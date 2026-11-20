@@ -1,0 +1,40 @@
+Mojolearn native Logistic query-width fixtures (2026-11-10)
+
+Dependency: production e3d0ed8d05, included in frozen pilot5ecb011169.
+Lane adopted pilot ancestry via merge a9f486acad; cherry-pick only this test
+commit, not that merge. No product source changed.
+
+Native command:
+  mojo run -I . checks/native_tests/logistic_query_width.mojo
+Native importable bundle:
+  from checks.native_tests.logistic_query_width_suite import run_checks
+Native coverage:80 independent fixtures, host_parallelize over fixture IDs.
+  8 signed/native-word extremes and exact scalar construction.
+  18 exact real/complex comparisons, two-limb fractional residuals, NaN,
+     infinities, signed zero, subnormal and oversized values.
+  20 analytic float16/bfloat16/float32/float64 ties-to-even cases and the
+     exact-integer alternative; no reference generated from product helpers.
+  18 unsigned/signed Torch wrapped-integer cases including8/16/32/64-bit edges.
+  8 NumPy half-overflow event-policy cases.
+  8 legacy-empty/nonnumeric decisions and binary/host error-prefix cases.
+Each equality fixture also checks validation agreement and both error dialects.
+Pure native core imports only; no Python objects or GPU kernels.
+
+Boundary file:python/mojolearn/tests/test_logistic_query_width_native.py
+  10 definitions /41 parametrized cases. Actual live field/storage owners,
+  NumPy scalar/big-endian/object array buffers, original comparison refusal
+  and warnings, exact Array storage, binary prediction's preserved int
+  conversion, refused user hooks, input-before-feature refusal order,
+  NumPy overflow policy/callback refusal, optional exact Torch scalar types,
+  bounded nested-object unboxing. Independent NumPy comparison is test
+  oracle/preparation, never product execution or timed work. Torch may skip
+  if not installed; report those cases explicitly.
+
+Validation performed in lane:source review, Python AST parse, TOML parse,
+  git diff --check. NO native compilation, execution, pytest or identity run;
+  all runtime/compile evidence remains owed to the orchestrator.
+
+Deletions:none. Existing Python Logistic tests cover public labels/wrappers,
+not these newly extracted scalar plans, so no duplicate numerical test was
+identified for removal. Numerical kernels, public interface and defaults
+unchanged; no A/B define and no timing claim.

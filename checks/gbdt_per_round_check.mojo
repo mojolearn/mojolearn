@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATIONS 2550 and 2551, both sides of both switches (CONTRIBUTING.md (Non-default paths)).
 
-    pixi run check-gbdt-per-round                       default IDENTICAL build: 2550 ON
+    pixi run check-native-gpu gbdt_per_round_check                       default IDENTICAL build: 2550 ON
                                                         and 2551 ON (both the default
                                                         since 2026-09-11)
     pixi run check-gbdt-per-round-2550-host-copy        -D MOJOLEARN_2550_HOST_COPY=1,
                                                         the 2550 OPT-OUT side
-    pixi run check-gbdt-per-round-2551-host-partition   -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1,
-                                                        the 2551 OPT-OUT side
+    (the 2551 opt-out side, -D MOJOLEARN_2551_DEVICE_PARTITION_OFF, was deleted 2026-11-15;
+    docs/TOMBSTONES.md)
 
 CLAIM 1, every build. `DeviceLeafPartitioner.partition` returns the same
 `row_index`, `offsets` and `sizes` as the host `partition_from_bins` over a
@@ -152,12 +152,11 @@ def read_rows(
     ctx: DeviceContext, mut part: LeafPartition, cap: Int, n: Int
 ) raises -> List[UInt32]:
     var h = ctx.enqueue_create_host_buffer[DType.uint32](cap)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=part.row_index)
+    download_host_into[DType.uint32](ctx, part.row_index, h)
     ctx.synchronize()
     var out = List[UInt32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return out^
 
 
@@ -184,8 +183,8 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                 h_n.unsafe_ptr().unsafe_store(r, UInt32(b))
                 h_cap.unsafe_ptr().unsafe_store(r, UInt32(b))
             var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
-            ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_n.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, d_bins, h_n)
+            upload_host_into[DType.uint32](ctx, dp.bins, h_cap)
             ctx.synchronize()
             var host_part = partition_from_bins(ctx, d_bins, n, n_leaves)
             var host_rows = read_rows(ctx, host_part, n, n)
@@ -213,7 +212,6 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                     "  FAIL partition rows=" + String(n) + " leaves="
                     + String(n_leaves)
                 )
-            _ = h_n^
             _ = d_bins^
 
     # refusals: one key in range of the sort's bits, one above them
@@ -230,8 +228,8 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
         h_n.unsafe_ptr().unsafe_store(200, bad)
         h_cap.unsafe_ptr().unsafe_store(200, bad)
         var d_bins = ctx.enqueue_create_buffer[DType.uint32](n)
-        ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_n.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dp.bins, src_ptr=h_cap.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_bins, h_n)
+        upload_host_into[DType.uint32](ctx, dp.bins, h_cap)
         ctx.synchronize()
         var host_refused = False
         try:
@@ -250,7 +248,6 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
                 "  FAIL refusal case " + String(which) + " host="
                 + String(host_refused) + " device=" + String(dev_refused)
             )
-        _ = h_n^
         _ = d_bins^
     _ = h_cap^
     print(
@@ -260,7 +257,7 @@ def check_partitions(ctx: DeviceContext) raises -> Int:
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("GBDT_PER_ROUND_PATH " + gbdt_per_round_paths())
     var failures = check_partitions(ctx)
@@ -322,3 +319,22 @@ def main() raises:
     if failures != 0:
         raise Error("gbdt_per_round_check: " + String(failures) + " failures")
     print("GBDT_PER_ROUND_CHECK PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gbdt_per_round_check", cpu=False, gpu=True, serial="", run=run_cases)

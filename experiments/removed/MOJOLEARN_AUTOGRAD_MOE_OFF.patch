@@ -1,0 +1,191 @@
+diff --git a/autograd/kernels/moe.mojo b/autograd/kernels/moe.mojo
+index 883b555952..341f9496c4 100644
+--- a/autograd/kernels/moe.mojo
++++ b/autograd/kernels/moe.mojo
+@@ -4,7 +4,7 @@
+ (lane ag-moe-backward, 2026-10-19; the tape plan's path 5, now
+ docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). HOST-SAFE:
+ every body below is an element function `(t, Args)` that HostExec and
+-DeviceExec both run through `sequence/dispatch.mojo` (codes 2902..2914),
++DeviceExec both run through `sequence/dispatch.mojo` (codes 2900..2914),
+ so the host column and every GPU column compute the same words by
+ construction. The tape assembly (graph, rules, driver) is
+ `autograd/route_ops.mojo`.
+@@ -13,18 +13,15 @@ Notation: T tokens, D model width, F expert width, E experts, k picks;
+ a pair p = tok * k + j (token tok's j-th pick), P = T * k pairs, e_p its
+ expert (`sel[p]`, a float holding an integer), w_p its routing weight.
+ 
+-FORWARD (training): the forward's own ops, recorded on the tape
+-(autograd/route_ops.mojo): OP_MOE_ROUTE (logits, softmax, top-k,
+-renormalised weights), then the pairs grouped by expert (OP_MOEB_GROUP_*:
+-a stable counting sort, integer counts, exact), then OP_MOE_HIDDEN
+-h[p, f] = silu(g) * u and OP_MOE_OUT y[tok, d] = sum_j w_j (h_j .
+-down[e_j, d, :]) in their item form (no grouping words, a.i4 = a.i6 = 0:
+-`op_moe_hidden` / `op_moe_out`, h in pair order on every executor). Under
+-the IDENTICAL default (MOE_GROUPED_GEMM) their cells are the identical
+-GEMM's contract cell, the words the device's grouped forward stores, so
+-the training forward's y equals MoEBlock.forward's. Lane x9-moe-gcn-rules
+-(2026-11-09) deleted the two duplicate codes OP_MOEB_HIDDEN_FWD (2900) and
+-OP_MOEB_OUT_FWD (2901), which ran those same two bodies under other codes.
++FORWARD (training): the forward's own route (OP_MOE_ROUTE: logits,
++softmax, top-k, renormalised weights), then the pairs grouped by expert
++(OP_MOEB_GROUP_*: a stable counting sort, integer counts, exact), then
++h[p, f] = silu(g) * u (OP_MOEB_HIDDEN_FWD = `op_moe_hidden`, pair order)
++and y[tok, d] = sum_j w_j (h_j . down[e_j, d, :]) (OP_MOEB_OUT_FWD =
++`op_moe_out`). Those two are the host column's forward bodies; under the
++IDENTICAL default (MOE_GROUPED_GEMM) their cells are the identical GEMM's
++contract cell, the words the device's grouped forward stores, so the
++training forward's y equals MoEBlock.forward's.
+ 
+ BACKWARD (NEW BITS, a capability with no earlier version; every column
+ together). Every contraction is the identical GEMM's contract cell
+@@ -55,11 +52,11 @@ gradient's two terms (experts, router) are added by the tape
+ from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_sigmoid, identical_silu
+ from gemm.contract import contract_leaf_size, leaf_count
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
++from sequence.moe import op_moe_hidden, op_moe_out
+ from sequence.moe_grouped_fold import MOE_FOLD_SLOTS, MOE_GROUPED_GEMM, _fold_drain16, _fold_push16, moe_contract_cell
+ 
+-# TOMBSTONE: OP_MOEB_HIDDEN_FWD (2900) / OP_MOEB_OUT_FWD (2901) (duplicate codes of OP_MOE_HIDDEN / OP_MOE_OUT's item
+-# bodies) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch (the whole deletion, code files)
++comptime OP_MOEB_HIDDEN_FWD = 2900
++comptime OP_MOEB_OUT_FWD = 2901
+ comptime OP_MOEB_GROUP_COUNT = 2902
+ comptime OP_MOEB_GROUP_TOTAL = 2903
+ comptime OP_MOEB_GROUP_BASE = 2904
+@@ -73,7 +70,7 @@ comptime OP_MOEB_DGATEUP = 2911
+ comptime OP_MOEB_ROUTE_VJP = 2912
+ comptime OP_MOEB_ROUTER_DX = 2913
+ comptime OP_MOEB_ROUTER_DW = 2914
+-comptime OP_MOEB_FIRST = OP_MOEB_GROUP_COUNT
++comptime OP_MOEB_FIRST = OP_MOEB_HIDDEN_FWD
+ comptime OP_MOEB_LAST = OP_MOEB_ROUTER_DW
+ 
+ #: pairs per counting block of the grouping (a constant: no shape rule)
+@@ -396,7 +393,11 @@ def op_moeb_router_dw(t: Int, a: Args):
+ @always_inline
+ def apply_moe_backward[OP: Int](t: Int, a: Args):
+     """The OP_MOEB_FIRST..OP_MOEB_LAST family (sequence/dispatch.mojo)."""
+-    comptime if OP == OP_MOEB_GROUP_COUNT:
++    comptime if OP == OP_MOEB_HIDDEN_FWD:
++        op_moe_hidden(t, a)
++    elif OP == OP_MOEB_OUT_FWD:
++        op_moe_out(t, a)
++    elif OP == OP_MOEB_GROUP_COUNT:
+         op_moeb_group_count(t, a)
+     elif OP == OP_MOEB_GROUP_TOTAL:
+         op_moeb_group_total(t, a)
+diff --git a/autograd/route_ops.mojo b/autograd/route_ops.mojo
+index 5b9c5f4b8b..bdddb1a1c6 100644
+--- a/autograd/route_ops.mojo
++++ b/autograd/route_ops.mojo
+@@ -7,8 +7,7 @@
+ # the structure and every VJP is a new kernel; the words are defined by the
+ # fold orders below, the same on the host column and every GPU column (the
+ # bodies are Exec element functions), one bit version with all columns.
+-# The tape is the only MoE backward (lane x9-moe-gcn-rules, 2026-11-09): the
+-# MOJOLEARN_AUTOGRAD_MOE_OFF refusal arm is deleted (tombstone below).
++# -D MOJOLEARN_AUTOGRAD_MOE_OFF restores the old refusal of the backward.
+ #
+ # ---------------------------------------------------------------- the tape graph
+ #   x      (variable_into dx)        [T, D]
+@@ -21,10 +20,9 @@
+ #                                              saved (non-differentiable, outside the
+ #                                              tape: the picks are piecewise constant)
+ #   h = MOE_HIDDEN(x, gate_up)        [P, F]   silu(gate) * up per pair (the gather
+-#                                              of x by the routing order inside;
+-#                                              OP_MOE_HIDDEN, the forward's op, item form)
++#                                              of x by the routing order inside)
+ #   y = MOE_OUT(h, down, w)           [T, D]   grad storage = the caller's dy (the seed,
+-#                                              read in place, no copy; OP_MOE_OUT, item form)
++#                                              read in place, no copy)
+ # Between the route and the hidden product the driver groups the pairs by
+ # expert (stable: each expert's pairs in ascending pair index), once; the
+ # hidden and out VJPs fold each expert's weight gradient over that order.
+@@ -41,10 +39,7 @@
+ #
+ # ---------------------------------------------------------------- launch inventory
+ # forward: OP_MOE_ROUTE (T), grouping COUNT (E nb) + TOTAL (E) + BASE
+-# (E nb + 1) + SCATTER (P), OP_MOE_HIDDEN (P F), OP_MOE_OUT (T D)  = 7
+-# (the hidden and out ops with a.i4 = a.i6 = 0: their item bodies on every
+-# executor, h in pair order, which the VJPs below index; the grouped and
+-# register-tiled device forms store h in slot order and stay forward-only)
++# (E nb + 1) + SCATTER (P), HIDDEN_FWD (P F), OUT_FWD (T D)        = 7
+ # backward: OUT: Q+dh (P F), DW (P), DDOWN (E D F); HIDDEN: DGU (P F), DX
+ # (T D), DGATEUP (E 2F D); ROUTE: ROUTE_VJP (T E), ROUTER_DX (T D),
+ # ROUTER_DW (E D); the tape's ACCUMULATE of dx (T D)                  = 10
+@@ -54,7 +49,7 @@ from std.sys.compile import is_defined
+ 
+ from autograd.tape import Tape, Tensor, BackwardRules
+ from sequence.exec_trait import Exec
+-from sequence.ops import FP, Args, OP_MOE_HIDDEN, OP_MOE_OUT, OP_MOE_ROUTE
++from sequence.ops import FP, Args, OP_MOE_ROUTE
+ from autograd.kernels.moe import (
+     MOEB_GROUP_BLOCK,
+     OP_MOEB_DDOWN,
+@@ -66,6 +61,8 @@ from autograd.kernels.moe import (
+     OP_MOEB_GROUP_COUNT,
+     OP_MOEB_GROUP_SCATTER,
+     OP_MOEB_GROUP_TOTAL,
++    OP_MOEB_HIDDEN_FWD,
++    OP_MOEB_OUT_FWD,
+     OP_MOEB_Q,
+     OP_MOEB_ROUTE_VJP,
+     OP_MOEB_ROUTER_DW,
+@@ -73,8 +70,8 @@ from autograd.kernels.moe import (
+     moeb_group_blocks,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed: the tape is the only MoE backward) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
++# The MoE backward exists by default; MOJOLEARN_AUTOGRAD_MOE_OFF refuses it as before.
++comptime AUTOGRAD_MOE = not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"]()
+ 
+ # Tags 112-114 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63, LM 64-71).
+ comptime MOE_ROUTE = 112
+@@ -263,10 +260,8 @@ def moe_tape_train_step[E: Exec](
+     down [E, D, F] and the output cotangent dy [T, D], the forward's y,
+     logits, picks and weights into Y, L, Sel, W and the gradients of x and
+     the three weights into DX, DWg, DGu, DDn. Ends on a sync."""
+-    # removed-define refusal, here (every MoE backward reaches this function) and in core/experiment_guards_neural.mojo
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"](), "removed 2026-11-09 (lane/x9-moe-gcn-rules): MOJOLEARN_AUTOGRAD_MOE_OFF (the refusal of the MoE backward) is deleted; the tape is the only MoE backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch"
++    comptime if not AUTOGRAD_MOE:
++        raise Error("moe_backward: the backward pass is not available in this build")
+     if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
+         raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
+     var P = T * k
+@@ -298,8 +293,7 @@ def moe_tape_train_step[E: Exec](
+     b.i0 = D
+     b.i1 = F
+     b.i2 = k
+-    # a.i4 = a.i6 = 0 (Args' zeros): the item body, h in pair order
+-    ex.launch[OP_MOE_HIDDEN](b, P * F)
++    ex.launch[OP_MOEB_HIDDEN_FWD](b, P * F)
+     var c = Args()
+     c.p0 = H
+     c.p1 = Dn
+@@ -309,7 +303,7 @@ def moe_tape_train_step[E: Exec](
+     c.i0 = D
+     c.i1 = F
+     c.i2 = k
+-    ex.launch[OP_MOE_OUT](c, T * D)
++    ex.launch[OP_MOEB_OUT_FWD](c, T * D)
+     # ---- record (no launches) and differentiate
+     var tape = Tape()
+     var x = tape.variable_into(ex, X, DX, T, D)
+diff --git a/sequence/dispatch.mojo b/sequence/dispatch.mojo
+index bc5f24ba7e..ec778e0fc3 100644
+--- a/sequence/dispatch.mojo
++++ b/sequence/dispatch.mojo
+@@ -357,7 +357,7 @@ def apply[OP: Int](t: Int, a: Args):
+     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
+         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
+     ), "pass-6 gemm opcode collides with recurrent scan"
+-    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2902..;
++    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2900..;
+     # lane ag-moe-backward), disjoint from every autograd range and the scans.
+     comptime assert OP_MOEB_FIRST <= OP_MOEB_LAST, "MoE backward opcode range is empty"
+     comptime assert OP_MOEB_FIRST > OP_AG_LAST or OP_MOEB_LAST < OP_AG_FIRST, "MoE backward opcodes overlap the tape's"

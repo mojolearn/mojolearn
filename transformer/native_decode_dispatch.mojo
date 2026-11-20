@@ -4,8 +4,8 @@
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.transformer_binding_impl import (
     TransformerDecodeSession, _require_session_open, _check_base_addrs,
-    _session_open_run, _session_open_run_int15, _session_step_run,
-    _session_forward_run, _session_export_run, _session_load_run,
+    _session_open_run, _session_open_run_int15, _session_export_run, _session_load_run,
+    _session_step_run, _session_decode_run, _session_forward_run,
 )
 
 
@@ -68,24 +68,23 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
             raise problem
         owner[].usable = True
         return result
+    if op == 5 or op == 6:
+        # Lane x4: the descriptor step (5) and forward (6) served only the
+        # public decode session's provider arm, which now runs the attention
+        # step op through its binding entries; the CausalLM layers use open,
+        # export, load and close only.
+        raise Error("transformer decode: the descriptor step and forward were removed; use the session entries")
     if len(a) != 2 or a[0] == 0 or a[1] == 0:
         raise Error("transformer decode: expected two nonnull buffer addresses")
-    if (op == 5 or op == 8) and len(p) != 1:
+    # TOMBSTONE: ops 10-12 (the registry-handle step / decode / forward of lane
+    # fix-transformer-decode-door) moved to `transformer_decode_reserved_run`
+    # (hot-path audit 2026-11-13): the pinned session runs them with no
+    # registry lookup and no List per token; code at 15419a68bb.
+    if op == 8 and len(p) != 1:
         raise Error("transformer decode: expected cached_tokens")
-    if op == 6 and (len(p) != 2 or p[0] <= 0):
-        raise Error("transformer decode forward: expected positive L and cached_tokens")
     if op == 7 and len(p) != 0:
         raise Error("transformer decode export: unexpected scalars")
-    if op == 5 or op == 6:
-        var claimed = p[0] if op == 5 else p[1]
-        if owner[].kv.value().s != claimed:
-            raise Error("transformer decode session: the caller believes cached_tokens = " + String(claimed)
-                + " but the resident cache holds " + String(owner[].kv.value().s))
     try:
-        if op == 5:
-            return _session_step_run(owner[], a[0], a[1])
-        if op == 6:
-            return _session_forward_run(owner[], a[0], a[1], p[0])
         if op == 7:
             return _session_export_run(owner[], a[0], a[1])
         if op == 8:
@@ -94,3 +93,45 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
     except problem:
         owner[].usable = False
         raise problem
+
+
+def transformer_decode_reserved_run(mut s: TransformerDecodeSession, kind: Int, x: Int, y: Int,
+                                    count: Int, cached: Int) raises -> Int:
+    """The public decode session's step (kind 0), resident N-token decode
+    (kind 1, count N) and L-token forward (kind 2, count L) on a session the
+    caller holds a lease on (CAUSAL_SESSION_DECODE_PINNED): reserve (the
+    open/busy/usable refusals), run, unreserve, with typed words only (no
+    native List, no registry). The bodies the binding entries
+    transformer_decode_session_step / decode / forward ran
+    (`_session_step_run`, `_session_decode_run`, `_session_forward_run`),
+    with their refusals; same kernels, same order. A failed run marks the
+    session lost, as those entries did."""
+    _require_session_open(s)
+    s.busy = True
+    var result = 0
+    try:
+        if x == 0 or y == 0:
+            raise Error("transformer decode: expected two nonnull buffer addresses")
+        if kind < 0 or kind > 2:
+            raise Error("transformer decode: unknown pinned operation")
+        if s.cached() != cached:
+            raise Error(
+                String("transformer decode session: the caller believes cached_tokens = ") + String(cached)
+                + " but the resident cache holds " + String(s.cached()))
+        if kind != 0 and count < 1:
+            raise Error("transformer decode session: L must be positive")
+        try:
+            if kind == 0:
+                result = _session_step_run(s, x, y)
+            elif kind == 1:
+                result = _session_decode_run(s, x, y, count)
+            else:
+                result = _session_forward_run(s, x, y, count)
+        except problem:
+            s.usable = False
+            raise problem
+    except problem:
+        s.busy = False
+        raise problem
+    s.busy = False
+    return result

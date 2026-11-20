@@ -7,70 +7,22 @@ import os
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 from . import _backend
-from ._cast_in import as_input, describe, matrix_view
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
-_SPEC_VERSION = 1
-# Version 2 (autograd/model.mojo SPEC2_*): a per-sample input shape of any
-# rank and the shape layers; [2, ndim, d0 .. d7, layer count] then per layer
-# (code, six arguments, 0).
-_SPEC2_VERSION = 2
-_SPEC2_DIMS = 8
-_SPEC2_ARGS = 6
 _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "layer_norm": 6, "dropout": 7, "residual": 8,
           "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14}
-_SHAPE_LAYERS = frozenset((9, 10, 11, 12, 13, 14))
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
-_PREDICT_CHUNK = 4096
-# autograd/model.mojo FIT_STATE_WORDS: the fit's resumable counters
-_FIT_STATE_WORDS = 12
 # core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
 # loaded checkpoint
 _CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
                 (1, 1): "i1", (1, 2): "i2", (1, 4): "i4", (1, 8): "i8",
                 (2, 2): "f2", (2, 4): "f4", (2, 8): "f8", (3, 1): "?"}
-def _x_2d(X, name):
-    # the user's array as it is and its descriptor: Mojo casts it to float32
-    # on the executor (_cast_in.py); the caller keeps the array alive
-    X = as_input(X)
-    if X.ndim != 2:
-        raise ValueError(f"{name} must be a 2-D array of shape (n_samples, n_features)")
-    return X, describe(X, name)
-
-
-def _x_nd(X, name):
-    # X of any rank >= 2: a 2-D X as it is; a higher-rank X (C order) as its
-    # (n_samples, values per sample) view of the same memory. Returns the
-    # array, its matrix view and the view's descriptor.
-    X = as_input(X)
-    if X.ndim < 2 or X.ndim > _SPEC2_DIMS:
-        raise ValueError(f"{name} must have shape (n_samples, ...) with 2 to {_SPEC2_DIMS} dimensions")
-    M = X if X.ndim == 2 else matrix_view(X, name, samples=True)
-    return X, M, describe(M, name)
-
-
-def _shape_arg(values, name, allow_infer=False):
-    values = tuple(values)
-    if not 1 <= len(values) <= _SPEC2_ARGS:
-        raise ValueError(f"{name} must list 1 to {_SPEC2_ARGS} dimensions")
-    out = []
-    for v in values:  # glue: at most six shape arguments
-        if isinstance(v, bool) or not isinstance(v, (int, np.integer)) or not (v >= 1 or (allow_infer and v == -1)):
-            raise ValueError(f"{name} must hold positive integers" + (" or -1" if allow_infer else ""))
-        out.append(int(v))
-    return out
-
-
-def _positive(value, name, low=1):
-    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < low:
-        raise ValueError(f"{name} must be an integer >= {low}")
-    return int(value)
 
 
 class Sequential:
@@ -111,6 +63,15 @@ class Sequential:
         then its bias).
     loss_curve_ : list of float
         Mean training loss of every epoch.
+    optimizer_m_ : ndarray of float32
+        The optimizer's first-moment state after the last step, laid out as
+        ``params_`` (the momentum buffer for ``'sgd'`` and ``'momentum'``, Adam's running
+        mean of the gradient for ``'adam'`` and ``'adamw'``). Not set on a
+        model loaded from an export.
+    optimizer_v_ : ndarray of float32
+        The optimizer's second-moment state, laid out as ``params_`` (Adam's
+        running mean of the squared gradient). Not set on a model loaded
+        from an export.
     n_iter_ : int
         Number of epochs run.
     n_features_in_ : int
@@ -171,19 +132,8 @@ class Sequential:
         """
         return _SEQUENTIAL_ENTRY(self, "add", (kind, args, kwargs), _SEQUENTIAL_CONTEXT)
 
-    def _append(self, code, a0=0, a1=0, f=0.0, args=None):
-        # one layer: (code, arg0, arg1, float argument, the six integer
-        # arguments of a version-2 description record)
-        return _SEQUENTIAL_ENTRY(self, "append", (code, a0, a1, f, args), _SEQUENTIAL_CONTEXT)
-
     def _linear(self, units, bias=True):
         return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
-
-    def _layer_norm(self, eps=1e-5):
-        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
-
-    def _dropout(self, p):
-        return _SEQUENTIAL_ENTRY(self, "add", ("dropout", (p,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def _residual(self, source=-1):
         return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
@@ -323,9 +273,6 @@ class Sequential:
     def _table(self):
         return _SEQUENTIAL_ENTRY(self, "table", (), _SEQUENTIAL_CONTEXT)
 
-    def _sample_of(self, X):
-        # the per-sample shape of a version-2 model (None: version 1)
-        return _SEQUENTIAL_ENTRY(self, "sample", (X,), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
@@ -384,9 +331,6 @@ class Sequential:
         return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
-    def _param_layers(self):
-        # (layer index, has bias) of every layer that holds parameters
-        return _SEQUENTIAL_ENTRY(self, "parameter_layers", (), _SEQUENTIAL_CONTEXT)
 
     def load_state_dict(self, state, *, source=None, names=None, prefix="", strict=True):
         """Load trained weights from PyTorch or a safetensors checkpoint.
@@ -449,33 +393,6 @@ class Sequential:
         >>> pred = model.predict(rng.random((16, 4), dtype=np.float32))
         """
         return _SEQUENTIAL_ENTRY(self, "load_weights", (state, source, names, prefix, strict), _SEQUENTIAL_CONTEXT)
-
-    def _import_shape(self, src, layers, entries):
-        # the per-sample shape (None: a version-1 description) and the input
-        # width of the description load_state_dict passes to Mojo
-        if hasattr(self, "params_") and hasattr(self, "n_features_in_"):
-            return getattr(self, "_sample_shape", None), self.n_features_in_
-        uses_shape = self.input_shape is not None or any(
-            c in _SHAPE_LAYERS for c, _, _, _, _ in self._layers)  # glue: a layer-kind check
-        if uses_shape:
-            if self.input_shape is None:
-                raise ValueError("load_state_dict: set input_shape on a model with reshape, permute, flatten, "
-                                 "conv2d or pooling layers")
-            return self.input_shape, 0
-        # a 2-D model: the input width is the first parameter layer's
-        # (the layers before it keep the width)
-        first = layers[0][0]
-        key = entries[0][0]
-        shape = src.shape(key)
-        if self._layers[first][0] == _LAYER["linear"]:
-            if len(shape) != 2:
-                raise ValueError(f"load_state_dict: {key!r} has shape {shape}; layer {first} (linear) takes a "
-                                 "weight of shape (out_features, in_features)")
-            return None, int(shape[1])
-        if len(shape) != 1:
-            raise ValueError(f"load_state_dict: {key!r} has shape {shape}; layer {first} (layer_norm) takes a "
-                             "weight of shape (width,)")
-        return None, int(shape[0])
 
     # ------------------------------------------------------------ checkpoints
     def _save(self, path, export):
@@ -651,7 +568,7 @@ def _connect_sequential_bindings():
     import mmap
     import sys
     from array import array
-    from ._array import Array, SUPPORTED_DTYPES
+    from ._array import Array, SUPPORTED_DTYPES, _ARRAY_CONTEXT
     from ._version import __version__
     selected = _backend.default_mode()
     entries = {}
@@ -673,7 +590,7 @@ def _connect_sequential_bindings():
     scalar_types = tuple(dtype.type for dtype in class_dtypes.values())  # glue: connect exact native scalar types once at package import
     integer_types = (int,) + tuple(dtype.type for (kind, _), dtype in class_dtypes.items() if kind in (0, 1))  # glue: connect exact native integer types once at package import
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
-    array_storage_slots = {name: vars(Array)[name] for name in ("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")}  # glue: fixed native storage layout retained at package import
+    array_storage_slots = _ARRAY_CONTEXT["from_buffer_slots"]  # glue: reuse the complete native storage descriptor inventory retained at import
     return {
         "array_storage_slots": array_storage_slots, "array_storage_dtypes": SUPPORTED_DTYPES,
         "sequential_class": Sequential, "module_type": ModuleType, "modules": sys.modules,
@@ -682,7 +599,7 @@ def _connect_sequential_bindings():
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "ctypes_array_base": ctypes.Array, "array_fields": array_fields,
-        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "_opt_m", "_opt_v", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
+        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),

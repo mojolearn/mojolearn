@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DBSCAN without a CSR: `-D MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF` disables it.
+"""DBSCAN without a CSR (IDENTICAL, NVIDIA and AMD: wherever the bit matrix is).
 
 WHY (lane dbscan-taxi-speed, 2026-10-10). The reference route (`runner.mojo`)
 materializes every eps edge as an int32 CSR and min-propagates labels over
@@ -85,8 +85,7 @@ O(E). A fit whose ranges fit one CSR each keeps the CSR route unchanged.
 
 from std.atomic import Atomic, Ordering
 from std.bit import count_trailing_zeros
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -104,18 +103,18 @@ from neighbors.impl.ball_cover.scan import rbc_exclusive_scan_launch
 
 #: The edge-free route. Default ON wherever the bit matrix is (IDENTICAL,
 #: NVIDIA and AMD): a clear asymptotic fix (O(E) label passes and int32
-#: splits -> O(n * n / 64) bit words). `-D MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF`
-#: (or MOJOLEARN_IDN_ALL_OFF) restores the CSR route everywhere.
+#: splits -> O(n * n / 64) bit words).
 #: KEPT 2026-10-10 (lane grid-act-15; A/B on main ca25d9321, one run per arm,
 #: nv2 v1234 default / v1235 _OFF, amd a1558 / a1559): taxi default 13336 ms
 #: NV / 7057 ms AMD, hash d6fa652f on both, 36 clusters, noise 0.000174; the
 #: _OFF arm is REFUSED(timeout) on both vendors. istella default 84826 / 54245
 #: ms, _OFF 84697 / 54157 ms (1.00x / 1.00x), hash 7494ce8e on all four
 #: cells, 40131 clusters, noise 0.219391 (no change on istella).
-comptime IDN_DBSCAN_EDGE_FREE = IDN_DBSCAN_ADJ_BITMAP and not (
-    is_defined["MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF (old path, EXP:2010 KEEP of the default; _OFF REFUSED(timeout) on taxi) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 763459fe0e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EDGE_FREE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_EDGE_FREE = IDN_DBSCAN_ADJ_BITMAP
 
 comptime EF_TPB = 128
 comptime EF_BROOT_TPB = 64

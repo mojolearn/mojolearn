@@ -4,7 +4,7 @@
 (lane thin-trees-metrics, 2026-10-21: moved word for word out of that shell,
 so a Python-free caller reaches the same source; no Python here). The
 address and parameter contracts are that file's."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from ivf.impl.neighbors.ivf_common import ivf_id_to_i32, ivf_out_of_bounds_distance, postprocess_distances
@@ -76,7 +76,7 @@ def ivf_store_index_arrays(
     if len(list_data) != n_rows * dim:
         raise Error("ivf_flat_build: the built index holds no list data")
     comptime if ANN3_HOST_PASSES:
-        memcpy(dest=lp, src=list_data.unsafe_ptr(), count=n_rows * dim)
+        unsafe_memcpy(dest=lp, src=list_data.unsafe_ptr(), count=n_rows * dim)
     else:
         for i in range(n_rows * dim):
             lp.unsafe_store(i, list_data[i])

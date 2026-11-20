@@ -63,7 +63,6 @@ its self-loop). Levels, the renumbering by ascending old id and the
 `louvain_partitions`. NEW BITS versus the sequential sweep (labels,
 modularity and level count).
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -517,10 +516,9 @@ def _pr_csr_fill(t: Int, g: GA):
     if s == Float32(0):
         s = Float32(1)
     _is(g, P_ROWS).unsafe_store(t, Int32(i))
-    comptime if C43_RESIDENT_NORMALIZATION:
-        _fs(g, P_VALS).unsafe_store(t, ftz(Float32(1) if g.n1 != 0 else v))
-    else:
-        _fs(g, P_VALS).unsafe_store(t, ftz(identical_div(ftz(Float32(1) if g.n1 != 0 else v), s)))
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+    _fs(g, P_VALS).unsafe_store(t, ftz(identical_div(ftz(Float32(1) if g.n1 != 0 else v), s)))
 
 
 @always_inline
@@ -568,10 +566,9 @@ def _pr_colfill(t: Int, g: GA):
             if s == Float32(0):
                 s = Float32(1)
             rows.unsafe_store(w, Int32(i))
-            comptime if C43_RESIDENT_NORMALIZATION:
-                vals.unsafe_store(w,ftz(Float32(1) if g.n1!=0 else v))
-            else:
-                vals.unsafe_store(w, ftz(identical_div(ftz(Float32(1) if g.n1 != 0 else v), s)))
+            # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+            # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+            vals.unsafe_store(w, ftz(identical_div(ftz(Float32(1) if g.n1 != 0 else v), s)))
             w += 1
 
 
@@ -613,24 +610,8 @@ def pr_step_csr(
 def _pr_step(t: Int, g: GA):
     """One node of a step: x in slot n4, the next iterate into slot n5,
     alpha x0, the dangling mass from P_SUM[0]."""
-    comptime if C43_RESIDENT_NORMALIZATION:
-        var offsets=_is(g,P_CNT)
-        var rows=_is(g,P_ROWS)
-        var values=_fs(g,P_VALS)
-        var degrees=_fs(g,P_RS)
-        var x=_fs(g,g.n4)
-        var acc=Float32(0)
-        for edge in range(Int(offsets[t]),Int(offsets[t+1])):
-            var row=Int(rows[edge])
-            var degree=degrees[row]
-            if degree==Float32(0):
-                degree=Float32(1)
-            var value=ftz(identical_div(ftz(values[edge]),degree))
-            acc=ftz(identical_mul_add(ftz(x[row]),value,acc))
-        var inner=ftz(identical_mul_add(_fs(g,P_SUM)[0],ftz(_fs(g,P_DW)[t]),acc))
-        var teleport=ftz(identical_mul(_sub(Float32(1),g.x0),ftz(_fs(g,P_P)[t])))
-        _fs(g,g.n5)[t]=ftz(identical_mul_add(g.x0,inner,teleport))
-        return
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     pr_step_csr(t, _is(g, P_CNT), _is(g, P_ROWS), _fs(g, P_VALS), _fs(g, g.n4), _fs(g, P_P), _fs(g, P_DW),
                 _fs(g, P_SUM).unsafe_load(0), _fs(g, g.n5), g.x0)
 
@@ -792,10 +773,10 @@ def _lv_tadd(g: GA, c: Int, d: Int64):
     equal to the host column's sequential adds."""
     var dlo = d.cast[DType.int32]()
     var dhi = (d >> Int64(32)).cast[DType.int32]()
-    var old = Atomic[DType.int32].fetch_add(_is(g, L_TLO) + c, dlo)
+    var old = Atomic[Int32].fetch_add(_is(g, L_TLO) + c, dlo)
     var new_lo = (old + dlo).cast[DType.uint32]()
     var carry = Int32(1) if new_lo < old.cast[DType.uint32]() else Int32(0)
-    _ = Atomic[DType.int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
+    _ = Atomic[Int32].fetch_add(_is(g, L_THI) + c, dhi + carry)
 
 
 @always_inline

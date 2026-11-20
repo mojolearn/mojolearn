@@ -30,17 +30,9 @@ right. Metal admits only device zero: its worker uses the ordinary GPU
 route, and no visibility mask or physical multi-device isolation is claimed.
 """
 from .. import _backend
-from .causal_lm import CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
+from .causal_lm import CausalLM as _CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
 
 __all__ = ['ParallelCausalLM']
-
-
-def _admit_route(layer_devices=()):
-    """`gpu` on CUDA/HIP or single-device Metal; `cpu` on a CPU-only install.
-
-    Called in the same two places the vendor check used to sit, and before a
-    layer is built or a checkpoint is read."""
-    return _native_parallel_causal("route", (layer_devices,))
 
 
 class _RemoteState:
@@ -95,7 +87,7 @@ class _RemotePrimitives:
         return _native_parallel_causal("primitive", (self, "head_int15", x))
 
 
-class ParallelCausalLM(CausalLM):
+class ParallelCausalLM(_CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
 
     One device index per checkpoint layer; repeated indices are allowed.
@@ -106,12 +98,6 @@ class ParallelCausalLM(CausalLM):
     # The inherited public methods enter the shared native owner; remote
     # layer dispatch is cached as a compiled entry in _native_entries.
 
-    def _generate_resident(self, ids, n_new, total, last_logits=None):
-        # Blocks and decode handles belong to remote worker processes. The
-        # parent's single-process resident loop cannot consume those handles;
-        # The shared native generation loop drives the remote owners.
-        return _native_parallel_causal("resident", (self, ids, n_new, total, last_logits))
-
     def __init__(self, plan, weights, *, layer_devices, **kwargs):
         return _native_parallel_causal("init", (self, plan, weights, layer_devices, kwargs), _CAUSAL_CONTEXT)
 
@@ -119,9 +105,6 @@ class ParallelCausalLM(CausalLM):
     def load(cls, path, *, layer_devices, weight_format='float32', max_positions=None,
              numeric_profile=None):
         return _native_parallel_causal("load", (cls, path, layer_devices, (weight_format, max_positions, numeric_profile)), _CAUSAL_CONTEXT)
-
-    def _make_blocks(self, cls, layers, kwargs):
-        return _native_parallel_causal("make_blocks", (self, layers, kwargs))
 
     def _rpc(self, device, operation, args):
         return _native_parallel_causal("rpc", (self, device, operation, args))

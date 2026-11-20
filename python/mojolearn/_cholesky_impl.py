@@ -46,7 +46,7 @@ purpose (its header, point 3).
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
 from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, empty
 from ._mode import NumericModeMixin
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -54,7 +54,7 @@ from ._mode import NumericModeMixin
 #: the thing it checks.
 _MODE_CODE = {"fast": 0, "identical": 1}
 
-# The compiled family owner (bindings/linalg_native.mojo), connected once at
+# The compiled family owner (bindings/linalg_native_door.mojo), connected once at
 # import: each public operation selects its binding inside the native owner.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 from ._native_owner_lifetime import connect_owner_context as _connect_chol_owner_context
@@ -65,7 +65,7 @@ _native_family_bridge.tables(family_chol_mode_codes=dict(_MODE_CODE))
 _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -138,7 +138,7 @@ class Cholesky(NumericModeMixin):
     _BINDING = _GPU_BINDING
 
     #: `fit` factors a given matrix; that is inference, so a CPU-only
-    #: install runs it publicly (`_cpu_reference.require_training`).
+    #: install runs it publicly.
     _CPU_FIT_IS_INFERENCE = True
 
     def __init__(self, jitter=None, *, numeric_mode=None):
@@ -221,28 +221,15 @@ class Cholesky(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# The 0.8.55 writer's members and refusals, in its order: the fit check, the
-# numeric mode, the factor's dtype and shape, then the field vectors. The
-# saved estimator is always "Cholesky"; -1.0 in jitter_param means "the
-# profile's ridge" (None), the fitted ridge is in `scalars` either way.
-_native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, (
-    ("need", "L_", "RuntimeError", "mojolearn Cholesky: call fit before save"),
-    ("format", "format", _CHOLESKY_FORMAT),
-    ("format", "estimator", "Cholesky"),
-    ("mode", "numeric_mode", "mojolearn Cholesky: "),
-    ("check_array", "L_", "<f4", (("int", "n_"), ("int", "n_")), "ValueError",
-     "mojolearn Cholesky: L_ must be float32 {want}, got {dtype} {shape}"),
-    ("array", "L", "L_"),
-    ("i8", "meta", (("int", "n_"), ("int", "info_"), ("int", "nb_"))),
-    ("f8", "scalars", (("float", "_logdet"), ("float", "jitter_"))),
-    ("f8", "jitter_param", (("none_real", "jitter", -1.0),)),
-))
+# The fixed Cholesky archive family is implemented by typed native plans.
+# Its estimator name remains "Cholesky" and jitter_param=-1 means None.
+_native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, "native_cholesky")
 
 
 __all__ = ["Cholesky"]
 
 
-# The class the multi-GPU Cholesky drivers admit (bindings/linalg_native.mojo
+# The class the multi-GPU Cholesky drivers admit (bindings/linalg_native_door.mojo
 # `family_chol_par_*`).
 _native_family_bridge.tables(family_chol_par_class=Cholesky)
 

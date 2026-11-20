@@ -14,10 +14,9 @@ GEMM round-off makes a point sitting on its own neighbor come out slightly
 negative, and `sqrt` of that is NaN.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.math import sqrt
+from max.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, identical_sqrt
 
 
 def expand_distances_kernel(
@@ -52,5 +51,11 @@ def expand_distances_kernel(
     if d <= Float32(0.0):
         d = Float32(0.0)
     if is_sqrt_in != 0:
-        d = ftz(sqrt(d))
+        # The root is the math-library seam (checks/numerics.mojo identical_sqrt), not the stdlib sqrt: on NVPTX
+        # the stdlib one is `sqrt.approx.ftz.f32`. A legacy fast build still takes the stdlib form through the
+        # seam (ROW_VENDOR_MATH), as before. A fast-rows build that launches this kernel (the k-NN matrix-units
+        # route, neighbors/distance_matrix_units_route.mojo) relaxes the product only, so its root is the exact
+        # one unless MOJOLEARN_MODE_FAST_VENDOR_MATH is on; with the stdlib sqrt the set failed the PTX audit
+        # (packaging/linux/ptx_contract.py approx_refused; run 44704464712, assemble sm_89).
+        d = ftz(identical_sqrt(d))
     z.unsafe_store(idx, d)

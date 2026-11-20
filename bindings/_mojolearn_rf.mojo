@@ -27,66 +27,48 @@ with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
 
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from std.memory import memcpy
-from core.hostptr import copy_f32, list_f32, list_i32
-from ensemble.device_layout import device_has_nan_f32, upload_forest_x
-from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
-from xtrees.dart_device import DART_SESSIONS, _DART_CTX
-from ensemble.nan_refusal import RF_NAN_REFUSAL
+from core.experiment_guards_trees import TREES_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.hostptr import list_f32
+from ensemble.ada_rounds import AdaState
+from xtrees.dart_device import DART_SESSIONS
+from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 
 from std.os import abort
-from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
+from ensemble.device_finite import FOREST_DEVICE_FINITE
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from forest_inference_binding import (
+from forest_inference_binding_door import (
     forest_prepare_gpu_binding, forest_release_gpu_binding,
     forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
-    forest_resident_layout_binding, forest_ordered_resident_binding,
-    forest_identical_fused_labels_binding,
+    forest_stage_input_gpu_binding,
+    forest_unstage_input_gpu_binding,
+    forest_ordered_resident_binding,
 )
+from core.forest_inference_run import (
+    forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
+    forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
+)
+from bindings.forest_fit_boundary_unpack import forest_fit_args_py, forest_params_py
+from core.forest_fit_request import (
+    ForestFitArgs,
+    XF_CAP_DEVICE_SCAN,
+    XF_CAP_DART,
+)
+from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry_table import FOREST_TABLE_RF
+from core.native_descriptor_abi import NativeDescriptorError
 from core.forest_inference_model import (
-    resident_prepare, resident_predict_into, resident_release,
+    resident_prepare,
+    resident_release,
 )
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-
-from max.gpu.host import DeviceBuffer, DeviceContext
-from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
-
-#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoRfContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoRfContextFast"
 
 
-from ensemble.decisiontree.batched_levelalgo.bins import (
-    BinScales,
-    ClassificationBin,
-    WeightedClassificationBin,
-    RegressionBin,
-    WeightedRegressionBin,
-)
-from checks.fixed_point import choose_scale
-from core.abs_sum_blocked import (
-    device_abs_sum_blocked,
-    device_any_index_out_of_range,
-)
-from core.weight_scan_device import device_scan_weights
-from core.weight_compact_device import (
-    device_gather_rows,
-    device_gather_rows_colmajor,
-    device_nonzero_weight_rows,
-)
-from ensemble.decisiontree.batched_levelalgo.objectives import (
-    ClassificationObjectiveFunction,
-    RegressionObjectiveFunction,
-)
 from ensemble.instruments import StageTimes
 from ensemble.decisiontree.decisiontree import (
     ENTROPY,
@@ -95,304 +77,53 @@ from ensemble.decisiontree.decisiontree import (
     INVERSE_GAUSSIAN,
     MSE,
     POISSON,
-    DecisionTreeParams,
     TreeMetaDataNode,
-    criterion_name,
 )
-from ensemble.flatnode import SparseTreeNode
 from ensemble.randomforest import (
-    CLASSIFICATION,
-    REGRESSION,
-    RF_params,
     RandomForest,
     RandomForestMetaData,
     ForestPrep,
     fit_forest,
-    fit_forest_prepared,
-    launch_gather_rows_colmajor,
-    n_sampled_rows_for,
 )
-
-comptime DT = DType.float32
-comptime CLT = DType.int32
-comptime RLT = DType.float32
-comptime ClsObj = ClassificationObjectiveFunction[DT, CLT, ClassificationBin]
-comptime WeightedClsObj = ClassificationObjectiveFunction[
-    DT, CLT, WeightedClassificationBin
-]
-comptime RegObj = RegressionObjectiveFunction[DT, RLT, RegressionBin]
-comptime WeightedRegObj = RegressionObjectiveFunction[DT, RLT, WeightedRegressionBin]
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null float32 buffer address")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-comptime N_RF_FIT_PARAMS = 16
-"""`params` for both fit entry points, in this exact order -- the wrapper
-names the same order in the same words:
-
-     0  n_rows
-     1  n_cols
-     2  n_classes             (classifier only; MUST be 0 for the regressor)
-     3  n_trees
-     4  max_depth
-     5  max_leaves            (-1 = unlimited, cuML's own sentinel)
-     6  max_features_fraction (float in (0, 1]; the WRAPPER resolves
-                               'sqrt'/'log2'/counts to a fraction, exactly
-                               as cuML's python layer does)
-     7  max_n_bins
-     8  min_samples_leaf
-     9  min_samples_split
-    10  min_impurity_decrease (float)
-    11  bootstrap             (0/1)
-    12  max_samples           (float; ignored and reset to 1.0 by the implementation
-                               when bootstrap is 0, `randomforest.cuh:304`)
-    13  seed
-    14  n_streams             (cuML's python default is 4; DEVIATION 117)
-    15  max_batch_size        (cuML default 4096)
-    16  min_weight_fraction_leaf  OPTIONAL (float in [0, 0.5]; scikit-
-                               learn's; a 16-slot call is 0). Read by
-                               `rf_classifier_fit*` (session included)
-                               and `rf_regressor_fit*`; see
-                               `_rf_min_weight_fraction` below.
-
-The split criterion is NOT a slot: it crosses as its own integer argument
-(`criterion`, the `CRITERION` enumerator value from `decisiontree.mojo`)
-so the two fit entry points can gate it by LABEL TYPE before the engine
-sees it -- see DEVIATION 407 at `_check_criterion` below.
-"""
-
-# DEVIATION 407 (2026-08-23, RF lane). THE CRITERION SELECTOR CROSSES THE
-# PYTHON BOUNDARY.
-# THEIRS: `randomforest_common.pyx:104-151` maps the strings
-# 'gini'/'entropy'/'mse'/'poisson'/'gamma'/'inverse_gaussian' (and the
-# digits '0'..'7') onto `CRITERION`, refuses MAE by NotImplementedError, and
-# passes the enumerator down as `split_criterion`; nothing in their python
-# layer checks that the enumerator suits the LABEL TYPE. The C++ `default:`
-# arm of `GainPerSplit` (`objectives.cuh:132-136`, `:331-338`) returns
-# `-max()` for every candidate, so a regression enumerator handed to the
-# classifier (or vice versa) fits a forest of STUMPS without a word.
-# OURS: the wrapper maps sklearn-shaped names onto the same enumerators
-# (`python/mojolearn/randomforest.py::_CLS_CRITERIA` / `_REG_CRITERIA`)
-# and each fit binding REFUSES BY NAME an enumerator its objective has no
-# arm for -- a silent stump is the "reached but inert" failure class
-# `ensemble/checks/criteria_check.mojo` arm A/B exists to catch, and
-# the Python surface must not reopen it. Until this deviation the binding
-# hardcoded GINI / MSE and the wrapper refused every other name; that text
-# is gone.
-
-
-def _cls_criteria() -> List[Int]:
-    """The enumerators `ClassificationObjectiveFunction.GainPerSplit` has
-    an arm for (`objectives.cuh:132-136`)."""
-    return [GINI, ENTROPY]
-
-
-def _reg_criteria() -> List[Int]:
-    """The enumerators `RegressionObjectiveFunction.GainPerSplit` has an
-    arm for (`objectives.cuh:331-338`); MAE is enumerated but armless,
-    theirs and ours."""
-    return [MSE, POISSON, GAMMA, INVERSE_GAUSSIAN]
-
-
-def _check_criterion(
-    who: String, criterion: Int, allowed: List[Int]
-) raises:
-    """DEVIATION 407: refuse an enumerator the objective has no arm for."""
-    for i in range(len(allowed)):  # small-loop(allowed: at most four criterion enumerators): parameter validation, not data
-        if allowed[i] == criterion:
-            return
-    var names = String("")
-    for i in range(len(allowed)):  # small-loop(allowed: at most four criterion enumerators): error message names, not data
-        if i > 0:
-            names += "/"
-        names += criterion_name(allowed[i])
-    raise Error(
-        who
-        + ": split criterion "
-        + criterion_name(criterion)
-        + " ("
-        + String(criterion)
-        + ") has no arm in this objective's GainPerSplit"
-        + " (objectives.mojo, DEVIATION 407); accepted: "
-        + names
-    )
-
-
-# TOMBSTONE: MOJOLEARN_RF_FAST_BATCH16K (DROPPED-noise) deleted 2026-10-03 by 288809ef8; code recoverable at 288809ef8^.
-# Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_BATCH16K.patch; record in docs/TOMBSTONES.md.
-#: FAST on Apple (trees-apple3): a wider node batch. A tree deeper than 12
-#: levels has levels of more than 4096 nodes, and every batch of a level is
-#: one more round of launches, uploads and a host wait for nodes of a few
-#: rows each (M4 Pro, taxi, 100 trees of depth 16: 32.8 node batches and
-#: 71.5 histogram rounds per tree). The queue is first in, first out and a
-#: node's split reads only its own rows and its own feature sample, so the
-#: batch width changes which launch a node rides, not its split. Only the
-#: default width (4096) is widened, only for trees without a leaf budget
-#: (max_leaves -1) that may grow past 12 levels, and only as far as `RF_FAST_BATCH_BYTES` of histogram
-#: workspace per stream allows. OPT-IN until its A/B passes: `-D
-#: MOJOLEARN_RF_FAST_BATCH32K` (the 16K arm was DROPPED-noise,
-#: lane/apple-fast-trees2 @ bfd1d7cc6).
-comptime RF_FAST_BATCH = 0 if not (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-) else (
-    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else 0
+from core.mojolearn_rf_run import (
+    DT,
+    CLT,
+    RLT,
+    N_RF_FIT_PARAMS,
+    _f32_ptr,
+    _i32_ptr,
+    _cls_criteria,
+    _reg_criteria,
+    _check_criterion,
+    _rf_params_len_ok,
+    _rf_min_weight_fraction,
+    _rf_fold_min_weight_count,
+    _rf_params_from,
+    RFExportTrees,
+    RF_EXPORTS,
+    _retain_rf_handle,
+    _rf_export_into_native,
+    _rf_export_verify_native,
+    RfDataSession,
+    RF_SESSIONS,
+    _session_shape_check,
+    _rf_session_restore_prep,
+    _u64_ptr,
+    _f64_ptr,
+    _ada_state_of,
+    _rf_predict_native,
+    _rf_weighted_session_fit,
+    _rf_ada_classifier_round,
+    _rf_classifier_fit_forest,
+    _rf_regressor_fit_forest,
+    _rf_keep_forest,
+    _rf_dart_member_forest,
+    _rf_session_rows_forest,
+    _rf_data_session_stage,
+    _rf_ada_open_stage,
+    _rf_ada_regressor_round,
+    _rf_data_session_close,
 )
-comptime RF_FAST_BATCH_BYTES = 536870912
-comptime RF_CUML_DEFAULT_BATCH = 4096
-
-
-def _rf_batch_size(params: PythonObject) raises -> Int:
-    """Slot 15, widened under `RF_FAST_BATCH` (see its note)."""
-    var batch = Int(py=params[15])
-    comptime if RF_FAST_BATCH > 0:
-        var depth = Int(py=params[4])
-        if (
-            batch == RF_CUML_DEFAULT_BATCH
-            and Int(py=params[5]) == -1
-            and (depth > 12 or depth < 1)
-        ):
-            var n_cols = Int(py=params[1])
-            var outputs = Int(py=params[2])
-            if outputs < 1:
-                outputs = 1
-            var cols = Int(Float64(py=params[6]) * Float64(n_cols)) + 1
-            if cols > n_cols:
-                cols = n_cols
-            if cols > 40:
-                cols = 40
-            # 8 bytes covers both bin types
-            var per_node = Int(py=params[7]) * outputs * cols * 8
-            var wide = RF_FAST_BATCH
-            if per_node > 0 and wide * per_node > RF_FAST_BATCH_BYTES:
-                wide = RF_FAST_BATCH_BYTES // per_node
-            if wide > batch:
-                batch = wide
-    return batch
-
-
-def _rf_params_len_ok(params: PythonObject) raises -> Bool:
-    """16 slots, or 17 with the optional `min_weight_fraction_leaf`."""
-    var n = len(params)
-    return n == N_RF_FIT_PARAMS or n == N_RF_FIT_PARAMS + 1
-
-
-def _rf_min_weight_fraction(params: PythonObject) raises -> Float64:
-    """Slot 16, scikit-learn's `min_weight_fraction_leaf` (lane
-    sk-kernels): 0 for a 16-slot call; refused outside [0, 0.5] in
-    scikit-learn's words (its `_parameter_constraints`)."""
-    if len(params) <= N_RF_FIT_PARAMS:
-        return 0.0
-    var f = Float64(py=params[N_RF_FIT_PARAMS])
-    if not (f >= 0.0 and f <= 0.5):
-        raise Error(
-            "The 'min_weight_fraction_leaf' parameter must be a float in the"
-            " range [0.0, 0.5]. Got " + String(f) + " instead."
-        )
-    return f
-
-
-def _rf_fold_min_weight_count(
-    mut rf_params: RF_params, frac: Float64, n_rows: Int
-):
-    """scikit-learn's `min_weight_leaf = frac * total weight` on a COUNT
-    objective (no row weights reach the bins: unweighted, all-unit, or
-    weighted bootstrap, where the weights drive the draw and every drawn
-    row counts once). A tree's total weight is then its row count -- the
-    bootstrap draw `n_sampled_rows_for` sizes, else n_rows -- and an
-    integer child count c satisfies c >= frac * total exactly when
-    c >= ceil(frac * total), so the bound is `min_samples_leaf` raised to
-    that ceiling. frac == 0 leaves the params, and every bit, unchanged."""
-    if not (frac > 0.0):
-        return
-    var n_tree = n_sampled_rows_for(
-        rf_params.bootstrap,
-        rf_params.max_samples if rf_params.bootstrap else Float32(1.0),
-        n_rows,
-    )
-    var bound = frac * Float64(n_tree)
-    var need = Int(bound)
-    if Float64(need) < bound:
-        need += 1
-    if need > Int(rf_params.tree_params.min_samples_leaf):
-        rf_params.tree_params.min_samples_leaf = Int32(need)
-
-
-def _rf_min_weight_leaf(frac: Float64, weight_total: Float64) -> Float32:
-    """scikit-learn's `min_weight_leaf` on a WEIGHTED objective (no
-    bootstrap, non-unit row weights): `frac * total weight`, read by the
-    weighted bins' `GainPerSplit` (`ObjectiveLike.SetMinWeightLeaf`)."""
-    if not (frac > 0.0):
-        return Float32(0)
-    return Float32(frac * weight_total)
-
-
-def _rf_drop_zero_weight_rows[LT: DType](
-    ctx: DeviceContext,
-    mut dx: DeviceBuffer[DT],
-    mut dy: DeviceBuffer[LT],
-    mut dsw: DeviceBuffer[DT],
-    mut weights: List[Float32],
-    n_rows: Int,
-    n_cols: Int,
-) raises -> Int:
-    """lane sk-weq-trees: scikit-learn's tree splitter keeps only the rows
-    whose sample_weight is not zero (`_splitter.pyx`, `Splitter.init`), so a
-    zero-weight row must shape nothing -- not the quantile edges (computed
-    from every row of `dx`), not a node's row count. Called on a weighted
-    fit without bootstrap whose weights are not all 1.0: the kept rows are
-    found and gathered ON THE DEVICE (`core/weight_compact_device`) into new
-    column-major X, labels and weights, which replace the caller's; the
-    host weight list becomes the kept weights (one bulk copy). Returns the
-    kept row count; n_rows (and every buffer untouched) when no weight is
-    zero, so such a fit keeps every bit."""
-    var rows = ctx.enqueue_create_buffer[DType.int32](n_rows)
-    var kept = device_nonzero_weight_rows(ctx, dsw, n_rows, rows)
-    if kept >= n_rows or kept <= 0:
-        _ = rows^
-        return n_rows
-    var cx = device_gather_rows_colmajor(ctx, dx, n_rows, n_cols, rows, kept)
-    var cy = device_gather_rows[LT](ctx, dy, rows, kept)
-    var cw = device_gather_rows[DT](ctx, dsw, rows, kept)
-    weights = List[Float32](length=kept, fill=Float32(0))
-    ctx.enqueue_copy(dst_ptr=weights.unsafe_ptr(), src_buf=cw)
-    ctx.synchronize()
-    _ = rows^
-    dx = cx^
-    dy = cy^
-    dsw = cw^
-    return kept
-
-
-def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
-    """Slots 3-15 into `RF_params`, read under the GIL."""
-    return RF_params(
-        n_trees=Int32(Int(py=params[3])),
-        bootstrap=Int(py=params[11]) != 0,
-        max_samples=Float32(Float64(py=params[12])),
-        seed=UInt64(Int(py=params[13])),
-        n_streams=Int32(Int(py=params[14])),
-        tree_params=DecisionTreeParams(
-            max_depth=Int32(Int(py=params[4])),
-            max_leaves=Int32(Int(py=params[5])),
-            max_features=Float32(Float64(py=params[6])),
-            max_n_bins=Int32(Int(py=params[7])),
-            min_samples_leaf=Int32(Int(py=params[8])),
-            min_samples_split=Int32(Int(py=params[9])),
-            split_criterion=criterion,
-            min_impurity_decrease=Float32(Float64(py=params[10])),
-            max_batch_size=Int32(_rf_batch_size(params)),
-        ),
-    )
 
 
 def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises -> PythonObject:
@@ -422,45 +153,17 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises ->
     return out
 
 
-def _forest_out(forest: RandomForestMetaData[DT, DT]) raises -> PythonObject:
-    return _forest_out_trees(forest.trees, forest.notices)
-
-
-def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObject:
-    return _forest_out_trees(forest.trees, forest.notices)
-
-
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
 # into the export registry retains existing native storage without flattening.
-from std.ffi import _Global
-from forest_export_binding import (
-    ForestExportRegistry, validate_forest_export_destinations,
-    copy_forest_export_leaves, forest_export_py_list_f64,
-    forest_export_py_list_i64,
-)
-from core.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
-comptime RFExportTrees = List[TreeMetaDataNode[DT]]
-comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
-    name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
+from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
+from forest_export_binding_pack import (forest_export_descriptor_py,)
+from core.mojolearn_rf_impl import rf_flatten_trees
 
 
 def _retain_rf_export(var trees: RFExportTrees, notices: Int) raises -> PythonObject:
-    if not len(trees):
-        raise Error("cannot export an empty fitted RF")
-    var nodes = 0
-    var outputs = Int(trees[0].num_outputs)
-    var n_fitted = len(trees)
-    for t in range(n_fitted):  # small-loop(n_fitted: fitted trees, one node count each): export shape bookkeeping, no row or node data
-        var tree_nodes = len(trees[t].sparsetree)
-        nodes += tree_nodes
-        if Int(trees[t].num_outputs) != outputs or len(trees[t].vector_leaf) != tree_nodes * outputs:
-            raise Error("fitted RF leaf storage differs from export dimensions")
-    var count = len(trees)
-    # The third word is the fit's notice mask (`ensemble/rf_notices.mojo`):
-    # the public fit raises those notices as Python warnings.
-    var meta: List[Int64] = [Int64(count), Int64(outputs), Int64(notices)]
-    return RF_EXPORTS.get_or_create_ptr()[].insert(trees^, count, nodes, outputs, meta^)
+    """`_retain_rf_handle`, then the export descriptor (the session, DART
+    and AdaBoost Python entries)."""
+    return _rf_handle_py(_retain_rf_handle(trees^, notices), True)
 
 
 def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
@@ -468,19 +171,8 @@ def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
     leaves: PythonObject, counts: PythonObject) raises -> PythonObject:
     if len(counts) != 3:
         raise Error("forest_export requires trees, nodes, outputs capacities")
-    var id = Int(py=handle)
-    var registry = RF_EXPORTS.get_or_create_ptr()
-    registry[].validate(id, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
-    validate_forest_export_destinations(Int(py=offsets), Int(py=columns),
-        Int(py=thresholds), Int(py=left), Int(py=leaves))
-    var op = _i32_ptr(Int(py=offsets))
-    var cp = _i32_ptr(Int(py=columns))
-    var tp = _f32_ptr(Int(py=thresholds))
-    var lp = _i32_ptr(Int(py=left))
-    rf_export_trees_into(
-        registry[].entries[id].model, op, cp, tp, lp, Int(py=leaves),
-        registry[].entries[id].outputs,
-    )
+    var dst: List[Int] = [Int(py=offsets), Int(py=columns), Int(py=thresholds), Int(py=left), Int(py=leaves)]
+    _rf_export_into_native(Int(py=handle), dst, Int(py=counts[0]), Int(py=counts[1]), Int(py=counts[2]))
     return PythonObject(None)
 
 
@@ -498,232 +190,80 @@ def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
-def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    params: PythonObject,
-    criterion: PythonObject,
-    weights_addr: Int = 0,
-    tree_start: Int = 0,
-    oob_addr: Int = 0,
-    oob_score_addr: Int = 0,
-    importance_addr: Int = 0,
-) raises -> PythonObject:
+def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit the cuML-implementation RandomForest classifier. `x` is COLUMN-major
     float32 (n_rows * n_cols, the layout `fit_forest`'s default expects);
     `y` is int32 class CODES in [0, n_classes). See `N_RF_FIT_PARAMS`.
     `criterion` is GINI (0) or ENTROPY (1); anything else is refused by
-    name (DEVIATION 407)."""
-    if not _rf_params_len_ok(params):
-        raise Error(
-            "rf_classifier_fit: params must hold "
-            + String(N_RF_FIT_PARAMS)
-            + " values (17 with min_weight_fraction_leaf), got "
-            + String(len(params))
-        )
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var n_classes = Int(py=params[2])
-    if n_classes < 2:
-        raise Error("rf_classifier_fit: n_classes must be >= 2")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _i32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
-    _check_criterion("rf_classifier_fit", crit, _cls_criteria())
-    var rf_params = _rf_params_from(params, crit)
-    var mw_frac = _rf_min_weight_fraction(params)
-
-    # cpu3-bindings: the weights are one memcpy here; their refusals, the
-    # all-ones test and the total run on the device after the upload
-    # (`core/weight_scan_device`), not as a host walk over every row.
-    var weights = List[Float32]()
-    var weight_total = Float64(0)
-    var weighted = weights_addr != 0
-    if weighted:
-        weights = list_f32(_f32_ptr(weights_addr), n_rows)
-    var forest: RandomForestMetaData[DT, CLT]
-    # DEVIATION 2510 -- the binding's own stage table (MOJOLEARN_STAGE_TIMES=1
-    # only): what this entry point spends OUTSIDE `fit_forest`'s fit_total,
-    # host-stamped, so the Python-side residual can be split. No arithmetic.
+    name (DEVIATION 407). Returns the export handle (lane calltable-forest:
+    every fit is kept in RF_EXPORTS; the diagnostic lists are read from the
+    kept fit, `_rf_handle_py`)."""
     var bt = StageTimes()
     var t_bind = bt.start()
+    var forest: RandomForestMetaData[DT, CLT]
     with GILReleased(Python()):
-        var t_s = bt.start()
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        bt.stop_host("bind_ctx_create", t_s)
-        t_s = bt.start()
-        var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
-        ctx.synchronize()
-        bt.stop_host("bind_pinned_alloc", t_s)
-        t_s = bt.start()
-        # DEVIATION 2481: bulk typed copies preserve every input bit while
-        # avoiding scalar stores into pinned memory.
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
-        bt.stop_host("bind_host_copy", t_s)
-        t_s = bt.start()
-        # cpu-gpu-cleanup t-forest: X goes to the device as the caller's
-        # bytes and is transposed there when the caller lent its ROW-major
-        # C-order block (ROWMAJOR); the NaN refusal is a device scan
-        # (`ensemble/device_layout.mojo`). No host pass over X: the threaded
-        # pinned-stage transpose and host NaN scan (DEVIATION 2637) are gone.
-        # The builder's host view of X (`host_x_addr`, DEVIATION 2484) is the
-        # caller's column-major block when it lent one, else none.
-        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
-        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
-        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
-        comptime if not FOREST_DEVICE_FINITE:
-            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
-                raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
-        var host_x = 0 if ROWMAJOR else Int(xp)
-        # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
-        var n_fit = n_rows
-        var dy = ctx.enqueue_create_buffer[CLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        # The host weights drive sampling; non-bootstrap objectives read the
-        # device weights at original row IDs. Keep both alive through fitting.
-        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        comptime if FOREST_DEVICE_FINITE:
-            var fscan = ForestFiniteScan(ctx)
-            fscan.enqueue(ctx, dx, n_rows * n_cols)
-            ctx.synchronize()
-            fscan.refuse_if_bad("rf_classifier_fit: ")
-        else:
-            ctx.synchronize()
-        bt.stop_host("bind_h2d", t_s)
-        if weighted:
-            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
-            var wscan = device_scan_weights(ctx, dsw, n_rows)
-            if wscan.bad:
-                raise Error("class weights must be finite and nonnegative")
-            if wscan.total <= 0:
-                raise Error("class weights must have positive total")
-            # sk-weq-trees: zero-weight rows leave the fit (no bootstrap);
-            # the kept weights are rescanned (all 1.0 after the drop: the
-            # count objective, the fit on the repeated rows)
-            if not rf_params.bootstrap and not wscan.all_unit:
-                n_fit = _rf_drop_zero_weight_rows[CLT](
-                    ctx, dx, dy, dsw, weights, n_rows, n_cols
-                )
-                if n_fit < n_rows:
-                    host_x = 0
-                    wscan = device_scan_weights(ctx, dsw, n_fit)
-            weight_total = wscan.total
-            if wscan.all_unit:
-                weights = List[Float32]()
-        # cuML randomforest.cuh dispatches weighted objectives only when
-        # bootstrap is disabled: sampling already applies bootstrap weights.
-        if len(weights) > 0 and not rf_params.bootstrap:
-            var scale = choose_scale(weight_total, n_fit)
-            if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
-                raise Error("class weights exceed Float32 fixed-point scale range")
-            var scales = BinScales(Float32(1), Float32(scale))
-            forest = fit_forest[WeightedClsObj](
-                ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                scales, sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
-                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
-                notices_to_stderr=False,
-            )
-        else:
-            _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
-            forest = fit_forest[ClsObj](
-                ctx, dx, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                sample_weight_host=weights, host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
-                notices_to_stderr=False,
-            )
-        t_s = bt.start()
-        ctx.synchronize()
-        _ = dx^
-        _ = dy^
-        _ = dsw^
-        _ = hy^
-        bt.stop_host("bind_release_buffers", t_s)
-        t_s = bt.start()
-        # DEVIATION 1946: THE CONTEXT DIES LAST. Mojo destroys a value at its
-        # LAST USE, so without this line `ctx`'s last use is the
-        # `synchronize()` above and the five buffers -- two of them PINNED
-        # HOST allocations -- are freed against a context that is already
-        # gone. `ensemble/checks/rf_ctx_order_probe.mojo` is that ordering
-        # in 60 lines with no Python. It is the same class as DEVIATION 1944
-        # (a device buffer freed against a context that is not the live one),
-        # and it is why the pure-Mojo probe passed where this binding hung:
-        # `rf_ctx_probe.mojo::one_fit` takes `ctx` as a BORROWED argument, so
-        # the caller's frame keeps it alive past every release.
-        _ = ctx^
-        bt.stop_host("bind_release_ctx", t_s)
-    _ = weights^
-    if oob_addr != 0:
-        if oob_score_addr == 0 or not forest.has_oob:
-            raise Error("RF OOB export requires output and score buffers")
-        # T15 native public output boundary: borrowed result buffers, no Python
-        # rows/labels/reductions. The forest owns state through this bulk copy.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
-        memcpy(dest=oob_out,src=forest.oob_decision_function_.unsafe_ptr(),count=len(forest.oob_decision_function_))
-        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
-    if importance_addr != 0:
-        if len(forest.feature_importances_) != n_cols:
-            raise Error("RF feature importance output does not match feature count")
-        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
-    var t_x = bt.start()
-    comptime if EXPORT:
-        var export_trees = forest.trees^
-        forest.trees = RFExportTrees()
-        var handle = _retain_rf_export(export_trees^, forest.notices)
-        bt.stop_host("bind_export_retain", t_x)
-        bt.stop_host("binding_total", t_bind)
-        bt.report()
-        return handle
+        forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+    return _rf_keep_forest(forest, bt, t_bind)
+
+
+def _rf_fit_native[CLASSIFIER: Bool, ROWMAJOR: Bool](args: ForestFitArgs) raises -> Int:
+    """One fit (the forest entry's XF_FIT): the export handle."""
+    comptime if CLASSIFIER:
+        return _rf_classifier_fit[ROWMAJOR](args)
     else:
-        var out = _forest_out_i32(forest)
-        bt.stop_host("bind_export_legacy", t_x)
-        bt.stop_host("binding_total", t_bind)
-        bt.report()
-        return out
+        return _rf_regressor_fit[ROWMAJOR](args)
 
 
-def rf_classifier_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, weights_addr: PythonObject,
-    oob_addr: PythonObject, score_addr: PythonObject, importance_addr: PythonObject,
+def _kept_forest_out(handle: Int) raises -> PythonObject:
+    # The kept fit's diagnostic lists. A helper of its own so the Dict
+    # lookup (DictKeyError) and the list build (Error) both raise Error to
+    # the caller's try/finally, which cannot mix the two error types.
+    var registry = RF_EXPORTS.get_or_create_ptr()
+    ref entry = registry[].entries[handle]
+    return _forest_out_trees(entry.model, Int(entry.meta[2]))
+
+
+def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:
+    """PACK of a kept fit for the Python entries: the export descriptor
+    (`*_export`), or the diagnostic lists of the kept fit, released (the
+    plain entries; the same lists `_forest_out` built from the forest)."""
+    var registry = RF_EXPORTS.get_or_create_ptr()
+    if export:
+        try:
+            return forest_export_descriptor_py(registry[], handle)
+        except error:
+            registry[].release(handle)
+            raise error^
+    var out = PythonObject(None)
+    try:
+        out = _kept_forest_out(handle)
+    finally:
+        registry[].release(handle)
+    return out
+
+
+def _rf_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject, criterion: PythonObject,
+    export: Bool, weights: Int = 0, tree_start: Int = 0, oob: Int = 0, score: Int = 0, importance: Int = 0,
+    weight_max: Float64 = 0,
 ) raises -> PythonObject:
-    """T15 optional outputs: Float64 OOB+score, Float32 importance[n_features].
-    Zero disables each output; OOB prediction and score must be requested together.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    if (Int(py=oob_addr) == 0) != (Int(py=score_addr) == 0):
-        raise Error("RF OOB output and score must be requested together")
-    return _rf_classifier_fit[True](x_addr,y_addr,params,criterion,
-        weights_addr=Int(py=weights_addr),oob_addr=Int(py=oob_addr),
-        oob_score_addr=Int(py=score_addr),importance_addr=Int(py=importance_addr))
-
-
-def rf_regressor_fit_aux_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
-    importance_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 optional requested outputs; same status/ownership as classifier."""
-    if (Int(py=oob_addr) == 0) != (Int(py=score_addr) == 0):
-        raise Error("RF OOB output and score must be requested together")
-    return _rf_regressor_fit[True](x_addr,y_addr,params,criterion,
-        oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr),
-        importance_addr=Int(py=importance_addr))
+    """The Python fit entries: UNPACK (`forest_fit_args_py`), the native
+    fit, PACK (`_rf_handle_py`)."""
+    var args = forest_fit_args_py(x_addr, y_addr, params, criterion)
+    args.weights = weights
+    args.tree_start = tree_start
+    args.oob = oob
+    args.score = score
+    args.importance = importance
+    args.weight_max = weight_max
+    return _rf_handle_py(_rf_fit_native[CLASSIFIER, ROWMAJOR](args), export)
 
 
 def rf_classifier_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
-    return _rf_classifier_fit[EXPORT](x_addr, y_addr, params, criterion)
-
-
-def rf_classifier_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_classifier_fit` with `x` ROW-major (C-order) float32, borrowed
-    through the call (DEVIATION 2637). Same params, same forest bits."""
-    return _rf_classifier_fit[EXPORT, True](x_addr, y_addr, params, criterion)
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, EXPORT)
 
 
 def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
@@ -733,14 +273,14 @@ def rf_classifier_fit_weighted_binding[EXPORT: Bool = False](
     var address = Int(py=weights_addr)
     if address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    return _rf_classifier_fit[EXPORT](x_addr, y_addr, params, criterion, address)
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, EXPORT, weights=address)
 
 
 def rf_regressor_fit_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
-    return _rf_regressor_fit[EXPORT](x_addr, y_addr, params, criterion)
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, EXPORT)
 
 
 def rf_regressor_fit_weighted_binding[EXPORT: Bool = False](
@@ -754,84 +294,24 @@ def rf_regressor_fit_weighted_binding[EXPORT: Bool = False](
     var address = Int(py=weights_addr)
     if address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
-    return _rf_regressor_fit[EXPORT](
-        x_addr, y_addr, params, criterion,
-        weights_addr=address, weight_max=Float64(py=weight_max),
-    )
-
-
-# ---------------------------------------------------------------------------
-# THE DATA SESSION (trees-apple3). A boosted ensemble (DART, AdaBoost) fits
-# one small forest per member on the SAME X: each member's fit scanned X for
-# NaN, copied it into a pinned stage and uploaded it again (M4 Pro, 1M x 16:
-# about 10 ms of a 30 ms member fit). A session does that once. Its member
-# fits are `fit_forest_prepared` on the staged X: the same kernels on the
-# same bytes, so a member's forest is the forest `rf_*_fit` returns.
-# `share_tables` also keeps the first member's quantile table and binned
-# dataset for the later members. Their quantile SAMPLE is then the first
-# member's (the sample is drawn with the fit's seed), so the later members'
-# bins differ from their own fits': a FAST-only option with a quality check.
-# One thread uses a session at a time.
-struct RfDataSession(Movable):
-    var id: Int
-    var dx: DeviceBuffer[DT]
-    var n_rows: Int
-    var n_cols: Int
-    var host_x: Int
-    var share_tables: Bool
-    var prep: List[ForestPrep]
-
-    def __init__(
-        out self,
-        id: Int,
-        var dx: DeviceBuffer[DT],
-        n_rows: Int,
-        n_cols: Int,
-        host_x: Int,
-        share_tables: Bool,
-    ):
-        self.id = id
-        self.dx = dx^
-        self.n_rows = n_rows
-        self.n_cols = n_cols
-        self.host_x = host_x
-        self.share_tables = share_tables
-        self.prep = List[ForestPrep]()
-
-
-struct RfSessionRegistry(Defaultable, Movable):
-    var sessions: List[RfDataSession]
-    var next_id: Int
-
-    def __init__(out self):
-        self.sessions = List[RfDataSession]()
-        self.next_id = 1
-
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
-            if self.sessions[i].id == id:
-                return i
-        raise Error("unknown or closed forest data session handle")
-
-
-comptime RF_SESSIONS = _Global[StorageType=RfSessionRegistry,
-    name=("MojoRFDataSessionIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFDataSessionFast"), init_fn=RfSessionRegistry.__init__]
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, EXPORT, weights=address,
+                                    weight_max=Float64(py=weight_max))
 
 
 def rf_data_session_open_binding(
-    x_addr: PythonObject, params: PythonObject
+    x_addr: PythonObject, params_py: PythonObject
 ) raises -> PythonObject:
     """Stage X on the device for the member fits of one ensemble. `params`
     is [n_rows, n_cols, row_major, share_tables]; `x` is float32, ROW-major
     when `row_major` is 1 and COLUMN-major otherwise, borrowed through this
     call only. Returns the session handle."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
     if len(params) != 4:
         raise Error("rf_data_session_open: params must hold 4 values")
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var row_major = Int(py=params[2]) != 0
-    var share_tables = Int(py=params[3]) != 0
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var row_major = params.i(2) != 0
+    var share_tables = params.i(3) != 0
     if n_rows <= 0 or n_cols <= 0:
         raise Error("rf_data_session_open: invalid shape")
     comptime if GLOBAL_NUMERIC_MODE == 1:
@@ -842,24 +322,11 @@ def rf_data_session_open_binding(
             )
     var xp = _f32_ptr(Int(py=x_addr))
     var made = List[RfDataSession]()
-    var has_nan = False
+    var bad = False
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        # cpu-gpu-cleanup t-forest: the caller's bytes go to the device as
-        # they are, the transpose and the NaN scan run there. The session
-        # keeps no host copy of X (`host_x` 0: the borrow ends with this
-        # call), so a member's OOB pass reads the device plane.
-        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, row_major)
-        has_nan = device_has_nan_f32(ctx, dx, n_rows * n_cols)
-        if has_nan:
-            _ = dx^
-        else:
-            made.append(
-                RfDataSession(0, dx^, n_rows, n_cols, 0, share_tables)
-            )
-        _ = ctx^
-    if has_nan:
-        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+        bad = _rf_data_session_stage(xp, n_rows, n_cols, row_major, share_tables, made)
+    if bad:
+        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var id = reg[].next_id
     reg[].next_id += 1
@@ -870,32 +337,8 @@ def rf_data_session_open_binding(
 
 
 def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(Int(py=handle))
-    var session = reg[].sessions.pop(si)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    ctx.synchronize()
-    _ = session^
-    _ = ctx^
+    _rf_data_session_close(Int(py=handle))
     return PythonObject(None)
-
-
-def _session_shape_check(
-    name: String, session_rows: Int, session_cols: Int,
-    n_rows: Int, n_cols: Int,
-) raises:
-    if session_rows != n_rows or session_cols != n_cols:
-        raise Error(
-            name
-            + ": params name "
-            + String(n_rows)
-            + " x "
-            + String(n_cols)
-            + ", the session holds "
-            + String(session_rows)
-            + " x "
-            + String(session_cols)
-        )
 
 
 # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -906,6 +349,15 @@ def rf_regressor_fit_dart_binding(
     dart_handle: PythonObject, cls: PythonObject, rows_addr: PythonObject,
     cols_addr: PythonObject, params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
+    """`rf_regressor_fit_dart_export` (UNPACK of `_rf_regressor_fit_dart`,
+    the forest entry's XF_FIT_DART)."""
+    var args = forest_fit_args_py(rows_addr, cols_addr, params, criterion)
+    args.session = Int(py=dart_handle)
+    args.cls = Int(py=cls)
+    return _rf_handle_py(_rf_regressor_fit_dart(args), True)
+
+
+def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     """cpu4-forest: a DART round's member fit for class `cls` on the DART
     session's device buffers (`x_trees_dart_open`'s X and the `target`
     plane `x_trees_dart_step` wrote), on the DART context, so the K
@@ -922,18 +374,18 @@ def rf_regressor_fit_dart_binding(
             + " values, got "
             + String(len(params))
         )
-    if Int(py=params[2]) != 0:
+    if params.i(2) != 0:
         raise Error("rf_regressor_fit_dart: n_classes (slot 2) must be 0")
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var crit = Int(py=criterion)
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var crit = params.criterion
     _check_criterion("rf_regressor_fit_dart", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
     _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
-    var hid = Int(py=dart_handle)
-    var c = Int(py=cls)
-    var rows_a = Int(py=rows_addr)
-    var cols_a = Int(py=cols_addr)
+    var hid = params.session
+    var c = params.cls
+    var rows_a = params.x
+    var cols_a = params.y
     var dreg = DART_SESSIONS.get_or_create_ptr()
     var di = dreg[].find(hid)
     var n = dreg[].sessions[di].n
@@ -951,70 +403,26 @@ def rf_regressor_fit_dart_binding(
     if cols_a != 0 and n_cols > d:
         raise Error("rf_regressor_fit_dart: more columns than X holds")
 
+    # Hazard B: the DART session registry is a process-global List that
+    # another thread may append to (reallocating it) or pop from while this
+    # member fit runs with the GIL released. Take the session's buffer
+    # HANDLES (reference counted; the device memory is shared) under the GIL
+    # and never index the registry inside the released block.
+    var dart_x = dreg[].sessions[di].x.copy()
+    var dart_target = dreg[].sessions[di].target.copy()
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
-        var ctx = process_ctx[_DART_CTX]()
-        var drows = ctx.enqueue_create_buffer[DType.int32](
-            n_rows if rows_a != 0 else 1
+        forest = _rf_dart_member_forest(
+            dart_x, dart_target, rows_a, cols_a, n_rows, n_cols, n, d, c, rf_params,
         )
-        var dcols = ctx.enqueue_create_buffer[DType.int32](
-            n_cols if cols_a != 0 else 1
-        )
-        if rows_a != 0:
-            ctx.enqueue_copy(dst_buf=drows, src_ptr=_i32_ptr(rows_a))
-        if cols_a != 0:
-            ctx.enqueue_copy(dst_buf=dcols, src_ptr=_i32_ptr(cols_a))
-        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        launch_dart_member_x(
-            ctx, dreg[].sessions[di].x, drows, dcols, dx, d, n_rows, n_cols,
-            rows_a != 0, cols_a != 0,
-        )
-        var dy: DeviceBuffer[RLT]
-        if rows_a != 0:
-            dy = ctx.enqueue_create_buffer[RLT](n_rows)
-            var tsub = dreg[].sessions[di].target.create_sub_buffer[RLT](
-                c * n, n
-            )
-            launch_dart_member_y(ctx, tsub, drows, dy, n_rows)
-            ctx.synchronize()
-            _ = tsub^
-        else:
-            # a device copy of the class plane: the fit owns its labels
-            dy = ctx.enqueue_create_buffer[RLT](n_rows)
-            var tall = dreg[].sessions[di].target.create_sub_buffer[RLT](
-                c * n, n
-            )
-            ctx.enqueue_copy(dst_buf=dy, src_buf=tall)
-            ctx.synchronize()
-            _ = tall^
-        var dsw = ctx.enqueue_create_buffer[DT](1)
-        # the label scale, as `_rf_regressor_fit` chooses it, on the device
-        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
-        var scales = BinScales(
-            Float32(choose_scale(mag, n_rows)), Float32(1.0)
-        )
-        var prep = List[ForestPrep]()
-        forest = fit_forest_prepared[RegObj](
-            ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, prep, False,
-            scales,
-            notices_to_stderr=False,
-        )
-        ctx.synchronize()
-        _ = dx^
-        _ = dy^
-        _ = dsw^
-        _ = drows^
-        _ = dcols^
-        _ = prep^
-        _ = ctx^
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return _retain_rf_handle(export_trees^, forest.notices)
 
 
 def rf_regressor_fit_session_rows_binding(
     handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
+    params_py: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     """`rf_regressor_fit_export` on the rows `rows` (int32 row ids of the
     session's X, `params[0]` of them, repeats allowed) with `y` their
@@ -1023,6 +431,7 @@ def rf_regressor_fit_session_rows_binding(
     into a fresh column-major matrix, the bytes a host gather of the same
     rows stages, and the fit is `fit_forest` on it with its own quantile
     table."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session_rows: params must hold "
@@ -1030,10 +439,10 @@ def rf_regressor_fit_session_rows_binding(
             + " values, got "
             + String(len(params))
         )
-    if Int(py=params[2]) != 0:
+    if params.i(2) != 0:
         raise Error("rf_regressor_fit_session_rows: n_classes (slot 2) must be 0")
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
     if n_rows <= 0:
         raise Error("rf_regressor_fit_session_rows: no rows")
     var rp = _i32_ptr(Int(py=rows_addr))
@@ -1048,52 +457,16 @@ def rf_regressor_fit_session_rows_binding(
     var src_rows = reg[].sessions[si].n_rows
     if reg[].sessions[si].n_cols != n_cols:
         raise Error("rf_regressor_fit_session_rows: the session holds another column count")
+    # Hazard B: the session's X handle is taken under the GIL (see
+    # rf_regressor_fit_dart_binding); the registry is not indexed after the
+    # GIL is released.
+    var session_dx = reg[].sessions[si].dx.copy()
 
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var hrows = ctx.enqueue_create_host_buffer[CLT](n_rows)
-        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
-        ctx.synchronize()
-        memcpy(dest=hrows.unsafe_ptr(), src=rp, count=n_rows)
-        copy_f32(yp, hy.unsafe_ptr(), n_rows)
-        var drows = ctx.enqueue_create_buffer[CLT](n_rows)
-        ctx.enqueue_copy(dst_buf=drows, src_ptr=hrows.unsafe_ptr())
-        # cpu2-l6-bindings: the row-id range refusal on the device, before
-        # the gather reads through the ids (one Int32 read back)
-        if device_any_index_out_of_range(ctx, drows, n_rows, src_rows):
-            raise Error("rf_regressor_fit_session_rows: a row id is outside the session's X")
-        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](1)
-        var dxg = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        launch_gather_rows_colmajor(
-            ctx,
-            reg[].sessions[si].dx,
-            drows,
-            dxg,
-            src_rows,
-            n_rows,
-            n_cols,
+        forest = _rf_session_rows_forest(
+            session_dx, rp, yp, n_rows, n_cols, src_rows, rf_params,
         )
-        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
-        # blocked order the host column restates (`core/abs_sum_blocked`)
-        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
-        var scales = BinScales(
-            Float32(choose_scale(mag, n_rows)), Float32(1.0)
-        )
-        forest = fit_forest[RegObj](
-            ctx, dxg, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
-            notices_to_stderr=False,
-        )
-        ctx.synchronize()
-        _ = dxg^
-        _ = drows^
-        _ = dy^
-        _ = dsw^
-        _ = hrows^
-        _ = hy^
-        _ = ctx^
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_export(export_trees^, forest.notices)
@@ -1101,11 +474,12 @@ def rf_regressor_fit_session_rows_binding(
 
 def rf_classifier_fit_weighted_session_binding(
     handle: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+    params_py: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
 ) raises -> PythonObject:
     """`rf_classifier_fit_weighted_export` on a data session's X (its
     COLUMN-major stage): same params, same weight checks, same export
     descriptor."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_classifier_fit_weighted_session: params must hold "
@@ -1113,9 +487,9 @@ def rf_classifier_fit_weighted_session_binding(
             + " values (17 with min_weight_fraction_leaf), got "
             + String(len(params))
         )
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var n_classes = Int(py=params[2])
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var n_classes = params.i(2)
     if n_classes < 2:
         raise Error("rf_classifier_fit_weighted_session: n_classes must be >= 2")
     var yp = _i32_ptr(Int(py=y_addr))
@@ -1143,460 +517,252 @@ def rf_classifier_fit_weighted_session_binding(
     var host_x = reg[].sessions[si].host_x
     var prep = List[ForestPrep]()
     swap(prep, reg[].sessions[si].prep)
+    # Hazard B: the session's X handle is taken under the GIL; the registry
+    # is not indexed after the GIL is released (another thread may append or
+    # pop a session meanwhile). The swapped-out prep goes back to the session
+    # on the error path too.
+    var session_dx = reg[].sessions[si].dx.copy()
 
     var forest: RandomForestMetaData[DT, CLT]
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
-            0, n_rows * n_cols
-        )
-        var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
-        ctx.synchronize()
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
-        var dy = ctx.enqueue_create_buffer[CLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
-        var wscan = device_scan_weights(ctx, dsw, n_rows)
-        if wscan.bad:
-            raise Error("class weights must be finite and nonnegative")
-        if wscan.total <= 0:
-            raise Error("class weights must have positive total")
-        # sk-weq-trees: zero-weight rows leave the fit (no bootstrap), as in
-        # `_rf_classifier_fit`. The member then fits its OWN compacted X
-        # with its own quantile table (`fit_forest`), never the session's
-        # shared one (built from every row); a member without a zero weight
-        # keeps the session path and every bit.
-        var n_fit = n_rows
-        if not rf_params.bootstrap and not wscan.all_unit:
-            n_fit = _rf_drop_zero_weight_rows[CLT](
-                ctx, dxv, dy, dsw, weights, n_rows, n_cols
+    try:
+        with GILReleased(Python()):
+            forest = _rf_weighted_session_fit(
+                session_dx, yp, weights^, n_rows, n_cols, n_classes, rf_params^,
+                mw_frac, prep, share_tables, host_x, weight_total,
             )
-            if n_fit < n_rows:
-                wscan = device_scan_weights(ctx, dsw, n_fit)
-        weight_total = wscan.total
-        if wscan.all_unit:
-            weights = List[Float32]()
-        if n_fit < n_rows:
-            if len(weights) > 0:
-                var cscale = choose_scale(weight_total, n_fit)
-                if cscale < Float64(1.1754943508222875e-38) or cscale > Float64(3.4028234663852886e38):
-                    raise Error("class weights exceed Float32 fixed-point scale range")
-                forest = fit_forest[WeightedClsObj](
-                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                    BinScales(Float32(1), Float32(cscale)),
-                    sample_weight_host=weights, host_x_addr=0,
-                    min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
-                    notices_to_stderr=False,
-                )
-            else:
-                _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
-                forest = fit_forest[ClsObj](
-                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
-                    sample_weight_host=weights, host_x_addr=0,
-                    notices_to_stderr=False,
-                )
-        elif len(weights) > 0 and not rf_params.bootstrap:
-            var scale = choose_scale(weight_total, n_rows)
-            if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
-                raise Error("class weights exceed Float32 fixed-point scale range")
-            var scales = BinScales(Float32(1), Float32(scale))
-            forest = fit_forest_prepared[WeightedClsObj](
-                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                prep, share_tables, scales, sample_weight_host=weights,
-                host_x_addr=host_x,
-                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
-                notices_to_stderr=False,
-            )
-        else:
-            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
-            forest = fit_forest_prepared[ClsObj](
-                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-                prep, share_tables, sample_weight_host=weights,
-                host_x_addr=host_x,
-                notices_to_stderr=False,
-            )
-        ctx.synchronize()
-        _ = dxv^
-        _ = dy^
-        _ = dsw^
-        _ = hy^
-        _ = ctx^
-    _ = weights^
-    var back = RF_SESSIONS.get_or_create_ptr()
-    var bi = back[].find(session_id)
-    swap(prep, back[].sessions[bi].prep)
-    _ = prep^
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
+    _rf_session_restore_prep(session_id, prep)
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
     return _retain_rf_export(export_trees^, forest.notices)
 
 
-def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
-    x_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_regressor_fit` with `x` ROW-major (C-order) float32, borrowed
-    through the call (DEVIATION 2637). Same params, same forest bits."""
-    return _rf_regressor_fit[EXPORT, True](x_addr, y_addr, params, criterion)
+# ------------------------------------------------------------ AdaBoost --
+# Lane n5-prophet-adaboost-loops (2026-11-09; plan
+# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, row "AdaBoost").
+# The ensemble's boosting state stays on the device for the whole fit
+# (ensemble/ada_rounds.mojo): one call per round fits the member on the
+# session's X from the resident weights, predicts the training X on the
+# device and runs the SAMME / R2 step there. Before, every round rebuilt the
+# float32 weights on the host (`_w32` + `trees_weighted_rows`), uploaded them
+# into the member fit, downloaded the member's predictions, uploaded weights,
+# predictions and labels into the step, downloaded the weights, rescaled
+# them on the host and (R2) drew and gathered the rows on the host and
+# uploaded them with their targets.
 
 
-def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    params: PythonObject,
-    criterion: PythonObject,
-    tree_start: Int = 0,
-    oob_addr: Int = 0,
-    oob_score_addr: Int = 0,
-    importance_addr: Int = 0,
-    weights_addr: Int = 0,
-    weight_max: Float64 = 0,
+def rf_ada_open_binding(
+    handle: PythonObject, w_addr: PythonObject, y_addr: PythonObject,
+    cw_addr: PythonObject, params_py: PythonObject,
 ) raises -> PythonObject:
+    """Keep an AdaBoost fit's state on a data session's device: `w` (float64,
+    the normalized starting weights), `y` (int32 class codes when
+    `params[1]` = k >= 2; float32 targets when k = 0), `cw` (float32
+    class_weight row weights, or 0 for none). `params` = [n, k]; n must be
+    the session's row count. Every array is borrowed through this call
+    only. Replaces an earlier state of the session."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+    if len(params) != 2:
+        raise Error("rf_ada_open: params must hold [n, k]")
+    var n = params.i(0)
+    var k = params.i(1)
+    if k == 1 or k < 0:
+        raise Error("rf_ada_open: k must be 0 (regressor) or >= 2")
+    var wa = Int(py=w_addr)
+    var ya = Int(py=y_addr)
+    var ca = Int(py=cw_addr)
+    var wp = _u64_ptr(wa)
+    if ya == 0:
+        raise Error("rf_ada_open: null label buffer address")
+    if ca != 0 and k == 0:
+        raise Error("rf_ada_open: class weights belong to a classifier")
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    if reg[].sessions[si].n_rows != n or n <= 0:
+        raise Error("rf_ada_open: n must be the session's row count")
+    var made = List[AdaState]()
+    with GILReleased(Python()):
+        _rf_ada_open_stage(wp, ya, ca, n, k, made)
+    var back = RF_SESSIONS.get_or_create_ptr()
+    var bi = back[].find(session_id)
+    back[].sessions[bi].ada = List[AdaState]()
+    back[].sessions[bi].ada.append(made.pop())
+    return PythonObject(None)
+
+
+def rf_classifier_fit_ada_round_binding(
+    handle: PythonObject, params_py: PythonObject, criterion: PythonObject,
+    round_params: PythonObject, stats_addr: PythonObject,
+) raises -> PythonObject:
+    """One AdaBoostClassifier (SAMME) round on a data session holding the
+    fit's state (`rf_ada_open`): the member's weights from the resident
+    boosting weights, the weighted member fit on the session's X (same
+    params, checks and export descriptor as
+    `rf_classifier_fit_weighted_session_export`), its predictions of the
+    training X and the SAMME step, all on the device. `round_params` =
+    [learning_rate, last]; `stats` (float64, 4) gets [status, alpha, error,
+    total]. The weights are rescaled by the total in place when the round
+    moved them and the total is positive (the next round's start)."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+    if not _rf_params_len_ok(params):
+        raise Error(
+            "rf_classifier_fit_ada_round: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if len(round_params) != 2:
+        raise Error("rf_classifier_fit_ada_round: round_params must hold [learning_rate, last]")
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var n_classes = params.i(2)
+    if n_classes < 2:
+        raise Error("rf_classifier_fit_ada_round: n_classes must be >= 2")
+    var crit = Int(py=criterion)
+    _check_criterion("rf_classifier_fit_ada_round", crit, _cls_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var mw_frac = _rf_min_weight_fraction(params)
+    var lr = Float64(py=round_params[0])
+    var last = Int(py=round_params[1]) != 0
+    var stats = _f64_ptr(Int(py=stats_addr))
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_classifier_fit_ada_round", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var share_tables = reg[].sessions[si].share_tables
+    var host_x = reg[].sessions[si].host_x
+    var session_dx = reg[].sessions[si].dx.copy()
+    var state = _ada_state_of(session_id, True, "rf_classifier_fit_ada_round")
+    if state.k != n_classes:
+        raise Error("rf_classifier_fit_ada_round: n_classes differs from the session's AdaBoost state")
+    var prep = List[ForestPrep]()
+    swap(prep, reg[].sessions[si].prep)
+    var forest: RandomForestMetaData[DT, CLT]
+    try:
+        with GILReleased(Python()):
+            forest = _rf_ada_classifier_round(
+                session_dx, state, n_rows, n_cols, n_classes, rf_params^, mw_frac,
+                prep, share_tables, host_x, lr, last, stats,
+            )
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
+    _rf_session_restore_prep(session_id, prep)
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^, forest.notices)
+
+
+def rf_regressor_fit_ada_round_binding(
+    handle: PythonObject, params_py: PythonObject, criterion: PythonObject,
+    round_params: PythonObject, stats_addr: PythonObject,
+) raises -> PythonObject:
+    """One AdaBoostRegressor (AdaBoost.R2) round on a data session holding
+    the fit's state (`rf_ada_open`, k = 0): n rows drawn with probability
+    w / sum(w) on the device (`x_trees_weighted_sample`'s cdf and draws,
+    stream = the round), the session's X and the targets gathered at them,
+    the squared-error member fit (as `rf_regressor_fit_session_rows_export`:
+    same params, checks and export descriptor), its predictions of the
+    training X and the R2 step, all on the device. `round_params` = [seed,
+    round, loss, learning_rate, last]; `stats` (float64, 4) gets [status,
+    alpha, error, total]; the weights are rescaled by the total in place
+    when the round moved them and the total is positive."""
+    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+    if not _rf_params_len_ok(params):
+        raise Error(
+            "rf_regressor_fit_ada_round: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if params.i(2) != 0:
+        raise Error("rf_regressor_fit_ada_round: n_classes (slot 2) must be 0")
+    if len(round_params) != 5:
+        raise Error("rf_regressor_fit_ada_round: round_params must hold [seed, round, loss, learning_rate, last]")
+    var n_rows = params.i(0)
+    var n_cols = params.i(1)
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit_ada_round", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
+    var seed = Int(py=round_params[0])
+    var round = Int(py=round_params[1])
+    var loss = Int(py=round_params[2])
+    var lr = Float64(py=round_params[3])
+    var last = Int(py=round_params[4]) != 0
+    var stats = _f64_ptr(Int(py=stats_addr))
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_regressor_fit_ada_round", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var session_dx = reg[].sessions[si].dx.copy()
+    var state = _ada_state_of(session_id, False, "rf_regressor_fit_ada_round")
+    var forest: RandomForestMetaData[DT, RLT]
+    with GILReleased(Python()):
+        forest = _rf_ada_regressor_round(
+            session_dx, state, n_rows, n_cols, rf_params, seed, round, loss, lr, last, stats,
+        )
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^, forest.notices)
+
+
+def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
     GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
     (DEVIATION 407). The log criteria are DEVIATION 406's: they RUN in
-    both numeric modes, comparable to cuML in neither."""
-    if not _rf_params_len_ok(params):
-        raise Error(
-            "rf_regressor_fit: params must hold "
-            + String(N_RF_FIT_PARAMS)
-            + " values (17 with min_weight_fraction_leaf), got "
-            + String(len(params))
-        )
-    if Int(py=params[2]) != 0:
-        raise Error("rf_regressor_fit: n_classes (slot 2) must be 0")
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
-    _check_criterion("rf_regressor_fit", crit, _reg_criteria())
-    var rf_params = _rf_params_from(params, crit)
-    var mw_frac = _rf_min_weight_fraction(params)
-    # sk-edges: the row weights of `rf_regressor_fit_weighted` (0: none), one
-    # memcpy as in the classifier; their checks run on the device below.
-    var weights = List[Float32]()
-    var weight_total = Float64(0)
-    var weighted = weights_addr != 0
-    if weighted:
-        weights = list_f32(_f32_ptr(weights_addr), n_rows)
-
-    var forest: RandomForestMetaData[DT, RLT]
-    # DEVIATION 2510 -- as in the classifier: the binding's own host stamps.
+    both numeric modes, comparable to cuML in neither. Returns the export
+    handle (as the classifier)."""
     var bt = StageTimes()
     var t_bind = bt.start()
+    var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
-        var t_s = bt.start()
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        bt.stop_host("bind_ctx_create", t_s)
-        t_s = bt.start()
-        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
-        ctx.synchronize()
-        bt.stop_host("bind_pinned_alloc", t_s)
-        t_s = bt.start()
-        # DEVIATION 2481: bulk typed copies preserve every input bit while
-        # avoiding scalar stores into pinned memory.
-        copy_f32(yp, hy.unsafe_ptr(), n_rows)
-        bt.stop_host("bind_host_copy", t_s)
-        t_s = bt.start()
-        # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
-        # device transpose, device NaN scan.
-        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
-        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
-        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
-        comptime if not FOREST_DEVICE_FINITE:
-            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
-                raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
-        var host_x = 0 if ROWMAJOR else Int(xp)
-        # sk-weq-trees: the rows the fit sees (fewer when zero weights drop)
-        var n_fit = n_rows
-        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        comptime if FOREST_DEVICE_FINITE:
-            var fscan = ForestFiniteScan(ctx)
-            fscan.enqueue(ctx, dx, n_rows * n_cols)
-            ctx.synchronize()
-            fscan.refuse_if_bad("rf_regressor_fit: ")
-        else:
-            ctx.synchronize()
-        bt.stop_host("bind_h2d", t_s)
-        if weighted:
-            # the classifier's weight checks and all-unit test, on the device
-            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
-            var wscan = device_scan_weights(ctx, dsw, n_rows)
-            if wscan.bad:
-                raise Error("sample weights must be finite and nonnegative")
-            if wscan.total <= 0:
-                raise Error("sample weights must have positive total")
-            # sk-weq-trees: zero-weight rows leave the fit, as in the
-            # classifier (`_rf_drop_zero_weight_rows`)
-            if not rf_params.bootstrap and not wscan.all_unit:
-                n_fit = _rf_drop_zero_weight_rows[RLT](
-                    ctx, dx, dy, dsw, weights, n_rows, n_cols
-                )
-                if n_fit < n_rows:
-                    host_x = 0
-                    wscan = device_scan_weights(ctx, dsw, n_fit)
-            weight_total = wscan.total
-            if wscan.all_unit:
-                weights = List[Float32]()
-        # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
-        # `label_sum` in fixed point through `BinScales.label_scale`
-        # (DEVIATION 101b), and the host chooses the scale once per fit
-        # from the sum of label magnitudes (`fixed_point.choose_scale`).
-        # The unit scale TRUNCATES every |label| < 1 to zero, which fits a
-        # forest of zero-leaved stumps -- the build gate caught exactly
-        # that. The weight plane stays 1.0: unweighted `Weight()` is a
-        # count, which is exact.
-        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
-        # blocked order the host column restates (`core/abs_sum_blocked`)
-        var mag = device_abs_sum_blocked(ctx, dy, n_fit)
-        var scales = BinScales(
-            Float32(choose_scale(mag, n_fit)), Float32(1.0)
-        )
-        # `n_unique_labels` is 1 for regression, exactly what
-        # `rf_regressor_fit`'s cuML counterpart passes.
-        if len(weights) > 0 and not rf_params.bootstrap:
-            # sk-edges: the weighted objective (cuML dispatches it only
-            # without bootstrap, as for the classifier). `label_sum` holds
-            # label * weight, so its scale bounds sum |y| * max w, which is
-            # >= sum |y * w| for non-negative weights; the weight plane takes
-            # the classifier's scale from the weight total.
-            var lscale = choose_scale(mag * max(weight_max, Float64(0)), n_fit)
-            var wscale = choose_scale(weight_total, n_fit)
-            if wscale < Float64(1.1754943508222875e-38) or wscale > Float64(3.4028234663852886e38):
-                raise Error("sample weights exceed Float32 fixed-point scale range")
-            forest = fit_forest[WeightedRegObj](
-                ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params,
-                BinScales(Float32(lscale), Float32(wscale)), sample_weight_host=weights,
-                host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
-                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
-                notices_to_stderr=False,
-            )
-        else:
-            _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
-            forest = fit_forest[RegObj](
-                ctx, dx, dy, dsw, n_fit, n_cols, 1, rf_params, scales,
-                sample_weight_host=weights,
-                host_x_addr=host_x, tree_start=tree_start, oob_score=oob_addr != 0, feature_importances=importance_addr != 0,
-                notices_to_stderr=False,
-            )
-        t_s = bt.start()
-        ctx.synchronize()
-        _ = dx^
-        _ = dy^
-        _ = dsw^
-        _ = hy^
-        bt.stop_host("bind_release_buffers", t_s)
-        t_s = bt.start()
-        # DEVIATION 1946, as in `rf_classifier_fit_binding`: the context
-        # outlives every buffer created on it.
-        _ = ctx^
-        bt.stop_host("bind_release_ctx", t_s)
-    if oob_addr != 0:
-        if oob_score_addr == 0 or not forest.has_oob:
-            raise Error("RF OOB export requires output and score buffers")
-        # T15 native public output boundary: borrowed result buffers, no Python
-        # rows/labels/reductions. The forest owns state through this bulk copy.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var oob_out = MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_addr)
-        memcpy(dest=oob_out,src=forest.oob_prediction_.unsafe_ptr(),count=len(forest.oob_prediction_))
-        MutPointer[Float64,MutUntrackedOrigin](unsafe_from_address=oob_score_addr)[unsafe_offset=0] = forest.oob_score_
-    if importance_addr != 0:
-        if len(forest.feature_importances_) != n_cols:
-            raise Error("RF feature importance output does not match feature count")
-        memcpy(dest=_f32_ptr(importance_addr),src=forest.feature_importances_.unsafe_ptr(),count=n_cols)
-    var t_x = bt.start()
-    comptime if EXPORT:
-        var export_trees = forest.trees^
-        forest.trees = RFExportTrees()
-        var handle = _retain_rf_export(export_trees^, forest.notices)
-        bt.stop_host("bind_export_retain", t_x)
-        bt.stop_host("binding_total", t_bind)
-        bt.report()
-        return handle
-    else:
-        var out = _forest_out(forest)
-        bt.stop_host("bind_export_legacy", t_x)
-        bt.stop_host("binding_total", t_bind)
-        bt.report()
-        return out
+        forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+    return _rf_keep_forest(forest, bt, t_bind)
 
 
-def _default_rf_params(n_trees: Int) raises -> RF_params:
-    """A benign `RF_params` for the predict-side metadata: predict reads the
-    forest's trees, not these knobs, but the structs require one."""
-    return RF_params(
-        n_trees=Int32(n_trees),
-        bootstrap=True,
-        max_samples=Float32(1.0),
-        seed=UInt64(0),
-        n_streams=Int32(4),
-        tree_params=DecisionTreeParams(
-            max_depth=Int32(16),
-            max_leaves=Int32(-1),
-            max_features=Float32(1.0),
-            max_n_bins=Int32(128),
-            min_samples_leaf=Int32(1),
-            min_samples_split=Int32(2),
-            split_criterion=GINI,
-            min_impurity_decrease=Float32(0.0),
-            max_batch_size=Int32(4096),
-        ),
-    )
+def _rf_predict_py(offsets_addr: PythonObject, colid_addr: PythonObject, quesval_addr: PythonObject,
+                   left_child_addr: PythonObject, leaves_addr: PythonObject, x_addr: PythonObject,
+                   out_addr: PythonObject, params: PythonObject, regression: Bool) raises -> PythonObject:
+    """`rf_predict_proba` / `rf_predict_reg` (UNPACK of `_rf_predict_native`):
+    `params` is `[n_rows, n_cols, n_trees, num_outputs]`."""
+    if len(params) != 4:
+        if regression:
+            raise Error("rf_predict_reg: params must hold [n_rows, n_cols, n_trees, 1], got " + String(len(params)))
+        raise Error("rf_predict_proba: params must hold [n_rows, n_cols, n_trees, num_outputs], got "
+                    + String(len(params)))
+    var model: List[Int] = [Int(py=offsets_addr), Int(py=colid_addr), Int(py=quesval_addr),
+                            Int(py=left_child_addr), Int(py=leaves_addr)]
+    return PythonObject(_rf_predict_native(model, Int(py=x_addr), Int(py=out_addr), Int(py=params[0]),
+                                           Int(py=params[1]), Int(py=params[2]), Int(py=params[3]), regression))
 
 
 def rf_predict_proba_binding(
-    offsets_addr: PythonObject,
-    colid_addr: PythonObject,
-    quesval_addr: PythonObject,
-    left_child_addr: PythonObject,
-    leaves_addr: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    offsets_addr: PythonObject, colid_addr: PythonObject, quesval_addr: PythonObject,
+    left_child_addr: PythonObject, leaves_addr: PythonObject, x_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """Classifier probabilities through the IMPLEMENTED `predict_proba`
-    (`predict` stopped one line early, per its docstring). Model arrays are
-    int32/float32 as `_forest_out` laid them out; `x` is ROW-major; `out`
-    receives n_rows * num_outputs float32. `params` is `[n_rows, n_cols,
-    n_trees, num_outputs]`. The wrapper's argmax over these IS cuML's
-    `predict`. Returns rows written."""
-    if len(params) != 4:
-        raise Error(
-            "rf_predict_proba: params must hold [n_rows, n_cols, n_trees,"
-            " num_outputs], got "
-            + String(len(params))
-        )
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var n_trees = Int(py=params[2])
-    var num_outputs = Int(py=params[3])
-    if n_trees < 1 or num_outputs < 2:
-        raise Error(
-            "rf_predict_proba: n_trees must be >= 1 and num_outputs >= 2"
-        )
-    var offsets_p = _i32_ptr(Int(py=offsets_addr))
-    var colid_p = _i32_ptr(Int(py=colid_addr))
-    var quesval_p = _f32_ptr(Int(py=quesval_addr))
-    var left_p = _i32_ptr(Int(py=left_child_addr))
-    var leaves_p = _f32_ptr(Int(py=leaves_addr))
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-
-    # cpu-gpu-cleanup t-forest: the `sequential` engine runs on the device.
-    # The host walk (`core/forest_host_predict.mojo`'s `rf_host_predict`,
-    # DEVIATION 2900) is the CPU-only install's (`_mojolearn_rf_host`); here
-    # the same arithmetic -- zero, add every tree's leaf in increasing tree
-    # order, divide by `n_trees` -- is `forest_ordered_kernel`, one thread
-    # per (row, output), through a one-call ordered snapshot.
-    if n_rows == 0:
-        return PythonObject(0)
-    _ = xp
-    _ = op
-    return _rf_predict_ordered(
-        "rf_predict_proba", offsets_p, colid_p, quesval_p, left_p, leaves_p,
-        Int(py=x_addr), Int(py=out_addr), n_rows, n_cols, n_trees, num_outputs,
-    )
-
-
-def _rf_predict_ordered(
-    name: String,
-    offsets_p: MutPointer[Int32, MutUntrackedOrigin],
-    colid_p: MutPointer[Int32, MutUntrackedOrigin],
-    quesval_p: MutPointer[Float32, MutUntrackedOrigin],
-    left_p: MutPointer[Int32, MutUntrackedOrigin],
-    leaves_p: MutPointer[Float32, MutUntrackedOrigin],
-    x_address: Int,
-    out_address: Int,
-    n_rows: Int,
-    n_cols: Int,
-    n_trees: Int,
-    num_outputs: Int,
-) raises -> PythonObject:
-    """The `sequential` engine on the device: the flat model goes into an
-    ordered resident snapshot (`forest_ordered_kernel`: increasing-tree
-    association, the host walk's fold), the borrowed rows are predicted into
-    the borrowed output, and the snapshot is released. The GIL stays held,
-    as `forest_inference_binding` requires for the registry."""
-    var n_nodes = Int(offsets_p[n_trees])
-    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
-        raise Error(name + ": tree_offsets must start at 0 and hold at least one node per tree")
-    if n_nodes > 2147483647 // num_outputs:
-        raise Error(name + ": node/output count exceeds Int32")
-    # one memcpy per array (no per-node host loop); the snapshot uploads once
-    var offsets = list_i32(offsets_p, n_trees + 1)
-    var columns = list_i32(colid_p, n_nodes)
-    var thresholds = list_f32(quesval_p, n_nodes)
-    var left = list_i32(left_p, n_nodes)
-    var leaves = list_f32(leaves_p, n_nodes * num_outputs)
-    var handle = resident_prepare[True](
-        offsets, columns, thresholds, left, leaves, n_cols, num_outputs, True
-    )
-    try:
-        resident_predict_into[True](
-            handle,
-            _f32_ptr(x_address).unsafe_origin_cast[MutAnyOrigin](),
-            _f32_ptr(out_address).unsafe_origin_cast[MutAnyOrigin](),
-            n_rows, n_cols, num_outputs, True,
-        )
-    except e:
-        resident_release[True](handle)
-        raise e
-    resident_release[True](handle)
-    return PythonObject(n_rows)
+    return _rf_predict_py(offsets_addr, colid_addr, quesval_addr, left_child_addr, leaves_addr, x_addr,
+                          out_addr, params, False)
 
 
 def rf_predict_reg_binding(
-    offsets_addr: PythonObject,
-    colid_addr: PythonObject,
-    quesval_addr: PythonObject,
-    left_child_addr: PythonObject,
-    leaves_addr: PythonObject,
-    x_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    offsets_addr: PythonObject, colid_addr: PythonObject, quesval_addr: PythonObject,
+    left_child_addr: PythonObject, leaves_addr: PythonObject, x_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """Regressor predictions through the IMPLEMENTED `RandomForest.predict`.
-    Same array contract; `out` is n_rows float32; `params` is `[n_rows,
-    n_cols, n_trees, 1]`. Returns rows written."""
-    if len(params) != 4:
-        raise Error(
-            "rf_predict_reg: params must hold [n_rows, n_cols, n_trees, 1],"
-            " got "
-            + String(len(params))
-        )
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var n_trees = Int(py=params[2])
-    var num_outputs = Int(py=params[3])
-    if n_trees < 1 or num_outputs != 1:
-        raise Error(
-            "rf_predict_reg: n_trees must be >= 1 and num_outputs must be 1"
-        )
-    var offsets_p = _i32_ptr(Int(py=offsets_addr))
-    var colid_p = _i32_ptr(Int(py=colid_addr))
-    var quesval_p = _f32_ptr(Int(py=quesval_addr))
-    var left_p = _i32_ptr(Int(py=left_child_addr))
-    var leaves_p = _f32_ptr(Int(py=leaves_addr))
-    var xp = _f32_ptr(Int(py=x_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-
-    # cpu-gpu-cleanup t-forest: the same device route as `rf_predict_proba`
-    # above, read at output 0 of a one-output vote, which is what
-    # `RandomForest.predict`'s REGRESSION branch does.
-    if n_rows == 0:
-        return PythonObject(0)
-    _ = xp
-    _ = op
-    return _rf_predict_ordered(
-        "rf_predict_reg", offsets_p, colid_p, quesval_p, left_p, leaves_p,
-        Int(py=x_addr), Int(py=out_addr), n_rows, n_cols, n_trees, 1,
-    )
+    return _rf_predict_py(offsets_addr, colid_addr, quesval_addr, left_child_addr, leaves_addr, x_addr,
+                          out_addr, params, True)
 
 
 def rf_device_finite_scan_binding() raises -> PythonObject:
@@ -1606,8 +772,10 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
     return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
 
 
-#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), FAST on every vendor;
-#: `-D MOJOLEARN_DT_BINS_QOLD` restores 128. Audit (M3 0.8.34, taxi):
+#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), FAST on every vendor.
+# TOMBSTONE: MOJOLEARN_DT_BINS_QOLD (old path; the 256-bin FAST default is the recorded winner) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at b81caf7773.
+# Restore: git apply experiments/removed/MOJOLEARN_DT_BINS_QOLD.patch
+#: Audit (M3 0.8.34, taxi):
 #: decision-tree-reg r2 0.8626 vs scikit-learn 0.8915, bagging-reg 0.9188 vs
 #: 0.9388, voting-reg 0.9192 vs 0.9246, stacking-reg 0.9197 vs 0.9325 (all
 #: four fit DecisionTreeRegressor members; IDENTICAL has the same numbers, so
@@ -1620,14 +788,8 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
 #: ms (+1.1%); bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms (-7.3%);
 #: voting/stacking/adaboost-reg errored in both arms (not measured). KEEP.
 comptime RF_DT_DEFAULT_BINS = (
-    256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DT_BINS_QOLD"]() else 128
+    256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else 128
 )
-
-
-def rf_dt_default_bins_binding() raises -> PythonObject:
-    """The quantile bin count a DecisionTreeRegressor left at n_bins=None
-    fits with in this build (RF_DT_DEFAULT_BINS): 256 FAST, 128 otherwise."""
-    return PythonObject(RF_DT_DEFAULT_BINS)
 
 
 def rf_numeric_mode_binding() raises -> PythonObject:
@@ -1649,38 +811,124 @@ def rf_vendor_binding() raises -> PythonObject:
 def rf_classifier_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, tree_start: PythonObject,
     weights_addr: PythonObject) raises -> PythonObject:
-    return _rf_classifier_fit(x_addr, y_addr, params, criterion,
-                             Int(py=weights_addr), Int(py=tree_start))
+    return _rf_fit_py[True, False](x_addr, y_addr, params, criterion, False, weights=Int(py=weights_addr),
+                                   tree_start=Int(py=tree_start))
 
 
 def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, tree_start: PythonObject) raises -> PythonObject:
-    return _rf_regressor_fit(x_addr, y_addr, params, criterion, Int(py=tree_start))
+    return _rf_fit_py[False, False](x_addr, y_addr, params, criterion, False, tree_start=Int(py=tree_start))
+
+
+struct RfGpuForest(ForestImage):
+    """This image's forest entry operations (core/forest_entry.mojo; lane
+    calltable-forest): the bodies the Python entries above unpack into."""
+
+    @staticmethod
+    def caps() -> Int:
+        var caps = forest_gpu_resident_caps() | XF_CAP_DART
+        comptime if FOREST_DEVICE_FINITE:
+            caps |= XF_CAP_DEVICE_SCAN
+        return caps
+
+    @staticmethod
+    def dt_default_bins() -> Int:
+        return RF_DT_DEFAULT_BINS
+
+    @staticmethod
+    def fit(classifier: Bool, row_major: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            if row_major:
+                return _rf_fit_native[True, True](args)
+            return _rf_fit_native[True, False](args)
+        if row_major:
+            return _rf_fit_native[False, True](args)
+        return _rf_fit_native[False, False](args)
+
+    @staticmethod
+    def fit_dart(args: ForestFitArgs) raises -> Int:
+        return _rf_regressor_fit_dart(args)
+
+    @staticmethod
+    def export_sizes(handle: Int, out_addr: Int) raises:
+        RF_EXPORTS.get_or_create_ptr()[].sizes_into(handle, out_addr)
+
+    @staticmethod
+    def export_into(handle: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+        _rf_export_into_native(handle, dst, trees, nodes, outputs)
+
+    @staticmethod
+    def export_verify(handle: Int, dst: List[Int]) raises -> Int:
+        return _rf_export_verify_native(handle, dst)
+
+    @staticmethod
+    def export_release(handle: Int) raises:
+        RF_EXPORTS.get_or_create_ptr()[].release(handle)
+
+    @staticmethod
+    def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
+                regression: Bool) raises -> Int:
+        return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, regression)
+
+    @staticmethod
+    def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
+        return forest_prepare_gpu_native[True](model, features, trees, outputs, ordered)
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_into_gpu_native[True, True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_labels(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_labels_gpu_native[True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_release(handle: Int) raises:
+        resident_release[True](handle)
+
+    @staticmethod
+    def strict_prepare(model: List[Int], features: Int, trees: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+    @staticmethod
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+    @staticmethod
+    def strict_release(handle: Int) raises:
+        raise Error("RuntimeError: rebuild the forest host binding")
+
+
+def rf_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's published forest entry (core/forest_entry_table.mojo)."""
+    return forest_entry_dispatch[RfGpuForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_rf() -> PythonObject:
+    comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
+        # The native forest entry (core/forest_entry_table.mojo) under this image's key.
+        forest_entry_publish["MojolearnForestEntryOwnerRfGpuV1"](FOREST_TABLE_RF, COMPILED_VENDOR, rf_gpu_forest_entry_v1)
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
-        m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
-        m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_classifier_fit_rowmajor_binding[True]]("rf_classifier_fit_rowmajor_export")
+        # TOMBSTONE: TREES_LEGACY_PYTHON_ENTRIES (DELETED: no caller; the door fits through the forest entry table) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+        # Restore: git apply experiments/removed/TREES_LEGACY_PYTHON_ENTRIES.patch
         m.def_function[rf_classifier_fit_weighted_binding[False]]("rf_classifier_fit_weighted")
         m.def_function[rf_classifier_fit_weighted_binding[True]]("rf_classifier_fit_weighted_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -1691,14 +939,11 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_regressor_fit_weighted_binding[True]]("rf_regressor_fit_weighted_export")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_regressor_fit_rowmajor_binding[True]]("rf_regressor_fit_rowmajor_export")
         m.def_function[rf_predict_proba_binding]("rf_predict_proba")
         m.def_function[rf_predict_reg_binding]("rf_predict_reg")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
-        m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_forest_export_binding]("forest_export")
@@ -1715,15 +960,18 @@ def build__mojolearn_rf() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
+        m.def_function[forest_stage_input_gpu_binding[True]]("forest_stage_input_gpu")
+        m.def_function[forest_unstage_input_gpu_binding[True]]("forest_unstage_input_gpu")
         m.def_function[rf_data_session_open_binding]("rf_data_session_open")
         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
-        m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
+        m.def_function[rf_ada_open_binding]("rf_ada_open")
+        m.def_function[rf_classifier_fit_ada_round_binding]("rf_classifier_fit_ada_round_export")
+        m.def_function[rf_regressor_fit_ada_round_binding]("rf_regressor_fit_ada_round_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
-        m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()
     except e:
         abort(String("failed to initialize _mojolearn_rf: ") + String(e))

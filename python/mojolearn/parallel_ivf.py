@@ -8,12 +8,12 @@ index and extending a distributed index are outside this API.
 """
 __all__ = ['DistributedIVFIndex']
 
-from ._ivf_impl import IVFIndex
+from ._ivf_impl import IVFIndex as _IVFIndex
 from . import _native_parallel_shard as _shard
 from ._native_parallel_shard import _native_parallel_shard
 
 # Import-time class metadata; admission, storage and partial searches are native.
-_shard.register(ivf_class=IVFIndex)
+_shard.register(ivf_class=_IVFIndex)
 
 
 class DistributedIVFIndex:
@@ -33,7 +33,7 @@ class DistributedIVFIndex:
         return _native_parallel_shard('ivf_from_index', (cls, index, devices))
 
     def search(self, queries):
-        # One native call (bindings/parallel_shard_native.mojo `ivf_search`).
+        # One native call (bindings/parallel_shard_native_door.mojo `ivf_search`).
         return _native_parallel_shard('ivf_search', (self, queries))
 
     def close(self):

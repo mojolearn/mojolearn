@@ -1,0 +1,16 @@
+# Reviewed false alarms of tools/mojo_lastuse_audit.py, one per line: <path>:<function>:<local>  # <reason>
+# A line needs a reason. A real site is fixed in code (`_ = name^` after the pointer's last use), never listed here.
+# An `own-copy` finding (a check under checks/native_tests/ that enqueues a host-to-device copy itself) is listed here
+# only for a check whose subject is the queue or the copy itself, with that reason; every other check calls the kit.
+bindings/native_worker_inventory_door.mojo:native_worker_inventory:name  # stack array (Array[Int8, 256]) with a trivial destructor: no heap free at its last use
+bindings/tokenizer_public_native_door.mojo:decode:empty_byte  # stack UInt8 scalar, trivial destructor; its address is only taken when count == 0 (nothing is read)
+bindings/tokenizer_public_native_door.mojo:decode:name  # a C-string view of self.name: the bytes belong to self, which outlives the call
+checks/native_tests/archive_parser.mojo:_unicode:bytes  # a byte view of `text`; `text` is kept alive after the call (`_ = text^`)
+checks/native_tests/lof_plan_contract_suite.mojo:fixture:f  # empty list: the helper's address is only compared with 0, never read
+checks/native_tests/lof_plan_contract_suite.mojo:fixture:i  # empty list: the helper's address is only compared with 0, never read
+checks/native_tests/nearest_centroid_descriptor_suite.mojo:empty_case:empty  # empty list: the helper's address is only compared with 0, never read
+checks/native_tests/query_x_held.mojo:_lease_holds:q_x  # a shared handle to q's buffer; q is handed to the store (resident_query_x_done) that keeps the buffer
+checks/native_tests/sequence_plan_buffers.mojo:_borrowed:row_a  # the address is only compared with the plan's recorded pointer, never read
+checks/native_tests/sequence_plan_buffers.mojo:_borrowed:row_b  # the address is only compared with the plan's recorded pointer, never read
+cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_c  # fused_veclen_for reads only the address's alignment, never the memory
+cluster/checks/kmeans_check.mojo:check_fused_policy_dispatch:probe_x  # fused_veclen_for reads only the address's alignment, never the memory

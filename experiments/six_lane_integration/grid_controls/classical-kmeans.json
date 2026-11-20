@@ -1,306 +1,121 @@
 {
- "schema": "mojolearn.grid-controls/1",
- "lane": "classical-kmeans",
- "branch": "lane/classical-kmeans",
- "head": "24dbc6581",
- "controls": {
-  "kmeans_assign": {
-   "define": "MOJOLEARN_KMEANS_ROW_ASSIGN",
-   "kind": "arms",
-   "arms": {
-    "tiled": [],
-    "rows4": [
-     "MOJOLEARN_KMEANS_ROW_ASSIGN=4"
-    ]
-   },
-   "default": "tiled",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:56",
-    "experiments/classical_identical_ideas/graph_controls.mojo:57",
-    "cluster/impl/detail/min_cluster_distance_compute.mojo:92",
-    "cluster/impl/detail/classical_assignment.mojo:13",
-    "cluster/impl/detail/kmeans.mojo"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": false,
-   "status": "split_from:C30_DIRECT_DISTANCE+C36_CENTROID_TILES (C30_ROWS_4/C36_ROWS_4 merged)",
-   "note": "expanded row arms only while k*d <= 512 (cost rule), else the tiled kernel; incumbent bits (no host change). The direct arms (MOJOLEARN_KMEANS_DIRECT_DISTANCE: direct2/direct4) were deleted 2026-10-08 by lane/grid-act-2 (grid ge123e6f9 loser, see removed)."
-  },
-  "xcluster_row_assign": {
-   "define": "MOJOLEARN_XCLUSTER_ROW_ASSIGN",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "2": [
-     "MOJOLEARN_XCLUSTER_ROW_ASSIGN=2"
-    ],
-    "4": [
-     "MOJOLEARN_XCLUSTER_ROW_ASSIGN=4"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:64",
-    "x_cluster/device_ops.mojo:1950,2732"
-   ],
-   "binding": "_mojolearn_x_cluster",
-   "bits_change": "unverified (kept old C36 x_cluster arithmetic; no host twin edit)",
-   "status": "split_from:C36_CENTROID_TILES"
-  },
-  "xcluster_kpp_distinct": {
-   "define": "MOJOLEARN_XCLUSTER_KPP_DISTINCT",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XCLUSTER_KPP_DISTINCT"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:82",
-    "x_cluster/common.mojo:99"
-   ],
-   "binding": "_mojolearn_x_cluster",
-   "bits_change": false,
-   "status": "split_from:C38_REUSE_NEAREST"
-  },
-  "c39_retain_state": {
-   "define": "MOJOLEARN_C39_RETAIN_STATE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_C39_RETAIN_STATE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:83",
-    "x_cluster/minibatch.mojo:374",
-    "x_cluster/bisect.mojo:174"
-   ],
-   "binding": "_mojolearn_x_cluster",
-   "bits_change": false,
-   "status": "kept"
-  },
-  "kde_direct": {
-   "define": "MOJOLEARN_KDE_DIRECT_DISTANCE",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KDE_DIRECT_DISTANCE"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:20"
-   ],
-   "binding": "_mojolearn_estimators",
-   "bits_change": true,
-   "status": "split_from:C30_DIRECT_DISTANCE",
-   "note": "kde/impl/neighbors/kernel_density.mojo, kde/impl/distance/distance.mojo, kde/host/kde_oracle.mojo; distance.mojo is also called by kernel_methods kernel_matrix | binding fixed (lane classical-fixes 2026-10-07): the public route is density.py:844 -> bindings/_mojolearn_estimators.mojo:1261 kde_score_samples_binding / :1372 kde_score_samples_resident_binding -> kde/estimator.mojo, kde/resident_fit.mojo -> kde/impl/neighbors/kernel_density.mojo:1839,3645 + kde/impl/distance/distance.mojo:146; host twin kde/host/kde_oracle.mojo:207 via _mojolearn_estimators_host; bindings/_mojolearn.mojo exports no KDE or DBSCAN entry."
-  },
-  "ivf_direct": {
-   "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "experiments/classical_identical_ideas/graph_controls.mojo:44"
-   ],
-   "binding": "_mojolearn_ivf",
-   "bits_change": true,
-   "status": "promoted:ge123e6f9",
-   "note": "ivf identical_ivf_scan, ivf_balanced_tasks, ivf_flat_search tile, ivf_host twin Default ON in IDENTICAL; `_OFF` is the norm-expansion distance. Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
-  "c06_norms": {
-   "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS / MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
-   "kind": "arms",
-   "arms": {
-    "off": [],
-    "rows2": [
-     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
-    ],
-    "rows4": [
-     "MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
-    ],
-    "small_d": [
-     "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:21",
-    "core/row_norms.mojo:228",
-    "experiments/classical_identical_ideas/shared_controls.mojo:28",
-    "core/row_norms.mojo:139,220"
-   ],
-   "binding": "_mojolearn",
-   "bits_change": true,
-   "status": "merged",
-   "merged_from": [
-    "c06_norm_rows",
-    "c06_small_d_thread",
-    "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
-    "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
-   ],
-   "note": "One control, one arm per run: small_d returns before norm_rows when d<=32 (row_norms.mojo:220-232), so every cross of the two old controls equals a single on each workload. The two defines are refused together in core/six_lane_experiment_guards.mojo. Not on classical:kmeans (X norms once per fit, kmeans.mojo:1590-1594)."
-  }
- },
- "algorithms": {
-  "classical:kmeans": {
-   "binding": "_mojolearn (host twin _mojolearn_core_host)",
-   "route": "fit: cluster.estimator kmeans_fit -> k-means|| / k-means++ (min_cluster_and_distance_compute, gemm_nt or direct trial) -> Lloyd loop (min_cluster_and_distance_compute[_gated] + launch_accumulate_*_blocked + fold) -> finalize; predict: min_cluster_and_distance_compute",
-   "controls": [
-    "kmeans_assign"
-   ],
-   "interaction_groups": []
-  },
-  "more:gmm": {
-   "binding": "_mojolearn_mixture",
-   "route": "fit: mixture/estimator.mojo:80 init_params=kmeans -> cluster.estimator.kmeans_fit (same as classical:kmeans)",
-   "controls": [],
-   "interaction_groups": [],
-   "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (GMM runs kmeans_fit only as init, mixture/estimator.mojo:711); phase 2 adds one confirm config here with the kmeans winner."
-  },
-  "expanded:minibatch-kmeans": {
-   "binding": "_mojolearn_x_cluster",
-   "route": "fit: x_cluster/minibatch.mojo -> ops.mb_assign/nearest (device_ops) -> mb_update (_mb_centers_block_kernel); init x_cluster/common.mojo k-means++",
-   "controls": [
-    "xcluster_row_assign",
-    "xcluster_kpp_distinct",
-    "c39_retain_state"
-   ],
-   "interaction_groups": []
-  },
-  "expanded:bisecting-kmeans": {
-   "binding": "_mojolearn_x_cluster",
-   "route": "fit: x_cluster/bisect.mojo -> ops.nearest -> k-means++ x_cluster/common.mojo",
-   "controls": [
-    "xcluster_row_assign",
-    "xcluster_kpp_distinct",
-    "c39_retain_state"
-   ],
-   "interaction_groups": []
-  },
-  "more:ivf": {
-   "binding": "_mojolearn_ivf",
-   "route": "build: coarse kmeans (cluster kmeans_fit); search: ivf_flat_search pinned tile + identical_ivf_scan",
-   "controls": [
-    "ivf_direct"
-   ],
-   "interaction_groups": [],
-   "notes": "kmeans_conv_chunk and kmeans_assign are decided on classical:kmeans only (ivf/estimator.mojo:93 runs kmeans_fit); phase 2 adds one confirm config here with the kmeans winner."
-  },
-  "classical:knn": {
-   "binding": "_mojolearn",
-   "route": "knn_brute_force (pinned tile / stream top-k) ; host twin knn_host_predict",
-   "controls": [
-    "c06_norms"
-   ],
-   "interaction_groups": []
-  },
-  "classical:kde": {
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-   "route": "density.py:844 -> _mojolearn_estimators kde_score_samples(_resident) -> kernel_density + kde/impl/distance",
-   "controls": [
-    "kde_direct",
-    "c06_norms"
-   ],
-   "interaction_groups": [],
-   "notes": "Only c06_norms=rows2 c06_norms=rows4 reach this lane."
-  },
-  "classical:dbscan": {
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-   "route": "density.py:371 -> _mojolearn_estimators dbscan_fit_core -> dbscan/impl/runner.mojo -> epsilon_neighborhood (brute) or RBC eps (knn primitive)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "classical:hdbscan": {
-   "binding": "_mojolearn_hdbscan",
-   "route": "kNN core distances (knn primitive) -> sparse_mr_mst / linkage",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
- "removed": [
-  {
-   "define": "MOJOLEARN_C37_ROW_PANELS",
-   "reason": "per-(cluster,feature) serial sum over all rows (1 block at taxi), 25x/43x kmeans taxi; replaced by MOJOLEARN_C37_FUSED_ACCUMULATE (incumbent bits)"
-  },
-  {
-   "define": "MOJOLEARN_C37_PANEL_128",
-   "reason": "sub-knob of the deleted C37; the new sweep is MOJOLEARN_C37_FUSED_ROWS"
-  },
-  {
-   "define": "MOJOLEARN_C38_REUSE_NEAREST",
-   "reason": "KMeans half no-op on NVIDIA/AMD; x_cluster half renamed MOJOLEARN_XCLUSTER_KPP_DISTINCT"
-  },
-  {
-   "define": "MOJOLEARN_C38_DEVICE_POTENTIAL",
-   "reason": "no-op on NVIDIA/AMD (incumbent flags already on)"
-  },
-  {
-   "define": "MOJOLEARN_C30_DIRECT_DISTANCE",
-   "reason": "spanned ~12 algorithms; split into KMEANS_DIRECT_DISTANCE (arm of KMEANS_ROW_ASSIGN) and KNN/KDE/DBSCAN/GRAPH/IVF_DIRECT_DISTANCE"
-  },
-  {
-   "define": "MOJOLEARN_C30_ROWS_4",
-   "reason": "same knob as C36_ROWS_4; now KMEANS_ROW_ASSIGN=4"
-  },
-  {
-   "define": "MOJOLEARN_C36_CENTROID_TILES",
-   "reason": "same kernel as C30 in kmeans; now KMEANS_ROW_ASSIGN (cluster) and XCLUSTER_ROW_ASSIGN (x_cluster)"
-  },
-  {
-   "define": "MOJOLEARN_C36_ROWS_4",
-   "reason": "now the =4 arm of KMEANS_ROW_ASSIGN / XCLUSTER_ROW_ASSIGN"
-  },
-  {
-   "define": "MOJOLEARN_CLASSICAL_C06_ROWS2",
-   "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
-  },
-  {
-   "define": "MOJOLEARN_CLASSICAL_C06_ROWS4",
-   "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
-  },
-  {
-   "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
-   "control": "c37_fused_accumulate",
-   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
-  },
-  {
-   "define": "MOJOLEARN_C37_FUSED_ROWS",
-   "control": "c37_fused_rows",
-   "reason": "DELETED 2026-10-08 (lane grid-act-2) with c37_fused_accumulate (rows per fused block; only read by the deleted fused pass). DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
-  },
-  {
-   "define": "MOJOLEARN_KMEANS_DIRECT_DISTANCE",
-   "control": "kmeans_assign",
-   "arm": "direct4",
-   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. direct4/tiled ms ratio NV/AMD: kmeans istella 12.695/6.192 (620.2 -> 7873.6 NV, 541.0 -> 3349.7 AMD), taxi 1.777/1.961; combined 4.07x SLOWER; inertia SAME. The direct arms (direct2 shares the code, not a grid arm) are gone from the row kernel, k-means++, k-means||, transform and the host oracle; rows2/rows4 stay. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
-  },
-  {
-   "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
-   "control": "graph_direct",
-   "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: hdbscan istella 1.758/1.699 (1785.0 -> 3137.6 NV, 1413.6 -> 2402.2 AMD), taxi 1.141/1.158; combined 1.41x SLOWER. Deleted from sparse_mr_mst, the hdbscan host oracle, the linkage oracle and the connectivities/multi_gpu tile (expanded tile, [False]). Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
-  },
-  {
-   "define": "MOJOLEARN_KNN_DIRECT_DISTANCE",
-   "control": "knn_direct",
-   "reason": "DELETE-slower (knn istella 34x, dbscan taxi timeout; grid g50ebe26a5 + main ef1e7e9f9), lane/grid-act-16"
-  },
-  {
-   "define": "MOJOLEARN_DBSCAN_DIRECT_DISTANCE",
-   "control": "dbscan_direct",
-   "reason": "DELETE-noise (dbscan taxi 0.99x/1.00x, main ef1e7e9f9), lane/grid-act-16"
-  }
- ]
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "classical-kmeans",
+  "branch": "lane/classical-kmeans",
+  "head": "24dbc6581",
+  "controls": {},
+  "algorithms": {},
+  "removed": [
+    {
+      "define": "MOJOLEARN_C37_ROW_PANELS",
+      "reason": "per-(cluster,feature) serial sum over all rows (1 block at taxi), 25x/43x kmeans taxi; replaced by MOJOLEARN_C37_FUSED_ACCUMULATE (incumbent bits)"
+    },
+    {
+      "define": "MOJOLEARN_C37_PANEL_128",
+      "reason": "sub-knob of the deleted C37; the new sweep is MOJOLEARN_C37_FUSED_ROWS"
+    },
+    {
+      "define": "MOJOLEARN_C38_REUSE_NEAREST",
+      "reason": "KMeans half no-op on NVIDIA/AMD; x_cluster half renamed MOJOLEARN_XCLUSTER_KPP_DISTINCT"
+    },
+    {
+      "define": "MOJOLEARN_C38_DEVICE_POTENTIAL",
+      "reason": "no-op on NVIDIA/AMD (incumbent flags already on)"
+    },
+    {
+      "define": "MOJOLEARN_C30_DIRECT_DISTANCE",
+      "reason": "spanned ~12 algorithms; split into KMEANS_DIRECT_DISTANCE (arm of KMEANS_ROW_ASSIGN) and KNN/KDE/DBSCAN/GRAPH/IVF_DIRECT_DISTANCE"
+    },
+    {
+      "define": "MOJOLEARN_C30_ROWS_4",
+      "reason": "same knob as C36_ROWS_4; now KMEANS_ROW_ASSIGN=4"
+    },
+    {
+      "define": "MOJOLEARN_C36_CENTROID_TILES",
+      "reason": "same kernel as C30 in kmeans; now KMEANS_ROW_ASSIGN (cluster) and XCLUSTER_ROW_ASSIGN (x_cluster)"
+    },
+    {
+      "define": "MOJOLEARN_C36_ROWS_4",
+      "reason": "now the =4 arm of KMEANS_ROW_ASSIGN / XCLUSTER_ROW_ASSIGN"
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C06_ROWS2",
+      "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=2"
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C06_ROWS4",
+      "reason": "now MOJOLEARN_CLASSICAL_C06_NORM_ROWS=4"
+    },
+    {
+      "define": "MOJOLEARN_C37_FUSED_ACCUMULATE",
+      "control": "c37_fused_accumulate",
+      "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_C37_FUSED_ROWS",
+      "control": "c37_fused_rows",
+      "reason": "DELETED 2026-10-08 (lane grid-act-2) with c37_fused_accumulate (rows per fused block; only read by the deleted fused pass). DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: kmeans istella 104.781/0.841 (64986 vs 620 ms NV), taxi 68.558/0.895; vendor split (AMD faster), combined 9.4x/7.8x SLOWER; inertia SAME. Code (cluster/impl/detail/kmeans_fused_accumulate.mojo and the Lloyd-loop hooks) recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_KMEANS_DIRECT_DISTANCE",
+      "control": "kmeans_assign",
+      "arm": "direct4",
+      "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. direct4/tiled ms ratio NV/AMD: kmeans istella 12.695/6.192 (620.2 -> 7873.6 NV, 541.0 -> 3349.7 AMD), taxi 1.777/1.961; combined 4.07x SLOWER; inertia SAME. The direct arms (direct2 shares the code, not a grid arm) are gone from the row kernel, k-means++, k-means||, transform and the host oracle; rows2/rows4 stay. Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_GRAPH_DIRECT_DISTANCE",
+      "control": "graph_direct",
+      "reason": "DELETED 2026-10-08 (lane grid-act-2): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD: hdbscan istella 1.758/1.699 (1785.0 -> 3137.6 NV, 1413.6 -> 2402.2 AMD), taxi 1.141/1.158; combined 1.41x SLOWER. Deleted from sparse_mr_mst, the hdbscan host oracle, the linkage oracle and the connectivities/multi_gpu tile (expanded tile, [False]). Code recoverable at main 42d1e42c6; define refused in core/six_lane_experiment_guards.mojo."
+    },
+    {
+      "define": "MOJOLEARN_KNN_DIRECT_DISTANCE",
+      "control": "knn_direct",
+      "reason": "DELETE-slower (knn istella 34x, dbscan taxi timeout; grid g50ebe26a5 + main ef1e7e9f9), lane/grid-act-16"
+    },
+    {
+      "define": "MOJOLEARN_DBSCAN_DIRECT_DISTANCE",
+      "control": "dbscan_direct",
+      "reason": "DELETE-noise (dbscan taxi 0.99x/1.00x, main ef1e7e9f9), lane/grid-act-16"
+    },
+    {
+      "define": "MOJOLEARN_XCLUSTER_ROW_ASSIGN",
+      "control": "xcluster_row_assign",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a); the default arm is the incumbent. Code recoverable at b1f48f8126."
+    },
+    {
+      "define": "MOJOLEARN_XCLUSTER_KPP_DISTINCT",
+      "control": "xcluster_kpp_distinct",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a); the default arm is the incumbent. Code recoverable at c3dc42fd2c."
+    },
+    {
+      "define": "MOJOLEARN_C39_RETAIN_STATE",
+      "control": "c39_retain_state",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a); the default arm is the incumbent. Code recoverable at 9ac1d53067."
+    },
+    {
+      "define": "MOJOLEARN_KDE_DIRECT_DISTANCE",
+      "control": "kde_direct",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a); the default arm is the incumbent. Code recoverable at 1fef4f5d4a."
+    },
+    {
+      "define": "MOJOLEARN_KMEANS_ROW_ASSIGN",
+      "control": "kmeans_assign",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): rows2 / rows4 arms never measured on their own (V2 rule e); the tiled incumbent is the only arm. Code recoverable at b97e8ccd99."
+    },
+    {
+      "define": "MOJOLEARN_IVF_DIRECT_DISTANCE_OFF",
+      "control": "ivf_direct",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path of the PROMOTED default (ge123e6f9; CONFIRMED g50ebe26a5). Code recoverable at 3cf1b7b6af."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+      "control": "c06_norms",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 526172a06e; patch experiments/removed/MOJOLEARN_CLASSICAL_C06_NORM_ROWS.patch): opt-in arm; EXP:1519 RESTRUCTURED, A/B owed and never run. EXP:1519 RESTRUCTURED (ROWS2/ROWS4 into `C06_NORM_ROWS=2|4`), A/B owed and never run. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD",
+      "control": "c06_norms",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6a40fe1b92; patch experiments/removed/MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD.patch): opt-in arm; EXP:1519 A/B owed and never run. EXP:1519 introduced it with the A/B owed; it never ran. Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15). Refused in core/six_lane_experiment_guards.mojo; docs/TOMBSTONES.md."
+    }
+  ]
 }

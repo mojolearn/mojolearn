@@ -1,0 +1,23 @@
+PAPER-COMPARE vendor=amd 0.8.55->0.8.66 recipes=102 gpu AMD Instinct MI300X VF -> AMD Instinct MI300X VF
+flags: FASTER=6 NOT-RUN=18 NOW-LOSES=1 NOW-WINS=1 PARAMS-DIFF=2 REGRESSION=42 SAME=34 STILL-FAILING=2
+timed both=82 median ratio=1.13 geomean=2.32
+worst regressions:
+  82.76x trees/iforest/istella/rows=full infer ours test (17.96 -> 1486 ms)
+  82.41x trees/iforest/istella/rows=full infer ours large (35.55 -> 2930 ms)
+  69.41x classical/ols/istella/rows=full infer ours Xq (20.49 -> 1422 ms)
+  60.82x classical2/tsvd/istella/rows=full fit ours (47.56 -> 2893 ms)
+  48.39x classical/ols/taxi/rows=full fit ours (13.17 -> 637 ms)
+  42.73x trees/iforest/taxi/rows=full infer ours test (2.91 -> 124 ms)
+  39.56x trees/iforest/istella/rows=full fit ours (180 -> 7124 ms)
+  31.53x classical2/tsvd/taxi/rows=full fit ours (4.69 -> 148 ms)
+biggest gains:
+  0.18x classical/svc/istella/rows=full infer ours Xq (10.26 -> 1.80 ms)
+  0.29x classical2/linearsvc/taxi/rows=full fit ours (69.04 -> 20.05 ms)
+  0.29x neural/mlp-train-step/gaussian/shape=full fit ours (3.32 -> 0.971 ms)
+  0.64x neural/sequential-predict/synthetic/shape=full fit ours (4.22 -> 2.68 ms)
+  0.66x neural/program-run/gaussian/shape=full fit ours (1.25 -> 0.822 ms)
+  0.72x neural/transformer-forward/gaussian/shape=full fit ours (8.04 -> 5.76 ms)
+NOW-WINS (1): neural/mlp-train-step/gaussian/shape=full fit ours
+NOW-LOSES (1): classical/ols/taxi/rows=full fit ours
+PARAMS-DIFF (2): neural/sequential-fit/synthetic/shape=full fit ours, neural/sequential-predict/synthetic/shape=full fit ours
+NOT-RUN (18): trees/gbdt-depthwise/istella/rows=full fit ours, trees/gbdt-depthwise/istella/rows=full fit ours-prebinned, trees/gbdt-depthwise/istella/rows=full infer ours test, trees/gbdt-depthwise/istella/rows=full infer ours-prebinned test, trees/gbdt-depthwise/istella/rows=full infer ours large, trees/gbdt-depthwise/istella/rows=full infer ours-prebinned large ...

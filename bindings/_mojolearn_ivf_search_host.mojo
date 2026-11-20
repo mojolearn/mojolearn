@@ -22,6 +22,7 @@ The sabotage arm (`ivf_search_host_sabotage`) is
 axis descending, and every returned distance has its bits moved
 (`ivf_sabotage_value_flip`), so the integer `ties` fixture moves too.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -32,8 +33,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_index_arrays import ivf_merge_shards_host_binding
-from bindings.ivf_host_search import (
+from bindings.ivf_host_search_door import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
     ivf_flat_index_search_binding,
@@ -86,6 +86,7 @@ def ivf_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_ivf_search_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_ivf_search_host")
         module.def_function[ivf_search_host_numeric_mode_binding]("ivf_search_host_numeric_mode")
@@ -101,7 +102,9 @@ def build__mojolearn_ivf_search_host() -> PythonObject:
         module.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
         module.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         module.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
-        module.def_function[ivf_merge_shards_host_binding]("ivf_merge_shards")
+        # ivf_merge_shards: no Python door (lane calltable-parallel-archive,
+        # 2026-11-11); the distributed IVF owner reads the parallel IVF table
+        # `_mojolearn_ivf_host` publishes.
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))

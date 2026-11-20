@@ -4,8 +4,8 @@
 its launch, synchronize, copy and allocation counters.
 
 EVERYTHING HERE IS COMPILED ONLY UNDER `-D MOJOLEARN_STEP_PHASE_TIMERS=1`
-and switched on at run time by the block timers' switch
-(`MOJOLEARN_TRANSFORMER_TIMING=1`), the `MOJOLEARN_ATTN_PHASE_TIMERS`
+and switched on by the block timers' define
+(`-D MOJOLEARN_TRANSFORMER_TIMING`), the `MOJOLEARN_ATTN_PHASE_TIMERS`
 pattern of `transformer/impl/llama/fused_attention.mojo`. On a build
 without the define every function below compiles to nothing (the counter
 helpers) or to three field stores that nothing reads (`StepPhaseClock`):
@@ -34,11 +34,10 @@ timer helpers' own waits excluded). A launch or wait the MAX runtime makes
 internally is not visible here and is not counted.
 """
 
-from std.ffi import _Global
-from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
+from core.shared_slot import SharedSlot
 
 # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
 comptime STEP_PHASE_TIMERS = is_defined["MOJOLEARN_STEP_PHASE_TIMERS"]()
@@ -71,16 +70,15 @@ struct _StepCountsStore(Defaultable, Movable):
 # The `std.ffi._Global` slot the trees, RF and byte LM bindings use for
 # their process-lifetime state; referenced only inside the comptime branches
 # below, so a build without the define never creates it.
-comptime STEP_COUNTS = _Global[StorageType=_StepCountsStore,
-    name="MojolearnStepPhaseCountsV1", init_fn=_StepCountsStore.__init__]
+comptime STEP_COUNTS = SharedSlot[_StepCountsStore, "MojolearnStepPhaseCountsV2"]
 
 
 def step_phase_on() -> Bool:
-    """Compiled by `MOJOLEARN_STEP_PHASE_TIMERS`, switched on by
-    `MOJOLEARN_TRANSFORMER_TIMING`. False on every other build."""
-    comptime if STEP_PHASE_TIMERS:
-        return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    return False
+    """True in a build with both `-D MOJOLEARN_STEP_PHASE_TIMERS` and
+    `-D MOJOLEARN_TRANSFORMER_TIMING` (the block timers' define; a run-time
+    environment switch read per step until lane envgate-neural-lm,
+    2026-11-15). False on every other build."""
+    return STEP_PHASE_TIMERS and is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
 
 
 @always_inline

@@ -28,12 +28,11 @@ The CPU column runs this file on `x_decomp/kit.mojo`; the GPU binding runs
 x_decomp/kit_device.mojo's `fast_mcd_dev`, the same search with every
 matrix resident on the device.
 """
-from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
-from experiments.classical_identical_ideas.linear_controls import C23_MCD
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -54,11 +53,80 @@ from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, 
 # absolute cut that removes small-scale features of a badly scaled
 # covariance); the Cholesky keeps them, as scikit-learn's float64 pinvh does.
 # Bits change (all columns: this host twin runs chol_oracle's spelling of the
-# same profile). No size rule. `-D MOJOLEARN_IDN_MCD_CHOL_OFF` restores the
-# LU + eigh C-step. A/B owed (NV + AMD, MinCovDet/EllipticEnvelope taxi and
-# istella, plus one non-board shape).
-comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_MCD_CHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# same profile). No size rule.
+#
+# DEFAULT OFF since lane restore-classical-measured-routes (2026-11-13): this
+# switch went in (2cb89eb1b9) as the IDENTICAL default with its NV + AMD A/B
+# owed and never run. The board on record: min-cov-det taxi fit AMD 2116 ms
+# (0.8.25, LU + Jacobi pinvh C-step) -> 9852 ms (0.8.42 a6b5f76cb, after
+# this switch), NVIDIA 2871 -> 3420 ms; elliptic-envelope taxi AMD 2141 ->
+# 9760 ms; istella went the other way (AMD 268.9 s @1658ba796 -> 243.4 s
+# @a6b5f76cb, NVIDIA 186.2 s @12412eca4 -> 168.8 s @4c75b4144). One cell
+# each, other changes in between (history-audit hist-classical rank 2). The
+# measured LU + round-robin Jacobi pinvh C-step (0.8.25 .. 0.8.41) is the
+# default again; `-D MOJOLEARN_IDN_MCD_CHOL` is the Cholesky C-step, the B
+# arm of the owed A/B (NV + AMD, min-cov-det and elliptic-envelope taxi AND
+# istella, plus one non-board shape; owed row mcd-chol in
+# bench/results/paper_compare/owed-pre0867.json). Flipping the default
+# changes MinCovDet / EllipticEnvelope IDENTICAL bits on every column
+# together (host, Apple, NVIDIA, AMD). The `_OFF` define is gone (it would
+# select the default). A size rule only if each arm wins on a range of
+# shapes (no dimension targeting).
+# TOMBSTONE: MOJOLEARN_IDN_MCD_CHOL (opt-in arm: the Cholesky C-step, EXP:581 RUN OWED, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at c387c0b2c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MCD_CHOL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+# (MOJOLEARN_IDN_ALL_OFF stays deleted, so its term is not restored.)
+# A/B 2026-11-18 (ab1, owed row mcd-chol, NVIDIA L40S host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1,
+# base and arm back to back in one job, one run per arm): the Cholesky arm is FASTER, arm/base min-cov-det taxi
+# fit 6199 -> 3422 ms (0.55), elliptic-envelope taxi fit 6188 -> 3386 (0.55), min-cov-det istella 125.6 ->
+# 107.5 s (0.86), elliptic-envelope istella 127.5 -> 106.8 s (0.84), elliptic-envelope istella infer 25.83 ->
+# 20.26 ms (0.78), taxi infer 1.188 -> 1.229 (1.03). QUALITY IS LOWER on one cell: elliptic-envelope taxi support
+# Jaccard vs scikit-learn 0.9636 (LU) -> 0.9258 (Cholesky; fraction flagged 0.10237 -> 0.10209); istella equal
+# (same digest c8f7d3738967a583, Jaccard 0.0622 both); min-cov-det records no quality metric (n_features only).
+# The Cholesky taxi output is 0.8.55's exactly (digest 8c1b478088f596bf, Jaccard 0.9258, stored 0.8.55 board of
+# the 2026-11-17 full board). Hashes differ on 3 of 6 cells (the taxi cells). HELD, NOT FLIPPED: the owed row
+# promotes B only with Jaccard not lower, and AGENTS.md never trades quality for speed; a decision for Andrew.
+comptime IDN_MCD_CHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_MCD_CHOL"]()
+
+# Experiment MOJOLEARN_MCD_FAST_LOCKSTEP (lane fx-board-covariance-nb, 2026-11-19; decided by A/B round 3, below: owed row
+# mcd-lockstep in bench/results/paper_compare/owed-pre0867.json, docs/apple-fast/EXPERIMENTS.md). IDENTICAL, GPU
+# columns only; the host column and every word are unchanged (no bit change on any column).
+# Cause it addresses: the resident search (x_decomp/kit_device.mojo `DMcd.select_random` / `select_init`) runs its
+# candidates ONE AT A TIME, and every C-step of every candidate waits once for its log determinant and runs its
+# narrow pinvh as a one-block Jacobi with a batch of one, so the device works on one d x d problem at a time: about
+# 1,650 log-determinant waits and 1,100 single-block eigen solves a fit whatever the row count (the plan's 500 random
+# trials x up to 3, 50 merged candidates, 10 final ones). That is the cost the Cholesky C-step (IDN_MCD_CHOL above)
+# removes by changing the math (and the support: Jaccard 0.9636 -> 0.9258 on its A/B). This arm keeps the LU + Jacobi
+# pinvh math and the words and changes only the ORDER OF LAUNCHES: the candidates of one `select_random` /
+# `select_init` call take each C-step together. Per round: one batched Jacobi launch over every still-running
+# candidate's covariance (`DevExec._eigh_batch_enq`, one block a candidate: the same kernel and words as the batch of
+# one), each candidate's distances, selection, gather, mean, covariance and LU enqueued, then ONE wait for all their
+# log determinants. Candidates are independent (a trial's draws are its own Philox stream, numbered in trial order
+# as before), so each candidate's values are the serial loop's values. Applies up to XD_EIGH_ONE_BLOCK_N columns (the
+# one-block solve's bound: above it the Jacobi is multi-block and already fills the device); `select_init_best` (ten
+# candidates, support rows and distances kept whole) stays the serial loop.
+# Estimate (not measured): taxi-like fits (d 11-16, positive definite) lose most of the 2.8 s that separates the two
+# C-steps on the L40S (ab1: 6199 vs 3422 ms) plus the per-C-step waits of the other half. Time beside the board rows:
+# a neighbouring shape (300,000 x 16 rows of random float32 with 5 percent outliers) and a non-board dataset
+# (covtype's 10 continuous columns). Apple: a round enqueues up to trials x about 60 launches before its wait; the
+# Apple column is not timed (AGENTS.md part 8) and must be smoke-run before any promotion.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers bound to the GPU's NUMA node 0; one
+# scored run per arm; digests and quality equal on all 6 cells). Base -> arm ms:
+# min-cov-det taxi fit 6,009.9 -> 4,269.0 (0.710), elliptic-envelope taxi fit 6,015 -> 4,299 (0.715; Jaccard vs
+# scikit-learn 0.9636 both, unlike the Cholesky arm), taxi infer 0.863 -> 0.896 (1.04, median of 20, spread
+# 0.85..1.78 / 0.84..2.65: noise, the arm does not touch predict); istella (d = 220, above the one-block bound, so
+# the serial loop on both arms) fit 122,670 -> 122,650 (1.000) and 122,770 -> 122,910 (1.001), infer 1.006.
+# PROMOTED on the NVIDIA and AMD columns: DEFAULT ON there since 2026-11-20 (-D MOJOLEARN_MCD_FAST_LOCKSTEP_OFF
+# builds the serial candidate loop). The Apple column keeps the serial loop (a round enqueues up to trials x about
+# 60 launches before its wait and was never run on Metal); there the old name MOJOLEARN_MCD_FAST_LOCKSTEP still
+# opts in, for the owed smoke. The words are the same in either order, so the columns agree whichever runs.
+# Not timed: the neighbouring shape and the non-board dataset named above.
+comptime MCD_LOCKSTEP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP_OFF"]()
+    and (not TARGET_HAS_APPLE_GPU or is_defined["MOJOLEARN_MCD_FAST_LOCKSTEP"]())
+    and not IDN_MCD_CHOL
 )
 
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
@@ -166,19 +234,30 @@ def _quickselect(mut keys: List[UInt64], k: Int) -> UInt64:
 
 struct Est(Copyable, Movable):
     """One C-step's answer: (location, covariance, log det, support rows,
-    distances)."""
+    distances). `owed`: the final distances are not computed yet
+    (`Mcd.finish` runs them from P, the precision the loop last used
+    (L^{-1} when `p_chol`), or from pinvh(cov) when P is empty)."""
     var loc: Mat
     var cov: Mat
     var det: Float64
     var sel: List[Int]
     var dist: Mat
+    var P: Mat
+    var p_chol: Bool
+    var owed: Bool
 
-    def __init__(out self, var loc: Mat, var cov: Mat, det: Float64, var sel: List[Int], var dist: Mat):
+    def __init__(
+        out self, var loc: Mat, var cov: Mat, det: Float64, var sel: List[Int], var dist: Mat, var P: Mat,
+        p_chol: Bool, owed: Bool,
+    ):
         self.loc = loc^
         self.cov = cov^
         self.det = det
         self.sel = sel^
         self.dist = dist^
+        self.P = P^
+        self.p_chol = p_chol
+        self.owed = owed
 
 
 struct Chol(Movable):
@@ -225,14 +304,10 @@ struct Mcd[E: Exec]:
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
     def emp_cov_at(self, Xs: Mat, loc: Mat) raises -> Mat:
-        # C57 retains this candidate's just-computed immutable subset mean.
-        # No reuse across support changes; the centered products are unchanged.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C23_MCD:
-            return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
-        comptime if C57_CANDIDATE_STATE:
-            var Xc = self.k.ew2(OP_SUB, Xs, loc)
-            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C23_MCD (its use here: the centered-Gram covariance arm) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 7b5151da9b.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.expdel2-17-decomposition.patch.
+        # TOMBSTONE: MOJOLEARN_C57_CANDIDATE_STATE (its use here: the covariance centred at the candidate's mean) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-07-base); code recoverable at 3b6b933bcc.
+        # Restore: git apply experiments/removed/MOJOLEARN_C57_CANDIDATE_STATE.expdel2-17-decomposition.patch.
         return self.emp_cov(Xs)
 
     def mahal(self, X: Mat, loc: Mat, P: Mat) raises -> Mat:
@@ -310,11 +385,28 @@ struct Mcd[E: Exec]:
             return self.mahal_chol(X, loc, f.li)
         return self.mahal(X, loc, self.pinvh(cov))
 
+    def finish(self, X: Mat, mut e: Est) raises:
+        """A C-step's final distances, owed since `c_step` (lane
+        mcd-per-step-cost, 2026-11-14; x_decomp/kit_device.mojo
+        `DMcd.finish` is the GPU twin): the same calls on the same operands
+        as before, run only for a candidate whose distances are read."""
+        if not e.owed:
+            return
+        if e.P.r == 0:
+            e.dist = self.mahal(X, e.loc, self.pinvh(e.cov))
+        elif e.p_chol:
+            e.dist = self.mahal_chol(X, e.loc, e.P)
+        else:
+            e.dist = self.mahal(X, e.loc, e.P)
+        e.P = Mat(0, 0)
+        e.owed = False
+
     def c_step_chol(
-        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat
     ) raises -> Est:
         """`c_step` with the Cholesky's log determinant and distances
-        (IDN_MCD_CHOL): the same control flow, statement for statement."""
+        (IDN_MCD_CHOL): the same control flow, statement for statement; the
+        final distances owed (`finish`)."""
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]
@@ -328,11 +420,11 @@ struct Mcd[E: Exec]:
         var cov = self.emp_cov_at(Xs, loc)
         var f = self.chol(cov)
         var det = f.det
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
         var P = Mat(0, 0)
         var p_chol = False
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -362,14 +454,8 @@ struct Mcd[E: Exec]:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = Mat(0, 0)
-        if want_dist:
-            if p_chol:
-                final = self.mahal_chol(X, loc, P)
-            else:
-                final = self.mahal(X, loc, P)
-        return Est(loc^, cov^, det, sel^, final^)
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, p_chol, True)
 
     # ---- randomness
     def perm(mut self, n: Int) raises -> List[Int]:
@@ -384,10 +470,14 @@ struct Mcd[E: Exec]:
 
     # ---- the C-step
     def c_step(
-        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
+        mut self, X: Mat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat
     ) raises -> Est:
+        """One C-step search from a random subset or an initial estimate;
+        the final distances owed to `finish` (lane mcd-per-step-cost: a -inf
+        start's pinvh(cov) and the final distances were computed for every
+        candidate and read for the kept one only)."""
         comptime if IDN_MCD_CHOL:
-            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0, want_dist)
+            return self.c_step_chol(X, h, n_iter, has_init, loc0, cov0)
         var iters = n_iter
         var dist = Mat(0, 0)
         var sel: List[Int]
@@ -401,10 +491,10 @@ struct Mcd[E: Exec]:
         var loc = self.colmean(Xs)
         var cov = self.emp_cov_at(Xs, loc)
         var det = self.fast_logdet(cov)
+        # P empty with has_p: a -inf start, pinvh(cov) owed to `finish`
         var P = Mat(0, 0)
         var has_p = False
         if det == _neg_inf():
-            P = self.pinvh(cov)
             has_p = True
         var prev_det = _pos_inf()
         var have_prev = False
@@ -435,26 +525,31 @@ struct Mcd[E: Exec]:
         if iters == 0:
             use_prev = False
         if use_prev:
-            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
-        var final = Mat(0, 0)
-        if want_dist:
-            final = self.mahal(X, loc, P)
-        return Est(loc^, cov^, det, sel^, final^)
+            return Est(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^, Mat(0, 0), False, False)
+        return Est(loc^, cov^, det, sel^, Mat(0, 0), P^, False, True)
 
     def select_random(mut self, X: Mat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool) raises -> List[Est]:
         var est = List[Est]()
         var none = Mat(0, 0)
         for _ in range(trials):
-            est.append(self.c_step(X, h, n_iter, False, none, none, want_dist))
-        return Self._top(est, keep)
+            est.append(self.c_step(X, h, n_iter, False, none, none))
+        return self._kept(X, est, keep, want_dist)
 
     def select_init(
         mut self, X: Mat, h: Int, inits: List[Est], keep: Int, n_iter: Int, want_dist: Bool
     ) raises -> List[Est]:
         var est = List[Est]()
         for t in range(len(inits)):
-            est.append(self.c_step(X, h, n_iter, True, inits[t].loc, inits[t].cov, want_dist))
-        return Self._top(est, keep)
+            est.append(self.c_step(X, h, n_iter, True, inits[t].loc, inits[t].cov))
+        return self._kept(X, est, keep, want_dist)
+
+    def _kept(self, X: Mat, est: List[Est], keep: Int, want_dist: Bool) raises -> List[Est]:
+        """`_top`, then the kept candidates' final distances when read."""
+        var out = Self._top(est, keep)
+        if want_dist:
+            for a in range(len(out)):
+                self.finish(X, out[a])
+        return out^
 
     @staticmethod
     def _top(est: List[Est], keep: Int) raises -> List[Est]:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Every neural-family identity lane, all of them in ONE process per column,
-each stage run TWICE (`identity_break.py --repeats 2`), on the GPU bindings
+"""A neural-family identity lane (every one of them, in ONE process per
+column, with MOJOLEARN_NEURAL_REPEAT_EXHAUSTIVE=1), each stage run TWICE (`identity_break.py --repeats 2`), on the GPU bindings
 and on the CPU host bindings; then the two columns diffed bit for bit.
 
 The directive it answers (CURRENT DIRECTIVES, 2026-09-27): an entry that
@@ -16,10 +16,10 @@ Running all twelve lanes in one process is the hardest case: the training,
 transformer, mamba, embedding and byte LM bindings each open their shared
 context once and every later entry, session and stage reuses it. A second
 run of a stage that moved reads MOVED, which fails the harness; a hang hits
-the timeout. The lane names come from tools/identity_lanes/neural.core. The default uses base and negative fixtures
-(the latter retains the known Samba trigger), with a 180-second arm bound.
-MOJOLEARN_NEURAL_REPEAT_EXHAUSTIVE=1 explicitly selects all nine fixtures.
-Both paths retain every property, including batchgrad and ragged checks.
+the timeout. The lane names come from tools/identity_lanes/neural.core. The default runs the samba lane
+alone on the base and negative fixtures (the latter retains the known Samba trigger), with a 180-second
+arm bound. MOJOLEARN_NEURAL_REPEAT_EXHAUSTIVE=1 explicitly selects all twelve lanes in one process and
+all nine fixtures. Both paths retain every property, including batchgrad and ragged checks.
 The subprocesses use the same runtime imported by pytest, including an
 installed wheel; source builds also work after their bindings are staged:
 `python -m pytest python/mojolearn/tests/test_neural_repeat.py`."""
@@ -39,13 +39,27 @@ LANES = ROOT / "tools" / "identity_lanes" / "neural.core"
 EXHAUSTIVE = os.environ.get("MOJOLEARN_NEURAL_REPEAT_EXHAUSTIVE") == "1"
 FIXTURES = "" if EXHAUSTIVE else "base,negative"
 TIMEOUT_S = 3600 if EXHAUSTIVE else 180
+# The default runs ONE lane per column: every lane's bits across columns are
+# the release identity round's job, so the suite keeps only the in-process
+# second run. samba is the lane whose negative fixture carries the known
+# second-call trigger (ragged), and it carries the sampler/trainer pair, so
+# it reaches every part the harness collects.
+DEFAULT_LANE = "samba"
 
 
-def _lanes():
+def _all_lanes():
     lanes = [line.strip() for line in LANES.read_text().splitlines()
              if line.strip() and not line.lstrip().startswith("#")]
     assert len(lanes) == 12 and len(set(lanes)) == len(lanes)
     return lanes
+
+
+def _lanes():
+    lanes = _all_lanes()
+    if EXHAUSTIVE:
+        return lanes
+    assert DEFAULT_LANE in lanes
+    return [DEFAULT_LANE]
 
 
 def _environment(kind):
@@ -185,12 +199,12 @@ def _assert_records(gpu_path, cpu_path):
     return dict(cells_per_arm=len(expected), repeats_per_part=2,
                 numeric_parts=sum(not v.startswith("n/a:") for v in values[0].values()),
                 structural_na=declared_na,
-                absent_rlpair={f"{lane}/{f}": "no sampler/trainer pair declared" for lane in sorted(no_pair) for f in sorted(fixtures)},
+                absent_rlpair={f"{lane}/{f}": "no sampler/trainer pair declared" for lane in sorted(no_pair & set(_lanes())) for f in sorted(fixtures)},
                 intentional_batchgrad_notes=intentional_notes,
                 fixtures=sorted(fixtures), exhaustive=EXHAUSTIVE)
 
 
-def test_every_neural_lane_twice_in_one_process_gpu_and_cpu(tmp_path):
+def test_neural_lane_twice_in_one_process_gpu_and_cpu(tmp_path):
     from mojolearn import _backend
     backend = _backend.vendor()
     if backend not in ("metal", "cuda", "hip"):

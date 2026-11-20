@@ -1,0 +1,48 @@
+diff --git a/autograd/kernels/mamba2_ssd.mojo b/autograd/kernels/mamba2_ssd.mojo
+index b1951030f7..37dd2805bb 100644
+--- a/autograd/kernels/mamba2_ssd.mojo
++++ b/autograd/kernels/mamba2_ssd.mojo
+@@ -38,8 +38,9 @@ from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
+ from mamba.impl.modeling.modeling_mamba import mamba_scratch
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 and 2) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is mamba/impl/ops/neural_gradient_profile.mojo); code recoverable at d788d4c3f4.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
++# NN39: shared pure Mojo profile imported by both device and checked-in
++# generated host source. Future regeneration preserves the same import.
++from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, IDN_M2_GRAD_FOLD_ARM, nn39_gradient_tree
+ 
+ comptime M2_SSD_BWD_TPB = 128
+ 
+@@ -70,7 +71,16 @@ comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
+     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
+ ]()
+-comptime M2_BWD_FOLD_ROWS = 256
++# NI44 V subarm: halve each logical gradient leaf to expose twice the
++# independent token work before the same ascending tile merge. 128 is a fixed
++# reduction granularity, not a benchmark shape; all host/GPU columns change
++# the graph together. Existing allocation uses m2_fold_tiles, including tails.
++# Default OFF. No gradient/trajectory quality or performance claim is made.
++comptime IDN_M2_GRAD_LEAF128 = (
++    IDN_M2_BWD_FOLD_TILED
++    and IDN_M2_GRAD_FOLD_ARM == 2
++)
++comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
+ 
+ 
+ def m2_fold_rows_per_tile(rows: Int) -> Int:
+@@ -1186,8 +1196,11 @@ def m2_fold_tiles_kernel(
+     if c >= cols:
+         return
+     var acc = part.unsafe_load(c)
+-    for tile in range(1, tiles):
+-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
++    comptime if NN39_M2_GRAD_TREE:
++        acc = nn39_gradient_tree(part, tiles, cols, c)
++    else:
++        for tile in range(1, tiles):
++            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+     if c < split:
+         out_a.unsafe_store(c, acc)
+         if has_scale != 0:

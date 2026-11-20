@@ -1,0 +1,136 @@
+name: Parse each
+
+# Parse, type check and elaborate each Mojo file of a list ON ITS OWN (`mojo build --emit llvm --no-optimization`), all
+# files in parallel across 16 runners, every error collected. The native checks compile into ONE binary per column, so
+# one error in one suite hides every other suite's errors and each fix costs a round (2026-11-19: 133 old check suites
+# were registered at once; five compile rounds had already gone to five errors the night before). This gives every
+# file's first errors in a single round.
+#
+# files_from: a text file in the repo, one path per line (a suite module with run_checks(), or a file with main()).
+# column cpu: -D MOJOLEARN_COLUMN_CPU with the host CPU pin; column sm_89: -D MOJOLEARN_COLUMN_NVIDIA
+# --target-accelerator sm_89, no GPU needed (as device-parse in native-checks.yml). Errors that are only the
+# unoptimised lowering's refusals are not counted (as host-parse). Tooling only: gates and reports nothing.
+#
+# MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger):
+#   gh workflow run parse-each.yml --ref main -f ref=<sha|branch> -f files_from=<path> -f column=cpu|sm_89
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit or branch to check out"
+        required: true
+      files_from:
+        description: "path in the repo of the list of Mojo files"
+        required: true
+      column:
+        description: "cpu or sm_89"
+        required: false
+        default: "cpu"
+
+run-name: "parse-each ${{ inputs.ref }} ${{ inputs.column }} ${{ inputs.files_from }}"
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    env:
+      PE_SHARDS: 16
+      PE_SHARD: ${{ matrix.shard }}
+      PE_COLUMN: ${{ inputs.column }}
+      PE_LIST: ${{ inputs.files_from }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 16 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse each file of shard ${{ matrix.shard }} (mojo build --emit llvm --no-optimization)
+        run: |
+          # GitHub runs steps under `bash -e`: a failing compile is the EXPECTED case here and must not end the step
+          # (2026-11-19: the first run lost every failing file because the shard exited at its first one).
+          set +e
+          set -u
+          mkdir -p out/logs
+          python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > out/generated-sources.log 2>&1 \
+            || { tail -n 20 out/generated-sources.log; exit 1; }
+          mapfile -t ALL < <(grep -v '^[[:space:]]*#' "$PE_LIST" | grep -v '^[[:space:]]*$' | LC_ALL=C sort)
+          target="--target-cpu x86-64-v3 --target-features +avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave"
+          [ "$(uname -m)" = x86_64 ] || target=""
+          if [ "$PE_COLUMN" = cpu ]; then col="-D MOJOLEARN_COLUMN_CPU"; else col="-D MOJOLEARN_COLUMN_NVIDIA --target-accelerator $PE_COLUMN"; fi
+          n=0; bad=0
+          : > out/RESULT.tsv
+          for i in "${!ALL[@]}"; do
+            [ $((i % PE_SHARDS)) -eq "$PE_SHARD" ] || continue
+            f=${ALL[$i]}; n=$((n + 1)); stem=$(echo "$f" | tr '/.' '__')
+            # A suite module has `run_checks()` and no `main()` (a module with main() cannot be imported): give it a
+            # two-line entry. A file that has its own main() is built as it is.
+            root="$f"
+            if ! grep -qE '^(def|fn) main\b' "$f"; then
+              root="out/${stem}_entry.mojo"
+              printf 'from %s import run_checks\n\n\ndef main() raises:\n    run_checks()\n' "$(echo "${f%.mojo}" | tr '/' '.')" > "$root"
+            fi
+            # shellcheck disable=SC2086
+            pixi run mojo build -j "$(nproc)" --emit llvm --no-optimization -D MOJOLEARN_NUMERIC_IDENTICAL=1 $col \
+              $target -I . -I bindings "$root" -o "out/$stem.ll" > "out/logs/$stem.log" 2>&1
+            rc=$?
+            rm -f "out/$stem.ll"
+            # as host-parse: only the unoptimised lowering's refusals means the file elaborated
+            real=$(grep -E '\.mojo:[0-9]+:[0-9]+: error' "out/logs/$stem.log" | grep -v 'stdlib/std/sys/intrinsics.mojo' | head -n 3 | tr '\n' ' ' | cut -c1-600)
+            if [ -n "$real" ] || { [ "$rc" != 0 ] && ! grep -q 'could not lower funcs to LLVM\|failed to legalize operation' "out/logs/$stem.log"; }; then
+              bad=$((bad + 1)); printf 'FAIL\t%s\t%s\t%s\n' "$f" "$rc" "${real:-$(tail -n 2 "out/logs/$stem.log" | tr '\n' ' ' | cut -c1-400)}" >> out/RESULT.tsv
+            else
+              printf 'OK\t%s\t%s\t\n' "$f" "$rc" >> out/RESULT.tsv; rm -f "out/logs/$stem.log"
+            fi
+          done
+          echo "shard $PE_SHARD: $n files, $bad failed"
+          grep '^FAIL' out/RESULT.tsv | cut -c1-400 || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: parse-each-${{ inputs.column }}-shard-${{ matrix.shard }}
+          path: |
+            out/RESULT.tsv
+            out/logs
+          retention-days: 14
+          if-no-files-found: warn
+
+  summary:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: shards
+      - name: Summary
+        run: |
+          set -u
+          cat shards/*/RESULT.tsv > RESULT.tsv 2> /dev/null || true
+          {
+            echo "# Parse each"
+            echo "files: $(wc -l < RESULT.tsv)  ok: $(grep -c '^OK' RESULT.tsv || true)  failed: $(grep -c '^FAIL' RESULT.tsv || true)"
+            grep '^FAIL' RESULT.tsv | cut -f2,4 | sed 's/^/- /' | cut -c1-500 || true
+          } | tee SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: parse-each-summary
+          path: |
+            SUMMARY.md
+            RESULT.tsv
+          retention-days: 14

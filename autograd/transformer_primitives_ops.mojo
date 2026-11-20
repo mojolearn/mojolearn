@@ -5,6 +5,9 @@ from sequence.ops import Args, FP
 from autograd.ops import op_ag_softmax_fwd, op_ag_softmax_vjp
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_div, identical_rsqrt, identical_sin, identical_cos
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (fixed 32-lane norm fold; EXP:2246 PENDING, opt-in arm never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 085ef605b2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-25-neural.patch.
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from gemm.contract import contract_leaf_size, leaf_count
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell

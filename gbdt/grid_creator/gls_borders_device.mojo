@@ -40,6 +40,10 @@ from gbdt.grid_creator.gls_borders import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF (DELETE-OLD-PATH, packed 64-column border-type launch, EXP:2273 CANDIDATE, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 4d1a3fc5f3.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BT_COLUMN_BLOCKS_OFF.patch; record in docs/TOMBSTONES.md.
+
+
 def _blocks(n: Int) -> Int:
     return max(1, min((n + GLS_BLOCK - 1) // GLS_BLOCK, 65535))
 
@@ -160,6 +164,17 @@ def device_float_borders(
     var base = 0
     while base < n_float:
         var width = min(chunk, n_float - base)
+        # Lane perf-trees-misc (2026-11-05): one column per block for the six
+        # border types. Each column's search is a
+        # serial, data-dependent walk (the exact DP's pointer loops, the
+        # greedy heap); 64 columns packed into one block shared one
+        # multiprocessor and their warps diverged on every branch, so a
+        # chunk of up to 64 columns ran on one SM at a fraction of one
+        # thread's speed. One block per column spreads the columns over
+        # every multiprocessor, none diverging. The same kernel and the same
+        # per-column arithmetic: no bit change.
+        var bt_grid = width
+        var bt_block = 1
         var cols_ptr = d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if use_dev:
             cols_ptr = dev_cols.value() + base * n_rows
@@ -219,7 +234,7 @@ def device_float_borders(
                 d_i32s.unsafe_ptr(), Int64(i32_stride),
                 d_uniq.unsafe_ptr(), Int64(uniq_stride),
                 d_out.unsafe_ptr(), Int32(out_cap), d_counts.unsafe_ptr(),
-                grid_dim=max(1, (width + 63) // 64), block_dim=64,
+                grid_dim=bt_grid, block_dim=bt_block,
             )
         ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
         ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)
@@ -243,6 +258,11 @@ def device_float_borders(
             borders.append(bs^)
             modes.append(m)
         base += width
+    # past the drain: `h_seg` is read through `hs` by the two segment uploads
+    # above; its last named use was there, so it was freed while they were
+    # queued. The loop runs at least once (n_float > 0), so this is after the
+    # first chunk's drain.
+    _ = h_seg^
     _ = d_f64s^
     _ = d_i32s^
     _ = d_uniq^

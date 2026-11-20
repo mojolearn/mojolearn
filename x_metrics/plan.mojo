@@ -14,9 +14,8 @@ core count or the data), so the host and the device run the same stages.
 A stage the planner cannot size (a group_sum whose OFF no earlier
 group_sort wrote) runs its sequential unit unchanged.
 """
-from experiments.classical_identical_ideas.shared_controls import C05_PHASE_SCRATCH, C09_REG_BUNDLE, C10_RANK_REUSE, C12_SPARSE_COUNTS
 from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
-from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM, KEY_GROUP
+from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
 from x_metrics.cls_epi import OP_CLS_EPI
 from x_metrics.curve_out import (
     OP_CURVE_OUT, OP_CO_KEEP, OP_CO_EMIT, OP_CO_DET, CO_DET, OP_AUC_XY, OP_AX_CHUNK, OP_AX_FINAL, AX_REC,
@@ -27,12 +26,15 @@ from x_metrics.contingency import (
 )
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # The planner and its emitted chunk parameters use the same selected width.
-comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P09"]()
+comptime AFCL_P09 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P09"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P09 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 74cbc6951a.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P09.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
@@ -118,6 +120,14 @@ comptime IOTA_EXACT = 1 << 24
 comptime OP_LAST_TAIL = 62
 #: StratifiedShuffleSplit's per-class draw counts (x_metrics/split.mojo approx_mode_unit; lane py-runtime-b)
 comptime OP_APPROX_MODE = 81
+#: permutation_test_score's within-group permutation (x_metrics/split.mojo group_take_unit,
+#: take_rows64_unit; lane ne2-b-search-workers)
+comptime OP_GROUP_TAKE = 85
+comptime OP_TAKE_ROWS64 = 86
+#: one StratifiedShuffleSplit split as one program (x_metrics/split.mojo permute_drawn_unit,
+#: strat_take_unit; lane ne2-b-search-workers)
+comptime OP_PERMUTE_DRAWN = 87
+comptime OP_STRAT_TAKE = 88
 
 
 @always_inline
@@ -126,7 +136,8 @@ def is_user_op(op: Int) -> Bool:
     label layout units onehot, rep_rows and pair_cols."""
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
             or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS
-            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL) or op == OP_CURVE_OUT or op == OP_AUC_XY or op == OP_CONT_STATS or op == OP_APPROX_MODE)
+            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL) or op == OP_CURVE_OUT or op == OP_AUC_XY or op == OP_CONT_STATS or op == OP_APPROX_MODE
+            or op == OP_GROUP_TAKE or op == OP_TAKE_ROWS64 or op == OP_PERMUTE_DRAWN or op == OP_STRAT_TAKE)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
@@ -200,48 +211,6 @@ struct Plan(Movable):
 @always_inline
 def _a(r: IP, k: Int) -> Int:
     return Int(r.unsafe_load(2 + k))
-
-
-def _separate(a: Int, an: Int, b: Int, bn: Int) -> Bool:
-    # Native program metadata only. Missing optional regions are disjoint.
-    return a < 0 or b < 0 or an <= 0 or bn <= 0 or a + an <= b or b + bn <= a
-
-
-def _reg_pair_safe(r: IP, following: IP, total: Int) -> Bool:
-    var y = _a(r, 0)
-    var pred = _a(r, 1)
-    var pn = _a(r, 3) if _a(r, 6) == 1 else total
-    var a = _a(r, 2)
-    var b = _a(following, 2)
-    return (a >= 0 and b >= 0 and _separate(a, total, b, total)
-            and _separate(a, total, y, total) and _separate(a, total, pred, pn)
-            and _separate(b, total, y, total) and _separate(b, total, pred, pn))
-
-
-def _curve_pair_safe(r: IP, following: IP, n: Int, total: Int) -> Bool:
-    # Reuse only independent arenas. Aliased producer programs retain B.
-    # KEEP has extra write regions; it is left to the ordinary planner.
-    if _a(r, 11) != 0 or _a(following, 11) != 0 or _a(r, 1) < total:
-        return False
-    var N = n * total
-    var score_n = (n - 1) * _a(r, 1) + total
-    for stage in range(2):
-        var a = r if stage == 0 else following
-        for k in range(5, 10):
-            var at = _a(a, k)
-            var count = total if k == 9 else N
-            if at < 0 or not _separate(at, count, _a(r, 0), score_n):
-                return False
-            if not _separate(at, count, _a(r, 2), N) or not _separate(at, count, _a(r, 3), n):
-                return False
-            for other_stage in range(stage, 2):
-                var b = r if other_stage == 0 else following
-                for j in range(5, 10):
-                    if other_stage == stage and j <= k:
-                        continue
-                    if not _separate(at, count, _a(b, j), total if j == 9 else N):
-                        return False
-    return True
 
 
 def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
@@ -349,18 +318,9 @@ def _plan_cont_stats(mut pl: Plan, r: IP, total: Int) raises:
 
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
     var pl = Plan(arena_len)
-    var peak = arena_len
-    var skip = -1
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 890e449c3d.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
     for s in range(stages):
-        # C05: every expansion finishes into caller arena before the next
-        # source stage. Retain one bounded, invocation-owned workspace and
-        # reuse its offsets after that boundary; no cross-call stale state.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C05_PHASE_SCRATCH:
-            peak = max(peak, pl.size)
-            pl.size = arena_len
-        if s == skip:
-            continue
         var r = q + s * STAGE_INTS
         var op = Int(r.unsafe_load(0))
         var total = Int(r.unsafe_load(1))
@@ -369,19 +329,8 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
         if total <= 0:
             pl.copy_stage(q, s)
             continue
-        comptime if C09_REG_BUNDLE:
-            if op == 3 and s+1 < stages:
-                var following = q + (s+1)*STAGE_INTS
-                # Only fuse adjacent independent SQ/ABS stages with the same
-                # inputs, broadcast and output geometry. B keeps both maps.
-                if (Int(following[0]) == 3 and Int(following[1]) == total
-                    and _a(r, 4) == 0 and _a(following, 4) == 1
-                    and _a(r, 0) == _a(following, 0) and _a(r, 1) == _a(following, 1)
-                    and _a(r, 3) == _a(following, 3) and _a(r, 6) == _a(following, 6)
-                    and _reg_pair_safe(r, following, total)):
-                    pl.emit(82, total, [_a(r,0), _a(r,1), _a(r,2), _a(following,2), _a(r,3), _a(r,6)])
-                    skip = s+1
-                    continue
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C09_REG_BUNDLE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 0e0c18d8e0.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C09_REG_BUNDLE.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
         if op == OP_GROUP_SORT:
             var K = _a(r, 0)
             var n = _a(r, 1)
@@ -394,17 +343,8 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
                 cap = 1
             if C > cap:
                 C = cap
-            comptime if C12_SPARSE_COUNTS:
-                # Occupancy can never exceed n. Prefer row storage when
-                # full class/chunk tables cost more than sorting n keys.
-                # No measured-shape threshold; dense OFF output still paid.
-                if n > 1 and 6*n < m*C+m and pl.fits(6*n):
-                    var B = pl.sort(KEY_GROUP, n, 1, K, m, 0)
-                    pl.emit(OP_SORT_EMIT, n, [B, n, ORD])
-                    pl.emit(83, m+1, [K, n, m, ORD, OFF])
-                    pl.off_at.append(OFF)
-                    pl.off_n.append(n)
-                    continue
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 767961776e.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
             if n <= 0 or m <= 0 or C < 1 or not pl.fits(m * C + m):
                 pl.copy_stage(q, s)
                 continue
@@ -489,21 +429,8 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK, _a(r, 3)])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
             _plan_keep(pl, r, n, total)
-            comptime if C10_RANK_REUSE:
-                if s+1 < stages:
-                    var next_curve = q+(s+1)*STAGE_INTS
-                    var same = Int(next_curve[0]) == OP_BIN_CURVE and Int(next_curve[1]) == total
-                    for k in range(5):
-                        same = same and _a(r,k) == _a(next_curve,k)
-                    if same and _curve_pair_safe(r, next_curve, n, total):
-                        # Sources were not touched between these adjacent
-                        # producers. Reuse tie blocks and weighted prefixes;
-                        # each consumer still receives its own output layout.
-                        pl.emit(84, N, [n, _a(r,6), _a(r,7), _a(r,8), _a(r,9),
-                                      _a(next_curve,6), _a(next_curve,7), _a(next_curve,8), _a(next_curve,9),
-                                      _a(r,5), _a(next_curve,5), G])
-                        _plan_keep(pl, next_curve, n, total)
-                        skip = s+1
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_C10_RANK_REUSE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 33145e49d6.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C10_RANK_REUSE.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
             if n <= 1 or not pl.fits(6 * n):
@@ -567,6 +494,4 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_AX_FINAL, 1, [S, C, _a(r, 3)])
         else:
             pl.copy_stage(q, s)
-    comptime if C05_PHASE_SCRATCH:
-        pl.size = max(peak, pl.size)
     return pl^

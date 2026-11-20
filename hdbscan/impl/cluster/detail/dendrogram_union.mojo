@@ -37,7 +37,7 @@ ends with no synchronize (the condense that follows is on the same queue).
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hierarchy.impl.cluster.detail.dendrogram_device import (

@@ -634,7 +634,7 @@ def check_hardware_matrix() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. `decomposition/pca_main.mojo` and
     # `neighbors/knn_main.mojo` both call this first; neither is a
     # registered task, so until now the only way to run it was to run a
@@ -643,3 +643,20 @@ def main() raises:
     # Standalone matrix task also checks live GBDT layout arithmetic.
     # This includes three modeled negative controls and launches no GPU work.
     check_sub_byte_layout()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("hardware_matrix_check", cpu=True, gpu=False, serial="", run=run_cases)

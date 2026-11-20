@@ -128,8 +128,8 @@ def check_radix_sort(n_bins: Int, first_bit: Int, last_bit: Int) raises:
     var d_off = ctx.enqueue_create_buffer[DType.int32](n)
     var n_blocks = (n + REORDER_BLOCK - 1) // REORDER_BLOCK
     var d_bsum = ctx.enqueue_create_buffer[DType.int32](n_blocks)
-    ctx.enqueue_copy(dst_buf=d_keys, src_ptr=h_keys.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_keys, h_keys)
+    upload_host_into[DType.uint32](ctx, d_vals, h_vals)
     ctx.synchronize()
 
     launch_radix_sort_bins(
@@ -140,8 +140,8 @@ def check_radix_sort(n_bins: Int, first_bit: Int, last_bit: Int) raises:
 
     var got_k = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var got_v = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=got_k.unsafe_ptr(), src_buf=d_keys)
-    ctx.enqueue_copy(dst_ptr=got_v.unsafe_ptr(), src_buf=d_vals)
+    download_host_into[DType.uint32](ctx, d_keys, got_k)
+    download_host_into[DType.uint32](ctx, d_vals, got_v)
     ctx.synchronize()
 
     # The host tally: stable order = key ascending, then input position.
@@ -228,7 +228,7 @@ def check_radix_sort(n_bins: Int, first_bit: Int, last_bit: Int) raises:
         )
 
 
-def main() raises:
+def run_checks() raises:
     print("radix sort over (bin, permutation position), reorder block",
           REORDER_BLOCK)
     # Six bits covers every key, and the pass count is EVEN, so the answer
@@ -243,3 +243,22 @@ def main() raises:
     # this arm has a much larger tie population than the other two.
     check_radix_sort(N_BINS_7, 2, 7)
     print("  radix sort is stable and matches the host tally, 3 arms")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("radix_sort_check", cpu=False, gpu=True, serial="", run=run_cases)

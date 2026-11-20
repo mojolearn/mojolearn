@@ -42,14 +42,14 @@ and read here, host side (a checkpoint is a host file). No arithmetic on the
 values: they move by memcpy and by their bits. The Python doors (argument
 unpacking and results) are in model_checkpoint_pyapi.mojo.
 """
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_LAYER_NORM, LAYER_LINEAR, ModelSpec,
     parse_model,
 )
-from autograd.program import program_from_words, program_words
+from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
 from autograd.arg_words import cast_in_words, fptr_word, fval_word
@@ -57,6 +57,7 @@ from training.checkpoint import (
     CKPT_REFUSE_SHAPE, CKPT_SECTION_PROGRAM, CKPT_SECTION_SEQUENTIAL, CKPT_SECTION_SESSION, Checkpoint,
     read_checkpoint_unchecked,
     save_checkpoint,
+    save_checkpoint_sha256,
 )
 
 comptime BP = UnsafePointer[UInt8, MutUntrackedOrigin]
@@ -110,15 +111,15 @@ def _check_layout(ck: Checkpoint, offsets: List[Int], names: List[String], path:
 
 
 def _floats_of(p: FP, n: Int) -> List[Float32]:
-    var out = List[Float32](length=n, fill=Float32(0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=p, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=p, count=n)
     return out^
 
 
 def _put_floats(dst: FP, src: List[Float32]):
     if len(src) > 0:
-        memcpy(dest=dst, src=src.unsafe_ptr(), count=len(src))
+        unsafe_memcpy(dest=dst, src=src.unsafe_ptr(), count=len(src))
 
 
 # ---------------------------------------------------------------- Sequential save
@@ -299,7 +300,7 @@ def model_save_checkpoint(
         var sa = addrs[3]
         if sa == 0:
             raise Error("model_save_checkpoint: null training-state buffer")
-        memcpy(dest=state.unsafe_ptr(), src=IP64(unsafe_from_address=sa), count=FIT_STATE_WORDS)
+        unsafe_memcpy(dest=state.unsafe_ptr(), src=IP64(unsafe_from_address=sa), count=FIT_STATE_WORDS)
     var opt = ip[3]
     var flags = ip[4]
     ck.t = Int(state[FS_STEP])
@@ -420,10 +421,10 @@ def model_load_checkpoint(file: String, addrs: List[Int]) raises -> Int:
     if addrs[2] != 0:
         _put_floats(fptr_word(addrs[2], "v"), ck.v_state)
     if addrs[3] != 0:
-        memcpy(dest=IP64(unsafe_from_address=addrs[3]), src=r.state.unsafe_ptr(), count=FIT_STATE_WORDS)
+        unsafe_memcpy(dest=IP64(unsafe_from_address=addrs[3]), src=r.state.unsafe_ptr(), count=FIT_STATE_WORDS)
     if addrs[4] != 0 and r.n_run > 0:
         var curve = fptr_word(addrs[4], "loss_curve")
-        memcpy(dest=curve, src=ck.ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
+        unsafe_memcpy(dest=curve, src=ck.ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
     if addrs[5] != 0 and r.k > 0:
         var bp = BP(unsafe_from_address=addrs[5])
         for j in range(r.k):  # driver-loop: over classes
@@ -576,9 +577,9 @@ def ops_load_state[E: Exec & Movable & Deinitable, KIND: Int](
     return res^
 
 
-def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int, file: String) raises -> Int:
-    """Write program `pid` of session `sid` and its parameters' current
-    values to `file`. Returns the byte count."""
+def _program_checkpoint[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int) raises -> Checkpoint:
+    """The checkpoint record of program `pid` of session `sid` with its
+    parameters' current values (downloaded once)."""
     var p = ops_session[E, KIND](sid)
     var prog = p[].program(pid)
     var K = len(prog.params)
@@ -607,8 +608,26 @@ def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: I
     ck.ext_floats = words[1].copy()
     ck.seed = 0
     ck.t = 0
+    return ck^
+
+
+def ops_save_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, pid: Int, file: String) raises -> Int:
+    """Write program `pid` of session `sid` and its parameters' current
+    values to `file`. Returns the byte count."""
+    var ck = _program_checkpoint[E, KIND](sid, pid)
     var h = save_checkpoint(file, ck)
     return h.bytes
+
+
+def ops_save_program_sha256[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: Int, pid: Int, file: String,
+) raises -> Tuple[String, Int]:
+    """`ops_save_program`, returning (the SHA-256 of the written bytes, their
+    count) from the in-memory body, so the caller never re-reads the file
+    (row N167)."""
+    var ck = _program_checkpoint[E, KIND](sid, pid)
+    var saved = save_checkpoint_sha256(file, ck)
+    return (saved[1].copy(), saved[0].bytes)
 
 
 def ops_load_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, file: String) raises -> Int:
@@ -633,6 +652,13 @@ def ops_load_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, file: 
                         + " does not hold its recorded shape")
         var c = CastIn(Int(ck.param.unsafe_ptr()) + 4 * off, CAST_KIND_FLOAT, 4, sh.rows(), sh.cols(), 4 * sh.cols(), 4)
         prog.params[i] = p[].upload_nd(c, sh, False)
+        # lane x1 (record version 3): carried state comes back as state; int32
+        # words were saved as their bit patterns and keep them (a float32 copy)
+        var pk = prog.param_kind(i)
+        if pk == PROGRAM_PARAM_STATE_WORDS:
+            p[].int_words[p[]._slot(prog.params[i])] = True
+        if pk != PROGRAM_PARAM_WEIGHT:
+            p[].declare_state(prog.params[i])
     var pid = p[].add_program(prog^)
     _ = ck^
     return pid

@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.neighbors_native import neighbors_operation
+from bindings.neighbors_native_pack import neighbors_operation
 
 
 @export

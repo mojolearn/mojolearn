@@ -26,7 +26,7 @@ schedules are the speed work that follows.
 | 5000 | every reduction (`ops.dot`, `row_dot`, the Gram and X'y folds) | PIN: j ascending, one `identical_mul_add` per term |
 | 5001 | every operand and result | PIN: `ftz` (a subnormal is its signed zero) |
 | 5002 | Cholesky (`ops.cholesky`, `chol_solve`) | PIN: column j ascending, inner sums k ascending, products rounded alone |
-| 5003 | the symmetric eigensolver (`ops.jacobi_eig`, BayesianRidge) | REPLACE their SVD: cyclic Jacobi, p then q ascending, Rutishauser's rotation |
+| 5003 | (removed 2026-11-09) the symmetric eigensolver `ops.jacobi_eig`: BayesianRidge now takes the executor eigh op (`x_decomp/eigh_ops.mojo`); no caller, no check | - |
 | 5004 | the SGD epoch order (`ops.perm_at`, `perm_key`) | REPLACE numpy's MT19937 shuffle: a fresh keyed permutation each epoch (4-round Feistel on splitmix64's mix, cycle-walked into [0, n), key = mix(seed + 1000003 c + (epoch + 1) golden)), a thread a row on the device; `ops.shuffle` (Fisher-Yates) remains only as the seam fixture |
 | 5005 | every argmax/argmin (LARS's feature, the class argmax, the CV choices) | PIN: the lowest index wins an exact tie |
 | 5006 | isotonic out-of-bounds 'nan' | PIN: the constant word 0x7FC00000, never a computed NaN (Clause B) |

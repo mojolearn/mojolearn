@@ -54,11 +54,10 @@ lane/inference-holtwinters (2026-09-15) also saved Holt-Winters models
 (`forecast`, `predict` and the fitted state) through the same forecast
 binding.
 """
-import hashlib
 import os
 
-from . import _backend, _native_classical_bridge, _serialize
-from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
+from . import _backend, _native_classical_bridge
+from ._iforest_impl import IsolationForest, _IFOREST_FORMAT, _IFOREST_FORMAT_FOREST
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
@@ -156,22 +155,19 @@ class _HostBound:
             )
         return _backend.load_host_module(_HOST_BASENAMES[name])
 
-    def _host_refusals(self):
-        """Raised by `host_model` after `load`, for a saved parameter the
-        host binding has no entry for; a subclass overrides."""
-
     def vendor_used(self):
         return "cpu"
 
     def model_sha256(self):
-        """SHA-256 over the model file's bytes as `save` would write them
-        again, for a report to name the model it predicted with."""
-        h = hashlib.sha256()
-        for name in sorted(self._HOST_ARRAYS):
-            value = getattr(self, name)
-            if value is not None:
-                h.update(value.tobytes())
-        return h.hexdigest()
+        """SHA-256 over the model's stored arrays, for a report to name the
+        model it predicted with.
+
+        Returns
+        -------
+        str
+            The 64-character hexadecimal SHA-256 digest.
+        """
+        return _native_classical(self, "host_bound_hash", (), _CLASSICAL)
 
 
 class HostLinearRegression(_HostBound, LinearRegression):
@@ -330,20 +326,6 @@ class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression)
         >>> log_probabilities = model.predict_log_proba(X)
         """
         return _native_classical(self, "host_infer_predict_log_proba", (X,), _CLASSICAL)
-
-    def _host_refusals(self):
-        """A model with more than two classes needs the softmax link
-        (`qn_softmax`, lane/logistic-multiclass, 2026-09-14); a host build
-        without it is refused by name at load, not at the first predict."""
-        if len(self.classes_) > 2:
-            binding = self._bind("_mojolearn_estimators")
-            if not callable(getattr(binding, "qn_softmax", None)):
-                raise ImportError(
-                    "mojolearn: this build of _mojolearn_estimators_host does "
-                    "not export qn_softmax, so a LogisticRegression with "
-                    f"{len(self.classes_)} classes cannot predict on the host; "
-                    "rebuild it with bindings/build_estimators_host.sh"
-                )
 
 
 class _HostProjection(_HostBound):
@@ -948,7 +930,7 @@ class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifie
     when only the reference set is built, `_mojolearn_gp_host`) on any box,
     a GPU box included, so a GPU fit and a CPU prediction compare in one
     process (`mojolearn.host_model` returns this for a saved classifier).
-    IDENTICAL only; fit refuses outside `reference_training()`."""
+    IDENTICAL only."""
 
     _HOST_INFERENCE_ONLY = True
 
@@ -967,10 +949,6 @@ class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifie
         if os.path.exists(_backend.host_module_path(_GPC_HOST_INFERENCE_BASENAME)):
             return _backend.load_host_module(_GPC_HOST_INFERENCE_BASENAME)
         return _backend.load_host_module(_GPC_HOST_BASENAME)
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s checks: the host binding exports both
-        classification entries."""
 
     def vendor_used(self):
         return "cpu"
@@ -996,10 +974,6 @@ class HostCholesky(_NativeArchiveLoad, Cholesky):
                 f"factor was saved {mode!r}"
             )
         return _backend.load_host_module(_LINALG_HOST_BASENAME), "linalg_numeric_mode"
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s own checks: the host binding carries all
-        three door names."""
 
     def vendor_used(self):
         return "cpu"
@@ -1072,19 +1046,15 @@ class HostSpectralClustering(_NativeArchiveLoad, _HostBound, SpectralClustering)
 
 
 class _HostScaler(_HostBound):
-    """The scalers ask for their binding through `_binding(mode)` with the
-    fitted mode; the host answers the estimators host binding for an
-    IDENTICAL model and refuses any other mode by name."""
+    """The host scalers' family binding. Their fixed CPU entries and the
+    IDENTICAL-only refusal are connected natively below
+    (`_native_scaler_bridge.connect_host`, `_native_minmax_bridge.connect_host`)."""
 
     _BINDING = "_mojolearn_preprocessing"
 
-    def _binding(self, mode):
-        if mode != "identical":
-            raise ValueError(
-                f"mojolearn: {type(self).__name__} runs IDENTICAL only on the "
-                f"host; this model was saved {mode!r}"
-            )
-        return self._bind(self._BINDING)
+    # TOMBSTONE: `_HostScaler._binding(mode)` (the Python IDENTICAL-only refusal and binding
+    # selection; no caller: the host scalers run through their native owners) deleted 2026-11-14
+    # by lane py-classical-linalg; code recoverable at 9140ed9c6c.
 
 
 class HostStandardScaler(_HostScaler, StandardScaler):
@@ -1146,14 +1116,6 @@ class _HostKernelMethod(_HostBound):
         # glue: register ordinary subclass layouts only at class definition
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
-
-    def _host_refusals(self):
-        from .kernel_methods import (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
-                                     KERNEL_SIGMOID, KERNEL_LAPLACIAN)
-        kernel = self._kernel_params[0]
-        if kernel not in (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
-                          KERNEL_SIGMOID, KERNEL_LAPLACIAN):
-            raise ImportError(f"mojolearn: unsupported saved kernel code {kernel}")
 
 
 class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):
@@ -1270,6 +1232,8 @@ _FORMATS = {
     _KDE_FORMAT: {"KernelDensity": HostKernelDensity},
     _SVC_FORMAT: {"SVC": HostSVC},
     _IFOREST_FORMAT: {"IsolationForest": HostIsolationForest},
+    # lane fix-iforest-save-device-forest: the saved forest (no training rows)
+    _IFOREST_FORMAT_FOREST: {"IsolationForest": HostIsolationForest},
     _GMM_FORMAT: {"GaussianMixture": HostGaussianMixture},
     _HDBSCAN_FORMAT: {"HDBSCAN": HostHDBSCAN},
     _GP_FORMAT: {"GaussianProcessRegressor": HostGaussianProcessRegressor},
@@ -1438,7 +1402,7 @@ try:
     _logistic_host = _backend.load_host_module(_HOST_BASENAME)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _logistic_host_error:
     _logistic_host = _logistic_host_error
-_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _native_classical, _CLASSICAL)
+_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _CLASSICAL)
 
 
 # Import-time connection of complete explicit CPU prediction owners.
@@ -1450,9 +1414,9 @@ def _connect_host_inference():
     from .tokenizer import _binding
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
-                                                          "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
-                                                          "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
-                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
+                                                          "tsvd_transform", "tsvd_native_api_v1", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
+                                                          "logistic_native_api_v1", "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "qn_proba", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
+                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run", "iforest_forest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -1463,6 +1427,11 @@ def _connect_host_inference():
             if entry is not None and not isinstance(entry, BuiltinFunctionType):
                 raise TypeError("explicit CPU prediction requires a native binding entry")
             entries[name] = entry
+    # Import connection only: the compiled TSVD owner uses this CPU image
+    # directly; fitting no longer calls the Python _HostBound._bind method.
+    from .decomposition import _TSVD_CONTEXT
+    if entries.get("tsvd_native_api_v1") is not None:
+        _TSVD_CONTEXT["tsvd_host_factory"] = entries["tsvd_native_api_v1"]
     # CPU training is public. Replace only this complete native fit after
     # mixin class setup; inherited/overridden operations keep their guards.
     HostKernelDensity.fit = _NATIVE_HOST_FITS["HostKernelDensity.fit"]
@@ -1479,6 +1448,9 @@ def _connect_host_inference():
                    host_iforest_memoryview_type=memoryview,
                    host_iforest_module_type=ModuleType, host_iforest_module_dict=vars(ModuleType)["__dict__"].__get__,
                    host_iforest_context_type=ContextVar, host_iforest_context_get=ContextVar.get,
+                   # iforest_validate's absent-field sentinel (trees_public_iforest_door `_field`),
+                   # read when a saved forest loads into HostIsolationForest (smoke 2026-11-15)
+                   trees_missing=object(),
                    host_density_object_setattr=vars(object)["__setattr__"],
                    host_hash_list_sort=list.sort,
                    host_hash_field_collection_types=(list, tuple, set, frozenset, dict, str, bytes, bytearray, range),

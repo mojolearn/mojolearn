@@ -1,0 +1,42 @@
+diff --git a/spectral/impl/preprocessing/detail/fast_graph.mojo b/spectral/impl/preprocessing/detail/fast_graph.mojo
+index 8f86aea00c..429715fd3a 100644
+--- a/spectral/impl/preprocessing/detail/fast_graph.mojo
++++ b/spectral/impl/preprocessing/detail/fast_graph.mojo
+@@ -28,7 +28,7 @@ the same bytes as the host path.
+ 
+ Taken only when `k` fits one threadgroup sort (`FG_MAX_K`), the counts fit
+ Int32, and no identity trace is being written (the trace records the host
+-COO stages).
++COO stages). `-D MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF` keeps the host path.
+ """
+ 
+ from std.atomic import Atomic
+@@ -36,6 +36,7 @@ from max.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
+ from max.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
+ from std.bit import pop_count
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+@@ -66,14 +67,15 @@ comptime IDN_SPECTRAL_GRAPH_DEVICE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+ )
+-# TOMBSTONE: MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at c48110e94d.
+-# Restore: git apply experiments/removed/MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime SPECTRAL_GRAPH_FAST = (
+     (
+-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+-        and TARGET_HAS_APPLE_GPU
++        (
++            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
++            and TARGET_HAS_APPLE_GPU
++        )
++        or IDN_SPECTRAL_GRAPH_DEVICE
+     )
+-    or IDN_SPECTRAL_GRAPH_DEVICE
++    and not is_defined["MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF"]()
+ )
+ comptime FG_MAX_K = 4096
+ comptime FG_SORT_TPB = 1024

@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: Apache-2.0
+# The label/tree operation context with concrete native scalar type tuples,
+# built once per connected class context instead of on every public call.
+#
+# Several doors (LDA, the classify door, LogisticRegression, the fixed CV
+# owner, the GBDT adapters) used to copy the whole connected context and
+# build the real/integral type tuples on EVERY public call (fit, predict,
+# transform, score, ...): a dict copy plus four Python calls per call, and
+# per-call state written to the copy (connected NumPy types, warning
+# registry, NotFittedError bridge) was thrown away and rebuilt next call.
+# The derived dict is now cached on the connected context. It is rebuilt
+# when the source context gains or loses keys (connect-time additions), so
+# a stale view never survives a structural change; replaced values of
+# existing keys are connection metadata that stays fixed for a connected
+# class. Keys an operation memoizes on the derived dict (connected NumPy
+# types, warning registry, tag plan, NotFittedError bridge) persist across
+# calls, exactly as they do on doors that pass their connected context
+# straight through.
+from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module, shared_dict_watch, shared_dict_epoch
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.native_keys_unpack import native_keys
+from bindings.py_balanced import py_item
+
+# The cache keys (`_mojolearn_typed_context_{labels,trees,both}`) are held keys
+# of bindings/native_keys_unpack.mojo.
+
+
+def native_typed_context(context: PythonObject, labels: Bool, trees: Bool) raises -> PythonObject:
+    """`context` plus `labels_real_type`/`labels_integral_type` (when
+    `labels`) and `trees_real_type`/`trees_integral_type` (when `trees`):
+    tuples of the concrete native int/float/bool and connected NumPy scalar
+    classes, so isinstance tests never run numbers.Real/Integral ABC hooks."""
+    var b = native_loaded_module("builtins")
+    var nk = native_keys()
+    var key = nk[].k__mojolearn_typed_context_both if (labels and trees) else (nk[].k__mojolearn_typed_context_labels if labels else nk[].k__mojolearn_typed_context_trees)
+    if py_type(context) is b.dict:
+        var cached = py_get(context, key)
+        if cached is not None and py_type(cached) is b.tuple and len(cached) == 5:
+            # Valid while the source keeps its size and the two derived
+            # inputs; on Python >= 3.12 also while the watched source dict
+            # had no edit at all since the record (a replaced value under an
+            # existing key bumps the epoch). Epoch -1: not watched.
+            var epoch = Int(py=cached[2][0])
+            if (Int(py=cached[1]) == len(context)
+                    and cached[3] is py_get(context, nk[].k_scalar_types)
+                    and cached[4] is py_get(context, nk[].k_integer_types)
+                    and (epoch < 0 or epoch == shared_dict_epoch(Int(context._obj_ptr)))):
+                return cached[0]
+    var result = py_call(b.dict, context)
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_labels, PythonObject(None))
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_trees, PythonObject(None))
+    _ = py_call(result.pop, nk[].k__mojolearn_typed_context_both, PythonObject(None))
+    var types = Python.list()
+    _ = py_call(types.extend, Python.tuple(b.int, b.float, b.bool))
+    _ = py_call(types.extend, py_item(context, nk[].k_scalar_types))
+    var real = py_call(b.tuple, types)
+    var integral = py_item(context, nk[].k_integer_types)
+    if labels:
+        py_setitem(result, nk[].k_labels_real_type, real)
+        py_setitem(result, nk[].k_labels_integral_type, integral)
+    if trees:
+        py_setitem(result, nk[].k_trees_real_type, real)
+        py_setitem(result, nk[].k_trees_integral_type, integral)
+    if py_type(context) is b.dict:
+        # Insert first so the recorded source size counts the cache key.
+        var epoch_slot = Python.list(PythonObject(-1))
+        py_setitem(context, key, Python.tuple(result, PythonObject(0), epoch_slot, py_item(context, nk[].k_scalar_types), integral))
+        var watched = shared_dict_watch(context._obj_ptr)
+        py_setitem(context, key, Python.tuple(result, PythonObject(len(context)), epoch_slot,
+                                              py_item(context, nk[].k_scalar_types), integral))
+        # The epoch is read after the record's own store (filling the list
+        # does not edit the source dict), so only later edits invalidate it.
+        if watched:
+            py_setitem(epoch_slot, PythonObject(0), PythonObject(shared_dict_epoch(Int(context._obj_ptr))))
+    return result

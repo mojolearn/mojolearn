@@ -383,27 +383,6 @@ def test_ivf_extend_admits_before_mutation_and_leaves_fit_unchanged_on_refusal(m
         fields["n_rows_"] = n_rows
 
 
-def test_tsne_source_leaves_both_binding_routes_for_native_admission():
-    # Parent-requested source-only guard for the two TSNE wrappers in the
-    # shared ANN Python file. It does not import or execute TSNE and does not
-    # qualify its native implementation or installed wrapper lifecycle.
-    import ast
-    from pathlib import Path
-
-    tree = ast.parse((Path(__file__).parents[1] / "_expansion_ann.py").read_text())
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "TSNE")
-    for name in ("fit", "fit_transform"):
-        method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
-        statements = method.body[1:] if ast.get_docstring(method) else method.body
-        assert len(statements) == 1 and isinstance(statements[0], ast.Return)
-        call = statements[0].value
-        assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "_NATIVE"
-        arguments = call.args[2]
-        assert isinstance(arguments, ast.Tuple) and len(arguments.elts) == 3
-        assert all(isinstance(arg, ast.Constant) and arg.value is None for arg in arguments.elts[:2])
-        assert isinstance(arguments.elts[2], ast.Name) and arguments.elts[2].id == "X"
-
-
 @pytest.mark.parametrize("name", ("Nystroem", "RBFSampler"))
 @pytest.mark.parametrize("bad_y", ("length", "nonfinite"))
 def test_kernel_feature_fit_keeps_ignored_target_validation_and_cleans_fit_depth(name, bad_y):

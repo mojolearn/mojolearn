@@ -153,7 +153,7 @@ def check(ctx: DeviceContext, offsets: List[Int], label: String) raises:
     print("PASS", label, "unpack+pack bits and canaries")
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     # Uneven counts hit empty, single element and partial/full/multiple blocks.
     var irregular: List[Int] = [3, 3, 4, 11, 266, 522, 779, 781, 798, 1311]

@@ -1,0 +1,36 @@
+diff --git a/x_metrics/plan.mojo b/x_metrics/plan.mojo
+index a498a0124c..30c79d60ba 100644
+--- a/x_metrics/plan.mojo
++++ b/x_metrics/plan.mojo
+@@ -14,9 +14,9 @@ core count or the data), so the host and the device run the same stages.
+ A stage the planner cannot size (a group_sum whose OFF no earlier
+ group_sort wrote) runs its sequential unit unchanged.
+ """
+-from experiments.classical_identical_ideas.shared_controls import C10_RANK_REUSE
++from experiments.classical_identical_ideas.shared_controls import C10_RANK_REUSE, C12_SPARSE_COUNTS
+ from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
+-from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
++from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM, KEY_GROUP
+ from x_metrics.cls_epi import OP_CLS_EPI
+ from x_metrics.curve_out import (
+     OP_CURVE_OUT, OP_CO_KEEP, OP_CO_EMIT, OP_CO_DET, CO_DET, OP_AUC_XY, OP_AX_CHUNK, OP_AX_FINAL, AX_REC,
+@@ -367,8 +367,17 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
+                 cap = 1
+             if C > cap:
+                 C = cap
+-            # TOMBSTONE: MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 767961776e.
+-            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
++            comptime if C12_SPARSE_COUNTS:
++                # Occupancy can never exceed n. Prefer row storage when
++                # full class/chunk tables cost more than sorting n keys.
++                # No measured-shape threshold; dense OFF output still paid.
++                if n > 1 and 6*n < m*C+m and pl.fits(6*n):
++                    var B = pl.sort(KEY_GROUP, n, 1, K, m, 0)
++                    pl.emit(OP_SORT_EMIT, n, [B, n, ORD])
++                    pl.emit(83, m+1, [K, n, m, ORD, OFF])
++                    pl.off_at.append(OFF)
++                    pl.off_n.append(n)
++                    continue
+             if n <= 0 or m <= 0 or C < 1 or not pl.fits(m * C + m):
+                 pl.copy_stage(q, s)
+                 continue

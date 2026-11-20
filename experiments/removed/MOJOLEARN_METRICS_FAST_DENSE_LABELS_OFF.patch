@@ -1,0 +1,52 @@
+diff --git a/core/labels_score_encode.mojo b/core/labels_score_encode.mojo
+index e48f1a1126..edac38a833 100644
+--- a/core/labels_score_encode.mojo
++++ b/core/labels_score_encode.mojo
+@@ -17,25 +17,14 @@ so no bit moves. Wider ranges keep the radix route. The size rule is cost
+ reasoning, not a shape: the table is O(range) <= O(n), the radix scratch
+ O(n) words. Time it on a neighbouring shape (e.g. 30k or 300k labels, k=2
+ and k=50) and on a non-board dataset (e.g. covertype's 7 classes).
+-VERDICT 2026-11-18 (A/B ab2, owed rows metrics-dense-labels and
+--neighbour, NVIDIA L40S host c6dd9ebea3e3, driver 595.112.07, 14-core
+-cgroup, wheel d652a4b0a1 and its B set, base and arm back to back in one
+-job, one run per arm, small rows the median of 20 calls): the radix arm
+-`-D MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF` was slower on 68 of 72 cells,
+-arm/base geomean 3.62, median 4.16 (precision-score taxi 1.94 -> 7.91 ms,
+-confusion-matrix istella 1.55 -> 7.77, f1 istella 1.98 -> 8.26, brier
+-istella 0.93 -> 9.24, cohen-kappa istella 1.28 -> 8.49; neighbour shape
+-taxi 300,000 labels: f1 1.87 -> 6.96, confusion 1.50 -> 7.39); the four
+-others 0.85-1.10 (accuracy, silhouette: rows the encode does not dominate).
+-Digests and scores equal on all 72 cells. The dense table stays the one
+-route for in-range signed labels and the arm is deleted (docs/TOMBSTONES.md).
+-Limits: NVIDIA only (AGENTS.md part 8); covertype not run."""
++`-D MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF` restores the radix route for
++the owed A/B."""
++from std.sys.compile import is_defined
+ from core.cast_in import CastIn, CAST_KIND_SIGNED
+ from core.label_cast import host_unique_inverse_cast
+ from core.host_parallel import host_parallelize
+ 
+-# TOMBSTONE: MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF (LOSER: radix route 3.62x slower geomean, 68 of 72 metric cells slower, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts; code recoverable at 0c65d61fed.
+-# Restore: git apply experiments/removed/MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF.patch; record in docs/TOMBSTONES.md.
++comptime _DENSE_OFF = is_defined["MOJOLEARN_METRICS_FAST_DENSE_LABELS_OFF"]()
+ comptime _DENSE_CHUNK = 65536  # labels (or table slots) per host-pool task, as core/label_encode.mojo's _UI_CHUNK
+ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
+ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+@@ -162,11 +151,12 @@ def score_encode_cast(src: CastIn, label_kind: Int, classes_addr: Int, codes_add
+     range is within its length takes the dense table, everything else
+     (floats, unsigned, bool, strided, wide ranges) the radix route. Same
+     contract and the same outputs: k, or -2 for a NaN label."""
+-    if (label_kind == 1 and src.kind == CAST_KIND_SIGNED and src.cols == 1
+-            and src.s0 == src.itemsize):
+-        var dense = score_encode_dense(src.addr, src.itemsize, src.rows, classes_addr, codes_addr)
+-        if dense >= 0:
+-            return dense
++    comptime if not _DENSE_OFF:
++        if (label_kind == 1 and src.kind == CAST_KIND_SIGNED and src.cols == 1
++                and src.s0 == src.itemsize):
++            var dense = score_encode_dense(src.addr, src.itemsize, src.rows, classes_addr, codes_addr)
++            if dense >= 0:
++                return dense
+     return host_unique_inverse_cast(src, label_kind, classes_addr, codes_addr)
+ 
+ 

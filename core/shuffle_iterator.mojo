@@ -98,14 +98,12 @@ the real value.
 """
 
 from std.bit import bit_width
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime LCG_MERSENNE_REDUCE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_FAST_LCG_MODULO"]()
-)
+# TOMBSTONE: MOJOLEARN_FAST_LCG_MODULO (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at b086331d7a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAST_LCG_MODULO.patch; record in docs/TOMBSTONES.md.
+comptime LCG_MERSENNE_REDUCE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST only: `lcg_next` reduces `48271 * x` modulo 2^31 - 1 with the
 Mersenne fold `(t & M) + (t >> 31)` and one conditional subtract instead of
 a 64-bit `%`. For `x < M` the product is below 2^47, the fold is below 2M,
@@ -113,7 +111,7 @@ and the result is the SAME integer, so every draw, every Feistel key and
 every sampled feature is unchanged. Apple GPUs have no 64-bit integer
 divide; the `%` was a software division per draw, 48 draws per sampled
 feature per sampling round (the RF `phase_setup` launch measured about
-0.4 ms on the M4 at taxi 1M). `-D MOJOLEARN_FAST_LCG_MODULO` restores `%`."""
+0.4 ms on the M4 at taxi 1M)."""
 
 # --- cuda::std::minstd_rand ------------------------------------------------
 # `linear_congruential_engine.h:403`:

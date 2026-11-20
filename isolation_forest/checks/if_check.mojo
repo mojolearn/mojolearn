@@ -96,7 +96,7 @@ from std.math import ceil, log2
 from std.os import getenv, makedirs, path
 from std.memory import bitcast
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines
@@ -150,9 +150,10 @@ from isolation_forest.impl.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SCRATCH = "/private/tmp/mojolearn_if_cards"
 """Where `check_if_card_is_emitted` writes its two control cards. A FIXED
 path under /private/tmp, not a session scratchpad: this file used to name
@@ -665,9 +666,9 @@ def _run_xorwow_on_device(
     var d_seed = ctx.enqueue_create_buffer[DType.uint64](n_t)
     var d_tree = ctx.enqueue_create_buffer[DType.uint64](n_t)
     var d_off = ctx.enqueue_create_buffer[DType.uint64](n_t)
-    ctx.enqueue_copy(dst_buf=d_seed, src_ptr=h_seed.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tree, src_ptr=h_tree.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+    upload_host_into[DType.uint64](ctx, d_seed, h_seed)
+    upload_host_into[DType.uint64](ctx, d_tree, h_tree)
+    upload_host_into[DType.uint64](ctx, d_off, h_off)
 
     var tables = build_xorwow_tables()
     var d_seq = ctx.enqueue_create_buffer[DType.uint32](XORWOW_TABLE_WORDS)
@@ -675,11 +676,11 @@ def _run_xorwow_on_device(
     var h_tbl = ctx.enqueue_create_host_buffer[DType.uint32](XORWOW_TABLE_WORDS)
     for i in range(XORWOW_TABLE_WORDS):
         h_tbl.unsafe_ptr().unsafe_store(i, tables.sequence[i])
-    ctx.enqueue_copy(dst_buf=d_seq, src_ptr=h_tbl.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_seq, h_tbl)
     ctx.synchronize()
     for i in range(XORWOW_TABLE_WORDS):
         h_tbl.unsafe_ptr().unsafe_store(i, tables.offset[i])
-    ctx.enqueue_copy(dst_buf=d_offt, src_ptr=h_tbl.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_offt, h_tbl)
     ctx.synchronize()
 
     var n_cells = n_t * n_draws
@@ -705,19 +706,14 @@ def _run_xorwow_on_device(
     ctx.synchronize()
     var h_out = ctx.enqueue_create_host_buffer[DType.uint32](n_cells)
     var out = List[UInt32]()
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_u32)
+    download_host_into[DType.uint32](ctx, d_u32, h_out)
     ctx.synchronize()
     for i in range(n_cells):
         out.append(h_out.unsafe_ptr().unsafe_load(i))
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_uni)
+    download_host_into[DType.uint32](ctx, d_uni, h_out)
     ctx.synchronize()
     for i in range(n_cells):
         out.append(h_out.unsafe_ptr().unsafe_load(i))
-    _ = h_seed^
-    _ = h_tree^
-    _ = h_off^
-    _ = h_tbl^
-    _ = h_out^
     _ = d_seed^
     _ = d_tree^
     _ = d_off^

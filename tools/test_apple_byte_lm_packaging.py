@@ -73,6 +73,8 @@ def test_installed_fast_verifier_rejects_identical_fallback(monkeypatch):
     mod._merged = merged
     monkeypatch.setitem(sys.modules, 'mojolearn', mod)
     monkeypatch.setitem(sys.modules, 'mojolearn._merged', merged)
+    # the verifier loads the shared profile check by path (verify_wheel.sh exports it; lane fx-leaf512-arm-build)
+    monkeypatch.setenv('MOJOLEARN_BYTE_LM_PROFILE_PY', str(Path(__file__).resolve().parents[1]/'packaging'/'byte_lm_profile.py'))
     exec(compile(body, '<installed-fast-verifier>', 'exec'), {})
     native.__file__ = str(package/'identical'/(BYTE+'.so'))
     with pytest.raises(AssertionError):exec(compile(body, '<installed-fast-verifier>', 'exec'), {})

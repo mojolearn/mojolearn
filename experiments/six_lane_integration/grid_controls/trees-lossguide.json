@@ -6,36 +6,7 @@
   "mode": "IDENTICAL",
   "controls_note": "hist_packed_gh and hist_warp_agg (F4, ideas-all-gaps-20261011: zero code, existing opt-in; integer atomics are order-free, bits unchanged) are declared once, in trees-hist-ideas.json; this file adds their lossguide and categorical routes. A control key is declared in one grid_controls file only (six_lane_grid.load_controls).",
   "controls": {},
-  "algorithms": {
-    "trees:gbdt-lossguide": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: doc_parallel_boosting -> fit_non_symmetric_tree (greedy_search_helper_depthwise, Lossguide, LG_EXACT_ID) -> split chain (8 launches; IDN_LG_FUSED_CHAIN: _launch_fused_split_chain + histogram copy)",
-      "controls": [
-        "hist_packed_gh",
-        "hist_warp_agg"
-      ],
-      "interaction_groups": [
-        [
-          "hist_packed_gh",
-          "hist_warp_agg"
-        ]
-      ]
-    },
-    "trees:gbdt-categorical": {
-      "binding": "_mojolearn_gbdt",
-      "route": "fit: CatBoost CTR columns -> doc_parallel_boosting -> fit_non_symmetric_tree (Lossguide) per permutation",
-      "controls": [
-        "hist_packed_gh",
-        "hist_warp_agg"
-      ],
-      "interaction_groups": [
-        [
-          "hist_packed_gh",
-          "hist_warp_agg"
-        ]
-      ]
-    }
-  },
+  "algorithms": {},
   "removed": [
     {
       "define": "MOJOLEARN_IDN_LG_FUSED_CHAIN",

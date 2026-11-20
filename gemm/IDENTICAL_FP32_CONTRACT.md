@@ -890,3 +890,81 @@ is faster. Not that it is slower. Not that the fold matters at all at large
 measurement finds the staged tree slow, the answer is to fuse levels into one
 block, which is legal and produces the same bits. It is never to change the
 pairing.
+
+## 14. Profile `mojolearn.identical.gemm.fp32.v2-leaf512` (an ARM, default off, not measured)
+
+Everything above is v1 and stays the shipped profile. This section describes the arm
+`-D MOJOLEARN_GEMM_FAST_LEAF512` (lane fx-gemm-leaf512, 2026-11-19): the v1 contract with
+one profile constant changed, `K_LEAF_MIN` 128 -> 512. `MAX_LEAVES` stays 1024. Profile
+version integer 4 (2 was the deleted leaf-64 profile, 3 the deleted leaf-256 arm). No
+compile, identity or timing has been run for it; the A/B is owed
+(`docs/apple-fast/EXPERIMENTS.md`, `bench/results/paper_compare/owed-pre0867.json` rows
+`fx-gemm-leaf512`, `fx-gemm-leaf512-shapes`).
+
+### 14.1 The order, as a formula
+
+    L(k) = k                 if k <= 512
+           512               if ceil(k / 512) <= 1024        (k <= 524,288)
+           ceil(k / 1024)    otherwise                       P = ceil(k / L)
+
+    s_t(i, j) = the chain over p in [t L, min((t + 1) L, k)), ascending, seeded +0.0:
+                acc = ftz(fma(ftz(A[i, p]), ftz(B[p, j]), acc))          (section 7.1)
+    C[i, j]   = ftz(T(s_0, ..., s_{P-1}))                                (sections 7.2, 7.3)
+                T = the adjacent-pair balanced tree, an odd tail carried bit for bit,
+                every node ftz(x + y); P = 1 performs no fold addition; k = 0 stores +0.0
+
+Sections 1 to 5 and 7 to 11 hold unchanged: operand layout, the three orientations, the
+seams, the tree and its addressing, ragged `k`, NaN, infinity and signed zero. Only
+section 6's constant differs, so `k` in (128, 512] is one chain where v1 has two to four
+leaves, and every longer `k` has a quarter of v1's leaves (rounded up) until the cap.
+
+### 14.2 Why (hardware reasoning, any shape; to be measured, not assumed)
+
+A leaf boundary costs every device kernel a flush of the accumulators, a push on the fold
+stack and a restart of the window admission. Four times longer leaves make that four
+times rarer; at `k <= 512` there is no fold, no partials workspace and no fold launch. The
+serial dependency inside a leaf is four times longer, which the kernels already hide
+behind many independent cells a thread. A window that fails admission demotes the rest of
+its leaf, which is now up to four times more work: that is the stated risk.
+
+### 14.3 Who follows the define
+
+One constant, `gemm/contract.mojo::CONTRACT_K_LEAF_MIN`, read through
+`contract_leaf_size` / `contract_leaf_count` (and `gemm_identical.mojo::contract_partition`).
+It is the build-wide profile, not a GEMM-only switch.
+
+| reader | follows the define | note |
+|---|---|---|
+| every device GEMM plan on NVIDIA, AMD, Apple (`gemm/checks/gemm_identical.mojo`: flat, tile, tuned, packed, split, staged, matrix-core, Apple matrix plan), unpinned and low-bit kernels | yes | `leaf_in`, `p_in` come from `contract_partition(k)` and nowhere else; no kernel assumes a leaf length |
+| host column (`gemm/host/gemm_host_rows.mojo`, `gemm/host/identical_gemm.mojo`, `core/host_gemm_simd.mojo`, `cluster/host/host_gemm_cells.mojo`, `x_cnn/host/gemm_host.mojo`, `training/byte_lm_host_kernels.mojo`) and the oracle (`gemm/host/gemm_oracle.mojo`) | yes | same function |
+| plans keyed on the leaf COUNT (split plans `P >= 4`, the wide split `P >= 512`, Apple skinny split, the AMD band `5 <= P <= 8`, the fold-slot class, matrix-core group sizes, `gemm_default_ksplit_leaves`) | yes, plan only | the same rule at a quarter of the leaves: split plans start at `k > 1536`, the AMD band is `2048 < k <= 4096`; no bit depends on the plan |
+| folds outside GEMM that take their leaves from `contract_leaf_size`: blocked moments and centered Gram / cross (`core/blocked_moments*.mojo`, `core/classical_centered.mojo`, `glm/impl/gram_solve.mojo`, `x_linear`), CD and profile dots (`solver/`), SVM (`svm/host/smo_oracle.mojo`), RBF projection (`kernel_methods/rbf_fused.mojo`), spectral, Cholesky's oracle, MoE (`sequence/moe_grouped_fold.mojo`, `autograd/kernels/moe.mojo`), CNN (`x_cnn/device.mojo`, `autograd/kernels/cnn.mojo`), Mamba projections and scans (`autograd/kernels/mamba*_proj.mojo`, `mamba1_scan.mojo` and their generated host copies), transformer primitives, the loss and optimizer folds | yes | device and host read the one function, so they move together; these families' bits change under the arm too |
+| the neural research profile (`gemm/experiments/neural_profile.mojo` `NEURAL_LEAF`) | yes | it is the contract's leaf when no neural arm is on; its assert admits it |
+| profile names and versions (`linalg.profile()`, the training bindings' `+gemm-leaf512`, `byte_lm_config`'s `-gemm-leaf512`, `x_cnn`'s `gemm=` field) | yes | derived from the constant or from `GEMM_NUMERICAL_PROFILE` |
+| the small MLP op (`autograd/small_mlp_op.mojo`, `autograd/small_mlp_host.mojo`) | no, by decision | names leaf 128 explicitly on device and host (its measured winner) |
+| Mamba-2 SSD contractions (`mamba/impl/modules/ssd_minimal.mojo`, `autograd/kernels/mamba2_ssd.mojo`, generated host copies) | no | a literal two leaves of 128 at Q = 256 on device and host alike; consistent across columns, stays v1's shape |
+| the pinned Gram split-K (`core/gram_splitk.mojo`, 128 chunks), fused kernels that serve only `k <= 64` or `head_dim <= 128` as one chain, the sequence family's chains | unaffected | own constants, or one chain under both profiles |
+
+### 14.4 Checks
+
+Under the arm the device and the host column are held to `gemm_oracle` by
+`gemm/checks/gemm_device_check.mojo` and `gemm/checks/gemm_host_rows_check.mojo` at k = 511,
+512, 513, 1500 (512 + 512 + 476), 2049, 2600 and 4096, with the all-plans and the
+all-`-0.0` carry cases at 1500; `gemm/checks/gemm_oracle_check.mojo` builds F1 and F5 to F9
+from leaf counts, so they run at the new leaf, and pins the partition table by literals for
+each profile.
+
+Not re-fixtured, owed on promotion: the family checks whose PREMISES are stated at
+`L = 128` (`training/checks/loss_check.mojo` and `loss_fixture.mojo::case_leaf_count`,
+`training/checks/optimizer_*`, `transformer/checks/*`, `embedding/checks/embedding_check.mojo`,
+`mamba/checks/*`, `solver/checks/cd_check.mojo`, `checks/batch_invariance_check.mojo`,
+`gemm/checks/gemm_backward_check.mojo`), the Python gate
+`python/mojolearn/tests/test_linalg_identity.py` (asserts the v1 name and version 1) and the
+fixture sizes of `tools/identity_break.py` and `tools/logical_shard_identity.py` (rows chosen
+for three leaves of 128). Their device-against-host comparisons stay valid; their
+"this k has P = 3" assertions do not.
+
+Stored references are not touched while this is an arm. On promotion the release's one
+verification re-records every lane (`python/mojolearn/verify_reference/`, the light and API
+reference modules, the reference cards), since nearly every lane holds a fold longer than
+128.

@@ -18,13 +18,17 @@ from checks.numerics import (
 )
 from gemm.neural_dispatch import (
     PLAN_FLAT,
+    identical_gemm_with_plan,
+    identical_gemm_workspace_max_floats,
+)
+# The plan words and names live with the plans (gemm/checks/gemm_identical.mojo);
+# gemm/neural_dispatch.mojo no longer re-exports them.
+from gemm.checks.gemm_identical import (
     PLAN_SPLITK,
     PLAN_SPLITK_STAGED,
     PLAN_TILE_16_16_32,
     gemm_plan_name,
     gemm_sabotage_name,
-    identical_gemm_with_plan,
-    identical_gemm_workspace_max_floats,
 )
 from gemm.neural_backward import gemm_backward_sabotage_name
 from gemm.contract import OP_NN, contract_leaf_size
@@ -102,6 +106,7 @@ from training.checks.loss_oracle import (
     ce_forward_f64,
     ce_forward_oracle,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # Card output follows the caller-selected runtime path; standalone runs use the fallback.
@@ -418,9 +423,8 @@ def _upload_f32(
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -438,9 +442,8 @@ def _upload_i32(
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -459,15 +462,14 @@ def _download_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        download_host_into[DType.float32](ctx, buf, host)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        download_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
     return out^
 
 
@@ -504,12 +506,11 @@ def _plant_bits_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](count)
     ctx.synchronize()
     var view = buf.create_sub_buffer[DType.float32](0, count)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+    download_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
     host.unsafe_ptr().unsafe_store(idx, f32_from_bits(pattern))
-    ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
-    _ = host^
     _ = view
 
 

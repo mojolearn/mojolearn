@@ -174,20 +174,12 @@ def _audits(junit):
                 approved = report.get("approved_python_fallbacks")
                 frames = report.get("python_frames")
                 require(isinstance(approved, list) and isinstance(frames, list), "public audit has no full frame/fallback records")
-                if approved:
-                    require(report.get("passed") is False, "compatibility execution was relabelled strict native")
-                    require(all(p.get("id") == "array-length-metadata"
-                                and p.get("callee") == "mojolearn._array.Array.__len__"
-                                and type(p.get("calls")) is int and p["calls"] > 0 for p in approved),
-                            "unapproved Python compatibility callback")
-                    require(all(f.get("function") == "Array.__len__"
-                                and str(f.get("file", "")).endswith("/python/mojolearn/_array.py")
-                                and type(f.get("calls")) is int and f["calls"] > 0 for f in frames)
-                            and sum(f["calls"] for f in frames) == sum(p["calls"] for p in approved),
-                            "Python frames exceed the named metadata exception")
-                else:
-                    require(report.get("passed") is True and not frames,
-                            "operation has neither strict native proof nor a named compatibility exception")
+                # The frozen fallback list (_runtime_fallbacks.py) is empty:
+                # array-length-metadata was removed when Array.__len__
+                # became a C property over the native entry.
+                require(not approved, "unapproved Python compatibility callback")
+                require(report.get("passed") is True and not frames,
+                        "operation has no strict native proof")
             rows.append(dict(test=case.get("name"), reports=reports))
     return rows
 

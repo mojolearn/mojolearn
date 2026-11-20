@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5216 (the PageRank step), 5217 (the min-label product),
-5204 (Louvain's tie to the smallest community id, lane hr-graph) and 5205 (the SVGP system: Cholesky, the
-substitutions, the collapsed bound) of x_neighbors/items.mojo.
+"""Seams DEVIATION 5216 (the PageRank step), 5217 (the min-label product)
+and 5204 (Louvain's tie to the smallest community id, lane hr-graph) of x_neighbors/items.mojo. Check 5205
+(the SVGP system) was removed with the ops it checked (see the TOMBSTONE in main).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_neighbors/checks/graph_check.mojo
 
 Pattern as dist_check.mojo."""
 from core.identity_trace import IdentityTrace
-from x_neighbors.checks.oracles import o_pagerank_step, o_cc_step, o_svgp, o_kernel, o_matmul
+from x_neighbors.checks.oracles import o_pagerank_step, o_cc_step
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
-from x_neighbors.device_ops import op_pagerank_step, op_cc_step, op_svgp
-from x_neighbors.host_ops import op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step, op_svgp as h_svgp
+from x_neighbors.device_ops import op_pagerank_step, op_cc_step
+from x_neighbors.host_ops import op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step
 from x_neighbors.graph_dev import op_louvain, pr_iterate_gpu
 from x_neighbors.graph_host import op_louvain as h_louvain, GraphCpu, pr_iterate_cpu
 from x_neighbors.graph_par import (
-    Lay, LV_MOVE, L_NSLOT, L_G0, L_COMM, L_IC, L_DEG, L_STOT, L_FV, L_EK, L_ORD, _is, _fs, _ls,
+    Lay, LV_MOVE, L_NSLOT, L_G0, L_COMM, L_IC, L_DEG, L_TLO, L_THI, L_PREV, L_FV, L_EK, L_ORD, _is, _fs, _ls,
 )
 
 
@@ -138,7 +138,12 @@ def main() raises:
     lay.i(L_COMM, 3)
     lay.i(L_IC, 8)
     lay.f(L_DEG, 3)
-    lay.f(L_STOT, 3)
+    # The community totals are the fixed-point int64 words (ff8fb5c112):
+    # low and high int32 per community, shift n6 = 0 so a total is its
+    # degree exactly; L_PREV is the move's write of the old community.
+    lay.i(L_TLO, 3)
+    lay.i(L_THI, 3)
+    lay.i(L_PREV, 3)
     lay.f(L_FV, 4)
     lay.l(L_EK, 4)
     lay.l(L_ORD, 3)
@@ -160,13 +165,15 @@ def main() raises:
     for k in range(3):
         _is(gx, L_COMM).unsafe_store(k, Int32(k))
         _fs(gx, L_DEG).unsafe_store(k, degs[k])
-        _fs(gx, L_STOT).unsafe_store(k, degs[k])
+        _is(gx, L_TLO).unsafe_store(k, Int32(Int(degs[k])))
+        _is(gx, L_THI).unsafe_store(k, Int32(0))
     _fs(gx, L_FV).unsafe_store(0, Float32(2))
     _ls(gx, L_ORD).unsafe_store(0, Int64(0))
     var mq = gx
     mq.n0 = 3
     mq.n1 = 0
     mq.n3 = L_G0
+    mq.n6 = 0
     mq.x0 = Float32(1)
     ex.run(LV_MOVE, 1, mq)
     var tie = zi(1)
@@ -227,49 +234,10 @@ def main() raises:
     _ = wg^
     tr.record_list_i32("x_neighbors.louvain", dl)
 
-    # ---- 5205: the SVGP system on 60 rows, 8 inducing points
-    var nn = 60
-    var mm = 8
-    var d = 3
-    var xs = seam_fixture(nn, d, 44)
-    for i in range(len(xs)):
-        xs[i] = xs[i] * Float32(0.002)
-    var z = zf(mm * d)
-    for i in range(mm):
-        for f in range(d):
-            z[i * d + f] = xs[(i * 7) * d + f]
-    var y = zf(nn)
-    for i in range(nn):
-        y[i] = xs[i * d] + Float32(0.1) * Float32(i % 5)
-    var kuu = o_kernel(z, z, mm, mm, d, 2, Float32(0.5), Float32(0), 0)
-    var kuf = o_kernel(z, xs, mm, nn, d, 2, Float32(0.5), Float32(0), 0)
-    var kfu = o_kernel(xs, z, nn, mm, d, 2, Float32(0.5), Float32(0), 0)
-    var bmat = o_matmul(kuf, kfu, mm, nn, mm)
-    var b = o_matmul(kuf, y, mm, nn, 1)
-    var ws = o_svgp(kuu, bmat, b, y, mm, nn, Float32(0.3), Float32(1e-4), Float32(1))
-    require_separates("5205 cholesky fold", count_diff_f32(ws, o_svgp(kuu, bmat, b, y, mm, nn, Float32(0.3), Float32(1e-4), Float32(1), 1)))
-    var outs = List[List[Float32]]()
-    for col in range(2):
-        var al = zf(mm)
-        var cm = zf(mm * mm)
-        var qm = zf(mm)
-        var qs = zf(mm * mm)
-        var inf = zf(2)
-        if col == 0:
-            op_svgp(fa(kuu), fa(bmat), fa(b), fa(y), fa(al), fa(cm), fa(qm), fa(qs), fa(inf), mm, nn, Float32(0.3), Float32(1e-4), Float32(1))
-        else:
-            h_svgp(fa(kuu), fa(bmat), fa(b), fa(y), fa(al), fa(cm), fa(qm), fa(qs), fa(inf), mm, nn, Float32(0.3), Float32(1e-4), Float32(1))
-        var got = al.copy()
-        got.extend(cm.copy())
-        got.extend(qm.copy())
-        got.extend(qs.copy())
-        got.append(inf[0])
-        if inf[1] != Float32(1):
-            raise Error("5205: the SVGP system was not positive definite on the fixture")
-        outs.append(got^)
-    same("5205 svgp device", count_diff_f32(outs[0], ws))
-    same("5205 svgp host", count_diff_f32(outs[1], ws))
-    tr.record_list_f32("x_neighbors.svgp", outs[0])
+    # TOMBSTONE: check 5205 (the SVGP system, device op_svgp and host op_svgp
+    # against o_svgp) deleted 2026-11-11 by lane/round2-fixes: both ops were
+    # deleted as unused in 4e93405d15 (SVGP fits through op_svgp_fit_ff), so
+    # what it checked no longer exists. Recoverable at 4e93405d15^.
     _ = q^
     _ = x^
     _ = p^
@@ -277,8 +245,4 @@ def main() raises:
     _ = g^
     _ = lab^
     _ = ring^
-    _ = kuu^
-    _ = bmat^
-    _ = b^
-    _ = y^
     print("PASS x_neighbors graph_check")

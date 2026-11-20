@@ -8,7 +8,7 @@ bindings, on the device on a GPU install. They stay as the reference that
 transcription is held to bit for bit, and as the libsvm reading the tests
 exercise."""
 
-from mojolearn import _portable_math as math
+from mojolearn.tests._oracle_support import portable_math as math
 
 
 _FEISTEL_M0 = 0xD2B74407B1CE6E93
@@ -254,8 +254,8 @@ def ovr_scores(model, decisions, n_rows):
 # any of it): the legacy host-inference twin and tools/py_consolidated/svc_equal.py
 # drive the binding entries directly through these.
 import array as _array_mod
-from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, empty
+from mojolearn import Array
+from mojolearn.tests._oracle_support import addr, addr_ro, empty
 
 array = _array_mod
 (_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY,
@@ -272,7 +272,7 @@ def _i32(values):
         store = array.array("i", values)
     except TypeError:
         store = array.array("i", map(int, values))
-    return Array._owned(store, (len(store),), "<i4", "C")
+    return Array.from_list(store.tolist(), "<i4")
 
 
 def _gather(binding, x, rows=None, cols=None):

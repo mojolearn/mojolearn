@@ -8,8 +8,7 @@ def _binding(name, mode):
     from . import _backend
     try:
         module = _backend.binding(name, mode)
-        if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time resolution of the existing CPU-only proxy
+        module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
         if type(module) is not ModuleType:
             getattr(module, 'parallel_public_probe')
             raise ImportError('parallel driver requires a compiled binding')
@@ -172,13 +171,23 @@ def refresh(context):
     # constructors connect; a snapshot taken earlier refused every later
     # correct call with "parallel estimator methods or storage hooks changed".
     # A change after import is still refused.
+    # Called after every family's class connections (lane lazy-family-import):
+    # each class is re-read once, after the pass that connected its family.
     meta = context.get('parallel_public')
     if meta is None:
         return
     for cls in tuple(meta['classes']):  # glue: fixed connected class identities
-        meta['classes'][cls] = _class(cls)
-    if 'predictor_class' in meta:
-        meta['predictor_layout'] = _class(meta['predictor_class'])
+        if cls not in _REFRESHED:
+            meta['classes'][cls] = _class(cls)
+            _REFRESHED.add(cls)
+    predictor = meta.get('predictor_class')
+    if predictor is not None and predictor not in _REFRESHED:
+        meta['predictor_layout'] = _class(predictor)
+        _REFRESHED.add(predictor)
+
+
+#: Classes whose final snapshot `refresh` has taken.
+_REFRESHED = set()
 
 
 def register_predictor(cls, context):

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`grow_policy` on `train()`: the three policies are three different models.
 
-    pixi run check-grow-policy
+    pixi run check-native-gpu grow_policy_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`. DEVIATION 259 put
 `grow_policy` / `max_leaves` / `min_data_in_leaf` on `train()` and the
@@ -147,7 +147,7 @@ def expect_raise(what: String, ok: Bool, msg: String) raises:
     print("  refused by name:", what, "--", head)
 
 
-def main() raises:
+def run_checks() raises:
     print("grow_policy on train(): three policies, one loop")
     var ctx = DeviceContext()
     var x = build_x()
@@ -400,3 +400,21 @@ def main() raises:
     print("  claim 7 OK: both non-symmetric policies are run-to-run"
           " identical at the 8-bit histogram shape")
     print("grow_policy check: PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("grow_policy_check", cpu=False, gpu=True, serial="", run=run_cases)

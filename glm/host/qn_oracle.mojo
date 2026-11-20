@@ -151,9 +151,9 @@ comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: QN_TILED (`glm/impl/qn/glm_base.mojo`): the `C == 1` objective's loss
 #: sum, bias mean and `X^T dZ` in the row-tile order every GPU runs.
-#: `-D MOJOLEARN_QN_TILED_OFF=1` restores the 256-chain order (the device
-#: build must take the same define).
-comptime HOST_QN_TILED = not is_defined["MOJOLEARN_QN_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime HOST_QN_TILED removed; always True, nothing read it.)
 comptime HOST_QNT_ROWS = 256
 
 
@@ -1146,8 +1146,10 @@ def host_min_owlqn(
 
     var k = 0
     var fx = host_owlqn_objective(f, x, grad, l1, pg_limit)
-    var gnorm = f.grad_norm(grad)
     host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+    # OWL-QN FIX (2026-11-14), as glm/impl/qn/qn_solvers.mojo min_owlqn: convergence reads the
+    # PSEUDO-gradient's norm; the loss gradient alone is zero where the loss is flat while l1 still pulls.
+    var gnorm = f.grad_norm(pseudo)
     if param.past > 0:
         fx_hist[0] = fx
     if host_check_convergence(param, k, fx, gnorm, fx_hist):
@@ -1171,13 +1173,13 @@ def host_min_owlqn(
         lsret = host_ls_backtrack_projected(
             param, f, fx, x, grad, pseudo, step, drt, xp, l1, pg_limit, n, ls_iters
         )
-        gnorm = f.grad_norm(grad)
+        host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
+        gnorm = f.grad_norm(pseudo)
         var stop = host_update_and_check(
             param, k, lsret, fx, fxp, gnorm, x, xp, grad, gradp, fx_hist, retcode, n
         )
         if stop:
             return HostQNResult(fx, k, retcode)
-        host_update_pseudo(x, grad, l1, pg_limit, pseudo, n)
         host_axpy(S[end], Float32(-1.0), xp, x, n)
         host_axpy(Y[end], Float32(-1.0), gradp, grad, n)
         end = host_lbfgs_search_dir(param, n_vec, end, S, Y, pseudo, drt, ys, alpha, n)
@@ -1226,7 +1228,7 @@ def host_qn_fit(
     """`qn_fit_host` then `qn_fit_x` and `qn_fit` (module docstring).
     `coef` is resized to `n_param` and zero-initialized here as
     `solvers/qn.pyx:552-554` does (no warm start)."""
-    # `glm/estimator.mojo::qn_check_loss_args`, the same refusals.
+    # `glm/qn_resident.mojo::qn_check_loss_args`, the same refusals.
     var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
     var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
     var is_binary = (

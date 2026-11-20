@@ -2,7 +2,7 @@
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.os import abort
-from bindings.xcnn_pool_native import xcnn_pool_layers
+from bindings.xcnn_pool_native_door import xcnn_pool_layers
 
 def pool_compile(model: PythonObject, operation: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     return xcnn_pool_layers(model, String(py=operation), args, context)

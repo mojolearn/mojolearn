@@ -78,8 +78,10 @@ class TransformerBackwardWiring(unittest.TestCase):
                 ids = np.array([[1, 4, 7], [3, 6, 9]], dtype='i4')
                 targets = np.array([[4, 7, 10], [6, -100, 12]], dtype='i4')
                 expected_loss, expected_gradients = _reference(model, ids, targets, None, None, 0)
-                with patch.object(S.SambaStack, '_block', side_effect=AssertionError('Python block walk')):
-                    loss, gradients = audit_native_call(model.loss_and_grads, ids, targets).assert_native()
+                # The Python block walk (SambaStack._block) was deleted by
+                # 9bef32ca44; nothing is left to poison, and assert_native
+                # refuses any Python frame in the call.
+                loss, gradients = audit_native_call(model.loss_and_grads, ids, targets).assert_native()
                 self.assertEqual(np.float32(loss).tobytes(), np.float32(expected_loss).tobytes())
                 self.assertEqual(len(gradients), len(model.names))
                 for name, value, expected in zip(model.names, gradients, expected_gradients):

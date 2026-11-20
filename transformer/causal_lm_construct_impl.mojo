@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed element loops behind the CausalLM construction shell (bindings/causal_lm_construct.mojo)."""
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32
 
 
 def causal_lm_gather_f32(
@@ -20,6 +20,6 @@ def causal_lm_gather_f32(
 
 
 def causal_lm_check_finite(ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    for i in range(n):
-        if not isfinite(ptr[i]):
-            raise Error("CausalLM: top-level weight is not finite")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(ptr, n):
+        raise Error("CausalLM: top-level weight is not finite")

@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 from mojolearn import _arena_io
-from mojolearn import _expansion_metrics as XM
+from mojolearn import _backend
 from mojolearn import _expansion_prep as XP
 
 
@@ -88,7 +88,7 @@ def _battery():
 
 def _gpu_ranges():
     try:
-        mb = XM._binding(None)
+        mb = _backend.binding("_mojolearn_x_metrics", _backend.default_mode())
         pb = XP._prep_binding(None)
     except Exception:  # a CPU-only install
         return None

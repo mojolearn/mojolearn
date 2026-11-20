@@ -2,7 +2,8 @@
 # Shared native linalg transport. Extracted numerical bodies keep their original
 # launch, synchronization and release order; both ABI doors call these owners.
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
-from std.os import abort, getenv
+from std.os import abort
+from std.sys import is_defined
 from std.time import perf_counter_ns
 
 from checks.vendor import COMPILED_VENDOR
@@ -13,7 +14,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
+comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnLinalgContextFastV3"
 
 
 from x_decomp.cells import F32Ptr
@@ -28,12 +29,12 @@ from gemm.host_transport import (
     ROLE_A,
     ROLE_B,
     ROLE_C,
+    ROLE_WS,
     ROLE_X,
     gemm_down_f32,
     gemm_up_f32,
     gemm_up_u16,
 )
-from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
@@ -57,7 +58,7 @@ from gemm.afn_apple_fast import (
     afn_gemm_fused_into,
 )
 from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,
@@ -67,6 +68,7 @@ from gemm.checks.gemm_int15 import (
 from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
 
 
@@ -124,7 +126,7 @@ struct _LowbitSlot(Defaultable, Movable):
     def __init__(out self):
         self.work = Optional[LowbitWorkspace]()
 
-comptime _LOWBIT_POOL = _Global[StorageType=_LowbitSlot, name="MojoGemmLowbitPool", init_fn=_LowbitSlot.__init__]
+comptime _LOWBIT_POOL = SharedSlot[_LowbitSlot, "MojolearnGemmLowbitPoolV1"]
 
 def _lowbit_run(
     ctx: DeviceContext,
@@ -148,14 +150,21 @@ def _lowbit_run(
     ctx.synchronize()
     _ = work^
 
-def _lowbit_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
-    ms`, advance `t`. A no-op when off."""
-    if not on:
+#: `-D MOJOLEARN_LOWBIT_TIMING`: per-phase timing lines for gemm_int8. Before
+#: 2026-11-15 an environment read per gemm_int8 call; now a build define, so
+#: the default build carries no read, no synchronize and no print.
+comptime LOWBIT_TIMING = is_defined["MOJOLEARN_LOWBIT_TIMING"]()
+
+
+@always_inline
+def _lowbit_tick(ctx: DeviceContext, mut t: Int, name: StaticString) raises:
+    """-D MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
+    ms`, advance `t`. Compiled out when the define is absent."""
+    comptime if not LOWBIT_TIMING:
         return
     ctx.synchronize()
     var now = Int(perf_counter_ns())
-    print("timing int8." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    print(String("timing int8.") + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
     t = now
 
 def gemm_native(
@@ -206,8 +215,8 @@ def gemm_bf16_native(
     _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
     var ctx = process_ctx[_DEVCTX_SLOT]()
     # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
-    # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
-    # restores fresh buffers). Copies only, the same kernels.
+    # staged download (gemm/host_transport.mojo). Copies only, the same
+    # kernels.
     var lease = GemmHostLease()
     var db = lease.u16(ctx, ROLE_B, n * k)
     gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
@@ -267,27 +276,35 @@ def gemm_int8_native(
     _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int8"))
     if k > INT8_MAX_K:
         raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
-    # lane/neural-net-experiment (2026-09-30): MOJOLEARN_LOWBIT_TIMING=1
+    # lane/neural-net-experiment (2026-09-30): -D MOJOLEARN_LOWBIT_TIMING
     # prints one line per phase of this call (`timing int8.<phase> <ms>
     # ms`), a synchronize around each, so the board's gemm-int8 cell can be
     # read as context + uploads + kernel + download + drains. Measurement
     # only: the phases and their order are unchanged when it is off.
-    var ton = String(getenv("MOJOLEARN_LOWBIT_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    _lowbit_tick(ctx, ton, tk, "context")
-    var dqa = _dev_i8(ctx, qa_address, m * k)
-    var dea = _dev_i32(ctx, ea_address, m)
-    var dqb = _dev_i8(ctx, qb_address, n * k)
-    var deb = _dev_i32(ctx, eb_address, n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-    _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
+    _lowbit_tick(ctx, tk, "context")
+    # Pooled buffers (gemm/host_transport.mojo GemmHostLease, as the f32 and
+    # bf16 surfaces; a busy pool gives fresh ones) and the staged
+    # download, whose own wait retires the kernel: the bare synchronize()
+    # between the kernel and the download read nothing and is gone (audit
+    # row 26, lane a3). Copies and waits only; the same kernel.
+    var lease = GemmHostLease()
+    var dqa = lease.i8(ctx, ROLE_A, m * k)
+    var dqb = lease.i8(ctx, ROLE_B, n * k)
+    var dea = lease.i32(ctx, ROLE_A, m)
+    var deb = lease.i32(ctx, ROLE_B, n)
+    ctx.enqueue_copy(dst_buf=dqa, src_ptr=i8_ptr(qa_address))
+    ctx.enqueue_copy(dst_buf=dqb, src_ptr=i8_ptr(qb_address))
+    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+    var dc = lease.f32(ctx, ROLE_C, m * n)
+    _lowbit_tick(ctx, tk, "uploads_and_alloc")
     identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
-    ctx.synchronize()
-    _lowbit_tick(ctx, ton, tk, "kernel")
-    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-    ctx.synchronize()
-    _lowbit_tick(ctx, ton, tk, "download")
+    _lowbit_tick(ctx, tk, "kernel")
+    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+    _lowbit_tick(ctx, tk, "download")
+    lease.release()
     _ = dqa^
     _ = dea^
     _ = dqb^
@@ -300,7 +317,7 @@ def gemm_int8_native(
     # 2520's mechanism; the native backtrace of the `transformer-bf16w`
     # hang blames exactly this library). Host-side drain, no arithmetic.
     ctx.synchronize()
-    _lowbit_tick(ctx, ton, tk, "free_and_drain")
+    _lowbit_tick(ctx, tk, "free_and_drain")
     return m * n
 
 def quantize_int8_native(
@@ -359,7 +376,8 @@ def dequantize_int8_native(
     var de = _dev_i32(ctx, e_address, rows)
     var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
     dequantize_rows_int8_device(ctx, dy, dq, de, rows, cols)
-    ctx.synchronize()
+    # The copy is ordered after the kernel on the same queue; the wait below
+    # retires both (a bare synchronize() between them read nothing; lane a3).
     ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
     ctx.synchronize()
     _ = dq^
@@ -393,17 +411,25 @@ def gemm_int15_native(addrs: List[Int], params: List[Int]) raises -> Int:
     if k > INT15_MAX_K:
         raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dah = _dev_i8(ctx, ah_address, m * k)
-    var dal = _dev_i8(ctx, al_address, m * k)
-    var dea = _dev_i32(ctx, ea_address, m)
-    var dbh = _dev_i8(ctx, bh_address, n * k)
-    var dbl = _dev_i8(ctx, bl_address, n * k)
-    var deb = _dev_i32(ctx, eb_address, n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+    # Pooled buffers and the staged download, as gemm_int8 (lane a3); the
+    # download's wait retires the kernel, so no bare synchronize() before it.
+    var lease = GemmHostLease()
+    var dah = lease.i8(ctx, ROLE_A, m * k)
+    var dal = lease.i8(ctx, ROLE_X, m * k)
+    var dbh = lease.i8(ctx, ROLE_B, n * k)
+    var dbl = lease.i8(ctx, ROLE_WS, n * k)
+    var dea = lease.i32(ctx, ROLE_A, m)
+    var deb = lease.i32(ctx, ROLE_B, n)
+    ctx.enqueue_copy(dst_buf=dah, src_ptr=i8_ptr(ah_address))
+    ctx.enqueue_copy(dst_buf=dal, src_ptr=i8_ptr(al_address))
+    ctx.enqueue_copy(dst_buf=dbh, src_ptr=i8_ptr(bh_address))
+    ctx.enqueue_copy(dst_buf=dbl, src_ptr=i8_ptr(bl_address))
+    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+    var dc = lease.f32(ctx, ROLE_C, m * n)
     identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-    ctx.synchronize()
+    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+    lease.release()
     _ = dah^
     _ = dal^
     _ = dea^

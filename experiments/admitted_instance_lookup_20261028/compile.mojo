@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.public_attributes_native import public_attribute_c
+from bindings.public_attributes_native_door import public_attribute_c
 
 
 @export

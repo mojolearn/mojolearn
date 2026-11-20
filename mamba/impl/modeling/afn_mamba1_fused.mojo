@@ -23,7 +23,7 @@ Per-element arithmetic is main's (bias seed, taps k ascending, one fma
 per tap, `identical_silu`, `identical_exp`); only the launch shape
 changes, so no float crosses a thread boundary differently.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_silu

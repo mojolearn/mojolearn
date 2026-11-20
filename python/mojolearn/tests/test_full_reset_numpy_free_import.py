@@ -39,17 +39,18 @@ def _child(source):
 
 def test_import_does_not_load_numpy_when_installed():
     pytest.importorskip('numpy')
-    out = _child("import sys, mojolearn\n"
-                 "assert 'numpy' not in sys.modules, sorted(m for m in sys.modules if m.startswith('numpy'))\n"
-                 "print('OK')\n")
-    assert out.strip().endswith('OK')
+    # The one plain-import child of this test process (tests/_fresh_process.py).
+    from mojolearn.tests._fresh_process import plain_import_report
+    modules = plain_import_report()["modules"]
+    assert 'numpy' not in modules, sorted(m for m in modules if m.startswith('numpy'))
 
 
 def test_import_works_with_numpy_blocked_and_sequence_names_stay_lazy():
     out = _child(_BLOCK_NUMPY + r'''
 import mojolearn
 from mojolearn._native_full_reset_params import _CONTEXT, _DEFERRED_MODULES
-assert _CONTEXT['ready']
+# connect() (ready=True) runs at the first family load (_families.py:266), not at `import mojolearn`, since
+# families import on first touch (b6aa87e41d); a deferred module loaded before it waits in pending_classes.
 assert 'numpy' not in sys.modules
 for module, names in _DEFERRED_MODULES.items():
     assert 'mojolearn.' + module not in sys.modules, module

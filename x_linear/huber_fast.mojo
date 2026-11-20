@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """HuberRegressor with the L-BFGS line search batched on the device
 (lane/apple-fast-robust@cfdb95e48, 2026-10-02; recovered onto main
-2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, behind
-the FAST + Apple default since 2026-10-04; rollback
-`-D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF`).
+2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, the
+FAST + Apple default since 2026-10-04).
 
 Main's x_linear/huber_grid.mojo now runs the minimizer on the device too
 (x_linear/lbfgs_device.mojo), but the host still drives the line search:
@@ -29,21 +28,20 @@ snapshotted before it and restored before a rerun. Recovery note: main's
 device L-BFGS moved its P-vector sums to the vfold order; this fit keeps
 the source's ascending dots (FAST bits only, never IDENTICAL), so its words
 differ from main's FAST Huber fit and the A/B's quality check decides.
-HUBER_FAST_BLOCK512 (the FAST + Apple default since rab19-huber512; rollback
-`-D MOJOLEARN_HUBER_FAST_BLOCK512_OFF`) folds the partials
+HUBER_FAST_BLOCK512 (the FAST + Apple default since rab19-huber512; the `_OFF`
+rollback was deleted 2026-11-15) folds the partials
 over 512-row blocks instead of FOLD_BLOCK: eight times the threads of the
 partials launch (taxi: 21 tasks x 366 blocks under FOLD_BLOCK), a
 different fold order (FAST bits only).
 """
-from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import bitcast
+from max.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.memory import bitcast
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_linear.ops import FP, IP, ld, st, ldi, sti, fexp, fm, fd, fa, fs, fmad, fabs, fmax, fsqrt, i2f
 from x_linear.team import LINEAR_TPB, team_barrier
-from x_linear.tops import FOLD_BLOCK
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.huber import huber_map_row, _huber_part
 from x_linear.huber_grid import hg_fold_kernel, HG_TPB
@@ -64,12 +62,12 @@ from x_linear.lbfgs import LBFGS_M
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): huber taxi 219.8 -> 189.9 ms; r2/rmse
 #: identical, output digest identical. KEEP: the FAST + Apple default since
-#: then; rollback -D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (the old -D name is
-#: harmless; HUBER_FAST_BLOCK512 still forces it on).
-comptime HUBER_DEVICE_LBFGS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and (not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
-)
+#: then.
+# TOMBSTONE: MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (old path of the FAST Apple default, EXP:1256; FAST is Apple only, so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a1003b0db5.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_DEVICE_LBFGS_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512 (force-on knob of the FAST Apple default, EXP:1423 KEEP; the default is unchanged) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7c79bbf05.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512.patch; record in docs/TOMBSTONES.md.
+comptime HUBER_DEVICE_LBFGS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: (FAST + Apple, default ON since 2026-10-05; needs HUBER_DEVICE_LBFGS) the partials of
 #: the fast fit over 512-row blocks instead of FOLD_BLOCK: eight times the
 #: threads in the partials launch (taxi: 21 tasks x 366 blocks under
@@ -79,18 +77,20 @@ comptime HUBER_DEVICE_LBFGS = (
 #: No failure recorded.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab19-huber512): huber taxi 192.0 -> 161.6 ms, r2 equal 0.900215. KEEP:
-#: the FAST + Apple default; rollback -D MOJOLEARN_HUBER_FAST_BLOCK512_OFF
-#: (the old -D name still forces HUBER_DEVICE_LBFGS on, harmless).
-comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"]()
-#: Rows per partial of the fast fit: FOLD_BLOCK (the grid fit's order) or
-#: 512 under HUBER_FAST_BLOCK512.
+#: the FAST + Apple default, the only form of the fast fit.
+# TOMBSTONE: MOJOLEARN_HUBER_FAST_BLOCK512_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 246a53ea57.
+# Restore: git apply experiments/removed/MOJOLEARN_HUBER_FAST_BLOCK512_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFCL_L04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 91fed31806.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L04.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+#: Rows per partial of the fast fit (HUBER_FAST_BLOCK512): 512, or 256 under AFCL_L04.
 # AFCL-L04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
 # 256 rows shorten each partial chain and expose twice the row parallelism
 # of the existing 512-row schedule; scratch and final folds grow accordingly.
 # Solver tolerance, line-search budget and stopping observations are unchanged.
-comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L04"]())
-comptime HF_FOLD = 256 if AFCL_L04 else (512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK)
+comptime HF_FOLD = 256 if AFCL_L04 else 512
 #: Evaluation units enqueued between two reads of the stop word.
 comptime HF_BATCH = 16
 #: x_linear/lbfgs.mojo's line search: the step halved up to 40 times.

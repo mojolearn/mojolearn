@@ -26,7 +26,7 @@ def main():
         if 'norm' in row['name']:
             p[row['offset']:row['offset'] + row['size']] += np.float32(1)
     corpus = args.corpus.read_bytes()
-    seed = Trainer(p, shape=shape, data_schedule={
+    seed = Trainer(p, shape=shape, step_result='full', data_schedule={
         'corpus_sha256': hashlib.sha256(corpus).hexdigest(), 'logical_shards': 3})
     initial = seed.state_dict()
     checks = []

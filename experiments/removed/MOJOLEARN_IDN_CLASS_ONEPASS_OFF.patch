@@ -1,0 +1,19 @@
+diff --git a/x_prep/blocked.mojo b/x_prep/blocked.mojo
+index 43f529aaa3..ecfd3a9747 100644
+--- a/x_prep/blocked.mojo
++++ b/x_prep/blocked.mojo
+@@ -70,9 +70,11 @@ comptime IDN_STATS_BLOCKED = (
+ #: by `csb1_ss` (op 165). Each class chain is csb_part's / csb_ss's (the
+ #: class's rows of the block, ascending from zero), so the words are theirs:
+ #: no bit moves against the blocked order.
+-# TOMBSTONE: MOJOLEARN_IDN_CLASS_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at a7d5d989b5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CLASS_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_CLASS_ONEPASS = IDN_NB_ONEPASS and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++#: -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF restores csb_part / csb_ss.
++comptime IDN_CLASS_ONEPASS = (
++    IDN_NB_ONEPASS
++    and not (is_defined["MOJOLEARN_IDN_CLASS_ONEPASS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
++)
+ 
+ 
+ @always_inline

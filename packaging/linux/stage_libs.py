@@ -82,6 +82,7 @@ The set directory holds `*.so` (fast) and
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -91,7 +92,26 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from native_library_sources import library_source
+
 DT_NULL, DT_NEEDED, DT_STRTAB, DT_RPATH, DT_RUNPATH = 0, 1, 5, 15, 29
+
+# Native ZIP codecs are opened by SONAME through dlopen, so DT_NEEDED alone
+# cannot discover them. Preserve those names through staging/auditwheel.
+ARCHIVE_CODEC_LIBRARIES = ("libz.so.1", "libbz2.so.1.0", "liblzma.so.5", "libzstd.so.1")
+
+
+def workers(units):
+    if units <= 1:
+        return 1
+    if sys.platform != "linux":
+        return max(1, min(units, os.cpu_count() or 1))
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools"))
+    from build_sizing import box_resources
+    cores, _ = box_resources()
+    return max(1, min(units, cores))
+
 
 SYSTEM_PREFIXES = (
     "libc.so", "libm.so", "libdl.so", "libpthread.so", "librt.so",
@@ -193,31 +213,49 @@ def classify(name, env_lib):
     return "unresolved"
 
 
-def closure(exts, env_lib):
-    """Every STAGED library reachable from `exts`, in discovery order, plus
-    the full classified edge list for the manifest."""
+def closure(exts, env_lib, dynamic=(), codec_lib=None, sources=None):
+    """Declared dlopen roots plus the full transitive DT_NEEDED closure.
+
+    Dependencies form ordered graph frontiers; inspect independent files in
+    each frontier concurrently, then retain deterministic discovery order.
+    """
+    codec_lib = env_lib if codec_lib is None else codec_lib
+    selected = {} if sources is None else sources
     order, seen, edges, driver, unresolved = [], set(), [], set(), []
     queue = list(exts)
+    for dep in dynamic:
+        source = library_source(dep, env_lib, env_lib, codec_lib, selected, "native archive codec")
+        if dep not in seen:
+            seen.add(dep)
+            order.append(dep)
+            queue.append(source)
+            edges.append({"from": "native archive dlopen", "needs": dep, "class": "staged"})
     while queue:
-        cur = queue.pop(0)
-        needed, _, _ = elf_dynamic(cur)
-        for dep in needed:
-            cls = classify(dep, env_lib)
-            edges.append({"from": os.path.basename(str(cur)), "needs": dep,
-                          "class": cls})
-            if cls == "driver":
-                driver.add(dep)
-            elif cls == "unresolved":
-                unresolved.append(f"{os.path.basename(str(cur))} -> {dep}")
-            elif cls == "staged" and dep not in seen:
-                seen.add(dep)
-                order.append(dep)
-                queue.append(env_lib / dep)
+        frontier, queue = queue, []
+        with ThreadPoolExecutor(max_workers=workers(len(frontier))) as pool:
+            results = list(pool.map(elf_dynamic, frontier))
+        for cur, (needed, _, _) in zip(frontier, results):
+            for dep in needed:
+                cls = classify(dep, env_lib)
+                if cls == "unresolved" and (codec_lib / dep).is_file():
+                    cls = "staged"
+                source = None
+                if cls == "staged":
+                    preferred = codec_lib if pathlib.Path(cur).parent == codec_lib else env_lib
+                    source = library_source(dep, preferred, env_lib, codec_lib, selected)
+                edges.append({"from": os.path.basename(str(cur)), "needs": dep, "class": cls})
+                if cls == "driver":
+                    driver.add(dep)
+                elif cls == "unresolved":
+                    unresolved.append(f"{os.path.basename(str(cur))} -> {dep}")
+                elif cls == "staged" and dep not in seen:
+                    seen.add(dep)
+                    order.append(dep)
+                    queue.append(source)
     if unresolved:
-        print("ERROR: dependencies that are neither system, driver nor in "
-              f"{env_lib}:", file=sys.stderr)
-        for u in unresolved:
-            print("   ", u, file=sys.stderr)
+        print("ERROR: dependencies that are neither system, driver nor in " + str(env_lib), file=sys.stderr)
+        for item in unresolved:
+            print("   ", item, file=sys.stderr)
         raise SystemExit(1)
     return order, edges, sorted(driver)
 
@@ -226,9 +264,9 @@ def set_runpath(patchelf, path, value):
     subprocess.run([patchelf, "--set-rpath", value, str(path)], check=True)
 
 
-def verify_closed(files, libs_dir, env_lib):
+def verify_closed(files, libs_dir, env_lib, dynamic=()):
     have = {p.name for p in libs_dir.glob("*.so*")}
-    missing = []
+    missing = ["native archive dlopen -> " + name for name in dynamic if name not in have]
     for f in files:
         needed, _, _ = elf_dynamic(f)
         for dep in needed:
@@ -246,11 +284,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", required=True)
     ap.add_argument("--env-lib", required=True)
+    ap.add_argument("--codec-lib", help="pinned packaging environment library directory")
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--patchelf", default=shutil.which("patchelf"))
     a = ap.parse_args()
     root = pathlib.Path(a.set).resolve()
     env_lib = pathlib.Path(a.env_lib).resolve()
+    codec_lib = pathlib.Path(a.codec_lib).resolve() if a.codec_lib else env_lib
     if not a.patchelf:
         raise SystemExit("stage_libs: patchelf not found; build_sets.sh installs one")
 
@@ -283,16 +323,17 @@ def main():
         shutil.rmtree(libs)
     libs.mkdir()
     # the adapter library's MAX runtime closure is staged with the bindings'
-    needed, edges, driver = closure(exts + adapter_native, env_lib)
-    staged = []
-    for name in needed:
-        src = env_lib / name
-        # Follow symlinks: the pixi env may expose libfoo.so -> libfoo.so.1.
+    library_sources = {}
+    needed, edges, driver = closure(exts + adapter_native, env_lib, ARCHIVE_CODEC_LIBRARIES, codec_lib, library_sources)
+    def stage_library(name):
+        src = library_sources[name]
+        # Follow symlinks but retain the SONAME used by native dlopen.
         shutil.copy2(src.resolve(), libs / name)
         set_runpath(a.patchelf, libs / name, "$ORIGIN")
-        staged.append({"name": name, "bytes": (libs / name).stat().st_size,
-                       "sha256": sha256(libs / name),
-                       "source": str(src.resolve())})
+        return {"name": name, "bytes": (libs / name).stat().st_size,
+                "sha256": sha256(libs / name), "source": str(src.resolve())}
+    with ThreadPoolExecutor(max_workers=workers(len(needed))) as pool:
+        staged = list(pool.map(stage_library, needed))
     # Build on the Linux leg so packing these sets on macOS needs no cross compiler.
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "portable_math"))
     from stage import stage
@@ -349,7 +390,7 @@ def main():
         edges += [{"from": ADAPTER_NATIVE, "needs": dep,
                    "class": "staged" if dep in {r["name"] for r in staged} else classify(dep, env_lib)}
                   for dep in elf_dynamic(adapter_native[0])[0]]
-    verify_closed(exts + adapter_native + sorted(libs.glob("*.so*")), libs, env_lib)
+    verify_closed(exts + adapter_native + sorted(libs.glob("*.so*")), libs, env_lib, ARCHIVE_CODEC_LIBRARIES)
     # MERGED LAYOUT (packaging/linux/merged_layout.py): each merged file's
     # index ships beside it and the loader trusts it, so it is recorded with
     # its digest like every other shipped file of the set.
@@ -363,7 +404,8 @@ def main():
     total_ext = sum(r["bytes"] for r in ext_records)
     total_libs = sum(r["bytes"] for r in staged)
     manifest = {
-        "set": str(root), "env_lib": str(env_lib),
+        "set": str(root), "env_lib": str(env_lib), "codec_lib": str(codec_lib),
+        "dynamically_loaded_libraries": list(ARCHIVE_CODEC_LIBRARIES),
         "extensions": ext_records, "staged_libs": staged,
         "merged_indexes": merged_indexes,
         "binding_layout": "merged" if merged_indexes else "per-binding",

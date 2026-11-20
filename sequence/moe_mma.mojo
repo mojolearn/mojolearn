@@ -20,13 +20,12 @@ only, quality on the board's rel_fro / max_rel_diff column.
   (_KB32, 32-word slabs, was deleted 2026-10-09: see the TOMBSTONE below.)
   (_WIDE, the 64 x 64 hidden block, was deleted 2026-10-10: see the TOMBSTONE below.)
   (_PF, the next slab's register prefetch, was deleted 2026-10-10: see the TOMBSTONE below.)"""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.ffi import external_call
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.apple_air import simdgroup_load_legacy_air
 from checks.numerics import ftz, identical_silu
@@ -35,7 +34,7 @@ from sequence.moe_reg import MOE_DEVGROUP
 
 #: MOE_FAST_MMA is the FAST + Apple default since M3 A/B rab10-moemma (2026-10-05, afc_ab_def, full board
 #: size, 1 run per arm): moe synthetic 71.39 -> 53.48 ms (-25.1%), output digest identical.
-#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. The bundle KB32 + WIDE + PF (rab10-moemmaall,
+#: The bundle KB32 + WIDE + PF (rab10-moemmaall,
 #: same A/B setup) was slower, moe 71.3 -> 146.8 ms; its three variants are deleted (TOMBSTONEs below).
 # See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
 # TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_KB32 (DROPPED-slower as the bundle KB32 + WIDE + PF: M3 rab10-moemmaall moe synthetic
@@ -49,9 +48,9 @@ from sequence.moe_reg import MOE_DEVGROUP
 # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
 # Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
 # (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
-comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
-    not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_MOE_FAST_MMA_OFF (old path; EXP:1956 record, MOE_FAST_MMA is the M3 FAST default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 1e5b507b04.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_OFF.patch
+comptime MOE_MMA = TARGET_HAS_APPLE_GPU and MOE_DEVGROUP
 
 comptime MM_KB = 16
 comptime MM_SGM = 2
@@ -114,10 +113,10 @@ def _mm_block_map(poff: FP, En: Int, nq: Int, b: Int) -> Tuple[Int, Int]:
 
 
 @always_inline
-def _mm_gload[N: Int](src: FP, rows: InlineArray[Int, N], k0: Int, K: Int, tid: Int) -> InlineArray[Float32, N]:
+def _mm_gload[N: Int](src: FP, rows: Array[Int, N], k0: Int, K: Int, tid: Int) -> Array[Float32, N]:
     """Thread tid's words of a slab: item j is row (tid + NT j) // KB, column
     k0 + (tid + NT j) % KB of `src` (row offsets in `rows`, -1 = a zero row)."""
-    var out = InlineArray[Float32, N](fill=Float32(0.0))
+    var out = Array[Float32, N](fill=Float32(0.0))
     comptime for j in range(N):
         var q = tid + MM_NT * j
         var r = q // MM_KB
@@ -162,20 +161,20 @@ def moe_hidden_mma_kernel(
     var at = stack_allocation[MM_KB * MM_AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var gt = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var ut = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var xrow = InlineArray[Int, NX](fill=-1)
+    var xrow = Array[Int, NX](fill=-1)
     comptime for j in range(NX):
         var rp = p0 + (tid + MM_NT * j) // MM_KB
         if rp < p1:
             xrow[j] = (Int(order.unsafe_load(rp)) // k) * D
-    var grow = InlineArray[Int, NW](fill=-1)
-    var urow = InlineArray[Int, NW](fill=-1)
+    var grow = Array[Int, NW](fill=-1)
+    var urow = Array[Int, NW](fill=-1)
     comptime for j in range(NW):
         var f = q0 + (tid + MM_NT * j) // MM_KB
         if f < F:
             grow[j] = (e * 2 * F + f) * D
             urow[j] = (e * 2 * F + F + f) * D
-    var accg = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
-    var accu = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
+    var accg = Array[_M64, MM_FM * FN](fill=_M64(0))
+    var accu = Array[_M64, MM_FM * FN](fill=_M64(0))
     var xv = _mm_gload[NX](x, xrow, 0, D, tid)
     var gv = _mm_gload[NW](gu, grow, 0, D, tid)
     var uv = _mm_gload[NW](gu, urow, 0, D, tid)
@@ -196,7 +195,7 @@ def moe_hidden_mma_kernel(
         # Tried: MOE_FAST_MMA_PF's early slab load (hidden kernel).
         # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
-            var af = InlineArray[_M64, MM_FM](fill=_M64(0))
+            var af = Array[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
                 af[fm] = _mm_load_t(at + (8 * p8) * MM_AST + (sgm * MM_FM + fm) * 8, MM_AST)
             comptime for fq in range(FN):
@@ -257,17 +256,17 @@ def moe_out_mma_kernel(
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[MM_KB * MM_AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wt = stack_allocation[BN * MM_BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var hrow = InlineArray[Int, NX](fill=-1)
+    var hrow = Array[Int, NX](fill=-1)
     comptime for j in range(NX):
         var rp = p0 + (tid + MM_NT * j) // MM_KB
         if rp < p1:
             hrow[j] = Int(order.unsafe_load(rp)) * F
-    var wrow = InlineArray[Int, NW](fill=-1)
+    var wrow = Array[Int, NW](fill=-1)
     comptime for j in range(NW):
         var d = q0 + (tid + MM_NT * j) // MM_KB
         if d < D:
             wrow[j] = (e * D + d) * F
-    var acc = InlineArray[_M64, MM_FM * FN](fill=_M64(0))
+    var acc = Array[_M64, MM_FM * FN](fill=_M64(0))
     var hv = _mm_gload[NX](h, hrow, 0, F, tid)
     var wv = _mm_gload[NW](dn, wrow, 0, F, tid)
     var f0 = 0
@@ -286,7 +285,7 @@ def moe_out_mma_kernel(
         # Tried: MOE_FAST_MMA_PF's early slab load (out kernel).
         # Restore: git apply experiments/removed/MOJOLEARN_MOE_FAST_MMA_PF.patch; record in docs/TOMBSTONES.md.
         comptime for p8 in range(MM_KB // 8):
-            var af = InlineArray[_M64, MM_FM](fill=_M64(0))
+            var af = Array[_M64, MM_FM](fill=_M64(0))
             comptime for fm in range(MM_FM):
                 af[fm] = _mm_load_t(at + (8 * p8) * MM_AST + (sgm * MM_FM + fm) * 8, MM_AST)
             comptime for fq in range(FN):

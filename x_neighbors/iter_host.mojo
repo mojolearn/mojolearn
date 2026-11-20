@@ -1,7 +1,5 @@
 """The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
 same items. HOST ONLY."""
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -11,7 +9,7 @@ from x_neighbors.svgp_b32_gate import (
 )
 from gemm.host.gemm_oracle import gemm_oracle
 from gemm.contract import OP_TN as _SVGP_OP_TN
-from std.memory import bitcast
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
@@ -23,13 +21,17 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE, xn_host_status
+from x_neighbors.host_ops import op_unary as _host_unary, op_p2m_sign_label as _host_sign_label
+from x_neighbors.host_ops import (
+    op_absdiff_sum as _host_absdiff_sum, op_lp_clamp as _host_lp_clamp, op_ls_clamp as _host_ls_clamp,
+)
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     K_RBF, U_IDENTITY,
 )
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -40,15 +42,11 @@ def op_lp_iterate(
     alpha: Float32,
 ) raises:
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     var clamp_variant = variant % 2
     var nc = n * c
     var pg = FP(unsafe_from_address=g)
-    var degree = List[Float32](length=max(n,1) if raw_graph else 1,fill=Float32(0))
-    var pd = degree.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    if raw_graph:
-        for row in range(n):
-            classical_graph_degree(row,pg,pd,n,clamp_variant)
     var pys = FP(unsafe_from_address=ystatic)
     var punl = IP(unsafe_from_address=unlabeled)
     var a = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
@@ -71,10 +69,7 @@ def op_lp_iterate(
             converged = True
             break
         for t in range(nc):
-            if raw_graph:
-                classical_graph_product(t,pg,pd,cur,pn,n,c,clamp_variant)
-            else:
-                matmul_item(t, pg, cur, pn, n, n, c)
+            matmul_item(t, pg, cur, pn, n, n, c)
         if clamp_variant == 0:
             for t in range(n):
                 lp_clamp_item(t, pn, pys, punl, prev, n, c)
@@ -94,7 +89,6 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = degree^
     _ = a^
     _ = b^
     _ = nxt^
@@ -189,8 +183,12 @@ def op_pcs_resident(
 
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+    status: Int = 0,
 ) raises:
-    """The CPU column: `knn_sq_item` itself."""
+    """The CPU column: `knn_sq_item` itself (`status`: x's finite status
+    word, `xn_host_status`)."""
+    if not xn_host_status(x, n * d, status):
+        return
     for t in range(n):
         knn_sq_item(t, FP(unsafe_from_address=x), FP(unsafe_from_address=y), FP(unsafe_from_address=dist),
                     IP(unsafe_from_address=idx), n, m, d, k, exclude_self)
@@ -225,11 +223,15 @@ def _tile_rows(n: Int, width: Int) -> Int:
     return max(1, min(n, t))
 
 
-def _cells[F: def(Int) -> None](ref f: F, count: Int):
-    """f(t) for t in [0, count), cut into host tasks by count only."""
+def _cells[F: def(Int) -> None](ref f: F, count: Int, work: Int = 0):
+    """f(t) for t in [0, count), cut into host tasks by count only. Every
+    cell writes only its own output, so the task count moves no bit. `work`
+    is the call's scalar element operations; below the grain floor
+    (`core/host_predict_threads.mojo::HOST_MIN_TASK_WORK`, lane
+    perf-host-grain) the cells run on the calling thread; 0 = unknown."""
     if count <= 0:
         return
-    var tasks = host_predict_task_count(count)
+    var tasks = host_predict_task_count_work(count, work)
     var part = host_predict_chunk(count, tasks)
 
     def _task(k: Int) {imm f, imm part, imm count}:
@@ -253,13 +255,13 @@ def _hsab(addr: Int, count: Int):
 def _kernel_rows(q: FP, y: FP, k: FP, rows: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32):
     def f(t: Int) {imm q, imm y, imm k, imm rows, imm m, imm d, imm kind, imm degree, imm gamma, imm coef0}:
         kernel_item(t, q, y, k, rows, m, d, kind, gamma, coef0, degree)
-    _cells(f, rows * m)
+    _cells(f, rows * m, rows * m * d)
 
 
 def _matmul_rows(a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
     def f(t: Int) {imm a, imm b, imm res, imm n, imm k, imm m}:
         matmul_item(t, a, b, res, n, k, m)
-    _cells(f, n * m)
+    _cells(f, n * m, n * m * k)
 
 
 def op_kpca_transform(
@@ -289,13 +291,13 @@ def op_kpca_transform(
 
         def rsum(t: Int) {imm Kc, imm rsp, imm rows, imm nf}:
             rowsum_item(t, Kc, rsp, rows, nf)
-        _cells(rsum, rows)
+        _cells(rsum, rows, rows * nf)
         for t in range(rows):
             scale_div_item(t, rsp, prp, rows, s)
 
         def cen(t: Int) {imm Kc, imm colp, imm prp, imm allp, imm kcp, imm rows, imm nf}:
             kpca_center_item(t, Kc, colp, prp, allp, kcp, rows, nf)
-        _cells(cen, rows * nf)
+        _cells(cen, rows * nf, 2 * rows * nf)
         _matmul_rows(kcp, FP(unsafe_from_address=alphas), FP(unsafe_from_address=res) + r0 * c, rows, nf, c)
         r0 += rows
     _hsab(res, nq * c)
@@ -323,12 +325,33 @@ def op_kernel_matmul(
     _ = kb^
 
 
+def op_ocsvm_labels(
+    q: Int, y: Int, w: Int, lab: Int,
+    n: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+    scale: Float32, shift: Float32, mode: Int, thr: Float32,
+) raises:
+    """The device op's chain on the host column: `op_kernel_matmul` (c = 1)
+    into a score vector, then the host `op_unary` (U_IDENTITY) and
+    `op_p2m_sign_label` over it: the three host ops the caller ran one by
+    one, in the same order (sabotage hooks included), so the same bits."""
+    var sb = List[Float32](length=max(n, 1), fill=Float32(0))
+    var db = List[Float32](length=max(n, 1), fill=Float32(0))
+    var sp = Int(sb.unsafe_ptr())
+    var dp = Int(db.unsafe_ptr())
+    op_kernel_matmul(q, y, w, sp, n, m, d, 1, kind, degree, gamma, coef0)
+    if n > 0:
+        _host_unary(sp, dp, n, U_IDENTITY, scale, shift)
+        _host_sign_label(dp, lab, n, mode, thr)
+    _ = sb^
+    _ = db^
+
+
 def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32):
     _kernel_rows(q, z, kp, rows, m, d, K_RBF, 0, gamma, Float32(0))
 
     def f(t: Int) {imm kp, imm ksp, imm rows, imm m, imm variance}:
         unary_item(t, kp, ksp, rows * m, U_IDENTITY, variance, Float32(0))
-    _cells(f, rows * m)
+    _cells(f, rows * m, 2 * rows * m)
 
 
 def op_svgp_fit_ff(
@@ -404,7 +427,7 @@ def op_svgp_fit_ff(
 
                 def gb(t: Int) {imm kt, imm bhp, imm blp, imm grows, imm m}:
                     matmul_tn_acc_ff_item(t, kt, kt, bhp, blp, grows, m, m)
-                _cells(gb, mm)
+                _cells(gb, mm, mm * grows)
                 g0 += grows
         _ = kf^
         _ = b32^
@@ -416,7 +439,7 @@ def op_svgp_fit_ff(
 
         def bb(t: Int) {imm ksp, imm bhp, imm blp, imm rows, imm m}:
             matmul_tn_acc_ff_item(t, ksp, ksp, bhp, blp, rows, m, m)
-        _cells(bb, mm)
+        _cells(bb, mm, mm * rows)
         for t in range(m):
             matmul_tn_acc_ff_item(t, ksp, yp, vhp, vlp, rows, m, 1)
         r0 += rows
@@ -452,7 +475,7 @@ def op_svgp_predict(
 
         def vv(t: Int) {imm ksp, imm cp, imm vp, imm rows, imm m, imm kdiag}:
             svgp_var_item(t, ksp, cp, vp, rows, m, kdiag)
-        _cells(vv, rows)
+        _cells(vv, rows, rows * m * m)
         r0 += rows
     _hsab(mean, n)
     _ = kb^
@@ -520,9 +543,12 @@ def _nc_stats_chunked(f: Int, x: FP, lab: IP, cent: FP, std: FP, dsc: FP, n: Int
         std.unsafe_store(f, Float32(0))
 
 
-def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int,
+                status: Int = 0) raises:
     """nc_stats_item over the features (what the generated op ran); the
     device's chunked fold when XN_NC_IDN_CHUNKED and n > XN_NC_CHUNK_ROWS."""
+    if not xn_host_status(x, n * d, status):
+        return
     var xp = FP(unsafe_from_address=x)
     var lp = IP(unsafe_from_address=lab)
     var kp = FP(unsafe_from_address=nk)
@@ -546,49 +572,48 @@ def op_lp_iterate_knn(
     cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
     n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
 ) raises:
-    """The CPU column of the resident kNN-graph loop (lane/apple-fast-neighbors2):
-    `_LabelPropagationBase.fit`'s Python loop over the same items
-    (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp)."""
+    """The CPU column of the resident kNN-graph loop: the loop the binding
+    door ran on a host binary (bindings/neighbors_semi_native_door.mojo `_lp_fit`,
+    one `xn_*` crossing per op per iteration), now inside one call. Each
+    iteration runs the same host ops in the same order with the same words:
+    `op_absdiff_sum` (the part / fin fold items), the float64 compare of
+    that float32 sum with float(tol), `op_lp_knn_product`, then
+    `op_lp_clamp` / `op_ls_clamp` (sabotage hooks included), so the
+    distributions, n_iter_ and the stop are the same bits as the door's
+    loop. Lane ne3-g-svc-gp-neighbors (row N303): before, this column
+    folded the stopping sum with the serial `absdiff_sum_item`, which is
+    not the door's fold."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
     var nc = n * c
-    var pc = IP(unsafe_from_address=cols)
-    var pv = FP(unsafe_from_address=vals)
-    var pld = FP(unsafe_from_address=ld)
-    var pys = FP(unsafe_from_address=ystatic)
-    var pun = IP(unsafe_from_address=unlabeled)
     var cur = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var prev = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var nxt = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var hs = List[Float32](length=1, fill=Float32(0))
-    var p_cur = FP(unsafe_from_address=Int(cur.unsafe_ptr()))
-    var p_prev = FP(unsafe_from_address=Int(prev.unsafe_ptr()))
-    var p_nxt = FP(unsafe_from_address=Int(nxt.unsafe_ptr()))
-    var p_hs = FP(unsafe_from_address=Int(hs.unsafe_ptr()))
-    for q in range(nc):
-        cur[q] = pld.unsafe_load(q)
+    var a_cur = Int(cur.unsafe_ptr())
+    var a_prev = Int(prev.unsafe_ptr())
+    var a_nxt = Int(nxt.unsafe_ptr())
+    var a_hs = Int(hs.unsafe_ptr())
+    if nc > 0:
+        unsafe_memcpy(dest=FP(unsafe_from_address=a_cur), src=FP(unsafe_from_address=ld), count=nc)
     var n_iter = 0
     var converged = False
-    for it in range(max_iter):
+    for it in range(max_iter):  # driver-loop: over propagation iterations (each depends on the last)
         n_iter = it
-        absdiff_sum_item(0, p_cur, p_prev, p_hs, nc)
-        if Float64(hs[0]) < tol:
+        _host_absdiff_sum(a_cur, a_prev, a_hs, nc)
+        if Float64(FP(unsafe_from_address=a_hs).unsafe_load(0)) < tol:
             converged = True
             break
-        for q in range(nc):
-            prev[q] = cur[q]
-        var finite = lp_knn_finite(p_cur, nc)
-        for t in range(nc):
-            lp_knn_product_item(t, pc, pv, p_cur, p_nxt, n, n, k, c, finite)
+        if nc > 0:
+            unsafe_memcpy(dest=FP(unsafe_from_address=a_prev), src=FP(unsafe_from_address=a_cur), count=nc)
+        op_lp_knn_product(cols, vals, a_cur, a_nxt, n, n, k, c)
         if variant == 0:
-            for t in range(n):
-                lp_clamp_item(t, p_nxt, pys, pun, p_cur, n, c)
+            _host_lp_clamp(a_nxt, ystatic, unlabeled, a_cur, n, c)
         else:
-            for t in range(nc):
-                ls_clamp_item(t, p_nxt, pys, p_cur, nc, alpha)
+            _host_ls_clamp(a_nxt, ystatic, a_cur, nc, alpha)
     if not converged:
         n_iter += 1
-    for q in range(nc):
-        pld.unsafe_store(q, cur[q])
+    if nc > 0:
+        unsafe_memcpy(dest=FP(unsafe_from_address=ld), src=FP(unsafe_from_address=a_cur), count=nc)
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
@@ -598,7 +623,5 @@ def op_lp_iterate_knn(
     _ = hs^
 
 
-def lp_fast_resident() -> Int:
-    """The host column never takes the resident kNN-graph loop by default
-    (LP_FAST_RESIDENT is FAST + Apple; the Python loop runs here)."""
-    return 0
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch

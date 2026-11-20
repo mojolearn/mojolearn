@@ -18,7 +18,7 @@ from extratrees.checks.fixtures import (
     hashed_classification,
     shaped_dataset,
 )
-from extratrees.checks.fixture_parity_check import const_heavy_shapes
+from extratrees.checks.fixture_parity_check_suite import const_heavy_shapes
 from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification,
 )
@@ -311,7 +311,7 @@ def report(name: String, fx: FixtureDataset, n_classes: Int32) raises -> Int:
     return moved
 
 
-def main() raises:
+def run_checks() raises:
     print("[reach] DEVIATION 205, max_features=0.15 so the sample is narrow")
     var seed = UInt64(20260821)
     var heavy = shaped_dataset(seed, 512, const_heavy_shapes())

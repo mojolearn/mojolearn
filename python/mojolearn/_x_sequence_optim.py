@@ -34,12 +34,6 @@ class _ResidentState:
     def _binding(self):
         return _SEQ_NATIVE("seq_binding", self, (), None, _SEQ_CONTEXT)
 
-    def _state_binding(self):
-        return _SEQ_NATIVE("seq_state_binding", self, (), None, _SEQ_CONTEXT)
-
-    def _slot_addrs(self):
-        return _SEQ_NATIVE("seq_slots", self, (), None, _SEQ_CONTEXT)
-
     @property
     def _res(self):
         return _SEQ_NATIVE("seq_handle", self, (), None, _SEQ_CONTEXT)
@@ -60,9 +54,6 @@ class _ResidentState:
 
     def __del__(self):
         return _SEQ_NATIVE("seq_finalize", self, (), None, _SEQ_CONTEXT)
-
-    def _lr_for_step(self):
-        return _SEQ_NATIVE("seq_lr", self, (), None, _SEQ_CONTEXT)
 
     def step(self, grads):
         """Update every parameter from gradients of the same shapes and order."""
@@ -392,12 +383,6 @@ class Adafactor(_ResidentState):
     def __init__(self, params, lr=1e-2, beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0,
                  maximize=False, numeric_mode=None):
         return _SEQ_NATIVE("seq_construct", self, (params, lr, (beta2_decay, eps, d, weight_decay, maximize)), numeric_mode, _SEQ_CONTEXT)
-
-
-    @property
-    def _af_res(self):
-        """The per-tensor resident handles, or None while the state is on the host."""
-        return _SEQ_NATIVE("seq_handles", self, (), None, _SEQ_CONTEXT)
 
 
 class LAMB(_SeqOptimizer):

@@ -47,7 +47,7 @@ def check_packing() raises:
     for i in range(n_rows):
         zero.unsafe_ptr().unsafe_store(i, UInt32(0))
     # The OR-write REQUIRES a zeroed destination; see binarize.mojo.
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=zero.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, zero)
 
     var host_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -55,7 +55,7 @@ def check_packing() raises:
     for f in range(n_features):
         for r in range(n_rows):
             host_bins.unsafe_ptr().unsafe_store(r, UInt8((r + f) % 2))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bins.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bins)
         var blocks = (n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
@@ -70,7 +70,7 @@ def check_packing() raises:
         ctx.synchronize()
 
     var out = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=cindex)
+    download_host_into[DType.uint32](ctx, cindex, out)
     ctx.synchronize()
 
     var mismatches = 0
@@ -99,8 +99,27 @@ def check_packing() raises:
     print("  32 features per UInt32 round-trip exactly")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "packing round trip (GPU)".
     print("packing round trip (GPU):")
     check_packing()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pack_check", cpu=False, gpu=True, serial="", run=run_cases)

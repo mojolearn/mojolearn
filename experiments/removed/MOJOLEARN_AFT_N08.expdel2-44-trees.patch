@@ -1,0 +1,118 @@
+diff --git a/gbdt/targets/kernel/pair_logit.mojo b/gbdt/targets/kernel/pair_logit.mojo
+index 211e754c78..088100bd2e 100644
+--- a/gbdt/targets/kernel/pair_logit.mojo
++++ b/gbdt/targets/kernel/pair_logit.mojo
+@@ -591,17 +591,20 @@ def pair_logit_row_kernel[estimation: Bool, second_order: Bool](
+     if in_range:
+         var k = Int(ep_offsets.unsafe_load(i))
+         var end = Int(ep_offsets.unsafe_load(i + 1))
+-        # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 208c366f20.
+-        # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
++        # N08 preserves ascending endpoint order, while making two
++        # independent code/direction/scale loads available per loop. No
++        # performance or quality evidence; the odd final endpoint is kept.
+         while k < end:
+-            var code = ep_codes.unsafe_load(k)
+-            var p = Int(code >> UInt32(1))
+-            if (code & UInt32(1)) != UInt32(0):
+-                acc_der = acc_der + (-pair_dir.unsafe_load(p))
+-            else:
+-                acc_der = acc_der + pair_dir.unsafe_load(p)
+-            acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
+-            k += 1
++            comptime for endpoint_lane in range(2 if AFT_N08 else 1):
++                if k < end:
++                    var code = ep_codes.unsafe_load(k)
++                    var p = Int(code >> UInt32(1))
++                    if (code & UInt32(1)) != UInt32(0):
++                        acc_der = acc_der + (-pair_dir.unsafe_load(p))
++                    else:
++                        acc_der = acc_der + pair_dir.unsafe_load(p)
++                    acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
++                    k += 1
+         weight = row_weights.unsafe_load(i)
+     var der = ftz(acc_der)
+     var der2 = ftz(acc_der2)
+diff --git a/gbdt/targets/kernel/pair_logit_group.mojo b/gbdt/targets/kernel/pair_logit_group.mojo
+index 458c767107..ca50c77428 100644
+--- a/gbdt/targets/kernel/pair_logit_group.mojo
++++ b/gbdt/targets/kernel/pair_logit_group.mojo
+@@ -336,41 +336,45 @@ def pair_logit_group_kernel[
+             if tile_n > threads:
+                 tile_n = threads
+             if in_range:
+-                # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 99dbe96663.
+-                # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+-                for k in range(tile_n):
+-                    var g_j = sh_grade.unsafe_load(k)
+-                    if g_j != g_i:
+-                        # `pair_logit.cu:25-40` for the pair (winner, loser)
+-                        var winner_side = g_i > g_j
+-                        var diff = p_i - sh_point.unsafe_load(k)
+-                        if not winner_side:
+-                            diff = sh_point.unsafe_load(k) - p_i
+-                        var exp_diff = routed_exp(diff)
+-                        var p = Float32(1.0)
+-                        if isfinite(Float32(1.0) + exp_diff):
+-                            p = exp_diff / (Float32(1.0) + exp_diff)
+-                        p = max(
+-                            min(p, Float32(1.0) - Float32(1e-40)),
+-                            Float32(1e-40),
+-                        )
+-                        var direction = Float32(1.0) - p
+-                        var scale = ftz(identical_mul(p, Float32(1.0) - p))
+-                        var wd = ftz(identical_mul(w, direction))
+-                        if winner_side:
+-                            acc_der = acc_der + wd
+-                            if compute_fv != Int32(0):
+-                                var log_exp_val_plus_one = diff
++                # N08: unroll two ascending endpoint visits to expose
++                # independent shared loads. Keep addition and pair order;
++                # this is not the rejected each-pair-once route. No evidence.
++                for pair_base in range(0, tile_n, 2 if AFT_N08 else 1):
++                    comptime for pair_lane in range(2 if AFT_N08 else 1):
++                        var k = pair_base + pair_lane
++                        if k < tile_n:
++                            var g_j = sh_grade.unsafe_load(k)
++                            if g_j != g_i:
++                                # `pair_logit.cu:25-40` for the pair (winner, loser)
++                                var winner_side = g_i > g_j
++                                var diff = p_i - sh_point.unsafe_load(k)
++                                if not winner_side:
++                                    diff = sh_point.unsafe_load(k) - p_i
++                                var exp_diff = routed_exp(diff)
++                                var p = Float32(1.0)
+                                 if isfinite(Float32(1.0) + exp_diff):
+-                                    log_exp_val_plus_one = routed_log(
+-                                        Float32(1.0) + exp_diff
+-                                    )
+-                                fv_local = fv_local + identical_mul(
+-                                    w, diff - log_exp_val_plus_one
++                                    p = exp_diff / (Float32(1.0) + exp_diff)
++                                p = max(
++                                    min(p, Float32(1.0) - Float32(1e-40)),
++                                    Float32(1e-40),
+                                 )
+-                        else:
+-                            acc_der = acc_der + (-wd)
+-                        acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
++                                var direction = Float32(1.0) - p
++                                var scale = ftz(identical_mul(p, Float32(1.0) - p))
++                                var wd = ftz(identical_mul(w, direction))
++                                if winner_side:
++                                    acc_der = acc_der + wd
++                                    if compute_fv != Int32(0):
++                                        var log_exp_val_plus_one = diff
++                                        if isfinite(Float32(1.0) + exp_diff):
++                                            log_exp_val_plus_one = routed_log(
++                                                Float32(1.0) + exp_diff
++                                            )
++                                        fv_local = fv_local + identical_mul(
++                                            w, diff - log_exp_val_plus_one
++                                        )
++                                else:
++                                    acc_der = acc_der + (-wd)
++                                acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
+         var der = ftz(acc_der)
+         var der2 = ftz(acc_der2)
+         var weight = Float32(0.0)

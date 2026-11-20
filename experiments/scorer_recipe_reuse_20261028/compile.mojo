@@ -4,8 +4,8 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from bindings.msel_cv import msel_cross_validate
-from bindings.msel_search import msel_learning_curve
-from bindings.msel_scorer_native import msel_scorer_call
+from bindings.msel_search_door import msel_learning_curve
+from bindings.msel_scorer_native_door import msel_scorer_call
 
 
 def cross_validate(args: PythonObject, context: PythonObject) raises -> PythonObject:

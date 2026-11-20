@@ -17,21 +17,20 @@ cross products take the blocked order: a NEW order for n > XB (one block at
 n <= XB: the serial unit's words). Every other operation is the serial
 unit's. A blocked sum is never less accurate than the row-order one.
 
--D MOJOLEARN_IDN_SELECT_BLOCKED_OFF restores the serial units (the switch is
-bit 4 of `x_prep_idn_fam`; python/mojolearn/_expansion_prep.py stages these
-ops only when it is set).
+The switch is bit 4 of `x_prep_idn_fam`; python/mojolearn/_expansion_prep.py
+stages these ops only when it is set.
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st, canonical_nan
 from x_prep.prims import add, sub, mul, div
 from x_prep.stats import F32_MAX, pos_inf, f_sf, sqrtf_
 from x_prep.blocked import _span
 
-comptime IDN_SELECT_BLOCKED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SELECT_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_SELECT_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 27b4b5a66a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SELECT_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 # ---------------------------------------------------------------- f_classif

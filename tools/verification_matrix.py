@@ -117,7 +117,10 @@ SAB_NAME = re.compile(r"sabotage|(^|[-_.])g?sab([-_.]|$)")
 #: can be argued with rather than hidden in a heuristic.
 NOT_ALGORITHMS = frozenset({
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch",
-    "gpu_arch_how", "Array",
+    "gpu_arch_how", "runtime_report", "Array",
+    # the GPU-versus-CPU check of a user's fitted estimator (2026-11-20): it runs
+    # the estimator's own method on each side and compares bytes; no compute of its own
+    "check",
     # the numeric profile SELECTOR (lane/lowbit-flag, 2026-09-29): it names
     # which arithmetic a model's products run and computes nothing itself;
     # the arithmetic it names is covered by the lane gemm-int15

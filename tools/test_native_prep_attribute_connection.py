@@ -8,6 +8,7 @@ from types import ModuleType
 from unittest.mock import patch
 
 import test_native_public_attribute_connection as public_fixture
+from boundary_keys_plain import plain  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,7 +72,10 @@ def test_all_24_declared_prep_slots_connect_with_exact_availability_plans():
     newly_admitted = {cls.__name__ for cls in selected if context['plans'][cls]['availability']}
     assert newly_admitted == {'BernoulliNB', 'CategoricalNB', 'ComplementNB', 'GaussianNB',
                               'MultinomialNB', 'QuadraticDiscriminantAnalysis'}
-    assert vars(prep._PrepBase)['__getattribute__'] is original
+    # py-tail-2 (1b614e624f) deleted the base fit_transform composition, so _PrepBase declares no
+    # availability descriptor any more and is connected like any complete class; _Classifier keeps
+    # its own available_if, which no plan admits on the base, so it keeps the original slot.
+    assert vars(prep._PrepBase)['__getattribute__'] is context['descriptor']
     assert vars(prep._Classifier)['__getattribute__'] is original
 
 
@@ -87,7 +91,9 @@ def test_cloned_descriptor_supported_but_unrelated_predicate_stays_pending():
     with patch.dict(sys.modules, modules):
         ns['connect_classes'](package)
     plan = context['plans'][prep.GaussianNB]['availability']['fit_transform']
-    assert plan['attribute_name'] is context['missing']
+    # available_if resolves its name once in __call__ (21b231faac), so a copy made without
+    # __set_name__ carries the wrapped function's name, and the plan pins that identity.
+    assert plan['attribute_name'] == wrapped.__name__
     assert plan['function'] is wrapped
     assert vars(prep.CategoricalNB)['__getattribute__'] is original
     assert 'unconnected availability predicate' in context['pending'][prep.CategoricalNB]
@@ -101,7 +107,9 @@ def test_unknown_descriptor_and_other_families_are_not_blessed():
             calls.append(instance)
             raise AssertionError('descriptor executed during connection')
     prep.Normalizer.fit_transform = Descriptor()
-    prep.RobustScaler.fit_transform = vars(prep._PrepBase)['fit_transform']
+    # An available_if whose predicate is not one of the pinned built-in checks (the base
+    # composition this used to borrow is deleted, 1b614e624f).
+    prep.RobustScaler.fit_transform = mode.available_if(lambda self: True)(lambda self: None)
     with patch.dict(sys.modules, modules):
         ns['connect_classes'](package)
     assert not calls
@@ -111,8 +119,8 @@ def test_unknown_descriptor_and_other_families_are_not_blessed():
 
 
 def test_native_availability_never_calls_predicate_or_descriptor():
-    source = (ROOT / 'bindings/public_attributes_native.mojo').read_text()
-    assert '"PyFunction_GetCode"' in source
+    source = plain('bindings/public_attributes_native_door.mojo', (ROOT / 'bindings/public_attributes_native_door.mojo').read_text())
+    assert '.PyFunction_GetCode(' in source   # typed cpython_table() call (fed1b4e384)
     assert '"availability"' in source
     assert '"transform"' in source
     code = '\n'.join(line.split('#', 1)[0] for line in source.splitlines())

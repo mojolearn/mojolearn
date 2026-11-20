@@ -32,30 +32,19 @@ one-liner, and both are copied exactly:
   buffer instead.
 
 The dispatcher's `partCount == size` arm (`:165-172`) pre-fills every
-entry with `size` and takes the no-suffix kernel; `_fill_u32_kernel` below
-is their `FillBuffer` (`cuda_util/fill.cu`) for exactly that call, local
-because nothing else here fills a buffer with a non-zero value.
+entry with `size` and takes the no-suffix kernel; their `FillBuffer`
+(`cuda_util/fill.cu`) for that call is `core/device_zero.mojo`
+`enqueue_fill_n` (one launch, as the private fill kernel that stood here).
 
 Grid-stride, blockSize 256, no shared memory, no warp intrinsics, no
 vendor row.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+
+from core.device_zero import enqueue_fill_n
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 comptime PARTITIONS_BLOCK_SIZE = 256
-
-
-def _fill_u32_kernel(
-    dst: MutPointer[UInt32, MutAnyOrigin],
-    value: UInt32,
-    size_in: Int32,
-):
-    var size = Int(size_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(block_dim.x) * Int(grid_dim.x)
-    while i < size:
-        dst.unsafe_store(i, value)
-        i += stride
 
 
 def update_partition_offsets_kernel(
@@ -131,27 +120,12 @@ def launch_update_partition_offsets(
         # is invisible until something takes it. Found by the lane implementing
         # `pointwise_optimization_subsets`, which needs this entry.
         # ================================================================
-        ctx.enqueue_function[_fill_u32_kernel](
-            part_offsets.unsafe_ptr(),
-            UInt32(0),
-            Int32(part_count),
-            grid_dim=(
-                (part_count + PARTITIONS_BLOCK_SIZE - 1)
-                // PARTITIONS_BLOCK_SIZE,
-                1,
-                1,
-            ),
-            block_dim=(PARTITIONS_BLOCK_SIZE, 1, 1),
-        )
+        enqueue_fill_n(ctx, part_offsets, part_count, UInt32(0))
         return
     var skip_suffix = part_count == size
     if skip_suffix:
         # their FillBuffer(partOffsets, size, size, stream) (:166)
-        ctx.enqueue_function[_fill_u32_kernel](
-            part_offsets.unsafe_ptr(), UInt32(size), Int32(part_count),
-            grid_dim=(num_blocks, 1, 1),
-            block_dim=(PARTITIONS_BLOCK_SIZE, 1, 1),
-        )
+        enqueue_fill_n(ctx, part_offsets, part_count, UInt32(size))
     ctx.enqueue_function[update_partition_offsets_kernel](
         part_offsets.unsafe_ptr(),
         Int32(part_count),

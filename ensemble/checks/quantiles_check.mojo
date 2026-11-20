@@ -119,6 +119,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
     quantile_bin_index,
 )
 from core.segmented_sort import segmented_sort_keys_f32
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # ===========================================================================
@@ -556,7 +557,7 @@ def check_segmented_sort(ctx: DeviceContext) raises -> Int:
         h_in.unsafe_ptr().unsafe_store(i, host[i])
     var d_in = ctx.enqueue_create_buffer[DType.float32](NSEG * SEG)
     var d_out = ctx.enqueue_create_buffer[DType.float32](NSEG * SEG)
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=h_in.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, h_in)
 
     var wa = ctx.enqueue_create_buffer[DType.uint32](NSEG * SEG)
     var wb = ctx.enqueue_create_buffer[DType.uint32](NSEG * SEG)
@@ -564,9 +565,6 @@ def check_segmented_sort(ctx: DeviceContext) raises -> Int:
     var wide = (SEG + 511) // 512
     var bsum = ctx.enqueue_create_buffer[DType.int32](NSEG * wide)
     ctx.synchronize()
-    # Freed-at-enqueue UAF guard (perf-lane find, 2026-08-22): `h_in`'s
-    # last use above was the enqueue itself; keep-alive AFTER the sync.
-    _ = h_in^
 
     segmented_sort_keys_f32(
         ctx, NSEG, SEG, d_in, d_out, wa, wb, off, bsum
@@ -574,7 +572,7 @@ def check_segmented_sort(ctx: DeviceContext) raises -> Int:
     ctx.synchronize()
 
     var got = ctx.enqueue_create_host_buffer[DType.float32](NSEG * SEG)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, got)
     ctx.synchronize()
 
     var wrong = 0
@@ -721,10 +719,8 @@ def check_pipeline(
     for i in range(len(data)):
         h.unsafe_ptr().unsafe_store(i, data[i])
     var d = ctx.enqueue_create_buffer[DType.float32](len(data))
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d, h)
     ctx.synchronize()
-    # Freed-at-enqueue UAF guard: keep-alive AFTER the sync.
-    _ = h^
 
     var result = compute_quantiles(
         ctx, d, max_n_bins, n_rows, N_COLS, 4, seed, False
@@ -735,12 +731,8 @@ def check_pipeline(
         N_COLS * max_n_bins
     )
     var got_n = ctx.enqueue_create_host_buffer[DType.int32](N_COLS)
-    ctx.enqueue_copy(
-        dst_ptr=got_q.unsafe_ptr(), src_buf=result.quantiles_array
-    )
-    ctx.enqueue_copy(
-        dst_ptr=got_n.unsafe_ptr(), src_buf=result.n_bins_array
-    )
+    download_host_into[DType.float32](ctx, result.quantiles_array, got_q)
+    download_host_into[DType.int32](ctx, result.n_bins_array, got_n)
     ctx.synchronize()
     _ = view
 
@@ -797,7 +789,7 @@ def check_distributed_raises(ctx: DeviceContext) raises -> Int:
     return 0 if raised else 1
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "quantiles_check requires a GPU"
     var ctx = DeviceContext()
     var wrong = 0

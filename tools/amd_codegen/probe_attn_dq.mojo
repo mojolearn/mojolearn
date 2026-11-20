@@ -2,7 +2,7 @@
 # kernels (the shipped VALU `fused_bwd_dq_tiled_pf_kernel` and the matrix-core
 # `fused_bwd_dq_mfma_kernel`), for tools/amd_codegen/mfma_census.py.
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
+from max.gpu.host import get_gpu_target
 from transformer.impl.llama.fused_attention import (
     fused_bwd_dq_tiled_pf_kernel,
     fused_bwd_dq_mfma_kernel,

@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -61,6 +62,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(dev, "c_toolchain_facts", lambda *_: C_FACTS)
     monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
     monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * 2 ** 30))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * 2 ** 30)
     return root
 
 
@@ -147,7 +149,7 @@ def test_flags_target_toolchain_and_builder_invalidate(repo, tmp_path):
 def test_tool_edits_that_keep_the_recipe_keep_every_key(repo, tmp_path):
     base = plan(repo, tmp_path)
     for name in ("tools/development_build.py", "tools/build_process.py", "tools/build_sizing.py",
-                 "tools/bincache.py", "tools/merged_bindings.py"):
+                 "tools/bincache.py", "tools/merged_bindings.py", "tools/python_free_dirs.sh"):
         path = repo / name
         write(repo, name, (path.read_text() if path.exists() else "") + "# controller edit\nx = 1\n")
     # Comments and blank lines in the build scripts are not part of the recipe.
@@ -176,6 +178,7 @@ def test_generator_inputs_invalidate_only_owner(repo, tmp_path):
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "from .unicode_table_generated import value\n")
     write(repo, "tokenizer/impl/unicode_table_generated.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# first generator\n")
     before = plan(repo, tmp_path)
     write(repo, "tokenizer/tools/generate.py", "# repaired generator\n")
@@ -308,6 +311,7 @@ def test_unrelated_writes_during_compile_do_not_trip_the_input_guard(repo, tmp_p
     path = repo / f"bindings/{A}.mojo"
     path.write_text("from tokenizer.impl.unicode_class import value\n" + path.read_text())
     write(repo, "tokenizer/impl/unicode_class.mojo", "comptime value = 1\n")
+    write(repo, "tokenizer/tools/gen_unicode_categories.py", "# declared generator\n")
     write(repo, "tokenizer/tools/generate.py", "# generator\n")
     row = next(r for r in plan(repo, tmp_path)["groups"] if r["stem"] == "_mojolearn_dev_trees")
     evidence = tmp_path / "evidence"
@@ -557,6 +561,8 @@ def test_lock_wait_has_a_deadline(monkeypatch, tmp_path):
 
 def configure_main(repo, monkeypatch):
     monkeypatch.setattr(dev.os, "environ", dict(ENV))
+    # the synthetic repo has no tools/python_free_dirs.sh; main's import grep (55f541d20c) has its own tests below
+    monkeypatch.setattr(dev, "python_free_check", lambda _repo: None)
     monkeypatch.setattr(merged, "default_platform", lambda: "linux")
     monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
 
@@ -625,7 +631,7 @@ def test_main_passes_measured_guard_budget_and_retains_compile_attempt_count(rep
     report = json.loads((evidence / "result.json").read_text())
     assert len(seen) == report["plan"]["counts"]["build_selected"] == report["compile_attempts"]
     assert report["jobs"] == 2
-    assert all(value["rss_bytes"] == 30 * 2 ** 30 and value["min_available_bytes"] == 20 * 2 ** 30
+    assert all(value["rss_bytes"] == 45 * 2 ** 30 and value["min_available_bytes"] == 20 * 2 ** 30
                and value["seconds"] == 321 and value["stall_seconds"] == 12
                and value["lock_seconds"] == 9 for value in seen)
     assert all(result["exit_code"] == 124 for result in report["results"])
@@ -731,10 +737,16 @@ def test_host_target_normalization_and_refusals(repo, tmp_path):
 def test_development_shell_executes_the_fingerprinted_compiler(repo, tmp_path):
     # Capture the actual shell command with inert tool shims. This exercises
     # group/root/index assembly without invoking any native compiler.
-    for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "tools/merged_bindings.py"):
+    for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh",
+                     "tools/merged_bindings.py", "tools/python_free_dirs.sh"):
         # 095db6a93 dropped tools/*.py from dev.BUILD_INPUTS, so the synthetic repo has no tools/ directory
         (repo / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE_REPO / relative, repo / relative)
+    # merged_build.sh runs the import grep first (55f541d20c); the synthetic repo lists no door files
+    (repo / "tools" / "python_free_doors.txt").write_text("")
+    # This assembly fixture does not exercise Unicode generation. Supply its
+    # already-generated input, as a normal compiler checkout does.
+    write(repo, "tokenizer/impl/unicode_table_generated.mojo", "# synthetic generated table\n")
     compiler = write(repo, ".pixi/envs/default/bin/mojo", "#!/bin/sh\nexit 99\n")
     compiler.chmod(0o755)
     bin_dir = tmp_path / "bin"
@@ -942,3 +954,607 @@ def test_standard_development_optimization_flags_preserved():
     assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS=""), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == ""
     assert "MOJOLEARN_MOJO_BUILD_FLAGS" not in dev.build_environment("identical", ENV, "linux")
     assert dev.build_environment("identical", dict(ENV, MOJOLEARN_MOJO_BUILD_FLAGS="-O2"), "linux")["MOJOLEARN_MOJO_BUILD_FLAGS"] == "-O2"
+
+
+# Parallel group scheduler (--parallel auto). Pure functions and a main run
+# with a fake compiler; nothing here compiles.
+
+def test_packing_respects_the_memory_budget_and_the_slot_count():
+    # Biggest first: 9 + 4 + 2 + 1 fit 16; the second 4 would make 20.
+    assert dev.next_launches([9 * GIB, 4 * GIB, 4 * GIB, 2 * GIB, 1 * GIB], [], 16 * GIB, 8, 32 * GIB) == [0, 1, 3, 4]
+    # At most one group per slot (core or cap).
+    assert dev.next_launches([GIB] * 10, [], 100 * GIB, 3, 100 * GIB) == [0, 1, 2]
+    # Running groups keep their reservation and their slots.
+    assert dev.next_launches([3 * GIB, 2 * GIB], [12 * GIB], 16 * GIB, 8, 32 * GIB) == [0]
+    assert dev.next_launches([GIB, GIB], [GIB, GIB], 100 * GIB, 3, 100 * GIB) == [0]
+    assert dev.next_launches([], [GIB], 100 * GIB, 3, 100 * GIB) == []
+
+
+def test_a_group_larger_than_the_budget_runs_alone_or_is_refused():
+    # A group above the available budget but below the machine ceiling runs alone.
+    assert dev.next_launches([11 * GIB, GIB], [], 10 * GIB, 8, int(12.8 * GIB)) == [0]
+    # While it runs nothing fits beside it.
+    assert dev.next_launches([GIB], [11 * GIB], 10 * GIB, 8, int(12.8 * GIB)) == []
+    with pytest.raises(dev.BuildError, match="cannot fit.*--memory-per-job-gib"):
+        dev.next_launches([14 * GIB], [], 10 * GIB, 8, int(12.8 * GIB))
+
+
+def test_biggest_recorded_need_starts_first():
+    rows = [{"mode": "host", "stem": name, "fields": {"source": {"files": ["f"] * files}}}
+            for name, files in (("small", 50), ("big", 1), ("mid", 10), ("tie", 99))]
+    ordered, needs = dev.packing_order(rows, [GIB, 12 * GIB, 4 * GIB, GIB])
+    assert [r["stem"] for r in ordered] == ["big", "mid", "tie", "small"]
+    assert needs == [12 * GIB, 4 * GIB, GIB, GIB]
+
+
+def test_missing_records_take_the_flag_then_the_set_maximum_then_the_floor():
+    rows = [{"mode": "host", "stem": "a", "recorded_need_bytes": 3 * GIB},
+            {"mode": "host", "stem": "b", "recorded_need_bytes": 0},
+            {"mode": "host", "stem": "c", "recorded_need_bytes": 7 * GIB},
+            {"mode": "identical", "stem": "d", "recorded_need_bytes": 0}]
+    assert dev.group_needs(rows, rows, None, 12 * GIB) == [
+        (3 * GIB, "recorded"), (7 * GIB, "set-max"), (7 * GIB, "recorded"), (12 * GIB, "group-floor")]
+    assert dev.group_needs(rows, rows, 2, 12 * GIB) == [
+        (3 * GIB, "recorded"), (2 * GIB, "memory-per-job-gib"), (7 * GIB, "recorded"),
+        (2 * GIB, "memory-per-job-gib")]
+
+
+def test_group_cap_variable_parallel_and_jobs():
+    assert dev.group_cap(None, None, None) is None
+    assert dev.group_cap(dev.parse_parallel("auto"), None, "6") == 6
+    assert dev.group_cap(dev.parse_parallel("4"), None, "6") == 4
+    assert dev.group_cap(None, 2, "") == 2
+    assert dev.group_cap(dev.parse_parallel("1"), None, None) == 1
+    for bad in ("0", "-1", "x"):
+        with pytest.raises(dev.BuildError):
+            dev.parse_parallel(bad)
+    with pytest.raises(dev.BuildError, match=dev.GROUP_WORKERS_ENV):
+        dev.group_cap(None, None, "0")
+
+
+def test_threads_budget_and_pressure_floor():
+    assert dev.launch_threads(16, [], [None] * 3) == [6, 5, 5]
+    assert dev.launch_threads(4, [], [None] * 9) == [1, 1, 1, 1]
+    assert dev.launch_threads(192, [], [None]) == [192]
+    # Other load shrinks the budget; our own running groups do not.
+    assert dev.current_budget(80 * GIB, 100 * GIB, []) == 80 * GIB
+    assert dev.current_budget(80 * GIB, 70 * GIB, [30 * GIB]) == 80 * GIB
+    assert dev.current_budget(80 * GIB, 50 * GIB, []) == 40 * GIB
+    # The 20% system reserve, lowered for a group that runs alone above the budget.
+    assert dev.pressure_floor(100 * GIB, 80 * GIB, 100 * GIB, 30 * GIB) == 20 * GIB
+    assert dev.pressure_floor(10 * GIB, 8 * GIB, 10 * GIB, 9 * GIB) == 1 * GIB
+
+
+def test_group_worker_cap_is_never_a_key_field(repo, tmp_path):
+    assert keys(plan(repo, tmp_path)) == keys(plan(repo, tmp_path, dict(ENV, **{dev.GROUP_WORKERS_ENV: "3"})))
+
+
+def test_auto_compile_threads_follow_the_caller_and_amd():
+    assert dev.auto_compile_jobs("identical", {"MOJOLEARN_GPU_ARCHS": "sm_89"}, "linux")
+    assert dev.auto_compile_jobs("host", {}, "darwin")
+    assert not dev.auto_compile_jobs("host", {"MOJOLEARN_COMPILE_JOBS": "1"}, "darwin")
+    assert not dev.auto_compile_jobs("identical", {"MOJOLEARN_GPU_ARCHS": "gfx942"}, "linux")
+    assert dev.auto_compile_jobs("host", {"MOJOLEARN_GPU_ARCHS": "gfx942"}, "linux")
+
+
+def fake_group_compiler(seen):
+    def compiler(command, root, env, log):
+        seen.append((command[command.index("--group") + 1], env["MOJOLEARN_COMPILE_JOBS"],
+                     json.loads(env[dev.GUARD_ENV])))
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (command[command.index("--group") + 1] + ".so")).write_bytes(b"built")
+        Path(str(log) + ".execution.json").write_text(json.dumps(
+            {"complete": True, "status": "passed", "exit_code": 0, "peak_rss_bytes": GIB}))
+        return 0
+    return compiler
+
+
+def test_main_packs_groups_keys_their_threads_and_reuses_them(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    cache_plan_support = plan(repo, tmp_path)
+    for row in cache_plan_support["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    groups = len(cache_plan_support["groups"])
+    # No records: every group needs the 12 GiB Linux floor; 80 GiB holds all of them.
+    assert len(seen) == groups == report["compile_attempts"]
+    assert report["groups_concurrent_max"] == groups
+    assert report["host_cores"] == 16 and report["host_memory_bytes"] == 128 * GIB
+    assert report["scheduler"]["parallel"] == "auto" and report["scheduler"]["slots"] == 16
+    # All start on the first tick and share the 16 cores: threads sum to the cores.
+    assert sum(int(jobs) for _, jobs, _ in seen) == 16
+    assert {int(jobs) for _, jobs, _ in seen} <= {16 // groups, 16 // groups + 1}
+    # Packing reserves 12 GiB; the runaway guard allows its documented 50% headroom.
+    assert all(limits["rss_bytes"] == 18 * GIB and limits["min_available_bytes"] == 20 * GIB
+               for _, _, limits in seen)
+    assert all(r["workers_at_launch"] in (16 // groups, 16 // groups + 1) and r["peak_rss_bytes"] == GIB
+               and r["queue_wait_seconds"] >= 0 and r["compile_seconds"] >= 0 for r in report["results"])
+    assert sorted(r["groups_running_at_launch"] for r in report["results"]) == list(range(1, groups + 1))
+    assert max(r["threads_running_at_launch"] for r in report["results"]) == 16
+    assert report["threads_running_max"] == 16
+    assert report["state"] == "activated"
+    # The keys differ from the platform default's, and the next plan finds them.
+    built = {r["stem"]: r["key"] for r in report["plan"]["groups"]}
+    assert built != keys(cache_plan_support)
+    again = plan(repo, tmp_path)
+    assert keys(again) == built and all(r["action"] == "reuse" for r in again["groups"])
+    # Recorded peaks (1 GiB passed -> 1.2 GiB) size the next packing.
+    assert all(abs(r["recorded_need_bytes"] - int(1.2 * GIB)) <= 1 for r in again["groups"])
+
+
+def test_parallel_one_is_the_serial_budget(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence),
+                     "--parallel", "1"]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["jobs"] == 1 and report["groups_concurrent_max"] == 1
+    assert report["scheduler"] == {"parallel": 1, "slots": 1}
+    # The old serial run: platform default compiler workers, 80% of available memory.
+    assert {jobs for _, jobs, _ in seen} == {"2"}
+    assert all(limits["jobs"] == 1 and limits["rss_bytes"] == 80 * GIB for _, _, limits in seen)
+    assert report["state"] == "activated"
+
+
+def test_group_worker_variable_caps_concurrency(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev.os, "environ", dict(ENV, **{dev.GROUP_WORKERS_ENV: "2"}))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    for row in plan(repo, tmp_path)["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["scheduler"]["slots"] == 2 and report["groups_concurrent_max"] <= 2
+    assert all(dev.GROUP_WORKERS_ENV not in r["fields"]["environment"] for r in report["plan"]["groups"])
+    assert report["state"] == "activated"
+
+
+def test_caller_compile_jobs_keep_their_keys_under_the_scheduler(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    env = dict(ENV, MOJOLEARN_COMPILE_JOBS="1")
+    monkeypatch.setattr(dev.os, "environ", dict(env))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    cache = tmp_path / "cache"
+    before = plan(repo, tmp_path, env)
+    for row in before["support"]:
+        cache_row(cache, row)
+    seen = []
+    monkeypatch.setattr(dev, "run_logged", fake_group_compiler(seen))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert {jobs for _, jobs, _ in seen} == {"1"}
+    assert {r["stem"]: r["key"] for r in report["plan"]["groups"]} == keys(before)
+    assert report["state"] == "activated"
+
+
+def test_launch_threads_sum_to_the_cores_after_every_start():
+    # 32-vCPU box, 15 groups fit memory: every core is given out.
+    threads = dev.launch_threads(32, [], [None] * 15)
+    assert sum(threads) == 32 and len(threads) == 15 and threads[0] >= threads[-1] >= 2
+    # A group finished and freed its 3 threads: the next start takes all 3.
+    running = threads[1:]
+    assert dev.launch_threads(32, running, [None, None]) == [2, 1]
+    assert sum(running) + 3 == 32
+    # No free core: nothing starts beside the running groups.
+    assert dev.launch_threads(32, [16, 16], [None]) == []
+    # Fixed counts (AMD's 8) take their cores; chosen groups get what is left.
+    assert dev.launch_threads(32, [8, 8], [8, None, None]) == [8, 4, 4]
+    assert dev.launch_threads(32, [8, 8, 8], [8, None]) == [8]
+    assert dev.launch_threads(32, [8, 8, 8, 8], [8, None]) == []
+    # A lone group above the cores still starts, alone.
+    assert dev.launch_threads(4, [], [8, None]) == [8]
+
+
+def test_longest_group_starts_first_recorded_seconds_then_source_size(tmp_path):
+    root = tmp_path / "src"
+    for name, size in (("small.mojo", 10), ("large.mojo", 1000), ("mid.mojo", 100)):
+        write(root, name, "x" * size)
+
+    def row(stem, files, seconds=0.0):
+        return {"mode": "identical", "stem": stem, "recorded_seconds": seconds,
+                "fields": {"repo": str(root), "source": {"files": {f: "h" for f in files}}}}
+    # First run, no records: the largest source closure starts first.
+    first = [row("s", ["small.mojo"]), row("l", ["large.mojo"]), row("m", ["mid.mojo"])]
+    ordered, needs = dev.packing_order(first, [12 * GIB] * 3)
+    assert [r["stem"] for r in ordered] == ["l", "m", "s"] and needs == [12 * GIB] * 3
+    # Recorded seconds outrank size and memory; an unrecorded group is
+    # estimated from its bytes at the recorded seconds per byte (600 s / 110 bytes).
+    later = [row("s", ["small.mojo"], 500.0), row("l", ["large.mojo"], 0.0), row("m", ["mid.mojo"], 100.0)]
+    ordered, needs = dev.packing_order(later, [GIB, 3 * GIB, 2 * GIB])
+    assert [r["stem"] for r in ordered] == ["l", "s", "m"] and needs == [3 * GIB, GIB, 2 * GIB]
+    assert dev.estimated_seconds(later) == [500.0, pytest.approx(1000 * 600 / 110), 100.0]
+
+
+def test_unrecorded_groups_pack_by_what_this_run_measured():
+    floor, ceiling = 12 * GIB, 200 * GIB
+    # Nothing measured yet: the floor stays.
+    assert dev.live_need("group-floor", floor, 0, floor, ceiling) == (floor, "group-floor")
+    # A passed group of the set measured 3 GiB: unrecorded groups pack at 3 GiB ...
+    assert dev.live_need("group-floor", floor, 3 * GIB, floor, ceiling) == (3 * GIB, "set-max-live")
+    assert dev.live_need("set-max-live", 3 * GIB, 4 * GIB, floor, ceiling) == (4 * GIB, "set-max-live")
+    # ... but keep the floor as their rss limit.
+    # 1.5x the need, never below 4 GiB, never below the floor for a live estimate.
+    assert dev.guard_rss(3 * GIB, "set-max-live", floor) == max(floor, int(4.5 * GIB))
+    assert dev.guard_rss(3 * GIB, "recorded", floor) == int(4.5 * GIB)
+    assert dev.guard_rss(1 * GIB, "recorded", floor) == 4 * GIB
+    # A set maximum from older records only rises; own records and the flag stay.
+    assert dev.live_need("set-max", 5 * GIB, 3 * GIB, floor, ceiling) == (5 * GIB, "set-max")
+    assert dev.live_need("set-max", 5 * GIB, 7 * GIB, floor, ceiling) == (7 * GIB, "set-max")
+    assert dev.live_need("recorded", 2 * GIB, 9 * GIB, floor, ceiling) == (2 * GIB, "recorded")
+    assert dev.live_need("memory-per-job-gib", 2 * GIB, 9 * GIB, floor, ceiling) == (2 * GIB, "memory-per-job-gib")
+    assert dev.live_need("group-floor", floor, 300 * GIB, floor, ceiling) == (ceiling, "set-max-live")
+
+
+def test_sliding_window_starts_a_group_as_soon_as_a_core_frees(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * GIB)
+    monkeypatch.setattr(dev, "available_resources", lambda: (2, 100 * GIB))
+    cache = tmp_path / "cache"
+    first = plan(repo, tmp_path)
+    for row in first["support"]:
+        cache_row(cache, row)
+    groups = len(first["groups"])
+    seen = []
+    compile_group = fake_group_compiler(seen)
+    # The group started k-th finishes only once the (k+2)-th has started (the last two at once), so the
+    # scheduler always sees one finish while the other group still runs. Before 2026-11-18 the fake finished
+    # at once: on a slow runner both running groups could finish inside one scheduler wait, the window then
+    # restarted from an idle host and a lone last group rightly took both cores ({'1', '2'}; runs
+    # 44389691574, 44428091067, 44431531617), which says nothing about starting on a freed core.
+    started = threading.Condition()
+
+    def ordered_compiler(command, root, env, log):
+        with started:
+            rank = len(seen)
+            result = compile_group(command, root, env, log)
+            started.notify_all()
+            assert started.wait_for(lambda: len(seen) >= min(rank + 2, groups), timeout=60), \
+                "the scheduler did not start the next group while this one ran"
+        return result
+    monkeypatch.setattr(dev, "run_logged", ordered_compiler)
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(cache), "--evidence", str(evidence)]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert groups > 2 and len(seen) == groups
+    # Two cores: two groups at a time, one thread each, never more threads than cores.
+    assert report["groups_concurrent_max"] == 2 and report["threads_running_max"] == 2
+    assert {jobs for _, jobs, _ in seen} == {"1"}
+    assert all(r["threads_running_at_launch"] <= 2 and r["groups_running_at_launch"] <= 2
+               for r in report["results"])
+    # As soon as a core frees: every group after the first started beside a running one.
+    assert sorted(r["groups_running_at_launch"] for r in report["results"]) == [1] + [2] * (groups - 1)
+    assert report["state"] == "activated"
+
+
+def test_input_check_rebuilds_only_the_finished_group(repo, tmp_path, monkeypatch):
+    row = plan(repo, tmp_path)["groups"][0]
+    monkeypatch.setattr(dev, "make_plan", lambda *_, **__: pytest.fail("no whole-set re-plan after a compile"))
+    monkeypatch.setattr(dev, "cached_artifact", lambda *_: None)
+
+    def build(command, *_):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"completed")
+        return 0
+    monkeypatch.setattr(dev, "run_logged", build)
+    reads = []
+    monkeypatch.setattr(dev, "toolchain_facts", lambda root: reads.append(root) or FACTS)
+    probe = dev.ToolchainProbe(repo)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence", probe,
+                               {"groups_running_at_launch": 3, "threads_running_at_launch": 7,
+                                "cores": 8, "submitted": 0.0})
+    assert result["state"] == "built", result.get("reason")
+    assert result["groups_running_at_launch"] == 3 and result["threads_running_at_launch"] == 7
+    assert result["queue_wait_seconds"] >= 0 and "submitted" not in result
+    assert len(reads) == 1
+    receipt = json.loads((tmp_path / "evidence" / (row["mode"] + "-" + row["stem"] + ".json")).read_text())
+    assert receipt["groups_running_at_launch"] == 3 and "queue_wait_seconds" in receipt
+    # The one-group fields equal the plan's: same key.
+    assert dev.digest(dev.current_group_fields(row, repo, tmp_path / "cache", ENV, FACTS)) == row["key"]
+
+
+def test_one_toolchain_read_serves_groups_that_finished_before_it(monkeypatch, tmp_path):
+    import threading
+    gate, reads = threading.Event(), []
+
+    def slow_facts(root):
+        reads.append(root)
+        gate.wait(5)
+        return FACTS
+    monkeypatch.setattr(dev, "toolchain_facts", slow_facts)
+    monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
+    probe = dev.ToolchainProbe(tmp_path)
+    moment = dev.time.monotonic()
+    out = []
+    workers = [threading.Thread(target=lambda: out.append(probe.facts_after(moment))) for _ in range(4)]
+    for worker in workers:
+        worker.start()
+    dev.time.sleep(0.2)
+    gate.set()
+    for worker in workers:
+        worker.join(10)
+    assert out == [FACTS] * 4 and len(reads) == 1
+    # A group that finished after that read began needs a new read.
+    assert probe.facts_after(dev.time.monotonic()) == FACTS and len(reads) == 2
+
+
+# ---------------------------------------------------------------------------
+# --layout release: the macOS wheel's compile through the one Mac cache
+# ---------------------------------------------------------------------------
+
+RELEASE_GROUPS = {("identical", "_mojolearn_native"), ("identical", "_mojolearn_native_m1"),
+                  ("host", "_mojolearn_native_host")}
+# A synthetic merged_build.sh that writes the declared output, as the real one does.
+FAKE_MERGED_BUILD = """#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+: "${MOJOLEARN_COMPILE_JOBS:-2}${MOJOLEARN_PACKAGE_BYTE_LM:-0}${MOJOLEARN_NUMERIC_MODE:-}${MOJOLEARN_BUILD_DEFINES:-}"
+mkdir -p "$(dirname "$MOJOLEARN_BINCACHE_OUTPUTS")"
+printf 'compiled %s\\n' "$*" > "$MOJOLEARN_BINCACHE_OUTPUTS"
+"""
+
+
+@pytest.fixture
+def mac(repo, monkeypatch):
+    """The fixture repo seen as a Mac: fixed OS and Xcode facts, no GPU probe."""
+    monkeypatch.setattr(bincache, "os_fields", lambda: {"id": "darwin", "version_id": "26", "machine": "arm64"})
+    monkeypatch.setattr(bincache, "darwin_toolchain", lambda: {"xcode": "Xcode test"})
+    monkeypatch.setattr(bincache, "device_arch", lambda: "")
+    monkeypatch.setattr(bincache, "build_platform", lambda: "darwin")
+    write(repo, "bindings/merged_build.sh", FAKE_MERGED_BUILD)
+    return repo
+
+
+def release_plan(repo, tmp_path, env=None, **kwargs):
+    return dev.release_plan(repo, tmp_path / "cache", tmp_path / "mac", ["identical", "host"],
+                            {} if env is None else env, facts=FACTS, plat="darwin", c_facts=C_FACTS, **kwargs)
+
+
+def wheel_key(repo, tmp_path, mode, stem, **release_env):
+    """The key packaging/macos/build_release_wheel.sh computes for one group under
+    tools/release.py step_macos_build and tools/mac_slot.py run, spelled out here
+    independently of bincache.macos_merged_group."""
+    env = dict({"MOJOLEARN_BINCACHE_DIR": str(tmp_path / "release/macos-bincache"),
+                "MOJOLEARN_PACKAGE_BYTE_LM": "1", "MOJOLEARN_COMPILE_JOBS": "1", "MOJOLEARN_BUILD_JOBS": "4",
+                "MOJOLEARN_RELEASE_MODES": "identical", "MOJOLEARN_MERGED_BINDINGS": "1",
+                "MOJOLEARN_MERGED_KEY": "f" * 64, "MOJOLEARN_SLOT_TOKEN": "slot-token",
+                "MOJOLEARN_BINCACHE_SEED_DIRS": str(tmp_path / "mac")}, **release_env)
+    if mode == "host":
+        kind, output = "host", f"python/mojolearn/host/{stem}.so"
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+        env.pop("MOJOLEARN_HOST_OUTDIR", None)
+        env.update(MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_TARGET_COLUMN="cpu")
+    else:
+        kind, output = "gpu", f"python/mojolearn/{mode}/{stem}.so"
+        env["MOJOLEARN_NUMERIC_MODE"] = mode
+    env.update(MOJOLEARN_BINCACHE_OUTPUTS=output, MOJOLEARN_BINCACHE_SHELL="sh")
+    return bincache.key_of(bincache.local_fields(repo, repo / "bindings/merged_build.sh",
+                                                 [kind, "--group", stem], env, [output], "sh"))
+
+
+def test_default_layout_is_the_release_compile_on_macos_only():
+    assert dev.default_layout("darwin") == "release"
+    assert dev.default_layout("linux") == "development"
+
+
+def test_release_environment_takes_the_release_compile_settings_and_refuses_another_job_count():
+    env = dev.release_environment("identical", {}, "darwin")
+    assert (env["MOJOLEARN_COMPILE_JOBS"], env["MOJOLEARN_PACKAGE_BYTE_LM"]) == ("1", "1")
+    assert dev.release_environment("identical", {"MOJOLEARN_COMPILE_JOBS": "1"}, "darwin")
+    with pytest.raises(dev.BuildError, match="MOJOLEARN_COMPILE_JOBS=4 would key another compile"):
+        dev.release_environment("identical", {"MOJOLEARN_COMPILE_JOBS": "4"}, "darwin")
+    with pytest.raises(dev.BuildError, match="MOJOLEARN_PACKAGE_BYTE_LM=0 would key another compile"):
+        dev.release_environment("host", {"MOJOLEARN_PACKAGE_BYTE_LM": "0"}, "darwin")
+    host = dev.release_environment("host", {"MOJOLEARN_GPU_ARCHS": "x"}, "darwin")
+    assert "MOJOLEARN_GPU_ARCHS" not in host and host["MOJOLEARN_TARGET_COLUMN"] == "cpu"
+
+
+def test_release_layout_is_refused_off_macos(mac, tmp_path):
+    with pytest.raises(dev.BuildError, match="macOS wheel's compile"):
+        dev.release_plan(mac, tmp_path / "cache", tmp_path / "mac", ["identical"], {}, facts=FACTS,
+                         plat="linux", c_facts=C_FACTS)
+
+
+def test_release_plan_keys_are_the_macos_wheel_keys(mac, tmp_path):
+    # The development shell carries variables the release never sets and no
+    # keyed input reads; the release carries its own runner switches.
+    value = release_plan(mac, tmp_path, env={"MOJOLEARN_RUNPOD_KEY_FILE": "/k", dev.GROUP_WORKERS_ENV: "3",
+                                             "MOJOLEARN_MERGED_PYTHON": "/some/python"})
+    assert value["schema"] == dev.RELEASE_SCHEMA and value["layout"] == "release"
+    assert {(r["mode"], r["stem"]) for r in value["groups"]} == RELEASE_GROUPS
+    native = next(r for r in value["groups"] if r["stem"] == "_mojolearn_native")
+    assert native["members"] == [A, BYTE]
+    for row in value["groups"]:
+        assert row["key"] == wheel_key(mac, tmp_path, row["mode"], row["stem"])
+        assert row["action"] == "build" and row["compile_jobs"] == 1 and not row["auto_compile_jobs"]
+        assert row["command"][1:] == ["tools/bincache.py", "build", "./bindings/merged_build.sh",
+                                      "host" if row["mode"] == "host" else "gpu", "--group", row["stem"]]
+    # The keys still separate a different compile: another job count, another checkout.
+    assert native["key"] != wheel_key(mac, tmp_path, "identical", "_mojolearn_native", MOJOLEARN_COMPILE_JOBS="2")
+    assert native["key"] != wheel_key(mac, tmp_path, "identical", "_mojolearn_native",
+                                      MOJOLEARN_BUILD_DEFINES="-D X=1")
+
+
+def release_outputs(repo, value, data=b"release-bytes"):
+    """Write each group's package file and archive it in the one Mac cache under its key."""
+    for row in value["groups"]:
+        write(repo, row["output"], data.decode() + row["stem"])
+        mac_cache = Path(row["mac_cache"])
+        mac_cache.mkdir(parents=True, exist_ok=True)
+        bincache.pack(mac_cache / (row["key"] + ".tar.gz"), row["key"], row["fields"]["bincache"], repo,
+                      [row["output"]], {})
+
+
+def test_cached_release_groups_plan_as_reuse_and_activation_indexes_each_set(mac, tmp_path):
+    value = release_plan(mac, tmp_path)
+    release_outputs(mac, value)
+    again = release_plan(mac, tmp_path)
+    assert {r["action"] for r in again["groups"]} == {"reuse"}
+    assert again["counts"]["reuse"] == 3
+    for row in again["support"]:
+        cache_row(tmp_path / "cache", row)
+    stale = write(mac, "python/mojolearn/identical/_mojolearn_native.so", "other bytes")
+    assert dev.activate_release(again, mac, tmp_path / "cache")["missing"] == ["identical:_mojolearn_native"]
+    release_outputs(mac, value)
+    assert stale.read_text() == "release-bytes_mojolearn_native"
+    result = dev.activate_release(again, mac, tmp_path / "cache")
+    assert result["state"] == "activated" and result["activated"] == ["host", "identical"]
+    index = json.loads((mac / "python/mojolearn/identical/_mojolearn_merged.json").read_text())
+    assert index == {"format": merged.INDEX_FORMAT,
+                     "files": {"_mojolearn_native.so": [A, BYTE], "_mojolearn_native_m1.so": [B]}}
+    host = json.loads((mac / "python/mojolearn/host/_mojolearn_merged.json").read_text())
+    assert host["files"] == {"_mojolearn_native_host.so": [HOST]}
+    write(mac, f"python/mojolearn/identical/{A}.so", "a shadowing per-binding file")
+    with pytest.raises(dev.BuildError, match="shadow"):
+        dev.activate_release(again, mac, tmp_path / "cache")
+
+
+def fake_bincache_child(record):
+    def run(argv, root, env, log):
+        record.append((list(argv), {k: v for k, v in env.items() if k.startswith("MOJOLEARN_")}))
+        if argv[:2] == ["sh", "tokenizer/tools/gen_unicode_table.sh"]:
+            return 0
+        assert argv[1:3] == ["tools/bincache.py", "build"]
+        child = {k: v for k, v in env.items() if k != dev.GUARD_ENV}
+        return bincache.cmd_build_local(str(Path(root) / argv[3]), argv[4:], child, child["MOJOLEARN_BINCACHE_DIR"])
+    return run
+
+
+def test_compile_release_group_requires_the_plan_key_and_counts_only_compiles(mac, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(dev, "run_logged", fake_bincache_child(calls))
+    value = release_plan(mac, tmp_path)
+    row = next(r for r in value["groups"] if r["mode"] == "host")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    built = dev.compile_release_group(row, mac, tmp_path / "cache", {}, evidence)
+    assert built["state"] == "built" and built["cached"] and built["command"] == row["command"]
+    assert built["bincache_key"] == row["key"]
+    env = calls[-1][1]
+    assert env["MOJOLEARN_BINCACHE_DIR"] == str((tmp_path / "mac").resolve())
+    assert (env["MOJOLEARN_COMPILE_JOBS"], env["MOJOLEARN_PACKAGE_BYTE_LM"]) == ("1", "1")
+    assert (env["MOJOLEARN_TARGET_COLUMN"], env["MOJOLEARN_BINCACHE_OUTPUTS"]) == ("cpu", row["output"])
+    assert "MOJOLEARN_GPU_ARCHS" not in env
+    placed = dev.compile_release_group(row, mac, tmp_path / "cache", {}, evidence)
+    assert placed["state"] == "reused" and "command" not in placed, "a placement is not a compile attempt"
+    assert not dev.peak_path(tmp_path / "cache", "host", row["stem"]).exists() or \
+        json.loads(dev.peak_path(tmp_path / "cache", "host", row["stem"]).read_text())["key"] == row["key"]
+    moved = dict(row, key="0" * 64)
+    failed = dev.compile_release_group(moved, mac, tmp_path / "cache", {}, evidence)
+    assert failed["exit_code"] == 1 and "keyed this group" in failed["reason"]
+
+
+def test_limited_release_group_retains_peak_without_cache_provenance(mac, tmp_path, monkeypatch):
+    value = release_plan(mac, tmp_path)
+    row = next(r for r in value["groups"] if r["mode"] == "host")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    cache = tmp_path / "cache"
+    observed = 5 * GIB
+
+    def limited_child(command, cwd, env, log):
+        Path(log).with_suffix(".log.execution.json").write_text(json.dumps({
+            "status": "rss-limit", "exit_code": 124,
+            "peak_rss_bytes": observed, "reason": "measured RSS exceeded reservation",
+        }))
+        return 124
+
+    monkeypatch.setattr(dev, "run_logged", limited_child)
+    failed = dev.compile_release_group(row, mac, cache, {}, evidence)
+    assert failed["state"] == "failed" and failed["exit_code"] == 124
+    assert failed["bincache_outcome"] == ""
+    assert failed["peak_rss_bytes"] == observed
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == int(observed * dev.PEAK_HEADROOM["limited"])
+
+
+def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_release_keys_hit(
+        mac, tmp_path, monkeypatch):
+    monkeypatch.setattr(dev.os, "environ", {})
+    monkeypatch.setattr(merged, "default_platform", lambda: "darwin")
+    monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
+    monkeypatch.setattr(dev, "physical_memory", lambda: 100 * 2 ** 30)
+    monkeypatch.setattr(dev, "python_free_check", lambda _repo: None)  # synthetic repo; own test below
+    calls = []
+    monkeypatch.setattr(dev, "run_logged", fake_bincache_child(calls))
+    for row in release_plan(mac, tmp_path)["support"]:
+        cache_row(tmp_path / "cache", row)
+    argv = ["build", "--sets", "identical,host", "--cache", str(tmp_path / "cache"),
+            "--mac-cache", str(tmp_path / "mac")]
+    assert dev.main(argv + ["--evidence", str(tmp_path / "first")]) == 0
+    first = json.loads((tmp_path / "first/result.json").read_text())
+    assert first["schema"] == dev.RELEASE_SCHEMA and first["state"] == "activated"
+    assert first["compile_attempts"] == 3
+    assert {(r["mode"], r["stem"], r["state"]) for r in first["results"]} == \
+        {(m, s, "built") for m, s in RELEASE_GROUPS}
+    # The release's macOS build of the same commit in the same checkout: every key is in the one cache.
+    for mode, stem in RELEASE_GROUPS:
+        assert (tmp_path / "mac" / (wheel_key(mac, tmp_path, mode, stem) + ".tar.gz")).is_file()
+    assert dev.main(argv + ["--evidence", str(tmp_path / "second")]) == 0
+    second = json.loads((tmp_path / "second/result.json").read_text())
+    assert second["compile_attempts"] == 0
+    assert {r["state"] for r in second["results"]} == {"reused"}
+    # --layout development keeps the per-binding groups and their own cache.
+    assert dev.main(["plan", "--layout", "development", "--sets", "identical", "--cache",
+                     str(tmp_path / "cache")]) == 0
+
+
+def test_archive_table_and_generator_enter_only_reaching_development_closure(repo, tmp_path):
+    import generated_sources as gs
+    write(repo, gs.ARCHIVE_GENERATOR, '# generator revision one\n')
+    write(repo, gs.ARCHIVE_PIN, 'from core.archive_unicode_names_generated import TABLE\n')
+    write(repo, gs.ARCHIVE_TABLE, 'comptime TABLE = 1\n')
+    binding = repo / f'bindings/{A}.mojo'
+    binding.write_text('from core.native_archive_unicode_names import lookup\n' + binding.read_text())
+    first = plan(repo, tmp_path)
+    before = {row['stem']: row['key'] for row in first['groups']}
+    write(repo, gs.ARCHIVE_GENERATOR, '# generator revision two\n')
+    after = {row['stem']: row['key'] for row in plan(repo, tmp_path)['groups']}
+    changed = {name for name in before if before[name] != after[name]}
+    assert changed == {'_mojolearn_dev_trees'}
+    write(repo, gs.ARCHIVE_TABLE, 'comptime TABLE = 2\n')
+    changed_bytes = {row['stem']: row['key'] for row in plan(repo, tmp_path)['groups']}
+    assert changed_bytes['_mojolearn_dev_trees'] != after['_mojolearn_dev_trees']
+
+
+def test_main_prepares_sources_before_planning_and_stops_on_missing_output(repo, tmp_path, monkeypatch):
+    import generated_sources as gs
+    from test_generated_sources import archive_fixture, write_sources
+    configure_main(repo, monkeypatch)
+    _, inputs = archive_fixture()
+    write_sources(repo, inputs)
+    calls = []
+    monkeypatch.setattr(dev, 'run_logged', lambda command, *_: calls.append(command) or 0)
+    monkeypatch.setattr(dev, 'make_plan', lambda *_: pytest.fail('cannot plan a missing generated output'))
+    evidence = tmp_path / 'evidence'
+    assert dev.main(['build', '--sets', 'identical', '--cache', str(tmp_path / 'cache'),
+                     '--evidence', str(evidence)]) == 1
+    assert calls == [gs.COMMANDS[gs.ARCHIVE_TABLE]]
+    report = json.loads((evidence / 'result.json').read_text())
+    assert report['state'] == 'failed' and report['compile_attempts'] == 0
+    manifest = json.loads((evidence / 'generated-sources/generated-sources.json').read_text())
+    assert not manifest['sources'][gs.ARCHIVE_TABLE]['verified']
+
+
+def test_python_free_check_refuses_before_compile_and_passes_a_clean_tree(tmp_path):
+    (tmp_path / "tools").mkdir()
+    script = tmp_path / "tools" / "python_free_dirs.sh"
+    script.write_text("echo 'kernels/x.mojo imports Python'; exit 1\n")
+    with pytest.raises(dev.BuildError, match="imports Python"):
+        dev.python_free_check(tmp_path)
+    script.write_text("exit 0\n")
+    dev.python_free_check(tmp_path)

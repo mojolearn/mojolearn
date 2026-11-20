@@ -47,7 +47,7 @@ GATES:
       float version does not have.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -120,7 +120,7 @@ def hist8_kernel[variant: Int](
             out_buf.unsafe_store(at, smem.unsafe_load(at))
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -157,10 +157,10 @@ def main() raises:
             | UInt32(b3)
         )
 
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     # ---- B2's precondition: mass in the TRAILING runs -----------------
     # the window must end inside a run, and that run must carry weight
@@ -233,7 +233,7 @@ def main() raises:
                 scale, d_out.unsafe_ptr(),
                 grid_dim=(1, 1, 1), block_dim=(PW_HIST2_BLOCK, 1, 1),
             )
-        ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+        download_host_into[DType.int32](ctx, d_out, h_out)
         ctx.synchronize()
 
         var bad = 0
@@ -317,8 +317,8 @@ def main() raises:
     for r in range(N_ROWS):
         tgt3.append(target_h[r] + Float32(0.3141592))
         wt3.append(weight_h[r] + Float32(0.2718281))
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=tgt3.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=wt3.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_tgt, tgt3)
+    upload_whole_into[DType.float32](ctx, d_wt, wt3)
 
     ctx.enqueue_memset(d_out, Int32(0))
     ctx.enqueue_function[hist8_kernel[1]](
@@ -327,7 +327,7 @@ def main() raises:
         scale3, d_out.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(PW_HIST2_BLOCK, 1, 1),
     )
-    ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+    download_host_into[DType.int32](ctx, d_out, h_out)
     ctx.synchronize()
 
     var over_bound = 0
@@ -419,3 +419,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("pointwise 8-bit accumulator: B1-B4 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_hist2_8bit_check", cpu=False, gpu=True, serial="", run=run_cases)

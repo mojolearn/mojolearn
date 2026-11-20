@@ -12,7 +12,7 @@ def read(path):
 def body(source, name):
     return re.search(rf'^def {name}\(.*?(?=^def |\Z)', source, re.M | re.S).group()
 
-def test_native_owner_has_no_provider_or_python_dependency():
+def test_native_owner_dependencies_resolve():
     _, errors = audit(ROOT, ('kernel_methods.native_descriptor_dispatch', 'kernel_methods.descriptor_schema'))
     assert not errors, errors
     source = read('kernel_methods/native_descriptor_dispatch.mojo')
@@ -30,7 +30,7 @@ def test_public_frontdoors_only_enter_native_owner():
             assert isinstance(calls[0].func, ast.Name) and calls[0].func.id == '_NATIVE'
 
 def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
-    source = read('providers/python/estimator_binding_pyapi.mojo')
+    source = read('providers/python/estimator_binding_pyapi_door.mojo')
     assert 'backend["_SETS"]' in source and 'fields["_modules"]' in source
     assert 'context["family_mode_set_fields"]' in source
     assert 'py_type(module) is not py_type(bi)' in source
@@ -39,31 +39,58 @@ def test_shared_binding_admission_uses_live_registry_without_load_callbacks():
         assert text not in source
 
 def test_computation_transport_reuses_common_provider_and_resource():
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert 'struct ' not in source
     assert 'neural_descriptor_reuse(previous, factory' in source
     assert 'neural_descriptor_execute(native, operation' in source
-    source = read('bindings/kernel_methods_native.mojo')
+    source = read('bindings/kernel_methods_native_door.mojo')
     assert 'neural_descriptor_adopt(native, Int(py=handle), 5, [])' in source
     assert 'neural_descriptor_resource_close(held[3], [])' in source
     assert 'held[4] is native' in source
     assert 'state.pop, "_native_kernel_method_provider"' in source
 
 def test_compound_transform_reuses_admitted_x_and_provider():
-    source = read('bindings/kernel_methods_native.mojo')
+    source = read('bindings/kernel_methods_native_door.mojo')
+    # X is admitted once per public operation by the dispatcher and handed to
+    # the bodies as x_meta (312223206b, c251819d8a); no body re-admits it.
     for name, operation in [('_nys_fit', 'nystroem_transform'), ('_rbf_fit', 'rbf_sampler_transform')]:
         part = body(source, name)
-        assert part.count('family_f32_snapshot(args[1]') == 1
+        assert 'x_meta: ArrayMetadata' in part
+        assert part.count('admit_family_meta(args[1]') == 0
         assert f'kernel_method_execute(native, "{operation}"' in part
+    _assert_x_admitted_once_per_operation(source)
+
+
+def _assert_x_admitted_once_per_operation(source):
+    # X is admitted into the door's ArrayPin (c7893b3b8d); a device-rows fold admits its own host array once instead.
+    admit = 'admit_family_meta(args[1], 2, "X", context, x_pin, True)'
+    for door in ('kernel_methods_operation', '_km_par_fit', '_km_par_apply'):
+        assert body(source, door).count(admit) == 1, door
+    operation = body(source, 'kernel_methods_operation')
+    assert operation.count('admit_family_meta(fx.array, 2, "X", context, x_pin, True)') == 1
+    inner = body(source, '_kernel_methods_operation')
+    assert 'admit_family_meta(args[1]' not in inner
+    for call in ('_krr_fit(model, args, context, x, x_pin, fold)', '_nys_fit(model, args, context, x, x_pin)',
+                 '_nys_transform(model, args, context, x, x_pin)', '_rbf_transform(model, args, context, x, x_pin)',
+                 '_rbf_fit(model, args, False, context, x, x_pin)', '_rbf_fit(model, args, True, context, x, x_pin)'):
+        assert call in inner, call
 
 def test_native_transport_preserves_existing_numerical_owners_and_route_defines():
     native = read('kernel_methods/native_descriptor_dispatch.mojo')
     original = read('bindings/_mojolearn_kernel_methods.mojo')
+    # 92e065b5e5 moved the pointer-fit and Nystroem-transform RUN bodies out of the binding into
+    # kernel_methods/kernel_methods_binding_run.mojo: a binding's numerical owners include those of the RUN it calls.
+    run_module = read('kernel_methods/kernel_methods_binding_run.mojo')
+    runs = {m: body(run_module, m) for m in re.findall(r'^def (\w+)\(', run_module, re.M)}
+
+    def with_runs(text):
+        # inline each called RUN body at its call site, so the owners keep their call order
+        return re.sub(r'\b(\w+_run)\(', lambda m: runs.get(m.group(1), '') + m.group(0), text)
     for name in ('kernel_ridge_fit', 'kernel_ridge_predict', 'kernel_ridge_fit_ptr', 'kernel_ridge_predict_ptr',
                  'kernel_ridge_resident_prepare', 'kernel_ridge_resident_release', 'kernel_ridge_predict_resident',
                  'nystroem_fit', 'nystroem_fit_ptr', 'nystroem_fit_transform_ptr', 'nystroem_transform',
                  'rbf_sampler_fit', 'rbf_sampler_transform'):
-        a, b = body(original, name + '_binding'), body(native, 'km_native_' + name)
+        a, b = with_runs(body(original, name + '_binding')), body(native, 'km_native_' + name)
         numerical = r'\b(?:_kernel_ridge_\w+_run|_nystroem_\w+_run|_rbf_sampler_\w+_run|kernel_ridge_\w+_into|kernel_ridge_resident_\w+|kernel_ridge_predict_resident|km_nystroem_\w+_run|nystroem_transform_ptr_into|rbf_sampler_transform_ptr_into)\('
         assert [v for v in re.findall(numerical, a) if not v.endswith("_binding(")] == re.findall(numerical, b), name
     assert 'Int(KRR_IDN_PTR_IN)' in native and 'Int(NYS_IDN_FIT_PTR_IN)' in native
@@ -75,24 +102,41 @@ def test_private_span_bounds_and_scalar_schemas_are_checked_before_dispatch():
     assert 'nf != np' in source
     assert 'operation == 6 and na != 3' in source
     assert 'operation == 5 and (na != 1 or np != 0)' in source
-    source = read('providers/python/kernel_method_descriptor_pyapi.mojo')
+    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
     assert source.index('len(params) != schema[0]') < source.index('params[i]')
 
 
 def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
-    source = read('providers/python/array_metadata_pyapi.mojo')
-    assert 'var keep: PythonObject' in source and 'var source: CastIn' in source
+    source = read('providers/python/array_metadata_pyapi_door.mojo')
+    # c7893b3b8d: the door's ArrayPin keeps the storage; the typed view (core/array_metadata.mojo) holds the CastIn.
+    assert 'var keep: PythonObject' in source.split('struct ArrayPin', 1)[1]
+    assert 'var source: CastIn' in read('core/array_metadata.mojo').split('struct ArrayMetadata', 1)[1]
     for field in ('value.shape', 'value.dtype', 'value.itemsize', 'value.strides'):
         assert source.count(field) == 1, field
-    conversion = body(read('bindings/family_common.mojo'), 'family_f32_snapshot')
-    assert conversion.count('array_shape_once(view, context)') == 1
-    assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in conversion
-    assert 'snapshot.replace_f32(result, address)' in conversion
-    source = read('bindings/kernel_methods_native.mojo')
+    # The family admission (lane a2-admit-family, bindings/admitted_family_door.mojo):
+    # the one-shot input snapshot, then the float32 pack from that snapshot;
+    # both halves stay single-capture.
+    family = read('bindings/admitted_family_door.mojo')
+    conversion = body(family, 'admit_family_meta')
+    assert 'admit_family_input(source, ndim, name, context, pin, dense, admitted, empty)' in conversion
+    assert 'admit_family_cast(snapshot, pin, name, context, finite, refusal, defer_finite)' in conversion
+    capture = body(family, 'admit_family_input')
+    assert capture.count('array_shape_once(view, context)') == 1
+    assert 'array_metadata_once(view, shape^, name, context, pin)' in capture
+    pack = body(family, 'admit_family_cast')
+    assert 'admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in pack
+    assert 'snapshot.replace_f32(address)\n        pin.keep = result' in pack
+    source = read('bindings/kernel_methods_native_door.mojo')
+    _assert_x_admitted_once_per_operation(source)
     for name in ('_krr_fit', '_krr_predict', '_nys_fit', '_nys_transform', '_rbf_fit', '_rbf_transform'):
         part = body(source, name)
-        assert part.count('family_f32_snapshot(args[1]') == 1, name
+        assert re.search(r'\bx(?:q)?_meta: ArrayMetadata', part.split(' raises', 1)[0]), name
+        assert part.count('admit_family_meta(args[1]') == 0, name
         for text in ('x.shape', 'xq.shape', 'x.size', 'xq.size', 'classical_address(x)', 'classical_address(xq)'):
             assert text not in part, (name, text)
-    assert 'family_owned_snapshot(x_meta, context)' in source
+    # the fitted X is the admission's own copy when it made one, else one memcpy; never the caller's Array
+    owned = body(source, '_km_fit_owned')
+    assert 'if x_meta.copied and x_meta.owned_writable:\n        return x_pin.keep' in owned
+    assert 'unsafe_memcpy(' in owned
+    assert '_km_fit_owned(x_meta, x_pin, context)' in source
     assert '_km_scale_gamma(extension, x_meta, d, context, native)' in source

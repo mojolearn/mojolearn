@@ -122,9 +122,9 @@ from max.gpu.memory import AddressSpace
 
 from std.sys import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.sync import barrier
 
 from isolation_forest.impl.rng.xorwow import (
@@ -153,20 +153,29 @@ from checks.numerics import (
 #: measured, b046c2de7), the finiteness refusal runs as a device scan of the
 #: same cells, and the gather below reads `data[row * n_cols + col]`: the
 #: same cell values (`ftz` is a no-op under FAST), the same trees, a
-#: coalesced read of each sampled row. `-D MOJOLEARN_IF_ROWMAJOR_OFF` keeps
-#: the column-major upload (the A/B arm).
+#: coalesced read of each sampled row.
+# TOMBSTONE: MOJOLEARN_IF_ROWMAJOR_OFF (old path; IF_FAST_ROWMAJOR default kept, EXP:115 KEPT 269ffa57a on Apple; NVIDIA/AMD n/a (FAST+Apple only)) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at b35af0836a.
+# Restore: git apply experiments/removed/MOJOLEARN_IF_ROWMAJOR_OFF.patch; record in docs/TOMBSTONES.md.
 # T40/T41/T42 and C47/C48/C49: all opt-ins default OFF.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime IF_T40_ROWMAJOR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T40_ROWMAJOR"]()
-comptime IF_T41_TREE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T41_TREE_BATCH"]()
-comptime IF_T42_CORRECTION_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T42_CORRECTION_CACHE"]()
-comptime IF_C47_LIVE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C47_IF_LIVE_TASKS"]()
+# TOMBSTONE: MOJOLEARN_TREES_T40_ROWMAJOR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T40_ROWMAJOR.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T41_TREE_BATCH (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at aa61101d80.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T41_TREE_BATCH.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: IF_T41_TREE_BATCH removed; reader folded.)
+# TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: IF_T42_CORRECTION_CACHE removed; reader folded.)
+# TOMBSTONE: MOJOLEARN_TREES_C47_IF_LIVE_TASKS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 77a0ad6f45.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()
 comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
-comptime IF_FAST_ROWMAJOR = IF_T40_ROWMAJOR or (
+comptime IF_FAST_ROWMAJOR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 
@@ -174,35 +183,22 @@ comptime EULER_MASCHERONI_F32 = Float32(0.5772156649015329)
 """`T(0.5772156649015329)` with T = float: 0x3f13c468. Printed and gated
 as hex by `if_check.mojo` so the constant cannot drift by a decimal."""
 
+# TOMBSTONE: MOJOLEARN_AFT_F10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at e0359716d7.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F10: two 32-lane groups share each tree instead of four; less idle
 # work on short ranges trades against less parallel sampling/minmax work.
 # The shared scratch remains sized by IF_BUILD_TPB_MAX, and all scans use
 # the actual n_threads. experiments/apple_fast_trees/IDEAS.md; opt-in,
 # no quality/speed evidence; uncompiled/unverified/unmeasured.
-# Lane trees-small (2026-10-07): MOJOLEARN_TREES_IF_BUILD_TPB, IDENTICAL int
-# sweep, legal set {128 (absent, the incumbent), 256, 512}. Threads per
-# tree block of `build_isolation_trees_global_kernel`. Cost reasoning: one
-# block builds one tree over at most `max_samples` rows; the sampling radix
-# passes, every node's min/max and its stable partition stride over the
-# block, and the barrier count per node is fixed, so a wider block takes
-# fewer items per thread on the root-heavy levels and hides more of the
-# per-row key/RNG latency. It is driven by the per-tree sample count, never
-# by the dataset's rows or features. No bits: min/max ties go to the lower
-# position and the partition is integer scans (see the block comment above
-# `IF_BUILD_TPB_MAX`), so the answer is width-independent; the host oracle is
-# unchanged. 512 widens `IF_BUILD_TPB_MAX`'s shared scratch to
-# 21 * 512 * 4 B = 43 KB, inside the 48 KB NVIDIA default and AMD's 64 KB.
-# NOT COMPILED -- NOT TESTED -- NOT MEASURED. Default off.
-comptime IF_BUILD_TPB_SWEEP = get_defined_int["MOJOLEARN_TREES_IF_BUILD_TPB", 128]() if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_TREES_IF_BUILD_TPB"]()
-) else 128
+# TOMBSTONE: MOJOLEARN_TREES_IF_BUILD_TPB (opt-in int sweep, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 2e3951cb68.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_IF_BUILD_TPB.patch; record in docs/TOMBSTONES.md.
 
 comptime IF_BUILD_TPB = 64 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F10"]()
-) else IF_BUILD_TPB_SWEEP
+) else 128
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
 (`:397`). A scheduling width: the sampling, the gather and every node's
 min/max and partition are split over the block's threads; no bit depends
@@ -229,12 +225,15 @@ Int32, carved into three disjoint slices. IT IS ONE KERNEL ARGUMENT, not
 three, ON PURPOSE: Metal caps a kernel at 31 arguments and this one already
 stands at 25. A new output here REUSES A SLICE."""
 
+# TOMBSTONE: MOJOLEARN_AFCL_T10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 72e0724726.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFCL-T10: four SIMD groups per path/score block reduce live traversal
 # state per workgroup. All trees and correction terms remain unchanged.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T10 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T10"]()
 )
 comptime IF_PATH_TPB = 128 if AFCL_T10 else 256
@@ -260,17 +259,9 @@ def compute_c_n(n_samples: Int) -> Float32:
     return ftz(identical_mul_add(Float32(2.0), h, -tail))  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
-@always_inline
-def cached_c_n(n: Int, cache: MutPointer[Float32, MutAnyOrigin]) -> Float32:
-    comptime if IF_T42_CORRECTION_CACHE:
-        return cache.unsafe_load(n)
-    return compute_c_n(n)
-
-
-def if_correction_table_kernel(cache: MutPointer[Float32, MutAnyOrigin], count: Int32):
-    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i < Int(count):
-        cache.unsafe_store(i, compute_c_n(i))
+# TOMBSTONE: MOJOLEARN_TREES_T42_CORRECTION_CACHE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at d30e6f5678.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T42_CORRECTION_CACHE.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: if_correction_table_kernel, launched only under the folded IF_T42_CORRECTION_CACHE, removed.)
 
 
 # ---------------------------------------------------------------------------
@@ -292,17 +283,14 @@ comptime SAB_U64_SWAP = is_defined["MOJOLEARN_IF_SABOTAGE_U64_SWAP"]()
 #: in a shipped build: they truncate the kernel so a hang can be placed.
 #: `tools/diag/rtx4090_hang.sh` builds `checks/if_hang_probe.mojo` once
 #: per guard on the rented box and records which truncations still hang.
-#:   MOJOLEARN_IF_DIAG_ENTRY_RETURN  the build kernel returns at entry
-#:   MOJOLEARN_IF_DIAG_GATHER_ONLY   returns after the subsample gather
-#:                                   barrier (sampling + gather, no walk)
-#:   MOJOLEARN_IF_DIAG_NO_REJECT     `sample_bounded` is `value % bound`,
-#:                                   no rejection loop (the one data-
-#:                                   dependent `while` in the walk)
-#:   MOJOLEARN_IF_DIAG_NO_RECORD     `_record_decision` writes nothing
-comptime DIAG_ENTRY_RETURN = is_defined["MOJOLEARN_IF_DIAG_ENTRY_RETURN"]()
-comptime DIAG_GATHER_ONLY = is_defined["MOJOLEARN_IF_DIAG_GATHER_ONLY"]()
-comptime DIAG_NO_REJECT = is_defined["MOJOLEARN_IF_DIAG_NO_REJECT"]()
-comptime DIAG_NO_RECORD = is_defined["MOJOLEARN_IF_DIAG_NO_RECORD"]()
+# TOMBSTONE: MOJOLEARN_IF_DIAG_ENTRY_RETURN (diagnostic bisect arm, no A/B recorded; tools/diag/rtx4090_hang.sh no longer builds it) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 4a6591cfdc.
+# Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_ENTRY_RETURN.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IF_DIAG_GATHER_ONLY (diagnostic bisect arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 690463fbcf.
+# Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_GATHER_ONLY.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IF_DIAG_NO_REJECT (diagnostic bisect arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at e1bb1a873e.
+# Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_NO_REJECT.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IF_DIAG_NO_RECORD (diagnostic bisect arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 5c5dda5130.
+# Restore: git apply experiments/removed/MOJOLEARN_IF_DIAG_NO_RECORD.patch; record in docs/TOMBSTONES.md.
 
 
 def curand_u64(mut rng_state: curandStateXORWOW) -> UInt64:
@@ -328,8 +316,6 @@ def sample_bounded(mut rng_state: curandStateXORWOW, bound: UInt64) -> UInt64:
     var max_uint64: UInt64 = 0xFFFFFFFFFFFFFFFF
     var limit: UInt64 = max_uint64 - (max_uint64 % bound)
     var value = curand_u64(rng_state)
-    comptime if DIAG_NO_REJECT:
-        return value % bound
     while value >= limit:
         value = curand_u64(rng_state)
     return value % bound
@@ -419,8 +405,6 @@ def _record_decision(
     `feature_start` is the per-node draw that decides WHICH column is
     tried first, and it is invisible in the tree whenever the first
     candidate happens to be splittable."""
-    comptime if DIAG_NO_RECORD:
-        return
     var base = IF_DECISION_WORDS * node_idx
     decisions.unsafe_store(base + 0, bitcast[DType.int32](min_val))
     decisions.unsafe_store(base + 1, bitcast[DType.int32](max_val))
@@ -466,7 +450,7 @@ def _record_decision(
 # forest's bits move once, on every vendor and the CPU column together.
 # ---------------------------------------------------------------------------
 
-comptime IF_BUILD_TPB_MAX = 256 if IF_BUILD_TPB_SWEEP <= 256 else 512
+comptime IF_BUILD_TPB_MAX = 256
 """The widest build block the shared scratch is sized for (the launch
 invariance gates run 32..256); the launch refuses a wider one."""
 
@@ -575,7 +559,7 @@ def _block_select_smallest(
     var k_rem = k
     for p in range(8):
         var shift = UInt32(28 - 4 * p)
-        var local = InlineArray[UInt32, IF_KEY_BUCKETS](fill=UInt32(0))
+        var local = Array[UInt32, IF_KEY_BUCKETS](fill=UInt32(0))
         var r = tid
         while r < n:
             var key = if_row_key(base, r)
@@ -677,12 +661,9 @@ def _block_min_max(
 ) -> Tuple[Float32, Float32]:
     """(min, max) of column `candidate` over the node's rows, each the
     serial positional fold's answer (ties to the lower position)."""
-    # C47 IF sub-arm: dead reduction lanes are absent from the logical task.
-    # Extrema compare (value,row-position), so changing lane grouping cannot
-    # change tie semantics. Every physical thread still reaches each barrier.
+    # TOMBSTONE: MOJOLEARN_TREES_C47_IF_LIVE_TASKS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 77a0ad6f45.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch; record in docs/TOMBSTONES.md.
     var active_threads = n_threads
-    comptime if IF_C47_LIVE_TASKS:
-        active_threads = max(1, min(n_threads, end-start))
     var lmin = Float32(0.0)
     var lmin_i = -1
     var lmax = Float32(0.0)
@@ -734,6 +715,9 @@ def _block_stable_partition(
 ) -> Int:
     """Rows of `[start, end)` with `value < threshold` first, then the rest,
     each side in its previous order; returns the split position."""
+    # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
     comptime if IF_C48_FUSED_PARTITION:
         # temp holds n local output indices and n signed destinations. Each
         # row's flag and global child prefix are produced once. Child metadata
@@ -885,7 +869,7 @@ def build_tree_iterative_global(
         if stop_depth or stop_isolated or stop_capacity:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
+                    Float32(depth) + compute_c_n(n_node_samples)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
@@ -926,7 +910,7 @@ def build_tree_iterative_global(
         if local_feature < 0:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
+                    Float32(depth) + compute_c_n(n_node_samples)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
@@ -992,6 +976,9 @@ def build_tree_iterative_global(
 # ---------------------------------------------------------------------------
 
 
+# TOMBSTONE: MOJOLEARN_AFT_F12 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dd8de6f332.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F12.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F12: each lane copies a 16-byte tile of the flattened sampled matrix.
 # Unlike the old per-row gather, narrow feature rows use the whole block;
 # the first sampled-row lookup is reused within the tile when it stays in
@@ -999,7 +986,7 @@ def build_tree_iterative_global(
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_IF_GATHER_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and IF_FAST_ROWMAJOR
     and is_defined["MOJOLEARN_AFT_F12"]()
 )
@@ -1042,11 +1029,6 @@ def build_isolation_trees_global_kernel(
     subsample into `local_data` (`:319-326`, column-major source); then
     `build_tree_iterative_global`. `data` is column-major `n_rows x
     n_cols` exactly as theirs (`isolation_forest.hpp:118`)."""
-    comptime assert (
-        IF_BUILD_TPB_SWEEP == 128 or IF_BUILD_TPB_SWEEP == 256 or IF_BUILD_TPB_SWEEP == 512
-    ), "MOJOLEARN_TREES_IF_BUILD_TPB legal set is {128, 256, 512}"
-    comptime if DIAG_ENTRY_RETURN:
-        return
     var scratch_id = Int(block_idx.x)
     var tree_id = scratch_id + Int(batch_tree_start)
     var n_trees = Int(n_trees_in)
@@ -1194,8 +1176,6 @@ def build_isolation_trees_global_kernel(
                     )
                 f += n_threads
     barrier()
-    comptime if DIAG_GATHER_ONLY:
-        return
 
     build_tree_iterative_global(
         local_data,
@@ -1269,6 +1249,9 @@ def traverse_global_tree(
     return Float32(0.0)
 
 
+# TOMBSTONE: MOJOLEARN_AFT_F11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f53beacaab.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F11.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F11: two independent rows/lane reuse each tree offset and the tree
 # loop; adjacent lanes retain adjacent rows within each stripe. Two FP32
 # accumulators bound register growth, and each still folds trees in order.
@@ -1277,7 +1260,7 @@ def traverse_global_tree(
 # evidence; uncompiled/unverified/unmeasured.
 comptime AFT_IF_PATH_ROWS = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F11"]()
 ) else 1
 

@@ -27,12 +27,11 @@ total is preserved and every individual prediction is wrong. Conservation
 cannot see it; comparing against the learn cursor can.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.apple_fast_tree_experiments import AFT_P05
@@ -42,36 +41,26 @@ from core.apple_fast_tree_experiments import AFT_P05
 #: oblivious ensemble four trees per launch (`compute_bins_and_add_four_kernel`,
 #: the resident path's grouping) instead of one launch per tree. Same ordered
 #: float32 adds per row, so no bit moves and the host column is untouched.
-#: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
-#: restores one launch per tree.
-comptime IDN_PREDICT_FOUR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a8ef992718.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PREDICT_FOUR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-#: lane/fam2-gbdt F4 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
-#: `-D MOJOLEARN_IDN_GBDT_APPLY_WIDE`): an ensemble whose trees all share one
-#: positive depth is applied `APPLY_WIDE_TREES` trees per launch
-#: (`compute_bins_and_add_uniform_kernel`), each row carrying its sum in a
-#: register through the trees in tree order: the same ordered float32 adds,
-#: one cursor store per launch instead of one per tree. No bit moves. Time it
-#: against the four-tree grouping (resident predict and `predict`). An
-#: ensemble with mixed depths keeps the four-tree grouping.
-comptime IDN_APPLY_WIDE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-#: trees per launch of the wide arm: bounded so one launch stays short (macOS
-#: cuts a Metal launch that runs for seconds)
-comptime APPLY_WIDE_TREES = 64
+#: lane/fam2-gbdt F4, the wide uniform-depth apply (candidate arm, never
+#: timed). (Sweep 2026-11-15: IDN_APPLY_WIDE, APPLY_WIDE_TREES and the wide
+#: apply's kernel and launcher were removed with their importer's branch.)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 805d22d33d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
 
 
-def compute_bins_and_add_kernel(
+# integ-w3: the kernel bodies are inlined device functions. The gated tree-op
+# kernels (TREE_OP_LEAF_BINS / TREE_OP_APPLY below) call them; a module that
+# also LAUNCHED the plain kernel and called it from another kernel lost one
+# of the two from its offload result ("compile offload result missing
+# kernelId", the GBDT binding once lane T2 reached the gated ops).
+@always_inline
+def _compute_bins_and_add_body(
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_shift: MutPointer[UInt32, MutAnyOrigin],
@@ -204,7 +193,7 @@ def compute_bins_and_add_four_kernel(
     once per block, and each row performs the same ordered float32 additions.
     No tree or level is reordered and no reduction is introduced.
     """
-    var depths = InlineArray[Int, 4](fill=0)
+    var depths = Array[Int, 4](fill=0)
     depths[0] = Int(depth0_in)
     depths[1] = Int(depth1_in)
     depths[2] = Int(depth2_in)
@@ -261,7 +250,8 @@ def compute_bins_and_add_four_kernel(
         i += stride
 
 
-def compute_bins_kernel(
+@always_inline
+def _compute_bins_body(
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_shift: MutPointer[UInt32, MutAnyOrigin],
@@ -346,6 +336,105 @@ def compute_bins_kernel(
 # features += node.LeftSubtree` (`:381-382`). That is theirs and it is why
 # the caller builds a per-node feature table rather than indexing a
 # per-feature one; the deviation block below says what ours does instead.
+
+
+def compute_bins_and_add_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """`AddObliviousTreeImpl`: `_compute_bins_and_add_body` as a kernel."""
+    _compute_bins_and_add_body(
+        compressed_index, feature_offset, feature_shift, feature_mask, split_bin, take_equal,
+        depth_in, leaf_values, n_rows_in, cursor, dim_count_in, cursor_stride_in,
+    )
+
+
+def compute_bins_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`ComputeObliviousTreeBinsImpl`: `_compute_bins_body` as a kernel."""
+    _compute_bins_body(
+        compressed_index, feature_offset, feature_shift, feature_mask, split_bin, take_equal,
+        depth_in, n_rows_in, out_bins,
+    )
+
+
+def compute_bins_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    depth_word: MutPointer[Int32, MutAnyOrigin],
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Tree op TREE_OP_LEAF_BINS (lane t1-tree-builder-ops,
+    docs/plans/EXECUTOR_T1_TREE_OPS.md): `compute_bins_kernel` unchanged,
+    with the depth read from a device word (the gate walk's structure
+    record) and nothing written once word 0 of `gate` is set. Every thread
+    reads the same two words first, so the early return is block-uniform."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _compute_bins_body(
+        compressed_index, feature_offset, feature_shift, feature_mask,
+        split_bin, take_equal, depth_word.unsafe_load(0), n_rows_in, out_bins,
+    )
+
+
+def compute_bins_and_add_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    depth_word: MutPointer[Int32, MutAnyOrigin],
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+    root_adds: Int32,
+):
+    """Tree op TREE_OP_APPLY: `compute_bins_and_add_kernel` unchanged (the
+    same leaf index, the same one add per row and dimension), depth from a
+    device word, behind the gate: the cursor is carried state. A depth-0
+    tree adds nothing when `root_adds` is 0, as the held-out apply skips it
+    (`_apply_last_tree_to_test`); with `root_adds` 1 (the learn cursor,
+    lane t2-trees-on-executor) it adds its one leaf to every row, as the
+    learn cursor's estimator apply always did."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var depth = depth_word.unsafe_load(0)
+    if depth < Int32(0) or (depth == Int32(0) and root_adds == Int32(0)):
+        return
+    _compute_bins_and_add_body(
+        compressed_index, feature_offset, feature_shift, feature_mask,
+        split_bin, take_equal, depth, leaf_values, n_rows_in, cursor,
+        dim_count_in, cursor_stride_in,
+    )
 
 
 def compute_non_symmetric_decision_tree_bins_kernel(
@@ -459,119 +548,8 @@ def compute_non_symmetric_decision_tree_bins_kernel(
         i += stride
 
 
-def compute_bins_and_add_uniform_kernel(
-    compressed_index: MutPointer[UInt32, MutAnyOrigin],
-    feature_offset: MutPointer[UInt32, MutAnyOrigin],
-    feature_shift: MutPointer[UInt32, MutAnyOrigin],
-    feature_mask: MutPointer[UInt32, MutAnyOrigin],
-    split_bin: MutPointer[UInt32, MutAnyOrigin],
-    take_equal: MutPointer[UInt8, MutAnyOrigin],
-    depth_in: Int32,
-    tree_count_in: Int32,
-    leaf_values: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    cursor: MutPointer[Float32, MutAnyOrigin],
-    dim_count_in: Int32,
-    cursor_stride_in: Int32,
-):
-    """`IDN_APPLY_WIDE`: `tree_count` consecutive oblivious trees of ONE
-    depth, applied in their original order. Tree `t`'s level records sit at
-    `t * depth` in the five descriptor planes and its leaf values at
-    `t * (1 << depth) * dim_count`; the planes are read from global memory
-    (they are a few kilobytes and shared by every row). Each row performs
-    `compute_bins_and_add_kernel`'s adds in tree order through `acc`."""
-    var depth = Int(depth_in)
-    var tree_count = Int(tree_count_in)
-    var n_rows = Int(n_rows_in)
-    var dim = Int(block_idx.y)
-    var dim_count = Int(dim_count_in)
-    var plane = dim * Int(cursor_stride_in)
-    var leaves_per_tree = (1 << depth) * dim_count
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    while i < n_rows:
-        var acc = cursor.unsafe_load(plane + i)
-        for t in range(tree_count):
-            var level_base = t * depth
-            var leaf = 0
-            for level in range(depth):
-                var j = level_base + level
-                var off = Int(feature_offset.unsafe_load(j))
-                var shift = feature_shift.unsafe_load(j)
-                var mask = feature_mask.unsafe_load(j) << shift
-                var value = split_bin.unsafe_load(j) << shift
-                var feature_val = compressed_index.unsafe_load(off + i) & mask
-                var split: Bool
-                if take_equal.unsafe_load(j) != UInt8(0):
-                    split = feature_val == value
-                else:
-                    split = feature_val > value
-                if split:
-                    leaf += 1 << level
-            acc = acc + leaf_values.unsafe_load(
-                t * leaves_per_tree + leaf * dim_count + dim
-            )
-        cursor.unsafe_store(plane + i, acc)
-        i += stride
-
-
-def uniform_positive_depth(depths: List[Int]) -> Int:
-    """The one depth every tree shares when it is positive, else 0."""
-    if len(depths) == 0:
-        return 0
-    var d = depths[0]
-    if d < 1:
-        return 0
-    for t in range(1, len(depths)):  # small-loop(depths: trees): compares the per-tree depths, model metadata
-        if depths[t] != d:
-            return 0
-    return d
-
-
-def launch_oblivious_apply_wide(
-    ctx: DeviceContext,
-    mut cindex: DeviceBuffer[DType.uint32],
-    mut d_off: DeviceBuffer[DType.uint32],
-    mut d_shift: DeviceBuffer[DType.uint32],
-    mut d_mask: DeviceBuffer[DType.uint32],
-    mut d_bin: DeviceBuffer[DType.uint32],
-    mut d_eq: DeviceBuffer[DType.uint8],
-    mut d_vals: DeviceBuffer[DType.float32],
-    depth: Int,
-    n_trees: Int,
-    n_rows: Int,
-    mut cursor: DeviceBuffer[DType.float32],
-    approx_dim: Int,
-) raises:
-    """`IDN_APPLY_WIDE`'s launches: `n_trees` trees of one positive `depth`,
-    `APPLY_WIDE_TREES` per launch, back to back, no drain."""
-    var wide = (n_rows + 255) // 256
-    if wide > 1024:
-        wide = 1024
-    var t = 0
-    while t < n_trees:
-        var count = n_trees - t
-        if count > APPLY_WIDE_TREES:
-            count = APPLY_WIDE_TREES
-        var lvl = t * depth
-        var leaf = t * (1 << depth) * approx_dim
-        ctx.enqueue_function[compute_bins_and_add_uniform_kernel](
-            cindex.unsafe_ptr(),
-            d_off.unsafe_ptr() + lvl,
-            d_shift.unsafe_ptr() + lvl,
-            d_mask.unsafe_ptr() + lvl,
-            d_bin.unsafe_ptr() + lvl,
-            d_eq.unsafe_ptr() + lvl,
-            Int32(depth), Int32(count),
-            d_vals.unsafe_ptr() + leaf,
-            Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(approx_dim),
-            Int32(n_rows),
-            grid_dim=(wide, approx_dim, 1),
-            block_dim=(256, 1, 1),
-        )
-        t += count
+# (Sweep 2026-11-15: compute_bins_and_add_uniform_kernel, uniform_positive_depth and
+# launch_oblivious_apply_wide, reached only under the folded IDN_APPLY_WIDE, removed.)
 
 
 def launch_oblivious_apply_four(
@@ -641,6 +619,9 @@ def launch_oblivious_apply_four(
         t += count
 
 
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL, held only for a never-run Apple FAST card, rule g; its all-trees kernel compute_bins_and_add_all_kernel went with it; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at c55bcd3b80.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # ---------------------------------------------------------------------------
 # lane/apple-fast-sym-feat (2026-10-03): referenced ONLY under the FAST +
 # Apple guard `GBDT_PREDICT_PACKED` (`gbdt/resident_model.mojo`); IDENTICAL
@@ -724,6 +705,9 @@ def compute_bins_and_add_all_kernel(
             )
             j += Int(block_dim.x)
         barrier()
+        # TOMBSTONE: MOJOLEARN_AFT_P05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 4f447a43f3.
+        # Restore: git apply experiments/removed/MOJOLEARN_AFT_P05.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
         comptime if AFT_P05:
             # P05: a two-plane row tile shares every tree/split descriptor.
             # The second plane is guarded; every worker still hits both

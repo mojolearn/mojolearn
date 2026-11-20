@@ -108,9 +108,7 @@ def test_exact_verifier_controllers_may_use_reference_packages(tmp_path, name):
 
 
 @pytest.mark.parametrize('name,scope', [
-    ('mojolearn/_native_xcnn_bridge.py', 'connect'),
     ('mojolearn/importers/_native_reader_bridge.py', 'connect'),
-    ('mojolearn/resample.py', None),
 ])
 def test_native_metadata_import_guard_is_location_and_statement_scoped(tmp_path, name, scope):
     path = tmp_path / 'setup.py'
@@ -128,15 +126,19 @@ def test_native_metadata_import_guard_is_location_and_statement_scoped(tmp_path,
     assert audit.numpy_errors(path, name)
 
 
-def test_rng_setup_admits_only_exact_native_metadata_import(tmp_path):
+def test_former_import_time_numpy_setup_is_refused(tmp_path):
+    # The PCS RNG, the CNN owner and resample connect NumPy natively at call
+    # time; their former package-import setup imports are no longer admitted.
     path = tmp_path / 'rng.py'
     text = ('def _connect_pcs_rng():\n    try:\n'
             '        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64\n'
             '    except ImportError:\n        return\n')
     path.write_text(text)
-    assert not audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
-    path.write_text(text.replace('SFC64', 'default_rng'))
     assert audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py')
+    path.write_text('def connect():\n    try:\n        import numpy\n    except ImportError:\n        pass\n')
+    assert audit.numpy_errors(path, 'mojolearn/_native_xcnn_bridge.py')
+    path.write_text('try:\n    import numpy as _native_numpy_storage\nexcept ImportError:\n    pass\n')
+    assert audit.numpy_errors(path, 'mojolearn/resample.py')
 
 
 def test_compensated_sum_exception_cannot_admit_platform_transcendentals(tmp_path):
@@ -371,3 +373,25 @@ def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
     binary.write_bytes(binary.read_bytes() + b'changed')
     with pytest.raises(ValueError, match='complete GPU binding bytes'):
         audit.audit_tree(payload)
+
+
+@pytest.mark.parametrize('platform', ['linux', 'darwin'])
+def test_finalize_packs_the_sets_own_math_helper_on_every_packing_host(tmp_path, monkeypatch, platform):
+    # A Linux packer (the GitHub pack runner) rebuilt libMojolearnMath.so with its own `cc`, so the packed
+    # bytes were not the leg-built bytes LINUX_PAYLOAD records and release_reuse refused every B arm on that
+    # base (2026-11-19). The set's own helper is packed byte for byte wherever the wheel is finalized.
+    import zipfile
+    stage_module = sys.modules['stage']
+    def no_build(*args, **kwargs):
+        raise AssertionError('finalize rebuilt the set\'s own libMojolearnMath.so')
+    monkeypatch.setattr(stage_module, 'build', no_build)
+    monkeypatch.setattr(audit, 'audit_tree', lambda root, python_only=False: {})
+    monkeypatch.setattr(sys, 'platform', platform)
+    whl = tmp_path / 'mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl'
+    with zipfile.ZipFile(whl, 'w') as z:
+        z.writestr('mojolearn/.libs/libMojolearnMath.so', b'leg-built helper bytes')
+        z.writestr('mojolearn_core-0.0.0.dist-info/RECORD', '')
+    report = audit.finalize(whl)
+    with zipfile.ZipFile(whl) as z:
+        assert z.read('mojolearn/.libs/libMojolearnMath.so') == b'leg-built helper bytes'
+    assert 'supplied_helper_sha256' in report['runtime_changes'][0]['build']

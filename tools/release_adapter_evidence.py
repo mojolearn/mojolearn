@@ -2,8 +2,10 @@
 
 Used by tools/release_ledger_admission.py; never installs or runs anything. The
 actual producer is tools/adapter_wheel_smoke.py, launched by the release gate
-(tools/gate_smoke_box.py on NVIDIA/AMD, release.py gate-apple on the Mac). Each
-declared coverage ID needs its own complete checker record:
+(tools/gate_smoke_box.py on NVIDIA/AMD, release.py gate-apple on the Mac). The
+coverage IDs a requirement owes come from tools/release_requirements.json (the
+adapters-* rows); each needs its own complete checker record. The IDs this
+module can count:
 
   torch-inference    torch-compile phase:  torch-compile/adapter-results.json
   torch-training     torch-training phase: torch-training/training-results.json
@@ -21,7 +23,23 @@ import zipfile
 from release_ledger_admission import require, load, reference, checked
 
 TOOL = "tools/release_adapter_evidence.py"
-COVERAGE = ("torch-inference", "torch-training", "max-train", "max-train-resume")
+CATALOG = Path(__file__).resolve().with_name("release_requirements.json")
+
+
+def catalog_coverage(catalog=CATALOG):
+    """The adapters-<vendor> coverage IDs, read from the requirement catalog (the one source of truth).
+
+    A copy here drifted at 0.8.65 (four IDs against the catalog's three), so supports_requirement was
+    always False and every adapters-* row was refused. Every vendor row must declare the same list.
+    """
+    import json
+    rows = json.loads(Path(catalog).read_text())["requirements"]
+    lists = {tuple(row["coverage"]) for row in rows if str(row.get("id", "")).startswith("adapters-")}
+    require(len(lists) == 1, "adapters-* requirements declare different coverage lists")
+    return lists.pop()
+
+
+COVERAGE = catalog_coverage()
 RESULTS = {"torch-compile": "torch-compile/adapter-results.json",
            "torch-training": "torch-training/training-results.json",
            "max-training": "max-training/max-training-results.json"}
@@ -130,8 +148,11 @@ def _apple_facts(root, producer):
             and "macosx" in wheel.name, "adapter smoke receipt belongs to another macOS wheel")
     with zipfile.ZipFile(wheel) as archive:
         revision = archive.read("mojolearn/identity_columns/COMMIT").decode().strip()
-        version = next((n.split("-")[1] for n in archive.namelist()
-                        if n.endswith(".dist-info/METADATA") and n.startswith("mojolearn-")), None)
+        # the dist-info directory is mojolearn-<version>.dist-info: take the version between the two
+        # (a split on "-" returned "<version>.dist" and refused every macOS wheel, 0.8.63 and 0.8.64)
+        version = next((n.split("/", 1)[0][len("mojolearn-"):-len(".dist-info")] for n in archive.namelist()
+                        if n.endswith(".dist-info/METADATA") and n.startswith("mojolearn-")
+                        and n.count("/") == 1), None)
     require(HEX40.fullmatch(revision) and version and wheel.name.split("-")[1] == version,
             "macOS wheel lacks its packaged source commit/version")
     smoke = _smoke(directory, "apple", version)
@@ -170,6 +191,12 @@ def _check(requirement_id, wanted, facts, unit):
             "installed adapter wheels differ from the requirement artifacts")
     if "release_modes" in facts:
         require(configuration.get("release_modes") == facts["release_modes"], "release modes differ")
+    # The requirement's coverage IDs are the three the release adapter smoke exercises (torch-inference,
+    # torch-training, max-train). max-train-resume belongs to the full MAX campaign (tools/adapter_wheel_smoke.py
+    # --smoke runs no resume step) and is not a publication prerequisite (AGENTS.md, 2026-10-25); 0.8.64's
+    # catalog still listed it and the admission crashed on the smoke's counts.
+    owed = [name for name in wanted["coverage"] if name not in facts["counts"]]
+    require(not owed, "adapter smoke has no check record for required coverage: " + ", ".join(owed))
     rows = [dict(id=name, status="passed", exit_code=0, expected=facts["counts"][name],
                  completed=facts["counts"][name], failed=0, skipped=0) for name in wanted["coverage"]]
     return rows, list(facts["evidence"])

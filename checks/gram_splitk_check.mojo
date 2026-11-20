@@ -230,10 +230,10 @@ def _gram_one(ctx: DeviceContext, m: Int, k: Int, arm: Int) raises -> String:
         hpois.unsafe_ptr().unsafe_store(i, Float32(-123456.0))
     for i in range(m * m):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xt, src_ptr=hpois.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xt2, src_ptr=hpois.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, z, hz)
+    upload_host_into[DType.float32](ctx, xt, hpois)
+    upload_host_into[DType.float32](ctx, xt2, hpois)
     ctx.synchronize()
 
     if arm == ARM_SPLITK:
@@ -243,7 +243,7 @@ def _gram_one(ctx: DeviceContext, m: Int, k: Int, arm: Int) raises -> String:
     else:
         gemm_tn(ctx, z, x, xt, xt2, m, m, k)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     var rel_budget = _rel_budget_for(ctx, m, k, arm)
@@ -405,10 +405,10 @@ def _centered_one(
         )
     for i in range(m * m):
         hz1.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=xc, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z1, src_ptr=hz1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z2, src_ptr=hz1.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, xc, hx)
+    upload_host_into[DType.float32](ctx, z1, hz1)
+    upload_host_into[DType.float32](ctx, z2, hz1)
     ctx.synchronize()
 
     # mu from the REAL producer, on the UNCENTERED data -- exactly what
@@ -433,9 +433,9 @@ def _centered_one(
     else:
         gram_centered_splitk(ctx, z2, x, mu, m, k)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz1.unsafe_ptr(), src_buf=z1)
-    ctx.enqueue_copy(dst_ptr=hz2.unsafe_ptr(), src_buf=z2)
-    ctx.enqueue_copy(dst_ptr=hx_after.unsafe_ptr(), src_buf=x)
+    download_host_into[DType.float32](ctx, z1, hz1)
+    download_host_into[DType.float32](ctx, z2, hz2)
+    download_host_into[DType.float32](ctx, x, hx_after)
     ctx.synchronize()
 
     for i in range(m * m):
@@ -597,12 +597,12 @@ def check_gram_tf32_bound_separates() raises:
         )
     for i in range(m * m):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx_tf32.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx_tf32)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
     gemm_tn_splitk(ctx, z, x, m, k)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
 
     var worst = Float64(0.0)
@@ -856,7 +856,7 @@ def check_gram_dispatch() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. The four calls `decomposition/pca_main.mojo`
     # makes, in its order. Each builds its own `DeviceContext`.
     check_gram_splitk_oracle()
@@ -864,3 +864,22 @@ def main() raises:
     check_gram_tf32_bound_separates()
     check_gram_dispatch()
     check_gram_centered_fused()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gram_splitk_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -1,0 +1,85 @@
+diff --git a/core/forest_experiments.mojo b/core/forest_experiments.mojo
+index f09ec10959..fdbb4f1332 100644
+--- a/core/forest_experiments.mojo
++++ b/core/forest_experiments.mojo
+@@ -14,8 +14,7 @@ from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDE
+ # a no-op and B duplicated MOJOLEARN_FOREST_SEPARATE_NODES.
+ # TOMBSTONE: MOJOLEARN_TREES_T32_SHARED_ROWS (IDENTICAL opt-in shared-row staging, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a5502e594d.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T32_SHARED_ROWS.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_TREES_T33_COST_SCHEDULE (IDENTICAL opt-in cache-cost grove schedule, core/forest_inference.mojo; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 1cad80e23b.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch; record in docs/TOMBSTONES.md.
++comptime T33_COST_SCHEDULE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T33_COST_SCHEDULE"]()
+ # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in chunk fold version: FOREST_CHUNK, chunk_add, forest_chunk_sum; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+ #: Kept as the folded constant: core/forest_inference_model.mojo imports it.
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index 02299ddfa4..e3171a79f8 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -31,7 +31,7 @@ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
+-from core.forest_experiments import forest_chunk_finish
++from core.forest_experiments import (T33_COST_SCHEDULE, forest_chunk_finish)
+ 
+ # TOMBSTONE: MOJOLEARN_AFCL_T08 (never-run Apple FAST card: two SIMD groups per RF traversal workgroup) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 5bc2865240.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T08.patch; record in docs/TOMBSTONES.md.
+@@ -421,8 +421,15 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
+     # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in 32-tree chunk fold version, forest_chunk_kernel; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+     # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+     comptime if GROVE:
+-        # TOMBSTONE: MOJOLEARN_TREES_T33_COST_SCHEDULE (IDENTICAL opt-in rows-vs-lanes choice by cache cost; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 1cad80e23b.
+-        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T33_COST_SCHEDULE.patch; record in docs/TOMBSTONES.md.
++        comptime if T33_COST_SCHEDULE:
++            # Compare feature cache lines with live logical tree lanes. All
++            # neighboring shapes use this work/cache estimate, never a board row.
++            var feature_lines = (n_features * 4 + 63) // 64
++            if feature_lines <= max(1, min(trees, 32) // 8):
++                _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
++            else:
++                _launch_grove_lanes[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
++            return
+         comptime if FOREST_ROW_THREADS:
+             if n_features <= FOREST_ROW_THREADS_MAX_FEATURES:
+                 _launch_grove_rows[RF_INPUT, PACKED](ctx, doff, dcol, dthr, dleft, dleaf, dx, dout, n_rows, n_features, n_outputs, trees)
+@@ -1111,7 +1118,7 @@ def forest_labels_kernel[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool](
+             best_value = value
+     codes.unsafe_store(row, Int32(best))
+ 
+-# The bounded leaf preparation of the fused labels (T38).
++# T33: physical schedule of the bounded leaf preparation (fused labels).
+ # Arithmetic is solely in the following output fold. Shared tiles carry all
+ # feature bits and every required row is checked, including unused columns.
+ def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
+@@ -1133,11 +1140,30 @@ def forest_leaf_ids_grouped_kernel[RF_INPUT: Bool, PACKED: Bool](
+             tree += 32
+ 
+ 
++def forest_leaf_ids_row_kernel[RF_INPUT: Bool, PACKED: Bool](
++    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
++    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[Int32, MutAnyOrigin],
++    row_start: Int32, rows: Int32, features: Int32, trees: Int32, bad: MutPointer[Int32, MutAnyOrigin],
++):
++    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    if row < Int(rows):
++        for tree in range(Int(trees)):
++            ids.unsafe_store(row*Int(trees)+tree, Int32(reached_leaf[RF_INPUT, PACKED](offsets, columns, thresholds, left,
++                x, tree, Int(row_start)+row, Int(features))))
++
++
+ def _launch_leaf_ids[RF_INPUT: Bool, PACKED: Bool](ctx: DeviceContext,
+     mut offsets: DeviceBuffer[DType.int32], mut columns: DeviceBuffer[DType.int32],
+     mut thresholds: DeviceBuffer[DType.float32], mut left: DeviceBuffer[DType.int32],
+     mut x: DeviceBuffer[DType.float32], mut ids: DeviceBuffer[DType.int32], mut bad: DeviceBuffer[DType.int32],
+     first: Int, rows: Int, features: Int, trees: Int) raises:
++    comptime if T33_COST_SCHEDULE:
++        if (features*4+63)//64 <= max(1, min(trees, 32)//8):
++            ctx.enqueue_function[forest_leaf_ids_row_kernel[RF_INPUT, PACKED]](
++                offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
++                Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+127)//128, block_dim=128)
++            return
+     ctx.enqueue_function[forest_leaf_ids_grouped_kernel[RF_INPUT, PACKED]](
+         offsets.unsafe_ptr(), columns.unsafe_ptr(), thresholds.unsafe_ptr(), left.unsafe_ptr(), x.unsafe_ptr(), ids.unsafe_ptr(),
+         Int32(first), Int32(rows), Int32(features), Int32(trees), bad.unsafe_ptr(), grid_dim=(rows+3)//4, block_dim=128)

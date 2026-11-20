@@ -1,0 +1,27 @@
+diff --git b/x_cluster/minibatch_ptr.mojo a/x_cluster/minibatch_ptr.mojo
+index 02eff142a9..8003827b02 100644
+--- b/x_cluster/minibatch_ptr.mojo
++++ a/x_cluster/minibatch_ptr.mojo
+@@ -4,8 +4,8 @@
+ array (lane/apple-fast-mbkspeed, 2026-10-03). Switch: `MBK_ZEROCOPY`
+ below, DEFAULT on FAST+Apple since the M3 A/B (lane/apple-fast-mbkspeed
+ d844f180a, n=1: minibatch-kmeans istella 351 -> 256 ms, taxi 51.1 -> 48.5 ms,
+-silhouette identical .1182 / .138; the old `-D MOJOLEARN_MBK_ZEROCOPY` is
+-harmless); taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
++silhouette identical .1182 / .138); `-D MOJOLEARN_MBK_ZEROCOPY_OFF` turns it
++off (the old `-D MOJOLEARN_MBK_ZEROCOPY` is harmless); taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
+ 
+ Cause: the binding copies X into a FRESH host list (`read_f32`,
+ bindings/_mojolearn_x_cluster.mojo `call_binding`) before `ops.put` uploads
+@@ -41,10 +41,9 @@ from core.device_pool import pool_give, pool_take
+ from core.device_scan import device_first_nonfinite
+ from x_cluster.out import ClusterOut
+ 
+-# TOMBSTONE: MOJOLEARN_MBK_ZEROCOPY_OFF (old path: the copying FAST Apple MiniBatchKMeans fit; EXP:486 KEPT 51493c7a8, promoted on Apple M3 only; FAST is Apple only, so no other vendor A/B is owed) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 238261963f.
+-# Restore: git apply experiments/removed/MOJOLEARN_MBK_ZEROCOPY_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime MBK_ZEROCOPY = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and MINIBATCH_FAST_DEV
++    and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
+ )  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
+ 
+ #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only (default since

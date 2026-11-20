@@ -1,0 +1,36 @@
+diff --git a/gbdt/ctrs/kernel/ctr_calcers.mojo b/gbdt/ctrs/kernel/ctr_calcers.mojo
+index 962d409c52..1017ab887f 100644
+--- a/gbdt/ctrs/kernel/ctr_calcers.mojo
++++ b/gbdt/ctrs/kernel/ctr_calcers.mojo
+@@ -74,14 +74,12 @@ from gbdt.ctrs.index_wrapper import (
+ )
+ 
+ 
+-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G10
++from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G09, AFT_G10
+ 
+ # G09: eight numerator rows amortize target predicate/segment-sign setup;
+ # the exact scan and prefix exclusion run unchanged. No performance/quality
+ # evidence. Keep the separate frequency kernel's four-row tile unchanged.
+-# TOMBSTONE: MOJOLEARN_AFT_G09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 85224dc690.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G09.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_CTR_TARGET_DOCS = 4
++comptime AFT_CTR_TARGET_DOCS = 8 if AFT_G09 else 4
+ # G10: four coalesced independent lookups per lane amortize prior/map setup.
+ # Uncompiled/unverified/unmeasured; no category/prefix approximation.
+ comptime AFT_CTR_LOOKUP_DOCS = 4 if AFT_G10 else 1
+diff --git a/gbdt/gpu_data/apple_fast_trees_experiments.mojo b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+index 0237bfeb17..ae2b31fbae 100644
+--- a/gbdt/gpu_data/apple_fast_trees_experiments.mojo
++++ b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+@@ -55,9 +55,7 @@ comptime AFT_G07 = False
+ comptime AFT_G08 = False
+ # G09: eight-row numerator preparation tiles for exact ordered CTR sums.
+ # No performance/quality evidence; preserve segment signs and target predicates.
+-# TOMBSTONE: MOJOLEARN_AFT_G09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 70b5f7a860.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G09.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_G09 = False
++comptime AFT_G09 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G09"]()
+ # G10: four coalesced rows per weighted-frequency/mean-scatter CTR worker.
+ # No performance/quality evidence; preserve priors, index maps and prefix sums.
+ comptime AFT_G10 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G10"]()

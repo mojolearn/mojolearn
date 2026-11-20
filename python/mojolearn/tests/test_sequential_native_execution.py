@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Array, Sequential, _backend
-from mojolearn._cast_in import describe
+from mojolearn.tests._cast_in import describe
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -76,8 +76,8 @@ def build(width, loss="mse", *, shaped=False, patience=0, tolerance=0.0):
 
 
 def same_state(out, expected):
-    for actual, wanted in ((out.params_, expected["params"]), (out._opt_m, expected["moment"]),
-                           (out._opt_v, expected["variance"]), (out._fit_state, expected["state"])):
+    for actual, wanted in ((out.params_, expected["params"]), (out.optimizer_m_, expected["moment"]),
+                           (out.optimizer_v_, expected["variance"]), (out._fit_state, expected["state"])):
         assert actual.dtype == wanted.dtype
         assert actual.shape == wanted.shape
         assert actual.tobytes() == wanted.tobytes()

@@ -24,11 +24,14 @@ def _cross_vendor():
     """The package's cross_vendor, or None when no binding set is built: its
     fold is the base binding's fold_pair_f32 since de82c9a18 (no Python
     element loop), so it needs the package, not just the source file. Any
-    other import failure still fails the test."""
+    other import failure still fails the test. The tool-test runner puts no
+    package on the path (ModuleNotFoundError naming mojolearn itself): that
+    is the same "not built here" case."""
     try:
         from mojolearn import cross_vendor
     except ImportError as error:
-        if 'binary exists under' not in str(error):
+        missing = isinstance(error, ModuleNotFoundError) and error.name == 'mojolearn'
+        if not missing and 'binary exists under' not in str(error):
             raise
         return None
     return cross_vendor

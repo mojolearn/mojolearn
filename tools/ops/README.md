@@ -5,7 +5,9 @@ Live copies: ~/mojolearn-evidence/lq/lq and ~/mojolearn-ops/. compile_slot.sh no
 `lq` is retired for releases (docs/plans/POST_0863_RELEASE_TOOLING.md item 4): the NVIDIA/AMD release
 gate runs through `release_gate.py` (Mac side) and `release_gate_job.sh` (the box job), launched with
 `tools/nvidia_central.sh submit` or `tools/do_amd_steward.sh run` and persisted to R2. The `lq` copy here
-is historical.
+is historical. The post-publication published-nvidia and published-amd producers run the same way:
+`published_install.py` (Mac side; tools/release.py's published-<vendor> steps call it) and
+`published_install_job.sh` (the box job, which takes its vendor from nvidia-smi or rocm-smi).
 
 ## Incremental development builds
 
@@ -119,7 +121,7 @@ The originals stay in place; edit the repo copy first.
 |---|---|---|
 | `tools/compile_slot.sh` | `~/mojolearn-evidence/compile_slot.sh` | Mac compile semaphore: 4 machine-wide slots (mkdir locks under `~/mojolearn-evidence/compile-slots`), `nice -n 19`; refuses dedicated Apple `fast` builds unless `MOJOLEARN_INTEG_BUILD=1`. The origin path is now a shim that execs the main checkout's copy (falling back to `~/mojolearn-evidence/compile_slot.legacy-20261028.sh` until this lands on main). `tools/ops/compile_slot.sh` forwards to it. |
 | `tools/ops/archive_all_boxes.sh` | `~/mojolearn-evidence/archive_all_boxes.sh` | Archives every live rented box (from `devpods/*/state.env` and `do-amd-steward/state.env`) through `tools/box_archive.sh`, then prunes R2-confirmed local copies to 3 per box. Named in `tools/box_archive.sh`. Its launchd job is not installed at present. |
-| `tools/ops/lq` | `~/mojolearn-ops/lq` (refreshed 2026-10-28 from the 2026-10-24 live copy) | Box job queue CLI named in CLAUDE.md. `~/mojolearn-ops/lq` stays the live copy. |
+| `tools/ops/lq` | `~/mojolearn-ops/lq` (refreshed 2026-10-28 from the 2026-10-24 live copy) | Box job queue CLI named in AGENTS.md. `~/mojolearn-ops/lq` stays the live copy. |
 | `tools/apple_fast_ops/apple_watch.sh`, `tools/apple_fast_ops/m2_bq.sh` | `~/mojolearn-evidence/` | Already versioned, byte-identical; nothing copied. |
 
 ### Not adopted (one-off)

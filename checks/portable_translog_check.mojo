@@ -24,11 +24,11 @@ Three claims, three arms:
    mismatches means the compare is blind and the gate is decoration.
    Sabotage PASSES by detecting mismatches.
 
-Run: `pixi run check-portable-translog` (append `sabotage` for arm 3).
+Run: `pixi run check-native-gpu portable_translog_check` (append `sabotage` for arm 3).
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp, log
 from std.memory import bitcast
 from std.sys import argv
@@ -86,7 +86,7 @@ def _ulp_dist(a: Float32, b: Float32) -> Int64:
     return d
 
 
-def main() raises:
+def run_checks() raises:
     var sabotage = False
     for a in argv():
         if a == "sabotage":
@@ -172,8 +172,8 @@ def main() raises:
     # ---- arm 2: the device arm must reproduce the host bits ------------
     var d_xe = ctx.enqueue_create_buffer[DType.float32](N)
     var d_xl = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_xe, src_ptr=h_xe.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_xl, src_ptr=h_xl.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_xe, h_xe)
+    upload_host_into[DType.float32](ctx, d_xl, h_xl)
     var o_exp = ctx.enqueue_create_buffer[DType.float32](N)
     var o_log = ctx.enqueue_create_buffer[DType.float32](N)
 
@@ -187,8 +187,8 @@ def main() raises:
 
     var r_exp = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_log = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_exp.unsafe_ptr(), src_buf=o_exp)
-    ctx.enqueue_copy(dst_ptr=r_log.unsafe_ptr(), src_buf=o_log)
+    download_host_into[DType.float32](ctx, o_exp, r_exp)
+    download_host_into[DType.float32](ctx, o_log, r_log)
     ctx.synchronize()
 
     var qe = r_exp.unsafe_ptr()
@@ -232,3 +232,22 @@ def main() raises:
     _ = host_log.unsafe_ptr()
     _ = r_exp.unsafe_ptr()
     _ = r_log.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_translog_check", cpu=False, gpu=True, serial="", run=run_cases)

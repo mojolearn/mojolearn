@@ -19,7 +19,7 @@ import pytest
 
 import mojolearn as ml
 from mojolearn import _backend, ops
-from mojolearn.models.safetensors import write_safetensors
+from mojolearn._causal_lm_fixtures import write_safetensors
 
 
 def _has_entries():

@@ -1,8 +1,8 @@
 # lane/amd-step-time: does a kernel carrying the launch-bound decorator the
 # GEMM kernels now carry still compile for target "apple-m4"?
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
-from std.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu.host import get_gpu_target
+from max.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 
 

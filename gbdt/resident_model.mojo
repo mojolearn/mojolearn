@@ -85,10 +85,8 @@ build with it moves every infer and proba cell that goes through this
 door and nothing that does not; the identity gate's sabotage column is
 built with it.
 """
-from std.ffi import _Global
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
-from core.forest_experiments import C50_GB_PACKED
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
@@ -96,7 +94,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoGbdtContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoGbdtContextFast"
+comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV3"
 
 
 from checks.numerics import (
@@ -122,6 +120,11 @@ from gbdt.gpu_data.kernel.binarize import (
     pack_cindex_words_kernel,
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
+from gbdt.models.add_non_symmetric_tree_doc_parallel import (
+    IDN_NS_RESIDENT_PACK,
+    NsResidentPack,
+    ns_resident_apply,
+)
 from gbdt.models.kernel.resident_ctr import (
     ResidentCtrPlan,
     enqueue_resident_ctr_expand,
@@ -130,13 +133,10 @@ from gbdt.models.kernel.resident_ctr import (
 from gbdt.models.tensor_ctr_apply import TTensorCtrApplyTable
 from gbdt.apple_fast_classical import AFCL_PREDICT_BLOCK
 from gbdt.models.kernel.add_bin_values import (
-    IDN_APPLY_WIDE,
     PRED_ALL_CHUNK_LEVELS,
     compute_bins_and_add_all_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
-    launch_oblivious_apply_wide,
-    uniform_positive_depth,
 )
 from gbdt.gpu_data.sym_feat_switches import GBDT_PREDICT_PACKED
 from gbdt.models.model_text import load_model_text
@@ -150,6 +150,7 @@ from gbdt.models.kernel.resident_link import (
     resident_link_kernel,
     resident_stage_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
 #: `gbdt_resident_predict`'s modes. The first three are
@@ -186,6 +187,9 @@ comptime STAGE_MIN_ROWS_PER_TASK = 4096
 comptime PAIR_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
 
 
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL, held only for a never-run Apple FAST card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at c55bcd3b80.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 @fieldwise_init
 struct _PackedPredict(Movable):
     """lane/apple-fast-sym-feat (`GBDT_PREDICT_PACKED`): one call's packed
@@ -233,7 +237,9 @@ def _build_packed_predict(
         if len(tm.borders[f]) == 0:
             continue
         per_word[Int(layout.features[f].offset)].append(f)
-    var fits = nw > 0
+    # a layout always holds a column (`build_layout`); a model without a
+    # bordered feature is caught by `ne == 0` below
+    var fits = True
     var ne = 0
     # driver-loop: over the packed words
     for w in range(nw):
@@ -256,10 +262,7 @@ def _build_packed_predict(
     var run = 0
     # driver-loop: over the trees
     for t in range(n_trees):
-        # C50 counts a constant tree as one unit of leaf-load work, ensuring
-        # all-constant ensembles are bounded too. Real level bytes can only
-        # be smaller than this work bound, so the shared page always fits.
-        var work = max(1, depths[t]) if C50_GB_PACKED else depths[t]
+        var work = depths[t]
         if run > 0 and run + work > PRED_ALL_CHUNK_LEVELS:
             chunk_start.append(t)
             run = 0
@@ -353,6 +356,9 @@ struct ResidentGbdtModel(Movable):
     #: (`gbdt/models/kernel/resident_ctr.mojo`), built on the first predict
     #: of a model that needs it
     var ctr: Optional[ResidentCtrPlan]
+    #: lane fix-gbdt-prebinned-infer (`IDN_NS_RESIDENT_PACK`): a
+    #: Depthwise / Lossguide ensemble packed once, at the first predict
+    var ns_pack: Optional[NsResidentPack]
 
     def __init__(out self, text: String) raises:
         var tm = load_model_text(text)
@@ -547,10 +553,12 @@ struct ResidentGbdtModel(Movable):
         self.d_out_u64 = Optional[DeviceBuffer[DType.uint64]]()
         self.d_out_i64 = Optional[DeviceBuffer[DType.int64]]()
         self.ctr = Optional[ResidentCtrPlan]()
+        self.ns_pack = Optional[NsResidentPack]()
         self.ctx = ctx^
 
     def __deinit__(deinit self):
         # every buffer before the context it was created on (DEVIATION 1946)
+        _ = self.ns_pack^
         _ = self.ctr^
         _ = self.d_out_i64^
         _ = self.d_out_u64^
@@ -665,6 +673,21 @@ struct ResidentGbdtModel(Movable):
         `predict` itself."""
         ref ctx = self.ctx
         if not self.oblivious:
+            comptime if IDN_NS_RESIDENT_PACK:
+                # `predict`'s non-symmetric arm over the held pack: the same
+                # cursor seed, the same kernels in tree order, one drain;
+                # the per-call layout build, node staging, allocations and
+                # uploads are gone (`NsResidentPack`)
+                if not self.ns_pack:
+                    self.ns_pack = NsResidentPack(
+                        ctx, self.layout, self.tm.model.non_symmetric_models
+                    )
+                enqueue_fill(ctx, self.d_cursor.value(), Float32(self.tm.model.bias))
+                ns_resident_apply(
+                    ctx, self.ns_pack.value(), self.d_cindex.value(), n_rows,
+                    self.d_cursor.value(),
+                )
+                return
             predict(
                 self.tm.model, ctx, n_rows, self.tm.fold_counts,
                 self.d_cindex.value(), self.d_cursor.value(),
@@ -683,25 +706,8 @@ struct ResidentGbdtModel(Movable):
         var wide = (n_rows + AFCL_PREDICT_BLOCK - 1) // AFCL_PREDICT_BLOCK
         if wide > 1024:
             wide = 1024
-        comptime if C50_GB_PACKED:
-            # C50 GB: reuse the supported exact packed model metadata, but
-            # launch one bounded mixed-depth tree chunk at a time. The shared
-            # metadata byte capacity defines chunks, never board dimensions.
-            # Each cursor carries precisely the incumbent tree-order additions.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var pp = _build_packed_predict(ctx, self.tm, self.layout, self.approx_dim)
-            var trees = pp.d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + pp.tree_at
-            var nt = self.tm.model.size()
-            for chunk in range(pp.n_chunks):
-                ctx.enqueue_function[compute_bins_and_add_all_kernel](
-                    self.d_cindex.value().unsafe_ptr(), self.d_off.unsafe_ptr(), self.d_shift.unsafe_ptr(),
-                    self.d_mask.unsafe_ptr(), self.d_bin.unsafe_ptr(), self.d_eq.unsafe_ptr(), trees, trees+nt,
-                    trees+2*nt+1, trees+3*nt+1+chunk, Int32(1), self.d_vals.unsafe_ptr(), Int32(n_rows),
-                    self.d_cursor.value().unsafe_ptr(), Int32(self.approx_dim), Int32(n_rows),
-                    grid_dim=(wide, self.approx_dim, 1), block_dim=(256,1,1))
-            ctx.synchronize()
-            _ = pp^
-            return
+        # TOMBSTONE: MOJOLEARN_TREES_C50_GB_PACKED (DELETE-ARM, opt-in arm, no A/B recorded, rule a; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 64dbc2ee5f.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_GB_PACKED.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
         var lvl = 0
         var leaf = 0
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
@@ -725,23 +731,8 @@ struct ResidentGbdtModel(Movable):
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
             return
-        comptime if IDN_APPLY_WIDE:
-            # lane/fam2-gbdt F4 (candidate arm): one depth across the
-            # ensemble -> `APPLY_WIDE_TREES` trees per launch, same adds
-            var tree_depths = List[Int](capacity=self.tm.model.size())
-            for tw in range(self.tm.model.size()):  # small-loop(self.tm.model.size: trees): collects the per-tree depths, model metadata
-                tree_depths.append(
-                    self.tm.model.weak_models[tw].structure.get_depth()
-                )
-            var uniform = uniform_positive_depth(tree_depths)
-            if uniform > 0:
-                launch_oblivious_apply_wide(
-                    ctx, self.d_cindex.value(), self.d_off, self.d_shift,
-                    self.d_mask, self.d_bin, self.d_eq, self.d_vals,
-                    uniform, self.tm.model.size(), n_rows,
-                    self.d_cursor.value(), self.approx_dim,
-                )
-                return
+        # TOMBSTONE: MOJOLEARN_IDN_GBDT_APPLY_WIDE (DELETE-ARM, opt-in candidate arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at d0c26dae37.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_APPLY_WIDE.patch; record in docs/TOMBSTONES.md.
         var t = 0
         while t < self.tm.model.size():
             var count = min(4, self.tm.model.size() - t)
@@ -799,6 +790,9 @@ struct ResidentGbdtModel(Movable):
         for lvl in range(self.total_levels):
             ho.unsafe_store(lvl, self.off_base[lvl] * UInt32(n_rows))
         ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=ho)
+        # TOMBSTONE: MOJOLEARN_AFT_P05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 25c2da055f.
+        # Restore: git apply experiments/removed/MOJOLEARN_AFT_P05.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
         # P05: two rows per lane, same grid cap, no shape-specific route.
         var rows_per_block = AFCL_PREDICT_BLOCK * (2 if AFT_P05 else 1)
         var wide = (n_rows + rows_per_block - 1) // rows_per_block
@@ -1071,7 +1065,7 @@ struct ResidentGbdtModel(Movable):
         )
 
 
-struct GbdtModelRegistry(Movable):
+struct GbdtModelRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentGbdtModel]
     var next_id: Int
 
@@ -1080,14 +1074,7 @@ struct GbdtModelRegistry(Movable):
         self.next_id = 1
 
 
-comptime GBDT_MODEL_REGISTRY = _Global[
-    StorageType=GbdtModelRegistry,
-    name=(
-        "MojoGbdtResidentModelIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoGbdtResidentModelFast"
-    ),
-    init_fn=GbdtModelRegistry.__init__,
-]
+comptime GBDT_MODEL_REGISTRY = SharedSlot[GbdtModelRegistry, ( "MojolearnGbdtResidentModelIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnGbdtResidentModelFastV1" )]
 
 
 def gbdt_resident_prepare(text: String) raises -> Int:

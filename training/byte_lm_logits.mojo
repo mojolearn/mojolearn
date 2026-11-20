@@ -29,7 +29,7 @@ A PREDICTION UNTIL GATED. `tools/byte_lm_gpu_logits_sweep.py` compares these
 logits byte for byte with the CPU reference path on each GPU.
 """
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -56,7 +56,6 @@ from gemm.experiments.neural_switches import ROLE_HEAD
 
 # TOMBSTONE: MOJOLEARN_IDN_LM_LOGITS_LEAN (noise: lm-forward 0.925) deleted 2026-10-11 by 066722146; code recoverable at 066722146^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LOGITS_LEAN.patch
-from gemm.experiments.neural_streaming import NN16
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
@@ -169,13 +168,11 @@ struct ByteLogitsScratch(Movable):
             self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True))
         self.logits = _zeros(ctx, m * config.vocab_size)
         var head_cells = identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model)
-        comptime if NN16 and not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]():
-            # Every consumed GEMM scratch cell has an in-order producer. This
-            # removes the real cold owner clear; geometry/allocation bounds
-            # remain those of the selected dispatcher, on every shape/vendor.
-            self.head_ws = ctx.enqueue_create_buffer[DType.float32](head_cells)
-        else:
-            self.head_ws = _zeros(ctx, head_cells)
+        # TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN16 (uncleared head scratch, opt-in arm, no A/B recorded) and
+        # MOJOLEARN_IDN_NEURAL_GEMM_CONTROL (its control) folded 2026-11-15 by lane/expdel2-31-neural (non-owner
+        # site); code recoverable at 6ce75b82de.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.expdel2-31-neural.patch
+        self.head_ws = _zeros(ctx, head_cells)
         arena_end(self.arena_id)
 
     def __deinit__(deinit self):
@@ -308,26 +305,11 @@ def _logits_forward(
     return out^
 
 
-def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """The same refusal `_logits_forward` makes over its List, over the
-    caller's memory, eight lanes at a time: the exponent-all-ones test on
-    the bits (an infinity or a NaN), and the FIRST offending flat index in
-    the message, found by the scalar tail once a vector has one. No
-    floating-point arithmetic, so no bit is judged differently."""
-    comptime W = 8
-    var exp = SIMD[DType.uint32, W](0x7F800000)
-    var i = 0
-    var body = n - n % W
-    while i < body:
-        var bits = bitcast[DType.uint32, W](destination.unsafe_load[width=W](i)) & exp
-        var hit = bits.eq(exp).select(SIMD[DType.uint32, W](1), SIMD[DType.uint32, W](0))
-        if hit.reduce_or() != UInt32(0):
-            break
-        i += W
-    while i < n:
-        if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            _raise_nonfinite_logit(i)
-        i += 1
+# `_refuse_nonfinite_logits` (a serial eight-lane host scan of the logits
+# in the caller's memory) had no caller left: the refusal is folded into the
+# staged copy-out (core/staged_download.mojo), which names the same first
+# flat index through `_raise_nonfinite_logit`. Deleted by lane fx-host-scans,
+# 2026-11-18.
 
 
 def _raise_nonfinite_logit(i: Int) raises:
@@ -540,19 +522,17 @@ def _next_key(v: Float32) -> UInt32:
     return bits | UInt32(0x80000000)
 
 
-def byte_next_byte_kernel(
+@always_inline
+def _next_byte_row(
     picked_out: MutPointer[Int32, MutAnyOrigin],
     logits: MutPointer[Float32, MutAnyOrigin],
-    length_in: Int32,
-    vocab_in: Int32,
+    b: Int,
+    base: Int,
+    vocab: Int,
 ):
-    """One block per row `b`: the greedy next byte, the argmax over `vocab`
-    of the row's LAST position `logits[(b * length + length - 1) * vocab:]`,
-    ties to the LOWEST byte value. That is the host `argmax_rows_f32` rule
-    (strict `>` scanning from index 0), as an order-free reduction: the
-    larger key wins, an equal key keeps the smaller index, so every vendor
-    and every block size gives the same byte. Integer keys, no float
-    arithmetic: no bit can differ."""
+    """The block's argmax over `vocab` logits from `base`, written to
+    `picked_out[b]`: the shared reduction of `byte_next_byte_kernel` and
+    `byte_next_byte_rows_kernel` (moved here unchanged, 2026-11-07)."""
     var keys = stack_allocation[
         BYTE_NEXT_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
     ]()
@@ -560,10 +540,6 @@ def byte_next_byte_kernel(
         BYTE_NEXT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var tid = Int(thread_idx.x)
-    var b = Int(block_idx.x)
-    var length = Int(length_in)
-    var vocab = Int(vocab_in)
-    var base = (b * length + length - 1) * vocab
     var best_k = UInt32(0)
     var best_i = Int32(2147483647)
     var j = tid
@@ -595,10 +571,50 @@ def byte_next_byte_kernel(
         picked_out.unsafe_store(b, Int32(0) if r == Int32(2147483647) else r)
 
 
+def byte_next_byte_kernel(
+    picked_out: MutPointer[Int32, MutAnyOrigin],
+    logits: MutPointer[Float32, MutAnyOrigin],
+    length_in: Int32,
+    vocab_in: Int32,
+):
+    """One block per row `b`: the greedy next byte, the argmax over `vocab`
+    of the row's LAST position `logits[(b * length + length - 1) * vocab:]`,
+    ties to the LOWEST byte value. That is the host `argmax_rows_f32` rule
+    (strict `>` scanning from index 0), as an order-free reduction: the
+    larger key wins, an equal key keeps the smaller index, so every vendor
+    and every block size gives the same byte. Integer keys, no float
+    arithmetic: no bit can differ."""
+    var b = Int(block_idx.x)
+    var length = Int(length_in)
+    var vocab = Int(vocab_in)
+    _next_byte_row(picked_out, logits, b, (b * length + length - 1) * vocab, vocab)
+
+
+def byte_next_byte_rows_kernel(
+    picked_out: MutPointer[Int32, MutAnyOrigin],
+    logits: MutPointer[Float32, MutAnyOrigin],
+    last_rows: MutPointer[Int32, MutAnyOrigin],
+    length_in: Int32,
+    vocab_in: Int32,
+):
+    """`byte_next_byte_kernel` for a RAGGED batch (plan row N091): row `b`'s
+    greedy next byte is the argmax at its last REAL position
+    `last_rows[b]` (lengths[b] - 1, admitted in [0, length) on the host).
+    Causal attention: that position's logits do not depend on the padding
+    after it, so this is the byte the full logits' host argmax picked; the
+    same integer-key reduction, so no bit can differ."""
+    var b = Int(block_idx.x)
+    var length = Int(length_in)
+    var vocab = Int(vocab_in)
+    var last = Int(last_rows.unsafe_load(b))
+    _next_byte_row(picked_out, logits, b, (b * length + last) * vocab, vocab)
+
+
 def byte_next_bytes_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
                                   batch: Int, length: Int,
                                   mut scratch: Optional[ByteLogitsScratch],
-                                  destination: MutPointer[Int32, MutUntrackedOrigin]) raises:
+                                  destination: MutPointer[Int32, MutUntrackedOrigin],
+                                  last_rows: List[Int32]) raises:
     """cpu3-seq: `byte_logits_resident_into`'s forward and refusals, then the
     greedy next byte of every row on the device (`byte_next_byte_kernel`)
     and ONE download of `batch` int32 into `destination`. The logits never
@@ -606,6 +622,14 @@ def byte_next_bytes_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, input
     floats and ran the argmax on the host). Same failure convention."""
     var config = tr.config.copy()
     byte_logits_validate(inputs, batch, length, config)
+    # A ragged batch (plan row N091): `last_rows[b]` is row b's last real
+    # position, lengths[b] - 1; empty means every row ends at length - 1.
+    if len(last_rows) != 0:
+        if len(last_rows) != batch:
+            raise Error("byte LM next bytes: one last position per row")
+        for row in range(batch):  # small-loop(batch: one admitted position per row): checks the positions, no data
+            if last_rows[row] < 0 or Int(last_rows[row]) >= length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
     if not tr.healthy:
         raise Error("byte LM: session lost; restore a retained export")
     var rebuild = True
@@ -631,12 +655,23 @@ def byte_next_bytes_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, input
         if bad >= 0:
             _raise_nonfinite_logit(bad)
         var picked = ctx.enqueue_create_buffer[DType.int32](batch)
-        ctx.enqueue_function[byte_next_byte_kernel](
-            picked.unsafe_ptr(), sc.logits.unsafe_ptr(), Int32(length), Int32(vocab),
-            grid_dim=(batch, 1, 1), block_dim=(BYTE_NEXT_TPB, 1, 1),
-        )
-        ctx.enqueue_copy(dst_ptr=destination, src_buf=picked)
-        ctx.synchronize()
+        if len(last_rows) == 0:
+            ctx.enqueue_function[byte_next_byte_kernel](
+                picked.unsafe_ptr(), sc.logits.unsafe_ptr(), Int32(length), Int32(vocab),
+                grid_dim=(batch, 1, 1), block_dim=(BYTE_NEXT_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=destination, src_buf=picked)
+            ctx.synchronize()
+        else:
+            var last_dev = ctx.enqueue_create_buffer[DType.int32](batch)
+            ctx.enqueue_copy(dst_buf=last_dev, src_ptr=last_rows.unsafe_ptr())
+            ctx.enqueue_function[byte_next_byte_rows_kernel](
+                picked.unsafe_ptr(), sc.logits.unsafe_ptr(), last_dev.unsafe_ptr(), Int32(length), Int32(vocab),
+                grid_dim=(batch, 1, 1), block_dim=(BYTE_NEXT_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=destination, src_buf=picked)
+            ctx.synchronize()
+            _ = last_dev^
         _ = picked^
     except error:
         failed = True

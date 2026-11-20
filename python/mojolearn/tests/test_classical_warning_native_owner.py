@@ -163,6 +163,7 @@ def test_nested_list_target_retains_legacy_refusal_without_warning():
     assert not captured
 
 
+@pytest.mark.needs_installed_package
 @pytest.mark.parametrize("stream_kind", ["string", "file"])
 def test_native_default_warning_output_without_python_formatting(tmp_path, stream_kind):
     import json
@@ -204,5 +205,7 @@ print(json.dumps({"output": output, "audit": report.report()}))
     data = json.loads(result.stdout)
     assert not data["audit"]["python_frames"]
     assert f": DataConversionWarning: {MESSAGE}\n" in data["output"]
-    assert "  return method(self, *args, **kwargs)\n" in data["output"]
+    # The fixed warning location is `_mode._guard_cpu_training`'s last line, which
+    # 7de9157f08 reduced to `return method` (the per-fit wrapper call is gone).
+    assert "  return method\n" in data["output"]
     assert "mojolearn/_mode.py:" in data["output"]

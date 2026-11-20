@@ -2,11 +2,14 @@
 """Exact partial-pool reuse, overwritten queries/weights, budget/lifetime gates."""
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
+# TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.
 from kde.impl.chunk_workspace import KdeChunkWorkspace,KDE_CHUNK_POOL_ON
 from kde.impl.neighbors.kernel_density import kde_score_samples_chunk_lse_identical,kde_score_samples_chunk_lse_reused,DIST_L2_SQRT_UNEXPANDED,KDE_KERNEL_GAUSSIAN,KDE_KERNEL_TOPHAT,host_sum_weights
 from kde.checks.kde_check import _train_fixture,_query_fixture,_weight_fixture,_upload,_scores_by_path
 from kde.resident_fit import kde_fit_prepare,kde_score_samples_resident,kde_fit_release,KDE_FIT_REGISTRY
 from kde.impl.neighbors.kernel_density import metric_from_name,kernel_from_name
+from checks.native_tests.kit import download_host_into
 
 
 def check_resident() raises:
@@ -23,13 +26,6 @@ def check_resident() raises:
                 var expected=_scores_by_path(ctx,train,query,weights,True,nt,nq,dims,Float32(0.25),kernel_from_name(kernelname),metric_from_name(metricname),0,0,0)
                 for i in range(nq):
                     if bitcast[DType.uint32](output[i])!=bitcast[DType.uint32](expected[i]):raise Error("public retained KDE changed density bits")
-            comptime if KDE_CHUNK_POOL_ON:
-                var state=KDE_FIT_REGISTRY.get_or_create_ptr()
-                ref entry=state[].entries[handle]
-                if not entry.partial_pool:raise Error("public KDE pool not reached")
-                ref pool=entry.partial_pool.value()
-                if pool.source_key!=UInt64(handle) or pool.allocations!=4 or pool.reuse_calls!=1:raise Error("public KDE retained allocation/source reach failed")
-                if pool.retained_bytes()>pool.budget_bytes:raise Error("public KDE scratch bound exceeded")
             kde_fit_release(handle)
             print("I20_PUBLIC_POOL_PASS metric="+metricname+" kernel="+kernelname+" pool_enabled="+String(KDE_CHUNK_POOL_ON))
 
@@ -70,8 +66,8 @@ def run_checks() raises:
             kde_score_samples_chunk_lse_identical(ctx,train,query,weights,weighted,sumw,nt,nq,dims,Float32(0.25),kernel,DIST_L2_SQRT_UNEXPANDED,actual)
         if fixture==2 and admitted:raise Error("KDE oversized request retained beyond budget")
         if fixture!=2 and fixture!=3 and not admitted:raise Error("small KDE request did not reuse pool")
-        ctx.enqueue_copy(dst_ptr=eh.unsafe_ptr(),src_buf=expected)
-        ctx.enqueue_copy(dst_ptr=ah.unsafe_ptr(),src_buf=actual)
+        download_host_into[DType.float32](ctx, expected, eh)
+        download_host_into[DType.float32](ctx, actual, ah)
         ctx.synchronize()
         for i in range(nq):
             if bitcast[DType.uint32](eh[i])!=bitcast[DType.uint32](ah[i]):raise Error("retained partials changed KDE score bits or left poison")
@@ -101,7 +97,3 @@ def run_checks() raises:
     if not refused:raise Error("closed KDE pool reuse admitted")
     print("I20_POOL_LIFECYCLE_PASS")
     check_resident()
-
-
-def main() raises:
-    run_checks()

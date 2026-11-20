@@ -2,7 +2,7 @@
 # module registers these same compiled functions; no alternate implementation.
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.neural_block_public import neural_block_c
+from bindings.neural_block_public_door import neural_block_c
 
 
 @export

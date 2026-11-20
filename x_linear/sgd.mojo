@@ -39,7 +39,6 @@ from x_linear.ops import (
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
-from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.team import Team, team_at
@@ -420,41 +419,11 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
     return Float32(1) if v == i2f(c) else Float32(-1)
 
 
-#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX candidate, REVERTED the
-#: same day (OUTCOME below): opt-in `-D MOJOLEARN_SGD_PERC_AVG` (every vendor
-#: and the FAST host column); the final iterate is the default. The minibatch Perceptron (constant rate, the batch-SUM step,
-#: tol=None never settles on non-separable data) returns the MEAN of its
-#: epoch-end iterates from epoch max_iter // 2 on (weights and intercept),
-#: not the last one. Audit: perceptron taxi FAST accuracy 0.46538 vs
-#: scikit-learn 0.75052 (board-quality-audit-2026-10-04). The last iterate is
-#: a lottery: a float32 numpy model of this exact step on the board's taxi
-#: block (1M rows, batch 256, 20 epochs, standardized) gave last-iterate
-#: accuracy 0.543 / 0.774 / 0.668 / 0.757 over four shuffle seeds and the
-#: second-half epoch-end mean 0.771 / 0.769 / 0.774 (base rate 0.7596;
-#: ~/mojolearn-evidence/apple-fast-q-clf/sim_mb_perceptron.py). IDENTICAL
-#: is untouched. Applies to loss perceptron at learning_rate 'constant' only,
-#: never the one-class problem; a fit that stops before epoch max_iter // 2
-#: keeps its last iterate.
-#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
-#: rab5-perc): perceptron taxi accuracy 0.76219 (last iterate, A) -> 0.74097
-#: (averaged, B), worse; 1401.1 -> 1400.3 ms. REVERTED: the last iterate is
-#: the default again; averaging is opt-in `-D MOJOLEARN_SGD_PERC_AVG` (the old
-#: `-D MOJOLEARN_SGD_PERC_QOLD` is harmless).
-comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SGD_PERC_AVG"]()
-
-
-@always_inline
-def sgd_perc_avg_on(loss: Int, lr: Int, k: Int, max_iter: Int) -> Bool:
-    """Whether problem fits average their epoch-end iterates (SGD_PERC_AVG)."""
-    comptime if SGD_PERC_AVG:
-        return loss == L_PERCEPTRON and lr == LR_CONSTANT and k != 1 and max_iter >= 2
-    return False
-
-
-@always_inline
-def sgd_perc_avg_from(max_iter: Int) -> Int:
-    """The first 0-based epoch whose end iterate enters the mean."""
-    return max_iter // 2
+# TOMBSTONE: MOJOLEARN_SGD_PERC_AVG (loser, REVERTED rab5-perc) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 8b2e35c54e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch; record in docs/TOMBSTONES.md.
+# The SGD_PERC_QOLD marker below moved here from x_linear/sgd_avg.mojo (file deleted with SGD_PERC_AVG).
+# TOMBSTONE: MOJOLEARN_SGD_PERC_QOLD (DROPPED-quality) deleted 2026-10-04 by 170cbedc0; code recoverable at 170cbedc0^.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_QOLD.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -998,11 +967,13 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
 # float-float explicit step (sample weights, or no intercept), 2 the
 # implicit step. New bits for the one-class minibatch on every column
 # (host `sgd_mb_one` and every device driver take the same `ocm`).
-# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
-# the explicit single-word step. IDENTICAL only (FAST keeps its form).
+# IDENTICAL only (FAST keeps its form).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 561bfcf338.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_OC_MB_IMPLICIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 # fix-l1-linear (lane/neural-pass139's default): SGDOneClassSVM's default
@@ -1010,12 +981,12 @@ comptime SGD_OC_MB_IMPLICIT = (
 # step on it resolves to the minibatch at MB_BATCH_DEFAULT (4096, the mean
 # step, like SGDClassifier / SGDRegressor), which runs on the device grid
 # in parallel instead of the per-sample chain (one sample after the next).
-# Elsewhere (FAST, or the arm off) auto is the per-sample fit, the old
-# default. `-D MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF` (or MOJOLEARN_IDN_ALL_OFF)
-# restores the per-sample default. An explicit batch_size is always kept.
+# Elsewhere (FAST) auto is the per-sample fit, the old
+# default. An explicit batch_size is always kept.
+# TOMBSTONE: MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51028ea5eb.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_OC_IDN_MB_DEFAULT = (
     SGD_OC_MB_IMPLICIT
-    and not (is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
@@ -1037,10 +1008,10 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 # floor). 32 steps an epoch: enough updates for the n_iter_no_change window
 # (5 epochs = 160 steps) to see the loss settle, while a batch still
 # averages >= 1 row and the launch count of a small fit stays below
-# scikit-learn's per-sample n steps. `-D MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF`
-# restores the fixed `cap` (the A/B arm B). New bits for every fit with
+# scikit-learn's per-sample n steps. New bits for every fit with
 # n < SGD_AUTO_STEPS * cap on the host column and every device together.
-comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]()
+# TOMBSTONE: MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF (unmeasured old path, EXP:16 PENDING) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5d8783f621.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 # lane sgd-quality (2026-10-17): the step floor is 256 steps an epoch (was 32).
 # Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
 # rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
@@ -1060,10 +1031,11 @@ comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]
 # 2 * 256 rows trains on single rows (the
 # per-sample fit's steps); the cap binds from n >= 256 * cap (65,536 rows at
 # cap 256, 1,048,576 at cap 4096), a smooth rule with no shape threshold.
-# `-D MOJOLEARN_SGD_AUTO_STEPS_256_OFF` restores the 32-step floor (the A/B
-# arm B). New bits for 'auto' fits of every SGD-family estimator except
+# New bits for 'auto' fits of every SGD-family estimator except
 # SGDOneClassSVM, on the host column and every device together.
-comptime SGD_AUTO_STEPS = 32 if is_defined["MOJOLEARN_SGD_AUTO_STEPS_256_OFF"]() else 256
+# TOMBSTONE: MOJOLEARN_SGD_AUTO_STEPS_256_OFF (unmeasured old path, EXP:17 no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 735cd099cb.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_AUTO_STEPS_256_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SGD_AUTO_STEPS = 256
 
 
 @always_inline
@@ -1071,15 +1043,13 @@ def sgd_batch(ipb: Int, k: Int, n: Int) -> Int:
     """The minibatch size of a fit from ip[12]: positive is the caller's,
     0 the per-sample fit, -1 "auto" for SGDOneClassSVM (k == 1, see
     SGD_OC_IDN_MB_DEFAULT; the per-sample fit for any other k, as before),
-    and -cap (cap >= 2) the row-count default of the other SGD estimators
-    (SGD_ADAPTIVE_BATCH): n // SGD_AUTO_STEPS, at least 1, at most cap."""
+    and -cap (cap >= 2) the row-count default of the other SGD estimators:
+    n // SGD_AUTO_STEPS, at least 1, at most cap."""
     if ipb > 0:
         return ipb
     if ipb < -1 and k != 1:
         var cap = -ipb
-        comptime if SGD_ADAPTIVE_BATCH:
-            return max(1, min(cap, n // SGD_AUTO_STEPS))
-        return cap
+        return max(1, min(cap, n // SGD_AUTO_STEPS))
     if ipb < 0 and k == 1:
         comptime if SGD_OC_IDN_MB_DEFAULT:
             return MB_BATCH_DEFAULT
@@ -1244,11 +1214,10 @@ def sgd_mb_one(
     lr: Int, eta0: Float32, power_t: Float32, eps: Float32, fit_intercept: Bool, max_iter: Int, tol: Float32,
     nic: Int, do_shuffle: Bool, seed: UInt64, w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool, batch: Int, scratch: FP,
-    one_class: Bool = False, bsum: Bool = False, avg_from: Int = -1,
+    one_class: Bool = False, bsum: Bool = False,
 ) -> Int:
     """One problem on the host (the CPU binding's form of the device's batches).
-    scratch: dl batch | loss batch | partials (d + 2) * subs, then (avg_from
-    >= 0, SGD_PERC_AVG) d + 1 sums of the epoch-end weights and intercept.
+    scratch: dl batch | loss batch | partials (d + 2) * subs.
     Returns epochs, -1 on a non-finite weight."""
     # lane sgd-quality (2026-10-17): the penalty's l1_ratio as the device
     # drivers take it (x_linear/device.mojo `_sgd_mb_grid`: 0 for 'l2', 1 for
@@ -1265,10 +1234,6 @@ def sgd_mb_one(
     var sub = mb_sub_size(batch)
     var dblk = mb_dblk(batch)
     var nsub = mb_subs(batch, sub)
-    var acc = parts + (d + 2) * nsub
-    var navg = 0
-    if avg_from >= 0:
-        fill(acc, 0, d + 1, Float32(0))
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
     var bl = Float32(0)  # one-class (SGD_OC_MB_IMPLICIT): the intercept's low word
@@ -1348,12 +1313,6 @@ def sgd_mb_one(
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
             return -1
-        if avg_from >= 0 and epoch >= avg_from:
-            # SGD_PERC_AVG: this epoch's end iterate enters the mean
-            for j in range(d):
-                st(acc, j, fa(ld(acc, j), ld(w, woff + j)))
-            st(acc, d, fa(ld(acc, d), bias))
-            navg += 1
         if need_obj:
             var mean_obj = fa(fd(objective, i2f(n)), mb_penalty(w, woff, d, alpha, l1r, penalty))
             if one_class:
@@ -1370,13 +1329,6 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
-    if navg > 0:
-        # SGD_PERC_AVG: the mean of the epoch-end iterates replaces the last
-        var inv = fd(Float32(1), i2f(navg))
-        for j in range(d):
-            st(w, woff + j, fm(ld(acc, j), inv))
-        bias = fm(ld(acc, d), inv)
-        bl = Float32(0)  # the mean carries the intercept's high word only (merge 2026-10-05)
     # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`; bl is 0 with ocm 0)
     st(b, boff, (oc_offset(bias, bl) if ocm != 0 else fs(Float32(1), bias)) if one_class else bias)
     return epochs

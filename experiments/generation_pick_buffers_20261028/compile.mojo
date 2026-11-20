@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.causal_lm_public import causal_public_c
+from bindings.causal_lm_public_door import causal_public_c
 
 
 

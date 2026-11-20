@@ -35,7 +35,7 @@ class CandidateBuildTest(unittest.TestCase):
             with self.subTest(bad=bad),self.assertRaises(ValueError):b.explicit_defines([bad])
 
     def test_reserved_and_duplicate_flags_refused(self):
-        for bad in ['MOJOLEARN_IDN_ALL_OFF','MOJOLEARN_COLUMN_AMD','MOJOLEARN_NUMERIC_IDENTICAL']:
+        for bad in ['MOJOLEARN_COLUMN_AMD','MOJOLEARN_NUMERIC_IDENTICAL']:
             with self.assertRaises(ValueError):b.explicit_defines([bad])
         with self.assertRaises(ValueError):b.explicit_defines(['MOJOLEARN_IDN_TEST','MOJOLEARN_IDN_TEST=2'])
 

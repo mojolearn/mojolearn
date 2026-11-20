@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Array
+from mojolearn.tests import _mamba_block_reference
 from mojolearn._causal_lm_fixtures import (
     family_fixture, _llama_config, _llama_tensors, _write_checkpoint,
 )
@@ -42,7 +43,7 @@ def block_reference(model, ids, state=None):
     x = model._prims.embedding(model._embed, ids.reshape((b * l,)))
     x = x.reshape((b, l, model.d_model))
     for i, blk in enumerate(model.blocks):
-        x = blk._call(x, None if state is None else state.layers[i], step=False)
+        x = _mamba_block_reference.block_call(blk, x, None if state is None else state.layers[i], step=False)
     x = x.reshape((b * l, model.d_model))
     if model._norm is not None:
         x = model._prims.rms_norm(x, model._norm, model.norm_eps)
@@ -201,6 +202,10 @@ def test_tokenizer_native_unicode_specials_and_text_generation(tmp_path, monkeyp
         patch.setattr(tokenizer, "encode", forbidden)
         with pytest.raises(TypeError, match="state field was replaced by a descriptor"):
             model.generate_text("!", 3, tokenizer=tokenizer, eos_token_id=0)
+    # monkeypatch restores an instance attribute by setting the bound method
+    # back into the instance dictionary, which the owner keeps refusing; the
+    # class-level proof below takes a fresh tokenizer.
+    tokenizer = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2", normalizer="NFC")
     with monkeypatch.context() as patch:
         patch.setattr(Tokenizer, "encode", forbidden)
         patch.setattr(Tokenizer, "decode", forbidden)
@@ -234,18 +239,25 @@ def test_text_stream_retains_incomplete_utf8_across_reads_and_resume(tmp_path):
     assert short.read(1) == "�"
 
 
-def test_public_execution_methods_are_one_native_call():
-    import ast
-    from pathlib import Path
-    from mojolearn.models import causal_lm
-    tree = ast.parse(Path(causal_lm.__file__).read_text())
-    methods = {"forward", "step", "allocate_state", "reset_state", "generate", "stream",
-               "generate_text", "stream_text", "resume_generation", "read", "info", "state_dict", "parameters"}
-    checked = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in methods:
-            body = node.body[1:] if ast.get_docstring(node) else node.body
-            assert len(body) == 1 and isinstance(body[0], ast.Return), node.name
-            assert isinstance(body[0].value, ast.Call), node.name
-            checked.append(node.name)
-    assert set(checked) == methods
+@pytest.mark.parametrize("family", ["llama", "mamba", "mamba2"])
+def test_admitted_registry_plain_entries_pass_owner_capture(tmp_path, family):
+    """Every plain registry entry the admission writes passes the owner capture.
+
+    On the GPU the registry carries the route words ``resident``,
+    ``resident_vendor`` (Transformer) and ``program_read`` (every kind) beside
+    the compiled entries; ``generate`` captures the registry and must admit
+    them instead of refusing them as non-functions.
+    """
+    model = load_fixture(tmp_path, family)
+    entries = model._native_entries
+    assert isinstance(entries["entry_mode"], int) and isinstance(entries["entry_vendor"], int)
+    if DEVICE == "gpu":
+        assert entries["cpu"] is False
+        assert isinstance(entries["program_read"], int)
+        if model.kind == "transformer":
+            assert entries["resident"] is True
+            assert entries["resident_vendor"] == model._native_vendor
+    else:
+        assert entries["cpu"] is True
+    ids = np.array([[1, 2]], dtype="i4")
+    assert np.asarray(model.generate(ids, 2)).shape == (1, 4)

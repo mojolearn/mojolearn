@@ -21,10 +21,13 @@ tools/gate_smoke_box.py (gate-nvidia, gate-amd, ON the held box) and tools/relea
 
 MOJOLEARN_RELEASE_ADAPTERS=0 turns it off, the same switch that drops the adapters from the legs and the pack.
 """
+import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -32,8 +35,17 @@ HERE = Path(__file__).resolve().parent
 FRAMEWORKS = "torch,max"
 PHASES = ("torch-compile", "torch-training", "max-training")
 #: the device string each vendor's framework build uses (torch-ROCm keeps the cuda device type)
-DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps"}
+DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps",
+          # the CPU route (release.py --identity-on-wheels): the CPU-only install refuses the framework adapters
+          # by design (they run on a GPU; the CPU is for verification digests, CPU-only installs and inference),
+          # so the CPU checks job records that refusal as its expected outcome (cpu_refusal below)
+          "cpu": "cpu"}
 RECEIPT = "adapter-smoke.json"
+#: the smoke's bounds the gate passes (tools/adapter_wheel_smoke.py): each install-<framework> phase 2400 s (the
+#: torch download was killed at 900 s on a pod whose PyPI route ran at 160 kB/s, 0.8.66 run i, 2026-11-08), each
+#: compile/training phase 900 s
+INSTALL_SECONDS = 2400
+PHASE_SECONDS = 900
 
 
 def enabled(environ=None):
@@ -43,6 +55,52 @@ def enabled(environ=None):
 
 def venv_python(venv):
     return str(Path(venv) / "bin" / "python")
+
+
+#: the file beside the adapters unit that hands the torch entries their environment: {"python", "env"} where env
+#: holds only the variables that differ from the gate process's own (never a copy of the whole environment: the
+#: job's environment carries credentials, and this file is fetched home with the unit's results)
+TORCH_ENV = "torch-env.json"
+
+
+#: what tools/adapter_wheel_smoke.py adds to its own environment for every framework phase
+SMOKE_PHASE_ENV = {"PYTORCH_ENABLE_MPS_FALLBACK": "0"}
+
+
+def framework_env(vendor, venv, base=None):
+    """The environment a process that imports torch from VENV runs with (BASE, default os.environ, is copied, never
+    changed). On AMD, LD_LIBRARY_PATH is set to torch/lib FIRST, then the venv's */lib64 and exactly ONE ROCm lib
+    dir (2026-10-26, amd-torch-interop): whichever of torch and mojolearn is imported first, the MAX runtime's
+    bare-name dlopen then reaches torch's HIP/HSA copies instead of mapping second ones (python/mojolearn/
+    _rocm_runtime.py; two HSA runtimes in one process fail with "Failed to initialize HSA runtime"). torch/lib
+    exists only once torch is installed, so a caller that hands the environment on computes it after the
+    install. Other vendors: BASE unchanged."""
+    env = dict(os.environ if base is None else base)
+    if vendor == "amd":
+        site = str(Path(venv) / "lib" / "python*" / "site-packages")
+        env["LD_LIBRARY_PATH"] = ":".join(
+            sorted(glob.glob(site + "/torch/lib")) + sorted(glob.glob(site + "/*/lib64"))
+            + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
+    return env
+
+
+def env_overrides(env, base=None):
+    """The variables of ENV that differ from BASE (default os.environ); a removed variable maps to None."""
+    base = os.environ if base is None else base
+    changed = {k: v for k, v in env.items() if base.get(k) != v}
+    changed.update({k: None for k in base if k not in env})
+    return changed
+
+
+def apply_overrides(overrides, base=None):
+    """BASE (default os.environ) copied, with OVERRIDES applied (None removes the variable)."""
+    env = dict(os.environ if base is None else base)
+    for k, v in (overrides or {}).items():
+        if v is None:
+            env.pop(k, None)
+        else:
+            env[k] = str(v)
+    return env
 
 
 def venv_commands(base_python, venv, installs):
@@ -57,7 +115,8 @@ def smoke_command(vendor, venv, out, runner_python=None):
     if vendor not in DEVICE:
         raise ValueError("adapter gate: vendor is one of %s, not %r" % (", ".join(sorted(DEVICE)), vendor))
     return [str(runner_python or sys.executable), str(HERE / "adapter_wheel_smoke.py"), "--python", venv_python(venv),
-            "--out", str(out), "--device", DEVICE[vendor], "--install", FRAMEWORKS, "--require", FRAMEWORKS]
+            "--out", str(out), "--device", DEVICE[vendor], "--install", FRAMEWORKS, "--require", FRAMEWORKS,
+            "--seconds", str(PHASE_SECONDS), "--install-seconds", str(INSTALL_SECONDS)]
 
 
 def judge(receipt):
@@ -81,6 +140,20 @@ def judge(receipt):
     return status, True, "PASSED (%s)" % ", ".join(PHASES)
 
 
+#: the product's refusal of the framework adapters on a CPU-only install (MOJOLEARN_VENDOR=cpu)
+CPU_REFUSAL = ("the framework adapters run on a GPU", "MOJOLEARN_VENDOR=cpu")
+
+
+def cpu_refusal(record):
+    """The CPU column's adapters outcome: a run() RECORD on vendor cpu that failed only because the installed
+    wheel refused the adapters on a CPU-only install becomes status "refused-by-design", ok True, the
+    refusal text kept in why. Every other record (a pass, any other failure) is returned as is."""
+    why = str(record.get("why") or "")
+    if record.get("vendor") == "cpu" and not record.get("ok") and all(m in why for m in CPU_REFUSAL):
+        return dict(record, status="refused-by-design", ok=True, refused_why=why)
+    return record
+
+
 def summary(record):
     """The one-line form of a gate's adapters record."""
     if not record.get("enabled", True):
@@ -88,18 +161,45 @@ def summary(record):
     return "adapters=%s" % record.get("status")
 
 
-def run(vendor, base_python, out, installs, env=None, launch=None):
+def scratch_venv():
+    """A throwaway venv path under a new temp dir (the dir is the caller's to remove, `drop_venv`). The evidence
+    folder holds logs and records only: 2026-11-09, gate-apple/adapters/venv and published-apple/adapter-smoke/venv
+    left PyTorch inside the release's evidence."""
+    return Path(tempfile.mkdtemp(prefix="adapter-venv-")) / "venv"
+
+
+def drop_venv(venv):
+    """Remove a `scratch_venv` and its temp dir."""
+    if venv is not None:
+        shutil.rmtree(Path(venv).parent, ignore_errors=True)
+
+
+def run(vendor, base_python, out, installs, env=None, launch=None, venv=None):
     """Fresh venv, install, smoke, judge. Returns the record the gate keeps:
-    {enabled, status, ok, why, rc, report, frameworks, phases}. LAUNCH(argv, log) -> rc (tests swap it)."""
+    {enabled, status, ok, why, rc, report, frameworks, phases}. LAUNCH(argv, log) -> rc (tests swap it).
+    The venv is a `scratch_venv` removed before this returns, unless the caller passes VENV (a `scratch_venv` it
+    keeps for later steps and drops itself)."""
+    if venv is not None:
+        return _run(vendor, base_python, out, installs, env, launch, Path(venv))
+    venv = scratch_venv()
+    try:
+        return _run(vendor, base_python, out, installs, env, launch, venv)
+    finally:
+        drop_venv(venv)
+
+
+def _run(vendor, base_python, out, installs, env, launch, venv):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    venv = out / "venv"
 
     def default(argv, log):
         with open(log, "ab") as fh:
             return subprocess.run(argv, stdout=fh, stderr=subprocess.STDOUT, env=env).returncode
     launch = launch or default
-    rec = dict(enabled=True, vendor=vendor, device=DEVICE.get(vendor), report=str(out / RECEIPT))
+    # the smoke's interpreter and the variables it ran with beyond the caller's (env None: inherited unchanged):
+    # what tools/release_check_units.py hands the autograd torch entries
+    rec = dict(enabled=True, vendor=vendor, device=DEVICE.get(vendor), report=str(out / RECEIPT),
+               python=venv_python(venv), env_overrides=env_overrides(env) if env is not None else {})
     started = time.monotonic()
     for argv in venv_commands(base_python, venv, installs):
         rc = launch(argv, str(out / "adapter-venv.log"))

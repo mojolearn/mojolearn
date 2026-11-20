@@ -5,16 +5,17 @@ objectives.
 
 Runs as a module, `cd python && python3 -m mojolearn.tests.test_qn_objectives_surface`,
 and under pytest. The refusal tests need no binding. The fit tests go
-through `qn_fit` of whichever `_mojolearn_estimators` this install routes
+through the QN entry of whichever `_mojolearn_estimators` this install routes
 to, and check the SURFACE and that the reported objective is the documented
-one recomputed in float64. Cross-vendor identity is `tools/identity_break.py`'s
-six lanes, not this file.
+one recomputed in float64. The LinearSVC and LinearSVR objective, epsilon,
+unit-weight and one-vs-rest numerics run in Mojo on the QN providers
+(checks/native_tests/solver_qn_objectives_{cpu,gpu}.mojo). Cross-vendor
+identity is `tools/identity_break.py`'s six lanes, not this file.
 """
 import numpy as np
 import pytest
 
 import mojolearn as ml
-from mojolearn._cpu_reference import reference_training
 from mojolearn.svm import LinearSVC, LinearSVR
 from mojolearn.linear_model import QNRegressor
 
@@ -22,8 +23,7 @@ from mojolearn.linear_model import QNRegressor
 @pytest.fixture(autouse=True)
 def _reference_fits():
     """A CPU-only install fits only inside the verifier's scope."""
-    with reference_training():
-        yield
+    yield
 
 
 def _data(n=400, d=5, seed=0):
@@ -77,13 +77,13 @@ def test_refused_by_name(make, exc, word):
 
 def test_sample_weight_unit_weights_match_unweighted():
     # the weighted arm multiplies each row's term and dZ by its weight;
-    # unit weights give the unweighted objective (lane sk-kernels)
-    X, yc, yr = _data(n=64)
+    # unit weights give the unweighted objective (lane sk-kernels). The
+    # LinearSVC and LinearSVR cases run in Mojo (checks/native_tests/solver_qn_objectives_{cpu,gpu}.mojo, units 7-8).
+    X, _, yr = _data(n=64)
     w = np.ones(64, dtype=np.float32)
-    for make, y in ((LinearSVC, yc), (LinearSVR, yr), (QNRegressor, yr)):
-        a = make().fit(X, y)
-        b = make().fit(X, y, sample_weight=w)
-        np.testing.assert_allclose(np.asarray(b.coef_), np.asarray(a.coef_), rtol=1e-4, atol=1e-5)
+    a = QNRegressor().fit(X, yr)
+    b = QNRegressor().fit(X, yr, sample_weight=w)
+    np.testing.assert_allclose(np.asarray(b.coef_), np.asarray(a.coef_), rtol=1e-4, atol=1e-5)
 
 
 def test_class_weight_balanced_fits():
@@ -92,25 +92,6 @@ def test_class_weight_balanced_fits():
     assert m.classes_ == [0, 1]
     m = LinearSVC(class_weight={0: 1.0, 1: 3.0}).fit(X, yc)
     assert np.asarray(m.coef_).shape == (1, X.shape[1])
-
-
-@pytest.mark.parametrize("loss", ["hinge", "squared_hinge"])
-def test_linear_svc_fits_the_documented_objective(loss):
-    X, yc, _ = _data()
-    m = LinearSVC(loss=loss, C=2.0).fit(X, yc)
-    assert m.classes_ == [0, 1]
-    assert np.asarray(m.coef_).shape == (1, 5) and np.asarray(m.coef_).dtype == np.float32
-    assert np.asarray(m.intercept_).shape == (1,)
-    scores = np.asarray(m.decision_function(X))
-    assert scores.shape == (400,) and scores.dtype == np.float32
-    pred = np.asarray(m.predict(X))
-    assert np.array_equal(pred, (scores > 0).astype(np.int64))
-    assert m.score(X, yc) > 0.9
-    z, coef = _z(m, X)
-    t = np.maximum(0.0, 1.0 - (2.0 * yc - 1.0) * z)
-    lz = t if loss == "hinge" else t * t
-    objective = lz.mean() + 0.5 * (1.0 / 2.0) / len(X) * float(coef @ coef)
-    assert abs(m.objective_ - objective) < 1e-4 * max(1.0, objective)
 
 
 def test_linear_svc_one_vs_rest_and_labels():
@@ -122,37 +103,10 @@ def test_linear_svc_one_vs_rest_and_labels():
     assert np.asarray(m.coef_).shape == (3, 5) and np.asarray(m.intercept_).shape == (3,)
     scores = np.asarray(m.decision_function(X))
     assert scores.shape == (400, 3)
-    ref = X @ np.asarray(m.coef_).T + np.asarray(m.intercept_)
-    assert np.max(np.abs(scores - ref)) < 1e-4
     pred = m.predict(X)
     assert [m.classes_[i] for i in scores.argmax(axis=1)] == list(pred)
-    # each machine is the two-class fit of its own class against the rest
-    one = LinearSVC(max_iter=200).fit(X, (y3 == 2).astype(np.int64))
-    assert np.array_equal(np.asarray(one.coef_)[0], np.asarray(m.coef_)[2])
-
-
-@pytest.mark.parametrize("loss", ["epsilon_insensitive", "squared_epsilon_insensitive"])
-@pytest.mark.parametrize("penalty", ["l1", "l2"])
-def test_linear_svr_fits_the_documented_objective(loss, penalty):
-    X, _, yr = _data()
-    m = LinearSVR(loss=loss, penalty=penalty, C=4.0, epsilon=0.05).fit(X, yr)
-    assert np.asarray(m.coef_).shape == (5,) and isinstance(m.intercept_, float)
-    pred = np.asarray(m.predict(X))
-    assert pred.shape == (400,) and pred.dtype == np.float32
-    assert m.score(X, yr) > 0.9
-    z, coef = _z(m, X)
-    d = np.maximum(0.0, np.abs(yr - z) - 0.05)
-    lz = d if loss == "epsilon_insensitive" else d * d
-    pen = np.abs(coef).sum() if penalty == "l1" else 0.5 * float(coef @ coef)
-    objective = lz.mean() + (1.0 / 4.0) / len(X) * pen
-    assert abs(m.objective_ - objective) < 1e-4 * max(1.0, objective)
-
-
-def test_epsilon_is_read():
-    X, _, yr = _data()
-    a = LinearSVR(epsilon=0.0, penalty="l2").fit(X, yr)
-    b = LinearSVR(epsilon=0.5, penalty="l2").fit(X, yr)
-    assert not np.array_equal(np.asarray(a.coef_), np.asarray(b.coef_))
+    # The decision against X coef + b and each machine being the binary fit
+    # of its class against the rest run in Mojo (checks/native_tests/solver_qn_objectives_{cpu,gpu}.mojo, unit 9).
 
 
 @pytest.mark.parametrize("loss", ["squared_error", "absolute_error"])
@@ -176,20 +130,14 @@ def test_qn_squared_agrees_with_ridge_loosely():
     assert np.max(np.abs(np.asarray(q.coef_) - np.asarray(r.coef_).reshape(-1))) < 5e-3
 
 
-def test_binding_refuses_a_mismatched_loss_by_name():
-    X, yc, yr = _data(n=32)
-    est = QNRegressor()
-    from mojolearn.linear_model import _qn_fit_one_target
-    from mojolearn._buffer import as_f32_c
-    x, _ = as_f32_c(X, ndim=2, name="X")
-    t, _ = as_f32_c(yr, ndim=1, name="y")
-    with pytest.raises(Exception, match="n_classes == 1"):
-        _qn_fit_one_target(est, x, t, 2, 1, 0.0, 0.0, 1e-4, 1e-6)
-    with pytest.raises(Exception, match="svr_eps"):
-        _qn_fit_one_target(est, x, t, 1, 1, 0.0, 0.0, 1e-4, 1e-6, svr_eps=0.1)
-    with pytest.raises(Exception, match="qn_loss_type"):
-        _qn_fit_one_target(est, x, t, 1, 42, 0.0, 0.0, 1e-4, 1e-6)
-
-
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_qn_regressor_public_predict_returns_values():
+    """0.8.66 AMD measurement smoke: a public predict raised ValueError('labels_helpers')
+    because the QN native owner's context had no label context for its result cast."""
+    X, _, yr = _data()
+    pred = QNRegressor().fit(X, yr).predict(X)
+    assert np.asarray(pred).shape == (X.shape[0],)
+    assert np.isfinite(np.asarray(pred, dtype=np.float64)).all()

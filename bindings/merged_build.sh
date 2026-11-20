@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Build the MERGED bindings of one installed directory set: one native file per
 # group of bindings/merged_groups.json, exporting every member's PyInit, so the
 # code the members share (sequence ops, linalg, common kernels, the Mojo stdlib)
@@ -28,7 +29,8 @@
 #           The byte LM's -D MOJOLEARN_COLUMN_APPLE is what TARGET_COLUMN
 #           detects on a Metal target (checks/kernel_matrix.mojo), so it joins
 #           the default file unchanged.
-#   Linux   --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} on x86_64, and ONE
+#   Linux   --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} and the matching
+#           --target-features (MOJOLEARN_LINUX_CPU_FEATURES) on x86_64, and ONE
 #           explicit --target-accelerator from MOJOLEARN_GPU_ARCHS (required:
 #           the byte LM script already requires it, and the x_* scripts would
 #           otherwise read it from nvidia-smi while the rest default).
@@ -39,7 +41,7 @@
 # and MOJOLEARN_MOJO_BUILD_FLAGS apply to every member as they apply to every
 # per-binding script. Defines that only SOME per-binding scripts read
 # (MOJOLEARN_EXTRA_DEFINES, MOJOLEARN_BUILD_EXTRA_DEFINES on a GPU set,
-# MOJOLEARN_MAMBA_DEFINES, MOJOLEARN_ATTENTION_MEMORY_PROFILE, and build.sh's
+# MOJOLEARN_MAMBA_DEFINES, and build.sh's
 # MOJOLEARN_ALLOW_NO_GPU) are refused: one compile cannot scope them to one
 # member. Run that A/B with the per-binding scripts.
 #
@@ -49,7 +51,9 @@
 # this script removes the members' own files there before it installs the
 # merged one.
 #
-# No build gate runs here: the packers read back vendor, mode and kernels from
+# Before any compile, tools/python_free_dirs.sh (an import grep) refuses a tree
+# whose kernel directories or RUN modules import Python. No gate runs after the
+# compile here: the packers read back vendor, mode and kernels from
 # every member after the build, as they do for the per-binding files.
 set -eu
 
@@ -76,6 +80,14 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# Python-free kernel directories and RUN modules (2026-11-11): an import grep
+# (milliseconds), once, before any plan or compile. Refused builds print its list.
+if ! pyfree=$(bash tools/python_free_dirs.sh 2>&1); then
+    printf '%s\n' "$pyfree" >&2
+    echo "merged_build: REFUSED before any compile by tools/python_free_dirs.sh" >&2
+    exit 1
+fi
+
 PY=${MOJOLEARN_MERGED_PYTHON:-python3}   # build glue only: tools/merged_bindings.py
 MACOS_FLOOR="11.0"
 mode=${MOJOLEARN_NUMERIC_MODE:-identical}
@@ -91,10 +103,6 @@ refuse_env() {
 }
 [ -z "${MOJOLEARN_EXTRA_DEFINES:-}" ] || refuse_env MOJOLEARN_EXTRA_DEFINES "$MOJOLEARN_EXTRA_DEFINES"
 [ -z "${MOJOLEARN_MAMBA_DEFINES:-}" ] || refuse_env MOJOLEARN_MAMBA_DEFINES "$MOJOLEARN_MAMBA_DEFINES"
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) ;;
-    *) refuse_env MOJOLEARN_ATTENTION_MEMORY_PROFILE "$MOJOLEARN_ATTENTION_MEMORY_PROFILE" ;;
-esac
 [ "${MOJOLEARN_ALLOW_NO_GPU:-0}" != 1 ] || refuse_env MOJOLEARN_ALLOW_NO_GPU 1
 if [ "$kind" = gpu ] && [ -n "${MOJOLEARN_BUILD_EXTRA_DEFINES:-}" ]; then
     refuse_env MOJOLEARN_BUILD_EXTRA_DEFINES "$MOJOLEARN_BUILD_EXTRA_DEFINES"
@@ -121,8 +129,19 @@ if [ "$plat" = darwin ]; then
     link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $sdk"
     base_flags="--target-cpu apple-m1"
 else
+    # THE FEATURES ARE PINNED WITH THE CPU (2026-11-13, lane bincache-define-host-leg).
+    # `mojo build --help`: --target-features "Defaults to the host features",
+    # independently of --target-cpu. With only the CPU pinned, the same key
+    # (source, compiler, flags, env) compiled _mojolearn_native_x_host.so to
+    # three byte variants that follow the runner, not the leg: EPYC 7763 ->
+    # unstaged 3221fc47, EPYC 9V74 -> 7d24cd7b, EPYC 9V45 -> 52e0243c (candidate
+    # 4c2340386abc.svd1, legs/*/release-build/build/build-provenance.json). That
+    # is the "host bytes depend on the build machine" of docs/MODULAR_ASKS.md
+    # (0.8.63) and the reason linux-wait needed tools/release_host_composition.py.
+    # The list is exactly the x86-64-v3 level (v2 + AVX, AVX2, BMI1/2, F16C, FMA,
+    # LZCNT, MOVBE, XSAVE); set MOJOLEARN_LINUX_CPU_FEATURES with any other CPU.
     case "$(uname -m)" in
-        x86_64) base_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) base_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
         aarch64) base_flags="" ;;
         *) echo "merged_build: unsupported Linux host architecture" >&2; exit 2 ;;
     esac
@@ -163,9 +182,9 @@ if [ -n "$only" ]; then
     printf '%s\n' "$plan" | awk -v s="$only" '$1==s{f=1} END{exit !f}' \
         || { echo "merged_build: no group '$only' in the $dir plan:" >&2; printf '%s\n' "$plan" | awk '{print "  " $1}' >&2; exit 2; }
 fi
-if [ "$kind" = host ] && printf '%s\n' "$plan" | awk -v s="$only" '!s || $1==s' | grep -q '_mojolearn_tokenizer_host'; then
-    sh tokenizer/tools/gen_unicode_table.sh < /dev/null
-fi
+# Both Unicode tables can enter shared closures. Verify/generate independent
+# outputs before compilation, retaining the actual bytes and tracked inputs.
+"$PY" tools/generated_sources.py prepare --repo "$PWD" < /dev/null
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-merged-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -197,8 +216,13 @@ while read -r stem cls members; do
     else
         set -- pixi run mojo
     fi
+    # Compile jobs: bindings/compile_jobs.sh (sourced at the top), the one
+    # rule every build script uses: MOJOLEARN_COMPILE_JOBS when set (the
+    # laptop's compile slot exports 1), else every core this Linux host may
+    # use (rented cores are paid for whole; cgroup quota respected), 2 on macOS.
+    jobs="$MOJOLEARN_COMPILE_JOBS_RESOLVED"
     # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-    "$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+    "$@" build -j "$jobs" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
         $base_flags $class_flags $link_flags $mode_flags $column_flags $extra_flags \
         -I . -I bindings \
         "$root" -o "$tmpdir/$stem.so" < /dev/null

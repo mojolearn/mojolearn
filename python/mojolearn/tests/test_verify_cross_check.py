@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from mojolearn import _backend, _forest_host
+import mojolearn
 from mojolearn import _verify_all as va
 
 
@@ -20,7 +20,7 @@ def test_all_batches_cover_every_lane_and_fixture_and_propagate_failures(monkeyp
     lanes = [f'lane-{i}' for i in range(53)]
     fixtures = ['base', 'ties', 'wide']
     calls = []
-    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
+    monkeypatch.setattr(mojolearn, 'vendor', lambda: 'metal')
 
     def run(command, **kwargs):
         assert command[command.index('--cross-check') + 1] == 'default'  # no recursion
@@ -73,7 +73,6 @@ def test_cli_tiers_choose_all_fixtures_only_for_all(monkeypatch, capsys, scope, 
     harness = SimpleNamespace(FIXTURES=['base', 'wide'])
     monkeypatch.setattr(va, 'load_harness', lambda: harness)
     monkeypatch.setattr(va, 'cross_check_lanes', lambda h, s: (['ols'], ['ols'], {}))
-    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
 
     def result(lanes, fixtures):
         assert fixtures == expected
@@ -82,7 +81,7 @@ def test_cli_tiers_choose_all_fixtures_only_for_all(monkeypatch, capsys, scope, 
     monkeypatch.setattr(va, '_cross_check_batched', lambda lanes, fixtures, threads, log: result(lanes, fixtures))
     monkeypatch.setattr(va, 'cross_check', lambda h, ml, lanes, fixtures, log: result(lanes, fixtures))
     args = SimpleNamespace(json=True, cross_check=scope, lanes='', fixtures=requested, cpu_threads=1)
-    assert va._cmd_cross_check(args, None) == 0
+    assert va._cmd_cross_check(args, SimpleNamespace(vendor=lambda: 'metal')) == 0
     report = json.loads(capsys.readouterr().out)
     assert report['scope'] == ('custom' if requested else scope)
     assert report['available_fixtures'] == 2
@@ -91,11 +90,10 @@ def test_cli_tiers_choose_all_fixtures_only_for_all(monkeypatch, capsys, scope, 
 def test_missing_fixture_cannot_hide_behind_another_fixture_passing(monkeypatch, capsys):
     monkeypatch.setattr(va, 'load_harness', lambda: SimpleNamespace(FIXTURES=['base', 'wide']))
     monkeypatch.setattr(va, 'cross_check_lanes', lambda h, s: (['ols'], ['ols'], {}))
-    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
     result = va._cross_check_result('metal', ['ols'], ['base', 'wide'], cells(['ols'], ['base']), {})
     monkeypatch.setattr(va, '_cross_check_batched', lambda *a: result)
     args = SimpleNamespace(json=True, cross_check='all', lanes='', fixtures='', cpu_threads=1)
-    assert va._cmd_cross_check(args, None) == va.EXIT_CANNOT_RUN
+    assert va._cmd_cross_check(args, SimpleNamespace(vendor=lambda: 'metal')) == va.EXIT_CANNOT_RUN
     report = json.loads(capsys.readouterr().out)
     assert report['passed'] is False and len(report['missing']) == 2
 
@@ -120,13 +118,23 @@ def test_spectral_batch_uses_identical_fixture_input_on_both_devices(monkeypatch
         fixture=lambda fx: (affinity, None, None), heldout=lambda fx: affinity,
         _save_load=lambda est: ('save', None, '.model'), _public_est=lambda lane, est: est,
         _h=lambda *a: 'b' * 16, _probe_batch=batch, BATCH_ALONE=1,
-        Fit=lambda *a: SimpleNamespace())
-    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
-    monkeypatch.setattr(_forest_host, 'host_model', lambda p: host)
-    result = va.cross_check(harness, None, ['spectral-precomputed'], ['base'])
+        Fit=lambda *a: SimpleNamespace(), cpu_model=lambda: 'test processor')
+    # the two sides are described from the runtime report (the shared check
+    # module, _check_both.side_environment), once, after the cells ran
+    report = dict(version='0', numeric_mode='identical', vendor='metal', gpu_arch=None, code_kind='native',
+                  package_dir='/pkg', bindings={
+                      'mojolearn._mojolearn': dict(path='/pkg/metal/identical/_mojolearn.so', loaded=True),
+                      'mojolearn._host._mojolearn_core_host': dict(path='/pkg/host/_mojolearn_core_host.so', loaded=True)})
+    ml = SimpleNamespace(vendor=lambda: 'metal', host_model=lambda p: host, runtime_report=lambda: report)
+    result = va.cross_check(harness, ml, ['spectral-precomputed'], ['base'])
     if batch_error:
         assert result['passed'] is not True
         assert 'GPU batch failed' in result['skipped']['spectral-precomputed/base']
     else:
         assert seen == [est, host]
         assert result['passed'] is True and result['agree'] == 2
+        assert result['sides']['gpu']['binaries'] == dict(directories=['metal/identical'], loaded=1)
+        assert result['sides']['cpu']['binaries'] == dict(directories=['host'], loaded=1)
+        assert result['sides']['cpu']['device'] == 'test processor'
+        text = va.format_cross_check(dict(result, elapsed_s=0.0))
+        assert 'side      gpu' in text and 'side      cpu' in text and 'host (1 loaded)' in text

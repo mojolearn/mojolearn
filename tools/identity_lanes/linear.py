@@ -51,10 +51,14 @@ def _linear_pos_target(X, yr):
     z = (yr - yr.mean()) / (yr.std() + np.float32(1e-6))
     # NumPy dispatches exp to different Arm/x86 SIMD approximations: the
     # same 2,000 float32 arguments differed in 791 target words on M4/EPYC.
-    # Use the repository's shared portable polynomial, then round to f32.
-    from mojolearn import _portable_math
+    # Use decimal's software exp at 40 digits (the same digits on every host,
+    # no libm), rounded to binary64 and then to f32. Before 2026-11-15 this
+    # was the product's `_portable_math.exp` polynomial; both are within a
+    # binary64 ulp of e^x, far inside one f32 rounding step on [-2, 2].
+    import decimal
+    ctx = decimal.Context(prec=40, rounding=decimal.ROUND_HALF_EVEN)
     arg = np.clip(z, -4, 4) * np.float32(0.5)
-    return np.asarray([_portable_math.exp(float(v)) for v in arg], dtype=np.float32)
+    return np.asarray([float(ctx.exp(decimal.Decimal(float(v)))) for v in arg], dtype=np.float32)
 
 
 @lane("x-glm-poisson")
@@ -238,7 +242,7 @@ def _(ml, X, yc, yr, Xh=None):
     # partly outside the fitted range, so the out-of-bounds NaN word is hashed
     m = ml.IsotonicRegression(y_min=-2.0).fit(X[:3000, 3], yr[:3000])
     # increasing='auto' picks the direction from the sign of Spearman's rho
-    # (bindings/x_linear_native.mojo _xl_isotonic_fit -> x_linear_spearman_sign)
+    # (bindings/x_linear_native_door.mojo _xl_isotonic_fit -> x_linear_spearman_sign)
     ma = ml.IsotonicRegression(increasing="auto").fit(X[:3000, 3], yr[:3000])
     return _fit(dict(xt=_h(m.X_thresholds_), yt=_h(m.y_thresholds_), predict=_h(m.predict(X[:256, 3])),
                      auto=_h(np.asarray([int(bool(ma.increasing_))], dtype=np.int64), ma.y_thresholds_,

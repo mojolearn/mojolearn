@@ -1,0 +1,2388 @@
+diff --git a/bindings/_mojolearn_runtime_classical_host.mojo b/bindings/_mojolearn_runtime_classical_host.mojo
+index 4e9379cc78..9689f0c806 100644
+--- a/bindings/_mojolearn_runtime_classical_host.mojo
++++ b/bindings/_mojolearn_runtime_classical_host.mojo
+@@ -29,7 +29,7 @@ from bindings.classical_native import classical_c
+ from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
+ from bindings.host_archive_lifetime import host_archive_finalize_c
+ from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
+-from bindings.admitted_input import register_admitted_buffer_pin
++from bindings.linalg_ops_buffers import register_lin_buffer_pin
+ 
+ comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+ 
+@@ -128,7 +128,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
+         register_tree_shap_owner(module)
+         register_compiled_binding_snapshot(module)
+         register_scaler_snapshot(module)
+-        register_admitted_buffer_pin(module)
++        register_lin_buffer_pin(module)
+         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
+         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
+         module.def_function[runtime_classical_host_column_binding]("runtime_classical_host_column")
+diff --git a/bindings/admitted_input.mojo b/bindings/admitted_input.mojo
+index 02804a7200..c1cf52bce5 100644
+--- a/bindings/admitted_input.mojo
++++ b/bindings/admitted_input.mojo
+@@ -80,21 +80,6 @@ from bindings.admitted_registry import admitted_held_index, admitted_held_addres
+ from bindings.device_rows_door import door_is_device_rows, DoorRows
+ from core.admitted_input import admitted_check_f32, admitted_check_weights_f32
+ from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
+-from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+-from std.python._cpython import PyObjectPtr
+-from std.reflection import reflect
+-from std.sys.compile import is_defined
+-from bindings.py_balanced import py_setattr, py_get, py_setitem
+-from bindings.py_attr import py_attr
+-from bindings.py_type_registry import py_type_absent, py_type_attach
+-from bindings.native_buffer_owner import native_storage_allocate
+-from bindings.native_owner_lifetime import native_release_admit, _released_dtype
+-from bindings.native_numpy_metadata import native_numpy_dtype
+-from bindings.tensor_view import TensorView, shape_text, _contiguous, base_format, _array_code
+-from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+-from providers.python.array_metadata_pyapi import array_owner_once
+-from core.admitted_convert import admitted_convert
+-from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+ 
+ comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
+ 
+@@ -588,553 +573,3 @@ def admit_weights(source: PythonObject, rows: Int, context: PythonObject,
+     _ = value^
+     _ = view^
+     return out
+-
+-
+-# ---------------------------------------------------------------------------
+-# THE MULTI-DTYPE ADMISSION (lane a6-device-x-family-classical, 2026-11-09).
+-#
+-# The float32 path above is `admit_x`; this is the same path for an input the
+-# kernel reads in another Array dtype ("<f8", "<i8", "<i4", "<u2", "<i1",
+-# ... any Array typestr) or in the dtype it already has (metrics, linalg ops,
+-# low-bit weights, resampling):
+-#
+-#   AdmittedTyped(value, context, admitted)
+-#                     metadata once: a mojolearn Array read off its
+-#                     import-pinned slots (its storage owners retained), any
+-#                     other native exporter pinned through one
+-#                     PyObject_GetBuffer (AdmittedBorrowedBuffer) for the call
+-#   admitted_typed_c(var input, typestr, name, context, force_copy) -> AdmittedBuf
+-#                     borrow when the dtype and C order already match
+-#                     (zero copy; a foreign exporter becomes a pinned Array
+-#                     over the same memory), else ONE conversion into a new
+-#                     C-order store, split across the host's cores
+-#                     (core/admitted_convert.mojo: typed loads, Array.astype's
+-#                     rules, the first failing element's refusal)
+-#   admitted_typed_output(var input) -> AdmittedBuf
+-#                     a caller-supplied output, pinned for the call
+-#   admit_typed(source, typestr, ndim, name, context, admitted) -> AdmittedBuf
+-#                     the three above for one argument with the rank and
+-#                     empty refusals
+-#   admitted_snapshot(value, memo, context)
+-#                     an operation-private snapshot of a metric argument
+-#                     (containers walked, aliases kept, dtypes kept)
+-#
+-# These were LinAdmission / lin_admitted_c / lin_borrow_array / lin_convert /
+-# lin_typed / lin_admitted_output / lin_admit_exporter / LinBuf / LinBufferPin
+-# (bindings/linalg_ops_buffers.mojo) and metric_input_snapshot
+-# (providers/python/metric_input_snapshot_pyapi.mojo), moved here word for
+-# word: the same bytes reach every kernel (no bit change).
+-
+-
+-struct AdmittedBuf(Movable):
+-    """A C-ordered buffer the kernels read: the object that owns it (kept
+-    alive across the call), its address and its shape (and, for a borrowed
+-    exporter, the pin and storage owner that keep the address valid)."""
+-    var keep: PythonObject
+-    var addr: Int
+-    var shape: List[Int]
+-    var pin: Optional[AdmittedBorrowedBuffer]
+-    var owner: PythonObject
+-
+-    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int]):
+-        # Python's None is a runtime object. Constructing it in a default
+-        # argument asks the compiler to initialize CPython at compile time.
+-        self.keep = keep
+-        self.addr = addr
+-        self.shape = shape^
+-        self.pin = None
+-        self.owner = PythonObject(None)
+-
+-    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int],
+-                 var pin: Optional[AdmittedBorrowedBuffer], owner: PythonObject):
+-        self.keep = keep
+-        self.addr = addr
+-        self.shape = shape^
+-        self.pin = pin^
+-        self.owner = owner
+-
+-    def dim(self, k: Int) -> Int:
+-        return self.shape[k]
+-
+-    def rank(self) -> Int:
+-        return len(self.shape)
+-
+-    def count(self) -> Int:
+-        var n = 1
+-        for i in range(len(self.shape)):  # driver-loop: over shape words
+-            n *= self.shape[i]
+-        return n
+-
+-    def text(self) -> String:
+-        return shape_text(self.shape)
+-
+-
+-def admitted_shape_tuple(shape: List[Int]) raises -> PythonObject:
+-    """A shape as a Python tuple."""
+-    var dims = Python.list()
+-    for i in range(len(shape)):  # driver-loop: over shape words
+-        _ = py_call(dims.append, PythonObject(shape[i]))
+-    return py_call(native_loaded_module("builtins").tuple, dims)
+-
+-
+-def admitted_width(typestr: String) raises -> Int:
+-    """The item width of an Array typestr; refuses a dtype no Array holds."""
+-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
+-        return 4
+-    if typestr == "<f8" or typestr == "<i8":
+-        return 8
+-    if typestr == "<u2" or typestr == "<f2":
+-        return 2
+-    if typestr == "<i1" or typestr == "<u1":
+-        return 1
+-    raise Error("TypeError: " + typestr + " is not an Array dtype")
+-
+-
+-def admitted_zeros(shape: List[Int], typestr: String, context: PythonObject) raises -> AdmittedBuf:
+-    """A new zero-filled C-order Array of any Array dtype. Array stores have
+-    no uninitialised constructor (admitted_storage keeps the same zeros
+-    without NumPy), so the one fill pass stays."""
+-    var count = 1
+-    for i in range(len(shape)):  # driver-loop: over shape words
+-        count *= shape[i]
+-    _ = admitted_width(typestr)  # its refusal for a dtype no Array holds
+-    var out = classical_wrap_array(native_array_zeros(_store_code(typestr), count), admitted_shape_tuple(shape),
+-                                   typestr, "C", context)
+-    var addr = Int(py=classical_address(out))
+-    return AdmittedBuf(out, addr, shape.copy())
+-
+-
+-def _typed_kind(v: TensorView, mut item: Int) raises -> Int:
+-    """The CastIn element kind of a viewed buffer (its item size in `item`);
+-    -1 for a format no Array dtype holds."""
+-    item = v.itemsize
+-    if v.is_array:
+-        var t = v.dtype
+-        if t == "<f4" or t == "<f8" or t == "<f2":
+-            return CAST_KIND_FLOAT
+-        if t == "<i1" or t == "<i4" or t == "<i8":
+-            return CAST_KIND_SIGNED
+-        return CAST_KIND_UNSIGNED
+-    var code = base_format(v.fmt)
+-    if code == "f" or code == "d" or code == "e":
+-        return CAST_KIND_FLOAT
+-    if code == "?":
+-        return CAST_KIND_BOOL
+-    if code == "b" or code == "h" or code == "i" or code == "l" or code == "q" or code == "n":
+-        return CAST_KIND_SIGNED
+-    if code == "B" or code == "H" or code == "I" or code == "L" or code == "Q" or code == "N":
+-        return CAST_KIND_UNSIGNED
+-    return -1
+-
+-
+-def _typed_target(typestr: String, mut item: Int) raises -> Int:
+-    item = admitted_width(typestr)
+-    if typestr == "<f4" or typestr == "<f8" or typestr == "<f2":
+-        return CAST_KIND_FLOAT
+-    if typestr == "<i1" or typestr == "<i4" or typestr == "<i8":
+-        return CAST_KIND_SIGNED
+-    return CAST_KIND_UNSIGNED
+-
+-
+-def admitted_typed_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
+-    """Every element of the viewed buffer, in C order, into the C-order
+-    `typestr` store at `dst`: a copy of each contiguous run for the same
+-    dtype, else one conversion per element by Array.astype's rules. The
+-    elements are split into contiguous C-order ranges across the host's
+-    cores (core/admitted_convert.mojo; each element writes only its own cell,
+-    so no word depends on the split); a refusal is the one the first failing
+-    element in C order raises."""
+-    var item = 0
+-    var kind = _typed_kind(v, item)
+-    if kind < 0:
+-        raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
+-    var titem = 0
+-    var tkind = _typed_target(typestr, titem)
+-    var nd = len(v.shape)
+-    var strides = List[Int](length=max(nd, 1), fill=0)
+-    var shape = List[Int](length=max(nd, 1), fill=1)
+-    if v.has_strides:
+-        for k in range(nd):  # driver-loop: over stride words
+-            strides[k] = v.strides[k]
+-    else:
+-        var step = v.itemsize
+-        for k in range(nd - 1, -1, -1):  # driver-loop: over stride words
+-            strides[k] = step
+-            step *= v.shape[k]
+-    for k in range(nd):  # driver-loop: over shape words
+-        shape[k] = v.shape[k]
+-    admitted_convert(v.addr, shape, strides, v.count(), item, kind, titem, tkind, typestr, dst)
+-
+-
+-def admitted_typed_exporter(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+-    # Preserve the native mmap/array owners already connected by the classical
+-    # boundary. The context-free provider helper intentionally knows fewer
+-    # import-time owners; no Python protocol is used to broaden that set here.
+-    if depth > 64:
+-        raise Error("TypeError: native linalg buffer owner nesting exceeds its bound")
+-    var cls = py_type(value)
+-    var b = native_loaded_module("builtins")
+-    if cls is b.memoryview:
+-        var owner = value.obj
+-        if owner is not None:
+-            admitted_typed_exporter(owner, context, depth + 1)
+-        return
+-    var owners = context["buffer_owner_types"]
+-    for i in range(len(owners)):  # small-loop(import-connected native storage classes)
+-        if cls is owners[i]:
+-            return
+-    admit_native_buffer_exporter(value)
+-
+-
+-struct AdmittedTyped(Movable):
+-    # One operation-local metadata capture. Exact native exporter admission
+-    # precedes PyObject_GetBuffer; the pin lives through the numerical call.
+-    var keep: PythonObject
+-    var view: TensorView
+-    var pin: Optional[AdmittedBorrowedBuffer]
+-    var owner: PythonObject
+-
+-    def __init__(out self, value: PythonObject, context: PythonObject, admitted: Bool = False) raises:
+-        # `admitted`: the caller ran classical_admit_value over this very
+-        # value in the same call (admit_typed, row N237).
+-        if not admitted:
+-            classical_admit_value(value, context)
+-        self.keep = value
+-        var view = TensorView()
+-        self.pin = None
+-        self.owner = PythonObject(None)
+-        if classical_is_array(value, context):
+-            var slots = context["array_fields"]
+-            var cls = context["array_class"]
+-            # Keep the admitted storage owners themselves, so replacement of
+-            # the input Array's slots while native code releases the GIL cannot
+-            # free the captured address. Each slot is read once through its
+-            # import-pinned native descriptor rather than a mutable class hook.
+-            self.owner = array_owner_once(value, context)
+-            var address = py_call(slots["_addr"], value, cls)
+-            var item = py_call(slots["itemsize"], value, cls)
+-            var readonly = py_call(slots["_readonly"], value, cls)
+-            var dtype = py_call(slots["dtype"], value, cls)
+-            var shape = py_call(slots["shape"], value, cls)
+-            var strides = py_call(slots["strides"], value, cls)
+-            if (py_type(address) is not py_type(PythonObject(0)) or py_type(item) is not py_type(PythonObject(0))
+-                or py_type(readonly) is not py_type(PythonObject(True)) or py_type(dtype) is not py_type(PythonObject(""))
+-                or py_type(shape) is not py_type(Python.tuple()) or py_type(strides) is not py_type(Python.tuple())):
+-                raise Error("TypeError: Array metadata must contain native integer, boolean, string and tuple values")
+-            if len(shape) != len(strides):
+-                raise Error("TypeError: Array shape and stride ranks differ")
+-            view.is_array = True
+-            view.addr = Int(py=address)
+-            view.itemsize = Int(py=item)
+-            view.readonly = Bool(py=readonly)
+-            view.dtype = String(py=dtype)
+-            view.fmt = _array_code(view.dtype)
+-            for axis in range(len(shape)):  # small-loop(Array rank metadata admitted once)
+-                if py_type(shape[axis]) is not py_type(PythonObject(0)) or py_type(strides[axis]) is not py_type(PythonObject(0)):
+-                    raise Error("TypeError: Array dimensions and strides must be native integers")
+-                view.shape.append(Int(py=shape[axis]))
+-                view.strides.append(Int(py=strides[axis]))
+-            view.nbytes = view.count() * view.itemsize
+-            view.has_strides = True
+-            view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
+-            self.view = view^
+-            return
+-        admitted_typed_exporter(value, context)
+-        self.pin = AdmittedBorrowedBuffer(value)
+-        ref layout = self.pin.value().layout.value()
+-        view.addr = layout.address
+-        view.itemsize = layout.itemsize
+-        view.readonly = layout.readonly
+-        view.nbytes = layout.count * layout.itemsize
+-        view.shape = layout.shape.copy()
+-        view.strides = layout.strides.copy()
+-        view.has_strides = True
+-        view.fmt = self.pin.value().format
+-        if view.fmt.startswith(">") or view.fmt.startswith("!"):
+-            raise Error("TypeError: mojolearn: big-endian buffers are not supported")
+-        view.c_contig = _contiguous(view.shape, view.strides, True, layout.itemsize)
+-        for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
+-            if layout.suboffsets[axis] >= 0:
+-                raise Error("TypeError: mojolearn: indirect buffers are not supported")
+-
+-        self.view = view^
+-
+-
+-# One Python type per numeric mode: a process may load both builds of a binding.
+-comptime ADMITTED_PIN_MODE: Int = 1 if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]() else 0
+-
+-
+-struct AdmittedBufferPin[MODE: Int = ADMITTED_PIN_MODE](Movable, Writable):
+-    var pin: Optional[AdmittedBorrowedBuffer]
+-
+-    def __init__(out self, var pin: Optional[AdmittedBorrowedBuffer]):
+-        self.pin = pin^
+-
+-    def write_to(self, mut writer: Some[Writer]):
+-        writer.write("AdmittedBufferPin")
+-
+-    def write_repr_to(self, mut writer: Some[Writer]):
+-        self.write_to(writer)
+-
+-
+-def register_admitted_buffer_pin(mut module: PythonModuleBuilder) raises:
+-    # The module that owns the linalg public operations registers the pin
+-    # once; _typed_borrow_array allocates it with PythonObject(alloc=...).
+-    # Once per process: a second initialization of the owner attaches the
+-    # existing type object (bindings/py_type_registry.mojo).
+-    var existing = PythonObject(None)
+-    try:
+-        existing = lookup_py_type_object[AdmittedBufferPin[]]()
+-    except error:
+-        if not py_type_absent(error, String(reflect[AdmittedBufferPin[]].name())):
+-            raise error
+-        _ = module.add_type[AdmittedBufferPin[]]("_AdmittedBufferPin")
+-        return
+-    py_type_attach(module.module, "_AdmittedBufferPin", existing)
+-
+-
+-def _typed_borrow_array(var input: AdmittedTyped, typestr: String, context: PythonObject) raises -> AdmittedBuf:
+-    # Array.from_buffer's zero-copy ownership semantics from metadata already
+-    # admitted once. The public CPython raw-memory view does not ask the exporter
+-    # for its metadata again; the owned pin keeps storage valid for its lifetime.
+-    var v = input.view.copy()
+-    var array = native_storage_allocate(context["array_class"])
+-    var held_pin = Optional[AdmittedBorrowedBuffer]()
+-    swap(held_pin, input.pin)
+-    var pin = PythonObject(alloc=AdmittedBufferPin[](held_pin^))
+-    ref cpy = Python().cpython()
+-    var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
+-        MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr), v.nbytes,
+-        Int32(0x100 if v.readonly else 0x200))
+-    if not raw:
+-        raise cpy.unsafe_get_error()
+-    var bytes_view = PythonObject(from_owned=raw)
+-    var view = py_call(bytes_view.cast, _store_code(typestr))
+-    py_setattr(array, "_store", input.keep)
+-    py_setattr(array, "_base", PythonObject(None))
+-    py_setattr(array, "_pin", pin)
+-    py_setattr(array, "_mv", view)
+-    py_setattr(array, "_addr", PythonObject(v.addr))
+-    py_setattr(array, "_readonly", PythonObject(v.readonly))
+-    py_setattr(array, "shape", admitted_shape_tuple(v.shape))
+-    var canonical = List[Int](length=len(v.shape), fill=0)
+-    var step = v.itemsize
+-    for axis in range(len(v.shape) - 1, -1, -1):  # small-loop(known output view shape)
+-        canonical[axis] = step
+-        step *= v.shape[axis]
+-    py_setattr(array, "strides", admitted_shape_tuple(canonical))
+-    py_setattr(array, "dtype", PythonObject(typestr))
+-    py_setattr(array, "ndim", PythonObject(len(v.shape)))
+-    py_setattr(array, "size", PythonObject(v.count()))
+-    py_setattr(array, "itemsize", PythonObject(v.itemsize))
+-    py_setattr(array, "nbytes", PythonObject(v.nbytes))
+-    py_setattr(array, "order", PythonObject("C"))
+-    return AdmittedBuf(array, v.addr, v.shape.copy())
+-
+-
+-def admitted_typed_c(var input: AdmittedTyped, typestr: String, name: String,
+-                     context: PythonObject, force_copy: Bool = False) raises -> AdmittedBuf:
+-    """The admitted input as C-order `typestr` words: borrowed when it
+-    already is (an Array as it is, a foreign exporter as a pinned Array over
+-    the same memory), else one parallel conversion into a new Array.
+-    `force_copy`: always the converted copy (an operation-private input)."""
+-    var item = 0
+-    var kind = _typed_kind(input.view, item)
+-    var target_item = 0
+-    var target_kind = _typed_target(typestr, target_item)
+-    if not force_copy and kind == target_kind and item == target_item and input.view.c_contig:
+-        if input.view.is_array:
+-            var held_pin = Optional[AdmittedBorrowedBuffer]()
+-            swap(held_pin, input.pin)
+-            return AdmittedBuf(input.keep, input.view.addr, input.view.shape.copy(), held_pin^, input.owner)
+-        return _typed_borrow_array(input^, typestr, context)
+-    # Every cell is written by the conversion; Array stores have no
+-    # uninitialised constructor, so the destination is the zeroed Array.
+-    var result = admitted_zeros(input.view.shape, typestr, context)
+-    admitted_typed_convert(input.view, typestr, result.addr, name)
+-    _ = input^
+-    return result^
+-
+-
+-def admitted_typed_output(var input: AdmittedTyped) -> AdmittedBuf:
+-    # Preserve the supplied output object's identity while its native buffer
+-    # export and Array storage owners stay pinned through the complete call.
+-    var pin = Optional[AdmittedBorrowedBuffer]()
+-    swap(pin, input.pin)
+-    return AdmittedBuf(input.keep, input.view.addr, input.view.shape.copy(), pin^, input.owner)
+-
+-
+-def admit_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
+-                context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
+-    """One argument as C-order `typestr` words of rank `ndim` (-1: any
+-    rank), refused when empty."""
+-    # Native exporters cross the metadata boundary directly. Existing native
+-    # list/frame/Torch/scalar admission may first materialize supported values;
+-    # no arbitrary Python conversion or buffer hook is a fallback here.
+-    # `admitted`: the family door already ran classical_admit_value over this
+-    # very argument. Row N237: the value is admitted once here (or by the
+-    # door), not again by classical_view and AdmittedTyped; a view that
+-    # classical_view materialized is a new object and is still admitted.
+-    if not admitted:
+-        classical_admit_value(source, context)
+-    var prepared = source
+-    if not classical_is_array(source, context):
+-        try:
+-            admitted_typed_exporter(source, context)
+-        except:
+-            prepared = classical_view(source, context, name, True)
+-    var input = AdmittedTyped(prepared, context, prepared is source)
+-    var nd = len(input.view.shape)
+-    if ndim >= 0 and nd != ndim:
+-        var hint = String("")
+-        if ndim == 2 and nd < 2:
+-            hint = ". " + String(RESHAPE_HINT)
+-        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+-                    + "-D shape " + shape_text(input.view.shape) + hint)
+-    if input.view.count() == 0:
+-        var what = String("sample(s)")
+-        if nd == 2 and input.view.shape[0] != 0:
+-            what = "feature(s)"
+-        var shape = shape_text(input.view.shape)
+-        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
+-                    + " (shape=" + shape + ") while a minimum of 1 is required.")
+-    return admitted_typed_c(input^, typestr, name, context)
+-
+-
+-def admitted_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
+-    """Refuse a NumPy dtype whose storage cannot be copied as raw bytes
+-    without callbacks; NumPy's StringDType is admitted with its owners."""
+-    if _released_dtype(dtype, context, 0):
+-        return
+-    # NumPy's native variable-length StringDType cannot be copied as raw
+-    # allocator bytes. Accept its exact builtin class, with callback-free
+-    # missing-value/metadata owners, and use native scalar storage copying.
+-    var b = native_loaded_module("builtins")
+-    var string_dtype = PythonObject(None)
+-    try:
+-        string_dtype = py_call(native_numpy_dtype(context), "T")
+-    except:
+-        pass
+-    if string_dtype is None or py_type(dtype) is not py_type(string_dtype):
+-        raise Error("TypeError: resample requires a native NumPy dtype")
+-    native_release_admit(py_call(b.getattr, dtype, "na_object", PythonObject(None)), context)
+-    var metadata = dtype.metadata
+-    if metadata is not None:
+-        var pairs = py_call(b.list, metadata.items())
+-        for i in range(len(pairs)):  # driver-loop: native dtype metadata cannot retain callback owners
+-            native_release_admit(pairs[i][0], context)
+-            native_release_admit(pairs[i][1], context)
+-
+-
+-def _snapshot_flat_leaves(value: PythonObject, context: PythonObject) raises -> Bool:
+-    """True when no element of the list/tuple `value` is a container the
+-    snapshot copies (a mojolearn Array, array.array, ndarray, list, tuple or
+-    bytearray): the exact types are read once with `set(map(type, value))`
+-    and each distinct type is tested, not each element."""
+-    var b = native_loaded_module("builtins")
+-    var types = py_call(b.list, py_call(b.set, py_call(b.map, b.type, value)))
+-    var ndarray = py_get(context, "ndarray")
+-    var array_class = context["array_class"]
+-    var native_array = context["array_type"]
+-    for i in range(len(types)):  # driver-loop: over the distinct exact element types (a handful)
+-        var cls = types[i]
+-        if (cls is array_class or cls is native_array or cls is ndarray or cls is b.list
+-                or cls is b.tuple or cls is b.bytearray):
+-            return False
+-    return True
+-
+-
+-def _snapshot_array_alias(value: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """A private Array sharing `value`'s storage: every slot (storage owners,
+-    address and metadata) is read once through the import-pinned native slot
+-    descriptors and written to a fresh Array of the connected class. The GIL
+-    is held throughout, so the slots form one consistent capture."""
+-    var cls = context["array_class"]
+-    var fields = context["array_fields"]
+-    var array_alias = native_storage_allocate(cls)
+-    var names = py_call(native_loaded_module("builtins").list, fields)
+-    for i in range(len(names)):  # driver-loop: over the fixed Array slot names
+-        var name = names[i]
+-        py_setattr(array_alias, String(py=name), py_call(fields[name], value, cls))
+-    return array_alias
+-
+-
+-def admitted_snapshot(value: PythonObject, memo: PythonObject,
+-                      context: PythonObject, depth: Int = 0) raises -> PythonObject:
+-    """An operation-private snapshot of a metric argument: an Array through
+-    AdmittedTyped (a C-order one aliased with its storage owners retained, a
+-    strided one copied in its own dtype), array.array / bytearray / ndarray
+-    copied or viewed natively, containers walked with their aliases (`memo`)
+-    and scalar leaf dtypes kept."""
+-    if depth > 64:
+-        raise Error("TypeError: metric input nesting exceeds the supported depth")
+-    var b = native_loaded_module("builtins")
+-    var cls = py_type(value)
+-    var array = classical_is_array(value, context)
+-    var ndarray = py_get(context, "ndarray")
+-    var native_array = cls is context["array_type"]
+-    if not array and not native_array and cls is not ndarray and cls is not b.list and cls is not b.tuple and cls is not b.bytearray:
+-        # Exact scalar leaves retain their dtype inside containers. Pandas and
+-        # Torch retain their existing native materialization semantics.
+-        return value
+-    var key = py_call(b.id, value)
+-    var known = py_get(memo, key)
+-    if known is not None:
+-        return known
+-    var result = PythonObject(None)
+-    if array:
+-        var input = AdmittedTyped(value, context)
+-        if input.view.c_contig:
+-            # Metrics only read their inputs. A private Array that shares the
+-            # admitted storage owners freezes the metadata (a caller replacing
+-            # its slots cannot change what later readers see, and the owners
+-            # keep the address alive); the data itself is not copied.
+-            _ = input^
+-            result = _snapshot_array_alias(value, context)
+-        else:
+-            var dtype = input.view.dtype
+-            # Copy the same dtype, with the original pin/slot owners retained until
+-            # copying finishes. Later readers see this private Array's metadata.
+-            var output = admitted_typed_c(input^, dtype, "metric input", context, True)
+-            result = output.keep
+-            _ = output^
+-    elif native_array:
+-        # Exact array.array construction preserves the native typecode and
+-        # copies its C storage without caller iteration/conversion hooks.
+-        result = py_call(native_loaded_module("array").array, value.typecode, value)
+-    elif cls is b.bytearray:
+-        result = py_call(b.bytearray, value)
+-    elif cls is ndarray:
+-        # Exact native ndarray.view captures the caller's metadata once. C
+-        # ndarray.copy only copies storage/references in the same dtype; no
+-        # NumPy computation, cast, __array__, or user __copy__ hook runs.
+-        var view = py_call(py_attr(ndarray, "view"), value)
+-        var dtype = view.dtype
+-        admitted_dtype_admit(dtype, context)
+-        var flags = view.flags
+-        if (not Bool(py=dtype.hasobject)
+-                and (Bool(py=flags.c_contiguous) or Bool(py=flags.f_contiguous))):
+-            # Metrics only read their inputs (scikit-learn takes no snapshot).
+-            # The private view fixes shape/strides/dtype once and holds the
+-            # base storage alive; a concurrent writer can change values but
+-            # never the memory the kernel reads, so no data copy is needed.
+-            result = view
+-        else:
+-            result = py_call(py_attr(ndarray, "copy"), view, order="K")
+-            if Bool(py=dtype.hasobject):
+-                # A caller may replace its object cells while a kernel runs. The
+-                # private snapshot must never become the final callback owner.
+-                native_release_admit(result, context)
+-        _ = view^
+-    elif _snapshot_flat_leaves(value, context):
+-        # Every element is a leaf, which the walk below returns unchanged and
+-        # never memoizes: one C-level copy of the container is the same
+-        # snapshot, without a recursive call per element.
+-        result = py_call(b.tuple, value) if cls is b.tuple else py_call(b.list, value)
+-    else:
+-        var items = Python.list()
+-        for i in range(len(value)):  # driver-loop: stable nested native metric containers, preserving scalar leaf dtypes
+-            py_call(items.append, admitted_snapshot(value[i], memo, context, depth + 1))
+-        result = py_call(b.tuple, items) if cls is b.tuple else items
+-    py_setitem(memo, key, result)
+-    return result
+diff --git a/bindings/linalg_ops_buffers.mojo b/bindings/linalg_ops_buffers.mojo
+index 20d09c3c36..fe49c321e9 100644
+--- a/bindings/linalg_ops_buffers.mojo
++++ b/bindings/linalg_ops_buffers.mojo
+@@ -1,23 +1,80 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Buffer readings of the native linalg owner (bindings/linalg_ops_native.mojo):
+-# `bool(value)` and `dtype_name`'s refusal name. The admission itself (the
+-# metadata capture, the zero-copy borrow, the parallel conversion by
+-# Array.astype's rules, the zero-filled Arrays and the shape tuples) is the one
+-# multi-dtype admission path, bindings/admitted_input.mojo (`AdmittedTyped`,
+-# `admitted_typed_c`, `admit_typed`, `admitted_typed_output`, `admitted_zeros`,
+-# `AdmittedBuf`).
+-from std.python import PythonObject
+-from bindings.py_balanced import py_call
++# `_bufcheck.probe`'s facts and `dtype_name`'s refusal name, `_buffer.empty`'s
++# zero-filled Arrays of any public dtype, and `_buffer.as_*_c`'s layout copy or
++# element conversion (Array.astype's rules: float to float32 round to nearest
++# even, integers range checked, float to integer truncated toward zero), so the
++# kernels read the same element values the Python shells handed them.
++from std.math import isinf
++from std.memory import bitcast, memcpy
++from std.python import Python, PythonObject
++from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
++from std.reflection import reflect
++from bindings.py_type_registry import py_type_absent, py_type_attach
++from std.sys.compile import is_defined
++from std.python._cpython import PyObjectPtr
++from bindings.py_balanced import py_call, py_setattr, py_type
+ from bindings.native_loaded_module import native_loaded_module
+-from bindings.tensor_view import TensorView, base_format, _format_name, _typestr_name
++from bindings.classical_validate import classical_view, RESHAPE_HINT
++from bindings.native_buffer_owner import native_storage_allocate
++from bindings.native_array_storage import native_array_zeros
++from core.admitted_convert import admitted_convert
++from bindings.classical_pandas import classical_admit_value
++from bindings.classical_arrays import classical_is_array
++from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
++from providers.python.array_metadata_pyapi import array_owner_once
++from bindings.classical_arrays import classical_wrap_array, _store_code, classical_address
++from bindings.family_common import family_isinstance, family_view
++from bindings.optimizer_public_door import (
++    TensorView, _get_buffer, _release_buffer, _contiguous, base_format, _format_name, _typestr_name,
++    _array_code, shape_text,
++)
++from core.cast_in import cast_f32_bits, f16_to_f32_bits, CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+ 
+-# TOMBSTONE: LinAdmission, LinBuf, LinBufferPin, register_lin_buffer_pin,
+-# lin_admitted_c, lin_borrow_array, lin_convert, lin_typed, lin_admitted_output,
+-# lin_admit_exporter, lin_new, lin_array, lin_width, lin_tuple (moved onto the one
+-# admission path, bindings/admitted_input.mojo) and lin_view, lin_c_order (no
+-# caller) deleted 2026-11-09 by lane a6-device-x-family-classical; code
+-# recoverable at f59d913b0b.
+-# Restore: experiments/removed/A6_LIN_ADMISSION.patch.
++comptime LIN_IP = MutPointer[Int, MutUntrackedOrigin]
++comptime LIN_BP = MutPointer[UInt8, MutUntrackedOrigin]
++
++
++struct LinBuf(Movable):
++    """A C-ordered buffer the kernels read: the object that owns it (kept
++    alive across the call), its address and its shape."""
++    var keep: PythonObject
++    var addr: Int
++    var shape: List[Int]
++    var pin: Optional[AdmittedBorrowedBuffer]
++    var owner: PythonObject
++
++    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int]):
++        # Python's None is a runtime object. Constructing it in a default
++        # argument asks the compiler to initialize CPython at compile time.
++        self.keep = keep
++        self.addr = addr
++        self.shape = shape^
++        self.pin = None
++        self.owner = PythonObject(None)
++
++    def __init__(out self, keep: PythonObject, addr: Int, var shape: List[Int],
++                 var pin: Optional[AdmittedBorrowedBuffer], owner: PythonObject):
++        self.keep = keep
++        self.addr = addr
++        self.shape = shape^
++        self.pin = pin^
++        self.owner = owner
++
++    def dim(self, k: Int) -> Int:
++        return self.shape[k]
++
++    def rank(self) -> Int:
++        return len(self.shape)
++
++    def count(self) -> Int:
++        var n = 1
++        for i in range(len(self.shape)):  # driver-loop: over shape words
++            n *= self.shape[i]
++        return n
++
++    def text(self) -> String:
++        return shape_text(self.shape)
+ 
+ 
+ def lin_truth(value: PythonObject) raises -> Bool:
+@@ -25,6 +82,77 @@ def lin_truth(value: PythonObject) raises -> Bool:
+     return Bool(py=py_call(native_loaded_module("builtins").bool, value))
+ 
+ 
++def lin_view(obj: PythonObject, context: PythonObject, mut v: TensorView) raises -> Bool:
++    """`_bufcheck.probe(obj)`'s facts in `v` (the export released before
++    this returns); False when `obj` does not export a buffer. A mojolearn
++    Array is read off its own slots (`_buffer.Buf._from_array`); `v.dtype`
++    then holds its typestr."""
++    v = TensorView()
++    if family_isinstance(obj, context["array_class"]):
++        v.is_array = True
++        v.addr = Int(py=obj._addr)
++        v.nbytes = Int(py=obj.nbytes)
++        v.itemsize = Int(py=obj.itemsize)
++        v.readonly = lin_truth(obj._readonly)
++        var t = String(py=obj.dtype)
++        v.fmt = _array_code(t)
++        var shape = obj.shape
++        for i in range(len(shape)):  # driver-loop: over shape words
++            v.shape.append(Int(py=shape[i]))
++        var strides = obj.strides
++        for i in range(len(strides)):  # driver-loop: over stride words
++            v.strides.append(Int(py=strides[i]))
++        v.has_strides = True
++        v.c_contig = _contiguous(v.shape, v.strides, True, v.itemsize)
++        v.dtype = t
++        return True
++    var view = List[Int](length=10, fill=0)
++    if not _get_buffer(obj, view):
++        _ = view^
++        return False
++    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
++    var words32 = p.bitcast[Int32]()
++    var indirect = False
++    v.addr = p[0]
++    v.nbytes = p[2]
++    v.itemsize = p[3]
++    v.readonly = words32[8] != 0
++    var ndim = Int(words32[9])
++    if p[5] != 0:
++        var fp = LIN_BP(unsafe_from_address=p[5])
++        var text = String("")
++        for k in range(64):  # driver-loop: over format characters of one buffer
++            if fp[k] == 0:
++                break
++            text += chr(Int(fp[k]))
++        v.fmt = text
++    if ndim > 0:
++        if p[6] != 0:
++            var sp = LIN_IP(unsafe_from_address=p[6])
++            for k in range(ndim):  # driver-loop: over shape words of one buffer
++                v.shape.append(sp[k])
++        else:
++            v.shape.append(v.nbytes // max(v.itemsize, 1))
++        if p[7] != 0:
++            var tp = LIN_IP(unsafe_from_address=p[7])
++            for k in range(ndim):  # driver-loop: over stride words of one buffer
++                v.strides.append(tp[k])
++            v.has_strides = True
++        if p[8] != 0:
++            var op = LIN_IP(unsafe_from_address=p[8])
++            for k in range(ndim):  # driver-loop: over suboffset words of one buffer
++                if op[k] >= 0:
++                    indirect = True
++    _release_buffer(view)
++    _ = view^
++    if indirect:
++        # `Buf._fill` refuses an indirect buffer with a TypeError
++        return False
++    v.c_contig = _contiguous(v.shape, v.strides, v.has_strides, v.itemsize)
++    v.dtype = String("")
++    return True
++
++
+ def lin_is_f32(v: TensorView) -> Bool:
+     """`_bufcheck.is_native_f32(pb.format)`."""
+     return base_format(v.fmt) == "f"
+@@ -38,3 +166,355 @@ def lin_dtype_name(obj: PythonObject, v: TensorView) raises -> String:
+         if name != "":
+             return name
+     return _format_name(base_format(v.fmt), v.itemsize, v.fmt)
++
++
++def lin_width(typestr: String) raises -> Int:
++    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
++        return 4
++    if typestr == "<f8" or typestr == "<i8":
++        return 8
++    if typestr == "<u2" or typestr == "<f2":
++        return 2
++    if typestr == "<i1" or typestr == "<u1":
++        return 1
++    raise Error("TypeError: " + typestr + " is not an Array dtype")
++
++
++def lin_tuple(shape: List[Int]) raises -> PythonObject:
++    """A shape as a Python tuple."""
++    var dims = Python.list()
++    for i in range(len(shape)):  # driver-loop: over shape words
++        _ = py_call(dims.append, PythonObject(shape[i]))
++    return py_call(native_loaded_module("builtins").tuple, dims)
++
++
++def lin_array(shape: List[Int], typestr: String, context: PythonObject) raises -> PythonObject:
++    """`_buffer.empty(shape, typestr)`: a new zero-filled C-order Array."""
++    var count = 1
++    for i in range(len(shape)):  # driver-loop: over shape words
++        count *= shape[i]
++    # One fill pass (array.array repetition of a one-word zero seed): the
++    # store was a zeroed bytes object copied into the array, two passes over
++    # every output byte (audit, lane a3). Array stores have no uninitialised
++    # constructor, so the zeros stay.
++    _ = lin_width(typestr)  # its refusal for a dtype no Array holds
++    var store = native_array_zeros(_store_code(typestr), count)
++    return classical_wrap_array(store, lin_tuple(shape), typestr, "C", context)
++
++
++def lin_new(shape: List[Int], typestr: String, context: PythonObject) raises -> LinBuf:
++    """A new zero-filled C-order Array as a LinBuf."""
++    var out = lin_array(shape, typestr, context)
++    var addr = Int(py=classical_address(out))
++    _ = out  # keep the Python object alive through the native call above
++    return LinBuf(out, addr, shape.copy())
++
++
++def _lin_kind(v: TensorView, mut item: Int) raises -> Int:
++    """The CastIn element kind of a viewed buffer (its item size in `item`);
++    -1 for a format no Array dtype holds."""
++    item = v.itemsize
++    if v.is_array:
++        var t = v.dtype
++        if t == "<f4" or t == "<f8" or t == "<f2":
++            return CAST_KIND_FLOAT
++        if t == "<i1" or t == "<i4" or t == "<i8":
++            return CAST_KIND_SIGNED
++        return CAST_KIND_UNSIGNED
++    var code = base_format(v.fmt)
++    if code == "f" or code == "d" or code == "e":
++        return CAST_KIND_FLOAT
++    if code == "?":
++        return CAST_KIND_BOOL
++    if code == "b" or code == "h" or code == "i" or code == "l" or code == "q" or code == "n":
++        return CAST_KIND_SIGNED
++    if code == "B" or code == "H" or code == "I" or code == "L" or code == "Q" or code == "N":
++        return CAST_KIND_UNSIGNED
++    return -1
++
++
++def _lin_target(typestr: String, mut item: Int) raises -> Int:
++    item = lin_width(typestr)
++    if typestr == "<f4" or typestr == "<f8" or typestr == "<f2":
++        return CAST_KIND_FLOAT
++    if typestr == "<i1" or typestr == "<i4" or typestr == "<i8":
++        return CAST_KIND_SIGNED
++    return CAST_KIND_UNSIGNED
++
++
++# The conversion itself (Array.astype's per-element rules, the bounds and the
++# typed loads and stores) is core/admitted_convert.mojo, split across the
++# host's cores (lane a3-admit-decomp-prep-metrics, audit R10).
++
++
++def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
++    """Every element of the viewed buffer, in C order, into the C-order
++    `typestr` store at `dst`: a copy of each contiguous run for the same
++    dtype, else one conversion per element by Array.astype's rules. The
++    elements are split into contiguous C-order ranges across the host's
++    cores (each element writes only its own cell, so no word depends on the
++    split); a refusal is the one the first failing element in C order
++    raises, as the serial walk raised it."""
++    var item = 0
++    var kind = _lin_kind(v, item)
++    if kind < 0:
++        raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
++    var titem = 0
++    var tkind = _lin_target(typestr, titem)
++    var nd = len(v.shape)
++    var strides = List[Int](length=max(nd, 1), fill=0)
++    var shape = List[Int](length=max(nd, 1), fill=1)
++    if v.has_strides:
++        for k in range(nd):  # driver-loop: over stride words
++            strides[k] = v.strides[k]
++    else:
++        var step = v.itemsize
++        for k in range(nd - 1, -1, -1):  # driver-loop: over stride words
++            strides[k] = step
++            step *= v.shape[k]
++    for k in range(nd):  # driver-loop: over shape words
++        shape[k] = v.shape[k]
++    admitted_convert(v.addr, shape, strides, v.count(), item, kind, titem, tkind, typestr, dst)
++
++
++def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
++                context: PythonObject) raises -> LinBuf:
++    """`obj` (already the dtype `typestr`, or converted to it) in C order:
++    the buffer itself when it already is, else one converted copy."""
++    var item = 0
++    var kind = _lin_kind(v, item)
++    var titem = 0
++    var tkind = _lin_target(typestr, titem)
++    if kind == tkind and item == titem and v.c_contig:
++        return LinBuf(obj, v.addr, v.shape.copy())
++    var out = lin_new(v.shape, typestr, context)
++    lin_convert(v, typestr, out.addr, name)
++    _ = out  # keep the Python object alive through the native call above
++    return out^
++
++
++def lin_admit_exporter(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
++    # Preserve the native mmap/array owners already connected by the classical
++    # boundary. The context-free provider helper intentionally knows fewer
++    # import-time owners; no Python protocol is used to broaden that set here.
++    if depth > 64:
++        raise Error("TypeError: native linalg buffer owner nesting exceeds its bound")
++    var cls = py_type(value)
++    var b = native_loaded_module("builtins")
++    if cls is b.memoryview:
++        var owner = value.obj
++        if owner is not None:
++            lin_admit_exporter(owner, context, depth + 1)
++        return
++    var owners = context["buffer_owner_types"]
++    for i in range(len(owners)):  # small-loop(import-connected native storage classes)
++        if cls is owners[i]:
++            return
++    admit_native_buffer_exporter(value)
++
++
++def lin_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
++              context: PythonObject, admitted: Bool = False) raises -> LinBuf:
++    # Native exporters cross the metadata boundary directly. Existing native
++    # list/frame/Torch/scalar admission may first materialize supported values;
++    # no arbitrary Python conversion or buffer hook is a fallback here.
++    # `admitted`: the family door already ran classical_admit_value over this
++    # very argument. Row N237: the value is admitted once here (or by the
++    # door), not again by classical_view and LinAdmission; a view that
++    # classical_view materialized is a new object and is still admitted.
++    if not admitted:
++        classical_admit_value(source, context)
++    var prepared = source
++    if not classical_is_array(source, context):
++        try:
++            lin_admit_exporter(source, context)
++        except:
++            prepared = classical_view(source, context, name, True)
++    var input = LinAdmission(prepared, context, prepared is source)
++    var nd = len(input.view.shape)
++    if ndim >= 0 and nd != ndim:
++        var hint = String("")
++        if ndim == 2 and nd < 2:
++            hint = ". " + String(RESHAPE_HINT)
++        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
++                    + "-D shape " + shape_text(input.view.shape) + hint)
++    if input.view.count() == 0:
++        var what = String("sample(s)")
++        if nd == 2 and input.view.shape[0] != 0:
++            what = "feature(s)"
++        var shape = shape_text(input.view.shape)
++        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
++                    + " (shape=" + shape + ") while a minimum of 1 is required.")
++    return lin_admitted_c(input^, typestr, name, context)
++
++
++struct LinAdmission(Movable):
++    # One operation-local metadata capture. Exact native exporter admission
++    # precedes PyObject_GetBuffer; the pin lives through the numerical call.
++    var keep: PythonObject
++    var view: TensorView
++    var pin: Optional[AdmittedBorrowedBuffer]
++    var owner: PythonObject
++
++    def __init__(out self, value: PythonObject, context: PythonObject, admitted: Bool = False) raises:
++        # `admitted`: the caller ran classical_admit_value over this very
++        # value in the same call (lin_typed, row N237).
++        if not admitted:
++            classical_admit_value(value, context)
++        self.keep = value
++        var view = TensorView()
++        self.pin = None
++        self.owner = PythonObject(None)
++        if classical_is_array(value, context):
++            var slots = context["array_fields"]
++            var cls = context["array_class"]
++            # Keep the admitted storage owners themselves, so replacement of
++            # the input Array's slots while native code releases the GIL cannot
++            # free the captured address. Each slot is read once through its
++            # import-pinned native descriptor rather than a mutable class hook.
++            self.owner = array_owner_once(value, context)
++            var address = py_call(slots["_addr"], value, cls)
++            var item = py_call(slots["itemsize"], value, cls)
++            var readonly = py_call(slots["_readonly"], value, cls)
++            var dtype = py_call(slots["dtype"], value, cls)
++            var shape = py_call(slots["shape"], value, cls)
++            var strides = py_call(slots["strides"], value, cls)
++            if (py_type(address) is not py_type(PythonObject(0)) or py_type(item) is not py_type(PythonObject(0))
++                or py_type(readonly) is not py_type(PythonObject(True)) or py_type(dtype) is not py_type(PythonObject(""))
++                or py_type(shape) is not py_type(Python.tuple()) or py_type(strides) is not py_type(Python.tuple())):
++                raise Error("TypeError: Array metadata must contain native integer, boolean, string and tuple values")
++            if len(shape) != len(strides):
++                raise Error("TypeError: Array shape and stride ranks differ")
++            view.is_array = True
++            view.addr = Int(py=address)
++            view.itemsize = Int(py=item)
++            view.readonly = Bool(py=readonly)
++            view.dtype = String(py=dtype)
++            view.fmt = _array_code(view.dtype)
++            for axis in range(len(shape)):  # small-loop(Array rank metadata admitted once)
++                if py_type(shape[axis]) is not py_type(PythonObject(0)) or py_type(strides[axis]) is not py_type(PythonObject(0)):
++                    raise Error("TypeError: Array dimensions and strides must be native integers")
++                view.shape.append(Int(py=shape[axis]))
++                view.strides.append(Int(py=strides[axis]))
++            view.nbytes = view.count() * view.itemsize
++            view.has_strides = True
++            view.c_contig = _contiguous(view.shape, view.strides, True, view.itemsize)
++            self.view = view^
++            return
++        lin_admit_exporter(value, context)
++        self.pin = AdmittedBorrowedBuffer(value)
++        ref layout = self.pin.value().layout.value()
++        view.addr = layout.address
++        view.itemsize = layout.itemsize
++        view.readonly = layout.readonly
++        view.nbytes = layout.count * layout.itemsize
++        view.shape = layout.shape.copy()
++        view.strides = layout.strides.copy()
++        view.has_strides = True
++        view.fmt = self.pin.value().format
++        if view.fmt.startswith(">") or view.fmt.startswith("!"):
++            raise Error("TypeError: mojolearn: big-endian buffers are not supported")
++        view.c_contig = _contiguous(view.shape, view.strides, True, layout.itemsize)
++        for axis in range(len(layout.suboffsets)):  # small-loop(buffer rank)
++            if layout.suboffsets[axis] >= 0:
++                raise Error("TypeError: mojolearn: indirect buffers are not supported")
++
++        self.view = view^
++
++
++
++# One Python type per numeric mode: a process may load both builds of a binding.
++comptime LIN_PIN_MODE: Int = 1 if is_defined["MOJOLEARN_NUMERIC_IDENTICAL"]() else 0
++
++
++struct LinBufferPin[MODE: Int = LIN_PIN_MODE](Movable, Writable):
++    var pin: Optional[AdmittedBorrowedBuffer]
++
++    def __init__(out self, var pin: Optional[AdmittedBorrowedBuffer]):
++        self.pin = pin^
++
++    def write_to(self, mut writer: Some[Writer]):
++        writer.write("LinBufferPin")
++
++    def write_repr_to(self, mut writer: Some[Writer]):
++        self.write_to(writer)
++
++
++def register_lin_buffer_pin(mut module: PythonModuleBuilder) raises:
++    # The module that owns the linalg public operations registers the pin
++    # once; lin_borrow_array allocates it with PythonObject(alloc=...).
++    # Once per process: a second initialization of the owner attaches the
++    # existing type object (bindings/py_type_registry.mojo).
++    var existing = PythonObject(None)
++    try:
++        existing = lookup_py_type_object[LinBufferPin[]]()
++    except error:
++        if not py_type_absent(error, String(reflect[LinBufferPin[]].name())):
++            raise error
++        _ = module.add_type[LinBufferPin[]]("_LinBufferPin")
++        return
++    py_type_attach(module.module, "_LinBufferPin", existing)
++
++
++def lin_borrow_array(var input: LinAdmission, typestr: String, context: PythonObject) raises -> LinBuf:
++    # Array.from_buffer's zero-copy ownership semantics from metadata already
++    # admitted once. The public CPython raw-memory view does not ask the exporter
++    # for its metadata again; the owned pin keeps storage valid for its lifetime.
++    var v = input.view.copy()
++    var array = native_storage_allocate(context["array_class"])
++    var held_pin = Optional[AdmittedBorrowedBuffer]()
++    swap(held_pin, input.pin)
++    var pin = PythonObject(alloc=LinBufferPin[](held_pin^))
++    ref cpy = Python().cpython()
++    var raw = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
++        MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr), v.nbytes,
++        Int32(0x100 if v.readonly else 0x200))
++    if not raw:
++        raise cpy.unsafe_get_error()
++    var bytes_view = PythonObject(from_owned=raw)
++    var view = py_call(bytes_view.cast, _store_code(typestr))
++    py_setattr(array, "_store", input.keep)
++    py_setattr(array, "_base", PythonObject(None))
++    py_setattr(array, "_pin", pin)
++    py_setattr(array, "_mv", view)
++    py_setattr(array, "_addr", PythonObject(v.addr))
++    py_setattr(array, "_readonly", PythonObject(v.readonly))
++    py_setattr(array, "shape", lin_tuple(v.shape))
++    var canonical = List[Int](length=len(v.shape), fill=0)
++    var step = v.itemsize
++    for axis in range(len(v.shape) - 1, -1, -1):  # small-loop(known output view shape)
++        canonical[axis] = step
++        step *= v.shape[axis]
++    py_setattr(array, "strides", lin_tuple(canonical))
++    py_setattr(array, "dtype", PythonObject(typestr))
++    py_setattr(array, "ndim", PythonObject(len(v.shape)))
++    py_setattr(array, "size", PythonObject(v.count()))
++    py_setattr(array, "itemsize", PythonObject(v.itemsize))
++    py_setattr(array, "nbytes", PythonObject(v.nbytes))
++    py_setattr(array, "order", PythonObject("C"))
++    return LinBuf(array, v.addr, v.shape.copy())
++
++def lin_admitted_c(var input: LinAdmission, typestr: String, name: String,
++                   context: PythonObject, force_copy: Bool = False) raises -> LinBuf:
++    var item = 0
++    var kind = _lin_kind(input.view, item)
++    var target_item = 0
++    var target_kind = _lin_target(typestr, target_item)
++    if not force_copy and kind == target_kind and item == target_item and input.view.c_contig:
++        if input.view.is_array:
++            var held_pin = Optional[AdmittedBorrowedBuffer]()
++            swap(held_pin, input.pin)
++            return LinBuf(input.keep, input.view.addr, input.view.shape.copy(), held_pin^, input.owner)
++        return lin_borrow_array(input^, typestr, context)
++    var result = lin_new(input.view.shape, typestr, context)
++    lin_convert(input.view, typestr, result.addr, name)
++    _ = input^
++    return result^
++
++
++def lin_admitted_output(var input: LinAdmission) -> LinBuf:
++    # Preserve the supplied output object's identity while its native buffer
++    # export and Array storage owners stay pinned through the complete call.
++    var pin = Optional[AdmittedBorrowedBuffer]()
++    swap(pin, input.pin)
++    return LinBuf(input.keep, input.view.addr, input.view.shape.copy(), pin^, input.owner)
+diff --git a/bindings/linalg_ops_decomp.mojo b/bindings/linalg_ops_decomp.mojo
+index 9a111234f3..edae66850f 100644
+--- a/bindings/linalg_ops_decomp.mojo
++++ b/bindings/linalg_ops_decomp.mojo
+@@ -18,8 +18,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+ from bindings.py_balanced import py_call, py_get, py_setitem
+ from bindings.classical_arrays import classical_address
+ from bindings.family_common import family_call, family_repr
+-from bindings.linalg_ops_buffers import lin_truth
+-from bindings.admitted_input import AdmittedBuf, admitted_zeros
++from bindings.linalg_ops_buffers import LinBuf, lin_truth, lin_new, lin_array
+ from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
+ from providers.python.linalg_result_pyapi import linalg_result_new
+ from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
+@@ -56,7 +55,7 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises ->
+     """`_triu(h, r).out()`: the first r rows of h, everything below the
+     diagonal zeroed (pure data movement)."""
+     var c = kit.c(h)
+-    var out = admitted_zeros([r, c], "<f4", context).keep
++    var out = lin_array([r, c], "<f4", context)
+     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
+     _ = out  # keep the Python object alive through the native call above
+     if r * c:
+@@ -73,17 +72,17 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises ->
+ def _lin_tsqr_release(mut kit: LinKit, context: PythonObject):
+     """`_tsqr_release`: drop the factorization the binding kept."""
+     try:
+-        var one = admitted_zeros([1], "<f4", context)
++        var one = lin_new([1], "<f4", context)
+         _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(one.addr), PythonObject(one.addr), lin_ints(1, 1, 0))
+         _ = one  # keep the Python object alive through the native call above
+     except:
+         pass
+ 
+ 
+-def _lin_tsqr_r(mut kit: LinKit, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool, context: PythonObject) raises -> AdmittedBuf:
++def _lin_tsqr_r(mut kit: LinKit, a: LinBuf, rows: Int, cols: Int, keep: Bool, context: PythonObject) raises -> LinBuf:
+     """`_tsqr_r`: R (cols x cols) of the TSQR of a; `keep` holds the
+     factorization in the binding for one `_tsqr_q`."""
+-    var r = admitted_zeros([cols, cols], "<f4", context)
++    var r = lin_new([cols, cols], "<f4", context)
+     # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
+     # (m, d, nrhs, keep); b is not read when nrhs is 0
+     _ = family_call(kit.entry("x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr), PythonObject(r.addr),
+@@ -92,9 +91,9 @@ def _lin_tsqr_r(mut kit: LinKit, a: AdmittedBuf, rows: Int, cols: Int, keep: Boo
+     return r^
+ 
+ 
+-def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, context: PythonObject) raises -> AdmittedBuf:
++def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, context: PythonObject) raises -> LinBuf:
+     """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
+-    var out = admitted_zeros([rows, k], "<f4", context)
++    var out = lin_new([rows, k], "<f4", context)
+     _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr), lin_ints(rows, cols, k))
+     _ = out  # keep the Python object alive through the native call above
+     return out^
+@@ -146,11 +145,11 @@ def _lin_svd_tall(mut kit: LinKit, a: Int, full: Bool, context: PythonObject, mu
+ # the public functions
+ 
+ 
+-def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
+     """`svdvals` of an admitted operand."""
+     var rows = a.dim(0)
+     var cols = a.dim(1)
+-    var buf = AdmittedBuf(a.keep, a.addr, a.shape.copy())
++    var buf = LinBuf(a.keep, a.addr, a.shape.copy())
+     if rows < cols:
+         # the singular values of a wide A are those of A^T, exactly: the
+         # transpose is data movement
+@@ -159,14 +158,14 @@ def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject
+             var held = kit.borrow(a.keep, a.addr, rows, cols)
+             var t = kit.transpose(held)
+             var moved = kit.out(t)
+-            buf = AdmittedBuf(moved, Int(py=classical_address(moved)), [cols, rows])
++            buf = LinBuf(moved, Int(py=classical_address(moved)), [cols, rows])
+             _ = moved  # keep the Python object alive through the native call above
+         finally:
+             kit.close()
+         var swap = rows
+         rows = cols
+         cols = swap
+-    var out = admitted_zeros([cols], "<f4", context)
++    var out = lin_new([cols], "<f4", context)
+     _ = family_call(neural_descriptor_entry(_lin_door(context), "svdvals"),
+                     Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
+     _ = out  # keep the Python object alive through the native call above
+@@ -206,7 +205,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
+         kit.close()
+ 
+ 
+-def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> PythonObject:
++def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonObject:
+     """`_qr_q(a, mode)`: numpy.linalg.qr's 'reduced', 'complete' and 'raw'."""
+     var rows = a.dim(0)
+     var cols = a.dim(1)
+@@ -218,7 +217,7 @@ def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> Pyt
+         if mode == "reduced" and _lin_tsqr_on(rows, cols):
+             # `_qr_tsqr`: (Q, R), R's diagonal non-negative
+             var r = _lin_tsqr_r(kit, a, rows, cols, True, context)
+-            var signs = admitted_zeros([cols, cols], "<f4", context)
++            var signs = lin_new([cols, cols], "<f4", context)
+             var signed = False
+             try:
+                 # R's rows signed so its diagonal is non-negative, and C the
+@@ -291,7 +290,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
+             return wide
+         finally:
+             kit.close()
+-    var out = admitted_zeros([cols, cols], "<f4", context)
++    var out = lin_new([cols, cols], "<f4", context)
+     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS: addrs (a, r_out), params
+     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
+     _ = family_call(neural_descriptor_entry(_lin_door(context), "qr_r"),
+diff --git a/bindings/linalg_ops_kit.mojo b/bindings/linalg_ops_kit.mojo
+index f7ba68a8ae..55ccf75d5f 100644
+--- a/bindings/linalg_ops_kit.mojo
++++ b/bindings/linalg_ops_kit.mojo
+@@ -16,8 +16,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+ from bindings.py_balanced import py_call, py_type
+ from bindings.classical_arrays import classical_address
+ from bindings.family_common import family_call
+-from bindings.linalg_ops_buffers import lin_truth
+-from bindings.admitted_input import admitted_zeros
++from bindings.linalg_ops_buffers import lin_array, lin_truth
+ from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr_fill_eye
+ # The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows N293,
+ # N294): alloc / upload / download / free, ew, gemm, the sums and the moves
+@@ -184,7 +183,7 @@ struct LinKit(Movable):
+     def zeros(mut self, rows: Int, cols: Int) raises -> Int:
+         """`_M.zeros(rows, cols)` (one spare word keeps an empty matrix's
+         address valid, as `_M._one` did)."""
+-        var host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
++        var host = lin_array([max(rows * cols, 1)], "<f4", self.context)
+         return self.add(host, rows, cols)
+ 
+     def borrow(mut self, keep: PythonObject, addr: Int, rows: Int, cols: Int) raises -> Int:
+@@ -199,7 +198,7 @@ struct LinKit(Movable):
+             # an empty operand keeps of_buffer's owned spare word
+             self.matrices[out].borrowed = 0
+             self.matrices[out].keep = PythonObject(None)
+-            self.matrices[out].host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
++            self.matrices[out].host = lin_array([max(rows * cols, 1)], "<f4", self.context)
+         return out
+ 
+     def of_buffer(mut self, addr: Int, rows: Int, cols: Int) raises -> Int:
+@@ -220,7 +219,7 @@ struct LinKit(Movable):
+         """`_M.s`: the host store, downloading a device matrix once (it moves)."""
+         if self.matrices[a].host is None:
+             var count = self.n(a)
+-            var result = admitted_zeros([max(count, 1)], "<f4", self.context).keep
++            var result = lin_array([max(count, 1)], "<f4", self.context)
+             if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
+                 # a borrowed matrix asked for its owned store (no kit path
+                 # does today): one copy of the admitted words, as of_buffer made
+@@ -286,7 +285,7 @@ struct LinKit(Movable):
+         """`_M.out()`: a public float32 Array (C order) of the matrix."""
+         var rows = self.r(a)
+         var cols = self.c(a)
+-        var result = admitted_zeros([rows, cols], "<f4", self.context).keep
++        var result = lin_array([rows, cols], "<f4", self.context)
+         if rows * cols:
+             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
+                    count=rows * cols)
+@@ -295,7 +294,7 @@ struct LinKit(Movable):
+ 
+     def out_vector(mut self, a: Int, length: Int) raises -> PythonObject:
+         """`_M.out((length,))`."""
+-        var result = admitted_zeros([length], "<f4", self.context).keep
++        var result = lin_array([length], "<f4", self.context)
+         if length:
+             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
+                    count=length)
+diff --git a/bindings/linalg_ops_lowbit.mojo b/bindings/linalg_ops_lowbit.mojo
+index 13abd15dc5..f0c302998f 100644
+--- a/bindings/linalg_ops_lowbit.mojo
++++ b/bindings/linalg_ops_lowbit.mojo
+@@ -18,8 +18,9 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
+ from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
+ from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
+ from bindings.optimizer_public_door import TensorView, shape_text
+-from bindings.linalg_ops_buffers import lin_truth, lin_is_f32, lin_dtype_name
+-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
++from bindings.linalg_ops_buffers import (
++    LinBuf, LinAdmission, lin_admitted_c, lin_admitted_output, lin_truth, lin_is_f32, lin_dtype_name, lin_new, lin_typed, lin_tuple,
++)
+ 
+ comptime OP_NN = 0
+ comptime OP_NT = 1
+@@ -257,17 +258,17 @@ def lin_ints(*values: Int) raises -> PythonObject:
+     return out
+ 
+ 
+-def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
++def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
+     """`_operand(x, name)`: a float32 2-D buffer, refused by name otherwise,
+     in C order (a layout copy at most, never a cast)."""
+     # `admitted`: the family door already admitted this very argument (row
+     # N237: lin_lowbit_operation and lin_decomp_operation admit every
+-    # operand before dispatch), so AdmittedTyped does not admit it again.
+-    var input = AdmittedTyped(x, context, admitted)
++    # operand before dispatch), so LinAdmission does not admit it again.
++    var input = LinAdmission(x, context, admitted)
+     return _lin_operand_admitted(input^, name, context)
+ 
+ 
+-def _lin_operand_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
++def _lin_operand_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
+     var profile = lin_text(context, "PROFILE")
+     var v = input.view.copy()
+     if not lin_is_f32(v):
+@@ -289,17 +290,17 @@ def _lin_operand_admitted(var input: AdmittedTyped, name: String, context: Pytho
+                     + "but no gate in this tree has run them through the Python "
+                     + "surface, so they are refused here rather than answered "
+                     + "unchecked.")
+-    return admitted_typed_c(input^, "<f4", name, context)
++    return lin_admitted_c(input^, "<f4", name, context)
+ 
+ 
+-def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
++def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
+     """`_operand_bits(x, name)`: a 2-D uint16 buffer of bf16 bits in C order."""
+     # `admitted`: as lin_operand (row N237).
+-    var input = AdmittedTyped(x, context, admitted)
++    var input = LinAdmission(x, context, admitted)
+     return _lin_bits_admitted(input^, name, context)
+ 
+ 
+-def _lin_bits_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
++def _lin_bits_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
+     var v = input.view.copy()
+     var dtype = lin_dtype_name(input.keep, v)
+     if dtype != "uint16":
+@@ -310,14 +311,14 @@ def _lin_bits_admitted(var input: AdmittedTyped, name: String, context: PythonOb
+         raise Error("mojolearn.linalg: " + name + " must be 2-D, got " + String(len(v.shape)) + "-D")
+     if v.count() == 0:
+         raise Error("mojolearn.linalg: " + name + " has no elements")
+-    return admitted_typed_c(input^, "<u2", name, context)
++    return lin_admitted_c(input^, "<u2", name, context)
+ 
+ 
+-def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> AdmittedBuf:
++def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> LinBuf:
+     """`_out_or_new(out, m, n, who)`."""
+     if out_buf is None:
+-        return admitted_zeros([m, n], "<f4", context)
+-    var input = AdmittedTyped(out_buf, context)
++        return lin_new([m, n], "<f4", context)
++    var input = LinAdmission(out_buf, context)
+     var v = input.view.copy()
+     if not lin_is_f32(v):
+         raise Error("TypeError: mojolearn.linalg." + who + ": out must be float32")
+@@ -326,7 +327,7 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
+                     + String(m) + ", " + String(n) + ")")
+     if not v.c_contig or v.readonly:
+         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
+-    return admitted_typed_output(input^)
++    return lin_admitted_output(input^)
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -366,11 +367,11 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
+                     + "transpose_b=" + ("True" if tb else "False") + "). The row-major shapes for each "
+                     + "op are in this function's table and in contract section 0.1.")
+     var out_obj = args[5]
+-    var out: AdmittedBuf
++    var out: LinBuf
+     if out_obj is None:
+-        out = admitted_zeros([m, n], "<f4", context)
++        out = lin_new([m, n], "<f4", context)
+     else:
+-        var output = AdmittedTyped(out_obj, context)
++        var output = LinAdmission(out_obj, context)
+         var v = output.view.copy()
+         if not lin_is_f32(v):
+             raise Error("TypeError: mojolearn.linalg.matmul: out has dtype " + lin_dtype_name(out_obj, v)
+@@ -390,7 +391,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
+                         + "write to it; the device writes `out` directly (contract "
+                         + "section 2) and a read-only buffer handed to it is memory "
+                         + "corruption, not an exception.")
+-        out = admitted_typed_output(output^)
++        out = lin_admitted_output(output^)
+         _ = v  # keep the Python object alive through the native call above
+     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
+     # address first, then a and b; params (m, n, k, op).
+@@ -404,11 +405,11 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
+ 
+ 
+ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
+-    var a = admit_typed(args[1], "<f4", -1, "x", context, True)
++    var a = lin_typed(args[1], "<f4", -1, "x", context, True)
+     var n = a.count()
+     if n == 0:
+         raise Error("mojolearn.linalg.to_bf16: x has no elements")
+-    var out = admitted_zeros(a.shape, "<u2", context)
++    var out = lin_new(a.shape, "<u2", context)
+     _ = lin_call(lin_lowbit(args[0], context), context, "to_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+     _ = out  # keep the Python object alive through the native call above
+     _ = a  # keep the Python object alive through the native call above
+@@ -417,11 +418,11 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
+ 
+ 
+ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
+-    var a = admit_typed(args[1], "<u2", -1, "bits", context, True)
++    var a = lin_typed(args[1], "<u2", -1, "bits", context, True)
+     var n = a.count()
+     if n == 0:
+         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
+-    var out = admitted_zeros(a.shape, "<f4", context)
++    var out = lin_new(a.shape, "<f4", context)
+     _ = lin_call(lin_lowbit(args[0], context), context, "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+     _ = out  # keep the Python object alive through the native call above
+     _ = a  # keep the Python object alive through the native call above
+@@ -430,11 +431,11 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
+ 
+ 
+ def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObject:
+-    var a = admit_typed(args[1], "<u2", -1, "bits", context)
++    var a = lin_typed(args[1], "<u2", -1, "bits", context)
+     var n = a.count()
+     if n == 0:
+         raise Error("mojolearn.linalg.from_f16: bits has no elements")
+-    var out = admitted_zeros(a.shape, "<f4", context)
++    var out = lin_new(a.shape, "<f4", context)
+     _ = lin_call(lin_lowbit(args[0], context), context, "from_f16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+     _ = out  # keep the Python object alive through the native call above
+     _ = a  # keep the Python object alive through the native call above
+@@ -442,12 +443,12 @@ def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObj
+     return out.keep
+ 
+ 
+-def lin_quantize_int8(binding: PythonObject, a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++def lin_quantize_int8(binding: PythonObject, a: LinBuf, context: PythonObject) raises -> PythonObject:
+     """`quantize_int8` of an admitted operand: (codes, exponents)."""
+     var rows = a.dim(0)
+     var cols = a.dim(1)
+-    var codes = admitted_zeros([rows, cols], "<i1", context)
+-    var exps = admitted_zeros([rows], "<i4", context)
++    var codes = lin_new([rows, cols], "<i1", context)
++    var exps = lin_new([rows], "<i4", context)
+     _ = lin_call(lin_lowbit(binding, context), context, "quantize_int8", PythonObject(codes.addr), PythonObject(exps.addr),
+                  PythonObject(a.addr), lin_ints(rows, cols))
+     _ = exps  # keep the Python object alive through the native call above
+@@ -463,14 +464,14 @@ def _lin_quantize_int8(args: PythonObject, context: PythonObject) raises -> Pyth
+ 
+ 
+ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
+-    var q = admit_typed(args[1], "<i1", 2, "codes", context, True)
+-    var e = admit_typed(args[2], "<i4", 1, "exponents", context, True)
++    var q = lin_typed(args[1], "<i1", 2, "codes", context, True)
++    var e = lin_typed(args[2], "<i4", 1, "exponents", context, True)
+     var rows = q.dim(0)
+     var cols = q.dim(1)
+     if e.rank() != 1 or e.dim(0) != rows:
+         raise Error("mojolearn.linalg.dequantize_int8: exponents has shape " + e.text() + ", want ("
+                     + String(rows) + ",)")
+-    var out = admitted_zeros([rows, cols], "<f4", context)
++    var out = lin_new([rows, cols], "<f4", context)
+     _ = lin_call(lin_lowbit(args[0], context), context, "dequantize_int8", PythonObject(out.addr), PythonObject(q.addr),
+                  PythonObject(e.addr), lin_ints(rows, cols))
+     _ = out  # keep the Python object alive through the native call above
+@@ -482,13 +483,13 @@ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> Py
+ 
+ 
+ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, context: PythonObject,
+-                      mut q: AdmittedBuf, mut e: AdmittedBuf) raises:
++                      mut q: LinBuf, mut e: LinBuf) raises:
+     """`_int8_operand(x, name)`: a (codes, exponents) pair, or a float32
+     matrix quantized by `quantize_int8`."""
+     var b = native_loaded_module("builtins")
+     if py_type(x) is b.tuple and len(x) == 2:
+-        q = admit_typed(x[0], "<i1", 2, name + " codes", context)
+-        e = admit_typed(x[1], "<i4", 1, name + " exponents", context)
++        q = lin_typed(x[0], "<i1", 2, name + " codes", context)
++        e = lin_typed(x[1], "<i4", 1, name + " exponents", context)
+         if e.rank() != 1 or e.dim(0) != q.dim(0):
+             raise Error("mojolearn.linalg.matmul_int8: " + name + " exponents has shape " + e.text()
+                         + ", want (" + String(q.dim(0)) + ",)")
+@@ -496,16 +497,16 @@ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, cont
+     var a = lin_operand(x, name, context)
+     var pair = lin_quantize_int8(binding, a, context)
+     _ = a^
+-    q = admit_typed(pair[0], "<i1", 2, name + " codes", context)
+-    e = admit_typed(pair[1], "<i4", 1, name + " exponents", context)
++    q = lin_typed(pair[0], "<i1", 2, name + " codes", context)
++    e = lin_typed(pair[1], "<i4", 1, name + " exponents", context)
+ 
+ 
+ def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     var binding = args[0]
+-    var qa = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var ea = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var qb = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var eb = AdmittedBuf(PythonObject(None), 0, List[Int]())
++    var qa = LinBuf(PythonObject(None), 0, List[Int]())
++    var ea = LinBuf(PythonObject(None), 0, List[Int]())
++    var qb = LinBuf(PythonObject(None), 0, List[Int]())
++    var eb = LinBuf(PythonObject(None), 0, List[Int]())
+     _lin_int8_operand(binding, args[1], "a", context, qa, ea)
+     _lin_int8_operand(binding, args[2], "b", context, qb, eb)
+     var m = qa.dim(0)
+@@ -531,7 +532,7 @@ def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> Python
+     return out.keep
+ 
+ 
+-def _lin_op_and_shape(a: AdmittedBuf, bb: AdmittedBuf, transpose_a: PythonObject, transpose_b: PythonObject,
++def _lin_op_and_shape(a: LinBuf, bb: LinBuf, transpose_a: PythonObject, transpose_b: PythonObject,
+                       who: String, mut op: Int, mut m: Int, mut n: Int, mut k: Int) raises:
+     """`_op_and_shape(a.shape, b.shape, transpose_a, transpose_b, who)`."""
+     var ta = lin_truth(transpose_a)
+@@ -568,7 +569,7 @@ def _lin_op_and_shape(a: AdmittedBuf, bb: AdmittedBuf, transpose_a: PythonObject
+ 
+ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     var binding = args[0]
+-    var input = AdmittedTyped(args[1], context)
++    var input = LinAdmission(args[1], context)
+     var a_bits = lin_dtype_name(input.keep, input.view) == "uint16"
+     var a = _lin_bits_admitted(input^, "a", context) if a_bits else _lin_operand_admitted(input^, "a", context)
+     var bb = lin_operand_bits(args[2], "b", context, True)
+@@ -589,13 +590,13 @@ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> Python
+     return out.keep
+ 
+ 
+-def lin_quantize_int15(binding: PythonObject, a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++def lin_quantize_int15(binding: PythonObject, a: LinBuf, context: PythonObject) raises -> PythonObject:
+     """`quantize_int15` of an admitted operand: (hi, lo, exponents)."""
+     var rows = a.dim(0)
+     var cols = a.dim(1)
+-    var hi = admitted_zeros([rows, cols], "<i1", context)
+-    var lo = admitted_zeros([rows, cols], "<i1", context)
+-    var exps = admitted_zeros([rows], "<i4", context)
++    var hi = lin_new([rows, cols], "<i1", context)
++    var lo = lin_new([rows, cols], "<i1", context)
++    var exps = lin_new([rows], "<i4", context)
+     # addrs (mirrored in quantize_int15_binding): hi, lo, exponents, x
+     var addrs = Python.list(PythonObject(hi.addr), PythonObject(lo.addr), PythonObject(exps.addr), PythonObject(a.addr))
+     _ = exps  # keep the Python object alive through the native call above
+@@ -616,11 +617,11 @@ def _lin_quantize_int15(args: PythonObject, context: PythonObject) raises -> Pyt
+ 
+ 
+ def _lin_int15_planes(x: PythonObject, name: String, who: String, context: PythonObject,
+-                      mut hi: AdmittedBuf, mut lo: AdmittedBuf, mut e: AdmittedBuf) raises:
++                      mut hi: LinBuf, mut lo: LinBuf, mut e: LinBuf) raises:
+     """`_int15_planes(x, name, who)`."""
+-    hi = admit_typed(x[0], "<i1", 2, name + " hi", context)
+-    lo = admit_typed(x[1], "<i1", 2, name + " lo", context)
+-    e = admit_typed(x[2], "<i4", 1, name + " exponents", context)
++    hi = lin_typed(x[0], "<i1", 2, name + " hi", context)
++    lo = lin_typed(x[1], "<i1", 2, name + " lo", context)
++    e = lin_typed(x[2], "<i4", 1, name + " exponents", context)
+     if lo.rank() != hi.rank() or lo.dim(0) != hi.dim(0) or lo.dim(1) != hi.dim(1):
+         raise Error("mojolearn.linalg." + who + ": " + name + " lo has shape " + lo.text() + ", hi has " + hi.text())
+     if e.rank() != 1 or e.dim(0) != hi.dim(0):
+@@ -629,13 +630,13 @@ def _lin_int15_planes(x: PythonObject, name: String, who: String, context: Pytho
+ 
+ 
+ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
+-    var h = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var l = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var e = AdmittedBuf(PythonObject(None), 0, List[Int]())
++    var h = LinBuf(PythonObject(None), 0, List[Int]())
++    var l = LinBuf(PythonObject(None), 0, List[Int]())
++    var e = LinBuf(PythonObject(None), 0, List[Int]())
+     _lin_int15_planes(Python.tuple(args[1], args[2], args[3]), "operand", "dequantize_int15", context, h, l, e)
+     var rows = h.dim(0)
+     var cols = h.dim(1)
+-    var out = admitted_zeros([rows, cols], "<f4", context)
++    var out = lin_new([rows, cols], "<f4", context)
+     # addrs: y, hi, lo, exponents (mirrored in the binding)
+     var addrs = Python.list(PythonObject(out.addr), PythonObject(h.addr), PythonObject(l.addr), PythonObject(e.addr))
+     _ = out  # keep the Python object alive through the native call above
+@@ -654,7 +655,7 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
+ 
+ 
+ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, context: PythonObject,
+-                       mut hi: AdmittedBuf, mut lo: AdmittedBuf, mut e: AdmittedBuf) raises:
++                       mut hi: LinBuf, mut lo: LinBuf, mut e: LinBuf) raises:
+     """`_int15_operand(x, name)`."""
+     var b = native_loaded_module("builtins")
+     if py_type(x) is b.tuple and len(x) == 3:
+@@ -666,19 +667,19 @@ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, con
+     var a = lin_operand(x, name, context)
+     var planes = lin_quantize_int15(binding, a, context)
+     _ = a^
+-    hi = admit_typed(planes[0], "<i1", 2, name + " hi", context)
+-    lo = admit_typed(planes[1], "<i1", 2, name + " lo", context)
+-    e = admit_typed(planes[2], "<i4", 1, name + " exponents", context)
++    hi = lin_typed(planes[0], "<i1", 2, name + " hi", context)
++    lo = lin_typed(planes[1], "<i1", 2, name + " lo", context)
++    e = lin_typed(planes[2], "<i4", 1, name + " exponents", context)
+ 
+ 
+ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     var binding = args[0]
+-    var ah = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var al = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var ea = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var bh = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var bl = AdmittedBuf(PythonObject(None), 0, List[Int]())
+-    var eb = AdmittedBuf(PythonObject(None), 0, List[Int]())
++    var ah = LinBuf(PythonObject(None), 0, List[Int]())
++    var al = LinBuf(PythonObject(None), 0, List[Int]())
++    var ea = LinBuf(PythonObject(None), 0, List[Int]())
++    var bh = LinBuf(PythonObject(None), 0, List[Int]())
++    var bl = LinBuf(PythonObject(None), 0, List[Int]())
++    var eb = LinBuf(PythonObject(None), 0, List[Int]())
+     _lin_int15_operand(binding, args[1], "a", context, ah, al, ea)
+     _lin_int15_operand(binding, args[2], "b", context, bh, bl, eb)
+     var m = ah.dim(0)
+diff --git a/bindings/linalg_ops_resample.mojo b/bindings/linalg_ops_resample.mojo
+index 967825c2fd..2ae48cbbf9 100644
+--- a/bindings/linalg_ops_resample.mojo
++++ b/bindings/linalg_ops_resample.mojo
+@@ -29,8 +29,7 @@ from bindings.native_buffer_owner import native_storage_allocate
+ from bindings.family_common import (
+     FAMILY_F64P, FAMILY_I32P, family_call, family_repr, family_type_name, family_isinstance, family_is_str,
+ )
+-from bindings.linalg_ops_buffers import lin_truth
+-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
++from bindings.linalg_ops_buffers import LinBuf, LinAdmission, lin_admitted_c, lin_truth, lin_new, lin_tuple
+ 
+ 
+ 
+@@ -106,7 +105,7 @@ def _rs_nonneg(value: PythonObject) raises -> Int:
+ 
+ 
+ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
+-              context: PythonObject) raises -> AdmittedBuf:
++              context: PythonObject) raises -> LinBuf:
+     # Capture ordinary input-buffer metadata once. Lists, pandas and Torch
+     # use their existing native materialization before capturing the new owner.
+     # perf2-msel: no second classical_admit_value here. Every caller passes a
+@@ -116,16 +115,16 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
+     var value = source
+     if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
+         value = classical_view(value, context, name)
+-    var admitted = AdmittedTyped(value, context)
++    var admitted = LinAdmission(value, context)
+     var rank = len(admitted.view.shape)
+     # p3-cnn-sequence-tsa: the shape text is built only on a refusal
+     if (ndim >= 0 and rank != ndim) or admitted.view.count() == 0:
+         _rs_refuse_shape(admitted, rank, ndim, name)
+-    return admitted_typed_c(admitted^, typestr, name, context)
++    return lin_admitted_c(admitted^, typestr, name, context)
+ 
+ 
+-def _rs_refuse_shape(admitted: AdmittedTyped, rank: Int, ndim: Int, name: String) raises:
+-    var shape = family_repr(admitted_shape_tuple(admitted.view.shape))
++def _rs_refuse_shape(admitted: LinAdmission, rank: Int, ndim: Int, name: String) raises:
++    var shape = family_repr(lin_tuple(admitted.view.shape))
+     if ndim >= 0 and rank != ndim:
+         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(rank) + "-D shape " + shape)
+     if admitted.view.count() == 0:
+@@ -136,7 +135,7 @@ def _rs_refuse_shape(admitted: AdmittedTyped, rank: Int, ndim: Int, name: String
+                     + " (shape=" + shape + ") while a minimum of 1 is required.")
+ 
+ 
+-def _rs_word(scalars: AdmittedBuf, i: Int) -> Float64:
++def _rs_word(scalars: LinBuf, i: Int) -> Float64:
+     return FAMILY_F64P(unsafe_from_address=scalars.addr)[i]
+ 
+ 
+@@ -146,7 +145,7 @@ def _rs_object(cls: PythonObject) raises -> PythonObject:
+     return native_storage_allocate(cls)
+ 
+ 
+-def _rs_bootstrap_result(dist: AdmittedBuf, sdist: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++def _rs_bootstrap_result(dist: LinBuf, sdist: LinBuf, scalars: LinBuf, context: PythonObject) raises -> PythonObject:
+     var b = native_loaded_module("builtins")
+     var result = _rs_object(resample_result_layout(0, context))
+     py_setitem(_fields(result), "point_estimate", PythonObject(_rs_word(scalars, 0)))
+@@ -161,7 +160,7 @@ def _rs_bootstrap_result(dist: AdmittedBuf, sdist: AdmittedBuf, scalars: Admitte
+     return result
+ 
+ 
+-def _rs_permutation_result(null: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++def _rs_permutation_result(null: LinBuf, scalars: LinBuf, context: PythonObject) raises -> PythonObject:
+     var result = _rs_object(resample_result_layout(1, context))
+     py_setitem(_fields(result), "statistic", PythonObject(_rs_word(scalars, 0)))
+     py_setitem(_fields(result), "null_distribution", null.keep)
+@@ -171,7 +170,7 @@ def _rs_permutation_result(null: AdmittedBuf, scalars: AdmittedBuf, context: Pyt
+     return result
+ 
+ 
+-def _rs_addr(buf: AdmittedBuf) -> PythonObject:
++def _rs_addr(buf: LinBuf) -> PythonObject:
+     return PythonObject(buf.addr)
+ 
+ 
+@@ -200,9 +199,9 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises ->
+     var meth = _rs_method(args[5], where, context)
+     var alt = rs_code("ALTERNATIVES", args[6], "alternative", where, context)
+     var r = rs_int(args[3], "n_resamples", where)
+-    var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var scalars = admitted_zeros([6], "<f8", context)
++    var dist = lin_new([_rs_nonneg(r)], "<f4", context)
++    var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
++    var scalars = lin_new([6], "<f8", context)
+     var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap_unpaired")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding:
+     # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
+@@ -253,9 +252,9 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
+     var seed = rs_int(args[7], "random_state", where)
+     var cl = rs_real(args[4], "confidence_level", where)
+     var qp = rs_real(args[8], "q_or_prop", where)
+-    var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var scalars = admitted_zeros([6], "<f8", context)
++    var dist = lin_new([_rs_nonneg(r)], "<f4", context)
++    var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
++    var scalars = lin_new([6], "<f8", context)
+     var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_binding.
+     # x (the C-order sample, flat), distribution_out, sorted_out, scalars_out;
+@@ -292,16 +291,16 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
+         raise Error("mojolearn " + where + ": statistic " + family_repr(statistic) + " is refused by name; the implemented arm for "
+                     + arm + " is " + family_repr(PythonObject(want)))
+     var ny = 0
+-    var yy: AdmittedBuf
++    var yy: LinBuf
+     if y is None:
+-        yy = AdmittedBuf(xx.keep, xx.addr, xx.shape.copy())
++        yy = LinBuf(xx.keep, xx.addr, xx.shape.copy())
+         _ = xx  # keep the Python object alive through the native call above
+     else:
+         yy = _rs_typed(y, "<f4", 1, "y", context)
+         ny = yy.dim(0)
+     var r = rs_int(args[4], "n_resamples", where)
+-    var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var scalars = admitted_zeros([4], "<f8", context)
++    var null = lin_new([_rs_nonneg(r)], "<f4", context)
++    var scalars = lin_new([4], "<f8", context)
+     var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_samples")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding:
+     # n, n_y, n_resamples, seed, alternative, r_first
+@@ -349,8 +348,8 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
+     var r = rs_int(args[4], "n_resamples", where)
+     var rf = rs_int(args[7], "r_first", where)
+     var seed = rs_int(args[6], "random_state", where)
+-    var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+-    var scalars = admitted_zeros([4], "<f8", context)
++    var null = lin_new([_rs_nonneg(r)], "<f4", context)
++    var scalars = lin_new([4], "<f8", context)
+     var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_test")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_test_binding:
+     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
+@@ -376,12 +375,12 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
+ #                       i_first, numeric_mode)
+ 
+ 
+-def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> AdmittedBuf:
++def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> LinBuf:
+     """`Array.from_list([_real(v, name, where) for v in values], "<f4")`."""
+     var b = native_loaded_module("builtins")
+     var items = Python.list()
+     if classical_is_array(values, context):
+-        var admitted = AdmittedTyped(values, context)
++        var admitted = LinAdmission(values, context)
+         ref view = admitted.view
+         if len(view.shape) != 1:
+             raise Error("TypeError: mojolearn " + where + ": " + name + " must be a one-dimensional native sequence")
+@@ -413,7 +412,7 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
+     var words = List[Float64]()
+     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
+         words.append(Float64(py=rs_real(items[i], name, where)))
+-    var out = admitted_zeros([count], "<f4", context)
++    var out = lin_new([count], "<f4", context)
+     var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out.addr)
+     _ = out  # keep the Python object alive through the native call above
+     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
+@@ -432,7 +431,7 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
+     if lo.dim(0) != 2 or hi.dim(0) != 2:
+         raise Error("mojolearn " + where + ": lower and upper must each hold 2 values "
+                     + "(MC_DIMS), got " + String(lo.dim(0)) + " and " + String(hi.dim(0)))
+-    var scalars = admitted_zeros([4], "<f8", context)
++    var scalars = lin_new([4], "<f8", context)
+     var fn_obj = rs_entry(rs_extension(args[0], args[7], context), "monte_carlo_integrate")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::monte_carlo_integrate_binding:
+     # lower, upper, scalars_out; f_id, n_samples, seed, i_first
+@@ -461,11 +460,11 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
+ 
+ 
+ def rs_indices(binding: PythonObject, n_obj: PythonObject, n_samples: PythonObject, replace: PythonObject,
+-               random_state: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> AdmittedBuf:
++               random_state: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> LinBuf:
+     var where = String("resample")
+     var n = rs_int(n_obj, "n", where)
+     var count = n if n_samples is None else rs_int(n_samples, "n_samples", where)
+-    var idx = admitted_zeros([_rs_nonneg(count)], "<i4", context)
++    var idx = lin_new([_rs_nonneg(count)], "<i4", context)
+     var fn_obj = rs_entry(rs_extension(binding, numeric_mode, context), "resample_indices")
+     # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
+     var params = Python.list(n, count, PythonObject(1 if lin_truth(replace) else 0),
+diff --git a/bindings/metrics_native_support.mojo b/bindings/metrics_native_support.mojo
+index 5d2ac91f71..ea94300916 100644
+--- a/bindings/metrics_native_support.mojo
++++ b/bindings/metrics_native_support.mojo
+@@ -10,7 +10,7 @@ from bindings.classical_warnings import classical_warning, _warning_class_fields
+ from bindings.optimizer_public_words import stash_python_error
+ from bindings.native_scalar_decode import native_scalar_buffer
+ from bindings.native_caller_frame import native_frame_globals
+-from bindings.admitted_input import admitted_snapshot
++from providers.python.metric_input_snapshot_pyapi import metric_input_snapshot
+ 
+ 
+ def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
+@@ -71,7 +71,7 @@ def metric_arguments(args: PythonObject, first: Int, context: PythonObject) rais
+             else:
+                 value = scalar.to_python_number(metric_is_integral(value, context))
+         elif index >= first:
+-            value = admitted_snapshot(value, snapshots, context)
++            value = metric_input_snapshot(value, snapshots, context)
+         py_call(out.append, value)
+     return py_call(py_type(Python.tuple()), out)
+ 
+diff --git a/core/admitted_convert.mojo b/core/admitted_convert.mojo
+index e9599c22ca..04de1b11a8 100644
+--- a/core/admitted_convert.mojo
++++ b/core/admitted_convert.mojo
+@@ -4,7 +4,7 @@
+ of any Array dtype (no Python import): Array.astype's rules (float to float32
+ round to nearest even, integers range checked, float to integer truncated
+ toward zero). The native linalg / metrics admission
+-(bindings/admitted_input.mojo `admitted_typed_convert`) reads it.
++(bindings/linalg_ops_buffers.mojo `lin_convert`) reads it.
+ 
+     admitted_convert(src, shape, strides, count, item, kind, titem, tkind,
+                      typestr, dst)
+diff --git a/providers/python/lowbit_weight_pyapi.mojo b/providers/python/lowbit_weight_pyapi.mojo
+index 9c36f90b01..36d8517418 100644
+--- a/providers/python/lowbit_weight_pyapi.mojo
++++ b/providers/python/lowbit_weight_pyapi.mojo
+@@ -11,8 +11,7 @@ from bindings.native_buffer_owner import native_storage_allocate
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.classical_arrays import classical_wrap_array
+ from bindings.sequential_inputs import sequential_sequence_f32
+-from bindings.linalg_ops_buffers import lin_is_f32, lin_dtype_name
+-from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
++from bindings.linalg_ops_buffers import LinBuf, LinAdmission, lin_admitted_c, lin_new, lin_tuple, lin_is_f32, lin_dtype_name
+ from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
+ from bindings.optimizer_public_door import base_format, shape_text
+ 
+@@ -65,19 +64,19 @@ def low_binding(mut binding: PythonObject, context: PythonObject) raises -> Pyth
+     return binding
+ 
+ 
+-def low_wrap(kind: Int, q: AdmittedBuf, e: PythonObject, context: PythonObject) raises -> PythonObject:
++def low_wrap(kind: Int, q: LinBuf, e: PythonObject, context: PythonObject) raises -> PythonObject:
+     var result = native_storage_allocate(context["family_low_bf16"] if kind == 1 else context["family_low_int8"])
+     var fields = py_fields(result)
+     py_setitem(fields, "bits" if kind == 1 else "codes", q.keep)
+     if kind == 2:
+         py_setitem(fields, "exponents", e)
+-    py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
++    py_setitem(fields, "shape", lin_tuple(q.shape))
+     return result
+ 
+ 
+ def low_admit(value: PythonObject, typestr: String, rank: Int, name: String,
+-              context: PythonObject, force_copy: Bool = False) raises -> AdmittedBuf:
+-    var input = AdmittedTyped(value, context)
++              context: PythonObject, force_copy: Bool = False) raises -> LinBuf:
++    var input = LinAdmission(value, context)
+     var code = base_format(input.view.fmt)
+     var valid = (typestr == "<u2" and code == "H" and input.view.itemsize == 2
+         or typestr == "<i1" and code == "b" and input.view.itemsize == 1
+@@ -90,11 +89,11 @@ def low_admit(value: PythonObject, typestr: String, rank: Int, name: String,
+         raise Error("TypeError: mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
+     if input.view.count() == 0:
+         low_empty(name, input.view.shape)
+-    return admitted_typed_c(input^, typestr, name, context, force_copy)
++    return lin_admitted_c(input^, typestr, name, context, force_copy)
+ 
+ 
+ def low_exponents(value: PythonObject, rows: Int, context: PythonObject,
+-                  force_copy: Bool = False) raises -> AdmittedBuf:
++                  force_copy: Bool = False) raises -> LinBuf:
+     var e = low_admit(value, "<i4", 1, "exponents", context, force_copy)
+     if e.dim(0) != rows:
+         raise Error("TypeError: mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
+@@ -107,7 +106,7 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
+         return value
+     var fields = low_fields(value)
+     var q = low_admit(native_instance_item(fields, PythonObject("bits" if kind == 1 else "codes")), "<u2" if kind == 1 else "<i1", 2, "weight", context)
+-    var result = admitted_zeros(q.shape, "<f4", context)
++    var result = lin_new(q.shape, "<f4", context)
+     if kind == 1:
+         _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(q.addr), lin_ints(q.count()))
+     else:
+@@ -118,7 +117,7 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
+     return result.keep
+ 
+ 
+-def low_pack_admitted(var input: AdmittedTyped, fmt: String, name: String,
++def low_pack_admitted(var input: LinAdmission, fmt: String, name: String,
+                       mut binding: PythonObject, context: PythonObject) raises -> PythonObject:
+     if not lin_is_f32(input.view):
+         raise Error("TypeError: mojolearn.lowbit: " + name + " has dtype " + lin_dtype_name(input.keep, input.view) + "; pack takes float32")
+@@ -126,16 +125,16 @@ def low_pack_admitted(var input: AdmittedTyped, fmt: String, name: String,
+         raise Error("mojolearn.lowbit: " + name + " must be 2-D to pack, got shape " + shape_text(input.view.shape))
+     if input.view.count() == 0:
+         low_empty(name, input.view.shape)
+-    var a = admitted_typed_c(input^, "<f4", name, context, fmt == "float32")
++    var a = lin_admitted_c(input^, "<f4", name, context, fmt == "float32")
+     if fmt == "float32":
+         return a.keep
+-    var q = admitted_zeros(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
++    var q = lin_new(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
+     var result = PythonObject(None)
+     if fmt == "bfloat16":
+         _ = lin_call(low_binding(binding, context), context, "to_bf16", PythonObject(q.addr), PythonObject(a.addr), lin_ints(a.count()))
+         result = low_wrap(1, q, PythonObject(None), context)
+     else:
+-        var e = admitted_zeros([a.dim(0)], "<i4", context)
++        var e = lin_new([a.dim(0)], "<i4", context)
+         _ = lin_call(low_binding(binding, context), context, "quantize_int8", PythonObject(q.addr), PythonObject(e.addr), PythonObject(a.addr), lin_ints(a.dim(0), a.dim(1)))
+         result = low_wrap(2, q, e.keep, context)
+         _ = e^
+@@ -193,24 +192,24 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
+             _ = e^
+         else:
+             py_setitem(fields, "bits", q.keep)
+-        py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
++        py_setitem(fields, "shape", lin_tuple(q.shape))
+         _ = q^
+         return PythonObject(None)
+     if operation == "family_low_materialize_one":
+         return low_materialize(args[0], binding, context)
+     if operation == "family_low_widen_bf16":
+-        var input = AdmittedTyped(args[0], context)
+-        var a = admitted_typed_c(input^, "<u2", "bits", context)
++        var input = LinAdmission(args[0], context)
++        var a = lin_admitted_c(input^, "<u2", "bits", context)
+         if a.count() == 0:
+             raise Error("mojolearn.linalg.from_bf16: bits has no elements")
+-        var result = admitted_zeros(a.shape, "<f4", context)
++        var result = lin_new(a.shape, "<f4", context)
+         _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(a.addr), lin_ints(a.count()))
+         _ = a^
+         return result.keep
+     if operation == "family_low_pack_one":
+         var fmt = low_format(args[1])
+         var name = low_name(args[2])
+-        var input = AdmittedTyped(args[0], context)
++        var input = LinAdmission(args[0], context)
+         return low_pack_admitted(input^, fmt, name, binding, context)
+     var b = native_loaded_module("builtins")
+     if operation == "family_low_unpack":
+@@ -257,7 +256,7 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
+                 classical_admit_value(value, context)
+                 var sequence = sequential_sequence_f32(value, context)
+                 value = classical_wrap_array(sequence[1], sequence[0], "<f4", "C", context)
+-            var input = AdmittedTyped(value, context)
++            var input = LinAdmission(value, context)
+             if fmt != "float32" and len(input.view.shape) == 2:
+                 py_setitem(result, key, low_pack_admitted(input^, fmt, name, binding, context))
+             else:
+diff --git a/providers/python/metric_input_snapshot_pyapi.mojo b/providers/python/metric_input_snapshot_pyapi.mojo
+new file mode 100644
+index 0000000000..0f6bd535e8
+--- /dev/null
++++ b/providers/python/metric_input_snapshot_pyapi.mojo
+@@ -0,0 +1,121 @@
++# SPDX-License-Identifier: Apache-2.0
++# Private operation-owned metric inputs. Admission happens at the public door;
++# this snapshot preserves original container/array dtype inference and aliases.
++from std.python import Python, PythonObject
++from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr
++from bindings.native_buffer_owner import native_storage_allocate
++from bindings.py_attr import py_attr
++from bindings.native_loaded_module import native_loaded_module
++from bindings.classical_arrays import classical_is_array
++from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c
++from bindings.native_owner_lifetime import native_release_admit
++from providers.python.resample_rows_pyapi import _row_dtype_admit
++
++
++def _metric_flat_leaves(value: PythonObject, context: PythonObject) raises -> Bool:
++    """True when no element of the list/tuple `value` is a container the
++    snapshot copies (a mojolearn Array, array.array, ndarray, list, tuple or
++    bytearray): the exact types are read once with `set(map(type, value))`
++    and each distinct type is tested, not each element."""
++    var b = native_loaded_module("builtins")
++    var types = py_call(b.list, py_call(b.set, py_call(b.map, b.type, value)))
++    var ndarray = py_get(context, "ndarray")
++    var array_class = context["array_class"]
++    var native_array = context["array_type"]
++    for i in range(len(types)):  # driver-loop: over the distinct exact element types (a handful)
++        var cls = types[i]
++        if (cls is array_class or cls is native_array or cls is ndarray or cls is b.list
++                or cls is b.tuple or cls is b.bytearray):
++            return False
++    return True
++
++
++def _metric_array_alias(value: PythonObject, context: PythonObject) raises -> PythonObject:
++    """A private Array sharing `value`'s storage: every slot (storage owners,
++    address and metadata) is read once through the import-pinned native slot
++    descriptors and written to a fresh Array of the connected class. The GIL
++    is held throughout, so the slots form one consistent capture."""
++    var cls = context["array_class"]
++    var fields = context["array_fields"]
++    var array_alias = native_storage_allocate(cls)
++    var names = py_call(native_loaded_module("builtins").list, fields)
++    for i in range(len(names)):  # driver-loop: over the fixed Array slot names
++        var name = names[i]
++        py_setattr(array_alias, String(py=name), py_call(fields[name], value, cls))
++    return array_alias
++
++
++def metric_input_snapshot(value: PythonObject, memo: PythonObject,
++                          context: PythonObject, depth: Int = 0) raises -> PythonObject:
++    if depth > 64:
++        raise Error("TypeError: metric input nesting exceeds the supported depth")
++    var b = native_loaded_module("builtins")
++    var cls = py_type(value)
++    var array = classical_is_array(value, context)
++    var ndarray = py_get(context, "ndarray")
++    var native_array = cls is context["array_type"]
++    if not array and not native_array and cls is not ndarray and cls is not b.list and cls is not b.tuple and cls is not b.bytearray:
++        # Exact scalar leaves retain their dtype inside containers. Pandas and
++        # Torch retain their existing native materialization semantics.
++        return value
++    var key = py_call(b.id, value)
++    var known = py_get(memo, key)
++    if known is not None:
++        return known
++    var result = PythonObject(None)
++    if array:
++        var input = LinAdmission(value, context)
++        if input.view.c_contig:
++            # Metrics only read their inputs. A private Array that shares the
++            # admitted storage owners freezes the metadata (a caller replacing
++            # its slots cannot change what later readers see, and the owners
++            # keep the address alive); the data itself is not copied.
++            _ = input^
++            result = _metric_array_alias(value, context)
++        else:
++            var dtype = input.view.dtype
++            # Copy the same dtype, with the original pin/slot owners retained until
++            # copying finishes. Later readers see this private Array's metadata.
++            var output = lin_admitted_c(input^, dtype, "metric input", context, True)
++            result = output.keep
++            _ = output^
++    elif native_array:
++        # Exact array.array construction preserves the native typecode and
++        # copies its C storage without caller iteration/conversion hooks.
++        result = py_call(native_loaded_module("array").array, value.typecode, value)
++    elif cls is b.bytearray:
++        result = py_call(b.bytearray, value)
++    elif cls is ndarray:
++        # Exact native ndarray.view captures the caller's metadata once. C
++        # ndarray.copy only copies storage/references in the same dtype; no
++        # NumPy computation, cast, __array__, or user __copy__ hook runs.
++        var view = py_call(py_attr(ndarray, "view"), value)
++        var dtype = view.dtype
++        _row_dtype_admit(dtype, context)
++        var flags = view.flags
++        if (not Bool(py=dtype.hasobject)
++                and (Bool(py=flags.c_contiguous) or Bool(py=flags.f_contiguous))):
++            # Metrics only read their inputs (scikit-learn takes no snapshot).
++            # The private view fixes shape/strides/dtype once and holds the
++            # base storage alive; a concurrent writer can change values but
++            # never the memory the kernel reads, so no data copy is needed.
++            result = view
++        else:
++            result = py_call(py_attr(ndarray, "copy"), view, order="K")
++            if Bool(py=dtype.hasobject):
++                # A caller may replace its object cells while a kernel runs. The
++                # private snapshot must never become the final callback owner.
++                native_release_admit(result, context)
++        _ = view^
++    elif _metric_flat_leaves(value, context):
++        # Every element is a leaf, which the walk below returns unchanged and
++        # never memoizes: one C-level copy of the container is the same
++        # snapshot, without a recursive call per element.
++        result = py_call(b.tuple, value) if cls is b.tuple else py_call(b.list, value)
++    else:
++        var items = Python.list()
++        for i in range(len(value)):  # driver-loop: stable nested native metric containers, preserving scalar leaf dtypes
++            py_call(items.append, metric_input_snapshot(value[i], memo, context, depth + 1))
++        result = py_call(b.tuple, items) if cls is b.tuple else items
++    py_setitem(memo, key, result)
++    return result
+diff --git a/providers/python/metrics_matrix_input_pyapi.mojo b/providers/python/metrics_matrix_input_pyapi.mojo
+index 588c8edcc7..49c9f2ed15 100644
+--- a/providers/python/metrics_matrix_input_pyapi.mojo
++++ b/providers/python/metrics_matrix_input_pyapi.mojo
+@@ -1,20 +1,20 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Exact native metric target/score/weight buffers, captured once per input.
+ from std.python import Python, PythonObject
+-from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_shape_tuple
++from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_tuple
+ from bindings.optimizer_public_door import base_format
+ from bindings.family_common import family_repr, FAMILY_F32P
+ from core.family_cast_impl import family_min_f32, family_max_f32
+ from core.host_finite_scan import host_all_finite_f32
+ 
+ 
+-def _metric_f32(input: AdmittedTyped) -> Bool:
++def _metric_f32(input: LinAdmission) -> Bool:
+     return input.view.dtype == "<f4" if input.view.is_array else base_format(input.view.fmt) == "f"
+ 
+ 
+ def metric_reg_target(source: PythonObject, name: String, caller: String,
+                       context: PythonObject) raises -> PythonObject:
+-    var input = AdmittedTyped(source, context)
++    var input = LinAdmission(source, context)
+     if not _metric_f32(input):
+         raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly before scoring")
+     var rank = len(input.view.shape)
+@@ -22,7 +22,7 @@ def metric_reg_target(source: PythonObject, name: String, caller: String,
+     var cols = input.view.shape[1] if rank == 2 else 1
+     if (rank != 1 and rank != 2) or rows == 0 or cols == 0:
+         raise Error("mojolearn " + caller + ": " + name + " must be a nonempty (n,) or (n, n_outputs) array")
+-    var output = admitted_typed_c(input^, "<f4", name, context, True)
++    var output = lin_admitted_c(input^, "<f4", name, context, True)
+     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
+         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
+     var result = Python.tuple(output.keep, rows, cols)
+@@ -32,7 +32,7 @@ def metric_reg_target(source: PythonObject, name: String, caller: String,
+ 
+ def metric_score_matrix(source: PythonObject, n: Int, caller: String, ndim: Int,
+                         name: String, context: PythonObject) raises -> PythonObject:
+-    var input = AdmittedTyped(source, context)
++    var input = LinAdmission(source, context)
+     if not _metric_f32(input):
+         raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly")
+     var rank = len(input.view.shape)
+@@ -41,17 +41,17 @@ def metric_score_matrix(source: PythonObject, n: Int, caller: String, ndim: Int,
+     var nd = 1 if rank == 2 and cols == 1 and ndim == 1 else rank
+     if ndim >= 0 and nd != ndim:
+         raise Error("mojolearn " + caller + ": " + name + " must be " + String(ndim) + "-D, got shape "
+-                    + family_repr(admitted_shape_tuple(input.view.shape)))
++                    + family_repr(lin_tuple(input.view.shape)))
+     if rows != n:
+         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
+     if rank > 2:
+         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(rank) + "-D")
+     if input.view.count() == 0:
+         var what = "feature(s)" if rank == 2 and rows != 0 else "sample(s)"
+-        var shape = family_repr(admitted_shape_tuple(input.view.shape))
++        var shape = family_repr(lin_tuple(input.view.shape))
+         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
+                     + " (shape=" + shape + ") while a minimum of 1 is required.")
+-    var output = admitted_typed_c(input^, "<f4", name, context, True)
++    var output = lin_admitted_c(input^, "<f4", name, context, True)
+     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
+         raise Error("mojolearn " + caller + ": " + name + " must be finite")
+     var result = Python.tuple(output.keep, rows, cols, nd)
+@@ -61,14 +61,14 @@ def metric_score_matrix(source: PythonObject, n: Int, caller: String, ndim: Int,
+ 
+ def metric_sample_weights(source: PythonObject, n: Int, caller: String,
+                           context: PythonObject) raises -> PythonObject:
+-    var input = AdmittedTyped(source, context)
++    var input = LinAdmission(source, context)
+     if len(input.view.shape) != 1:
+         raise Error("mojolearn " + caller + ": sample_weight must be 1-D, got shape "
+-                    + family_repr(admitted_shape_tuple(input.view.shape)))
++                    + family_repr(lin_tuple(input.view.shape)))
+     var count = input.view.shape[0]
+     if count != n:
+         raise Error("mojolearn " + caller + ": sample_weight has " + String(count) + " entries for " + String(n) + " samples")
+-    var output = admitted_typed_c(input^, "<f4", "sample_weight", context, True)
++    var output = lin_admitted_c(input^, "<f4", "sample_weight", context, True)
+     var words = FAMILY_F32P(unsafe_from_address=output.addr)
+     if not host_all_finite_f32(words, n) or (n > 0 and family_min_f32(words, n) < 0):
+         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
+diff --git a/providers/python/metrics_vector_input_pyapi.mojo b/providers/python/metrics_vector_input_pyapi.mojo
+index 79b72c34a3..b675652260 100644
+--- a/providers/python/metrics_vector_input_pyapi.mojo
++++ b/providers/python/metrics_vector_input_pyapi.mojo
+@@ -3,7 +3,7 @@
+ from std.python import Python, PythonObject
+ from bindings.py_balanced import py_type, py_get
+ from bindings.classical_arrays import classical_is_array
+-from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
++from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_new, lin_tuple
+ from bindings.optimizer_public_door import base_format
+ from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
+ from core.host_finite_scan import host_all_finite_f32
+@@ -14,11 +14,11 @@ def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bo
+     return classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray")
+ 
+ 
+-def _metric_vector_shape(input: AdmittedTyped, name: String) raises -> Int:
++def _metric_vector_shape(input: LinAdmission, name: String) raises -> Int:
+     ref shape = input.view.shape
+     var rank = len(shape)
+     if rank != 1 and not (rank == 2 and shape[1] == 1):
+-        raise Error("mojolearn metrics: " + name + " must be 1-D, got shape " + family_repr(admitted_shape_tuple(shape)))
++        raise Error("mojolearn metrics: " + name + " must be 1-D, got shape " + family_repr(lin_tuple(shape)))
+     if shape[0] == 0:
+         raise Error("mojolearn metrics: " + name + " is empty")
+     return shape[0]
+@@ -32,7 +32,7 @@ def _metric_i32_range(name: String) raises:
+ 
+ 
+ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+-    var input = AdmittedTyped(value, context)
++    var input = LinAdmission(value, context)
+     var count = _metric_vector_shape(input, name)
+     ref view = input.view
+     var code = base_format(view.fmt)
+@@ -47,7 +47,7 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject)
+                     + (view.dtype if view.is_array else view.fmt) + "; the ported kernels take int32 labels")
+     # admit_ids: one parallel read narrowed to int32 in the same pass (it was
+     # a serial int64 read into a zero-filled store, then a serial narrowing).
+-    var output = admitted_zeros([count], "<i4", context)
++    var output = lin_new([count], "<i4", context)
+     if not admitted_ids_i32(view.addr, view.strides[0], 0, count, 1, view.itemsize, signed, False,
+                             FAMILY_I32P(unsafe_from_address=output.addr)):
+         _metric_i32_range(name)
+@@ -59,7 +59,7 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject)
+ 
+ def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
+                       regression: Bool, context: PythonObject) raises -> PythonObject:
+-    var input = AdmittedTyped(value, context)
++    var input = LinAdmission(value, context)
+     var count = _metric_vector_shape(input, name)
+     var code = base_format(input.view.fmt)
+     var f32 = input.view.dtype == "<f4" if input.view.is_array else code == "f"
+@@ -74,7 +74,7 @@ def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
+                     + "precision you run at is the one you chose.")
+     # The numerical owners consume an Array, so keep an operation-owned copy
+     # independent of mutable source Array slots after this snapshot returns.
+-    var output = admitted_typed_c(input^, "<f4", name, context, True)
++    var output = lin_admitted_c(input^, "<f4", name, context, True)
+     if require_finite and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), count):
+         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
+                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
+diff --git a/providers/python/resample_rows_pyapi.mojo b/providers/python/resample_rows_pyapi.mojo
+index a110e4fabf..d450630581 100644
+--- a/providers/python/resample_rows_pyapi.mojo
++++ b/providers/python/resample_rows_pyapi.mojo
+@@ -6,11 +6,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+ from bindings.py_attr import py_attr
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.native_numpy_metadata import native_numpy_dtype
+-from bindings.native_owner_lifetime import native_release_admit
++from bindings.native_owner_lifetime import native_release_admit, _released_dtype
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.classical_arrays import classical_is_array
+ from bindings.classical_pandas import classical_admit_value
+-from bindings.admitted_input import AdmittedTyped, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
++from bindings.linalg_ops_buffers import LinAdmission, LinBuf, lin_new, lin_tuple
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+ from core.borrowed_buffer import BorrowedBufferLayout
+@@ -19,7 +19,28 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
+ from bindings.cpython_table import cpython_table
+ 
+ 
+-# _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
++def _row_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
++    if _released_dtype(dtype, context, 0):
++        return
++    # NumPy's native variable-length StringDType cannot be copied as raw
++    # allocator bytes. Accept its exact builtin class, with callback-free
++    # missing-value/metadata owners, and use native scalar storage copying.
++    var b = native_loaded_module("builtins")
++    var string_dtype = PythonObject(None)
++    try:
++        string_dtype = py_call(native_numpy_dtype(context), "T")
++    except:
++        pass
++    if string_dtype is None or py_type(dtype) is not py_type(string_dtype):
++        raise Error("TypeError: resample requires a native NumPy dtype")
++    native_release_admit(py_call(b.getattr, dtype, "na_object", PythonObject(None)), context)
++    var metadata = dtype.metadata
++    if metadata is not None:
++        var pairs = py_call(b.list, metadata.items())
++        for i in range(len(pairs)):  # driver-loop: native dtype metadata cannot retain callback owners
++            native_release_admit(pairs[i][0], context)
++            native_release_admit(pairs[i][1], context)
++
+ 
+ 
+ def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,
+@@ -62,7 +83,7 @@ struct ResampleRows(Movable):
+     var sequence: PythonObject
+     var dtype: PythonObject
+     var pin: Optional[AdmittedBorrowedBuffer]
+-    var array_owner: Optional[AdmittedTyped]
++    var array_owner: Optional[LinAdmission]
+     var layout: BorrowedBufferLayout
+     var is_array: Bool
+     var has_objects: Bool
+@@ -90,7 +111,7 @@ struct ResampleRows(Movable):
+             # original owner alive without Array/Python conversion callbacks.
+             self.source = py_call(py_attr(context["ndarray"], "view"), source)
+             self.dtype = self.source.dtype
+-            admitted_dtype_admit(self.dtype, context)
++            _row_dtype_admit(self.dtype, context)
+             self.has_objects = Bool(py=self.dtype.hasobject) or String(self.dtype.kind) == "T"
+             self.is_array = True
+             var item = Int(py=self.dtype.itemsize)
+@@ -117,7 +138,7 @@ struct ResampleRows(Movable):
+         elif classical_is_array(source, context):
+             if py_get(context, "ndarray") is None:
+                 raise Error("ImportError: mojolearn: resample requires optional NumPy support for Array outputs")
+-            self.array_owner = AdmittedTyped(source, context)
++            self.array_owner = LinAdmission(source, context)
+             ref view = self.array_owner.value().view
+             self.layout = BorrowedBufferLayout(view.addr, view.itemsize, view.readonly,
+                 view.shape.copy(), view.strides.copy(), List[Int](length=len(view.shape), fill=-1))
+@@ -167,9 +188,9 @@ struct ResampleRows(Movable):
+         shape[0] = count
+         # Exact ndarray allocation with a retained native dtype is storage
+         # construction only. No asarray, conversion, or caller protocol runs.
+-        return py_call(context["ndarray"], admitted_shape_tuple(shape), dtype=self.dtype)
++        return py_call(context["ndarray"], lin_tuple(shape), dtype=self.dtype)
+ 
+-    def take(self, indices: AdmittedBuf, context: PythonObject) raises -> PythonObject:
++    def take(self, indices: LinBuf, context: PythonObject) raises -> PythonObject:
+         var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=indices.addr)
+         var count = indices.dim(0)
+         if not self.is_array:
+@@ -222,8 +243,8 @@ struct ResampleRows(Movable):
+                     # Exact ndarray scalar storage access preserves object and
+                     # structured-dtype reference semantics. The source dtype
+                     # and result dtype are identical: no dtype conversion runs.
+-                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, admitted_shape_tuple(coordinates))
+-                    py_call(py_attr(context["ndarray"], "__setitem__"), out, admitted_shape_tuple(out_coordinates), value)
++                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, lin_tuple(coordinates))
++                    py_call(py_attr(context["ndarray"], "__setitem__"), out, lin_tuple(out_coordinates), value)
+                 else:
+                     memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + (i * row_items + item) * self.layout.itemsize),
+                         src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.layout.item_address(coordinates)), count=self.layout.itemsize)
+@@ -241,8 +262,8 @@ struct ResampleRows(Movable):
+ 
+ 
+ def resample_rows_indices(binding: PythonObject, n: Int, count: Int, replace: Bool,
+-                          seed: PythonObject, context: PythonObject) raises -> AdmittedBuf:
+-    var indices = admitted_zeros([max(count, 0)], "<i4", context)
++                          seed: PythonObject, context: PythonObject) raises -> LinBuf:
++    var indices = lin_new([max(count, 0)], "<i4", context)
+     py_call(neural_descriptor_entry(binding, "resample_indices"), Python.list(indices.addr),
+             Python.list(n, count, 1 if replace else 0, seed))
+     _ = indices
+@@ -291,7 +312,7 @@ def resample_rows_narrow(rows: List[ResampleRows], binding: PythonObject, n: Int
+     if route is None:
+         return PythonObject(None)
+     var bound = Int(py=py_call(neural_descriptor_entry(binding, "resample_gather_narrow_bytes")))
+-    var indices = admitted_zeros([count], "<i4", context)
++    var indices = lin_new([count], "<i4", context)
+     var outputs = Python.list()
+     var output_pins = List[AdmittedBorrowedBuffer]()
+     var addresses = Python.list(indices.addr)

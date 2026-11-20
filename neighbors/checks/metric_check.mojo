@@ -81,9 +81,10 @@ from neighbors.impl.selection.distance_weights import (
     weights_from_name,
 )
 from core.row_norms import NORM_TPB, row_norm_kernel
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 comptime M_ROWS = 37
 comptime M_COLS = 53
@@ -172,9 +173,8 @@ def _upload(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, v[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^
     return buf^
 
 
@@ -209,12 +209,11 @@ def _read(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
     var out = List[Float32](capacity=n)
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
     return out^
 
 

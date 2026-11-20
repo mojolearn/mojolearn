@@ -62,11 +62,17 @@ embedding scatter (free order) and the tied pair add's placement; every
 accumulate stays f32.
 """
 
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_FUSE (record read: EXP:2363 DELETED, superseded), MOJOLEARN_AFN_SAMBA_ARENA, MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT, MOJOLEARN_AFN_SAMBA_EMB_ATOMIC, MOJOLEARN_AFN_SAMBA_HEAD_GEMM (MERGED-UNMEASURED opt-in arms, EXP:653-657) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at f6652fc1ac.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.patch (one patch: the arms, the arena, the device admission, the atomic embedding scatter, the head GEMMs and the standalone op bodies).
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL and MOJOLEARN_AFN_EPI_ALL (umbrella reads, owner another lane) deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f6652fc1ac.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.expdel2-32-neural.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -128,7 +134,7 @@ from transformer.impl.llama.modeling_llama import llama_rms_norm
 # ===========================================================================
 
 comptime AFN_SAMBA_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_SAMBA_ALL = AFN_SAMBA_APPLE_FAST and is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
 comptime AFN_SAMBA_FUSE = AFN_SAMBA_ALL or (
@@ -889,70 +895,8 @@ def afn_head_loss_host(
 # ===========================================================================
 
 
-def afn_norm_head_forward_host(
-    ctx: DeviceContext,
-    c_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    nw_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    hw_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    m: Int,
-    n: Int,
-    k: Int,
-    eps: Float32,
-) raises -> Int:
-    """The final RMSNorm then the head GEMM in one call: `c[m, n] =
-    rms_norm(x[m, k], nw) . hw[n, k]^T`. `hn` never leaves the device.
-    Returns `m * n`."""
-    comptime if not AFN_SAMBA_FUSE:
-        raise Error("mojolearn samba afn: fused entries are not in this build")
-    else:
-        _refuse_norm_shape(m, k, eps)
-        if n < 1:
-            raise Error("mojolearn samba ops: linear shape must be positive")
-        var cells = m * k
-        comptime if not AFN_SAMBA_DEVICE_ADMIT:
-            _refuse_nonfinite_host("rms_norm input", x_ptr, cells)
-            _refuse_nonfinite_host("rms_norm weight", nw_ptr, k)
-            _refuse_nonfinite_host("linear weight", hw_ptr, n * k)
-        var arena = AfnArena()
-        var own = arena.id >= 0
-        var admit = AfnAdmit(ctx)
-        var x = afn_upload_f32(own, ctx, x_ptr, cells)
-        var nw = afn_upload_f32(own, ctx, nw_ptr, k)
-        var hw = afn_upload_f32(own, ctx, hw_ptr, n * k)
-        admit.scan(ctx, x, cells, "rms_norm input")
-        admit.scan(ctx, nw, k, "rms_norm weight")
-        admit.scan(ctx, hw, n * k, "linear weight")
-        var hn = afn_scratch_f32(own, ctx, cells)
-        var sumsq = afn_scratch_f32(own, ctx, m)
-        llama_rms_norm(ctx, sumsq, hn, x, nw, m, k, eps)
-        var c = afn_scratch_f32(own, ctx, m * n)
-        var keep = List[DeviceBuffer[DType.float32]]()
-        # lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the matrix-unit
-        # kernel, no workspace; afn-samba's spelling if it declines.
-        comptime if AFN_SAMBA_HEAD_GEMM:
-            if not afn_head_gemm_into(ctx, c, hn, hw, m, n, k, OP_NT):
-                var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
-                identical_gemm_into(ctx, c, hn, hw, ws, m, n, k, OP_NT)
-                keep.append(ws^)
-        else:
-            var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
-            identical_gemm_into(ctx, c, hn, hw, ws, m, n, k, OP_NT)
-            keep.append(ws^)
-        ctx.enqueue_copy(dst_ptr=c_ptr, src_buf=c)
-        admit.finish(ctx)
-        ctx.synchronize()
-        arena.close()
-        admit.check()
-        _ = x^
-        _ = nw^
-        _ = hw^
-        _ = hn^
-        _ = sumsq^
-        _ = c^
-        _ = keep^
-        _ = admit^
-        return m * n
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD afn_norm_head_forward_host (the AFN_SAMBA_FUSE fused forward tail; SambaStack.forward runs SambaStackProgram on every device build) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def afn_tail_train_host(

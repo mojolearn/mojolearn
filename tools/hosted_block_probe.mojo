@@ -15,7 +15,7 @@ the claim "runs on any Apple silicon" needs qualifying rather than widening.
 
 from max.gpu.host import DeviceContext
 from max.gpu.primitives.block import sum as block_sum
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 comptime TPB = 256
 
@@ -49,6 +49,7 @@ def main() raises:
         h.unsafe_ptr().unsafe_store(i, Float32(1.0))
     ctx.enqueue_copy(dst_buf=src, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[block_reduce_kernel](
         dst.unsafe_ptr(), src.unsafe_ptr(), Int32(COLS),

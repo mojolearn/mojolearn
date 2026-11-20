@@ -55,18 +55,16 @@ def _version(text):
 
 
 def published_base(root, revision, version):
-    """Source commit of the newest published release before VERSION, at REVISION."""
-    listing = git(root, "ls-tree", "-r", "--name-only", revision, "bench/results/release_verification/")
+    """Source commit of the newest published release before VERSION, at REVISION: read through git from the release
+    evidence set (bench/results/release_evidence/) and its history, then the dated records of releases up to 0.8.65
+    (tools/release_evidence_set.py provenance_history)."""
+    import release_evidence_set
     best = None
-    for path in listing.splitlines():
-        if not path.endswith("/release-provenance.json"):
-            continue
-        record = json.loads(git(root, "show", revision + ":" + path))
-        published = str(record.get("version", ""))
-        if (record.get("schema") == "mojolearn.release-provenance.v1" and re.fullmatch(r"\d+(\.\d+)+", published)
-                and _version(published) < _version(version) and HEX40.fullmatch(str(record.get("source_commit")))):
+    for published, source in release_evidence_set.provenance_history(root, revision):
+        if (re.fullmatch(r"\d+(\.\d+)+", published) and _version(published) < _version(version)
+                and HEX40.fullmatch(str(source))):
             if best is None or _version(published) > _version(best[0]):
-                best = (published, record["source_commit"])
+                best = (published, source)
     require(best is not None, "no published release record precedes this version at the tested revision")
     return best
 

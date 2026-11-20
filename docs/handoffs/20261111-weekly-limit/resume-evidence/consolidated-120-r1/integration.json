@@ -1,0 +1,12 @@
+{
+  "source": "6ebb6c98ca89f72e236050b0dd62af65b904c695",
+  "base": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+  "state": "compile_failed",
+  "compiled": false,
+  "merged": false,
+  "pushed": false,
+  "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r1",
+  "scope": "Mac identical and CPU compilation only; no runtime, vendor identity, or performance claim",
+  "updated_at": "2026-11-11T19:49:03.065241+00:00",
+  "build_exit": 1
+}

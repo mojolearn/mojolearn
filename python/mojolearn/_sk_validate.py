@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""scikit-learn's input and target validation, once, around every estimator.
+"""scikit-learn's input and target validation for application subclasses.
 
-`_mode.install_fit_tracking` wraps every estimator's `fit`, `partial_fit`,
-`fit_predict` and `fit_transform`, and its `predict`, `transform`,
-`decision_function`, `predict_proba`, `predict_log_proba`, `score` and
-`score_samples`. The wrappers call `before_fit` / `before_call` here on the
-outermost call (never on a call a fit makes on its own instance), so every
-estimator refuses what scikit-learn's `validate_data` refuses, with
-scikit-learn's wording, without a copy of the check in each estimator:
+A package class admits and refuses its inputs natively inside its one-call
+public methods. `_mode.install_fit_tracking` runs only for a class written
+outside the package (an application subclass): it wraps that class's `fit`,
+`partial_fit`, `fit_predict` and `fit_transform`, and its `predict`,
+`transform`, `decision_function`, `predict_proba`, `predict_log_proba`,
+`score` and `score_samples`. Those wrappers call `before_fit` /
+`before_call` here on the outermost call (never on a call a fit makes on its
+own instance), so such a class refuses what scikit-learn's `validate_data`
+refuses, with scikit-learn's wording:
 
 - sparse X when the estimator's `input_tags.sparse` is False
   ("Sparse data was passed for X, but dense data is required ...");
@@ -30,9 +32,10 @@ scikit-learn's wording, without a copy of the check in each estimator:
 After a fit it sets `n_features_in_` (when the estimator did not) and
 `feature_names_in_` for a DataFrame with string column names.
 
-Every look at VALUES (finiteness, integrality) is a native helper on an
-`Array` view of the input (`_buffer.all_finite`, the core `reduce_stat`):
-Python only reads shapes, formats and tags. The X finiteness scan runs only
+Every refusal and every look at VALUES (finiteness, integrality) is one
+native operation (bindings/labels_admission_unpack.mojo
+`admission_check_x_op` / `admission_check_y_op`, scikit-learn's wording):
+Python only reads shapes, formats and tags and hands them over. The X finiteness scan runs only
 for the estimators in `_SCANS_X_HERE`; every other estimator's kernels scan
 X themselves, and their refusal (a plain `Exception` raised by the binding)
 is re-raised here as the `ValueError` scikit-learn's callers catch.
@@ -41,6 +44,7 @@ is re-raised here as the `ValueError` scikit-learn's callers catch.
 import re
 import sys
 import warnings
+import weakref
 
 #: The wrapped fit methods that validate their arguments.
 FIT_METHODS = ("fit", "partial_fit", "fit_predict", "fit_transform")
@@ -97,10 +101,26 @@ _NONFINITE = re.compile(r"NaN|[Ii]nfinit|non-?finite|not finite|requires finite|
 #: A device fault is never an input refusal, whatever the input looked like.
 _DEVICE_FAULT = re.compile(r"device_context|CUDA|HIP|hipError|Metal|MTL")
 
-_RESHAPE_HINT = ("Reshape your data either using array.reshape(-1, 1) if your data has a "
-                 "single feature or array.reshape(1, -1) if it contains a single sample.")
-
 _MISSING = object()
+
+#: `bindings/labels_native_entry_pack.mojo` admission operations (lanes py-admission
+#: and py-buffer). ADMISSION_OP_X describes X and makes every refusal in one call;
+#: ADMISSION_OP_Y does the same for y.
+_OP_CHECK_Y = 13
+_OP_DESCRIBE = 14
+_OP_X = 15
+_OP_Y = 16
+#: ADMISSION_OP_X words (bindings/labels_admission_unpack.mojo ADMISSION_X_*).
+_X_SPARSE_OK = 1
+_X_TABULAR = 2
+_X_SCAN = 4
+
+
+def _admission():
+    """`(entry, context)`: the compiled label entry whose admission
+    operations raise the X and y refusals (connected once)."""
+    from ._native_labels_bridge import labels_entry
+    return labels_entry()
 
 
 class DataConversionWarning(UserWarning):
@@ -118,8 +138,27 @@ def _conversion_warning():
 # ------------------------------------------------------------------ tags
 
 
+#: class -> (its __mro__ tuple, the MRO's class names). A class's MRO tuple
+#: is replaced when its bases change, so the identity test below notices; a
+#: dead class drops out of the weak mapping. One set per class, not up to
+#: four per validated call.
+_NAMES_CACHE = weakref.WeakKeyDictionary()
+
+
 def _names(cls):
-    return {c.__name__ for c in cls.__mro__}  # glue: the class names of the MRO (class-sized)
+    mro = cls.__mro__
+    try:
+        cached = _NAMES_CACHE.get(cls)
+    except TypeError:
+        cached = None
+    if cached is not None and cached[0] is mro:
+        return cached[1]
+    names = frozenset(c.__name__ for c in mro)  # glue: the class names of the MRO (class-sized), once per class
+    try:
+        _NAMES_CACHE[cls] = (mro, names)
+    except TypeError:
+        pass
+    return names
 
 
 def input_tag_overrides(cls):
@@ -130,6 +169,38 @@ def input_tag_overrides(cls):
     return {}
 
 
+#: class -> (its __mro__ tuple, the fit word, the call word, its NaN rule):
+#: the ADMISSION_OP_X words of `cls`, from tags that are class constants, read
+#: once per class (lane py-buffer). Before, each validated call read up to
+#: three input tags, the NaN hook and the scan sets.
+_X_WORDS_CACHE = weakref.WeakKeyDictionary()
+
+
+def _x_words(cls):
+    mro = cls.__mro__
+    try:
+        cached = _X_WORDS_CACHE.get(cls)
+    except TypeError:
+        cached = None
+    if cached is not None and cached[0] is mro:
+        return cached
+    names = _names(cls)
+    base = 0
+    if _input_tag(cls, "sparse", False):
+        base |= _X_SPARSE_OK
+    if _input_tag(cls, "two_d_array", True) and not _input_tag(cls, "one_d_array", False):
+        base |= _X_TABULAR
+    nan_ok = _input_tag(cls, "allow_nan", False)
+    fit_scan = not nan_ok and bool(names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT)
+    call_scan = fit_scan or (not nan_ok and bool(names & _SCANS_X_AFTER_FIT))
+    words = (mro, base | (_X_SCAN if fit_scan else 0), base | (_X_SCAN if call_scan else 0), _nan_rule(cls))
+    try:
+        _X_WORDS_CACHE[cls] = words
+    except TypeError:
+        pass
+    return words
+
+
 def _input_tag(cls, name, default):
     own = getattr(cls, "_sklearn_input_tags", {})
     if name in own:
@@ -137,12 +208,25 @@ def _input_tag(cls, name, default):
     return input_tag_overrides(cls).get(name, default)
 
 
-def _allows_nan_now(est):
-    """An estimator whose NaN handling is a parameter (SplineTransformer's
-    handle_missing='zeros') says so through `_mojolearn_allows_nan()`; the
-    class tag alone cannot."""
-    hook = getattr(est, "_mojolearn_allows_nan", None)
-    return bool(hook()) if hook is not None else False
+def _nan_rule(cls):
+    """How an estimator whose NaN handling is a parameter says so, resolved
+    once per class (`_x_words`): None, a (parameter, value) pair from the
+    class constant `_mojolearn_nan_parameter` (SplineTransformer's
+    handle_missing='zeros': answered from the parameter, no hook call), or
+    True for an application class's own `_mojolearn_allows_nan()` (called)."""
+    if getattr(cls, "_mojolearn_allows_nan", None) is not None:
+        return True
+    rule = getattr(cls, "_mojolearn_nan_parameter", None)
+    return tuple(rule) if rule is not None else None
+
+
+def _allows_nan_now(est, rule):
+    """`rule` from `_nan_rule`: the class tag alone cannot say whether this
+    instance takes NaN."""
+    if rule is True:
+        hook = getattr(est, "_mojolearn_allows_nan", None)
+        return bool(hook()) if hook is not None else False
+    return getattr(est, rule[0], None) == rule[1]
 
 
 def _target_tag(cls, name, default, est=None):
@@ -205,35 +289,14 @@ def _put(args, kwargs, index, name, value):
 # ------------------------------------------------------------- inspection
 
 
-def _is_sparse(obj):
-    return hasattr(obj, "tocsr") and hasattr(obj, "nnz") and hasattr(obj, "shape")
+# TOMBSTONE: _sk_validate._is_sparse / _format_kind / _scalar_kind (describe's Python
+# probes) deleted 2026-11-15 by lane py-buffer: bindings/labels_admission_unpack.mojo
+# admission_describe reads them natively; code recoverable at 8579360a2e.
 
 
-_INT_LETTERS = frozenset("bBhHiIlLqQnN?")
-
-
-def _format_kind(fmt):
-    """'float', 'int', 'complex' or None for a PEP 3118 format or an Array
-    dtype string."""
-    f = fmt.lstrip("@=<>!|")
-    if f[:1] == "Z":
-        return "complex"
-    if f in ("f", "d", "e", "g", "f2", "f4", "f8"):
-        return "float"
-    if (len(f) == 1 and f in _INT_LETTERS) or f[:1] in ("i", "u", "b") and f[1:].isdigit():
-        return "int"
-    return None
-
-
-def _scalar_kind(value):
-    import numbers
-    if isinstance(value, bool) or isinstance(value, numbers.Integral):
-        return "int"
-    if isinstance(value, numbers.Real):
-        return "float"
-    if isinstance(value, numbers.Complex):
-        return "complex"
-    return None
+#: ADMISSION_OP_DESCRIBE codes -> describe's names.
+_CONTAINERS = (None, "sparse", "buffer", "list", "frame")
+_KINDS = (None, "float", "int", "complex")
 
 
 def describe(obj):
@@ -241,33 +304,15 @@ def describe(obj):
     export, its nesting or its `shape` attribute, never from its values:
     container is 'sparse', 'buffer', 'list' or 'frame'; value_kind is
     'float', 'int', 'complex' or None (strings, objects, records, or not
-    known). None for None and for anything without a shape."""
+    known). None for None and for anything without a shape. One native call
+    (bindings/labels_admission_unpack.mojo `admission_describe`)."""
     if obj is None:
         return None
-    if _is_sparse(obj):
-        return "sparse", tuple(obj.shape), None
-    if isinstance(obj, (list, tuple)):
-        shape = []
-        item = obj
-        while isinstance(item, (list, tuple)):  # glue: walks the nesting depth through first elements (rank-sized)
-            shape.append(len(item))
-            if not item:
-                return "list", tuple(shape), "int"
-            item = item[0]
-        return "list", tuple(shape), _scalar_kind(item)
-    if isinstance(obj, (str, bytes, dict)):
+    entry, context = _admission()
+    info = entry(_OP_DESCRIBE, (obj,), context)
+    if info is None:
         return None
-    from ._buffer import Buf, _device_array_kind
-    if _device_array_kind(obj) is None:
-        try:
-            with Buf(obj, name="X") as b:
-                return "buffer", tuple(b.shape) if b.ndim else (), _format_kind(b.format)
-        except (TypeError, ValueError, BufferError):
-            pass
-    shape = getattr(obj, "shape", None)
-    if isinstance(shape, tuple) and all(isinstance(s, int) for s in shape):  # glue: the shape tuple (rank-sized)
-        return "frame", tuple(shape), None
-    return None
+    return _CONTAINERS[info[0]], info[1], _KINDS[info[2]]
 
 
 def _column_names(X):
@@ -281,40 +326,13 @@ def _column_names(X):
     return names
 
 
-def _all_finite(obj):
-    """True unless a float buffer or list holds NaN or infinity (the base
-    binding's `all_finite` over a zero-copy `Array` view when it can be)."""
-    from ._buffer import _materialize, all_finite
-    a, _ = _materialize(obj, "X")
-    if a.dtype not in ("<f4", "<f8"):
-        return True
-    return all_finite(a)
+# TOMBSTONE: _sk_validate._all_finite / _finite_array / _integral_array (the value scans) deleted
+# 2026-11-14 by lane py-admission: bindings/labels_admission_unpack.mojo admission_check_x_op /
+# admission_check_y_op scan X and y natively; code recoverable at 1fac46234f.
 
 
-def _integral(obj):
-    """True when every value of a float label vector is a whole number. The
-    device `unique_inverse` (`_labels`) finds the k distinct values and the
-    core helper `reduce_stat` tests only those k, so no host pass runs over
-    the rows. A y that is not a float vector answers True (not tested)."""
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import _materialize, _native, addr_ro
-    from ._labels import unique_inverse
-    a, _ = _materialize(obj, "y")
-    if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape):  # glue: largest axis of the shape
-        return True
-    classes, _ = unique_inverse(a._as_c().reshape((a.size,)))
-    return bool(_native("reduce_stat")(addr_ro(classes, name="classes"), _NATIVE_CODE[classes.dtype],
-                                       int(classes.size), _REDUCE_INTEGRAL))
-
-
-def whole_float_labels(y):
-    """True when `y` is a float buffer whose every value is a finite whole
-    number (class labels scikit-learn's callers pass as floats, such as
-    `[0.0, 1.0, ...]`); both scans are native."""
-    info = describe(y)
-    if info is None or info[0] != "buffer" or info[2] != "float":
-        return False
-    return _all_finite(y) and _integral(y)
+# TOMBSTONE: _sk_validate.whole_float_labels (no product caller: bindings/neighbors_knn_native_door.mojo
+# owns it) deleted 2026-11-14 by lane py-admission; the oracle copy is tests/_legacy_neighbors_knn.py.
 
 
 # ------------------------------------------------------------------ X
@@ -325,53 +343,31 @@ def _precomputed(est):
     return any(getattr(est, k, None) == "precomputed" for k in keys)  # glue: four parameter names
 
 
-def _scans_x(cls, fitting):
-    """True when the X finiteness scan runs here for this call."""
-    names = _names(cls)
-    if names & _SCANS_X_HERE or names & _SCANS_X_AT_FIT:
-        return True
-    return not fitting and bool(names & _SCANS_X_AFTER_FIT)
+# TOMBSTONE: _sk_validate._scans_x deleted 2026-11-15 by lane py-buffer: the scan sets are
+# folded into the per-class words of `_x_words`; code recoverable at 8579360a2e.
 
 
 def _check_X(est, X, fitting=True):
     """Refuse X as scikit-learn's `validate_data` does; return its
     description (or None when X is not tabular numeric input)."""
-    info = describe(X)
-    if info is None:
-        return None
-    container, shape, kind = info
+    # Hot path (AGENTS.md "No refactor adds cost on a hot path"): ONE native
+    # call per public call (fit, predict, transform, score, ...). It reads X's
+    # export once (shape and format), refuses sparse, complex, 0-D/1-D and
+    # empty X in scikit-learn's words, and runs the finiteness scan the class
+    # asks for (bindings/labels_admission_unpack.mojo `admission_x_op`). The
+    # class's tags are one cached word; only an estimator whose NaN handling
+    # is a parameter asks its hook. Lane py-buffer removed the Python
+    # description (`_buffer.Buf`: a ctypes buffer export, Python shape and
+    # stride tuples, two device probes) that ran before the native call.
+    # The description's container and kind are small-int codes; callers read
+    # only the shape (`info[1]`).
     cls = type(est)
-    name = cls.__name__
-    if container == "sparse":
-        if not _input_tag(cls, "sparse", False):
-            raise TypeError(
-                "Sparse data was passed for X, but dense data is required. Use "
-                f"'.toarray()' to convert to a dense numpy array. ({name} takes dense X only.)")
-        return info
-    if kind == "complex":
-        raise ValueError(f"Complex data not supported: {name} got a complex X.")
-    if container != "frame" and kind is None:
-        return None  # strings, objects, records: the estimator's own input step
-    if not _input_tag(cls, "two_d_array", True) or _input_tag(cls, "one_d_array", False):
-        return None
-    ndim = len(shape)
-    if ndim < 2:
-        raise ValueError(
-            f"Expected 2D array, got {'scalar' if ndim == 0 else '1D'} array instead "
-            f"(shape={shape}). {_RESHAPE_HINT}")
-    if ndim == 2:
-        if shape[0] == 0:
-            raise ValueError(f"Found array with 0 sample(s) (shape={shape}) while a "
-                             f"minimum of 1 is required by {name}.")
-        if shape[1] == 0:
-            raise ValueError(f"Found array with 0 feature(s) (shape={shape}) while a "
-                             f"minimum of 1 is required by {name}.")
-    if (container in ("buffer", "list") and kind == "float"
-            and not _input_tag(cls, "allow_nan", False)
-            and not _allows_nan_now(est)
-            and _scans_x(cls, fitting) and not _all_finite(X)):
-        raise ValueError(f"Input X contains NaN or infinity ({name}).")
-    return info
+    words = _x_words(cls)
+    word = words[1] if fitting else words[2]
+    if words[3] is not None and word & _X_SCAN and _allows_nan_now(est, words[3]):
+        word &= ~_X_SCAN
+    entry, context = _admission()
+    return entry(_OP_X, (X, cls.__name__, word), context)
 
 
 def _check_width(est, X, info):
@@ -403,52 +399,46 @@ def _check_width(est, X, info):
 # ------------------------------------------------------------------ y
 
 
-def _check_y(est, y):
-    """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does;
-    return the y to fit on."""
+def _check_y(est, y, x_rows=-1, X=None):
+    """Refuse or reshape y as scikit-learn's `validate_data(..., y)` does,
+    and refuse an X and y of different lengths (`check_consistent_length`,
+    `x_rows` the rows of X or -1); return the y to fit on."""
+    from ._native_labels_bridge import ADMISSION_Y_CLASSIFIER, ADMISSION_Y_MISSING
     cls = type(est)
     name = cls.__name__
     kind = _kind(est)
+    entry, context = _admission()
     if y is None:
         if _target_tag(cls, "required", kind in ("classifier", "regressor")):
-            raise ValueError(f"{name} requires y to be passed, but the target y is None.")
+            entry(_OP_CHECK_Y, (None, name, ADMISSION_Y_MISSING, -1, -1), context)
         return y
-    info = describe(y)
-    if info is None:
+    # Hot path: ONE native call per fit (bindings/labels_admission_unpack.mojo
+    # `admission_y_op`): y's description, its refusals (complex, NaN or
+    # infinity, a continuous y for a classifier) and the lengths, in
+    # scikit-learn's words. Lane py-buffer removed the `_buffer.Buf`
+    # description that ran before it.
+    # X rides along so a non-finite y refusal can name a non-finite X first
+    # (scikit-learn's order); it is read only on that refusal path.
+    column = entry(_OP_Y, (y, name, ADMISSION_Y_CLASSIFIER if kind == "classifier" else 0, x_rows, X),
+                   context)
+    if column is None:
         return y
-    container, shape, vkind = info
-    if container == "sparse":
-        return y
-    if vkind == "complex":
-        raise ValueError(f"Complex data not supported: {name} got a complex y.")
-    if (len(shape) == 2 and shape[1] == 1 and container != "list"
-            and not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape")):
+    # A column vector (n, 1) that is not a list: scikit-learn's column_or_1d
+    # warns and ravels it before the value checks.
+    flags, y_rows = column
+    if not _target_tag(cls, "multi_output", False, est) and hasattr(y, "reshape"):
         warnings.warn(
             "A column-vector y was passed when a 1d array was expected. Please change "
             "the shape of y to (n_samples, ), for example using ravel().",
             _conversion_warning(), stacklevel=4)
         y = y.reshape(-1)
-    if container in ("buffer", "list") and vkind == "float":
-        if not _all_finite(y):
-            raise ValueError(f"Input y contains NaN or infinity ({name}).")
-        if kind == "classifier" and not _integral(y):
-            raise ValueError(
-                "Unknown label type: continuous. Maybe you are trying to fit a classifier, "
-                "which expects discrete classes on a regression target with continuous values.")
+    entry(_OP_CHECK_Y, (y, name, flags, x_rows, y_rows, X), context)
     return y
 
 
-def _check_lengths(info, y):
-    """scikit-learn's `check_consistent_length` over X and y, from their
-    shapes."""
-    if info is None or y is None or not info[1]:
-        return
-    yinfo = describe(y)
-    if yinfo is None or not yinfo[1]:
-        return
-    if yinfo[1][0] != info[1][0]:
-        raise ValueError("Found input variables with inconsistent numbers of samples: "
-                         f"[{info[1][0]}, {yinfo[1][0]}]")
+# TOMBSTONE: _sk_validate._check_lengths deleted 2026-11-14 by lane py-admission: the
+# lengths refusal is admission_check_y_op's (bindings/labels_admission_unpack.mojo), called
+# by _check_y with the rows of X; code recoverable at 1fac46234f.
 
 
 # ------------------------------------------------------------- the hooks
@@ -457,17 +447,20 @@ def _check_lengths(info, y):
 class Check:
     """What `before_fit` / `before_call` saw, for `after_fit` and `reraise`."""
 
-    __slots__ = ("X", "info", "fitting")
+    __slots__ = ("X", "info", "fitting", "prior_width")
 
-    def __init__(self, X, info, fitting):
+    def __init__(self, X, info, fitting, prior_width=None):
         self.X, self.info, self.fitting = X, info, fitting
+        # The `n_features_in_` object present before a full (re)fit, or
+        # _MISSING; None for a partial_fit or a predict-side call.
+        self.prior_width = prior_width
 
 
 def _array_like(obj):
     """An `__array__`-only object (scikit-learn's _NotAnArray, a pandas object:
     no buffer, not a sequence) as the array it exports, else `obj` itself, so
     X, y and sample_weight take the same paths as their arrays. Glue: one
-    conversion call, no per-element work (the rule `_buffer._materialize`
+    conversion call, no per-element work (the rule the native admission
     applies to X)."""
     if (obj is None or isinstance(obj, (list, tuple, str, bytes))
             or not callable(getattr(obj, "__array__", None))):
@@ -502,11 +495,12 @@ def before_fit(est, method, slots, args, kwargs):
         _check_width(est, X, info)
     y = _get(args, kwargs, iy, yname)
     if y is not _MISSING:
-        y2 = _check_y(est, _array_like(y))
+        x_rows = info[1][0] if info is not None and info[1] else -1
+        y2 = _check_y(est, _array_like(y), x_rows, X)
         if y2 is not y:
             args, kwargs = _put(args, kwargs, iy, yname, y2)
-        _check_lengths(info, y2)
-    return args, kwargs, Check(X, info, True)
+    prior = None if method == "partial_fit" else vars(est).get("n_features_in_", _MISSING)
+    return args, kwargs, Check(X, info, True, prior)
 
 
 def before_call(est, method, slots, args, kwargs):
@@ -533,11 +527,19 @@ def after_fit(est, check):
     estimator did not."""
     info = check.info
     state = vars(est)
-    if info is not None and len(info[1]) == 2 and "n_features_in_" not in state:
-        try:
-            est.n_features_in_ = info[1][1]
-        except AttributeError:
-            pass
+    if info is not None and len(info[1]) == 2:
+        current = state.get("n_features_in_", _MISSING)
+        # Set it when absent, and on a full refit when the value is still the
+        # one from before this fit (the estimator did not set it) but X's
+        # width changed: a stale width from the previous fit would otherwise
+        # refuse every correctly shaped predict after the refit.
+        stale = (check.prior_width is not None and current is not _MISSING
+                 and current is check.prior_width and current != info[1][1])
+        if current is _MISSING or stale:
+            try:
+                est.n_features_in_ = info[1][1]
+            except AttributeError:
+                pass
     names = _column_names(check.X)
     if names is None:
         state.pop("feature_names_in_", None)

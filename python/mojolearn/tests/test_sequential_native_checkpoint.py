@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Sequential, _backend
-from mojolearn._cast_in import describe
+from mojolearn.tests._cast_in import describe
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -131,7 +131,7 @@ def training_model(loss):
 
 
 def state_bytes(value):
-    return tuple(getattr(value, name).tobytes() for name in ("params_", "_opt_m", "_opt_v", "_fit_state")) + (
+    return tuple(getattr(value, name).tobytes() for name in ("params_", "optimizer_m_", "optimizer_v_", "_fit_state")) + (
         np.asarray(value.loss_curve_, "f4").tobytes(), value.n_iter_)
 
 
@@ -191,7 +191,6 @@ def test_native_sequential_export_prediction_and_training_state_refusals(loss, t
 
 
 def test_native_sequential_checkpoint_and_import_do_not_call_python_helpers(monkeypatch, tmp_path):
-    from mojolearn import _verify_model, _weight_import
     x, y = dataset("mse")
     fitted = training_model("mse").fit(x, y, epochs=1)
     imported = model()
@@ -202,8 +201,6 @@ def test_native_sequential_checkpoint_and_import_do_not_call_python_helpers(monk
         raise AssertionError("Python helper reached in native Sequential operation")
 
     with monkeypatch.context() as patch:
-        patch.setattr(_verify_model, "record_sequential", forbidden)
-        patch.setattr(_weight_import, "WeightSource", forbidden)
         patch.setattr(_backend, "binding", forbidden)
         for name in ("empty", "zeros", "asarray", "ascontiguousarray", "array"):
             patch.setattr(np, name, forbidden)

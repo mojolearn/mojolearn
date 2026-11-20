@@ -36,9 +36,9 @@ IDENTICAL), never by a mode test here: this file compiles the same in both
 modes and the ROUTE decides who calls it.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
@@ -145,7 +145,7 @@ def compute_partition_stats_gather(
     _ = max_leaf_rows
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var max_chunks = partition_stats_chunks(sm, n_stats)
 
     ctx.enqueue_function[partition_stats_partial_gather_kernel](

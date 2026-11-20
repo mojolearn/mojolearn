@@ -3,7 +3,9 @@
 """Transport for the host-pointer GEMM surfaces (lane/gap-neural-models, 2026-10-02).
 
 NO ARITHMETIC. Copies, pooled allocations and waits only, so nothing here can
-move a bit of any GEMM profile.
+move a bit of any GEMM profile. One exception, on by default: with
+NAN_CANON_ON (the default; core/nan_canon.mojo) `gemm_down_f32` rewrites the NaN words of
+the downloaded product to the one canonical word (core/nan_canon.mojo).
 
 WHY. `linalg.matmul` at the board shape (4096^3, 64 MB per operand) paid, per
 call: three fresh device allocations plus the dispatcher's fresh workspace,
@@ -20,20 +22,20 @@ host surfaces:
   * A STAGED UPLOAD (same stage, the other direction), off by default on
     Apple where a raw host-pointer upload is already 1.6-2.4 ms per 64 MB.
 
-A/B (runtime, one build serves both arms):
-  MOJOLEARN_GEMM_POOL=0        fresh buffers every call (the old path)
-  MOJOLEARN_GEMM_STAGE_DOWN=0|1   staged download off/on (default on)
-  MOJOLEARN_GEMM_STAGE_UP=0|1     staged upload off/on (default: on except Apple)
+A/B (build arms; run-time environment reads per matmul until 2026-11-15):
+  -D MOJOLEARN_GEMM_STAGE_UP_OFF      raw upload (default staged except Apple)
+  -D MOJOLEARN_GEMM_STAGE_UP          staged upload on Apple too
 """
 
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
-from std.memory import memcpy
-from std.os import getenv
+from std.memory import unsafe_memcpy
+from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.shared_slot import SharedSlot
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -55,54 +57,61 @@ struct _GemmPool(Defaultable, Movable):
     var busy: Int64
     var f32: List[Optional[DeviceBuffer[DType.float32]]]
     var u16: List[Optional[DeviceBuffer[DType.uint16]]]
+    var i8: List[Optional[DeviceBuffer[DType.int8]]]
+    var i32: List[Optional[DeviceBuffer[DType.int32]]]
     var stage: Optional[HostBuffer[DType.float32]]
 
     def __init__(out self):
         self.busy = 0
         self.f32 = List[Optional[DeviceBuffer[DType.float32]]]()
         self.u16 = List[Optional[DeviceBuffer[DType.uint16]]]()
+        self.i8 = List[Optional[DeviceBuffer[DType.int8]]]()
+        self.i32 = List[Optional[DeviceBuffer[DType.int32]]]()
         for _ in range(N_ROLES):
             self.f32.append(Optional[DeviceBuffer[DType.float32]]())
             self.u16.append(Optional[DeviceBuffer[DType.uint16]]())
+            self.i8.append(Optional[DeviceBuffer[DType.int8]]())
+            self.i32.append(Optional[DeviceBuffer[DType.int32]]())
         self.stage = Optional[HostBuffer[DType.float32]]()
 
 
-comptime GEMM_POOL = _Global[StorageType=_GemmPool, name="MojoGemmHostPool", init_fn=_GemmPool.__init__]
+comptime GEMM_POOL = SharedSlot[_GemmPool, "MojolearnGemmHostPoolV1"]
 
 
-def _env_flag(name: StringLiteral, default: Bool) -> Bool:
-    var v = String(getenv(name))
-    if v == "0":
-        return False
-    if v == "1":
-        return True
-    return default
+# Transport switches (lane envgate-train-seq-mamba, 2026-11-15): build
+# constants holding today's defaults; before, each was an environment read per
+# matmul (`_env_flag`, now deleted).
+# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal;
+# cells gemm / gemm-bf16 / gemm-int8 fit): the pool and the staged download
+# stay, with no switch.
+#   fresh buffers per call:  1.044 geomean (0.94, 1.09, 1.11)
+#   raw download:            1.125 geomean (1.03, 1.18, 1.17)
+#   raw upload (the B arm below): 0.986 geomean (0.87, 1.07, 1.03), three cells,
+#   one of them faster: UNDECIDED, kept opt-in, re-time owed (owed-pre0867.json
+#   "gemm-stage-up-off").
+# TOMBSTONE: MOJOLEARN_GEMM_POOL_OFF (LOSER: fresh device buffers per matmul, arm/base geomean 1.044 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_GEMM_STAGE_DOWN_OFF (LOSER: raw device-to-host-pointer download, arm/base geomean 1.125 over 3 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_POOL_OFF-STAGE_DOWN_OFF.patch (restores both gemm switches; re-delete the other); record in docs/TOMBSTONES.md.
+comptime GEMM_STAGE_UP_ON = (
+    TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_GEMM_STAGE_UP"]()
+) and not is_defined["MOJOLEARN_GEMM_STAGE_UP_OFF"]()
 
 
-def gemm_pool_on() -> Bool:
-    return _env_flag("MOJOLEARN_GEMM_POOL", True)
-
-
-def gemm_stage_down_on() -> Bool:
-    return _env_flag("MOJOLEARN_GEMM_STAGE_DOWN", True)
-
-
+@always_inline
 def gemm_stage_up_on() -> Bool:
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return _env_flag("MOJOLEARN_GEMM_STAGE_UP", False)
-    return _env_flag("MOJOLEARN_GEMM_STAGE_UP", True)
+    return GEMM_STAGE_UP_ON
 
 
 struct GemmHostLease(Movable):
-    """The pool for one call, or nothing when the pool is off or busy.
+    """The pool for one call, or nothing when the pool is busy.
     `release()` before the lease ends (after the call's final wait)."""
 
     var held: Bool
 
     def __init__(out self) raises:
         self.held = False
-        if not gemm_pool_on():
-            return
         var p = GEMM_POOL.get_or_create_ptr()
         var flag = UnsafePointer(to=p[].busy)
         var old = Atomic.fetch_add[ordering = Ordering.SEQUENTIAL](flag, Int64(1))
@@ -140,6 +149,29 @@ struct GemmHostLease(Movable):
             p[].u16[role] = ctx.enqueue_create_buffer[DType.uint16](want)
         return p[].u16[role].value().create_sub_buffer[DType.uint16](0, want)
 
+    def i8(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
+        """int8 codes (gemm_int8's operands; lane a3, 2026-11-08: they were
+        fresh allocations per call while the f32/bf16 surfaces pooled theirs)."""
+        var want = n if n > 0 else 1
+        if not self.held:
+            return ctx.enqueue_create_buffer[DType.int8](want)
+        var p = GEMM_POOL.get_or_create_ptr()
+        if not p[].i8[role] or len(p[].i8[role].value()) < want:
+            ctx.synchronize()
+            p[].i8[role] = ctx.enqueue_create_buffer[DType.int8](want)
+        return p[].i8[role].value().create_sub_buffer[DType.int8](0, want)
+
+    def i32(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+        """int32 words (gemm_int8's per-row exponents)."""
+        var want = n if n > 0 else 1
+        if not self.held:
+            return ctx.enqueue_create_buffer[DType.int32](want)
+        var p = GEMM_POOL.get_or_create_ptr()
+        if not p[].i32[role] or len(p[].i32[role].value()) < want:
+            ctx.synchronize()
+            p[].i32[role] = ctx.enqueue_create_buffer[DType.int32](want)
+        return p[].i32[role].value().create_sub_buffer[DType.int32](0, want)
+
     def stage(self, ctx: DeviceContext) raises -> Int:
         """The address of two halves of GEMM_STAGE_FLOATS pinned floats, or 0
         when the pool is not held."""
@@ -155,7 +187,7 @@ struct GemmHostLease(Movable):
 def _par_copy(dst: F32P, src: F32P, n: Int):
     """One `memcpy(dst, src, n)`: the stage's single host copy (transport, no
     arithmetic, no host threads)."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def gemm_up_f32(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[DType.float32], src: F32P, n: Int) raises:
@@ -192,15 +224,30 @@ def gemm_up_u16(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[
         ctx.enqueue_copy(dst_buf=dst.create_sub_buffer[DType.uint16](0, n), src_ptr=src)
 
 
+@always_inline
+def _down_canon(dst: F32P, n: Int):
+    """The NaN words of a downloaded GEMM result `dst[0, n)` made the one
+    canonical word (core/nan_canon.mojo), across the host's cores. Compiles
+    to nothing under -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF."""
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(dst, n)
+
+
 def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DType.float32], dst: F32P, n: Int) raises:
-    """`src[0, n)` into host floats `dst[0, n)`, then waits."""
+    """`src[0, n)` into host floats `dst[0, n)`, then waits.
+    Every caller hands a float32 product C (fp32, fused, bf16, int8, int15),
+    so this is where a GEMM result leaves the device: with
+    NAN_CANON_ON (default on) each chunk's NaN
+    words become the one canonical word right after its host copy, while the
+    copy engine fills the other half (`_down_canon`). No other word moves."""
     if n <= 0:
         ctx.synchronize()
         return
-    var addr = lease.stage(ctx) if (n >= GEMM_STAGE_MIN and gemm_stage_down_on()) else 0
+    var addr = lease.stage(ctx) if n >= GEMM_STAGE_MIN else 0
     if addr == 0:
         ctx.enqueue_copy(dst_ptr=dst, src_buf=src.create_sub_buffer[DType.float32](0, n))
         ctx.synchronize()
+        _down_canon(dst, n)
         return
     var stage = F32P(unsafe_from_address=addr)
     # Double-buffered: chunk i's DMA runs while chunk i-1 (retired by the
@@ -215,9 +262,11 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
         ctx.enqueue_copy(dst_ptr=half, src_buf=src.create_sub_buffer[DType.float32](off, cnt))
         if i > 0:
             _par_copy(dst + prev_off, stage + ((i - 1) % 2) * GEMM_STAGE_FLOATS, prev_cnt)
+            _down_canon(dst + prev_off, prev_cnt)
         ctx.synchronize()
         prev_off = off
         prev_cnt = cnt
         off += cnt
         i += 1
     _par_copy(dst + prev_off, stage + ((i - 1) % 2) * GEMM_STAGE_FLOATS, prev_cnt)
+    _down_canon(dst + prev_off, prev_cnt)

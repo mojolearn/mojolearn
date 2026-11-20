@@ -20,8 +20,11 @@ def controller(tmp_path, monkeypatch, saved=None, supplied=None):
         doc["configuration"] = saved or {}
     monkeypatch.setattr(release.release_reuse, "darwin_toolchain", lambda: {"clang": "current"})
     monkeypatch.setattr(release.release_requirements, "build_flags", lambda: {"CFLAGS": "current"})
+    # The fake returns the shape release_requirements.requirements returns (requirements + configuration):
+    # readiness_manifest reads manifest["requirements"] for unmapped optional bindings.
     monkeypatch.setattr(release.release_requirements, "requirements",
-                        lambda root, rev, version, configuration: configuration)
+                        lambda root, rev, version, configuration: {"requirements": {},
+                                                                   "configuration": configuration})
     ctx.macos_wheel = lambda: None
     def absent(vendor):
         raise release.StepFailed("no current candidate")
@@ -34,7 +37,7 @@ def test_saved_workloads_and_cpu_scope_survive_but_stale_artifacts_do_not(tmp_pa
              "build_flags": {"old": "old"}, "artifacts:nvidia": {"old.whl": "old"},
              "artifacts:amd": {"old.whl": "old"}, "artifacts:apple": {"old.whl": "old"}}
     ctx = controller(tmp_path, monkeypatch, saved)
-    result = ctx.readiness_manifest()
+    result = ctx.readiness_manifest()["configuration"]
     assert result["dependency_context"] == dict(saved["dependency_context"], apple_toolchain={"clang": "current"})
     assert result["build_flags"] == {"CFLAGS": "current"}
     assert not any(k.startswith("artifacts:") for k in result)
@@ -43,7 +46,7 @@ def test_saved_workloads_and_cpu_scope_survive_but_stale_artifacts_do_not(tmp_pa
 
 def test_cpu_scope_is_never_inferred_and_explicit_configuration_is_used(tmp_path, monkeypatch):
     ctx = controller(tmp_path, monkeypatch, supplied={"dependency_context": {"workloads": {"amd": []}}})
-    result = ctx.readiness_manifest()
+    result = ctx.readiness_manifest()["configuration"]
     assert "cpu_target" not in result["dependency_context"]
     assert result["dependency_context"]["workloads"] == {"amd": []}
 
@@ -70,7 +73,7 @@ def test_frozen_analysis_reused_but_new_artifact_and_freeze_invalidate(tmp_path,
     calls = []
     def analyze(root, rev, version, configuration):
         calls.append((rev, configuration))
-        return {"source": rev, "configuration": configuration}
+        return {"source": rev, "requirements": {}, "configuration": configuration}
     monkeypatch.setattr(release.release_requirements, "requirements", analyze)
     first = ctx.readiness_manifest()
     first['configuration']['mutated'] = True

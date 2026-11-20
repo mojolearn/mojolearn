@@ -1,0 +1,54 @@
+diff --git a/gbdt/targets/kernel/pair_logit.mojo b/gbdt/targets/kernel/pair_logit.mojo
+index d3b1fee99f..211e754c78 100644
+--- a/gbdt/targets/kernel/pair_logit.mojo
++++ b/gbdt/targets/kernel/pair_logit.mojo
+@@ -74,6 +74,7 @@ from std.math import isfinite
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from checks.numerics import ftz
++from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
+ from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32
+ from std.memory import bitcast, stack_allocation
+ from max.gpu.memory import AddressSpace
+@@ -95,10 +96,10 @@ from gbdt.targets.kernel.pair_logit_group import (
+     launch_pair_logit_group_setup,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+-#: the explicit-pair route's block (buffer sizing and function-value reductions)
+-comptime AFT_PAIR_BLOCK = MSE_BLOCK_SIZE
++# N07 explicit-pair route: four simdgroups per block reduce physical
++# occupancy cost. Buffer sizing and function-value reductions use this
++# exact width. No performance/quality evidence; default OFF.
++comptime AFT_PAIR_BLOCK = 128 if AFT_N07 else MSE_BLOCK_SIZE
+ 
+ 
+ def pair_blocks(n_pairs: Int) -> Int:
+diff --git a/gbdt/targets/kernel/pair_logit_group.mojo b/gbdt/targets/kernel/pair_logit_group.mojo
+index 1a4ae22033..458c767107 100644
+--- a/gbdt/targets/kernel/pair_logit_group.mojo
++++ b/gbdt/targets/kernel/pair_logit_group.mojo
+@@ -56,6 +56,7 @@ list is not a function of the grades.
+ """
+ 
+ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
++from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
+ from std.math import isfinite
+ from std.memory import stack_allocation
+ from std.sys import is_defined
+@@ -160,9 +161,11 @@ def pl_group_narrow_for[column: Int]() -> Bool:
+ comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
+ #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
+ #: (`MSE_BLOCK_SIZE`, 256)
+-# TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+-comptime PLG_LAUNCH_THREADS = 128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE
++# N07: two simdgroups per query block trade more serial query tiles for
++# smaller register/shared reservations. Every document and unlike-grade pair
++# remains present; queries wider than the block keep the complete tile loop.
++# New64-lane arm, not the historical256-vs128 experiment. No evidence.
++comptime PLG_LAUNCH_THREADS = 64 if AFT_N07 else (128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE)
+ 
+ #: threads per group block, one document per thread per chunk; the value
+ #: and magnitude partials use `pinned_block_sum` at this width

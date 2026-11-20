@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # CPU implementation of the same ByteLM descriptor table as GPU trainers.
 # Only the session/host execution owner differs; metadata transport is shared.
-from std.ffi import _Global
-from std.memory import memcpy, memcmp
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from std.memory import unsafe_memcpy, unsafe_memcmp
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
@@ -10,9 +10,13 @@ from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_session import ByteHostSession, host_optimizer, host_state_validate, host_state_finite, host_tokens, host_loss_bits, host_copy_f32, host_copy_i32, host_scatter
 from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native
+from core.shared_slot import SharedSlot
 
 comptime BYTE_HOST_TRAINER_ABI = "mojolearn.training.byte_lm.v1"
-comptime BYTE_HOST_TRAINER_COUNT = 12
+# Operation 12: the multi-step entry (the host column of the device table's
+# operation 12; a = [session, ids, losses, flags], p = [n_steps, completed]).
+comptime BYTE_HOST_TRAINER_STEPS = 12
+comptime BYTE_HOST_TRAINER_COUNT = 13
 
 
 def host_trainer_recover(mut owner: ByteHostSession, completed: Int):
@@ -27,7 +31,12 @@ def host_trainer_recover(mut owner: ByteHostSession, completed: Int):
 
 
 def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
-                      opt: List[Float64], completed: Int, train: Bool) raises -> Int:
+                      opt: List[Float64], completed: Int, train: Bool, n_steps: Int = 1) raises -> Int:
+    """Operation 1: `n_steps` training steps (a[0] the (n_steps, batch,
+    length + 1) id stack, a[5] n_steps losses; lane x7: the binding's one
+    call for `train_steps`) or one evaluation."""
+    if n_steps < 1 or (n_steps > 1 and not train):
+        raise Error("byte LM trainer: an evaluation takes one batch; a training call at least one")
     if len(a) < 8:
         raise Error("byte LM trainer: expected at least 8 addresses")
     var full = a[7] != 0
@@ -35,11 +44,11 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
         raise Error("byte LM trainer: an evaluation returns no gradient")
     if len(a) != (8 + cfg.n_tensors() if full else 8):
         raise Error("byte LM trainer: expected one named gradient output per parameter tensor")
-    if train and completed >= 999999:
+    if train and completed + n_steps > 999999:
         raise Error("byte LM: completed step outside admitted bound")
     if not train and a[6] != 0:
         raise Error("byte LM trainer: an evaluation requires a null flags output")
-    host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+    host_tokens(a[0], n_steps * cfg.batch * (cfg.length + 1), cfg.vocab_size)
     if not owner.opened:
         if a[2] == 0 and a[3] == 0 and a[4] == 0:
             raise Error("byte LM: session is not open")
@@ -47,8 +56,11 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
     try:
         var step = 0
         if train:
-            step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
-            if step != completed + 1:
+            if n_steps > 1:
+                step = owner.steps([a[0], a[5], a[6]], n_steps, completed)
+            else:
+                step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
+            if step != completed + n_steps:
                 raise Error("byte LM: successful result has wrong completed step")
             if full:
                 _ = owner.export_gradients(a[7], cfg)
@@ -96,6 +108,12 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
         loss = host_loss_bits(byte_host_train_native([Int(p.unsafe_ptr()), Int(m.unsafe_ptr()), Int(v.unsafe_ptr()),
             a[4], Int(grad.unsafe_ptr()), Int(out_p.unsafe_ptr()), Int(out_m.unsafe_ptr()), Int(out_v.unsafe_ptr())],
             cfg, opt, completed))
+        # p, m and v are read through their addresses only: without these
+        # their last use is `unsafe_ptr()` above and ASAP destruction may
+        # free them before the step reads them (a NaN step from freed memory).
+        _ = p^
+        _ = m^
+        _ = v^
         host_state_validate(out_p, out_m, out_v, flags, completed + 1)
         host_state_finite(grad, "returned gradient")
         host_copy_f32(a[8], grad)
@@ -108,7 +126,7 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
                 named.append(a[i])
             host_scatter(a[8], named, cfg)
     else:
-        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 0, 1))
+        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 1, 0))
         host_copy_f32(a[5], p)
         host_copy_f32(a[6], m)
         host_copy_f32(a[7], v)
@@ -138,6 +156,10 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
         for i in range(4, count):  # driver-loop: over CPU attention-stage metadata (no device stash)
             out[i] = 0
         return count
+    # TOMBSTONE: operation 12 (the multi-step entry) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]); code recoverable at the deletion commit's parent.
+    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+    if op == BYTE_HOST_TRAINER_STEPS:
+        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
     if len(p) != 17 or len(f) != 8 or (p[9] != 0 and p[9] != 1):
         raise Error("byte LM native ABI: invalid configuration descriptor")
     var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
@@ -168,7 +190,10 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
     if op == 8:
         return host_trainer_run(addresses, cfg, opt, p[11], p[10] == 1)
     if op == 1:
-        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1)
+        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+        if p[14] < 0 or p[14] > 999999:
+            raise Error("byte LM native ABI: invalid step count")
+        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1, max(1, p[14]))
     if op == 10:
         if len(addresses) != 1 and len(addresses) != 1 + cfg.n_tensors():
             raise Error("byte LM trainer: expected the flat gradient and optional named outputs")
@@ -190,7 +215,7 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
             step = owner[].export_state([addresses[1], addresses[2], addresses[3], addresses[4]], cfg)
             if step != p[11]:
                 raise Error("Byte-LM state export returned a different completed step")
-            if memcmp(i32_ptr(addresses[4]), expected.unsafe_ptr(), len(expected)) != 0:
+            if unsafe_memcmp(i32_ptr(addresses[4]), expected.unsafe_ptr(), len(expected)) != 0:
                 raise Error("Byte-LM exported flags differ from the admitted flags")
         except error:
             if p[16] == 1:
@@ -200,7 +225,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
             owner[].close()
         return step
     if op == 2 or op == 6:
-        if len(addresses) != 6:
+        # A seventh address (next bytes only): the ragged row lengths.
+        if len(addresses) != 6 and not (op == 6 and len(addresses) == 7):
             raise Error("byte LM trainer: expected 6 addresses")
         host_tokens(addresses[0], p[14] * p[15], cfg.vocab_size)
         if not owner[].opened:
@@ -208,6 +234,8 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
                 raise Error("byte LM: session is not open")
             _ = owner[].open([addresses[3], addresses[4], addresses[5], addresses[2]], cfg, opt, p[11])
         try:
+            if len(addresses) == 7:
+                return owner[].next_rows([addresses[0], addresses[1]], addresses[6], p[14], p[15], cfg, p[11])
             return owner[].logits([addresses[0], addresses[1]], p[14], p[15], cfg, p[11], op == 6)
         except error:
             if owner[].opened and (not owner[].usable or owner[].completed != p[11]):
@@ -243,5 +271,4 @@ struct ByteHostTrainerTable(Defaultable, Movable):
         self.entries.append(host_trainer_native_v1)
 
 
-comptime BYTE_HOST_TRAINER_TABLE = _Global[StorageType=ByteHostTrainerTable,
-    name="MojoByteHostTrainerTableV1", init_fn=ByteHostTrainerTable.__init__]
+comptime BYTE_HOST_TRAINER_TABLE = SharedSlot[ByteHostTrainerTable, ("MojolearnByteHostTrainerTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostTrainerTableFastV3")]

@@ -5,15 +5,13 @@ NI55/58/60 change ownership of independent cells, preserving each cell's exact
 operation sequence. NI59 uses one supported thread-block barrier to share the
 existing channel draw. The public mask stays dense and unchanged.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul, identical_div
 from x_cnn.ops import FP, IP, dropout2d_mask_val
-from x_cnn.neural_aux_contract import (
-    NEURAL_AUX_FEATURE_TILE, NI57_GRAPH_TREE64, graph_reduce_tree64,
-)
+from x_cnn.neural_aux_contract import NEURAL_AUX_FEATURE_TILE
 
 
 @always_inline
@@ -34,14 +32,6 @@ def spmm_feature4_at(tile: Int, vals: FP, h: FP, dst: FP, unused: FP, q: IP, p: 
                 if hi > lo:
                     value = ftz(identical_div(ftz(h.unsafe_load(i)), Float32(hi - lo)))
                 dst.unsafe_store(i, value)
-        return
-    comptime if NI57_GRAPH_TREE64:
-        # Both flags use the NI57 graph; do not accidentally restore the old
-        # arithmetic when the independent feature-schedule candidate is enabled.
-        comptime for lane in range(NEURAL_AUX_FEATURE_TILE):
-            if first + lane < features:
-                dst.unsafe_store(row * features + first + lane,
-                    graph_reduce_tree64(row, first + lane, n, features, mode, vals, h, q))
         return
     var acc = SIMD[DType.float32, NEURAL_AUX_FEATURE_TILE](0.0)
     for edge in range(lo, hi):

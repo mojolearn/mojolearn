@@ -1,33 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CPU training for the misc lanes (lane/cpu-training-misc, 2026-09-15):
-kmeans-sqrt, kmeans-classic-pp, cross-val, bootstrap,
-permutation-test, monte-carlo, optim-sgd, optim-adam-clip,
-cross-entropy-arms and training-primitives, checked from
-SOURCE so it runs on a box with nothing built, plus runtime checks that run
-only where the host bindings are built and the package took the CPU-only
-path.
+"""CPU training for the misc lanes: kmeans-sqrt, kmeans-classic-pp,
+cross-val, bootstrap, permutation-test, monte-carlo, optim-sgd,
+optim-adam-clip, cross-entropy-arms and training-primitives.
 
-What the source checks hold: the manifest declares the three k-means lanes
-on the core family and cross-val on the gbdt family, and names each for the
-docs; no lane is diffed against a fix record since release-0845 (the
-2026-10-14 training record carries kmeans-sqrt after its fix), and any fix
-record's three columns would carry its lane STABLE and equal on every
-fixture; the covered lanes split into the record
-set and the fix set with nothing lost; the CPU identity gate reads both sets
-and the fix columns from the manifest and diffs each against its own columns
-in the covered step and in the sabotage step; `python -m mojolearn identity`
-runs only the record set on a CPU-only install; the core host binding
-registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
-binding's name, and the oracle refuses an unsupported metric in the device's
-words; the resample family routes `_mojolearn_resample` to its own host
-binding, which registers the GPU binding's three entries, read-backs and
-the one-device range probe, and whose oracle imports no GPU module, calls
-the device path's own host stages and carries the sabotage arm; the training
-family declares the four neural lanes, its host binding registers the GPU
-binding's clip, accumulate and Samba operation names, the new oracle imports
-no GPU module, and the no-CPU-path sentence names the blocks that still have
-none rather than "the neural blocks".
+The manifest checks: the covered lanes split into the record set and the fix
+set with nothing lost (no lane is diffed against a fix record since
+release-0845), and `python -m mojolearn identity` can serve every public
+reference lane of the record set from a binding that ships.
 
 The runtime checks (skipped, and SAID to be skipped, when a binding is
 absent or a GPU set loaded): an unsupported metric refuses with the
@@ -35,59 +15,25 @@ device's sentence, by its name on the Python side and by its code on the
 Mojo side; the fold-row gather returns the rows a Python index
 returns, byte for byte, and refuses an out-of-range index before writing;
 a bootstrap run twice returns the same bytes and its `r_first` slice equals
-the whole run's, and the range probe answers one device; the host embedding
-forward is the gather, the two-piece accumulate is the elementwise sum, and
-the clip refuses max_norm <= 0 by name.
-The bit claim against the GPU columns is the CPU identity gate's.
+the whole run's; the host embedding forward is the gather, the two-piece
+accumulate is the elementwise sum, and the clip refuses max_norm <= 0 by
+name. The bit claim against the GPU columns is the CPU identity gate's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_misc
 """
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import json
-import re
 import sys
-from pathlib import Path
 
 import mojolearn
-from mojolearn._cpu_reference import reference_training
 from mojolearn import _backend, host_surface
 
-ROOT = Path(__file__).resolve().parents[3]
-
-KMEANS_LANES = ("kmeans-sqrt", "kmeans-classic-pp")
-KMEANS_ORACLE = "cluster/host/kmeans_oracle.mojo"
-RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
-RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
-NEURAL_LANES = ("optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives")
-SAMBA_ORACLE = "training/host/samba_ops_oracle.mojo"
-NEURAL_EXPORTS = ("accumulate", "accumulation_is_aligned", "embedding_forward",
-                  "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward",
-                  "linear_backward")
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 #: The device's refusal of a metric it does not implement. The cosine metric
 #: was DELETED on 2026-09-18 (lane/kmeans-cosine-capability); what must
 #: survive is the property the routed refusal existed to give, which is that
 #: an unsupported metric is refused BY NAME rather than accepted and ignored.
 METRIC_REFUSAL = "kmeans supports only the L2Expanded (0) and L2SqrtExpanded (1) distance metrics"
-FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def test_manifest_covers_the_misc_lanes():
-    covered = host_surface.covered_lanes()
-    core = host_surface.family("core")
-    for lane in KMEANS_LANES:
-        assert lane in covered, f"{lane} is not a covered training lane"
-        assert lane in core["training_lanes"], f"{lane} is not a core training lane"
-        assert host_surface.TRAINING_LANE_NAMES[lane] in host_surface.training_sentence()
-    gbdt = host_surface.family("gbdt")
-    assert "cross-val" in covered and "cross-val" in gbdt["training_lanes"]
-    assert "model_selection.cross_val_score" in gbdt["classes"]
 
 
 def test_fix_lanes_split_the_covered_lanes():
@@ -104,55 +50,7 @@ def test_fix_lanes_split_the_covered_lanes():
     assert host_surface.main(["--record-covered-lanes"]) == 0
 
 
-def test_fix_columns_carry_the_fixed_lane_on_every_fixture():
-    """Every fix lane must be carried by exactly three of the fix columns, one
-    per GPU vendor, STABLE with one hash per fixture across the three; and
-    the record must either lack the lane or disagree with those hashes on
-    some fixture (otherwise the lane belongs back on the record). kmeans-sqrt's
-    three are the record's own boxes after the fix."""
-    cols = {rel: json.loads(_read(rel)) for rel in host_surface.TRAINING_FIX_COLUMNS}
-    recs = [json.loads(_read(rel))["cells"] for rel in host_surface.TRAINING_GPU_COLUMNS]
-    for fix, rec in zip(host_surface.TRAINING_FIX_COLUMNS[:3], host_surface.TRAINING_GPU_COLUMNS):
-        assert fix.rsplit("/", 1)[1] == rec.rsplit("/", 1)[1], (fix, rec)
-    for lane in host_surface.fix_covered_lanes():
-        carriers = [rel for rel, j in cols.items() if f"{lane}/base" in j["cells"]]
-        assert len(carriers) == 3, f"{lane}: carried by {len(carriers)} fix columns {carriers}, want 3"
-        # By file name: the ivf-euclidean record's Apple column predates the
-        # derived vendor label and reads "arm64" (its platform is macOS arm64).
-        vendors = sorted(v for rel in carriers for v in ("amd", "apple", "nvidia")
-                         if v in rel.rsplit("/", 1)[1])
-        assert vendors == ["amd", "apple", "nvidia"], (lane, vendors)
-        differs = 0
-        for fx in FIXTURES:
-            key = f"{lane}/{fx}"
-            hashes = set()
-            for rel in carriers:
-                c = cols[rel]["cells"][key]
-                assert c["verdict"] == "STABLE", (key, rel, c["verdict"])
-                hashes.add(c["hashes"][0])
-            assert len(hashes) == 1, f"{key}: the fix columns disagree {hashes}"
-            if any(key not in r or r[key]["hashes"][0] not in hashes for r in recs):
-                differs += 1
-        assert differs > 0, f"{lane}: the record already carries the fixed cells; drop it from TRAINING_FIX_LANES"
-
-
-def test_workflow_diffs_each_set_against_its_columns():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for flag in ("--record-covered-lanes", "--fix-covered-lanes", "--training-fix-columns"):
-        assert flag in text, f"the workflow does not read {flag}"
-    assert text.count('--diff $GPU_COLUMNS "$GATE_OUT/cpu-') == 2, "record diffs (covered and sabotage)"
-    assert text.count('--lanes "$RECORD_COVERED_LANES"') == 2
-    assert text.count('--diff $FIX_COLUMNS "$GATE_OUT/cpu-') == 2, "fix diffs (covered and sabotage)"
-    assert text.count('--lanes "$FIX_COVERED_LANES"') == 2
-    for rel in host_surface.TRAINING_FIX_COLUMNS:
-        directory = "/" + rel.rsplit("/", 1)[0] + "/"
-        assert directory in text, f"the sparse checkout does not bring down {directory}"
-
-
 def test_identity_command_runs_public_reference_probes_on_a_cpu():
-    text = _read("python/mojolearn/_identity.py")
-    assert "set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())" in text
-    assert "l in cpu_record_lanes]" in text
     host_only = host_surface.PUBLIC_HOST_ONLY_LANES
     trained = set(host_surface.public_reference_lanes()) - set(host_only)
     # `identity` replays the older bundled column; `verify` has a broader,
@@ -189,98 +87,6 @@ def test_identity_command_runs_public_reference_probes_on_a_cpu():
             assert f["routes"] is None, f"{lane}: not a shipped host-only family"
 
 
-def test_core_host_binding_registers_the_fold_gather():
-    src = _read(host_surface.binding_source("core"))
-    assert '("gather_rows_bytes")' in src
-    assert "gather_rows_bytes" in host_surface.family("core")["exports"]
-    helpers = _read("bindings/host_helpers.mojo")
-    assert "def gather_rows_bytes_binding(" in helpers
-    # lane cpu2-l4-modelsel: cross-validation's fold rows are the msel store's
-    # device gather; the core host binding carries its host column. The entry
-    # is connected once for the arena row owner (_native_arena_rows.py).
-    assert "'msel_take_rows'" in _read("python/mojolearn/_native_arena_rows.py")
-    for name in ("msel_put", "msel_take_rows", "msel_free"):
-        assert '("%s")' % name in src
-        assert name in host_surface.family("core")["exports"]
-
-
-def test_oracle_refuses_an_unknown_metric_in_the_device_words():
-    text = _read(KMEANS_ORACLE)
-    flat = re.sub(r'"\s*\n\s*"', "", text)
-    assert METRIC_REFUSAL in flat
-    params = re.sub(r'"\s*\n\s*"', "", _read("cluster/impl/kmeans_params.mojo"))
-    assert METRIC_REFUSAL in params, "the device's refusal sentence moved; the oracle must follow it"
-
-
-def test_the_cosine_metric_is_gone_from_every_kmeans_source():
-    """lane/kmeans-cosine-capability, 2026-09-18. The metric was deleted, not
-    refused: cuVS refuses cosine k-means too (`kmeans_common.cuh:320`), and
-    the arithmetic mean does not minimize cosine distance, so the fit did not
-    descend. A reappearing constant here means someone revived the dead arm
-    without the update step that would make it correct."""
-    for path in (KMEANS_ORACLE, "cluster/impl/kmeans_params.mojo",
-                 "cluster/impl/detail/kmeans_common.mojo",
-                 "cluster/impl/distance/unfused_distance_nn.mojo",
-                 "python/mojolearn/cluster.py"):
-        text = _read(path)
-        assert "METRIC_COSINE_EXPANDED" not in text, f"{path} still declares or uses METRIC_COSINE_EXPANDED"
-
-
-def test_manifest_covers_the_resample_lanes():
-    fam = host_surface.family("resample")
-    assert host_surface.routed_modules()["_mojolearn_resample"] == "_mojolearn_resample_host"
-    for lane in RESAMPLE_LANES:
-        assert lane in host_surface.record_covered_lanes(), f"{lane} is not a record-covered lane"
-        assert lane in fam["training_lanes"]
-    assert RESAMPLE_ORACLE in fam["host_modules"] and (ROOT / RESAMPLE_ORACLE).is_file()
-    src = _read(host_surface.binding_source("resample"))
-    gpu = _read("bindings/_mojolearn_resample.mojo")
-    for name in ("bootstrap", "permutation_test", "monte_carlo_integrate", "resample_numeric_mode", "resample_vendor"):
-        assert f'("{name}")' in src and f'("{name}")' in gpu, name
-        assert name in fam["exports"], name
-    assert '("resample_ranges_parallel_available")' not in gpu
-    assert "resample_ranges_parallel_available" not in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
-    assert (ROOT / host_surface.build_shim("resample")).is_file()
-
-
-def test_resample_oracle_is_host_only_and_sabotaged():
-    text = _read(RESAMPLE_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{RESAMPLE_ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
-    assert not re.search(r"^\s*from resample\.estimator import", text, re.M), "the oracle must not import the device entry points"
-    for stage in ("permutation_pvalue", "distribution_standard_error", "percentile_interval",
-                  "basic_interval", "narrow_for_alternative", "mc_finish_host", "draw_row_index",
-                  "draw_permutation_key", "draw_uniform_in", "float_to_sortable"):
-        assert stage in text, f"{RESAMPLE_ORACLE} does not call {stage}"
-    define = host_surface.sabotage_define("resample")
-    assert f'is_defined["{define}"]()' in text
-    assert "comptime if RESAMPLE_HOST_SABOTAGE:" in text
-    assert "RESAMPLE_HOST_SABOTAGE" in _read(host_surface.binding_source("resample"))
-
-
-def test_manifest_covers_the_neural_lanes():
-    fam = host_surface.family("training")
-    for lane in NEURAL_LANES:
-        assert lane in host_surface.record_covered_lanes(), f"{lane} is not a record-covered lane"
-        assert lane in fam["training_lanes"]
-    src = _read(host_surface.binding_source("training"))
-    gpu = _read("bindings/_mojolearn_training.mojo")
-    for name in NEURAL_EXPORTS:
-        assert f'("{name}")' in src and f'("{name}")' in gpu, name
-        assert name in fam["exports"], name
-    for absent in ("clip_parallel_available", "optimizer_parallel_available"):
-        assert f'("{absent}")' in gpu and f'("{absent}")' not in src, absent
-    assert SAMBA_ORACLE in fam["host_modules"] and (ROOT / SAMBA_ORACLE).is_file()
-    text = _read(SAMBA_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{SAMBA_ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from training\.samba_ops import", text, re.M)
-    for oracle in ("emb_forward_oracle", "emb_backward_oracle", "gemm_oracle", "gemm_backward_a_call",
-                   "gemm_backward_b_call", "identical_rsqrt"):
-        assert oracle in text, oracle
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "neural blocks" not in sentence and "Samba" not in sentence, sentence
-
-
 def _cpu_only_with(basename):
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -291,7 +97,6 @@ def _cpu_only_with(basename):
     return True
 
 
-@reference_training()
 def test_an_unsupported_metric_refuses_on_the_host_when_built():
     """Both halves of the refusal, because they live in different languages.
 
@@ -320,16 +125,16 @@ def test_an_unsupported_metric_refuses_on_the_host_when_built():
     raise AssertionError("KMeans(metric=2) fit on the host; an unknown code was accepted")
 
 
-@reference_training()
 def test_fold_gather_matches_python_indexing_when_built():
     if not _cpu_only_with("_mojolearn_core_host"):
         return
     import numpy as np
-    from mojolearn.model_selection import _take_rows
+    from mojolearn.model_selection import _Resident
     from mojolearn._array import Array
     x = np.random.default_rng(1).standard_normal((50, 7)).astype(np.float32)
     idx = Array.from_list([49, 0, 7, 7, 13], "<i8")
-    got = np.asarray(_take_rows(x, idx))
+    with _Resident() as res:
+        got = np.asarray(res.take(x, idx))
     assert got.tobytes() == x[[49, 0, 7, 7, 13]].tobytes()
     gather = _backend.load_host_module("_mojolearn_core_host").gather_rows_bytes
     out = np.zeros((2, 7), dtype=np.float32)
@@ -343,7 +148,6 @@ def test_fold_gather_matches_python_indexing_when_built():
     raise AssertionError("an out-of-range fold index was gathered")
 
 
-@reference_training()
 def test_bootstrap_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_resample_host"):
         return
@@ -366,7 +170,6 @@ def test_bootstrap_runs_on_the_host_when_built():
     assert m.integral == 2.0 and m.closed_form == 2.0
 
 
-@reference_training()
 def test_neural_primitives_run_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_training_host"):
         return

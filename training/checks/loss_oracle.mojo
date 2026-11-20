@@ -2,7 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of softmax cross-entropy under profile `mojolearn.identical.loss.ce.fp32.v1`, and its Float64 tolerance reference. The shared contract (constants, configuration, refusals) is in `training/checks/loss_contract.mojo`; `refuse_nonfinite` there is a THIRD COPY (DEVIATION 1164)."""
 
-from training.neural_ab_profile_contract import NN54_LOSS_PROFILE, nn_reduce_host_admitted
 from checks.numerics import (
     ftz,
     identical_div,
@@ -58,8 +57,6 @@ def ce_fold(
 
 def ce_total_fold(values: List[Float32], count: Int, ones: List[Float32]) -> Float32:
     """NN54 v2 changes only row-total order; normalization stays unchanged."""
-    comptime if NN54_LOSS_PROFILE:
-        return nn_reduce_host_admitted[128, False](rebind[MutPointer[Float32, MutAnyOrigin]](values.unsafe_ptr()), count)
     # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     return ce_fold(values, 0, count, ones)
 

@@ -19,6 +19,8 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import threading
+import time
 import types
 import xml.etree.ElementTree as ET
 import zipfile
@@ -429,6 +431,16 @@ def test_dependencies(selected, extra=()):
                           for dependency in TEST_DEPENDENCIES.get(name, ())] + list(extra)))
 
 
+def unit_plan_dependency_files(plan, selected):
+    """The files whose test dependencies the per-unit venv installs: every unit in the plan,
+    run or reused, not only the ones this invocation runs. A unit's environment then does not
+    depend on which other units happened to need rerunning: with pandas 3, pyarrow (declared
+    by other units) changes the storage of every DataFrame string column, so the same unit
+    passed alone and failed in the full 73-unit run of the 0.8.66 Apple gate."""
+    planned = [row["unit"] for row in plan.get("units", []) if row.get("unit") in PUBLIC_TESTS]
+    return list(dict.fromkeys(list(selected) + planned))
+
+
 def require(condition, why):
     if not condition:
         raise ValueError(why)
@@ -483,15 +495,50 @@ def source_match(source, commit, wheels, payload, git_root=None):
     require(witness in payload, "wheel source witness missing")
     with zipfile.ZipFile(payload[witness]["wheel"]) as archive:
         require(archive.read(witness).decode().strip() == commit, "wheel source witness differs")
+    # Every wheel Python member under mojolearn/ is either tracked under
+    # python/ at the commit or a generated copy of a tracked source
+    # (tools/generated_wheel_members.py); anything else refuses by name.
+    tracked = set(filter(None, subprocess.check_output(
+        ["git", "-C", str(git_root), "ls-tree", "-r", "-z", "--full-tree", "--name-only",
+         commit, "--", "python/mojolearn"]).decode().split("\0")))
+    generated = _generated_wheel_members()
     matched = {}
     for member, row in payload.items():
-        path = source / "python" / member
-        if member.startswith("mojolearn/") and member.endswith(".py") and path.is_file():
-            require(digest(path) == row["sha256"], "wheel/source Python mismatch: " + member)
-            blob = subprocess.check_output(["git", "-C", str(git_root), "show", commit + ":python/" + member])
-            require(hashlib.sha256(blob).hexdigest() == row["sha256"], "uncommitted package source: " + member)
+        if not (member.startswith("mojolearn/") and member.endswith(".py")):
+            continue
+        origin = generated.source_path(member)
+        if origin is not None:
+            # A generated member is checked against its source at the commit,
+            # never against python/<member>: the build's copy there is
+            # untracked and may be absent or stale.
+            shown = subprocess.run(["git", "-C", str(git_root), "show", commit + ":" + origin],
+                                   capture_output=True)
+            require(shown.returncode == 0,
+                    "generated wheel member " + member + " has no source " + origin + " at " + commit)
+            require(hashlib.sha256(shown.stdout).hexdigest() == row["sha256"],
+                    "generated wheel member differs from its source at the commit: "
+                    + member + " (" + origin + ")")
             matched[member] = row["sha256"]
+            continue
+        require("python/" + member in tracked,
+                "wheel Python member " + member + " is neither tracked under python/ at " + commit
+                + " nor a generated member in tools/generated_wheel_members.py")
+        path = source / "python" / member
+        if path.is_file():
+            require(digest(path) == row["sha256"], "wheel/source Python mismatch: " + member)
+        blob = subprocess.check_output(["git", "-C", str(git_root), "show", commit + ":python/" + member])
+        require(hashlib.sha256(blob).hexdigest() == row["sha256"], "uncommitted package source: " + member)
+        matched[member] = row["sha256"]
     return matched
+
+
+def _generated_wheel_members():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "generated_wheel_members", Path(__file__).with_name("generated_wheel_members.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _export_ignore_attributes(git_root, commit, paths):
@@ -866,7 +913,8 @@ def worker(request_path):
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in (nodes or request["test_files"])],
-                              plugins=[InstalledGuard(), exact_guard or whole_guard]))
+                              plugins=[InstalledGuard(), exact_guard or whole_guard,
+                                       ProgressLog(out / PROGRESS)]))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
@@ -885,11 +933,534 @@ def worker(request_path):
     return code if code is not None and not inventory_errors and worker_error is None else 1
 
 
+#: Per-test progress, one JSON line per pytest event, flushed as it happens. A run that is stopped
+#: (a test that exceeds --test-timeout, or the whole run exceeding --timeout) never reaches pytest's
+#: own --junitxml write; this file is what still records the tests that finished (tests.partial.xml).
+PROGRESS = "tests.progress.jsonl"
+PARTIAL_JUNIT = "tests.partial.xml"
+#: The 0.8.65 gates ran one 900 s budget over the whole worker and were stopped at 23% (AMD MI300X)
+#: and 12% (NVIDIA L40S) of the 73-file selection: about 3,900 s and 7,500 s for the full run. The
+#: run budget is about twice the slower vendor; a hung test is caught by the per-test bound instead.
+RUN_TIMEOUT_S = 14400
+TEST_TIMEOUT_S = 900
+
+
+class ProgressLog:
+    """Append every test start and phase report to PROGRESS (worker side)."""
+    def __init__(self, path):
+        self.stream = open(path, "a", buffering=1)
+
+    def _write(self, **row):
+        self.stream.write(json.dumps(row) + "\n")
+        self.stream.flush()
+
+    def pytest_collectreport(self, report):
+        # A heartbeat while the 73 files import, so collection is not mistaken for a hung test.
+        self._write(event="collect", nodeid=report.nodeid, outcome=report.outcome, time=time.time())
+
+    def pytest_runtest_logstart(self, nodeid, location):
+        self._write(event="start", nodeid=nodeid, time=time.time())
+
+    def pytest_runtest_logreport(self, report):
+        message = ""
+        if report.outcome == "skipped" and isinstance(report.longrepr, tuple) and len(report.longrepr) == 3:
+            message = str(report.longrepr[2])
+        elif report.outcome == "failed":
+            message = str(report.longrepr)[-2000:]
+        self._write(event="report", nodeid=report.nodeid, when=report.when, outcome=report.outcome,
+                    message=message, time=time.time())
+
+
+def _junit_names(nodeid):
+    path, _, rest = nodeid.partition("::")
+    parts = rest.split("::") if rest else [""]
+    module = path[:-3] if path.endswith(".py") else path
+    return ".".join([module.replace("/", ".")] + parts[:-1]), parts[-1]
+
+
+def partial_junit(progress, destination, stopped=None):
+    """Fold PROGRESS into a junit file junit_summary reads. A test that started and has no
+    final report when the run was stopped is an error naming the stop. Returns the summary."""
+    order, cases = [], {}
+    lines = Path(progress).read_text().splitlines() if Path(progress).is_file() else []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # the last line can be torn by the kill
+        if row.get("event") not in ("start", "report"):
+            continue
+        node = row.get("nodeid", "")
+        if node not in cases:
+            order.append(node)
+            cases[node] = dict(outcome=None, message="", done=False)
+        case = cases[node]
+        if row.get("event") != "report":
+            continue
+        when, outcome = row.get("when"), row.get("outcome")
+        if outcome == "failed":
+            case.update(outcome="failed", message=row.get("message", ""))
+        elif outcome == "skipped" and case["outcome"] != "failed":
+            case.update(outcome="skipped", message=row.get("message", ""))
+        elif when == "call" and outcome == "passed" and case["outcome"] is None:
+            case["outcome"] = "passed"
+        if when == "teardown":
+            case["done"] = True
+    suite = ET.Element("testsuite", name="pytest-partial", stopped=str(stopped or ""))
+    for node in order:
+        case = cases[node]
+        classname, name = _junit_names(node)
+        element = ET.SubElement(suite, "testcase", classname=classname, name=name)
+        if not case["done"] and case["outcome"] != "failed":
+            ET.SubElement(element, "error", message="stopped: " + str(stopped or "worker ended")).text = ""
+        elif case["outcome"] == "failed":
+            ET.SubElement(element, "failure", message="failed").text = case["message"]
+        elif case["outcome"] == "skipped":
+            ET.SubElement(element, "skipped", message=case["message"])
+    ET.ElementTree(suite).write(destination)
+    return junit_summary(destination)
+
+
+def _reaped(process, usage, block=False):
+    """Popen.poll (or wait, when BLOCK) that also keeps the finished child's peak RSS in USAGE
+    (os.wait4: the worker's own resource usage, so units running side by side are measured apart).
+    True once the child has exited."""
+    if process.returncode is not None:
+        return True
+    if usage is None or not hasattr(os, "wait4"):
+        if block:
+            process.wait()
+            return True
+        return process.poll() is not None
+    try:
+        pid, status, rusage = os.wait4(process.pid, 0 if block else os.WNOHANG)
+    except ChildProcessError:
+        return process.poll() is not None
+    if pid == 0:
+        return False
+    process.returncode = os.waitstatus_to_exitcode(status)
+    # ru_maxrss is bytes on macOS and KiB on Linux
+    usage["peak_rss_bytes"] = int(rusage.ru_maxrss) * (1 if sys.platform == "darwin" else 1024)
+    return True
+
+
+def run_bounded(command, *, cwd, env, log, progress, run_timeout, test_timeout, poll=1.0, usage=None,
+                limits=None):
+    """Run the worker; stop it when the whole run exceeds run_timeout or no test event has been
+    written for test_timeout seconds (one test running too long). Returns (exit, stop, elapsed).
+    USAGE (a dict), when given, receives the worker's peak_rss_bytes. LIMITS, when given, is called
+    every poll and returns the current (run_timeout, test_timeout): a unit's bounds grow while more
+    units share its GPU (run_units)."""
+    # poll was 5 s through 0.8.66: every unit's seconds were rounded up to the next 5 s step
+    # (0.8.66 gate-apple: 73 units, 80.1 s, 250.3 s, ...), about 3 minutes of a serial run.
+    started = time.monotonic()
+    process = subprocess.Popen(command, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT)
+    last, size, stop = started, -1, None
+    while not _reaped(process, usage):
+        time.sleep(poll)
+        now = time.monotonic()
+        current = Path(progress).stat().st_size if Path(progress).exists() else 0
+        if current != size:
+            size, last = current, now
+        if limits is not None:
+            run_timeout, test_timeout = limits()
+        if now - started > run_timeout:
+            stop = dict(kind="run", budget_s=run_timeout)
+        elif now - last > test_timeout:
+            stop = dict(kind="test", budget_s=test_timeout)
+        if stop:
+            process.kill()
+            _reaped(process, usage, block=True)
+            break
+    elapsed = round(time.monotonic() - started, 1)
+    if stop:
+        stop["elapsed_s"] = elapsed
+    return process.returncode, stop, elapsed
+
+
 def run_command(name, command, out, *, cwd, env=None, timeout=900):
     with (out / (name + ".log")).open("wb") as log:
         result = subprocess.run(command, cwd=cwd, env=env, stdout=log,
                                 stderr=subprocess.STDOUT, timeout=timeout)
     require(result.returncode == 0, name + " failed; see retained log")
+
+
+class _UnitsDone(Exception):
+    """Per-unit mode finished its units; the single-run path below is not taken."""
+
+
+def unit_status(qualifier_status):
+    return {"selected-tests-passed": "passed", "selected-tests-not-applicable": "not-applicable"}.get(
+        qualifier_status, "failed")
+
+
+#: PARALLEL UNITS (Andrew, 2026-11-07: tests split across every core; a host at one busy core is a
+#: defect). The 0.8.66 gate-apple ran its 73 units one after another: 63 units in 40 min, one Python
+#: process at 93 % CPU on a 10-core Mac at 25 % busy, and the same serial loop ran on the rented NVIDIA
+#: and AMD boxes. The units are independent (own run dir, request.json, work dir, junit and receipt) and
+#: the full suite already runs these files under pytest-xdist on 10 workers on that Mac, so per-unit mode
+#: runs WORKERS units at once: the host's cores (affinity and cgroup quota), at most one per
+#: UNIT_MEMORY_BYTES of free memory; --jobs or MOJOLEARN_QUALIFY_JOBS overrides.
+QUALIFY_JOBS_ENV = "MOJOLEARN_QUALIFY_JOBS"
+#: Memory one unit is assumed to take until a unit of this run has finished and been measured (the
+#: receipts carry no peak RSS); afterwards the largest measured peak RSS gates each start.
+UNIT_MEMORY_BYTES = 3 * 2**29          # 1.5 GiB
+#: The busy-cores sample period (every report states busy cores of total).
+BUSY_EVERY_S = 60
+#: UNITS PER GPU (0.8.66 run t, NVIDIA gate on a 1x RTX 4090 pod with 48 cores): the core and memory
+#: bound let five units run at once; they all share the one GPU, so the GPU-bound tests serialized on the
+#: device, each unit ran about five times its serial seconds (busy cores 7 of 48, each worker ~50 % CPU),
+#: units that take 30-80 s alone blew their 120 s budgets, and after 15 min 6 of 73 units had passed. On
+#: a GPU host the units therefore run at most UNITS_PER_GPU per GPU: each unit holds its own CUDA/HIP
+#: context, and two keep the device busy while one of them is in host work (import, collection, Python
+#: set-up, result checks) without stacking contexts that only queue on the device. The Mac ran 6 at once
+#: on one Apple GPU in ~8 min, so the Apple GPU had headroom: raise it there with the override.
+#: MOJOLEARN_QUALIFY_UNITS_PER_GPU overrides; --jobs / MOJOLEARN_QUALIFY_JOBS still set the count outright.
+UNITS_PER_GPU = 2
+UNITS_PER_GPU_ENV = "MOJOLEARN_QUALIFY_UNITS_PER_GPU"
+#: A unit that took this long alone (its plan row's prior_s; unknown counts as heavy) runs with at most
+#: one sibling on its GPU, whatever UNITS_PER_GPU allows: the heavy units are the GPU-bound ones.
+HEAVY_UNIT_S = 60
+HEAVY_UNIT_SIBLINGS = 1
+#: the variable that pins one unit to one GPU on a multi-GPU host (HIP_VISIBLE_DEVICES counts within
+#: whatever ROCR_VISIBLE_DEVICES already left visible, so the ordinal is always right there)
+VISIBLE_DEVICES = {"cuda": "CUDA_VISIBLE_DEVICES", "hip": "HIP_VISIBLE_DEVICES"}
+
+
+def _listed(value):
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def host_gpus(vendor, *, env=None, run=subprocess.run):
+    """(ids, why): the GPUs the units share. ids is None for the cpu backend (no GPU to share), ['0'] on
+    Apple (one GPU), else the devices CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES / ROCR_VISIBLE_DEVICES
+    already leave visible, else one per `nvidia-smi -L` GPU line (cuda) or `rocm-smi --showid --csv` /
+    `amd-smi list` card (hip). An unreadable count is one GPU, said so in WHY."""
+    import re
+    env = os.environ if env is None else env
+    if vendor == "cpu":
+        return None, "cpu backend"
+    if vendor == "metal":
+        return ["0"], "Apple GPU"
+    names = ("CUDA_VISIBLE_DEVICES",) if vendor == "cuda" else ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES")
+    for name in names:
+        if env.get(name, "").strip():
+            ids = _listed(env[name])
+            return (ids if vendor == "cuda" else [str(k) for k in range(len(ids))]), name
+    probes = ([(["nvidia-smi", "-L"], r"^GPU \d+:")] if vendor == "cuda" else
+              [(["rocm-smi", "--showid", "--csv"], r"^card\d+,"), (["amd-smi", "list"], r"^GPU: *\d+")])
+    for command, pattern in probes:
+        try:
+            listing = run(command, capture_output=True, text=True, timeout=60).stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            continue
+        count = sum(1 for line in listing.splitlines() if re.match(pattern, line.strip()))
+        if count:
+            return [str(k) for k in range(count)], command[0]
+    return ["0"], "GPU count unreadable, one assumed"
+
+
+def units_per_gpu(env=None):
+    """UNITS_PER_GPU, or MOJOLEARN_QUALIFY_UNITS_PER_GPU when set (a positive integer)."""
+    env = os.environ if env is None else env
+    chosen = (env.get(UNITS_PER_GPU_ENV) or "").strip()
+    if not chosen:
+        return UNITS_PER_GPU
+    require(chosen.isdigit() and int(chosen) >= 1, UNITS_PER_GPU_ENV + " must be a positive integer")
+    return int(chosen)
+
+
+def host_cores():
+    """The cores this process may use: affinity and cgroup quota (tools/release_measurement_smoke.py)."""
+    import release_measurement_smoke as smoke
+    return smoke.box_cores()
+
+
+def free_memory_bytes():
+    """Memory one more unit can take: macOS the kernel's free-memory level, Linux MemAvailable
+    (tools/mac_slot.py available_bytes), lowered to the cgroup memory.max headroom when one is set (a RunPod
+    container reads the host's /proc/meminfo; tools/build_sizing.py). None when unreadable."""
+    import mac_slot
+    free = mac_slot.available_bytes()
+    try:
+        import build_sizing
+        headroom = build_sizing.cgroup_memory_headroom()
+    except Exception:  # noqa: BLE001 - no cgroup v2 file: MemAvailable alone
+        headroom = None
+    if headroom is not None and (free is None or headroom < free):
+        return int(headroom)
+    return free
+
+
+def unit_workers(count, *, jobs=None, env=None, cores=None, free=None, per_unit=UNIT_MEMORY_BYTES,
+                 gpus=None, per_gpu=UNITS_PER_GPU):
+    """(workers, why): how many of COUNT units run at once. JOBS (--jobs), else MOJOLEARN_QUALIFY_JOBS,
+    else CORES capped by FREE bytes // PER_UNIT and, on a GPU host, by GPUS x PER_GPU; never more than
+    COUNT, never under 1."""
+    env = os.environ if env is None else env
+    chosen = jobs or (env.get(QUALIFY_JOBS_ENV) or "").strip()
+    if chosen:
+        require(str(chosen).isdigit() and int(chosen) >= 1, QUALIFY_JOBS_ENV + " must be a positive integer")
+        return max(1, min(int(chosen), count)), ("--jobs %s" % chosen if jobs else "%s=%s" % (QUALIFY_JOBS_ENV, chosen))
+    cores = cores or host_cores()
+    workers, why = cores, "%d core(s)" % cores
+    if free is not None and free // per_unit < workers:
+        workers = max(1, int(free // per_unit))
+        why += ", capped by %.1f GiB free at %.1f GiB per unit" % (free / 2**30, per_unit / 2**30)
+    if gpus and gpus * per_gpu < workers:
+        workers = max(1, gpus * per_gpu)
+        why += ", capped by %d GPU(s) x %d unit(s) per GPU" % (gpus, per_gpu)
+    return max(1, min(workers, count)), why
+
+
+def busy_cores_sample(window=5.0):
+    """Busy cores of the whole host now: /proc/stat over WINDOW seconds on Linux; elsewhere (macOS) the
+    summed %CPU of every process from ps. None when neither can be read."""
+    import release_measurement_smoke as smoke
+    before = smoke.cpu_jiffies()
+    if before is not None:
+        time.sleep(window)
+        return smoke.busy_cores(before, smoke.cpu_jiffies(), os.cpu_count() or 1)
+    try:
+        listing = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=30).stdout
+        return round(sum(float(value) for value in listing.split()) / 100.0, 1)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+class BusySampler(threading.Thread):
+    """Prints `QUALIFY busy cores=<b> of <total> running=<units> at <s>s` every EVERY seconds."""
+
+    def __init__(self, total, running, *, every=BUSY_EVERY_S, sample=busy_cores_sample, say=print):
+        super().__init__(daemon=True)
+        self.total, self.running, self.every, self.sample, self.say = total, running, every, sample, say
+        self.stopped, self.samples, self.t0 = threading.Event(), [], time.monotonic()
+
+    def run(self):
+        while not self.stopped.wait(self.every):
+            busy = self.sample()
+            at = round(time.monotonic() - self.t0)
+            self.samples.append(dict(at_s=at, busy=busy, of=self.total, running=self.running()))
+            self.say("QUALIFY busy cores=%s of %d running=%d at %ds" % (busy, self.total, self.running(), at),
+                     flush=True)
+
+    def stop(self):
+        self.stopped.set()
+        self.join(timeout=30)
+
+
+def run_units(args, selected, *, out, tests, python, env, payload, test_commit, clock=time.monotonic,
+              bounded=None, available=None, cores=None, sample=None, admit_poll=5.0, gpus=None):
+    """Run each selected whole file as its own bounded worker (qualify/runs/<stem>/), WORKERS at once
+    (unit_workers), heaviest budget first, and write its unit receipt as soon as it ends.
+
+    On a GPU host the units are placed on the GPUS (host_gpus; a list of ids, [] for none) at most
+    UNITS_PER_GPU to a GPU, a heavy unit (HEAVY_UNIT_S) with at most HEAVY_UNIT_SIBLINGS beside it, and
+    on a multi-GPU host each unit sees only its GPU. An explicit --jobs / MOJOLEARN_QUALIFY_JOBS sets the
+    count outright and every unit shares the devices.
+
+    A unit's budget is the plan's serial bound (3x its last serial seconds, at least 120 s); while N units
+    share its GPU it runs under N x that bound (the run bound and the one-test stall bound both), the most
+    N seen while it ran is its receipt's concurrency and the scaled bound its scaled_budget_s. Both are
+    clipped to what the outer --timeout leaves when it starts; a unit over its bound, or never started
+    because the outer cap ran out, is a FAILED receipt naming the unit. A unit starts only while the free
+    memory holds one more unit (the largest peak RSS measured so far, else UNIT_MEMORY_BYTES) or when none
+    is running. Returns [{unit, status, seconds, reason}] in SELECTED order."""
+    import runtime_qualifier_units as units
+    bounded = bounded or run_bounded
+    available = available or free_memory_bytes
+    plan = json.loads(Path(args.unit_plan).read_text())
+    require(plan.get("schema") == units.PLAN_SCHEMA, "not a runtime unit plan")
+    planned = {row["unit"]: row for row in plan["units"] if row.get("decision") == "run"}
+    require(set(selected) == set(planned), "unit plan and selected files differ")
+    units_dir, store = Path(plan["units_dir"]), plan.get("store")
+    # heaviest first (longest-processing-time order): the long units start at once, the short ones fill in
+    order = sorted(selected, key=lambda name: -int(planned[name]["budget_s"]))
+    total = cores or host_cores()
+    if gpus is None:
+        ids, gpu_why = host_gpus(args.vendor)
+    else:
+        ids, gpu_why = (list(gpus) or None), "given"
+    explicit = bool(getattr(args, "jobs", None) or (os.environ.get(QUALIFY_JOBS_ENV) or "").strip())
+    gated = ids is not None and not explicit
+    per_gpu = units_per_gpu()
+    workers, why = unit_workers(len(order), jobs=getattr(args, "jobs", None), cores=total, free=available(),
+                                gpus=len(ids) if gated else None, per_gpu=per_gpu)
+    print("QUALIFY units=%d workers=%d of %d core(s) (%s); heaviest first, budget sum %d s; gpus=%s (%s) "
+          "units-per-gpu=%s" % (
+              len(order), workers, total, why, sum(int(planned[name]["budget_s"]) for name in order),
+              len(ids) if ids is not None else 0, gpu_why,
+              ("%d, heavy (>= %d s alone) with at most %d sibling" % (per_gpu, HEAVY_UNIT_S, HEAVY_UNIT_SIBLINGS))
+              if gated else ("off (%s)" % ("explicit job count" if ids is not None else "no GPU"))), flush=True)
+    lock = threading.Lock()
+    pending, results, running, peaks, errors = list(order), {}, [0], [], []
+    # the units on each GPU now (gated: one slot per GPU id; explicit count on a GPU host: one shared
+    # slot; cpu backend: no slot, nothing shared) and the most units each unit has shared its GPU with
+    slots = {gpu: [] for gpu in ids} if gated else ({"shared": []} if ids is not None else {})
+    sharing = {}
+    started = clock()
+
+    def heavy(name):
+        prior = planned[name].get("prior_s")
+        return prior is None or float(prior) >= HEAVY_UNIT_S
+
+    def place():
+        """(unit, slot) of the first pending unit (heaviest first) that fits a GPU, else None."""
+        if not gated:
+            return pending[0], ("shared" if slots else None)
+        for name in pending:
+            for gpu in sorted(slots, key=lambda key: len(slots[key])):
+                limit = per_gpu
+                if heavy(name) or any(heavy(other) for other in slots[gpu]):
+                    limit = min(limit, HEAVY_UNIT_SIBLINGS + 1)
+                if len(slots[gpu]) < limit:
+                    return name, gpu
+        return None
+
+    def join(name, slot):
+        if slot is None:
+            sharing[name] = 1
+            return
+        slots[slot].append(name)
+        for member in slots[slot]:
+            sharing[member] = max(sharing.get(member, 1), len(slots[slot]))
+
+    def one(name, slot):
+        entry = planned[name]
+        unit_out = out / units.RUNS_DIR / units.stem(name)
+        (unit_out / "work").mkdir(parents=True)
+        request = dict(out=str(unit_out), tests=str(tests), payload=payload, test_files=[name],
+                       test_commit=test_commit, test_nodes=None, vendor=args.vendor,
+                       numeric_mode=args.numeric_mode, generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
+        (unit_out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
+        with lock:
+            remaining = int(args.timeout - (clock() - started))
+        serial = int(entry["budget_s"])
+        budget = min(serial, remaining)
+
+        def limits():
+            """(run bound, one-test bound) now: the serial bounds x the units sharing this unit's GPU."""
+            with lock:
+                shared = sharing.get(name, 1)
+            scaled = min(serial * shared, remaining)
+            return scaled, min(args.test_timeout * shared, scaled)
+        unit_env = env
+        if gated and len(ids) > 1 and args.vendor in VISIBLE_DEVICES:
+            unit_env = dict(env, **{VISIBLE_DEVICES[args.vendor]: slot})
+        common = dict(unit=name, vendor=plan["vendor"], backend=args.vendor, device=plan["device_class"],
+                      budget_s=budget, wheels=plan["wheels"], source_commit=plan["source_commit"],
+                      test_commit=test_commit, closure=entry.get("closure"),
+                      run=unit_out.relative_to(out.parent).as_posix())
+        usage = {}
+        if budget < 1:
+            receipt = units.unit_receipt(status="failed", seconds=0, scope=None, cases=0, stopped="not-started",
+                                         reason=f"unit {name} not started: the whole-run budget of "
+                                                f"{args.timeout} s was spent", concurrency=0,
+                                         scaled_budget_s=0, **common)
+            junit = b"<testsuite/>"
+        else:
+            with (unit_out / "tests.log").open("wb") as log:
+                worker_exit, stop, elapsed = bounded(
+                    [str(python), str(out / "controller.py"), "--worker", str(unit_out / "request.json")],
+                    cwd=unit_out / "work", env=unit_env, log=log, progress=unit_out / PROGRESS,
+                    run_timeout=budget, test_timeout=min(args.test_timeout, budget), usage=usage,
+                    limits=limits)
+            scaled, _ = limits()
+            with lock:
+                shared = sharing.get(name, 1)
+            installed_path = unit_out / "installed-modules.json"
+            installed = json.loads(installed_path.read_text()) if installed_path.is_file() else {}
+            junit_path = unit_out / "tests.xml"
+            if stop is not None or not junit_path.is_file():
+                junit_path = unit_out / PARTIAL_JUNIT
+                partial_junit(unit_out / PROGRESS, junit_path, stop and stop["kind"] + " timeout")
+            summary = junit_summary(junit_path)
+            scope = test_scope_summary(summary, [name], args.vendor, interpreter=installed.get("interpreter"))
+            collected = installed.get("whole_file_collection") or []
+            whole = exact_node_summary(collected, [c.get("exact_node", "") for c in summary["cases"]])["complete"]
+            qualifier = selected_test_status(worker_exit if whole and not installed.get("inventory_errors")
+                                             and installed.get("worker_error") is None else 1,
+                                             summary, scope, installed_path.is_file())
+            status = "failed" if stop is not None else unit_status(qualifier)
+            reason = ""
+            if stop is not None and stop["kind"] == "run":
+                reason = (f"unit {name} over its budget of {scaled} s"
+                          + (f" ({serial} s serial x {shared} units sharing its GPU)" if shared > 1 else "")
+                          + f" (stopped after {stop['elapsed_s']} s"
+                          + ("; clipped by the whole-run budget)" if scaled < serial * shared else ")"))
+            elif stop is not None:
+                reason = f"unit {name}: one test made no progress for {stop['budget_s']} s"
+            elif status == "failed":
+                reason = (f"unit {name}: {qualifier}, worker exit {worker_exit}, "
+                          f"{len(summary['failures'])} failure(s), whole-file collection "
+                          + ("complete" if whole else "incomplete"))
+            receipt = units.unit_receipt(status=status, seconds=elapsed, scope=scope["scopes"].get(name),
+                                         cases=summary["total"], stopped=stop and stop["kind"], reason=reason,
+                                         interpreter=installed.get("interpreter"),
+                                         natives=units.natives_of(installed), concurrency=shared,
+                                         scaled_budget_s=scaled, **common)
+            junit = junit_path.read_bytes()
+        receipt = units.put_receipt(units_dir, receipt, junit)
+        if store:
+            units.store_receipt(store, receipt, junit)
+        with lock:
+            print("UNIT %s %s %.1fs%s%s" % (name, receipt["status"], receipt["seconds"],
+                                            (" shared-gpu=%d" % receipt["concurrency"])
+                                            if receipt["concurrency"] > 1 else "",
+                                            (" " + receipt["reason"]) if receipt["reason"] else ""), flush=True)
+            if usage.get("peak_rss_bytes"):
+                peaks.append(usage["peak_rss_bytes"])
+                print("QUALIFY unit-memory %s peak_rss_mib=%d" % (name, usage["peak_rss_bytes"] // 2**20),
+                      flush=True)
+            results[name] = dict(unit=name, status=receipt["status"], seconds=receipt["seconds"],
+                                 reason=receipt["reason"])
+
+    def take():
+        """The next (unit, slot) to start, or None when none is left (or a unit raised)."""
+        while True:
+            with lock:
+                if not pending or errors:
+                    return None
+                need = max(peaks) if peaks else UNIT_MEMORY_BYTES
+                free = available() if running[0] else None
+                picked = place() if free is None or free >= need else None
+                if picked is not None:
+                    pending.remove(picked[0])
+                    running[0] += 1
+                    join(*picked)
+                    return picked
+            time.sleep(admit_poll)
+
+    def lane():
+        while True:
+            picked = take()
+            if picked is None:
+                return
+            name, slot = picked
+            try:
+                one(name, slot)
+            except BaseException as error:  # noqa: BLE001 - re-raised on the calling thread below
+                with lock:
+                    errors.append(error)
+            finally:
+                with lock:
+                    running[0] -= 1
+                    if slot is not None:
+                        slots[slot].remove(name)
+
+    busy = BusySampler(total, lambda: running[0], **(dict(sample=sample) if sample else {}))
+    busy.start()
+    lanes = [threading.Thread(target=lane, name="qualify-unit-%d" % k, daemon=True) for k in range(workers)]
+    try:
+        for thread in lanes:
+            thread.start()
+        for thread in lanes:
+            thread.join()
+    finally:
+        busy.stop()
+    if errors:
+        raise errors[0]
+    return [results[name] for name in selected]
 
 
 def freeze_committed_tests(git_root, revision, destination):
@@ -972,8 +1543,17 @@ def main():
     parser.add_argument("--dependency", action="append", default=[])
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--timeout", type=int, default=RUN_TIMEOUT_S, help="whole test run budget, seconds")
+    parser.add_argument("--test-timeout", type=int, default=TEST_TIMEOUT_S,
+                        help="longest one test may run (no test event for this long stops the run), seconds")
+    parser.add_argument("--unit-plan", type=Path,
+                        help="per-unit mode: the JSON plan tools/release_runtime_installed.py writes (budgets, "
+                             "closures, units dir, unit store); --timeout stays the outer cap")
+    parser.add_argument("--jobs", type=int,
+                        help="per-unit mode: units run at once (default: MOJOLEARN_QUALIFY_JOBS, else the "
+                             "host's cores, capped by free memory and by GPUs x MOJOLEARN_QUALIFY_UNITS_PER_GPU)")
     args = parser.parse_args()
+    require(args.unit_plan is None or not args.test_node, "per-unit mode selects whole files")
     selected = selected_files(args.test_file, args.test_node)
     source, out = args.source_root.resolve(), args.out.resolve()
     git_root = (args.git_root or source).resolve()
@@ -1031,7 +1611,9 @@ def main():
         report["selected_test_nodes"] = args.test_node
         report["selected_public_scope"] = {name:PUBLIC_TESTS[name] for name in selected}
         report["selected_test_applicability"] = test_applicability(selected, args.vendor)
-        report["test_dependencies"] = test_dependencies(selected, args.dependency)
+        dependency_files = (unit_plan_dependency_files(json.loads(Path(args.unit_plan).read_text()), selected)
+                            if args.unit_plan else selected)
+        report["test_dependencies"] = test_dependencies(dependency_files, args.dependency)
         venv = out / "venv"
         run_command("venv", [args.python, "-m", "venv", str(venv)], out, cwd=out)
         python = venv / "bin/python"
@@ -1043,6 +1625,18 @@ def main():
                     + report["test_dependencies"], out, cwd=out, env=env)
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
+        if args.unit_plan:
+            # Per-unit mode (tools/runtime_qualifier_units.py): one bounded worker per selected file, one
+            # receipt per file written the moment it finishes (qualify/units/ and the unit store).
+            report["units"] = run_units(args, selected, out=out, tests=tests, python=python, env=env,
+                                        payload=payload, test_commit=report["test_commit"])
+            report["test_selection_kind"] = "whole-file-units"
+            passing = [u for u in report["units"] if u["status"] in ("passed", "not-applicable")]
+            report["status"] = ("selected-tests-passed" if len(passing) == len(report["units"])
+                                and any(u["status"] == "passed" for u in report["units"])
+                                else "selected-tests-not-applicable" if len(passing) == len(report["units"])
+                                and report["units"] else "failed-or-incomplete")
+            raise _UnitsDone()
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
                        test_commit=report["test_commit"],
                        test_nodes=args.test_node,
@@ -1051,10 +1645,21 @@ def main():
         (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
         (out / "work").mkdir()
         with (out / "tests.log").open("wb") as log:
-            result = subprocess.run([str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
-                                    cwd=out / "work", env=env, stdout=log, stderr=subprocess.STDOUT,
-                                    timeout=args.timeout)
-        report["worker_exit"] = result.returncode
+            worker_exit, stop, elapsed = run_bounded(
+                [str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
+                cwd=out / "work", env=env, log=log, progress=out / PROGRESS,
+                run_timeout=args.timeout, test_timeout=args.test_timeout)
+        report.update(worker_exit=worker_exit, tests_elapsed_s=elapsed,
+                      budgets=dict(run_timeout_s=args.timeout, test_timeout_s=args.test_timeout))
+        if stop is not None or not (out / "tests.xml").exists():
+            # Stopped (or crashed) before pytest wrote its junit: keep what finished.
+            partial = partial_junit(out / PROGRESS, out / PARTIAL_JUNIT, stop and stop["kind"] + " timeout")
+            report["partial_tests"] = dict(path=PARTIAL_JUNIT, total=partial["total"], passed=partial["passed"],
+                                           failed=len(partial["failures"]), skipped=len(partial["skipped"]))
+        if stop is not None:
+            report["timed_out"] = stop
+            raise TimeoutError("%s timeout after %.0f s (budget %d s); %d tests finished, see %s" % (
+                stop["kind"], stop["elapsed_s"], stop["budget_s"], report["partial_tests"]["passed"], PARTIAL_JUNIT))
         receipt_path = out / "installed-modules.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
         report["pytest_exit"] = receipt.get("pytest_exit")
@@ -1077,8 +1682,10 @@ def main():
                     [c.get("exact_node", "") for c in tests_summary.get("cases", [])])["complete"]
                     and receipt.get("whole_file_collection"), "executed JUnit differs from whole-file collection")
         scope = report["test_scope_summary"]
-        report["status"] = selected_test_status(result.returncode, tests_summary, scope,
+        report["status"] = selected_test_status(worker_exit, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())
+    except _UnitsDone:
+        pass
     except Exception as error:
         report["status"] = "failed-or-incomplete"
         report["error"] = type(error).__name__ + ": " + str(error)

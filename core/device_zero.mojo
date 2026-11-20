@@ -23,9 +23,8 @@ carved prefixes are 16-byte aligned or better; a start that is not 4-byte
 aligned takes the byte kernel for the whole span.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
-from std.sys.compile import is_defined
 from std.sys.info import size_of
 
 comptime ZERO_TPB = 256
@@ -33,13 +32,8 @@ comptime ZERO_MAX_BLOCKS = 2048
 comptime ZERO_LANES = 4
 """Four uint32 lanes, 16 bytes, per thread per grid stride."""
 
-comptime MEMSET_FILL = is_defined["MOJOLEARN_2560_MEMSET_FILL"]()
-"""DEVIATION 2560 (2026-09-11): opt-out switch for `enqueue_fill` only.
-`-D MOJOLEARN_2560_MEMSET_FILL=1` restores `ctx.enqueue_memset` at every
-gbdt fill site (the pre-89cb86ee launch sequence) so the section-9 A/B on
-taxi and Istella-S runs from one source. The RF builder's
-`enqueue_zero_bytes` is not switched. Both sides are held to the same
-bytes by `pixi run check-device-zero` and `check-device-zero-memset`."""
+# TOMBSTONE: MOJOLEARN_2560_MEMSET_FILL (DEVIATION 2560 opt-in: `enqueue_fill` as `ctx.enqueue_memset`; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch; record in docs/TOMBSTONES.md.
 
 
 def zero_words_kernel(dst: MutPointer[UInt32, MutAnyOrigin], n_vec: Int32):
@@ -144,22 +138,56 @@ def enqueue_fill[
     the same bytes, none of Metal's memset-between-launches host cost. An
     all-zero-bytes value goes through the SIMD zero kernel (DEVIATION
     2561); any other value, -0.0 and NaN included, through the scalar
-    fill. Nothing is enqueued for an empty buffer. `buf` is `mut` because
-    the DEVIATION 2560 arm hands it to `enqueue_memset`, which every
+    fill. Nothing is enqueued for an empty buffer. `buf` stays `mut`: every
     caller in the repository passes a mutable buffer."""
-    comptime if MEMSET_FILL:
-        ctx.enqueue_memset(buf, value)
-    else:
-        var n = len(buf)
-        if n <= 0:
+    var n = len(buf)
+    if n <= 0:
+        return
+    if _all_zero_bits[dt](value):
+        enqueue_zero_buffer(ctx, buf)
+        return
+    var p = MutPointer[Scalar[dt], MutAnyOrigin](
+        unsafe_from_address=Int(buf.unsafe_ptr())
+    )
+    ctx.enqueue_function[fill_kernel[dt]](
+        p, Int32(n), value,
+        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
+    )
+
+
+def enqueue_fill_addr[
+    dt: DType
+](ctx: DeviceContext, addr: Int, n: Int, value: Scalar[dt]) raises:
+    """`n` copies of `value` from device address `addr` (a buffer's or a
+    view's first element), in ONE launch whatever `n` and `value` are, so a
+    caller that had its own one-launch fill kernel keeps its launch count:
+    the SIMD zero kernel when the value is all zero bytes and the span is a
+    whole number of 16-byte groups on a 4-byte-aligned start, otherwise the
+    scalar fill. Nothing is enqueued for `n <= 0`. The span must lie inside
+    the caller's buffer."""
+    if n <= 0:
+        return
+    if _all_zero_bits[dt](value):
+        var nbytes = n * size_of[Scalar[dt]]()
+        if nbytes % 16 == 0 and addr % 4 == 0:
+            var pz = MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=addr)
+            var n_vec = nbytes // 16
+            ctx.enqueue_function[zero_words_kernel](
+                pz, Int32(n_vec),
+                grid_dim=_blocks_for(n_vec, 4), block_dim=ZERO_TPB,
+            )
             return
-        if _all_zero_bits[dt](value):
-            enqueue_zero_buffer(ctx, buf)
-            return
-        var p = MutPointer[Scalar[dt], MutAnyOrigin](
-            unsafe_from_address=Int(buf.unsafe_ptr())
-        )
-        ctx.enqueue_function[fill_kernel[dt]](
-            p, Int32(n), value,
-            grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
-        )
+    var p = MutPointer[Scalar[dt], MutAnyOrigin](unsafe_from_address=addr)
+    ctx.enqueue_function[fill_kernel[dt]](
+        p, Int32(n), value,
+        grid_dim=_blocks_for(n), block_dim=ZERO_TPB,
+    )
+
+
+def enqueue_fill_n[
+    dt: DType
+](ctx: DeviceContext, buf: DeviceBuffer[dt], n: Int, value: Scalar[dt]) raises:
+    """`enqueue_fill_addr` over the first `n` elements of `buf` (`n` is
+    capped at the buffer's length)."""
+    var m = n if n < len(buf) else len(buf)
+    enqueue_fill_addr[dt](ctx, Int(buf.unsafe_ptr()), m, value)

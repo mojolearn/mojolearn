@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "dependency": "9d39093e14",
+  "generic_provider_followup": "7a4a338545",
+  "status": "New NMF fixture source reviewed only; uncompiled/unrun",
+  "fixtures": 28,
+  "suite": "checks/native_tests/nmf_contract_suite.mojo",
+  "coverage": {
+    "metadata": 1,
+    "fit_boolean_combinations_and_result_spans": 8,
+    "inverse_wire": 1,
+    "native_request_copies": 2,
+    "analytic_regularization_cases": 6,
+    "regularization_copy": 1,
+    "malformed_wire_and_missing_result": 9
+  },
+  "oracle": "Distinct literal request fields/statuses; six independently derived exact dyadic row/feature-scaled L1/L2 values. No NMF solver is implemented by the wire oracle.",
+  "ownership": "Separate heap-owned Int result words and Float64 error values; named lifetime pins in finally on malformed/refusal calls; stable NativeCallOutput heap owner for missing-result error callback. Parallel cases own independent envelopes.",
+  "parallelism": "All28 independent fixtures use host_parallelize",
+  "commands": [
+    "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/nmf_contract.mojo"
+  ],
+  "retained": "Existing NMF Python parameter/clone/admission checks remain. Actual provider numerical execution follows when original cases and final options/scratch API are reviewed.",
+  "deletions": "Nothing identified: additive typed request/state coverage; existing Python boundary checks are not redundant with it.",
+  "kernel_changes": false,
+  "timing_or_identity_run": false,
+  "compile_lessons": [
+    "Explicitly typed list literals; no positional variadic List constructor.",
+    "Integer-address owners remain live after calls including errors.",
+    "Generic provider qualification7a4a338545 adopted before actual-provider fixtures."
+  ]
+}

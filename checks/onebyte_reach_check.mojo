@@ -90,7 +90,7 @@ R2  THE SABOTAGE. The same fixture's data, re-declared at four fold counts
 """
 
 from max.gpu.host import DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.grid_creator.binarization import binarize
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -150,7 +150,7 @@ def claim_counts(
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -161,7 +161,7 @@ def claim_counts(
             hb.unsafe_ptr().unsafe_store(
                 r, UInt8(binarize(o.x[f][r], o.borders[f]))
             )
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -182,9 +182,9 @@ def claim_counts(
         ht.unsafe_ptr().unsafe_store(r, o.y[r])
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hd.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=docs, src_ptr=hd.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
+    upload_host_into[DType.uint32](ctx, docs, hd)
 
     # `TDataPartition{Offset, Size}` pairs. Sixteen slots so no shift the
     # offsets helper computes can run off the end; only slot 0 is non-empty.
@@ -193,7 +193,7 @@ def claim_counts(
     for i in range(32):
         hp.unsafe_ptr().unsafe_store(i, UInt32(0))
     hp.unsafe_ptr().unsafe_store(1, UInt32(n_rows))
-    ctx.enqueue_copy(dst_buf=parts, src_ptr=hp.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, parts, hp)
     ctx.synchronize()
 
     var gids = List[Int]()
@@ -204,7 +204,7 @@ def claim_counts(
     for _ in range(4):
         out.append(-1)
 
-    var sm_count = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm_count = device_multiprocessor_count(ctx)
 
     for b in range(len(blocks)):
         if blocks[b].policy != POLICY_ONE_BYTE:
@@ -278,7 +278,7 @@ def claim_counts(
                     fcb, sm_count, scale,
                 )
             ctx.synchronize()
-            ctx.enqueue_copy(dst_buf=hh, src_buf=h.d_hist)
+            download_buffer_into[DType.float32](ctx, h.d_hist, hh)
             ctx.synchronize()
             var nz = 0
             for i in range(cells):
@@ -329,7 +329,7 @@ def report(name: String, folds: Int, counts: List[Int]) raises -> Int:
     return 0
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -423,3 +423,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " reach gate(s) failed")
     print("one-byte reach: R1-R2 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("onebyte_reach_check", cpu=False, gpu=True, serial="", run=run_cases)

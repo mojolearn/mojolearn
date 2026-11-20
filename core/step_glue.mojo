@@ -46,8 +46,6 @@ launch. Never set on a timed run.
 Nothing here reads or writes a device buffer.
 """
 
-from std.os import getenv
-from std.sys.compile import is_defined
 
 # DEVIATION 2649: the shipped arm comes from the kernel matrix's routing row,
 # so this file names no column. The matrix imports nothing of ours, so there
@@ -59,8 +57,9 @@ from checks.kernel_matrix import (
     step_glue_default_arm_for,
 )
 
-# NEVER RUN — PENDING MEASUREMENT
-comptime STEP_GLUE_TRIAL = is_defined["MOJOLEARN_STEP_GLUE_TRIAL"]()
+# TOMBSTONE: MOJOLEARN_STEP_GLUE_TRIAL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 6027e14ec1.
+# Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: the STEP_GLUE_TRIAL = False constant removed; its five readers now test the shipped predicate alone.)
 
 comptime STEP_GLUE_SHIPPED = 0
 comptime STEP_GLUE_OPTSKIP = 1
@@ -85,7 +84,7 @@ comptime STEP_GLUE_ARM_DEFAULT = step_glue_default_arm_for[TARGET_COLUMN]()
 NVIDIA, so those builds are unchanged."""
 
 comptime STEP_GLUE_SHIPPED_UPDATE = (
-    (not STEP_GLUE_TRIAL) and (STEP_GLUE_ARM_DEFAULT & STEP_GLUE_UPDATE_BITS) != 0
+    (STEP_GLUE_ARM_DEFAULT & STEP_GLUE_UPDATE_BITS) != 0
 )
 """DEVIATION 2649: a shipped build whose column default carries `optskip`
 and/or `noshadow`, so `_byte_step_device` takes `_byte_glue_update`. The
@@ -93,9 +92,7 @@ analogue of `ATTN_SHIPPED_BWD_ESTASH` (DEVIATION 2657)."""
 
 
 def step_glue_trial_build() -> Bool:
-    """True only in a build compiled with `-D MOJOLEARN_STEP_GLUE_TRIAL=1`."""
-    comptime if STEP_GLUE_TRIAL:
-        return True
+    """False: the trial build (`MOJOLEARN_STEP_GLUE_TRIAL`) is deleted."""
     return False
 
 
@@ -138,7 +135,7 @@ small power of two, so this holds on every column today; it is written down
 so a future rows token cannot silently name a geometry a column refuses."""
 
 comptime STEP_GLUE_SHIPPED_ROWS = (
-    (not STEP_GLUE_TRIAL) and STEP_GLUE_DEFAULT_ROWS != 0 and STEP_GLUE_ROWS_FIT
+    STEP_GLUE_DEFAULT_ROWS != 0 and STEP_GLUE_ROWS_FIT
 )
 """DEVIATION 2649: a shipped build whose column default carries a rows
 token, so the two RMSNorm row launchers use it."""
@@ -208,22 +205,18 @@ def step_glue_arm_from_env() raises -> Int:
     comptime assert step_glue_arm_valid(STEP_GLUE_ARM_DEFAULT), (
         "step_glue_default_arm_for names a word the parser cannot produce"
     )
-    comptime assert STEP_GLUE_TRIAL or STEP_GLUE_ROWS_FIT, (
+    comptime assert STEP_GLUE_ROWS_FIT, (
         "step_glue_default_arm_for names a rows token past this column's"
         " dispatch cap; the shipped build would launch a geometry the vendor"
         " refuses"
     )
-    comptime if not STEP_GLUE_TRIAL:
-        return STEP_GLUE_ARM_DEFAULT
-    return step_glue_arm_parse(String(getenv("MOJOLEARN_STEP_GLUE_ARM")))
+    return STEP_GLUE_ARM_DEFAULT
 
 
 def step_glue_sabotage() -> Bool:
     """The reach sabotage switch (module docstring). False on every build
-    without the trial define, without reading the environment."""
-    comptime if not STEP_GLUE_TRIAL:
-        return False
-    return String(getenv("MOJOLEARN_STEP_GLUE_ARM_SABOTAGE")) == "1"
+    since the trial define is deleted, without reading the environment."""
+    return False
 
 
 def step_glue_blocks(count: Int, threads: Int) -> Int:

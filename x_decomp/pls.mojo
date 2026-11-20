@@ -12,8 +12,7 @@ this file's driver section).
 Status: the number of components fitted; a constant y residual stops the
 loop there (the caller warns, as Python's StopIteration did)."""
 from std.math import sqrt
-from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
@@ -115,20 +114,16 @@ def power[E: Exec](mut k: Kit[E], X: Mat, Y: Mat, a: PlsArgs, mut xw: Mat, mut y
             xw = k.mm(Xp, y_score, False, False)
         else:
             xw = k.ew2(OP_DIV, k.mm(X, y_score, True, False), _dot(k, y_score, y_score))
-        comptime if C27_NORM_VECTOR:
-            xw = k.ew3(OP_CLASSICAL_NORM, xw, _dot(k, xw, xw), k.zeros(1, 1), eps)
-        else:
-            xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot(k, xw, xw), 0.0), eps))
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_NORM_VECTOR (its use here: the fused normalize cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 2b6647c32d.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_NORM_VECTOR.expdel2-17-decomposition.patch.
+        xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot(k, xw, xw), 0.0), eps))
         var x_score = k.mm(X, xw, False, False)
         if a.mode_b:
             yw = k.mm(Yp, x_score, False, False)
         else:
             yw = k.ew2(OP_DIV, k.mm(Y, x_score, True, False), _dot(k, x_score, x_score))
         if a.norm_y:
-            comptime if C27_NORM_VECTOR:
-                yw = k.ew3(OP_CLASSICAL_NORM, yw, _dot(k, yw, yw), k.zeros(1, 1), eps)
-            else:
-                yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot(k, yw, yw), 0.0), eps))
+            yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot(k, yw, yw), 0.0), eps))
         y_score = k.ew2(OP_DIV, k.mm(Y, yw, False, False), k.ew1(OP_ADDS, _dot(k, yw, yw), eps))
         if Y.c == 1:
             break

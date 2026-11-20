@@ -34,7 +34,7 @@ per-block partial so no load can be dead-coded. Useful bytes at density
 amplification shows up as the dense/indexed ratio directly.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -133,6 +133,7 @@ def main() raises:
         hci.unsafe_ptr().unsafe_store(i, UInt32((state >> 33) & 0xFF))
     ctx.enqueue_copy(dst_buf=ci, src_ptr=hci.unsafe_ptr())
     ctx.synchronize()
+    _ = hci^  # past the drain: a queued copy reads it after its last named use
 
     print("density probe:", R, "rows x", COLS, "uint32 columns,",
           REPS, "reps, hashed membership, ascending indices")
@@ -159,6 +160,7 @@ def main() raises:
         ctx.enqueue_copy(dst_buf=idx, src_ptr=hidx.unsafe_ptr())
         var gathered = ctx.enqueue_create_buffer[DType.uint32](m * COLS)
         ctx.synchronize()
+        _ = hidx^  # past the drain: a queued copy reads it after its last named use
 
         var useful_gb = Float64(4 * m * COLS) / 1e9
 

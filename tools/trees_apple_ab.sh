@@ -7,7 +7,7 @@
 # TAP_CELLS. The arms interleave per round (A B A B ...) so drift on the
 # Mac lands on both.
 #
-#   TAB_BUILDS="rf" TAB_ARMS="before=-D MOJOLEARN_RF_BINS_COLUMN_MAJOR;after=" \
+#   TAB_BUILDS="rf" TAB_ARMS="before=-D MOJOLEARN_<DEFINE>;after=" \
 #   TAB_ROUNDS=2 TAP_CELLS="rf:taxireg xt:dt:taxi" sh tools/trees_apple_ab.sh
 #
 # TAB_ARMS: ';' separated name=defines[|VAR=value ...]. The LAST arm's

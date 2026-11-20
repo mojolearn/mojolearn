@@ -1,9 +1,7 @@
 """Fold descriptors use native host helpers even on a GPU installation."""
 import ast
-import numbers
 from pathlib import Path
 
-import pytest
 
 import lane_applicability as applicability
 
@@ -11,51 +9,34 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_descriptor_default_fold_route_reaches_native_helpers():
-    # Execute the actual route functions without importing a GPU package.
-    # The sentinel is the native boundary, not a duplicate implementation.
+    # The Python fold shims (`_folds`, `_default_fold_arrays`) were deleted by
+    # f4d37e5eec; the default folds are the native model_selection owner's
+    # `msel_default_folds`. split_descriptor and the public default_folds
+    # (which the verify lane calls) reach it through the one owner entry, and
+    # it calls core's fold helpers.
     tree = ast.parse((ROOT / 'python/mojolearn/model_selection.py').read_text())
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
-    # split_descriptor is one call into the native model_selection owner,
-    # whose default folds (bindings/msel_split.mojo `msel_default_folds`)
-    # call the same base helpers as the Python `_native_default_folds`.
+    assert '_default_fold_arrays' not in functions and '_folds' not in functions
     descriptor_ops = {n.args[1].value for n in ast.walk(functions['split_descriptor'])
                       if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_NATIVE'
                       and len(n.args) > 1 and isinstance(n.args[1], ast.Constant)}
     assert descriptor_ops == {'family_msel_split_descriptor'}
-    owner = (ROOT / 'bindings/msel_split.mojo').read_text()
+    owner = (ROOT / 'bindings/msel_split_door.mojo').read_text()
     body = owner[owner.index('def msel_default_folds('):owner.index('# ---', owner.index('def msel_default_folds('))]
-    assert 'msel_entry("fold_ids"' in body and '_select_folds(' in owner and 'msel_entry("select_fold_i64"' in owner
-
-    class NativeRoute(Exception):
-        pass
-
-    def native(y, splits, classifier):
-        assert y == [0, 1, 0, 1] and splits == 2 and classifier is True
-        raise NativeRoute
-
-    namespace = dict(numbers=numbers, _sabotage_requested=lambda: False,
-                     _classifier=lambda estimator: True, _native_default_folds=native)
-    selected = ast.Module(body=[functions['_folds'], functions['_default_fold_arrays']], type_ignores=[])
-    exec(compile(selected, 'actual-model-selection-routing', 'exec'), namespace)
-    with pytest.raises(NativeRoute):
-        list(namespace['_folds'](2, object(), object(), [0, 1, 0, 1], None))
-    # The default folds reach the native helpers directly or through module
-    # helpers they call (the fold selection lives in _select_folds, shared
-    # with the sabotage control), so follow the module-level call graph.
-    reached, todo = set(), ['_native_default_folds']
-    while todo:
-        name = todo.pop()
-        if name in reached or name not in functions:
-            continue
-        reached.add(name)
-        todo.extend(n.func.id for n in ast.walk(functions[name])
-                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name))
-    native_calls = {n.args[0].value for name in reached for n in ast.walk(functions[name])
-                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_native'
-                    and n.args and isinstance(n.args[0], ast.Constant)}
-    assert {'fold_ids', 'select_fold_i64'} <= native_calls
-    core = next(f for f in applicability.host_surface().FAMILIES if f['family'] == 'core')
-    assert native_calls <= set(core['exports'])
+    assert 'msel_fold_ids(' in body and '_select_folds(' in body and 'msel_sabotage()' in body
+    door = (ROOT / 'bindings/model_selection_native_door.mojo').read_text()
+    route = door[door.index('if operation == "family_msel_default_folds":'):]
+    assert 'return msel_default_folds(' in route.split('raise Error', 1)[0]
+    cv = (ROOT / 'bindings/msel_cv_door.mojo').read_text()
+    source = cv[cv.index('def msel_fold_source('):]
+    assert 'msel_default_folds(' in source.split('\ndef ', 1)[0]
+    harness = (ROOT / 'tools/identity_break.py').read_text()
+    lane = harness[harness.index('@lane("cross-val-folds")'):]
+    lane = lane[:lane.index('\n@lane(')]
+    assert 'ms.default_folds(' in lane and 'ms._NATIVE' not in lane and 'ms._default_fold_arrays(' not in lane
+    public = [n for n in ast.walk(functions['default_folds'])
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_NATIVE']
+    assert [n.args[1].value for n in public] == ['family_msel_default_folds']
 
 
 def test_fold_lane_is_cpu_applicable_and_never_gpu_coverage():

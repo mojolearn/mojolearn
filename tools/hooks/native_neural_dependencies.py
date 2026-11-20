@@ -42,7 +42,7 @@ GENERATION_ROOTS = (
 # lifecycle is allowed by the current owner rule. Keep the mapping
 # in sync with AdmittedNativeExecution.endpoint, not merely with filenames.
 INDIRECT_TARGETS = {
-    "core/native_execution.mojo": ("providers/python/native_execution_pyapi.mojo",),
+    "core/native_execution.mojo": ("providers/python/native_execution_pyapi_door.mojo",),
 }
 EXTERNAL_PACKAGES = ("std", "max", "layout", "linalg")
 PYTHON_NAMES = re.compile(r"(?:Python\w*|PyObject\w*|Py[A-Z]\w*|_Py\w*|GILReleased|GILAcquired)\Z")

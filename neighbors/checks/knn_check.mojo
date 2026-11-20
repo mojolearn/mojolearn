@@ -79,6 +79,7 @@ from neighbors.impl.detail.fast_topk_knn import (
     FAST_TOPK_KNN_ENABLED,
     fast_topk_knn_applies,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def _apple_fast_arm_takes(n_features: Int, k: Int) -> Bool:
@@ -182,7 +183,7 @@ def check_knn() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * KNN_FEATURES + f, _coord(j, f, 0)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
 
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         KNN_QUERIES * KNN_FEATURES
@@ -192,7 +193,7 @@ def check_knn() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * KNN_FEATURES + f, _coord(i, f, 7)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, index_norm, KNN_INDEX, KNN_FEATURES, False)
@@ -206,7 +207,7 @@ def check_knn() raises:
     )
 
     var ho = ctx.enqueue_create_host_buffer[DType.uint32](KNN_QUERIES * KNN_K)
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=out_idx)
+    download_host_into[DType.uint32](ctx, out_idx, ho)
     ctx.synchronize()
 
     # TRUTH on the host, in Float64, by the DIRECT formula. Independent of
@@ -322,7 +323,7 @@ def check_knn_reach_by_sabotage() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * KNN_FEATURES + f, _coord(j, f, 0)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
 
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         KNN_QUERIES * KNN_FEATURES
@@ -332,7 +333,7 @@ def check_knn_reach_by_sabotage() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * KNN_FEATURES + f, _coord(i, f, 7)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, index_norm, KNN_INDEX, KNN_FEATURES, False)
@@ -349,19 +350,19 @@ def check_knn_reach_by_sabotage() raises:
         buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
         KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
-    ctx.enqueue_copy(dst_ptr=base.unsafe_ptr(), src_buf=out_idx)
+    download_host_into[DType.uint32](ctx, out_idx, base)
     ctx.synchronize()
 
     # --- SABOTAGE 1: index norms. The neighbor set MUST move. ------------
     var hn = ctx.enqueue_create_host_buffer[DType.float32](KNN_INDEX)
-    ctx.enqueue_copy(dst_ptr=hn.unsafe_ptr(), src_buf=index_norm)
+    download_host_into[DType.float32](ctx, index_norm, hn)
     ctx.synchronize()
     for j in range(KNN_INDEX):
         # Reversed ramp, large enough to reorder and positive throughout.
         hn.unsafe_ptr().unsafe_store(
             j, Float32(1000.0) * Float32(KNN_INDEX - j)
         )
-    ctx.enqueue_copy(dst_buf=index_norm, src_ptr=hn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index_norm, hn)
     ctx.synchronize()
 
     tiled_brute_force_knn(
@@ -369,7 +370,7 @@ def check_knn_reach_by_sabotage() raises:
         buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
         KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
-    ctx.enqueue_copy(dst_ptr=sab.unsafe_ptr(), src_buf=out_idx)
+    download_host_into[DType.uint32](ctx, out_idx, sab)
     ctx.synchronize()
 
     var moved = 0
@@ -385,14 +386,14 @@ def check_knn_reach_by_sabotage() raises:
     # --- restore, then SABOTAGE 2: query norms, OFFSET. Set must hold. ---
     compute_norms(ctx, index, index_norm, KNN_INDEX, KNN_FEATURES, False)
     var hqn = ctx.enqueue_create_host_buffer[DType.float32](KNN_QUERIES)
-    ctx.enqueue_copy(dst_ptr=hqn.unsafe_ptr(), src_buf=query_norm)
+    download_host_into[DType.float32](ctx, query_norm, hqn)
     ctx.synchronize()
     for i in range(KNN_QUERIES):
         hqn.unsafe_ptr().unsafe_store(
             i,
             hqn.unsafe_ptr().unsafe_load(i) + Float32(0.1) * Float32(i + 1),
         )
-    ctx.enqueue_copy(dst_buf=query_norm, src_ptr=hqn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, query_norm, hqn)
     ctx.synchronize()
 
     tiled_brute_force_knn(
@@ -400,7 +401,7 @@ def check_knn_reach_by_sabotage() raises:
         buf_idx, out_dist, out_idx, out_i32, KNN_QUERIES, KNN_INDEX,
         KNN_FEATURES, KNN_K, KNN_TILE, buf_len, False,
     )
-    ctx.enqueue_copy(dst_ptr=sab.unsafe_ptr(), src_buf=out_idx)
+    download_host_into[DType.uint32](ctx, out_idx, sab)
     ctx.synchronize()
 
     var set_moved = 0
@@ -467,7 +468,7 @@ def check_vendor_topk_matches_ours() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * KNN_FEATURES + f, _coord(j, f, 0)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         KNN_QUERIES * KNN_FEATURES
     )
@@ -476,7 +477,7 @@ def check_vendor_topk_matches_ours() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * KNN_FEATURES + f, _coord(i, f, 7)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
     compute_norms(ctx, index, index_norm, n, KNN_FEATURES, False)
     compute_norms(ctx, queries, query_norm, KNN_QUERIES, KNN_FEATURES, False)
@@ -490,7 +491,7 @@ def check_vendor_topk_matches_ours() raises:
     var implemented = ctx.enqueue_create_host_buffer[DType.uint32](
         KNN_QUERIES * KNN_K
     )
-    ctx.enqueue_copy(dst_ptr=implemented.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, implemented)
     ctx.synchronize()
 
     tiled_brute_force_knn(
@@ -501,7 +502,7 @@ def check_vendor_topk_matches_ours() raises:
     var vendor = ctx.enqueue_create_host_buffer[DType.int32](
         KNN_QUERIES * KNN_K
     )
-    ctx.enqueue_copy(dst_ptr=vendor.unsafe_ptr(), src_buf=oi32)
+    download_host_into[DType.int32](ctx, oi32, vendor)
     ctx.synchronize()
 
     var disagree = 0
@@ -610,7 +611,7 @@ def check_fused_l2_knn() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * FCHK_FEATURES
     )
@@ -619,7 +620,7 @@ def check_fused_l2_knn() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
@@ -647,8 +648,8 @@ def check_fused_l2_knn() raises:
             ctx, queries, qnorm, index, inorm, od, oi,
             FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
         )
-        ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
-        ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
+        download_host_into[DType.uint32](ctx, oi, ho)
+        download_host_into[DType.float32](ctx, od, hd)
         ctx.synchronize()
 
         var bad = 0
@@ -727,14 +728,14 @@ def check_fused_l2_knn() raises:
     var plain_d = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * ksq
     )
-    ctx.enqueue_copy(dst_ptr=plain_d.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.float32](ctx, od, plain_d)
     ctx.synchronize()
     fused_l2_knn(
         ctx, queries, qnorm, index, inorm, od, oi,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, ksq, True,
     )
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.float32](ctx, od, hd)
+    download_host_into[DType.uint32](ctx, oi, ho)
     ctx.synchronize()
     var sq_bad = 0
     var sq_same = 0
@@ -815,7 +816,7 @@ def check_fused_reach_by_sabotage() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * FCHK_FEATURES
     )
@@ -824,7 +825,7 @@ def check_fused_reach_by_sabotage() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
@@ -846,8 +847,8 @@ def check_fused_reach_by_sabotage() raises:
         ctx, queries, qnorm, index, inorm, od, oi,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
     )
-    ctx.enqueue_copy(dst_ptr=base_i.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=base_d.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.uint32](ctx, oi, base_i)
+    download_host_into[DType.float32](ctx, od, base_d)
     ctx.synchronize()
 
     # --- SABOTAGE 1: index norms ramped. Set AND distances must move. ----
@@ -856,15 +857,15 @@ def check_fused_reach_by_sabotage() raises:
         hn.unsafe_ptr().unsafe_store(
             j, Float32(1000.0) * Float32(FCHK_INDEX - j)
         )
-    ctx.enqueue_copy(dst_buf=inorm, src_ptr=hn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, inorm, hn)
     ctx.synchronize()
 
     fused_l2_knn(
         ctx, queries, qnorm, index, inorm, od, oi,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
     )
-    ctx.enqueue_copy(dst_ptr=sab_i.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=sab_d.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.uint32](ctx, oi, sab_i)
+    download_host_into[DType.float32](ctx, od, sab_d)
     ctx.synchronize()
 
     var moved = 0
@@ -895,20 +896,20 @@ def check_fused_reach_by_sabotage() raises:
     # --- restore, then SABOTAGE 2: query norms, OFFSET. Set must hold. ---
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
     var hqn = ctx.enqueue_create_host_buffer[DType.float32](FCHK_QUERIES)
-    ctx.enqueue_copy(dst_ptr=hqn.unsafe_ptr(), src_buf=qnorm)
+    download_host_into[DType.float32](ctx, qnorm, hqn)
     ctx.synchronize()
     for i in range(FCHK_QUERIES):
         hqn.unsafe_ptr().unsafe_store(
             i, hqn.unsafe_ptr().unsafe_load(i) + Float32(0.1) * Float32(i + 1)
         )
-    ctx.enqueue_copy(dst_buf=qnorm, src_ptr=hqn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, qnorm, hqn)
     ctx.synchronize()
 
     fused_l2_knn(
         ctx, queries, qnorm, index, inorm, od, oi,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, k, False,
     )
-    ctx.enqueue_copy(dst_ptr=sab_i.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, sab_i)
     ctx.synchronize()
 
     var order_moved = 0
@@ -1001,7 +1002,7 @@ def check_dispatch_takes_fused() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * FCHK_FEATURES
     )
@@ -1010,7 +1011,7 @@ def check_dispatch_takes_fused() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
     compute_norms(ctx, queries, qnorm, FCHK_QUERIES, FCHK_FEATURES, False)
@@ -1036,16 +1037,16 @@ def check_dispatch_takes_fused() raises:
     )
 
     # --- k = 8, THEIR dispatch asked for explicitly: their fused arm ------
-    ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, oi, seed_u)
+    upload_host_into[DType.int32](ctx, oi32, seed_i)
     ctx.synchronize()
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
         True, knn_method=KNN_METHOD_FUSED,
     )
-    ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
+    download_host_into[DType.uint32](ctx, oi, got_u)
+    download_host_into[DType.int32](ctx, oi32, got_i)
     ctx.synchronize()
 
     var bad = 0
@@ -1072,16 +1073,16 @@ def check_dispatch_takes_fused() raises:
         )
 
     # --- k = 65: one past their bound, so their fallback ------------------
-    ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, oi, seed_u)
+    upload_host_into[DType.int32](ctx, oi32, seed_i)
     ctx.synchronize()
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kt, tile, buf_len, False,
         True, knn_method=KNN_METHOD_FUSED,
     )
-    ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
+    download_host_into[DType.uint32](ctx, oi, got_u)
+    download_host_into[DType.int32](ctx, oi32, got_i)
     ctx.synchronize()
 
     # k = 65 exceeds the oracle's 64, so the first 64 slots are checked as a
@@ -1117,16 +1118,16 @@ def check_dispatch_takes_fused() raises:
     # Same k, same fixture, same buffers as the first call. The ONLY thing
     # that differs is that `knn_method` is not passed, so this asserts the
     # value of the default and nothing else.
-    ctx.enqueue_copy(dst_buf=oi, src_ptr=seed_u.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=oi32, src_ptr=seed_i.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, oi, seed_u)
+    upload_host_into[DType.int32](ctx, oi32, seed_i)
     ctx.synchronize()
     brute_force_knn_impl(
         ctx, queries, qnorm, index, inorm, dist, bv, bi, od, oi, oi32,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
         True,
     )
-    ctx.enqueue_copy(dst_ptr=got_u.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=got_i.unsafe_ptr(), src_buf=oi32)
+    download_host_into[DType.uint32](ctx, oi, got_u)
+    download_host_into[DType.int32](ctx, oi32, got_i)
     ctx.synchronize()
 
     var untouched3 = 0
@@ -1226,14 +1227,14 @@ def check_dispatch_takes_fused() raises:
             hbq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 9)
             )
-    ctx.enqueue_copy(dst_buf=bqueries, src_ptr=hbq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, bqueries, hbq)
     var hbu = ctx.enqueue_create_host_buffer[DType.uint32](big_q * kf)
     var hbi = ctx.enqueue_create_host_buffer[DType.int32](big_q * kf)
     for i in range(big_q * kf):
         hbu.unsafe_ptr().unsafe_store(i, UInt32(0xDEADBEEF))
         hbi.unsafe_ptr().unsafe_store(i, Int32(-77))
-    ctx.enqueue_copy(dst_buf=boi, src_ptr=hbu.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=boi32, src_ptr=hbi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, boi, hbu)
+    upload_host_into[DType.int32](ctx, boi32, hbi)
     ctx.synchronize()
     compute_norms(ctx, bqueries, bqnorm, big_q, FCHK_FEATURES, False)
     brute_force_knn_impl(
@@ -1241,8 +1242,8 @@ def check_dispatch_takes_fused() raises:
         big_q, FCHK_INDEX, FCHK_FEATURES, kf, tile, buf_len, False,
         True,
     )
-    ctx.enqueue_copy(dst_ptr=hbu.unsafe_ptr(), src_buf=boi)
-    ctx.enqueue_copy(dst_ptr=hbi.unsafe_ptr(), src_buf=boi32)
+    download_host_into[DType.uint32](ctx, boi, hbu)
+    download_host_into[DType.int32](ctx, boi32, hbi)
     ctx.synchronize()
     var fused_wrote = 0
     for i in range(big_q * kf):
@@ -1429,7 +1430,7 @@ def check_fused_edge_shapes() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK2_FEATURES + f, _fchk_coord(j, f, 53)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK2_QUERIES * FCHK2_FEATURES
     )
@@ -1438,7 +1439,7 @@ def check_fused_edge_shapes() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK2_FEATURES + f, _fchk_coord(i, f, 61)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, FCHK2_INDEX, FCHK2_FEATURES, False)
@@ -1473,8 +1474,8 @@ def check_fused_edge_shapes() raises:
             ctx, queries, qnorm, index, inorm, od, oi,
             FCHK2_QUERIES, FCHK2_INDEX, FCHK2_FEATURES, k, False,
         )
-        ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
-        ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
+        download_host_into[DType.uint32](ctx, oi, ho)
+        download_host_into[DType.float32](ctx, od, hd)
         ctx.synchronize()
 
         var bad = 0
@@ -1580,7 +1581,7 @@ def check_fused_queue_reach_by_sabotage() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * FCHK_FEATURES
     )
@@ -1589,7 +1590,7 @@ def check_fused_queue_reach_by_sabotage() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
@@ -1606,8 +1607,8 @@ def check_fused_queue_reach_by_sabotage() raises:
     var base_d = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * k
     )
-    ctx.enqueue_copy(dst_ptr=base_i.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=base_d.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.uint32](ctx, oi, base_i)
+    download_host_into[DType.float32](ctx, od, base_d)
     ctx.synchronize()
 
     # The victim column must not already be an answer anywhere, or clause 3
@@ -1660,7 +1661,7 @@ def check_fused_queue_reach_by_sabotage() raises:
             VICTIM_COL * FCHK_FEATURES + f,
             hq.unsafe_ptr().unsafe_load(VICTIM_ROW * FCHK_FEATURES + f),
         )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     ctx.synchronize()
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
     ctx.synchronize()
@@ -1673,8 +1674,8 @@ def check_fused_queue_reach_by_sabotage() raises:
     var sab_d = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * k
     )
-    ctx.enqueue_copy(dst_ptr=sab_i.unsafe_ptr(), src_buf=oi)
-    ctx.enqueue_copy(dst_ptr=sab_d.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.uint32](ctx, oi, sab_i)
+    download_host_into[DType.float32](ctx, od, sab_d)
     ctx.synchronize()
 
     # 1. rank 0 is the planted point
@@ -1783,7 +1784,7 @@ def check_fused_k_ceiling() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK2_FEATURES + f, _fchk_coord(j, f, 53)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK2_QUERIES * FCHK2_FEATURES
     )
@@ -1792,7 +1793,7 @@ def check_fused_k_ceiling() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK2_FEATURES + f, _fchk_coord(i, f, 61)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
     compute_norms(ctx, index, inorm, FCHK2_INDEX, FCHK2_FEATURES, False)
     compute_norms(ctx, queries, qnorm, FCHK2_QUERIES, FCHK2_FEATURES, False)
@@ -1984,7 +1985,7 @@ def check_fused_griddimx_merge() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * FCHK_FEATURES + f, _fchk_coord(j, f, 3)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         FCHK_QUERIES * FCHK_FEATURES
     )
@@ -1993,7 +1994,7 @@ def check_fused_griddimx_merge() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * FCHK_FEATURES + f, _fchk_coord(i, f, 11)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, FCHK_INDEX, FCHK_FEATURES, False)
@@ -2019,7 +2020,7 @@ def check_fused_griddimx_merge() raises:
         ctx, queries, qnorm, index, inorm, od, oi,
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
     )
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, ho)
     # DEVIATION 5219: the merged grid's DISTANCES too, kept for the bitwise
     # comparison with the single-block launch in step 4.
     var hd_merged = ctx.enqueue_create_host_buffer[DType.float32](
@@ -2028,8 +2029,8 @@ def check_fused_griddimx_merge() raises:
     var hi_merged = ctx.enqueue_create_host_buffer[DType.uint32](
         FCHK_QUERIES * K
     )
-    ctx.enqueue_copy(dst_ptr=hd_merged.unsafe_ptr(), src_buf=od)
-    ctx.enqueue_copy(dst_ptr=hi_merged.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.float32](ctx, od, hd_merged)
+    download_host_into[DType.uint32](ctx, oi, hi_merged)
     ctx.synchronize()
     var bad = 0
     for i in range(FCHK_QUERIES):
@@ -2053,7 +2054,7 @@ def check_fused_griddimx_merge() raises:
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
         cfg[0], cfg[1], 1,
     )
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, ho)
     ctx.synchronize()
     var moved = 0
     for i in range(FCHK_QUERIES):
@@ -2076,7 +2077,7 @@ def check_fused_griddimx_merge() raises:
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
         5, cfg[1], 0,
     )
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, ho)
     ctx.synchronize()
     var bad5 = 0
     for i in range(FCHK_QUERIES):
@@ -2099,7 +2100,7 @@ def check_fused_griddimx_merge() raises:
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
         1, (FCHK_QUERIES + FKNN_MBLK - 1) // FKNN_MBLK, 1,
     )
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, ho)
     ctx.synchronize()
     var bad1 = 0
     for i in range(FCHK_QUERIES):
@@ -2119,7 +2120,7 @@ def check_fused_griddimx_merge() raises:
     # just the oracle's indices: every distance and every index of the
     # computed grid equals the `grid_x == 1` launch's.
     var hd1 = ctx.enqueue_create_host_buffer[DType.float32](FCHK_QUERIES * K)
-    ctx.enqueue_copy(dst_ptr=hd1.unsafe_ptr(), src_buf=od)
+    download_host_into[DType.float32](ctx, od, hd1)
     ctx.synchronize()
     var bitdiff = 0
     for c in range(FCHK_QUERIES * K):
@@ -2220,7 +2221,7 @@ def check_fused_griddimx_one_capped_y() raises:
             hi.unsafe_ptr().unsafe_store(
                 j * GX1_FEATURES + f, _fchk_coord(j, f, 31)
             )
-    ctx.enqueue_copy(dst_buf=index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, index, hi)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](
         GX1_QUERIES * GX1_FEATURES
     )
@@ -2229,7 +2230,7 @@ def check_fused_griddimx_one_capped_y() raises:
             hq.unsafe_ptr().unsafe_store(
                 i * GX1_FEATURES + f, _fchk_coord(i, f, 47)
             )
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, queries, hq)
     ctx.synchronize()
 
     compute_norms(ctx, index, inorm, GX1_INDEX, GX1_FEATURES, False)
@@ -2243,7 +2244,7 @@ def check_fused_griddimx_one_capped_y() raises:
     var ho = ctx.enqueue_create_host_buffer[DType.uint32](
         GX1_QUERIES * GX1_K
     )
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    download_host_into[DType.uint32](ctx, oi, ho)
     ctx.synchronize()
 
     var bad = 0

@@ -1,0 +1,1811 @@
+# SPDX-License-Identifier: Apache-2.0
+# `GradientBoosting.fit` in one native call (python/mojolearn/ensemble.py):
+# the input layout choice (row-major for a FAST Apple binding with the device
+# quantizer, else column-major), the target and class checks with their
+# wording, the feature flags, the sample weights, the eval set, the
+# 35-slot parameter list (the resolved learning rate, leaf iterations and
+# random strength, the class weights and the optional tail), the multi-target
+# and query/pair tails, the option strings (loss, bootstrap, detector, NaN
+# mode, border type, the Ordered fold settings), the `gbdt_fit` /
+# `gbdt_fit_rowmajor` launch, and the fitted state read from its outputs.
+# The entry, its arguments and their order are the Python path's, so the
+# fitted model text keeps its bytes.
+#
+# Round trips removed against the Python path: X, y, the weights and the eval
+# set are staged and handed to the fit entry in the same call (Python
+# returned between each conversion, scan and the launch); the output
+# dimension is read from the fitted text in the same call.
+from core.mode_answer import MODE_FAMILY_GBDT, answer_mode_word
+from std.math import isfinite
+from std.memory import bitcast
+from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.params_metadata_native_door import _read, _resolved
+from bindings.classical_pandas_door import classical_admit_value
+from bindings.trees_public_state_unpack import _release_tree_values
+from bindings.py_typed_call import py_call_typed
+from bindings.boundary_read_door import read_int, read_float, exact_ndarray_view, view_kind_fits_i64, view_kind_real
+from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.host_archive_native_door import host_archive_gbdt_state
+from bindings.classical_arrays_door import classical_wrap_array
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.trees_public_inputs_door import (
+    TreesLabels,
+    trees_builtins,
+    trees_entry,
+    trees_need,
+    trees_helper,
+    trees_address,
+    trees_forest_x,
+    trees_call,
+    trees_encode_labels,
+)
+from bindings.trees_public_inputs_run import trees_finite_f32
+from bindings.admitted_input_run import AdmittedXView
+from bindings.admitted_input_unpack import (
+    AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
+)
+from bindings.classical_arrays_door import classical_address, classical_c_order
+# TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from bindings.trees_public_gbdt_door import gbdt_table, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_params_py, gbdt_fit_strs_py
+from std.memory import unsafe_memcpy
+from core.trees_entry_table import TreesEntryKey
+from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
+from core.entry_table import EntryRef, entry_ref_vendor
+from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
+from bindings.trees_boost_constructor_native_unpack import tree_constructor_storage
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native_door import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words_unpack import label_store_address
+from bindings.label_list_words_pack import label_list_store
+from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
+from gbdt.trees_gbdt_fit_run import (
+    _sabotaged, _pair_end_range,
+    GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
+    gbdt_validate_search_options, gbdt_id_code, gbdt_id_typestr_supported, gbdt_check_group_rows, gbdt_bias_of,
+)
+from bindings.trees_keys_unpack import trees_keys
+from bindings.operation_names_trees import TREES_OPN_TREES_GBDT_BOOSTING_TYPE, TREES_OPN_TREES_GBDT_LEARNING_RATE
+from bindings.py_balanced import py_item
+
+comptime _UNSET = -1.0
+
+
+def _b() raises -> PythonObject:
+    return trees_builtins()
+
+
+def _str(value: PythonObject) raises -> String:
+    return String(py_call(_b().str, value))
+
+
+def _in(value: PythonObject, table: PythonObject) raises -> Bool:
+    return py_contains(table, value)
+
+
+def _eq(value: PythonObject, text: String) raises -> Bool:
+    return Bool(py=value == PythonObject(text))
+
+
+def _truthy(value: PythonObject) raises -> Bool:
+    return Bool(py=py_call(_b().bool, value))
+
+
+def _is_bool(value: PythonObject) raises -> Bool:
+    var t = py_type(value)
+    return t is _b().bool or String(t.__name__) == "bool_"
+
+
+def _float(value: PythonObject) raises -> Float64:
+    return Float64(py=py_call_typed(_b().float, value))
+
+
+def _tables(context: PythonObject) raises -> PythonObject:
+    var nk = trees_keys()
+    return py_item(context, nk[].k_trees_gbdt_tables)
+
+
+# ------------------------------------------------------------ resolution
+
+
+def gbdt_auto_learning_rate(loss: PythonObject, n_rows: Float64, iterations: Float64, use_best: Bool, bfa: Bool,
+                            table: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`ensemble.catboost_auto_learning_rate`: CatBoost's GPU automatic
+    rate, or None where their table has no row. `exp` and `log` are the
+    package's portable binary64 routines (the ones `_portable_math`
+    loads)."""
+    var target = String("")
+    if _eq(loss, "Logloss") or _eq(loss, "MultiClass") or _eq(loss, "RMSE"):
+        target = String(loss)
+    if target == "":
+        return PythonObject(None)
+    var nk = trees_keys()
+    var source = table if table is not None else py_item(_tables(context), nk[].k_gpu_auto_learning_rate)
+    var coeffs = py_get(source, Python.tuple(PythonObject(target), PythonObject(use_best), PythonObject(bfa)))
+    if coeffs is None:
+        return PythonObject(None)
+    var a = _float(coeffs[0])
+    var bb = _float(coeffs[1])
+    var c = _float(coeffs[2])
+    var d = _float(coeffs[3])
+    return PythonObject(gbdt_auto_rate(a, bb, c, d, n_rows, iterations))
+
+
+def catboost_auto_learning_rate_op(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The public `ensemble.catboost_auto_learning_rate(loss, n_rows,
+    iterations, use_best_model, boost_from_average, table=None)`."""
+    return gbdt_auto_learning_rate(args[0], _float(args[1]), _float(args[2]), _truthy(args[3]),
+                                   _truthy(args[4]), args[5] if _truthy(args[5]) else PythonObject(None), context)
+
+
+def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: Int, n_eval_rows: Int,
+                            eval_constant: Bool, context: PythonObject) raises -> Float64:
+    """`GradientBoosting._resolved_learning_rate`."""
+    var t = _tables(context)
+    var nk = trees_keys()
+    var lr = _field(fields, model, nk[].k_learning_rate, "learning_rate")
+    if lr is not None:
+        return _float(lr)
+    if not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree"):
+        return _float(py_item(t, nk[].k_legacy_learning_rate))
+    if (_field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg") is not None or _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method") is not None
+            or _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations") is not None):
+        return _float(py_item(t, nk[].k_catboost_learning_rate))
+    var use_best_obj = _field(fields, model, nk[].k_use_best_model, "use_best_model")
+    var use_best = (n_eval_rows > 0 and not eval_constant) if use_best_obj is None else _truthy(use_best_obj)
+    var bfa_obj = _field(fields, model, nk[].k_boost_from_average, "boost_from_average")
+    var bfa = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(t, nk[].k_boost_from_average_losses)) if bfa_obj is None else _truthy(bfa_obj)
+    var table = py_item(t, nk[].k_cpu_auto_learning_rate) if _sabotaged() else PythonObject(None)
+    var rate = gbdt_auto_learning_rate(_field(fields, model, nk[].k_loss, "loss"), Float64(n_rows),
+                                       Float64(Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators")))),
+                                       use_best, bfa, table, context)
+    return _float(py_item(t, nk[].k_catboost_learning_rate)) if rate is None else _float(rate)
+
+
+def _resolved_boosting_type(fields: PythonObject, model: PythonObject, n_rows: Int, context: PythonObject) raises -> String:
+    """`GradientBoosting._resolved_boosting_type`."""
+    var t = _tables(context)
+    var nk = trees_keys()
+    var explicit = _field(fields, model, nk[].k_boosting_type, "boosting_type")
+    if explicit is not None:
+        return _str(explicit)
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    if (not _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree") or _in(loss, py_item(t, nk[].k_multi_output_losses))
+            or _in(loss, py_item(t, nk[].k_multi_regression_losses))
+            or not (_eq(score, "Cosine") or _eq(score, "NewtonCosine"))
+            or _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0))):
+        return "Plain"
+    if n_rows >= Int(py=py_item(t, nk[].k_ordered_max_rows)) or Int(py=py_call_typed(_b().int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < Int(py=py_item(t, nk[].k_ordered_min_iterations)):
+        return "Plain"
+    return "Ordered"
+
+
+def _check_ordered_options(boosting: String, fields: PythonObject, model: PythonObject, context: PythonObject) raises:
+    """`ensemble._check_ordered_options`: UNPACK of its facts (read only
+    for an Ordered fit, as before), then the RUN check
+    (gbdt/trees_gbdt_fit_run.mojo)."""
+    if boosting != "Ordered":
+        return
+    var t = _tables(context)
+    var nk = trees_keys()
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    var facts = GbdtOrderedFacts(
+        _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree"),
+        _in(loss, py_item(t, nk[].k_multi_output_losses)),
+        _in(loss, py_item(t, nk[].k_multi_regression_losses)),
+        _in(loss, py_item(t, nk[].k_querywise_losses)),
+        _eq(score, "Cosine") or _eq(score, "NewtonCosine"),
+        _eq(_field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method"), "Exact"),
+        _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")),
+        Bool(py=py_get(fields, nk[].k_feature_fraction, PythonObject(1.0)) < PythonObject(1.0)),
+        _str(loss), _repr(loss), _str(score))
+    gbdt_check_ordered_options(boosting, facts)
+
+
+def _validate_search_options(fields: PythonObject, model: PythonObject, context: PythonObject) raises -> Float64:
+    """`ensemble._validate_search_options`: UNPACK of its facts, then the
+    RUN check (gbdt/trees_gbdt_fit_run.mojo) that returns the strength the
+    fit uses."""
+    var t = _tables(context)
+    var nk = trees_keys()
+    var grow = _field(fields, model, nk[].k_grow_policy, "grow_policy")
+    var score = _field(fields, model, nk[].k_score_function, "score_function")
+    var rs = _field(fields, model, nk[].k_random_strength, "random_strength")
+    var strength = gbdt_nan()
+    var real = False
+    if rs is not None and not _is_bool(rs) and Bool(py=py_call(_b().isinstance, rs, py_item(context, nk[].k_trees_real_type))):
+        real = True
+        try:
+            strength = _float(rs)
+        except:
+            strength = gbdt_nan()
+    # The texts (two reprs and one str) are only a refusal's: they are built
+    # when the check refuses, then the check runs again to raise its own
+    # sentence (round2-fixes; perf audit 2 A pattern 9: the door split built
+    # them on every fit, the old code only on the refusing branch).
+    var facts = GbdtSearchFacts(
+        _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")),
+        _eq(grow, "SymmetricTree"), String(""),
+        _eq(score, "L2") or _eq(score, "NewtonL2"), String(""),
+        rs is None, strength, String(""),
+        _float(py_item(t, nk[].k_catboost_random_strength)), _float(py_item(t, nk[].k_legacy_random_strength)))
+    try:
+        return gbdt_validate_search_options(facts)
+    except:
+        facts.grow_repr = _repr(grow)
+        facts.score_repr = _repr(score)
+        if real:
+            facts.strength_str = _str(PythonObject(strength))
+        return gbdt_validate_search_options(facts)
+
+
+def _f(value: PythonObject) raises -> PythonObject:
+    """`_params`' `f`: the unset sentinel, else `float(value)`."""
+    if value is None:
+        return PythonObject(_UNSET)
+    return py_call_typed(_b().float, value)
+
+
+def _tri(value: PythonObject) raises -> PythonObject:
+    """`ensemble._tri`."""
+    if value is None:
+        return PythonObject(-1)
+    return PythonObject(1 if _truthy(value) else 0)
+
+
+def _int_or(value: PythonObject, unset: Int) raises -> PythonObject:
+    if value is None:
+        return PythonObject(unset)
+    return py_call_typed(_b().int, value)
+
+
+def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: Int, n_flags: Int, n_weights: Int,
+            n_eval_rows: Int, eval_constant: Bool, context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting._params`: the 35-slot list in the binding's order,
+    the class weights, then the optional min_split_gain /
+    min_child_hessian / feature_fraction tail."""
+    var b = _b()
+    var t = _tables(context)
+    var strength = _validate_search_options(fields, model, context)
+    var nk = trees_keys()
+    var cw = _field(fields, model, nk[].k_class_weights, "class_weights")
+    var weights = Python.list() if cw is None or not _truthy(cw) else py_call(b.list, cw)
+    var method = _field(fields, model, nk[].k_leaf_estimation_method, "leaf_estimation_method")
+    var method_code = PythonObject(-1) if method is None else py_item(t, nk[].k_leaf_estimation_names)[method]
+    var iters = _field(fields, model, nk[].k_leaf_estimation_iterations, "leaf_estimation_iterations")
+    if (iters is None and _eq(_field(fields, model, nk[].k_grow_policy, "grow_policy"), "SymmetricTree")
+            and Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators"))) < 200 and n_features < 20):
+        iters = PythonObject(1)
+    var rate = _resolved_learning_rate(fields, model, n_rows, n_eval_rows, eval_constant, context)
+    var tail = Python.list()
+    var fraction = py_get(fields, nk[].k_feature_fraction, PythonObject(1.0))
+    var gain = _field(fields, model, nk[].k_min_split_gain, "min_split_gain")
+    var hessian = _field(fields, model, nk[].k_min_child_hessian, "min_child_hessian")
+    if not Bool(py=fraction == PythonObject(1.0)):
+        _ = py_call(tail.append, PythonObject(-1.0) if gain is None else py_call_typed(b.float, gain))
+        _ = py_call(tail.append, PythonObject(-1.0) if hessian is None else py_call_typed(b.float, hessian))
+        _ = py_call(tail.append, py_call_typed(b.float, fraction))
+    elif hessian is not None:
+        _ = py_call(tail.append, PythonObject(-1.0) if gain is None else py_call_typed(b.float, gain))
+        _ = py_call(tail.append, py_call_typed(b.float, hessian))
+    elif gain is not None:
+        _ = py_call(tail.append, py_call_typed(b.float, gain))
+    var l2 = _field(fields, model, nk[].k_l2_leaf_reg, "l2_leaf_reg")
+    var l2_value = PythonObject(0.0 if _eq(_field(fields, model, nk[].k_loss, "loss"), "YetiRank") else 3.0) if l2 is None else l2
+    var params = Python.list(
+        PythonObject(n_rows), PythonObject(n_features), PythonObject(n_weights), PythonObject(n_flags),
+        py_call_typed(b.int, _field(fields, model, nk[].k_border_count, "border_count")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_n_estimators, "n_estimators")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_max_depth, "max_depth")),
+        PythonObject(rate),
+        py_call_typed(b.float, l2_value),
+        py_call_typed(b.int, _field(fields, model, nk[].k_random_state, "random_state")),
+        py_item(t, nk[].k_score_function_names)[_field(fields, model, nk[].k_score_function, "score_function")],
+        _f(_field(fields, model, nk[].k_loss_alpha, "loss_alpha")), _f(_field(fields, model, nk[].k_loss_q, "loss_q")),
+        _f(_field(fields, model, nk[].k_loss_delta, "loss_delta")), _f(_field(fields, model, nk[].k_loss_variance_power, "loss_variance_power")),
+        _f(_field(fields, model, nk[].k_loss_border, "loss_border")),
+        PythonObject(-1) if iters is None else py_call_typed(b.int, iters),
+        method_code,
+        py_call_typed(b.float, _field(fields, model, nk[].k_bagging_temperature, "bagging_temperature")),
+        _f(_field(fields, model, nk[].k_subsample, "subsample")),
+        PythonObject(n_eval_rows),
+        _f(_field(fields, model, nk[].k_od_pvalue, "od_pvalue")),
+        _int_or(_field(fields, model, nk[].k_od_wait, "od_wait"), -1),
+        _tri(_field(fields, model, nk[].k_use_best_model, "use_best_model")),
+        py_call_typed(b.int, _field(fields, model, nk[].k_best_model_min_trees, "best_model_min_trees")),
+        PythonObject(strength),
+        PythonObject(1 if _truthy(_field(fields, model, nk[].k_use_pointwise_searcher, "use_pointwise_searcher")) else 0),
+        py_call_typed(b.int, _field(fields, model, nk[].k_border_build_max_samples, "border_build_max_samples")),
+        _int_or(_field(fields, model, nk[].k_permutation_count, "permutation_count"), -1),
+        _int_or(_field(fields, model, nk[].k_ctr_estimation_permutation_id, "ctr_estimation_permutation_id"), -1),
+        _tri(_field(fields, model, nk[].k_boost_from_average, "boost_from_average")),
+        py_item(t, nk[].k_grow_policy_codes)[_field(fields, model, nk[].k_grow_policy, "grow_policy")],
+        _int_or(_field(fields, model, nk[].k_max_leaves, "max_leaves"), -1),
+        py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")),
+        PythonObject(len(weights)),
+    )
+    _ = py_call(params.extend, weights)
+    _ = py_call(params.extend, tail)
+    return params
+
+
+def _padded_tail(params: PythonObject) raises -> PythonObject:
+    """The slots past the class weights padded to their three defaults
+    (`[-1.0, -1.0, 1.0][len(tail):]`), so a later slot lands in place."""
+    var b = _b()
+    var fixed = 35 + Int(py=py_call_typed(b.int, params[34]))
+    var out = py_call(b.list, params)
+    var defaults = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(1.0))
+    var have = len(params) - fixed
+    for i in range(have, 3):  # driver-loop: over fixed call structure, small-loop(defaults): at most three tail defaults
+        _ = py_call(out.append, defaults[i])
+    return out
+
+
+# ---------------------------------------------------------- labels/codes
+
+
+def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
+    """The finite integer class codes of a float32 vector, as `(k, dense,
+    top)`: the number of distinct values, whether they are exactly
+    0..k-1, and the largest; None where a label is not a code
+    (a value that is not a finite nonnegative integer)."""
+    var classes = admitted_vector(n, "<f8", context)
+    var codes = admitted_vector(n, "<i4", context)
+    var k = 0
+    try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+        k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(addr), PythonObject(0),
+                                PythonObject(n), PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
+                                PythonObject(0), PythonObject(0), PythonObject(0)))
+        _ = codes  # keep the Python object alive through the native call above
+        _ = classes  # keep the Python object alive through the native call above
+    except error:
+        if "NaN" in String(error):
+            return PythonObject(None)
+        raise error^
+    var p = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(classes))
+    _ = classes  # keep the Python object alive through the native call above
+    var lo = p[0]
+    _ = classes  # keep the Python object alive through the native call above
+    var hi = p[k - 1]
+    _ = classes  # keep the Python object alive through the native call above
+    if lo < 0 or not isfinite(hi):
+        return PythonObject(None)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+    var integral = Int(py=py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(classes)),
+                                       PythonObject(1), PythonObject(k), PythonObject(4)))
+    _ = classes  # keep the Python object alive through the native call above
+    if integral == 0:
+        return PythonObject(None)
+    _ = classes  # keep the Python object alive through the native calls above
+    # Sorted distinct nonnegative integers are 0..k-1 exactly when the
+    # largest is k - 1.
+    return Python.tuple(PythonObject(k), PythonObject(Int(hi) == k - 1), PythonObject(Int(hi)))
+
+
+# ------------------------------------------------------------ groups/pairs
+
+
+def _group_key(value: PythonObject, index: Int, context: PythonObject) raises -> PythonObject:
+    """`ensemble._group_id_key`: the bytes CatBoost hashes for a group id."""
+    # P1: exact types only. A str/bytes/int subclass or another Integral
+    # could run its own encode/__int__/__index__ (Python code) here; such an
+    # id is refused before any of its methods runs. NumPy's integer scalars
+    # (C types of the numpy module) keep their native int conversion.
+    var b = _b()
+    var cls = py_type(value)
+    if cls is b.bytes:
+        return value
+    if cls is b.str:
+        return py_call(b.str.encode, value, "utf-8")
+    var nk = trees_keys()
+    var numpy_int = (cls is not b.bool and String(py_call(b.getattr, cls, "__module__", "")) == "numpy"
+                     and Bool(py=py_call(b.isinstance, value, py_item(context, nk[].k_trees_integral_type))))
+    if cls is b.int or numpy_int:
+        return py_call(b.str.encode, py_call(b.str, py_call_typed(b.int, value)), "ascii")
+    raise Error("mojolearn: group_id[" + String(index) + "] object (" + _repr(value) + ") is unsuitable "
+                + "(should be string or integral type)")
+
+
+def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`value.tolist()` for an exact ndarray or `array.array`, a list as
+    is, else `list(value)`."""
+    var b = _b()
+    var cls = py_type(value)
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
+    if ndarray is not None and cls is ndarray:
+        return py_call(ndarray.tolist, value)
+    if cls is py_item(context, nk[].k_array_type):
+        return py_call(py_item(context, nk[].k_array_type).tolist, value)
+    if cls is b.list:
+        return value
+    if cls is b.tuple:
+        return py_call(b.list, value)
+    # P1: list() of any other object would run its own __iter__ (Python
+    # code); it is refused before that.
+    raise Error("TypeError: mojolearn: group_id, pairs and pairs_weight must be a list, tuple, array.array or NumPy array")
+
+
+# Lane i3-move-data-loops (2026-11-09): the id word reads (`id_word_coded`,
+# moved word for word), the run scan and the run-length store run in
+# core/label_words_impl.mojo; an exact int list is unpacked by one
+# array.array('q') construction (bindings/label_list_words.mojo). This file
+# keeps the unpack, the refusal wording and the pack.
+
+
+def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+    """`_group_sizes` of an integer ndarray or Array id vector read from its
+    buffer in one native pass (lane perf-trees-owed, 2026-11-06: before, the
+    ids were listed, then each one type-checked, formatted to its decimal
+    bytes and looked up in a Python set). Two integer ids have equal keys
+    exactly when their values are equal, so the runs and the refusal are the
+    same. None when the ids are not such a vector (the general path below)."""
+    var cls = py_type(group_id)
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
+    if not ((ndarray is not None and cls is ndarray) or cls is py_item(context, nk[].k_array_class)):
+        return PythonObject(None)
+    var view = PythonObject(None)
+    var t = String("")
+    try:
+        view = classical_view(group_id, context, "group_id")
+        t = admitted_dtype(view, context)
+    except:
+        return PythonObject(None)
+    if Int(py=view.ndim) != 1 or not classical_c_order(view, context) or not gbdt_id_typestr_supported(t):
+        return PythonObject(None)
+    var n = Int(py=view.size)
+    var view_address = Int(py=classical_address(view))
+    gbdt_check_group_rows(n, n_rows)
+    var words = id_words_coded(view_address, gbdt_id_code(t), n)
+    _ = view  # keep the id buffer alive through the reads above
+    return _group_runs(words, PythonObject(None), context)
+
+
+def _group_runs(words: List[Int], labels: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The uint32 run lengths of consecutive equal group words, a repeated
+    word (a split group) refused (`group_runs_scan`). `labels` is the exact
+    list the words were coded from (its item names a refused group), or None
+    for numeric ids."""
+    var sizes = List[Int]()
+    var split = group_runs_scan(words, sizes)
+    if split >= 0:
+        var name = String(words[split]) if labels is None else _repr(labels[split])
+        raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+                    + name + " are split into more than one run (row " + String(split) + "); "
+                    + "CatBoost requires every group's rows to be contiguous")
+    var out = admitted_vector(len(sizes), "<u4", context)
+    group_sizes_store_u32(sizes, trees_address(out))
+    _ = out  # keep the Python object alive through the writes above
+    return out
+
+
+def _group_sizes_list(ids: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+    """`_group_sizes` of an exact list or tuple of n_rows group ids that are
+    all exact ints (within int64, unpacked by one array.array('q')) or all
+    exact strs (coded by their UTF-8 bytes, p3_text_codes): equal ids have
+    equal words, so the runs and refusals are those of the keyed object path.
+    None for anything else (that path then decides)."""
+    var b = _b()
+    if (py_type(ids) is not b.list and py_type(ids) is not b.tuple) or len(ids) != n_rows or n_rows == 0:
+        return PythonObject(None)
+    var listed = ids if py_type(ids) is b.list else py_call(b.list, ids)
+    var kind = labels_list_scalar_kind(listed)
+    if kind == LABELS_LIST_INT:
+        var store = label_list_store(listed, "q")
+        if store is None:
+            return PythonObject(None)  # an int outside int64: the keyed path keeps it
+        var words = id_words_coded(label_store_address(store), 0, n_rows)
+        _ = store  # keep the unpacked words alive through the reads above
+        return _group_runs(words, listed, context)
+    var text = p3_text_codes(listed, False)
+    if text.status != P3_TEXT_OK:
+        return PythonObject(None)
+    return _group_runs(label_codes_i32_to_int(text.codes), listed, context)
+
+
+def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+    """`ensemble._group_sizes`: the run lengths of consecutive equal ids, a
+    repeated id refused (their `adjacent_find`)."""
+    var fast = _group_sizes_native(group_id, n_rows, context)
+    if fast is not None:
+        return fast
+    var b = _b()
+    var ids = PythonObject(None)
+    try:
+        ids = _listed(group_id, context)
+    except error:
+        if String(error).startswith("TypeError"):
+            raise Error("mojolearn: Invalid group_id type=" + _str(py_type(group_id)) + ": must be "
+                        + "array like.")
+        raise error^
+    gbdt_check_group_rows(len(ids), n_rows)
+    # Lane p2-labels-lists-arrays: exact int or str ids from C storage.
+    var coded = _group_sizes_list(ids, n_rows, context)
+    if coded is not None:
+        return coded
+    var sizes = List[Int]()
+    var seen = py_call(b.set)
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    # Both are set at row 0 before any later row reads them.
+    var last = Optional[PythonObject]()
+    # Keyed once per run, as 0.8.55's `itertools.groupby` keyed it (lane
+    # perf2-trees, 2026-11-06): an id that is the previous id's object, or an
+    # exact int/str/bytes equal to a previous id of the same exact type, has
+    # the previous id's key (`_group_key` is a function of the value for
+    # these exact types) and was already admitted, so it extends the run
+    # without the per-row isinstance checks, formatting and encoding. Any
+    # other id is keyed and checked as before; same runs, same refusals.
+    var last_value = Optional[PythonObject]()
+    var int_t = b.int
+    var str_t = b.str
+    var bytes_t = b.bytes
+    # The ids reaching this loop are label objects other than exact int /
+    # str lists (bytes, mixed, subclasses): main's recorded object-path
+    # debt (tools/hooks/compute_in_shells_baseline.txt), Python objects a
+    # kernel file cannot read.
+    for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
+        var value = ids[i]
+        if i > 0:
+            var previous = last_value.value()
+            var same = value is previous
+            if not same:
+                var t = py_type(value)
+                same = (t is py_type(previous) and (t is int_t or t is str_t or t is bytes_t)
+                        and Bool(py=value == previous))
+            if same:
+                sizes[len(sizes) - 1] += 1
+                continue
+        var key = _group_key(value, i, context)
+        last_value = value
+        if i > 0 and Bool(py=key == last.value()):
+            sizes[len(sizes) - 1] += 1
+            continue
+        if py_contains(seen, key):
+            raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+                        + _repr(value) + " are split into more than one run (row " + String(i) + "); "
+                        + "CatBoost requires every group's rows to be contiguous")
+        _ = py_call(seen.add, key)
+        sizes.append(1)
+        last = key
+    var out = admitted_vector(len(sizes), "<u4", context)
+    group_sizes_store_u32(sizes, trees_address(out))
+    _ = out  # keep the Python object alive through the native writes above
+    return out
+
+
+struct _PairAdmit(Movable):
+    """The builtins and connected number types the non-exact pair and weight
+    admissions call, read ONCE per `_pairs_arrays` call (as the per-pair
+    loop before lane loops-trees-ab hoisted them; perf audit 2-b: the helper
+    split re-read `trees_builtins()`, `context[...]` and four builtin
+    attributes per element on this branch)."""
+    var isinstance_: PythonObject
+    var integral_t: PythonObject
+    var real_t: PythonObject
+    var bool_t: PythonObject
+    var int_t: PythonObject
+    var float_t: PythonObject
+
+    def __init__(out self, context: PythonObject) raises:
+        var b = _b()
+        self.isinstance_ = b.isinstance
+        var nk = trees_keys()
+        self.integral_t = py_item(context, nk[].k_trees_integral_type)
+        self.real_t = py_item(context, nk[].k_trees_real_type)
+        self.bool_t = b.bool
+        self.int_t = b.int
+        self.float_t = b.float
+
+
+def _pair_end_checked(index: PythonObject, i: Int, j: Int, n_rows: Int, int_word: Int,
+                      admit: _PairAdmit) raises -> Int:
+    """One end of `pairs[i]`: an exact Python int is read with one
+    PyLong_AsLongLong (it is Integral and not bool); any other object takes
+    the `isinstance(numbers.Integral)` / not-bool admission and `int()` of
+    `ensemble._pairs_arrays`, with its refusal text. Then the row range."""
+    var v: Int
+    if borrowed_type_word(index._obj_ptr) == int_word:
+        v = read_int(index)
+    else:
+        if (not Bool(py=py_call(admit.isinstance_, index, admit.integral_t))
+                or Bool(py=py_call(admit.isinstance_, index, admit.bool_t))):
+            raise Error("mojolearn: Invalid pairs[" + String(i) + "][" + String(j) + "] = '" + _str(index) + "' value "
+                        + "type=" + _str(py_type(index)) + ": must be an integer.")
+        v = Int(py=py_call_typed(admit.int_t, index))
+    _pair_end_range(v, i, j, n_rows)
+    return v
+
+
+def _pair_weight_checked(w: PythonObject, i: Int, float_word: Int, admit: _PairAdmit) raises -> Float32:
+    """One `pairs_weight[i]`: an exact Python float is read with one
+    PyFloat_AsDouble; any other object takes the `isinstance(numbers.Real)`
+    admission and `float()`. Finite and nonnegative, else the refusal."""
+    var ok: Bool
+    var f = Float64(0.0)
+    if borrowed_type_word(w._obj_ptr) == float_word:
+        ok = True
+        f = read_float(w)
+    else:
+        ok = Bool(py=py_call(admit.isinstance_, w, admit.real_t))
+        if ok:
+            f = Float64(py=py_call_typed(admit.float_t, w))
+    if ok:
+        ok = isfinite(f) and f >= 0
+    if not ok:
+        raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
+    return Float32(f)
+
+
+def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
+                  context: PythonObject) raises -> PythonObject:
+    """`ensemble._pairs_arrays`: (uint32 winner/loser pairs, float32 pair
+    weights) with its refusals, in the same order.
+
+    Lane loops-trees-ab (2026-11-11): an exact ndarray of integer pairs
+    (shape (m, 2)) and an exact ndarray of real weights are read through ONE
+    buffer view each (bindings/boundary_read.mojo `exact_ndarray_view`), not
+    `tolist()` plus an `isinstance` and an `int()`/`float()` call per value.
+    A Python list is read by exact-type slot reads (one C-API read per end,
+    no Python-level call); only a non-exact element takes the old
+    admission. Any other ndarray (bool, float or object pairs, other
+    shapes) keeps the `tolist()` route, so its refusal is unchanged."""
+    var nk = trees_keys()
+    var ndarray = py_get(context, nk[].k_ndarray)
+    var pair_view = exact_ndarray_view(pairs, ndarray)
+    var fast_pairs = False
+    if pair_view:
+        ref view = pair_view.value()
+        fast_pairs = view.ndim == 2 and view.shape[1] == 2 and view_kind_fits_i64(view.layout, view.kind)
+    var m: Int
+    var rows = PythonObject(None)
+    if fast_pairs:
+        m = pair_view.value().shape[0]
+    else:
+        pair_view = None  # release the export: the tolist() route reads it as Python values
+        rows = _listed(pairs, context)
+        m = len(rows)
+    if m == 0:
+        raise Error("mojolearn: pairs is empty")
+    var flat = admitted_vector(2 * m, "<u4", context)
+    var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
+    if fast_pairs:
+        var ends = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pair_view.value().as_i64_c())
+        for i in range(m):  # boundary-read: native int64 words of the one pairs view (no CPython call)
+            var w0 = Int(ends[2 * i])
+            _pair_end_range(w0, i, 0, n_rows)
+            var w1 = Int(ends[2 * i + 1])
+            _pair_end_range(w1, i, 1, n_rows)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+        pair_view.value().release()
+    else:
+        var int_word = borrowed_type_word(PythonObject(1)._obj_ptr)
+        var admit = _PairAdmit(context)
+        for i in range(m):  # boundary-read: one exact-type slot read per pair end of a user list (no buffer to view)
+            var pair = rows[i]
+            if len(pair) != 2:
+                raise Error("mojolearn: Length of pairs[" + String(i) + "] isn't equal to 2.")
+            var w0 = _pair_end_checked(pair[0], i, 0, n_rows, int_word, admit)
+            var w1 = _pair_end_checked(pair[1], i, 1, n_rows, int_word, admit)
+            if w0 == w1:
+                raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
+            fp[2 * i] = UInt32(w0)
+            fp[2 * i + 1] = UInt32(w1)
+    _ = pair_view^
+    _ = flat  # keep the Python object alive through the native writes above
+    var weights = admitted_vector(m, "<f4", context)
+    var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=trees_address(weights))
+    if pairs_weight is None:
+        for i in range(m):  # boundary-read: native fill of the weight Array (no CPython call)
+            wp[i] = 1.0
+        _ = weights  # keep the Python object alive through the native writes above
+        return Python.tuple(flat, weights)
+    var weight_view = exact_ndarray_view(pairs_weight, ndarray)
+    var fast_weights = False
+    if weight_view:
+        ref view = weight_view.value()
+        fast_weights = view.ndim == 1 and view_kind_real(view.layout, view.kind)
+    if fast_weights:
+        var count = weight_view.value().shape[0]
+        if count != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(count) + " is not equal to "
+                        + "len(pairs) = " + String(m) + " ")
+        var values = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=weight_view.value().as_f64_c())
+        for i in range(m):  # boundary-read: native float64 words of the one weight view (no CPython call)
+            var f = values[i]
+            if not (isfinite(f) and f >= 0):
+                raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
+            wp[i] = Float32(f)
+        weight_view.value().release()
+    else:
+        weight_view = None
+        var listed = _listed(pairs_weight, context)
+        if len(listed) != m:
+            raise Error("mojolearn: len(pairs_weight) = " + String(len(listed)) + " is not equal to "
+                        + "len(pairs) = " + String(m) + " ")
+        var float_word = borrowed_type_word(PythonObject(1.5)._obj_ptr)
+        var admit = _PairAdmit(context)
+        for i in range(m):  # boundary-read: one exact-type slot read per weight of a user list (no buffer to view)
+            wp[i] = _pair_weight_checked(listed[i], i, float_word, admit)
+    _ = weight_view^
+    _ = weights  # keep the Python object alive through the native writes above
+    return Python.tuple(flat, weights)
+
+
+# ----------------------------------------------------------------- inputs
+
+
+def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting._flags`: one packed word per feature (bit 0
+    categorical, bit 1 one-hot), or None."""
+    var b = _b()
+    var nk = trees_keys()
+    var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
+    var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
+    if not _truthy(cat) and not _truthy(hot):
+        return PythonObject(None)
+    var out = admitted_vector(n_features, "<u4", context)
+    var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+    _ = out  # keep the Python object alive through the native call above
+    var lists = Python.tuple(cat, hot)
+    var names: List[String] = ["cat_features", "one_hot_features"]
+    for which in range(2):  # driver-loop: over fixed call structure, small-loop(lists): the two feature-list arguments
+        var values = lists[which]
+        if not _truthy(values):
+            continue
+        var listed = py_call(b.list, values)
+        for k in range(len(listed)):  # driver-loop: over the feature-list argument indices
+            var i = listed[k]
+            if not (Bool(py=PythonObject(0) <= i) and Bool(py=i < PythonObject(n_features))):
+                raise Error("mojolearn: " + names[which] + " index " + _str(i) + " out of range for "
+                            + String(n_features) + " features")
+            var at = Int(py=py_call_typed(b.int, i))
+            p[at] = p[at] | UInt32(1 if which == 0 else 2)
+            _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject, n_features: Int,
+              context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting._eval_arrays`: (X_eval column-major, y_eval, rows)
+    as (keep_x, x_addr, keep_y, y_addr, rows), or None."""
+    var b = _b()
+    if eval_set is None:
+        return PythonObject(None)
+    var pair = eval_set
+    if Bool(py=py_call(b.isinstance, eval_set, b.list)):
+        if len(eval_set) != 1:
+            raise Error("mojolearn: eval_set takes ONE (X, y) pair; the "
+                        + "boosting carries a single test cursor. CatBoost "
+                        + "accepts a list, this takes " + String(len(eval_set)) + " as an "
+                        + "error rather than scoring the first and dropping "
+                        + "the rest")
+        pair = eval_set[0]
+    var items = PythonObject(None)
+    try:
+        items = py_call(b.tuple, pair)
+    except:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    if len(items) != 2:
+        raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
+    var xe = admit_f32(items[0], 2, "eval_set X", context, order="F", finite=False)
+    if xe.cols != n_features:
+        raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
+                    + "for a fit on " + String(n_features))
+    if xe.rows == 0:
+        raise Error("mojolearn: eval_set X has no rows")
+    var ye = admit_f32(items[1], 1, "eval_set y", context, finite=False)
+    if ye.rows != xe.rows:
+        raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
+                    + String(xe.rows) + " rows")
+    if not trees_finite_f32(ye.address, ye.rows):
+        var nk = trees_keys()
+        var multi = _in(_field(fields, model, nk[].k_loss, "loss"), py_item(_tables(context), nk[].k_multi_output_losses))
+        raise Error("mojolearn: " + ("eval_set y (the eval_set labels)" if multi else "eval_set y")
+                    + " must be finite (no NaN or infinity)")
+    _ = ye  # keep the Python object alive through the native calls above
+    var _keep_ret_xe = Python.tuple(xe.array, PythonObject(xe.address), ye.array, PythonObject(ye.address), PythonObject(xe.rows))
+    _ = ye  # keep the Python object alive through the native call above
+    _ = xe  # keep the Python object alive through the native call above
+    _ = xe  # keep the Python object alive through the native call above
+    return _keep_ret_xe^
+
+
+def _has_nan(x: AdmittedXView, context: PythonObject) raises -> Bool:
+    """Whether a float32 X holds a NaN (an infinity is not one): the label
+    encoder refuses a NaN by name and accepts an infinity. Reached only when
+    the finite scan already failed."""
+    var n = x.rows * x.cols
+    var classes = admitted_vector(n, "<f8", context)
+    var codes = admitted_vector(n, "<i4", context)
+    try:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+        _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.address), PythonObject(0), PythonObject(n),
+                          PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
+                          PythonObject(0), PythonObject(0), PythonObject(0))
+        _ = codes  # keep the Python object alive through the native call above
+        _ = classes  # keep the Python object alive through the native call above
+    except error:
+        if "NaN" in String(error):
+            return True
+        raise error^
+    return False
+
+
+def _f64_array(values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`Array.from_list(values, "<f8")` of a binding's list of floats."""
+    var nk = trees_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), "d", values)
+    return classical_wrap_array(store, Python.tuple(len(store)), "<f8", "C", context)
+
+
+def _f64_curve(values: List[Float64], context: PythonObject) raises -> PythonObject:
+    """`_f64_array` of a native curve (PACK): one array, one copy."""
+    if len(values) == 0:
+        return _f64_array(Python.list(), context)
+    var out = admitted_vector(len(values), "<f8", context)
+    unsafe_memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
+                  src=values.unsafe_ptr(), count=len(values))
+    return out
+
+
+def _gk(table: PythonObject) raises -> EntryRef:
+    """The gbdt entry, resolved once per operation (lane
+    entry-table-zero-alloc), of the image this tier connected (the bridge
+    records it at import as `gbdt_native_key`): the fit, its probes and the
+    model dimension run through that image's published native entry
+    (gbdt/fit_calls.mojo), not through its Python entries."""
+    var key = py_get(table, PythonObject("gbdt_native_key"))
+    if key is None:
+        raise Error("ImportError: mojolearn: the gbdt binding publishes no native entry table")
+    return xg_ref(TreesEntryKey(Int(py=key[0]), Int(py=key[1])))
+
+
+# -------------------------------------------------------------------- fit
+
+
+def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting.fit(X, y, sample_weight, eval_set, group_id,
+    subgroup_id, pairs, pairs_weight)`."""
+    var b = _b()
+    var t = _tables(context)
+    var fields = py_fields(model)
+    var X = args[0]
+    var y = args[1]
+    var sample_weight = args[2]
+    var eval_set = args[3]
+    var group_id = args[4]
+    var subgroup_id = args[5]
+    var pairs = args[6]
+    var pairs_weight = args[7]
+    # A refit drops the previous model's device copy here (its holder
+    # releases it), not at the next call.
+    _ = py_call(fields.pop, "_resident", PythonObject(None))
+    var table = gbdt_table(fields, context)
+    var nk = trees_keys()
+    var cat = _field(fields, model, nk[].k_cat_features, "cat_features")
+    var hot = _field(fields, model, nk[].k_one_hot_features, "one_hot_features")
+    var gkey = _gk(table)
+    var row_major_ok = False
+    try:
+        row_major_ok = xg_row_major(gkey)
+    except:
+        row_major_ok = False
+    var x: AdmittedX
+    if not _truthy(cat) and not _truthy(hot) and row_major_ok:
+        x = trees_forest_x(X, "X", context)
+    else:
+        # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x): this fit
+        # reads only x's address during the call and drops x at its end, so
+        # a converted (transposed) X goes into an uninitialized store.
+        x = admit_f32(X, 2, "X", context, order="F", finite=False)
+    var n_rows = x.rows
+    var n_features = x.cols
+    if n_rows == 0 or n_features == 0:
+        raise Error("mojolearn: fit requires at least one row and one feature")
+    var loss = _field(fields, model, nk[].k_loss, "loss")
+    var target_dim = 1
+    var ya: AdmittedX
+    if _in(loss, py_item(t, nk[].k_multi_regression_losses)):
+        ya = admit_f32(y, 2, "y", context, order="F", finite=False)
+        target_dim = ya.cols
+        if target_dim < 2:
+            raise Error("mojolearn: " + _str(loss) + " needs y of shape (n_samples, "
+                        + "n_targets) with n_targets >= 2, got " + String(target_dim) + " "
+                        + "(CatBoost: \"Only one class found, can't learn "
+                        + "multiclass objective\", multiclass_targets.h:167)")
+        if eval_set is not None:
+            raise Error("NotImplementedError: mojolearn: loss=" + _repr(loss) + " with eval_set is not "
+                        + "carried: the held-out arm's target is one value per row")
+        if group_id is not None or pairs is not None:
+            raise Error("mojolearn: loss=" + _repr(loss) + " does not read group_id "
+                        + "or pairs")
+        if _field(fields, model, nk[].k_class_weights, "class_weights") is not None:
+            raise Error("mojolearn: class_weights do not apply to loss=" + _repr(loss))
+        if _truthy(cat) or _truthy(hot):
+            raise Error("NotImplementedError: mojolearn: loss=" + _repr(loss) + " with cat_features or "
+                        + "one_hot_features is not carried: the CTR target "
+                        + "binarization reads one target per row")
+        if _truthy(_field(fields, model, nk[].k_boost_from_average, "boost_from_average")):
+            raise Error("NotImplementedError: mojolearn: boost_from_average=True with loss="
+                        + _repr(loss) + " is not carried: its StartingPoint is "
+                        + "per-dimension (optimal_const_for_loss.h:230-239) and "
+                        + "this model's bias is one value (DEVIATION 5951)")
+    else:
+        ya = admit_f32(y, 1, "y", context, finite=False)
+    if ya.rows != n_rows:
+        raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n_rows) + " rows")
+    var multi_output = _in(loss, py_item(t, nk[].k_multi_output_losses))
+    if not trees_finite_f32(ya.address, ya.rows * ya.cols):
+        # scikit-learn's wording, as the former fit and the other families
+        # raise it (bindings/classical_validate.mojo).
+        raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
+                    + " (GradientBoosting).")
+    if _eq(_field(fields, model, nk[].k_nan_mode, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
+        if _has_nan(x.view(), context):
+            raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
+                        + "CatBoost refuses this pair; this implementation would otherwise "
+                        + "bin the NaNs silently with no NaN bin. Use "
+                        + "nan_mode='Min' or 'Max', or clean the column.")
+    var n_classes = 0
+    if multi_output:
+        var found = _codes(ya.address, n_rows, context)
+        if found is None:
+            raise Error("mojolearn: " + _str(loss) + " labels must be finite "
+                        + "nonnegative integer class codes")
+        n_classes = Int(py=found[0])
+        if n_classes < 2:
+            raise Error("mojolearn: " + _str(loss) + " needs at least two classes")
+        if not Bool(py=found[1]):
+            raise Error("mojolearn: " + _str(loss) + " labels must be dense class "
+                        + "codes 0..k-1; encode labels before fitting")
+        var cw = _field(fields, model, nk[].k_class_weights, "class_weights")
+        if cw is not None and len(cw) != n_classes:
+            raise Error("mojolearn: class_weights needs " + String(n_classes) + " entries "
+                        + "for " + _str(loss))
+    var flags = _flags(fields, model, n_features, context)
+    var n_flags = 0 if flags is None else n_features
+    var flags_holder = flags if flags is not None else admitted_vector(1, "<u4", context)
+    var w_addr = x.address
+    var n_weights = 0
+    var weights: Optional[AdmittedX] = None
+    if sample_weight is not None:
+        weights = admit_weight_words(sample_weight, n_rows, context)
+        w_addr = weights.value().address
+        n_weights = n_rows
+    var held = _eval_set(eval_set, fields, model, n_features, context)
+    var n_eval_rows = 0 if held is None else Int(py=held[4])
+    if n_eval_rows and multi_output:
+        var found = _codes(Int(py=held[3]), n_eval_rows, context)
+        if found is None or Int(py=found[2]) >= n_classes:
+            raise Error("mojolearn: eval_set labels must be integer class codes "
+                        + "within the training class range")
+    var eval_constant = False
+    if n_eval_rows:
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+        var helper = trees_helper(context, "reduce_stat")
+        var lo = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(0))
+        var hi = py_call_typed(helper, held[3], PythonObject(0), PythonObject(n_eval_rows), PythonObject(1))
+        eval_constant = Bool(py=lo == hi)
+    var params = _params(fields, model, n_rows, n_features, n_flags, n_weights, n_eval_rows, eval_constant, context)
+    py_setitem(fields, nk[].k_learning_rate_, py_call_typed(b.float, params[7]))
+    if target_dim != 1:
+        params = _padded_tail(params)
+        _ = py_call(params.append, PythonObject(target_dim))
+    if subgroup_id is not None:
+        raise Error("NotImplementedError: mojolearn: subgroup_id is read by no loss this implementation "
+                    + "trains; the ranking losses that read CatBoost's subgroup ids "
+                    + "are not implemented")
+    if pairs_weight is not None and pairs is None:
+        raise Error("mojolearn: pairs_weight needs pairs")
+    if pairs is not None:
+        if not _eq(loss, "PairLogit"):
+            raise Error("NotImplementedError: mojolearn: pairs are read by loss='PairLogit' only; "
+                        + "loss=" + _repr(loss) + " does not use them")
+        if group_id is None:
+            raise Error("NotImplementedError: mojolearn: pairs without group_id are not implemented: "
+                        + "the CatBoost reference then regroups and reorders the "
+                        + "whole pool by the pairs' connected components; pass "
+                        + "group_id")
+    var group_holder = PythonObject(None)
+    var pair_holders = PythonObject(None)
+    if group_id is not None:
+        group_holder = _group_sizes(group_id, n_rows, context)
+        params = _padded_tail(params)
+        _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+        _ = group_holder  # keep the Python object alive through the native call above
+        _ = py_call(params.append, PythonObject(Int(py=group_holder.size)))
+        if _eq(loss, "PairLogit"):
+            if pairs is None:
+                _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+                _ = group_holder  # keep the Python object alive through the native call above
+                _ = py_call(params.append, PythonObject(-1))
+                _ = group_holder  # keep the Python object alive through the native call above
+                _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+                _ = group_holder  # keep the Python object alive through the native call above
+            else:
+                pair_holders = _pairs_arrays(pairs, pairs_weight, n_rows, context)
+                _ = py_call(params.append, PythonObject(trees_address(pair_holders[0])))
+                _ = group_holder  # keep the Python object alive through the native call above
+                _ = py_call(params.append, PythonObject(Int(py=pair_holders[1].size)))
+                _ = group_holder  # keep the Python object alive through the native call above
+                _ = py_call(params.append, PythonObject(trees_address(pair_holders[1])))
+                _ = group_holder  # keep the Python object alive through the native call above
+    var od = _field(fields, model, nk[].k_od_type, "od_type")
+    if od is not None and not _in(od, py_item(t, nk[].k_od_types)):
+        raise Error("mojolearn: od_type must be one of " + _repr(py_item(t, nk[].k_od_types)) + ", got " + _repr(od))
+    var bootstrap = _field(fields, model, nk[].k_bootstrap_type, "bootstrap_type")
+    var strs = Python.list(loss, PythonObject("") if not _truthy(bootstrap) else bootstrap,
+                           PythonObject("") if not _truthy(od) else od, _field(fields, model, nk[].k_nan_mode, "nan_mode"))
+    var border = py_get(fields, nk[].k_feature_border_type, PythonObject("GreedyLogSum"))
+    if not _in(border, py_item(t, nk[].k_border_types)):
+        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
+    var boosting = _resolved_boosting_type(fields, model, n_rows, context)
+    _check_ordered_options(boosting, fields, model, context)
+    var fold_len = _float(py_get(fields, nk[].k_fold_len_multiplier, PythonObject(2.0)))
+    var fold_block = py_get(fields, nk[].k_fold_permutation_block, PythonObject(None))
+    if boosting == "Plain":
+        if fold_len != 2.0 or fold_block is not None:
+            raise Error("mojolearn: fold_len_multiplier and fold_permutation_block "
+                        + "are read only by Ordered boosting, and this fit resolved "
+                        + "to Plain; they would be accepted and ignored")
+        if _field(fields, model, nk[].k_permutation_count, "permutation_count") is not None and not _truthy(cat):
+            raise Error("mojolearn: permutation_count is read only by the "
+                        + "categorical path and by Ordered boosting, and this fit "
+                        + "resolved to Plain with no cat_features; it would be "
+                        + "accepted and ignored")
+    if not _eq(border, "GreedyLogSum") or boosting == "Ordered":
+        _ = py_call(strs.append, border)
+    if boosting == "Ordered":
+        _ = py_call(strs.append, PythonObject("Ordered"))
+        _ = py_call(strs.append, PythonObject(String(bitcast[DType.uint64](fold_len))))
+        _ = py_call(strs.append, PythonObject(String(0 if fold_block is None else Int(py=py_call_typed(b.int, fold_block)))))
+    py_setitem(fields, nk[].k_boosting_type_, PythonObject(boosting))
+    var ex_addr = x.address if held is None else Int(py=held[1])
+    var ey_addr = ya.address if held is None else Int(py=held[3])
+    # UNPACK of the params and strs lists once; the fit runs natively in the
+    # connected gbdt image (gbdt/fit_calls.mojo), the row-major entry when X
+    # is C-order (refused by name by an image without it).
+    var p_ints = List[Int]()
+    var p_floats = List[Float64]()
+    var p_bad = List[UInt8]()
+    gbdt_fit_params_py(params, p_ints, p_floats, p_bad)
+    var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
+                               p_ints^, p_floats^, p_bad^, gbdt_fit_strs_py(strs))
+    var outcome = xg_fit(gkey, x.c_order, fit_args)
+    _ = fit_args^
+    _ = flags_holder  # keep the Python object alive through the native call above
+    _ = group_holder  # keep the Python object alive through the native call above
+    _ = weights^
+    _ = held^
+    _ = group_holder^
+    _ = pair_holders^
+    # PACK of the native outcome
+    var text = PythonObject(outcome.text)
+    py_setitem(fields, nk[].k_model_, text)
+    py_setitem(fields, nk[].k_bias_, PythonObject(gbdt_bias_of(outcome.text)))
+    py_setitem(fields, nk[].k_best_iteration_, PythonObject(outcome.best_iteration))
+    py_setitem(fields, nk[].k_stopped_early_, PythonObject(outcome.stopped_early))
+    py_setitem(fields, nk[].k_loss_curve_, _f64_curve(outcome.learn, context))
+    py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_features))
+    var dim = PythonObject(None)
+    if entry_ref_vendor(gkey) == 0 and gbdt_has_ctr(text):
+        # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
+        dim = py_call_typed(b.int, py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
+    else:
+        dim = PythonObject(xg_model_dim(gkey, outcome.text))
+    py_setitem(fields, nk[].k_approx_dim_, dim)
+    if _eq(loss, "MultiClass"):
+        py_setitem(fields, nk[].k_n_classes_, dim + PythonObject(1))
+    elif _eq(loss, "MultiClassOneVsAll"):
+        py_setitem(fields, nk[].k_n_classes_, dim)
+    else:
+        py_setitem(fields, nk[].k_n_classes_, PythonObject(None))
+    _ = x^
+    _ = ya^
+    return model
+
+
+def gbdt_inspect(model: PythonObject, operation: Int, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The fit's resolved settings, for inspection: `_params(...)`,
+    `_resolved_learning_rate(...)`, `_resolved_boosting_type(n_rows)`, by
+    the leaf code of `trees_gbdt_params` / `_learning_rate` / `_boosting_type`."""
+    var fields = py_fields(model)
+    if operation == TREES_OPN_TREES_GBDT_BOOSTING_TYPE:
+        return PythonObject(_resolved_boosting_type(fields, model, _int(args[0]), context))
+    if operation == TREES_OPN_TREES_GBDT_LEARNING_RATE:
+        return PythonObject(_resolved_learning_rate(fields, model, _int(args[0]), _int(args[1]), _truthy(args[2]), context))
+    return _params(fields, model, _int(args[0]), _int(args[1]), _int(args[2]), _int(args[3]), _int(args[4]),
+                   _truthy(args[5]), context)
+
+
+# ------------------------------------------------------------ constructor
+
+
+def _real(value: PythonObject, context: PythonObject) raises -> Bool:
+    var nk = trees_keys()
+    return not _is_bool(value) and Bool(py=py_call(_b().isinstance, value, py_item(context, nk[].k_trees_real_type)))
+
+
+def _parsed_real(value: PythonObject, context: PythonObject) raises -> Float64:
+    """`float(value)` of a real non-bool, NaN for anything else or a
+    refused conversion (the constructor's `parsed_*` pattern)."""
+    if not _real(value, context):
+        return gbdt_nan()
+    try:
+        return _float(value)
+    except:
+        return gbdt_nan()
+
+
+def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting.__init__`: every refusal in the constructor's
+    order and wording, then the stored parameters (normalized as it
+    normalized them) and the unfitted state."""
+    var b = _b()
+    var t = _tables(context)
+    var nk = trees_keys()
+    var names = py_item(t, nk[].k_init_names)
+    var kw = Python.dict()
+    for i in range(len(names)):  # driver-loop: over the constructor parameter names
+        py_setitem(kw, names[i], args[i])
+    var loss = py_item(kw, nk[].k_loss)
+    if not _in(loss, py_item(t, nk[].k_losses)):
+        raise Error("mojolearn: loss must be one of " + _repr(py_item(t, nk[].k_losses)) + ", got " + _repr(loss))
+    var required = py_get(py_item(t, nk[].k_required_param), loss)
+    if required is not None:
+        if kw[required[1]] is None:
+            raise Error("mojolearn: " + _str(loss) + " requires " + _str(required[1]) + "= "
+                        + "(CatBoost's " + _repr(required[0]) + ", which it makes mandatory)")
+    var grow = py_item(kw, nk[].k_grow_policy)
+    var symmetric = _eq(grow, "SymmetricTree")
+    var bootstrap = py_item(kw, nk[].k_bootstrap_type)
+    var bootstrap_defaulted = bootstrap is None and symmetric
+    var n_estimators = py_item(kw, nk[].k_n_estimators)
+    if n_estimators is None:
+        n_estimators = py_item(t, nk[].k_catboost_iterations) if symmetric else py_item(t, nk[].k_legacy_iterations)
+    if bootstrap is None and symmetric:
+        bootstrap = py_item(t, nk[].k_catboost_bootstrap)
+    if bootstrap is not None and not _in(bootstrap, py_item(t, nk[].k_bootstrap_types)):
+        raise Error("mojolearn: bootstrap_type must be one of " + _repr(py_item(t, nk[].k_bootstrap_types)) + ", got " + _repr(bootstrap))
+    var subsample = py_item(kw, nk[].k_subsample)
+    if _eq(bootstrap, "Bayesian") and subsample is not None:
+        if bootstrap_defaulted:
+            raise Error("mojolearn: the default bootstrap_type='Bayesian' "
+                        + "(CatBoost's GPU default, bootstrap_options.h:18) does "
+                        + "not support subsample; pass bootstrap_type='Bernoulli' "
+                        + "or 'Poisson' with it")
+        raise Error("mojolearn: bootstrap_type='Bayesian' does not support "
+                    + "subsample; it takes bagging_temperature")
+    if not Bool(py=py_item(kw, nk[].k_bagging_temperature) == PythonObject(1.0)) and not _eq(bootstrap, "Bayesian"):
+        raise Error("mojolearn: bagging_temperature is read only by "
+                    + "bootstrap_type='Bayesian'; with bootstrap_type="
+                    + _repr(bootstrap) + " it would be ignored, so it is refused")
+    if subsample is not None and not (_eq(bootstrap, "Bernoulli") or _eq(bootstrap, "Poisson")):
+        raise Error("mojolearn: subsample is read only by bootstrap_type="
+                    + "'Bernoulli' or 'Poisson'; with bootstrap_type="
+                    + _repr(bootstrap) + " it would be ignored, so it is refused")
+    var method = py_item(kw, nk[].k_leaf_estimation_method)
+    if method is not None and not _in(method, py_item(t, nk[].k_leaf_estimation_names)):
+        raise Error("mojolearn: leaf_estimation_method must be one of "
+                    + _repr(py_call(b.tuple, py_item(t, nk[].k_leaf_estimation_names))) + ", got " + _repr(method))
+    if _eq(grow, "Region"):
+        raise Error("NotImplementedError: mojolearn: grow_policy='Region' is EGrowPolicy::Region, "
+                    + "which no lane implements (greedy_search_helper.cpp:325-350); "
+                    + "reachable values are " + _repr(py_item(t, nk[].k_grow_policies)))
+    if not _in(grow, py_item(t, nk[].k_grow_policy_codes)):
+        raise Error("mojolearn: grow_policy must be one of " + _repr(py_item(t, nk[].k_grow_policies)) + ", "
+                    + "got " + _repr(grow))
+    var fraction = _parsed_real(py_item(kw, nk[].k_feature_fraction), context)
+    if not isfinite(fraction) or not (fraction > 0.0 and fraction <= 1.0):
+        raise Error("mojolearn: feature_fraction must be finite and in (0, 1]")
+    var cat = py_item(kw, nk[].k_cat_features)
+    var hot = py_item(kw, nk[].k_one_hot_features)
+    if fraction < 1.0 and ((cat is not None and len(cat) > 0) or (hot is not None and len(hot) > 0)):
+        raise Error("NotImplementedError: mojolearn: feature_fraction < 1 requires numeric features; "
+                    + "categorical, one-hot and CTR features are unsupported")
+    var gain_obj = py_item(kw, nk[].k_min_split_gain)
+    var gain = PythonObject(None)
+    if gain_obj is not None:
+        var parsed = _parsed_real(gain_obj, context)
+        if not isfinite(parsed) or parsed < 0:
+            raise Error("mojolearn: min_split_gain must be finite and nonnegative or None")
+        if symmetric:
+            raise Error("mojolearn: min_split_gain is only supported for Depthwise and Lossguide")
+        gain = PythonObject(parsed)
+    var non_symmetric = not symmetric
+    if non_symmetric and not _in(loss, py_item(t, nk[].k_non_symmetric_losses)):
+        raise Error("NotImplementedError: mojolearn: Error: optimization scheme is not supported for "
+                    + "GPU learning Loss=" + _str(loss) + ";OptimizationScheme=" + _str(grow) + " "
+                    + "-- CatBoost's GPU registers a non-symmetric trainer for "
+                    + "exactly eleven losses (pointwise_non_symmetric.cpp:7-29; "
+                    + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, py_item(t, nk[].k_non_symmetric_losses))))
+    var max_leaves = py_item(kw, nk[].k_max_leaves)
+    var depth = py_item(kw, nk[].k_max_depth)
+    if depth is not None:
+        # The device trainer sizes its leaf tables from 2 ** max_depth and
+        # reads a negative depth out of bounds (a segfault on CUDA); CatBoost
+        # caps oblivious and depthwise trees at 16. The host binding refuses
+        # the same range (bindings/_mojolearn_gbdt_host.mojo:1331).
+        var depth_int = Int(py=py_call_typed(b.int, depth))
+        if depth_int < 0 or depth_int > 16:
+            raise Error("mojolearn: max_depth must be in 0..16 (CatBoost's maximum tree depth), got " + _str(depth))
+    if max_leaves is not None:
+        var leaves = Int(py=py_call_typed(b.int, max_leaves))
+        if leaves < 2:
+            raise Error("mojolearn: max_leaves must be at least 2, got " + _str(max_leaves))
+        var pinned = 1 << Int(py=py_call_typed(b.int, depth))
+        if not _eq(grow, "Lossguide") and leaves != pinned:
+            raise Error("mojolearn: max_leaves option works only with lossguide "
+                        + "tree growing (catboost_options.cpp:998); under "
+                        + "grow_policy=" + _repr(grow) + " CatBoost pins it to "
+                        + "2 ** max_depth == " + String(pinned) + ", got " + _str(max_leaves))
+        if _eq(grow, "Lossguide") and leaves > 65536:
+            raise Error("mojolearn: Maximum leaves count for Lossguide grow "
+                        + "policy is 65536, got " + _str(max_leaves))
+    var min_data = py_item(kw, nk[].k_min_data_in_leaf)
+    var min_data_int = Int(py=py_call_typed(b.int, min_data))
+    if min_data_int < 0:
+        raise Error("mojolearn: min_data_in_leaf must be >= 0, got " + _str(min_data))
+    if not non_symmetric and min_data_int != 1:
+        raise Error("mojolearn: min_data_in_leaf=" + _str(min_data) + " does "
+                    + "nothing under grow_policy='SymmetricTree' -- CatBoost's "
+                    + "IsTerminalLeaf tests the leaf size only for Depthwise and "
+                    + "Lossguide (greedy_search_helper.cpp:685) and discards the "
+                    + "value on oblivious trees. Use a non-symmetric grow_policy "
+                    + "or leave it at 1.")
+    var score = py_item(kw, nk[].k_score_function)
+    if score is None:
+        score = PythonObject("NewtonL2") if _eq(grow, "Lossguide") else PythonObject("Cosine")
+    var unsupported = py_get(py_item(t, nk[].k_unsupported_score_functions), score)
+    if unsupported is not None:
+        raise Error("NotImplementedError: mojolearn: score_function=" + _repr(score) + " is not "
+                    + "honored here -- " + _str(unsupported) + ". Reachable values are " + _repr(py_item(t, nk[].k_score_functions)) + ".")
+    if not _in(score, py_item(t, nk[].k_score_function_names)):
+        raise Error("mojolearn: score_function must be one of " + _repr(py_item(t, nk[].k_score_functions)) + ", got " + _repr(score))
+    var hessian_obj = py_item(kw, nk[].k_min_child_hessian)
+    var hessian = PythonObject(None)
+    if hessian_obj is not None:
+        var parsed = _parsed_real(hessian_obj, context)
+        if not isfinite(parsed) or not (parsed >= 0 and parsed <= GBDT_F32_MAX):
+            raise Error("mojolearn: min_child_hessian must be finite nonnegative and <= Float32.MAX_FINITE or None")
+        if symmetric:
+            raise Error("mojolearn: min_child_hessian requires Depthwise or Lossguide")
+        if not (_eq(score, "NewtonL2") or _eq(score, "NewtonCosine")):
+            raise Error("mojolearn: min_child_hessian requires NewtonL2 or NewtonCosine")
+        if not (_eq(loss, "RMSE") or _eq(loss, "Logloss") or _eq(loss, "CrossEntropy")):
+            raise Error("mojolearn: min_child_hessian supports RMSE, Logloss and CrossEntropy only")
+        hessian = PythonObject(parsed)
+    var nan_mode = py_item(kw, nk[].k_nan_mode)
+    if not _in(nan_mode, py_item(t, nk[].k_nan_modes)):
+        raise Error("mojolearn: nan_mode must be one of " + _repr(py_item(t, nk[].k_nan_modes)) + ", got " + _repr(nan_mode))
+    var border = py_item(kw, nk[].k_feature_border_type)
+    if not _in(border, py_item(t, nk[].k_border_types)):
+        raise Error("mojolearn: feature_border_type must be one of " + _repr(py_item(t, nk[].k_border_types)) + ", got " + _repr(border))
+    # `_validate_search_options` over the arguments.
+    var probe = Python.dict()
+    py_setitem(probe, nk[].k_grow_policy, grow)
+    py_setitem(probe, nk[].k_score_function, score)
+    py_setitem(probe, nk[].k_use_pointwise_searcher, py_item(kw, nk[].k_use_pointwise_searcher))
+    py_setitem(probe, nk[].k_random_strength, py_item(kw, nk[].k_random_strength))
+    var strength = _validate_search_options(probe, model, context)
+    var random_strength = PythonObject(None) if py_item(kw, nk[].k_random_strength) is None else PythonObject(strength)
+    var border_rows = py_item(kw, nk[].k_border_build_max_samples)
+    if Bool(py=border_rows < PythonObject(0)):
+        raise Error("mojolearn: border_build_max_samples must be >= 0 (0 means "
+                    + "every row), got " + _str(border_rows))
+    var class_weights = py_item(kw, nk[].k_class_weights)
+    var stored_weights = PythonObject(None)
+    if class_weights is not None:
+        if len(class_weights) == 0:
+            raise Error("mojolearn: class_weights is empty; pass None for none")
+        var listed = py_call(b.list, class_weights)
+        stored_weights = Python.list()
+        for i in range(len(listed)):  # driver-loop: over the class_weights argument
+            var w = _float(listed[i])
+            if not isfinite(w) or w < 0:
+                raise Error("mojolearn: class_weights must have finite nonnegative entries")
+        if _eq(loss, "RMSE"):
+            raise Error("mojolearn: class_weights is not accepted with "
+                        + "loss='RMSE', which has no class structure to weight")
+        for i in range(len(listed)):  # driver-loop: over the class_weights argument
+            _ = py_call(stored_weights.append, py_call_typed(b.float, listed[i]))
+    var boosting = py_item(kw, nk[].k_boosting_type)
+    if boosting is not None and not _in(boosting, py_item(t, nk[].k_boosting_types)):
+        raise Error("mojolearn: boosting_type must be one of " + _repr(py_item(t, nk[].k_boosting_types)) + " or "
+                    + "None, got " + _repr(boosting))
+    var ordered_probe = Python.dict()
+    py_setitem(ordered_probe, nk[].k_loss, loss)
+    py_setitem(ordered_probe, nk[].k_grow_policy, grow)
+    py_setitem(ordered_probe, nk[].k_score_function, score)
+    py_setitem(ordered_probe, nk[].k_leaf_estimation_method, method)
+    py_setitem(ordered_probe, nk[].k_use_pointwise_searcher, py_item(kw, nk[].k_use_pointwise_searcher))
+    py_setitem(ordered_probe, nk[].k_feature_fraction, PythonObject(fraction))
+    _check_ordered_options(_str(boosting) if boosting is not None else String(""), ordered_probe, model, context)
+    var fold_len = py_item(kw, nk[].k_fold_len_multiplier)
+    var fold_ok = _real(fold_len, context)
+    if fold_ok:
+        var f = _float(fold_len)
+        fold_ok = isfinite(f) and f > 1.0
+    if not fold_ok:
+        raise Error("mojolearn: fold len multiplier should be greater than 1, got " + _repr(fold_len))
+    var block = py_item(kw, nk[].k_fold_permutation_block)
+    if block is not None:
+        var ok = not _is_bool(block) and Bool(py=py_call(b.isinstance, block, py_item(context, nk[].k_trees_integral_type)))
+        if ok:
+            var v = Int(py=py_call_typed(b.int, block))
+            ok = 0 <= v and v <= 256
+        if not ok:
+            raise Error("mojolearn: fold_permutation_block must be an integer in "
+                        + "0..256 or None, got " + _repr(block))
+    if _eq(boosting, "Plain") and (_float(fold_len) != 2.0 or block is not None):
+        raise Error("mojolearn: fold_len_multiplier and fold_permutation_block are "
+                    + "read only by Ordered boosting (dynamic_boosting.h:115-223); "
+                    + "with boosting_type='Plain' they would be accepted and ignored")
+    var perm_names: List[String] = ["permutation_count", "ctr_estimation_permutation_id"]
+    for i in range(2):  # driver-loop: over fixed call structure, small-loop(perm_names): the two permutation arguments
+        var value = kw[perm_names[i]]
+        if value is None:
+            continue
+        if Int(py=py_call_typed(b.int, value)) < 0:
+            raise Error("mojolearn: " + perm_names[i] + " must be >= 0 when given, got " + _str(value))
+        var may_be_ordered = i == 0 and not _eq(boosting, "Plain") and symmetric
+        if not _truthy(cat) and not may_be_ordered:
+            raise Error("mojolearn: " + perm_names[i] + " is read only by the categorical "
+                        + "path (doc_parallel_dataset_builder.cpp:190-262)"
+                        + (" and by Ordered boosting" if i == 0 else "")
+                        + "; with no cat_features it would be accepted and "
+                        + "ignored. Pass cat_features= or leave it unset.")
+    var fields = py_fields(model)
+    var stored = Python.list(
+        Python.tuple("loss", loss), Python.tuple("n_estimators", n_estimators), Python.tuple("max_depth", depth),
+        Python.tuple("learning_rate", py_item(kw, nk[].k_learning_rate)), Python.tuple("l2_leaf_reg", py_item(kw, nk[].k_l2_leaf_reg)),
+        Python.tuple("border_count", py_item(kw, nk[].k_border_count)), Python.tuple("random_state", py_item(kw, nk[].k_random_state)),
+        Python.tuple("loss_alpha", py_item(kw, nk[].k_loss_alpha)), Python.tuple("loss_q", py_item(kw, nk[].k_loss_q)),
+        Python.tuple("loss_delta", py_item(kw, nk[].k_loss_delta)), Python.tuple("loss_variance_power", py_item(kw, nk[].k_loss_variance_power)),
+        Python.tuple("loss_border", py_item(kw, nk[].k_loss_border)), Python.tuple("leaf_estimation_method", method),
+        Python.tuple("leaf_estimation_iterations", py_item(kw, nk[].k_leaf_estimation_iterations)),
+        Python.tuple("bootstrap_type", bootstrap), Python.tuple("bagging_temperature", py_item(kw, nk[].k_bagging_temperature)),
+        Python.tuple("subsample", subsample), Python.tuple("cat_features", cat), Python.tuple("one_hot_features", hot),
+        Python.tuple("od_type", py_item(kw, nk[].k_od_type)), Python.tuple("od_pvalue", py_item(kw, nk[].k_od_pvalue)),
+        Python.tuple("od_wait", py_item(kw, nk[].k_od_wait)), Python.tuple("use_best_model", py_item(kw, nk[].k_use_best_model)),
+        Python.tuple("best_model_min_trees", py_call_typed(b.int, py_item(kw, nk[].k_best_model_min_trees))),
+        Python.tuple("score_function", score), Python.tuple("nan_mode", nan_mode),
+        Python.tuple("random_strength", random_strength),
+        Python.tuple("use_pointwise_searcher", PythonObject(_truthy(py_item(kw, nk[].k_use_pointwise_searcher)))),
+        Python.tuple("boost_from_average", py_item(kw, nk[].k_boost_from_average)),
+        Python.tuple("border_build_max_samples", py_call_typed(b.int, border_rows)),
+        Python.tuple("class_weights", stored_weights),
+        Python.tuple("permutation_count", py_item(kw, nk[].k_permutation_count)),
+        Python.tuple("ctr_estimation_permutation_id", py_item(kw, nk[].k_ctr_estimation_permutation_id)),
+        Python.tuple("grow_policy", grow),
+        Python.tuple("max_leaves", PythonObject(None) if max_leaves is None else py_call_typed(b.int, max_leaves)),
+        Python.tuple("min_data_in_leaf", PythonObject(min_data_int)),
+        Python.tuple("min_split_gain", gain), Python.tuple("min_child_hessian", hessian),
+        Python.tuple("feature_fraction", py_item(kw, nk[].k_feature_fraction)), Python.tuple("feature_border_type", border),
+        Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
+        Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
+        Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
+        Python.tuple("test_loss_curve_", PythonObject(None)), Python.tuple("best_iteration_", PythonObject(None)),
+        Python.tuple("stopped_early_", PythonObject(None)), Python.tuple("learning_rate_", PythonObject(None)),
+        Python.tuple("boosting_type_", PythonObject(None)), Python.tuple("n_features_in_", PythonObject(None)),
+        Python.tuple("approx_dim_", PythonObject(None)), Python.tuple("n_classes_", PythonObject(None)),
+    )
+    for i in range(len(stored)):  # driver-loop: over the constructor's stored fields
+        py_setitem(fields, stored[i][0], stored[i][1])
+    if len(args) > len(names):
+        # GradientBoosting.__init__'s own numeric_mode= (the class is
+        # _mojolearn_native_public, so no _mode wrapper stores it)
+        _gbdt_store_mode(model, args[len(names)])
+    return PythonObject(None)
+
+
+# ------------------------------------------- OrderedRMSE / FeatureFreq constructors
+
+
+def _gbdt_base_args(model: PythonObject, overrides: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The argument tuple a GradientBoosting subclass's constructor hands
+    `GradientBoosting.__init__`: the connected base's defaults, with
+    `overrides` for the parameters the subclass passes."""
+    var b = _b()
+    var nk = trees_keys()
+    var classes = py_item(context, nk[].k_trees_classes)
+    var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(model))
+    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
+    var found = Optional[PythonObject]()
+    for i in range(len(ancestry)):  # driver-loop: over the model's class ancestry, to its connected GBDT base
+        if not found:
+            var kind = py_get(classes, ancestry[i])
+            if kind is not None and String(kind) == "gbdt":
+                var candidate = py_item(context, nk[].k_trees_defaults)[ancestry[i]]
+                if candidate is not None:
+                    found = candidate
+    if not found:
+        raise Error("TypeError: native GBDT constructors require the connected GradientBoosting base")
+    var defaults = found.value()
+    var names = py_item(_tables(context), nk[].k_init_names)
+    var args = Python.list()
+    for i in range(len(names)):  # driver-loop: over the constructor parameter names
+        _ = py_call(args.append, py_get(overrides, names[i], defaults[names[i]]))
+    return py_call(b.tuple, args)
+
+
+def _gbdt_subclass_storage(model: PythonObject, extra: PythonObject, context: PythonObject) raises:
+    """Storage admission before the subclass constructor writes any field."""
+    var nk = trees_keys()
+    var names = py_call(_b().list, py_item(_tables(context), nk[].k_init_names))
+    _ = py_call(names.extend, extra)
+    tree_constructor_storage(model, names)
+
+
+def _gbdt_default_mode(model: PythonObject) raises:
+    """What `GradientBoosting.__init__`'s numeric-mode wrapper does after the
+    constructor: `numeric_mode = None` unless the model already has one."""
+    var missing = Python.tuple()
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    if not py_contains(fields, nk[].k_numeric_mode) and _resolved(py_type(model), "numeric_mode", missing) is missing:
+        py_setitem(fields, nk[].k_numeric_mode, PythonObject(None))
+
+
+def _gbdt_store_mode(model: PythonObject, mode: PythonObject) raises:
+    """The former numeric-mode wrapper's rule: a given mode is stored; None
+    stores None unless the model already has a numeric_mode."""
+    if mode is not None:
+        var nk = trees_keys()
+        py_setitem(py_fields(model), nk[].k_numeric_mode, mode)
+    else:
+        _gbdt_default_mode(model)
+
+
+def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`OrderedRMSE.__init__(n_estimators, max_depth, learning_rate,
+    l2_leaf_reg, border_count)`: the ordered settings' checks, then the
+    GradientBoosting constructor with loss RMSE, no boost-from-average and
+    nan_mode Forbidden."""
+    if py_type(args) is not _b().tuple or (len(args) != 5 and len(args) != 6):
+        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters and numeric_mode")
+    ordered_option_values(Python.tuple(args[0], args[1], args[4], args[2], args[3]), context)
+    _gbdt_subclass_storage(model, Python.tuple("numeric_mode"), context)
+    var overrides = Python.dict()
+    var nk = trees_keys()
+    py_setitem(overrides, nk[].k_loss, PythonObject("RMSE"))
+    py_setitem(overrides, nk[].k_n_estimators, args[0])
+    py_setitem(overrides, nk[].k_max_depth, args[1])
+    py_setitem(overrides, nk[].k_learning_rate, args[2])
+    py_setitem(overrides, nk[].k_l2_leaf_reg, args[3])
+    py_setitem(overrides, nk[].k_border_count, args[4])
+    py_setitem(overrides, nk[].k_boost_from_average, PythonObject(False))
+    py_setitem(overrides, nk[].k_nan_mode, PythonObject("Forbidden"))
+    _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
+    _gbdt_store_mode(model, args[5] if len(args) == 6 else PythonObject(None))
+    return PythonObject(None)
+
+
+def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`ExperimentalTwoLevelFeatureFreq.__init__(sources, learning_rate,
+    l2_leaf_reg, random_state)`: the GradientBoosting constructor (one
+    depth-two RMSE tree), then the sources: at least two distinct integers."""
+    var b = _b()
+    if py_type(args) is not b.tuple or (len(args) != 4 and len(args) != 5):
+        raise Error("TypeError: the FeatureFreq constructor takes its four parameters and numeric_mode")
+    _gbdt_subclass_storage(model, Python.tuple("numeric_mode", "sources"), context)
+    var overrides = Python.dict()
+    var nk = trees_keys()
+    py_setitem(overrides, nk[].k_loss, PythonObject("RMSE"))
+    py_setitem(overrides, nk[].k_n_estimators, PythonObject(1))
+    py_setitem(overrides, nk[].k_max_depth, PythonObject(2))
+    py_setitem(overrides, nk[].k_learning_rate, args[1])
+    py_setitem(overrides, nk[].k_l2_leaf_reg, args[2])
+    py_setitem(overrides, nk[].k_random_state, args[3])
+    _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
+    _gbdt_store_mode(model, args[4] if len(args) == 5 else PythonObject(None))
+    var parsed = Python.list()
+    try:
+        var items = py_call_typed(b.tuple, args[0])
+        for i in range(len(items)):  # driver-loop: over the sources argument's column indices
+            _ = py_call(parsed.append, py_call_typed(b.int, items[i]))
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError:") or message.startswith("ValueError:"):
+            raise Error("mojolearn: sources must be integer indices")
+        raise error^
+    if len(parsed) < 2 or len(py_call(b.set, parsed)) != len(parsed):
+        raise Error("mojolearn: sources need at least two unique indices")
+    py_setitem(py_fields(model), nk[].k_sources, py_call(b.tuple, parsed))
+    return PythonObject(None)
+
+
+# --------------------------------------------------------------- adapters
+
+
+def _adapter_tables(context: PythonObject) raises -> PythonObject:
+    var nk = trees_keys()
+    return py_item(context, nk[].k_trees_gbdt_adapter_tables)
+
+
+def _adapter_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter.get_params()`."""
+    var nk = trees_keys()
+    return _read(model, False, py_item(context, nk[].k_trees_gbdt_parameter_metadata), Python.list())
+
+
+def _check_learner_mode(mode: PythonObject) raises:
+    """`_GBDTAdapter._new_learner`'s numeric_mode refusal."""
+    var b = _b()
+    if mode is not None:
+        var ok = Bool(py=py_call(b.isinstance, mode, b.str))
+        if ok:
+            var clean = String(py_call(py_call(mode.strip).lower))
+            ok = clean == "fast" or clean == "identical"
+        if not ok:
+            raise Error("numeric_mode must be fast, identical or None")
+
+
+def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter._new_learner(mode)`: the GradientBoosting learner the
+    adapter fits, built by the native constructor (its refusals are the
+    learner's)."""
+    var b = _b()
+    _check_learner_mode(mode)
+    var loss = _resolved(py_type(model), "_loss", PythonObject(None))
+    classical_admit_value(loss, context)
+    var nk = trees_keys()
+    if _eq(loss, "RMSE") and _field(py_fields(model), model, nk[].k_class_weights, "class_weights") is not None:
+        raise Error("NotImplementedError: GradientBoostingRegressor does not support class_weights")
+    var params = _adapter_params(model, context)
+    py_setitem(params, nk[].k_numeric_mode, mode)
+    var t = _tables(context)
+    var names = py_item(t, nk[].k_init_names)
+    var learner_cls = py_item(_adapter_tables(context), nk[].k_learner)
+    var learner = py_call(b.object.__new__, learner_cls)
+    var args = Python.list()
+    for i in range(len(names)):  # driver-loop: over the learner's constructor parameter names
+        var name = names[i]
+        if String(name) == "loss":
+            _ = py_call(args.append, loss)
+        else:
+            _ = py_call(args.append, py_get(params, name, py_item(context, nk[].k_trees_defaults)[learner_cls][name]))
+    _ = gbdt_initialize(learner, py_call(b.tuple, args), context)
+    py_setitem(py_fields(learner), nk[].k_numeric_mode, mode)
+    return learner
+
+
+def adapter_new_learner(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter._new_learner(mode)` and (with the stored `numeric_mode`)
+    `_GBDTAdapter._validate_params()`, one native call each from Python
+    (lane py-trees, 2026-11-14): the numeric_mode refusal, the regressor's
+    class_weights refusal, then the learner the native constructor builds."""
+    return _new_learner(model, mode, context)
+
+
+def adapter_validate_params(model: PythonObject, context: PythonObject) raises:
+    """`_GBDTAdapter._validate_params()`: `_new_learner(self.numeric_mode)`."""
+    var nk = trees_keys()
+    _ = _new_learner(model, _field(py_fields(model), model, nk[].k_numeric_mode, "numeric_mode"), context)
+
+
+def _clear_fit(fields: PythonObject, context: PythonObject) raises:
+    """`_GBDTAdapter._clear_fit`: drop every fitted attribute."""
+    var keys = py_call(_b().list, fields)
+    var removed = Python.list()
+    var retained = Python.list()
+    for i in range(len(keys)):  # driver-loop: admit displaced fitted owners before dropping references
+        if String(keys[i]).endswith("_"):
+            _ = py_call(removed.append, fields[keys[i]])
+        else:
+            _ = py_call(retained.append, fields[keys[i]])
+    _release_tree_values(removed, retained, context)
+    for i in range(len(keys)):  # driver-loop: over the instance's attribute names
+        if String(keys[i]).endswith("_"):
+            _ = py_call(fields.pop, keys[i], PythonObject(None))
+
+
+def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_metrics_impl._classification_encoded`'s kind and class values over
+    labels the ORDER RULE already encoded: (kind, the sorted classes as
+    `str` or `int`), with its one-dimensional and type refusals."""
+    var b = _b()
+    var shape_ok = True
+    var cls = py_type(values)
+    var nk = trees_keys()
+    if cls is b.list or cls is b.tuple:
+        shape_ok = not (len(values) > 0 and Bool(py=py_call(b.isinstance, values[0], Python.tuple(b.list, b.tuple))))
+    elif cls is py_item(context, nk[].k_array_class):
+        shape_ok = Int(py=values.ndim) == 1
+    else:
+        try:
+            shape_ok = Int(py=native_buffer_view(values).ndim) == 1
+        except:
+            shape_ok = True
+    if not shape_ok:
+        raise Error(name + " must be one-dimensional single-label data")
+    var classes = labels.classes
+    var k = len(classes)
+    var all_str = True
+    var all_int = True
+    for i in range(k):  # driver-loop: over the distinct class labels
+        var c = classes[i]
+        all_str = all_str and Bool(py=py_call(b.isinstance, c, b.str))
+        all_int = all_int and (Bool(py=py_call(b.isinstance, c, py_item(context, nk[].k_trees_integral_type))) or _is_bool(c))
+    if all_str and k > 0:
+        var out = Python.list()
+        for i in range(k):  # driver-loop: over the distinct class labels
+            _ = py_call(out.append, py_call(b.str, classes[i]))
+        return Python.tuple("string", out)
+    if all_int and k > 0:
+        var out = Python.list()
+        for i in range(k):  # driver-loop: over the distinct class labels
+            _ = py_call(out.append, py_call_typed(b.int, classes[i]))
+        return Python.tuple("integer", out)
+    raise Error("TypeError: " + name + " must contain only strings or only integers; "
+                + "floating labels, missing labels and mixed types are unsupported")
+
+
+def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObject:
+    """The class codes as float32 (`_label_map(...).astype('<f4')`)."""
+    var out = admitted_vector(labels.n, "<f4", context)
+    # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+    _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(labels.codes)), PythonObject(2),
+                      PythonObject(trees_address(out)), PythonObject(0), PythonObject(labels.n))
+    _ = out  # keep the Python object alive through the native call above
+    return out
+
+
+def _adapter_eval(eval_set: PythonObject) raises -> PythonObject:
+    """The adapters' eval_set shape: one (X, y) pair."""
+    var b = _b()
+    var pair = eval_set
+    if Bool(py=py_call(b.isinstance, eval_set, b.list)):
+        if len(eval_set) != 1:
+            raise Error("eval_set accepts one (X, y) pair")
+        pair = eval_set[0]
+    if not Bool(py=py_call(b.isinstance, pair, b.tuple)) or len(pair) != 2:
+        raise Error("eval_set must be (X_eval, y_eval) or a one-pair list")
+    return pair
+
+
+def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y: PythonObject,
+                sample_weight: PythonObject, eval_set: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_GBDTAdapter._fit_native`: the learner in the resolved mode, the
+    binding's compiled mode checked, the native learner fit, the fitted
+    attributes copied.
+
+    `validated` is the learner the fit's parameter check already built
+    (`_validate_params`: `_new_learner(self.numeric_mode)`). The 0.8.55
+    adapter built a second one here with the resolved mode; the two differ
+    only in the `numeric_mode` field (the constructor's `init_names` do not
+    include it, so gbdt_initialize reads and stores the same parameters,
+    which nothing between the two builds changes: `_clear_fit` drops only
+    fitted `_` names), and that field is overwritten below. So the checked
+    learner is reused and one full constructor admission per fit is saved
+    (lane perf2-trees, 2026-11-06). The resolved mode keeps its refusal."""
+    var b = _b()
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    var raw = _field(fields, model, nk[].k_numeric_mode, "numeric_mode")
+    if raw is None:
+        raw = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
+    _check_learner_mode(raw)
+    var learner = validated
+    var mode = String(py_call(py_call(raw.strip).lower))
+    answer_mode_word(mode, MODE_FAMILY_GBDT)
+    var learner_fields = py_fields(learner)
+    py_setitem(learner_fields, nk[].k_numeric_mode, PythonObject(mode))
+    var table = gbdt_table(learner_fields, context)
+    var code = xg_numeric_mode(_gk(table))
+    if code != (0 if mode == "fast" else 1):
+        raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
+    _ = gbdt_fit(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None), PythonObject(None),
+                                       PythonObject(None), PythonObject(None)), context)
+    py_setitem(fields, nk[].k__learner_, learner)
+    py_setitem(fields, nk[].k_numeric_mode_, PythonObject(mode))
+    py_setitem(fields, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
+    py_setitem(fields, nk[].k_model_, py_item(learner_fields, nk[].k_model_))
+    var copied = Python.tuple("loss_curve_", "test_loss_curve_", "best_iteration_", "stopped_early_", "learning_rate_")
+    for i in range(len(copied)):  # driver-loop: over fixed call structure, small-loop(copied): the five learner attributes
+        py_setitem(fields, copied[i], learner_fields[copied[i]])
+    return model
+
+
+def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`."""
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
+    _clear_fit(fields, context)
+    var y = args[1]
+    var labels = trees_encode_labels(y, context)
+    var seen = len(labels.classes)
+    if seen < 2:
+        raise Error("Classifier can't train when only one class is present.")
+    if seen > 2:
+        raise Error("Only binary classification is supported. The type of the target "
+                    + "is multiclass.")
+    var kind = _label_kind(labels, y, "y", context)
+    var classes = kind[1]
+    var encoded = _codes_f32(labels, context)
+    var eval_set = args[3]
+    if eval_set is not None:
+        var pair = _adapter_eval(eval_set)
+        var eval_labels = trees_encode_labels(pair[1], context)
+        var eval_kind = _label_kind(eval_labels, pair[1], "eval_set y", context)
+        if not Bool(py=eval_kind[0] == kind[0]):
+            raise Error("eval_set contains labels outside the training vocabulary")
+        var table = admitted_vector(len(eval_kind[1]), "<i4", context)
+        var tp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
+        _ = table  # keep the Python object alive through the native call above
+        for i in range(len(eval_kind[1])):  # driver-loop: over the eval set's distinct labels
+            var at = -1
+            for j in range(len(classes)):  # driver-loop: over fixed call structure, small-loop(classes): the two training classes
+                if Bool(py=classes[j] == eval_kind[1][i]):
+                    at = j
+            if at < 0:
+                raise Error("eval_set contains labels outside the training vocabulary")
+            tp[i] = Int32(at)
+            _ = table  # keep the Python object alive through the native call above
+        var mapped = admitted_vector(eval_labels.n, "<i4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+        _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)),
+                          PythonObject(len(eval_kind[1])), PythonObject(trees_address(eval_labels.codes)),
+                          PythonObject(eval_labels.n), PythonObject(trees_address(mapped)))
+        _ = table  # keep the Python object alive through the native call above
+        _ = mapped  # keep the Python object alive through the native call above
+        var eval_y = admitted_vector(eval_labels.n, "<f4", context)
+        # call-table: base helper (`_buffer._native`, sibling lane); left as a py_call
+        _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
+                          PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
+        _ = mapped  # keep the Python object alive through the native call above
+        _ = eval_y  # keep the Python object alive through the native call above
+        eval_set = Python.tuple(pair[0], eval_y)
+    _ = _fit_native(model, learner, args[0], encoded, args[2], eval_set, context)
+    py_setitem(fields, nk[].k_classes_, classes)
+    py_setitem(fields, nk[].k_n_classes_, PythonObject(2))
+    py_setitem(fields, nk[].k__label_kind_, kind[0])
+    return model
+
+
+def _regression_target(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
+    """`as_f32_c(y, ndim=None)` and `_regression_target`'s checks."""
+    var view = classical_view(source, context, name)
+    if Int(py=view.ndim) != 1 or Int(py=view.size) == 0:
+        raise Error(name + " must be nonempty one-dimensional targets")
+    var target = admit_f32(view, 1, name, context, finite=False, admitted=True)
+    _ = view^
+    if not trees_finite_f32(target.address, target.rows):
+        raise Error(name + " must be finite")
+    _ = target  # keep the Python object alive through the native calls above
+    return target^
+
+
+def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`."""
+    var fields = py_fields(model)
+    var nk = trees_keys()
+    var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
+    _clear_fit(fields, context)
+    var target = _regression_target(args[1], "y", context)
+    var eval_set = args[3]
+    var eval_target: Optional[AdmittedX] = None
+    if eval_set is not None:
+        var pair = _adapter_eval(eval_set)
+        eval_target = _regression_target(pair[1], "eval_set y", context)
+        eval_set = Python.tuple(pair[0], _as_array(eval_target.value(), context))
+    return _fit_native(model, learner, args[0], _as_array(target, context), args[2], eval_set, context)
+
+
+def _as_array(m: AdmittedX, context: PythonObject) raises -> PythonObject:
+    """A float32 vector as the Array the learner's fit reads (the checked
+    copy itself, or the caller's own Array/buffer owner)."""
+    return m.array

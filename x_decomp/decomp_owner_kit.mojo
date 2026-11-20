@@ -11,7 +11,7 @@ build registers (`x_decomp_dev_eigh`, `x_decomp_dev_lu`) and the solver
 drivers the binding registers under one name with a host and a GPU body
 (`x_decomp_ica_solve`, `x_decomp_nmf_solve`, ...). x_decomp/decomp_owner_host.mojo
 and decomp_owner_dev.mojo implement it for the two bindings."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.api import eigh_run, lu_solve_run, move_run, rand_run
 from x_decomp.cells import F32Ptr, I32Ptr
@@ -58,6 +58,14 @@ trait DecompDev:
         ...
 
     @staticmethod
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        """The n x n device matrix `a` into the device matrices w (1 x n,
+        DESCENDING) and v (n x n, matching vectors in columns): the resident
+        `kit_eigh` + `kit_reversed_columns` without the round trip (lane
+        n9-decomp-eigh-families; x_decomp/resident.mojo `dev_eigh_desc_run`)."""
+        ...
+
+    @staticmethod
     def has_lu() -> Bool:
         ...
 
@@ -100,7 +108,8 @@ trait DecompDev:
     @staticmethod
     def fa_flags() -> Int:
         """FactorAnalysis's FAST Apple switches (`x_decomp_fa_defines`): bit 1
-        GRAM_ONCE, 2 ITER_DEVICE, 4 TRANSFORM_FUSED, 8 GRAM_DF; 0 elsewhere."""
+        GRAM_ONCE, 2 ITER_DEVICE, 8 GRAM_DF (4 was TRANSFORM_FUSED, deleted
+        2026-11-15); 0 elsewhere."""
         ...
 
     @staticmethod
@@ -110,10 +119,6 @@ trait DecompDev:
     @staticmethod
     def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
-        ...
-
-    @staticmethod
-    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
         ...
 
     @staticmethod
@@ -150,6 +155,18 @@ trait DecompDev:
     @staticmethod
     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
         """`x_decomp_lanczos` on host words (the host binding only)."""
+        ...
+
+    @staticmethod
+    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+        """`x_decomp_dev_eigh_tridiag` on device ids: the Lanczos T of the
+        alphas / betas at iab into w (1 x j) and z (j x j) on the device
+        (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+        """`x_decomp_eigh_tridiag` on host words (the host binding only)."""
         ...
 
     @staticmethod
@@ -193,6 +210,27 @@ def kit_eigh[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES]
     return (w, v)
 
 
+def kit_eigh_desc[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
+    """(w 1 x n DESCENDING, v n x n matching vectors in columns): `kit_eigh`
+    then `kit_reversed_columns` of both. A resident operand stays on the
+    device (`X.eigh_desc`: the same solve, the reversal as device copies, w
+    and V never home; lane n9-decomp-eigh-families); a host operand takes
+    the host-address entry and the host reversal."""
+    var n = kit.r(a)
+    var resident = False
+    comptime if RES:
+        resident = X.has_eigh() and n >= 1 and kit.c(a) == n and kit.mats[a].dev >= 0
+    if resident:
+        var w = kit.device_output(1, n)
+        var v = kit.device_output(n, n)
+        X.eigh_desc(kit.mats[a].dev, kit.mats[w].dev, kit.mats[v].dev, n)
+        return (w, v)
+    var eig = kit_eigh[E, D, RES, X](kit, a)
+    var wr = kit_reversed_columns(kit, eig[0])
+    var vr = kit_reversed_columns(kit, eig[1])
+    return (wr, vr)
+
+
 def kit_reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
     """`A.take_cols(range(c - 1, -1, -1))` of a host matrix: a strided copy
     per column (data movement)."""
@@ -217,7 +255,7 @@ def kit_rows[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, star
         return kit.take_rows(a, idx)
     var out = kit.zeros(stop - start, cols)
     if (stop - start) * cols:
-        memcpy(dest=kit.ptr(out), src=kit.ptr(a).unsafe_offset(start * cols), count=(stop - start) * cols)
+        unsafe_memcpy(dest=kit.ptr(out), src=kit.ptr(a).unsafe_offset(start * cols), count=(stop - start) * cols)
     return out
 
 

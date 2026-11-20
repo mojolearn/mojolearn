@@ -30,11 +30,11 @@ float32), the scores' edge rules and the p-values are the units' own
 (`f_sf`, the force_finite words), so the only change is the fold ORDER of
 the sums: pairwise instead of row order, never less accurate.
 
-  (default; _OFF off)          f_regression / r_regression (op 64): pass 1
+  (default)                    f_regression / r_regression (op 64): pass 1
                                the column sums (and y's) when centring,
                                pass 2 the centred cross and square sums,
                                then r, F and p per column.
-  (default; _OFF off)          f_classif (op 63): the within-class squares
+  (default)                    f_classif (op 63): the within-class squares
                                about the class means, then F and p per
                                column; and, in a program that contains op
                                63, the `class_stats` stage (op 16) ahead of
@@ -42,10 +42,10 @@ the sums: pairwise instead of row order, never less accurate.
                                threadgroup memory per tile (K <= KT
                                classes), then the class means.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -56,13 +56,16 @@ from x_prep.stats import f_sf, pos_inf, F32_MAX
 
 #: FAST on Apple only. SELECT_FREG is the FAST + Apple default since the M3 A/B
 #: (select-r-regression taxi 100.5 -> 10.1 ms, -90%, n_selected same);
-#: -D MOJOLEARN_SELECT_FREG_OFF turns it off (-D MOJOLEARN_SELECT_FREG is now harmless).
+#: (-D MOJOLEARN_SELECT_FREG is harmless).
 #: SELECT_FCLS is the FAST + Apple default since the M3 A/B (select-f-classif taxi
-#: 131.4 -> 17.5 ms, -87%, n_selected same); -D MOJOLEARN_SELECT_FCLS_OFF turns it
-#: off (-D MOJOLEARN_SELECT_FCLS is now harmless).
-comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SELECT_FREG = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FREG_OFF"]()
-comptime SELECT_FCLS = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FCLS_OFF"]()
+#: 131.4 -> 17.5 ms, -87%, n_selected same) (-D MOJOLEARN_SELECT_FCLS is harmless).
+comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_SELECT_FREG_OFF (old path, EXP:368 KEEP; promoted on Apple (M3) only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_SELECT_FREG_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SELECT_FREG = SELECT_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_SELECT_FCLS_OFF (old path, EXP:367 KEEP; promoted on Apple (M3) only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_SELECT_FCLS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SELECT_FCLS = SELECT_FAST_APPLE
 
 #: the ops (python/mojolearn/_expansion_prep.py `_OPS`)
 comptime OP_SEL_CLASS_STATS = 16
@@ -83,6 +86,9 @@ comptime TPB = CT * RL
 # versus partial-buffer traffic experiment covering every feature width.
 comptime AFCL_P07 = SELECT_FAST_APPLE and is_defined["MOJOLEARN_AFCL_P07"]()
 comptime RPT = 32 if AFCL_P07 else 64
+# TOMBSTONE: MOJOLEARN_AFCL_P07 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P07.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 #: rows per tile
 comptime RT = RL * RPT
 #: the most classes the class-sum tile holds in threadgroup memory

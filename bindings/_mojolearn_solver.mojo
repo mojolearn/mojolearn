@@ -31,41 +31,38 @@ THE GIL IS RELEASED AROUND THE DEVICE WORK, and nothing inside a
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hierarchy.solver_descriptor_device import HIERARCHY_SOLVER_DEVICE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoSolverContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSolverContextFast"
+#: lane/devctx-lifetime), shared with the solver operations table entry
+#: (solver/ops_entry_device.mojo owns the slot name).
+from solver.ops_entry_device import (
+    SOLVER_DEVCTX_SLOT as _DEVCTX_SLOT, SOLVER_OPS_DEVICE_API, solver_ops_device_v1,
+    sv_cd_fit_device_run, sv_cd_predict_device_run,
+)
+from core.solver_entry_table import SolverEntryKey, solver_ops_publish, solver_vendor_word
 
 
 from hierarchy.estimator import linkage_fit_host
-from solver.estimator import cd_fit_host, cd_predict_host
 
 
 def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
     var api = HIERARCHY_SOLVER_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def cd_fit_binding(
@@ -117,10 +114,13 @@ def cd_fit_binding(
         raise Error(
             "cd_fit: params must contain 9 to 11 values, got " + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var ip = _f32_ptr(Int(py=info_addr))
+    # The body is the solver operations table's (solver/ops_entry_device.mojo):
+    # this export remains for the Python tests and tools that call the
+    # binding directly; the linear owner calls the table.
+    var x = Int(py=x_addr)
+    var y = Int(py=y_addr)
+    var coef = Int(py=coef_addr)
+    var info = Int(py=info_addr)
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     var fit_intercept = Int(py=params[2]) != 0
@@ -135,21 +135,16 @@ def cd_fit_binding(
     var row_major = False
     if len(params) >= 10:
         row_major = Int(py=params[9]) != 0
-    # 10 the sample_weight address (lane sk-kernels); without weights the
-    #    label address stands in and is never read as weights
-    var swp = yp
+    # 10 the sample_weight address (lane sk-kernels)
+    var sw = 0
     if has_sw:
         if len(params) != 11:
             raise Error("cd_fit: has_sample_weight needs the weight address as params[10]")
-        swp = _f32_ptr(Int(py=params[10]))
+        sw = Int(py=params[10])
     var n_iter = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        n_iter = cd_fit_host(
-            ctx, xp, yp, cp, ip, nr, nc, fit_intercept, epochs, alpha,
-            l1_ratio, tol, shuffle, has_sw, swp, row_major,
-        )
-        ctx.synchronize()
+        n_iter = sv_cd_fit_device_run(x, y, coef, info, sw, nr, nc, fit_intercept, epochs, alpha,
+                                      l1_ratio, tol, shuffle, has_sw, row_major)
     return PythonObject(n_iter)
 
 
@@ -175,16 +170,14 @@ def cd_predict_binding(
         raise Error(
             "cd_predict: params must contain n_rows, n_cols, intercept"
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var cp = _f32_ptr(Int(py=coef_addr))
-    var op = _f32_ptr(Int(py=out_addr))
+    var x = Int(py=x_addr)
+    var coef = Int(py=coef_addr)
+    var dst = Int(py=out_addr)
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     var intercept = Float32(Float64(py=params[2]))
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        cd_predict_host(ctx, xp, cp, op, nr, nc, intercept)
-        ctx.synchronize()
+        sv_cd_predict_device_run(x, coef, dst, nr, nc, intercept)
     return PythonObject(0)
 
 
@@ -229,10 +222,10 @@ def linkage_fit_binding(
             "linkage_fit: params must contain 5 values, got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
-    var chp = _i32_ptr(Int(py=children_addr))
-    var lp = _i32_ptr(Int(py=labels_addr))
-    var ip = _i32_ptr(Int(py=info_addr))
+    var xp = f32_ptr(Int(py=x_addr))
+    var chp = i32_ptr(Int(py=children_addr))
+    var lp = i32_ptr(Int(py=labels_addr))
+    var ip = i32_ptr(Int(py=info_addr))
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
     var k = Int(py=params[2])
@@ -272,10 +265,23 @@ def solver_vendor_binding() raises -> PythonObject:
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
 
+def _publish_solver_ops() raises:
+    # The solver operations table (core/solver_entry_table.mojo): the linear
+    # owner's ElasticNet / Lasso calls these entries. A build with no GPU
+    # vendor ("none") publishes nothing; its callers refuse with the table's
+    # "provider is not published".
+    var word = solver_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = SOLVER_OPS_DEVICE_API.get_or_create_ptr()
+    solver_ops_publish(SolverEntryKey(Int(_DEVCTX_MODE), word), Int(api[].entries.unsafe_ptr()), solver_ops_device_v1)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_solver() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
@@ -291,7 +297,9 @@ def build__mojolearn_solver() -> PythonObject:
         m.def_function[cd_predict_binding]("cd_predict")
         m.def_function[linkage_fit_binding]("linkage_fit")
         m.def_function[hierarchy_solver_native_api_v1_binding]("hierarchy_solver_native_api_v1")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_solver_ops()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_solver: ", e))
 

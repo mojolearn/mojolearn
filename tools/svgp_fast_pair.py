@@ -23,7 +23,9 @@ import subprocess
 import sys
 
 # RBFTILE, BLKCHOL and BSPLIT are default since their promotion; their _OFF forms build the old arm.
-DEFINES = ("MOJOLEARN_SVGP_FAST_BLKCHOL_OFF", "MOJOLEARN_SVGP_FAST_RBFTILE_OFF", "MOJOLEARN_SVGP_FAST_BSPLIT_OFF")
+# RBFTILE_OFF, BLKCHOL_OFF and BSPLIT_OFF deleted 2026-11-15 (lane expdel-01-cluster, docs/TOMBSTONES.md):
+# no B arm is left for this pair, so it refuses every manifest.
+DEFINES = ()
 DATASETS = ("taxi", "istella")
 FIXTURE = "svgp-board-v1"
 

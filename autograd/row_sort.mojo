@@ -9,7 +9,7 @@
 # the GLOBAL index, so every compare-exchange is op_ls_bitonic's on the
 # same values: the same words as one launch per stage. Values are only
 # moved, never computed.
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

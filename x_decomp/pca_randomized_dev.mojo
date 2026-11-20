@@ -19,6 +19,7 @@ from x_decomp.resident import (
     dev_rand_run,
     dev_rowsum_run,
     dev_svd_run,
+    dev_upload_finite_run,
     dev_upload_run,
     pool_alloc,
     pool_free,
@@ -39,6 +40,11 @@ struct DevRDev(RDev):
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
         _ = dev_upload_run(id, src, n)
+
+    @staticmethod
+    def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
+        # RSVD_FAST_DEVSCAN (restored 2026-11-09): the ONE upload-finite body
+        return dev_upload_finite_run(id, src, n)
 
     @staticmethod
     def download(id: Int, dst: F32Ptr, n: Int) raises:

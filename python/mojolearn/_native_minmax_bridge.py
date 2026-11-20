@@ -12,9 +12,6 @@ def connect(scaler_class):
 
     context = _state_context()
     context["output_context"] = _numpy_free_context()
-    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
-    from ._sk_validate import _ACCEPTS_SPARSE
-    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
         try:
@@ -31,7 +28,7 @@ def connect(scaler_class):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"MinMaxScaler requires compiled {name}")
                 entries[name] = entry
-            for name in ("x_prep_run", "x_prep_numeric_mode"):  # glue: native missing-value and running-extrema executor
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: native missing-value and running-extrema executor
                 entry = getattr(xprep, name)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"MinMaxScaler requires compiled {name}")
@@ -61,7 +58,8 @@ def connect_host(cls, context, prep, xprep, training):
     entries = {"minmax_transform": prep.minmax_transform,
                "preprocessing_numeric_mode": prep.estimators_numeric_mode,
                "x_prep_run": xprep.x_prep_run,
-               "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
+               "x_prep_numeric_mode": xprep.x_prep_numeric_mode,
+               "x_prep_vendor": xprep.x_prep_vendor}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostMinMaxScaler requires compiled CPU entries")
     if isinstance(training, str):

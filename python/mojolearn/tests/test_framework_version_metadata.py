@@ -31,10 +31,17 @@ class PretendVersion:
 class FrameworkVersionMetadata(unittest.TestCase):
     def test_unicode_storage_and_series_semantics(self):
         from mojolearn.adapters._shipped import series
-        values = ['', '2', '2.13', '2.13.0+rocm7.2', '+local', '.', '..',
-                  '2..13', '2.+local.3', '🐍.β.0', '\x00.3.4', '\ud800.3.4']
-        for text in values:
-            expected = '.'.join(text.split('+', 1)[0].split('.')[:2])
+        # Literal expected outputs; no Python split/join numerical driver.
+        # Includes the cases moved from the inert packaging suite, which
+        # cannot import this compiled package boundary as a standalone file.
+        values = [('', ''), ('2', '2'), ('2.13', '2.13'),
+                  ('2.13.0+rocm7.2', '2.13'), ('2.13.1', '2.13'),
+                  ('2.13.0+cu130', '2.13'), ('2.13.0', '2.13'),
+                  ('2.12.0', '2.12'), ('+local', ''), ('.', '.'), ('..', '.'),
+                  ('2..13', '2.'), ('2.+local.3', '2.'),
+                  ('🐍.β.0', '🐍.β'), ('\x00.3.4', '\x00.3'),
+                  ('\ud800.3.4', '\ud800.3')]
+        for text, expected in values:
             for value in (text, HostileVersion(text)):
                 with self.subTest(text=text, subclass=type(value) is HostileVersion):
                     result = series(value)

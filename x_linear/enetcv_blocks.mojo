@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LassoCV / ElasticNetCV fold statistics from fold-aligned compensated block
-partials (lane/classical-cv, 2026-10-07; IDENTICAL control
-`-D MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS=<chunks per fold>`, arms 16|32|64).
+partials (lane/classical-cv, 2026-10-07; the IDENTICAL default, 64 chunks per
+fold: the measured arm; the losing arms 16|32 and their switch are deleted).
 
 The incumbent (x_linear/cd_grid.mojo) folds every prep (F training sets and
 the full data) over ALL n rows: F + 1 reads of every row per pass, one plain
@@ -31,7 +31,7 @@ called by one device thread or by the host loop (the host column), so the
 host and both GPU vendors produce the same words. Rows whose fold id is
 outside [0, F) belong to no fold (Python's KFold ids never are).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -40,6 +40,8 @@ from x_linear.tops import upper_cell
 from x_linear.witness import witness_end
 from experiments.classical_identical_ideas.linear_controls import ENETCV_FB_CHUNKS
 
+# TOMBSTONE: MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS (losing arms =16|32) deleted 2026-11-15 by lane/expdel2-09-base (non-owner, docstring only; owner lane/expdel2-06-base); code recoverable at a407b79dce.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
 comptime FB_C = ENETCV_FB_CHUNKS
 """Chunks per fold."""
 comptime FB_TPB = 64

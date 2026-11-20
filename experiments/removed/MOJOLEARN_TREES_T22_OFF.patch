@@ -1,0 +1,15 @@
+diff --git a/gbdt/trees_identical_switches.mojo b/gbdt/trees_identical_switches.mojo
+index b315777dd2..ed56d4a01f 100644
+--- a/gbdt/trees_identical_switches.mojo
++++ b/gbdt/trees_identical_switches.mojo
+@@ -68,9 +68,7 @@ comptime T21_STREAMS = 1
+ # `-D MOJOLEARN_TREES_T22_OFF` restores the incumbent storage (the grid's
+ # "off" arm). The old opt-in define is refused in
+ # core/six_lane_experiment_guards.mojo.
+-# TOMBSTONE: MOJOLEARN_TREES_T22_OFF (DELETE-OLD-PATH, rule e, EXP:1636 PROMOTED: the document-keyed storage above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0fcc31241b.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T22_OFF.patch
+-comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime T22 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TREES_T22_OFF"]()
+ 
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ comptime T25 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T25"]()

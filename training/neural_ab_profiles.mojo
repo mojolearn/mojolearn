@@ -11,12 +11,12 @@ These are explicit component APIs. Public loss/clip wiring, all-vendor identity,
 task quality and full-model timing remain pending. Nothing has been compiled or
 verified. Caller owns both scratch planes and every input until its own drain.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 
-from training.neural_ab_profile_contract import NN54_LOSS_PROFILE, NN57_NORM_PROFILE, nn_reduce_leaf, nn_reduce_pair, nn_reduce_host, nn_reduce_host_admitted
+from training.neural_ab_profile_contract import NN57_NORM_PROFILE, nn_reduce_leaf, nn_reduce_pair
 comptime _FP = MutPointer[Float32, MutAnyOrigin]
 
 
@@ -56,12 +56,10 @@ def nn_reduce_into[LEAF: Int, SQUARE: Bool](
     is not a replacement for those public checks. Both scratch buffers have at
     least nn_reduce_scratch_floats(n) elements and may not alias input/output.
     """
-    comptime if SQUARE:
-        comptime if not NN57_NORM_PROFILE:
-            raise Error("NN57 norm profile is not enabled")
-    else:
-        comptime if not NN54_LOSS_PROFILE:
-            raise Error("NN54 loss profile is not enabled")
+    # (Sweep 2026-11-15: the NN54 loss fold (SQUARE False) is deleted; only the NN57 squared norm remains.)
+    comptime assert SQUARE, "the NN54 loss profile (MOJOLEARN_IDN_CE_TOKEN_FOLD=1) is deleted"
+    comptime if not NN57_NORM_PROFILE:
+        raise Error("NN57 norm profile is not enabled")
     if n < 0 or n > 2147483647:
         raise Error("neural reduction count exceeds native index range")
     var width = (n + LEAF - 1) // LEAF

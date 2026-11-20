@@ -259,7 +259,9 @@ def _(ml, X, yc, yr, Xh=None):
         # four tokens (each step advanced it)
         st.cached_tokens = 4
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `transformer_decode_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = np.concatenate(_decode_state_arrays(st))
     ref = blk.allocate_state(2, max_tokens=32)
@@ -519,8 +521,8 @@ def _coverage_state_pieces(st):
     return flat, words
 
 
-def _coverage_decode_session(ml, blk, X, dm):
-    """`blk._decode_session(state)` (bindings/mamba_public_native.mojo, the
+def _coverage_decode_session(ml, blk, X, dm, session_type):
+    """`blk.decode_session(state)` (bindings/mamba_public_native_door.mojo, the
     binding's `<kind>_session_open/step/export_state/load_state`) on two rows
     of the fixture slab: four steps, `sync_state`, four steps the reload
     discards, `load_state` (the session rewinds to the synced four-token
@@ -536,14 +538,19 @@ def _coverage_decode_session(ml, blk, X, dm):
         return np.ascontiguousarray(x[:, t:t + 1])
 
     st = blk.allocate_state(2)
-    with blk._decode_session(st) as sess:
+    with blk.decode_session(st) as sess:
+        # Each lane names its public session type explicitly so the source
+        # coverage scanner can attribute the exercised factory result.
+        assert type(sess) is session_type, type(sess)
         first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
         sess.sync_state()
         synced = _coverage_state_pieces(st)
         for t in range(4, 8):  # glue: four steps the reload discards
             sess.step(tok(t))
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `<kind>_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = _coverage_state_pieces(st)
     plain = blk.allocate_state(2)
@@ -562,7 +569,7 @@ def _coverage_decode_session(ml, blk, X, dm):
 
 @lane("mamba2-decode-session")
 def _(ml, X, yc, yr, Xh=None):
-    """Mamba2Block's resident decode session on the `mamba2` lane's weights:
+    """Mamba2Block's resident decode session (`Mamba2DecodeSession`) on the `mamba2` lane's weights:
     steps, sync_state and load_state (`mamba2_session_open`,
     `mamba2_session_export_state`, `mamba2_session_load_state`), held in the
     cell to the per-call step. The state is conv_window, h, buffer_xbc,
@@ -574,12 +581,12 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    return _coverage_decode_session(ml, ml.Mamba2Block(w), X, dm)
+    return _coverage_decode_session(ml, ml.Mamba2Block(w), X, dm, ml.mamba.Mamba2DecodeSession)
 
 
 @lane("mamba3-decode-session")
 def _(ml, X, yc, yr, Xh=None):
-    """Mamba3Block's resident decode session on the `mamba3` lane's weights:
+    """Mamba3Block's resident decode session (`Mamba3DecodeSession`) on the `mamba3` lane's weights:
     steps, sync_state and load_state (`mamba3_session_open`,
     `mamba3_session_step`, `mamba3_session_export_state`,
     `mamba3_session_load_state`), held in the cell to the per-call step. The
@@ -591,7 +598,71 @@ def _(ml, X, yc, yr, Xh=None):
         "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
         "D": (nh,), "out_proj.weight": (dm, di)},
         ones=("block_norm.weight",), near_one=("B_norm.weight", "C_norm.weight"))
-    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)
+    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm, ml.mamba.Mamba3DecodeSession)
+
+
+# ---------------------------------------------------------------- SambaStack.decode_session (lane fix-d1-decode-sessions, 2026-11-08)
+
+@lane("samba-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """SambaStack.decode_session(state) -> SambaDecodeSession on the `samba`
+    lane's stack (one Mamba-3 and one attention layer, d_model 32, vocab 256,
+    weights from Generator(1)): two rows, four steps, `sync_state`, four steps
+    the reload discards, `load_state`, four more steps and a final
+    `sync_state` (`samba_decode_open`, `samba_decode_step`,
+    `samba_decode_export`, `samba_decode_load` on a binding with the resident
+    decode; the per-call step on the caller's state otherwise). Each output and
+    both synced states are held byte for byte IN THE CELL to the per-call
+    `SambaStack.step` on a second state that stepped the first four tokens and
+    then the same last four. Parts: the first and last logits, the final state
+    (every layer's float pieces in stack order) and its cursors."""
+    d = _coverage_digester(ml)
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    ids = _ids(X, 2, 12)
+
+    def tok(t):
+        return np.ascontiguousarray(ids[:, t:t + 1])
+
+    def pieces(st):
+        flat, words = [], []
+        for layer in st.layers:  # glue: the stack state's layer states
+            if hasattr(layer, "k_cache"):
+                flat += [np.asarray(layer.k_cache, dtype=np.float32).reshape(-1),
+                         np.asarray(layer.v_cache, dtype=np.float32).reshape(-1)]  # glue: two cache pieces
+                words += [int(layer.cached_tokens), 0]
+            else:
+                f, w = _coverage_state_pieces(layer)
+                flat.append(f)
+                words += [int(v) for v in w]  # glue: the layer's cursors
+        return np.concatenate(flat), np.asarray(words, dtype=np.int64)
+
+    st = m.allocate_state(2, 16)
+    with m.decode_session(st) as sess:
+        assert type(sess).__name__ == "SambaDecodeSession", type(sess)
+        first = np.stack([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
+        sess.sync_state()
+        synced = pieces(st)
+        for t in range(4, 8):  # glue: four steps the reload discards
+            sess.step(tok(t))
+        sess.load_state()
+        # The four tokens after the reload go through `decode` (one native
+        # call, `samba_decode_tokens`): (2, 4, vocab), byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(ids[:, 8:12])))
+        sess.sync_state()
+        resident = pieces(st)
+    plain = m.allocate_state(2, 16)
+    want_first = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(4)], axis=1)  # glue: four steps
+    plain_synced = pieces(plain)
+    want = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(8, 12)], axis=1)  # glue: four steps
+    plain_final = pieces(plain)
+    _same_bytes("session steps", first, "per-call SambaStack.step", want_first)
+    _same_bytes("session sync_state", synced[0], "per-call state", plain_synced[0])
+    _same_bytes("session sync_state cursors", synced[1], "per-call state cursors", plain_synced[1])
+    _same_bytes("steps after load_state", after, "per-call steps after the same four tokens", want)
+    _same_bytes("final sync_state", resident[0], "per-call final state", plain_final[0])
+    _same_bytes("final sync_state cursors", resident[1], "per-call final cursors", plain_final[1])
+    return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
 
 
 # ---------------------------------------------------------------- training.chunked_lm_head_loss
@@ -627,7 +698,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("training-mlp-sessions")
 def _(ml, X, yc, yr, Xh=None):
-    """training.mlp_inference_sessions (`mlp_sessions_rows`, `mlp_sessions`):
+    """training.mlp_inference_sessions (the small-MLP program's SESSIONS forward):
     a seeded 8 -> 24 relu -> 3 model over three sessions of 5, 1 and 64
     fixture rows in one call, and over the held-out rows. The one call is
     held byte for byte in the cell to each session run alone and
@@ -893,7 +964,8 @@ def _coverage_text_tokenizers(ml):
     tk = ml.models.tokenizer
     rest = bytes(b for b in range(256) if b not in _COVERAGE_TEXT_ALPHABET)  # glue: the 192 other bytes
     tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET + rest]  # glue: the 256 one-byte tokens
-    spelled = ml.tokenizer._byte_to_char()
+    from mojolearn._tokenizer_synthetic import byte_to_char
+    spelled = byte_to_char()
     vocab = {spelled[t[0]]: i for i, t in enumerate(tokens)}  # glue: GPT-2 spelling of each token
     data = dict(version="1.0", truncation=None, padding=None, added_tokens=[], normalizer=None,
                 pre_tokenizer={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
@@ -905,10 +977,16 @@ def _coverage_text_tokenizers(ml):
                            end_of_word_suffix=None, fuse_unk=False, byte_fallback=False,
                            ignore_merges=False, vocab=dict(vocab), merges=[]))
     direct = tk.Tokenizer(tokens, [], pattern="gpt2")
-    from_json = tk.Tokenizer._from_json(data, "coverage-tokenizer.json")
-    from_spelled = tk.Tokenizer._from_spelled(dict(vocab), [], pattern="gpt2", added={},
-                                              normalizer=None, bos_ids=(), eos_ids=(),
-                                              ignore_merges=False, source="coverage-spelled")
+    # The spelled (tokenizer.json) vocabulary through the public loader
+    # `Tokenizer.from_pretrained`, twice: once from the file, once from its
+    # directory. Before 2026-11-15 the two were the private `_from_json` and
+    # `_from_spelled`, which from_pretrained reaches.
+    with tempfile.TemporaryDirectory(prefix="ib-coverage-tokenizer-") as tmp:
+        path = os.path.join(tmp, "tokenizer.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        from_json = tk.Tokenizer.from_pretrained(path)
+        from_spelled = tk.Tokenizer.from_pretrained(tmp)
     return direct, from_json, from_spelled
 
 
@@ -922,8 +1000,9 @@ def _(ml, X, yc, yr, Xh=None):
     fixture's first 24 bytes spelled in that alphabet. The text continuation is
     held byte for byte in the cell to the stream read two tokens at a time, to
     the decoded ids of `generate` on the encoded prompt, and across the three
-    tokenizers; on a build with the resident decode session,
-    `CausalLM._generate_resident` (`causal_lm_resident`) is held to `generate`.
+    tokenizers; on a model with resident decode sessions,
+    `CausalLM.generate(..., resident=True)` (`causal_lm_resident`) is held to
+    `generate`; a model without them must refuse it with `ValueError`.
     A text stream paused after one read, checkpointed with `state_dict` and
     resumed with `resume_generation` (the tokenizer's `vocab_fingerprint`) is
     held to the greedy text too, and `CausalLM.blocks` to the layer count.
@@ -939,7 +1018,7 @@ def _(ml, X, yc, yr, Xh=None):
     raw = np.frombuffer(np.ascontiguousarray(X).tobytes()[:24], dtype=np.uint8)
     text = bytes(_COVERAGE_TEXT_ALPHABET[int(b) % 64] for b in raw).decode("ascii")  # glue: 24 prompt bytes
     prompt = np.asarray([direct.encode(text)], dtype=np.int32)
-    for name, other in (("_from_json", from_json), ("_from_spelled", from_spelled)):  # glue: two loaders
+    for name, other in (("from_pretrained(file)", from_json), ("from_pretrained(dir)", from_spelled)):  # glue: two loaders
         _same_bytes(f"Tokenizer.{name} encode", np.asarray([other.encode(text)], dtype=np.int32),
                     "Tokenizer(...) encode", prompt)
     cfg, tensors = fx.family_fixture("llama", False)
@@ -953,8 +1032,14 @@ def _(ml, X, yc, yr, Xh=None):
         stream = m.stream_text(text, HF_LM_NEW, tokenizer=from_json)
         pieces = [stream.read(2) for _ in range(-(-HF_LM_NEW // 2) + 1)]  # glue: bounded reads
         full = np.asarray(m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW), dtype=np.int32)
-        resident = m._generate_resident(A(np.ascontiguousarray(prompt)), HF_LM_NEW,
-                                        prompt.shape[1] + HF_LM_NEW)
+        try:
+            resident = m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW, resident=True)
+        except ValueError as error:
+            # The documented refusal of a model with no resident sessions (the
+            # CPU column; a profile or norm the sessions do not cover).
+            if "resident=True" not in str(error):
+                raise
+            resident = None
         # A text stream paused after one read, checkpointed (state_dict records
         # the tokenizer's vocab_fingerprint) and resumed with the same tokenizer
         # (resume_generation checks it) must continue the greedy text byte for
@@ -974,7 +1059,7 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("decoded generate continuation", _hf_text(direct.decode(cont[0].tolist())),
                 "generate_text", _hf_text(greedy))
     if resident is not None:
-        _same_bytes("CausalLM._generate_resident", np.asarray(resident, dtype=np.int32),
+        _same_bytes("CausalLM.generate(resident=True)", np.asarray(resident, dtype=np.int32),
                     "CausalLM.generate", full)
     _same_bytes("stream_text resumed from state_dict", _hf_text(head + tail),
                 "generate_text", _hf_text(greedy))
@@ -994,14 +1079,19 @@ def _(ml, X, yc, yr, Xh=None):
     plan with `layer_weights` and `checkpoint_names` (`model_plan_init`,
     `model_layer_weights`, `model_checkpoint_names`), `TensorInfo` built by
     hand from each header entry with `nbytes` and `size` (`tensor_info_init`,
-    `tensor_info_size`), `SafetensorsFile._map` (`safetensors_map`),
-    `Checkpoint._file` on a shard (`checkpoint_file`),
-    `CausalLM._read_weights` (`causal_model_read_weights`) and `CausalLM(plan,
-    weights)` with a column-major head (`causal_model_init`,
+    `tensor_info_size`), `SafetensorsFile.read` of every tensor (through the
+    file's map, `safetensors_map`), each shard opened as its own
+    `SafetensorsFile` and read against `Checkpoint.read`, the weights
+    `CausalLM.load` read (`causal_model_read_weights`), back through
+    `parameters()` and assembled by `ModelPlan.layer_weights`, and
+    `CausalLM(plan, weights)` with a column-major head (`causal_model_init`,
     `causal_lm_gather_f32`). The tensors are the fixture's own bytes (F32
     values, F16 bit patterns). Parts: the config as JSON text, the plan
-    table, the header table, the mapped file bytes, the shard reads, the
-    top-level weights read, both models' logits and the flags."""
+    table, the header table, the single file's tensor reads, the shard reads,
+    the top-level weights read, both models' logits and the flags. The
+    loader internals (`SafetensorsFile._map`, `Checkpoint._file` and its
+    one-handle-per-shard cache, `CausalLM._read_weights`) stay private and
+    are held by python/mojolearn/tests/test_models_loader.py."""
     from mojolearn import _causal_lm_fixtures as fx
     d = _coverage_digester(ml)
     M = ml.models
@@ -1029,8 +1119,18 @@ def _(ml, X, yc, yr, Xh=None):
             rebuilt = [st.TensorInfo(t.name, t.dtype, t.shape, t.begin, t.end, t.file) for t in infos]  # glue: by hand
             header = "|".join(f"{t.name},{t.dtype},{t.shape},{t.begin},{t.end},{t.nbytes},{t.size}"
                               for t in rebuilt)
-            mapped = np.frombuffer(bytes(sf._map()), dtype=np.uint8).copy()
-            shard_bytes = np.concatenate([_hf_bytes(ck._file(ck.info(n).file).read(n)) for n in names])
+            mapped = np.concatenate([_hf_bytes(sf.read(n)) for n in names])  # glue: one read per tensor
+            shard_files = {}
+            try:
+                for n in names:  # glue: one public file per shard
+                    f = ck.info(n).file
+                    if f not in shard_files:
+                        shard_files[f] = st.SafetensorsFile(os.path.join(many, os.path.basename(f)))
+                shard_bytes = np.concatenate([_hf_bytes(shard_files[ck.info(n).file].read(n)) for n in names])
+                n_shard_files = len(shard_files)
+            finally:
+                for f in shard_files.values():
+                    f.close()
             whole_bytes = np.concatenate([_hf_bytes(ck.read(n)) for n in names])
             flags = np.asarray([
                 built.model_type == loaded.model_type == "llama",
@@ -1045,7 +1145,7 @@ def _(ml, X, yc, yr, Xh=None):
                 all(copy.layer_weights(i) == plan.layer_weights(i) for i in range(plan.n_layers)),
                 all((a.nbytes, a.size) == (b.nbytes, b.size) for a, b in zip(infos, rebuilt)),
                 _hf_refused(lambda: st.TensorInfo("t", "F32", (4,), 0, 15, "f"), "bytes differ"),
-                ck._file(ck.info(names[0]).file) is ck._file(ck.info(names[0]).file),
+                n_shard_files == 2,
                 shard_bytes.tobytes() == whole_bytes.tobytes(),
             ], dtype=np.int64)
         finally:
@@ -1054,11 +1154,17 @@ def _(ml, X, yc, yr, Xh=None):
         lcfg, ltensors = fx.family_fixture("llama", False)
         root = fx._write_checkpoint(os.path.join(tmp, "llama"), lcfg, ltensors)
         lplan = M.plan_for(M.HFConfig.from_json(root))
-        lck = st.Checkpoint.open(root)
-        try:
-            weights = M.causal_lm.CausalLM._read_weights(lck, lplan, "float32")
-        finally:
-            lck.close()
+        # The weights the loader read, back through the public parameters()
+        # (the constructor keeps their bytes), in the constructor's layout.
+        params = M.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").parameters()
+        weights = {"embed": params[lplan.embed_name],
+                   **{k: params[n] for k, n in (("norm", lplan.norm_name), ("head", lplan.head_name))
+                      if n is not None},  # glue: the two optional top-level tensors
+                   "layers": [{key: (params[name] if rows is None else
+                                     ml.Array.from_buffer(np.ascontiguousarray(
+                                         np.asarray(params[name], dtype=np.float32)[rows[0]:rows[1]])))
+                               for key, name, rows in lplan.layer_weights(i)}
+                              for i in range(lplan.n_layers)]}  # glue: driver over layers
     top = np.concatenate([np.asarray(weights[k], dtype=np.float32).reshape(-1)
                           for k in ("embed", "norm", "head") if weights.get(k) is not None])
     # The read weights assembled into a model twice: as read, and with the
@@ -1186,10 +1292,13 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("x-metrics-permutation-test-score")
 def _(ml, X, yc, yr, Xh=None):
     """model_selection.permutation_test_score: a Ridge on 600 fixture rows,
-    three folds, 12 permutations from the counter generator (random_state
+    three folds, 4 permutations from the counter generator (random_state
     3), the default score; and the same with groups (permutations within
     each of four groups). Parts: each call's score, permutation scores and
     p-value."""
+    # 4 permutations (was 12, 2026-11-05 lane/slow-verification-lanes): every
+    # permutation is three more Ridge fits; the count is not a branch, four
+    # still draws several counter-generator permutations per call
     d = _coverage_digester(ml)
     ms = ml.model_selection
     x = np.ascontiguousarray(X[:600, :8], dtype=np.float32)
@@ -1198,7 +1307,7 @@ def _(ml, X, yc, yr, Xh=None):
     parts = {}
     for tag, kw in (("plain", {}), ("groups", dict(groups=groups))):  # glue: two calls
         score, perm, p = ms.permutation_test_score(ml.Ridge(alpha=1.0), x, y, cv=ms.KFold(3),
-                                                   n_permutations=12, random_state=3, **kw)
+                                                   n_permutations=4, random_state=3, **kw)
         parts[tag] = d(np.concatenate([np.asarray([score, p], dtype=np.float64),
                                        np.asarray(perm, dtype=np.float64)]))
     return _fit(parts)
@@ -1265,56 +1374,10 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
 
 
 # ---------------------------------------------------------------- lane verify-coverage-20261024
-# The whole-surface audit (docs/plans/VERIFY_COVERAGE_20261024.md) found no
-# lane for TransformerBlock's forward tape: forward_with_tape,
-# backward_from_tape and TransformerForwardTape.close
-# (`transformer_session_forward_tape`, `_backward_tape`, `_discard_tape`).
-
-
-@lane("transformer-forward-tape")
-def _(ml, X, yc, yr, Xh=None):
-    """The `transformer` lane's block: a forward with a tape kept whole and
-    one with a zero activation budget (the backward replays the forward),
-    each consumed by backward_from_tape, whose gradients must equal the
-    block's own recomputing backward byte for byte. A third tape is closed;
-    its backward must refuse, and a fourth, made after the close, must
-    still give the same gradients (the discard frees only its ticket)."""
-    d = _coverage_digester(ml)
-    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
-    w = _block_weights("transformer", {
-        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
-        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
-        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
-        "down_proj.weight": (dm, it)},
-        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
-    x = _seq(X, 2, 16, dm)
-    g = _seq(X, 2, 16, dm, skip=1024)
-    whole = blk.backward(x, g)
-    names = sorted(whole)
-    parts = {"backward": d(np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))}
-    for tag, budget in (("kept", 1 << 29), ("replayed", 0)):  # glue: the two activation budgets
-        y, tape = blk.forward_with_tape(x, activation_budget_bytes=budget)
-        grads = blk.backward_from_tape(tape, g)
-        flat = np.concatenate([np.asarray(grads[k], dtype=np.float32).reshape(-1) for k in names])
-        _same_bytes(f"backward_from_tape ({tag})", flat, "TransformerBlock.backward",
-                    np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))
-        parts[f"{tag}_forward"] = d(np.asarray(y, dtype=np.float32))
-        parts[f"{tag}_grads"] = d(flat)
-    _, closed = blk.forward_with_tape(x)
-    closed.close()
-    try:
-        blk.backward_from_tape(closed, g)
-        refused = 0
-    except ValueError:
-        refused = 1
-    if not refused:
-        raise AssertionError("backward_from_tape accepted a closed tape")
-    _, after = blk.forward_with_tape(x)
-    again = blk.backward_from_tape(after, g)
-    parts["after_close"] = d(np.concatenate([np.asarray(again[k], dtype=np.float32).reshape(-1) for k in names]))
-    parts["closed_refused"] = d(np.asarray([refused], dtype=np.int64))
-    return _fit(parts)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the `transformer-forward-tape` lane: forward_with_tape, backward_from_tape
+# and the tape's close; the block's backward is the `transformer` lane's.)
 
 
 @lane("scaler-fit-transform")
@@ -1384,15 +1447,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("neural-trainer-unfused")
 def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the mlp lane's trainer with
-    MOJOLEARN_MLP_FUSED=0: the unfused per-layer gradient route
-    (bindings/parallel_mlp_native.mojo mlp_gradients_from_state: the
-    training binding's mlp_bias_activation, ce_loss, mlp_relu_backward and
-    mlp_sum_rows) that a multi-device optimizer takes and a one-device run
-    otherwise skips for the fused step. The switch is read live from
-    os.environ (_parallel_mlp connects os.environ._data); it is restored
-    before the lane returns. Parts: the weights after three steps and the
-    logits."""
+    """ParallelNeuralTrainer over the mlp lane's trainer: the shard
+    gradients (bindings/parallel_mlp_native_door.mojo mlp_gradients_on: the
+    SmallMLPTrainer program's loss-and-gradients run,
+    autograd/small_mlp_program.mojo mode 1; lane m2-neural-leftovers,
+    2026-11-09) and the ordered update. Parts: the weights after three
+    steps and the logits."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     d = _coverage_digester(ml)
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
@@ -1401,21 +1461,13 @@ def _(ml, X, yc, yr, Xh=None):
     t = _three_class(X[:576])
     steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
               for k in range(3)] for s in range(3)]
-    old = os.environ.get("MOJOLEARN_MLP_FUSED")
-    os.environ["MOJOLEARN_MLP_FUSED"] = "0"
-    try:
-        m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
-        # one device: the claim is the unfused route's arithmetic, not a
-        # multi-device driver's (that is par-mlp's), so the lane names device 0
-        # itself rather than the par-* lanes' _par_devices()
-        with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
-            for shards in steps:  # glue: three driver steps
-                tr.train_step(shards)
-    finally:
-        if old is None:
-            os.environ.pop("MOJOLEARN_MLP_FUSED", None)
-        else:
-            os.environ["MOJOLEARN_MLP_FUSED"] = old
+    m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+    # one device: the claim is the per-layer route's arithmetic, not a
+    # multi-device driver's (that is par-mlp's), so the lane names device 0
+    # itself rather than the par-* lanes' _par_devices()
+    with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
+        for shards in steps:  # glue: three driver steps
+            tr.train_step(shards)
     return _fit(dict(weights=d(np.concatenate([np.asarray(m.weights_[k], dtype=np.float32).reshape(-1)
                                                for k in sorted(m.weights_)])),
                      logits=d(np.asarray(m.predict_logits(Xm[:256]), dtype=np.float32))))
@@ -1425,7 +1477,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """SVC and SVR with gamma='scale' (the package default is 'auto', so
     the svc and svr lanes never take it): SVC.fit -> the SVC owner's
-    `_resolve_gamma` (bindings/svc_kernel_native.mojo) -> the svm binding's
+    `_resolve_gamma` (bindings/svc_kernel_native_door.mojo) -> the svm binding's
     `scale_gamma_limbs` (svm/impl/scale_gamma_device.mojo on a GPU column,
     svm/host/scale_gamma_host.mojo on the host column) -> the once-rounded
     exact 1 / (n_features * X.var()). SVR.fit takes the same door. Parts: the
@@ -1440,4 +1492,4 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")
+            "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")

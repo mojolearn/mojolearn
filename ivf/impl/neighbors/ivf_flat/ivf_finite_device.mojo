@@ -23,14 +23,12 @@ same on every vendor and at every grid size. Nothing here reaches a card or
 an output: on a hit the caller re-runs the host walk ONLY to raise the same
 message (the failure path), so the refusal text is unchanged.
 
-IDENTICAL only; FAST keeps the host walk. `-D MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF`
-(or `MOJOLEARN_IDN_ALL_OFF`) restores the host walk before the upload. No bit
-of any output moves either way (a scan only refuses).
+IDENTICAL only; FAST keeps the host walk. No bit of any output moves either
+way (a scan only refuses).
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -41,9 +39,11 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_validate_data,
 )
 
-comptime IVF_IDN_DEVICE_FINITE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at e3895d9d95.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_FINITE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_DEVICE_FINITE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """Default ON in IDENTICAL; see the module docstring."""
 
 comptime IVF_FINITE_TPB = 256

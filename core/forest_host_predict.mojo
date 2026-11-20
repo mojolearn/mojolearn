@@ -35,10 +35,9 @@ The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
 from core.host_parallel import host_parallelize
-from core.forest_experiments import T34_CHUNK_FOLD, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish, chunk_add
-from std.os import getenv
+from core.launch_log import activity_host
+from core.host_predict_threads import host_predict_workers
 from std.sys.compile import is_defined
-from std.sys.info import num_physical_cores
 
 from ensemble.decisiontree.decisiontree import DecisionTree
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode as RfTree
@@ -78,20 +77,19 @@ def _divisor(n_trees: Int) -> Float32:
 
 def host_worker_count(workers: Int = 0) -> Int:
     """The thread count of a host prediction (DEVIATION 2900). `workers`
-    above zero as given; zero reads `MOJOLEARN_CPU_THREADS`, and an absent,
+    above zero as given; zero means `MOJOLEARN_CPU_THREADS`, and an absent,
     empty, zero or unparsable value means one thread per physical core.
-    Always in `[1, FOREST_HOST_MAX_THREADS]`."""
+    Always in `[1, FOREST_HOST_MAX_THREADS]`.
+
+    Lane perf-small-fixes (2026-11-06): the zero case reads the read-once
+    process policy `core/host_predict_threads.mojo::host_predict_workers`
+    (same parse, same physical-core default, same 1024 ceiling) instead of
+    reading and parsing the environment on every predict call. The count
+    feeds `host_task_count` exactly as before, so chunk boundaries and every
+    output bit are unchanged."""
     var count = workers
     if count <= 0:
-        var raw = getenv(FOREST_HOST_THREADS_ENV)
-        count = 0
-        if raw != "":
-            try:
-                count = Int(raw)
-            except:
-                count = 0
-        if count <= 0:
-            count = num_physical_cores()
+        count = host_predict_workers()
     if count < 1:
         return 1
     if count > FOREST_HOST_MAX_THREADS:
@@ -207,6 +205,8 @@ def rf_host_predict(
     what `RandomForest.predict`'s REGRESSION branch does at `:1071-1074`).
     `workers` is the thread count, `host_worker_count`'s reading of zero.
     """
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("rf_host_predict")
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
@@ -251,31 +251,15 @@ def rf_host_predict(
                 # `:404-412`, one row at a time, every tree adds into it:
                 # `DecisionTree.predict` with `n_rows=1` is `predict_all`
                 # over one row is `predict_one` at that row's offset.
-                comptime if T34_CHUNK_FOLD:
-                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
-                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
-                    var first = 0
-                    while first < n_trees:
-                        for j in range(FOREST_CHUNK*num_outputs):
-                            part[j] = 0
-                        for i in range(min(FOREST_CHUNK, n_trees-first)):
-                            DecisionTree.predict_one(rp[], row_id*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
-                        for k in range(num_outputs):
-                            for i in range(FOREST_CHUNK):
-                                values[i] = part[i*num_outputs+k]
-                            row_prediction[k] = chunk_add(row_prediction[k], forest_chunk_sum(values))
-                        first += FOREST_CHUNK
-                else:
-                    for i in range(n_trees):
-                        DecisionTree.predict_one(
-                            rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
-                        )
+                # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in 32-tree chunk fold version; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+                # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+                for i in range(n_trees):
+                    DecisionTree.predict_one(
+                        rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
+                    )
                 # `:414-416`, divide by n_trees, and stop.
                 for k in range(num_outputs):
-                    comptime if T34_CHUNK_FOLD:
-                        op.unsafe_store(row_id*num_outputs+k, forest_chunk_finish(row_prediction[k], n_trees))
-                    else:
-                        op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
+                    op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 
@@ -336,6 +320,8 @@ def et_host_predict(
     once per row, into `output` as `et_predict_binding` writes it (`:528-532`).
     `workers` is the thread count, `host_worker_count`'s reading of zero
     (DEVIATION 2900, the same fan-output as `rf_host_predict`)."""
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("et_host_predict")
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
@@ -366,29 +352,13 @@ def et_host_predict(
                 for k in range(num_outputs):
                     acc[k] = Float32(0.0)
                 # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
-                comptime if T34_CHUNK_FOLD:
-                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
-                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
-                    var first = 0
-                    while first < n_trees:
-                        for j in range(FOREST_CHUNK*num_outputs):
-                            part[j] = 0
-                        for i in range(min(FOREST_CHUNK, n_trees-first)):
-                            predict_one_accumulate(rp[], r*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
-                        for k in range(num_outputs):
-                            for i in range(FOREST_CHUNK):
-                                values[i] = part[i*num_outputs+k]
-                            acc[k] = chunk_add(acc[k], forest_chunk_sum(values))
-                        first += FOREST_CHUNK
-                else:
-                    for i in range(n_trees):
-                        predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
+                # TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (IDENTICAL opt-in 32-tree chunk fold version; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at cfad8788a0.
+                # Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
+                for i in range(n_trees):
+                    predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
                 # `row_prediction[k] /= n_trees`.
                 for k in range(num_outputs):
-                    comptime if T34_CHUNK_FOLD:
-                        op.unsafe_store(r*num_outputs+k, forest_chunk_finish(acc[k], n_trees))
-                    else:
-                        op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
+                    op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 

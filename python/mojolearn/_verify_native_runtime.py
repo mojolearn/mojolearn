@@ -17,6 +17,7 @@ import gc
 import sys
 import threading
 from collections import Counter
+from contextlib import contextmanager
 from types import ModuleType
 
 #: The audited call stands in for a user's: the public methods answer this
@@ -25,6 +26,37 @@ __mojolearn_user_boundary__ = True
 
 
 _FORBIDDEN_NATIVE_MODULES = ("numpy", "scipy", "sklearn")
+
+
+def loaded_binding(name, mode="identical", report=None):
+    """The `mojolearn.runtime_report()` row of binding `name` (for example
+    `_mojolearn_x_sequence`) loaded in tier `mode`, or None when no loaded
+    binding of that tier is in the report. A row counts when the binding's
+    own compiled read-back says `mode`; a binding without that read-back
+    counts as the tier it was loaded for (its tier set, or the process tier
+    for the selected binding). Call it AFTER the work that loads the binding:
+    the report never loads one."""
+    if report is None:
+        from . import runtime_report
+        report = runtime_report()
+    keys = [(f"mojolearn._sets.{mode}.{name}", mode), (f"mojolearn.{name}", report["numeric_mode"])]
+    if report.get("cpu_only"):
+        # A CPU-only install serves `mojolearn.<name>` through a facade the
+        # report skips (not an exact module); the binding that ran is its
+        # host extension, `mojolearn._host.<basename>`, which carries its own
+        # vendor and mode read-backs (host bindings build identical only).
+        from . import host_surface
+        basename = host_surface.routed_modules().get(name) or host_surface.inference_routes().get(name)
+        if basename:
+            keys.append((f"mojolearn._host.{basename}", "identical"))
+    for key, tier in keys:
+        row = report["bindings"].get(key)
+        if row is None or not row["loaded"] or row["path"] is None:
+            continue
+        compiled = row.get("compiled_mode")
+        if compiled == mode or (compiled is None and tier == mode):
+            return row
+    return None
 
 
 def _ordinary_field(fields, wanted):
@@ -60,8 +92,45 @@ def _native_call_origin(function):
         # Built-in owner types compute __module__ rather than storing it in
         # their dictionaries. Call the retained native type descriptor, not
         # a metaclass property or custom __getattribute__ implementation.
-        module = type.__dict__["__module__"].__get__(owner)
+        try:
+            module = type.__dict__["__module__"].__get__(owner)
+        except AttributeError:
+            # A heap type registered by a compiled binding under an undotted
+            # name (Mojo `add_type`, e.g. the schedule's `_LrScheduleBlock`,
+            # whose bound `lr_at` / `bits_at` are the public methods) has no
+            # __module__. Its origin is the module that holds the type object
+            # itself; with none, it stays unresolved (fail closed).
+            module = _registering_extension(owner)
     return _module_name(module)
+
+
+#: id(type) -> (type, name or None): the extension module holding each heap
+#: type without __module__ (the type is retained so its id cannot be reused).
+_REGISTERED_TYPE_MODULES = {}
+
+
+def _registering_extension(owner):
+    entry = _REGISTERED_TYPE_MODULES.get(id(owner))
+    if entry is not None and entry[0] is owner:
+        return entry[1]
+    # Every loaded module that holds the type object itself. A forbidden
+    # module among them wins, so a forbidden type re-exported elsewhere is
+    # still reported; otherwise the first holder (the registering binding).
+    holders = []
+    read_fields = ModuleType.__dict__["__dict__"].__get__
+    for module in list(sys.modules.values()):
+        if type(module) is not ModuleType:
+            continue
+        fields = read_fields(module)
+        if any(item is owner for item in list(fields.values())):
+            name = _ordinary_field(fields, "__name__")
+            if type(name) is str and name:
+                holders.append(name)
+    found = next((n for n in holders if any(n == m or n.startswith(m + ".") for m in _FORBIDDEN_NATIVE_MODULES)),
+                 holders[0] if holders else None)
+    if found is not None:
+        _REGISTERED_TYPE_MODULES[id(owner)] = (owner, found)
+    return found
 
 
 class NativeRuntimeAudit:
@@ -163,6 +232,32 @@ def audit_native_call(operation, *args, **kwargs):
     return _audit_call(operation, args, kwargs, {})
 
 
+def audited(audits, name, operation, *args, **kwargs):
+    """Audit one complete public call, append its trace (with ``operation``
+    set to ``name``) to the list ``audits`` and return its value; a call that
+    entered Python raises (``assert_native``)."""
+    audit = audit_native_call(operation, *args, **kwargs)
+    entry = audit.report()
+    entry["operation"] = name
+    audits.append(entry)
+    return audit.assert_native()
+
+
+@contextmanager
+def audited_context(audits, name, operation, *args, **kwargs):
+    """Open a context-managed public object with ``operation`` and audit its
+    construction, ``__enter__`` and ``__exit__`` as three complete public
+    boundaries (``name``, ``name.enter``, ``name.exit``), each appended to
+    ``audits``. The one shared controller of the distributed and partitioned
+    program verifiers."""
+    instance = audited(audits, name, operation, *args, **kwargs)
+    try:
+        assert audited(audits, name + ".enter", instance.__enter__) is instance
+        yield instance
+    finally:
+        audited(audits, name + ".exit", instance.__exit__, None, None, None)
+
+
 def audit_compatible_call(operation, *args, **kwargs):
     """Audit the public operation with its named, owner-authorized exceptions."""
     from ._runtime_fallbacks import approved_metadata_callbacks
@@ -213,7 +308,7 @@ def _audit_call(operation, args, kwargs, approved_callbacks):
                     threading.get_ident() == caller_thread):
                 audit.wrapper_entries += 1
             else:
-                key = (code.co_filename, code.co_firstlineno, code.co_qualname)
+                key = (code.co_filename, code.co_firstlineno, getattr(code, "co_qualname", code.co_name))  # co_qualname is 3.11+
                 audit.frames[key] += 1
                 if code in audit.approved_callbacks:
                     audit.approved_frames[key] += 1

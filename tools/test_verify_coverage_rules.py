@@ -68,13 +68,13 @@ def test_composed_names_resolve_against_exports():
 
 def test_reached_needs_a_specific_value_or_the_owner_entry():
     records = [((frozenset({"FastICA"}), frozenset({"fit"})), frozenset({"x_decomp_ica_fit"}),
-                "bindings/decomp_native.mojo", frozenset()),
-               ((frozenset({"fit"}),), frozenset({"x_decomp_ipca_fit"}), "bindings/ipca_native.mojo",
+                "bindings/decomp_native_door.mojo", frozenset()),
+               ((frozenset({"fit"}),), frozenset({"x_decomp_ipca_fit"}), "bindings/ipca_native_door.mojo",
                 frozenset())]
     od = _dispatch(set(), records, generic={"fit"},
-                   owner_files={"ipca_native_call": {"bindings/ipca_native.mojo"}})
+                   owner_files={"ipca_native_call": {"bindings/ipca_native_door.mojo"}})
     ents, files = od.reached(frozenset({"FastICA", "fit"}), frozenset())
-    assert ents == {"x_decomp_ica_fit"} and files == {"bindings/decomp_native.mojo"}
+    assert ents == {"x_decomp_ica_fit"} and files == {"bindings/decomp_native_door.mojo"}
     # `fit` alone credits the IncrementalPCA branch only through its owner entry
     ents, _ = od.reached(frozenset({"fit"}), frozenset({"ipca_native_call"}))
     assert ents == {"x_decomp_ipca_fit"}
@@ -83,10 +83,10 @@ def test_reached_needs_a_specific_value_or_the_owner_entry():
 
 
 def test_reached_relays_an_owner_operation_named_by_a_branch():
-    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native.mojo",
+    records = [((frozenset({"family_msel_split"}),), frozenset(), "bindings/model_selection_native_door.mojo",
                 frozenset({"family_msel_split_loo_at"})),
                ((frozenset({"family_msel_split_loo_at"}),), frozenset({"leave_range_i64"}),
-                "bindings/model_selection_native.mojo", frozenset())]
+                "bindings/model_selection_native_door.mojo", frozenset())]
     od = _dispatch(set(), records)
     ents, _ = od.reached(frozenset({"family_msel_split"}), frozenset())
     assert ents == {"leave_range_i64"}
@@ -101,7 +101,7 @@ def test_constant_probe():
 
 
 def test_valueless_definitions():
-    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojoCoreContextIdentical"')
+    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3"')
     assert audit_tool._valueless("@fieldwise_init\nstruct Handle(Movable):\n    var id: Int")
     assert audit_tool._valueless("def __init__(out self):\n    pass", ("m", "f.mojo", "Store", "__init__"))
     assert not audit_tool._valueless("def gather(x: Int) -> Int:\n    return x + 1", ("t", "f.mojo", "gather"))
@@ -180,8 +180,9 @@ def test_import_installed_entries_name_their_lanes():
 
 def test_dead_and_probe_entries_read_sabotage_na():
     # lane coverage-sabotage-arms-20261025: the 0.8.57 owed sabotage rows; lane
-    # dead-native-entries-0859 deleted the dead ones, the two reach probes remain
-    for entry in ("km_rbf_staged", "x_decomp_mcd_cov_reach"):
+    # dead-native-entries-0859 deleted the dead ones; lane consol-k0-dead-code deleted
+    # x_decomp_mcd_cov_reach with MCD_ORDERED_COV (docs/TOMBSTONES.md batch 3)
+    for entry in ("km_rbf_staged",):
         st, why = audit_tool.sabotage_of(_row(entry, changed_kernel=["core/x.mojo:k"], n_changed=1))
         assert st == "n/a" and why, entry
     # a reaching arm still wins over the table

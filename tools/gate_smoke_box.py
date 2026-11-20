@@ -143,7 +143,7 @@ def own_not_built(board):
 
 class Gate:
     def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
-                 adapters=True, profile=P.LIGHT):
+                 adapters=True, profile=P.LIGHT, identity_once=False):
         import bench_board as B
         import bench_board_evidence as E
         self.B, self.E = B, E
@@ -153,6 +153,8 @@ class Gate:
         self.candidate_wheels, self.source_commit = list(candidate_wheels), source_commit
         self.autograd_manifest = autograd_manifest
         self.adapters_on = adapters
+        # --no-identity-lanes (release.py --identity-on-wheels): the identity lanes ran once in the column record
+        self.identity_once = identity_once
         self.root.mkdir(parents=True, exist_ok=True)
         self.out, self.cache = self.root / "setup", str(self.root / "cache")
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
@@ -297,6 +299,8 @@ class Gate:
                    "--expected-version", self.version, "--scope", "expanded", "--output", str(output)]
         if self.source_commit:
             command += ["--expected-source-commit", self.source_commit]
+        if self.identity_once:
+            command.append("--no-identity-lanes")
         rc = self.launch_light(command, self.root / "correctness.log")
         report = output / "results.json"
         document = json.loads(report.read_text()) if report.is_file() else {}
@@ -401,18 +405,8 @@ class Gate:
             return
         self.mark(phase="adapters", status="running", adapters_enabled=True, adapters_started=time.time(),
                   adapters_finished=None)
-        env = self.env()
-        if self.vendor == "amd":
-            env["LD_LIBRARY_PATH"] = ":".join(
-                # torch/lib FIRST (2026-10-26, amd-torch-interop): the adapter probes import torch
-                # before mojolearn, and the MAX runtime's bare-name dlopen then reaches torch's
-                # loaded HIP/HSA copies instead of mapping second ones (python/mojolearn/
-                # _rocm_runtime.py; the documented setup for that import order).
-                glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/torch/lib"))
-                + glob.glob(str(self.root / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
-                # Exactly ONE ROCm runtime: two HSA runtimes in one process (PyTorch's ROCm 7 build
-                # loaded beside a 6.x libhsa) fail with "Failed to initialize HSA runtime".
-                + [next((d for d in ("/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib") if os.path.isdir(d)), "/opt/rocm/lib")])
+        # on AMD torch/lib first, then */lib64 and exactly one ROCm runtime: the one helper (adapter_gate.framework_env)
+        env = AG.framework_env(self.vendor, self.root / "adapter-smoke" / "venv", self.env())
         options = {"launch": self.launch_light} if self.profile == P.LIGHT else {}
         rec = AG.run(self.vendor, sys.executable, self.root / "adapter-smoke", self.adapter_installs(), env=env, **options)
         self.mark(phase="adapters", status="done", adapters=rec, adapters_finished=time.time())
@@ -531,6 +525,9 @@ def main(argv):
     parser.add_argument('--autograd-manifest')
     parser.add_argument('--no-adapters', action='store_true',
                         help='record the adapter stage as disabled (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship)')
+    parser.add_argument('--no-identity-lanes', action='store_true',
+                        help='release.py --identity-on-wheels: the correctness stage drops its identity-lane jobs '
+                             '(the one column record of the same wheels ran them)')
     args = parser.parse_args(argv)
     vendor, version, root, step = args.vendor, args.version, args.root, args.step
     if vendor not in ("nvidia", "amd"):
@@ -543,7 +540,7 @@ def main(argv):
     if args.autograd_manifest and not args.candidate_wheel:
         parser.error('autograd-manifest is a candidate-mode input')
     gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest,
-                adapters=not args.no_adapters, profile=args.profile)
+                adapters=not args.no_adapters, profile=args.profile, identity_once=args.no_identity_lanes)
     if args.profile == P.LIGHT and step != "verdict":
         return gate.run_light(step)
     for stage in STAGES:

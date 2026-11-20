@@ -1,0 +1,9 @@
+commit=84da9f145c6dddc2d7e5db4a55d794562019ddf4
+label=amd-mi300x-gfx942
+backend=hip
+scope=all shard= lanes_override=yes lane_selection=only-changed-table
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-59-generic x86_64 mojolearn-steward-do-amd
+date=2026-11-05T10:30:13Z
+dirty_tracked=none
+record_sha256=d1af6a75a5051e6efe684afb67bd2a508a401a43ae29d9fd6623272b25678880

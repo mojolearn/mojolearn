@@ -1,0 +1,23 @@
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index ab482496e6..e44992bc14 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -191,11 +191,15 @@ comptime IDN_KMEANS_FOLD_STORE = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUM
+ #: `n_iter` are the per-iteration loop's, bit for bit. The loop keeps the
+ #: per-iteration form when `inertia_check` is on, when the identity trace is
+ #: recording, and when the assignment is split across devices.
++#: `-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF=1` restores the per-iteration
++#: drain everywhere.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF (old path, EXP:2274 REFACTORED default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at ea62796835.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_KMEANS_DEVICE_CONV = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_KMEANS_DEVICE_CONV = (
++    KMEANS_BLOCK_ACC
++    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
++)
+ #: Iterations enqueued per flag read: ONE int sweep define (lane
+ #: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
+ #: default 8 when absent. It replaces the five mutually overriding defines

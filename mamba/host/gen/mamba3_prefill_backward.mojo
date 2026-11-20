@@ -14,6 +14,12 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.host.gen.modeling_mamba import mamba_zeros
 
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA3_BWD_ARENA (MERGED-UNMEASURED opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at cca09a09f6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA3_BWD_ARENA.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_ALL (MERGED-UNMEASURED opt-in umbrella) read deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at cca09a09f6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_ALL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # lane afn-samba (2026-10-03), Apple FAST only:
 #   MOJOLEARN_AFN_MAMBA3_BWD_ARENA: the VJP's ~70 scratch buffers are views
 #     of one device arena chunk (core/device_arena.mojo) opened at the
@@ -24,23 +30,22 @@ from mamba.host.gen.modeling_mamba import mamba_zeros
 # `_m3_scratch`'s other arm is exactly the `mamba_zeros[False]` call it
 # replaces; the ten gradient outputs stay real buffers.
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import NUMERIC_FAST
 from mamba.host.gen.device_optimizations import arena_active, arena_begin, arena_end, arena_release, arena_take
 
-#: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL, default ON;
-#: `-D MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
-#: restores main): the Mamba-3 prefill backward ran its angle stage twice,
+#: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL): the Mamba-3
+#: prefill backward ran its angle stage twice,
 #: once on the pre-join d_theta whose results (and those of the join
 #: current, dt partial, dt_bias reduce and adt product around it) no
 #: returned gradient reads. Every column skips them; no bit moves.
-comptime IDN_M3_BWD_SKIP_DEAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 8e12418241.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M3_BWD_SKIP_DEAD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime AFN_M3_BWD_ARENA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 ) and (
     is_defined["MOJOLEARN_AFN_MAMBA3_BWD_ARENA"]()
     or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()

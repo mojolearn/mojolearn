@@ -29,7 +29,7 @@ optional root. This kernel writes the same `rows x cols` matrix:
 `-D MOJOLEARN_KNN_APPLE_MMA_OFF` keeps the register tile.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
@@ -97,7 +97,7 @@ def apple_mma_distance_tile_kernel(
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var rmin = stack_allocation[BM, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var cmin = stack_allocation[BN, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, FM * FN](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, FM * FN](fill=_AMMA_M64(0))
     # Thread t < 64 owns row t's running minimum, t >= 64 column t - 64's.
     var mine = UInt32(0xFF)
     var k0 = 0

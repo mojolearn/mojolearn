@@ -7,7 +7,10 @@ NAMES=('gemm','gemm_bf16','gemm_int8','quantize_int8','dequantize_int8','gemm_in
 
 
 def body(source,name):
-    return re.search(r'^def '+name+r'\(.*?(?=^def |\Z)',source,re.M|re.S).group()
+    # Whole-line `#` comments are notes, not transport: drop them so a comment
+    # after a refusal does not glue onto the raise being compared.
+    text=re.search(r'^def '+name+r'\(.*?(?=^def |\Z)',source,re.M|re.S).group()
+    return re.sub(r'^[ \t]*#[^\n]*\n','',text,flags=re.M)
 
 
 def test_host_transport_preserves_numerical_calls_and_refusals():
@@ -24,13 +27,13 @@ def test_host_transport_preserves_numerical_calls_and_refusals():
 def test_host_and_device_have_identical_transport_contract():
     device=(ROOT/'gemm/linalg_dispatch.mojo').read_text()
     host=(ROOT/'gemm/host/linalg_dispatch.mojo').read_text()
-    assert host==device.replace('from gemm.linalg_native import','from gemm.host.linalg_native import').replace('MojoLinalgNativeTableV1','MojoLinalgHostNativeTableV1')
+    assert host==device.replace('from gemm.linalg_native import','from gemm.host.linalg_native import').replace('MojolearnLinalgNativeTable','MojolearnLinalgHostNativeTable')
     shell=(ROOT/'bindings/_mojolearn_linalg_host.mojo').read_text()
     assert 'module.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")' in shell
     assert 'neural_descriptor_capsule(table[].name, table[].entries)' in shell
 
 
 def test_shared_family_admission_import_is_executable_source():
-    source=(ROOT/'bindings/family_native.mojo').read_text()
-    assert '\nfrom providers.python.estimator_binding_pyapi import estimator_arguments\n' in source
+    source=(ROOT/'bindings/family_native_door.mojo').read_text()
+    assert '\nfrom providers.python.estimator_binding_pyapi_door import estimator_arguments\n' in source
     assert '\nfrom the ' not in source

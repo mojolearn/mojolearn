@@ -3,36 +3,28 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_small_mlp_uses_shared_provider_and_native_owners():
-    src=(ROOT/'bindings/small_mlp_native.mojo').read_text()
-    assert 'neural_descriptor_reuse' in src and 'neural_descriptor_execute' in src
-    assert 'struct SmallMlpProvider' not in src
+def test_small_mlp_runs_one_captured_program():
+    src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text()
     operation=src.split('def _mode_entries(')[1].split('def _mode_name(')[0]
-    assert 'entries["small_mlp_api_v1"]' in operation
-    assert 'MlpOperationMetadata(entries, provider, String(py=mode))' in operation
+    # The door reads through held keys (bindings/small_mlp_keys_unpack.mojo).
+    assert 'nk[].k_small_mlp_program' in operation
+    assert 'MlpOperationMetadata(entries, String(py=mode))' in operation
+    code='\n'.join(line for line in src.splitlines() if not line.lstrip().startswith('#'))
+    for gone in ('mlp_train_step', 'mlp_resident_', 'small_mlp_api_v1', 'neural_descriptor_execute'):
+        assert gone not in code
     batch=src.split('def _batch_in(')[1].split('def _owned_rows(')[0]
     assert batch.count('= _view(')==1 and batch.count('= _shape(')==1
     assert '_words_from_view(value, view, shape,' in batch
-    table=(ROOT/'training/small_mlp_dispatch.mojo').read_text()
+    program=(ROOT/'autograd/small_mlp_program.mojo').read_text()
     for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
-        assert forbidden not in table
-    for owner in ('mlp_train_step_host(', 'neural_gemm_native(', 'mlp_bias_activation_host(',
-                  'mlp_relu_backward_host(', 'mlp_sum_rows_host(', 'identical_ce_loss_host(', 'per_call_step('):
-        assert owner in table
-
-
-def test_neural_gemm_both_doors_share_native_transport():
-    door=(ROOT/'bindings/neural_gemm_boundary.mojo').read_text()
-    assert 'neural_gemm_native(aa, ba, ca, shape)' in door
-    assert 'identical_gemm_into(' not in door
-    owner=(ROOT/'training/neural_gemm_native.mojo').read_text()
-    assert owner.count('identical_gemm_into(')==1
-    assert 'gemm_up_f32(' in owner and 'gemm_down_f32(' in owner
-    assert 'ctx.synchronize()' in owner and 'lease.release()' in owner
+        assert forbidden not in program
+    for owner in ('OPS_SMALL_MLP', 'OPS_LINEAR', 'capture(', 'cross_entropy(', 'backward_scalar_with_rules(', 'step_lr('):
+        assert owner in program
+    assert not (ROOT/'training/small_mlp_dispatch.mojo').exists()
 
 
 def test_small_mlp_rejects_hooks_before_admission():
-    src=(ROOT/'bindings/small_mlp_native.mojo').read_text().split('def small_mlp_call(')[1]
+    src=(ROOT/'bindings/small_mlp_native_door.mojo').read_text().split('def small_mlp_call(')[1]
     assert src.index('sequential_admit_value(args,') < src.index('return small_mlp_create(args)')
 
 
@@ -46,12 +38,17 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
         assert len(body)==1 and isinstance(body[0],ast.Return)
         assert isinstance(body[0].value.func,ast.Name) and body[0].value.func.id=='_LM_TRAINER'
     assert 'MethodType(module.byte_lm_pooled_finalize_call, context)' in source
-    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    door=(ROOT/'bindings/byte_lm_trainer_native_door.mojo').read_text()
     mode=door.split('def _mode(')[1].split('def _has(')[0]
     assert 'backend["_DEFAULT_MODE"]' in mode
     assert 'py_call_typed' not in mode
-    assert 'neural_descriptor_handle(provider, factory, session)' in door
-    assert 'neural_descriptor_reuse' in door
+    # lane byte-lm-sessions-native: the resident session is a native registry
+    # handle owned by a thin native object; no Python provider or handle factory
+    assert 'neural_descriptor' not in door
+    assert 'byte_lm_session_owner_new(_key(fields))' in door
+    sessions=(ROOT/'core/byte_lm_entry_table_sessions.mojo').read_text()
+    for forbidden in ('PythonObject','std.python','bindings.','providers.'):
+        assert forbidden not in sessions
     table=(ROOT/'training/byte_lm_native_dispatch.mojo').read_text()
     for forbidden in ('PythonObject','std.python','bindings.','providers.'):
         assert forbidden not in table
@@ -60,7 +57,7 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
 
 
 def test_byte_lm_input_admission_precedes_buffer_export():
-    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text().split('def _ids(')[1].split('def _f32(')[0]
+    door=(ROOT/'bindings/byte_lm_trainer_native_door.mojo').read_text().split('def _ids(')[1].split('def _f32(')[0]
     assert door.index('classical_admit_value(source, context)') < door.index('native_buffer_view(source)')
 
 
@@ -72,13 +69,13 @@ def test_training_constructors_share_admission_helpers():
     assert len(constructor.body)==1
     assert constructor.body[0].value.func.id=='_LM_TRAINER'
     assert 'byte_lm_lock=type(threading.RLock())' in source
-    byte=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
-    small=(ROOT/'bindings/small_mlp_native.mojo').read_text()
+    byte=(ROOT/'bindings/byte_lm_trainer_native_door.mojo').read_text()
+    small=(ROOT/'bindings/small_mlp_native_door.mojo').read_text()
     for src in (byte,small):
         assert 'training_f32_scalar(' in src
         assert 'training_schedule_json(' in src
     construct=byte.split('def byte_lm_construct(')[1].split('def byte_lm_logits(')[0]
-    assert construct.index('_load_snapshot(shape, context)') < construct.index('training_f32_owned(')
+    assert construct.index('_load_snapshot(mods, shape, context)') < construct.index('training_f32_owned(')
     assert 'training_f32_owned(' in construct
     copy=(ROOT/'core/training_input_copy.mojo').read_text()
     assert 'std.python' not in copy and 'PythonObject' not in copy
@@ -91,7 +88,7 @@ def test_linalg_gemm_uses_shared_native_transport():
     for name in ('matmul','matmul_bf16','matmul_int8','to_bf16','from_bf16','quantize_int8','dequantize_int8'):
         calls=[n for n in ast.walk(funcs[name]) if isinstance(n,ast.Call)]
         assert not any(isinstance(n.func,ast.Name) and n.func.id=='_load' for n in calls)
-    door=(ROOT/'bindings/linalg_ops_lowbit.mojo').read_text()
+    door=(ROOT/'bindings/linalg_ops_lowbit_door.mojo').read_text()
     assert 'neural_descriptor_execute(provider, op, addresses, parameters' in door
     assert 'neural_descriptor_reuse' in door
     assert 'family_call(bf["default_mode"])' not in door
@@ -114,23 +111,30 @@ def test_byte_lm_stateless_owner_and_locked_finalization_share_transport():
     owner=binding.split('def _byte_lm_run(')[1].split('def _read_addresses(')[0]
     assert 'byte_lm_run_native(' in owner and 'byte_lm_run_finalize(session)' in owner
     assert 'byte_train_step(ctx,' not in owner
-    door=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    door=(ROOT/'bindings/byte_lm_trainer_native_door.mojo').read_text()
     stateless=door.split('def _run_stateless(')[1].split('def byte_lm_construct(')[0]
-    assert 'neural_descriptor_execute(provider, 8,' in stateless
-    assert 'neural_descriptor_execute(provider, 9,' in stateless
-    assert 'neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create"))' in stateless
-    common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    # lane calltable-byte-lm: the stateless step runs on a call-scoped native
+    # session through the trainer table, with no Python session or provider.
+    # The trainer table is resolved once per call and passed by value (`trainer`), not a key lookup.
+    assert '_table_execute(trainer, 8, descriptors,' in stateless
+    assert '_table_execute(trainer, 9, finalize,' in stateless
+    assert 'byte_lm_session_new(gl)' in stateless and 'byte_lm_session_free(gl, session)' in stateless
+    assert '_entry(binding' not in stateless and 'neural_descriptor' not in stateless
+    common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     assert 'release_gil: Bool = True' in common
     assert '_neural_descriptor_admit_entry(provider, factory)' in common
 
 
 def test_native_metadata_readback_reuses_admission_snapshot():
-    src=(ROOT/'bindings/byte_lm_trainer_native.mojo').read_text()
+    src=(ROOT/'bindings/byte_lm_trainer_native_door.mojo').read_text()
     runtime=src.split('def _runtime_metadata(')[1].split('def byte_lm_consume(')[0]
     assert 'fields["_admitted_binding_metadata"]' in runtime
     assert 'byte_lm_numeric_mode' not in runtime
     assert 'sha256_file(' in runtime
-    common=(ROOT/'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    common=(ROOT/'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     entry=common.split('def neural_descriptor_entry(')[1].split('def neural_descriptor_connect(')[0]
-    assert 'py_get(py_fields(module), name)' in entry
-    assert 'entry.__self__ is not module' in entry
+    # One borrowed exact-dict read of the admitted namespace (lane perf-provider-cache), never the
+    # module's Python __getattr__.
+    assert '_neural_descriptor_module_fields_once(module, bi)' in entry
+    assert 'PyDict_GetItemWithError(fields._obj_ptr, key._obj_ptr)' in entry
+    assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in entry

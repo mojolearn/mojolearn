@@ -1,0 +1,18 @@
+diff --git a/svm/impl/distance/kernel_matrices.mojo b/svm/impl/distance/kernel_matrices.mojo
+index a70755c952..6e8f4cd535 100644
+--- a/svm/impl/distance/kernel_matrices.mojo
++++ b/svm/impl/distance/kernel_matrices.mojo
+@@ -106,11 +106,11 @@ def row_norm_l2sq_kernel(
+ #: Apple IDENTICAL: the RBF epilogue on a (columns, rows) grid, so no cell
+ #: divides its flat index by `cols` (a 64-bit integer division, emulated on
+ #: Apple's GPU). Same per-cell arithmetic.
+-# TOMBSTONE: MOJOLEARN_SVM_RBF_EPILOGUE_1D (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 58cc0078e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch; record in docs/TOMBSTONES.md.
++#: `-D MOJOLEARN_SVM_RBF_EPILOGUE_1D` keeps the flat grid.
+ comptime RBF_EPILOGUE_2D = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"]()
+ )
+ 
+ 

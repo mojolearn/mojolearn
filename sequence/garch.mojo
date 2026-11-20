@@ -18,8 +18,7 @@ from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
 from sequence.fold32 import FOLD_L, tree32
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
 #: to the thread's device scratch, `garch_sigma2` writes sigma2_t and reads
@@ -34,13 +33,11 @@ from std.sys.info import has_apple_gpu_accelerator
 #: same order, nothing stored; the final evaluation still stores sigma2
 #: (the sigma output and the forecast read it). FAST only. Default on FAST +
 #: Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
-#: identical): garch taxi-hourly 2,770 -> 968 ms. -D MOJOLEARN_SEQ_GARCH_REG_OFF
-#: restores the stored code; the old -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
-comptime GARCH_REG = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
-)
+#: identical): garch taxi-hourly 2,770 -> 968 ms. The old
+#: -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
+# TOMBSTONE: MOJOLEARN_SEQ_GARCH_REG_OFF (old path; EXP:547 KEPT on the M3 only; FAST is Apple only, no NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 7a79b3b608.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_GARCH_REG_OFF.patch
+comptime GARCH_REG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane/apple-fast-seq (2026-10-02). `op_garch`'s starting values are the
 #: best of arch's 4 x 4 x 4 grid, 64 serial `garch_nll` passes over the
 #: series per thread (`sequence/garch.mojo` op_garch, "starting_values")
@@ -53,13 +50,10 @@ comptime GARCH_REG = (
 #: serial loop's. FAST only; IDENTICAL compiles the serial grid. Default on
 #: FAST + Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
 #: identical): with GARCH_REG, taxi-hourly 2,769 -> 905 ms, synthetic 1,525 ->
-#: 528 ms. -D MOJOLEARN_SEQ_GARCH_GRID_OFF restores the serial grid; the old
-#: -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
-comptime GARCH_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
-)
+#: 528 ms. The old -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
+# TOMBSTONE: MOJOLEARN_SEQ_GARCH_GRID_OFF (old path; EXP:546 KEPT on the M3 only; FAST is Apple only, no NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at bc254a427e.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_GARCH_GRID_OFF.patch
+comptime GARCH_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime GARCH_GRID_N = 64
 
 #: lane fix-t1-seq (audit T1, F10; from lane/hr2-kpca-seq e99030f6f
@@ -70,11 +64,12 @@ comptime GARCH_GRID_N = 64
 #: the slots on up to 32 threads, the tree on every thread; `garch_nll`
 #: below (the host column) replays the same slots and tree. CHANGES THE BITS
 #: of every GARCH log-likelihood, on NVIDIA, AMD, Apple and the host column
-#: together. -D MOJOLEARN_IDN_GARCH_FOLD32_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the ascending chain everywhere.
-comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GARCH_FOLD32_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: together.
+# TOMBSTONE: MOJOLEARN_IDN_GARCH_FOLD32_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 869fa6e1fb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_FOLD32_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 869fa6e1fb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: lane fix-t1-seq (audit T1, F10). The chunked GARCH(1, 1) likelihood of
 #: Apple FAST (`GARCH_COOP`, sequence/fit_team.mojo `garch_nll_coop`: one
 #: chunk of the series per thread, the chunk's affine variance map composed
@@ -86,11 +81,9 @@ comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 #: only (the board's GARCH(1, 1)); other orders keep the stored recursion.
 #: CHANGES THE BITS (the composed maps round differently from the step by
 #: step recursion), on NVIDIA, AMD, Apple and the host column together.
-#: -D MOJOLEARN_IDN_GARCH_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: lead thread's recursion everywhere.
-comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GARCH_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GARCH_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 02b0c1f6db.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_COOP_OFF.patch
+comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the chunks of garch_nll_coop: the team's threads (fit_team.mojo
 #: SEQ_TEAM_TPB, asserted equal in fit_team_py.mojo garch_team_py)
 comptime GARCH_CHUNKS = 64
@@ -207,7 +200,7 @@ def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32,
     comptime if GARCH_FOLD32:
         # the team's order (fit_team.mojo garch_nll_team): slot t mod 32
         # ascending, then the pairwise tree
-        var sl = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        var sl = Array[Float32, FOLD_L](fill=Float32(0.0))
         for t in range(n):
             var v = ld(s2, t)
             var x = ld(r, t)

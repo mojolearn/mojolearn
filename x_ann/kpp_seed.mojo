@@ -27,6 +27,10 @@ from cluster.impl.detail.kmeans import HostRng
 
 #: lanes of one distance step
 comptime KPP_W = 4
+# TOMBSTONE: MOJOLEARN_ANN3_PQ_SEED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at fa411f5da5.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_PQ_SEED.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# (Sweep 2026-11-15: the host k-means++ seeding `kpp_seed`, its lane width KPP_W and the HostRng import removed: its only caller was the always-False PQ_FAST_SEED branch of x_ann/ivf_pq_device.mojo.)
 
 
 def kpp_seed_rows(n: Int, k: Int, rows_per_seed: Int) -> Int:

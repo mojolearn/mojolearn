@@ -5,10 +5,13 @@
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from gemm.afn_apple_fast import afn_gemm_fp32_ragged_k_ptr_into
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -39,8 +42,9 @@ from gemm.checks.gemm_identical import (
     _amma_stage,
 )
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.device_plan import DevicePlan
+from core.gram_multi_gpu import gram_plan_current, pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 from core.strided_walk import NV_AMD_IDENTICAL_STEPS
 
 from gemm.checks.gemm_identical import (
@@ -96,10 +100,9 @@ def pinned_gemm_nt_kernel(
 #: untiled global loads (Ridge's U = A V at 1M x 220 x 220, PCA's
 #: transform). The tiled kernel is plain shared memory and barriers; the
 #: simdgroup-matrix arm (`APPLE_GEMM_NT_MMA`) stays Apple-only via APPLE_MMA.
-comptime APPLE_GEMM_NT_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_TILED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_GEMM_NT_TILED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_GEMM_NT_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """IDENTICAL on Apple: `gemm_nt` stages x and y tiles in threadgroup memory
 and gives each thread RM x RN cells. Every cell is still ONE chain,
 `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)` for p = 0 .. k-1 in
@@ -117,14 +120,11 @@ Only which thread owns a chain and where its operands are read from move."""
 #:   lane/apple-fast-tier @ 95a09d1fd (docs/apple-fast/EXPERIMENTS.md).
 #: Default since the M3 A/B tier-ols-tnv1b (lane/apple-fast-tier 0a2048a44,
 #: ols istella, n=1): 2,219 -> 935 ms (-58%), r2 0.3211 -> 0.3319 (square
-#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only;
-#: -D MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF restores the vendor-matmul arm.
+#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only.
 #: IDENTICAL never reads it (its branch returns before this point).
-comptime APPLE_FAST_GEMM_TN_V1 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1005624c27.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_FAST_GEMM_TN_V1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 comptime GNT_KT = 16
@@ -154,7 +154,7 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
     var ys = stack_allocation[
         TN * GNT_KT, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[Float32, RM * RN](fill=Float32(0.0))
+    var acc = Array[Float32, RM * RN](fill=Float32(0.0))
     var p0 = 0
     while p0 < k:
         var kt = min(GNT_KT, k - p0)
@@ -174,8 +174,8 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
             t += THREADS
         barrier()
         for pp in range(kt):
-            var a = InlineArray[Float32, RM](fill=Float32(0.0))
-            var b = InlineArray[Float32, RN](fill=Float32(0.0))
+            var a = Array[Float32, RM](fill=Float32(0.0))
+            var b = Array[Float32, RN](fill=Float32(0.0))
             comptime for rr in range(RM):
                 a[rr] = xs[(ty_ * RM + rr) * GNT_KT + pp]
             comptime for cc in range(RN):
@@ -193,11 +193,9 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
                 z[i * n + j] = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
 
 
-comptime APPLE_GEMM_NT_MMA = (
-    APPLE_GEMM_NT_TILED
-    and APPLE_MMA
-    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_APPLE_GEMM_NT_MMA_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at ea1e949b3d.
+# Restore: git apply experiments/removed/MOJOLEARN_APPLE_GEMM_NT_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime APPLE_GEMM_NT_MMA = APPLE_GEMM_NT_TILED and APPLE_MMA
 """IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): `gemm_nt`
 for m, n >= 64 on the simdgroup matrix unit. Every cell is still the one
 chain `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)`, p ascending,
@@ -207,8 +205,7 @@ the GEMM's window admission holds (flushed operand exponent fields
 of the chain admitted, so every entering accumulator is a multiple of
 2^-126): then no step result can be subnormal and the bare FMA, which the
 M4's matrix chain reproduces bit for bit, IS `rtf_mul_add`. Any other
-window, every later one, and a ragged tail run `rtf_mul_add` cell by cell.
-`-D MOJOLEARN_APPLE_GEMM_NT_MMA_OFF` reverts to the tiled kernel."""
+window, every later one, and a ragged tail run `rtf_mul_add` cell by cell."""
 
 
 def apple_gemm_nt_mma_kernel(
@@ -247,7 +244,7 @@ def apple_gemm_nt_mma_kernel(
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True
     var windows = (k + KB - 1) // KB
     var ra = _amma_gload[BM, KB, NT](x, k, 1, m0, m, 0, min(KB, k), tid, False)
@@ -277,8 +274,8 @@ def apple_gemm_nt_mma_kernel(
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):
@@ -390,7 +387,10 @@ def pinned_gemv_n_tiled_kernel(
         z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
-comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
+# TOMBSTONE: MOJOLEARN_537_GEMM_IDENT_SWAP (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 33a25f5e7e.
+# Restore: git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch; record in docs/TOMBSTONES.md.
+# The name stays (bench/speed/gemm_speed_main.mojo imports it) as the folded constant.
+comptime GEMM_IDENT_SWAP_537 = False
 
 
 comptime PINNED_GEMM_TPB = 256
@@ -479,12 +479,6 @@ def gemm_nt(
         m, n, k, OP_NT,
     ):
         return
-    if try_scoped_gemm[False, 0](
-        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        m, n, k, k, 1, 1, k, 1, k,
-    ):
-        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))
@@ -492,6 +486,19 @@ def gemm_nt(
 
 
 def gemm_nt_gram(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    xt: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_nt_gram(gram_plan_current(), ctx, z, xt, m, n, k)
+
+
+def gemm_nt_gram(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     xt: DeviceBuffer[DType.float32],
@@ -509,7 +516,7 @@ def gemm_nt_gram(
         )
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var xtm = xt
-        if m == n and parallel_gram_outputs[False](ctx,z,xtm,m,k):
+        if m == n and parallel_gram_outputs[False](plan,ctx,z,xtm,m,k):
             return
         ctx.enqueue_function[pinned_gemm_nt_gram_kernel](
             z.unsafe_ptr(),
@@ -532,11 +539,6 @@ def gemm_nt_gram(
         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp, m, n, k, OP_NT
     ):
         return
-    if try_scoped_gemm[False, 0](
-        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp,
-        m, n, k, k, 1, 1, k, 1, k,
-    ):
-        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(xt, row_major(m, k))
     var ty = TileTensor(xt, row_major(n, k))
@@ -544,6 +546,21 @@ def gemm_nt_gram(
 
 
 def gemm_tn(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn(gram_plan_current(), ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -576,19 +593,32 @@ def gemm_tn(
                     + " operand and one width, so m must equal n."
                     + " IDENTITY_PATHS row 27."
                 )
-            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            gemm_tn_identical_v1(plan, ctx, z, x, xt2, m, k)
             return
     if gram_splitk_applies(m, n, k):
-        gemm_tn_splitk_into(ctx, z, x, xt, m, k)
+        gemm_tn_splitk_into(plan, ctx, z, x, xt, m, k)
         return
     comptime if APPLE_FAST_GEMM_TN_V1:
         if m == n:
-            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            gemm_tn_identical_v1(plan, ctx, z, x, xt2, m, k)
             return
-    gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
+    gemm_tn_via_transpose(plan, ctx, z, x, xt, xt2, m, n, k)
 
 
 def gemm_tn_identical_v1(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_identical_v1(gram_plan_current(), ctx, z, x, scratch, m, k)
+
+
+def gemm_tn_identical_v1(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -603,7 +633,7 @@ def gemm_tn_identical_v1(
     split-K capacity is a fused tile plan needing no workspace at all, so
     the allocate-and-wait branch below is the guard, not the path.
     """
-    if parallel_gram_outputs[True](ctx,z,x,m,k):
+    if parallel_gram_outputs[True](plan,ctx,z,x,m,k):
         return
     var x2 = x
     var need = identical_gemm_workspace_max_floats(m, m, k)
@@ -618,6 +648,21 @@ def gemm_tn_identical_v1(
 
 
 def gemm_tn_via_transpose(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xt: DeviceBuffer[DType.float32],
+    mut xt2: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """Plan-less entry: reads the Gram plan once and forwards."""
+    gemm_tn_via_transpose(gram_plan_current(), ctx, z, x, xt, xt2, m, n, k)
+
+
+def gemm_tn_via_transpose(
+    plan: DevicePlan,
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -658,7 +703,7 @@ def gemm_tn_via_transpose(
         ),
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
-    gemm_nt_gram(ctx, z, xt, m, n, k)
+    gemm_nt_gram(plan, ctx, z, xt, m, n, k)
     _ = xt2
 
 
@@ -678,6 +723,52 @@ there; from the SIMD width up every lane of the vendor kernel has work.
 `-D MOJOLEARN_LEGACY_NARROW_GEMV_PINNED` restores 64."""
 
 
+#: OLS predict's gemv (lane restore-classical-measured-routes, 2026-11-13).
+#: The tiled kernel became the IDENTICAL NVIDIA/AMD `gemv_n` (812de59288,
+#: 2026-10-02, NV_AMD_IDENTICAL_STEPS) for the QN objective's loads and was
+#: never measured for predict. The board on record, same clock span (upload
+#: + validation + call): ols taxi infer 0.8.25 (plain `pinned_gemv_n_kernel`)
+#: NVIDIA 2.68 ms / AMD 1.51 ms vs 0.8.55 5.45 / 3.54 and candidate
+#: 4c2340386abc 5.52 / 3.02 (2x); istella infer did not regress. One cell
+#: each, with other 0.8.25 -> 0.8.37 harness/Python changes in between. So
+#: OLS predict (`gemv_n_ols_predict`) launches the measured plain kernel by
+#: default; `-D MOJOLEARN_IDN_OLS_PREDICT_TILED` is the B arm (today's tiled
+#: kernel), owed A/B row ols-predict-tiled (ols infer taxi + istella, NV +
+#: AMD) in bench/results/paper_compare/owed-pre0867.json. Fit and every other
+#: `gemv_n` caller keep NV_AMD_IDENTICAL_STEPS. Both kernels run the same
+#: chain per row: no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_OLS_PREDICT_TILED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1900f1d297.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_PREDICT_TILED.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime IDN_OLS_PREDICT_TILED = is_defined["MOJOLEARN_IDN_OLS_PREDICT_TILED"]()
+
+
+def gemv_n_ols_predict(
+    ctx: DeviceContext,
+    mut z: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    k: Int,
+) raises:
+    """`z[m] = x[m x k] . y[k]` for OLS predict: IDENTICAL launches the
+    plain one-thread-per-row `pinned_gemv_n_kernel` (the measured 0.8.25
+    route) unless `-D MOJOLEARN_IDN_OLS_PREDICT_TILED`; every other case is
+    `gemv_n`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not IDN_OLS_PREDICT_TILED:
+        ctx.enqueue_function[pinned_gemv_n_kernel](
+            z.unsafe_ptr(),
+            x.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(m),
+            Int32(k),
+            grid_dim=((m + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+            block_dim=(PINNED_GEMM_TPB, 1, 1),
+        )
+        return
+    gemv_n(ctx, z, x, y, m, k)
+
+
 def gemv_n(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -689,8 +780,7 @@ def gemv_n(
     """`z[m] = x[m x k] ."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # NVIDIA / AMD: the same chain per row, X staged through shared
-        # memory (NV_AMD_IDENTICAL_STEPS; -D MOJOLEARN_NV_AMD_STEPS_OFF=1
-        # restores the plain kernel).
+        # memory (NV_AMD_IDENTICAL_STEPS).
         comptime if NV_AMD_IDENTICAL_STEPS:
             ctx.enqueue_function[pinned_gemv_n_tiled_kernel](
                 z.unsafe_ptr(),
@@ -714,11 +804,9 @@ def gemv_n(
         return
     # FAST on Apple, k <= GEMV_FAST_PINNED_MAX_K: the one-thread-per-row
     # kernel beats the vendor gemv on narrow matrices.
-    # `-D MOJOLEARN_GEMV_FAST_VENDOR` keeps the vendor gemv.
-    comptime if (
-        has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_GEMV_FAST_VENDOR"]()
-    ):
+    # TOMBSTONE: MOJOLEARN_GEMV_FAST_VENDOR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8fc20d312b.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMV_FAST_VENDOR.patch; record in docs/TOMBSTONES.md.
+    comptime if TARGET_HAS_APPLE_GPU:
         if k <= GEMV_FAST_PINNED_MAX_K:
             ctx.enqueue_function[pinned_gemv_n_kernel](
                 z.unsafe_ptr(),

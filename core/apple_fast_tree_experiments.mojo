@@ -5,11 +5,19 @@ SOURCE ONLY: uncompiled, unverified, unmeasured. All candidates are OFF by
 default. No quality or speed claim, including for combinations. These guards
 keep IDENTICAL and non-Apple paths outside this experiment programme.
 """
+# TOMBSTONE: MOJOLEARN_AFT_P01 MOJOLEARN_AFT_P02 MOJOLEARN_AFT_P03 MOJOLEARN_AFT_P04 MOJOLEARN_AFT_P05 MOJOLEARN_AFT_P06
+# MOJOLEARN_AFT_P07 MOJOLEARN_AFT_P08 MOJOLEARN_AFT_P09 MOJOLEARN_AFT_P10 MOJOLEARN_AFT_P11 MOJOLEARN_AFT_P12
+# (the never-run Apple FAST trees programme P01-P12, experiments/apple_fast_trees/P.json) deleted 2026-11-15 by
+# lane/expdel2-03-base; code recoverable at 5bc2865240.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_P<nn>.patch (one per card); record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: P01, P02, P04-P12 back as they were (opt-in, default off, Apple fast only;
+# default path unchanged). P03 is NOT restored: its reader, the shared-row staging FOREST_SHARED_ROWS in
+# core/forest_inference.mojo, was deleted by 77aaad1bcc (not an Apple fast arm), so P03 has nothing to switch.
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime AFT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # P01: two rather than four logical 32-tree groves per threadgroup; less
 # shared reduction state, more independently schedulable blocks.
@@ -31,9 +39,7 @@ comptime AFT_ARGMAX_ROWS = 2 if AFT_P04 else 1
 
 # P03: row staging gets a fixed 2 KiB threadgroup budget. Larger feature
 # rows keep direct loads; coverage follows storage capacity, not board rows.
-# This differs from the pre-existing 4 KiB / four-row staging experiment.
-comptime AFT_P03 = AFT_APPLE_FAST and is_defined["MOJOLEARN_AFT_P03"]()
-comptime AFT_ROW_STAGE_BYTES = 2048
+# (P03 not restored, see above: its host FOREST_SHARED_ROWS is deleted.)
 
 # P05: two independent rows reuse each packed split descriptor. Requires
 # MOJOLEARN_GBDT_PREDICT_PACKED in BOTH arms; that prerequisite is not promoted.

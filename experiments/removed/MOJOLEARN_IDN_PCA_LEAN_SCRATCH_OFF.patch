@@ -1,0 +1,36 @@
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 8a38b2722d..c232e47aba 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -18,6 +18,7 @@ from max.gpu.sync import barrier
+ from std.memory import stack_allocation
+ 
+ from core.gemm import gemm_nt, gemm_tn
++from std.sys.compile import is_defined
+ from gemm.afn_apple_fast import (
+     AFN_EPI_NONE,
+     AFN_GEMM_APPLE,
+@@ -244,7 +245,8 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch; record in docs/TOMBSTONES.md.
+ 
+ 
+-#: P2, lane fg-pca (2026-10-09), IDENTICAL default. `pca_fit_host` uploads X into a
++#: P2, lane fg-pca (2026-10-09), IDENTICAL default; rollback
++#: `-D MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF`. `pca_fit_host` uploads X into a
+ #: device buffer that is the fit's own and nothing reads after the Gram, so
+ #: (a) the restore pass (`shift_columns_kernel` +mu: one n*d read and one
+ #: n*d write, 2 x 1.8 GB at 2M x 220) is dead and is skipped, and (b) the two
+@@ -259,9 +261,10 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
+ #: Bits: none (the words the Gram and the eigensolver read are unchanged;
+ #: the restored copy was never read). IDENTICAL only: the FAST NVIDIA/AMD
+ #: route (`gemm_tn_via_transpose`) reads both alias buffers at full size.
+-# TOMBSTONE: MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF (unmeasured old path, EXP:1689 owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at e1c7b2b99a.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime PCA_LEAN_SCRATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime PCA_LEAN_SCRATCH = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"]()
++)
+ 
+ 
+ def pca_cov_scratch_floats(n_rows: Int, n_cols: Int) raises -> Tuple[Int, Int]:

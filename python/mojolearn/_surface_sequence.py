@@ -58,13 +58,13 @@ FAMILIES = (
                  "ProphetForecaster", "MoEBlock", "Sequential"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
-                      "providers/python/sequence_pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo", "sequence/mlp.mojo",
+                      "providers/python/sequence_pyapi_door.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo", "sequence/mlp.mojo",
                       "sequence/mlp_fit.mojo", "sequence/adafactor.mojo",
                       "sequence/layernorm.mojo", "sequence/nm.mojo", "sequence/theta.mojo",
                       "sequence/croston.mojo", "sequence/ets.mojo",
                       "sequence/garch.mojo", "sequence/prophet.mojo",
                       "sequence/moe.mojo", "autograd/model.mojo", "autograd/model_ops.mojo",
-                      "providers/python/autograd_pyapi.mojo", "autograd/ops_api.mojo", "autograd/losses.mojo",
+                      "providers/python/autograd_pyapi_door.mojo", "autograd/ops_api.mojo", "autograd/losses.mojo",
                       "autograd/metrics.mojo", "autograd/data.mojo",
                       "autograd/profile.mojo", "autograd/optim.mojo", "autograd/higher.mojo",
                       "autograd/model_checkpoint.mojo", "training/checkpoint.mojo",
@@ -75,16 +75,14 @@ FAMILIES = (
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "layer_norm", "theta", "croston", "croston_forecast", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "prophet_days", "prophet_features",
-            "prophet_changepoints",
+            "rnn_fit", "rnn_predict", "optimizer_step", "mlp_fit", "mlp_predict", "layer_norm", "moe_forward",
+            # theta, croston, ets, garch, prophet_*, var_fit, var_forecast and stl left the Python surface
+            # (lane calltable-xseq, 2026-11-11): the sequence owner reaches them
+            # through the native table (core/xseq_entry_table.mojo).
             # the model-description trainer (autograd/model.mojo)
             "model_native_api_v1", "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",
             "model_fit_labels", "model_predict_labels",
-            "moe_backward", "seq_adafactor_step", "seq_lamb_step",
-            "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
-            "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
+            "moe_backward",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_session_create", "session_public_api_v1", "ops_session_public_connect",
             "ops_shape",
@@ -102,11 +100,15 @@ FAMILIES = (
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
-            "onnx_read", "onnx_info", "onnx_buffers", "onnx_resolve", "onnx_close",
+            "onnx_read", "onnx_buffers",
             # the lowering onto session operations (autograd/import_lower.mojo; importers.import_model)
             "onnx_import", "onnx_import_file", "ops_imported_run", "ops_import_model", "ops_torch_program_run",
             # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "onnx_native_api_v1", "ops_graph_record",
+            # lane x2-small-mlp-on-executor (2026-11-09): the trainer's captured program
+            "small_mlp_program",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

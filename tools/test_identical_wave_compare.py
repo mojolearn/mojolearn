@@ -19,7 +19,7 @@ class IdentityProofTests(unittest.TestCase):
                 'vendor': vendor, 'gpu_arch': {'nvidia': 'sm_120', 'amd': 'gfx942'}[vendor],
                 'sha': 'a'*40, 'plan_sha256': sha256(self.plan),
                 'data_manifest_sha256': 'b'*64, 'neural_fixture_sha256': {'fixed.npz': 'c'*64}}, 'arms': {}}
-            for arm, digest in [('on', 'd'*64), ('off', 'e'*64)]:
+            for arm, digest in [('on', 'd'*64)]:  # the off arm was deleted 2026-11-15
                 steps = []
                 for tag in ['linear--medium', 'neural--small']:
                     steps += [{'id': tag+'--'+v, 'rc': 0, 'status': 'PASS'} for v in [backend, 'cpu']]
@@ -33,7 +33,7 @@ class IdentityProofTests(unittest.TestCase):
     def compare(self):
         return compare_receipts(self.raw('nvidia'), self.raw('amd'), self.plan)
 
-    def test_valid_proof_and_different_bits_between_arms(self):
+    def test_valid_proof(self):
         proof = self.compare()
         for vendor in ['nvidia', 'amd']:
             validate_proof(proof, self.raw(vendor), vendor, self.plan)
@@ -53,12 +53,12 @@ class IdentityProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'cross-vendor digest'): self.compare()
 
     def test_reject_missing_cases_on_both_vendors(self):
-        for receipt in self.receipts.values(): receipt['arms']['off'] = receipt['arms']['off'][:3]
+        for receipt in self.receipts.values(): receipt['arms']['on'] = receipt['arms']['on'][:3]
         with self.assertRaisesRegex(ValueError, 'missing'): self.compare()
 
     def test_reject_missing_arm_or_digest_or_failed_receipt(self):
         original = copy.deepcopy(self.receipts)
-        mutations = [lambda r: r['arms'].pop('off'),
+        mutations = [lambda r: r['arms'].pop('on'),
                      lambda r: r['arms']['on'][2]['digests'].pop('cpu'),
                      lambda r: r.update(status='INCOMPLETE')]
         for mutate in mutations:
@@ -82,7 +82,7 @@ class IdentityProofTests(unittest.TestCase):
 
     def test_reject_stale_or_incomplete_proof(self):
         for mutation in [lambda p: p['identity_core'].update(sha='f'*40),
-                         lambda p: p['arms']['off'].pop('linear--medium'),
+                         lambda p: p['arms']['on'].pop('neural--small'),
                          lambda p: p['arms']['on']['linear--medium']['amd'].update(hip='f'*64)]:
             proof = self.compare(); mutation(proof)
             with self.assertRaises(ValueError): validate_proof(proof, self.raw('nvidia'), 'nvidia', self.plan)
@@ -127,11 +127,11 @@ class PartialProofTests(IdentityProofTests):
             validate_partial_cases(proof, self.raw('amd'), 'amd', self.plan, ['neural--small'])
 
     def test_partial_differ(self):
-        for step in self.receipts['amd']['arms']['off']:
+        for step in self.receipts['amd']['arms']['on']:
             if step['id'] == 'linear--medium--bits':
                 step['digests'] = {'hip': 'f'*64, 'cpu': 'f'*64}
         proof = classify_receipts(self.raw('nvidia'), self.raw('amd'), self.plan)
-        self.assertEqual(proof['classes']['off'].get('DIFFER'), ['linear--medium'])
+        self.assertEqual(proof['classes']['on'].get('DIFFER'), ['linear--medium'])
         with self.assertRaises(ValueError):
             validate_partial_cases(proof, self.raw('nvidia'), 'nvidia', self.plan, ['linear--medium'])
 

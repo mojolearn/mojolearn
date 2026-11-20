@@ -1,0 +1,150 @@
+# Verify smoke: does `python -m mojolearn verify` still run, and do the Python boundaries still work, from the
+# BUILT Linux CPU wheel of one measurement build (tools/ops/wheel_verify_smoke.sh: imports, verify --self-test,
+# every CPU lane of verify's harness, the Python tests; each step's rc in SUMMARY.txt).
+#
+# NOT the identity verification: it compares nothing across vendors, records nothing and never replaces the
+# release's one verification. It REPORTS and gates nothing: a red run and its SUMMARY artifact, no merge or
+# release step waits on it.
+#
+# WHERE THE WHEEL COMES FROM. release-linux-build.yml uploads no wheel: it uploads the compiled sets
+# (release-<vendor>-<arch>) and the staged host (host-build); the wheels are packed on the Mac by
+# `tools/release.py candidate` (linux-pack, into ~/mojolearn-evidence/release-candidates/<version>/<commit12>/
+# linux/final/). So the wheel arrives the way cpu-identity-gate.yml's wheel mode takes it: a presigned R2 GET
+# with its name and sha256. tools/ops/verify_smoke_dispatch.py uploads the core wheel and dispatches this
+# workflow, and tools/release_candidate.py calls it once its wheels are packed (fail soft), so every
+# measurement build starts one run automatically. A workflow_run trigger on release-linux-build would have no
+# wheel to test without repacking all four sets here (a second download of every set plus a second pack).
+#
+# Dispatch by hand (the workflow file must exist on --ref; the source tested is inputs.ref):
+#   python3 tools/ops/verify_smoke_dispatch.py --wheel-dir <.../linux/final> --ref <branch holding this file>
+
+name: Verify smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "the wheel's source commit (40 hex): its tests and tools run against the wheel"
+        required: true
+      wheel_url:
+        description: "a presigned GET of the built core wheel (mojolearn_core-*.whl)"
+        required: true
+      wheel_name:
+        description: "the wheel's file name"
+        required: true
+      wheel_sha256:
+        description: "the wheel's sha256"
+        required: true
+      python:
+        description: "Python version (the release CPU column's)"
+        required: false
+        default: "3.12"
+      token:
+        description: "a label the dispatcher finds its run by"
+        required: false
+        default: ""
+      census_stands:
+        description: "empty: the frames census runs; else the skip line naming the wheel whose census stands"
+        required: false
+        default: ""
+
+run-name: "verify-smoke ${{ inputs.ref }} ${{ inputs.token }}"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # TWO CHECKOUTS (as cpu-identity-gate.yml wheel-checks): tooling/ is this run's own ref (the smoke script),
+      # source/ the wheel's commit (the tests it runs against the wheel), so an older build can be smoked too.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ inputs.python }}
+      - name: Fetch the built core wheel (sha256 checked)
+        env:
+          WHEEL_URL: ${{ inputs.wheel_url }}
+          WHEEL_NAME: ${{ inputs.wheel_name }}
+          WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+          REF: ${{ inputs.ref }}
+        # the one fetch path, shared with fast-trial.yml
+        run: bash tooling/tools/ops/fetch_built_wheel.sh "$RUNNER_TEMP/wheels"
+      # gdb for crash traces: a unit that dies by a signal is rerun under gdb (bt + thread apply all bt 12) into
+      # smoke-out/crashes/<unit>.txt. Fail soft: without gdb the smoke still runs and keeps the faulthandler trace.
+      - name: Install gdb (crash traces)
+        run: |
+          sudo apt-get update -q >/dev/null && sudo apt-get install -y -q --no-install-recommends gdb >/dev/null \
+            && gdb --version | head -n 1 || echo "gdb not installed: crash traces carry faulthandler output only"
+      # DEFAULT-SCORER PROBE (fx-user-crash-scorer, 2026-11-19): every public estimator's fit + score, one process
+      # per class, from the fetched wheel; for a PUBLISHED version (no local part) also from `pip install
+      # mojolearn==<version>` exactly as a downstream user installs it. Crashes (signals) are rerun under gdb with
+      # the faulting instruction. Reports only (continue-on-error). A token starting `scorer-probe` runs the probe
+      # alone and skips the smoke, so one probe per Python version costs minutes, not the full smoke.
+      - name: Default-scorer probe (every public score, one process per class)
+        continue-on-error: true
+        env:
+          WHEEL_NAME: ${{ inputs.wheel_name }}
+        run: |
+          probe_root="$RUNNER_TEMP/smoke-out/scorer-probe"; mkdir -p "$probe_root"
+          rc=0; { python -m venv "$RUNNER_TEMP/probe-wheel" && "$RUNNER_TEMP/probe-wheel/bin/python" -m pip install \
+            --disable-pip-version-check -q --no-cache-dir "$RUNNER_TEMP/wheels/$WHEEL_NAME" numpy; } \
+            > "$probe_root/install-wheel.log" 2>&1 || rc=$?; echo "install wheel rc=$rc"
+          rc=0; python3 tooling/tools/ops/default_scorer_probe.py --python "$RUNNER_TEMP/probe-wheel/bin/python" \
+            --out "$probe_root/wheel" > "$probe_root/wheel.log" 2>&1 || rc=$?; echo "probe wheel rc=$rc"
+          tail -n 30 "$probe_root/wheel/SUMMARY.txt" 2>/dev/null
+          ver=$(echo "$WHEEL_NAME" | cut -d- -f2)
+          case "$ver" in *+*|*dev*) echo "unpublished version $ver: no PyPI install probe" ;; *)
+            rc=0; { python -m venv "$RUNNER_TEMP/probe-pypi" && "$RUNNER_TEMP/probe-pypi/bin/python" -m pip install \
+              --disable-pip-version-check -q --no-cache-dir "mojolearn==$ver" numpy; } > "$probe_root/install-pypi.log" 2>&1 || rc=$?
+            echo "install pypi mojolearn==$ver rc=$rc"
+            "$RUNNER_TEMP/probe-pypi/bin/python" -m pip list --format=freeze 2>/dev/null | grep -i mojolearn
+            rc=0; python3 tooling/tools/ops/default_scorer_probe.py --python "$RUNNER_TEMP/probe-pypi/bin/python" \
+              --out "$probe_root/pypi" > "$probe_root/pypi.log" 2>&1 || rc=$?; echo "probe pypi rc=$rc"
+            tail -n 30 "$probe_root/pypi/SUMMARY.txt" 2>/dev/null ;;
+          esac
+          { echo '### default-scorer probe'; echo '```'; cat "$probe_root"/*/SUMMARY.txt 2>/dev/null || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: The smoke (every step runs; SUMMARY.txt has each rc)
+        if: ${{ !startsWith(inputs.token, 'scorer-probe') }}
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref }}
+          SOURCE_ROOT: ${{ github.workspace }}/source
+          VENV: ${{ runner.temp }}/smoke-venv/venv
+          CENSUS_STANDS: ${{ inputs.census_stands }}
+        run: |
+          echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2), $(free -g | awk '/Mem:/{print $2}') GiB"
+          bash tooling/tools/ops/wheel_verify_smoke.sh "$RUNNER_TEMP/wheels" "$RUNNER_TEMP/smoke-out" > "$RUNNER_TEMP/smoke.log" 2>&1
+          rc=$?
+          tail -n 40 "$RUNNER_TEMP/smoke.log"
+          cp "$RUNNER_TEMP/smoke.log" "$RUNNER_TEMP/smoke-out/smoke.log"
+          echo "smoke rc=$rc"
+          exit "$rc"
+      - name: SUMMARY.txt
+        if: always()
+        run: |
+          cat "$RUNNER_TEMP/smoke-out/SUMMARY.txt" 2>/dev/null || echo "no SUMMARY.txt"
+          { echo '### verify smoke'; echo '```'; cat "$RUNNER_TEMP/smoke-out/SUMMARY.txt" 2>/dev/null || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: verify-smoke-${{ inputs.ref }}
+          path: |
+            ${{ runner.temp }}/smoke-out/
+            !${{ runner.temp }}/smoke-out/_cwd/
+          retention-days: 14
+          if-no-files-found: warn

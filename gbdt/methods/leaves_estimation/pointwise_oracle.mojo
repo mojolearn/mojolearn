@@ -66,13 +66,10 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from gbdt.gpu_util.arena import BufferArena
-from gbdt.trees_identical_switches import CTR_SORTFREE_SUMS
-from gbdt.methods.leaves_estimation.bin_keyed_stats import (
-    enqueue_bin_keyed_stats,
-    enqueue_bk_copy_u32,
-)
+# TOMBSTONE: MOJOLEARN_TREES_CTR_SORTFREE_SUMS (DELETE-ARM, opt-in arm, no A/B recorded, rule a; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 99c7ba636e.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
 
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -150,8 +147,8 @@ from gbdt.targets.kernel.yeti_rank import (
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
 from checks.soft_f64 import (
     sf64_add,
     sf64_from_f32,
@@ -187,7 +184,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # `add_bin_model_value_kernel` launch first, so the cursor is never
 # observed stale.
 #
-# OFF BY DEFAULT. Arm B builds with `-D MOJOLEARN_2030_FUSED_EST_MOVE=1`.
+# Off by default except under Apple FAST. The force define
+# MOJOLEARN_2030_FUSED_EST_MOVE was deleted 2026-11-15 (docs/TOMBSTONES.md).
 # `-D MOJOLEARN_2030_NO_FUSED_EST_MOVE=1` takes precedence for baseline A/B.
 # Kernel equivalence is checked by checks/gbdt_fused_move_check.mojo.
 # Native fit A/B: checks/gbdt_fused_fit_check.mojo (baseline versus define).
@@ -203,16 +201,18 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 # The T27 alias (MOJOLEARN_TREES_T27) was deleted by lane/grid-prune
 # (2026-10-07): it only aliased MOJOLEARN_2030_FUSED_EST_MOVE, and the board
 # walks call _launch_shift_abmv directly, never move_to.
+# TOMBSTONE: MOJOLEARN_2030_FUSED_EST_MOVE (DELETE-ARM, EXP:1611 DROP_REDUNDANT force knob, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 5b86e54145.
+# Restore: git apply experiments/removed/MOJOLEARN_2030_FUSED_EST_MOVE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2030_NO_FUSED_EST_MOVE (DELETE-ARM, opt-out arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 3f984813dd.
+# Restore: git apply experiments/removed/MOJOLEARN_2030_NO_FUSED_EST_MOVE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime FUSED_EST_MOVE_2030 = (
-    is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
-    or (
-        # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
-        # unchanged); the owed gates (check-fit-pointwise,
-        # check-logloss-train, check-ordered-boosting, gbdt_fused_move_check,
-        # gbdt_fused_fit_check) run on the M4 with the define.
-        TARGET_COLUMN == COLUMN_APPLE
-        and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    )
+    # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
+    # unchanged); the owed gates (check-fit-pointwise,
+    # check-logloss-train, check-ordered-boosting, gbdt_fused_move_check,
+    # gbdt_fused_fit_check) run on the M4 with the define.
+    TARGET_COLUMN == COLUMN_APPLE
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 ) and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
 
 
@@ -496,11 +496,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: on every oracle built the ordinary way, whose constructor drains and
     #: fills `weights_cpu` itself.
     var h_weight_stats: Optional[HostBuffer[DType.float32]]
-    #: Lane S3 `CTR_SORTFREE_SUMS`: the rows are in ORIGINAL order, `d_bins`
-    #: is each row's leaf id, and the single-dim per-leaf sums come from
-    #: `enqueue_bin_keyed_stats` into `bk_partials` instead of
-    #: `compute_partition_stats` over partition ranges. False (and None) on
-    #: every oracle built the ordinary way.
+    #: always False: the bin-keyed arm (TREES_CTR_SORTFREE_SUMS) is deleted;
+    #: the field and `bk_partials` stay for the callers in other modules.
     var bin_keyed: Bool
     var bk_partials: Optional[DeviceBuffer[DType.float32]]
     #: lane gbdt-host-loops-12: the host interface's double staging (the
@@ -614,8 +611,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # below), so apply it through the ORIGINAL kernel, then drain so
         # the `h_shift` rewrite below cannot race the in-flight DMA of
         # the deferred copy.
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
@@ -639,8 +635,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # kernel exactly as before.
         var defer_shift = False
 
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             defer_shift = (
                 self.cursor_dim == 1 and self.single_bin_dim == 1
                 and not self.query.__bool__()
@@ -867,27 +862,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
-            var bk_done = False
-            comptime if CTR_SORTFREE_SUMS:
-                if self.bin_keyed:
-                    # Lane S3: original-order rows, per-row leaf ids
-                    var bk_part = self.bk_partials.value().copy()
-                    enqueue_bin_keyed_stats(
-                        self.ctx, self.bin_count, 2, self.n_rows, self.n_rows,
-                        self.d_bins, self.d_eval_stats, bk_part,
-                        self.d_part_stats,
-                    )
-                    bk_done = True
-            if not bk_done:
-                # the widest leaf bounds every partition exactly
-                # (`compute_partition_stats`' `row_bound`)
-                compute_partition_stats(
-                    self.ctx, self.bin_count, 0, 2, self.n_rows,
-                    self.d_leaves, self.d_p_off, self.d_p_sz,
-                    self.d_eval_stats, self.d_partials, self.d_part_stats,
-                    sm_count=self.sm_count,
-                    row_bound=self.max_leaf_size,
-                )
+            # the widest leaf bounds every partition exactly
+            # (`compute_partition_stats`' `row_bound`)
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, 2, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_eval_stats, self.d_partials, self.d_part_stats,
+                sm_count=self.sm_count,
+                row_bound=self.max_leaf_size,
+            )
             self.times.end(self.ctx, "est.pstats")
             if not readback:
                 return
@@ -935,13 +918,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             if n > 0:
                 var hp = self.h_f64.value().unsafe_ptr()
                 gradient.resize(unsafe_uninit_length=n)
-                memcpy(
+                unsafe_memcpy(
                     dest=gradient.unsafe_ptr().bitcast[UInt64](),
                     src=hp,
                     count=n,
                 )
                 self.cached_der2.resize(unsafe_uninit_length=n)
-                memcpy(
+                unsafe_memcpy(
                     dest=self.cached_der2.unsafe_ptr().bitcast[UInt64](),
                     src=hp + n,
                     count=n,
@@ -1299,7 +1282,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 return
             self._f64_staging()
             var hp = self.h_f64.value().unsafe_ptr()
-            memcpy(
+            unsafe_memcpy(
                 dest=hp,
                 src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
                 count=n,
@@ -1321,7 +1304,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             )
             self.ctx.synchronize()
             second_der.resize(unsafe_uninit_length=n * dim)
-            memcpy(
+            unsafe_memcpy(
                 dest=second_der.unsafe_ptr().bitcast[UInt64](),
                 src=hp + n,
                 count=n * dim,
@@ -1417,8 +1400,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # the walker), so a deferred shift would never be applied. Flush
         # it through the original kernel so the cursor holds exactly what
         # the split schedule leaves.
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
@@ -1445,7 +1427,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 src_buf=self.exact.value().point,
             )
             self.ctx.synchronize()
-            memcpy(
+            unsafe_memcpy(
                 dest=point.unsafe_ptr(),
                 src=self.exact.value().h_point.unsafe_ptr(),
                 count=n,
@@ -1519,12 +1501,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         var h_p = self.ctx.enqueue_create_host_buffer[DType.float32](n * dim)
         var d_p = self.ctx.enqueue_create_buffer[DType.float32](n * dim)
         self.ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_w.unsafe_ptr(),
             src=self.weights_cpu.unsafe_ptr().bitcast[UInt64](),
             count=n,
         )
-        memcpy(dest=h_p.unsafe_ptr(), src=point.unsafe_ptr(), count=n * dim)
+        unsafe_memcpy(dest=h_p.unsafe_ptr(), src=point.unsafe_ptr(), count=n * dim)
         self.ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
         self.ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
         self.ctx.enqueue_function[regularize_point_f64_kernel](
@@ -1538,7 +1520,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         )
         self.ctx.enqueue_copy(dst_ptr=h_p.unsafe_ptr(), src_buf=d_p)
         self.ctx.synchronize()
-        memcpy(dest=point.unsafe_ptr(), src=h_p.unsafe_ptr(), count=n * dim)
+        unsafe_memcpy(dest=point.unsafe_ptr(), src=h_p.unsafe_ptr(), count=n * dim)
         _ = h_w^
         _ = d_w^
         _ = d_p^
@@ -1606,12 +1588,11 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
     Element values are the row kernel's; the reduce over more columns can
     move FAST bits. IDENTICAL compiles main's loop.
     Default since the M3 A/B 2026-10-03 (gbdt-multiclass taximc, n=2,
-    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%).
-    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF` restores main's loop; the old
-    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH` is accepted and changes nothing."""
-    comptime if not is_defined["MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF"]():
-        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-            return True
+    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%)."""
+    # TOMBSTONE: MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF (DELETE-OLD-PATH, EXP:116 KEPT 28adffe85 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 0415c68a0f.
+    # Restore: git apply experiments/removed/MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
     return False
 
 
@@ -2149,7 +2130,7 @@ struct OracleScratchPool(Movable):
             fv_blocks = pair_blocks
         var sm = sm_count
         if sm < 0:
-            sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+            sm = device_multiprocessor_count(ctx)
         # a row-half key change (another dataset shape) empties the pool
         if len(self.entries) > 0 and not self.entries[0].row_matches(
             n_rows, dims[1], fv_blocks
@@ -2283,7 +2264,7 @@ def make_bin_optimized_oracle(
         fv_blocks = pairs.value().blocks()
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
 
     # DEVIATION 3041: the fit's buffers when the key is this task's, fresh
     # ones at the same sizes otherwise
@@ -2359,23 +2340,11 @@ def make_bin_optimized_oracle(
     var bins_gx = 2 * sm
     if bins_gx < 1:
         bins_gx = 1
-    var bin_keyed = False
-    comptime if CTR_SORTFREE_SUMS:
-        if natural_bins.__bool__():
-            if not bk_partials.__bool__():
-                raise Error("bin-keyed oracle needs its bk_partials scratch")
-            bin_keyed = True
-    if bin_keyed:
-        # Lane S3: the rows stay in original order; their leaf ids are the
-        # model walk's, copied into the oracle's (pooled) `d_bins`
-        var nb = natural_bins.value().copy()
-        enqueue_bk_copy_u32(ctx, d_bins, nb, n_rows)
-    else:
-        ctx.enqueue_function[fill_bins_from_partition_kernel](
-            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
-            grid_dim=(bins_gx, bin_count, 1),
-            block_dim=(256, 1, 1),
-        )
+    ctx.enqueue_function[fill_bins_from_partition_kernel](
+        d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
+        grid_dim=(bins_gx, bin_count, 1),
+        block_dim=(256, 1, 1),
+    )
     comptime if ORACLE_POOL_SABOTAGE:
         # the negative control: a reusing task's row 0 moves to the next
         # leaf, in range (see the comptime above)
@@ -2422,17 +2391,7 @@ def make_bin_optimized_oracle(
     # here (the evaluation's readback reuses `h_part_stats`, so the two
     # copies may not share it while both are in flight)
     var h_weight_stats = Optional[HostBuffer[DType.float32]]()
-    if has_weights and bin_keyed:
-        # Lane S3: the weight fold over original-order rows (the deferred
-        # arm's device-only result; `_estimate_prepare` defers it)
-        if not defer_weights:
-            raise Error("bin-keyed oracle: weights are folded deferred only")
-        var bkw = bk_partials.value().copy()
-        enqueue_bin_keyed_stats(
-            ctx, bin_count, 1, n_rows, n_rows, d_bins, d_weights, bkw,
-            d_part_stats,
-        )
-    elif has_weights and defer_weights:
+    if has_weights and defer_weights:
         # lane cpu4-gbdt: the deferred fold stays on the device for the
         # device walk (`device_walker.mojo` stashes it before the first
         # evaluation); nothing is copied home (`weights_on_device` is kept
@@ -2562,7 +2521,7 @@ def make_bin_optimized_oracle(
         TRandom(yeti_seed),
         True,  # yeti_at_search_point: no move, no evaluation yet
         h_weight_stats^,
-        bin_keyed,
+        False,  # bin_keyed: the bin-keyed arm is deleted
         bk_partials^,
         Optional[DeviceBuffer[DType.uint64]](),  # d_f64: host interface only
         Optional[HostBuffer[DType.uint64]](),  # h_f64

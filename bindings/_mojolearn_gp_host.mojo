@@ -45,11 +45,18 @@ squared distance walks the feature axis descending, and the gemm oracle's
 leaf walks descending with it, so every fit and predict this binary serves
 differs.
 """
+from core.gp_native_provider import GPProviderAPI
+from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST, gp_table_publish
+from bindings.py_balanced import py_setattr
+from core.gp_native_host import GPHostKernels
+from core.shared_slot import SharedSlot
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
@@ -96,7 +103,7 @@ from gaussian_process.host.gp_host_fit_entries import (
     gp_theta_params_list,
 )
 from bindings.py_lists import py_list_f64
-from bindings.gp_host_predict import (
+from bindings.gp_host_predict_pack import (
     gpc_ovr_combine_binding,
     gpc_predict_binding,
     gpr_predict_binding,
@@ -373,7 +380,7 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         if len(addrs) == 11:
             # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
             var yo = f32_ptr(Int(py=addrs[10]))
-            memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
+            unsafe_memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
             _ = len(y)
     else:
         y = read_f32(Int(py=addrs[1]), max(0, n_train))
@@ -569,7 +576,7 @@ def cholesky_solve_binding(
     var factor = CholHostFactor(l^, n, info, logdet, nb, jitter)
     with GILReleased(Python()):
         var x = chol_host_solve(factor, b, nrhs)
-        memcpy(dest=xp, src=x.unsafe_ptr(), count=max(0, n * nrhs))
+        unsafe_memcpy(dest=xp, src=x.unsafe_ptr(), count=max(0, n * nrhs))
         _ = x^
     _ = factor^
     _ = b^
@@ -579,9 +586,33 @@ def cholesky_solve_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+comptime GP_HOST_NATIVE_API = SharedSlot[GPProviderAPI[GPHostKernels], "MojolearnGPHostKernelsV1"]
+
+
+# The capsule factory stays only for the Python import prerequisite that
+# names it (python/mojolearn/host_surface.py); no native caller connects
+# through it (the GP owners read the table below, core/gp_entry_table.mojo).
+def gp_native_api_v1_binding() raises -> PythonObject:
+    var api = GP_HOST_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_gp_table(module: PythonObject) raises:
+    # The _mojolearn_gp_host column of the GP table (core/gp_entry_table.mojo), CPU
+    # vendor word 0; the key is recorded as the module attribute
+    # `gp_native_key` for the GP owners (bindings/gp_native_boundary_door.mojo).
+    var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), 0, GP_COLUMN_HOST)
+    var api = GP_HOST_NATIVE_API.get_or_create_ptr()
+    gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])
+    py_setattr(module, "gp_native_key", Python.tuple(PythonObject(key.mode), PythonObject(key.vendor),
+                                                     PythonObject(key.column)))
+
 def build__mojolearn_gp_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_gp_host")
+        module.def_function[gp_native_api_v1_binding]("gp_native_api_v1")
         module.def_function[gp_host_numeric_mode_binding]("gp_host_numeric_mode")
         module.def_function[gp_host_vendor_binding]("gp_host_vendor")
         module.def_function[gp_host_column_binding]("gp_host_column")
@@ -599,10 +630,11 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[gp_theta_params_binding]("gp_theta_params")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")
-        module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")
-        return module.finalize()
+        var published = module.finalize()
+        _publish_gp_table(published)
+        return published
     except e:
         abort(String("failed to create _mojolearn_gp_host: ", e))

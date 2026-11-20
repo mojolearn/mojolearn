@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """SGDOneClassSVM's tail replay (lane/apple-fast-w2-sgdoc, 2026-10-04):
-MOJOLEARN_SGDOC_FAST_TAIL: FAST + Apple DEFAULT (rollback MOJOLEARN_SGDOC_FAST_TAIL_OFF).
+MOJOLEARN_SGDOC_FAST_TAIL: FAST + Apple DEFAULT (the `_OFF` rollback was deleted 2026-11-15, docs/TOMBSTONES.md).
 
 Why the tail is the whole answer for learning_rate='optimal'. sgd_one with
 eta_t = 1 / (alpha (t0 + t)) decays w by (1 - eta_t alpha) =
@@ -41,7 +41,7 @@ fit_intercept, shuffle, tol=None (no objective / no early stop), no sample
 weights, max_iter n > K, and every column's mean within SGDOC_CENTER_TOL of
 its standard deviation (`sgdoc_centered`, two grid kernels and one word home;
 a constant column must be exactly 0)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.atomic import Atomic
 from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, ld, st, fabs, fsqrt
@@ -92,7 +92,7 @@ def sgdoc_mom_flag_kernel(part: FP, n: Int32, d: Int32, g: Int32, flag: IP):
         var sd = fsqrt(var_) if var_ > Float32(0) else Float32(0)
         var finite = s == s and s2 == s2 and fabs(s) < Float32(3.0e38) and fabs(s2) < Float32(3.0e38)
         if not finite or fabs(mu) > SGDOC_CENTER_TOL * sd:
-            _ = Atomic[DType.int32].fetch_add(flag, Int32(1))
+            _ = Atomic[Int32].fetch_add(flag, Int32(1))
 
 
 def sgdoc_centered(ctx: DeviceContext, x: FP, n: Int, d: Int) raises -> Bool:
@@ -111,7 +111,7 @@ def sgdoc_centered(ctx: DeviceContext, x: FP, n: Int, d: Int) raises -> Bool:
         dpart.unsafe_ptr(), Int32(n), Int32(d), Int32(g), dflag.unsafe_ptr(),
         grid_dim=(d + SGDOC_TAIL_TPB - 1) // SGDOC_TAIL_TPB, block_dim=SGDOC_TAIL_TPB,
     )
-    var h = List[Int32](length=1, fill=Int32(1))
+    var h = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dflag)
     ctx.synchronize()
     var ok = h[0] == 0

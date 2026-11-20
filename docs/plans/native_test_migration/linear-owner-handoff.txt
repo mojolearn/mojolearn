@@ -1,0 +1,81 @@
+Mojolearn direct native Ridge/OLS owner checks, 2026-11-10
+
+23 independent fixtures per CPU/GPU entry family
+  Eight Ridge cases preserve the original matrix: 3/1 features, intercept
+  on/off, unweighted/vector/scalar weights, including zero vector-weight rows.
+  Native dyadic data replaces NumPy RNG and dyadic nonuniform weights replace
+  linspace. Independent Float64 weighted centering, normal equations and a
+  small partial-pivot Gaussian solve determine coefficient/intercept answers.
+  Original coefficient/intercept tolerance stays rtol3e-4/atol3e-5.
+  Twelve OLS cases preserve full rank, no intercept, one feature, weighted,
+  weighted/no-intercept, scalar weights, duplicate/constant/zero columns,
+  unequal column units, square normal-equation shape and wide minimum norm.
+  Closed-form dyadic inputs/targets determine consumed predictions without
+  calling another solver. Original rtol5e-4/atol3e-4 remains; rank-deficient
+  cases compare predictions, not an arbitrarily chosen coefficient vector.
+  Native tests check both training and independently generated held-out data
+  and both narrow/wide prediction requests. Native coefficient/mean/output
+  guards and immutable borrowed inputs/targets/weights are checked.
+  CPU wide OLS must explicitly refuse with lstsq_min_norm/no CPU restatement;
+  GPU wide OLS must return minimum-norm coefficients [0.25,0.5,0]. No skip.
+  OLS fit results build typed LinearModelState and run score end to end.
+  The R2 error bound follows algebraically from the preserved prediction
+  tolerances; zero-denominator behavior remains the existing API convention.
+  Three separate score fixtures check a literal 23/27 R2 through both native
+  score entry forms (atol1e-14), zero-denominator policy and target-shape refusal.
+
+Frozen producer and exact APIs
+  Merge dependency snapshot0a25971746; local mergeff77195707 retains root's
+  production resolutions. Pilot confirmed interfaces frozen before test edits.
+  Core RUN: linear_ridge_run, linear_ols_plan/linear_ols_run,
+  linear_predict_run, linear_score_run/linear_r2_run.
+  Requests/states: LinearFitRequest/Result, LinearPredictRequest,
+  LinearModelState. Only native raw spans and native scalar metadata cross RUN.
+  Host endpoints: glm.host.linear_fit_native.linear_fit_host_v1,
+  x_linear.ridge_descriptor_host.ridge_fit_host_v1,
+  glm.host.linear_predict_native.linear_predict_host_v1,
+  x_decomp.descriptor_host.x_decomp_host_v1,
+  x_metrics.descriptor_host.metrics_program_host_v1.
+  Device counterparts: glm.linear_fit_device.linear_fit_device_v1,
+  x_linear.ridge_descriptor_device.ridge_fit_device_v1,
+  glm.linear_predict_device.linear_predict_device_v1,
+  x_decomp.descriptor_device.x_decomp_device_v1,
+  x_metrics.descriptor_device.metrics_program_device_v1.
+  No Python binding calls, restored Python drivers or old-version hashes.
+
+Parallelism and ownership
+  CPU fixtures and source rows use host_parallelize. Tiny oracle pivot and
+  accumulation sequences are dependent arithmetic within one fixture.
+  GPU fixtures submit in order because product entries share process_ctx and
+  the decomposition pool. Kernels remain unchanged; no multi-context claim.
+  Integer request addresses retain their owning Lists explicitly after every
+  final fit/predict/score call. Internal scratch/LinearKit ownership stays with
+  the existing core RUN implementation. No production edits in test commit.
+
+Python migration
+  test_classical_native_owner.py and test_classical_ols_native_owner.py lose
+  np.linalg.solve/lstsq and the duplicate whole-fit numerical comparisons.
+  Their numerical tests become fitted-output publication checks, retaining
+  all ten definitions and the original parametrized public input forms.
+  Keep native-call callback audits, real scalar-weight/array admission,
+  metadata/shape/dtype publication, input immutability, CPU wide-error mapping
+  and no coef_ publication, poisoned helpers, malformed weights/targets,
+  subclasses and large-int conversion through ndarray/strides/list/memoryview.
+  No supported public interface or native numerical case is deleted.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-linear-owner-cpu
+  bash tools/compile_slot.sh pixi run check-native-linear-owner-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/linear_owner_cpu.mojo -o "$HOME/mojolearn-evidence/native-linear-owner-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/linear_owner_gpu.mojo -o "$HOME/mojolearn-evidence/native-linear-owner-gpu"
+  Normal target flags apply. Binding families exercised directly: estimators,
+  x_linear, x_decomp, prediction and x_metrics; public tests use pilot groups.
+  Retained installed boundary selection: test_classical_native_owner.py and
+  test_classical_ols_native_owner.py.
+
+Status
+  Python AST/task manifest parsed and source/diff reviewed only.
+  CPU/GPU compile/run owed to root. No box jobs, timing or identity. A/B: none.
+  Removed duplicate Python solve/lstsq oracles and same-public-fit comparisons.
+  Product defaults, kernels, arithmetic and bit policy unchanged.

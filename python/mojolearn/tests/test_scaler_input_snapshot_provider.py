@@ -55,7 +55,10 @@ def test_fit_transform_reuses_preparation_and_preserves_copyback(name, direct, l
     else:
         np.testing.assert_array_equal(np.asarray(source), before)
     if backing is not None and layout == 'array_view':
-        np.testing.assert_array_equal(np.asarray(backing), np.asarray(expected))
+        # `Array[:]` is a copy (Array.__getitem__: "anything else a COPY as a
+        # C-order Array"): copy-back writes the slice the caller passed, never
+        # the Array it was taken from.
+        np.testing.assert_array_equal(np.asarray(backing), before)
 
 
 @pytest.mark.parametrize('name', ['StandardScaler', 'MinMaxScaler'])

@@ -23,6 +23,19 @@
 # the one-chain route. The pass-5 shapes keep the old digest ("digest"); the
 # pass-6 shapes (micro edges 63..65 x K 15..129, long-K split shapes) add
 # "digest6", and every case's split words "split_digest".
+#
+# Lane fx-gemm-seq-packed (the default route since 2026-11-19 on the
+# NVIDIA and AMD columns): the large
+# products the packed rule selects (sequence/gemm_packed_route.mojo), run on
+# either arm: one thread a cell, the 16 x 16 tile, the dispatch (the packed
+# body with one leaf where the arm routes it) and the host executor, the
+# words REQUIRED equal across the three device runs and, for the plain
+# product, against the host's op_gemm words. Shapes on both sides of the
+# rule's bounds (K 63 / 64 / 65, the block floor, ragged edges and a ragged
+# last window, the wide and the stepped-down tile) and operand sets with
+# subnormal words, tiny rows and columns (chains that flush at the steps:
+# the window admission's exact path, the DETECT seam's recompute) and zeros.
+# Their words go to "digestP"; the older digests are unchanged.
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI
 from sequence.mlp import EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX
@@ -31,6 +44,8 @@ from sequence.gemm_split import OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.exec_device import DeviceExec
 from sequence.exec import HostExec
 from autograd.ops import OP_AGK_GEMM_EPI
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, seq_gemm_packed_on
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind
 
 # GR_CELL, GR_TILE (the tiled family as the dispatch resolves it), GR_THIN_N,
 # GR_THIN_M, GR_MICRO and GR_TILE16 forced, then the dispatch's own
@@ -91,8 +106,22 @@ struct GemmTally(Movable):
     var split_hits: Int
     var split_diffs: Int
     var split_digest: UInt64
+    #: lane fx-gemm-seq-packed: the packed-rule cases, how many the dispatch
+    #: routed to the packed body, host words that differ, the words' digest
+    var packed_cases: Int
+    var packed_routed: Int
+    var packed_host_diffs: Int
+    var packed_digest: UInt64
+    #: lane fx-leftovers-product: packed-rule epilogue cases whose follower
+    #: ran in the packed store (the GEMM store-epilogue arm with the packed arm)
+    var packed_fused: Int
 
     def __init__(out self):
+        self.packed_cases = 0
+        self.packed_routed = 0
+        self.packed_host_diffs = 0
+        self.packed_digest = UInt64(1469598103934665603)
+        self.packed_fused = 0
         self.cases = 0
         self.launches = 0
         self.host_diffs = 0
@@ -115,6 +144,10 @@ struct GemmTally(Movable):
     def mix_split(mut self, v: List[Float32]):
         for i in range(len(v)):
             self.split_digest = (self.split_digest ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
+
+    def mix_packed(mut self, v: List[Float32]):
+        for i in range(len(v)):
+            self.packed_digest = (self.packed_digest ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
 
 
 def _same_bits(name: String, route: Int, got: List[Float32], ref_: List[Float32]) raises:
@@ -346,6 +379,240 @@ def _run[OP: Int](
         tally.cases6 += 1
 
 
+def _fill_seams(outer: Int, terms: Int, s_outer: Int, s_term: Int, salt: Int) -> List[Float32]:
+    """An operand for the flush seams (lane fx-gemm-seq-packed): word (o, t)
+    at v[o s_outer + t s_term]. Every fourth outer line (a row of A, a
+    column of B) is tiny (up to 3e-19: the products of two such lines run
+    from zero to about eight times the smallest normal, so those cells'
+    chains produce subnormal and normal step results side by side and flush
+    on the way); the other lines mix zeros, subnormal
+    WORDS of both signs (flushed at the load), 1e-30 and ordinary values."""
+    var v = List[Float32](length=outer * terms, fill=0)
+    for o in range(outer):
+        for t in range(terms):
+            var i = o * terms + t
+            var h = (i * 7919 + salt * 104729 + (i // 13) * 31) % 2003
+            var x = Float32(h - 1001) / Float32(997.0)
+            var which = (o * 5 + t * 3 + salt) % 16
+            if o % 4 == 1:
+                x = x * Float32(3.0e-19)
+            elif which == 0:
+                x = Float32(0.0)
+            elif which == 1:
+                x = bitcast[DType.float32](UInt32(1 + h))
+            elif which == 2:
+                x = bitcast[DType.float32](UInt32(0x80000001) + UInt32(h))
+            elif which == 3:
+                x = x * Float32(1.0e-30)
+            v[o * s_outer + t * s_term] = x
+    return v^
+
+
+def _run_packed[OP: Int](
+    mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTally,
+    M: Int, N: Int, K: Int, transposed: Bool, kind: Int, seams: Bool,
+) raises:
+    """One plain dense product of the packed rule's family (lane
+    fx-gemm-seq-packed): one thread a cell, the 16 x 16 tile, the dispatch
+    and the host. The three device runs must store the same words; the host's
+    must equal them for the plain product (kind 0) and are counted for an
+    epilogue kind. `seams`: the `_fill_seams` operands."""
+    var ek = _kind(kind)
+    var epi = ek[0]
+    var act = ek[1]
+    var name = (
+        String("gemm_packed/op") + String(OP) + "_" + String(M) + "x" + String(N) + "x" + String(K)
+        + (String("_T") if transposed else String("_D")) + "_kind" + String(kind)
+        + (String("_seams") if seams else String(""))
+    )
+    var a = Args()
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    if transposed:
+        a.i3 = 1
+        a.i4 = M
+        a.i5 = 1
+        a.i6 = K
+    else:
+        a.i3 = K
+        a.i4 = 1
+        a.i5 = N
+        a.i6 = 1
+    a.i7 = 0
+    a.i8 = N
+    a.i9 = epi
+    a.i10 = act
+    a.f0 = Float32(0.03)
+    a.f1 = Float32(7.0)
+    var ha: List[Float32]
+    var hb: List[Float32]
+    if seams:
+        ha = _fill_seams(M, K, a.i3, a.i4, 11 + kind)
+        hb = _fill_seams(N, K, a.i6, a.i5, 12 + kind)
+    else:
+        ha = _fill(M * K, 1 + M + kind)
+        hb = _fill(K * N, 2 + N + kind)
+    var hc0 = _fill(M * N, 3 + K)
+    var h3 = _fill(M * N, 4 + kind)
+    if act == ACT_RELU and epi == EPI_ACT_BWD:
+        for i in range(len(h3)):
+            if h3[i] < Float32(0.0):
+                h3[i] = Float32(0.0)
+    elif epi == EPI_ACT_BWD:
+        for i in range(len(h3)):
+            h3[i] = Float32(0.5) + Float32(0.4) * h3[i]
+    var dA = dev.alloc(M * K)
+    var dB = dev.alloc(K * N)
+    var dC = dev.alloc(M * N)
+    var d3 = dev.alloc(M * N)
+    var d4 = dev.alloc(N)
+    dev.upload(dA, _hp(ha), M * K)
+    dev.upload(dB, _hp(hb), K * N)
+    dev.upload(d3, _hp(h3), M * N)
+    a.p0 = dA
+    a.p1 = dB
+    a.p2 = dC
+    a.p3 = d3
+    a.p4 = d4
+    if gemm_split_on[OP](a):
+        raise Error(name + ": a packed-rule case must not be a split-K shape")
+    var routed = seq_gemm_packed_on[OP](a) != SP_NONE
+    # lane fx-leftovers-product: a routed epilogue the packed store fuses
+    # (-D MOJOLEARN_GEMM_FAST_EPI=1 with the packed arm). The dispatch run
+    # below is then ONE launch (product and follower in the store), compared
+    # word for word with one thread a cell and the 16 x 16 tile.
+    comptime if OP != OP_GEMM:
+        if routed and seq_gemm_packed_epi_kind(a.i9, a.i10) != 0:
+            tally.packed_fused += 1
+    var cell = List[Float32]()
+    for run in range(3):  # driver-loop: over one thread a cell, the 16 x 16 tile, the dispatch
+        # C starts as other words every run, so a run that stored nothing fails
+        dev.upload(dC, _hp(hc0), M * N)
+        if run == 0:
+            dev.gemm_launch_route[OP](a, M * N, GR_CELL)
+        elif run == 1:
+            dev.gemm_launch_route[OP](a, M * N, GR_TILE16)
+        else:
+            dev.launch[OP](a, M * N)
+        tally.launches += 1
+        var got = List[Float32](length=M * N, fill=0)
+        dev.download(_hp(got), dC, M * N)
+        if run == 0:
+            cell = got.copy()
+        elif run == 1:
+            _same_bits(name + "/tile16", run, got, cell)
+        else:
+            _same_bits(name + (String("/packed_dispatch") if routed else String("/dispatch")), run, got, cell)
+    dev.free(dA)
+    dev.free(dB)
+    dev.free(dC)
+    dev.free(d3)
+    dev.free(d4)
+    var hA = host.alloc(M * K)
+    var hB = host.alloc(K * N)
+    var hC = host.alloc(M * N)
+    var hp3 = host.alloc(M * N)
+    var hp4 = host.alloc(N)
+    host.upload(hA, _hp(ha), M * K)
+    host.upload(hB, _hp(hb), K * N)
+    host.upload(hC, _hp(hc0), M * N)
+    host.upload(hp3, _hp(h3), M * N)
+    a.p0 = hA
+    a.p1 = hB
+    a.p2 = hC
+    a.p3 = hp3
+    a.p4 = hp4
+    host.launch[OP](a, M * N)
+    var hgot = List[Float32](length=M * N, fill=0)
+    host.download(_hp(hgot), hC, M * N)
+    var hd = _count_diffs(hgot, cell)
+    host.free(hA)
+    host.free(hB)
+    host.free(hC)
+    host.free(hp3)
+    host.free(hp4)
+    if hd != 0:
+        print("PACKEDHOSTDIFF", name, "words", hd)
+        if kind == 0:
+            raise Error(name + ": the device product differs from the host's op_gemm words")
+    tally.packed_host_diffs += hd
+    # keep the host lists alive past the uploads that read their addresses
+    _ = ha^
+    _ = hb^
+    _ = hc0^
+    _ = h3^
+    tally.mix_packed(cell)
+    tally.packed_cases += 1
+    if routed:
+        tally.packed_routed += 1
+
+
+def _packed_shape(mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTally, M: Int, N: Int, K: Int) raises:
+    """A packed-rule shape: the plain product in both layouts, one forward
+    epilogue (bias + ReLU, the hand opcode) and one backward epilogue (act'
+    of ReLU, the tape's opcode)."""
+    _run_packed[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
+    _run_packed[OP_GEMM](dev, host, tally, M, N, K, True, 0, False)
+    _run_packed[OP_GEMM_EPI](dev, host, tally, M, N, K, False, 2, False)
+    _run_packed[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, True, 6, False)
+
+
+def run_packed_cases(mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTally) raises:
+    """Lane fx-gemm-seq-packed: the shapes of the packed rule
+    (seq_gemm_packed_shape), on either arm. NVIDIA (block floor 192, wide tile
+    128 x 64, stepped-down 64 x 64): 4096 x 256, 2048 x 512 and 4000 x 300 take
+    the stepped-down tile, 3072 x 512 (192 wide tiles, the floor itself) and
+    3100 x 530 the wide one; K = 63 and 2048 x 256 (128 tiles) stay on the
+    16 x 16 tile. AMD (floor 1024, 128 x 128): 16384 x 1024 alone is routed."""
+    _packed_shape(dev, host, tally, 4096, 256, 220)
+    _packed_shape(dev, host, tally, 4096, 256, 128)
+    _packed_shape(dev, host, tally, 2048, 512, 512)
+    # ragged edges and a ragged last window (K = 67: four windows and 3 terms)
+    _packed_shape(dev, host, tally, 4000, 300, 67)
+    _packed_shape(dev, host, tally, 3072, 512, 100)
+    _packed_shape(dev, host, tally, 3100, 530, 81)
+    # the rule's K bound: 63 keeps the tile, 64 is four whole windows, 65 adds a one-term window
+    _run_packed[OP_GEMM](dev, host, tally, 4096, 256, 63, False, 0, False)
+    _run_packed[OP_GEMM](dev, host, tally, 4096, 256, 64, False, 0, False)
+    _run_packed[OP_GEMM](dev, host, tally, 4096, 256, 65, True, 0, False)
+    # under the block floor: the 16 x 16 tile on both arms
+    _run_packed[OP_GEMM](dev, host, tally, 2048, 256, 256, False, 0, False)
+    # the AMD column's floor (1024 wide tiles of 128 x 128); 2048 wide tiles on NVIDIA
+    _run_packed[OP_GEMM](dev, host, tally, 16384, 1024, 64, False, 0, False)
+    # the flush seams: subnormal words, tiny lines, zeros; both tiles, both layouts
+    _run_packed[OP_GEMM](dev, host, tally, 4096, 256, 220, False, 0, True)
+    _run_packed[OP_GEMM](dev, host, tally, 4096, 256, 220, True, 0, True)
+    _run_packed[OP_GEMM](dev, host, tally, 3100, 530, 81, False, 0, True)
+    _run_packed[OP_GEMM](dev, host, tally, 3100, 530, 81, True, 0, True)
+    _run_packed[OP_GEMM_EPI](dev, host, tally, 4096, 256, 220, False, 2, True)
+    _run_packed[OP_AGK_GEMM_EPI](dev, host, tally, 4000, 300, 67, False, 6, True)
+    # lane fx-leftovers-product: every follower the packed store can fuse,
+    # at a wide-tile shape, a stepped-down shape and a ragged neighbour, in
+    # both layouts and on the flush seams: bias alone (1), bias + ReLU /
+    # logistic / tanh (2, 3, 4), bias with the softmax code (10: the word is
+    # left), act' of ReLU / logistic / tanh (6, 7, 8). Kind 5 (the L2
+    # gradient) is routed and keeps its follower launch. On a build without
+    # the store-epilogue arm these run the product and the follower launch:
+    # the same comparison, so the words are pinned on both arms.
+    for which in [1, 2, 3, 4, 10, 6, 7, 8, 5]:  # driver-loop: over the follower kinds
+        _run_packed[OP_GEMM_EPI](dev, host, tally, 3072, 512, 100, False, which, False)
+        _run_packed[OP_AGK_GEMM_EPI](dev, host, tally, 4096, 256, 128, True, which, False)
+        _run_packed[OP_GEMM_EPI](dev, host, tally, 3100, 530, 81, False, which, True)
+    print("PACKED EPI arm", 1 if SEQ_GEMM_PACKED_EPI else 0, "fused", tally.packed_fused)
+    comptime if SEQ_GEMM_PACKED_EPI:
+        if tally.packed_fused == 0:
+            raise Error("gemm_cases: the fused packed store is on and no epilogue case took it")
+    print(
+        "PACKED arm", 1 if SEQ_GEMM_PACKED else 0, "cases", tally.packed_cases,
+        "routed", tally.packed_routed, "host_diffs", tally.packed_host_diffs,
+        "digestP", tally.packed_digest,
+    )
+    comptime if SEQ_GEMM_PACKED:
+        if tally.packed_routed == 0:
+            raise Error("gemm_cases: the packed arm is on and no case took the packed body")
+
+
 def _shape_all_kinds(mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTally, M: Int, N: Int, K: Int) raises:
     for t in range(2):  # driver-loop: over the two layouts
         var tr = t == 1
@@ -448,6 +715,8 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
         _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, 5, False)
         _run[OP_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
         idx += 1
+    # lane fx-gemm-seq-packed: the packed rule's shapes (digestP)
+    run_packed_cases(dev, host, tally)
     print(
         "ROUTES grid cell", routes_seen[GR_CELL], "tile", routes_seen[GR_TILE],
         "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M],

@@ -63,13 +63,15 @@ def test_shipped_table_loads_and_is_small():
     table = vref.load_table(path)
     assert table["format"] == vref.FORMAT
     # The inventory grew from 228 to 504 lanes (4,536 fixture cells and
-    # 35,352 recorded parts). The current table is 3.39 MB uncompressed but
-    # 239 KB compressed. Keep both a proportional raw budget and a strict
-    #download-size budget; do not discard evidence to meet the older 2 MB cap.
+    # 35,352 recorded parts). It was 3.39 MB uncompressed but 239 KB
+    # compressed then; after the 0.8.66 column admissions (four columns at
+    # 84da9f145c6d plus apple at fca4c4773eff) it is 5,042,331 bytes raw and
+    # 236,248 bytes compressed. Keep both a proportional raw budget and a
+    # strict download-size budget; do not discard evidence to meet an older cap.
     import gzip
     with open(path, "rb") as source:
         payload = source.read()
-    assert len(payload) < 4_500_000, "reference table exceeds its 4.5 MB raw budget"
+    assert len(payload) < 6_000_000, "reference table exceeds its 6 MB raw budget"
     assert len(gzip.compress(payload, mtime=0)) < 512_000, "reference table exceeds its 512 KB compressed budget"
     assert table["cells"], "the shipped table carries no cell"
     for rec in table["records"]:
@@ -968,17 +970,38 @@ def test_a_lane_the_run_already_executed_is_not_smoked_again():
     """A lane the run RAN is not left with nothing -- its result is kept in
     `ran_state` -- so fitting it twice more would buy a weaker version of what
     the run already has. Explicitly selected diagnostics should not incur
-    another two fits when --smoke is also selected."""
+    another two fits when --smoke is also selected.
+
+    The harness has had no par-* lane since multi-GPU verification was retired
+    (2026-10-31), so the selection is shown on a small harness: two NOT
+    APPLICABLE lanes with a CPU route, one without, one exposed lane."""
+    class Harness:
+        LANES = {"ols": None, "par-forest": None, "par-mlp": None, "par-no-cpu": None}
+
+    class Surface:
+        @staticmethod
+        def covered_lanes():
+            return ["ols", "par-forest", "par-mlp"]
+
+    na = dict(status=va.LANE_NOT_APPLICABLE, reason="claim requires two devices", exposed=True)
+    exposure = {"ols": dict(status="EXPOSED", reason=None, exposed=True),
+                "par-forest": na, "par-mlp": na, "par-no-cpu": na}
+    none_run = va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=[])
+    assert none_run == ["par-forest", "par-mlp"], (
+        "a CPU box smokes the lanes it can run but cannot judge, and only those "
+        "with a CPU route")
+    assert va.smokeable_lanes(Harness, Surface, exposure, "apple", run_lanes=[]) == [
+        "par-forest", "par-mlp", "par-no-cpu"]
+    assert va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=["par-forest"]) == ["par-mlp"]
+    already = va.smokeable_lanes(Harness, Surface, exposure, "cpu", run_lanes=none_run)
+    assert already == [], "a lane the run executed was smoked a second time"
+    # The shipped harness: whatever a CPU box could smoke, a run that already
+    # executed it smokes nothing more.
     surface = va.host_surface()
     harness = va.load_harness()
-    exposure = surface.lane_exposure(list(harness.LANES), "cpu")
-    none_run = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=[])
-    assert none_run, "a CPU box has par-* lanes it can run but cannot judge"
-    assert all(l.startswith("par-") for l in none_run)
-    assert set(none_run) <= set(surface.covered_lanes()), (
-        "a lane with no CPU route cannot be smoked on a CPU box either")
-    already = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=none_run)
-    assert already == [], "a lane the run executed was smoked a second time"
+    real = surface.lane_exposure(list(harness.LANES), "cpu")
+    candidates = va.smokeable_lanes(harness, surface, real, "cpu", run_lanes=[])
+    assert va.smokeable_lanes(harness, surface, real, "cpu", run_lanes=candidates) == []
 
 
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
@@ -1253,12 +1276,15 @@ def test_gpu_sweep_skips_structurally_inapplicable_execution(vendor, depth, incl
         assert "no-ref" in lanes, "lack of reference must not hide an applicable lane"
 
 
-def test_gpu_parallel_diagnostics_remain_explicitly_selectable():
+def test_retired_gpu_parallel_lanes_are_selectable_and_read_not_applicable():
+    # Multi-GPU verification was retired (2026-10-31): a par-* lane asked for
+    # by name is still selected, and reads not applicable with the retirement
+    # as its reason.
     lanes, _ = va.select_lanes(_FakeHarness, _fake_table(), "apple", "full", ["par-forest"])
     assert lanes == ["par-forest"]
     exposure = va.host_surface().lane_exposure(lanes, "apple")
     assert exposure["par-forest"]["status"] == va.LANE_NOT_APPLICABLE
-    assert "physical multi-device identity" in exposure["par-forest"]["reason"]
+    assert "multi-GPU verification is retired" in exposure["par-forest"]["reason"]
 
 
 @pytest.mark.parametrize("argv", [["verify", "--par"], ["verify", "--par", "quick"],
@@ -1371,15 +1397,12 @@ def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypat
 
 
 def test_core_import_and_verify_guidance_without_numpy():
-    # Block NumPy in a fresh process even when the test environment has it.
-    # New optional estimators must not prevent the CLI reaching its guidance.
+    # NumPy is blocked in the shared child even when the test environment has
+    # it, and the child imported mojolearn under the block (a failed import
+    # fails this case). New optional estimators must not prevent the CLI
+    # reaching its guidance. The case changes no process-wide state.
     code = '''
 import sys
-class NoNumpy:
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == "numpy" or fullname.startswith("numpy."):
-            raise ModuleNotFoundError("NumPy blocked for test", name="numpy")
-sys.meta_path.insert(0, NoNumpy())
 import mojolearn
 assert "numpy" not in sys.modules
 assert "AutoARIMA" in dir(mojolearn)
@@ -1398,8 +1421,8 @@ except ModuleNotFoundError as exc:
 else:
     raise AssertionError("NumPy-dependent estimator unexpectedly loaded")
 '''
-    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    from mojolearn.tests._fresh_process import BLOCK_NUMPY_IMPORTED, shared_child
+    shared_child(BLOCK_NUMPY_IMPORTED).run(code)
 
 
 def test_lazy_sequence_exports_resolve_to_original_implementations():
@@ -1448,6 +1471,7 @@ def _run_cli(argv, env_extra=None, timeout=180):
                           env=env, cwd=str(PKG.parent), timeout=timeout)
 
 
+@pytest.mark.slow  # one real CLI process per exit code (12 s)
 def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
     """THE EXIT CODE IS THE INTERFACE. Two parties compare in a script, and
     what that script branches on is `$?`. Held end to end through the real
@@ -1496,6 +1520,7 @@ def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
                 assert "RESULT: AGREE" not in r.stdout, (x, y, tier, r.stdout[-800:])
 
 
+@pytest.mark.slow  # two real verify CLI runs over the gemm-pinned fixtures (17 s)
 def test_cli_corrupted_table_exits_1():
     build = _identical_build()
     if not build:
@@ -1517,6 +1542,7 @@ def test_cli_corrupted_table_exits_1():
     assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
 
 
+@pytest.mark.slow  # three real `verify --all` CLI runs over the ols fixtures (26 s)
 def test_all_checks_batch_reference_without_opt_in(tmp_path):
     if not _identical_build():
         pytest.skip("no importable identical build")
@@ -1548,6 +1574,7 @@ def test_all_checks_batch_reference_without_opt_in(tmp_path):
     assert report['properties']['batchscale'][vref.IDENTICAL] == 0
 
 
+@pytest.mark.slow  # a real verify CLI run over the ols fixtures
 def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     """THE SKIPPED COUNT RIDES WITH THE VERDICT, seen on the real RESULT line.
 
@@ -1568,15 +1595,18 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     # The CLI bounds each cell itself (120 s worker limit, _verify_worker.py)
     # and reports a timeout as its own verdict. The outer guard only catches
     # a hung CLI, so it exceeds the two cells' own limits plus startup.
-    ok = _run_cli(["verify", "--lanes", "ols,ridge", "--fixtures", "base", "--no-models"],
-                  timeout=2 * 120 + 60)
+    # One lane carries the clause as well as two did (the count is the
+    # lane_accounting unit tests' to check); the second lane cost ~5 s.
+    ok = _run_cli(["verify", "--lanes", "ols", "--fixtures", "base", "--no-models"],
+                  timeout=120 + 60)
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert "VERIFIED" in result, result
-    assert "2 verified" in result and "of 2 lanes" in result, (
+    assert "1 verified" in result and "of 1 lanes" in result, (
         "a pass that does not say its own scope overstates itself: " + result)
 
 
+@pytest.mark.slow  # the real identity harness and the verifier, each over the ols fixtures (22 s)
 @pytest.mark.skipif(ROOT is None, reason="needs tools/identity_break.py beside the package")
 def test_shipped_verifier_hashes_like_the_harness():
     """Same machine, same lanes: the column tools/identity_break.py writes and

@@ -3,14 +3,14 @@
 """x_decomp/lle_iter.mojo's subspace iteration on resident device matrices
 (lane py-runtime-b): the same statements on `DKit` (the triangular solves
 by `launch_trisolve` on the resident factor). The Householder QR and the
-SVD take DevExec's host-address forms, as Python's kit called them (the
-block comes home, the same launches run, the factor goes back up), and the
-subspace change is one word home. GPU binding only."""
+SVD are the executor ops (`DKit.qr_q`, `DKit.svd`; lane n9b-device-svd-qr:
+were DevExec's host-address forms, the block home and the factor up again),
+the same launches and words; S and X come home at the iteration's one sync,
+and the subspace change is one word home. GPU binding only."""
 from std.math import inf, sqrt
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import DevExec
-from x_decomp.fa_em import svd_desc
 from x_decomp.kit import Mat, OP_ABS, OP_ADDS, OP_MUL, OP_RECIP, OP_SELECT, OP_SQ, OP_SUB, mat_const, mat_from
 from x_decomp.kit_device import DKit, DMat
 from x_decomp.lle_iter import LleArgs, take_want
@@ -34,14 +34,7 @@ def lle_orth_dev(mut k: DKit, Z: DMat) raises -> DMat:
     var one = k.upload(mat_const(1.0, 1, 1))
     var sc = k.ew3(OP_SELECT, rc, rc, one, 0.0)
     var hd = k.ew2(OP_MUL, Z, sc)
-    var h = k.get(hd)
-    k.sync()
-    var kk = min(h.r, h.c)
-    var tau = Mat(1, kk)
-    DevExec.geqrf(h.p(), tau.p(), h.r, h.c)
-    var Q = Mat(h.r, Z.c)
-    DevExec.orgqr(h.p(), tau.p(), Q.p(), h.r, h.c, kk, Z.c)
-    return k.upload(Q)
+    return k.qr_q(hd, Z.c)
 
 
 def lle_iterate_dev(
@@ -60,14 +53,12 @@ def lle_iterate_dev(
         var U = k.trisolve(lu, pm, T, 0)
         X = lle_orth_dev(k, k.rows(U, 0, a.n1))
         var B = lle_mm_dev(k, F0, k.pad_zero_row(X), False, False)
-        var s = Mat(0, 0)
-        var v = Mat(0, 0)
-        k.svd_host(B, s, v)
-        var Vt = Mat(0, 0)
-        S = Mat(0, 0)
-        svd_desc(s, v, S, Vt)
-        X = lle_mm_dev(k, X, k.upload(Vt), False, True)
+        var Sd = k.zeros(0, 0)
+        var Vt = k.zeros(0, 0)
+        k.svd(B, Sd, Vt)
+        X = lle_mm_dev(k, X, Vt, False, True)
         var hx = k.get(X)
+        S = k.get(Sd)
         k.sync()
         Y = k.upload(take_want(hx, p, a.nc))
         var sw = take_want(S, p, a.nc)

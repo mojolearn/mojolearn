@@ -46,7 +46,8 @@ FIXTURES="base,ties,odd,dupes,wide"
 # 2026-09-17). FIXED by DEVIATION 3010 on 2026-09-18 and no longer skipped:
 # the cause was the resident forest's teardown, not the batch protocol.
 SKIP_CUDA="${SKIP_CUDA:-}"
-VARIANTS="${VARIANTS:-pinned:-D MOJOLEARN_FOREST_PINNED_STAGE=1|packed:-D MOJOLEARN_FOREST_PACKED_NODES=1|shared:-D MOJOLEARN_FOREST_SHARED_ROWS=1|profile:-D MOJOLEARN_FOREST_PROFILE=1}"
+# pinned (FOREST_PINNED_STAGE) and shared (FOREST_SHARED_ROWS) were deleted 2026-11-15 (docs/TOMBSTONES.md).
+VARIANTS="${VARIANTS:-packed:-D MOJOLEARN_FOREST_PACKED_NODES=1|profile:-D MOJOLEARN_FOREST_PROFILE=1}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }
 step() {
@@ -298,9 +299,8 @@ phase_final() {
     cd "$R"
     build_gpu "$R" after2 ""
     mkdir -p "$OUT/layouts"
-    for layout in packed_default separate_arrays; do
+    for layout in packed_default; do  # separate_arrays (FOREST_SEPARATE_NODES) deleted 2026-11-15
         defs="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
-        [ "$layout" = separate_arrays ] && defs="$defs -D MOJOLEARN_FOREST_SEPARATE_NODES=1"
         stem="$OUT/layouts/$layout"
         # shellcheck disable=SC2086
         step "layout_build_$layout" pixi run mojo build -I . $defs checks/forest_inference_model.mojo -o "$stem"

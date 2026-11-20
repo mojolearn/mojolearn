@@ -33,7 +33,15 @@ ENV_LIB="$here/.pixi/envs/default/lib"
 PKG="$here/python/mojolearn"
 DYLIBS="$PKG/.dylibs"
 STAMP=$(mktemp "${TMPDIR:-/tmp}/mojolearn-release-stamp.XXXXXX")
-trap 'rm -f "$STAMP"' EXIT INT TERM
+# The identity payload copied into $PKG below (tools/generated_wheel_members.py
+# lists the Python ones) exists only to be packed: remove it on every exit, so
+# a build never leaves generated members in the source checkout for a later
+# source/wheel check to mistake for package source.
+remove_generated_members() {
+    rm -f "$PKG/_identity_trace_diff.py" "$PKG/_identity_break.py" "$PKG"/_identity_lane_*.py
+    rm -rf "$PKG/identity_columns"
+}
+trap 'rm -f "$STAMP"; remove_generated_members' EXIT INT TERM
 
 # Refreshed every build. These are COPIES of the repository root's files, and
 # a stale copy in a published wheel is a wrong LICENSE or a wrong README on
@@ -360,9 +368,9 @@ if [ "$MERGED" = 1 ]; then
         # this covers a file placed from the compile cache.
         for _n in $_expect; do rm -f "$(merged_pkgdir "$_d")/$_n.so"; done
     done
-    # THE COMPILE CACHE KEY. tools/bincache.py keys every MOJOLEARN_* variable,
-    # and its walk keys the .mojo tree and merged_build.sh, but not the root
-    # generator or the manifest; this digest puts them in the key. The members
+    # THE COMPILE CACHE KEY. tools/bincache.py (closure-v2) keys each group's
+    # own import closure, its members and its exact root text; this digest is
+    # kept for the v1 rule (MOJOLEARN_BINCACHE_SOURCE=tree) only. The members
     # each merged file reads back after the build are checked against the plan
     # as well (PYMERGED below), so a cached file can never serve another plan.
     MOJOLEARN_MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | shasum -a 256 | cut -d' ' -f1)
@@ -699,7 +707,10 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 assert module.byte_lm_numeric_mode() == {"fast": 0, "identical": 1}[sys.argv[2]]
 assert module.byte_lm_vendor() == 'metal'
-assert module.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# Base profile plus this binary's arithmetic tags (packaging/byte_lm_profile.py; an arm define adds one).
+_ps = importlib.util.spec_from_file_location('_byte_lm_profile', os.path.join(os.getcwd(), 'packaging', 'byte_lm_profile.py'))
+_pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+_pm.check(module.byte_lm_profile())
 print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=module.byte_lm_numeric_mode(),
     profile=module.byte_lm_profile(), supported_modes=['fast', 'identical'], unsupported_modes=[])))
 PYBYTE
@@ -800,7 +811,7 @@ for so in $ALL_SOS; do
 done
 # shellcheck disable=SC2086
 MOJOLEARN_STAGE_SKIP="$STAGE_SKIP" pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
-    $ALL_SOS "$ENV_LIB"
+    $ALL_SOS "$ENV_LIB" --codec-lib "$here/.pixi/envs/pkg/lib"
 pixi run -e pkg python "$here/packaging/portable_math/stage.py" "$PKG/.dylibs" \
     --receipt "$here/portable-math-build.json"
 # THE GATE ON REUSE: every reused binding still carries the plan's sha256
@@ -870,6 +881,23 @@ for so in $ALL_SOS; do
 done
 # shellcheck disable=SC2086
 pixi run -e pkg python "$here/packaging/macos/check_gpu_embedded.py" $GPU_SOS
+
+# IDENTICAL APPLE GPU ARITHMETIC (lane fb13-identity-audit, 2026-11-17): every AIR
+# module of the identical set compiled with fast math off, no fast-math flag but
+# `contract`, no approximate math intrinsic (packaging/macos/air_contract.py; the
+# NVIDIA and AMD halves are packaging/linux/ptx_contract.py and hip_contract.py).
+# The FAST tier (python/mojolearn/*.so) is Apple-only and not held to it.
+IDN_GPU_SOS=""
+for so in $GPU_SOS; do
+    case "$so" in "$PKG"/identical/*) IDN_GPU_SOS="$IDN_GPU_SOS $so" ;; esac
+done
+if [ -n "$IDN_GPU_SOS" ]; then
+    mkdir -p "$here/build"
+    # shellcheck disable=SC2086
+    python3 "$here/packaging/macos/air_contract.py" audit $IDN_GPU_SOS > "$here/build/air_audit.jsonl" \
+        || { echo "REFUSING: IDENTICAL Apple GPU code with fast math or an approximate intrinsic (build/air_audit.jsonl):" >&2
+             grep -v '"refused": \[\], "allowed"' "$here/build/air_audit.jsonl" | head -5 | cut -c1-240 >&2; exit 1; }
+fi
 
 # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14; docs/VERIFY.md).
 # `python -m mojolearn verify` needs the one card comparator and

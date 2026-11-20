@@ -1,0 +1,40 @@
+diff --git a/gbdt/gpu_data/kernel/binarize.mojo b/gbdt/gpu_data/kernel/binarize.mojo
+index c16101ed12..ce1cb5f04a 100644
+--- a/gbdt/gpu_data/kernel/binarize.mojo
++++ b/gbdt/gpu_data/kernel/binarize.mojo
+@@ -40,6 +40,7 @@ from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+ from std.memory import bitcast, stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
++from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G06
+ 
+ 
+ #: `binarize.cu:26`.
+@@ -204,10 +205,8 @@ def binarize_float_feature_kernel(
+ # G06: retain 2048 rows per block but halve threads and double independent
+ # rows per worker, amortizing the shared word/border table over more work
+ # per lane. This deliberately trades registers for occupancy; no evidence.
+-# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at eedd37dfb4.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+-comptime PACK_BLOCK = 256
+-comptime PACK_DOCS = 8
++comptime PACK_BLOCK = 128 if AFT_G06 else 256
++comptime PACK_DOCS = 16 if AFT_G06 else 8
+ #: the most features one compressed-index word holds (the binary policy's
+ #: `features_per_int`), and the shared slab for the word's border values:
+ #: 32 x 1 (binary), 8 x 15 (half-byte) or 4 x 255 (one-byte) at most, so
+diff --git a/gbdt/gpu_data/apple_fast_trees_experiments.mojo b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+index 0670622366..6e35edcd24 100644
+--- a/gbdt/gpu_data/apple_fast_trees_experiments.mojo
++++ b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+@@ -40,9 +40,7 @@ comptime AFT_G04 = False
+ comptime AFT_G05 = False
+ # G06: 128-thread compressed-word packing with sixteen rows per lane.
+ # No performance/quality evidence; same 2048 rows/block and bit layout.
+-# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at adccdfe434.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_G06 = False
++comptime AFT_G06 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G06"]()
+ # G07: 128-thread Apple leaf walker objective reduction and direction traversal.
+ # No performance/quality evidence; leave shared/fused statistics contracts intact.
+ comptime AFT_G07 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G07"]()

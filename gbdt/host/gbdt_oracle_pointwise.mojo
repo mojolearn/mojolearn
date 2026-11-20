@@ -70,6 +70,7 @@ from checks.numerics import (
     identical_pow,
     portable_log64,
 )
+from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
@@ -517,18 +518,16 @@ def gbdt_pointwise_host_fit(
             y, w, cursor, row_index, offsets, sizes, n_rows, border,
             l2_leaf_reg, leaf_iterations,
         )
-        for leaf in range(n_leaves):
-            for k in range(sizes[leaf]):
-                var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], learning_rate, cursor[row])
+        var scaled = rescaled_leaves(estimated, learning_rate)
+        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_leaves)
         for level in range(len(splits)):
             split_features.append(splits[level].feature)
             split_bins.append(splits[level].bin)
         tree_split_offsets.append(len(split_features))
         var tree_leaves = List[Float32]()
         for leaf in range(n_leaves):
-            tree_leaves.append(estimated[leaf] * learning_rate)
-            model_leaves.append(estimated[leaf] * learning_rate)
+            tree_leaves.append(scaled[leaf])
+            model_leaves.append(scaled[leaf])
         tree_leaf_offsets.append(len(model_leaves))
         # ---- the test cursor, the test loss, the detector ----
         if len(splits) > 0:

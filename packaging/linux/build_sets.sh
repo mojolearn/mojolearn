@@ -48,9 +48,19 @@ CUDA_CODE_FORMAT="${MOJOLEARN_CUDA_CODE_FORMAT:-native}"
 python3 "$REPO/packaging/linux/ptx_baseline.py" validate-config \
   --code-format "$CUDA_CODE_FORMAT" --arch "${MOJOLEARN_GPU_ARCHS:-}" || exit 2
 mkdir -p "$DEST/build_logs" "$DEST/sets"
+# AMD IDENTICAL machine-code audit needs an LLVM disassembler that knows amdgcn
+# (packaging/linux/hip_contract.py). Checked BEFORE compiling, so a box without
+# one fails in seconds rather than after the build.
+if [[ "${MOJOLEARN_GPU_ARCHS:-}" == gfx* ]] && ! python3 "$REPO/packaging/linux/hip_contract.py" find-disassembler > /dev/null; then
+  { sudo -n apt-get install -y -qq llvm-18 > /dev/null 2>&1 || apt-get install -y -qq llvm-18 > /dev/null 2>&1; } || true
+  python3 "$REPO/packaging/linux/hip_contract.py" find-disassembler > /dev/null \
+    || { echo 'REFUSING: no llvm-objdump with the amdgcn target for the AMD IDENTICAL audit (set MOJOLEARN_LLVM_OBJDUMP)' >&2; exit 2; }
+fi
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
-[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+# 1..128: a sanity range, not a sizing cap (tools/build_sizing.py MAX_JOBS; a rented
+# box runs every core, Andrew 2026-11-05).
+[[ "$JOBS" =~ ^[1-9][0-9]{0,2}$ && "$JOBS" -le 128 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..128' >&2; exit 2; }
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 # AMD GPU COMPILER WORKERS ARE A CHOICE, NOT A FIXED ONE (lane/amd-compile-speed,
 # 2026-10-20). History: the Mojo compiler's gfx942 output varies run to run with
@@ -260,10 +270,10 @@ if [[ "$MERGED" = 1 ]]; then
     python3 tools/merged_bindings.py check --dir host --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
       --expect "$HOST_NAMES" || exit 2
   fi
-  # The cache key (tools/bincache.py) hashes every .mojo file of the tree for
-  # a merged build (its compile line names a generated root), every MOJOLEARN_*
-  # variable and the scripts; the root generator and the group manifest are
-  # neither, so their digest rides in as a variable.
+  # The cache key (tools/bincache.py closure-v2) keys each group's own import
+  # closure, members and root text; this digest is exported for the records
+  # only and is not a key field any more (NON_BUILD_ENV_V2). Under the v1 rule
+  # (MOJOLEARN_BINCACHE_SOURCE=tree) it still keys the manifest and generator.
   MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | sha256sum | cut -c1-64)
 else
   say "binding layout: per-binding (MOJOLEARN_MERGED_BINDINGS=0)"
@@ -595,7 +605,7 @@ for t in $TIERS; do
     v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, os, sys
 # The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
-# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module_door.mojo).
 # This read-back imports ONE binary standalone, so it loads that registry the same way first; without
 # it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
 _reg = "mojolearn._native_loaded_modules"
@@ -611,7 +621,11 @@ loader.exec_module(m)
 f = getattr(m, fn, None)
 if name == '_mojolearn_byte_lm':
     assert m.byte_lm_numeric_mode() == 1, 'Byte LM must be IDENTICAL'
-    assert m.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1', 'Wrong byte LM profile'
+    # Base profile plus this binary's arithmetic tags (an arm define such as MOJOLEARN_GEMM_FAST_LEAF512 adds
+    # `-gemm-leaf512`); the runtime admits exactly that (packaging/byte_lm_profile.py).
+    _ps = importlib.util.spec_from_file_location("_byte_lm_profile", os.path.join(sys.argv[3], "packaging", "byte_lm_profile.py"))
+    _pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+    _pm.check(m.byte_lm_profile())
 print("NO-READBACK" if f is None else str(f()))
 PY
 )
@@ -632,7 +646,7 @@ if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
       hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" "$REPO" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, os, sys
 # The bindings read their fixed module connections from `mojolearn._native_loaded_modules`, the
-# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module.mojo).
+# import-time registry `import mojolearn` loads before any binding (bindings/native_loaded_module_door.mojo).
 # This read-back imports ONE binary standalone, so it loads that registry the same way first; without
 # it the host tokenizer member's transport_initialize refused on 2026-10-24 (import-time module connections).
 _reg = "mojolearn._native_loaded_modules"
@@ -853,8 +867,12 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   python3 "$REPO/packaging/linux/ptx_contract.py" patch "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_rn.jsonl" \
     || { say "REFUSING: the IDENTICAL PTX .rn pass failed (read $DEST/ptx_rn.jsonl)"; exit 5; }
   if ! python3 "$REPO/packaging/linux/ptx_contract.py" audit "$SET"/identical/*.so $ADAPTER_SO > "$DEST/ptx_audit.jsonl"; then
-    say "REFUSING: IDENTICAL PTX still carries a float op without a rounding modifier:"
-    grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    # Two refusals, each printed with its rows (2026-11-20: an approximate-instruction refusal printed the
+    # rounding-modifier sentence and no row, because only plain_float_ops was read).
+    say "REFUSING: IDENTICAL PTX carries a float op without a rounding modifier, or an approximate instruction outside APPROX_ALLOW (packaging/linux/ptx_contract.py):"
+    grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    plain: /' || true
+    grep -v '"approx_refused": \[\]' "$DEST/ptx_audit.jsonl" | head -5 \
+      | python3 -c 'import json,sys; [print("    approx:", json.loads(l)["file"].rsplit("/",1)[-1], json.loads(l)["approx_refused"][:5]) for l in sys.stdin]' || true
     exit 5
   fi
   say "IDENTICAL PTX: $(python3 -c 'import json,sys; print(sum(json.loads(l)["rewritten"] for l in open(sys.argv[1])))' "$DEST/ptx_rn.jsonl") float ops given .rn"
@@ -905,6 +923,19 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   fi
   say "IDENTICAL machine code: $(python3 -c 'import json,sys; r=[json.loads(l) for l in open(sys.argv[1])][1:]; print(sum(x["in_place"] for x in r), "modules fatbin in place,", sum(x["moved"] for x in r), "moved (lea repointed), ptxas --fmad=false")' "$DEST/cubin.jsonl")"
   fi # native cubin conversion; the PTX set retains the rounding-pinned PTX
+fi
+
+# ------------------------------------------- AMD IDENTICAL, NO APPROXIMATE OPS
+# packaging/linux/hip_contract.py: no V_SQRT/V_RSQ/V_EXP/V_LOG/V_SIN/V_COS or bare
+# V_RCP_F32 in an IDENTICAL kernel (their results are AMD's own); the PTX half is
+# ptx_contract.py's audit above. Every code object disassembled, all cores.
+if [[ "$VENDOR" = hip ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
+  if ! python3 "$REPO/packaging/linux/hip_contract.py" audit --mcpu "$ARCH" "$SET"/identical/*.so > "$DEST/hip_audit.jsonl"; then
+    say "REFUSING: IDENTICAL AMD kernels carry an approximate instruction (read $DEST/hip_audit.jsonl):"
+    grep -v '"refused": \[\]' "$DEST/hip_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    exit 5
+  fi
+  say "IDENTICAL AMD machine code: no approximate instruction"
 fi
 
 # ------------------------------------------------- CPU ISA BASELINE
@@ -1009,7 +1040,7 @@ fi
 say "patchelf: $PATCHELF"
 ENV_LIB="$(pixi run -e "$PIXI_ENV" python3 -c 'import sys,os; print(os.path.join(sys.prefix,"lib"))' | tail -1)"
 say "pixi env lib: $ENV_LIB"
-pixi run -e pkg python packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" \
+pixi run -e pkg python packaging/linux/stage_libs.py --set "$SET" --env-lib "$ENV_LIB" --codec-lib "$REPO/.pixi/envs/pkg/lib" \
   --manifest "$SET/manifest.json" --patchelf "$PATCHELF" \
   2>&1 | tee "$DEST/build_logs/stage.log"
 STAGE_RC=${PIPESTATUS[0]}

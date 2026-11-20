@@ -31,7 +31,7 @@ def centered_gram_cell(x: F32Ptr, means: F32Ptr, n: Int, d: Int, i: Int, j: Int)
     32 levels cover the public int32 row domain; no raw moment subtraction.
     Empty tail leaves are absent, and singleton nodes promote unchanged.
     """
-    var levels = InlineArray[Float32, 32](fill=Float32(0))
+    var levels = Array[Float32, 32](fill=Float32(0))
     var occupied = UInt32(0)
     var mi = means.unsafe_load(i)
     var mj = means.unsafe_load(j)

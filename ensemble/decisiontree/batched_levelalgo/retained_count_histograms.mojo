@@ -9,11 +9,8 @@ the original row loop computes it. Integer counts have no rounding seam.
 The byte budget includes metadata, validity and routing arrays. High node
 indices simply stop caching. All data work and routing execute on device.
 """
-from std.atomic import Atomic, Ordering
-from std.ffi import _Global
-from std.sys.compile import is_defined
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_H_CUR, LOOP_HDR_WORDS
-from std.gpu import block_idx, thread_idx, block_dim, grid_dim
+from max.gpu import block_idx, thread_idx, block_dim, grid_dim
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, WorkloadInfo
@@ -21,18 +18,11 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
 
 
-struct _RetainedAudit(Defaultable,Movable):
-    var reused: Int64
-    def __init__(out self):
-        self.reused=Int64(0)
-
-comptime _RETAINED_AUDIT=_Global[StorageType=_RetainedAudit,name="MojolearnRetainedHistogramAudit",init_fn=_RetainedAudit.__init__]
-
+# TOMBSTONE: MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT (unmeasured audit counter) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT.patch; record in docs/TOMBSTONES.md.
 def retained_histogram_reused() raises -> Int:
-    # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
-    comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
-        ref audit=_RETAINED_AUDIT.get_or_create_ptr()[]
-        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.reused)))
+    # The reuse audit counter went with MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT;
+    # kept for the I18 check's import, always 0.
     return 0
 
 @always_inline
@@ -140,7 +130,7 @@ def retain_computed[O: ObjectiveLike](hist: MutPointer[O.BinT, MutAnyOrigin], it
             valid[key] = UInt8(1)
 
 
-def subtract_retained[O: ObjectiveLike](hist: MutPointer[O.BinT, MutAnyOrigin], items: MutPointer[NodeWorkItem, MutAnyOrigin], samples: MutPointer[Int32, MutAnyOrigin], cache: MutPointer[UInt32, MutAnyOrigin], valid: MutPointer[UInt8, MutAnyOrigin], parents: MutPointer[Int32, MutAnyOrigin], skip: MutPointer[UInt8, MutAnyOrigin], n: Int32, col_start: Int32, width: Int32, columns: Int32, slots: Int32, capacity: Int32, live: MutPointer[Int32,MutAnyOrigin], reused: MutPointer[UInt32,MutAnyOrigin]):
+def subtract_retained[O: ObjectiveLike](hist: MutPointer[O.BinT, MutAnyOrigin], items: MutPointer[NodeWorkItem, MutAnyOrigin], samples: MutPointer[Int32, MutAnyOrigin], cache: MutPointer[UInt32, MutAnyOrigin], valid: MutPointer[UInt8, MutAnyOrigin], parents: MutPointer[Int32, MutAnyOrigin], skip: MutPointer[UInt8, MutAnyOrigin], n: Int32, col_start: Int32, width: Int32, columns: Int32, slots: Int32, capacity: Int32, live: MutPointer[Int32,MutAnyOrigin]):
     var cell = Int(block_idx.x)*128+Int(thread_idx.x)
     if cell >= live_nodes(n,live)*Int(width)*Int(slots):
         return
@@ -161,9 +151,6 @@ def subtract_retained[O: ObjectiveLike](hist: MutPointer[O.BinT, MutAnyOrigin], 
         cache[key*Int(slots)+offset] = value
         if offset == 0:
             valid[key] = UInt8(1)
-            # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
-            comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
-                _ = Atomic.fetch_add(reused,UInt32(1))
 
 
 struct RetainedCountHistograms(Movable):
@@ -179,12 +166,10 @@ struct RetainedCountHistograms(Movable):
     var skip: DeviceBuffer[DType.uint8]
     var live: MutPointer[Int32,MutUntrackedOrigin]
     var exact_header: DeviceBuffer[DType.int32]
-    var reused: DeviceBuffer[DType.uint32]
 
     def __init__(out self, ctx: DeviceContext, capacity: Int, columns: Int, slots: Int) raises:
         self.exact_header=ctx.enqueue_create_buffer[DType.int32](LOOP_HDR_WORDS)
         self.live=self.exact_header.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        self.reused=ctx.enqueue_create_buffer[DType.uint32](1)
         self.capacity=capacity; self.columns=columns; self.slots=slots
         self.cache=ctx.enqueue_create_buffer[DType.uint32](capacity*columns*slots)
         self.starts=ctx.enqueue_create_buffer[DType.int64](capacity)
@@ -195,7 +180,6 @@ struct RetainedCountHistograms(Movable):
         self.skip=ctx.enqueue_create_buffer[DType.uint8](capacity*columns)
 
     def reset(mut self, ctx: DeviceContext) raises:
-        self.reused.enqueue_fill(UInt32(0))
         self.known.enqueue_fill(UInt8(0))
         self.valid.enqueue_fill(UInt8(0))
 
@@ -219,11 +203,5 @@ struct RetainedCountHistograms(Movable):
         log_launch_ctx(ctx,"retained_hist_store")
         ctx.enqueue_function[retain_computed[O]](hist,items,samples,self.cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.valid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),Int32(n),Int32(col),Int32(width),Int32(self.columns),Int32(self.slots),Int32(self.capacity),self.live.unsafe_origin_cast[MutAnyOrigin](),grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
         log_launch_ctx(ctx,"retained_hist_subtract")
-        ctx.enqueue_function[subtract_retained[O]](hist,items,samples,self.cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.valid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.parents.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),Int32(n),Int32(col),Int32(width),Int32(self.columns),Int32(self.slots),Int32(self.capacity),self.live.unsafe_origin_cast[MutAnyOrigin](),self.reused.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
+        ctx.enqueue_function[subtract_retained[O]](hist,items,samples,self.cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.valid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.parents.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),self.skip.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),Int32(n),Int32(col),Int32(width),Int32(self.columns),Int32(self.slots),Int32(self.capacity),self.live.unsafe_origin_cast[MutAnyOrigin](),grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
 
-    def publish_audit(mut self,ctx: DeviceContext) raises:
-        # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.
-        comptime if is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT"]():
-            ref audit=_RETAINED_AUDIT.get_or_create_ptr()[]
-            with self.reused.map_to_host() as values:
-                _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.reused),Int64(values[0]))

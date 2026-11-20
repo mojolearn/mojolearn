@@ -10,8 +10,36 @@ import mojolearn
 from mojolearn import ParallelNeuralTrainer, _backend
 from mojolearn._parallel_mlp import _native_parallel_mlp as mlp
 from mojolearn._parallel_neural import _native_parallel_neural as native
+
+try:
+    ExceptionGroup
+except NameError:  # Python 3.10: the builtin is 3.11+; keep every cleanup failure
+    class ExceptionGroup(Exception):
+        def __init__(self, message, exceptions):
+            super().__init__(message, list(exceptions))
+            self.exceptions = list(exceptions)
 from mojolearn._verify_native_runtime import audit_native_call
-from mojolearn.tests.test_parallel_mlp_native import model_fixture, independent_gradient
+from mojolearn.tests.test_parallel_mlp_native import model_fixture
+
+
+# Test-side float64 oracle of the small-MLP softmax cross-entropy gradient. It
+# lived in test_parallel_mlp_native.py until 2fb40775dc moved that file's shard
+# gradient test to checks/native_tests/training_small_mlp.mojo and deleted
+# it there; test_parallel_neural_admission.py imports it from here.
+def independent_gradient(state, x, y):
+    w1, b1, w2, b2 = (np.asarray(state['weights'][name], dtype=np.float64)
+                       for name in ('weight1', 'bias1', 'weight2', 'bias2'))
+    z = np.asarray(x, dtype=np.float64) @ w1.T + b1
+    h = np.maximum(z, 0)
+    logits = h @ w2.T + b2
+    exp = np.exp(logits - logits.max(axis=1, keepdims=True))
+    probabilities = exp / exp.sum(axis=1, keepdims=True)
+    loss = -np.log(probabilities[np.arange(len(y)), y]).mean()
+    dl = probabilities.copy()
+    dl[np.arange(len(y)), y] -= 1
+    dl /= len(y)
+    dh = (dl @ w2) * (z > 0)
+    return loss, [dh.T @ x, dh.sum(axis=0), dl.T @ h, dl.sum(axis=0)]
 
 
 def checked(operation, *args):
@@ -39,7 +67,9 @@ directory = Path(os.environ['NATIVE_NEURAL_AUDIT_DIRECTORY'])
 sys.stdout = (directory / (str(os.getpid()) + '.stdout.log')).open('w', buffering=1)
 sys.stderr = (directory / (str(os.getpid()) + '.stderr.log')).open('w', buffering=1)
 from mojolearn import _backend
-from mojolearn._parallel_neural import _native_parallel_neural
+# Through the public module: importing the private _parallel_neural first
+# re-enters it half-initialized (_parallel_mlp -> parallel_training -> it).
+from mojolearn.parallel_training import _native_parallel_neural
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn._gpu_witness import visible_gpu_inventory, worker_process_inventory
 vendor = _backend.vendor()
@@ -106,9 +136,10 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         gradient_pids = [worker['pid'] for worker in owner._pool['workers']]
         update_pid = owner._update_pool['workers'][0]['pid']
         pids = gradient_pids + [update_pid]
-        assert len(set(pids)) == len(devices) + 1
+        # one device: the update runs on the gradient worker (one pool)
+        assert len(set(pids)) == len(devices) + (0 if len(devices) == 1 else 1)
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup_errors = []
         # Capture identities even when training or the independent oracle
         # fails, then give every child time to retain its complete audit.
@@ -233,9 +264,12 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         audit_native_call(replay.train_step, shards).assert_native()
         _assert_state_equal(audit_native_call(owner.checkpoint).assert_native()['state'],
                             audit_native_call(replay.checkpoint).assert_native()['state'])
-        pids = [row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']]
+        # one device: the update runs on the gradient worker (one shared
+        # pool, one process; bindings/parallel_neural_native_door.mojo)
+        assert owner._update_pool is owner._pool
+        pids = sorted({row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']})
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup_errors = []
         for active in (owner, replay):
             if active is not None:
@@ -251,7 +285,7 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
                 primary.add_note('Child cleanup also failed: ' + repr(error))
         elif cleanup_errors:
             raise ExceptionGroup('Samba child cleanup failures; evidence: ' + str(tmp_path), cleanup_errors)
-    assert len(pids) == 2
+    assert len(pids) == 1
     for pid in pids:
         path = tmp_path / (str(pid) + '.json')
         assert path.exists(), str(path)
@@ -285,7 +319,7 @@ def test_samba_last_dropout_stream_commits_and_restores_exhausted_checkpoint():
                 assert not failed.report()[key], failed.report()
             _assert_state_equal(audit_native_call(active.checkpoint).assert_native()['state'], before['state'])
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         failures = []
         for active in (owner, replay):
             if active is not None:

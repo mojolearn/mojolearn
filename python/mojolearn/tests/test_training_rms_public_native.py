@@ -271,7 +271,6 @@ def test_public_rms_uses_no_python_preparation_or_loader(monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("Python RMS helper entered")
     monkeypatch.setattr(T, "_load", forbidden)
-    monkeypatch.setattr(T, "_c32", forbidden)
     result = audit_native_call(T.rms_norm_backward, gradient, x, weight, 1e-5, numeric_mode="identical").assert_native()
     assert_outputs(result, expected)
 
@@ -287,8 +286,5 @@ def test_public_rms_refuses_replaced_native_entry(monkeypatch, operation):
     assert not calls
 
 
-def test_existing_rms_primitive_contract():
-    from mojolearn.tests import test_training_primitives_surface as existing
-    report = existing.Report("native_rms_existing_primitive")
-    existing.arm_rms_norm(report)
-    assert report.rows and not report.failures, report.failures
+# test_existing_rms_primitive_contract DELETED: its subject, test_training_primitives_surface.arm_rms_norm, moved to
+# the Mojo suites training_primitives_{cases,cpu_suite,gpu_suite}.mojo in aea4ac877e.

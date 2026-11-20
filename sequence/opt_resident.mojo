@@ -21,18 +21,22 @@ statements on the same values: no bit moves against the per-call entries.
 handle indexes the pool and a closed handle's slot is reused. The Python
 entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
-from std.ffi import _Global
-from std.memory import bitcast, memcpy
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from max.gpu.host import DeviceBuffer
+from std.memory import bitcast, unsafe_memcpy
+from std.sys import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
+from sequence.exec_device import (
+    DeviceExec, TPB, X_SEQUENCE_POOL, _args_i32_out, _pack_ff, _pack_ii, _pool_host, _pool_release_host, seq_kernel,
+    sequence_ctx,
+)
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
+from core.resident_upload_count import RUC_OPTIMIZER_STATE, resident_upload_note
+from core.shared_slot import SharedSlot
 
 #: Apple FAST transport switches of the resident step (lane
 #: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
@@ -53,12 +57,14 @@ from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 #:    device (a third return value), so the Python side skips uploading its
 #:    still untouched zero host copies on the first step.
 #: IDENTICAL and the other vendors compile the main path unchanged.
-comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab2 @ 40027eb8e): RAW_UP measured as a pair with
 #: OPT_FAST_STREAM below (see there): KEEP, the FAST + Apple default since
-#: then; rollback -D MOJOLEARN_OPT_RAW_UP_OFF (the old -D name is harmless).
-comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_OFF"]()
+#: then (the rollback define was deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_OPT_RAW_UP_OFF (old path; the FAST+Apple default is the measured pair with OPT_FAST_STREAM, EXP:1204) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_RAW_UP_OFF.patch
+comptime OPT_RAW_UP = _OPT_APPLE_FAST
 #: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
 #: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
 #: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
@@ -70,13 +76,33 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_O
 #: ZERO_OPEN on every vendor (copies only, and zeros not uploaded over
 #: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
 #: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
-comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()) or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
-comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _OPT_IDN
+# TOMBSTONE: MOJOLEARN_OPT_PIPE_DOWN_OFF (old path; FAST+Apple default, EXP:589 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_PIPE_DOWN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF.patch
+# TOMBSTONE: MOJOLEARN_OPT_ZERO_OPEN_OFF (old path; FAST+Apple default, EXP:590 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_ZERO_OPEN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST or _OPT_IDN
+comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST or _OPT_IDN
+#: Experiment MOJOLEARN_OPT_FAST_ASYNC_DEV_STEP (lane fb12-rows, 2026-11-17; A/B owed, NVIDIA
+#: L40S; default off): the element-wise step on resident device params and device grads
+#: (`opt_resident_step_dev`) returns without draining the queue. (lane fb15-sync-counts,
+#: 2026-11-18: the arm was inert as written: the step's `DeviceExec` drained the queue in its
+#: destructor whether or not `ex.sync()` ran. The step now enqueues its launch on the shared
+#: context directly (`_opt_launch`), so the define does remove the step's one wait.) The launch takes every scalar
+#: by value (`_opt_args`), allocates nothing and frees nothing, so nothing after it waits for the
+#: kernel except a read of the params or state, which drains first (`seq_tensor_download`,
+#: `opt_resident_move`, `opt_resident_close`, `seq_tensor_free` all synchronize the one
+#: in-order context). Lets the next step's host door overlap this step's kernel instead of
+#: running between drained steps (rows: algos rmsprop/adagrad/adamax/nadam/lion synthetic fit,
+#: 16 Mi floats x 10 steps; neighbor: any parameter count; a kernel fault surfaces at the next
+#: drain instead of in this step). Same launches, same order: no bit moves.
+comptime OPT_ASYNC_DEV_STEP = is_defined["MOJOLEARN_OPT_FAST_ASYNC_DEV_STEP"]()
 #: the pipelined download's chunk, floats (8 MB), a transfer granularity.
 # TOMBSTONE: MOJOLEARN_OPT_FAST_PIPE_CH (=524288 arm; the rab7 optimizer read-back batch DROPPED-slower, this arm untried)
 # deleted 2026-10-09 on lane/owed-deletions-D2: the -D override of the chunk; the default 1 << 21 is unchanged;
@@ -100,16 +126,17 @@ comptime OPT_PIPE_CH = 1 << 21
 #:    (`sequence/ops_impl.mojo::adafactor_core`) on the same values.
 #: AF_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afresident): adafactor 392.8 -> 205.2 ms, digest
-#: identical A == B. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_AF_FAST_RESIDENT_OFF (the old -D name is harmless).
+#: identical A == B. KEEP: the FAST + Apple default since then.
+# TOMBSTONE: MOJOLEARN_AF_FAST_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at a656258c20.
+# Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 #: lane idn-opt-resident (2026-10-04): the IDENTICAL default on every
 #: vendor (the per-call entry moved P, G and the moment up and two of them
-#: down each step); -D MOJOLEARN_IDN_AF_RESIDENT_OFF restores the per-call
-#: entry (the Python side falls back when the entry points are absent).
+#: down each step; the -D MOJOLEARN_IDN_AF_RESIDENT_OFF rollback was deleted
+#: 2026-11-15).
 #: The same `adafactor_core` launches on the same values: no bit moves.
-comptime AF_RESIDENT = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"]()) or (
-    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_AF_RESIDENT_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_RESIDENT_OFF.patch
+comptime AF_RESIDENT = _OPT_APPLE_FAST or _OPT_IDN
 
 #: MOJOLEARN_OPT_FAST_STREAM (lane apple-fast-rec-optim, 2026-10-04), default OFF,
 #: FAST + Apple only: the element-wise resident step (rmsprop, adagrad, adamax,
@@ -138,7 +165,9 @@ comptime AF_RESIDENT = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RE
 #: default since then; rollback -D MOJOLEARN_OPT_FAST_STREAM_OFF and
 #: -D MOJOLEARN_OPT_RAW_UP_OFF, each on its own (STREAM_OFF alone leaves the
 #: measured-noise RAW_UP; RAW_UP_OFF alone leaves the slower staged STREAM).
-comptime OPT_STREAM = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_FAST_STREAM_OFF"]()
+# TOMBSTONE: MOJOLEARN_OPT_FAST_STREAM_OFF (old path; the FAST+Apple default is the measured pair with OPT_RAW_UP, EXP:1204) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_FAST_STREAM_OFF.patch
+comptime OPT_STREAM = _OPT_APPLE_FAST
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
@@ -175,14 +204,20 @@ struct _ResPool(Defaultable, Movable):
         self.offs = List[List[Int]]()
 
 
-comptime _RES_NAME = "MojoXSequenceOptResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceOptResidentFast"
-comptime _RES = _Global[StorageType=_ResPool, name=_RES_NAME, init_fn=_ResPool.__init__]
+comptime _RES_NAME = "MojolearnXSequenceOptResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceOptResidentFastV1"
+comptime _RES = SharedSlot[_ResPool, _RES_NAME]
 
 
 def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:
     var ctx = sequence_ctx()
     var b = ctx.enqueue_create_buffer[DType.float32](n if keep else 1)
-    b.enqueue_fill(Float32(0.0))
+    # lane fb15-sync-counts (2026-11-18): only a kept slot is zero filled. A
+    # slot the configuration does not use is a 1-float placeholder that no
+    # launch and no move reads (`opt_resident_move` returns 0 for it, the
+    # step passes the parameter pointer in its place): its fill was a
+    # memset per open (2 of the 3 per Adagrad fit). No bit moves.
+    if keep:
+        b.enqueue_fill(Float32(0.0))
     return b^
 
 
@@ -199,6 +234,7 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
     var tb = ctx.enqueue_create_buffer[DType.float32](max(len(tab), 1))
     if len(tab) > 0:
         ctx.enqueue_copy(dst_buf=tb, src_ptr=tab.unsafe_ptr())
+        resident_upload_note(RUC_OPTIMIZER_STATE, len(tab))  # check-only count (compiles to nothing by default)
     var nb = 0
     if len(tab) > 0:
         nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
@@ -230,8 +266,12 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
         pool[].nb[h] = nb
         pool[].offs[h] = offs^
     # the fills and the table copy are ordered before every later use on
-    # the one in-order context; the table's host list must outlive its copy
-    ctx.synchronize()
+    # the one in-order context. Only LAMB's table copy reads a host list
+    # (`tab`, freed when the caller returns), so only it waits here (lane
+    # fb15-sync-counts, 2026-11-18: every open waited, one cuStreamSynchronize
+    # per element-wise or Adafactor fit with nothing host-side to protect).
+    if len(tab) > 0:
+        ctx.synchronize()
     return h
 
 
@@ -360,6 +400,8 @@ def opt_resident_move(handle: Int, slot: Int, addr: Int, up: Bool) raises -> Int
     var hp = _host_fp(addr, "state")
     var ctx = sequence_ctx()
     var to_dev = up
+    if to_dev:
+        resident_upload_note(RUC_OPTIMIZER_STATE, pool[].n[h])  # check-only count (compiles to nothing by default)
     if s == 0:
         if to_dev:
             ctx.enqueue_copy(dst_buf=pool[].s0[h], src_ptr=hp)
@@ -447,7 +489,7 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
             _ = v^
             if have_prev:
                 # overlaps the DMA just queued, into the other half
-                memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
                        count=prev_cnt)
             ex.ctx.synchronize()
             have_prev = True
@@ -458,7 +500,7 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
             done += cnt
         off += sizes[j]
     if have_prev:
-        memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+        unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
     _pool_release_host(h0)
     _pool_release_host(h1)
     # the executor's own bookkeeping (no copy is pending: the queue is empty)
@@ -548,8 +590,8 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             else:
                 var sp = FP(unsafe_from_address=stg[par])
                 var sg = FP(unsafe_from_address=stg[2 + par])
-                memcpy(dest=sp, src=hp, count=cnt)
-                memcpy(dest=sg, src=hg, count=cnt)
+                unsafe_memcpy(dest=sp, src=hp, count=cnt)
+                unsafe_memcpy(dest=sg, src=hg, count=cnt)
                 ex.ctx.enqueue_copy(dst_buf=vp, src_ptr=sp)
                 ex.ctx.enqueue_copy(dst_buf=vg, src_ptr=sg)
             var a = a0
@@ -564,7 +606,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             _ = vp^
             if have_prev:
                 # overlaps chunk c's uploads, launch and DMA
-                memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+                unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                        count=prev_cnt)
             ex.ctx.synchronize()
             have_prev = True
@@ -575,7 +617,7 @@ def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], siz
             c += 1
         off += sizes[j]
     if have_prev:
-        memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+        unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
                count=prev_cnt)
     for k in range(6):
         _pool_release_host(hi[k])
@@ -701,7 +743,7 @@ def adafactor_resident_open(ip: List[Int]) raises -> List[Int]:
     col_var (C, matrices only), zero filled. Returns [handle, used mask]
     (and 1 under OPT_ZERO_OPEN)."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_open: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_open: not built (IDENTICAL default, FAST + Apple default)")
     if len(ip) != 2:
         raise Error("adafactor_resident_open: requires [R, C]")
     var R = ip[0]
@@ -723,7 +765,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
     fp = `adafactor_step`'s six. The parameter is updated in place.
     Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_step: not built (IDENTICAL default, FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")
@@ -781,6 +823,27 @@ def _dev_ptrs(handles: List[Int], J: Int, sizes: List[Int], n: Int) raises -> Tu
     return (ps^, gs^)
 
 
+def _opt_launch(ctx: DeviceContext, a: Args, n: Int) raises:
+    """The one `op_opt` launch of `DeviceExec.launch[OP_OPT]` (its generic
+    `seq_kernel` route: one thread per element, TPB a block, the integers and
+    floats packed two to a word), enqueued on the shared context with no
+    executor around it, so nothing drains when it returns (lane
+    fb15-sync-counts, 2026-11-18)."""
+    if n <= 0:
+        return
+    if _args_i32_out(a):
+        raise Error("optimizer_resident_step_dev: an integer argument does not fit Int32")
+    ctx.enqueue_function[seq_kernel[OP_OPT]](
+        a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+        _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+        _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+        _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+        Int64(n),
+        grid_dim=((n + TPB - 1) // TPB, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+
+
 def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
                           fp: List[Float64]) raises -> Int:
     """`opt_resident_step` on resident tensors: handles = [param_0 ..
@@ -819,7 +882,7 @@ def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
         k0 = t0 + 1
     for k in range(k0, t):
         _ = opt_scalars(cfg, st, k, Float32(fp[0]))
-    var ex = DeviceExec()
+    var ctx = sequence_ctx()
     var P0 = FP(unsafe_from_address=pg[0][0])
     # an unused slot names the first parameter tensor (never read by op_opt
     # for that kind); the scalars advance once for the whole step
@@ -835,9 +898,17 @@ def opt_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
         a.p2 = (a0.p2 + off) if u[0] else pj
         a.p3 = (a0.p3 + off) if u[1] else pj
         a.p4 = (a0.p4 + off) if u[2] else pj
-        ex.launch[OP_OPT](a, sizes[j])
+        _opt_launch(ctx, a, sizes[j])
         off += sizes[j]
-    ex.sync()
+    # lane fb15-sync-counts (2026-11-18): ONE wait per step. The step ran on a
+    # `DeviceExec`, whose `sync()` drained the queue and whose destructor then
+    # drained it again (2 cuStreamSynchronize per step, 20 per 10-step fit).
+    # The launch now goes straight onto the shared in-order context: it
+    # allocates, stages and frees nothing, so this wait is the step's only
+    # one (none under OPT_ASYNC_DEV_STEP: every reader of the parameters or
+    # state drains first). No bit moves: the same kernel, Args and grid.
+    comptime if not OPT_ASYNC_DEV_STEP:
+        ctx.synchronize()
     sc.unsafe_store(0, st.pw1)
     sc.unsafe_store(1, st.pw2)
     sc.unsafe_store(2, st.mu_prod)
@@ -918,7 +989,11 @@ def lamb_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
             _ = vp2^
             _ = dp^
             o2 += sizes[j]
-    ex.sync()
+    # lane fb15-sync-counts (2026-11-18): the executor's destructor drains the
+    # queue (here, at its last use above) before its buffers go; the explicit
+    # `ex.sync()` before it was a second cuStreamSynchronize per step on an
+    # empty queue (no staged upload or pending download to release). The
+    # scalars below are host words. One wait per step. No bit moves.
     if (flags & 8) != 0:
         sc.unsafe_store(0, bias[2])
         sc.unsafe_store(1, bias[3])
@@ -932,7 +1007,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     `adafactor_step`'s six. The parameter is updated where it lives (the
     same `adafactor_core` launches). Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_step_dev: not built (IDENTICAL default, FAST + Apple default)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(handles) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step_dev: requires 2 handles, 3 integer and 6 float parameters")
@@ -947,5 +1022,7 @@ def adafactor_resident_step_dev(handle: Int, handles: List[Int], ip: List[Int],
     var G = seq_tensor_ptr(handles[1], n, "grad")
     var ex = DeviceExec()
     adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
-    ex.sync()
+    # lane fb15-sync-counts (2026-11-18): one wait per step, the executor's
+    # destructor drain (was `ex.sync()` and then that drain again on an empty
+    # queue). No bit moves.
     return n

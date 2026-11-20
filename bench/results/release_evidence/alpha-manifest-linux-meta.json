@@ -1,0 +1,17 @@
+{
+  "files": {
+    "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "release_profile": "alpha-api",
+  "requirements_admission": {
+    "bundle_sha256": "8d7268e2230a95deeeb72e9f4141e199c84ea87e0ac1c520efe6ce1b4db06328",
+    "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+  },
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.66"
+}

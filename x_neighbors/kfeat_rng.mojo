@@ -8,7 +8,7 @@ random tables from numpy's legacy MT19937 stream (`_LegacyRandomState` in
 `python/mojolearn/_expansion_neighbors.py`) in a Python loop on one host
 thread, so a fit reproduced scikit-learn's `random_state` numbers. That
 stream is sequential by definition. Old bits do not matter (owner rule,
-handoff), so under `XN_IDN_SKETCH_CTR` an integer `random_state` keys a
+handoff), so an integer `random_state` keys a
 COUNTER-BASED generator instead: draw `t` of stream `s` is a pure function
 of `(seed, s, t)`, one GPU thread per draw, no host walk.
 
@@ -34,26 +34,24 @@ same in expectation; the particular tables for a given seed differ from
 scikit-learn's. A numpy RandomState or None keeps the MT19937 path (the
 caller's generator is the contract there).
 
-`-D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) drops the
-bindings, and the glue falls back to the MT19937 draws.
-
 Nothing here imports a GPU module, so the CPU-only host binding compiles it
 (the host column's ops are at the end; the device kernels are in
 `kfeat_dev.mojo`).
 """
 
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
+from checks.numerics import ftz, identical_mul
 from x_neighbors.items import FP, IP, skew_weights_item
 
 # lane cpu3-python (2026-10-04): FAST takes the counter
 # draws too, on every vendor (owner rule: no host draw on a GPU route; FAST
 # keeps the same uniform/z/offset distributions, so quality is unchanged and
-# only FAST's bits move). The `_OFF` defines keep their meaning for the
-# IDENTICAL A/B only.
-comptime XN_IDN_SKETCH_CTR = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not (
-    is_defined["MOJOLEARN_IDN_XN_SKETCH_CTR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# only FAST's bits move). Every mode takes them; the binding's capability
+# bit 3 stays set.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_XN_SKETCH_CTR_OFF (old path: the MT19937 sketch draws in IDENTICAL; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 3ce1491344.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_SKETCH_CTR_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_IDN_SKETCH_CTR = True
 
 comptime KFEAT_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 comptime KFEAT_KEY_SALT: UInt64 = 0x4B46454154524E47

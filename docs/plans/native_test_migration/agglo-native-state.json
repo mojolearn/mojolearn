@@ -1,0 +1,25 @@
+{
+  "family": "AgglomerativeClustering",
+  "suite": "agglo_state_suite.run_checks",
+  "entry": "checks/native_tests/agglo_state.mojo",
+  "fixtures": 103,
+  "dependency": "2121167e8471",
+  "execution": "authored; uncompiled/unrun",
+  "coverage": {
+    "0-16": "exact linkage/metric/connectivity names and aliases",
+    "17-28": "prediction admission matrix for four linkages and three metrics",
+    "29-60": "solver route and invariance to prediction-data/full-tree metadata",
+    "61-76": "prescribed full/partial/threshold tree plans at floor100 and2-percent strict-boundary neighbors; all literal expected merges/cuts",
+    "77-82": "all stored reference identity fields, symmetric mismatch, copy independence and >2^53 owner distinction",
+    "83-91": "zero/large/negative handles, owner/provider/key matching, moved driver and take-once invalidation",
+    "92-102": "native solver/tree scratch zeroing and result words, CPU rounds-1 sentinel, empty33-row zero flags, edge/mid positive and negative flags, moved native flag allocation"
+  },
+  "parallel": "103 independent fixtures via host_parallelize; product native any-positive reduction remains unchanged",
+  "ownership": "Native flag storage is accessed through normal typed fields. No captured struct-field pointer in new tests; fake state handles only reach a metadata mock, never registry release. DBSCAN blocked fixture/source remains untouched.",
+  "python_removed": 0,
+  "product_changes": false,
+  "remaining": "typed request/wire and actual solver/tree/prediction numerical fixtures; public Python seams retained",
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1"
+  ]
+}

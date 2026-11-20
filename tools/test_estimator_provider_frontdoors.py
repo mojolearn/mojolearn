@@ -1,7 +1,15 @@
 """Enforce one-call frontdoors; these source checks do not qualify runtime paths."""
 import ast
+import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
+
+
+def _door(rel):
+    """A door's by-name text (bw2-cluster: the cluster doors read held keys)."""
+    return plain(rel, (ROOT / rel).read_text())
 
 def test_selected_frontdoors_delegate_binding_admission_after_native_entry():
     expected = {
@@ -34,10 +42,10 @@ def test_selected_frontdoors_delegate_binding_admission_after_native_entry():
     assert len(checked) == sum(len(methods) for classes in expected.values() for methods in classes.values())
 
 def test_one_shared_admission_helper_keeps_explicit_internal_arguments():
-    source = (ROOT / 'providers/python/estimator_binding_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/estimator_binding_pyapi_door.mojo').read_text()
     assert 'if len(args) == 0 or args[0] is not None:' in source
     assert 'estimator_binding(model, name, context)' in source
-    family = (ROOT / 'bindings/family_native.mojo').read_text()
+    family = (ROOT / 'bindings/family_native_door.mojo').read_text()
     for name in ('_mojolearn_estimators', '_mojolearn_svm', '_mojolearn'):
         assert f'estimator_arguments(model, "{name}", args, context)' in family
 
@@ -85,9 +93,11 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
 
 
 def test_native_admission_preserves_mode_check_and_live_host_replacement():
-    source=(ROOT/'providers/python/estimator_binding_pyapi.mojo').read_text()
+    source=(ROOT/'providers/python/estimator_binding_pyapi_door.mojo').read_text()
     assert 'context["family_binding_offerings"][name][selected_mode]' in source
-    assert 'py_get(native_loaded_module("sys").modules, record[1])' in source
+    # bc9d3e04b8: the live sys.modules slot is read from the caller's admitted sys module (per call, never cached)
+    assert 'py_get(sys_module.modules, record[1])' in source
+    assert 'call.module("sys")' in source and 'native_loaded_module("sys")' in source
     assert 'neural_descriptor_entry(module, reader, False)' in source
     assert 'if got != expected:' in source
     assert 'native host binding must be an exact extension module' in source
@@ -95,7 +105,7 @@ def test_native_admission_preserves_mode_check_and_live_host_replacement():
 
 
 def test_cluster_native_boundary_refuses_initializer_callbacks_before_array_conversion():
-    source = (ROOT / 'bindings/cluster_fit_a_native.mojo').read_text()
+    source = _door('bindings/cluster_fit_a_native_door.mojo')
     assert 'def _callable_init(' not in source
     helper = source.split('def _init_array(', 1)[1].split('def _flag(', 1)[0]
     assert helper.index('PyCallable_Check') < helper.index('_f32(init,')
@@ -123,7 +133,7 @@ def test_cluster_classes_disable_python_decorators_and_keep_numeric_mode_signatu
 
 
 def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
-    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
     for required in ('classical_check_x(', 'classical_require_fitted(', 'estimator_feature_check(',
                      'estimator_fit_begin(', 'estimator_fit_end(', 'estimator_fit_complete(',
                      'native_array_ndarray_view(', 'host_inference_scalar('):
@@ -133,14 +143,14 @@ def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
 
 
 def test_cluster_context_lookup_cannot_enter_module_getattr():
-    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
     assert 'native_loaded_module("mojolearn._native_public_attributes")._CONTEXT' not in source
     assert 'py_get(module_fields, "_CONTEXT")' in source
     assert 'py_type(attributes) is not b.dict' in source
 
 
 def test_cluster_learned_scalars_have_numeric_dtype_admission():
-    source = (ROOT / 'providers/python/cluster_public_lifecycle_pyapi.mojo').read_text()
+    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
     learned = source.split('var learned =', 1)[1].split('return fields', 1)[0]
     for name in ('n_features_in_', '_partial_batch', '_partial_init', '_partial_state', 'n_steps_', 'lower_bound_'):
         assert name in learned

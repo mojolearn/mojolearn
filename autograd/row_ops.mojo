@@ -2,9 +2,8 @@
 # Row bodies of the softmax family and the AUC sort's in-block stages (lane
 # ag-pass6-rows, pass-6 ideas C and I), shared by HostExec and DeviceExec.
 #
-# IDEA C, MOJOLEARN_IDN_ROW_COOP (IDENTICAL default; -D
-# MOJOLEARN_IDN_ROW_COOP_OFF or MOJOLEARN_IDN_ALL_OFF restores the one-chain
-# rows and their bits). Softmax, log-softmax, their VJP, the cross-entropy
+# IDEA C, ROW_COOP (the IDENTICAL route; the one-chain rows stay for FAST).
+# Softmax, log-softmax, their VJP, the cross-entropy
 # row loss and VJP and the fused mean-SCE VJP were one thread per row, a
 # serial chain over the columns of software exponentials (~100 dependent
 # operations each): 512 x 256 softmax 105 / 248 us NV / AMD, CE 512 x 256
@@ -23,9 +22,8 @@
 # Gated on IDENTICAL like SEQ_LN_COOP: an Apple FAST build keeps today's
 # rows until a FAST A/B decides.
 #
-# IDEA I, MOJOLEARN_IDN_AUC_BLOCK_SORT (default on, identical: same network,
-# same pairs, same stage order; -D MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF or
-# MOJOLEARN_IDN_ALL_OFF restores one launch per stage). roc_auc ran one
+# IDEA I, the AUC block sort (the only route; identical: same network,
+# same pairs, same stage order as one launch per stage). roc_auc ran one
 # OP_LS_BITONIC launch per (k, j) stage: 53 / 86 / 145 launches at n 512 /
 # 4096 / 65536, all at the launch floor (205 / 318 / 565 us NV, 192 / 361 /
 # 714 AMD). OP_ROW_BITONIC_BLOCK runs every stage whose partner distance is
@@ -43,20 +41,21 @@
 # autograd/ops.mojo _ld_right). Every function a kernel reaches is
 # @always_inline.
 from std.math import nan
-from std.sys.compile import is_defined
 from sequence.ops import Args, FP, ld, st, add, sub, mul
 from sequence.fold32 import FOLD_L, tree32
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log,
 )
 
-comptime ROW_COOP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
-comptime AUC_BLOCK_SORT = not (
-    is_defined["MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ROW_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural; code recoverable at 5d81d356e0. ROW_COOP stays the IDENTICAL-mode alias.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+comptime ROW_COOP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural; code recoverable at fe0b691d9b. The block sort is the only route (autograd/metrics.mojo).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch
 
 #: slots of a row fold (the coop cell's lanes; sequence/coop.mojo asserts
 #: COOP_W == ROW_L)
@@ -137,7 +136,7 @@ def row_best_takes(ma: Float32, ia: Int32, mb: Float32, ib: Int32) -> Bool:
 @always_inline
 def row_expsum32(p: FP, base: Int, cols: Int, m: Float32) -> Float32:
     """sum_c exp(p[base + c] - m) in the fold32 order."""
-    var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+    var s = Array[Float32, ROW_L](fill=Float32(0.0))
     var k = 0
     while k < cols:
         var n = min(ROW_L, cols - k)
@@ -156,7 +155,7 @@ def row_softmax_fwd(t: Int, a: Args):
     var base = t * cols
     var m = ld(a.p0, base + row_first_max(a.p0, base, cols))
     if a.i0 == 0:
-        var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+        var s = Array[Float32, ROW_L](fill=Float32(0.0))
         var k = 0
         while k < cols:
             var n = min(ROW_L, cols - k)
@@ -198,7 +197,7 @@ def row_softmax_vjp(t: Int, a: Args):
     dot product in the fold32 order."""
     var cols = a.i1
     var base = t * cols
-    var s = InlineArray[Float32, ROW_L](fill=Float32(0.0))
+    var s = Array[Float32, ROW_L](fill=Float32(0.0))
     var k = 0
     while k < cols:
         var n = min(ROW_L, cols - k)

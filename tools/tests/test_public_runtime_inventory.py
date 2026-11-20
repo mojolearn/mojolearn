@@ -290,34 +290,18 @@ def test_module_level_entries():
     assert wrapped.verdict == "python" and wrapped.native_calls == 1 and wrapped.helpers == 1
 
 
-def test_baseline_and_check():
+def test_door_tsv():
     with tempfile.TemporaryDirectory() as tmp:
         root = build(Path(tmp))
-        baseline = root / "baseline.tsv"
-        assert INV.main(["--root", str(root), "--baseline", "--baseline-file", str(baseline)]) == 0
-        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
-        records = INV.read_tsv(baseline)
-        assert {r["verdict"] for r in records} == {"native", "orchestrated", "python"}
-        # a native method that starts allocating in Python fails the check
-        est = root / "python/mojolearn/est.py"
-        est.write_text(est.read_text().replace(
-            "        return _backend.binding(\"_mojolearn_x\").x_predict(self, X)",
-            "        out = empty((4,), \"<f4\")\n"
-            "        return _backend.binding(\"_mojolearn_x\").x_predict(self, X, out)"))
-        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
-        problems, _ = INV.check(INV.records_of(INV.inventory_rows(root)), records)
-        assert any("regressed native -> orchestrated" in p for p in problems)
-        assert any("zero required regardless of baseline" in p for p in problems)
-
-
-def test_existing_baseline_debt_cannot_authorize_product_execution():
-    row = {"class": "mojolearn.Estimator", "method": "fit", "module:line": "est.py:1"}
-    for verdict in ("python", "orchestrated", "unresolved"):
-        debt = dict(row, verdict=verdict)
-        problems, _ = INV.check([debt], [debt])
-        assert problems and any("zero required" in p for p in problems)
-    native = dict(row, verdict="native")
-    assert INV.check([native], [dict(row, verdict="python")])[0] == []
+        (root / "bindings").mkdir(exist_ok=True)       # an (empty) door layer: nothing is registered
+        door = root / "door.tsv"
+        assert INV.main(["--root", str(root), "--out", str(door)]) == 0
+        records = INV.read_tsv(door)
+        assert records and {r["door"] for r in records} <= {"native", "glue-heavy", "python-on-path", "unresolved",
+                                                            "allowed_tag_metadata", "refusal_only"}
+        # the fake package has no compiled door: a native-shaped call cannot be proved native
+        assert any(r["door"] == "python-on-path" and "does not resolve to a registered compiled entry" in r["worst"]
+                   for r in records)
 
 
 def test_returned_framework_callable_is_audited_without_an_export():

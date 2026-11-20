@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # batchv_quality.sh: QUALITY ONLY (times nothing) for the lane/apple-fast-batchv
 # defines on an Apple box. Builds FAST x_prep arms (none,
-# SI_ONEPASS, PT no-spec set) and FAST estimators arms (none, KDE_DIMTILE),
+# PT no-spec set) and FAST estimators arms (none, KDE_DIMTILE),
 # dumps tools/batchv_quality.py outputs with each arm's .so installed, then
 # prints BATCHV-Q lines (define on vs off). The tree's original .so files are
 # restored at the end. Run in a built tree.
@@ -34,13 +34,11 @@ dump() {  # $1 binding, $2 arm, $3 prep|kde
   [ $rc = 0 ] || tail -n 15 "$out/dump_$3_$2.log"
 }
 build x_prep off "" && dump x_prep off prep
-build x_prep si "-D MOJOLEARN_SI_ONEPASS" && dump x_prep si prep
-build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
+# si arm (-D MOJOLEARN_SI_ONEPASS) gone: the define was deleted 2026-11-15 (docs/TOMBSTONES.md).
+# ptns arm (-D MOJOLEARN_PT_COLBATCH) gone: the define was deleted 2026-11-08 (docs/TOMBSTONES.md batch 3);
+# COLBATCH runs under the PT_SCORE default, which the off arm already builds.
 build estimators off "" && dump estimators off kde
 build estimators kdt "-D MOJOLEARN_KDE_DIMTILE" && dump estimators kdt kde
-for a in si ptns; do
-  [ -f "$out/prep_off.npz" ] && [ -f "$out/prep_$a.npz" ] && $PY tools/batchv_quality.py cmp "$out/prep_off.npz" "$out/prep_$a.npz" "$a"
-done
 [ -f "$out/kde_off.npz" ] && [ -f "$out/kde_kdt.npz" ] && $PY tools/batchv_quality.py cmp "$out/kde_off.npz" "$out/kde_kdt.npz" kdt
 for b in x_prep estimators; do
   [ -f "$out/orig_$b.so" ] && cp "$out/orig_$b.so" "python/mojolearn/_mojolearn_$b.so.tmp" \

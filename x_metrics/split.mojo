@@ -61,9 +61,12 @@ def permute_unit(t: Int, f: FP, q: IP):
     """q = [n, OUT, salt_lo, salt_hi]; t = 0. OUT[0..n) = the permutation."""
     if t != 0:
         return
-    var n = p(q, 0)
-    var O = p(q, 1)
-    var salt = _salt(q)
+    _heap_permute(f, p(q, 1), p(q, 0), _salt(q))
+
+
+def _heap_permute(f: FP, O: Int, n: Int, salt: Int):
+    """OUT[0..n) at O = the permutation of (n, salt) (`permute_unit`'s
+    heapsort; shared with `permute_drawn_unit`)."""
     for i in range(n):
         sti(f, O + i, i)
     if n < 2:
@@ -253,3 +256,80 @@ def approx_mode_unit(t: Int, f: FP, q: IP):
             if pos == 0:
                 sti(f, p(q, 6), 1)
     sti(f, p(q, 4) + t, (ct * n_draws) // total + plus)
+
+
+def group_take_unit(t: Int, f: FP, q: IP):
+    """q = [KEY, ORD, OFF, P, OUT]; t = position j in group order (lane
+    ne2-b-search-workers, N056). ORD lists the rows group by group (a
+    stable group_sort of KEY, group g at ORD[OFF[g] ..)), and P holds each
+    group's permutation at its own offset (P[OFF[g] + i], the `permute`
+    stages of the draws in group order). OUT[j] = ORD[OFF[g] + P[j]] for the
+    group g of position j: each group's rows permuted by its own draw, the
+    word `gather_i64(ORD + OFF[g], size_g, P + OFF[g])` gave. One unit per
+    position, no unit reads another's output: the same words on every
+    column."""
+    var ORD = p(q, 1)
+    var g = ldi(f, p(q, 0) + ldi(f, ORD + t))
+    var start = ldi(f, p(q, 2) + g)
+    sti(f, p(q, 4) + t, ldi(f, ORD + start + ldi(f, p(q, 3) + t)))
+
+
+def take_rows64_unit(t: Int, f: FP, q: IP):
+    """q = [TAB, IDX, OUT]; t = i (lane ne2-b-search-workers, N056):
+    TAB[IDX[i]] as the Int64 words OUT[2i], OUT[2i + 1] (`st_row64`), the
+    word `gather_i64(TAB, n, IDX)` gave, read back as an int64 row Array.
+    One unit per row; nothing to plan."""
+    st_row64(f, p(q, 2) + 2 * t, ldi(f, p(q, 0) + ldi(f, p(q, 1) + t)))
+
+
+def permute_drawn_unit(t: Int, f: FP, q: IP):
+    """q = [n, OUT, seed_lo, seed_hi, base_lo, base_hi, USED, n_used]; t = 0
+    (lane ne2-b-search-workers, N086). `permute_unit` for a draw whose
+    number is only known on the device: draw = base + USED[0] + ..
+    + USED[n_used - 1] (the draws `approx_mode` stages of the same program
+    consumed), salt = `_mix64(seed * GOLDEN + draw + 1)` (CounterRng._salt,
+    as approx_mode_unit derives its tie salt). The same permutation the
+    host-salted `permute` stage gives for that draw."""
+    if t != 0:
+        return
+    var seed = unsigned_word_pair(q, 2, 3)
+    var draw = unsigned_word_pair(q, 4, 5)
+    var USED = p(q, 6)
+    for i in range(p(q, 7)):
+        draw += UInt64(ldi(f, USED + i))
+    _heap_permute(f, p(q, 1), p(q, 0), Int(splitmix64_finalizer(seed * GOLDEN64 + draw + 1)))
+
+
+def strat_take_unit(t: Int, f: FP, q: IP):
+    """q = [k, ORD, OFF, P, MODES, TRAIN, TEST]; t = position j in class
+    order (lane ne2-b-search-workers, N086). StratifiedShuffleSplit's
+    per-class selection of one split: ORD lists the rows class by class
+    (class c at ORD[OFF[c] ..), ascending), P holds class c's permutation at
+    P + OFF[c], MODES the train counts n_c then the test counts t_c (the
+    approx_mode stages). Position i = j - OFF[c] of class c goes to
+    TRAIN[sum n_c' (c' < c) + i] when i < n_c, to TEST[sum t_c' (c' < c) +
+    i - n_c] when n_c <= i < n_c + t_c, and nowhere otherwise; the word is
+    ORD[OFF[c] + P[j]]: what the two per-class `gather_i64` calls wrote.
+    One unit per position, reading only inputs and earlier stages."""
+    var k = p(q, 0)
+    var OFF = p(q, 2)
+    var MODES = p(q, 4)
+    var c = 0
+    while c + 1 < k and ldi(f, OFF + c + 1) <= t:
+        c += 1
+    var start = ldi(f, OFF + c)
+    var i = t - start
+    var n_c = ldi(f, MODES + c)
+    var t_c = ldi(f, MODES + k + c)
+    if i >= n_c + t_c:
+        return
+    var word = ldi(f, p(q, 1) + start + ldi(f, p(q, 3) + t))
+    var before = 0
+    if i < n_c:
+        for j in range(c):
+            before += ldi(f, MODES + j)
+        sti(f, p(q, 5) + before + i, word)
+    else:
+        for j in range(c):
+            before += ldi(f, MODES + k + j)
+        sti(f, p(q, 6) + before + i - n_c, word)

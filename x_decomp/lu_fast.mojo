@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-linalg2 (2026-10-03): LU_FAST_STEP1 (default; _OFF reverts), the
+"""lane/apple-fast-gap-linalg2 (2026-10-03): LU_FAST_STEP1 (default), the
 blocked LU's panel steps as ONE launch per column (FAST on Apple only).
 
 `launch_lu`'s blocked route runs five launches per column of a panel (the
@@ -30,10 +30,9 @@ blocked route (lu_diag, lu_l_elem, lu_update_elem; the same pivot by the
 same compare rule), so the words are the blocked route's.
 """
 
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
@@ -44,17 +43,17 @@ from x_decomp.cells import F32Ptr, I32Ptr, div0
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: lu-factor synthetic 1,369 -> 977 ms, lu-solve 1,422 -> 971 ms, relative
 #: residual the same 3.256e-06; tags gl2-lu-step1-synthetic,
-#: gl2-lusolve-step1-synthetic). -D MOJOLEARN_LU_FAST_STEP1_OFF restores the
-#: five-launch panel step (the A/B arm).
-#: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor;
-#: -D MOJOLEARN_IDN_GATES_OFF (or the _OFF above) restores the five-launch
-#: step in IDENTICAL.
+#: gl2-lusolve-step1-synthetic).
+#: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here: every IDENTICAL switch off at once) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 172d7908e7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-17-decomposition.patch.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (its term here: the five-launch step in IDENTICAL; EXP:2479 old path) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at e8f262523b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-17-decomposition.patch.
+# TOMBSTONE: MOJOLEARN_LU_FAST_STEP1_OFF (old path: the five-launch panel step; EXP:460 DEFAULT on FAST + Apple and IDENTICAL) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0b8dd725c3.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_STEP1_OFF.patch; record in docs/TOMBSTONES.md.
 comptime LU_FAST_STEP1 = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 #: IDENTICAL: the pivot search skips a NaN exactly as `lu_pivot`'s strict
 #: compare does (x_decomp/cells.mojo: a NaN below the diagonal never wins, a
@@ -66,9 +65,11 @@ comptime LFS_NAN_SERIAL = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: M3 w2-lu-pivot-shuffle-q-20261004: 10 exact factor/pivot/solve fixtures;
 #: call+first-read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms.
 #: Measured6d82b6127, w2-lu-pivot-shuffle-t-20261004, one call per arm.
-#: _OFF restores shared-tree barriers. Only synchronization changes;
-#: no pivot reassociation, panel arithmetic, output storage or host math change.
-comptime LU_FAST_PIVOT_SHUFFLE = LU_FAST_STEP1 and not is_defined["MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF"]()
+#: Only synchronization changes; no pivot reassociation, panel arithmetic,
+#: output storage or host math change. The kernels below run only under
+#: LU_FAST_STEP1, so the warp fold is unconditional in them.
+# TOMBSTONE: MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF (old path: the shared-tree barrier folds; EXP:1007 DEFAULT merged) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 855b464e2c.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime LFS_TPB = 256
 
 
@@ -137,31 +138,20 @@ def lu_fast_load_kernel(
     ri[tid] = ci
     barrier()
     var active = LFS_TPB // 2
-    comptime if LU_FAST_PIVOT_SHUFFLE:
-        while active >= 32:
-            if tid < active:
-                var ov = rv[tid + active]
-                var oi = ri[tid + active]
-                if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                    rv[tid] = ov
-                    ri[tid] = oi
-            barrier()
-            active = active // 2
-        if tid < 32:
-            var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
-            if tid == 0:
-                rv[0] = folded[0]
-                ri[0] = folded[1]
-    else:
-        while active > 0:
-            if tid < active:
-                var ov = rv[tid + active]
-                var oi = ri[tid + active]
-                if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                    rv[tid] = ov
-                    ri[tid] = oi
-            barrier()
-            active = active // 2
+    while active >= 32:
+        if tid < active:
+            var ov = rv[tid + active]
+            var oi = ri[tid + active]
+            if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                rv[tid] = ov
+                ri[tid] = oi
+        barrier()
+        active = active // 2
+    if tid < 32:
+        var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
+        if tid == 0:
+            rv[0] = folded[0]
+            ri[0] = folded[1]
     if tid == 0:
         part.unsafe_store(b, rv[0])
         part.unsafe_store(Int(maxb) + b, Float32(Int(ri[0])))
@@ -195,9 +185,7 @@ def lu_fast_step_kernel(
             cv = ov
             ci = oi
         q += LFS_TPB
-    var short_fold = False
-    comptime if LU_FAST_PIVOT_SHUFFLE:
-        short_fold = Int(gin) <= 32
+    var short_fold = Int(gin) <= 32
     if short_fold:
         # Threads32..255 contain invalid rows. The old128/64/32 directed
         # tree levels never change a live lane, even if its value is NaN.
@@ -271,31 +259,20 @@ def lu_fast_step_kernel(
     ri[tid] = ci
     barrier()
     var active2 = LFS_TPB // 2
-    comptime if LU_FAST_PIVOT_SHUFFLE:
-        while active2 >= 32:
-            if tid < active2:
-                var ov = rv[tid + active2]
-                var oi = ri[tid + active2]
-                if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                    rv[tid] = ov
-                    ri[tid] = oi
-            barrier()
-            active2 = active2 // 2
-        if tid < 32:
-            var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
-            if tid == 0:
-                rv[0] = folded[0]
-                ri[0] = folded[1]
-    else:
-        while active2 > 0:
-            if tid < active2:
-                var ov = rv[tid + active2]
-                var oi = ri[tid + active2]
-                if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                    rv[tid] = ov
-                    ri[tid] = oi
-            barrier()
-            active2 = active2 // 2
+    while active2 >= 32:
+        if tid < active2:
+            var ov = rv[tid + active2]
+            var oi = ri[tid + active2]
+            if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                rv[tid] = ov
+                ri[tid] = oi
+        barrier()
+        active2 = active2 // 2
+    if tid < 32:
+        var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
+        if tid == 0:
+            rv[0] = folded[0]
+            ri[0] = folded[1]
     if tid == 0:
         part_out.unsafe_store(b, rv[0])
         part_out.unsafe_store(mb + b, Float32(Int(ri[0])))

@@ -206,21 +206,20 @@ def digest(value):
 
 
 def capture(cases=EXPECTED_CASES, *, artifacts=None):
-    from . import _backend, _verify, __version__
+    from . import _verify, _verify_native_runtime, __version__, runtime_report
     cases = tuple(cases)
     if not cases or len(set(cases)) != len(cases) or set(cases) - set(EXPECTED_CASES):
         raise ValueError('unknown, duplicate or empty light case selection')
-    binding = _backend.binding('_mojolearn_x_sequence', 'identical')
+    if runtime_report()['numeric_mode'] != 'identical':
+        raise ValueError('light verification requires identical mode')
     report = dict(format=FORMAT, version=__version__,
                   source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   case_sources={name: case_fingerprint(globals()[name])
                                 for name in cases},
                   case_source_protocol='python-tokens-v1',
                   digest_protocol='sha256-raw-shape-dtype-v1',
-                  vendor=str(binding.x_sequence_vendor()), numeric_mode=int(binding.x_sequence_numeric_mode()),
+                  vendor=None, numeric_mode=None,
                   expected_cases=list(cases), cases={}, max_input_elements=MAX_INPUT_ELEMENTS)
-    if report['numeric_mode'] != 1:
-        raise ValueError('light verification requires identical mode')
     for name in cases:
         try:
             values = globals()[name]()
@@ -229,6 +228,13 @@ def capture(cases=EXPECTED_CASES, *, artifacts=None):
             report['cases'][name] = dict(status='captured', outputs=[digest(x) for x in values])
         except Exception as exc:
             report['cases'][name] = dict(status='failed', error=str(exc), outputs=[])
+    # The binding the cases ran on, read back after they ran (the report never
+    # loads one): its own compiled vendor and mode. A missing row leaves both
+    # None, which compare() refuses as an invalid capture.
+    row = _verify_native_runtime.loaded_binding('_mojolearn_x_sequence', 'identical')
+    if row is not None:
+        report['vendor'] = row['vendor']
+        report['numeric_mode'] = 1  # loaded_binding admitted it as identical
     report['bindings'] = _verify.binding_artifacts() if artifacts is None else artifacts
     report['status'] = 'CAPTURED' if all(r['status'] == 'captured' for r in report['cases'].values()) else 'FAILED'
     return report

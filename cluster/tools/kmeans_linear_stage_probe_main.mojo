@@ -12,7 +12,7 @@
 #
 # <prefix>_X.bin (float32 rows x cols) and <prefix>_init.bin (k x cols), the
 # files bench/results/linear_cluster_istella_2026-09-11/probe_bins.py writes.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys import argv
 from std.time import perf_counter_ns
 from std.collections.string import atol
@@ -92,8 +92,8 @@ def main() raises:
     var h_cen = ctx.enqueue_create_host_buffer[DType.float32](cd)
     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
     ctx.synchronize()
-    memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
-    memcpy(dest=hi.unsafe_ptr().bitcast[UInt8](), src=bi.unsafe_ptr(), count=cd * 4)
+    unsafe_memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
+    unsafe_memcpy(dest=hi.unsafe_ptr().bitcast[UInt8](), src=bi.unsafe_ptr(), count=cd * 4)
     _ = bx^
     _ = bi^
 

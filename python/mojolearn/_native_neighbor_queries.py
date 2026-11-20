@@ -24,6 +24,21 @@ def _capture(binding, name, symbols):
         if type(entry) is not BuiltinFunctionType:
             raise TypeError(f"{name}.{symbol} must be compiled")
         setattr(result, symbol, entry)
+    # The k-NN owner reads the image's neighbors table key from the module it
+    # is handed (bindings/neighbors_knn_native_door.mojo knn_ops_key); the
+    # binding records it at PyInit. The captured route carries it too, or every
+    # resident/device query through a route refused "publishes no native
+    # neighbors table" (lane lazy-import-fix).
+    # On a CPU-only install `binding` is the `_HostBinding` facade, not an
+    # exact module: read the key through it (it forwards to the host module
+    # that published it), or every CPU k-NN/radius query refused (smoke-triage
+    # 2026-11-15: lanes knn*, radius*, x-neighbors-metrics; 8 test files).
+    try:
+        key = getattr(binding, "neighbors_native_key")
+    except (ImportError, AttributeError):
+        key = None
+    if type(key) is tuple:
+        result.neighbors_native_key = key
     _BINDING_ALIASES[id(binding)] = (binding, result)
     _BINDING_ALIASES[id(result)] = (result, result)
     return result
@@ -38,7 +53,7 @@ def _routes(groups, host_names=None):
         choices = {}
         for mode in (("identical",) if host_names is not None else ("identical", "fast")):  # glue: import-time fixed supported numeric-mode routes
             try:
-                binding = (_backend.load_host_module(host_names[name]) if host_names is not None  # cpu-route: import-time connection of explicit saved-model CPU entries
+                binding = (_backend.load_host_module(host_names[name]) if host_names is not None  # import-time: import-time connection of explicit saved-model CPU entries
                            else _backend.binding(name, mode))
                 choices[mode] = _capture(binding, name, symbols)
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:

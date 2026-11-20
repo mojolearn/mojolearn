@@ -12,9 +12,8 @@ QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
 from x_decomp.classical_cells import contrast_pair, centered_gram_cell
-from x_decomp.rr_solve import host_eigh_rr_sorted
-from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
-from x_decomp.eigh_tridiag_host import host_eigh_td
+from x_decomp.eigh_ops_host import eigh_op_dense_host, eigh_op_sym_host
+from x_decomp.rr import RR_EIGH_SWEEPS
 from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale_ptr
 from x_decomp.rr_svd import host_rr_svd
 from std.memory import bitcast
@@ -38,6 +37,7 @@ from std.sys.compile import is_defined
 
 from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
+from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
@@ -184,11 +184,8 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     # every decomp host op was single threaded. Every task body writes only
     # its own outputs and per-task scratch (rows, blocks, slices; audited),
     # so the bits are the serial loop's.
-    # `-D MOJOLEARN_XDECOMP_HOST_SERIAL=1` restores the serial loop.
-    comptime if is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"]():
-        for g in range(groups):
-            group(g)
-        return
+    # TOMBSTONE: MOJOLEARN_XDECOMP_HOST_SERIAL (opt-in arm: the serial group loop, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 395d3136ad.
+    # Restore: git apply experiments/removed/MOJOLEARN_XDECOMP_HOST_SERIAL.patch; record in docs/TOMBSTONES.md.
     if groups <= 1:
         group(0)
         return
@@ -461,28 +458,30 @@ struct HostExec(Exec):
             for j in range(n):
                 if (uplo == 1 and i < j) or (uplo == 2 and i > j):
                     m[i * n + j] = m[j * n + i]
-        # DevExec._eigh_on's route (lane apple-neighbors-gpu-cpu, 2026-10-13):
-        # the IDENTICAL tridiagonal solve from n = TD_MIN_N on a copy (the
-        # device's `_eigh_td_try` works on a copy too), the Jacobi below on
-        # the untouched input when it refuses. Before, the host kept the
-        # Jacobi at every n, so every eigh from n = 64 split the GPU and CPU
-        # columns (x_decomp/eigh_tridiag_host.mojo).
-        comptime if EIGH_TD_IDN:
-            if n >= TD_MIN_N:
-                var work = m.copy()
-                if host_eigh_td(work, n, w, v):
-                    return
-        _host_eigh_rr_one(m, w, v, n)
+        # lane n9-decomp-eigh-families (2026-11-09): the executor op's host
+        # twin (x_decomp/eigh_ops_host.mojo `eigh_op_sym_host`), the route
+        # `DevExec.eigh` takes (`DevExec.eigh_into`): the IDENTICAL
+        # tridiagonal solve from n = TD_MIN_N on a copy, the Jacobi on a
+        # refusal or below. The same words as the inline route it replaces.
+        if eigh_op_sym_host(F32Ptr(unsafe_from_address=Int(m.unsafe_ptr())), w, v, n) != 0:
+            raise Error(_eigh_unconverged(n))
+        _ = m^
 
     @staticmethod
     def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
-        """x_decomp/rr_batch.mojo's problems one after another: each is
-        `eigh`'s solve (the same words)."""
-        for b in range(batch):
-            var m = List[Float32](capacity=n * n)
-            for i in range(n * n):
-                m.append(a.unsafe_load(b * n * n + i))
-            _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
+        """`eigh_op_dense_host` (x_decomp/eigh_ops_host.mojo): the problems
+        of x_decomp/rr_batch.mojo in parallel over the host pool, each
+        `host_eigh_rr_sorted`'s words (lane n9-decomp-eigh-families: was a
+        serial loop over the problems)."""
+        if batch <= 0:
+            return
+        var bad = eigh_op_dense_host(a, w, v, batch, n)
+        if bad != 0:
+            raise Error(
+                "eigh_batch: " + String(bad) + " of " + String(batch) + " problems (n = " + String(n)
+                + ") did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps. An unconverged"
+                " decomposition is not returned as if it were one (DEVIATION 590)."
+            )
 
     @staticmethod
     def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
@@ -689,6 +688,7 @@ struct HostExec(Exec):
             F32Ptr(unsafe_from_address=Int(rt.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(vt.unsafe_ptr())), s, n,
             X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL,
         )
+        _ = rt^  # read and written through their addresses above (Mojo frees a List at its last named use)
         if not got[0]:
             raise Error("x_decomp svd: the round-robin one-sided Jacobi did not converge")
         host_es_unscale_ptr(s, n, fac)
@@ -843,7 +843,13 @@ struct HostExec(Exec):
         a: F32Ptr, b: F32Ptr, r: F32Ptr, mu: F32Ptr, ymean: MutPointer[UInt64, MutAnyOrigin], m: Int, d: Int
     ) raises:
         """The host column of DevExec.ols_tsqr_factor: the same items
-        (glm/host/center_host.mojo), then the TSQR's host replay."""
+        (glm/host/center_host.mojo), then the TSQR's host replay. X and y
+        are tested finite here as the device entry tests the words it
+        uploads (the door defers them to this entry; one wording)."""
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(a)), m * d):
+            raise Error("mojolearn: X contains NaN or infinity")
+        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(b)), m):
+            raise Error("mojolearn: y contains NaN or infinity")
         var sums = List[UInt64](length=d + 1, fill=UInt64(0))
         var sp = Int(sums.unsafe_ptr())
         col_sums_on_cpu(Int(a), sp, m, d)
@@ -893,13 +899,10 @@ struct HostExec(Exec):
         return String("cpu")
 
 
-def _host_eigh_rr_one(mut m: List[Float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
-    """`host_eigh_rr_sorted` (x_decomp/rr_solve.mojo) into w and v:
-    DevExec.eigh's and rr_batch_kernel's words."""
-    var wl = List[Float32]()
-    var vl = List[Float32]()
-    _ = host_eigh_rr_sorted(m, n, wl, vl)
-    for i in range(n):
-        w.unsafe_store(i, wl[i])
-    for i in range(n * n):
-        v.unsafe_store(i, vl[i])
+def _eigh_unconverged(n: Int) -> String:
+    """The DEVIATION 590 refusal `host_eigh_rr_sorted` raised by name."""
+    return (
+        "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
+        + " sweeps at n = " + String(n) + ". An unconverged decomposition is not returned"
+        " as if it were one (DEVIATION 590)."
+    )

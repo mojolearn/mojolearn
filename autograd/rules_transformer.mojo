@@ -123,9 +123,12 @@ from gemm.contract import OP_NT
 # + bubble, AMD ~18 us + bubble of ~3.4 ms). The verdict is the same index
 # from the same kernels; the refusal is still raised by this call, after the
 # layer's gradients are written. Bits of an accepted call: unchanged (no
-# kernel or order moves). -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps the
-# synchronous scan before the first launch (arm A).
-comptime AUTOGRAD_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+# kernel or order moves).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF (the synchronous scan, arm A; old path, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 2266129859. AUTOGRAD_REFUSE_DEFER = True stays for
+# autograd/rules_samba.mojo and training/samba_resident.mojo; traced and materialized calls keep the synchronous scan.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
+# (Sweep 2026-11-15: the AUTOGRAD_REFUSE_DEFER = True constant removed; its two readers folded to the deferred scan.)
 
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -373,6 +376,10 @@ struct TransformerRules(BackwardRules):
             self._card(12, bst.norm2_dx, m * dm)
             self._card(13, bst.d_residual1, m * dm)
         else:
+            # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_NORM1_RESID (the fused residual arm) deleted 2026-11-15 by
+            # lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+            # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch
+            # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
             # S33-35, then S36 (or _AFN_NORM1_RESID's fused residual)
             comptime if _AFN_NORM1_RESID:
                 bwd_rms_norm_routed[1](
@@ -391,6 +398,12 @@ struct TransformerRules(BackwardRules):
             self._card(34, bst.dw_norm1, dm)
             self._card(35, bst.norm1_dx, m * dm)
             self._card(36, bst.d_x, m * dm)
+
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) _dx_fanin_epi, its branch in _linear and TF_DX_JOINED deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) _dx_fanin_cat (the q, k, v members as one product) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 
     def _linear(
         self, saved: Args, upstream: FP, inputs: List[FP], gradients: List[FP],
@@ -852,7 +865,7 @@ def llama_decoder_layer_backward_autograd(
     var plain = not (traced or materialize)
     var alias_in = IDN_BWD_ENTRY_ALIAS and plain
     var trace_addr = Int(MutPointer(to=trace)) if traced else 0
-    if AUTOGRAD_REFUSE_DEFER and plain:
+    if plain:
         # idea J: the verdict is queued now and read at the closing wait
         var scan = DeferredNonfiniteScan(ctx, d_out, len(d_out))
         var ex = DeviceExec(ctx)

@@ -14,32 +14,26 @@ def _reduce_not_fitted(error):
     return _ERROR_ENTRY(error, "reduce_not_fitted", (), _ERROR_CONTEXT)
 
 
+def _native_table_cells(module, prefix):
+    # glue: create an immutable compiled connection owner once at import.
+    # The compiled connector admits exact images/metadata and the published
+    # endpoint; product operations never invoke the capsule factory.
+    from .tokenizer import _binding
+    families = {"estimators": (0, "linear_fit_native_api_v1"),
+                "x_linear": (1, "ridge_fit_native_api_v1"),
+                "x_decomp": (2, "x_decomp_native_api_v1"),
+                "x_metrics": (3, "metrics_program_native_api_v1")}
+    family, factory = families[prefix]
+    owner = _binding()._module.linear_entry_connection_v1(
+        family, getattr(module, prefix + "_numeric_mode"),
+        getattr(module, prefix + "_vendor"), getattr(module, factory))
+    return {"_native_entry_connection": owner}
+
+
 def _decomp_cells(decomp):
-    # glue: cache only the compiled TSQR entry points of one decomposition
-    # binding (the selected device's, or the CPU one for the Host* classes).
-    from types import BuiltinFunctionType
-    cells = {}
-    required_cells = ("vendor", "numeric_mode", "tsqr_r", "ew", "gemm", "colsum", "rowsum",
-                      "move", "order_f", "svd", "rank_above", "orth_diag", "geqrf", "orgqr")
-    optional_cells = ("idn_flags", "ols_tsqr_r", "dev_ew", "dev_alloc", "dev_free", "dev_upload",
-                      "dev_download", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
-                      "dev_reduce", "dev_order_f", "dev_orth_diag", "dev_svd")
-    for suffix in required_cells + optional_cells:  # glue: cache only compiled decomp entry points during connection
-        name = "x_decomp_" + suffix
-        try:
-            entry = getattr(decomp, name)
-        except (AttributeError, ImportError):
-            if suffix in required_cells:
-                raise
-            continue
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"classical TSQR owner requires compiled {name}")
-        cells[name] = entry
-    if "x_decomp_dev_ew" in cells:
-        for suffix in optional_cells[3:-1]:  # glue: complete native resident family admission
-            if "x_decomp_" + suffix not in cells:
-                raise ImportError(f"classical TSQR resident entry missing: {suffix}")
-    return cells
+    # glue: the selected CPU/device TSQR image publishes its native table
+    # during initialization. No capsule factory is needed by converted OLS.
+    return _native_table_cells(decomp, "x_decomp")
 
 
 def connect_host(host_ridge_class, host_linear_class, helpers):
@@ -52,13 +46,14 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     owner = object.__new__(host_ridge_class)
     object.__setattr__(owner, "numeric_mode", "identical")
     module = host_ridge_class._bind(owner, "_mojolearn_estimators")
-    cpu = {}
+    cpu = _native_table_cells(module, "estimators")
     names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
              "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
              "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
     optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
                 "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                "ols_fit_resident", "ols_normal_eq_default")
+                "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
+                "lm_ols_prep")
     for name in names + optional:  # glue: retain verified compiled CPU symbols at connection
         function = getattr(module, name, None)
         if function is None and name in optional:
@@ -76,11 +71,8 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
         cpu["decomp"] = _decomp_cells(decomp)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         cpu["decomp"] = type(error).__name__ + ": " + str(error)
-    linear_fit = getattr(linear, "x_linear_fit", None)
-    if linear_fit is not None:  # only a weighted or one-column HostRidge fit needs it
-        if not isinstance(linear_fit, BuiltinFunctionType):
-            raise TypeError("explicit host model requires compiled x_linear_fit")
-        cpu["x_linear_fit"] = linear_fit
+    weighted = _native_table_cells(linear, "x_linear")
+    cpu["_native_weighted_connection"] = weighted["_native_entry_connection"]
     connected = {mode: dict(cpu) for mode in context["classical_bindings"]}  # glue: one CPU entry family per connected mode
     context.update(classical_bindings=connected, classical_explicit_cpu=True,
                    classical_metric_vendor=context["vendor"], vendor="cpu")
@@ -106,9 +98,9 @@ def _numpy_free_context():
     import sys
     from array import array
     from . import _backend
-    from ._array import Array, SUPPORTED_DTYPES
+    from ._array import Array, SUPPORTED_DTYPES, _ARRAY_CONTEXT
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "_store", "_base", "_pin", "_addr", "_readonly", "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")}  # glue: retain native slot descriptors once at package import
-    array_storage_slots = {name: vars(Array)[name] for name in ("_store", "_mv", "_addr", "_readonly", "shape", "dtype", "order")}  # glue: fixed native storage layout retained at package import
+    array_storage_slots = _ARRAY_CONTEXT["from_buffer_slots"]  # glue: reuse the complete native storage descriptor inventory retained at import
     return {
         "array_storage_slots": array_storage_slots, "array_storage_dtypes": SUPPORTED_DTYPES,
         "mapping_types": (dict, OrderedDict, defaultdict), "defaultdict_class": defaultdict,
@@ -117,9 +109,13 @@ def _numpy_free_context():
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, Array, array, PosixPath,
                                PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
-        # The base of the library's native output store (_buffer._output_store):
+        # Large zero host buffers that may never be touched (the sequence
+        # optimizers' state copies): a private anonymous mapping, zero filled
+        # by the kernel on first touch (bindings/sequence_optimizer_native_door.mojo seq_array).
+        "native_mmap_type": mmap.mmap, "native_mmap_private": mmap.MAP_PRIVATE,
+        # The base of a native output store (a raw ctypes array class):
         # admission accepts a ctypes array class made directly from it with no
-        # Python buffer hook (bindings/sequential_admission.mojo).
+        # Python buffer hook (bindings/sequential_admission_door.mojo).
         "ctypes_array_base": ctypes.Array,
         "scalar_types": (), "integer_types": (int,), "array_fields": array_fields,
         "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
@@ -131,29 +127,41 @@ def _numpy_free_context():
     }
 
 
+#: The compiled doors `classical_native_call` forwards to (2026-11-07 host
+#: split, docs/build/HOT_GROUPS.md section 6): context key -> entry name on the
+#: tokenizer host, where import setup (host_surface.HOST_IMPORT_ALIASES) put
+#: the owner's entry, or its native refusal when that owner is not built.
+_CLASSICAL_DOORS = (("classical_trees_door", "trees_native_call"),
+                    ("classical_family_door", "family_native_call"))
+
+
+def _classical_doors(binding):
+    # glue: retain the separately compiled classical doors' entries once, at
+    # import; the native door forwards to them and refuses when one is absent.
+    from types import BuiltinFunctionType
+    try:
+        fields = vars(binding()._module)
+    except ImportError:
+        return {}
+    doors = {}
+    for key, name in _CLASSICAL_DOORS:  # glue: fixed door names, connected once at import
+        entry = fields.get(name)
+        if type(entry) is BuiltinFunctionType:
+            doors[key] = entry
+    return doors
+
+
 def _state_context():
     # glue: connect compiled entries and exact native buffer classes once
     from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
-    import _codecs
-    import unicodedata
     import io
     import os
     import sys
-    import zlib
     from ._native_loaded_modules import PATH_TYPES, PATH_BASES
     from . import _backend
     from .tokenizer import _binding
     from .exceptions import NotFittedError
     from ._native_classical_warnings import connect_warnings
-
-    try:
-        import _bz2
-    except ImportError:
-        _bz2 = None
-    try:
-        import _lzma
-    except ImportError:
-        _lzma = None
 
     # Both import orders use the same native admission setup. Do not copy
     # Sequential's cached context or install a Python first-call callback.
@@ -166,64 +174,41 @@ def _state_context():
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
-    # The sklearn tag record layout is read natively from the loaded sklearn
-    # module the first time sklearn asks for tags (bindings/classical_tags.mojo),
-    # so connecting never imports the optional sklearn dependency.
-    context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
+    context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    # CPython 3.14 builds builtin C types as heap types, so the former `__flags__ & 512`
+    # (heap-type) test no longer tells a subclass from the builtin (2026-11-12, MAX 26.7 pixi env).
+    archive_mmap = context["owner_mmap_class"]
+    if (type(archive_mmap) is not type
+            or archive_mmap.__module__ != "mmap" or archive_mmap.__name__ != "mmap"
+            or not isinstance(archive_mmap.__new__, BuiltinFunctionType)
+            or not isinstance(archive_mmap.__init__, WrapperDescriptorType)):
+        raise TypeError("classical archives require the native mmap owner")
     if not isinstance(io.open, BuiltinFunctionType):
         raise TypeError("classical archives require native binary file opening")
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
         methods = {}
-        for name in ("read", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
+        for name in ("read", "readinto", "readable", "fileno", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
             entry = getattr(cls, name)
             if not isinstance(entry, (MethodDescriptorType, WrapperDescriptorType)):
                 raise TypeError(f"classical archives require native {cls.__name__}.{name}")
             methods[name] = entry
+        if cls is io.BytesIO:
+            entry = cls.getbuffer
+            if not isinstance(entry, MethodDescriptorType):
+                raise TypeError("classical archives require native BytesIO.getbuffer")
+            methods["getbuffer"] = entry
         archive_methods.append(methods)
-    codec_entries = (zlib.crc32, zlib.decompress, unicodedata.lookup, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
-                     _codecs.unicode_escape_decode)
-    if _lzma is not None:
-        codec_entries += (_lzma._decode_filter_properties,)
-    for entry in codec_entries:  # glue: validate format metadata C entries once
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError("classical archives require native CRC and Unicode metadata entries")
-    decompressor_types = (() if _bz2 is None else (_bz2.BZ2Decompressor,)) + (() if _lzma is None else (_lzma.LZMADecompressor,))
-    for cls in decompressor_types:  # glue: native archive codec admission at setup
-        if (type(cls) is not type or not isinstance(cls.decompress, MethodDescriptorType)
-                or not isinstance(cls.__new__, BuiltinFunctionType)
-                or not isinstance(cls.__init__, WrapperDescriptorType)):
-            raise TypeError("classical archives require native byte decompressor types")
-    try:
-        from compression import zstd
-    except ImportError:
-        zstd_class = None
-    else:
-        zstd_class = zstd.ZstdDecompressor
-        if (type(zstd_class) is not type or not isinstance(zstd_class.decompress, MethodDescriptorType)
-                or not isinstance(zstd_class.__new__, BuiltinFunctionType)
-                or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
-            raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
+                   archive_python_minor=sys.version_info.minor, archive_python_micro=sys.version_info.micro,
                    archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
                    archive_memoryview_type=memoryview, archive_attribute_error=AttributeError,
                    archive_path_types=PATH_TYPES,
                    archive_path_bases=PATH_BASES,
                    archive_path_member_type=MemberDescriptorType,
-                   archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
-                   archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
-                   archive_unicode_lookup=unicodedata.lookup, archive_unicode_key_error=KeyError,
-                   archive_unicode_decode_error=UnicodeDecodeError, archive_unicode_encode_error=UnicodeEncodeError,
-                   archive_inflate=zlib.decompress, archive_bzip=None if _bz2 is None else _bz2.BZ2Decompressor,
-                   archive_lzma=None if _lzma is None else _lzma.LZMADecompressor,
-                   archive_lzma_properties=None if _lzma is None else _lzma._decode_filter_properties,
-                   archive_lzma1=None if _lzma is None else _lzma.FILTER_LZMA1,
-                   archive_lzma_raw=None if _lzma is None else _lzma.FORMAT_RAW,
-                   archive_zstd=zstd_class,
-                   archive_cp437=tuple(bytes(range(256)).decode("cp437")),
-                   archive_npy_magic=b"\x93NUMPY", archive_zip_end=b"PK\x05\x06")
+                   archive_unicode_decode_error=UnicodeDecodeError, archive_unicode_encode_error=UnicodeEncodeError)
     return context
 
 
@@ -243,12 +228,13 @@ def connect(ridge_class, linear_class=None):
         try:
             estimator = _backend.binding("_mojolearn_estimators", mode)
             linear = _backend.binding("_mojolearn_x_linear", mode)
-            entries = {}
+            entries = _native_table_cells(estimator, "estimators")
             required = ("estimators_vendor", "estimators_numeric_mode", "lm_col_sums",
                         "lm_means_finish", "lm_center", "lm_intercept", "ridge_fit", "ols_predict")
             optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
                         "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                        "ols_fit_resident", "ols_normal_eq_default")
+                        "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
+                "lm_ols_prep")
             if linear_class is not None:
                 required += ("ols_fit", "lm_scale_rows", "py2mojo_rows")
             for name in required + optional:  # glue: retain raw native symbols at setup only
@@ -261,10 +247,8 @@ def connect(ridge_class, linear_class=None):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"classical owner requires compiled {name}")
                 entries[name] = entry
-            entry = linear.x_linear_fit
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError("classical owner requires compiled x_linear_fit")
-            entries["x_linear_fit"] = entry
+            weighted = _native_table_cells(linear, "x_linear")
+            entries["_native_weighted_connection"] = weighted["_native_entry_connection"]
             if linear_class is not None:
                 try:
                     entries["decomp"] = _decomp_cells(_backend.binding("_mojolearn_x_decomp", mode))
@@ -275,19 +259,12 @@ def connect(ridge_class, linear_class=None):
             connected[mode] = type(error).__name__ + ": " + str(error)
         try:
             metrics = _backend.binding("_mojolearn_x_metrics", mode)
-            metric_entries = {}
-            metric_names = ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
-                            "x_metrics_run_out", "x_metrics_run_ranges")
-            for name in metric_names:  # glue: cache raw metric program entries once at package connection
-                try:
-                    entry = getattr(metrics, name)
-                except (AttributeError, ImportError):
-                    if name in ("x_metrics_run_out", "x_metrics_run_ranges"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"classical score requires compiled {name}")
-                metric_entries[name] = entry
+            metric_entries = _native_table_cells(metrics, "x_metrics")
+            name = "metrics_program_native_api_v1"
+            entry = getattr(metrics, name)
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError(f"classical score requires compiled {name}")
+            metric_entries[name] = entry
             metric_bindings[mode] = metric_entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)
@@ -343,6 +320,15 @@ def _layout(cls, attribute_descriptor):
 # query, host inference and other module-level connections run first).
 # refresh_installed_members rebinds those members once, then stops recording.
 _IMPORT_LAYOUTS = []
+
+
+def arm_import_layouts():
+    """Collect the layouts taken while a family imports (lane
+    lazy-family-import): `_families` arms this when the outermost package
+    import begins; `refresh_installed_members` rebinds and disarms it."""
+    global _IMPORT_LAYOUTS
+    if _IMPORT_LAYOUTS is None:
+        _IMPORT_LAYOUTS = []
 
 
 def refresh_installed_members(names=("__init__", "set_params")):

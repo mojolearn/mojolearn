@@ -58,16 +58,16 @@ therefore be held against each other bit for bit; a silent fallback would
 turn a divergence into a pass.
 """
 
-from core.hostptr import copy_f32
+from core.transfer import transfer_upload_list
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
+comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnLinalgContextFastV3"
 
 
 from core.householder_qr import qr_factor, qr_slice_count
@@ -79,23 +79,18 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    """`cholesky/estimator.mojo::_upload`, for its reason: one staged host
-    buffer, one copy, one wait."""
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    """`cholesky/estimator.mojo::_upload`: core/transfer.mojo's in-place
+    upload (lane fx-dup-next, 2026-11-19), one copy from the caller's list,
+    one wait. Gone: a pinned host buffer of the whole matrix per call and a
+    host pass into it."""
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     # the result lands straight in the list (no host copy loop)
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var head = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=head)
@@ -176,7 +171,14 @@ def device_svdvals(
     # x_decomp/eigh_scale.mojo on A (`host_svdvals` takes the same)
     var dfac = enqueue_es_scale_rect(ctx, F32Ptr(unsafe_from_address=Int(da.unsafe_ptr())), 1, n_rows, n_cols)
     _ = qr_factor(ctx, da, scratch, r_buf, n_rows, n_cols)
-    svd_of_r(ctx, r_buf, v_buf, s_buf, n_cols)
+    # fix-svdvals-jacobi (2026-11-08): the x_decomp convergence rule (60
+    # sweeps, 8 float32 epsilon, insignificant rotations skipped). The
+    # inherited 15 sweeps at 1e-7 sit below float32 epsilon and refused
+    # rank-deficient input (istella's 21 constant columns) on every vendor.
+    # `host_svdvals` passes the same three, so the host column keeps the bits.
+    svd_of_r[False, True](
+        ctx, r_buf, v_buf, s_buf, n_cols, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+    )
     enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_buf.unsafe_ptr())), dfac, 1, n_cols)
     # descending on the device (decomposition/spectrum_order_device.mojo)
     var so = ctx.enqueue_create_buffer[DType.float32](n_cols)

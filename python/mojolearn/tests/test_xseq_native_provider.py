@@ -75,20 +75,16 @@ def test_mlp_native_table_retains_numeric_labels_outputs_and_refit(monkeypatch, 
     assert not seen
 
 
-def test_recurrent_builtin_schedule_does_not_call_packed_schedule_entries(monkeypatch):
-    from mojolearn._training_impl import _OPT_CONTEXT
+def test_recurrent_builtin_schedule_stays_native_with_packed_entries_poisoned(monkeypatch):
     from mojolearn import StepLR
 
     schedule = StepLR(0.01, step_size=2, gamma=0.5)
     expected = np.asarray(schedule.lr_values(4)).copy()
     seen = poison_packed_entries(monkeypatch)
 
-    def forbidden(*args, **kwargs):
-        seen.append(True)
-        raise AssertionError('schedule reentered a packed CPython engine')
-
-    for name in ('lr_schedule_series', 'lr_schedule_at'):
-        monkeypatch.setitem(_OPT_CONTEXT['schedule_entries'], name, forbidden)
+    # The retired schedule_entries context dictionary has no product consumer.
+    # Poison the connected packed engines and audit the real public schedule
+    # calls plus its use during RNN training, without recreating obsolete glue.
     actual = audit_native_call(schedule.lr_values, 4).assert_native()
     assert np.asarray(actual).tobytes() == expected.tobytes()
     assert audit_native_call(schedule.lr_at, 1).assert_native() == float(expected[0])
@@ -134,7 +130,11 @@ def test_recurrent_state_native_round_trip_and_atomic_rejection(name):
     assert list(state)[-2:] == ['head.weight', 'head.bias']
     assert np.concatenate([v.ravel() for v in state.values()]).tobytes() == expected.tobytes()
     assert all(not np.shares_memory(v, model.params_) for v in state.values())
-    model.params_.fill(0)
+    # Fitted params with a device-resident copy are read-only; replacing the
+    # array still works.
+    with pytest.raises(ValueError, match='read-only'):
+        model.params_.fill(0)
+    model.params_ = np.zeros_like(model.params_)
     assert audit_native_call(model.load_state_dict, OrderedDict(state)).assert_native() is model
     assert model.params_.tobytes() == expected.tobytes()
     bad = dict(state, **{'head.bias': np.zeros((999,), dtype='f4')})

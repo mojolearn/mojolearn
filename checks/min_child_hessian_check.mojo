@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Analytic child Hessian bounds, candidate runner-up, and full GPU fits."""
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import bitcast
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import child_hessian_below
 from checks.min_split_gain_check import check as check_gain
@@ -116,7 +116,7 @@ def rejected_sibling(ctx: DeviceContext, policy: String) raises:
         raise Error("rejected sibling was revisited or eligible sibling was lost")
     print("PREPARED SIBLING GREEN", policy)
 
-def main() raises:
+def run_checks() raises:
     print("numeric_mode", numeric_mode_name())
     var ctx = DeviceContext()
     tiny_bounds(ctx)
@@ -137,3 +137,21 @@ def main() raises:
         check_gain(ctx, policy, 2, 2)
         check_gain(ctx, policy, 1024, 1)
     print("MIN CHILD HESSIAN GREEN")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("min_child_hessian_check", cpu=False, gpu=True, serial="", run=run_cases)

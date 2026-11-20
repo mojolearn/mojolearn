@@ -12,7 +12,7 @@ BINARY-PRED-2: integer sign/magnitude class selection preserves strict raw>0
 for positive subnormal margins on devices that flush floating comparisons.
 Thus rounded probabilities can tie while raw-margin classification is positive.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -20,7 +20,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoGbdtContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoGbdtContextFast"
+comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV3"
 
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import SF64_ONE, sf64_ftz, sf64_sigmoid_f64, sf64_sub

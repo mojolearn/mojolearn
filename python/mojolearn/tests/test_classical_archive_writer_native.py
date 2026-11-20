@@ -110,7 +110,7 @@ def test_archive_writer_ignores_replaced_builtin_helpers(tmp_path, monkeypatch, 
         patch.setattr(builtins, name, foreign)
         audit = audit_native_call(save, filename)
     # A replaced connected builtin export is refused before any callback
-    # (bindings/native_loaded_module.mojo, contract of 31fc85981 and
+    # (bindings/native_loaded_module_door.mojo, contract of 31fc85981 and
     # test_native_cv_module_connections.py); the restored export then saves.
     assert type(audit.exception) is TypeError, audit.report()
     assert str(audit.exception) == "native module connection export changed: builtins." + name

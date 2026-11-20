@@ -22,7 +22,7 @@ False otherwise (the units then run, already in the same order).
 The trees are `add` in shared memory with the halving widths of `lt_tree`;
 TREE_W = 256 threads, 2 KiB of shared words per group (fits every vendor).
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

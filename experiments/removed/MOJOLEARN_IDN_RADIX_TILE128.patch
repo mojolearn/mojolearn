@@ -1,0 +1,65 @@
+diff --git b/experiments/performance_ideas/I19/check.mojo a/experiments/performance_ideas/I19/check.mojo
+index 2c2aeb85ff..c1ebba6dd7 100644
+--- b/experiments/performance_ideas/I19/check.mojo
++++ a/experiments/performance_ideas/I19/check.mojo
+@@ -29,24 +29,28 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
+         var bsum = ctx.enqueue_create_buffer[DType.int32](stable_radix_bsum_len(n))
+         ctx.enqueue_copy(dst_buf=dk,src_ptr=keys.unsafe_ptr())
+         ctx.enqueue_copy(dst_buf=dv,src_ptr=values.unsafe_ptr())
+-        # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+         # NEVER RUN — PENDING MEASUREMENT
+         comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+             if arm==1:
+-                stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++                # NEVER RUN — PENDING MEASUREMENT
++                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
++                    stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++                else:
++                    stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+             else:
+                 stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
+         else:
+             stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
+         # Reuse the same workspace without a host roundtrip; idempotence
+         # must hold, including value carry within every equal-key run.
+-        # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+         # NEVER RUN — PENDING MEASUREMENT
+         comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+             if arm==1:
+-                stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++                # NEVER RUN — PENDING MEASUREMENT
++                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
++                    stable_nibble_pairs_u32[128](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++                else:
++                    stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
+             else:
+                 stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
+         else:
+diff --git b/experiments/performance_ideas/I19/ragged_float.mojo a/experiments/performance_ideas/I19/ragged_float.mojo
+index 23896ade51..575871a528 100644
+--- b/experiments/performance_ideas/I19/ragged_float.mojo
++++ a/experiments/performance_ideas/I19/ragged_float.mojo
+@@ -81,8 +81,6 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
+     # This bounded component win does not qualify larger workloads or promotion.
+     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I19;
+     # raw attempts: amd/live/repairs. Default radix admission remains OFF.
+-    # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+     comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
+         if largest>4096:
+             raise Error("ragged float sort: rank control restricted to bounded small rows")
+@@ -96,7 +94,11 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
+             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
+             # NEVER RUN — PENDING MEASUREMENT
+             comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
+-                stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
++                # NEVER RUN — PENDING MEASUREMENT
++                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
++                    stable_nibble_pairs_u32[128](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
++                else:
++                    stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+             else:
+                 stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+             ctx.enqueue_function[_words](keys.unsafe_ptr(),positions.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))

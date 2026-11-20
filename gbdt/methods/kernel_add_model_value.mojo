@@ -37,9 +37,15 @@ point it at. Recorded so that gap is visible.
 ===================================================
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import stack_allocation
 
-from checks.numerics import identical_mul_add
+from gbdt.methods.cursor_rescale import rescaled_leaf
+# TOMBSTONE: MOJOLEARN_AFT_G08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at acfd453fec.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G08.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G08
 
 # G08: four independent row stores share leaf metadata and loop control.
@@ -80,6 +86,49 @@ def add_model_value_kernel(
     model in place; ours does not, because nothing here serialises a model
     yet and an unscaled leaf is the more useful thing to inspect.
     """
+    _add_model_value_body(
+        part_offset, part_size, row_index, leaf_values, learning_rate, cursor,
+        dim_count_in, cursor_stride_in,
+    )
+
+
+def add_model_value_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    learning_rate: Float32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """`add_model_value_kernel` behind a device loop's gate (lane
+    t3-gbdt-greedy-on-device-loop, tree op TREE_OP_SEARCHER_APPLY): while
+    word 0 of `gate` is 0 the same body, statement for statement (the
+    greedy searcher's learn cursor add, same bits); past the loop's stop it
+    writes nothing (the cursor is carried state). Block-uniform test."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _add_model_value_body(
+        part_offset, part_size, row_index, leaf_values, learning_rate, cursor,
+        dim_count_in, cursor_stride_in,
+    )
+
+
+@always_inline
+def _add_model_value_body(
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    learning_rate: Float32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """The body of `add_model_value_kernel` and its gated wrapper (one
+    helper, so no launched kernel is also called from another kernel)."""
     var leaf = Int(block_idx.y)
     var dim = Int(block_idx.z)
     var dim_count = Int(dim_count_in)
@@ -90,27 +139,28 @@ def add_model_value_kernel(
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    # IDENTITY_PATHS row 9, the CURSOR UPDATE seam (E1 2026-08-22:
-    # with tree 0 fully bit-identical Apple<->AMD under RMSE, the
-    # first divergence moved to tree 1's FIRST histogram -- the only
-    # arithmetic in between is this `cursor + leaf*rate`, which HIP's
-    # default contraction may fuse per row while Metal's baseline is
-    # measured unfused). `identical_mul_add` is an explicit fma under
-    # IDENTICAL (one rounding, every vendor) and the naive chain
-    # under FAST -- same operands, same ops, Apple FAST bits unchanged.
+    # THE RESCALED LEAF, ONCE PER BLOCK (fb11 follow-up, 2026-11-17). Thread 0
+    # forms `round(leaf * rate)` (`rescaled_leaf`, the soft-float product the
+    # stored model's rescale also calls) into shared memory and every row of
+    # the block adds it: one add per row. It was one soft-float product per
+    # THREAD (fb11) and before that one fma per ROW. Every block of a leaf
+    # forms the same bits from the same two operands. The gated wrapper's
+    # early return is block-uniform, so every thread reaches the barrier.
+    var shared_scaled = stack_allocation[
+        1, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    if thread_idx.x == 0:
+        shared_scaled[0] = rescaled_leaf(raw, learning_rate)
+    barrier()
+    var scaled = shared_scaled[0]
     while i < size:
         comptime for lane in range(AFT_LEAF_ROWS):
             var position = i + lane * stride
             if position < size:
                 var row = plane + Int(row_index.unsafe_load(offset + position))
-                # Same IDENTITY_PATHS row 9 arithmetic; independent rows share
-                # the leaf value already loaded above and never share writes.
-                cursor.unsafe_store(
-                    row,
-                    identical_mul_add(raw, learning_rate, cursor.unsafe_load(row)),
-                )
+                # independent rows share the leaf value and never share writes
+                cursor.unsafe_store(row, cursor.unsafe_load(row) + scaled)
         i += stride * AFT_LEAF_ROWS
-
 
 
 comptime ABMV_BLOCK = 256
@@ -164,7 +214,7 @@ def add_bin_model_value_kernel(
         thread_idx.x
     )
 
-    var bins_local = InlineArray[UInt32, ABMV_ELEMENTS](fill=UInt32(0))
+    var bins_local = Array[UInt32, ABMV_ELEMENTS](fill=UInt32(0))
 
     comptime for j in range(ABMV_ELEMENTS):
         var idx = i + j * ABMV_BLOCK
@@ -172,7 +222,7 @@ def add_bin_model_value_kernel(
             bins_local[j] = bins.unsafe_load(idx)
 
     for dim in range(cursor_dim):
-        var vals_local = InlineArray[Float32, ABMV_ELEMENTS](
+        var vals_local = Array[Float32, ABMV_ELEMENTS](
             fill=Float32(0.0)
         )
 

@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T20:07:57.895094+00:00",
+  "state": "building",
+  "source": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+  "passed": 6,
+  "failed": 2,
+  "unfinished": 17,
+  "logs": [
+    "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_byte_trainer_host.log",
+    "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_orchestration_host.log"
+  ]
+}

@@ -1,0 +1,37 @@
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index de72e300f1..4d3e99cf5a 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -2575,7 +2575,8 @@ def _sgd_ps_kernel_body(
+ 
+ # lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
+ # for d <= SPS_MAX_D = SPS_W * SPS_MAXC, the register bound (off:
+-# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
++# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF; old d <= 32 gate behind
++# MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD). M3 A/Bs (n=1):
+ # sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
+ # identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
+ # 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the old small-d gate. Cause: the per-sample fit above runs a
+@@ -2628,8 +2629,11 @@ comptime SPS_MAXC = 8
+ #: Kernel limit (register footprint): each of the SPS_W lanes holds SPS_MAXC
+ #: weights and their q in registers, so d <= SPS_W * SPS_MAXC.
+ comptime SPS_MAX_D = SPS_W * SPS_MAXC
+-# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD (unmeasured old benchmark-tuned d <= 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51a85b3df6.
+-# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch; record in docs/TOMBSTONES.md.
++#: LEGACY, default OFF: the old gate admitted only d <= 32, chosen between
++#: taxi (d 11, -27.6%) and istella (d 220, +41%). Removed as benchmark-tuned
++#: on 2026-10-04; the register-bound replacement is UNMEASURED.
++comptime SPS_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"]()
++comptime SPS_LEGACY_MAX_D = 32
+ 
+ 
+ @always_inline
+@@ -3154,6 +3158,8 @@ struct _SgdPsEpochs(LoopStep, Movable):
+         var sps = False
+         comptime if SGD_FAST_PS_SIMD:
+             sps = d >= 1 and d <= SPS_MAX_D
++            comptime if SPS_LEGACY_NARROW:
++                sps = sps and d <= SPS_LEGACY_MAX_D
+         var spw = False
+         comptime if SGD_IDN_PS_WARP:
+             spw = d >= 1 and nb <= SPS_W

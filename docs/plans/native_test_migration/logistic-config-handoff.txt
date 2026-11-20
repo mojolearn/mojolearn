@@ -1,0 +1,82 @@
+Typed Logistic scalar configuration and real Python policy seams (2026-11-10)
+
+Dependency/source
+  Producer4cf077436c: core.logistic_config and actual logistic_config_boundary.
+  New checks/native_tests/logistic_config_suite.mojo (54 fixtures), thin
+  logistic_config.mojo and literal logistic_config_reference.mojo. Config is
+  host-native for every public backend; execute once in the CPU native bundle.
+  Fixed descriptor/QN contract sources and prior frozen suites untouched.
+
+Native coverage:54 independent fixtures
+  34 scalar operations: legacy/weak half and single precision; mixed NumPy
+  int8/int16/int32 widening; NumPy and builtin bool including legacy strong
+  bool; builtin-only binary64; separately rounded half reciprocal; weak-cast
+  overflow versus invalid multiplication, cleared weak-cast underflow; exact
+  and inexact half/single/double subnormal products; exact power-of-two versus
+  inexact tiny reciprocals; half/single overflow; signaling versus quiet NaN;
+  inf-inf and inf*0 invalid events; builtin overflow without NumPy error flags.
+  Exact expected values come from analytic IEEE words/dyadic values, not from
+  the production helper. Assert width/kind, status, cast_status, operation,
+  scalar diagnostic form and signaling-state removal, plus value words or NaN.
+  10 strength plans: none/L1/L2/elastic, builtin/half/single legacy and weak,
+  mixed integer and bool ratios. Assert l1/l2, all four ordered intermediate
+  words/types and each event. None skips an otherwise invalid reciprocal.
+  Six tolerance cases: half/single/double under legacy and weak promotion,
+  preserving separate scalar conversion/multiplication rounding.
+  Four admission groups: exact penalty names, positive/ratio comparisons
+  including established NaN acceptance, bounds/inf/negative-zero, and native
+  scalar-origin/promotion defaults. No new constructor restriction.
+
+Independent reference provenance
+  Ten strength and six tolerance rows were generated using NumPy2.5.2 only,
+  original scalar expressions, without importing Mojolearn or invoking product
+  fits/tests. Legacy cases use explicit strong NumPy float64 one/factor to
+  reproduce legacy Python-real promotion; weak cases use native NumPy2 rules.
+  Both policies are then tested explicitly by the native helper, independent
+  of installed product execution. No fitted outputs/identity hash reference.
+  Fixtures/logistic-config-reference.json records expression/version/policy;
+  literal Mojo words are generated from that independent reference.
+  Full generator and output evidence:
+    ~/mojolearn-evidence/integ-finish-20261110/generate_logistic_config_reference.py
+    ~/mojolearn-evidence/integ-finish-20261110/logistic-config-reference-generation.log
+  Generator parallelizes independent rows using host CPU count. Source/data
+  generation is not a product test or a compile; no runtime pass is claimed.
+
+Python boundary:5 definitions/35 cases, new focused file
+  python/mojolearn/tests/test_logistic_scalar_native_boundary.py:
+  24 cases compare native C reciprocal/tolerance multiplication warning and
+  exception behavior with original NumPy expressions, for float16/32/64 under
+  ignore/warn/raise/warning-as-error. This follows actual installed NumPy1.26
+  legacy or2.x weak policy without a private mode override. An intentional
+  later invalid max_iter stops before QN RUN, isolating config error behavior.
+  Two seterrcall cases refuse Python callbacks without invocation. Three string/
+  None tolerance cases preserve float-before-multiply exception type/message.
+  Five multi-invalid configs assert penalty→solver→C→ratio refusal precedence,
+  unchanged public parameter owners and no fitted coefficient publication.
+  One actual six-row binary fit preserves a huge positive Python integer C
+  with penalty=None (no strength conversion); same owner under L2 raises
+  native OverflowError. Every product operation is audited for Python execution.
+  These are real warning/CPython-owner/admission seams; no fabricated handles,
+  private dispatch hooks, Python arithmetic inside product calls or new fallback.
+
+Parallel/build handoff
+  Native54 units use host_parallelize. Each unit's bounded four-expression
+  configuration sequence is ordered by its original evaluation dependencies.
+  Add checks.native_tests.logistic_config_suite.run_checks to the CPU bundle.
+  Existing task: bash tools/compile_slot.sh pixi run check-native-logistic-config
+  Standalone existing compiler:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/logistic_config.mojo -o "$HOME/mojolearn-evidence/logistic-config"
+  Updated logistic-state-weights-suites.json includes this suite and its
+  dependency; prior weight CPU define MOJOLEARN_COLUMN_CPU=1 remains required.
+  Python boundary file goes through root's installed-wheel parallel controller.
+
+Status/removals
+  Source/API review, independent reference generation, Python AST/TOML/JSON parse
+  and git diff --check only. Native COMPILE/RUN and installed Python RUN OWED.
+  No lane product execution, boxes, timing, identity or release action.
+  No previous tests removed in this new-production-regression batch; no product
+  mechanism to remove here because producer owns its former envelope/operators.
+  Product/kernel/bit changes and A/B define: none.
+  Separately recorded root accepted wave4:138 local native fixtures at281ffea,
+  CPU128/GPU10, with original failedR1 retained. This is not qualification of
+  the new config/state/weights source or installed/cross-vendor behavior.

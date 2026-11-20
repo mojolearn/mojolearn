@@ -12,7 +12,7 @@ THE REFERENCE'S THREE STEPS AND THIS IMPLEMENTATION'S
 
 | reference | line | here |
 |---|---|---|
-| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08; the whole dataset under `-D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF`, DEVIATION 1781) through the implemented k-means |
+| train the quantizer on a strided subsample | `:414-437` | the strided subsample in exact integers (`IVF_TRAINSET_STRIDE`, `ivf_trainset_stride`, lane gap-ivf 2026-10-08, DEVIATION 1781) through the implemented k-means |
 | `kmeans::predict` the labels, in batches | `:222-224` | `cluster/impl/kmeans.mojo::predict`, one call |
 | `build_index_kernel` scatters into the lists | `:317-325` | `ivf/checks/list_layout.mojo::build_list_layout` (DEVIATIONS 1782/1783) |
 
@@ -96,7 +96,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_validate_data,
 )
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
@@ -117,25 +117,27 @@ from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
 #: restatement (ivf/host/ivf_host.mojo), so this makes the device build's
 #: scale the host column's by construction; the scale is snapped to a power
 #: of two, so it moves only when the two sums straddle a snap boundary.
-#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
-#: the host walk.
-comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-from std.sys.info import has_apple_gpu_accelerator
-from std.memory import memcpy
+#: FAST keeps the host walk.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 8c59f74e0d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from std.memory import unsafe_memcpy
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list, transfer_download_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnIvfFlatTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnIvfFlatTransferStagesFastV1"
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
-from x_ann.kpp_seed import kpp_seed
+from x_ann.switches import ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed_device import kpp_seed_device
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_TRAINSET = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_FAST_TRAINSET_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at da99e6f6f6.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple: the coarse quantizer trains on at most
 `IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
 rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
@@ -144,41 +146,35 @@ comptime IVF_FAST_ROWS_PER_LIST = 256
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_SEED = (
-    ANN3_COARSE_SEED
-    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-)
-"""FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
-the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
-a stride sample of its training rows) and cluster/'s k-means starts from
-those seeds (`INIT_ARRAY`). An untraced build only."""
+# TOMBSTONE: MOJOLEARN_ANN3_COARSE_SEED_OFF (old path, EXP:2135 OPEN) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at ee8f7b22c2.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_COARSE_SEED_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_SEED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+"""FAST on Apple, DEFAULT (lane ann-apple3):
+the coarse quantizer is seeded by k-means++ over a stride sample of its
+training rows and cluster/'s k-means starts from those seeds (`INIT_ARRAY`).
+An untraced build only. The seeding runs on the device (below)."""
 
-comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"]()
-"""Lane apple-fast-fastonly2, FAST + Apple DEFAULT (`-D
-MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` reverts to the host k-means++). M3 A/Bs:
-fastonly2-5-ivf-pq-istella-m3 (no seed -> seed+device) 5976 -> 5253 ms
-(-12.1%), recall_at_10 .5995 -> .6071; fastonly2-3-ivf-pq-istella-m3 (host
-seed -> device seed) 5516 -> 5243 ms (-4.9%), recall .6017 -> .6071. The
-IVF_FAST_SEED k-means++ runs on the device (`x_ann/kpp_seed_device.mojo`: a
-distance-update grid plus a fold/selection launch per seed, same HostRng
-stream) over the training rows already on the device, instead of on one host
-core. FAST bits may move (Float32 blocked sums); recall check paired."""
+# TOMBSTONE: MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 24d88b46f5.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+# Device seeding: lane apple-fast-fastonly2, FAST + Apple DEFAULT. M3 A/Bs:
+# fastonly2-5-ivf-pq-istella-m3 (no seed -> seed+device) 5976 -> 5253 ms
+# (-12.1%), recall_at_10 .5995 -> .6071; fastonly2-3-ivf-pq-istella-m3 (host
+# seed -> device seed) 5516 -> 5243 ms (-4.9%), recall .6017 -> .6071. The
+# IVF_FAST_SEED k-means++ runs on the device (`x_ann/kpp_seed_device.mojo`: a
+# distance-update grid plus a fold/selection launch per seed, same HostRng
+# stream) over the training rows already on the device, instead of on one host
+# core. FAST bits may move (Float32 blocked sums); recall check paired.
 
 
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_FAST_RANDOM_INIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF (old path beside the Apple FAST default, EXP:2135 OPEN) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at c09e6cced1.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_RANDOM_INIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
-#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF` (k-means|| seeding).
-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
-rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF`): the coarse quantizer starts from n_lists
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03): the coarse quantizer starts from n_lists
 DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
 rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
 k-means|| seeding (8 rounds of every-row-to-candidate distances, each with
@@ -192,17 +188,13 @@ bits (another start): paired recall check."""
 # Tried: FAISS's random-row coarse start with the IVF_FAST_SEED k-means++ seeding skipped; ivf-sq recall@10 istella .60895 -> .51065, taxi .83325 -> .76685 (rab5-ivfinit).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_FAISS_INIT.patch; record in docs/TOMBSTONES.md.
 
-comptime IVF_FAST_DEVICE_VALIDATE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_DEVICE_VALIDATE_OFF (old path of the KEPT FAST+Apple default, EXP:352) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 1893f23d4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_DEVICE_VALIDATE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_DEVICE_VALIDATE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
-#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF` (host word scan).
-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch; rollback
-`-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF`):
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch):
 `ivf_validate_data`'s word scan of the n x dim dataset (one host pass over
 352 MB on Istella) runs on the device after the upload (`ivf_refused_words_kernel`,
 one flag word read back); a refused dataset then runs the host scan, which
@@ -325,79 +317,42 @@ def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
 def upload_f32(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    """Host list to device buffer, through a runtime host buffer.
-
-    The second hop is `neighbors/estimator.mojo`'s: `archive/plans/UNWIRED.md:31` records
-    that an arbitrary host pointer is not interchangeable with one from
-    `enqueue_create_host_buffer` on this stack, and that the failure is
-    SILENT.
-    """
+    """Host list to device buffer: one copy that reads the caller's list in
+    place, drained before the return."""
     var n = len(values)
     if n == 0:
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    comptime if ANN3_HOST_PASSES:
-        # Every column (lane neural-pass35, 2026-10-01; Apple only since
-        # lane ann-apple3): the copy reads the caller's list and is drained
-        # before the return. The pinned hop below pinned a buffer the size
-        # of the dataset per upload and copied into it first: on the L40S
-        # the build's 352 MB upload read 752 ms (0.47 GB/s) that way
-        # (bench/results/ivf-stages-l40s-20261001.log). The raw host-pointer
-        # upload is the one the resident optimizer step and the x_decomp
-        # kit use on all three vendors with the same words.
-        # lane ann-apple3, Apple only, behind `ANN3_HOST_PASSES`: the copy
-        # reads the caller's list (the same words, one host pass fewer;
-        # `x_ann/io.mojo` has uploaded this way since lane ann-apple2). The
-        # copy is drained before the return, while the list is alive.
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
-        ctx.synchronize()
-    else:
-        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-        copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-        ctx.synchronize()
-        _ = host^
+    # Every column (lane neural-pass35, 2026-10-01): the copy reads the
+    # caller's list and is drained before the return, while the list is
+    # alive. The pinned hop that stood in the else of ANN3_HOST_PASSES (a
+    # constant True, so never compiled) pinned a buffer the size of the
+    # dataset per upload and copied into it first: on the L40S the build's
+    # 352 MB upload read 752 ms (0.47 GB/s) that way
+    # (bench/results/ivf-stages-l40s-20261001.log). Deleted with its arm
+    # (lane fx-dup-next, 2026-11-19).
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
+    ctx.synchronize()
     return buf^
 
 
 def download_f32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one memcpy of the staged
-    # words (one append each otherwise)
-    comptime if ANN3_HOST_PASSES:
-        var moved = List[Float32](length=n, fill=Float32(0.0))
-        if n > 0:
-            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
-        _ = host^
-        return moved^
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18), every
+    # column: the copy engine writes the list's own words (the pooled pinned
+    # stages from DOWNLOAD_STAGE_MIN floats). Gone: a pinned buffer per call,
+    # and then either one append per word or, under `ANN3_HOST_PASSES` (lane
+    # ann-apple3), a zero fill and a memcpy. The same words on both arms.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def download_u32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint32], n: Int
 ) raises -> List[UInt32]:
-    var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    comptime if ANN3_HOST_PASSES:
-        var moved = List[UInt32](length=n, fill=UInt32(0))
-        if n > 0:
-            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
-        _ = host^
-        return moved^
-    var out = List[UInt32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo: as `download_f32` above, one copy into the list's
+    # own words on every column (both `ANN3_HOST_PASSES` arms are gone here).
+    return transfer_download_list[DType.uint32](ctx, buf, n)
 
 
 def compute_row_norms(
@@ -705,13 +660,16 @@ def _ivf_flat_build_impl[resident: Bool](
             # lane ann-apple3, OPT-IN: one memcpy per sampled row
             xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
             for r in range(n_train):
-                memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
+                unsafe_memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
         else:
             xt = List[Float32](capacity=n_train * dim)
             for r in range(n_train):
                 var b = rows[r] * dim
                 for c in range(dim):
                     xt.append(x[b + c])
+        # TOMBSTONE: MOJOLEARN_ANN3_TRAINSET_COPY (opt-in arm, no A/B row) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f4251b23d5.
+        # Restore: git apply experiments/removed/MOJOLEARN_ANN3_TRAINSET_COPY.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
     var sum_scale = Float64(0.0)
     comptime if not IVF_IDN_DEVICE_SCALE:
@@ -817,20 +775,10 @@ def _ivf_flat_build_impl[resident: Bool](
 
     comptime if IVF_FAST_SEED:
         if not trace.enabled and n_train >= n_lists:
-            comptime if IVF_FAST_SEED_DEVICE:
-                if n_train < n_rows:
-                    kpp_seed_device(ctx, dxt, n_train, dim, n_lists, params.seed, 8, centroids)
-                else:
-                    kpp_seed_device(ctx, dx, n_rows, dim, n_lists, params.seed, 8, centroids)
+            if n_train < n_rows:
+                kpp_seed_device(ctx, dxt, n_train, dim, n_lists, params.seed, 8, centroids)
             else:
-                var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
-                if n_train < n_rows:
-                    kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
-                else:
-                    kpp_seed(x, n_rows, dim, n_lists, params.seed, 8, seeds)
-                ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
-                ctx.synchronize()
-                _ = seeds^
+                kpp_seed_device(ctx, dx, n_rows, dim, n_lists, params.seed, 8, centroids)
             kp.init = INIT_ARRAY
             st.host("seed")
 
@@ -869,8 +817,7 @@ def _ivf_flat_build_impl[resident: Bool](
             st.host("random_init")
 
     comptime if IVF_IDN_STRIDED_INIT:
-        # lane fg-ivf B1 (IDENTICAL default since postmerge-act-3; -D
-        # MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF rolls back): the strided
+        # lane fg-ivf B1 (IDENTICAL default since postmerge-act-3): the strided
         # training rows are the start; no k-means|| rounds, no recluster. The
         # host column (ivf/host/ivf_host.mojo) starts from the same rows.
         if kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:

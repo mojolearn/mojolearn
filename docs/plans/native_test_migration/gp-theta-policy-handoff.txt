@@ -1,0 +1,31 @@
+Mojolearn GP theta precision migration, 2026-11-11
+
+Two actual native fixtures per backend, uncompiled/unrun:
+  gp_theta_cpu_suite.run_checks and gp_theta_gpu_suite.run_checks.
+  Grid fixture: all4097 original i/32 values(-2048..2048), plus each value's
+  binary64 neighbor toward negative and positive infinity; three typed calls.
+  Original finite/positive and <=2ULP versus stdlib math.exp preserved.
+  Neighbor outputs retain original Float32-word agreement, including both
+  signed smallest binary64 neighbors of zero. This tests input precision,
+  not repeated fits, performance or release identity.
+  FTZ fixture: [-100,-90,-88,0] -> [0,0,0,1], original numeric equality.
+  All typed output counts, buffer canaries and unchanged input words checked.
+
+CPU independent fixtures/oracle cells use host_parallelize. GPU graphs are
+ordered on the physical GPU; existing kernels remain parallel and unchanged.
+Use -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I .; CPU additionally
+-D MOJOLEARN_COLUMN_CPU=1. Run from repository cwd for reference artifact IO.
+No new experimental switch, product algorithm, runtime fallback or source guard.
+Root repairs e93fcc09ef6 and20bef004c214 adopted locally as78619dc6e6/fc19ae1eee;
+do not cherry-pick these local adoptions. No other GP fixture changed here.
+
+Four reference spans prepared using standard-library math only,132 independent
+chunks/os.cpu_count() processes; original expressions match all4 artifact spans.
+E/pca-native-tests/gp-theta-reference-preparation.log and gp-theta-static.json
+preserve full preparation/status/hash evidence. No native execution occurred.
+
+Old packaging/portable_math/test_host_math.py is unchanged. Pending cleanup at
+E/pca-native-tests/gp-theta-python-cleanup.patch removes only its one numerical
+GP theta function/five assertion sites after root accepts replacements and
+rechecks source hashes. Other Python boundary/API tests remain. No boxed export,
+benchmark, controller clock or timing workload changed by this producer.

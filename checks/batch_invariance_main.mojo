@@ -14,7 +14,7 @@ first: it states which TIER the claim is in and why, what "the same tokens
 at a different batch size" has to mean for a recurrence, and what the
 sabotage and the three vacuity controls are.
 
-    tools/with_identical_mode.sh pixi run check-batch-invariance
+    tools/with_identical_mode.sh pixi run check-native-gpu batch_invariance_main
 
 Under FAST this driver still runs and still prints every
 number; it REPORTS instead of asserting, and says so on its banner
@@ -24,5 +24,23 @@ number; it REPORTS instead of asserting, and says so on its banner
 from checks.batch_invariance_check import check_block_batch_invariance
 
 
-def main() raises:
+def run_checks() raises:
     check_block_batch_invariance()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("batch_invariance_main", cpu=False, gpu=True, serial="", run=run_cases)

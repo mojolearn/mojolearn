@@ -1,0 +1,15 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index f9c950345a..3c3306562e 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -2137,9 +2137,7 @@ def m3_siso_forward(
+             block_dim=(MAMBA3_TPB, 1, 1),
+         )
+     m3_phase_tick(ctx, phase_tick, String("m3_yintra_kernel"))
+-    # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_YSTATE (unmeasured old path: the scalar y-state kernel where the tile fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 84eefc33e6.
+-    # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_YSTATE.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-    comptime if lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
++    comptime if not is_defined["MOJOLEARN_MAMBA3_LEGACY_YSTATE"]() and lib_smem_page_fits_for[TARGET_COLUMN, 5248]():
+         ctx.enqueue_function[m3_ystate_tiled_kernel](
+             ystate.unsafe_ptr(),
+             rotq_work.unsafe_ptr(),

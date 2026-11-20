@@ -12,15 +12,20 @@ def connect(scaler_class):
     context = _state_context()
     context["native_module_type"] = ModuleType
     context["output_context"] = _numpy_free_context()
-    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
-    from ._sk_validate import _ACCEPTS_SPARSE
-    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI connection
         try:
             prep = _backend.binding("_mojolearn_preprocessing", mode)
             xprep = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {}
+            # The provider admission (providers/python/neural_descriptor_pyapi_door.mojo
+            # `neural_descriptor_entry`) takes an exact module that owns its
+            # entry. On a CPU-only install `_backend.binding` returns the lazy
+            # `_HostBinding` facade; resolve it to its host module here, as
+            # _native_family_bridge.connect_bindings does, or GP normalize_y
+            # refused "native provider requires an exact compiled module"
+            # (smoke-triage 2026-11-15: lanes gp-normalize-y, gp-sample-y-normalize).
+            entries = {"native_scaler_provider": _backend.exact_host_module(prep),
+                       "native_program_provider": _backend.exact_host_module(xprep)}
             for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
                 try:
                     entry = getattr(prep, name)
@@ -31,7 +36,7 @@ def connect(scaler_class):
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"StandardScaler requires compiled {name}")
                 entries[name] = entry
-            for name in ("x_prep_run", "x_prep_numeric_mode"):  # glue: cache the existing native weighted-statistics executor
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: cache the existing native weighted-statistics executor
                 entry = getattr(xprep, name)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"StandardScaler requires compiled {name}")
@@ -76,9 +81,11 @@ def connect_host(cls, context, prep, xprep, training):
     entries = {"standard_transform": prep.standard_transform,
                "preprocessing_numeric_mode": prep.estimators_numeric_mode,
                "x_prep_run": xprep.x_prep_run,
-               "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
+               "x_prep_numeric_mode": xprep.x_prep_numeric_mode,
+               "x_prep_vendor": xprep.x_prep_vendor}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostStandardScaler requires compiled CPU entries")
+    entries["native_program_provider"] = xprep
     if isinstance(training, str):
         entries["scaler_training_error"] = training
     else:
@@ -89,6 +96,7 @@ def connect_host(cls, context, prep, xprep, training):
             if training.preprocessing_numeric_mode() != 1 or training.preprocessing_vendor() != "cpu":
                 raise ValueError("HostStandardScaler training requires the CPU identical binding")
             entries["standard_fit"] = entry
+            entries["native_scaler_provider"] = training
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             entries["scaler_training_error"] = type(error).__name__ + ": " + str(error)
 

@@ -6,6 +6,11 @@
                                          reference card shipped in the wheel;
                                          with no card shipped, `verify --quick`
     python -m mojolearn verify --json    the same, machine readable
+    python -m mojolearn verify --check MODEL --estimator CLASS --inputs X.npy
+    python -m mojolearn verify --fit-both --estimator CLASS --inputs X.npy --fit-inputs XTRAIN.npy
+                                         run your saved model on your rows on
+                                         the GPU and on the CPU of this machine
+                                         and compare the bits (_verify_check.py)
     python -m mojolearn env              what this process loaded, no GPU
     python -m mojolearn check-fixture    rebuild and hash the pinned fixture,
                                          no GPU and no extension call
@@ -59,6 +64,11 @@ import json
 from pathlib import Path
 import sys
 
+# Every command (verify above all) runs on the loaded set the package had
+# before lazy family import: every family and every unit (`_families.load_all`),
+# so verify's enumeration and binding provenance find each one.
+from . import _families
+_families.load_all()
 from . import _conformance
 from . import _identity
 from . import _verify
@@ -108,20 +118,15 @@ def _asks_for_card(args):
                 != _verify.REFERENCE_NAME)
 
 
-def _ships_card():
-    try:
-        _verify.read_reference()
-    except _verify._NoReference:
-        return False
-    return True
-
-
 QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
                        "`verify --quick` against the reference table instead "
                        "(`verify --all` is the full check)")
 
 
 def _verify_dispatch(args):
+    if getattr(args, "check", None) or getattr(args, "fit_both", False):
+        from . import _verify_check
+        return _verify_check.cmd_check(args)
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
     if not _asks_for_card(args):
@@ -330,6 +335,46 @@ def build_parser():
                         "--lanes and --fixtures explicitly select a custom "
                         "scope. Missing or failed checks exit nonzero. On a CPU-only "
                         "install it says so rather than silently skipping")
+    v.add_argument("--check", metavar="MODEL", default=None,
+                   help="CHECK YOUR OWN MODEL AND DATA ON THE GPU AND ON THE CPU of this "
+                        "machine. MODEL is a file an estimator's save wrote; --estimator "
+                        "names the class that saved it and --inputs a .npy or .npz file of "
+                        "rows. The model answers --method for those rows twice, from the "
+                        "GPU estimator and from the CPU model mojolearn.host_model loads "
+                        "from the same file, and the report shows both sides (device, "
+                        "binaries loaded, what the runtime counted while it ran, wall time, and the shape, dtype, SHA-256 and first "
+                        "values of the output) and one verdict line: MATCH, or MISMATCH with "
+                        "the index and the two values of the first differing element. It is "
+                        "the same check --cross-check runs on the fixtures in the wheel. "
+                        "identical mode only: fast makes no promise about bits and is "
+                        "refused (exit 3). --cpu-threads sets the CPU side's threads")
+    v.add_argument("--fit-both", dest="fit_both", action="store_true",
+                   help="CHECK A FIT ON THE GPU AND ON THE CPU of this machine, for an "
+                        "estimator whose fitted model cannot be loaded on the CPU: "
+                        "--estimator CLASS (built with --params, a JSON object of constructor "
+                        "arguments) is fitted on --fit-inputs (and --fit-targets) once on each "
+                        "side, the CPU side in a child process that selects the CPU binaries, "
+                        "and each fitted model answers --method for --inputs. Same report and "
+                        "verdict as --check, with the CPU side's fit and wall time. Opt-in: "
+                        "the CPU fit can be slow (--fit-rows N fits both sides on the first N "
+                        "rows). A class the CPU does not run reports why (exit 4)")
+    v.add_argument("--fit-inputs", dest="fit_inputs", metavar="FILE", default=None,
+                   help="with --fit-both: the training rows, a .npy or .npz file")
+    v.add_argument("--fit-targets", dest="fit_targets", metavar="FILE", default=None,
+                   help="with --fit-both: the training targets, when the estimator takes them")
+    v.add_argument("--params", metavar="JSON", default=None,
+                   help="with --fit-both: the constructor arguments as a JSON object")
+    v.add_argument("--fit-rows", dest="fit_rows", type=int, default=None, metavar="N",
+                   help="with --fit-both: fit both sides on the first N training rows only")
+    v.add_argument("--estimator", metavar="CLASS", default=None,
+                   help="with --check: the mojolearn class whose save wrote MODEL, for "
+                        "example RandomForestClassifier")
+    v.add_argument("--inputs", metavar="FILE", default=None,
+                   help="with --check: the rows to answer for, a .npy file or a .npz file "
+                        "(its array X, else its first array)")
+    v.add_argument("--method", metavar="NAME", default=None,
+                   help="with --check: the method to check (default: predict when the "
+                        "model has it, else transform)")
     # `--par`, `--par-devices` and `--par-self-test` (the two-device column
     # of the par-* lanes) were removed when multi-GPU verification was
     # retired (owner, 2026-10-31); argparse refuses them as unknown options.

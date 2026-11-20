@@ -16,7 +16,7 @@ vendor's flush-to-zero or float64 support. One thread per row; no shared
 memory (no page to gate).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 comptime LRD_TPB = 256
@@ -171,22 +171,3 @@ def _argmax_last_u32_kernel(src: _U32, rows_: Int32, length_: Int32, cols_: Int3
     dst.unsafe_store(r, Int64(best))
 
 
-def device_argmax_last_f32(
-    ctx: DeviceContext, logits_addr: Int, rows: Int, length: Int, cols: Int, dst_addr: Int,
-) raises:
-    """`argmax_rows_f32` of position `length - 1` of each row of the C-order
-    float32 `[rows, length, cols]` host block at `logits_addr`, one int64
-    column index per row into `dst_addr`. `1 <= rows, length, cols` and
-    `rows * length <= LRD_MAX_N` (the binding checks)."""
-    var total = rows * length * cols
-    var d_dst = ctx.enqueue_create_buffer[DType.int64](rows)
-    var d_src = ctx.enqueue_create_buffer[DType.uint32](total)
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=_U32(unsafe_from_address=logits_addr))
-    ctx.enqueue_function[_argmax_last_u32_kernel](
-        d_src.unsafe_ptr(), Int32(rows), Int32(length), Int32(cols), d_dst.unsafe_ptr(),
-        grid_dim=_blocks(rows), block_dim=LRD_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=dst_addr), src_buf=d_dst)
-    ctx.synchronize()
-    _ = d_src^
-    _ = d_dst^

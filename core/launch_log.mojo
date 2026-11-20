@@ -20,6 +20,12 @@ kernel site. `ensemble/bench/profile_metal.py` performs the join and
 REFUSES it unless the two counts match exactly -- a misaligned join
 mislabels every row after the first slip, so an inexact one is worthless.
 
+THE ACTIVITY RECORD SHARES THE LATCH (lane fx-verify-trace, 2026-11-20).
+`python -m mojolearn verify` asks the runtime what it did during a call
+(`activity_begin` / `activity_end` below, `core/activity_record.mojo`). The
+named launch sites already read this slot once per launch, so the record's
+switch lives in the same state and a site still tests one Bool (`watch`).
+
 DISABLED IS THE SHIPPING STATE. DEVIATION 1895: the env read happens
 ONCE per process, not once per launch. This used to call
 `String(getenv("RF_LAUNCH_LOG"))` on EVERY launch (~9.4k per benchmark
@@ -36,12 +42,16 @@ on the enqueue path and quiet_window would rightly refuse to certify
 one.
 """
 
-from std.ffi import _Global
 from std.os import getenv
+from core.activity_record import ActivityRecord
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 struct _LaunchLogState(Defaultable, Movable):
-    """The once-read `RF_LAUNCH_LOG` value (DEVIATION 1895)."""
+    """The once-read `RF_LAUNCH_LOG` value (DEVIATION 1895) and the activity
+    record's switch (lane fx-verify-trace, 2026-11-20). ONE slot for both, so
+    a named launch site still reads one pointer and tests one Bool (`watch`)
+    when neither is on."""
 
     var path: String
     var enabled: Bool
@@ -53,6 +63,15 @@ struct _LaunchLogState(Defaultable, Movable):
     overlaps); read it as attribution, never as a timing."""
     var last_name: String
     var last_ns: Int
+    var watch: Bool
+    """`enabled or counting`: the one test of a named launch site."""
+    var counting: Bool
+    """A verification asked for the activity record (`activity_begin`); off
+    in every process that did not."""
+    var lock: List[Int64]
+    """One lock word (`shared_slot_lock`) around every write of `record`:
+    the parallel drivers launch from several host threads."""
+    var record: ActivityRecord
 
     def __init__(out self):
         self.path = String(getenv("RF_LAUNCH_LOG"))
@@ -60,20 +79,125 @@ struct _LaunchLogState(Defaultable, Movable):
         self.clock = self.enabled and getenv("RF_LAUNCH_CLOCK") == "1"
         self.last_name = String("")
         self.last_ns = 0
+        self.watch = self.enabled
+        self.counting = False
+        self.lock = List[Int64](length=1, fill=Int64(0))
+        self.record = ActivityRecord()
 
 
-comptime _LAUNCH_LOG = _Global[
-    StorageType=_LaunchLogState,
-    name="RFLaunchLog",
-    init_fn=_LaunchLogState.__init__,
-]
+# V2 (lane fx-verify-trace, 2026-11-20): the activity record's fields joined
+# the state, so the name and the layout version moved together.
+comptime _LAUNCH_LOG = SharedSlot[_LaunchLogState, "MojolearnRFLaunchLogV2", 2]
+
+
+@always_inline
+def _activity_lock_word(
+    st: UnsafePointer[_LaunchLogState, MutUntrackedOrigin],
+) -> MutPointer[Int64, MutUntrackedOrigin]:
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](st[].lock.unsafe_ptr())
 
 
 def log_launch(name: StringSlice) raises:
-    """Append `name` to `$RF_LAUNCH_LOG` if it was set at first use;
-    one pointer load and one Bool test when it was not."""
+    """Count `name` in the activity record when a verification asked for it,
+    and append it to `$RF_LAUNCH_LOG` if that was set at first use; one
+    pointer load and one Bool test when neither is on."""
     var st = _LAUNCH_LOG.get_or_create_ptr()
-    if not st[].enabled:
+    if not st[].watch:
         return
-    with open(st[].path, "a") as fh:
-        fh.write(String(name) + "\n")
+    if st[].counting:
+        var lock = _activity_lock_word(st)
+        shared_slot_lock(lock)
+        st[].record.launch(String(name))
+        shared_slot_unlock(lock)
+    if st[].enabled:
+        with open(st[].path, "a") as fh:
+            fh.write(String(name) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# The activity record (lane fx-verify-trace, 2026-11-20): `core/activity_record
+# .mojo` says what is counted at which door. OFF IN EVERY PROCESS THAT DID NOT
+# ASK: each entry below reads the slot and tests `counting`, and returns. None
+# of them sits in a loop over rows or elements: a host split, a transfer of one
+# operand and a host inference entry each happen once per call or per stage.
+# ---------------------------------------------------------------------------
+
+
+def activity_begin() raises:
+    """Clear the record and start counting. Called by the verification code
+    (bindings/_mojolearn_core_host.mojo `activity_begin`), never by a product
+    call."""
+    var st = _LAUNCH_LOG.get_or_create_ptr()
+    var lock = _activity_lock_word(st)
+    shared_slot_lock(lock)
+    st[].record = ActivityRecord()
+    st[].counting = True
+    st[].watch = True
+    shared_slot_unlock(lock)
+
+
+def activity_end() raises -> ActivityRecord:
+    """Stop counting and return what was counted since `activity_begin` (an
+    empty record when nothing was begun)."""
+    var st = _LAUNCH_LOG.get_or_create_ptr()
+    var lock = _activity_lock_word(st)
+    shared_slot_lock(lock)
+    st[].counting = False
+    st[].watch = st[].enabled
+    var record = st[].record.copy()
+    st[].record = ActivityRecord()
+    shared_slot_unlock(lock)
+    return record^
+
+
+def activity_uploaded(size: Int) raises:
+    """One host-to-device copy of `size` bytes through a shared transfer
+    entry."""
+    var st = _LAUNCH_LOG.get_or_create_ptr()
+    if not st[].counting:
+        return
+    var lock = _activity_lock_word(st)
+    shared_slot_lock(lock)
+    st[].record.uploaded(size)
+    shared_slot_unlock(lock)
+
+
+def activity_downloaded(size: Int) raises:
+    """One device-to-host copy of `size` bytes through a shared transfer
+    entry."""
+    var st = _LAUNCH_LOG.get_or_create_ptr()
+    if not st[].counting:
+        return
+    var lock = _activity_lock_word(st)
+    shared_slot_lock(lock)
+    st[].record.downloaded(size)
+    shared_slot_unlock(lock)
+
+
+def activity_host_split(tasks: Int):
+    """One host thread split into `tasks` tasks (`core/host_parallel.mojo`).
+    Does not raise: the split it sits in does not."""
+    try:
+        var st = _LAUNCH_LOG.get_or_create_ptr()
+        if not st[].counting:
+            return
+        var lock = _activity_lock_word(st)
+        shared_slot_lock(lock)
+        st[].record.host_split(tasks)
+        shared_slot_unlock(lock)
+    except:
+        return
+
+
+def activity_host(name: StringSlice):
+    """One entry of the named host routine. Does not raise."""
+    try:
+        var st = _LAUNCH_LOG.get_or_create_ptr()
+        if not st[].counting:
+            return
+        var lock = _activity_lock_word(st)
+        shared_slot_lock(lock)
+        st[].record.host_entry(String(name))
+        shared_slot_unlock(lock)
+    except:
+        return

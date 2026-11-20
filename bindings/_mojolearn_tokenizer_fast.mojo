@@ -27,8 +27,11 @@ THE ADDRESS CONTRACT is the host binding's, so the Python door passes the same b
         allow_endoftext must be False (the door sends True to the host binding) and out_cap
         at least n_bytes; ids back to back as int32, counts as int64; returns the total.
 """
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -47,10 +50,17 @@ from tokenizer.fast.bpe_fast_impl import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Direct PyNumber_Index / PyLong_AsLongLong through entries resolved once
+    # per process: no class-name String, no operator module stamp, no Python
+    # call per argument. Any refusal keeps the original path and wording.
+    var word = 0
+    if lm_try_index(value, word):
+        return word
+    # Not an index: keep the original wording (NumPy bool_ included).
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("tokenizer fast: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -58,10 +68,13 @@ def _index(value: PythonObject) raises -> Int:
 
 
 def _flag(value: PythonObject, name: String) raises -> Bool:
+    # Exact bool singletons, compared by identity (no class-name String).
+    if value is PythonObject(True):
+        return True
+    if value is PythonObject(False):
+        return False
     var type_name = String(py=value.__class__.__name__)
-    if type_name != "bool":
-        raise Error("tokenizer fast: " + name + " must be a bool, got " + type_name)
-    return Bool(py=value)
+    raise Error("tokenizer fast: " + name + " must be a bool, got " + type_name)
 
 
 def tokenizer_fast_numeric_mode_binding() raises -> PythonObject:
@@ -190,6 +203,7 @@ def bpe_encode_batch_binding(
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_fast.mojo
 # (the per-binding build, tools/merged_bindings.py entries).
 def build__mojolearn_tokenizer_fast() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_fast")
         module.def_function[tokenizer_fast_numeric_mode_binding]("tokenizer_fast_numeric_mode")

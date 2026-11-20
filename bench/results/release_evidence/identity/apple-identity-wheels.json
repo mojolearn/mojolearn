@@ -1,0 +1,65 @@
+{
+ "columns": {
+  "apple": {
+   "chunks": [
+    {
+     "device": null,
+     "lanes": 171,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/apple/apple-m4/w0/apple-m4.lanes-b949fd58.identical.json",
+       "name": "apple-m4.lanes-b949fd58"
+      }
+     ],
+     "worker": 0
+    },
+    {
+     "device": null,
+     "lanes": 171,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/apple/apple-m4/w1/apple-m4.lanes-a3e263f4.identical.json",
+       "name": "apple-m4.lanes-a3e263f4"
+      }
+     ],
+     "worker": 1
+    },
+    {
+     "device": null,
+     "lanes": 171,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/apple/apple-m4/w2/apple-m4.lanes-e02aa4eb.identical.json",
+       "name": "apple-m4.lanes-e02aa4eb"
+      }
+     ],
+     "worker": 2
+    }
+   ],
+   "label": "apple-m4",
+   "owed": 513,
+   "rc": 0,
+   "reused": 0
+  }
+ },
+ "failures": [],
+ "gpu_free_gib": null,
+ "gpus": 0,
+ "nproc": 10,
+ "ok": true,
+ "schema": "mojolearn.identity-wheels.v1",
+ "shard": "0/1",
+ "wheels": [
+  "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl 72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+ ],
+ "workers_per_device": 3
+}

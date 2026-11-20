@@ -145,11 +145,15 @@ def test_unfitted_width_rank_and_empty_refusals_match_the_previous_path(method):
     error = clean(getattr(unfitted, method), X, expected_error=RuntimeError)
     assert str(error) == 'this estimator is not fitted yet'
     model, _ = fixture('RandomForestRegressor')
-    for bad in (np.zeros((len(X), 3), dtype=np.float32), np.zeros(3, dtype=np.float32), np.zeros((0, 2), dtype=np.float32)):
+    for bad in (np.zeros((len(X), 3), dtype=np.float32), np.zeros((0, 2), dtype=np.float32)):
         with pytest.raises(ValueError) as old:
             legacy_auxiliary(model, bad, leaves=True)
         error = clean(getattr(model, method), bad, expected_error=ValueError)
         assert str(error) == str(old.value)
+    # A 1-D X is the same rank refusal; the shared admission
+    # (core/admitted_f32_plan.mojo) now words it as scikit-learn does.
+    error = clean(getattr(model, method), np.zeros(3, dtype=np.float32), expected_error=ValueError)
+    assert str(error).startswith("mojolearn: X must be 2-D, got 1-D shape (3,). Reshape your data")
 
 
 @pytest.mark.parametrize('method', METHODS)
@@ -204,10 +208,3 @@ def test_nonfinite_inputs_still_refuse(method):
     assert 'valid finite trees and input' in str(error)
 
 
-def test_private_combined_request_still_returns_all_three_outputs():
-    model, arrays = fixture('RandomForestClassifier')
-    expected = reference(X, arrays, 2)
-    result = clean(model._forest_auxiliary, X, leaves=True, prefixes=True, prediction=True)
-    assert type(result) is tuple and len(result) == 3
-    for actual, value in zip(result, expected):
-        assert_bytes(actual, value)

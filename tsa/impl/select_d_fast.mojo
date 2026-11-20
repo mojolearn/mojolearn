@@ -3,7 +3,7 @@
 """FAST + Apple `select_d` (lane/apple-fast-select, 2026-10-02): every KPSS
 round on the device, one download.
 
-FAST ON APPLE ONLY, the FAST + Apple default (`-D MOJOLEARN_SELECT_D_OFF` turns it off); tsa/impl/auto_arima.mojo
+FAST ON APPLE ONLY, the FAST + Apple default; tsa/impl/auto_arima.mojo
 gates the one call on `SELECT_D_FAST` below, so the IDENTICAL binding, the
 other vendors and the host compile the host-controlled loop unchanged.
 
@@ -20,14 +20,12 @@ chosen orders and the flag come back together. The refusal of a non-finite
 input is raised after the download, by the same name; the statistic of
 every round is the primitive's, so the chosen orders are the same words.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.hostptr import copy_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
-from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 from core.column_stats import STATS_TPB
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 from tsa.impl.timeSeries.stationarity import (
@@ -37,11 +35,10 @@ from tsa.impl.timeSeries.stationarity import (
 )
 
 #: FAST on Apple only. The FAST + Apple default since the M3 A/B (select-d taxi-hourly
-#: 7.8 -> 3.9 ms, -50%, digest identical); -D MOJOLEARN_SELECT_D_OFF turns it off
-#: (-D MOJOLEARN_SELECT_D is now harmless).
-comptime SELECT_D_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SELECT_D_OFF"]()
-)
+#: 7.8 -> 3.9 ms, -50%, digest identical) (-D MOJOLEARN_SELECT_D is harmless).
+# TOMBSTONE: MOJOLEARN_SELECT_D_OFF (old path, EXP:552 KEPT default) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_SELECT_D_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SELECT_D_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: `select_d`
 #: takes `select_d_fast` (every KPSS round queued on the device, the first
@@ -49,22 +46,20 @@ comptime SELECT_D_FAST = (
 #: one `kpss_test` + scan + download per candidate order. The launches are
 #: the primitive's own kernels, so the chosen orders are the same words; a
 #: refusal falls back to the host-controlled loop, which raises it by its
-#: own name and index (`tsa/impl/auto_arima.mojo`).
-#: `-D MOJOLEARN_IDN_SELECT_D_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: loop. FAST is unchanged.
-comptime SELECT_D_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SELECT_D_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: own name and index (`tsa/impl/auto_arima.mojo`). FAST is unchanged.
+# TOMBSTONE: MOJOLEARN_IDN_SELECT_D_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_D_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+comptime SELECT_D_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: `kpss_test`
 #: from the binding as ONE wait (`kpss_one_wait` below: the upload, the
 #: non-finite flag kernel, the differencing, `_kpss_test`'s launches and the
 #: download queued back to back) instead of four (upload, non-finite scan,
-#: the test, the download). Same kernels, same bits.
-#: `-D MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores
-#: the four-wait sequence. FAST is unchanged.
-comptime KPSS_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: the test, the download). Same kernels, same bits. FAST is unchanged.
+# TOMBSTONE: MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KPSS_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def nonfinite_flag_kernel(flag: MutPointer[UInt32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin], n_in: Int32):
@@ -109,10 +104,21 @@ def select_d_fast(
     if batch_size < 1:
         raise Error("kpss_test: batch_size must be >= 1 (batch_size=" + String(batch_size) + ")")
     var total = batch_size * n_obs
-    # the rounds' shapes and one workspace for all of them: per round the
-    # differenced series, the centred series, the accumulator (3 x batch x
-    # n_diff) and y_means, s2A, s2B, eta, stat (5 x batch)
-    var words = 0
+    # ONE device buffer (lane fb15-sync-counts, 2026-11-18; was four: the
+    # workspace, the flags, the non-finite word and the chosen orders), laid
+    # out in 32-bit words as
+    #   [chosen batch | non-finite word 1 | round flags (batch * d_max bytes) | workspace]
+    # so the chosen orders and the non-finite word come home in ONE download.
+    # Per round the workspace holds the differenced series (not for the round
+    # that tests the input itself: it reads `d_y` directly, where it copied
+    # it device-to-device before), the centred series, the accumulator, and
+    # y_means, s2A, s2B, eta, stat (5 x batch). The kernels and their inputs
+    # are the same words, so the chosen orders are the same words.
+    var flag_at = batch_size
+    var res_at = batch_size + 1
+    var res_words = (batch_size * d_max + 3) // 4
+    var ws_at = res_at + res_words
+    var words = ws_at
     for d_ in range(d_max):
         var d_sD = d_ + s * D
         if n_obs <= d_sD:
@@ -120,50 +126,58 @@ def select_d_fast(
                 "stationarity: n_obs (" + String(n_obs)
                 + ") must be greater than d + s*D (" + String(d_sD) + ")"
             )
-        words += 3 * batch_size * (n_obs - d_sD) + 5 * batch_size
-    var w = ctx.enqueue_create_buffer[DType.float32](words if words > 0 else 1)
-    var res = ctx.enqueue_create_buffer[DType.uint8](batch_size * d_max if d_max > 0 else 1)
-    var flag = ctx.enqueue_create_buffer[DType.uint32](1)
-    var chosen = ctx.enqueue_create_buffer[DType.int32](batch_size)
-    ctx.enqueue_memset(flag, UInt32(0))
+        var tot_ = batch_size * (n_obs - d_sD)
+        words += (2 if (d_ == 0 and D == 0) else 3) * tot_ + 5 * batch_size
+    var buf = ctx.enqueue_create_buffer[DType.float32](words)
+    var flag = buf.create_sub_buffer[DType.float32](flag_at, 1)
+    var head = buf.create_sub_buffer[DType.float32](0, batch_size + 1)
+    ctx.enqueue_memset(flag, Float32(0.0))
+    var bp = buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var chosen_p = bp.bitcast[Int32]()
+    var flag_p = (bp + flag_at).bitcast[UInt32]()
+    var res_p = (bp + res_at).bitcast[UInt8]()
+    var yp = d_y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[nonfinite_flag_kernel](
-        flag.unsafe_ptr(), d_y.unsafe_ptr(), Int32(total),
+        flag_p, yp, Int32(total),
         grid_dim=((total + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
     comptime sum_kernel = series_sum_kernel[False]
     comptime sumsq_kernel = series_sum_kernel[True]
-    var off = 0
+    var off = ws_at
     for d_ in range(d_max):
         var nd = n_obs - d_ - s * D
         var tot = batch_size * nd
+        var direct = d_ == 0 and D == 0
         var y_at = off
-        var cent_at = off + tot
-        var acc_at = off + 2 * tot
-        var means_at = off + 3 * tot
+        if not direct:
+            off += tot
+        var cent_at = off
+        var acc_at = off + tot
+        var means_at = off + 2 * tot
         var s2a_at = means_at + batch_size
         var s2b_at = s2a_at + batch_size
         var eta_at = s2b_at + batch_size
         var stat_at = eta_at + batch_size
-        off += 3 * tot + 5 * batch_size
-        var y_diff = w.create_sub_buffer[DType.float32](y_at, tot)
-        if d_ == 0 and D == 0:
-            # the round tests the input itself: a device-to-device copy into the workspace
-            var src = d_y.create_sub_buffer[DType.float32](0, tot)
-            ctx.enqueue_copy(dst_buf=y_diff, src_buf=src)
-        else:
+        off += 2 * tot + 5 * batch_size
+        var wp = bp
+        # the round's series: the input itself, or its differences in the workspace
+        var src = yp
+        if not direct:
+            var y_diff = buf.create_sub_buffer[DType.float32](y_at, tot)
             prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d_, D, s)
+            src = bp + y_at
+            _ = y_diff^
         # `_kpss_test`'s launches (tsa/impl/timeSeries/stationarity.mojo), on the workspace
         var nd_f = Float32(nd)
         var ratio = Float32(1.0) / nd_f
         var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
         var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
-        var wp = w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[sum_kernel](
-            wp + means_at, wp + y_at, Int32(nd), ratio,
+            wp + means_at, src, Int32(nd), ratio,
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         ctx.enqueue_function[center_kernel](
-            wp + cent_at, wp + y_at, wp + means_at, Int32(nd), Int32(tot),
+            wp + cent_at, src, wp + means_at, Int32(nd), Int32(tot),
             grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
         ctx.enqueue_function[sumsq_kernel](
@@ -172,7 +186,9 @@ def select_d_fast(
         )
         var lags = kpss_lags(nd)
         var coeffs = kpss_s2B_coefficients(nd, lags)
-        var lag_tasks = batch_size * ((nd + 3) // 4) if C60_LAG4 else tot
+        # TOMBSTONE: MOJOLEARN_C60_LAG4 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+        # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+        var lag_tasks = tot
         ctx.enqueue_function[s2B_accumulation_kernel](
             wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
             grid_dim=((lag_tasks + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
@@ -197,34 +213,30 @@ def select_d_fast(
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         ctx.enqueue_function[kpss_stationarity_check_kernel](
-            res.unsafe_ptr() + d_ * batch_size, wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
+            res_p + d_ * batch_size, wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
             Int32(batch_size), nd_f, pval_threshold,
             grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
-        _ = y_diff^
     ctx.enqueue_function[choose_d_kernel](
-        chosen.unsafe_ptr(), res.unsafe_ptr(), Int32(batch_size), Int32(d_max),
+        chosen_p, res_p, Int32(batch_size), Int32(d_max),
         grid_dim=((batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
-    # the one download: the chosen orders and the non-finite flag
-    var hc = ctx.enqueue_create_host_buffer[DType.int32](batch_size)
-    var hf = ctx.enqueue_create_host_buffer[DType.uint32](1)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=chosen)
-    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=flag)
+    # the one download: the chosen orders and the non-finite word, adjacent
+    var hh = ctx.enqueue_create_host_buffer[DType.float32](batch_size + 1)
+    ctx.enqueue_copy(dst_ptr=hh.unsafe_ptr(), src_buf=head)
     ctx.synchronize()
-    if hf.unsafe_ptr().unsafe_load(0) != UInt32(0):
+    var hp = hh.unsafe_ptr()
+    if hp.bitcast[UInt32]().unsafe_load(flag_at) != UInt32(0):
         raise Error(
             "kpss_test: y contains a non-finite value; missing or infinite observations are refused by name"
         )
     var out = List[Int32]()
     for b in range(batch_size):
-        out.append(hc.unsafe_ptr().unsafe_load(b))
-    _ = hc^
-    _ = hf^
-    _ = chosen^
+        out.append(hp.bitcast[Int32]().unsafe_load(b))
+    _ = hh^
+    _ = head^
     _ = flag^
-    _ = res^
-    _ = w^
+    _ = buf^
     return out^
 
 
@@ -253,46 +265,63 @@ def kpss_one_wait(
     var total = batch_size * n_obs
     var nd = n_obs - d_sD
     var tot = batch_size * nd
-    # one workspace: the differenced series, the centred series, the
-    # accumulator (3 x batch x nd) and y_means, s2A, s2B, eta, stat (5 x batch)
-    var cent_at = tot
-    var acc_at = 2 * tot
-    var means_at = 3 * tot
+    var direct = d == 0 and D == 0
+    # ONE device buffer and ONE host stage (lane fb15-sync-counts, 2026-11-18;
+    # were four device buffers and four host buffers, a device-to-device copy
+    # of the input and three downloads), in 32-bit words:
+    #   [y total | non-finite word 1 | stat batch | flags (batch bytes) | workspace]
+    # The upload carries y and a zero non-finite word (no memset); the ONE
+    # download brings the non-finite word, the statistics and the flags home
+    # together. The test at d = D = 0 reads y directly (it copied y into the
+    # workspace device-to-device before). Same kernels on the same words.
+    var flag_at = total
+    var stat_at = total + 1
+    var res_at = stat_at + batch_size
+    var res_words = (batch_size + 3) // 4
+    var ws_at = res_at + res_words
+    # the workspace: the differenced series (not when the test reads y), the
+    # centred series, the accumulator, then y_means, s2A, s2B, eta (4 x batch)
+    var y_at = ws_at
+    var cent_at = ws_at + (0 if direct else tot)
+    var acc_at = cent_at + tot
+    var means_at = acc_at + tot
     var s2a_at = means_at + batch_size
     var s2b_at = s2a_at + batch_size
     var eta_at = s2b_at + batch_size
-    var stat_at = eta_at + batch_size
-    var d_y = ctx.enqueue_create_buffer[DType.float32](total)
-    var h_y = ctx.enqueue_create_host_buffer[DType.float32](total)
-    copy_f32(y_ptr, h_y.unsafe_ptr(), total)
-    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
-    var w = ctx.enqueue_create_buffer[DType.float32](3 * tot + 5 * batch_size)
-    var res = ctx.enqueue_create_buffer[DType.uint8](batch_size)
-    var flag = ctx.enqueue_create_buffer[DType.uint32](1)
-    ctx.enqueue_memset(flag, UInt32(0))
+    var words = eta_at + batch_size
+    var buf = ctx.enqueue_create_buffer[DType.float32](words)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](res_at + res_words)
+    var hp = host.unsafe_ptr()
+    copy_f32(y_ptr, hp, total)
+    hp.unsafe_store(flag_at, Float32(0.0))
+    var up = buf.create_sub_buffer[DType.float32](0, total + 1)
+    var tail = buf.create_sub_buffer[DType.float32](flag_at, res_at + res_words - flag_at)
+    ctx.enqueue_copy(dst_buf=up, src_ptr=hp)
+    var wp = buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[nonfinite_flag_kernel](
-        flag.unsafe_ptr(), d_y.unsafe_ptr(), Int32(total),
+        (wp + flag_at).bitcast[UInt32](), wp, Int32(total),
         grid_dim=((total + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
-    var y_diff = w.create_sub_buffer[DType.float32](0, tot)
-    if d == 0 and D == 0:
-        # the test reads the input itself: a device-to-device copy into the workspace
-        ctx.enqueue_copy(dst_buf=y_diff, src_buf=d_y)
-    else:
+    var src = wp
+    if not direct:
+        var d_y = buf.create_sub_buffer[DType.float32](0, total)
+        var y_diff = buf.create_sub_buffer[DType.float32](y_at, tot)
         prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d, D, s)
+        src = wp + y_at
+        _ = y_diff^
+        _ = d_y^
     comptime sum_kernel = series_sum_kernel[False]
     comptime sumsq_kernel = series_sum_kernel[True]
     var nd_f = Float32(nd)
     var ratio = Float32(1.0) / nd_f
     var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
     var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
-    var wp = w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[sum_kernel](
-        wp + means_at, wp, Int32(nd), ratio,
+        wp + means_at, src, Int32(nd), ratio,
         grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
     ctx.enqueue_function[center_kernel](
-        wp + cent_at, wp, wp + means_at, Int32(nd), Int32(tot),
+        wp + cent_at, src, wp + means_at, Int32(nd), Int32(tot),
         grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
     ctx.enqueue_function[sumsq_kernel](
@@ -301,7 +330,9 @@ def kpss_one_wait(
     )
     var lags = kpss_lags(nd)
     var coeffs = kpss_s2B_coefficients(nd, lags)
-    var lag_tasks = batch_size * ((nd + 3) // 4) if C60_LAG4 else tot
+    # TOMBSTONE: MOJOLEARN_C60_LAG4 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+    var lag_tasks = tot
     ctx.enqueue_function[s2B_accumulation_kernel](
         wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
         grid_dim=((lag_tasks + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
@@ -325,32 +356,21 @@ def kpss_one_wait(
         grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
     ctx.enqueue_function[kpss_stationarity_check_kernel](
-        res.unsafe_ptr(), wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
+        (wp + res_at).bitcast[UInt8](), wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
         Int32(batch_size), nd_f, pval_threshold,
         grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
-    # the one download: the flags, the statistics and the non-finite word
-    var hr = ctx.enqueue_create_host_buffer[DType.uint8](batch_size)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
-    var hf = ctx.enqueue_create_host_buffer[DType.uint32](1)
-    var stat_view = w.create_sub_buffer[DType.float32](stat_at, batch_size)
-    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=res)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=stat_view)
-    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=flag)
+    # the one download: the non-finite word, the statistics and the flags
+    ctx.enqueue_copy(dst_ptr=hp + flag_at, src_buf=tail)
     ctx.synchronize()
-    var ok = hf.unsafe_ptr().unsafe_load(0) == UInt32(0)
+    var ok = hp.bitcast[UInt32]().unsafe_load(flag_at) == UInt32(0)
     if ok:
+        var hr = (hp + res_at).bitcast[UInt8]()
         for b in range(batch_size):
-            flags_ptr.unsafe_store(b, Int32(1) if hr.unsafe_ptr().unsafe_load(b) != UInt8(0) else Int32(0))
-            stat_ptr.unsafe_store(b, hs.unsafe_ptr().unsafe_load(b))
-    _ = stat_view^
-    _ = y_diff^
-    _ = hr^
-    _ = hs^
-    _ = hf^
-    _ = h_y^
-    _ = flag^
-    _ = res^
-    _ = w^
-    _ = d_y^
+            flags_ptr.unsafe_store(b, Int32(1) if hr.unsafe_load(b) != UInt8(0) else Int32(0))
+            stat_ptr.unsafe_store(b, hp.unsafe_load(stat_at + b))
+    _ = up^
+    _ = tail^
+    _ = host^
+    _ = buf^
     return ok

@@ -18,8 +18,7 @@ ascending and divided by k. Without an intercept nothing is centered.
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, seq_rows
 from x_linear.ridge import chol_trusted, ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import FOLD_BLOCK
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, RIDGECV_FF_BLOCKED
-from x_linear.ridge_ff_blocks import rff_stats_host
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
 from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 
 
@@ -267,16 +266,12 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
 
 def _kf_ff_stats_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, s: Int, e: Int, ffb: FP):
     """ridge_ff_unit's float-float statistics over the rows outside [s, e).
-    RIDGECV_FF_BLOCKED (lane/classical-cv-folds): the same words as the
-    device's block partials folded blocks ascending
-    (x_linear/ridge_ff_blocks.mojo `rff_stats_host`); bits change with the
-    device."""
+    The same words as the device's float-float statistics."""
     var ffw = d + 1 + d * d + d
     var sh = ffb
     var sl = ffb + ffw
-    comptime if RIDGECV_FF_BLOCKED:
-        rff_stats_host(x, y, n, d, 1, fi, False, n, s, e, sh, sl)
-        return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5ff76a71a1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     var units = ridge_ff_units(n, d, 1)
 
     def means(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm fi, imm sh, imm sl, imm s, imm e}:

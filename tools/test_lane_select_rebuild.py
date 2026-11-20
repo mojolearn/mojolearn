@@ -12,7 +12,6 @@ share one derived map; run this file on its own time budget.
     .pixi/envs/test/bin/python -m pytest tools/test_lane_select_rebuild.py -q
     python3 tools/test_lane_select_rebuild.py          # same checks, no pytest
 """
-import ast
 import os
 import re
 import sys
@@ -20,29 +19,41 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 from test_lane_select import _assert_reviewed_membership, _conformance_misses, _lane_sets  # noqa: E402
+from test_lane_select import _keep_the_real_map  # noqa: E402,F401  the autouse fixture: one derivation per perturbation
 
 
 def test_the_inversion_check_fails_when_the_backward_edge_is_removed():
     """THE ARM THAT MUST FAIL. An inversion that holds no matter what the map
     does is not a check. With the backward edge disabled, inversion 2 must
-    report `neural_inference.py` and the six lanes it was missing."""
+    report some extender, and only one the backward edge holds today.
+
+    THE CASE MOVED (2026-11-05). This named `neural_inference.py` and four
+    mamba lanes. Every mamba lane now reaches that file FORWARD:
+    `_training_impl.py` imports `_native_samba_bridge` as a module, whose
+    `_connect_admission` reads `vars(base)` (a dynamic module, read whole) and
+    imports `SambaInference`; at run time `import mojolearn` runs the same
+    chain (`__init__.py` -> `_samba_impl.py` ->
+    `_native_samba_bridge.connect` -> `_connect_admission`). Without the
+    backward edge the inversion still fires, on `_classical_host.py`,
+    `_expansion_trees.py` and the others the 2026-11-05 CPU leg printed."""
     real = lane_select._extending_files
+    _, real_rev = _lane_sets()
+    broken_with_edge = {f for f, targets in lane_select.extenders().items()
+                        for b in targets if real_rev.get(b, set()) - real_rev.get(f, set())}
     lane_select._extending_files = lambda closure: set()
     lane_select.reset_caches()
     try:
         sources, rev = _lane_sets()
-        broken = []
+        broken = set()
         for f, targets in lane_select.extenders().items():
             for b in targets:
                 if rev.get(b, set()) - rev.get(f, set()):
-                    broken.append(f)
-        assert "python/mojolearn/neural_inference.py" in broken, (
-            "with the backward edge removed the inversion did NOT flag neural_inference.py, so it "
-            f"is not what is holding the map together. flagged: {sorted(set(broken))[:5]}")
-        missing = rev.get("python/mojolearn/_mamba_impl.py", set()) \
-            - rev.get("python/mojolearn/neural_inference.py", set())
-        for lane in ("mamba1", "mamba2", "mamba2-dtlimit", "mamba3"):
-            assert lane in missing, f"{lane} was expected to be missing without the edge"
+                    broken.add(f)
+        assert broken, "with the backward edge removed the inversion flagged nothing, so it is not a check"
+        # The edge is what holds each flagged file: with it, that file is held.
+        assert not broken & broken_with_edge, (
+            f"{sorted(broken & broken_with_edge)[:5]} break the inversion with the edge ON too; "
+            "this arm cannot tell the edge's work from an existing break")
     finally:
         lane_select._extending_files = real
         lane_select.reset_caches()
@@ -118,8 +129,6 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     that module, which the wide rule above breaks at once."""
     rev = lane_select.reverse_map()
     ib = lane_select.identity_break()
-    init = ast.parse(open(os.path.join(lane_select.ROOT, lane_select.PKG, "__init__.py"),
-                          encoding="utf-8").read())
     # STALE CASE DROPPED 2026-10-10: language_model.py is no longer a door.
     # 76c025466 (2026-10-02) made __init__.py bind the language-model names on
     # first touch (`_CPU_INFERENCE`, name -> module) instead of an eager
@@ -137,9 +146,11 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         lanes = rev.get(rel, set())
         assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
         stem = os.path.basename(rel)[:-3]
-        bound = {a.asname or a.name for n in ast.walk(init)
-                 if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module == stem
-                 for a in n.names}
+        # Since b6aa87e41d `__init__.py` binds these names through its `_LAZY_NAMES` table
+        # ("UMAP": ".umap") rather than `from .umap import UMAP`; both forms are read the way the
+        # selector reads them (`_public_rebindings`).
+        bound = {name for name, rels in lane_select._public_rebindings(lane_select._python_files()).items()
+                 if rel in rels and name != stem}
         assert bound, f"__init__.py binds nothing from {stem}; pick a new case"
         naming = {n for n, fn in ib.LANES.items()
                   if lane_select._code_names(fn, vars(ib)) & bound}

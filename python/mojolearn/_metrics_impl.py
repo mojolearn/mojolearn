@@ -47,9 +47,10 @@ Examples
 # repository (`archive/evidence/E3_RESULTS.md:253` names it `<mac 123452>`), so
 # NVIDIA <-> AMD is reproducible from committed artifacts and the Apple
 # comparisons rest on the recorded judge output.
-# Input validation lives here deliberately: the Mojo entries do not scan their
-# device inputs (`metrics/README.md` HAND-OFF ask 3), so these functions do the
-# `check_array` work (finite X for silhouette and trustworthiness, finite
+# Input validation runs in the native owners' UNPACK (bindings/mcls_common_unpack.mojo,
+# bindings/metrics_cls_native_unpack.mojo, bindings/metrics_reg_door.mojo): the Mojo kernel
+# entries do not scan their device inputs (`metrics/README.md` HAND-OFF ask 3), so the
+# UNPACK does the `check_array` work (finite X for silhouette and trustworthiness, finite
 # y/y_pred for r2_score, finite non-negative P/Q for kl_divergence). The
 # kernel-level answers for out-of-contract values (a NaN reaching `sil_op` as
 # +0.0 through DEVIATION 656, r2_score's canonical NaN 0x7fc00000 through
@@ -57,18 +58,7 @@ Examples
 # `metrics/checks/regression_metrics_check.mojo` and `silhouette_check.mojo`.
 # cuML defaults come from the pinned v26.08.00 checkout.
 
-import numbers
-from ._buffer import _materialize, _native
-from ._labels import is_bool, flatten_labels
-from . import _user_objects
-from ._arrays import _addr, _addr_ro
-
 from . import _backend
-from ._array import Array
-from ._buffer import all_finite, as_f32_c, as_i64_c, empty
-from .linear_model import (
-    _buffer_format, _dtype_name, _flatten, _is_integer_labels, _shape_of,
-)
 
 __all__ = [
     "accuracy_score",
@@ -147,16 +137,16 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Loading the binding, mode-aware.
 # ---------------------------------------------------------------------------
-# All metric calls share the estimator loader. Resolve the current default at
-# call time; an explicit mode selects its own compiled artifact without changing
-# the process default. The backend checks vendor provenance and never falls back.
-def _get_binding(numeric_mode=None):
-    if numeric_mode is not None and (
-        not isinstance(numeric_mode, str)
-        or numeric_mode.strip().lower() not in ("fast", "identical")
-    ):
-        raise ValueError("numeric_mode must be 'fast' or 'identical'")
-    expected = (numeric_mode or _backend.default_mode()).strip().lower()
+# glue: import-time connection of the compiled metrics binding of one fixed
+# mode ('identical' or 'fast'), called only by the scorer and spectral/UMAP
+# connectors at import (`_native_msel_scorers.connect`,
+# `_native_spectral_umap_bridge.connect`). A public call's `numeric_mode` is
+# resolved and refused natively (bindings/classical_labels_door.mojo
+# `_metrics_mode`); the Python string check that stood here had no caller
+# with a user value (lane py-metrics, 2026-11-15). The backend checks vendor
+# provenance and never falls back.
+def _get_binding(mode):
+    expected = mode
     mod = _backend.binding("_mojolearn_metrics", expected)
     read_mode = getattr(mod, "metrics_numeric_mode", None)
     if read_mode is None:
@@ -170,160 +160,12 @@ def _get_binding(numeric_mode=None):
     return mod
 
 
-# ---------------------------------------------------------------------------
-# Array handling. `_buffer.py` owns the 2-D float32 contract and is used for
-# X; these are its 1-D siblings, under the same rule: the returned Array MUST
-# be kept alive in a local across the Mojo call, because the Mojo side takes
-# a raw address, borrows it, and holds nothing after the call returns.
-# NumPy-free since DEVIATION 2377: the shape and dtype questions are asked
-# of the caller's object through `_shape_of` / the buffer protocol BEFORE
-# it is converted, so every message below keeps its wording.
-# ---------------------------------------------------------------------------
-
-
-def _vector_shape(x, name):
-    """`(n, column)`: the length of a 1-D input, or of an `(n, 1)` column,
-    which is accepted and flattened as before; every other shape refused."""
-    shape = _shape_of(x)
-    column = len(shape) == 2 and shape[1] == 1
-    if len(shape) != 1 and not column:
-        raise ValueError(
-            f"mojolearn metrics: {name} must be 1-D, got shape {shape}"
-        )
-    if shape[0] == 0:
-        raise ValueError(f"mojolearn metrics: {name} is empty")
-    return shape, column
-
-
-def _is_float64(x):
-    """`numpy.asarray(x).dtype == numpy.float64`: a buffer of format 'd', or a
-    list/tuple with a Python float among its leaves (NumPy made float64 of
-    that too)."""
-    fmt = _buffer_format(x)
-    if fmt is not None:
-        return fmt == "d"
-    return any(type(v) is float for v in _flatten(x))  # glue: type probe of a list argument
-
-
-def _as_i32_1d(x, name):
-    shape, column = _vector_shape(x, name)
-    if not _is_integer_labels(x):
-        raise ValueError(
-            f"mojolearn metrics: {name} must be an integer label array, got "
-            f"{_dtype_name(x)}; the ported kernels take int32 labels"
-        )
-    a, _ = as_i64_c(x, ndim=len(shape), name=name)
-    if column:
-        a = a.reshape((shape[0],))
-    if a.min() < -(1 << 31) or a.max() > (1 << 31) - 1:
-        raise ValueError(
-            f"mojolearn metrics: {name} does not fit in int32; the implemented "
-            "kernels are the int32 instantiation (the int64 overload of "
-            "adjusted_rand_index is the same code at a wider type and is "
-            "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
-        )
-    # int64 -> int32 through `Array.astype`: the core helper `cast_elements`
-    # (DEVIATION 3100), else `array.array`'s item loop, which has no Python
-    # loop BODY but makes one Python int per element (69 ms per 1,000,000
-    # rows on an EPYC 7713 before the helper, 1.9 ms with it). Exact after
-    # the range check.
-    return a.astype("<i4")
-
-
-
-
-def _sample_weight_f32(sample_weight, n, caller):
-    """Weights for the pinned-sum weighted arms (`metrics/impl/weighted_scores.mojo`):
-    one finite, non-negative Float32 per sample with a positive total, the
-    rule `GradientBoosting.fit` applies to its own sample_weight. Cast to
-    Float32 like the estimators' weights. scikit-learn's `np.average` also
-    accepts negative weights; those are refused here by name."""
-    shape = _shape_of(sample_weight)
-    if len(shape) != 1:
-        raise ValueError(
-            f"mojolearn {caller}: sample_weight must be 1-D, got shape {shape}"
-        )
-    if shape[0] != n:
-        raise ValueError(
-            f"mojolearn {caller}: sample_weight has {shape[0]} entries for {n} samples"
-        )
-    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    # `Array.min` / `Array.max` answer as `min()` / `max()` over the storage
-    # view did, without one Python float per weight (DEVIATION 3101).
-    if not all_finite(w) or w.min() < 0:
-        raise ValueError(
-            f"mojolearn {caller}: sample_weight must have finite nonnegative entries"
-        )
-    if not w.max() > 0:
-        raise ValueError(
-            f"mojolearn {caller}: sample_weight must have positive total weight"
-        )
-    return w
-
-
-
-
-def _prepare_cluster_labels(labels_true, labels_pred):
-    """cuML 26.08's `prepare_cluster_metric_inputs`
-    (`python/cuml/cuml/metrics/cluster/utils.py`), same behavior.
-
-    Both arrays are remapped onto the CONTIGUOUS range `[0, n_classes - 1]`
-    over the UNION of their distinct labels, and the range handed to the
-    kernel is `(0, n_classes - 1)`. That is what keeps the contingency
-    matrix `n_classes` square instead of `(max - min + 1)` square.
-
-    NOTE FOR ANYONE READING `metrics/README.md`'s HAND-OFF: that paragraph
-    says the Python side passes `min` and `max` of the two arrays "exactly
-    as cuML's .pyx files do". That is true of `entropy` and false of these
-    four at the 26.08 pin, where the remap above was introduced. The remap
-    is what runs here.
-    """
-    yt = _as_i32_1d(labels_true, "labels_true")
-    yp = _as_i32_1d(labels_pred, "labels_pred")
-    if yt.shape[0] != yp.shape[0]:
-        raise ValueError(
-            f"mojolearn metrics: labels_true has {yt.shape[0]} entries and "
-            f"labels_pred has {yp.shape[0]}; they must be the same length"
-        )
-    # `np.unique` of the union, then `np.searchsorted`: the package-wide
-    # order rule (`_labels.sorted_classes`, DEVIATION 2340) over the
-    # concatenation and a dict lookup, O(rows) label loops (DEVIATION 2377).
-    fast = _native_union_codes(yt, yp)
-    if fast is None:
-        return yt, yp, 0, 0, -1   # both sides empty: no classes
-    return fast[0], fast[1], int(yt.shape[0]), 0, fast[2] - 1
-
-
-#: DEVIATION 3107 (lane/python-hotpath, 2026-09-17). Below this many labels
-#: the Python label routines were the only path; lane apple-fast-py2mojo-core
-#: (2026-10-03) sends every non-empty label buffer to the native encoder.
-_NATIVE_MIN_LABELS = 1
-
-
-def _native_union_codes(yt, yp):
-    """`(codes_true, codes_pred, n_classes)` over the sorted union of two
-    int32 label Arrays, or None when both are empty (lane pyglue-sweep: one
-    empty side is encoded too; the Python dict route is gone).
-
-    lane apple-fast-py2mojo-core (2026-10-03): the two arrays are laid end
-    to end and encoded ONCE by the base binding's `unique_inverse` (the
-    device sort, flag/scan compaction and gather on a GPU install, the core
-    host twin on a CPU-only one): its sorted distinct values ARE the sorted
-    union and its codes, split at len(yt), are each side's codes on it. No
-    class cap (the 4096-class encoder and the Python merge of the two class
-    lists are gone, and with them the dict fallback for more classes)."""
-    import ctypes
-    from ._labels import unique_inverse
-
-    nt, npred = int(yt.size), int(yp.size)
-    if nt + npred == 0:
-        return None
-    yt, yp = yt._as_c(), yp._as_c()
-    both = empty((nt + npred,), "<i4")
-    ctypes.memmove(_addr(both), _addr_ro(yt), 4 * nt)
-    ctypes.memmove(_addr(both) + 4 * nt, _addr_ro(yp), 4 * npred)
-    classes, codes = unique_inverse(both)
-    return codes[0:nt], codes[nt:nt + npred], int(classes.size)
+# TOMBSTONE: the Python label and weight preparation `_vector_shape`, `_is_float64`, `_as_i32_1d`,
+# `_sample_weight_f32`, `_prepare_cluster_labels`, `_NATIVE_MIN_LABELS`, `_native_union_codes` (no product
+# caller: every public metric is one native call, and their native owners are bindings/mcls_common_unpack.mojo
+# `_as_i32_1d` / `_sample_weight_f32`, bindings/mcls_cluster_door.mojo `_prepare_cluster_labels`,
+# bindings/metrics_reg_door.mojo and bindings/metrics_exp_common_unpack.mojo `_weights`) deleted 2026-11-15 by
+# lane py-metrics; code recoverable at fcc934a37c.
 
 
 # ===========================================================================
@@ -385,7 +227,7 @@ def accuracy_score(
     ...                        np.array([0, 1, 0, 0], dtype=np.int32))
     0.75
     """
-    return _NATIVE(None, "family_mcls_accuracy", (None, y_true, y_pred, normalize, sample_weight,
+    return _NATIVE(None, _OP.family_mcls_accuracy, (None, y_true, y_pred, normalize, sample_weight,
                                                    numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -416,7 +258,7 @@ def rand_score(labels_true, labels_pred):
     >>> score = metrics.rand_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                            np.array([1, 1, 0, 0], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_rand", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_rand, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::adjusted_rand_index`, the int32
@@ -450,7 +292,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     >>> a = rng.integers(0, 4, 1000).astype(np.int32)
     >>> score = metrics.adjusted_rand_score(a, a)
     """
-    return _NATIVE(None, "family_mcls_adjusted_rand", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_adjusted_rand, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
@@ -494,7 +336,7 @@ def entropy(clustering, *, base=None):
     >>> from mojolearn import metrics
     >>> h = metrics.entropy(np.array([0, 0, 1, 1], dtype=np.int32), base=2)
     """
-    return _NATIVE(None, "family_mcls_entropy", (None, clustering, base), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_entropy, (None, clustering, base), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::mutual_info_score` (DEVIATIONS
@@ -529,7 +371,7 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     >>> mi = metrics.mutual_info_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_mutual_info", (None, labels_true, labels_pred, contingency),
+    return _NATIVE(None, _OP.family_mcls_mutual_info, (None, labels_true, labels_pred, contingency),
                    _NATIVE_CONTEXT)
 
 
@@ -566,7 +408,7 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     >>> score = metrics.fowlkes_mallows_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                       np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_fowlkes_mallows", (None, labels_true, labels_pred, sparse),
+    return _NATIVE(None, _OP.family_mcls_fowlkes_mallows, (None, labels_true, labels_pred, sparse),
                    _NATIVE_CONTEXT)
 
 
@@ -594,7 +436,7 @@ def homogeneity_score(labels_true, labels_pred):
     >>> h = metrics.homogeneity_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                               np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_homogeneity", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_homogeneity, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::completeness_score`, which RAFT
@@ -626,7 +468,7 @@ def completeness_score(labels_true, labels_pred):
     >>> c = metrics.completeness_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_completeness", (None, labels_true, labels_pred), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_completeness, (None, labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
@@ -655,16 +497,16 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     >>> v = metrics.v_measure_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                             np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_v_measure", (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_v_measure, (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     """Homogeneity, completeness and V-measure in one call.
 
     Returns ``(homogeneity_score, completeness_score, v_measure_score)``, as
-    scikit-learn's function of the same name. Each value is computed by its
-    own call, so this costs about three separate metric calls; call the one
-    you need if speed matters.
+    scikit-learn's function of the same name. The three values are computed
+    together from one pass over the labels and equal the values of the three
+    separate functions.
 
     Parameters
     ----------
@@ -684,7 +526,7 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     >>> h, c, v = metrics.homogeneity_completeness_v_measure(
     ...     np.array([0, 0, 1, 1], dtype=np.int32), np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_hcv", (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_hcv, (None, labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -753,12 +595,8 @@ def r2_score(
     >>> pred = y + rng.normal(0, 0.1, 1000).astype(np.float32)
     >>> r2 = metrics.r2_score(y, pred)
     """
-    return _NATIVE(None, "family_mcls_r2", (None, y_true, y_pred, sample_weight, multioutput,
+    return _NATIVE(None, _OP.family_mcls_r2, (None, y_true, y_pred, sample_weight, multioutput,
                                            force_finite, numeric_mode), _NATIVE_CONTEXT)
-
-
-
-
 
 
 # Maintainer notes: IDENTICAL pins the reduction schedule and flushes
@@ -803,7 +641,7 @@ def mean_squared_error(
     >>> metrics.mean_squared_error(y, pred)
     0.375
     """
-    return _NATIVE(None, "family_mcls_regression_error", (None, "mean_squared_error", y_true,
+    return _NATIVE(None, _OP.family_mcls_regression_error, (None, "mean_squared_error", y_true,
                    y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -843,7 +681,7 @@ def mean_absolute_error(
     >>> metrics.mean_absolute_error(y, pred)
     0.5
     """
-    return _NATIVE(None, "family_mcls_regression_error", (None, "mean_absolute_error", y_true,
+    return _NATIVE(None, _OP.family_mcls_regression_error, (None, "mean_absolute_error", y_true,
                    y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -883,7 +721,7 @@ def root_mean_squared_error(
     >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
     >>> rmse = metrics.root_mean_squared_error(y, pred)
     """
-    return _NATIVE(None, "family_mcls_regression_error", (None, "root_mean_squared_error",
+    return _NATIVE(None, _OP.family_mcls_regression_error, (None, "root_mean_squared_error",
                    y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -919,7 +757,7 @@ def kl_divergence(P, Q):
     >>> Q = np.array([0.4, 0.4, 0.2], dtype=np.float32)
     >>> kl = metrics.kl_divergence(P, Q)
     """
-    return _NATIVE(None, "family_mcls_kl", (None, P, Q), _NATIVE_CONTEXT)
+    return _NATIVE(None, _OP.family_mcls_kl, (None, P, Q), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -983,7 +821,7 @@ def silhouette_score(
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_score(X, labels)
     """
-    return _NATIVE(None, "family_mcls_silhouette_score", (None, X, labels, metric, sample_size, random_state,
+    return _NATIVE(None, _OP.family_mcls_silhouette_score, (None, X, labels, metric, sample_size, random_state,
                                                            chunksize), _NATIVE_CONTEXT)
 
 
@@ -1022,7 +860,7 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_samples(X, labels)
     """
-    return _NATIVE(None, "family_mcls_silhouette_samples", (None, X, labels, metric, chunksize),
+    return _NATIVE(None, _OP.family_mcls_silhouette_samples, (None, X, labels, metric, chunksize),
                    _NATIVE_CONTEXT)
 
 
@@ -1089,153 +927,15 @@ def trustworthiness(
     >>> X = rng.random((1000, 8), dtype=np.float32)
     >>> t = metrics.trustworthiness(X, X[:, :2], n_neighbors=5)
     """
-    return _NATIVE(None, "family_mcls_trustworthiness", (None, X, X_embedded, n_neighbors, metric,
+    return _NATIVE(None, _OP.family_mcls_trustworthiness, (None, X, X_embedded, n_neighbors, metric,
                                                           batch_size), _NATIVE_CONTEXT)
 
 
-# ---------------------------------------------------------------------------
-# Unweighted single-label classification. Labels are encoded on the host;
-# confusion counts, ratios and averaging are computed by the GPU binding.
-# ---------------------------------------------------------------------------
-def _classification_labels(values, name, *, allow_empty=False):
-    shape = _shape_of(values)
-    if len(shape) != 1:
-        raise ValueError(f"{name} must be one-dimensional single-label data")
-    labels = flatten_labels(values)
-    if not allow_empty and not labels:
-        raise ValueError(f"{name} must contain at least one label")
-    # the kind test and the conversion read the labels once natively
-    # (bindings/user_objects_native.mojo kinds, strs, ints)
-    got = _user_objects.kinds(labels)
-    if got[_user_objects.KIND_STR] == len(labels):
-        return _user_objects.call("strs", labels), "string"
-    if got[_user_objects.KIND_INT_OR_BOOL] == len(labels):
-        return _user_objects.call("ints", labels).tolist(), "integer"
-    raise TypeError(f"{name} must contain only strings or only integers; "
-                    "floating labels, missing labels and mixed types are unsupported")
-
-
-class _EncodedLabels:
-    """Integer labels held as `classes` (sorted distinct Python ints) and
-    `codes` (one int32 index into `classes` per row): what
-    `_classification_labels` returns as a list of n Python ints, without the
-    n objects (DEVIATION 3107). `len()` and iteration answer as that list
-    does, so a consumer that walks labels still works; the metric functions
-    below never walk it, they go through `_label_set` and `_label_map`."""
-
-    __slots__ = ("classes", "codes")
-
-    def __init__(self, classes, codes):
-        self.classes = classes
-        self.codes = codes
-
-    def __len__(self):
-        return int(self.codes.size)
-
-    def __iter__(self):
-        return map(self.classes.__getitem__, self.codes._values())
-
-
-def _classification_encoded(values, name, *, allow_empty=False):
-    """`_classification_labels`, with an integer or bool BUFFER of at least
-    `_NATIVE_MIN_LABELS` labels answered as `_EncodedLabels` through the
-    native encoder. Everything else (lists, str labels, float buffers and
-    their refusal, empty input and its refusal, more distinct labels than
-    the encoder holds) is `_classification_labels` itself."""
-    fast = _native_classification_labels(values)
-    if fast is not None:
-        return fast, "integer"
-    return _classification_labels(values, name, allow_empty=allow_empty)
-
-
-def _native_classification_labels(values):
-    from ._buffer import _has_buffer, hotpath_enabled
-    from ._labels import _encode_labels_native
-
-    if isinstance(values, (str, bytes)) or not hotpath_enabled():
-        return None
-    if type(values) in (list, tuple):
-        # lane apple-fast-py2mojo-core: a flat list of exact Python ints is
-        # packed into an int64 buffer in C and encoded like one (the list
-        # route's `[int(v) for v in labels]` and its dict per row are gone
-        # for it); str, bool, nested or mixed lists keep the list route
-        if not values or set(map(type, values)) != {int}:
-            return None
-        import array
-        try:
-            store = array.array("q", values)
-        except OverflowError:
-            return None
-        values = Array._owned(store, (len(store),), "<i8", "C")
-    if not isinstance(values, Array) and not _has_buffer(values):
-        return None
-    if len(_shape_of(values)) != 1:
-        return None
-    try:
-        arr = _materialize(values, "input")[0]
-    except (TypeError, ValueError, OverflowError):
-        return None  # `_classification_labels` names the refusal
-    if arr.ndim != 1 or arr.size < _NATIVE_MIN_LABELS:
-        return None
-    if arr.dtype in ("<u2", "<i1"):
-        arr = arr.astype("<i4")  # exact; the encoder has no 8- or 16-bit arm
-    if arr.dtype not in ("<i4", "<i8", "<u4", "<u1"):
-        return None  # floats are refused by `_classification_labels`
-    try:
-        encoded = _encode_labels_native(arr)
-    except (ImportError, AttributeError):
-        return None
-    if encoded is None:
-        return None
-    classes, codes = encoded
-    # a bool buffer's classes come back as bools; the list routine's are ints
-    return _EncodedLabels([int(c) for c in classes], codes)  # glue: reads the native class table (classes-sized: distinct classes)
-
-
-def _label_set(labels):
-    """`set(labels)`."""
-    if isinstance(labels, _EncodedLabels):
-        return set(labels.classes)
-    return set(labels)
-
-
-def _label_map(labels, fn):
-    """`Array.from_list([fn(v) for v in labels], '<i4')`, `fn` a pure
-    function of the label: evaluated once per CLASS and gathered per row for
-    `_EncodedLabels` (DEVIATION 3107), once per row for a list."""
-    if isinstance(labels, _EncodedLabels):
-        from ._buffer import _native
-        gather = _native("gather_i32")
-        table = [fn(c) for c in labels.classes]  # glue: maps the class table through the label function
-        table = Array.from_list(table, "<i4")
-        out = empty((len(labels),), "<i4")
-        gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
-               len(labels), _addr(out))
-        return out
-    # a list: `fn` once per distinct label (first-seen classes, read natively),
-    # gathered per row as for `_EncodedLabels`
-    classes, codes = _user_objects.call("first_seen", labels)
-    table = Array.from_list([fn(c) for c in classes], "<i4")  # glue: maps the class table through the label function
-    from ._buffer import _native
-    out = empty((len(labels),), "<i4")
-    if len(labels):
-        _native("gather_i32")(_addr_ro(table), len(classes), codes.buffer_info()[0], len(labels), _addr(out))
-    return out
-
-
-def _classification_pair(y_true, y_pred, sample_weight):
-    if sample_weight is not None:
-        raise NotImplementedError("classification metrics do not yet support sample_weight")
-    true, kind = _classification_encoded(y_true, "y_true")
-    pred, pred_kind = _classification_encoded(y_pred, "y_pred")
-    if len(true) != len(pred):
-        raise ValueError("y_true and y_pred lengths differ")
-    if kind != pred_kind:
-        raise TypeError("y_true and y_pred must use the same label type")
-    if len(true) > 2147483647:
-        raise ValueError("classification counts require at most INT32_MAX rows")
-    return true, pred, kind, sorted(_label_set(true) | _label_set(pred))  # glue: sorts the distinct class labels
-
+# TOMBSTONE: the Python classification label preparation `_classification_labels`, `_EncodedLabels`,
+# `_classification_encoded`, `_native_classification_labels`, `_label_set`, `_label_map`, `_classification_pair`
+# (no product caller; native owners bindings/mcls_common_unpack.mojo, bindings/metrics_exp_common_unpack.mojo,
+# bindings/classical_labels_door.mojo, bindings/mcls_classify_door.mojo) deleted 2026-11-15 by lane py-metrics;
+# code recoverable at fcc934a37c.
 
 
 # Maintainer notes: the probability check (finite, in [0, 1], rows summing to
@@ -1294,7 +994,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     >>> p = np.array([0.1, 0.9, 0.8, 0.35], dtype=np.float32)
     >>> loss = metrics.log_loss(y, p)
     """
-    return _NATIVE(None, "family_mcls_log_loss", (y_true, y_pred, normalize, sample_weight, labels, numeric_mode),
+    return _NATIVE(None, _OP.family_mcls_log_loss, (y_true, y_pred, normalize, sample_weight, labels, numeric_mode),
                    _NATIVE_CONTEXT)
 
 
@@ -1349,7 +1049,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> auc = metrics.roc_auc_score(y, s)
     """
-    return _NATIVE(None, "family_mcls_roc_auc", (None, y_true, y_score, average, sample_weight,
+    return _NATIVE(None, _OP.family_mcls_roc_auc, (None, y_true, y_score, average, sample_weight,
                                                   max_fpr, multi_class, labels, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1405,25 +1105,13 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> precision, recall, thresholds = metrics.precision_recall_curve(y, s)
     """
-    return _NATIVE(None, "family_mcls_pr_curve", (None, y_true, y_score, pos_label, sample_weight,
+    return _NATIVE(None, _OP.family_mcls_pr_curve, (None, y_true, y_score, pos_label, sample_weight,
                                                    drop_intermediate, numeric_mode), _NATIVE_CONTEXT)
 
 
-def _selected_labels(labels, kind, observed):
-    if labels is None:
-        return observed.copy()
-    selected, selected_kind = _classification_labels(labels, "labels")
-    if selected_kind != kind:
-        raise TypeError("labels must use the same type as the targets")
-    if len(set(selected)) != len(selected):
-        raise ValueError("labels must be unique")
-    return selected
-
-
-def _encode_classification(true, pred, labels):
-    mapping = {label: i for i, label in enumerate(labels)}  # glue: class index table
-    return (_label_map(true, lambda v: mapping.get(v, -1)),
-            _label_map(pred, lambda v: mapping.get(v, -1)))
+# TOMBSTONE: `_selected_labels`, `_encode_classification` (no product caller; native owners
+# bindings/mcls_common_unpack.mojo and bindings/metrics_exp_common_unpack.mojo `_selected_labels`) deleted
+# 2026-11-15 by lane py-metrics; code recoverable at fcc934a37c.
 
 
 # Maintainer notes: unweighted counts come from the metrics binding (at most
@@ -1470,7 +1158,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     >>> C = metrics.confusion_matrix(np.array([0, 1, 2, 2], dtype=np.int32),
     ...                              np.array([0, 2, 2, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_confusion", (None, y_true, y_pred, labels, sample_weight,
+    return _NATIVE(None, _OP.family_mcls_confusion, (None, y_true, y_pred, labels, sample_weight,
                                                     normalize, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1515,7 +1203,7 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     >>> p = metrics.precision_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                             np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_prf", (None, 0, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, _OP.family_mcls_prf, (None, 0, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1559,7 +1247,7 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> r = metrics.recall_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                          np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _NATIVE(None, "family_mcls_prf", (None, 1, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, _OP.family_mcls_prf, (None, 1, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1603,7 +1291,7 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> f1 = metrics.f1_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                       np.array([0, 1, 0, 1], dtype=np.int32), average='macro')
     """
-    return _NATIVE(None, "family_mcls_prf", (None, 2, y_true, y_pred, labels, pos_label, average,
+    return _NATIVE(None, _OP.family_mcls_prf, (None, 2, y_true, y_pred, labels, pos_label, average,
                                               sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
@@ -1650,17 +1338,20 @@ def _label_entries():
     # `prepare_targets` and `gather_i32`), connected once at import; a
     # connection error is raised by the first call that needs them
     try:
-        with _backend.host_helper_scope():
-            base = _backend.binding("_mojolearn", mode="identical")
+        base = _backend.binding("_mojolearn", mode="identical")
         return {"prepare_targets": base.prepare_targets, "gather_i32": base.gather_i32}
     except Exception as error:  # glue: kept as text for the native owner to raise
         return f"ImportError: mojolearn metrics: the base binding's label entries are not connected: {error}"
 
 
 # The public functions above are one call each into the compiled owner of
-# the metrics (bindings/metrics_cls_native.mojo, `family_mcls_*`).
+# the metrics (bindings/metrics_cls_native_unpack.mojo, `family_mcls_*`).
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 _native_family_bridge.tables(family_mcls_labels=_label_entries())
 _native_family_bridge.connect_bindings("_mojolearn_metrics")
 

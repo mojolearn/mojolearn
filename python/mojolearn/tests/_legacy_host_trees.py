@@ -8,13 +8,40 @@ from the new native operation under audit.
 import hashlib
 import struct
 import weakref
-from mojolearn import _serialize
-from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty, frombytes
-from mojolearn._labels import argmax_rows, decode_labels
-from mojolearn._forest_host import _load, _ESTIMATORS, _ENGINES, _MODEL_ARRAYS, _GROVES_FAMILY, binary_path
-from mojolearn._gbdt_host import (_TEXT_NAME, _TEXT_VERSION, _NAN_CODES, _PROBA_LOSSES,
-    _MULTI_LOSSES, _CLASSIFICATION_LOSSES, _CTR_TYPE_CODES, _CTR_APPLIED, _REFUSED_RECORDS, GBDT_ESTIMATORS)
+from mojolearn import Array
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, frombytes
+from mojolearn.tests._typed_input import as_f32_c, as_f32_colmajor
+# The first-max argmax and the frozen label decode (copies of `_labels.argmax_rows` / `_labels.decode_labels`).
+from mojolearn.tests._legacy_host_inference import argmax_rows, decode_labels
+from mojolearn._forest_host import _load, binary_path  # oracle subject: the native `_mojolearn_forest_host` binding these oracles drive (no public route to the host binding)
+
+# Copies of `mojolearn._forest_host` constants.
+_ENGINES = ('sequential', 'parallel_groves')
+_GROVES_FAMILY = {'rf': 0, 'et': 1}
+_ESTIMATORS = {
+    'RandomForestClassifier': ('rf', True),
+    'RandomForestRegressor': ('rf', False),
+    'ExtraTreesClassifier': ('et', True),
+    'ExtraTreesRegressor': ('et', False),
+}
+_MODEL_ARRAYS = (('offsets', '<i4'), ('colid', '<i4'), ('quesval', '<f4'),
+                 ('left_child', '<i4'), ('leaves', '<f4'))
+
+# Copies of `mojolearn._gbdt_host` constants.
+_TEXT_NAME = 'mojolearn-model'
+_TEXT_VERSION = 2
+_NAN_CODES = {'as_is': 0, 'as_false': 1, 'as_true': 2}
+_PROBA_LOSSES = ('Logloss', 'CrossEntropy')
+_MULTI_LOSSES = ('MultiClass', 'MultiClassOneVsAll')
+_CLASSIFICATION_LOSSES = _PROBA_LOSSES + _MULTI_LOSSES
+_CTR_TYPE_CODES = {'Borders': 0, 'Buckets': 1, 'BinarizedTargetMeanValue': 2,
+                   'FloatTargetMeanValue': 3, 'Counter': 4, 'FeatureFreq': 5}
+_CTR_APPLIED = ('Borders', 'Counter', 'FeatureFreq')
+GBDT_ESTIMATORS = {
+    'GradientBoosting': None,
+    'OrderedRMSE': ('RMSE',),
+    'ExperimentalTwoLevelFeatureFreq': ('RMSE',),
+}
 
 def _bits32(token, what):
     """The float32 whose IEEE bits are the hex half of `<decimal>/<hex>`."""
@@ -599,18 +626,6 @@ class LegacyHostForest:
         vote = self._vote(X)
         return vote if self.family == 'rf' else vote.astype('<f8')
 
-    def _predict_with_proba(self, X):
-        """The two classifier views from one host traversal.
-
-        Kept in lockstep with the RF/ET estimator helper used by the identity
-        harness, including Extra Trees' exact float32-to-float64 widening.
-        """
-        if not self.is_classifier:
-            raise AttributeError(f"{self.estimator} has no predict_proba")
-        vote = self._vote(X)
-        proba = vote if self.family == 'rf' else vote.astype('<f8')
-        return decode_labels(self.classes_, argmax_rows(vote)), proba
-
     def predict(self, X):
         """Predict with the saved model.
 
@@ -701,7 +716,7 @@ class LegacyHostGBDT:
         dim = self.approx_dim_
         n_cols = self.n_model_columns_
         row_major = not (a['n_ctr_tables'] or a['n_tensor_tables'])
-        Xa = Xc if row_major else Xc._as_order('F')
+        Xa = Xc if row_major else as_f32_colmajor(Xc, name='X')[0]
         if a['n_ctr_tables'] or a['n_tensor_tables']:
             expanded = empty((n_rows * n_cols,), '<f4')
             names = ('ctr_ints', 'ctr_floats', 'tensor_ints', 'tensor_floats', 'ctr_counts',

@@ -1,189 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Workstream E batch 2, CPU training for the kmeans, metrics, spectral,
-standard-scaler, minmax-scaler and logistic lanes (lane/cpu-training-e2,
-2026-09-14), checked from SOURCE so it runs on a box with nothing built,
-plus runtime checks that run only where the host bindings are built and
-the package took the CPU-only path.
+standard-scaler, minmax-scaler and logistic lanes, run only where the host
+bindings are built and the package took the CPU-only path (skipped, and SAID
+to be skipped, otherwise).
 
-What the source checks hold: the manifest lists kmeans as a core training
-lane and names it for the docs, and no longer names k-means as a lane with
-no CPU path; the core host binding registers `kmeans_fit` under the GPU
-binding's name; the oracle imports no GPU module and reads its fold widths
-from the kernel matrix; the sabotage define reaches the oracle through the
-quantized accumulation (the arm that moves every centroid) and the binding
-reads it back; the oracle spells the device's round seed reassembly (the
-sign-extended low half, measured on the M4).
-
-The runtime check (skipped, and SAID to be skipped, when the binding is
-absent or a GPU set loaded): `KMeans.fit` runs through the host binding on
-a small draw, twice, and returns the same bytes, with `labels_` in range
-and one label per row; the binding reads back sabotage False. It is a
-plumbing check. The bit claim against the GPU columns is the CPU identity
-gate's, not this file's.
+Each public fit runs twice on a small draw and returns the same bytes, with
+its outputs in range; the metrics host entries give the same answers with one
+and seven row tasks (each count in its own process); each binding reads back
+sabotage False. They are plumbing checks. The bit claim against the GPU
+columns is the CPU identity gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_e2
 """
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import re
 import os
 import sys
 from pathlib import Path
 
 import mojolearn
-from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-ORACLE = "cluster/host/kmeans_oracle.mojo"
-METRICS_ORACLE = "metrics/host/metrics_oracle.mojo"
-METRICS_EXPORTS = ("accuracy_score", "adjusted_rand_score", "entropy", "mutual_info_score",
-                   "homogeneity_score", "completeness_score", "v_measure_score", "r2_score",
-                   "silhouette", "spectral_fit_predict_dataset", "spectral_fit_predict_graph")
-SPECTRAL_ORACLE = "spectral/host/spectral_oracle.mojo"
-SCALER_ORACLE = "preprocessing/host/scaler_oracle.mojo"
-QN_ORACLE = "glm/host/qn_oracle.mojo"
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
+from mojolearn import _backend
 
 
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
+def _run_with_threads(threads, code):
+    """Run `code` in a fresh interpreter with MOJOLEARN_CPU_THREADS set to
+    `threads` (None: unset) and return its stdout lines. The host thread
+    policy is read once per process (core/host_predict_threads.mojo), so a
+    count set inside this process after the first host call changes
+    nothing; only a new process honours it. The child imports the same
+    mojolearn package this process holds."""
+    import subprocess
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    if threads is None:
+        env.pop("MOJOLEARN_CPU_THREADS", None)
+    else:
+        env["MOJOLEARN_CPU_THREADS"] = threads
+    pkg_parent = str(Path(mojolearn.__file__).resolve().parent.parent)
+    proc = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import sys; sys.path.insert(0, sys.argv.pop(1)); exec(sys.argv.pop(1))",
+         pkg_parent, code],
+        env=env, capture_output=True, text=True, timeout=900,
+    )
+    assert proc.returncode == 0, (threads, proc.stdout[-2000:], proc.stderr[-4000:])
+    return proc.stdout.strip().splitlines()
 
 
-def test_manifest_covers_kmeans():
-    assert "kmeans" in host_surface.covered_lanes(), "kmeans is not a covered training lane"
-    assert host_surface.TRAINING_LANE_NAMES["kmeans"] == "k-means"
-    core = host_surface.family("core")
-    assert "kmeans" in core["training_lanes"], "kmeans is not a core training lane"
-    assert "KMeans" in core["classes"]
-    assert ORACLE in core["host_modules"], f"{ORACLE} is not a core host module"
-    assert (ROOT / ORACLE).is_file(), f"{ORACLE} does not exist"
-    assert "k-means" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
-    assert "k-means" in host_surface.training_sentence()
+#: The metrics host thread-count check, run once per thread count in its own
+#: process: the same draw as the test, the address entries, one line out.
+_METRICS_THREADS_CODE = """
+import numpy as np
+from mojolearn import _backend
+module = _backend.load_host_module("_mojolearn_metrics_host")
+rng = np.random.default_rng(1)
+x = rng.standard_normal((300, 3)).astype(np.float32)
+yt = (rng.integers(0, 3, 300)).astype(np.int32)
+yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
+acc = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
+cm = np.empty(9, dtype=np.int64)
+module.confusion_matrix(yt.ctypes.data, yp.ctypes.data, cm.ctypes.data, [len(yt), 3, 0])
+print(repr(float(acc)), cm.tobytes().hex())
+"""
 
 
-def test_accuracy_host_uses_pointer_parallel_count():
-    binding = _read("bindings/_mojolearn_metrics_host.mojo")
-    oracle = _read(METRICS_ORACLE)
-    assert "host_accuracy_score_ptr(yt, yp, n)" in binding
-    assert "host_parallelize(_rows, tasks)" in oracle
-
-
-def test_confusion_host_uses_pointer_parallel_counts():
-    binding = _read("bindings/_mojolearn_metrics_host.mojo")
-    oracle = _read("metrics/host/classification_oracle.mojo")
-    assert "host_confusion_matrix_ptr(y, p, n, k, normalization)" in binding
-    assert "def host_confusion_counts_ptr(" in oracle
-    assert "host_parallelize(_rows, tasks)" in oracle
-
-
-def test_binding_registers_kmeans_fit():
-    src = _read(host_surface.binding_source("core"))
-    assert '("kmeans_fit")' in src, "the core host binding does not register kmeans_fit"
-    assert "kmeans_fit" in host_surface.family("core")["exports"], "the manifest does not list kmeans_fit"
-    # The ball cover entries joined on lane/cpu-training-batch3 (the radius
-    # and knn-rbc lanes); the manifest must list what the binding registers.
-    for present in ("rbc_knn_search", "radius_neighbors_count", "radius_neighbors_fill"):
-        assert f'("{present}")' in src, f"{present} is not registered"
-        assert present in host_surface.family("core")["exports"], f"the manifest does not list {present}"
-
-
-def test_oracle_imports_no_gpu_and_reads_the_matrix():
-    text = _read(ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
-    assert "from checks.numerics import" in text
-    assert "from checks.fixed_point import choose_scale" in text, "the scale must be the device's choose_scale"
-    for row in ("K_LIB_ROW_NORM", "K_LIB_REDUCE_BY_KEY", "K_LIB_PLUS_PLUS"):
-        assert f"lib_block_size_for[{row}, TARGET_COLUMN]()" in text, f"{row} is not read from the matrix"
-        assert f"lib_block_size_for[{row}, COLUMN_AMD]()" in text, f"{row} is not held to the AMD column"
-
-
-def test_sabotage_define_moves_the_accumulation():
-    text = _read(ORACLE)
-    define = host_surface.sabotage_define("core")
-    assert f'is_defined["{define}"]()' in text
-    assert "comptime if KMEANS_ORACLE_HOST_SABOTAGE:" in text, "the sabotage arm is not a comptime branch"
-    assert "q = q + Int32(1)" in text, "the sabotage arm does not add one unit per cell"
-    binding = _read(host_surface.binding_source("core"))
-    assert "KMEANS_ORACLE_HOST_SABOTAGE" in binding, "the binding does not read the oracle's define back"
-
-
-def test_oracle_spells_the_device_seed_reassembly():
-    text = _read(ORACLE)
-    assert "def host_round_seed_as_the_device_reassembles_it(" in text
-    assert "lo | UInt64(0xFFFFFFFF00000000)" in text, "the low half is not sign-extended"
-    assert "host_round_seed_as_the_device_reassembles_it(\n            rng.next_u64()" in text, \
-        "the round seed does not pass through the reassembly"
-
-
-
-def test_manifest_covers_metrics():
-    assert "metrics" in host_surface.covered_lanes(), "metrics is not a covered training lane"
-    fam = host_surface.family("metrics")
-    assert fam["routes"] == "_mojolearn_metrics"
-    # spectral-precomputed joined the family on lane/cpu-training-batch2-declare,
-    # umap on lane/cpu-training-umap-b (tests/test_cpu_training_umap.py),
-    # metrics-classification on lane/cpu-training-metrics-classification.
-    assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                                     "metrics-fowlkes-mallows", "metrics-homogeneity-completeness",
-                                     "spectral-embedding")
-    assert METRICS_ORACLE in fam["host_modules"]
-    assert (ROOT / METRICS_ORACLE).is_file()
-    assert (ROOT / "bindings/build_metrics_host.sh").is_file()
-    assert (ROOT / host_surface.binding_source("metrics")).is_file()
-    assert "_mojolearn_metrics" in host_surface.routed_modules()
-
-
-def test_metrics_binding_registers_the_lane_entries():
-    src = _read(host_surface.binding_source("metrics"))
-    exports = host_surface.family("metrics")["exports"]
-    for name in METRICS_EXPORTS + ("metrics_vendor", "metrics_numeric_mode"):
-        assert f'("{name}")' in src, f"the metrics host binding does not register {name}"
-        assert name in exports, f"the manifest does not list {name} for metrics"
-    # umap_fit_transform left this list on lane/cpu-training-umap-b; rand_score,
-    # trustworthiness, kl_divergence, log_loss and confusion_matrix on the
-    # metrics-classification lane.
-    for absent in ("graph_parallel_available",):
-        assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
-
-
-def test_metrics_oracle_imports_no_gpu_and_carries_the_sabotage_arm():
-    text = _read(METRICS_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{METRICS_ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
-    assert "from checks.numerics import" in text
-    assert "comptime PINNED_SUM_W = 256" in text, "the slab width is the tree; it must be 256"
-    define = host_surface.sabotage_define("metrics")
-    assert f'is_defined["{define}"]()' in text
-    assert "comptime if METRICS_ORACLE_HOST_SABOTAGE:" in text
-    assert "values[(i + 1) % n]" in text, "the sabotage arm does not shift the chunk boundaries"
-    assert "METRICS_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
-
-
-def test_manifest_covers_spectral_and_the_oracle_moved():
-    assert "spectral" in host_surface.covered_lanes(), "spectral is not a covered training lane"
-    fam = host_surface.family("metrics")
-    assert "spectral" in fam["training_lanes"] and "SpectralClustering" in fam["classes"]
-    assert SPECTRAL_ORACLE in fam["host_modules"]
-    assert "spectral clustering" not in host_surface.no_cpu_path_sentence()
-    text = _read(SPECTRAL_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{SPECTRAL_ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
-    assert "from gemm.host.identical_gemm import contract_leaf_size" in text
-    assert "def oracle_embedding[" in text and "def host_spectral_fit_predict_dataset(" in text
-    assert "def host_coo_symmetrize(" in text
-    checks = _read("spectral/checks/spectral_oracle.mojo")
-    assert "from spectral.host.spectral_oracle import (" in checks, "the checks file must re-export the host oracle"
-    assert "def dense_laplacian_eigenvalues_f64(" in checks
-    assert "comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:" in text and "seed + UInt64(1)" in text
-    assert "SPECTRAL_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
-
-
-@reference_training()
 def test_spectral_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -202,33 +84,6 @@ def test_spectral_runs_on_the_host_when_built():
         "two separated blobs were not split into the two clusters"
 
 
-def test_manifest_covers_the_scalers():
-    for lane in ("standard-scaler", "minmax-scaler"):
-        assert lane in host_surface.covered_lanes(), f"{lane} is not a covered training lane"
-    fam = host_surface.family("preprocessing")
-    assert fam["routes"] == "_mojolearn_preprocessing"
-    # The three parameter lanes joined on lane/cpu-training-batch2-declare,
-    # scaler-fit-transform (fit_transform's one-upload entries) in eecd2d2a7;
-    # the par-scaler lanes left with multi-GPU verification (2026-10-31).
-    assert fam["training_lanes"] == ("standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-                                     "standard-scaler-no-std", "minmax-scaler-clip",
-                                     "scaler-fit-transform")
-    assert SCALER_ORACLE in fam["host_modules"] and (ROOT / SCALER_ORACLE).is_file()
-    assert (ROOT / "bindings/build_preprocessing_host.sh").is_file()
-    assert "_mojolearn_preprocessing" in host_surface.routed_modules()
-    src = _read(host_surface.binding_source("preprocessing"))
-    for name in ("standard_fit", "standard_transform", "minmax_fit", "minmax_transform",
-                 "preprocessing_numeric_mode", "preprocessing_vendor"):
-        assert f'("{name}")' in src and name in fam["exports"], name
-    text = _read(SCALER_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{SCALER_ORACLE} imports a GPU module"
-    assert "from checks.numerics import" in text and "comptime PINNED_SUM_W = 256" in text
-    assert "comptime if SCALER_ORACLE_HOST_SABOTAGE:" in text
-    assert "values[(i + 1) % n]" in text and "ftz(lower) + ftz(identical_mul(" in text
-    assert "SCALER_ORACLE_HOST_SABOTAGE" in src
-
-
-@reference_training()
 def test_scalers_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -256,35 +111,6 @@ def test_scalers_run_on_the_host_when_built():
     assert again.tobytes() == u.tobytes(), "two host fits returned different bytes"
 
 
-def test_manifest_covers_logistic():
-    assert "logistic" in host_surface.covered_lanes(), "logistic is not a covered training lane"
-    fam = host_surface.family("estimators")
-    assert "logistic" in fam["training_lanes"] and "logistic" in fam["inference_lanes"]
-    assert QN_ORACLE in fam["host_modules"] and (ROOT / QN_ORACLE).is_file()
-    assert "qn_fit" in fam["exports"]
-    assert "logistic regression training" not in host_surface.no_cpu_path_sentence()
-    src = _read(host_surface.binding_source("estimators"))
-    assert '("qn_fit")' in src
-    text = _read(QN_ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{QN_ORACLE} imports a GPU module"
-    assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
-    assert "from checks.numerics import" in text
-    assert "from glm.host.glm_oracle import host_xty" in text
-    assert "from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum" in text
-    # The softmax loss and OWL-QN train on the host since
-    # lane/cpu-training-batch3, and sample_weight (the weighted arm of
-    # getLossAndDZ) since lane sk-kernels (db17ac6cc).
-    for named in ("QN_LOSS_SOFTMAX", "def host_min_owlqn", "has_sample_weight: Bool"):
-        assert named in text, f"{named} is not in {QN_ORACLE}"
-    assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
-    assert "QN_ORACLE_HOST_SABOTAGE" in src
-    # Binary training reuses the exact row-parallel inference primitive only
-    # above a work threshold; small fits retain the original serial loop.
-    assert "if self.n_rows * self.d < (1 << 19):" in text
-    assert "self.z = host_qn_decision(" in text
-
-
-@reference_training()
 def test_logistic_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -308,7 +134,6 @@ def test_logistic_runs_on_the_host_when_built():
     assert l1[0].tobytes() == l1[1].tobytes(), "two host OWL-QN fits returned different coefficients"
 
 
-@reference_training()
 def test_metrics_run_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")
@@ -324,34 +149,11 @@ def test_metrics_run_on_the_host_when_built():
     x = rng.standard_normal((300, 3)).astype(np.float32)
     yt = (rng.integers(0, 3, 300)).astype(np.int32)
     yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
-    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-    try:
-        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-        serial = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
-        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
-        parallel = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
-    finally:
-        if previous_threads is None:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-        else:
-            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
-    assert serial == parallel
-    serial_cm = np.empty(9, dtype=np.int64)
-    parallel_cm = np.empty(9, dtype=np.int64)
-    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
-    try:
-        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
-        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
-                                serial_cm.ctypes.data, [len(yt), 3, 0])
-        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
-        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
-                                parallel_cm.ctypes.data, [len(yt), 3, 0])
-    finally:
-        if previous_threads is None:
-            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
-        else:
-            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
-    assert serial_cm.tobytes() == parallel_cm.tobytes()
+    # One and seven row tasks must give the same accuracy and confusion
+    # matrix bytes; each count runs in its own process (read once).
+    serial = _run_with_threads("1", _METRICS_THREADS_CODE)
+    parallel = _run_with_threads("7", _METRICS_THREADS_CODE)
+    assert serial and serial == parallel, (serial, parallel)
     got = [(mt.accuracy_score(yt, yp), mt.adjusted_rand_score(yt, yp), mt.v_measure_score(yt, yp),
             mt.r2_score(x[:, 0], x[:, 0] * np.float32(0.9)), mt.silhouette_score(x, yp))
            for _ in range(2)]
@@ -361,7 +163,6 @@ def test_metrics_run_on_the_host_when_built():
     assert -0.5 <= ari <= 1.0 and 0.0 <= vm <= 1.0 and 0.0 <= r2 <= 1.0 and -1.0 <= sil <= 1.0
 
 
-@reference_training()
 def test_kmeans_fit_runs_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

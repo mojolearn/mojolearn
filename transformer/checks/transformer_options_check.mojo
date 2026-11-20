@@ -57,7 +57,7 @@ B 2, L 6, a cache of 8, a 512-position table; one case at head_dim 24
 width is not a power of two.
 """
 
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -414,7 +414,7 @@ struct DeviceRun(Movable):
                 else:
                     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=self.stages.residual2.create_sub_buffer[DType.float32](0, n))
                 ctx.synchronize()
-                memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+                unsafe_memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
                 _ = host^
             out.append(values^)
         return out^
@@ -548,14 +548,14 @@ def assert_clause_d(ctx: DeviceContext, name: String, sh: Shape, w: TransformerW
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_out)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=stages2.residual2.create_sub_buffer[DType.float32](0, n_out))
     ctx.synchronize()
-    memcpy(dest=y2.unsafe_ptr(), src=host.unsafe_ptr(), count=n_out)
+    unsafe_memcpy(dest=y2.unsafe_ptr(), src=host.unsafe_ptr(), count=n_out)
     _ = host^
     var n_cache = sh.b * sh.n_kv * l * sh.head_dim
     var k2 = List[Float32](length=n_cache, fill=Float32(0.0))
     var hostk = ctx.enqueue_create_host_buffer[DType.float32](n_cache)
     ctx.enqueue_copy(dst_ptr=hostk.unsafe_ptr(), src_buf=stages2.k_cache.create_sub_buffer[DType.float32](0, n_cache))
     ctx.synchronize()
-    memcpy(dest=k2.unsafe_ptr(), src=hostk.unsafe_ptr(), count=n_cache)
+    unsafe_memcpy(dest=k2.unsafe_ptr(), src=hostk.unsafe_ptr(), count=n_cache)
     _ = hostk^
     var whole_y = full[29].copy()
     var whole_tail = slice_tokens(whole_y, sh.b, l, dm, l - 2, l)

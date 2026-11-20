@@ -60,6 +60,7 @@ binary print.
 
 from std.math import fma
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from gemm.contract import (
     CONTRACT_K_LEAF_MIN,
@@ -107,7 +108,26 @@ from gemm.impl.linalg.contractions import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
+
+# THE FIXTURE LENGTHS ARE COUNTED IN LEAVES OF THE PROFILE (lane
+# fx-gemm-leaf512, 2026-11-19). Every fixture below that takes its leaf from
+# `contract_leaf_size(k)` is built from `(L, P)` and needs a stated NUMBER of
+# leaves (8 for F1/F5/F6, 4 for F8, 3 with a ragged 44-element tail for F7, 2
+# for the padding elision), not a stated k. Under v1 (K_LEAF_MIN = 128) these
+# are the literals the fixtures always used: 1024, 512, 300, 256, 200. Under
+# `-D MOJOLEARN_GEMM_FAST_LEAF512` (profile v2-leaf512) they are 4096, 2048,
+# 1068, 1024 and 584, so F1 and F5-F9 run at the new leaf with the same
+# leaf counts and the same predicted words (each prediction is a function of
+# `(L, P)` only). F2 names its leaves explicitly (128, 64, 256) and is
+# unchanged by the define.
+comptime FIXTURE_K_EIGHT_LEAVES = 8 * CONTRACT_K_LEAF_MIN
+comptime FIXTURE_K_FOUR_LEAVES = 4 * CONTRACT_K_LEAF_MIN
+comptime FIXTURE_K_TWO_LEAVES = 2 * CONTRACT_K_LEAF_MIN
+#: Two full leaves and a ragged third of 44 elements: `P = 3`, odd.
+comptime FIXTURE_K_RAGGED_ODD = 2 * CONTRACT_K_LEAF_MIN + 44
+#: One full leaf and a ragged second of 72 elements (`k > K_LEAF_MIN`).
+comptime FIXTURE_K_ORIENT = CONTRACT_K_LEAF_MIN + 72
 
 #: The smallest normal binary32, `2^-126`. `ftz`'s own boundary.
 comptime MIN_NORMAL_F32 = Float32(1.1754943508222875e-38)
@@ -727,26 +747,65 @@ def check_leaf_partition_is_a_pure_function_of_k() raises:
     want_l.append(1)
     ks.append(64)
     want_l.append(64)
-    ks.append(128)
-    want_l.append(128)
-    ks.append(129)
-    want_l.append(128)
+    # The rows from here on are stated in the profile's own constants, so the
+    # table pins v1 (128: the literals in the comments) and v2-leaf512 (512)
+    # alike. The formula it pins, for K = K_LEAF_MIN and M = MAX_LEAVES:
+    #     L(k) = k if k <= K;  K if ceil(k/K) <= M;  else ceil(k/M).
+    comptime K = CONTRACT_K_LEAF_MIN
+    comptime M = CONTRACT_MAX_LEAVES
+    ks.append(K)  # 128 -> 128, the longest single leaf
+    want_l.append(K)
+    ks.append(K + 1)  # 129 -> 128, P = 2
+    want_l.append(K)
     # F7's shape: RAGGED (300 = 2*128 + 44) and an ODD live-leaf count (P=3),
     # which is clause 5's explicit requirement. Pinned here so that a later
     # edit which changes the partition also changes F7's premise loudly.
-    ks.append(300)
-    want_l.append(128)
-    ks.append(1024)
-    want_l.append(128)
-    ks.append(131072)
-    want_l.append(128)
+    ks.append(FIXTURE_K_RAGGED_ODD)
+    want_l.append(K)
+    ks.append(FIXTURE_K_EIGHT_LEAVES)  # 1024 -> 128
+    want_l.append(K)
+    ks.append(K * M)  # 131072 -> 128
+    want_l.append(K)
     # 131072/128 = 1024 leaves exactly: the last k the uncapped branch serves.
-    ks.append(131200)
-    want_l.append(129)
+    ks.append(K * M + K)  # 131200 -> 129
+    want_l.append(K + 1)
     # 131200/128 = 1025 > MAX_LEAVES, so the capped branch takes over:
-    # ceil(131200/1024) = 129.
+    # ceil(131200/1024) = 129. In general ceil((K M + K) / M) = K + 1.
     ks.append(4000000)
     want_l.append(3907)
+    # 4,000,000 is in the capped branch under both profiles (above 131,072
+    # and above 524,288), where L = ceil(k / 1024) does not read K_LEAF_MIN.
+    comptime if not (IDENTICAL_BUILD and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()):
+        # v1's own literals, read from the define and not from the constant:
+        # a build without the arm whose K_LEAF_MIN is anything but 128 fails
+        # here whatever the rows above (built from the constant) say.
+        ks.append(129)
+        want_l.append(128)
+        ks.append(300)
+        want_l.append(128)
+        ks.append(1024)
+        want_l.append(128)
+        ks.append(131072)
+        want_l.append(128)
+        ks.append(131200)
+        want_l.append(129)
+    else:
+        # v2-leaf512's own literals, so the arm is pinned by numbers and not
+        # only by the constant it is built from: one chain up to 512, P = 2
+        # at 513, the board-independent ragged 1500 (P = 3: 512, 512, 476),
+        # a non-multiple of the leaf.
+        ks.append(300)
+        want_l.append(300)
+        ks.append(512)
+        want_l.append(512)
+        ks.append(513)
+        want_l.append(512)
+        ks.append(1500)
+        want_l.append(512)
+        ks.append(524288)
+        want_l.append(512)
+        ks.append(524800)
+        want_l.append(513)
 
     for t in range(len(ks)):
         var k = ks[t]
@@ -871,7 +930,7 @@ def check_oracle_matches_the_contract_spelling() raises:
     # the tree is "reached but inert". F5's fixture at `k = 1024` (P = 8)
     # separates the balanced tree from the serial fold by 6, so a gated
     # oracle that folded serially could not pass this.
-    var kf = 1024
+    var kf = FIXTURE_K_EIGHT_LEAVES
     var elf = contract_leaf_size(kf)
     var pf = leaf_count(kf, elf)
     var af = _zeros(kf)
@@ -957,7 +1016,7 @@ def check_orientations_agree() raises:
     """
     var m = 3
     var n = 5
-    var k = 200
+    var k = FIXTURE_K_ORIENT
     var ae = List[Float32]()  # m x k, row-major -- the LOGICAL left operand
     var be = List[Float32]()  # k x n, row-major -- the LOGICAL right operand
     for i in range(m):
@@ -1081,7 +1140,7 @@ def check_f1_serial_vs_splitk() raises:
     reference, `gemm_oracle_serial`); `leaf = contract_leaf_size(k)` is the
     contract's partition.
     """
-    var k = 1024
+    var k = FIXTURE_K_EIGHT_LEAVES
     var a = _swallow_fixture(k)
     var b = _ones(k)
     var el = contract_leaf_size(k)
@@ -1410,8 +1469,8 @@ def check_f5_balanced_vs_serial_fold() raises:
     both distinctions would have proved one of them and believed it had
     proved two.
     """
-    var k = 1024
-    var el = contract_leaf_size(k)  # 128
+    var k = FIXTURE_K_EIGHT_LEAVES
+    var el = contract_leaf_size(k)  # 128 (v1)
     var p = leaf_count(k, el)  # 8
     var a = _zeros(k)
     a[0] = TWO_P24
@@ -1538,7 +1597,7 @@ def check_f6_signed_zero_and_cancellation() raises:
     the partition choice stops being a last-bit question.
     """
     # ---- F6a: the SEEDLESS tree preserves the sign --------------------
-    var k = 1024
+    var k = FIXTURE_K_EIGHT_LEAVES
     var el = contract_leaf_size(k)
     var p = leaf_count(k, el)
     var a = _minus_zero_leaves(k, el)
@@ -1628,7 +1687,7 @@ def check_f6_signed_zero_and_cancellation() raises:
         )
 
     # ---- F6b: cancellation ------------------------------------------
-    var kc = 1024
+    var kc = FIXTURE_K_EIGHT_LEAVES
     var elc = contract_leaf_size(kc)
     var pc = leaf_count(kc, elc)
     var ac = _zeros(kc)
@@ -1917,7 +1976,7 @@ def check_serial_oracle_is_the_one_leaf_case() raises:
         )
 
     # ---- k > 128: they are DIFFERENT ANSWERS, and that is the point ---
-    var k2 = 1024
+    var k2 = FIXTURE_K_EIGHT_LEAVES
     var a2 = _swallow_fixture(k2)
     var b2 = _ones(k2)
     var norm = gemm_oracle(a2, b2, OP_NT, 1, 1, k2)
@@ -1940,7 +1999,7 @@ def check_one_leaf_fast_path_matches_explicit_fold() raises:
     rebuilt through a one-element ``fold_balanced_tree`` so this check keeps
     covering the exact allocation-and-fold route replaced in production.
     """
-    for k in List[Int]([1, 64, 127, 128]):
+    for k in List[Int]([1, 64, 127, 128, CONTRACT_K_LEAF_MIN - 1, CONTRACT_K_LEAF_MIN]):
         if contract_leaf_count(k) != 1:
             raise Error("one-leaf fast-path fixture unexpectedly has P != 1")
         comptime m = 3
@@ -2003,11 +2062,16 @@ def check_right_zero_padding_elision() raises:
     the observable zero-FMA normalization that the compressed spelling must
     retain.
     """
-    comptime k = 256
+    comptime k = FIXTURE_K_TWO_LEAVES
     comptime m = 3
     comptime n = 4
+    # v1: [0, 1, 7, 127, 128, 129, 255, 256]
     var lengths = List[Int](
-        [0, 1, 7, 127, 128, 129, 255, 256]
+        [
+            0, 1, 7, CONTRACT_K_LEAF_MIN - 1, CONTRACT_K_LEAF_MIN,
+            CONTRACT_K_LEAF_MIN + 1, FIXTURE_K_TWO_LEAVES - 1,
+            FIXTURE_K_TWO_LEAVES,
+        ]
     )
     for op in List[Int]([OP_NN, OP_NT, OP_TN]):
         for real in lengths:
@@ -2106,13 +2170,13 @@ def check_f7_odd_carry_vs_zero_padding() raises:
     buys nothing. This arm ASSERTS the equality, so if a future toolchain
     ever disagrees the surprise arrives here rather than in a kernel.
     """
-    var k = 300
+    var k = FIXTURE_K_RAGGED_ODD
     var el = contract_leaf_size(k)
     var p = leaf_count(k, el)
-    if el != 128 or p != 3:
+    if el != CONTRACT_K_LEAF_MIN or p != 3:
         raise Error(
-            "check_f7: expected the ragged odd shape (L = 128, P = 3) at"
-            " k = 300, got L = " + String(el) + ", P = " + String(p)
+            "check_f7: expected the ragged odd shape (L = K_LEAF_MIN, P = 3)"
+            " at k = " + String(k) + ", got L = " + String(el) + ", P = " + String(p)
         )
     if leaf_end(p - 1, el, k) - leaf_begin(p - 1, el) != 44:
         raise Error("check_f7: the last leaf is not the ragged 44-element one")
@@ -2243,12 +2307,12 @@ def check_f8_adjacent_vs_stride_pairing() raises:
     Every quantity is an exact integer and the separation is a whole unit
     against a zero, not one ulp. `k = 512` gives `L = 128, P = 4`.
     """
-    var k = 512
+    var k = FIXTURE_K_FOUR_LEAVES
     var el = contract_leaf_size(k)
     var p = leaf_count(k, el)
-    if el != 128 or p != 4:
+    if el != CONTRACT_K_LEAF_MIN or p != 4:
         raise Error(
-            "check_f8: expected L = 128, P = 4 at k = 512, got L = "
+            "check_f8: expected L = K_LEAF_MIN, P = 4 at k = 4 K_LEAF_MIN, got L = "
             + String(el)
             + ", P = "
             + String(p)

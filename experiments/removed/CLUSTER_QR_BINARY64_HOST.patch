@@ -1,0 +1,594 @@
+diff --git b/x_cluster/checks/oracles.mojo a/x_cluster/checks/oracles.mojo
+index a79d8c0c98..8f4a09dffd 100644
+--- b/x_cluster/checks/oracles.mojo
++++ a/x_cluster/checks/oracles.mojo
+@@ -11,7 +11,6 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_exp, id
+ from x_cluster.bodies import IDN_BGMM_NK_LEVELS, SplitMix64
+ from mixture.nk_order import gmm_nk_fold_levels
+ from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
+-from x_linear.ff import FF, ff_add, ff_div, ff_mul, ff_neg, ff_sqrt, ff_sub
+ 
+ 
+ # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
+@@ -416,43 +415,28 @@ def oracle_agglo(
+ 
+ 
+ # ---------------------------------------------------------------- DEVIATION 5119
+-# TOMBSTONE: the binary64 `oracle_jacobi_svd` (of x_cluster/spectral_assign.mojo's binary64 `jacobi_svd`) deleted
+-# 2026-11-09 by lane m3-linalg-and-housekeeping with its subject (cluster_qr moved to float-float); code recoverable at
+-# 0ce88411d3. Restore: git apply experiments/removed/CLUSTER_QR_BINARY64_HOST.patch
+-
+-
+-def oracle_df64_svd(
+-    a: List[FF], m: Int, mut u: List[FF], mut sv: List[FF], mut v: List[FF], reversed_fold: Bool = False
++def oracle_jacobi_svd(
++    a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64],
++    reversed_fold: Bool = False,
+ ) raises:
+-    """x_cluster/spectral_df64.mojo's float-float one-sided Jacobi SVD
+-    (`_sd_svd_host`, `sdk_step_kernel`) restated for a full-rank a (m x m,
+-    row major): pairs (p < q) in row order, the three column sums folded
+-    rows ascending (descending with `reversed_fold`, the alternative the
+-    fixture must separate), a rotation skipped when gamma's hi word is 0 or
+-    |gamma| <= 2^-44 sqrt(alpha beta), zeta = (beta - alpha) / (2 gamma), t
+-    = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)), c = 1 / sqrt(1 + t^2), s =
+-    c t; stop after a sweep that rotates nothing (cap 80). u = w / ||w||."""
++    """`x_cluster/spectral_assign.mojo::jacobi_svd` restated for a full-rank
++    a: one-sided Jacobi on the columns, pairs (p < q) in row order, the three
++    column sums folded rows ascending (descending with `reversed_fold`, the
++    alternative the fixture must separate), every product pinned, zeta =
++    (beta - alpha) / (2 gamma), t = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)),
++    c = 1 / sqrt(1 + t^2), s = c t; stop after a sweep that rotates nothing."""
+     var w = a.copy()
+-    var zero = FF(Float32(0), Float32(0))
+-    var one = FF(Float32(1), Float32(0))
+-    var two = FF(Float32(2), Float32(0))
+-    v = List[FF](length=m * m, fill=zero)
++    v = List[Float64](length=m * m, fill=0)
+     for i in range(m):
+-        v[i * m + i] = one
++        v[i * m + i] = 1
+ 
+-    def col(w: List[FF], m: Int, p: Int, q: Int, rev: Bool) -> FF:
+-        var s = FF(Float32(0), Float32(0))
++    def col(w: List[Float64], m: Int, p: Int, q: Int, rev: Bool) -> Float64:
++        var s = Float64(0)
+         for rr in range(m):
+             var r = m - 1 - rr if rev else rr
+-            s = ff_add(s, ff_mul(w[r * m + p], w[r * m + q]))
++            s += identical_mul64(w[r * m + p], w[r * m + q])
+         return s
+ 
+-    def less(a: FF, b: FF) -> Bool:
+-        return a.hi < b.hi or (a.hi == b.hi and a.lo < b.lo)
+-
+-    def absf(x: FF) -> FF:
+-        return ff_neg(x) if x.hi < Float32(0) else x
+-
+     for _sweep in range(80):
+         var rotated = False
+         for p in range(m - 1):
+@@ -460,39 +444,35 @@ def oracle_df64_svd(
+                 var alpha = col(w, m, p, p, reversed_fold)
+                 var beta = col(w, m, q, q, reversed_fold)
+                 var gamma = col(w, m, p, q, reversed_fold)
+-                var ab = ff_mul(alpha, beta)
+-                var root = ff_sqrt(ab) if ab.hi > Float32(0) else FF(Float32(0), Float32(0))
+-                var bound = ff_mul(FF(Float32(5.684341886080802e-14), Float32(0)), root)
+-                if gamma.hi == Float32(0) or not less(bound, absf(gamma)):
++                if gamma == 0 or abs(gamma) <= Float64(2.220446049250313e-16) * sqrt(identical_mul64(alpha, beta)):
+                     continue
+                 rotated = True
+-                var zeta = ff_div(ff_sub(beta, alpha), ff_mul(two, gamma))
+-                var t = ff_div(one, ff_add(absf(zeta), ff_sqrt(ff_add(one, ff_mul(zeta, zeta)))))
+-                if zeta.hi < Float32(0):
+-                    t = ff_neg(t)
+-                var c = ff_div(one, ff_sqrt(ff_add(one, ff_mul(t, t))))
+-                var s = ff_mul(c, t)
++                var zeta = (beta - alpha) / (2 * gamma)
++                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
++                if zeta < 0:
++                    t = -t
++                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
++                var s = identical_mul64(c, t)
+                 for r in range(m):
+                     var wp = w[r * m + p]
+                     var wq = w[r * m + q]
+-                    w[r * m + p] = ff_sub(ff_mul(c, wp), ff_mul(s, wq))
+-                    w[r * m + q] = ff_add(ff_mul(s, wp), ff_mul(c, wq))
++                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
++                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
+                     var vp = v[r * m + p]
+                     var vq = v[r * m + q]
+-                    v[r * m + p] = ff_sub(ff_mul(c, vp), ff_mul(s, vq))
+-                    v[r * m + q] = ff_add(ff_mul(s, vp), ff_mul(c, vq))
++                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
++                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
+         if not rotated:
+             break
+-    sv = List[FF](length=m, fill=zero)
+-    u = List[FF](length=m * m, fill=zero)
++    sv = List[Float64](length=m, fill=0)
++    u = List[Float64](length=m * m, fill=0)
+     for j in range(m):
+-        var nn = col(w, m, j, j, reversed_fold)
+-        if not (nn.hi > Float32(0)):
+-            raise Error("oracle_df64_svd: the fixture must be full rank")
+-        var nj = ff_sqrt(nn)
++        var nj = sqrt(col(w, m, j, j, reversed_fold))
++        if nj == 0:
++            raise Error("oracle_jacobi_svd: the fixture must be full rank")
+         sv[j] = nj
+         for r in range(m):
+-            u[r * m + j] = ff_div(w[r * m + j], nj)
++            u[r * m + j] = w[r * m + j] / nj
+ 
+ 
+ def oracle_ap_noise(s_in: List[Float32], seed: UInt64) -> List[Float32]:
+diff --git b/x_cluster/checks/sabotage/5119_svd_fold.patch a/x_cluster/checks/sabotage/5119_svd_fold.patch
+index 54a809a61b..1bfe315fd1 100644
+--- b/x_cluster/checks/sabotage/5119_svd_fold.patch
++++ a/x_cluster/checks/sabotage/5119_svd_fold.patch
+@@ -1,13 +1,12 @@
+-diff --git a/x_cluster/spectral_df64.mojo b/x_cluster/spectral_df64.mojo
+---- a/x_cluster/spectral_df64.mojo
+-+++ b/x_cluster/spectral_df64.mojo
+-@@ -253,7 +253,8 @@
+- def sd_dot_cols(wh: FP, wl: FP, k: Int, p: Int, q: Int) -> FF:
+-     """sum_r w[r, p] w[r, q], rows ascending."""
+-     var s = sd_zero()
+--    for r in range(k):
+-+    for rr in range(k):
+-+        var r = k - 1 - rr  # SABOTAGE 5119: rows descending
+-         s = ff_add(s, ff_mul(sd_ld(wh, wl, r * k + p), sd_ld(wh, wl, r * k + q)))
++diff --git a/x_cluster/spectral_assign.mojo b/x_cluster/spectral_assign.mojo
++--- a/x_cluster/spectral_assign.mojo
+++++ b/x_cluster/spectral_assign.mojo
++@@ -40,6 +40,6 @@
++     rows in order."""
++     var s = Float64(0)
++-    for r in range(m):
++-        s += identical_mul64(w[r * m + p], w[r * m + q])
+++    for rr in range(m):
+++        s += identical_mul64(w[(m - 1 - rr) * m + p], w[(m - 1 - rr) * m + q])
+      return s
+  
+diff --git b/x_cluster/checks/spectral_assign_check.mojo a/x_cluster/checks/spectral_assign_check.mojo
+index 776e79c81c..1ef6efe76d 100644
+--- b/x_cluster/checks/spectral_assign_check.mojo
++++ a/x_cluster/checks/spectral_assign_check.mojo
+@@ -1,37 +1,33 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Seam DEVIATION 5119 (SpectralClustering assign_labels: the k x k SVD
+-LAPACK computes for scikit-learn is a float-float one-sided Jacobi SVD, the
+-column sums folded rows ascending).
++LAPACK computes for scikit-learn is a one-sided Jacobi SVD, the column sums
++folded rows ascending, every product pinned).
+ 
+     tools/with_identical_mode.sh pixi run mojo run -I . x_cluster/checks/spectral_assign_check.mojo
+ 
+-The fixtures (the k x k class sums discretize builds, and the pivot-row
+-matrices cluster_qr builds, from a seam fixture embedding) are first shown
+-to SEPARATE the pinned fold from the reversed one, VACUOUS otherwise; then
+-x_cluster/host/spectral_df64_host.mojo `_sd_svd_host` (the host column of
+-the device's one-block SVD, the same bodies) must equal the host oracle
+-(`x_cluster/checks/oracles.mojo::oracle_df64_svd`) bit for bit in u, the
+-singular values and v, both words. Lane m3-linalg-and-housekeeping
+-(2026-11-09): cluster_qr moved from binary64 host code to float-float on
+-every column, so this check moved from the binary64 `jacobi_svd` to the
+-float-float SVD both assignments share; the lane check
+-(x-cluster-spectral-affinities) compares the columns end to end. With
+-MOJOLEARN_IDENTITY_TRACE set, the stage lands on the card."""
++Pass 2, lane/algos-cluster. The fixture (the k x k class sums discretize
++builds, and the pivot-row transposes cluster_qr builds, from a seam fixture
++embedding) is first shown to SEPARATE the pinned fold from the reversed one,
++VACUOUS otherwise; then `x_cluster/spectral_assign.mojo::jacobi_svd` must
++equal the host oracle (`x_cluster/checks/oracles.mojo::oracle_jacobi_svd`)
++bit for bit in u, the singular values and v. The routine is host code, one
++source compiled into both bindings, so the device and CPU columns run the
++same compiled body; the lane check (x-cluster-spectral-affinities) compares
++the two columns end to end. With MOJOLEARN_IDENTITY_TRACE set, the stage
++lands on the card."""
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from core.identity_trace import IdentityTrace
+-from x_cluster.checks.oracles import oracle_df64_svd
++from x_cluster.checks.oracles import oracle_jacobi_svd
+ from x_cluster.checks.seam_util import require_equal, require_separates, seam_fixture
+-from x_cluster.host.spectral_df64_host import _sd_svd_host, cluster_qr_df64_host, discretize_df64_host
+-from x_cluster.spectral_df64 import SD_STATE_WORDS, SD_STATUS
+-from x_linear.ff import FF, ff_add
+-from x_linear.ops import FP, IP
++from x_cluster.spectral_assign import cluster_qr_labels, jacobi_svd
++from x_cluster.host.spectral_df64_host import discretize_df64_host
+ 
+ 
+-def _diff(a: List[FF], b: List[FF]) -> Int:
++def _diff64(a: List[Float64], b: List[Float64]) -> Int:
+     var c = 0
+     for i in range(len(a)):
+-        if a[i].hi != b[i].hi or a[i].lo != b[i].lo:
++        if a[i] != b[i]:
+             c += 1
+     return c
+ 
+@@ -43,48 +39,10 @@ def _same(seam: String, differing: Int) raises:
+         print("  " + seam + ": FAST, " + String(differing) + " cells differ from the oracle (no claim)")
+ 
+ 
+-def _shipped_svd(a: List[FF], k: Int, mut u: List[FF], mut sv: List[FF], mut v: List[FF]) raises:
+-    """`_sd_svd_host` on a copy of a (it rotates m in place)."""
+-    var kk = k * k
+-    var mh = List[Float32](length=kk, fill=0)
+-    var ml = List[Float32](length=kk, fill=0)
+-    for t in range(kk):
+-        mh[t] = a[t].hi
+-        ml[t] = a[t].lo
+-    var vh = List[Float32](length=kk, fill=0)
+-    var vl = List[Float32](length=kk, fill=0)
+-    var uh = List[Float32](length=kk, fill=0)
+-    var ul = List[Float32](length=kk, fill=0)
+-    var svh = List[Float32](length=k, fill=0)
+-    var svl = List[Float32](length=k, fill=0)
+-    var ch = List[Float32](length=k, fill=0)
+-    var cl = List[Float32](length=k, fill=0)
+-    var fil = List[Int32](length=k, fill=0)
+-    var st = List[Int32](length=SD_STATE_WORDS, fill=0)
+-    _sd_svd_host(
+-        FP(unsafe_from_address=Int(mh.unsafe_ptr())), FP(unsafe_from_address=Int(ml.unsafe_ptr())),
+-        FP(unsafe_from_address=Int(vh.unsafe_ptr())), FP(unsafe_from_address=Int(vl.unsafe_ptr())),
+-        FP(unsafe_from_address=Int(uh.unsafe_ptr())), FP(unsafe_from_address=Int(ul.unsafe_ptr())),
+-        FP(unsafe_from_address=Int(svh.unsafe_ptr())), FP(unsafe_from_address=Int(svl.unsafe_ptr())),
+-        IP(unsafe_from_address=Int(fil.unsafe_ptr())), FP(unsafe_from_address=Int(ch.unsafe_ptr())),
+-        FP(unsafe_from_address=Int(cl.unsafe_ptr())), k, IP(unsafe_from_address=Int(st.unsafe_ptr())),
+-    )
+-    if st[SD_STATUS] != 0:
+-        raise Error("spectral_assign_check: the shipped SVD refused a full-rank fixture")
+-    u = List[FF](capacity=kk)
+-    v = List[FF](capacity=kk)
+-    sv = List[FF](capacity=k)
+-    for t in range(kk):
+-        u.append(FF(uh[t], ul[t]))
+-        v.append(FF(vh[t], vl[t]))
+-    for j in range(k):
+-        sv.append(FF(svh[j], svl[j]))
+-
+-
+ def main() raises:
+     var n = 96
+     var tr = IdentityTrace()
+-    var fixtures = List[List[FF]]()
++    var fixtures = List[List[Float64]]()
+     var sizes = List[Int]()
+     for k in range(3, 7):
+         # the fixture's all-zero last column dropped (an embedding has none)
+@@ -94,52 +52,52 @@ def main() raises:
+             for r in range(k):
+                 x.append(xf[i * (k + 1) + r])
+         # the discretize class sums: rows grouped by (row index mod k)
+-        var m = List[FF](length=k * k, fill=FF(Float32(0), Float32(0)))
++        var m = List[Float64](length=k * k, fill=0)
+         for i in range(n):
+             for r in range(k):
+-                m[(i % k) * k + r] = ff_add(m[(i % k) * k + r], FF(x[i * k + r], Float32(0)))
++                m[(i % k) * k + r] = m[(i % k) * k + r] + Float64(x[i * k + r])
+         fixtures.append(m^)
+         sizes.append(k)
+-        # a cluster_qr-shaped one: M[c, r] = embedding row (7 c + 3)
+-        var b = List[FF](length=k * k, fill=FF(Float32(0), Float32(0)))
+-        for c in range(k):
+-            for r in range(k):
+-                b[c * k + r] = FF(x[(7 * c + 3) * k + r], Float32(0))
++        # a cluster_qr-shaped one: k rows of the embedding, transposed
++        var b = List[Float64](length=k * k, fill=0)
++        for r in range(k):
++            for c in range(k):
++                b[r * k + c] = Float64(x[(7 * c + 3) * k + r])
+         fixtures.append(b^)
+         sizes.append(k)
+         # the full routes run (the trace records their labels)
+-        tr.record_list_i32("x_cluster.spectral_assign.cluster_qr", cluster_qr_df64_host(x, n, k))
++        tr.record_list_i32("x_cluster.spectral_assign.cluster_qr", cluster_qr_labels(x, n, k))
+         var it = 0
+         tr.record_list_i32("x_cluster.spectral_assign.discretize", discretize_df64_host(x, n, k, UInt64(3), 30, 20, it))
+     var sep = 0
+     for f in range(len(fixtures)):
+         var k = sizes[f]
+-        var u0 = List[FF]()
+-        var s0 = List[FF]()
+-        var v0 = List[FF]()
+-        oracle_df64_svd(fixtures[f], k, u0, s0, v0)
+-        var u1 = List[FF]()
+-        var s1 = List[FF]()
+-        var v1 = List[FF]()
+-        oracle_df64_svd(fixtures[f], k, u1, s1, v1, reversed_fold=True)
+-        sep += _diff(u0, u1) + _diff(s0, s1) + _diff(v0, v1)
++        var u0 = List[Float64]()
++        var s0 = List[Float64]()
++        var v0 = List[Float64]()
++        oracle_jacobi_svd(fixtures[f], k, u0, s0, v0)
++        var u1 = List[Float64]()
++        var s1 = List[Float64]()
++        var v1 = List[Float64]()
++        oracle_jacobi_svd(fixtures[f], k, u1, s1, v1, reversed_fold=True)
++        sep += _diff64(u0, u1) + _diff64(s0, s1) + _diff64(v0, v1)
+     require_separates("5119 Jacobi SVD column fold", sep)
+     for f in range(len(fixtures)):
+         var k = sizes[f]
+-        var uo = List[FF]()
+-        var so = List[FF]()
+-        var vo = List[FF]()
+-        oracle_df64_svd(fixtures[f], k, uo, so, vo)
+-        var u = List[FF]()
+-        var s = List[FF]()
+-        var v = List[FF]()
+-        _shipped_svd(fixtures[f], k, u, s, v)
++        var uo = List[Float64]()
++        var so = List[Float64]()
++        var vo = List[Float64]()
++        oracle_jacobi_svd(fixtures[f], k, uo, so, vo)
++        var u = List[Float64]()
++        var s = List[Float64]()
++        var v = List[Float64]()
++        jacobi_svd(fixtures[f], k, u, s, v)
+         var tag = "fixture " + String(f) + " (k " + String(k) + ")"
+-        _same("5119 df64 svd u " + tag, _diff(u, uo))
+-        _same("5119 df64 svd singular values " + tag, _diff(s, so))
+-        _same("5119 df64 svd v " + tag, _diff(v, vo))
++        _same("5119 jacobi_svd u " + tag, _diff64(u, uo))
++        _same("5119 jacobi_svd singular values " + tag, _diff64(s, so))
++        _same("5119 jacobi_svd v " + tag, _diff64(v, vo))
+         var sf = List[Float32]()
+-        for j in range(k):
+-            sf.append(s[j].hi)
++        for val in s:
++            sf.append(Float32(val))
+         tr.record_list_f32("x_cluster.spectral_assign.svd", sf)
+     print("PASS x_cluster spectral_assign_check")
+diff --git b/x_cluster/entries.mojo a/x_cluster/entries.mojo
+index 6a4a6efd1d..5bfae5d4bf 100644
+--- b/x_cluster/entries.mojo
++++ a/x_cluster/entries.mojo
+@@ -20,7 +20,7 @@ from x_cluster.out import ClusterOut
+ from x_cluster.post_bodies import FM_VAL
+ from checks.numerics import portable_log64
+ from x_cluster.tree_cut import tree_labels
+-from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE
++from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels
+ 
+ 
+ def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
+@@ -564,9 +564,7 @@ def spectral_assign_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[
+         raise Error("x_cluster spectral_assign: the embedding is not n x k")
+     var out = ClusterOut()
+     if ip[2] == ASSIGN_CLUSTER_QR:
+-        # lane m3-linalg-and-housekeeping: float-float on the binding's
+-        # column (the device on the GPU binding), was binary64 on the host
+-        out.i.append(ops.spectral_cluster_qr(x, n, k))
++        out.i.append(cluster_qr_labels(x, n, k))
+         out.s.append(0)
+     elif ip[2] == ASSIGN_DISCRETIZE:
+         var it = 0
+diff --git b/x_cluster/spectral_assign.mojo a/x_cluster/spectral_assign.mojo
+index 37e625af6f..69e2545e71 100644
+--- b/x_cluster/spectral_assign.mojo
++++ a/x_cluster/spectral_assign.mojo
+@@ -1,22 +1,209 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""SpectralClustering's assign_labels codes. Both assignments run in
+-float-float on every column: 'discretize' and 'cluster_qr' are
+-x_cluster/spectral_df64.mojo (device driver x_cluster/spectral_df64_device.mojo,
+-host column x_cluster/host/spectral_df64_host.mojo). Reference: scikit-learn
++"""SpectralClustering's assign_labels='cluster_qr' (lane/algos-cluster,
++option parity); 'discretize' is x_cluster/spectral_df64.mojo (float-float on
++every column, lane n9b-device-svd-qr). Reference: scikit-learn
+ `sklearn/cluster/_spectral.py::discretize` (Yu and Shi 2003) and
+ `cluster_qr` (Damle, Minden and Ying 2019).
++
++It runs on the n x k spectral embedding the fit already produced. HOST
++CODE, one source compiled into both bindings, float64 throughout (the
++reference keeps a float32 embedding in float32 and hands it to LAPACK):
++
++- the k x k singular value decomposition scikit-learn takes from LAPACK
++  are a one-sided (Hestenes) Jacobi SVD here, the pairs (p < q) in row
++  order every sweep, until a sweep rotates nothing (cap 80 sweeps); every
++  product that feeds a sum is `identical_mul64`, so no build fuses it.
++  DEVIATION 5119.
++- cluster_qr's column-pivoted QR (LAPACK geqp3) is a Householder QR that
++  RECOMPUTES every remaining column's norm each step (LAPACK downdates it),
++  the largest norm first, the lowest column on a tie (idamax's rule).
++- every argmax takes the lowest index on a tie, as NumPy's.
+ """
++from std.math import sqrt
++
++from checks.numerics import identical_mul64
+ 
+ comptime ASSIGN_DISCRETIZE = 0
+ comptime ASSIGN_CLUSTER_QR = 1
+ 
+ 
+-# TOMBSTONE: `cluster_qr_labels`, `jacobi_svd`, `_polar`, `_dot_cols` (assign_labels='cluster_qr' in binary64 on the
+-# host: the n x k pivoted QR and the k x k Jacobi SVD, the fit's last host step) deleted 2026-11-09 by lane
+-# m3-linalg-and-housekeeping; code recoverable at 0ce88411d3. The float-float form on every column is
+-# x_cluster/spectral_df64.mojo (`cq_*` bodies; `cluster_qr_df64_device`, `cluster_qr_df64_host`).
+-# Restore: git apply experiments/removed/CLUSTER_QR_BINARY64_HOST.patch
++def _dot_cols(w: List[Float64], m: Int, p: Int, q: Int) -> Float64:
++    """sum_r w[r, p] * w[r, q] over the m rows of the m x m row-major w,
++    rows in order."""
++    var s = Float64(0)
++    for r in range(m):
++        s += identical_mul64(w[r * m + p], w[r * m + q])
++    return s
++
++
++def jacobi_svd(a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64]) raises:
++    """a (m x m, row-major) = u diag(sv) v^T by one-sided Jacobi on the
++    columns of a copy of a. u and v are m x m row-major with the singular
++    vectors in COLUMNS, u orthonormal also where a is rank-deficient (a zero
++    column is completed by Gram-Schmidt against e_0, e_1, ..., lowest
++    first). The singular values are NOT sorted (nothing here reads their
++    order). DEVIATION 5119."""
++    var w = a.copy()
++    v = List[Float64](length=m * m, fill=0)
++    for i in range(m):
++        v[i * m + i] = 1
++    comptime EPS = Float64(2.220446049250313e-16)
++    for _sweep in range(80):
++        var rotated = False
++        for p in range(m - 1):
++            for q in range(p + 1, m):
++                var alpha = _dot_cols(w, m, p, p)
++                var beta = _dot_cols(w, m, q, q)
++                var gamma = _dot_cols(w, m, p, q)
++                if gamma == 0 or abs(gamma) <= EPS * sqrt(identical_mul64(alpha, beta)):
++                    continue
++                rotated = True
++                var zeta = (beta - alpha) / (2 * gamma)
++                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
++                if zeta < 0:
++                    t = -t
++                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
++                var s = identical_mul64(c, t)
++                for r in range(m):
++                    var wp = w[r * m + p]
++                    var wq = w[r * m + q]
++                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
++                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
++                    var vp = v[r * m + p]
++                    var vq = v[r * m + q]
++                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
++                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
++        if not rotated:
++            break
++    sv = List[Float64](length=m, fill=0)
++    u = List[Float64](length=m * m, fill=0)
++    var filled = List[Bool](length=m, fill=False)
++    var zero_cols = List[Int]()
++    for j in range(m):
++        var nj = sqrt(_dot_cols(w, m, j, j))
++        sv[j] = nj
++        if nj == 0:
++            zero_cols.append(j)
++            continue
++        filled[j] = True
++        for r in range(m):
++            u[r * m + j] = w[r * m + j] / nj
++    # complete u to an orthonormal basis: e_0, e_1, ... minus their
++    # projections on the columns already filled, the first that survives
++    var e = 0
++    for j in zero_cols:
++        while True:
++            if e >= m:
++                raise Error("jacobi_svd: no basis vector completes u")
++            var cand = List[Float64](length=m, fill=0)
++            cand[e] = 1
++            e += 1
++            for c in range(m):
++                if not filled[c]:
++                    continue
++                var proj = Float64(0)
++                for r in range(m):
++                    proj += identical_mul64(u[r * m + c], cand[r])
++                for r in range(m):
++                    cand[r] = cand[r] - identical_mul64(proj, u[r * m + c])
++            var nn = Float64(0)
++            for r in range(m):
++                nn += identical_mul64(cand[r], cand[r])
++            nn = sqrt(nn)
++            if nn > Float64(1e-8):
++                for r in range(m):
++                    u[r * m + j] = cand[r] / nn
++                filled[j] = True
++                break
++
++
++def _polar(u: List[Float64], v: List[Float64], m: Int) -> List[Float64]:
++    """u v^T (m x m row-major), the k products of each entry in order."""
++    var q = List[Float64](length=m * m, fill=0)
++    for i in range(m):
++        for j in range(m):
++            var s = Float64(0)
++            for c in range(m):
++                s += identical_mul64(u[i * m + c], v[j * m + c])
++            q[i * m + j] = s
++    return q^
++
++
++def cluster_qr_labels(x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
++    """scikit-learn `cluster_qr`: the k pivot rows of the embedding by a
++    column-pivoted QR of its transpose, the orthogonal polar factor Q of
++    those rows' k x k transpose, then each row's argmax |row . Q|."""
++    # A = x^T (k x n): column c of A is row c of x (contiguous).
++    var a = List[Float64](length=n * k, fill=0)
++    for i in range(n * k):
++        a[i] = Float64(x[i])
++    var used = List[Bool](length=n, fill=False)
++    var piv = List[Int]()
++    var hv = List[Float64](length=k, fill=0)
++    for j in range(k):
++        var best = -1
++        var bn = Float64(0)
++        for c in range(n):
++            if used[c]:
++                continue
++            var s = Float64(0)
++            for r in range(j, k):
++                s += identical_mul64(a[c * k + r], a[c * k + r])
++            if best < 0 or s > bn:
++                best = c
++                bn = s
++        used[best] = True
++        piv.append(best)
++        if j == k - 1 or bn == 0:
++            continue
++        # Householder reflector zeroing A[j+1:k, best]
++        var nrm = sqrt(bn)
++        var x0 = a[best * k + j]
++        var alpha = -nrm if x0 >= 0 else nrm
++        for r in range(k):
++            hv[r] = 0
++        for r in range(j, k):
++            hv[r] = a[best * k + r]
++        hv[j] = x0 - alpha
++        var hb = Float64(0)
++        for r in range(j, k):
++            hb += identical_mul64(hv[r], hv[r])
++        if hb == 0:
++            continue
++        for c in range(n):
++            if used[c] and c != best:
++                continue
++            var d = Float64(0)
++            for r in range(j, k):
++                d += identical_mul64(hv[r], a[c * k + r])
++            var f = (2 * d) / hb
++            for r in range(j, k):
++                a[c * k + r] = a[c * k + r] - identical_mul64(f, hv[r])
++    # B = x[piv, :]^T (k x k): B[r, c] = x[piv[c], r]
++    var b = List[Float64](length=k * k, fill=0)
++    for r in range(k):
++        for c in range(k):
++            b[r * k + c] = Float64(x[piv[c] * k + r])
++    var u = List[Float64]()
++    var sv = List[Float64]()
++    var v = List[Float64]()
++    jacobi_svd(b, k, u, sv, v)
++    var q = _polar(u, v, k)
++    var labels = List[Int32](length=n, fill=0)
++    for i in range(n):
++        var best = 0
++        var bv = Float64(0)
++        for c in range(k):
++            var s = Float64(0)
++            for r in range(k):
++                s += identical_mul64(Float64(x[i * k + r]), q[r * k + c])
++            s = abs(s)
++            if c == 0 or s > bv:
++                best = c
++                bv = s
++        labels[i] = Int32(best)
++    return labels^
+ 
+ 
+ # TOMBSTONE: `discretize_labels` (assign_labels='discretize' in binary64 on the host: n x k loops, the fit's last host

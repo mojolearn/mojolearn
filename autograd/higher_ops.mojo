@@ -142,6 +142,8 @@ def higher_family(op: Int) -> String:
         return "samba"
     if tag >= 96 and tag <= 98:
         return "cnn"
+    if tag == 108:
+        return "attention_step"
     if tag == 120 or tag == 121:
         return "small_mlp"
     return "custom"

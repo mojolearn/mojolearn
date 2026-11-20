@@ -40,11 +40,7 @@ import mojolearn as ml
 if algo == "rsvd":
     from mojolearn import _expansion_decomp as xd
     X = rng.standard_normal((900_000, d), dtype=np.float32)
-    for nm in ("mm", "orth", "rand", "colsum", "ew", "svd", "eigh", "absmax_signs"):
-        if hasattr(xd._Kit, nm):
-            wrap(xd._Kit, nm)
-    for nm in ("from_input", "out", "cols", "rows", "take_cols"):
-        wrap(xd._M, nm, "M." + nm)
+    # randomized_svd is one native driver; the Python kit stages once wrapped here are deleted.
     for r in range(2):
         t = time.perf_counter()
         xd.randomized_svd(X, 8, n_oversamples=10, n_iter=4, random_state=7)

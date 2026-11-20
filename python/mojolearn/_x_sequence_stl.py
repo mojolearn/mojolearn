@@ -9,7 +9,7 @@ np = require_numpy('_x_sequence_stl')
 from . import _native_xseq_bridge
 
 # Package-import connection: fit is ONE call into the compiled owner
-# (bindings/xseq_forecast_native.mojo), which builds the result object too.
+# (bindings/xseq_forecast_native_door.mojo), which builds the result object too.
 _XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 

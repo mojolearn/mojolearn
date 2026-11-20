@@ -14,15 +14,12 @@ def connect(scaler_class):
 
     context = _state_context()
     context["output_context"] = _numpy_free_context()
-    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
-    from ._sk_validate import _ACCEPTS_SPARSE
-    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
         try:
             module = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct",  # glue: fixed native exports connected during import
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_maxabs_fit_direct",  # glue: fixed native exports connected during import
                          "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
                          "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
                 try:

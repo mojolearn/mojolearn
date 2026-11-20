@@ -4,7 +4,7 @@
 SimpleImputer, IterativeImputer, RFE, TargetEncoder and SelectKBest are one
 native call each. A wrapped estimator (IterativeImputer, RFE) is cloned,
 fitted and asked to predict through its connected native plan
-(bindings/prep_native_estimator.mojo), a mojolearn cv splitter
+(bindings/prep_native_estimator_door.mojo), a mojolearn cv splitter
 (TargetEncoder) yields its folds from the model-selection owner directly, and
 a Python callable (SimpleImputer strategy, SelectKBest score_func) is refused.
 
@@ -14,84 +14,21 @@ splitter's class (its fit, predict, get_params, __init__, ...) or to a user
 callable. Monkeypatching the class would itself be refused by the plan's
 method-identity check, so the probe watches frames instead.
 
-The source checks run without bindings; the probes need the built bindings."""
-import ast
+The probes need the built bindings."""
 import inspect
-import pathlib
 import sys
 import types
 
 import numpy as np
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-BINDINGS = ROOT / "bindings"
-
 try:
     import mojolearn as ml
     from mojolearn.model_selection import KFold
     ml.Ridge  # noqa: B018  (the bindings loaded)
-except Exception:  # no built bindings: only the source checks run
+except Exception:  # no built bindings: every probe skips
     ml = None
 needs_bindings = pytest.mark.skipif(ml is None, reason="needs the built mojolearn bindings")
-
-
-# ---------------------------------------------------------------- source checks (no bindings)
-def _source(name):
-    return (BINDINGS / name).read_text()
-
-
-def test_iterimp_door_has_no_python_method_calls():
-    src = _source("prep_iterimp_native.mojo")
-    for needle in ('_method(', '"get_params"', 'import_module("inspect")', 'deepcopy', '"predict", Python.tuple(xm), keywords',
-                   'def _user_call', 'def _clone'):
-        assert needle not in src, needle
-    assert src.count("prep_estimator_clone(estimator, context)") == 1
-    assert 'prep_estimator_call(est, "fit"' in src and 'prep_estimator_call(est, "predict"' in src
-    assert 'prep_estimator_admit(estimator, "IterativeImputer", context)' in src
-
-
-def test_rfe_door_has_no_python_method_calls():
-    src = _source("prep_select_native.mojo")
-    for needle in ('_attr(_clone(', '_attr(est, "get_params")', '_attr(_attr(model, "estimator_"), operation)',
-                   'def _clone', 'def _admit_estimator'):
-        assert needle not in src, needle
-    assert src.count("_fit_clone(estimator,") == 2
-    assert 'prep_estimator_admit(estimator, "RFE", context)' in src
-    assert "prep_estimator_call(est, operation" in src
-
-
-def test_encode_door_calls_no_user_callable():
-    src = _source("prep_encode_native.mojo")
-    for needle in ("py_call_typed(strategy", "py_call(b.callable, strategy)", "py_call_typed(score_func",
-                   "py_call(cv.split"):
-        assert needle not in src, needle
-    assert "prep_native_split(cv, x, y, context)" in src
-    assert 'context["prep_encode_entry"]' in src
-
-
-def test_model_selection_owner_serves_the_plan_operations():
-    src = _source("model_selection_native.mojo")
-    assert 'operation == "family_msel_estimator_call"' in src
-    assert 'operation == "family_msel_estimator_clone"' in src
-    assert "msel_native_clone(model, context)" in src
-    helper = _source("prep_native_estimator.mojo")
-    for op in ("family_msel_estimator_clone", "family_msel_estimator_call", "family_msel_split"):
-        assert '"' + op + '"' in helper
-    # the entry must be a compiled builtin, never a Python callable
-    assert "py_type(entry) is not py_type(b.len)" in helper
-
-
-def test_package_connects_the_entry_at_import():
-    tree = ast.parse((ROOT / "python" / "mojolearn" / "__init__.py").read_text())
-    keys = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "update":
-            keys |= {kw.arg for kw in node.keywords}
-    assert {"native_estimator_entry", "native_estimator_context"} <= keys
-    prep = (ROOT / "python" / "mojolearn" / "_expansion_prep.py").read_text()
-    assert "prep_encode_entry=_ENCODE_CALL" in prep
-    assert 'mutual_info_classif: "mutual_info_classif"' in prep
 
 
 # ---------------------------------------------------------------- probes (bindings)

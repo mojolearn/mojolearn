@@ -51,7 +51,7 @@ def test_ridge_row_view_keeps_offset_and_owner():
     storage = np.array([[1, 2], [3, 4]], dtype='f4')
     reference = weakref.ref(storage)
     array = Array.from_buffer(storage)
-    row = array._row_view(1, (2,), 2)
+    row = list(array)[1]  # row 1: the native zero-copy row view (iteration)
     model = object.__new__(Ridge)
     object.__getattribute__(model, '__dict__')['coef_'] = row
     output = read_native(model, 'coef_')
@@ -89,7 +89,10 @@ def test_mapped_preprocessing_storage_without_store_keeps_owning_slice():
     assert reference() is None
 
 
-def test_kernel_pca_retained_training_view_survives_argument_lifetime():
+def test_kernel_pca_retained_training_copy_survives_argument_lifetime():
+    # A fit retains an owned copy of X (family_lifecycle_begin: "a fit
+    # retains X and keeps the owned copy"), so neither freeing nor mutating
+    # the caller's buffer after fit reaches the fitted model.
     np = pytest.importorskip('numpy')
     storage = np.array([[0, 1], [1, 2], [2, 0], [3, 1]], dtype='f4')
     reference = weakref.ref(storage)
@@ -99,8 +102,10 @@ def test_kernel_pca_retained_training_view_survives_argument_lifetime():
     query = np.array([[0.5, 1.0], [2.5, 0.5]], dtype='f4')
     expected = np.asarray(model.transform(query)).copy()
     fitted = object.__getattribute__(model, '__dict__')['_fit_X']
-    assert np.shares_memory(np.asarray(fitted), storage)
+    assert not np.shares_memory(np.asarray(fitted), storage)
+    storage[:] = 7.0
+    np.testing.assert_array_equal(np.asarray(model.transform(query)), expected)
     del array, storage, fitted
     gc.collect()
-    assert reference() is not None
+    assert reference() is None
     np.testing.assert_array_equal(np.asarray(model.transform(query)), expected)

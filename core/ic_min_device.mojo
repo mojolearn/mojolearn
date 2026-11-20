@@ -13,7 +13,7 @@ too); -2 llf is exact, so the one rounding is the add, the host's. A NaN
 criterion is the canonical quiet NaN on both columns (the host column
 canonicalizes it the same way since this lane).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 

@@ -39,14 +39,100 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojolearn.importers._graph import FLOAT_DTYPES, UnsupportedModel, resolve
-from mojolearn.tests._resolve_oracle import _numel, _slice_range, int_values
+from mojolearn.importers import UnsupportedModel
+from mojolearn.tests._oracle_support import require_numpy
+# resolve: the Python shape resolution oracle; tests/test_import_onnx_native.py holds it equal to the native one
+from mojolearn.tests._resolve_oracle import FLOAT_DTYPES, _numel, _slice_range, int_values, resolve
 
 # the largest tensor rank of a session (autograd/rankn.mojo RN_MAX_RANK)
 MAX_RANK = 8
 
-# the op table mojolearn.importers.supported_ops() returns (importers/_table.py)
-from mojolearn.importers._table import SUPPORTED_OPS  # noqa: F401
+# the op table mojolearn.importers.supported_ops() returns: a local copy of python/mojolearn/importers/_table.py
+# SUPPORTED_OPS (2026-11-15)
+SUPPORTED_OPS = (
+    ("Abs", "any input"),
+    ("Add", "inputs that broadcast"),
+    ("And", "inputs that broadcast; nonzero is true"),
+    ("ArgMax", "select_last_index=0; the positions come back as int32"),
+    ("AveragePool", "2-D, square kernel_shape, equal strides, dilations 1; any pads or auto_pad, "
+                    "count_include_pad 0 or 1"),
+    ("BatchNormalization", "inference (training_mode=0) with constant scale, bias, mean and variance"),
+    ("Cast", "to any float type; between integer and bool types; not from float to integer or bool"),
+    ("Ceil", "any input"),
+    ("Clip", "constant or computed min and max"),
+    ("Concat", "any axis"),
+    ("ConstantOfShape", "a static shape"),
+    ("Conv", "1-D and 2-D, any group, dilations 1, equal strides; any pads or auto_pad"),
+    ("Cos", "any input"),
+    ("CumSum", "a static axis; exclusive and reverse"),
+    ("Div", "inputs that broadcast; floating-point values"),
+    ("Dropout", "inference: the input passes through; the mask output unused"),
+    ("Elu", "any alpha"),
+    ("Equal", "inputs that broadcast"),
+    ("Erf", "any input"),
+    ("Exp", "any input"),
+    ("Expand", "a static shape"),
+    ("Flatten", "any axis"),
+    ("Floor", "any input"),
+    ("Gather", "constant indices, or an integer model input read only as indices, each in [0, size)"),
+    ("GatherND", "batch_dims=0; constant or computed indices, each in range"),
+    ("Gelu", "approximate 'none' or 'tanh'"),
+    ("Gemm", "any transA, transB, alpha and beta; a bias that broadcasts"),
+    ("GlobalAveragePool", "rank 3 or more"),
+    ("GlobalMaxPool", "rank 3 or more"),
+    ("Greater", "inputs that broadcast"),
+    ("GreaterOrEqual", "inputs that broadcast"),
+    ("GroupNormalization", "rank 3 or more; scale and bias per channel or per group"),
+    ("HardSigmoid", "any alpha and beta"),
+    ("HardSwish", "any input"),
+    ("Identity", "any input"),
+    ("InstanceNormalization", "rank 3 or more"),
+    ("LayerNormalization", "the last axis; the Mean and InvStdDev outputs unused"),
+    ("LeakyRelu", "any alpha"),
+    ("Less", "inputs that broadcast"),
+    ("LessOrEqual", "inputs that broadcast"),
+    ("Log", "any input"),
+    ("LogSoftmax", "any axis"),
+    ("MatMul", "any ranks that broadcast as NumPy's matmul"),
+    ("Max", "inputs that broadcast"),
+    ("MaxPool", "2-D, square kernel_shape, equal strides, dilations 1; any pads or auto_pad; "
+                "the Indices output unused"),
+    ("MaxPool", "2-D, square kernel_shape, equal strides, pads smaller than the kernel, dilations 1; the Indices output unused"),
+    ("Min", "inputs that broadcast"),
+    ("Mul", "inputs that broadcast"),
+    ("Neg", "any input"),
+    ("Not", "any input"),
+    ("Or", "inputs that broadcast; nonzero is true"),
+    ("Pad", "mode 'constant'; static pads and axes"),
+    ("Pow", "a tensor or constant exponent"),
+    ("Reciprocal", "any input"),
+    ("ReduceL2", "static axes"),
+    ("ReduceMax", "static axes; on bool values, any"),
+    ("ReduceMean", "static axes"),
+    ("ReduceMin", "static axes; on bool values, all"),
+    ("ReduceSum", "static axes"),
+    ("Relu", "any input"),
+    ("Reshape", "a static target shape"),
+    ("RMSNormalization", "the last axis"),
+    ("Round", "any input; a half rounds to the even integer"),
+    ("Shape", "folded at import"),
+    ("Sigmoid", "any input"),
+    ("Sign", "any input"),
+    ("Sin", "any input"),
+    ("Size", "folded at import"),
+    ("Slice", "static starts, ends and axes; steps 1"),
+    ("Softmax", "any axis"),
+    ("Softplus", "any input"),
+    ("Split", "static sizes; no empty piece"),
+    ("Sqrt", "any input"),
+    ("Squeeze", "static axes"),
+    ("Sub", "inputs that broadcast"),
+    ("Tanh", "any input"),
+    ("Transpose", "any permutation"),
+    ("Trilu", "rank 2 or more; a static k"),
+    ("Unsqueeze", "static axes"),
+    ("Where", "inputs that broadcast; a nonzero condition selects the first value"),
+)
 
 # the inputs of an op that are description (static integers folded at import), not data
 _DESC_INPUTS = {
@@ -69,7 +155,7 @@ _BINARY = {
     "Or": "logical_or",
 }
 
-# autograd/weight_import.mojo WI_* (python/mojolearn/_weight_import.py): the record of one source tensor
+# autograd/weight_import.mojo WI_* (python/mojolearn/tests/_weight_import.py): the record of one source tensor
 _WI_MAX_RANK = 4
 # NumPy views of an initializer's raw little-endian bytes (no copy, no conversion)
 _NP_VIEW = {"f32": "<f4", "f16": "<f2", "f64": "<f8", "i64": "<i8", "i32": "<i4", "bool": "?"}
@@ -488,7 +574,6 @@ class _Lowerer:
         """Initializer ``t`` as a session tensor of its session shape, cast on
         the device; ``transpose=True`` loads a 2-D ``(a, b)`` initializer as
         ``(b, a)`` through the weight import's layout code."""
-        from mojolearn._optional_numpy import require_numpy
         np = require_numpy("mojolearn.importers")
         shape = session_shape(t.shape)
         if t.dtype == "bf16" or transpose:
@@ -507,7 +592,6 @@ class _Lowerer:
 
     def upload_ints(self, values, shape):
         """Folded description integers (a shape read as data) as a tensor."""
-        from mojolearn._optional_numpy import require_numpy
         np = require_numpy("mojolearn.importers")
         return self._own(self.s.tensor(np.asarray(values, dtype=np.int64).reshape(session_shape(shape))))
 
@@ -538,7 +622,6 @@ class _Lowerer:
             if name in G.index_inputs:
                 # an ids placeholder (id 0 is in range of every table); capture names it an
                 # ids input, and it is freed after the capture with the other unread uploads
-                from mojolearn._optional_numpy import require_numpy
                 np = require_numpy("mojolearn.importers")
                 h = self._own(s.ids(np.zeros(session_shape(G.shape(name)), dtype=np.int32)))
             else:
@@ -850,7 +933,6 @@ def _l_slice(L, n):
 
 
 def _l_gather(L, n):
-    from mojolearn._optional_numpy import require_numpy
     G, s = L.G, L.s
     x = n.inputs[0]
     sh = G.shape(x)
@@ -1045,7 +1127,6 @@ def _l_pad(L, n):
 
 
 def _l_trilu(L, n):
-    from mojolearn._optional_numpy import require_numpy
     np = require_numpy("mojolearn.importers")
     s = L.s
     sh = L.G.shape(n.inputs[0])
@@ -1190,7 +1271,8 @@ def lower(g, value_shapes, session):
 def import_model(source, *, shapes=None, numeric_mode=None):
     """The former importers/_program.py import_model: read, check, one
     inference Session, lower (one Session call per operation), capture."""
-    from mojolearn.importers._graph import GraphIR
+    from mojolearn.importers._graph import GraphIR  # oracle subject: the product IR graph a test may pass in place of a file
+    # oracle subject: ImportedProgram is the product program object the test runs and compares; no public constructor
     from mojolearn.importers._program import ImportedProgram
     dtype_names = {"f32": "float32", "f16": "float16", "bf16": "bfloat16", "f64": "float64",
                    "i64": "int64", "i32": "int32", "bool": "bool"}

@@ -28,7 +28,6 @@ Sabotage arm: training/checks/sabotage/maximize_6200_subtract_from_zero.patch.
 
 from std.memory import bitcast
 from std.os import getenv
-from std.sys import exit
 
 from checks.fixture_rng import u01_triple
 from core.identity_trace import IdentityTrace
@@ -117,7 +116,7 @@ def run_steps(cfg: OptimizerConfig, spelling: Int, mut trace: IdentityTrace, tag
     return Run(param^, grad^, m^, v^)
 
 
-def main() raises:
+def run_checks() raises:
     var card = getenv("MOJOLEARN_MAXIMIZE_CARD")
     var trace = IdentityTrace.to_path(card) if card != "" else IdentityTrace.disabled()
     var none = IdentityTrace.disabled()
@@ -128,7 +127,7 @@ def main() raises:
     var b = run_steps(sgd.copy(), 2, none, "sep.b")
     if bits_equal(a.param, b.param) < 0 and bits_equal(a.m, b.m) < 0:
         print("maximize_check: VACUOUS: the fixture does not separate -g from 0.0 - g")
-        exit(2)
+        raise Error("maximize_check: VACUOUS: the fixture does not separate -g from 0.0 - g")
     print("maximize_check: fixture separates -g from 0.0 - g (param first diff at", bits_equal(a.param, b.param), ")")
 
     var cfgs = List[OptimizerConfig]()
@@ -161,5 +160,5 @@ def main() raises:
             print("OK  ", names[c], ": production flip == -g restatement, bitwise")
     if fails:
         print("maximize_check: FAIL")
-        exit(1)
+        raise Error("maximize_check: FAIL")
     print("maximize_check: PASS")

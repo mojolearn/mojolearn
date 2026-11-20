@@ -2,16 +2,16 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
-from std.ffi import _Global
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
-from std.memory import memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.sys import is_defined
+from std.memory import unsafe_memcpy
+from std.ffi import external_call
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 from sequence.moe_group import (
     MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
-    moe_group_zero_all_kernel, MOE_STABLE_PACK, moe_group_stable_all_kernel,
+    moe_group_zero_all_kernel,
 )
 from sequence.moe_reg import (
     MOE_DEVGROUP,
@@ -33,8 +33,6 @@ from sequence.moe_grouped_fold import MOE_GROUPED_GEMM
 from sequence.moe_grouped import moe_grouped_offsets, moe_grouped_workspace, moe_grouped_hidden, moe_grouped_out
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
 from sequence.execution_profile import ExecutionProfile
@@ -54,25 +52,35 @@ from autograd.loss_ops import OP_LS_CE_FWD, OP_LS_CE_VJP, OP_LS_METRIC_TERM, MT_
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.row_ops import ROW_COOP, OP_ROW_BITONIC_BLOCK
 from autograd.row_sort import row_bitonic_block_kernel
-from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
-from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
+from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks
 from sequence.gemm_tiled import (
-    GEMM_DISPATCH_V1, GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GT_M, GT_N, GT_K, GT_THIN, GT_THIN_K,
+    GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GT_M, GT_N, GT_K, GT_THIN, GT_THIN_K,
     GK_PLAIN, GK_BIAS, GK_BIAS_RELU, GK_BIAS_ACT, GK_L2GRAD, GK_ACT_BWD,
     seq_gemm_route, seq_gemm_epi_kind, seq_gemm_tile_blocks, seq_gemm_tile_kernel,
 )
 from sequence.gemm_tiled import (
-    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel, seq_gemm_micro_on,
+    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel,
     seq_gemm_split_blocks, seq_gemm_split_kernel,
 )
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+# lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
+from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
+# lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
+from sequence.gemm_bf16_units_route import (
+    SEQ_GEMM_BF16_UNITS, SBU_NONE, seq_gemm_bf16_units_on, seq_gemm_bf16_units_launch,
+)
+from gemm.fast_bf16_units import bf16_units_workspace_floats
+from sequence.gemm_matrix_units_route import (
+    SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
+    seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
+)
+from sequence.ops import OP_GEMM_EPI_TAIL
 from sequence.ops import OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
 from sequence.ops import OP_COLSUM_DIV
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
-from sequence.adafactor import AF_COL_CHUNK_FOLD
-from sequence.adafactor_candidates import AF_COL_LANES, af_col_chunk_kernel
 from sequence.theta_spec import THETA_SPEC
 from sequence.ets_spec import ETS_SPEC, op_ets_spec
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
@@ -85,34 +93,41 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_fwd
 from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.shared_slot import SharedSlot
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
 #: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
 #: cooperative fold is the one-thread op's chain (same fmas, same values,
 #: same order; only the loads are spread over the warp), so no bit moves on
 #: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
-#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores Apple only.
+#: wavefront.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (unmeasured old path: Apple-only coop folds in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 14eb8b482b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_COOP_NVAMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
 #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
 #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
-#: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
+#: IDENTICAL on every GPU.
 #: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
 #: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
-#: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_AF_COOP_OFF (unmeasured old path: one-thread Adafactor row factor in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2794197ed7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_AF_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_AF_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_COOP_OFF (unmeasured old path: one thread per LayerNorm row in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 2c0d457d23.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_COOP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime SEQ_LN_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 comptime TPB = 128
@@ -134,26 +149,37 @@ comptime TPB = 128
 #: Copies only: the same bytes, the same launches, no bit moves. Default on
 #: FAST + Apple since the M3 A/B (n=3, digests identical): layernorm
 #: 76.0 -> 52.2 ms (UP + DOWN), adafactor 685.7 -> 390.0 ms (DOWN), adagrad
-#: 195.5 -> 199.1 ms (neutral). -D MOJOLEARN_SEQ_FAST_PIPE_UP_OFF /
-#: -D MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF restore the serial copies; the old
-#: -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 / _DOWN=1 are harmless. IDENTICAL and
-#: the other vendors compile the main path unchanged.
-comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+#: 195.5 -> 199.1 ms (neutral). The old -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 /
+#: _DOWN=1 are harmless. IDENTICAL and the other vendors compile the main
+#: path unchanged.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_UP_OFF (superseded: SEQ_FAST_PIPE_UP KEPT f6a9e7c04, M3 regress-layernorm-pipe
+# layernorm 76.0 -> 52.2 ms with PIPE_DOWN, digests identical) deleted 2026-11-15 by lane/expdel-04-neural; code
+# recoverable at eff4ddd2d8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_UP_OFF.patch
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF (superseded: SEQ_FAST_PIPE_DOWN KEPT f6a9e7c04, M3 regress-adafactor-down
+# adafactor 684 -> 390 ms, adagrad neutral, digests identical) deleted 2026-11-15 by lane/expdel-04-neural; code
+# recoverable at 2e31a412c9.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF.patch
+comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane idn-opt-resident (2026-10-04): IDENTICAL takes the same pipelined
 #: copies on every vendor (NVIDIA, AMD, Apple). Copies only: the same bytes,
-#: the same launches, no bit moves. -D MOJOLEARN_IDN_SEQ_PIPE_UP_OFF /
-#: -D MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF restore IDENTICAL's serial copies.
+#: the same launches, no bit moves.
 #: FAST on NVIDIA and AMD is unchanged.
 comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime SEQ_PIPE_UP = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()) or (
-    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_UP_OFF (unmeasured old path: IDENTICAL serial uploads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at b25786e9b3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_UP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST or (
+    _SEQ_IDN
 )
-comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()) or (
-    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF (unmeasured old path: IDENTICAL serial downloads) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c0a04b3bfd.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST or (
+    _SEQ_IDN
 )
-#: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
-#: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
-comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
+#: the pipelined chunk, floats (8 MB).
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_CH (unmeasured Apple FAST knob, EXP:680 MERGED-UNMEASURED; default 1 << 21 kept) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c5730b729c.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch; record in docs/TOMBSTONES.md.
+comptime SEQ_PIPE_CH = 1 << 21
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md):
 #: its two read-back candidates for the pipelined downloads (map_to_host,
 #: raw chunked DMA) were deleted 2026-10-09 as losers (TOMBSTONES below).
@@ -181,8 +207,8 @@ struct _SeqContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXSequenceContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceContextFast"
-comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
+comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV3"
+comptime X_SEQUENCE_CONTEXT = SharedSlot[_SeqContext, _CTX_NAME]
 
 
 def sequence_ctx() raises -> DeviceContext:
@@ -242,15 +268,45 @@ def _fhi(w: Int64) -> Float32:
 
 
 
+# Sequence executor routes (lane envgate-train-seq-mamba, 2026-11-15): build
+# constants holding today's defaults (on). Before, each was an environment
+# read per launch (MOE_TILED, VAR_BLOCK) or per executor construction (POOL).
+# ROUTE-DEFAULT-SUSPECT, no A/B on record: B arms RUN OWED in
+# bench/results/paper_compare/owed-pre0867.json ("seq-moe-tiled-off",
+# "seq-var-block-off"; "seq-pool-off" is decided, below).
+#: the tiled MoE kernel; `-D MOJOLEARN_SEQ_MOE_TILED_OFF` keeps the untiled one
+comptime SEQ_MOE_TILED = not is_defined["MOJOLEARN_SEQ_MOE_TILED_OFF"]()
+#: VAR's Cholesky solve and forecast on one threadgroup
+#: (sequence/vecar_block.mojo, lane gap-prep2); `-D MOJOLEARN_SEQ_VAR_BLOCK_OFF`
+#: keeps the one-thread ops (the A/B arm)
+comptime SEQ_VAR_BLOCK = not is_defined["MOJOLEARN_SEQ_VAR_BLOCK_OFF"]()
+#: the executor's device buffer pool (always on for a shared executor; an owned executor keeps its own storage)
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
+# arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Pool (default) -> no pool, ms:
+# sequential-fit 279.9 -> 274.5 (0.98), sequential-predict 2.893 -> 2.751 (0.95, medians of 20; no NUMA record and no
+# second base of either row in the job). NOT DECIDED: on these two rows fresh buffers are at least as fast, but they
+# hold small buffers; the pool was built for calls with 64 MB stages (the note at "the buffer pool" below: a pinned
+# allocation of that size costs tens of ms on CUDA, the layernorm cell 99.7 ms against a 1 ms kernel) and no such row
+# was in the pair. Neither side is deleted on two small-buffer cells: the switch stays, owed RUN on the layer rows
+# with large inputs beside these two (owed-pre0867.json seq-pool-off-envgate).
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal). Pool -> no pool, ms:
+# sequential-fit 272.7 -> 270.3 (0.991), sequential-predict 2.585 -> 2.644 (1.023, medians of 20, spreads 2.55..2.90
+# / 2.61..2.93). NOISE a second time on the same two rows (round 2: 0.98, 0.95); the large-stage rows were again not
+# in the pair, and the pool's own record stands for them (a 64 MB pinned allocation a call, the layernorm cell
+# 99.7 ms against a 1 ms kernel). The pool stays; the build switch is deleted.
+# TOMBSTONE: MOJOLEARN_SEQ_POOL_OFF (NOISE, A/B rounds 2 and 3 NVIDIA L40S, wheels 0c68d6cd27 and 28a780604c, one run per arm, digests equal: sequential-fit 0.98 / 0.991, sequential-predict 0.95 / 1.023) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+
+
+@always_inline
 def _moe_tiled_on() -> Bool:
-    return String(getenv("MOJOLEARN_SEQ_MOE_TILED")) != "0"
+    return SEQ_MOE_TILED
 
 
+@always_inline
 def _var_block_on() -> Bool:
-    """VAR's Cholesky solve and forecast on one threadgroup
-    (sequence/vecar_block.mojo, lane gap-prep2); MOJOLEARN_SEQ_VAR_BLOCK=0
-    keeps the one-thread ops (the A/B arm)."""
-    return String(getenv("MOJOLEARN_SEQ_VAR_BLOCK")) != "0"
+    return SEQ_VAR_BLOCK
 
 
 def seq_kernel[OP: Int](
@@ -299,11 +355,13 @@ def team_kernel[OP: Int](
         comptime if OP == OP_GARCH:
             garch_team(blk, team, a)
         elif (ETS_TEAM or IDN_ETS_TEAM) and OP == OP_ETS:
-            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo);
-            # IDENTICAL default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the tree prefix)
+            # Apple FAST default (sequence/ets_team.mojo);
+            # IDENTICAL default (the tree prefix)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
-            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
+            # Apple FAST default (sequence/prophet_coop.mojo)
+            # TOMBSTONE: MOJOLEARN_PROPHET_COOP_OFF (old path of the FAST Apple Prophet coop, EXP:537 KEPT 8c2b7de51; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9c780e0ba9.
+            # Restore: git apply experiments/removed/MOJOLEARN_PROPHET_COOP_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
             prophet_fit_coop(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)
@@ -311,12 +369,35 @@ def team_kernel[OP: Int](
 
 
 
+#: Experiment MOJOLEARN_SEQ_FAST_LIBC_COPY (lane fb3-named, 2026-11-17; A/B owed, NVIDIA L40S;
+#: docs/apple-fast/EXPERIMENTS.md). Default off. The transport copies into and out of the pinned stages
+#: (`_pcopy` and the pipelined upload chunks) call the C library's memcpy instead of the Mojo
+#: `unsafe_memcpy`. Reason to try it: against 0.8.55 (Mojo 1.0 `memcpy`, same source otherwise) the rows whose
+#: only large host pass is this copy grew by the same amount per staged megabyte on one box: mlp-reg/mlp-clf
+#: fit at 1,000,000 x 220 float32 (880 MB staged) +331 / +310 ms = 0.35-0.38 ms/MB, cross_entropy (256 MB
+#: logits up, 256 MB gradient down) +176 ms = 0.34 ms/MB, while the same box's C memcpy runs 16.7 GB/s
+#: (0.06 ms/MB) and its H2D DMA is unchanged between the wheels (iforest: 1,798 MB in 81 vs 84 ms). The A/B
+#: decides whether the copy is the cause; time it on a neighbouring shape (500,000 x 100) and a non-board
+#: array as well. Bytes copied are the same: no bit moves on any vendor.
+#: FIRST A/B 2026-11-18 (ab1, owed rows seq-libc-copy-mlp-istella / -cross-entropy, NVIDIA L40S host
+#: 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and arm back to back in one job, ONE run per arm,
+#: digests equal on all 5 cells): arm/base mlp-reg istella infer 77.68 -> 73.40 ms (0.94), mlp-clf istella infer
+#: 152.9 -> 147.4 (0.96), mlp-reg istella fit 1950 -> 1884 (0.97), mlp-clf istella fit 1965 -> 1914 (0.97),
+#: cross-entropy synthetic fit 252.3 -> 266.3 (1.06). Mixed sign at one run per arm: NOT promoted, NOT deleted.
+#: REPEAT OWED with the staging split from the call profile (how many ms of each row are the host copy into and
+#: out of the pinned stage), so the verdict rests on the copy itself, not on run-to-run spread.
+comptime SEQ_LIBC_COPY = is_defined["MOJOLEARN_SEQ_FAST_LIBC_COPY"]()
+
+
 def _pcopy(dst: FP, src: FP, n: Int):
     """A host transport copy: one memcpy on the calling thread (no host task
     pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
     only, the bytes are the same."""
     if n > 0:
-        memcpy(dest=dst, src=src, count=n)
+        comptime if SEQ_LIBC_COPY:
+            _ = external_call["memcpy", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](dst, src, n * 4)
+        else:
+            unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def coop_kernel[OP: Int](
@@ -357,9 +438,13 @@ def coop_kernel[OP: Int](
 #: pinned stages across calls, handed out by exact count (device) or
 #: capacity (pinned) and returned when the executor syncs (stages) or ends
 #: (device buffers); the words are copied exactly as before, so no bit
-#: moves. MOJOLEARN_SEQ_POOL=0 restores the per-call allocations;
-#: SEQ_POOL_BYTES bounds what is kept (the oldest free entries go first).
+#: moves. SEQ_POOL_BYTES bounds what is kept (the oldest free entries go first).
 comptime SEQ_POOL_BYTES = 3 << 30
+#: The bound of one owned executor's kept storage (DeviceExec.idle_*,
+#: fable-perf-neural-0855): device memory, not a model or board dimension.
+#: A byte LM train step at the board's control shape keeps about 300 MB of
+#: per-step buffers and stages; a Mamba block program about 20 MB.
+comptime SEQ_EXEC_IDLE_BYTES = 1 << 30
 
 
 struct _SeqPool(Defaultable, Movable):
@@ -381,12 +466,8 @@ struct _SeqPool(Defaultable, Movable):
         self.bytes = 0
 
 
-comptime _POOL_NAME = "MojoXSequencePoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequencePoolFast"
-comptime X_SEQUENCE_POOL = _Global[StorageType=_SeqPool, name=_POOL_NAME, init_fn=_SeqPool.__init__]
-
-
-def seq_pool_on() -> Bool:
-    return String(getenv("MOJOLEARN_SEQ_POOL")) != "0"
+comptime _POOL_NAME = "MojolearnXSequencePoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequencePoolFastV1"
+comptime X_SEQUENCE_POOL = SharedSlot[_SeqPool, _POOL_NAME]
 
 
 def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:
@@ -490,6 +571,7 @@ def _pool_release_host(i: Int) raises:
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct DeviceExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = True
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
@@ -521,6 +603,30 @@ struct DeviceExec(Exec, Movable):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: lane fable-perf-neural-0855 (2026-11-13): an OWNED executor (the
+    #: `__init__(ctx)` form: the Mamba block programs, the byte LM and Samba
+    #: training programs, the CausalLM program, the transformer step arms)
+    #: keeps the device buffers it freed and the pinned stages its syncs
+    #: drained, and serves the next `_alloc` of the same count and the next
+    #: upload/download of a fitting size from them. Before this every such
+    #: call created a pinned HostBuffer (`enqueue_create_host_buffer`) and
+    #: dropped it at the sync: a Mamba-1 per-call forward paid 6 pinned
+    #: allocations and frees (x, two state pieces in, y, two pieces out), a
+    #: Mamba-2 forward 10, a byte LM train step 5 plus 13 device buffers.
+    #: cudaHostAlloc/cudaFreeHost are slow calls on NVIDIA (the 0.8.55
+    #: bodies allocated once per session and copied from pageable pointers):
+    #: candidate 4c2340386abc vs 0.8.55 on the L40S read mamba2-forward 5.57
+    #: -> 7.58 ms, mamba1-forward 3.43 -> 4.08, lm-train-step 35.5 -> 48.9,
+    #: with AMD unchanged on the Mamba rows. The pooled executor already
+    #: reuses through X_SEQUENCE_POOL; this is the same rule per owned
+    #: executor (exact count for device buffers, smallest fit for stages),
+    #: bounded by SEQ_EXEC_IDLE_BYTES, oldest dropped first. Copies only: no
+    #: bit moves on any vendor.
+    var idle_dev: List[DeviceBuffer[DType.float32]]
+    var idle_dev_n: List[Int]
+    var idle_host: List[HostBuffer[DType.float32]]
+    var idle_host_n: List[Int]
+    var idle_bytes: Int
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
@@ -537,7 +643,7 @@ struct DeviceExec(Exec, Movable):
         self.pend_host = List[HostBuffer[DType.float32]]()
         self.pend_dst = List[Int]()
         self.pend_n = List[Int]()
-        self.pooled = seq_pool_on()
+        self.pooled = True
         self.pdev = List[Int]()
         self.pstaged = List[Int]()
         self.ppend_host = List[Int]()
@@ -547,6 +653,11 @@ struct DeviceExec(Exec, Movable):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.idle_dev = List[DeviceBuffer[DType.float32]]()
+        self.idle_dev_n = List[Int]()
+        self.idle_host = List[HostBuffer[DType.float32]]()
+        self.idle_host_n = List[Int]()
+        self.idle_bytes = 0
         self.profile = launch_profile_level()
         self.execution_profile = ExecutionProfile(True)
 
@@ -574,6 +685,11 @@ struct DeviceExec(Exec, Movable):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.idle_dev = List[DeviceBuffer[DType.float32]]()
+        self.idle_dev_n = List[Int]()
+        self.idle_host = List[HostBuffer[DType.float32]]()
+        self.idle_host_n = List[Int]()
+        self.idle_bytes = 0
         self.profile = launch_profile_level()
         self.execution_profile = ExecutionProfile(True)
 
@@ -616,7 +732,7 @@ struct DeviceExec(Exec, Movable):
             if zero:
                 self.execution_profile.fill(count * 4)
             return pp
-        var buf = self.ctx.enqueue_create_buffer[DType.float32](count)
+        var buf = self._idle_dev_take(count)
         if zero:
             buf.enqueue_fill(Float32(0.0))
         var p = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
@@ -628,12 +744,81 @@ struct DeviceExec(Exec, Movable):
             self.execution_profile.fill(count * 4)
         return p
 
+    # ------------------------------------------------------------ owned reuse
+    def _idle_dev_take(mut self, count: Int) raises -> DeviceBuffer[DType.float32]:
+        """A kept device buffer of exactly `count` floats (the queue that
+        last used it has drained: it entered the list at a sync), else a
+        new one."""
+        for i in range(len(self.idle_dev_n)):  # small-loop(idle_dev: kept device buffers): exact-count search, no data
+            if self.idle_dev_n[i] == count:
+                self.idle_bytes -= count * 4
+                _ = self.idle_dev_n.pop(i)
+                return self.idle_dev.pop(i)
+        return self.ctx.enqueue_create_buffer[DType.float32](count)
+
+    def _idle_host_take(mut self, n: Int) raises -> HostBuffer[DType.float32]:
+        """A kept pinned stage of at least `n` floats (the smallest that
+        fits; its last copy drained at the sync that kept it), else a new
+        one of `n` floats."""
+        var best = -1
+        for i in range(len(self.idle_host_n)):  # small-loop(idle_host: kept pinned stages): smallest-fit search, no data
+            if self.idle_host_n[i] >= n and (best < 0 or self.idle_host_n[i] < self.idle_host_n[best]):
+                best = i
+        if best >= 0:
+            self.idle_bytes -= self.idle_host_n[best] * 4
+            _ = self.idle_host_n.pop(best)
+            return self.idle_host.pop(best)
+        return self.ctx.enqueue_create_host_buffer[DType.float32](n)
+
+    def _idle_trim(mut self, need: Int) raises:
+        """Drop kept storage, oldest first, until `need` more bytes fit
+        under SEQ_EXEC_IDLE_BYTES (a buffer larger than the bound alone is
+        not kept)."""
+        while self.idle_bytes + need > SEQ_EXEC_IDLE_BYTES and (len(self.idle_dev) > 0 or len(self.idle_host) > 0):
+            if len(self.idle_host) > 0:
+                self.idle_bytes -= self.idle_host_n[0] * 4
+                _ = self.idle_host_n.pop(0)
+                _ = self.idle_host.pop(0)
+            else:
+                self.idle_bytes -= self.idle_dev_n[0] * 4
+                _ = self.idle_dev_n.pop(0)
+                _ = self.idle_dev.pop(0)
+
+    def _idle_dev_keep(mut self, var buf: DeviceBuffer[DType.float32]) raises:
+        """Keep a drained device buffer for `_idle_dev_take`."""
+        var count = len(buf)
+        self._idle_trim(count * 4)
+        if self.idle_bytes + count * 4 > SEQ_EXEC_IDLE_BYTES:
+            _ = buf^
+            return
+        self.idle_bytes += count * 4
+        self.idle_dev_n.append(count)
+        self.idle_dev.append(buf^)
+
+    def _idle_host_keep(mut self, var host: HostBuffer[DType.float32]) raises:
+        """Keep a drained pinned stage for `_idle_host_take`."""
+        var n = len(host)
+        self._idle_trim(n * 4)
+        if self.idle_bytes + n * 4 > SEQ_EXEC_IDLE_BYTES:
+            _ = host^
+            return
+        self.idle_bytes += n * 4
+        self.idle_host_n.append(n)
+        self.idle_host.append(host^)
+
     def _sub(self, slot: Int, off: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
         """The view [off, off + n) of this executor's slot (pooled or owned)."""
         if self.pooled:
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             return pool[].dev[self.pdev[slot]].create_sub_buffer[DType.float32](off, n)
-        return self.bufs[slot].create_sub_buffer[DType.float32](off, n)
+        # `slot` indexes `base`; `bufs` also holds GEMM workspaces with no
+        # `base` entry (`_launch`), so after one of them the two lists no
+        # longer line up. Match the owning buffer by its address.
+        var addr = self.base[slot]
+        for j in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec owns): address lookup, no data
+            if Int(self.bufs[j].unsafe_ptr()) == addr:
+                return self.bufs[j].create_sub_buffer[DType.float32](off, n)
+        raise Error("sequence: a view names no buffer this device Exec owns")
 
     def __deinit__(deinit self):
         # The context outlives this Exec: drain its queue before the buffers
@@ -695,7 +880,7 @@ struct DeviceExec(Exec, Movable):
                     var done = 0
                     while done < n:
                         var cnt = min(SEQ_PIPE_CH, n - done)
-                        memcpy(dest=hpf + done, src=src + done, count=cnt)
+                        _pcopy(hpf + done, src + done, cnt)
                         self.execution_profile.copied(3, cnt * 4)
                         var cv = self._sub(found[0], found[1] + done, cnt)
                         self.ctx.enqueue_copy(dst_buf=cv, src_ptr=hpf + done)
@@ -711,7 +896,7 @@ struct DeviceExec(Exec, Movable):
             self.pstaged.append(hi)
             _ = view^
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         _pcopy(host.unsafe_ptr(), src, n)
         self.execution_profile.copied(3, n * 4)
@@ -755,7 +940,7 @@ struct DeviceExec(Exec, Movable):
             _pool_release_host(hi)
             _ = view^
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         self.execution_profile.copied(1, n * 4)
@@ -764,7 +949,7 @@ struct DeviceExec(Exec, Movable):
         self.execution_profile.copied(3, n * 4)
         _ = view^
         self.execution_profile.staging(-n * 4)
-        _ = host^
+        self._idle_host_keep(host^)
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
         var started = self.execution_profile.clock()
@@ -797,7 +982,7 @@ struct DeviceExec(Exec, Movable):
             self.pend_dst.append(Int(dst))
             self.pend_n.append(n)
             return
-        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var host = self._idle_host_take(n)
         self.execution_profile.staging(n * 4)
         var view = self._sub(found[0], found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
@@ -839,9 +1024,17 @@ struct DeviceExec(Exec, Movable):
         launch_profile_record(OP, n, ns, self.profile)
         # lane ag-pass5-gemm: one row per (code, route, M, N, K) for the GEMMs
         comptime if OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI or OP == OP_GEMM_SPLITK:
-            launch_profile_record_shape(
-                OP, seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP), a.i0, a.i1, a.i2, ns,
-            )
+            comptime if SEQ_GEMM_PACKED and OP != OP_GEMM_SPLITK:
+                # lane fx-gemm-seq-packed (the default route): _launch asks the packed rule where the
+                # split and coop rules passed, i.e. where the row would read the tile family
+                var prof_route = seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP)
+                if prof_route == GR_TILE and seq_gemm_packed_on[OP](a) != SP_NONE:
+                    prof_route = GR_PROF_PACKED
+                launch_profile_record_shape(OP, prof_route, a.i0, a.i1, a.i2, ns)
+            else:
+                launch_profile_record_shape(
+                    OP, seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP), a.i0, a.i1, a.i2, ns,
+                )
 
     def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
@@ -859,15 +1052,8 @@ struct DeviceExec(Exec, Movable):
                     raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
         # TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): the OP_AF_VFUSE / OP_AF_VFIN
         # launches were NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged; recoverable at main 0a7b206f1.
-        # NI54 neural optimizer-only opcode. Every lane's logical leaf is
-        # shared with HostExec's op_af_col; no statistical estimator op moves.
-        comptime if AF_COL_CHUNK_FOLD and OP == OP_AF_COL:
-            self.ctx.enqueue_function[af_col_chunk_kernel](
-                a.p0, a.p1, Int32(a.i0), Int32(a.i1), a.f0,
-                grid_dim=(n, 1, 1), block_dim=(AF_COL_LANES, 1, 1),
-            )
-            self.execution_profile.kernel()
-            return
+        # TOMBSTONE: MOJOLEARN_IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm: NI54 64-row leaf column fold for Adafactor) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at ab421749bb.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch; record in docs/TOMBSTONES.md.
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows); the
         # integers packed as seq_kernel's (lane ag-pass5-recurrent)
@@ -924,18 +1110,11 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
                 self.execution_profile.kernel()
-                comptime if MOE_STABLE_PACK:
-                    self.ctx.enqueue_function[moe_group_stable_all_kernel](
-                        a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
-                        grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
-                    )
-                    self.execution_profile.kernel()
-                else:
-                    self.ctx.enqueue_function[moe_group_scatter_all_kernel](
-                        a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
-                        grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
-                    )
-                    self.execution_profile.kernel()
+                self.ctx.enqueue_function[moe_group_scatter_all_kernel](
+                    a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                    grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.execution_profile.kernel()
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1
@@ -971,18 +1150,11 @@ struct DeviceExec(Exec, Movable):
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
                         self.execution_profile.kernel()
-                        comptime if MOE_STABLE_PACK:
-                            self.ctx.enqueue_function[moe_group_stable_all_kernel](
-                                a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                                grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                            )
-                            self.execution_profile.kernel()
-                        else:
-                            self.ctx.enqueue_function[moe_group_scatter_kernel](
-                                a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
-                                grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
-                            )
-                            self.execution_profile.kernel()
+                        self.ctx.enqueue_function[moe_group_scatter_kernel](
+                            a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                        )
+                        self.execution_profile.kernel()
                 comptime if MOE_GROUPED_GEMM:
                     # lane gap-gemm-layers: each expert's gate|up product on
                     # identical_gemm_into (sequence/moe_grouped.mojo); h in
@@ -1109,7 +1281,9 @@ struct DeviceExec(Exec, Movable):
         # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
         # products the shape rule selects take the split-K order on every GPU
         # column (Apple too), ahead of the coop and tile routes; HostExec takes
-        # the same rule, so the same words. MOJOLEARN_IDN_GEMM_SPLITK_OFF: off.
+        # the same rule, so the same words.
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (unmeasured old path, EXP:2180 PENDING: the GEMM without the split-K order; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f15596c0c6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._gemm_split[OP](a)
@@ -1146,7 +1320,7 @@ struct DeviceExec(Exec, Movable):
             )
             self.execution_profile.kernel()
             return
-        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default (off: -D MOJOLEARN_IDN_NM_SPEC_OFF)
+        # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default
         # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
         # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
         comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
@@ -1193,13 +1367,102 @@ struct DeviceExec(Exec, Movable):
                 )
                 self.execution_profile.kernel()
                 return
+        # lane fx-fast-bf16 (-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>, default OFF, A/B owed with quality; legal only
+        # in a `fast` build): a large plain dense product runs on the bf16 matrix unit, FP32 accumulation and
+        # output (sequence/gemm_bf16_units_route.mojo: the addressings, what is not routed;
+        # gemm/fast_bf16_units.mojo: the bound, what stays FP32). Asked before the TF32 arm, so a build with both
+        # runs bf16 where its rule takes. The scratch for the two bf16 operand images is the executor's own
+        # allocation, freed here: `free` retires it until the next sync, after the launches that use it. An
+        # epilogue opcode runs its follower in FP32 as OP_GEMM_EPI_TAIL. Per call under the arm: eight integer
+        # tests, one take, one free, three launches; no wait. Off: not compiled.
+        comptime if SEQ_GEMM_BF16_UNITS and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var bf16_form = seq_gemm_bf16_units_on[OP](a)
+            if bf16_form != SBU_NONE:
+                var bf16_scratch = self._alloc(bf16_units_workspace_floats(a.i0, a.i1, a.i2), False)
+                seq_gemm_bf16_units_launch(
+                    self.ctx, a, bf16_form, bf16_scratch.unsafe_origin_cast[MutAnyOrigin]()
+                )
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.free(bf16_scratch)
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                return
+        # lane fx-fast-matrix-units (-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality; legal
+        # only in an NVIDIA `fast` build): a large plain dense product with row-major operands runs the TF32
+        # tensor-core product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
+        # routed, the error bound). An epilogue opcode then runs its follower in FP32 as OP_GEMM_EPI_TAIL on the
+        # stored words, the launch pair of the packed route below. After the split-K and coop tests above, which
+        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call under the arm:
+        # seven integer tests, one launch, and one more for an epilogue; no lookup, allocation or wait.
+        comptime if SEQ_GEMM_MATRIX_UNITS and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var units_form = seq_gemm_matrix_units_on[OP](a)
+            if units_form != SMU_NONE:
+                seq_gemm_matrix_units_launch(self.ctx, a, units_form)
+                self.execution_profile.kernel()
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                return
+            # lane fx-fast-nvidia-routes (2026-11-19): the same arm for a transposed A (the tape's weight
+            # gradient X^T dY), so a training step's three products are all on the matrix unit. The m k
+            # scratch is the executor's own allocation (exact-count reuse from its idle list or pool after
+            # the first step) and is freed here: `free` retires it until the next sync, after the two
+            # launches that use it. Per call under the arm: the integer tests, one take, one free, two
+            # launches; no wait. Off: not compiled.
+            var units_ta_form = seq_gemm_matrix_units_ta_on[OP](a)
+            if units_ta_form != SMU_NONE:
+                var units_scratch = self._alloc(a.i0 * a.i2, False)
+                seq_gemm_matrix_units_ta_launch(
+                    self.ctx, a, units_ta_form, units_scratch.unsafe_origin_cast[MutAnyOrigin]()
+                )
+                self.execution_profile.kernel()
+                self.execution_profile.kernel()
+                self.free(units_scratch)
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                return
+        # lane fx-gemm-seq-packed (DEFAULT since 2026-11-19, promoted on the A/B beside SEQ_GEMM_PACKED in
+        # sequence/gemm_packed_route.mojo: mlp fit 0.59-0.66, infer 0.43-0.68, digests equal): a large
+        # plain dense product (the size rule and the order argument are sequence/gemm_packed_route.mojo's
+        # docstring) runs the neural packed body with ONE leaf of K terms: per cell the same chain,
+        # acc = ftz(fma(ld a, ld b, acc)), k ascending from +0.0, so the tile's word. An epilogue opcode
+        # then runs its follower as OP_GEMM_EPI_TAIL on the stored words, the launch pair HostExec runs
+        # (the same operands and operations as the tile's in-register epilogue). After the split-K and
+        # coop tests above, which are their own orders; accumulate, a non-dense C and the column sums
+        # keep the routes below. Per call: five integer tests, one launch, and one more
+        # launch for an epilogue; no lookup, allocation or wait.
+        comptime if SEQ_GEMM_PACKED and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            var packed_geom = seq_gemm_packed_on[OP](a)
+            if packed_geom != SP_NONE:
+                # lane fx-leftovers-product (with -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, A/B owed): a bias,
+                # bias + activation or activation-derivative follower runs in the packed store, so the pair
+                # below is one launch. Per call under both arms: two integer tests more, one launch fewer.
+                comptime if SEQ_GEMM_PACKED_EPI and OP != OP_GEMM:
+                    var fused_kind = seq_gemm_packed_epi_kind(a.i9, a.i10)
+                    if fused_kind != 0:
+                        seq_gemm_packed_epi_launch(self.ctx, a, packed_geom, fused_kind)
+                        self.execution_profile.kernel()
+                        return
+                seq_gemm_packed_launch(self.ctx, a, packed_geom)
+                self.execution_profile.kernel()
+                comptime if OP != OP_GEMM:
+                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                return
         # lane ag-pass4-gemm: OP_GEMM, the tape's OP_AGK_GEMM_EPI and the hand
         # MLP's OP_GEMM_EPI take the shape-aware route (sequence/gemm_tiled.mojo
         # seq_gemm_route: one thread a cell for K < 4, the 16 x 16 tile when
         # both edges are >= 8, else the thin tile along the long edge when the
         # launch fuses an epilogue or column sums, one thread a cell if not); every
         # route is op_gemm's chain and op_gemm_epi's follower, the same words.
-        comptime if SEQ_GEMM_TILED and not GEMM_DISPATCH_V1 and (
+        comptime if SEQ_GEMM_TILED and (
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
             # fused work: an epilogue (not the plain kind) or the column sums
             var fused = False
@@ -1209,39 +1472,7 @@ struct DeviceExec(Exec, Movable):
                     fused = fused or a.i11 != 0
             self.gemm_launch_route[OP](a, n, seq_gemm_route(a.i0, a.i1, a.i2, fused))
             return
-        # The pass-3 routes below are -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.
-        # nr-small D1: op_gemm's chain with the A/B slabs staged in
-        # threadgroup memory (sequence/gemm_tiled.mojo), same words
-        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_GEMM:
-            if seq_gemm_tiled_on(a.i0, a.i1):
-                self.ctx.enqueue_function[seq_gemm_tiled_kernel](
-                    a.p0, a.p1, a.p2,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
-                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-                    Int32(a.i7), Int32(a.i8),
-                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
-                    block_dim=(GT_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
-        # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
-        # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
-        # stored word): the same words as the one-thread op_gemm_epi. The
-        # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
-        # Lane ag-pass3-impl: i11 = 1 also folds B's column sums into p4
-        # (the fused linear node's bias gradient) inside the tile.
-        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_AGK_GEMM_EPI:
-            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
-                self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
-                    a.p0, a.p1, a.p2, a.p3, a.p4,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
-                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-                    Int32(a.i9), Int32(a.i10), Int32(a.i11), a.f0, a.f1,
-                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
-                    block_dim=(GT_TPB, 1, 1),
-                )
-                self.execution_profile.kernel()
-                return
+        # (Sweep 2026-11-15: the GEMM_DISPATCH_V1 pass-3 tiled routes (False on every build) removed.)
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
             # Tried 2026-10-08: MOJOLEARN_C58_FORECAST4 (four series per thread, tasks = ceil(n/4)), NV/AMD 2.1-3.2x
             # SLOWER on every theta/damped-ets cell of run ge123e6f9, quality SAME; deleted, recoverable at main bc10b8b56.
@@ -1287,7 +1518,7 @@ struct DeviceExec(Exec, Movable):
                         self._gemm_tile[GT_THIN, 1, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     elif route == GR_THIN_M:
                         self._gemm_tile[1, GT_THIN, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
-                    elif route == GR_MICRO or (route == GR_TILE and seq_gemm_micro_on(a.i0, a.i1)):
+                    elif route == GR_MICRO:
                         # lane ag-pass6-gemm: GR_TILE on both edges >= 64 (or
                         # forced): the micro-tile, 4 x 4 register cells a thread
                         self._gemm_micro(a, ek, colsum, seq_gemm_tile_blocks(GR_MICRO, a.i0, a.i1))
@@ -1451,9 +1682,13 @@ struct DeviceExec(Exec, Movable):
         var staged_bytes = self._profile_staged_bytes()
         self._synchronize()
         self.execution_profile.drained()
-        self.staged.clear()
+        # the queue is drained: the upload stages and the freed buffers of an
+        # owned executor are kept for its next calls (fable-perf-neural-0855)
+        while len(self.staged) > 0:
+            self._idle_host_keep(self.staged.pop())
         # lane ag-fusion: the queue is drained, so freed buffers can go
-        self.retired.clear()
+        while len(self.retired) > 0:
+            self._idle_dev_keep(self.retired.pop())
         for i in range(len(self.retired_pdev)):
             _pool_release_dev(self.retired_pdev[i])
         self.retired_pdev.clear()
@@ -1471,6 +1706,8 @@ struct DeviceExec(Exec, Movable):
             for i in range(len(self.pend_dst)):
                 _pcopy(FP(unsafe_from_address=self.pend_dst[i]), self.pend_host[i].unsafe_ptr(), self.pend_n[i])
                 self.execution_profile.copied(3, self.pend_n[i] * 4)
+            while len(self.pend_host) > 0:
+                self._idle_host_keep(self.pend_host.pop())
         self.pend_host.clear()
         self.pend_dst.clear()
         self.pend_n.clear()
@@ -1516,7 +1753,7 @@ struct DeviceExec(Exec, Movable):
                 _ = v^
                 if have_prev:
                     # overlaps the DMA just queued, into the other half
-                    memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                    unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
                            count=prev_cnt)
                     self.execution_profile.copied(3, prev_cnt * 4)
                 self._synchronize()
@@ -1527,7 +1764,7 @@ struct DeviceExec(Exec, Movable):
                 half = 1 - half
                 done += cnt
         if have_prev:
-            memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+            unsafe_memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
             self.execution_profile.copied(3, prev_cnt * 4)
         self._profile_stage(h0, False)
         self._profile_stage(h1, False)
@@ -1593,3 +1830,46 @@ struct DeviceExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b: the step ops' host-arm hooks (sequence/exec_trait.mojo). A
+    # device session runs the device table itself (autograd/block_step_ops.mojo).
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        raise Error("ops: a device session runs the block step ops' device table")
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        raise Error("ops: a device session runs the attention step's device backward")
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        raise Error("ops: a device session reads its reports from the device table")
+
+    def step_forget(mut self, addr: Int):
+        pass
+
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        raise Error("ops: a device session restores its append-only caches in the device table")
+
+    def step_weights_changed(mut self, addr: Int):
+        pass
+
+    def step_clear(mut self):
+        pass
+
+    # Lane x56d: the generation ops' host-arm hooks; a device session runs
+    # the device bodies (autograd/generation_ops.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        raise Error("ops: a device session runs lm_pick's device body")
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        raise Error("ops: a device session runs lm_alive's device body")
+
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        raise Error("ops: a device session launches the lm_head_v2 kernels itself")
+
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        raise Error("ops: a device session launches the small_mlp kernels itself")
+
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        raise Error("ops: a device session calls the CNN block entries itself")

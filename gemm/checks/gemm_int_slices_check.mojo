@@ -23,7 +23,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys import has_accelerator
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
-from gemm.checks.gemm_int15_check import _digest, _download_cells, _first_diff, _poisoned, _upload
+from gemm.checks.gemm_int15_check_suite import _digest, _download_cells, _first_diff, _poisoned, _upload
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
 from gemm.host.identical_gemm import gemm_oracle
@@ -146,7 +146,7 @@ def _one(m: Int, n: Int, k: Int, op: Int, wide: Bool, mut failed: Int) raises:
         _ = ctx^
 
 
-def main() raises:
+def run_checks() raises:
     print("== gemm/checks/gemm_int_slices_check.mojo  column " + column_name(TARGET_COLUMN)
           + "  plan " + int_slices_plan_name() + "  sabotage " + String(INT_SLICES_SABOTAGE) + " ==")
     var failed = 0
@@ -171,6 +171,8 @@ def main() raises:
             z.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             1, 1, INT_SLICES_MAX_K + 1, OP_NN,
         )
+        _ = z^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
+        _ = c^
     except:
         refused = True
     if not refused:

@@ -14,6 +14,13 @@ from sequence.execution_profile import ExecutionProfile
 
 
 trait Exec:
+    #: True for the GPU executor (`DeviceExec`). Generic code that has a
+    #: device-only arm (the executor's block step ops,
+    #: autograd/block_step_ops.mojo) selects it with `comptime if
+    #: E.IS_DEVICE` and `rebind[DeviceExec]`, so a host build never
+    #: instantiates device kernels.
+    comptime IS_DEVICE: Bool
+
     def alloc(mut self, n: Int) raises -> FP:
         """A zero-filled buffer of n floats that lives as long as the Exec."""
         ...
@@ -59,4 +66,85 @@ trait Exec:
         ...
 
     def execution_profile_end(mut self) raises -> ExecutionProfile:
+        ...
+
+    # Lane x7b-step-ops-host-arm (2026-11-09): the block step ops' host arm
+    # (autograd/block_step_host.mojo). A host executor runs the op through
+    # its own arm and keeps the arm's entries; the device table runs inside
+    # the session (autograd/block_step_ops.mojo), so DeviceExec refuses the
+    # two runs and ignores the three notifications. Generic session code
+    # reaches the host arm only through these, so no GPU module imports it.
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        """Run block step op `code` on this executor's arm (`record`: a
+        recorded training run, its stages kept: OPS_ATTN_STEP, and since
+        lane x56d the Mamba steps)."""
+        ...
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        """The backward of the last recorded step run over (w, s, q): an
+        attention or (lane x56d) a Mamba entry."""
+        ...
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        """The last run's Mamba reports into the caller's host arrays."""
+        ...
+
+    def step_forget(mut self, addr: Int):
+        """The session buffer at `addr` was written from outside a step or
+        freed: drop the arm's entries over it."""
+        ...
+
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        """Lane fx-kv-inplace: a bounded loop ran bodies past its stop over
+        the append-only caches at `kvs` (position words at `words`, already
+        restored): the host arm clears what those bodies appended. A device
+        session repairs its own table (`attn_append_restore`)."""
+        ...
+
+    def step_weights_changed(mut self, addr: Int):
+        """The weights at `addr` were rewritten in place."""
+        ...
+
+    def step_clear(mut self):
+        """Drop every entry of the arm."""
+        ...
+
+    # Lane x56d-mamba-samba-train-and-host (2026-11-09): the generation ops'
+    # host arm (autograd/generation_host.mojo), reached the same way; a
+    # device session runs the device bodies (autograd/generation_ops.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        """OPS_LM_PICK on this executor's arm: each row's pick into `ids`,
+        the rows state updated in place."""
+        ...
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        """OPS_LM_ALIVE on this executor's arm: the alive word into dst."""
+        ...
+
+    # Lane m2-neural-leftovers (2026-11-09): the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo). A device session launches the op's
+    # kernels itself (autograd/lm_head_v2_op.mojo), so DeviceExec refuses it.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        """OPS_LM_HEAD_V2's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in lm_head_v2_host_run."""
+        ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the small MLP op's host
+    # arm (autograd/small_mlp_host.mojo). A device session launches the op's
+    # kernels itself (autograd/small_mlp_op.mojo), so DeviceExec refuses it.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        """OPS_SMALL_MLP's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in small_mlp_host_run."""
+        ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the CNN conv block and
+    # head ops' host arm (autograd/cnn_block_host.mojo). A device session
+    # calls the x_cnn device entries itself (autograd/cnn_block_op.mojo), so
+    # DeviceExec refuses it.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        """OPS_CNN_CONV_BLOCK / OPS_CNN_LINEAR forward or VJP `op` on this
+        executor's host arm; buffer and word order in cnn_op_host_run."""
         ...

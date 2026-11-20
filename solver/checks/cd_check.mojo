@@ -169,8 +169,9 @@ from solver.impl.cd import (
     cd_predict,
 )
 from solver.impl.solvers.params import LOSS_HINGE, LOSS_SQRD_LOSS
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 #: Where the device and oracle cards of `check_cd_device_equals_oracle` and
 #: the two control cards of `check_cd_card_is_emitted` are written. Override
 #: with `MOJOLEARN_CD_CHECK_DIR`; the repo's other checks write to /tmp too.
@@ -208,12 +209,11 @@ def _read(
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+    download_host_into[DType.float32](ctx, view, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = view^
     return out^
 
@@ -328,8 +328,8 @@ def _device_fit(
     var yv = y.create_sub_buffer[DType.float32](0, n)
     var cv = coef.create_sub_buffer[DType.float32](0, d)
     var rv = resid.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_buf=xv, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=yv, src_ptr=hy.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, xv, hx)
+    upload_whole_into[DType.float32](ctx, yv, hy)
     ctx.enqueue_memset(cv, Float32(0.0))
     ctx.synchronize()
     var trace: IdentityTrace

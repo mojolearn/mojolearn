@@ -1,0 +1,64 @@
+ARIMA fitted-state native tests (2026-11-10)
+
+Source and scope
+  checks/native_tests/arima_state_cases.mojo: shared guarded native owners,
+  typed entry trait, deterministic dyadic input and independent expectations.
+  arima_state_cpu_suite.mojo / arima_state_gpu_suite.mojo export run_checks().
+  arima_state_cpu.mojo / arima_state_gpu.mojo are thin main wrappers, ready
+  for the root's bundled suite imports. Existing pixi/compile_slot mechanism.
+
+Coverage per target: 8 fixtures, each with 4 queries
+  Two real MLE fits preserve the Python tests' work-changing settings:
+    batch3,n80,order(1,1,1),no seasonal terms,default no trend,maxiter5;
+    batch2,n64,order(1,0,0),one exogenous regressor,default constant,maxiter5.
+  Retain horizons6/9 and predict10:90 on order111; exogenous forecast5.
+  Add exogenous horizon8/predict10:70 and first3 observations on every state.
+  No shorter MLE solve or different algorithm replaces the original fits.
+  Fixture-only NumPy normal RNG becomes deterministic native signed dyadic
+  data with seed labels7/11; product fit, method and settings do not change.
+  Six given transformed parameter states use independent Float64 conditional
+  means: phi0,+/-0.5, differenced AR(1) with zero MA (declared order111), and
+  stationary AR(1) with constant + one exogenous term (declared order100).
+  Exact expected words use dyadic inputs and short geometric recurrences;
+  initial differenced observation explicitly requires canonical quiet NaN.
+  Fit resident/per-call equality is state parity, not an independent oracle.
+
+Native ownership/contracts
+  CPU calls typed arima.host.arima_host_entries directly; GPU calls
+  arima.estimator and arima.resident_state, without Python or callbacks.
+  Guard all observation/exogenous/parameter/scratch/stat/flag/output spans.
+  Confirm per-call queries preserve source/parameter/future raw words;
+  predict(n,n+h) agrees with forecast(h), including end-exclusive layout.
+  GPU snapshots retain answers after all caller state buffers are overwritten;
+  changing horizons keeps one resident owner, release/double release restores
+  count, stale handle refuses before writing its guarded output.
+
+Python retained and removed
+  test_tsa_resident_state.py keeps actual public shape/dtype packing, distinct
+  output buffers, readonly fitted parameters, refit replacement, finalizer
+  count and outputs surviving model destruction; exogenous future is unmodified.
+  Remove the two ARIMA numerical comparisons, the deepcopy/per-call twin helper
+  and its now-unused copy import. Existing five public definitions remain.
+  Holt-Winters/Theta previously migrated portions and Prophet test unchanged.
+  External-library ARIMA tests, admission, archive and serialization untouched.
+
+Parallel plan and root commands (lane runs nothing)
+  CPU8 independent fitted states dispatch via host_parallelize; nested raw-word
+  checks use the existing host worker policy. Native fit recursion unchanged.
+  GPU owner queries are ordered on the existing shared context; device work is
+  parallel. This is not concurrent GPU-context or busy-core measurement proof.
+  bash tools/compile_slot.sh pixi run check-native-arima-state-cpu
+  bash tools/compile_slot.sh pixi run check-native-arima-state-gpu
+  Or compile the thin entry with the existing optimized Mojo build:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/arima_state_cpu.mojo -o "$HOME/mojolearn-evidence/arima-state-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/arima_state_gpu.mojo -o "$HOME/mojolearn-evidence/arima-state-gpu"
+  Bundled imports: checks.native_tests.arima_state_cpu_suite.run_checks and
+  checks.native_tests.arima_state_gpu_suite.run_checks (alias names in bundle).
+  Existing product APIs; no new producer dependency. Public bindings are
+  _mojolearn_arima / _mojolearn_arima_host. Keep installed Python public tests;
+  resident-only public entries intentionally skip on host as before.
+
+Status
+  Python AST, TOML/JSON parse and source diff checks only; compile/runtime OWED
+  at root. No product/kernel edit, A/B define, new loader, box job, timing,
+  cross-vendor identity, old-version hash or release claim.

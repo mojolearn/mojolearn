@@ -20,8 +20,7 @@ from sequence.nm import Objective, nelder_mead
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_FMA.patch (the theta level/trend updates go back to seq_madd).
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
 #: and one error per step to the thread's device scratch and reads the
@@ -34,7 +33,7 @@ from std.sys.info import has_apple_gpu_accelerator
 #: operations in the same order, four words written. Default on FAST + Apple
 #: since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta taxi-hourly, n=1):
 #: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
-#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
+#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF (deleted 2026-11-15) restored the
 #: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
 #: IDENTICAL compiles the register form by default (MOJOLEARN_IDN_SEQ_REG,
 #: lane/seq-reg 2026-10-11, PROMOTED 2026-10-11 by lane/i17-decide-linalg-seq;
@@ -43,8 +42,8 @@ from std.sys.info import has_apple_gpu_accelerator
 #: / AMD 189.2 -> 122.4 (avg 0.62x); theta taxi-hourly 294.6 -> 173.5 /
 #: 596.8 -> 397.6 (0.63x); dynamic-optimized-theta synthetic 476.5 -> 340.4
 #: / 1117.1 -> 792.2 (0.71x), taxi-hourly 2161.6 -> 1807.9 / 6295.8 ->
-#: 4603.4 (0.78x); damped-ets 1.00x). -D MOJOLEARN_IDN_SEQ_REG_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores the stored-row code. The same register form on
+#: 4603.4 (0.78x); damped-ets 1.00x). The IDN_ALL_OFF rollback to the
+#: stored-row code was deleted 2026-11-15. The same register form on
 #: NVIDIA/AMD and the host binding. Structural reason: the stored-row run
 #: makes ~1.4M dependent device-memory round trips per thread (five state
 #: words and one error per step, the previous row read back) on a kernel of
@@ -53,16 +52,19 @@ from std.sys.info import has_apple_gpu_accelerator
 #: construction, host column unchanged). Expected 2-4x on AMD theta
 #: (latency bound; Apple's twin -25%). THETA_REG_FAST keeps the FAST-only
 #: followers (THETA_SPEC) off IDENTICAL.
+# TOMBSTONE: MOJOLEARN_SEQ_THETA_REG_OFF (old path; FAST+Apple default, EXP:548 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch
 comptime THETA_REG_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
-comptime THETA_REG = THETA_REG_FAST or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_SEQ_REG_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_REG_OFF (superseded: IDN_SEQ_REG PROMOTED 2026-10-11, NV v0037/v0038 + AMD a1620/a1621,
+# theta 0.62x, dynamic-optimized-theta 0.71x-0.78x, digests NV == AMD) deleted 2026-11-15 by lane/expdel-04-neural;
+# code recoverable at 38664dbf45.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_REG_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+comptime THETA_REG = THETA_REG_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).
 #: Since SEQ_FAST_FMA became the FAST + Apple default (95a09d1fd), the
@@ -80,13 +82,13 @@ comptime THETA_REG = THETA_REG_FAST or (
 #: for Nelder-Mead (k <= 3 coordinates use at most 28). Default on FAST +
 #: Apple since the M3 A/B (n=3, digests identical): dynamic-optimized-theta
 #: taxi-hourly 2,087.7 -> 561.9 ms, rmse the same. SEQ_FAST_FMA stays on.
-#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF restores the plain run; the old
-#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
-comptime THETA_SNAP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
-)
+#: The old -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless; every other build
+#: keeps the plain run.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF (superseded: SEQ_FAST_THETA_SNAP KEPT f6a9e7c04, M3 regress-dotm-snap
+# dynamic-optimized-theta taxi-hourly 2,088 -> 562 ms, same bits) deleted 2026-11-15 by lane/expdel-04-neural; code
+# recoverable at e382ce0c14.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF.patch
+comptime THETA_SNAP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +
 #: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)
 comptime THETA_SNAP_OFF = 32
@@ -621,3 +623,64 @@ def op_theta(t: Int, a: Args):
     st(info, 5, Float32(1.0) if decompose else Float32(0.0))
     st(info, 6, Float32(1.0) if (decompose and mult) else Float32(0.0))
     st(info, 7, Float32(iters))
+
+
+def op_theta_forecast(t: Int, a: Args):
+    """The forecast-only tail of `op_theta` for series t (lane
+    ne1-a-decomp-tsa, plan section A, row N031): the fitted level, alpha,
+    theta, model and decomposition words come from op_theta's own info row,
+    so a later `predict` with another horizon runs no Nelder-Mead. p0 y
+    [B, n]; p1 forecast [B, h] out; p2 info [B, 8] in (op_theta's: level,
+    alpha, theta, mse, model, decomposed, multiplicative, iters); p3
+    scratch [B, stride]. i0 n, i1 h, i2 m, i6 scratch stride (op_theta's
+    layout).
+
+    WHAT DOES NOT CHANGE. The fit does not read h (the horizon only sizes
+    scratch), the decomposition is recomputed by the same `_decompose` with
+    the multiplicative flag the fit settled on (it overwrites trend and
+    season in full, so its last call in op_theta is the one that counts),
+    and the run and the forecast are op_theta's final two calls with the
+    same arguments in the same comptime form (`theta_run_reg` is
+    bit-identical to `theta_run` by construction, the THETA_SPEC tail is the
+    register form): the forecast words are op_theta's."""
+    var n = a.i0
+    var h = a.i1
+    var m = a.i2
+    var sc = a.p3 + t * a.i6
+    var y = a.p0 + t * n
+    var yd = sc
+    var trend = yd + n
+    var seas = trend + n
+    var states = seas + (m if m > 0 else 1)
+    var e = states + 5 * (n + h)
+    var nm_scr = e + n
+    var x = nm_scr + 64
+    var lo = x + 4
+    var hi = lo + 4
+    var f = hi + 4
+    var info = a.p2 + t * 8
+    var decompose = ld(info, 5) != Float32(0.0)
+    var mult = ld(info, 6) != Float32(0.0)
+    for i in range(n):
+        st(yd, i, ld(y, i))
+    if decompose:
+        _decompose(y, n, m, mult, trend, seas)
+        for i in range(n):
+            var s = ld(seas, i % m)
+            st(yd, i, div(ld(y, i), s) if mult else sub(ld(y, i), s))
+    var bl = ld(info, 0)
+    var ba = ld(info, 1)
+    var bt = ld(info, 2)
+    var best_model = Int(ld(info, 4))
+    comptime if THETA_REG:
+        _ = theta_run_reg(yd, n, best_model, bl, ba, bt, states)
+        theta_forecast_reg(n, h, best_model, ba, bt, states, f)
+    else:
+        _ = theta_run(yd, n, best_model, bl, ba, bt, states, e)
+        theta_forecast(n, h, best_model, ba, bt, states, f)
+    for j in range(h):
+        var v = ld(f, j)
+        if decompose:
+            var s = ld(seas, (n - m + (j % m)) % m)
+            v = mul(v, s) if mult else add(v, s)
+        st(a.p1, t * h + j, v)

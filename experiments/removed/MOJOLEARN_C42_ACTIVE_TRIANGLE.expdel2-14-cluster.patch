@@ -1,0 +1,157 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index b07065bdf3..d502706c66 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -8,6 +8,8 @@ from core.em_loop_chunk import em_loop_check_every
+ from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df64_device
+ # TOMBSTONE: MOJOLEARN_XCLUSTER_ROW_ASSIGN (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at 456dbd4bca.
+ # Restore: git apply experiments/removed/MOJOLEARN_XCLUSTER_ROW_ASSIGN.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
++from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
++from core.fast_radix_sort import frs_exclusive_scan, frs_scan_blocks
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -1262,8 +1264,50 @@ def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=
+     return r
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_C42_ACTIVE_TRIANGLE (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at d73c9660dc.
+-# Restore: git apply experiments/removed/MOJOLEARN_C42_ACTIVE_TRIANGLE.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
++@always_inline
++def _c42_slot(i: Int,j: Int,n: Int) -> Int:
++    comptime if C42_ACTIVE_TRIANGLE:
++        var lo=min(i,j)
++        var hi=max(i,j)
++        return lo*n-lo*(lo-1)//2+(hi-lo)
++    return i*n+j
++
++
++def _c42_pack(source: FPtr,dst: FPtr,n: Int32):
++    var i=_tid()
++    if i<Int(n):
++        for j in range(i,Int(n)):
++            dst[_c42_slot(i,j,Int(n))]=source[i*Int(n)+j]
++
++
++def _c42_live_flags(live: IPtr,flag: IPtr,scan: IPtr,n: Int32):
++    # The live rows, ascending, are compacted by an exclusive scan of these
++    # flags (`frs_exclusive_scan`, every block) and `_c42_emit`: the same
++    # stable logical row order the one-thread walk gave, exact integers.
++    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
++    if row<Int(n):
++        var f=Int32(1) if live[row]!=0 else Int32(0)
++        flag[row]=f
++        scan[row]=f
++
++
++def _c42_emit(flag: IPtr,scan: IPtr,active: IPtr,n: Int32):
++    var row=Int(block_idx.x)*TPB+Int(thread_idx.x)
++    if row<Int(n) and flag[row]!=0:
++        active[Int(scan[row])]=Int32(row)
++
++
++def _c42_argmin(md: FPtr,nn: IPtr,active: IPtr,count: Int32,part: MutPointer[UInt64,MutAnyOrigin]):
++    var red=stack_allocation[AGG_TPB,UInt64,address_space=AddressSpace.SHARED]()
++    var mine=AGG_NONE
++    var start=Int(block_idx.x)*AGG_PER
++    for task in range(start+Int(thread_idx.x),min(start+AGG_PER,Int(count)),AGG_TPB):
++        var row=Int(active[task])
++        if nn[row]>=0:
++            mine=min(mine,_agg_key(md[row],row))
++    var best=_agg_block_min(red,mine)
++    if thread_idx.x==0:
++        part[Int(block_idx.x)]=best
+ 
+ 
+ def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
+@@ -1343,7 +1387,7 @@ def _agg_lw_kernel(
+         return
+     var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+     var b = Int(nn[a])
+-    var dab = dm[a * N + b]
++    var dab = dm[_c42_slot(a,b,N)]
+     var na = sz[a]
+     var nbs = sz[b]
+     if k == 0:
+@@ -1361,9 +1405,10 @@ def _agg_lw_kernel(
+         ha = adj[a * N + k] != 0
+         hb = adj[b * N + k] != 0
+     if Int(linkage) == LINK_WARD or ha or hb:
+-        var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], ha, hb)
+-        dm[a * N + k] = v
+-        dm[k * N + a] = v
++        var v = lance_williams(Int(linkage), dm[_c42_slot(a,k,N)], dm[_c42_slot(b,k,N)], dab, na, nbs, sz[k], ha, hb)
++        dm[_c42_slot(a,k,N)] = v
++        comptime if not C42_ACTIVE_TRIANGLE:
++            dm[_c42_slot(k,a,N)] = v
+     if con != 0 and (ha or hb):
+         adj[a * N + k] = 1
+         adj[k * N + a] = 1
+@@ -1402,7 +1447,7 @@ def _agg_flag_kernel(
+         if q == a or q == b:
+             go = True
+         elif i < a and (con == 0 or adj[i * N + a] != 0):
+-            var v = dm[i * N + a]
++            var v = dm[_c42_slot(i,a,N)]
+             if q < 0 or v < md[i] or (v == md[i] and a < q):
+                 nn[i] = Int32(a)
+                 md[i] = v
+@@ -1425,7 +1470,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
+         var mine = AGG_NONE
+         for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
+             if live[j] != 0 and (con == 0 or adj[i * N + j] != 0):
+-                mine = min(mine, _agg_key(dm[i * N + j], j))
++                mine = min(mine, _agg_key(dm[_c42_slot(i,j,N)], j))
+         var r = _agg_block_min(red, mine)
+         if thread_idx.x == 0:
+             if r == AGG_NONE:
+@@ -1434,7 +1479,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
+             else:
+                 var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+                 nn[i] = Int32(j)
+-                md[i] = dm[i * N + j]
++                md[i] = dm[_c42_slot(i,j,N)]
+         e += Int(grid_dim.x)
+ 
+ 
+@@ -2358,6 +2403,16 @@ struct DeviceOps(ClusterOps):
+         var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+         var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+         var p_dm = self._fp(dm)
++        var packed = ctx.enqueue_create_buffer[DType.float32](n*(n+1)//2 if C42_ACTIVE_TRIANGLE else 1)
++        var active = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
++        var live_flag = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
++        var live_scan = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
++        var live_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n) if C42_ACTIVE_TRIANGLE else 1)
++        comptime if C42_ACTIVE_TRIANGLE:
++            ctx.enqueue_function[_c42_pack](p_dm,packed.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
++            ctx.synchronize()
++            self.shrink(dm)
++            p_dm=packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+         var con = Int32(1) if adj >= 0 else Int32(0)
+         var p_adj = self._ip(adj) if adj >= 0 else p_lst
+         var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
+@@ -2369,11 +2424,19 @@ struct DeviceOps(ClusterOps):
+             p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
+         )
+         for step in range(n_merges):
+-            ctx.enqueue_function[_agg_argmin_part_kernel](
+-                p_md,p_nn,p_live,Int32(n),p_part,p_st,grid_dim=nb,block_dim=AGG_TPB,
+-            )
++            var partial_count=nb
++            comptime if C42_ACTIVE_TRIANGLE:
++                partial_count=(n-step+AGG_PER-1)//AGG_PER
++                ctx.enqueue_function[_c42_live_flags](p_live,live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
++                frs_exclusive_scan(ctx,live_scan,n,live_bsum)
++                ctx.enqueue_function[_c42_emit](live_flag.unsafe_ptr(),live_scan.unsafe_ptr(),active.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
++                ctx.enqueue_function[_c42_argmin](p_md,p_nn,active.unsafe_ptr(),Int32(n-step),p_part,grid_dim=partial_count,block_dim=AGG_TPB)
++            else:
++                ctx.enqueue_function[_agg_argmin_part_kernel](
++                    p_md,p_nn,p_live,Int32(n),p_part,p_st,grid_dim=nb,block_dim=AGG_TPB,
++                )
+             ctx.enqueue_function[_agg_lw_kernel](
+-                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
++                p_part, Int32(partial_count), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
+                 grid_dim=_grid(n), block_dim=TPB,
+             )
+             ctx.enqueue_function[_agg_flag_kernel](

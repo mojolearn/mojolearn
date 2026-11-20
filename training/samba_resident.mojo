@@ -64,12 +64,13 @@ come back, and a hit is spelled with `ce_refuse_targets`'s own message.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from max.gpu import block_dim, block_idx, thread_idx
+from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.identity_trace import IdentityTrace
+from core.weight_epoch import RegistryKey, SAMBA_STEP_REGISTRY_RESIDENT, registry_epoch_bump
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.contract import OP_NT
@@ -101,8 +102,6 @@ from training.estimator import (
     identical_ce_loss_resident,
     identical_optimizer_step_resident_io,
 )
-from training.neural_ab_pointwise import NN58_ACCUMULATE_STATUS
-from training.neural_ab_shards import NN63_CANONICAL_SHARD_MERGE, nn_shard_merge_into
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_SAMBA_ATTN_RECOMPUTE
 from training.samba_ops import (
     SAMBA_TPB,
@@ -110,17 +109,12 @@ from training.samba_ops import (
     _samba_accumulate_core,
     samba_accumulate_host,
     samba_validate_accumulation,
-    samba_leaf_ids_kernel,
     samba_tree_level_kernel,
-    samba_tree_status_kernel,
 )
 from transformer.block_options import BlockOptions
 from autograd.kernels.transformer import LlamaBackwardStages
 from transformer.checks.transformer_fixture import RMS_EPS
-from autograd.rules_transformer import (
-    AUTOGRAD_REFUSE_DEFER,
-    llama_decoder_layer_record,
-)
+from autograd.rules_transformer import llama_decoder_layer_record
 from autograd.tape import Tape, Tensor
 from autograd.refuse_scan import DeferredNonfiniteScan
 from autograd.rules_mamba3 import M3BlockRef, M3StagesRef, M3WeightsRef, Mamba3TapeBlock, mamba3_block_record
@@ -155,6 +149,11 @@ from transformer.impl.llama.modeling_llama import (
     llama_decoder_layer_forward,
     llama_rms_norm,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 
 #: The layer kinds, as `python/mojolearn/_samba_impl.py` codes them for
@@ -166,6 +165,68 @@ comptime SAMBA_LAYER_ATTENTION = 1
 #: embed.weight, then nine per layer, then norm_f.weight, then lm_head.weight
 #: when the embedding is untied (`SambaConfig.registry`).
 comptime SAMBA_BLOCK_TENSORS = 9
+
+# TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD (SAMBA_STEP_SCRATCH_HELD: the resident session held one backward arena and one forward-state arena per Mamba-3 layer; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job
+# nvc-ab-20261119T154232Z-0642a5, base and arm in one job, digests and quality equal: samba-train-step 48.73 -> 48.57
+# ms, 1.00; lm-train-step 1.00; samba-forward 1.02; driver steps 41.60 -> 42.69, 56.33 -> 56.24, 22.38 -> 20.96)
+# deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13. This file's text is the pre-arm text again.
+# Restore: git apply experiments/removed/MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD.patch; record in docs/TOMBSTONES.md.
+
+
+def samba_registry_layout(
+    kinds: List[Int],
+    vocab: Int,
+    dm: Int,
+    ldims: LlamaDims,
+    it: Int,
+    tie: Bool,
+    mut offsets: List[Int],
+    mut slot: List[Int],
+) raises -> Int:
+    """`SambaConfig.registry`'s offsets (J + 1 entries) into `offsets` and,
+    per layer, its index among the layers of its kind into `slot`; returns
+    the registry's float count. embed.weight, nine tensors per layer
+    (Mamba3Block._W_NAMES or TransformerBlock._W_NAMES order), norm_f.weight,
+    then lm_head.weight when the embedding is untied. Bookkeeping over the
+    model's structure, not data."""
+    offsets.clear()
+    slot.clear()
+    offsets.append(0)
+    var n_m3 = 0
+    var n_t = 0
+    var running = vocab * dm
+    offsets.append(running)
+    for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
+        if kinds[i] == SAMBA_LAYER_MAMBA3:
+            var d3 = Mamba3Dims.of(dm)
+            var dip = d3.d_in_proj()
+            var sizes: List[Int] = [
+                dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
+                d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
+                dm * d3.d_inner,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_m3)
+            n_m3 += 1
+        else:
+            var qw = ldims.q_width()
+            var kw = ldims.kv_width()
+            var sizes: List[Int] = [
+                dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_t)
+            n_t += 1
+    running += dm
+    offsets.append(running)
+    if not tie:
+        running += vocab * dm
+        offsets.append(running)
+    return running
 
 
 def _lean_stages(hd: Int) -> Bool:
@@ -194,9 +255,9 @@ def samba_targets_scan_kernel(
     var t = targets.unsafe_load(i)
     if t == ignore:
         return
-    _ = Atomic[DType.int32].fetch_add(count, Int32(1))
+    _ = Atomic[Int32].fetch_add(count, Int32(1))
     if t < Int32(0) or t >= vocab:
-        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+        _ = Atomic[Int32].min(first_bad, Int32(i))
 
 
 def _admit_targets_device(
@@ -261,52 +322,25 @@ def _d2d(
 
 def _pair_add_device(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     n: Int,
 ) raises:
-    """`out[n] = ftz(ftz(src[0:n]) + ftz(src[n:2n]))`: the clause 9.2 tree of
+    """`dst[n] = ftz(ftz(src[0:n]) + ftz(src[n:2n]))`: the clause 9.2 tree of
     TWO pieces, which is what `SambaStack.loss_and_grads` asks of
     `accumulate_grads([d_emb, dw_head], tokens=None)` for the tied embedding
     gradient. Launch for launch `training/samba_ops.mojo::samba_accumulate_buffer`
-    at `a == 2` (one level, `pairs == 1`), including its NN63 and NN58 arms,
+    at `a == 2` (one level, `pairs == 1`),
     with the result left on the device instead of copied to a host pointer."""
-    comptime if NN63_CANONICAL_SHARD_MERGE:
-        var ids = ctx.enqueue_create_buffer[DType.int32](2)
-        ctx.enqueue_function[samba_leaf_ids_kernel](
-            ids.unsafe_ptr(), Int32(2),
-            grid_dim=(_grid(2), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var first = ctx.enqueue_create_buffer[DType.float32](2 * n)
-        var second = ctx.enqueue_create_buffer[DType.float32](n)
-        nn_shard_merge_into(ctx, out, src, ids, first, second, 2, n)
-        comptime if NN58_ACCUMULATE_STATUS:
-            var hit = device_first_nonfinite(ctx, out, n)
-            if hit >= 0:
-                raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
-        _ = ids^
-        _ = first^
-        _ = second^
-        return
-    comptime if NN58_ACCUMULATE_STATUS:
-        var status = ctx.enqueue_create_buffer[DType.int32](1)
-        status.enqueue_fill(Int32(n))
-        ctx.enqueue_function[samba_tree_status_kernel](
-            out.unsafe_ptr(), src.unsafe_ptr(), status.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
-        var host_status = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=host_status.unsafe_ptr(), src_buf=status)
-        ctx.synchronize()
-        if host_status[0] < Int32(n):
-            raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(host_status[0]))
-        _ = status^
-        _ = host_status^
-    else:
-        ctx.enqueue_function[samba_tree_level_kernel](
-            out.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
-            grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
-        )
+    # TOMBSTONE: MOJOLEARN_NN63_CANONICAL_SHARD_MERGE (opt-in canonical shard merge, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5f27699bee.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch
+
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in tree status kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at e4e5ad1f37.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
+    ctx.enqueue_function[samba_tree_level_kernel](
+        dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n), Int32(1),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SAMBA_TPB, 1, 1),
+    )
 
 
 struct SambaResidentSession(Movable, Writable):
@@ -375,6 +409,21 @@ struct SambaResidentSession(Movable, Writable):
     #: the loss node's value word (the tape reads no value of it)
     var tape_loss: DeviceBuffer[DType.float32]
     var busy: Bool
+    # ---- lane fix-samba-weight-upload (2026-11-13): the stateless forward
+    #: uploads the registry only when `param` does not hold the bytes at the
+    #: caller's address: keyed by that address and THAT registry's epoch
+    #: (core/weight_epoch.mojo `RegistryKey`, lane
+    #: fix-samba-weight-epoch-per-model: another model's write leaves it
+    #: current; as SambaStackProgram.refresh_weights). Every operation that
+    #: writes the registry stamps it
+    #: (bindings/samba_public_native_pack.mojo, training/samba_public_run.mojo
+    #: `_samba_writes_registry`) and the public views are read-only, so an
+    #: unchanged key means unchanged bytes: no pass over the weights. Empty
+    #: (never current) at open and while a step rewrites `param`.
+    var wkey: RegistryKey
+    #: registry uploads (host -> `param`) this session has made, open included;
+    #: returned by the forward (descriptor op 16) as the session's report
+    var param_uploads: Int
 
     def __init__(
         out self,
@@ -394,8 +443,9 @@ struct SambaResidentSession(Movable, Writable):
         """The registry on the device and the weight views. `param_ptr` is the
         stack's flat float32 registry, uploaded once here so the attention
         weight views can run their constructor's own finiteness refusal
-        (`LlamaDeviceWeights._validate_finite`); every later call uploads
-        the registry again and scans it whole."""
+        (`LlamaDeviceWeights._validate_finite`); a train step uploads the
+        registry again and scans it whole, a forward only when the weight
+        key (`wkey`) is not current."""
         if vocab < 2 or dm < 1 or len(kinds) < 1:
             raise Error("mojolearn samba resident: vocab >= 2, d_model >= 1 and at least one layer are required")
         self.ctx = ctx.copy()
@@ -415,44 +465,11 @@ struct SambaResidentSession(Movable, Writable):
             self.ldims = LlamaDims(dm, nh, nkv, hd, it)
             self.ldims.validate()
         self.lean = _lean_stages(hd) if self.has_attn else False
-        # ---- the registry offsets, SambaConfig.registry's order
+        # ---- the registry offsets, SambaConfig.registry's order (one helper,
+        # shared with the decode session: training/samba_decode_resident.mojo)
         self.offsets = List[Int]()
-        self.offsets.append(0)
         self.slot = List[Int]()
-        var n_m3 = 0
-        var n_t = 0
-        var running = vocab * dm
-        self.offsets.append(running)
-        for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
-            if kinds[i] == SAMBA_LAYER_MAMBA3:
-                var d3 = Mamba3Dims.of(dm)
-                var dip = d3.d_in_proj()
-                var sizes: List[Int] = [
-                    dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
-                    d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
-                    dm * d3.d_inner,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_m3)
-                n_m3 += 1
-            else:
-                var qw = self.ldims.q_width()
-                var kw = self.ldims.kv_width()
-                var sizes: List[Int] = [
-                    dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_t)
-                n_t += 1
-        running += dm
-        self.offsets.append(running)
-        if not tie:
-            running += vocab * dm
-            self.offsets.append(running)
+        var running = samba_registry_layout(kinds, vocab, dm, self.ldims, it, tie, self.offsets, self.slot)
         self.n_total = running
         if n_total != running:
             raise Error(
@@ -465,6 +482,10 @@ struct SambaResidentSession(Movable, Writable):
         self.grad.enqueue_fill(Float32(0.0))
         ctx.enqueue_copy(dst_buf=self.param, src_ptr=param_ptr)
         ctx.synchronize()
+        self.param_uploads = 1
+        # Empty key: open scans only the attention views (their constructor),
+        # so the first forward still uploads and admits the whole registry.
+        self.wkey = RegistryKey()
         # ---- placeholders for the shape-keyed workspaces (rebuilt on first use)
         self.b = 0
         self.l = 0
@@ -781,7 +802,7 @@ def _backward_tape(
     var n_layers = s.n_layers()
     _bind_attention_grad_views(s)
     _ensure_m3_dx(s, m)
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     # ---- every activation gradient's storage: gin[i] = d loss / d acts[i]
     # (the gradient the consumer of acts[i] writes); gin[n_layers] = dh, the final
     # norm's dx as in the hand path
@@ -891,41 +912,30 @@ def _backward_tape(
 
     # ---- one backward, then the tied pair add (embedding first, as the hand
     # path's `accumulate_grads([d_emb, dw_head], tokens=None)`)
-    comptime if AUTOGRAD_REFUSE_DEFER:
-        # A NaN reaching a later rule may make it raise first; the refusal
-        # is the error the hand path gives, so it is checked first.
-        var raised = False
-        var msg = String()
-        try:
-            tape.backward_with_rules(ex, loss, seed, rules)
-        except e:
-            raised = True
-            msg = String(e)
-        if not raised:
-            tape.release(ex)
-        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
-            scans[i].enqueue_readback(s.ctx)
-        # Drain the queue before the Mamba-3 blocks and the views go.
-        ex.sync()
-        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
-            var bad = scans[i].result_after_sync()
-            if bad >= 0:
-                raise Error(
-                    String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad)
-                    + " REFUSED"
-                )
-        if raised:
-            raise Error(msg)
-    else:
-        try:
-            tape.backward_with_rules(ex, loss, seed, rules)
-        except e:
-            # a Mamba-3 block's scratch may still be read by queued launches
-            ex.sync()
-            raise e
+    # A NaN reaching a later rule may make it raise first; the refusal
+    # is the error the hand path gives, so it is checked first.
+    var raised = False
+    var msg = String()
+    try:
+        tape.backward_with_rules(ex, loss, seed, rules)
+    except e:
+        raised = True
+        msg = String(e)
+    if not raised:
         tape.release(ex)
-        # Drain the queue before the Mamba-3 blocks and the views go.
-        ex.sync()
+    for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+        scans[i].enqueue_readback(s.ctx)
+    # Drain the queue before the Mamba-3 blocks and the views go.
+    ex.sync()
+    for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+        var bad = scans[i].result_after_sync()
+        if bad >= 0:
+            raise Error(
+                String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad)
+                + " REFUSED"
+            )
+    if raised:
+        raise Error(msg)
     if s.tie:
         var gemb = s.grad_view(0)
         _pair_add_device(s.ctx, gemb, s.pair, v * dm)
@@ -975,16 +985,36 @@ def samba_resident_forward(
 ) raises -> Int:
     """`SambaStack.forward(inputs)`: `(B, L)` ids -> `(B * L, vocab)` logits
     written to `out_ptr`, every block from its zero state, no dropout. The
-    registry goes up once, the ids once, the logits come down once (the
-    board's forward span includes that download, as for lm-forward).
-    Returns `B * L * vocab`."""
+    registry goes up (and is scanned) only when `param` does not already
+    hold the bytes at `param_ptr` (`s.wkey`, the address and the weight
+    epoch); the ids go up once, the logits come down once (the board's
+    forward span includes that download, as for lm-forward). Returns the
+    session's registry upload count (`s.param_uploads`), its report."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     _ensure_shape(s, b, l)
     var m = b * l
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    _upload_tokens(s, ids_ptr)
-    _admit_registry(s)
+    # lane fix-samba-weight-upload (2026-11-13): 0.8.55's forward (restored
+    # body) copied the whole registry (~22 MB at the board shape) up and
+    # scanned it on every call. Now only when the key is not current: same
+    # bytes in `param`, same kernels, same bits. Per call at unchanged
+    # weights this drops one registry host->device copy, the non-finite
+    # scan's launch and its one-word read-back. The epoch is read BEFORE the
+    # upload (a bump in between only costs one more upload); the key is set
+    # only after the admission passed, so a refused registry is uploaded and
+    # refused again at the next call.
+    var addr = Int(param_ptr)
+    var fresh = s.wkey.current(addr)
+    if fresh:
+        _upload_tokens(s, ids_ptr)
+    else:
+        var key = RegistryKey.take(addr)
+        s.wkey = RegistryKey()
+        s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+        s.param_uploads += 1
+        _upload_tokens(s, ids_ptr)
+        _admit_registry(s)
+        s.wkey = key^
     # The token-range refusal is the embedding entry's own
     # (`emb_refuse_device_ids`): the ids are checked on the device before
     # the gather reads them, so Python makes no min/max pass over them.
@@ -996,7 +1026,88 @@ def samba_resident_forward(
     s.ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
     s.ctx.synchronize()
     _ = ew^
-    return m * s.vocab
+    return s.param_uploads
+
+
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward (the resident stateless forward; SambaStack.forward runs SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+# RESTORED 2026-11-13 (lane restore-samba-resident-forward) from
+# `git show 5b5490960d:training/samba_resident.mojo`, body unchanged: lane x6
+# deleted it on reasoning, never A/B'd (AGENTS.md "A measured winner is never
+# deleted on reasoning"). Numbers on record: IDN_SAMBA_RESIDENT_STEP PROMOTED
+# (docs/apple-fast/EXPERIMENTS.md, grid ge123e6f9) samba-forward NVIDIA 12.0 ->
+# 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x) vs the per-op route; the 0.8.55
+# paper column (NVIDIA L40S 4.60 ms, AMD MI300X 6.10 ms) ran this function. The
+# program forward that replaced it measured NVIDIA 10.54 ms (2.29x), MI325X
+# 8.36 ms (1.48x) at candidate 4c2340386abc. B arm: -D
+# MOJOLEARN_SAMBA_PROGRAM_FORWARD (SambaStackProgram); RUN OWED samba-forward
+# A vs B on NVIDIA and AMD (bench/results/paper_compare/owed-pre0867.json).
+
+
+def _step_registry_in(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Bool:
+    """A train step's registry transport in: clears the forward's weight key
+    (the step rewrites `param`) and queues the host -> device copy. Returns
+    whether the registry went up, i.e. whether the caller must admit it
+    (`_admit_registry`).
+
+    Under MOJOLEARN_SAMBA_FAST_STEP_REGISTRY_RESIDENT_OFF: always (the copy
+    and the scan every step, the default before 2026-11-20).
+
+    SAMBA_STEP_REGISTRY_RESIDENT: only when the key is not current, the
+    forward's own test (`samba_resident_forward`): one atomic load, no pass
+    over the weights. A current key means `param` holds the bytes at
+    `param_ptr` AND that they were admitted: the key is only ever set after
+    `_admit_registry` passed (the forward) or after the step's own scan of
+    the weights it wrote came back clean (`_step_registry_out`). Every other
+    writer of the registry (another step route, publish, load_weights, a
+    failed write) stamps it, so the key is then not current and the registry
+    is uploaded and scanned here exactly as in the default."""
+    var upload = True
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        upload = not s.wkey.current(Int(param_ptr))
+    s.wkey = RegistryKey()
+    if upload:
+        s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+        s.param_uploads += 1
+    return upload
+
+
+def _step_registry_out(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """A train step's registry transport out: the updated registry device ->
+    host and the step's closing wait.
+
+    SAMBA_STEP_REGISTRY_RESIDENT: the non-finite refusal the next step's
+    upload scan gave is kept by scanning what the optimizer just wrote, on
+    the device, with the answer read at this same wait (no wait of its own:
+    `DeferredNonfiniteScan`, the kernels and the index of
+    `device_first_nonfinite`). Clean: the registry is stamped (every other
+    copy of it reloads) and this session keeps the key, so the next step and
+    the next forward skip the upload and the scan. A hit: the registry is
+    stamped and the key stays EMPTY, so the next call uploads the same bytes
+    and `_admit_registry` refuses them there with today's message at today's
+    call. The provider door's stamp after the step
+    (providers/python/samba_resident_pyapi_door.mojo) is not made under the
+    define: it would leave the key taken here not current."""
+    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
+    comptime if SAMBA_STEP_REGISTRY_RESIDENT:
+        var written = DeferredNonfiniteScan(s.ctx, s.param, s.n_total)
+        written.enqueue_readback(s.ctx)
+        s.ctx.synchronize()
+        # `written` (its device and host words) is named past the wait
+        var bad = written.result_after_sync()
+        if bad < 0:
+            s.wkey = RegistryKey.stamp_and_take(Int(param_ptr))
+        else:
+            registry_epoch_bump(Int(param_ptr))
+        _ = written^
+    else:
+        s.ctx.synchronize()
 
 
 def samba_resident_train_step(
@@ -1037,7 +1148,7 @@ def samba_resident_train_step(
     `param_ptr`, the loss to `loss_ptr`, the flags to `init_ptr` and the
     clip info to `info_ptr`. Returns `count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1:
         raise Error("mojolearn samba resident: B and L must be positive")
     var m = b * l
@@ -1059,8 +1170,12 @@ def samba_resident_train_step(
     _ensure_shape(s, b, l)
     var dm = s.dm
     var v = s.vocab
-    # ---- transport in: the registry, the ids, the targets
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+    # ---- transport in: the registry, the ids, the targets. The step
+    # rewrites `param`; the forward's key is current again only after its
+    # own upload (the dispatcher bumps the epoch around every step), or,
+    # under SAMBA_STEP_REGISTRY_RESIDENT, after this step's own clean
+    # download (`_step_registry_in` / `_step_registry_out`).
+    var uploaded = _step_registry_in(s, param_ptr)
     _upload_tokens(s, ids_ptr)
     s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr)
     # ---- the targets' range refusal and the ignore-index count, on the
@@ -1069,7 +1184,8 @@ def samba_resident_train_step(
     var count = _admit_targets_device(s.ctx, s.targets, m, v, IGNORE_INDEX_DEFAULT)
     var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), count)
     ce_refuse_shape(m, m * v, cfg)
-    _admit_registry(s)
+    if uploaded:
+        _admit_registry(s)
 
     # ---- forward
     var emb = EmbConfig.llama(v, dm)
@@ -1111,8 +1227,7 @@ def samba_resident_train_step(
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
     # ---- transport out: the updated registry
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^
@@ -1163,7 +1278,7 @@ def samba_resident_accumulated_step(
     The same kernels in the same order as the per-microbatch walk, so the
     same bits. Returns `total_count`."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+        raise Error("mojolearn samba resident: the resident step is IDENTICAL only")
     if b < 1 or l < 1 or a < 2 or b % a != 0:
         raise Error("Samba: batch rows must be divisible by power-of-two accumulation_steps")
     if n_tensors + 1 != len(s.offsets):
@@ -1184,8 +1299,10 @@ def samba_resident_accumulated_step(
     _ensure_shape(s, rows_per, l)
     var dm = s.dm
     var v = s.vocab
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    _admit_registry(s)
+    # The step rewrites `param`: the forward's weight key is cleared first
+    # (lane fix-samba-weight-upload; see samba_resident_train_step).
+    if _step_registry_in(s, param_ptr):
+        _admit_registry(s)
     var stacked = s.ctx.enqueue_create_buffer[DType.float32](a * n)
     var losses = List[Float32](length=a, fill=Float32(0.0))
     var emb = EmbConfig.llama(v, dm)
@@ -1236,8 +1353,7 @@ def samba_resident_accumulated_step(
         offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2,
         eps, weight_decay, momentum, dampening, max_norm, 0,
     )
-    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
-    s.ctx.synchronize()
+    _step_registry_out(s, param_ptr)
     _ = ew^
     _ = hw^
     _ = nw^

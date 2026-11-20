@@ -4,20 +4,7 @@
  "branch": "lane/lab-binarizer",
  "head": "3fef1d762",
  "controls": {},
- "algorithms": {
-  "expanded:label-binarizer": {
-   "binding": "_mojolearn_x_prep",
-   "route": "LabelBinarizer.fit_transform -> _label_fit_hist (lab_min_part/fold, lab_present, lab_flag_count, uniq_scan, lab_hist_write, lab_code_direct) -> label_binarize",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:label-encoder": {
-   "binding": "_mojolearn_x_prep",
-   "route": "LabelEncoder.fit_transform -> _label_fit_hist",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_LAB_UNIQUE_HIST",

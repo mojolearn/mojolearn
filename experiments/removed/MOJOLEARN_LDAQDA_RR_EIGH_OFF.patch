@@ -1,0 +1,16 @@
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index 94b178b875..4e73481dc1 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -181,9 +181,8 @@ comptime PAR_STAGES = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_G
+ # TOMBSTONE: MOJOLEARN_LDAQDA_DEC_TILE_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:241); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d64015f87d.
+ # Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch
+ comptime DEC_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+-# TOMBSTONE: MOJOLEARN_LDAQDA_RR_EIGH_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:243); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at fc4f469cc4.
+-# Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch
+-comptime RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++                    and not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"]())
+ #: eigh q[5] != 0 keeps that stage on `eigh_unit`'s cyclic path under RR_EIGH.
+ #: IterativeImputer sets it (python/mojolearn/_expansion_prep.py, one small
+ #: eigh per feature per round): M3, iterative-imputer istella, main b2dd5dfe5,

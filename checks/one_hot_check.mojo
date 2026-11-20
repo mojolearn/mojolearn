@@ -73,8 +73,8 @@ def check_one_hot() raises:
         for r in range(OH_ROWS):
             ht.unsafe_ptr().unsafe_store(r, y[r])
             hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-        ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, targets, ht)
+        upload_host_into[DType.float32](ctx, weights, hw)
         ctx.synchronize()
 
         var flags = List[Bool]()
@@ -102,7 +102,7 @@ def check_one_hot() raises:
         var cursor = ctx.enqueue_create_buffer[DType.float32](OH_ROWS)
         predict(model, ctx, OH_ROWS, folds, cindex, cursor, one_hot=flags)
         var hc = ctx.enqueue_create_host_buffer[DType.float32](OH_ROWS)
-        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+        download_host_into[DType.float32](ctx, cursor, hc)
         ctx.synchronize()
         var se = Float64(0.0)
         for r in range(OH_ROWS):
@@ -146,8 +146,27 @@ def check_one_hot() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes. The
     # cardinality sweep is a DIFFERENT module (`one_hot_cardinality_check`,
-    # `pixi run check-onehot-cardinality`) and stays there.
+    # `pixi run check-native-gpu one_hot_cardinality_check`) and stays there.
     check_one_hot()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("one_hot_check", cpu=False, gpu=True, serial="", run=run_cases)

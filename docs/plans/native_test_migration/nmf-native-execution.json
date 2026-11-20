@@ -1,0 +1,66 @@
+{
+  "suite": "nmf_native",
+  "cpu_fixtures": 20,
+  "gpu_fixtures": 20,
+  "dependencies": [
+    "9d39093e14",
+    "7a4a338545",
+    "bb172e710e"
+  ],
+  "execution": "uncompiled and unrun; root bundle owed",
+  "input": {
+    "source": "test_nmf_native_boundary.py::_data and _model",
+    "rows": 6,
+    "features": 3,
+    "components": 2,
+    "max_iter": 3,
+    "seed": 7,
+    "tol": 0.0001,
+    "shuffle": false,
+    "regularization": 0
+  },
+  "coverage": {
+    "0": "actual provider metadata",
+    "1-5": "CD random/nndsvd/nndsvda/nndsvdar/custom",
+    "6-10": "MU random/nndsvd/nndsvda/nndsvdar/custom",
+    "11-12": "fixed-H transform CD/MU",
+    "13-14": "custom MU beta 1 and 0",
+    "15": "NaN deferred finite status/no publication",
+    "16": "negative input refusal/no publication",
+    "17": "literal inverse into typed NMFScratch and changed native components",
+    "18": "CD beta 1 refusal/no publication",
+    "19": "Int32 dimension overflow refusal before data read/no publication"
+  },
+  "oracle": {
+    "method": "Float64 two-term matrix product and defining Frobenius/KL/IS divergence; finite/nonnegative factors; objective improvement against independent zero/custom-one initial products; fixed-H equality; literal inverse [5,7,9] and changed [5.5,7,9]",
+    "rtol": 0.0002,
+    "atol": 0.0002,
+    "tolerance_source": "Existing public inverse seam retains its original 2e-4/2e-4; newly authored scalar objective checks use the same bound. No previous bound weakened.",
+    "not_used": [
+      "native generated expected factors",
+      "copy of optimizer update loops",
+      "development repeated-fit identity"
+    ]
+  },
+  "lifetime": "Owned input and guarded output Lists pinned in finally through all native calls; every success inverse output guarded; private scratch read only after complete inverse write.",
+  "parallel": "CPU graphs use host_parallelize over all 20 fixtures; GPU graphs ordered over shared DeviceContext on one physical GPU; existing kernels and independent oracle cells parallel. Scalar sum of oracle terms is a reduction, not independent solver work.",
+  "reviewed_python_files": {
+    "test_nmf_native_boundary.py": 13,
+    "test_native_decomp_params.py": 9,
+    "test_native_declared_params_setter.py": 15,
+    "test_sklearn_compat.py": 11
+  },
+  "python_removed": [],
+  "remaining_python": "All reviewed NMF tests assert public parameter/storage/callback/refusal/interoperability seams. Rebound NumPy inverse equality remains necessary to prove Python array rebinding and mutation are observed; no whole test is a pure native numerical controller.",
+  "product_changes": [],
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_COLUMN_CPU=1 for CPU only"
+  ],
+  "static_checks": [
+    "Python AST of reviewed inventory files",
+    "pixi TOML parsed",
+    "JSON parsed",
+    "git diff --check; Mojo source review only"
+  ]
+}

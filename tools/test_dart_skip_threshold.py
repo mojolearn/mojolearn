@@ -1,8 +1,9 @@
 """Scalar argument encoding tests without requiring a compiled binding.
 
 The DART skip_drop threshold moved from `_DARTBase._dart_thr` (Python) into the
-native public DART fit, bindings/trees_public_boost.mojo `_dart_thr`
-(6ea508cd2: one native call per public method). This test reads that Mojo
+native public DART fit, bindings/trees_public_boost_door.mojo `_dart_thr`
+(6ea508cd2: one native call per public method); fbf0f483f1 moved `_dart_thr` to
+xtrees/trees_boost_run.mojo, which the door imports. This test reads that Mojo
 function's body, restates it statement by statement as Python, and checks it
 against the exact counter comparison."""
 import ast
@@ -12,13 +13,14 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).parents[1]
-MOJO = ROOT / 'bindings/trees_public_boost.mojo'
+DOOR = ROOT / 'bindings/trees_public_boost_door.mojo'
+MOJO = ROOT / 'xtrees/trees_boost_run.mojo'
 PY = ROOT / 'python/mojolearn/_expansion_trees.py'
 
 
 def _mojo_threshold():
     text = MOJO.read_text()
-    m = re.search(r'^def _dart_thr\(v: Float64\) -> Int:\n(.*?)(?=^\S)', text, re.S | re.M)
+    m = re.search(r'^def _dart_thr\(v: Float64\) -> Int:\n(.*?)(?=^\S|\Z)', text, re.S | re.M)
     assert m, '_dart_thr(v: Float64) -> Int is missing from %s' % MOJO
     body = [line for line in m.group(1).splitlines() if line.strip()]
     if body and body[0].strip().startswith('"""'):
@@ -45,7 +47,8 @@ def test_skip_drop_matches_exact_counter_comparison():
 
 
 def test_the_native_fit_uses_it_and_python_computes_no_threshold():
-    text = MOJO.read_text()
+    text = DOOR.read_text()
+    assert re.search(r'^from xtrees\.trees_boost_run import \([^)]*\b_dart_thr\b', text, re.M)
     assert 'var skip_thr = _dart_thr(Float64(py=_float(fields["skip_drop"])))' in text
     classes = {node.name: node for node in ast.parse(PY.read_text()).body if isinstance(node, ast.ClassDef)}
     for name in ('DARTRegressor', 'DARTClassifier'):

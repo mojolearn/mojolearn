@@ -3,8 +3,17 @@
 This is the previous Python orchestration, deliberately outside native-call
 audits. It qualifies parity with that behavior, not runtime compliance.
 """
-from mojolearn._buffer import empty, as_f32_c
-from mojolearn._arrays import _addr, _addr_ro
+from mojolearn.tests._oracle_support import empty
+from mojolearn.tests._typed_input import as_f32_c
+from mojolearn.tests._oracle_support import addr as _buffer_addr, addr_ro as _buffer_addr_ro
+
+
+def _addr(a):
+    return _buffer_addr(a, name="output buffer")
+
+
+def _addr_ro(a):
+    return _buffer_addr_ro(a, name="input buffer")
 
 
 def legacy_auxiliary(model, x, *, leaves=False, prefixes=False, prediction=False):

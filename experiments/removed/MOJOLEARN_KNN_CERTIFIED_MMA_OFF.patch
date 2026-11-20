@@ -1,0 +1,31 @@
+diff --git a/neighbors/impl/detail/knn_brute_force.mojo b/neighbors/impl/detail/knn_brute_force.mojo
+index 04bb643741..db1bebea66 100644
+--- a/neighbors/impl/detail/knn_brute_force.mojo
++++ b/neighbors/impl/detail/knn_brute_force.mojo
+@@ -237,18 +237,20 @@ comptime KNN_APPLE_MMA_DIST = APPLE_MMA and GLOBAL_NUMERIC_MODE == NUMERIC_IDENT
+ #: takes its candidates from the simdgroup-matrix arm and its answer from
+ #: the pinned chain under a per-query certificate; an uncertified query is
+ #: answered by the tiled arm (`neighbors/impl/detail/certified_mma_knn.mojo`).
+-#: Same keys, same bits.
++#: Same keys, same bits. `-D MOJOLEARN_KNN_CERTIFIED_MMA_OFF` keeps the
++#: tiled arm for every query.
+ # I15 M3 2026-10-06 measured Apple-only public KNN component: n100000/q2000/
+ # d8/k8 baseline19.793ms candidate10.354ms (B/A0.5231); n131071/q1024/d17/k16
+ # baseline20.326ms candidate14.339ms (0.7055). One same-process warmup+score;
+ # timingdriver f32549d28, ab-20261006/repairs-i15-f32549d28. Prior identity
+ # evidence reused, no new numerical oracle or cross-vendor IDENTICAL vote.
+-# Confirm existing Apple-only default. No default change.
+-# I15 2026-10-06: NVIDIA/AMD have NO_DISTINCT_RUNTIME_ARM (Apple-only guard).
+-# TOMBSTONE: MOJOLEARN_KNN_CERTIFIED_MMA_OFF (tiled-arm rollback of the Apple certified MMA default, no two-vendor A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at b8ff403d5b.
+-# Restore: git apply experiments/removed/MOJOLEARN_KNN_CERTIFIED_MMA_OFF.patch; record in docs/TOMBSTONES.md.
++# Confirm existing Apple-only default; keep OFF escape. No default change.
+ comptime KNN_CERTIFIED_MMA = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and TARGET_COLUMN == COLUMN_APPLE
++    # I15 2026-10-06: NVIDIA/AMD have NO_DISTINCT_RUNTIME_ARM (Apple-only guard).
++    # Recorded cloud timings are not A/B evidence; Apple qualification remains pending.
++    and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_KNN_CERTIFIED_REACH (opt-in I15 reach counter, never run) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a40e1d3d34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_CERTIFIED_REACH.patch; record in docs/TOMBSTONES.md.

@@ -44,6 +44,7 @@ def test_smoke_command_per_vendor(tmp_path, vendor, device):
     assert cmd[cmd.index("--device") + 1] == device
     assert cmd[cmd.index("--install") + 1] == "torch,max" and cmd[cmd.index("--require") + 1] == "torch,max"
     assert cmd[cmd.index("--out") + 1] == str(tmp_path / "out")
+    assert cmd[cmd.index("--install-seconds") + 1] == "2400" and cmd[cmd.index("--seconds") + 1] == "900"
 
 
 def test_smoke_command_refuses_an_unknown_vendor(tmp_path):
@@ -94,6 +95,14 @@ def test_run_records_the_judged_receipt(tmp_path, status, ok):
     assert [c[1:3] for c in calls[:2]] == [["-m", "venv"], ["-m", "pip"]] and "--device" in calls[2]
 
 
+def test_run_keeps_no_venv_in_the_evidence_folder(tmp_path):
+    calls = []
+    rec = AG.run("nvidia", "/base/python3", tmp_path / "a", ["/w/core.whl"], launch=fake_launch("PASSED", calls))
+    venv = Path(rec["python"]).parents[1]
+    assert tmp_path not in venv.parents and not venv.parent.exists()  # a temp dir, removed on return
+    assert not (tmp_path / "a" / "venv").exists()
+
+
 def test_run_stops_when_the_venv_does_not_install(tmp_path):
     calls = []
     rec = AG.run("amd", "/base/python3", tmp_path / "a", ["x.whl"], launch=fake_launch("PASSED", calls, venv_rc=1))
@@ -138,8 +147,9 @@ def test_gate_stage_runs_the_smoke_on_its_own_venv(tmp_path, monkeypatch, status
     g.adapters()
     rec = json.loads(g.state_path.read_text())
     assert rec["adapters_enabled"] is True and rec["adapters"]["ok"] is ok and rec["adapters_finished"]
-    venv = str(tmp_path / "gate" / "adapter-smoke" / "venv")
-    assert calls[0][-1] == venv and "/gate/venv/bin/python" not in calls[2]  # never the measurement venv
+    # a scratch venv under a temp dir, never inside the gate's evidence folder, and never the measurement venv
+    venv = calls[0][-1]
+    assert venv.endswith("/venv") and str(tmp_path / "gate") not in venv and "/gate/venv/bin/python" not in calls[2]
     assert calls[1][-3:] == ["mojolearn-core==0.8.56", "mojolearn-nvidia==0.8.56", "numpy"]
     assert calls[2][calls[2].index("--device") + 1] == "cuda:0"
     assert (G.gate_verdict(dict(state(), **{k: rec[k] for k in ("adapters_enabled", "adapters_finished",
@@ -177,7 +187,7 @@ def release_runner(tmp_path):
     r.dry, r.version, r.rel, r.commit = True, "0.8.56", tmp_path / "rel", "c" * 40
     r.base = tmp_path / "base"
     r.args = SimpleNamespace(smoke_branch="main", gate_autograd_root=None)
-    r.gate_ok = lambda vendor: (False, "no gate report")
+    r.gate_ok = lambda vendor, measure=True: (False, "no gate report")
     r.gate_out = lambda vendor: tmp_path / "out"
     r.source_checkout = lambda create=True: tmp_path / "source"
     r.candidate_gate_wheels = lambda vendor: [tmp_path / "core.whl", tmp_path / (vendor + ".whl")]
@@ -222,6 +232,9 @@ def apple_runner(tmp_path, status):
         if launch([str(c) for c in cmd], kw.get("log")) != 0:
             raise release.StepFailed("exited 1")
     r.must = must
+    # runtime-apple (the installed-runtime qualifier gate-apple also runs) has its own tests in
+    # tools/test_runtime_qualifier_units.py; these cover the adapter smoke alone
+    r.apple_runtime_gate = lambda: None
     return r
 
 
@@ -237,21 +250,96 @@ def test_gate_apple_passes_on_passed(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("status", ["NO_FRAMEWORK", "FAILED"])
 def test_gate_apple_fails_on_anything_but_passed(tmp_path, monkeypatch, status):
+    # --strict: the adapter smoke stops gate-apple (the behavior before 2026-11-08)
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
     r = apple_runner(tmp_path, status)
+    r.args.strict = True
     with pytest.raises(release.StepFailed):
         r.step_gate_apple()
-    assert not r.apple_adapters_ok()[0]
+    assert not r.apple_adapters_ok()[0] and not r.apple_adapters_soft_failed()
+
+
+@pytest.mark.parametrize("status", ["NO_FRAMEWORK", "FAILED"])
+def test_gate_apple_records_a_failed_adapter_smoke_as_soft(tmp_path, monkeypatch, status):
+    # fail soft (tools/release_verdicts.py apple/adapters): recorded, notified, gate-apple continues
+    import release_verdicts as RV
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    r = apple_runner(tmp_path, status)
+    lines = []
+    r.say = lines.append
+    assert "SOFT FAIL apple/adapters" in r.step_gate_apple()
+    assert [f["name"] for f in RV.load(r.rel)] == ["apple/adapters"] and r.apple_adapters_soft_failed()
+    assert any(l.startswith("SOFT FAIL apple apple/adapters: ") for l in lines)
+    assert (r.base / RV.rel_name(r.version) / "SOFT-FAILURES.md").is_file()   # the notice stays under the fake state
 
 
 def test_gate_apple_is_skipped_when_no_adapters_ship(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "0")
     r = apple_runner(tmp_path, "PASSED")
-    assert r.step_gate_apple().startswith("skipped") and r.calls == []
+    assert r.step_gate_apple().startswith("adapters skipped") and r.calls == []
 
 
 def test_publish_macos_needs_a_passed_apple_adapter_smoke(tmp_path, monkeypatch):
     monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
     r = apple_runner(tmp_path, "NO_FRAMEWORK")
     with pytest.raises(release.StepFailed, match="run gate-apple"):
-        r.step_publish_macos()
+        r.step_publish_macos()   # no adapter smoke at all, recorded neither as passed nor as a SOFT failure
+
+
+def test_cpu_column_records_the_adapter_refusal_as_its_expected_outcome():
+    why = ("FAILED: the installed wheel carries no usable framework adapters: ImportError: mojolearn: the framework "
+           "adapters run on a GPU, and this install selected no GPU set (mojolearn: MOJOLEARN_VENDOR=cpu; ...)")
+    rec = AG.cpu_refusal({"vendor": "cpu", "status": "FAILED", "ok": False, "why": why})
+    assert (rec["status"], rec["ok"], rec["refused_why"]) == ("refused-by-design", True, why)
+    other = {"vendor": "cpu", "status": "FAILED", "ok": False, "why": "FAILED: torch-compile exit 1"}
+    assert AG.cpu_refusal(other) is other
+    gpu = {"vendor": "nvidia", "status": "FAILED", "ok": False, "why": why}
+    assert AG.cpu_refusal(gpu) is gpu
+    venv = {"vendor": "cpu", "status": "VENV_FAILED", "ok": False, "why": "adapter venv setup failed (exit 1)"}
+    assert AG.cpu_refusal(venv)["ok"] is False
+
+
+def _torch_venv(tmp_path):
+    venv = tmp_path / "venv"
+    lib = venv / "lib" / "python3.12" / "site-packages" / "torch" / "lib"
+    lib.mkdir(parents=True)
+    return venv, lib
+
+
+def test_framework_env_puts_torch_lib_first_on_amd_only_and_never_changes_its_base(tmp_path):
+    venv, lib = _torch_venv(tmp_path)
+    base = {"LD_LIBRARY_PATH": "/job/lib", "KEEP": "1"}
+    amd = AG.framework_env("amd", venv, base)
+    parts = amd["LD_LIBRARY_PATH"].split(":")
+    assert parts[0] == str(lib) and parts[-1].startswith("/opt/rocm") and len(parts) == 2
+    assert amd["KEEP"] == "1" and base == {"LD_LIBRARY_PATH": "/job/lib", "KEEP": "1"}
+    assert AG.framework_env("nvidia", venv, base) == base
+
+
+def test_env_overrides_round_trip_and_name_only_what_changed():
+    base = {"A": "1", "B": "2", "SECRET": "s"}
+    env = dict(base, A="9", C="3")
+    env.pop("B")
+    over = AG.env_overrides(env, base)
+    assert over == {"A": "9", "C": "3", "B": None} and "SECRET" not in over
+    assert AG.apply_overrides(over, base) == env
+
+
+def test_run_records_the_smoke_python_and_its_env_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/job/lib")
+    calls = []
+    env = dict(__import__("os").environ, LD_LIBRARY_PATH="/torch/lib:/opt/rocm/lib")
+    rec = AG.run("amd", "/base/python3", tmp_path / "a", ["/w/core.whl"], env=env, launch=fake_launch("PASSED", calls))
+    # the venv is a scratch venv under a temp dir, never inside the evidence folder (d43f402957)
+    py = Path(rec["python"])
+    assert rec["python"] == AG.venv_python(py.parents[1])
+    assert py.parents[2].name.startswith("adapter-venv-") and tmp_path not in py.parents
+    keep = AG.scratch_venv()
+    try:
+        assert AG.run("amd", "/base/python3", tmp_path / "k", ["/w/core.whl"], env=env, venv=keep,
+                      launch=fake_launch("PASSED", []))["python"] == AG.venv_python(keep)
+    finally:
+        AG.drop_venv(keep)
+    assert rec["env_overrides"] == {"LD_LIBRARY_PATH": "/torch/lib:/opt/rocm/lib"}
+    assert AG.run("amd", "/base/python3", tmp_path / "b", ["/w/core.whl"],
+                  launch=fake_launch("PASSED", []))["env_overrides"] == {}

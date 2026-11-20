@@ -43,11 +43,22 @@ def sidecar_path(path):
 
 
 def _np():
-    from ._optional_numpy import require_numpy
-    return require_numpy("mojolearn verify-model")
+    try:
+        import numpy
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        raise ModuleNotFoundError(
+            "mojolearn: verify-model requires optional NumPy support. "
+            "Install it with `pip install numpy`.") from None
+    return numpy
 
 
 def _binding(numeric_mode=None):
+    # KEPT (docs/plans/VERIFY_DECOUPLE_2026-11-15.md): verify-model's own
+    # native entries (verify_digest, verify_fill, verify_file_sha256,
+    # verify_model_info) live in the x_sequence binding; this is the one
+    # place verify resolves them, so no product API exposes them.
     from . import _backend
     return _backend.binding("_mojolearn_x_sequence", numeric_mode)
 
@@ -56,7 +67,7 @@ def _digest(b, a, name):
     if not a.flags.c_contiguous:
         raise ValueError(f"{name} must be a C-contiguous array")
     # Mojo folds the array's bytes (FNV-1a64, the identity digest)
-    return str(b.verify_digest(a.ctypes.data, a.nbytes))  # cpu-route: verification digest of a host array after the run
+    return str(b.verify_digest(a.ctypes.data, a.nbytes))  # verification: verification digest of a host array after the run
 
 
 def _seeded(b, shapes, seed, kinds=None):
@@ -70,26 +81,23 @@ def _seeded(b, shapes, seed, kinds=None):
             continue
         a = np.empty(tuple(shape), dtype=np.float32)
         # Mojo writes the seeded values (input k is Philox stream k)
-        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # cpu-route: verification inputs made before the run
+        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # verification: verification inputs made before the run
         arrays.append(a)
     return arrays
 
 
 def _install(numeric_mode):
-    from . import _backend
+    from . import runtime_report
     from ._verify import describe_device
     try:
-        from ._version import __version__ as version
-    except Exception:  # pragma: no cover
-        version = "unknown"
-    try:
-        vendor = _backend.vendor()
+        report = runtime_report()
+        version, vendor, default_mode = report["version"], report["vendor"], report["default_mode"]
     except Exception as exc:
-        vendor = f"unknown ({type(exc).__name__})"
+        version, vendor, default_mode = "unknown", f"unknown ({type(exc).__name__})", None
     import platform
     return {
         "mojolearn_version": version,
-        "numeric_mode": numeric_mode or _backend.default_mode(),
+        "numeric_mode": numeric_mode or default_mode,
         "vendor": vendor or "unknown",
         "device": describe_device(),
         "platform": f"{platform.system()} {platform.machine()}",
@@ -97,8 +105,8 @@ def _install(numeric_mode):
 
 
 def _model_entry(b, path):
-    sha, size = b.verify_file_sha256(os.fspath(path))  # cpu-route: model file hashed on the host
-    kind, desc = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
+    sha, size = b.verify_file_sha256(os.fspath(path))  # verification: model file hashed on the host
+    kind, desc = b.verify_model_info(os.fspath(path))  # verification: model file read on the host
     return {"file": os.path.basename(os.fspath(path)), "kind": str(kind), "sha256": str(sha),
             "bytes": int(size), "description_hash": str(desc)}
 
@@ -119,7 +127,7 @@ def _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, ou
 
 
 def _write(rep, path):
-    with open(path, "w") as fh:  # cpu-route: report file written on the host
+    with open(path, "w") as fh:  # verification: report file written on the host
         json.dump(rep, fh, indent=2, sort_keys=True)
         fh.write("\n")
 
@@ -131,40 +139,17 @@ def _names(entries, items, stem):
     return [f"{stem}{k}" for k, _ in enumerate(items)]  # glue: one label per model input or output
 
 
-# ------------------------------------------------------------ at save time
-
-def record_program(program, path):
-    """Run ``program`` on the seeded inputs and write its report beside the
-    file ``path`` that ``Program.save`` just wrote."""
-    s = program._s
-    b = s._b
-    arrays = _seeded(b, program.input_shapes, DEFAULT_SEED, getattr(program, "input_kinds", None))
-    outs = s.run(program, *arrays)
-    outs = outs if isinstance(outs, tuple) else (outs,)
-    names_in = _names([e[0] for e in getattr(program, "inputs", ())], arrays, "input")  # glue: the model's input names
-    names_out = _names([e[0] for e in getattr(program, "outputs", ())], outs, "output")  # glue: the model's output names
-    rep = _report(b, path, s.numeric_mode, names_in, arrays, "seeded", DEFAULT_SEED, names_out, outs)
-    _write(rep, sidecar_path(path))
-    return rep
-
-
-def record_sequential(model, path):
-    """Run a fitted ``Sequential`` on the seeded inputs and write its report
-    beside the file ``path`` that ``save_checkpoint`` or ``export`` just
-    wrote."""
-    b = model._binding()
-    (X,) = _seeded(b, [(SEQUENTIAL_ROWS, model.n_features_in_)], DEFAULT_SEED)
-    out = model._forward(X, _OUT_RAW)
-    rep = _report(b, path, model.numeric_mode, ["X"], [X], "seeded", DEFAULT_SEED, ["output"], [out])
-    _write(rep, sidecar_path(path))
-    return rep
+# The save-time report is written natively beside the saved file
+# (autograd/program_save.mojo, bindings/sequential_checkpoint_door.mojo); the
+# Python copies record_program / record_sequential were never called and
+# could drift from the native writer, so they were removed.
 
 
 # ------------------------------------------------------------ at verify time
 
 def _load_inputs(path, want_names, n):
     np = _np()
-    with np.load(os.fspath(path), allow_pickle=False) as z:  # cpu-route: input file read on the host
+    with np.load(os.fspath(path), allow_pickle=False) as z:  # verification: input file read on the host
         files = list(z.files)
         if len(files) != n:
             raise ValueError(f"{os.fspath(path)} holds {len(files)} arrays; the model takes {n} inputs")
@@ -180,10 +165,10 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
     the seeded inputs; ``expect`` a report dict whose seed, input shapes and
     names are reused when ``inputs`` is None."""
     from .ops import Session
-    from ._x_sequence_model import Sequential
+    from . import Sequential
     b = _binding(numeric_mode)
     try:
-        kind, _ = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
+        kind, _ = b.verify_model_info(os.fspath(path))  # verification: model file read on the host
     except Exception as exc:  # the binding's refusal names what is wrong with the file
         raise ValueError(f"{os.fspath(path)} is not a saved model: {exc}") from None
     kind = str(kind)
@@ -198,14 +183,14 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             prog = s.load_program(path)
             n = len(prog.input_shapes)
             if inputs is None:
-                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed, getattr(prog, "input_kinds", None)), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
+                arrays, names_in, source = _seeded(b, prog.input_shapes, seed, getattr(prog, "input_kinds", None)), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
             else:
                 names_in, arrays = _load_inputs(inputs, exp_names_in, n)
                 source = "file"
             outs = prog.run(*arrays)
             outs = outs if isinstance(outs, tuple) else (outs,)
             names_out = _names(exp_names_out, outs, "output")
-            return _report(s._b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
+            return _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
     if kind in _SEQUENTIAL:
         model = Sequential.load(path, numeric_mode=numeric_mode)
         if inputs is None:
@@ -296,7 +281,7 @@ def cmd_verify_model(args):
     expect = None
     if expect_from is not None:
         try:
-            with open(expect_from) as fh:  # cpu-route: report file read on the host
+            with open(expect_from) as fh:  # verification: report file read on the host
                 expect = json.load(fh)
         except (OSError, ValueError) as exc:
             print(f"verify-model: cannot read the expected report {expect_from}: {exc}", file=sys.stderr)

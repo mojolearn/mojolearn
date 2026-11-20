@@ -17,7 +17,7 @@ arithmetic is added: every number comes from the session's `ByteTrainer`
 
 No Python here.
 """
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext, HostBuffer
 from core.hostptr import f32_ptr, i32_ptr, copy_f32
@@ -28,21 +28,28 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.optimizer_contract import OptimizerConfig
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
-    ByteTrainer, byte_train_step_resident, byte_eval_loss_resident, byte_rollback,
+    ByteTrainer, byte_train_step_resident, byte_train_steps_resident, byte_eval_loss_resident, byte_rollback,
     byte_validate_state, byte_validate_tokens,
 )
 from training.byte_lm_logits import (
     byte_logits_validate, byte_logits_resident_into, byte_next_bytes_resident_into,
 )
 from training.byte_lm_binding_impl import (
-    ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
+    ByteLMSession,
     _read_f32, _btick, _bbytes, _validate_slot_table,
     _read_flags, _read_ids, _write_flags, _write_loss, _nonfinite,
     _require_open, _mark_if_lost, _admit_session_scalars, _stage_download,
 )
 
+# Lane envgate-neural-lm (2026-11-15): was a getenv per session open /
+# step / export call; a build constant with today's default.
+comptime _TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-21, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
+
+
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime BYTE_LM_NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
+comptime BYTE_LM_NEURAL_CTX = "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralByteLMContextFastV3"
 
 
 
@@ -69,8 +76,7 @@ def byte_session_open(mut session: ByteLMSession, addr: List[Int], completed: In
         raise Error("byte LM: session is busy")
     if Bool(owner[].trainer) or Bool(owner[].ctx):
         raise Error("byte LM: session is already open; close it first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -84,9 +90,6 @@ def byte_session_open(mut session: ByteLMSession, addr: List[Int], completed: In
     owner[].busy = True
     owner[].usable = False
     try:
-        if keep_context:
-            # DEVIATION 2513: the same keeper the per-call path uses.
-            BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
         owner[].ctx = neural_ctx[BYTE_LM_NEURAL_CTX]()
         owner[].trainer = ByteTrainer(owner[].ctx.value(), initial_p, initial_m,
             initial_v, flags, completed, cfg, cfg_shape)
@@ -115,7 +118,7 @@ def byte_session_step_run(mut session: ByteLMSession, ids: List[Int32], flags: L
     marks the session unusable."""
     var owner = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n_tensors = cfg_shape.n_tensors()
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     var loss = Float32(0)
     var result_step = completed
@@ -240,7 +243,7 @@ def byte_session_export_state(mut session: ByteLMSession, addr: List[Int],
     _require_open(owner[])
     if owner[].trainer.value().config.profile() != cfg_shape.profile():
         raise Error("byte LM: resident model shape mismatch")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     ref ctx = owner[].ctx.value()
     var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
@@ -295,7 +298,7 @@ def byte_session_export_gradients(mut session: ByteLMSession, out_addr: Int,
     var grad_step = owner[].trainer.value().grad_step
     if grad_step < 0 or grad_step != owner[].trainer.value().completed_steps:
         raise Error("byte LM: no gradient to export; complete a step first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var ton = _TRANSFORMER_TIMING
     var tk = Int(perf_counter_ns())
     ref ctx = owner[].ctx.value()
     var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
@@ -345,6 +348,14 @@ def byte_session_rollback(mut session: ByteLMSession) raises -> Int:
 def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
                             length: Int, out_addr: Int, claimed: Int,
                             cfg_shape: ByteConfig, next_bytes: Bool) raises -> Int:
+    return byte_session_logits_rows_run(session, ids, batch, length, out_addr, claimed, cfg_shape,
+                                        next_bytes, List[Int32]())
+
+
+def byte_session_logits_rows_run(mut session: ByteLMSession, ids: List[Int32], batch: Int,
+                                 length: Int, out_addr: Int, claimed: Int,
+                                 cfg_shape: ByteConfig, next_bytes: Bool,
+                                 last_rows: List[Int32]) raises -> Int:
     """Forward-only logits (or, with `next_bytes`, the greedy next byte of
     every row, argmax on the device) on an open session, after the ids were
     read and admitted. `claimed` is the caller's committed step, which must
@@ -362,7 +373,7 @@ def byte_session_logits_run(mut session: ByteLMSession, ids: List[Int32], batch:
         ref ctx = owner[].ctx.value()
         if next_bytes:
             byte_next_bytes_resident_into(ctx, owner[].trainer.value(), ids, batch, length,
-                                          owner[].logits_scratch, i32_ptr(out_addr))
+                                          owner[].logits_scratch, i32_ptr(out_addr), last_rows)
             if owner[].trainer.value().completed_steps != step_before:
                 raise Error("byte LM next bytes changed the completed step")
         else:
@@ -447,24 +458,66 @@ def byte_owner_recover(mut session: ByteLMSession, committed: Int):
     byte_owner_mark(session, committed)
 
 
-def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
-                    cfg: OptimizerConfig, cfg_shape: ByteConfig, train: Bool) raises -> Int:
-    """One training step (`train`) or evaluation of the trainer, the whole
-    of `train_step` / `evaluate` on a resident session.
+def byte_session_steps_run(mut session: ByteLMSession, stack: List[Int32], n_steps: Int,
+                           loss_addr: Int, flags_addr: Int, completed: Int,
+                           cfg: OptimizerConfig, cfg_shape: ByteConfig) raises -> Int:
+    """`n_steps` device-owned steps on an open session as ONE Program.fit
+    (lane x7), after their batches were read and admitted (`stack`: the
+    batches one after the other) and the caller's scalars were admitted
+    (`_admit_session_scalars`). Out: the n_steps losses at `loss_addr`
+    and the flags at `flags_addr`. Returns completed + n_steps. A refused
+    call is rolled back on the device by the trainer before it propagates
+    (none of its steps is committed); a lost context marks the session
+    unusable."""
+    var owner = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
+    var n_tensors = cfg_shape.n_tensors()
+    var result_step = completed
+    var out_flags = List[Bool]()
+    var counts0 = step_counts_now()
+    owner[].busy = True
+    try:
+        ref ctx = owner[].ctx.value()
+        var result = byte_train_steps_resident(ctx, owner[].trainer.value(), Int(stack.unsafe_ptr()), n_steps,
+                                               loss_addr)
+        result_step = result.completed_steps
+        out_flags = result.flags.copy()
+        if result_step != completed + n_steps:
+            raise Error("byte LM: successful result has wrong completed step")
+        if len(out_flags) != n_tensors:
+            raise Error("byte LM: wrong flags length")
+        step_count_sync()
+        ctx.synchronize()
+        step_counts_report(counts0)
+    except error:
+        owner[].busy = False
+        _mark_if_lost(owner[])
+        raise error
+    owner[].busy = False
+    _write_flags(flags_addr, out_flags)
+    return result_step
 
-    addr = [in_ids_i32 (batch * (length + 1)), in_flags_i32 (the committed
-    flags), in_param, in_m, in_v (the host state, admitted and uploaded when
-    the session is not open; all three 0 when it is), out_loss_f32,
-    out_flags_i32 (training; 0 for an evaluation), out_grad_f32 (n_total; 0
-    unless the step returns its gradient), then, after a nonzero out_grad,
+
+def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
+                    cfg: OptimizerConfig, cfg_shape: ByteConfig, train: Bool, n_steps: Int = 1) raises -> Int:
+    """`n_steps` training steps (`train`) or one evaluation of the trainer:
+    the whole of `train_step`, `train_steps` or `evaluate` on a resident
+    session, in ONE native call (lane x7: the multi-step call is this one,
+    one Program.fit over its batches).
+
+    addr = [in_ids_i32 (n_steps * batch * (length + 1): the step batches
+    one after the other), in_flags_i32 (the committed flags), in_param,
+    in_m, in_v (the host state, admitted and uploaded when the session is
+    not open; all three 0 when it is), out_loss_f32 (n_steps), out_flags_i32
+    (training; 0 for an evaluation), out_grad_f32 (n_total; 0 unless the
+    call returns the last step's gradient), then, after a nonzero out_grad,
     one output per parameter tensor for the gradient by name].
 
-    The ids are admitted first, before any device work; then the session is
-    opened from the host state when it is not open; then the step or the
-    evaluation runs; then a returned gradient is exported and split by
+    Every batch is admitted first, before any device work; then the session
+    is opened from the host state when it is not open; then the steps or
+    the evaluation run; then a returned gradient is exported and split by
     name. Any failure after the session opened rolls the device back to
-    `completed` (`byte_owner_recover`) before it propagates. Returns the
-    completed step after the call.
+    `completed` (`byte_owner_recover`) before it propagates: a refused call
+    commits none of its steps. Returns the completed step after the call.
     """
     var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n = cfg_shape.n_total()
@@ -472,25 +525,27 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
     var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
     if len(addr) < 8:
         raise Error("byte LM trainer: expected at least 8 addresses")
+    if n_steps < 1 or (n_steps > 1 and not train):
+        raise Error("byte LM trainer: an evaluation takes one batch; a training call at least one")
     var full = addr[7] != 0
     if full and not train:
         raise Error("byte LM trainer: an evaluation returns no gradient")
     if len(addr) != (8 + n_tensors if full else 8):
         raise Error("byte LM trainer: expected one named gradient output per parameter tensor")
-    if train and completed >= 999999:
+    if train and completed + n_steps > 999999:
         raise Error("byte LM: completed step outside admitted bound")
     if not train and addr[6] != 0:
         raise Error("byte LM trainer: an evaluation requires a null flags output")
     var admit = addr[2] != 0 or addr[3] != 0 or addr[4] != 0
     var slots: List[Int] = [addr[0], addr[1]]
-    var cells: List[Int] = [n_ids, n_tensors]
+    var cells: List[Int] = [n_steps * n_ids, n_tensors]
     if admit:
         for i in range(2, 5):  # small-loop(state: three host state address slots)
             slots.append(addr[i])
             cells.append(n)
     var n_inputs = len(slots)
     slots.append(addr[5])
-    cells.append(1)
+    cells.append(n_steps)
     if train:
         slots.append(addr[6])
         cells.append(n_tensors)
@@ -502,9 +557,10 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
             named.append(addr[8 + j])
         _named_cells(cfg_shape, slots, cells, named)
     _validate_slot_table(slots, cells, n_inputs)
-    var ids = _read_ids(addr[0], n_ids)
+    var stack = _read_ids(addr[0], n_steps * n_ids)
+    for k in range(n_steps):  # driver-loop: over the call's step batches (token admission)
+        byte_validate_tokens(_read_ids(addr[0] + k * n_ids * 4, n_ids), cfg_shape)
     var flags = _read_flags(addr[1], n_tensors)
-    byte_validate_tokens(ids, cfg_shape)
     if not s[].trainer:
         if not admit:
             raise Error("byte LM: session is not open")
@@ -514,16 +570,24 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
     var step = completed
     try:
         if train:
-            step = byte_session_step_run(s[], ids, flags, addr[5], addr[6], completed, cfg, cfg_shape)
+            if s[].trainer.value().completed_steps != completed:
+                raise Error("byte LM: resident completed-step mismatch")
+            _admit_session_scalars(s[], completed, cfg, flags, cfg_shape)
+            step = byte_session_steps_run(s[], stack, n_steps, addr[5], addr[6], completed, cfg, cfg_shape)
             if full:
                 _ = byte_session_export_gradients(s[], addr[7], cfg_shape)
                 byte_scatter_named(addr[7], named, cfg_shape)
         else:
-            step = byte_session_eval_run(s[], ids, flags, addr[5], completed, cfg, cfg_shape)
+            step = byte_session_eval_run(s[], stack, flags, addr[5], completed, cfg, cfg_shape)
     except error:
         byte_owner_recover(s[], completed)
         raise error
+    _ = stack^
     return step
+
+
+# TOMBSTONE: byte_owner_steps (the multi-step provider operation 12, a per-step loop over byte_session_step_run) deleted 2026-11-09 by lane x7-byte-lm-on-executor (byte_owner_step takes n_steps: one Program.fit); code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
 
 
 def byte_owner_export_state(mut session: ByteLMSession, addr: List[Int], completed: Int,
@@ -603,7 +667,10 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
     var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
     var n = cfg_shape.n_total()
     var n_tensors = cfg_shape.n_tensors()
-    if len(addr) != 6:
+    # A seventh address (next bytes only, plan row N091): the int32 length of
+    # every row of a ragged batch, each in [1, length]; the greedy pick then
+    # reads each row's last real position on the device.
+    if len(addr) != 6 and not (next_bytes and len(addr) == 7):
         raise Error("byte LM trainer: expected 6 addresses")
     var m = batch * length
     var admit = addr[3] != 0 or addr[4] != 0 or addr[5] != 0
@@ -613,12 +680,23 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         for i in range(3, 6):  # small-loop(state: three host state address slots)
             slots.append(addr[i])
             cells.append(n)
+    var ragged = len(addr) == 7
+    if ragged:
+        slots.append(addr[6])
+        cells.append(batch)
     var n_inputs = len(slots)
     slots.append(addr[1])
     cells.append(batch if next_bytes else m * cfg_shape.vocab_size)
     _validate_slot_table(slots, cells, n_inputs)
     var ids = _read_ids(addr[0], m)
     byte_logits_validate(ids, batch, length, cfg_shape)
+    var last_rows = List[Int32]()
+    if ragged:
+        var lengths = _read_ids(addr[6], batch)
+        for row in range(batch):  # small-loop(batch: one admitted length per row): checks the lengths, no data
+            if lengths[row] < 1 or Int(lengths[row]) > length:
+                raise Error("byte LM next bytes: row length outside [1, length]")
+            last_rows.append(lengths[row] - 1)
     if not s[].trainer:
         if not admit:
             raise Error("byte LM: session is not open")
@@ -626,8 +704,8 @@ def byte_owner_logits(mut session: ByteLMSession, addr: List[Int], batch: Int, l
         _ = byte_session_open(s[], state, completed, cfg, cfg_shape)
     var written = 0
     try:
-        written = byte_session_logits_run(s[], ids, batch, length, addr[1], completed,
-                                          cfg_shape, next_bytes)
+        written = byte_session_logits_rows_run(s[], ids, batch, length, addr[1], completed,
+                                               cfg_shape, next_bytes, last_rows)
     except error:
         byte_owner_mark(s[], completed)
         raise error

@@ -1,45 +1,38 @@
 # SPDX-License-Identifier: Apache-2.0
 # Logical host owner for classical. Release builds merge this builder
 # with the other host builders; development builds give it an independent
-# source/cache boundary. TreesResident is registered, allocated and finalized only in this owner.
+# source/cache boundary. TreesResident is registered and finalized only in this owner
+# (registered once per process; the registrars below).
+# 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): the tree and
+# family operations of classical_native_call run in their own doors
+# (_mojolearn_runtime_trees_host, _mojolearn_runtime_family_host), and the
+# preprocessing, decomposition and linear doors are their own bindings
+# (_mojolearn_runtime_prep_host, _mojolearn_runtime_decomp_host,
+# _mojolearn_runtime_linear_host), each its own merged group. The Python types
+# their code allocates stay registered HERE, unchanged: import setup loads this
+# owner before them (python/mojolearn/host_surface.py HOST_IMPORT_ALIASES order).
+from bindings.native_owner_registry_unpack import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from bindings.trees_lifetime import TreesResident
-from bindings.trees_explainer_native import TreeShapOwner
-from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
-from bindings.classical_native import classical_c
-from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
-from bindings.host_archive_lifetime import host_archive_finalize_c
-from bindings.host_svr_native import host_svr_attribute_c
-from bindings.host_svc_native import host_svc_attribute_c
-from bindings.pca_native import pca_c
-from bindings.scaler_native import scaler_fit_c
-from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
-from bindings.minmax_native import minmax_lifecycle_c
-from providers.python.preprocessing_input_pyapi import register_scaler_snapshot
-from bindings.linalg_ops_buffers import register_lin_buffer_pin
-from bindings.maxabs_native import maxabs_lifecycle_c
-from bindings.prep_stateless_native import prep_stateless_c
-from bindings.qn_native import qn_c
-from bindings.logistic_native import logistic_c
-from bindings.decomp_native import decomp_c
-from bindings.linalg_decomp_native import linalg_decomp_c
-from bindings.als_native import als_c
-from bindings.mcd_native import mcd_c
-from bindings.pls_native import pls_c
-from bindings.dict_learning_native import dict_learning_c
-from bindings.jl_native import jl_c
-from bindings.ipca_native import ipca_c
-from bindings.tsvd_native import tsvd_c
-from bindings.prep_classify_native import prep_classify_c
-from bindings.prep_owner_native import prep_owner_c
-from bindings.x_linear_native import x_linear_c
-from bindings.str_labels_native import str_labels_c
-from bindings.robust_native import robust_lifecycle_c
+from std.python.bindings import lookup_py_type_object
+from bindings.py_type_registry import py_type_absent, py_type_attach
+from bindings.trees_lifetime_door import TreesResident, trees_resident_pins
+from bindings.py_trees_resident import TreesResidentDeath
+from bindings.trees_explainer_native_door import TreeShapOwner
+from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
+from bindings.classical_native_pack import classical_c
+from bindings.classical_attributes_door import classical_attribute_c, classical_attribute_descriptor_c
+from bindings.host_archive_lifetime_door import host_archive_finalize_c
+from providers.python.preprocessing_input_pyapi_door import register_scaler_snapshot
+from bindings.admitted_input_unpack import register_admitted_buffer_pin
+from providers.python.linear_entry_boundary_door import register_linear_entry_owner, register_linear_entry_owner_identity, linear_entry_connect_c
+from providers.python.linear_state_boundary_door import register_linear_state_owner, register_linear_state_owner_identity
 
 comptime RUNTIME_CLASSICAL_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -66,51 +59,93 @@ def runtime_classical_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(RUNTIME_CLASSICAL_SABOTAGE)
 
 
+# This host's own Python types. Its PyInit can run twice in one process (see
+# bindings/py_type_registry.mojo); each registrar creates the type on the first
+# initialization and attaches the existing type object on any later one.
+def register_trees_resident(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[TreesResident]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[TreesResident]("_TreesResident")
+        return
+    py_type_attach(module.module, "_TreesResident", existing)
+
+
+def register_trees_resident_death(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[TreesResidentDeath]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[TreesResidentDeath]("_TreesResidentDeath")
+        return
+    py_type_attach(module.module, "_TreesResidentDeath", existing)
+
+
+def register_tree_shap_owner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[TreeShapOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
+        return
+    py_type_attach(module.module, "_TreeShapOwner", existing)
+
+
+def register_compiled_binding_snapshot(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[CompiledBindingSnapshot]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
+        return
+    py_type_attach(module.module, "_CompiledBindingSnapshot", existing)
+
+
 def build__mojolearn_runtime_classical_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_classical_host")
         module.def_py_c_function(classical_c, "classical_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(host_archive_finalize_c, "host_archive_finalize_call")
-        module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
-        module.def_py_c_function(host_svc_attribute_c, "host_svc_attribute_call")
-        module.def_py_c_function(pca_c, "pca_native_call")
-        module.def_py_c_function(scaler_fit_c, "standard_scaler_fit_native")
-        module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
-        module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
-        module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
-        module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
-        module.def_py_c_function(qn_c, "qn_native_call")
-        module.def_py_c_function(logistic_c, "logistic_native_call")
-        module.def_py_c_function(decomp_c, "decomp_native_call")
-        module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
-        module.def_py_c_function(als_c, "als_native_call")
-        module.def_py_c_function(mcd_c, "mcd_native_call")
-        module.def_py_c_function(pls_c, "pls_native_call")
-        module.def_py_c_function(dict_learning_c, "dict_learning_native_call")
-        module.def_py_c_function(jl_c, "jl_native_call")
-        module.def_py_c_function(ipca_c, "ipca_native_call")
-        module.def_py_c_function(tsvd_c, "tsvd_native_call")
-        module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
-        module.def_py_c_function(prep_owner_c, "prep_encode_native_call")
-        module.def_py_c_function(x_linear_c, "x_linear_native_call")
-        module.def_py_c_function(str_labels_c, "str_labels_native_call")
-        module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
-        module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
-        _ = module.add_type[TreesResident]("_TreesResident")
-        # Values this host allocates with PythonObject(alloc=...): the Tree SHAP owner and the
-        # compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor owners.
-        # Registered once per process here (the manifold and tokenizer hosts allocate snapshots
-        # through the same x_neighbors admission and must not register them a second time).
-        _ = module.add_type[TreeShapOwner]("_TreeShapOwner")
-        _ = module.add_type[CompiledBindingSnapshot]("_CompiledBindingSnapshot")
+        # Values this host allocates with PythonObject(alloc=...): resident trees, the Tree SHAP
+        # owner and the compiled-binding snapshots of the SVM, hierarchy and x_neighbors descriptor
+        # owners. Registered once per process here (the manifold and tokenizer hosts allocate
+        # snapshots through the same x_neighbors admission and must not register them a second
+        # time). This PyInit can run twice in one process (`mojolearn._host.` at package connection,
+        # then `mojolearn.host.` through the merged finder); a second run attaches the existing
+        # type objects instead of aborting (bindings/py_type_registry.mojo).
+        register_trees_resident(module)
+        # The tree family's resident-table death record (ne1-a-trees).
+        register_trees_resident_death(module)
+        register_tree_shap_owner(module)
+        register_compiled_binding_snapshot(module)
         register_scaler_snapshot(module)
-        register_lin_buffer_pin(module)
+        register_admitted_buffer_pin(module)
+        register_linear_entry_owner(module)
+        register_linear_state_owner(module)
+        module.def_py_c_function(linear_entry_connect_c, "linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
         module.def_function[runtime_classical_host_vendor_binding]("runtime_classical_host_vendor")
         module.def_function[runtime_classical_host_column_binding]("runtime_classical_host_column")
         module.def_function[runtime_classical_host_sabotage_binding]("runtime_classical_host_sabotage")
-        return module.finalize()
+        # Owner identities need the finalized type objects (Mojo 1.2 creates
+        # them in finalize(); see bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_native_owner_type[TreesResident](published, trees_resident_pins)
+        register_native_owner_type[TreesResidentDeath](published, native_owner_no_pins)
+        register_linear_entry_owner_identity(published)
+        register_linear_state_owner_identity(published)
+        return published
     except error:
         abort(String("failed to create _mojolearn_runtime_classical_host: ", error))

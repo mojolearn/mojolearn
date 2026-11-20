@@ -1,6 +1,7 @@
 """Eight-row endpoint fixtures; no timings, accuracy targets or datasets."""
 __mojolearn_user_boundary__ = True
 
+from ._verify_api import resolve
 from ._verify_api_metadata import factory
 
 METHODS = frozenset(('score', 'fit_transform', 'fit_predict', 'inverse_transform',
@@ -15,6 +16,15 @@ METHODS = frozenset(('score', 'fit_transform', 'fit_predict', 'inverse_transform
 # Neural/stateful programs and raw arrays have their own tiny shape contracts.
 SEPARATE = ('Adam', 'SGD', 'Adagrad', 'Adamax', 'Adafactor', 'Lion', 'LAMB', 'RMSprop',
             'NAdam', 'Mamba', 'Transformer', 'Sequential', 'MoE', 'Embedding', 'HostForest')
+
+
+# Forecasters take a series, not (X, y): fit(y) (statsforecast form), or the
+# series at construction (statsmodels form: endog), and forecast a horizon.
+FORECAST_Y = ('ARIMA', 'AutoTheta', 'Theta', 'OptimizedTheta', 'DynamicTheta',
+              'DynamicOptimizedTheta', 'CrostonClassic', 'CrostonOptimized', 'CrostonSBA',
+              'ETS', 'DampedETS', 'GARCH')
+FORECAST_ENDOG = ('AutoARIMA', 'STL', 'VAR')
+FORECASTERS = FORECAST_Y + FORECAST_ENDOG + ('ProphetForecaster',)
 
 
 def applicable(public, methods):
@@ -75,7 +85,27 @@ def estimator_checks(recorder, public, methods):
                 overrides['reg_param'] = .5
             if name == 'SparseRandomProjection':
                 overrides['compute_inverse_components'] = True
-            obj = factory(public, **overrides)
+            if name == 'VAR':
+                overrides['endog'] = X[:, :2]   # eight observations of two series for one lag and an intercept
+            if name == 'TSNE':
+                overrides['perplexity'] = 2.0   # must be below the eight fixture rows
+            if name == 'ParallelForestPredictor':
+                from . import RandomForestClassifier
+                overrides.update(estimator=RandomForestClassifier(n_estimators=2, max_depth=2, random_state=7)
+                                 .fit(X, labels), devices=(0,))
+            if name == 'ReferenceShardedNeighbors':
+                from . import KNeighborsClassifier
+                overrides['estimator'] = KNeighborsClassifier(n_neighbors=2, algorithm='brute').fit(X, labels)
+            # Layers built from their own shape arguments: the fixture rows are (C, H, W) = (1, 2, 2) images
+            # or (C, L) = (1, 4) signals.
+            if name == 'CNNClassifier':
+                obj = resolve(public)(input_shape=(1, 2, 2), conv_channels=(2,), kernel_size=1, pool_size=1,
+                                      batch_size=4, max_iter=1, random_state=7, numeric_mode='identical')
+            elif name in ('Conv1d', 'Conv2d'):
+                obj = resolve(public)(1, 1, 1, input_shape=(1, 4) if name == 'Conv1d' else (1, 2, 2),
+                                      numeric_mode='identical')
+            else:
+                obj = factory(public, **overrides)
         return obj
 
     def data():
@@ -94,27 +124,55 @@ def estimator_checks(recorder, public, methods):
             return X.reshape(8,2,2), y
         if name in ('CCA', 'PLSCanonical', 'PLSRegression'):
             return X, np.column_stack([target, target*.5])
-        if name in ('Louvain',):
+        if name in ('Louvain', 'PageRank'):
             return np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]],np.float32), None
+        if name == 'Cholesky':
+            # symmetric positive definite: X'X plus the identity
+            return X.T @ X + np.eye(X.shape[1], dtype=np.float32), None
         if name in ('GridSearchCV', 'RandomizedSearchCV'):
             return X, labels
         if name in ('GradientBoosting','ExperimentalTwoLevelFeatureFreq','RFE'):return X,labels
         return X, y
+
+    def forecast_fit(m):
+        # the forecasters' own fit forms; returns what fit returns
+        if name in FORECAST_Y:
+            # GARCH: zero-centred returns, at least ten observations
+            series = (np.concatenate([target, target[::-1]]) - target.mean() if name == 'GARCH' else target)
+            return m.fit(series)
+        if name == 'AutoARIMA':
+            m.search(d=[0], D=[0], p=[1], q=[0], P=[0], Q=[0], fit_intercept=False)
+            return m.fit()
+        if name == 'VAR':
+            return m.fit(maxlags=1)
+        if name == 'STL':
+            return m.fit()
+        return m.fit(np.arange(8, dtype=np.float64), target)   # ProphetForecaster: times in days, sorted
 
     def fit():
         nonlocal fitted
         m = model()
         if not fitted:
             x, y = data()
-            if name=='OrderedRMSE':
+            if name in FORECASTERS:
+                forecast_fit(m)
+            elif name=='OrderedRMSE':
                 m.fit(x,y,permutation=np.arange(len(x),dtype=np.int64))
-            else:
+            elif hasattr(m, 'fit'):   # wrappers of an already fitted estimator have no fit
                 m.fit(x) if y is None else m.fit(x, y)
             fitted = True
         return m
 
     def consumed(m):
         x, _ = data()
+        if name in ('ARIMA', 'AutoARIMA'):
+            return m.forecast(2)
+        if name == 'GARCH':
+            return m.forecast(2)
+        if name == 'ProphetForecaster':
+            return m.predict(np.arange(8, 10, dtype=np.float64))
+        if name in FORECAST_Y:
+            return m.predict(2)
         if hasattr(m, 'predict'):
             return m.predict(x)
         if hasattr(m, 'transform'):
@@ -123,6 +181,19 @@ def estimator_checks(recorder, public, methods):
             return m.labels_
         if hasattr(m, 'kneighbors'):
             return m.kneighbors(x)
+        # fitted outputs of the estimators with no predict or transform
+        if hasattr(m, 'embedding_'):
+            return m.embedding_
+        if hasattr(m, 'search'):
+            return m.search(x)
+        if hasattr(m, 'radius_neighbors'):
+            return m.radius_neighbors(x)
+        if hasattr(m, 'mahalanobis'):
+            return m.mahalanobis(x)
+        if hasattr(m, 'score_samples'):
+            return m.score_samples(x)
+        if hasattr(m, 'similar_items'):
+            return m.similar_items(0, N=2)
         raise ValueError('fixture needs explicit fitted output: '+public)
 
     def check(method):
@@ -134,6 +205,15 @@ def estimator_checks(recorder, public, methods):
             result = operation(x) if y is None else operation(x,y)
             fitted = True
             return result
+        if method == 'fit' and name in FORECASTERS:
+            result = forecast_fit(m)
+            fitted = True
+            # STL, VAR (statsmodels form) return their results; the others return the model
+            return result if name in ('STL', 'VAR') else consumed(m)
+        if method == 'fit' and name == 'OrderedRMSE':
+            assert m.fit(x, y, permutation=np.arange(len(x), dtype=np.int64)) is m
+            fitted = True
+            return consumed(m)
         if method in ('fit', 'partial_fit'):
             operation = getattr(m, method)
             result = operation(x) if y is None else operation(x,y)
@@ -147,6 +227,14 @@ def estimator_checks(recorder, public, methods):
                 assert 'classification loss' in str(error) or "fitted with 'RMSE'" in str(error)
                 return {'classification_only_refused':True}
             raise AssertionError('RMSE admitted classification-only prediction')
+        if method == 'score' and name == 'EllipticEnvelope':
+            return m.score(x, (labels*2-1).astype(np.int64))   # accuracy against inlier 1 / outlier -1 labels
+        if method == 'inverse_transform' and name == 'GaussianRandomProjection':
+            # its own instance: the inverse needs compute_inverse_components=True, which the shared
+            # instance's other endpoints (its __getstate__) do not carry
+            g = factory(public, compute_inverse_components=True)
+            g.fit(x, y)
+            return g.inverse_transform(g.transform(x))
         if method == 'score':
             if name in ('GaussianMixture','BayesianGaussianMixture','KernelDensity','FactorAnalysis'):
                 return m.score(x)

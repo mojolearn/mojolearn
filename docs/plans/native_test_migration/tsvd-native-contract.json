@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "dependency": "7928f536d074c07f86596702bf8daf0770ce78af",
+  "status": "uncompiled/unrun; source review only",
+  "fixtures": 32,
+  "suite": "checks/native_tests/tsvd_contract_suite.mojo",
+  "coverage": {
+    "metadata": 1,
+    "fit_boolean_route_fold_variants": 8,
+    "query_boolean_lease_variants": 8,
+    "lease_token_and_error": 2,
+    "native_record_copies": 2,
+    "malformed_envelopes_and_result_span": 11
+  },
+  "parallelism": "all independent fixtures use host_parallelize",
+  "oracle": "test-only distinct literal ABI slots/statuses; no numerical implementation",
+  "kernel_changes": false,
+  "identity_run": false,
+  "deletions": "Nothing identified in this additive ABI fixture chunk; numerical Python migration follows.",
+  "command": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_contract.mojo"
+}

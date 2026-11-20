@@ -14,8 +14,8 @@ variable and is always `n_rows` in rung 1.
 THE CUB CALLS AND WHAT STANDS IN (svm/README.md section 2):
 
     cub::DeviceRadixSort::SortPairs(f, f_idx)   -> twiddle_keys_kernel +
-                                                   gbdt radix_sort.mojo::
-                                                   launch_radix_sort_bins
+                                                   core/fast_radix_sort.mojo::
+                                                   fast_radix_sort_pairs_u32
                                                    (stable LSD, 32 bits)
     thrust::copy(permutation_iterator(avail))   -> gather_u8_by_u32_kernel
     cub::DeviceSelect::Flagged                  -> SelectScratch.select_*
@@ -37,7 +37,6 @@ THE CUB CALLS AND WHAT STANDS IN (svm/README.md section 2):
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from svm.impl.fast_ws_select import (
     FWS_ANY,
@@ -50,13 +49,12 @@ from svm.impl.fast_ws_select import (
     fws_pick_kernel,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
-from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from core.device_zero import enqueue_fill_n
 from svm.checks.device_select import (
     SEL_TPB,
     SelectScratch,
     copy_i32_kernel,
-    fill_u8_kernel,
     gather_u8_by_u32_kernel,
     range_i32_kernel,
     twiddle_keys_kernel,
@@ -80,22 +78,23 @@ comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
 #: the working-set sort takes `core/fast_radix_sort.mojo`
 #: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
 #: Both are stable sorts by the full key, so the order is the same.
-#: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
 #: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD ran
 #: the one-bit sort (128 launches per working-set pick) and the host-counted
 #: gathers (a drain per gather). Same stable sort by the full key, same
 #: picks, so no bit moves. `fws_pick_kernel` ballots at the hardware wave
 #: width (AMD wave64).
-comptime FAST_WS_SORT = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SVM_FAST_SORT_OFF (unmeasured old path beside the Apple fast default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 7684b61797.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_FAST_SORT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_WS_SORT = True
 #: FAST on Apple: the three gathers keep their counts on the device
 #: (`svm/impl/fast_ws_select.mojo`), no drain per gather. Same working set.
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
+# TOMBSTONE: MOJOLEARN_SVM_WS1024 (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a4bd9fe9ae.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_WS1024.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it
@@ -103,10 +102,9 @@ over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
 SVM_WS_BIG_MIN training rows: the larger set needs at least SVM_WS_MAX rows
 to fill (kernel limit, not a board window)."""
-#: LEGACY, default OFF: the old floor 8192 rows sat just below the board's
-#: 10k kernel-fit rows. Removed as benchmark-tuned on 2026-10-04; the new
-#: floor (SVM_WS_MAX rows) is UNMEASURED.
-comptime SVM_WS_BIG_MIN = 8192 if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() else SVM_WS_MAX
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SVM_WS (old path, EXP:1344 NEUTRAL, not merged; the SVM_WS_MAX floor is the default) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ab40e72f25.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SVM_WS.patch; record in docs/TOMBSTONES.md.
+comptime SVM_WS_BIG_MIN = SVM_WS_MAX
 
 
 def svm_ws_cap(n_train: Int) -> Int:
@@ -130,7 +128,7 @@ def twiddle_keys_reversed_kernel(
     to the stable sort in REVERSED position (`p = n - 1 - i`), so equal
     keys come out in DESCENDING index order. Correct indices, wrong tie
     order: exactly the defect the gate is for."""
-    from std.gpu import block_dim, block_idx, thread_idx
+    from max.gpu import block_dim, block_idx, thread_idx
     from std.memory import bitcast
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -163,7 +161,6 @@ struct WorkingSet(Movable):
     var tmp_keys: DeviceBuffer[DType.uint32]
     var tmp_vals: DeviceBuffer[DType.uint32]
     var sort_offsets: DeviceBuffer[DType.int32]
-    var sort_block_sums: DeviceBuffer[DType.int32]
     var idx_tmp: DeviceBuffer[DType.int32]
     var available: DeviceBuffer[DType.uint8]
     var available_sorted: DeviceBuffer[DType.uint8]
@@ -207,15 +204,11 @@ struct WorkingSet(Movable):
         self.f_idx_sorted = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_keys = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_vals = ctx.enqueue_create_buffer[DType.uint32](nt)
-        # FAST_WS_SORT reuses this as its (digit, tile) count table
+        # the sort's (digit, tile) count table
         var n_off = nt
-        comptime if FAST_WS_SORT:
-            if frs_counts_len(nt) > n_off:
-                n_off = frs_counts_len(nt)
+        if frs_counts_len(nt) > n_off:
+            n_off = frs_counts_len(nt)
         self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n_off)
-        self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
-            (nt + REORDER_BLOCK - 1) // REORDER_BLOCK
-        )
         self.idx_tmp = ctx.enqueue_create_buffer[DType.int32](nt)
         self.available = ctx.enqueue_create_buffer[DType.uint8](nt)
         self.available_sorted = ctx.enqueue_create_buffer[DType.uint8](nt)
@@ -309,17 +302,12 @@ struct WorkingSet(Movable):
                 self.f_idx_sorted.unsafe_ptr(), Int32(nt),
                 grid_dim=_grid(nt), block_dim=SEL_TPB,
             )
-        comptime if FAST_WS_SORT:
-            fast_radix_sort_pairs_u32(
-                ctx, nt, self.f_keys, self.f_idx_sorted,
-                self.tmp_keys, self.tmp_vals, self.sort_offsets,
-            )
-        else:
-            launch_radix_sort_bins(
-                ctx, nt, 0, 32, self.f_keys, self.f_idx_sorted,
-                self.tmp_keys, self.tmp_vals, self.sort_offsets,
-                self.sort_block_sums,
-            )
+        # The one-bit sort that stood in the else of FAST_WS_SORT (true in
+        # both tiers, so never compiled) and its block-sums buffer are gone.
+        fast_radix_sort_pairs_u32(
+            ctx, nt, self.f_keys, self.f_idx_sorted,
+            self.tmp_keys, self.tmp_vals, self.sort_offsets,
+        )
 
         comptime if FAST_WS_SELECT:
             self._fast_select(ctx, alpha, y, C, n_already_selected)
@@ -347,10 +335,7 @@ struct WorkingSet(Movable):
         # In case we could not find enough elements, then we just fill using
         # the still available elements.
         if n_already_selected < self.n_ws:
-            ctx.enqueue_function[fill_u8_kernel](
-                self.available.unsafe_ptr(), UInt8(1), Int32(nt),
-                grid_dim=_grid(nt), block_dim=SEL_TPB,
-            )
+            enqueue_fill_n(ctx, self.available, nt, UInt8(1))
             n_already_selected += self.gather_available(
                 ctx, n_already_selected, self.n_ws - n_already_selected, True
             )

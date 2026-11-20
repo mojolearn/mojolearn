@@ -4,10 +4,9 @@
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
-import sys
+import sys as _sys
 
 PROTOCOL = "mojolearn.cross-vendor.v1"
-_TINY = 2.0 ** -126  # smallest normal float32
 
 __all__ = ["ordered_fold", "fold_pair", "state_hash", "Coordinator", "Worker", "CrossVendorMismatch", "PROTOCOL", "BatchFeed", "LearningRateTable"]
 
@@ -18,16 +17,15 @@ class CrossVendorMismatch(RuntimeError):
 
 from ._backend import load_host_module as _load_host_module
 from ._array import Array as _Array
-from ._buffer import _native as _buffer_native
+from ._native_table_key import connected_key as _connected_key
 _native_cross_vendor = _load_host_module("_mojolearn_tokenizer_host").cross_vendor_call
-_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _buffer_native("fold_pair_f32")))
+# glue: once at import, the base image's native table key; the native fold
+# calls that image's fold_pair_f32 through its parallel table, not a door.
+_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _connected_key("_mojolearn", required=True)))
 
 
 # ------------------------------------------------------------ the fold
 
-
-def _f32(payload):
-    return _native_cross_vendor("f32", (payload,))
 
 
 def fold_pair(total, shard):
@@ -51,16 +49,6 @@ def trainer_state_hash(trainer):
 
 
 # ------------------------------------------------------------ framing
-def _send(sock, header, payload=b""):
-    return _native_cross_vendor("send", (sock, header, payload))
-
-
-def _recv(sock, max_payload):
-    return _native_cross_vendor("receive", (sock, max_payload))
-
-
-def _recv_exact(sock, n):
-    return _native_cross_vendor("receive_exact", (sock, n))
 
 
 _cross_vendor_errors = {"mismatch": CrossVendorMismatch}
@@ -163,6 +151,23 @@ class Worker:
 
 # ------------------------------------------------------------ command line
 def main(argv=None):
+    """Run the ``python -m mojolearn.cross_vendor`` command line.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        The arguments after the program name. The default reads ``sys.argv``.
+
+    Returns
+    -------
+    int
+        The process exit status.
+
+    Examples
+    --------
+    >>> from mojolearn import cross_vendor
+    >>> cross_vendor.main(["coordinator", "--workers", "2", "--shards", "4", "--steps", "100"])  # doctest: +SKIP
+    """
     return _native_cross_vendor("main", (argv,), _cross_vendor_errors)
 
 
@@ -173,4 +178,4 @@ _native_cross_vendor("worker_initialize", (_ParallelByte, BatchFeed, LearningRat
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _sys.exit(main())

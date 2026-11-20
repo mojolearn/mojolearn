@@ -1,0 +1,25 @@
+diff --git a/isolation_forest/impl/isolation_tree_builder.mojo b/isolation_forest/impl/isolation_tree_builder.mojo
+index 0cf5b061f6..24490ef883 100644
+--- a/isolation_forest/impl/isolation_tree_builder.mojo
++++ b/isolation_forest/impl/isolation_tree_builder.mojo
+@@ -1173,9 +1173,17 @@ def traverse_global_tree(
+     return Float32(0.0)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AFT_F11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f53beacaab.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_F11.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_IF_PATH_ROWS = 1
++# AFT F11: two independent rows/lane reuse each tree offset and the tree
++# loop; adjacent lanes retain adjacent rows within each stripe. Two FP32
++# accumulators bound register growth, and each still folds trees in order.
++# Used by both single-owner and tree-sharded traversal; score epilogues are
++# unchanged. experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed
++# evidence; uncompiled/unverified/unmeasured.
++comptime AFT_IF_PATH_ROWS = 2 if (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_AFT_F11"]()
++) else 1
+ 
+ 
+ def compute_path_lengths_global_kernel(

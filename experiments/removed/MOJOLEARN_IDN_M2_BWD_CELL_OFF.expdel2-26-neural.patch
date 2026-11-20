@@ -1,0 +1,38 @@
+diff --git a/mamba/host/gen/mamba2_ssd_backward.mojo b/mamba/host/gen/mamba2_ssd_backward.mojo
+index 5e4755eff0..9c1262560f 100644
+--- a/mamba/host/gen/mamba2_ssd_backward.mojo
++++ b/mamba/host/gen/mamba2_ssd_backward.mojo
+@@ -48,8 +48,8 @@ comptime M2_SSD_BWD_TPB = 128
+ # lane nr-mamba (2026-10-04), roadmap B6. IDENTICAL only; every column
+ # (NVIDIA, AMD, Apple and the generated host column) runs this same source.
+ #
+-# IDN_M2_BWD_CELL (default ON in IDENTICAL; its OFF switches were deleted
+-# 2026-11-15, see the tombstones below): the conv backward's per-cell
++# IDN_M2_BWD_CELL (default ON; `-D MOJOLEARN_IDN_M2_BWD_CELL_OFF` or
++# `-D MOJOLEARN_IDN_ALL_OFF` restores main): the conv backward's per-cell
+ # parts (d_conv, d_in) and the S9/S10 per-cell parts (d_dt, d_dtraw) run one
+ # thread per cell, where main ran one thread per channel (conv, over B x L)
+ # or per head (nh threads in all, over B x T). Each cell is the same chain,
+@@ -66,12 +66,10 @@ comptime M2_SSD_BWD_TPB = 128
+ # upstream reads them (the optimizer state follows them). The tile height
+ # is a constant, not a shape rule.
+ # ---------------------------------------------------------------------------
+-# TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (DELETE-OLD-PATH, no A/B for the old path) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.expdel2-26-neural.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
+ comptime IDN_M2_BWD_CELL = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_M2_BWD_CELL_OFF"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
+     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
+@@ -84,6 +82,7 @@ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
+ comptime IDN_M2_GRAD_LEAF128 = (
+     IDN_M2_BWD_FOLD_TILED
+     and IDN_M2_GRAD_FOLD_ARM == 2
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
+ 

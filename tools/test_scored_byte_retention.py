@@ -297,3 +297,23 @@ def test_tree_inference_bad_evidence_does_not_hide_or_replace_other_cells(tmp_pa
     assert set(missing) == {("infer", "ours", "test")}
     assert refs[("fit", "ours")][0]["output"]
     assert len(refs[("infer", "ours", "large")]) == 2
+
+
+def test_output_omitted_over_receipt_cap_is_a_gap_not_a_retention_failure(tmp_path):
+    directory, rec, members = capture(tmp_path)
+    cell = rec["cells"][0]
+    cell.update(times_ms=[1.25], median_ms=1.25)
+    receipt = cell["state_receipts"][0]
+    Path(receipt["retained_output"]["path"]).unlink()
+    receipt["retained_output"] = {"omitted": True, "bytes": 536870912, "limit": 268435456,
+                                  "reason": "over MOJOLEARN_RECEIPT_OUTPUT_MAX_BYTES"}
+    members = {}
+    E.seal(dict(out=str(tmp_path), measurement_inventory={}, measurement_source={"status": "local"},
+                evidence_r2=False), directory, dict(source={}, dataset={"identity": "input-sha"}, hardware={}), rec)
+    # the fixture has no worker metadata (a "metadata" failure, retained, never blocking); no retention failure
+    assert rec.get("evidence_failure_kind") != "retention"
+    assert not E.blocks_campaign(rec)
+    row = cell["measurement"]["scored_state"]["receipts"][0]
+    assert row["output"]["status"] == "omitted" and row["output"]["canonical_sha256"] == receipt["output_sha256"]
+    assert "retained_outputs" not in cell["measurement"]
+    assert cell["times_ms"] == [1.25]

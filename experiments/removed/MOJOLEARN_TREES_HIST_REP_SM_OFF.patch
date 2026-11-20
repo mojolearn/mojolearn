@@ -1,0 +1,18 @@
+diff --git a/gbdt/trees_small_switches.mojo b/gbdt/trees_small_switches.mojo
+index 15260e2d42..ff75220689 100644
+--- a/gbdt/trees_small_switches.mojo
++++ b/gbdt/trees_small_switches.mojo
+@@ -62,9 +62,10 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ #   categorical taxicat  AMD 10988 -> 10818 (0.984x); NV not measured.
+ #   10 faster / 0 slower cells, geometric mean 0.927x. Quality SAME where
+ #   scored (rank quality pending); no bits change (Int32 sums).
+-# TOMBSTONE: MOJOLEARN_TREES_HIST_REP_SM_OFF (DELETE-OLD-PATH, rule e, EXP:1640 PROMOTED: the device arm above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 70fbbc4c47.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM_OFF.patch
+-comptime HIST_REP_SM_ON = _IDN
++# Arms kept for the grid: `-D MOJOLEARN_TREES_HIST_REP_SM_OFF` (pinned32, the
++# old default), `=64`, `=1` (device x4); `=32` is the pinned target through
++# this route.
++comptime HIST_REP_SM_ON = _IDN and not is_defined["MOJOLEARN_TREES_HIST_REP_SM_OFF"]()
+ #: Arm values: the device's own SM/CU count (the `sm_count` the launcher was
+ #: given) at 2 or at 4 blocks per SM.
+ comptime HIST_REP_DEVICE = 0

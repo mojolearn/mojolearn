@@ -146,8 +146,8 @@ def mi_cc_unit(t: Int, f: FP, q: IP):
     var yi = ld(f, p(q, 3) + i)
     var sxi = _sec(f, zs, i * d + c)
     var syi = _sec(f, ys, i)
-    var bp = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
-    var bs = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bp = Array[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bs = Array[Float32, MAX_K](fill=Float32(3.4028235e38))
     for j in range(n):
         if j == i:
             continue
@@ -201,8 +201,8 @@ def _cd_term(
     var kl = k if k < cnt - 1 else cnt - 1
     var xi = ld(f, zb + i * zs)
     var si = _sec(f, sb, i * zs)
-    var bp = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
-    var bs = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bp = Array[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bs = Array[Float32, MAX_K](fill=Float32(3.4028235e38))
     for j in range(n):
         if j == i or Int(ld(f, lb + j * ls)) != li:
             continue

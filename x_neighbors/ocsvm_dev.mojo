@@ -28,7 +28,7 @@ State (int32 `st`): it, stop, go, the pending (i, j); float32 `sf` the
 pending (alpha_i, alpha_j). Each launch reads only the slots the launch
 before it wrote. The host reads `st` once per OCSVM_CHUNK iterations, the
 convergence check."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
@@ -41,8 +41,7 @@ from x_neighbors.items import (
     ocsvm_rho_part_item, ocsvm_rho_level_item, ocsvm_rho_level_items, ocsvm_rho_levels_done,
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_neighbors.ocsvm_init import (
     XN_OCSVM_DEV_INIT, oci_chunks, oci_part_item, oci_scan_item, oci_alpha_item, oci_nu_hi, oci_nu_lo,
@@ -71,33 +70,41 @@ comptime OCSVM_CHUNK = 64
 #   MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256: 256 iterations between two reads
 #     of the stop flag, not 64 (fewer synchronizes; the iterations past the
 #     stop are no-op launches, as they are now).
-comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # All three are the FAST + Apple default since the M3 A/B (n=1, quality
 # identical): ocsvm taxi 375.7 -> 65.0 ms (RES+2L+CHUNK256; RES alone -77%).
-# -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / _2L_OFF / _CHUNK256_OFF turn them
-# off; the old -D names stay harmless.
-comptime OCSVM_CLS2_RES = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF"]()
+# The old -D names stay harmless. None of the three has a rollback:
+# TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 976cce176d.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OCSVM_CLS2_RES = _OC_FA
 # lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor. The three
 # switches above change no bit (same Q words, same maxima under the same
 # total order), so IDENTICAL takes them too:
-#   MOJOLEARN_IDN_OCSVM_RES (default ON; -D MOJOLEARN_IDN_OCSVM_RES_OFF): the
+#   MOJOLEARN_IDN_OCSVM_RES (the IDENTICAL path, no rollback): the
 #     Gram stays on the device (no n x n download and upload around the
 #     solve); the binding registers `x_neighbors_ocsvm_resident_idn`.
-#   MOJOLEARN_IDN_OCSVM_2L (default ON; -D MOJOLEARN_IDN_OCSVM_2L_OFF): two
+#   MOJOLEARN_IDN_OCSVM_2L (the IDENTICAL path, no rollback): two
 #     launches per SMO iteration, not three.
-#   MOJOLEARN_IDN_OCSVM_CHUNK256 (CANDIDATE, default OFF; -D
-#     MOJOLEARN_IDN_OCSVM_CHUNK256 turns it on): 256 iterations between two
-#     reads of the stop flag, not 64.
-# All off under MOJOLEARN_IDN_ALL_OFF.
-comptime _OC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime OCSVM_IDN_RES = _OC_IDN and not is_defined["MOJOLEARN_IDN_OCSVM_RES_OFF"]()
+#   MOJOLEARN_IDN_OCSVM_CHUNK256 (a never-measured opt-in candidate: 256
+#     iterations between two stop-flag reads) is deleted; IDENTICAL reads
+#     the flag every 64.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _OC_IDN
+# TOMBSTONE: MOJOLEARN_IDN_OCSVM_RES_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9b4369322e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_RES_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OCSVM_IDN_RES = _OC_IDN
 comptime OCSVM_X_ON = OCSVM_CLS2_RES or OCSVM_IDN_RES
-comptime OCSVM_CLS2_2L = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()) or (
-    _OC_IDN and not is_defined["MOJOLEARN_IDN_OCSVM_2L_OFF"]()
-)
-comptime OCSVM_CLS2_CHUNK256 = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()) or (
-    _OC_IDN and is_defined["MOJOLEARN_IDN_OCSVM_CHUNK256"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_OCSVM_2L_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 8930967ba7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_2L_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF (old path, EXP:357 KEEP FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at b69e215f3d.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OCSVM_CLS2_2L = _OC_FA or _OC_IDN
+# TOMBSTONE: MOJOLEARN_IDN_OCSVM_CHUNK256 (unmeasured opt-in IDENTICAL arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9cf7afdb28.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_CHUNK256.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF (old path, EXP:358 KEEP FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 0dffcf5903.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch; record in docs/TOMBSTONES.md.
+comptime OCSVM_CLS2_CHUNK256 = _OC_FA
 comptime OCSVM_CHUNK_RUN = 256 if OCSVM_CLS2_CHUNK256 else OCSVM_CHUNK
 
 comptime S_IT = 0
@@ -632,7 +639,7 @@ def op_ocsvm_x(
     formed on the device by the kernel the Python side would have run
     (`kernel_kernel`): the same words, never downloaded."""
     comptime if not OCSVM_X_ON:
-        raise Error("x_neighbors: op_ocsvm_x is off in this build (MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / MOJOLEARN_IDN_OCSVM_RES_OFF)")
+        raise Error("x_neighbors: op_ocsvm_x is off in this build (neither FAST + Apple nor IDENTICAL)")
     else:
         var ctx = xn_ctx()
         var d_x = _buf(ctx, x, n * d, True)

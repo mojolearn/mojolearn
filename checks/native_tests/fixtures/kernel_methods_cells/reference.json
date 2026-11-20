@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "numpy": "2.5.3",
+  "scikit_learn": "1.9.1",
+  "generator_sha256": "16930f7268ad1dea111e33bba4909ea2fa8e000a76abb5e858671105b3a6faec",
+  "pairwise_source_sha256": "5dea05d1237d57d62f5235af78a3dec1b4f27c239c0adc3c2088a7eaf409600e",
+  "origin": "test_km_kernels._data80x6 seed4; first80input rows byte-identical",
+  "oracle": "sklearn pairwise float64 on recorded float32 inputs; no Mojolearn execution",
+  "records": [
+    {
+      "path": "original-input.f32",
+      "sha256": "a49cce2e662a7d41fa7c1c0c9bb3330539247bfd9f786a8a56adfc80a5e9b5d8",
+      "shape": [
+        81,
+        6
+      ],
+      "dtype": "<f4"
+    },
+    {
+      "path": "edges-input.f32",
+      "sha256": "7865d6cd8b97b11cd1985fc23d2632335a2659bd1d64654da239345a41fe782c",
+      "shape": [
+        7,
+        4
+      ],
+      "dtype": "<f4"
+    },
+    {
+      "path": "negative-input.f32",
+      "sha256": "d2285a51b847cf37adefe5284b600ef0fb744a4866ddc2c110b93e898b602512",
+      "shape": [
+        4,
+        2
+      ],
+      "dtype": "<f4"
+    },
+    {
+      "path": "original-cosine.f64",
+      "sha256": "4b6826872b44dc667cac2d26c90ca396b7b5d26a77469aaff84946e3d853f919",
+      "shape": [
+        81,
+        81
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "original-chi2.f64",
+      "sha256": "b31b40dc441ba8c3e686fcfeda7f1705a376202ace2ba5c78e47863ca397fe55",
+      "shape": [
+        81,
+        81
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "original-chi2-g03.f64",
+      "sha256": "e904a32a3ad1e78917cdb3d3e55d1ea04f54fa5db401da655d6b271f6f7dbb3f",
+      "shape": [
+        81,
+        81
+      ],
+      "dtype": "<f8",
+      "gamma": 0.3
+    },
+    {
+      "path": "original-additive-chi2.f64",
+      "sha256": "17bdf292cea7d9f21d390fe2ca202c6331fca766609c56518a6a56d32581ef4b",
+      "shape": [
+        81,
+        81
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "edges-cosine.f64",
+      "sha256": "74871cabe8cfca4aaa95c41bc85ee0d3ca500d7af3b4ae061a62a06a19427fe8",
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "edges-chi2.f64",
+      "sha256": "368d14b10b1bf9cbb0e61faab96a064736e5ca3a6c5cbd321b41c6f2c0691e13",
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "edges-chi2-g03.f64",
+      "sha256": "c5892a1dde1b35a01c3507ad2584b0d558fc7ad07b39eb1ab9dfe6ea790d8b38",
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "<f8",
+      "gamma": 0.3
+    },
+    {
+      "path": "edges-additive-chi2.f64",
+      "sha256": "5b18ceff7d13b743ee5760ad8c50906ba7ba7ce45aa7a18521ea74b636a2e0ce",
+      "shape": [
+        7,
+        7
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    },
+    {
+      "path": "negative-cosine.f64",
+      "sha256": "f9580cfe308caf0a8189b27315a9578fd653d68731e935b1d0457ff417f517ae",
+      "shape": [
+        4,
+        4
+      ],
+      "dtype": "<f8",
+      "gamma": 1.0
+    }
+  ],
+  "nystroem": {
+    "training_shape": [
+      80,
+      6
+    ],
+    "components": 12,
+    "seed": 1,
+    "atol": 0.005,
+    "rtol": 1e-07
+  },
+  "parallel_workers": 10
+}

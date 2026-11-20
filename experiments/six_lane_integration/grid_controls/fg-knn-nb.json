@@ -3,84 +3,8 @@
  "lane": "fg-knn-nb",
  "branch": "lane/fg-knn-nb",
  "head": "3b59db56a",
- "controls": {
-  "knn_scratch_pool_off": {
-   "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_KNN_SCRATCH_POOL_OFF"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "neighbors/impl/detail/knn_brute_force.mojo:KNN_SCRATCH_POOL",
-    "neighbors/estimator.mojo:_knn_search_on_device_index"
-   ],
-   "binding": [
-    "_mojolearn",
-    "_mojolearn_estimators",
-    "_mojolearn_hdbscan",
-    "_mojolearn_metrics",
-    "_mojolearn_x_ann",
-    "_mojolearn_ivf",
-    "_mojolearn_x_cluster",
-    "_mojolearn_estimators_host",
-    "_mojolearn_hdbscan_host",
-    "_mojolearn_metrics_host",
-    "_mojolearn_x_ann_host",
-    "_mojolearn_x_cluster_host"
-   ],
-   "bits_change": false,
-   "status": "default K4; confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): the scratch pool stays the default",
-   "note": "Rollback arm: per-call allocation of queries, norms, dist_tile, radix pairs, outputs and pinned readback on every resident search. Default: exact-length views of the handle's high-water pool. CONFIRMED 2026-10-10: the _OFF arm is slower, knn istella NV 1.02x / AMD 1.02x, taxi NV 1.05x / AMD 1.06x; recall and hashes unchanged."
-  },
-  "xprep_arena_pool_off": {
-   "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XPREP_ARENA_POOL_OFF"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "core/device_store.mojo:STORE_SLOT_POOL",
-    "x_prep/device.mojo:X_PREP_POOL_ARENA_IDN"
-   ],
-   "binding": [
-    "_mojolearn_x_prep",
-    "_mojolearn_x_metrics",
-    "_mojolearn_x_prep_host",
-    "_mojolearn_x_metrics_host"
-   ],
-   "bits_change": false,
-   "status": "default G2 CONFIRMED (post-merge A/B, lane postmerge-act-2)",
-   "note": "Rollback arm: fresh device arena per program and free-at-once store slots. Default (not FAST): exact-size pooled arena (core/device_pool.mojo, 2 GB idle cap) and spare slot buffers (2 GB idle cap). CONFIRMED 2026-10-09 (post-merge A/B, nv n0668 -> n0629, amd a1066 -> a1089): the _OFF arm is slower, gaussian-nb istella NV 1.12x / AMD 1.02x, taxi NV 1.38x / AMD 1.06x, same digests."
-  }
- },
- "algorithms": {
-  "classical:knn": {
-   "binding": "_mojolearn",
-   "route": "neighbors.py kneighbors -> knn_search_resident -> _knn_search_on_device_index (K4 pool) -> brute_force_knn_impl -> tiled_brute_force_knn (resident cache) -> smem/register distance tile + bound-compact | small-k | radix | block top-k + partial merges",
-   "controls": [
-    "knn_scratch_pool_off"
-   ],
-   "interaction_groups": [],
-   "notes": "Diagnostic first: one AMD build with -D MOJOLEARN_KNN_PHASE_TIMERS (existing, vendor-neutral) splits transpose/distance/select/merge/upload. K1 (legacy-schedule arm), K2, K3 and K5 were removed 2026-10-10 (lane postmerge-act-6): AMD takes the NVIDIA schedule."
-  },
-  "expanded:gaussian-nb": {
-   "binding": "_mojolearn_x_prep",
-   "route": "GaussianNB.fit: encode_labels (G5 device codes deleted) -> _Prog.put(X) -> DeviceCache.dev_put (G2 spare slot; one pageable copy, G1 pinned stage deleted; G3 host spans deleted) -> run_ranges (G2 pooled arena) -> stages -> download_ranges",
-   "controls": [
-    "xprep_arena_pool_off"
-   ],
-   "interaction_groups": [],
-   "notes": "Diagnostic first: MOJOLEARN_XPREP_PROFILE=1 (XPPHASE upload/alloc us). G4 (C61 arm 2) is classical-nbda.json c61_nb; G6 not in this lane."
-  }
- },
+ "controls": {},
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF",
@@ -116,6 +40,16 @@
    "define": "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX",
    "control": "knn_widek_radix",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): knn istella AMD 1.12x / NV 1.00x, knn taxi AMD 1.31x / NV 0.99x (slower on AMD), recall and hashes unchanged. K2 deleted from neighbors/impl/detail/knn_brute_force.mojo (KNN_WIDEK_RADIX, knn_widek_radix_applies and its two call sites); define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX.patch)."
+  },
+  {
+   "define": "MOJOLEARN_XPREP_ARENA_POOL_OFF",
+   "control": "xprep_arena_pool_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-03-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1787 CONFIRMED (the pool is the kept default); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 9907fddc3f; patch experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch."
+  },
+  {
+   "define": "MOJOLEARN_KNN_SCRATCH_POOL_OFF",
+   "control": "knn_scratch_pool_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-12-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): CONFIRMED by the fg2 A/B (the pool is the kept default; the _OFF arm was slower on both vendors); under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 465cb20ca0; patch experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch."
   }
  ]
 }

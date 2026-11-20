@@ -1,0 +1,115 @@
+diff --git a/tools/identical_wave_eigh_block_refusal.mojo b/tools/identical_wave_eigh_block_refusal.mojo
+index 2d9e4b4330..a1ceb031c2 100644
+--- a/tools/identical_wave_eigh_block_refusal.mojo
++++ b/tools/identical_wave_eigh_block_refusal.mojo
+@@ -6,6 +6,7 @@ its32x32 solve. GPU and host reject60sweeps; extra diagnostic120/180/240
+ also reject. The local tolerance and Frobenius guard are unchanged.
+ """
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from x_decomp.cells import F32Ptr
+ from x_decomp.rr import host_eigh_rr, RR_EIGH_SWEEPS, rr_off_fold, rr_fro_kept
+ from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use, rb_tol
+@@ -13,12 +14,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ def main() raises:
+     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 2d8c673dc0.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
++    comptime requested = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]()
+     # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d5f1bc4291.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+-    comptime assert not IDN_EIGH_BLOCK
+-    if rb_use(4096):
++    comptime disabled = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    comptime assert IDN_EIGH_BLOCK == (requested and not disabled)
++    if rb_use(4096) != (requested and not disabled):
+         raise Error("block route override precedence changed")
+     var bits: List[UInt32] = [
+         1073741824, 0, 0, 0, 0, 0, 0, 0,
+diff --git a/tools/identical_wave_eigh_centered_pivot.mojo b/tools/identical_wave_eigh_centered_pivot.mojo
+index 88a1e0dfd8..0d5cb4855c 100644
+--- a/tools/identical_wave_eigh_centered_pivot.mojo
++++ b/tools/identical_wave_eigh_centered_pivot.mojo
+@@ -6,6 +6,7 @@ its32x32 solve. GPU and host reject60sweeps; extra diagnostic120/180/240
+ also reject. The local tolerance and Frobenius guard are unchanged.
+ """
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from x_decomp.cells import F32Ptr
+ from x_decomp.rr import host_eigh_rr, RR_EIGH_SWEEPS, rr_off_fold, rr_fro_kept
+ from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use, rb_tol, rb_gather_cell
+@@ -13,12 +14,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ def main() raises:
+     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 2d8c673dc0.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
++    comptime requested = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]()
+     # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d5f1bc4291.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+-    comptime assert not IDN_EIGH_BLOCK
+-    if rb_use(4096):
++    comptime disabled = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    comptime assert IDN_EIGH_BLOCK == (requested and not disabled)
++    if rb_use(4096) != (requested and not disabled):
+         raise Error("block route override precedence changed")
+     var bits: List[UInt32] = [
+         1073741824, 0, 0, 0, 0, 0, 0, 0,
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 664b085db4..358e4c46cf 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -126,6 +126,7 @@ from x_decomp.exec_trait import Exec
+ from x_decomp.jacobi2 import dev_barrier
+ from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
++from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
+ # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (quarantined: observed convergence failure) device arm deleted 2026-11-09 by
+ # lane n9-decomp-eigh-families (`DevExec._eigh_block_on`, x_decomp/rr_block_device.mojo); the op refuses the define.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
+@@ -2864,9 +2865,14 @@ struct DevExec(Exec):
+         XD_EIGH_ONE_BLOCK_N the one-launch batched kernel with a batch of
+         one (`_eigh_batch_on`, one sync), above it the per-round multi-block
+         launches (`_eigh_par_dev`). An unconverged solve raises."""
+-        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c41dc34810.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
+-        # (the define is refused at build time in core/experiment_guards_decomposition.mojo)
++        comptime if IDN_EIGH_BLOCK:
++            # the quarantined block Jacobi (MOJOLEARN_IDN_EIGH_BLOCK_ON, DROPPED:
++            # observed convergence failure) has no device arm; refuse it by name
++            if rb_use(n):
++                raise Error(
++                    "eigh: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device arm;"
++                    " build without it"
++                )
+         if n <= XD_EIGH_ONE_BLOCK_N:
+             DevExec._eigh_batch_on(ctx, da, 1, n, dw, dv)
+             return
+diff --git a/x_decomp/eigh_ops_host.mojo b/x_decomp/eigh_ops_host.mojo
+index 60cc4753d2..e52d4382df 100644
+--- a/x_decomp/eigh_ops_host.mojo
++++ b/x_decomp/eigh_ops_host.mojo
+@@ -28,6 +28,7 @@ from decomposition.host.pca_oracle import host_sign_flip
+ from x_decomp.cells import F32Ptr
+ from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
+ from x_decomp.eigh_tridiag_host import host_eigh_td, host_td_solve
++from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
+ from x_decomp.rr_solve import host_eigh_rr_sorted
+ 
+ 
+@@ -83,8 +84,12 @@ def eigh_op_sym_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
+     is this after its triangle mirror."""
+     if n < 1:
+         raise Error("eigh_op_sym_host: n must be positive, got " + String(n))
+-    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c41dc34810.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
++    comptime if IDN_EIGH_BLOCK:
++        if rb_use(n):
++            raise Error(
++                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
++                " build without it"
++            )
+     comptime if EIGH_TD_IDN:
+         if n >= TD_MIN_N:
+             var work = List[Float32](capacity=n * n)

@@ -1,0 +1,24 @@
+diff --git a/core/forest_inference_model.mojo b/core/forest_inference_model.mojo
+index 3906c32bf0..d701f110c5 100644
+--- a/core/forest_inference_model.mojo
++++ b/core/forest_inference_model.mojo
+@@ -21,9 +21,7 @@ from core.forest_inference import (
+ from core.forest_inference_pool import PooledForest, forest_device_count
+ from core.neural_context import process_ctx
+ from core.admitted_finite_status import enqueue_finite_status
+-from core.forest_experiments import T36_FINITE_STAGE
+-# TOMBSTONE: MOJOLEARN_TREES_T34_CHUNK_FOLD (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 08081353e1.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T34_CHUNK_FOLD.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
++from core.forest_experiments import T34_CHUNK_FOLD, T36_FINITE_STAGE
+ # TOMBSTONE: MOJOLEARN_TREES_T38_FUSED_LABELS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 1caa34cfb3.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
+@@ -268,7 +266,7 @@ struct ResidentForest(Movable):
+         self.left = Optional[DeviceBuffer[DType.int32]]()
+         self.leaves = Optional[DeviceBuffer[DType.float32]]()
+         var device_count = forest_device_count()
+-        comptime if T36_FINITE_STAGE:
++        comptime if T34_CHUNK_FOLD or T36_FINITE_STAGE:
+             if device_count != 1:
+                 raise Error("selected TREES inference experiment requires one device; pooled integration remains pending")
+         comptime if FOREST_PACKED_NODES:

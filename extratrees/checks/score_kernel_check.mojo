@@ -92,12 +92,8 @@ THE ARMS
 
 from std.math import ceildiv
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-    size_of,
-)
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceContext
 
 from extratrees.checks.fixed_point import choose_scale, quantize
@@ -165,6 +161,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     SCORE_STATUS_UNVISITED,
     TPB_DEFAULT,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime TPB = TPB_DEFAULT
@@ -368,11 +365,11 @@ def _vendor() -> String:
     """Which GPU family this run used. A HOST-side check (`has_*`), not a
     target check (`is_*`): the kernel is one GPU-agnostic source and nothing in
     it branches on the vendor."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return "Apple"
-    elif has_nvidia_gpu_accelerator():
+    elif TARGET_HAS_NVIDIA_GPU:
         return "NVIDIA"
-    elif has_amd_gpu_accelerator():
+    elif TARGET_HAS_AMD_GPU:
         return "AMD"
     else:
         return "unknown vendor"
@@ -542,7 +539,7 @@ def check_objective[
     ctx.synchronize()
     for i in range(n_nodes):
         h_tree_ids.unsafe_ptr().unsafe_store(i, Int32(TREE_ID))
-    ctx.enqueue_copy(dst_buf=d_tree_ids, src_ptr=h_tree_ids.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_tree_ids, h_tree_ids)
     ctx.synchronize()
 
     var arms = List[Int32]()
@@ -653,15 +650,15 @@ def check_objective[
         var o_blocks = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
         var o_left = ctx.enqueue_create_host_buffer[DType.int32](n_acc_cells)
         var o_total = ctx.enqueue_create_host_buffer[DType.int32](n_acc_cells)
-        ctx.enqueue_copy(dst_buf=o_status, src_buf=d_status)
-        ctx.enqueue_copy(dst_buf=o_thresh, src_buf=d_thresh)
-        ctx.enqueue_copy(dst_buf=o_n_left, src_buf=d_n_left)
-        ctx.enqueue_copy(dst_buf=o_n_total, src_buf=d_n_total)
-        ctx.enqueue_copy(dst_buf=o_num, src_buf=d_num)
-        ctx.enqueue_copy(dst_buf=o_den, src_buf=d_den)
-        ctx.enqueue_copy(dst_buf=o_blocks, src_buf=d_blocks)
-        ctx.enqueue_copy(dst_buf=o_left, src_buf=d_acc_left)
-        ctx.enqueue_copy(dst_buf=o_total, src_buf=d_acc_total)
+        download_host_into[DType.int32](ctx, d_status, o_status)
+        download_host_into[DType.float32](ctx, d_thresh, o_thresh)
+        download_host_into[DType.int32](ctx, d_n_left, o_n_left)
+        download_host_into[DType.int32](ctx, d_n_total, o_n_total)
+        download_host_into[DType.int64](ctx, d_num, o_num)
+        download_host_into[DType.int64](ctx, d_den, o_den)
+        download_host_into[DType.int32](ctx, d_blocks, o_blocks)
+        download_host_into[DType.int32](ctx, d_acc_left, o_left)
+        download_host_into[DType.int32](ctx, d_acc_total, o_total)
         ctx.synchronize()
 
         var cells = List[ScoredCandidate]()
@@ -707,7 +704,6 @@ def check_objective[
     # Mojo frees a buffer at its LAST USE; the launches above read this one
     # and the loop's synchronize must come first.
     _ = d_tree_ids^
-    _ = h_tree_ids^
 
     var base = runs[0].copy()
 
@@ -1499,13 +1495,13 @@ def main() raises:
     for i in range(plan.n_blocks_dimx):
         wl_ptr[unsafe_offset=i] = plan.info[i]
 
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=s_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=s_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_colids, src_ptr=s_colids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_cls, src_ptr=s_cls.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_reg, src_ptr=s_reg.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=s_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wl, src_ptr=s_wl.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_data, s_data)
+    upload_host_into[DType.int32](ctx, d_row_ids, s_row_ids)
+    upload_host_into[DType.int32](ctx, d_colids, s_colids)
+    upload_host_into[DType.int32](ctx, d_cls, s_cls)
+    upload_host_into[DType.int32](ctx, d_reg, s_reg)
+    upload_host_into[DType.uint8](ctx, d_items, s_items)
+    upload_host_into[DType.uint8](ctx, d_wl, s_wl)
     ctx.synchronize()
 
     var failures = 0
@@ -1557,9 +1553,9 @@ def main() raises:
     var r_min = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     var r_max = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     var r_missing = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-    ctx.enqueue_copy(dst_buf=r_min, src_buf=d_min)
-    ctx.enqueue_copy(dst_buf=r_max, src_buf=d_max)
-    ctx.enqueue_copy(dst_buf=r_missing, src_buf=d_missing)
+    download_host_into[DType.float32](ctx, d_min, r_min)
+    download_host_into[DType.float32](ctx, d_max, r_max)
+    download_host_into[DType.int32](ctx, d_missing, r_missing)
     ctx.synchronize()
 
     print("")

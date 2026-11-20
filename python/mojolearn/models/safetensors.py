@@ -7,17 +7,12 @@ float32; `bf16="bits"` retains uint16 bits and returns a `BF16Weight` for a
 matrix. Other storage types are refused by name. Files are mapped lazily and
 may be closed explicitly or used with a context manager.
 """
-import json
-import mmap
-import os
-import struct
 
 from .. import lowbit as _lowbit
-from .._array import Array
+from .._array import Array as _Array
 from ..tokenizer import _binding
 
 _NATIVE = _binding()._module
-from .._buffer import frombytes
 
 __all__ = ["SafetensorsFile", "Checkpoint", "TensorInfo", "DTYPES", "INDEX_NAME", "SINGLE_NAME"]
 
@@ -32,8 +27,6 @@ DTYPES = {
 
 INDEX_NAME = "model.safetensors.index.json"
 SINGLE_NAME = "model.safetensors"
-
-_HEADER_LIMIT = 100 * 1024 * 1024  # a header above this is not a checkpoint
 
 
 class TensorInfo:
@@ -68,16 +61,6 @@ def widen_f16(bits):
     on a CPU-only one); the per-element Python loop is gone
     (pyglue-text-io, Oct 3). Exact, so every column has the same bits."""
     return _NATIVE.checkpoint_widen_f16(bits)
-
-
-def _parse_header(raw, path):
-    try:
-        header = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as exc:
-        raise ValueError(f"mojolearn.models.safetensors: {path}: the header is not JSON: {exc}") from None
-    if not isinstance(header, dict):
-        raise ValueError(f"mojolearn.models.safetensors: {path}: the header is not a JSON object")
-    return header
 
 
 class SafetensorsFile:
@@ -165,36 +148,11 @@ class Checkpoint:
         return _NATIVE.checkpoint_repr(self, 2)
 
 
-def write_safetensors(path, tensors, metadata=None):
-    """WRITE a `.safetensors` file from `{name: (dtype, shape, bytes)}`, the
-    tests' synthetic-checkpoint writer. `dtype` is the safetensors spelling,
-    `bytes` the row-major little-endian payload. Kept beside the reader so
-    the two agree on the one format; not a checkpoint saver for models."""
-    header = {}
-    if metadata is not None:
-        header["__metadata__"] = dict(metadata)
-    offset = 0
-    payload = []
-    for name in sorted(tensors):  # cpu-route: verification oracle or fixture text, not a runtime route
-        dtype, shape, raw = tensors[name]
-        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
-        payload.append(raw)
-        offset += len(raw)
-    encoded = json.dumps(header, separators=(",", ":")).encode("utf-8")
-    pad = (8 - len(encoded) % 8) % 8
-    encoded += b" " * pad
-    with open(path, "wb") as fh:
-        fh.write(struct.pack("<Q", len(encoded)))
-        fh.write(encoded)
-        for raw in payload:  # cpu-route: verification oracle or fixture text, not a runtime route
-            fh.write(raw)
-    return path
-
 from .. import _linalg_impl as _checkpoint_linalg
 
 # Native file/mmap owners release their resources with normal reference lifetime;
 # no Python __del__ callback is needed when native load owns temporary readers.
-_NATIVE_CONTEXT = {"array_class": Array, "bf16_class": _lowbit.BF16Weight,
+_NATIVE_CONTEXT = {"array_class": _Array, "bf16_class": _lowbit.BF16Weight,
                    "info_class": TensorInfo, "file_class": SafetensorsFile,
                    "checkpoint_class": Checkpoint,
                    "linalg_context": _checkpoint_linalg._NATIVE_CONTEXT}

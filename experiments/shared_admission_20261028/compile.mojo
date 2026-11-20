@@ -1,7 +1,7 @@
 # Compile-only coverage. These exported entries are never executed.
 from std.python import PythonObject
-from bindings.native_loaded_module import NativeModules, native_loaded_module
-from bindings.native_array_snapshot import NativeArrayAdmission, native_array_snapshot
+from bindings.native_loaded_module_door import NativeModules, native_loaded_module
+from bindings.native_array_snapshot_door import NativeArrayAdmission, native_array_snapshot
 
 @export
 def compile_array_admission(context: PythonObject, value: PythonObject) raises -> PythonObject:
@@ -14,7 +14,7 @@ def compile_array_admission(context: PythonObject, value: PythonObject) raises -
     _ = mods.module("builtins")
     return native_array_snapshot(mods, value, context)
 
-from bindings.native_identity_key import NativeIdentityKey
+from bindings.native_identity_key_door import NativeIdentityKey
 @export
 def compile_identity_walk(context: PythonObject, value: PythonObject, fields: PythonObject) raises -> Bool:
     var mods = NativeModules()

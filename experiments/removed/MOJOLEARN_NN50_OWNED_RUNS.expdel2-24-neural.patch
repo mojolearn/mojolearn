@@ -1,0 +1,54 @@
+diff --git a/autograd/rules_lm.mojo b/autograd/rules_lm.mojo
+index 8d82d8cdee..de9bd41306 100644
+--- a/autograd/rules_lm.mojo
++++ b/autograd/rules_lm.mojo
+@@ -101,11 +101,7 @@ from autograd.kernels.embedding import (
+     identical_embedding_backward_prerefused_into,
+ )
+ from embedding.checks.embedding_oracle import EmbConfig
+-# TOMBSTONE: MOJOLEARN_NN50_OWNED_RUNS (owned embedding runs, opt-in arm, no A/B recorded) folded to False here
+-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 7251df6425. The emb_runs plumbing stays until
+-# training/byte_lm.mojo (another lane) stops passing it.
+-# Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.expdel2-24-neural.patch
+-from autograd.kernels.embedding_runs import OwnedEmbeddingRuns
++from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+ from autograd.kernels.lm import identical_ce_backward_into
+ from training.checks.loss_contract import CeConfig
+ from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
+@@ -365,16 +361,27 @@ struct LmRules(BackwardRules):
+         _same(gradients[0], self.dw_emb[], "the embedding weight gradient")
+         var m = self.b * self.l
+         var emb = EmbConfig.llama(self.vocab, self.dm)
+-        if self.emb_prerefused:
+-            identical_embedding_backward_prerefused_into(
+-                self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
+-                self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
+-            )
++        comptime if NN50_OWNED_RUNS:
++            ref runs = self.emb_runs[]
++            var reuse = False
++            if len(runs) == 1:
++                reuse = runs[0].matches(self.ctx, self.ids[], m, emb)
++            if not reuse:
++                if len(runs) == 1:
++                    _ = runs.pop()
++                runs.append(OwnedEmbeddingRuns(self.ctx, self.ids[], m, emb))
++            runs[0].backward_into(self.ctx, self.dw_emb[], bst0.d_x, emb)
+         else:
+-            identical_embedding_backward_into(
+-                self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
+-                self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
+-            )
++            if self.emb_prerefused:
++                identical_embedding_backward_prerefused_into(
++                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
++                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
++                )
++            else:
++                identical_embedding_backward_into(
++                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
++                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
++                )
+ 
+     def _head(self, upstream: FP, gradients: List[FP]) raises:
+         # forward logits [M, V] = h [M, DM] . lm_w [V, DM]^T (OP_NT): the hand

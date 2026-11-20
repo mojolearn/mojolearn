@@ -82,17 +82,27 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.native_owner_registry_unpack import register_native_owner_type
+from bindings.native_owner_registry_run import native_owner_no_pins
+from core.gp_native_provider import GPProviderAPI
+from core.gp_entry_table import GPEntryKey, GP_COLUMN_DEVICE, gp_entry_vendor, gp_table_publish
+from bindings.py_balanced import py_setattr
+from core.gp_native_device import GPDeviceKernels
+from core.shared_slot import SharedSlot
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from core.device_query_x import QueryFold
 from gaussian_process.host.gp_theta import (
     gp_theta_param,
 )
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from bindings.py_lists import py_list_f64
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word.
@@ -153,6 +163,12 @@ from gaussian_process.classifier import (
 # lane fam2-kernel-gp (2026-10-04): every class in one device session.
 from gaussian_process.gpc_ovr import GPC_IDN_OVR, gpc_fit_all_device, gpc_predict_all_device
 from gaussian_process.gpr_resident import GPR_IDN_PTR, gpr_fit_ptr_device, gpr_predict_ptr_device
+from gaussian_process.gp_resident_state import (
+    GpResidentLease,
+    gp_resident_lease_open,
+    gp_resident_stats_words,
+    gpr_predict_resident_device,
+)
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -166,10 +182,13 @@ from cholesky.estimator import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b (its reach counter gp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners: the reach counter alone, for MOJOLEARN_CHOL_FAST_SHARED_SUB
+# (cholesky/checks/fast_trsm.mojo); the LU define stays deleted.
 from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
 
-def gp_shared_sub_count_py() raises -> PythonObject:
-    return PythonObject(shared_sub_count(True))
 
 def gp_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
@@ -786,7 +805,7 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         if len(addrs) == 11:
             # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
             var yo = f32_ptr(Int(py=addrs[10]))
-            memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
+            unsafe_memcpy(dest=yo, src=y.unsafe_ptr(), count=max(0, n_train))
             _ = len(y)
     else:
         y = read_f32(Int(py=addrs[1]), max(0, n_train))
@@ -916,15 +935,20 @@ def gpc_ovr_combine_binding(
 # GPC, EVERY CLASS IN ONE CALL (lane fam2-kernel-gp, 2026-10-04;
 # gaussian_process/gpc_ovr.mojo). NEW entries: `gpc_fit`, `gpc_predict` and
 # `gpc_ovr_combine` above are unchanged. `gp_idn_caps` tells the Python glue
-# whether to take them (`-D MOJOLEARN_IDN_GPC_OVR_OFF` answers 0).
+# whether to take them (FAST builds answer 0).
+# TOMBSTONE: MOJOLEARN_IDN_GPC_OVR_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 5ebe54b4f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPC_OVR_OFF.expdel2-01-base.patch
 # ===========================================================================
 
 
 def gp_idn_caps_binding() raises -> PythonObject:
     """Bit 0: `gpc_fit_all` / `gpc_predict_all` are the route
     (`GPC_IDN_OVR`, IDENTICAL builds, on by default). Bit 1: `gpr_fit_ptr` /
-    `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same)."""
-    return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0))
+    `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same). Bit 2:
+    `gp_resident_lease`, `gpr_predict_resident` and
+    `gpc_predict_all_resident` exist (every device build, both tiers; the
+    host bindings register none of them)."""
+    return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0) | 4)
 
 
 def gpr_fit_ptr_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1124,8 +1148,13 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
 
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
     3 n_nodes, 4 n_ls, 5 out_kind, 6 k.
+
+    `addrs` may end with three more words (lane a7a): a cross-validation
+    fold's store ids [base id, base rows, index id]; xstar is then 0 and the
+    query rows are gathered on the device. Returns [finite word, range
+    word] of the query (0, 0: finite and in range; the door refuses).
     """
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 8:
         raise Error(
             "gpc_predict_all: params must contain 7 values (n_train,"
             " n_features, n_star, n_nodes, n_ls, out_kind, k), got "
@@ -1138,11 +1167,11 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
     var n_ls = Int(py=params[4])
     var out_kind = Int(py=params[5])
     var k = Int(py=params[6])
-    if k < 1 or len(addrs) != 7 + 4 * k:
+    if k < 1 or (len(addrs) != 7 + 4 * k and len(addrs) != 10 + 4 * k):
         raise Error(
             "gpc_predict_all: k="
             + String(k)
-            + " needs 7 + 4 k addresses, got "
+            + " needs 7 + 4 k addresses (10 + 4 k with a fold's store ids), got "
             + String(len(addrs))
         )
     var spec = _rebuild_kernel_spec(
@@ -1166,12 +1195,134 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
         pi_addrs.append(Int(py=addrs[8 + 4 * c]))
         wsr_addrs.append(Int(py=addrs[9 + 4 * c]))
         l_addrs.append(Int(py=addrs[10 + 4 * c]))
+    var lease = -1
+    if len(params) == 8:
+        # gpc_predict_all_resident (lane ne1-a-gp-svm): the lease word.
+        lease = Int(py=params[7])
+        if lease < 0:
+            raise Error("gpc_predict_all_resident: the lease must be 0 or a lease, got " + String(lease))
+    var fold = _gp_query_fold(addrs, 7 + 4 * k)
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        gpc_predict_all_device(
+        words = gpc_predict_all_device(
             xt_addr, n_train, n_features, spec, xs_addr, n_star,
-            y_addrs, pi_addrs, wsr_addrs, l_addrs, out_kind, out_addr,
+            y_addrs, pi_addrs, wsr_addrs, l_addrs, out_kind, out_addr, lease, fold,
         )
-    return PythonObject(0)
+    return Python.list(Int(words[0]), Int(words[1]))
+
+
+def gpc_predict_all_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpc_predict_all` with the same `addrs` in the same order and
+    `params` = its 7 values followed by ONE more word, the lease
+    (`gp_resident_lease`; 0 uploads the model for this call only). The model
+    arrays are read from the lease's device copies. `addrs` may end with a
+    fold's three store ids, and the result is the query's [finite, range]
+    words, as `gpc_predict_all`."""
+    if len(params) != 8:
+        raise Error(
+            "gpc_predict_all_resident: params must contain 8 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, out_kind, k, lease), got "
+            + String(len(params))
+        )
+    return gpc_predict_all_binding(addrs, params)
+
+
+# ===========================================================================
+# DEVICE-RESIDENT FITTED STATE (lane ne1-a-gp-svm, 2026-11-06;
+# gaussian_process/gp_resident_state.mojo, core/fitted_resident_store.mojo).
+# The public door takes a lease once per fitted state and names it on every
+# predict; the model's fitted arrays then cross to the device once.
+# ===========================================================================
+
+
+def gp_resident_lease_binding() raises -> PythonObject:
+    """A new lease: `(owner, lease)`. `owner` is the native object whose
+    destruction frees every device copy the lease holds; the caller keeps it
+    as long as the copies may be used (bindings/fitted_resident_door.mojo)."""
+    var lease = gp_resident_lease_open()
+    var owner = PythonObject(alloc=GpResidentLease(lease))
+    return Python.tuple(owner, PythonObject(lease))
+
+
+def gp_resident_stats_binding() raises -> PythonObject:
+    """`(live leases, kept entries, kept bytes, uploads, cap bytes)` of this
+    binding's store: a test-only readout."""
+    var words = gp_resident_stats_words()
+    return Python.tuple(PythonObject(words[0]), PythonObject(words[1]), PythonObject(words[2]),
+                        PythonObject(words[3]), PythonObject(words[4]))
+
+
+def _gp_query_fold(addrs: PythonObject, at: Int) raises -> QueryFold:
+    """A fold's store ids at `addrs[at:at + 3]` (lane a7a), or none."""
+    if len(addrs) < at + 3:
+        return QueryFold.none()
+    return QueryFold(Int(py=addrs[at]), Int(py=addrs[at + 1]), Int(py=addrs[at + 2]))
+
+
+def gpr_predict_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpr_predict_ptr` with the same `addrs` (12) in the same order and
+    `params` = gpr_predict_ptr's (7, or 10 with normalize_y, y_std, y_mean)
+    followed by ONE more word, the lease (`gp_resident_lease`); 0 names no
+    lease and uploads the model for this call only. The same outputs; the
+    model's X_train, factor and dual are read from the lease's device copies.
+    `addrs` may carry three more words (lane a7a): a cross-validation fold's
+    store ids [base id, base rows, index id] (bindings/device_rows_door.mojo
+    door_rows_store); xstar is then 0 and the query rows are gathered on the
+    device. Returns [n_clamped, finite word, range word] (the query's status
+    words: 0, 0 finite and in range; the door refuses otherwise)."""
+    if len(addrs) != 12 and len(addrs) != 15:
+        raise Error(
+            "gpr_predict_resident: addrs must contain 12 addresses (xtrain, l,"
+            " dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " std_out, clamped_out) or 15 (and a fold's base id, base rows,"
+            " index id), got "
+            + String(len(addrs))
+        )
+    if len(params) != 8 and len(params) != 11:
+        raise Error(
+            "gpr_predict_resident: params must contain 8 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, return_std, info, lease), or 11"
+            " (n_train .. info, normalize_y, y_std, y_mean, lease), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var return_std = Int(py=params[5]) != 0
+    var info = Int(py=params[6])
+    var tail = len(params) == 11
+    var unnorm = tail and Int(py=params[7]) != 0
+    var y_std = Float32(Float64(py=params[8])) if tail else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[9])) if tail else Float32(0.0)
+    var lease = Int(py=params[len(params) - 1])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_predict_resident"),
+    )
+    var xt_addr = Int(py=addrs[0])
+    var l_addr = Int(py=addrs[1])
+    var dual_addr = Int(py=addrs[2])
+    var xs_addr = Int(py=addrs[3])
+    var mean_addr = Int(py=addrs[8])
+    var var_addr = Int(py=addrs[9])
+    var std_addr = Int(py=addrs[10])
+    var clamped_addr = Int(py=addrs[11])
+    var fold = _gp_query_fold(addrs, 12)
+    var result: Tuple[Int, Int32, Int32]
+    with GILReleased(Python()):
+        result = gpr_predict_resident_device(
+            lease, xt_addr, l_addr, dual_addr, xs_addr, n_train, n_features, n_star, spec,
+            return_std, info, unnorm, y_std, y_mean,
+            mean_addr, var_addr, std_addr, clamped_addr, fold,
+        )
+    return Python.list(result[0], Int(result[1]), Int(result[2]))
 
 
 # ===========================================================================
@@ -1318,10 +1469,37 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+comptime GP_DEVICE_NATIVE_API = SharedSlot[GPProviderAPI[GPDeviceKernels], ("MojolearnGPDeviceKernelsV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnGPDeviceKernelsV1Fast")]
+
+
+# The capsule factory stays only for the Python import prerequisites that
+# name it (python/mojolearn/_native_parallel_shard.py, host_surface.py); no
+# native caller connects through it (the GP owners and the shard worker read
+# the table below, core/gp_entry_table.mojo).
+def gp_native_api_v1_binding() raises -> PythonObject:
+    var api = GP_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_gp_table(module: PythonObject) raises:
+    # The device column of the GP table (core/gp_entry_table.mojo): the GP
+    # owners (bindings/gp_native_boundary_door.mojo) and the GPC shard worker read
+    # the key from the module attribute `gp_native_key` and call this entry
+    # with plain values.
+    var key = GPEntryKey(Int(GLOBAL_NUMERIC_MODE), gp_entry_vendor(COMPILED_VENDOR), GP_COLUMN_DEVICE)
+    if key.vendor < 0:
+        raise Error("native GP entries: unknown compiled vendor " + String(COMPILED_VENDOR))
+    var api = GP_DEVICE_NATIVE_API.get_or_create_ptr()
+    gp_table_publish(key, Int(api[].entries.unsafe_ptr()), api[].entries[0])
+    py_setattr(module, "gp_native_key", Python.tuple(PythonObject(key.mode), PythonObject(key.vendor),
+                                                     PythonObject(key.column)))
+
 def build__mojolearn_gp() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
-        m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
+        m.def_function[gp_native_api_v1_binding]("gp_native_api_v1")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
@@ -1340,18 +1518,28 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gp_theta_params_binding]("gp_theta_params")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
-        m.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         m.def_function[gp_idn_caps_binding]("gp_idn_caps")
         m.def_function[gpc_fit_all_binding]("gpc_fit_all")
         m.def_function[gpc_predict_all_binding]("gpc_predict_all")
         m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
+        # Device-resident fitted state (lane ne1-a-gp-svm).
+        _ = m.add_type[GpResidentLease]("_GpResidentLease")
+        m.def_function[gp_resident_lease_binding]("gp_resident_lease")
+        m.def_function[gp_resident_stats_binding]("gp_resident_stats")
+        m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
+        m.def_function[gpc_predict_all_resident_binding]("gpc_predict_all_resident")
         # The Cholesky door (workstream D, 2026-09-14).
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         m.def_function[cholesky_factor_binding]("cholesky_factor")
         m.def_function[cholesky_solve_binding]("cholesky_solve")
-        return m.finalize()
+        # The owner identity needs the finalized type object (Mojo 1.2 creates
+        # it in finalize(); see bindings/native_owner_registry.mojo).
+        var published = m.finalize()
+        register_native_owner_type[GpResidentLease](published, native_owner_no_pins)
+        _publish_gp_table(published)
+        return published
     except e:
         abort(String("failed to create _mojolearn_gp: ", e))

@@ -1,0 +1,96 @@
+diff --git a/hdbscan/impl/detail/extract.mojo b/hdbscan/impl/detail/extract.mojo
+index d2dcf8d98f..2d0de615d2 100644
+--- a/hdbscan/impl/detail/extract.mojo
++++ b/hdbscan/impl/detail/extract.mojo
+@@ -58,7 +58,7 @@ from hdbscan.impl.detail.stabilities import (
+     compute_stabilities,
+     get_stability_scores_device,
+ )
+-from hdbscan.impl.detail.fast_apple import HDB_SELECT_DEVICE
++from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC, HDB_SELECT_DEVICE
+ from hdbscan.impl.detail.idn_switches import (
+     IDN_HDB_ONE_SYNC,
+     IDN_HDB_SELECT_ONE_READ,
+@@ -852,11 +852,10 @@ def extract_clusters(
+     var h_inv: List[Int32]
+     var h_probs: List[Float32]
+     var n_outliers: Int
+-    # IDENTICAL (IDN_HDB_ONE_SYNC): the seven downloads and the scalar
+-    # staged, ONE wait, then taken; the route below waits eight times.
+-    # TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+-    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+-    comptime if IDN_HDB_ONE_SYNC:
++    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the seven
++    # downloads and the scalar staged, ONE wait, then taken; main's route
++    # below waits eight times.
++    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
+         var s_raw = td_stage_i32(ctx, raw)
+         var s_final = td_stage_i32(ctx, final)
+         var s_isc = td_stage_i32(ctx, is_cluster)
+diff --git a/hdbscan/impl/detail/fast_apple.mojo b/hdbscan/impl/detail/fast_apple.mojo
+index 8eb9a30a40..9763976746 100644
+--- a/hdbscan/impl/detail/fast_apple.mojo
++++ b/hdbscan/impl/detail/fast_apple.mojo
+@@ -45,10 +45,20 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
+ # Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
+ # Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
+ 
+-# TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (FAST Apple opt-in: output downloads under one wait; EXP:1914 inconclusive full-data, owed row withdrawn) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+-# Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+-# Tried: M3 batchv-hdb-onesync taxi / istella 424.7 -> 425.5 / 3809 -> 3829 ms (inconclusive); F15/hdbscan-downloads cold B/A 0.89..0.95, one sample, never timed with the promoted linkage.
+-# The same staged route stays the IDENTICAL default (idn_switches.IDN_HDB_ONE_SYNC).
++# INCONCLUSIVE-speed, M3 batchv-hdb-onesync-taxi / -istella vs main:
++# 424.7 -> 425.5 / 3809 -> 3829 ms, clusters identical (SMR on both).
++# Old-base -5% did not carry; dropped for no demonstrated main gain.
++# See docs/apple-fast/EXPERIMENTS.md (HDB_ONE_SYNC).
++# F15/hdbscan-downloads M3 2026-10-06: same three public fits as linkage;
++# cold B/A0.9506,0.9225,0.8915, repeated0.8997,0.9363,0.8688;
++# task quality equal. One scored sample. Promising independently, retain
++# OFF pending combined timing with promoted linkage (no combination artifact
++# is present). Caller/build evidence: results/F15/hdbscan-downloads under
++# the retained root above. Historical full-dataset inconclusive result stays.
++comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
++    is_defined["MOJOLEARN_HDB_ONE_SYNC"]()
++)
++"""The extract's and the runner's output downloads under one wait each."""
+ 
+ # F15/hdbscan-linkage M3 2026-10-06: promote FAST Apple device linkage.
+ # Full public cold/repeated fits at509x7,997x13,1031x67 (3/4/5 separated
+@@ -58,6 +68,7 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
+ # dataset claim. Caller67d0efb29; unchanged reused build/hash provenance:
+ # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/
+ # hdbscan-linkage. No identity/compile rerun. OFF is the baseline/rollback.
++# ONE_SYNC remains off: individual wins do not establish a combined win.
+ comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
+     not is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"]()
+ )
+diff --git a/hdbscan/impl/runner.mojo b/hdbscan/impl/runner.mojo
+index bc1bc4fc28..3901789ea5 100644
+--- a/hdbscan/impl/runner.mojo
++++ b/hdbscan/impl/runner.mojo
+@@ -59,6 +59,7 @@ from hdbscan.impl.detail.condense import (
+     download_condensed,
+ )
+ from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
++from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
+ from hdbscan.impl.detail.idn_switches import IDN_HDB_ONE_SYNC
+ from hdbscan.impl.detail.tree_device import (
+     td_stage_f32,
+@@ -351,12 +352,12 @@ def fit_hdbscan(
+     # The outputs, downloaded once.
+     var tree: CondensedHierarchy
+     var h_core: List[Float32]
+-    # IDENTICAL on every vendor (IDN_HDB_ONE_SYNC): the tree's four arrays
+-    # and the core distances staged, ONE wait; the other route
++    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the tree's
++    # four arrays and the core distances staged, ONE wait; main's route
+     # (`download_condensed` + `_download_f32`) waits six times.
+-    # TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+-    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+-    comptime if IDN_HDB_ONE_SYNC:
++    # fam2-cluster: the same route under IDENTICAL on every vendor
++    # (IDN_HDB_ONE_SYNC).
++    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
+         var s_par = td_stage_i32(ctx, dtree.parents)
+         var s_chi = td_stage_i32(ctx, dtree.children)
+         var s_lam = td_stage_f32(ctx, dtree.lambdas)

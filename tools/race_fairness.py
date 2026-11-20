@@ -6,7 +6,8 @@
 The boards measure the cost of bitwise identity; every result is shown, wins and losses alike, and only a broken
 comparison is hidden. This module is the one place the rule runs. It marks every (mode, phase) row of every race
 of a board.json, and tools/main_board_ingest.py calls it on every rebuild. The paper (mlsys) and mojolearn.org
-read the marks and omit rows with rerace "x" and opponent arms in race["opponents_excluded"].
+read the marks and omit rows with rerace "x" and opponent arms in race["opponents_excluded"]. A lane that is not a
+race (lane_class: the call-overhead internal check, Andrew 2026-11-17) is marked NOT-A-RACE, rerace "x", whole.
 
     python3 tools/race_fairness.py bench/results/bench_board/main-nvidia-l40s/board.json ...   # apply, write
     python3 tools/race_fairness.py --check <board.json>...    # print what would change, write nothing
@@ -50,6 +51,59 @@ for _lane in ("lm-forward", "lm-train-step", "lm-infer", "lm-host-train-step", "
               "mamba2-infer", "mamba3-infer", "samba-forward", "samba-train-step", "samba-infer", "moe",
               "resnet-block"):
     HARNESS_ARMS[_lane] = _TORCH                   # harness twins and pure-PyTorch references (the stored cells)
+
+# 1c. NOT A RACE: call overhead, internal (Andrew, 2026-11-17). The learning-rate schedule lanes (lr-step,
+# lr-exponential, lr-onecycle, lr-constant, lr-warmup-linear, lr-warmup-cosine) timed a Python loop of single
+# lr_at calls: no GPU work, only call overhead, so they are not races. Every race of this class gets the
+# NOT-A-RACE mark (rerace "x"), so the paper and mojolearn.org, which omit rerace "x", never show it, and
+# tools/main_board_ingest.py does not emit it on a main board. Stored cells and audits stay on disk (history and
+# provenance). The one row kept, INTERNAL_CALL_OVERHEAD_LANE, is our arm only and is compared only with our own prior
+# version on the same box in the same job (tools/paper_compare.py internal rows, the full-board screen).
+INTERNAL_CALL_OVERHEAD_LANE = "internal-call-overhead-lr-at"
+CALL_OVERHEAD = "call overhead, internal check"
+
+
+#: the harness_clock suffix of a cell whose lane changed what EVERY arm's clock or settings key holds (lane fx-harness,
+#: 2026-11-18): a stored opponent cell of that lane is BROKEN against it until the opponent job re-scores the arm
+ALL_ARMS_CLOCK_SUFFIX = "(all arms)"
+
+
+def opponent_rescore_owed(cell):
+    """The cell's harness_clock when it changed every arm's clock or settings key (the stored opponent cells of its
+    race wait for the opponent job's re-score), else None. tools/paper_compare.py lists those races once."""
+    hc = (cell or {}).get("harness_clock") or ""
+    return hc if hc.endswith(ALL_ARMS_CLOCK_SUFFIX) else None
+
+
+def lane_class(lane):
+    """CALL_OVERHEAD for a lane that is not a race (rule 1c), else None."""
+    lane = str(lane or "")
+    return CALL_OVERHEAD if lane == INTERNAL_CALL_OVERHEAD_LANE or lane.startswith("lr-") else None
+
+
+def _mark_not_a_race(rr, modes, today):
+    """Rule 1c: every row of a call-overhead race is NOT-A-RACE (rerace "x"); a prior audit moves to audit_history."""
+    history = rr.setdefault("audit_history", [])
+    for key, entry in (rr.get("audit") or {}).items():
+        if entry.get("verdict") != "NOT-A-RACE" and dict(entry, row=key) not in history:
+            history.append(dict(entry, row=key))
+    if not history:
+        rr.pop("audit_history", None)
+    audit = {}
+    for mode in modes:
+        for phase in ("fit", "infer"):
+            if any(is_own(c, mode) for c in phase_cells(rr, phase)):
+                audit["%s/%s" % (mode, phase)] = {
+                    "rule": "race_fairness.lane_class (Andrew, 2026-11-17)", "date": today,
+                    "verdict": "NOT-A-RACE", "rerace": "x", "opponent": None, "ours_over_theirs": None,
+                    "reason": CALL_OVERHEAD + ": host lr_at calls, no GPU work; not shown or raced"}
+    rr["lane_class"] = CALL_OVERHEAD
+    if audit:
+        rr["audit"] = audit
+    else:
+        rr.pop("audit", None)
+    rr["rerace"] = "x"
+
 
 # No host-based exclusion (Andrew, 2026-10-14): the slow-host rule added on 2026-10-13 was never asked for and is
 # removed. An opponent measured on another box of the same GPU model is judged like any other opponent cell.
@@ -308,6 +362,16 @@ def _pair_problems(race, ours, opp):
             bad.append("different dataset identity")
         if mo.get("shape") and mt.get("shape") and mo["shape"] != mt["shape"]:
             bad.append("different measured input shape")
+    # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): train-test-split, resample, resample-indices, the
+    # model_selection lanes and radius-neighbors copied, cast and reduced their outputs INSIDE every arm's clock; the
+    # harness now does it after the clock and stamps the cell (harness_clock, "... (all arms)"). A stored opponent
+    # cell timed before carries harness work our new cell does not: a harness-written difference in the work, so
+    # the pair is BROKEN until the opponent job scores that arm again. A stamp ending "(our arm)" changed only our
+    # clock (the opponents never held that work) and never makes a pair unfair.
+    hc = opponent_rescore_owed(ours) or ""
+    if hc and (opp.get("harness_clock") or "") != hc:
+        bad.append("harness clock differs: ours %r, opponent %r (stored before the 2026-11-18 harness fix; "
+                   "re-score the opponent)" % (hc, opp.get("harness_clock")))
     clock = BC.pair_ratio(BC.cell_clock(ours), BC.cell_clock(opp), opp)
     # FAIRNESS FIX (2026-10-13 audit): an alternate common clock may be
     # shown diagnostically, but cannot replace the owner's required clock.
@@ -449,6 +513,10 @@ def apply(board, prev=None, today=None, upgrade_legacy=False):
     marked = 0
     for section in ("races", "extra_races"):
         for rid, rr in ((board.get(section) or {}).items()):
+            if lane_class(rr.get("lane")):          # rule 1c: not a race, never shown or raced
+                _mark_not_a_race(rr, modes, today)
+                marked += 1
+                continue
             prev_rr = (((prev or {}).get("races") or {}).get(rid)
                        or ((prev or {}).get("extra_races") or {}).get(rid) or {})
             old = prev_rr.get("audit") or {}

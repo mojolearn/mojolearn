@@ -66,8 +66,8 @@ struct _Mat(Movable):
     var rs: Int     # row stride
     var cs: Int     # column stride
     var nb: Int     # batch axes (ndim - 2, or 0 for ndim <= 2)
-    var be: InlineArray[Int, RN_MAX_RANK]   # batch extents
-    var bs: InlineArray[Int, RN_MAX_RANK]   # batch strides
+    var be: Array[Int, RN_MAX_RANK]   # batch extents
+    var bs: Array[Int, RN_MAX_RANK]   # batch strides
 
     def copy(self) -> Self:
         return _Mat(self.buf, self.base, self.rows, self.cols, self.rs, self.cs, self.nb, self.be.copy(), self.bs.copy())
@@ -77,8 +77,8 @@ def _mat[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> _Mat:
     var o = tape.operand_nd(ex, x)
     var s = o[2].copy()
     var st = o[3].copy()
-    var be = InlineArray[Int, RN_MAX_RANK](fill=1)
-    var bs = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var be = Array[Int, RN_MAX_RANK](fill=1)
+    var bs = Array[Int, RN_MAX_RANK](fill=0)
     if s.ndim < 1:
         raise Error("matmul operands must have at least one dimension")
     if s.ndim == 1:
@@ -167,7 +167,7 @@ def rankn_matmul[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, y: Tensor) raise
     if nb + 2 > RN_MAX_RANK:
         raise Error("matmul output has more than 8 dimensions")
     # the output's shape and row-major strides
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for j in range(nb):  # small-loop(nb: tensor rank, at most 8): shape metadata, no data
         var ea = _ext(a, j, nb)
         var eb = _ext(b, j, nb)
@@ -177,7 +177,7 @@ def rankn_matmul[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, y: Tensor) raise
     d[nb] = M
     d[nb + 1] = N
     var shape = ShapeN(nb + 2, d)
-    var gs = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var gs = Array[Int, RN_MAX_RANK](fill=0)
     var run = 1
     var j = nb + 1
     while j >= 0:  # small-loop(nb + 2: tensor rank, at most 8): shape metadata, no data

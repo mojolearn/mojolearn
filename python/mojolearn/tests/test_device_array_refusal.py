@@ -3,7 +3,7 @@
 """A device array must REFUSE BY NAME, and host input must be untouched.
 
 DEVIATION 2692. Before this, a cupy or torch-CUDA array had no host buffer,
-so `_materialize` fell into the nested-list branch and raised
+so the former Python converter fell into the nested-list branch and raised
 `mojolearn: X holds a ndarray, not a number` -- an error about ELEMENT TYPES
 for input whose actual problem is that the memory lives on a GPU. Nothing in
 it mentioned the device.
@@ -14,7 +14,7 @@ it is that it fires on something it should not. A CPU torch tensor exports
 DLPack *and* the buffer protocol; if the DLPack arm did not ask
 `__dlpack_device__` for the device type, host tensors would start refusing
 and every `fit` in the library would break on them. `test_cpu_dlpack_*` is
-that guard, and it asserts the ZERO-COPY path specifically (`copied=False`),
+that guard, and it asserts the ZERO-COPY path specifically (the borrowed address),
 not merely that the call succeeded.
 
 No GPU is required and none is touched: detection reads protocol attributes
@@ -25,6 +25,7 @@ import array
 import unittest
 
 from .. import _buffer
+from .._array import Array
 
 
 class _CupyLike:
@@ -54,7 +55,7 @@ class _TorchCpuLike(array.array):
 
     An array.array subclass rather than a class with `__buffer__`: a
     pure-Python `__buffer__` is honored from 3.12 only, so on 3.10 and
-    3.11 the old fake exported no buffer at all and `_materialize` read it
+    3.11 the old fake exported no buffer at all and the old converter read it
     as a scalar (red on the 2026-09-23 pod, green on 3.14). A real host
     tensor exports its buffer from C on every Python; so does this.
     """
@@ -79,7 +80,7 @@ class _BadDlpackDevice:
 class DeviceArrayRefusalTest(unittest.TestCase):
     def test_cuda_array_interface_refuses_by_name(self):
         with self.assertRaises(TypeError) as caught:
-            _buffer._materialize(_CupyLike(), "X")
+            _buffer.view(_CupyLike(), name="X")
         message = str(caught.exception)
         self.assertIn("DEVICE array", message)
         self.assertIn("__cuda_array_interface__", message)
@@ -90,7 +91,7 @@ class DeviceArrayRefusalTest(unittest.TestCase):
 
     def test_dlpack_cuda_refuses_and_names_the_device_type(self):
         with self.assertRaises(TypeError) as caught:
-            _buffer._materialize(_TorchCudaLike(), "X")
+            _buffer.view(_TorchCudaLike(), name="X")
         message = str(caught.exception)
         self.assertIn("DEVICE array", message)
         self.assertIn("__dlpack__", message)
@@ -98,25 +99,23 @@ class DeviceArrayRefusalTest(unittest.TestCase):
 
     def test_refusal_names_the_argument(self):
         with self.assertRaises(TypeError) as caught:
-            _buffer._materialize(_CupyLike(), "sample_weight")
+            _buffer.view(_CupyLike(), name="sample_weight")
         self.assertIn("sample_weight", str(caught.exception))
 
     # ---------------------------------------------- negative controls
 
-    def test_cpu_dlpack_tensor_keeps_the_zero_copy_path(self):
-        materialized, copied = _buffer._materialize(_TorchCpuLike(), "X")
-        self.assertFalse(copied, "a host DLPack tensor must not be copied")
-        self.assertIsNotNone(materialized)
+    def test_python_subclass_dlpack_exporter_is_refused_without_calling_it(self):
+        # A host exporter whose class is Python-defined (a heap type with a
+        # Python `__dlpack__`) is refused by the native exporter admission
+        # (bindings/array_from_buffer_native_door.mojo) before any protocol runs:
+        # `__dlpack__` would raise RuntimeError if it were called.
+        with self.assertRaisesRegex(TypeError, "native buffer exporters without Python protocols"):
+            Array.from_buffer(_TorchCpuLike())
 
     def test_host_buffer_is_untouched(self):
-        materialized, copied = _buffer._materialize(array.array("f", [1.0, 2.0]), "X")
-        self.assertFalse(copied)
-        self.assertIsNotNone(materialized)
-
-    def test_nested_list_is_untouched(self):
-        materialized, copied = _buffer._materialize([[1.0, 2.0], [3.0, 4.0]], "X")
-        self.assertTrue(copied)
-        self.assertIsNotNone(materialized)
+        store = array.array("f", [1.0, 2.0])
+        borrowed = Array.from_buffer(store)
+        self.assertEqual(_buffer.addr_ro(borrowed, name="X"), store.buffer_info()[0])
 
     def test_broken_dlpack_exporter_is_not_a_device_array(self):
         self.assertIsNone(_buffer._device_array_kind(_BadDlpackDevice()))
@@ -124,7 +123,7 @@ class DeviceArrayRefusalTest(unittest.TestCase):
     # ------------------------------------------- the address chokepoint
 
     def test_addr_path_also_refuses_by_name(self):
-        """`view`/`addr`/`addr_ro` bypass `_materialize` and reach `Buf`.
+        """`view`/`addr`/`addr_ro` all reach `Buf`, the one chokepoint.
 
         Before DEVIATION 2692's second half these said "does not support the
         buffer protocol" -- true, but silent about the GPU. No caller reaches

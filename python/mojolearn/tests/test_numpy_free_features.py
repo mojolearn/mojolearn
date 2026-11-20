@@ -79,33 +79,34 @@ def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp
         with pytest.raises(ValueError):
             list(batches.prefetch(args[0], args[1], depth=args[2]))
 
-    original = batches.ids
-    def fail_at_five(step):
-        if step == 5:
-            raise RuntimeError('prefetch-step-five')
-        return original(step)
-    monkeypatch.setattr(batches, 'ids', fail_at_five)
-    with pytest.raises(RuntimeError, match='prefetch-step-five'):
+    # The native prefetch reads batches through its own ids operation; an
+    # instance-level Python override is refused by name, never called.
+    calls = []
+    def overridden(step):
+        calls.append(step)
+        raise RuntimeError('prefetch-step-five')
+    monkeypatch.setattr(batches, 'ids', overridden)
+    with pytest.raises(TypeError, match='cannot call an overridden Python ids method'):
         list(batches.prefetch(3, 7, depth=2))
+    assert calls == []
 
 
 @pytest.mark.parametrize('shard_rows', [1, 3, 20])
 @pytest.mark.parametrize('fault', [None, 'drop_result', 'reverse_results'])
-def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, shard_rows, fault):
-    # transform_rbf_sampler is one native call (bindings/parallel_shard_native.mojo);
+def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, request, shard_rows, fault):
+    # transform_rbf_sampler is one native call (bindings/parallel_shard_native_door.mojo);
     # it needs no NumPy, joins row blocks in input order, and its checks or
     # the bytes catch a dropped or reordered block (the transport negative
-    # control, bindings/parallel_shard_common.mojo `shard_map`).
+    # control, bindings/parallel_shard_common_door.mojo `shard_map`).
     from mojolearn._native_parallel_shard import _native_parallel_shard
     rows = np.arange(35, dtype='<f4').reshape(7, 5)[::-1]
     x = Array.from_list(rows.tolist(), '<f4')
-    from mojolearn._cpu_reference import reference_training
-    with reference_training():
-        model = RBFSampler(n_components=5, random_state=3).fit(x)
+    model = RBFSampler(n_components=5, random_state=3).fit(x)
     expected = model.transform(x)
     if fault:
-        monkeypatch.setenv('MOJOLEARN_PAR_TRANSPORT_FAULT', fault)
-        monkeypatch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+        # armed through the native switch (`shard_faults_arm`), not the environment
+        _native_parallel_shard('faults_arm', (fault,))
+        request.addfinalizer(lambda: _native_parallel_shard('faults_arm', ('',)))
     _native_parallel_shard('faults_take', ())
     with no_numpy():
         if fault == 'drop_result' and len(range(0, 7, shard_rows)) > 1:

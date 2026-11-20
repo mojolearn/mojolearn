@@ -1,0 +1,123 @@
+diff --git a/glm/checks/logistic_check.mojo b/glm/checks/logistic_check.mojo
+index 57a74ab65b..437223680a 100644
+--- a/glm/checks/logistic_check.mojo
++++ b/glm/checks/logistic_check.mojo
+@@ -121,7 +121,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.column_stats import STATS_TPB
+ from core.identity_trace import IdentityTrace, first_divergence
+ from glm.impl.qn.glm_base import GLMDims, GLMWithData
+-from glm.host.qn_oracle import host_qnt_sum, host_qnt_xty
++from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
+ from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+ from glm.impl.qn.qn_util import OPT_MAX_ITERS_REACHED, OPT_SUCCESS
+ from glm.impl.linear_model.qn import (
+@@ -483,9 +483,22 @@ def check_logistic_refuses_by_name() raises:
+ 
+ def _host_halving_sum(terms: List[Float32], n: Int) -> Float32:
+     # QN_TILED (lane/gap-linear-nv): the evaluation's sums are tiled
+-    # TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+-    # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+-    return host_qnt_sum(terms, n)
++    comptime if HOST_QN_TILED:
++        return host_qnt_sum(terms, n)
++    var red = List[Float32]()
++    for t in range(STATS_TPB):
++        var acc = Float32(0.0)
++        var i = t
++        while i < n:
++            acc = ftz(acc + terms[i])
++            i += STATS_TPB
++        red.append(acc)
++    var step = STATS_TPB // 2
++    while step > 0:
++        for t in range(step):
++            red[t] = red[t] + red[t + step]
++        step //= 2
++    return ftz(red[0])
+ 
+ 
+ def _host_halving_xty(x: List[Float32], y: List[Float32], n: Int, d: Int, col: Int) -> Float32:
+diff --git a/glm/checks/qn_losses_check.mojo b/glm/checks/qn_losses_check.mojo
+index 29f54ed6a3..ace014f6c3 100644
+--- a/glm/checks/qn_losses_check.mojo
++++ b/glm/checks/qn_losses_check.mojo
+@@ -72,7 +72,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.column_stats import STATS_TPB
+ from core.identity_trace import IdentityTrace, first_divergence
+-from glm.host.qn_oracle import host_qnt_sum, host_qnt_xty
++from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
+ from glm.checks.multinomial_check import (
+     _download,
+     _hex32,
+@@ -603,14 +603,22 @@ def _host_evaluate(
+     var reg_h = _host_tikhonov(hw, d, l2, g)
+     var alpha = Float32(1.0 / Float64(n))
+     # QN_TILED (lane/gap-linear-nv): the C == 1 evaluation's sums are tiled
+-    # TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+-    # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+-    loss_h = host_qnt_sum(terms, n)
+-    var xt = host_qnt_xty(xh, dz, n, d)
++    comptime if HOST_QN_TILED:
++        loss_h = host_qnt_sum(terms, n)
++        var xt = host_qnt_xty(xh, dz, n, d)
++        for k in range(d):
++            var st = ftz(alpha * xt[k])
++            g[k] = ftz(st + g[k])
++        g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
++        return ftz(loss_h + reg_h)
++    # the gradient is the tile order with QN_TILED off too (`linear_bwd`'s
++    # `qntm_tiled_into`, lane debt-block-per-n 2026-10-21)
++    var xt0 = host_qnt_xty(xh, dz, n, d)
+     for k in range(d):
+-        var st = ftz(alpha * xt[k])
+-        g[k] = ftz(st + g[k])
+-    g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
++        var s = ftz(alpha * xt0[k])
++        g[k] = ftz(s + g[k])
++    var ratio = Float32(1.0) / Float32(n)
++    g[d] = ftz(_host_sum_terms(dz, n) * ratio)
+     return ftz(loss_h + reg_h)
+ 
+ 
+diff --git a/glm/host/qn_oracle.mojo b/glm/host/qn_oracle.mojo
+index 3143b9dda5..beb236e37b 100644
+--- a/glm/host/qn_oracle.mojo
++++ b/glm/host/qn_oracle.mojo
+@@ -151,9 +151,9 @@ comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+ 
+ #: QN_TILED (`glm/impl/qn/glm_base.mojo`): the `C == 1` objective's loss
+ #: sum, bias mean and `X^T dZ` in the row-tile order every GPU runs.
+-# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime HOST_QN_TILED = True
++#: `-D MOJOLEARN_QN_TILED_OFF=1` restores the 256-chain order (the device
++#: build must take the same define).
++comptime HOST_QN_TILED = not is_defined["MOJOLEARN_QN_TILED_OFF"]()
+ comptime HOST_QNT_ROWS = 256
+ 
+ 
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 5e8706c15b..20ec415d2d 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -473,12 +473,15 @@ def qn_block_fold_kernel(
+ # pinned halving tree. The epilogues (cuBLAS's alpha/beta, the bias
+ # `sum * (1 / N)`, the loss store) are unchanged. The words differ from the
+ # 256-chain order and are the same on NVIDIA, AMD, Apple and the host column
+-# (`glm/host/qn_oracle.mojo::host_qnt_*`).
++# (`glm/host/qn_oracle.mojo::host_qnt_*`). `-D MOJOLEARN_QN_TILED_OFF=1`
++# restores the 256-chain kernels (the A/B define; pass it to the host build
++# too).
+ # ---------------------------------------------------------------------------
+ 
+-# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime QN_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime QN_TILED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_QN_TILED_OFF"]()
++)
+ comptime QNT_ROWS = 256
+ comptime QNT_TPB = 256
+ 

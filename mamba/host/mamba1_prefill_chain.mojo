@@ -9,7 +9,7 @@ this file (lane del-mamba, 2026-10-19: the device copy of this walk is
 tombstoned in autograd/kernels/mamba1_prefill.mojo).
 """
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -17,7 +17,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnNeuralMambaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnNeuralMambaContextFastV3"
 
 
 from core.identity_trace import IdentityTrace

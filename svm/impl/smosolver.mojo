@@ -65,9 +65,9 @@ float `diff`: `diff > diff_prev * 1.5` and `abs(diff - diff_prev) < 0.001
 NaN throw is the same sentence.
 """
 
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan
 from std.builtin.sort import sort
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isnan
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -76,7 +76,7 @@ from core.identity_trace import IdentityTrace, fnv1a64_bytes, FNV_OFFSET
 from ensemble.instruments import StageTimes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from std.memory import stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from svm.checks.device_select import (
@@ -142,7 +142,7 @@ comptime SMO_MAX_INNER_ITER = 10000
 #: every mode (cpu-gpu-cleanup c-svm, 2026-10-02: the host sort and upload of
 #: the fold order and its `MOJOLEARN_SVM_*SYNCS_OFF` switches are gone).
 
-comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
+comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
@@ -155,13 +155,12 @@ tile and reading it back; RBF and linear kernels, n_cols <= 64."""
 #: of writing the `nnz x batch` kernel tile (identical GEMM + RBF epilogue
 #: launch) and reading it back: RBF and linear kernels, n_cols <= 64, one
 #: device. Same expressions in the same order per cell, so no bit moves and
-#: the host column is untouched. `-D MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`
-#: (or the master `MOJOLEARN_IDN_ALL_OFF`) keeps the tile path; the sabotage
-#: builds keep it too, so each still fails its gate through the kernels it
-#: names.
+#: the host column is untouched. The sabotage builds keep the tile path, so
+#: each still fails its gate through the kernels it names.
+# TOMBSTONE: MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 30ab49dcd7.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SVM_IDN_FUSED_UPDATE_F = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not SAB_FOLD_ROTATE
     and not SAB_NO_FTZ
     and not is_defined["MOJOLEARN_SVM_SABOTAGE_STD_EXP"]()
@@ -173,12 +172,9 @@ comptime SVM_IDN_FUSED_UPDATE_F = (
 #: flag, scan alpha, scan f); it is one: the flag is cleared once before the
 #: loop, and a set flag raises, so nothing ever needs it cleared again. The
 #: same verdict on the same words; no arithmetic.
-#: `-D MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
-#: restores the three launches.
-comptime SVM_IDN_NAN_SCAN_ONE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 788f90f025.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVM_IDN_NAN_SCAN_ONE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def flag_nan2_f32_kernel(
@@ -323,16 +319,13 @@ def update_f_kernel(
 #: smaller training index), so the winner, and every word, is the same at any
 #: block width (the launch-invariance gate already passes 1024); the host
 #: oracle is unchanged. Expected ~6.5 -> ~2.5 us per inner iteration: svc taxi
-#: NV ~1202 -> ~750 ms. -D MOJOLEARN_IDN_SVC_ONE_BLOCK turns it on;
-#: MOJOLEARN_IDN_ALL_OFF wins.
+#: NV ~1202 -> ~750 ms.
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): svc istella 0.720 (NV 0.685, AMD 0.755),
-#: taxi 0.663 (NV 0.629, AMD 0.697); same bits; runs v0127/a1709 vs A v0126/a1708. -D
-#: MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF restores the old path.
-comptime IDN_SVC_ONE_BLOCK = not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
-comptime SMO_GRID_TPB_CAP = 1024 if IDN_SVC_ONE_BLOCK else SMO_GRID_TPB
+#: taxi 0.663 (NV 0.629, AMD 0.697); same bits; runs v0127/a1709 vs A v0126/a1708.
+# TOMBSTONE: MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF (old path of the promoted default, EXP:2062) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at ed4cab202e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SMO_GRID_TPB_CAP = 1024
 
 
 def _block_solve_threads_for(n_ws: Int, requested: Int) -> Int:
@@ -589,10 +582,14 @@ struct SmoSolver(Movable):
     # `InitPenalty`'s weighted arm: one bound per ROW (the caller's C * w,
     # rounded to float32 once on the host); empty = C at every index.
     var c_rows: List[Float32]
+    var plan: DevicePlan
+    """The device plan the fit entry read once. `plan.single()` selects the
+    one-device kernels; the kernel tiles shard over it (svm/multi_gpu.mojo)."""
 
     def __init__(
         out self,
         ctx: DeviceContext,
+        plan: DevicePlan,
         param: SvmParameter,
         kp: KernelParams,
         n_rows: Int,
@@ -659,6 +656,7 @@ struct SmoSolver(Movable):
         self.trace = SmoTrace()
         check_c_rows(c_rows, n_rows)
         self.c_rows = c_rows.copy()
+        self.plan = plan.copy()
         ctx.synchronize()
 
     def get_n_iter(self) -> Int:
@@ -814,7 +812,7 @@ struct SmoSolver(Movable):
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)
         var cache = KernelCache(
-            ctx, x, n_rows, n_cols, self.n_ws, self.kp, self.cache_size,
+            ctx, self.plan, x, n_rows, n_cols, self.n_ws, self.kp, self.cache_size,
             self.kernel_tile_byte_limit, self.scratch_pad,
             self.scratch_poison, self.svmType,
         )
@@ -844,9 +842,10 @@ struct SmoSolver(Movable):
                 self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
             )
         # SVM_IDN_FUSED_UPDATE_F serves one device; the multi-device kernel
-        # rows (`kernel_op`, MOJOLEARN_SVM_DEVICE_COUNT) keep the tile path.
-        var device_setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
-        var one_device = device_setting == "" or device_setting == "1"
+        # rows (svm/multi_gpu.mojo::kernel_matrix_dispatch) keep the tile
+        # path. `plan.single()` is the old `setting == "" or setting == "1"`
+        # test on the same MOJOLEARN_SVM_DEVICE_COUNT setting: same truth table.
+        var one_device = self.plan.single()
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](

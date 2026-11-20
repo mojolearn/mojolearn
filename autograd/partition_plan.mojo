@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Physical residency is separate from this immutable logical graph. Tensor
 # splitting partitions independent output columns, never the contraction K.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from autograd.program import OpsProgram
 from autograd.rankn import ShapeN
 
@@ -89,11 +89,11 @@ def _emit_node(mut p: OpsProgram, code: Int, args: List[Int], ints: List[Int], f
 def column_bytes(a: GraphBytes, lo: Int, width: Int) raises -> GraphBytes:
     if a.shape.ndim != 2 or lo < 0 or width < 1 or lo + width > a.shape.cols():
         raise Error("tensor partition requires a valid rank-two column range")
-    var data = List[Float32](length=a.shape.rows() * width, fill=Float32(0))
+    var data = List[Float32](unsafe_uninit_length=a.shape.rows() * width)
     # Byte packing, no host arithmetic on tensor values. The full unpartitioned
     # parameter is never uploaded to a model-stage executor.
     for row in range(a.shape.rows()):  # driver-loop: packed parameter row copies
-        memcpy(dest=data.unsafe_ptr() + row * width,
+        unsafe_memcpy(dest=data.unsafe_ptr() + row * width,
                src=a.words.unsafe_ptr() + row * a.shape.cols() + lo, count=width)
     return GraphBytes(ShapeN.matrix(a.shape.rows(), width), data^, a.integer)
 
@@ -152,6 +152,9 @@ def partition_plan(p: OpsProgram, values: List[GraphBytes], trainable: List[Bool
         plan.trainable.append(trainable[j])
         plan.program.params.append(0)
         plan.program.param_shapes.append(p.param_shapes[j])
+        while len(plan.program.param_kinds) < len(plan.program.params) - 1:  # driver-loop: over parameter kinds owed by earlier weights
+            plan.program.param_kinds.append(0)
+        plan.program.param_kinds.append(p.param_kind(j))
     var refs = List[Int]()
     for j in range(p.n_in):  # driver-loop: input value mapping
         refs.append(j)

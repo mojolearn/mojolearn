@@ -2,16 +2,17 @@
 # Logical host owner for manifold. Release builds merge this builder
 # with the other host builders; development builds give it an independent
 # source/cache boundary. Private matrix/device types own native lifetimes.
+from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.runtime_manifold_entry import (
+from bindings.runtime_manifold_entry_pack import (
     runtime_manifold_c, RUNTIME_MANIFOLD_SABOTAGE,
 )
-from bindings.manifold_storage_native import ManifoldMatrix, ManifoldDevice
-from bindings.manifold_scalar_native import ManifoldScalarSnapshot
+from bindings.manifold_storage_native_unpack import ManifoldMatrix
+from bindings.manifold_scalar_native_door import ManifoldScalarSnapshot
 
 
 def runtime_manifold_host_numeric_mode_binding() raises -> PythonObject:
@@ -37,10 +38,11 @@ def runtime_manifold_host_sabotage_binding() raises -> PythonObject:
 
 
 def build__mojolearn_runtime_manifold_host() -> PythonObject:
+    comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_manifold_host")
         _ = module.add_type[ManifoldMatrix]("_ManifoldMatrix")
-        _ = module.add_type[ManifoldDevice]("_ManifoldDevice")
+        # TOMBSTONE: _ManifoldDevice (the Python-holding pool buffer type) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
         _ = module.add_type[ManifoldScalarSnapshot]("_ManifoldScalarSnapshot")
         module.def_py_c_function(runtime_manifold_c, "manifold_native_call")
         module.def_function[runtime_manifold_host_numeric_mode_binding]("runtime_manifold_host_numeric_mode")

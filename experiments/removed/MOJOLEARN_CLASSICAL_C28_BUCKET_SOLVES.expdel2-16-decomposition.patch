@@ -1,0 +1,144 @@
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 4321c41b43..dc69c1145e 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -30,6 +30,7 @@ from gemm.afn_apple_fast import (
+ # try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
+ from decomposition.linalg_public_device import device_qr_r
+ from decomposition.linalg_types import _validate_shape
++from experiments.classical_identical_ideas.linear_controls import C28_BUCKET_SOLVES
+ from x_decomp.classical_device import contrast_kernel
+ from core.blocked_moments import bm_centered_gram_panels
+ from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
+@@ -1142,9 +1143,6 @@ def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: I
+ 
+ # C28 shared-Gram sparse-code tasks: stable descriptors group equal active
+ # workspace scale, while every row retains its original scratch and tie order.
+-# Lane expdel2-16-decomposition (2026-11-15): the arm is deleted in this file; these two kernels and
+-# `launch_classical_code_rows` stay only for x_decomp/kit_device.mojo's import (another lane's file)
+-# and go with that file's fold.
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+ def classical_code_bucket_kernel(q: F32Ptr, w: F32Ptr, keys: U32Ptr, order: U32Ptr, n: Int32, k: Int32,
+                                   kind: Int32, alpha: Float32):
+@@ -1290,14 +1288,14 @@ def _ast[SH: Bool](sh: ShF32, g: F32Ptr, o: Int, q: Int, v: Float32):
+ 
+ def als_block_kernel[SH: Bool](
+     c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32,
+-    su: Int32, si: Int32, reg: Float32,
++    su: Int32, si: Int32, reg: Float32, order: MutPointer[UInt32, MutAnyOrigin],
+ ):
+     """`als_row` for row u = block_idx.x of C (element (u, i) at c[u * su +
+     i * si]), by a block of ALS_BLK_TPB threads; SH: the f*f + f cells in
+     threadgroup memory, else at s[u * (f*f + f)]."""
+     var u = Int(block_idx.x)
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
++    comptime if C28_BUCKET_SOLVES:
++        u = Int(order.unsafe_load(u))
+     var tid = Int(thread_idx.x)
+     var ff = Int(f)
+     var mm = Int(m)
+@@ -1393,8 +1391,20 @@ def als_scratch(n: Int, f: Int) -> Int:
+     return 0 if cells <= ALS_SH_CELLS else n * cells
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
++def als_bucket_keys_kernel(c: F32Ptr, keys: MutPointer[UInt32, MutAnyOrigin], order: MutPointer[UInt32, MutAnyOrigin],
++                           n: Int32, m: Int32, su: Int32, si: Int32):
++    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if u < Int(n):
++        var count = 0
++        for i in range(Int(m)):
++            if ftz(c.unsafe_load(u * Int(su) + i * Int(si))) != Float32(0):
++                count += 1
++        var bucket = UInt32(0)
++        while count > 0:
++            count >>= 1
++            bucket += 1
++        keys.unsafe_store(u, bucket)
++        order.unsafe_store(u, UInt32(u))
+ 
+ 
+ def launch_als_rows(
+@@ -1405,18 +1415,29 @@ def launch_als_rows(
+     (cgr-decomp: the MOJOLEARN_XD_ALS_BLOCK=0 A/B arm is deleted.)"""
+     if n <= 0:
+         return
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
++    var order = ctx.enqueue_create_buffer[DType.uint32](n if C28_BUCKET_SOLVES else 1)
++    comptime if C28_BUCKET_SOLVES:
++        var keys = ctx.enqueue_create_buffer[DType.uint32](n)
++        var tk = ctx.enqueue_create_buffer[DType.uint32](n)
++        var tv = ctx.enqueue_create_buffer[DType.uint32](n)
++        var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
++        ctx.enqueue_function[als_bucket_keys_kernel](c, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(m), Int32(su), Int32(si),
++                                                    grid_dim=_blocks(n), block_dim=TPB)
++        fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
++        _ = keys^
++        _ = tk^
++        _ = tv^
++        _ = cnt^
+     if f * f + f <= ALS_SH_CELLS:
+         comptime k_sh = als_block_kernel[True]
+         ctx.enqueue_function[k_sh](
+-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
++            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
+             grid_dim=n, block_dim=ALS_BLK_TPB,
+         )
+     else:
+         comptime k_g = als_block_kernel[False]
+         ctx.enqueue_function[k_g](
+-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
++            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
+             grid_dim=n, block_dim=ALS_BLK_TPB,
+         )
+ 
+@@ -3544,9 +3565,10 @@ struct DevExec(Exec):
+         comptime if DECOMP_FAST_LASSO_GRP:
+             # lane/apple-fast-gap-clus3: a 32-thread block per row (x_decomp/lasso_grp.mojo)
+             grp = n > 0 and k >= 1 and k <= LG_MAXK
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+-        if grp:
++        if C28_BUCKET_SOLVES:
++            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(dh), _p(di), n, k, 0, max_iter,
++                                      1 if positive else 0, alpha, tol)
++        elif grp:
+             ctx.enqueue_function[lasso_grp_kernel](
+                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                 alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LG_TPB,
+@@ -3630,12 +3652,13 @@ struct DevExec(Exec):
+         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+         var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+-        ctx.enqueue_function[lars_rows_kernel](
+-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+-            Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+-        )
++        if C28_BUCKET_SOLVES:
++            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 1, m, nnz, Float32(0), Float32(0))
++        else:
++            ctx.enqueue_function[lars_rows_kernel](
++                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
++                Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
++            )
+         _down(ctx, dw, w, n * k)
+         _down(ctx, dn, na, n)
+         ctx.synchronize()
+@@ -3666,9 +3689,9 @@ struct DevExec(Exec):
+                     dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                     Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
+                 )
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+-        if not block:
++        if C28_BUCKET_SOLVES:
++            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 2, nnz, 0, Float32(0), Float32(0))
++        elif not block:
+             ctx.enqueue_function[omp_rows_kernel](
+                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                 Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,

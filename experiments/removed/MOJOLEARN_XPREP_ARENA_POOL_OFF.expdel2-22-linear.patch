@@ -1,0 +1,16 @@
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index 274fb16601..7380b82d96 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -99,9 +99,8 @@ comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
+ #: cleared), and the idle cap is POOL_KEEP_BYTES (2 GB). DEFAULT ON (storage
+ #: only, no bit moves); `-D MOJOLEARN_XPREP_ARENA_POOL_OFF=1` restores the
+ #: fresh allocation (and the store's free-at-once slots).
+-# TOMBSTONE: MOJOLEARN_XPREP_ARENA_POOL_OFF (old path: the fresh allocation; EXP:1787 CONFIRMED the pool default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5867d7c11d.
+-# Restore: git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.expdel2-22-linear.patch
+-comptime X_PREP_POOL_ARENA_IDN = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
++comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
++                                 and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
+ comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+                              and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
+ comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV2" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV2"

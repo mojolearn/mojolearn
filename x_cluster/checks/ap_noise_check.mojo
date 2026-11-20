@@ -35,7 +35,7 @@ def run[O: ClusterOps](mut ops: O, s: List[Float32], seed: UInt64) raises -> Lis
     return ops.get(ss, len(s))
 
 
-def main() raises:
+def run_checks() raises:
     var m = 40000
     var x = seam_fixture(200, 200, 31)
     var s = List[Float32](capacity=m)

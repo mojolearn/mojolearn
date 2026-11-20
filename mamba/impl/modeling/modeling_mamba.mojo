@@ -164,7 +164,7 @@ Everything, with the pins compiled away, on the same code and the same
 launches. FAST makes no identity claim (contract section 8's last sentence).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import step_count_sync
@@ -219,6 +219,10 @@ from mamba.impl.modeling.afn_mamba1_fused import afn_m1_conv_token, afn_m1_split
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
 #: the residual folded into out_proj. Every use is a `comptime if` whose
 #: other arm is main's spelling unchanged.
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (with _SPLITK and AFN_EPI_ALL: neural MERGED-UNMEASURED FAST+Apple matrix-unit
+# in_proj/out_proj route; AFN_MAMBA_PROJ_ROUTE folded False) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 21b1e860c2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from mamba.impl.modules.afn_proj_gemm import (
     AFN_MAMBA_PROJ_ROUTE,
     afn_proj_gemm_into,
@@ -401,6 +405,9 @@ comptime BLOCK_ANY_SABOTAGE = (
 # 12.860 ms, AMD MI325X 9.934 -> 9.922 ms, avg 1.52x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at b056f35e0.
 # Only the IDENTICAL arm (NI46) is gone: the fused kernels stay for the Apple FAST AFN_MAMBA1_FUSE_IN route.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA1_FUSE_IN (neural MERGED-UNMEASURED FAST+Apple arm: the fused conv/split launches) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 3ae6bf9245.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA1_FUSE_IN.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 comptime MAMBA1_ELEMENTWISE_FUSED = AFN_MAMBA1_FUSE_IN
 
 
@@ -843,6 +850,43 @@ struct MambaDeviceStages(Movable):
         step_count_sync()
         ctx.synchronize()
 
+    def rezero(mut self) raises:
+        """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+        the held stages made ready for the next forward on the buffers
+        already held (no allocation, no wait). Not for a guarded (poison)
+        build, whose fills cover a body view.
+
+        Lane fix-wave2-leftovers (audit NOTE block_step_ops.mojo:1012): a
+        stage is refilled only where some route of `mamba_block_forward`
+        leaves it partly or wholly unwritten. Every other stage is written
+        whole by every route, so its zeros were overwritten before any read
+        (same bits):
+          norm_sumsq [M], norm_out [M,dm]: mamba_rms_norm, one thread per row
+            (plain) or lane/tree/out launches over m and m*dm (RMS_TREE);
+          in_proj [M,2di]: afn_proj_gemm_into or mamba_proj_gemm, C stored
+            whole (no accumulate);
+          a_out [di,N]: a_from_a_log (di*N threads) or afn_m1_split_a's
+            n_a tail;
+          conv_out, silu_out [M,di]: every conv arm (fn, cell, nn35 pair,
+            afn token) stores both per (b, token, d); conv_win [B,di,4]: the
+            window kernel stores all D_CONV slots per (b, d), the afn token
+            kernel stores slots j >= 0 per token plus the p < 0 slots at
+            token 0;
+          x_proj [M,xr], dt_proj [M,di]: mamba_proj_gemm;
+          dt_low, b_mat, c_mat: split_x_proj (per row, all xr columns) or
+            afn_m1_split_a (per element of m*xr);
+          softplus_out, gate_out [M,di]: elementwise over m*di;
+          scan_y, skip_out [M,di]: selective_scan_fn, every arm over all
+            (b, d) channels and all L tokens;
+          scan_h: a whole-buffer copy of state.h;
+          residual_out [M,dm]: residual_add_kernel over m*dm, or the fused
+            out_proj seeded by a whole copy of x.
+        KEPT: out_proj under AFN_MAMBA_PROJ_ROUTE, where the fused
+        out_proj+residual launch (trace off) never writes it; the tape still
+        names it as the PROJ_OUT value."""
+        comptime if AFN_MAMBA_PROJ_ROUTE:
+            self.out_proj.enqueue_fill(Float32(0.0))
+
     def __init__(
         out self,
         ctx: DeviceContext,
@@ -1204,66 +1248,8 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
-# NN35: two adjacent tokens share their convolution input window and
-# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
-# it saves D_CONV-1 loads per pair without changing either tap chain.
-# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
-comptime NN35_CONV_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-def nn35_causal_pair_kernel(
-    conv_out: MutPointer[Float32, MutAnyOrigin],
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    in_proj: MutPointer[Float32, MutAnyOrigin],
-    conv_w: MutPointer[Float32, MutAnyOrigin],
-    conv_b: MutPointer[Float32, MutAnyOrigin],
-    win: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, di_in: Int32,
-):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var nt = (l + 1) // 2
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nt * di:
-        return
-    var d = cell % di
-    var ti = cell // di
-    var bb = ti // nt
-    var li = (ti % nt) * 2
-    var inputs = stack_allocation[D_CONV + 1, Float32]()
-    var weights = stack_allocation[D_CONV, Float32]()
-    var valid = min(2, l - li)
-    # Only valid outputs' taps are loaded; no read past the odd tail.
-    for k in range(D_CONV + valid - 1):
-        var pos = li - (D_CONV - 1) + k
-        var v: Float32
-        if pos >= 0:
-            v = in_proj.unsafe_load((bb * l + pos) * (2 * di) + d)
-        else:
-            v = win.unsafe_load((bb * di + d) * D_CONV + D_CONV + pos)
-        inputs[k] = ftz(v)
-    for k in range(D_CONV):
-        weights[k] = ftz(conv_w.unsafe_load(d * D_CONV + k))
-    var bias = ftz(conv_b.unsafe_load(d))
-    for j in range(valid):
-        var acc = bias
-        comptime if SAB_S13_BIAS_LAST:
-            acc = Float32(0.0)
-        for kk in range(D_CONV):
-            var k = kk
-            comptime if SAB_S13_TAPS_REVERSED:
-                k = D_CONV - 1 - kk
-            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
-        comptime if SAB_S13_BIAS_LAST:
-            acc = ftz(acc + bias)
-        var out_i = (bb * l + li + j) * di + d
-        conv_out.unsafe_store(out_i, acc)
-        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+# TOMBSTONE: MOJOLEARN_NN35_CONV_PAIR (unmeasured opt-in arm: two tokens per conv thread) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d54d3d8b00.
+# Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.expdel2-27-neural.patch
 
 
 def causal_conv1d_cell_kernel(
@@ -1365,21 +1351,7 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    comptime if NN35_CONV_PAIR:
-        ctx.enqueue_function[nn35_causal_pair_kernel](
-            conv_out.unsafe_ptr(),
-            silu_out.unsafe_ptr(),
-            in_proj.unsafe_ptr(),
-            conv_w.unsafe_ptr(),
-            conv_b.unsafe_ptr(),
-            old_win.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(d_inner),
-            grid_dim=(_grid(b * ((l + 1) // 2) * d_inner), 1, 1),
-            block_dim=(MAMBA_TPB, 1, 1),
-        )
-    elif IDN_MAMBA_CONV_CELL:
+    comptime if IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[causal_conv1d_cell_kernel](
             conv_out.unsafe_ptr(),
             silu_out.unsafe_ptr(),

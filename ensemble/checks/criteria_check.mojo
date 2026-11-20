@@ -67,6 +67,7 @@ from ensemble.decisiontree.decisiontree import (
     criterion_name,
 )
 from ensemble.randomforest import RF_params, RandomForestMetaData, fit_forest
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime CLS_LT = DType.int32
@@ -156,12 +157,12 @@ def _fit_cls(
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, x[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[CLS_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, y[i])
     var dy = ctx.enqueue_create_buffer[CLS_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[CLS_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var p = _params(criterion, min_samples_leaf)
@@ -172,8 +173,6 @@ def _fit_cls(
     _ = dx^
     _ = dy^
     _ = dsw^
-    _ = hx^
-    _ = hy^
     return s^
 
 
@@ -190,12 +189,12 @@ def _fit_reg(
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, x[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[REG_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, y[i])
     var dy = ctx.enqueue_create_buffer[REG_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[REG_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var p = _params(criterion, min_samples_leaf)
@@ -204,8 +203,6 @@ def _fit_reg(
     _ = dx^
     _ = dy^
     _ = dsw^
-    _ = hx^
-    _ = hy^
     return s^
 
 
@@ -544,7 +541,7 @@ def arm_f_params_reach_the_device(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("criteria_check: every split criterion cuML accepts, actually run")
     var ctx = DeviceContext()
     var fails = 0

@@ -158,7 +158,7 @@ from spectral.impl.sparse.solver.detail.lanczos import (
 )
 from spectral.impl.sparse.solver.lanczos_types import LANCZOS_LA, LANCZOS_SM
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SCRATCH = "/tmp"
 
 

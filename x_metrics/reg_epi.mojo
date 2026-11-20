@@ -44,14 +44,17 @@ from checks.soft_f64 import (
 from x_metrics.common import FP, IP, p, ld, ldi, sti
 from x_metrics.tail import st64, ld64, is0, abs64
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P08: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Two software-binary64 chains can overlap long integer-emulation dependencies
 # in multioutput score averaging. This is an epilogue experiment, not a new
 # per-row metric fold. Preserve every weight and NANRULE before final division.
-comptime AFCL_P08 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P08"]()
+comptime AFCL_P08 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P08"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P08 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P08.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 comptime OP_REG_EPI = 60
 

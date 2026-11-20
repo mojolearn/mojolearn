@@ -23,13 +23,15 @@ pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
 from std.math import fma  # only a sabotage arm (seam 5709) spells the fused form
 from std.memory import bitcast
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from core.philox import philox4x32_10
-from checks.rtf_seam import rtf_mul_add
-from gemm.experiments.neural_profile import NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell, neural_merge_chains, neural_fold_push, neural_fold_drain
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
-from x_cnn.neural_aux_contract import NI57_GRAPH_TREE64, graph_reduce_tree64
 from gemm.contract import GEMM_NUMERICAL_PROFILE
+# Launch-word layouts and shape rules (re-exported; see x_cnn/shape_words.mojo).
+from x_cnn.shape_words import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_SH, CP_SW, CP_PH, CP_PW
+from x_cnn.shape_words import CP_DH, CP_DW, CP_OH, CP_OW, CP_BIAS, CP_REV, CP_LEN, conv_params
+from x_cnn.shape_words import PP_N, PP_C, PP_H, PP_W, PP_KH, PP_KW, PP_SH, PP_SW, PP_PH, PP_PW
+from x_cnn.shape_words import PP_DH, PP_DW, PP_OH, PP_OW, PP_INCPAD, PP_REV, PP_CEIL, PP_DIVOVR, PP_LEN, pool_params
 
 # NN45/46/47: source-only A/B arms; default OFF, no quality/identity/time
 # claim. Shared element functions define every floating seam for host/GPU.
@@ -37,10 +39,16 @@ from gemm.contract import GEMM_NUMERICAL_PROFILE
 # -D MOJOLEARN_IDN_CNN_CONV_RELU=0|1|2: 0 separate passes (default),
 # 1 = NN45 conv-out + bias + ReLU in one forward pass (host and device),
 # 2 = arm 1 plus NI16's fused ReLU backward rows (device). Same values.
-comptime IDN_CNN_CONV_RELU_ARM = get_defined_int["MOJOLEARN_IDN_CNN_CONV_RELU", 0]()
-comptime NN45_CONV_RELU = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_CNN_CONV_RELU_ARM >= 1 and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NN46_GATHER_BOUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN46_GATHER_BOUNDS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NN47_APPLY_RUNNING = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN47_APPLY_RUNNING"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_CNN_CONV_RELU (opt-in arms 1/2, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_CONV_RELU.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_NN46_GATHER_BOUNDS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_NN47_APPLY_RUNNING (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN47_APPLY_RUNNING.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: IDN_CNN_CONV_RELU_ARM, NN45_CONV_RELU, NN47_APPLY_RUNNING and nn45_conv_out_relu_at /
+# nn47_bn_apply_running_at removed: no reader left.)
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -50,17 +58,12 @@ comptime ElemFn = def(Int, FP, FP, FP, FP, IP, IP) thin -> None
 def neural_tape_budget_bytes() -> Int:
     """NI10 explicit A/B lifetime policy, shared by CPU and GPU bindings.
 
-    -1 keeps the incumbent unbounded tape policy. Candidate A has a
-    64-MiB total retained-tape budget, a memory policy independent of model
-    dimensions. B recomputes. ALL_OFF restores the incumbent. Selection
-    affects buffer allocation only, never values or training sample count.
+    -1 keeps the incumbent unbounded tape policy (the only policy).
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
-        comptime assert not (is_defined["MOJOLEARN_NI10_BUDGETED_CNN_TAPE"]() and is_defined["MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE"]()), "select one CNN tape arm"
-        comptime if is_defined["MOJOLEARN_NI10_BUDGETED_CNN_TAPE"]():
-            return 64 * 1024 * 1024
-        comptime if is_defined["MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE"]():
-            return 0
+    # TOMBSTONE: MOJOLEARN_NI10_BUDGETED_CNN_TAPE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI10_BUDGETED_CNN_TAPE.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE.patch; record in docs/TOMBSTONES.md.
     return -1
 
 
@@ -72,42 +75,31 @@ def neural_tape_budget_bytes() -> Int:
 # column's element functions). IDENTICAL only; each has its own before arm.
 #: AvgPool2d backward, windows that tile the input (kernel == stride, no
 #: padding; global average pooling is this): the pixel's ONE window instead
-#: of a KH x KW scan. `-D MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF` is the before arm.
-comptime IDN_AVGPOOL_BWD_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: of a KH x KW scan.
+# TOMBSTONE: MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_AVGPOOL_BWD_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: pad backward: the pad margins and the pixel's own interior position
-#: instead of the whole Hp x Wp plane. `-D MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF`.
-comptime IDN_PAD_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: instead of the whole Hp x Wp plane.
+# TOMBSTONE: MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PAD_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: adaptive pool backward (avg and max): the output cells whose window can
-#: hold the pixel instead of all OH x OW. `-D MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF`.
-comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: hold the pixel instead of all OH x OW.
+# TOMBSTONE: MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: nr-small D9 (2026-10-04): `softmax_xent_row_at` computes each exp once
 #: and parks it in the proba row (same words, every column and the host).
-#: -D MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
-comptime XCNN_SOFTMAX_ONE_EXP = not (is_defined["MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF (old path (two exps per element), no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 # ---------------------------------------------------------------- conv params
-# The Int32 block of a convolution (conv_params fills 13 and 14):
-comptime CP_N = 0
-comptime CP_C = 1
-comptime CP_H = 2
-comptime CP_W = 3
-comptime CP_OC = 4
-comptime CP_KH = 5
-comptime CP_KW = 6
-comptime CP_SH = 7
-comptime CP_SW = 8
-comptime CP_PH = 9
-comptime CP_PW = 10
-comptime CP_DH = 11
-comptime CP_DW = 12
-comptime CP_OH = 13
-comptime CP_OW = 14
-comptime CP_BIAS = 15
-#: 1 reverses col2im's (kh) order: the host binding's sabotage build and a
-#: device sabotage patch set it; production callers leave it 0.
-comptime CP_REV = 16
-comptime CP_LEN = 17
+# The launch-word layout of a convolution and of a pooling layer, and their
+# output-shape rules, live in x_cnn/shape_words.mojo (integers only; the
+# native layer owners import them without the element functions). Every
+# name is re-exported here unchanged.
 
 
 @always_inline
@@ -140,29 +132,6 @@ def _ud(a: Int, b: Int) -> Int:
 @always_inline
 def _um(a: Int, b: Int) -> Int:
     return Int(UInt32(a) % UInt32(b))
-
-
-def conv_params(raw: List[Int]) raises -> List[Int32]:
-    """Validate the Python-side block and fill OH, OW."""
-    if len(raw) < CP_BIAS + 1:
-        raise Error("x_cnn: conv params need 16 entries")
-    for k in range(CP_OH):
-        if raw[k] < 0:
-            raise Error("x_cnn: negative conv parameter")
-    var positive: List[Int] = [CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_SH, CP_SW, CP_DH, CP_DW]
-    for k in positive:
-        if raw[k] <= 0:
-            raise Error("x_cnn: conv dimensions, stride and dilation must be positive")
-    var oh = (raw[CP_H] + 2 * raw[CP_PH] - raw[CP_DH] * (raw[CP_KH] - 1) - 1) // raw[CP_SH] + 1
-    var ow = (raw[CP_W] + 2 * raw[CP_PW] - raw[CP_DW] * (raw[CP_KW] - 1) - 1) // raw[CP_SW] + 1
-    if oh <= 0 or ow <= 0:
-        raise Error("x_cnn: the kernel does not fit the padded input")
-    var out = List[Int32](capacity=CP_LEN)
-    for k in range(CP_LEN):
-        out.append(Int32(raw[k]) if k < len(raw) else Int32(0))
-    out[CP_OH] = Int32(oh)
-    out[CP_OW] = Int32(ow)
-    return out^
 
 
 @always_inline
@@ -286,22 +255,9 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
     var n = _ud(t, C)
     var ckk = C * KH * KW
     var acc = Float32(0)
-    # NN46: solve 0 <= h+PH-kh*DH <= (OH-1)*SH (and width)
-    # before the incumbent divisibility tests. This only omits impossible
-    # taps, never a floating term, for arbitrary stride/dilation/padding.
-    var kh0 = 0
-    var kh1 = KH
-    var kw0 = 0
-    var kw1 = KW
-    comptime if NN46_GATHER_BOUNDS:
-        if _g(p, CP_REV) == 0:
-            var low_h = h + PH - (OH - 1) * SH
-            var low_w = w + PW - (OW - 1) * SW
-            kh0 = max(0, (max(0, low_h) + DH - 1) // DH)
-            kh1 = min(KH, (h + PH) // DH + 1)
-            kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
-            kw1 = min(KW, (w + PW) // DW + 1)
-    for a in range(kh0, kh1):
+    # TOMBSTONE: MOJOLEARN_NN46_GATHER_BOUNDS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch; record in docs/TOMBSTONES.md.
+    for a in range(KH):
         var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
         var th = h + PH - kh * DH
         if th < 0 or _um(th, SH) != 0:
@@ -309,7 +265,7 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
         var oh = _ud(th, SH)
         if oh >= OH:
             continue
-        for kw in range(kw0, kw1):
+        for kw in range(KW):
             var tw = w + PW - kw * DW
             if tw < 0 or _um(tw, SW) != 0:
                 continue
@@ -322,143 +278,20 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
-def col2im_bounded_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """NI14 address-schedule arm: exclude taps outside the output image.
-
-    The bounds solve 0 <= h+PH-kh*DH <= (OH-1)*SH, and likewise for
-    width. Congruence checks and the surviving (kh,kw) contribution order
-    are unchanged, including CP_REV. No scatter atomics or new reduction.
-    This is also the resource/boundary fallback for NI14's cooperative tap
-    pages in x_cnn/neural_col2im.mojo; it introduces no partial sums.
-    """
-    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
-    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
-    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
-    var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
-    var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
-    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
-    var w = _um(i, W); var t = _ud(i, W)
-    var h = _um(t, H)
-    t = _ud(t, H)
-    var c = _um(t, C); var n = _ud(t, C)
-    var hlo = max(0, h + PH - (OH - 1) * SH + DH - 1) // DH
-    var hhi = min(KH, (h + PH) // DH + 1)
-    var wlo = max(0, w + PW - (OW - 1) * SW + DW - 1) // DW
-    var whi = min(KW, (w + PW) // DW + 1)
-    var acc = Float32(0)
-    var ckk = C * KH * KW
-    for a in range(max(0, hhi - hlo)):
-        var kh = hhi - 1 - a if _g(p, CP_REV) != 0 else hlo + a
-        var th = h + PH - kh * DH
-        if _um(th, SH) != 0:
-            continue
-        var oh = _ud(th, SH)
-        for kw in range(wlo, whi):
-            var tw = w + PW - kw * DW
-            if _um(tw, SW) != 0:
-                continue
-            var ow = _ud(tw, SW)
-            var r = (n * OH + oh) * OW + ow
-            acc = ftz(acc + ftz(dcols.unsafe_load(r * ckk + (c * KH + kh) * KW + kw)))
-    dx.unsafe_store(i, acc)
-
-
-@always_inline
 def fill_one_at(i: Int, dst: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, Float32(1))
 
 
-@always_inline
-def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """dst[i] = src[q[i // row] * row + i % row], row = p[0]: a 4-byte word
-    copy (no float arithmetic touches it), the batch rows of a resident X."""
-    var row = Int(p.unsafe_load(0))
-    var r = _ud(i, row)
-    var j = Int(q.unsafe_load(r)) * row + (i - r * row)
-    dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
+# TOMBSTONE: x_cnn_res_gather (gather_rows_at, its element body; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
-def argmax_row_at(i: Int, proba: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """q[i] = the column of row i's first largest value (k = p[0] columns;
-    a NaN wins at its first occurrence, as numpy's argmax): the classifier's
-    predict on the device (lane pyglue-numeric: numpy's argmax on the host)."""
-    var k = Int(p.unsafe_load(0))
-    var base = i * k
-    var best = 0
-    var bv = proba.unsafe_load(base)
-    for j in range(1, k):
-        if bv != bv:
-            break
-        var v = proba.unsafe_load(base + j)
-        if v != v or v > bv:
-            best = j
-            bv = v
-    q.unsafe_store(i, Int32(best))
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 # ---------------------------------------------------------------- pooling
-# The Int32 block of a pooling layer (pool_params fills 12 and 13):
-comptime PP_N = 0
-comptime PP_C = 1
-comptime PP_H = 2
-comptime PP_W = 3
-comptime PP_KH = 4
-comptime PP_KW = 5
-comptime PP_SH = 6
-comptime PP_SW = 7
-comptime PP_PH = 8
-comptime PP_PW = 9
-comptime PP_DH = 10
-comptime PP_DW = 11
-comptime PP_OH = 12
-comptime PP_OW = 13
-#: AvgPool's count_include_pad (PyTorch's default True).
-comptime PP_INCPAD = 14
-#: 1 reverses the backward gathers' (kh) order (sabotage only).
-comptime PP_REV = 15
-#: ceil_mode (PyTorch's output-size rule; the last window must start inside
-#: the input or its left padding).
-comptime PP_CEIL = 16
-#: AvgPool2d divisor_override (0: none).
-comptime PP_DIVOVR = 17
-comptime PP_LEN = 18
-
-
-def _pool_out(size: Int, k: Int, pad: Int, stride: Int, dil: Int, ceil: Bool) -> Int:
-    """aten/src/ATen/native/Pool.h pooling_output_shape_pad_lr."""
-    var num = size + 2 * pad - dil * (k - 1) - 1 + ((stride - 1) if ceil else 0)
-    var out = num // stride + 1
-    if ceil and (out - 1) * stride >= size + pad:
-        out -= 1
-    return out
-
-
-def pool_params(raw: List[Int]) raises -> List[Int32]:
-    """Validate and fill OH, OW (PyTorch's pooling_output_shape, floor or ceil mode)."""
-    if len(raw) < PP_INCPAD + 1:
-        raise Error("x_cnn: pool params need 15 entries")
-    for k in range(PP_OH):
-        if raw[k] < 0:
-            raise Error("x_cnn: negative pool parameter")
-    var positive: List[Int] = [PP_N, PP_C, PP_H, PP_W, PP_KH, PP_KW, PP_SH, PP_SW, PP_DH, PP_DW]
-    for k in positive:
-        if raw[k] <= 0:
-            raise Error("x_cnn: pool dimensions, stride and dilation must be positive")
-    if 2 * raw[PP_PH] > raw[PP_KH] or 2 * raw[PP_PW] > raw[PP_KW]:
-        raise Error("x_cnn: pad should be at most half of the kernel size (PyTorch's rule)")
-    var ceil = len(raw) > PP_CEIL and raw[PP_CEIL] != 0
-    var oh = _pool_out(raw[PP_H], raw[PP_KH], raw[PP_PH], raw[PP_SH], raw[PP_DH], ceil)
-    var ow = _pool_out(raw[PP_W], raw[PP_KW], raw[PP_PW], raw[PP_SW], raw[PP_DW], ceil)
-    if oh <= 0 or ow <= 0:
-        raise Error("x_cnn: the pooling window does not fit the padded input")
-    if len(raw) > PP_DIVOVR and raw[PP_DIVOVR] < 0:
-        raise Error("x_cnn: divisor_override must be positive")
-    var out = List[Int32](capacity=PP_LEN)
-    for k in range(PP_LEN):
-        out.append(Int32(raw[k]) if k < len(raw) else Int32(0))
-    out[PP_OH] = Int32(oh)
-    out[PP_OW] = Int32(ow)
-    return out^
+# The pooling launch words and pool_params: x_cnn/shape_words.mojo (re-exported).
 
 
 @always_inline
@@ -531,35 +364,23 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
     var nc = _ud(t, H)
     var me = Int32(h * W + w)
     var acc = Float32(0)
-    comptime if not is_defined["MOJOLEARN_XCNN_NO_POOL_BWD_TILE"]():
-        # lane/cnn-apple2: windows that tile the input (kernel == stride, no
-        # padding, no dilation, no reversed order asked) hold each pixel
-        # exactly once, window (h // KH, w // KW): the loop below visits that
-        # one window and no other, so this is its one step on the same words.
-        if KH == SH and KW == SW and PH == 0 and PW == 0 and DH == 1 and DW == 1 and _g(p, PP_REV) == 0:
-            var oh1 = _ud(h, KH)
-            var ow1 = _ud(w, KW)
-            if oh1 < OH and ow1 < OW:
-                var o1 = (nc * OH + oh1) * OW + ow1
-                if idx.unsafe_load(o1) == me:
-                    acc = ftz(acc + ftz(dout.unsafe_load(o1)))
-            return acc
-    # NN46: solve 0 <= h+PH-kh*DH <= (OH-1)*SH (and width)
-    # before the incumbent divisibility tests. This only omits impossible
-    # taps, never a floating term, for arbitrary stride/dilation/padding.
-    var kh0 = 0
-    var kh1 = KH
-    var kw0 = 0
-    var kw1 = KW
-    comptime if NN46_GATHER_BOUNDS:
-        if _g(p, PP_REV) == 0:
-            var low_h = h + PH - (OH - 1) * SH
-            var low_w = w + PW - (OW - 1) * SW
-            kh0 = max(0, (max(0, low_h) + DH - 1) // DH)
-            kh1 = min(KH, (h + PH) // DH + 1)
-            kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
-            kw1 = min(KW, (w + PW) // DW + 1)
-    for a in range(kh0, kh1):
+    # TOMBSTONE: MOJOLEARN_XCNN_NO_POOL_BWD_TILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_POOL_BWD_TILE.patch; record in docs/TOMBSTONES.md.
+    # lane/cnn-apple2: windows that tile the input (kernel == stride, no
+    # padding, no dilation, no reversed order asked) hold each pixel
+    # exactly once, window (h // KH, w // KW): the loop below visits that
+    # one window and no other, so this is its one step on the same words.
+    if KH == SH and KW == SW and PH == 0 and PW == 0 and DH == 1 and DW == 1 and _g(p, PP_REV) == 0:
+        var oh1 = _ud(h, KH)
+        var ow1 = _ud(w, KW)
+        if oh1 < OH and ow1 < OW:
+            var o1 = (nc * OH + oh1) * OW + ow1
+            if idx.unsafe_load(o1) == me:
+                acc = ftz(acc + ftz(dout.unsafe_load(o1)))
+        return acc
+    # TOMBSTONE: MOJOLEARN_NN46_GATHER_BOUNDS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch; record in docs/TOMBSTONES.md.
+    for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh * DH
         if th < 0 or _um(th, SH) != 0:
@@ -567,7 +388,7 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
         var oh = _ud(th, SH)
         if oh >= OH:
             continue
-        for kw in range(kw0, kw1):
+        for kw in range(KW):
             var tw = w + PW - kw * DW
             if tw < 0 or _um(tw, SW) != 0:
                 continue
@@ -713,17 +534,6 @@ def conv_relu_out_at(i: Int, y2: FP, bias: FP, yconv: FP, dst: FP, q: IP, p: IP)
 
 
 @always_inline
-def relu_rows_bwd_at(i: Int, dout: FP, yconv: FP, grow: FP, f3: FP, q: IP, p: IP):
-    """NI16: no-pool ReLU VJP plus NCHW-to-rows, retaining both FTZ seams."""
-    var OC = _g(p, CP_OC)
-    var S = _g(p, CP_OH) * _g(p, CP_OW)
-    var r = _ud(i, OC); var oc = i - r * OC
-    var n = _ud(r, S); var rem = r - n * S
-    var j = (n * OC + oc) * S + rem
-    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), dout.unsafe_load(j))))
-
-
-@always_inline
 def pool_relu_rows_bwd_at(i: Int, dpool: FP, yconv: FP, grow: FP, f3: FP, idx: IP, p: IP):
     """The conv block's backward from the pool's output gradient to the
     GEMM's rows in one pass (DEVIATION 5720): grow[r, oc] = dout_rows of
@@ -806,38 +616,24 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
             rowloss.unsafe_store(i, Float32(0) if ftz(logits.unsafe_load(base + y)) == inf else inf)
         return
     var s = Float32(0)
-    comptime if XCNN_SOFTMAX_ONE_EXP:
-        # nr-small D9: each exp once, parked in the proba row (the same word
-        # the second exp gave), the label's logit read first (proba may be
-        # the logits buffer)
-        var ly0 = Float32(0)
-        if y >= 0:
-            ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
-        for j in range(k):
-            var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
-            proba.unsafe_store(base + j, e)
-            s = ftz(s + e)
-        for j in range(k):
-            var pr = canon(ftz(identical_div(proba.unsafe_load(base + j), s)))
-            proba.unsafe_store(base + j, pr)
-            if y >= 0:
-                var t = ftz(pr - Float32(1)) if j == y else pr
-                grad.unsafe_store(base + j, canon(ftz(identical_div(t, Float32(n)))))
-        if y >= 0:
-            rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly0)))
-        return
-    for j in range(k):
-        s = ftz(s + ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx))))
+    # nr-small D9: each exp once, parked in the proba row (the same word
+    # the second exp gave), the label's logit read first (proba may be
+    # the logits buffer)
+    var ly0 = Float32(0)
+    if y >= 0:
+        ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
     for j in range(k):
         var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
-        var pr = canon(ftz(identical_div(e, s)))
+        proba.unsafe_store(base + j, e)
+        s = ftz(s + e)
+    for j in range(k):
+        var pr = canon(ftz(identical_div(proba.unsafe_load(base + j), s)))
         proba.unsafe_store(base + j, pr)
         if y >= 0:
             var t = ftz(pr - Float32(1)) if j == y else pr
             grad.unsafe_store(base + j, canon(ftz(identical_div(t, Float32(n)))))
     if y >= 0:
-        var ly = ftz(ftz(logits.unsafe_load(base + y)) - mx)
-        rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly)))
+        rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly0)))
 
 
 def seq_mean(values: List[Float32], n: Int) -> Float32:
@@ -1039,15 +835,12 @@ def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
 # a function of count alone, so the order is the same on every vendor, the
 # host and every core count. With one block the result is the single
 # chain's. It replaced one thread folding a whole channel.
-# `-D MOJOLEARN_BN_FOLD_BLOCK_OFF` restores the single chain.
-comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_BN_FOLD_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-# NI17 V arm, source-only and default OFF: halve each logical chain and
-# use a balanced fold of its block sums. Both host and all GPUs call these
-# functions, including adaptive-average pooling which shares this schedule.
-# No precision/objective/epsilon change; running statistics and gradients
-# require new-version all-column identity and full training-quality evidence.
-comptime NI17_BALANCED_NORM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NI17_BALANCED_NORM"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_NI17_BALANCED_NORM (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI17_BALANCED_NORM.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1056,11 +849,6 @@ def bn_fold_block(count: Int) -> Int:
     var b = 64
     while b * b < count:
         b *= 2
-    comptime if NI17_BALANCED_NORM:
-        # The square-root schedule balances leaf work against number of
-        # partials. Halving trades shorter dependency chains for more nodes;
-        # no hardware lane width or exact workload dimension is consulted.
-        b = max(32, b // 2)
     return b
 
 
@@ -1122,28 +910,6 @@ def _bn_blk_fold[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float
 @always_inline
 def _bn_blk_total(c: Int, part: FP, NB: Int) -> Float32:
     """The NB block partials of channel c added ascending from +0.0."""
-    comptime if NI17_BALANCED_NORM:
-        # NB is bounded by the Int32 parameter domain. A 32-level register
-        # stack carries odd tails without zero padding; no scratch mutation
-        # occurs, so concurrent channels cannot affect one another.
-        var stack = InlineArray[Float32, 32](fill=Float32(0))
-        var occ = 0
-        for b in range(NB):
-            var value = ftz(part.unsafe_load(c * NB + b))
-            var level = 0
-            while ((occ >> level) & 1) != 0:
-                value = ftz(ftz(stack[level]) + ftz(value))
-                occ -= 1 << level
-                level += 1
-            stack[level] = value
-            occ += 1 << level
-        var have = False
-        var result = Float32(0)
-        for level in range(32):
-            if ((occ >> level) & 1) != 0:
-                result = ftz(ftz(stack[level]) + ftz(result)) if have else stack[level]
-                have = True
-        return result
     var acc = Float32(0)
     for b in range(NB):
         acc = ftz(acc + part.unsafe_load(c * NB + b))
@@ -1226,7 +992,7 @@ def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
 # shape changes, so bits CHANGE versus BN_FOLD_BLOCK on every column
 # together. Expected: BN2d AMD 2.2 -> ~1.0 ms, BN1d 2.1 -> ~1.0, NV 1.2 ->
 # ~0.9 / 1.6 -> ~1.1; resnet-block gets it twice.
-comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_BN_GRID_STATS_OFF"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime IDN_BN_GRID_STATS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_BN_GRID_STATS_OFF"]()
 comptime BN_GS_LANES = 256
 comptime BN_GS_PER = 4
 comptime BN_GS_CHUNK = BN_GS_LANES * BN_GS_PER
@@ -1283,8 +1049,8 @@ def bn_gs_lane[MODE: Int](t: Int, lane: Int, x: FP, g: FP, aux: FP, p: IP) -> Tu
 def _bn_gs_chunk_host[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
     """The host twin of the device chunk block: the same lane sums and the
     same halving tree, in registers."""
-    var v0 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
-    var v1 = InlineArray[Float32, BN_GS_LANES](fill=Float32(0))
+    var v0 = Array[Float32, BN_GS_LANES](fill=Float32(0))
+    var v1 = Array[Float32, BN_GS_LANES](fill=Float32(0))
     for l in range(BN_GS_LANES):
         var r = bn_gs_lane[MODE](t, l, x, g, aux, p)
         v0[l] = r[0]
@@ -1348,6 +1114,25 @@ def bn_gs_var_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
 
 
+# lane fb15-sync-counts (2026-11-18): the training forward's running-state
+# update rides the variance launch (both run one thread per channel; the
+# update reads the variance its own thread just stored). One launch fewer per
+# BatchNorm training forward; the same expressions on the same words, so no
+# bit moves on any column. The host twin keeps its two loops (the same values).
+@always_inline
+def bn_gs_var_running_at(c: Int, part: FP, aux: FP, running: FP, f3: FP, q: IP, p: IP):
+    """`bn_gs_var_at` then `bn_running_at` for channel c (`running` in the f2 seat)."""
+    bn_gs_var_at(c, part, aux, running, f3, q, p)
+    bn_running_at(c, running, aux, running, f3, q, p)
+
+
+@always_inline
+def bn_blk_var_running_at(c: Int, part: FP, aux: FP, running: FP, f3: FP, q: IP, p: IP):
+    """`bn_blk_var_at` then `bn_running_at` for channel c (`running` in the f2 seat)."""
+    bn_blk_var_at(c, part, aux, running, f3, q, p)
+    bn_running_at(c, running, aux, running, f3, q, p)
+
+
 @always_inline
 def bn_gs_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     """Channel c's sum_g and sum_gx from its chunk sums."""
@@ -1394,9 +1179,10 @@ def bn_bwd_eval_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 # value ONCE (dropout2d_chan_at, one thread per (n, c)) and the element pass
 # reads it (dropout2d_apply_at), instead of ten Philox rounds and a division
 # per element. Same draw, same threshold, same product: no bit moves.
-# IDENTICAL only. `-D MOJOLEARN_DROPOUT2D_CH_MASK_OFF` restores the
-# per-element draw. The host column keeps dropout2d_at (the same words).
-comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_DROPOUT2D_CH_MASK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDENTICAL only. The host column keeps dropout2d_at (the same words).
+# TOMBSTONE: MOJOLEARN_DROPOUT2D_CH_MASK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_DROPOUT2D_CH_MASK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -1473,11 +1259,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
             d = ftz(identical_div(ftz(h.unsafe_load(i)), Float32(hi - lo)))
         dst.unsafe_store(i, d)
         return
-    comptime if NI57_GRAPH_TREE64:
-        # NI57 V arm: this common element function is called by every GPU
-        # and the host. Only the logical edge reduction graph changes.
-        dst.unsafe_store(i, graph_reduce_tree64(r, f, n, F, mode, vals, h, q))
-        return
+    # TOMBSTONE: MOJOLEARN_NI57_GRAPH_TREE64 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI57_GRAPH_TREE64.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
     var acc = Float32(0)
     for e in range(lo, hi):
         var c = _g(q, n + 1 + e)
@@ -1699,8 +1482,10 @@ def adapt_avg_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
 # division by the window size (`adapt_avg_fin_at`). A window of at most B
 # values (B >= 64, so every window up to 8 x 8) is one block: the old chain's
 # bits exactly; larger windows move bits on the devices and the host column
-# together. `-D MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF` restores the single chain.
-comptime IDN_GAP_BLOCK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# together.
+# TOMBSTONE: MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GAP_BLOCK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -1926,25 +1711,19 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 #   folded ascending, the block sums folded the same way, level by level,
 #   and one division by n at the last level (`blk_fold_at`). The fold order
 #   depends on n alone; the host column runs the same function, so the bits
-#   move on all four columns together. `-D MOJOLEARN_IDN_XENT_DEV_FOLD_OFF`.
-# IDN_CNN_EPOCH_DEV: (a) the epoch's row order was a Fisher-Yates walk on the
-#   CPU (`epoch_order_i32`), uploaded per step. It is now a counter-based
-#   permutation each thread computes for its own position (`epoch_rows_at`:
-#   a six-round Feistel network over the smallest even-width domain holding
-#   n, cycle-walked into [0, n); 32-bit integers only). (b) Adam's step
-#   scalars were double arithmetic on the CPU (`adam_hyper_f64`). They are
-#   now computed on the device per step (`adam_hyper_at`) in double-float32
-#   arithmetic (error-free sums and Dekker products, every product pinned),
-#   about 2^-45 relative before the final rounding to float32. Both change
-#   bits, on every column together. `-D MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`.
-comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#   move on all four columns together.
+# IDN_CNN_EPOCH_DEV (the classifier's device epoch order and Adam scalars)
+#   is deleted with that epoch (lane x8-cnn-on-executor, 2026-11-09).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _FAM2_IDN
 # cpu2-l11-neural (2026-10-04): FAST takes the same device forms on every
 # vendor (no host epoch order, Adam scalars, loss fold or GCN loops on a GPU
-# route). FAST promises quality, never bits, and has no `_OFF` arm here; the
-# `_OFF` defines keep their meaning for the IDENTICAL A/B only.
-comptime _FAM2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]())
-comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]())
+# route). FAST promises quality, never bits.
+from checks.mode_policy import KERNEL_FORM_LEGACY_FAST as _FAM2_FAST
+# TOMBSTONE: MOJOLEARN_IDN_XENT_DEV_FOLD_OFF (old path (host seq_mean), no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XENT_DEV_FOLD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or _FAM2_IDN
 # IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural, audit F7 `gcn_self_loops`):
 #   GCNConv's add_remaining_self_loops (drop every existing loop, append one
 #   loop per node carrying the LAST existing loop's weight, else the fill)
@@ -1955,18 +1734,12 @@ comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined
 #   install. Selection and copies only: no arithmetic, so no bit moves on any
 #   column. Lane py-runtime round 2: the NumPy form is deleted; Python always
 #   calls `x_cnn_gcn_loops` (this flag only reports bit 2 of `x_cnn_idn2_flags`).
-comptime IDN_GCN_LOOPS_DEV = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]())
-#: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
-#: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32
-#: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a
-#: longer one-thread chain per block. A different fold order, so different
-#: bits, on every column together (the host column reads the same constant).
-#: Dead under MOJOLEARN_IDN_ALL_OFF and reported as `x_cnn_idn2_flags` bit 3
-#: (lane/review-fixes), so the glue can see which fold a binding was built with.
-comptime IDN_XENT_FOLD_BLOCK_256 = is_defined["MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
-comptime LOSS_FOLD_BLOCK = 256 if IDN_XENT_FOLD_BLOCK_256 else 32
+# TOMBSTONE: MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GCN_LOOPS_DEV = _FAM2_FAST or _FAM2_IDN
+# TOMBSTONE: MOJOLEARN_IDN_XENT_FOLD_BLOCK_256 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XENT_FOLD_BLOCK_256.patch; record in docs/TOMBSTONES.md.
+comptime LOSS_FOLD_BLOCK = 32
 
 
 @always_inline
@@ -2006,230 +1779,8 @@ def fold_plan(count: Int, div: Int, index: Int) -> List[Int32]:
     return prm^
 
 
-# ---- the epoch order
-comptime EP_N = 0  # rows
-comptime EP_POS = 1  # the position of element 0 in the epoch
-comptime EP_SHUFFLE = 2
-comptime EP_HALF = 3  # the Feistel half width in bits
-comptime EP_KEY = 4  # the 64-bit epoch key as four 16-bit words, low first
-comptime EP_LEN = 8
-
-
-@always_inline
-def _perm_mix(x: UInt32) -> UInt32:
-    """murmur3's 32-bit finalizer (a bijection of the 32-bit words)."""
-    var z = x
-    z = (z ^ (z >> 16)) * UInt32(0x85EBCA6B)
-    z = (z ^ (z >> 13)) * UInt32(0xC2B2AE35)
-    return z ^ (z >> 16)
-
-
-def epoch_key(seed: UInt64, epoch: Int) -> UInt64:
-    """Epoch `epoch`'s permutation key: splitmix64's output at state
-    seed + (epoch + 1) * golden (the counter is the epoch)."""
-    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-    return z ^ (z >> 31)
-
-
-def epoch_rows_prm(n: Int, pos: Int, shuffle: Bool, key: UInt64) -> List[Int32]:
-    """`epoch_rows_at`'s parameter block for positions pos, pos + 1, ... of
-    an epoch over n rows (1 <= n < 2^31)."""
-    var bits = 1
-    while (1 << bits) < n:
-        bits += 1
-    var prm = List[Int32]()
-    prm.append(Int32(n))
-    prm.append(Int32(pos))
-    prm.append(Int32(1 if shuffle else 0))
-    prm.append(Int32((bits + 1) // 2))
-    for w in range(4):
-        prm.append(Int32(Int((key >> UInt64(16 * w)) & UInt64(0xFFFF))))
-    return prm^
-
-
-@always_inline
-def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """q[i] = the row at position p[EP_POS] + i of the epoch's order: the
-    position itself without shuffle, else its image under the epoch's
-    permutation of [0, n): six Feistel rounds on the two EP_HALF-bit halves
-    (round function `_perm_mix` of the half plus the round key, masked),
-    repeated until the image is below n (cycle walking: the image of a
-    permutation of the 2^(2 half) words restricted to [0, n) is a
-    permutation of [0, n)). Integers only: the same row on every column."""
-    q.unsafe_store(i, epoch_row_val(i, p))
-
-
-@always_inline
-def epoch_row_val(i: Int, p: IP) -> Int32:
-    """NI18 shared integer permutation, also used by the fused device gather.
-
-    Logical position, epoch key, Feistel rounds and cycle walk are exactly
-    the existing epoch_rows_at contract. This is not a new shuffle/RNG.
-    """
-    var n = UInt32(_g(p, EP_N))
-    var pos = _g(p, EP_POS) + i
-    if _g(p, EP_SHUFFLE) == 0:
-        return Int32(pos)
-    var h = UInt32(_g(p, EP_HALF))
-    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
-    var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
-    var k1 = UInt32(_g(p, EP_KEY + 2)) | (UInt32(_g(p, EP_KEY + 3)) << UInt32(16))
-    var x = UInt32(pos)
-    while True:
-        var l = (x >> h) & mask
-        var r = x & mask
-        for rd in range(6):
-            var rk = _perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
-            var f = _perm_mix(r + rk) & mask
-            var t = l ^ f
-            l = r
-            r = t
-        x = (l << h) | r
-        if x < n:
-            break
-    return Int32(Int(x))
-
-
-# ---- Adam's step scalars in double-float32
-@always_inline
-def _two_sum(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
-    """(s, e) with s = fl(a + b) and s + e = a + b exactly (Knuth)."""
-    var s = ftz(a + b)
-    var bb = ftz(s - a)
-    var e = ftz(ftz(a - ftz(s - bb)) + ftz(b - bb))
-    return (s, e)
-
-
-@always_inline
-def _two_prod(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
-    """(p, e) with p = fl(a b) and p + e = a b exactly (Dekker's split, no
-    fused operation; every product pinned)."""
-    var p = ftz(identical_mul(a, b))
-    var ca = ftz(identical_mul(Float32(4097), a))
-    var ah = ftz(ca - ftz(ca - a))
-    var al = ftz(a - ah)
-    var cb = ftz(identical_mul(Float32(4097), b))
-    var bh = ftz(cb - ftz(cb - b))
-    var bl = ftz(b - bh)
-    var e = ftz(ftz(identical_mul(ah, bh)) - p)
-    e = ftz(e + ftz(identical_mul(ah, bl)))
-    e = ftz(e + ftz(identical_mul(al, bh)))
-    e = ftz(e + ftz(identical_mul(al, bl)))
-    return (p, e)
-
-
-@always_inline
-def _dd_mul(ah: Float32, al: Float32, bh: Float32, bl: Float32) -> Tuple[Float32, Float32]:
-    """(ah + al)(bh + bl) as a normalized pair."""
-    var pe = _two_prod(ah, bh)
-    var e = ftz(pe[1] + ftz(ftz(identical_mul(ah, bl)) + ftz(identical_mul(al, bh))))
-    return _two_sum(pe[0], e)
-
-
-@always_inline
-def _dd_powi(bh: Float32, bl: Float32, e: Int) -> Tuple[Float32, Float32]:
-    """(bh + bl) ** e for e >= 0 by squaring, in one fixed order."""
-    var rh = Float32(1)
-    var rl = Float32(0)
-    var xh = bh
-    var xl = bl
-    var k = e
-    while k > 0:
-        if (k & 1) != 0:
-            var r = _dd_mul(rh, rl, xh, xl)
-            rh = r[0]
-            rl = r[1]
-        var x = _dd_mul(xh, xl, xh, xl)
-        xh = x[0]
-        xl = x[1]
-        k >>= 1
-    return (rh, rl)
-
-
-@always_inline
-def _dd_one_minus(h: Float32, l: Float32) -> Tuple[Float32, Float32]:
-    """1 - (h + l) as a normalized pair."""
-    var se = _two_sum(Float32(1), -h)
-    return _two_sum(se[0], ftz(se[1] - l))
-
-
-comptime AH_BASE = 10  # [lr hi, lr lo, b1 hi, b1 lo, b2 hi, b2 lo, eps, wd hi, wd lo, decoupled]
-comptime AH_ROW = 9
-
-
-@always_inline
-def adam_hyper_at(t: Int, base: FP, hy: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """hy[9 t : 9 t + 9] = `adam_at`'s hyper block of 1-based step p[0] + t:
-    [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd, decoupled, 1 - lr wd]
-    with bc = 1 - beta ** step, each value the float32 nearest a
-    double-float32 result (the pairs in `base` are the float32 nearest the
-    caller's double and the float32 nearest the remainder)."""
-    var step = _g(p, 0) + t
-    var lrh = base.unsafe_load(0)
-    var lrl = base.unsafe_load(1)
-    var b1h = base.unsafe_load(2)
-    var b1l = base.unsafe_load(3)
-    var b2h = base.unsafe_load(4)
-    var b2l = base.unsafe_load(5)
-    var wdh = base.unsafe_load(7)
-    var wdl = base.unsafe_load(8)
-    var p1 = _dd_powi(b1h, b1l, step)
-    var c1 = _dd_one_minus(p1[0], p1[1])
-    var p2 = _dd_powi(b2h, b2l, step)
-    var c2 = _dd_one_minus(p2[0], p2[1])
-    # lr / bc1: the float32 quotient plus its correction
-    var q0 = ftz(identical_div(lrh, c1[0]))
-    var step_size = q0
-    if c1[0] != Float32(0):
-        var pe = _two_prod(q0, c1[0])
-        var rem = ftz(ftz(ftz(lrh - pe[0]) - pe[1]) + lrl)
-        rem = ftz(rem - ftz(identical_mul(q0, c1[1])))
-        step_size = ftz(q0 + ftz(identical_div(rem, c1[0])))
-    # sqrt(bc2): the float32 root plus one Newton correction
-    var s0 = ftz(identical_sqrt(c2[0]))
-    var sq = s0
-    if s0 > Float32(0):
-        var ps = _two_prod(s0, s0)
-        var rs = ftz(ftz(ftz(c2[0] - ps[0]) - ps[1]) + c2[1])
-        sq = ftz(s0 + ftz(identical_div(rs, ftz(s0 + s0))))
-    var o1 = _dd_one_minus(b1h, b1l)
-    var o2 = _dd_one_minus(b2h, b2l)
-    var lw = _dd_mul(lrh, lrl, wdh, wdl)
-    var ow = _dd_one_minus(lw[0], lw[1])
-    var row = t * AH_ROW
-    hy.unsafe_store(row + 0, canon(step_size))
-    hy.unsafe_store(row + 1, canon(o1[0]))
-    hy.unsafe_store(row + 2, b2h)
-    hy.unsafe_store(row + 3, canon(o2[0]))
-    hy.unsafe_store(row + 4, base.unsafe_load(6))
-    hy.unsafe_store(row + 5, canon(sq))
-    hy.unsafe_store(row + 6, wdh)
-    hy.unsafe_store(row + 7, base.unsafe_load(9))
-    hy.unsafe_store(row + 8, canon(ow[0]))
-
-
-def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Float64, dec: Float64) -> List[Float32]:
-    """`adam_hyper_at`'s base block: each double hyperparameter as the
-    float32 nearest it and the float32 nearest the remainder (two casts and
-    one exact subtraction; no step arithmetic)."""
-    var out = List[Float32]()
-    var lrh = Float32(lr)
-    out.append(lrh)
-    out.append(Float32(lr - Float64(lrh)))
-    var b1h = Float32(b1)
-    out.append(b1h)
-    out.append(Float32(b1 - Float64(b1h)))
-    var b2h = Float32(b2)
-    out.append(b2h)
-    out.append(Float32(b2 - Float64(b2h)))
-    out.append(Float32(eps))
-    var wdh = Float32(wd)
-    out.append(wdh)
-    out.append(Float32(wd - Float64(wdh)))
-    out.append(Float32(dec))
-    return out^
+# TOMBSTONE: the classifier device epoch's element functions (epoch_key, epoch_rows_prm, epoch_rows_at, epoch_row_val, the double-float32 adam_hyper_at / adam_hyper_base and their helpers) and MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF deleted 2026-11-09 by lane/x8-cnn-on-executor (the classifier trains through Program.fit: OP_MLP_PERM order, the session optimizer's step_lr scalars); code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 
 
 def neural_numerical_profile() -> String:
@@ -2244,9 +1795,9 @@ def neural_numerical_profile() -> String:
         return "mojolearn.x_cnn.fast"
     var result = String("mojolearn.x_cnn.identical.v1;gemm=") + String(GEMM_NUMERICAL_PROFILE)
     result += ";bn-block=" + String(Int(BN_FOLD_BLOCK))
-    result += ";norm-ni17=" + String(Int(NI17_BALANCED_NORM))
+    result += ";norm-ni17=0"
     result += ";gap-block=" + String(Int(IDN_GAP_BLOCK_FOLD))
-    result += ";graph-ni57=" + String(Int(NI57_GRAPH_TREE64))
+    result += ";graph-ni57=0"
     result += ";loss-device=" + String(Int(IDN_XENT_DEV_FOLD))
     result += ";loss-leaf=" + String(LOSS_FOLD_BLOCK)
     return result
@@ -2254,171 +1805,24 @@ def neural_numerical_profile() -> String:
 
 def idn2_flags() -> Int:
     """The lane fam2-neural switches this build has on (both bindings export
-    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV,
-    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural); bit 3 the candidate
-    IDN_XENT_FOLD_BLOCK_256 and bit 4 a `-D MOJOLEARN_IDN_ALL_OFF` build
-    (lane/review-fixes: the glue reads the build's OFF arm from here, not
-    only from the environment)."""
+    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 reserved
+    (0: IDN_CNN_EPOCH_DEV was deleted with the classifier's device epoch),
+    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural); bits 3 and 4 are
+    reserved (0: the IDN_XENT_FOLD_BLOCK_256 arm and the IDN_ALL_OFF build
+    were deleted on 2026-11-15)."""
     var f = 0
     comptime if IDN_XENT_DEV_FOLD:
         f |= 1
-    comptime if IDN_CNN_EPOCH_DEV:
-        f |= 2
     comptime if IDN_GCN_LOOPS_DEV:
         f |= 4
-    comptime if IDN_XENT_FOLD_BLOCK_256:
-        f |= 8
-    comptime if is_defined["MOJOLEARN_IDN_ALL_OFF"]():
-        f |= 16
     return f
 
 
-@always_inline
-def nn45_conv_out_relu_at(i: Int, y2: FP, bias: FP, saved: FP, dst: FP, q: IP, p: IP):
-    """Fused layout/bias/ReLU, with the exact preactivation retained for
-    backward. conv_out_val and relu_val preserve the old rounded seams,
-    NaNs and activation-zero policy; saved may alias dst when not retained."""
-    var OC = _g(p, CP_OC)
-    var S = _g(p, CP_OH) * _g(p, CP_OW)
-    var nc = i // S
-    var pos = i - nc * S
-    var oc = nc % OC
-    var n = nc // OC
-    var v = conv_out_val(y2.unsafe_load((n * S + pos) * OC + oc), bias, oc, p)
-    saved.unsafe_store(i, v)
-    dst.unsafe_store(i, relu_val(ftz(v)))
-
-
-@always_inline
-def nn47_bn_apply_running_at(i: Int, x: FP, aux: FP, dst: FP, running: FP, q: IP, p: IP):
-    """One normalization launch also updates each channel's running state
-    exactly once. Statistics are already complete; apply never reads running.
-    The first pixel of each channel of image zero owns its state update.
-    Mean/variance folds, unbiased conversion, momentum and eps stay pinned."""
-    bn_apply_at(i, x, aux, dst, dst, q, p)
-    var C = _g(p, 1)
-    var HW = _g(p, 2)
-    if i < C * HW and i % HW == 0:
-        bn_running_at(i // HW, running, aux, aux, aux, q, p)
-
-
-# NN14: bounded forward/recompute and virtual-im2col backward. OFF/unmeasured.
-# The budget is 8 MiB total cols+y2, except an indivisible single row.
-# All reductions retain the complete K and original per-cell profile;
-# absolute output row positions are restored before NCHW writes.
-comptime NN14_BOUNDED_IM2COL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN14_BOUNDED_IM2COL"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-
-
-def nn14_conv_rows(rows: Int, k: Int, oc: Int) -> Int:
-    return min(rows, max(1, (1 << 21) // max(1, k + oc)))
-
-
-@always_inline
-def nn14_im2col_value(i: Int, x: FP, p: IP) -> Float32:
-    """cols[r, qq], r = (n*OH + oh)*OW + ow, qq = (c*KH + kh)*KW + kw: the
-    input pixel under that tap, or +0.0 in the zero padding. A copy, no
-    arithmetic."""
-    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
-    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
-    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
-    var ckk = C * KH * KW
-    var r = _ud(i, ckk)
-    var qq = i - r * ckk
-    var n = _ud(r, (OH * OW))
-    var rem = r - n * OH * OW
-    var oh = _ud(rem, OW)
-    var ow = rem - oh * OW
-    var c = _ud(qq, (KH * KW))
-    var t = qq - c * KH * KW
-    var kh = _ud(t, KW)
-    var kw = t - kh * KW
-    var h = oh * _g(p, CP_SH) - _g(p, CP_PH) + kh * _g(p, CP_DH)
-    var w = ow * _g(p, CP_SW) - _g(p, CP_PW) + kw * _g(p, CP_DW)
-    var v = Float32(0)
-    if h >= 0 and h < H and w >= 0 and w < W:
-        v = ftz(x.unsafe_load(((n * C + c) * H + h) * W + w))
-    return v
-
-
-@always_inline
-def nn14_im2col_slice_cell(local: Int, x: FP, cols: FP, p: IP, row0: Int):
-    var width = _g(p, CP_C) * _g(p, CP_KH) * _g(p, CP_KW)
-    cols.unsafe_store(local, nn14_im2col_value(local + row0 * width, x, p))
+# NN14: bounded forward/recompute and virtual-im2col backward (deleted).
+# TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (opt-in arm, source says OFF/unmeasured) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: NN14_BOUNDED_IM2COL = False and the nn14_* element functions removed: no reader left.)
 
 
 
-@always_inline
-def nn14_conv_slice_cell(i: Int, y2: FP, bias: FP, dst: FP, p: IP, row0: Int):
-    var OC = _g(p, CP_OC)
-    var S = _g(p, CP_OH) * _g(p, CP_OW)
-    var local_row = i // OC
-    var oc = i % OC
-    var row = row0 + local_row
-    var n = row // S
-    var pos = row % S
-    dst.unsafe_store((n * OC + oc) * S + pos, conv_out_val(y2.unsafe_load(i), bias, oc, p))
 
-
-@always_inline
-def nn14_wgrad_at(i: Int, x: FP, grow: FP, dw: FP, f3: FP, q: IP, p: IP):
-    """TN contraction against a virtual im2col operand. The selected GEMM
-    leaf/chain/fold is complete over ALL rows; chunk boundaries never change
-    this reduction. Scratch is fixed per output cell, independent of rows."""
-    var width = _g(p, CP_C) * _g(p, CP_KH) * _g(p, CP_KW)
-    var oc = i // width
-    var qq = i % width
-    var OC = _g(p, CP_OC)
-    var rows = _g(p, CP_N) * _g(p, CP_OH) * _g(p, CP_OW)
-    var part = neural_partition[NEURAL_LEAF](rows)
-    var stack = SIMD[DType.float32, 16](0.0)
-    var occupied = 0
-    for leaf in range(part[1]):
-        var begin = leaf * part[0]
-        var accum = SIMD[DType.float32, NEURAL_CHAINS](0.0)
-        for row in range(begin, min(rows, begin + part[0])):
-            var chain = (row - begin) % NEURAL_CHAINS
-            accum[chain] = rtf_mul_add(ftz(grow.unsafe_load(row * OC + oc)),
-                nn14_im2col_value(row * width + qq, x, p), accum[chain])
-        neural_fold_push[16](stack, occupied, neural_merge_chains[NEURAL_CHAINS](accum))
-    dw.unsafe_store(i, neural_fold_drain[16](stack, occupied))
-
-
-@always_inline
-def nn14_input_grad_at(i: Int, grow: FP, weights: FP, dx: FP, f3: FP, q: IP, p: IP):
-    """col2im's original tap gather, with each dcols cell generated by the
-    selected complete OC contraction. No scatter/atomics or full dcols."""
-    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
-    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
-    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW); var OC = _g(p, CP_OC)
-    var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
-    var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
-    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
-    var w = i % W
-    var h = (i // W) % H
-    var c = (i // (W * H)) % C
-    var n = i // (W * H * C)
-    var width = C * KH * KW
-    var part = neural_partition[NEURAL_LEAF](OC)
-    var acc = Float32(0)
-    var kh0 = 0; var kh1 = KH; var kw0 = 0; var kw1 = KW
-    comptime if NN46_GATHER_BOUNDS:
-        if _g(p, CP_REV) == 0:
-            kh0 = max(0, (max(0, h + PH - (OH - 1) * SH) + DH - 1) // DH)
-            kh1 = min(KH, (h + PH) // DH + 1)
-            kw0 = max(0, (max(0, w + PW - (OW - 1) * SW) + DW - 1) // DW)
-            kw1 = min(KW, (w + PW) // DW + 1)
-    for a in range(kh0, kh1):
-        var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
-        var th = h + PH - kh * DH
-        if th < 0 or th % SH != 0 or th // SH >= OH:
-            continue
-        for kw in range(kw0, kw1):
-            var tw = w + PW - kw * DW
-            if tw < 0 or tw % SW != 0 or tw // SW >= OW:
-                continue
-            var row = (n * OH + th // SH) * OW + tw // SW
-            var qq = (c * KH + kh) * KW + kw
-            var v = neural_cell[NEURAL_CHAINS](grow, weights, row, qq, OC,
-                part[0], part[1], OC, 1, width, 1)
-            acc = ftz(acc + ftz(v))
-    dx.unsafe_store(i, acc)

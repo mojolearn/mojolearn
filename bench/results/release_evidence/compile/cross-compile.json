@@ -1,0 +1,12 @@
+{
+ "archs": "sm_89,sm_80,gfx942",
+ "at": "2026-11-08T15:53:07Z",
+ "base": "6519a54c657930757a36a520a03724d78318140e",
+ "commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "run": "https://github.com/mojolearn/mojolearn/actions/runs/42493889672",
+ "schema": "mojolearn.release-cross-compile.v1",
+ "tiers": [
+  "identical"
+ ],
+ "verdict": "PASS"
+}

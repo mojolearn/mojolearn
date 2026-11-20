@@ -3,135 +3,8 @@
  "lane": "neural-io-2",
  "branch": "lane/neural-io-2",
  "head": "bf06ffdb3",
- "controls": {
-  "seq_moe_device_io_off": {
-   "define": "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "bindings/_mojolearn_x_sequence.mojo:46",
-    "sequence/moe_dev.mojo:30",
-    "sequence/pyapi.mojo (moe_forward_core)",
-    "python/mojolearn/_x_sequence_moe.py (MoEBlock._forward_dev, to_device)",
-    "tools/bench_board_algos.py (_seq_device_io)"
-   ],
-   "binding": [
-    "_mojolearn_x_sequence"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): device IO stays the default",
-   "note": "Lane neural-io-2. Default ON (waste removal): MoEBlock's forward on resident sequence tensors (x, y, logits, picks, weights stay on the device; 2 x 4 T D bytes over PCIe and four host zero-filled outputs per call removed; host-array entry outputs np.empty). The OFF arm leaves moe_forward_dev out of the binding, so MoEBlock.to_device returns host arrays and the host-array entry runs (the before arm). Same moe_forward_core launches on the same words: no bit moves. A/B owed on moe plus a neighboring shape (e.g. T=6144, D=1024, F=2816; T=8192, D=768). CONFIRMED 2026-10-10: the _OFF arm is slower, moe NV 23.16 -> 30.19 ms (1.30x, v1058) / AMD 18.79 -> 22.25 ms (1.18x, a1158); digest 393fefe9 unchanged."
-  },
-  "xcnn_res_new_nozero_off": {
-   "define": "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:1172",
-    "x_cnn/device.mojo:1189",
-    "bindings/_mojolearn_x_cnn.mojo (x_cnn_res_alloc_nofill)",
-    "python/mojolearn/_expansion_cnn.py (DeviceTensor._new_out: BatchNorm y/dx, Dropout2d y/dx)"
-   ],
-   "binding": [
-    "_mojolearn_x_cnn"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): no-zero resident outputs stay the default",
-   "note": "Lane neural-io-2. Default ON (waste removal): BatchNorm2d/1d and Dropout2d resident outputs (y, dx) are not +0.0 filled; every word is stored by bn_apply / the dx pass / the dropout apply / the mask product. No bit moves. A/B owed on batchnorm2d and dropout2d plus a neighboring shape (e.g. 32 x 128 x 28 x 28). CONFIRMED 2026-10-10: the _OFF arm is slower, batchnorm2d NV 1.16 -> 2.09 ms (1.80x, v1060) / AMD 2.19 -> 2.17 ms (0.99x, a1148); dropout2d NV 1.11 -> 1.01 ms / AMD 0.36 -> 0.38 ms."
-  },
-  "xcnn_res_free_async_off": {
-   "define": "MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:1181",
-    "x_cnn/device.mojo:1230"
-   ],
-   "binding": [
-    "_mojolearn_x_cnn"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): async resident frees stay the default",
-   "note": "Lane neural-io-2. Default ON (waste removal): res_free returns an array to the reuse pool without waiting for the queue (its next user is queued behind every earlier use on the one in-order context); the wait stays where the array is destroyed. No bit moves. Touches every x_cnn resident tensor (conv, pool, BasicBlock, GCN/SAGE, BatchNorm, Dropout); A/B owed on batchnorm2d, dropout2d, conv2d, resnet-block. CONFIRMED 2026-10-10: the _OFF arm is slower, batchnorm2d NV 1.16 -> 1.76 ms (1.52x, v1061) / AMD 2.19 -> 2.18 ms (1.00x, a1149)."
-  }
- },
- "algorithms": {
-  "neural:moe": {
-   "binding": "_mojolearn_x_sequence",
-   "route": "MoEBlock.forward(SequenceDeviceTensor) -> moe_forward_dev -> moe_forward_core [seq_moe_device_io_off]",
-   "controls": [
-    "seq_moe_device_io_off"
-   ],
-   "interaction_groups": [
-    [
-     "seq_moe_device_io_off"
-    ]
-   ]
-  },
-  "expanded:embedding": {
-   "binding": "_mojolearn_embedding",
-   "route": "Embedding.backward(ids, dy on device) -> embedding_backward_dev -> _backward_dev_run (eager refusal scans; idn_emb_scan_deferred_off removed 2026-10-10)",
-   "controls": [],
-   "interaction_groups": [],
-   "note": "no control of this lane reaches it since the deferred scan was deleted (lane postmerge-act-6)"
-  },
-  "neural:batchnorm2d": {
-   "binding": "_mojolearn_x_cnn",
-   "route": "BatchNorm2d.forward/backward(DeviceTensor) -> batchnorm_forward_m / batchnorm_backward_m; outputs from res_alloc_nofill; frees via res_free",
-   "controls": [
-    "xcnn_res_new_nozero_off",
-    "xcnn_res_free_async_off"
-   ],
-   "interaction_groups": [
-    [
-     "xcnn_res_new_nozero_off",
-     "xcnn_res_free_async_off"
-    ]
-   ]
-  },
-  "neural:dropout2d": {
-   "binding": "_mojolearn_x_cnn",
-   "route": "Dropout2d.forward/backward(DeviceTensor) -> dropout2d_m / map2_m; outputs from res_alloc_nofill; frees via res_free",
-   "controls": [
-    "xcnn_res_new_nozero_off",
-    "xcnn_res_free_async_off"
-   ],
-   "interaction_groups": [
-    [
-     "xcnn_res_new_nozero_off",
-     "xcnn_res_free_async_off"
-    ]
-   ]
-  },
-  "neural:adafactor": {
-   "binding": "_mojolearn_x_sequence",
-   "route": "Adafactor.step (resident) -> adafactor_resident_step_dev_py -> adafactor_core [idn_af_vec_fused]",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "idn_af_vec_fused"
-    ]
-   ]
-  }
- },
+ "controls": {},
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_AF_VEC_FUSED",
@@ -142,6 +15,21 @@
    "define": "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF",
    "control": "idn_emb_scan_deferred_off",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): the _OFF arm (eager scans) WON the post-merge neural A/B, one run per arm (nv2 L40S v1056 -> v1059 on main 9f83ea479, amd MI325X a1156 -> a1159 on main 0a7b206f1): embedding NV 2.70 -> 2.28 ms (0.84x) / AMD 2.09 -> 1.94 ms (0.92x), digest 2753e61a unchanged. The deferred scan (MOJOLEARN_IDN_EMB_SCAN_DEFERRED, default on) is deleted, the eager scans are the only path; both defines refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch)."
+  },
+  {
+   "define": "MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF",
+   "control": "seq_moe_device_io_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the host-array MoE rollback; device IO stayed the default after the postmerge-20261010 A/B; moe_forward_dev and moe_forward_dev_alloc are always registered (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF",
+   "control": "xcnn_res_free_async_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-35-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch): old path, EXP:1959 CONFIRMED async frees stay (batchnorm2d _OFF NV 1.52x slower, AMD 1.00x) (rule b). Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15); default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF",
+   "control": "xcnn_res_new_nozero_off",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-35-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 145be10898; patch experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch): old path, EXP:1958 CONFIRMED no-zero outputs stay (batchnorm2d _OFF NV 1.80x slower, AMD 0.99x) (rule b). Deleted under AGENTS.md \"An unmeasured arm is deleted\" (Andrew, 2026-11-15); default kept, no bits move. Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

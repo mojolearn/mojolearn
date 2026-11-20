@@ -1,0 +1,15 @@
+diff --git b/x_linear/cls1_fast.mojo a/x_linear/cls1_fast.mojo
+index 150a39314d..74f6cc9d52 100644
+--- b/x_linear/cls1_fast.mojo
++++ a/x_linear/cls1_fast.mojo
+@@ -49,9 +49,7 @@ comptime BAYES_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FA
+ # TOMBSTONE: MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 3cadf0f84b.
+ # Restore: git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime BAYES_CLS1_PARTS = C1_FAST_APPLE
+-# TOMBSTONE: MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 9a688a11e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime BAYES_CLS1_BATCH = C1_FAST_APPLE
++comptime BAYES_CLS1_BATCH = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF"]()
+ comptime ARD_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_CLS1_STATS_OFF"]()
+ # TOMBSTONE: MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at a656258c20.
+ # Restore: git apply experiments/removed/MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF.patch; record in docs/TOMBSTONES.md.

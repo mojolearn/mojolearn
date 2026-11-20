@@ -46,7 +46,12 @@ set -euo pipefail
 # Every route, including GitHub-only publish=none, uses the canonical ledger.
 # The private bundle is verified again in CI; legacy manifest fields alone do
 # not authorize publication or waive any requirement.
-: "${MOJOLEARN_REQUIREMENTS_LEDGER:?set MOJOLEARN_REQUIREMENTS_LEDGER to the canonical release requirements.json}"
+# MOJOLEARN_ADMITTED_FACTS (tools/release.py --identity-on-wheels, 2026-11-07): identity-admit is the one check of a
+# release; the publisher binds the facts it admitted (version, frozen commit, admission commit, table sha256, wheel
+# sha256s) and requires this wheel's sha256 among them. Nothing re-derives the requirements ledger then.
+if [ -z "${MOJOLEARN_ADMITTED_FACTS:-}" ]; then
+  : "${MOJOLEARN_REQUIREMENTS_LEDGER:?set MOJOLEARN_REQUIREMENTS_LEDGER to the canonical release requirements.json}"
+fi
 WHL=$(cd "$(dirname "${1:?final wheel}")" && pwd)/$(basename "$1")
 TAG="${2:?tag, e.g. alpha-api-0.7.0-20260909}"
 PUBLISH="${3:?none|testpypi|pypi}"
@@ -94,9 +99,28 @@ WSHA=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
 # ledger/evidence is attached to the public GitHub release.
 BUNDLE="$WORK/requirements-admission.tar.gz"
 ADMISSION="$WORK/requirements-admission.json"
+# Every package of one release shares the frozen dependency analyses (keyed by analyzer, revision and
+# request): the first bundle runs them in parallel (MOJOLEARN_ADMISSION_JOBS, default all cores; or on
+# MOJOLEARN_ADMISSION_WORKER=<ssh target>), the others reuse them. 0.8.65 reran all ten, serially, per package.
+DEPENDENCY_CACHE="${MOJOLEARN_DEPENDENCY_CACHE:-$(dirname "$WORK")/dependency-logs}"
+if [ -n "${MOJOLEARN_ADMITTED_FACTS:-}" ]; then
+  # the admitted facts are the admission: this wheel must be one identity-admit admitted, from this source
+  python3 - "$MOJOLEARN_ADMITTED_FACTS" "$WSHA" "$ARTIFACT_SOURCE_COMMIT" "$ADMISSION" <<'EOF'
+import json, sys
+facts = json.load(open(sys.argv[1]))
+if facts.get("source_commit") != sys.argv[3]:
+    sys.exit("REFUSING: the admitted facts are of source %s, not %s" % (facts.get("source_commit"), sys.argv[3]))
+if sys.argv[2] not in (facts.get("wheels") or {}).values():
+    sys.exit("REFUSING: sha256 %s is not a wheel identity-admit admitted (%s)" % (sys.argv[2], sys.argv[1]))
+json.dump(dict(facts, admission="admitted by identity-admit at %s" % facts.get("admitted_commit")),
+          open(sys.argv[4], "w"), indent=1, sort_keys=True)
+EOF
+  tar -czf "$BUNDLE" -C "$(dirname "$ADMISSION")" "$(basename "$ADMISSION")"
+else
 python3 tools/release_publish_admission.py bundle --ledger "$MOJOLEARN_REQUIREMENTS_LEDGER" \
   --root "$REPO" --source "$ARTIFACT_SOURCE_COMMIT" --wheel "$ART/$(basename "$WHL")" \
-  --output "$BUNDLE" --upload > "$ADMISSION"
+  --output "$BUNDLE" --dependency-cache "$DEPENDENCY_CACHE" --upload > "$ADMISSION"
+fi
 VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$ADMISSION")
 BUNDLE_SHA=$(shasum -a 256 "$BUNDLE" | cut -d' ' -f1)
 
@@ -164,16 +188,20 @@ fi
 echo "== GitHub release $TAG =="
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION $LIGHT_PLATFORM wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
 # Check the exact staged bytes again immediately before any public upload.
+if [ -n "${MOJOLEARN_ADMITTED_FACTS:-}" ]; then
+  [ "$(shasum -a 256 "$ART/$(basename "$WHL")" | cut -d' ' -f1)" = "$WSHA" ] \
+    || { echo "REFUSING: the staged wheel changed after admission" >&2; exit 1; }
+else
 python3 tools/release_publish_admission.py wheels --bundle "$BUNDLE" --bundle-sha256 "$BUNDLE_SHA" \
   --ledger "$MOJOLEARN_REQUIREMENTS_LEDGER" --source "$ARTIFACT_SOURCE_COMMIT" --wheel "$ART/$(basename "$WHL")"
+fi
 if ! gh release view "$TAG" >/dev/null 2>&1; then
   NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
   # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): one package per release.
   case "$(basename "$WHL")" in
-    mojolearn_nvidia_ptx-*) NOTES="mojolearn-nvidia-ptx: the NVIDIA PTX set of mojolearn $VERSION for Linux x86-64, installed through the exact dependency of mojolearn-nvidia; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
-    mojolearn_nvidia-*) NOTES="mojolearn-nvidia: the NVIDIA (CUDA) sets of mojolearn $VERSION for Linux x86-64; pip install mojolearn-nvidia installs it with mojolearn-core and mojolearn-nvidia-ptx $VERSION (published after the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    mojolearn_nvidia-*) NOTES="mojolearn-nvidia: the NVIDIA (CUDA) sets (native sm_89 and PTX sm_80) of mojolearn $VERSION for Linux x86-64; pip install mojolearn-nvidia installs it with mojolearn-core (published after the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     mojolearn_amd-*) NOTES="mojolearn-amd: the AMD (ROCm/HIP) sets of mojolearn $VERSION for Linux x86-64; pip install mojolearn-amd installs it with mojolearn-core $VERSION (published after the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     mojolearn_core-*) NOTES="mojolearn-core $VERSION: the Linux x86-64 core (Python, host bindings, MAX runtime) with no vendor dependency; mojolearn-nvidia and mojolearn-amd $VERSION each require it, and pip install mojolearn installs all of them; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     mojolearn-*manylinux*) NOTES="mojolearn $VERSION for Linux x86-64: a file-free wheel requiring mojolearn-core, mojolearn-nvidia and mojolearn-amd $VERSION (published last), so pip install mojolearn installs everything; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;

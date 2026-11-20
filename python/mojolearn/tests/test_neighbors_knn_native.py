@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """NearestNeighbors.fit and the k-NN classifier/regressor fit, predict,
 predict_proba and score are one native call each
-(bindings/neighbors_knn_native.mojo). Every case compares the native method
+(bindings/neighbors_knn_native_door.mojo). Every case compares the native method
 with the frozen former Python body (`_legacy_neighbors_knn`) bit for bit:
 fitted state, outputs and refusals (class and wording)."""
 import inspect
@@ -50,6 +50,13 @@ def _raw(cls, name):
     return inspect.unwrap(getattr(cls, name))
 
 
+def _outcome(call, *args):
+    """The value, or the error class and text: a score the former path
+    refused (for example floating labels) must be refused the same way."""
+    error = _error(call, *args)
+    return error if error is not None else ("value", call(*args))
+
+
 def _error(call, *args):
     try:
         call(*args)
@@ -91,9 +98,9 @@ def test_classifier_matches_former_path(case, params):
     _same(native.predict_proba(Q), legacy.clf_predict_proba(former, Q))
     truth = y[: Q.shape[0]] if not isinstance(y, list) else y[: Q.shape[0]]
     if np.ndim(y) == 1:
-        assert native.score(Q, truth) == legacy.clf_score(former, Q, truth)
+        assert _outcome(native.score, Q, truth) == _outcome(legacy.clf_score, former, Q, truth)
         w = np.linspace(0.5, 2.0, Q.shape[0], dtype=np.float32)
-        assert native.score(Q, truth, w) == legacy.clf_score(former, Q, truth, w)
+        assert _outcome(native.score, Q, truth, w) == _outcome(legacy.clf_score, former, Q, truth, w)
 
 
 @pytest.mark.parametrize("params", PARAMS, ids=str)
@@ -145,6 +152,13 @@ REFUSED = [
 ]
 
 
+# A parameter that is not a native value (a callable here) is refused by the
+# native state admission before any Python conversion hook can run
+# (bindings/host_inference_scalars_door.mojo); the former path refused it with a
+# ValueError built from its repr.
+_HOOK_REFUSAL = (TypeError, "scalar model state requires native values without Python conversion hooks")
+
+
 @pytest.mark.parametrize("cls,params", REFUSED, ids=str)
 def test_refusals_keep_class_and_wording(cls, params):
     X, _, rng = _data(3)
@@ -157,6 +171,9 @@ def test_refusals_keep_class_and_wording(cls, params):
         got, want = _error(native.fit, X, y), _error(legacy.clf_fit, former, X, y)
     else:
         got, want = _error(native.fit, X, y), _error(legacy.reg_fit, former, X, y)
+    if any(callable(v) for v in params.values()):
+        assert want is not None and got == _HOOK_REFUSAL
+        return
     assert got is not None and got == want
 
 
@@ -166,6 +183,19 @@ def test_label_refusals_keep_class_and_wording(y):
     X, _, _ = _data(4)
     got = _error(mojolearn.KNeighborsClassifier().fit, X, y)
     want = _error(legacy.clf_fit, mojolearn.KNeighborsClassifier(), X, y)
+    # The row-count and continuous-target refusals now use scikit-learn's
+    # wording (check_consistent_length, check_classification_targets); the
+    # class is unchanged.
+    sklearn_wording = {
+        (40, "i"): None,
+        (39, "i"): "Found input variables with inconsistent numbers of samples: [40, 39]",
+        (40, "f"): ("Unknown label type: continuous. Maybe you are trying to fit a classifier, which "
+                    "expects discrete classes on a regression target with continuous values."),
+    }.get((len(y), y.dtype.kind)) if y.ndim == 1 else None
+    if sklearn_wording is not None:
+        assert want is not None and want[0] is ValueError
+        assert got == (ValueError, sklearn_wording)
+        return
     assert got is not None and got == want
 
 
@@ -176,11 +206,20 @@ def test_predict_refusals_keep_class_and_wording():
         native = mojolearn.KNeighborsClassifier().fit(X, y)
         former = mojolearn.KNeighborsClassifier()
         legacy.clf_fit(former, X, y)
-        native.set_params(**change)
-        former.set_params(**change)
+        # set_params is a full reset (the model is unfitted afterwards); a
+        # parameter assigned on the fitted model is what predict must refuse.
+        for name, value in change.items():
+            setattr(native, name, value)
+            setattr(former, name, value)
         assert _error(native.predict, Q) == _error(legacy.clf_predict, former, Q)
     native = mojolearn.KNeighborsClassifier().fit(X, y)
-    assert _error(native.predict, Q[:, :2]) == (ValueError, "mojolearn: X has 2 features, index has 3")
+    assert _error(native.predict, Q[:, :2]) == (
+        ValueError, "X has 2 features, but KNeighborsClassifier is expecting 3 features as input.")
+    native.set_params(n_neighbors=3)
+    # issubclass, not `is`: once scikit-learn is imported the raised class is
+    # the bridge that also derives from sklearn's NotFittedError
+    # (mojolearn.exceptions, bindings/classical_exceptions_door.mojo).
+    assert issubclass(_error(native.predict, Q)[0], mojolearn.exceptions.NotFittedError)
 
 
 def test_methods_run_as_one_native_call():
@@ -197,3 +236,63 @@ def test_methods_run_as_one_native_call():
     audit_native_call(_raw(mojolearn.KNeighborsRegressor, "score"), reg, Q, Q[:, 0]).assert_native()
     nn = mojolearn.NearestNeighbors()
     audit_native_call(_raw(mojolearn.NearestNeighbors, "fit"), nn, X).assert_native()
+
+
+@pytest.mark.parametrize("cls", [mojolearn.KNeighborsRegressor, mojolearn.KNeighborsClassifier])
+def test_fit_keeps_the_resident_index_it_prepared(cls):
+    # perf-neighbors (2026-11-13): a GPU fit uploads and tests the index once
+    # and the first predict reuses that handle; the public fit envelope used
+    # to replace the holder, dropping the handle unreleased and uploading the
+    # index again at the first predict. The CPU column holds no handle.
+    X, Xq, rng = _data(3)
+    y = (rng.random(X.shape[0]) > 0.5).astype(np.int32) if cls is mojolearn.KNeighborsClassifier \
+        else rng.random(X.shape[0], dtype=np.float32)
+    model = cls(n_neighbors=3).fit(X, y)
+    held = vars(model)["_resident_holder"].get("index")
+    model.predict(Xq)
+    after = vars(model)["_resident_holder"].get("index")
+    if held is None:
+        assert after is None or after[1] != 0  # CPU column: nothing prepared at fit
+        return
+    assert after is not None and after[1] == held[1]
+
+
+@pytest.mark.parametrize("cls", [mojolearn.KNeighborsRegressor, mojolearn.KNeighborsClassifier])
+def test_board_cycle_one_handle_per_fit_and_lazy_x_neighbors(cls):
+    # fix-knn-door-fixed-cost (2026-11-14): the board's clock is construct +
+    # fit + predict with the previous estimator replaced (its finalizer
+    # releases its index inside the next cycle). Every cycle must answer the
+    # same bits, and each predict must reuse the handle its own fit prepared
+    # (one index prepare per fit + predict). A single-output fit no longer
+    # resolves the x_neighbors binding (0.8.55's form); a refit of the same
+    # instance with a multi-output y, whose transpose does resolve it, must
+    # still match the former path, and a single-output refit after it too.
+    X, Q, rng = _data(4)
+    clf = cls is mojolearn.KNeighborsClassifier
+    y1 = rng.integers(0, 3, X.shape[0]).astype(np.int32) if clf else rng.random(X.shape[0], dtype=np.float32)
+    y2 = rng.integers(0, 3, (X.shape[0], 2)) if clf else np.asfortranarray(rng.random((X.shape[0], 2)))
+    first = None
+    held = {}
+    for _ in range(3):  # glue: the board's repeated construct + fit + predict cycle
+        model = cls(n_neighbors=3).fit(X, y1)
+        index = vars(model)["_resident_holder"].get("index")
+        out = model.predict(Q)
+        after = vars(model)["_resident_holder"].get("index")
+        if index is not None:
+            assert after is not None and after[1] == index[1]
+        if first is None:
+            first = _bits(out)
+        assert _bits(out) == first
+        held["model"] = model  # replaces the previous cycle's estimator, as the board does
+    former = cls(n_neighbors=3)
+    model = held["model"]
+    for y in (y2, y1):
+        model.fit(X, y)
+        if clf:
+            legacy.clf_fit(former, X, y)
+            assert _state(model) == _state(former)
+            _same(model.predict(Q), legacy.clf_predict(former, Q))
+        else:
+            legacy.reg_fit(former, X, y)
+            assert _state(model) == _state(former)
+            _same(model.predict(Q), legacy.reg_predict(former, Q))

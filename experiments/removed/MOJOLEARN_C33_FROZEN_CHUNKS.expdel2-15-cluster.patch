@@ -1,0 +1,23 @@
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index 4c4f45c9a3..d677fd509a 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -11,6 +11,7 @@ same values; only the stopping sum crosses back, one float per iteration,
+ compared in double exactly as Python compared it. The CPU column runs the
+ same loop over the items (`x_neighbors/iter_host.mojo`).
+ """
++from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS
+ from x_neighbors.items import matmul_item
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+@@ -3216,9 +3217,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
+ comptime LPK_TPB = 256
+ # TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured opt-in arm: four iterations per register read; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 1afc78b64a.
+ # Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded arm, EXP:2323 DELETED; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 707a4b8732.
+-# Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime LPK_BATCH = 16
++comptime LPK_BATCH = 16 if C33_FROZEN_CHUNKS else 16
+ comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+ #: The resident loop is the only kNN-graph path on every vendor and tier
+ #: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured

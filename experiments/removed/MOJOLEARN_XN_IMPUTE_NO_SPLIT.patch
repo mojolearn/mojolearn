@@ -1,0 +1,16 @@
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index 8f84d293a1..ac137d7cdb 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -1250,9 +1250,9 @@ def op_knn_impute_tiled(
+     var d_bd = _buf(ctx, 0, n * d * k, False)
+     var d_bi = _buf_i(ctx, 0, n * d * k, False)
+     var d_res = _buf(ctx, res, n * d, True)
+-    # TOMBSTONE: MOJOLEARN_XN_IMPUTE_NO_SPLIT (unmeasured opt-in arm: forced the tiled KNNImputer kernel) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2d1d60acad.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_NO_SPLIT.patch; record in docs/TOMBSTONES.md.
+     var split = k <= IMPS_KMAX
++    comptime if is_defined["MOJOLEARN_XN_IMPUTE_NO_SPLIT"]():
++        split = False
+     if split:
+         ctx.enqueue_function[knn_impute_split_kernel](
+             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),

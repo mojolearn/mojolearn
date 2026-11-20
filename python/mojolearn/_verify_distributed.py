@@ -24,7 +24,7 @@ PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_g
                            'parallel_ivf.py', '_verify_distributed.py', '_native_parallel_shard.py',
                            '_gpu_witness.py'))
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
-#: the native shard workers' numerical operations (bindings/parallel_shard_native.mojo,
+#: the native shard workers' numerical operations (bindings/parallel_shard_native_door.mojo,
 #: parallel_forecast_native.mojo)
 NUMERICAL_OPERATIONS = frozenset(("arima_predict_shard", "hw_predict_shard", "gpc_class_fit", "gpc_class_predict",
                                   "ivf_search"))
@@ -41,6 +41,24 @@ def write(path, value):
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
     tmp.replace(path)
+
+
+DISTRIBUTED_BINDINGS = ('_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf')
+
+
+def _binding_vendors(receipt, report):
+    """Fill each recorded binding's compiled vendor from the report, read
+    after the cells ran: the binding that ran must be the recorded file
+    (same path and SHA-256), or its vendor stays unset and
+    validate_receipt refuses the capture."""
+    from mojolearn._verify_native_runtime import loaded_binding
+    for name, recorded in receipt['bindings'].items():
+        row = loaded_binding(name, 'identical', report)
+        if (row is not None and row['identity'] == recorded['sha256']
+                and str(Path(row['path']).resolve()) == recorded['path']):
+            recorded['vendor'] = row['vendor']
+        else:
+            recorded['vendor'] = None
 
 
 def _require_used_groups(receipt, group_ids, case):
@@ -62,23 +80,20 @@ def _require_used_groups(receipt, group_ids, case):
 @contextmanager
 def transport_fault(fault, control):
     """Perturb one actual numerical result batch of the native shard pools
-    (bindings/parallel_shard_common.mojo `shard_map`): its last result is
+    (bindings/parallel_shard_common_door.mojo `shard_map`): its last result is
     dropped or the batch is reversed, once. Never a native arithmetic fault."""
     from ._native_parallel_shard import _native_parallel_shard
     if fault not in ('drop_result', 'reverse_results'):
         raise ValueError('unknown transport fault')
-    saved = {key: os.environ.get(key) for key in ('MOJOLEARN_PAR_TRANSPORT_FAULT', 'MOJOLEARN_HOST_ALLOW_SABOTAGE')}
+    # The native switch (bindings/parallel_shard_common_run.mojo
+    # `shard_faults_arm`), not the environment: the shard driver no longer
+    # reads MOJOLEARN_PAR_TRANSPORT_FAULT per batch.
     _native_parallel_shard('faults_take', ())
-    os.environ['MOJOLEARN_PAR_TRANSPORT_FAULT'] = fault
-    os.environ['MOJOLEARN_HOST_ALLOW_SABOTAGE'] = '1'
+    _native_parallel_shard('faults_arm', (fault,))
     try:
         yield
     finally:
-        for key, value in saved.items():  # glue: restores two environment variables
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        _native_parallel_shard('faults_arm', ('',))
         control['triggered'] = _native_parallel_shard('faults_take', ()) > 0
 
 
@@ -227,13 +242,13 @@ def main(argv=None):
     except (ImportError, AttributeError):
         ap.error("distributed capture requires NumPy; install the optional mojolearn[test] extra")
     import mojolearn as ml
-    from mojolearn import _backend
     from mojolearn._native_parallel_shard import _native_parallel_shard
+    from mojolearn._verify_native_runtime import loaded_binding
     from mojolearn import parallel_forecasting as pf, parallel_gaussian_process as pg
     from mojolearn.parallel_ivf import DistributedIVFIndex
-    if _backend.numeric_mode() != 'identical':
+    if ml.numeric_mode() != 'identical':
         ap.error('distributed capture requires identical numeric mode in a fresh process')
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     if vendor not in ('cuda', 'hip'):
         ap.error('physical qualification capture requires CUDA or HIP')
     package = Path(ml.__file__).resolve().parent
@@ -266,11 +281,18 @@ def main(argv=None):
                    sys.modules[__name__], _shard_module, _gpu_witness):
         p = Path(module.__file__)
         receipt['source_files'][p.name] = hashlib.sha256(p.read_bytes()).hexdigest()
-    for name in ('_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf'):
-        native = _backend.binding(name, 'identical')
-        p = Path(native.__file__).resolve()
-        receipt['bindings'][name] = dict(path=str(p), sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
-                                          vendor=_backend.read_vendor(native))
+    # The four native bindings, named by mojolearn.runtime_report() (path and
+    # SHA-256 now; a binding not loaded yet is its identical tier member).
+    # Their compiled vendor read-back is taken after the cells ran
+    # (_binding_vendors), when the report names them loaded.
+    report_now = ml.runtime_report()
+    for name in DISTRIBUTED_BINDINGS:
+        row = (loaded_binding(name, 'identical', report_now)
+               or report_now['bindings'].get('mojolearn._sets.identical.' + name))
+        if row is None or row['path'] is None or row['identity'] is None:
+            ap.error(f'{name} is not in this install\'s identical binding set')
+        receipt['bindings'][name] = dict(path=str(Path(row['path']).resolve()), sha256=row['identity'],
+                                          vendor=row['vendor'])
     from mojolearn._verify import _git_commit
     receipt['source_commit'] = _git_commit(package)
     guarded = os.environ.get('MOJOLEARN_COMMIT')
@@ -368,6 +390,7 @@ def main(argv=None):
                 write(args.out, receipt)
                 if not control['triggered'] or not control['detected']:
                     raise AssertionError(f'{case} did not detect {fault}')
+        _binding_vendors(receipt, ml.runtime_report())
         receipt['status'] = 'NUMERICAL_MATCH_EXECUTION_TRACE_OWED'
         validate_receipt(receipt)
     except BaseException as exc:

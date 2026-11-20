@@ -50,7 +50,7 @@ def _sequential_class(runtime_so, numeric_so, tokenizer_so):
     package.__path__ = [str(PACKAGE)]
     sys.modules["mojolearn"] = package
     # The package connects its stdlib module registry at import, before any
-    # binding initializes; native admission reads it (bindings/native_loaded_module.mojo).
+    # binding initializes; native admission reads it (bindings/native_loaded_module_door.mojo).
     import mojolearn._native_loaded_modules  # noqa: F401
     numeric = _load_extension("mojolearn._mojolearn_x_sequence_host", numeric_so)
     tokenizer = _load_extension("mojolearn._host._mojolearn_tokenizer_host", tokenizer_so)
@@ -129,8 +129,6 @@ def main(out_path, scratch):
     record("unfitted.layers", lambda: bare.layers)
     record("unfitted.table", lambda: bare._table())
     record("unfitted.program", lambda: bare._program(4))
-    record("unfitted.parameter_layers", lambda: bare._param_layers())
-    record("unfitted.sample", lambda: bare._sample_of(X))
 
     for optimizer in ("adam", "sgd"):
         try:
@@ -143,7 +141,6 @@ def main(out_path, scratch):
             record(tag + ".layers", lambda: m.layers)
             record(tag + ".table", lambda: m._table())
             record(tag + ".program", lambda: m._program(4))
-            record(tag + ".parameter_layers", lambda: m._param_layers())
             ckpt = scratch / (tag + ".ckpt")
             m.save_checkpoint(str(ckpt))
             record(tag + ".save_checkpoint", lambda: _file(ckpt))
@@ -216,7 +213,6 @@ def main(out_path, scratch):
     refuse("predict.layers_python_list", lambda: with_field("_layers", PyList(fitted._layers)).predict(X))
     refuse("layers.layers_python_list", lambda: with_field("_layers", PyList(fitted._layers)).layers)
     refuse("table.layers_python_list", lambda: with_field("_layers", PyList(fitted._layers))._table())
-    refuse("parameter_layers.layers_python_list", lambda: with_field("_layers", PyList(fitted._layers))._param_layers())
     refuse("predict.params_ndarray_subclass", lambda: with_field("params_", fitted.params_.view(PyArray)).predict(X))
     refuse("predict.n_features_python_object", lambda: with_field("n_features_in_", PyObject()).predict(X))
     refuse("predict.fit_loss_python_object", lambda: with_field("_fit_loss", PyObject()).predict(X))
@@ -224,7 +220,7 @@ def main(out_path, scratch):
     refuse("predict.y_1d_python_object", lambda: with_field("_y_1d", PyObject()).predict(X))
     refuse("predict.numeric_mode_python_object", lambda: with_field("numeric_mode", PyObject()).predict(X))
     # Fields only fit/save/state operations read: refused there (full walk).
-    for name in ("_opt_m", "loss_curve_", "_options"):
+    for name in ("optimizer_m_", "loss_curve_", "_options"):
         refuse("fit." + name + "_python_object", lambda name=name: with_field(name, PyObject()).fit(X, y, epochs=1, batch_size=8, seed=0, resume=True))
         refuse("save_checkpoint." + name + "_python_object", lambda name=name: with_field(name, PyObject()).save_checkpoint(str(scratch / "refused.ckpt")))
         refuse("predict." + name + "_python_object", lambda name=name: with_field(name, PyObject()).predict(X))
@@ -238,11 +234,11 @@ def main(out_path, scratch):
 
 
 # Read-only operations admit only the model fields they read
-# (bindings/sequential_admission.mojo `_read_fields`). A Python-defined value
+# (bindings/sequential_admission_door.mojo `_read_fields`). A Python-defined value
 # in a field that predict/layers never read was refused by the full inventory
 # walk and is not refused by the narrow admission; fit and save still refuse
 # it (the `fit.*` and `save_checkpoint.*` cases stay equal).
-NARROWED = tuple(op + "." + name + "_python_object" for op in ("predict", "layers") for name in ("_opt_m", "loss_curve_", "_options"))
+NARROWED = tuple(op + "." + name + "_python_object" for op in ("predict", "layers") for name in ("optimizer_m_", "loss_curve_", "_options"))
 
 
 def compare(before_path, after_path):

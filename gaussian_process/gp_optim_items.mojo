@@ -738,6 +738,10 @@ def gp_opt_run_end_item(tid: Int, nt: Int, t: Int, st: _P, si: _I, rec: _P, run:
             p += nt
 
 
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by lane/fb12-loser-arms: gp_opt_advance_item and the GP_OPT_SEQ_* words, the device run sequencer's; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+
+
 def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls: _P, res: _P):
     """The winner: `out[p]` its theta, `out[t + p]` the float32
     hyperparameter that runs there, also written into the parameter table."""

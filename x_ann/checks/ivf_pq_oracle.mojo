@@ -9,9 +9,17 @@ not this oracle (DEVIATIONS 5800-5804).
   5803  the search top-k: the total order (distance, row id)
   5804  the probe selection: the total order (coarse distance, list id)
 
-The coarse quantizer and the codebooks are cluster/'s k-means; their host
-oracles (`host_ivf_build`, `host_kmeans_fit`) are cluster/'s and ivf/'s, and
-the device side runs the device k-means, so they are compared here too.
+The coarse quantizer is cluster/'s k-means; its host oracle
+(`host_ivf_build`) is ivf/'s, and the device side runs the device k-means, so
+it is compared here too. The codebooks are the batched Lloyd loop of
+`x_ann/pq_kmeans_device.mojo` (the IDENTICAL default since 2026-10-09,
+IDN_PQ_DEVICE_CODEBOOKS; strided training rows since 2026-10-11,
+IDN_PQ_TRAINSET_STRIDED), restated here as `or_codebooks_batched`; a subspace
+wider than 16 or more than 256 codes takes cluster/'s k-means per subspace
+(`host_kmeans_fit`), as the build does. Until 2026-11-19 this oracle trained
+every codebook with `host_kmeans_fit`, which the device had not run since
+those two promotions: the first GPU run of ivf_pq_check (build 0c68d6cd27)
+showed it.
 
 `descending` / `high_tie` are the UNPINNED spellings, computed only to show
 a fixture separates them from the pinned ones."""
@@ -46,6 +54,65 @@ def or_argmin(r: List[Float32], ro: Int, cb: List[Float32], cbo: Int, n_codes: I
     return best
 
 
+def or_codebooks_batched(
+    r: List[Float32], n: Int, rot: Int, pq_dim: Int, pq_len: Int, n_codes: Int, pq_iters: Int, seed: Int
+) -> List[Float32]:
+    """The batched codebooks, plainly. Training rows: every row, or the
+    256 * n_codes rows s -> (s n) // n_train when n is larger. Seeds: code c
+    of subspace j is sample row c * stride + (h mod stride), stride =
+    n_train // n_codes (at least 1), h the splitmix64 finalizer of
+    seed (as Int32) ^ ((j + 1) * 0x9E3779B97F4A7C15), clamped to the last
+    sample row. Then pq_iters times, per subspace: every sample row takes its
+    nearest code (5800's fold, 5801's lower code on a tie); the rows of each
+    code are summed in blocks of 256 sample rows (row order, from 0, each add
+    flushed), the block sums added in block order (from 0, flushed), and the
+    code becomes sum / count (one quotient); a code with no rows keeps its
+    words."""
+    var n_train = n
+    if n > 256 * n_codes:
+        n_train = 256 * n_codes
+    var per = n_codes * pq_len
+    var cb = List[Float32](length=pq_dim * per, fill=Float32(0.0))
+    var stride = n_train // n_codes
+    if stride < 1:
+        stride = 1
+    for j in range(pq_dim):
+        var h = UInt64(Int(Int32(seed))) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15))
+        h = (h ^ (h >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+        h = (h ^ (h >> 27)) * UInt64(0x94D049BB133111EB)
+        h = h ^ (h >> 31)
+        for c in range(n_codes):
+            var s = c * stride + Int(h % UInt64(stride))
+            if s >= n_train:
+                s = n_train - 1
+            var row = (s * n) // n_train
+            for u in range(pq_len):
+                cb[j * per + c * pq_len + u] = ftz(r[row * rot + j * pq_len + u])
+    var n_blocks = (n_train + 255) // 256
+    for _ in range(pq_iters):
+        for j in range(pq_dim):
+            var lab = List[Int](length=n_train, fill=0)
+            for s in range(n_train):
+                lab[s] = or_argmin(r, ((s * n) // n_train) * rot + j * pq_len, cb, j * per, n_codes, pq_len)
+            var tot = List[Float32](length=per, fill=Float32(0.0))
+            var cnt = List[Int](length=n_codes, fill=0)
+            for b in range(n_blocks):
+                var part = List[Float32](length=per, fill=Float32(0.0))
+                var s1 = min(b * 256 + 256, n_train)
+                for s in range(b * 256, s1):
+                    var off = ((s * n) // n_train) * rot + j * pq_len
+                    for u in range(pq_len):
+                        part[lab[s] * pq_len + u] = ftz(part[lab[s] * pq_len + u] + ftz(r[off + u]))
+                    cnt[lab[s]] += 1
+                for e in range(per):
+                    tot[e] = ftz(tot[e] + part[e])
+            for c in range(n_codes):
+                if cnt[c] > 0:
+                    for u in range(pq_len):
+                        cb[j * per + c * pq_len + u] = identical_div(tot[c * pq_len + u], Float32(cnt[c]))
+    return cb^
+
+
 @fieldwise_init
 struct OrIndex(Movable):
     var centers: List[Float32]
@@ -76,7 +143,10 @@ def or_build(x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, seed:
             r[i * rot + c] = ftz(ftz(x[i * dim + c]) - ftz(centers[labels[i] * dim + c]))
     var n_codes = 1 << pq_bits
     var codebooks = List[Float32]()
-    for j in range(pq_dim):
+    var batched = pq_len <= 16 and n_codes <= 256
+    if batched:
+        codebooks = or_codebooks_batched(r, n, rot, pq_dim, pq_len, n_codes, pq_iters, seed)
+    for j in range(pq_dim if not batched else 0):
         var sub = List[Float32]()
         for i in range(n):
             for t in range(pq_len):
@@ -85,7 +155,7 @@ def or_build(x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, seed:
         var lab = List[UInt32](length=n, fill=UInt32(0))
         _ = host_kmeans_fit(sub, n, pq_len, n_codes, cb, lab, List[Float32](), 0, pq_iters, Float64(1e-4),
                             UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0),
-                            lazy_shift=True)  # the device codebooks' lazy_shift (x_ann/ivf_pq_device.mojo)
+                            lazy_shift=True)  # the per-subspace route's lazy_shift (x_ann/ivf_pq_device.mojo `_codebooks`)
         for e in range(len(cb)):
             codebooks.append(cb[e])
     var codes = List[Int32](length=n * pq_dim, fill=Int32(0))

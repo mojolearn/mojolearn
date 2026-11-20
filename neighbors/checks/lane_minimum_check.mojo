@@ -4,11 +4,12 @@
 Widths above this device's native group test shared-memory portability only;
 they do not constitute execution evidence for another physical GPU column.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, column_lane_width, column_lane_width_is_fixed, column_max_block_size, column_is_simulated, column_is_buildable, column_name, COLUMN_AMD_RDNA
 from neighbors.checks.lane_minimum import logical_min_u64
+from checks.native_tests.kit import download_host_into
 
 comptime BLOCK = 128 if column_max_block_size(TARGET_COLUMN) < 256 else 256
 
@@ -32,7 +33,7 @@ def check[WIDTH: Int, FIXED: Bool](ctx: DeviceContext) raises:
     var output = ctx.enqueue_create_buffer[DType.uint64](BLOCK * 2)
     var host = ctx.enqueue_create_host_buffer[DType.uint64](BLOCK * 2)
     ctx.enqueue_function[kernel[WIDTH, FIXED]](output.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(BLOCK, 1, 1))
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=output)
+    download_host_into[DType.uint64](ctx, output, host)
     ctx.synchronize()
     for iteration in range(2):
         for tid in range(BLOCK):

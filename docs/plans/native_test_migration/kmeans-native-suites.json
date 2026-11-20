@@ -1,0 +1,44 @@
+{
+  "production_commit": "3a5b05c487b0ca02d9710a50b20835172519f0ca",
+  "status": "authored; compilation and execution owed to orchestrator",
+  "native_fixtures": 41,
+  "suites": [
+    {
+      "module": "checks.native_tests.kmeans_contract_suite",
+      "entry": "run_checks",
+      "main": "checks/native_tests/kmeans_contract.mojo",
+      "fixtures": 26,
+      "coverage": "native ABI slots, fused/fold/resident route flags, result words, owner identity, handle transfer, malformed requests",
+      "parallel": "host_parallelize across independent fixtures"
+    },
+    {
+      "module": "checks.native_tests.kmeans_native_cpu_suite",
+      "entry": "run_checks",
+      "main": "checks/native_tests/kmeans_native_cpu.mojo",
+      "fixtures": 6,
+      "defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_COLUMN_CPU=1"
+      ],
+      "coverage": "actual host fit, predict/ties, both transform metrics, fit/query finite refusal",
+      "parallel": "host_parallelize across independent owners"
+    },
+    {
+      "module": "checks.native_tests.kmeans_native_gpu_suite",
+      "entry": "run_checks",
+      "main": "checks/native_tests/kmeans_native_gpu.mojo",
+      "fixtures": 9,
+      "defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+      ],
+      "coverage": "CPU geometric cases through actual GPU provider plus resident predict/transform and fused fit_transform",
+      "parallel": "one GPU context exercised in order; existing numerical kernels remain parallel"
+    }
+  ],
+  "python_boundary_seams": {
+    "file": "python/mojolearn/tests/test_kmeans_native_boundary.py",
+    "expanded_cases": 53,
+    "coverage": "poisoned legacy dispatch, public methods, native owner cache, writable/rebound centers, copy/deepcopy, model lifetime, serialized callback refusal, nonfinite predict/transform refusal before public output, scalar hook refusal, exact NumPy scalar compatibility, validation order"
+  },
+  "limits": "No lane compile, test, timing or identity execution. Existing Python public KMeans coverage is retained. No correctness or performance pass is claimed."
+}

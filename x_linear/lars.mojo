@@ -13,8 +13,10 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
   * the correlations are recomputed as X'y - G coef every step instead of
     their incremental `Cov -= gamma * corr_eq_dir` (the same quantity), and
     their `np.around(corr_eq_dir, cov_precision)` is not applied;
-  * the Cholesky of G_AA is refactored each step (x_linear/ops.mojo) instead
-    of updated/downdated; ties in argmax|Cov| go to the lowest feature index
+  * the Cholesky of G_AA is kept across steps and grown by one row per
+    addition (theirs too); after a LassoLars drop the rows from the first
+    dropped position on are refactored instead of downdated (`_t_chol_rows`);
+    ties in argmax|Cov| go to the lowest feature index
     (theirs: the lowest position in their permuted Cov array);
   * float32 throughout; equality tolerance float32 eps, tiny32 as theirs;
   * DEVIATION 5010: the lar method lets an active coefficient cross zero
@@ -23,27 +25,44 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
+    fill, copy, centered_gram, centered_xty, add_acc,
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty, t_cholesky
+from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
 from std.sys.compile import is_defined
 from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cell, bm_column_mean_cell
 
 # lane/lars-grid-gram (2026-10-11), PROMOTED to the default (lane
 # i17-decide-nbr-lin-prep, 2026-10-11); `-D MOJOLEARN_IDN_LARS_GRID_GRAM_OFF`
-# (or MOJOLEARN_IDN_ALL_OFF) restores main's moments grid. A/B one run per arm,
+# restores main's moments grid. A/B one run per arm,
 # main@b2657cc89 (runs v0045/v0046, a1628/a1629), NV L40S / AMD MI325X ms:
 #   lars taxi          59.1 -> 3.1 (0.05)    / 126.1 -> 3.3 (0.03)
 #   lasso-lars taxi    58.9 -> 3.0 (0.05)    / 125.7 -> 3.3 (0.03)
 #   lasso-lars istella 112.8 -> 83.4 (0.74)  / 191.6 -> 74.6 (0.39)
 #   lars istella       165.6 -> 340.7 (2.06) / 390.2 -> 1155.2 (2.96)  SLOWER
 # Digests NV == AMD on both arms; quality equal or better (lars istella r2
-# 0.3090 -> 0.3287, the rest equal to 1e-4). OPEN FOLLOW-UP: the lars istella
-# regression (one cell of four; the net is a large win). Find its structural
-# cause and fix it by size/cost reasoning that covers neighboring shapes; no
-# dataset- or dimension-keyed dodge (CLAUDE.md, No dimension targeting).
+# 0.3090 -> 0.3287, the rest equal to 1e-4).
+# The lars istella regression (lane/fix-lars-grid-gram, 2026-11-15): the
+# route changes only the moments, and lasso-lars istella, on the same moments,
+# got faster; the time went into the PATH. With the new Gram's bits, Lars on
+# istella's 220 features runs further along its path (r2 0.3090 -> 0.3287),
+# and each step cost O(k^3) with k barriers: the path re-copied G_AA and
+# refactored it twice a step (the (k+1) factor of the addition, then the k
+# factor of the direction, `t_cholesky`: k barriers each, every thread
+# re-summing every pivot), O(d^4) over a full path, all of it on one block.
+# The pivots of the last steps dominate, so a path that goes ~20% further
+# costs ~2x (k^4). Fix, for every shape: the factor is kept across steps
+# (stride d in fw[ll]); an addition factors row k only (a lead forward
+# substitution, O(k^2), no barrier but its broadcast), the direction reuses
+# it (no second factorization), a LassoLars drop refactors only the rows
+# from the first dropped position; no switch is kept for the old path. The
+# row, the refactor and both solves then went onto the team with a chunked
+# fold (lane/fix-lars-chol-parallel, `LARS_CH` below; bits change, every
+# column and the host together). Both arms of `_OFF` take the kept factor,
+# so that A/B isolates the moments again. RUN OWED: lars and lasso-lars on istella and
+# taxi, NV + MI300X, this arm against `_OFF` and against the rows above
+# (bench/results/paper_compare/owed-pre0867.json); numbers pending.
 # The route takes LARS / LassoLars' moments from the
 # row-parallel blocked moments (core/blocked_moments.mojo: leaf column sums +
 # binary-counter fold for the means of X and y, `bm_centered_gram_panels` and
@@ -59,9 +78,9 @@ from core.classical_centered import centered_gram_v1_cell, centered_cross_v1_cel
 # `centered_cross_v1_cell`, `bm_column_mean_cell`). Apple runs the same
 # blocked fold (lane/apple-lars, 2026-10-12; x_linear/device.mojo
 # `XL_IDN_LARS_GRID_GRAM`), so its column matches NVIDIA == AMD == host.
-comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+comptime LARS_GRID_GRAM = not is_defined["MOJOLEARN_IDN_LARS_GRID_GRAM_OFF"]()
 
 
 def _lars_host_blocked_moments(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, gg: Int, xty: Int) -> Float32:
@@ -90,6 +109,154 @@ comptime TINY32 = Float32(1.1754944e-38)
 comptime EQ_TOL = Float32(1.1920929e-07)
 
 
+# lane/fix-lars-chol-parallel (2026-11-15): the Cholesky of G_AA is kept
+# across steps at row stride d in fw[ll] (lane/fix-lars-grid-gram), and every
+# triangular pass over it (the new row of an addition, the rows refactored
+# after a LassoLars drop, the two solves of the direction) runs on the whole
+# team. Each value has ONE fold order, fixed by the index grid alone (chunks
+# of LARS_CH, never the thread count), so the host (a team of one) and every
+# device write the same words: an inner product over p is the fmad chain of
+# each LARS_CH-chunk from 0 (p ascending), the chunks subtracted from the
+# right side one after another (ascending for the lower solves and the pivot,
+# descending for the upper solve), the chunk of the value's own block last.
+# The chunk partials of the finished blocks are dealt across the team (one
+# (value, chunk) a thread), folded one value a thread, and the in-block
+# triangle (at most LARS_CH^2/2 fmads) runs on the lead. Per LARS step with k
+# active and nb = ceil(k / LARS_CH): about 9 nb + 6 barriers and a lead chain
+# of about 3 nb LARS_CH^2/2 fmads, where lane/fix-lars-grid-gram's lead ran
+# k^2/2 (new row) + k^2 (two solves) dependent fmads behind 2 barriers. A
+# factor row depends only on G and the rows above it, so a row refactored
+# after a drop is the word an addition would have written. Bits change from
+# the serial statements: lars and lasso-lars, every vendor column and the
+# host column together.
+# LARS_CH: a chunk is one thread's dependent chain and bounds the lead's
+# in-block triangle; it is fixed, not keyed on d, n or a dataset (cost: 16
+# keeps both short for every k from 1 to thousands, and the partials of one
+# block, one word per (value, chunk), never exceed k <= d words of scratch).
+comptime LARS_CH = 16
+
+
+def _t_lower_solve(t: Team, a: FP, ll: Int, s: Int, m: Int, xo: Int, pw: Int):
+    """In place: a[xo + j] (j < m) holds the right side g on entry and the
+    solution of L x = g on return, L the lower factor at a[ll] (row stride s).
+    x_j = (g_j - P_0 - ... - P_{b-1} - P_in) / L[j, j], b = j // LARS_CH, P_c
+    the fmad chain over chunk c of L[j, p] x_p from 0 (p ascending), P_in the
+    same over [b * LARS_CH, j). pw: scratch of at most m words (the chunk
+    partials of one block). Ends on a barrier when m > 0."""
+    var nb = (m + LARS_CH - 1) // LARS_CH
+    for b in range(nb):  # driver-loop: over column blocks of the factor
+        var j0 = b * LARS_CH
+        var nj = min(LARS_CH, m - j0)
+        if b > 0:
+            # the chunk partials of the finished blocks, one (j, chunk) a thread
+            for task in range(t.tid, nj * b, t.nt):
+                var jl = task // b
+                var c = task - jl * b
+                var row = ll + (j0 + jl) * s
+                var acc = Float32(0)
+                for p in range(c * LARS_CH, c * LARS_CH + LARS_CH):
+                    acc = fmad(ld(a, row + p), ld(a, xo + p), acc)
+                st(a, pw + task, acc)
+            t.sync()
+            # folded into the right side in chunk order, one j a thread
+            for jl in range(t.tid, nj, t.nt):
+                var tv = ld(a, xo + j0 + jl)
+                for c in range(b):
+                    tv = fs(tv, ld(a, pw + jl * b + c))
+                st(a, xo + j0 + jl, tv)
+            t.sync()
+        if t.lead():
+            # the in-block triangle (at most LARS_CH rows)
+            for j in range(j0, j0 + nj):
+                var acc = Float32(0)
+                for p in range(j0, j):
+                    acc = fmad(ld(a, ll + j * s + p), ld(a, xo + p), acc)
+                st(a, xo + j, fd(fs(ld(a, xo + j), acc), ld(a, ll + j * s + j)))
+        t.sync()
+
+
+def _t_upper_solve(t: Team, a: FP, ll: Int, s: Int, m: Int, xo: Int, pw: Int):
+    """In place: the solution of L' x = y (y in a[xo + i], i < m, on entry).
+    x_i = (y_i - P_{nb-1} - ... - P_{b+1} - P_in) / L[i, i], b = i // LARS_CH,
+    P_c the fmad chain over chunk c of L[p, i] x_p from 0 (p ascending), P_in
+    the same over (i, end of i's block); blocks run descending. pw: scratch of
+    at most m words. Ends on a barrier when m > 0."""
+    var nb = (m + LARS_CH - 1) // LARS_CH
+    var b = nb - 1
+    while b >= 0:  # driver-loop: over column blocks of the factor, descending
+        var i0 = b * LARS_CH
+        var ni = min(LARS_CH, m - i0)
+        var na = nb - 1 - b  # finished chunks above this block
+        if na > 0:
+            # one (i, chunk) a thread; ca = 0 is the last chunk (descending)
+            for task in range(t.tid, ni * na, t.nt):
+                var il = task // na
+                var c = nb - 1 - (task - il * na)
+                var p1 = min(c * LARS_CH + LARS_CH, m)
+                var acc = Float32(0)
+                for p in range(c * LARS_CH, p1):
+                    acc = fmad(ld(a, ll + p * s + i0 + il), ld(a, xo + p), acc)
+                st(a, pw + task, acc)
+            t.sync()
+            for il in range(t.tid, ni, t.nt):
+                var tv = ld(a, xo + i0 + il)
+                for ca in range(na):
+                    tv = fs(tv, ld(a, pw + il * na + ca))
+                st(a, xo + i0 + il, tv)
+            t.sync()
+        if t.lead():
+            var i = i0 + ni - 1
+            while i >= i0:
+                var acc = Float32(0)
+                for p in range(i + 1, i0 + ni):
+                    acc = fmad(ld(a, ll + p * s + i), ld(a, xo + p), acc)
+                st(a, xo + i, fd(fs(ld(a, xo + i), acc), ld(a, ll + i * s + i)))
+                i -= 1
+        t.sync()
+        b -= 1
+
+
+def _t_chol_row(t: Team, a: FP, ll: Int, s: Int, gg: Int, d: Int, iw: IP, act: Int, r: Int, pw: Int) -> Bool:
+    """Row r of the lower Cholesky of G_AA (A = the active list at iw[act])
+    into a[ll] at row stride s; rows < r already hold it. The off-diagonal
+    entries solve L[:r, :r] x = G[A_r, A_:r] (`_t_lower_solve`); the pivot is
+    sqrt(G[A_r, A_r] - Q_0 - Q_1 - ...), Q_c the fmad chain of x_p^2 over
+    chunk c. False (uniform) on a non-positive pivot, the pivot unwritten."""
+    var gr = ldi(iw, act + r)
+    var xo = ll + r * s
+    for j in range(t.tid, r, t.nt):
+        st(a, xo + j, ld(a, gg + gr * d + ldi(iw, act + j)))
+    t.sync()
+    _t_lower_solve(t, a, ll, s, r, xo, pw)
+    var nc = (r + LARS_CH - 1) // LARS_CH
+    for c in range(t.tid, nc, t.nt):
+        var acc = Float32(0)
+        for p in range(c * LARS_CH, min(c * LARS_CH + LARS_CH, r)):
+            var l = ld(a, xo + p)
+            acc = fmad(l, l, acc)
+        st(a, pw + c, acc)
+    t.sync()
+    var ok = 0
+    if t.lead():
+        var sv = ld(a, gg + gr * d + gr)
+        for c in range(nc):
+            sv = fs(sv, ld(a, pw + c))
+        if sv > 0:
+            st(a, xo + r, fsqrt(sv))
+            ok = 1
+    return t.bcast_int(ok, 6) == 1
+
+
+def _t_chol_rows(t: Team, a: FP, ll: Int, s: Int, gg: Int, d: Int, iw: IP, act: Int, lo: Int, m: Int, pw: Int) -> Bool:
+    """Rows [lo, m) of the kept factor, one `_t_chol_row` each (an addition is
+    one row; a LassoLars drop refactors the rows from its first dropped
+    position). False (uniform) where a pivot is not positive."""
+    for r in range(lo, m):  # driver-loop: over factor rows
+        if not _t_chol_row(t, a, ll, s, gg, d, iw, act, r, pw):
+            return False
+    return True
+
+
 def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, lasso, positive]; fp: [alpha_min].
     res: coef d, intercept, n_iter, alpha, n_active, active d.
@@ -111,8 +278,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     var corr = sgn + d
     var state = 0
     var act = d
-    # Team form: the row passes (means, Gram, X'y) across the team
-    # (x_linear/tops.mojo); the path itself (d x d) on the lead.
+    # the moments come from the device kernels or the host's blocked fold;
+    # the path runs on the team (`_lars_path_team`)
     var ym = Float32(0)
     comptime if is_gpu():
         # the device (x_linear/device.mojo `lars_path_kernel`): the moments
@@ -143,158 +310,12 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
                 fill(fw, xm, d, Float32(0))
             centered_gram(x, n, d, fw, xm, fw, gg)
             centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
-    comptime if is_gpu():
-        if t.nt > 1:
-            _lars_path_team(t, n, d, max_iter, lasso, positive, alpha_min, fi, ym, fw, iw, res,
-                            xm, gg, xty, prev, cov, ll, ls, sgn, corr, state, act)
-            return
-    if not t.lead():
-        return
-    fill(res, 0, d, Float32(0))
-    fill(fw, prev, d, Float32(0))
-    for j in range(d):
-        sti(iw, state + j, 0)
-    var k = 0
-    var n_iter = 0
-    var drop = False
-    var alpha = Float32(0)
-    var prev_alpha = Float32(0)
-    var guard = 0
-    while guard < 4 * d + 4 * max_iter + 8:
-        guard += 1
-        # correlations with the current residual
-        for j in range(d):
-            var acc = ld(fw, xty + j)
-            for l in range(d):
-                acc = fs(acc, fm(ld(fw, gg + j * d + l), ld(res, l)))
-            st(fw, cov + j, acc)
-        var c_idx = -1
-        var cbig = Float32(0)
-        for j in range(d):
-            if ldi(iw, state + j) == 0:
-                # their positive=True takes argmax(Cov), not argmax |Cov|
-                var a = ld(fw, cov + j) if positive else fabs(ld(fw, cov + j))
-                # DEVIATION 5005 (IDENTITY_PATHS row 105): strict >, the
-                # lowest index wins an exact tie
-                if c_idx < 0 or a > cbig:
-                    c_idx = j
-                    cbig = a
-        alpha = fd(cbig, i2f(n))
-        if alpha <= fa(alpha_min, EQ_TOL):
-            if fabs(fs(alpha, alpha_min)) > EQ_TOL:
-                if n_iter > 0:
-                    var ss = fd(fs(prev_alpha, alpha_min), fs(prev_alpha, alpha))
-                    for j in range(d):
-                        var pj = ld(fw, prev + j)
-                        st(res, j, fmad(ss, fs(ld(res, j), pj), pj))
-                alpha = alpha_min
-            break
-        if n_iter >= max_iter or k >= d:
-            break
-        if not drop:
-            if c_idx < 0:
-                break
-            sti(iw, act + k, c_idx)
-            st(fw, sgn + k, Float32(1) if positive else fsign(ld(fw, cov + c_idx)))
-            # the new pivot of the Cholesky of G_AA
-            for a in range(k + 1):
-                for b in range(k + 1):
-                    st(fw, ll + a * (k + 1) + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-            var okc = cholesky(fw, ll, k + 1)
-            if not okc or ld(fw, ll + k * (k + 1) + k) < Float32(1e-7):
-                sti(iw, state + c_idx, 2)  # their degenerate-regressor skip
-                continue
-            sti(iw, state + c_idx, 1)
-            k += 1
-        if lasso and n_iter > 0 and prev_alpha < alpha:
-            break
-        # equiangular direction over the active set
-        for a in range(k):
-            for b in range(k):
-                st(fw, ll + a * k + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-        _ = cholesky(fw, ll, k)
-        for a in range(k):
-            st(fw, ls + a, ld(fw, sgn + a))
-        chol_solve(fw, ll, k, fw, ls)
-        var aa: Float32
-        if k == 1 and ld(fw, ls) == 0:
-            st(fw, ls, Float32(1))
-            aa = Float32(1)
-        else:
-            var sm = Float32(0)
-            for a in range(k):
-                sm = fmad(ld(fw, ls + a), ld(fw, sgn + a), sm)
-            aa = fd(Float32(1), fsqrt(sm))
-            for a in range(k):
-                st(fw, ls + a, fm(ld(fw, ls + a), aa))
-        var gamma = fd(cbig, aa)
-        for j in range(d):
-            if ldi(iw, state + j) != 0:
-                continue
-            var cj = Float32(0)
-            for a in range(k):
-                cj = fmad(ld(fw, gg + j * d + ldi(iw, act + a)), ld(fw, ls + a), cj)
-            var cv = ld(fw, cov + j)
-            var g1 = fd(fs(cbig, cv), fa(fs(aa, cj), TINY32))
-            if g1 > 0 and g1 < gamma:
-                gamma = g1
-            if not positive:
-                var g2 = fd(fa(cbig, cv), fa(fa(aa, cj), TINY32))
-                if g2 > 0 and g2 < gamma:
-                    gamma = g2
-        drop = False
-        var z_pos = BIG
-        # DEVIATION 5010 (x_linear/README.md): the zero crossing is the lasso
-        # modification only. Their lar method also flips sign_active and
-        # skips the next addition when an active coefficient crosses zero,
-        # which breaks the equiangular invariant (an active correlation keeps
-        # its sign in LAR; only the coefficient changes sign) and diverges:
-        # their own Lars, float64, ends far from least squares even with
-        # every feature active (python -m mojolearn.tests.test_x_linear_sanity
-        # lars-crossing). Plain LAR (Efron et al. 2004) lets it cross.
-        if lasso:
-            for a in range(k):
-                var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
-                if z > 0 and z < z_pos:
-                    z_pos = z
-            if z_pos < gamma:
-                for a in range(k):
-                    var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
-                    if z == z_pos:
-                        st(fw, sgn + a, -ld(fw, sgn + a))
-                gamma = z_pos
-                drop = True
-        n_iter += 1
-        copy(fw, prev, res, 0, d)
-        prev_alpha = alpha
-        for a in range(k):
-            var j = ldi(iw, act + a)
-            st(res, j, fmad(gamma, ld(fw, ls + a), ld(res, j)))
-        if drop and lasso:
-            var w = 0
-            for a in range(k):
-                var j = ldi(iw, act + a)
-                var z = fd(-ld(fw, prev + j), fa(ld(fw, ls + a), TINY32))
-                if z == z_pos:
-                    sti(iw, state + j, 0)
-                    st(res, j, Float32(0))
-                else:
-                    sti(iw, act + w, j)
-                    st(fw, sgn + w, ld(fw, sgn + a))
-                    w += 1
-            k = w
-    var intercept = Float32(0)
-    if fi:
-        var acc = Float32(0)
-        for j in range(d):
-            acc = fmad(ld(fw, xm + j), ld(res, j), acc)
-        intercept = fs(ym, acc)
-    st(res, d, intercept)
-    st(res, d + 1, i2f(n_iter))
-    st(res, d + 2, alpha)
-    st(res, d + 3, i2f(k))
-    for a in range(d):
-        st(res, d + 4 + a, i2f(ldi(iw, act + a)) if a < k else Float32(-1))
+    # lane/fix-lars-chol-parallel (2026-11-15): one path on every column. The
+    # host is a team of one (sync is nothing, bcast returns its argument) and
+    # runs the device statements; the lead-only copy of the path that sat here
+    # (the host column and a device team of one) is deleted.
+    _lars_path_team(t, n, d, max_iter, lasso, positive, alpha_min, fi, ym, fw, iw, res,
+                    xm, gg, xty, prev, cov, ll, ls, sgn, corr, state, act)
 
 
 def _lars_path_team(
@@ -302,17 +323,19 @@ def _lars_path_team(
     fw: FP, iw: IP, res: FP, xm: Int, gg: Int, xty: Int, prev: Int, cov: Int, ll: Int, ls: Int, sgn: Int, corr: Int,
     state: Int, act: Int,
 ):
-    """lars_fit's path on the whole team (lane/neural-pass90, 2026-10-01).
-    Every thread runs the loop and computes its scalar decisions from the
-    same words (read after a barrier), so the control flow is uniform; the
-    lead alone writes the shared state. The O(d^2) and O(k^3) parts are split
-    across the team, each value by the lead loop's own statements: the
-    correlations (one j a thread, its chain over l ascending), the two
-    Cholesky factors a step (`t_cholesky`) and the d x k products of the step
-    search (cj, one j a thread); the minimum over j stays the lead's scan.
-    The device ran the whole path on the lead thread: Lars on istella 100k x
-    220 took 9.4 s on the M4's GPU. `-D MOJOLEARN_X_LINEAR_LARS_LEAD=1`
-    restores the lead-only loop."""
+    """lars_fit's path, the only one: the whole block on a device, a team of
+    one on the host (lane/neural-pass90, 2026-10-01; lane/fix-lars-chol-parallel,
+    2026-11-15). Every thread runs the loop and computes its scalar decisions
+    from the same words (read after a barrier), so the control flow is
+    uniform; the lead alone writes the shared state. The O(d^2) and O(k^2)
+    parts are split across the team: the correlations (one j a thread, its
+    chain over l ascending), every pass over the kept Cholesky (the new row
+    of an addition, the refactor after a LassoLars drop, the two solves of
+    the direction: `_t_chol_rows`, `_t_lower_solve`, `_t_upper_solve`, whose
+    fold order is fixed by the index grid, not the thread count) and the
+    d x k products of the step search (cj, one j a thread); the minimum over
+    j stays the lead's. The device ran the whole path on the lead thread:
+    Lars on istella 100k x 220 took 9.4 s on the M4's GPU."""
     if t.lead():
         fill(res, 0, d, Float32(0))
         fill(fw, prev, d, Float32(0))
@@ -320,6 +343,7 @@ def _lars_path_team(
             sti(iw, state + j, 0)
     t.sync()
     var k = 0
+    var lv = 0  # rows of the kept Cholesky factor (stride d at fw[ll]); uniform
     var n_iter = 0
     var drop = False
     var alpha = Float32(0)
@@ -337,7 +361,10 @@ def _lars_path_team(
         var cbig = Float32(0)
         for j in range(d):
             if ldi(iw, state + j) == 0:
+                # their positive=True takes argmax(Cov), not argmax |Cov|
                 var a = ld(fw, cov + j) if positive else fabs(ld(fw, cov + j))
+                # DEVIATION 5005 (IDENTITY_PATHS row 105): strict >, the
+                # lowest index wins an exact tie
                 if c_idx < 0 or a > cbig:
                     c_idx = j
                     cbig = a
@@ -360,13 +387,11 @@ def _lars_path_team(
                 sti(iw, act + k, c_idx)
                 st(fw, sgn + k, Float32(1) if positive else fsign(ld(fw, cov + c_idx)))
             t.sync()
-            for a in range(t.tid, k + 1, t.nt):
-                for b in range(k + 1):
-                    st(fw, ll + a * (k + 1) + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
-            t.sync()
-            var okc = t_cholesky(t, fw, ll, k + 1)
-            t.sync()
-            if not okc or ld(fw, ll + k * (k + 1) + k) < Float32(1e-7):
+            # row k of the kept factor on the team (rows < lv kept; lv == k
+            # unless a refactor after a drop failed); corr is free scratch
+            # here (written next by the step search below)
+            var okc = _t_chol_rows(t, fw, ll, d, gg, d, iw, act, lv, k + 1, corr)
+            if not okc or ld(fw, ll + k * d + k) < Float32(1e-7):
                 if t.lead():
                     sti(iw, state + c_idx, 2)
                 t.sync()
@@ -374,19 +399,23 @@ def _lars_path_team(
             if t.lead():
                 sti(iw, state + c_idx, 1)
             k += 1
+            lv = k
             t.sync()
         if lasso and n_iter > 0 and prev_alpha < alpha:
             break
+        # no second factorization: the addition finished G_AA's factor; a
+        # LassoLars drop refactors rows [lv, k) on the team
+        if lv < k:
+            if _t_chol_rows(t, fw, ll, d, gg, d, iw, act, lv, k, corr):
+                lv = k
+        # L L' ls = sgn on the team (`_t_lower_solve`, `_t_upper_solve`)
         for a in range(t.tid, k, t.nt):
-            for b in range(k):
-                st(fw, ll + a * k + b, ld(fw, gg + ldi(iw, act + a) * d + ldi(iw, act + b)))
+            st(fw, ls + a, ld(fw, sgn + a))
         t.sync()
-        _ = t_cholesky(t, fw, ll, k)
+        _t_lower_solve(t, fw, ll, d, k, ls, corr)
+        _t_upper_solve(t, fw, ll, d, k, ls, corr)
         var aa = Float32(0)
         if t.lead():
-            for a in range(k):
-                st(fw, ls + a, ld(fw, sgn + a))
-            chol_solve(fw, ll, k, fw, ls)
             if k == 1 and ld(fw, ls) == 0:
                 st(fw, ls, Float32(1))
                 aa = Float32(1)
@@ -398,7 +427,7 @@ def _lars_path_team(
                 for a in range(k):
                     st(fw, ls + a, fm(ld(fw, ls + a), aa))
         aa = t.bcast(aa, 2)
-        # cj for every inactive j, one j a thread (the lead loop's chain)
+        # cj for every inactive j, one j a thread (its chain over a ascending)
         for j in range(t.tid, d, t.nt):
             if ldi(iw, state + j) != 0:
                 continue
@@ -411,6 +440,7 @@ def _lars_path_team(
         var z_pos = BIG
         drop = False
         var kk = k
+        var lvl = lv
         if t.lead():
             for j in range(d):
                 if ldi(iw, state + j) != 0:
@@ -424,6 +454,15 @@ def _lars_path_team(
                     var g2 = fd(fa(cbig, cv), fa(fa(aa, cj), TINY32))
                     if g2 > 0 and g2 < gamma:
                         gamma = g2
+            # DEVIATION 5010 (x_linear/README.md): the zero crossing is the
+            # lasso modification only. Their lar method also flips
+            # sign_active and skips the next addition when an active
+            # coefficient crosses zero, which breaks the equiangular
+            # invariant (an active correlation keeps its sign in LAR; only
+            # the coefficient changes sign) and diverges: their own Lars,
+            # float64, ends far from least squares even with every feature
+            # active (python -m mojolearn.tests.test_x_linear_sanity
+            # lars-crossing). Plain LAR (Efron et al. 2004) lets it cross.
             if lasso:
                 for a in range(k):
                     var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
@@ -448,6 +487,8 @@ def _lars_path_team(
                     if z == z_pos:
                         sti(iw, state + j, 0)
                         st(res, j, Float32(0))
+                        if a < lvl:
+                            lvl = a
                     else:
                         sti(iw, act + w, j)
                         st(fw, sgn + w, ld(fw, sgn + a))
@@ -455,6 +496,7 @@ def _lars_path_team(
                 kk = w
         drop = t.bcast_int(1 if drop else 0, 1) == 1
         k = t.bcast_int(kk, 3)
+        lv = t.bcast_int(lvl, 5)
         n_iter += 1
         prev_alpha = alpha
     if not t.lead():

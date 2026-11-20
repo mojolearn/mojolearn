@@ -144,10 +144,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoTreesContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTreesContextFast"
+comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV3"
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -493,10 +493,13 @@ def _et_device_batch() -> Int:
     """
     # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_65536 (DROPPED-slower) deleted 2026-10-03 by e242fb001; code recoverable at e242fb001^.
     # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch; record in docs/TOMBSTONES.md.
-    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
-        return 32768
-    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"]():
-        return 4096
+    # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_32768 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_32768.patch
+    # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_4096 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_4096.patch
+    # TOMBSTONE: MOJOLEARN_ET_DEVICE_BATCH_16384 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_16384.patch
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"]():
         return 16384
     # APPLE FAST: 32768. Apple M4, 1M rows, alternating processes, same
@@ -505,7 +508,7 @@ def _et_device_batch() -> Int:
     # 0.953. `_16384=1` restores the previous width for an A/B.
     # IDENTICAL on Apple too since 2026-09-28: the width is bit-inert by the
     # argument above (keyed draws, integer cells, per-node reduction).
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return 32768
     return 16384
 

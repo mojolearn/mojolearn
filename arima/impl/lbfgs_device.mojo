@@ -2,9 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batched ARIMA L-BFGS state machine ON THE DEVICE (cpu-gpu-cleanup
 n-seq, 2026-10-02): one GPU thread per series, every series' optimizer state
-resident between launches. `arima/impl/batched_fit.mojo::batched_min_lbfgs`
-drives it; the host only sequences the launches and reads one "any series
-still active / still searching" word per step.
+resident between launches. Two drivers take it: the lock-step solver
+(`arima/impl/batched_fit.mojo::_lockstep_min_lbfgs`, the host sequences the
+launches and reads one "any series still active / still searching" word per
+step) and the per-series solver (`arima/impl/fast_lbfgs_async.mojo`, the
+start kernel and the two-loop recursion; one "any series still running" word
+every few rounds). `batched_fit.mojo::batched_min_lbfgs` picks between them.
 
 THE SAME ARITHMETIC AS THE HOST COLUMN, SERIES BY SERIES. Each function
 below is the device spelling of one in `arima/impl/lbfgs_host.mojo` (which
@@ -26,7 +29,7 @@ axis (thousands per batch). Nothing folds ACROSS series.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf, isnan
 
 from checks.numerics import (
@@ -64,7 +67,7 @@ def _series() -> Int:
 
 @always_inline
 def _raise_flag(flag: IP):
-    _ = Atomic[DType.int32].max(flag, Int32(1))
+    _ = Atomic[Int32].max(flag, Int32(1))
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +124,14 @@ def d_check_convergence(
 
 
 # ---------------------------------------------------------------------------
-# the kernels, in the order `batched_min_lbfgs` launches them
+# the kernels, in the order the lock-step solver launches them
 # ---------------------------------------------------------------------------
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ASYNC_OFF, MOJOLEARN_ARIMA_FAST_ASYNC_OFF (superseded: the lock-step device solver they kept) deleted 2026-11-09 by lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
+# Restore: git apply experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch
+# Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults (`lbfgs_prelude_kernel`,
+# `lbfgs_candidate_kernel`, `lbfgs_accept_kernel`, `lbfgs_verdict_kernel` are
+# back: the lock-step solver is the default again wherever it was before the
+# deletion, never measured against the per-series solver on NVIDIA / AMD).
 
 
 def lbfgs_init_kernel(

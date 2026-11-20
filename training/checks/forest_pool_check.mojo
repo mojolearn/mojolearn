@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """RunPod-only RF/ET fixed32 pool route, all-grove bits and failure gate."""
 from std.os import getenv, setenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_FOREST
 from std.sys.compile import is_defined
 from std.memory import bitcast
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz
 from core.forest_inference import forest_add, reached_leaf
@@ -73,11 +74,9 @@ def run_case[RF_INPUT: Bool](ctx: DeviceContext, trees: Int, outputs: Int,
     for row in range(129):
         x.append(bitcast[DType.float32](UInt32(row % 4)))
         x.append(Float32(row % 3 - 1))
-    if not setenv("MOJOLEARN_FOREST_DEVICE_COUNT", "1", True):
-        raise Error("setenv")
+    device_plan_check_count(1, DEVICE_PLAN_FOREST)
     var one = ResidentForest(offsets, columns, thresholds, left, leaves, 2, outputs)
-    if not setenv("MOJOLEARN_FOREST_DEVICE_COUNT", "2", True):
-        raise Error("setenv")
+    device_plan_check_count(2, DEVICE_PLAN_FOREST)
     var many = ResidentForest(offsets, columns, thresholds, left, leaves, 2, outputs)
     if not many.pool or one.pool or many.ctx or many.offsets or many.columns or many.leaves:
         raise Error("pool route retained full root model")

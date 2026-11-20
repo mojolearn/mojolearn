@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The column moves of `mojolearn.parallel_forecasting`'s Holt-Winters
-shards (bindings/parallel_forecast_native.mojo): copies, no arithmetic."""
+shards (bindings/parallel_forecast_native_door.mojo): copies, no arithmetic."""
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 

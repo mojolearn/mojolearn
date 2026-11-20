@@ -11,13 +11,13 @@ from ._mode import NumericModeMixin
 _UMAP_FORMAT = "mojolearn-umap-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after the class; host_archive_native.mojo
 # `host_archive_umap` builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit`,
 # `fit_transform` and `transform` are one native call each
-# (bindings/mani_umap_native.mojo).
+# (bindings/mani_umap_native_door.mojo).
 from . import _native_runtime_manifold_bridge, _native_spectral_umap_bridge
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 _NATIVE_CONTEXT["family_spectral_umap_bindings"] = _native_spectral_umap_bridge.connect()
@@ -155,9 +155,9 @@ class UMAP(NumericModeMixin):
 
     #: Every public operation is one native call: the constructor and
     #: set_params are the full-reset native constructor, which validates the
-    #: parameters (bindings/umap_parameters_native.mojo); fit, fit_transform
+    #: parameters (bindings/umap_parameters_native_door.mojo); fit, fit_transform
     #: and transform run the whole lifecycle in the manifold owner
-    #: (bindings/manifold_native.mojo). The `_mode` class-creation wrappers
+    #: (bindings/manifold_native_pack.mojo). The `_mode` class-creation wrappers
     #: leave this class unwrapped.
     _mojolearn_native_public = True
 

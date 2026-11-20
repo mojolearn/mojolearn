@@ -325,7 +325,7 @@ def mamba1_prefill_backward(
     var _l1_a9 = Int32(dims.d_inner)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9}:
         m1_conv_w_interleave_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9)
-    host_launch(_launch_1, launch_count(((dims.d_inner + 127) // 128, 1, 1), (128, 1, 1)))
+    host_launch(_launch_1, launch_count(((dims.d_inner + 127) // 128, 1, 1), (128, 1, 1)), 0)
     var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
 
     var result = Mamba1PrefillGradients()

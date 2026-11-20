@@ -1,0 +1,143 @@
+diff --git a/autograd/checks/losses.mojo b/autograd/checks/losses.mojo
+index 2f812ee5ca..b0710aa207 100644
+--- a/autograd/checks/losses.mojo
++++ b/autograd/checks/losses.mojo
+@@ -12,7 +12,7 @@ from autograd.losses import (
+     REDUCTION_SUM, loss_scratch, release_loss_scratch, loss_value_into,
+ )
+ from autograd.loss_ops import (
+-    LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY,
++    LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB, LS_BINARY_LOG_PROB, LS_CROSS_ENTROPY,
+ )
+ from autograd.metrics import (
+     accuracy, accuracy_from_scores, log_loss, mean_squared_error, root_mean_squared_error,
+@@ -45,7 +45,17 @@ def _term64(kind: Int, p: Float64, y: Float64, delta: Float64) -> Float64:
+         return delta * (abs(d) - 0.5 * delta)
+     if kind == LS_BCE_LOGITS:
+         return max(p, 0.0) - p * y + log1p(exp(-abs(p)))
+-    return 0.0
++    if kind == LS_LOG_PROB:
++        if y == 0.0:
++            return 0.0
++        return -y * log(_clip64(p))
++    var pc = _clip64(p)
++    var acc = 0.0
++    if y != 0.0:
++        acc += y * log(pc)
++    if 1.0 - y != 0.0:
++        acc += (1.0 - y) * log(1.0 - pc)
++    return -acc
+ 
+ 
+ def _sign64(x: Float64) -> Float64:
+@@ -382,7 +392,26 @@ def _mse_seed_report[E: Exec](mut ex: E, mut tape: Tape, pred: List[Float32], ta
+     ex.free(sq)
+ 
+ 
+-# TOMBSTONE: _probability_terms (the LS_LOG_PROB / LS_BINARY_LOG_PROB checks; the kinds are deleted) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
++def _probability_terms[E: Exec](mut ex: E) raises:
++    """The MLP trainer's clipped-probability kinds (forward only), with
++    probabilities at and beyond the clip bounds."""
++    var p: List[Float32] = [0.0, 0.25, 1.0, 0.6, 0.999999999, 0.1]
++    var y: List[Float32] = [1.0, 0.0, 0.0, 1.0, 1.0, 0.5]
++    var dp = _upload(ex, p)
++    var dy = _upload(ex, y)
++    var ws = loss_scratch(ex, len(p))
++    var word = ex.alloc(1)
++    for kind in [LS_LOG_PROB, LS_BINARY_LOG_PROB]:
++        var total = 0.0
++        for i in range(len(p)):
++            total += _term64(kind, Float64(p[i]), Float64(y[i]), 1.0)
++        loss_value_into(ex, kind, dp, dy, 2, 3, REDUCTION_SUM, word, ws)
++        var name = String("log_prob/sum") if kind == LS_LOG_PROB else String("binary_log_prob/sum")
++        check_values(name, _download(ex, word, 1), [_f32(total)])
++    release_loss_scratch(ex, ws)
++    ex.free(word)
++    ex.free(dp)
++    ex.free(dy)
+ 
+ 
+ # ------------------------------------------------------------------ metrics
+@@ -543,6 +572,7 @@ def run_loss_checks[E: Exec](mut ex: E) raises:
+     cases += _wide_row_cases(ex, tape)
+     _mse_matches_tape(ex, tape, pred, target)
+     _mse_seed_report(ex, tape, pred, target)
++    _probability_terms(ex)
+     _metric_checks(ex)
+     tape.release(ex)
+     print("PASS loss_checks cases=" + String(cases))
+diff --git a/autograd/loss_ops.mojo b/autograd/loss_ops.mojo
+index 8c3806ca84..53d7e42fce 100644
+--- a/autograd/loss_ops.mojo
++++ b/autograd/loss_ops.mojo
+@@ -43,9 +43,11 @@ comptime LS_MSE = 1
+ comptime LS_MAE = 2
+ comptime LS_HUBER = 3
+ comptime LS_BCE_LOGITS = 4
+-# TOMBSTONE: LS_LOG_PROB (5) / LS_BINARY_LOG_PROB (6) (dead: reached only from autograd/checks/losses.mojo) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+-# Restore: git apply experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch
+-# (codes 5 and 6 stay unused so LS_CROSS_ENTROPY keeps its word)
++# Forward only: the clipped-probability log-loss terms of the MLP trainer
++# (sequence/mlp.mojo op_mlp_rowloss, one term per element instead of one
++# chain per row). No VJP: the trainer seeds its own combined derivative.
++comptime LS_LOG_PROB = 5
++comptime LS_BINARY_LOG_PROB = 6
+ # Row loss from logits and integer codes (OP_LS_CE_FWD / OP_LS_CE_VJP).
+ comptime LS_CROSS_ENTROPY = 7
+ 
+@@ -119,8 +121,19 @@ def loss_term(kind: Int, p: Float32, y: Float32, delta: Float32) -> Float32:
+         var pos = x if x > 0 else Float32(0)
+         var soft = ftz(identical_log1p(ftz(identical_exp(-_abs(x)))))
+         return add(sub(pos, mul(x, y)), soft)
+-    # unreachable: loss_value_into and the tape refuse any other kind
+-    return Float32(0)
++    if kind == LS_LOG_PROB:
++        if y == Float32(0):
++            return Float32(0)
++        return -mul(y, ftz(identical_log(clip_probability(p))))
++    # LS_BINARY_LOG_PROB
++    var pc = clip_probability(p)
++    var acc = Float32(0)
++    if y != Float32(0):
++        acc = mul(y, ftz(identical_log(pc)))
++    var ny = sub(Float32(1), y)
++    if ny != Float32(0):
++        acc = add(acc, mul(ny, ftz(identical_log(sub(Float32(1), pc)))))
++    return -acc
+ 
+ 
+ @always_inline
+diff --git a/autograd/losses.mojo b/autograd/losses.mojo
+index f72c69e566..a14b424586 100644
+--- a/autograd/losses.mojo
++++ b/autograd/losses.mojo
+@@ -9,7 +9,8 @@ from autograd.tape import Tape, Tensor
+ from autograd.fold import blocked_fold, fold_partials_bound, loss_fold
+ from autograd.ops import AXIS_ALL, AUTOGRAD_LOSS_REDUCED
+ from autograd.loss_ops import (
+-    OP_LS_ELEM_FWD, OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY,
++    OP_LS_ELEM_FWD, OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB,
++    LS_BINARY_LOG_PROB, LS_CROSS_ENTROPY,
+ )
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args
+@@ -130,8 +131,8 @@ def loss_value_into[E: Exec](
+ ) raises:
+     """dst[0] = the loss of `kind` over executor buffers, with no tape.
+ 
+-    kind is LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS (rows x cols
+-    prediction and target), or
++    kind is LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB or
++    LS_BINARY_LOG_PROB (rows x cols prediction and target), or
+     LS_CROSS_ENTROPY (rows x cols logits, `target` the rows class codes,
+     reduced over rows). The value equals the tape loss of the same kind and
+     reduction bit for bit: the same term body and the same fold.
+@@ -152,7 +153,7 @@ def loss_value_into[E: Exec](
+         ex.launch[OP_LS_CE_FWD](a, rows)
+         blocked_fold(ex, dst, scratch.terms, rows, 1, AXIS_ALL, reduction_factor(count, reduction), scratch.partials)
+         return
+-    if kind < LS_MSE or kind > LS_BCE_LOGITS:
++    if kind < LS_MSE or kind > LS_BINARY_LOG_PROB:
+         raise Error("unknown loss kind")
+     comptime if AUTOGRAD_LOSS_REDUCED:
+         # the terms folded in the leaf chain (lane ag-pass6-fold): the same

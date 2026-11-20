@@ -15,6 +15,7 @@ import subprocess
 
 EXPORTS = {
     'mojolearn._array': {'_ARRAY_CONTEXT'},
+    'mojolearn._training_impl': {'_OPT_CONTEXT'},
     'mojolearn._expansion_trees': {'_TREES_CONTEXT'},
     'mojolearn._mode': {'_MODE_METADATA_CONTEXT'},
     'mojolearn._native_family_bridge': {'_CONTEXT'},

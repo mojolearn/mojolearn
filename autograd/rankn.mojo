@@ -43,9 +43,9 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     every 2-D operation works on.
     """
     var ndim: Int
-    var d: InlineArray[Int, RN_MAX_RANK]
+    var d: Array[Int, RN_MAX_RANK]
 
-    def __init__(out self, ndim: Int, d: InlineArray[Int, RN_MAX_RANK]):
+    def __init__(out self, ndim: Int, d: Array[Int, RN_MAX_RANK]):
         self.ndim = ndim
         self.d = d.copy()
 
@@ -56,7 +56,7 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     @staticmethod
     def matrix(rows: Int, cols: Int) -> ShapeN:
         """The rank-2 shape (rows, cols)."""
-        var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+        var d = Array[Int, RN_MAX_RANK](fill=1)
         d[0] = rows
         d[1] = cols
         return ShapeN(2, d^)
@@ -64,14 +64,14 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     @staticmethod
     def scalar() -> ShapeN:
         """The rank-0 shape."""
-        return ShapeN(0, InlineArray[Int, RN_MAX_RANK](fill=1))
+        return ShapeN(0, Array[Int, RN_MAX_RANK](fill=1))
 
     @staticmethod
     def of(dims: List[Int]) raises -> ShapeN:
         """The shape with these dims (at most RN_MAX_RANK, each positive)."""
         if len(dims) > RN_MAX_RANK:
             raise Error("tensor rank must be at most 8")
-        var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+        var d = Array[Int, RN_MAX_RANK](fill=1)
         for k in range(len(dims)):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             d[k] = dims[k]
         var s = ShapeN(len(dims), d^)
@@ -112,9 +112,9 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
             s *= self.d[j]
         return s
 
-    def strides(self) -> InlineArray[Int, RN_MAX_RANK]:
+    def strides(self) -> Array[Int, RN_MAX_RANK]:
         """Every axis's row-major element stride (0 in the unused slots)."""
-        var s = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var s = Array[Int, RN_MAX_RANK](fill=0)
         var run = 1
         for j in range(self.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             var k = self.ndim - 1 - j
@@ -168,7 +168,7 @@ def rn_broadcast(a: ShapeN, b: ShapeN) raises -> ShapeN:
     """The NumPy broadcast of two shapes: dims aligned from the right, a dim
     of 1 stretches, any other mismatch raises."""
     var nd = max(a.ndim, b.ndim)
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for j in range(nd):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         var da = a.d[a.ndim - 1 - j] if j < a.ndim else 1
         var db = b.d[b.ndim - 1 - j] if j < b.ndim else 1
@@ -185,7 +185,7 @@ def rn_normalize_axis(axis: Int, ndim: Int) raises -> Int:
     return axis + ndim if axis < 0 else axis
 
 
-def rn_collapse(mut shape: ShapeN, mut strides: List[InlineArray[Int, RN_MAX_RANK]]):
+def rn_collapse(mut shape: ShapeN, mut strides: List[Array[Int, RN_MAX_RANK]]):
     """Drop extent-1 axes and merge each pair of adjacent axes whose outer
     stride equals the inner stride times the inner extent on EVERY operand
     (strides[o] is operand o's element strides over `shape`; 0 marks a
@@ -197,7 +197,7 @@ def rn_collapse(mut shape: ShapeN, mut strides: List[InlineArray[Int, RN_MAX_RAN
     # write goes through a nested subscript of a list element.
     var n_ops = len(strides)
     var nd = 0
-    var dims = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var dims = Array[Int, RN_MAX_RANK](fill=1)
     var flat = List[Int](length=n_ops * RN_MAX_RANK, fill=0)
     for k in range(shape.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         var e = shape.d[k]
@@ -222,9 +222,9 @@ def rn_collapse(mut shape: ShapeN, mut strides: List[InlineArray[Int, RN_MAX_RAN
             nd += 1
     if nd == 0:
         nd = 1
-    var out = List[InlineArray[Int, RN_MAX_RANK]]()
+    var out = List[Array[Int, RN_MAX_RANK]]()
     for o in range(n_ops):  # small-loop(operands of one launch): shape metadata
-        var row = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var row = Array[Int, RN_MAX_RANK](fill=0)
         for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
             row[k] = flat[o * RN_MAX_RANK + k]
         out.append(row^)
@@ -245,25 +245,25 @@ def rn_desc_shape(mut words: List[Int], s: ShapeN):
         words.append(s.d[k] if k < s.ndim else 1)
 
 
-def rn_desc_strides(mut words: List[Int], s: InlineArray[Int, RN_MAX_RANK]):
+def rn_desc_strides(mut words: List[Int], s: Array[Int, RN_MAX_RANK]):
     """Append a RN_DESC_STRIDE record: [s0 .. s7]."""
     for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: descriptor slots)
         words.append(s[k])
 
 
-def rn_desc_view(mut words: List[Int], s: ShapeN, strides: InlineArray[Int, RN_MAX_RANK]):
+def rn_desc_view(mut words: List[Int], s: ShapeN, strides: Array[Int, RN_MAX_RANK]):
     """Append a RN_DESC_VIEW record (a SHAPE record, then a STRIDE record)
     for a strided read of a dense output of shape s, collapsed first
     (rn_collapse: the same words, a shorter decode)."""
     var shape = ShapeN(s.ndim, s.d)
-    var one = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var one = Array[Int, RN_MAX_RANK](fill=0)
     for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
         one[k] = strides[k]
-    var st = List[InlineArray[Int, RN_MAX_RANK]]()
+    var st = List[Array[Int, RN_MAX_RANK]]()
     st.append(one^)
     rn_collapse(shape, st)
     rn_desc_shape(words, shape)
-    var collapsed = InlineArray[Int, RN_MAX_RANK](fill=0)
+    var collapsed = Array[Int, RN_MAX_RANK](fill=0)
     for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
         collapsed[k] = st[0][k]
     rn_desc_strides(words, collapsed)

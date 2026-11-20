@@ -1,0 +1,265 @@
+{
+ "at": "2026-11-08T19:50:47.442606+00:00",
+ "branch": "ref/43b5f7c320e0",
+ "commit": "9d70418446aa876bfd10ea5e7c19d31199610939",
+ "recorded": 15,
+ "repacked": [
+  "linux",
+  "macos"
+ ],
+ "schema": "mojolearn.release-identity-admitted.v1",
+ "soft_failures": [
+  {
+   "at": "2026-11-08T16:17:07Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/measuresmoke-job/measuresmoke/measuresmoke.json",
+   "name": "measuresmoke",
+   "reason": "measuresmoke: no measurement-smoke summary: it is produced only by the measurement smoke's own box job (tools/ops/release_gate.py <vendor> <version> --job measuresmoke, launched by the gate-<vendor> step); a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the gate-<vendor> step so that box job runs (with or without --reuse-unchanged); nothing on the Mac can stand in for it",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T16:17:07Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json",
+   "name": "runtime",
+   "reason": "runtime qualifier left no report at /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T16:17:11Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/measuresmoke-job/measuresmoke/measuresmoke.json",
+   "name": "measuresmoke",
+   "reason": "measuresmoke: no measurement-smoke summary: it is produced only by the measurement smoke's own box job (tools/ops/release_gate.py <vendor> <version> --job measuresmoke, launched by the gate-<vendor> step); a vendor composed on the Mac under --reuse-unchanged has none. To pass, rerun the gate-<vendor> step so that box job runs (with or without --reuse-unchanged); nothing on the Mac can stand in for it",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T16:17:11Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json",
+   "name": "runtime",
+   "reason": "runtime qualifier left no report at /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-gradients",
+   "reason": "units: unit autograd/autograd-gradients did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-higher",
+   "reason": "units: unit autograd/autograd-higher did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-import-ops",
+   "reason": "units: unit autograd/autograd-import-ops did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-lm-tape",
+   "reason": "units: unit autograd/autograd-lm-tape did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-mamba-tape",
+   "reason": "units: unit autograd/autograd-mamba-tape did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-mlp-identity",
+   "reason": "units: unit autograd/autograd-mlp-identity did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-public",
+   "reason": "units: unit autograd/autograd-public did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-samba-tape",
+   "reason": "units: unit autograd/autograd-samba-tape did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/autograd-small-mlp-tape",
+   "reason": "units: unit autograd/autograd-small-mlp-tape did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/import-torch-smoke",
+   "reason": "units: unit autograd/import-torch-smoke did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units",
+   "name": "autograd/real-model-smoke",
+   "reason": "units: unit autograd/real-model-smoke did not pass",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [
+    "{",
+    "  \"schema\": \"mojolearn.release-runtime-installed.v1\",",
+    "  \"tool\": \"tools/release_runtime_installed.py\",",
+    "  \"origin\": \"per-unit-receipts\",",
+    "  \"vendor\": \"amd\",",
+    "  \"backend\": \"hip\",",
+    "  \"numeric_mode\": \"identical\",",
+    "  \"source_revision\": \"43b5f7c320e0942bdef8c212917b440d1ab1d513\",",
+    "  \"test_revision\": \"43b5f7c320e0942bdef8c212917b440d1ab1d513\",",
+    "  \"device_class\": \"amd-gfx942\",",
+    "  \"wheels\": {",
+    "    \"mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl\": \"c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c\","
+   ],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json",
+   "name": "runtime",
+   "reason": "runtime qualifier status failed in /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json: ",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T17:58:12Z",
+   "first_lines": [
+    "[12:34:17 release-gate] runtime unit receipts to reuse: 73 from /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/runtime-prior-amd-20261108T173417Z",
+    "[12:34:18 release-gate] copying mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl (44583919 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+    "[12:34:21 release-gate] copying mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl (26432789 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+    "[12:34:23 release-gate] copying release_gate_job.sh (30087 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/release_gate_job.sh",
+    "[12:34:24 release-gate] copying build-manifest.json (492413 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/build-manifest.json",
+    "[12:34:24 release-gate] copying autograd-gradients-amd (2753384 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-gradients-amd",
+    "[12:34:25 release-gate] copying autograd-mlp-identity-amd (2478704 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-mlp-identity-amd",
+    "[12:34:26 release-gate] copying autograd-higher-amd (3165584 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-higher-amd",
+    "[12:34:27 release-gate] copying autograd-import-ops-amd (3169176 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-import-ops-amd",
+    "[12:34:27 release-gate] copying autograd-mamba-tape-amd (5036000 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-mamba-tape-amd",
+    "[12:34:28 release-gate] copying autograd-lm-tape-amd (7599240 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-lm-tape-amd",
+    "[12:34:29 release-gate] copying autograd-small-mlp-tape-amd (1776760 bytes) to /root/release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/in/autograd-prior/autograd-small-mlp-tape-amd"
+   ],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/gate-amd.log",
+   "name": "box-exit",
+   "reason": "the amd release gate box job exited 1; log /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/gate-amd.log (its HARD parts passed)",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T18:17:02Z",
+   "first_lines": [
+    "{",
+    " \"batches\": [",
+    "  {",
+    "   \"batch\": 0,",
+    "   \"ceiling_hit\": false,",
+    "   \"elapsed_seconds\": 475.350332,",
+    "   \"exit_code\": 1,",
+    "   \"log\": \"/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1-measuresmoke/rel-0.8.66-measuresmoke-amd-20261108T175812Z/out/measuresmoke/logs/b000.log\",",
+    "   \"recipes\": 29,",
+    "   \"started_late\": false,",
+    "   \"timed_out\": false",
+    "  },"
+   ],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/measuresmoke-job/measuresmoke/measuresmoke.json",
+   "name": "measuresmoke",
+   "reason": "measuresmoke: 37 of 653 recipes failed: algos/ann-refine/istella/rows=2000 (ours: status not-scored); algos/ann-refine/taxi/rows=2000 (ours: status not-scored); algos/avgpool1d/synthetic/rows=2000 (-: status failed; -: BOARD-PARAMS NOT CHECKED (the driver printed no BOARD-PARAMS line); ours: status REFUSED(REFUSED: \"); algos/avgpool2d/synthetic/rows=2000 (-: status failed; -: BOARD-PARAMS NOT CHECKED (the driver printed no BOARD-PARAMS line); ours: status REFUSED(REFUSED: \"); algos/batchnorm1d/synthetic/rows=2000 (-: status failed; -: BOARD-PARAMS NOT CHECKED (the driver printed no BOARD-PARAM",
+   "vendor": "amd"
+  },
+  {
+   "at": "2026-11-08T18:58:10Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/units",
+   "name": "autograd/autograd-public",
+   "reason": "units: unit autograd/autograd-public did not pass",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T18:58:10Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/units",
+   "name": "autograd/import-torch-smoke",
+   "reason": "units: unit autograd/import-torch-smoke did not pass",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T18:58:10Z",
+   "first_lines": [],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/units",
+   "name": "autograd/real-model-smoke",
+   "reason": "units: unit autograd/real-model-smoke did not pass",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T18:58:10Z",
+   "first_lines": [
+    "{",
+    "  \"schema\": \"mojolearn.release-runtime-installed.v1\",",
+    "  \"tool\": \"tools/release_runtime_installed.py\",",
+    "  \"origin\": \"per-unit-receipts\",",
+    "  \"vendor\": \"nvidia\",",
+    "  \"backend\": \"cuda\",",
+    "  \"numeric_mode\": \"identical\",",
+    "  \"source_revision\": \"43b5f7c320e0942bdef8c212917b440d1ab1d513\",",
+    "  \"test_revision\": \"43b5f7c320e0942bdef8c212917b440d1ab1d513\",",
+    "  \"device_class\": \"nvidia-sm_89\",",
+    "  \"wheels\": {",
+    "    \"mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl\": \"c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c\","
+   ],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json",
+   "name": "runtime",
+   "reason": "runtime qualifier status failed in /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json: ",
+   "vendor": "nvidia"
+  },
+  {
+   "at": "2026-11-08T18:58:10Z",
+   "first_lines": [
+    "[12:34:17 release-gate] runtime unit receipts to reuse: 73 from /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/runtime-prior-nvidia-20261108T173417Z",
+    "[12:34:18 release-gate] $ bash tools/nvidia_central.sh sync release-gate /Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/43b5f7c320e0",
+    "[12:34:33 release-gate] copying mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl (44583919 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+    "[12:34:46 release-gate] copying mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl (67275742 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.",
+    "[12:35:03 release-gate] copying release_gate_job.sh (30087 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/release_gate_job.sh",
+    "[12:35:04 release-gate] copying build-manifest.json (492264 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/build-manifest.json",
+    "[12:35:06 release-gate] copying autograd-gradients-nvidia (4039472 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-gradients-nvidia",
+    "[12:35:11 release-gate] copying autograd-mlp-identity-nvidia (3600944 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-mlp-identity-nvidia",
+    "[12:35:14 release-gate] copying autograd-higher-nvidia (4373840 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-higher-nvidia",
+    "[12:35:17 release-gate] copying autograd-import-ops-nvidia (4369240 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-import-ops-nvidia",
+    "[12:35:21 release-gate] copying autograd-mamba-tape-nvidia (7135320 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-mamba-tape-nvidia",
+    "[12:35:24 release-gate] copying autograd-lm-tape-nvidia (13550080 bytes) to /root/release-gate/0.8.66/nvidia/c92469d260a8b3a5f70d-release-light-v1/in/autograd-prior/autograd-lm-tape-nvidia"
+   ],
+   "log": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/gate-nvidia.log",
+   "name": "box-exit",
+   "reason": "the nvidia release gate box job exited 1; log /Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gates/gate-nvidia.log (its HARD parts passed)",
+   "vendor": "nvidia"
+  }
+ ],
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "table_sha256": "8efc5b051f9382e2b2b147184af6be1a7d5a671990d635a20ad425cf515d3fe5",
+ "version": "0.8.66"
+}

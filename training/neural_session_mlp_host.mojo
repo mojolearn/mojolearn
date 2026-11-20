@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host model and admission for NN64; no GPU imports or Python data work."""
 from std.math import isfinite
+from core.host_finite_scan import host_copy_f32_finite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from gemm.host.neural_gemm import gemm_host_rows
 from gemm.contract import OP_NT
@@ -12,12 +13,12 @@ from training.neural_session_shape import nn_mlp_session_shape
 
 
 def _read_finite(p: _FP, n: Int, label: String) raises -> List[Float32]:
-    var values = List[Float32](capacity=n)
-    for i in range(n):
-        var value = p[i]
-        if not isfinite(value):
-            raise Error("neural MLP sessions: nonfinite " + label)
-        values.append(value)
+    # parallel: the owned copy with the finite test folded into its loads,
+    # split over host cores (was a serial load, isfinite and append per word)
+    var count = max(n, 0)
+    var values = List[Float32](unsafe_uninit_length=count)
+    if not host_copy_f32_finite(Int(p), Int(rebind[_FP](values.unsafe_ptr())), count):
+        raise Error("neural MLP sessions: nonfinite " + label)
     return values^
 
 

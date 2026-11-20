@@ -665,6 +665,27 @@ def _load(name):
     return mod
 
 
+_SMALL_ROWS = []
+
+
+def _classical_route():
+    """tools/classical_route.py, loaded once per process (lane
+    flag-classical-dispatch-gate: the route beside each round's time)."""
+    if not _CLASSICAL_ROUTE:
+        _CLASSICAL_ROUTE.append(_load("classical_route"))
+    return _CLASSICAL_ROUTE[0]
+
+
+_CLASSICAL_ROUTE = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py, loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load("bench_board_small_rows"))
+    return _SMALL_ROWS[0]
+
+
 def _smoke_staging():
     """tools/smoke_inproc.py when this process is the campaign smoke's worker or one of its arm servers (they serve
     the --params-only parameter probe only), else None: a timed worker returns None here without importing
@@ -769,7 +790,10 @@ def prep(args):
     table = [b for b in blocks if b in ("manifold", "cls", "reg", "tsvd", "ivf")]
     if not table:
         return 0
-    harness = ctd._module("speed_gbdt_arm")
+    # --inputs verify-fixtures (the release measurement smoke only): every block from the identity verification's
+    # fixture `base` through the one helper (tools/smoke_inputs.py prep_sources), never from the dataset files
+    harness, knn_ds = _load("smoke_inputs").prep_sources(getattr(args, "inputs", None) or "datasets",
+                                                         ctd._module("speed_gbdt_arm"), None)
     for ds in datasets:
         if ds not in ("taxi", "istella"):
             continue
@@ -798,7 +822,7 @@ def prep(args):
 
         for blk in table:
             if blk == "ivf":
-                knn_ds = ctd._module("knn_datasets")
+                knn_ds = knn_ds or ctd._module("knn_datasets")
                 b = knn_ds.real_block(ds, n_index=_cap(IVF_INDEX, cap, 2048),
                                       n_queries=_cap(IVF_QUERIES, cap and max(64, cap // 50), 64))
                 index, bad_i = ctd.clean_sentinel(b["index"])
@@ -946,12 +970,19 @@ def length_scale_of(D):
 class Runner:
     """`call` is timed; `outputs` is run after the clock, once per round."""
 
-    def __init__(self, info, call, outputs, sync=None, params=None, model_for_hash=None):
+    def __init__(self, info, call, outputs, sync=None, params=None, model_for_hash=None, fixed_params=None):
         self.model_for_hash = model_for_hash
         self.info, self._call, self._outputs, self._sync = info, call, outputs, sync
         # the constructed estimator (or a declared dict for a function arm);
         # the worker sends its tools/bench_board_params.py record
         self.params = params
+        # Settings the harness adds to the probe's record because the estimator
+        # fixes them internally and has no constructor parameter for them (ivf:
+        # kmeans_trainset_fraction). The timed estimator's read-back carries the
+        # same entries, so the preflight/fitted comparison
+        # (bench_board_evidence.py "actual fitted estimator settings changed")
+        # compares like with like.
+        self.fixed_params = dict(fixed_params or {})
 
     def call(self):
         self._call()
@@ -967,8 +998,14 @@ class Runner:
         # The parameter probe is a different, unfitted instance. Read the
         # estimator whose fit was actually timed, never that probe's counters.
         model = self.model_for_hash() if callable(self.model_for_hash) else None
-        return dict(parameters=_load("bench_board_params").arm_record(model) if model is not None else None,
-                    iterations=_load("bench_board_probe").iteration_receipt(model))
+        # board-smoke-3 (2026-11-16): the same record function as the preflight (worker "params",
+        # params_record: array-valued settings as their sha256 digest). BP.arm_record wrote an array
+        # setting as its repr, so ETS (endog=Y) was refused "actual fitted estimator settings changed
+        # after preflight" with every setting equal (box smoke of d95f805cce, classical2/ets/synthetic).
+        record = _load("classical_two_datasets").params_record(model) if model is not None else None
+        if record is not None and self.fixed_params:
+            record["params"].update(self.fixed_params)
+        return dict(parameters=record, iterations=_load("bench_board_probe").iteration_receipt(model))
 
 
 def _np():
@@ -1371,7 +1408,7 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
     info = _ours(lane, probe)
     if d is not None:
         info["n_features"] = d
-    params = probe
+    params, fixed = probe, None
     if lane == "ivf":
         # smoke-fixes (2026-10-14; classical2/ivf: "kmeans_trainset_fraction missing from ours
         # read-back"): ours' IVFIndex takes no trainset option; its build fixes the coarse k-means
@@ -1383,10 +1420,15 @@ def _build_ours(lane, D, rec, S, *, separate_inference=False, classical_variant=
         # fixed fraction under cuVS's name, as tools/bench_board_algos.py _ivf_pq_effective does.
         n_rows = D["index"].shape[0]
         nlist = min(IVF_NLIST, n_rows // 4)
+        # ivf-params-readback (2026-11-16): the timed estimator's read-back gets the same fixed fraction
+        # (Runner.fixed_params). Since 2026-10-14 only the probe's record carried it, so every IVF race whose
+        # ours arm ran was refused "actual fitted estimator settings changed after preflight" (0.8.55 paper
+        # 2026-10-29; box smoke of d95f805cce 2026-11-16, classical2/ivf/{taxi,istella}/rows=2000).
+        fixed = {"kmeans_trainset_fraction": _ours_ivf_train_rows(n_rows, nlist) / float(n_rows)}
         params = _load("bench_board_params").arm_record(probe)
-        params["params"]["kmeans_trainset_fraction"] = _ours_ivf_train_rows(n_rows, nlist) / float(n_rows)
+        params["params"].update(fixed)
         params["source"] += " + fixed trainset stride (ivf_trainset_stride)"
-    return Runner(info, call, out, params=params, model_for_hash=lambda: S.get("est"))
+    return Runner(info, call, out, params=params, model_for_hash=lambda: S.get("est"), fixed_params=fixed)
 
 
 def _build_sklearn(lane, D, rec, S):
@@ -1807,6 +1849,10 @@ def worker(args):
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED call's time decides
+    # how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup does not
+    # decide (it carries start-up and kernel compilation)
+    small = _small_rows()
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -1833,6 +1879,21 @@ def worker(args):
                 last = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
+                # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
+                # Opponents and rows at or above 10 ms make one call.
+                n_calls = small.calls_for(ms, (runner.info or {}).get("library") == "mojolearn", "fit") if r > 0 else 1
+                calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
+                for _ in range(1, n_calls):
+                    t0 = time.perf_counter()
+                    runner.call()
+                    runner.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
+                calls_rec = small.spread(calls) if r > 0 else None
+                if calls_rec is not None:
+                    ms = calls_rec["ms"]
                 m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
@@ -1842,13 +1903,15 @@ def worker(args):
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(last, runner) if r > 0 else None
                 fitted_readback = runner.fitted_readback()
+                route = _classical_route().classical_route(runner)   # after the clock; None for opponents
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
-                 "iterations": fitted_readback["iterations"],
+                 "scored_calls": calls_rec,
+                 "iterations": fitted_readback["iterations"], "classical_route": route,
                  "fitted_parameters": fitted_readback["parameters"],
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
@@ -2238,6 +2301,9 @@ def race(args):
                 result["arms"][arm]["warmup_ms"] = msg["ms"]
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
             result["arms"][arm]["digests"].append(msg["digest"])
             if msg.get("operation") is not None:
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
@@ -2246,9 +2312,13 @@ def race(args):
             if r > 0:
                 result["arms"][arm].setdefault("iteration_receipts", []).append(msg.get("iterations"))
                 result["arms"][arm].setdefault("fitted_parameters", []).append(msg.get("fitted_parameters"))
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                result["arms"][arm].setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
             result["arms"][arm]["mem"].append(msg.get("mem"))
-            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
+            print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg["digest"],
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _classical_route().route_suffix(msg.get("classical_route"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]
@@ -2304,6 +2374,9 @@ def build_parser():
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0,
                     help="SMOKE shape: cap every row count near this (0 = the lane shapes)")
+    pr.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                    help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                         "(tools/smoke_inputs.py); never a timed run")
     r = sub.add_parser("race")
     r.add_argument("--lane", required=True, choices=LANE_ORDER)
     r.add_argument("--dataset", required=True)

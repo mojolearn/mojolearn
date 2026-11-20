@@ -10,7 +10,7 @@ tooling only.
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.time import perf_counter_ns
 
 

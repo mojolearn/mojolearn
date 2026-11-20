@@ -61,6 +61,7 @@ def _fake_bench_board(python):
         ap.add_argument("--vendor", default="apple")
         ap.add_argument("--python-env", default=None)
         ap.add_argument("--mojolearn-version", default=None)
+        ap.add_argument("--wheel-manifest", default=None)  # the real parser's option; warm_box reads it
         return ap
     fake.build_parser = build_parser
     fake.repo_commit = lambda: "c0ffee"

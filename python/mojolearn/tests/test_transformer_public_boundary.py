@@ -106,49 +106,9 @@ def test_state_buffer_protocol_is_not_invoked():
     assert calls == []
 
 
-def test_tape_lifecycle_and_gradient_shapes():
-    block = _block()
-    x = np.full((1, 2, 16), .01, dtype=np.float32)
-    y, tape = block.forward_with_tape(x, activation_budget_bytes=0)
-    assert y.shape == x.shape and tape.shape == x.shape
-    with pytest.raises(TypeError):
-        pickle.dumps(tape)
-    gradients = block.backward_from_tape(tape, np.ones_like(x))
-    assert gradients["x"].shape == x.shape
-    assert set(gradients) == {"x", *block._W_NAMES}
-    with pytest.raises(ValueError):
-        block.backward_from_tape(tape, np.ones_like(x))
-    tape.close()
-
-
-def test_tape_close_does_not_discard_newer_ticket():
-    block = _block()
-    x = np.full((1, 2, 16), .01, dtype=np.float32)
-    _, old = block.forward_with_tape(x)
-    _, current = block.forward_with_tape(x)
-    old.close()
-    assert block.backward_from_tape(current, np.ones_like(x))["x"].shape == x.shape
-
-
-def test_tape_rejects_input_and_mutable_model_hooks():
-    block = _block()
-    calls = []
-    class ArrayHook(np.ndarray):
-        @property
-        def shape(self):
-            calls.append("shape")
-            return (1, 2, 16)
-    with pytest.raises(TypeError):
-        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32).view(ArrayHook))
-    assert calls == []
-    class ScalarHook:
-        def __int__(self):
-            calls.append("int")
-            return 16
-    block.d_model = ScalarHook()
-    with pytest.raises(TypeError):
-        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32))
-    assert calls == []
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the forward_with_tape / backward_from_tape lifecycle, ticket and hook tests.)
 
 
 def test_decode_session_state_roundtrip_and_original_route_bits():
@@ -169,6 +129,44 @@ def test_decode_session_state_roundtrip_and_original_route_bits():
     np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
 
 
+def test_decode_session_kept_steps_match_single_forwards():
+    # Eight tokens through one kept session (words admitted once, the step
+    # reads only cached_tokens) against eight single-token forwards on a
+    # fresh state: the same bits and the same cache position after each.
+    block = _block()
+    rng = np.random.default_rng(31)
+    tokens = rng.normal(0, .1, (8, 1, 1, 16)).astype(np.float32)
+    reference = block.allocate_state(1, 8)
+    expected = [np.asarray(block.forward(t, reference)).copy() for t in tokens]
+    state = block.allocate_state(1, 8)
+    with block.decode_session(state) as session:
+        for i, t in enumerate(tokens):
+            actual = session.forward(t)
+            assert np.asarray(actual).tobytes() == expected[i].tobytes()
+            assert state.cached_tokens == i + 1
+    np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
+
+
+def test_decode_session_sees_a_foreign_cached_tokens_write():
+    # A write to the state between steps is seen by the kept (row N177) step
+    # path. The session refuses a cached_tokens that differs from its own
+    # cache position, and steps on once the caller's word matches again: the
+    # GPU resident session and the CPU host route alike (decided 2026-11-15).
+    block = _block()
+    x = np.full((1, 1, 16), .02, dtype=np.float32)
+    state = block.allocate_state(1, 6)
+    with block.decode_session(state) as session:
+        session.step(x)
+        session.step(x)
+        assert state.cached_tokens == 2
+        state.cached_tokens = 0
+        with pytest.raises(ValueError, match="cached_tokens = 0"):
+            session.step(x)
+        state.cached_tokens = 2
+        session.step(x)
+        assert state.cached_tokens == 3
+
+
 def test_decode_rejects_mutable_state_hooks_without_invocation():
     block = _block()
     state = block.allocate_state(1, 6)
@@ -185,6 +183,63 @@ def test_decode_rejects_mutable_state_hooks_without_invocation():
         state.cached_tokens = 0
 
 
+def _block_and_weights():
+    d, it = 16, 32
+    rng = np.random.default_rng(27)
+    names = TransformerBlock._W_NAMES
+    shapes = ((d,), (d,), (d, d), (d, d), (d, d), (d, d), (it, d), (it, d), (d, it))
+    weights = {name: rng.normal(0, .01, shape).astype(np.float32) for name, shape in zip(names, shapes)}
+    weights[names[0]].fill(1)
+    weights[names[1]].fill(1)
+    return TransformerBlock(weights, n_heads=1, numeric_mode="identical"), weights
+
+
+def test_decode_admitted_steps_keep_the_admitted_block():
+    # Lane fix-transformer-decode-step-admission: a step on an open session
+    # admits only x (0.8.55's per-token path). Weights edited in place and a
+    # replaced `_block` between steps do not reach the open session: it runs
+    # on what it admitted at open, bit for bit; the owner check still refuses
+    # the replaced block at sync, and a replaced `_state` at the next step.
+    rng = np.random.default_rng(41)
+    tokens = rng.normal(0, .1, (6, 1, 16)).astype(np.float32)
+    reference_block = _block()
+    reference = reference_block.allocate_state(1, 8)
+    with reference_block.decode_session(reference) as session:
+        expected = [np.asarray(session.step(t)).copy() for t in tokens]
+    block, weights = _block_and_weights()
+    state = block.allocate_state(1, 8)
+    session = block.decode_session(state)
+    # The admitted step is the GPU registry session's (its native marker is
+    # the handle word, an int); the host route admits in full every step.
+    admitted = isinstance(session._native, int)
+    original = session._block
+    try:
+        for i, t in enumerate(tokens):
+            if i == 2:
+                for value in weights.values():
+                    value *= 3
+            if i == 4 and admitted:
+                session._block = _block()
+            actual = session.step(t)
+            assert np.asarray(actual).shape == (1, 1, 16)
+            assert np.asarray(actual).tobytes() == expected[i].tobytes()
+            assert state.cached_tokens == i + 1
+        if admitted:
+            with pytest.raises(TypeError):
+                session.sync_state()
+        session._block = original
+        session.sync_state()
+        np.testing.assert_array_equal(np.asarray(state.keys()), np.asarray(reference.keys()))
+        replaced = session._state
+        session._state = block.allocate_state(1, 8)
+        with pytest.raises(TypeError):
+            session.step(tokens[0])
+        session._state = replaced
+        assert state.cached_tokens == len(tokens)
+    finally:
+        session.discard()
+
+
 def test_decode_rejects_replaced_session_owners():
     block = _block()
     state = block.allocate_state(1, 6)
@@ -199,18 +254,6 @@ def test_decode_rejects_replaced_session_owners():
         session.discard()
 
 
-def test_budget_aware_tape_retention_and_replay_keep_outputs_and_gradients():
-    block = _block()
-    rng = np.random.default_rng(271)
-    x = rng.normal(0, .01, (1, 2, 16)).astype(np.float32)
-    dy = rng.normal(0, .01, x.shape).astype(np.float32)
-    replay_y, replay = block.forward_with_tape(x, activation_budget_bytes=0)
-    replay_gradients = block.backward_from_tape(replay, dy)
-    retained_y, retained = block.forward_with_tape(x, activation_budget_bytes=536870912)
-    retained_gradients = block.backward_from_tape(retained, dy)
-    assert np.asarray(replay_y).tobytes() == np.asarray(retained_y).tobytes()
-    for name in replay_gradients:
-        assert np.asarray(replay_gradients[name]).tobytes() == np.asarray(retained_gradients[name]).tobytes()
-    # Retention still depends on the established compile-time experiment
-    # policy; the caller budget never promises to override that policy.
-    assert isinstance(retained.retained, bool) and retained.stage_bytes >= 0
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the budget-aware tape retention and replay test.)

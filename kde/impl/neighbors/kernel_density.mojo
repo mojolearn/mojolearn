@@ -103,16 +103,16 @@ is not this lane's.
 
 from std.math import log, pi, sqrt
 from std.memory import bitcast
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
-from experiments.classical_identical_ideas.stats_controls import C52_PAIR, C52_ROWS
-from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
-from core.classical_distance import direct_distance_step
-from kde.pair_lse import pair_parts, pair_row
-from std.gpu import block_dim, block_idx, thread_idx
+# TOMBSTONE: MOJOLEARN_C52_PAIR_ROWS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-07-base); code recoverable at c48de5dbfd.
+# Restore: git apply experiments/removed/MOJOLEARN_C52_PAIR_ROWS.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-05-base); code recoverable at 8ea09dd4a4.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+
 from max.gpu.host import DeviceBuffer, DeviceContext
 from kde.impl.chunk_workspace import KdeChunkWorkspace
 from max.gpu.memory import AddressSpace
@@ -914,11 +914,6 @@ def logsumexp_kernel(
     if i >= n_query:
         return
     var base = i * n_train
-    comptime if C52_PAIR:
-        var answer = pair_row(logk + base, n_train, kde_chunk_rows_for(n_train))
-        rowmax[i] = answer[0]
-        lse[i] = answer[1]
-        return
     var max_exp = logk.unsafe_load(base)
     for j in range(1, n_train):
         var v = logk.unsafe_load(base + j)
@@ -1836,7 +1831,7 @@ def kde_tiled_logk_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](
@@ -1997,9 +1992,11 @@ def kde_lse_serial_sum_kernel(
 # while thread 0 folds the PREVIOUS tile with `ftz(s + t)` in ascending `j`
 # (double buffered, one barrier per tile). The owner sees `t_0 .. t_{n-1}`
 # in the serial kernel's order, so `lse` is that kernel's, bit for bit.
-# `-D MOJOLEARN_KDE_BLOCK_SUM_OFF` restores the two kernels.
+# The two kernels stay for the profile checks (kde_stage_profile, kde_dist_attribution).
 # ===========================================================================
-comptime KDE_BLOCK_SUM = not is_defined["MOJOLEARN_KDE_BLOCK_SUM_OFF"]()
+# TOMBSTONE: MOJOLEARN_KDE_BLOCK_SUM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 8b543e49e0.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_BLOCK_SUM_OFF.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime KDE_BLOCK_SUM removed; always True, nothing read it.)
 comptime KDE_BLOCK_SUM_TPB = 256
 comptime KDE_BLOCK_SUM_TILE = 1024
 
@@ -2106,7 +2103,7 @@ def kde_score_samples_tiled_identical(
         raise Error("kde: q_tpb must not exceed the tile (" + String(KDE_TILED_TILE_FLOATS) + ")")
     validate_metric_arg(metric, Float32(2.0))
     # Grid y stays inside every vendor's 65,535 limit.
-    var chunk_rows = C52_ROWS if C52_PAIR else chunk_rows_in
+    var chunk_rows = chunk_rows_in
     var min_rows = (n_train + 32767) // 32768
     if chunk_rows < min_rows:
         chunk_rows = min_rows
@@ -2157,7 +2154,7 @@ def kde_score_samples_tiled_identical(
     # layout-aware), so a q_tpb / chunk_rows_in schedule or the layout
     # never moves a bit and the pass agrees with the entry and the host.
     # `chunk_rows_in` stays the max-pass grid only. With
-    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the serial
+    # FAST the serial
     # fold below runs, the staged pass's and the host's serial fold.
     if kde_chunk_lse_metric_applies(metric):
         var lse_rows = kde_chunk_rows_for(n_train)
@@ -2214,37 +2211,16 @@ def kde_score_samples_tiled_identical(
         grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
         block_dim=(lse_tpb, 1, 1),
     )
-    comptime if KDE_BLOCK_SUM:
-        ctx.enqueue_function[kde_lse_block_sum_kernel](
-            logk.unsafe_ptr(),
-            rowmax.unsafe_ptr(),
-            lse.unsafe_ptr(),
-            Int32(n_query),
-            Int32(n_train),
-            Int32(1 if transposed else 0),
-            grid_dim=(n_query, 1, 1),
-            block_dim=(KDE_BLOCK_SUM_TPB, 1, 1),
-        )
-    else:
-        ctx.enqueue_function[kde_lse_terms_kernel](
-            logk.unsafe_ptr(),
-            rowmax.unsafe_ptr(),
-            Int32(n_query),
-            Int32(n_train),
-            Int32(1 if transposed else 0),
-            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
-        ctx.enqueue_function[kde_lse_serial_sum_kernel](
-            logk.unsafe_ptr(),
-            rowmax.unsafe_ptr(),
-            lse.unsafe_ptr(),
-            Int32(n_query),
-            Int32(n_train),
-            Int32(1 if transposed else 0),
-            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
-            block_dim=(lse_tpb, 1, 1),
-        )
+    ctx.enqueue_function[kde_lse_block_sum_kernel](
+        logk.unsafe_ptr(),
+        rowmax.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        Int32(n_train),
+        Int32(1 if transposed else 0),
+        grid_dim=(n_query, 1, 1),
+        block_dim=(KDE_BLOCK_SUM_TPB, 1, 1),
+    )
     var log_sw = ftz(identical_log(sum_weights))
     var norm = log_kernel_norm(kernel, bandwidth, n_features)
     ctx.enqueue_function[normalize_scores_kernel](
@@ -2607,7 +2583,7 @@ def kde_score_samples_fused_identical(
     # serial per-query chain, and the entry's, the staged pass's and the
     # host column's bits. `k_cells` / `sum_tpb` / `chunk_rows_in` schedule
     # only the serial-fold arm and are validated above either way. With
-    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the fused
+    # FAST the fused
     # serial fold below runs.
     if kde_chunk_lse_metric_applies(metric):
         kde_score_samples_chunk_lse_identical(
@@ -2727,7 +2703,7 @@ def kde_score_samples_fused_identical(
 #
 # The sibling defines compose on top of it (each also turns it on):
 comptime _KDE2_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 # TOMBSTONE: MOJOLEARN_KDE2_ALL (DROP) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: every kde2 define at once; istella no gain over DIMTILE alone (-0.6%), includes SAMPLE_FUSED (taxi +354%).
@@ -2747,21 +2723,15 @@ comptime _KDE2_FAST_APPLE = (
 #: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
 comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE_DIMTILE"]()
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
-#: every n_features since 2026-10-04 (old n_features > 32 gate behind
-#: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE): M3 A/B vs main batchv-kde-dimtile-istella3
+#: every n_features since 2026-10-04: M3 A/B vs main batchv-kde-dimtile-istella3
 #: kde istella (d = 220) 137.2 -> 69.2 ms, mean_log_likelihood -222.27058 both;
 #: taxi (d = 11) 9.0 -> 17.8 ms (the old gate kept main's fused pass). Quality
 #: (tools/batchv_quality.sh, M2): score_samples within 9e-8 of the output scale.
-#: -D MOJOLEARN_KDE_DIMTILE_OFF: main's passes at every d.
-comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or (
-    _KDE2_FAST_APPLE and not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"]()
-)
-#: LEGACY, default OFF: the old gate took the tile pass only for
-#: n_features > 32, chosen between taxi (d 11, slower) and istella (d 220,
-#: faster). Removed as benchmark-tuned on 2026-10-04: the tile pass (which
-#: runs at any d) now serves every d; UNMEASURED.
-comptime KDE2_DIMTILE_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE"]()
-comptime KDE2_DIMTILE_MIN_D = 32
+# TOMBSTONE: MOJOLEARN_KDE_DIMTILE_OFF (old path, EXP:343 DROP; the FAST + Apple tile pass is the default) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 82d4e4de40.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or _KDE2_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE (old benchmark-tuned n_features > 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 531563873b.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE.patch; record in docs/TOMBSTONES.md.
 
 #: Threads per block, and the thread grid over (queries, train rows).
 comptime KDE2_TPB = 128
@@ -2777,6 +2747,9 @@ comptime KDE2_TT = 8
 # query-grid-derived chunking may change FAST reduction association.
 comptime AFCL_G13 = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_AFCL_G13"]()
 comptime KDE2_QM = 2 if AFCL_G13 else 4
+# TOMBSTONE: MOJOLEARN_AFCL_G13 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at ab962d7d76.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G13.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime KDE2_TM = 8
 comptime KDE2_QT = KDE2_TQ * KDE2_QM
 comptime KDE2_TT_ROWS = KDE2_TT * KDE2_TM
@@ -3459,21 +3432,22 @@ def kde2_score_samples_fast_apple(
 # lane/review-fixes), so a trace recording never changes the bits. The
 # explicit tiled matrix pass folds its matrix in the same chunks and the
 # opt-in fused pass (`fused_only`) takes this chunked pass (box-run-2-kde),
-# so every route gives one set of bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
-# restores the tiled matrix pass and the host's serial row fold.
+# so every route gives one set of bits. FAST keeps the tiled matrix pass.
 # ===========================================================================
-comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 9dcc758292.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def kde_chunk_rows_for(n_train: Int, chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS) -> Int:
     """The train chunk length of the tiled grid: `chunk_rows_in`, raised so
     grid y stays inside every vendor's limit. The device drivers and the
     host column's chunked fold share this one definition."""
-    # C52's leaf profile is shared with the host. Grow only for the portable
-    # grid-y limit, a function of total rows independent of the device vendor.
-    var chunk_rows = C52_ROWS if C52_PAIR else chunk_rows_in
+    # Grow only for the portable grid-y limit, a function of total rows
+    # independent of the device vendor.
+    var chunk_rows = chunk_rows_in
     var min_rows = (n_train + 32767) // 32768
     if chunk_rows < min_rows:
         chunk_rows = min_rows
@@ -3483,7 +3457,7 @@ def kde_chunk_rows_for(n_train: Int, chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS) 
 def kde_chunk_lse_metric_applies(metric: Int) -> Bool:
     """The metrics whose IDENTICAL scores take the chunked fold (the tiled
     pass's three); the host column asks the same question."""
-    comptime if KDE_IDN_CHUNK_LSE or C52_PAIR:
+    comptime if KDE_IDN_CHUNK_LSE:
         return (
             metric == DIST_L2_SQRT_UNEXPANDED
             or metric == DIST_L1
@@ -3570,7 +3544,7 @@ def kde_chunk_lse_kernel(
                         )
                         var row = tile.unsafe_load[width=KDE_TILED_CELL](feat * KDE_TILED_CELL)
                         var diff = ftz_simd[KDE_TILED_CELL](qv - row)
-                        acc = (direct_distance_step[KDE_TILED_CELL](acc, diff, SIMD[DType.float32, KDE_TILED_CELL](0)) if KDE_DIRECT_DISTANCE else ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc)))
+                        acc = ftz_simd[KDE_TILED_CELL](identical_mul_add_simd[KDE_TILED_CELL](diff, diff, acc))
                 elif metric == DIST_L1:
                     for feat in range(feats):
                         var qv = SIMD[DType.float32, KDE_TILED_CELL](
@@ -3634,13 +3608,70 @@ def kde_chunk_lse_kernel(
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): kde taxi 0.343 (NV 0.300, AMD 0.387), kde
 #: istella 1.239 (NV 1.231, AMD 1.246): REGRESSION +24% on istella on both vendors, kept by the average
-#: rule (avg 0.791); same bits; runs v0123/a1705 vs A v0122/a1704. -D MOJOLEARN_IDN_KDE_QTILE_OFF
-#: restores the old path.
-comptime KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE and not is_defined["MOJOLEARN_IDN_KDE_QTILE_OFF"]()
+#: rule (avg 0.791); same bits; runs v0123/a1705 vs A v0122/a1704.
+# TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_OFF (old path; EXP:2059 KEEP by average, the cost rule below keeps the old body where it wins) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 4bf6c39024.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KDE_IDN_QTILE = KDE_IDN_CHUNK_LSE
 comptime KDE_QT_Q = 4
 comptime KDE_QT_CELL = 16
 comptime KDE_QT_FEAT = 256
 comptime KDE_QT_TILE_FLOATS = KDE_QT_CELL * KDE_QT_FEAT
+# Lane restore-iforest-kde (2026-11-13, history audit row 5): the promotion
+# above kept a measured +24% loss on istella on BOTH vendors (B/A NV 1.231,
+# AMD 1.246; record measurement of candidate 4c2340386abc: NV istella fit
+# 27.70 ms at 0.8.55 -> 34.47 ms). 0.8.55's pass (kde_chunk_lse_kernel)
+# is the measured winner there, so the query-tile pass now runs only where
+# its cost model wins. COST RULE (no dataset or dimension target): per
+# (query, train) pair and feature, the default body reads the query word
+# once per 64-cell train tile and stages train once per 128 queries
+# (3d/128 words); the query-tile body reads it once per 16-cell tile and
+# stages train once per 512 queries (33d/512 words). Both grow linearly
+# in d, so the query-tile body only wins while its re-read query rows hit
+# the per-SM/CU L1: the 4 query rows of every thread in a block,
+# q_tpb * KDE_QT_Q * d * 4 bytes, against the smaller vendor L1 that votes
+# (32 KiB vector L1 per CU on MI300X/MI325X; the L40S has more). Past that
+# every 16-cell tile re-fetches 4 rows per thread from L2, 4x the default
+# body's query traffic, which is the istella loss; under it the coalesced
+# staging and the 4x train reuse are the taxi gain (B/A NV 0.300, AMD
+# 0.387). At the default q_tpb = 128 the rule takes the query tile for
+# d <= 16 and the default body above on AMD, d <= 56 on NVIDIA (the budget
+# note at KDE_QT_QUERY_CACHE_BYTES), covering every neighbouring width.
+# The A/B is owed (bench/results/paper_compare/owed-pre0867.json):
+# `-D MOJOLEARN_IDN_KDE_QTILE_FORCE` (the promoted every-d form, B arm),
+# this rule (A), on istella, taxi and one wide non-board dataset, NV and
+# AMD. Same bits either way (see the BITS note above): both bodies write
+# the same partial planes word for word.
+# TOMBSTONE: MOJOLEARN_IDN_KDE_QTILE_FORCE (unmeasured opt-in arm, EXP:2398 PENDING) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0ba472a9c7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_QTILE_FORCE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime KDE_IDN_QTILE_FORCE = KDE_IDN_QTILE and is_defined["MOJOLEARN_IDN_KDE_QTILE_FORCE"]()
+# THE BUDGET IS THE VENDOR'S L1, NOT ONE NUMBER (lane flag-knn-kde-fit,
+# 2026-11-15; owed driver rk-kde-qtile-widths, whose row says "a loss at 24
+# or 48 moves the 32 KiB budget"). Same-box L40S, host 590b12deb83b,
+# measurement of fcc934a37c, KernelDensity fit+score_samples n=200000
+# q=20000, rule (32 KiB everywhere) vs 0.8.66 (query tile at every width):
+# d=12 117 vs 119 ms, d=16 128 vs 121, d=24 395 vs 143 (2.76x slower),
+# d=48 462 vs 258 (1.79x slower), d=512 1417 vs 2084 (faster); board kde
+# istella (d=220) 29.27 vs 34.94 ms (faster). So on NVIDIA the query tile
+# still wins at 48 and loses by 220: the 32 KiB budget is MI300X/MI325X's
+# vector L1 per CU and is far below NVIDIA's. NVIDIA (Ampere/Ada/Hopper) has
+# 128 KiB of unified L1/shared memory per SM; the query-tile body stages
+# KDE_QT_TILE_FLOATS words (16 KiB) of it as shared memory, leaving
+# 112 KiB of L1 for the block's re-read query rows: at q_tpb = 128 that is
+# d <= 56, covering every measured NVIDIA win (12..48) and none of its losses
+# (220, 512). AMD keeps 32 KiB (its measured istella loss; its widths driver
+# is owed). Same bits on every vendor and width (both bodies write the same
+# partial planes word for word, see the BITS note above).
+comptime KDE_QT_QUERY_CACHE_BYTES = (128 * 1024 - KDE_QT_TILE_FLOATS * 4) if TARGET_HAS_NVIDIA_GPU else 32 * 1024
+
+
+@always_inline
+def kde_qtile_applies(n_features: Int, q_tpb: Int) -> Bool:
+    """True when the query-tile pass is the cheaper one for this width and
+    block (the cost rule above); `_FORCE` takes it at every width."""
+    comptime if KDE_IDN_QTILE_FORCE:
+        return True
+    return q_tpb * KDE_QT_Q * n_features * 4 <= KDE_QT_QUERY_CACHE_BYTES
 
 
 @always_inline
@@ -3655,10 +3686,7 @@ def _kde_qt_step(
     var qv = SIMD[DType.float32, KDE_QT_CELL](ftz(qs))
     if metric == DIST_L2_SQRT_UNEXPANDED:
         var diff = ftz_simd[KDE_QT_CELL](qv - row)
-        comptime if KDE_DIRECT_DISTANCE:
-            return direct_distance_step[KDE_QT_CELL](acc, diff, SIMD[DType.float32, KDE_QT_CELL](0))
-        else:
-            return ftz_simd[KDE_QT_CELL](identical_mul_add_simd[KDE_QT_CELL](diff, diff, acc))
+        return ftz_simd[KDE_QT_CELL](identical_mul_add_simd[KDE_QT_CELL](diff, diff, acc))
     elif metric == DIST_L1:
         return ftz_simd[KDE_QT_CELL](acc + abs(ftz_simd[KDE_QT_CELL](qv - row)))
     var diff = abs(ftz_simd[KDE_QT_CELL](qv - row))
@@ -3842,10 +3870,6 @@ def kde_chunk_lse_reduce_kernel(
         return
     var n_chunks = Int(n_chunks_in)
     var base = i * n_chunks
-    comptime if C52_PAIR:
-        var answer = pair_parts(part_max, part_sum, base, n_chunks)
-        lse[i] = answer[1]
-        return
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var mx = part_max.unsafe_load(base)
     for b in range(1, n_chunks):
@@ -3935,11 +3959,6 @@ def kde_chunk_lse_reduce_rowmax_kernel(
         return
     var n_chunks = Int(n_chunks_in)
     var base = i * n_chunks
-    comptime if C52_PAIR:
-        var answer = pair_parts(part_max, part_sum, base, n_chunks)
-        rowmax[i] = answer[0]
-        lse[i] = answer[1]
-        return
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var mx = part_max.unsafe_load(base)
     for b in range(1, n_chunks):
@@ -4006,8 +4025,12 @@ def _kde_score_samples_chunk_lse_reused_locked(
     if has_weights:
         ctx.enqueue_function[log_weights_kernel](sc.logw.unsafe_ptr(),weights.unsafe_ptr(),Int32(n_train),
             grid_dim=((n_train+elem_tpb-1)//elem_tpb,1,1),block_dim=(elem_tpb,1,1))
+    var qtile=False
     comptime if KDE_IDN_QTILE:
-        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        qtile=kde_qtile_applies(n_features,q_tpb)
+    if qtile:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel);
+        # only where the cost rule (kde_qtile_applies) says it wins.
         var qt_span=q_tpb*KDE_QT_Q
         ctx.enqueue_function[kde_chunk_lse_qtile_kernel](sc.part.unsafe_ptr(),sc.psum.unsafe_ptr(),query.unsafe_ptr(),train.unsafe_ptr(),
             sc.logw.unsafe_ptr(),Int32(n_query),Int32(n_train),Int32(n_features),Int32(n_chunks),Int32(chunk_rows),
@@ -4084,8 +4107,12 @@ def kde_score_samples_chunk_lse_identical(
     var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var psum = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
     var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var qtile = False
     comptime if KDE_IDN_QTILE:
-        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel).
+        qtile = kde_qtile_applies(n_features, q_tpb)
+    if qtile:
+        # IDN_KDE_QTILE: 4 queries per thread, same partial planes (see the kernel);
+        # only where the cost rule (kde_qtile_applies) says it wins.
         ctx.enqueue_function[kde_chunk_lse_qtile_kernel](
             part.unsafe_ptr(),
             psum.unsafe_ptr(),
@@ -4200,8 +4227,8 @@ def kde_score_samples_device(
             )
         else:
             # lane/fam-neighbors: the chunked log-sum-exp is the IDENTICAL
-            # default (KDE_IDN_CHUNK_LSE above); _OFF restores the tiled pass.
-            comptime if KDE_IDN_CHUNK_LSE or C52_PAIR:
+            # default (KDE_IDN_CHUNK_LSE above); FAST takes the tiled pass.
+            comptime if KDE_IDN_CHUNK_LSE:
                 kde_score_samples_chunk_lse_identical(
                     ctx, train, query, weights, has_weights, sum_weights,
                     n_train, n_query, n_features, bandwidth, kernel, metric, scores,
@@ -4219,10 +4246,7 @@ def kde_score_samples_device(
         # lane/apple-fast-kde2: FAST + Apple + -D MOJOLEARN_KDE_DIMTILE takes
         # the 2D tile pass (any d); every other build skips this block.
         comptime if KDE2_DIMTILE:
-            if (not staged_only) and not trace.enabled and (
-                KDE2_DIMTILE_ANY_D or not KDE2_DIMTILE_LEGACY_NARROW
-                or n_features > KDE2_DIMTILE_MIN_D
-            ):
+            if (not staged_only) and not trace.enabled:
                 kde2_score_samples_fast_apple(
                     ctx, train, query, weights, has_weights, sum_weights,
                     n_train, n_query, n_features, bandwidth, kernel, metric,
@@ -4373,18 +4397,16 @@ def kde_score_samples_device(
 # changes, which FAST may do. FAST + Apple only; the two slice kernels are
 # the two fused kernels with slice bounds and partial outputs.
 # DEFAULT ON (FAST + Apple) since the M3 A/B core-kde-slices-istella: kde
-# 1,519 -> 141 ms, mean_log_likelihood -222.3 same. -D
-# MOJOLEARN_KDE_FAST_SLICES_OFF turns it off; the old -D
+# 1,519 -> 141 ms, mean_log_likelihood -222.3 same. The old -D
 # MOJOLEARN_KDE_FAST_SLICES name is accepted and changes nothing.
+# TOMBSTONE: MOJOLEARN_KDE_FAST_SLICES_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 6af1055b8a.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_FAST_SLICES_OFF.patch; record in docs/TOMBSTONES.md.
 comptime KDE_SLICE_TARGET_BLOCKS = 1024
 comptime KDE_SLICE_MAX = 256
 
 
 def kde_fast_slices_on() -> Bool:
-    comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_KDE_FAST_SLICES_OFF"]()
-    ):
+    comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU):
         return False
     else:
         return True

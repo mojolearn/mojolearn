@@ -3,15 +3,14 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
-from std.sys.compile import is_defined
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.vendor import COMPILED_VENDOR
@@ -25,15 +24,17 @@ from gemm.afn_apple_fast import (
     afn_launch_tile,
     afn_zero_kernel,
 )
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from decomposition.linalg_public_device import device_qr_r
 from decomposition.linalg_types import _validate_shape
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
 from x_decomp.classical_device import contrast_kernel
 from core.blocked_moments import bm_centered_gram_panels
 from core.blocked_moments_ops import C23_MCD_LEAF_ROWS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 # TOMBSTONE: MOJOLEARN_IDN_LU_NB128 (DELETE-slower: grid g50ebe26a5 lu-solve synthetic NV L40S 352.1 -> 541.4 ms, AMD MI325X
 # 331.3 -> 697.0 ms, avg 1.80x) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 885c23dc7.
@@ -57,7 +58,7 @@ from x_decomp.cells import (
     lu_aux_clamp,
     lu_aux_join,
     lu_aux_val,
-    trs_block_col, trs_block_group,
+    trs_block_col,
     trs_coef,
     trs_divides,
     trs_feed_cell,
@@ -127,21 +128,12 @@ from x_decomp.exec_trait import Exec
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
-from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
-from x_decomp.rr_block import RB_B, RB_W, rb_blocks, rb_tol, rb_use
-from x_decomp.rr_block_device import (
-    rb_bad_kernel,
-    rb_embed_kernel,
-    rb_gather_kernel,
-    rb_left_kernel,
-    rb_pad_kernel,
-    rb_rank_kernel,
-    rb_right_kernel,
-    rb_scatter_kernel,
-    rb_v_kernel,
-)
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (quarantined: observed convergence failure) device arm deleted 2026-11-09 by
+# lane n9-decomp-eigh-families (`DevExec._eigh_block_on`, x_decomp/rr_block_device.mojo); the op refuses the define.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
+from x_decomp.svd_ops import so_desc_commit_kernel, so_desc_rank_kernel, svd_op_tall
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -164,6 +156,7 @@ from x_decomp.tsqr_device import (
     TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
+from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
@@ -180,21 +173,27 @@ from x_decomp.jacobi_par import (
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
+from core.step_phase import step_count_d2h, step_count_sync
+from core.admitted_finite_status import ADMIT_FAST_FINITE_VERDICT, enqueue_finite_status, enqueue_finite_word
 from core.device_zero import enqueue_fill
+from x_decomp.eigh_ops import eigh_op_dense
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_enqueue, td_copy_kernel
+from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from core.device_plan import DevicePlan
+from core.neural_context import process_ctx
 
 
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
 
-# lane idn-dense-linalg (2026-10-04), IDENTICAL speed on NVIDIA and AMD; -D
-# MOJOLEARN_IDN_XD_SWEEP_OFF restores the old forms. No bit moves (waits and
-# a readback only):
+# lane idn-dense-linalg (2026-10-04), IDENTICAL speed on NVIDIA and AMD. No
+# bit moves (waits and a readback only):
 # - the Jacobi rounds of eigh and svd wait every PJ_SYNC_ROUNDS rounds on the
 #   Apple column only (macOS cuts a long command buffer; NVIDIA and AMD
 #   queues take a whole sweep);
@@ -204,7 +203,11 @@ comptime PJ_SYNC_ROUNDS = 512
 # - `tsqr_factor` with a right-hand side does not wait between the pack and
 #   the factorization off Apple.
 # IDENTICAL builds only: a FAST build keeps its waits and readbacks.
-comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_XD_SWEEP_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0ddee7ae4b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SWEEP_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
 # lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7, item 4),
@@ -219,33 +222,47 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # flags. 4 sweeps a group: the Jacobi of a well-conditioned R converges in
 # ~8-12 sweeps, so the waits fall 3-4x while at most 3 identity sweeps are
 # spent after convergence; a size, not a shape, rule.
-# `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
-comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_XD_SVD_GROUP_OFF (old path, EXP:2145 DEFAULT bit-neutral grouping) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 02aeadc9f6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XD_SVD_GROUP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+
+#: Lane m3-linalg-and-housekeeping (2026-11-09): -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK
+#: routes `DevExec._svd_on` (PCA / TruncatedSVD / randomized_svd /
+#: linalg.svd through `x_decomp_svd` and `x_decomp_dev_svd`) through the
+#: executor op `svd_op_tall` (x_decomp/svd_ops.mojo: the same QR, the
+#: Jacobi's rounds as ONE gated block with the sweep test on the device, the
+#: descending order on the device, one status read) instead of the round
+#: launches below (one launch per round, a wait every XD_SVD_GROUP sweeps).
+#: Default off: today's round launches. Lane perf-decomp-eigh (2026-11-13): the
+#: switch also covers the resident kit's `DKit.svd` (x_decomp/kit_device.mojo),
+#: which n9b had put on the op unconditionally (factor-analysis/istella fit 2.45x
+#: NVIDIA, 4.76x AMD vs 0.8.66). Two SVD paths exist; the A/B on
+#: pca / tsvd / randomized-svd (owed row svd-tall-vs-rounds, B arm
+#: svd-one-block) decides which one is deleted. Bits: the op's module note
+#: says the words are the rounds' (the same pairs, fold and tree); s and v
+#: come out already in the descending order every caller sorts into.
+# TOMBSTONE: MOJOLEARN_XD_FAST_SVD_ONE_BLOCK (unmeasured opt-in arm, EXP:2366 PENDING) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0564fdef0e.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SVD_ONE_BLOCK.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime XD_FAST_SVD_ONE_BLOCK removed with its reader in x_decomp/kit_device.mojo.)
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
-# lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
-# is ONE launch and one wait, the batched round-robin kernel
-# (x_decomp/rr_batch.mojo) with a batch of one, whose pairs, 2 x 2 blocks and
-# V rows spread over the block's RR_OFF_TPB threads, instead of two launches
-# a round, 2 (m - 1) a sweep, and a three-scalar readback before every sweep
-# (at n = 16 about 250 launches and 8 waits a solve; FastICA's symmetric
-# decorrelation, FactorAnalysis, PLS and MCD's pinvh call it every
-# iteration). The batched kernel runs the single solver's cells in its
-# order and decides by the same tests (its header): the same words, on the
-# device columns and against `host_eigh_rr`. At most RR_OFF_TPB cells of
-# work a step, so the block is not short of threads at these sizes.
-# -D MOJOLEARN_IDN_EIGH_SMALL_OFF restores the per-round launches.
-comptime IDN_EIGH_SMALL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-# lane fam2-decomp (2026-10-04), CANDIDATE ARMS (default off; the same words
-# by the batched kernel's contract, so no column moves): the one-launch
-# route up to n = 64 (-D MOJOLEARN_IDN_EIGH_SMALL_N64) or n = 128
-# (-D MOJOLEARN_IDN_EIGH_SMALL_N128) instead of 32. One block of RR_OFF_TPB
-# threads then carries h h + n h cells a round (3,072 at n = 64, 12,288 at
-# n = 128) against 2 (m - 1) launches a sweep; which wins is a measurement.
-comptime _IDN_EIGH_SMALL_N_WIDE = 128 if is_defined["MOJOLEARN_IDN_EIGH_SMALL_N128"]() else 32
-comptime IDN_EIGH_SMALL_N = 64 if is_defined["MOJOLEARN_IDN_EIGH_SMALL_N64"]() else _IDN_EIGH_SMALL_N_WIDE
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_SMALL_OFF, MOJOLEARN_IDN_EIGH_SMALL_N64, MOJOLEARN_IDN_EIGH_SMALL_N128 (superseded) deleted
+# 2026-11-09 by lane n9-decomp-eigh-families: the one-launch batched Jacobi (x_decomp/rr_batch.mojo, the same words as the
+# per-round launches) was made THE dense eigh below TD_MIN_N (x_decomp/eigh_ops.mojo `eigh_op_sym`), so the cut it
+# switched on and the per-round route it rolled back to are gone; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
+#
+# Lane perf-decomp-eigh (2026-11-13): the one-block cut is back at its 0.8.55 / 0.8.66 value. Up to
+# XD_EIGH_ONE_BLOCK_N the batched kernel's one block of RR_OFF_TPB threads covers a round's h h + n h cells
+# in a few steps, so one launch beats 2 (m - 1) launches a sweep; above it one block is short of threads
+# (n = 220: 36,300 cells a round on 256 threads, every round behind a block barrier) and the per-round
+# multi-block launches (`DevExec._eigh_par_dev`) win. Measured: n9's one block at every n gave
+# min-cov-det/istella fit 8.91x on NVIDIA (see `_eigh_par_test`). Every mode, every vendor (the same words).
+comptime XD_EIGH_ONE_BLOCK_N = 32
 
 # lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
 # matrix straight from its address and takes R straight into the caller's
@@ -254,8 +271,11 @@ comptime IDN_EIGH_SMALL_N = 64 if is_defined["MOJOLEARN_IDN_EIGH_SMALL_N64"]() e
 # (220 M appends at the board's 1 M x 220 FactorAnalysis), copying that List
 # into a staging buffer, and copying R through a second List. Copies only:
 # the same launches on the same values, the same words.
-# -D MOJOLEARN_IDN_QR_R_DIRECT_OFF restores the List route.
-comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_QR_R_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_DIRECT_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 0c86559205.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -294,36 +314,6 @@ def xd_first_where_kernel(v: F32Ptr, count: Int32, stride: Int32, mode: Int32, f
             _ = Atomic.min(first, Int32(t))
 
 
-def xd_first_where2_kernel(v: F32Ptr, count: Int32, stride: Int32, first: I32Ptr):
-    """`xd_first_where_kernel`'s modes 0 (< 0) and 1 (== 0) on the same words
-    in one pass: first[0] and first[1] (lane idn-regress)."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(count):
-        var x = v.unsafe_load(t * Int(stride))
-        if x < Float32(0.0):
-            _ = Atomic.min(first, Int32(t))
-        if x == Float32(0.0):
-            _ = Atomic.min(first.unsafe_offset(1), Int32(t))
-
-
-def xd_first_where2_enq(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int,
-    mut output: HostBuffer[DType.int32],
-) raises:
-    """`xd_first_where` modes 0 and 1 together, ENQUEUED: output[0], output[1] are
-    the first t (XD_NO_FLAG for none) after the caller's next sync. One
-    launch and no wait of its own."""
-    var dfirst = ctx.enqueue_create_buffer[DType.int32](2)
-    enqueue_fill(ctx, dfirst, XD_NO_FLAG)
-    if count > 0:
-        ctx.enqueue_function[xd_first_where2_kernel](
-            _p(buf), Int32(count), Int32(stride), dfirst.unsafe_ptr(),
-            grid_dim=_blocks(count), block_dim=TPB,
-        )
-    ctx.enqueue_copy(dst_buf=output, src_buf=dfirst)
-    _ = dfirst^
-
-
 def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int, mode: Int) raises -> Int:
     """`xd_first_where_kernel` on the device; one word home (-1 for none)."""
     if count <= 0:
@@ -343,27 +333,15 @@ def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: 
     return -1 if f == XD_NO_FLAG else Int(f)
 
 
-struct _XdContext(Defaultable, Movable):
-    """ONE process-lifetime DeviceContext for every x_decomp entry (the x_cnn
-    `_Global` pattern, CURRENT DIRECTIVES 2026-09-27): a context per call
-    exhausts Metal's per-process command queues within one fit, and a
-    fit here is hundreds of calls. Every entry still frees and drains its
-    own buffers before returning; the context outlives them all."""
-    var ctx: Optional[DeviceContext]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-
-
-comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojoXDecompContextIdentical", init_fn=_XdContext.__init__]
-
-
 def xd_ctx() raises -> DeviceContext:
-    """The shared context, created on first use."""
-    var slot = X_DECOMP_CONTEXT.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    """One image-independent context with synchronized first publication.
+
+    This family has always used the default root, even inside a bound device
+    plan. Keep that root explicitly; the native owner only changes publication.
+    V4 names the shared native context layout instead of the former Optional.
+    """
+    var plan = DevicePlan("", 1, 0, List[Int](), False)
+    return process_ctx["MojolearnXDecompContextIdenticalV4"](plan)
 
 comptime TPB = 128
 #: rows of shortest paths per launch (the heap scratch is DIJKSTRA_ROWS x n ints)
@@ -540,12 +518,15 @@ def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
         dst.unsafe_store(t, absmax_sign_cell(a, t, Int(n), Int(d), by_col != 0))
 
 
+# TOMBSTONE: MOJOLEARN_AFCL_L10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # AFCL-L10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
 # NMF's OP_MUZ already fuses multiply/divide and the zero-denominator guard.
 # This candidate specializes that operation and groups four independent
 # coalesced output stripes per thread; it does not claim a new fusion.
 # Runtime cost selection is by operation, never by a benchmark shape.
-comptime AFCL_L10 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L10 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L10"]())
 
 
@@ -1049,7 +1030,7 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
     if tid < width:
         acts[tid] = act.unsafe_load(kk0 + tid)
     barrier()
-    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    var acc = Array[Float32, LU_RB * LU_RB](fill=Float32(0))
     comptime for r in range(LU_RB):
         comptime for c in range(LU_RB):
             var i = i0 + ty + LU_TILE * r
@@ -1058,8 +1039,8 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
     for kp in range(width):
         if acts[kp] != Float32(0):
-            var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
-            var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            var lv = Array[Float32, LU_RB](fill=Float32(0))
+            var uv = Array[Float32, LU_RB](fill=Float32(0))
             comptime for r in range(LU_RB):
                 lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
             comptime for c in range(LU_RB):
@@ -1126,9 +1107,9 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
 
 
 # lane/apple-fast-rec-decomp (2026-10-04): the FAST + Apple guard of the
-# recovered `-D MOJOLEARN_...` candidates in this file (FA_FAST_QRR;
+# recovered `-D MOJOLEARN_...` candidates in this file (FA_FAST_QRR deleted 2026-11-15;
 # SVD_FAST_CHOLQR deleted 2026-10-09). IDENTICAL and every other vendor compile main's code.
-comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower: rab3-svdcholqr istella 1782.1 -> 15378.0 ms, +762.9%) deleted 2026-10-09
 # on lane/owed-deletions-D1 (CholeskyQR2 passes for linalg.svd's U, `cholqr_guard_kernel`); code recoverable at b639a2bd2.
@@ -1147,9 +1128,12 @@ comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: drop the qr_r call; this keeps only the decomp-linalg part.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): factor-analysis istella 10391.5 -> 10254.8
-#: ms; output digest identical. KEEP: the FAST + Apple default since then;
-#: rollback -D MOJOLEARN_FA_FAST_QRR_OFF (the old -D name is harmless).
-comptime FA_FAST_QRR = XD_FAST_APPLE and not is_defined["MOJOLEARN_FA_FAST_QRR_OFF"]()
+#: ms; output digest identical. KEEP: the FAST + Apple default since then,
+#: and since the 2026-10-05 merge the upload of `DevExec.qr_r` in every mode
+#: (the host List staging is gone), so FA_FAST_QRR read by nothing went with
+#: its rollback.
+# TOMBSTONE: MOJOLEARN_FA_FAST_QRR_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at e0d53def90.
+# Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_QRR_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower: rab3-svdcholqr istella 1782.1 -> 15378.0 ms, +762.9%) deleted 2026-10-09
 # on lane/owed-deletions-D1 (CholeskyQR2 passes for linalg.svd's U, `cholqr_guard_kernel`); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
@@ -1193,62 +1177,6 @@ def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: I
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         na.unsafe_store(i, omp_row(g, q, w, s, i, Int(k), Int(nnz)))
-
-
-# C28 shared-Gram sparse-code tasks: stable descriptors group equal active
-# workspace scale, while every row retains its original scratch and tie order.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def classical_code_bucket_kernel(q: F32Ptr, w: F32Ptr, keys: U32Ptr, order: U32Ptr, n: Int32, k: Int32,
-                                  kind: Int32, alpha: Float32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        var count = 0
-        for j in range(Int(k)):
-            var value = ftz(q.unsafe_load(i * Int(k) + j))
-            if kind == 0:
-                if ftz(w.unsafe_load(i * Int(k) + j)) != Float32(0) or abs(value) > alpha:
-                    count += 1
-            elif value != Float32(0):
-                count += 1
-        var bucket = UInt32(0)
-        while count > 0:
-            count >>= 1
-            bucket += 1
-        keys.unsafe_store(i, bucket)
-        order.unsafe_store(i, UInt32(i))
-
-
-def classical_code_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr, order: U32Ptr,
-                                 n: Int32, k: Int32, kind: Int32, a: Int32, b: Int32, alpha: Float32, tol: Float32):
-    var slot = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if slot < Int(n):
-        var i = Int(order.unsafe_load(slot))
-        var count = Float32(0)
-        if kind == 0:
-            count = lasso_row(g, q, w, s, i, Int(k), alpha, Int(a), tol, b != 0)
-        elif kind == 1:
-            count = lars_row(g, q, w, s, i, Int(k), Int(a), Int(b))
-        else:
-            count = omp_row(g, q, w, s, i, Int(k), Int(a))
-        counts.unsafe_store(i, count)
-
-
-def launch_classical_code_rows(ctx: DeviceContext, g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, counts: F32Ptr,
-                                n: Int, k: Int, kind: Int, a: Int, b: Int, alpha: Float32, tol: Float32) raises:
-    if n <= 0:
-        return
-    var keys = ctx.enqueue_create_buffer[DType.uint32](n)
-    var order = ctx.enqueue_create_buffer[DType.uint32](n)
-    var tk = ctx.enqueue_create_buffer[DType.uint32](n)
-    var tv = ctx.enqueue_create_buffer[DType.uint32](n)
-    var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
-    ctx.enqueue_function[classical_code_bucket_kernel](q, w, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(k),
-        Int32(kind), alpha, grid_dim=_blocks(n), block_dim=TPB)
-    fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
-    # One wave of 32 independent rows shares the same immutable Gram allocation;
-    # power-of-two workspace buckets reduce warp divergence for neighboring shapes.
-    ctx.enqueue_function[classical_code_rows_kernel](g, q, w, s, counts, order.unsafe_ptr(), Int32(n), Int32(k),
-        Int32(kind), Int32(a), Int32(b), alpha, tol, grid_dim=(n + 31) // 32, block_dim=32)
 
 
 def gamma_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, shape: Float32):
@@ -1342,14 +1270,14 @@ def _ast[SH: Bool](sh: ShF32, g: F32Ptr, o: Int, q: Int, v: Float32):
 
 def als_block_kernel[SH: Bool](
     c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32,
-    su: Int32, si: Int32, reg: Float32, order: MutPointer[UInt32, MutAnyOrigin],
+    su: Int32, si: Int32, reg: Float32,
 ):
     """`als_row` for row u = block_idx.x of C (element (u, i) at c[u * su +
     i * si]), by a block of ALS_BLK_TPB threads; SH: the f*f + f cells in
     threadgroup memory, else at s[u * (f*f + f)]."""
     var u = Int(block_idx.x)
-    comptime if C28_BUCKET_SOLVES:
-        u = Int(order.unsafe_load(u))
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
     var tid = Int(thread_idx.x)
     var ff = Int(f)
     var mm = Int(m)
@@ -1445,20 +1373,8 @@ def als_scratch(n: Int, f: Int) -> Int:
     return 0 if cells <= ALS_SH_CELLS else n * cells
 
 
-def als_bucket_keys_kernel(c: F32Ptr, keys: MutPointer[UInt32, MutAnyOrigin], order: MutPointer[UInt32, MutAnyOrigin],
-                           n: Int32, m: Int32, su: Int32, si: Int32):
-    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if u < Int(n):
-        var count = 0
-        for i in range(Int(m)):
-            if ftz(c.unsafe_load(u * Int(su) + i * Int(si))) != Float32(0):
-                count += 1
-        var bucket = UInt32(0)
-        while count > 0:
-            count >>= 1
-            bucket += 1
-        keys.unsafe_store(u, bucket)
-        order.unsafe_store(u, UInt32(u))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 
 
 def launch_als_rows(
@@ -1469,29 +1385,18 @@ def launch_als_rows(
     (cgr-decomp: the MOJOLEARN_XD_ALS_BLOCK=0 A/B arm is deleted.)"""
     if n <= 0:
         return
-    var order = ctx.enqueue_create_buffer[DType.uint32](n if C28_BUCKET_SOLVES else 1)
-    comptime if C28_BUCKET_SOLVES:
-        var keys = ctx.enqueue_create_buffer[DType.uint32](n)
-        var tk = ctx.enqueue_create_buffer[DType.uint32](n)
-        var tv = ctx.enqueue_create_buffer[DType.uint32](n)
-        var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
-        ctx.enqueue_function[als_bucket_keys_kernel](c, keys.unsafe_ptr(), order.unsafe_ptr(), Int32(n), Int32(m), Int32(su), Int32(si),
-                                                    grid_dim=_blocks(n), block_dim=TPB)
-        fast_radix_sort_pairs_u32(ctx, n, keys, order, tk, tv, cnt)
-        _ = keys^
-        _ = tk^
-        _ = tv^
-        _ = cnt^
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
     if f * f + f <= ALS_SH_CELLS:
         comptime k_sh = als_block_kernel[True]
         ctx.enqueue_function[k_sh](
-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
             grid_dim=n, block_dim=ALS_BLK_TPB,
         )
     else:
         comptime k_g = als_block_kernel[False]
         ctx.enqueue_function[k_g](
-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg, order.unsafe_ptr(),
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
             grid_dim=n, block_dim=ALS_BLK_TPB,
         )
 
@@ -1725,12 +1630,15 @@ comptime XD_STAGE_MIN = 1 << 18
 
 struct _XdStage(Defaultable, Movable):
     var buf: Optional[HostBuffer[DType.float32]]
+    var lock: List[Int64]
 
     def __init__(out self):
+        # SharedSlot may construct a losing candidate: no device work here.
         self.buf = Optional[HostBuffer[DType.float32]]()
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageIdentical", init_fn=_XdStage.__init__]
+comptime X_DECOMP_STAGE = SharedSlot[_XdStage, "MojolearnXDecompStageIdenticalV2", 2]
 
 
 def _xd_staged(n: Int) -> Bool:
@@ -1742,18 +1650,19 @@ def _xd_staged(n: Int) -> Bool:
 
 
 def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
-    """The process's pinned stage (XD_STAGE_FLOATS floats), created on first use."""
+    """The pinned stage; caller holds its lease through DMA and the host copy."""
     var slot = X_DECOMP_STAGE.get_or_create_ptr()
     if not slot[].buf:
-        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
+        var buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
         ctx.synchronize()
+        slot[].buf = buf^
     return F32Ptr(unsafe_from_address=Int(slot[].buf.value().unsafe_ptr()))
 
 
 def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
     """`memcpy(dst, src, n)`: the one read of pinned memory (one thread;
     cpu-gpu-cleanup c-decomp removed the host-task split)."""
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
@@ -1784,14 +1693,23 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], p: F32Ptr, n: In
     if not _xd_staged(n):
         ctx.enqueue_copy(dst_ptr=p, src_buf=buf.create_sub_buffer[DType.float32](0, n))
         return
-    var stage = _xd_stage_ptr(ctx)
-    var off = 0
-    while off < n:
-        var cnt = min(XD_STAGE_FLOATS, n - off)
-        ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
-        ctx.synchronize()
-        _xd_read_out(p + off, stage, cnt)
-        off += cnt
+    var slot = X_DECOMP_STAGE.get_or_create_ptr()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].lock.unsafe_ptr())
+    shared_slot_lock(lock)
+    try:
+        # One lease spans first publication and every chunk's DMA, wait and
+        # host read. Another caller must not overwrite the shared stage while
+        # this call is still consuming it. The measured transfer path stays.
+        var stage = _xd_stage_ptr(ctx)
+        var off = 0
+        while off < n:
+            var cnt = min(XD_STAGE_FLOATS, n - off)
+            ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
+            ctx.synchronize()
+            _xd_read_out(p + off, stage, cnt)
+            off += cnt
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: Int) raises:
@@ -1812,6 +1730,18 @@ def _pj_off_blocks(n: Int) -> Int:
     return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
 
 
+# TOMBSTONE: DevExec._eigh_par_on's per-sweep convergence read (`_eigh_par_test`, three scalars and a wait before
+# every sweep) and the block Jacobi's `_eigh_block_test` deleted 2026-11-09 by lane n9-decomp-eigh-families: every
+# dense eigh is the executor op x_decomp/eigh_ops.mojo `eigh_op_sym` (the test on the device, no wait).
+# Code recoverable at the lane's parent commit (git log --grep 'n9: DevExec eigh').
+#
+# Lane perf-decomp-eigh (2026-11-13): `_eigh_par_test` is restored with the multi-block round-robin Jacobi
+# (`DevExec._eigh_par_dev`). n9 had made the one-block batched Jacobi (`eigh_op_dense`, ONE block of RR_OFF_TPB
+# threads for the whole n x n solve) the dense eigh for 33 <= n < TD_MIN_N and the fallback of every refused
+# tridiagonal solve (a singular covariance: repeated zero eigenvalues), at any n. Measured on candidate
+# 4c2340386abc against 0.8.66 (owed record 2026-11-13): min-cov-det/istella fit NVIDIA 303881 -> 2707673 ms
+# (8.91x; AMD smoke timeout), isomap smoke timeout on NVIDIA; both run pinvh / dense eigh on 220-wide or
+# n_samples-wide singular matrices. 0.8.55 / 0.8.66 ran this route.
 def _eigh_par_test(
     ctx: DeviceContext,
     mut da: DeviceBuffer[DType.float32],
@@ -1841,32 +1771,6 @@ def _eigh_par_test(
     return SIMD[DType.float32, 4](p.unsafe_load(0), p.unsafe_load(1), p.unsafe_load(2), Float32(0.0))
 
 
-def _eigh_block_test(
-    ctx: DeviceContext,
-    mut da: DeviceBuffer[DType.float32],
-    mut doff: DeviceBuffer[DType.float32],
-    mut dpart: DeviceBuffer[DType.float32],
-    mut dfold: DeviceBuffer[DType.float32],
-    mut hfold: HostBuffer[DType.float32],
-    mut dbad: DeviceBuffer[DType.float32],
-    mut hbad: HostBuffer[DType.float32],
-    n: Int,
-) raises -> SIMD[DType.float32, 4]:
-    """`_eigh_par_test` for the block Jacobi (lane fam2-decomp): the pivot
-    solves' two sticky flags (`rb_bad_kernel`) ride the same wait. Returns
-    (off, diag, ran, bad): bad 0 = every pivot solve so far converged, 1 = one
-    did not, 2 or 3 = a pivot block did not run."""
-    ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
-    var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
-    var pb = hbad.unsafe_ptr()
-    var bad = Float32(0.0)
-    if pb.unsafe_load(0) != Float32(0.0):
-        bad = Float32(1.0)
-    if pb.unsafe_load(1) != Float32(0.0):
-        bad = bad + Float32(2.0)
-    return SIMD[DType.float32, 4](tst[0], tst[1], tst[2], bad)
-
-
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     # TOMBSTONE: MOJOLEARN_IDN_XD_KIT_GEMM (noise) deleted 2026-10-11 by 2256fff37; code recoverable at 2256fff37^.
@@ -1878,8 +1782,7 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): DECOMP_FAST_GEMM_MMA, the FAST +
 #: Apple default (M3 A/B, one run per arm: randomized-svd istella 711 -> 533 ms,
 #: taxi -1.3%, nmf istella 8,155 -> 6,333 ms, reconstruction errors the same;
-#: tags gl2p-rsvd-gemmmma-istella, -taxi, gl2p-nmf-gemmmma-istella). -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
-#: restores the per-cell kit GEMM (the A/B arm).
+#: tags gl2p-rsvd-gemmmma-istella, -taxi, gl2p-nmf-gemmmma-istella).
 #: The kit's GEMM (`launch_gemm`: one thread per output cell and FOLD_BLOCK
 #: slice, scalar loads, no tiling) on the Apple matrix unit instead
 #: (`gemm/afn_apple_fast.mojo::afn_gemm_mma_kernel`, 64 x 64 tiles, any of
@@ -1888,7 +1791,9 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
 #: W^T X: a few output tiles over a million rows) splits k into row ranges
 #: summed with f32 atomics into a zeroed C. FAST + Apple only; the sum order
 #: is the matrix unit's (FAST's fold order is free).
-comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF"]()
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF (old path, EXP:435 DROPPED-slower; the FAST Apple MMA GEMM is the default) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at f899386021.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE
 comptime DFG_BLOCK_TARGET = 640
 comptime DFG_MIN_SPLIT_STEPS = 512
 
@@ -1915,21 +1820,13 @@ def _launch_gemm_mma(
             grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
             block_dim=(AFN_ZERO_TPB, 1, 1),
         )
-        # OPEN: scoped source28f06e19 passed28 mechanism fixtures on M3
-        # (scoped-r2-all-q-v1, bound5e-6, zero error-regression allowance).
-        # Split-boundary PASS is not downstream fitted quality or a speed
-        # claim; broad default stays OFF. See GEMM_INLINE_OUTCOMES.md.
-        if not try_scoped_gemm[True, 1](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, splits, per):
-            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
-            )
+        afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
+        )
     else:
-        # OPEN: non-split G1/G2 mechanism PASS has no actual AFN timing
-        # admission. SDK catalog wins cannot promote this caller by analogy.
-        if not try_scoped_gemm[False, 0](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, 1, k):
-            afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
-            )
+        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+        )
 
 
 def launch_gemm(
@@ -2032,10 +1929,8 @@ def trs_block_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, l
         trs_block_col(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c)
 
 
-def trs_group_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
-    var c = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) * 4
-    if c < Int(nrhs):
-        trs_block_group(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c, min(c + 4, Int(nrhs)))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 
 
 def trs_diag_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
@@ -2119,12 +2014,9 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
         var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
         var lo = bq * TRS_BLOCK
         var hi = min(n, lo + TRS_BLOCK)
-        comptime if C14_GROUP_RHS:
-            ctx.enqueue_function[trs_group_kernel](
-                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
-                grid_dim=_blocks((nrhs + 3) // 4), block_dim=TPB,
-            )
-        elif TRS_DIAG_FITS:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        comptime if TRS_DIAG_FITS:
             ctx.enqueue_function[trs_diag_kernel](
                 lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
                 grid_dim=(nrhs + TRS_DIAG_COLS - 1) // TRS_DIAG_COLS, block_dim=TRS_DIAG_TPB,
@@ -2391,7 +2283,9 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     replaced by the orthonormalized columns): R of the matrix (`qr_factor`
     on a device copy, as `device_qr_r`), the rank guard on the host
     (DEVIATION 5318), then A R^-1 by rows (`trsm_kernel`, DEVIATION 5309).
-    Waits for the device (the guard reads R on the host).
+    The two-pass route is enqueued only (the guard reads R on the device);
+    the caller waits before any host read. The TSQR route waits (its R
+    crosses through a host list).
     RSVD_IDN_TSQR_ORTHO: one blocked TSQR pass instead (`_orth_tsqr_device`)
     for the shapes the TSQR takes."""
     comptime if RSVD_IDN_TSQR_ORTHO and TS_SMEM_OK:
@@ -2441,14 +2335,18 @@ def orth_on_device_diag(
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )
-        ctx.synchronize()
         _ = src^
         _ = dst^
+    # Enqueued only (lane consol-n0-readmission): the two synchronize() calls
+    # here (one per pass, one at the end) read nothing. The guard reads R on
+    # the device in stream order, the work buffers are this call's own and go
+    # back in stream order, and every caller downloads and waits before it
+    # reads a result on the host (DevExec.orth / orth_diag, dev_orth_diag_run)
+    # or reads it only from later launches (dev_orth_run).
     _ = dq^
     _ = dw^
     _ = scratch^
     _ = r_buf^
-    ctx.synchronize()
 
 
 def launch_lu(
@@ -2490,8 +2388,7 @@ def launch_lu(
         # steps in order through tiles. The same cells in the same
         # order as the per-step route below.
         var k0 = 0
-        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo; -D
-        # MOJOLEARN_LU_FAST_STEP1_OFF reverts):
+        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo):
         # each panel column one launch instead of five; the same cells.
         var step1 = False
         comptime if LU_FAST_STEP1:
@@ -2501,7 +2398,7 @@ def launch_lu(
         var lfs_p1 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
         var lfs_pa = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
         var lfs_pb = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
-        # LU_FAST_MMA (FAST + Apple default, x_decomp/lu_fast_mma.mojo; rollback -D MOJOLEARN_LU_FAST_MMA_OFF):
+        # LU_FAST_MMA (FAST + Apple default, x_decomp/lu_fast_mma.mojo):
         # 256-column outer blocks, the trailing updates delayed and run on
         # the Apple matrix unit (one pass over the trailing square per 256
         # columns instead of per 32). Off: main's loop below.
@@ -2838,6 +2735,13 @@ struct DevExec(Exec):
         `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
         against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
         runs the same calls on its pooled matrices."""
+        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
+        # (potrf_lower with its info read per panel, the chol_logdet wait,
+        # trsm_lower against I), restored from 49e8c5b633^.
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var nb = chol_nb_for(n, CHOL_NB_PINNED)
@@ -2907,67 +2811,89 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
-        """THE eigh at every size: the round-robin Jacobi (x_decomp/rr.mojo,
-        x_decomp/jacobi_par.mojo; the host runs the same rounds). cgr-decomp
-        (2026-10-03): the one-block cyclic solvers it fell back to
-        (`device_eigh`, `jacobi_eigh2_kernel`) and the cyclic define are
-        deleted; a solve that does not converge in RR_EIGH_SWEEPS raises.
-        uplo 1 / 2 reads the lower / upper triangle (numpy's UPLO), mirrored
-        on the device; 0 the whole matrix."""
+        """THE eigh at every size (`eigh_into`: the tridiagonal solve from
+        n = TD_MIN_N, the round-robin Jacobi below it and whenever that
+        solve refuses; the host column runs `eigh_op_sym_host`, the same
+        route). A solve that does not converge raises. uplo 1 / 2 reads the
+        lower / upper triangle (numpy's UPLO), mirrored on the device; 0 the
+        whole matrix."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         DevExec._eigh_on(ctx, da, w, v, n, uplo)
         _ = da^
-        ctx.synchronize()
         _ = ctx^
 
     @staticmethod
-    def _eigh_on(
-        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int, uplo: Int
+    def eigh_into(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
     ) raises:
-        """`eigh` on the device matrix in `da` (n x n, overwritten): the
-        triangle mirrored when uplo != 0, then `_eigh_par_on`. `eigh` and the
-        resident entry (x_decomp/resident.mojo `dev_eigh_py`, lane
-        fam-decomp) both call it: one launch sequence."""
-        if uplo != 0:
-            ctx.enqueue_function[sym_from_triangle_kernel](
-                da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-            )
-        # FAST Apple; -D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF rolls back.
-        # Householder tridiagonalization + df64 bisection + twisted
-        # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
-        # (clustered spectrum, nonfinite T) falls through to the Jacobi on
-        # the untouched `da`. lane gap-linalg (2026-10-08): also the
-        # IDENTICAL default on NVIDIA and AMD since 2026-10-11 (`EIGH_TD_IDN`,
-        # pinned folds and the identical GEMM; A/B eigh/synthetic AMD 8620.1 ->
-        # 353.7 ms a1600, NV 21119.9 -> 367.2 ms v0006, digests equal);
-        # -D MOJOLEARN_IDN_EIGH_TRIDIAG_OFF reverts to the Jacobi.
+        """The dense symmetric eigh of the device matrix in `da` (n x n, both
+        triangles, consumed) into the device buffers dw (n, ascending) and
+        dv (n x n, vectors in columns, sign-flipped). Host-driven: the
+        tridiagonal route's refusal word and the Jacobi's convergence test
+        are read on the host (0.8.55 / 0.8.66's `_eigh_on` route), and an
+        unconverged solve raises here. dw and dv stay on the device, so the
+        resident kits (x_decomp/kit_device.mojo `DKit.eigh`,
+        x_decomp/resident.mojo) keep w and V resident.
+
+        Lane perf-decomp-eigh (2026-11-13): replaces `eigh_enq` (the
+        read-free executor op `eigh_op_sym`), whose Jacobi ran in ONE block
+        for 33 <= n < TD_MIN_N and for every refused tridiagonal solve (see
+        `_eigh_par_test`). The same words: x_decomp/rr_batch.mojo is the
+        multi-block solver's cells in its order."""
         comptime if EIGH_TRIDIAG_ROUTE:
             if n >= TD_MIN_N:
-                if DevExec._eigh_td_try(ctx, da, w, v, n):
-                    # The caller owns the matrix and context (including the
-                    # resident path); this borrowed helper must not release them.
+                if DevExec._eigh_td_try_dev(ctx, da, dw, dv, n):
                     return
-        _ = DevExec._eigh_par_on(ctx, da, w, v, n)
+        DevExec._eigh_jacobi_dev(ctx, da, dw, dv, n)
 
     @staticmethod
-    def _eigh_td_try(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Bool:
+    def _eigh_jacobi_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises:
+        """The round-robin Jacobi of `da` (consumed) into dw, dv: up to
+        XD_EIGH_ONE_BLOCK_N the one-launch batched kernel with a batch of
+        one (`_eigh_batch_on`, one sync), above it the per-round multi-block
+        launches (`_eigh_par_dev`). An unconverged solve raises."""
+        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at c41dc34810.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
+        # (the define is refused at build time in core/experiment_guards_decomposition.mojo)
+        if n <= XD_EIGH_ONE_BLOCK_N:
+            DevExec._eigh_batch_on(ctx, da, 1, n, dw, dv)
+            return
+        _ = DevExec._eigh_par_dev(ctx, da, dw, dv, n)
+
+    @staticmethod
+    def _eigh_td_try_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises -> Bool:
         """x_decomp/eigh_tridiag.mojo on a device copy of `da` (left
-        untouched for the fallback); on success the same tail as
-        `_eigh_par_on` (sign_flip_kernel, the ascending permutation) and w, v
-        out to host memory. False: refused, nothing written."""
-        var dwork = ctx.enqueue_create_buffer[DType.float32](n * n)
+        untouched for the fallback), its refusal word read at ONE wait; on
+        success the sign flip, the ascending order and the unscale into dw,
+        dv (enqueued). False: refused, dw and dv not written. (The 0.8.66
+        `_eigh_td_try`, outputs on the device.)"""
+        var nn = n * n
+        var dwork = ctx.enqueue_create_buffer[DType.float32](nn)
         ctx.enqueue_function[td_copy_kernel](
-            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(n * n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(nn), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB
         )
-        # the Jacobi's power-of-two range scale on the copy (FAST: quality)
+        # the Jacobi's power-of-two range scale on the copy
         var dfac = enqueue_es_scale(ctx, _p(dwork), 1, n)
-        var dz = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dz = ctx.enqueue_create_buffer[DType.float32](nn)
         var dwt = ctx.enqueue_create_buffer[DType.float32](n)
-        var ok = eigh_td_on(ctx, dwork, n, dz, dwt)
+        var dinfo = ctx.enqueue_create_buffer[DType.float32](4)
+        var hinfo = ctx.enqueue_create_host_buffer[DType.float32](4)
+        eigh_td_enqueue(ctx, dwork, n, dz, dwt, dinfo)
+        ctx.enqueue_copy(dst_buf=hinfo, src_buf=dinfo)
+        ctx.synchronize()
         _ = dwork^
-        if not ok:
-            ctx.synchronize()
+        _ = dinfo^
+        var refused = hinfo.unsafe_ptr().unsafe_load(2) != Float32(0.0)
+        _ = hinfo^
+        if refused:
             _ = dfac^
             _ = dz^
             _ = dwt^
@@ -2975,71 +2901,46 @@ struct DevExec(Exec):
         ctx.enqueue_function[sign_flip_kernel](
             dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
         )
-        var dw = ctx.enqueue_create_buffer[DType.float32](n)
-        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-        enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dvo))
+        enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dv))
         enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
-        _down(ctx, dw, w, n)
-        _down(ctx, dvo, v, n * n)
-        ctx.synchronize()
         _ = dfac^
-        _ = dw^
-        _ = dvo^
         _ = dpos^
         _ = dz^
         _ = dwt^
         return True
 
     @staticmethod
-    def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
+    def _eigh_par_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises -> Int:
         """The two-sided Jacobi in the round-robin ordering on the device
         copy in `da` (consumed): `eigh_par_cs_kernel` / `eigh_par_update_kernel`
-        per round, the convergence test before every sweep folded on the
-        device (`_eigh_par_test`, three scalars read), then
-        `sign_flip_kernel` and the ascending permutation; w (n) and v (n x n)
-        out to host memory. The resident kit (x_decomp/kit_device.mojo)
-        hands its own copy here, the Lanczos projected solve too. Returns the
-        sweeps run (0 from the small route, which does not report them)."""
-        comptime if IDN_EIGH_SMALL:
-            if n >= 1 and n <= IDN_EIGH_SMALL_N:
-                # one launch (see IDN_EIGH_SMALL); an unconverged solve or a
-                # block that did not run raises in `_rr_batch_check`, after
-                # the ONE sync that also brings w and v home (lane
-                # idn-regress: was three syncs)
-                var bw = ctx.enqueue_create_buffer[DType.float32](n)
-                var bv = ctx.enqueue_create_buffer[DType.float32](n * n)
-                var marks = DevExec._rr_batch_enq(ctx, da, 1, n, bw, bv)
-                _down(ctx, bw, w, n)
-                _down(ctx, bv, v, n * n)
-                ctx.synchronize()
-                _ = bw^
-                _ = bv^
-                DevExec._rr_batch_check(marks, 1, n)
-                return 0
+        per round over the whole grid, the convergence test before every
+        sweep folded on the device (`_eigh_par_test`, three scalars read),
+        then `sign_flip_kernel` and the ascending permutation into dw (n) and
+        dv (n x n), enqueued. Returns the sweeps run. (The 0.8.66
+        `_eigh_par_on`, outputs on the device.)"""
         # lane idn-cov-overflow: the power-of-two range scale
         # (x_decomp/eigh_scale.mojo; the host's `host_eigh_rr_sorted` takes
         # the same), so the convergence test's squares stay finite
         var dfac = enqueue_es_scale(ctx, _p(da), 1, n)
-        # Experimental block Jacobi is opt-in only (x_decomp/rr_block.mojo);
-        # shared rb_use keeps GPU and host defaults and OFF precedence aligned.
-        if rb_use(n):
-            return DevExec._eigh_block_on(ctx, da, w, v, n, dfac)
         var m = n + (n % 2)
         var h = m // 2
-        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dvr = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
         var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
         var dfold = ctx.enqueue_create_buffer[DType.float32](3)
         var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
-        ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        ctx.enqueue_function[pj_identity_kernel](dvr.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         var converged = False
         var executed = 0
         var fro_in = Float32(-1.0)
         var fro_now = Float32(0.0)
         var off_last = Float32(0.0)
-        for sweep in range(RR_EIGH_SWEEPS + 1):
+        for sweep in range(RR_EIGH_SWEEPS + 1):  # driver-loop: over Jacobi sweeps (host convergence test)
             var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
             if not (tst[2] >= Float32(0.0)):
                 raise Error(
@@ -3057,13 +2958,13 @@ struct DevExec(Exec):
             if sweep == RR_EIGH_SWEEPS:
                 break
             executed += 1
-            for rd in range(m - 1):
+            for rd in range(m - 1):  # driver-loop: over Jacobi rounds of one sweep
                 ctx.enqueue_function[eigh_par_cs_kernel](
                     da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
                     grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
                 )
                 ctx.enqueue_function[eigh_par_update_kernel](
-                    da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                    da.unsafe_ptr(), dvr.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
                     grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
                 )
                 _round_sync(ctx, rd)
@@ -3078,24 +2979,17 @@ struct DevExec(Exec):
                 " it were one (DEVIATION 590)."
             )
         ctx.enqueue_function[sign_flip_kernel](
-            dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+            dvr.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
         )
         # the last test's kernel left the diagonal of the converged A in
         # doff[2n, 3n); the ascending order on the device
-        # (decomposition/spectrum_order_device.mojo), then w and v out
-        var dw = ctx.enqueue_create_buffer[DType.float32](n)
-        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+        # (decomposition/spectrum_order_device.mojo)
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-        enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+        enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dvr), n, dpos, _p(dw), _p(dv))
         enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
-        _down(ctx, dw, w, n)
-        _down(ctx, dvo, v, n * n)
-        ctx.synchronize()
         _ = dfac^
-        _ = dw^
-        _ = dvo^
         _ = dpos^
-        _ = dv^
+        _ = dvr^
         _ = dcs^
         _ = doff^
         _ = dpart^
@@ -3104,255 +2998,125 @@ struct DevExec(Exec):
         return executed
 
     @staticmethod
-    def _eigh_block_on(
-        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int,
-        dfac: DeviceBuffer[DType.float32],
-    ) raises -> Int:
-        """The block Jacobi eigh (x_decomp/rr_block.mojo, lane fam2-decomp) on
-        the device copy in `da` (n x n, read once): M - 1 block rounds a
-        sweep, six launches each (gather, mark fill, the batched pivot
-        solve, T = A W, A = W^T T, V = V W), nothing read back inside a
-        sweep. Before every sweep the rotation solver's convergence test on
-        the padded matrix (`_eigh_par_test`) and the pivot solves' two
-        sticky flags come back in one wait. Then the sign flip, and the
-        real columns ascending into w (n) and v (n x n) on the host, w
-        unscaled by `_eigh_par_on`'s range factors `dfac`.
-        `host_eigh_rb_sorted` (x_decomp/rr_solve.mojo) is the same walk.
-        Returns the sweeps run."""
-        var m = rb_blocks(n)
-        var h = m // 2
-        var nn = m * RB_B
-        var ww = RB_W * RB_W
-        var dab = ctx.enqueue_create_buffer[DType.float32](nn * nn)
-        var dtb = ctx.enqueue_create_buffer[DType.float32](nn * nn)
-        var dv0 = ctx.enqueue_create_buffer[DType.float32](nn * nn)
-        var dv1 = ctx.enqueue_create_buffer[DType.float32](nn * nn)
-        var dpv = ctx.enqueue_create_buffer[DType.float32](h * ww)
-        var dwv = ctx.enqueue_create_buffer[DType.float32](h * ww)
-        var dwl = ctx.enqueue_create_buffer[DType.float32](h * RB_W)
-        var dbv = ctx.enqueue_create_buffer[DType.float32](h * ww)
-        var dbcs = ctx.enqueue_create_buffer[DType.float32](h * rrb_cs_len(RB_W))
-        var dbpart = ctx.enqueue_create_buffer[DType.float32](h * rrb_part_len(RB_W))
-        var dbdg = ctx.enqueue_create_buffer[DType.float32](h * RB_W)
-        var dinfo = ctx.enqueue_create_buffer[DType.float32](2 * h)
-        var dbad = ctx.enqueue_create_buffer[DType.float32](2)
-        var hbad = ctx.enqueue_create_host_buffer[DType.float32](2)
-        var doff = ctx.enqueue_create_buffer[DType.float32](3 * nn)
-        var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(nn))
-        var dfold = ctx.enqueue_create_buffer[DType.float32](3)
-        var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
-        var pa = _p(dab)
-        var pt = _p(dtb)
-        var pv0 = _p(dv0)
-        var pv1 = _p(dv1)
-        var cells = _pj_blocks(nn * nn)
-        enqueue_fill(ctx, dbad, Float32(0.0))
-        ctx.enqueue_function[rb_embed_kernel](_p(da), pa, Int32(n), Int32(nn), grid_dim=cells, block_dim=PJ_TPB)
-        ctx.enqueue_function[pj_identity_kernel](pv0, Int32(nn), grid_dim=cells, block_dim=PJ_TPB)
-        var tl = rb_tol(Float32(JACOBI_TOL), m)
-        var cur = 0
-        var converged = False
-        var executed = 0
-        var fro_in = Float32(-1.0)
-        var fro_now = Float32(0.0)
-        var off_last = Float32(0.0)
-        for sweep in range(RR_EIGH_SWEEPS + 1):
-            var tst = _eigh_block_test(ctx, dab, doff, dpart, dfold, hfold, dbad, hbad, nn)
-            if not (tst[2] >= Float32(0.0)) or tst[3] >= Float32(2.0):
-                raise Error(
-                    "eigh: a block of the block Jacobi's convergence test or of a pivot solve did not run:"
-                    " a launch failure, not a convergence failure. Check that the binding is built for"
-                    " this device."
-                )
-            if tst[3] != Float32(0.0):
-                raise Error(
-                    "eigh: a " + String(RB_W) + " x " + String(RB_W) + " pivot problem of the block Jacobi did"
-                    " not converge in " + String(RR_EIGH_SWEEPS) + " sweeps at n = " + String(n)
-                    + ". An unconverged decomposition is not returned as if it were one (DEVIATION 590)."
-                )
-            off_last = tst[0]
-            fro_now = ftz(tst[0] + tst[1])
-            if fro_in < Float32(0.0):
-                fro_in = fro_now
-            if rr_converged(tst[0], tst[1], Float32(JACOBI_TOL)):
-                converged = True
-                break
-            if sweep == RR_EIGH_SWEEPS:
-                break
-            executed += 1
-            for rd in range(m - 1):
-                var vsrc = pv0 if cur == 0 else pv1
-                var vdst = pv1 if cur == 0 else pv0
-                ctx.enqueue_function[rb_gather_kernel](
-                    pa, _p(dpv), Int32(nn), Int32(m), Int32(rd), grid_dim=_pj_blocks(h * ww), block_dim=PJ_TPB
-                )
-                enqueue_fill(ctx, dinfo, Float32(-1.0))
-                ctx.enqueue_function[rr_batch_kernel](
-                    _p(dpv), _p(dbv), _p(dbcs), _p(dbpart), _p(dbdg), _p(dinfo), _p(dwl), _p(dwv), Int32(RB_W),
-                    Int32(RR_EIGH_SWEEPS), tl, grid_dim=h, block_dim=RR_OFF_TPB,
-                )
-                ctx.enqueue_function[rb_bad_kernel](
-                    _p(dinfo), _p(dbad), Int32(h), pa, _p(dwl), Int32(nn), Int32(m), Int32(rd),
-                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB
-                )
-                ctx.enqueue_function[rb_right_kernel](
-                    pa, _p(dwv), pt, Int32(nn), Int32(m), Int32(rd), grid_dim=cells, block_dim=PJ_TPB
-                )
-                ctx.enqueue_function[rb_left_kernel](
-                    pa, pt, _p(dwv), _p(dwl), Int32(nn), Int32(m), Int32(rd), grid_dim=cells, block_dim=PJ_TPB
-                )
-                ctx.enqueue_function[rb_v_kernel](
-                    vsrc, vdst, _p(dwv), Int32(nn), Int32(m), Int32(rd), grid_dim=cells, block_dim=PJ_TPB
-                )
-                cur = 1 - cur
-                # the Apple column drains its command buffer every 32 block
-                # rounds (macOS cuts a long one); NVIDIA and AMD take the sweep
-                comptime if not IDN_XD_NO_WAIT:
-                    if rd % 32 == 31:
-                        ctx.synchronize()
-        if converged and not rr_fro_kept(fro_in, fro_now):
-            converged = False
-        if not converged:
+    def ols_finite_status_check(words: List[Int32]) raises:
+        """`ols_tsqr_factor`'s two finite status words (X at 0, y at 1), already
+        on the host: copied down with the means before the factor, landed by
+        the factor's own drain (lane ols-regression, 2026-11-14: no second
+        copy, no second synchronize, no per-call pinned buffer). A nonzero
+        word raises the entry's non-finite refusal, which the door maps to
+        scikit-learn's wording (bindings/admitted_input_run.mojo
+        admitted_finite_entry_refuse)."""
+        if words[0] != Int32(0):
+            raise Error("mojolearn: X contains NaN or infinity")
+        if words[1] != Int32(0):
+            raise Error("mojolearn: y contains NaN or infinity")
+
+    @staticmethod
+    def eigh_status_check(hs: HostBuffer[DType.int32], n: Int) raises:
+        """An `_eigh_batch_enq` status word, read after the caller's sync: a
+        nonzero word raises (DEVIATION 590)."""
+        var bad = Int(hs.unsafe_ptr().unsafe_load(0))
+        if bad != 0:
             raise Error(
-                "eigh: the block Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
-                + " sweeps at n = " + String(n) + " (off-diagonal mass " + String(off_last)
-                + " of " + String(fro_now) + "). An unconverged decomposition is not returned as if"
+                "eigh: " + String(bad) + " solve(s) at n = " + String(n) + " did not converge in "
+                + String(RR_EIGH_SWEEPS) + " sweeps. An unconverged decomposition is not returned as if"
                 " it were one (DEVIATION 590)."
             )
-        var vfin = pv0 if cur == 0 else pv1
-        ctx.enqueue_function[sign_flip_kernel](
-            vfin, Int32(nn), grid_dim=(nn, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
-        )
-        # the last test left the converged diagonal in doff[2 N, 3 N): the
-        # pad columns marked, the real ones ranked ascending and scattered
-        var dpad = ctx.enqueue_create_buffer[DType.float32](nn)
-        var dpos = ctx.enqueue_create_buffer[DType.int32](nn)
+
+    @staticmethod
+    def _eigh_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int, uplo: Int
+    ) raises:
+        """`eigh` on the device matrix in `da` (n x n, overwritten): the
+        triangle mirrored when uplo != 0, then `eigh_into`, w and v out to
+        host memory at one sync. `eigh` and the resident entry
+        (x_decomp/resident.mojo `dev_eigh_run`) both call it."""
+        if uplo != 0:
+            ctx.enqueue_function[sym_from_triangle_kernel](
+                da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+            )
         var dw = ctx.enqueue_create_buffer[DType.float32](n)
-        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var pkey = _p(doff) + 2 * nn
-        ctx.enqueue_function[rb_pad_kernel](vfin, _p(dpad), Int32(nn), Int32(n), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB)
-        ctx.enqueue_function[rb_rank_kernel](
-            pkey, _p(dpad), dpos.unsafe_ptr(), Int32(nn), Int32(n), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB
-        )
-        ctx.enqueue_function[rb_scatter_kernel](
-            pkey, vfin, dpos.unsafe_ptr(), Int32(nn), Int32(n), _p(dw), _p(dvo),
-            grid_dim=_pj_blocks(n * nn), block_dim=PJ_TPB,
-        )
-        enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec.eigh_into(ctx, da, dw, dv, n)
         _down(ctx, dw, w, n)
-        _down(ctx, dvo, v, n * n)
+        _down(ctx, dv, v, n * n)
         ctx.synchronize()
         _ = dw^
-        _ = dvo^
-        _ = dpos^
-        _ = dpad^
-        _ = dab^
-        _ = dtb^
-        _ = dv0^
-        _ = dv1^
-        _ = dpv^
-        _ = dwv^
-        _ = dwl^
-        _ = dbv^
-        _ = dbcs^
-        _ = dbpart^
-        _ = dbdg^
-        _ = dinfo^
-        _ = dbad^
-        _ = hbad^
-        _ = doff^
-        _ = dpart^
-        _ = dfold^
-        _ = hfold^
-        return executed
+        _ = dv^
 
     @staticmethod
-    def _rr_batch_enq(
+    def _eigh_batch_enq(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
         mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
-    ) raises -> HostBuffer[DType.int32]:
-        """`_rr_batch_on`'s launches, ENQUEUED: the two convergence marks
-        land in the returned host words; read them with `_rr_batch_check`
-        after the caller's next sync."""
-        # lane idn-cov-overflow: each problem's power-of-two range scale
-        # (x_decomp/eigh_scale.mojo; `host_eigh_rr_sorted` takes the same)
-        var dfac = enqueue_es_scale(ctx, _p(da), batch, n)
-        var dv = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
-        var dcs = ctx.enqueue_create_buffer[DType.float32](batch * rrb_cs_len(n))
-        var dpart = ctx.enqueue_create_buffer[DType.float32](batch * rrb_part_len(n))
-        var ddg = ctx.enqueue_create_buffer[DType.float32](batch * n)
-        var dinfo = ctx.enqueue_create_buffer[DType.float32](2 * batch)
-        enqueue_fill(ctx, dinfo, Float32(-1.0))
-        ctx.enqueue_function[rr_batch_kernel](
-            _p(da), _p(dv), _p(dcs), _p(dpart), _p(ddg), _p(dinfo), _p(dw), _p(dvo), Int32(n),
-            Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=batch, block_dim=RR_OFF_TPB,
-        )
-        enqueue_es_unscale(ctx, _p(dw), dfac, batch, n)
-        # the convergence marks are read on the device (lane cpu3-core):
-        # the first problem whose block never ran, and the first unconverged,
-        # both in one launch and one word pair home (lane idn-regress: was a
-        # sync each)
-        var marks = ctx.enqueue_create_host_buffer[DType.int32](2)
-        xd_first_where2_enq(ctx, dinfo, batch, 2, marks)
-        _ = dv^
-        _ = dcs^
-        _ = dpart^
-        _ = ddg^
-        _ = dinfo^
-        _ = dfac^
-        return marks^
+    ) raises -> DeviceBuffer[DType.int32]:
+        """`eigh_op_dense` on `batch` n x n problems already on the device in
+        `da` (consumed): dw (batch x n ascending), dvo (batch x n x n,
+        vectors in columns), ENQUEUED; the returned status word counts the
+        unconverged problems (read it with `eigh_status_check`)."""
+        var gate = step_gate_open_word(ctx)
+        var status = ctx.enqueue_create_buffer[DType.int32](1)
+        eigh_op_dense(ctx, gate, da, dw, dvo, status, batch, n)
+        _ = gate^
+        return status^
 
     @staticmethod
-    def _rr_batch_on(
+    def _eigh_jacobi_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int
+    ) raises:
+        """The round-robin Jacobi at EVERY n (`_eigh_jacobi_dev`: one block up
+        to XD_EIGH_ONE_BLOCK_N, the per-round multi-block launches above) on
+        the device matrix in `da` (consumed), w and v out to host memory. For
+        the callers whose host oracle is the Jacobi at every size (the
+        spectral Lanczos projected solve, x_decomp/rr_solve.mojo); `_eigh_on`
+        takes the tridiagonal route from TD_MIN_N. Lane perf-decomp-eigh
+        (2026-11-13): was `eigh_op_dense` (one block) at every n."""
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec._eigh_jacobi_dev(ctx, da, dw, dv, n)
+        _down(ctx, dw, w, n)
+        _down(ctx, dv, v, n * n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dv^
+
+    @staticmethod
+    def _eigh_batch_on(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
         mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
     ) raises:
-        """x_decomp/rr_batch.mojo on `batch` n x n problems already on the
-        device in `da` (consumed): dw (batch x n ascending) and dvo (batch x
-        n x n, vectors in columns). One sync to read the convergence marks;
-        an unconverged problem raises."""
-        var marks = DevExec._rr_batch_enq(ctx, da, batch, n, dw, dvo)
+        """`_eigh_batch_enq`, then ONE sync for its status word; an
+        unconverged problem raises. (Was `_rr_batch_on` /
+        `_rr_batch_enq` / `_rr_batch_check`, the same kernel.)"""
+        var status = DevExec._eigh_batch_enq(ctx, da, batch, n, dw, dvo)
+        var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
         ctx.synchronize()
-        DevExec._rr_batch_check(marks, batch, n)
-
-    @staticmethod
-    def _rr_batch_check(marks: HostBuffer[DType.int32], batch: Int, n: Int) raises:
-        """`_rr_batch_enq`'s two marks, read after the caller's sync: raise
-        for a block that never ran or an unconverged problem."""
-        var fn_ = marks.unsafe_ptr().unsafe_load(0)
-        var fz = marks.unsafe_ptr().unsafe_load(1)
-        var b_neg = -1 if fn_ == XD_NO_FLAG else Int(fn_)
-        var b_zero = -1 if fz == XD_NO_FLAG else Int(fz)
-        if b_neg >= 0 or b_zero >= 0:
-            var b = b_neg if (b_zero < 0 or (b_neg >= 0 and b_neg < b_zero)) else b_zero
-            if b == b_neg:
-                raise Error("eigh_batch: a block of the batched Jacobi did not run (a launch failure)")
-            else:
-                raise Error(
-                    "eigh_batch: problem " + String(b) + " of " + String(batch) + " (n = " + String(n)
-                    + ") did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps. An unconverged"
-                    " decomposition is not returned as if it were one (DEVIATION 590)."
-                )
+        _ = status^
+        DevExec.eigh_status_check(hs, n)
 
     @staticmethod
     def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
         """`eigh` of `batch` n x n problems stacked in `a`, one block each
-        (x_decomp/rr_batch.mojo): w batch x n ascending, v batch x n x n
-        (vectors in columns); the same words `eigh` gives each one."""
+        (`eigh_op_dense`): w batch x n ascending, v batch x n x n (vectors
+        in columns); the same words `eigh` gives each one below TD_MIN_N."""
         if batch <= 0:
             return
         var ctx = xd_ctx()
         var da = _up(ctx, a, batch * n * n)
         var dw = ctx.enqueue_create_buffer[DType.float32](batch * n)
         var dvo = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
-        DevExec._rr_batch_on(ctx, da, batch, n, dw, dvo)
+        var status = DevExec._eigh_batch_enq(ctx, da, batch, n, dw, dvo)
         _down(ctx, dw, w, batch * n)
         _down(ctx, dvo, v, batch * n * n)
+        var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
         ctx.synchronize()
         _ = da^
         _ = dw^
         _ = dvo^
+        _ = status^
         _ = ctx^
+        DevExec.eigh_status_check(hs, n)
 
     @staticmethod
     def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
@@ -3404,7 +3168,7 @@ struct DevExec(Exec):
             )
         var dw = ctx.enqueue_create_buffer[DType.float32](max(n * nn, 1))
         var dv = ctx.enqueue_create_buffer[DType.float32](max(nn2, 1))
-        DevExec._rr_batch_on(ctx, dg, n, nn, dw, dv)
+        DevExec._eigh_batch_on(ctx, dg, n, nn, dw, dv)
         if method == 0:
             ctx.enqueue_function[ltsa_kernel](
                 _p(dv), _p(di), _p(db), Int32(n), Int32(nn), Int32(nc), grid_dim=_blocks(nn2), block_dim=TPB
@@ -3424,7 +3188,7 @@ struct DevExec(Exec):
                     _p(dq), _p(dc), Int32(n), Int32(nn), Int32(nc), grid_dim=_blocks(nn2), block_dim=TPB
                 )
                 var dw2 = ctx.enqueue_create_buffer[DType.float32](max(n * nn, 1))
-                DevExec._rr_batch_on(ctx, dc, n, nn, dw2, dvc)
+                DevExec._eigh_batch_on(ctx, dc, n, nn, dw2, dvc)
                 _ = dc^
                 _ = dw2^
             ctx.enqueue_function[hessian_kernel](
@@ -3505,9 +3269,10 @@ struct DevExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        """Two passes of: R of the matrix (`qr_factor` on a device copy, as
-        `device_qr_r`), the rank guard on the host, then A R^-1 by rows
-        (`trsm_kernel`); `orth_on_device`. One upload, one download."""
+        """`orth_on_device`: under IDENTICAL one blocked TSQR pass with the
+        rank-guarded selection (RSVD_IDN_TSQR_ORTHO) for the shapes the TSQR
+        takes; otherwise two passes of R (`qr_factor`), the rank guard on the
+        device and A R^-1 by rows (`trsm_kernel`). One upload, one download."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * l)
         orth_on_device(ctx, da, m, l)
@@ -3562,12 +3327,91 @@ struct DevExec(Exec):
         QR): s (n) and v (n x n) out to host memory, every launch waited for.
         `svd_cells` and the resident entry (x_decomp/resident.mojo
         `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
+        comptime if XD_FAST_SVD_ONE_BLOCK:
+            DevExec._svd_on_op(ctx, da, m, n, s, v)
+            return
+        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec._svd_rounds(ctx, da, m, n, qr_cells, s_buf, vt)
+        var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        _down(ctx, s_buf, s, n)
+        _down(ctx, v_buf, v, n * n)
+        ctx.synchronize()
+        # a NaN left is a launch cut short (or a NaN input): refused (the
+        # test runs on the device copy, lane cpu3-core)
+        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
+        if t_nan >= 0:
+            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
+                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        _ = vt^
+        _ = v_buf^
+        _ = s_buf^
+
+    @staticmethod
+    def svd_desc_into(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, qr_cells: Int,
+        mut s_out: DeviceBuffer[DType.float32], mut vt_out: DeviceBuffer[DType.float32],
+    ) raises:
+        """`_svd_on`'s solve (the round launches, `_svd_rounds`) of the tall
+        device matrix in `da` (m x n, consumed) with the outputs left on the
+        device in the descending order every caller sorts into: s_out (n,
+        descending, ties in index order) and vt_out (n x n, row a the right
+        singular vector of s_out[a]), by `svd_op_tall`'s order kernels
+        (`so_desc_rank_kernel`, `so_desc_commit_kernel`: `svd_order`'s
+        words). A NaN singular value raises (one wait, `_svd_on`'s test).
+
+        Lane perf-decomp-eigh (2026-11-13): the resident kit's SVD
+        (x_decomp/kit_device.mojo `DKit.svd`; FactorAnalysis EM every
+        iteration, LLE's subspace iteration, PLS) ran `svd_op_tall`, the
+        Jacobi of R in ONE block, by default since lane n9b-device-svd-qr
+        (2026-11-09), while that route is the owed B arm
+        MOJOLEARN_XD_FAST_SVD_ONE_BLOCK of `_svd_on`. Measured against
+        0.8.66: factor-analysis/istella fit NVIDIA 6525 -> 15992 ms (2.45x),
+        AMD 4143 -> 19733 ms (4.76x). This is 0.8.66's solve (round
+        launches over the whole grid) with n9b's resident order."""
+        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        DevExec._svd_rounds(ctx, da, m, n, qr_cells, s_buf, vt)
+        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
+        if t_nan >= 0:
+            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
+                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        var gate = step_gate_open_word(ctx)
+        var gp = I32Ptr(unsafe_from_address=Int(gate.unsafe_ptr()))
+        var pos = ctx.enqueue_create_buffer[DType.int32](n)
+        var bad = ctx.enqueue_create_buffer[DType.int32](1)
+        enqueue_fill(ctx, bad, Int32(0))
+        var pp = I32Ptr(unsafe_from_address=Int(pos.unsafe_ptr()))
+        var pb = I32Ptr(unsafe_from_address=Int(bad.unsafe_ptr()))
+        ctx.enqueue_function[so_desc_rank_kernel](
+            gp, _p(s_buf), pp, pb, Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        )
+        ctx.enqueue_function[so_desc_commit_kernel](
+            gp, _p(s_buf), _p(vt), pp, pb, _p(s_out), _p(vt_out), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        _ = gate^
+        _ = pos^
+        _ = bad^
+        _ = s_buf^
+        _ = vt^
+
+    @staticmethod
+    def _svd_rounds(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, qr_cells: Int,
+        mut s_buf: DeviceBuffer[DType.float32], mut vt: DeviceBuffer[DType.float32],
+    ) raises:
+        """The solve `_svd_on` and `svd_desc_into` share, on the device matrix
+        in `da` (m x n, overwritten by the QR): the range scale, the bounded
+        QR, the round-robin one-sided Jacobi of R^T by round launches (a
+        wait every XD_SVD_GROUP sweeps for the convergence word), the
+        norms and the unscale. On return (in stream order) s_buf (n) holds
+        the singular values in the Jacobi's column order and vt (n x n) the
+        right singular vectors in its ROWS. An unconverged solve raises.
+        (Lane perf-decomp-eigh: `_svd_on`'s body, split out unchanged.)"""
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         var mm = n + (n % 2)
         var h = mm // 2
         # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
@@ -3623,26 +3467,48 @@ struct DevExec(Exec):
             )
         ctx.enqueue_function[rs_norm_kernel](_p(rt), _p(s_buf), Int32(n), grid_dim=n, block_dim=RS_TPB)
         enqueue_es_unscale(ctx, _p(s_buf), dfac, 1, n)
-        ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-        _down(ctx, s_buf, s, n)
-        _down(ctx, v_buf, v, n * n)
-        ctx.synchronize()
-        # a NaN left is a launch cut short (or a NaN input): refused (the
-        # test runs on the device copy, lane cpu3-core)
-        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
-        if t_nan >= 0:
-            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
-                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
         _ = dfac^
         _ = scratch^
         _ = r_buf^
         _ = rt^
-        _ = vt^
-        _ = v_buf^
-        _ = s_buf^
         _ = flags^
         _ = dfirst^
         _ = hfirst^
+
+    @staticmethod
+    def _svd_on_op(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr
+    ) raises:
+        """`_svd_on` through the executor op `svd_op_tall` (the A/B arm of
+        -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK): s (n, descending) and v (n x n,
+        column a the right singular vector of s[a], the layout `_svd_on`
+        writes) out to host memory, one wait. The op's status word carries
+        both refusals of `_svd_on` (no convergence in X_DECOMP_SVD_SWEEPS
+        sweeps, a NaN value)."""
+        var gate = step_gate_open_word(ctx)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var status = ctx.enqueue_create_buffer[DType.int32](1)
+        var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
+        svd_op_tall(ctx, gate, da, ds, dvt, status, m, n)
+        ctx.enqueue_function[pj_transpose_kernel](_p(dvt), _p(dv), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        _down(ctx, ds, s, n)
+        _down(ctx, dv, v, n * n)
+        ctx.enqueue_copy(dst_buf=hstatus, src_buf=status)
+        ctx.synchronize()
+        if Int(hstatus.unsafe_ptr().unsafe_load(0)) != 0:
+            raise Error(
+                "x_decomp svd: the one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)
+                + " sweeps at n_cols = " + String(n) + ", or a singular value is NaN (a device launch cut short, or a"
+                " NaN input). An unconverged decomposition is not returned as if it were one; see DEVIATION 590."
+            )
+        _ = gate^
+        _ = ds^
+        _ = dvt^
+        _ = dv^
+        _ = status^
+        _ = hstatus^
 
     @staticmethod
     def lasso_rows(
@@ -3659,10 +3525,9 @@ struct DevExec(Exec):
         comptime if DECOMP_FAST_LASSO_GRP:
             # lane/apple-fast-gap-clus3: a 32-thread block per row (x_decomp/lasso_grp.mojo)
             grp = n > 0 and k >= 1 and k <= LG_MAXK
-        if C28_BUCKET_SOLVES:
-            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(dh), _p(di), n, k, 0, max_iter,
-                                      1 if positive else 0, alpha, tol)
-        elif grp:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        if grp:
             ctx.enqueue_function[lasso_grp_kernel](
                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
                 alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LG_TPB,
@@ -3746,13 +3611,12 @@ struct DevExec(Exec):
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        if C28_BUCKET_SOLVES:
-            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 1, m, nnz, Float32(0), Float32(0))
-        else:
-            ctx.enqueue_function[lars_rows_kernel](
-                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
-                Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
-            )
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        ctx.enqueue_function[lars_rows_kernel](
+            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+            Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+        )
         _down(ctx, dw, w, n * k)
         _down(ctx, dn, na, n)
         ctx.synchronize()
@@ -3772,6 +3636,13 @@ struct DevExec(Exec):
         var block = False
         comptime if DECOMP_FAST_OMP_BLOCK:
             block = n > 0 and omp_block_fits(k, nnz)
+        # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (unmeasured Apple FAST opt-in arm, EXP:449 verdict owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 6aa22d61f9.
+        # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+        # TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (opt-in arm: one OMP block per row; EXP:449 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0d75c7cca2.
+        # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+        # (Sweep 2026-11-15: x_decomp/omp_block.mojo (DECOMP_FAST_OMP_BLOCK, omp_block_fits, omp_block_kernel), with no importer left, deleted; restore it from 7c6df8f9f7 with the patch.)
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
@@ -3783,9 +3654,9 @@ struct DevExec(Exec):
                     dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
                     Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
                 )
-        if C28_BUCKET_SOLVES:
-            launch_classical_code_rows(ctx, _p(dg), _p(dq), _p(dw), _p(ds), _p(dn), n, k, 2, nnz, 0, Float32(0), Float32(0))
-        elif not block:
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d1bf9a2e59.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
+        if not block:
             ctx.enqueue_function[omp_rows_kernel](
                 dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
                 Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
@@ -4023,8 +3894,8 @@ struct DevExec(Exec):
         # cpu3-core: the List staging arm, a host copy loop, is gone; the
         # same buffers and launch, the same words). Merge 2026-10-05: this is
         # FA_FAST_QRR's FAST + Apple upload (lane apple-fast-rec-decomp) taken
-        # in every mode; FA_FAST_QRR stays defined, and its _OFF rollback (the
-        # host List staging) is gone with the staging itself, same R bits.
+        # in every mode; its _OFF rollback (the host List staging) is gone with
+        # the staging itself, same R bits (FA_FAST_QRR deleted 2026-11-15).
         _validate_shape(m, n, "qr")
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * n)
@@ -4050,11 +3921,15 @@ struct DevExec(Exec):
     @staticmethod
     def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
         """The blocked TSQR on the device (x_decomp/tsqr_device.mojo)."""
+        # lane ne2-i-j (2026-11-07): the QR family's plan, read once here
+        # (x_decomp/tsqr_multi_gpu.mojo; one device unless a parallel driver
+        # bound a plan, and the same words either way)
+        var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + nrhs
         if nrhs == 0:
             var da = _up(ctx, a, m * n)
-            ts_factor_device(ctx, da, m, n, r, keep)
+            ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         else:
             var ta = _up(ctx, a, m * d)
@@ -4062,14 +3937,14 @@ struct DevExec(Exec):
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
             comptime if IDN_XD_NO_WAIT:
                 # no wait before the factorization: a and b live until its own
-                ts_factor_device(ctx, da, m, n, r, keep)
+                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
                 _ = ta^
                 _ = tb^
             else:
                 ctx.synchronize()
                 _ = ta^
                 _ = tb^
-                ts_factor_device(ctx, da, m, n, r, keep)
+                ts_factor_dispatch(plan, ctx, da, m, n, r, keep)
             _ = da^
         ctx.synchronize()
         _ = ctx^
@@ -4084,10 +3959,43 @@ struct DevExec(Exec):
         (`center_cell`, inside the pack) and the blocked TSQR of
         [X - mu | y - ymean] all read the resident buffers. The words of
         lm_col_sums + lm_center + tsqr_factor, which crossed X four times."""
+        # lane ne2-i-j (2026-11-07): the QR family's plan, read once here;
+        # under `fit_gram_estimator(..., devices=...)` the TSQR's row blocks
+        # run over its devices (x_decomp/tsqr_multi_gpu.mojo, the same
+        # words), one device otherwise.
+        var plan = tsqr_plan_current()
         var ctx = xd_ctx()
         var n = d + 1
         var ta = _up(ctx, a, m * d)
         var tb = _up(ctx, b, m)
+        # The finite test of the words this entry uploads (lane
+        # fable-perf-classical-0855, 2026-11-13; core/admitted_finite_status.mojo):
+        # two status words on the stream, read with the factor's one drain.
+        # Before, LinearRegression's door scanned X on the host (its one
+        # new pass over X against 0.8.55, whose as_f32_c scanned nothing):
+        # ols/taxi fit NVIDIA L40S 16.5 -> 18.9 ms, AMD 13.2 -> 14.2 ms
+        # (candidate 4c2340386abc vs the 0.8.55 column, 2026-11-13,
+        # ~/mojolearn-evidence/measure-candidate/*-4c2340386abc). The door
+        # defers X to this entry and refuses in scikit-learn's wording
+        # (bindings/admitted_input_run.mojo admitted_finite_entry_refuse).
+        var dstat = ctx.enqueue_create_buffer[DType.int32](2)
+        # lane fb16-audit (2026-11-18): ONE fill of both words, then the two
+        # tests (the d652a4b0a1 form). `enqueue_finite_word` fills its own
+        # word, so two calls cost two fills here, one launch more per fit
+        # than before. Under MOJOLEARN_ADMIT_FAST_FINITE_VERDICT each word is
+        # one single-block launch with no fill, so the helper stays there.
+        comptime if ADMIT_FAST_FINITE_VERDICT:
+            enqueue_finite_word(ctx, ta.unsafe_ptr(), m * d, dstat, 0)
+            enqueue_finite_word(ctx, tb.unsafe_ptr(), m, dstat, 1)
+        else:
+            enqueue_fill(ctx, dstat, Int32(0))
+            if m * d > 0:
+                enqueue_finite_status(ctx, ta.unsafe_ptr(), m * d, dstat.unsafe_ptr(), 0)
+            if m > 0:
+                enqueue_finite_status(ctx, tb.unsafe_ptr(), m, dstat.unsafe_ptr(), 1)
+        # The words come down with the means below (pageable host words; the
+        # factor's final synchronize lands them): no pinned buffer per call.
+        var hstat = List[Int32](length=2, fill=0)
         var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_pair_buf(ctx, ta, tb, d_sx, d_sy, m, d)
@@ -4099,10 +4007,39 @@ struct DevExec(Exec):
         # the fit's outputs: mu (float32) and the y mean (binary64 bits)
         ctx.enqueue_copy(dst_ptr=mu, src_buf=d_mx)
         ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(hstat.unsafe_ptr())),
+                         src_buf=dstat)
+        # This entry's own copies down and waits, counted under
+        # -D MOJOLEARN_STEP_PHASE_TIMERS (core/step_phase.mojo; nothing
+        # otherwise; checks/ols_call_cost_check.mojo). The factor's own
+        # waits (col_sums_buf, ts_factor_finish) are not counted here.
+        step_count_d2h()
+        step_count_d2h()
+        step_count_d2h()
         comptime if TARGET_COLUMN == COLUMN_APPLE:
             ctx.synchronize()
-        ts_factor_device(ctx, da, m, n, r, False)
-        ctx.synchronize()
+            step_count_sync()
+        try:
+            ts_factor_dispatch(plan, ctx, da, m, n, r, False)
+        except factor_error:
+            # A non-finite X or y reaches R as NaN, and the factor's own R
+            # refusal (x_decomp/tsqr_device.mojo ts_factor_device, "R entry
+            # ... is NaN") drains and raises before the status words above
+            # are read: read them now, so a non-finite input refuses with
+            # the admission message first on every column (Apple, NVIDIA,
+            # AMD; lane ols-finite-refusal-apple, 2026-11-13). Only the
+            # refusal path pays this read; a finite fit reads the words once
+            # below, as before. The refusal path drains again before it reads
+            # them: a factor error raised before the factor's own drain.
+            ctx.synchronize()
+            step_count_sync()
+            DevExec.ols_finite_status_check(hstat)
+            raise factor_error^
+        # ts_factor_dispatch's last step synchronizes (R into the host r),
+        # so the status words copied above have landed.
+        DevExec.ols_finite_status_check(hstat)
+        _ = hstat^
+        _ = dstat^
         _ = ta^
         _ = tb^
         _ = d_sx^

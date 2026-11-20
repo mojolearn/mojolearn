@@ -36,7 +36,7 @@ defined and ties only another default).
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G03
@@ -310,12 +310,13 @@ def launch_pw_pack_winner(
 # keep the incumbent), block (0, 0) thread 0 makes the chain's stores
 # (`best_*`, `winners_*`, `score_before`, `split_desc`), and every thread
 # takes the descriptor from its registers. Integer and compare work only;
-# the bins written are the unfused kernel's. `-D
-# MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
+# the bins written are the unfused kernel's.
 # ====================================================================
-comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold, PW_FUSED_LEVEL kept as the constant True for its importers) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at c91aa521d9.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: the always-True PW_FUSED_LEVEL constant was folded into PW_FUSED_SEARCH.)
 # the searcher's fused launch alone, for bisecting
-comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
+comptime PW_FUSED_SEARCH = not is_defined[
     "MOJOLEARN_GBDT_FUSED_PW_OFF"
 ]()
 
@@ -510,6 +511,11 @@ def pw_resolve_pack_bins_kernel(
     var g_bin = UInt32(0)
     var g_score = FLOAT32_MAX
     var g_gain = FLOAT32_MAX
+    # TOMBSTONE: MOJOLEARN_AFT_G03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 65839d0178.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G03.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_SYM_RESOLVE_BLOCK (DELETE-EXPERIMENT, EXP:1303 NEUTRAL alone, never built or timed as its own arm, rule g) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e301d611ef.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_RESOLVE_BLOCK.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     comptime if AFT_G03:
         # G03: preserve the original serial record order, but only lane 0
         # performs it. Broadcast costs one barrier and sixteen shared bytes,

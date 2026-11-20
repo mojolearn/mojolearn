@@ -7,31 +7,33 @@ def read(name):
     return (ROOT / name).read_text()
 
 
-def test_native_closure_includes_shared_numerical_owners_without_cpython():
+def test_native_dependencies_resolve_and_include_shared_numerical_owners():
     seen, failures = audit()
-    assert {'training.samba_ops', 'mamba.impl.mamba_shell_impl', 'core.native_descriptor_call'} <= seen
+    # The Mamba state ops run on the cached block program (lane x5-mamba-on-executor), not the shell.
+    assert {'training.samba_ops', 'mamba.impl.mamba_block_program', 'core.native_descriptor_call'} <= seen
     assert not failures, failures
 
 
 def test_connection_and_hot_execution_remain_separate():
-    provider = read('providers/python/neural_descriptor_pyapi.mojo')
+    provider = read('providers/python/neural_descriptor_pyapi_door.mojo')
     connect = provider.split('def neural_descriptor_connect(')[1].split('def neural_descriptor_cached')[0]
     assert 'PyCapsule_IsValid' in connect and 'PyCapsule_GetPointer' in connect
     assert 'NeuralDescriptorProvider(module, capsule, factory, name^, table[0], operation_count)' in connect
     execute = provider.split('def neural_descriptor_execute(')[1].split('def neural_descriptor_info')[0]
     assert 'with GILReleased(Python())' in execute and '_ = provider' in execute
     assert 'py_call' not in execute and 'getattr' not in execute and 'getenv' not in execute
-    for file in ('bindings/samba_inference_native.mojo', 'bindings/samba_training_native.mojo'):
+    for file in ('bindings/samba_inference_native_door.mojo', 'bindings/samba_training_native_door.mojo'):
         assert 'neural_descriptor_cached' not in read(file)
-    for file in ('bindings/samba_state_native.mojo', 'bindings/causal_lm_construct.mojo'):
+    for file in ('bindings/samba_state_native_door.mojo', 'bindings/causal_lm_construct_door.mojo'):
         assert 'neural_descriptor_cached' in read(file)
 
 
 def test_both_doors_share_numerical_functions_and_original_float_casts():
-    for file, fn in [('bindings/_mojolearn_training.mojo', 'native_primitive_operation'),
-                     ('bindings/_mojolearn_mamba.mojo', 'mamba_state_operation')]:
+    # The Mamba-3 forward/decode-step Python entries (state ops 4 and 5) were deleted by 4d934316ef.
+    for file, fn, ops in [('bindings/_mojolearn_training.mojo', 'native_primitive_operation', range(6)),
+                          ('bindings/_mojolearn_mamba.mojo', 'mamba_state_operation', range(4))]:
         body = read(file)
-        for op in range(6):
+        for op in ops:
             assert f'{fn}({op},' in body
     native = read('training/native_primitive_dispatch.mojo')
     for family in ('embedding', 'rms_norm', 'linear'):
@@ -40,11 +42,14 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
     for op in (2, 3):
         branch = native.split(f'    if op == {op}:')[1].split('    if op ==')[0]
         assert branch.count('Float32(f[0])') == 1
-    assert 'MojoNeuralTrainingContextIdentical' in native
+    assert 'MojolearnNeuralTrainingContextIdenticalV3' in native
     mamba = read('mamba/native_state_dispatch.mojo')
-    assert '_mamba1_run(a, b, l, dm, step, position)' in mamba
-    assert '_mamba2_run(a, b, l, dm, p[tail], Float32(f[0]), Float32(f[1]))' in mamba
-    assert '_mamba3_run(a, b, l, dm, p[tail], p[tail + 1])' in mamba
+    # lane x5-mamba-on-executor: every family runs the block step op on the
+    # cached block program (mamba/impl/mamba_block_program.mojo).
+    # Families 1 and 2 also pass the trailing (False, not step) route words.
+    assert 'mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0), False, not step)' in mamba
+    assert 'mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]), False, not step)' in mamba
+    assert 'mamba_block_call_abi(3, a, b, l, dm, p[tail], p[tail + 1], Float32(0), Float32(0))' in mamba
 
 
 def test_native_descriptors_are_checked_named_private_operations():
@@ -55,7 +60,7 @@ def test_native_descriptors_are_checked_named_private_operations():
         assert f'if op < 0 or op >= {count}:' in body
         assert 'if result == 0:' in body
         assert 'native_descriptor_report(problem, context, sink)' in body
-    for file in ('providers/python/neural_descriptor_pyapi.mojo', 'core/native_descriptor_call.mojo'):
+    for file in ('providers/python/neural_descriptor_pyapi_door.mojo', 'core/native_descriptor_call.mojo'):
         body = read(file)
         for forbidden in ('PyCFunction_GetFunction', 'PyObject_Vectorcall', 'PyObject_Call'):
             assert forbidden not in body
@@ -74,10 +79,15 @@ def test_coverage_lists_actual_twenty_nine_plan_rows_and_pending_runtime():
 
 def test_result_and_error_share_stable_caller_owned_storage():
     caller = read('core/native_descriptor_call.mojo')
-    assert 'List[NativeCallOutput]()' in caller
-    assert 'Int(MutPointer(to=output[0].result))' in caller
-    assert 'Int(MutPointer(to=output[0].error))' in caller
-    assert 'return output[0].result' in caller
+    # The output words live on the caller's frame (lane entry-table-zero-alloc; the heap List
+    # arm ENTRY_TABLE_HEAP_OUTPUT was folded off by 18a80bdd0b) and are handed to the span call,
+    # which writes result and error through that one value.
+    assert 'var output = NativeCallOutput()' in caller and 'List[NativeCallOutput]' not in caller
+    assert 'Int(floats.unsafe_ptr()), len(floats), output)' in caller
+    assert 'mut output: NativeCallOutput' in caller
+    assert 'Int(MutPointer(to=output.result))' in caller
+    assert 'Int(MutPointer(to=output.error))' in caller
+    assert 'return output.result' in caller
     assert 'Array[Int, 1]' not in caller
 
 
@@ -99,8 +109,10 @@ def test_public_probes_strictly_audit_candidate_calls_and_retain_reports():
         assert "status='failed', traceback=traceback.format_exc(), runtime_audits=RUNTIME_AUDITS" in body
     assert 'if arm == 1 and t in (0, ids.shape[1] - 1):' in samba
     # Independent callback controls stay present and outside strict audit.
-    assert 'baseline.forward(ids, baseline.allocate_state(1, 12))' in causal
-    assert 'assert len(calls) == n' in causal
+    # The default build never calls the by-name legacy entry (lane
+    # flag-native-dispatch-gate: dispatch is a build constant, no env arm).
+    assert "assert not calls, 'default build called the by-name legacy primitive entry'" in causal
+    assert "MOJOLEARN_NEURAL_NATIVE_DISPATCH'] =" not in causal and "MOJOLEARN_NEURAL_NATIVE_DISPATCH'] =" not in samba
     assert 'assert not called' in samba
     runner = read('tools/verify_neural_provider.py')
     assert "result['runtime_audits'] = getattr(module, 'RUNTIME_AUDITS', [])" in runner

@@ -114,8 +114,9 @@ depth. The same contract every shared-Int32 arm in this package rides on.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -136,6 +137,9 @@ comptime QH_BINS = 256
 comptime QH_STATS = 2
 #: DEV 1913: features per block from the COLUMN's shared budget
 #: (`quantized_hist_group_features_for` -- 16/24/32, never 227 KB).
+# TOMBSTONE: MOJOLEARN_AFCL_T02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 7b43f615be.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T02.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime QH_GROUP_FEATURES = (
     8 if AFCL_T02 else quantized_hist_group_features_for[TARGET_COLUMN]()
 )
@@ -144,6 +148,9 @@ comptime QH_GROUP_WORDS = QH_GROUP_FEATURES // 4
 #: Int32 cells of the ONE per-block shared histogram.
 comptime QH_SMEM = QH_GROUP_FEATURES * QH_BINS * QH_STATS
 #: DEV 1914: XGBoost `kMinItemsPerBlock` (`histogram.cu:405-419`).
+# TOMBSTONE: MOJOLEARN_AFCL_T01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at f04baade37.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T01.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime QH_MIN_ITEMS_PER_BLOCK = 4096 if AFCL_T01 else 8192
 #: DEV 1914: LightGBM `min_grid_dim_y_ = 160`
 #: (`cuda_histogram_constructor.hpp:152`); read by the launcher.
@@ -183,8 +190,7 @@ def quantize_pair_kernel[ridx_stats: Bool = False](
         var u = hist2_dither(pos)
         var src = pos
 
-        @parameter
-        if ridx_stats:
+        comptime if ridx_stats:
             # DEVIATION 1902 x 1911: the stat plane is stationary, so the
             # VALUE is gathered through the row id at this position while
             # the dither stays keyed on the storage position -- the same
@@ -193,10 +199,10 @@ def quantize_pair_kernel[ridx_stats: Bool = False](
             # pair the permuted plane would have held here and the
             # positional load in `qh_hist_gather_kernel` stays correct
             # unchanged.
-            src = Int(ldg(indices + pos))
-        var q1 = hist2_quantize(ldg(stats + src), fixed_scale, u)
+            src = Int((indices + pos).unsafe_load[invariant=True]())
+        var q1 = hist2_quantize((stats + src).unsafe_load[invariant=True](), fixed_scale, u)
         var q2 = hist2_quantize(
-            ldg(stats + (stat_line_size + src)), fixed_scale, u
+            (stats + (stat_line_size + src)).unsafe_load[invariant=True](), fixed_scale, u
         )
         var pair = SIMD[DType.int32, 2](q1, q2)
         q_stats.unsafe_store(pos, bitcast[DType.uint64, 1](pair)[0])
@@ -225,7 +231,7 @@ def qh_add_row(
     never reads -- `bin < folds` bounds every flush, the ladder's own drop.
     """
     for w in range(words):
-        var ci = ldg(bins_p + (w * bins_line_size + row))
+        var ci = (bins_p + (w * bins_line_size + row)).unsafe_load[invariant=True]()
         comptime for i in range(4):
             var j = (tid + i) & 3
             var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
@@ -361,7 +367,7 @@ def qh_hist_kernel(
     var stride = active_block_count * QH_BLOCK
     var pend = p_offset + p_size
     while pos < pend:
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         qh_add_row(pair, words, pos, bins_line_size, bins_p, tid, smem)
         pos += stride
 
@@ -439,8 +445,8 @@ def qh_hist_gather_kernel(
     var stride = active_block_count * QH_BLOCK
     var pend = p_offset + p_size
     while pos < pend:
-        var row = Int(ldg(indices + pos))
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        var row = Int((indices + pos).unsafe_load[invariant=True]())
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         qh_add_row(pair, words, row, bins_line_size, bins_p, tid, smem)
         pos += stride
 
@@ -492,7 +498,7 @@ def qh_write_hist_kernel(
         dst_histogram.unsafe_store(dst, val)
 
 
-# ---- QH_MODE_SKIP (FAST, Apple; default, off `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`)
+# ---- QH_MODE_SKIP (FAST, Apple; default)
 # Lane apple-fast-dwgap. A low-cardinality feature sends most of a block's
 # rows to ONE bin, so every lane's two threadgroup atomics land on the same
 # two cells and serialize (taxi: store_fwd, mta_tax, airport_fee,
@@ -534,7 +540,7 @@ def qh_add_row_skip(
     per thread so the index stays comptime (registers, no local array)."""
     comptime for w in range(QH_GROUP_WORDS):
         if w < words:
-            var ci = ldg(bins_p + (w * bins_line_size + row))
+            var ci = (bins_p + (w * bins_line_size + row)).unsafe_load[invariant=True]()
             comptime for i in range(4):
                 var j = (tid + i) & 3
                 var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
@@ -629,8 +635,8 @@ def qh_hist_skip_kernel[gather: Bool](
     while pos < pend:
         var row = pos
         comptime if gather:
-            row = Int(ldg(indices + pos))
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+            row = Int((indices + pos).unsafe_load[invariant=True]())
+        var pair = bitcast[DType.int32, 2]((q_stats + pos).unsafe_load[invariant=True]())
         tot += pair
         qh_add_row_skip(
             pair, words, row, bins_line_size, bins_p, rot_skip, smem, tid

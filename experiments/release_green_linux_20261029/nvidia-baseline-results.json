@@ -1,0 +1,40 @@
+{
+  "source_commit": "47508cfcd96771eee86b115739b2a83ddb0e43aa",
+  "source_archive": {
+    "key": "measurements/release-green-20261029/apple47508-install-evidence.tgz",
+    "sha256": "488190968daa12bb7c5efd4d707417ddb1dbd820ef014f16d064e49435de66f8",
+    "member": "source47508.tar",
+    "member_sha256": "c6cfd3b597dcb03fcc2b3332539ec40b401914b8913e7811a91ec674930a8858",
+    "receipt": "/Users/andrewhendel/mojolearn-evidence/release-green-20261029/source-retention-reference.json"
+  },
+  "baseline_artifact": {
+    "key": "measurements/linux-adapter-build-bc11389-20261029/linux-bc11389-with-adapters.tgz",
+    "sha256": "c5b0ee2bee77ebb30c13d3113a3036bab4b264322a627ce6a9d4ce74e4d8fb83"
+  },
+  "scope": "Retained baseline installed runtime and bounded harness smokes only; final repaired host groups pending. Not current release identity or performance admission.",
+  "cuda_route": "passed",
+  "measurement_smokes": {
+    "gemm": "passed",
+    "transformer-decode": "passed",
+    "mamba1-decode": "passed after missing Torch fixture dependency installed; original preserved"
+  },
+  "adapter_smokes": {
+    "torch": "passed after missing ONNX fixture dependency installed; original preserved",
+    "max": "passed, MAX26.5.0 check reused passing Torch training outputs"
+  },
+  "full_release_identity": "pending",
+  "first_archive": "/Users/andrewhendel/mojolearn-evidence/box-archive/green475-nv3-20261030T0234Z/r2-readback.json",
+  "rental_status": "deleted HTTP204, verified GET404 and absent from pod listing",
+  "final_archive": {
+    "local": "/Users/andrewhendel/mojolearn-evidence/box-archive/green475-nv3-20261030T0242Z",
+    "key": "measurements/box-archive/green475-nv3/green475-nv3-20261030T0242Z.tgz",
+    "bytes": 1019398,
+    "sha256": "c35ec2ec229d574faff71a651284e0b5a1630fda141c2f4da275f871d7445cff",
+    "get_status": 200,
+    "verified": true,
+    "files": 104,
+    "final_smoke_summaries_present": true
+  },
+  "pod_id": "r7xf8si6udvao0",
+  "teardown_evidence": "/Users/andrewhendel/mojolearn-evidence/release-green-linux-20261029/nvidia3-down.log"
+}

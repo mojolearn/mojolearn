@@ -1,0 +1,138 @@
+{
+  "status": "authored, uncompiled and unrun",
+  "cpu_cases": 15,
+  "gpu_cases": 14,
+  "cpu_entry": "checks/native_tests/gpc_score_cpu.mojo",
+  "cpu_import": "checks.native_tests.gpc_score_cpu_suite.run_checks",
+  "gpu_entry": "checks/native_tests/gpc_score_gpu.mojo",
+  "gpu_import": "checks.native_tests.gpc_score_gpu_suite.run_checks",
+  "dependencies": [
+    "76bba34249",
+    "6f5afa90c8",
+    "b8acfbcfdb",
+    "b9b0edfe7f",
+    "4d8e2c64b3",
+    "6ed4b3b075",
+    "4256e469ae"
+  ],
+  "skip_duplicate_root_repair": "0ef98ae676",
+  "fixture_groups": [
+    {
+      "name": "empty native observed-label union",
+      "cpu": 1,
+      "gpu": 0
+    },
+    {
+      "name": "six prescribed integer/text/bigint label graphs through actual host encoder and COUNT",
+      "cpu": 12,
+      "gpu": 12,
+      "range_flags": [
+        false,
+        true
+      ],
+      "oracle": "explicit sorted union codes and hand-counted fractions",
+      "tolerance": 1e-12
+    },
+    {
+      "name": "original 48x3 binary GP fit/predict plus native score composition",
+      "cpu": 2,
+      "gpu": 2,
+      "range_flags": [
+        false,
+        true
+      ],
+      "oracle": "parallel elementwise comparison against original labels, independent of COUNT grouping",
+      "tolerance": 1e-06,
+      "tolerance_status": "supplementary composition tolerance, not a changed original numerical assertion"
+    }
+  ],
+  "original_workload": {
+    "path": "python/mojolearn/tests/test_gpc_surface.py",
+    "functions": [
+      "_data",
+      "test_binary_and_multiclass_fit_predict"
+    ],
+    "rows": 48,
+    "features": 3,
+    "query_rows": 10,
+    "seed": 0,
+    "kernel": "Constant(1) * RBF(1)",
+    "max_iter_predict": 100,
+    "new_fit_algorithms": false,
+    "inputs": [
+      {
+        "path": "checks/native_tests/fixtures/gp/classifier48-source.f32",
+        "bytes": 576,
+        "sha256": "02c5b1f021e4bfa6928cab4f7848e1b8153f128a2e9aed90b50795a0a8eb29d3",
+        "unchanged_from_accepted_base": true
+      },
+      {
+        "path": "checks/native_tests/fixtures/gp/classifier48-query.f32",
+        "bytes": 120,
+        "sha256": "8137edbac0ddb3ada974fdcaa0f4c3ba26f30d7652fac6a1331e7583618dca7e",
+        "unchanged_from_accepted_base": true
+      },
+      {
+        "path": "checks/native_tests/fixtures/gp/classifier48-labels2.i32",
+        "bytes": 192,
+        "sha256": "c3e297bfd2a4fc0b86e322a1d20c0914dd7fe1e91d8e6e6f548f41b0457b9f94",
+        "unchanged_from_accepted_base": true
+      }
+    ]
+  },
+  "python_split": {
+    "definitions_removed": 0,
+    "assertions_removed": 0,
+    "unchanged": "All existing Python tests, including new GP class identity/refusal seams. GPC is not a row in test_estimator_score_p2 CLASSIFIERS; no pre-existing GPC numerical score assertion is claimed moved.",
+    "supplementary": "Actual COUNT composition and native ownership coverage; original workload reused without deleting prior fit/query checks.",
+    "boundary_cases": "test_gp_score_native_boundary.py keeps duplicate/rebound public classes, arbitrary Python integer/NumPy scalar pins, unused classes, row-count and float-label refusal order."
+  },
+  "owner_cases": [
+    "source integer mutation after encoding",
+    "text/magnitude owners die only after union remapping",
+    "local class encoders die before metric execution",
+    "input codes mutated and destroyed after arena snapshot",
+    "whole native program move preserves allocation identity",
+    "fit/query guarded outputs retained through calls"
+  ],
+  "resource_plan": {
+    "cpu": "all 15 independent cases dispatched to the existing full shared host pool",
+    "gpu": "14 ordered graphs on one physical GPU; numerical kernels retain their parallel work",
+    "concurrency_claim": false
+  },
+  "compile_flags": {
+    "both": [
+      "MOJOLEARN_NUMERIC_IDENTICAL=1"
+    ],
+    "cpu_extra": [
+      "MOJOLEARN_COLUMN_CPU=1"
+    ]
+  },
+  "product_edits": [],
+  "affected_binding_roots": [
+    "bindings/_mojolearn_runtime_byte_trainer_host.mojo",
+    "bindings/_mojolearn_runtime_classical_host.mojo",
+    "bindings/_mojolearn_runtime_decomp_host.mojo",
+    "bindings/_mojolearn_runtime_family_host.mojo",
+    "bindings/_mojolearn_runtime_linear_host.mojo",
+    "bindings/_mojolearn_runtime_manifold_host.mojo",
+    "bindings/_mojolearn_runtime_model_selection_host.mojo",
+    "bindings/_mojolearn_runtime_parallel_host.mojo",
+    "bindings/_mojolearn_runtime_prep_host.mojo",
+    "bindings/_mojolearn_runtime_trees_host.mojo",
+    "bindings/_mojolearn_runtime_xseq_host.mojo"
+  ],
+  "source_audit": {
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/gpr-score-native-tests/gpc-role-audit.json",
+    "additional_roles": 8,
+    "combined_score_roles": 15,
+    "native_closure": 36,
+    "python_imports": 0,
+    "numerical_unchanged": 130,
+    "execution_claim": false
+  },
+  "build": null,
+  "runtime": null,
+  "identity": null,
+  "performance": null
+}

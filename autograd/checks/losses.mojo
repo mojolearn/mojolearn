@@ -12,7 +12,7 @@ from autograd.losses import (
     REDUCTION_SUM, loss_scratch, release_loss_scratch, loss_value_into,
 )
 from autograd.loss_ops import (
-    LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB, LS_BINARY_LOG_PROB, LS_CROSS_ENTROPY,
+    LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY,
 )
 from autograd.metrics import (
     accuracy, accuracy_from_scores, log_loss, mean_squared_error, root_mean_squared_error,
@@ -45,17 +45,7 @@ def _term64(kind: Int, p: Float64, y: Float64, delta: Float64) -> Float64:
         return delta * (abs(d) - 0.5 * delta)
     if kind == LS_BCE_LOGITS:
         return max(p, 0.0) - p * y + log1p(exp(-abs(p)))
-    if kind == LS_LOG_PROB:
-        if y == 0.0:
-            return 0.0
-        return -y * log(_clip64(p))
-    var pc = _clip64(p)
-    var acc = 0.0
-    if y != 0.0:
-        acc += y * log(pc)
-    if 1.0 - y != 0.0:
-        acc += (1.0 - y) * log(1.0 - pc)
-    return -acc
+    return 0.0
 
 
 def _sign64(x: Float64) -> Float64:
@@ -392,26 +382,7 @@ def _mse_seed_report[E: Exec](mut ex: E, mut tape: Tape, pred: List[Float32], ta
     ex.free(sq)
 
 
-def _probability_terms[E: Exec](mut ex: E) raises:
-    """The MLP trainer's clipped-probability kinds (forward only), with
-    probabilities at and beyond the clip bounds."""
-    var p: List[Float32] = [0.0, 0.25, 1.0, 0.6, 0.999999999, 0.1]
-    var y: List[Float32] = [1.0, 0.0, 0.0, 1.0, 1.0, 0.5]
-    var dp = _upload(ex, p)
-    var dy = _upload(ex, y)
-    var ws = loss_scratch(ex, len(p))
-    var word = ex.alloc(1)
-    for kind in [LS_LOG_PROB, LS_BINARY_LOG_PROB]:
-        var total = 0.0
-        for i in range(len(p)):
-            total += _term64(kind, Float64(p[i]), Float64(y[i]), 1.0)
-        loss_value_into(ex, kind, dp, dy, 2, 3, REDUCTION_SUM, word, ws)
-        var name = String("log_prob/sum") if kind == LS_LOG_PROB else String("binary_log_prob/sum")
-        check_values(name, _download(ex, word, 1), [_f32(total)])
-    release_loss_scratch(ex, ws)
-    ex.free(word)
-    ex.free(dp)
-    ex.free(dy)
+# TOMBSTONE: _probability_terms (the LS_LOG_PROB / LS_BINARY_LOG_PROB checks; the kinds are deleted) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
 
 
 # ------------------------------------------------------------------ metrics
@@ -572,7 +543,6 @@ def run_loss_checks[E: Exec](mut ex: E) raises:
     cases += _wide_row_cases(ex, tape)
     _mse_matches_tape(ex, tape, pred, target)
     _mse_seed_report(ex, tape, pred, target)
-    _probability_terms(ex)
     _metric_checks(ex)
     tape.release(ex)
     print("PASS loss_checks cases=" + String(cases))

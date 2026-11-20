@@ -265,25 +265,33 @@ _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-l
 
 
 @lane("x-prep-da-solvers")
+@floor(rows=(4097, "4097 rows is three XB = 2048 blocks of the tiled discriminant Gram and class covariances "
+                  "(x_prep/gram_blocked.mojo:29, n > XB is the blocked order) for every LDA/QDA solver arm; cut"
+                  " from 20000 on 2026-11-05, lane/slow-verification-lanes, to bring the lane near 5 s"))
 def _(ml, X, yc, yr, Xh=None):
     """LinearDiscriminantAnalysis solver 'lsqr' / 'eigen' with shrinkage None,
     'auto' (Ledoit-Wolf) and a constant, store_covariance; QDA solver 'eigen'
     with shrinkage and store_covariance."""
-    y3 = _prep_three_class(X, yr)
+    # three XB = 2048 row blocks (x_prep/blocked.mojo:30), the last one ragged, so the
+    # blocked partials and their ordered fold still run (2026-11-05, lane/slow-verification-lanes;
+    # was the whole 20000-row fixture)
+    rows = 4500
+    Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    y3 = _prep_three_class(Z, yr)
     parts = {}
     for j, kw in enumerate((dict(solver="lsqr"), dict(solver="lsqr", shrinkage="auto"),
                             dict(solver="eigen", shrinkage=0.25), dict(solver="svd", store_covariance=True))):
-        m = ml.LinearDiscriminantAnalysis(**kw).fit(X, y3)
-        parts[f"lda{j}"] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(X[:256]))
+        m = ml.LinearDiscriminantAnalysis(**kw).fit(Z, y3)
+        parts[f"lda{j}"] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(Z[:256]))
     # (the eigen / QDA arms take a constant shrinkage: the dupes fixture's classes are
     # singular, and 'auto' can land within an ulp of the reference's refusal)
-    me = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.5).fit(X, yc)
-    parts["eigen_binary"] = _h(me.coef_, me.explained_variance_ratio_, me.transform(X[:256]))
+    me = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.5).fit(Z, yc)
+    parts["eigen_binary"] = _h(me.coef_, me.explained_variance_ratio_, me.transform(Z[:256]))
     for j, kw in enumerate((dict(solver="eigen", shrinkage=0.3, store_covariance=True),
                             dict(solver="svd", reg_param=0.05, store_covariance=True))):
-        q = ml.QuadraticDiscriminantAnalysis(**kw).fit(X, y3)
-        parts[f"qda{j}"] = _h(*q.covariance_, q.predict_proba(X[:256]))
-    m = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.25).fit(X, y3)
+        q = ml.QuadraticDiscriminantAnalysis(**kw).fit(Z, y3)
+        parts[f"qda{j}"] = _h(*q.covariance_, q.predict_proba(Z[:256]))
+    m = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.25).fit(Z, y3)
     return _fit(parts, m, lambda e: (e.predict_proba(Xh[:256]), e.transform(Xh[:256])))
 
 
@@ -291,18 +299,27 @@ _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-d
 
 
 @lane("x-prep-nb-weights")
+@floor(rows=(4097, "4097 rows keeps the weighted naive Bayes class sums in three XB = 2048 row blocks "
+                  "(x_prep/blocked.mojo:18, the blocked order is for n > XB) for Gaussian, multinomial, "
+                  "complement, Bernoulli and categorical; cut from 20000 on 2026-11-05, lane/slow-verification-"
+                  "lanes"))
 def _(ml, X, yc, yr, Xh=None):
     """sample_weight for every naive Bayes classifier; CategoricalNB min_categories."""
-    y3 = _prep_three_class(X, yr)
-    w = (np.abs(X[:, 0]) * 2 + 0.25).astype(np.float32)
+    # three XB = 2048 row blocks (x_prep/blocked.mojo:30), the last one ragged, so the
+    # blocked partials and their ordered fold still run (2026-11-05, lane/slow-verification-lanes;
+    # was the whole 20000-row fixture)
+    rows = 4500
+    Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    y3 = _prep_three_class(Z, yr)
+    w = (np.abs(Z[:, 0]) * 2 + 0.25).astype(np.float32)
     parts = {}
-    g = ml.GaussianNB().fit(X, y3, sample_weight=w)
-    parts["gnb"] = _h(g.theta_, g.var_, g.class_count_, g.predict_proba(X[:256]))
-    Xa = _prep_abs(X)
+    g = ml.GaussianNB().fit(Z, y3, sample_weight=w)
+    parts["gnb"] = _h(g.theta_, g.var_, g.class_count_, g.predict_proba(Z[:256]))
+    Xa = _prep_abs(Z)
     for nm in ("MultinomialNB", "ComplementNB", "BernoulliNB"):
-        m = getattr(ml, nm)().fit(Xa if nm != "BernoulliNB" else X, y3, sample_weight=w)
+        m = getattr(ml, nm)().fit(Xa if nm != "BernoulliNB" else Z, y3, sample_weight=w)
         parts[nm] = _h(m.feature_count_, m.class_count_, m.feature_log_prob_)
-    Xc = _prep_cat_codes(X)
+    Xc = _prep_cat_codes(Z)
     c = ml.CategoricalNB(min_categories=7).fit(Xc, y3, sample_weight=w)
     parts["cat"] = _h(*c.feature_log_prob_, c.class_count_, c.predict_proba(Xc[:256]))
     return _fit(parts, g, lambda e: (e.predict_proba(Xh[:256]),))
@@ -545,11 +562,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("x-prep-rfe")
+@floor(rows=(4097, "4097 rows keeps every RFE round's LinearDiscriminantAnalysis Gram in three XB = 2048 blocks "
+                  "(x_prep/gram_blocked.mojo:29, blocked for n > XB) while the feature eliminations 16 -> 5 are"
+                  " unchanged; cut from 20000 on 2026-11-05, lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    y3 = _prep_three_class(X, yr)
-    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3).fit(X, y3)
-    parts = dict(ranking=_h(m.ranking_), support=_h(np.array(m.support_)), predict=_h(m.predict(X[:256])),
-                 transform=_h(m.transform(X[:256])))
+    # three XB = 2048 row blocks (x_prep/blocked.mojo:30), the last one ragged, so the
+    # blocked partials and their ordered fold still run (2026-11-05, lane/slow-verification-lanes;
+    # was the whole 20000-row fixture)
+    rows = 4500
+    Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    y3 = _prep_three_class(Z, yr)
+    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3).fit(Z, y3)
+    parts = dict(ranking=_h(m.ranking_), support=_h(np.array(m.support_)), predict=_h(m.predict(Z[:256])),
+                 transform=_h(m.transform(Z[:256])))
     return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 
@@ -557,13 +582,21 @@ _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
 
 
 @lane("x-prep-score-edges")
+@floor(rows=(4097, "4097 rows keeps the f_classif / chi2 / f_regression reductions and the RFE discriminant Gram"
+                  " over three XB = 2048 row blocks (x_prep/blocked.mojo:18) with every NaN / inf edge column "
+                  "intact; cut from 20000 on 2026-11-05, lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
     """The reference's NaN / +inf score edges (f_classif of a constant and of
     a within-class-constant feature, chi2 of an all-zero feature),
     f_regression / r_regression with force_finite on and off, and RFE with
     importance_getter as a dotted path."""
-    y3 = _prep_three_class(X, yr)
-    Xe = np.array(X[:, :6], dtype=np.float32)
+    # three XB = 2048 row blocks (x_prep/blocked.mojo:30), the last one ragged, so the
+    # blocked partials and their ordered fold still run (2026-11-05, lane/slow-verification-lanes;
+    # was the whole 20000-row fixture)
+    rows = 4500
+    Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    y3 = _prep_three_class(Z, yr)
+    Xe = np.array(Z[:, :6], dtype=np.float32)
     Xe[:, 1] = 2.5
     Xe[:, 2] = y3.astype(np.float32)
     Xz = np.abs(Xe)
@@ -578,8 +611,8 @@ def _(ml, X, yc, yr, Xh=None):
     # importance_getter: an attribute path (a callable getter is refused: user Python code)
     for j, g in enumerate(("coef_",)):
         m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
-                   importance_getter=g).fit(X, y3)
-        parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
+                   importance_getter=g).fit(Z, y3)
+        parts[f"rfe{j}"] = _h(m.ranking_, m.transform(Z[:256]))
     return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 
@@ -621,14 +654,22 @@ _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep
 
 
 @lane("x-prep-priors")
+@floor(rows=(4097, "4097 rows keeps the GaussianNB / MultinomialNB class sums and the LDA / QDA Grams with "
+                  "explicit priors over three XB = 2048 blocks (x_prep/gram_blocked.mojo:29, blocked for n > "
+                  "XB); cut from 20000 on 2026-11-05, lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    y3 = _prep_three_class(X, yr)
-    g = ml.GaussianNB(priors=[0.2, 0.5, 0.3]).fit(X, y3)
-    mn = ml.MultinomialNB(class_prior=[0.1, 0.6, 0.3]).fit(_prep_abs(X), y3)
-    lda = ml.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]).fit(X, y3)
-    qda = ml.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5], reg_param=0.01).fit(X, y3)
-    parts = dict(g=_h(g.predict_proba(X[:256])), mn=_h(mn.class_log_prior_, mn.predict_proba(_prep_abs(X[:256]))),
-                 lda=_h(lda.priors_, lda.coef_, lda.predict_proba(X[:256])), qda=_h(qda.predict_proba(X[:256])))
+    # three XB = 2048 row blocks (x_prep/blocked.mojo:30), the last one ragged, so the
+    # blocked partials and their ordered fold still run (2026-11-05, lane/slow-verification-lanes;
+    # was the whole 20000-row fixture)
+    rows = 4500
+    Z, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    y3 = _prep_three_class(Z, yr)
+    g = ml.GaussianNB(priors=[0.2, 0.5, 0.3]).fit(Z, y3)
+    mn = ml.MultinomialNB(class_prior=[0.1, 0.6, 0.3]).fit(_prep_abs(Z), y3)
+    lda = ml.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]).fit(Z, y3)
+    qda = ml.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5], reg_param=0.01).fit(Z, y3)
+    parts = dict(g=_h(g.predict_proba(Z[:256])), mn=_h(mn.class_log_prior_, mn.predict_proba(_prep_abs(Z[:256]))),
+                 lda=_h(lda.priors_, lda.coef_, lda.predict_proba(Z[:256])), qda=_h(qda.predict_proba(Z[:256])))
     return _fit(parts, lda, lambda e: (e.predict_proba(Xh[:256]),))
 
 

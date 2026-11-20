@@ -1,0 +1,52 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+index 401d20fe2b..f58a826388 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo
+@@ -280,16 +280,21 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
+ # `AppendModels` (the cursor add) waits for the gates; a rare early stop
+ # takes the unfused tail after its rollback, exactly as before.
+ #
+-# DEFAULT ON. A partition the single-pass route would take
++# DEFAULT ON. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the unfused
++# schedule for the A/B; a partition the single-pass route would take
+ # (`max_live_rows > FAST_SORT_SIZE`) keeps the unfused split chain.
+ # ====================================================================
+-# TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, unfused level schedule, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 413f6bdc16.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime SYM_FUSED_LEVEL = True
+-# per-fusion switches, for bisecting one fused kernel
+-comptime SYM_FUSED_SCAN = not is_defined["MOJOLEARN_GBDT_FUSED_SCAN_OFF"]()
+-comptime SYM_FUSED_SPLIT = not is_defined["MOJOLEARN_GBDT_FUSED_SPLIT_OFF"]()
+-comptime SYM_FUSED_COPY = not is_defined["MOJOLEARN_GBDT_FUSED_COPY_OFF"]()
++comptime SYM_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
++# per-fusion switches under the umbrella, for bisecting one fused kernel
++comptime SYM_FUSED_SCAN = SYM_FUSED_LEVEL and not is_defined[
++    "MOJOLEARN_GBDT_FUSED_SCAN_OFF"
++]()
++comptime SYM_FUSED_SPLIT = SYM_FUSED_LEVEL and not is_defined[
++    "MOJOLEARN_GBDT_FUSED_SPLIT_OFF"
++]()
++comptime SYM_FUSED_COPY = SYM_FUSED_LEVEL and not is_defined[
++    "MOJOLEARN_GBDT_FUSED_COPY_OFF"
++]()
+ 
+ 
+ def compute_target_std_dev(
+@@ -4633,7 +4638,7 @@ def fused_split_chain_ok(max_live_rows: Int) -> Bool:
+     """Whether DEVIATION 3110's fused split chain stands in for
+     `launch_stable_partition_routed`: only where the router takes the
+     three-phase path, which it always does at or under `FAST_SORT_SIZE`."""
+-    return max_live_rows <= FAST_SORT_SIZE
++    return SYM_FUSED_LEVEL and max_live_rows <= FAST_SORT_SIZE
+ 
+ 
+ def enqueue_fused_resolve_split_partition(
+@@ -6687,7 +6692,7 @@ def run_tree_layout_traced[
+     # recorded none since the previous drain; a full-queue synchronize
+     # covers every copy enqueued before it whatever the manager recorded.
+     # The manager is per call, so the activity it still records dies here.
+-    var spec_tail = True
++    var spec_tail = SYM_FUSED_LEVEL
+     if spec_tail and apply_to_cursor:
+         if use_ridx:
+             compute_partition_stats_gather(

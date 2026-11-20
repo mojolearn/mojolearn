@@ -3,8 +3,8 @@
 # lowers to rocdl.flat_work_group_size) and a waves-per-EU floor
 # (rocdl.waves_per_eu -> "amdgpu-waves-per-eu").
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
-from std.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu.host import get_gpu_target
+from max.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 
 comptime T = get_gpu_target["mi300x"]()

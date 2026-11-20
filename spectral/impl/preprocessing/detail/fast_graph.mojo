@@ -28,16 +28,15 @@ the same bytes as the host path.
 
 Taken only when `k` fits one threadgroup sort (`FG_MAX_K`), the counts fit
 Int32, and no identity trace is being written (the trace records the host
-COO stages). `-D MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF` keeps the host path.
+COO stages).
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
-from std.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
+from max.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
+from max.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -59,24 +58,19 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
 #: module docstring) and no bit moves. The one width-dependent step, the
 #: two-level scan in `fg_bm_row_kernel`, now takes its group width from
 #: `WARP_SIZE` (32 on NVIDIA and Apple, 64 on AMD).
-#: `-D MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF=1` keeps the host path there.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 950d140288.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SPECTRAL_GRAPH_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at c48110e94d.
+# Restore: git apply experiments/removed/MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SPECTRAL_GRAPH_FAST = (
-    (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
-        )
-        or IDN_SPECTRAL_GRAPH_DEVICE
-    )
-    and not is_defined["MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF"]()
+    TARGET_HAS_APPLE_GPU
+    or IDN_SPECTRAL_GRAPH_DEVICE
 )
 comptime FG_MAX_K = 4096
 comptime FG_SORT_TPB = 1024

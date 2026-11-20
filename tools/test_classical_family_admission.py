@@ -6,13 +6,32 @@ import sys
 import types
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
+from boundary_keys_plain import plain  # noqa: E402  (the doors read through held keys: bw2-classical)
 
 
 def connection():
+    # The layouts module registers itself through the sibling
+    # `._native_loaded_modules` (standard library only) at import, so load
+    # both from the source tree inside a throwaway package. No mojolearn
+    # import runs and nothing stays in sys.modules.
+    package = types.ModuleType('_family_layout_pkg')
+    package.__path__ = [str(ROOT / 'python/mojolearn')]
+    name = package.__name__ + '._native_family_layouts'
     path = ROOT / 'python/mojolearn/_native_family_layouts.py'
-    spec = importlib.util.spec_from_file_location('_family_layout_test', path)
+    spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    saved = {key: sys.modules.get(key) for key in (package.__name__, name, package.__name__ + '._native_loaded_modules')}
+    sys.modules[package.__name__] = package
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = value
     return module
 
 
@@ -64,16 +83,25 @@ def test_application_classes_are_not_registered_as_trusted_package_owners(monkey
 
 
 def test_native_family_door_admits_storage_before_dispatch_and_operation_coercion():
-    source = (ROOT / 'bindings/classical_native.mojo').read_text()
+    # The family operations moved to their own host door (d24e390da9); the classical door only routes them.
+    source = (ROOT / 'bindings/classical_native_pack.mojo').read_text()
     body = source.split('def classical_c(', 1)[1]
-    assert body.index('py_type(call[1]) is not b.str') < body.index('var operation = String(call[1])')
-    family = body.split('if operation.startswith("family_"):', 1)[1]
-    assert family.index('classical_family_admit(model)') < family.index('family_operation(model,')
+    # bw2-classical: the str is resolved by one table lookup (classical_operation_leaf); only a name
+    # the table does not hold is copied into a String. Both follow the exact-str admission.
+    assert body.index('py_type(request[1]) is not b.str') < body.index('var operation = classical_operation_leaf(request[1])')
+    assert body.index('py_type(request[1]) is not b.str') < body.index('var name = String(request[1])')
+    door = (ROOT / 'bindings/classical_family_door.mojo').read_text()
+    entry = door.split('def classical_family_c(', 1)[1]
+    assert entry.index('py_type(request[1]) is not b.str') < entry.index('var operation = String(request[1])')
+    assert entry.index('classical_family_admit(model)') < entry.index('family_operation(model,')
+    coded = door.split('def _family_coded(', 1)[1].split('\ndef ', 1)[0]
+    assert coded.index('classical_family_admit(model)') < coded.index('family_operation_routed(model,')
 
 
 def test_guard_keeps_none_passive_subclasses_and_native_dictionary_boundary():
-    source = (ROOT / 'providers/python/classical_family_admission_pyapi.mojo').read_text()
-    assert source.index('if model is None:') < source.index('native_loaded_module("mojolearn._native_family_layouts")')
+    rel = 'providers/python/classical_family_admission_pyapi_unpack.mojo'
+    source = plain(rel, (ROOT / rel).read_text())
+    assert source.index('if model is None:') < source.index('mods.module("mojolearn._native_family_layouts")')
     assert 'len(ancestry) - start != len(connected)' in source
     assert 'String(name) == "__init__" or not py_contains(names, name)' in source
     assert 'py_call(plan["fields_get"], model, cls)' in source
@@ -83,7 +111,7 @@ def test_guard_keeps_none_passive_subclasses_and_native_dictionary_boundary():
 
 
 def test_connections_follow_installers_and_refresh_only_on_new_module_import():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     assert source.index('_connect_family_layouts(') > source.index('_connect_declared_constructors(_declared_constructor_setters)')
     assert source.index('_connect_family_layouts(') < source.index('_connect_estimator_defaults()')
     lazy = (ROOT / 'python/mojolearn/_expansion_sequence.py').read_text()

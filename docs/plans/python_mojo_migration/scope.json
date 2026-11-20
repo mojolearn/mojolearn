@@ -1,0 +1,19 @@
+{
+  "source_commit": "caba5aa2320a9840891d2db9e80eebc0cd68b73e",
+  "purpose": "Migration work allocation only. Not a guard, qualification result, or proof of Python-free execution. Every listed path needs semantic review; counts do not establish runtime behavior.",
+  "scope": "All tracked-source Mojo files currently present in bindings/ and providers/ at the merged integration baseline. Tests are inventoried separately by the native-test lane. Shared runtime and Python wrappers reached by these operations must also be migrated.",
+  "files": 838,
+  "with_direct_python_import_statements": 826,
+  "status_counts": {
+    "unreviewed": 838
+  },
+  "completion_rule": "A family is complete only when its public operation and transitive internal execution use typed Mojo values, Python ownership/admission/wrapping stays at explicit unpack/pack boundaries, obsolete runtime paths are removed, and correctness plus GPU performance evidence covers the changed operations. No source-count pass.",
+  "ordering": [
+    "Integration compile-only merge completed at caba5aa232 by owner instruction",
+    "Delete misleading source guard and dependent checks",
+    "Ridge/LinearRegression complete-operation pilot; native test migration in parallel",
+    "Validate pilot before additional production families; preserve tuned kernels",
+    "Continue family by family and migrate pure native tests; keep Python API boundary tests",
+    "Final cross-vendor verification only at the eventual release freeze; no release scheduled"
+  ]
+}

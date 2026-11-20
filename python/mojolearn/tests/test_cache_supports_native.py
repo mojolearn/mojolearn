@@ -194,6 +194,9 @@ class BlockNumPy(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, BlockNumPy())
 from types import SimpleNamespace
 from mojolearn import _arena_io as arena, _backend
+# the arena row/cache doors are connected when model_selection loads (_native_arena_rows.connect);
+# families import on first touch since b6aa87e41d, so a bare _arena_io import is not connected
+from mojolearn import model_selection
 from mojolearn._verify_native_runtime import audit_native_call
 assert 'numpy' not in sys.modules
 assert audit_native_call(arena.DeviceCache.supports,SimpleNamespace(x_dev_put=None,x_dev_free=None),'x').assert_native() is True

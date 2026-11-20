@@ -23,9 +23,6 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("numpy")
-from mojolearn import _backend
-
-PKG = Path(__file__).resolve().parents[1]
 
 _SCRIPT = r'''
 import hashlib
@@ -91,7 +88,7 @@ assert first == second, "a second call in the same process moved the bits"
 
 
 def _run(env_extra):
-    env = dict(os.environ, PYTHONPATH=str(PKG.parent), MOJOLEARN_NUMERIC_MODE="identical")
+    env = dict(os.environ, PYTHONPATH=_runtime_parent(), MOJOLEARN_NUMERIC_MODE="identical")
     env.update(env_extra)
     proc = subprocess.run([sys.executable, "-c", _SCRIPT], env=env, capture_output=True,
                           text=True, timeout=900)
@@ -104,7 +101,12 @@ def _run(env_extra):
 
 def test_every_entry_point_twice_on_gpu_and_cpu():
     gpu, gpu_parts = _run({})
-    cpu, cpu_parts = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
+    cpu, cpu_parts = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(Path(_runtime_parent()) / "mojolearn" / "host")})
     # the entry points whose bits differ, by name, so a split names its lane
     split = sorted(k for k in gpu_parts if gpu_parts[k] != cpu_parts.get(k))
     assert gpu == cpu, (gpu, cpu, split)
+
+
+def _runtime_parent():
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT  # the runtime this process imported
+    return PACKAGE_PARENT

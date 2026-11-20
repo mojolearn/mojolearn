@@ -110,35 +110,33 @@ class RefuseIgnoredKnobs(unittest.TestCase):
     def test_nn_p_under_a_non_lp_metric_is_refused(self):
         from mojolearn.neighbors import (
             KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors,
-            RadiusNeighbors, _resolve_metric, _resolve_rbc_metric,
+            RadiusNeighbors,
         )
         for metric in self._NON_LP:
             for p in (1, 3, 2.5):
                 with self.assertRaisesRegex(ValueError, "p is read only by metric='minkowski'"):
-                    _resolve_metric("NearestNeighbors", metric, p)
+                    NearestNeighbors(metric=metric, p=p)._dist_params()
                 for cls in (NearestNeighbors, KNeighborsClassifier, KNeighborsRegressor):
                     with self.assertRaisesRegex(ValueError, "p is read only by metric='minkowski'"):
                         cls(metric=metric, p=p)._check_refusals()
         for metric in self._RBC_NON_LP:
-            with self.assertRaisesRegex(ValueError, "p is read only by metric='minkowski'"):
-                _resolve_rbc_metric("RadiusNeighbors", metric, 3)
             with self.assertRaisesRegex(ValueError, "p is read only by metric='minkowski'"):
                 NearestNeighbors(metric=metric, algorithm="rbc", p=3)._check_refusals()
             with self.assertRaisesRegex(ValueError, "p is read only by metric='minkowski'"):
                 RadiusNeighbors(metric=metric, p=3)._check_refusals()
 
     def test_nn_default_p_and_minkowski_p_are_accepted(self):
-        from mojolearn.neighbors import NearestNeighbors, RadiusNeighbors, _resolve_metric
+        from mojolearn.neighbors import NearestNeighbors, RadiusNeighbors
         for metric in self._NON_LP:
             for p in (2, 2.0, np.float64(2.0)):
-                _, arg = _resolve_metric("NearestNeighbors", metric, p)
+                _, arg, _ = NearestNeighbors(metric=metric, p=p)._dist_params()
                 self.assertEqual(arg, 2.0)
             NearestNeighbors(metric=metric)._check_refusals()
         for metric in self._RBC_NON_LP:
             RadiusNeighbors(metric=metric)._check_refusals()
         for metric in ("minkowski", "lp"):
             for p in (1, 2, 3, 0.5):
-                _, arg = _resolve_metric("NearestNeighbors", metric, p)
+                _, arg, _ = NearestNeighbors(metric=metric, p=p)._dist_params()
                 self.assertEqual(arg, float(p))
             NearestNeighbors(metric=metric, p=3)._check_refusals()
             RadiusNeighbors(metric=metric, p=3)._check_refusals()

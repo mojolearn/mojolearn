@@ -14,7 +14,7 @@
 #
 # Environment: MOJOLEARN_COMMIT (full SHA of the shipped source), and
 # optionally MOJOLEARN_BUILD_JOBS (default: cores / 2, at most 16 GiB of RAM
-# per job, at most 16 jobs; the merged layout: 1, see THE MERGED LAYOUT below).
+# per job; the merged layout: 1, see THE MERGED LAYOUT below).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -85,7 +85,9 @@ if [[ -z "${MOJOLEARN_BUILD_JOBS:-}" ]]; then
     else
         jobs=$((ncpu / 2)); by_mem=$((mem_gib / 16))
         ((jobs <= by_mem)) || jobs=$by_mem
-        ((jobs <= 16)) || jobs=16
+        # No fixed job ceiling: a rented box runs every core, limited only by
+        # memory (Andrew 2026-11-05); 128 is packaging/linux/build_sets.sh's sanity range.
+        ((jobs <= 128)) || jobs=128
         ((jobs >= 1)) || jobs=1
     fi
     MOJOLEARN_BUILD_JOBS=$jobs

@@ -205,7 +205,8 @@ def _refuses(call, text, error_type=Exception):
         call()
     except Exception as error:
         assert isinstance(error, error_type), (error_type.__name__, type(error).__name__)
-        assert text in str(error), (text, str(error))
+        texts = text if isinstance(text, tuple) else (text,)
+        assert any(one in str(error) for one in texts), (text, str(error))
         if _AUDITS and _AUDITS[-1]["exception"] is not None:
             _AUDITS[-1]["expected_refusal"] = True
         return
@@ -1048,10 +1049,14 @@ def integer_loop_state_refusal():
         for value in wrapped:
             body = s.capture(x, value)
             seed = np.ones(s.shape(value), np.float32)
+            # Lane x1 (04f01fe89e): int32-word state is carried when its state
+            # input is ids; an integer output for a float input is refused in
+            # either of the two places that check the kinds.
             for optimize in (False, True):
                 _refuses(lambda: _invoke(body.while_loop, a, condition=condition,
                                         max_iterations=1, optimize=optimize),
-                         "state outputs must hold floating-point values", ValueError)
+                         ("holds integer ids; its state input must be ids",
+                          "must hold the kind of its state input"), ValueError)
             _refuses(lambda: _invoke(body.vjp_while, a, condition=condition,
                                     max_iterations=1, seeds=seed),
                      "state outputs must hold floating-point values", ValueError)
@@ -1103,7 +1108,8 @@ def integer_loop_state_refusal():
             control = _invoke(restored.load_control, control_path)
             _refuses(lambda: _invoke(control["body"].while_loop, a,
                                     condition=control["condition"], max_iterations=1),
-                     "state outputs must hold floating-point values", ValueError)
+                     ("holds integer ids; its state input must be ids",
+                      "must hold the kind of its state input"), ValueError)
     return outputs
 
 
@@ -1767,18 +1773,23 @@ def comparator_self_test(report):
 
 
 def run_checks(vendor, require_installed=False):
-    from . import _backend
     import mojolearn
+    from . import ops
+    from ._verify_native_runtime import loaded_binding
     report = {"format": FORMAT, "expected_cases": list(EXPECTED_CASES), "cases": {}, "backend": {}}
     try:
-        b = _backend.binding("_mojolearn_x_sequence", "identical")
-        report["backend"] = {"vendor": str(b.x_sequence_vendor()), "numeric_mode": int(b.x_sequence_numeric_mode()),
-                             "binding_file": str(getattr(b, "__file__", "")), "binding_type": type(b).__name__,
+        # One public identical-session call loads the binding the cases run
+        # on; mojolearn.runtime_report() then names it (it never loads one).
+        # A missing program entry refuses by name inside the cases.
+        with ops.Session(numeric_mode="identical") as s:
+            s.tensor([[0.0]])
+        row = loaded_binding("_mojolearn_x_sequence", "identical")
+        assert row is not None, "no identical _mojolearn_x_sequence binding is loaded"
+        report["backend"] = {"vendor": row["vendor"], "numeric_mode": 1 if row["compiled_mode"] == "identical" else 0,
+                             "binding_file": row["path"], "binding_sha256": row["identity"],
                              "package_file": str(Path(mojolearn.__file__).resolve()), "python": sys.executable}
         assert report["backend"]["vendor"] == vendor, report["backend"]
         assert report["backend"]["numeric_mode"] == 1, report["backend"]
-        for entry in ("ops_program_execute", "ops_program_control", "ops_program_inspect"):
-            assert hasattr(b, entry), "missing native entry " + entry
         if require_installed:
             package_path = Path(mojolearn.__file__).resolve()
             assert "site-packages" in package_path.parts or "dist-packages" in package_path.parts, package_path

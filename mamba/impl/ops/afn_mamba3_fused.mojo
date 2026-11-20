@@ -31,7 +31,7 @@ mod-2pi-per-step spelling is a seam. The sabotage check arms of the
 replaced kernels (A_FLOOR_UNCLAMPED, TRAP_LEFT_ONLY, SEGSUM_DESCENDING,
 ROTATE_HALF_SPLIT) are IDENTICAL falsifiers and are not spelled here.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (

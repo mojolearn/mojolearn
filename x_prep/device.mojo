@@ -1,18 +1,19 @@
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
-from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_GROUPED_OUTPUT, C08_DICTIONARY, C08_UNIQUE_SCAN
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
+from std.sys.compile import is_defined
+from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.gpu import block_idx, block_dim, thread_idx
-from std.ffi import _Global
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys import has_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
@@ -29,6 +30,9 @@ from x_prep.fastred import (
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from x_prep.fastnb import NB_CAT_ATOMIC, AFCL_P03, cat_hist_atomic_kernel, cat_hist_convert_kernel
+# TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
@@ -37,9 +41,8 @@ from x_prep.select_fast import (
 from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 #: lane ml-prep-nb: te_global / te_enc / ii_gram in the lane-tree order on a threadgroup (IDENTICAL)
 from x_prep.idn_tree import IDN_TREE_ANY, idn_tree_scratch_words, idn_tree_stage
-#: lane classical-te-gmm (2026-10-07): te_global / te_enc in the blocked order BLT (IDENTICAL A/B,
-#: -D MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD, default off; x_prep/idn_blocked.mojo)
-from x_prep.idn_blocked import IDN_TE_BLOCKED, te_blocked_scratch_words, te_blocked_stage
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
 
 #: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
 #: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
@@ -56,14 +59,15 @@ from core.device_pool import pool_take, pool_give
 #: (and arena ranges of 1M+ words) download through core/staged_download.mojo.
 #: Default since the M3 A/Bs gmp-staged-* (output digests the same):
 #: label-binarizer taxi 563 -> 345 ms, multilabel-binarizer taxi 287 -> 193 ms,
-#: target-encoder taxi 281 -> 272 ms. -D MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF:
-#: the raw host-pointer copies.
-comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                              and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
-comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
+#: target-encoder taxi 281 -> 272 ms. Every other build takes the raw
+#: host-pointer copies (the `_OFF` rollback was deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 509aa1c3a5.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime X_PREP_STAGED_OUT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
 
-#: lane/apple-fast-w2-prep (2026-10-04), DEFAULT in FAST + Apple; rollback
-#: -D MOJOLEARN_X_PREP_POOL_ARENA_OFF (IDENTICAL and other vendors compile
+#: lane/apple-fast-w2-prep (2026-10-04), DEFAULT in FAST + Apple (the rollback
+#: define was deleted 2026-11-15; IDENTICAL and other vendors compile
 #: none of it). M3, one run per arm: label-binarizer taxi 319.9 -> 270.4 ms,
 #: multilabel-binarizer taxi 175.6 -> 167.5 ms, istella 129.3 -> 125.7 ms;
 #: w2-pool-quality PASS (25 output arrays sha256-identical A vs B, dirty-buffer
@@ -96,13 +100,14 @@ comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 #: above makes a pooled buffer word-identical (inputs uploaded, every other
 #: arena word zeroed by upload_ranges or copied whole, output memset, scratch
 #: cleared), and the idle cap is POOL_KEEP_BYTES (2 GB). DEFAULT ON (storage
-#: only, no bit moves); `-D MOJOLEARN_XPREP_ARENA_POOL_OFF=1` restores the
-#: fresh allocation (and the store's free-at-once slots).
-comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
-                                 and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
-comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                             and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
-comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoXPrepArenaPoolIdentical"
+#: only, no bit moves; the _OFF rollback was deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_XPREP_ARENA_POOL_OFF (old path: the fresh allocation; EXP:1787 CONFIRMED the pool default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5867d7c11d.
+# Restore: git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.expdel2-22-linear.patch
+comptime X_PREP_POOL_ARENA_IDN = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
+# TOMBSTONE: MOJOLEARN_X_PREP_POOL_ARENA_OFF (old path; promoted on FAST+Apple only (EXP:409, M3); the NVIDIA/AMD FAST A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at cc8e7c0dfd.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch
+comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or X_PREP_POOL_ARENA_IDN
+comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV2" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV2"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
 comptime _XP_POOL_MIN_WORDS = 1 << 24
 
@@ -141,24 +146,25 @@ from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
 from x_prep.rr_eigh import rr_eigh_into, rre_words, rr_eigh_clear
 #: lane fam-prep-metrics: IDENTICAL takes the round-robin eigh on every vendor (the host column runs
-#: the same rounds, x_prep/host/rr_eigh_host.mojo; -D MOJOLEARN_IDN_RR_EIGH_OFF: `eigh_unit`)
+#: the same rounds, x_prep/host/rr_eigh_host.mojo; the _OFF rollback was deleted 2026-11-15)
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH, eigh_rr_takes
 from x_prep.da_par import (
     DA_TPB, DT, DT_TPB, lda2_rank_kernel, lda2_scal1_kernel, lda2_ms_kernel, lda2_g2_kernel, lda3_rank_kernel,
     lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
     qda_prep_rot_kernel, qda_dec_tile_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
 def _da_blocks(t: Int) -> Int:
     return max((t + DA_TPB - 1) // DA_TPB, 1)
 
-#: FAST on Apple by default (lane/apple-fast-ldaqda; off: -D MOJOLEARN_LDAQDA_RR_EIGH_OFF): the
+#: FAST on Apple by default (lane/apple-fast-ldaqda): the
 #: `eigh` stage (op 18) as x_prep/rr_eigh.mojo's round-robin Jacobi on the
 #: whole GPU instead of `eigh_unit`'s one thread per matrix (cyclic, 24,090
 #: serial rotations a sweep at LDA's / QDA's d = 220 on Istella).
 comptime OP_EIGH = 18
-#: FAST on Apple by default (off: -D MOJOLEARN_LDAQDA_PAR_STAGES_OFF / _DEC_TILE_OFF): x_prep/da_par.mojo,
+#: FAST on Apple by default: x_prep/da_par.mojo,
 #: lda_stage2 / lda_stage3 / qda_prep a thread a cell, qda_dec by shared tiles
 #: (each cell the unit's own chain: the units' words)
 comptime OP_LDA_STAGE2 = 38
@@ -169,14 +175,16 @@ comptime OP_QDA_DEC = 42
 #: A/B on lane/apple-fast-ldaqda ef187d37b (n=1, Istella), all three on:
 #: lda-clf 19,696 -> 536 ms, qda 15,794 -> 425 ms (RR_EIGH alone 607 / 435);
 #: accuracy / logloss unchanged (lda .9131 / .2357, qda .8805 / 3.608 -> 3.609).
-#: `-D MOJOLEARN_LDAQDA_<NAME>_OFF` restores main's path for that stage; the old
-#: `-D MOJOLEARN_LDAQDA_<NAME>` stays harmless. The three are independent.
-comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                       and not is_defined["MOJOLEARN_LDAQDA_PAR_STAGES_OFF"]())
-comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                     and not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"]())
-comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                    and not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"]())
+#: The three are independent (their _OFF rollbacks were deleted 2026-11-15).
+# TOMBSTONE: MOJOLEARN_LDAQDA_PAR_STAGES_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:242); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7decc17403.
+# Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_PAR_STAGES_OFF.patch
+comptime PAR_STAGES = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_LDAQDA_DEC_TILE_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:241); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d64015f87d.
+# Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_DEC_TILE_OFF.patch
+comptime DEC_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_LDAQDA_RR_EIGH_OFF (old path; promoted on FAST+Apple only (M3 A/B lane/apple-fast-ldaqda, EXP:243); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at fc4f469cc4.
+# Restore: git apply experiments/removed/MOJOLEARN_LDAQDA_RR_EIGH_OFF.patch
+comptime RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: eigh q[5] != 0 keeps that stage on `eigh_unit`'s cyclic path under RR_EIGH.
 #: IterativeImputer sets it (python/mojolearn/_expansion_prep.py, one small
 #: eigh per feature per round): M3, iterative-imputer istella, main b2dd5dfe5,
@@ -192,7 +200,7 @@ comptime EIGH_CYCLIC_Q = 5
 #: one thread per (column, sorted rank) (implies SORTCOUNT); CLF_RANKMAJOR: op 69's point kernel
 #: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
 #: the other vendors compile main's code unchanged.
-comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_MI_ALL (DROP-quality: M3 miv-reg-all-* reg istella 46,430 -> 1,151 ms, taxi 2,316 -> 81, but
 # it includes FAST_FOLDS, which fails the selected-set gate) deleted 2026-10-09 on lane/owed-deletions-D2: the
 # bundle alias only, each member keeps its own define; code recoverable at b639a2bd2.
@@ -201,19 +209,33 @@ comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelera
 #: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
 #: both arms; main's istella arm swings 46-70 s run to run, far inside the gap). Quality
 #: (tools/miv_quality.sh, M2): scores bit-identical to main's FAST route on a tie-heavy fixture.
-#: -D MOJOLEARN_MI_REG_TIES_OFF: main's search.
-comptime MI_REG_TIES = _MI_FA and (is_defined["MOJOLEARN_MI_REG_TIES"]()
-                                   or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
-comptime MI_REG_RANKMAJOR = _MI_FA and is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]()
-comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
+# TOMBSTONE: MOJOLEARN_MI_REG_TIES (force-on knob; the arm is the FAST+Apple default through its _OFF switch, EXP:379) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 293c8f301c.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_REG_TIES.patch
+# TOMBSTONE: MOJOLEARN_MI_REG_TIES_OFF (old path; promoted on FAST+Apple only (EXP:379, M3); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8bf90f94c1.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_REG_TIES_OFF.patch
+comptime MI_REG_TIES = _MI_FA
+# TOMBSTONE: MOJOLEARN_MI_REG_RANKMAJOR (FAST+Apple opt-in arm, EXP:377 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 6a50f39dd3.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch
+comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
+# TOMBSTONE: MOJOLEARN_MI_REG_SORTCOUNT (force-on knob; the sorted search is the FAST+Apple default through MI_REG_TIES, EXP:379) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 699627ef7b.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_REG_SORTCOUNT.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 # TOMBSTONE: MOJOLEARN_MI_FAST_FOLDS (DROP speed + quality: mi-reg-folds-istella-x -0.2%; M2 tie-heavy fixture scores
 # move up to 3.2% of scale, selected-set symmetric difference 2) deleted 2026-10-09 on lane/owed-deletions-D2: ops 66 / 70
 # as threadgroup folds; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_MI_FAST_FOLDS.patch
 #: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
-#: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
-comptime MI_CLF_RANKMAJOR = _MI_FA and (is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
-                                        or not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]())
+#: scores bit-identical (tools/miv_quality.sh, M2).
+# TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR (force-on knob; the arm is the FAST+Apple default through its _OFF switch, EXP:374) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 8b76065907.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_MI_CLF_RANKMAJOR_OFF (old path; promoted on FAST+Apple only (EXP:374, M3); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 31dc3269c3.
+# Restore: git apply experiments/removed/MOJOLEARN_MI_CLF_RANKMAJOR_OFF.patch
+comptime MI_CLF_RANKMAJOR = _MI_FA
+#: The force-on knob, restored 2026-11-15 as it was: MI_CLF_RANKMAJOR is the
+#: FAST + Apple default (its _OFF rollback is deleted), so the knob changes
+#: nothing; `-D MOJOLEARN_MI_CLF_RANKMAJOR` build lines keep compiling.
+comptime MI_CLF_RANKMAJOR_FORCE = _MI_FA and is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
 comptime OP_MI_CC = 68
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
@@ -225,9 +247,7 @@ comptime OP_COL_STATS = 1
 #: FAST on Apple (lane/apple-fast-gram, 2026-10-02), the FAST + Apple default
 #: since the M3 re-A/B on lane head c338b88dd (n=1, Istella): qda 16,310 ->
 #: 15,811 ms with acc .866 -> .881; lda 19,026 -> 19,641 ms with acc .909 ->
-#: .913, logloss .264 -> .236 (kept for quality). `-D
-#: MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF` restores main's path; the old
-#: `-D MOJOLEARN_X_PREP_CLASS_COV_GRID` stays harmless.
+#: .913, logloss .264 -> .236 (kept for quality; the _OFF rollback was deleted 2026-11-15).
 #: QDA's per-class covariances (op 40, naive_bayes/da.mojo `qda_cov_unit`: one
 #: thread per (class, cell) walking every row, K d^2 chains of a million rows)
 #: and LDA's Gram `matmul` (op 13, x_prep/prims.mojo `matmul_unit` as Z'Z: one
@@ -266,8 +286,8 @@ struct _PrepContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXPrepContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepContextFast"
-comptime X_PREP_CONTEXT = _Global[StorageType=_PrepContext, name=_CTX_NAME, init_fn=_PrepContext.__init__]
+comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV3"
+comptime X_PREP_CONTEXT = SharedSlot[_PrepContext, _CTX_NAME]
 
 
 def x_prep_ctx() raises -> DeviceContext:
@@ -280,8 +300,8 @@ def x_prep_ctx() raises -> DeviceContext:
 
 #: The binding's resident input store (core/device_store.mojo; lane
 #: py-shared): `x_prep_dev_put` / `_free` / `_live`, one per tier.
-comptime _STORE_NAME = "MojoXPrepStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepStoreFast"
-comptime X_PREP_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_fn=DeviceStore.__init__]
+comptime _STORE_NAME = "MojolearnXPrepStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV1"
+comptime X_PREP_STORE = SharedSlot[DeviceStore, _STORE_NAME]
 
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
@@ -454,10 +474,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
     comptime if IDN_TREE_ANY:
         scratch = max(scratch, idn_tree_scratch_words(host_q, stages))
-    comptime if IDN_TE_BLOCKED:
-        scratch = max(scratch, te_blocked_scratch_words(host_q, stages))
-    var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
-    var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
+    # lane fx-env-dead (2026-11-18): were the run-time env reads MOJOLEARN_XPREP_MI_SORTED=0 /
+    # MOJOLEARN_XPREP_MI_TIES=0 per program run; now build defines, default unchanged (on), A/B owed.
+    var mi_sorted = not is_defined["MOJOLEARN_XPREP_FAST_MI_SORTED_OFF"]()
+    var mi_ties = not is_defined["MOJOLEARN_XPREP_FAST_MI_TIES_OFF"]()
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
@@ -469,8 +489,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # OP_MATMUL above), sized over the program; 1 word when unused
     var cov_grid = False
     var cov_words = 1
-    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                 and not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"]()):
+# TOMBSTONE: MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF (old path; promoted on FAST+Apple only (EXP:252, M3); the other vendors' A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 518d83d2b0.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         cov_grid = True
         if cov_grid:
             for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
@@ -560,7 +581,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             if op == OP_MI_CC:
                 # q = [Z, n, d, Y, k, TERM, ZS, YS]
                 var hq = host_q + (s * STAGE_INTS + 2)
-                mi_cc_device[MI_REG_TIES, MI_REG_RANKMAJOR](ctx, df, dq, s * STAGE_INTS + 2, total, Int(hq[1]),
+                # TOMBSTONE: MOJOLEARN_MI_REG_RANKMAJOR (FAST+Apple opt-in arm, EXP:377 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 6a50f39dd3.
+                # Restore: git apply experiments/removed/MOJOLEARN_MI_REG_RANKMAJOR.patch
+                mi_cc_device[MI_REG_TIES, False](ctx, df, dq, s * STAGE_INTS + 2, total, Int(hq[1]),
                                                             Int(hq[2]), Int(hq[0]), Int(hq[6]), Int(hq[3]),
                                                             Int(hq[7]))
                 continue
@@ -634,9 +657,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     continue
         comptime if PREP2_FAST:
             if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
-                continue
-        comptime if IDN_TE_BLOCKED:
-            if te_blocked_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp))):
                 continue
         comptime if IDN_TREE_ANY:
             if idn_tree_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp))):
@@ -775,6 +795,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 if cells > 0 and cells <= 2147483647 and words > 0:
                     ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
                     var cat_block = BLOCK // 2 if AFCL_P03 else BLOCK
+# TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
                     ctx.enqueue_function[cat_hist_atomic_kernel](
                         df.unsafe_ptr(), qp, Int32(cells),
                         grid_dim=(cells + cat_block - 1) // cat_block, block_dim=cat_block,
@@ -786,9 +809,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
                 continue
-        comptime if C08_GROUPED_OUTPUT:
-            if op == 9:
-                total = (total+3)//4
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](

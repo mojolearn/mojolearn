@@ -7,25 +7,20 @@
 spectral entries return Int32. The conversion was a host loop over n after
 the download; here it is one launch (one thread per label) and the download
 lands in the result's own memory. Integer work: no bit moves.
-`-D MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF=1` restores the host loop, as
-does the master `-D MOJOLEARN_IDN_ALL_OFF=1`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime LABELS_TPB = 256
 
-comptime IDN_SPECTRAL_LABELS_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at d51b4bf33f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SPECTRAL_LABELS_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def labels_u32_to_i32_kernel(

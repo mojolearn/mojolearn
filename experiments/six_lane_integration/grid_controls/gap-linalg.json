@@ -3,56 +3,8 @@
  "lane": "gap-linalg",
  "branch": "lane/gap-linalg",
  "head": "0e8ebb636",
- "controls": {
-  "eigh_tridiag_idn": {
-   "define": "MOJOLEARN_IDN_EIGH_TRIDIAG_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_EIGH_TRIDIAG_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_decomp/eigh_tridiag.mojo:EIGH_TD_IDN",
-    "x_decomp/eigh_tridiag.mojo:eigh_td_on",
-    "x_decomp/device.mojo:DevExec._eigh_on"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": true,
-   "status": "promoted:lane/eigh-promote",
-   "notes": "PROMOTED 2026-10-11 (A/B main@5876e9205 eigh/synthetic: AMD 8620.1 -> 353.7 ms a1600, NV 21119.9 -> 367.2 ms v0006, digest dbbb891997... NV == AMD). The Apple FAST tridiagonal eigh (Householder panels, df64 bisection, twisted vectors, compact-WY back-transform) on IDENTICAL NVIDIA/AMD: every product-meets-add / division / sqrt through checks/numerics seams, fixed 256-slot block folds, rank-2k update as ONE OP_NT identical GEMM at k = 64, back-transform as three identical GEMMs; clustered-spectrum refusal falls back to the identical Jacobi (decided by T's bits). Host column keeps the Jacobi (digest recorded, not required). Also linked by _mojolearn_linalg (its eigh_binding calls DevExec.eigh)."
-  }
- },
- "algorithms": {
-  "algos:cholesky": {
-   "binding": "_mojolearn_gp",
-   "route": "fit: python/mojolearn/_cholesky_impl.py Cholesky -> bindings/_mojolearn_gp.mojo cholesky_factor_binding -> cholesky/estimator.mojo cholesky_factor_poolio -> cholesky/checks/potrf.mojo potrf_lower -> _potrf_lower_blocked (on) | _potrf_lower_strips (off)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "algos:lu-factor": {
-   "binding": "_mojolearn_x_decomp",
-   "route": "python/mojolearn/_expansion_decomp.py lu_factor -> x_decomp/api.mojo lu_py -> x_decomp/device.mojo DevExec.lu -> launch_lu (nb = 128 on, 32 off)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "expanded:lu-solve": {
-   "binding": "_mojolearn_x_decomp",
-   "route": "python/mojolearn/_expansion_decomp.py solve -> x_decomp/api.mojo lu_gesv_py -> DevExec.lu_gesv -> launch_lu + launch_lu_solve -> launch_trs_tri (GEMM feed on at nrhs >= 32)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "algos:eigh": {
-   "binding": "_mojolearn_x_decomp",
-   "route": "python/mojolearn/_expansion_decomp.py _Kit.eigh -> x_decomp/api.mojo eigh_py -> DevExec.eigh -> _eigh_on -> _eigh_td_try (on) | _eigh_par_on Jacobi (off, and the refusal fallback)",
-   "controls": [
-    "eigh_tridiag_idn"
-   ],
-   "interaction_groups": []
-  }
- },
+ "controls": {},
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_LU_NB128",
@@ -68,6 +20,11 @@
    "define": "MOJOLEARN_IDN_OLS_R_TRISOLVE",
    "control": "ols_r_trisolve",
    "reason": "DELETED 2026-10-11 (lane/i17-decide-linalg-seq, deletion c14beeda5): NOISE with bits changed (r2 differs at 1e-8): classical:ols taxi NV 15.8 -> 16.9 ms (1.07x) / AMD 14.2 -> 12.6 ms (0.89x), istella NV 505.5 -> 502.9 (0.99x) / AMD 444.7 -> 445.6 (1.00x), avg ~0.98x; arm nv2 v0047 / amd a1630 (r1011.olstri.ab), A nv2 r1011.ols + v0052 / amd a1634 (r1011.ols2, main 2afa942e3), one run per arm. Refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_EIGH_TRIDIAG_OFF",
+   "control": "eigh_tridiag_idn",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-16-decomposition, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the PROMOTED IDENTICAL tridiagonal eigh (AMD 8620.1 -> 353.7 ms, NV 21119.9 -> 367.2 ms) is gone; EIGH_TD_IDN is the IDENTICAL mode term (no bit change); define refused in core/experiment_guards_decomposition.mojo; code recoverable at 8e83b98cee."
   }
  ]
 }

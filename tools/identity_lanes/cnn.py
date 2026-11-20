@@ -188,7 +188,11 @@ def _(ml, X, yc, yr, Xh=None):
     y = b2.forward(b1.forward(x))
     dx = b1.backward(b2.backward(_cnn_grad(X, y.shape)))
     grads = [getattr(l, g) for blk in (b1, b2) for l, _, g in blk.parameters()]
-    running = [a for blk in (b1, b2) for bn in blk._bns() for a in (bn.running_mean_, bn.running_var_)]
+    # the blocks' public batch norms, in the order BasicBlock keeps them: bn1, bn2,
+    # then the shortcut's norm (downsample[1]) on a downsampling block
+    running = [a for blk in (b1, b2)
+               for bn in [blk.bn1, blk.bn2] + ([blk.downsample[1]] if blk.downsample else [])
+               for a in (bn.running_mean_, bn.running_var_)]
     b1.eval()
     return _fit(dict(y=_h(y), dx=_h(dx), grads=_h(*grads), running=_h(*running)),
                 b1, lambda e: (e.transform(np.ascontiguousarray(Xh[:256, :16])),))

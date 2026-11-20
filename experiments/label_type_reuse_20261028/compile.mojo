@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.prep_owner_native import prep_owner_c
+from bindings.prep_owner_native_door import prep_owner_c
 from bindings.classical_labels import labels_accuracy
 
 

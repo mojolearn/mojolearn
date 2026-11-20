@@ -27,7 +27,7 @@ A case the Python path handles by a warning or an exception (an empty
 class, a zero denominator) is never sent here: the Python checks it first,
 and any doubt raises so the caller falls back to its Python path.
 """
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from checks.numerics import pinned_mul_f64
 from x_metrics.common import FP, IP
 
@@ -471,7 +471,7 @@ def scatter_rows(src_addr: Int, dst_addr: Int, idx_addr: Int, n: Int, n_dst: Int
     var sp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=src_addr)
     var dp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=dst_addr)
     for j in range(n):
-        memcpy(dest=dp + Int(I[j]) * row_bytes, src=sp + j * row_bytes, count=row_bytes)
+        unsafe_memcpy(dest=dp + Int(I[j]) * row_bytes, src=sp + j * row_bytes, count=row_bytes)
 
 
 # ---------------------------------------------------------------------------

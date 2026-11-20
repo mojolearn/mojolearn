@@ -1,0 +1,192 @@
+{
+  "source": "test_neighbors_loc_native.py::_data and original LOF parameterizations",
+  "numpy": "2.5.2",
+  "workers": 10,
+  "source_dimensions": {
+    "fit": [
+      60,
+      5
+    ],
+    "query": [
+      25,
+      5
+    ]
+  },
+  "source_seeds": {
+    "fit": 0,
+    "query": 3
+  },
+  "k": [
+    1,
+    7,
+    59,
+    6
+  ],
+  "k_admission": "Public k=200 is clamped to 59 by the retained Python-boundary check.",
+  "oracle": "Float64 Euclidean norm/full sort and mathematical reachability-density ratios; independent NumPy percentiles. No product code execution.",
+  "generator_sha256": "d8b30728863a7e573794a3742f7172ba00897469185d8b41bfd0b487abd4de97",
+  "files": [
+    {
+      "file": "fit.f32",
+      "shape": [
+        60,
+        5
+      ],
+      "sha256": "249f04e58d10a413ecd55d75b401abeb73787976213fd49a8104f18fd17c5ea8"
+    },
+    {
+      "file": "query.f32",
+      "shape": [
+        25,
+        5
+      ],
+      "sha256": "3cc19f8859a01b5a7ff73162b7dae3943a646db360032d13629f5af980dd3ad8"
+    },
+    {
+      "file": "fit-k1-distances.f64",
+      "shape": [
+        60,
+        1
+      ],
+      "sha256": "2d2a34ce3753dd6b590110112cc9a23249385c96dee2cb0b8d916646ffa45daf"
+    },
+    {
+      "file": "fit-k1-density.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "fedc95071c4e64fe4f7c43fa29c734f0ad3d1b8a61c832293412d98e0cceeecd"
+    },
+    {
+      "file": "fit-k1-scores.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "1b3fe497fcded788d2acefb7ca3ff2702eb64492cb03f0e397cdc1dfaa680e09"
+    },
+    {
+      "file": "fit-k1-offsets.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "327b3d4e95b4a7a8a4c660c929df35967a7b1c5af2f5ac2a2fc170dc99992a4a"
+    },
+    {
+      "file": "fit-k7-distances.f64",
+      "shape": [
+        60,
+        7
+      ],
+      "sha256": "e8e1e771f36df0337d37189329694b90fe7b1f38a2bd8abd37236a5d426c7f32"
+    },
+    {
+      "file": "fit-k7-density.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "e63fa00a2d8cf30fa2a7e5792495d8283f1986180a356c219aac0382aeadd93e"
+    },
+    {
+      "file": "fit-k7-scores.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "788c77a37561660f04b1a905b1c4990ca2b85fe2d28cbff026edad78d503d5bc"
+    },
+    {
+      "file": "fit-k7-offsets.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "cb08bb8291df942770ffbb2baa360e7c8e46ea0f807749f7c00ab80bfcda6472"
+    },
+    {
+      "file": "fit-k59-distances.f64",
+      "shape": [
+        60,
+        59
+      ],
+      "sha256": "888878012fbd2f3e1ed2846b86ab32fffe5d4df11067f6678e67e2b57016eac8"
+    },
+    {
+      "file": "fit-k59-density.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "f4d6d6e0ea98054270d9159c9335f221f7aef42a2a9984849464ad0f7386cbc1"
+    },
+    {
+      "file": "fit-k59-scores.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "500a436bfd4ca30953b3984f1272d8d67ab10a4f3564f768946fea56f2845f50"
+    },
+    {
+      "file": "fit-k59-offsets.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "d921ac33eda0bf511d98a0142990114087d0a8122672c5d8b7c24b396b7cff7e"
+    },
+    {
+      "file": "fit-k6-distances.f64",
+      "shape": [
+        60,
+        6
+      ],
+      "sha256": "0f6fa10bee42d1f9650c5bae8d8b5ac55c47a7e2ff0efb8f58358eba1268e147"
+    },
+    {
+      "file": "fit-k6-density.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "2beb0fe0e99511d4a4dd4fc870df1a81c67574cc0b8041c4c8a5af85db4f4c2a"
+    },
+    {
+      "file": "fit-k6-scores.f64",
+      "shape": [
+        60
+      ],
+      "sha256": "0e40325c89dfef4212bc315e1ea0696da6b656d1a4748a8bdc12facd5dab823d"
+    },
+    {
+      "file": "fit-k6-offsets.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "8ab93b297498e3b84c58960a16fb8e3a1ba2cc29c54794ae810f95d9cc3c81eb"
+    },
+    {
+      "file": "query-distances.f64",
+      "shape": [
+        25,
+        6
+      ],
+      "sha256": "21cc8d7e435b56da20b89f3c167061b9c61b6a7ec3db5618d3fbf6d227185f0f"
+    },
+    {
+      "file": "query-density.f64",
+      "shape": [
+        25
+      ],
+      "sha256": "e7d289712281dc90168fccfebcd952306289f7e9fc2c5d80f3679dd1c1867511"
+    },
+    {
+      "file": "query-scores.f64",
+      "shape": [
+        25
+      ],
+      "sha256": "ab2dedbbe31491afe14a5a5ac8e44a57a799839af76f546b12ac3e1a788ce419"
+    },
+    {
+      "file": "query-offsets.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "1ddd812ad17b5c63bcd3bae85a77741bf0bfb5bee926d4e1f10e092bff814c2f"
+    }
+  ],
+  "execution": "Fixture preparation only; no compile, runtime test, timing or identity result."
+}

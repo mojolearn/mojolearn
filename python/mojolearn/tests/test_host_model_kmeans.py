@@ -1,18 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Saved-model CPU inference for KMeans (lane/kmeans-save, 2026-09-16).
 
-THE GAP THIS CLOSES. `KMeans.predict` and `KMeans.transform` shipped, and
-`_mojolearn_core_host` exports both, but the class had no `save`, so the
-GPU-train / save / CPU-infer route stopped at serialization and
-`host_surface.SAVED_MODEL_INFERENCE_OWED` said so.
+A fitted KMeans saves, and `mojolearn.host_model` answers `predict` and
+`transform` from the file on a CPU with no GPU.
 
 The format and refusal tests need no binding. The round-trip tests fit
 through the bindings this process routes (a GPU set, or the reference host
-set under `reference_training()` on a CPU-only install), save, load through
+set on a CPU-only install), save, load through
 `mojolearn.host_model` and require the host answer to be the same bytes as
 the fitted model's; they skip when the core host binding is not built.
-Cross-vendor identity is tools/classical_host_gate.py's and
-tools/identity_break.py's, not this file's.
+Cross-vendor identity is the verification's, not this file's.
 
 A CHECK THAT CANNOT FAIL IS NOT A CHECK. `test_one_ulp_in_the_file_moves_the
 _answer` rewrites one centroid element of a saved file by one ULP and
@@ -27,7 +24,6 @@ import pytest
 
 import mojolearn
 from mojolearn import _backend, _classical_host, _serialize
-from mojolearn._cpu_reference import reference_training
 from mojolearn.cluster import _KMEANS_FORMAT
 
 
@@ -51,35 +47,10 @@ def _bytes(outputs):
 
 # ------------------------------------------------------------------ format
 
-def test_kmeans_format_is_a_host_model_format():
-    assert _KMEANS_FORMAT == "mojolearn-kmeans-1"
-    assert _KMEANS_FORMAT in _classical_host.CLASSICAL_FORMATS
-    assert _classical_host._FORMATS[_KMEANS_FORMAT] == {"KMeans": _classical_host.HostKMeans}
-
-
 def test_unfitted_kmeans_refuses_save():
     with tempfile.TemporaryDirectory() as tmp:
         with pytest.raises(RuntimeError, match="not fitted"):
             mojolearn.KMeans().save(os.path.join(tmp, "m.npz"))
-
-
-def test_kmeans_is_a_declared_inference_lane_and_no_longer_owed():
-    """lane/kmeans-save put `mojolearn-kmeans-1` in the classical host door;
-    lane/classical-host-recordings (2026-09-16) declared the six fitted
-    k-means lanes and recorded them, so `kmeans` left the owed registry.
-
-    The assertion that would catch a regression is the pair: the lanes are
-    DECLARED (so the gate covers them) and they are NOT owed (so nothing
-    claims a recording is still missing). Dropping one k-means lane from
-    `host_surface` fails the first; re-adding a `kmeans` note to
-    SAVED_MODEL_INFERENCE_OWED fails the second.
-    """
-    from mojolearn import host_surface
-    declared = host_surface.inference_lanes()
-    for lane in ("kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
-                 "kmeans-sqrt", "kmeans-classic-pp"):
-        assert lane in declared, f"{lane} is not a declared inference lane"
-    assert "kmeans" not in host_surface.saved_model_inference_owed()
 
 
 # ------------------------------------------------------------- round trip
@@ -93,8 +64,7 @@ CASES = [
 
 
 def _fit_and_save(make, X, path):
-    with reference_training():
-        est = make().fit(X)
+    est = make().fit(X)
     est.save(path)
     return est
 

@@ -40,6 +40,14 @@ try:
     audit = audit_native_call(T.rms_norm_forward, source, weight, 1e-5, numeric_mode='identical')
 finally:
     setattr(module, name, original)
+if sys.argv[1] == 'storage':
+    # `array.array` is a connected export (_native_loaded_modules; buffer admission reads it through
+    # providers/python/borrowed_buffer_pyapi_unpack.mojo): replacing it refuses before any hook runs
+    assert type(audit.exception) is TypeError, audit.report()
+    assert 'native module connection export changed: array.array' in str(audit.exception)
+    assert not calls
+    print(json.dumps({'refused': True, 'calls': calls}))
+    sys.exit(0)
 result = audit.assert_native()
 assert not calls
 assert type(result) is array_class
@@ -51,6 +59,9 @@ print(json.dumps({'native': audit.report(), 'calls': calls, 'shape': result.shap
     child = subprocess.run([sys.executable, "-c", program, owner], capture_output=True, text=True, timeout=90)
     assert child.returncode == 0, (child.stdout, child.stderr)
     report = json.loads(child.stdout.strip().splitlines()[-1])
+    if owner == "storage":
+        assert report["refused"] and not report["calls"]
+        return
     assert report["native"]["passed"] and not report["calls"]
     assert report["shape"] == [4, 3]
 

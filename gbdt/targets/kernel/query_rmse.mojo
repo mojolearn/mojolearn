@@ -58,7 +58,7 @@ DEVIATIONS, both the pointwise family's and for the same reasons:
     row 10), a comptime no-op outside IDENTICAL.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
@@ -358,6 +358,9 @@ def launch_approximate_query_rmse[estimation: Bool](
     )
 
 
+# TOMBSTONE: MOJOLEARN_AFT_N12 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 385e4adfcd.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N12.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # N12: one four-simdgroup block per complete query exposes four times the
 # independent row loads of the existing 32-lane query reducer. There is no
 # query-size threshold and no truncated group. Weighted terms are unchanged;

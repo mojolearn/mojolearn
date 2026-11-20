@@ -270,29 +270,40 @@ transcendentals and division below are OURS.
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: MOJOLEARN_IDN_NORM_FIXED_LANES arms and helpers (RUN #6 of
+# docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), reverse of the sweep 5d0bda260a.
 from transformer.experiments.norm_fixed_lanes import (
     IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
     nfl_square, nfl_sum, norm_row_threads,
 )
-from transformer.experiments.attention_schedules import (
-    NN25_RMS_SPLIT_SCALE, NN29_RING_PAIR,
-    rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
-    kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
-    NN21_SCALE_MASK, score_scale_mask_kernel,
-)
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy, stack_allocation
-from std.os import getenv
+# Markers moved from the deleted transformer/experiments/attention_schedules.mojo (sweep 2026-11-15):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN22_EAGER_DKDV_PAIR (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 2 and 4, NN25; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_NN29_RING_PAIR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (the fixed 32-lane S1 arm, EXP:2246 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# TOMBSTONE: MOJOLEARN_IDN_ROPE (arm 1, NN27, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
+# TOMBSTONE: MOJOLEARN_NN21_SCALE_MASK (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+# Restore: git apply experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch
+# TOMBSTONE: MOJOLEARN_NN23_ROWDOT_DS (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+# Restore: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: transformer/experiments/attention_schedules.mojo deleted with its last importer's dead arms: NN25_RMS_SPLIT_SCALE,
+# NN29_RING_PAIR, NN27_QK_ROPE_PAIR, NN21_SCALE_MASK and rms_sumsq_kernel, rms_parallel_scale_kernel, kv_ring_pair_kernel,
+# qk_rope_pair_kernel, score_scale_mask_kernel.)
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from gemm.experiments.neural_tiled_v2 import NI07_GROUPED_PROJECTIONS, neural_projection_triplet
-from training.neural_identical_experiments import (
-    IDN_RMS_ROW_BLOCK, IDN_TRAIN_SWIGLU, IDN_ROPE_CACHE,
-    IDN_TRAIN_NO_DECODE_CACHE,
-)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -311,7 +322,6 @@ from core.step_phase import (
 # token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_SHIPPED_ROWS,
-    STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
     step_glue_rows_of,
@@ -320,7 +330,7 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from gemm.neural_dispatch import GemmWorkspace, NEURAL_PAIR_ENABLED
+from gemm.neural_dispatch import GemmWorkspace
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -361,11 +371,9 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     AttnFwdScan,
     FUSED_RAN,
-    FUSED_SKIPPED_STICKY,
     IDN_DECODE_RESIDENT_IO,
     IDN_TRAIN_ONE_WAIT,
     LlamaDeferredChecks,
@@ -386,7 +394,7 @@ from transformer.impl.llama.attn_fold_v2 import (
     attn_v2_context_cell,
     attn_v2_denom_row,
 )
-from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE
+from core.device_scan import DeviceNonfiniteBatch, NONFINITE_NONE, SCAN_TPB, _scan_blocks, min_partials_kernel
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
 # is reached only from `comptime if AFN_ATTN_ANY` arms below.
 from transformer.impl.llama.afn_apple_fast import (
@@ -822,7 +830,7 @@ def _upload(
     step_count_sync()
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     step_count_h2d()
@@ -854,7 +862,7 @@ def _download(
     ctx.synchronize()
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
     return out^
 
@@ -1565,6 +1573,10 @@ def _expect_optional(name: String, got: Int, want: Int, on: Bool) raises:
         )
 
 
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: causal-lm-generate 0.90 from one pair with 3-8 percent drift, causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02) the switch, LlamaKVCache.fixed / scan_cells, the fixed-stride append and clear kernels and their branches in the refusal scans, the two appends and the rewind deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch
+
+
 struct LlamaKVCache(Movable):
     """The recurrent state between calls (contract section 7.2):
     `k_cache` and `v_cache`, each `[B, n_kv, S, head_dim]`, appended to at
@@ -1595,6 +1607,19 @@ struct LlamaKVCache(Movable):
     var cap: Int
     var k: DeviceBuffer[DType.float32]
     var v: DeviceBuffer[DType.float32]
+    #: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK (the IDENTICAL default; nothing reads
+    #: these four on a build with its _OFF define or in a FAST build). `wm_on`: the owner granted the
+    #: watermark (`wm_grant`): every writer of `k` / `v` other than the block
+    #: forward's append calls `wm_reset`. `wm_upto`: the cache rows `[0,
+    #: wm_upto)` and the rotary inv_freq were scanned finite by a call's
+    #: refusal and nothing but the append's bit copies touched them since
+    #: (-1: nothing is known, the next call scans everything). `wm_x`: the
+    #: hidden-state floats of one decode token (`b * d_model`). `wm_batch`:
+    #: the held scratch of the decode step's three fixed-length scans.
+    var wm_on: Bool
+    var wm_upto: Int
+    var wm_x: Int
+    var wm_batch: Optional[DeviceNonfiniteBatch]
 
     def __init__(
         out self,
@@ -1649,10 +1674,107 @@ struct LlamaKVCache(Movable):
             self.cap = window
         self.k = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
         self.v = _zeros(ctx, b * dims.n_kv * self.cap * dims.head_dim)
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_x = 0
+        self.wm_batch = Optional[DeviceNonfiniteBatch]()
+
+    def wm_grant(mut self, ctx: DeviceContext, d_model: Int) raises:
+        """MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: the owner states that every
+        writer of this cache's floats other than the block forward's own
+        append calls `wm_reset` (or drops the cache), and gets the held
+        scratch of a decode step's scans: the hidden states of one token and
+        the one key row and one value row the previous step appended, three
+        fixed lengths. A ring cache (`window > 0`) is refused the grant: a
+        step overwrites a ring slot, so its whole-ring scan stays. Nothing is
+        known at the grant: the first call scans everything."""
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_batch = None
+        if self.window != 0 or d_model <= 0:
+            return
+        var row = self.b * self.n_kv * self.head_dim
+        var lens: List[Int] = [self.b * d_model, row, row]
+        self.wm_x = self.b * d_model
+        self.wm_batch = DeviceNonfiniteBatch(ctx, lens)
+        self.wm_on = True
+
+    def wm_reset(mut self):
+        """The cache floats or the position were written from outside the
+        block forward (a load, a zero fill, a restart, a rewind): nothing
+        below any row is known, the next call scans the whole cache."""
+        self.wm_upto = -1
+
+    def wm_revoke(mut self):
+        """The owner can no longer vouch for the cache's writers (the state
+        tensor is shared with another resident entry): every call scans the
+        whole cache, as a cache that was never granted does."""
+        self.wm_on = False
+        self.wm_upto = -1
+        self.wm_batch = None
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+
+
+# MOJOLEARN_LLAMA_FAST_STAGE_KEEP: PROMOTED 2026-11-19 (lane fx-verdicts4) for the stateless block forward, DELETED for
+# the stack-layer run. Confirmed and its _OFF switch deleted 2026-11-20 (round 3 below; the
+# old opt-in name and _OFF are refused, core/experiment_guards_neural.mojo). Evidence: A/B round 2, NVIDIA L40S (host
+# bd9c355c19c0), wheel 0c68d6cd27 and its B set, base and arm in ONE pod job (nvc1-0008, tag
+# nvc-ab-20261119T154232Z-0642a5), small rows the median of 20 calls; every output digest equal (9 cells).
+# The stateless forward (`attn_step_fresh_prefill`), base -> arm ms: transformer-forward 2.869 -> 2.734 (0.953; the
+# row's other base in the job 2.883); driver TransformerBlock.forward, median of 20: 1 x 4096 d384 6.007 -> 5.805
+# (0.97), 1 x 2048 d512 4.052 -> 3.506 (0.87), non-board 3 x 700 d320 2.390 -> 2.199 (0.92), 4 x 128 d384 1.570 ->
+# 1.398 (0.89). Five of five faster, no shape or dataset in the rule (a forward-only run on kept stages of its shape).
+# The stack-layer run (`_run_attn_on` with forward_only, the arm's second site): samba-forward 4.609 -> 4.751 (1.031;
+# the row's three bases in the job 4.609-4.635, min of 20 4.583 -> 4.706): slower, so that site passes no keep and
+# resets as before (TOMBSTONE in autograd/block_step_ops.mojo). Controls: lm-forward 0.98, lm-train-step 1.01,
+# transformer-decode 1.03 (L = 1 steps and trained stages are never reset in either arm).
+# Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): the _OFF arm on the same rows.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; every digest equal). Kept stages (default)
+# -> reset before every stateless forward, ms: transformer-forward 2.617 -> 2.901 (1.108, medians of 20); driver
+# TransformerBlock.forward, median of 20: 1 x 4096 d384 5.726 -> 5.715 (1.00), 1 x 2048 d512 3.490 -> 3.853 (1.10),
+# non-board 3 x 700 d320 2.158 -> 2.287 (1.06), 4 x 128 d384 1.370 -> 1.430 (1.04). Rows the switch does not reach:
+# lm-train-step 1.000, samba-forward 1.003, transformer-decode 1.003, lm-forward 0.911 (that row's two bases in the
+# job are 20.36 and 22.48: its own spread). CONFIRMED a second time; the switch and the reset on this path are deleted.
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF (old path, the reset before a stateless forward on kept stages; the promotion confirmed by A/B rounds 2 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF.patch; record in docs/TOMBSTONES.md.
+# The constant is kept as the name the docstrings below and in autograd/block_step_ops.mojo refer to; nothing branches on it.
+comptime LLAMA_FAST_STAGE_KEEP = True
+"""A forward-only attention step run of L > 1 tokens on kept stages of the
+same shape that passes `AttnPrefill.prepare(..., keep_bytes=True)` (the
+stateless `TransformerBlock.forward`) restores the stages' host flags
+(`LlamaDeviceStages.reset_flags`) and does NOT zero-fill the stage buffers
+again, where `LlamaDeviceStages.reset` (every other reused run) is thirty zero fills
+and a wait before the call.
+
+WHY THE OUTPUT IS THE SAME. A forward writes each stage it reads, whole,
+before reading it: the stages are built for exactly this call's (B, L)
+(`llama_decoder_layer_forward_planted` refuses any other), every stage
+kernel covers all M rows of its output, the packed key and value spans are
+written by the append for all `s` used positions and nothing reads past `s`,
+and the eager attention kernels (a regime or corner refusal) write
+`scores`, `masked`, `aexp` and `weights` over the call's whole
+`[B, n_heads, L, S]` before the next kernel reads them. The byte LM's logits
+forward has run this same `llama_decoder_layer_forward(forward_only=True)`
+on kept stages with no reset since DEVIATION 2942
+(training/byte_lm_logits.mojo `ByteLogitsScratch`), the trainer's per-layer
+stages serve every training step without one, and the L = 1 decode stages of
+a resident entry are never reset between tokens. A run that a backward may
+read (`forward_only` False) keeps the default reset. No float is produced
+differently: no bit moves on any column.
+
+WHAT IT REMOVES, from sizes alone. The fills write every stage: twelve
+M x d_model-wide buffers, four M x intermediate, the two key / value spans,
+and `aexp`, which a column whose default attention arm keeps the fused
+forward's exp stash (NVIDIA) grows to B x n_heads x L x S floats at the
+first call. The fill is linear in B x L x (12 d_model + 4 intermediate) and
+QUADRATIC in L through `aexp`, while the launches that do the work are not
+cheaper for it: the saving grows with the sequence length, the head count
+and the width (twice the bytes at d_model 768; four times the `aexp` bytes
+at L doubled), and is thirty queued fills and one wait at any shape."""
 
 
 struct LlamaDeviceStages(Movable):
@@ -1754,9 +1876,10 @@ struct LlamaDeviceStages(Movable):
     False: `aexp` does not hold the eager stage); cleared at the start of
     every `eager_attention_forward` and by `attention_eager_core`, the only
     other writer of `aexp`, on every build (a host integer nothing on a
-    shipped build reads). `llama_decoder_layer_backward_device` hands it
-    with `aexp` to `fused_backward_launch_estash_ran`, which runs the
-    DEVIATION 2650 backward only when it equals this call's cell count."""
+    shipped build reads). The hand layer backward that handed it with `aexp`
+    to `fused_backward_launch_estash_ran` (which runs the DEVIATION 2650
+    backward only when it equals this call's cell count) was deleted
+    2026-10-19; the checks and attention benches still call that launcher."""
     var defer_addr: Int
     """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
     2026-10-28): the address of the owner's `LlamaDeferredChecks` while a
@@ -1772,6 +1895,15 @@ struct LlamaDeviceStages(Movable):
     three buffers) and on the AFN flash path; set after a fused forward.
     The fused backward takes the three maxima from it instead of scanning
     the three buffers again."""
+    var refuse_batch: Optional[DeviceNonfiniteBatch]
+    """lane/fx-transformer-forward (2026-11-19): the scan scratch of this
+    stage set's from-position-0 refusal (`_llama_refuse_prefill_held`: the
+    hidden states and inv_freq, two fixed lengths for a stage set, since the
+    stages are built for one (B, L)), built at the first such call and kept,
+    where every call allocated two device buffers and one host buffer and
+    freed them. None until that call; not a stage, never recorded, and
+    `reset` leaves it alone (it holds no call's data between calls: every
+    slot is rewritten by the scan before it is read)."""
 
     def __init__(
         out self,
@@ -1868,6 +2000,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_estash_cells = 0
         self.defer_addr = 0
         self.attn_fwd_scan = AttnFwdScan()
+        self.refuse_batch = Optional[DeviceNonfiniteBatch]()
 
         # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
@@ -1952,6 +2085,21 @@ struct LlamaDeviceStages(Movable):
         self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
+
+    def reset_flags(mut self) raises:
+        """LLAMA_FAST_STAGE_KEEP (the default): the host half of `reset`, every
+        route flag and per-call record back to the constructor's value, with
+        no fill and no wait. For a forward-only run on kept stages of the
+        same shape, which writes each stage whole before reading it
+        (`LLAMA_FAST_STAGE_KEEP`). Keep this list equal to `reset`'s."""
+        self.attn_prefer_eager = False
+        self.attn_recompute_backward = False
+        self.attn_forward_status = -1
+        self.attn_fused_off = False
+        self.attn_materialized = False
+        self.attn_estash_cells = 0
+        self.defer_addr = 0
+        self.attn_fwd_scan = AttnFwdScan()
 
 
 def llama_proj(
@@ -2139,43 +2287,6 @@ def llama_rms_norm_kernel(
         )
 
 
-def llama_rms_norm_row_block_kernel(
-    sumsq: MutPointer[Float32, MutAnyOrigin],
-    out_buf: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    weight: MutPointer[Float32, MutAnyOrigin],
-    dm_in: Int32,
-    eps_in: Float32,
-):
-    """NI25 S arm: one block per row; original serial S1, parallel S3/S4.
-
-    Lane zero alone owns the original ascending FMA chain. A shared scalar
-    broadcasts the same rounded rstd to all output lanes, so the physical
-    thread count is never a numerical reduction parameter. No shape cutoff.
-    """
-    var t = Int(block_idx.x)
-    var lane = Int(thread_idx.x)
-    var dm = Int(dm_in)
-    var shared = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
-    if lane == 0:
-        var acc = Float32(0.0)
-        comptime if IDN_NORM_FIXED_LANES:
-            # the fixed 32-lane fold, one thread (same bits as the cell)
-            acc = nfl_dot(x, x, t * dm, t * dm, dm)
-        else:
-            for j in range(dm):
-                var xj = ftz(x.unsafe_load(t * dm + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.unsafe_store(t, acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        shared.unsafe_store(0, ftz(identical_rsqrt(ftz(mean + eps_in))))
-    barrier()
-    var rstd = shared.unsafe_load(0)
-    for j in range(lane, dm, Int(block_dim.x)):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner)))
-
-
 def residual_rms_norm_kernel(
     residual: MutPointer[Float32, MutAnyOrigin],
     sumsq: MutPointer[Float32, MutAnyOrigin],
@@ -2276,9 +2387,10 @@ def residual_next_norm_fusion_enabled(
     m: Int, dm: Int, norm_kind: Int, norm_bias: Bool
 ) -> Bool:
     """The measured cross-block residual2 -> norm1 route."""
+    # TOMBSTONE: MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+    # Restore: git apply experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch
     return (
-        not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"]()
-        and TARGET_COLUMN == COLUMN_APPLE
+        TARGET_COLUMN == COLUMN_APPLE
         and residual_norm_fusion_size_ok(m, dm)
         and norm_kind == NORM_RMSNORM and not norm_bias
     )
@@ -2302,30 +2414,6 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
-    # NN25 keeps the exact S1 fold; cell work is a second flat launch.
-    # OFF by default. No width threshold: this arm measures the actual
-    # extra launch/repeated-rsqrt cost across neighboring model widths.
-    comptime if NN25_RMS_SPLIT_SCALE and not SAB_S1_FOLD_DESCENDING and not SAB_BATCHINV_NORM_CHUNK_FROM_M:
-        step_count_launch()
-        ctx.enqueue_function[rms_sumsq_kernel](
-            sumsq.unsafe_ptr(), x.unsafe_ptr(), Int32(m), Int32(d_model),
-            grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[rms_parallel_scale_kernel](
-            out_buf.unsafe_ptr(), sumsq.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(m), Int32(d_model), eps,
-            grid_dim=(_grid(m * d_model), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
-    comptime if IDN_RMS_ROW_BLOCK and not BLOCK_ANY_SABOTAGE:
-        step_count_launch()
-        ctx.enqueue_function[llama_rms_norm_row_block_kernel](
-            sumsq.unsafe_ptr(), out_buf.unsafe_ptr(), x.unsafe_ptr(),
-            weight.unsafe_ptr(), Int32(d_model), eps,
-            grid_dim=(m, 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-        return
     # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the same kernel at that many threads per block. The kernel owns one
@@ -2340,7 +2428,7 @@ def llama_rms_norm(
     # block) cannot hold a cell and is not offered under the define.
     var norm_blocks = _grid(norm_row_threads(m))
     var norm_threads = LLAMA_TPB
-    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS) and not IDN_NORM_FIXED_LANES:
+    comptime if STEP_GLUE_SHIPPED_ROWS and not IDN_NORM_FIXED_LANES:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             norm_blocks = step_glue_blocks(m, glue_rows)
@@ -2934,51 +3022,6 @@ def apply_rotary_pos_emb(
 # ===========================================================================
 
 
-def rotary_k_prefill_cache_kernel(
-    k_rope: MutPointer[Float32, MutAnyOrigin],
-    k_cache: MutPointer[Float32, MutAnyOrigin],
-    v_cache: MutPointer[Float32, MutAnyOrigin],
-    k_proj: MutPointer[Float32, MutAnyOrigin],
-    v_proj: MutPointer[Float32, MutAnyOrigin],
-    cos_tab: MutPointer[Float32, MutAnyOrigin],
-    sin_tab: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, nkv_in: Int32, hd_in: Int32, rd_in: Int32,
-):
-    """NI23: full-prefill K RoPE plus the K/V attention-layout stores.
-
-    Only cache-empty, absolute-position-zero calls enter. One cell computes
-    apply_rotary_pos_emb_kernel's clean S9/S10 spelling, saves its original
-    token-major tape value, and writes the same value to the packed K layout.
-    V is a raw copy, matching kv_append2_kernel (no newly introduced FTZ).
-    """
-    var l = Int(l_in)
-    var nkv = Int(nkv_in)
-    var hd = Int(hd_in)
-    var rd = Int(rd_in)
-    var half = rd // 2
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(b_in) * l * nkv * hd:
-        return
-    var d = i % hd
-    var kvh = (i // hd) % nkv
-    var tok = i // (nkv * hd)
-    var t = tok % l
-    var bb = tok // l
-    var rotated = ftz(k_proj.unsafe_load(i))
-    if d < rd:
-        var f = d if d < half else d - half
-        var c = ftz(cos_tab.unsafe_load(t * half + f))
-        var s = ftz(sin_tab.unsafe_load(t * half + f))
-        var rh = -ftz(k_proj.unsafe_load(i + half)) if d < half else ftz(k_proj.unsafe_load(i - half))
-        var a = ftz(identical_mul(rotated, c))
-        var bterm = ftz(identical_mul(rh, s))
-        rotated = ftz(ftz(a) + ftz(bterm))
-    k_rope.unsafe_store(i, rotated)
-    var dst = ((bb * nkv + kvh) * l + t) * hd + d
-    k_cache.unsafe_store(dst, rotated)
-    v_cache.unsafe_store(dst, v_proj.unsafe_load(i))
-
-
 def kv_append_kernel(
     new_cache: MutPointer[Float32, MutAnyOrigin],
     old_cache: MutPointer[Float32, MutAnyOrigin],
@@ -3066,6 +3109,51 @@ def kv_append2_kernel(
         src_i = (bb * l + t) * nkv * hd + kvh * hd + d
         new_k.unsafe_store(i, fresh_k.unsafe_load(src_i))
         new_v.unsafe_store(i, fresh_v.unsafe_load(src_i))
+
+
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: causal-lm-generate 0.90 from one pair with 3-8 percent drift, causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02) kv_fixed_append2_kernel and kv_fixed_clear2_kernel deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch
+
+
+def kv_rewind2_kernel(
+    new_k: MutPointer[Float32, MutAnyOrigin],
+    new_v: MutPointer[Float32, MutAnyOrigin],
+    old_k: MutPointer[Float32, MutAnyOrigin],
+    old_v: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_from_in: Int32,
+    s_to_in: Int32,
+):
+    """The linear cache packed at stride `s_from`, rewritten packed at the
+    SMALLER stride `s_to` (lane fx-kv-inplace, `llama_kv_cache_rewind`):
+    destination cell `i` of the first `B*n_kv*s_to*head_dim` is slot
+    `j < s_to` of its (batch, kv head) row read at the old stride, a plain
+    bit copy; every cell from there to the end of the old span
+    (`B*n_kv*s_from*head_dim`) is 0, the value those cells hold in a cache
+    that never ran past `s_to`. Out of place (DEVIATION 1022): `new_*` and
+    `old_*` are different buffers. One thread per cell, K and V together.
+    """
+    var b = Int(b_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s_from = Int(s_from_in)
+    var s_to = Int(s_to_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s_from * hd:
+        return
+    if i >= b * nkv * s_to * hd:
+        new_k.unsafe_store(i, Float32(0.0))
+        new_v.unsafe_store(i, Float32(0.0))
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s_to
+    var row = rest // s_to
+    var src_i = (row * s_from + j) * hd + d
+    new_k.unsafe_store(i, old_k.unsafe_load(src_i))
+    new_v.unsafe_store(i, old_v.unsafe_load(src_i))
 
 
 def kv_window_gather_kernel(
@@ -3699,6 +3787,12 @@ def attn_context_kernel(
     ctxv.unsafe_store(i, acc)
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (DELETE-ARM: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural: attn_denom_v2_kernel, attn_context_v2_kernel and their launch arms; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed). Restored from the reverse of the deletion
+# commits b76ae8bbc3, a5a10b1930 and the sweep a803ea45ba, not from the patch (the patch also carries the Apple FAST
+# forward arms deleted between c3d1c7865f and a5a10b1930, which stay deleted).
 def attn_denom_v2_kernel(
     denom: MutPointer[Float32, MutAnyOrigin],
     aexp: MutPointer[Float32, MutAnyOrigin],
@@ -3849,9 +3943,8 @@ def swiglu_training_fused_kernel(
     gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
 
 
-def swiglu_fused_enabled() -> Bool:
-    """`MOJOLEARN_SWIGLU_FUSED=1`; read per block call, default off."""
-    return String(getenv("MOJOLEARN_SWIGLU_FUSED")) == "1"
+# TOMBSTONE: MOJOLEARN_SWIGLU_FUSED (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-09-30, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558. `swiglu_fused_kernel` stays: the Apple AFN block launches it.
+# Restore: git apply experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch; record in docs/TOMBSTONES.md.
 
 
 def mlp_gated_kernel(
@@ -4072,9 +4165,11 @@ def _refuse_nonfinite_at(
     )
 
 
-comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF (DELETE-OLD-PATH: no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-33-neural.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL: the per-call
 refusal scans of `llama_refuse_bad_call` (hidden states, rotary inv_freq
 and, on a decode step, the key and value caches) are enqueued together on
@@ -4083,23 +4178,173 @@ allocations, where each scan had its own partials buffer, pinned host
 buffer and wait (two per layer per forward, four on a decode step). Same
 kernel, same geometry, same integer first-index fold; the names are tested
 in the same order, so the refusal raised is the one the separate scans
-raised. No float is produced: no bit moves on any column.
-`-D MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF` restores the separate scans."""
+raised. No float is produced: no bit moves on any column. FAST builds keep the separate scans."""
 
-comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF"]()
-    or is_defined["MOJOLEARN_ATTN_CACHE_WAIT"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK: PROMOTED 2026-11-19 (lane fx-verdicts3). The appended-row scan on a granted
+# cache is the IDENTICAL default (confirmed and its _OFF switch deleted 2026-11-20, round 3 below; the old opt-in
+# name and _OFF are refused, core/experiment_guards_neural.mojo; the constant
+# keeps its experiment name). Evidence: A/B round 1, NVIDIA L40S (host bd9c355c19c0, 14-core cgroup), wheel
+# 0c68d6cd27 and its B set, base and arm back to back in ONE pod job (nvc1-0006, tag nvc-ab-20261119T125554Z-6f7afc),
+# one scored run per arm; digests and quality equal on all 4 cells. Base -> arm ms: causal-lm-generate
+# (mojolearn-162m) 1019.7 -> 931.2 (0.91), samba-decode 1556.8 -> 1426.5 (0.92), transformer-decode 1173.3 -> 1093.6
+# (0.93), causal-lm-generate-smollm2 1593.9 -> 1504.7 (0.94). How to read it: this pair's base was the slowest base
+# run of each row in the job (the same rows' bases in the other pairs: 989.5; 1433.0, 1483.3; 1156.0, 1117.6;
+# 1566.2), so part of each ratio is drift; against the mean of those other bases the arm is 0.94, 0.98, 0.96, 0.96,
+# which is what the launch arithmetic predicted (-45, -30, -60, -115 ms: 0.955, 0.98, 0.95, 0.93), and the arm is
+# under every base run of every row. A gain of about 4 to 6 %, four rows of four, none slower.
+# A refusal scan produces no float: no bit moves. The refusal's name, order, flat index and call are unchanged by
+# design; that is decided by the native checks, not by timing: checks/native_tests/llama_refuse_row_scan.mojo (part 2
+# requires the row scan to be the refusing scan in this build) and transformer_decode_door.mojo case 3 (a non-finite
+# loaded into a stepped session). They had run only in a build without the arm when this was flipped: RUN OWED on
+# the integration build, and a failure there is fixed or this switch goes back to _OFF the same round.
+# General mechanism: the scan lengths come from the cache geometry (one row of every run), no shape key.
+# Limits: NVIDIA only (AGENTS.md part 8). OWED (does not hold the flip): a 4096-token decode at n_kv 2 and a
+# 12-layer llama configuration against the _OFF arm.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its _OFF set, base
+# and arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; digests and quality equal on all 4 cells).
+# Row scan (default) -> whole scans ms: transformer-decode 1,086.8 -> 1,118.2 (1.029; the row's three bases in the job
+# 1,086.0 to 1,086.8), causal-lm-generate-smollm2 1,504.9 -> 1,549.6 (1.030), causal-lm-generate (162M) 864.4 -> 880.6
+# (1.019), samba-decode 1,302.9 -> 1,319.7 (1.013; its other base 1,312.8). CONFIRMED a second time, four rows of
+# four in the same direction (2 to 3 % here against round 1's 4 to 6 %): the row scan stands and its switch is
+# deleted. The whole scans themselves stay: FAST builds run them, and so does a cache that is not granted.
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF (old path's switch; the promotion confirmed by A/B rounds 1 and 3, numbers above) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LLAMA_FAST_REFUSE_WATERMARK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+"""lane/fx-llama-refuse-watermark (2026-11-18), the IDENTICAL default since
+2026-11-19 (A/B numbers in the comment above; `_OFF` restores the whole
+scans; docs/apple-fast/EXPERIMENTS.md). A decode step
+(L = 1, linear cache) of a cache whose owner granted it
+(`LlamaKVCache.wm_grant`) scans the hidden states and only the ONE key row
+and ONE value row the previous step appended, on scratch held by the cache
+(no allocation per step, three fixed scan lengths), where the default scans
+the whole key cache, the whole value cache and inv_freq on three buffers
+allocated per call.
+
+WHY THE REFUSAL IS THE SAME ONE. A call's refusal that passes proves rows
+`[0, s)` and inv_freq finite. The only writers after it, until the next
+call, are this call's append (`kv_append2_kernel` and the two whole-buffer
+copies: bit copies, a finite float stays finite, at the new stride) and
+whatever the owner does; the owner's every other write calls `wm_reset`
+(the per-writer list is in autograd/block_step_ops.mojo
+`_attn_watermark_grant`). inv_freq is written only by
+`LlamaRopeTable.__init__`. So at the next call every float of the whole-cache
+scan outside row `s - 1` is finite, and the smallest non-finite flat index
+of the whole scan is the smallest one in row `s - 1`
+(`kv_rows_nonfinite_partial_kernel` reports that flat index): same name, same
+order (hidden_states, then key, then value), same index, same message, at
+the same call. Anything else (a prefill or chunk, the first call after a
+grant, a load, a reset, a ring cache, a cache nobody granted, a FAST build)
+takes the default scans. No float is produced: no bit moves on any column."""
+
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF (DELETE-OLD-PATH) and MOJOLEARN_ATTN_CACHE_WAIT (DELETE-ARM), no A/B recorded, deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF.patch (and MOJOLEARN_ATTN_CACHE_WAIT.patch)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-33-neural.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/nr-attn (2026-10-04), default ON under IDENTICAL; ported from
 lane/neural-pass67 087231ba3 (`MOJOLEARN_ATTN_CACHE_WAIT`). The per-layer
 hard wait after the KV cache update in `llama_attention_forward` is compiled
 out: every reader of the caches is a launch on the same in-order context,
 so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
 layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
-arithmetic moves: same bits on every column. `-D
-MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF` (or the old `-D
-MOJOLEARN_ATTN_CACHE_WAIT=1`) restores the wait."""
+arithmetic moves: same bits on every column. FAST builds keep the wait."""
+
+
+def kv_rows_nonfinite_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+    row_stride_in: Int32,
+    first_in: Int32,
+):
+    """core/device_scan.mojo `nonfinite_partial_kernel` over `n / width`
+    equal rows of `buf` that are NOT adjacent: row `g` is the `width` floats
+    at `g * row_stride + first` (the one row a decode step appended to each
+    (batch, kv head) of a cache packed at stride `row_stride / width`). Scan
+    element `i` is float `(i // width) * row_stride + first + i % width`, and
+    the partial holds that FLAT index of `buf` (or `NONFINITE_NONE`). The map
+    from `i` to the flat index is increasing (`first + width <= row_stride`,
+    checked by the caller), so the minimum over the partials is the smallest
+    flat index among the scanned rows: the index a scan of the whole buffer
+    reports when every float outside these rows is finite. Same predicate by
+    bits, same geometry (SCAN_TPB threads, `_scan_blocks`), same integer
+    fold (`min_partials_kernel`); no float is produced. It lives here, not
+    in the shared scan module, because only the llama cache has this layout
+    (MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK)."""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var row_stride = Int(row_stride_in)
+    var first = Int(first_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * SCAN_TPB
+    var i = Int(block_idx.x) * SCAN_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var flat = (i // width) * row_stride + first + i % width
+        var au = bitcast[DType.uint32](buf.unsafe_load(flat)) & UInt32(0x7FFFFFFF)
+        if au >= UInt32(0x7F800000):
+            best = Int32(flat)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def _kv_rows_scan_enqueue(
+    ctx: DeviceContext, mut batch: DeviceNonfiniteBatch, slot: Int,
+    mut buf: DeviceBuffer[DType.float32],
+    width: Int, row_stride: Int, first: Int,
+) raises:
+    """`DeviceNonfiniteBatch.enqueue` for a slot whose `lengths[slot]` floats
+    are `lengths[slot] / width` rows of `buf`, row `g` at `g * row_stride +
+    first` (`kv_rows_nonfinite_partial_kernel`). The slot's result is a FLAT
+    index of `buf`, the smallest among the scanned rows, or -1. The same
+    partial offsets, device fold, slot flag and one wait (`finish`) as
+    `enqueue`; a refused layout drains before raising, as `enqueue` does."""
+    if slot < 0 or slot >= len(batch.lengths):
+        ctx.synchronize()
+        raise Error("nonfinite batch: slot out of range")
+    var n = batch.lengths[slot]
+    var bad = batch.queued[slot] or width <= 0 or n % max(width, 1) != 0 or first < 0
+    bad = bad or first + width > row_stride
+    var rows = n // max(width, 1)
+    var reach = 0
+    if rows > 0:
+        reach = (rows - 1) * row_stride + first + width
+    if bad or reach > len(buf) or reach > Int(NONFINITE_NONE):
+        ctx.synchronize()
+        raise Error("nonfinite batch: duplicate slot, bad row layout or short source")
+    var blocks = 0
+    if n > 0:
+        blocks = _scan_blocks(n)
+        step_count_launch()
+        ctx.enqueue_function[kv_rows_nonfinite_partial_kernel](
+            batch.part.unsafe_ptr() + batch.offsets[slot], buf.unsafe_ptr(),
+            Int32(n), Int32(width), Int32(row_stride), Int32(first),
+            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+    step_count_launch()
+    ctx.enqueue_function[min_partials_kernel](
+        batch.res.unsafe_ptr() + slot, batch.part.unsafe_ptr() + batch.offsets[slot],
+        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    batch.queued[slot] = True
 
 
 def _llama_refuse_bad_call_deferred(
@@ -4178,6 +4423,38 @@ def llama_refuse_bad_call(
     var dm = dims.d_model
     var hd = dims.head_dim
     comptime if IDN_LLAMA_REFUSE_BATCH:
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            # Rows [0, s - 1) and inv_freq are known finite (the comptime's
+            # docstring): scan the hidden states and row s - 1 of each cache
+            # on the held scratch. Every condition that fails falls through
+            # to the whole scans below.
+            var wm_step = kv.wm_on and l == 1 and kv.window == 0 and kv.s >= 1 and kv.wm_upto == kv.s - 1
+            wm_step = wm_step and b * dm == kv.wm_x and b == kv.b and dims.n_kv == kv.n_kv and hd == kv.head_dim
+            wm_step = wm_step and b * dm <= len(x) and b * dims.n_kv * kv.s * hd <= len(kv.k)
+            wm_step = wm_step and b * dims.n_kv * kv.s * hd <= len(kv.v)
+            wm_step = wm_step and b * dims.n_kv * kv.s * hd <= Int(NONFINITE_NONE)
+            if wm_step:
+                # The held scratch moves out of the cache struct for the
+                # scans (they borrow the cache's buffers mutably) and back in
+                # after their one wait, before anything can raise a refusal.
+                # (Were a scan itself to raise, the scratch would go with
+                # this call and the cache would take the whole scans from
+                # then on.)
+                var held = Optional[DeviceNonfiniteBatch]()
+                swap(held, kv.wm_batch)
+                if held:
+                    var row_stride = kv.s * hd
+                    var row_first = (kv.s - 1) * hd
+                    held.value().enqueue(ctx, 0, x)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 1, kv.k, hd, row_stride, row_first)
+                    _kv_rows_scan_enqueue(ctx, held.value(), 2, kv.v, hd, row_stride, row_first)
+                    var held_hits = held.value().finish(ctx)
+                    swap(held, kv.wm_batch)
+                    _refuse_nonfinite_at(ctx, "hidden_states", x, held_hits[0])
+                    _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, held_hits[1])
+                    _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, held_hits[2])
+                    kv.wm_upto = kv.s
+                    return
         var has_kv = kv.s > 0
         var kv_used = kv.s
         if kv.window > 0:
@@ -4185,9 +4462,10 @@ def llama_refuse_bad_call(
         var lens = List[Int]()
         lens.append(b * l * dm)
         lens.append(rope.half)
+        var kv_cells = b * dims.n_kv * kv_used * hd
         if has_kv:
-            lens.append(b * dims.n_kv * kv_used * hd)
-            lens.append(b * dims.n_kv * kv_used * hd)
+            lens.append(kv_cells)
+            lens.append(kv_cells)
         var batch = DeviceNonfiniteBatch(ctx, lens)
         batch.enqueue(ctx, 0, x)
         batch.enqueue(ctx, 1, rope.inv_freq)
@@ -4200,6 +4478,11 @@ def llama_refuse_bad_call(
         if has_kv:
             _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, hits[2])
             _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, hits[3])
+        comptime if LLAMA_FAST_REFUSE_WATERMARK:
+            # The whole scans passed: rows [0, s) and inv_freq are finite.
+            # (A ring cache is never granted, so `wm_on` is a linear cache.)
+            if kv.wm_on:
+                kv.wm_upto = kv.s
         return
     # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
     # was 65 ms per call at the Samba shape, a fifth of the forward.
@@ -4211,12 +4494,59 @@ def llama_refuse_bad_call(
         var used = kv.s
         if kv.window > 0:
             used = kv.cap
+        var used_cells = b * dims.n_kv * used * hd
         _refuse_nonfinite_device(
-            ctx, "past_key_values.key_cache", kv.k, b * dims.n_kv * used * hd
+            ctx, "past_key_values.key_cache", kv.k, used_cells
         )
         _refuse_nonfinite_device(
-            ctx, "past_key_values.value_cache", kv.v, b * dims.n_kv * used * hd
+            ctx, "past_key_values.value_cache", kv.v, used_cells
         )
+
+
+def _llama_refuse_prefill_held(
+    ctx: DeviceContext,
+    mut held: Optional[DeviceNonfiniteBatch],
+    mut rope: LlamaRopeTable,
+    mut x: DeviceBuffer[DType.float32],
+    nx: Int,
+) raises:
+    """`llama_refuse_bad_call` for a call that starts at an EMPTY cache
+    (`kv.s == 0`: a prefill, a training forward, the first decode token), on
+    scan scratch the caller keeps (`LlamaDeviceStages.refuse_batch`).
+
+    With no carried keys or values the refusal is two scans, the `nx` hidden
+    states and inv_freq, and both lengths are fixed for a stage set. The
+    default built a `DeviceNonfiniteBatch` for them on every call: two
+    device buffers and one host buffer allocated and freed per layer per
+    forward. Here the batch is built at the first call and reused
+    (`DeviceNonfiniteBatch`: "a completed batch can be reused with the same
+    lengths; enqueue rereads every source"); a batch of other lengths is
+    replaced. The same kernels at the same geometry, the same integer fold,
+    the same one wait, the names tested in the same order with the same
+    messages: no float is produced and nothing a caller sees changes. A
+    scan that raises (a short source) drops the batch, so the next call
+    builds a clean one, as a per-call batch was."""
+    var fits = False
+    if held:
+        fits = (len(held.value().lengths) == 2 and held.value().lengths[0] == nx
+                and held.value().lengths[1] == rope.half)
+    if not fits:
+        # Drop a batch of other lengths before allocating its replacement.
+        held = None
+        var lens = List[Int]()
+        lens.append(nx)
+        lens.append(rope.half)
+        held = DeviceNonfiniteBatch(ctx, lens)
+    var hits = List[Int]()
+    try:
+        held.value().enqueue(ctx, 0, x)
+        held.value().enqueue(ctx, 1, rope.inv_freq)
+        hits = held.value().finish(ctx)
+    except err:
+        held = None
+        raise err
+    _refuse_nonfinite_at(ctx, "hidden_states", x, hits[0])
+    _refuse_nonfinite_at(ctx, "rotary_emb.inv_freq", rope.inv_freq, hits[1])
 
 
 def llama_refuse_bad_inputs(
@@ -4269,13 +4599,14 @@ def llama_refuse_bad_inputs(
         "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
     )
     if kv.s > 0:
+        var host_cells = b * dims.n_kv * kv.s * hd
         _refuse_nonfinite_named_host(
             "past_key_values.key_cache",
-            _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.k, host_cells),
         )
         _refuse_nonfinite_named_host(
             "past_key_values.value_cache",
-            _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
+            _download(ctx, kv.v, host_cells),
         )
 
 
@@ -4299,11 +4630,17 @@ def llama_attention_scale(head_dim: Int) -> Float32:
     return ftz(identical_rsqrt(Float32(head_dim)))
 
 
+comptime TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
+"""`-D MOJOLEARN_TRANSFORMER_TIMING`: the block and step timers. Was a getenv
+per block call / step / session call until lane envgate-neural-lm
+(2026-11-15); a build without the define pays nothing."""
+
+
 def timing_on() -> Bool:
-    """`MOJOLEARN_TRANSFORMER_TIMING=1`: print a host-timed, synchronized
+    """`-D MOJOLEARN_TRANSFORMER_TIMING`: print a host-timed, synchronized
     phase breakdown of every block call. A traced or timed run is not a
     measurement of anything else; this exists to say where the time goes."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    return TRANSFORMER_TIMING
 
 
 def timing_tick(
@@ -4331,10 +4668,12 @@ comptime ATTN_PATH_FUSED = 2
 def attention_path_choice(plant_at: Int) -> Int:
     """Which attention path THIS call takes, before the data is looked at.
 
-    `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager` forces the eager kernels (the
+    `-D MOJOLEARN_TRANSFORMER_ATTN_PATH_EAGER` forces the eager kernels (the
     A/B arm for timing; also what a sabotage build and a planted call get
-    unconditionally). `fused` asks for the fused kernels; the default is
-    `auto`, which is `fused`.
+    unconditionally). `-D MOJOLEARN_TRANSFORMER_ATTN_PATH_FUSED` asks for the
+    fused kernels; the default is `auto`, which is `fused`. Both were the
+    run-time `MOJOLEARN_TRANSFORMER_ATTN_PATH=eager|fused`, read per block
+    call, until lane envgate-neural-lm (2026-11-15).
 
     THIS FUNCTION USED TO RETURN EAGER FOR A FAST BUILD,
     which is the whole case against that tier existing in this lane: the
@@ -4349,12 +4688,15 @@ def attention_path_choice(plant_at: Int) -> Int:
         return ATTN_PATH_EAGER
     if plant_at != PLANT_AT_NONE:
         return ATTN_PATH_EAGER
-    var want = String(getenv("MOJOLEARN_TRANSFORMER_ATTN_PATH"))
-    if want == "eager":
+    comptime if TRANSFORMER_ATTN_PATH_EAGER:
         return ATTN_PATH_EAGER
-    if want == "fused":
+    comptime if TRANSFORMER_ATTN_PATH_FUSED:
         return ATTN_PATH_FUSED
     return ATTN_PATH_AUTO
+
+
+comptime TRANSFORMER_ATTN_PATH_EAGER = is_defined["MOJOLEARN_TRANSFORMER_ATTN_PATH_EAGER"]()
+comptime TRANSFORMER_ATTN_PATH_FUSED = is_defined["MOJOLEARN_TRANSFORMER_ATTN_PATH_FUSED"]()
 
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
@@ -4442,15 +4784,8 @@ def eager_attention_forward(
     # whole branch reduces to the code that was here before, so the identity
     # card is untouched by this commit and the measured path is the one that
     # was measured.
-    if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
-            and ATTN_STICKY and not need_eager):
-        status = FUSED_SKIPPED_STICKY
-        if not need_eager:
-            attention_eager_core(
-                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
-                plant_idx, plant_bits, trace, prefix, softcap,
-            )
-    elif choice != ATTN_PATH_EAGER:
+    # (Sweep 2026-11-15: the ATTN_STICKY latch arm (False on every build) removed.)
+    if choice != ATTN_PATH_EAGER:
         attention_fwd_scan_clear()
         # IDN_DECODE_RESIDENT_IO: the owner's deferred window (0: none, the
         # launchers read their checks on the host as today).
@@ -4691,26 +5026,14 @@ def attention_eager_core(
         ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
-    var scale_mask_fused = False
-    comptime if NN21_SCALE_MASK and not BLOCK_ANY_SABOTAGE:
-        scale_mask_fused = softcap == Float32(0.0) and plant_at == PLANT_AT_NONE
-    if scale_mask_fused:
-        step_count_launch()
-        ctx.enqueue_function[score_scale_mask_kernel](
-            stages.scores.unsafe_ptr(), stages.masked.unsafe_ptr(),
-            Int32(cells), Int32(l), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), scale, bitcast[DType.float32](UInt32(MASK_FILL_BITS)),
-            grid_dim=(_grid(cells), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-    else:
-        step_count_launch()
-        ctx.enqueue_function[attn_scale_kernel](
-            stages.scores.unsafe_ptr(),
-            Int32(cells),
-            scale,
-            grid_dim=(_grid(cells), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    step_count_launch()
+    ctx.enqueue_function[attn_scale_kernel](
+        stages.scores.unsafe_ptr(),
+        Int32(cells),
+        scale,
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4747,21 +5070,20 @@ def attention_eager_core(
     )
 
     # ---- S13 (:206). An ADD, of -FLT_MAX or of +0.0. Not a select.
-    if not scale_mask_fused:
-        step_count_launch()
-        ctx.enqueue_function[attn_mask_kernel](
-            stages.masked.unsafe_ptr(),
-            stages.scores.unsafe_ptr(),
-            Int32(b),
-            Int32(nh),
-            Int32(l),
-            Int32(s),
-            Int32(pos0),
-            Int32(key_lo),
-            Int32(window),
-            grid_dim=(_grid(cells), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    step_count_launch()
+    ctx.enqueue_function[attn_mask_kernel](
+        stages.masked.unsafe_ptr(),
+        stages.scores.unsafe_ptr(),
+        Int32(b),
+        Int32(nh),
+        Int32(l),
+        Int32(s),
+        Int32(pos0),
+        Int32(key_lo),
+        Int32(window),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4981,6 +5303,76 @@ def attention_eager_core(
             ctx.synchronize()
 
 
+def llama_kv_cache_rewind(
+    ctx: DeviceContext,
+    mut scratch_k: DeviceBuffer[DType.float32],
+    mut scratch_v: DeviceBuffer[DType.float32],
+    mut kv: LlamaKVCache,
+    s_to: Int,
+) raises:
+    """Take a full-causal cache back from `kv.s` used positions to `s_to`
+    (lane fx-kv-inplace, 2026-11-18): the bounded program loop's repair of a
+    cache that iterations enqueued past the loop's stop appended to
+    (autograd/program_control.mojo, `attn_append_restore`).
+
+    The linear cache is packed at stride `kv.s` and every append rewrites
+    every (batch, kv head) row at the new stride, so a cache that ran `k`
+    positions past the stop holds its committed slots at stride `s_to + k`
+    while the restored position word says `s_to`. This repacks the committed
+    slots at stride `s_to` and zeroes the rest of the span the extra appends
+    wrote, so the cache is the one a run that stopped at `s_to` leaves. Out
+    of place through `scratch_k` / `scratch_v` (two buffers of at least
+    `B*n_kv*kv.s*head_dim` cells that are not the cache: a resident entry
+    passes its stages' `k_cache` / `v_cache`, the append's own repack
+    targets), then the span copied back; queued, no wait, so the scratch
+    must outlive the queue. `kv.s` becomes `s_to`. A ring (`window > 0`) is not append-only and is not handled here
+    (the loop shadows it whole)."""
+    if kv.window != 0:
+        raise Error("llama: a windowed KV cache is not rewound (the loop shadows it)")
+    if s_to < 0 or s_to > kv.s:
+        raise Error(
+            String("llama: KV cache rewind to ") + String(s_to) + " from " + String(kv.s) + " used positions"
+        )
+    if s_to == kv.s:
+        return
+    comptime if LLAMA_FAST_REFUSE_WATERMARK:
+        # A writer of the cache other than the block forward's append
+        # (autograd/block_step_ops.mojo `_attn_watermark_grant`'s list): it
+        # moves scanned rows and lowers `kv.s`. Every word it writes is a bit
+        # copy of a scanned float or 0, so nothing non-finite can appear, but
+        # the watermark is a position and no longer names the last row; the
+        # next call scans the whole cache.
+        kv.wm_reset()
+    var n = kv.b * kv.n_kv * kv.s * kv.head_dim
+    if n > len(scratch_k) or n > len(scratch_v):
+        raise Error("llama: KV cache rewind: the scratch holds a shorter cache span")
+    step_count_launch()
+    ctx.enqueue_function[kv_rewind2_kernel](
+        scratch_k.unsafe_ptr(),
+        scratch_v.unsafe_ptr(),
+        kv.k.unsafe_ptr(),
+        kv.v.unsafe_ptr(),
+        Int32(kv.b),
+        Int32(kv.n_kv),
+        Int32(kv.head_dim),
+        Int32(kv.s),
+        Int32(s_to),
+        grid_dim=(_grid(n), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
+    step_count_d2d()
+    ctx.enqueue_copy(
+        dst_buf=kv.k.create_sub_buffer[DType.float32](0, n),
+        src_buf=scratch_k.create_sub_buffer[DType.float32](0, n),
+    )
+    step_count_d2d()
+    ctx.enqueue_copy(
+        dst_buf=kv.v.create_sub_buffer[DType.float32](0, n),
+        src_buf=scratch_v.create_sub_buffer[DType.float32](0, n),
+    )
+    kv.s = s_to
+
+
 def llama_attention_forward(
     ctx: DeviceContext,
     mut stages: LlamaDeviceStages,
@@ -4996,7 +5388,6 @@ def llama_attention_forward(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -5029,14 +5420,6 @@ def llama_attention_forward(
     layer normalizes first and this reads `stages.norm1_out`, rather than
     taking a tensor argument.
     """
-    var commit_cache = True
-    comptime if IDN_TRAIN_NO_DECODE_CACHE:
-        if not retain_kv_cache:
-            # Explicit training-only capability, never inferred from size.
-            # Stages retain the exact packed K/V consumed by backward.
-            if pos0 != 0 or kv.s != 0:
-                raise Error("no-decode-cache: training prefill requires an empty cache")
-            commit_cache = False
     var dims = stages.dims.copy()
     var dm = dims.d_model
     var qw = dims.q_width()
@@ -5046,9 +5429,6 @@ def llama_attention_forward(
     var m = b * l
     var s_old = kv.s
     var window = kv.window
-    if not retain_kv_cache:
-        if not (IDN_TRAIN_NO_DECODE_CACHE) or s_old != 0 or pos0 != 0 or window != 0:
-            raise Error("llama: no-decode-cache requires the NI24 IDENTICAL arm and an empty full-prefill cache")
     var key_lo = llama_key_lo(s_old, window)
     var s = llama_key_span(s_old, l, window)
     var ton = timing_on()
@@ -5182,49 +5562,23 @@ def llama_attention_forward(
 
     # ---- apply_rotary_pos_emb (:257). S9 and S10, q then k. V IS NOT
     #      ROTATED (:257 takes q and k only).
-    var rope_cache_fused = False
-    comptime if NN27_QK_ROPE_PAIR and not SAB_S07_ROPE_RELATIVE_POSITION and not SAB_S09_ROPE_HALVES_SWAPPED and not SAB_S10_ROPE_FUSED:
-        step_count_launch()
-        ctx.enqueue_function[qk_rope_pair_kernel](
-            stages.q_rope.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
-            stages.q_proj.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-            rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-            Int32(m), Int32(l), Int32(dims.n_heads), Int32(nkv),
-            Int32(hd), Int32(pos0), Int32(rope.rope_dim),
-            grid_dim=(_grid(m * qw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-        )
-
-    else:
-        apply_rotary_pos_emb(
-            ctx,
-            stages.q_rope,
-            stages.q_proj,
-            rope.cos,
-            rope.sin,
-            m,
-            l,
-            dims.n_heads,
-            hd,
-            pos0,
-            rope.rope_dim,
-        )
-        comptime if IDN_ROPE_CACHE and not BLOCK_ANY_SABOTAGE:
-            # Cache semantics, not a benchmark size: no previous keys and no ring.
-            rope_cache_fused = s_old == 0 and pos0 == 0 and window == 0
-        if rope_cache_fused:
-            step_count_launch()
-            ctx.enqueue_function[rotary_k_prefill_cache_kernel](
-                stages.k_rope.unsafe_ptr(), stages.k_cache.unsafe_ptr(),
-                stages.v_cache.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
-                stages.v_proj.unsafe_ptr(), rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
-                Int32(b), Int32(l), Int32(nkv), Int32(hd), Int32(rope.rope_dim),
-                grid_dim=(_grid(m * kw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
-            )
-        else:
-            apply_rotary_pos_emb(
-                ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
-                m, l, nkv, hd, pos0, rope.rope_dim,
-            )
+    apply_rotary_pos_emb(
+        ctx,
+        stages.q_rope,
+        stages.q_proj,
+        rope.cos,
+        rope.sin,
+        m,
+        l,
+        dims.n_heads,
+        hd,
+        pos0,
+        rope.rope_dim,
+    )
+    apply_rotary_pos_emb(
+        ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin,
+        m, l, nkv, hd, pos0, rope.rope_dim,
+    )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5244,9 +5598,7 @@ def llama_attention_forward(
     #      SPAN this call reads (absolute `[key_lo, pos0 + l)`), gathered
     #      from the ring plus this call's tokens; the ring itself is then
     #      updated in place. The recorded `kv.k_cache` stage is that span.
-    if rope_cache_fused:
-        pass  # NI23 wrote both packed attention stages with K RoPE above.
-    elif window == 0:
+    if window == 0:
         step_count_launch()
         ctx.enqueue_function[kv_append2_kernel](
             stages.k_cache.unsafe_ptr(),
@@ -5312,61 +5664,49 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if commit_cache:
-        if window == 0:
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-            step_count_d2d()
-            ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
-        else:
-            comptime if NN29_RING_PAIR:
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_pair_kernel](
-                    kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
-                    Int32(b), Int32(l), Int32(nkv), Int32(hd),
-                    Int32(kv.cap), Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-            else:
-                # The ring takes this call's tokens AFTER the gather above read it.
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.k.unsafe_ptr(),
-                    stages.k_rope.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-                step_count_launch()
-                ctx.enqueue_function[kv_ring_write_kernel](
-                    kv.v.unsafe_ptr(),
-                    stages.v_proj.unsafe_ptr(),
-                    Int32(b),
-                    Int32(l),
-                    Int32(nkv),
-                    Int32(hd),
-                    Int32(kv.cap),
-                    Int32(s_old),
-                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-                    block_dim=(LLAMA_TPB, 1, 1),
-                )
-        # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
-        # 087231ba3): the hard wait after the cache update ordered nothing.
-        # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
-        # or copy on the same in-order context, and the host reads none of them
-        # before its own later wait (the fused forward's regime scan or flag
-        # read, or the next call's). No buffer local to this call is freed here.
-        comptime if not IDN_ATTN_CACHE_NOWAIT:
-            step_count_sync()
-            ctx.synchronize()
-        kv.s = s_old + l
+    if window == 0:
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+    else:
+        # The ring takes this call's tokens AFTER the gather above read it.
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.k.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        step_count_launch()
+        ctx.enqueue_function[kv_ring_write_kernel](
+            kv.v.unsafe_ptr(),
+            stages.v_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(nkv),
+            Int32(hd),
+            Int32(kv.cap),
+            Int32(s_old),
+            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+    # 087231ba3): the hard wait after the cache update ordered nothing.
+    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+    # or copy on the same in-order context, and the host reads none of them
+    # before its own later wait (the fused forward's regime scan or flag
+    # read, or the next call's). No buffer local to this call is freed here.
+    comptime if not IDN_ATTN_CACHE_NOWAIT:
+        step_count_sync()
+        ctx.synchronize()
+    kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
@@ -5428,7 +5768,6 @@ def llama_mlp_forward(
     m: Int,
     mut trace: IdentityTrace,
     prefix: String,
-    forward_only: Bool = False,
 ) raises:
     """`LlamaMLP.forward(x)` (:174-176).
 
@@ -5459,18 +5798,12 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    var projections_paired = False
-    comptime if NEURAL_PAIR_ENABLED:
-        if gated and not w.int15:
-            stages.gemm_workspace.run_pair(ctx, stages.gate_proj, stages.up_proj,
-                stages.norm2_out, w.w_gate, w.w_up, m, it, dm, _gemm_op_nt())
-            projections_paired = True
     if gated:
-        if not projections_paired:
-            llama_proj(
-                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
-                stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
-            )
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+        )
+    if gated:
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -5506,11 +5839,10 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    if not projections_paired:
-        llama_proj(
-            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-        )
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+    )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](
@@ -5537,37 +5869,9 @@ def llama_mlp_forward(
     # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
     #      otherwise, over the gate projection (gated) or the up
     #      projection (ungated).
-    # lane/neural-net-experiment: S20 + S21 in one launch when no backward
-    # follows, the trace is off, the record is the default SiLU gated MLP
-    # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
-    var swiglu_fused = False
-    comptime if not SAB_S20_SILU_MUL_SIGMOID:
-        swiglu_fused = (forward_only and gated and opts.act_is_silu()
-                        and not bias_silu_fused and not bias_gelu_fused
-                        and not trace.enabled and swiglu_fused_enabled())
-    var training_swiglu = False
-    comptime if IDN_TRAIN_SWIGLU and not BLOCK_ANY_SABOTAGE:
-        training_swiglu = (not forward_only and gated and opts.act_is_silu()
-                           and not bias_silu_fused and not bias_gelu_fused)
-    if training_swiglu:
-        step_count_launch()
-        ctx.enqueue_function[training_swiglu_kernel](
-            stages.silu_out.unsafe_ptr(), stages.gated.unsafe_ptr(),
-            stages.gate_proj.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
-            Int32(m * it), grid_dim=(_grid(m * it), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    elif swiglu_fused:
-        step_count_launch()
-        ctx.enqueue_function[swiglu_fused_kernel](
-            stages.gated.unsafe_ptr(),
-            stages.gate_proj.unsafe_ptr(),
-            stages.up_proj.unsafe_ptr(),
-            Int32(m * it),
-            grid_dim=(_grid(m * it), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    elif bias_gelu_fused or bias_silu_fused:
+    # TOMBSTONE: MOJOLEARN_SWIGLU_FUSED (opt-in forward-only S20+S21 launch here) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+    # Restore: git apply experiments/removed/MOJOLEARN_SWIGLU_FUSED.patch; record in docs/TOMBSTONES.md.
+    if bias_gelu_fused or bias_silu_fused:
         pass
     elif opts.act_is_silu():
         step_count_launch()
@@ -5609,13 +5913,7 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if training_swiglu:
-        trace.record_device[DType.float32](
-            ctx, prefix + ".mlp.gated", stages.gated, m * it
-        )
-    if swiglu_fused or training_swiglu:
-        pass  # the selected fused kernel already wrote S21
-    elif gated:
+    if gated:
         step_count_launch()
         ctx.enqueue_function[mlp_gated_kernel](
             stages.gated.unsafe_ptr(),
@@ -5672,6 +5970,9 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.down_proj", "down_fwd")
 
 
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ALL / NORM_SG / ROPE_CACHE / GQA_TILE / FLASH / FUSE_PRE / FUSE_MLP (DELETE-ARM: neural MERGED-UNMEASURED opt-in, never measured) deleted 2026-11-15 by lane/expdel2-33-neural with the `_afn_*` block helpers and their `comptime if AFN_ATTN_ANY` arms in llama_decoder_layer_forward_planted; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ALL.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # ===========================================================================
 # lane afn-attn (2026-10-03): the Apple FAST forward candidates. Every
 # function below is called ONLY from a `comptime if AFN_ATTN_ANY` arm of
@@ -6070,7 +6371,7 @@ def _afn_mlp_and_residual2(
             )
             mlp_done = True
     if not mlp_done:
-        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=True)
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix)
 
     # ---- residual2, and the next layer's norm1 when asked.
     var want_next = (
@@ -6157,7 +6458,6 @@ def llama_decoder_layer_forward_planted(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -6314,7 +6614,25 @@ def llama_decoder_layer_forward_planted(
                 ctx, w, rope, x, kv, b, l, stages.defer_addr
             )
     if not refusal_deferred:
-        llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
+        # lane/fx-transformer-forward (2026-11-19): a call that starts at an
+        # empty cache scans the hidden states and inv_freq only, on scratch
+        # these stages keep (`_llama_refuse_prefill_held`); before, this was
+        # `llama_refuse_bad_call` here for every call, which allocated and
+        # freed three scan buffers per layer per forward. Call site: once per
+        # layer per forward, no loop inside. A call with carried keys and
+        # values (lengths that grow with the cache) and a FAST build (separate
+        # scans) take `llama_refuse_bad_call` as before.
+        var refused_held = False
+        comptime if IDN_LLAMA_REFUSE_BATCH:
+            if kv.s == 0:
+                _llama_refuse_prefill_held(ctx, stages.refuse_batch, rope, x, b * l * dm)
+                comptime if LLAMA_FAST_REFUSE_WATERMARK:
+                    # as `llama_refuse_bad_call` after its whole scans
+                    if kv.wm_on:
+                        kv.wm_upto = kv.s
+                refused_held = True
+        if not refused_held:
+            llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
     # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
     # weights carry planes.
@@ -6375,7 +6693,7 @@ def llama_decoder_layer_forward_planted(
         ):
             llama_attention_forward(
                 ctx, stages, kv, rope, w, b, l, pos0, plant_at, plant_idx, plant_bits,
-                trace, prefix, materialize, retain_kv_cache=retain_kv_cache,
+                trace, prefix, materialize,
             )
     else:
         llama_attention_forward(
@@ -6393,23 +6711,18 @@ def llama_decoder_layer_forward_planted(
             trace,
             prefix,
             materialize,
-            retain_kv_cache=retain_kv_cache,
         )
     timing_tick(ctx, ton, tk, "block.attention_total")
     pc.mark(ctx)
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
-    comptime fuse_residual_norm = (
-        is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
-        or TARGET_COLUMN == COLUMN_APPLE
-    )
+    # TOMBSTONE: MOJOLEARN_FUSE_RESIDUAL1_NORM2 (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+    # Restore: git apply experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch
+    comptime fuse_residual_norm = TARGET_COLUMN == COLUMN_APPLE
     var fused_residual_norm = (
         fuse_residual_norm and w.opts.norm_kind == NORM_RMSNORM
-        and not w.opts.norm_bias and (
-            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
-            or residual_norm_fusion_size_ok(m, dm)
-        )
+        and not w.opts.norm_bias and residual_norm_fusion_size_ok(m, dm)
     )
     comptime if AFN_ATTN_ANY:
         if _afn_residual1_norm2(
@@ -6497,7 +6810,7 @@ def llama_decoder_layer_forward_planted(
             ctx, stages, w, m, trace, prefix, plant_at, materialize, forward_only,
             next_norm_sumsq, next_norm_out, next_norm_weight, next_norm_eps,
         ):
-            llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+            llama_mlp_forward(ctx, stages, w, m, trace, prefix)
             pc.mark(ctx)
             var fuse_next_norm = (
                 next_norm_sumsq and next_norm_out and next_norm_weight
@@ -6520,7 +6833,7 @@ def llama_decoder_layer_forward_planted(
                     grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
                 )
     else:
-        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix)
         pc.mark(ctx)
 
         # ---- residual + hidden_states (:323). S23, the same imported kernel.
@@ -6577,19 +6890,12 @@ def llama_decoder_layer_forward(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
-    retain_kv_cache: Bool = True,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
 
     `forward_only` (lane/neural-net-experiment): the caller promises no
     backward reads this call's stages, which admits the forward-only
-    fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
-
-    `retain_kv_cache=False` is the NI24 owned-training-prefill protocol:
-    admitted only by its IDENTICAL opt-in, with an empty non-window cache
-    at position zero. Per-layer attention stages survive for backward;
-    persistent cache buffers and kv.s stay unchanged. Such a call cannot
-    be used as the prefix of a later decode operation.
+    fusions.
 
     Every argument is a scalar or a buffer or one of this file's own
     structs; nothing from `transformer/checks/` crosses this boundary,
@@ -6620,5 +6926,4 @@ def llama_decoder_layer_forward(
         next_norm_weight=next_norm_weight,
         next_norm_eps=next_norm_eps,
         forward_only=forward_only,
-        retain_kv_cache=retain_kv_cache,
     )

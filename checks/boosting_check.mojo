@@ -42,6 +42,7 @@ from gbdt.gpu_data.kernel.binarize import (
 )
 from gbdt.methods.doc_parallel_boosting import fit, predict
 from gbdt.models.oblivious_model import TAdditiveModel
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def check_boosting_learns(
@@ -67,7 +68,7 @@ def check_boosting_learns(
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var host_bin = List[List[Int]]()
@@ -85,7 +86,7 @@ def check_boosting_learns(
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -119,8 +120,8 @@ def check_boosting_learns(
         variance += d * d
     variance /= Float64(n_rows)
 
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var model = TAdditiveModel()
@@ -253,7 +254,7 @@ def check_boosting_learns(
     var pred = ctx.enqueue_create_buffer[DType.float32](n_rows)
     predict(model, ctx, n_rows, folds, cindex, pred)
     var hp = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hp.unsafe_ptr(), src_buf=pred)
+    download_host_into[DType.float32](ctx, pred, hp)
     ctx.synchronize()
 
     var sse_pred = Float64(0.0)

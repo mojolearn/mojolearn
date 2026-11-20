@@ -43,8 +43,7 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_ann.switches import ANN3_HOST_PASSES
 
@@ -99,16 +98,13 @@ comptime IVF_DEFAULT_N_PROBES = 20
 #: can pick different rows on two hosts. `kmeans_trainset_fraction` stays 1.0 at
 #: the entries (its refusal is unchanged); the rule below is the build's own.
 #: Every row is still assigned to the trained centroids and laid into the lists.
-#: -D MOJOLEARN_IVF_TRAINSET_STRIDE_OFF trains on every row again.
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_TRAINSET_STRIDE = (
-    not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-    and not is_defined["MOJOLEARN_IVF_TRAINSET_STRIDE_OFF"]()
-)
-#: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST
-#: (`-D MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF` restores KMeansParams.default()'s
-#: 300): the coarse quantizer's k-means|| recluster (the fit of the
+# TOMBSTONE: MOJOLEARN_IVF_TRAINSET_STRIDE_OFF (old every-row trainset; new default by plan gaps-2026-10-08, no two-vendor A/B in the record: NVIDIA and AMD A/B owed) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 4615a42f93.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_TRAINSET_STRIDE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_TRAINSET_STRIDE = not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+#: lane fg-ivf (read_ivf.md idea B2), DEFAULT ON outside FAST (KMeansParams.default()'s
+#: 300 before): the coarse quantizer's k-means|| recluster (the fit of the
 #: oversampled candidate set back to n_lists centres,
 #: `init_scalable_kmeans_plus_plus`) runs at most `kmeans_n_iters` Lloyd
 #: iterations, the caller's own budget for the main fit (cuVS's balanced
@@ -119,12 +115,11 @@ comptime IVF_TRAINSET_STRIDE = (
 #: is 0, "no cap", for every other k-means). Bits CHANGE when the recluster
 #: had not converged by kmeans_n_iters: device (NVIDIA, AMD) and the host
 #: column (ivf/host/ivf_host.mojo -> host_fit_main) together; recall gate.
-comptime IVF_IDN_RECLUSTER_CAP = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF (old path of the CONFIRMED default, EXP:1803) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 9c51ef3a83.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_RECLUSTER_CAP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_RECLUSTER_CAP = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: lane fg-ivf (read_ivf.md idea B1), DEFAULT ON outside FAST since lane
-#: postmerge-act-3 (2026-10-09; `-D MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF`
-#: restores k-means|| seeding). Post-merge A/B on main a47bd9fb2, one run per
+#: postmerge-act-3 (2026-10-09; k-means|| seeding before). Post-merge A/B on main a47bd9fb2, one run per
 #: arm (default nv2 v0996 / amd a1131, arm nv2 v0993 / amd a1134): ivf-pq
 #: istella NV 1008.1 -> 756.9 ms (0.75x) / AMD 853.1 -> 542.2 ms (0.64x),
 #: recall@10 0.7489 -> 0.8021 on both; taxi NV 157.2 -> 100.0 ms (0.64x) /
@@ -141,9 +136,9 @@ comptime IVF_IDN_RECLUSTER_CAP = (
 #: IVF-Flat and to IVF-PQ's coarse step (the same build). B2 is moot with it.
 # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise: M4 IVFSQIndex 500k x 128 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
-comptime IVF_IDN_STRIDED_INIT = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF (old path of the CONFIRMED default, EXP:1803) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at bdd885b9b1.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDN_STRIDED_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_STRIDED_INIT = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 
 
 def ivf_strided_init_row(c: Int, n_train: Int, n_lists: Int) -> Int:

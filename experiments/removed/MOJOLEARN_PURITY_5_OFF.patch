@@ -1,0 +1,76 @@
+diff --git a/x_neighbors/svgp_ff.mojo b/x_neighbors/svgp_ff.mojo
+index daac848b82..22baefd6f8 100644
+--- a/x_neighbors/svgp_ff.mojo
++++ b/x_neighbors/svgp_ff.mojo
+@@ -483,15 +483,12 @@ def svgp_ff_part_item(t: Int, y: FP, bvh: FP, bvl: FP, w: FP, m: Int, n: Int):
+ 
+ #: lane apple-fast-purity (2026-10-03): the partials fold in a fixed tree so
+ #: the device folds them with one block of SVGP_TREE threads instead of one
+-#: thread. Slot s folds
++#: thread (`-D MOJOLEARN_PURITY_5_OFF`: the ascending chains). Slot s folds
+ #: blocks s, s + SVGP_TREE, ... from zero, ascending; then halving: slot s
+ #: combines slot s + h for h = SVGP_TREE / 2 .. 1. The CPU column
+ #: (`svgp_ff_solve`) runs the same steps, so every column has the same word.
+ comptime SVGP_TREE = 256
+-# TOMBSTONE: MOJOLEARN_PURITY_5_OFF (old path, no A/B row; the ascending chains) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d45ed8fcae.
+-# Restore: git apply experiments/removed/MOJOLEARN_PURITY_5_OFF.patch; record in docs/TOMBSTONES.md.
+-#: Kept as a name for x_neighbors/iter_device.mojo; the tree is the only fold.
+-comptime SVGP_TREE_ON = True
++comptime SVGP_TREE_ON = not is_defined["MOJOLEARN_PURITY_5_OFF"]()
+ #: one slot: y'y (hi, lo), b'x (hi, lo), the trace (hi, lo), log det S, log det Kuu'
+ comptime SV8 = SIMD[DType.float32, 8]
+ 
+@@ -555,22 +552,39 @@ def svgp_ff_failed(w: FP, info: FP) -> Bool:
+ 
+ 
+ def svgp_ff_fin_item(w: FP, info: FP, nbn: Int, nbm: Int, nf: Float32, noise: Float32, kdiag: Float32):
+-    """The partials folded in the SVGP_TREE order, the collapsed bound;
+-    info = [elbo, ok] ([0, 0] when a factor of Kuu' or Sigma failed)."""
++    """The partials folded (the SVGP_TREE order; ascending under
++    -D MOJOLEARN_PURITY_5_OFF), the collapsed bound; info = [elbo, ok]
++    ([0, 0] when a factor of Kuu' or Sigma failed)."""
+     if svgp_ff_failed(w, info):
+         return
+-    # TOMBSTONE: MOJOLEARN_PURITY_5_OFF (old path, no A/B row; the ascending chains) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d45ed8fcae.
+-    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_5_OFF.patch; record in docs/TOMBSTONES.md.
+-    var sl = Array[SV8, SVGP_TREE](fill=SV8(0))
+-    for s in range(SVGP_TREE):
+-        sl[s] = svgp_ff_tree_slot(w, s, nbn, nbm)
+-    var h = SVGP_TREE // 2
+-    while h > 0:
+-        for s in range(h):
+-            sl[s] = svgp_ff_tree_comb(sl[s], sl[s + h])
+-        h //= 2
+-    var t = sl[0]
+-    svgp_ff_bound(w, info, FF(t[0], t[1]), FF(t[2], t[3]), FF(t[4], t[5]), t[6], t[7], nf, noise, kdiag)
++    comptime if SVGP_TREE_ON:
++        var sl = Array[SV8, SVGP_TREE](fill=SV8(0))
++        for s in range(SVGP_TREE):
++            sl[s] = svgp_ff_tree_slot(w, s, nbn, nbm)
++        var h = SVGP_TREE // 2
++        while h > 0:
++            for s in range(h):
++                sl[s] = svgp_ff_tree_comb(sl[s], sl[s + h])
++            h //= 2
++        var t = sl[0]
++        svgp_ff_bound(w, info, FF(t[0], t[1]), FF(t[2], t[3]), FF(t[4], t[5]), t[6], t[7], nf, noise, kdiag)
++    else:
++        var yty = ff_of(Float32(0))
++        var oy = w + _o_yty(nbn, nbm)
++        for b in range(nbn):
++            yty = ff_add(yty, ff_ld(oy, oy + nbn, b))
++        var bsb = ff_of(Float32(0))
++        var trq = ff_of(Float32(0))
++        var lds = Float32(0)
++        var ldu = Float32(0)
++        var ob = w + _o_bsb(nbn, nbm)
++        var ot = w + _o_trq(nbn, nbm)
++        for b in range(nbm):
++            bsb = ff_add(bsb, ff_ld(ob, ob + nbm, b))
++            trq = ff_add(trq, ff_ld(ot, ot + nbm, b))
++            lds = ftz(lds + w.unsafe_load(_o_lds(nbn, nbm) + b))
++            ldu = ftz(ldu + w.unsafe_load(_o_ldu(nbn, nbm) + b))
++        svgp_ff_bound(w, info, yty, bsb, trq, lds, ldu, nf, noise, kdiag)
+ 
+ 
+ def svgp_ff_solve(

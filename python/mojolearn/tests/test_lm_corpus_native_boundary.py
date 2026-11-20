@@ -14,8 +14,8 @@ def _tokens(tmp_path, batch=2, length=3):
     directory.mkdir()
     payload = array("i", range(48)).tobytes()
     (directory / "tokens.i32").write_bytes(payload)
-    manifest = dict(schema=lm_corpus.TOKENS_SCHEMA, source=dict(sha256="c" * 64),
-                    vocabulary=dict(schema=lm_corpus.VOCABULARY_SCHEMA, sha256="v" * 64, n_vocab=257),
+    manifest = dict(schema=lm_corpus._TOKENS_SCHEMA, source=dict(sha256="c" * 64),
+                    vocabulary=dict(schema=lm_corpus._VOCABULARY_SCHEMA, sha256="v" * 64, n_vocab=257),
                     sha256=hashlib.sha256(payload).hexdigest(), bytes=len(payload), tokens=48,
                     train_range=[4, 40])
     (directory / "manifest.json").write_text(json.dumps(manifest) + "\n")
@@ -45,10 +45,18 @@ def test_prefetch_is_lazy_and_closes_after_native_field_failure(tmp_path):
             touched.append("int")
             return 3
 
+    # The iterator admits its owner once, at prefetch, and keeps the admitted
+    # scalars and the ids snapshot (lane p3-lm-tokenizer row 28): a later
+    # field replacement is never read by the running iterator, and a new
+    # prefetch refuses it without calling the hostile conversion.
     batches.length = Conversion()
-    with pytest.raises(TypeError):
-        next(iterator)
+    step, rows = next(iterator)
+    assert step == 3 and rows.shape == (2, 4)
     assert touched == []
+    with pytest.raises(TypeError):
+        batches.prefetch(2, 3)
+    assert touched == []
+    assert next(iterator)[0] == 4
     with pytest.raises(StopIteration):
         next(iterator)
 
@@ -200,3 +208,57 @@ def test_numpy_step_overflow_refuses_before_seterrcall(tmp_path):
         if setter is not None:
             setter(prior)
     assert touched == []
+
+
+def _prepared(tmp_path):
+    path = tmp_path / "corpus.txt"
+    path.write_bytes(b"".join(b"line %d of a small corpus with repeated words\n" % (i % 37) for i in range(400)))
+    options = dict(cache_dir=tmp_path / "cache", vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+    return path, options
+
+
+def test_prepare_cache_hit_carries_the_token_verdict_to_batches(tmp_path):
+    # pass 3 (N174): a cache hit hashes the mapped token file once and
+    # batches() reuses that verified mapping; the rows are the rows of a
+    # freshly opened TokenBatches.
+    path, options = _prepared(tmp_path)
+    first = lm_corpus.prepare(path, **options)
+    assert first._tokens_verified is None             # a miss carries no verdict
+    again = lm_corpus.prepare(path, **options)
+    assert again.tokens_dir == first.tokens_dir
+    verified = again._tokens_verified
+    assert isinstance(verified, tuple) and len(verified) == 4
+    assert verified[2] == again.manifest["sha256"]
+    carried = again.batches(2, 8)
+    assert carried.ids_all is verified[3]
+    fresh = lm_corpus.TokenBatches(again.tokens_dir, 2, 8)
+    for step in (0, 1, 9):
+        assert list(memoryview(carried.ids(step)._store)) == list(memoryview(fresh.ids(step)._store))
+    assert carried.describe() == fresh.describe()
+    assert carried.data_schedule() == fresh.data_schedule()
+
+
+def test_carried_verdict_is_ignored_unless_it_matches_the_file(tmp_path):
+    path, options = _prepared(tmp_path)
+    lm_corpus.prepare(path, **options)
+    corpus = lm_corpus.prepare(path, **options)
+    token_file, size, sha, mapped = corpus._tokens_verified
+    # A forged or stale verdict for another size or hash is not trusted: the
+    # file is mapped and hashed again.
+    corpus._tokens_verified = (token_file, size + 4, sha, mapped)
+    assert corpus.batches(2, 8).ids_all is not mapped
+    corpus._tokens_verified = (token_file, size, "0" * 64, mapped)
+    assert corpus.batches(2, 8).ids_all is not mapped
+    corpus._tokens_verified = ["not", "a", "tuple", mapped]
+    assert corpus.batches(2, 8).ids_all is not mapped
+    # A changed cached token file is refused on the next prepare.
+    tokens = open(token_file, "r+b")
+    try:
+        first = tokens.read(4)
+        tokens.seek(0)
+        tokens.write(bytes([first[0] ^ 1]) + first[1:])
+    finally:
+        tokens.close()
+    del corpus, mapped
+    with pytest.raises(ValueError, match="cached token hash differs"):
+        lm_corpus.prepare(path, **options)

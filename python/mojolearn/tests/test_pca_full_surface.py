@@ -1,15 +1,13 @@
-"""Authored additive full-PCA exposure gates; root executes, never agents.
+"""Full-PCA refusals of the native owner.
 
-The default cases check the native owner's refusals. Numerical case requires explicit
-remote CUDA/HIP opt-in and does not confer cross-vendor certification.
+The small 8x3 reference spectrum, reconstruction and input-ownership case runs
+over the CPU/GPU PCA providers in checks/native_tests/pca_native_* (fixture
+full-8x3, the same matrix and tolerances).
 """
-import os
-import sys
-
 import numpy as np
 import pytest
 
-from mojolearn import PCA, _backend
+from mojolearn import PCA
 
 
 def test_full_wide_matrix_refuses_outside_identical():
@@ -20,6 +18,20 @@ def test_full_wide_matrix_refuses_outside_identical():
         model.fit(np.ones((8, 3), dtype=np.float32))
     except ImportError:
         pytest.skip('this install carries no fast estimators binding')
+    from mojolearn import _backend
+
+    if _backend.fast_answer() == 'identical':
+        # Off Apple with no fast set the identical set answers `fast` for PCA
+        # (core/mode_answer.mojo MODE_FAMILIES_ANSWERED): the wide fit is then
+        # exactly the identical fit, refusal (a CPU-only install) included.
+        def outcome(mode):
+            try:
+                model = PCA(2, svd_solver='full', numeric_mode=mode).fit(np.ones((3, 8), dtype=np.float32))
+            except Exception as error:  # the identical outcome, whatever it is
+                return type(error), str(error)
+            return None, np.asarray(model.components_).tobytes()
+        assert outcome('fast') == outcome('identical')
+        return
     with pytest.raises(NotImplementedError, match='at least as many samples'):
         PCA(2, svd_solver='full', numeric_mode='fast').fit(np.ones((3, 8), dtype=np.float32))
 
@@ -27,30 +39,6 @@ def test_full_wide_matrix_refuses_outside_identical():
 def test_full_component_bound_refused_before_the_fit():
     with pytest.raises(ValueError, match="cannot exceed min"):
         PCA(4, svd_solver="full", numeric_mode="identical").fit(np.ones((3, 8), dtype=np.float32))
-
-
-@pytest.mark.skipif(
-    os.environ.get('MOJOLEARN_PCA_FULL_GATE') != '1', reason='root-only numerical opt-in')
-def test_full_remote_small_reference_and_identical_repeat():
-    expected_vendor = os.environ.get('MOJOLEARN_EXPECT_VENDOR')
-    if sys.platform != 'linux' or expected_vendor not in ('cuda', 'hip'):
-        pytest.fail('full PCA gate requires explicit remote CUDA/HIP vendor')
-    if _backend.vendor() != expected_vendor or _backend.numeric_mode() != 'identical':
-        pytest.fail('full PCA native mode/vendor mismatch')
-    x = np.array([[0, 1, 2], [2, 0, 1], [1, 3, -1], [-2, 1, 0],
-                  [4, -1, 2], [0, -3, 1], [3, 2, 4], [-1, 0, -2]], dtype=np.float32)
-    original = x.tobytes()
-    a = PCA(3, svd_solver='full').fit(x)
-    b = PCA(3, svd_solver='full').fit(x)
-    centered = x.astype(np.float64) - x.astype(np.float64).mean(axis=0)
-    _, singular, _ = np.linalg.svd(centered, full_matrices=False)
-    np.testing.assert_allclose(a.singular_values_, singular, rtol=2e-4, atol=2e-5)
-    np.testing.assert_allclose(a.explained_variance_, singular**2 / 7, rtol=4e-4, atol=2e-5)
-    np.testing.assert_allclose(a.inverse_transform(a.transform(x)), x, rtol=2e-4, atol=2e-4)
-    for name in ('components_', 'mean_', 'explained_variance_',
-                 'explained_variance_ratio_', 'singular_values_'):
-        assert getattr(a, name).tobytes() == getattr(b, name).tobytes()
-    assert x.tobytes() == original
 
 
 @pytest.mark.parametrize("kwargs", [dict(svd_solver="arpack"), dict(tol=1e-4)])

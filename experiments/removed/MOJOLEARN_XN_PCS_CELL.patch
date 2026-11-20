@@ -1,0 +1,16 @@
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index ffbfd36d94..c3a07cf2b7 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -821,9 +821,9 @@ def op_pcs_resident(
+     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+     var cur_is_a = True
+     for p in range(1, degree):
+-        # TOMBSTONE: MOJOLEARN_XN_PCS_CELL (unmeasured opt-in arm: forced the per-cell convolution) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 89867bbda4.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XN_PCS_CELL.patch; record in docs/TOMBSTONES.md.
+         var row_kernel = nc <= PCS_ROW_MAX_NC
++        comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
++            row_kernel = False
+         if row_kernel:
+             ctx.enqueue_function[pcs_conv_row_kernel](
+                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),

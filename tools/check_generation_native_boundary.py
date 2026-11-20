@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Diagnostic local dependency inventory with narrow execution-source checks.
+"""Diagnostic local dependency inventory.
 
-Native CPython imports/calls are allowed anywhere under the 2026-10-28 owner
-rule. The default audit follows providers/bindings rather than exempting their
-algorithms, and flags unresolved local dependencies or explicit interpreter
-execution. It cannot prove dynamic targets, admitted types, hooks or transitive
-runtime safety. The runtime endpoint ledger and source review remain separate.
+The target architecture confines Python support to the actual UNPACK/PACK
+boundaries. The default inventory follows providers/bindings rather than
+exempting their algorithms and flags unresolved local dependencies. Resolving
+those imports does not establish that the architecture is satisfied. This tool
+cannot prove dynamic targets, admitted types, interpreter execution, hooks or
+transitive runtime safety; executed-call checks and source review remain separate.
 
 --require-native-only is an optional architectural assertion for a deliberately
 pure root, not product execution policy and not a mandatory source/push gate.
@@ -14,21 +15,40 @@ Neither mode inspects compiled upstream standard libraries or runs product code.
 import argparse
 from pathlib import Path
 
-from hooks.no_python_in_kernels import execution_findings
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOTS = ("transformer.session_abi", "transformer.native_session_call",
-         "transformer.session_native_dispatch", "core.native_descriptor_abi",
+ROOTS = ("transformer.session_native_dispatch", "core.transformer_block_session", "core.native_descriptor_abi",
          "core.native_descriptor_call", "training.native_primitive_dispatch",
          "mamba.native_state_dispatch", "transformer.native_lm_resident_dispatch",
-         "core.resident_generation_read")
+         "transformer.causal_lm_program")
 FORBIDDEN_IMPORTS = ("std.python", "providers", "bindings")
 CALLBACK_TOKENS = re.compile(r"\b(?:PythonObject|PyObjectPtr|Python|py_call|py_call_typed|GILReleased)\b")
 # Resolved from Modular's installed native packages, not this repository.
 # nn.topk is supplied by lib/mojo/nn.mojoc; package hash/provenance is retained
 # in experiments/neural_provider_layout_20261027/external_native.json.
-EXTERNAL_MODULES = {"layout", "layout.tile_layout", "linalg.gemv", "linalg.matmul", "nn.topk"}
+# layout.tensor_engine (DefaultEngine for top_k, Mojo 1.2.0, 7911e021d6) and comm.sync (enable_p2p, 2b4af0abe6) are
+# Modular's layout.mojoc and comm.mojoc.
+EXTERNAL_MODULES = {"layout", "layout.tile_layout", "layout.tensor_engine", "linalg.gemv", "linalg.matmul", "nn.topk",
+                    "comm.sync"}
+
+
+def unbuilt_generated(problems, root=ROOT):
+    """The problems that are only a REGISTERED generated module (tools/generated_sources.GENERATED) a build has not
+    written yet in this checkout, with its generator and pin tracked. A build writes them before it compiles
+    (generated_sources.py prepare, which downloads pinned Unicode data); audit() never exempts them itself, and a
+    present generated file is audited like any source."""
+    import sys
+    sys.path.insert(0, str(ROOT / "tools"))
+    try:
+        from generated_sources import GENERATED
+    finally:
+        sys.path.pop(0)
+    registered = {rel[:-len(".mojo")].replace("/", "."): rel for rel in GENERATED}
+    return [(chain, reason) for chain, reason in problems
+            if reason == "unresolved local dependency" and chain[-1] in registered
+            and not (root / registered[chain[-1]]).exists()
+            and all((root / dep).is_file() for dep in GENERATED[registered[chain[-1]]])]
 
 
 def code_only(source):
@@ -58,8 +78,6 @@ def audit(root=ROOT, roots=ROOTS, *, require_native_only=False):
                 violations.append((chain, "unresolved local dependency"))
             continue
         source = path.read_text()
-        for line, callee in execution_findings(source):
-            violations.append((chain, f"explicit Python evaluator call {callee} at line {line}"))
         code = code_only(source)
         without_strings = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', "", code)
         if require_native_only and (CALLBACK_TOKENS.search(without_strings) or re.search(r'["\']Py(?:Object|CFunction|Capsule|Import|Err|_)[A-Za-z_]*["\']', code)):

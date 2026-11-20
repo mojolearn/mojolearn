@@ -7,11 +7,10 @@
   compare kernel_methods|x_neighbors|x_decomp A.npz B.npz
 
 Tolerances, fixed before any result:
-- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, old arm =
-  MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF) and x_neighbors
-  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, default now, old arm =
-  MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
-  now, old arm = MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): the
+- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, its _OFF arm
+  deleted 2026-11-15, docs/TOMBSTONES.md) and x_neighbors
+  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN and MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
+  now; their _OFF old arms deleted 2026-11-15): the
   candidates run main's kernels on main's words, so every array (features,
   random_weights_, random_offset_, sigma_/scale_, transforms) must be
   BYTE-IDENTICAL and every refusal must raise the same type with the same
@@ -26,8 +25,8 @@ Tolerances, fixed before any result:
   MOJOLEARN_KM_FAST_RBF_STAGED (the staged download: outputs above and
   below DOWNLOAD_STAGE_MIN, the board shape repeated) are copies or the
   same kernels on the same words.
-- x_decomp (MOJOLEARN_XD_FAST_SRP_STRAT; default now, old arm =
-  MOJOLEARN_XD_FAST_SRP_STRAT_OFF) changes SparseRandomProjection's
+- x_decomp (MOJOLEARN_XD_FAST_SRP_STRAT; default now, its _OFF old arm
+  deleted 2026-11-15) changes SparseRandomProjection's
   draw by design, so its bits differ. Gate: the board's own metric
   (mean |projected / original squared distance - 1| over 2,000 Xq row pairs,
   tools/bench_board_algos.py) on the board's tsvd blocks (istella, taxi),

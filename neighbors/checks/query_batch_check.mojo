@@ -42,7 +42,7 @@ def _case(n: Int, q: Int, d: Int, k: Int) raises:
             print("QUERY_BATCH_CASE", n, q, d, k, arm, "used_tile", used)
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("query batch gate requires IDENTICAL")
     # DEVIATION 2631: the query clamp goes last, so a default tile wider than

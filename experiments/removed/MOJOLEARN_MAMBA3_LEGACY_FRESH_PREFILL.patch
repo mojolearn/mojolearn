@@ -1,0 +1,23 @@
+diff --git b/bindings/_mojolearn_mamba.mojo a/bindings/_mojolearn_mamba.mojo
+index f4fa684089..13daab6e63 100644
+--- b/bindings/_mojolearn_mamba.mojo
++++ a/bindings/_mojolearn_mamba.mojo
+@@ -137,6 +137,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
+ from core.hostptr import f32_ptr, read_f32, copy_f32
+ from std.memory import bitcast, unsafe_memcpy
+ from std.time import perf_counter_ns
++from std.sys.compile import is_defined, get_defined_int
+ # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ from mamba.impl.ops.mamba3_siso import m3_phase_tick
+@@ -1315,9 +1316,7 @@ def build__mojolearn_mamba() -> PythonObject:
+         m.def_function[mamba3_forward_tape_binding]("mamba3_forward_tape")
+         m.def_function[mamba3_backward_tape_binding]("mamba3_backward_tape")
+         m.def_function[mamba3_close_tape_binding]("mamba3_close_tape")
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL (old path: no fresh-prefill entries; no A/B recorded for it) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 7d80876e08.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch
+-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
++        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
+             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
+             # lane/neural-net-experiment: the fresh prefill on a session.
+             # The prefill session is a native registry handle of this image

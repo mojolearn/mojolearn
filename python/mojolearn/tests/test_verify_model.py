@@ -116,6 +116,44 @@ def test_seeded_inputs_are_exact_and_repeatable():
 
 # ---------------------------------------------------------------- (b)
 
+def test_program_report_hashes_match_the_written_file(tmp_path):
+    # Row N167: the report's sha256, byte count and description hash come
+    # from the bytes as written and the in-memory program, not a re-read;
+    # they must equal what a read of the file gives.
+    path = tmp_path / "hashed.mlprog"
+    s = _program(path)
+    saved = _read(_verify_model.sidecar_path(path))
+    data = path.read_bytes()
+    assert saved["model"]["sha256"] == hashlib.sha256(data).hexdigest()
+    assert saved["model"]["bytes"] == len(data)
+    sha, size = _b().verify_file_sha256(str(path))
+    assert (str(sha), int(size)) == (saved["model"]["sha256"], len(data))
+    s.close()
+
+
+def test_program_save_without_verify_writes_no_report(tmp_path):
+    from mojolearn import ops
+    path = tmp_path / "quick.mlprog"
+    s = _program(path)
+    side = _verify_model.sidecar_path(path)
+    assert os.path.isfile(side)
+    first = path.read_bytes()
+    s2 = ops.Session()
+    x = s2.tensor(np.zeros((6, 4), np.float32))
+    h = s2.linear(x, s2.tensor(_W1), activation="relu")
+    y = s2.softmax(s2.linear(h, s2.tensor(_W2)))
+    prog = s2.capture(inputs=[x], outputs=[y, h])
+    s2.reset()
+    prog.save(path, verify=False)
+    # the program file is the same bytes; the stale report is gone
+    assert path.read_bytes() == first
+    assert not os.path.exists(side)
+    with pytest.raises(TypeError):
+        prog.save(path, verify=1)
+    s2.close()
+    s.close()
+
+
 def test_program_report_round_trips(tmp_path, capsys):
     path = tmp_path / "mlp.mlprog"
     s = _program(path)
@@ -244,7 +282,8 @@ def _run(column, mode, path):
         env["MOJOLEARN_VENDOR"] = "cpu"
     else:
         env.pop("MOJOLEARN_VENDOR", None)
-    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # the IMPORTED package's parent, not python/ of a source checkout (no binaries there)
+    here = os.path.dirname(os.path.dirname(os.path.abspath(ml.__file__)))
     env["PYTHONPATH"] = here + os.pathsep + env.get("PYTHONPATH", "")
     r = subprocess.run([sys.executable, "-c", _CHILD, mode, str(path)], env=env, capture_output=True,
                        text=True, timeout=900)

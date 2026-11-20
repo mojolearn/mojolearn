@@ -6,7 +6,7 @@ repeat. Deterministic by construction.
 `tokenizer/impl/bpe.mojo` APPLIES a vocabulary; this file BUILDS one. The
 tokenizer has shipped without a trainer since mojolearn ships no vocabulary
 (2026-09-15), so a user who wanted their own table had to train it somewhere
-else. This is that trainer, and `python/mojolearn/_bpe_trainer.py` is an
+else. This is that trainer, and `python/mojolearn/tests/_bpe_trainer.py` is an
 independent second implementation of the same stated algorithm which
 `tokenizer/checks/trainer_check.mojo` holds this one to, file byte for file
 byte.

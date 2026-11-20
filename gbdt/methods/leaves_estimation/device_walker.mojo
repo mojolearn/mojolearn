@@ -53,11 +53,10 @@ overwrites it).
 """
 
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
 
 from checks.soft_f64 import (
     SF64_ZERO,
@@ -76,7 +75,6 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from gbdt.gpu_util.arena import BufferArena
-from gbdt.trees_identical_switches import T23
 from gbdt.methods.leaves_estimation.pointwise_oracle import BinOptimizedOracle
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
@@ -108,8 +106,9 @@ comptime WALK_BLOCK = 256
 #: host loop as before (one drain per evaluation, up to 100). On Metal a
 #: drain is a fixed cost per evaluation of every leaf-estimation task, the
 #: per-tree cost of Logloss's 10 Newton iterations on small data.
-#: `-D MOJOLEARN_GBDT_WALK_DEV_STEP_OFF` restores the drain per evaluation.
-comptime GBDT_WALK_DEV_STEP = not is_defined["MOJOLEARN_GBDT_WALK_DEV_STEP_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_WALK_DEV_STEP_OFF (DELETE-OLD-PATH, EXP:2147 the default is the recorded bit-neutral kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at a303565f2a.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_WALK_DEV_STEP_OFF.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: the always-True GBDT_WALK_DEV_STEP was folded into its one reader.)
 #: the double 1.0's bits, and one exponent step (a power of two halved)
 comptime WALK_STEP_ONE = UInt64(0x3FF0000000000000)
 comptime WALK_STEP_EXP1 = UInt64(0x0010000000000000)
@@ -680,27 +679,7 @@ def _enqueue_eval_and_decide(
     )
 
 
-def _one_step_prepare_kernel(
-    stats: MutPointer[Float32, MutAnyOrigin],
-    cur: MutPointer[Float32, MutAnyOrigin],
-    direction: MutPointer[Float32, MutAnyOrigin],
-    optimum: MutPointer[Float32, MutAnyOrigin],
-    weights: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32, has_weights: Int32,
-):
-    """T23: exact device one-step preparation in one leaf pass.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    The three +0 fills and the constructor's exact weight copy keep their
-    incumbent values. No gradient, Hessian, regularizer or step is changed.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        cur.unsafe_store(i, Float32(0.0))
-        direction.unsafe_store(i, Float32(0.0))
-        optimum.unsafe_store(i, Float32(0.0))
-        if has_weights != Int32(0):
-            weights.unsafe_store(i, stats.unsafe_load(i))
+# (Sweep 2026-11-15: _one_step_prepare_kernel, launched only under the folded T23, removed.)
 
 
 def device_walk_begin(
@@ -717,30 +696,22 @@ def device_walk_begin(
     `oracle.d_part_stats` (the oracle was just made)."""
     var n = oracle.bin_count
     w.result_next = False
-    if T23 and iterations == 1:
-        ctx.enqueue_function[_one_step_prepare_kernel](
-            oracle.d_part_stats.unsafe_ptr(), w.d_cur.unsafe_ptr(),
-            w.d_dir.unsafe_ptr(), w.d_opt.unsafe_ptr(), w.d_w.unsafe_ptr(),
-            Int32(n), Int32(1) if oracle.has_weights else Int32(0),
-            grid_dim=(_leaf_grid(n), 1, 1), block_dim=(WALK_BLOCK, 1, 1),
+    w.d_cur.enqueue_fill(Float32(0.0))
+    w.d_dir.enqueue_fill(Float32(0.0))
+    w.d_opt.enqueue_fill(Float32(0.0))
+    if oracle.has_weights:
+        # `WeightsCpu`: the constructor's per-leaf weight fold, before the
+        # evaluation below overwrites `d_part_stats`
+        ctx.enqueue_function[scaled_copy_kernel](
+            oracle.d_part_stats.unsafe_ptr(),
+            Int32(n),
+            Float32(1.0),
+            Int32(0),
+            w.d_w.unsafe_ptr(),
+            Int32(0),
+            grid_dim=(_leaf_grid(n), 1, 1),
+            block_dim=(WALK_BLOCK, 1, 1),
         )
-    else:
-        w.d_cur.enqueue_fill(Float32(0.0))
-        w.d_dir.enqueue_fill(Float32(0.0))
-        w.d_opt.enqueue_fill(Float32(0.0))
-        if oracle.has_weights:
-            # `WeightsCpu`: the constructor's per-leaf weight fold, before the
-            # evaluation below overwrites `d_part_stats`
-            ctx.enqueue_function[scaled_copy_kernel](
-                oracle.d_part_stats.unsafe_ptr(),
-                Int32(n),
-                Float32(1.0),
-                Int32(0),
-                w.d_w.unsafe_ptr(),
-                Int32(0),
-                grid_dim=(_leaf_grid(n), 1, 1),
-                block_dim=(WALK_BLOCK, 1, 1),
-            )
     # `MoveTo(startPoint)` at the zero point: `fma(0, 0, +0) = +0`, kept
     # through the regularizer, shift +0.0 - +0.0 = +0.0, and the cursor add
     # runs as the host walker's did
@@ -777,16 +748,83 @@ def device_walk_enqueue_speculative(
     mut oracle: BinOptimizedOracle,
     mut w: WalkBuffers,
     evaluations: Int,
+    copy_home: Bool = True,
 ) raises:
     """GBDT_WALK_DEV_STEP: `evaluations` line-search evaluations, each at the
     control word's step (`walker_accept_kernel` formed it from the last
     flag), then the control word's copy home; no flag readback, no drain.
     The caller drains, then reads `device_walk_ctl_updated` /
-    `device_walk_ctl_step`."""
+    `device_walk_ctl_step`. `copy_home=False` (tree op TREE_OP_LEAF_ESTIMATE)
+    leaves the control word on the device: `walk_tail_status_kernel` reads
+    it there."""
     for _ in range(evaluations):  # driver-loop: over the walk's line-search evaluations
         _enqueue_move(ctx, oracle, w, Float64(0.0), True, step_from_dev=True)
         _enqueue_eval_and_decide(ctx, oracle, w, False, WALK_CTL_LINE)
-    ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
+    if copy_home:
+        ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
+
+
+#: Tree op TREE_OP_LEAF_ESTIMATE's status code (lane t1b-tree-leaf-and-node-ops,
+#: docs/plans/EXECUTOR_T1_TREE_OPS.md section 5): the walk's first
+#: `iterations` line-search evaluations accepted nothing, so the walker's
+#: never-accepted tail (`iteration < 100`, `descent_helpers.cpp:179`, one
+#: drain per evaluation) owns this round. A code of its own range, so it is
+#: never mistaken for the structure word's level codes or the partition's
+#: 1 / 2 in STEP_FAIL.
+comptime LEAF_STATUS_HOST_TAIL = Int32(1 << 20)
+
+
+def walk_tail_status_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    ctl: MutPointer[UInt64, MutAnyOrigin],
+    line_search: Int32,
+    status: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread, while the gate is open: `status[0]` =
+    LEAF_STATUS_HOST_TAIL when the walk ran a line search (`line_search`,
+    more than one iteration) and its control word says no evaluation was
+    taken (`ctl[1] == 0`, `walker_accept_kernel`), else 0. Integer only."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var code = Int32(0)
+    if line_search != Int32(0) and ctl.unsafe_load(1) == UInt64(0):
+        code = LEAF_STATUS_HOST_TAIL
+    status.unsafe_store(0, code)
+
+
+def device_walk_enqueue_bounded(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: WalkBuffers,
+    iterations: Int,
+    mut gate: DeviceBuffer[DType.int32],
+    mut status: DeviceBuffer[DType.int32],
+) raises:
+    """The walk of tree op TREE_OP_LEAF_ESTIMATE, ENQUEUED, nothing read
+    back: `device_walk_begin`, then (more than one iteration) the first
+    `iterations` line-search evaluations at the control word's steps (the
+    GBDT_WALK_DEV_STEP form: the host walker
+    always runs them, so their steps and their accept/stop decisions are
+    the device's), then `walk_tail_status_kernel`. When an evaluation was
+    taken the walk is over (`iteration == iterations` and updated, the
+    host walker's exit) and the estimate is `w.result()`; when none was,
+    `status[0]` is LEAF_STATUS_HOST_TAIL and the round belongs to the
+    host tail (`device_walk_estimate`), see the op's docstring. The one
+    data-dependent loop length left is that tail's: a device-side loop
+    whose trip count is a device word needs a conditional launch the
+    toolchain does not offer (recorded as an ask for Modular in
+    docs/plans/EXECUTOR_T1_TREE_OPS.md), so it is not emulated here with
+    up to 100 gated evaluations per round."""
+    var finished = device_walk_begin(ctx, oracle, w, iterations)
+    if not finished:
+        device_walk_enqueue_speculative(ctx, oracle, w, iterations, copy_home=False)
+    ctx.enqueue_function[walk_tail_status_kernel](  # small-launch(one word): the walk's stop status
+        gate.unsafe_ptr(), w.d_ctl.unsafe_ptr(),
+        Int32(0) if finished else Int32(1), status.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
 
 
 def device_walk_ctl_updated(mut w: WalkBuffers) -> Bool:
@@ -812,43 +850,23 @@ def device_walk_estimate(
     `MakeEstimationResult` is the identity), enqueued."""
     if device_walk_begin(ctx, oracle, w, iterations):
         return
-    comptime if GBDT_WALK_DEV_STEP:
-        # the first `iterations` evaluations behind one drain (see
-        # GBDT_WALK_DEV_STEP); the host loop below takes over only when
-        # none of them was taken: then `iteration == iterations`, not
-        # updated, and the step is 2^-iterations
-        device_walk_enqueue_speculative(ctx, oracle, w, iterations)
-        ctx.synchronize()
-        if device_walk_ctl_updated(w):
-            return
-        var tail_step = device_walk_ctl_step(w)
-        var tail_it = iterations
-        while tail_it < 100:
-            device_walk_enqueue_line_search(ctx, oracle, w, tail_step)
-            ctx.synchronize()
-            tail_it += 1
-            if device_walk_flag(w):
-                return
-            tail_step /= 2
+    # the first `iterations` evaluations behind one drain (see
+    # GBDT_WALK_DEV_STEP); the host loop below takes over only when
+    # none of them was taken: then `iteration == iterations`, not
+    # updated, and the step is 2^-iterations
+    device_walk_enqueue_speculative(ctx, oracle, w, iterations)
+    ctx.synchronize()
+    if device_walk_ctl_updated(w):
         return
-    var updated = False
-    var iteration = 0
-    while iteration < iterations:
-        var step = Float64(1.0)
-        var accepted = False
-        while iteration < iterations or ((not updated) and iteration < 100):
-            device_walk_enqueue_line_search(ctx, oracle, w, step)
-            # the walk's control flow: one word
-            ctx.synchronize()
-            if device_walk_flag(w):
-                iteration += 1
-                updated = True
-                accepted = True
-                break
-            iteration += 1
-            step /= 2
-        if not accepted:
-            break
+    var tail_step = device_walk_ctl_step(w)
+    var tail_it = iterations
+    while tail_it < 100:
+        device_walk_enqueue_line_search(ctx, oracle, w, tail_step)
+        ctx.synchronize()
+        tail_it += 1
+        if device_walk_flag(w):
+            return
+        tail_step /= 2
 
 
 def enqueue_zero_average(

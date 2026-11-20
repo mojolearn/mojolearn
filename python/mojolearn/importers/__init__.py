@@ -9,7 +9,7 @@ on the host; its weights are copied to the device once.
 attribute values each accepts. A model that uses anything else raises
 :class:`UnsupportedModel`, which names every node the import cannot run.
 """
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
 from ._graph import UnsupportedModel, _READER_NATIVE, _READER_CONTEXT
 

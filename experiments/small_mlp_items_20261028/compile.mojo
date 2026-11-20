@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.small_mlp_native import small_mlp_c
+from bindings.small_mlp_native_door import small_mlp_c
 
 
 @export

@@ -24,10 +24,11 @@ function's, operand for operand.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_div
+from core.device_zero import enqueue_fill_n
 from core.device_fold import device_count_nonzero_i32, device_exclusive_scan_total_from, device_sum_f32_fixed
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len, frs_exclusive_scan, frs_scan_blocks
 
@@ -105,12 +106,6 @@ def _edge_emit_kernel(
     _ = Atomic.fetch_add(rowcnt.unsafe_offset(i), Int32(1))
 
 
-def _zero_kernel(buf: _I32P, n_in: Int32):
-    var i = Int(block_idx.x) * _TPB + Int(thread_idx.x)
-    if i < Int(n_in):
-        buf[i] = Int32(0)
-
-
 def _normalize_kernel(values: _F32P, n_in: Int32, total: Float32):
     var i = Int(block_idx.x) * _TPB + Int(thread_idx.x)
     if i < Int(n_in):
@@ -175,7 +170,7 @@ def tsne_symmetrize_device(
     var values = ctx.enqueue_create_buffer[DType.float32](max(nnz, 1))
     var rowcnt = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var indptr = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    ctx.enqueue_function[_zero_kernel](rowcnt.unsafe_ptr(), Int32(n + 1), grid_dim=_g(n + 1), block_dim=_TPB)
+    enqueue_fill_n(ctx, rowcnt, n + 1, Int32(0))
     ctx.enqueue_function[_edge_emit_kernel](
         nn_i.unsafe_ptr(), p_cond.unsafe_ptr(), Int32(m), Int32(nn), vals.unsafe_ptr(), flag.unsafe_ptr(),
         pos.unsafe_ptr(), indices.unsafe_ptr(), values.unsafe_ptr(), rowcnt.unsafe_ptr(),

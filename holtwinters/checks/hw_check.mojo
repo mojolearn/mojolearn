@@ -250,7 +250,7 @@ from checks.numerics import (
 )
 from solver.checks.record_canon import canon_nan_f32, canon_nan_list
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SCRATCH = "/tmp"
 
 comptime N = 72

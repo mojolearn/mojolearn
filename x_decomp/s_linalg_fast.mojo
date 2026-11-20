@@ -5,15 +5,15 @@ the kit's device routes. Python reads which are compiled through
 `x_decomp_s_flags()`. All three are the FAST + Apple default since
 verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 
-  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
-  bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
-  bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
-  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`)
+  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`; deleted 2026-11-08, restored 2026-11-09)
+  bit 2  DECOMP_FAST_ORTH_WS (its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
+  bit 4  LU_FAST_RESIDENT    (its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
+  bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11; its _OFF rollback deleted 2026-11-15, docs/TOMBSTONES.md)
 
-IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless its _OFF define).
+IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries.
 """
-from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.device_pool import pool_give, pool_take
@@ -26,8 +26,20 @@ from x_decomp.device import (
     orth_guard_kernel, trsm_kernel, xd_ctx,
 )
 from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
-from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident import pool_buffer, _ptr
 
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (KEPT FAST + Apple default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. It moved randomized_svd's
+# finiteness refusal from the serial host scan to the device copy (rab15: istella
+# 490.1 -> 435.1 ms with ORTH_WS). randomized_svd is now one driver
+# (x_decomp/randomized_svd_owner.mojo) whose input admission runs the parallel
+# host scan of the one admission path, so the serial scan it beat is gone.
+# RESTORED 2026-11-09 by lane r1-restore-measured-winners (AGENTS.md "A measured winner is never deleted on
+# reasoning"): the one driver did NOT do the same work: its admission scans M on the host (in parallel), a
+# full host pass over M that this measured default never paid. The block below is f7d10d2b09's, verbatim;
+# the device test now runs inside the one call (x_decomp/randomized_svd_owner.mojo `finite_word`,
+# RKit.device_tested -> resident.mojo dev_upload_finite_run, the ONE upload-finite body). A/B:
+# -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF (the host scan of the one admission path).
 #: What: `randomized_svd`'s direct input (RSVD_FAST_DIRECT_IN, the FAST +
 #: Apple default) refuses NaN/inf with the base binding's `all_finite_f32`, a
 #: single-thread host loop with an early-exit branch over every value
@@ -43,6 +55,9 @@ from x_decomp.resident import X_DECOMP_POOL, _ptr
 #: 2026-10-05, rab15-rsvdbundle, with DECOMP_FAST_ORTH_WS): randomized-svd
 #: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
 #: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:2377 KEPT) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at c18df7df06.
+# Restore: git apply experiments/removed/MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()
 
 #: What: `Kit.orth` on a device matrix (`x_decomp_dev_orth`, resident.mojo
@@ -62,8 +77,10 @@ comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FA
 #: DECOMP_FAST_ORTH_WS OUTCOME (M3 afc_ab_def, full board size, 1 run per
 #: arm, 2026-10-05, rab15-rsvdbundle, with RSVD_FAST_DEVSCAN): randomized-svd
 #: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
-#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.
-comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and not is_defined["MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF"]()
+#: KEEP: the FAST + Apple default.
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at de1175eb70.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE
 
 
 #: What: `lu_factor` + `lu_solve` (the lu-factor / lu-solve rows, 8192 x 8192,
@@ -85,8 +102,10 @@ comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and not is_defined["MOJOLEARN_DECOM
 #: LU_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab15-luresident): lu-factor 934.4 -> 608.5 ms, lu-solve
 #: 934.9 -> 608.7 ms, residual identical 3.259e-8, digest same. KEEP: the
-#: FAST + Apple default; rollback -D MOJOLEARN_LU_FAST_RESIDENT_OFF.
-comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLEARN_LU_FAST_RESIDENT_OFF"]()
+#: FAST + Apple default.
+# TOMBSTONE: MOJOLEARN_LU_FAST_RESIDENT_OFF (old path beside the FAST + Apple default, EXP:2031 A/B owed, none recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 82c5c6ef43.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX
 
 #: lane/lu-resident-pair (2026-10-11), idea B1 (ideas-dense-linalg-20261011.md):
 #: LU_FAST_RESIDENT's glue on the IDENTICAL route (NVIDIA / AMD GPU binding).
@@ -107,20 +126,20 @@ comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLE
 #: AMD MI325X a1615/a1616), digests equal NV == AMD on both arms, quality
 #: equal: lu-factor synthetic NV 822.7 -> 369.0 ms (0.45x), AMD 568.0 ->
 #: 315.4 ms (0.56x), avg 0.50x; lu-solve NV 353.0 -> 378.7 (1.07x), AMD
-#: 317.0 -> 317.3 (1.00x), avg 1.04x (noise). Rollback:
-#: -D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (or MOJOLEARN_IDN_ALL_OFF).
-comptime IDN_LU_RESIDENT_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: 317.0 -> 317.3 (1.00x), avg 1.04x (noise).
+# TOMBSTONE: MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 63d9ceea61.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LU_RESIDENT_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: Whether the binding registers `x_decomp_dev_lu_factor` / `_dev_lu_solve`.
 comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
 
 
 def s_flags_run() -> Int:
-    """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
-    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
+    """Bit 1 RSVD_FAST_DEVSCAN (restored 2026-11-09), bit 2
+    DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR
+    (0 when none)."""
     var f = 0
     comptime if RSVD_FAST_DEVSCAN:
         f |= 1
@@ -147,32 +166,36 @@ def dev_lu_factor_run(
     the factor (see the door). ppv holds int32 words, moved as 4-byte floats."""
     if n <= 0 or n * n > 2147483647:
         raise Error("x_decomp: dev_lu_factor needs 0 < n and n * n inside Int32")
-    _ = _ptr(ida, n * n)
-    var dl = _ptr(idl, n * n)
-    var dp = I32Ptr(unsafe_from_address=Int(_ptr(idp, n)))
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ida, n * n)
+    var factor = pool_buffer(idl, n * n)
+    var pivots = pool_buffer(idp, n)
+    var dl = F32Ptr(unsafe_from_address=Int(factor.unsafe_ptr()))
+    var dp = I32Ptr(unsafe_from_address=Int(pivots.unsafe_ptr()))
     var rc = 0
     var ctx = xd_ctx()
-    _up_into(ctx, pool[].bufs[ida], src, n * n)
-    if device_first_nonfinite(ctx, pool[].bufs[ida], n * n) >= 0:
+    _up_into(ctx, source, src, n * n)
+    if device_first_nonfinite(ctx, source, n * n) >= 0:
         rc = -1
     else:
         ctx.enqueue_copy(
-            dst_buf=pool[].bufs[idl].create_sub_buffer[DType.float32](0, n * n),
-            src_buf=pool[].bufs[ida].create_sub_buffer[DType.float32](0, n * n),
+            dst_buf=factor.create_sub_buffer[DType.float32](0, n * n),
+            src_buf=source.create_sub_buffer[DType.float32](0, n * n),
         )
         var di = ctx.enqueue_create_buffer[DType.float32](1)
         var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
         var dact = ctx.enqueue_create_buffer[DType.float32](n)
         launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
-        _down(ctx, pool[].bufs[idl], plu, n * n)
-        _down(ctx, pool[].bufs[idp], ppv, n)
+        _down(ctx, factor, plu, n * n)
+        _down(ctx, pivots, ppv, n)
         _down(ctx, di, pinf, 1)
         ctx.synchronize()
         _ = di^
         _ = ds^
         _ = dact^
     ctx.synchronize()
+    _ = source^
+    _ = factor^
+    _ = pivots^
     return rc
 
 
@@ -223,27 +246,18 @@ def dev_lu_solve_run(
     return cells
 
 
-def dev_upload_scan_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
-    """`dev_upload_scan_py`'s typed body: cnt host floats into pool matrix
-    i, then the first non-finite index or -1."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
-    var r = -1
-    if cnt <= 0:
-        return r
-    var ctx = xd_ctx()
-    _up_into(ctx, p[].bufs[i], src, cnt)
-    r = device_first_nonfinite(ctx, p[].bufs[i], cnt)
-    ctx.synchronize()
-    return r
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its upload-and-scan entry dev_upload_scan_run) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
+# Restored 2026-11-09 by lane r1-restore-measured-winners as behaviour, not as this entry: the define is back and its
+# device test runs inside randomized_svd's one call through resident.mojo dev_upload_finite_run (the one upload-finite body).
 
 
 def orth_ws_on_device(
     ctx: DeviceContext, a: DeviceBuffer[DType.float32], dst: DeviceBuffer[DType.float32], m: Int, l: Int
 ) raises:
     """dst = the orthonormalized columns of a (both m x l, a unchanged):
-    `orth_on_device`'s two passes with pooled work buffers; waits."""
-    comptime NAME = "MojoXDecompOrthWS"
+    `orth_on_device`'s two passes with pooled work buffers, enqueued."""
+    comptime NAME = "MojolearnXDecompOrthWSV2"
     var cells = m * l
     var ns = qr_slice_count(m, l)
     var dw = pool_take[NAME](ctx, cells)
@@ -263,8 +277,12 @@ def orth_ws_on_device(
         )
         _ = src^
         _ = out^
-    # every launch that reads the pooled buffers is done before they go back
-    ctx.synchronize()
+    # No wait before the buffers go back (lane consol-n0-readmission: this
+    # synchronize() read nothing). The pool is this function's own name and
+    # its only taker is this function on x_decomp's one context
+    # (`dev_orth_ws_run` -> `xd_ctx`), so the next take's launches run after
+    # these in stream order, as x_decomp's resident pool (`pool_free`) already
+    # relies on.
     pool_give[NAME](dw^)
     pool_give[NAME](dq^)
     pool_give[NAME](scratch^)
@@ -275,14 +293,15 @@ def dev_orth_ws_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """`dev_orth_ws_py`'s typed body: pool matrix io = the orthonormalized
     columns of pool matrix ia (`orth_ws_on_device`)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     if ia == io:
         raise Error("x_decomp: dev_orth_ws needs distinct input and output matrices")
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     if cells > 0:
-        var src = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
-        var out = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
+        var src = source.create_sub_buffer[DType.float32](0, cells)
+        var out = target.create_sub_buffer[DType.float32](0, cells)
         var ctx = xd_ctx()
         orth_ws_on_device(ctx, src, out, m, l)
+    _ = source^
+    _ = target^
     return cells

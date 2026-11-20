@@ -21,15 +21,20 @@ The chunks live in a process global; `arena_release` marks a session's
 chunks free for the next session of any shape and never frees them under
 live views (the views die with their owner's fields, after `__deinit__`
 runs). The bytes a kernel reads and writes are the same; only where a
-buffer's storage sits moves. Default on for the Apple column, off
-elsewhere; `MOJOLEARN_DEVICE_ARENA=0/1` forces either.
+buffer's storage sits moves. On for the Apple column, off elsewhere;
+`-D MOJOLEARN_DEVICE_ARENA_OFF` turns it off on Apple.
 """
-from std.ffi import _Global
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.ctx_key import ctx_cache_key
+from core.shared_slot import SharedSlot
+
+#: Layout version of `_ArenaPool` (core/shared_slot.mojo rule). V2: the
+#: layout word and `chunk_ctx`, the context key a chunk was created on.
+comptime _ARENA_LAYOUT = 3
 
 #: a chunk's floats (256 MB) and a view's alignment (256 B)
 comptime ARENA_CHUNK_FLOATS = 1 << 26
@@ -39,6 +44,11 @@ comptime ARENA_ALIGN_FLOATS = 64
 struct _ArenaPool(Defaultable, Movable):
     var chunks: List[DeviceBuffer[DType.float32]]
     var chunk_n: List[Int]
+    # the `ctx_cache_key` of the context each chunk was created on: the
+    # arena is one slot per process and tier, reached by every neural
+    # binding, and each binding runs its own context (its own stream or
+    # queue), so a chunk is handed only to a session on the same context
+    var chunk_ctx: List[Int]
     var owner: List[Int]
     var active: Int
     var cur: Int
@@ -49,6 +59,7 @@ struct _ArenaPool(Defaultable, Movable):
     def __init__(out self):
         self.chunks = List[DeviceBuffer[DType.float32]]()
         self.chunk_n = List[Int]()
+        self.chunk_ctx = List[Int]()
         self.owner = List[Int]()
         self.active = -1
         self.cur = -1
@@ -57,18 +68,31 @@ struct _ArenaPool(Defaultable, Movable):
         self.views = 0
 
 
-comptime _ARENA_NAME = "MojoDeviceArenaIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDeviceArenaFast"
-comptime DEVICE_ARENA = _Global[StorageType=_ArenaPool, name=_ARENA_NAME, init_fn=_ArenaPool.__init__]
+comptime _ARENA_NAME_IDN: StaticString = "MojolearnDeviceArenaIdenticalV3"
+comptime _ARENA_NAME_OTHER: StaticString = "MojolearnDeviceArenaFastV3"
+comptime _ARENA_NAME: StaticString = _ARENA_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _ARENA_NAME_OTHER
+comptime DEVICE_ARENA = SharedSlot[_ArenaPool, _ARENA_NAME, _ARENA_LAYOUT]
+
+
+def _arena() raises -> UnsafePointer[_ArenaPool, MutAnyOrigin]:
+    """The process-wide arena, refused when its creator had another layout."""
+    var pool = DEVICE_ARENA.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return pool
+
+
+# TOMBSTONE: MOJOLEARN_DEVICE_ARENA (NVIDIA/AMD opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-01, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_DEVICE_ARENA.patch; record in docs/TOMBSTONES.md.
+comptime DEVICE_ARENA_ON = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_DEVICE_ARENA_OFF"]()
+"""Whether sessions carve their buffers from arenas: the Apple column, off
+elsewhere (CUDA and HIP launches do not pay per live buffer). A build
+constant since lane envgate-neural-lm (2026-11-15): it was a getenv per
+session open and per arena call. `-D MOJOLEARN_DEVICE_ARENA_OFF` turns it
+off on Apple."""
 
 
 def device_arena_on() -> Bool:
-    """Whether sessions carve their buffers from arenas: the Apple column by
-    default, off elsewhere (CUDA and HIP launches do not pay per live
-    buffer); MOJOLEARN_DEVICE_ARENA=0/1 forces either."""
-    var v = String(getenv("MOJOLEARN_DEVICE_ARENA"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    """See DEVICE_ARENA_ON: a build constant."""
+    return DEVICE_ARENA_ON
 
 
 def arena_begin() raises -> Int:
@@ -77,7 +101,7 @@ def arena_begin() raises -> Int:
     construction that raised without ending is simply superseded."""
     if not device_arena_on():
         return -1
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var id = pool[].next_id
     pool[].next_id += 1
     pool[].active = id
@@ -90,7 +114,7 @@ def arena_end(id: Int) raises:
     """Stop taking views for arena `id` (its chunks stay owned)."""
     if id < 0:
         return
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     if pool[].active == id:
         pool[].active = -1
         pool[].cur = -1
@@ -103,7 +127,7 @@ def arena_release(id: Int) raises:
     are destroyed, and the next session reuses them."""
     if id < 0:
         return
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
         if pool[].owner[i] == id:
             pool[].owner[i] = -1
@@ -117,14 +141,14 @@ def arena_active() raises -> Bool:
     """Whether an allocation helper should take a view right now."""
     if not device_arena_on():
         return False
-    return DEVICE_ARENA.get_or_create_ptr()[].active >= 0
+    return _arena()[].active >= 0
 
 
 def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     """A view of `n` floats (at least 1) in the active arena: the current
     chunk when it fits, else a free chunk that fits, else a new chunk of
     max(n, ARENA_CHUNK_FLOATS)."""
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var id = pool[].active
     if id < 0:
         raise Error("device arena: no active arena")
@@ -132,10 +156,11 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
     if want < 1:
         want = 1
     var need = ((want + ARENA_ALIGN_FLOATS - 1) // ARENA_ALIGN_FLOATS) * ARENA_ALIGN_FLOATS
-    if pool[].cur < 0 or pool[].off + need > pool[].chunk_n[pool[].cur]:
+    var key = ctx_cache_key(ctx)
+    if pool[].cur < 0 or pool[].off + need > pool[].chunk_n[pool[].cur] or pool[].chunk_ctx[pool[].cur] != key:
         var pick = -1
-        for i in range(len(pool[].chunks)):
-            if pool[].owner[i] < 0 and pool[].chunk_n[i] >= need:
+        for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
+            if pool[].owner[i] < 0 and pool[].chunk_n[i] >= need and pool[].chunk_ctx[i] == key:
                 pick = i
                 break
         if pick < 0:
@@ -144,6 +169,7 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
                 size = ARENA_CHUNK_FLOATS
             pool[].chunks.append(ctx.enqueue_create_buffer[DType.float32](size))
             pool[].chunk_n.append(size)
+            pool[].chunk_ctx.append(key)
             pool[].owner.append(id)
             pick = len(pool[].chunks) - 1
         else:
@@ -158,7 +184,7 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
 
 def arena_stats() raises -> List[Int]:
     """[chunks, chunks in use, floats allocated, views taken] for a probe."""
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var used = 0
     var floats = 0
     for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data

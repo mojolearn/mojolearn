@@ -7,7 +7,7 @@ absent from the binary, the state `_buffer._native_optional` answers None
 for, and makes every label seam decline (return None), so each seam runs
 its Python routine; the `MOJOLEARN_HOTPATH=python` switch that did this is
 deleted (cpu-gpu-cleanup c-core). The NEW arm takes the core helper of
-`bindings/hotpath_helpers.mojo` or the C builtin. Each case
+`bindings/hotpath_helpers_door.mojo` or the C builtin. Each case
 runs both arms and holds them to the SAME RESULT, byte for byte, OR THE
 SAME REFUSAL, type and words.
 
@@ -31,9 +31,8 @@ import warnings
 import numpy as np
 import pytest
 
-from mojolearn import _array, _buffer, _labels, _metrics_impl as M
-from mojolearn import model_selection as MS
-from mojolearn.tests import _fold_reference as _REF
+from mojolearn import _array, _buffer, _labels
+from mojolearn.tests import _array_reference
 from mojolearn._array import Array
 
 _HELPERS = (
@@ -60,8 +59,6 @@ def _canon(value):
     float bits (so -0.0, 0.0 and NaN payloads are told apart), types."""
     if isinstance(value, Array):
         return ("Array", value.shape, value.dtype, value.order, value.tobytes())
-    if isinstance(value, M._EncodedLabels):
-        return ("list", [_canon(v) for v in value])  # it stands for that list
     if isinstance(value, bool):
         return ("bool", value)
     if isinstance(value, float):
@@ -81,7 +78,7 @@ class _Spy:
 
     def __enter__(self):
         self.saved = dict(_buffer._NATIVE)
-        # The native Array operations (bindings/array_native.mojo) call the
+        # The native Array operations (bindings/array_native_door.mojo) call the
         # helpers they captured at connection, so those are counted too.
         self.array_helpers = _array._ARRAY_CONTEXT["helpers"]
         self.saved_array = dict(self.array_helpers)
@@ -115,7 +112,7 @@ def _outcome(fn):
     return result, [(w.category.__name__, str(w.message)) for w in caught]
 
 
-_LABEL_SEAMS = ("_encode_labels_native", "_decode_labels_native")
+_LABEL_SEAMS = ("_encode_labels_native",)
 
 
 @contextlib.contextmanager
@@ -133,23 +130,11 @@ def _python_arm():
         _buffer._NATIVE_MISSING.add(key)
     for name in _LABEL_SEAMS:
         setattr(_labels, name, lambda *args, **kwargs: None)
-    # A label LIST is mapped by the native user-object reader since lane
-    # purge-user-objects (first-seen classes, then a native gather); the
-    # reference arm keeps the routine it replaced, here in the test.
-    saved_label_map = M._label_map
-
-    def _label_map_oracle(labels, fn):
-        if isinstance(labels, M._EncodedLabels):
-            return saved_label_map(labels, fn)
-        return Array.from_list([fn(v) for v in labels], "<i4")
-
-    M._label_map = _label_map_oracle
-    _buffer._REFERENCE = True
+    _array_reference._REFERENCE = True
     try:
         yield
     finally:
-        _buffer._REFERENCE = False
-        M._label_map = saved_label_map
+        _array_reference._REFERENCE = False
         for name, real in saved_seams.items():
             setattr(_labels, name, real)
         _buffer._NATIVE.clear()
@@ -242,7 +227,7 @@ def test_astype_matches_the_item_setter(src, dst):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
             native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
-                  group="astype", ref_fn=lambda: _array._ArrayReference.astype(a, dst))
+                  group="astype", ref_fn=lambda: _array_reference._ArrayReference.astype(a, dst))
 
 
 def test_astype_keeps_layout_and_reads_a_readonly_source():
@@ -250,11 +235,11 @@ def test_astype_keeps_layout_and_reads_a_readonly_source():
     a = _arr(block)
     assert a.order == "F"
     _same(lambda: a.astype("<f4"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(a, "<f4"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(a, "<f4"))
     frozen = _arr(_RNG.integers(0, 9, 5000).astype(np.int64).tobytes())
     assert frozen.dtype == "<u1" and frozen._readonly
     _same(lambda: frozen.astype("<i8"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(frozen, "<i8"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(frozen, "<i8"))
 
 
 def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
@@ -271,7 +256,7 @@ def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
     _same(lambda: a[0:900], ("cast_elements",), group="getitem", ref_fn=ref(slice(0, 900)))
     _same(lambda: a[1:900:2], ("cast_elements",), group="getitem", ref_fn=ref(slice(1, 900, 2)))
     _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(a, "<f8"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(a, "<f8"))
 
 
 # ------------------------------------------------------------- reductions
@@ -306,20 +291,24 @@ def _reduction_inputs():
 
 @pytest.mark.parametrize("what", ["min", "max", "sum", "argmax"])
 def test_reductions_match_python(what):
+    # Since b58b2109ce the native Array reductions call reduce_stat through the native
+    # base table (base_reduce_stat), not the Python-visible helper the spy wraps, so no
+    # helper call is pinned; each answer is still held to the Python reference.
     for raw in _reduction_inputs():
         a = _arr(raw.copy())
-        # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
-        native = a.size >= 1
-        _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
-              group="reduce", ref_fn=lambda: getattr(_array._ArrayReference, what)(a))
+        _same(lambda: getattr(a, what)(), (),
+              group="reduce", ref_fn=lambda: getattr(_array_reference._ArrayReference, what)(a))
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
-    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce", ref_fn=lambda: _array._ArrayReference.argmax(f))
+    _same(lambda: f.argmax(), (), group="reduce", ref_fn=lambda: _array_reference._ArrayReference.argmax(f))
 
 
 # --------------------------------------------------------------- equality
 
 
 def test_equality_matches_python():
+    # Since b58b2109ce the native Array equality calls equal_elements through the
+    # native base table (base_equal_elements), not the Python-visible helper the spy
+    # wraps, so no helper call is pinned; each answer is held to the Python reference.
     for dt in _NP.values():
         x = _RNG.integers(0, 3, 5000).astype(dt)
         y = _RNG.integers(0, 3, 5000).astype(dt)
@@ -329,21 +318,21 @@ def test_equality_matches_python():
             x[1::13] = -0.0
             y[1::13] = 0.0
         a, b = _arr(x), _arr(y)
-        _same(lambda: a == b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))
-        _same(lambda: a != b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__ne__(a, b))
-        _same(lambda: a == a, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, a))
+        _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))
+        _same(lambda: a != b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__ne__(a, b))
+        _same(lambda: a == a, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, a))
         _same(lambda: a[:100] == b[:100], (), group="equal",
-              ref_fn=lambda: _array._ArrayReference.__eq__(_array._ArrayReference.__getitem__(a, slice(None, 100)),
-                                        _array._ArrayReference.__getitem__(b, slice(None, 100))))
-        _same(lambda: a == 1, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, 1))
+              ref_fn=lambda: _array_reference._ArrayReference.__eq__(_array_reference._ArrayReference.__getitem__(a, slice(None, 100)),
+                                        _array_reference._ArrayReference.__getitem__(b, slice(None, 100))))
+        _same(lambda: a == 1, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, 1))
     a = _arr(_RNG.integers(0, 3, 5000).astype(np.int64))
     b = _arr(_RNG.integers(0, 3, 5000).astype(np.float64))
-    _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))  # two dtypes: Python compares exactly
+    _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))  # two dtypes: Python compares exactly
     _same(lambda: a == b[:4999], (), group="equal",
-          ref_fn=lambda: _array._ArrayReference.__eq__(a, _array._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
+          ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, _array_reference._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
     f = _arr(np.asfortranarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
     c = _arr(np.ascontiguousarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
-    _same(lambda: f == c, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(f, c))
+    _same(lambda: f == c, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(f, c))
 
 
 # --------------------------------------------------------------- indexing
@@ -366,9 +355,9 @@ def test_getitem_matches_the_per_run_copy():
     for block in blocks:
         a = _arr(block)
         for key in keys:
-            _same(lambda: a[key], (), group="getitem", ref_fn=lambda: _array._ArrayReference.__getitem__(a, key))
+            _same(lambda: a[key], (), group="getitem", ref_fn=lambda: _array_reference._ArrayReference.__getitem__(a, key))
     a = _arr(blocks[1])
-    ref, new = _both(lambda: a[5:650], ("cast_elements",), ref_fn=lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)))
+    ref, new = _both(lambda: a[5:650], ("cast_elements",), ref_fn=lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)))
     assert _EXPECT_SABOTAGE or ref == new
 
 
@@ -387,60 +376,13 @@ _LISTS = [
 def test_list_input_matches_the_recursive_flatten(index):
     value = _LISTS[index]
     _same(lambda: _array._flatten(value), (), group="lists")
-    for convert in (_buffer.as_f32_c, _buffer.as_i64_c, _buffer.as_f64_c):
-        for ndim in (1, 2, None):
-            _same(lambda: convert(value, ndim=ndim, name="X"), (), group="lists")
     _same(lambda: Array.from_list(value, "<f8"), (), group="lists",
-          ref_fn=lambda: _array._ArrayReference.from_list(Array, value, "<f8"))
+          ref_fn=lambda: _array_reference._ArrayReference.from_list(Array, value, "<f8"))
 
 
-def test_big_list_input():
-    rows = _RNG.standard_normal((3000, 7)).tolist()
-    _same(lambda: _buffer.as_f32_c(rows, ndim=2, name="X"), (), group="lists")
-    ints = _RNG.integers(-9, 9, 5000).tolist()
-    _same(lambda: _buffer.as_f32_c(ints, ndim=1, name="y"), ("cast_elements",), group="lists")
-    _same(lambda: _buffer.as_i32_c(ints, ndim=1, name="y"), ("cast_elements",), group="lists")
-
-
-# ----------------------------------------------------------- buffer input
-
-
-def _awkward_buffers():
-    base = _RNG.standard_normal((600, 8))
-    ints = _RNG.integers(-1000, 1000, (600, 8))
-    out = []
-    for dt in (np.float32, np.float64, np.int32, np.int64, np.uint32, np.uint8, np.int16,
-               np.uint16, np.int8, np.uint64, np.float16, bool):
-        block = (ints if np.issubdtype(dt, np.integer) else base)
-        block = np.abs(block).astype(dt) if dt in (np.uint32, np.uint8, np.uint16, np.uint64, bool) \
-            else block.astype(dt)
-        out += [block, block[::2], block[:, ::3], block[::-1], block.T, np.asfortranarray(block),
-                block[:, 0], block[::5, 1]]
-        ro = block.copy()
-        ro.setflags(write=False)
-        out += [ro, ro[::2]]
-        if dt not in (bool, np.uint8, np.int8):
-            out += [block.astype(block.dtype.newbyteorder(">")),
-                    block.astype(block.dtype.newbyteorder(">"))[::2]]
-    snan = np.full(2000, 0x7FA00001, np.uint32).view(np.float32)
-    out += [snan[::2], snan.reshape(1000, 2)[:, 0]]
-    return out
-
-
-def test_buffer_input_matches():
-    for block in _awkward_buffers():
-        for convert in (_buffer.as_f32_c, _buffer.as_f64_c, _buffer.as_i64_c, _buffer.as_i32_c):
-            _same(lambda: convert(block, ndim=None, name="X"), (), group="buffers")
-        if block.ndim == 2:
-            _same(lambda: _buffer.as_f32_colmajor(block, name="X"), (), group="buffers")
-
-
-def test_a_strided_float32_view_takes_the_helper():
-    block = _RNG.standard_normal((4000, 6)).astype(np.float32)
-    _same(lambda: _buffer.as_f32_c(block[::2], ndim=2, name="X"), ("cast_elements",),
-          group="buffers")
-    ints = _RNG.integers(0, 9, (4000, 6)).astype(np.int32)
-    _same(lambda: _buffer.as_f32_c(ints, ndim=2, name="X"), ("cast_elements",), group="buffers")
+# TOMBSTONE: test_big_list_input, _awkward_buffers, test_buffer_input_matches and
+# test_a_strided_float32_view_takes_the_helper (they ran the deleted `_buffer.as_*_c` converters; the
+# "buffers" group went with them) deleted 2026-11-15 by lane py-tail-2; code recoverable at 1a9d8c01bd.
 
 
 # ------------------------------------------------------------------ labels
@@ -466,16 +408,18 @@ def _label_lists():
 
 @pytest.mark.parametrize("name", list(_label_lists()))
 def test_encode_labels_list_matches_the_order_rule(name):
+    # Since lane ne1-h-labels (N413) encode_labels is ONE native call
+    # (classical_encode_labels), which no longer goes through the
+    # prepare_targets helper: no helper is expected; the outcomes are still
+    # compared, and test_labels_native_entry.py pins the native contract.
     y = _label_lists()[name]
-    native = name in ("ints", "tuple", "one class", "int64 edge")
-    _same(lambda: _labels.encode_labels(y), ("prepare_targets",) if native else (),
-          group="labels")
+    _same(lambda: _labels.encode_labels(y), (), group="labels")
 
 
 def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
-        ref = _same(lambda: _labels.encode_labels(y), ("prepare_targets",), group="labels")
+        ref = _same(lambda: _labels.encode_labels(y), (), group="labels")  # one native call (N413)
         assert ref[0][0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept
@@ -485,9 +429,10 @@ def test_encode_labels_float_list_takes_the_helper():
                                      [False, True, 2], [2**70, 1, 2]])
 def test_decode_labels_int32_codes(classes):
     codes = _RNG.integers(0, 3, 4000).astype(np.int32)
-    numeric = _labels.label_kind(classes) in ("int", "float") and classes[0] != 2**70
-    _same(lambda: _labels.decode_labels(classes, _arr(codes)),
-          ("cast_elements",) if numeric else (), group="labels")
+    # Since lane ne1-h-labels (N437) decode_labels of int codes is ONE
+    # native call (labels_decode_labels, the widening included), so the
+    # cast_elements helper is no longer expected.
+    _same(lambda: _labels.decode_labels(classes, _arr(codes)), (), group="labels")
     negative = codes.copy()
     negative[17] = -1  # Python indexes from the end; the gather refuses; same answer
     _same(lambda: _labels.decode_labels(classes, _arr(negative)), (), group="labels")
@@ -497,229 +442,20 @@ def test_decode_labels_int32_codes(classes):
 
 
 # ----------------------------------------------------------------- metrics
-
-
-def _metric_label_inputs():
-    n = 3000
-    out = {}
-    for dt in (np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64):
-        lo = -4 if np.issubdtype(dt, np.signedinteger) else 0
-        out[np.dtype(dt).name] = _RNG.integers(lo, 5, n).astype(dt)
-    out["bool"] = _RNG.integers(0, 2, n).astype(bool)
-    out["strided"] = _RNG.integers(0, 5, 2 * n)[::2]
-    out["big endian"] = _RNG.integers(0, 5, n).astype(">i4")
-    out["Array"] = _arr(_RNG.integers(0, 5, n).astype(np.int32))
-    out["float32"] = _RNG.integers(0, 5, n).astype(np.float32)
-    out["list"] = _RNG.integers(0, 5, n).tolist()
-    out["strs"] = [("c%d" % v) for v in _RNG.integers(0, 5, n)]
-    out["column"] = _RNG.integers(0, 5, (n, 1))
-    out["empty"] = np.zeros(0, np.int64)
-    out["short"] = _RNG.integers(0, 5, 100)
-    out["many classes"] = np.arange(n) % 5000
-    out["one class"] = np.full(n, 3)
-    out["binary"] = _RNG.integers(0, 2, n)
-    out["minus one one"] = _RNG.integers(0, 2, n) * 2 - 1
-    out["uint64 huge"] = np.full(n, 2**63 + 5, np.uint64)
-    return out
-
-
-_NATIVE_LABELS = {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "bool",
-                  "strided", "big endian", "Array", "one class", "binary", "minus one one"}
-
-
-@pytest.mark.parametrize("name", list(_metric_label_inputs()))
-def test_classification_labels_match(name):
-    y = _metric_label_inputs()[name]
-    # lane migrate-shared-labels: a numeric label vector is encoded by the one
-    # prepare_targets call (it runs encode_labels_<dtype> inside the binding)
-    expect = ("prepare_targets",) if name in ("int64", "strided", "one class", "binary",
-                                                "minus one one", "uint64") else ()
-    ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
-    if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
-        assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
-        assert ref[0][0] == "ok"
-
-    other = _RNG.integers(-4, 5, 3000)[:len(y)]
-
-    def prepared():
-        true, pred, kind, observed = M._classification_pair(y, other, None)
-        selected = observed[1:] + [99]
-        return (kind, observed, len(true), sorted(M._label_set(true)),
-                M._encode_classification(true, pred, observed),
-                M._encode_classification(true, pred, selected),
-                M._label_map(true, lambda v: int(v == observed[-1])))
-
-    _same(prepared, ("gather_i32",) if name in _NATIVE_LABELS else (), group="metrics")
-
-
-@pytest.mark.parametrize("name", list(_metric_label_inputs()))
-def test_cluster_label_union_matches(name):
-    y = _metric_label_inputs()[name]
-    other = _RNG.integers(-2, 9, 3000)
-    # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
-    # two arrays laid end to end (no encoder, no gather), and lane
-    # pyglue-sweep removed the Python dict route, so declining the seam
-    # leaves no reference routine. The reference is computed here: NumPy's
-    # sorted union and its inverse, after the same int32 admission.
-    call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
-
-    def reference():
-        yt = M._as_i32_1d(y, "labels_true")
-        yp = M._as_i32_1d(other[:len(y)], "labels_pred")
-        if yt.shape[0] != yp.shape[0]:
-            return call()  # the length refusal, raised by the routine itself
-        both = np.concatenate([np.asarray(yt), np.asarray(yp)]).astype(np.int32)
-        if both.size == 0:
-            return yt, yp, 0, 0, -1
-        classes, codes = np.unique(both, return_inverse=True)
-        codes = codes.astype(np.int32)
-        nt = int(yt.shape[0])
-        return (_arr(np.ascontiguousarray(codes[:nt])), _arr(np.ascontiguousarray(codes[nt:])),
-                nt, 0, int(classes.size) - 1)
-
-    ref = _outcome(reference)
-    new = _outcome(call)
-    if not _EXPECT_SABOTAGE:
-        assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
-    _same(lambda: M._as_i32_1d(y, "labels"), (), group="metrics")
-
-
-def test_int32_range_refusal_and_weights():
-    wide = _RNG.integers(0, 5, 3000)
-    wide[11] = 2**31
-    _same(lambda: M._as_i32_1d(wide, "labels"), ("reduce_stat",), group="metrics")
-    for w in (_RNG.random(3000, dtype=np.float32), np.zeros(3000, np.float32),
-              -_RNG.random(3000, dtype=np.float32),
-              np.where(np.arange(3000) == 5, np.nan, 1.0).astype(np.float32),
-              np.where(np.arange(3000) == 5, -0.0, 0.0).astype(np.float32)):
-        # a NaN weight is refused by the finiteness scan before any reduction
-        expect = () if np.isnan(w).any() else ("reduce_stat",)
-        _same(lambda: M._sample_weight_f32(w, 3000, "r2_score"), expect, group="metrics")
+# The metric label and weight seams (`_classification_encoded`, `_EncodedLabels`,
+# `_label_map`, `_prepare_cluster_labels`, `_as_i32_1d`, `_sample_weight_f32`) have
+# no Python route left: their Python copies were deleted (lane py-metrics,
+# 2026-11-15); bindings/mcls_common_unpack.mojo, bindings/mcls_cluster_door.mojo and
+# bindings/metrics_exp_common_unpack.mojo own them, reached through the public
+# metric functions.
 
 
 # --------------------------------------------------------- model_selection
-
-
-def _fold_lists(folds):
-    return [(list(train), list(test)) for train, test in folds]
-
-
-def _fold_labels():
-    n = 3000
-    return {
-        "int64": _arr(_RNG.integers(0, 4, n)),
-        "int32 signed": _arr(_RNG.integers(-3, 3, n).astype(np.int32)),
-        "uint8 bool": _arr(_RNG.integers(0, 2, n).astype(np.uint8)),
-        "float integral": _arr(_RNG.integers(0, 4, n).astype(np.float32)),
-        "float zeros": _arr(np.where(_RNG.integers(0, 2, n) == 0, -0.0, 0.0)),
-        "float regression": _arr(_RNG.standard_normal(n).astype(np.float32)),
-        "float nan": _arr(np.where(np.arange(n) == 9, np.nan, 1.0)),
-        "rare class": _arr(np.where(np.arange(n) < 3, 9, _RNG.integers(0, 3, n))),
-        "all rare": _arr(np.arange(n)),
-        "many classes": _arr(np.arange(n) % 1500),
-        "sorted": _arr(np.sort(_RNG.integers(0, 4, n))),
-        "list": _RNG.integers(0, 4, n).tolist(),
-        "strs": [("c%d" % v) for v in _RNG.integers(0, 4, n)],
-        "short": _arr(_RNG.integers(0, 2, 40)),
-        "odd length": _arr(_RNG.integers(0, 4, 2999)),
-    }
-
-
-@pytest.mark.parametrize("classifier", [True, False])
-@pytest.mark.parametrize("name", list(_fold_labels()))
-def test_default_folds_match(name, classifier):
-    y = _fold_labels()[name]
-    for splits in (2, 3, 5, 7, 1, True, 2.0, len(y) + 1):
-        python_only = (name in ("short",) or (classifier and name in ("list", "strs"))
-                       or splits in (1, True, 2.0) or splits > len(y)
-                       or (classifier and name == "all rare"))
-        # a refusal (a class with fewer members than folds) is raised between
-        # the two helpers, so only `fold_ids` is pinned for every case
-        expect = () if python_only else ("fold_ids",)
-        _same(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)), expect,
-              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
-        if not _EXPECT_SABOTAGE and not python_only:
-            clean = _outcome(lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
-            fast = _outcome(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)))
-            assert clean == fast
-
-
-def test_one_row_per_fold():
-    y = _arr(_RNG.integers(0, 2, 300))
-    for classifier in (True, False):
-        _same(lambda: _fold_lists(MS._default_fold_arrays(y, 300, classifier)), ("fold_ids",),
-              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, 300, classifier)))
-
-
-def test_the_fold_sabotage_control_still_moves_the_folds():
-    y = _arr(_RNG.integers(0, 4, 3000))
-    clean = _fold_lists(MS._default_fold_arrays(y, 4, True))
-    os.environ["MOJOLEARN_FOLD_ORDER_SABOTAGE"] = "1"
-    os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE_SAVED"] = os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE", "")
-    os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = "1"
-    try:
-        # the control runs in the core helpers too (lane py-runtime-b)
-        with _Spy() as spy:
-            rotated = _fold_lists(MS._default_fold_arrays(y, 4, True))
-        assert "fold_ids" in spy.calls
-        assert rotated == _fold_lists(_REF.default_folds(y, 4, True))
-        if not _EXPECT_SABOTAGE:
-            assert rotated != clean
-    finally:
-        os.environ.pop("MOJOLEARN_FOLD_ORDER_SABOTAGE")
-        saved = os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE_SAVED")
-        if saved:
-            os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = saved
-        else:
-            os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE")
-
-
-def _indices_definition(value, n, name):
-    """`MS._indices`' definition in NumPy: its Python route was deleted (index
-    checks native only since d53d84a0f), so the reference arm runs this."""
-    a = np.asarray(value)
-    if a.ndim != 1 or a.dtype.kind not in "iu" or not a.size:
-        raise ValueError(f"{name} must be a nonempty 1-D integer index array")
-    a = a.astype(np.int64)
-    if ((a < 0) | (a >= n)).any():
-        raise ValueError(f"{name} contains an out-of-range index")
-    if np.unique(a).size != a.size:
-        raise ValueError(f"{name} contains duplicate indices")
-    return Array.from_list(a.tolist(), "<i8")
-
-
-def _overlap_definition(a, b, n):
-    """`MS._overlap`'s definition: two accepted index Arrays share a row."""
-    if not a.size or not b.size or n <= 0:
-        return False
-    return bool(np.intersect1d(np.frombuffer(a.tobytes(), "<i8"), np.frombuffer(b.tobytes(), "<i8")).size)
-
-
-def test_indices_and_overlap_match():
-    n = 5000
-    perm = _RNG.permutation(n)
-    cases = {
-        "ok int64": perm[:3000], "ok int32": perm[:3000].astype(np.int32),
-        "ok uint32": perm[:3000].astype(np.uint32), "ok uint8": np.arange(200, dtype=np.uint8),
-        "strided": perm[::2], "list": perm[:3000].tolist(), "short": perm[:10],
-        "negative": np.where(np.arange(3000) == 7, -1, perm[:3000]),
-        "too big": np.where(np.arange(3000) == 7, n, perm[:3000]),
-        "duplicate": np.where(np.arange(3000) == 7, perm[8], perm[:3000]),
-        "duplicate and too big": np.concatenate([perm[:3000], [perm[0], n]]),
-        "floats": perm[:3000].astype(np.float32), "two dim": perm[:3000].reshape(1500, 2),
-        "empty": np.zeros(0, np.int64),
-    }
-    for name, value in cases.items():
-        native = name not in ("short", "floats", "two dim", "empty", "ok uint8")
-        _same(lambda: MS._indices(value, n, "train"),
-              ("check_indices_i64",) if native else (), group="indices",
-              ref_fn=lambda: _indices_definition(value, n, "train"))
-    a = MS._indices(perm[:2500], n, "train")
-    for other, hit in ((perm[2500:], False), (perm[2499:], True), (perm[:2500], True)):
-        b = MS._indices(other, n, "test")
-        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices",
-                    ref_fn=lambda: _overlap_definition(a, b, n))
-        assert ref[0] == ("ok", ("bool", hit))
+# The fold seams (`_indices`, `_overlap`, the default folds and their sabotage
+# control) have no Python route left: their Python copies were deleted (lane
+# py-msel-prep-cnn, 2026-11-14); bindings/msel_cv_door.mojo and
+# msel_split_door.mojo own them, held to tests/_fold_reference.py by
+# tools/cross_val_folds_oracle_check.py and test_model_selection_numpy_free.py.
 
 
 # ------------------------------------------- the C-builtin seams, pinned
@@ -775,16 +511,134 @@ def _pinned(module, name, fn, answers=True, ref_fn=None):
     return ref
 
 
+def _flatten_oracle(y):
+    """The former Python `_labels.flatten_labels` (deleted by lane
+    p2-labels-lists-arrays), the reference of the native flatten. Since
+    8e021e439d the native walk admits each label as it flattens, so a None
+    label is refused there with the label input step's ValueError (the
+    product's `labels_refusal`, bindings/label_admission_native_unpack.mojo)."""
+    from itertools import chain
+    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
+        y = y.tolist()
+    if isinstance(y, (str, bytes)):
+        raise ValueError("mojolearn: y must be a sequence of labels")
+    items = [y]
+    while any(isinstance(item, (list, tuple)) for item in items):
+        items = list(chain.from_iterable(item if isinstance(item, (list, tuple)) else (item,) for item in items))
+    if any(item is None for item in items):
+        raise ValueError("mojolearn: label None is neither a number nor a str")
+    return items
+
+
+# The former Python ORDER RULE of `_labels` (deleted from the package by lane
+# p2-labels-lists-arrays: `sorted_classes` is one native call), kept here as
+# the reference the native answer is held to.
+import numbers as _numbers
+import operator as _operator
+
+
+_ref_PLAIN_NUMBERS = frozenset((int, float, bool))
+_ref_PLAIN_STR = frozenset((str,))
+
+
+def _ref_plain_labels(labels):
+    """'number' or 'str' when EVERY label is exactly a Python int, float or
+    bool, or exactly a str (the type set, read in C); None for anything
+    else, an empty sequence included."""
+    if not labels:
+        return None
+    kinds = set(map(type, labels))
+    if kinds <= _ref_PLAIN_NUMBERS:
+        return "number"
+    if kinds == _ref_PLAIN_STR:
+        return "str"
+    return None
+
+
+def _ref_classes_and_codes(labels):
+    """The ORDER RULE over labels already checked: the FIRST of equal keys
+    is the one `dict.fromkeys` keeps, the classes sort by Python's own
+    comparison, and each label's code is one dict lookup, driven by `map`."""
+    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
+    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
+    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
+
+
+def _ref_sorted_plain_classes(labels, kind):
+    """DEVIATION 3103: `sorted_classes` for labels `_ref_plain_labels` vouched
+    for: one kind (no mixing) of exact Python types, so only a float can be
+    a NaN."""
+    if kind == "number":
+        # `v != v` in C: True only for a NaN float (an int or bool never,
+        # at any size)
+        if any(map(_operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
+            raise ValueError(
+                "mojolearn: y contains a NaN label; NaN is not a class"
+            )
+    return _ref_classes_and_codes(labels)
+
+
+def _ref_kind_of_type(t):
+    """'str', 'number' or None (refused) for one label TYPE: the per-label
+    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
+    if issubclass(t, str):
+        return "str"
+    if issubclass(t, _numbers.Real) or t.__name__ == "bool_":
+        return "number"
+    return None
+
+
+def _ref_first_true(flags):
+    """Index of the first true flag, or None."""
+    try:
+        return _operator.indexOf(flags, True)
+    except ValueError:
+        return None
+
+
+def _ref_check_label_kinds(labels):
+    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
+    the refusals in walk order: the first label that is neither a number
+    nor a str, or a NaN before it, then a mix of the two kinds."""
+    kinds = {t: _ref_kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
+    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
+    stop = _ref_first_true(map(refused.__contains__, map(type, labels))) if refused else None
+    head = labels if stop is None else labels[:stop]
+    if _ref_first_true(map(_operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
+        raise ValueError(
+            "mojolearn: y contains a NaN label; NaN is not a class"
+        )
+    if stop is not None:
+        raise ValueError(
+            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
+        )
+    found = set(kinds.values())
+    if "str" in found and "number" in found:
+        raise ValueError(
+            "mojolearn: y mixes numeric and str labels; encode one kind "
+            "before fitting"
+        )
+
+
 def _general_sorted_classes(y):
     """`sorted_classes` through the general label walk (the kind check and the
-    ORDER RULE), the definition `_sorted_plain_classes` specializes. Since lane
-    migrate-shared-labels the plain seam is always taken (it no longer
-    declines), so declining it would leave `sorted_classes` answering None."""
+    ORDER RULE)."""
     labels = list(y)
     if not labels:
         raise ValueError("mojolearn: y is empty")
-    _labels._check_label_kinds(labels)
-    return _labels._classes_and_codes(labels)
+    _ref_check_label_kinds(labels)
+    return _ref_classes_and_codes(labels)
+
+
+def _agree(new_fn, ref_fn):
+    """The native answer equals the reference's; a reference refusal is a
+    native refusal too (the native walk words some refusals differently)."""
+    new, ref = _outcome(new_fn)[0], _outcome(ref_fn)[0]
+    if ref[0] == "ok":
+        assert new == ref, f"new {new!r:.300} != reference {ref!r:.300}"
+    else:
+        assert new[0] == "refused", f"reference refused {ref!r:.300}, native answered {new!r:.300}"
+    return ref
 
 
 @pytest.mark.parametrize("name", list(_label_lists()))
@@ -796,10 +650,10 @@ def test_plain_label_lists_match_the_label_loop(name):
     # plain types; the NaN test is `v != v`, which holds 2**2000 too
     big = name == "huge ints"
     if isinstance(y, list):
-        _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                answers=plain, ref_fn=lambda: _general_sorted_classes(y))
-    _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
-            answers=plain or big or name == "tuple")
+        _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+    # flatten_labels is one native call (lane p2-labels-lists-arrays): held
+    # equal to the Python flatten it replaced.
+    _agree(lambda: _labels.flatten_labels(y), lambda: _flatten_oracle(y))
     if plain and name != "nan":
         classes, codes = _labels.sorted_classes(list(y))
         assert all(classes[c] == v for c, v in zip(codes, y))
@@ -808,9 +662,8 @@ def test_plain_label_lists_match_the_label_loop(name):
 def test_first_seen_object_is_kept_by_the_plain_path():
     for y in ([True, 1, 1.0, 0, False, 0.0] * 50, [1.0, 1, True, -0.0, 0, False] * 50,
               [0.0, -0.0] * 99, [-0.0, 0.0] * 99):
-        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                      ref_fn=lambda: _general_sorted_classes(y))
-        assert ref[0][0] == "ok"
+        ref = _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+        assert ref[0] == "ok"
 
 
 @pytest.mark.parametrize("index", range(len(_LISTS)))
@@ -826,14 +679,11 @@ def test_flatten_fast_is_pinned(index):
 
 def test_block_copy_is_pinned():
     a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
-    # The block copy is native now (bindings/array_native.mojo _getitem); its
+    # The block copy is native now (bindings/array_native_door.mojo _getitem); its
     # Python definition, the oracle above, keeps its pinned run rule.
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
-    block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
-    _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
-            answers=True)
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
 
 
 def test_sabotage_build_diverges():
@@ -843,7 +693,8 @@ def test_sabotage_build_diverges():
     if not _EXPECT_SABOTAGE:
         assert not _DIVERGED
         return
-    groups = {"astype", "getitem", "reduce", "equal", "lists", "buffers", "labels",
-              "metrics", "folds", "indices"}
+    # The "folds" and "indices" groups went with the Python fold/index routes
+    # that py-msel-prep-cnn deleted (bfd3f40b9d); no test records them now.
+    groups = {"astype", "getitem", "reduce", "equal", "lists", "labels"}
     missing = groups - set(_DIVERGED)
     assert not missing, f"no divergence seen under sabotage in: {sorted(missing)}"

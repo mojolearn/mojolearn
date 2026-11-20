@@ -1433,7 +1433,7 @@ def check_entropy_scattered() -> Int:
     return failed
 
 
-def main() raises:
+def run_checks() raises:
     print("objectives_check -- extratrees split scoring, per cell")
     print("")
     var failed = 0

@@ -26,7 +26,7 @@ Only one-byte cells are compared: on a FAST float column the binary and
 half-byte cells come from float atomics and are not run-to-run exact.
 
     pixi run check-sym-arms                       (FAST column)
-    pixi run check-sym-arms-identical             (IDENTICAL)
+    pixi run check-native-gpu sym_arms_check             (IDENTICAL)
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -122,8 +122,8 @@ def run_arm[level_quant: Bool, group_width: Bool](
     for i in range(total):
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, zf)
+    upload_host_into[DType.int32](ctx, acc, zi)
     ctx.synchronize()
     var scale_keep = upload_scale(ctx, scale)
     var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
@@ -144,11 +144,9 @@ def run_arm[level_quant: Bool, group_width: Bool](
     )
     ctx.synchronize()
     var out = ctx.enqueue_create_host_buffer[DType.float32](total)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     _ = scale_keep^
-    _ = zf^
-    _ = zi^
     return out^
 
 
@@ -179,9 +177,8 @@ def upload_plane(
     var h = ctx.enqueue_create_host_buffer[DType.float32](len(src))
     for i in range(len(src)):
         h.unsafe_ptr().unsafe_store(i, src[i])
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dst, h)
     ctx.synchronize()
-    _ = h^
 
 
 def check_depth(depth: Int) raises -> Int:
@@ -209,7 +206,7 @@ def check_depth(depth: Int) raises -> Int:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS * lay.columns)
     for i in range(N_ROWS * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
     var host_bin = List[List[Int]]()
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](N_ROWS)
@@ -222,7 +219,7 @@ def check_depth(depth: Int) raises -> Int:
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(N_ROWS), cindex.unsafe_ptr(),
@@ -263,7 +260,7 @@ def check_depth(depth: Int) raises -> Int:
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS)
     for r in range(N_ROWS):
         hi.unsafe_ptr().unsafe_store(r, UInt32(rows[r]))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var off = List[Int]()
     var siz = List[Int]()
@@ -303,10 +300,10 @@ def check_depth(depth: Int) raises -> Int:
         hd.unsafe_ptr().unsafe_store(i, UInt32(i))
     for i in range(n_live):
         hid.unsafe_ptr().unsafe_store(i, UInt32(want[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hs.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hd.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hs)
+    upload_host_into[DType.uint32](ctx, ids, hid)
+    upload_host_into[DType.uint32](ctx, dense_ids, hd)
 
     var hcl = lay.hist_cells
     var total = MAX_LEAVES * STAT_COUNT * hcl
@@ -427,14 +424,14 @@ def check_depth(depth: Int) raises -> Int:
             var length = plans[pi].feat_start[3] + plans[pi].feat_count[3]
             length += plans[pi].feat_count[3] // 4
             var host = ctx.enqueue_create_host_buffer[DType.uint32](length)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=plans[pi].folds)
+            download_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             var at = plans[pi].feat_start[0] + plans[pi].feat_count[0]
             var c0 = host.unsafe_ptr().unsafe_load(at)
             var c1 = host.unsafe_ptr().unsafe_load(at + 1)
             host.unsafe_ptr().unsafe_store(at, c1)
             host.unsafe_ptr().unsafe_store(at + 1, c0)
-            ctx.enqueue_copy(dst_buf=plans[pi].folds, src_ptr=host.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             var b_swap = run_arm[False, True](
                 ctx, dblocks, plans, depth, n_live, False, cindex, row_index,
@@ -444,7 +441,7 @@ def check_depth(depth: Int) raises -> Int:
             d_swap = count_diff(off_side, b_swap, want, ob_first, ob_len, hcl)
             host.unsafe_ptr().unsafe_store(at, c0)
             host.unsafe_ptr().unsafe_store(at + 1, c1)
-            ctx.enqueue_copy(dst_buf=plans[pi].folds, src_ptr=host.unsafe_ptr())
+            upload_host_into[DType.uint32](ctx, plans[pi].folds, host)
             ctx.synchronize()
             _ = host^
     print("    check_2581_on: on vs off", d_b, "cells; with two 5-bit groups'"
@@ -465,19 +462,31 @@ def check_depth(depth: Int) raises -> Int:
         print("    check_2580_2581_on FAILED")
         failed += 1
 
-    _ = z^
-    _ = hb^
-    _ = hi^
-    _ = ho^
-    _ = hs^
-    _ = hid^
-    _ = hd^
     return failed
 
 
-def main() raises:
+def run_checks() raises:
     print("sym_arms_check: DEVIATIONS 2580 and 2581, both sides")
     var failed = check_depth(0) + check_depth(1)
     if failed != 0:
         raise Error("sym_arms_check: " + String(failed) + " sides FAILED")
     print("sym_arms_check: every side PASSED")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("sym_arms_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -1,0 +1,46 @@
+diff --git b/x_linear/device.mojo a/x_linear/device.mojo
+index dfa1853618..fc9cd2cc2b 100644
+--- b/x_linear/device.mojo
++++ a/x_linear/device.mojo
+@@ -4390,7 +4390,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
+     var wit = Witness(ctx, wcap)
+     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+     # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
+-    # every other build takes `kf_cells_kernel`)
++    # `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores `kf_cells_kernel`)
+     # builds each fold's means, centered Gram and X'y with the shared grid
+     # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
+     # of `kf_cells_kernel`, one thread per cell walking the fold's rows
+diff --git b/x_linear/fast_gram.mojo a/x_linear/fast_gram.mojo
+index 76783b740e..1e79210aa2 100644
+--- b/x_linear/fast_gram.mojo
++++ a/x_linear/fast_gram.mojo
+@@ -42,12 +42,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ 
+ #: FAST + Apple default since the M3 re-A/B on lane head c338b88dd (n=1, taxi,
+ #: quality the same: ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms);
+-#: the `_OFF` rollback was deleted 2026-11-15 (docs/TOMBSTONES.md). Ridge's
++#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path. Ridge's
+ #: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
+ #: Grams (x_linear/device.mojo) from `fast_gram_into`.
+-# TOMBSTONE: MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 9eb96f91e6.
+-# Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime XL_RIDGE_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++                               and not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"]())
+ 
+ # AFCL-L01/L02: NEVER RUN — PENDING MEASUREMENT. Source-only, uncompiled,
+ # unverified; defaults OFF. Half-sized row chunks increase independent
+diff --git b/x_linear/ridge_grid.mojo a/x_linear/ridge_grid.mojo
+index f7e8ca874c..fc2fc8c7bf 100644
+--- b/x_linear/ridge_grid.mojo
++++ a/x_linear/ridge_grid.mojo
+@@ -278,7 +278,7 @@ def ridge_fit_grid(
+                                                      wit.p(), Int32(wo), nonce, grid_dim=g_f, block_dim=RG_TPB)
+             wo += g_f
+         elif XL_RIDGE_FAST_GRAM:
+-            # lane/apple-fast-gram (FAST on Apple default; every other build takes main's path):
++            # lane/apple-fast-gram (FAST on Apple default; `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path):
+             # the same words from the shared grid Gram (row chunks x 32 x 32
+             # tiles); it waits for its own launches (unwitnessed)
+             var fwf = FP(unsafe_from_address=Int(fwp))

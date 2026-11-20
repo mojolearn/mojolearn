@@ -1,0 +1,21 @@
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 6eb2cb5700..19956ca971 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -1202,11 +1202,13 @@ def qnt_fold_kernel(
+ # outputs o, o + 256, ... when D + 2 > 256), X now cache-resident.
+ # `qnt_fold_kernel` follows unchanged. NO BIT MOVES: every chain is the one
+ # the four launches ran, so the host column is untouched.
++# `-D MOJOLEARN_QN_IDN_FUSED_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
++# four launches.
+ # ---------------------------------------------------------------------------
+ 
+-# TOMBSTONE: MOJOLEARN_QN_IDN_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 42a2855cbe.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime QN_IDN_FUSED = QN_TILED
++comptime QN_IDN_FUSED = QN_TILED and not (
++    is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
+ # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
+ # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.

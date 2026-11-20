@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Build the neural-training CPython extension into
 # python/mojolearn/_mojolearn_training.so. Run from anywhere; requires pixi.
 #
@@ -91,7 +92,7 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 TARGET_FLAGS="--target-cpu apple-m1"
 if [ "$(uname)" != "Darwin" ]; then
     case "$(uname -m)" in
-        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
         *)      TARGET_FLAGS="" ;;   # linux arm: host cpu + its GPU
     esac
 fi
@@ -151,11 +152,8 @@ fi
 # build allocates two extra buffers of N floats on every step. It is a gate
 # build's flag, not a wheel's.
 #
-# DO NOT ADD -D MOJOLEARN_OPT_TRUST_INPUTS EITHER. It removes the
-# device-side non-finite refusal that DEVIATION 1496 added after clause (f)
-# MEASURED a NaN planted in a parameter reaching `param.out`. It is a
-# deliberate downgrade of the profile, it is named so it shows up in a
-# banner, and a wheel is not where a caller opts into it.
+# (The OPT_TRUST_INPUTS downgrade, which removed DEVIATION 1496's device-side
+# non-finite refusal, was deleted 2026-11-15; the refusal always runs.)
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-training.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -167,7 +165,7 @@ out="$tmpdir/_mojolearn_training.so"
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 # compiles the entry bindings/entry/entry__mojolearn_training.mojo, which imports the module body bindings/_mojolearn_training.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \

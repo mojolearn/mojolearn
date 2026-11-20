@@ -41,6 +41,31 @@ class ParallelByteLanguageModelTrainer:
         """
         return _native_parallel_byte("train_step", (self, shards))
 
+    def train_step_from(self, batches, steps):
+        """Run one step on batches read straight from a token corpus.
+
+        Equivalent to ``train_step([batches.ids(s) for s in steps])``: shard
+        ``k`` is the batch of step index ``steps[k]``, read from the corpus
+        file without building an array per shard.
+
+        Parameters
+        ----------
+        batches : mojolearn.lm_corpus.TokenBatches
+            Batches whose ``batch`` and ``length`` match this trainer's.
+        steps : list or tuple of int
+            One step index per logical shard, each at least 0.
+
+        Returns
+        -------
+        dict
+            The same record ``train_step`` returns.
+
+        Examples
+        --------
+        >>> trainer.train_step_from(batches, [0, 1])  # two logical shards  # doctest: +SKIP
+        """
+        return _native_parallel_corpus("batches_parallel_step", (batches, self, steps))
+
     def state_dict(self, *, rank=0):
         """Export a replica in the existing portable byte-LM state format."""
         return _native_parallel_byte("state", (self, rank))
@@ -79,9 +104,6 @@ class ParallelByteLanguageModelTrainer:
         `into`, when given, is a caller-owned float32[n_total] buffer written
         in place and returned; nothing is allocated (same bytes)."""
         return _native_parallel_byte("export_gradients", (self, rank, into))
-
-    def _require_split_step(self, name):
-        return _native_parallel_byte("require_split", (self, name))
 
     def shard_gradient(self, ids):
         """One logical shard's gradient from the CURRENT state, with no
@@ -202,7 +224,7 @@ class ParallelNeuralTrainer:
 
 def _connect_parallel_byte_native():
     # glue: import-time ABI connection only. Product methods hand off once to
-    # native Mojo (bindings/parallel_byte_native.mojo), which admits the exact
+    # native Mojo (bindings/parallel_byte_native_door.mojo), which admits the exact
     # trainer classes and the installed binding's schedule descriptor table.
     from . import _backend
     from ._array import Array
@@ -221,7 +243,7 @@ def _connect_parallel_byte_native():
         # only with MOJOLEARN_PACKAGE_BYTE_LM=1, so a Linux process in fast
         # mode (or any set built with it off) has none. The byte-LM trainers
         # then refuse at use ("Byte-LM numeric mode is not installed",
-        # bindings/parallel_byte_native.mojo) instead of the whole package
+        # bindings/parallel_byte_native_door.mojo) instead of the whole package
         # failing at `import mojolearn` (AMD verify fast, 2026-10-23).
         modes = {}
     else:
@@ -237,5 +259,16 @@ def _connect_parallel_byte_native():
 
 
 _native_parallel_byte = _connect_parallel_byte_native()
+
+
+def _connect_parallel_corpus_native():
+    # glue: import-time connection only. The corpus-fed step is one native
+    # call (bindings/lm_corpus_public_native_door.mojo, batches_parallel_step):
+    # the batches owner is admitted there and its rows gathered natively.
+    from .tokenizer import _binding as _tokenizer_binding
+    return _tokenizer_binding()._module.lm_corpus_public_call
+
+
+_native_parallel_corpus = _connect_parallel_corpus_native()
 
 from ._parallel_neural import _native_parallel_neural

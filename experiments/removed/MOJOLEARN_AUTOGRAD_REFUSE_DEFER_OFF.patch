@@ -1,0 +1,143 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index f7c76d9051..faaebb2b97 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -3274,7 +3274,7 @@ def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType
+     the one offending word read back to name NaN or infinity). Raises
+     before any launch of the backward; returns when `d_out` is finite.
+     The autograd decoder-layer entry calls it on traced and materialized
+-    calls."""
++    calls (and under -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF)."""
+     var bad = device_first_nonfinite(ctx, d_out, len(d_out))
+     if bad >= 0:
+         var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)
+diff --git a/autograd/rules_lm.mojo b/autograd/rules_lm.mojo
+index 1123f1dea8..8d82d8cdee 100644
+--- a/autograd/rules_lm.mojo
++++ b/autograd/rules_lm.mojo
+@@ -91,6 +91,7 @@ from autograd.tape import Tape, Tensor, BackwardRules
+ from sequence.exec_trait import Exec
+ from sequence.exec_device import DeviceExec
+ from sequence.ops import FP, Args
++from core.device_scan import device_first_nonfinite
+ from autograd.refuse_scan import DeferredNonfiniteScan
+ from gemm.contract import OP_NT
+ from gemm.experiments.neural_switches import ROLE_HEAD
+@@ -149,9 +150,8 @@ comptime LM_REMOVED_DEFINES_OK = _check_removed_defines()
+ # (checked before any other error the backward raised, so a NaN still
+ # reports as the refusal); the step's gradients are written by then.
+ # Accepted steps: no kernel or order moves, the same bits.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF (one wait per layer, arm A; old path, no A/B recorded) deleted
+-# 2026-11-15 by lane/expdel2-24-neural with the LM_REFUSE_DEFER alias; code recoverable at 2266129859.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
++# -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps one wait per layer (arm A).
++comptime LM_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+ 
+ # Tags 64-71 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63).
+ comptime LM_EMBEDDING = 64
+@@ -345,9 +345,17 @@ struct LmRules(BackwardRules):
+         # the deleted hand layer walk's first device read: the
+         # incoming gradient is refused by bits before any of its stages.
+         var d = _view(self.ctx, upstream, n)
+-        # the verdict is read at the step's closing wait (byte_backward_autograd)
+-        self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
+-        self.scan_layers[].append(layer)
++        comptime if LM_REFUSE_DEFER:
++            # the verdict is read at the step's closing wait (byte_backward_autograd)
++            self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
++            self.scan_layers[].append(layer)
++            return
++        var bad = device_first_nonfinite(self.ctx, d, n)
++        if bad >= 0:
++            raise Error(
++                String("llama backward: NaN or infinity in d_residual2 of block ") + String(layer)
++                + " at flat index " + String(bad) + " REFUSED"
++            )
+ 
+     def _embedding(self, upstream: FP, gradients: List[FP]) raises:
+         # byte_gradient_device's embedding backward, verbatim: dw_emb from
+@@ -535,27 +543,33 @@ def byte_backward_autograd(
+         _ScansRef(unsafe_from_address=Int(MutPointer(to=scans))),
+         _LayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers))),
+     )
+-    # idea J: a NaN reaching a later rule may make it raise first; the
+-    # refusal is the error the hand path gives, so it is checked first.
+-    var raised = False
+-    var msg = String()
+-    try:
++    comptime if LM_REFUSE_DEFER:
++        # idea J: a NaN reaching a later rule may make it raise first; the
++        # refusal is the error the hand path gives, so it is checked first.
++        var raised = False
++        var msg = String()
++        try:
++            tape.backward_with_rules(ex, loss, seed, rules)
++        except e:
++            raised = True
++            msg = String(e)
++        if not raised:
++            tape.release(ex)
++        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
++            scans[i].enqueue_readback(ctx)
++        # Drain the queue before the stages and views go back to the caller.
++        ex.sync()
++        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
++            var bad = scans[i].result_after_sync()
++            if bad >= 0:
++                raise Error(
++                    String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
++                    + " at flat index " + String(bad) + " REFUSED"
++                )
++        if raised:
++            raise Error(msg)
++    else:
+         tape.backward_with_rules(ex, loss, seed, rules)
+-    except e:
+-        raised = True
+-        msg = String(e)
+-    if not raised:
+         tape.release(ex)
+-    for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+-        scans[i].enqueue_readback(ctx)
+-    # Drain the queue before the stages and views go back to the caller.
+-    ex.sync()
+-    for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+-        var bad = scans[i].result_after_sync()
+-        if bad >= 0:
+-            raise Error(
+-                String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
+-                + " at flat index " + String(bad) + " REFUSED"
+-            )
+-    if raised:
+-        raise Error(msg)
++        # Drain the queue before the stages and views go back to the caller.
++        ex.sync()
+diff --git a/autograd/rules_transformer.mojo b/autograd/rules_transformer.mojo
+index ef3aa39b1b..ba58ca9c5a 100644
+--- a/autograd/rules_transformer.mojo
++++ b/autograd/rules_transformer.mojo
+@@ -123,12 +123,9 @@ from gemm.contract import OP_NT
+ # + bubble, AMD ~18 us + bubble of ~3.4 ms). The verdict is the same index
+ # from the same kernels; the refusal is still raised by this call, after the
+ # layer's gradients are written. Bits of an accepted call: unchanged (no
+-# kernel or order moves).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF (the synchronous scan, arm A; old path, no A/B recorded) deleted
+-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 2266129859. AUTOGRAD_REFUSE_DEFER = True stays for
+-# autograd/rules_samba.mojo and training/samba_resident.mojo; traced and materialized calls keep the synchronous scan.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
+-comptime AUTOGRAD_REFUSE_DEFER = True
++# kernel or order moves). -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps the
++# synchronous scan before the first launch (arm A).
++comptime AUTOGRAD_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+ 
+ from transformer.impl.llama.modeling_llama import (
+     LlamaDeviceStages,
+@@ -851,7 +848,7 @@ def llama_decoder_layer_backward_autograd(
+     var plain = not (traced or materialize)
+     var alias_in = IDN_BWD_ENTRY_ALIAS and plain
+     var trace_addr = Int(MutPointer(to=trace)) if traced else 0
+-    if plain:
++    if AUTOGRAD_REFUSE_DEFER and plain:
+         # idea J: the verdict is queued now and read at the closing wait
+         var scan = DeferredNonfiniteScan(ctx, d_out, len(d_out))
+         var ex = DeviceExec(ctx)

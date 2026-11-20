@@ -1,0 +1,73 @@
+diff --git a/autograd/kernels/embedding.mojo b/autograd/kernels/embedding.mojo
+index 8e16cfc6d6..230b7b2bae 100644
+--- a/autograd/kernels/embedding.mojo
++++ b/autograd/kernels/embedding.mojo
+@@ -8,6 +8,7 @@ directions share, the plan and the sabotage switches."""
+ 
+ from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
+ from max.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.step_phase import step_count_d2h, step_count_host_alloc, step_count_launch, step_count_sync
+ from checks.numerics import ftz
+@@ -69,14 +70,26 @@ def emb_counts_kernel(
+     counts.unsafe_store(v, c)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_EMB_SERIAL_RUN_BEGIN (unmeasured revert arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 37ef16948e.
+-# Restore: git apply experiments/removed/MOJOLEARN_EMB_SERIAL_RUN_BEGIN.patch; record in docs/TOMBSTONES.md.
++def emb_run_begin_kernel(
++    run_begin: MutPointer[Int32, MutAnyOrigin],
++    counts: MutPointer[Int32, MutAnyOrigin],
++    vocab_in: Int32,
++):
++    """The exclusive prefix sum of `counts`, length `V + 1`."""
++    var vocab = Int(vocab_in)
++    var acc = Int32(0)
++    for v in range(vocab):
++        run_begin.unsafe_store(v, acc)
++        acc = acc + counts.unsafe_load(v)
++    run_begin.unsafe_store(vocab, acc)
++
++
+ def emb_run_begin_block_kernel(
+     run_begin: MutPointer[Int32, MutAnyOrigin],
+     counts: MutPointer[Int32, MutAnyOrigin],
+     vocab_in: Int32,
+ ):
+-    """The exclusive prefix sum of `counts` (length `V + 1`), by ONE
++    """`emb_run_begin_kernel`'s exclusive prefix sum of `counts`, by ONE
+     block of `EMB_RUN_BEGIN_THREADS` threads instead of one thread: thread
+     `t` sums its contiguous chunk, thread 0 scans the chunk sums, each
+     thread writes its chunk's prefixes. Integer addition is exactly
+@@ -794,13 +807,23 @@ def _emb_backward_launch(
+         )
+ 
+         step_count_launch()
+-        ctx.enqueue_function[emb_run_begin_block_kernel](
+-            run_begin.unsafe_ptr(),
+-            counts.unsafe_ptr(),
+-            Int32(cfg.vocab),
+-            grid_dim=(1, 1, 1),
+-            block_dim=(EMB_RUN_BEGIN_THREADS, 1, 1),
+-        )
++        comptime if is_defined["MOJOLEARN_EMB_SERIAL_RUN_BEGIN"]():
++            # The revert arm: the single-thread scan.
++            ctx.enqueue_function[emb_run_begin_kernel](
++                run_begin.unsafe_ptr(),
++                counts.unsafe_ptr(),
++                Int32(cfg.vocab),
++                grid_dim=(1, 1, 1),
++                block_dim=(1, 1, 1),
++            )
++        else:
++            ctx.enqueue_function[emb_run_begin_block_kernel](
++                run_begin.unsafe_ptr(),
++                counts.unsafe_ptr(),
++                Int32(cfg.vocab),
++                grid_dim=(1, 1, 1),
++                block_dim=(EMB_RUN_BEGIN_THREADS, 1, 1),
++            )
+ 
+         step_count_launch()
+         ctx.enqueue_function[emb_perm_kernel](

@@ -5,6 +5,11 @@
 from std.sys.compile import is_defined
 from core.six_lane_experiment_guards import SIX_LANE_CONFIGURATION_OK
 from core.package_profile import NATIVE_PACKAGE, identical_mode_enabled
+# The numeric seams below read the rows of the mode policy table, never the
+# mode as a whole: `not ROW_X` is the constant `GLOBAL_NUMERIC_MODE ==
+# NUMERIC_IDENTICAL` in an identical build and in the legacy fast build, so
+# each seam compiles the arm it always did (checks/mode_policy.mojo).
+from checks.mode_policy import ROW_CONTRACT_FREE, ROW_FLUSH_OFF, ROW_VENDOR_MATH
 
 
 
@@ -67,6 +72,129 @@ from std.sys._assembly import inlined_assembly
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 
 
+# NVIDIA rounding-mode PTX arithmetic, one place for every caller
+# (lane nvvm-intrinsics-ptx, 2026-11-12). The LLVM inside Mojo 1.2 no longer
+# knows `llvm.nvvm.mul.rn.{f,ftz.f,d}` ("could not find LLVM intrinsic"), so
+# these emit the same PTX instructions those intrinsics lowered to, as inline
+# assembly on f32 (`f`) / f64 (`d`) registers. Same instruction, same bits.
+# The `.rn` modifier is what keeps ptxas from fusing a product into a
+# neighbouring add (PTX ISA, `mul`/`fma`); the identity guards depend on it,
+# never on LLVM's fp-contraction setting. Call only in code compiled for an
+# NVIDIA GPU (every caller sits under an `is_nvidia_gpu()` or NVIDIA-only
+# comptime branch).
+@always_inline
+def nv_mul_rn_f32(a: Float32, b: Float32) -> Float32:
+    """PTX `mul.rn.f32`."""
+    return inlined_assembly[
+        "mul.rn.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_mul_rn_ftz_f32(a: Float32, b: Float32) -> Float32:
+    """PTX `mul.rn.ftz.f32`."""
+    return inlined_assembly[
+        "mul.rn.ftz.f32 $0, $1, $2;", Float32, constraints="=f,f,f", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_mul_rn_f64(a: Float64, b: Float64) -> Float64:
+    """PTX `mul.rn.f64`."""
+    return inlined_assembly[
+        "mul.rn.f64 $0, $1, $2;", Float64, constraints="=d,d,d", has_side_effect=False
+    ](a, b)
+
+
+@always_inline
+def nv_fma_rn_f32(a: Float32, b: Float32, c: Float32) -> Float32:
+    """PTX `fma.rn.f32` (`a*b + c`, one rounding)."""
+    return inlined_assembly[
+        "fma.rn.f32 $0, $1, $2, $3;", Float32, constraints="=f,f,f,f", has_side_effect=False
+    ](a, b, c)
+
+
+@always_inline
+def nv_fma_rn_ftz_f32(a: Float32, b: Float32, c: Float32) -> Float32:
+    """PTX `fma.rn.ftz.f32`."""
+    return inlined_assembly[
+        "fma.rn.ftz.f32 $0, $1, $2, $3;", Float32, constraints="=f,f,f,f", has_side_effect=False
+    ](a, b, c)
+
+
+# SCHEDULABLE NVIDIA PRODUCTS (lane fix-nv-mul-rn-via-fma, 2026-11-14, owed
+# row `fix-nv-mul-rn-via-fma`). 0.8.55 (0e4de0f46e) spelled the pinned
+# product and the hardware flush as the LLVM intrinsics
+# `llvm.nvvm.mul.rn.f` / `.d` / `.ftz.f`, which LLVM schedules like any
+# arithmetic. Mojo 1.2 dropped them and 62a6577b39 (2026-11-12) moved every
+# site to the inline asm above, which LLVM cannot schedule, hoist or combine
+# around: one opaque block per cell per feature in the distance tile, per
+# step in the GEMM and attention chains, per `ftz` and per `identical_mul`
+# in every NVIDIA identical kernel. NV-only regression on record (L40S,
+# AMD flat): hdbscan taxi fit 423 (0.8.55) -> 552 ms (4c2340386abc).
+# A (default) spells the same IEEE results with the fma intrinsics that
+# Mojo 1.2 still knows; B = `-D MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD` keeps the
+# asm above. Why the bits are the same, every word:
+#   mul.rn(a, b) == fma.rn(a, b, -0.0): fma forms the EXACT product and
+#     adds -0.0, which leaves every nonzero exact value unchanged, then
+#     rounds once: RN(a*b), the multiply's result, including overflow and
+#     gradual underflow (neither form flushes). An exact zero product keeps
+#     its sign: +0 + -0 = +0 and -0 + -0 = -0 under round-to-nearest (a +0.0
+#     addend would turn -0 into +0, so the addend must be -0.0). Inf stays
+#     inf; 0*inf and NaN inputs give NaN in both (NaN payloads are refused
+#     by the contract, IDENTITY_PATHS row 39).
+#   mul.rn.ftz(x, 1.0) == fma.rn.ftz(x, 1.0, -0.0): a subnormal x is
+#     flushed to its signed zero on input in both, and that zero plus -0.0
+#     keeps the sign as above; a normal x times one is exact, so there is
+#     no rounding at all and the fma.ftz smallest-normal boundary (it flushes
+#     a tiny EXACT result before rounding; see pinned_distance_tile `_rt_step`)
+#     cannot arise: the exact result is x itself, never a tiny inexact value.
+#     Only the by-one form is equivalent; a general `mul.rn.ftz(a, b)` is not
+#     rewritten.
+#   f64: as f32, `fma.rn.d` with a -0.0 addend.
+# The `.rn` intrinsics keep the product out of contraction exactly as
+# 0.8.55's `mul.rn` intrinsics did (LLVM may canonicalize either to the same
+# unflagged `fmul`); the on-device gate
+# `neighbors/checks/knn_distance_fma_boundary_check.mojo` compares A and B
+# bitwise over the boundary words and probes that the product is not fused.
+# -0.0 is built from its bit pattern (a local bitcast, folded by LLVM to the
+# constant) so no literal handling can drop the sign.
+comptime IDN_NV_MUL_RN_ASM_OLD = is_defined["MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD"]()
+
+
+@always_inline
+def nv_mul_rn_kernel_f32(a: Float32, b: Float32) -> Float32:
+    """`mul.rn.f32` as `fma.rn.f32(a, b, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_f32(a, b)
+    var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
+    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](
+        a, b, neg_zero
+    )
+
+
+@always_inline
+def nv_mul_rn_kernel_f64(a: Float64, b: Float64) -> Float64:
+    """`mul.rn.f64` as `fma.rn.f64(a, b, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_f64(a, b)
+    var neg_zero = bitcast[DType.float64](UInt64(0x8000000000000000))
+    return llvm_intrinsic["llvm.nvvm.fma.rn.d", Float64, has_side_effect=False](
+        a, b, neg_zero
+    )
+
+
+@always_inline
+def nv_flush_by_one_kernel(x: Float32) -> Float32:
+    """The hardware flush `mul.rn.ftz.f32 x, 1.0` as `fma.rn.ftz.f32(x, 1.0, -0.0)`, schedulable; see above."""
+    comptime if IDN_NV_MUL_RN_ASM_OLD:
+        return nv_mul_rn_ftz_f32(x, Float32(1.0))
+    var neg_zero = bitcast[DType.float32](UInt32(0x80000000))
+    return llvm_intrinsic["llvm.nvvm.fma.rn.ftz.f", Float32, has_side_effect=False](
+        x, Float32(1.0), neg_zero
+    )
+
+
 def ftz(x: Float32) -> Float32:
     """IDENTITY_PATHS row 10's construction: the denormal policy.
 
@@ -80,7 +208,7 @@ def ftz(x: Float32) -> Float32:
     lean B4 step 0.896 -> 0.819 s, optimizer step 57.5 -> 52.6 s, the replay
     of steps 101..103 PASS against the H100 chain and 10 identity lanes
     IDENTICAL. `-D MOJOLEARN_FTZ_NO_CLASS=1` is the revert arm."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_NO_CLASS"]() and is_amd_gpu():
+    comptime if not ROW_FLUSH_OFF and not is_defined["MOJOLEARN_FTZ_NO_CLASS"]() and is_amd_gpu():
         var subnormal = llvm_intrinsic[
             "llvm.amdgcn.class.f32", Bool, has_side_effect=False
         ](x, Int32(0x90))
@@ -92,7 +220,7 @@ def ftz(x: Float32) -> Float32:
     # Apple column has one ftz, not two. `-D MOJOLEARN_FTZ_FCMP_OFF=1` (or
     # ann's old `-D MOJOLEARN_FTZ_TWO_TEST`) restores the integer spelling
     # below.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_FCMP_OFF"]() and not is_defined["MOJOLEARN_FTZ_TWO_TEST"]() and is_apple_gpu():
+    comptime if not ROW_FLUSH_OFF and not is_defined["MOJOLEARN_FTZ_FCMP_OFF"]() and not is_defined["MOJOLEARN_FTZ_TWO_TEST"]() and is_apple_gpu():
         # lane cluster-apple2 (2026-09-28), in code compiled FOR an Apple GPU:
         # `|x| < FLT_MIN` holds exactly for the subnormals and the two zeros
         # (a zero maps to itself), never for a normal, an infinity or a NaN,
@@ -127,10 +255,12 @@ def ftz(x: Float32) -> Float32:
     # x-prep-inverse-transforms, NVIDIA against AMD, Apple and the host).
     # The select keeps the input word for a NaN, so this spelling returns the
     # integer spelling's word for all 2^32 inputs.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
-        var y = llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0))
+    comptime if not ROW_FLUSH_OFF and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
+        # lane fix-nv-mul-rn-via-fma: the same flush as a schedulable fma
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_flush_by_one_kernel.
+        var y = nv_flush_by_one_kernel(x)
         return x if y != y else y
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_FLUSH_OFF:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (
             b & UInt32(0x007FFFFF)
@@ -141,7 +271,7 @@ def ftz(x: Float32) -> Float32:
 
 def identical_mul_add(a: Float32, b: Float32, c: Float32) -> Float32:
     """IDENTITY_PATHS row 9's construction: the contraction pin."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_CONTRACT_FREE:
         return _fma_f32(a, b, c)
     return a * b + c
 
@@ -158,14 +288,14 @@ def identical_mul(a: Float32, b: Float32) -> Float32:
     Under IDENTICAL it is `pinned_mul_f32`. It used to be `fma(a, b, -0.0)`,
     which LLVM folds into a plain contractable product that a following add
     then fused with (lane/pinned-mul-contract-free, 2026-09-26)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_CONTRACT_FREE:
         return pinned_mul_f32(a, b)
     return a * b
 
 
 def identical_mul64(a: Float64, b: Float64) -> Float64:
     """`identical_mul`'s float64 twin: `pinned_mul_f64` under IDENTICAL, `a * b` otherwise."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_CONTRACT_FREE:
         return pinned_mul_f64(a, b)
     return a * b
 
@@ -185,7 +315,8 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 #   AMD GPU: the instruction itself, `v_mul_f32` / `v_mul_f64` as inline asm
 #     on VGPRs. The fence was the first spelling and gfx942 codegen refused it
 #     on a uniform value ("illegal VGPR to SGPR copy", a row-norm kernel).
-#   NVIDIA: `llvm.nvvm.mul.rn.{f,d}`, i.e. PTX `mul.rn`. A fenced `fmul`
+#   NVIDIA: PTX `mul.rn`, spelled `fma.rn(a, b, -0.0)` (`nv_mul_rn_kernel_f32` /
+#     `nv_mul_rn_kernel_f64` above; asm `mul.rn` is the B arm). A fenced `fmul`
 #     reaches PTX as a plain `mul.f32`, which ptxas may still fuse with an
 #     `add.f32`; the `.rn` modifier forbids that (PTX ISA, `mul`).
 #   Apple GPU: `llvm.fma(a, b, -0.0)` called WITHOUT fast-math flags; LLVM
@@ -196,7 +327,9 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
     """`a*b`, correctly rounded, never fused into a neighbor. See above."""
     comptime if is_nvidia_gpu():
-        return llvm_intrinsic["llvm.nvvm.mul.rn.f", Float32, has_side_effect=False](a, b)
+        # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f32.
+        return nv_mul_rn_kernel_f32(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f32 $0, $1, $2", Float32, constraints="=v,v,v", has_side_effect=False
@@ -215,7 +348,9 @@ def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
 def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
     """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
     comptime if is_nvidia_gpu():
-        return llvm_intrinsic["llvm.nvvm.mul.rn.d", Float64, has_side_effect=False](a, b)
+        # lane fix-nv-mul-rn-via-fma: schedulable fma.rn with a -0.0 addend
+        # (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD), see nv_mul_rn_kernel_f64.
+        return nv_mul_rn_kernel_f64(a, b)
     elif is_amd_gpu():
         return inlined_assembly[
             "v_mul_f64 $0, $1, $2", Float64, constraints="=v,v,v", has_side_effect=False
@@ -332,7 +467,7 @@ def _cephes_logf_core(t: Float32, e: Int) -> Float32:
 
 def identical_exp(x: Float32) -> Float32:
     """Row 12's seam call."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_expf(x)
     from std.math import exp
 
@@ -341,13 +476,28 @@ def identical_exp(x: Float32) -> Float32:
 
 def identical_log(x: Float32) -> Float32:
     """Row 12's seam call, `log` side."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_logf(x)
     from std.math import log
 
     return log(x)
 
 
+
+
+# MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP: PROMOTED 2026-11-18 (lane fx-verdicts). The comptime candidate step is the
+# default on every vendor and the host column; `-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF` restores the
+# run-time `for k in range(4)` chain. Evidence, NVIDIA L40S, wheel d652a4b0a1 and its B set, base and arm back to back
+# in one job, one run per arm: A/B ab2 (host c6dd9ebea3e3, 36 cells): digests and quality equal on all 36; arm/base
+# geomean 0.973; hdbscan taxi fit 561 -> 450 ms (0.80), knn taxi 32.99 -> 27.76 (0.84), knn-reg taxi 18.94 -> 16.16
+# (0.85), ann-refine taxi 28.08 -> 24.40 (0.87), knn-clf taxi 19.64 -> 17.27 (0.88), knn taxi 300,000 rows (neighbour
+# shape) 25.74 -> 22.52 (0.87), knn istella 0.93, hdbscan istella 0.95, gpr taxi 0.92, the tree, ALS, STL, ARIMA and
+# KDE rows 0.97-1.04; one cell slower: rbf-sampler istella fit 59.88 -> 78.66 ms (1.31; taxi 1.00), whose sqrt work is
+# one d x n_components / 2 Box-Muller launch and two host scalars (RE-TIME OWED, one cell). Earlier ab1 (host
+# 37f71a6102af, 8 cells, digests equal): bisecting-kmeans istella infer 0.67, randomized-svd taxi 0.89, others
+# 0.94-1.00. The function is vendor neutral (no vendor branch): the same code on every column, bits unchanged.
+# Limits: NVIDIA only (AGENTS.md part 8); knn covtype (non-board) not run.
+comptime NUMERICS_SQRT_COMPTIME_STEP = not is_defined["MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF"]()
 
 
 def portable_sqrtf(x_in: Float32) -> Float32:
@@ -378,21 +528,44 @@ def portable_sqrtf(x_in: Float32) -> Float32:
     var yb = rebind[UInt32](y.to_bits())
     var best = y
     var r_best = abs(_fma_f32(-y, y, x))
-    for k in range(4):
-        var cb: UInt32
-        if k == 0:
-            cb = yb - UInt32(1)
-        elif k == 1:
-            cb = yb + UInt32(1)
-        elif k == 2:
-            cb = yb - UInt32(2)
-        else:
-            cb = yb + UInt32(2)
-        var c = bitcast[DType.float32](cb)
-        var r = abs(_fma_f32(-c, c, x))
-        if r < r_best:
-            best = c
-            r_best = r
+    comptime if NUMERICS_SQRT_COMPTIME_STEP:
+        # Default since 2026-11-18 (MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP promoted, lane sqrt-comptime-step
+        # 2026-11-16; A/B numbers beside NUMERICS_SQRT_COMPTIME_STEP above; _OFF restores the loop). The run-time
+        # `for k in range(4)` below with its `k == 0 ...` chain was lowered to selects by Mojo 1.0 and to a rotated compare-and-branch loop by Mojo 1.2
+        # (pinned_distance_register_tile_kernel, 32 inlined sqrts per thread: 81 -> 119 registers, sm_89 warps per
+        # SM 20 -> 16; ~/mojolearn-evidence/kernel-attribution-20261116/ATTRIBUTION.md). Here the candidate offset
+        # is a compile-time constant per step (k = 0, 1, 2, 3 -> -1, +1, -2, +2, the same order), so there is no
+        # run-time `k` to branch on. Same candidates, same order, same integer add/sub on yb (UInt32 wrap
+        # identical), same bitcast, same `abs(_fma_f32(-c, c, x))`, same strict `<` and the same two updates:
+        # the result bits are identical to the loop below for every input, on every vendor and the host column.
+        comptime for k in range(4):
+            comptime delta = UInt32(k // 2 + 1)
+            var cb: UInt32
+            comptime if k % 2 == 0:
+                cb = yb - delta
+            else:
+                cb = yb + delta
+            var c = bitcast[DType.float32](cb)
+            var r = abs(_fma_f32(-c, c, x))
+            var take = r < r_best
+            best = c if take else best
+            r_best = r if take else r_best
+    else:
+        for k in range(4):
+            var cb: UInt32
+            if k == 0:
+                cb = yb - UInt32(1)
+            elif k == 1:
+                cb = yb + UInt32(1)
+            elif k == 2:
+                cb = yb - UInt32(2)
+            else:
+                cb = yb + UInt32(2)
+            var c = bitcast[DType.float32](cb)
+            var r = abs(_fma_f32(-c, c, x))
+            if r < r_best:
+                best = c
+                r_best = r
     if scaled_down:
         best = best * bitcast[DType.float32](UInt32(0x2F800000))  # 2^-32
     return best
@@ -498,7 +671,7 @@ def portable_exp64(x: Float64) -> Float64:
 
 def identical_exp64(x: Float64) -> Float64:
     """The probability links' seam call (host): IDENTICAL routes through `portable_exp64`, FAST is the host stdlib verbatim."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_exp64(x)
     from std.math import exp
 
@@ -506,7 +679,7 @@ def identical_exp64(x: Float64) -> Float64:
 
 
 def portable_log64(x_in: Float64) -> Float64:
-    """HOST-ONLY (no float64 on device): `log` for Float64 as one arithmetic, the sibling of `portable_exp64` for the same reason (each host libm rounds double log differently in the last bit)."""
+    """`log` for Float64 on the host and on NVIDIA / AMD devices (explicit fma, IEEE division and bit work only; Metal has no float64, so never in an Apple kernel) as one arithmetic, the sibling of `portable_exp64` for the same reason (each host libm rounds double log differently in the last bit)."""
     from std.math import fma
     from std.memory import bitcast
 
@@ -580,7 +753,7 @@ def portable_log64(x_in: Float64) -> Float64:
 
 def identical_log64(x: Float64) -> Float64:
     """The host double-log seam call: IDENTICAL routes through `portable_log64`, FAST is the host stdlib verbatim (the `identical_exp64` contract)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_log64(x)
     from std.math import log
 
@@ -668,7 +841,7 @@ def portable_log2_64(x_in: Float64) -> Float64:
 
 def identical_log2_64(x: Float64) -> Float64:
     """Host log2 seam: only IDENTICAL selects the portable arithmetic."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_log2_64(x)
     from std.math import log2
 
@@ -778,7 +951,7 @@ def portable_pow64(x: Float64, p: Float64) -> Float64:
 
 def identical_pow64(x: Float64, p: Float64) -> Float64:
     """Host pow seam: IDENTICAL portable; other modes keep std.math.pow."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_pow64(x, p)
     from std.math import pow
 
@@ -787,7 +960,7 @@ def identical_pow64(x: Float64, p: Float64) -> Float64:
 
 def identical_sqrt(x: Float32) -> Float32:
     """Row 10's sqrt seam call: IDENTICAL routes through `portable_sqrtf` (one arithmetic, correctly rounded, the same bits on the approximate- sqrt column too); FAST is the stdlib's device path verbatim."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_sqrtf(x)
     from std.math import sqrt
 
@@ -796,7 +969,7 @@ def identical_sqrt(x: Float32) -> Float32:
 
 def identical_cos(x: Float32) -> Float32:
     """Row 12's `cos` seam call (Box-Muller). Same two-arm contract."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_cosf(x)
     from std.math import cos
 
@@ -805,7 +978,7 @@ def identical_cos(x: Float32) -> Float32:
 
 def identical_pow(x: Float32, p: Float32) -> Float32:
     """Row 12's `pow` seam call (Bayesian bootstrap temperature)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_powf(x, p)
     return x**p
 
@@ -814,7 +987,7 @@ def identical_pow(x: Float32, p: Float32) -> Float32:
 
 def ftz_simd[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     """`ftz`, lane by lane."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_FLUSH_OFF:
         var out = x
         comptime for i in range(w):
             out[i] = ftz(x[i])
@@ -830,7 +1003,7 @@ def identical_mul_add_simd[
     c: SIMD[DType.float32, w],
 ) -> SIMD[DType.float32, w]:
     """`identical_mul_add`, lane by lane: ONE rounding under IDENTICAL, the naive chain under FAST."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_CONTRACT_FREE:
         return _fma_f32_simd[w](a, b, c)
     return a * b + c
 
@@ -930,14 +1103,14 @@ def portable_softplusf(x: Float32) -> Float32:
 
 def identical_div(a: Float32, b: Float32) -> Float32:
     """Row 49's seam: IDENTICAL routes through `portable_divf` (the flush model around one correctly rounded division); FAST is plain `/`."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_divf(a, b)
     return a / b
 
 
 def identical_rsqrt(x: Float32) -> Float32:
     """Row 50's seam: IDENTICAL is `portable_rsqrtf`; FAST is the reference's own spelling `1 / sqrt(x)` through the stdlib sqrt (the vendor's sqrt -- approximate on NVIDIA, DEVIATION 258), never the rsqrt intrinsic."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_rsqrtf(x)
     from std.math import sqrt
 
@@ -946,7 +1119,7 @@ def identical_rsqrt(x: Float32) -> Float32:
 
 def identical_log1p(x: Float32) -> Float32:
     """Row 51's seam: IDENTICAL is `portable_log1pf`; FAST is too since 2026-09-27 (it was `log(1 + x)` through the stdlib log -- Triton 3's own spelling of the same thing (mamba_ssm/ops/triton/softplus.py:11) -- and NOT `std.math.log1p`, because that one lowers the Float32 case THROUGH FLOAT64 (`air.convert.f.f64.f.f32` ..."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_log1pf(x)
     # FAST (lane neural, 2026-09-27): `log(1 + x)` rounds `1 + x` first and
     # loses up to 2^-24 / |x| relative (5.5e-5 at x = exp(-7), which put the
@@ -958,7 +1131,7 @@ def identical_log1p(x: Float32) -> Float32:
 
 def identical_sigmoid(x: Float32) -> Float32:
     """Row 52's seam: IDENTICAL is `portable_sigmoidf`; FAST is `1 / (1 + exp(-x))` through the stdlib exp."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_sigmoidf(x)
     from std.math import exp
 
@@ -967,7 +1140,7 @@ def identical_sigmoid(x: Float32) -> Float32:
 
 def identical_silu(x: Float32) -> Float32:
     """Row 53's seam: IDENTICAL is `portable_siluf`; FAST is the reference's `x / (1 + exp(-x))` through the stdlib exp."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_siluf(x)
     from std.math import exp
 
@@ -976,7 +1149,7 @@ def identical_silu(x: Float32) -> Float32:
 
 def identical_softplus(x: Float32) -> Float32:
     """Row 54's seam: IDENTICAL is `portable_softplusf`; FAST is torch's `log1p(exp(x))` (stdlib exp) since 2026-09-27; it was the reference's guard around Triton 3's `log(exp(x) + 1)` through the stdlib (not `log1p`: see `identical_log1p` for why it cannot be)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_softplusf(x)
     # FAST (lane neural, 2026-09-27): torch's `log1p(exp(x))` with the stdlib
     # exp. The former `log(exp(x) + 1)` (Triton 3's spelling) lost up to
@@ -1166,7 +1339,7 @@ def portable_fmaxf(a_in: Float32, b_in: Float32) -> Float32:
 
 def identical_sin(x: Float32) -> Float32:
     """Row 12's `sin` seam call (RoPE)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_sinf(x)
     from std.math import sin
 
@@ -1175,7 +1348,7 @@ def identical_sin(x: Float32) -> Float32:
 
 def identical_tanh(x: Float32) -> Float32:
     """DEVIATION 821's seam: IDENTICAL is `portable_tanhf`; FAST is `std.math.tanh`, the stdlib's device path verbatim."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_tanhf(x)
     from std.math import tanh
 
@@ -1184,7 +1357,7 @@ def identical_tanh(x: Float32) -> Float32:
 
 def identical_erf(x: Float32) -> Float32:
     """DEVIATION 822's seam: IDENTICAL is `portable_erff`; FAST is `std.math.erf`, the stdlib's device path verbatim."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_erff(x)
     from std.math import erf
 
@@ -1215,7 +1388,7 @@ def identical_erf(x: Float32) -> Float32:
 # x_prep/iterative.mojo shipped as `_ppnd7` / `_phi` (sample_posterior), moved
 # here unchanged so BCa (resample/checks/intervals.mojo) and the imputer read
 # ONE construction. Its accuracy against a float64 oracle (PPND16 refined by
-# Newton on erfc) is measured, bounded and hashed by `pixi run check-ndtri`
+# Newton on erfc) is measured, bounded and hashed by `pixi run check-native-gpu ndtri_check`
 # (checks/ndtri_check.mojo), host and device, bit for bit.
 # ---------------------------------------------------------------------------
 
@@ -1300,7 +1473,7 @@ def identical_ndtri(p_in: Float32) -> Float32:
 
 def identical_gelu_erf(x: Float32) -> Float32:
     """DEVIATION 823's seam, the EXACT gelu: IDENTICAL is `portable_gelu_erf`; FAST is the reference's own spelling `x * 0.5 * (1 + erf(x / sqrt(2)))` through the stdlib erf, with the same pinned float32 divisor."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_gelu_erf(x)
     from std.math import erf
     from std.memory import bitcast
@@ -1311,7 +1484,7 @@ def identical_gelu_erf(x: Float32) -> Float32:
 
 def identical_gelu_tanh(x: Float32) -> Float32:
     """DEVIATION 824's seam, the TANH gelu: IDENTICAL is `portable_gelu_tanh`; FAST is the reference's own spelling `x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))` through the stdlib tanh, with the same pinned float32 constants and the same unfused association."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_gelu_tanh(x)
     from std.math import tanh
     from std.memory import bitcast
@@ -1327,7 +1500,7 @@ def identical_gelu_tanh(x: Float32) -> Float32:
 
 def identical_fmax(a: Float32, b: Float32) -> Float32:
     """DEVIATION 825's seam (softmax's row maximum): IDENTICAL is `portable_fmaxf` (the total-order selection, NaN canonicalized, operands and result flushed); FAST is the stdlib `max`, whose signed-zero and NaN answers are the vendor's own choice."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_fmaxf(a, b)
     from std.math import max
 
@@ -1353,7 +1526,7 @@ def portable_clampf(x_in: Float32, lo_in: Float32, hi_in: Float32) -> Float32:
 
 def identical_clamp(x: Float32, lo: Float32, hi: Float32) -> Float32:
     """DEVIATION 788's seam (mamba2 S9, `dt = clamp(softplus(dt_raw + bias), lo, hi)`): IDENTICAL is `portable_clampf` (total-order value-pick, NaN canonicalized, operands flushed); FAST is the reference's own spelling `min(max(x, lo), hi)` through the stdlib min/max, whose signed-zero and NaN answers are the vendor's own choice -- FAST's contract is..."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_VENDOR_MATH:
         return portable_clampf(x, lo, hi)
     from std.math import max, min
 

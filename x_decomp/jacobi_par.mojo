@@ -33,7 +33,7 @@ does not converge in its budget returns False and the caller runs the cyclic
 solver on the untouched input. (cgfin-c-decomp deleted the one-sided SVD's
 round-robin experiment, MOJOLEARN_XD_PJ_SVD_MIN, default never.)
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

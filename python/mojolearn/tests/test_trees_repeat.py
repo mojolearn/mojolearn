@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every trees-family entry point called TWICE in one process, on the GPU
 bindings and on the CPU host bindings, with the second call's bits equal to
-the first's; the GPU and CPU column digests are recorded side by side.
+the first's, and the GPU and CPU column digests equal.
 
 The directive it answers (CURRENT DIRECTIVES, 2026-09-27): x_cluster and
 x_neighbors hung on the SECOND GPU call in a process because each call built
@@ -129,7 +129,7 @@ assert first == second, "a second call in the same process moved the bits"
 
 
 def _run(env_extra):
-    env = dict(os.environ, PYTHONPATH=str(PKG.parent), MOJOLEARN_NUMERIC_MODE="identical")
+    env = dict(os.environ, PYTHONPATH=_runtime_parent(), MOJOLEARN_NUMERIC_MODE="identical")
     env.update(env_extra)
     proc = subprocess.run([sys.executable, "-c", _SCRIPT], env=env, capture_output=True,
                           text=True, timeout=1800)
@@ -139,9 +139,15 @@ def _run(env_extra):
 
 def test_every_entry_point_twice_on_gpu_and_cpu():
     # Each column asserts its own second call equals its first (_SCRIPT).
-    # Identity is required across NVIDIA and AMD only (2026-10-07); a GPU
-    # column and the host column are recorded side by side, never required to
-    # agree, so the pair is printed rather than asserted.
+    # The bits rule (AGENTS.md "The CPU column is required", 2026-11-09): the
+    # GPU column and the host column return the same bits within one version,
+    # so the two digests must agree (as test_x_neighbors_repeat and
+    # test_x_ann_repeat assert).
     gpu = _run({})
-    cpu = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(PKG / "host")})
-    print("trees_repeat digests: gpu", gpu, "cpu", cpu, "agree" if gpu == cpu else "differ")
+    cpu = _run({"MOJOLEARN_VENDOR": "cpu", "MOJOLEARN_HOST_DIR": str(Path(_runtime_parent()) / "mojolearn" / "host")})
+    assert gpu == cpu, ("trees_repeat: the GPU and CPU column digests differ", gpu, cpu)
+
+
+def _runtime_parent():
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT  # the runtime this process imported
+    return PACKAGE_PARENT

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The univariate score functions and TargetEncoder.fit_transform are one
-native call (bindings/prep_owner_native.mojo, bindings/prep_encode_native.mojo).
+native call (bindings/prep_owner_native_door.mojo, bindings/prep_encode_native_door.mojo).
 The former Python routines are kept below as the oracle: the door must return
 the same bytes. The shell checks run without bindings; the rest need the
 compiled package."""
@@ -49,10 +49,11 @@ def P():
     # the compiled package; the oracle below reads the module's helpers as globals
     try:
         from mojolearn import _expansion_prep as module
+        from mojolearn.tests import _prep_prog_oracle as oracle
     except Exception as error:  # noqa: BLE001  (no bindings in a lane worktree)
         pytest.skip(f"compiled mojolearn unavailable: {error}")
     for name in _ORACLE_NAMES:  # glue: test oracle setup
-        globals()[name] = getattr(module, name)
+        globals()[name] = getattr(oracle, name)
     return module
 
 
@@ -166,8 +167,10 @@ def test_chi2_negative_refusal(P):
 def test_target_encoder_splitters(P):
     np, _, Xb, y3, yr = _fixtures()
     import mojolearn as ml
-    pairs = list(ml.KFold(4).split(Xb, yr))
-    a = ml.TargetEncoder(cv=ml.KFold(4)).fit_transform(Xb, yr)
+    # KFold is public in mojolearn.model_selection, not at the package root.
+    KFold = ml.model_selection.KFold
+    pairs = list(KFold(4).split(Xb, yr))
+    a = ml.TargetEncoder(cv=KFold(4)).fit_transform(Xb, yr)
     b = ml.TargetEncoder(cv=pairs).fit_transform(Xb, yr)
     c = ml.TargetEncoder(cv=tuple((list(tr), list(te)) for tr, te in pairs)).fit_transform(Xb, yr)
     assert _bytes(a) == _bytes(b) == _bytes(c)
@@ -175,10 +178,14 @@ def test_target_encoder_splitters(P):
     class Splits:
         def split(self, X, y=None):
             yield from pairs
+    # A class defined here lives in `mojolearn.tests`, which the door reads as
+    # a mojolearn splitter; a user's splitter lives in the user's module.
+    Splits.__module__ = "user_splitters"
     with pytest.raises(TypeError, match="got Splits"):
         ml.TargetEncoder(cv=Splits()).fit_transform(Xb, yr)
+    # One test fold that leaves rows 150..299 in no validation fold.
     with pytest.raises(ValueError, match="cover each sample index exactly once"):
-        ml.TargetEncoder(cv=[(np.arange(300), np.arange(300))]).fit_transform(Xb, yr)
+        ml.TargetEncoder(cv=[(np.arange(150, 300), np.arange(150))]).fit_transform(Xb, yr)
     bad = [(np.arange(10), te) for _, te in pairs]
     with pytest.raises(NotImplementedError, match="training rows are not every"):
         ml.TargetEncoder(cv=bad).fit_transform(Xb, yr)

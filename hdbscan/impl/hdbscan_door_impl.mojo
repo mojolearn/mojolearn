@@ -4,8 +4,7 @@
 the fit run and the prediction-data run with their result copies, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change)."""
-from std.memory import memcpy
-from std.sys.compile import is_defined
+from std.memory import unsafe_memcpy
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 from hdbscan.estimator import hdbscan_fit_host_output
@@ -13,7 +12,7 @@ from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 #: The HDBSCAN binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime HDB_DEVCTX_SLOT = "MojoHdbscanContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoHdbscanContextFast"
+comptime HDB_DEVCTX_SLOT = "MojolearnHdbscanContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnHdbscanContextFastV3"
 comptime _DEVCTX_SLOT = HDB_DEVCTX_SLOT
 
 #: fg-tsne-dbscan H5 (every mode and column, DEFAULT ON, lane fg-tsne-dbscan
@@ -21,8 +20,8 @@ comptime _DEVCTX_SLOT = HDB_DEVCTX_SLOT
 #: condensed tree's four arrays; the inverse map; the probabilities) go into
 #: the caller's arrays by one memcpy each instead of an element loop per
 #: array (5 n + 4 n_edges scalar stores). The same bytes.
-#: `-D MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF` restores the loops.
-comptime IDN_HDB_OUT_MEMCPY = not is_defined["MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF (old path: element loops into the caller's arrays; nv2 v1047 / amd a1187 neutral, memcpy kept) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 89d0ad23b5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def hdbscan_fit_door_run(
@@ -65,13 +64,8 @@ def hdbscan_fit_door_run(
         metric,
     )
     ctx.synchronize()
-    comptime if IDN_HDB_OUT_MEMCPY:
-        memcpy(dest=lp, src=out.labels.unsafe_ptr(), count=n)
-        memcpy(dest=cp, src=out.core_dists.unsafe_ptr(), count=n)
-    else:
-        for i in range(n):
-            lp.unsafe_store(i, out.labels[i])
-            cp.unsafe_store(i, out.core_dists[i])
+    unsafe_memcpy(dest=lp, src=out.labels.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=cp, src=out.core_dists.unsafe_ptr(), count=n)
     ip.unsafe_store(0, Int32(out.n_clusters))
     ip.unsafe_store(1, Int32(out.n_outliers))
     ip.unsafe_store(2, Int32(out.n_boruvka_rounds))
@@ -85,26 +79,13 @@ def hdbscan_fit_door_run(
                 " by name"
             )
         ip.unsafe_store(4, Int32(ne))
-        comptime if IDN_HDB_OUT_MEMCPY:
-            memcpy(dest=tpp, src=out.condensed.parents.unsafe_ptr(), count=ne)
-            memcpy(dest=tcp, src=out.condensed.children.unsafe_ptr(), count=ne)
-            memcpy(dest=tlp, src=out.condensed.lambdas.unsafe_ptr(), count=ne)
-            memcpy(dest=tsp, src=out.condensed.sizes.unsafe_ptr(), count=ne)
-            memcpy(dest=invp, src=out.inverse_label_map.unsafe_ptr(), count=out.n_clusters)
-        else:
-            for e in range(ne):
-                tpp.unsafe_store(e, out.condensed.parents[e])
-                tcp.unsafe_store(e, out.condensed.children[e])
-                tlp.unsafe_store(e, out.condensed.lambdas[e])
-                tsp.unsafe_store(e, out.condensed.sizes[e])
-            for c in range(out.n_clusters):
-                invp.unsafe_store(c, out.inverse_label_map[c])
+        unsafe_memcpy(dest=tpp, src=out.condensed.parents.unsafe_ptr(), count=ne)
+        unsafe_memcpy(dest=tcp, src=out.condensed.children.unsafe_ptr(), count=ne)
+        unsafe_memcpy(dest=tlp, src=out.condensed.lambdas.unsafe_ptr(), count=ne)
+        unsafe_memcpy(dest=tsp, src=out.condensed.sizes.unsafe_ptr(), count=ne)
+        unsafe_memcpy(dest=invp, src=out.inverse_label_map.unsafe_ptr(), count=out.n_clusters)
     if want_probs:
-        comptime if IDN_HDB_OUT_MEMCPY:
-            memcpy(dest=pp, src=out.probabilities.unsafe_ptr(), count=n)
-        else:
-            for i in range(n):
-                pp.unsafe_store(i, out.probabilities[i])
+        unsafe_memcpy(dest=pp, src=out.probabilities.unsafe_ptr(), count=n)
     var n_clusters = out.n_clusters
     _ = out^
     # DEVIATION 1946: the context dies LAST, after every value built on it.

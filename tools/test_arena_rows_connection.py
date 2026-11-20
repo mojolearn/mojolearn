@@ -1,5 +1,6 @@
 """Import-time native descriptor admission; no compiled product claim."""
 from pathlib import Path
+import collections
 import sys
 import threading
 from types import MemberDescriptorType, ModuleType, SimpleNamespace
@@ -54,9 +55,16 @@ def connect(native_entry=len, store_binding=None, backend_fields=None):
     bridge = ModuleType('mojolearn._native_classical_bridge')
     bridge._numpy_free_context = lambda: {'array_class': Array}
     tokenizer = ModuleType('mojolearn.tokenizer')
+    # _mode's import-time generic slots (4fe4a53c9d) connect three more
+    # compiled entries. The descriptor factory is a builtin that hands back
+    # the standard object.__getattribute__, so the inert fixture keeps
+    # ordinary attribute reads on PublicOutputsMixin.
+    standard_getattribute = collections.defaultdict(lambda: object.__getattribute__).__missing__
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(
         arena_rows_native_call=len, mode_metadata_native_call=len,
-        params_metadata_native_call=len))
+        params_metadata_native_call=len, public_attribute_generic_slot_native_call=len,
+        classical_attribute_descriptor=standard_getattribute,
+        full_reset_params_native_call=len))
     backend = ModuleType('mojolearn._backend')
     # The real connector now initializes native mode metadata before the cache
     # routes. Supply that import-time protocol in this inert fixture too.

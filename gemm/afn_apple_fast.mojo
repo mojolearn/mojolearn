@@ -68,12 +68,12 @@ arguments are fixed-width; pointers cross only `@always_inline` callees.
 
 from std.atomic import Atomic
 from std.ffi import external_call
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erf, exp
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -87,6 +87,11 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.contract import OP_NN, OP_NT, OP_TN
+# TOMBSTONE: MOJOLEARN_AFN_GEMM2_ALL, MOJOLEARN_AFN_GEMM2_BIGTILE, MOJOLEARN_AFN_GEMM2_DBUF, MOJOLEARN_AFN_GEMM2_DIRECT_B,
+# MOJOLEARN_AFN_GEMM2_SWIZZLE, MOJOLEARN_AFN_GEMM2_SWZ_G (never measured, Apple FAST second-round kernel gemm/afn_apple_fast2.mojo)
+# deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 45d3386430.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM2_ALL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # lane/apple-fast-neural-w2-gemm2: the second-round kernel (AFN_GEMM2_ON is
 # False unless FAST + Apple + a MOJOLEARN_AFN_GEMM2_* define).
 from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
@@ -99,9 +104,16 @@ from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
 #: The tier and the vendor every candidate is behind.
 comptime AFN_GEMM_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
+# TOMBSTONE: MOJOLEARN_AFN_GEMM_ALL, MOJOLEARN_AFN_GEMM_SIMDGROUP, MOJOLEARN_AFN_GEMM_SPLITK, MOJOLEARN_AFN_GEMM_TILESHAPE,
+# MOJOLEARN_AFN_GEMM_INT8_MMA, MOJOLEARN_AFN_GEMM_EPILOGUE (never measured opt-in arms), MOJOLEARN_AFN_GEMM_BF16_MMA (=0
+# off knob, never measured), MOJOLEARN_AFN_GEMM_KB and MOJOLEARN_AFN_GEMM_CORES (width knobs, never measured; 32 and 80
+# kept) and MOJOLEARN_GEMM_FAST_RAGGED_K_OFF (old path beside the EXP:2123 FAST default) deleted 2026-11-15 by
+# lane/expdel2-25-neural; code recoverable at 02da0a0217.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()
 comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or AFN_GEMM2_ON or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_SIMDGROUP"]()
@@ -141,7 +153,7 @@ comptime AFN_GEMM_EPILOGUE = AFN_GEMM_ALL or (
 #: (SPLITK and TILESHAPE are policies of the same kernel).
 comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_TILESHAPE
 #: lane/identical-gemm-ktail (2026-10-15), FAST default (was A/B define
-#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`; off switch `_OFF`). FAST Apple fp32 GEMMs whose `k` is not
+#: `-D MOJOLEARN_GEMM_FAST_RAGGED_K`). FAST Apple fp32 GEMMs whose `k` is not
 #: a whole number of this kernel's windows (`k % AFN_GEMM_KB != 0`) run on
 #: the simdgroup kernel below instead of MAX's `linalg.matmul`. Cause:
 #: public `mojolearn.linalg.matmul` fp32 FAST on an Apple M4 (one warmup,
@@ -161,8 +173,9 @@ comptime AFN_GEMM_FP32_MMA = AFN_GEMM_SIMDGROUP or AFN_GEMM_SPLITK or AFN_GEMM_T
 #: non-board estimator fit that reaches `gemm_nt` with a ragged feature count.
 #: FAST DEFAULT since 2026-10-15 (A/B on Apple M4, one run per arm, run3; arm A MAX matmul, arm B this kernel):
 #: 4096x4096x2500 1974.6 -> 97.7 ms, 3000x5000x2500 1780.5 -> 86.1 ms; relative RMS error vs FP64 equal
-#: (9.0e-7, 8.9e-7). Aligned k keeps MAX. `-D MOJOLEARN_GEMM_FAST_RAGGED_K_OFF` restores arm A.
-comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"]()
+#: (9.0e-7, 8.9e-7). Aligned k keeps MAX.
+# MOJOLEARN_GEMM_FAST_RAGGED_K_OFF stays deleted (not an Apple fast arm; restore-apple-fast-neural leaves it out).
+comptime AFN_GEMM_FAST_RAGGED_K = AFN_GEMM_APPLE
 
 #: The window: steps staged per barrier. 32 stages one 64x64 page of
 #: 17,920 bytes (one page on Apple's 32 KB); 16 stages two pages of 9,472.
@@ -453,7 +466,7 @@ def afn_gemm_mma_kernel[
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[NPG * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[NPG * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
     var a_ofast = a_si == 1 and a_sp != 1
     var b_ofast = b_sj == 1 and b_sp != 1
     var kb = 0
@@ -488,8 +501,8 @@ def afn_gemm_mma_kernel[
                 ra = _afn_gload[BM, KB, NT, AT](a, a_si, a_sp, m0, m, k1, min(KB, ke - k1), tid, a_ofast)
                 rb = _afn_gload[BN, KB, NT, BT](b, b_sj, b_sp, n0, n, k1, min(KB, ke - k1), tid, b_ofast)
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _afn_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

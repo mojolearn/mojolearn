@@ -333,7 +333,7 @@ def test_native_string_missing_member_refuses_replaced_getattr(resident, monkeyp
         patch.setattr(builtins, "getattr", hook)
         refused = candidate(tensor, dtype)
     # A replaced connected builtin export is refused before any callback
-    # (bindings/native_loaded_module.mojo, contract of 31fc85981); the
+    # (bindings/native_loaded_module_door.mojo, contract of 31fc85981); the
     # restored export then converts both outputs natively.
     assert_connection_refusal(refused, "getattr", calls)
     with warnings.catch_warnings():

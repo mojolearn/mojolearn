@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`EGrowPolicy::Lossguide` grows a tree, and it is not Depthwise's tree.
 
-    pixi run check-lossguide
+    pixi run check-native-gpu lossguide_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
@@ -180,11 +180,35 @@ def check_lossguide(ctx: DeviceContext) raises:
     # iteration and needs a LEAF count. The error's own numbers said so from
     # the first run: iterations always exactly `max_depth + 2`, leaves always
     # exactly `iterations + 1`. See the bound's block in the driver.
+    #
+    # THE FIRST PAIR COULD NOT DISCRIMINATE (fb11, 2026-11-17, the first
+    # L40S run: "the SAME structure"). It compared Depthwise at depth 4 with
+    # Lossguide at depth 4 and max_leaves 16 = 2^4. The flat model is built
+    # from the leaf PATHS in one canonical visit (`model_builder.mojo`
+    # `build_non_symmetric_tree`), so the order in which leaves were split
+    # leaves no trace, and when every leaf splits both policies pick each
+    # leaf's own argmax and end at the same full tree -- equal BY
+    # CONSTRUCTION. That equality is kept below as L4a, a claim of its own
+    # (the two arms agree on every leaf's split). The CONTRAST, L4b, gives
+    # Lossguide the same leaf budget (16) but room to go deeper (depth 6):
+    # best-first growth spends the budget where the gain is, Depthwise must
+    # spend it level by level, and the structures must differ.
     var fx4 = Fixture(ctx.copy())
     var dw_o = default_options(4)
     var dw = depthwise_fit(fx4, dw_o)
-    var lg = fit_policy(fx4, lossguide_options(4, 16))
+    var lg_full = fit_policy(fx4, lossguide_options(4, 16))
     var dw_s = structure_text(dw)
+    if len(dw.model_structure.nodes) == 15:
+        if structure_text(lg_full) != dw_s:
+            print(
+                "  FAIL L4a Depthwise grew the full depth-4 tree and Lossguide"
+                " at max_leaves 16 did not grow the same one: the two arms"
+                " chose different splits for the same leaf"
+            )
+            failures += 1
+        else:
+            print("  ok   L4a full depth-4 tree: both policies pick the same split per leaf")
+    var lg = fit_policy(fx4, lossguide_options(6, 16))
     var lg_s = structure_text(lg)
     if dw_s == lg_s:
         print(
@@ -198,9 +222,9 @@ def check_lossguide(ctx: DeviceContext) raises:
         failures += 1
     else:
         print(
-            "  ok   structures differ:", len(dw.model_structure.nodes),
-            "depthwise nodes vs", len(lg.model_structure.nodes),
-            "lossguide nodes at the same depth and fixture",
+            "  ok   L4b structures differ:", len(dw.model_structure.nodes),
+            "depthwise nodes (depth 4) vs", len(lg.model_structure.nodes),
+            "lossguide nodes (16 leaves, depth 6), same fixture",
         )
 
     print()
@@ -279,6 +303,24 @@ def model_leaf_count(model: TNonSymmetricTree) raises -> Int:
     return model.model_structure.leaves_count()
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_lossguide(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("lossguide_check", cpu=False, gpu=True, serial="", run=run_cases)

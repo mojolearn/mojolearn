@@ -4,6 +4,10 @@
 model_selection helpers the expansion added). One entry runs a program of
 units on the device (x_metrics/common.mojo); the host binding runs the same
 units on the CPU."""
+from core.experiment_guards_base import BASE_GUARDS_OK
+from x_metrics.mojolearn_x_metrics_run import _publish_linear_entry_table
+from x_metrics.descriptor_device import METRICS_PROGRAM_DEVICE_API
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -16,6 +20,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.device import (
     run_program_device, run_program_device_out, run_program_device_ranges,
 )
+
+
+def metrics_program_native_api_v1_binding() raises -> PythonObject:
+    var api = METRICS_PROGRAM_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -74,12 +83,6 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes:
 # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
 
 
-def first_rows_binding(codes: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo first_rows_i32 (lane metrics-apple3)."""
-    first_rows_i32(Int(py=codes), Int(py=n), Int(py=k), Int(py=out_addr))
-    return PythonObject(0)
-
-
 # lane py-misc-metrics: the rest of DEVIATION 6106's O(n) epilogues
 # (x_metrics/epilogue.mojo); addresses and counts in, a Float64 or a
 # length out. Each raises on any case its Python fallback decides.
@@ -96,19 +99,24 @@ def vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+
 def build__mojolearn_x_metrics() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")
+        m.def_function[metrics_program_native_api_v1_binding]("metrics_program_native_api_v1")
         m.def_function[run_out_binding]("x_metrics_run_out")
         m.def_function[run_ranges_binding]("x_metrics_run_ranges")
         # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
-        m.def_function[first_rows_binding]("x_metrics_first_rows")
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
         # TOMBSTONE: x_metrics_dev_put/_free/_live/_take_rows, x_metrics_py2mojo_core, x_metrics_idn_fam2 (dead native entries: no public call reaches them) deleted 2026-10-26 by c209716bf; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_metrics.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_metrics: ", e))

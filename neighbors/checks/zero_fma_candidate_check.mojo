@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Generate fixtures with tools/knn_zero_fma_oracle.py before running."""
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, block_idx, block_dim
+from max.gpu import thread_idx, block_idx, block_dim
 from std.memory import bitcast
 from checks.numerics import ftz
 from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step, _rt_accumulate_tile, _rt_accumulate_metadata_tile, vector_exponent_minimum_kernel, RT_ROWS, RT_COLS
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def oracle_kernel(words: MutPointer[UInt32, MutAnyOrigin], output: MutPointer[UInt32, MutAnyOrigin], packed: MutPointer[Float32, MutAnyOrigin], minima: MutPointer[Float32, MutAnyOrigin], count: Int32):
@@ -57,14 +58,14 @@ def main() raises:
             packed_host.unsafe_ptr().unsafe_store(row * 8 + 6, Float32(1.0))
             packed_host.unsafe_ptr().unsafe_store(row * 8 + 7, bitcast[DType.float32](data[row * 5 + 1]))
         var packed = ctx.enqueue_create_buffer[DType.float32](count * 8)
-        ctx.enqueue_copy(dst_buf=packed, src_ptr=packed_host.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, packed, packed_host)
         var words = ctx.enqueue_create_buffer[DType.uint32](len(data))
         var output = ctx.enqueue_create_buffer[DType.uint32](count * 4)
-        ctx.enqueue_copy(dst_buf=words, src_ptr=host.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, words, host)
         var minima = ctx.enqueue_create_buffer[DType.float32](count * 2)
         ctx.enqueue_function[vector_exponent_minimum_kernel](packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(count * 2), Int32(4), grid_dim=((count * 2 + 127) // 128, 1, 1), block_dim=(128, 1, 1))
         ctx.enqueue_function[oracle_kernel](words.unsafe_ptr(), output.unsafe_ptr(), packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(count), grid_dim=((count + 127) // 128, 1, 1), block_dim=(128, 1, 1))
-        ctx.enqueue_copy(dst_ptr=actual.unsafe_ptr(), src_buf=output)
+        download_host_into[DType.uint32](ctx, output, actual)
         ctx.synchronize()
         for row in range(count):
             for arm in range(4):
@@ -79,13 +80,12 @@ def main() raises:
         var cases: List[UInt32] = [0, 1, 0x7f800000, 0x7fc00001, 0x00800000, 0x4affffff, 0x4b000000, 0x80000000]
         for i in range(8):
             packed_host.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](cases[i]))
-        ctx.enqueue_copy(dst_buf=packed, src_ptr=packed_host.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, packed, packed_host)
         ctx.enqueue_function[vector_exponent_minimum_kernel](packed.unsafe_ptr(), minima.unsafe_ptr(), Int32(2), Int32(4), grid_dim=(1, 1, 1), block_dim=(128, 1, 1))
-        ctx.enqueue_copy(dst_ptr=min_host.unsafe_ptr(), src_buf=minima)
+        download_host_into[DType.float32](ctx, minima, min_host)
         ctx.synchronize()
         if min_host.unsafe_ptr().unsafe_load(0) != 255 or min_host.unsafe_ptr().unsafe_load(1) != 1:
             raise Error("metadata did not reflect mutated zero/subnormal/nonfinite inputs")
         print("METADATA MUTATION PASS")
         print("ZERO FMA CANDIDATE PASS", "cases", count, "arms", 4)
-        _ = host^
         _ = words^

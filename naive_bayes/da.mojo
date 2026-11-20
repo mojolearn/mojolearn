@@ -13,7 +13,6 @@ does not see. Arrays are laid out with row stride d and zero padding past
 the data-dependent ranks, so every stage has a size known when the program is
 built.
 """
-from experiments.classical_identical_ideas.stats_controls import C56_QDA_PROJECT
 from checks.numerics import ftz
 from x_prep.common import FP, IP, p, ld, st, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
@@ -232,25 +231,8 @@ def qda_dec_unit(t: Int, f: FP, q: IP):
     var K = p(q, 6)
     var i = t // K
     var k = t % K
-    # C56_QDA_PROJECT (experiments/classical_identical_ideas/stats_controls.mojo):
-    # W adjacent projection columns per pass over the centred row. Each column
-    # keeps ascending c and the norm keeps ascending r: the off words.
-    comptime W = C56_QDA_PROJECT
-    comptime if W > 0:
-        comptime assert W == 2 or W == 4 or W == 8, "MOJOLEARN_CLASSICAL_C56_QDA_PROJECT must be 2, 4 or 8"
-        var norm = Float32(0)
-        for r0 in range(0, d, W):
-            var acc = InlineArray[Float32, W](fill=Float32(0))
-            for c in range(d):
-                var centered = sub(ld(f, p(q, 0) + i * d + c), ld(f, p(q, 3) + k * d + c))
-                comptime for lane in range(W):
-                    if r0 + lane < d:
-                        acc[lane] = add(acc[lane], mul(centered, ld(f, p(q, 4) + k * d * d + c * d + r0 + lane)))
-            comptime for lane in range(W):
-                if r0 + lane < d:
-                    norm = add(norm, mul(acc[lane], acc[lane]))
-        st(f, p(q, 7) + t, sub(ld(f, p(q, 5) + k), mul(Float32(0.5), norm)))
-        return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_QDA_PROJECT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 2fef9eaba4.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_QDA_PROJECT.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
     var norm2 = Float32(0)
     for r in range(d):
         var s = Float32(0)

@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
-from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
+from bindings.parallel_causal_native_door import parallel_causal_c, RemoteStateLifetime
 
 
 @export

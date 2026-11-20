@@ -11,16 +11,15 @@ THE SAME BITS. Every distance is `eps_dist_sq`'s sequence (ascending
 dimension, `diff = a - b`, `sum = fma(diff, diff, sum)`), every bound the
 same expression, so counts and columns equal the reference kernel's.
 
-Gate: `FAST_RBC_EPS` (FAST, Apple, not `-D MOJOLEARN_RBC_FAST_EPS_OFF`),
+Gate: `FAST_RBC_EPS` (FAST or IDENTICAL, Apple),
 Euclidean only, `n_cols <= FAST_RBC_MAX_D`.
 """
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
-from std.gpu.primitives.warp import sum as warp_sum
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu.primitives.warp import sum as warp_sum
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
@@ -33,11 +32,9 @@ from checks.numerics import (
 )
 from neighbors.impl.ball_cover.common import RBC_FLT_MAX
 
-comptime FAST_RBC_EPS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RBC_FAST_EPS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_RBC_FAST_EPS_OFF (old path beside the Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at afb468bfd6.
+# Restore: git apply experiments/removed/MOJOLEARN_RBC_FAST_EPS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_RBC_EPS = TARGET_HAS_APPLE_GPU
 comptime FAST_RBC_MAX_D = 32
 comptime FR_LANES = 32
 comptime FR_MASK_DT = DType.uint32
@@ -45,7 +42,7 @@ comptime FR_MASK_DT = DType.uint32
 
 @always_inline
 def _fr_dist[D: Int](
-    q: InlineArray[Float32, D], b: MutPointer[Float32, MutAnyOrigin], off: Int
+    q: Array[Float32, D], b: MutPointer[Float32, MutAnyOrigin], off: Int
 ) -> Float32:
     var s = Float32(0.0)
     comptime for c in range(D):
@@ -91,7 +88,7 @@ def fast_rbc_eps_csr_kernel[D: Int](
         if offset == Int(adj_ia[query_id + 1]):
             return
         ja_pos = offset
-    var q = InlineArray[Float32, D](fill=0.0)
+    var q = Array[Float32, D](fill=0.0)
     comptime for c in range(D):
         q[c] = ftz(x[D * query_id + c])
     var eps_cmp = eps * eps

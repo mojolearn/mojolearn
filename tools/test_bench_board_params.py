@@ -580,3 +580,15 @@ def test_nested_estimators_are_stable_across_instances_but_keep_settings():
         def get_params(self, deep=False): return {'child': self}
     with pytest.raises(P.ParamsRefused, match='cyclic'):
         P._jsonable(Cycle())
+
+
+def test_graph_cached_absent_field_is_waived_only_for_the_matching_work():
+    """lane fx-harness-honest (2026-11-18): PyG SAGEConv has no `cached` (it does the work of ours' cached=True);
+    an older mojolearn GCNConv has none against torch's cached=True. Any other value is still compared."""
+    se = BP.semantic_exception
+    assert se("algos/graphsage", "cached", "torch-eager-fp32", {"cached": True}, {}, "torch")
+    assert se("graphsage", "cached", "torch-eager-fp32", {"cached": True}, {}, "torch")
+    assert se("graphsage", "cached", "torch-eager-fp32", {"cached": False}, {}, "torch") is None
+    assert se("gcn", "cached", "torch-eager-fp32", {}, {"cached": True}, "torch")
+    assert se("gcn", "cached", "torch-eager-fp32", {}, {"cached": False}, "torch") is None
+    assert se("gcn", "cached", "torch-eager-fp32", {"cached": True}, {}, "torch") is None

@@ -38,7 +38,7 @@ from gemm.checks.gemm_int15_apple_tuned import (
     _launch_tuned,
     int15_apple_tuned_pipeline_admits,
 )
-from gemm.checks.gemm_int15_check import _bits, _download, _poisoned, _upload, POISON
+from gemm.checks.gemm_int15_check_suite import _bits, _download, _poisoned, _upload, POISON
 
 
 def _planes(rows: Int, k: Int, salt: Int) -> Tuple[List[Int8], List[Int8]]:

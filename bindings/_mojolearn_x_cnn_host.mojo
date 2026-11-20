@@ -3,57 +3,58 @@
 """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
 the GPU binding's export names and address contract, the work is
 x_cnn/host/ops_host.mojo."""
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_type
+from bindings.py_cpython_table import cpython_table
+
+comptime _TPFLAGS_LIST_SUBCLASS = UInt64(1) << 25  # Py_TPFLAGS_LIST_SUBCLASS
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from std.memory import alloc, memcpy, memset_zero
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_cnn.ops import NN14_BOUNDED_IM2COL
+# TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (opt-in arm, default off; record EXP:1943 read) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 9418a556ae.
+# Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-25-neural.patch.
 
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
-from x_cnn.ops import FP, IP, argmax_row_at
-from x_cnn.host.gemm_host import gemm_host_into
-from x_cnn.host.ops_host import conv2d_forward_into, conv2d_backward_into
-from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
-from x_cnn.host.ops_host import linear_forward_into, linear_backward_into
-from x_cnn.host.ops_host import maxpool2d_forward_into, maxpool2d_backward_into
-from x_cnn.host.ops_host import avgpool2d_forward_into, avgpool2d_backward_into
-from x_cnn.host.ops_host import map2_into, softmax_xent_into, sgd_into, adam_into
-from x_cnn.host.ops_host import batchnorm_forward_into, batchnorm_backward_into, dropout2d_into
-from x_cnn.ops import relu_fwd_at, relu_bwd_at, add_at, mul_at
-from x_cnn.host.ops_host import graph_op_host as graph_op_impl
-from x_cnn.host.ops_host import adaptive_pool_host as adaptive_pool_impl
-from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
-from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
-from x_cnn.host.ops_host import spmm_host as spmm_impl
-from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
-from providers.python.x_cnn_host_ops_host_pyapi import csr_build_host_binding, perm_gather_host_binding, vals_t_host_binding
-from providers.python.x_cnn_host_ops_host_pyapi import gcn_loops_host_binding
-# lane fam2-neural (2026-10-04): the device epoch's element functions, looped
+from x_cnn.ops import FP, IP
+from x_cnn.host.mojolearn_x_cnn_host_run import (
+    conv_block_forward_run,
+    conv_block_backward_run,
+    softmax_xent_run,
+    sgd_list_run,
+    sgd_run,
+    adam_list_run,
+    adam_run,
+)
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
-# out of this shell; `out_f32` (the CPU column's output seam) lives there too.
+# out of this shell; `out_f32` (the CPU column's output seam) lives there too
+# and is called from x_cnn/host/mojolearn_x_cnn_host_run.mojo.
+# TOMBSTONE: the host fit-epoch helpers (epoch_rows_fill, adam_rows, widen_f32_into, widen_f32_list_into, sgd_hyper_rows, fit_epoch_r_into) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 from x_cnn.host.binding_entries_impl import (
-    out_f32,
-    _at,
     pool_counts as _pool_counts,
     check_labels_below,
-    csr_checked,
-    argmax_rows_into,
-    gather_rows_f32,
-    epoch_rows_fill as _epoch_rows_fill,
-    adam_rows,
-    widen_f32_into,
-    widen_f32_list_into,
-    sgd_hyper_rows,
-    fit_epoch_r_into,
 )
-from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
+# lane calltable-xcnn (2026-11-11): the operations the CNN layer doors call
+# are typed runs in x_cnn/host/entry_runs_host.mojo (the graph builders'
+# former providers/python/x_cnn_host_ops_host_pyapi.mojo folded in), published
+# at module init as this image's native entry (core/xcnn_entry_table.mojo);
+# their Python entries below only unpack into plain words.
+from x_cnn.host.entry_runs_host import x_cnn_host_run, publish_x_cnn_host_entries
+from core.xcnn_entry_table import (
+    XC_RES_ALLOC, XC_RES_FREE, XC_RES_UPLOAD, XC_RES_DOWNLOAD, XC_GEMM, XC_CONV2D_FORWARD, XC_CONV2D_BACKWARD,
+    XC_MAXPOOL2D_FORWARD, XC_MAXPOOL2D_BACKWARD, XC_AVGPOOL2D_FORWARD, XC_AVGPOOL2D_BACKWARD, XC_RELU_FORWARD,
+    XC_RELU_BACKWARD, XC_ADD, XC_MUL, XC_LINEAR_FORWARD, XC_LINEAR_BACKWARD, XC_BATCHNORM_FORWARD,
+    XC_BATCHNORM_BACKWARD, XC_DROPOUT2D, XC_SPMM, XC_GCN_NORM, XC_PAD2D_FORWARD, XC_PAD2D_BACKWARD,
+    XC_ADAPTIVE_POOL, XC_GRAPH_OP, XC_CSR_BUILD, XC_PERM_GATHER, XC_VALS_T, XC_GCN_LOOPS, XC_GCN_BACKWARD_T,
+    XC_SAGE_BACKWARD_T,
+)
+from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
 
 
 def fp(addr: PythonObject) raises -> FP:
@@ -77,63 +78,6 @@ def _ints(params: PythonObject) raises -> List[Int]:
     for k in range(Int(py=len(params))):  # small-loop(the caller's int parameter words)
         out.append(Int(py=params[k]))
     return out^
-
-
-def gemm_binding(a_addr: PythonObject, b_addr: PythonObject, c_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    var op = Int(py=params[3])
-    if m <= 0 or n <= 0 or k <= 0 or op < 0 or op > 2:
-        raise Error("x_cnn gemm: positive m, n, k and op in {0, 1, 2} required")
-    var pa = fp(a_addr)
-    var pb = fp(b_addr)
-    var pc = fp(c_addr)
-    with GILReleased(Python()):
-        gemm_host_into(pa, pb, pc, op, m, n, k)
-        out_f32(pc, m * n)
-    return PythonObject(m * n)
-
-
-def conv2d_forward_binding(
-    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    var prm = conv_params(_ints(params))
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var total = N * OC * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var px = fp(x_addr)
-    var pw = fp(w_addr)
-    var pb = fp(b_addr)
-    var po = fp(out_addr)
-    _ = C
-    _ = ckk
-    with GILReleased(Python()):
-        conv2d_forward_into(px, pw, pb, po, prm)
-        out_f32(po, total)
-    return PythonObject(total)
-
-
-def conv2d_backward_binding(
-    x_addr: PythonObject, w_addr: PythonObject, dout_addr: PythonObject, dx_addr: PythonObject,
-    dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    var prm = conv_params(_ints(params))
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
-    var px = fp(x_addr)
-    var pw = fp(w_addr)
-    var pd = fp(dout_addr)
-    var pdx = fp(dx_addr)
-    var pdw = fp(dw_addr)
-    var pdb = fp(db_addr)
-    with GILReleased(Python()):
-        conv2d_backward_into(px, pw, pd, pdx, pdw, pdb, prm, True)
-        out_f32(pdx, nx)
-        out_f32(pdw, OC * ckk)
-        out_f32(pdb, OC)
-    return PythonObject(nx)
 
 def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) raises -> Tuple[List[Int32], List[Int32], Bool]:
     """The conv block's two parameter blocks; an empty pool list is no pool."""
@@ -173,8 +117,7 @@ def _block_forward(
     var pk = FP(unsafe_from_address=kcols) if keep else po
     var py_ = FP(unsafe_from_address=ky) if keep else po
     with GILReleased(Python()):
-        conv_block_forward_into(px, pw, pb, po, pi, cprm, pprm, pool, keep, pk, py_)
-        out_f32(po, no)
+        conv_block_forward_run(px, pw, pb, po, pi, cprm, pprm, pool, keep, pk, py_, no)
     _ = noidx^
     return PythonObject(0)
 
@@ -221,17 +164,10 @@ def conv_block_backward_binding(
     var py_ = FP(unsafe_from_address=ky) if keep else pdb
     _ = db_addr  # keep the Python object alive through the native call above
     with GILReleased(Python()):
-        conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_)
+        conv_block_backward_run(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_, nx, OC, ckk)
         _ = db_addr  # keep the Python object alive through the native call above
         _ = dw_addr  # keep the Python object alive through the native call above
         _ = dx_addr  # keep the Python object alive through the native call above
-        if need_dx:
-            out_f32(pdx, nx)
-            _ = dx_addr  # keep the Python object alive through the native call above
-        out_f32(pdw, OC * ckk)
-        _ = dw_addr  # keep the Python object alive through the native call above
-        out_f32(pdb, OC)
-        _ = db_addr  # keep the Python object alive through the native call above
     _ = noidx^
     return PythonObject(0)
 
@@ -249,134 +185,11 @@ def pool_shape_binding(params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     return Python.tuple(Int(prm[PP_OH]), Int(prm[PP_OW]))
 
-
-def maxpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var prm = _pool_prm(params)
-    var c = _pool_counts(prm)
-    var px = fp(x_addr)
-    var po = fp(out_addr)
-    var pi = ip(idx_addr)
-    with GILReleased(Python()):
-        maxpool2d_forward_into(px, po, pi, prm)
-        out_f32(po, c[1])
-    return PythonObject(c[1])
-
-
-def maxpool2d_backward_binding(dout_addr: PythonObject, idx_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var prm = _pool_prm(params)
-    var c = _pool_counts(prm)
-    var pg = fp(dout_addr)
-    var pi = ip(idx_addr)
-    var pd = fp(dx_addr)
-    with GILReleased(Python()):
-        maxpool2d_backward_into(pg, pi, pd, prm)
-        out_f32(pd, c[0])
-    return PythonObject(c[0])
-
-
-def avgpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var prm = _pool_prm(params)
-    var c = _pool_counts(prm)
-    var px = fp(x_addr)
-    var po = fp(out_addr)
-    with GILReleased(Python()):
-        avgpool2d_forward_into(px, po, prm)
-        out_f32(po, c[1])
-    return PythonObject(c[1])
-
-
-def avgpool2d_backward_binding(dout_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var prm = _pool_prm(params)
-    var c = _pool_counts(prm)
-    var pg = fp(dout_addr)
-    var pd = fp(dx_addr)
-    with GILReleased(Python()):
-        avgpool2d_backward_into(pg, pd, prm)
-        out_f32(pd, c[0])
-    return PythonObject(c[0])
-
-
 def _count(params: PythonObject) raises -> Int:
     var n = Int(py=params[0])
     if n <= 0:
         raise Error("x_cnn: a positive element count is required")
     return n
-
-
-def relu_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = _count(params)
-    var px = fp(x_addr)
-    var po = fp(out_addr)
-    with GILReleased(Python()):
-        map2_into[relu_fwd_at](px, px, po, n)
-        out_f32(po, n)
-    return PythonObject(n)
-
-
-def relu_backward_binding(x_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = _count(params)
-    var px = fp(x_addr)
-    var pg = fp(g_addr)
-    var po = fp(dx_addr)
-    with GILReleased(Python()):
-        map2_into[relu_bwd_at](px, pg, po, n)
-        out_f32(po, n)
-    return PythonObject(n)
-
-
-def add_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = _count(params)
-    var pa = fp(a_addr)
-    var pb = fp(b_addr)
-    var po = fp(out_addr)
-    with GILReleased(Python()):
-        map2_into[add_at](pa, pb, po, n)
-        out_f32(po, n)
-    return PythonObject(n)
-
-
-def _lin(params: PythonObject) raises -> Tuple[Int, Int, Int]:
-    var n = Int(py=params[0])
-    var d_in = Int(py=params[1])
-    var d_out = Int(py=params[2])
-    if n <= 0 or d_in <= 0 or d_out <= 0:
-        raise Error("x_cnn linear: positive rows, in and out features required")
-    return (n, d_in, d_out)
-
-
-def linear_forward_binding(x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var s = _lin(params)
-    var px = fp(x_addr)
-    var pw = fp(w_addr)
-    var pb = fp(b_addr)
-    var po = fp(out_addr)
-    with GILReleased(Python()):
-        linear_forward_into(px, pw, pb, po, s[0], s[1], s[2])
-        out_f32(po, s[0] * s[2])
-    return PythonObject(s[0] * s[2])
-
-
-def linear_backward_binding(
-    x_addr: PythonObject, w_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject,
-    dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    var s = _lin(params)
-    var n = s[0]
-    var d_in = s[1]
-    var d_out = s[2]
-    var px = fp(x_addr)
-    var pw = fp(w_addr)
-    var pg = fp(g_addr)
-    var pdx = fp(dx_addr)
-    var pdw = fp(dw_addr)
-    var pdb = fp(db_addr)
-    with GILReleased(Python()):
-        linear_backward_into(px, pw, pg, pdx, pdw, pdb, n, d_in, d_out)
-        out_f32(pdx, n * d_in)
-        out_f32(pdw, d_out * d_in)
-        out_f32(pdb, d_out)
-    return PythonObject(n)
-
 
 def softmax_xent_binding(
     logits_addr: PythonObject, labels_addr: PythonObject, grad_addr: PythonObject, proba_addr: PythonObject,
@@ -394,9 +207,7 @@ def softmax_xent_binding(
     var pp = fp(proba_addr)
     var loss = Float32(0)
     with GILReleased(Python()):
-        loss = softmax_xent_into(pl, py_, pg, pp, n, k)
-        out_f32(pg, n * k)
-        out_f32(pp, n * k)
+        loss = softmax_xent_run(pl, py_, pg, pp, n, k)
     return PythonObject(Float64(loss))
 
 
@@ -414,259 +225,25 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
         # lane/cnn-apple2: the list form (one handle per parameter), the
         # per-parameter entry in the caller's order
         var cnt = _list_counts(w_addr, g_addr, v_addr, params)
+        # p3-cnn-sequence-tsa: the handle lists are read once, then one
+        # GIL release covers every parameter (it was one per parameter)
+        var qws = List[FP]()
+        var qgs = List[FP]()
+        var qvs = List[FP]()
         for j in range(len(cnt)):  # driver-loop: over the model's parameters
-            var qw = fp(w_addr[j])
-            var qg = fp(g_addr[j])
-            var qv = fp(v_addr[j])
-            var nj = cnt[j]
-            with GILReleased(Python()):
-                sgd_into(qw, qg, qv, h, nj)
-                out_f32(qw, nj)
-                out_f32(qv, nj)
+            qws.append(fp(w_addr[j]))
+            qgs.append(fp(g_addr[j]))
+            qvs.append(fp(v_addr[j]))
+        with GILReleased(Python()):
+            sgd_list_run(qws, qgs, qvs, h, cnt)
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pv = fp(v_addr)
     with GILReleased(Python()):
-        sgd_into(pw, pg, pv, h, n)
-        out_f32(pw, n)
-        out_f32(pv, n)
+        sgd_run(pw, pg, pv, h, n)
     return PythonObject(n)
-
-
-def _bn_prm(params: PythonObject) raises -> List[Int32]:
-    var N = Int(py=params[0])
-    var C = Int(py=params[1])
-    var HW = Int(py=params[2])
-    if N <= 0 or C <= 0 or HW <= 0:
-        raise Error("x_cnn batchnorm: positive N, C and H*W required")
-    var out: List[Int32] = [Int32(N), Int32(C), Int32(HW)]
-    return out^
-
-
-def batchnorm_forward_binding(
-    x_addr: PythonObject, y_addr: PythonObject, running_addr: PythonObject, aux_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [N, C, HW, training]; running (2C) and aux (2 + 7C) update in place."""
-    var prm = _bn_prm(params)
-    var training = Int(py=params[3]) != 0
-    var N = Int(prm[0]); var C = Int(prm[1]); var HW = Int(prm[2])
-    if training and N * HW < 2:
-        raise Error("x_cnn batchnorm: expected more than 1 value per channel when training")
-    var total = N * C * HW
-    var px = fp(x_addr)
-    var pyo = fp(y_addr)
-    var pr = fp(running_addr)
-    var pa = fp(aux_addr)
-    with GILReleased(Python()):
-        batchnorm_forward_into(px, pr, pa, pyo, prm, training)
-        out_f32(pyo, total)
-        out_f32(pr, 2 * C)
-        out_f32(pa, 2 + 7 * C)
-    return PythonObject(total)
-
-
-def batchnorm_backward_binding(
-    x_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject, aux_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [N, C, HW, training]; aux updates in place (sum_g, sum_gx)."""
-    var prm = _bn_prm(params)
-    var training = Int(py=params[3]) != 0
-    var C = Int(prm[1])
-    var total = Int(prm[0]) * C * Int(prm[2])
-    var px = fp(x_addr)
-    var pg = fp(g_addr)
-    var pd = fp(dx_addr)
-    var pa = fp(aux_addr)
-    with GILReleased(Python()):
-        batchnorm_backward_into(px, pg, pa, pd, prm, training)
-        out_f32(pd, total)
-        out_f32(pa, 2 + 7 * C)
-    return PythonObject(total)
-
-
-def dropout2d_binding(x_addr: PythonObject, y_addr: PythonObject, mask_addr: PythonObject, params: PythonObject, drop_p: PythonObject) raises -> PythonObject:
-    """params = [N, C, HW, seed_lo, seed_hi, thresh_hi, thresh_lo] (the seed
-    words and the threshold halves as non-negative ints)."""
-    var N = Int(py=params[0])
-    var C = Int(py=params[1])
-    var HW = Int(py=params[2])
-    if N <= 0 or C <= 0 or HW <= 0:
-        raise Error("x_cnn dropout2d: positive N, C and H*W required")
-    var prm = List[Int32]()
-    for k in range(7):  # small-loop(the seven dropout parameter words)
-        var v = Int(py=params[k])
-        if v < 0:
-            raise Error("x_cnn dropout2d: negative parameter")
-        prm.append(Int32(Int64(v) - Int64(4294967296)) if v > 2147483647 else Int32(v))
-    var h: List[Float32] = [Float32(Float64(py=drop_p))]
-    var total = N * C * HW
-    var px = fp(x_addr)
-    var pyo = fp(y_addr)
-    var pm = fp(mask_addr)
-    with GILReleased(Python()):
-        dropout2d_into(px, pyo, pm, prm, h, total)
-        out_f32(pyo, total)
-        out_f32(pm, total)
-    return PythonObject(total)
-
-
-def mul_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = _count(params)
-    var pa = fp(a_addr)
-    var pb = fp(b_addr)
-    var po = fp(out_addr)
-    with GILReleased(Python()):
-        map2_into[mul_at](pa, pb, po, n)
-        out_f32(po, n)
-    return PythonObject(n)
-
-
-def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int32], List[Int32]]:
-    """Validate a CSR block [rowptr | col | row] against params [n, F, nnz, mode]."""
-    return _csr_ints(csr_addr, Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]))
-
-
-def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    return csr_checked(Int(py=csr_addr), n, F, nnz, mode)
-
-
-def spmm_binding(vals_addr: PythonObject, h_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """out (n x F) = the CSR fold of h (n x F); see x_cnn/ops.mojo spmm_at."""
-    var t = _csr(csr_addr, params)
-    var n = Int(t[1][0])
-    var F = Int(t[1][1])
-    var nnz = Int(t[1][2])
-    var vals = read_f32(Int(py=vals_addr), nnz if nnz > 0 else 1) if nnz > 0 else List[Float32](length=1, fill=Float32(0))
-    var h = read_f32(Int(py=h_addr), n * F)
-    var po = f32_ptr(Int(py=out_addr))
-    with GILReleased(Python()):
-        var y = spmm_impl(vals, h, t[0], t[1])
-        copy_f32(y.unsafe_ptr(), po, n * F)
-    return PythonObject(n * F)
-
-
-def gcn_norm_binding(w_addr: PythonObject, vals_addr: PythonObject, csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """vals[e] = PyG gcn_norm of the CSR (rows = targets, self loops included)."""
-    var t = _csr(csr_addr, params)
-    var nnz = Int(t[1][2])
-    if nnz <= 0:
-        raise Error("x_cnn gcn_norm: at least one edge (the self loops) is required")
-    var w = read_f32(Int(py=w_addr), nnz)
-    var pv = f32_ptr(Int(py=vals_addr))
-    with GILReleased(Python()):
-        var y = gcn_norm_impl(w, t[0], t[1])
-        copy_f32(y.unsafe_ptr(), pv, nnz)
-    return PythonObject(nnz)
-
-
-def _pad_prm(params: PythonObject) raises -> List[Int32]:
-    var out = List[Int32]()
-    for k in range(9):  # small-loop(the nine pad parameter words)
-        var v = Int(py=params[k])
-        if v < 0:
-            raise Error("x_cnn pad: negative parameter")
-        out.append(Int32(v))
-    var N = Int(out[0]); var C = Int(out[1]); var H = Int(out[2]); var W = Int(out[3])
-    if N <= 0 or C <= 0 or H <= 0 or W <= 0 or Int(out[8]) > 3:
-        raise Error("x_cnn pad: positive N, C, H, W and a mode in 0..3 required")
-    if Int(out[8]) == 1 and (Int(out[4]) >= H or Int(out[5]) >= H or Int(out[6]) >= W or Int(out[7]) >= W):
-        raise Error("x_cnn pad: reflect padding must be smaller than the input dimension")
-    if Int(out[8]) == 3 and (Int(out[4]) > H or Int(out[5]) > H or Int(out[6]) > W or Int(out[7]) > W):
-        raise Error("x_cnn pad: circular padding can wrap around at most once")
-    return out^
-
-
-def pad2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [N, C, H, W, top, bottom, left, right, mode (0 zeros, 1 reflect, 2 replicate, 3 circular)]."""
-    var prm = _pad_prm(params)
-    var nc = Int(prm[0]) * Int(prm[1])
-    var nx = nc * Int(prm[2]) * Int(prm[3])
-    var no = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
-    var x = read_f32(Int(py=x_addr), nx)
-    var po = f32_ptr(Int(py=out_addr))
-    with GILReleased(Python()):
-        var y = pad2d_forward_impl(x, prm)
-        copy_f32(y.unsafe_ptr(), po, no)
-    return PythonObject(no)
-
-
-def pad2d_backward_binding(g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var prm = _pad_prm(params)
-    var nc = Int(prm[0]) * Int(prm[1])
-    var nx = nc * Int(prm[2]) * Int(prm[3])
-    var ng = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
-    var g = read_f32(Int(py=g_addr), ng)
-    var po = f32_ptr(Int(py=dx_addr))
-    with GILReleased(Python()):
-        var y = pad2d_backward_impl(g, prm)
-        copy_f32(y.unsafe_ptr(), po, nx)
-    return PythonObject(nx)
-
-
-def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [N, C, H, W, OH, OW, kind]: kind 0 avg forward (in x, out y),
-    1 avg backward (in g, out dx), 2 max forward (in x, out y, idx written),
-    3 max backward (in g, out dx, idx read)."""
-    var prm = List[Int32]()
-    for k in range(6):  # small-loop(the six adaptive pool shape words)
-        var v = Int(py=params[k])
-        if v <= 0:
-            raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
-        prm.append(Int32(v))
-    var kind = Int(py=params[6])
-    if kind < 0 or kind > 3:
-        raise Error("x_cnn adaptive pool: kind in 0..3")
-    var nc = Int(prm[0]) * Int(prm[1])
-    var nin = nc * Int(prm[2]) * Int(prm[3])
-    var nout = nc * Int(prm[4]) * Int(prm[5])
-    var n_read = nin if kind == 0 or kind == 2 else nout
-    var n_write = nout if kind == 0 or kind == 2 else nin
-    var src = read_f32(Int(py=in_addr), n_read)
-    var idx = read_i32(Int(py=idx_addr), nout) if kind == 3 else List[Int32](length=nout, fill=Int32(0))
-    var po = f32_ptr(Int(py=out_addr))
-    var pi = i32_ptr(Int(py=idx_addr))
-    with GILReleased(Python()):
-        var idx_out = List[Int32]()
-        var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
-        copy_f32(y.unsafe_ptr(), po, n_write)
-        if kind == 2:
-            memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
-            _ = len(idx_out)
-    return PythonObject(n_write)
-
-
-def graph_op_binding(
-    a_addr: PythonObject, b_addr: PythonObject, aux_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, F, nnz, kind]: kind 0 SAGE max forward (a = h; aux 2nF
-    written), 1 its backward (a = h, b = g, aux read; the TRANSPOSED csr),
-    2 row L2 normalize forward (a = x; aux n written), 3 its backward
-    (a = y, b = g, aux read). A kind with no graph passes nnz 0 and a
-    rowptr of zeros."""
-    var kind = Int(py=params[3])
-    if kind < 0 or kind > 3:
-        raise Error("x_cnn graph op: kind in 0..3")
-    var n = Int(py=params[0])
-    var F = Int(py=params[1])
-    var nnz = Int(py=params[2])
-    var t = _csr_ints(csr_addr, n, F, nnz, 0)
-    var naux = 2 * n * F if kind < 2 else n
-    var a = read_f32(Int(py=a_addr), n * F)
-    var b = read_f32(Int(py=b_addr), n * F) if kind == 1 or kind == 3 else a.copy()
-    var aux = read_f32(Int(py=aux_addr), naux)
-    var po = f32_ptr(Int(py=out_addr))
-    var pa = f32_ptr(Int(py=aux_addr))
-    with GILReleased(Python()):
-        var r = graph_op_impl(a, b, aux, t[0], t[1], kind)
-        copy_f32(r.unsafe_ptr(), po, n * F)
-        copy_f32(r.unsafe_ptr() + n * F, pa, naux)
-    _ = nnz
-    return PythonObject(n * F)
-
 
 def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
     """In place: w and mv = [m (n) | v (n)]. hyper = [step_size, 1 - beta1,
@@ -680,24 +257,23 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     if _is_list(w_addr):
         # lane/cnn-apple2: the list form (one handle per parameter)
         var cnt = _list_counts(w_addr, g_addr, mv_addr, params)
+        # p3-cnn-sequence-tsa: handle lists read once, one GIL release
+        var qws = List[FP]()
+        var qgs = List[FP]()
+        var qms = List[FP]()
         for j in range(len(cnt)):  # driver-loop: over the model's parameters
-            var qw = fp(w_addr[j])
-            var qg = fp(g_addr[j])
-            var qm = fp(mv_addr[j])
-            var nj = cnt[j]
-            with GILReleased(Python()):
-                adam_into(qw, qg, qm, h, nj)
-                out_f32(qw, nj)
-                out_f32(qm, 2 * nj)
+            qws.append(fp(w_addr[j]))
+            qgs.append(fp(g_addr[j]))
+            qms.append(fp(mv_addr[j]))
+        with GILReleased(Python()):
+            adam_list_run(qws, qgs, qms, h, cnt)
         return PythonObject(len(cnt))
     var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pm = fp(mv_addr)
     with GILReleased(Python()):
-        adam_into(pw, pg, pm, h, n)
-        out_f32(pw, n)
-        out_f32(pm, 2 * n)
+        adam_run(pw, pg, pm, h, n)
     return PythonObject(n)
 
 
@@ -722,44 +298,8 @@ def x_cnn_host_sabotage_binding() raises -> PythonObject:
 # allocation and its handle is its address, so the `_r` entries are the
 # ordinary entries (the GPU binding's `_r` entries read device addresses).
 
-
-def res_alloc_binding(n: PythonObject) raises -> PythonObject:
-    var nn = Int(py=n)
-    var p = alloc[Float32](nn if nn > 0 else 1)
-    memset_zero(p, nn if nn > 0 else 1)
-    return PythonObject(Int(p))
-
-
-def res_free_binding(h: PythonObject) raises -> PythonObject:
-    f32_ptr(Int(py=h)).free()
-    return PythonObject(0)
-
-
-def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """n 4-byte words (float32 or int32) from a host array into the resident array."""
-    var nn = Int(py=n)
-    if nn > 0:
-        memcpy(dest=f32_ptr(Int(py=h)), src=f32_ptr(Int(py=src_addr)), count=nn)
-    return PythonObject(nn)
-
-
-def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_cnn_res_argmax` on host memory: the same item."""
-    var n = Int(py=params[0])
-    var k = Int(py=params[1])
-    if n > 0 and k > 0:
-        var src = FP(unsafe_from_address=Int(py=h))
-        var dst = IP(unsafe_from_address=Int(py=dst_addr))
-        argmax_rows_into(src, dst, n, k)
-    return PythonObject(n)
-
-
-def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    var nn = Int(py=n)
-    if nn > 0:
-        memcpy(dest=f32_ptr(Int(py=dst_addr)), src=f32_ptr(Int(py=h)), count=nn)
-    return PythonObject(nn)
-
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 def conv_block_forward_r_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
@@ -784,8 +324,11 @@ def conv_block_backward_r_binding(
 
 
 def _is_list(o: PythonObject) raises -> Bool:
-    var bi = Python.import_module("builtins")
-    return Bool(py=py_call(bi.isinstance, o, bi.list))
+    """`isinstance(o, list)` as CPython's PyList_Check: the type's
+    Py_TPFLAGS_LIST_SUBCLASS bit (p3-cnn-sequence-tsa: it ran a builtins
+    module lookup and two Python calls per optimizer step and per gather)."""
+    var cls = py_type(o)
+    return (cpython_table()[].PyType_GetFlags(cls._obj_ptr) & _TPFLAGS_LIST_SUBCLASS) != 0
 
 
 def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: PythonObject) raises -> List[Int]:
@@ -801,117 +344,8 @@ def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: Pyth
     return out^
 
 
-def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each.
-    lane/cnn-apple2: the pair form [dst, dst2], [src, src2], [n, row, row2]."""
-    var n = Int(py=params[0])
-    if _is_list(dst):
-        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
-            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
-        var rq = i32_ptr(Int(py=rows_addr))
-        for t in range(2):  # small-loop(the two arrays of the pair form)
-            var d2 = f32_ptr(Int(py=dst[t]))
-            var s2 = f32_ptr(Int(py=src[t]))
-            var rw = Int(py=params[1 + t])
-            gather_rows_f32(d2, s2, rq, n, rw)
-        return PythonObject(n)
-    var row = Int(py=params[1])
-    var d = f32_ptr(Int(py=dst))
-    var sr = f32_ptr(Int(py=src))
-    var rp = i32_ptr(Int(py=rows_addr))
-    gather_rows_f32(d, sr, rp, n, row)
-    return PythonObject(n)
-
-
-# ------------------------------------------------------------ the fit epoch
-# lane/py-misc (2026-09-28): the host twin of the GPU binding's
-# `x_cnn_fit_epoch_r` (see there). CNNClassifier.fit on the CPU made, per
-# step, two row gathers, each block's `_r` forward, the head, the softmax
-# (with its label check), the head's backward, each block's backward and one
-# optimizer entry per parameter; this loop makes the same `_into` calls with
-# the same arguments in the same order, each followed by the same output
-# seam (`out_f32`) its entry ran. The bits cannot move.
-
-
-def _epoch_plan(
-    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
-    mut pools: List[List[Bool]],
-) raises:
-    """Appends one plan: [[conv params, pool params] per block]."""
-    if Int(py=len(obj)) != nb:
-        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
-    var c = List[List[Int32]]()
-    var p = List[List[Int32]]()
-    var o = List[Bool]()
-    for j in range(nb):  # driver-loop: over the network's blocks
-        var t = _block_prms(obj[j][0], obj[j][1])
-        c.append(t[0].copy())
-        p.append(t[1].copy())
-        o.append(t[2])
-    cs.append(c^)
-    ps.append(p^)
-    pools.append(o^)
-
-
-def fit_epoch_r_binding(
-    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """The GPU binding's `x_cnn_fit_epoch_r` contract, on host allocations."""
-    var n = Int(py=params[0])
-    var batch = Int(py=params[1])
-    var adam = Int(py=params[2]) != 0
-    if n <= 0 or batch <= 0:
-        raise Error("x_cnn fit epoch: positive rows and batch required")
-    var nh = 9 if adam else 6
-    var blocks = spec["blocks"]
-    var nb = Int(py=len(blocks))
-    var bh = List[List[Int]]()
-    for j in range(nb):  # driver-loop: over the network's blocks
-        var h = _ints(blocks[j])
-        if len(h) != 9:
-            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
-        bh.append(h^)
-    var head = _ints(spec["head"])
-    var a = _ints(spec["a"])
-    var data = _ints(spec["data"])
-    var dims = _ints(spec["dims"])
-    var opt = spec["opt"]
-    var cnt = _list_counts(opt[0], opt[1], opt[2], opt[3])
-    var hp = _ints(opt[0])
-    var hg = _ints(opt[1])
-    var hb = _ints(opt[2])
-    var cs = List[List[List[Int32]]]()
-    var ps = List[List[List[Int32]]]()
-    var pools = List[List[Bool]]()
-    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
-    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
-    var flat = dims[0]
-    var k = dims[1]
-    var row = data[2]
-    var steps = (n + batch - 1) // batch
-    var rows = i32_ptr(Int(py=rows_addr))
-    var hyp = f64_ptr(Int(py=hyper_addr))
-    var losses = f64_ptr(Int(py=losses_addr))
-    var xd = f32_ptr(a[0])
-    var yd = f32_ptr(a[1])
-    var xs = f32_ptr(data[0])
-    var ys = f32_ptr(data[1])
-    var yl = IP(unsafe_from_address=a[1])
-    with GILReleased(Python()):
-        fit_epoch_r_into(
-            n, batch, adam, nh, nb, steps, flat, k, row, bh, head, a, cnt, hp, hg, hb, cs, ps, pools,
-            rows, hyp, losses, xd, yd, xs, ys, yl,
-        )
-    return PythonObject(steps)
-
-
-# ------------------------------------------------ lane fam2-neural: the device epoch
-# The GPU binding's `x_cnn_idn2_flags`, `x_cnn_epoch_rows`,
-# `x_cnn_adam_hyper_d` and `x_cnn_fit_epoch_d` contracts on the host: the
-# same element functions (`epoch_rows_at`, `adam_hyper_at`, and through
-# `softmax_xent_into` `blk_fold_at`) in a loop, so the order, the step
-# scalars and the losses are the device's words.
+# TOMBSTONE: x_cnn_res_gather (the CPU entry; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 def idn2_flags_binding() raises -> PythonObject:
@@ -926,85 +360,205 @@ def neural_numerical_profile_binding() raises -> PythonObject:
     return PythonObject(neural_numerical_profile())
 
 
-def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
-    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
-
-
-def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    var n = Int(py=params[0])
-    if n < 1 or n >= 2147483647:
-        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
-    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
-    _epoch_rows_fill(ip(dst_addr), n, Int(py=params[2]) != 0, key)
-    return PythonObject(n)
-
-
-def _adam_rows(fparams: PythonObject, step0: Int, nsteps: Int) raises -> List[Float32]:
-    """`adam_hyper_at`'s rows of steps step0 .. step0 + nsteps - 1."""
-    if Int(py=len(fparams)) != 6:
-        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
-    return adam_rows(
-        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
-        Float64(py=fparams[4]), Float64(py=fparams[5]), step0, nsteps,
-    )
-
-
-def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
-    var step0 = Int(py=params[0])
-    var nsteps = Int(py=params[1])
-    if step0 < 1 or nsteps < 0:
-        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
-    var rows = _adam_rows(fparams, step0, nsteps)
-    var dst = f64_ptr(Int(py=dst_addr))
-    widen_f32_into(dst, rows, nsteps * AH_ROW)
-    return PythonObject(nsteps)
-
-
-def fit_epoch_d_binding(
-    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
-) raises -> PythonObject:
-    """The GPU binding's `x_cnn_fit_epoch_d` contract: the epoch's order and
-    hyper rows from the device's element functions, then the `_r` entry's
-    loop on them (its losses are `softmax_xent_into`'s blocked fold)."""
-    var n = Int(py=params[0])
-    var batch = Int(py=params[1])
-    var adam = Int(py=params[2]) != 0
-    var done = Int(py=params[3])
-    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
-        raise Error("x_cnn fit epoch: positive rows and batch required")
-    var key = epoch_key(_seed64(params[6], params[7]), Int(py=params[4]))
-    var steps = (n + batch - 1) // batch
-    var rows = List[Int32](length=n, fill=Int32(0))
-    _epoch_rows_fill(rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, Int(py=params[5]) != 0, key)
-    var nh = 9 if adam else 6
-    var hyp = List[Float64](length=steps * nh, fill=Float64(0))
-    if adam:
-        var r32 = _adam_rows(fparams, done + 1, steps)
-        widen_f32_list_into(hyp, r32, steps * nh)
-    else:
-        if Int(py=len(fparams)) != 6:
-            raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
-        var f5 = List[Float64]()
-        for e in range(5):  # small-loop(the five sgd hyper words)
-            f5.append(Float64(py=fparams[e]))
-        sgd_hyper_rows(hyp, f5, steps, done)
-    var out = fit_epoch_r_binding(
-        spec, PythonObject(Int(rows.unsafe_ptr())), PythonObject(Int(hyp.unsafe_ptr())), losses_addr, params,
-    )
-    _ = rows^
-    _ = hyp^
-    return out
-
-
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
+
+
+# ------------------------------------------------ the table operations' Python entries
+# lane calltable-xcnn (2026-11-11): UNPACK only. Each entry turns its Python
+# arguments into the plain words of `core/xcnn_entry_table.mojo` and runs
+# `x_cnn_run` (the body moved to x_cnn/host/entry_runs_host.mojo) with the GIL
+# released. They stay for the binding's Python surface (python/mojolearn/
+# _surface_cnn.py, the tools and tests that call them by name); the CNN layer
+# doors call the published native entry instead.
+
+
+def _w(value: PythonObject) raises -> Int:
+    """An address or handle word; None is 0 (a run refuses a null it reads)."""
+    if value is None:
+        return 0
+    return Int(py=value)
+
+
+def _ws(values: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for k in range(Int(py=len(values))):  # small-loop(k: arrays of one entry): reads address list, not data
+        out.append(_w(values[k]))
+    return out^
+
+
+def _py_run(op: Int, a: List[Int], p: List[Int]) raises -> PythonObject:
+    var f = List[Float64]()
+    var r = 0
+    with GILReleased(Python()):
+        r = x_cnn_host_run(op, a, p, f)
+    return PythonObject(r)
+
+
+def _py_run_f(op: Int, a: List[Int], p: List[Int], drop_p: PythonObject) raises -> PythonObject:
+    var f: List[Float64] = [Float64(py=drop_p)]
+    var r = 0
+    with GILReleased(Python()):
+        r = x_cnn_host_run(op, a, p, f)
+    return PythonObject(r)
+
+
+def _m_words(dev: PythonObject, params: PythonObject) raises -> List[Int]:
+    """A `_m` entry's integers: the residency word, then the parameters."""
+    var p: List[Int] = [Int(py=dev)]
+    for k in range(Int(py=len(params))):  # small-loop(the caller's int parameter words)
+        p.append(Int(py=params[k]))
+    return p^
+
+
+def gemm_binding(a_addr: PythonObject, b_addr: PythonObject, c_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_GEMM, [_w(a_addr), _w(b_addr), _w(c_addr)], _ints(params))
+
+
+def conv2d_forward_binding(x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject,
+                           params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_CONV2D_FORWARD, [_w(x_addr), _w(w_addr), _w(b_addr), _w(out_addr)], _ints(params))
+
+
+def conv2d_backward_binding(x_addr: PythonObject, w_addr: PythonObject, dout_addr: PythonObject, dx_addr: PythonObject,
+                            dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_CONV2D_BACKWARD, [_w(x_addr), _w(w_addr), _w(dout_addr), _w(dx_addr), _w(dw_addr), _w(db_addr)],
+                   _ints(params))
+
+
+def maxpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_MAXPOOL2D_FORWARD, [_w(x_addr), _w(out_addr), _w(idx_addr)], _ints(params))
+
+
+def maxpool2d_backward_binding(dout_addr: PythonObject, idx_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_MAXPOOL2D_BACKWARD, [_w(dout_addr), _w(idx_addr), _w(dx_addr)], _ints(params))
+
+
+def avgpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_AVGPOOL2D_FORWARD, [_w(x_addr), _w(out_addr)], _ints(params))
+
+
+def avgpool2d_backward_binding(dout_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_AVGPOOL2D_BACKWARD, [_w(dout_addr), _w(dx_addr)], _ints(params))
+
+
+def relu_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RELU_FORWARD, [_w(x_addr), _w(out_addr)], _ints(params))
+
+
+def relu_backward_binding(x_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RELU_BACKWARD, [_w(x_addr), _w(g_addr), _w(dx_addr)], _ints(params))
+
+
+def add_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_ADD, [_w(a_addr), _w(b_addr), _w(out_addr)], _ints(params))
+
+
+def mul_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_MUL, [_w(a_addr), _w(b_addr), _w(out_addr)], _ints(params))
+
+
+def linear_forward_binding(x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject,
+                      params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_LINEAR_FORWARD, [_w(x_addr), _w(w_addr), _w(b_addr), _w(out_addr)], _ints(params))
+
+
+def linear_backward_binding(x_addr: PythonObject, w_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject,
+                       dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_LINEAR_BACKWARD, [_w(x_addr), _w(w_addr), _w(g_addr), _w(dx_addr), _w(dw_addr), _w(db_addr)],
+                   _ints(params))
+
+
+def batchnorm_forward_binding(x_addr: PythonObject, y_addr: PythonObject, running_addr: PythonObject,
+                              aux_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_BATCHNORM_FORWARD, [_w(x_addr), _w(y_addr), _w(running_addr), _w(aux_addr)], _ints(params))
+
+
+def batchnorm_backward_binding(x_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject, aux_addr: PythonObject,
+                               params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_BATCHNORM_BACKWARD, [_w(x_addr), _w(g_addr), _w(dx_addr), _w(aux_addr)], _ints(params))
+
+
+def dropout2d_binding(x_addr: PythonObject, y_addr: PythonObject, mask_addr: PythonObject, params: PythonObject,
+                      drop_p: PythonObject) raises -> PythonObject:
+    return _py_run_f(XC_DROPOUT2D, [_w(x_addr), _w(y_addr), _w(mask_addr)], _ints(params), drop_p)
+
+
+def spmm_binding(vals_addr: PythonObject, h_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject,
+                 params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_SPMM, [_w(vals_addr), _w(h_addr), _w(out_addr), _w(csr_addr)], _ints(params))
+
+
+def gcn_norm_binding(w_addr: PythonObject, vals_addr: PythonObject, csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_GCN_NORM, [_w(w_addr), _w(vals_addr), _w(csr_addr)], _ints(params))
+
+
+def pad2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_PAD2D_FORWARD, [_w(x_addr), _w(out_addr)], _ints(params))
+
+
+def pad2d_backward_binding(g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_PAD2D_BACKWARD, [_w(g_addr), _w(dx_addr)], _ints(params))
+
+
+def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_ADAPTIVE_POOL, [_w(in_addr), _w(out_addr), _w(idx_addr)], _ints(params))
+
+
+def graph_op_binding(a_addr: PythonObject, b_addr: PythonObject, aux_addr: PythonObject, out_addr: PythonObject,
+                     csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_GRAPH_OP, [_w(a_addr), _w(b_addr), _w(aux_addr), _w(out_addr), _w(csr_addr)], _ints(params))
+
+
+def csr_build_host_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject,
+                      params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_CSR_BUILD, [_w(rows_addr), _w(cols_addr), _w(csr_addr), _w(order_addr)], _ints(params))
+
+
+def perm_gather_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_PERM_GATHER, _ws(addrs), _ints(params))
+
+
+def vals_t_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_VALS_T, _ws(addrs), _ints(params))
+
+
+def gcn_loops_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_GCN_LOOPS, _ws(addrs), _ints(params))
+
+
+def gcn_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_GCN_BACKWARD_T, _ws(addrs), _ints(params))
+
+
+def sage_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _py_run(XC_SAGE_BACKWARD_T, _ws(addrs), _ints(params))
+
+
+def res_alloc_binding(n: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RES_ALLOC, List[Int](), [Int(py=n)])
+
+
+def res_free_binding(h: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RES_FREE, [Int(py=h)], List[Int]())
+
+
+def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RES_UPLOAD, [Int(py=h), _w(src_addr)], [Int(py=n)])
+
+
+def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    return _py_run(XC_RES_DOWNLOAD, [Int(py=h), _w(dst_addr)], [Int(py=n)])
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_cnn_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_cnn_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
+        # the native entry the CNN layer doors call (core/xcnn_entry_table.mojo)
+        publish_x_cnn_host_entries()
         var m = PythonModuleBuilder("_mojolearn_x_cnn_host")
         m.def_function[x_cnn_host_numeric_mode_binding]("x_cnn_host_numeric_mode")
         m.def_function[x_cnn_host_vendor_binding]("x_cnn_host_vendor")
@@ -1041,6 +595,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[pad2d_backward_binding]("x_cnn_pad2d_backward")
         m.def_function[adaptive_pool_binding]("x_cnn_adaptive_pool")
         m.def_function[graph_op_binding]("x_cnn_graph_op")
+        m.def_function[gcn_backward_t_binding]("x_cnn_gcn_backward_t")
+        m.def_function[sage_backward_t_binding]("x_cnn_sage_backward_t")
         # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
         m.def_function[vendor_binding]("x_cnn_vendor")
@@ -1048,22 +604,17 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
-        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
         m.def_function[sgd_binding]("x_cnn_sgd_r")
         m.def_function[adam_binding]("x_cnn_adam_r")
-        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
         m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
         m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
-        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
-        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
-        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))
@@ -1071,4 +622,4 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
 
 def nn14_bounded_im2col_binding() -> PythonObject:
     """Source-arm query for saved-buffer allocation, never data-dependent."""
-    return PythonObject(1 if NN14_BOUNDED_IM2COL else 0)
+    return PythonObject(0)

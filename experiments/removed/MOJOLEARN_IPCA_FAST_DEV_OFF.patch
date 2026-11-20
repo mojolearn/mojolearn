@@ -1,0 +1,40 @@
+diff --git b/x_decomp/lanczos_dev.mojo a/x_decomp/lanczos_dev.mojo
+index 5a28552bfe..7e99cc262d 100644
+--- b/x_decomp/lanczos_dev.mojo
++++ a/x_decomp/lanczos_dev.mojo
+@@ -25,7 +25,10 @@ step: alpha's two halves add in float32 (Python added them in float64) and
+ residual test, which still decides convergence on the host.
+ """
+ 
++from std.sys.compile import is_defined
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from x_decomp.cells import F32Ptr
+ from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
+ from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
+@@ -114,12 +117,18 @@ def dev_lanczos_run(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: I
+ 
+ #: lane/apple-fast-gap-linalg2-kpca: IPCA_FAST_DEV, the FAST + Apple default
+ #: (M3 A/B, one run per arm: incremental-pca taxi 159 -> 136 ms, output digest
+-#: bit-identical; tag gl2k-ipca-dev-taxi): IncrementalPCA.fit stacks each batch
+-#: on the device instead of downloading the centered batch to stack it on the
+-#: host. No kernel of its own, and nothing read the constant any more (the
+-#: Python reader is gone), so IPCA_FAST_DEV went with its rollback.
+-# TOMBSTONE: MOJOLEARN_IPCA_FAST_DEV_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 91dc329408.
+-# Restore: git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch; record in docs/TOMBSTONES.md.
++#: bit-identical; tag gl2k-ipca-dev-taxi). -D MOJOLEARN_IPCA_FAST_DEV_OFF
++#: restores the host stack (the A/B arm).
++#: No kernel of its own: IncrementalPCA.fit (python/mojolearn/_expansion_decomp.py)
++#: reads this constant and stacks each batch on the device (`_Kit.vstack_dev`,
++#: the PLACE_COLS move) instead of downloading the centered batch to stack it
++#: on the host and uploading it again, and reads its public arrays once after
++#: the last batch instead of after every batch.
++comptime IPCA_FAST_DEV = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
++)
+ 
+ 
+ def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises -> Int:

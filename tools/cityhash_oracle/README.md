@@ -1,6 +1,6 @@
 # The category hash oracle
 
-Generates `bench/cityhash_oracle.txt`, which `pixi run check-cityhash`
+Generates `bench/cityhash_oracle.txt`, which `pixi run check-native-cpu cityhash_check`
 reads. Regenerate with
 
     c++ -std=c++17 -O2 -I tools/cityhash_oracle \

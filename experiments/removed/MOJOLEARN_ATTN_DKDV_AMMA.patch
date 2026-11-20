@@ -1,0 +1,196 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index ce511aa072..fb8666c4eb 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -5948,13 +5948,186 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
+     key_lo_in: Int32,
+     window_in: Int32,
+ ):
+-    """The preflushed dk/dv folds: the tiled body."""
+-    _dkdv_tiled_pf_simt[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
+-        nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
++    """The preflushed dk/dv folds: on Apple IDENTICAL the matrix-unit body
++    (DK AND DV ON APPLE'S MATRIX UNIT), everywhere else the tiled body."""
++    comptime if ATTN_BWD_DKDV_AMMA and HD == 64:
++        _dkdv_tiled_pf_amma[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
++            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
++    else:
++        _dkdv_tiled_pf_simt[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
++            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
++
++
++# ===========================================================================
++# DK AND DV ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
++# `ATTN_BWD_APPLE_MMA`). `fused_bwd_dkdv_tiled_pf_kernel`'s two folds are one
++# chain per (key j, column d) from +0.0 over the kv group's heads ascending
++# and the queries t ascending that see key j: dk += dcell[t][j] * q[t][d],
++# dv += y[t][j] * dctx[t][d], stepped by `_step_preflushed`, which on Apple
++# the matrix chain reproduces bit for bit (THE FORWARD ON APPLE'S MATRIX
++# UNIT). Per 8-query piece of an 8 x 8 output fragment the matrix step runs
++# when all 8 keys see all 8 queries; otherwise the scalar chain over exactly
++# the visible queries (the causal edge). Staging, the -0.0 corner OR and the
++# stores are the original's. HD 64, BJ 64, TT 16.
++# ===========================================================================
++#: Trial only (`-D MOJOLEARN_ATTN_DKDV_AMMA`): bit-identical, but on the M4 at
++#: 12 layers x 1 x 2048 no measurable gain (dk/dv 261 / 251 ms against 266 ms
++#: per step, per-kernel timers). The Apple backward is bound by its
++#: [B, nh, L, S] stash traffic, not by these products.
++comptime ATTN_BWD_DKDV_AMMA = (
++    ATTN_BWD_APPLE_MMA and is_defined["MOJOLEARN_ATTN_DKDV_AMMA"]()
++)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_ATTN_DKDV_AMMA (Apple trial arm: dk/dv on the matrix unit, M4 no measurable gain) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at eaa875c1b1.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_DKDV_AMMA.patch
++@always_inline
++def _dkdv_tiled_pf_amma[HD: Int](
++    dk: MutPointer[Float32, MutAnyOrigin],
++    dv: MutPointer[Float32, MutAnyOrigin],
++    corner: MutPointer[Float32, MutAnyOrigin],
++    y_st: MutPointer[Float32, MutAnyOrigin],
++    ds_st: MutPointer[Float32, MutAnyOrigin],
++    q_rope: MutPointer[Float32, MutAnyOrigin],
++    dctx: MutPointer[Float32, MutAnyOrigin],
++    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32, s_in: Int32,
++    pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
++):
++    comptime BJ = 64
++    comptime TT = TILED_TT
++    comptime NSG = FUSED_THREADS // 32
++    comptime TST = TT + 4
++    comptime NFJ = BJ // 8
++    comptime NFD = HD // 8
++    comptime FPS = (NFJ * NFD) // NSG
++    comptime assert FPS * NSG == NFJ * NFD and TT % 8 == 0, "amma dkdv: whole fragments"
++    var qT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var dT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var b = Int(b_in)
++    var l = Int(l_in)
++    var nh = Int(nh_in)
++    var nkv = Int(nkv_in)
++    var s = Int(s_in)
++    var pos0 = Int(pos0_in)
++    var key_lo = Int(key_lo_in)
++    var window = Int(window_in)
++    var n_rep = nh // nkv
++    var njb = (s + BJ - 1) // BJ
++    var raw = Int(block_idx.x)
++    var jb = raw % njb
++    var rest = raw // njb
++    var kvh = rest % nkv
++    var bb = rest // nkv
++    if bb >= b:
++        return
++    var tid = Int(thread_idx.x)
++    var sg = tid // 32
++    var lane = tid % 32
++    var qd = lane // 4
++    var frow = (qd & 4) + ((lane // 2) % 4)
++    var fcol = (qd & 2) * 2 + (lane % 2) * 2
++    var j0 = jb * BJ
++    var j1 = min(j0 + BJ - 1, s - 1)
++    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
++    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
++    var tb_lo = q0[0] // TT
++    var tb_hi = q1[1] // TT
++    if q1[1] < q0[0]:
++        tb_hi = tb_lo - 1
++    var kvbase = (bb * nkv + kvh) * s * HD
++    var dka = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
++    var dva = Array[_AMMA_M64, FPS](fill=_AMMA_M64(0))
++    var hit = False
++    for hh in range(n_rep):
++        var h = kvh * n_rep + hh
++        var hbase = (bb * nh + h) * l
++        for tb in range(tb_lo, tb_hi + 1):
++            var tq0 = tb * TT
++            for i in range(tid, TT * HD, FUSED_THREADS):
++                var r = i // HD
++                var c = i % HD
++                var t = tq0 + r
++                var qv = Float32(0.0)
++                var dcv = Float32(0.0)
++                if t < l:
++                    var off = (bb * l + t) * nh * HD + h * HD + c
++                    qv = ftz(q_rope.unsafe_load(off))
++                    dcv = ftz(dctx.unsafe_load(off))
++                qT[c * TST + r] = qv
++                dT[c * TST + r] = dcv
++            for i in range(tid, TT * BJ, FUSED_THREADS):
++                var r = i // BJ
++                var c = i % BJ
++                var t = tq0 + r
++                var jc = j0 + c
++                var yv = Float32(0.0)
++                var dsv = Float32(0.0)
++                if t < l and jc < s:
++                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
++                    if t >= cr[0] and t <= cr[1]:
++                        var cell = (hbase + t) * s + jc
++                        yv = y_st.unsafe_load(cell)
++                        dsv = ds_st.unsafe_load(cell)
++                ys[i] = yv
++                dss[i] = dsv
++            barrier()
++            comptime for q in range(FPS):
++                var g = sg * FPS + q
++                var fj = g // NFD
++                var fd = g % NFD
++                var jf0 = j0 + fj * 8
++                var jf1 = min(jf0 + 7, s - 1)
++                comptime for k8 in range(TT // 8):
++                    var tp = tq0 + k8 * 8
++                    var full = False
++                    if jf0 < s:
++                        var rf = _key_query_range(jf0, pos0, key_lo, window, l)
++                        var rl = _key_query_range(jf1, pos0, key_lo, window, l)
++                        full = (jf1 == jf0 + 7 and rf[0] <= tp and rl[0] <= tp
++                                and rf[1] >= tp + 7 and rl[1] >= tp + 7)
++                    if full:
++                        # A[r = key][c = query] = cell[t][j] at [t * BJ + j].
++                        var ad = _amma_load_t(dss + (k8 * 8) * BJ + fj * 8, BJ)
++                        var ay = _amma_load_t(ys + (k8 * 8) * BJ + fj * 8, BJ)
++                        # B[r = query][c = column] = x[t][d] at [d * TST + t].
++                        var bq = _amma_load_t(qT + (fd * 8) * TST + k8 * 8, TST)
++                        var bd = _amma_load_t(dT + (fd * 8) * TST + k8 * 8, TST)
++                        dka[q] = _amma_mma(ad, bq, dka[q])
++                        dva[q] = _amma_mma(ay, bd, dva[q])
++                        comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
++                            dva[q] = dva[q] * Float32(1.0000001)
++                    else:
++                        var jc = j0 + fj * 8 + frow
++                        if jc < s:
++                            var cr = _key_query_range(jc, pos0, key_lo, window, l)
++                            comptime for e in range(2):
++                                var d = fd * 8 + fcol + e
++                                for tk in range(8):
++                                    var t = tp + tk
++                                    if t < l and t >= cr[0] and t <= cr[1]:
++                                        var tl = k8 * 8 + tk
++                                        var jl = fj * 8 + frow
++                                        dka[q][e] = _step_preflushed(dss[tl * BJ + jl], qT[d * TST + tl], dka[q][e])
++                                        dva[q][e] = _step_preflushed(ys[tl * BJ + jl], dT[d * TST + tl], dva[q][e])
++            barrier()
++        comptime for q in range(FPS):
++            comptime for e in range(2):
++                if bitcast[DType.uint32](dka[q][e]) == NEG_ZERO_BITS:
++                    hit = True
++                if bitcast[DType.uint32](dva[q][e]) == NEG_ZERO_BITS:
++                    hit = True
++    comptime for q in range(FPS):
++        var g = sg * FPS + q
++        var fj = g // NFD
++        var fd = g % NFD
++        var jc = j0 + fj * 8 + frow
++        if jc < s:
++            if hit:
++                corner.unsafe_store(0, Float32(1.0))
++            comptime for e in range(2):
++                var d = fd * 8 + fcol + e
++                dk.unsafe_store(kvbase + jc * HD + d, dka[q][e])
++                dv.unsafe_store(kvbase + jc * HD + d, dva[q][e])
+ 
+ 
+ @always_inline

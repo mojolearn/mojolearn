@@ -31,9 +31,11 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.math import sqrt
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from core.device_query_x import QueryFold
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -41,7 +43,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from kernel_methods.estimator import (
     KernelRidgeModel,
     NystroemModel,
@@ -50,12 +52,9 @@ from kernel_methods.estimator import (
     kernel_ridge_predict_host,
     nystroem_fit_host,
     nystroem_transform_host_into,
-    nystroem_transform_ptr_into,
     KM_FAST_PTR_IN,
-    KRR_IDN_PTR_IN,
     NYS_IDN_FIT_PTR_IN,
     nystroem_fit_ptr,
-    kernel_ridge_fit_ptr_into,
     kernel_ridge_predict_ptr_into,
     rbf_sampler_fit_host,
     rbf_sampler_transform_host_into,
@@ -75,7 +74,7 @@ from kernel_methods.km_binding_impl import (
 )
 
 
-from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from providers.python.svm_impl_scale_gamma_device_pyapi_pack import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
 from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT
 from kernel_methods.krr_resident import (
@@ -83,27 +82,20 @@ from kernel_methods.krr_resident import (
     kernel_ridge_resident_release,
     kernel_ridge_predict_resident,
 )
-from providers.python.kernel_methods_rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
+from providers.python.kernel_methods_rbf_resident_pyapi_pack import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 from kernel_methods.native_descriptor_dispatch import KERNEL_METHOD_NATIVE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from kernel_methods.kernel_methods_binding_run import (
+    kernel_ridge_fit_ptr_run,
+    nystroem_transform_model_run,
+    nystroem_transform_ptr_run,
+)
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 def kernel_methods_api_v1_binding() raises -> PythonObject:
     var api = KERNEL_METHOD_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    return f64_ptr(addr)
 
 
 def kernel_methods_numeric_mode_binding() raises -> PythonObject:
@@ -169,10 +161,10 @@ def kernel_ridge_fit_binding(
             " degree, gamma, coef0, alpha), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=addrs[0]))
-    var yp = _f32_ptr(Int(py=addrs[1]))
-    var dp = _f32_ptr(Int(py=addrs[2]))
-    var sp = _f64_ptr(Int(py=addrs[3]))
+    var xp = f32_ptr(Int(py=addrs[0]))
+    var yp = f32_ptr(Int(py=addrs[1]))
+    var dp = f32_ptr(Int(py=addrs[2]))
+    var sp = f64_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -189,7 +181,7 @@ def kernel_ridge_fit_binding(
     if len(addrs) == 5:
         # the per-row factors sqrt(sample_weight): the binary64 square root
         # of each weight rounded once to float32 (formerly Python's loop)
-        sw = km_sqrt_weights(_f64_ptr(Int(py=addrs[4])), n)
+        sw = km_sqrt_weights(f64_ptr(Int(py=addrs[4])), n)
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(x, y, n, d, t, kp, alpha, dp, sp, sw)
@@ -235,10 +227,10 @@ def kernel_ridge_predict_binding(
             " kernel, degree, gamma, coef0, alpha, info, q), got "
             + String(len(params))
         )
-    var xfp = _f32_ptr(Int(py=addrs[0]))
-    var dp = _f32_ptr(Int(py=addrs[1]))
-    var xnp = _f32_ptr(Int(py=addrs[2]))
-    var op = _f32_ptr(Int(py=addrs[3]))
+    var xfp = f32_ptr(Int(py=addrs[0]))
+    var dp = f32_ptr(Int(py=addrs[1]))
+    var xnp = f32_ptr(Int(py=addrs[2]))
+    var op = f32_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -264,14 +256,24 @@ def kernel_ridge_fit_ptr_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     """fam2-kernel-gp (KRR_IDN_PTR_IN; registered as `kernel_ridge_fit_ptr`
-    only when that define is on): `kernel_ridge_fit_binding`'s `addrs` and
-    `params`, exactly, with X and y read from their addresses on the device
-    and `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
-    No owned host copy of X or y is made. Returns `info`."""
-    if len(addrs) != 4 and len(addrs) != 5:
+    only when that define is on): `kernel_ridge_fit_binding`'s `params`,
+    exactly, with X and y read from their addresses on the device and
+    `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
+    No owned host copy of X or y is made.
+
+    `addrs` is `kernel_ridge_fit_binding`'s 4 (or 5, with the weights), or
+    9 (lane a8a): x, y, dual_out, scalars_out, sw (0: unweighted), x_fit_out
+    (0: none; else n * d float32 receiving the device copy of X), then a
+    cross-validation fold's store ids [base id, base rows, index id] (x is
+    then 0 and the fold's rows are gathered on the device).
+
+    Returns [info, finite word, range word] of X (0, 0: finite and in range;
+    a flagged X is not fitted and the door refuses it)."""
+    if len(addrs) != 4 and len(addrs) != 5 and len(addrs) != 9:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out) and optionally sw, got "
+            " dual_out, scalars_out), 5 (and sw) or 9 (sw, x_fit_out and a"
+            " fold's base id, base rows, index id), got "
             + String(len(addrs))
         )
     if len(params) != 8:
@@ -280,10 +282,15 @@ def kernel_ridge_fit_ptr_binding(
             " degree, gamma, coef0, alpha), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=addrs[0]))
-    var yp = _f32_ptr(Int(py=addrs[1]))
-    var dp = _f32_ptr(Int(py=addrs[2]))
-    var sp = _f64_ptr(Int(py=addrs[3]))
+    var fold = QueryFold.none()
+    var xfit_addr = 0
+    if len(addrs) == 9:
+        xfit_addr = Int(py=addrs[5])
+        fold = QueryFold(Int(py=addrs[6]), Int(py=addrs[7]), Int(py=addrs[8]))
+    var xaddr = 0 if fold.active() else Int(f32_ptr(Int(py=addrs[0])))
+    var yaddr = Int(f32_ptr(Int(py=addrs[1])))
+    var dp = f32_ptr(Int(py=addrs[2]))
+    var sp = f64_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -294,23 +301,18 @@ def kernel_ridge_fit_ptr_binding(
         Float64(py=params[6]),
     )
     var alpha = Float32(Float64(py=params[7]))
-    var sw = List[Float32]()
     var waddr = 0
-    if len(addrs) == 5:
+    if len(addrs) >= 5 and Int(py=addrs[4]) != 0:
         # cpu2-l6-bindings: the per-row factors sqrt(sample_weight) are
         # formed and refused on the device from the caller's float64
         # weights (`_krr_sqrt_weights_dev`), not in a host loop
-        waddr = Int(_f64_ptr(Int(py=addrs[4])))
-    var xaddr = Int(xp)
-    var yaddr = Int(yp)
-    var info = 0
+        waddr = Int(f64_ptr(Int(py=addrs[4])))
+    var result: Tuple[Int, Int32, Int32]
     with GILReleased(Python()):
-        var trace = IdentityTrace()
-        info = kernel_ridge_fit_ptr_into(
-            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr=waddr
+        result = kernel_ridge_fit_ptr_run(
+            xaddr, yaddr, n, d, t, kp, alpha, dp, sp, waddr, fold, xfit_addr
         )
-        sp.unsafe_store(0, Float64(info))
-    return PythonObject(info)
+    return Python.list(result[0], Int(result[1]), Int(result[2]))
 
 
 def kernel_ridge_predict_ptr_binding(
@@ -321,11 +323,14 @@ def kernel_ridge_predict_ptr_binding(
     `kernel_ridge_predict_binding`'s `addrs` and `params`, exactly, with
     X_fit, the dual and the query read from their addresses on the device
     and `out` written by the device copy (`kernel_ridge_predict_ptr_into`).
-    Returns 0."""
-    if len(addrs) != 4:
+    `addrs` may carry three more words (lane a7a): a cross-validation fold's
+    store ids [base id, base rows, index id]; x_new is then 0 and the query
+    rows are gathered on the device. Returns [finite word, range word] of
+    the query (0, 0: finite and in range; the door refuses otherwise)."""
+    if len(addrs) != 4 and len(addrs) != 7:
         raise Error(
             "kernel_ridge_predict: addrs must contain 4 addresses (x_fit,"
-            " dual, x_new, out), got "
+            " dual, x_new, out) or 7 (and a fold's base id, base rows, index id), got "
             + String(len(addrs))
         )
     if len(params) != 10:
@@ -334,10 +339,13 @@ def kernel_ridge_predict_ptr_binding(
             " kernel, degree, gamma, coef0, alpha, info, q), got "
             + String(len(params))
         )
-    var xfaddr = Int(_f32_ptr(Int(py=addrs[0])))
-    var daddr = Int(_f32_ptr(Int(py=addrs[1])))
-    var xnaddr = Int(_f32_ptr(Int(py=addrs[2])))
-    var op = _f32_ptr(Int(py=addrs[3]))
+    var xfaddr = Int(f32_ptr(Int(py=addrs[0])))
+    var daddr = Int(f32_ptr(Int(py=addrs[1])))
+    var fold = QueryFold.none()
+    if len(addrs) == 7:
+        fold = QueryFold(Int(py=addrs[4]), Int(py=addrs[5]), Int(py=addrs[6]))
+    var xnaddr = 0 if fold.active() else Int(f32_ptr(Int(py=addrs[2])))
+    var op = f32_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -348,11 +356,12 @@ def kernel_ridge_predict_ptr_binding(
         Float64(py=params[6]),
     )
     var q = Int(py=params[9])
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+        words = kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace, fold)
         _ = xfaddr  # keep the Python object alive through the native call above
-    return PythonObject(0)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def kernel_ridge_resident_prepare_binding(
@@ -365,8 +374,8 @@ def kernel_ridge_resident_prepare_binding(
     `kernel_ridge_resident_release`."""
     if len(addrs) != 2 or len(params) != 3:
         raise Error("kernel_ridge_resident_prepare: addrs must hold x_fit, dual and params n, d, t")
-    var xfaddr = Int(_f32_ptr(Int(py=addrs[0])))
-    var daddr = Int(_f32_ptr(Int(py=addrs[1])))
+    var xfaddr = Int(f32_ptr(Int(py=addrs[0])))
+    var daddr = Int(f32_ptr(Int(py=addrs[1])))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -386,7 +395,8 @@ def kernel_ridge_predict_resident_binding(
     handle: PythonObject, addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     """`kernel_ridge_predict_ptr` over a resident fit: `addrs` is `[x_new,
-    out]`, `params` `kernel_ridge_predict_binding`'s ten values. Returns 0."""
+    out]`, `params` `kernel_ridge_predict_binding`'s ten values. Returns
+    [finite word, range word] of the query (lane a7a)."""
     if len(addrs) != 2:
         raise Error(
             "kernel_ridge_predict_resident: addrs must contain 2 addresses (x_new, out), got "
@@ -398,8 +408,8 @@ def kernel_ridge_predict_resident_binding(
             " kernel, degree, gamma, coef0, alpha, info, q), got "
             + String(len(params))
         )
-    var xnaddr = Int(_f32_ptr(Int(py=addrs[0])))
-    var op = _f32_ptr(Int(py=addrs[1]))
+    var xnaddr = Int(f32_ptr(Int(py=addrs[0])))
+    var op = f32_ptr(Int(py=addrs[1]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var t = Int(py=params[2])
@@ -411,10 +421,11 @@ def kernel_ridge_predict_resident_binding(
     )
     var q = Int(py=params[9])
     var h = Int(py=handle)
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
-    return PythonObject(0)
+        words = kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def nystroem_fit_transform_ptr_binding(
@@ -437,14 +448,14 @@ def nystroem_fit_transform_ptr_binding(
             " gamma, coef0, q, seed), got "
             + String(len(params))
         )
-    var xaddr = Int(_f32_ptr(Int(py=addrs[0])))
-    var cp = _f32_ptr(Int(py=addrs[1]))
-    var ip = _i32_ptr(Int(py=addrs[2]))
-    var np_ = _f32_ptr(Int(py=addrs[3]))
-    var evp = _f32_ptr(Int(py=addrs[4]))
-    var ecp = _f32_ptr(Int(py=addrs[5]))
-    var sp = _f64_ptr(Int(py=addrs[6]))
-    var op = _f32_ptr(Int(py=addrs[7]))
+    var xaddr = Int(f32_ptr(Int(py=addrs[0])))
+    var cp = f32_ptr(Int(py=addrs[1]))
+    var ip = i32_ptr(Int(py=addrs[2]))
+    var np_ = f32_ptr(Int(py=addrs[3]))
+    var evp = f32_ptr(Int(py=addrs[4]))
+    var ecp = f32_ptr(Int(py=addrs[5]))
+    var sp = f64_ptr(Int(py=addrs[6]))
+    var op = f32_ptr(Int(py=addrs[7]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var kp = KernelParams(
@@ -510,13 +521,13 @@ def nystroem_fit_binding(
             " gamma, coef0, q, seed), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=addrs[0]))
-    var cp = _f32_ptr(Int(py=addrs[1]))
-    var ip = _i32_ptr(Int(py=addrs[2]))
-    var np_ = _f32_ptr(Int(py=addrs[3]))
-    var evp = _f32_ptr(Int(py=addrs[4]))
-    var ecp = _f32_ptr(Int(py=addrs[5]))
-    var sp = _f64_ptr(Int(py=addrs[6]))
+    var xp = f32_ptr(Int(py=addrs[0]))
+    var cp = f32_ptr(Int(py=addrs[1]))
+    var ip = i32_ptr(Int(py=addrs[2]))
+    var np_ = f32_ptr(Int(py=addrs[3]))
+    var evp = f32_ptr(Int(py=addrs[4]))
+    var ecp = f32_ptr(Int(py=addrs[5]))
+    var sp = f64_ptr(Int(py=addrs[6]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var kp = KernelParams(
@@ -557,13 +568,13 @@ def nystroem_fit_ptr_binding(
             " gamma, coef0, q, seed), got "
             + String(len(params))
         )
-    var xaddr = Int(_f32_ptr(Int(py=addrs[0])))
-    var cp = _f32_ptr(Int(py=addrs[1]))
-    var ip = _i32_ptr(Int(py=addrs[2]))
-    var np_ = _f32_ptr(Int(py=addrs[3]))
-    var evp = _f32_ptr(Int(py=addrs[4]))
-    var ecp = _f32_ptr(Int(py=addrs[5]))
-    var sp = _f64_ptr(Int(py=addrs[6]))
+    var xaddr = Int(f32_ptr(Int(py=addrs[0])))
+    var cp = f32_ptr(Int(py=addrs[1]))
+    var ip = i32_ptr(Int(py=addrs[2]))
+    var np_ = f32_ptr(Int(py=addrs[3]))
+    var evp = f32_ptr(Int(py=addrs[4]))
+    var ecp = f32_ptr(Int(py=addrs[5]))
+    var sp = f64_ptr(Int(py=addrs[6]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var kp = KernelParams(
@@ -632,34 +643,21 @@ def nystroem_transform_binding(
     var seed = UInt64(Int(py=params[6]))
     var sweeps = Int(py=params[7])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var indices = read_i32(Int(py=addrs[1]), max(0, q))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var eigenvalues = read_f32(Int(py=addrs[3]), max(0, q))
-    var eigenvectors = read_f32(Int(py=addrs[4]), max(0, q * q))
-    var xaddr = Int(py=addrs[5])
-    var op = _f32_ptr(Int(py=addrs[6]))
-    var model = NystroemModel(
-        components^,
-        indices^,
-        normalization^,
-        eigenvalues^,
-        eigenvectors^,
-        q,
-        d,
-        kernel,
-        degree,
-        gamma,
-        coef0,
-        seed,
-        sweeps,
+    # Only the components and the normalization are read; the other address
+    # slots stay in the argument list for its fixed order.
+    var components_addr = Int(py=addrs[0])
+    var normalization_addr = Int(py=addrs[2])
+    var model = nystroem_transform_model_run(
+        components_addr, normalization_addr,
+        q, d, kernel, degree, gamma, coef0, seed, sweeps,
     )
+    var xaddr = Int(py=addrs[5])
+    var op = f32_ptr(Int(py=addrs[6]))
     comptime if KM_FAST_PTR_IN:
         if xaddr == 0:
             raise Error("nystroem_transform: null X address")
         with GILReleased(Python()):
-            var trace = IdentityTrace()
-            nystroem_transform_ptr_into(model, xaddr, m, op, trace)
+            nystroem_transform_ptr_run(model, xaddr, m, op)
             _ = model  # keep the Python object alive through the native call above
     else:
         var x = read_f32(xaddr, max(0, m * d))
@@ -706,9 +704,9 @@ def rbf_sampler_fit_binding(
             " seed), got "
             + String(len(params))
         )
-    var wp = _f32_ptr(Int(py=addrs[0]))
-    var bp = _f32_ptr(Int(py=addrs[1]))
-    var sp = _f64_ptr(Int(py=addrs[2]))
+    var wp = f32_ptr(Int(py=addrs[0]))
+    var bp = f32_ptr(Int(py=addrs[1]))
+    var sp = f64_ptr(Int(py=addrs[2]))
     var d = Int(py=params[0])
     var q = Int(py=params[1])
     var gamma = Float32(Float64(py=params[2]))
@@ -764,7 +762,7 @@ def rbf_sampler_transform_binding(
     var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
     var offset = read_f32(Int(py=addrs[1]), max(0, q))
     var xaddr = Int(py=addrs[2])
-    var op = _f32_ptr(Int(py=addrs[3]))
+    var op = f32_ptr(Int(py=addrs[3]))
     var model = RBFSamplerModel(
         weights^, offset^, d, q, gamma, seed, sigma, scale
     )
@@ -794,6 +792,7 @@ def km_scale_gamma_limbs_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_kernel_methods() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
@@ -808,12 +807,13 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         m.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")
         m.def_function[kernel_ridge_fit_binding]("kernel_ridge_fit")
         m.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
-        comptime if KRR_IDN_PTR_IN:
-            m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
-            m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
-            m.def_function[kernel_ridge_resident_prepare_binding]("kernel_ridge_resident_prepare")
-            m.def_function[kernel_ridge_resident_release_binding]("kernel_ridge_resident_release")
-            m.def_function[kernel_ridge_predict_resident_binding]("kernel_ridge_predict_resident")
+        # TOMBSTONE: MOJOLEARN_IDN_KRR_PTR_IN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 25dea25b3b.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_KRR_PTR_IN_OFF.patch; record in docs/TOMBSTONES.md.
+        m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
+        m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
+        m.def_function[kernel_ridge_resident_prepare_binding]("kernel_ridge_resident_prepare")
+        m.def_function[kernel_ridge_resident_release_binding]("kernel_ridge_resident_release")
+        m.def_function[kernel_ridge_predict_resident_binding]("kernel_ridge_predict_resident")
         m.def_function[nystroem_fit_binding]("nystroem_fit")
         comptime if NYS_IDN_FIT_PTR_IN:
             m.def_function[nystroem_fit_ptr_binding]("nystroem_fit_ptr")

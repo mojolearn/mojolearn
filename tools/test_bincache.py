@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -30,6 +31,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$here"
 if false; then pixi run mojo build -j 2 --emit shared-lib -I . -I bindings bindings/_mojolearn_fake.mojo -o x; fi
 [ -z "${BINCACHE_TEST_MARKER:-}" ] || echo ran >> "$BINCACHE_TEST_MARKER"
+: "${MOJOLEARN_BUILD_EXTRA_DEFINES:-}${MOJOLEARN_GEMM_ARM_TRIAL:-}${MOJOLEARN_COMPILE_JOBS:-2}"
 mkdir -p python/mojolearn/identical
 printf 'fake-binding %s\\n' "${MOJOLEARN_NUMERIC_MODE:-identical}" > python/mojolearn/identical/.tmp.so
 mv python/mojolearn/identical/.tmp.so python/mojolearn/identical/_mojolearn_fake.so
@@ -90,7 +92,7 @@ class KeyTests(unittest.TestCase):
             "toolchain": lambda: (self.repo / "pixi.lock").write_text(
                 "      - conda: https://conda.modular.com/max/%s/mojo-compiler-1.0.1-release.conda\n" % PLAT),
             "imported source": lambda: (self.repo / "core/a.mojo").write_text("from layout import T\nfn f(): return\n"),
-            "build script": lambda: (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "# edit\n"),
+            "build script": lambda: (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "true\n"),
         }
         for name, mutate in cases.items():
             with self.subTest(name):
@@ -105,7 +107,7 @@ class KeyTests(unittest.TestCase):
         moved = {
             "image": fields(self.repo, image="do:188571990"),
             "mode": fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "fast"}),
-            "define": fields(self.repo, {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_2560_MEMSET_FILL=1"}),
+            "define": fields(self.repo, {"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_2550_HOST_COPY=1"}),
             "trial": fields(self.repo, {"MOJOLEARN_GEMM_ARM_TRIAL": "kpack_hg"}),
             "gpu archs": fields(self.repo, {"MOJOLEARN_GPU_ARCHS": "sm_90a"}),
             "column": fields(self.repo, {"MOJOLEARN_TARGET_COLUMN": "cpu"}),
@@ -163,14 +165,62 @@ class KeyTests(unittest.TestCase):
         toml.write_text('[workspace]\nname = "m"\n[dependencies]\nmojo = ">=1.0.1,<2"\n[tasks]\nprobe = "mojo run x"\n')
         self.assertNotEqual(bc.key_of(fields(self.repo)), k)
 
-    def test_unresolvable_import_widens_to_the_whole_tree(self):
+    def test_unresolvable_import_widens_the_v1_key_and_fails_the_closure_key(self):
         (self.repo / "core/a.mojo").write_text("from nowhere.at_all import thing\n")
+        # v1 (kept verifiable): the whole tree.
         src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake.sh", [])
         self.assertEqual(src["scope"], "tree")
         self.assertIn("core/unrelated.mojo", rels)
-        k = bc.key_of(fields(self.repo))
+        k = bc.key_of(bc.key_fields(self.repo, self.repo / "bindings/build_fake.sh", [], {}, "i",
+                                    dev_arch="x", os_info=dict(OS), rule="v1"))
         (self.repo / "core/unrelated.mojo").write_text("fn u(): return 2\n")
+        self.assertNotEqual(bc.key_of(bc.key_fields(self.repo, self.repo / "bindings/build_fake.sh", [], {}, "i",
+                                                    dev_arch="x", os_info=dict(OS), rule="v1")), k)
+        # closure-v2: no fallback, a loud error naming the import and its file.
+        with self.assertRaises(bc.UnresolvedImport) as caught:
+            fields(self.repo)
+        self.assertEqual(caught.exception.module, "nowhere.at_all")
+        self.assertEqual(caught.exception.importer, "core/a.mojo")
+        self.assertIn("nowhere.at_all", str(caught.exception))
+
+    def test_unread_and_per_run_variables_do_not_move_the_key(self):
+        for env in ({"MOJOLEARN_SLOT_TOKEN": "681867bcbd7740c6"},
+                    {"MOJOLEARN_MERGED_KEY": "a4675865"},
+                    {"MOJOLEARN_RUNPOD_KEY_FILE": "/Users/x/.key"},
+                    {"MOJOLEARN_CUDA_CODE_FORMAT": "ptx", "MOJOLEARN_BUILD_TIERS": "identical"},
+                    {"MOJOLEARN_SOMETHING_NO_SCRIPT_READS": "1"}):
+            with self.subTest(env):
+                self.assertEqual(bc.key_of(fields(self.repo, env)), self.base)
+        # The toolchain's own variables stay keyed, read or not.
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MODULAR_HOME": "/x"})), self.base)
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_BUILD_PIXI_ENV": "cuda"})), self.base)
+
+    def test_a_dynamic_variable_name_is_read_by_pattern(self):
+        (self.repo / "bindings/build_fake.sh").write_text(
+            SCRIPT + 'd=$(eval "printf %s \\"\\${MOJOLEARN_${FAMILY}_HOST_OUTDIR:-}\\"")\n')
+        base = bc.key_of(fields(self.repo))
+        self.assertNotEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_FAKE_HOST_OUTDIR": "o"})), base)
+        self.assertEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_FAKE_OUTDIR": "o"})), base)
+
+    def test_comment_edits_of_shell_inputs_do_not_move_the_key(self):
+        (self.repo / "bindings/build_fake.sh").write_text(SCRIPT + "# a note\n\n")
+        self.assertEqual(bc.key_of(fields(self.repo)), self.base)
+
+    def test_a_sourced_helper_beside_the_script_is_an_input(self):
+        (self.repo / "bindings/build_defines.sh").write_text("X=1\n")
+        (self.repo / "bindings/build_fake.sh").write_text(
+            '. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"\n' + SCRIPT)
+        f = fields(self.repo)
+        self.assertIn("bindings/build_defines.sh", f["inputs"]["files"])
+        k = bc.key_of(f)
+        (self.repo / "bindings/build_defines.sh").write_text("X=2\n")
         self.assertNotEqual(bc.key_of(fields(self.repo)), k)
+
+    def test_unread_sabotage_variable_still_makes_a_negative_control(self):
+        env = {"MOJOLEARN_UNREAD_SABOTAGE_X": "1"}
+        f = fields(self.repo, env)
+        self.assertEqual(f.get("variant"), "sabotage")
+        self.assertTrue(bc.refusal(f, env).startswith("sabotage:"))
 
     def test_sabotage_is_refused(self):
         for env in ({"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1"},
@@ -195,6 +245,16 @@ class KeyTests(unittest.TestCase):
         self.assertIn("bindings/_mojolearn_fake_host.mojo", rels)
         self.assertIn("core/g.mojo", rels)
         self.assertIn("bindings/build_host_family.sh", rels)
+
+
+    def test_release_provisioning_switches_are_not_build_inputs(self):
+        # MOJOLEARN_ORCHESTRATOR=1 is required by release.py gate-boxes and
+        # boxes-down; it chooses who may rent, never what the compiler emits.
+        env = dict(MOJOLEARN_ORCHESTRATOR="1", MOJOLEARN_AMD_PROVIDER="do",
+                   MOJOLEARN_RELEASE_NV_BOX="nv", MOJOLEARN_NUMERIC_MODE="identical")
+        self.assertEqual(bc.build_env(env), {"MOJOLEARN_NUMERIC_MODE": "identical"})
+        self.assertNotIn("MOJOLEARN_ORCHESTRATOR",
+                         bc.keyed_env(env, ({"MOJOLEARN_ORCHESTRATOR"}, [])))
 
 
 class PresignTests(unittest.TestCase):
@@ -531,7 +591,8 @@ class ReleaseDeclaredTests(BuildFlowTests):
         self.assertNotIn("_mojolearn_other.so", row[5])
         fields_a = json.loads((out_a / "keys" / (row[3] + ".json")).read_text())
         self.assertEqual(fields_a["declared"]["outputs"], [self.OUT])
-        self.assertIn("bindings/build_fake.sh", fields_a["declared"]["inputs"]["files"])
+        self.assertIn("bindings/build_fake.sh", fields_a["inputs"]["files"])
+        self.assertEqual(fields_a["key_rule"], bc.KEY_RULE)
         b = self.tree("b")
         out_b = self.base / "out-b"
         self.build(b, self.write_map("b"), out_b)
@@ -648,6 +709,34 @@ class LocalCacheTests(unittest.TestCase):
         self.assertTrue((c / "ran.txt").exists(), "a corrupt archive must fall back to a real build")
         self.assertEqual((c / self.OUT).read_bytes(), built)
 
+    def test_an_archive_names_its_commit_and_a_hit_records_that_compile(self):
+        # tools/release_requirements_macos_build.py admits a placed group from
+        # these records: the archive's source_commit/built/build_seconds/builder
+        # and the hit's placements.jsonl line naming the same compile.
+        a = self.tree()
+        git = ["git", "-C", str(a), "-c", "user.email=fixture@example.invalid", "-c", "user.name=Fixture"]
+        subprocess.run(git + ["init", "-q"], check=True)
+        subprocess.run(git + ["add", "."], check=True)
+        subprocess.run(git + ["commit", "-qm", "fixture"], check=True)
+        head = subprocess.check_output(git + ["rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(bc.head_commit(a), head)
+        self.assertEqual(bc.head_commit(self.base), "", "not a checkout: no commit")
+        self.assertEqual(self.build(a), 0)
+        self.assertEqual(self.rows()[-1][2], "miss+built-cached")
+        key = self.rows()[-1][3]
+        with tarfile.open(self.cache / (key + ".tar.gz"), "r:gz") as tf:
+            manifest = json.loads(tf.extractfile("manifest.json").read())
+        self.assertEqual(manifest["source_commit"], head)
+        b = self.tree()
+        self.assertEqual(self.build(b), 0)
+        self.assertEqual(self.rows()[-1][2], "hit")
+        lines = [json.loads(l) for l in (self.cache / "provenance" / "placements.jsonl").read_text().splitlines()]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual((lines[0]["key"], lines[0]["outcome"], lines[0]["archive_source_commit"],
+                          lines[0]["archive_built"], lines[0]["archive_build_seconds"], lines[0]["archive_builder"]),
+                         (key, "hit", head, manifest["built"], manifest["build_seconds"], manifest["builder"]))
+        self.assertEqual(lines[0]["files"], [dict(path=self.OUT, sha256=bc.sha256_file(b / self.OUT))])
+
     def test_only_the_declared_output_is_archived(self):
         # The release script runs builds side by side in ONE tree, so a .so
         # another build writes at the same time must never enter this archive.
@@ -751,3 +840,545 @@ class RealBuildScriptsAreReadable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# closure-v2 for bindings/merged_build.sh (2026-11-04)
+# ---------------------------------------------------------------------------
+
+MERGED_SCRIPT = """#!/bin/sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"
+PY=${MOJOLEARN_MERGED_PYTHON:-python3}
+plan=$("$PY" tools/merged_bindings.py plan --dir x)
+# `mojo build` of a generated root: script_plan cannot read it literally
+"$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" ${MOJOLEARN_MOJO_BUILD_FLAGS:-} -I . -I bindings "$root" -o x
+mkdir -p python/mojolearn/identical
+printf 'merged %s\\n' "$*" > python/mojolearn/identical/.tmp.so
+mv python/mojolearn/identical/.tmp.so python/mojolearn/identical/_mojolearn_native_a.so
+"""
+
+
+def make_merged_repo(root):
+    root = Path(root)
+    make_repo(root)
+    (root / "tools").mkdir(exist_ok=True)
+    shutil.copy(Path(__file__).resolve().parent / "merged_bindings.py", root / "tools" / "merged_bindings.py")
+    (root / "bindings" / "merged_build.sh").write_text(MERGED_SCRIPT)
+    (root / "bindings" / "build_defines.sh").write_text("MOJOLEARN_BUILD_DEFINE_FLAGS=${MOJOLEARN_BUILD_DEFINES:-}\n")
+    (root / "kernels").mkdir()
+    for name, imports in (("_mojolearn_a1", "from kernels import ka\nfrom core import g\n"),
+                          ("_mojolearn_a2", "from kernels import ka\n"),
+                          ("_mojolearn_b1", "from kernels import kb\nfrom core import g\n"),
+                          ("_mojolearn_t", "from tokenizer.impl.unicode_table_generated import TABLE\n"
+                                           "from tokenizer.impl import unicode_class\n")):
+        (root / "bindings" / (name + ".mojo")).write_text(
+            imports + "from std.python import PythonObject\n\n\ndef build_%s() -> PythonObject:\n    pass\n" % name)
+    (root / "kernels" / "ka.mojo").write_text("fn ka(): pass\n")
+    (root / "kernels" / "kb.mojo").write_text("fn kb(): pass\n")
+    (root / "tokenizer" / "impl").mkdir(parents=True)
+    (root / "tokenizer" / "tools").mkdir()
+    (root / "tokenizer" / "__init__.mojo").write_text("")
+    (root / "tokenizer" / "impl" / "__init__.mojo").write_text("")
+    (root / "tokenizer" / "impl" / "unicode_class.mojo").write_text('comptime UNICODE_VERSION_PINNED = "15"\n')
+    (root / "tokenizer" / "tools" / "gen_unicode_categories.py").write_text("print('gen')\n")
+    (root / "bindings" / "merged_groups.json").write_text(json.dumps({
+        "index_file": "_mojolearn_merged.json",
+        "dirs": {"identical": {"path": "python/mojolearn/identical", "optional": {},
+                               "groups": {"_mojolearn_native_a": ["_mojolearn_a1", "_mojolearn_a2"],
+                                          "_mojolearn_native_b": ["_mojolearn_b1"],
+                                          "_mojolearn_native_t": ["_mojolearn_t"]}},
+                 "host": {"path": "python/mojolearn/host", "optional": {}, "groups": {}}},
+        "darwin_metal1": [], "darwin_metal1_suffix": "_m1"}))
+    return root
+
+
+class MergedClosureTests(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_merged_repo(Path(self.td.name) / "repo").resolve()
+
+    def key(self, group, env=None, plat="linux"):
+        env = dict({"MOJOLEARN_GPU_ARCHS": "sm_89"}, **(env or {}))
+        return bc.key_fields(self.repo, self.repo / "bindings/merged_build.sh", ["gpu", "--group", group], env,
+                             "img", dev_arch="sm_89", os_info=dict(OS), plat=plat)
+
+    def test_a_merged_group_keys_its_own_members_closure(self):
+        f = self.key("_mojolearn_native_a")
+        self.assertEqual(f["source"]["scope"], "closure")
+        self.assertEqual(f["merged"][0]["members"], ["_mojolearn_a1", "_mojolearn_a2"])
+        self.assertNotIn("device_arch", f, "a merged GPU build names its target; the box GPU is not an input")
+        _, closure = bc.key_fields_closure(self.repo, self.repo / "bindings/merged_build.sh",
+                                           ["gpu", "--group", "_mojolearn_native_a"],
+                                           {"MOJOLEARN_GPU_ARCHS": "sm_89"}, "img", os_info=dict(OS), plat="linux")
+        self.assertIn("kernels/ka.mojo", closure)
+        self.assertNotIn("kernels/kb.mojo", closure)
+        self.assertNotIn("core/unrelated.mojo", closure)
+
+    def test_an_edit_in_one_group_leaves_the_other_groups_keys(self):
+        a, b = bc.key_of(self.key("_mojolearn_native_a")), bc.key_of(self.key("_mojolearn_native_b"))
+        (self.repo / "kernels" / "kb.mojo").write_text("fn kb(): return\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_b")), b)
+        # a shared file moves both
+        (self.repo / "core" / "g.mojo").write_text("fn g(): return\n")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+
+    def test_membership_and_root_text_are_keyed_per_group(self):
+        a, b = bc.key_of(self.key("_mojolearn_native_a")), bc.key_of(self.key("_mojolearn_native_b"))
+        m = json.loads((self.repo / "bindings/merged_groups.json").read_text())
+        m["dirs"]["identical"]["groups"]["_mojolearn_native_b"] = ["_mojolearn_b1", "_mojolearn_t"]
+        del m["dirs"]["identical"]["groups"]["_mojolearn_native_t"]
+        (self.repo / "bindings/merged_groups.json").write_text(json.dumps(m))
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a, "another group's edit")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_b")), b)
+        # A generator edit that does not change the root text moves nothing.
+        mb = self.repo / "tools" / "merged_bindings.py"
+        mb.write_text(mb.read_text() + "\n# a new subcommand would go here\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a)
+
+    def test_the_slot_token_and_merged_key_do_not_split_a_group(self):
+        base = bc.key_of(self.key("_mojolearn_native_a"))
+        moved = self.key("_mojolearn_native_a", {"MOJOLEARN_SLOT_TOKEN": "18ecb160", "MOJOLEARN_MERGED_KEY": "a4",
+                                                 "MOJOLEARN_MERGED_PYTHON": "/x/python3",
+                                                 "MOJOLEARN_CUDA_CODE_FORMAT": "ptx"})
+        self.assertEqual(bc.key_of(moved), base)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a", {"MOJOLEARN_COMPILE_JOBS": "8"})), base)
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_a", {"MOJOLEARN_BUILD_DEFINES": "X=1"})), base)
+
+    def test_a_generated_source_is_keyed_by_its_generator_not_its_bytes(self):
+        before = bc.key_of(self.key("_mojolearn_native_t"))
+        (self.repo / "tokenizer/impl/unicode_table_generated.mojo").write_text("comptime TABLE = 1\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_t")), before, "the first generator run")
+        (self.repo / "tokenizer/tools/gen_unicode_categories.py").write_text("print('gen2')\n")
+        self.assertNotEqual(bc.key_of(self.key("_mojolearn_native_t")), before)
+        a = bc.key_of(self.key("_mojolearn_native_a"))
+        (self.repo / "tokenizer/tools/gen_unicode_categories.py").write_text("print('gen3')\n")
+        self.assertEqual(bc.key_of(self.key("_mojolearn_native_a")), a, "only groups that import the table")
+
+    def test_the_generated_table_matches_generated_sources(self):
+        import generated_sources as gs
+        self.assertEqual(set(bc.GENERATED_SOURCES), set(gs.GENERATED))
+        for rel, (directory, pin) in bc.GENERATED_SOURCES.items():
+            self.assertEqual(directory, gs.GENERATOR_DIRS[rel])
+            self.assertIn(pin, gs.GENERATED[rel])
+
+    def test_an_unknown_group_or_argument_is_unkeyable(self):
+        with self.assertRaises(bc.UnkeyableBuild):
+            self.key("_mojolearn_native_nope")
+        with self.assertRaises(bc.UnkeyableBuild):
+            bc.key_fields(self.repo, self.repo / "bindings/merged_build.sh", ["gpu", "--bogus"], {}, "i",
+                          dev_arch="x", os_info=dict(OS), plat="linux")
+
+    def test_the_real_tree_keys_every_merged_group_without_a_fallback(self):
+        repo = Path(__file__).resolve().parents[1]
+        import merged_bindings as mb
+        for d in ("identical", "host"):
+            for plat in ("linux", "darwin"):
+                for stem, _, _ in mb.plan(d, plat, True):
+                    env = {"MOJOLEARN_PACKAGE_BYTE_LM": "1"}
+                    if d == "identical" and plat == "linux":
+                        env["MOJOLEARN_GPU_ARCHS"] = "sm_89"
+                    with self.subTest((d, plat, stem)):
+                        f = bc.key_fields(repo, repo / "bindings/merged_build.sh",
+                                          ["host" if d == "host" else "gpu", "--group", stem], env, "i",
+                                          dev_arch="none", os_info=dict(OS), plat=plat)
+                        self.assertEqual(f["source"]["scope"], "closure")
+                        self.assertLess(f["source"]["files"], len(bc.tree_sources(repo)))
+
+
+class ExplainSeedHotTests(unittest.TestCase):
+    """explain (the plan line a build prints before compiling), seed
+    directories of a release-scoped local cache, and the hot-only box route."""
+
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.repo = make_repo(self.base / "mojolearn")
+        self.orig = (bc.device_arch, bc.os_fields, bc.darwin_toolchain)
+        bc.device_arch, bc.os_fields = (lambda: "none"), (lambda: dict(OS))
+        bc.darwin_toolchain = lambda: {}
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        bc.device_arch, bc.os_fields, bc.darwin_toolchain = self.orig
+
+    def env(self, **extra):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+        env.update(MOJOLEARN_BINCACHE_OUTPUTS=self.OUT, MOJOLEARN_BINCACHE_MAP=str(self.base / "no-map.tsv"),
+                   BINCACHE_TEST_MARKER=str(self.repo / "ran.txt"))
+        env.update(extra)
+        return env
+
+    def explain(self, env):
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            rc = bc.cmd_explain([str(self.repo / "bindings/build_fake.sh")], environ=env)
+        finally:
+            sys.stdout = old
+        return rc, buf.getvalue().strip()
+
+    def test_explain_then_seed_a_release_scoped_cache(self):
+        old_release = self.base / "release-old"
+        env = self.env(MOJOLEARN_BINCACHE_DIR=str(old_release))
+        rc, line = self.explain(env)
+        self.assertEqual(rc, 0)
+        self.assertTrue(line.startswith("compile: no earlier build"), line)
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % old_release))
+        (self.repo / self.OUT).unlink()
+        (self.repo / "ran.txt").unlink()
+        new_release = self.base / "release-new"
+        env = self.env(MOJOLEARN_BINCACHE_DIR=str(new_release), MOJOLEARN_BINCACHE_SEED_DIRS=str(old_release))
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % old_release))
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertFalse((self.repo / "ran.txt").exists(), "a seeded hit compiles nothing")
+        self.assertEqual(len(list(new_release.glob("*.tar.gz"))), 1, "the seed is copied into the release cache")
+        rows = [l.split("\t") for l in (new_release / "provenance" / "provenance.tsv").read_text().splitlines()]
+        self.assertEqual(rows[-1][2], "hit")
+        # an edit: explain names the changed closure file
+        (self.repo / self.OUT).unlink()
+        (self.repo / "core/a.mojo").write_text("from layout import TileTensor\nfn f(): return\n")
+        rc, line = self.explain(env)
+        self.assertTrue(line.startswith("compile: closure changed: core/a.mojo"), line)
+
+    def test_hot_only_route_caches_on_the_box_without_a_map(self):
+        hot = self.base / "hot"
+        env = self.env(MOJOLEARN_BINCACHE_HOT_DIR=str(hot), MOJOLEARN_BINCACHE_OUT=str(self.base / "out"),
+                       MOJOLEARN_BINCACHE_SHELL="sh", MOJOLEARN_BINCACHE_IMAGE="box:nvidia")
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertEqual(len(list(hot.glob("*.tar.gz"))), 1)
+        self.assertTrue(self.explain(env)[1].startswith("hit (%s)" % hot))
+        (self.repo / self.OUT).unlink()
+        (self.repo / "ran.txt").unlink()
+        self.assertEqual(_run_with_buffer(bc.cmd_build)([str(self.repo / "bindings/build_fake.sh")], environ=env), 0)
+        self.assertFalse((self.repo / "ran.txt").exists())
+        rows = [l.split("\t") for l in (self.base / "out" / "provenance.tsv").read_text().splitlines()]
+        self.assertEqual([r[2] for r in rows], ["miss+built-not-uploaded:no-slot", "hot-hit"])
+
+    def test_explain_reports_an_unresolved_import_and_exits_3(self):
+        (self.repo / "core/a.mojo").write_text("from nowhere.at_all import thing\n")
+        rc, line = self.explain(self.env(MOJOLEARN_BINCACHE_DIR=str(self.base / "c")))
+        self.assertEqual(rc, 3)
+        self.assertIn("nowhere.at_all", line)
+
+
+# ---------------------------------------------------------------------------
+# one key, one byte content (2026-11-05, finding 3 of the 0.8.66 release state)
+# ---------------------------------------------------------------------------
+
+#: The fake build's bytes follow FAKE_BYTES, which no key reads: two builds of
+#: one key can then write different bytes, as the hip and cuda legs did.
+VARYING_SCRIPT = SCRIPT.replace(
+    "printf 'fake-binding %s\\n' \"${MOJOLEARN_NUMERIC_MODE:-identical}\"",
+    "printf 'fake-binding %s%s\\n' \"${MOJOLEARN_NUMERIC_MODE:-identical}\" \"${FAKE_BYTES:-}\"")
+
+
+class DirStore:
+    """bincache.R2Store over a directory (the promote transport in tests)."""
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.copies = []
+
+    def fetch(self, name, dest):
+        p = self.root / name
+        if not p.is_file():
+            return False
+        shutil.copyfile(p, dest)
+        return True
+
+    def copy(self, src, dest):
+        (self.root / dest).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.root / src, self.root / dest)
+        self.copies.append(dest)
+
+    def delete(self, name):
+        (self.root / name).unlink()
+
+
+class OneKeyOneContentTests(unittest.TestCase):
+    OUT = "python/mojolearn/host/_mojolearn_native_series_host.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.repo = make_repo(self.base / "repo")
+        self.store = self.base / "r2"
+        self.fields = dict(schema=bc.SCHEMA, script="bindings/merged_build.sh",
+                           args=["host", "--group", "_mojolearn_native_series_host"], build_env={},
+                           merged=[dict(dir="host", stem="_mojolearn_native_series_host")])
+        self.key = bc.key_of(self.fields)
+
+    def archive(self, name, payload, builder="a"):
+        so = self.repo / self.OUT
+        so.parent.mkdir(parents=True, exist_ok=True)
+        so.write_bytes(payload)
+        arc = self.base / name
+        bc.pack(arc, self.key, self.fields, self.repo, [self.OUT], dict(builder=dict(leg=builder)))
+        return arc
+
+    def upload(self, leg, slot, arc):
+        """An inbox upload plus the box's record of it (uploads.tsv, keys/)."""
+        d = self.base / ("out-" + leg)
+        (d / "keys").mkdir(parents=True, exist_ok=True)
+        (d / "keys" / (self.key + ".json")).write_text(json.dumps(self.fields))
+        dest = "%s/none/img/%s.tar.gz" % (bc.OBJECT_PREFIX, self.key)
+        inbox = self.store / bc.INBOX_PREFIX / leg / (slot + ".tar.gz")
+        inbox.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(arc, inbox)
+        with open(d / "uploads.tsv", "a") as fh:
+            fh.write("%s\t%s\t%s\t%s\tsabotage=0\n" % (leg, slot, dest, self.key))
+        return d, dest, inbox
+
+    def promote(self, d, store):
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            rc = bc.cmd_promote([str(d)], store=store)
+        finally:
+            sys.stdout = old
+        return rc, buf.getvalue()
+
+    def test_content_conflict_compares_files_not_archive_bytes(self):
+        a = self.archive("a.tar.gz", b"cuda bytes", builder="sm_89")
+        b = self.archive("b.tar.gz", b"cuda bytes", builder="gfx942")   # other manifest extras
+        c = self.archive("c.tar.gz", b"hip bytes")
+        self.assertNotEqual(bc.sha256_file(a), bc.sha256_file(b))
+        self.assertEqual(bc.content_conflict(bc.archive_files(a), bc.archive_files(b)), [])
+        diffs = bc.content_conflict(bc.archive_files(a), bc.archive_files(c))
+        self.assertEqual(diffs, [(self.OUT, bc.sha256_bytes(b"cuda bytes"), bc.sha256_bytes(b"hip bytes"))])
+        self.assertEqual(bc.keep_or_refuse(self.base / "absent.tar.gz", a, self.key)[0], "write")
+        self.assertEqual(bc.keep_or_refuse(a, b, self.key)[0], "same")
+        verdict, line = bc.keep_or_refuse(a, c, self.key, "here")
+        self.assertEqual(verdict, "conflict")
+        for part in (self.key, bc.sha256_bytes(b"cuda bytes"), bc.sha256_bytes(b"hip bytes"), self.OUT):
+            self.assertIn(part, line)
+        junk = self.base / "junk.tar.gz"
+        junk.write_bytes(b"not a tarball")
+        self.assertEqual(bc.keep_or_refuse(junk, a, self.key)[0], "write")
+
+    def test_promote_first_writes_same_is_a_no_op_and_other_bytes_are_refused(self):
+        store = DirStore(self.store)
+        d1, dest, inbox1 = self.upload("sm89", "000", self.archive("a.tar.gz", b"cuda bytes", "sm_89"))
+        rc, log = self.promote(d1, store)
+        self.assertEqual(rc, 0, log)
+        self.assertIn("BINCACHE PROMOTED 1 refused_or_failed=0 already_same=0 conflicts=0", log)
+        kept = (self.store / dest).read_bytes()
+        self.assertFalse(inbox1.exists())
+
+        # a second leg with the SAME files: nothing is written, the inbox object goes
+        d2, _, inbox2 = self.upload("sm80", "000", self.archive("b.tar.gz", b"cuda bytes", "sm_80"))
+        rc, log = self.promote(d2, store)
+        self.assertEqual(rc, 0, log)
+        self.assertIn("already_same=1 conflicts=0", log)
+        self.assertEqual((self.store / dest).read_bytes(), kept)
+        self.assertFalse(inbox2.exists())
+
+        # a third leg with OTHER bytes under the same key: refused loudly, existing kept
+        d3, _, inbox3 = self.upload("gfx942", "000", self.archive("c.tar.gz", b"hip bytes", "gfx942"))
+        rc, log = self.promote(d3, store)
+        self.assertEqual(rc, 4, log)
+        self.assertIn("conflicts=1", log)
+        self.assertTrue(log.strip().splitlines()[-1].startswith("BINCACHE PROMOTED 0"), log)
+        self.assertIn("BINCACHE CONFLICT key=" + self.key, log)
+        self.assertIn("existing sha256=" + bc.sha256_bytes(b"cuda bytes"), log)
+        self.assertIn("upload sha256=" + bc.sha256_bytes(b"hip bytes"), log)
+        self.assertEqual((self.store / dest).read_bytes(), kept)
+        self.assertTrue(inbox3.exists(), "the refused upload stays in the inbox for inspection")
+        self.assertEqual(store.copies, [dest])
+
+    def test_promote_repairs_an_unreadable_object(self):
+        store = DirStore(self.store)
+        d, dest, _ = self.upload("sm89", "000", self.archive("a.tar.gz", b"cuda bytes"))
+        (self.store / dest).parent.mkdir(parents=True, exist_ok=True)
+        (self.store / dest).write_bytes(b"truncated")
+        rc, log = self.promote(d, store)
+        self.assertEqual(rc, 0, log)
+        self.assertEqual(bc.archive_files(self.store / dest), {self.OUT: bc.sha256_bytes(b"cuda bytes")})
+
+    def test_vendor_neutral_names_the_host_builds_only(self):
+        self.assertTrue(bc.vendor_neutral(self.fields))
+        self.assertTrue(bc.vendor_neutral(dict(script="bindings/build_core_host.sh", args=[])))
+        self.assertTrue(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["host", "--group", "g"])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["gpu", "--group", "g"],
+                                                merged=[dict(dir="identical", stem="g")])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/merged_build.sh", args=["host"],
+                                                merged=[dict(dir="host"), dict(dir="identical")])))
+        self.assertFalse(bc.vendor_neutral(dict(script="bindings/build_rf.sh", args=[])))
+
+
+# The hot directory and the local cache never take other bytes under a key.
+# Attached to the existing classes (their fixtures) so no parent test runs twice.
+def _test_hot_directory_keeps_the_first_bytes_of_a_key(self):
+    self.assertNotEqual(VARYING_SCRIPT, SCRIPT)
+    hot = self.base / "hot"
+    a = self.tree("a")
+    (a / "bindings/build_fake.sh").write_text(VARYING_SCRIPT)
+    out = self.base / "out"
+    self.assertEqual(self.rbuild(a, self.write_map("a"), out, hot=hot), 0)
+    key = self.provenance(out)[0][3]
+    first = (hot / (key + ".tar.gz")).read_bytes()
+    uploads = (out / "uploads.tsv").read_text()
+    # the destination exists, so the hot archive is bypassed and the build runs,
+    # writing other bytes under the same key
+    self.assertEqual(self.rbuild(a, self.write_map("a2", leg="leg2"), out, hot=hot,
+                                 extra={"FAKE_BYTES": "-hip"}), 0)
+    row = self.provenance(out)[1]
+    self.assertEqual(row[3], key)
+    self.assertEqual(row[2], "bypass-destination-exists+built-not-uploaded:conflict")
+    self.assertEqual((hot / (key + ".tar.gz")).read_bytes(), first)
+    self.assertEqual((out / "uploads.tsv").read_text(), uploads, "a conflicting archive is never uploaded")
+
+
+ReleaseDeclaredTests.test_hot_directory_keeps_the_first_bytes_of_a_key = \
+    _test_hot_directory_keeps_the_first_bytes_of_a_key
+
+
+def _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones(self):
+    a = self.tree(VARYING_SCRIPT)
+    self.assertEqual(self.build(a), 0)
+    key = self.rows()[-1][3]
+    arc = self.cache / (key + ".tar.gz")
+    first = bc.archive_files(arc)
+    c = self.tree(VARYING_SCRIPT)
+    (c / self.OUT).parent.mkdir(parents=True, exist_ok=True)
+    (c / self.OUT).write_bytes(b"old")
+    self.assertEqual(self.build(c, extra={"FAKE_BYTES": "-other"}), 0)
+    self.assertEqual(self.rows()[-1][3], key)
+    self.assertEqual(self.rows()[-1][2], "bypass-destination-exists+built-not-cached:conflict")
+    self.assertEqual(bc.archive_files(arc), first)
+    d = self.tree(VARYING_SCRIPT)
+    (d / self.OUT).parent.mkdir(parents=True, exist_ok=True)
+    (d / self.OUT).write_bytes(b"old")
+    self.assertEqual(self.build(d), 0)
+    self.assertEqual(self.rows()[-1][2], "bypass-destination-exists+built-cached")
+    self.assertEqual(bc.archive_files(arc), first)
+
+
+LocalCacheTests.test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones = \
+    _test_local_cache_keeps_the_first_bytes_and_refreshes_equal_ones
+
+
+# ---------------------------------------------------------------------------
+# the one Mac cache (2026-11-07, lane/post-one-mac-cache)
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+class OneMacCacheTests(unittest.TestCase):
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.repo = make_repo(Path(self.td.name) / "repo").resolve()
+        (self.repo / self.OUT).parent.mkdir(parents=True)
+        (self.repo / self.OUT).write_bytes(b"one-mac-cache-bytes")
+        self.fields = fields(self.repo)
+        self.key = bc.key_of(self.fields)
+
+    def archive(self, directory, data=None):
+        directory.mkdir(parents=True, exist_ok=True)
+        if data is not None:
+            (self.repo / self.OUT).write_bytes(data)
+        arc = directory / (self.key + ".tar.gz")
+        bc.pack(arc, self.key, self.fields, self.repo, [self.OUT], {})
+        return arc
+
+    def test_the_mac_cache_defaults_to_the_evidence_directory_and_follows_the_override(self):
+        self.assertEqual(bc.mac_cache_dir({}), Path.home() / "mojolearn-evidence" / "bincache-mac")
+        self.assertEqual(bc.mac_cache_dir({"MOJOLEARN_BINCACHE_DIR": "/x/y"}), Path("/x/y"))
+
+    def test_the_release_compile_settings_are_the_mac_slot_and_byte_lm_ones(self):
+        self.assertEqual(bc.MACOS_RELEASE_COMPILE_ENV,
+                         {"MOJOLEARN_PACKAGE_BYTE_LM": "1", "MOJOLEARN_COMPILE_JOBS": "1"})
+        slot = (REPO_ROOT / "tools" / "mac_slot.py").read_text()
+        self.assertIn('MOJOLEARN_COMPILE_JOBS="1"', slot, "tools/mac_slot.py run pins one compiler worker")
+
+    def test_group_environment_matches_build_release_wheel_sh(self):
+        base = {"MOJOLEARN_GPU_ARCHS": "metal:3", "MOJOLEARN_HOST_OUTDIR": "/elsewhere", "KEEP": "1"}
+        kind, output, env = bc.macos_merged_group(base, "host", "_mojolearn_native_host")
+        self.assertEqual((kind, output), ("host", "python/mojolearn/host/_mojolearn_native_host.so"))
+        self.assertNotIn("MOJOLEARN_GPU_ARCHS", env)
+        self.assertNotIn("MOJOLEARN_HOST_OUTDIR", env)
+        self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_TARGET_COLUMN"], env["KEEP"]),
+                         ("identical", "cpu", "1"))
+        self.assertEqual((env["MOJOLEARN_BINCACHE_OUTPUTS"], env["MOJOLEARN_BINCACHE_SHELL"]), (output, "sh"))
+        kind, output, env = bc.macos_merged_group(base, "identical", "_mojolearn_native")
+        self.assertEqual((kind, output), ("gpu", "python/mojolearn/identical/_mojolearn_native.so"))
+        self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_GPU_ARCHS"]), ("identical", "metal:3"))
+        self.assertNotIn("MOJOLEARN_TARGET_COLUMN", env)
+        self.assertEqual(bc.macos_merged_group({}, "fast", "_mojolearn_native")[1],
+                         "python/mojolearn/_mojolearn_native.so")
+        self.assertEqual(base["MOJOLEARN_HOST_OUTDIR"], "/elsewhere", "the caller's environment is not changed")
+        # The shell builder spells the same rules; a change there must change the helper.
+        wheel = (REPO_ROOT / "packaging" / "macos" / "build_release_wheel.sh").read_text()
+        for line in ('host) output="python/mojolearn/host/$stem.so"; kind=host ;;',
+                     'fast) output="python/mojolearn/$stem.so"; kind=gpu ;;',
+                     '*) output="python/mojolearn/$mode/$stem.so"; kind=gpu ;;',
+                     "set -- env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR MOJOLEARN_NUMERIC_MODE=identical "
+                     "MOJOLEARN_TARGET_COLUMN=cpu",
+                     'set -- env MOJOLEARN_NUMERIC_MODE="$mode"',
+                     'export MOJOLEARN_BINCACHE_OUTPUTS="$output" MOJOLEARN_BINCACHE_SHELL=sh',
+                     '"$@" $runner ./bindings/merged_build.sh "$kind" --group "$stem"'):
+            self.assertIn(line, wheel)
+
+    def test_copy_archives_copies_verified_archives_once_and_never_over_a_conflict(self):
+        src, dst = Path(self.td.name) / "release", Path(self.td.name) / "mac"
+        self.archive(src)
+        (src / ("0" * 64 + ".tar.gz")).write_bytes(b"not an archive")
+        got = bc.copy_archives(src, dst)
+        self.assertEqual((got["copied"], got["present"], got["conflicts"], got["rejected"]),
+                         (1, 0, [], ["0" * 64]))
+        bc.verify_archive(str(dst / (self.key + ".tar.gz")), self.key, self.fields)
+        self.assertFalse((dst / ("0" * 64 + ".tar.gz")).exists())
+        again = bc.copy_archives(src, dst)
+        self.assertEqual((again["copied"], again["present"]), (0, 1))
+        # Same key, other bytes in the destination: reported, never replaced.
+        other = Path(self.td.name) / "other"
+        self.archive(other, data=b"different-bytes")
+        shutil.copyfile(other / (self.key + ".tar.gz"), dst / (self.key + ".tar.gz"))
+        before = (dst / (self.key + ".tar.gz")).read_bytes()
+        conflict = bc.copy_archives(src, dst)
+        self.assertEqual(conflict["conflicts"], [self.key])
+        self.assertEqual((dst / (self.key + ".tar.gz")).read_bytes(), before)
+        self.assertEqual(bc.copy_archives(src, src)["copied"], 0, "a directory is never copied onto itself")
+        self.assertEqual(bc.copy_archives(Path(self.td.name) / "absent", dst)["copied"], 0)
+
+    def test_a_seeded_mac_cache_archive_is_placed_instead_of_compiled(self):
+        mac, release_dir = Path(self.td.name) / "mac", Path(self.td.name) / "release"
+        self.archive(mac)
+        release_dir.mkdir()
+        self.assertEqual(bc.seed_archive(release_dir, self.key, self.fields,
+                                         {"MOJOLEARN_BINCACHE_SEED_DIRS": str(mac)}), str(mac))
+        bc.verify_archive(str(release_dir / (self.key + ".tar.gz")), self.key, self.fields)
+
+
+def test_archive_generator_is_a_single_file_without_excluding_other_build_tools(tmp_path):
+    import generated_sources as gs
+    for rel, text in {
+        gs.ARCHIVE_GENERATOR: '# generator one\n',
+        gs.ARCHIVE_PIN: 'comptime PIN = 1\n',
+        'tools/generated_sources.py': '# build preparation\n',
+        'bindings/build_fixture.sh': 'python3 tools/generated_sources.py prepare\npython3 tools/gen_archive_unicode.py\n',
+    }.items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    before = bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE})
+    assert set(before) == set(gs.GENERATED[gs.ARCHIVE_TABLE])
+    (tmp_path / 'tools/unrelated.py').write_text('# unrelated\n')
+    assert bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE}) == before
+    inputs, _ = bc.executed_inputs(tmp_path, tmp_path / 'bindings/build_fixture.sh')
+    assert 'tools/generated_sources.py' in inputs and gs.ARCHIVE_GENERATOR not in inputs
+    (tmp_path / gs.ARCHIVE_GENERATOR).write_text('# generator two\n')
+    assert bc.generator_inputs(tmp_path, {gs.ARCHIVE_TABLE}) != before

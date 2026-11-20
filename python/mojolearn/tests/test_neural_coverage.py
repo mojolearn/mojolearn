@@ -24,6 +24,19 @@ IDS = np.array([[1, 2, 3, 4]], np.int32)
 TARGETS = np.array([[2, 3, 4, 5]], np.int32)
 
 
+def test_samba_loss_is_the_cross_entropy_of_forward_logits():
+    # Row N169: loss runs the same (resident when available) forward route as
+    # SambaStack.forward; its value is the mean cross entropy of those logits.
+    config, weights = _samba()
+    model = SambaStack(config, weights=weights)
+    logits = np.asarray(model.forward(IDS), np.float64).reshape(-1, config.vocab)
+    rows = logits - logits.max(axis=1, keepdims=True)
+    log_probs = rows - np.log(np.exp(rows).sum(axis=1, keepdims=True))
+    expected = -log_probs[np.arange(logits.shape[0]), TARGETS.reshape(-1)].mean()
+    assert model.loss(IDS, TARGETS) == pytest.approx(expected, rel=1e-5)
+    assert model.loss(IDS, TARGETS) == model.loss(IDS, TARGETS)
+
+
 def test_samba_loss_and_grads_divisor_and_refusals():
     config, weights = _samba()
     model = SambaStack(config, weights=weights)
@@ -152,12 +165,14 @@ def test_causal_lm_counts_refuse_str_and_bool(tmp_path):
         model.allocate_state("1", 8)
     block = model.blocks[0]
     assert block.allocate_state(1, 8) is not None
-    with pytest.raises(TypeError, match="batch_size and max_tokens must be integers"):
+    # The block owner's own wording (the model's is above).
+    with pytest.raises(TypeError, match="batch_size and max_tokens require native integers"):
         block.allocate_state("1", 8)
 
 
 def test_mamba2_step_refuses_poisoned_arguments_by_name():
-    from mojolearn.tests.test_mamba23_decode_sessions import _mamba2_block, _tokens
+    # The fixtures left test_mamba23_decode_sessions.py in 3fe4f407d6.
+    from mojolearn.tests.test_decode_n_tokens import _mamba2_block, _tokens
     block, dm = _mamba2_block()
     state = block.allocate_state(2)
     token = _tokens(2, 1, dm)

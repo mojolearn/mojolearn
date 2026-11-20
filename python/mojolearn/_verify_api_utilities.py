@@ -41,7 +41,9 @@ def check(public, method):
         if method=='__len__': return a.__len__()
         if method in ('__eq__','__ne__'): return getattr(a,method)(a)
         if method=='__reduce__':
-            reducer,args=a.__reduce__(); restored=reducer(*args)
+            # (copyreg.__newobj__, (cls,), state): the state goes to __setstate__, as pickle does
+            reducer,args,*state=a.__reduce__(); restored=reducer(*args)
+            if state and state[0] is not None: restored.__setstate__(state[0])
             assert a.tobytes()==restored.tobytes()
             return restored
         if method=='flags:get': return a.flags
@@ -99,9 +101,9 @@ def check(public, method):
         obj=cls(**{k:values[k] for k in inspect.signature(cls).parameters})
         return {k:getattr(obj,k) for k in inspect.signature(cls).parameters if hasattr(obj,k)}
     if name=='set_numeric_mode':
-        before=ml._backend.default_mode()
+        before=ml.runtime_report()['default_mode']
         try:
-            result=cls('identical');assert ml._backend.default_mode()=='identical'
+            result=cls('identical');assert ml.runtime_report()['default_mode']=='identical'
             try:cls('deterministic')
             except ValueError:pass
             else:raise AssertionError('retired mode must be refused')

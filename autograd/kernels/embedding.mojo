@@ -7,8 +7,7 @@ which keeps the forward gather, the id and nonfinite refusals both
 directions share, the plan and the sabotage switches."""
 
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.step_phase import step_count_d2h, step_count_host_alloc, step_count_launch, step_count_sync
 from checks.numerics import ftz
@@ -70,26 +69,14 @@ def emb_counts_kernel(
     counts.unsafe_store(v, c)
 
 
-def emb_run_begin_kernel(
-    run_begin: MutPointer[Int32, MutAnyOrigin],
-    counts: MutPointer[Int32, MutAnyOrigin],
-    vocab_in: Int32,
-):
-    """The exclusive prefix sum of `counts`, length `V + 1`."""
-    var vocab = Int(vocab_in)
-    var acc = Int32(0)
-    for v in range(vocab):
-        run_begin.unsafe_store(v, acc)
-        acc = acc + counts.unsafe_load(v)
-    run_begin.unsafe_store(vocab, acc)
-
-
+# TOMBSTONE: MOJOLEARN_EMB_SERIAL_RUN_BEGIN (unmeasured revert arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 37ef16948e.
+# Restore: git apply experiments/removed/MOJOLEARN_EMB_SERIAL_RUN_BEGIN.patch; record in docs/TOMBSTONES.md.
 def emb_run_begin_block_kernel(
     run_begin: MutPointer[Int32, MutAnyOrigin],
     counts: MutPointer[Int32, MutAnyOrigin],
     vocab_in: Int32,
 ):
-    """`emb_run_begin_kernel`'s exclusive prefix sum of `counts`, by ONE
+    """The exclusive prefix sum of `counts` (length `V + 1`), by ONE
     block of `EMB_RUN_BEGIN_THREADS` threads instead of one thread: thread
     `t` sums its contiguous chunk, thread 0 scans the chunk sums, each
     thread writes its chunk's prefixes. Integer addition is exactly
@@ -317,7 +304,7 @@ def emb_backward_touched_vector4_kernel(
     if r != lo:
         return
     var hi = Int(run_begin[v + 1])
-    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+    var acc = Array[Float32, 4](fill=Float32(0.0))
     comptime for lane in range(4):
         if first_feature + lane < width:
             acc[lane] = dw[v * width + first_feature + lane]
@@ -807,23 +794,13 @@ def _emb_backward_launch(
         )
 
         step_count_launch()
-        comptime if is_defined["MOJOLEARN_EMB_SERIAL_RUN_BEGIN"]():
-            # The revert arm: the single-thread scan.
-            ctx.enqueue_function[emb_run_begin_kernel](
-                run_begin.unsafe_ptr(),
-                counts.unsafe_ptr(),
-                Int32(cfg.vocab),
-                grid_dim=(1, 1, 1),
-                block_dim=(1, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[emb_run_begin_block_kernel](
-                run_begin.unsafe_ptr(),
-                counts.unsafe_ptr(),
-                Int32(cfg.vocab),
-                grid_dim=(1, 1, 1),
-                block_dim=(EMB_RUN_BEGIN_THREADS, 1, 1),
-            )
+        ctx.enqueue_function[emb_run_begin_block_kernel](
+            run_begin.unsafe_ptr(),
+            counts.unsafe_ptr(),
+            Int32(cfg.vocab),
+            grid_dim=(1, 1, 1),
+            block_dim=(EMB_RUN_BEGIN_THREADS, 1, 1),
+        )
 
         step_count_launch()
         ctx.enqueue_function[emb_perm_kernel](

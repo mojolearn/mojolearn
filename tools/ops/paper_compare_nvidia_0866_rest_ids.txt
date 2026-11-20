@@ -1,0 +1,15 @@
+classical/hdbscan/taxi/rows=full
+classical/kmeans/taxi/rows=full
+classical/ols/taxi/rows=full
+classical/svc/taxi/rows=full
+classical2/knn-clf/taxi/rows=full
+classical2/linearsvc/taxi/rows=full
+classical2/svr/taxi/rows=full
+neural/gemm-int8/gaussian/shape=full
+neural/mamba1-forward/gaussian/shape=full
+neural/mlp-train-step/gaussian/shape=full
+neural/samba-forward/bytes/shape=full
+neural/transformer-decode/gaussian/shape=full
+trees/gbdt-lossguide/istella/rows=full
+trees/gbdt-rank-pairlogit/istella/rows=full
+trees/iforest/taxi/rows=full

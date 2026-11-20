@@ -17,7 +17,7 @@ GPU binding: those three lanes refuse on a CPU column with
 "rebuild bindings/build_byte_lm.sh", not with the cooperative driver's
 sentence, so they are owed a build as well as a box.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.host_parallel import host_parallelize
@@ -301,6 +301,10 @@ struct ByteParallelTrainer(Movable, Writable):
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
         var staged = _upload_from(self.contexts[0], prefix, n)
+        # pass 3 (N157): the binding hands the caller's buffer over unread;
+        # the finiteness refusal is this device scan of the uploaded copy,
+        # before the fold changes (it was a host scan of a host copy).
+        _require_device_finite(self.contexts[0], self.trainers[0].scan, staged, n, "fold prefix")
         _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
         self.contexts[0].synchronize()
         _ = staged^
@@ -326,6 +330,9 @@ struct ByteParallelTrainer(Movable, Writable):
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
         var staged = _upload_from(self.contexts[0], gradient, n)
+        # pass 3 (N157): device refusal of a non-finite host gradient, before
+        # it is folded (the binding no longer scans a host copy).
+        _require_device_finite(self.contexts[0], self.trainers[0].scan, staged, n, "fold gradient")
         if not self.fold_started:
             _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
             self.fold_started = True

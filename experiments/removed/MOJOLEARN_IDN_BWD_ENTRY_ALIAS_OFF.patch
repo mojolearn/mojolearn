@@ -1,0 +1,25 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 24bb8dc480..bc976496ca 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -247,17 +247,15 @@ def _fill_ones[wait: Bool = True](
+ 
+ #: The RMSNorm backward's `c` fold spelled product-then-add instead of one
+ #: `fma` per term. INERT at `d_model == 1` and on exactly-representable rows.
+-# TOMBSTONE: MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+-# lane/expdel2-24-neural; code recoverable at 3d189418c5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
+ comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ """lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
+ layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
+ identity) runs only on a traced or materialized call; the production path
+ hands `d_out` to the copy's readers instead (one `[M, d_model]` read and
+-write fewer per layer). Same bytes read: no bit moves on any column."""
++write fewer per layer). Same bytes read: no bit moves on any column.
++`-D MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF` restores the copy."""
+ 
+ 
+ comptime SAB_B01_DOT_UNFUSED = is_defined[

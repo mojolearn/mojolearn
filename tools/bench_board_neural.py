@@ -41,10 +41,14 @@ are never raced, so GPU decode work had no row before these):
                        state (load_state) per round.
   mamba1-decode        Mamba1Block(weights).decode_session(state).step(x_t).
   mamba2-decode / mamba3-decode
-                       Mamba{2,3}Block(weights).step(x_t, state) (their
-                       resident sessions are private, so the public
-                       per-call step), fresh allocate_state per round.
-  samba-decode         SambaStack(config, weights).step(ids_t, state).
+                       Mamba{2,3}Block(weights).decode_session(state).step(x_t)
+                       (public since 2026-11-08; until then the per-call
+                       step with a fresh allocate_state per round).
+  samba-decode         SambaStack(config, weights).decode_session(state).step(ids_t)
+                       (2026-11-08; until then SambaStack.step(ids_t, state)).
+                       A/B operation `decode_n` (decode plan D2) on every
+                       decode lane: the same session, one decode(x) call for
+                       all L tokens instead of one step per token.
                        Peers (2026-10-22): transformer-decode transformers'
                        DynamicCache loop; mamba1/2-decode mamba_ssm's own
                        Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
@@ -281,6 +285,7 @@ import statistics
 import subprocess
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -377,6 +382,24 @@ DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-
 #: step kernels instead (MAMBA_SSM_DECODE_LANES, 2026-10-22 lane measure-coverage).
 DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
+#: SMALL ROWS (Andrew, 2026-11-15): lanes whose scored call advances the trained state or consumes the next
+#: batch (a training step, a recorded Session step), so a second call in the same scored run is not the same
+#: operation on the same inputs; their scored run stays one call whatever the warmup took.
+SMALL_ROW_STATEFUL_LANES = TRAIN_LANES + OPS_LANES
+
+
+def attribution_train_calls(lane, small):
+    """ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh; a board never sets MOJOLEARN_BENCH_FORCE_CALLS): the
+    forced call count of a training lane's scored run, else None. A training step consumes the next batch, so the
+    forced calls are consecutive training steps, each on its own batch of the lane's schedule (the race stages
+    rounds + 1 + forced - 1 batches); every step is the same operation on the same shapes, which is what the
+    attribution profile attributes. fb3-attr-tool (2026-11-17, L40S): samba-train-step was held to one call, so its
+    min..max equalled the median and the nsys capture range (opened only around calls 2..n) never opened: "no nsys
+    report" on both wheels. OPS_LANES (a recorded Session step on one fixed batch) keep one call."""
+    if lane not in TRAIN_LANES:
+        return None
+    n = small.forced_calls(True, "fit")
+    return n if n is not None and n > 1 else None
 #: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
 #: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
 #: digest of an identical arm repeats (digest_stable is meaningful).
@@ -971,15 +994,16 @@ LANE_TEXT = {
                       "mamba-ssm-*: mamba_ssm Block(Mamba, layer_idx 0) over InferenceParams, one token "
                       "per call (Mamba.step: causal_conv1d_update + selective_state_update), states "
                       "zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L",
+    "mamba2-decode": ("mojolearn.Mamba2Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)",
                       "mamba-ssm-*: mamba_ssm Block(Mamba2, layer_idx 0) over InferenceParams, one "
                       "token per call (Mamba2.step: causal_conv1d_update + selective_state_update, "
                       "gated RMSNorm), states zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba3-decode": ("mojolearn.Mamba3Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
-    "samba-decode": ("mojolearn.SambaStack(config, weights): state = allocate_state(B, L); "
-                     "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
+    "mamba3-decode": ("mojolearn.Mamba3Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
+    "samba-decode": ("mojolearn.SambaStack(config, weights).decode_session(allocate_state(B, L)): "
+                     "load_state(); step(ids[:, t]) for t < L -> logits (B, L, vocab) (resident GPU decode)",
+                     "none (ours alone)"),
     "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
                     "F.linear, ReLU, F.linear on the GPU; .cpu()"),
     # 2026-10-19 (lane ag-bench): whole fits through the tape
@@ -1128,6 +1152,8 @@ def lane_settings(lane):
             ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
         if lane in FORWARD_REFERENCE_LANES:
             s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
+            # A wheel whose mode policy mask relaxes a row gets that row's bound on top (tools/mode_policy_bounds.py,
+            # forward_host_quality); mask 0 is exactly the bound named here.
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS + (GRAPH_SETTINGS if lane in GRAPH_LANES else ())]}
     if lane in GRAPH_LANES:
@@ -1186,6 +1212,16 @@ def _load(name, alias=None):
             sys.modules[alias] = previous
         raise
     return mod
+
+
+_SMALL_ROWS = []
+
+
+def _small_rows_suffix(rec):
+    """tools/bench_board_small_rows.py line_suffix, the module loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load("bench_board_small_rows"))
+    return _SMALL_ROWS[0].line_suffix(rec)
 
 
 def _load_mamba_corpus():
@@ -1292,10 +1328,53 @@ def samba_init(rng, name, shape):
     return np.ones(shape, dtype=np.float32)
 
 
+#: the pure shape/range definitions of mamba/corpus/gen_corpus.py that mamba_weight_spec reads
+_MAMBA_METADATA_FUNCTIONS = ("fan_in_scale", "default_ranges", "shapes_for", "m2_default_ranges", "m2_shapes_for",
+                             "m3_dims", "m3_default_ranges", "m3_shapes_for")
+_MAMBA_METADATA_CONSTANTS = ("M2_D_STATE", "M2_D_CONV", "M2_EXPAND", "M2_HEADDIM", "M2_NGROUPS",
+                             "M3_D_STATE", "M3_EXPAND", "M3_HEADDIM", "M3_NGROUPS", "M3_ROPE")
+_MAMBA_METADATA = []
+
+
+def mamba_corpus_metadata():
+    """mamba/corpus/gen_corpus.py's shape and range functions, without importing the module (it imports torch at
+    module top). Their exact source bodies and the literal constants they read are executed with `math` only, so
+    there is no second shape table to keep in step.
+
+    0.8.66 AMD measurement smoke (neural/mamba1/2/3-forward and -decode, shape=small: "preflight FAILED: no
+    parameter records; missing parameter/version probe: ours"): the measured venv has no torch (the smoke races
+    ours alone), so the conductor's input step died on `import torch` before any arm was constructed. The same
+    reason tools/identical_wave_prepare_neural.py reads Mamba3's metadata this way."""
+    if _MAMBA_METADATA:
+        return _MAMBA_METADATA[0]
+    import ast
+    import math
+    path = os.path.join(REPO, "mamba", "corpus", "gen_corpus.py")
+    with open(path) as fh:
+        tree = ast.parse(fh.read(), path)
+    wanted, found, body = set(_MAMBA_METADATA_FUNCTIONS) | set(_MAMBA_METADATA_CONSTANTS), set(), []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in _MAMBA_METADATA_FUNCTIONS:
+            body.append(node)
+            found.add(node.name)
+        elif (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+              and node.targets[0].id in _MAMBA_METADATA_CONSTANTS):
+            ast.literal_eval(node.value)       # a constant must stay a literal
+            body.append(node)
+            found.add(node.targets[0].id)
+    if found != wanted:
+        raise RuntimeError("mamba/corpus/gen_corpus.py metadata definitions changed: missing %s"
+                           % sorted(wanted - found))
+    namespace = {"math": math}
+    exec(compile(ast.Module(body=body, type_ignores=[]), path, "exec"), namespace)
+    _MAMBA_METADATA.append(types.SimpleNamespace(**{k: namespace[k] for k in wanted}))
+    return _MAMBA_METADATA[0]
+
+
 def mamba_weight_spec(model, d):
     """[(name, shape, (lo, hi))] from mamba/corpus/gen_corpus.py's shape and
     range functions, plus x's."""
-    corpus = _load_mamba_corpus()
+    corpus = mamba_corpus_metadata()
     dm, B, L = d["d_model"], d["batch"], d["length"]
     if model == "mamba1":
         di, r = 2 * dm, -(-dm // 16)
@@ -1507,7 +1586,17 @@ def _weights(data):
 
 
 def higgs_path():
-    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists); in the release
+    measurement smoke's synthetic mode, a synthetic file in HIGGS's schema generated on the box (tools/smoke_inputs.py
+    synthetic_path: SMOKE_TRAIN_ROWS head rows hold the `small` shape's train and held-out rows)."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "synthetic":
+        return _higgs_path()
+    got = os.environ.get(HIGGS_ENV, "").strip()
+    return _load("smoke_inputs").synthetic_path(os.path.expanduser(got) if got else
+                                                os.path.join("higgs", "higgs_speed.npz"))
+
+
+def _higgs_path():
     got = os.environ.get(HIGGS_ENV, "").strip()
     if got:
         return os.path.expanduser(got)
@@ -2122,6 +2211,61 @@ def _neural_ab_receipt(runner, config, executed=False):
     return receipt
 
 
+#: lane flag-native-dispatch-gate (2026-11-15): the fields a neural model or
+#: block holds that name the route its scored call took. Native descriptor
+#: dispatch is a build constant (providers/python/neural_descriptor_pyapi_door.mojo
+#: NEURAL_NATIVE_DISPATCH; B arm -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF): a
+#: connected provider field proves the native arm, None proves the by-name arm.
+_NEURAL_ROUTE_FIELDS = ("_samba_forward_route", "_samba_resident_uploads")
+_NEURAL_ROUTE_PRESENT = ("_native_primitives", "_resident_handle", "_native_block_provider_cache",
+                         "_native_mamba_block_provider_cache", "_native_mamba_state", "_native_session",
+                         "_prefill_session")
+
+
+def _route_suffix(route):
+    """` route=<word>` for the NEURAL-ROUND line: the Samba forward route, else
+    native/by-name dispatch from the connected provider fields, else empty."""
+    if not isinstance(route, dict):
+        return ""
+    if "error" in route:
+        return " route=unread"
+    if route.get("samba_forward_route"):
+        return " route=" + str(route["samba_forward_route"])
+    connected = [v for k, v in route.items() if k.endswith("_connected") and "provider" in k or k == "native_primitives_connected"]
+    if connected:
+        return " route=" + ("native" if any(connected) else "by-name")
+    return ""
+
+
+def neural_route(runner):
+    """The route each neural row's scored call took, read from the model's own
+    fields AFTER the round's clock (never inside it). None for a runner with no
+    neural model. A read failure is recorded by name and never breaks a timing."""
+    model = getattr(runner, "block", None)
+    if model is None:
+        model = getattr(runner, "model", None)
+    if model is None:
+        return None
+    try:
+        fields = vars(model)
+    except TypeError:
+        return {"error": "no field dictionary on %s" % type(model).__name__}
+    route = {"class": type(model).__name__}
+    for name in _NEURAL_ROUTE_FIELDS:
+        if name in fields:
+            value = fields[name]
+            route[name.lstrip("_")] = value if isinstance(value, (int, str, float, bool)) or value is None else repr(value)
+    for name in _NEURAL_ROUTE_PRESENT:
+        if name in fields:
+            route[name.lstrip("_") + "_connected"] = fields[name] is not None
+    blocks = fields.get("_blocks")
+    if blocks:
+        route["layers"] = [neural_route(type("_Layer", (), {"block": block})()) for block in blocks]
+    if getattr(runner, "decode_session", None) is not None:
+        route["decode_session"] = type(runner.decode_session).__name__
+    return route
+
+
 class Ours:
     """Common shape of an `ours` runner: call / sync / outputs / digest."""
     out = None
@@ -2207,6 +2351,12 @@ class OursLM(Ours):
             bits = self.model.train_step(np.ascontiguousarray(self.batches[self.k]))
             self.losses.append(float(np.array([int(bits)], dtype=np.uint32).view(np.float32)[0]))
             self.k += 1
+        # Holding the previous call's logits in self.out while the next call runs is deliberate (lane
+        # fx-harness-honest, 2026-11-18, on fx-transformer-forward's finding): it is what a user's loop
+        # `y = model.logits(ids)` does (the old y is released only when the new one is assigned), and each call
+        # returns a fresh array the caller owns, whose first touch is the product's cost. Releasing it first
+        # would not remove that cost either: a 64 MiB block is above the allocator's mmap threshold, so its pages
+        # are fresh on every call whether or not the previous block was freed before.
         elif self.lane == "lm-infer":
             self.out = self.model.logits(self.ids)
         else:
@@ -2335,9 +2485,15 @@ class OursBlock(Ours):
             # Before the clock: the per-token host inputs (the caller's decode
             # loop feeds one (B, 1, d_model) token per call).
             self.decode_tokens = [np.ascontiguousarray(self.x[:, t:t + 1, :]) for t in range(length)]
-            if model == "transformer":
+            # A prior wheel without a public decode_session allocates nothing here: its per-call step path
+            # allocates a fresh state per round (the setup state used to be allocated and then discarded).
+            has_session = hasattr(self.block, "decode_session")
+            if model == "transformer" and has_session:
                 self.decode_state = self.block.allocate_state(batch, length)
-            elif model == "mamba1":
+            elif model in ("mamba1", "mamba2", "mamba3") and has_session:
+                # lane fix-d1-decode-sessions (2026-11-08): Mamba-2/3 open the
+                # public resident session too (0.8.66 mamba3-decode 2.17x on the
+                # per-call step); the same bytes as the per-call step.
                 self.decode_state = self.block.allocate_state(batch)
             if self.decode_state is not None:
                 # The public resident session: weights uploaded once, here,
@@ -2345,15 +2501,20 @@ class OursBlock(Ours):
                 # buffers stay zero (never synced), so load_state() is the
                 # per-round zero reset.
                 self.decode_session = self.block.decode_session(self.decode_state)
+            elif model in ("transformer", "mamba1", "mamba2", "mamba3"):
+                # A PRIOR WHEEL (the pre-0.8.67 measurement's 0.8.66 arm, lane candidate-build): Mamba-2/3 have
+                # no public decode_session there, so the arm runs that version's public per-call step (call(),
+                # fresh allocate_state per round), as its own board measured it.
+                self.decode_state = None
+                self.info["call"] = "%s.step(x[:, t:t+1], state) for t < L (no public decode_session)" % cls.__name__
+                if self.operation == "decode_n":
+                    raise RuntimeError("REFUSED: decode_n needs the public decode_session (not in this wheel)")
             self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
                                             "one public step call per token")
-        if self.operation == "transformer_forward_vjp_tape":
-            if lane != "transformer-forward":
-                raise RuntimeError("REFUSED: transformer tape operation requires transformer-forward")
-            self.info["call"] = "TransformerBlock.forward_with_tape(x); backward_from_tape(tape, x)"
-            self.info["operation_scope"] = "full declared block forward plus VJP; no loss or optimizer"
-            self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
-        elif self.operation == "transformer_windowed_forward":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        # (the `transformer_forward_vjp_tape` board operation over forward_with_tape.)
+        if self.operation == "transformer_windowed_forward":
             if lane != "transformer-forward" or window <= 0:
                 raise RuntimeError("REFUSED: windowed operation needs transformer-forward and transformer_window > 0")
             self.window_state = self.block.allocate_state(int(self.x.shape[0]), int(self.x.shape[1]))
@@ -2375,22 +2536,9 @@ class OursBlock(Ours):
                 installed_generation=generation, installation_boundary="preparation_in_cold_total")
 
     def call(self):
-        if self.operation == "transformer_forward_vjp_tape":
-            self.out, tape = self.block.forward_with_tape(self.x,
-                activation_budget_bytes=int(self.runtime.get("activation_budget_bytes", 536870912)),
-                minimum_replay_ops_per_byte=int(self.runtime.get("minimum_replay_ops_per_byte", 0)))
-            self.neural_ab_runtime.update(retained=bool(tape.retained),
-                stage_bytes=int(tape.stage_bytes), profile=str(tape.profile))
-            expected = self.runtime.get("expect_retained")
-            if expected is not None and bool(tape.retained) != bool(expected):
-                tape.close()
-                raise RuntimeError("REFUSED: tape retained/replay selection did not reach the declared A/B arm")
-            try:
-                self.gradients = self.block.backward_from_tape(tape, self.x)
-            finally:
-                tape.close()
-            self.neural_ab_runtime["vjp_completed"] = True
-        elif self.operation == "mamba_forward_vjp":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        if self.operation == "mamba_forward_vjp":
             self.out = self.block.forward(self.x)
             self.gradients = self.block.backward(self.x, self.x)
             self.neural_ab_runtime["vjp_completed"] = True
@@ -2404,8 +2552,12 @@ class OursBlock(Ours):
             if hasattr(self.decode_state, "cached_tokens"):
                 self.decode_state.cached_tokens = 0      # position is API metadata
             self.decode_session.load_state()
-            step = self.decode_session.step
-            self.out = [step(xt) for xt in self.decode_tokens]
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, D) out.
+                self.out = self.decode_session.decode(self.x)
+            else:
+                step = self.decode_session.step
+                self.out = [step(xt) for xt in self.decode_tokens]
         elif self.decode_tokens is not None:
             state = self.block.allocate_state(int(self.x.shape[0]))
             step = self.block.step
@@ -2416,6 +2568,8 @@ class OursBlock(Ours):
 
     def _y(self):
         np = self.np
+        if self.decode_tokens is not None and self.operation == "decode_n":
+            return np.asarray(self.out)        # already (B, L, D)
         if self.decode_tokens is not None:     # after the clock: (B, 1, D) per token -> (B, L, D)
             return np.concatenate([np.asarray(y).reshape(self.x.shape[0], 1, -1) for y in self.out],
                                   axis=1)
@@ -2451,6 +2605,7 @@ class OursSamba(Ours):
         w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
         self.lane = lane
         runtime = ab_runtime or {}
+        self.operation = runtime.get("operation", "model_default")
         max_norm = runtime.get("samba_max_norm")
         accumulation_steps = int(runtime.get("samba_accumulation_steps", 1))
         if (max_norm is not None or accumulation_steps != 1) and lane != "samba-train-step":
@@ -2479,28 +2634,57 @@ class OursSamba(Ours):
                                accumulation_steps=accumulation_steps)
         self.batches = data["batches"]
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
+        if lane == "samba-train-step":
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): each step's input and target slices (b[:, :-1],
+            # b[:, 1:]: strided views) were made contiguous INSIDE our clock, a harness copy per step. They are made
+            # once here, before any clock, from the same batches; the step takes them as a user's loader hands them.
+            self.pairs = [(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:])) for b in self.batches]
+            self.info["harness_clock"] = "2026-11-18 harness input copies made before the clock (our arm)"
         self.k = 0
         self.losses = []
         # samba-decode: the per-token ids, made before the clock
         self.decode_ids = ([np.ascontiguousarray(self.ids[:, t]) for t in range(self.ids.shape[1])]
                            if lane == "samba-decode" else None)
+        # lane fix-d1-decode-sessions (2026-11-08): the public resident
+        # session, opened before the clock as transformer/mamba decode do
+        # (parameters uploaded once). The state's host arrays stay zero
+        # (never synced), so load_state() is the per-round zero reset.
+        self.decode_session = None
+        if self.decode_ids is not None and hasattr(self.model, "decode_session"):
+            self.decode_session = self.model.decode_session(
+                self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1])))
+        elif self.decode_ids is not None:
+            # A PRIOR WHEEL (0.8.66, lane candidate-build): SambaStack has no decode_session there; the arm runs
+            # that version's public per-call step(ids_t, state), as its own board measured it.
+            self.info["call"] = "SambaStack.step(ids[:, t], allocate_state(B, L)) for t < L (no decode_session)"
+            if self.operation == "decode_n":
+                raise RuntimeError("REFUSED: decode_n needs the public decode_session (not in this wheel)")
 
     def call(self):
         np = self.np
         if self.lane == "samba-train-step":
-            b = self.batches[self.k]
-            res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))
+            res = self.model.train_step(*self.pairs[self.k])
             self.losses.append(float(res["loss"]))
             self.k += 1
-        elif self.decode_ids is not None:
+        elif self.decode_ids is not None and self.decode_session is None:
             state = self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1]))
             step = self.model.step
             self.out = [step(t, state) for t in self.decode_ids]
+        elif self.decode_ids is not None:
+            self.decode_session.load_state()
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, vocab) out.
+                self.out = self.decode_session.decode(self.ids)
+            else:
+                step = self.decode_session.step
+                self.out = [step(t) for t in self.decode_ids]
         else:
             self.out = self.model.forward(self.ids)
         self.neural_ab_runtime["public_calls_completed"] += 1
 
     def _y(self):
+        if self.decode_ids is not None and self.operation == "decode_n":
+            return self.np.asarray(self.out)   # already (B, L, V)
         if self.decode_ids is not None:        # after the clock: (B, V) per token -> (B, L, V)
             return self.np.stack([self.np.asarray(y) for y in self.out], axis=1)
         return self.np.asarray(self.out)
@@ -3315,6 +3499,15 @@ def _torch_device():
                        "(never a CPU fallback)")
 
 
+def _reference_on_cpu():
+    """True only in the untimed quality-reference worker (QUALITY_REFERENCE_ENV) whose torch sees no GPU."""
+    if os.environ.get(QUALITY_REFERENCE_ENV) != "1":
+        return False
+    import torch
+    mps = getattr(torch.backends, "mps", None)
+    return not (torch.cuda.is_available() or (mps is not None and mps.is_available()))
+
+
 def _cpu_name():
     try:
         if sys.platform == "darwin":
@@ -3351,8 +3544,14 @@ class TorchArm:
         twin = _load("torch_lm_step_opponent")
         self.twin = twin
         col = INT8_COLUMNS.get(setting.replace("-", "_")) or twin.COLUMNS[setting.replace("-", "_")]
-        if where == "cpu":
+        if where == "cpu" or _reference_on_cpu():
+            # QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the untimed eager FP32 quality
+            # reference (torch_reference_outputs, QUALITY_REFERENCE_ENV) runs in the board's CPU-torch
+            # reference venv (bench_board --fixtures-venv) when the ours-only measurement venv has no torch;
+            # there it runs on the CPU. It is never timed and never an arm or an opponent; a timed GPU arm
+            # still refuses a box without a GPU (_torch_device).
             import torch
+            where = "cpu"
             dev, kind, name, sync = torch.device("cpu"), "cpu", _cpu_name(), (lambda: None)
         else:
             torch, dev, kind, name, sync = _torch_device()
@@ -5183,9 +5382,9 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     if "optimize" in (ab_config or {}).get("runtime", {}) and operation != "program_optimize":
         raise ValueError("REFUSED: runtime.optimize requires program_optimize")
-    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
+    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "mamba3_owned_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
-                 "program_eager", "program_optimize")
+                 "program_eager", "program_optimize", "decode_n")
     if operation not in supported:
         raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
@@ -5230,12 +5429,14 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             raise RuntimeError("REFUSED: lm_chunked_head_v2 requires lm-train-step and its config flag")
         if operation == "transformer_windowed_forward" and (lane != "transformer-forward" or int(runtime.get("transformer_window", 0)) <= 0):
             raise RuntimeError("REFUSED: windowed operation requires transformer-forward and a positive configured window")
-        if operation == "transformer_forward_vjp_tape" and model != "transformer":
-            raise RuntimeError("REFUSED: tape operation requires a transformer block")
         if operation == "mamba3_owned_forward" and model != "mamba3":
             raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
         if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
             raise RuntimeError("REFUSED: Mamba VJP operation requires a Mamba block")
+        if operation == "decode_n" and lane not in DECODE_LANES:
+            # Decode plan D2: the whole decode as one session.decode call (N
+            # tokens per native call), the A/B arm against one step per token.
+            raise RuntimeError("REFUSED: decode_n requires a decode lane")
         if model == "lm":
             return OursLM(lane, shape, data, ab_runtime=runtime)
         if model == "samba":
@@ -5356,6 +5557,15 @@ def worker(args):
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED call's time decides how
+    # many consecutive calls the one scored run makes (20 under 10 ms, else 1). The warmup does not decide: it
+    # carries CUDA start-up and kernel compilation (mamba3-forward: warmup 1051 ms, steady 5.7 ms). A lane
+    # whose call advances its state or consumes the next input (SMALL_ROW_STATEFUL_LANES) always makes one
+    # call: a repeat would not be the same operation on the same inputs.
+    small = _load("bench_board_small_rows")
+    numa = _load("numa_place")
+    small_ok = (runner.info or {}).get("library") == "mojolearn" and (
+        args.lane not in SMALL_ROW_STATEFUL_LANES or attribution_train_calls(args.lane, small) is not None)
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -5370,21 +5580,52 @@ def worker(args):
                 # identical round-0 step and a compile in a scored step is recorded and flagged.
                 guard = _load("bench_board_compile_guard")
                 c0 = guard.read()
+                # HOST USAGE (lane fx-board-1p2, 2026-11-20): getrusage just outside each scored call's clock, as
+                # tools/bench_board_algos.py records it (system time, user time, minor and major faults). The
+                # neural cells carried none, so a call that spends its wall first-touching a fresh output store
+                # (gemm-int8: 64 MB back per call) could only read REGRESSION, never HOST-STALL
+                # (tools/numa_place.py summarize; tools/paper_compare.py).
+                u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                host_use = [numa.delta(u0, numa.usage(), ms)]
                 compiles_now = guard.compiles(c0, guard.read())
                 outputs = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - t0) * 1000.0
-                m = mem.stop()
-                digest = runner.digest()
                 # 2026-10-19 (lane ag-inference-board): an inference runner's own sub-clocks (prefill, generate)
                 # and its UNTIMED memory pass, both read after the round's clock
                 extra = runner.round_extra() if hasattr(runner, "round_extra") else None
                 if extra and extra.get("clock_ms") is not None:
                     ms = float(extra["clock_ms"])     # the lane's clock: generate(prompt, N) alone
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken (the
+                # hash, the saved outputs' bits and the receipt are the first call's; `extra` is the first call's
+                # sub-clocks). One call: nothing below runs and the order is as before.
+                n_calls = 1
+                if r > 0 and small_ok:
+                    n_calls = small.calls_for(ms, True, "fit")
+                digest = runner.digest() if n_calls > 1 else None
+                calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
+                for _ in range(1, n_calls):
+                    u1 = numa.usage()
+                    t1 = time.perf_counter()
+                    runner.call()
+                    runner.sync()
+                    call_ms = (time.perf_counter() - t1) * 1000.0
+                    host_use.append(numa.delta(u1, numa.usage(), call_ms))
+                    if extra and extra.get("clock_ms") is not None:
+                        call_ms = float((runner.round_extra() or {}).get("clock_ms", call_ms))
+                    calls.append(call_ms)
+                small.range_close()
+                calls_rec = small.spread(calls) if r > 0 else None
+                if calls_rec is not None:
+                    ms = calls_rec["ms"]
+                m = mem.stop()
+                if digest is None:
+                    digest = runner.digest()
                 device_memory = None
                 if hasattr(runner, "memory_pass"):
                     try:
@@ -5393,8 +5634,30 @@ def worker(args):
                         device_memory = {"error": "memory pass failed: %r" % (exc,)}
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(outputs, runner) if r > 0 else None
+                # lane fix-mamba-forward-doors (2026-11-14): the Mamba-3 prefill
+                # session's counters after the round, read OUTSIDE the clock
+                # (weight_uploads, weight_recopies, weight_reuses, ...,
+                # stages_held): settles whether the session, its weights and
+                # its stages are held across forwards (one upload, then reuses).
+                session_counters = None
+                if args.lane == "mamba3-forward" and args.arm == "ours" and hasattr(runner, "block"):
+                    try:
+                        session_counters = runner.block.session_info()
+                    except Exception as exc:  # noqa: BLE001  (a counter read never breaks a timing; recorded)
+                        session_counters = {"error": "session_info failed: %r" % (exc,)}
+                # lane flag-native-dispatch-gate: the route the scored call took,
+                # read outside the clock, beside the time.
+                route = None
+                if args.arm.startswith("ours"):
+                    try:
+                        route = neural_route(runner)
+                    except Exception as exc:  # noqa: BLE001  (a route read never breaks a timing; recorded)
+                        route = {"error": "neural_route failed: %r" % (exc,)}
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
+                    "scored_calls": calls_rec, "neural_route": route,
+                    "host_usage": {"fit": host_use, "infer": None},
                     "extra": extra, "device_memory": device_memory,
+                    "mamba3_session_info": session_counters,
                     "state_receipt": state_receipt, "compiles": compiles_now,
                     "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
                     "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
@@ -5472,12 +5735,25 @@ def _forward_reference(lane, shape, data):
     return cls, np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
 
 
+def _policy_bounds():
+    """tools/mode_policy_bounds.py, importable also when this file was loaded by path from another directory."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import mode_policy_bounds
+    return mode_policy_bounds
+
+
 def forward_host_quality(lane, shape, data, outs):
     import numpy as np
     own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
     if not own:
         return {}
     cls, ref = _forward_reference(lane, shape, data)
+    # The bound follows the mode policy mask the wheel reports (tools/mode_policy_bounds.py): mask 0, or a wheel
+    # with no mask entry, is the FP32 bound below unchanged; the matrix-units bit adds that row's derived bound.
+    policy = _policy_bounds()
+    mask = policy.wheel_policy_mask(_ours_module())
     result = {}
     for arm, out in own.items():
         got = np.asarray(out["y"], dtype=np.float64)
@@ -5490,11 +5766,16 @@ def forward_host_quality(lane, shape, data, outs):
             q["shape_mismatch_vs_host"] = "%s vs %s" % (list(got.shape), list(ref.shape))
         elif finite and ref.size:
             error = np.abs(got - ref)
-            bound = FORWARD_REFERENCE_ATOL + FORWARD_REFERENCE_RTOL * np.abs(ref)
+            bound = policy.forward_reference_bound(np, ref, mask, FORWARD_REFERENCE_ATOL, FORWARD_REFERENCE_RTOL)
+            rms_passed, rms_ratio = policy.forward_reference_rms_passed(np, error, ref, mask)
             q.update(max_abs_diff_vs_host=float(error.max()),
                      max_rel_diff_vs_host=float(error.max()) / (float(np.abs(ref).max()) or 1.0),
                      host_reference_tolerance_ratio=float((error / bound).max()),
-                     host_reference_passed=bool(np.all(error <= bound)))
+                     host_reference_passed=bool(np.all(error <= bound)) and rms_passed)
+            if mask:
+                q.update(mode_policy_mask=mask, mode_policy_rows=policy.relaxed_rows(mask))
+            if rms_ratio is not None:
+                q.update(host_reference_rms_ratio=rms_ratio, host_reference_rms_bound=policy.MATRIX_UNITS_RMS_REL)
         result[arm] = q
     return result
 
@@ -5549,8 +5830,12 @@ def torch_reference_outputs(args, lane, shape, data_path, tag):
     w = None
     try:
         ctd = _load("classical_two_datasets")
-        cmd = shlex.split(args.theirs_python) + [os.path.abspath(__file__), "worker", "--arm", arm,
-                                                 "--lane", lane, "--shape", shape, "--data", data_path]
+        # QUALITY-MISSING FIX (2026-11-13): the reference's own interpreter (--reference-python: the board's
+        # CPU-torch reference venv), else the opponents' one; an ours-only venv has no torch
+        python = getattr(args, "reference_python", None) or args.theirs_python
+        receipt["python"] = python
+        cmd = shlex.split(python) + [os.path.abspath(__file__), "worker", "--arm", arm,
+                                     "--lane", lane, "--shape", shape, "--data", data_path]
         env = _worker_env(arm)
         env[QUALITY_REFERENCE_ENV] = "1"
         w = ctd.start_worker(arm, cmd, env,
@@ -5580,6 +5865,25 @@ def torch_reference_outputs(args, lane, shape, data_path, tag):
                 w.close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+def mark_reference_unavailable(result, outs):
+    """QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): when the untimed torch reference did not run
+    (no torch in the reference interpreter, a refused twin), every arm it should have scored says so in its own
+    quality cell (`quality_unavailable`), never a silent absence of rel_fro_vs_torch_eager_fp32. The other
+    metrics (the own-host reference) stay as scored; this is shown, never a gate or an arm failure."""
+    receipt = result.get("torch_quality_reference") or {}
+    if receipt.get("status") == "ok" or not receipt:
+        return result
+    why = "torch eager fp32 reference (rel_fro_vs_torch_eager_fp32) did not run: %s" % (
+        receipt.get("error") or receipt.get("status") or "unknown")
+    q = result.setdefault("quality", {})
+    for arm in outs:
+        if arm in OUR_ARMS:
+            cell = q.setdefault(arm, {})
+            if isinstance(cell, dict):
+                cell["quality_unavailable"] = why[:600]
+    return result
 
 
 SCORER_REFUSED = "quality scorer unavailable: "
@@ -5768,6 +6072,12 @@ def program_quality(data, outs):
     z = np.maximum(x @ w1 + b1, 0.0) @ w2 + b2
     z = np.exp(z - z.max(axis=1, keepdims=True))
     ref64 = z / z.sum(axis=1, keepdims=True)
+    # SCORER GAP (lane fix-executor-session-rows, 2026-11-13): this lane recorded only max_abs_err_vs_fp64,
+    # which the quality policy (tools/board_quality.py) does not declare, so tools/paper_compare.py kept no
+    # metric for the program-run cell (new_quality={}) and judged it INSUFFICIENT. Each arm now also records
+    # max_rel_err_vs_fp64 (max |y - y64| / max |y64|), the declared reference bound the gemm and mlp-predict
+    # lanes already score, from the same untimed float64 forward. Quality is read, never a gate.
+    ref_scale = float(np.abs(ref64).max()) or 1.0
     q = {}
     for arm, o in outs.items():
         y = np.asarray(o["y"], dtype=np.float64)
@@ -5775,6 +6085,7 @@ def program_quality(data, outs):
                "finite": bool(np.isfinite(y).all())}
         if y.shape == ref64.shape:
             row["max_abs_err_vs_fp64"] = float(np.abs(y - ref64).max())
+            row["max_rel_err_vs_fp64"] = row["max_abs_err_vs_fp64"] / ref_scale
         else:
             row["shape_mismatch_vs_fp64"] = "%s vs %s" % (list(y.shape), list(ref64.shape))
         q[arm] = row
@@ -5870,6 +6181,18 @@ def quality(lane, data, outs, *, shape="full"):
         scale = float(np.abs(c64).max()) or 1.0
         for arm, o in outs.items():
             q[arm]["max_rel_err_vs_fp64"] = float(np.abs(o["y"].astype(np.float64) - c64).max()) / scale
+    if MODEL_OF[lane] == "mlp" and lane != "mlp-train-step":
+        # SCORER GAP (lane release-measurement-smoke, 2026-11-06): mlp-predict's only metric was each arm's distance
+        # to ours, so ours raced alone (the board's default) had none. The untimed float64 evaluation of the same
+        # network on the same weights and rows (Linear(8, 16) -> ReLU -> Linear(16, 3); weights (out, in), as ours
+        # and the torch twin take them), scored like the gemm lanes: max |y - y64| / max |y64|.
+        x64 = np.asarray(data["X"][0], dtype=np.float64)
+        w1, b1, w2, b2 = (data["w:" + n].astype(np.float64) for n in MLP_NAMES)
+        y64 = np.maximum(x64 @ w1.T + b1, 0.0) @ w2.T + b2
+        scale = float(np.abs(y64).max()) or 1.0
+        for arm, o in outs.items():
+            if "y" in o and np.asarray(o["y"]).shape == y64.shape:
+                q[arm]["max_rel_err_vs_fp64"] = float(np.abs(np.asarray(o["y"], dtype=np.float64) - y64).max()) / scale
     if lane in TORCH_REFERENCE_LANES and TORCH_REFERENCE_ARM in outs:
         for arm, extra in torch_reference_quality(outs, outs[TORCH_REFERENCE_ARM]).items():
             if arm != TORCH_REFERENCE_ARM:        # its own distance is 0 by definition
@@ -6064,7 +6387,9 @@ def race(args):
         os.environ[HIGGS_ENV] = os.path.abspath(os.path.expanduser(args.higgs))   # fit_arrays reads it
     if getattr(args, "lm_checkpoints", None):
         os.environ[LM_CKPT_ENV] = os.path.abspath(os.path.expanduser(args.lm_checkpoints))   # lm_checkpoint reads it
-    inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
+    # the attribution job's forced training steps each take the next batch (attribution_train_calls)
+    forced_train = attribution_train_calls(lane, _load("bench_board_small_rows")) or 1
+    inputs = make_inputs(lane, shape, args.rounds + forced_train, data_path)
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
               "inputs": inputs, "arms": {}, "rounds_requested": args.rounds, "started": now_utc(),
@@ -6209,6 +6534,12 @@ def race(args):
                     result["arms"][arm]["warmup_deadline_s"] = warmup_deadline(arm, args)
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
+                # HOST USAGE: the scored calls' getrusage deltas, read by tools/bench_board.py host_fields
+                if msg.get("host_usage") is not None:
+                    result["arms"][arm].setdefault("host_usage", []).append(dict(msg["host_usage"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored rounds, summed
                 rounds_c = result["arms"][arm].setdefault("compile_rounds", [])
                 rounds_c.append(msg.get("compiles"))
@@ -6226,8 +6557,18 @@ def race(args):
             if msg.get("device_memory") is not None:
                 result["arms"][arm].setdefault("device_memory", []).append(dict(msg["device_memory"], round=r,
                                                                                warmup=r == 0))
-            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
+            if isinstance(msg.get("mamba3_session_info"), dict):
+                # lane fix-mamba-forward-doors: the session counters after each round
+                result["arms"][arm].setdefault("mamba3_session_info", []).append(
+                    dict(msg["mamba3_session_info"], round=r, warmup=r == 0))
+            route = msg.get("neural_route")
+            if isinstance(route, dict):
+                # lane flag-native-dispatch-gate: the route beside the time, every round
+                result["arms"][arm].setdefault("neural_route", []).append(dict(route, round=r, warmup=r == 0))
+            print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
+                  % (lane, arm, r, msg["ms"], msg["digest"],
+                     _small_rows_suffix(msg.get("scored_calls")),
+                     _route_suffix(route)), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]
@@ -6283,7 +6624,8 @@ def race(args):
             result["quality"] = quality(lane, data, scored, shape=args.shape)
             if scored is not outs:
                 result["quality"].pop(TORCH_REFERENCE_ARM, None)    # the reference is not a raced arm
-        if operation in ("transformer_forward_vjp_tape", "mamba_forward_vjp"):
+            mark_reference_unavailable(result, outs)
+        if operation == "mamba_forward_vjp":
             result["experimental_quality"] = {
                 "forward": "ordinary host forward comparator only",
                 "vjp": "not_qualified_by_forward_quality",
@@ -6373,6 +6715,9 @@ def build_parser():
     r.add_argument("--work", required=True)
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
+    r.add_argument("--reference-python", default=None,
+                   help="the interpreter of the untimed torch quality reference (TORCH_REFERENCE_LANES); "
+                        "default --theirs-python. It may be a CPU-torch venv: the reference then runs on the CPU")
     r.add_argument("--ready-seconds", type=int, default=1800)
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "

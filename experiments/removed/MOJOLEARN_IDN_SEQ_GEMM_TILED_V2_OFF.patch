@@ -1,0 +1,67 @@
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+index c7aa612cfa..cdc120f142 100644
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -97,7 +97,7 @@ every thread then folds ITS cell's chain over the slab:
+ which is `gemm_dot`'s chain term for term (same flushed operands, same fused
+ step, same order), so the stored word is the one-thread op's word on every
+ column and on the host. Only the loads are shared; no fold order changes.
+-The page is GT_PAGE_BYTES (16.6 KB), under every
++The page is GT_PAGE_BYTES (16.6 KB with GT_V2, 4 KB without), under every
+ column's threadgroup limit (the fits gate is the comptime assert below).
+ 
+ GT_V2 (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea 6):
+@@ -117,6 +117,7 @@ consecutive pieces; padding terms k >= K are never folded, i < cnt). The
+ load mapping and the padding only decide which thread fetches a word and
+ where it sits in threadgroup memory, never the word (each is ld(), flushed,
+ as gemm_dot reads it) or the position it is folded at.
++-D MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF restores GT_K = 32 and the old mapping.
+ 
+ The epilogue kernel can also fold the column sums of B (lane ag-pass3-impl,
+ PASS3_IDEAS idea 2): `colsum != 0` makes the first tile row's 16 threads add
+@@ -141,16 +142,15 @@ from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L
+ from sequence.mlp import ACT_LOGISTIC, ACT_TANH
+ from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial, gemm_split_shape
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 27a4108c9f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++comptime GT_V2 = not (
++    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime GT_M = 16
+ comptime GT_N = 16
+-comptime GT_K = 128
+-#: slab row strides in threadgroup memory (one padding word a row, GT_V2)
+-comptime GT_AS = GT_K + 1
+-comptime GT_BS = GT_N + 1
++comptime GT_K = 128 if GT_V2 else 32
++#: slab row strides in threadgroup memory (one padding word a row under GT_V2)
++comptime GT_AS = (GT_K + 1) if GT_V2 else GT_K
++comptime GT_BS = (GT_N + 1) if GT_V2 else GT_N
+ comptime GT_TPB = GT_M * GT_N
+ #: threadgroup bytes of the two slabs (the smallest column limit is 32 KB)
+ comptime GT_PAGE_BYTES = (GT_M * GT_AS + GT_K * GT_BS) * 4
+@@ -194,8 +194,8 @@ def seq_gemm_tiled_kernel(
+     var SBK = Int(sbk)
+     var SBN = Int(sbn)
+     # GT_V2: load each slab along its operand's unit stride (same words)
+-    var a_rows_fast = SAM == 1 and SAK != 1
+-    var b_terms_fast = SBK == 1 and SBN != 1
++    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
++    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+     var ntn = (N + GT_N - 1) // GT_N
+     var b = Int(block_idx.x)
+     var tm = b // ntn
+@@ -281,8 +281,8 @@ def seq_gemm_epi_tiled_kernel(
+     var SAK = Int(sak)
+     var SBK = Int(sbk)
+     var SBN = Int(sbn)
+-    var a_rows_fast = SAM == 1 and SAK != 1
+-    var b_terms_fast = SBK == 1 and SBN != 1
++    var a_rows_fast = GT_V2 and SAM == 1 and SAK != 1
++    var b_terms_fast = GT_V2 and SBK == 1 and SBN != 1
+     var ntn = (N + GT_N - 1) // GT_N
+     var b = Int(block_idx.x)
+     var tm = b // ntn

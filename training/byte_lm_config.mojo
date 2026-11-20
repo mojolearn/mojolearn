@@ -1,10 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+# TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (default-construct the chunked head, opt-in arm superseded; owner
+# elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at 3fba220d74.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-31-neural.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (the trainer's captured program on every column, lane x7's B arm;
+# opt-in, its NV + AMD A/B owed and never run) deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at
+# f0bffede56. The hand step (GPU columns) and the composed host step (CPU column) are the only training steps.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, lane x7's program step on every column; L40S ba08dac006 lm-train-step bytes 35.71 -> 48.52 ms, B 1.36x slower; training/byte_lm_program.mojo and training/byte_lm_host_program.mojo deleted with it) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
@@ -52,7 +61,7 @@ struct ByteConfig(Copyable, Movable):
                  d_model: Int = 32, n_heads: Int = 4, n_kv: Int = 2,
                  head_dim: Int = 8, intermediate: Int = 64,
                  n_layers: Int = 2, vocab_size: Int = 256,
-                 chunked_lm_head_v2: Bool = IDN_CHUNKED_LM_HEAD_V2):
+                 chunked_lm_head_v2: Bool = False):
         self.batch = batch
         self.length = length
         self.d_model = d_model

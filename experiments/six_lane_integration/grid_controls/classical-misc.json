@@ -23,381 +23,23 @@
       "status": "kept",
       "note": "256-lane fixed halving tree, two streams per barrier; StandardScaler mean pass only (finite input)."
     },
-    "c02_linear_pair": {
-      "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "glm/impl/center_device.mojo:302"
-      ],
-      "binding": "_mojolearn_estimators,_mojolearn_x_decomp",
-      "bits_change": true,
-      "status": "kept",
-      "note": "row-block x column exact integer accumulation + incumbent cs_fold_kernel; bits_change assumed until the ID check."
-    },
-    "c05_phase_scratch": {
-      "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_metrics/plan.mojo:359",
-        "x_metrics/plan.mojo:570"
-      ],
-      "binding": "_mojolearn_x_metrics",
-      "bits_change": false,
-      "status": "kept",
-      "note": "host arena offset planning only. Board @report workloads currently raise in the adapter (metric_workloads.py:58, report settings pending) before any report: NOT MEASURABLE until that is fixed."
-    },
-    "c05_ols_phase": {
-      "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C05_OLS_PHASE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "glm/estimator.mojo:119",
-        "glm/estimator.mojo:208",
-        "glm/estimator.mojo:340"
-      ],
-      "binding": "_mojolearn_estimators",
-      "bits_change": false,
-      "status": "kept",
-      "grid": "exclude",
-      "note": "UNREACHED: classical:ols takes the TSQR route (x_decomp/api.mojo:585 IDN_OLS_ONE_ENTRY) and never calls ols_fit; :208 is FAST-Apple only, :340 weighted only."
-    },
-    "c14_group_rhs": {
-      "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C14_GROUP_RHS"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_decomp/device.mojo:2143",
-        "x_linear/ridge.mojo:294",
-        "x_linear/ridge.mojo:195",
-        "x_decomp/cells.mojo:1534"
-      ],
-      "binding": "_mojolearn_x_decomp,_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "Reach fixed (catalog narrowed): grouping only acts on lu-solve (64 RHS; trs_group_kernel, 16 active threads replacing cell-parallel trs_diag_kernel: expected loser). ridge-clf (binary, T=1) and the ridge-cv REFIT reach t_ridge_solve_best with count=1 (no grouping). The RidgeCV fold solve kf_solve_kernel (x_linear/device.mojo:3444) has one RHS per (fold, alpha) factor, so RHS grouping cannot apply there; the ridge-cv speedup is C13 (review section 3). ridge.mojo:195 and cells.mojo:1534 are host-only. | lane classical-fixes 2026-10-07: the expanded:ridge-clf and expanded:ridge-cv algorithm entries were removed from this file (they measured a no-op: T=1 / count=1, no grouping); lu-solve is the only declared algorithm."
-    },
-    "c15_factor_solve": {
-      "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_linear/bayes.mojo:902",
-        "x_linear/bayes.mojo:922"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "ARD only; lead thread does a fixed-order dk triangular solve."
-    },
-    "c16_glm_fused": {
-      "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_linear/device.mojo:2946",
-        "x_linear/device.mojo:3292"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": true,
-      "status": "kept",
-      "note": "removes one launch per GLM iteration; one thread per row."
-    },
-    "c17_ls_trials": {
-      "define": "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C17_LS_TRIALS"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "glm/impl/qn/qn_linesearch.mojo:171",
-        "glm/impl/qn/qn_linesearch.mojo:236",
-        "glm/impl/qn/glm_base.mojo:2134"
-      ],
-      "binding": "_mojolearn_estimators",
-      "bits_change": false,
-      "status": "kept",
-      "note": "switches qn line search to 2 speculative trials accepted in original order; logreg-cv NOT reached (own L-BFGS). | COST NOTE (lane classical-fixes 2026-10-07): glm/impl/qn/qn_linesearch.mojo:241-251 allocates two n-float device buffers (trial_x, trial_g) per speculative trial plus a results device buffer and a host buffer per line search, and synchronizes twice per search (:260, :306); the on arm pays this per line search; off is the sequential search (no trial buffers). Preallocating once per fit is not done here (not self-contained: the buffers live across min_lbfgs state). | FIX (lane grid-fixups-1 2026-10-08): every c17_ls_trials cell of grid ge123e6f9 (logreg/linearsvc/linearsvr, NVIDIA and AMD, single and all_on) raised \"qn: deferred exact evaluation requires IDENTICAL trial experiment\" at round 0: the exact-trials search calls evaluate_pen(drain=False), whose gate admitted only MOJOLEARN_IDN_QN_EXACT_TRIALS (the I12 4-trial loser). The gate now admits either define (same predicate as qn_linesearch.mojo:171), so the switch is self-sufficient; C17_LS_TRIALS together with IDN_QN_EXACT_TRIALS is refused in core/six_lane_experiment_guards.mojo (one trial count). The failed cells are a code bug, not a measurement: re-race them."
-    },
-    "c17_ovr": {
-      "define": "MOJOLEARN_CLASSICAL_C17_OVR",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C17_OVR"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "x_linear/device.mojo:1395"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": false,
-      "status": "kept",
-      "grid": "exclude",
-      "note": "UNREACHED on the board: SGD minibatch one-vs-rest with >1 problem only; board sgd-clf is binary."
-    },
-    "c19_sgd_chunk": {
-      "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
-      "kind": "int_sweep",
-      "arms": {
-        "2048": [],
-        "128": [
-          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128"
-        ],
-        "32": [
-          "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32"
-        ]
-      },
-      "default": "2048",
-      "source": [
-        "experiments/classical_identical_ideas/linear_controls.mojo:43",
-        "x_linear/device.mojo:1934"
-      ],
-      "binding": "_mojolearn_x_linear",
-      "bits_change": false,
-      "status": "split_from:C19_ORDERED_128+C19_ORDERED_32",
-      "grid": "exclude",
-      "note": "UNREACHED on the board: every SGD-family estimator defaults to the minibatch route (_sgd_mb_grid): SGDClassifier/Regressor batch 4096, Perceptron/PA 256, SGDOneClassSVM 4096 in IDENTICAL. SGD_PS_CHUNK only affects batch_size=0 fits. Compiled (rc=0) at 79aa4a19c for sm_89 OFF and =32 before the no-compile rule."
-    },
-    "c20_pair_load": {
-      "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/kernelcache.mojo:347",
-        "svm/impl/kernelcache.mojo:410"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": false,
-      "status": "kept",
-      "note": "fused row+norm gather, parallel over n_ws*n_cols, no reduction. 2026-10-07: C20_ROW_CACHE deleted; its early return hid the square-tile site (kernelcache.mojo get_square_tile_without_caching), now reachable again on every SVC/SVR fit. The square-tile half was never measured: OWES its own A/B (off vs on) before any keep."
-    },
-    "c21_extrema": {
-      "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C21_EXTREMA"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/smoblocksolve.mojo:201"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": false,
-      "status": "kept",
-      "note": "4-way shared-memory extrema tree under a total (value,key) order (in-block TPB=256 and cross-block). Skips the SAB_FMAX_HWMAX sabotage arms."
-    },
-    "c22_triangle": {
-      "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_CLASSICAL_C22_TRIANGLE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "svm/impl/distance/kernel_matrices.mojo:534"
-      ],
-      "binding": "_mojolearn_svm",
-      "bits_change": true,
-      "status": "kept",
-      "note": "fires only for the SMO square tile (m==n, same pointer); n*n grid with half idle, classical_dot fixed leaf tree. Not reached by kernel-ridge, kernel-pca, ocsvm (catalog claims removed). 2026-10-07: C20_ROW_CACHE deleted; it returned before kernel_op, so C22 is reachable again through the incumbent square tile. Never measured on its own: OWES its own A/B (off vs on), bits change."
-    },
-    "c52_pair_rows": {
-      "define": "MOJOLEARN_C52_PAIR_ROWS",
-      "kind": "arms",
-      "arms": {
-        "off": [],
-        "128": [
-          "MOJOLEARN_C52_PAIR_ROWS=128"
-        ],
-        "512": [
-          "MOJOLEARN_C52_PAIR_ROWS=512"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "experiments/classical_identical_ideas/stats_controls.mojo:16",
-        "kde/impl/neighbors/kernel_density.mojo:3548",
-        "kde/impl/neighbors/kernel_density.mojo:3699",
-        "kde/impl/neighbors/kernel_density.mojo:3792",
-        "kde/host/kde_oracle.mojo:295"
-      ],
-      "binding": "_mojolearn_estimators (+ _mojolearn_estimators_host: build the host column with the same define)",
-      "bits_change": true,
-      "status": "split_from:C52_PAIR_128+C52_PAIR_512",
-      "note": "leaf 256 -> 128|512 and pair_parts combine tree; host oracle follows the same define."
-    },
-    "c58_series4": {
-      "define": "MOJOLEARN_C58_SERIES4",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C58_SERIES4"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "holtwinters/impl/internal/hw_estimate.mojo:703",
-        "holtwinters/impl/internal/hw_estimate_launch.mojo:126"
-      ],
-      "binding": "_mojolearn_tsa",
-      "bits_change": false,
-      "status": "kept",
-      "grid": "exclude",
-      "note": "UNREACHED on the board: serial estimate arm only (frequency + 5 > HW_EST_BLOCK=64); board ets uses seasonal_periods=24."
-    },
-    "c58_team_mib": {
-      "define": "MOJOLEARN_C58_TEAM_MIB",
-      "kind": "int_sweep",
-      "arms": {
-        "256": [],
-        "64": [
-          "MOJOLEARN_C58_TEAM_MIB=64"
-        ]
-      },
-      "default": "256",
-      "source": [
-        "experiments/classical_identical_ideas/stats_controls.mojo:34",
-        "sequence/fit_team_py.mojo:54"
-      ],
-      "binding": "_mojolearn_x_sequence",
-      "bits_change": false,
-      "status": "split_from:C58_TEAM64",
-      "grid": "exclude",
-      "note": "memory budget; at board size (64 series, prophet ~13.6 MB, garch ~6.8 MB) G=64 either way: no-op."
-    },
-    "c59_trial_state": {
-      "define": "MOJOLEARN_C59_TRIAL_STATE",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C59_TRIAL_STATE"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "arima/impl/batched_kalman.mojo:673",
-        "arima/impl/fast_eval_ws.mojo:343"
-      ],
-      "binding": "_mojolearn_arima",
-      "bits_change": false,
-      "status": "kept",
-      "note": "one observation copy instead of N+1; indexing only."
-    },
-    "c60_lag4": {
-      "define": "MOJOLEARN_C60_LAG4",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C60_LAG4"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "tsa/impl/timeSeries/stationarity.mojo:233",
-        "tsa/impl/select_d_fast.mojo:202"
-      ],
-      "binding": "_mojolearn_tsa",
-      "bits_change": false,
-      "status": "kept",
-      "note": "4 adjacent cells per thread, ascending per-cell sums; autoarima d=0 round only (max_d=1)."
-    },
-    "c61_same_component_skip": {
-      "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
-      "kind": "switch",
-      "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_C62_SAME_COMPONENT_SKIP"
-        ]
-      },
-      "default": "off",
-      "source": [
-        "experiments/classical_identical_ideas/graph_controls.mojo:43",
-        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:290",
-        "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:325"
-      ],
-      "binding": "_mojolearn_hdbscan",
-      "bits_change": false,
-      "status": "new",
-      "note": "NEW (this lane, NOT COMPILED): in sparse_mr_search_tiled_kernel (NV/AMD default arm) skip a j tile when every listed point of the block and every j of the tile share one component; those cells are already excluded by the epilogue (cj != ci), so outputs are identical. Block-uniform flag via two barriers; per-block uniform-component scan is one thread over the fixed SMR_TI (not a runtime size). Gain depends on later Boruvka rounds; unmeasured."
-    },
     "arima_search_reuse": {
-      "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE",
+      "define": "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF",
       "kind": "switch",
       "arms": {
-        "off": [],
-        "on": [
-          "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"
+        "on": [],
+        "off": [
+          "MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"
         ]
       },
-      "default": "off",
+      "default": "on",
       "source": [
-        "arima/impl/fast_order_search.mojo:125",
-        "python/mojolearn/_x_sequence_autoarima.py"
+        "arima/impl/fast_order_search.mojo"
       ],
       "binding": "_mojolearn_arima",
-      "bits_change": false,
-      "status": "kept",
-      "note": "EXISTING define (name says FAST but it is gated only on ARIMA_ORDER_BATCH, which is on under IDENTICAL on every vendor). AutoARIMA adopts the order search fit instead of refitting; aic/bic come from the device ic kernel (lane arima-ics). Apple FAST: taxi-hourly 16386 -> 9872 ms. Must confirm IDENTICAL outputs equal the refit (ID check) before keeping."
+      "bits_change": true,
+      "status": "promoted",
+      "note": "EXISTING define (name says FAST but it is gated only on ARIMA_ORDER_BATCH, which is on under IDENTICAL on every vendor). AutoARIMA adopts the order search fit instead of refitting; aic/bic come from the device ic kernel (lane arima-ics). Apple FAST: taxi-hourly 16386 -> 9872 ms. Must confirm IDENTICAL outputs equal the refit (ID check) before keeping. PROMOTED 2026-11-15 (lane/expdel2-47-promote): default on FAST + Apple only (M3 rab16-arimareuse synthetic 18229.7 -> 13688.1 ms, taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical); IDENTICAL and NVIDIA/AMD/host unchanged (the switch is now gated on NUMERIC_FAST and TARGET_HAS_APPLE_GPU); rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF; the old positive define is refused."
     }
   },
   "algorithms": {
@@ -409,240 +51,15 @@
       ],
       "interaction_groups": []
     },
-    "classical:ols": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "fit: LinearRegression.fit (linear_model.py:694) -> _ols_tsqr_centered -> x_decomp_ols_tsqr_r -> ols_tsqr_factor (x_decomp/device.mojo:4133: X and y up once, col_sums_pair_buf, col_means_buf, ts_pack_center_device, ts_factor_device) -> _tsqr_lstsq_core(Ra=...) small-R SVD",
-      "controls": [
-        "c02_linear_pair"
-      ],
-      "interaction_groups": []
-    },
-    "more:ridge": {
-      "binding": "_mojolearn_estimators",
-      "route": "fit: Ridge.fit -> _classical_xy_means -> lm_col_sums_pair -> col_sums_pair_device",
-      "controls": [
-        "c02_linear_pair"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:lu-solve": {
-      "binding": "_mojolearn_x_decomp",
-      "route": "solve -> x_decomp_lu_gesv -> launch_lu_solve -> launch_trisolve -> launch_trs_tri (x_decomp/device.mojo:2143)",
-      "controls": [
-        "c14_group_rhs"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:ard": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: ARDRegression -> ard_fit_grid -> _ard_sc_body -> _t_ard_coef (x_linear/bayes.mojo:902)",
-      "controls": [
-        "c15_factor_solve"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:poisson": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:gamma": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:tweedie": {
-      "binding": "_mojolearn_x_linear",
-      "route": "fit: _GLMBase -> _glm_fit_grid -> glm_obj_map_kernel (x_linear/device.mojo:2946)",
-      "controls": [
-        "c16_glm_fused"
-      ],
-      "interaction_groups": []
-    },
-    "more:logreg": {
-      "binding": "_mojolearn_estimators",
-      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
-      "controls": [
-        "c17_ls_trials"
-      ],
-      "interaction_groups": []
-    },
-    "more:linearsvc": {
-      "binding": "_mojolearn_estimators",
-      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
-      "controls": [
-        "c17_ls_trials"
-      ],
-      "interaction_groups": []
-    },
-    "more:linearsvr": {
-      "binding": "_mojolearn_estimators",
-      "route": "fit: qn_fit/qn_fit_ovr -> qn_minimize -> min_lbfgs -> ls_backtrack (glm/impl/qn/qn_linesearch.mojo:171)",
-      "controls": [
-        "c17_ls_trials"
-      ],
-      "interaction_groups": []
-    },
-    "classical:svc": {
-      "binding": "_mojolearn_svm",
-      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
-      "controls": [
-        "c20_pair_load",
-        "c21_extrema",
-        "c22_triangle"
-      ],
-      "interaction_groups": [
-        [
-          "c20_pair_load",
-          "c21_extrema",
-          "c22_triangle"
-        ]
-      ],
-      "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
-    },
-    "more:svr": {
-      "binding": "_mojolearn_svm",
-      "route": "fit: svc/svr_fit_binding -> svm/estimator.mojo -> SmoSolver.solve (svm/impl/smosolver.mojo:749): KernelCache (C20) -> get_square_tile_without_caching (C20_PAIR_LOAD, C22) -> launch_block_solve/smo_grid_solve_kernel (C21) -> init_full_tile_batching (C20_PAIR_LOAD :410)",
-      "controls": [
-        "c20_pair_load",
-        "c21_extrema",
-        "c22_triangle"
-      ],
-      "interaction_groups": [
-        [
-          "c20_pair_load",
-          "c21_extrema",
-          "c22_triangle"
-        ]
-      ],
-      "note": "C20_ROW_CACHE deleted 2026-10-07 (serial shape); C22 and the square-tile C20_PAIR_LOAD site are reachable again. Grid: pair_load x extrema x triangle = 8 arms."
-    },
-    "classical:knn": {
-      "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
-      "controls": [],
-      "interaction_groups": [],
-      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
-    },
-    "more:knn-clf": {
-      "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
-      "controls": [],
-      "interaction_groups": [],
-      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
-    },
-    "more:knn-reg": {
-      "binding": "_mojolearn",
-      "route": "search: neighbors.py -> _mojolearn knn binding -> neighbors/estimator.mojo _knn_search_on_device_index -> brute_force_knn_impl -> tiled_brute_force_knn (C29 gate deleted 2026-10-07)",
-      "controls": [],
-      "interaction_groups": [],
-      "note": "C29_STREAM_TOPK and C29_TILE deleted 2026-10-07 (serial shape). No classical-misc control left on this route; KNN_DIRECT_DISTANCE (lane L1 knn split) now changes only the distance spelling."
-    },
-    "classical:kde": {
-      "binding": "_mojolearn_estimators",
-      "route": "score_samples: kde_score_samples_binding -> kernel_density.mojo:4029 chunk-LSE pass -> kde_chunk_rows_for (:3548) -> reduce kernels (:3699, :3792)",
-      "controls": [
-        "c52_pair_rows"
-      ],
-      "interaction_groups": []
-    },
-    "more:ets": {
-      "binding": "_mojolearn_tsa",
-      "route": "fit: ExponentialSmoothing -> holtwinters_fit -> runner.mojo:354 -> hw_estimate_launch.mojo:58 (parallel arm, d=29<=64)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:theta": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:optimized-theta": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:dynamic-theta": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:dynamic-optimized-theta": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:auto-theta": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:damped-ets": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: _x_sequence_theta/ETS -> theta_py/ets_py -> seq_kernel (sequence/exec_device.mojo:236, OP_THETA/OP_ETS)",
-      "controls": [],
-      "interaction_groups": []
-    },
-    "expanded:garch": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
-      "controls": [
-        "c58_team_mib"
-      ],
-      "interaction_groups": []
-    },
-    "expanded:prophet": {
-      "binding": "_mojolearn_x_sequence",
-      "route": "fit: garch_binding/prophet -> fit_team_py _group -> launch_team -> team_kernel",
-      "controls": [
-        "c58_team_mib"
-      ],
-      "interaction_groups": []
-    },
-    "more:arima": {
-      "binding": "_mojolearn_arima",
-      "route": "fit: ARIMA.fit -> arima/estimator.mojo:511 batched_fit_x -> batched_fit.mojo:498 -> FastEvalWS loop kernel (batched_kalman.mojo:673)",
-      "controls": [
-        "c59_trial_state"
-      ],
-      "interaction_groups": []
-    },
     "expanded:autoarima": {
       "binding": "_mojolearn_tsa (select_d) + _mojolearn_arima (fits)",
       "route": "select_d -> select_d_host -> auto_arima.mojo:74 -> select_d_fast (C60_LAG4, stationarity.mojo:233); order search -> fast_order_search (search reuse) ; per-order ARIMA.fit (C59)",
       "controls": [
-        "c60_lag4",
-        "c59_trial_state",
         "arima_search_reuse"
       ],
       "interaction_groups": [
         [
-          "c59_trial_state",
           "arima_search_reuse"
-        ]
-      ]
-    },
-    "classical:hdbscan": {
-      "binding": "_mojolearn_hdbscan",
-      "route": "fit: hdbscan/impl/runner.mojo:316 -> single_linkage.mojo:201 -> sparse_mr_mst.mojo sparse_mr_search_tiled_kernel (SMR_TILED, NV/AMD default)",
-      "controls": [
-        "c61_same_component_skip"
-      ],
-      "interaction_groups": [
-        [
-          "c61_same_component_skip",
-          "C30_DIRECT_DISTANCE(lane L1, graph split)"
         ]
       ]
     }
@@ -701,22 +118,100 @@
       "define": "MOJOLEARN_C58_FORECAST4",
       "control": "c58_forecast4",
       "reason": "DELETED 2026-10-08 (lane grid-act-3): IDENTICAL grid ge123e6f9 loser. on/off ms ratio NV/AMD (synthetic, taxi-hourly): auto-theta 2.93/2.58, 2.81/2.13; damped-ets 2.59/2.39, 2.53/2.43; dynamic-optimized-theta 2.96/2.49, 2.66/1.81; dynamic-theta 3.15/3.00, 3.02/2.91; optimized-theta 2.72/2.60, 3.09/2.99; theta 2.93/2.86, 3.13/3.08 (2.72x combined SLOWER); quality SAME. Four series per thread cut the parallelism 4x. seq_kernel is one series per thread again (sequence/exec_device.mojo). Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
-    }
-  ],
-  "owed_removal_ab": [
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
+      "control": "c14_group_rhs",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9b13c93ee0; patch experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note called the lu-solve form an expected loser. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
+      "control": "c15_factor_solve",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 72270680f8; patch experiments/removed/MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+      "control": "c16_glm_fused",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 2a301a3aa3; patch experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
+      "control": "c17_ls_trials",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 10e3cad6a6; patch experiments/removed/MOJOLEARN_CLASSICAL_C17_LS_TRIALS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C17_OVR",
+      "control": "c17_ovr",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 8c1b568a83; patch experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK",
+      "control": "c19_sgd_chunk",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 6690c70fa8; patch experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); 2048 (the incumbent) is the only chunk now. Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
+      "control": "c20_pair_load",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 911bf993d5; patch experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note says the square-tile half owed its own A/B. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C21_EXTREMA",
+      "control": "c21_extrema",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 9aca9aa819; patch experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
+      "control": "c22_triangle",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-06-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 45379ff055; patch experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15); the grid note says it owed its own A/B and changes bits. Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C62_SAME_COMPONENT_SKIP",
+      "control": "c61_same_component_skip",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-05-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): unmeasured opt-in arm (V2 rule a). Code recoverable at 774f01dc6b."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
+      "control": "c05_phase_scratch",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 1ebc49831d; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_base.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+      "control": "c02_linear_pair",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at c95b22c391; patch experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
+      "control": "c05_ols_phase",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at eb67cbe21f; patch experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_linear.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C52_PAIR_ROWS",
+      "control": "c52_pair_rows",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at dd94b7ad88; patch experiments/removed/MOJOLEARN_C52_PAIR_ROWS.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_kernel.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C58_SERIES4",
+      "control": "c58_series4",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 236e97faa2; patch experiments/removed/MOJOLEARN_C58_SERIES4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C58_TEAM_MIB",
+      "control": "c58_team_mib",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at d6045cbd0a; patch experiments/removed/MOJOLEARN_C58_TEAM_MIB.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_neural.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C59_TRIAL_STATE",
+      "control": "c59_trial_state",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7935a1db35; patch experiments/removed/MOJOLEARN_C59_TRIAL_STATE.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_C60_LAG4",
+      "control": "c60_lag4",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-07-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ad78b8054f; patch experiments/removed/MOJOLEARN_C60_LAG4.patch): unmeasured opt-in arm. no record: no A/B was recorded for the opt-in arm (plan rule a; AGENTS.md \"An unmeasured arm is deleted\", Andrew 2026-11-15). Refused in core/experiment_guards_series.mojo; docs/TOMBSTONES.md."
+    },
     {
       "define": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD",
-      "source": "neighbors/impl/detail/knn_brute_force.mojo:198",
-      "A": "default build (size rule knn_large_request(n_index, n_queries): n_queries>=1024 and n_index*n_queries>=2^28)",
-      "B": [
-        "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"
-      ],
-      "effect": "gates only NVIDIA vector index loads (:1003) and Apple preflight metadata (:1014), both bit-neutral; no effect on AMD. classical:knn (k=64, sqrt metric) flips: A vector on, B off. knn-clf/reg (uniform weights, unrooted) unaffected.",
-      "vendors": [
-        "nvidia"
-      ],
-      "shapes": "neighbors of 400000x4000x32: n_index {300000, 400000, 500000}, n_queries {3000, 4000, 5000}, d {32, 64}, k {10, 15, 64}, metric euclidean (sqrt), plus one non-board dataset (e.g. a 1M x 16 random index)",
-      "status": "RUN OWED (not expressible as one lq RACE line: needs a committed neighbor-shape script); delete the define after it lands"
+      "reason": "DELETED 2026-11-15 (lane/expdel2-12-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): its owed removal A/B (owed_removal_ab) never ran; the size rule is the one rule; under \"An unmeasured arm is deleted\" the arm goes, the default stays (no bit change); code at 147979bdbf; patch experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch."
     }
   ],
   "ideas": [

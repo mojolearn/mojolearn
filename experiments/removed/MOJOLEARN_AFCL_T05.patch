@@ -1,0 +1,16 @@
+diff --git a/gbdt/apple_fast_classical.mojo b/gbdt/apple_fast_classical.mojo
+index a13dbccc22..55680ad1a7 100644
+--- a/gbdt/apple_fast_classical.mojo
++++ b/gbdt/apple_fast_classical.mojo
+@@ -42,9 +42,8 @@ comptime AFCL_T04 = False
+ # AFCL-T05: four adjacent score records per lane before advancing a
+ # cooperative block; comparator and final reduction order stay unchanged.
+ # Both arms require MOJOLEARN_SYM_RESOLVE_BLOCK and the fused search path.
+-# TOMBSTONE: MOJOLEARN_AFCL_T05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c8fa4d47fc.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T05.patch; record in docs/TOMBSTONES.md.
+-comptime AFCL_T05 = False
++# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
++comptime AFCL_T05 = AFCL_APPLE_FAST and is_defined["MOJOLEARN_AFCL_T05"]()
+ comptime AFCL_RESOLVE_RECORDS = 1
+ 
+ # AFCL-T06: halve hardware-derived leaf-statistic partial counts to reduce

@@ -118,7 +118,7 @@ The full list is contract section 16. The five that bear on THIS file.
    inside the clip forces a mid-step wait, so one does not exist yet.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.memory import bitcast
 from std.os import getenv
@@ -904,9 +904,9 @@ def adam_update_oop_status_kernel(
     v_out.unsafe_store(i,updated[2])
     comptime for field in range(3):
         if (bitcast[DType.uint32](updated[field]) & UInt32(0x7f800000))==UInt32(0x7f800000):
-            _ = Atomic[DType.int32].min(status+field,Int32(i))
+            _ = Atomic[Int32].min(status+field,Int32(i))
     if updated[2]<Float32(0):
-        _ = Atomic[DType.int32].min(status+3,Int32(i))
+        _ = Atomic[Int32].min(status+3,Int32(i))
 
 def sgd_update_kernel(
     param: MutPointer[Float32, MutAnyOrigin],
@@ -1696,14 +1696,14 @@ def opt_refuse_device_inputs(
     four D2H copies and four List copies DEVIATION 1496 paid (4n floats,
     2.59 GB and 3,122 ms per step at the LM target shape, measured
     2026-09-10) are gone; the scans read 4n floats of HBM, about 1 ms there.
-    `-D MOJOLEARN_OPT_TRUST_INPUTS=1` still means "no refusal": it is a
-    DELIBERATE downgrade of the profile, named so it appears in the banner,
-    and its behavior is unchanged by the move.
+    The scans always run (the `-D MOJOLEARN_OPT_TRUST_INPUTS` downgrade was
+    deleted 2026-11-15).
 
     **INPUTS, NOT INTERMEDIATES**, the stated gap every lane here carries.
     """
-    comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
-        return
+    # TOMBSTONE: MOJOLEARN_OPT_TRUST_INPUTS (opt-in "no refusal" downgrade, no A/B recorded) deleted 2026-11-15 by
+    # lane/expdel2-31-neural; code recoverable at 943c1ff5fe.
+    # Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch
     var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
     if n <= 0:
         return
@@ -1723,10 +1723,8 @@ def opt_refuse_device_inputs(
 
 def opt_refuse_scan_bytes(offsets: List[Int], cfg: OptimizerConfig) -> Int:
     """The bytes `opt_refuse_device_inputs` READS ON THE DEVICE per step
-    (four scans of n floats under AdamW, three under SGD; 0 when the build
-    trusts its inputs), for the `step.opt_refuse_scan_bytes` timing line."""
-    comptime if is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]():
-        return 0
+    (four scans of n floats under AdamW, three under SGD), for the
+    `step.opt_refuse_scan_bytes` timing line."""
     var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
     if n <= 0:
         return 0

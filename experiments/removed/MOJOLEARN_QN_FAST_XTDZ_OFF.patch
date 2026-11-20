@@ -1,0 +1,17 @@
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 20ec415d2d..cd4078aa46 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -102,11 +102,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from std.sys.compile import is_defined
+ 
+-# TOMBSTONE: MOJOLEARN_QN_FAST_XTDZ_OFF (old path; EXP:1930 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 83e86f6d61.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime QN_FAST_XTDZ = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"]()
+ )
+ """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
+ across blocks, X read once) instead of one block per output cell walking

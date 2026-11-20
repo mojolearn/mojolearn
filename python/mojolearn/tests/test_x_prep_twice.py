@@ -64,7 +64,7 @@ _CHILD = textwrap.dedent('''
 def _run(env_extra):
     env = dict(os.environ)
     env.update(env_extra)
-    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as here  # the runtime this process imported
     env["PYTHONPATH"] = here + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run([sys.executable, "-c", _CHILD], env=env, capture_output=True, text=True, timeout=900)
 

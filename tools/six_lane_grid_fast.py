@@ -482,12 +482,21 @@ def load_all(controls_dir=CONTROLS_DIR):
     aft, aft_groups, f1 = load_aft()
     afcl, afcl_groups, f2 = load_afcl()
     untried, untried_groups, untried_excluded, f3, owed = load_untried(controls_dir)
+    # A control whose define or any arm define a guard module refuses outright was deleted (docs/TOMBSTONES.md):
+    # the idea records keep its card as history; the grid plans nothing for it.
+    import experiment_guards
+    gone = experiment_guards.removed_defines(ROOT)
     controls = {}
     for part in (aft, afcl, untried):
         for k, c in part.items():
             if k in controls:
                 raise ValueError('Duplicate FAST control ' + k)
+            names = {c['define']} | {G.norm_define(d).split('=')[0] for d in c['arms']['on'] + c['both_defines']}
+            if names & gone:
+                continue
             controls[k] = c
+    untried_excluded = [e for e in untried_excluded if not set(re.findall(r'MOJOLEARN_\w+', str(e.get('define', '')))) & gone]
+    owed = [o for o in owed if not set(re.findall(r'MOJOLEARN_\w+', o['line'])) & gone]
     files = dict(f1, **f2, **f3)
     files['board'] = dict(path=_rel(BOARD_MD), sha256=G.file_sha(BOARD_MD))
     return controls, aft_groups + afcl_groups, untried_groups, untried_excluded, files, owed
@@ -655,7 +664,7 @@ VERDICT_RULE = dict(
     timing='per workload on the M3: FASTER / SLOWER only when |log(B/A)| of the scored clock (AFC-DEF-SUMMARY / AFT-MEDIAN median_ms) '
            'exceeds the M3 A/A floor for the same workload (its grid A/A line: both arms the FAST main build); otherwise NO_VERDICT. '
            'One box votes (apple); there is no second vendor',
-    identity='NOT_REQUIRED: FAST needs no identical anything (CLAUDE.md): no same bits across vendors, none vs arm A, none run to run',
+    identity='NOT_REQUIRED: FAST needs no identical anything (AGENTS.md): no same bits across vendors, none vs arm A, none run to run',
     quality='the board quality metric of B must not drop vs arm A (FAST main) on any workload: tools/af_quality.py, rel 1e-3 / abs 1e-6, '
             'the gate tools/af_board_apply.py enforces (which also refuses a row worse than the best opponent); a noise-level change, '
             'a different fold order or different bits never hold a candidate',
@@ -798,7 +807,7 @@ def render_md_fast(plan):
          '- **Arms**: ' + plan['arm_convention'] + '.',
          '- **Promoted `_OFF` arms are not gridded**: ' + plan['promoted_off_arms'].split(': ', 1)[1] + '.',
          '- **Builds**: FAST builds only (MOJOLEARN_NUMERIC_MODE=fast through the scripts); no `MOJOLEARN_NUMERIC_IDENTICAL` define anywhere.',
-         '- **Identity**: none. FAST needs no identical anything (CLAUDE.md); there is no identity column.', '',
+         '- **Identity**: none. FAST needs no identical anything (AGENTS.md); there is no identity column.', '',
          '## Totals', '', '| item | count |', '|---|---|',
          '| controls (48 AFT + 54 AFCL + %d authored: untried rows, their group partners, lane R8) | %d |' % (s['controls'] - 102, s['controls']),
          '| excluded controls | %d |' % s['excluded_controls'],

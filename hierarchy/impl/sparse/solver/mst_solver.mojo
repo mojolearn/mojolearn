@@ -28,7 +28,7 @@ HOST READBACKS MATCH THE REFERENCE. `mst_edge_count.value(stream)` (`:142`, `:14
 reads in the reference loop; here they are the same reads in the same places.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hierarchy.checks.edge_order import (
@@ -37,6 +37,7 @@ from hierarchy.checks.edge_order import (
     VERTEX_SENTINEL,
     WEIGHT_KEY_SENTINEL,
 )
+from core.device_zero import enqueue_fill_n
 from hierarchy.impl.sparse.solver.detail.mst_kernels import (
     COMPACT_TPB,
     IDN_MST_LABEL_JUMP,
@@ -58,8 +59,6 @@ from hierarchy.impl.sparse.solver.detail.mst_kernels import (
     add_reverse_edge,
     compact_new_edges_kernel,
     copy_i32_kernel,
-    fill_i32_kernel,
-    fill_u8_kernel,
     final_color_indices,
     kernel_count_new_mst_edges,
     kernel_min_edge_per_vertex,
@@ -246,13 +245,7 @@ struct MST_solver[DENSE: Bool = False](Movable):
         # `:93-95` mst_edge_count = 0, prev = 0, mst_edge memset 0
         ctx.enqueue_memset(self.mst_edge_count, Int32(0))
         var ne = 1 if Self.DENSE else e
-        ctx.enqueue_function[fill_u8_kernel](
-            self.mst_edge.unsafe_ptr(),
-            UInt8(0),
-            Int32(ne),
-            grid_dim=(_blocks(ne, MST_FILL_TPB), 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
+        enqueue_fill_n(ctx, self.mst_edge, ne, UInt8(0))
         # `:97-105` Initially, color holds the vertex id as color
         if initialize_colors:
             ctx.enqueue_function[sequence_i32_kernel](
@@ -500,35 +493,10 @@ struct MST_solver[DENSE: Bool = False](Movable):
 
     def min_edge_per_vertex(mut self, ctx: DeviceContext) raises:
         """`mst_solver_inl.cuh:277-304`, plus DEVIATION 620's two phases."""
-        var vblocks = _blocks(self.v, MST_FILL_TPB)
-        ctx.enqueue_function[fill_i32_kernel](
-            self.min_edge_color.unsafe_ptr(),
-            WEIGHT_KEY_SENTINEL,
-            Int32(self.v),
-            grid_dim=(vblocks, 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
-        ctx.enqueue_function[fill_i32_kernel](
-            self.min_edge_color_lo.unsafe_ptr(),
-            VERTEX_SENTINEL,
-            Int32(self.v),
-            grid_dim=(vblocks, 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
-        ctx.enqueue_function[fill_i32_kernel](
-            self.min_edge_color_hi.unsafe_ptr(),
-            VERTEX_SENTINEL,
-            Int32(self.v),
-            grid_dim=(vblocks, 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
-        ctx.enqueue_function[fill_i32_kernel](
-            self.new_mst_edge.unsafe_ptr(),
-            EDGE_SENTINEL,
-            Int32(self.v),
-            grid_dim=(vblocks, 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
+        enqueue_fill_n(ctx, self.min_edge_color, self.v, WEIGHT_KEY_SENTINEL)
+        enqueue_fill_n(ctx, self.min_edge_color_lo, self.v, VERTEX_SENTINEL)
+        enqueue_fill_n(ctx, self.min_edge_color_hi, self.v, VERTEX_SENTINEL)
+        enqueue_fill_n(ctx, self.new_mst_edge, self.v, EDGE_SENTINEL)
         # `:287`, `:295`: n_threads = 32, grid v -- one warp per row
         # fam2-cluster: IDN_MST_SCAN_LANES threads per row (their 32 unless a
         # candidate arm is compiled), gated on the device's finished flag.
@@ -585,13 +553,7 @@ struct MST_solver[DENSE: Bool = False](Movable):
     def min_edge_per_supervertex(mut self, ctx: DeviceContext) raises:
         """`mst_solver_inl.cuh:306-352`."""
         var blocks = _blocks(self.v, self.tpb)
-        ctx.enqueue_function[fill_i32_kernel](
-            self.temp_src.unsafe_ptr(),
-            VERTEX_SENTINEL,
-            Int32(2 * self.v),
-            grid_dim=(_blocks(2 * self.v, MST_FILL_TPB), 1, 1),
-            block_dim=(MST_FILL_TPB, 1, 1),
-        )
+        enqueue_fill_n(ctx, self.temp_src, 2 * self.v, VERTEX_SENTINEL)
         ctx.enqueue_function[min_edge_per_supervertex[Self.DENSE]](
             self.color.unsafe_ptr(),
             self.color_index.unsafe_ptr(),

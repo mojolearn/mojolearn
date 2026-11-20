@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared provider table for CPU training primitives. Existing public bindings
 # and this table call the same relocated host helpers, preserving arithmetic.
-from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr
@@ -12,14 +12,17 @@ from core.mojolearn_training_host_impl import (
     accumulate_host_into, neural_rng_host_into, ce_loss_host_into, optimizer_step_host_into,
     chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into,
 )
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+# TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (default-construct the chunked head, opt-in arm superseded; owner
+# elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural; code recoverable at 3fba220d74.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-31-neural.patch
+from core.shared_slot import SharedSlot
 
 
 def host_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if op == 24:
         return 0  # CPU has no resident GPU model owner.
     if op == 28:
-        return Int(IDN_CHUNKED_LM_HEAD_V2)
+        return 0  # the chunked head is never the default config
     if op == 25:
         return optimizer_step_host_into(f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]),
             i32_ptr(a[4]), i32_ptr(a[5]), f32_ptr(a[6]), p[0], p[1], p[2], p[3],
@@ -97,5 +100,4 @@ struct NativeHostTrainingPrimitiveAPI(Defaultable, Movable):
         self.entries.append(host_primitive_v1)
 
 
-comptime NATIVE_HOST_TRAINING_PRIMITIVE_API = _Global[StorageType=NativeHostTrainingPrimitiveAPI,
-    name="MojoHostTrainingPrimitiveAPIv1", init_fn=NativeHostTrainingPrimitiveAPI.__init__]
+comptime NATIVE_HOST_TRAINING_PRIMITIVE_API = SharedSlot[NativeHostTrainingPrimitiveAPI, ("MojolearnHostTrainingPrimitiveAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHostTrainingPrimitiveAPIFastV3")]

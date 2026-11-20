@@ -6,11 +6,10 @@ ExperimentalTwoLevelFeatureFreq, pointwise Bayesian eval and one-hot
 categorical models, loaded by `mojolearn.host_model` and predicted by the
 shipped forest host binding.
 
-What the source checks hold: HostGBDT reads the archives of the three
-classes that save `mojolearn-gbdt-1` and refuses any other name, a subclass
-archive whose loss that class cannot save, and every CTR or tensor CTR
-record by name; the forest family and the forest gate declare the four
-kinds; the gate's coded fixture transform is the rule it documents.
+What the boundary checks hold: HostGBDT refuses an archive saved by any
+other estimator name and a subclass archive whose loss that class cannot
+save, by name (a CTR or tensor CTR record whose tables are missing is the
+native check `gbdt_host_archive_text`); the forest gate's coded fixture transform is the rule it documents.
 
 The runtime check (skipped, and SAID to be skipped, unless the gbdt host
 binding and the forest host binary are both built and the package took the
@@ -23,29 +22,22 @@ file's.
     cd python && python3 -m mojolearn.tests.test_gbdt_host_modes
 """
 import os
-import re
 import struct
 import sys
 import tempfile
 from pathlib import Path
 
 import mojolearn
-from mojolearn import _backend, _serialize, host_surface
+from mojolearn import _backend, _serialize
 from mojolearn._array import Array
 from mojolearn._buffer import frombytes
-from mojolearn._cpu_reference import reference_training
-from mojolearn._gbdt_host import GBDT_ESTIMATORS, GBDT_FORMAT, HostGBDT, parse_model_text
+from mojolearn._gbdt_host import GBDT_FORMAT, HostGBDT
 
 ROOT = Path(__file__).resolve().parents[3]
-KINDS = ("gbdt_ordered_rmse", "gbdt_feature_freq", "gbdt_pointwise_bayesian_eval", "gbdt_categorical_onehot")
 
 #: one float feature with one border, no trees
 TEXT = ("format mojolearn-model 2\nfeatures 1 0\ntrees 0\nlosses 0\n"
         "feature 0 folds 1 one_hot 0 type float nan as_is borders 1 0.5/3f000000\n")
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
 
 
 def _archive(path, estimator, loss, text=TEXT):
@@ -67,15 +59,6 @@ def _raises(fn, needle):
     raise AssertionError(f"no refusal naming {needle!r}")
 
 
-def test_gbdt_estimators_are_the_three_saving_classes():
-    assert set(GBDT_ESTIMATORS) == {"GradientBoosting", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"}
-    for name in GBDT_ESTIMATORS:
-        cls = getattr(mojolearn, name)
-        assert cls is mojolearn.GradientBoosting or issubclass(cls, mojolearn.GradientBoosting)
-    assert GBDT_ESTIMATORS["OrderedRMSE"] == ("RMSE",)
-    assert GBDT_ESTIMATORS["ExperimentalTwoLevelFeatureFreq"] == ("RMSE",)
-
-
 def test_archive_names_and_losses_refuse_before_any_binding_loads():
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "m.npz")
@@ -84,30 +67,6 @@ def test_archive_names_and_losses_refuse_before_any_binding_loads():
         path2 = os.path.join(d, "m2.npz")
         _archive(path2, "OrderedRMSE", "Logloss")
         _raises(lambda: HostGBDT.from_file(path2), "saves RMSE only")
-
-
-def test_ctr_and_tensor_ctr_records_without_tables_refuse():
-    # lane/inference-gbdt-ctr-tables (2026-09-15) reads the CTR records;
-    # a record whose tables are missing still refuses, as predict_floats does
-    for record, needle in (("ctr_columns 1", "1 CTR columns and 0 CTR tables"),
-                           ("tensor_ctr_registry 1 1", "declares 1 tables and carries 0"),
-                           ("feature_freq_tensor 2 hash_hi 0", "before its registry")):
-        text = TEXT.replace("losses 0\n", "losses 0\n" + record + "\n")
-        _raises(lambda: parse_model_text(text), needle)
-    assert parse_model_text(TEXT)["n_features"] == 1
-
-
-def test_forest_family_and_gate_declare_the_four_kinds():
-    kinds = host_surface.forest_kinds()
-    for kind in KINDS:
-        assert kind in kinds, kind
-    fam = host_surface.family("forest")
-    assert "OrderedRMSE" in fam["classes"] and "ExperimentalTwoLevelFeatureFreq" in fam["classes"]
-    assert fam["ships_in_wheel"]
-    gate = _read("tools/forest_host_gate.py")
-    for kind in KINDS:
-        assert re.search(rf"^\s+'{kind}': dict\(", gate, re.M), kind
-    assert "GBDT_ESTIMATORS = ('GradientBoosting', 'OrderedRMSE', 'ExperimentalTwoLevelFeatureFreq')" in gate
 
 
 def test_gate_coded_transform_is_the_documented_rule():
@@ -122,19 +81,11 @@ def test_gate_coded_transform_is_the_documented_rule():
     assert gate.apply_transform(b"ab", 1, 1, None) == b"ab"
 
 
-def test_identity_break_host_infer_is_opt_in():
-    src = _read("tools/identity_break.py")
-    assert 'HOST_INFER_ENV = "MOJOLEARN_IDENTITY_HOST_INFER"' in src
-    assert "infer = _h(*fit.probe(host_model(path)))" in src
-    assert 'record["host_infer"]' in src
-
-
 def _forest_binary_built():
     from mojolearn._forest_host import binary_path
     return os.path.exists(binary_path())
 
 
-@reference_training()
 def test_four_modes_predict_through_host_model_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

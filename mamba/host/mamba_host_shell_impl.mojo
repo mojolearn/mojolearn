@@ -7,7 +7,7 @@ boundary in `bindings/_mojolearn_mamba_host.mojo` calls. Nothing here
 touches Python: every entry takes buffer addresses, Ints and typed sessions.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from std.os import abort
 
@@ -56,7 +56,7 @@ def _write(addr: Int, values: List[Float32], n: Int) raises:
             + String(n)
         )
     if n > 0:
-        memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
 
 
 # ===========================================================================
@@ -309,7 +309,10 @@ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     _write(a[20], gr.out_proj_weight, dm * di)
 
 
-comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned weight snapshots, host column) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0e66cc9a52.
+# Restore: git apply experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch
+# The name stays False for its importers (bindings, mamba/host/native_block_dispatch.mojo).
+comptime NN40_OWNED_WEIGHTS = False
 
 
 struct M3OwnedHostSession(Movable, Writable):
@@ -406,7 +409,4 @@ def _m3_owned_state_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int,
 
 
 def _nn40_host_require(s: M3OwnedHostSession, dm: Int, generation: Int, reserved: Bool = False) raises:
-    if not NN40_OWNED_WEIGHTS or s.busy != reserved or not s.usable or not s.weights:
-        raise Error("mamba3 owned host: no usable installed snapshot")
-    if s.weights.value().dims.d_model != dm or s.generation != generation:
-        raise Error("mamba3 owned host: stale generation or changed dimensions")
+    raise Error("mamba3 owned host: no usable installed snapshot")

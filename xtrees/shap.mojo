@@ -78,11 +78,8 @@ comptime SHAP_META_WORDS = 3
 comptime SHAP_MAX_PATH = 256
 
 
-# T45 versioned path unwind; shared by CPU and all vendor kernels.
-# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-comptime SHAP_T45_LINEAR_UNWIND = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T45_LINEAR_UNWIND"]()
+# TOMBSTONE: MOJOLEARN_TREES_T45_LINEAR_UNWIND (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f2de2ddf8b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T45_LINEAR_UNWIND.patch; record in docs/TOMBSTONES.md.
 
 @always_inline
 def _m(a: Float32, b: Float32) -> Float32:
@@ -163,7 +160,7 @@ def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32
             meta[unsafe_offset=SHAP_META_BAD] = 2
             return
         p = Int(parent[unsafe_offset=lo + p])
-    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
+    _ = Atomic[Int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
 
 
 @always_inline
@@ -207,7 +204,7 @@ def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
             c += 1
         else:
             slot[unsafe_offset=t * d + f] = -1
-    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
+    _ = Atomic[Int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
 
 
 @always_inline
@@ -241,28 +238,9 @@ def shap_ev_fold_unit(j: Int, n_trees: Int, k: Int, part: F32P, ev: F32P):
 
 
 @always_inline
-def _unwound_sum[W: Int](pz: InlineArray[Float32, W], po: InlineArray[Float32, W], pw: InlineArray[Float32, W],
+def _unwound_sum[W: Int](pz: Array[Float32, W], po: Array[Float32, W], pw: Array[Float32, W],
                          dd: Int, pi: Int) -> Float32:
     """`unwound_path_sum` of path element pi on the path 0 .. dd."""
-    comptime if SHAP_T45_LINEAR_UNWIND:
-        # Linear synthetic path division. Factor dd+1 out of every term,
-        # then multiply the completed canonical left fold once. This is V:
-        # the arithmetic below is deliberately shared, including zero-fraction
-        # behavior, FTZ at every operation and descending path-index order.
-        var of = po[pi]
-        var zf = pz[pi]
-        var next_one = pw[dd]
-        var total = Float32(0)
-        var i = dd-1
-        while i >= 0:
-            if of != 0:
-                var term = _q(next_one, _m(Float32(i+1), of))
-                total = _a(total, term)
-                next_one = _s(pw[i], _m(_m(term, zf), Float32(dd-i)))
-            elif zf != 0:
-                total = _a(total, _q(pw[i], _m(zf, Float32(dd-i))))
-            i -= 1
-        return _m(total, Float32(dd+1))
     var of = po[pi]
     var zf = pz[pi]
     var next_one = pw[dd]
@@ -300,13 +278,13 @@ def shap_tree_unit[W: Int](
     var hi = Int(offsets[unsafe_offset=t + 1])
     var sc = ftz(tscale[unsafe_offset=t])
     var xr = r * d
-    var pf = InlineArray[Int32, W](fill=Int32(-1))
-    var pz = InlineArray[Float32, W](fill=Float32(0.0))
-    var po = InlineArray[Float32, W](fill=Float32(0.0))
-    var pw = InlineArray[Float32, W](fill=Float32(0.0))
-    var mf = InlineArray[Int32, W](fill=Int32(-1))
-    var mz = InlineArray[Float32, W](fill=Float32(0.0))
-    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    var pf = Array[Int32, W](fill=Int32(-1))
+    var pz = Array[Float32, W](fill=Float32(0.0))
+    var po = Array[Float32, W](fill=Float32(0.0))
+    var pw = Array[Float32, W](fill=Float32(0.0))
+    var mf = Array[Int32, W](fill=Int32(-1))
+    var mz = Array[Float32, W](fill=Float32(0.0))
+    var mo = Array[Float32, W](fill=Float32(0.0))
     for g in range(lo, hi):
         if left[unsafe_offset=g] != -1:
             continue
@@ -431,13 +409,13 @@ def shap_table_unit[W: Int](
     var t = _tree_of(offsets, n_trees, g)
     var lo = Int(offsets[unsafe_offset=t])
     var sc = ftz(tscale[unsafe_offset=t])
-    var pf = InlineArray[Int32, W](fill=Int32(-1))
-    var pz = InlineArray[Float32, W](fill=Float32(0.0))
-    var po = InlineArray[Float32, W](fill=Float32(0.0))
-    var pw = InlineArray[Float32, W](fill=Float32(0.0))
-    var mf = InlineArray[Int32, W](fill=Int32(-1))
-    var mz = InlineArray[Float32, W](fill=Float32(0.0))
-    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    var pf = Array[Int32, W](fill=Int32(-1))
+    var pz = Array[Float32, W](fill=Float32(0.0))
+    var po = Array[Float32, W](fill=Float32(0.0))
+    var pw = Array[Float32, W](fill=Float32(0.0))
+    var mf = Array[Int32, W](fill=Int32(-1))
+    var mz = Array[Float32, W](fill=Float32(0.0))
+    var mo = Array[Float32, W](fill=Float32(0.0))
     var n = 0
     var c = g - lo
     var p = Int(parent[unsafe_offset=g])
@@ -513,7 +491,7 @@ def shap_table_row_unit[ACC: Int](
     var lo = Int(offsets[unsafe_offset=t])
     var hi = Int(offsets[unsafe_offset=t + 1])
     var xr = r * d
-    var acc = InlineArray[Float32, max(ACC, 1)](fill=Float32(0.0))
+    var acc = Array[Float32, max(ACC, 1)](fill=Float32(0.0))
     comptime if ACC == 0:
         for s in range(slots):
             for j in range(k):

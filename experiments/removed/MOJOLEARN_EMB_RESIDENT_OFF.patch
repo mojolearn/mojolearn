@@ -1,0 +1,24 @@
+diff --git a/embedding/embedding_words_run.mojo b/embedding/embedding_words_run.mojo
+index f0d4a43f75..a3b36f324f 100644
+--- a/embedding/embedding_words_run.mojo
++++ b/embedding/embedding_words_run.mojo
+@@ -101,7 +101,7 @@ comptime EMB_COPY_TASKS_MAX = 16
+ # second time in both calls; new 128 MB device buffers for Y, dW and dY in
+ # every call; and the scan plan's 2 * V * T id reads. IDENTICAL tier only
+ # (the FAST paths are untouched):
+-#   EMB_RESIDENT. The Python layer
++#   EMB_RESIDENT (off: -D MOJOLEARN_EMB_RESIDENT_OFF). The Python layer
+ #     passes a table token (a new one whenever its `weight` is assigned).
+ #     The table is uploaded and scanned once per token and its device copy
+ #     kept in this binding's pool; later forwards gather from that copy.
+@@ -119,9 +119,7 @@ comptime EMB_COPY_TASKS_MAX = 16
+ comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # E09-E10: not tested. FAST opts into token-owned tables and fully written
+ # scratch separately; the IDENTICAL controls retain their existing policy.
+-# TOMBSTONE: MOJOLEARN_EMB_RESIDENT_OFF (old path in IDENTICAL: the per-call table upload and scan; no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 63a7445f96.
+-# Restore: git apply experiments/removed/MOJOLEARN_EMB_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
++comptime EMB_RESIDENT = AFN26_EMB_RESIDENT or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+ comptime EMB_DEVICE_SCRATCH = AFN26_EMB_SCRATCH or (_EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+ #: buffers kept per element type (the oldest is retired past these)
+ comptime EMB_POOL_F32_KEEP = 3

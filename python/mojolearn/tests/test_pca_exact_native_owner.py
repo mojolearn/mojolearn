@@ -152,10 +152,9 @@ def test_exact_input_preparation_and_consumed_output_bypass_python_helpers(monke
     def forbidden(*args, **kwargs):
         raise AssertionError("Python PCA helper reached")
 
-    from mojolearn import _backend, _buffer, decomposition
+    from mojolearn import _backend, decomposition
     with monkeypatch.context() as patch:
         patch.setattr(_backend, "binding", forbidden)
-        patch.setattr(_buffer, "as_f32_c", forbidden)
         # decomposition no longer imports the Python helper (one native call)
         patch.setattr(decomposition, "as_f32_c", forbidden, raising=False)
         patch.setattr(np, "empty", forbidden)
@@ -233,9 +232,13 @@ def test_refuses_python_protocols_before_their_hooks(monkeypatch):
         raise AssertionError("Python model attribute access reached")
 
     with monkeypatch.context() as patch:
+        # A replaced storage hook is refused before it can run.
         patch.setattr(PCA, "__getattribute__", poisoned_attribute)
-        assert clean(audit_native_call(native_fit, model, fixture())) is model
+        audit = audit_native_call(native_fit, model, fixture())
+        clean(audit, TypeError)
+        assert "refuses changed Python storage hooks" in str(audit.exception)
     assert calls == []
+    assert clean(audit_native_call(native_fit, model, fixture())) is model
 
 
 @pytest.mark.parametrize("whiten", [False, True])
@@ -321,10 +324,10 @@ def test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs(
         raise AssertionError("Python randomized PCA orchestration reached")
 
     from mojolearn import _expansion_decomp
+    # _randomized_decompose, _rsvd_core and the Python kit `_Kit` are all deleted
+    # (the kit by lane pyout-decomp-linalg): no Python orchestration is left to reach.
+    assert not hasattr(_expansion_decomp, "_Kit")
     with monkeypatch.context() as patch:
-        patch.setattr(_expansion_decomp, "_randomized_decompose", forbidden)
-        patch.setattr(_expansion_decomp, "_rsvd_core", forbidden)
-        patch.setattr(_expansion_decomp, "_Kit", forbidden)
         actual = clean(audit_native_call(native_fit_transform, model, x))
         inverse = clean(audit_native_call(native_inverse, model, actual))
     assert_state_equal(model, expected)
@@ -342,18 +345,25 @@ def test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs(
     np.testing.assert_allclose(components @ components.T, np.eye(rank), rtol=5e-3, atol=5e-4)
 
 
-def test_randomized_rank_deficiency_preserves_zero_padding():
+def test_randomized_rank_deficient_owner_publishes_requested_arrays():
+    """Retain the Python owner/audit and returned-array shape boundary.
+
+    The same 20x5 reconstruction case, seed, power, oversampling and 1e-3
+    tolerance now run through typed CPU/GPU requests in pca_native_*.
+    """
     base = fixture(20, 2)
     x = np.column_stack((base, base[:, 0] * 2, base[:, 1] * 4, base[:, 0] * -2)).astype("f4")
     kwargs = dict(n_components=3, svd_solver="randomized", n_oversamples=2,
                   iterated_power=1, random_state=17)
-    expected = PCA(**kwargs).fit(x)
     model = PCA(**kwargs)
-    actual = clean(audit_native_call(native_fit_transform, model, x))
-    assert_state_equal(model, expected)
-    np.testing.assert_array_equal(bits(actual), bits(expected.transform(x)))
-    reconstructed = clean(audit_native_call(native_inverse, model, actual))
-    np.testing.assert_allclose(reconstructed, x, rtol=1e-3, atol=1e-3)
+    actual = np.asarray(clean(audit_native_call(native_fit_transform, model, x)))
+    assert actual.shape == (20, 3) and actual.dtype == np.float32
+    assert model.n_components_ == 3
+    assert np.asarray(model.components_).shape == (3, 5)
+    for name in ("singular_values_", "explained_variance_", "explained_variance_ratio_"):
+        assert np.asarray(getattr(model, name)).shape == (3,)
+    reconstructed = np.asarray(clean(audit_native_call(native_inverse, model, actual)))
+    assert reconstructed.shape == x.shape and reconstructed.dtype == np.float32
 
 
 @pytest.mark.parametrize("change", ["normalizer", "seed", "zero"])

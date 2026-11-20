@@ -116,6 +116,8 @@ def run_border(
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     print(
         "border_count", border, ":", n_rows, "rows x", n_feats,

@@ -29,10 +29,9 @@ multiply-add per (pair, feature), 3.5e13 of them.
     than intermediate_graph_degree + 1 rows, the caller builds the exact
     graph instead (one int downloaded)."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -57,12 +56,11 @@ comptime ETPB = 256
 
 #: IVFG: rows per list (n / IVFG_ROWS lists), sample rows per list for the
 #: Lloyd iterations, Lloyd iterations, rows of the centring sample, and the
-#: smallest n it takes (below, the exact graph is cheap)
+#: most lists
 comptime IVFG_ROWS = 384
 comptime IVFG_SAMPLE = 64
 comptime IVFG_ITERS = 10
 comptime MU_ROWS = 1024
-comptime IVFG_MIN_N = 65536
 comptime IVFG_MAX_LISTS = 4096
 
 
@@ -85,7 +83,7 @@ def _dt_tile[
     barrier. Padded features stage as 0 (a product of zeros adds nothing).
     EXACTD (IVFG_EXACTD): the difference form sum (q - x)^2 instead, rows
     staged raw, no norms: no cancellation on wide-range features."""
-    var acc = InlineArray[Float32, DT_RI * DT_RJ](fill=Float32(0.0))
+    var acc = Array[Float32, DT_RI * DT_RJ](fill=Float32(0.0))
     var k0 = 0
     while k0 < d:
         comptime for qq in range(DT_KC * DT_TI // DT_TPB):
@@ -114,8 +112,8 @@ def _dt_tile[
             b_s[kk * DT_TJ + jj] = v
         barrier()
         comptime for kk in range(DT_KC):
-            var av = InlineArray[Float32, DT_RI](fill=Float32(0.0))
-            var bv = InlineArray[Float32, DT_RJ](fill=Float32(0.0))
+            var av = Array[Float32, DT_RI](fill=Float32(0.0))
+            var bv = Array[Float32, DT_RJ](fill=Float32(0.0))
             comptime for r in range(DT_RI):
                 av[r] = a_s[kk * DT_TI + ty + r * DT_TY]
             comptime for c in range(DT_RJ):
@@ -309,14 +307,17 @@ def cg_probe_kernel(cnn_i: I32P, nlist: Int32, P: Int32, probes: I32P, size: I32
             _ = Atomic.fetch_add(flag, Int32(1))
 
 
-def cg_ivfg_kernel[EXACTD: Bool](
-    xs: F32P, xn: F32P, perm: U32P, skeys: U32P, start: I32P, size: I32P, probes: I32P, P: Int32,
+def cg_ivfg_kernel(
+    xs: F32P, perm: U32P, skeys: U32P, start: I32P, size: I32P, probes: I32P, P: Int32,
     n: Int32, d: Int32, mu: F32P, k: Int32, out_d: F32P, out_i: I32P,
 ):
     """Sorted rows s0 = 64 * block_idx.x .. s0 + 63 (one or more lists):
     for each list c among them, every row of c's probe lists is a candidate
     of the chunk's rows in list c, offered under its dataset id (perm), the
-    row itself skipped. Grid ceil(n / 64), block (16, 16)."""
+    row itself skipped. Grid ceil(n / 64), block (16, 16). The tile is the
+    difference form (EXACTD), which reads no norms."""
+    # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF (old path: the expanded-form tile and its row norms) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 71c8454b4f.
+    # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch; record in docs/TOMBSTONES.md.
     var tx = Int(thread_idx.x)
     var ty = Int(thread_idx.y)
     var tid = ty * DT_TX + tx
@@ -352,7 +353,8 @@ def cg_ivfg_kernel[EXACTD: Bool](
             var j0 = p0
             while j0 < pend:
                 var nj = DT_TJ if pend - j0 > DT_TJ else pend - j0
-                _dt_tile[EXACTD=EXACTD](xs, s0, ni, xs, j0, nj, dd, mu, xn, xn, tx, ty, tid, a_s, b_s, dist_s)
+                # EXACTD reads neither norm pointer: xs is passed in their place
+                _dt_tile[EXACTD=True](xs, s0, ni, xs, j0, nj, dd, mu, xs, xs, tx, ty, tid, a_s, b_s, dist_s)
                 if mine:
                     for r in range(nj):
                         var j = Int(perm[j0 + r])
@@ -413,27 +415,24 @@ def cg_mu_enqueue(ctx: DeviceContext, x: F32P, n: Int, d: Int, mut mu: DeviceBuf
 
 
 def cg_ivfg_enqueue[
-    PROBES: Int, EXACTD: Bool = False
+    PROBES: Int
 ](
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, k: Int,
     mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
 ) raises -> Bool:
     """IVFG: the approximate k-NN graph into dnd / dni. False (nothing
-    written) when n is under IVFG_MIN_N or a probe pool is too small: the
+    written) when n is under 2 * PROBES * IVFG_ROWS or a probe pool is too small: the
     caller then builds the exact graph."""
     # lane apple-fast-no-narrow-2 (2026-10-04): IVFG_MIN_N (65536) is
     # removed as benchmark-tuned (a row count picked between board sizes),
     # replacement UNMEASURED. The rule is now total work: IVFG scores about
     # n * PROBES * IVFG_ROWS candidate pairs against the exact graph's n^2,
     # so it is taken only when it scores at most half of them
-    # (n >= 2 * PROBES * IVFG_ROWS). `-D MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N`
-    # restores the 65536-row gate.
-    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N"]():
-        if n < IVFG_MIN_N:
-            return False
-    else:
-        if n < 2 * PROBES * IVFG_ROWS:
-            return False
+    # (n >= 2 * PROBES * IVFG_ROWS).
+    # TOMBSTONE: MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N (old path, EXP:1335 A/B owed and never run) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 58964eb313.
+    # Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N.patch; record in docs/TOMBSTONES.md.
+    if n < 2 * PROBES * IVFG_ROWS:
+        return False
     var nlist = n // IVFG_ROWS
     if nlist > IVFG_MAX_LISTS:
         nlist = IVFG_MAX_LISTS
@@ -497,17 +496,14 @@ def cg_ivfg_enqueue[
     if ok:
         # the rows in list order, then the graph
         var xs = ctx.enqueue_create_buffer[DType.float32](n * d)
-        var xsn = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.enqueue_function[cg_gather_perm_kernel](x, Int32(d), _u32p(vals), _f32p(xs), Int32(n),
                                                     grid_dim=(n * d + ETPB - 1) // ETPB, block_dim=ETPB)
-        _norms(ctx, _f32p(xs), n, d, _f32p(mu), _f32p(xsn))
-        ctx.enqueue_function[cg_ivfg_kernel[EXACTD]](
-            _f32p(xs), _f32p(xsn), _u32p(vals), _u32p(keys), _i32p(start), _i32p(size), _i32p(probes),
+        ctx.enqueue_function[cg_ivfg_kernel](
+            _f32p(xs), _u32p(vals), _u32p(keys), _i32p(start), _i32p(size), _i32p(probes),
             Int32(PROBES), Int32(n), Int32(d), _f32p(mu), Int32(k), _f32p(dnd), _i32p(dni),
             grid_dim=(n + DT_TI - 1) // DT_TI, block_dim=(DT_TX, DT_TY, 1),
         )
         ctx.synchronize()
-        _ = xsn^
         _ = xs^
     _ = flag^
     _ = probes^

@@ -4,7 +4,7 @@
 FAST on the Apple GPU, and (K1, lane ml-cluster-nbrs 2026-10-04) IDENTICAL on
 every vendor: x_prep/device.mojo gates every call on RADIX_SORT. The sort has
 one answer, so IDENTICAL keeps its bits (the host heapsort is unchanged).
-`-D MOJOLEARN_IDN_XPREP_RADIX_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+the deleted `MOJOLEARN_IDN_XPREP_RADIX_OFF` (2026-11-15) restored the
 bitonic sort under IDENTICAL. RBS = 64 assumes no wave width.
 
 A sort has ONE answer under a total order on the words (x_prep/dsort.mojo),
@@ -28,21 +28,22 @@ Measured on the M4 (request 1790626651574): the bitonic sort of 16 columns
 of 1M rows is 0.44 to 0.48 s (41 passes over the block), the largest FAST
 phase of every estimator that sorts.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, canon
 
 comptime RUP = MutPointer[UInt32, MutAnyOrigin]
 #: K1 (IDENTICAL, every vendor): the radix sort of sort_cols, same words as the bitonic sort
-comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_XPREP_RADIX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_XPREP_RADIX_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 60adf729d6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
-comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()) or IDN_XPREP_RADIX
+comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU) or IDN_XPREP_RADIX
 # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):
 # histogram storage scales with 2**digit bits; smaller digits trade extra
 # passes for smaller clear/scan work. The sorted words are the same for every
@@ -76,8 +77,10 @@ comptime RADIX_MIN_ROWS = 8192
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): ordinal NV/AMD 0.744/0.782, onehot
 #: 0.816/0.808, kbins taxi 0.712 (istella 1.127, NV 1.308 vs AMD 0.946); mean over 14 prep cells 0.945
 #: (AMD 0.59-0.69 on ordinal/onehot); same bits; runs v0125/a1707 vs A v0124/a1706. -D
-#: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF restores the old path.
-comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF"]()
+#: the _OFF rollback was deleted 2026-11-15.
+# TOMBSTONE: MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF (old path; the range passes are the IDENTICAL default, EXP:2060) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 26ab6baddf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DRADIX_RANGE_PASSES_OFF.patch
+comptime IDN_DRADIX_RANGE_PASSES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the sort chunk cap of IDN_DRADIX_RANGE_PASSES
 comptime RANGE_CHUNK_ROWS = 512
 

@@ -154,6 +154,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from core.host_parallel import host_parallelize
+from core.launch_log import activity_host
 
 from core.host_predict_threads import (
     HostF32Ptr,
@@ -161,7 +162,7 @@ from core.host_predict_threads import (
     host_list_ptr_u32,
     HostU32Ptr,
     host_predict_chunk,
-    host_predict_task_count,
+    host_predict_task_count_work,
 )
 from checks.kernel_matrix import (
     COLUMN_AMD,
@@ -880,6 +881,8 @@ def host_knn_search(
     vectors, every distance of every query row through
     `host_l2_expanded_cell`, the selection and the sort. `out_dist` and
     `out_idx` hold `n_queries * k` each."""
+    # lane fx-verify-trace: once per call, counted only for a verification
+    activity_host("host_knn_search")
     if n_index <= 0:
         raise Error("knn_search: n_index must be positive, got " + String(n_index))
     if n_queries <= 0:
@@ -937,7 +940,9 @@ def host_knn_search(
         # `compute_norms_for_metric`: cosine's TRUE norm, none for the rest.
         index_norm = host_cosine_row_norms(index, n_index, d)
         query_norm = host_cosine_row_norms(queries, n_queries, d)
-    var tasks = host_predict_task_count(n_queries)
+    # perf-host-grain: rows are independent; a call below the grain floor
+    # (query x index x feature operations) is one task on this thread
+    var tasks = host_predict_task_count_work(n_queries, n_queries * n_index * max(d, 1))
     var chunk = host_predict_chunk(n_queries, tasks)
     var ip = host_list_ptr(index)
     var qp = host_list_ptr(queries)
@@ -1398,7 +1403,9 @@ def host_rbc_radius_counts(
     """
     var tasks = requested_tasks
     if tasks <= 0:
-        tasks = host_predict_task_count(n_queries)
+        # perf-host-grain: independent rows; the grain floor on the
+        # query x index x feature work
+        tasks = host_predict_task_count_work(n_queries, n_queries * n_index * max(d, 1))
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
@@ -1431,7 +1438,9 @@ def host_rbc_radius_fill_rows(
     """Fill independent CSR rows in parallel at their counted offsets."""
     var tasks = requested_tasks
     if tasks <= 0:
-        tasks = host_predict_task_count(n_queries)
+        # perf-host-grain: independent rows; the grain floor on the
+        # query x index x feature work
+        tasks = host_predict_task_count_work(n_queries, n_queries * n_index * max(d, 1))
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
@@ -1524,7 +1533,9 @@ def host_rbc_knn_search(
     """
     var tasks = requested_tasks
     if tasks <= 0:
-        tasks = host_predict_task_count(n_queries)
+        # perf-host-grain: independent rows; the grain floor on the
+        # query x index x feature work
+        tasks = host_predict_task_count_work(n_queries, n_queries * n_index * max(d, 1))
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var packed = host_pack_index(host_list_ptr(index), n_index, d)

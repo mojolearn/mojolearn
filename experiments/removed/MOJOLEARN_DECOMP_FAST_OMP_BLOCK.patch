@@ -1,0 +1,34 @@
+diff --git a/x_decomp/omp_block.mojo b/x_decomp/omp_block.mojo
+index 6dc59dc49c..11c81bb21d 100644
+--- a/x_decomp/omp_block.mojo
++++ b/x_decomp/omp_block.mojo
+@@ -20,10 +20,12 @@ same refit (`omp_row`'s spellings, x_decomp/cells.mojo), no device scratch.
+ """
+ from max.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
++from std.sys.compile import is_defined
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ 
+-from checks.numerics import ftz, identical_mul_add
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+ from x_decomp.cells import F32Ptr, div0, mul, sqrt0, sub
+ 
+ #: Recovered candidate (lane/apple-fast-rec-decomp, 2026-10-04), default OFF,
+@@ -42,10 +44,11 @@ from x_decomp.cells import F32Ptr, div0, mul, sqrt0, sub
+ #: ordering Metal's barrier() does not give device memory). Bounds come
+ #: from the kernel: k <= OMP_TPB (a thread per atom) and nnz <= OMP_NNZ_MAX
+ #: (the threadgroup Cholesky's side); otherwise the old kernel runs.
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (opt-in arm: one OMP block per row; EXP:449 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0d75c7cca2.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch; record in docs/TOMBSTONES.md.
+-# The name stays (x_decomp/device.mojo reads it) as the folded constant; the kernel below has no other caller.
+-comptime DECOMP_FAST_OMP_BLOCK = False
++comptime DECOMP_FAST_OMP_BLOCK = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]()
++)
+ comptime OMP_TPB = 128
+ """Threads of an OMP block; k atoms at most OMP_TPB."""
+ comptime OMP_NNZ_MAX = 32

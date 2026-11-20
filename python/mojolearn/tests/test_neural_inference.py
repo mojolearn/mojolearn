@@ -8,8 +8,10 @@ What this file holds, on the host it runs on:
   - both classes read back a CPU, IDENTICAL, CPU-column binding;
   - MLP logits from a saved checkpoint equal the four-weight constructor's,
     each row equals the row alone, and every checkpoint refusal is by name;
-  - the Transformer stateless forward equals itself split by batch rows and
-    by ragged lengths, and every training entry is refused by name;
+  - the Transformer stateless forward equals itself split by ragged lengths,
+    and every training entry is refused by name (rows alone, the causal
+    prefix, decode == prefill and the one-ULP witness of the Transformer and
+    the MLP's rows alone are checks/native_tests/training_neural_inference.mojo);
   - when the source reference bindings are also present (a CPU identity
     column, never a wheel), both equal `SmallMLPTrainer.predict_logits` and
     `TransformerBlock.forward` byte for byte.
@@ -81,57 +83,22 @@ def test_binding_reads_back_cpu_identical(binding):
     assert bool(binding.neural_host_sabotage()) is False or os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1"
 
 
-def test_binding_exports_no_training_entry(binding):
-    names = {n for n in dir(binding) if not n.startswith("_")}
-    assert names == {"neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
-                     "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-                     "transformer_forward", "transformer_decode_step",
-                     "mamba1_forward", "mamba1_decode_step",
-                     "mamba2_forward", "mamba2_decode_step",
-                     "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
-                     "embedding_forward", "rms_norm_forward", "linear_forward",
-                     # numeric_profile="fixed15_v1" on the CPU route (lane/lowbit-blocks)
-                     "transformer_forward_int15",
-                     # the arithmetic profile a checkpoint is admitted against
-                     # (neural_inference.py; the IDENTICAL toggle suffix)
-                     "neural_arithmetic_profile",
-                     # checkpoint integrity digest (core/sha256.mojo)
-                     "sha256_hex"}, names
-    # the decode cache is here (lane/stateful-cpu-decoding); training is not
-    assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
-                or n.endswith("_fit") or "train" in n], names
-
-
 def test_mlp_logits_shape_rows_alone_and_checkpoint(binding):
     inf = ml.MLPInference(*_mlp_weights())
     X = _x(64)
     got = np.asarray(inf.predict_logits(X))
+    # rows alone equal the batch: the native check training_neural_inference
     assert got.shape == (64, 3) and got.dtype == np.float32
-    for i in (0, 1, 7, 63):
-        assert np.asarray(inf.predict_logits(X[i:i + 1])).tobytes() == got[i:i + 1].tobytes(), i
-    assert np.asarray(inf.predict_logits(X[1:8])).tobytes() == got[1:8].tobytes()
     assert set(inf.weights_) == {"weight1", "bias1", "weight2", "bias2"}
 
 
 def _checkpoint_from_weights(tmp):
-    """A trainer checkpoint written by the trainer's own encoder, without
-    running the trainer (no binding needed to write it)."""
-    from mojolearn import _mlp_impl as M
-    from mojolearn._buffer import zeros
-    w = [M._array(v, s, n) for v, s, n in zip(_mlp_weights(), _SHAPES, M._NAMES)]
-    state = dict(schema=M._STATE_SCHEMA, architecture=[8, 16, 3], numeric_mode="identical",
-                 parameter_order=list(M._NAMES), weights=dict(zip(M._NAMES, w)),
-                 optimizer=dict(kind="AdamW", step=0, m=zeros((M._TOTAL,), "<f4"),
-                                v=zeros((M._TOTAL,), "<f4"), flags=zeros((4,), "<i4")),
-                 config=dict(lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.01),
-                 data_schedule={"dataset": "test"})
-    payload = M._encode_state(state)
-    import hashlib
-    env = dict(schema=M._FILE_SCHEMA, payload=payload,
-               payload_sha256=hashlib.sha256(M._canonical(payload)).hexdigest())
+    """A trainer checkpoint written by the public trainer's own
+    `save_checkpoint`, before any step. (It was assembled from the Python
+    encoder twins `_mlp_impl._array`/`_encode_state`/`_canonical` until
+    0a71e11436 deleted them; the native door writes the checkpoint now.)"""
     path = os.path.join(tmp, "mlp.json")
-    with open(path, "wb") as fh:
-        fh.write(M._canonical(env) + b"\n")
+    ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"}).save_checkpoint(path)
     return path
 
 
@@ -180,10 +147,7 @@ def test_transformer_forward_rows_ragged_and_refusals(binding):
         x = np.random.default_rng(5).standard_normal((4, 16, 32)).astype(np.float32)
         y = np.asarray(blk.forward(x))
         assert y.shape == (4, 16, 32)
-        for i in range(4):
-            assert np.asarray(blk.forward(x[i:i + 1])).tobytes() == y[i:i + 1].tobytes(), (window, i)
-        # causal: a prefix is the prefix of the whole
-        assert np.asarray(blk.forward(np.ascontiguousarray(x[:, :7]))).tobytes() == np.ascontiguousarray(y[:, :7]).tobytes()
+        # rows alone and the causal prefix: the native check training_neural_inference
         lengths = [16, 7, 1, 12]
         yr = np.asarray(blk.forward(x, lengths=lengths))
         for i, n in enumerate(lengths):
@@ -203,12 +167,10 @@ def test_equals_the_reference_path_when_present(binding):
     """A CPU identity column only: the source reference bindings are there."""
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here (a wheel has neither)")
-    from mojolearn._cpu_reference import reference_training
     X = _x(64, seed=9)
     t = np.random.default_rng(9).integers(0, 3, 64).astype(np.int32)
-    with reference_training():
-        tr = ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"})
-        tr.train_step(X, t)
+    tr = ml.SmallMLPTrainer(*_mlp_weights(), data_schedule={"dataset": "test"})
+    tr.train_step(X, t)
     tmp = tempfile.mkdtemp()
     path = os.path.join(tmp, "trained.json")
     tr.save_checkpoint(path)
@@ -289,18 +251,6 @@ def _step_equals_full(model, x, alloc, as_position):
     return None
 
 
-def test_transformer_decode_equals_the_prefill(binding):
-    """THE DECODE IS THE PREFILL. A carried state, step and allocate_state
-    were refused by name until lane/stateful-cpu-decoding, because the
-    binding exported the fresh entry alone."""
-    tw = _block_weights()
-    x = np.random.default_rng(23).standard_normal((2, 12, 32)).astype(np.float32)
-    for window in (0, 8):
-        blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1, window=window)
-        bad = _step_equals_full(blk, x, lambda: blk.allocate_state(2, 12), np.asarray)
-        assert bad is None, (window, bad)
-
-
 @pytest.mark.parametrize("kind,cls,kw", _MAMBA)
 def test_mamba_decode_equals_the_prefill(binding, kind, cls, kw):
     blk = getattr(ml, cls)(_mamba_weights(kind), **kw)
@@ -323,30 +273,6 @@ def test_samba_decode_equals_the_forward(binding, tied):
     assert head.tobytes() == np.ascontiguousarray(full[:, :5]).tobytes()
     tail = np.asarray(inf.forward(np.ascontiguousarray(ids[:, 5:]), state))
     assert tail.tobytes() == np.ascontiguousarray(full[:, 5:]).tobytes()
-
-
-def test_one_ulp_in_the_cache_moves_a_position(binding):
-    """The comparison above CAN fail: one ULP on one cached value moves a
-    later position. v_cache cell 7 is named because a single ULP in a single
-    cached component is often absorbed (k_cache absorbs it at all of the
-    first thirty-two cells here), and an arm that absorbs its own
-    perturbation is indistinguishable from a pass."""
-    tw = _block_weights()
-    x = np.random.default_rng(3).standard_normal((2, 12, 32)).astype(np.float32)
-    blk = ml.TransformerBlockInference(tw, n_heads=2, n_kv_heads=1)
-    full = np.asarray(blk.forward(np.ascontiguousarray(x)))
-    state = blk.allocate_state(2, 12)
-    moved = None
-    for t in range(12):
-        if t == 6:
-            u = np.asarray(state.v_cache).reshape(-1).view(np.uint32)
-            before = int(u[7])
-            u[7] = before + 1
-            assert int(np.asarray(state.v_cache).reshape(-1).view(np.uint32)[7]) == before + 1
-        one = np.asarray(blk.step(np.ascontiguousarray(x[:, t:t + 1]), state))
-        if moved is None and np.ascontiguousarray(full[:, t:t + 1]).tobytes() != one.tobytes():
-            moved = t
-    assert moved == 6, moved
 
 
 def _samba_config(tied=True):
@@ -401,7 +327,6 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
         pytest.skip("the source reference mamba host binding is not built here (a wheel has none)")
     if not _reference_present():
         pytest.skip("the source reference training and transformer host bindings are not built here")
-    from mojolearn._cpu_reference import reference_training
     x = np.random.default_rng(13).standard_normal((2, 16, 32)).astype(np.float32)
     for kind, cls, kw in _MAMBA:
         w = _mamba_weights(kind, seed=17)
@@ -412,9 +337,8 @@ def test_mamba_samba_byte_lm_equal_the_reference_path_when_present(binding):
     ids = np.random.default_rng(13).integers(0, 256, (2, 17)).astype(np.int32)
     tmp = tempfile.mkdtemp()
     for tied in (True, False):
-        with reference_training():
-            st = ml.SambaStack(_samba_config(tied), generator=ml.training.Generator(1), lr=1e-3)
-            st.train_step(ids[:, :-1], ids[:, 1:])
+        st = ml.SambaStack(_samba_config(tied), generator=ml.training.Generator(1), lr=1e-3)
+        st.train_step(ids[:, :-1], ids[:, 1:])
         path = os.path.join(tmp, f"samba-{tied}.ckpt")
         st.save_checkpoint(path)
         assert (np.asarray(ml.SambaInference.from_checkpoint(path).forward(ids[:, :-1])).tobytes()

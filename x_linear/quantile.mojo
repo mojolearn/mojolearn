@@ -59,16 +59,17 @@ def _soft(a: Float32, t: Float32) -> Float32:
 
 
 @always_inline
-def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32, rel: Bool) -> Float32:
-    """The residual balancing's rho factor (2, 1/2 or 0 = keep). rel (the
-    default, fp[4] = 1): the residuals RELATIVE to their stopping
-    tolerances, prim/eps_p against dual/eps_d (OSQP's rule); the absolute
-    rule (prim against dual, fp[4] = 0, MOJOLEARN_XQ_ABS_BALANCE=1) compares
-    two norms in different units and on standardized Istella-S and taxi
-    doubled rho to ~4000x its start, where float32 ADMM drifts off the LP
-    optimum (Istella-S r2 -1.7e11) and never meets the tolerance (5000 iterations)."""
-    var p = fm(prim_n, eps_d) if rel else prim_n
-    var dl = fm(dual_n, eps_p) if rel else dual_n
+def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32) -> Float32:
+    """The residual balancing's rho factor (2, 1/2 or 0 = keep): the
+    residuals RELATIVE to their stopping tolerances, prim/eps_p against
+    dual/eps_d (OSQP's rule)."""
+    # TOMBSTONE: MOJOLEARN_XQ_ABS_BALANCE (env arm, DECIDED by quality: the absolute rule compared two norms in
+    # different units; on standardized Istella-S and taxi it doubled rho to ~4000x its start, float32 ADMM drifted
+    # off the LP optimum (Istella-S r2 -1.7e11) and never met the tolerance in 5000 iterations) deleted 2026-11-18
+    # by lane/fx-env-dead; code recoverable at 0c65d61fed. The request word fp[4] is no longer read.
+    # Restore: git apply experiments/removed/MOJOLEARN_XQ_ABS_BALANCE.patch
+    var p = fm(prim_n, eps_d)
+    var dl = fm(dual_n, eps_p)
     if p > fm(Float32(10), dl):
         return Float32(2)
     if dl > fm(Float32(10), p):
@@ -184,10 +185,10 @@ def t_chol_solve_cols(t: Team, l: FP, loff: Int, m: Int, b: FP, boff: Int, w: FP
 
 
 @always_inline
-def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
+def q_layout(n: Int, d: Int, m: Int) -> Array[Int, 12]:
     """fw offsets: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d |
     v d | next rhs m | dsq d; [11] the total."""
-    var o = InlineArray[Int, 12](fill=0)
+    var o = Array[Int, 12](fill=0)
     o[0] = 0
     o[1] = m * m
     o[2] = o[1] + m
@@ -203,11 +204,11 @@ def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
     return o^
 
 
-def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> InlineArray[Float32, 3]:
+def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> Array[Float32, 3]:
     """(den, rho, ||y||) from the folded sums (nf = the row count as a
     float): den = n or sum(w), rho = 1 / (n * max(mean |y - ym|, 1e-6)),
     the target norm."""
-    var r = InlineArray[Float32, 3](fill=Float32(0))
+    var r = Array[Float32, 3](fill=Float32(0))
     r[0] = den_sum if sw else nf
     var spread = fmax(fd(spread_sum, nf), Float32(1e-6))
     r[1] = fd(Float32(1), fm(nf, spread))
@@ -217,7 +218,7 @@ def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: F
 
 def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, dq: Int,
            abn: Float32, rn: Float32, prim_rows: Float32, un_rows: Float32, ynorm: Float32, rho: Float32,
-           alpha: Float32, eps_abs: Float32, eps_rel: Float32, rel_bal: Bool, it: Int) -> Tuple[Int, Float32]:
+           alpha: Float32, eps_abs: Float32, eps_rel: Float32, it: Int) -> Tuple[Int, Float32]:
     """One iteration after its row folds (A' dr folded into rhs): the z- and
     v-updates, the residuals, the stop rule and the balancing. Returns
     (0 go on | 1 converged | 2 rescaled, the rho factor); a rescale has
@@ -260,7 +261,7 @@ def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int,
     if prim_n <= eps_p and dual_n <= eps_d:
         return (1, Float32(1))
     if (it + 1) % 10 == 0:
-        var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
+        var factor = _balance(prim_n, dual_n, eps_p, eps_d)
         if factor != 0:
             var inv = fd(Float32(1), factor)
             for j in range(d):
@@ -321,10 +322,10 @@ def qp_rounds(k: Int) -> Int:
 
 
 @always_inline
-def qp_layout(d: Int, m: Int) -> InlineArray[Int, 10]:
+def qp_layout(d: Int, m: Int) -> Array[Int, 10]:
     """Polish words: Q m*m | L m*m | y_R m | a m | v m | c m | t m | S m |
     coef d, intercept 1; [9] the total."""
-    var o = InlineArray[Int, 10](fill=0)
+    var o = Array[Int, 10](fill=0)
     o[0] = 0
     o[1] = m * m
     o[2] = 2 * m * m

@@ -52,34 +52,26 @@ def neural_checks(recorder,public,methods):
                     return state.capacity
                 return getattr(state,method)()
             if method=='__call__':return m(x)
-            if method in ('forward_with_tape','backward_from_tape'):
-                if name=='TransformerBlockInference':
-                    # This documented CPU inference class has no training tape.
-                    # Test its actual public refusal, without claiming backward arithmetic.
-                    if method=='forward_with_tape':
-                        try:m.forward_with_tape(x)
-                        except NotImplementedError as error:
-                            assert 'native tape API' in str(error)
-                            return {'availability':'forward-only inference','numerical_execution':False}
-                    else:
-                        try:m.backward_from_tape(None,np.ones_like(x))
-                        except ValueError as error:
-                            assert 'another block' in str(error)
-                            return {'foreign_tape_refused':True,'numerical_execution':False}
-                    raise AssertionError('inference-only tape admission changed; add numerical fixture')
-                out,tape=m.forward_with_tape(x)
-                try:
-                    return out if method=='forward_with_tape' else m.backward_from_tape(tape,np.full_like(out,.125))
-                finally:
-                    tape.close()
+            # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+            # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+            # (the forward_with_tape / backward_from_tape probes.)
             if method in ('__getstate__','__setstate__'):
                 state=m.__getstate__()
                 restored=object.__new__(cls);restored.__setstate__(state)
                 before=m(x);after=restored(x)
                 assert encode(before)==encode(after)
                 return after
-            enabled=getattr(m._extension(),'mamba3_owned_weights_enabled',lambda:False)()
+            # Public probe (lane verify-runtime-report): the compiled switch is
+            # read through install_owned_weights itself, which refuses by name
+            # ('owned') when the binding was built without owned weights.
+            try:
+                m.install_owned_weights();enabled=True
+            except RuntimeError as error:
+                if 'owned' not in str(error).lower():raise
+                enabled=False
             if not enabled:
+                if method=='install_owned_weights':
+                    return {'availability':'compiled owned weights disabled','numerical_execution':False}
                 if method=='release_owned_weights':
                     m.release_owned_weights();return m(x)
                 if method=='session_info':
@@ -90,7 +82,6 @@ def neural_checks(recorder,public,methods):
                     return {'availability':'compiled owned weights disabled','numerical_execution':False}
                 raise AssertionError('disabled owned-weight capability was admitted')
             try:
-                m.install_owned_weights()
                 before=m(x)
                 if method=='export_owned_weights':return m.export_owned_weights()
                 if method=='release_owned_weights':

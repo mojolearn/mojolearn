@@ -28,8 +28,8 @@ kernel it mirrors and keeps its statements in its order:
                            does (`git grep 537_GEMM_IDENT_SWAP` finds only
                            bench/speed/gemm_speed_main.mojo's opt-in).
   `host_gemm_nt`           the kernel's grid, every cell in row-major order.
-  `host_ols_predict`       `ols_predict_host`, `glm/estimator.mojo:192-231`:
-                           the gemv, then `_add_scalar_kernel` (`:53-74`)
+  `host_ols_predict`       `ols_predict_device`, `core/p3_linear_impl.mojo`:
+                           the gemv, then the epilogue's intercept add
                            only when the intercept is not exactly 0.0.
   `host_qn_decision`       `linear_fwd` at C == 1, `glm/impl/qn/glm_base.mojo:
                            198-244`: the gemv over the first D entries of W,
@@ -108,6 +108,7 @@ from std.sys.compile import is_defined
 from std.math import sqrt
 
 from core.host_parallel import host_parallelize
+from core.rows_log_word import log_or_inf
 
 from checks.numerics import (
     ftz,
@@ -118,6 +119,7 @@ from checks.numerics import (
 )
 from core.host_predict_threads import (
     HostF32Ptr,
+    host_grain_cap,
     HostF64Ptr,
     HostI64Ptr,
     host_list_ptr,
@@ -193,6 +195,8 @@ def host_gemm_nt_into(
         t = 1
     if t > m:
         t = m
+    # perf-host-grain: rows are independent, so a small call is one task
+    t = host_grain_cap(t, m * n * max(k, 1))
     var chunk = host_predict_chunk(m, t)
 
     def _rows(c: Int) {imm x, imm y, imm z, imm chunk, imm m, imm n, imm k}:
@@ -224,10 +228,10 @@ def host_ols_predict(
     x: List[Float32], coef: List[Float32], n_rows: Int, n_features: Int,
     intercept: Float32,
 ) -> List[Float32]:
-    """`ols_predict_host` (`glm/estimator.mojo:192-231`): `gemv_n`, then
-    `_add_scalar_kernel` (`:53-74`, `dst[i] = ftz(ftz(dst[i]) + ftz(value))`)
-    only `if intercept != Float32(0.0)`, the host compare that file audits
-    under DEVIATION 527."""
+    """`ols_predict_device` (`core/p3_linear_impl.mojo`): the gemv, then the
+    epilogue's `dst[i] = ftz(ftz(dst[i]) + ftz(value))` only
+    `if intercept != Float32(0.0)`, the host compare audited under
+    DEVIATION 527."""
     var out = List[Float32](length=n_rows, fill=Float32(0.0))
     host_ols_predict_into(
         host_list_ptr(x), host_list_ptr(coef), host_list_ptr(out), n_rows,
@@ -327,7 +331,8 @@ def host_qn_sigmoid_into(
     """
     if n_rows <= 0:
         return
-    var t = max(1, min(tasks, n_rows))
+    # perf-host-grain: rows are independent; an exp64 is ~20 operations
+    var t = host_grain_cap(max(1, min(tasks, n_rows)), 20 * n_rows)
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm scores, imm dst, imm chunk, imm n_rows}:
@@ -416,7 +421,8 @@ def host_qn_softmax_into(
     """
     if n_rows <= 0:
         return
-    var t = max(1, min(tasks, n_rows))
+    # perf-host-grain: rows are independent; two exp64 per cell
+    var t = host_grain_cap(max(1, min(tasks, n_rows)), 40 * n_rows * max(n_classes, 1))
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(task: Int) {imm scores, imm dst, imm chunk, imm n_rows, imm n_classes}:
@@ -504,6 +510,8 @@ def host_pca_transform_into(
         t = 1
     if t > n_rows:
         t = n_rows
+    # perf-host-grain: rows are independent, so a small call is one task
+    t = host_grain_cap(t, n_rows * max(n_cols, 1) * (n_components + 1))
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm x, imm mu, imm components, imm dst, imm chunk, imm n_rows, imm n_cols, imm n_components}:
@@ -727,3 +735,28 @@ def host_pca_whiten_inverse_transform_into(
             )
     _ = components_t^
     _ = components_w^
+
+
+def host_rows_log_inplace(dst: HostF64Ptr, n: Int, tasks: Int):
+    """`py2mojo_rows` ROWS_LOG in place over n binary64 words, split by
+    elements across `tasks` host tasks (`log_or_inf` per word, the device
+    kernel's statements; no reduction crosses elements, so the split moves
+    no bit). The host `qn_proba` entry's log_proba."""
+    # ne2-g-linear (N361): log_proba in the qn_proba call on the host column.
+    if n <= 0:
+        return
+    var words = dst.bitcast[UInt64]()
+    # A soft-float log is on the order of 60 operations per word.
+    var t = host_grain_cap(max(1, min(tasks, n)), 60 * n)
+    var chunk = host_predict_chunk(n, t)
+
+    def _part(c: Int) {imm words, imm chunk, imm n}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            words.unsafe_store(i, log_or_inf(words.unsafe_load(i)))
+
+    if t == 1:
+        _part(0)
+    else:
+        host_parallelize(_part, t)

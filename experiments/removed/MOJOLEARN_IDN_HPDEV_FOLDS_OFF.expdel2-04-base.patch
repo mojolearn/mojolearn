@@ -1,0 +1,28 @@
+diff --git a/core/msel_helpers_device.mojo b/core/msel_helpers_device.mojo
+index ad33dbd763..1a0e49add0 100644
+--- a/core/msel_helpers_device.mojo
++++ b/core/msel_helpers_device.mojo
+@@ -16,6 +16,7 @@ either way. The fold store's operations run on the store's own context
+ No Python object crosses; the Python exports release the GIL around the
+ same runs.
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from checks.vendor import COMPILED_VENDOR
+ from core.msel_entry_table import (
+@@ -52,11 +53,10 @@ from core.native_descriptor_call import native_descriptor_report
+ from core.neural_context import process_ctx
+ from core.shared_slot import SharedSlot
+ 
+-#: The fold and index helpers on the device (`bindings/hotpath_device.mojo`
+-#: documents the switch family).
+-# TOMBSTONE: MOJOLEARN_IDN_HPDEV_FOLDS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 8adf7b05f6.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_FOLDS_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-comptime MSEL_HPDEV_FOLDS = LABELS_DEVICE_BASE
++#: The IDN_HPDEV_FOLDS switch (`-D MOJOLEARN_IDN_HPDEV_FOLDS_OFF`): the fold
++#: and index helpers on the device (`bindings/hotpath_device.mojo` documents
++#: the switch family).
++comptime MSEL_HPDEV_FOLDS = LABELS_DEVICE_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
+ 
+ #: Largest k x n_folds table the stratified helpers build on the device.
+ comptime MSEL_HPDEV_MAX_TABLE = 1 << 26

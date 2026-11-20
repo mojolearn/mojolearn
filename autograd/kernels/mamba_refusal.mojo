@@ -6,9 +6,8 @@ or 1 for infinity, so a minimum selects the first offending cell, whatever
 its sign or NaN payload. Callers retain the existing named-buffer order.
 Other numeric modes keep the original host refusal and transfer helpers.
 """
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -18,7 +17,10 @@ from mamba.impl.modeling.modeling_mamba import _refuse_nonfinite_named_host
 comptime M3_REFUSAL_THREADS = 256
 comptime M3_REFUSAL_BLOCKS = 128
 comptime M3_REFUSAL_NONE: Int64 = 9223372036854775807
-comptime M3_DEVICE_REFUSAL = not is_defined["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"]()
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_REFUSAL (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at e81ebf2572.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_REFUSAL.patch; record in docs/TOMBSTONES.md.
+# The host refusal arm stays: the generated host column sets this False.
+comptime M3_DEVICE_REFUSAL = True
 
 
 def m3_nonfinite_partial_kernel(
@@ -131,3 +133,18 @@ def mamba_refuse_grad_output(
             raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
     else:
         _refuse_grad_output_host(tag, values)
+
+
+def mamba_refuse_grad_output_on_device(
+    ctx: DeviceContext, tag: String, mut grad: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    """`mamba_refuse_grad_output` for a gradient that is already on the
+    device and has no host copy (lane x56d: the block step op's rule, whose
+    upstream gradient is tape storage). The same message and first flat
+    index; the legacy-refusal build reads the n words back once."""
+    comptime if M3_DEVICE_REFUSAL:
+        var code = m3_first_nonfinite_code(ctx, grad, n)
+        if code != M3_REFUSAL_NONE:
+            raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
+    else:
+        _refuse_grad_output_host(tag, m3_download(ctx, grad, n))

@@ -10,7 +10,7 @@ from core.device_plan import device_plan_device, device_plan_setting
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -312,27 +312,17 @@ struct ForestGroveOwner(Movable):
                     grid_dim=(n + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB,
                     block_dim=FOREST_FINITE_TPB,
                 )
-            comptime if FOREST_PACKED_NODES:
-                forest_pack_resident(
-                    self.ctx.value(), loff, gcol, gthr, gleft, gleaf, t, n,
-                    features, outputs, self.columns, self.leaves,
-                )
-                self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
-                self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
-                self.ctx.value().synchronize()
-                _ = gcol^
-                _ = gthr^
-                _ = gleft^
-                _ = gleaf^
-            else:
-                # each owner re-checks its own part on its device
-                forest_validate_device(
-                    self.ctx.value(), loff, gcol, gthr, gleft, gleaf, t, n, features, outputs,
-                )
-                self.columns = gcol^
-                self.thresholds = gthr^
-                self.left = gleft^
-                self.leaves = gleaf^
+            forest_pack_resident(
+                self.ctx.value(), loff, gcol, gthr, gleft, gleaf, t, n,
+                features, outputs, self.columns, self.leaves,
+            )
+            self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
+            self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
+            self.ctx.value().synchronize()
+            _ = gcol^
+            _ = gthr^
+            _ = gleft^
+            _ = gleaf^
             self.ctx.value().synchronize()
         except e:
             self.ctx.value().synchronize()
@@ -455,11 +445,9 @@ struct PooledForest(Movable):
             assignments[grove] = owner
             var gtrees = (self.trees - grove + 31) // 32
             var gnodes = Int(hsz.unsafe_ptr().unsafe_load(grove))
-            # each tree: its nodes' words plus one offset word
-            var size = gnodes * (12 + 4 * outputs) + 4 * gtrees
-            comptime if FOREST_PACKED_NODES:
-                var gleaves = Int(hsz.unsafe_ptr().unsafe_load(32 + grove))
-                size = gnodes * 16 + 4 * gtrees + 4 * outputs * gleaves
+            # each tree: its packed nodes' words, one offset word, and its leaf vectors
+            var gleaves = Int(hsz.unsafe_ptr().unsafe_load(32 + grove))
+            var size = gnodes * 16 + 4 * gtrees + 4 * outputs * gleaves
             loads[owner] += size
         _ = dsz^
         _ = hsz^

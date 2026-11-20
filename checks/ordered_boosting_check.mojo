@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for ordered boosting's FOLD AXIS, from `CreateFolds` to the histogram.
 
-    pixi run check-ordered-boosting
+    pixi run check-native-gpu ordered_boosting_check
 
 `check-dynamic-boosting-folds` gates the fold BOUNDARIES against a closed
 form and `check-fold-tasks` gates the fold LAYOUT (2N alternating partitions,
@@ -191,7 +191,7 @@ def drain(
     ctx.synchronize()
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -399,8 +399,8 @@ def main() raises:
         h_t[i] = plant_target(i)
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_docs)
     var d_t = ctx.enqueue_create_buffer[DType.float32](n_docs)
-    ctx.enqueue_copy(dst_buf=d_w, src_buf=h_w)
-    ctx.enqueue_copy(dst_buf=d_t, src_buf=h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_t, h_t)
     ctx.synchronize()
     # A HOST buffer handed to `enqueue_copy` is LAST USED at the enqueue, so
     # Mojo may free it before the copy runs
@@ -495,7 +495,7 @@ def main() raises:
             # `Shift(j) = 28 - 4 * localId`, high nibble first
             word |= UInt32(b) << UInt32(28 - 4 * k)
         h_ci[r] = word
-    ctx.enqueue_copy(dst_buf=d_ci, src_buf=h_ci)
+    upload_host_into[DType.uint32](ctx, d_ci, h_ci)
     ctx.synchronize()
     _ = h_ci[0]
 
@@ -508,10 +508,10 @@ def main() raises:
     for _ in range(N_HB):
         off_host.append(UInt32(0))
         oh_host.append(UInt8(0))
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=off_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_first, src_ptr=hb_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=hb_folds_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_oh, src_ptr=oh_host.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_off, off_host)
+    upload_whole_into[DType.uint32](ctx, d_first, hb_first)
+    upload_whole_into[DType.uint32](ctx, d_folds, hb_folds_host)
+    upload_whole_into[DType.uint8](ctx, d_oh, oh_host)
 
     var d_docs = ctx.enqueue_create_buffer[DType.uint32](n_docs)
     ctx.enqueue_copy(dst_buf=d_docs, src_ptr=ids.unsafe_ptr())
@@ -541,7 +541,7 @@ def main() raises:
         SM_COUNT,
         Float32(1.0),
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
 
     # host tally: part 0, folds 0..FoldCount-1, indexed with the TIGHT
@@ -603,14 +603,14 @@ def main() raises:
             bf_host.append(UInt32(k))
             bf_host.append(UInt32(b))
             bf_host.append(UInt32(0))
-    ctx.enqueue_copy(dst_buf=d_bf, src_ptr=bf_host.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_bf, bf_host)
     var d_cw = ctx.enqueue_create_buffer[DType.float32](hist_line)
     var d_bw = ctx.enqueue_create_buffer[DType.float32](hist_line)
     var ones = List[Float32]()
     for _ in range(hist_line):
         ones.append(Float32(1.0))
-    ctx.enqueue_copy(dst_buf=d_cw, src_ptr=ones.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_bw, src_ptr=ones.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, d_cw, ones)
+    upload_whole_into[DType.float32](ctx, d_bw, ones)
     var d_rid = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_rsc = ctx.enqueue_create_buffer[DType.float32](2)
     # DEVIATION 207: the scorers read scoreBeforeSplit from the device
@@ -885,7 +885,7 @@ def main() raises:
         SM_COUNT,
         Float32(1.0),
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
 
     var want2 = List[Float32]()
@@ -1055,3 +1055,22 @@ def main() raises:
         print("ordered boosting: OK")
     else:
         raise Error(String(failures) + " ordered-boosting gate(s) failed")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ordered_boosting_check", cpu=False, gpu=True, serial="", run=run_cases)

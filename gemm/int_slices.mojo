@@ -55,7 +55,7 @@ product in the UNIT and FLAT epilogues (never in the host oracle): the gate
 must print DIFFER under it on shapes whose low halves are nonzero.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -85,18 +85,19 @@ from gemm.int_slices_seams import (
     int_slices_strides,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
 #: THE SWITCH. Default OFF.
 comptime IDN_GEMM_INT_SLICES = is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]()
 
 #: The sabotage arm (see the module docstring).
 comptime INT_SLICES_SABOTAGE = is_defined["MOJOLEARN_INT_SLICES_SABOTAGE"]()
 
-#: Forces the FLAT plan on a column that has the unit, so one box can compare
-#: UNIT against FLAT (the gate's plan-agreement arm).
-comptime INT_SLICES_FORCE_FLAT = is_defined["MOJOLEARN_INT_SLICES_FORCE_FLAT"]()
-
+# TOMBSTONE: MOJOLEARN_INT_SLICES_FORCE_FLAT (force the FLAT plan on a unit column; opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at e62e7376e0.
+# Restore: git apply experiments/removed/MOJOLEARN_INT_SLICES_FORCE_FLAT.patch; record in docs/TOMBSTONES.md.
 #: Whether this build has the integer matrix unit plan.
-comptime INT_SLICES_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]() and not INT_SLICES_FORCE_FLAT
+comptime INT_SLICES_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 
 #: Threads of the quantizer's and the cell kernels' blocks. SCHEDULING.
 comptime INT_SLICES_TPB = 256

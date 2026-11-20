@@ -1,0 +1,15 @@
+diff --git a/x_prep/fastpt.mojo b/x_prep/fastpt.mojo
+index 5449b4ad97..27d04fa818 100644
+--- a/x_prep/fastpt.mojo
++++ b/x_prep/fastpt.mojo
+@@ -60,9 +60,7 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
+ # itself has std0/NaN normality. Cols0-5 improve; no isolated fix accepted.
+ # See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
+ # Explicitly disables speculation, whose objective tree is incompatible.
+-# TOMBSTONE: MOJOLEARN_PT_SCORE (DROP quality, EXP:2280; the stable score is the FAST+Apple default through PT_SCORE_STABLE) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1de4f202c5.
+-# Restore: git apply experiments/removed/MOJOLEARN_PT_SCORE.patch
+-comptime PT_SCORE = _FAST_APPLE and PT_SCORE_STABLE
++comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
+ # TOMBSTONE: MOJOLEARN_PTIMPUTE_ALL (DROP quality: M3 batchv-pt-all-istella 2,258 -> 512 ms, but M2 lambda max relative
+ # shift 9.5e-3, sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate) deleted 2026-10-09 on lane/owed-deletions-D2:
+ # the bundle alias; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PTIMPUTE_ALL.patch

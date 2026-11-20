@@ -154,7 +154,7 @@ comptime RR_OFF_TPB = 256
 `eigh_par_off_fold_kernel`)."""
 
 
-def _rr_tree(mut so: InlineArray[Float32, RR_OFF_TPB], mut sd: InlineArray[Float32, RR_OFF_TPB]):
+def _rr_tree(mut so: Array[Float32, RR_OFF_TPB], mut sd: Array[Float32, RR_OFF_TPB]):
     """The pairwise tree over the RR_OFF_TPB slots (slot 0 the sum)."""
     var w = RR_OFF_TPB // 2
     while w > 0:
@@ -174,8 +174,8 @@ def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
     var po = List[Float32](length=max(nb, 1), fill=Float32(0.0))
     var pd = List[Float32](length=max(nb, 1), fill=Float32(0.0))
     for b in range(nb):
-        var so = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
-        var sd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+        var so = Array[Float32, RR_OFF_TPB](fill=Float32(0.0))
+        var sd = Array[Float32, RR_OFF_TPB](fill=Float32(0.0))
         for t in range(RR_OFF_TPB):
             var k = b * RR_OFF_TPB + t
             if k < n:
@@ -185,8 +185,8 @@ def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
         _rr_tree(so, sd)
         po[b] = so[0]
         pd[b] = sd[0]
-    var so = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
-    var sd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    var so = Array[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    var sd = Array[Float32, RR_OFF_TPB](fill=Float32(0.0))
     for t in range(RR_OFF_TPB):
         var b = t
         while b < nb:

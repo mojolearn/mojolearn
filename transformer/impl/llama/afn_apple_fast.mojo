@@ -47,13 +47,19 @@ Candidates (docs/apple-fast/notes/neural-attn.md has the launch profile):
 - ALL: every candidate at once.
 """
 
-from std.ffi import external_call, _Global
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ALL, MOJOLEARN_AFN_ATTN_NORM_SG, MOJOLEARN_AFN_ATTN_ROPE_CACHE, MOJOLEARN_AFN_ATTN_GQA_TILE, MOJOLEARN_AFN_ATTN_FLASH, MOJOLEARN_AFN_ATTN_FUSE_PRE, MOJOLEARN_AFN_ATTN_FUSE_MLP (DELETE-ARM: neural MERGED-UNMEASURED opt-in, never measured; FLASH/GQA_TILE M3 component B/A mixed/regressing, kept OFF) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ALL.patch (one patch per define, same code)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_AUDIT, MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF, MOJOLEARN_AFN26_ATTN_NORM_TPB128, MOJOLEARN_AFN26_ATTN_NORM_TPB512, MOJOLEARN_AFN26_ATTN_FLASH_BK16, MOJOLEARN_AFN26_ATTN_FLASH_TQ16, MOJOLEARN_AFN26_ATTN_PROJ_KB16, MOJOLEARN_AFN26_ATTN_PROJ_BM32 (DELETE-ARM / DELETE-OLD-PATH: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/<DEFINE>.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+from std.ffi import external_call
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.math import exp, sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -61,6 +67,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from core.step_phase import step_count_launch
+from core.shared_slot import SharedSlot
 
 # ---------------------------------------------------------------------------
 # The guard and the defines. Every candidate is FAST + Apple + its define
@@ -68,7 +75,7 @@ from core.step_phase import step_count_launch
 # ---------------------------------------------------------------------------
 
 comptime AFN_ATTN_ON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_ATTN_ALL = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_ALL"]()
 # A01: not tested in this campaign; standalone A/B recipe in attention.json.
@@ -112,10 +119,8 @@ comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
 comptime AFN_ATTN_FUSE_MLP = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_FUSE_MLP"]()
 )
-# A07: not tested in this campaign; standalone transformer binding allocation arm.
-comptime AFN_ATTN_ARENA = AFN_ATTN_ON and (
-    AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ARENA"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
 #: Any candidate that changes the block forward's launches.
 comptime AFN_ATTN_ANY = (
     AFN_ATTN_NORM_SG or AFN_ATTN_ROPE_CACHE or AFN_ATTN_FLASH
@@ -663,7 +668,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
         sta[tid] = Float32(1.0)
     barrier()
     var fr = sg // (AFN_FL_NSG // AFN_FL_NFR)
-    var qf = InlineArray[_M64, HD // 8](fill=_M64(0))
+    var qf = Array[_M64, HD // 8](fill=_M64(0))
     comptime for p8 in range(HD // 8):
         qf[p8] = _sg_load_t(vT + (8 * p8) * QST + fr * 8, QST)
     barrier()
@@ -674,7 +679,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     var q8 = tid % 8
     var t_s = t0 + r_s % TQG
     var rng = _row_lo_hi(t_s, pos0, key_lo, window, s)
-    var cacc = InlineArray[_M64, AFN_FL_CPS](fill=_M64(0))
+    var cacc = Array[_M64, AFN_FL_CPS](fill=_M64(0))
     comptime SPAN = AFN_FL_NSG // AFN_FL_NFR  # simdgroups sharing one row fragment
 
     for kb in range(kb_lo, kb_hi + 1):
@@ -838,7 +843,7 @@ struct FlashCallerAudit(Defaultable, Movable):
         self.calls = 0
         self.grouped_calls = 0
 
-comptime FLASH_AUDIT = _Global[StorageType=FlashCallerAudit, name="AppleFlashCallerAudit", init_fn=FlashCallerAudit.__init__]
+comptime FLASH_AUDIT = SharedSlot[FlashCallerAudit, "MojolearnAppleFlashCallerAuditV1"]
 # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 3/3 metrics within the existing bands; PASS.
 # F07/default M3 2026-10-06: 3 retained public-caller timings;
@@ -1046,8 +1051,8 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
             rs[tid] = r
         barrier()
 
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
-    var acc2 = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
+    var acc2 = Array[_M64, NF](fill=_M64(0))
     var windows = k // KB
     for w in range(windows):
         var k0 = w * KB
@@ -1089,7 +1094,7 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
                 (bt2 + j * BST + p4).store[alignment=16](z4)
         barrier()
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _sg_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):

@@ -56,22 +56,18 @@ def test_the_three_doors_ship_in_the_linalg_family():
 
 @needs_host
 @pytest.mark.parametrize("rows,cols", [(48, 5), (16, 4)])
-def test_qr_returns_numpys_r(rows, cols):
-    """`numpy.linalg.qr(a, mode='r')`: shape (K, N), upper triangular, and
-    `R.T @ R == a.T @ a`, which is the property that does not depend on the
-    reflector's sign convention.
+def test_qr_r_public_shape_and_dtype_match_numpy(rows, cols):
+    """Keep the returned-array and caller-storage boundary against NumPy.
 
-    BOTH SLICE ARMS. `host_qr_slice_count` halves from QR_MAX_SLICES while a
-    slice would hold fewer than QR_SLICE_ROWS_PER_COL rows per column, so
-    48 x 5 takes the two-slice arm and 16 x 4 the one-slice arm; they are
-    different code and a test of one says nothing about the other.
+    The original two shapes' triangularity and Gram assertions now run over
+    the actual CPU/GPU entries in checks/native_tests/linalg_numerical_*.
     """
     a = _matrix(rows, cols)
+    original = a.copy()
     r = np.asarray(linalg.qr(a, mode="r")).reshape(cols, cols)
     assert r.shape == np.linalg.qr(a.astype(np.float64), mode="r").shape
-    assert np.allclose(np.tril(r, -1), 0.0, atol=1e-5), "R is not upper triangular"
-    gram = a.T.astype(np.float64) @ a.astype(np.float64)
-    assert np.allclose(r.T @ r, gram, rtol=1e-4, atol=1e-4)
+    assert r.dtype == np.float32
+    np.testing.assert_array_equal(a, original)
 
 
 @needs_host
@@ -117,14 +113,8 @@ def test_eigh_reads_one_triangle_like_numpy():
         linalg.eigh(sym, UPLO="X")
 
 
-@needs_host
-def test_eigh_of_a_diagonal_matrix_is_that_diagonal_sorted():
-    """The sweep performs no rotation at all here, so the answer is the input
-    ordered. It is the arm that catches an ordering permutation applied
-    unconditionally, which a generic matrix hides."""
-    d = np.array([3.0, 0.5, 2.0, 9.0], np.float32)
-    w, _ = linalg.eigh(np.ascontiguousarray(np.diag(d)))
-    assert np.allclose(np.asarray(w), np.sort(d), rtol=0, atol=1e-6)
+# The literal diagonal ordering case moved to linalg_numerical_* (4x4,
+# unchanged atol=1e-6). NumPy comparisons and triangle admission stay here.
 
 
 @needs_host
@@ -136,15 +126,8 @@ def test_svdvals_is_descending_like_numpy():
                        rtol=1e-4, atol=1e-4)
 
 
-@needs_host
-def test_svdvals_of_a_rank_deficient_matrix_ends_at_zero():
-    """A duplicated column makes the smallest singular value an exact zero and
-    puts a tie at the bottom of the sort."""
-    a = _matrix(48, 3)
-    dup = np.ascontiguousarray(np.stack([a[:, 0], a[:, 1], a[:, 1], a[:, 2]], 1))
-    s = np.asarray(linalg.svdvals(dup))
-    assert np.all(np.diff(s) <= 0)
-    assert abs(float(s[-1])) < 1e-3, f"a duplicated column must give a zero, got {s[-1]}"
+# The original seed-5 duplicated-column 48x4 case moved to native CPU/GPU
+# tests with the same descending order and strict abs(last) < 1e-3 bound.
 
 
 @needs_host
@@ -301,68 +284,29 @@ def test_float64_is_refused_and_never_cast(fn):
 # ===========================================================================
 
 
-def _both_routes():
-    """(device_module, host_module) or None when this box has one route.
+def _constant_columns(rows=64):
+    """Constant columns beside large-scale ones: numerically null directions
+    next to columns of squared norm ~1e10, the rank-deficient float32 shape
+    the one-sided Jacobi once refused."""
+    base = _matrix(rows, 4) * np.asarray([1e4, 1.0, 1e4, 1.0], np.float32)
+    const = np.broadcast_to(np.asarray([1.0, 3.0, 0.0, 250.0, 0.0, 7.5], np.float32), (rows, 6))
+    return np.ascontiguousarray(np.hstack([base, const]).astype(np.float32))
 
-    On a CPU-only install `_door()` answers the host binding for both, so
-    there is nothing to compare and the test SKIPS rather than passing
-    vacuously -- a cell that cannot fail reads exactly like coverage.
+
+@needs_host
+def test_svdvals_converges_on_constant_columns():
+    """Retain the independent NumPy spectrum comparison at the public door.
+
+    Native linalg_numerical_* also checks the original ordering and all five
+    null directions on this same 64x10 input, with unchanged tolerances.
     """
-    from mojolearn import _backend, _linalg_impl
-    if _backend._CPU_ONLY is not None:
-        return None
-    try:
-        device = _linalg_impl._door()
-        host = _backend.load_host_module("_mojolearn_linalg_host")
-    except Exception:
-        return None
-    return None if device is host else (device, host)
+    a = _constant_columns()
+    s = np.asarray(linalg.svdvals(a))
+    ref = np.linalg.svd(a.astype(np.float64), compute_uv=False)
+    assert np.allclose(s[:5], ref[:5], rtol=1e-4, atol=1e-5 * float(ref[0])), f"{s[:5]} vs {ref[:5]}"
 
 
-needs_both = pytest.mark.skipif(
-    _both_routes() is None,
-    reason="one route on this box (CPU-only install, or no GPU binding built)")
-
-
-@needs_both
-@pytest.mark.parametrize("rows,cols", [(48, 5), (16, 4)])
-def test_qr_device_equals_host_byte_for_byte(rows, cols):
-    """Both QR slice arms. `host_qr_slice_count` halves from QR_MAX_SLICES,
-    so 48x5 takes the two-slice arm and 16x4 the one-slice arm; they are
-    different code on BOTH routes and agreement on one says nothing about
-    the other."""
-    a = _matrix(rows, cols)
-    device, host = _both_routes()
-    d = np.zeros(cols * cols, np.float32)
-    h = np.zeros(cols * cols, np.float32)
-    device.qr_r([a.ctypes.data, d.ctypes.data], [rows, cols])
-    host.qr_r([a.ctypes.data, h.ctypes.data], [rows, cols])
-    assert d.tobytes() == h.tobytes(), "device and host QR disagree in the bytes"
-
-
-@needs_both
-def test_svdvals_device_equals_host_byte_for_byte():
-    a = _matrix(48, 5)
-    device, host = _both_routes()
-    d = np.zeros(5, np.float32)
-    h = np.zeros(5, np.float32)
-    device.svdvals([a.ctypes.data, d.ctypes.data], [48, 5])
-    host.svdvals([a.ctypes.data, h.ctypes.data], [48, 5])
-    assert d.tobytes() == h.tobytes()
-
-
-@needs_both
-def test_eigh_device_equals_host_byte_for_byte():
-    """Includes the sign flip: without it two routes agreeing on every value
-    could still hand back `v` and `-v`, which `.tobytes()` catches and a
-    subspace comparison would not."""
-    a = _matrix(64, 5)
-    sym = a.T @ a
-    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
-    device, host = _both_routes()
-    dw, dv, ds = np.zeros(5, np.float32), np.zeros(25, np.float32), np.zeros(2, np.float64)
-    hw, hv, hs = np.zeros(5, np.float32), np.zeros(25, np.float32), np.zeros(2, np.float64)
-    device.eigh([sym.ctypes.data, dw.ctypes.data, dv.ctypes.data, ds.ctypes.data], [5])
-    host.eigh([sym.ctypes.data, hw.ctypes.data, hv.ctypes.data, hs.ctypes.data], [5])
-    assert dw.tobytes() == hw.tobytes(), "eigenvalues disagree in the bytes"
-    assert dv.tobytes() == hv.tobytes(), "eigenvectors disagree in the bytes"
+# The four device-equals-host word comparisons (QR 48x5 and 16x4, svdvals 48x5
+# and the constant-column 64x10, eigh 64x5) run in Mojo:
+# checks/native_tests/linalg_decompositions.mojo
+# (pixi run check-native-linalg-decompositions-gpu).

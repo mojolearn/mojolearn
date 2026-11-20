@@ -30,6 +30,10 @@ import re
 import statistics
 
 TREE_BATCHES = ("test", "large")
+#: a cell's explicit reason for the quality it does not record (shown, never a gate; tools/paper_compare.py)
+UNAVAILABLE = "quality_unavailable"
+LARGE_UNAVAILABLE = ("large batch = training rows (a throughput batch, no held-out labels); "
+                     "quality is the test batch's, same fitted model")
 CLASSICAL_INFER_LANES = ("kmeans", "pca", "ols", "svc")
 CLASSICAL_CALL = {"kmeans": "predict", "pca": "transform", "ols": "predict", "svc": "predict"}
 
@@ -118,6 +122,9 @@ def parse_tree_infer(path):
                     pass
                 if f.get("hash") not in (None, "-", "None"):
                     rec["hashes"].append(f["hash"])
+                calls = _small_rows().parse_suffix(f)   # SMALL ROWS (2026-11-15): calls= min_ms= max_ms=
+                if calls is not None:
+                    rec.setdefault("scored_calls", []).append(dict(calls, round=f.get("round")))
             elif head == "FSPEED-INFER-WARMUP" and arm and batch:
                 try:
                     out["warmup"][(arm, batch)] = (float(f["ms"]), int(f["rows"]))
@@ -142,6 +149,22 @@ def parse_tree_infer(path):
 # ---------------------------------------------------------------------------
 # Cells
 # ---------------------------------------------------------------------------
+
+_SMALL_ROWS = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py by path, loaded once per process (small rows: calls and spread)."""
+    if not _SMALL_ROWS:
+        import importlib.util
+        import os
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_board_small_rows.py")
+        spec = importlib.util.spec_from_file_location("bench_board_infer_small_rows", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _SMALL_ROWS.append(mod)
+    return _SMALL_ROWS[0]
+
 
 def _timing(cell, ms, rounds, refused, bb):
     cell.update(times_ms=ms, median_ms=float(statistics.median(ms)) if ms else None,
@@ -177,6 +200,7 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
             warm = p["warmup"].get((arm, batch))
             refused = p["refused"].get((arm, batch)) or p["refused"].get((arm, "all"))
             _timing(cell, rec["ms"], ctx["rounds"], refused, bb)
+            cell.update(_small_rows().cell_fields(rec.get("scored_calls")))
             if not rec["ms"] and not refused:
                 cell["status"] = "UNKNOWN(no inference lines)"
             cell["batch_rows"] = rec["rows"] or (warm[1] if warm else None)
@@ -196,6 +220,12 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
                     q["max_abs_diff_vs_ours_identical"] = float(agree.get("max_abs_diff"))
                 except (TypeError, ValueError):
                     pass
+            if batch == "large" and not any(not k.endswith("_matches_fit") for k in q):
+                # QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the large batch is the first
+                # --infer-large-rows TRAINING rows (bench/speed/forest_speed_arm.py), a throughput batch the driver
+                # scores no held-out metric on; its cell says so instead of an empty quality the completion check
+                # read as "its scorer did not run". The model's quality is the test batch's (same fitted model).
+                q[UNAVAILABLE] = LARGE_UNAVAILABLE
             cell["quality"] = q
             cell["verdict"] = fit_verdict
             fitted = next((c for c in fit_cells if c["arm"] == arm), {})
@@ -232,6 +262,9 @@ def classical_cells(bb, ctx, race, r):
         refused = None if a.get("status") == "ok" else "%s: %s" % (
             a.get("status"), json.dumps(a.get("error"))[:200])
         _timing(cell, a.get("ms") or [], ctx["rounds"], refused, bb)
+        cell.update(_small_rows().cell_fields(a.get("scored_calls")))   # SMALL ROWS (2026-11-15)
+        # lane fx-harness (2026-11-18): worker NUMA node, scored calls' system time and faults, harness clock
+        cell.update(bb.host_fields(a.get("info"), a.get("host_usage"), "infer"))
         cell["warmup_ms"] = a.get("warmup_ms")
         cell["call"] = a.get("call_text") or "%s(Xq)" % inf.get("call")
         cell["hash"] = (a.get("digests") or [None])[-1]

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """PageRank.fit, Louvain.fit/fit_predict, connected_components and
 SVGP.fit/predict/score are one native call each
-(bindings/neighbors_graph_native.mojo); every output, fitted attribute and
+(bindings/neighbors_graph_native_door.mojo); every output, fitted attribute and
 refusal equals the former Python path's (tests/_legacy_neighbors_graph.py),
 bit for bit."""
 import numpy as np
@@ -169,7 +169,12 @@ def test_svgp_fit_predict_score_match_former_path(params):
     legacy.svgp_fit(old, x, y)
     assert _state(native, SV_ATTRS) == _state(old, SV_ATTRS)
     q = x[::3]
-    assert _bits(audit_native_call(native.predict, q).assert_native()) == _bits(legacy.svgp_predict(old, q))
+    # The public predict widens the float32 mean to float64 alongside NumPy
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo
+    # family_lifecycle_finish, as the former `_mode` wrapper did); the frozen
+    # helper is the inner float32 method, and the widening is exact.
+    predicted = audit_native_call(native.predict, q).assert_native()
+    assert _bits(predicted) == _bits(np.asarray(legacy.svgp_predict(old, q)).astype(np.float64))
     w = np.linspace(0.5, 1.5, x.shape[0], dtype=np.float32)
     for sw in (None, w):
         got = audit_native_call(native.score, x, y, sample_weight=sw).assert_native()
@@ -186,5 +191,15 @@ def test_svgp_refusals_match_former_path(params, data):
         y = y[:-1]
     params = {k: (np.repeat(x[:1], 4, axis=0) if v == "dup" else v) for k, v in params.items()}
     native, old = mojolearn.SVGP(**params), mojolearn.SVGP(**params)
+    if data == "short_y":
+        # The public fit's shared lifecycle validates y before the owner runs
+        # (providers/python/family_public_lifecycle_pyapi_door.mojo, target=2),
+        # with scikit-learn's wording, as the former `_mode` wrapper did; the
+        # frozen helper is the inner fit only.
+        assert _outcome(native.fit, x, y) == (
+            "raised", ValueError,
+            f"Found input variables with inconsistent numbers of samples: [{x.shape[0]}, {y.shape[0]}]")
+        assert _outcome(legacy.svgp_fit, old, x, y)[:2] == ("raised", ValueError)
+        return
     assert _outcome(native.fit, x, y) == _outcome(legacy.svgp_fit, old, x, y)
     assert getattr(native, "precision_", None) == getattr(old, "precision_", None)

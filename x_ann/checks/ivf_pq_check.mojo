@@ -14,7 +14,6 @@ With MOJOLEARN_IDENTITY_TRACE=<file> the device stages are written as a card
 comparison matched."""
 
 from std.memory import bitcast
-from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, pq_encode_device
@@ -35,11 +34,11 @@ def check_build(name: String, x: List[Float32], n: Int, dim: Int, mut trace: Ide
     trace.record_list_i32(String("ivfpq.") + name + ".codes", dev.codes)
     report(name + ": coarse centres == host_ivf_build", same_f32(dev.centers, ora.centers), failed)
     report(name + ": lists == host_ivf_build", same_i32(dev.offsets, ora.offsets) and same_i32(dev.list_indices, ora.list_indices), failed)
-    report(name + ": codebooks == host_kmeans_fit", same_f32(dev.codebooks, ora.codebooks), failed)
+    report(name + ": codebooks == oracle (batched Lloyd)", same_f32(dev.codebooks, ora.codebooks), failed)
     report(name + ": codes == oracle (5800, 5801)", same_i32(dev.codes, ora.codes), failed)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var failed = 0
     var trace = IdentityTrace()
@@ -68,7 +67,7 @@ def main() raises:
     print("separation: fold", sep_fold, "encode-tie", sep_tie)
     if sep_fold == 0 or sep_tie == 0:
         print("VACUOUS: a fixture does not separate its seam")
-        exit(2)
+        raise Error("VACUOUS: a fixture does not separate its seam")
 
     # 5801 directly: codebooks with DUPLICATED codewords (code 2c+1 = code 2c),
     # so every row's encoding meets an exact tie
@@ -91,7 +90,7 @@ def main() raises:
     print("separation: duplicated-codeword ties", enc_ties)
     if enc_ties == 0:
         print("VACUOUS: the duplicated codebook does not separate 5801")
-        exit(2)
+        raise Error("VACUOUS: the duplicated codebook does not separate 5801")
     report("encode with duplicated codewords == oracle (5801)", enc_ok, failed)
 
     check_build("wide", wide, n, dim, trace, failed)
@@ -140,7 +139,7 @@ def main() raises:
     print("separation: probe-tie", sep_probe, "topk-tie", sep_topk)
     if sep_probe == 0 or sep_topk == 0:
         print("VACUOUS: the planted index does not separate its seams")
-        exit(2)
+        raise Error("VACUOUS: the planted index does not separate its seams")
     var dd = List[Float32]()
     var di = List[Int32]()
     var dn = List[Int32]()
@@ -167,5 +166,5 @@ def main() raises:
     report("wide search == oracle", same_f32(wd, xd) and same_i32(wi, xi) and same_i32(wn, xn), failed)
     if failed > 0:
         print("ivf_pq_check: FAILED", failed)
-        exit(1)
+        raise Error("ivf_pq_check: FAILED")
     print("ivf_pq_check: ALL OK")

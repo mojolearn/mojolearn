@@ -1,0 +1,26 @@
+diff --git a/x_linear/ridge.mojo b/x_linear/ridge.mojo
+index 8947bc47d9..d5dddeeb6e 100644
+--- a/x_linear/ridge.mojo
++++ b/x_linear/ridge.mojo
+@@ -68,16 +68,18 @@ def _loo_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, ym: Int, xm: Int, rhs: Int,
+ # host and every device. The float32 path stays the default; the fit falls
+ # back when its Cholesky fails or a pivot keeps less than 2^-12 of its
+ # diagonal (more than 12 bits cancelled). A matrix float-float cannot
+-# factor either is refused (status 2).
+-# TOMBSTONE: MOJOLEARN_RIDGE_FF_ALWAYS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 67fe970eba.
+-# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch; record in docs/TOMBSTONES.md.
++# factor either is refused (status 2). `-D MOJOLEARN_RIDGE_FF_ALWAYS=1`
++# takes float-float for every fit (the A/B arm for its cost).
+ comptime BIG_ERR = Float32(3.0e38)
+ comptime RIDGE_FF_GATE = Float32(0.000244140625)  # 2^-12
++comptime RIDGE_FF_ALWAYS = is_defined["MOJOLEARN_RIDGE_FF_ALWAYS"]()
+ 
+ 
+ def chol_trusted(ok: Bool, l: FP, g: FP, d: Int, alpha: Float32) -> Bool:
+     """Whether a float32 factor l of G + alpha I (G at g) may be used: it
+     factored and no pivot kept less than RIDGE_FF_GATE of its diagonal."""
++    comptime if RIDGE_FF_ALWAYS:
++        return False
+     if not ok:
+         return False
+     for j in range(d):

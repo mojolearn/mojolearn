@@ -1,0 +1,21 @@
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index 6006bd37f5..1331a1c81e 100644
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -121,11 +121,11 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
+ # vendor and the host together (old bits do not matter); a blocked float sum
+ # is at least as accurate as the n-long chain. Scratch is 2 * ns * d words
+ # (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). `-D
+-# MOJOLEARN_IDN_ALL_OFF` restores the one-chain fold and the
+-# one-block-per-seed team kernel.
+-# TOMBSTONE: MOJOLEARN_IDN_MEANSHIFT_GRID_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 2d6b343a06.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MEANSHIFT_GRID_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++# MOJOLEARN_IDN_MEANSHIFT_GRID_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
++# one-chain fold and the one-block-per-seed team kernel.
++comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_MEANSHIFT_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime MSI_T = 256
+ """Rows per chunk of the K6 blocked fold (fixed: the bits depend on it)."""
+ comptime MSI_SCRATCH_PER_SEED = 2 if IDN_MEANSHIFT_GRID else 1

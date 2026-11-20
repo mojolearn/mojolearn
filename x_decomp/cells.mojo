@@ -20,7 +20,6 @@ cell is written so it cannot:
     lu_result_word at the factor/solve boundary;
   * no float64 anywhere.
 """
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -38,6 +37,7 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.philox import philox4x32_10
+from core.row_cells import sqdist_diff_cell
 
 #: The one-sided Jacobi SVD's sweep budget in this lane (x_decomp svd):
 #: decomposition/'s JACOBI_SWEEPS (15, RAFT's) stops short on the `wide`
@@ -481,12 +481,9 @@ def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
 # multiply-add per term; arm 5302_sqdist_order.
 @always_inline
 def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
-    """||a_i - b_j||^2, features ascending."""
-    var acc = Float32(0)
-    for p in range(d):
-        var t = sub(a.unsafe_load(i * d + p), b.unsafe_load(j * d + p))
-        acc = ftz(identical_mul_add(t, t, acc))
-    return acc
+    """||a_i - b_j||^2, features ascending: core/row_cells.mojo's one
+    by-difference body (the same statements)."""
+    return sqdist_diff_cell(a, b, i, j, d)
 
 
 comptime PD_MANHATTAN = 1
@@ -1413,7 +1410,10 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     the trailing matrix takes step k's one fused multiply-add, steps in
     order; lane/algos-decomp 2026-09-28: one device thread took 7 s at 512)."""
     info.unsafe_store(0, Float32(0))
-    var scal = InlineArray[Float32, 2](fill=Float32(0))
+    # Native List, not Array: an Array local whose address escapes only as an Int is
+    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
+    # build (reproduced on the Mac, smoke-triage C01 pattern).
+    var scal = List[Float32](length=2, fill=Float32(0))
     var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
     for k in range(n):
         lu_pivot(a, piv, k, n)
@@ -1425,6 +1425,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
         for i in range(k + 1, n):
             for j in range(k + 1, n):
                 lu_update_elem(a, sp, k, i, j, n)
+    _ = scal^  # read and written through `sp` above: keep it past the last step
     lu_finish_host(a, n * n)
 
 
@@ -1517,32 +1518,16 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
-def trs_block_group(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, hi: Int, c0: Int, c1: Int):
-    """C14: one factor entry feeds bounded RHS columns; each RHS retains B's fold."""
-    var forward = tri == 0 or tri == 2
-    for step in range(hi - lo):
-        var j = lo + step if forward else hi - 1 - step
-        if trs_divides(tri):
-            var diag = lu.unsafe_load(j * n + j)
-            for c in range(c0, c1):
-                b.unsafe_store(j * nrhs + c, div0(ftz(b.unsafe_load(j * nrhs + c)), diag))
-        var first = j + 1 if forward else lo
-        var last = hi if forward else j
-        for i in range(first, last):
-            var coeff = -ftz(trs_coef(lu, n, tri, i, j))
-            for c in range(c0, c1):
-                b.unsafe_store(i * nrhs + c, ftz(identical_mul_add(
-                    coeff, ftz(b.unsafe_load(j * nrhs + c)), ftz(b.unsafe_load(i * nrhs + c)))))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 
 
 def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
     """One triangle on the columns [c0, c1): the reference walk (one row at
     a time, each applied to every row it feeds, columns innermost). Every
     cell's chain is its own column's, so column slices run apart."""
-    comptime if C14_GROUP_RHS:
-        for first in range(c0, c1, 4):
-            trs_block_group(lu, b, n, nrhs, tri, 0, n, first, min(c1, first + 4))
-        return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 8d5d392bf1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
     if tri == 0 or tri == 2:
         for j in range(n):
             if trs_divides(tri):

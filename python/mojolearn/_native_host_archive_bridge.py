@@ -12,7 +12,6 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     from .density import _METRICS
     from ._spectral_impl import _CLUSTER_AFFINITIES
     from ._hierarchy_impl import _ALL_METRICS
-    from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE, _UNSUPPORTED_METRICS
     from ._umap_impl import _METRICS as umap_metrics
     from ._mode import SklearnTagsMixin
     from ._svm_impl import _SVC_KERNELS, _SVC_REFUSED_KERNELS, _SVR_REFUSED_KERNELS
@@ -31,9 +30,6 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     archive["host_archive_dbscan_metrics"] = tuple(_METRICS)
     archive["host_archive_spectral_affinities"] = tuple(_CLUSTER_AFFINITIES)
     archive["host_archive_agglo_metrics"] = tuple(_ALL_METRICS)
-    archive["host_archive_neighbor_metrics"] = dict(_METRIC_TABLE)
-    archive["host_archive_rbc_metrics"] = dict(_RBC_METRIC_TABLE)
-    archive["host_archive_unsupported_metrics"] = tuple(_UNSUPPORTED_METRICS)
     archive["host_archive_umap_metrics"] = dict(umap_metrics)
     archive["host_archive_svm_kernels"] = dict(_SVC_KERNELS)
     archive["host_archive_svm_refused"] = dict(_SVC_REFUSED_KERNELS)
@@ -48,12 +44,20 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     }
     archive["host_archive_fitted_estimators"] = tuple(
         name for classes in formats.values() for name, cls in classes.items()  # glue: fixed fitted-state ownership metadata at import
+        # A class with no `fit` (Embedding: a layer built from its weights)
+        # has no fitted state; its public loader writes no fitted marker and
+        # the host load must restore the same fields.
         if issubclass(cls, SklearnTagsMixin) and name not in ("LinearRegression", "Ridge")
+        and callable(getattr(cls, "fit", None))
     )
     archive["host_archive_classical_formats"] = tuple(formats)
     archive.update(forest_metadata)
     archive["host_archive_formats"].update(forest_metadata["host_archive_extra_formats"])
     archive["host_archive_lifetime_layouts"] = {}
+    # iforest_validate's absent-field sentinel (bindings/trees_public_iforest_door.mojo `_field`): a saved forest
+    # loads into HostIsolationForest through THIS context (classical_trees_door host_archive_load); e05037cd81 put
+    # it in host_inference_context only, so the load raised KeyError-as-ValueError 'trees_missing'.
+    archive["trees_missing"] = object()
     module = _binding()._module
     finalize = getattr(module, "host_archive_finalize_call", None)
     if finalize is not None:
@@ -84,16 +88,20 @@ def connect(context, formats, cleanup_entries, forest_metadata):
             raise TypeError("forest grove cleanup requires a compiled native entry")
         archive["host_archive_lifetime_layouts"][forest_cls] = (release, forest_cls.__dict__["__dict__"], "groves")
         forest_cls.__del__ = descriptor
-    entries = {}
-    for name in ("forest_host_rf_predict_proba", "forest_host_rf_predict_reg", "forest_host_et_predict",  # glue: fixed CPU inference entry points
-                 "forest_host_groves_prepare", "forest_host_groves_predict", "forest_host_groves_release",
-                 "forest_host_gbdt_expand_ctr", "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid_pair"):
-        entry = getattr(forest_metadata["host_archive_forest_binding"], name, None)
-        if entry is not None and not isinstance(entry, BuiltinFunctionType):
-            raise TypeError("CPU tree inference requires compiled native entry points")
-        entries[name] = entry
     prediction = dict(archive)
-    prediction.update(host_tree_entries=entries, host_tree_entry_type=BuiltinFunctionType, output_context=archive)
+    prediction.update(host_tree_entry_type=BuiltinFunctionType, output_context=archive)
+    # glue: once at import, the connected forest host image's (tier, vendor)
+    # key of the native host entry table (core/host_entry_table.mojo); the
+    # saved-model owner calls that image's published entry, not its Python
+    # exports. An image without the probe leaves the key absent and the
+    # owner refuses at the first call.
+    forest_binding = forest_metadata["host_archive_forest_binding"]
+    try:
+        mode = int(forest_binding.forest_host_numeric_mode())  # import-time: the image's compiled tier
+    except Exception:  # noqa: BLE001 - absent binding or probe leaves the key absent
+        mode = -1
+    if mode in (0, 1):
+        prediction["host_tree_native_key"] = (mode, 0)
     context["host_tree_context"] = prediction
     context["host_archive_context"] = archive
 

@@ -49,14 +49,17 @@ exactly what was there before.
 """
 
 from std.bit import log2_floor
-from std.gpu import thread_idx, WARP_SIZE
+from max.gpu import thread_idx, WARP_SIZE
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# The fold seams read the reduction-order row of the mode policy table
+# (checks/mode_policy.mojo): False in an identical build, True in the legacy
+# fast build, so each compiles the arm it always did.
+from checks.mode_policy import ROW_FOLD_FREE
 
 
 @always_inline
@@ -77,7 +80,7 @@ def pinned_block_sum[block_size: Int](value: Float32) -> Float32:
     `identical_mul_add` does, and what is purchased is that IDENTICAL's
     bits are the same bits everywhere.
     """
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if not ROW_FOLD_FREE:
         return halving_block_sum[block_size](value)
     else:
         return block_sum[block_size=block_size](value)
@@ -126,7 +129,7 @@ def two_phase_halving_sum[block_size: Int](value: Float32) -> Float32:
     red[tid] = value
     barrier()
     if tid < P:
-        var v = InlineArray[Float32, G](fill=Float32(0.0))
+        var v = Array[Float32, G](fill=Float32(0.0))
         comptime for j in range(G):
             v[j] = red[tid + j * P]
         comptime for k in range(log2_floor(G)):
@@ -136,7 +139,7 @@ def two_phase_halving_sum[block_size: Int](value: Float32) -> Float32:
         # in place: red[tid] is read by this thread alone (j == 0 above)
         red[tid] = v[0]
     barrier()
-    var w = InlineArray[Float32, P](fill=Float32(0.0))
+    var w = Array[Float32, P](fill=Float32(0.0))
     comptime for t in range(P):
         w[t] = red[t]
     comptime for k in range(log2_floor(P)):
@@ -296,7 +299,7 @@ def pinned_block_prefix_sum[
     Same contract as the library: EVERY thread of the block calls it, and
     `block_size` is a multiple of 32 no larger than 32 * 32.
     """
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or WARP_SIZE == 32:
+    comptime if ROW_FOLD_FREE or WARP_SIZE == 32:
         return block_prefix_sum[block_size=block_size, exclusive=exclusive](
             value
         )

@@ -1,0 +1,18 @@
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index 8709cac5f9..d599cf0297 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -165,10 +165,9 @@ comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST or (
+ comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST or (
+     _SEQ_IDN and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+-#: the pipelined chunk, floats (8 MB).
+-# TOMBSTONE: MOJOLEARN_SEQ_FAST_PIPE_CH (unmeasured Apple FAST knob, EXP:680 MERGED-UNMEASURED; default 1 << 21 kept) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at c5730b729c.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch; record in docs/TOMBSTONES.md.
+-comptime SEQ_PIPE_CH = 1 << 21
++#: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
++#: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
++comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
+ #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md):
+ #: its two read-back candidates for the pipelined downloads (map_to_host,
+ #: raw chunked DMA) were deleted 2026-10-09 as losers (TOMBSTONES below).

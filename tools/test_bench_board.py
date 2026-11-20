@@ -33,6 +33,7 @@ STUB_TREES = textwrap.dedent(r'''
     p.add_argument("--infer", action="store_true")    # tools/test_bench_board_infer.py
     p.add_argument("--ours-cpu", action="store_true")
     p.add_argument("--mem", action="store_true")
+    p.add_argument("--own-arms")    # board-smoke-3 (9792ddb17e): bench_board names the planned own arms
     a = p.parse_args()
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("trees %s %s\n" % (a.lane, a.dataset))
@@ -41,7 +42,8 @@ STUB_TREES = textwrap.dedent(r'''
     n = int(os.environ["MOJOLEARN_SPEED_ROUNDS"])
     mode = os.environ["MOJOLEARN_NUMERIC_MODE"]
     shape = "%s-%sx16" % (a.dataset, a.rows or 4110786)
-    ours = [("ours", mode, 100.0)]
+    own = a.own_arms.split(",") if a.own_arms else ["ours"]
+    ours = [("ours", mode, 100.0)] if "ours" in own else []
     if a.ours_ab:
         ours.append(("ours-ab", a.ours_ab.split("=")[1].strip("'"), 80.0))
     if a.ours_cpu:
@@ -75,8 +77,11 @@ STUB_TREES = textwrap.dedent(r'''
                 continue
             # ours-cpu predicts the same bits as ours (the promise); STUB_CPU_BITS=differ breaks it
             h = "ours" if name == "ours-cpu" and os.environ.get("STUB_CPU_BITS") != "differ" else name
-            print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=h%s"
-                  % (a.lane, name, shape, r, base + r, h))
+            # SMALL ROWS (2026-11-15): STUB_SMALL=1 makes ours a median of 20 calls (calls= min_ms= max_ms=)
+            small = (" calls=20 min_ms=%.6f max_ms=%.6f" % (base + r - 0.5, base + r + 4.0)
+                     if os.environ.get("STUB_SMALL") == "1" and name == "ours" else "")
+            print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=h%s%s"
+                  % (a.lane, name, shape, r, base + r, h, small))
     for name, _, base in arms:
         if name == refuse:
             continue
@@ -125,6 +130,9 @@ STUB_CLASSICAL = textwrap.dedent(r'''
                      "info": info, "digest_stable": True, "mem": mem,
                      "span": {"input_home": "device" if arm.startswith("torch") else "host",
                               "pre_clock_fit": False}}
+        if os.environ.get("STUB_SMALL") == "1" and arm == "ours":   # SMALL ROWS (2026-11-15)
+            arms[arm]["scored_calls"] = [{"round": r + 1, "calls": 20, "ms": x, "min_ms": x - 0.25,
+                                          "max_ms": x + 3.0} for r, x in enumerate(ms)]
     out = {"lane": a.lane, "dataset": a.dataset,
            "block": {"arrays": {"X": {"shape": [4000, 11]}}}, "arms": arms,
            "quality": {arm: {"inertia": 1.5 + i, "n_iter": 20, "reference": "x"}
@@ -279,6 +287,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("STUB_CALLS", str(calls))
     monkeypatch.delenv("STUB_FAIL", raising=False)
     monkeypatch.delenv("STUB_REFUSE", raising=False)
+    monkeypatch.delenv("STUB_SMALL", raising=False)
     out = tmp_path / "out"
     base = ["--out", str(out), "--python-env", sys.executable, "--skip-install",
             "--with-opponents",  # These stub schema tests explicitly exercise opponent cells.
@@ -464,6 +473,9 @@ def test_fairness_fix_20261013_amd_installs_rocm_xgboost(monkeypatch):
         assert bb.amd_xgboost_index("DEFAULT", f) is None
         assert bb.amd_xgboost_index("DEFAULT", os.path.join(d, "missing")) == "DEFAULT"
     monkeypatch.setattr(bb, "amd_xgboost_index", lambda default, *a: default)
+    # the ROCm LightGBM group (FAIRNESS FIX 2026-10-30) depends on the box's ROCm version; this test is about
+    # xgboost, so that index is held off here (it would otherwise be the last group on an unreadable version)
+    monkeypatch.setattr(bb, "amd_lightgbm_index", lambda default, *a: None)
     groups = bb.opponent_requirements("amd", pins)
     assert not any(r.startswith("xgboost==") for _, reqs in groups for r in reqs)
     assert groups[-1] == (rocm[0], ["amd_xgboost==3.2.0"])
@@ -871,6 +883,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
             # (the torch references are planned and refused by name at race time)
             want = want + {"nvidia": ["mamba-ssm-fp32", "mamba-ssm-tf32"],
                            "amd": ["mamba-ssm-fp32"]}.get(vendor, [])
+        if r["lane"] in ("transformer-decode", "transformer-forward", "samba-forward", "lm-forward"):
+            # FAIRNESS FIX (2026-10-30, fbef079078): torch also races its CUDA-graph replay on these GPU
+            # inference lanes (bench_board_neural.GRAPH_LANES); graph-tf32 only where TF32 exists
+            want = want + ["torch-graph-fp32"] + (["torch-graph-tf32"] if vendor == "nvidia" else [])
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ours + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
@@ -1226,6 +1242,8 @@ def test_neural_program_run_lane_tables_fixtures_and_quality(tmp_path):
     p = (p / p.sum(axis=1, keepdims=True)).astype(np.float32)
     q = bbn.quality("program-run", data, {"ours": {"y": p}, "torch-eager-fp32": {"y": p + np.float32(0.5)}})
     assert q["ours"]["max_abs_err_vs_fp64"] < 1e-6 and q["ours"]["finite"]
+    # the declared reference metric the paper compare keeps (tools/board_quality.py REFERENCE)
+    assert q["ours"]["max_rel_err_vs_fp64"] < 1e-5 and "max_rel_err_vs_fp64" in bbn._load("board_quality").REFERENCE
     t = q["torch-eager-fp32"]
     assert abs(t["max_abs_diff_vs_ours"] - 0.5) < 1e-6 and t["digest_equal_ours"] is False
 
@@ -1719,8 +1737,10 @@ def test_smoke_verdict_pass_and_each_failure():
 
 
 def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
-    race = {"id": "trees/gbdt-lossguide/taxi/rows=2000", "family": "trees",
-            "lane": "gbdt-lossguide", "dataset": "taxi", "arms": ["ours", "lightgbm-cuda"]}
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM now, so the planned refusal is shown on
+    # gbdt-depthwise (still refused by name, MIN-CHILD); on gbdt-lossguide a LightGBM refusal fails the smoke
+    race = {"id": "trees/gbdt-depthwise/taxi/rows=2000", "family": "trees",
+            "lane": "gbdt-depthwise", "dataset": "taxi", "arms": ["ours", "lightgbm-cuda"]}
     rec = {"status": "done", "params_check": "MATCHED",
            "cells": [_smoke_cell("ours"), _smoke_cell("lightgbm-cuda", "REFUSED(no CUDA build)")]}
     assert bb.smoke_verdict(race, rec, "nvidia") == []
@@ -1728,6 +1748,13 @@ def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
     assert bb.smoke_verdict(race, rec, "apple")
     rec["cells"][1] = _smoke_cell("lightgbm-cuda", "UNKNOWN(not in log)")
     assert bb.smoke_verdict(race, rec, "nvidia")
+    lg = dict(race, id="trees/gbdt-lossguide/taxi/rows=2000", lane="gbdt-lossguide")
+    rec["cells"][1] = _smoke_cell("lightgbm-cuda", "REFUSED(no CUDA build)")
+    for vendor in ("nvidia", "amd"):
+        assert bb.smoke_verdict(lg, rec, vendor)
+        assert bb._planned_refusal(vendor, "trees/gbdt-lossguide/taxi", "lightgbm-cuda") is None
+        assert bb._planned_refusal(vendor, "trees/gbdt-lossguide/taxi", "lightgbm-cpu") is None
+        assert bb._planned_refusal(vendor, "trees/gbdt-depthwise/taxi", "lightgbm-cuda")
 
 
 def test_shards_split_the_plan_round_robin_by_id():
@@ -1882,19 +1909,24 @@ def test_paired_lossguide_plans_two_own_configurations_and_pairs_each_ratio():
     # (min_split_gain None) against catboost-gpu only and `ours-gain0` (0.0) against xgboost-* only
     race = bb.plan_races("nvidia", ["identical"], ["trees"], ["gbdt-lossguide"], ["taxi"], None)[0]
     assert race["our_arms"] == {"ours": "identical", "ours-gain0": "identical"}
-    assert race["our_pairing"] == {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*"]}
+    # FAIRNESS FIX (2026-10-30): LightGBM pairs with `ours-gain0` (strictly positive gain, pre-binned input)
+    assert race["our_pairing"] == {"ours": ["catboost-gpu"], "ours-gain0": ["xgboost-*", "lightgbm-*"]}
     assert bb.arm_library("ours-gain0") == "mojolearn" and bb.arm_device("ours-gain0", "nvidia") == "gpu"
     ctx = {"vendor": "nvidia", "rounds": 1}
     ms = {"ours": 100.0, "ours-gain0": 60.0, "catboost-gpu": 50.0, "xgboost-gpu": 30.0, "lightgbm-cuda": 10.0}
     cells = [dict(bb.base_cell(ctx, race, a, race["our_arms"].get(a)), status="ok", median_ms=m,
                   times_ms=[m], rounds=1) for a, m in ms.items()]
     by = {c["arm"]: c for c in bb.add_ratios(cells)}
-    assert by["ours"]["pairs_with"] == ["catboost-gpu"] and by["ours-gain0"]["pairs_with"] == ["xgboost-*"]
+    assert by["ours"]["pairs_with"] == ["catboost-gpu"]
+    assert by["ours-gain0"]["pairs_with"] == ["xgboost-*", "lightgbm-*"]
     assert by["catboost-gpu"]["ratio_ours_identical_over"] == pytest.approx(2.0)
     assert by["xgboost-gpu"]["ratio_ours_identical_over"] == pytest.approx(2.0)
     assert by["xgboost-gpu"]["ratio_ours_arm"] == {"identical": "ours-gain0"}
-    assert by["lightgbm-cuda"]["ratio_ours_identical_over"] is None     # no own configuration lists it
+    assert by["lightgbm-cuda"]["ratio_ours_identical_over"] == pytest.approx(6.0)
+    assert by["lightgbm-cuda"]["ratio_ours_arm"] == {"identical": "ours-gain0"}
     assert "ours-gain0, vs xgboost-*" in bb._arm_label(by["ours-gain0"])
+    assert bb.PAIR.prebinned_arm("gbdt-lossguide", "lightgbm-cuda")
+    assert not bb.PAIR.prebinned_arm("gbdt-depthwise", "lightgbm-cuda")
     # an unpaired lane keeps the old rule and carries no pairing field
     sym = bb.plan_races("nvidia", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"], None)[0]
     assert "our_pairing" not in sym and "pairs_with" not in bb.base_cell(ctx, sym, "ours", "identical")
@@ -2094,3 +2126,172 @@ def test_evidenced_backfill_uses_actual_worker_and_input_receipts(tmp_path):
     m['hardware']['status'] = 'missing'
     path.write_text(json.dumps(board))
     assert bb.backfill_evidenced_store(path, store) == 0
+
+
+def test_smoke_verdict_names_the_evidence_seal_failure():
+    """0.8.66 AMD smoke: an evidence-seal failure (rc 0) read only "status failed"."""
+    race = _smoke_race()
+    cell = dict(_smoke_cell("ours"), measurement={"missing": ["worker receipt", "timing boundary"]})
+    rec = {"status": "failed", "params_check": "MATCHED", "cells": [cell, _smoke_cell("sklearn-cpu")],
+           "evidence_failure": "incomplete worker evidence; recipe excluded, raw evidence retained",
+           "evidence_failure_kind": "metadata"}
+    why = bb.smoke_verdict(race, rec, "apple")[0][1]
+    assert why.startswith("status failed: incomplete worker evidence")
+    assert "ours fit: worker receipt, timing boundary" in why
+
+
+# --- small rows: the median of consecutive calls inside the one scored run (Andrew, 2026-11-15) ---------------
+
+def _small_rows():
+    spec = importlib.util.spec_from_file_location("test_bb_small_rows", os.path.join(HERE, "bench_board_small_rows.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_small_rows_rule_counts_and_spread():
+    sr = _small_rows()
+    assert sr.SMALL_ROW_MS == 10.0 and sr.SMALL_ROW_CALLS == 20
+    assert sr.calls_for(9.99, True) == 20
+    assert sr.calls_for(0.5, True) == 20
+    assert sr.calls_for(10.0, True) == 1          # at or above 10 ms: one call
+    assert sr.calls_for(250.0, True) == 1
+    assert sr.calls_for(0.5, False) == 1          # opponents are never repeated
+    assert sr.calls_for(None, True) == 1          # no first-call time: one call
+    assert sr.calls_for(float("nan"), True) == 1
+    rec = sr.spread([3.4] + [0.76] * 18 + [0.9])
+    assert rec["calls"] == 20 and rec["ms"] == pytest.approx(0.76)
+    assert rec["min_ms"] == pytest.approx(0.76) and rec["max_ms"] == pytest.approx(3.4)
+    assert sr.line_suffix(rec).startswith(" calls=20 min_ms=")
+    assert sr.line_suffix(sr.spread([12.0])) == " calls=1"   # one call: the line records its rule
+    assert sr.line_suffix(None) == ""
+    assert sr.cell_fields(None) == {}
+    assert sr.cell_fields([{"calls": 1, "min_ms": 5.0, "max_ms": 5.0}]) == {"calls": 1, "scoring": sr.SCORING_ONE}
+    assert sr.cell_fields([dict(rec, round=1)]) == {"calls": 20, "scoring": sr.SCORING_MEDIAN,
+                                                    "min_ms": pytest.approx(0.76), "max_ms": pytest.approx(3.4)}
+    assert sr.cell_fields([sr.parse_suffix({"calls": "1"})]) == {"calls": 1, "scoring": sr.SCORING_ONE}
+    assert sr.scoring_of({}) == sr.SCORING_ONE                     # cells before 2026-11-15, opponents
+    assert sr.scoring_of({"calls": 20}) == sr.SCORING_MEDIAN
+    assert sr.scoring_of({"scoring": sr.SCORING_ONE, "calls": 1}) == sr.SCORING_ONE
+
+
+def test_small_rows_decided_by_first_scored_call_not_warmup():
+    """2026-11-16: the first scored call decides, never the warmup (neural/mamba3-forward: warmup 1051 ms with
+    CUDA start-up and compilation, steady call 5.7 ms; the warmup rule scored it from one call). Every harness
+    passes the first scored call's time to calls_for."""
+    sr = _small_rows()
+    assert sr.calls_for(5.7, True) == 20
+    sites = {"bench_board_more.py": 1, "bench_board_neural.py": 1, "bench_board_algos.py": 2,
+             "classical_two_datasets.py": 2, "speed_gbdt_arm.py": 1}
+    for name, n in sites.items():
+        src = open(os.path.join(HERE, name)).read()
+        found = re.findall(r"calls_for\(([^,]+),", src)
+        assert len(found) == n, (name, found)
+        assert all("warm" not in a for a in found), (name, found)
+    assert sr.parse_suffix({"calls": "20", "min_ms": "0.7", "max_ms": "1.5"}) == {"calls": 20, "min_ms": 0.7,
+                                                                                    "max_ms": 1.5}
+    assert sr.parse_suffix({"ms": "1.0"}) is None
+
+
+def _speed_gbdt_arm():
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    spec = importlib.util.spec_from_file_location("test_bb_speed_gbdt_arm", os.path.join(HERE, "speed_gbdt_arm.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_small_rows_tree_driver_repeats_only_our_small_arm(monkeypatch, capsys):
+    """speed_gbdt_arm.run: our arm whose FIRST SCORED fit is under 10 ms makes 20 fits in its scored run and prints
+    their median with calls=20, whatever its warmup took (start-up and compilation: 1051 ms); our arm at or above
+    10 ms and an opponent under 10 ms each make one fit and print calls=1."""
+    import types
+    import time as real_time
+    np = pytest.importorskip("numpy")
+    sg = _speed_gbdt_arm()
+    clock = [0.0]
+    monkeypatch.setattr(sg, "time", types.SimpleNamespace(perf_counter=lambda: clock[0], time=real_time.time))
+    monkeypatch.setattr(sg, "emit_scale_reminder", lambda data, stage: None)
+    monkeypatch.setattr(sg, "check_fit_equivalence", lambda *a, **k: None)
+    fits = {}
+
+    def arm(name, library, costs_ms):
+        it = iter(costs_ms)
+
+        def fit(model, data):
+            fits[name] = fits.get(name, 0) + 1
+            clock[0] += next(it) / 1000.0
+        return sg.Arm(name, lambda: object(), fit, lambda m, d: [("acc", 1.0, np.array([1.0, 2.0]))],
+                      library=library)
+
+    small_costs = [4.0, 3.0] + [1.0] * 10 + [2.0] * 9        # warmup 4, then 20 scored calls
+    arms = [arm("ours", "mojolearn", small_costs),
+            arm("ours-big", "mojolearn", [50.0, 40.0]),
+            arm("ours-cold", "mojolearn", [1051.0] + [5.7] * 20),
+            arm("ours-warm-small", "mojolearn", [4.0, 12.0]),
+            arm("xgboost-gpu", "xgboost", [2.0, 1.5])]
+    sg.run("gbdt", arms, types.SimpleNamespace(tag="t-100x4"), 1, "smoke", dev="x")
+    lines = [l for l in capsys.readouterr().out.splitlines() if l.startswith("FSPEED ")]
+    by_arm = {re.search(r"arm=(\S+)", l).group(1): l for l in lines}
+    assert fits == {"ours": 21, "ours-big": 2, "ours-cold": 21, "ours-warm-small": 2, "xgboost-gpu": 2}
+    ours = bb._kv(by_arm["ours"].partition(" ")[2])
+    assert ours["round"] == "1" and float(ours["ms"]) == pytest.approx(1.5)   # median of 3, 10x1, 9x2
+    assert ours["calls"] == "20" and float(ours["min_ms"]) == 1.0 and float(ours["max_ms"]) == 3.0
+    assert ours["hash"] != "-"
+    cold = bb._kv(by_arm["ours-cold"].partition(" ")[2])
+    assert cold["calls"] == "20" and float(cold["ms"]) == pytest.approx(5.7)
+    for name, ms in (("ours-big", 40.0), ("ours-warm-small", 12.0), ("xgboost-gpu", 1.5)):
+        assert by_arm[name].endswith("ms=%.3f hash=%s calls=1" % (ms, bb._kv(by_arm[name].partition(" ")[2])["hash"]))
+
+
+def test_small_rows_board_cells_carry_calls_and_spread(env, monkeypatch):
+    """A small row's cell: median_ms is the driver's median, calls=20 and min/max over every call; opponents and
+    our arms timed once carry no calls."""
+    monkeypatch.setenv("STUB_SMALL", "1")
+    assert _run(env) == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    rf = {c["arm"]: c for c in res["races"]["trees/rf/taxi/rows=1000"]["cells"]}
+    assert rf["ours"]["calls"] == 20
+    assert rf["ours"]["median_ms"] == pytest.approx(102.0)          # rounds 101, 102, 103: ms read as before
+    assert rf["ours"]["min_ms"] == pytest.approx(100.5) and rf["ours"]["max_ms"] == pytest.approx(107.0)
+    assert "calls" not in rf["sklearn-rf-cpu"] and "calls" not in rf["ours-ab"]
+    assert rf["sklearn-rf-cpu"]["min_ms"] == pytest.approx(201.0)   # opponents untouched
+    km = {c["arm"]: c for c in res["races"]["classical/kmeans/taxi/rows=1000"]["cells"]}
+    assert km["ours"]["calls"] == 20 and km["ours"]["median_ms"] == pytest.approx(11.0)
+    assert km["ours"]["min_ms"] == pytest.approx(9.75) and km["ours"]["max_ms"] == pytest.approx(15.0)
+    assert all("calls" not in c for a, c in km.items() if a != "ours")
+
+
+def test_small_rows_paper_compare_prints_calls_beside_the_time():
+    spec = importlib.util.spec_from_file_location("test_bb_paper_compare", os.path.join(HERE, "paper_compare.py"))
+    pc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pc)
+    cell = {"median_ms": 0.76, "calls": 20, "min_ms": 0.7, "max_ms": 3.4}
+    row = dict({"new_ms": 0.76}, **pc.calls_fields("new", cell))
+    assert pc.fmt_ms_calls(row, "new") == "0.760 (median of 20 calls, 0.7..3.4 ms)"
+    # harness-small-row (2026-11-16): every cell now records the rule its time was taken under (SCORING-MIXED)
+    assert pc.calls_fields("new", {"median_ms": 12.0}) == {"new_scoring": "one-call"}
+    assert pc.fmt_ms_calls({"new_ms": 12.0}, "new") == "12.00"
+
+
+def test_tree_command_builds_only_the_planned_own_arms(tmp_path):
+    # board-smoke-3 (2026-11-16): gbdt-categorical on a GPU board plans ours-catboost-gpu only; the driver
+    # must not also time `ours` (paired with catboost-cpu), and the probe passes own arms as --own-arms.
+    ctx = {"python": "py", "tree_driver": "drv", "vendor": "nvidia", "rounds": 1,
+           "arm_budget_s": 1, "race_deadline_s": 2}
+    race = dict(family="trees", lane="gbdt-categorical", dataset="taxi", rows=2000, opponents=[],
+                our_arms={"ours-catboost-gpu": "identical"}, arms=["ours-catboost-gpu"])
+    cmd, _env = bb.tree_cmd(ctx, race)
+    assert cmd[cmd.index("--own-arms") + 1] == "ours-catboost-gpu" and "--ours-only" in cmd
+    seen = {}
+    monkey = bb.probe_run
+    try:
+        bb.probe_run = lambda cmd_, env, log, deadline, nice=None: (seen.update(cmd=cmd_), (1, {}))[1]
+        bb.params_probe(dict(ctx, out=str(tmp_path), nice=0, data_root=str(tmp_path), race_deadline_s=2), dict(
+            race, id="trees/gbdt-categorical/taxi/rows=2000"), ["ours-catboost-gpu", "catboost-gpu"])
+    finally:
+        bb.probe_run = monkey
+    got = seen["cmd"]
+    assert got[got.index("--own-arms") + 1] == "ours-catboost-gpu"
+    assert got[got.index("--arms") + 1] == "catboost-gpu"

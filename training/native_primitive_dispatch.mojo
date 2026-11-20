@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Internal native descriptor interface to the SAME public training primitives.
 # No arithmetic is respelled and no precision, cache or synchronization changes.
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr
@@ -11,22 +10,25 @@ from core.philox_neural import neural_rng_host
 from training.estimator import identical_ce_loss_host
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.chunked_lm_head_v2 import chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host
-from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_CHUNKED_LM_HEAD_V2
+from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
 from training.native_resident_dispatch import native_resident_arity, native_resident_operation
 from training.samba_ops import (
     samba_embedding_forward_host, samba_embedding_backward_host,
     samba_rms_norm_forward_host, samba_rms_norm_backward_host,
     samba_linear_forward_host, samba_linear_backward_host, samba_head_loss_host,
 )
+from core.shared_slot import SharedSlot
 
-comptime PRIMITIVE_CONTEXT = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime PRIMITIVE_CONTEXT = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 
 
 def native_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if op == 24:
         return Int(IDN_SAMBA_RESIDENT_STEP)
     if op == 28:
-        return Int(IDN_CHUNKED_LM_HEAD_V2)
+        # TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (opt-in chunked head, never measured) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 2ea7c618fc.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch
+        return 0
     var ctx = neural_ctx[PRIMITIVE_CONTEXT]()
     if op >= 12:
         return native_resident_operation(ctx, op, a, p, f)
@@ -111,5 +113,4 @@ struct NativePrimitiveAPI(Defaultable, Movable):
         self.entries.append(native_primitive_v1)
 
 
-comptime NATIVE_PRIMITIVE_API = _Global[StorageType=NativePrimitiveAPI,
-    name="MojoNeuralPrimitiveNativeAPIv1", init_fn=NativePrimitiveAPI.__init__]
+comptime NATIVE_PRIMITIVE_API = SharedSlot[NativePrimitiveAPI, ("MojolearnNeuralPrimitiveNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralPrimitiveNativeAPIFastV3")]

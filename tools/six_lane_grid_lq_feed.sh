@@ -44,14 +44,19 @@ while IFS= read -r line; do
     if [ "$d" -ge 0 ] 2>/dev/null && [ "$d" -lt "$max" ]; then break; fi
     echo "$(date -u +%FT%TZ) $box depth=${d} (max $max); line $n/$total waits ${poll}s"; sleep "$poll"
   done
-  # claim the tag under the ledger lock (another feeder of this vendor may have queued it while this one waited)
+  # claim the tag (another feeder of this vendor may have queued it while this one waited). The claim itself is one
+  # atomic mkdir per bare tag (only one feeder's mkdir of a name can succeed), so it does not rest on the ledger
+  # lock's read-then-append; tool-tests 44591836964 (both attempts, under a loaded shard) saw nv and nv2 both queue
+  # g.T1 through the lock form. The ledger line is still written under the lock (it is the record and holds both
+  # spellings of a tag fed earlier).
   if [ -n "$tag" ]; then
-    lk; if fed "$tag"; then claimed=no; else echo "$tag" >> "$ledger"; claimed=yes; fi; ulk
+    claims=$ledger.claims; mkdir -p "$claims"; cname=${tag#MOJOLEARN_GRID_TAG=}; cname=${cname//\//_}
+    lk; if fed "$tag" || ! mkdir "$claims/$cname" 2>/dev/null; then claimed=no; else echo "$tag" >> "$ledger"; claimed=yes; fi; ulk
     if [ "$claimed" != yes ]; then echo "$(date -u +%FT%TZ) line $n/$total queued by another feeder ($tag); skipping"; done_n=$n; echo "$done_n" > "$state"; continue; fi
   fi
   # shellcheck disable=SC2086
   out=$("$LQ" ${line#lq } 2>&1 </dev/null); rc=$?
-  unclaim() { [ -n "$tag" ] || return 0; lk; grep -vxF "$tag" "$ledger" > "$ledger.tmp"; mv "$ledger.tmp" "$ledger"; ulk; }   # stdin detached: lq ssh-es, and would otherwise eat the lines file
+  unclaim() { [ -n "$tag" ] || return 0; lk; grep -vxF "$tag" "$ledger" > "$ledger.tmp"; mv "$ledger.tmp" "$ledger"; rmdir "$claims/$cname" 2>/dev/null; ulk; }   # stdin detached: lq ssh-es, and would otherwise eat the lines file
   echo "$(date -u +%FT%TZ) line $n/$total rc=$rc $(echo "$out" | tail -1 | cut -c1-160)"
   case "$out" in *queued*) ;; *) unclaim; echo "lq did not queue line $n; stopping (state $state = $done_n)" >&2; exit 1;; esac
   [ $rc -eq 0 ] || { echo "lq rc=$rc on line $n; stopping" >&2; exit 1; }

@@ -70,7 +70,10 @@ def qs_geqrf_host(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
     var col = List[Float32](length=nsmax, fill=Float32(0))
     var part = List[Float32](length=nsmax * max(n, 1), fill=Float32(0))
     var w = List[Float32](length=max(n, 1), fill=Float32(0))
-    var scal = InlineArray[Float32, 2](fill=Float32(0))
+    # Native List, not Array: an Array local whose address escapes only as an Int is
+    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
+    # build (reproduced on the Mac, smoke-triage C01 pattern).
+    var scal = List[Float32](length=2, fill=Float32(0))
     var psp = F32Ptr(unsafe_from_address=Int(ps.unsafe_ptr()))
     var pqp = F32Ptr(unsafe_from_address=Int(pq.unsafe_ptr()))
     var colp = F32Ptr(unsafe_from_address=Int(col.unsafe_ptr()))

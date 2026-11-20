@@ -3,8 +3,8 @@
 """MeanShift, FAST on Apple: every shift of every seed on the whole GPU
 (lane/apple-fast-cluster, 2026-10-02). Switch: `MEANSHIFT_FAST_GRID` below,
 taken by `x_cluster/device_ops.mojo` `DeviceOps.meanshift`: on by default
-in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it
-off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` is harmless). No
+in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` is
+harmless). No
 build reads the environment.
 
 Cause: `_meanshift_team_kernel` (x_cluster/device_ops.mojo:169) takes ONE
@@ -29,10 +29,10 @@ synchronize per group); a done seed's blocks return at once. The addends
 are the team kernel's; the order of the sum is not (bits move under FAST;
 the paired quality check holds). IDENTICAL compiles none of this.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -42,11 +42,10 @@ from x_cluster.bodies import FPtr, IPtr
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): meanshift 52.1 -> 34.9 ms, n_clusters 12 and silhouette
-# .4035 unchanged. `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it off.
-comptime MEANSHIFT_FAST_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"]()
-)
+# .4035 unchanged.
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2255b408f8.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MEANSHIFT_FAST_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime MSG_TPB = 256
 # AFCL-G12: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Two row passes per block amortize center staging and halve the partial
@@ -55,6 +54,9 @@ comptime MSG_TPB = 256
 # More serial row work may lose. FAST partial-sum association can change.
 comptime AFCL_G12 = MEANSHIFT_FAST_GRID and is_defined["MOJOLEARN_AFCL_G12"]()
 comptime MSG_T = 512 if AFCL_G12 else 256
+# TOMBSTONE: MOJOLEARN_AFCL_G12 (never-run Apple FAST programme card: two row passes per block, MSG_T 512) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ddae80bfe0.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G12.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 """Rows per chunk, strided across MSG_TPB threads in the bandwidth test."""
 comptime MSG_MAX_D = 1024
 comptime MSG_GROUP = 16

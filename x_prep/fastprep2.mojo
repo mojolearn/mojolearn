@@ -10,19 +10,19 @@ call, so the IDENTICAL binding and the other vendors compile none of this.
 Switches (`Prep2Switches`; build defines where marked -D, else env read on
 the host at dispatch time):
 
-  -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF  (default ON since 2026-10-04; rollback define) te_global by a threadgroup per (fold,
+  te_global  (FAST + Apple default since 2026-10-04; the `_OFF` rollback was deleted 2026-11-15) by a threadgroup per (fold,
       target) with a tree, instead of ONE thread per (fold, target) walking
       every row twice (x_prep/target.mojo te_global_unit: (F+1)*T = 5
       threads for a 1M-row fit).
-  -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF  (default ON since 2026-10-04; rollback define) te_enc by a threadgroup per (fold, column,
+  te_enc  (FAST + Apple default since 2026-10-04; the `_OFF` rollback was deleted 2026-11-15) by a threadgroup per (fold, column,
       category, target) over the category's gathered bucket, instead of ONE
       thread walking the bucket (x_prep/target.mojo te_enc_unit: the largest
       category's rows, hundreds of thousands on taxi, on one thread).
   MOJOLEARN_X_PREP_FAST_II_CONV=1  ii_conv's max over the row sums by one
       threadgroup tree instead of one thread over every row
       (x_prep/iterative.mojo ii_conv_unit; a max is exact, the same word).
-  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF  (default ON since 2026-10-04; `PREP2_FAST_EIGH_BLOCK`;
-      the kernel compiles only under it)  eigh (one cyclic Jacobi per matrix,
+  eigh_block  (FAST + Apple default since 2026-10-04; the `_OFF` rollback
+      was deleted 2026-11-15)  eigh (one cyclic Jacobi per matrix,
       x_prep/eigh.mojo eigh_unit on ONE thread: IterativeImputer's
       BayesianRidge runs it once per feature per round, ~465 rotations x 4
       rows of 31 per sweep, serial) on a 32-thread threadgroup per matrix:
@@ -44,12 +44,12 @@ the host at dispatch time):
       X; the same order statistics, so the same words as sort + quantile.
       Up to 4 fractions per column (QS_MAXT / 2).
 """
+from std.sys.compile import is_defined
 from std.atomic import Atomic
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -61,7 +61,7 @@ from x_prep.target import te_value
 from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
 #: FAST on Apple only
-comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: (FAST + Apple, default ON since 2026-10-04) IterativeImputer's eigh stage (one cyclic
 #: Jacobi per matrix, `eigh_unit` on ONE thread, run once per feature per
 #: round by BayesianRidge) on a 32-thread threadgroup per matrix
@@ -77,9 +77,10 @@ comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acce
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): iterative-imputer taxi 218.6 -> 185.3 ms;
 #: masked_rmse identical, output digest identical. KEEP: the FAST + Apple
-#: default since then; rollback -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF (the
-#: old -D name is harmless).
-comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and not is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF"]()
+#: default since then, the only form under PREP2_FAST (the old -D name is
+#: harmless).
+# TOMBSTONE: MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 4867560045.
+# Restore: git apply experiments/removed/MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_global stage by one
 #: threadgroup per (fold, target), each thread a strided share of the rows,
 #: then a tree (`te_global_fast_kernel`), in place of ONE thread per (fold,
@@ -93,11 +94,12 @@ comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and not is_defined["MOJOLEARN_PREP2_
 #: as Int32 (a float32 count stops being exact past 2^24 rows).
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 201.4 -> 90.2 ms; output
-#: digest identical. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (the old -D name is harmless).
+#: digest identical. KEEP: the FAST + Apple default since then, the only
+#: form under PREP2_FAST (the old -D name is harmless).
 #: Measured apart from TE_ENC (a different stage, OP_TE_GLOBAL vs OP_TE_ENC;
 #: the two compose, both on by default; the pair was not timed together).
-comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF"]()
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at d1ba1439d6.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF.patch; record in docs/TOMBSTONES.md.
 #: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_enc stage by one
 #: threadgroup per (fold, column, category, target) over the category's
 #: gathered bucket (`te_enc_fast_kernel`), in place of ONE thread walking
@@ -109,18 +111,25 @@ comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP
 #: TE_GLOBAL: a build define, Int32 counts.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
 #: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 203.1 -> 148.7 ms; output
-#: digest identical. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (the old -D name is harmless).
+#: digest identical. KEEP: the FAST + Apple default since then, the only
+#: form under PREP2_FAST (the old -D name is harmless).
 #: Measured apart from TE_GLOBAL (a different stage; both on by default).
-comptime X_PREP_FAST_TE_ENC = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC_OFF"]()
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 3827e5294b.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch; record in docs/TOMBSTONES.md.
 comptime TGR = 256
 # AFCL-P05/P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # P05 uses four Apple SIMD groups per category/fold rather than eight to
 # reduce shared scratch and barriers at the cost of longer lane sums.
+# TOMBSTONE: MOJOLEARN_AFCL_P05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1d5f37812c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P05.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 # P06 doubles convergence-reduction lanes to shorten each lane's row walk;
 # it keeps the existing runtime II_CONV prerequisite equal in both arms.
 comptime AFCL_P05 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P05"]()
 comptime AFCL_P06 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P06"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P06 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at a1ed29218e.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P06.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime TE_TGR = 128 if AFCL_P05 else TGR
 comptime II_CONV_TGR = 512 if AFCL_P06 else TGR
 comptime OP_QUANTILE = 2
@@ -137,21 +146,14 @@ def _on(name: String) -> Bool:
 
 struct Prep2Switches(Copyable, Movable):
     """The lane's switches, read once per program on the host (every field
-    False outside FAST + Apple): env switches, and `eigh_block`, `te_global`
-    and `te_enc` the build defines PREP2_FAST_EIGH_BLOCK,
-    X_PREP_FAST_TE_GLOBAL and X_PREP_FAST_TE_ENC."""
-    var te_global: Bool
-    var te_enc: Bool
+    False outside FAST + Apple): the env switches. te_global, te_enc and
+    eigh always take their threadgroup forms under PREP2_FAST."""
     var ii_conv: Bool
     var ii_gram_tile: Bool
-    var eigh_block: Bool
 
     def __init__(out self):
-        self.te_global = X_PREP_FAST_TE_GLOBAL
-        self.te_enc = X_PREP_FAST_TE_ENC
         self.ii_conv = False
         self.ii_gram_tile = False
-        self.eigh_block = PREP2_FAST_EIGH_BLOCK
         comptime if PREP2_FAST:
             self.ii_conv = _on("MOJOLEARN_X_PREP_FAST_II_CONV")
             self.ii_gram_tile = _on("MOJOLEARN_X_PREP_FAST_II_GRAM_TILE")
@@ -354,11 +356,11 @@ def ii_gram_tile_kernel(f: FP, q: IP, w: RUP):
     var cells = dd * dd
     var sx = stack_allocation[IIG_TILE * IIG_DMAX, Float32, address_space = AddressSpace.SHARED]()
     var sm = stack_allocation[IIG_TILE, Float32, address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var ma = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var mb = InlineArray[Float32, IIG_CELLS](fill=Float32(0))
-    var ca = InlineArray[Int, IIG_CELLS](fill=0)
-    var cb = InlineArray[Int, IIG_CELLS](fill=0)
+    var acc = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var ma = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var mb = Array[Float32, IIG_CELLS](fill=Float32(0))
+    var ca = Array[Int, IIG_CELLS](fill=0)
+    var cb = Array[Int, IIG_CELLS](fill=0)
     comptime for u in range(IIG_CELLS):
         var cell = tid + u * TGR
         if cell < cells:
@@ -750,19 +752,18 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
             raise Error("x_prep: quantile SELECT takes at most 4 fractions")
         qselect_device(ctx, f, w, qp, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[4]))
         return True
-    if sw.te_global and op == OP_TE_GLOBAL:
+    if op == OP_TE_GLOBAL:
         ctx.enqueue_function[te_global_fast_kernel](f, qp, grid_dim=total, block_dim=TE_TGR)
         return True
-    if sw.te_enc and op == OP_TE_ENC and Int(hq[11]) > 0 and Int(hq[13]) > 0:
+    if op == OP_TE_ENC and Int(hq[11]) > 0 and Int(hq[13]) > 0:
         ctx.enqueue_function[te_enc_fast_kernel](f, qp, grid_dim=total, block_dim=TE_TGR)
         return True
     if sw.ii_conv and op == OP_II_CONV and Int(hq[7]) > 0:
         ctx.enqueue_function[ii_conv_fast_kernel](f, qp, grid_dim=1, block_dim=II_CONV_TGR)
         return True
-    comptime if PREP2_FAST_EIGH_BLOCK:
-        if sw.eigh_block and op == OP_EIGH and Int(hq[1]) <= EIG_MAX:
-            ctx.enqueue_function[eigh_block_fast_kernel](f, qp, grid_dim=total, block_dim=EIG_TPB)
-            return True
+    if op == OP_EIGH and Int(hq[1]) <= EIG_MAX:
+        ctx.enqueue_function[eigh_block_fast_kernel](f, qp, grid_dim=total, block_dim=EIG_TPB)
+        return True
     if sw.ii_gram_tile and op == OP_II_GRAM and Int(hq[2]) <= IIG_DMAX:
         var chunks = _iig_chunks(Int(hq[1]))
         ctx.enqueue_function[ii_gram_tile_kernel](f, qp, w, grid_dim=chunks, block_dim=TGR)

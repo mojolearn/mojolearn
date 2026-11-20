@@ -1,0 +1,36 @@
+{
+  "purpose": "Original LogisticRegression test INPUTS only, never fitted outputs or identity references",
+  "source_commit": "9d3966efabc81f423d3622a2b3fba03e427ab9d6",
+  "source": "python/mojolearn/tests/test_logistic_multiclass_surface.py:_fixture",
+  "numpy_version": "2.5.2",
+  "generator": "Exact AST-extracted _fixture function; original n/d/seed arguments; no Mojolearn import or execution",
+  "records": [
+    {
+      "path": "checks/native_tests/fixtures/logistic-600x4-seed0.bin",
+      "rows": 600,
+      "columns": 4,
+      "seed": 0,
+      "bytes": 12000,
+      "sha256": "f2f1a5b0490bba6fd365cbb5c7623b8db81aae6c2b2f498291d24ff71ef9fe86",
+      "layout": "C-order X float32 little endian, then class codes float32 little endian"
+    },
+    {
+      "path": "checks/native_tests/fixtures/logistic-64x4-seed0.bin",
+      "rows": 64,
+      "columns": 4,
+      "seed": 0,
+      "bytes": 1280,
+      "sha256": "195d3cdb2997d894979590a79df88d00e4fd479bb41beb2c0b31ca985bd0c882",
+      "layout": "C-order X float32 little endian, then class codes float32 little endian"
+    },
+    {
+      "path": "checks/native_tests/fixtures/logistic-200x4-seed0.bin",
+      "rows": 200,
+      "columns": 4,
+      "seed": 0,
+      "bytes": 4000,
+      "sha256": "e237448d698db281d2ba251ef357a9dbdfd9d13536ff86726fd7e8e4ac089c11",
+      "layout": "C-order X float32 little endian, then class codes float32 little endian"
+    }
+  ]
+}

@@ -1,0 +1,392 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 8e42c10e54..6973dd6023 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -20,10 +20,14 @@ from core.device_arena import arena_active, arena_take
+ # lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
+ # build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
+ from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
+-# TOMBSTONE: MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID, MOJOLEARN_AFN_LMGRAD_ALL and their AFN26
+-# aliases (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by lane/expdel2-24-neural with
+-# autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
++# lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
++# GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
++# (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
++from autograd.kernels.transformer_afn import (
++    AFN_LM_BWD_NORM1_RESID,
++    AFN_LM_WGRAD_SPLIT,
++    afn_lm_wgrad_split_into,
++)
+ from core.step_phase import (
+     StepPhaseClock,
+     step_count_d2h,
+@@ -408,11 +412,11 @@ comptime BWD_ANY_SABOTAGE = (
+     or SAB_B_FANIN_ORDER_QKV_REVERSED
+ )
+ 
++# lane w2-lmgrad (2026-10-03): the FAST Apple arms, never in a sabotage build.
++comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
+ # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
+ # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
+-# TOMBSTONE: _AFN_WGRAD / _AFN_NORM1_RESID (MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID) deleted
+-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
++comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
+ 
+ #: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
+ #: normal build never defines it. Sabotage builds also retain the split
+@@ -2031,6 +2035,12 @@ def _route_b(
+     plan sections 5.2 and 5.4, and the gate asserts the NEGATIVE property
+     that these outputs MOVE under a change of batch composition."""
+     var call = gemm_backward_b_call(op, m, n, k)
++    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): the weight
++    # gradient, whose `k'` is the token count and whose output is small,
++    # on the split-K simdgroup route; falls through when it does not split.
++    comptime if _AFN_WGRAD:
++        if _afn_wgrad(ctx, out_buf, dc, other, call):
++            return
+     if call[4] == BWD_DC_LEFT:
+         workspace.run(
+             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
+@@ -2041,6 +2051,34 @@ def _route_b(
+     )
+ 
+ 
++# lane w2-lmgrad (2026-10-03): FAST + Apple helpers, reached only from
++# `comptime if _AFN_*` arms; IDENTICAL never instantiates them.
++
++
++def _afn_ptr(mut buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
++    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++
++def _afn_wgrad(
++    ctx: DeviceContext,
++    mut out_buf: DeviceBuffer[DType.float32],
++    mut dc: DeviceBuffer[DType.float32],
++    mut other: DeviceBuffer[DType.float32],
++    call: Tuple[Int, Int, Int, Int, Int],
++) raises -> Bool:
++    """`_route_b`'s product (`call` from `gemm_backward_b_call`) on the
++    split-K route (WGRAD_SPLIT). False when it does not serve it."""
++    if call[4] == BWD_DC_LEFT:
++        return afn_lm_wgrad_split_into(
++            ctx, _afn_ptr(out_buf), _afn_ptr(dc), _afn_ptr(other),
++            call[1], call[2], call[3], call[0],
++        )
++    return afn_lm_wgrad_split_into(
++        ctx, _afn_ptr(out_buf), _afn_ptr(other), _afn_ptr(dc),
++        call[1], call[2], call[3], call[0],
++    )
++
++
+ # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (_afn_route_a_resid_ok, _afn_bwd_epi_on, _afn_route_a_resid: the fused
+ # dA + residual store of the hand walk's two fan-ins) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
+ # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
+@@ -3259,6 +3297,15 @@ def bwd_rms_norm_routed[which: Int](
+         residual_out, residual_branch, fuse_residual, m, dm, eps,
+     )
+     var pc = StepPhaseClock(ctx)
++    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): `ones . dprod`
++    # at (1, dm, M) is a weight gradient over the tokens too; split-K, no
++    # env read, no workspace.
++    comptime if _AFN_WGRAD:
++        if afn_lm_wgrad_split_into(
++            ctx, _afn_ptr(dw_out), _afn_ptr(ones), _afn_ptr(dprod), 1, dm, m, OP_NN
++        ):
++            _bwd_rms_norm_dw_tick[which](ctx, pc)
++            return
+     if _norm_dw_own_workspace():
+         identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+     else:
+diff --git a/autograd/kernels/transformer_afn.mojo b/autograd/kernels/transformer_afn.mojo
+new file mode 100644
+index 0000000000..4620c53972
+--- /dev/null
++++ b/autograd/kernels/transformer_afn.mojo
+@@ -0,0 +1,219 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""lane w2-lmgrad (2026-10-03): the byte LM block backward on the merged
++Apple FAST GEMM (gemm/afn_apple_fast.mojo, read and never edited here).
++
++Every name below is reached only from a `comptime if` arm that is False
++unless the build is FAST, targets the Apple GPU, is not the CPU column, and
++carries its own `-D MOJOLEARN_AFN_LM_*` define (or `MOJOLEARN_AFN_LMGRAD_ALL`).
++IDENTICAL never instantiates a function of this file.
++
++  MOJOLEARN_AFN_LM_WGRAD_SPLIT     the block backward's weight-gradient
++      GEMMs (seven projections, `k` = tokens, outputs 384x384 / 1024x384 /
++      384x1024, plus the two RMSNorm weight GEMMs `ones . dprod` at
++      (1, d_model, tokens)) run the FAST simdgroup kernel with `k` split over
++      `grid.y`: one zero launch, then every split ADDS its partial tile into
++      the output with global f32 atomics. Independent of the gemm lane's
++      own defines (it calls the kernel launcher directly) and of the
++      GemmWorkspace sizing. The outputs are the bound `bst.dw_*`, which are
++      views of the flat gradient when PARAM_VIEWS is on.
++  MOJOLEARN_AFN_LM_BWD_EPILOGUE    the two activation fan-ins that follow a
++      dA GEMM (gate + up into d(norm2.out), q + k + v into d(norm1.out))
++      are folded into the next dA GEMM's store through the BIAS_RESID
++      epilogue with a zero bias, so the add2 and add3 launches and their
++      full [M, d_model] passes go. The zero bias is the block's `dw_norm1`
++      (d_model floats), zeroed once per block before the first use and
++      overwritten whole later by the norm1 weight GEMM.
++  MOJOLEARN_AFN_LM_BWD_NORM1_RESID the input RMSNorm backward's dx kernel
++      writes `d_x = dx + d_residual1` itself (the kernel's existing
++      `fuse_residual` arm, the one norm2 already uses), so the block's last
++      add2 launch goes.
++  MOJOLEARN_AFN_LMGRAD_ALL         all three.
++
++f32 throughout: the products and accumulation stay f32, only the fold order
++moves (split partials added in any order; the fan-in adds keep the
++forward-use order q, k, v). No approximation.
++"""
++
++from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
++from max.gpu.host import DeviceContext
++
++from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++from core.step_phase import step_count_launch
++from gemm.afn_apple_fast import (
++    AFN_EPI_BIAS_RESID,
++    AFN_EPI_NONE,
++    AFN_GEMM_CORES,
++    AFN_GEMM_KB,
++    AFN_ZERO_TPB,
++    _afn_launch_tile,
++    _afn_strides,
++    afn_gemm_tile,
++    afn_gemm_tile_count,
++    afn_zero_kernel,
++)
++from gemm.contract import OP_NN, OP_NT, OP_TN
++
++
++# ===========================================================================
++# The define table
++# ===========================================================================
++
++comptime AFN_LMGRAD_APPLE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++    and TARGET_COLUMN == COLUMN_APPLE
++)
++comptime _AFN_LMGRAD_ALL = is_defined["MOJOLEARN_AFN_LMGRAD_ALL"]()
++# T04 AFN26 alias: not tested in this campaign; enables the existing split arm.
++comptime AFN_LM_WGRAD_SPLIT = AFN_LMGRAD_APPLE and (
++    is_defined["MOJOLEARN_AFN_LM_WGRAD_SPLIT"]() or _AFN_LMGRAD_ALL
++    or is_defined["MOJOLEARN_AFN26_LM_WGRAD_SPLIT"]()
++)
++# T05 AFN26 alias: not tested in this campaign; independently selectable.
++comptime AFN_LM_BWD_EPILOGUE = AFN_LMGRAD_APPLE and (
++    is_defined["MOJOLEARN_AFN_LM_BWD_EPILOGUE"]() or _AFN_LMGRAD_ALL
++    or is_defined["MOJOLEARN_AFN26_LM_BWD_EPILOGUE"]()
++)
++# T05 AFN26 alias: not tested in this campaign; independently selectable.
++comptime AFN_LM_BWD_NORM1_RESID = AFN_LMGRAD_APPLE and (
++    is_defined["MOJOLEARN_AFN_LM_BWD_NORM1_RESID"]() or _AFN_LMGRAD_ALL
++    or is_defined["MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"]()
++)
++
++#: Blocks the split weight-gradient grid aims for (tiles x splits). The
++#: gemm lane's policy uses 2 x AFN_GEMM_CORES; a define, never an env read.
++comptime AFN_LM_WGRAD_BLOCKS = get_defined_int[
++    "MOJOLEARN_AFN_LM_WGRAD_BLOCKS", 2 * AFN_GEMM_CORES
++]()
++#: Fewest `k` steps one split walks (whole KB windows).
++# T09: not tested. Lower minimum exposes more parallel output tiles when the
++# hardware occupancy target is not met, but increases launch/atomic overhead
++# per reduction element. It applies to all neighboring K, never named shapes.
++comptime AFN_LM_WGRAD_MIN_STEPS = (
++    128 if AFN_LMGRAD_APPLE and is_defined["MOJOLEARN_AFN26_LM_WGRAD_MIN128"]()
++    else 256
++)
++#: Most splits per product.
++# T09: not tested. Fewer splits bound concurrent atomic partials per output
++# tile. Independent of the minimum-work control; neither enables splitting.
++comptime AFN_LM_WGRAD_MAX_SPLITS = (
++    8 if AFN_LMGRAD_APPLE and is_defined["MOJOLEARN_AFN26_LM_WGRAD_CAP8"]()
++    else 16
++)
++
++
++# ===========================================================================
++# Host helpers (asynchronous: every buffer is the caller's, nothing waits)
++# ===========================================================================
++
++
++def afn_lm_wgrad_k_split(tiles: Int, k: Int) -> Int:
++    """Steps per split, or 0 when the product should not split (the grid
++    already covers AFN_LM_WGRAD_BLOCKS, or `k` is too short for two
++    splits). The gemm lane's `afn_gemm_k_split` policy without its define
++    check, rounded to whole KB windows."""
++    var target = AFN_LM_WGRAD_BLOCKS
++    if tiles <= 0 or tiles >= target or k < 2 * AFN_LM_WGRAD_MIN_STEPS:
++        return 0
++    var s = (target + tiles - 1) // tiles
++    s = min(s, k // AFN_LM_WGRAD_MIN_STEPS)
++    s = min(s, AFN_LM_WGRAD_MAX_SPLITS)
++    if s <= 1:
++        return 0
++    var per = (k + s - 1) // s
++    per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
++    if (k + per - 1) // per <= 1:
++        return 0
++    return per
++
++
++def afn_lm_zero_into(
++    ctx: DeviceContext, c: MutPointer[Float32, MutAnyOrigin], count: Int
++) raises:
++    """`c[0, count) = +0.0` in one launch (the gemm lane's zero kernel)."""
++    comptime if not AFN_LMGRAD_APPLE:
++        raise Error("afn_lm_zero_into: FAST Apple build only")
++    else:
++        if count <= 0:
++            return
++        step_count_launch()
++        ctx.enqueue_function[afn_zero_kernel](
++            c, Int32(count),
++            grid_dim=((count + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
++            block_dim=(AFN_ZERO_TPB, 1, 1),
++        )
++
++
++def afn_lm_wgrad_split_into(
++    ctx: DeviceContext,
++    c: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    m: Int,
++    n: Int,
++    k: Int,
++    op: Int,
++) raises -> Bool:
++    """`C[m x n] = op(A) . op(B)` as a split-K product (WGRAD_SPLIT): one
++    zero launch over the `m n` cells, then one simdgroup GEMM launch whose
++    `grid.y` walks the splits and adds into `C` with f32 atomics. False
++    (nothing enqueued) when the define is off, the op or shape is not
++    served, or the product does not split: the caller runs its own route."""
++    comptime if not AFN_LM_WGRAD_SPLIT:
++        return False
++    else:
++        if m <= 0 or n <= 0 or k <= 0:
++            return False
++        if op != OP_NN and op != OP_NT and op != OP_TN:
++            return False
++        var tile = afn_gemm_tile(m, n)
++        var k_split = afn_lm_wgrad_k_split(afn_gemm_tile_count(tile, m, n), k)
++        if k_split <= 0:
++            return False
++        var splits = (k + k_split - 1) // k_split
++        var st = _afn_strides(op, m, n, k)
++        afn_lm_zero_into(ctx, c, m * n)
++        step_count_launch()
++        _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
++            ctx, tile, c, a, b, c, c, m, n, k, st, splits, k_split
++        )
++        return True
++
++
++def afn_lm_gemm_resid_into(
++    ctx: DeviceContext,
++    c: MutPointer[Float32, MutAnyOrigin],
++    a: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    zero_bias: MutPointer[Float32, MutAnyOrigin],
++    resid: MutPointer[Float32, MutAnyOrigin],
++    m: Int,
++    n: Int,
++    k: Int,
++    op: Int,
++) raises -> Bool:
++    """`C[m x n] = op(A) . op(B) + zero_bias[j] + resid[i, j]` in ONE launch
++    (BWD_EPILOGUE): the gemm lane's BIAS_RESID store with a bias of `n`
++    zeros, which is the residual-gradient fan-in add. `resid` may be a
++    buffer other than `c` (each cell is read, then written, by the same
++    thread, so `c == resid` would also be safe; the callers do not alias).
++    False when the define is off or the op or shape is not served."""
++    comptime if not AFN_LM_BWD_EPILOGUE:
++        return False
++    else:
++        if m <= 0 or n <= 0 or k <= 0:
++            return False
++        if op != OP_NN and op != OP_NT and op != OP_TN:
++            return False
++        var st = _afn_strides(op, m, n, k)
++        var tile = afn_gemm_tile(m, n)
++        step_count_launch()
++        _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS_RESID](
++            ctx, tile, c, a, b, zero_bias, resid, m, n, k, st, 1, k
++        )
++        return True
+diff --git a/autograd/rules_lm.mojo b/autograd/rules_lm.mojo
+index de9bd41306..5263407da9 100644
+--- a/autograd/rules_lm.mojo
++++ b/autograd/rules_lm.mojo
+@@ -65,7 +65,8 @@
+ # the layers is ONE contribution, written in place by its rule (no fill, no
+ # scratch, no OP_AG_ACCUMULATE). The two consumers of a layer input (norm1
+ # and the residual1 add) are joined inside the layer as the hand path does:
+-# d_x = norm1_dx + d_residual1 (S36's bwd_add2_kernel), by the norm1 rule (writes_total); the residual
++# d_x = norm1_dx + d_residual1 (S36's bwd_add2_kernel, or the
++# _AFN_NORM1_RESID fusion), by the norm1 rule (writes_total); the residual
+ # rule writes nothing. Inside a layer the order is the transformer lane's:
+ # d(norm2.out) = gate + up (S9), d(norm1.out) = (q + k) + v (S32),
+ # d_residual1 = norm2_dx + d(residual2) (S10-13). The embedding gradient is
+diff --git a/autograd/rules_transformer.mojo b/autograd/rules_transformer.mojo
+index ba58ca9c5a..8a0c21b2df 100644
+--- a/autograd/rules_transformer.mojo
++++ b/autograd/rules_transformer.mojo
+@@ -54,7 +54,7 @@
+ #   TF_RMS_NORM_INPUT / TF_RMS_NORM_POST  [x, weight] -> norm out
+ #                     bwd_rms_norm_routed[1|2] with the hand path's residual
+ #                     join: norm2 fused (BWD_FUSE_NORM2_RESIDUAL) or S13's
+-#                     add2, norm1 S36's add2
++#                     add2, norm1 S36's add2 (or _AFN_NORM1_RESID's fusion)
+ #   TF_LINEAR         [X, W] -> X W^T (OP_NT): _route_b dW, _route_a dX; a
+ #                     fan-in member writes dX to the hand path's tmp0/1/2 and
+ #                     the last one runs S9's add2 or S32's add3
+@@ -140,6 +140,7 @@ from autograd.kernels.transformer import (
+     BWD_FUSE_NORM2_RESIDUAL,
+     BWD_TPB,
+     IDN_BWD_ENTRY_ALIAS,
++    _AFN_NORM1_RESID,
+     LlamaBackwardStages,
+     _rec,
+     _route_a,
+@@ -372,16 +373,19 @@ struct TransformerRules(BackwardRules):
+             self._card(12, bst.norm2_dx, m * dm)
+             self._card(13, bst.d_residual1, m * dm)
+         else:
+-            # S33-35, then S36
+-            # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_NORM1_RESID (the fused residual arm) deleted 2026-11-15 by
+-            # lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+-            # Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_NORM1_RESID.patch
+-            var own = _fp(bst.norm1_dx).unsafe_origin_cast[MutAnyOrigin]()
+-            bwd_rms_norm_routed[1](
+-                self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
+-                bst.dvcoef, bst.ones, dy, x, weight, sumsq, own, own, False, m, dm, self.eps,
+-            )
+-            self._add2(gradients[0], _fp(bst.norm1_dx), saved.p2, m * dm)
++            # S33-35, then S36 (or _AFN_NORM1_RESID's fused residual)
++            comptime if _AFN_NORM1_RESID:
++                bwd_rms_norm_routed[1](
++                    self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
++                    bst.dvcoef, bst.ones, dy, x, weight, sumsq, total, branch, True, m, dm, self.eps,
++                )
++            else:
++                var own = _fp(bst.norm1_dx).unsafe_origin_cast[MutAnyOrigin]()
++                bwd_rms_norm_routed[1](
++                    self.ctx, bst.gemm_workspace, dot, bst.norm1_dx, dw, bst.dh, bst.dprod, bst.rstd,
++                    bst.dvcoef, bst.ones, dy, x, weight, sumsq, own, own, False, m, dm, self.eps,
++                )
++                self._add2(gradients[0], _fp(bst.norm1_dx), saved.p2, m * dm)
+             # cards 33-36 (the add above writes none of 33-35)
+             self._card(33, bst.norm1_dot, m)
+             self._card(34, bst.dw_norm1, dm)

@@ -49,7 +49,7 @@ subnormals in this path's range either way).
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -76,10 +76,18 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 #: w2-epi switch can be on (the gemm kernel's own guard, AFN_GEMM_APPLE).
 comptime AFN_W2EPI_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
+# TOMBSTONE: MOJOLEARN_AFN_EPI_ALL (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the w2-epi bundle) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1d8bc94f90.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_EPI_ALL.patch
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (neural MERGED-UNMEASURED FAST+Apple opt-in arm: Mamba-1/2/3 in_proj/out_proj on the FAST matrix-unit gemm with the residual folded in) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at f98dbab5bb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_SPLITK (neural MERGED-UNMEASURED FAST+Apple opt-in arm: the out_proj split-k policy) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 590e7e3230.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_SPLITK.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 comptime AFN_W2EPI_ALL = AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_EPI_ALL"]()
 comptime AFN_MAMBA_PROJ_EPILOGUE = AFN_W2EPI_ALL or (
     AFN_W2EPI_APPLE and is_defined["MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"]()

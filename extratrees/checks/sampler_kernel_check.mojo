@@ -61,12 +61,8 @@ error and the reason a float32 substitute was not shipped.
 """
 
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-    size_of,
-)
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 
@@ -101,6 +97,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
     sampler_scratch_len,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 # DEVIATION 457 -- the smallest algo-L k at n=20000 is MODE-DEPENDENT (7385
 # under FAST host libm on this host, 7386 under IDENTICAL's portable arm).
@@ -123,11 +120,11 @@ struct SabCase(Copyable, Movable):
 
 
 def _vendor() -> String:
-    if has_apple_gpu_accelerator():
+    if TARGET_HAS_APPLE_GPU:
         return String("apple")
-    if has_nvidia_gpu_accelerator():
+    if TARGET_HAS_NVIDIA_GPU:
         return String("nvidia")
-    if has_amd_gpu_accelerator():
+    if TARGET_HAS_AMD_GPU:
         return String("amd")
     return String("unknown-vendor")
 
@@ -204,12 +201,12 @@ def run_device(
     ctx.synchronize()
     for i in range(w):
         h_tree_ids.unsafe_ptr().unsafe_store(i, tree_id)
-    ctx.enqueue_copy(dst_buf=d_tree_ids, src_ptr=h_tree_ids.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_tree_ids, h_tree_ids)
 
     var ip = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
     for i in range(w):
         ip[unsafe_offset=i] = items[i]
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=h_items.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, d_items, h_items)
     # `-9` is not a column id and not a legal report value.
     d_colids.enqueue_fill(Int32(-9))
     d_report.enqueue_fill(SAMPLER_UNVISITED)
@@ -235,8 +232,8 @@ def run_device(
 
     var o_col = ctx.enqueue_create_host_buffer[DType.int32](n_col)
     var o_rep = ctx.enqueue_create_host_buffer[DType.int32](n_rep + 3)
-    ctx.enqueue_copy(dst_buf=o_col, src_buf=d_colids)
-    ctx.enqueue_copy(dst_buf=o_rep, src_buf=d_report)
+    download_host_into[DType.int32](ctx, d_colids, o_col)
+    download_host_into[DType.int32](ctx, d_report, o_rep)
     ctx.synchronize()
 
     var colids = List[Int32]()
@@ -251,7 +248,6 @@ def run_device(
     # Mojo frees a buffer at its LAST USE; the launch above read this one and
     # the synchronize came first.
     _ = d_tree_ids^
-    _ = h_tree_ids^
     return DeviceRun(colids^, report^, tail^, plan)
 
 
@@ -448,7 +444,7 @@ def _column_spread(
     return (lo, hi)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
     print("=== sampler_kernel_check ===")
     print(

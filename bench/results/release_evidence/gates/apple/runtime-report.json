@@ -1,0 +1,1198 @@
+{
+  "schema": "mojolearn.release-runtime-installed.v1",
+  "tool": "tools/release_runtime_installed.py",
+  "origin": "per-unit-receipts",
+  "vendor": "apple",
+  "backend": "metal",
+  "numeric_mode": "identical",
+  "source_revision": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+  "test_revision": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+  "device_class": "apple-m4",
+  "wheels": {
+    "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+  },
+  "units": {
+    "reused": 0,
+    "run": 73,
+    "failed": 0
+  },
+  "unit_rows": [
+    {
+      "unit": "test_host_density_constructors_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_optimizer_native_scalar_constructors.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_optimizer_native_config_order.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_device_rows_metadata_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_device_native_allocator.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_owner_builtin_identity.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_release_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_resident_lifecycle_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_classical_exceptions_native_owner.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_not_fitted_native_lifetime.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_upload_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_key_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_late_numpy_native_metadata.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_optimizer_native_container_admission.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_cross_entropy_public_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_embedding_public_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_rms_public_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_scalar_buffer_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_linear_public_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_scalar_decode_public.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_kde_fit_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_iforest_fit_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_sequential_native_buffers.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_samba_native_admission.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_sequential_native_admission.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_iforest_depth_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_supports_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_get_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_stats_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_cache_lifecycle_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_scaler_complex_warning_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_device_rows_materialize_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_sequence_shutdown_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_optimizer_native_step_errors.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_device_native_rollback.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_training_device_native_finalizer.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_archive_unicode_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_density_hash_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_process_pool.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_parallel_cv_wire.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_classical_archive_reader_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_classical_archive_writer_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_density_save_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_standard_scaler_native_lifecycle.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_minmax_scaler_native_lifecycle.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_robust_scaler_native_lifecycle.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_maxabs_scaler_native_transport.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_robust_scaler_native_transport.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_scaler_rows_snapshot_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_optimizer_native_array_ownership.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_samba_step_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_samba_inference_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_samba_checkpoint_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_sequential_native_execution.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_sequential_native_checkpoint.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_generator_draw_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_generation_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_owner_qualification.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_inference_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_kernel_inference_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_projection_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_logistic_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_svr_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_svc_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_kde_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_host_iforest_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_meta_public_boundary.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_meta_native.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_cv_lda.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_cv_gbdt_nb.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_search_dispatch.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_cv_scorers.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    },
+    {
+      "unit": "test_native_cv_outputs.py",
+      "decision": "run",
+      "rule": null,
+      "status": "passed"
+    }
+  ],
+  "failed_units": [],
+  "coverage": [
+    {
+      "id": "constructors",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 297,
+      "completed": 297,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "files": [
+        "test_host_density_constructors_native.py",
+        "test_optimizer_native_scalar_constructors.py",
+        "test_optimizer_native_config_order.py",
+        "test_device_rows_metadata_native.py",
+        "test_training_device_native_allocator.py",
+        "test_native_owner_builtin_identity.py",
+        "test_cache_release_native.py",
+        "test_resident_lifecycle_native.py",
+        "test_classical_exceptions_native_owner.py",
+        "test_not_fitted_native_lifetime.py"
+      ]
+    },
+    {
+      "id": "input preparation",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 1765,
+      "completed": 1765,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "files": [
+        "test_cache_upload_native.py",
+        "test_cache_key_native.py",
+        "test_late_numpy_native_metadata.py",
+        "test_optimizer_native_container_admission.py",
+        "test_training_cross_entropy_public_native.py",
+        "test_training_embedding_public_native.py",
+        "test_training_rms_public_native.py",
+        "test_training_scalar_buffer_native.py",
+        "test_training_linear_public_native.py",
+        "test_native_scalar_decode_public.py",
+        "test_host_kde_fit_native.py",
+        "test_host_iforest_fit_native.py",
+        "test_sequential_native_buffers.py",
+        "test_samba_native_admission.py",
+        "test_sequential_native_admission.py",
+        "test_iforest_depth_native.py"
+      ]
+    },
+    {
+      "id": "workers and callbacks",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 752,
+      "completed": 752,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 1,
+      "files": [
+        "test_cache_supports_native.py",
+        "test_cache_get_native.py",
+        "test_cache_stats_native.py",
+        "test_cache_lifecycle_native.py",
+        "test_scaler_complex_warning_native.py",
+        "test_device_rows_materialize_native.py",
+        "test_sequence_shutdown_native.py",
+        "test_optimizer_native_step_errors.py",
+        "test_training_device_native_rollback.py",
+        "test_training_device_native_finalizer.py",
+        "test_archive_unicode_native.py",
+        "test_host_density_hash_native.py",
+        "test_native_process_pool.py",
+        "test_native_parallel_cv_wire.py"
+      ]
+    },
+    {
+      "id": "consumed outputs",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 3490,
+      "completed": 3490,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "files": [
+        "test_classical_archive_reader_native.py",
+        "test_classical_archive_writer_native.py",
+        "test_host_density_save_native.py",
+        "test_standard_scaler_native_lifecycle.py",
+        "test_minmax_scaler_native_lifecycle.py",
+        "test_robust_scaler_native_lifecycle.py",
+        "test_maxabs_scaler_native_transport.py",
+        "test_robust_scaler_native_transport.py",
+        "test_scaler_rows_snapshot_native.py",
+        "test_optimizer_native_array_ownership.py",
+        "test_samba_step_native.py",
+        "test_samba_inference_native.py",
+        "test_samba_checkpoint_native.py",
+        "test_sequential_native_execution.py",
+        "test_sequential_native_checkpoint.py",
+        "test_generator_draw_native.py",
+        "test_generation_native.py",
+        "test_native_owner_qualification.py",
+        "test_host_inference_native.py",
+        "test_host_kernel_inference_native.py",
+        "test_host_projection_native.py",
+        "test_host_logistic_native.py",
+        "test_host_svr_native.py",
+        "test_host_svc_native.py",
+        "test_host_kde_native.py",
+        "test_host_iforest_native.py"
+      ]
+    },
+    {
+      "id": "supported built-in estimator combinations",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 129,
+      "completed": 129,
+      "failed": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "files": [
+        "test_native_meta_public_boundary.py",
+        "test_meta_native.py",
+        "test_native_cv_lda.py",
+        "test_native_cv_gbdt_nb.py",
+        "test_native_search_dispatch.py",
+        "test_native_cv_scorers.py",
+        "test_native_cv_outputs.py"
+      ]
+    }
+  ],
+  "coverage_without_tests": [],
+  "cases": 6434,
+  "status": "passed",
+  "exit_code": 0,
+  "evidence": [
+    {
+      "path": "coverage.json",
+      "sha256": "4f687b536603b67e3c1fd81c7375dfbb14824826a8fc84c38ac8858af3f9ebca"
+    },
+    {
+      "path": "request.json",
+      "sha256": "99d2095ff9a5de278ffbdad7dbb5033f92fd1aabaaa9cdcab35f02786bddc969"
+    },
+    {
+      "path": "qualify/units.json",
+      "sha256": "ff3ff84d570da7184bd79e79aa6a732e184e82771d48ca03531eff7919cdf26f"
+    },
+    {
+      "path": "qualify/units/test_host_density_constructors_native.py.json",
+      "sha256": "652239b68e098670e46fbb6ab8c0efec1a2e8c1734329f2a31bb7ed6f13e6e1d"
+    },
+    {
+      "path": "qualify/units/test_host_density_constructors_native.tests.xml",
+      "sha256": "9573ea97371e0b9df7cb3f12202dc066d044aedaff85fd82498e24f4f192d430"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_scalar_constructors.py.json",
+      "sha256": "231631846ceba642b208986ea143edbbf4fac9b5b97d35281255f93d27115c87"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_scalar_constructors.tests.xml",
+      "sha256": "db79812d08e8d308d7a628434ebe8a4c7da000ed8600649bbcf2e7a75644b6e1"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_config_order.py.json",
+      "sha256": "969ad9209e9d9f7f95d1c79a9efa710dfe5cba8439ba38c902a8262422131942"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_config_order.tests.xml",
+      "sha256": "c65cb725573967d50065388fd7a529f30ec617e1067bab4433d5dc1e37819836"
+    },
+    {
+      "path": "qualify/units/test_device_rows_metadata_native.py.json",
+      "sha256": "b51d4f9e53952fec66c2b803898f2082466f3687632624bf2ca11d0af5875cf0"
+    },
+    {
+      "path": "qualify/units/test_device_rows_metadata_native.tests.xml",
+      "sha256": "fe2969547850f0a784f97c1d969f95c20aec4f6dbf35b350dbfb24e4e771beb9"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_allocator.py.json",
+      "sha256": "b357bed16af639a18e9c3afdace9819706528111b86d4a9c31e41d83b7e36767"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_allocator.tests.xml",
+      "sha256": "7cda6d12310d0b6c62d6a24bfa258623df15612815a1ff598b15a98dfe78ac43"
+    },
+    {
+      "path": "qualify/units/test_native_owner_builtin_identity.py.json",
+      "sha256": "3406fa38c598b62d8c5bf0f646095d219f06ab8569dc8a361e13045388e6ac53"
+    },
+    {
+      "path": "qualify/units/test_native_owner_builtin_identity.tests.xml",
+      "sha256": "e1fee07b1c25b19098e65cd7f579a5809a4fd41d3f649063b77b55c0ba91654c"
+    },
+    {
+      "path": "qualify/units/test_cache_release_native.py.json",
+      "sha256": "6e80007d771d0cc21eff67fea945e579b465fcab07524ca6fae618477a58ea25"
+    },
+    {
+      "path": "qualify/units/test_cache_release_native.tests.xml",
+      "sha256": "757143af268622d4e69324d41eda0595530c37aad817edfa981bdd19be7d1174"
+    },
+    {
+      "path": "qualify/units/test_resident_lifecycle_native.py.json",
+      "sha256": "001ce02b9dc072fd924a698a2d785651bb2a7673831f354a6601b49f85a148a9"
+    },
+    {
+      "path": "qualify/units/test_resident_lifecycle_native.tests.xml",
+      "sha256": "7538bff670ef6e2ad443b6ed3aecc103f284a241165eff3e58be1ef5a0655646"
+    },
+    {
+      "path": "qualify/units/test_classical_exceptions_native_owner.py.json",
+      "sha256": "188e4e809123d6f7fdd8e5d760f1ab293de888845595dd52b859ff84c4380fad"
+    },
+    {
+      "path": "qualify/units/test_classical_exceptions_native_owner.tests.xml",
+      "sha256": "3bdabf5c3fea5017654d304e3e1624375b100280fb923a460c991d5c7b215a79"
+    },
+    {
+      "path": "qualify/units/test_not_fitted_native_lifetime.py.json",
+      "sha256": "24ff3725c00408cf0ae3cca50e6eb42e2a93cb1955e0cbfa0ddcfa0ca0a1fc39"
+    },
+    {
+      "path": "qualify/units/test_not_fitted_native_lifetime.tests.xml",
+      "sha256": "ec8db3bc881115a81a1309a8312086401ca4ea229a488be0edff62e3dc9dac76"
+    },
+    {
+      "path": "qualify/units/test_cache_upload_native.py.json",
+      "sha256": "2de798fed7cfc64dab5075c33757350945ad18e9e88a35edeb712eeb739ddba5"
+    },
+    {
+      "path": "qualify/units/test_cache_upload_native.tests.xml",
+      "sha256": "3fdef6025a5952bb1b52bff626eae3d926279bc3c82d6fc05553dbd541902c91"
+    },
+    {
+      "path": "qualify/units/test_cache_key_native.py.json",
+      "sha256": "5fd6721da0f27f0a9f7aea74433381fd678ca1cc8207719b1dd49dc585af2e11"
+    },
+    {
+      "path": "qualify/units/test_cache_key_native.tests.xml",
+      "sha256": "dba08d6dce73baf4255ebfe97cfe326ba756e935cc42e2b607f8b261c32150d7"
+    },
+    {
+      "path": "qualify/units/test_late_numpy_native_metadata.py.json",
+      "sha256": "0458c5d93fadf36ba0e72d6da97200735fc0725eb33a27ef64d58552b92b4628"
+    },
+    {
+      "path": "qualify/units/test_late_numpy_native_metadata.tests.xml",
+      "sha256": "88b942ba94bfa11df59fadef52e21c94a0f99e5771d02f376cfaefcf9f6b508c"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_container_admission.py.json",
+      "sha256": "a3dcffd82ec440e1f784c7ac0a4aef3de593c296b6d704470ec9d699ad3fb0a8"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_container_admission.tests.xml",
+      "sha256": "3fa61f804612c494b2fd561944c6515f0b48ee3869b0642bd9ed66f8a82a020e"
+    },
+    {
+      "path": "qualify/units/test_training_cross_entropy_public_native.py.json",
+      "sha256": "710a3158fef69f52aa7353aa1a44d7848fc741f2ce540fc36fe5a2c3785cadf4"
+    },
+    {
+      "path": "qualify/units/test_training_cross_entropy_public_native.tests.xml",
+      "sha256": "79a45b607b528341378c32ba11857c0d870e86d85b7135e67dab74e6afa8ab10"
+    },
+    {
+      "path": "qualify/units/test_training_embedding_public_native.py.json",
+      "sha256": "b69a2c685013cf3c38235865cdfba117361e2a5246755ddb9ace869427b1ae71"
+    },
+    {
+      "path": "qualify/units/test_training_embedding_public_native.tests.xml",
+      "sha256": "0ce7f27ae644cbf05fb875ba03b7100d486163b1cfc2b10e9b43ad663f5c4f13"
+    },
+    {
+      "path": "qualify/units/test_training_rms_public_native.py.json",
+      "sha256": "e4532781da3dc898b005f3ae37944dcaa1ead15f1552899fe060d98a6f409bfe"
+    },
+    {
+      "path": "qualify/units/test_training_rms_public_native.tests.xml",
+      "sha256": "c978ce8a304a9052c34e96de10e4c69d4ba33e8c17f3ff56757edf9839851e7d"
+    },
+    {
+      "path": "qualify/units/test_training_scalar_buffer_native.py.json",
+      "sha256": "0e69364f9fc10c72cdb125bf3f1e02fe022d6e3007ffcff495a30567edbeea59"
+    },
+    {
+      "path": "qualify/units/test_training_scalar_buffer_native.tests.xml",
+      "sha256": "7a729fac9ba6cec035cc022ba7d91f96d393ba017fa9ee4ca0cb04d5dbcd3d2c"
+    },
+    {
+      "path": "qualify/units/test_training_linear_public_native.py.json",
+      "sha256": "0b886f9d6c9aaf85e60e3e23254685b3cfa1930b8e902404f346cf7ff287614f"
+    },
+    {
+      "path": "qualify/units/test_training_linear_public_native.tests.xml",
+      "sha256": "8b5a0a4104677f837729f0bc3736c7da971308e112ad6cc49a58fb032d61b3ca"
+    },
+    {
+      "path": "qualify/units/test_native_scalar_decode_public.py.json",
+      "sha256": "05b8a6e8671931ce23dea188e8944a0cc93d72181409cc5c9a5f12e98b4e0606"
+    },
+    {
+      "path": "qualify/units/test_native_scalar_decode_public.tests.xml",
+      "sha256": "79b9684a53edd3bc474dbf84853c6025661b0b7a7d09b99e74c334b2c8b0d460"
+    },
+    {
+      "path": "qualify/units/test_host_kde_fit_native.py.json",
+      "sha256": "42669e2d38e56098a8a1e22ed2d534ee5ad0ca909ae8882e114caf24109bd657"
+    },
+    {
+      "path": "qualify/units/test_host_kde_fit_native.tests.xml",
+      "sha256": "b5ffc8d636b83600e9b269c7940f7d79ea691dc4f4b6c8792c8f6ce1397e8de1"
+    },
+    {
+      "path": "qualify/units/test_host_iforest_fit_native.py.json",
+      "sha256": "c596d66643371e1a6e5fb1521e2ed0fc9cfe8a5313f28b3df29805e1b7f769cd"
+    },
+    {
+      "path": "qualify/units/test_host_iforest_fit_native.tests.xml",
+      "sha256": "e566755001fee4a42e3812b41bbc64a037a3d467bebada89ade4100851616e76"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_buffers.py.json",
+      "sha256": "711150636eb8d08ba6d00fccd76014d201f049bcff7fe6acd1de1a062d654f1f"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_buffers.tests.xml",
+      "sha256": "8ef458c55290b06abebd93a605a6bec82bae2311824591788d40fd91a32d659a"
+    },
+    {
+      "path": "qualify/units/test_samba_native_admission.py.json",
+      "sha256": "d466f355c30f586cbb097a0e4ac528ac354aafde3d81b92362aaf049c18518a9"
+    },
+    {
+      "path": "qualify/units/test_samba_native_admission.tests.xml",
+      "sha256": "fda805646575458b342787fa21482c38791d69a01c45b8ece53149f82c626782"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_admission.py.json",
+      "sha256": "ddbcfb8b13a1d9cc4e27f497af921f993d5b2621f016c681d7e53111ff67e1ec"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_admission.tests.xml",
+      "sha256": "b8793b7c4ad14dcb699dbfeda95a2a9191e6389bef20b4a020e5b0c5fef261ec"
+    },
+    {
+      "path": "qualify/units/test_iforest_depth_native.py.json",
+      "sha256": "b099404b6996f461cfbb15811c31c5cb46780755705ce28639445495aa0b26ef"
+    },
+    {
+      "path": "qualify/units/test_iforest_depth_native.tests.xml",
+      "sha256": "5f6fb3e5bcf03ed93fae767ab3c93bdb1de85fad9d80297834a3bcb13156204a"
+    },
+    {
+      "path": "qualify/units/test_cache_supports_native.py.json",
+      "sha256": "5bd71c6bc41963f657b5f6db538f7a3c86a08b82240c8a2e28e4fb2950be973f"
+    },
+    {
+      "path": "qualify/units/test_cache_supports_native.tests.xml",
+      "sha256": "b83c3494f04954e414b2964da6f42005cac8ec1835d1ba23e5f019ccdd3af029"
+    },
+    {
+      "path": "qualify/units/test_cache_get_native.py.json",
+      "sha256": "b669521c23ee6028680af38d8c083543ae17c18e922f09e9b1268f9316b5d531"
+    },
+    {
+      "path": "qualify/units/test_cache_get_native.tests.xml",
+      "sha256": "98d6f411a56a8b707e0b9c29bc3bb4dccdd69ae034fdcd5e76faf7f1ed6ce709"
+    },
+    {
+      "path": "qualify/units/test_cache_stats_native.py.json",
+      "sha256": "323e90d75b584744dd1a43277a46c167594f5e3833cffe8e89c936d22339a766"
+    },
+    {
+      "path": "qualify/units/test_cache_stats_native.tests.xml",
+      "sha256": "ccc6da66b37aa2005c743a986c879fff78f7ce471f692b3e1a4477f2ab641d65"
+    },
+    {
+      "path": "qualify/units/test_cache_lifecycle_native.py.json",
+      "sha256": "b4861d8d5963bed772475455fbf0d8e2c716703417e13bf2484b96707cf3a5ea"
+    },
+    {
+      "path": "qualify/units/test_cache_lifecycle_native.tests.xml",
+      "sha256": "d0773e1bc25d79e2da1ae091af487b02b7a9b573a402cf160f4e2f72c0fa77aa"
+    },
+    {
+      "path": "qualify/units/test_scaler_complex_warning_native.py.json",
+      "sha256": "8e71885f6ab12aae452889d62b2108b1f660735bcf44140aab3665a308f7ce16"
+    },
+    {
+      "path": "qualify/units/test_scaler_complex_warning_native.tests.xml",
+      "sha256": "26786db27032ed8777f9b982bcbe18c15b45b8fed24f46df24fe228f11441b64"
+    },
+    {
+      "path": "qualify/units/test_device_rows_materialize_native.py.json",
+      "sha256": "393e8755bbf9db277a2430b98bd67cd460950e7c14c7ce5bfcb48c953185a826"
+    },
+    {
+      "path": "qualify/units/test_device_rows_materialize_native.tests.xml",
+      "sha256": "f4339a02d936d711c6281f402f122c825b1dc0e8bb9d3a81147a01bf820d0756"
+    },
+    {
+      "path": "qualify/units/test_sequence_shutdown_native.py.json",
+      "sha256": "07a14b94b0e08494403b47a54981afea35038f7e8f8192237b4b4120d092ec0f"
+    },
+    {
+      "path": "qualify/units/test_sequence_shutdown_native.tests.xml",
+      "sha256": "fcb763d7bd34b085858dce0d6960ab9bce4e0e152c8ec9bdfc3e0a8783829676"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_step_errors.py.json",
+      "sha256": "43229d3577e751cfb05434388250a4c328d55877dd6281fb2fe767e9f3a22068"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_step_errors.tests.xml",
+      "sha256": "417ea3df77aedce97e549879753b8fa7082b059d9c6a55add0edde9b579e6249"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_rollback.py.json",
+      "sha256": "cf300a79f1b6376493dbe214c28fff944ed88b2f6ce882ab20d9101f977b2038"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_rollback.tests.xml",
+      "sha256": "90547e98d47c9dd6bf0cd9f1af8c6299710d33e5b33574160b4bf53a712e020e"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_finalizer.py.json",
+      "sha256": "d59a2218bf0aadbc8a9dbcf76a6a7d617e14ddc5a35afd06685aab850a101461"
+    },
+    {
+      "path": "qualify/units/test_training_device_native_finalizer.tests.xml",
+      "sha256": "edd87a79dfabd9287ad6d3a96a97e14cbd6aac6080098cbb75939f0ab14d764a"
+    },
+    {
+      "path": "qualify/units/test_archive_unicode_native.py.json",
+      "sha256": "04a830abdef9ad7f7d972bb83694bb72c7a559c4ef25bdc350c42cc3bb409128"
+    },
+    {
+      "path": "qualify/units/test_archive_unicode_native.tests.xml",
+      "sha256": "7472289d8385af72cf683dc11b76a5be06f8954c436516d4b3b3df72ce17e749"
+    },
+    {
+      "path": "qualify/units/test_host_density_hash_native.py.json",
+      "sha256": "5762e109208bd0a956ccd561ad1e7b73d72aff5b96bedcd326db6bbea83bacef"
+    },
+    {
+      "path": "qualify/units/test_host_density_hash_native.tests.xml",
+      "sha256": "70d43a7553e5e9e4c24f0880be7656a6d13a5387b1cfc41d7e741ac66ed92101"
+    },
+    {
+      "path": "qualify/units/test_native_process_pool.py.json",
+      "sha256": "43238c8fa1ccf329ee18bd2c15a87a4caae3dd704305a67041bcf6dda98f7a82"
+    },
+    {
+      "path": "qualify/units/test_native_process_pool.tests.xml",
+      "sha256": "11f2c03a415c73e4f0dbce4b99f97af76ee5201ef6549d1d1884a1cbd8af1b2d"
+    },
+    {
+      "path": "qualify/units/test_native_parallel_cv_wire.py.json",
+      "sha256": "f420cda340366cb730d0d7e203e63889c5d852090d4a8ea145ae368a00adeae1"
+    },
+    {
+      "path": "qualify/units/test_native_parallel_cv_wire.tests.xml",
+      "sha256": "8b812c4361c2b918ef25673193f53c5e2b4f886aea69b7835667e35bd6faea3c"
+    },
+    {
+      "path": "qualify/units/test_classical_archive_reader_native.py.json",
+      "sha256": "5183433806598742e6cfb3500f0e7280960371dba71beff9b6f82716c0f6bcee"
+    },
+    {
+      "path": "qualify/units/test_classical_archive_reader_native.tests.xml",
+      "sha256": "7c217f9ec0ff63ad3562c7ed015a489052b5300ece10766d07850ec52859d071"
+    },
+    {
+      "path": "qualify/units/test_classical_archive_writer_native.py.json",
+      "sha256": "a436373919112aa602c92deb35fc0317c34b5c43a7b407539a11189f6013407b"
+    },
+    {
+      "path": "qualify/units/test_classical_archive_writer_native.tests.xml",
+      "sha256": "4fbf1bdc85f6d2a1936143a94017dbbc7e7a968f42d2842283a8579d162b4f81"
+    },
+    {
+      "path": "qualify/units/test_host_density_save_native.py.json",
+      "sha256": "d00fb97f9a44b43897f0d3be69e27bce1b8a8055bbf9c161dcb167f5778d5052"
+    },
+    {
+      "path": "qualify/units/test_host_density_save_native.tests.xml",
+      "sha256": "6b06059f171d45e7772eb0bf722eef22d9b37fa8ea38f4cfdf6130243f1ecf2a"
+    },
+    {
+      "path": "qualify/units/test_standard_scaler_native_lifecycle.py.json",
+      "sha256": "d36feeae9f88ebc594b74a6c5c8b73a7632e6b8ccd94aef5b7b95607c6d39663"
+    },
+    {
+      "path": "qualify/units/test_standard_scaler_native_lifecycle.tests.xml",
+      "sha256": "a7ee8ab942bc498c3ef42fdb384d439e34e65e317752959116ad11cf2389a203"
+    },
+    {
+      "path": "qualify/units/test_minmax_scaler_native_lifecycle.py.json",
+      "sha256": "c1d52cf0162fc8a42a8350857aa357b225b54dd74115f9901d89c56551a7a174"
+    },
+    {
+      "path": "qualify/units/test_minmax_scaler_native_lifecycle.tests.xml",
+      "sha256": "ead4f710d87ac6ae5f5778d1756985ddf1f600e68f0162274c733387164ce09f"
+    },
+    {
+      "path": "qualify/units/test_robust_scaler_native_lifecycle.py.json",
+      "sha256": "bf390ae4893190afd0a63a7f5fe0e3d9e5e6a527b221fd1c527b264901b723e2"
+    },
+    {
+      "path": "qualify/units/test_robust_scaler_native_lifecycle.tests.xml",
+      "sha256": "63763d8cd36388fe821e2ea36d75a820289d11c0dd40fc3063a065f8e1f798ea"
+    },
+    {
+      "path": "qualify/units/test_maxabs_scaler_native_transport.py.json",
+      "sha256": "75fc1e592f9473bddfbcfb13fabf3a5059e7a6af972f9a4f09a7bdecfffd7580"
+    },
+    {
+      "path": "qualify/units/test_maxabs_scaler_native_transport.tests.xml",
+      "sha256": "3b427225aee0a89355c8ad87712d088144ec49cd60235fc8231d3d6a2fdc27fd"
+    },
+    {
+      "path": "qualify/units/test_robust_scaler_native_transport.py.json",
+      "sha256": "185653e6177be1b90a8d3e4bda38fd042e1986458a2edf85b920410a30bab948"
+    },
+    {
+      "path": "qualify/units/test_robust_scaler_native_transport.tests.xml",
+      "sha256": "6bcaa238768f5439e5ced32a2c380ec539729042afb5c8d0a933bcb4ba650378"
+    },
+    {
+      "path": "qualify/units/test_scaler_rows_snapshot_native.py.json",
+      "sha256": "d0e72c3ad36a28fcbdbdb120edf8a1996a40b07b98c4d0f72a37a63d6831a308"
+    },
+    {
+      "path": "qualify/units/test_scaler_rows_snapshot_native.tests.xml",
+      "sha256": "d7b6569f0ed7e177383985df9793ae5362ea07ce0904bc5e8c90fb08e3230a02"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_array_ownership.py.json",
+      "sha256": "511dc68c820f8c49be215903be8dc6d700aa0d5857731e1f8c98076b249e1f33"
+    },
+    {
+      "path": "qualify/units/test_optimizer_native_array_ownership.tests.xml",
+      "sha256": "42e992a1b1d19ddd2d8a2c963f44f22b7fad59c7053a5666218a3c479b04715f"
+    },
+    {
+      "path": "qualify/units/test_samba_step_native.py.json",
+      "sha256": "1c8e9d0196e234201cbb949c2cc20ab4adef56ea1b5c0629942885bb4e0bb279"
+    },
+    {
+      "path": "qualify/units/test_samba_step_native.tests.xml",
+      "sha256": "0af0c0f9ff235a2105891d37febf6631498dcc3faaba056e5e10d3497fa1eca0"
+    },
+    {
+      "path": "qualify/units/test_samba_inference_native.py.json",
+      "sha256": "f47c964e350f3e31c9f64b57ba3c40f0be30e65af4fb5f30f8d271b78cfac7fb"
+    },
+    {
+      "path": "qualify/units/test_samba_inference_native.tests.xml",
+      "sha256": "e7dae4843f7ed36e006e892accf91eb3514dff5dc5ec24b7094aa9582db48ddf"
+    },
+    {
+      "path": "qualify/units/test_samba_checkpoint_native.py.json",
+      "sha256": "3cc389ef5d51397ced2912dde60e200ba9e2cb2fd21ed1685f1f8f084de54bfb"
+    },
+    {
+      "path": "qualify/units/test_samba_checkpoint_native.tests.xml",
+      "sha256": "2f1d7b1af7b9c529171e64bab407a4f3e41e135c7796b63b1c1db1ad5291770b"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_execution.py.json",
+      "sha256": "1b0cfa4356944a2884c409a2f388cdde334b2ba9c71514d51c329ee5a0ba7207"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_execution.tests.xml",
+      "sha256": "b0f90dc8e4685a1e84904d8bba02364c341faf6bb8d82731cb09feafc76ef53e"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_checkpoint.py.json",
+      "sha256": "c80b69e4251ab6de5171ce9c07b448678715a009d34269486ac6f4a270a792c2"
+    },
+    {
+      "path": "qualify/units/test_sequential_native_checkpoint.tests.xml",
+      "sha256": "7f0ff636e3afb39a75f9545347f25d0d643721abdfa50b4c889ea2fa9485074d"
+    },
+    {
+      "path": "qualify/units/test_generator_draw_native.py.json",
+      "sha256": "572cfd1a7832c4d1b33bc33296ac008f5603310c293c0daced25ee5f733f6e1d"
+    },
+    {
+      "path": "qualify/units/test_generator_draw_native.tests.xml",
+      "sha256": "697793e6f033a3bf076b72659339dffd9a07de1b1e78aa0bab166b512f0385c8"
+    },
+    {
+      "path": "qualify/units/test_generation_native.py.json",
+      "sha256": "b60e6dc1d2b0ba5f1a4a047cc0838c797c227ee6f58c43cf244b6258f6f17eec"
+    },
+    {
+      "path": "qualify/units/test_generation_native.tests.xml",
+      "sha256": "52580fcf79ff6b84f4504934c2eabc8d4db9718a7faa8c03d3a352e1f53d80f1"
+    },
+    {
+      "path": "qualify/units/test_native_owner_qualification.py.json",
+      "sha256": "67bbfcaac433a6b74b2e15b1b979333e14b572c0a373842648a765004bb1b582"
+    },
+    {
+      "path": "qualify/units/test_native_owner_qualification.tests.xml",
+      "sha256": "a767bf74db31e685755493db471fb60b48f1fd85f1e765ea719a6749261bc535"
+    },
+    {
+      "path": "qualify/units/test_host_inference_native.py.json",
+      "sha256": "9910f535c1d0c808a17cae9562c2bdfcfd7d116c15f7ba41a1457e8d498edab3"
+    },
+    {
+      "path": "qualify/units/test_host_inference_native.tests.xml",
+      "sha256": "18a5c2da004da3eef3cc0bf6a79e253a37811c35b31a7983bdaf784e52d27ea3"
+    },
+    {
+      "path": "qualify/units/test_host_kernel_inference_native.py.json",
+      "sha256": "5df12fd8d504e7b7c6effd7fcb48db6d49c9a852a793ae1e6c4f7ea8c865dcfa"
+    },
+    {
+      "path": "qualify/units/test_host_kernel_inference_native.tests.xml",
+      "sha256": "13cad10f0441e58d64910a16c88a886eceb5ceea8b45d343921a3788f1d9063a"
+    },
+    {
+      "path": "qualify/units/test_host_projection_native.py.json",
+      "sha256": "3c8261bd9abaaee1d8e24db97771ab8b83875f73dd4df3133b14f20dbf026f61"
+    },
+    {
+      "path": "qualify/units/test_host_projection_native.tests.xml",
+      "sha256": "399ce19c7c3058f982f8aa94db84723ec463d3be9b5a13903b9f6d6cc07e9965"
+    },
+    {
+      "path": "qualify/units/test_host_logistic_native.py.json",
+      "sha256": "bd0020de8ddcc47737bbdb1536ebc8fa4768025ed30720f31eb39c86be462bac"
+    },
+    {
+      "path": "qualify/units/test_host_logistic_native.tests.xml",
+      "sha256": "8bb8e24725a31d307aff0f42e4c251dacfa734ba50049962bf8c87cdcfea3f3a"
+    },
+    {
+      "path": "qualify/units/test_host_svr_native.py.json",
+      "sha256": "51b057c2c378a5acc07fffddb0815568cde178309c6a3e4c3ef2cddf727cfe70"
+    },
+    {
+      "path": "qualify/units/test_host_svr_native.tests.xml",
+      "sha256": "f9dce52dd8a2e2a3ab856b5d9b4897d0d004616b969613658013b4ef507fc184"
+    },
+    {
+      "path": "qualify/units/test_host_svc_native.py.json",
+      "sha256": "cd0338fff3fdb77daf66ac85f1fa06bc1b3750177b72dfa423b31b4afb7db130"
+    },
+    {
+      "path": "qualify/units/test_host_svc_native.tests.xml",
+      "sha256": "66fbb809dc3c02117edaedf83feb97f4b89492882c748de2a329668ca8536c7b"
+    },
+    {
+      "path": "qualify/units/test_host_kde_native.py.json",
+      "sha256": "20fdcf118a3f38e4df100e5e604d5ce837c72ec513128d97e8e7217b2afd5f89"
+    },
+    {
+      "path": "qualify/units/test_host_kde_native.tests.xml",
+      "sha256": "63642c2a9a29936a3ed5af07c2435d36f2acff74f61f151830c63239fa8dd10b"
+    },
+    {
+      "path": "qualify/units/test_host_iforest_native.py.json",
+      "sha256": "a3a2e5b5989068d5d636559ba44e0d5e94fac88f2a9742299f829d0ecdc4235b"
+    },
+    {
+      "path": "qualify/units/test_host_iforest_native.tests.xml",
+      "sha256": "4653db6f1bd0325f92f2e15a2055269644bd2b7fb74270363ebf4a2d118d52fc"
+    },
+    {
+      "path": "qualify/units/test_native_meta_public_boundary.py.json",
+      "sha256": "3f8ba8f5ddfbc42c549fc81491d4383726b2b7f1b64ad424a549fc33588cc575"
+    },
+    {
+      "path": "qualify/units/test_native_meta_public_boundary.tests.xml",
+      "sha256": "fb4b7a9fdcf5bb95291d509a53a08aea5e37fcd4b2355f2e8f7f33882ee61429"
+    },
+    {
+      "path": "qualify/units/test_meta_native.py.json",
+      "sha256": "eaf2b748c415ba287c922cd1ecbb97c2670b8a20b640b2f76bbd426fc63233fd"
+    },
+    {
+      "path": "qualify/units/test_meta_native.tests.xml",
+      "sha256": "700c9dcacd55156a371bb733ae12c0c16572459ca07a711ea2da7d16c10c25cc"
+    },
+    {
+      "path": "qualify/units/test_native_cv_lda.py.json",
+      "sha256": "40959cb4bbdadf4582f2731994bf375f2e6e2ac9c8777bd60f140824d6307e0a"
+    },
+    {
+      "path": "qualify/units/test_native_cv_lda.tests.xml",
+      "sha256": "7a98dee3d55b8ced9021abf11c648b527919d59776a66017328d8499a7477a4f"
+    },
+    {
+      "path": "qualify/units/test_native_cv_gbdt_nb.py.json",
+      "sha256": "d9ef666ac72361e9449878a1359beb3b94adfde19b05053daefe6398e84a1d34"
+    },
+    {
+      "path": "qualify/units/test_native_cv_gbdt_nb.tests.xml",
+      "sha256": "6b84c8f6b91c3e1b761e2044b1d6cf135056500c310a3658d31d2aa0848886e9"
+    },
+    {
+      "path": "qualify/units/test_native_search_dispatch.py.json",
+      "sha256": "c51e1a2d76d9563e9c1c23c755f136e11d40cbc859e4f590a36ea00941279bb3"
+    },
+    {
+      "path": "qualify/units/test_native_search_dispatch.tests.xml",
+      "sha256": "3b816b343f458d581b60aa70068e8a4e4a6cde8f5c9663cf30084123ef762606"
+    },
+    {
+      "path": "qualify/units/test_native_cv_scorers.py.json",
+      "sha256": "6bd1eed67c515ec4a63b7cec70ad678ce23f7688aee90cdeaab43374881ae063"
+    },
+    {
+      "path": "qualify/units/test_native_cv_scorers.tests.xml",
+      "sha256": "363bd26d3bf0529bf04eceae9d4bce3ab08505928332cfa6e0644c3aec5675e8"
+    },
+    {
+      "path": "qualify/units/test_native_cv_outputs.py.json",
+      "sha256": "b3a6924e2009e79a08c013b35472e815fb23690a361674447f2d5a760f9ede24"
+    },
+    {
+      "path": "qualify/units/test_native_cv_outputs.tests.xml",
+      "sha256": "ae14e327be95878a6317b218c8927fbfdb7662c3ff1ada30dfe033494a256042"
+    }
+  ],
+  "qualifier_exit": 0
+}

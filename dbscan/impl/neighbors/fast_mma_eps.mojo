@@ -35,17 +35,17 @@ unexpanded kernel's over 76 thresholds (d = 3, 5, 8, 13, 16, 30, data on a
 a sweep of the threshold over +-4 ulps of 110 pairs' own distances (every
 pair's flip point hit) with 0 differing bytes.
 
-Gate: `FAST_MMA_EPS_ENABLED` (FAST, Apple, not `-D MOJOLEARN_DBSCAN_FAST_MMA_OFF`),
+Gate: `FAST_MMA_EPS_ENABLED` (FAST, Apple),
 L2 only, `n_features <= 32`.
 """
 
+from std.sys.compile import is_defined
 from std.atomic import Atomic
 from std.bit import count_trailing_zeros
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_fold import device_column_means32
 from max.gpu.memory import AddressSpace
@@ -54,21 +54,22 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from neighbors.impl.detail.fast_mma_knn import _sg_load_t, _sg_mma
 
-comptime FAST_MMA_EPS_ENABLED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_DBSCAN_FAST_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_DBSCAN_FAST_MMA_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 099ec7d1ef.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_MMA_EPS_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 # AFCL-G03: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four complete SIMD groups per block expose twice as many query blocks,
 # trading cross-query operand reuse for occupancy without pruning an edge
 # or changing the exact epsilon-boundary fallback. No size-specific rule.
 comptime AFCL_G03 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G03"]()
 )
 comptime ME_SG = 4 if AFCL_G03 else 8
+# TOMBSTONE: MOJOLEARN_AFCL_G03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at b9deefa446.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G03.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime ME_TPB = ME_SG * 32
 comptime ME_T = 128
 comptime ME_MAX_D = 32
@@ -191,7 +192,7 @@ def fast_mma_eps_kernel[D: Int, A: Int, B: Int](
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var q0 = (Int(block_idx.x) * ME_SG + sg) * 8 * A
 
-    var qf = InlineArray[_M64, A * KS](fill=_M64(0))
+    var qf = Array[_M64, A * KS](fill=_M64(0))
     var qn = SIMD[DType.float32, A](0)
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
@@ -240,7 +241,7 @@ def fast_mma_eps_kernel[D: Int, A: Int, B: Int](
                 v = xc[(nb + r) * k + c]
             pf[u] = v
         for cb in range(ME_T // RB):
-            var xf = InlineArray[_M64, B * KS](fill=_M64(0))
+            var xf = Array[_M64, B * KS](fill=_M64(0))
             comptime for b in range(B):
                 comptime for kk in range(KS):
                     xf[b * KS + kk] = _sg_load_t(

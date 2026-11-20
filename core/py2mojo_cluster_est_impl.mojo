@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed DBSCAN core-array loops moved word for word from bindings/py2mojo_cluster_est.mojo."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 def dbscan_core_count(cp: MutPointer[UInt8, MutUntrackedOrigin], n: Int) raises -> Int:
@@ -24,5 +24,5 @@ def dbscan_core_gather(
         if cp.unsafe_load(i) != 0:
             ip.unsafe_store(o, Int32(i))
             olp.unsafe_store(o, lp.unsafe_load(i))
-            memcpy(dest=op + o * d, src=xp + i * d, count=d)
+            unsafe_memcpy(dest=op + o * d, src=xp + i * d, count=d)
             o += 1

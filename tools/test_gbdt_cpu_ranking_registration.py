@@ -91,9 +91,21 @@ class RankingVerifierRegistrationTests(unittest.TestCase):
                 self.assertIsNone(host.pending_blocks_comparison(lane, device))
             self.assertEqual(host.lane_exposure([lane])[lane]["note"], "unwatched")
         query = "gbdt-query-rmse-pointwise"
-        self.assertEqual(host.PUBLIC_PENDING_LANES[query], "no reference")
-        self.assertEqual(host.lane_exposure([query])[query]["status"], host.LANE_OWED)
+        # admitted on every column on 2026-11-05: compared, no longer withheld as OWED
+        self.assertEqual(host.PUBLIC_PENDING_LANES[query], "unwatched")
+        for device in ("cpu", "nvidia", "amd", "apple"):
+            self.assertIsNone(host.pending_blocks_comparison(query, device))
         self.assertIsNone(host.pending_blocks_comparison("gbdt-query-rmse"))
+
+    def test_no_lane_with_admitted_rows_is_withheld_as_owed(self):
+        # "no reference" means no committed record carries a hash for the lane; once the table admits rows for it
+        # the entry is stale and would withhold a lane the verifier can compare (gbdt-query-rmse-pointwise, 0.8.66)
+        import json
+        table = json.loads((ROOT / "python/mojolearn/verify_reference/table.json").read_text())
+        lanes = {key.partition("/")[0] for key in table.get("cells") or {}}
+        stale = sorted(lane for lane, why in self.host.PUBLIC_PENDING_LANES.items()
+                       if any(why.startswith(r) for r in self.host.PUBLIC_PENDING_OWED_REASONS) and lane in lanes)
+        self.assertEqual(stale, [])
 
     def test_device_residency_exclusions_are_preserved(self):
         exclusions = gpu_only_lanes()

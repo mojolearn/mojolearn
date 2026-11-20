@@ -8,6 +8,9 @@ import types
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / 'python/mojolearn'
 
@@ -37,9 +40,9 @@ def test_artifact_setup_passes_raw_values_to_one_native_owner():
 def test_both_sequence_bindings_register_the_same_native_setup():
     for name in ('_mojolearn_x_sequence.mojo', '_mojolearn_x_sequence_host.mojo'):
         source = (ROOT / 'bindings' / name).read_text()
-        assert 'from providers.python.autograd_import_frontend_pyapi import ops_import_model_c' in source
+        assert 'from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c' in source
         assert 'm.def_py_c_function(ops_import_model_c, "ops_import_model")' in source
-    source = (ROOT / 'providers/python/autograd_import_frontend_pyapi.mojo').read_text()
+    source = plain('providers/python/autograd_import_frontend_pyapi_door.mojo', (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text())
     for prohibited in ('torch.onnx', 'SerializeToString', 'session._sid(', 'ImportedProgram(', 'Session(', 'buffer_address(', 'Python.import_module('):
         assert prohibited not in source
     assert 'ops_session_initialize_py(session,' in source
@@ -48,7 +51,7 @@ def test_both_sequence_bindings_register_the_same_native_setup():
     assert 'downcast_value_ptr[NativeDescriptorResource]()[].close()' in source
     owner = (ROOT / 'autograd/program_import_request.mojo').read_text()
     assert 'onnx_import_file[E, KIND]' in owner and 'onnx_buffers(request[].reader)' in owner
-    metadata = (ROOT / 'providers/python/autograd_import_metadata_pyapi.mojo').read_text()
+    metadata = plain('providers/python/autograd_import_metadata_pyapi_door.mojo', (ROOT / 'providers/python/autograd_import_metadata_pyapi_door.mojo').read_text())
     assert 'py_call(b.ValueError.__new__, category,' in metadata
     assert '"PyErr_SetObject"' in metadata
 
@@ -73,7 +76,12 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     optional_numpy.require_numpy = lambda _operation: np
     onnx = types.ModuleType(importers.__name__ + '.onnx')
     onnx._Native = reader
-    for module in (package, importers, ops, backend, family, optional_numpy, onnx):
+    # connect() first hands the imported-program class to the Program save
+    # owner (205eab6d6c); the fixture records that hand-off.
+    save_bridge = types.ModuleType(package.__name__ + '._native_program_save_bridge')
+    save_connected = []
+    save_bridge.connect_imported = save_connected.append
+    for module in (package, importers, ops, backend, family, optional_numpy, onnx, save_bridge):
         monkeypatch.setitem(sys.modules, module.__name__, module)
     package.ops, package._backend = ops, backend
     spec = importlib.util.spec_from_file_location(importers.__name__ + '.bridge', PACKAGE / 'importers/_native_import_bridge.py')
@@ -81,6 +89,7 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
     spec.loader.exec_module(module)
     entry, context = module.connect(session, program, imported, graph, ValueError)
     assert entry is len
+    assert save_connected == [imported]
     assert context['modes']['fast'].startswith('ImportError:')
     assert set(context['layouts']) == {session, program, imported, graph, reader}
     for cls, layout in context['layouts'].items():
@@ -91,7 +100,8 @@ def test_import_connections_retain_only_native_entries_and_real_class_layouts(mo
 
 
 def test_native_shape_admission_precedes_protocol_sensitive_conversion():
-    source = (ROOT / 'providers/python/autograd_import_metadata_pyapi.mojo').read_text()
+    source = plain('providers/python/autograd_import_metadata_pyapi_door.mojo',
+                   (ROOT / 'providers/python/autograd_import_metadata_pyapi_door.mojo').read_text())
     body = source[source.index('def _shape_words('):source.index('def _raise_object(')]
     assert 'Python mapping callbacks are unsupported' in body
     assert body.index('_scalar(key, context["shape_names"])') < body.index('py_setitem(provided, key, pair[1])')

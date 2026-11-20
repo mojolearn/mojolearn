@@ -37,11 +37,9 @@ SM=64 + BPSM=4 equalled SM=128. The one distinct BPSM point, 4 blocks per
 device SM, is arm 1 (HIST_REP_DEVICE_X4; 1 is never a real SM pin). The old
 define is refused in core/six_lane_experiment_guards.mojo.
 """
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDN
 
 # PROMOTED: the device arm (0) is the IDENTICAL default (lane/grid-flips-1,
 # 2026-10-08, Andrew 13:00Z "flip all of these"). Grid run ge123e6f9 (NVIDIA
@@ -62,13 +60,14 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #   categorical taxicat  AMD 10988 -> 10818 (0.984x); NV not measured.
 #   10 faster / 0 slower cells, geometric mean 0.927x. Quality SAME where
 #   scored (rank quality pending); no bits change (Int32 sums).
-# Arms kept for the grid: `-D MOJOLEARN_TREES_HIST_REP_SM_OFF` (pinned32, the
-# old default), `=64`, `=1` (device x4); `=32` is the pinned target through
-# this route.
-comptime HIST_REP_SM_ON = _IDN and not is_defined["MOJOLEARN_TREES_HIST_REP_SM_OFF"]()
+# TOMBSTONE: MOJOLEARN_TREES_HIST_REP_SM_OFF (DELETE-OLD-PATH, rule e, EXP:1640 PROMOTED: the device arm above is the measured default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 70fbbc4c47.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM_OFF.patch
+comptime HIST_REP_SM_ON = _IDN
 #: Arm values: the device's own SM/CU count (the `sm_count` the launcher was
 #: given) at 2 or at 4 blocks per SM.
 comptime HIST_REP_DEVICE = 0
 comptime HIST_REP_DEVICE_X4 = 1
-comptime HIST_REP_SM = get_defined_int["MOJOLEARN_TREES_HIST_REP_SM", HIST_REP_DEVICE]() if HIST_REP_SM_ON else 32
+# TOMBSTONE: MOJOLEARN_TREES_HIST_REP_SM (DELETE-ARM, rule e, EXP:1640: the grid force values (=64, =1, =32) beside the promoted device default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at cf752f933b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_REP_SM.patch
+comptime HIST_REP_SM = HIST_REP_DEVICE if HIST_REP_SM_ON else 32
 comptime HIST_REP_BPSM = 4 if HIST_REP_SM == HIST_REP_DEVICE_X4 else 2

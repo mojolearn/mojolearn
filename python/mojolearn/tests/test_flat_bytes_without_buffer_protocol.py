@@ -1,14 +1,14 @@
 """On Python 3.10 and 3.11 the package's `Array` cannot export the buffer
 protocol (DEVIATION 2305), so `memoryview(array)` raises TypeError there.
 The live worker's fold export and the cross-vendor state hash read arrays
-through `_buffer.flat_bytes`, which works on every Python. These tests take
+at their address, which works on every Python (the former
+`_buffer.flat_bytes` had no product caller and was deleted 2026-11-14). These tests take
 `__buffer__` away from `Array` to stand in for those Pythons."""
 import hashlib
-import struct
 
 import pytest
 
-from mojolearn import _buffer, cross_vendor
+from mojolearn import cross_vendor
 from mojolearn._array import Array
 
 
@@ -22,29 +22,12 @@ def no_buffer_protocol(monkeypatch):
     return a
 
 
-def test_flat_bytes_reads_an_array_without_the_buffer_protocol(no_buffer_protocol):
-    a = no_buffer_protocol
-    mv = _buffer.flat_bytes(a)
-    assert mv.format == "B" and mv.nbytes == 12 and mv.readonly
-    assert mv.tobytes() == struct.pack("<3f", 1.5, -2.0, 3.25) == a.tobytes()
-
-
-def test_flat_bytes_reads_bytes_and_numpy_too():
-    import numpy as np
-    raw = struct.pack("<3f", 1.5, -2.0, 3.25)
-    assert _buffer.flat_bytes(raw).tobytes() == raw
-    assert _buffer.flat_bytes(np.frombuffer(raw, dtype="<f4")).tobytes() == raw
-    with pytest.raises(TypeError):
-        _buffer.flat_bytes(object(), name="thing")
-
-
 def test_state_hash_and_f32_on_arrays_without_the_buffer_protocol(no_buffer_protocol):
     a = no_buffer_protocol
     raw = a.tobytes()
     state = dict(parameters=a, m=a, v=a, flags=a)
     assert cross_vendor.state_hash(state) == hashlib.sha256(raw * 4).hexdigest()
     assert cross_vendor.state_hash(dict(parameters=raw, m=raw, v=raw, flags=raw)) == cross_vendor.state_hash(state)
-    assert list(cross_vendor._f32(a)) == [1.5, -2.0, 3.25]
     assert cross_vendor.ordered_fold([a, a]) == cross_vendor.ordered_fold([raw, raw])
 
 

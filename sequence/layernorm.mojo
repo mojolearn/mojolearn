@@ -9,14 +9,13 @@ reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
-from std.sys.compile import is_defined, get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
 from sequence.fold32 import FOLD_L, tree32
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
+from std.sys.compile import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
-#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
-#: MOJOLEARN_IDN_LN_ROW_WARP_OFF` restores the one-chain row; the old on-define
+#: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; the old on-define
 #: is refused in core/six_lane_experiment_guards.mojo). Post-merge A/B, one run
 #: per arm (nv2 L40S v1056 -> v1057 on main 9f83ea479, MI325X a1156 -> a1157 on
 #: main 0a7b206f1): layernorm NV 1.394 -> 1.071 ms (0.77x) / AMD 1.446 -> 1.143
@@ -45,11 +44,9 @@ from std.gpu.primitives.warp import shuffle_xor
 #: the tree shape does not depend on the row width; a wider row only gives
 #: each lane more sequential terms (D/32), still bandwidth-paced.
 #: dweight / dbias column folds are untouched (LN_FOLD_BLOCK above).
-comptime LN_ROW_WARP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path; EXP:1945 PROMOTED, the row warp is the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at b395beef95.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch
+comptime LN_ROW_WARP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: logical lanes of the row fold (the tree has log2(LN_RW_LANES) = 5 levels)
 comptime LN_RW_LANES = FOLD_L
 
@@ -60,28 +57,25 @@ comptime LN_RW_LANES = FOLD_L
 #: thread per column adds the block partials ascending from +0.0. The block
 #: size is a function of M alone. One block (M <= 64) is the single chain.
 #: It replaced one M-term chain per column.
-#: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
 # F20 M3 2026-10-06 MEASURED FAST block-fold; stays OFF. Shapes131x17,137x65,
 # 257x129: forward B/A0.9739/1.1342/0.9834, backward0.8322/2.0792/1.0993,
 # downstream0.6184/1.2856/0.9373. Mixed/regression, one warmup+score; FAST quality
 # varies within recorded contract. Existing IDENTICAL decision separate. ab-20261006/repairs-54c1f35a5/F20.
-comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
+# TOMBSTONE: MOJOLEARN_LN_FAST_BLOCK_FOLD (Apple FAST opt-in arm, F20 mixed/regression, never promoted) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 52392b3b15.
+# Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_BLOCK_FOLD.patch
+# TOMBSTONE: MOJOLEARN_LN_FOLD_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 8e9b1a9eb5.
+# Restore: git apply experiments/removed/MOJOLEARN_LN_FOLD_BLOCK_OFF.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_LN_FAST_BLOCK_FOLD opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_LN_FAST_BLOCK_FOLD"]())
 
 
 def ln_fold_rows(M: Int) -> Int:
     """Rows per block: the smallest power of two R >= 64 with R * R >= M."""
-    # NI51 independent V arm: more independent parameter-gradient leaves;
-    # sqrt(M) growth still bounds scratch. Shared HostExec/DeviceExec operation
-    # source; only neural LayerNorm changes. Default OFF, validation NOT RUN.
-    # L11 (2026-10-07): a leaf parameter, -D MOJOLEARN_IDN_SEQ_LN_LEAF=64|32
-    # (default 64; legal set asserted in core/six_lane_experiment_guards).
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_LEAF (unmeasured opt-in leaf 32, validation never run) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
     var r = 64
-    comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and LN_FOLD_BLOCK
-        and get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF", 64]() == 32
-        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    ):
-        r = 32
     while r * r < M:
         r *= 2
     return r
@@ -97,7 +91,7 @@ def _rw_fold_sum(x: FP, base: Int, D: Int) -> Float32:
     """sum of x[base + c], c < D, as the 32-lane fold (LN_ROW_WARP): slot j
     adds c = j, j + 32, ... ascending from +0.0, then `tree32` (the device
     cell computes exactly these adds: `coop_rw_total`, sequence/coop.mojo)."""
-    var p = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var p = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)
@@ -111,7 +105,7 @@ def _rw_fold_sum(x: FP, base: Int, D: Int) -> Float32:
 def _rw_fold_sq(x: FP, base: Int, D: Int, mean: Float32) -> Float32:
     """sum of (x[base + c] - mean)^2 as the 32-lane fold: slot j's chain is
     fma3(d, d, acc) over c = j, j + 32, ... from +0.0, then `tree32`."""
-    var p = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var p = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)
@@ -157,8 +151,8 @@ def _rw_fold_bwd(a: Args, base: Int, D: Int, mean: Float32, rstd: Float32) -> Tu
     """(sum g, sum g xhat) of a backward-x row as the 32-lane fold: lane j
     runs add(sg, g) and fma3(g, xh, sgx) over c = j, j + 32, ... from +0.0,
     then one `tree32` per sum."""
-    var pg = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
-    var pgx = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+    var pg = Array[Float32, FOLD_L](fill=Float32(0.0))
+    var pgx = Array[Float32, FOLD_L](fill=Float32(0.0))
     var k = 0
     while k < D:
         var m = min(LN_RW_LANES, D - k)
@@ -295,8 +289,9 @@ def op_ln_bwd_w(t: Int, a: Args):
 #: the same; only the repeated global reads go. Bound: 32 words a lane (D =
 #: 1024 on a 32-lane cell) is a register budget (the forward holds 32 floats,
 #: the backward 64), not a shape choice; wider rows keep the passes over memory.
-#: `-D MOJOLEARN_IDN_LN_ONE_PASS_OFF` keeps the multi-pass cell (arm A).
-comptime LN_ONE_PASS = LN_ROW_WARP and not is_defined["MOJOLEARN_IDN_LN_ONE_PASS_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_LN_ONE_PASS_OFF (old path, the multi-pass cell; EXP:2170 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at f12b3def4e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ONE_PASS_OFF.patch
+comptime LN_ONE_PASS = LN_ROW_WARP
 #: words a lane holds (slots of the register row)
 comptime LN_ONE_PASS_SLOTS = 32
 comptime LN_ONE_PASS_MAX_D = LN_RW_LANES * LN_ONE_PASS_SLOTS

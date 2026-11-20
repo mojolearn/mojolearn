@@ -4,107 +4,144 @@
 points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from x_decomp.publish_device_run import _publish_linear_entry_table
+from core.experiment_guards_decomposition import DECOMPOSITION_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from providers.python.x_decomp_api_pyapi import (
-    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, gather_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
+from providers.python.x_decomp_api_pyapi_pack import (
+    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
-from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+from providers.python.x_decomp_tsvd_owner_pyapi_pack import tsvd_randomized_py, tsvd_tsqr_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
-from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+from providers.python.x_decomp_ipca_owner_pyapi_door import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
-from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
-from std.sys.info import has_apple_gpu_accelerator
-from x_decomp.mcd_experiments import mcd_experiment_count
-from x_decomp.mcd_bmma import mcd_fast_batch_count, MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
+from providers.python.x_decomp_decomp_owner_pyapi_pack import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
 
-from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 
-def x_decomp_shared_sub_count_py() raises -> PythonObject:
-    return PythonObject(shared_sub_count(False))
-
-def mcd_experiment_count_py(stage: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_experiment_count(Int(py=stage)))
-
-def mcd_fast_batch_count_py() raises -> PythonObject:
-    return PythonObject(mcd_fast_batch_count())
+# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+# at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 
 
-def mcd_g1_gram_on_py() raises -> PythonObject:
-    return PythonObject(Int(MCD_G1_GRAM))
+# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
-def mcd_g1_gram_count_py(index: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_g1_count(Int(py=index)))
-
-def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_g1_last(Int(py=index)))
-
-from providers.python.x_decomp_kit_device_pyapi import mcd_dev_py
-from providers.python.x_decomp_chi2_dev_pyapi import chi2_quantile_dev_py, consistency_factor_dev_py
-from providers.python.x_decomp_als_dev_pyapi import als_fit_dev_py
-from providers.python.x_decomp_mds_dev_pyapi import mds_fit_dev_py
-from providers.python.x_decomp_lle_iter_dev_pyapi import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
-from gemm.afn_apple_fast import AFN_GEMM_APPLE
-from providers.python.x_decomp_pls_dev_pyapi import pls_fit_dev_py
-from providers.python.x_decomp_dictl_dev_pyapi import dict_learning_dev_py, minibatch_dev_py
-from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
-from providers.python.x_decomp_select_dev_pyapi import (
-    dev_argmin_all_py, dev_dsum_sq_py, dev_order_f_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
+from providers.python.x_decomp_select_ops_pyapi_pack import order_small_py, reduce_py
+from providers.python.x_decomp_select_dev_pyapi_pack import (
+    dev_order_small_py, dev_pca_mle_rank_py,
 )
-from providers.python.x_decomp_graph_device_pyapi import (
-    dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
-)
-from x_decomp.mcd_bmma import MCD_ORDERED_COV
-from providers.python.x_decomp_mcd_bmma_pyapi import mcd_cov_reach_py
-from providers.python.x_decomp_resident_pyapi import (
-    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+from providers.python.x_decomp_resident_pyapi_pack import (
+    dev_alloc_py, dev_ew_py, dev_free_py, dev_live_py, dev_upload_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY
-from providers.python.x_decomp_resident_pyapi import grp_cls2_py
-from providers.python.x_decomp_lanczos_dev_pyapi import dev_lanczos_py
+from providers.python.x_decomp_resident_pyapi_pack import grp_cls2_py
 from x_decomp.resident import IDN_SVD_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_svd_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_svd_py
 from x_decomp.resident import IDN_LU_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_lu_py, dev_lu_aux_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_lu_py, dev_lu_aux_py
 from x_decomp.resident import IDN_CODE_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_eigh_py
-# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
-# aliased here. Same Python name "x_decomp_dev_lu_aux" for both: LLE_FAST_DEV_LU is
-# FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
-from x_decomp.w4_fast import LLE_FAST_DEV_LU
-from providers.python.x_decomp_w4_fast_pyapi import dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
+from providers.python.x_decomp_resident_pyapi_pack import dev_eigh_to_py
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
+# IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 from x_decomp.qfix import LU_QFIX
-from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
+from providers.python.x_decomp_qfix_pyapi_pack import lu_resid_py, qfix_flags_py
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
-from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES, RSVD_FAST_DEVSCAN
-from providers.python.x_decomp_s_linalg_fast_pyapi import (
-    dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, dev_upload_scan_py, s_flags_py,
+from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT
+from providers.python.x_decomp_s_linalg_fast_pyapi_pack import (
+    dev_orth_ws_py, s_flags_py,
 )
+
+
+from x_decomp.descriptor_device import X_DECOMP_DEVICE_API
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+
+
+from core.shared_slot import SharedSlot
+from core.tsvd_native_decomp import TSVDDecompAPI
+from core.nmf_native_provider import NMFProviderAPI
+from core.ipca_native_provider import IPCAProviderAPI
+from core.kpca_native_api import KPCAProviderAPI
+from core.kpca_native_provider import KPCAEigenKernels
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+comptime _TSVD_DECOMP_API_NAME = "MojolearnTSVDDecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTSVDDecompDeviceFastV1"
+comptime TSVD_DECOMP_API = SharedSlot[TSVDDecompAPI[DevExec, DevRDev, True], _TSVD_DECOMP_API_NAME]
+
+
+comptime _NMF_API_NAME = "MojolearnNMFDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNMFDeviceFastV1"
+comptime NMF_API = SharedSlot[NMFProviderAPI[DevExec, DevRDev, True, DevDecomp], _NMF_API_NAME]
+
+
+comptime _IPCA_API_NAME = "MojolearnIPCADeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIPCADeviceFastV1"
+comptime IPCA_API = SharedSlot[IPCAProviderAPI[DevExec, DevRDev, True, DevIpcaDev], _IPCA_API_NAME]
+
+
+comptime _KPCA_DECOMP_API_NAME = "MojolearnKPCADecompDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnKPCADecompDeviceFastV1"
+comptime KPCA_DECOMP_API = SharedSlot[KPCAProviderAPI[KPCAEigenKernels[DevExec, DevRDev, True, DevDecomp]], _KPCA_DECOMP_API_NAME]
+
+
+def kpca_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = KPCA_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def ipca_native_api_v1_binding() raises -> PythonObject:
+    var api = IPCA_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def nmf_native_api_v1_binding() raises -> PythonObject:
+    var api = NMF_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def tsvd_decomp_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_DECOMP_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def x_decomp_native_api_v1_binding() raises -> PythonObject:
+    """The x_decomp kernel-call table (x_decomp/descriptor_schema.mojo): one
+    capsule over this image's dispatch function, connected once per module
+    by the kits (bindings/kit_call.mojo)."""
+    var api = X_DECOMP_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
 def build__mojolearn_x_decomp() -> PythonObject:
+    comptime assert DECOMPOSITION_GUARDS_OK, "invalid integrated experiment configuration (decomposition guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
+        m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
+        m.def_function[tsvd_decomp_native_api_v1_binding]("tsvd_decomp_native_api_v1")
+        m.def_function[nmf_native_api_v1_binding]("nmf_native_api_v1")
+        m.def_function[ipca_native_api_v1_binding]("ipca_native_api_v1")
+        m.def_function[kpca_decomp_native_api_v1_binding]("kpca_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
-        m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
-        m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
-        m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
+        # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")
@@ -113,7 +150,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[rand_py[DevExec]]("x_decomp_rand")
         m.def_function[lu_py[DevExec]]("x_decomp_lu")
         m.def_function[lu_solve_py[DevExec]]("x_decomp_lu_solve")
-        m.def_function[trisolve_py[DevExec]]("x_decomp_trisolve")
+        # TOMBSTONE: the manifold kit's named x_decomp entries (graph_*, dev_graph_*, barycenter_rows, lle_apply, lle_local, lle_iterate, lle_*_ordered, mds_fit, lanczos, dev_lanczos, eigh_tridiag, dev_eigh_tridiag, trisolve, dev_trisolve, dsum_sq, dev_dsum_sq, order_f, dev_order_f; now x_decomp table operations, x_decomp/descriptor_mani_schema.mojo) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
+        # Restore: git apply experiments/removed/x_decomp_mani_named_entries.patch
         # TOMBSTONE: x_decomp_knn_select (device copy) (dead native entry: no live caller; the host twin stays) deleted 2026-10-26 by 01f30742f; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_decomp_knn_select.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
@@ -121,8 +159,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[lle_local_py[DevExec]]("x_decomp_lle_local")
-        m.def_function[lle_apply_py[DevExec]]("x_decomp_lle_apply")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[orth_py[DevExec]]("x_decomp_orth")
@@ -134,7 +170,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[lu_aux_py[DevExec]]("x_decomp_lu_aux")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[barycenter_rows_py[DevExec]]("x_decomp_barycenter_rows")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[absmax_sign_py[DevExec]]("x_decomp_absmax_sign")
@@ -142,14 +177,18 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
-        m.def_function[tsqr_r_py[DevExec]]("x_decomp_tsqr_r")
-        m.def_function[tsqr_q_py[DevExec]]("x_decomp_tsqr_q")
         # TruncatedSVD.fit's randomized and TSVD_QFIX routes, one driver each
         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
         m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
+        # lane pyout-decomp-linalg (2026-11-11): x_decomp_als_fit, _topn_desc, _gather,
+        # _dict_learning, _dict_minibatch, _mcd, _consistency_factor, _chi2_quantile,
+        # _pls_fit, _lu_gesv and _randomized_svd are x_decomp table operations
+        # (XD_ALS_FIT .. XD_RANDOMIZED_SVD, x_decomp/descriptor_owner_*.mojo); their
+        # Python entries and `*_py` doors are deleted.
+        # x_decomp_dev_lu_factor / _dev_lu_solve likewise (XD_DEV_LU_FACTOR / XD_DEV_LU_SOLVE).
         # IncrementalPCA fit / partial_fit / transform + inverse_transform, one driver each
-        # (x_decomp/ipca_owner.mojo; bindings/ipca_native.mojo calls them)
+        # Legacy direct-call exports; public IPCA uses its native descriptor.
         m.def_function[ipca_fit_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_fit")
         m.def_function[ipca_partial_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_partial")
         m.def_function[ipca_project_py[DevExec, DevRDev, True]]("x_decomp_ipca_project")
@@ -161,136 +200,79 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[fa_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_fa_fit")
         m.def_function[fa_query_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_fa_query")
         m.def_function[lda_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_lda_owner")
-        m.def_function[kpca_eig_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_kpca_eig")
         m.def_function[rp_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_fit")
         m.def_function[rp_project_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_rp_project")
-        m.def_function[r_signs_py]("x_decomp_r_signs")
-        m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes
         m.def_function[idn_flags_py]("x_decomp_idn_flags")
+        # x_decomp_tsqr_r, x_decomp_tsqr_q and x_decomp_r_signs removed (lane entangled-decompkit,
+        # 2026-11-12): their callers use the table ops XD_TSQR_R, XD_TSQR_Q and XD_R_SIGNS.
         m.def_function[ols_tsqr_r_py[DevExec]]("x_decomp_ols_tsqr_r")
         # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
-        m.def_function[lu_gesv_py[DevExec]]("x_decomp_lu_gesv")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # MinCovDet's fast_mcd and online LDA on the resident kit
         # (x_decomp/kit_device.mojo)
-        m.def_function[mcd_dev_py]("x_decomp_mcd")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[dict_learning_dev_py]("x_decomp_dict_learning")
-        m.def_function[minibatch_dev_py]("x_decomp_dict_minibatch")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[pls_fit_dev_py]("x_decomp_pls_fit")
-        m.def_function[lle_iterate_dev_py]("x_decomp_lle_iterate")
-        comptime if AFN_GEMM_APPLE:
-            m.def_function[lle_gemm_ordered_py]("x_decomp_lle_gemm_ordered")
-            m.def_function[lle_lu_ordered_py]("x_decomp_lle_lu_ordered")
-        m.def_function[mds_fit_dev_py]("x_decomp_mds_fit")
-        m.def_function[als_fit_dev_py]("x_decomp_als_fit")
-        m.def_function[chi2_quantile_dev_py]("x_decomp_chi2_quantile")
-        m.def_function[consistency_factor_dev_py]("x_decomp_consistency_factor")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[gather_py]("x_decomp_gather")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[move_py]("x_decomp_move")
-        m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
-        m.def_function[order_f_py]("x_decomp_order_f")
-        m.def_function[select_smallest_py]("x_decomp_select_smallest")
-        m.def_function[argmin_all_py]("x_decomp_argmin_all")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
-        m.def_function[topn_desc_py]("x_decomp_topn_desc")
-        m.def_function[dev_move_py]("x_decomp_dev_move")
         # lane cpu2-l8-decomp: exact select reductions and the small stable order (x_decomp/select_*.mojo)
-        m.def_function[reduce_py]("x_decomp_reduce")
         m.def_function[order_small_py]("x_decomp_order_small")
-        m.def_function[dev_reduce_py]("x_decomp_dev_reduce")
         m.def_function[dev_order_small_py]("x_decomp_dev_order_small")
-        m.def_function[dev_pca_mle_rank_py]("x_decomp_dev_pca_mle_rank")
-        m.def_function[dev_order_f_py]("x_decomp_dev_order_f")
-        m.def_function[dev_argmin_all_py]("x_decomp_dev_argmin_all")
-        m.def_function[dev_select_smallest_py]("x_decomp_dev_select_smallest")
-        m.def_function[dev_dsum_sq_py]("x_decomp_dev_dsum_sq")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")
+        m.def_function[dev_live_py]("x_decomp_dev_live")
         m.def_function[dev_upload_py]("x_decomp_dev_upload")
-        m.def_function[dev_download_py]("x_decomp_dev_download")
+        # TOMBSTONE: x_decomp_dev_upload_finite (lane a8c duplicate of op XD_DEV_UPLOAD_FINITE) folded into the op 2026-11-09 at integration; never reached main (lane/a8c-device-x-linear-prep-rfe@2141a3451b).
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
-        m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
-        m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
-        # Apple simdgroup MMA probe (tools/mcd_ordered_quality.py): NVIDIA/AMD
-        # cannot link air.simdgroup_* (box-run-2 compile fix)
-        comptime if has_apple_gpu_accelerator():
-            m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
-        comptime if MCD_ORDERED_COV:
-            m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
-        m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
+        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[dev_rand_py]("x_decomp_dev_rand")
-        m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
-        # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
-        # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
-        m.def_function[w4_flags_py]("x_decomp_w4_flags")
+        # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT defaults, superseded: randomized_svd is one driver that reads M in place; their x_decomp_w4_flags entry had no other bit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+        # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
         # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
-        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
-        # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
+        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 2 DECOMP_FAST_ORTH_WS,
+        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults; LU_FAST_RESIDENT keeps an _OFF rollback); bit 1
+        # RSVD_FAST_DEVSCAN and its x_decomp_dev_upload_scan were deleted 2026-11-08
         m.def_function[s_flags_py]("x_decomp_s_flags")
-        comptime if RSVD_FAST_DEVSCAN:
-            m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
-        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)
-        comptime if LU_RESIDENT_ENTRIES:
-            m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
-            m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
-        comptime if LLE_FAST_DEV_LU:
-            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
-        m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
-        m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
-        m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
-        m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
-        m.def_function[dev_orth_py]("x_decomp_dev_orth")
-        m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
+        # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default; IDN_ALL_OFF reverts)
+        # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_SVD_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_svd_py]("x_decomp_dev_svd")
         comptime if IDN_LU_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_LU_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_lu_py]("x_decomp_dev_lu")
-            m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         comptime if IDN_CODE_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
             m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
         comptime if IDN_EIGH_RESIDENT:
-            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
-            m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
+            # lane fam-decomp: IDENTICAL default (x_decomp/resident.mojo)
+            # lane n9-decomp-eigh-families: device outputs (DevExec.eigh_into), no w / V round trip
+            m.def_function[dev_eigh_to_py]("x_decomp_dev_eigh_to")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
-        m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
-        m.def_function[dev_graph_knn_dense_py]("x_decomp_dev_graph_knn_dense")
-        m.def_function[dev_graph_radius_py]("x_decomp_dev_graph_radius")
-        m.def_function[dev_graph_radius_geo_py]("x_decomp_dev_graph_radius_geo")
-        m.def_function[dev_graph_lle_iw_py]("x_decomp_dev_graph_lle_iw")
-        m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
-        m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
-        m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
         # lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
         # switches (x_decomp/resident.mojo GRP_CLS2_*; DEVSCAN FAST + Apple default)
         comptime if GRP_CLS2_ANY:
@@ -301,8 +283,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[mcd_fast_batch_count_py]("mcd_fast_batch_count")
-        m.def_function[mcd_experiment_count_py]("mcd_experiment_count")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))

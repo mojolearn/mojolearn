@@ -2,14 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
 its tie (5307), the right-looking substitution folds of lu_solve and the Cholesky's (5308),
-the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
-its reflectors with its explicit Q (geqrf + orgqr, 5320).
+the two-pass orthonormalisation (5309: `orth_diag` in every mode) and the one
+blocked TSQR pass that IDENTICAL `orth` has been since 2026-10-10
+(RSVD_IDN_TSQR_ORTHO), and the Householder QR that keeps its reflectors with
+its explicit Q (geqrf + orgqr, 5320).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
 from x_decomp.checks.xd_oracles import (
-    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth,
+    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth_diag,
+    oracle_orth_tsqr,
 )
 from x_decomp.checks.seam_util import (
     count_diff_f32,
@@ -22,12 +25,8 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
-from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
-from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from decomposition.host.pca_full_oracle import host_qr_factor
 from x_decomp.qr_sliced import QS_ROWS
-from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
-from decomposition.host.pca_oracle import host_jacobi_eigh
-from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from x_decomp.device import DevExec
 from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
@@ -67,7 +66,7 @@ def spd(n: Int) -> List[Float32]:
     return g^
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp dense_check (DEVIATIONS 5307-5309, 5320)")
     # ---- the host's fast Householder QR (x_decomp/host_qr.mojo) == the
@@ -82,40 +81,15 @@ def main() raises:
         var want_r = host_qr_factor(qa2, qm, qn)
         var got_r = fast_qr_factor(ptr(qa), qm, qn)
         same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
-    # ---- the host's transposed one-sided Jacobi SVD (x_decomp/host_jacobi.mojo)
-    # == host_one_sided_jacobi_svd: values, V and the sweep count
-    var svd_ns = [9, 40, 300]
-    for sh in range(len(svd_ns)):
-        var sn = svd_ns[sh]
-        var sa = seam_fixture(sn, sn, UInt64(70 + sh))
-        var sa2 = sa.copy()
-        var want = host_one_sided_jacobi_svd(sa2, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        var got = fast_one_sided_jacobi_svd(sa, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        same("host Jacobi SVD values n " + String(sn), count_diff_f32(got.s, want.s))
-        same("host Jacobi SVD vectors n " + String(sn), count_diff_f32(got.v, want.v))
-        if got.executed != want.executed or got.converged != want.converged:
-            raise Error("host Jacobi SVD sweep count differs at n " + String(sn))
-    # ---- the host's two-sided Jacobi eigh (x_decomp/host_jacobi.mojo) ==
-    # host_jacobi_eigh: the consumed matrix (eigenvalues on its diagonal),
-    # the vectors and the sweep count; symmetric fixtures (a Gram matrix)
-    for sh in range(len(svd_ns)):
-        var en = svd_ns[sh]
-        var g = seam_fixture(en + 3, en, UInt64(80 + sh))
-        var sym = List[Float32](length=en * en, fill=Float32(0))
-        for i in range(en):
-            for j in range(en):
-                var acc = Float32(0)
-                for r in range(en + 3):
-                    acc += g[r * en + i] * g[r * en + j] * Float32(1e-4)
-                sym[i * en + j] = acc
-        var ea = sym.copy()
-        var eb = sym.copy()
-        var we = host_jacobi_eigh(ea, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        var ge = fast_jacobi_eigh(eb, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        same("host Jacobi eigh matrix n " + String(en), count_diff_f32(eb, ea))
-        same("host Jacobi eigh vectors n " + String(en), count_diff_f32(ge.vectors, we.vectors))
-        if ge.executed != we.executed or ge.converged != we.converged:
-            raise Error("host Jacobi eigh sweep count differs at n " + String(en))
+    # (2026-11-19, lane fx-gpu-checks-xfam) The two cases that held
+    # x_decomp/host_jacobi.mojo (fast_one_sided_jacobi_svd, fast_jacobi_eigh)
+    # to the serial oracles are gone with that module: no product path had
+    # called it since the host column took the round-robin order
+    # (x_decomp/rr_svd.mojo, rr_eigh; e07c50c348 and c2f2a2ae86, 2026-10-02),
+    # and its SVD case compared a replay that skips insignificant rotations
+    # with host_one_sided_jacobi_svd at its default skip_insignificant=False
+    # (a switch since 1d5708ba86), so it could not pass. The host column's
+    # SVD is held to the device below ("bounded device svd").
     # ---- the host LU's SIMD row eliminations (x_decomp/host_simd.mojo) at a
     # size past the vector width, against the oracle
     var ln = 100
@@ -211,16 +185,66 @@ def main() raises:
         # DEVIATION 5318: column 4 = 2 * column 3 + a perturbation 2^-20 of
         # column 5, numerically dependent at the 2^-16 guard
         q[t * l + 4] = Float32(2) * q[t * l + 3] + Float32(9.5367431640625e-07) * q[t * l + 5]
-    var wq = oracle_orth(q, mm, l)
-    require_separates("5309 orth passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
-    require_separates("5318 orth rank guard", count_diff_f32(wq, oracle_orth(q, mm, l, 2)))
+    # The two-pass route (qr_factor's R, the rank guard, trsm_row; twice):
+    # `orth_diag` in every mode (linalg.svd's U), and `orth` itself in FAST
+    # and for the shapes the TSQR does not take.
+    var want2 = oracle_orth_diag(q, mm, l)
+    require_separates("5309 orth passes (two vs one)", count_diff_f32(want2[0], oracle_orth_diag(q, mm, l, 1)[0]))
+    require_separates("5318 orth rank guard", count_diff_f32(want2[0], oracle_orth_diag(q, mm, l, 2)[0]))
+    var qd2 = q.copy()
+    var dd2 = zeros(l)
+    DevExec.orth_diag(ptr(qd2), mm, l, ptr(dd2))
+    same("5309 orth_diag device", count_diff_f32(qd2, want2[0]))
+    same("5309 orth_diag device R diagonals", count_diff_f32(dd2, want2[1]))
+    var qh2 = q.copy()
+    var dh2 = zeros(l)
+    HostExec.orth_diag(ptr(qh2), mm, l, ptr(dh2))
+    same("5309 orth_diag host", count_diff_f32(qh2, want2[0]))
+    same("5309 orth_diag host R diagonals", count_diff_f32(dh2, want2[1]))
+    # `orth`: under IDENTICAL one blocked TSQR pass with the rank-guarded
+    # selection (x_decomp/tsqr_core.mojo RSVD_IDN_TSQR_ORTHO, the default
+    # since 06865c6d84, 2026-10-10) on both columns. Until 2026-11-19 this
+    # case held `orth` to the two-pass oracle above, which the promotion left
+    # behind; it sat behind an earlier stale case and had never run. FAST
+    # keeps the two passes and `same` makes no claim there.
+    var wq = oracle_orth_tsqr(q, mm, l)
+    require_separates("5309 orth TSQR chains (16 vs one)", count_diff_f32(wq, oracle_orth_tsqr(q, mm, l, 1)))
+    require_separates("5318 orth TSQR rank guard", count_diff_f32(wq, oracle_orth_tsqr(q, mm, l, 2)))
+    require_separates("5309 orth route (TSQR vs two passes)", count_diff_f32(wq, want2[0]))
     var qd = q.copy()
     DevExec.orth(ptr(qd), mm, l)
-    same("5309 orth device", count_diff_f32(qd, wq))
     var qh = q.copy()
     HostExec.orth(ptr(qh), mm, l)
+    # the two columns against each other first, so a failure of the lines
+    # after it is the oracle's restatement and not a column
+    same("5309 orth device vs host replay", count_diff_f32(qd, qh))
+    same("5309 orth device", count_diff_f32(qd, wq))
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
+    # The TSQR orth beyond what the oracle restates (three leaf blocks, the
+    # combine tree, three panels in two pairs): the device against its host
+    # replay, with a dependent and a zero column.
+    var tm = 3 * 2048 + 37
+    var tl = 40
+    var tq = List[Float32](capacity=tm * tl)
+    var tst = UInt64(5309) * UInt64(2654435761) + UInt64(1)
+    for _ in range(tm * tl):
+        tq.append(lcg_unit(tst) * Float32(4) - Float32(2))
+    for t in range(tm):
+        tq[t * tl + 7] = Float32(2) * tq[t * tl + 3]
+        tq[t * tl + 21] = Float32(0)
+    var tqh = tq.copy()
+    HostExec.orth(ptr(tqh), tm, tl)
+    var tqd = tq.copy()
+    DevExec.orth(ptr(tqd), tm, tl)
+    same("5309 orth device vs host replay " + String(tm) + " x " + String(tl), count_diff_f32(tqd, tqh))
+    var tzero = 0
+    for t in range(tm):
+        if tqh[t * tl + 7] != Float32(0) or tqh[t * tl + 21] != Float32(0):
+            tzero += 1
+    if tzero != 0:
+        raise Error("SEAM 5318 orth TSQR: a dependent column is not exactly zero in " + String(tzero) + " rows")
+    print("  5318 orth TSQR dependent columns: exactly zero")
     # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix,
     # and (lane hr-qr) a tall one of several slices (x_decomp/qr_sliced.mojo)
     for shape in range(4):
@@ -282,10 +306,13 @@ def main() raises:
         var s_h = zeros(bn)
         var v_h = zeros(bn * bn)
         HostExec.svd(ptr(bh), bm, bn, ptr(s_h), ptr(v_h))
+        # the input list's last named use was the pointer above: held to here
+        _ = bh^
         var bd = ba.copy()
         var s_d = zeros(bn)
         var v_d = zeros(bn * bn)
         DevExec.svd(ptr(bd), bm, bn, ptr(s_d), ptr(v_d))
+        _ = bd^
         var tag = String(bm) + " x " + String(bn)
         same("bounded device svd values " + tag, count_diff_f32(s_d, s_h))
         same("bounded device svd vectors " + tag, count_diff_f32(v_d, v_h))
@@ -293,6 +320,7 @@ def main() raises:
         var s_c = zeros(bn)
         var v_c = zeros(bn * bn)
         DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096)
+        _ = bc^
         same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
         same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
         tr.record_list_f32("x_decomp.svd_bounded", v_d)

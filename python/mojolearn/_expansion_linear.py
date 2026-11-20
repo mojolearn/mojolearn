@@ -17,15 +17,12 @@ first imported, after the package, so both may rely on every module existing:
 Every fit here is one call into `_mojolearn_x_linear` (`x_linear_fit`), whose
 source is x_linear/ (one sequential schedule, the same on the CPU host
 binding and on the device); every score is `x_linear_decision`. The public
-methods are one call into the native owner (bindings/x_linear_native.mojo),
+methods are one call into the native owner (bindings/x_linear_native_door.mojo),
 which validates, encodes labels, assigns CV folds (integers) and unpacks the
 flat float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
 from . import _backend
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._bufcheck import memcopy
 from ._mode import NumericModeMixin, available_if
-from ._mode import RegressorScoreMixin
 from ._native_params_setter import NativeParamsSetter
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -51,22 +48,6 @@ LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
 # ------------------------------------------------------------------ plumbing
-
-
-def _coef_block(coef, intercept):
-    """[coef row | intercept] per class as one float32 Array (k rows of d + 1):
-    byte copies of the fitted Arrays."""
-    c = as_f32_c(coef, ndim=None, name="coef_")[0]
-    b = as_f32_c(intercept, ndim=None, name="intercept_")[0]
-    k = b.size
-    d = c.size // max(k, 1)
-    out = empty((k * (d + 1),), "<f4")
-    o = addr(out, name="coef")
-    ca, ba = addr_ro(c, name="coef_"), addr_ro(b, name="intercept_")
-    for j in range(k):                  # glue: one row copy per class
-        memcopy(o + 4 * j * (d + 1), ca + 4 * j * d, 4 * d)
-        memcopy(o + 4 * (j * (d + 1) + d), ba + 4 * j, 4)
-    return out
 
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
@@ -186,7 +167,7 @@ class _LinearRegressorMixin(NativeParamsSetter):
         score : float
             R^2; 1.0 is a perfect fit.
         """
-        # Predict and R^2 in one native call (bindings/linear_score_native.mojo):
+        # Predict and R^2 in one native call (bindings/linear_score_native_unpack.mojo):
         # the x_linear decision kernel, then the default metrics binding's r2_score.
         return _LINEAR_SCORE(self, "linear_regressor_score", (X, y), _LINEAR_SCORE_CONTEXT)
 
@@ -1016,22 +997,8 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         """
         return _XL_CALL(self, "fit_ard", (X, y), _XL_CONTEXT)
 
-    def predict(self, X, return_std=False):
-        """Predict targets with the posterior mean of the weights.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, converted to float32.
-        return_std : bool, default False
-            Not supported: True raises ValueError.
-
-        Returns
-        -------
-        y_pred : float32 array of shape (n_samples,)
-            Predicted values.
-        """
-        return _XL_CALL(self, "regressor_predict", (X, return_std), _XL_CONTEXT)
+    # BayesianRidge's posterior-mean predict, the same one native call.
+    predict = BayesianRidge.predict
 
 
 # --------------------------------------------------------------------- LARS
@@ -1654,7 +1621,6 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
 # intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
 
 class SGDOneClassSVM(NumericModeMixin):
-    _mojolearn_native_public = True
     """Linear one-class SVM trained by stochastic gradient descent.
 
     Follows scikit-learn's SGDOneClassSVM for outlier detection.
@@ -1716,6 +1682,7 @@ class SGDOneClassSVM(NumericModeMixin):
     >>> model = mojolearn.SGDOneClassSVM(nu=0.1).fit(X)
     >>> labels = model.predict(X)
     """
+    _mojolearn_native_public = True
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
@@ -1728,8 +1695,7 @@ class SGDOneClassSVM(NumericModeMixin):
         # step, a float-float intercept and an IMPLICIT intercept step,
         # x_linear/sgd.mojo `oc_solve`: the explicit step oscillated the
         # offset, board istella nu 0.1 flagged 0.374 of the training rows at
-        # batch 256, sklearn 0.055); FAST builds, or
-        # MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF, the per-sample fit
+        # batch 256, sklearn 0.055); FAST builds, the per-sample fit
         # (lane/neural-pass132's default). 0 asks for the per-sample fit, a
         # positive batch_size for that minibatch.
         self.batch_size = batch_size
@@ -2390,8 +2356,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 # kernel x_linear/isotonic.mojo (sequential PAVA; interp1d-linear predict).
 
 
-class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
-    _mojolearn_native_public = True
+class IsotonicRegression(NumericModeMixin):
     """Isotonic regression: the best monotone fit of one feature.
 
     Follows scikit-learn's IsotonicRegression: fits a non-decreasing (or
@@ -2440,6 +2405,7 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
     >>> model = mojolearn.IsotonicRegression(out_of_bounds="clip").fit(x, y)
     >>> y_fit = model.predict(x)
     """
+    _mojolearn_native_public = True
 
     _BINDING = _BINDING
     _estimator_type = "regressor"
@@ -2554,7 +2520,7 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
 
 
 # The native owner of every public fit / predict / transform / score above
-# (bindings/x_linear_native.mojo), connected once at import. A user cv
+# (bindings/x_linear_native_door.mojo), connected once at import. A user cv
 # splitter's `split(X, y)` is called once by it, as the Python did.
 from . import _native_x_linear_bridge  # noqa: E402
 _XL_CALL, _XL_CONTEXT = _native_x_linear_bridge.connect({

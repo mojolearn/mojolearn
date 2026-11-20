@@ -82,7 +82,7 @@ not drifted; with an arm armed it must differ in the predicted place.
         too, that ulp count is comparing zeros wrongly.
 
 Run:
-    pixi run check-portable-gelu
+    pixi run check-native-gpu portable_gelu_check
     pixi run mojo run -D MOJOLEARN_GELU_SABOTAGE_ONE_GELU=1 \\
         -I . checks/portable_gelu_check.mojo
 and the same for the other three names. A misspelled define is silently
@@ -91,7 +91,7 @@ ignored, so the run PRINTS the arm it was built with (`gelu sabotage
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erf, tanh
 from std.memory import bitcast
 from std.sys import argv
@@ -1091,7 +1091,7 @@ def check_sabotage_arms(
               "lanes, every one of them a negative zero -- and nothing else")
 
 
-def main() raises:
+def run_checks() raises:
     for a in argv():
         if a == "sabotage":
             print("NOTE: this gate takes its reach arms as `-D` defines, not")
@@ -1230,8 +1230,8 @@ def main() raises:
     # ---- arm 2 + arm 3: the device ------------------------------------
     var d_x = ctx.enqueue_create_buffer[DType.float32](N)
     var d_one = ctx.enqueue_create_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=h_x.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_one, src_ptr=h_one.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_x, h_x)
+    upload_host_into[DType.float32](ctx, d_one, h_one)
     var o_t = ctx.enqueue_create_buffer[DType.float32](N)
     var o_e = ctx.enqueue_create_buffer[DType.float32](N)
     var o_ge = ctx.enqueue_create_buffer[DType.float32](N)
@@ -1260,13 +1260,13 @@ def main() raises:
     var r_vt = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_ve = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_probe = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_t.unsafe_ptr(), src_buf=o_t)
-    ctx.enqueue_copy(dst_ptr=r_e.unsafe_ptr(), src_buf=o_e)
-    ctx.enqueue_copy(dst_ptr=r_ge.unsafe_ptr(), src_buf=o_ge)
-    ctx.enqueue_copy(dst_ptr=r_gt.unsafe_ptr(), src_buf=o_gt)
-    ctx.enqueue_copy(dst_ptr=r_vt.unsafe_ptr(), src_buf=o_vt)
-    ctx.enqueue_copy(dst_ptr=r_ve.unsafe_ptr(), src_buf=o_ve)
-    ctx.enqueue_copy(dst_ptr=r_probe.unsafe_ptr(), src_buf=o_probe)
+    download_host_into[DType.float32](ctx, o_t, r_t)
+    download_host_into[DType.float32](ctx, o_e, r_e)
+    download_host_into[DType.float32](ctx, o_ge, r_ge)
+    download_host_into[DType.float32](ctx, o_gt, r_gt)
+    download_host_into[DType.float32](ctx, o_vt, r_vt)
+    download_host_into[DType.float32](ctx, o_ve, r_ve)
+    download_host_into[DType.float32](ctx, o_probe, r_probe)
     ctx.synchronize()
 
     var qt = r_t.unsafe_ptr()
@@ -1566,3 +1566,22 @@ def main() raises:
     _ = r_vt.unsafe_ptr()
     _ = r_ve.unsafe_ptr()
     _ = r_probe.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_gelu_check", cpu=False, gpu=True, serial="", run=run_cases)

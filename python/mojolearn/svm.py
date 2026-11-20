@@ -26,7 +26,7 @@ objective-change tolerance is ``0.1 * tol``. This follows cuML's
 ``LinearSVC`` and ``LinearSVR``.
 """
 
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 from . import _native_family_bridge
 from ._svm_impl import SVC, SVR
 from .linear_model import _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2
@@ -36,13 +36,13 @@ __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 
 
 # The compiled family owner, connected once at import: every public method of
-# the two linear machines is one native call (bindings/svm_mixture_native.mojo
+# the two linear machines is one native call (bindings/svm_mixture_native_door.mojo
 # for LinearSVC.decision_function and LinearSVR.predict,
-# bindings/svc_linear_native.mojo for fit, predict and score), handed the
+# bindings/svc_linear_native_door.mojo for fit, predict and score), handed the
 # estimators binding admitted by the shared provider after native entry.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
-class _LinearSVMBase(NumericModeMixin):
+class _LinearSVMBase(_NumericModeMixin):
     """The fields and refusals the two linear machines share."""
 
     _BINDING = "_mojolearn_estimators"
@@ -55,7 +55,7 @@ class _LinearSVMBase(NumericModeMixin):
     def _init_common(self, penalty, loss, C, fit_intercept, penalized_intercept,
                      tol, max_iter, linesearch_max_iter, lbfgs_memory):
         # Stored verbatim (scikit-learn's convention); the native owner
-        # (bindings/svc_linear_native.mojo) checks them when `fit` runs.
+        # (bindings/svc_linear_native_door.mojo) checks them when `fit` runs.
         self.penalty = penalty
         self.loss = loss
         self.C = C
@@ -144,7 +144,7 @@ class LinearSVC(_LinearSVMBase):
     >>> labels = clf.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -312,7 +312,7 @@ class LinearSVR(_LinearSVMBase):
     >>> pred = model.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -400,4 +400,4 @@ __getattr__ = _lazy_exports("svm")
 __all__ += _SKLEARN_LAYOUT["svm"]
 
 # Import connection only; each native public operation admits the live registry.
-_native_family_bridge.connect_bindings("_mojolearn_estimators")
+_native_family_bridge.connect_bindings("_mojolearn_estimators", "_mojolearn_x_trees")

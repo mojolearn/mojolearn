@@ -79,6 +79,7 @@ from core.identity_trace import IdentityTrace
 from glm.impl.ols import OLS_ALGO_EIG, ols_fit_traced
 from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime OLS_CARD_ROWS = 65536
@@ -151,8 +152,8 @@ def fill_ols_card_fixture(
         ha.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt))
     for i in range(n_rows):
         hb.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt + 1))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     trace.record_host("ols.input.A", ha.unsafe_ptr(), n_rows * n_cols)
     trace.record_host("ols.input.b", hb.unsafe_ptr(), n_rows)
@@ -198,7 +199,7 @@ def emit_ols_card(
     )
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var out = List[Float32]()
     for k in range(n_cols):
@@ -214,5 +215,4 @@ def emit_ols_card(
     _ = inv
     _ = a_alias
     _ = a_alias2
-    _ = hw^
     return out^

@@ -78,31 +78,28 @@ comparison and one narrowing per kept value, no fold to sabotage.
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_host.mojo).
-from bindings.msel_host import (
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.parallel_base_entry_host import publish_parallel_base_host
+from bindings.msel_host_pack import (
     msel_put_binding,
-    msel_alloc_binding,
-    msel_read_binding,
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
-    msel_scatter_rows_binding,
-    msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
-    msel_split_table_i32_binding,
-    msel_group_fold_perm_i32_binding,
 )
+# lane calltable-msel: the same model-selection helpers as one native entry
+# for the model-selection doors (core/msel_entry_table.mojo).
+from core.msel_helpers_host import publish_msel_helpers_host
 from std.os import abort
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
 
-from bindings.host_helpers import (
+from bindings.host_helpers_pack import (
     all_finite_f32_binding,
     all_finite_f64_binding,
-    argmax_last_rows_f32_binding,
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
@@ -110,7 +107,7 @@ from bindings.host_helpers import (
     gather_i64_binding,
     gather_rows_bytes_binding,
 )
-from bindings.hotpath_helpers import (
+from bindings.hotpath_helpers_door import (
     HOTPATH_SABOTAGE,
     cast_elements_binding,
     check_indices_i64_binding,
@@ -126,6 +123,7 @@ from bindings.hotpath_helpers import (
     indices_overlap_i64_binding,
     reduce_stat_binding,
     select_fold_i64_binding,
+    select_folds_i64_binding,
     arange_i64_binding,
     leave_range_i64_binding,
     mask_from_indices_u8_binding,
@@ -133,7 +131,6 @@ from bindings.hotpath_helpers import (
     count_mask_u8_binding,
     ic_running_min_f64_host_binding,
     ic_running_min_f32_host_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     assign_fold_i64_binding,
@@ -142,47 +139,51 @@ from bindings.hotpath_helpers import (
     scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
-    first_seen_i32_binding,
     strat_fold_assign_i32_binding,
-    strat_alloc_i64_binding,
-    group_fold_assign_i32_binding,
-    strat_group_plan_i32_binding,
     bincount2_i32_host_binding,
 )
-from bindings.normal_dist_helpers import truncnorm_draws_binding
-from bindings.lr_table_helpers import (
+from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
+from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
-    lr_schedule_at_c, lr_schedule_series_c,
+    lr_schedule_at_c,
 )
-from bindings.optimizer_public_door import entry_init
-from bindings.array_helpers import (
+from bindings.array_helpers_pack import (
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
-    nsum_f64_binding,
     row_means_f64_binding,
     fsum_f64_binding,
-    row_stds_f64_binding,
     class_ratio_f64_host_binding,
-    shard_topk_merge_f32_host_binding,
 )
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.host_finite_scan import host_all_finite_f32
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
 )
 from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
-from core.label_encode import host_unique_inverse
+# unique_inverse / prepare_targets (the host column) live in
+# bindings/labels_host_ops.mojo (lane s1), the one host copy, so the label path
+# (bindings/classical_labels_door.mojo) runs the same host body in-process on a
+# CPU-only install instead of calling back into this module through Python.
+from bindings.labels_host_ops_unpack import unique_inverse_binding, prepare_targets_binding
+from core.labels_native_host_provider import LabelsHostNativeAPI
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish
+from neighbors.ops_entry_host import NEIGHBORS_OPS_HOST_API, neighbors_ops_host_v1
+from bindings.py_balanced import py_setattr, py_setitem
+from core.activity_record import ACTIVITY_KIND_LAUNCH
+from core.launch_log import activity_begin, activity_end
+from core.base_helpers_host import publish_base_helpers_host
 from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
 from core.knn_host_predict import KNN_HOST_SABOTAGE
 from core.core_host_impl import (
-    kmeans_fit_host,
     kmeans_predict_host,
     kmeans_transform_host,
     knn_classify_host,
@@ -197,6 +198,11 @@ from core.core_host_impl import (
     rbc_knn_search_host,
     transpose_to_f32,
 )
+from core.shared_slot import SharedSlot
+# wave 8 run split: the int-type slot, the host KMeans table and the host
+# KMeans fit body live in core/mojolearn_core_host_run.mojo.
+from core.mojolearn_core_host_run import _CORE_HOST_INT_TYPE, KMEANS_NATIVE_TABLE, kmeans_fit_host_run
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 #: Reported by `core_host_sabotage()`. The helpers move bytes and fold
@@ -207,6 +213,22 @@ comptime CORE_HOST_SABOTAGE_DEFINE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every address and params word the wrappers pass):
+    # one type-pointer compare and the integer read; no class-name String,
+    # module stamp or operator.index call. bool is its own type, so it never
+    # takes this path. Anything else keeps the full rule below.
+    ref cpy = Python().cpython()
+    var g = _CORE_HOST_INT_TYPE.get_or_create_ptr()
+    if g[].address == 0:
+        var sample = PythonObject(0)
+        var int_type = cpy.PyObject_Type(sample._obj_ptr)
+        g[].address = Int(int_type)
+        cpy.Py_DecRef(int_type)
+    var cls = cpy.PyObject_Type(value._obj_ptr)
+    var exact_int = Int(cls) == g[].address
+    cpy.Py_DecRef(cls)
+    if exact_int:
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("core host: integers expected, not booleans")
@@ -261,6 +283,50 @@ def core_host_sabotage_binding() raises -> PythonObject:
     )
 
 
+# The activity record (lane fx-verify-trace, 2026-11-20): verification
+# tooling's switch and read-back of what the runtime counted during a call
+# (core/activity_record.mojo). The slot is process-wide by name, so this one
+# binding switches and reads the record every loaded binding, GPU or host,
+# fills. No product call reaches these two.
+
+
+def activity_begin_binding() raises -> PythonObject:
+    """Clear the activity record and start counting."""
+    activity_begin()
+    return PythonObject(True)
+
+
+def activity_end_binding() raises -> PythonObject:
+    """Stop counting and return the record as a dictionary. PACK only: every
+    number was counted by the native runtime."""
+    var r = activity_end()
+    var record = Python.dict()
+    py_setitem(record, "format", "mojolearn-activity-record/1")
+    py_setitem(record, "launches", r.launches)
+    py_setitem(record, "upload_calls", r.upload_calls)
+    py_setitem(record, "upload_bytes", r.upload_bytes)
+    py_setitem(record, "download_calls", r.download_calls)
+    py_setitem(record, "download_bytes", r.download_bytes)
+    py_setitem(record, "host_splits", r.host_splits)
+    py_setitem(record, "host_tasks", r.host_tasks)
+    py_setitem(record, "host_tasks_widest", r.host_tasks_widest)
+    py_setitem(record, "host_entries", r.host_entries)
+    py_setitem(record, "names_dropped", r.names_dropped)
+    var kernels = Python.list()
+    var routines = Python.list()
+    for i in range(len(r.names)):  # driver-loop: over the record's named rows (at most 64)
+        var row = Python.dict()
+        py_setitem(row, "name", PythonObject(r.names[i]))
+        py_setitem(row, "count", r.counts[i])
+        if r.kinds[i] == ACTIVITY_KIND_LAUNCH:
+            _ = _balanced_call(kernels.append, row)
+        else:
+            _ = _balanced_call(routines.append, row)
+    py_setitem(record, "launch_names", kernels)
+    py_setitem(record, "host_names", routines)
+    return record
+
+
 # The base binding's names, same contract.
 
 
@@ -268,6 +334,14 @@ def mojolearn_vendor_binding() raises -> PythonObject:
     """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
     read-back cross-check expects that string from every host binding."""
     return PythonObject(String("cpu"))
+
+
+def mojolearn_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def mojolearn_numeric_mode_binding() raises -> PythonObject:
@@ -817,6 +891,11 @@ def rbc_knn_search_binding(
 # ===========================================================================
 
 
+def kmeans_native_api_v1_binding() raises -> PythonObject:
+    var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def kmeans_fit_binding(
     x_addr: PythonObject,
     out_centroids_addr: PythonObject,
@@ -844,13 +923,17 @@ def kmeans_fit_binding(
     written; on `init == INIT_ARRAY` it is read first as the start.
     `out_labels_addr` is `n_samples` uint32 (the caller's int32 array is
     the same bytes), the assignment against the FINAL centroids. The shape
-    refusals are `kmeans_fit`'s, raised BEFORE any address is read."""
+    refusals are `kmeans_fit`'s, raised BEFORE any address is read.
+    `params[11]` (OPTIONAL, lane a7d-device-x-decomp-cluster): 1 asks for
+    X's finite status word (the parallel host scan before the fit; a
+    flagged X is not fit), returned as a fifth value, as the GPU binding."""
     # 10 or 11, as the GPU binding: workstream D (2026-09-14) appended
     # oversampling_factor as params[10] (cluster.py packs it on every fit),
     # and the 10-only check read REFUSED for every kmeans cell on the CPU gate.
-    if len(params) != 10 and len(params) != 11:
+    # 12 with lane a7d's finite flag.
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -868,26 +951,27 @@ def kmeans_fit_binding(
     var ii = _index(params[8])
     var mm = _index(params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var status = 0
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var r = kmeans_fit_host(
+        kmeans_fit_host_run(
             x_address, centroids_address, lp, weights_address,
-            ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs,
+            ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs, test,
+            status, inertia, n_iter, sum_scale, weight_scale,
         )
-        inertia = r[0]
-        n_iter = r[1]
-        sum_scale = r[2]
-        weight_scale = r[3]
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(status))
     return out
 
 
@@ -902,10 +986,13 @@ def kmeans_predict_binding(
     Public INFERENCE: it
     reads a fitted model's centroids and trains nothing. The arithmetic is
     `host_kmeans_fit`'s final assignment (`host_kmeans_predict`). The shape
-    and metric refusals are raised BEFORE any address is read."""
-    if len(params) != 4:
+    and metric refusals are raised BEFORE any address is read. `params[4]`
+    (OPTIONAL, lane a7d): 1 asks for X's finite status word (the parallel
+    host scan; a flagged X is not read further), returned instead of
+    n_samples."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -915,8 +1002,16 @@ def kmeans_predict_binding(
     var nf = _index(params[1])
     var nc = _index(params[2])
     var mm = _index(params[3])
+    var test = len(params) == 5 and _index(params[4]) != 0
+    var status = 0
     with GILReleased(Python()):
-        kmeans_predict_host(x_address, centroids_address, lp, ns, nf, nc, mm)
+        if test and ns >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
+        if status == 0:
+            kmeans_predict_host(x_address, centroids_address, lp, ns, nf, nc, mm)
+    if test:
+        return PythonObject(status)
     return PythonObject(ns)
 
 
@@ -931,10 +1026,11 @@ def kmeans_transform_binding(
     2 n_clusters, 3 metric). Public INFERENCE: it reads a fitted model's
     centroids and trains nothing. The arithmetic is `host_kmeans_transform`,
     the GPU kernel's cell statement for statement. The shape and metric
-    refusals are raised BEFORE any address is read."""
-    if len(params) != 4:
+    refusals are raised BEFORE any address is read. `params[4]` (OPTIONAL,
+    lane a7d): as `kmeans_predict_binding`'s."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -944,8 +1040,16 @@ def kmeans_transform_binding(
     var nf = _index(params[1])
     var nc = _index(params[2])
     var mm = _index(params[3])
+    var test = len(params) == 5 and _index(params[4]) != 0
+    var status = 0
     with GILReleased(Python()):
-        kmeans_transform_host(x_address, centroids_address, op, ns, nf, nc, mm)
+        if test and ns >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
+        if status == 0:
+            kmeans_transform_host(x_address, centroids_address, op, ns, nf, nc, mm)
+    if test:
+        return PythonObject(status)
     return PythonObject(ns)
 
 
@@ -956,44 +1060,6 @@ def kmeans_transform_binding(
 # `_spectral_impl._DenseCOO` and `SpectralEmbedding._precomputed_knn_affinity`
 # (compares and the exact values 0, 0.5, 1; no fold).
 # ===========================================================================
-
-
-def nonzero_f32_count_binding(src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """How many of the `n` float32 values at `src` satisfy `v != 0.0`."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("nonzero_f32_count: n must be non-negative, got " + String(count))
-    if count == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = dense_nonzero_f32_count(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f32_fill_binding(
-    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, outs: PythonObject, capacity: PythonObject,
-) raises -> PythonObject:
-    """`nonzero_f64_fill` over a C-contiguous float32 `[rows, cols]` matrix:
-    row, column and value of every `v != 0.0`, row major. Returns the count."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0 or cap < 0:
-        raise Error("nonzero_f32_fill: rows, cols and capacity must be non-negative")
-    if len(outs) != 3:
-        raise Error("nonzero_f32_fill: outs must hold 3 addresses, got " + String(len(outs)))
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var rp = i32_ptr(Int(py=outs[0]))
-    var cp = i32_ptr(Int(py=outs[1]))
-    var vp = f32_ptr(Int(py=outs[2]))
-    var k = 0
-    with GILReleased(Python()):
-        k = dense_nonzero_f32_fill(sp, nr, nc, rp, cp, vp, cap)
-    return PythonObject(k)
 
 
 def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1025,181 +1091,68 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(0)
 
 
-def unique_inverse_binding(
-    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-) raises -> PythonObject:
-    """The GPU binding's `unique_inverse` (its contract and refusals) over
-    the host twin `core/label_encode.mojo::host_unique_inverse`, the same
-    statements as `core/label_encode_device.mojo` (cpu-gpu-cleanup
-    w2-pyglue). Integers and bit moves: the same bytes."""
-    var count = Int(py=n)
-    var k_ind = Int(py=kind)
-    if count < 1:
-        raise Error("unique_inverse: n must be positive, got " + String(count))
-    if k_ind != 0 and k_ind != 1:
-        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-        raise Error("unique_inverse: null buffer address")
-    var sp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
-    var cp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
-    var dp = i32_ptr(Int(py=codes_addr))
-    var k: Int
-    with GILReleased(Python()):
-        k = host_unique_inverse(sp, count, k_ind, cp, dp)
-    if k == -2:
-        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
-    return PythonObject(k)
-
-
-# ===========================================================================
-# THE SHARED ARGUMENT-AND-LABEL ENTRY (public runtime migration, plan section
-# 1 item 1, lane migrate-shared-labels). One native call takes a label
-# vector and/or a sample-weight vector and returns the ORDER RULE's classes
-# and codes and the weight verdict, so `_labels.encode_labels`,
-# `_labels.unique_inverse` and `_sample_weight.check_sample_weight` each make
-# this ONE call (they made up to three before, plus the Python glue between
-# them). It composes the SAME helpers those paths called, in the same order,
-# so no output byte moves: `encode_labels_<dt>` (capped encoder), then
-# `cast_elements` + `unique_inverse` past the cap, `all_finite_<f>` and
-# `reduce_stat` min/max for the weights. The core host binding carries the
-# same body over its host twins under the same name.
-#
-#   labels: `y_addr` != 0 points at `n` values of dtype code `y_code`
-#     (0 f32, 1 f64, 2 i32, 3 i64, 4 u32, 5 u8). The k sorted classes land
-#     WIDENED at `classes_addr` (n slots of 64 bits: float64 for float
-#     labels, int64 for integer labels), one int32 code per row at
-#     `codes_addr`. A NaN label raises the ORDER RULE's message.
-#   weights: `w_addr` != 0 points at `n` weights of code `w_code` (0 or 1).
-#     `w_flags` bit 1 allows negative weights, bit 2 an all-zero vector.
-#
-# Returns k (0 without labels), or a negative status for refused weights:
-# PT_W_NONFINITE, PT_W_NEGATIVE, PT_W_ALL_ZERO (the Python glue raises
-# scikit-learn's message for each). Labels are checked before weights.
-# ===========================================================================
-
-comptime PT_ENCODE_CAP = 4096
-comptime PT_W_NONFINITE = -3
-comptime PT_W_NEGATIVE = -4
-comptime PT_W_ALL_ZERO = -5
-comptime PT_ALLOW_NEGATIVE = 1
-comptime PT_ALLOW_ALL_ZERO = 2
-
-
-def _pt_encode(
-    y_addr: PythonObject, y_code: Int, n: PythonObject, classes_addr: Int,
-    cap: Int, codes_addr: PythonObject,
-) raises -> Int:
-    """The capped encoder `encode_labels_<dt>` for dtype code `y_code`."""
-    var ca = PythonObject(classes_addr)
-    var cp = PythonObject(cap)
-    if y_code == 0:
-        return Int(py=encode_labels_f32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 1:
-        return Int(py=encode_labels_f64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 2:
-        return Int(py=encode_labels_i32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 3:
-        return Int(py=encode_labels_i64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 4:
-        return Int(py=encode_labels_u32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 5:
-        return Int(py=encode_labels_u8_binding(y_addr, n, ca, cp, codes_addr))
-    raise Error("prepare_targets: label dtype code must be 0..5, got " + String(y_code))
-
-
-def prepare_targets_binding(
-    y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-    w_addr: PythonObject, w_code: PythonObject, w_flags: PythonObject,
-) raises -> PythonObject:
-    """See the block comment above."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("prepare_targets: n must be non-negative, got " + String(count))
-    var k = 0
-    if Int(py=y_addr) != 0:
-        if count < 1:
-            raise Error("prepare_targets: labels need n >= 1")
-        if Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-            raise Error("prepare_targets: null label output address")
-        var yc = Int(py=y_code)
-        var wide_kind = 0 if (yc == 0 or yc == 1) else 1
-        var wide_code = 1 if wide_kind == 0 else 3
-        var cap = count if count < PT_ENCODE_CAP else PT_ENCODE_CAP
-        if yc == wide_code:
-            # 64-bit labels: the encoder writes the classes in place
-            k = _pt_encode(y_addr, yc, n, Int(py=classes_addr), cap, codes_addr)
-        else:
-            var tmp = List[UInt64](length=cap, fill=0)
-            var tmp_addr = Int(tmp.unsafe_ptr())
-            k = _pt_encode(y_addr, yc, n, tmp_addr, cap, codes_addr)
-            if k > 0:
-                # widen the k classes (exact: float32 -> float64, int -> int64)
-                _ = cast_elements_binding(
-                    PythonObject(tmp_addr), y_code, classes_addr,
-                    PythonObject(wide_code), PythonObject(k),
-                )
-            _ = tmp^
-        if k < 0:
-            # more classes than the cap, or a NaN label: `unique_inverse` over
-            # the widened labels (no cap; it raises the NaN refusal)
-            if yc == wide_code:
-                k = Int(py=unique_inverse_binding(
-                    y_addr, n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-            else:
-                var wide = List[UInt64](length=count, fill=0)
-                var wide_addr = Int(wide.unsafe_ptr())
-                var st = Int(py=cast_elements_binding(
-                    y_addr, y_code, PythonObject(wide_addr), PythonObject(wide_code), n
-                ))
-                if st != 0:
-                    raise Error("prepare_targets: labels do not widen to 64 bits")
-                k = Int(py=unique_inverse_binding(
-                    PythonObject(wide_addr), n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-                _ = wide^
-    if Int(py=w_addr) != 0 and count > 0:
-        var wc = Int(py=w_code)
-        var flags = Int(py=w_flags)
-        var fin: Int
-        if wc == 1:
-            fin = Int(py=all_finite_f64_binding(w_addr, n))
-        elif wc == 0:
-            fin = Int(py=all_finite_f32_binding(w_addr, n))
-        else:
-            raise Error("prepare_targets: weight dtype code must be 0 or 1, got " + String(wc))
-        if fin == 0:
-            return PythonObject(PT_W_NONFINITE)
-        var lo = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(0)))
-        if (flags & PT_ALLOW_NEGATIVE) == 0 and lo < 0:
-            return PythonObject(PT_W_NEGATIVE)
-        if (flags & PT_ALLOW_ALL_ZERO) == 0:
-            var hi = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(1)))
-            if not (hi > 0 or lo < 0):
-                return PythonObject(PT_W_ALL_ZERO)
-    return PythonObject(k)
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
+comptime LABELS_HOST_NATIVE_V3_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v3"], "MojolearnLabelsHostNativeV3"]
+
+
+def labels_native_api_v3_binding() raises -> PythonObject:
+    var api = LABELS_HOST_NATIVE_V3_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+from core.spectral_preparation_api import SpectralPreparationAPI
+from core.spectral_preparation_host import SpectralPreparationHost
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
+
+comptime _SPECTRAL_PREPARATION_SLOT = "MojolearnSpectralPreparationHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_PREP_IDENTICAL else "MojolearnSpectralPreparationHostFastV1"
+comptime SPECTRAL_PREPARATION_API = SharedSlot[SpectralPreparationAPI[SpectralPreparationHost], _SPECTRAL_PREPARATION_SLOT]
+
+
+def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_PREPARATION_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_neighbors_ops(module: PythonObject) raises:
+    # The CPU column of the neighbors operations table
+    # (core/neighbors_entry_table.mojo): the k-NN owner
+    # (bindings/neighbors_knn_native.mojo) calls this entry with plain values
+    # and reads the key from the module attribute `neighbors_native_key`.
+    # The `knn_classify` / `knn_regress` exports remain for the unconverted
+    # caller bindings/host_knn_predict_native.mojo.
+    var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
+    neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
+                          neighbors_ops_host_v1)
+    py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+
+
 def build__mojolearn_core_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
+        module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
+        module.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
         module.def_function[core_host_vendor_binding]("core_host_vendor")
         module.def_function[core_host_column_binding]("core_host_column")
         module.def_function[core_host_sabotage_binding]("core_host_sabotage")
+        module.def_function[activity_begin_binding]("activity_begin")
+        module.def_function[activity_end_binding]("activity_end")
         module.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         module.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
+        module.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")
         module.def_function[knn_search_binding]("knn_search")
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")
         module.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
         module.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
+        module.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         module.def_function[kmeans_predict_binding]("kmeans_predict")
         module.def_function[kmeans_transform_binding]("kmeans_transform")
         module.def_function[radius_neighbors_count_binding]("radius_neighbors_count")
@@ -1209,8 +1162,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[cast_colmajor_f64_to_f32_binding]("cast_colmajor_f64_to_f32")
         module.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         module.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
-        module.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
-        module.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         module.def_function[unique_inverse_binding]("unique_inverse")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
@@ -1220,24 +1171,26 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[gather_f64_binding]("gather_f64")
         module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        # lane calltable-msel: the model-selection helper table, for the
+        # native model-selection doors in another extension module.
+        publish_msel_helpers_host()
         module.def_function[msel_put_binding]("msel_put")
-        module.def_function[msel_alloc_binding]("msel_alloc")
-        module.def_function[msel_read_binding]("msel_read")
         module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
         module.def_function[msel_take_rows_binding]("msel_take_rows")
-        module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
-        module.def_function[msel_proba_column_binding]("msel_proba_column")
-        module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
-        module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
-        module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        module.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
         # base binding has carried since DEVIATION 2500, so a CPU-only
         # install stops encoding labels in a Python loop.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit_door.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         module.def_function[cast_elements_binding]("cast_elements")
         module.def_function[reduce_stat_binding]("reduce_stat")
         module.def_function[equal_elements_binding]("equal_elements")
@@ -1250,6 +1203,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         module.def_function[fold_ids_binding]("fold_ids")
         module.def_function[select_fold_i64_binding]("select_fold_i64")
+        module.def_function[select_folds_i64_binding]("select_folds_i64")
         module.def_function[arange_i64_binding]("arange_i64")
         module.def_function[leave_range_i64_binding]("leave_range_i64")
         module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
@@ -1259,7 +1213,6 @@ def build__mojolearn_core_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
-        module.def_function[fold_pair_f32_binding]("fold_pair_f32")
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         module.def_function[bincount_i64_binding]("bincount_i64")
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -1267,37 +1220,35 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
         module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
-        module.def_function[normal_init_f32_binding]("normal_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        module.def_function[first_seen_i32_binding]("first_seen_i32")
         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
-        module.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        module.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
         # StratifiedGroupKFold's group x class table and group plan (the GPU
         # base binding's bincount2_i32 / strat_group_plan_i32): a CPU-only
         # install refused StratifiedGroupKFold.split without them (lane
         # run-sabotage-arms, 2026-10-21: x-metrics-splitters on the host column)
         module.def_function[bincount2_i32_host_binding]("bincount2_i32")
-        module.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
-        module.def_function[nsum_f64_binding]("nsum_f64")
         module.def_function[row_means_f64_binding]("row_means_f64")
         module.def_function[truncnorm_draws_binding]("truncnorm_draws")
         module.def_function[fsum_f64_binding]("fsum_f64")
-        module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
-        module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
-        module.def_py_c_function(entry_init, "optimizer_door_init")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
-        module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
-        return module.finalize()
+        var published_module = module.finalize()
+        _publish_neighbors_ops(published_module)
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_host()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

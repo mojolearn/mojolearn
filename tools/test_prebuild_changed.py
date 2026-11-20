@@ -39,7 +39,7 @@ def real_tier_scripts():
 
 def build_script(name, src):
     return ("#!/bin/bash\nset -eu\n"
-            "pixi run mojo build --emit shared-lib -I . bindings/%s -o python/mojolearn/x.so\n" % src)
+            "pixi run mojo build -j ${MOJOLEARN_COMPILE_JOBS:-2} --emit shared-lib -I . bindings/%s -o python/mojolearn/x.so\n" % src)
 
 
 def make_tree(root, gbdt_body="fn f():\n    pass\n"):
@@ -101,9 +101,8 @@ def box_key(tree, tier, script, arch="sm_90a", env_extra=None):
     env = dict(box_env(tier, script, arch), **(env_extra or {}))
     path = str(Path(tree) / "bindings" / script)
     with mock.patch.object(bincache, "toolchain", lambda repo: pc.linux_toolchain(repo)):
-        fields = bincache.key_fields(tree, path, [], env, IMAGE, dev_arch=arch, os_info=dict(OS))
-    fields["declared"] = dict(inputs=bincache.local_inputs(tree, path),
-                              outputs=[pc.declared_output(tier, script)], shell="bash")
+        fields, _ = bincache.build_fields(tree, path, [], env, IMAGE, declared=[pc.declared_output(tier, script)],
+                                          shell="bash", dev_arch=arch, os_info=dict(OS), plat="linux")
     fields["repo_path"] = "/root/mojolearn"       # the box's checkout, whatever tree the test used
     return bincache.key_of(fields), fields
 
@@ -189,8 +188,10 @@ class Capture(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tree = make_tree(Path(td) / "t")
             write_keys(tree, Path(td) / "keys", [("fast", "build_gbdt.sh")])
+            # closure-v2 keys only what a script reads: a conflicting value of a
+            # read variable (the compiler workers) is two different boxes.
             write_keys(tree, Path(td) / "keys", [("fast", "build_estimators.sh")],
-                       env_extra={"MOJOLEARN_NEW_FLAG": "1"})
+                       env_extra={"MOJOLEARN_COMPILE_JOBS": "8"})
             with self.assertRaises(SystemExit):
                 pc.capture(Path(td) / "keys")
 
@@ -212,17 +213,20 @@ class Capture(unittest.TestCase):
 
 class CheckKeys(unittest.TestCase):
     def test_a_stale_profile_is_named_not_passed(self):
-        """A leg that exported a new variable computes keys the planner does
-        not: check-keys lists them as box-only (the rent path fails on it)."""
+        """A leg that exported a different value of a variable a script reads
+        computes keys the planner does not: check-keys lists them as box-only
+        (the rent path fails on it). Under closure-v2 an exported variable no
+        script reads moves no key, so only the gbdt build (which reads
+        MOJOLEARN_COMPILE_JOBS) is stale; the host family's key still matches."""
         with tempfile.TemporaryDirectory() as td:
             tree = make_tree(Path(td) / "t")
             builds = [("fast", "build_gbdt.sh"), ("identical", "build_alpha_host.sh")]
             write_keys(tree, Path(td) / "old", builds)
             tmpl = pc.capture(Path(td) / "old")
-            write_keys(tree, Path(td) / "new", builds, env_extra={"MOJOLEARN_NEW_FLAG": "1"})
+            write_keys(tree, Path(td) / "new", builds, env_extra={"MOJOLEARN_COMPILE_JOBS": "8"})
             ok, box_only, pred_only = pc.check_keys(pc.CommitFacts(tree), tmpl, Path(td) / "new", builds)
             ok2, box_only2, _ = pc.check_keys(pc.CommitFacts(tree), tmpl, Path(td) / "old", builds)
-        self.assertEqual((len(ok), len(box_only), len(pred_only)), (0, 2, 2))
+        self.assertEqual((len(ok), len(box_only), len(pred_only)), (1, 1, 1))
         self.assertEqual((len(ok2), box_only2), (2, []))
 
 
@@ -297,6 +301,81 @@ class Wiring(unittest.TestCase):
         text = (TOOLS / "gemm_remote_leg.sh").read_text()
         self.assertIn('"$OUT/remote/release-build/build/bincache"', text)
         self.assertRegex(text, r'NVIDIA_CAMPAIGN" = 7 \] && _bc_slots="\$\{MOJOLEARN_BINCACHE_SLOTS:-192\}"')
+
+    def test_sm89_walk_is_the_shared_nvidia_central_constant(self):
+        # One constant file: nvidia_central.sh sources it and holds no list of its own; its `up` defaults to the
+        # L40S-only measurement walk (2026-11-13), the sm_89 walk stays prebuild's.
+        gpus, counts = pc.shared_walk()
+        self.assertEqual(pc.GPU_WALK["sm_89"], gpus)
+        self.assertEqual(pc.GPU_COUNT_WALK["sm_89"], counts)
+        central = (TOOLS / "nvidia_central.sh").read_text()
+        self.assertIn('. "$ROOT/tools/runpod_nvidia_sm89.env"', central)
+        self.assertIn("NVC_GPUS=${MOJOLEARN_NVC_GPUS:-${MOJOLEARN_DEVPOD_GPUS:-$NVIDIA_MEASURE_GPUS}}", central)
+        self.assertIn("NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_MEASURE_GPU_COUNTS}", central)
+        env = (TOOLS / "runpod_nvidia_sm89.env").read_text()
+        self.assertIn('NVIDIA_MEASURE_GPUS="NVIDIA L40S"\n', env)      # the measurement pod is an L40S only
+        self.assertIn('NVIDIA_MEASURE_GPU_COUNTS="1"\n', env)
+        for gpu in gpus:
+            self.assertNotIn('"' + gpu, central)
+        self.assertGreater(len(gpus), 1)
+        self.assertGreater(max(counts), 1)
+        for name in gpus:
+            self.assertNotRegex(name.lower(), r"apple|mac|m\d")
+
+    def test_rent_walks_every_type_at_each_count_in_order(self):
+        gpus, counts = pc.shared_walk()
+        walk = pc.rent_walk("cuda-sm_89", {"route": "gemm-campaign7"})
+        self.assertEqual(walk, [(g, c) for c in counts for g in gpus])
+        self.assertEqual(pc.rent_walk("hip-gfx942", {"route": "cpu-pod"}), [(None, 1)])
+        self.assertTrue(all(c == 1 for _g, c in pc.rent_walk("cuda-sm_90a", {"route": "gemm-campaign7"})))
+
+    def test_leg_command_asks_for_the_count_and_never_a_job_count(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MOJOLEARN_PREBUILD_DOLLAR_CAP", None)
+            cmd, env, _ = pc.leg_command("cuda-sm_89", {"route": "gemm-campaign7"}, "c" * 40, Path("/x"),
+                                         "NVIDIA GeForce RTX 4090", 4)
+        self.assertEqual(env["MOJOLEARN_GEMM_LEG_GPU_COUNT"], "4")
+        self.assertEqual(cmd[cmd.index("--dollar-cap") + 1], str(pc.DOLLAR_CAP_PER_GPU * 4))
+        self.assertFalse([k for k in env if "JOBS" in k or "CORES" in k])
+        with self.assertRaises(SystemExit):
+            pc.leg_command("cuda-sm_89", {"route": "gemm-campaign7"}, "c" * 40, Path("/x"), "g", 8)
+        leg = (TOOLS / "gemm_remote_leg.sh").read_text()
+        self.assertIn('in 1|2|4) ;;', leg)
+
+    def test_rent_walks_on_through_counts_after_no_stock(self):
+        calls = []
+
+        def fake_call(cmd, cwd, env, stdout, stderr):
+            calls.append((cmd[cmd.index("--gpu") + 1], env["MOJOLEARN_GEMM_LEG_GPU_COUNT"]))
+            out = Path(env["MOJOLEARN_GEMM_LEG_OUT"])
+            out.mkdir(parents=True, exist_ok=True)
+            if len(calls) < 3:
+                (out / "create_response.json").write_text(
+                    '{"error":"create pod: There are no instances currently available","status":500}')
+                return 1
+            return 0
+
+        class NoWorktree:
+            def __init__(self, commit):
+                pass
+
+            def __enter__(self):
+                return ROOT
+
+            def __exit__(self, *exc):
+                return False
+
+        plan = {"targets": {"cuda-sm_89": {"counts": {"missing": 3}}}}
+        profiles = {"cuda-sm_89": {"route": "gemm-campaign7", "templates": {}}}
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(pc, "EVIDENCE", Path(d)), \
+                mock.patch.object(pc, "GPU_WALK", dict(pc.GPU_WALK, sm_89=["A", "B"])), \
+                mock.patch.object(pc, "GPU_COUNT_WALK", dict(pc.GPU_COUNT_WALK, sm_89=[4, 1])), \
+                mock.patch.object(pc, "CommitWorktree", NoWorktree), \
+                mock.patch.object(pc.subprocess, "call", side_effect=fake_call):
+            results = pc.rent(plan, "c" * 40, profiles, {}, [], say=lambda *_: None)
+        self.assertEqual(calls, [("A", "4"), ("B", "4"), ("A", "1")])
+        self.assertEqual(results["cuda-sm_89"]["gpu_count"], 1)
+        self.assertEqual(results["cuda-sm_89"]["rc"], 0)
 
     def test_workflow_is_manual_only_and_never_rents_by_default(self):
         # Only light-checks starts by itself (light-checks.yml refuses any

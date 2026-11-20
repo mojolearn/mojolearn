@@ -18,7 +18,7 @@ tile with the same digit (a scan over the tile in shared memory), which is
 what makes the scatter stable.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

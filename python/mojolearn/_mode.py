@@ -48,21 +48,16 @@ from . import _sk_validate
 
 
 def _guard_cpu_training(method):
-    # Import-time native-method declaration: the complete operation already
-    # owns its validation and lifecycle. require_training has no runtime
-    # refusal, so adding a Python wrapper would only reintroduce orchestration.
-    if (getattr(method, "_mojolearn_validates", False)
-            and getattr(method, "_mojolearn_tracks_fit", False)):
-        return method
-    @functools.wraps(method)
-    def guarded(self, *args, **kwargs):
-        from ._cpu_reference import require_training
-        require_training(self)
-        return method(self, *args, **kwargs)
-    return guarded
+    # CPU training is public: nothing refuses it, so the former per-fit wrapper is gone and nothing calls this
+    # any more (its class-definition loop in `_install_numeric_mode` set every
+    # fit method to itself; deleted by lane py-mode-wrappers, 2026-11-15).
+    # Kept only as the fixed warning location: `_native_classical_warnings`
+    # reads this function's final line as the `mojolearn/_mode.py:<line>` the
+    # native warnings report.
+    return method
 
 
-def sklearn_tags(est):
+def sklearn_tags(est, preserves_dtype=None):
     """scikit-learn's tag protocol (1.6+) for a mojolearn estimator, read only
     by scikit-learn, so importing it here needs no dependency.
 
@@ -81,6 +76,9 @@ def sklearn_tags(est):
     - `_sklearn_instance_target_tags()`: target tag overrides that depend
       on the instance's parameters.
     - `_sklearn_requires_fit = False` for a stateless transformer.
+
+    `preserves_dtype` fixes the transformer tags' dtype names for an
+    estimator whose `transform` always keeps them (the float32 scalers).
     """
     from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
                                Tags, TargetTags, TransformerTags)
@@ -95,6 +93,8 @@ def sklearn_tags(est):
     if callable(getattr(est, "transform", None)):
         tags.transformer_tags = TransformerTags(
             preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+        if preserves_dtype is not None:
+            tags.transformer_tags.preserves_dtype = preserves_dtype
     from ._sk_validate import input_tag_overrides
     for name, value in input_tag_overrides(cls).items():  # glue: sklearn tag field overrides by name
         setattr(tags.input_tags, name, value)
@@ -189,8 +189,8 @@ def _needs_fit(method, name, require_fit=True):
     @functools.wraps(method)
     def guarded(self, *args, **kwargs):
         if require_fit and not is_fitted(self):
-            from .exceptions import not_fitted_error
-            raise not_fitted_error(
+            from .exceptions import _not_fitted_error
+            raise _not_fitted_error(
                 f"This {type(self).__name__} instance is not fitted yet. Call 'fit' with "
                 f"appropriate arguments before using {name}.")
         if vars(self).get("_mojolearn_fitting"):
@@ -217,6 +217,13 @@ def _needs_fit(method, name, require_fit=True):
 
 
 def _loader(method):
+    # Only an application subclass's loaders reach this (`install_fit_tracking`
+    # runs for application subclasses only). Every package loader is the one
+    # archive binding call, and the native loader publishes `_mojolearn_fitted`
+    # itself (bindings/host_archive_native_door.mojo `host_archive_load` for the
+    # registered classes, `host_archive_public_forest` for RF/ET/DT; the GBDT
+    # adapters' load is a native refusal), so no package `load` runs this
+    # Python frame (lane py-mode-wrappers, 2026-11-15).
     if getattr(method, "_mojolearn_tracks_fit", False):
         # The native archive owner publishes fitted state and admits any
         # after-fit hook before returning; no Python post-load callback.
@@ -231,14 +238,17 @@ def _loader(method):
                 after()
         return out
 
+    load._mojolearn_loader = True
     return classmethod(load)
 
 
 def _application_subclass(cls):
-    """A class written outside the package (or in its tests) that derives from
-    a one-call native public class: its own overrides are ordinary
-    application code and keep the inherited fit tracking and fitted checks;
-    the package's own native methods stay unwrapped."""
+    """A class written outside the package (or in its tests): its own
+    overrides are ordinary application code and keep fit tracking, fitted
+    checks and NumPy outputs (`install_fit_tracking`). A package class is
+    never wrapped: each of its public methods is the native owner's one
+    binding call, which owns validation, fit tracking, the fitted check and
+    the public result itself."""
     module = getattr(cls, "__module__", "") or ""
     return ("_mojolearn_native_public" not in cls.__dict__
             and (not module.startswith("mojolearn.") or module.startswith("mojolearn.tests")))
@@ -249,6 +259,9 @@ def install_fit_tracking(cls, own_only=False):
     transform and score methods before that (see `is_fitted`). A class with
     `_sklearn_requires_fit = False` (a stateless transformer) is not guarded.
     Also installs the NumPy outputs (`install_public_outputs`).
+
+    Called for application subclasses only (`SklearnTagsMixin`); a package
+    class keeps its one-call native methods unwrapped.
     """
     install_public_outputs(cls, own_only)
     for name in _FITS:  # glue: wraps the fit method names
@@ -258,8 +271,11 @@ def install_fit_tracking(cls, own_only=False):
         elif inspect.isfunction(method):
             setattr(cls, name, _track_fit(method))
     for name in _LOADS:  # glue: wraps the loader method names
-        method = cls.__dict__.get(name)
-        if isinstance(method, classmethod):
+        # A full install also wraps an inherited package loader (package
+        # classes carry no `_loader` wrapper of their own any more), so an
+        # application subclass's `load` still marks the instance fitted.
+        method = cls.__dict__.get(name) if own_only else inspect.getattr_static(cls, name, None)
+        if isinstance(method, classmethod) and not getattr(method.__func__, "_mojolearn_loader", False):
             setattr(cls, name, _loader(method.__func__))
     if not getattr(cls, "_sklearn_requires_fit", True):
         for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
@@ -305,22 +321,28 @@ class available_if:
     def __call__(self, fn):
         self.fn = fn
         functools.update_wrapper(self, fn)
+        # The name the refusal reports, resolved once here (and by
+        # `__set_name__` for a class attribute), not read on every access.
+        self.attribute_name = fn.__name__
         return self
 
     def __set_name__(self, owner, name):
         self.attribute_name = name
 
+    # Per access: the one parameter check and the bound method. The answer
+    # depends on a constructor parameter that `set_params` may change
+    # (novelty, voting, probability, loss, prediction_data), so it cannot be
+    # resolved at class creation.
     def __get__(self, obj, owner=None):
         if obj is None:
             return self.fn
-        name = getattr(self, "attribute_name", self.fn.__name__)
         try:
             ok = self.check(obj)
         except AttributeError as exc:
             raise AttributeError(
-                f"This {type(obj).__name__!r} has no attribute {name!r}") from exc
+                f"This {type(obj).__name__!r} has no attribute {self.attribute_name!r}") from exc
         if not ok:
-            raise AttributeError(f"This {type(obj).__name__!r} has no attribute {name!r}")
+            raise AttributeError(f"This {type(obj).__name__!r} has no attribute {self.attribute_name!r}")
         return self.fn.__get__(obj, owner)
 
 
@@ -395,6 +417,11 @@ def _public_result(est, name, out):
     # Array: this wrapper runs inside `_needs_fit`'s guard, so the guard's
     # own `after_call` only ever sees the NumPy view made below.
     out = _sk_validate.after_call(est, name, out)
+    if (name == "predict" and type(out) is _Array and out.dtype == "<f4"
+            and getattr(est, "_estimator_type", None) == "regressor"):
+        # The float64 regression output is widened by the native Array cast
+        # (exact), before the NumPy view: no NumPy pass in Python.
+        out = out.astype("<f8")
     out = _ndarray(out, np)
     if (name == "predict" and type(out) is np.ndarray and out.dtype.kind == "f"
             and out.dtype.itemsize < 8 and getattr(est, "_estimator_type", None) == "regressor"):
@@ -430,18 +457,98 @@ def install_public_outputs(cls, own_only=False):
             setattr(cls, name, _public_output(raw, name))
 
 
-class PublicOutputsMixin:
+class CheckMixin:
+    """`estimator.check(X)`: the GPU-versus-CPU check as a call (Andrew,
+    2026-11-20), on every estimator through `PublicOutputsMixin` and mixed into
+    the estimator families with a base of their own (`CNNClassifier`). A door
+    onto `mojolearn.check` (`_verify_check.check`), the function `python -m
+    mojolearn verify --check` runs: no second implementation. The check
+    modules load inside the method, so `import mojolearn` and every fit,
+    predict and transform path are unchanged. Not a constructor parameter,
+    so `get_params` and the scikit-learn tags never see it."""
+
+    # No instance state: an empty slot list keeps the instance layout (and the
+    # native attribute layouts that read the first `__dict__` descriptor in
+    # the MRO) exactly what it was before this base was added.
+    __slots__ = ()
+
+    def check(self, X, *, method=None, fit=None):
+        """Run this fitted model on the GPU and on the CPU, print both sides'
+        reports and whether their answers are the same bits.
+
+        In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
+        and AMD GPUs, and the CPU binaries are held to the same bits. This
+        answers `X` with this model twice on this machine: on the GPU, and on
+        the CPU from the same fitted model, saved and loaded with
+        `mojolearn.host_model`. It runs in `identical` mode only.
+
+        It prints, for each side, the device and the binaries that answered,
+        what the runtime counted while the side ran (launches, uploads,
+        downloads), the wall time, and the shape, dtype, SHA-256 and first
+        values of each output; then one line: MATCH, or MISMATCH with the
+        index and the two values of the first differing element. When nothing
+        could be compared (the estimator is not in `identical` mode, the
+        installation has no GPU, or the model cannot be loaded on the CPU) it
+        prints why.
+
+        Parameters
+        ----------
+        X : array-like
+            The rows to answer for.
+        method : str, optional
+            The method to check, for example `'predict'`, `'predict_proba'`
+            or `'transform'`. Default: `predict` when the estimator has it,
+            else `transform`.
+        fit : tuple, optional
+            Arguments for `fit`. When given, the estimator is fitted on the
+            GPU first, then the fitted model is checked on both sides. Fitting
+            is never done unless asked for.
+
+        Returns
+        -------
+        dict
+            The same result as `mojolearn.check(estimator, X)`: `ran`,
+            `sides` (one record per side) and `verdict["verdict"]`, which is
+            `'MATCH'` or `'MISMATCH'`; `ran` is False, with a `reason`, when
+            nothing was compared.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+        >>> model = mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0])
+        >>> result = model.check(X)    # doctest: +SKIP
+        >>> result["verdict"]["verdict"]    # doctest: +SKIP
+        'MATCH'
+        """
+        # Loaded here, on the first call only: nothing of the check is
+        # imported with the package or touched by fit/predict/transform.
+        from ._verify_check import check, format_check
+        result = check(self, X, method=method, fit=fit)
+        print(format_check(result))
+        return result
+
+
+class PublicOutputsMixin(CheckMixin):
     """NumPy results for callers outside the package: the public result
     methods (`install_public_outputs`) and the fitted attributes. A public
     attribute ending in an underscore (`coef_`, `labels_`,
     `cluster_centers_`) that holds an `Array` reads as a `numpy.ndarray`
     view of the same memory when NumPy is loaded and the reader is not
-    mojolearn's own code; the instance keeps the `Array`."""
+    mojolearn's own code; the instance keeps the `Array`.
+
+    Every estimator also gets `check(X)` from here (`CheckMixin`)."""
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
-        if getattr(cls, "_mojolearn_native_public", False):
-            return  # one-call native methods: no Python wrappers
+        # Resolved once, at class creation: a package class's public methods
+        # are one-call native doors whose packs return the public result
+        # (bindings/classical_caller_unpack.mojo reads the caller natively), so
+        # they get no Python `public` wrapper and no per-call frame walk. Before
+        # 2026-11-15 a package class not yet marked native was wrapped here and
+        # the trees bridges unwrapped it again after registration.
+        if getattr(cls, "_mojolearn_native_public", False) or not _application_subclass(cls):
+            return
         install_public_outputs(cls)
 
 
@@ -451,77 +558,20 @@ class SklearnTagsMixin(PublicOutputsMixin):
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
-        if getattr(cls, "_mojolearn_native_public", False):
-            # the native owner tracks fits and validates inputs itself; an
-            # application subclass's own overrides are still guarded
-            if _application_subclass(cls):
-                install_fit_tracking(cls, own_only=True)
+        # A package class: the native owner tracks fits, validates inputs and
+        # refuses an unfitted call itself; no `tracked`/`guarded`/`load`
+        # wrapper is installed. An application subclass's own overrides are
+        # still guarded (all inherited methods too when it derives from a class
+        # not marked native).
+        if not _application_subclass(cls):
             return
-        install_fit_tracking(cls)
+        install_fit_tracking(cls, own_only=bool(getattr(cls, "_mojolearn_native_public", False)))
 
     def __sklearn_tags__(self):
         return sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
         return _MODE_METADATA(self, "is_fitted", _MODE_METADATA_CONTEXT)
-
-
-class ClassifierScoreMixin:
-    """scikit-learn's `ClassifierMixin.score` for a classifier without its own:
-    the default scorer of `GridSearchCV` and `cross_val_score`."""
-
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        # The match count and weight total are the x_metrics binding's sums.
-        from ._expansion_metrics import accuracy_fraction
-        return accuracy_fraction(y, self.predict(X), sample_weight,
-                                 getattr(self, "numeric_mode", None))
-
-
-class RegressorScoreMixin:
-    """scikit-learn's `RegressorMixin.score` for a regressor without its own:
-    the default scorer of `GridSearchCV` and `cross_val_score`."""
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
-        """
-        # R^2 is the metrics binding's pinned-sum r2_score, in float32.
-        from ._buffer import as_f32_c
-        from ._metrics_impl import r2_score
-        truth, _ = as_f32_c(y, ndim=None, name="y")
-        pred, _ = as_f32_c(self.predict(X), ndim=None, name="prediction")
-        return r2_score(truth, pred, sample_weight=sample_weight,
-                        numeric_mode=getattr(self, "numeric_mode", None))
 
 
 class ParamsMixin(SklearnTagsMixin):
@@ -573,7 +623,7 @@ class ParamsMixin(SklearnTagsMixin):
         self : object
             This estimator with its updated parameters.
         """
-        # One native call (bindings/full_reset_params_native.mojo): connected
+        # One native call (bindings/full_reset_params_native_door.mojo): connected
         # native schemas first, else the generic rebuild (_generic_reset).
         return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)
 
@@ -591,20 +641,9 @@ def _install_numeric_mode(cls, *, native_constructor=False):
     # glue: NumericModeMixin.__init_subclass__'s class-definition wrapper
     if getattr(cls, "_mojolearn_native_public", False):
         return  # the constructor takes numeric_mode itself
-    # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
-    # fit methods retain their guard, including explicit host subclasses
-    # used on a machine that also has a GPU. `_fit_with_tree_start` is
-    # the forests' shard fit, which `parallel_ensemble.fit_forest`'s
-    # worker calls without `fit`; since the rf and trees host bindings
-    # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
-    # like `fit`, so a CPU-only install trains a shard only inside
-    # `reference_training()`.
-    for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
-        method = cls.__dict__.get(method_name)
-        if isinstance(method, available_if):
-            setattr(cls, method_name, available_if(method.check)(_guard_cpu_training(method.fn)))
-        elif method is not None:
-            setattr(cls, method_name, _guard_cpu_training(method))
+    # The former CPU-training guard loop over the five fit names is deleted
+    # (lane py-mode-wrappers, 2026-11-15): `_guard_cpu_training` returns the
+    # method unchanged, so the loop set each fit method to itself.
     orig = cls.__dict__.get("__init__")
     if orig is None:
         return
@@ -723,3 +762,19 @@ _GENERIC_ATTRIBUTE, _GENERIC_ATTRIBUTE_CONTEXT = _connect_generic_attributes()
 PublicOutputsMixin.__getattribute__ = _GENERIC_ATTRIBUTE
 from ._native_mode_metadata import connect_generic_params as _connect_generic_params
 _GENERIC_PARAMS, _GENERIC_PARAMS_CONTEXT = _connect_generic_params()
+
+
+def _connect_native_init(cls, entry, operation, names, owner):
+    # glue: import-time registration, once per class, of a class whose public
+    # __init__ body is exactly `entry(self, operation, (<names>...), owner)`.
+    # The generic set_params rebuild (bindings/full_reset_params_native_door.mojo
+    # `_generic_reset`) then calls that native constructor directly instead of
+    # re-entering the Python __init__ body. `names` is the argument tuple in the
+    # body's order; None stands for a fixed None argument. Keep it in step with
+    # the __init__ body beside it.
+    if cls.__new__ is not object.__new__:
+        raise TypeError('native constructor registration requires object.__new__')
+    declared = tuple(inspect.signature(cls.__init__).parameters)[1:]
+    if sorted(name for name in names if name is not None) != sorted(declared):  # glue: import-time schema check
+        raise TypeError(cls.__name__ + ': native constructor arguments differ from its signature')
+    _GENERIC_PARAMS_CONTEXT['native_inits'][cls] = (entry, operation, tuple(names), owner, object.__new__)

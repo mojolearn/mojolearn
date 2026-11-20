@@ -1,24 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Every `_mojolearn_x_metrics` entry family, called TWICE in one process, on
-the GPU binding and on the CPU host binding (CURRENT DIRECTIVES 2026-09-27:
+"""Every `_mojolearn_x_metrics` entry family, called TWICE in one process on
+the binding the install selects (CURRENT DIRECTIVES 2026-09-27:
 x_cluster and x_neighbors hung on the second GPU call of a process because
 each call built a DeviceContext whose buffers outlived it; x_metrics keeps
 ONE process-lifetime context, x_metrics/device.mojo `metrics_ctx`). The
 binding's one entry point is `x_metrics_run`; the calls below reach every
 user op and every planned parallel schedule (sorts, curves, weighted
 percentiles, group sums, permutations). The two passes must return the same
-bytes, and the GPU the host's.
+bytes on the binding the install selects.
 
     .pixi/envs/test/bin/python -m pytest python/mojolearn/tests/test_x_metrics_repeat.py -q
 """
 import hashlib
 
 import numpy as np
-import pytest
-
-from mojolearn import _backend
-from mojolearn import _expansion_metrics as X
 
 
 def _data(n=3000):
@@ -88,25 +84,10 @@ def _calls(d):
     return [(name, _digest(fn())) for name, fn in cases]
 
 
-def _gpu_available():
-    try:
-        X._binding(None)
-        return True
-    except Exception:  # a CPU-only install has no GPU binding
-        return False
-
-
-def test_every_entry_twice_host_and_gpu(monkeypatch):
-    d = _data()
-    g1 = g2 = None
-    if _gpu_available():
-        g1, g2 = _calls(d), _calls(d)
-    host = _backend.load_host_module("_mojolearn_x_metrics_host")
-    with monkeypatch.context() as m:
-        m.setattr(X, "_binding", lambda numeric_mode: host)
-        h1, h2 = _calls(d), _calls(d)
-    assert h1 == h2, [n for (n, a), (_, b) in zip(h1, h2) if a != b]
-    if g1 is None:
-        pytest.skip("no GPU binding in this process")
-    assert g1 == g2, [n for (n, a), (_, b) in zip(g1, g2) if a != b]
-    assert g1 == h1, [n for (n, a), (_, b) in zip(g1, h1) if a != b]
+# The host-binding pass and its GPU-vs-host comparison were deleted:
+# a171a0c425 removed `_expansion_metrics._binding`, the seam that forced the
+# host binding in a GPU process. Same bits across the GPU and host columns is
+# the release's one cross-vendor verification, not a per-test check.
+def test_every_entry_twice_in_one_process():
+    first, second = _calls(_data()), _calls(_data())
+    assert first == second, [n for (n, a), (_, b) in zip(first, second) if a != b]

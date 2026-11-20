@@ -25,10 +25,10 @@ block's no-pool forward skips its ReLU launch. The im2col words are still
 written to `cols` when the backward will read them (`save_cols`), from
 the same staged values.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -38,10 +38,16 @@ from x_cnn.ops import (
     FP, IP, _g, _ud, conv_out_val, relu_val,
 )
 
+# TOMBSTONE: MOJOLEARN_AFN_CNN_DIRECT (DELETE-ARM: neural MERGED-UNMEASURED opt-in, never measured) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_CNN_DIRECT.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_CNN_ROWS32, MOJOLEARN_AFN26_CNN_CHANNELS16, MOJOLEARN_AFN26_CNN_K16, MOJOLEARN_AFN26_CNN_COLS_ONCE (DELETE-ARM: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural with the tiled kernel; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_CNN_ROWS32.patch (one patch per define, same code)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # E01: not tested in this campaign; existing implicit-convolution A/B arm.
 comptime AFN_CNN_DIRECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and is_defined["MOJOLEARN_AFN_CNN_DIRECT"]()
 )
 #: `x_cnn/device.mojo`'s `DC_MAXK` and `DC_MAXW`, restated (that file
@@ -108,7 +114,7 @@ def afn_conv_tiled_kernel(
     var rl = tid % AT_TR
     var grp = tid // AT_TR
     var kk = tid % AT_KC
-    var acc = InlineArray[Float32, AT_PER](fill=Float32(0))
+    var acc = Array[Float32, AT_PER](fill=Float32(0))
     for k0 in range(0, ckk, AT_KC):
         # the weight tile: AT_TO x AT_KC words, four per thread
         comptime for j in range(AT_TO * AT_KC // AT_TPB):

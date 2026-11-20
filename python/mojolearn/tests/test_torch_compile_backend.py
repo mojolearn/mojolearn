@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Artifact-only Torch front-end: real native execution and callback refusals."""
-from pathlib import Path
 import numpy as np
 import pytest
 
@@ -24,7 +23,8 @@ def _artifact(path, scale=1.0):
 
 
 def test_artifact_torch_execution_matches_array_route_and_refreshes_inputs(tmp_path):
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("onnx")
     path = tmp_path / "model.onnx"
     _artifact(path)
     admitted = audit_native_call(import_model, str(path), numeric_mode="identical")
@@ -41,7 +41,8 @@ def test_artifact_torch_execution_matches_array_route_and_refreshes_inputs(tmp_p
 
 
 def test_weights_are_artifact_snapshots_and_change_only_on_explicit_import(tmp_path):
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("onnx")
     path = tmp_path / "model.onnx"
     _artifact(path)
     first = import_model(str(path), numeric_mode="identical")
@@ -75,5 +76,8 @@ def test_retired_backend_refuses_without_inspecting_or_executing_model():
 
 
 def test_torchdynamo_is_not_registered_by_packaging():
-    root = Path(__file__).resolve().parents[3]
-    assert "torch_dynamo_backends" not in (root / "python/pyproject.toml").read_text()
+    # The installed distribution's entry points, not the pyproject text: torch
+    # must find no Mojolearn backend in the group it scans.
+    from importlib.metadata import entry_points
+    found = [ep for ep in entry_points(group="torch_dynamo_backends") if "mojolearn" in ep.value]
+    assert found == []

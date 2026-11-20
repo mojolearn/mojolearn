@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from mojolearn._cpu_reference import reference_training
 
 REFUSAL = "group_id is read only by the querywise and pairwise losses"
 
@@ -27,7 +26,6 @@ def _small():
     return X, y, group
 
 
-@reference_training()
 @pytest.mark.parametrize("loss", ["RMSE", "Logloss"])
 def test_every_trained_loss_refuses_group_id_by_name(loss):
     X, y, group = _small()
@@ -36,7 +34,6 @@ def test_every_trained_loss_refuses_group_id_by_name(loss):
         GradientBoosting(n_estimators=2, max_depth=2, loss=loss).fit(X, target, group_id=group)
 
 
-@reference_training()
 def test_split_group_never_reaches_the_binding():
     X, y, group = _small()
     group = group.copy()
@@ -45,7 +42,6 @@ def test_split_group_never_reaches_the_binding():
         GradientBoosting(n_estimators=2, max_depth=2).fit(X, y, group_id=group)
 
 
-@reference_training()
 def test_subgroup_id_and_pairs_are_refused_by_name():
     X, y, group = _small()
     with pytest.raises(NotImplementedError, match="subgroup_id"):
@@ -73,7 +69,6 @@ def _ranked(group_id, X=None, y=None):
     return np.asarray(_ranker().fit(X, y, group_id=group_id).predict(X)).tobytes()
 
 
-@reference_training()
 def test_spellings_of_one_grouping_give_one_model():
     X, y, group = _small()
     base = _ranked(group, X, y)
@@ -93,7 +88,6 @@ def test_spellings_of_one_grouping_give_one_model():
     assert _ranked(np.zeros(len(group), np.int64), X, y) != base
 
 
-@reference_training()
 @pytest.mark.parametrize("bad", [1.0, np.float32(2.0), True, None, (1,)])
 def test_unsuitable_ids_are_refused_in_their_words(bad):
     X, y, group = _small()
@@ -103,7 +97,6 @@ def test_unsuitable_ids_are_refused_in_their_words(bad):
         _ranker().fit(X, y, group_id=ids)
 
 
-@reference_training()
 def test_split_and_length_refusals():
     X, y, group = _small()
     n = len(group)

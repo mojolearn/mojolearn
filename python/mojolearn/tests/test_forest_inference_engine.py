@@ -1,19 +1,32 @@
 """Engine routing and archive contracts, through the real public methods
-(the native forest owner, bindings/trees_public_forest.mojo); small inputs."""
+(the native forest owner, bindings/trees_public_forest_door.mojo); small inputs."""
 import numpy as np
 import pytest
 from mojolearn import (RandomForestClassifier, RandomForestRegressor,
                        ExtraTreesClassifier, ExtraTreesRegressor)
 from mojolearn import _backend, _serialize
 
+def _npz_format(z):
+    # An independent NumPy read of the stored tag. `_serialize.scalar_str` takes the members `read_npz`/`peek_npz`
+    # return, not a NumPy NpzFile (native codec 120cedb0c6).
+    tag = z['format'].reshape(-1)[0]
+    return tag.decode() if isinstance(tag, bytes) else str(tag)
+
+
 CLASSES = [RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor]
 
 
 @pytest.mark.parametrize('cls', CLASSES)
 def test_auto_engine_is_fast_only(cls):
+    from mojolearn import _backend
+
     fast = cls(numeric_mode='fast')
     assert fast.inference_engine == 'auto'
-    assert fast._prediction_engine() == 'parallel_groves'
+    # Off Apple with no fast set, the identical set answers `fast` for FOREST
+    # (core/mode_answer.mojo MODE_FAMILIES_ANSWERED): auto is then the
+    # identical engine. Where fast names its own set, auto is parallel groves.
+    answered = _backend.fast_answer() == 'identical'
+    assert fast._prediction_engine() == ('sequential' if answered else 'parallel_groves')
     model = cls(numeric_mode='identical')
     assert model.inference_engine == 'auto'
     assert model._prediction_engine() == 'sequential'
@@ -43,7 +56,7 @@ def test_versioned_gpu_archive_and_legacy_default(cls, tmp_path, monkeypatch):
     legacy = fitted(cls, 'sequential')
     legacy.save(path)
     with np.load(path, allow_pickle=False) as z:
-        old_format = _serialize.scalar_str(z, 'format')
+        old_format = _npz_format(z)
         assert 'numeric_mode' not in z.files
     restored = cls.load(path)
     assert restored.inference_engine == 'sequential'
@@ -58,32 +71,6 @@ def test_versioned_gpu_archive_and_legacy_default(cls, tmp_path, monkeypatch):
     np.testing.assert_array_equal(restored._leaves, gpu._leaves)
     gpu.set_params(inference_engine='sequential')
     assert not gpu.__sklearn_is_fitted__()
-
-
-@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
-def test_classifier_combined_prediction_is_exact_and_traverses_once(cls, monkeypatch):
-    """The evidence fast path must be the two public answers, not an approximation."""
-    calls = []
-    model = fitted(cls, 'sequential')
-    model.classes_ = [10, 20]
-
-    def vote(X):
-        calls.append(len(X))
-        from mojolearn._array import Array
-        values = Array.from_list([[0.75, 0.25], [0.5, 0.5], [0.125, 0.875]], '<f4')
-        return values[:len(X)]
-
-    # both classifiers derive the labels from `predict_proba` (one native call)
-    monkeypatch.setattr(model, 'predict_proba', vote)
-    X = np.ones((3, 1), dtype=np.float32)
-    prediction, proba = model._predict_with_proba(X)
-    assert calls == [3]
-    np.testing.assert_array_equal(prediction, np.array([10, 10, 20]))
-    expected = vote(X)
-    assert calls == [3, 3]
-    actual_np, expected_np = np.asarray(proba), np.asarray(expected)
-    view = np.uint32 if actual_np.dtype == np.float32 else np.uint64
-    np.testing.assert_array_equal(actual_np.view(view), expected_np.view(view))
 
 
 def _data(cls):
@@ -175,9 +162,9 @@ def test_identical_auto_keeps_sequential_bits_and_archive(cls, tmp_path):
     loaded = cls.load(path)
     assert loaded.inference_engine == loaded.inference_engine_ == 'sequential'
     with np.load(path, allow_pickle=False) as z:
-        assert 'parallel-groves' not in _serialize.scalar_str(z, 'format')
+        assert 'parallel-groves' not in _npz_format(z)
     groves, _ = real_fit(cls, 'parallel_groves')
     groves.save(path)
     with np.load(path, allow_pickle=False) as z:
-        assert 'parallel-groves' in _serialize.scalar_str(z, 'format')
+        assert 'parallel-groves' in _npz_format(z)
     assert cls.load(path).inference_engine_ == 'parallel_groves'

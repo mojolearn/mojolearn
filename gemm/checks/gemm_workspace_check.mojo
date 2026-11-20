@@ -13,6 +13,7 @@ from core.device_scan_check import upload
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.checks.gemm_oracle import gemm_oracle
+from checks.native_tests.kit import download_host_into
 
 
 def values(n: Int, salt: Int) -> List[Float32]:
@@ -27,12 +28,11 @@ def check(ctx: DeviceContext, mut got: DeviceBuffer[DType.float32],
           m: Int, n: Int, k: Int) raises:
     var want = gemm_oracle(a, b, op, m, n, k)
     var host = ctx.enqueue_create_host_buffer[DType.float32](m * n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=got)
+    download_host_into[DType.float32](ctx, got, host)
     ctx.synchronize()
     for i in range(m * n):
         if bitcast[DType.uint32](host.unsafe_ptr().unsafe_load(i)) != bitcast[DType.uint32](want[i]):
             raise Error("workspace GEMM differs from oracle at " + String(i))
-    _ = host^
 
 
 def main() raises:

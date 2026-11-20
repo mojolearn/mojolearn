@@ -1,0 +1,29 @@
+diff --git a/x_decomp/lu_fast.mojo b/x_decomp/lu_fast.mojo
+index f3b38d036c..976bd35336 100644
+--- a/x_decomp/lu_fast.mojo
++++ b/x_decomp/lu_fast.mojo
+@@ -30,6 +30,7 @@ blocked route (lu_diag, lu_l_elem, lu_update_elem; the same pivot by the
+ same compare rule), so the words are the blocked route's.
+ """
+ 
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.primitives.warp import shuffle_xor
+@@ -45,15 +46,13 @@ from x_decomp.cells import F32Ptr, I32Ptr, div0
+ #: residual the same 3.256e-06; tags gl2-lu-step1-synthetic,
+ #: gl2-lusolve-step1-synthetic).
+ #: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here: every IDENTICAL switch off at once) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 172d7908e7.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-17-decomposition.patch.
+ # TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (its term here: the five-launch step in IDENTICAL; EXP:2479 old path) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at e8f262523b.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-17-decomposition.patch.
+ # TOMBSTONE: MOJOLEARN_LU_FAST_STEP1_OFF (old path: the five-launch panel step; EXP:460 DEFAULT on FAST + Apple and IDENTICAL) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0b8dd725c3.
+ # Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_STEP1_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime LU_FAST_STEP1 = (
+     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+-    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ #: IDENTICAL: the pivot search skips a NaN exactly as `lu_pivot`'s strict
+ #: compare does (x_decomp/cells.mojo: a NaN below the diagonal never wins, a

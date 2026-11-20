@@ -152,7 +152,7 @@ candidate wheel directory) are placeholders.
 # The tests are copied from a checkout of SHA; a git worktree of SHA is enough.
 git worktree add --detach ~/src-$SHA $SHA
 python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/src-$SHA --source-commit $SHA \
-  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl --wheel $W/mojolearn_nvidia_ptx-$V-*.whl \
+  --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_nvidia-$V-*.whl \
   --python python3.12 --out ~/mojolearn-evidence/release/$V/runtime-nvidia
 #   amd:   --vendor amd   --wheel $W/mojolearn_core-$V-*.whl --wheel $W/mojolearn_amd-$V-*.whl
 #   cpu:   --vendor cpu   --wheel $W/mojolearn_core-$V-*.whl            (Linux CPU box, cpu_target linux-64)
@@ -163,7 +163,7 @@ python3 tools/release_runtime_installed.py run --vendor nvidia --source-root ~/s
 # the eleven installed correctness jobs and the three adapter phases.
 python3 tools/release_published_install.py run --vendor nvidia --version $V \
   --candidate-wheel $W/mojolearn_core-$V-*.whl --candidate-wheel $W/mojolearn_nvidia-$V-*.whl \
-  --candidate-wheel $W/mojolearn_nvidia_ptx-$V-*.whl --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
+  --python python3.12 --out ~/mojolearn-evidence/release/$V/published-nvidia
 #   apple runs under tools/mac_slot.py ... metal -- with --candidate-wheel $W/mojolearn-$V-*-macosx_*.whl
 
 # On the Mac, for each pulled directory DIR and its adapter:
@@ -278,7 +278,7 @@ mismatch is a bug to fix, never a reason to rerun).
 pixi run release <version> --dry-run          # the plan, every command, and what is already done
 pixi run release <version> --status           # per pipeline, leg and column: done, failed (log), owed; runs nothing
 pixi run release <version>                    # everything up to publication
-pixi run release <version> --publish pypi     # ... then publish each wheel as its pipeline passes, finish line, record
+pixi run release <version> --publish pypi     # ... then the TestPyPI rehearsal, publish each wheel as its pipeline passes, finish line, record
 ```
 
 `tools/release.py` walks this whole checklist. Write the CHANGELOG entry
@@ -292,13 +292,11 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 - **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
   linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
-  plugins plus PTX, 3b), publish-core-linux (last, after both plugins).
-- **nvidia-ptx**: publish-nvidia-ptx, before the NVIDIA vendor package that
-  requires it. The default preverified route uses its build and artifact checks.
+  plugins, the NVIDIA one carrying the PTX set, 3b), publish-core-linux (first on Linux).
 - **nvidia**: gpu-column-nvidia (the expanded smoke, on the
   nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
   `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia
-  (after publish-nvidia-ptx).
+  (after publish-core-linux; one wheel with native sm_89 and PTX sm_80 since 2026-11-05).
 - **amd**: gpu-column-amd (on the amd box we hold, the DigitalOcean MI325X
   gfx942; the expanded smoke too), publish-amd.
 
@@ -323,11 +321,52 @@ FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   (linux-joint-diff, the macOS cross-diff).
 
 A failure in one pipeline never blocks or undoes the other. The run ends with
-every outcome and exits non-zero unless every package published. The finish line
-checks each published platform (`pip install` on this Mac for macOS; `pip
-download` of the Linux file with its sha256 compared) and the
-`bench/results/release_verification/<date>_pypi_<v>/` record covers what is
-published; both run again when the other platform publishes.
+every outcome and exits non-zero unless every package published.
+
+**Everything that can be checked before the real publish is checked before it
+(Andrew, 2026-11-06).** With `--publish pypi`, the `testpypi-rehearsal` step
+runs after both gates and every check a publish needs, and before the first
+publish step: it uploads the exact gated wheels to TestPyPI (a file already
+there with the same sha256 is not uploaded again; the same file name with other
+bytes stops the release, because TestPyPI never takes a file name twice, so a
+re-freeze needs the next version), resolves `mojolearn`, each
+`mojolearn[<extra>]`, `mojolearn-core`, `mojolearn-nvidia` and `mojolearn-amd`
+for every platform tag and Python version the wheels declare with our project
+names served by TestPyPI only, compares every file's sha256 with the gated
+wheel's, and installs and imports the macOS wheel in a fresh venv on this Mac.
+Any failure stops the release before the real PyPI sees anything
+(`tools/release_testpypi_rehearsal.py`; report under
+`<commit12>/testpypi-rehearsal/`).
+
+After the publish nothing installs or runs anything. The finish line compares
+the sha256 of each file the real PyPI serves (`pip download --no-deps`) with
+the shipped wheel, `published-<vendor>` does the same with RECORD checks, and
+the `record` step writes the release evidence set (below); they run again when
+another platform publishes.
+
+**The release evidence: one set, overwritten each release (Andrew, 2026-11-06).**
+The `record` step deletes everything in `bench/results/release_evidence/` and
+writes this release's evidence there, then commits it ("Release evidence for
+<version>") and tags that commit `v<version>`. The directory only ever holds
+one release. It contains `manifest.json` (the version, the frozen source commit,
+every wheel's file name and sha256, the tools used, and for every file its
+sha256, the step that produced it and the wheels it was checked against),
+`README.md`, the identity round (`identity/`), the gate verdicts per vendor with
+the shard check, the measurement smoke and the machine facts (`gates/`), the
+TestPyPI rehearsal and the post-publish byte checks (`publish/`), the release's
+tool tests and compile summary (`checks/`, `compile/`), and the published
+wheels' manifests, provenance and binding identities the next release reuses.
+Logs, wheels, the full identity table, the reuse plan, build receipts and box
+results stay in `~/mojolearn-evidence` and R2; the manifest names each by path
+or R2 tag and sha256. The item list, which items are required and the size caps
+(2 MiB per file, 6 MiB for the set) are in `tools/release_evidence_set.py`;
+a missing required item fails `record` by name. To see an older release's
+evidence, read it from its tag:
+`git show v<version>:bench/results/release_evidence/manifest.json`. The dated
+directories releases up to 0.8.65 wrote under
+`bench/results/release_verification/` are in git history; read them at the
+parent of the commit that removed them
+(`git log -n 1 --format=%H -- bench/results/release_verification/`).
 
 **The shipped source and the release tooling are two commits.** The freeze
 pins the source commit in `state.json`; it never moves because main moved,
@@ -394,9 +433,9 @@ identity of a binding is its source closure digest (the same walk
 the Mojo/MAX packages pixi.lock pins for the target platform, the build flags
 the release scripts export for it, the builder scripts, and the pinned box
 image (on macOS the Xcode and Metal toolchain instead). REUSE means the exact
-identity digest of the last PUBLISHED release (the newest
-`bench/results/release_verification/<date>_pypi_<v>/` record, its
-`binding-identities.json` when it has one, else that commit's tree); the
+identity digest of the last PUBLISHED release (the release evidence set
+`bench/results/release_evidence/`, its `binding-identities.json` when it has
+one, else that commit's tree); the
 published bytes then come from a local copy or PyPI, verified by sha256 against
 the record and against the wheel's own payload, and are packed again. Anything
 else, including an unreadable pin, builds. A build leg runs only for a set with
@@ -508,17 +547,16 @@ MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build.
 
 ## 1. Freeze
 
-`CITATION.cff` version and release date are generated; do not update them by hand.
-The date comes from the matching `published YYYY-MM-DD` changelog heading,
-not the build clock. An `unreleased YYYY-MM-DD` entry omits the citation date.
-If publication moves to another day, update the changelog and regenerate before
-freezing the release artifacts. CI rejects stale citation metadata.
+`CITATION.cff` carries no release version or date: it names the paper to cite
+and the concept DOI for the software, so a release never edits it.
+`packaging/wheel_ci.py versions` fails if a top-level `version` or
+`date-released` comes back.
 
 Bump `python/mojolearn/_version.py` and `python/pyproject.toml`, add the
 CHANGELOG entry with the publication date in UTC, then
 
 ```sh
-pixi run write-docs-facts   # generates CITATION version/date and marked doc spans
+pixi run write-docs-facts   # rewrites the marked doc spans
 pixi run check-docs-facts   # fails if a pin, a badge or a prose default drifted
 ```
 
@@ -556,8 +594,8 @@ packer, smoke or admission file that spells one of its own. The columns the
 wheel ships are `TRAINING_GPU_COLUMNS` in the manifest, so a new record is a
 manifest edit, never a packaging edit.
 
-`_version.py` is the source of truth and the checker holds `pyproject.toml`,
-`CITATION.cff` and the newest published CHANGELOG heading to it, so a
+`_version.py` is the source of truth and the checker holds `pyproject.toml`
+and the newest published CHANGELOG heading to it, so a
 half-finished bump goes red here rather than shipping in a README. Commit,
 push. Every build below runs from that commit.
 
@@ -589,30 +627,18 @@ MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MO
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA L40S" --allow-concurrent --rent --minutes 60
 ```
 
-**The AMD providers and their order (2026-09-25).** Every AMD box is gfx942,
-the architecture the wheel ships (MI300X on RunPod and Hot Aisle, MI325X on
-DigitalOcean). The AMD BUILD leg rents a DigitalOcean MI325X
-(`tools/do_release061_leg.sh`), or a Hot Aisle 1x MI300X
-(`tools/hotaisle_release_leg.sh <commit> [--rent] [--expect-from DIR] [--lease 30..60] [--cap USD]`)
-when DigitalOcean has a GPU droplet live (its leg refuses a rental then, one
-GPU droplet per account) or no token. The Hot Aisle leg runs the same archive,
-host preparation, pinned Ubuntu 22.04 container, `release061_remote_build.sh`,
-read-backs and provenance, and writes the same `legs/hip-gfx942/release-build/`
-tree; it takes only the 1x VM, because `tools/amd_serial_guard.py` requires
-exactly one visible render GPU. `pixi run release` decides once per run
-(`--amd-build-provider auto|do|hotaisle`, or `MOJOLEARN_AMD_PROVIDER`), and
-`linux-wait` walks a DigitalOcean leg that refused on a live droplet to Hot
-Aisle. The AMD COLUMN (`release_wheel_smoke.sh --vendor hip`, step 5) walks
-`runpod`, `hotaisle`, `do` under `--provider auto`: RunPod once; Hot Aisle when
-RunPod has no MI300X (the 1x VM, or the 2x VM pinned to GPU 0 when no 1x is in
-stock, `--hotaisle-spec`, `--hotaisle-cap`); DigitalOcean when Hot Aisle refuses
-before creating anything (no key, stock, slot, balance or cap). Hot Aisle's
-guards are `tools/hotaisle_vm_lib.sh`'s: the whole lease priced live against the
-cap (the balance is only recorded), a Mac dead-man before the create, an on-box
-watchdog verified from two sessions, DELETE then GET 404 before the slot is
-released. `tools/tests/test_hotaisle_release_shim.py` tests both against a
-local stand-in API; `bench/results/release_hotaisle_2026-09-25/` is the real
-rehearsal.
+**The AMD providers and their order (2026-11-18).** Every AMD box is gfx942,
+the architecture the wheel ships (MI300X on RunPod, MI325X on DigitalOcean).
+The AMD BUILD leg rents a DigitalOcean MI325X (`tools/do_release061_leg.sh`;
+its leg refuses a rental while a GPU droplet is live on the account), or the
+CPU-pod route by name (`--amd-build-provider auto|do|cpu-box`, or
+`MOJOLEARN_AMD_PROVIDER`; auto is do). The AMD COLUMN
+(`release_wheel_smoke.sh --vendor hip`, step 5) walks `runpod`, `do` under
+`--provider auto`: RunPod once, DigitalOcean when RunPod has no MI300X or no
+key. The Hot Aisle route (`tools/hotaisle_release_leg.sh`,
+`tools/hotaisle_vm_lib.sh`, `--hotaisle-spec`, `--hotaisle-cap`) was removed
+2026-11-18 (lane fx-dead-small; recoverable at `7c1aad6561`);
+`bench/results/release_hotaisle_2026-09-25/` keeps its one real rehearsal.
 
 The legs' pre-flights and the packer judge TRACKED source only: an ignored or
 untracked file (a generated table, local test output) cannot refuse a launch
@@ -1145,12 +1171,11 @@ and PyPI refuses a second upload of the same filename.
 
 ## Finish line
 
-```sh
-python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
-  && /tmp/v/bin/python -c "import mojolearn; print(mojolearn.__version__)"
-```
-
-Run it on a Linux GPU box and on a Mac. Both wheels are listed at
+The install and import ran before the publish, from TestPyPI, in the
+`testpypi-rehearsal` step. After the publish, only the bytes are compared: the
+`finish-line` step downloads each published file from https://pypi.org/simple
+(`pip download --no-deps` for the wheel's own platform tag) and its sha256 must
+equal the shipped wheel's. The files are listed at
 https://pypi.org/project/mojolearn/#files.
 
 ## The release gate: smoke and measurement on the boxes (the `gate-nvidia` and `gate-amd` steps)

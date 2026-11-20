@@ -21,12 +21,10 @@ from sequence.ops import (
     FP,
     Args,
     OP_BIAS,
-    NN42_INPUT_BIAS_FUSED,
     OP_CE,
     OP_CELL_BWD,
     OP_CELL_FWD,
     OP_CELL_BWD_H,
-    OP_CELL_FWD_H,
     OP_COLSUM,
     OP_FILL,
     OP_GATHER_ROWS,
@@ -35,11 +33,6 @@ from sequence.ops import (
     OP_GEMM_SPLITK,
     OP_MSE,
     OP_OPT,
-    OP_SEQ_OUT,
-    OP_SEQ_IOTA,
-    OP_MLP_PERM,
-    OP_SOFTMAX,
-    OP_SUM,
     OPT_ADAGRAD,
     OPT_ADAM,
     OPT_ADAMW,
@@ -47,37 +40,35 @@ from sequence.ops import (
     OPT_NADAM,
     gates_of,
 )
-from sequence.mlp import mlp_epoch_key, mlp_perm_args
-from autograd.data import epoch_order as ag_epoch_order
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
-from std.sys.compile import is_defined, get_defined_int
-from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
 
-# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM runs
-# rnn_fit's update through autograd/optim.mojo (OptimizerState + step_lr)
-# instead of opt_step below. Bits: the same. optimizer_config_packed maps
-# OptConfig's words to named fields that pack back to the same words,
-# optimizer_scalars is opt_scalars word for word, and the update is the same
-# one OP_OPT launch over Gr; a slot word the kind's body never reads may
-# differ (RMSprop's f1, a non-SGD kind's flags) and moves no bit. No fold is
-# involved (no clip; the rate is lrs[k] as before).
-comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm ran rnn_fit's
+# update through autograd/optim.mojo (OptimizerState + step_lr), the same one OP_OPT launch with the same words
+# (optimizer_config_packed maps OptConfig's words to named fields that pack back to the same words,
+# optimizer_scalars is opt_scalars word for word). Andrew 2026-11-08 (bits may change; keep the simpler path):
+# that shared module is now rnn_fit's only update, the one Sequential and ops.Session already use; rnn_fit's hand
+# opt_step call is gone (opt_step stays for its other callers). Same bits by construction. A/B owed (ms per fit).
+# Restored 2026-11-09 by lane r2-restore-unmeasured-defaults (AGENTS.md "A measured winner is never deleted on
+# reasoning": the promotion had no measurement): rnn_fit's hand opt_step is the default again, as before X3 (the
+# define's default at f7d10d2b09 was off).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (the restored opt-in executor-optimizer arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.expdel2-30-neural.patch
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (decided B arm, the executor optimizer step_lr; L40S ba08dac006 gru/lstm/mlp/rnn fit B 0.99-1.01x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6; Andrew 2026-11-08: bits may
+# change between versions, never keep a serial fold for old bits): each step's reported loss (losses[k]) comes
+# from autograd/losses.mojo (loss_value_into: the squared-error terms or op_ce's row losses, term for term, then
+# the tape's blocked fold with factor 1 / count) instead of sum_into's one-thread ascending OP_SUM (deleted).
+# The gradient seed w.dy still comes from OP_MSE / OP_CE (gradient only: their unread loss stores are deleted). NEW BITS in losses[] only (every column together:
+# host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A f7d10d2b09 (OP_SUM), arm B dbab55bea7.
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
 from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
-from sequence.ops import dummy_ptr
-
-# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
-# each step's reported loss (losses[k]) through autograd/losses.mojo
-# (loss_value_into: the squared-error terms or op_ce's row losses, term for
-# term, then the tape's blocked fold with factor 1 / count) instead of the
-# one-thread ascending OP_SUM. The gradient seed w.dy still comes from
-# OP_MSE / OP_CE; the loss module's VJP would give the same bits (2 (g d)
-# with g = 1 / (B O) equals d (2 / (B O)) exactly, and (softmax - onehot) g
-# is op_ce's expression with g = 1 / B), but the seed is left as it is.
-# New bits in losses[] only; parameters unchanged.
-comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -89,35 +80,29 @@ comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
 #: Device and host run the same ops, so the bits move on every column
 #: together; the oracle (`sequence/checks/oracle.mojo::o_bptt_dw`) states
 #: the same blocks. One block (K <= WGRAD_MIN_BLOCK) is the old chain.
-#: -D MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (or MOJOLEARN_IDN_ALL_OFF).
-comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.expdel2-30-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # NN43 fp32 fixed-leaf-v2: K is partitioned at absolute multiples of 128;
 # each leaf starts at +0, uses the incumbent pinned ascending FMA chain,
 # then leaves are added ascending from +0. Odd tail has only actual rows.
 # No launch/vendor/board shape chooses the graph. New bits across versions
 # are permitted. Host Exec and GPU Exec run the same OP_GEMM_SPLITK body.
 # Unmeasured, disabled; no quality/identity evidence is claimed.
-# L11 (2026-10-07): NN43 and NI51's leaf arm are arms of ONE switch,
-# -D MOJOLEARN_IDN_SEQ_WGRAD=0|1|2: 0 = sqrt(K) blocks from 512 rows
-# (default), 1 = NI51 sqrt(K) blocks from 256 rows, 2 = NN43 fixed 128-row
-# leaves. Each arm is a bit version for every column together.
-comptime IDN_SEQ_WGRAD_ARM = get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]()
-comptime NN43_WGRAD_FIXED128 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_SEQ_WGRAD_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]()
-)
+# L11 (2026-10-07): NN43 and NI51's leaf arm were arms 2 and 1 of
+# -D MOJOLEARN_IDN_SEQ_WGRAD; arm 0 (sqrt(K) blocks from 512 rows) is the one form.
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD (opt-in arms 1 and 2, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.expdel2-30-neural.patch
+# (Sweep 2026-11-15: NN43_WGRAD_FIXED128 = False removed with its reader's dead arm in autograd/kernels/recurrent.mojo.)
 
 # NI51 V subarm: a smaller minimum leaf trades more independent gradient
 # work for partial storage. Above that minimum the existing sqrt(K) growth
 # bounds partial count; no dataset or benchmark dimension selects this graph.
 # The generic executor makes host and all GPU columns share the new bits.
 # Default OFF; multi-step recurrent quality and identity are unmeasured.
-comptime SEQ_WGRAD_LEAF256 = SEQ_WGRAD_BLOCKED and IDN_SEQ_WGRAD_ARM == 1
-comptime WGRAD_MIN_BLOCK = 256 if SEQ_WGRAD_LEAF256 else 512
+comptime WGRAD_MIN_BLOCK = 512
 #: partial floats one launch pair may hold (rows of cells are chunked to
 #: fit; chunking moves no bit, every cell's blocks are the same)
 comptime WGRAD_IDN_SCRATCH = 1 << 22
@@ -255,14 +240,10 @@ def gather_rows[E: Exec](mut ex: E, Y: FP, idx: FP, dst: FP, B: Int, O: Int, off
     ex.launch[OP_GATHER_ROWS](a, B * O)
 
 
-def sum_into[E: Exec](mut ex: E, X: FP, n: Int, dst: FP, at: Int, scale: Float32) raises:
-    var a = Args()
-    a.p0 = X
-    a.p1 = dst
-    a.i0 = at
-    a.i1 = n
-    a.f0 = scale
-    ex.launch[OP_SUM](a, 1)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+# sum_into (dst[at] = scale * the n values of X added ascending by ONE thread, OP_SUM) was rnn_fit's reported
+# loss; loss_value_into's blocked fold replaces it.
 
 
 # ------------------------------------------------------------------ work buffers
@@ -280,9 +261,37 @@ struct Work(Movable):
     var yb: FP
     var yhat: FP
     var dy: FP
-    var sq: FP
     var one: FP
     var wsplit: FP
+
+    def __init__(out self, gx: FP, gh: FP, act: FP, hall: FP, call: FP, dgh: FP, dh: FP, dhn: FP, dc: FP,
+                 one: FP, wsplit: FP):
+        """ONE layer's buffers on storage the caller owns (lane
+        fx-ops-session-blocks, 2026-11-19: the session's recurrent scan op,
+        autograd/rules_recurrent.mojo `rnn_scan_op`, hands tape storage of
+        the sizes the constructor below allocates for T, B and one layer).
+        `one` holds 1.0. The batch, target and head buffers are placeholders
+        nothing on that path reads."""
+        self.gx = List[FP]()
+        self.gh = List[FP]()
+        self.act = List[FP]()
+        self.hall = List[FP]()
+        self.call = List[FP]()
+        self.gx.append(gx)
+        self.gh.append(gh)
+        self.act.append(act)
+        self.hall.append(hall)
+        self.call.append(call)
+        self.dgh = dgh
+        self.dh = dh
+        self.dhn = dhn
+        self.dc = dc
+        self.xb = one
+        self.yb = one
+        self.yhat = one
+        self.dy = one
+        self.one = one
+        self.wsplit = wsplit
 
     def __init__[E: Exec](out self, mut ex: E, net: Net, T: Int, B: Int, train: Bool) raises:
         var GH = net.G() * net.H
@@ -310,91 +319,25 @@ struct Work(Movable):
         self.yb = ex.alloc(B * net.O)
         self.yhat = ex.alloc(B * net.O)
         self.dy = ex.alloc(B * net.O)
-        self.sq = ex.alloc(B * net.O)
+        # TOMBSTONE: w.sq (the squared-error / row-loss words OP_MSE and OP_CE stored and nothing read; the reported loss is
+        # loss_value_into's) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+        # Restore: git apply experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch
         comptime if SEQ_WGRAD_BLOCKED:
             # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
             self.one = ex.alloc(1)
             fill(ex, self.one, 1, Float32(1.0))
             self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
         else:
-            self.one = self.sq
-            self.wsplit = self.sq
+            # unread placeholders (the unblocked weight gradient takes no ones or split scratch)
+            self.one = ex.alloc(1)
+            self.wsplit = self.one
 
 
-def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises -> FP:
-    """Every layer over the time-major input x [T, B, D]; returns h_T of the
-    top layer [B, H]. Hall[l] holds h_0 = 0 then h_1..h_T."""
-    var H = net.H
-    var GH = net.G() * H
-    var inp = x
-    for l in range(net.L):
-        var din = net.din(l)
-        gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
-        # Scan has separate wide/shared bodies; this arm is deliberately
-        # confined to the per-step path until those callers share the seam.
-        comptime if not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN:
-            bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
-        comptime if SEQ_LSTM_SCAN:
-            if scan_routes(H, net.G()):
-                # the whole recurrence, one block per row (h_0 = c_0 = 0
-                # inside): sequence/recurrent_scan.mojo. The IDENTICAL
-                # default (-D MOJOLEARN_SEQ_RNN_SCAN_OFF keeps the per-step
-                # chain below); the same bits as that chain.
-                var sa = Args()
-                sa.p0 = w.gx[l]
-                sa.p1 = w.gh[l]
-                sa.p2 = w.act[l]
-                sa.p3 = w.hall[l]
-                sa.p4 = w.call[l]
-                sa.p5 = w.hall[l] + B * H
-                sa.p6 = w.call[l] + B * H
-                sa.p7 = P + net.w_hh(l)
-                sa.p8 = P + net.b_hh(l)
-                # p9..p11 are never read by the forward cell (NN42 is off on
-                # this route); bound to live storage, not dummy_ptr, so every
-                # kernel pointer argument is a real buffer (the Metal rule).
-                sa.p9 = P + net.b_ih(l)
-                sa.p10 = w.gx[l]
-                sa.p11 = P + net.w_hh(l)
-                sa.i0 = net.cell
-                sa.i1 = B
-                sa.i2 = H
-                sa.i3 = T
-                ex.launch[OP_CELL_FWD_SCAN](sa, B)
-                inp = w.hall[l] + B * H
-                continue
-        fill(ex, w.hall[l], B * H, Float32(0.0))
-        fill(ex, w.call[l], B * H, Float32(0.0))
-        for s in range(T):
-            var hprev = w.hall[l] + s * B * H
-            var ghs = w.gh[l] + s * B * GH
-            # one launch: h_prev @ W_hh^T + b_hh into GH, then the cell
-            # (ops.mojo::op_cell_fwd_h; the same bits as the three launches)
-            var a = Args()
-            a.p0 = w.gx[l] + s * B * GH
-            a.p1 = ghs
-            a.p2 = w.act[l] + s * B * GH
-            a.p3 = hprev
-            a.p4 = w.call[l] + s * B * H
-            a.p5 = w.hall[l] + (s + 1) * B * H
-            a.p6 = w.call[l] + (s + 1) * B * H
-            a.p7 = P + net.w_hh(l)
-            a.p8 = P + net.b_hh(l)
-            a.p9 = P + net.b_ih(l)
-            a.i5 = 1 if NN42_INPUT_BIAS_FUSED and not SEQ_LSTM_SCAN else 0
-            a.i0 = net.cell
-            a.i1 = B
-            a.i2 = H
-            ex.launch[OP_CELL_FWD_H](a, B * H)
-        inp = w.hall[l] + B * H
-    return w.hall[net.L - 1] + T * B * H
-
-
-def head[E: Exec](mut ex: E, net: Net, P: FP, hT: FP, B: Int, yhat: FP) raises:
-    var H = net.H
-    var O = net.O
-    gemm(ex, hT, P + net.head(), yhat, B, O, H, H, 1, 1, H, False, O)
-    bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# The hand forward (every layer over the time-major input: input projection, scan or per-step OP_CELL_FWD_H
+# chain) and head (h_T @ W_o^T + b_o) are gone with their one caller, the hand rnn_predict: prediction records
+# the trainer's forward (autograd/rules_recurrent.mojo rnn_forward_autograd) in inference mode, the same launches.
 
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
@@ -495,14 +438,12 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
-#: -D MOJOLEARN_AUTOGRAD_DATA (default off): rnn_fit's epoch order comes from
-#: autograd/data.mojo (`epoch_order`), the shared data layer of the tape
-#: trainers, instead of the launches below. That module launches the same
-#: OP_MLP_PERM with the same mlp_epoch_key(seed, epoch), or OP_SEQ_IOTA
-#: without shuffle, so the expected result is the same order and the same
-#: bits as the hand path; the A/B confirms the routing. autograd.data
-#: imports no sequence.recurrent, so there is no import cycle.
-comptime AUTOGRAD_DATA = is_defined["MOJOLEARN_AUTOGRAD_DATA"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
+# The opt-in arm built rnn_fit's epoch order through autograd/data.mojo (epoch_order), the same OP_MLP_PERM /
+# OP_SEQ_IOTA launches with the same key (same bits by construction). It is now the only path (the data layer
+# distributed_program and partition_runtime already use); rnn_fit's inline launches are gone. A/B owed.
+from autograd.data import epoch_order as ag_epoch_order
 
 
 # ------------------------------------------------------------------ training step seam
@@ -560,37 +501,30 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
-    var opt_state = OptimizerState()
-    comptime if AUTOGRAD_OPTIM:
-        # -D MOJOLEARN_AUTOGRAD_OPTIM: the state on the executor, s2 filled
-        # with init_acc as below
-        opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
-    else:
-        if init_acc != Float32(0.0):
-            fill(ex, s2, np_, init_acc)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+    # Restored 2026-11-09 (lane r2-restore-unmeasured-defaults): opt_step's state s1, s2, s3 is the default (s2
+    # filled with init_acc, Adagrad's initial accumulator).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (decided B arm, the executor optimizer step_lr; L40S ba08dac006 gru/lstm/mlp/rnn fit B 0.99-1.01x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    var s1 = ex.alloc(np_)
+    var s2 = ex.alloc(np_)
+    var s3 = ex.alloc(np_)
+    if init_acc != Float32(0.0):
+        fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
-    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
-    comptime if AUTOGRAD_LOSS:
-        loss_ws = loss_scratch(ex, bmax * net.O)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+    var loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            comptime if AUTOGRAD_DATA:
-                ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
-            else:
-                if shuffle:
-                    ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
-                else:
-                    var ia = Args()
-                    ia.p0 = dord
-                    ex.launch[OP_SEQ_IOTA](ia, N)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
+            ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
@@ -601,87 +535,30 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             a.p0 = w.yhat
             a.p1 = w.yb
             a.p2 = w.dy
-            a.p3 = w.sq
             a.f0 = Float32(2.0) / Float32(B * net.O)
             ex.launch[OP_MSE](a, B * net.O)
-            comptime if AUTOGRAD_LOSS:
-                loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
-            else:
-                sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
+            loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         else:
             gather_rows(ex, dY, dord, w.yb, B, 1, off)
             var a = Args()
             a.p0 = w.yhat
             a.p1 = w.yb
             a.p2 = w.dy
-            a.p3 = w.sq
             a.i0 = B
             a.i1 = net.O
             a.f0 = Float32(1.0) / Float32(B)
             ex.launch[OP_CE](a, B)
-            comptime if AUTOGRAD_LOSS:
-                loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
-            else:
-                sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
+            loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        comptime if AUTOGRAD_OPTIM:
-            step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
-        else:
-            opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
-    comptime if AUTOGRAD_OPTIM:
-        opt_state.release(ex)
-    comptime if AUTOGRAD_LOSS:
-        release_loss_scratch(ex, loss_ws)
+        # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (decided B arm, the executor optimizer step_lr; L40S ba08dac006 gru/lstm/mlp/rnn fit B 0.99-1.01x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
 
 
-def rnn_predict[E: Exec](
-    mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
-    dst: FP, seq: FP, want_seq: Bool, chunk: Int,
-) raises:
-    """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
-    with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first."""
-    var np_ = net.n_params()
-    var H = net.H
-    var bmax = chunk if chunk < N else N
-    var dX = ex.alloc(N * T * net.D)
-    ex.upload(dX, X, N * T * net.D)
-    var idx = List[Float32]()
-    for i in range(N):
-        idx.append(Float32(i))
-    var didx = ex.alloc(N)
-    ex.upload(didx, FP(unsafe_from_address=Int(idx.unsafe_ptr())), N)
-    var P = ex.alloc(np_)
-    ex.upload(P, Pin, np_)
-    var dout = ex.alloc(N * net.O)
-    var dseq = ex.alloc(N * T * H if want_seq else 1)
-    var w = Work(ex, net, T, bmax, False)
-    var b0 = 0
-    while b0 < N:
-        var B = bmax if b0 + bmax <= N else N - b0
-        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0)
-        var hT = forward(ex, net, P, w.xb, T, B, w)
-        head(ex, net, P, hT, B, dout + b0 * net.O)
-        if task == TASK_CE:
-            var a = Args()
-            a.p0 = dout + b0 * net.O
-            a.p1 = dout + b0 * net.O
-            a.i1 = net.O
-            ex.launch[OP_SOFTMAX](a, B)
-        if want_seq:
-            var a = Args()
-            a.p0 = w.hall[net.L - 1] + B * H
-            a.p1 = dseq
-            a.i0 = T
-            a.i1 = B
-            a.i2 = H
-            a.i3 = b0
-            ex.launch[OP_SEQ_OUT](a, B * T * H)
-        b0 += B
-    ex.sync()
-    ex.download(dst, dout, N * net.O)
-    if want_seq:
-        ex.download(seq, dseq, N * T * H)
-    _ = idx^
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# rnn_predict moved to autograd/rules_recurrent.mojo (it runs the tape forward, and that module imports this one).

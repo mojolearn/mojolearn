@@ -26,7 +26,10 @@ def write(path, value):
     return path
 
 
-def build(root, vendor, arch, body, source, rootdir=None, linux_cpu='x86-64-v3'):
+_DEFAULT_FORMAT = object()
+
+
+def build(root, vendor, arch, body, source, rootdir=None, linux_cpu='x86-64-v3', code_format=_DEFAULT_FORMAT):
     leg = vendor + '/' + arch
     setdir = root / 'sets' / leg
     hosts = {f: setdir / 'host' / f for f in HOST_FILES}
@@ -61,12 +64,18 @@ def build(root, vendor, arch, body, source, rootdir=None, linux_cpu='x86-64-v3')
         staged_libs=[dict(name=library.name, sha256=hc.file_sha(library))])
     write(setdir / 'manifest.json', manifest)
     cache_keys = {}
-    for f in HOST_FILES:
+    for i, f in enumerate(HOST_FILES):
         key = dict(schema='mojolearn-bincache-v1', script='bindings/merged_build.sh',
             args=['host', '--group', f[:-3]] + (['--rootdir', rootdir] if rootdir else []),
             target_column='cpu', numeric_mode='identical', device_arch='none', gpu_archs='',
             build_env={'MOJOLEARN_TARGET_COLUMN': 'cpu', 'MOJOLEARN_COMPILE_JOBS': '2',
-                       'MOJOLEARN_LINUX_CPU': linux_cpu, 'MOJOLEARN_CUDA_CODE_FORMAT': 'ptx' if arch == 'sm_80' else 'native'})
+                       'MOJOLEARN_LINUX_CPU': linux_cpu})
+        # code_format: the pre-closure-v2 per-leg value by default; None = the
+        # key does not carry it (closure-v2); a callable picks per host file.
+        fmt = (('ptx' if arch == 'sm_80' else 'native') if code_format is _DEFAULT_FORMAT
+               else code_format(i, f) if callable(code_format) else code_format)
+        if fmt is not None:
+            key['build_env']['MOJOLEARN_CUDA_CODE_FORMAT'] = fmt
         cache_keys[f] = hc.digest(key)
         write(root / 'bincache/keys' / (cache_keys[f] + '.json'), key)
     prefix = 'mojolearn/' + leg + '/'
@@ -424,3 +433,107 @@ def test_linux_wait_refuses_a_non_host_or_missing_file(tmp_path):
     short = dict(mismatch, **{first: {k: v for k, v in mismatch[first].items() if k != 'cuda-sm_80'}})
     with pytest.raises(release.StepFailed, match='missing on a leg'):
         release.compose_host_mismatch(legs, short, source, tmp_path / 'c2')
+
+
+# ---------------------------------------------------------------- release.py's linux-assemble with a composition
+def _assembly_release(tmp_path, monkeypatch, owner):
+    release = _release()
+    class Assembly(release.Release):
+        rel = dry = None   # plain attributes in place of the release-state properties
+    r = object.__new__(Assembly)
+    r.dry, r.rel, r.said = True, tmp_path / 'rel', []
+    r.say = r.said.append
+    r.host_composition = lambda: dict(owner=owner, receipt=str(tmp_path / 'host-composition.json'),
+                                      receipt_sha256='a' * 64, sets=str(tmp_path / 'comp/sets'))
+    r.assembly_needed = lambda: True
+    r.assembled_ok = lambda: False
+    r.admitted_legs = lambda: {}
+    r.plan = lambda: dict(previous=dict(version='0.8.64'), legs=[])
+    monkeypatch.setattr(release, 'linux_legs', lambda ctx: [])
+    monkeypatch.setattr(release.release_reuse, 'plan_rows', lambda plan, platform, action: ['b'] * 3)
+    return release, r
+
+
+def test_a_reuse_assembly_ships_the_retained_host_composition_owners_host_bindings(tmp_path, monkeypatch):
+    # 0.8.65: linux-assemble refused a retained host composition in a reuse assembly; it now ships the
+    # owner's host bindings in every assembled set and names the composition (dry run: nothing is copied).
+    owner = _release().host_owner_leg()
+    release, r = _assembly_release(tmp_path, monkeypatch, owner)
+    result = r.step_linux_assemble()
+    assert result.startswith('would take 3 binding(s)')
+    assert f'with the host bindings of {owner} (retained host composition)' in result
+    assert any(owner + ' ships its host bindings in every assembled set' in line for line in r.said)
+
+
+def test_a_reuse_assembly_refuses_a_composition_from_another_leg(tmp_path, monkeypatch):
+    release, r = _assembly_release(tmp_path, monkeypatch, 'hip-gfx90a')
+    with pytest.raises(release.StepFailed, match='not the host owner leg'):
+        r.step_linux_assemble()
+
+
+# ---------------------------------------------------------------- 0.8.66: closure-v2 host keys
+# tools/bincache.py NON_BUILD_ENV_V2 removed MOJOLEARN_CUDA_CODE_FORMAT from every
+# host key; the host builder never reads it, so the contract must not need it.
+def _format_builds(tmp_path, code_format):
+    source = _source(tmp_path)
+    builds = [build(tmp_path / str(i), v, a, b'host-' + a.encode(), source, code_format=code_format)
+              for i, (v, a) in enumerate(LEGS)]
+    return source, builds
+
+
+def test_host_witnesses_all_carrying_native_compose(tmp_path):
+    source, builds = _format_builds(tmp_path, 'native')
+    doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+    assert {v['inherited_cuda_code_format'] for v in doc['variants']} == {'native'}
+    hc.validate_document(doc)
+
+
+def test_host_witnesses_without_the_format_compose(tmp_path):
+    source, builds = _format_builds(tmp_path, None)
+    doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+    assert {v['inherited_cuda_code_format'] for v in doc['variants']} == {None}
+    assert doc['selected_leg'] == 'cuda/sm_89'
+
+
+def test_mixed_native_and_absent_host_witnesses_compose(tmp_path):
+    source, builds = _format_builds(tmp_path, lambda i, f: 'native' if i % 2 else None)
+    doc = hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+    assert {v['inherited_cuda_code_format'] for v in doc['variants']} == {'native'}
+
+
+@pytest.mark.parametrize('code_format', [lambda i, f: 'ptx' if i == 0 else 'native',
+                                         lambda i, f: 'ptx' if i == 0 else (None if i == 1 else 'native'),
+                                         'cubin', ''])
+def test_mixed_or_unknown_carried_formats_still_refuse(tmp_path, code_format):
+    source, builds = _format_builds(tmp_path, code_format)
+    with pytest.raises(ValueError, match='Unknown or mixed inherited CUDA code format'):
+        hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+
+
+def test_absent_format_does_not_relax_other_host_flags(tmp_path):
+    source = _source(tmp_path)
+    builds = [build(tmp_path / str(i), v, a, b'host-' + a.encode(), source, code_format=None,
+                    linux_cpu='x86-64-v4' if a == 'sm_80' else 'x86-64-v3')
+              for i, (v, a) in enumerate(LEGS)]
+    with pytest.raises(ValueError, match='flags differ'):
+        hc.prepare(builds, 'cuda/sm_89', COMPILER, None, source)
+
+
+def test_a_bincache_hit_from_an_earlier_commit_is_a_witnessed_host(tmp_path):
+    """A 'hit' (the bincache reusing an unchanged closure compiled from an earlier commit) composes: the key
+    equality proves the closure; the bytes are that commit's upload (2026-11-13, series_host on ba08dac006)."""
+    source_dir=tmp_path/'source'; source_dir.mkdir(); (source_dir/'sample.mojo').write_text('source\n')
+    for rel in hc.HOST_FORMAT_SOURCES:
+        path=source_dir/rel; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('source\n')
+    directory=build(tmp_path/'build', 'hip','gfx942',b'host',source_dir)
+    source,_=hc.inspect_build(directory)
+    proof=hc.decoded(source['proof']); keys=hc.decoded(source['host_cache_key'])
+    filename=next(iter(keys))
+    cache=proof['bincache']['mojolearn/hip/gfx942/host/'+filename]
+    cache['outcome']='hit'; cache['compiled_from_commit']='f'*40
+    source['proof']=_text_witness(json.dumps(proof))
+    hc._record(source,COMPILER)
+    bad=copy.deepcopy(source); p2=hc.decoded(bad['proof']); p2['bincache']['mojolearn/hip/gfx942/host/'+filename]['outcome']='miss+built-not-uploaded:no-slot'
+    bad['proof']=_text_witness(json.dumps(p2))
+    with pytest.raises(ValueError, match='Missing original successful host compiler/cache witness'):
+        hc._record(bad,COMPILER)

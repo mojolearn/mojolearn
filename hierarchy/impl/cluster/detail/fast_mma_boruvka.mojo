@@ -33,13 +33,13 @@ finite or above `MB_NORM_CAP`, when a core distance is not finite, or when
 or the scalar kernel's non-finite refusal must run.
 """
 
+from std.sys.compile import is_defined
 from std.bit import count_trailing_zeros
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_fold import device_column_means32
 from max.gpu.memory import AddressSpace
@@ -49,11 +49,9 @@ from std.atomic import Atomic
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from neighbors.impl.detail.fast_mma_knn import _sg_load_t, _sg_mma
 
-comptime FAST_MMA_BORUVKA_ENABLED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_BORUVKA_FAST_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_BORUVKA_FAST_MMA_OFF (old path: the scalar Boruvka search on FAST Apple; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3ce335dfc9.
+# Restore: git apply experiments/removed/MOJOLEARN_BORUVKA_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_MMA_BORUVKA_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 comptime MB_SG = 8
 comptime MB_TPB = MB_SG * 32
@@ -64,10 +62,13 @@ comptime MB_TPB = MB_SG * 32
 # recomputation, lower-bound filter and value/index tie ordering are fixed.
 # Applies to agglomerative and HDBSCAN callers of this same MST search.
 comptime AFCL_G14 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G14"]()
 )
 comptime MB_T = 64 if AFCL_G14 else 128
+# TOMBSTONE: MOJOLEARN_AFCL_G14 (never-run Apple FAST programme card: 64 staged reference rows instead of 128) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at b21ae6d074.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G14.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MB_MAX_D = 32
 comptime MB_A = 2
 """Listed-point 8-blocks per simdgroup (4: 2.08 s against 1.72-1.80 s at
@@ -216,7 +217,7 @@ def fb_mma_nearest_kernel[D: Int, MR: Bool, A: Int, B: Int](
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var q0 = (Int(block_idx.x) * MB_SG + sg) * 8 * A
 
-    var qf = InlineArray[_M64, A * KS](fill=_M64(0))
+    var qf = Array[_M64, A * KS](fill=_M64(0))
     var qn = SIMD[DType.float32, A](0)
     var qi = SIMD[DType.int32, A](0)
     var ci = SIMD[DType.int32, A](-1)
@@ -295,7 +296,7 @@ def fb_mma_nearest_kernel[D: Int, MR: Bool, A: Int, B: Int](
                 v = xc[(nb + r) * dim + c]
             pf[u] = v
         for cb in range(MB_T // RB):
-            var xf = InlineArray[_M64, B * KS](fill=_M64(0))
+            var xf = Array[_M64, B * KS](fill=_M64(0))
             comptime for b in range(B):
                 comptime for kk in range(KS):
                     xf[b * KS + kk] = _sg_load_t(

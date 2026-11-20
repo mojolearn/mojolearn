@@ -52,6 +52,7 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     # Host copy of every row's bin per feature, so the expected counts are a
     # plain tally rather than a second derivation.
@@ -132,6 +133,13 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
         max_leaves * stat_count * widest
     )
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hid^  # past the drain: a queued copy reads it after its last named use
+    _ = ho^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = hz2^  # past the drain: a queued copy reads it after its last named use
+    _ = zf^  # past the drain: a queued copy reads it after its last named use
+    _ = zi^  # past the drain: a queued copy reads it after its last named use
 
     # DENSE ids for the block scratch, `0..max_leaves`.
     var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
@@ -140,6 +148,7 @@ def probe_mixed_histogram(binary: Int = 8, half: Int = 4, one: Int = 4, pre_brid
         h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
     ctx.synchronize()
+    _ = h_dense^  # past the drain: a queued copy reads it after its last named use
 
     var scale_keep = upload_scale(ctx, Float32(1.0))
     launch_histograms_for_blocks(

@@ -1,0 +1,196 @@
+{
+  "family": [
+    "SpectralClustering",
+    "SpectralEmbedding"
+  ],
+  "status": "original-workload inventory; typed product API pending; no native compilation/execution",
+  "source_head": "ad18db0fc3356ed7f216916895b80e0c300ddda9",
+  "candidate_files": 17,
+  "source_catalog": "E/pca-native-tests/spectral-source-catalog.json",
+  "native_candidates": [
+    {
+      "file": "python/mojolearn/tests/test_spectral_embedding.py",
+      "functions": [
+        "test_fit_transform_shape_and_repeatability",
+        "test_embedding_is_the_clustering_embedding_without_its_trivial_column",
+        "test_precomputed_drops_the_diagonal",
+        "test_unnormalized_laplacian_is_a_different_embedding",
+        "test_eigen_tol_float_is_the_lanczos_tolerance"
+      ],
+      "input": {
+        "shape": [
+          150,
+          2
+        ],
+        "rng": "numpy.default_rng(20260920)",
+        "centers": [
+          [
+            0,
+            0
+          ],
+          [
+            8,
+            0
+          ],
+          [
+            0,
+            8
+          ]
+        ],
+        "interleaved": true,
+        "noise_std": 0.7
+      },
+      "cases": [
+        "default components2/seed5, default neighbors15",
+        "clustering components4/clusters3 vs embedding components3/dropfirst with neighbors10/seed3",
+        "precomputed150x150 inverse-distance median-threshold affinity, with and without original diagonal",
+        "normalized vs unnormalized Laplacian with components2/neighbors10/seed3",
+        "auto/default1e-5 versus loose1e-2; dataset150 and precomputed80 subset,components2/seed5"
+      ],
+      "oracle_limits": "Original same-graph column/diagonal/default-tolerance relations are exact. No NumPy eigenvector byte oracle. Preserve signs/basis conventions for exact relations; derive independent residual/subspace or planted-state expectations after typed API trace."
+    },
+    {
+      "file": "python/mojolearn/tests/test_spectral_predict.py",
+      "functions": [
+        "arm_nearest_neighbors",
+        "arm_precomputed"
+      ],
+      "input": {
+        "shape": [
+          120,
+          2
+        ],
+        "rng": "numpy.default_rng(20260915)",
+        "centers": [
+          [
+            0,
+            0
+          ],
+          [
+            8,
+            0
+          ],
+          [
+            0,
+            8
+          ]
+        ],
+        "interleaved": true,
+        "noise_std": 0.7
+      },
+      "settings": {
+        "clusters": 3,
+        "neighbors_nn": 8,
+        "seed": 3,
+        "prediction_data": true
+      },
+      "cases": [
+        "fit prediction_data flag preserves original fit labels/embedding",
+        "Nystr\u00f6m threshold abs(1+theta)>1e-3, trained-label range and finite embedding",
+        "original120 training queries; row5 alone; every7th alone; reversed query order",
+        "far queries[[1e4,-1e4],[-3e4,2.5e4]]",
+        "duplicated240-row training/query matrix; alone indices0,120,7,127; duplicate-label equality",
+        "precomputed120x120 affinity, queries[[1e4,1e4],[4,4]], zero-degree row and every11th alone"
+      ],
+      "oracle_limits": "Training predict==fitted labels and extension==fitted embedding are report-only, not promised assertions. Do not promote them to gates or force a cluster-label numbering. Independent Nystr\u00f6m expectation must derive from the published rule and consumed native state; no new cross-device hash campaign."
+    },
+    {
+      "file": "python/mojolearn/tests/test_native_dense_coo.py",
+      "functions": [
+        "test_dense_coo_matches_the_python_scan",
+        "test_dense_knn_affinity_matches_the_python_loops"
+      ],
+      "cases": {
+        "coo": "six17..22 square matrices,random.Random(seed),planted Float32 pool,NaN at3/+Inf at5",
+        "knn": "six23..28 square distance matrices,random.Random(100+seed),k3..8,planted even seeds/random uniform odd seeds"
+      },
+      "oracle": "Original row-major v!=0 scan; dense candidate sort(value,column), firstk, A=.5(C+C.T). Preserve signedzero/ties/subnormal/NaN/Inf and exact output words.",
+      "native_available_now": [
+        "core.dense_coo.nonzero_f32_count/fill",
+        "core.dense_coo_host.knn_affinity_f32",
+        "core.dense_coo_device.knn_affinity_f32_device"
+      ]
+    },
+    {
+      "file": "python/mojolearn/tests/test_cpu_training_e2.py",
+      "functions": [
+        "test_spectral_runs_on_the_host_when_built"
+      ],
+      "input": {
+        "shape": [
+          120,
+          3
+        ],
+        "rng": "numpy.default_rng(2)",
+        "groups": "60 standard normals+6 then60 standard normals-6"
+      },
+      "settings": {
+        "clusters": 2,
+        "neighbors": 8,
+        "seed": 5
+      },
+      "oracle": "Each planted half uniform and the two labels distinct; arbitrary permutation accepted. Preserve original full shape/settings."
+    },
+    {
+      "file": "python/mojolearn/tests/test_x_cluster_twice.py",
+      "functions": [
+        "embedded run controller, SpectralClustering assignment rows"
+      ],
+      "input": {
+        "shape": [
+          180,
+          3
+        ],
+        "rng": "numpy.default_rng(7)",
+        "groups": "60rows percenter0/4/8,sigma.4"
+      },
+      "settings": {
+        "clusters": 3,
+        "seed": 1,
+        "assign_labels": [
+          "discretize",
+          "cluster_qr"
+        ]
+      },
+      "oracle_limits": "Existing child-process timeout/context-lifetime repeated-call seam stays Python. Native assignment correctness needs independent partition invariants; do not duplicate its old bits campaign."
+    }
+  ],
+  "python_boundaries_retained": [
+    "Spectral public symbols/options/exact scalar admission and named refusals",
+    "fit_transform object identity, shape/dtype/public metadata",
+    "Float64/strided/reversed NumPy query admission and public Array packing",
+    "save/load and host_model vendor/image dispatch; no new cross-device execution here",
+    "rebound eigenvalue threshold field, invalid feature widths/affinity/nonfinite values",
+    "builtins import interception, unsupported sparse protocol callbacks and exact SciPy/dense admission",
+    "resident count/upload reuse, read-only centroid views, NumPy field replacement and refit release",
+    "parallel_graph.fit_graph public partition/device APIs",
+    "archive/reset/getter/weak-owner exception/lifetime tests"
+  ],
+  "resident_original": {
+    "file": "python/mojolearn/tests/test_cluster_resident_native.py",
+    "line": 104,
+    "shape": [
+      180,
+      3
+    ],
+    "seed": 11,
+    "groups": "60rows percenter0/4/8,sigma.4",
+    "query": "x[::5]+Float32(.05)",
+    "model": "clusters3/defaultneighbors/prediction_dataTrue/random_state1",
+    "native_owner_cases": "Await concrete typed API; retain Python telemetry/rebinding/readonly seams."
+  },
+  "existing_native_checks_not_recreated": [
+    "spectral/checks/spectral_check.mojo release/seam/identity-oriented checks",
+    "x_cluster/checks/spectral_assign_check.mojo pinned-fold separation and bit-oracle check"
+  ],
+  "oracle_warning": "spectral/checks/spectral_oracle.mojo reexports shipped spectral.host.spectral_oracle; it is product code and cannot supply independent expected numerical answers for this migration.",
+  "parallel_plan": "CPU independent graphs and oracle cells across host cores; GPU graphs ordered on one physical device with existing parallel kernels. Shared-DeviceContext concurrency failure stays separate.",
+  "next_steps": [
+    "Prepare exact original input bytes and independent dense COO/kNN oracles without importing Mojolearn.",
+    "Author direct existing dense primitive fixtures while pilot freezes typed fit/query/state APIs.",
+    "Preserve original embedding/cluster conventions and all settings once interfaces are frozen."
+  ],
+  "python_removed": 0,
+  "product_or_kernel_changes": 0,
+  "compile_or_runtime_claim": false
+}

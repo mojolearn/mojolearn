@@ -10,7 +10,7 @@ THE STATE POOL. Moved from the shell bindings/_mojolearn_training.mojo
 (`_OptPool`, `optimizer_resident_*`), the same buffers under the same
 `_Global` name, with one addition: a slot may hold the moments ON THE HOST
 (`on_host`), for an optimizer whose state stays off the device
-(`resident=False`, `MOJOLEARN_OPTIMIZER_RESIDENT=0`, several optimizer
+(`resident=False`, several optimizer
 devices). Such a slot runs the per-call step (`optimizer_step`'s route) on
 its own host pair; before, the Python object owned that pair. Either way the
 optimizer's state is allocated here, on the first step, and the Python
@@ -26,13 +26,14 @@ the existing entry for that route called with the same arguments it always
 had: the resident step, the resident step with its transfers named (the
 device-parameter step and the device sign flip), or the per-call step. The
 same kernels on the same buffers in the same order: the same bits."""
-from std.ffi import _Global
-from std.memory import memcpy
-from std.os import getenv
+from std.memory import unsafe_memcpy
+from std.sys import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.device_plan import DevicePlan
+from training.optimizer_device_plan import optimizer_device_plan
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.samba_ops import samba_accumulate_device
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
@@ -47,8 +48,9 @@ from training.estimator import (
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut,
-    gather, registry_check, resident_wanted_by_env, scatter, sizes_check, stack_microbatches, step_lr,
+    gather, registry_check, resident_wanted_by_build, scatter, sizes_check, stack_microbatches, step_lr,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -89,8 +91,8 @@ struct OptPool(Defaultable, Movable):
         self.on_host = List[Bool]()
 
 
-comptime _OPT_POOL_NAME = "MojoNeuralTrainingOptPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingOptPoolFast"
-comptime OPT_POOL = _Global[StorageType=OptPool, name=_OPT_POOL_NAME, init_fn=OptPool.__init__]
+comptime _OPT_POOL_NAME = "MojolearnNeuralTrainingOptPoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingOptPoolFastV1"
+comptime OPT_POOL = SharedSlot[OptPool, _OPT_POOL_NAME]
 
 
 def opt_pool_handle(h: Int, want: Int) raises -> Int:
@@ -192,9 +194,9 @@ def resident_download(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int,
     var pool = OPT_POOL.get_or_create_ptr()
     if pool[].on_host[h]:
         if m_addr != 0:
-            memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].hm[h].unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=F32P(unsafe_from_address=m_addr), src=pool[].hm[h].unsafe_ptr(), count=n)
         if v_addr != 0:
-            memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].hv[h].unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].hv[h].unsafe_ptr(), count=n)
         return n
     if m_addr != 0:
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=m_addr), src_buf=pool[].m[h])
@@ -211,9 +213,9 @@ def resident_upload(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int, n
     var pool = OPT_POOL.get_or_create_ptr()
     if pool[].on_host[h]:
         if m_addr != 0:
-            memcpy(dest=pool[].hm[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
+            unsafe_memcpy(dest=pool[].hm[h].unsafe_ptr(), src=F32P(unsafe_from_address=m_addr), count=n)
         if v_addr != 0:
-            memcpy(dest=pool[].hv[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
+            unsafe_memcpy(dest=pool[].hv[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
         return n
     if m_addr != 0:
         ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=F32P(unsafe_from_address=m_addr))
@@ -224,7 +226,7 @@ def resident_upload(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int, n
 
 
 def per_call_step(
-    ctx: DeviceContext, pp: F32P, gp: F32P, mp: F32P, vp: F32P, op: I32P, ip: I32P, fp: F32P,
+    ctx: DeviceContext, plan: DevicePlan, pp: F32P, gp: F32P, mp: F32P, vp: F32P, op: I32P, ip: I32P, fp: F32P,
     n_tensors: Int, kind: Int, t: Int, nesterov: Int, lr: Float32, beta1: Float32, beta2: Float32,
     eps: Float32, weight_decay: Float32, momentum: Float32, dampening: Float32, max_norm: Float32,
     maximize: Bool,
@@ -240,7 +242,7 @@ def per_call_step(
         if n_tensors < 1 or op[n_tensors] < Int32(0):
             raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
     return parallel_optimizer_step_host(
-        ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+        ctx, plan, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
         lr, beta1, beta2, eps, weight_decay, momentum, dampening,
         max_norm, maximize,
     )
@@ -378,25 +380,28 @@ def resident_copy_dev(ctx: DeviceContext, handle: Int, which: Int, th: Int, off:
 # ===========================================================================
 
 
-def _open_slot(ctx: DeviceContext, req: PublicStep) raises -> Int:
+def _open_slot(ctx: DeviceContext, plan: DevicePlan, req: PublicStep) raises -> Int:
     """The optimizer's slot, opened on its first use: on the device unless
     the optimizer was built with `resident=False` or the environment keeps
-    the state off the device (`resident_wanted_by_env`). A state the caller
+    the state off the device (`resident_wanted_by_build`). A state the caller
     has touched (a `load_state_dict`, an assignment, a read) is uploaded;
     an untouched one is the slot's own zeros."""
     if req.handle >= 0:
         return opt_pool_handle(req.handle, 0)
-    var device = req.resident_wanted != 0 and resident_wanted_by_env()
+    var device = req.resident_wanted != 0 and resident_wanted_by_build(plan)
     var h = resident_open(ctx, req.n_total, not device)
     if not req.pristine and req.m_addr != 0 and req.v_addr != 0:
         _ = resident_upload(ctx, h, req.m_addr, req.v_addr, req.n_total)
     return h
 
 
-def _single_device() -> Bool:
+def _single_device(plan: DevicePlan) -> Bool:
     """One optimizer device (the multi-device accumulate shards the columns
-    on the host side of each device and keeps its host result)."""
-    return String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) == "1"
+    on the host side of each device and keeps its host result). The plan's
+    setting is the raw MOJOLEARN_OPTIMIZER_DEVICE_COUNT value (default "1")
+    and the test is the old one, `== "1"`, not `plan.single()` (which also
+    takes ""), so the branch taken is unchanged."""
+    return plan.setting == "1"
 
 
 def _on_device(h: Int) raises -> Bool:
@@ -404,7 +409,7 @@ def _on_device(h: Int) raises -> Bool:
     return not pool[].on_host[h]
 
 
-def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
+def public_step(ctx: DeviceContext, plan: DevicePlan, req: PublicStep) raises -> PublicStepOut:
     """`step`, `step_device` and `step_accumulated` of the public optimizers
     in one call (see the file docstring)."""
     var hy = req.hyper
@@ -436,7 +441,7 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         if req.resident_wanted == 0 or req.handle < 0:
             raise Error("RuntimeError: mojolearn optimizer: device-resident parameters need a "
                         "device-resident optimizer (call params_to_device() first)")
-        h = _open_slot(ctx, req)
+        h = _open_slot(ctx, plan, req)
         if not _on_device(h):
             raise Error("RuntimeError: mojolearn optimizer: this optimizer keeps its state on the host; "
                         "device-resident parameters need a device-resident optimizer")
@@ -444,7 +449,7 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         var fg = Flat()
         var g_host = req.g_mode == GRADS_HOST
         var acc_dev = False
-        if req.a_count > 1 and _single_device():
+        if req.a_count > 1 and _single_device(plan):
             # step_accumulated on device parameters: the clause 9.2 tree on
             # the host-given microbatches straight into the slot's gradient
             # buffer, and the step reads it there (lane migrate-neural-2: it
@@ -466,7 +471,7 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
             fg.own = List[Float32](unsafe_uninit_length=req.n_total)
             fg.packed = True
             _ = parallel_accumulate_host(
-                ctx, fg.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
+                ctx, plan, fg.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
                 req.a_count, req.tokens,
             )
             _ = stacked^
@@ -506,10 +511,10 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         # (exp_avg / exp_avg_sq), as it always did, and has no slot
         h = -1
         if req.resident_wanted != 0:
-            h = _open_slot(ctx, req)
+            h = _open_slot(ctx, plan, req)
         var acc_dev = False
         comptime if IDN_OPT_PARAMS_RESIDENT:
-            acc_dev = req.a_count > 1 and h >= 0 and _on_device(h) and _single_device()
+            acc_dev = req.a_count > 1 and h >= 0 and _on_device(h) and _single_device(plan)
         if acc_dev:
             # step_accumulated with the moments in a device slot: the tree
             # writes the combined gradient into the slot's gradient buffer
@@ -532,7 +537,7 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
             fg.own = List[Float32](unsafe_uninit_length=req.n_total)
             fg.packed = True
             _ = parallel_accumulate_host(
-                ctx, fg.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
+                ctx, plan, fg.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
                 req.a_count, req.tokens,
             )
             _ = stacked^
@@ -606,7 +611,7 @@ comptime IO_PARAM_DEVICE = 5   # tensor j of the slot's parameters into a new de
 
 
 def public_io(
-    ctx: DeviceContext, req: PublicStep, op_code: Int, tensor: Int,
+    ctx: DeviceContext, plan: DevicePlan, req: PublicStep, op_code: Int, tensor: Int,
 ) raises -> Tuple[Int, Int]:
     """`params_resident_available`, `params_to_device`, `params_to_host`,
     `grads_to_device`, `grads_to_host` and `param_device`: one call each.
@@ -620,8 +625,8 @@ def public_io(
         if req.handle >= 0:
             h = opt_pool_handle(req.handle, 0)
             available = _on_device(h)
-        elif req.resident_wanted != 0 and resident_wanted_by_env():
-            h = _open_slot(ctx, req)
+        elif req.resident_wanted != 0 and resident_wanted_by_build(plan):
+            h = _open_slot(ctx, plan, req)
         else:
             available = False
     if op_code == IO_QUERY:
@@ -660,13 +665,19 @@ def public_io(
     return (h, req.n_total)
 
 
-def public_clip(ctx: DeviceContext, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
+
+# Grad-norm clip: several tensors on one optimizer device clip in place from
+# the tensors' own memory; several optimizer devices take the packed buffer.
+# TOMBSTONE: MOJOLEARN_CLIP_PACKED (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-09-30, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_CLIP_PACKED.patch; record in docs/TOMBSTONES.md.
+
+def public_clip(ctx: DeviceContext, plan: DevicePlan, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
     """`clip_grad_norm_`: the two-level global L2 norm of the tensors and the
     in-place scale (optimizer contract section 3). Several tensors go to the
     device straight from their own memory (`identical_clip_grad_norm_addrs`)
-    unless MOJOLEARN_CLIP_PACKED=1 or several optimizer devices ask for the
-    packed buffer (the A/B; the same device buffer, offsets and clip, so
-    the same bits). Returns (pre-clip total norm, clamped coefficient)."""
+    unless several optimizer devices ask for the packed buffer (the same
+    device buffer, offsets and clip, so the same bits). Returns (pre-clip
+    total norm, clamped coefficient)."""
     var j = len(addrs)
     var offsets = List[Int32](length=j + 1, fill=Int32(0))
     var op = offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -676,13 +687,15 @@ def public_clip(ctx: DeviceContext, addrs: List[Int], nbytes: List[Int], max_nor
         op[k + 1] = Int32(n_total)
     var info = List[Float32](length=2, fill=Float32(0.0))
     var fp = info.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    var multi = (j > 1 and String(getenv("MOJOLEARN_CLIP_PACKED")) != "1"
-                 and String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) == "1")
-    if multi:
+    # Several tensors, not packed, one optimizer device: clip straight from
+    # the tensors' own memory. (Was named `multi` for "several tensors"; the
+    # device test is the old `== "1"` on the plan's raw setting.)
+    var single_unpacked = (j > 1 and _single_device(plan))
+    if single_unpacked:
         _ = identical_clip_grad_norm_addrs_host(ctx, addrs, op, fp, j, max_norm)
     else:
         var f = gather(addrs, nbytes, 0, j, n_total)
-        _ = parallel_clip_grad_norm_host(ctx, f.ptr(), op, fp, j, max_norm)
+        _ = parallel_clip_grad_norm_host(ctx, plan, f.ptr(), op, fp, j, max_norm)
         scatter(f, addrs, nbytes, 0, j)
         _ = f^
     var out = (info[0], info[1])
@@ -692,7 +705,7 @@ def public_clip(ctx: DeviceContext, addrs: List[Int], nbytes: List[Int], max_nor
 
 
 def public_accumulate(
-    ctx: DeviceContext, in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int,
+    ctx: DeviceContext, plan: DevicePlan, in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int,
 ) raises -> Int:
     """`accumulate_grads`: the A microbatches (in_addrs microbatch-major, J
     tensors each, `nbytes` per tensor) combined by the clause 9.2 balanced
@@ -711,9 +724,48 @@ def public_accumulate(
     f.own = List[Float32](unsafe_uninit_length=max(req.n_total, 1))
     f.packed = True
     _ = parallel_accumulate_host(
-        ctx, f.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total, a_count, tokens,
+        ctx, plan, f.ptr(), stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total, a_count, tokens,
     )
     _ = stacked^
     scatter(f, out_addrs, nbytes, 0, req.j)
     _ = f^
     return req.n_total
+
+
+# Plan-less entries: the native dispatch tables and the training binding call
+# these; each reads the optimizer plan ONCE here and passes the value down.
+
+
+def per_call_step(
+    ctx: DeviceContext, pp: F32P, gp: F32P, mp: F32P, vp: F32P, op: I32P, ip: I32P, fp: F32P,
+    n_tensors: Int, kind: Int, t: Int, nesterov: Int, lr: Float32, beta1: Float32, beta2: Float32,
+    eps: Float32, weight_decay: Float32, momentum: Float32, dampening: Float32, max_norm: Float32,
+    maximize: Bool,
+) raises -> Int:
+    var plan = optimizer_device_plan()
+    return per_call_step(
+        ctx, plan, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov, lr, beta1, beta2,
+        eps, weight_decay, momentum, dampening, max_norm, maximize,
+    )
+
+
+def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
+    var plan = optimizer_device_plan()
+    return public_step(ctx, plan, req)
+
+
+def public_io(ctx: DeviceContext, req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
+    var plan = optimizer_device_plan()
+    return public_io(ctx, plan, req, op_code, tensor)
+
+
+def public_clip(ctx: DeviceContext, addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
+    var plan = optimizer_device_plan()
+    return public_clip(ctx, plan, addrs, nbytes, max_norm)
+
+
+def public_accumulate(
+    ctx: DeviceContext, in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int,
+) raises -> Int:
+    var plan = optimizer_device_plan()
+    return public_accumulate(ctx, plan, in_addrs, nbytes, out_addrs, a_count, tokens)

@@ -83,7 +83,7 @@ from gemm.neural_backward import (
     gemm_backward_b_call,
     gemm_backward_sabotage_name,
 )
-from gemm.neural_dispatch import gemm_sabotage_name
+from gemm.checks.gemm_identical import gemm_sabotage_name
 
 from embedding.checks.embedding_oracle import (
     EmbConfig,

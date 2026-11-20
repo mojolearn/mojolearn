@@ -50,6 +50,9 @@ def _case(skew: Bool,dense: Bool,invalid: Bool=False) raises:
     ctx.enqueue_copy(dst_buf=weights,src_buf=hw)
     ctx.enqueue_copy(dst_buf=offsets,src_buf=hi)
     ctx.synchronize()
+    _ = hb^  # past the drain: a queued copy reads it after its last named use
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     for arm in range(2):
         ctx.enqueue_memset(status,Int32(-7))
         ctx.enqueue_memset(output,Int64(-999))

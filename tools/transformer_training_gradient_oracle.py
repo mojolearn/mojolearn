@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fixed-profile independent FP64 autograd gate. Root remote execution only.
 
-This module's CaptureWriter is also called by the Mojo executable. Importing
-it performs no model work. CLI intentionally admits only NVIDIA/AMD CUDA API
+`seal <dir>` turns the raw files the native capture
+(`training/checks/train_gradient_capture.mojo`, no Python) wrote into the
+`capture.json` manifest; importing this module performs no model work. CLI intentionally admits only NVIDIA/AMD CUDA API
 backends. Tolerances are declared here, never inferred from observed errors.
 An oracle pass establishes tolerance correctness, NOT cross-vendor bit identity.
 """
@@ -15,6 +16,7 @@ import math
 import os
 from pathlib import Path
 import struct
+import sys
 
 SCHEMA = 'mojolearn.training.gradient-capture.v1'
 SHAPES = [('embed', (64, 32)), ('norm1_w', (32,)), ('w_q', (32, 32)),
@@ -58,66 +60,66 @@ def json_bytes(obj):
     return (json.dumps(obj, sort_keys=True, indent=2, allow_nan=False) + '\n').encode()
 
 
-def read_ids(path):
-    with open(path, 'rb') as handle:
-        raw = handle.read(4097)
-    if len(raw) > 4096:
-        raise ValueError('token fixture exceeds 4096-byte bound')
-    ids = json.loads(raw)
-    if not isinstance(ids, list) or len(ids) != 18 or any(type(x) is not int or not 0 <= x < 64 for x in ids):
-        raise ValueError('expected flat list of exactly 18 integer IDs in [0,64)')
-    return ids
+NATIVE_SCHEMA = 'mojolearn.training.gradient-capture.native.v1'
 
 
-class CaptureWriter:
-    def __init__(self, output, vendor, seed):
-        if not output or vendor not in ('cuda', 'hip'):
-            raise ValueError('new output directory and native cuda/hip required')
-        self.path = Path(output)
-        self.path.mkdir(parents=False, exist_ok=False)
-        self.arrays = {}
-        self.meta = dict(schema=SCHEMA, numeric_mode='identical', vendor=vendor,
-                         seed=seed, completed_steps=1, profile=PROFILE,
-                         registry=registry(), optimizer=dict(kind='adamw', lr=1e-3,
-                         beta1=.9, beta2=.999, eps=1e-8, weight_decay=.01,
-                         max_norm=0), arrays=self.arrays)
-        sources = {}
-        for directory in ('checks', 'core', 'gemm', 'embedding', 'transformer', 'training'):
-            for path in sorted(Path(directory).rglob('*.mojo')):
-                sources[path.as_posix()] = sha(path.read_bytes())
-        for name in ('pixi.toml', 'pixi.lock', 'tools/transformer_training_gradient_oracle.py'):
-            sources[name] = sha(Path(name).read_bytes())
-        self.meta['source_sha256'] = sources
+def _native_fields(path):
+    """The native capture's `native-capture.txt`: key/value lines plus one
+    `param <index> <name> <count>` line per registry entry."""
+    fields, params = {}, []
+    for line in (path / 'native-capture.txt').read_text().splitlines():
+        words = line.split(' ')
+        if words[0] == 'param' and len(words) == 4:
+            params.append((int(words[1]), words[2], int(words[3])))
+        elif len(words) == 2 and words[0] not in fields:
+            fields[words[0]] = words[1]
+        else:
+            raise ValueError('malformed native capture line')
+    return fields, params
 
-    def require_registry(self, index, name, count):
-        item = registry()[index]
+
+def seal_capture(output):
+    """Check a native capture's raw files and write its `capture.json`."""
+    path = Path(output)
+    fields, params = _native_fields(path)
+    vendor = fields.get('vendor')
+    if fields.get('schema') != NATIVE_SCHEMA or vendor not in ('cuda', 'hip'):
+        raise ValueError('native capture schema or cuda/hip vendor differs')
+    if fields.get('supplied') not in ('0', '1') or not fields.get('seed', '').isdigit():
+        raise ValueError('native capture seed or supplied flag malformed')
+    expected = registry()
+    if [p[0] for p in params] != list(range(len(expected))):
+        raise ValueError('native parameter registry changed')
+    for (index, name, count), item in zip(params, expected):
         if item['name'] != name or item['count'] != count:
             raise ValueError('native parameter registry changed')
-
-    def add_ids(self, words, supplied):
-        ids = [int(x) for x in words.split(',')]
-        if len(ids) != 18 or any(not 0 <= x < 64 for x in ids):
-            raise ValueError('invalid IDs')
-        raw = struct.pack('<18i', *ids)
-        exclusive(self.path / 'token_ids.i32', raw)
-        self.meta['token_ids'] = dict(file='token_ids.i32', sha256=sha(raw),
-                                     shape=[2, 9], supplied=bool(supplied))
-
-    def add_bits(self, name, words):
-        if name not in ARRAY_COUNTS or name in self.arrays:
-            raise ValueError('unknown or duplicate array')
-        bits = [int(x) for x in words.split(',')]
-        if len(bits) != ARRAY_COUNTS[name] or any(not 0 <= x <= 0xffffffff or x & 0x7f800000 == 0x7f800000 for x in bits):
-            raise ValueError('wrong array length or nonfinite FP32')
-        raw = struct.pack('<' + 'I' * len(bits), *bits)
+    arrays = {}
+    meta = dict(schema=SCHEMA, numeric_mode='identical', vendor=vendor,
+                seed=fields['seed'], completed_steps=1, profile=PROFILE,
+                registry=expected, optimizer=dict(kind='adamw', lr=1e-3,
+                beta1=.9, beta2=.999, eps=1e-8, weight_decay=.01,
+                max_norm=0), arrays=arrays)
+    sources = {}
+    for directory in ('checks', 'core', 'gemm', 'embedding', 'transformer', 'training'):
+        for source in sorted(Path(directory).rglob('*.mojo')):
+            sources[source.as_posix()] = sha(source.read_bytes())
+    for name in ('pixi.toml', 'pixi.lock', 'tools/transformer_training_gradient_oracle.py'):
+        sources[name] = sha(Path(name).read_bytes())
+    meta['source_sha256'] = sources
+    raw = (path / 'token_ids.i32').read_bytes()
+    if len(raw) != 72 or any(not 0 <= x < 64 for x in struct.unpack('<18i', raw)):
+        raise ValueError('invalid IDs')
+    meta['token_ids'] = dict(file='token_ids.i32', sha256=sha(raw), shape=[2, 9],
+                             supplied=fields['supplied'] == '1')
+    for name, count in ARRAY_COUNTS.items():
         filename = name + '.f32'
-        exclusive(self.path / filename, raw)
-        self.arrays[name] = dict(file=filename, count=len(bits), sha256=sha(raw))
-
-    def finish(self):
-        if set(self.arrays) != set(ARRAY_COUNTS) or 'token_ids' not in self.meta:
-            raise ValueError('incomplete capture')
-        exclusive(self.path / 'capture.json', json_bytes(self.meta))
+        raw = (path / filename).read_bytes()
+        if len(raw) != count * 4:
+            raise ValueError('wrong array length')
+        if any(x & 0x7f800000 == 0x7f800000 for x in struct.unpack('<%dI' % count, raw)):
+            raise ValueError('nonfinite FP32')
+        arrays[name] = dict(file=filename, count=count, sha256=sha(raw))
+    exclusive(path / 'capture.json', json_bytes(meta))
 
 
 def load_capture(path):
@@ -210,6 +212,9 @@ def comparison(actual, expected, atol, rtol):
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == 'seal':
+        seal_capture(sys.argv[2])
+        return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('capture', type=Path)
     parser.add_argument('--output', required=True, type=Path)

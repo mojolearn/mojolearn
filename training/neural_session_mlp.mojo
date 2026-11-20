@@ -1,58 +1,64 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NN64 full stateless MLP session batching, with shared immutable call weights.
+"""Stateless MLP inference sessions with shared immutable call weights.
 
 A session is one independent set of input rows. All use the same two-layer
 Linear/ReLU/Linear model, FP32 profile and weights passed to this call. There
-is no cache or RNG state to merge. A batches all rows through each projection;
-B runs each session separately. Both include upload, admission and consumed
-logits. This deliberately does not pretend to implement stateful decode.
+is no cache or RNG state to merge. Each session runs its own forward (one
+GEMM, bias + ReLU, GEMM, bias over its rows). Upload, admission and the
+consumed logits are inside the call. Not stateful decode.
+
+Restored 2026-11-09 (integration lane i2-integrate-seven) from 0ce88411d3 as
+the DEFAULT route of `mlp_inference_sessions` and
+`SmallMLPTrainer.predict_sessions`: lane m2-neural-leftovers had replaced it
+with one packed forward of the small-MLP program without a measurement
+against it. The packed program forward is the A/B arm
+-D MOJOLEARN_MLP_SESSIONS_PACKED (bindings/training_extra_native_door.mojo,
+bindings/small_mlp_native.mojo); RUN OWED: mlp-infer sessions, NVIDIA + AMD.
+The pack arm that lived here (MOJOLEARN_NN64_SESSION_PACK, never measured,
+default off) stays removed. The bias launches are `_mlp_kernel`'s body
+(autograd/small_mlp_cells.mojo small_mlp_cell, restored by lane r1), so the
+words are 0.8.66's.
 """
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from training.neural_ab_lifetime import NN64_SESSION_PACK
-from training.mlp_ops import _mlp_kernel
+from autograd.small_mlp_cells import small_mlp_cell, small_mlp_cell_count
 from training.neural_session_shape import nn_mlp_session_shape
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from core.device_scan import device_first_nonfinite
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
+comptime _AP = MutPointer[Float32, MutAnyOrigin]
+
+
+def _session_cells_kernel(source: _AP, other: _AP, dst: _AP, rows_in: Int32, cols_in: Int32, operation_in: Int32):
+    """`_mlp_kernel` (0ce88411d3): one thread per item of small_mlp_cell."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var operation = Int(operation_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= small_mlp_cell_count(rows, cols, operation):
+        return
+    small_mlp_cell(source, other, dst, rows, cols, operation, i)
 
 
 def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int],
     w1: _FP, b1: _FP, w2: _FP, b2: _FP, output: _FP,
     in_width: Int, hidden: Int, out_width: Int,
-    registry: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> Int:
-    """`registry` (lane migrate-neural-2): the weights already on the device
-    as one flat [w1, b1, w2, b2] buffer (an open training session); the
-    sessions read them there through views instead of an upload of the host
-    copy (w1 .. b2 are then not read). The same values, so the same bits."""
+    # TOMBSTONE: the `registry` argument (sessions reading an open Apple FAST resident training session's weights; its only caller, mlp_sessions_resident, went with the session, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
     var total = nn_mlp_session_shape(inputs, rows, in_width, hidden, out_width)
     var x = ctx.enqueue_create_buffer[DType.float32](max(1, total * in_width))
     var a = ctx.enqueue_create_buffer[DType.float32](max(1, total * hidden))
     var y = ctx.enqueue_create_buffer[DType.float32](max(1, total * out_width))
-    var dw1: DeviceBuffer[DType.float32]
-    var db1: DeviceBuffer[DType.float32]
-    var dw2: DeviceBuffer[DType.float32]
-    var db2: DeviceBuffer[DType.float32]
-    if registry:
-        var n_w1 = hidden * in_width
-        var n_w2 = out_width * hidden
-        if len(registry.value()) < n_w1 + hidden + n_w2 + out_width:
-            raise Error("neural MLP sessions: the resident registry is smaller than the model")
-        dw1 = registry.value().create_sub_buffer[DType.float32](0, n_w1)
-        db1 = registry.value().create_sub_buffer[DType.float32](n_w1, hidden)
-        dw2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden, n_w2)
-        db2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden + n_w2, out_width)
-    else:
-        dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
-        db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
-        dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
-        db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
-        ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
-        ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
-        ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
-        ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
+    var dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
+    var db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
+    var dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
+    var db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
+    ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
+    ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
+    ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
+    ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
     var keep = List[DeviceBuffer[DType.float32]]()
     var base = 0
     for session in range(len(rows)):
@@ -81,23 +87,20 @@ def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int
                 identical_gemm_workspace_max_floats(rows[i], hidden, in_width),
                 identical_gemm_workspace_max_floats(rows[i], out_width, hidden)))
     var ws = ctx.enqueue_create_buffer[DType.float32](max(1, workspace_cells))
-    comptime if NN64_SESSION_PACK:
-        nn_mlp_session_forward(ctx, x, dw1, db1, dw2, db2, a, y, ws,
-            total, in_width, hidden, out_width)
-    else:
-        base = 0
-        for session in range(len(rows)):
-            var count = rows[session]
-            if count > 0:
-                var xv = x.create_sub_buffer[DType.float32](base * in_width, count * in_width)
-                var av = a.create_sub_buffer[DType.float32](base * hidden, count * hidden)
-                var yv = y.create_sub_buffer[DType.float32](base * out_width, count * out_width)
-                nn_mlp_session_forward(ctx, xv, dw1, db1, dw2, db2, av, yv, ws,
-                    count, in_width, hidden, out_width)
-                keep.append(xv^)
-                keep.append(av^)
-                keep.append(yv^)
-            base += count
+    # TOMBSTONE: MOJOLEARN_NN64_SESSION_PACK (the packed arm of this loop) stays removed (lane/m2-neural-leftovers, 2026-11-09); the packed forward is now the program arm MOJOLEARN_MLP_SESSIONS_PACKED in the bindings.
+    base = 0
+    for session in range(len(rows)):
+        var count = rows[session]
+        if count > 0:
+            var xv = x.create_sub_buffer[DType.float32](base * in_width, count * in_width)
+            var av = a.create_sub_buffer[DType.float32](base * hidden, count * hidden)
+            var yv = y.create_sub_buffer[DType.float32](base * out_width, count * out_width)
+            nn_mlp_session_forward(ctx, xv, dw1, db1, dw2, db2, av, yv, ws,
+                count, in_width, hidden, out_width)
+            keep.append(xv^)
+            keep.append(av^)
+            keep.append(yv^)
+        base += count
     if device_first_nonfinite(ctx, y, total * out_width) >= 0:
         raise Error("neural MLP sessions: nonfinite logits")
     ctx.enqueue_copy(dst_ptr=output, src_buf=y)
@@ -126,7 +129,7 @@ def nn_mlp_session_forward(ctx: DeviceContext,
     # never a fold or a model-dimension route. Original MLP seams are reused.
     # Each cell reads and writes itself; take one raw view for in-place use.
     var hidden_ptr = hidden_values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    ctx.enqueue_function[_mlp_kernel](hidden_ptr, b1.unsafe_ptr(), hidden_ptr, Int32(rows), Int32(hidden), Int32(1), grid_dim=((rows * hidden + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+    ctx.enqueue_function[_session_cells_kernel](hidden_ptr, b1.unsafe_ptr(), hidden_ptr, Int32(rows), Int32(hidden), Int32(1), grid_dim=((rows * hidden + 127) // 128, 1, 1), block_dim=(128, 1, 1))
     identical_gemm_into(ctx, output, hidden_values, w2, ws, rows, out_width, hidden, OP_NT)
     var output_ptr = output.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    ctx.enqueue_function[_mlp_kernel](output_ptr, b2.unsafe_ptr(), output_ptr, Int32(rows), Int32(out_width), Int32(0), grid_dim=((rows * out_width + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+    ctx.enqueue_function[_session_cells_kernel](output_ptr, b2.unsafe_ptr(), output_ptr, Int32(rows), Int32(out_width), Int32(0), grid_dim=((rows * out_width + 127) // 128, 1, 1), block_dim=(128, 1, 1))

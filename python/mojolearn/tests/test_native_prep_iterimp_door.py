@@ -1,47 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 """IterativeImputer runs as one native call per public method
-(bindings/prep_iterimp_native.mojo, through the prep family door). The former
+(bindings/prep_iterimp_native_door.mojo, through the prep family door). The former
 Python route is kept below as the oracle: the door must give the same bytes and
 the same fitted attributes on small fixtures."""
 import array
-import ast
 import inspect
 import copy
-import pathlib
 
 import numpy as np
 import pytest
-
-_HERE = pathlib.Path(__file__).resolve().parents[1]
-
-
-def _method_bodies():
-    tree = ast.parse((_HERE / "_expansion_prep.py").read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "IterativeImputer")
-    return {f.name: f for f in cls.body if isinstance(f, ast.FunctionDef)}
-
-
-def test_public_methods_are_one_native_call():
-    """Pure source check: fit, fit_transform and transform each return one _ENCODE_CALL."""
-    bodies = _method_bodies()
-    for name in ("fit", "fit_transform", "transform"):
-        body = [s for s in bodies[name].body
-                if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
-        assert len(body) == 1 and isinstance(body[0], ast.Return), name
-        call = body[0].value
-        assert isinstance(call, ast.Call) and getattr(call.func, "id", "") == "_ENCODE_CALL", name
-        assert isinstance(call.args[1], ast.Constant) and call.args[1].value == name, name
-    assert set(bodies) >= {"fit", "fit_transform", "transform"}
-    # the former helpers are gone from the class
-    assert not set(bodies) & {"_fit_user", "_ii_take", "_ii_put", "_prepare", "_neighbours_device"}
 
 
 # ---------------------------------------------------------------- the former Python route (oracle)
 try:
     import mojolearn as ml
-    from mojolearn._expansion_prep import (
+    from mojolearn.tests._prep_prog_oracle import (
         Array, SimpleImputer, _Prog, _x2d, _cs, _mode, _seed_words, _NONE, _II_CH, as_f32_c)
-except Exception:  # no built bindings: only the source check above runs
+except Exception:  # no built bindings: every test below skips
     ml = None
 numbers = __import__("numbers")
 _INF = float("inf")
@@ -56,6 +31,12 @@ def _splitmix64(state):
     return state, z ^ (z >> 31)
 
 
+
+
+def _is_nan_value(v):
+    # The former route's module helper (_expansion_prep._is_nan_value before
+    # the native door), kept with the oracle.
+    return isinstance(v, float) and v != v
 
 
 def _mark_missing(pr, xo, count, missing_values):
@@ -104,7 +85,7 @@ def _clone(est):
 
 
 def _as_list(v):
-    from . import _user_objects
+    from mojolearn import _user_objects
     return _user_objects.call("floats", v.tolist() if hasattr(v, "tolist") else v).tolist()
 
 
@@ -114,7 +95,7 @@ def _pred_f64(v):
     """A user estimator's predictions as a float64 Array holding the values
     `_as_list` reads (`float(x)` per element): a float32 or float64 vector
     widened natively (exact), anything else through `_as_list`."""
-    from ._buffer import _materialize, _has_buffer, as_f64_c
+    from mojolearn.tests._typed_input import materialize as _materialize, has_buffer as _has_buffer, as_f64_c
     if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
         a, _ = _materialize(v, "predict")
         if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:
@@ -402,8 +383,10 @@ class _Former(ml.IterativeImputer if ml is not None else object):
         rows = pr.get_i32(rm, (m,)) if m else None
         return Xo, yo, Xm, rows, m
 
-    @staticmethod
-    def _ii_block(pr, xo, yo, m, nc):
+    # A plain method, not a staticmethod: a mojolearn estimator's native
+    # attribute owner binds subclass functions and refuses other Python
+    # descriptors (bindings/public_attributes_native_door.mojo _lookup_impl).
+    def _ii_block(self, pr, xo, yo, m, nc):
         """(X block (m, nc), y (m,)) as float32 Arrays; a 0-row block is
         `from_list([])`, a 0-column one its m empty rows, as before."""
         if m == 0:
@@ -465,14 +448,14 @@ class _Former(ml.IterativeImputer if ml is not None else object):
 
     def _truncnorm_draws(self, mus, sig, lo, hi):
         """`_impute_one_feature`'s rule per entry, in Mojo (the core helper
-        `truncnorm_draws`, bindings/normal_dist_helpers.mojo; lane py-runtime
+        `truncnorm_draws`, bindings/normal_dist_helpers_pack.mojo; lane py-runtime
         round 3, it was Python float64 per entry): mu beyond a bound -> the
         bound, sigma <= 0 -> mu, else the inversion of the truncated normal
         at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf
         (DEVIATION 6902), the instance's stream advanced by the entries that
         draw. The reference's zip stops at the shorter of the two outputs."""
-        from ._buffer import _native
-        from . import _user_objects
+        from mojolearn._buffer import _native
+        from mojolearn import _user_objects
         # the user estimator's predictions read once natively (user_objects floats)
         mu = _user_objects.call("floats", _user_objects.call("flatten", mus))
         sd = _user_objects.call("floats", _user_objects.call("flatten", sig))
@@ -483,6 +466,14 @@ class _Former(ml.IterativeImputer if ml is not None else object):
                                            [st >> 32, st & 0xFFFFFFFF], out.buffer_info()[0])
         self._rng = (int(hi_lo[0]) << 32) | int(hi_lo[1])
         return Array._owned(out, (k,), "<f8", "C")
+
+    def _check_width(self, arr):
+        # Test-side copy of the former `_PrepBase._check_width`, which
+        # 07359f4b53 removed from the product (the prep doors own the width
+        # check now); the oracle keeps the former route's refusal.
+        if arr.shape[1] != self.n_features_in_:
+            raise ValueError(f"mojolearn: X has {arr.shape[1]} features, {type(self).__name__} "
+                             f"was fitted with {self.n_features_in_}")
 
     def fit(self, X, y=None):
         self.fit_transform(X)
@@ -624,7 +615,7 @@ def test_refusals():
         ml.IterativeImputer(imputation_order="sideways").fit(X)
     with pytest.raises(ValueError, match="n_nearest_features"):
         ml.IterativeImputer(n_nearest_features=0).fit(X)
-    with pytest.raises(RuntimeError, match="not fitted"):
+    with pytest.raises(ml.exceptions.NotFittedError, match="not fitted"):
         ml.IterativeImputer().transform(X)
     with pytest.raises(ValueError, match="features"):
         ml.IterativeImputer(max_iter=1).fit(X).transform(X[:, :2])

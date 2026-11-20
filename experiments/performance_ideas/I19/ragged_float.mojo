@@ -6,31 +6,12 @@ is supplied/reused by the caller, and every segment keeps its original
 position for equal-word ties. The bounded quadratic arm is an executable
 small control, never a large-data production fallback.
 """
-from std.gpu import block_idx,thread_idx
+from max.gpu import block_idx,thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz
 from x_prep.common import canon,word_order
-from x_prep.dradix import radix_key,radix_word
-from core.stable_radix_digits import stable_nibble_pairs_u32
-from core.stable_radix_sort import stable_radix_sort_pairs_u32,stable_radix_counts_len,stable_radix_bsum_len
-
-def _keys(src: MutPointer[Float32,MutAnyOrigin],keys: MutPointer[UInt32,MutAnyOrigin],positions: MutPointer[UInt32,MutAnyOrigin],base: Int32,n_in: Int32,categories: Int32):
-    var i = Int(block_idx.x)*128+Int(thread_idx.x)
-    if i>=Int(n_in):
-        return
-    var value = ftz(src[Int(base)+i])
-    if categories!=Int32(0):
-        value = canon(value)
-    keys[i] = radix_key(bitcast[DType.uint32](value))
-    positions[i] = UInt32(Int(base)+i)
-
-def _words(keys: MutPointer[UInt32,MutAnyOrigin],positions: MutPointer[UInt32,MutAnyOrigin],dst: MutPointer[Float32,MutAnyOrigin],permutation: MutPointer[UInt32,MutAnyOrigin],base: Int32,n_in: Int32):
-    var i = Int(block_idx.x)*128+Int(thread_idx.x)
-    if i<Int(n_in):
-        dst[Int(base)+i] = bitcast[DType.float32](radix_word(keys[i]))
-        permutation[Int(base)+i] = positions[i]
+from core.stable_radix_sort import stable_radix_counts_len,stable_radix_bsum_len
 
 def _rank_control(src: MutPointer[Float32,MutAnyOrigin],dst: MutPointer[Float32,MutAnyOrigin],permutation: MutPointer[UInt32,MutAnyOrigin],base: Int32,n_in: Int32,categories: Int32):
     var i = Int(block_idx.x)*128+Int(thread_idx.x)
@@ -81,26 +62,17 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
     # This bounded component win does not qualify larger workloads or promotion.
     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I19;
     # raw attempts: amd/live/repairs. Default radix admission remains OFF.
-    comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
-        if largest>4096:
-            raise Error("ragged float sort: rank control restricted to bounded small rows")
+    # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+    # TOMBSTONE: MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 36a2cc0af1.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch
+    # TOMBSTONE: MOJOLEARN_IDN_RAGGED_FLOAT_RADIX (AMD-only component screening (I19 MI325X), never an NVIDIA + AMD full-operation A/B) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 6e8a669206.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_FLOAT_RADIX.patch
+    if largest>4096:
+        raise Error("ragged float sort: rank control restricted to bounded small rows")
     for s in range(len(offsets)-1):
         var base = offsets[s]
         var n = offsets[s+1]-base
         if n==0:
             continue
-        # Bounded caller timings above retain this experiment as opt-in.
-        comptime if is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
-            ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
-            # NEVER RUN — PENDING MEASUREMENT
-            comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
-                # NEVER RUN — PENDING MEASUREMENT
-                comptime if is_defined["MOJOLEARN_IDN_RADIX_TILE128"]():
-                    stable_nibble_pairs_u32[128](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
-                else:
-                    stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
-            else:
-                stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
-            ctx.enqueue_function[_words](keys.unsafe_ptr(),positions.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
-        else:
-            ctx.enqueue_function[_rank_control](src.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
+        ctx.enqueue_function[_rank_control](src.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))

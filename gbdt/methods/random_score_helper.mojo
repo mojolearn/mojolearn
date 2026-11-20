@@ -62,7 +62,7 @@ missing zero guard -- but the accumulation is Float32 with a deterministic
 lane fold where theirs is a double block reduce ending in a float atomic.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.math import exp, log, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -71,6 +71,8 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
+    identical_exp64,
+    identical_log64,
     identical_mul_add,
 )
 from gbdt.targets.kernel.pointwise_targets import (
@@ -234,12 +236,14 @@ def calc_score_model_length_mult(
     scale is not a decision. It would NOT be tolerable inside the score
     comparison, and no caller may reuse this value as a tie-break.
     """
-    # DEVIATION 256, justified UNPINNED: HOST-side Float64 exp/log, so
-    # IDENTITY_PATHS row 12 (device transcendentals) does not reach it,
-    # and the docstring above already prices the libm error as a scale
-    # on a random normal, never a decision.
-    var model_exp_length = log(sample_count)
-    var model_left = exp(model_exp_length - model_size)
+    # IDENTITY (lane fb13-identity-audit, 2026-11-17): was DEVIATION 256's
+    # unpinned host exp/log. The scale multiplies the split-score noise, so a
+    # last-bit difference between hosts can flip a split choice: it IS a
+    # decision. The seams (portable under IDENTICAL, stdlib under FAST) cost
+    # two scalar calls per boosting iteration. Bits change (IDENTICAL fits with
+    # random_strength != 0, every column together).
+    var model_exp_length = identical_log64(sample_count)
+    var model_left = identical_exp64(model_exp_length - model_size)
     return model_left / (1.0 + model_left)
 
 

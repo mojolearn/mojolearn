@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native tree construction and parsing against frozen pre-migration oracles."""
-import ast
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -156,17 +154,6 @@ def test_groves_reinitialization_releases_previous_native_snapshot(tmp_path):
     with pytest.raises(Exception, match="unknown or released host grove"):
         forest._load().forest_host_groves_predict(handle, x._addr, out._addr, [1, 2, 1], 1)
     assert _state(actual.predict(_queries("float32"))) == _state(LegacyHostForest(**options).predict(_queries("float32")))
-
-
-def test_constructor_parser_and_ctr_wrappers_are_single_native_calls():
-    for module, names in ((forest, {"__init__"}),
-                          (gbdt, {"__init__", "parse_model_text", "gbdt_ctr_model_dim", "gbdt_ctr_predict"})):
-        for method in ast.walk(ast.parse(Path(module.__file__).read_text())):
-            if not isinstance(method, ast.FunctionDef) or method.name not in names:
-                continue
-            body = method.body[1:] if ast.get_docstring(method) is not None else method.body
-            assert len(body) == 1 and isinstance(body[0], ast.Return), method.name
-            assert sum(isinstance(node, ast.Call) for node in ast.walk(body[0])) == 1, method.name
 
 
 def test_constructor_refuses_dictionary_descriptor_hooks(tmp_path):

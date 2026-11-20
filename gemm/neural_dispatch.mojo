@@ -7,35 +7,63 @@ original imports. Allocation, staging and synchronization remain in the model
 operation; no benchmark controller prepares hidden runtime work. Unverified.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device
-from std.sys.compile import is_defined,get_defined_int
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceContext,DeviceBuffer
 from checks.kernel_matrix import TARGET_COLUMN,COLUMN_NVIDIA
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from core.step_phase import step_count_device_alloc,step_count_sync
-from gemm.contract import OP_NN,OP_NT,OP_TN
 from gemm.checks.gemm_identical import (
     identical_gemm_into as _incumbent_into,
     identical_gemm as _incumbent_gemm,
     identical_gemm_workspace_max_floats as _incumbent_workspace,
-    identical_gemm_with_plan,identical_gemm_workspace_floats,choose_gemm_plan,
-    GEMM_ARM_KPACK,PLAN_FLAT,ANY_SABOTAGE,
+    # re-exported: training/checks/loss_check.mojo, training/byte_lm.mojo and the training checks import these from here
+    identical_gemm_with_plan,PLAN_FLAT,ANY_SABOTAGE,
 )
 from gemm.experiments.neural_profile import (
-    NEURAL_EXPERIMENTS_ALLOWED,NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,
-    neural_partition,neural_strides,neural_validate,
-    neural_merge_chains,neural_fold_push,neural_fold_drain,
+    NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
-from gemm.experiments.neural_streaming import (
-    NN02,NN11,NN16,neural_streaming_ab,neural_streaming_floats,neural_fold_capacity_ab,
+from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
+# lane fx-fast-matrix-units (2026-11-19, -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality): the
+# matrix-units relaxation of an NVIDIA `fast` build (gemm/fast_matrix_units.mojo). False on every other build.
+from gemm.fast_matrix_units import (
+    GEMM_FAST_MATRIX_UNITS,GEMM_FAST_MATRIX_UNITS_ALL,
+    matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
 )
-from gemm.experiments.neural_tiled import NN09,NN15,neural_tiled_ab
-from gemm.experiments.neural_plans import NN01,NN10,NN12,neural_schedule_ab,neural_cost_plan
-from gemm.experiments.neural_grouped import NN07,_neural_operand_pack_kernel
-from gemm.experiments.neural_switches import (
-    ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD,ROLE_ALL,NEURAL_GEMM_ROLES,
+# lane fx-fast-bf16 (2026-11-20, -D MOJOLEARN_GEMM_FAST_BF16_UNITS=1, default OFF, A/B owed with quality): the bf16
+# matrix-unit relaxation of a `fast` build (gemm/fast_bf16_units.mojo). False on every other build.
+from gemm.fast_bf16_units import (
+    GEMM_FAST_BF16_UNITS,bf16_units_takes,bf16_units_workspace_floats,bf16_units_gemm_into,
 )
+# lane fx-gemm-seq-packed (2026-11-18): the names `identical_gemm_leaf_ptr_into` below reads; nothing else uses them here.
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
+from checks.kernel_matrix import COLUMN_AMD,lib_smem_pages_for,lib_smem_page_fits_for
+from gemm.checks.gemm_identical import (
+    identical_gemm_kpack_kernel,_tile_grid,NI06_ONE_PAGE,TUNED_TPB,TUNED_TC,TUNED_RPT,
+    GEMM_KPACK_RPT,GEMM_KPACK_CPT,GEMM_KPACK_KS,GEMM_KPACK_FS,GEMM_KPACK_PAD,GEMM_KPACK_ALIGN,
+    GEMM_KPACK_PAGE_GUARD_BYTES,GEMM_TILE_MIN_BLOCKS_DEFAULT,
+)
+# lane fx-leftovers-product (2026-11-19): the store epilogue kinds that read a second buffer, and their kernel
+# (`identical_gemm_leaf_ptr_epi_into` below). The kinds are re-exported: sequence/gemm_packed_route.mojo imports them here.
+from gemm.checks.gemm_identical import (
+    identical_gemm_kpack_epi_ptr_kernel,GEMM_EPI_PLUS_BIAS,GEMM_EPI_BIAS_ACT,GEMM_EPI_ACT_BWD,
+)
+# (Sweep 2026-11-15: with MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (lane/expdel2-25-neural) and the NN07/NN12/NN16 arms deleted,
+# NN01, NN02, NN07, NN09, NN10, NN11, NN12, NN15 and NN16 were all False. Removed with them: gemm/experiments/
+# neural_streaming.mojo, neural_tiled.mojo, neural_plans.mojo, neural_grouped.mojo; here NEURAL_PAIR_ENABLED,
+# NEURAL_WORKSPACE_REUSE_ENABLED, the schedule constants, _scheduled/_unscheduled workspace sizing,
+# _profile_or_cost_into, _selected_cost_plan, the scheduled routes of identical_gemm_into, the NN07 operand pack
+# of identical_gemm_pair_into (then the pair entry itself, whose last caller was NEURAL_PAIR_ENABLED's) and the NN12
+# retained-plan path and plan fields of GemmWorkspace. Markers moved from the four deleted files:)
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN16 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 1362c86435.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=8 (slower) deleted 2026-10-07 by 225398f14; code recoverable at 225398f14^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE-arm8.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN12 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at a9cf951197.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN12.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_NN07 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at dd47bfb212.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_NN07.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES (NN-OZ int8 Ozaki-split neural GEMM; DELETE-slower: grid g50ebe26a5, slices 4/5
 # on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
 # 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
@@ -43,33 +71,29 @@ from gemm.experiments.neural_switches import (
 
 # NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
 # ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
-comptime NEURAL_PAIR_ENABLED = NN07
-comptime NEURAL_GEMM_EXPERIMENT_ENABLED = (
-    NEURAL_PROFILE_CHANGED or NN01 or NN02 or NN09 or NN10 or NN11 or NN12 or NN15 or NN16
-)
-comptime _STREAM_GROUP = get_defined_int["MOJOLEARN_IDN_NEURAL_STREAM_GROUP",8]()
-comptime _DEPTH = get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]()
-comptime _PAD = get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]()
-comptime _SWIZZLE = is_defined["MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE"]()
-comptime _ARM = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_ARM",GEMM_ARM_KPACK]()
-comptime _FILL_BLOCKS = get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]()
-comptime _RETAINED = get_defined_int["MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS",16777216]()
-# Resource budget, not a matrix-size route fit: 64 MiB retained per owned
-# workspace, with exact-shaped temporary allocation above that memory budget.
-comptime _CONTROL = is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]()
-comptime _PAIR_CONTROL = is_defined["MOJOLEARN_IDN_NEURAL_PAIR_CONTROL"]()
-comptime NEURAL_WORKSPACE_REUSE_ENABLED = NN12 and not _CONTROL
-comptime _STREAM = NN02
-comptime _STAGING = NN09 or NN15
-# NN11 has two real placements: global fold slots inside NN02, or a
-# standalone register/shared fold kernel. Other schedule families do not
-# implement its storage arm; reject those combinations instead of masking it.
-comptime _ROUTES = Int(NN01)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
-# One arm of MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE is selected. Products whose
-# caller role is outside MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES keep the
-# unscheduled route (selected profile, else the incumbent) in the same build.
-comptime _SCHEDULED = _ROUTES > 0
-comptime _ROLE_SPLIT = _SCHEDULED and NEURAL_GEMM_ROLES != ROLE_ALL
+comptime NEURAL_GEMM_EXPERIMENT_ENABLED = NEURAL_PROFILE_CHANGED
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) NEURAL_GEMM_WORKLIST and GemmWorkspace.worklist / list_begin / list_add / list_run deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_STREAM_GROUP (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_DEPTH (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_DEPTH.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_PAD (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_PAD.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STAGE_SWIZZLE.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_ARM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_ARM.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_FILL_BLOCKS (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FILL_BLOCKS.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_CONTROL (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_CONTROL.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_PAIR_CONTROL (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_PAIR_CONTROL.patch
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_FOLD_SHARED (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_FOLD_SHARED.patch
 
 
 def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
@@ -81,28 +105,9 @@ def _overlaps(mut a: DeviceBuffer[DType.float32],na: Int,
     return ap<bp+4*nb and bp<ap+4*na
 
 
-def _unscheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    comptime if NEURAL_PROFILE_CHANGED:
-        return 1
-    return _incumbent_workspace(m,n,k)
-
-
 def identical_gemm_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    """Covers every route the build can take for (m, n, k): with a role mask,
-    one workspace serves both the scheduled and the unscheduled roles."""
-    var count = _scheduled_workspace_max_floats(m,n,k)
-    comptime if _ROLE_SPLIT:
-        count = max(count,_unscheduled_workspace_max_floats(m,n,k))
-    return count
-
-
-def _scheduled_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    comptime if _STREAM:
-        var leaves = neural_partition[NEURAL_LEAF](k)[1]
-        comptime if NN02 and not _CONTROL:
-            return neural_streaming_floats[_STREAM_GROUP,True](k,m*n)
-        return max(1,m*n*leaves)
-    comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN11:
+    """Covers the route the build takes for (m, n, k)."""
+    comptime if NEURAL_PROFILE_CHANGED:
         return 1
     return _incumbent_workspace(m,n,k)
 
@@ -120,34 +125,42 @@ def _admit_product(mut c: DeviceBuffer[DType.float32],
         raise Error("neural GEMM output/workspace must not overlap inputs or each other")
 
 
-def _profile_or_cost_into(ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
+def _matrix_units_admits(mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,plan: Int) raises:
-    comptime if NEURAL_PROFILE_CHANGED:
-        # New-profile cost arm compares actual shared-tile reuse with scalar
-        # loads. Existing v1 native geometries cannot define a different sum.
-        if plan == PLAN_FLAT:
-            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-        else:
-            neural_tiled_ab[False](ctx,c,a,b,m,n,k,op)
-    else:
-        identical_gemm_with_plan(ctx,c,a,b,ws,m,n,k,op,plan)
+    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) -> Bool:
+    """Whether the matrix-units arm may take this product: the size rule, operands long enough and an output that
+    overlaps no input, and for the form that transposes A into the workspace a workspace that overlaps nothing.
+    False sends the call to the route below with its own refusals, so no refusal moves or changes its wording.
+    A and B hold m k and n k floats in all three addressings."""
+    if not matrix_units_takes(m,n,k):
+        return False
+    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
+        return False
+    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
+        return False
+    var wsn = matrix_units_workspace_floats(m,n,k,op)
+    if wsn>0:
+        if len(ws)<wsn or _overlaps(ws,wsn,c,m*n) or _overlaps(ws,wsn,a,m*k) or _overlaps(ws,wsn,b,n*k):
+            return False
+    return True
 
 
-def _selected_cost_plan(m: Int,n: Int,k: Int) raises -> Int:
-    comptime if not NEURAL_PROFILE_CHANGED:
-        return neural_cost_plan(m,n,k,_FILL_BLOCKS)
-    if m<=0 or n<=0:
-        return PLAN_FLAT
-    # The changed-profile candidate currently has a real 8x16 shared tile,
-    # not the incumbent 32/64/128 bodies. Price precisely the available tile
-    # instead of borrowing the old body's more favorable reuse estimate.
-    var blocks = (m*n+127)//128
-    var flat = Float64(2)*Float64(m*n)*Float64(max(k,1))*Float64(max(_FILL_BLOCKS,blocks))/Float64(blocks)
-    var tiles = ((m+7)//8)*((n+15)//16)
-    var staged = Float64(tiles*24+tiles*128-m*n)*Float64(max(k,1))*Float64(max(_FILL_BLOCKS,tiles))/Float64(tiles)
-    # Any non-FLAT tag selects the explicit selected-profile 8x16 launcher.
-    return 1 if staged<flat else PLAN_FLAT
+def _bf16_units_admits(mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int) -> Bool:
+    """`_matrix_units_admits` for the bf16 arm: the size rule, operands long enough, an output that overlaps no
+    input, and a workspace that holds the bf16 images and overlaps nothing. False sends the call to the routes
+    below with their own refusals."""
+    if not bf16_units_takes(m,n,k):
+        return False
+    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
+        return False
+    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
+        return False
+    var wsn = bf16_units_workspace_floats(m,n,k)
+    if len(ws)<wsn or _overlaps(ws,wsn,c,m*n) or _overlaps(ws,wsn,a,m*k) or _overlaps(ws,wsn,b,n*k):
+        return False
+    return True
 
 
 def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
@@ -155,10 +168,29 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
-    """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD) that
-    MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES selects on; it never changes the
-    route of a build without a schedule arm."""
+    """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD); it
+    never changes the route."""
     comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
+    # lane fx-fast-matrix-units: an NVIDIA `fast` build with the matrix-units row relaxed sends a large product of a
+    # caller that left the vendor route open (forward, dInput and dWeight alike) to the TF32 tensor-core product,
+    # FP32 accumulation. A caller that closed it (`allow_vendor=False`; taken too under the arm's value 3, its own
+    # owed row), a product under the size rule and every
+    # refusal keep the route below. Per call under the arm: the integer tests of `_matrix_units_admits`, then one
+    # launch in place of the route's (two for OP_TN: the transpose of A into `ws`); no allocation, lookup or wait.
+    # Asynchronous like the route below. Not compiled without the define.
+    # lane fx-fast-bf16: a `fast` build with the bf16-units row relaxed sends the same class of product (a caller
+    # that left the vendor route open, the size rule) to the bf16 matrix unit, FP32 accumulation and output; it is
+    # asked first, so a build with both arms runs bf16 where its rule takes and TF32 on the rest. Per call under
+    # the arm: the integer tests, then three launches (two narrows into `ws`, the product); no allocation, lookup
+    # or wait. Not compiled without the define.
+    comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
+        if _bf16_units_admits(c,a,b,ws,m,n,k):
+            if bf16_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
+                return
+    comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+        if _matrix_units_admits(c,a,b,ws,m,n,k,op):
+            if matrix_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
+                return
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
@@ -169,31 +201,13 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     # on 10 neural workloads, e.g. lm-train-step NV L40S 35.3 -> 3172.6 / 3709.4 ms, AMD MI325X 42.7 -> 334.3 / 407.5 ms; cnn-clf avg
     # 25.9x / 30.1x; mlp-train-step 1.20x / 1.22x, the closest) deleted 2026-10-11 by lane/grid-act-16; code recoverable at 7aa609453.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES.patch; record in docs/TOMBSTONES.md.
-    comptime if _SCHEDULED and not ((NEURAL_GEMM_ROLES & ROLE) != 0):
-        comptime if NEURAL_PROFILE_CHANGED:
-            neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-        else:
-            _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
-        return
-    comptime if NN01:
-        _ = neural_schedule_ab[not _CONTROL](ctx,c,a,b,ws,m,n,k,op,_ARM)
-    elif _STREAM:
-        neural_streaming_ab[not _CONTROL,_STREAM_GROUP,not _CONTROL,not _CONTROL](ctx,c,a,b,ws,m,n,k,op)
-    elif _STAGING:
-        neural_tiled_ab[not _CONTROL,_DEPTH,_PAD,_SWIZZLE,NN15](ctx,c,a,b,m,n,k,op)
-    elif NN10:
-        var plan = _selected_cost_plan(m,n,k)
-        comptime if _CONTROL:
-            plan = choose_gemm_plan(m,n,k)
-        _profile_or_cost_into(ctx,c,a,b,ws,m,n,k,op,plan)
-    elif NN11:
-        neural_fold_capacity_ab[not _CONTROL,is_defined["MOJOLEARN_IDN_NEURAL_FOLD_SHARED"]()](ctx,c,a,b,m,n,k,op)
-    elif NEURAL_PROFILE_CHANGED:
-        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
-    else:
-        _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
+    neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
+# TOMBSTONE: neural_model_leaf_into (its one caller, the deleted small MLP step's MLP_GEMM_LEAF128 dispatch, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+# TOMBSTONE restored 2026-11-09 by lane/r1-restore-measured-winners as the GEMM of op small_mlp (OPS_SMALL_MLP,
+# autograd/small_mlp_op.mojo); body from f59d913b0b, unchanged.
 def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
@@ -204,8 +218,8 @@ def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
     identical_gemm_into reaches under -D MOJOLEARN_IDN_GEMM_LEAF=1|2 with no
     schedule arm (the last `elif NEURAL_PROFILE_CHANGED` branch), with the
     same validation and overlap refusals; the profile kernel reads no
-    workspace, so none is taken. First caller: the MLP training step
-    (training/mlp_ops.mojo::MLP_GEMM_LEAF128)."""
+    workspace, so none is taken. Caller: the small MLP op
+    (autograd/small_mlp_op.mojo::SMALL_MLP_GEMM_LEAF128)."""
     comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "neural profile leaf 128|256 (leaf 64 deleted: I04 loser)"
     neural_validate(m,n,k,op)
     if len(c)<m*n or len(a)<m*k or len(b)<n*k:
@@ -217,10 +231,227 @@ def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
     neural_profile_device[MIN_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
+# ---------------------------------------------------------------------------
+# lane fx-gemm-seq-packed (2026-11-18, idea 1 of briefs-20261118/ideas-gemm-headroom-RESULT.md):
+# THE PACKED BODY AT A CALLER'S PARTITION, OVER RAW POINTERS.
+# Reached from the sequence packed route (sequence/gemm_packed_route.mojo; the default since 2026-11-19,
+# confirmed 2026-11-20).
+# Every neural caller keeps `identical_gemm_into`, whose `(L, P)` is `contract_partition(k)` and nothing else.
+# ---------------------------------------------------------------------------
+#: The columns whose build carries `identical_gemm_kpack_kernel` with the gather staging and the hardware fold
+#: flush (the `kpack_hg` body): NVIDIA and AMD under IDENTICAL. Apple's packed page is bounded differently
+#: (`PLAN_APPLE_MMA` is its body) and the CPU column has no kernel.
+comptime GEMM_LEAF_PTR_COLUMN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
+)
+#: The two packed tiles the shipped dispatch already instantiates (`_shipped_body_kpack_hg`): the wide one,
+#: `GEMM_KPACK_RPT` rows a thread (128 x 64 cells on NVIDIA, 128 x 128 on AMD), and the stepped-down one,
+#: `TUNED_RPT` rows a thread (64 x 64 on NVIDIA, `gemm_nv_step_kpack_rows`; NVIDIA only there, so NVIDIA only here).
+comptime GEMM_LEAF_PTR_RPT_WIDE = GEMM_KPACK_RPT
+comptime GEMM_LEAF_PTR_RPT_SMALL = TUNED_RPT
+comptime GEMM_LEAF_PTR_SMALL_ON = TARGET_COLUMN == COLUMN_NVIDIA
+comptime GEMM_LEAF_PTR_BM_WIDE = GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC)
+comptime GEMM_LEAF_PTR_BM_SMALL = TUNED_RPT * (TUNED_TPB // TUNED_TC)
+comptime GEMM_LEAF_PTR_BN = GEMM_KPACK_CPT * TUNED_TC
+#: The kernel's staged window, in terms of `k` (one barrier and one gather round trip a window).
+comptime GEMM_LEAF_PTR_KS = GEMM_KPACK_KS
+#: The local fold stack of each instantiation: unused storage above the highest reachable level, never a bit
+#: (`_kpack_hg_run_with_ws`). 4 levels cover 8 leaves and are the wide NVIDIA kernel the shipped dispatch runs
+#: for short folds (the kernel admits FS 4 on NVIDIA only); every other instantiation keeps the profile-wide stack.
+comptime GEMM_LEAF_PTR_FS_WIDE = 4 if TARGET_COLUMN == COLUMN_NVIDIA else GEMM_KPACK_FS
+comptime GEMM_LEAF_PTR_FS_SMALL = GEMM_KPACK_FS
+#: The column's block floor: fewer packed tiles than this leave SMs / CUs idle (`GEMM_TILE_MIN_BLOCKS_DEFAULT`,
+#: measured per column for the neural tiles: 192 on the L40S's 142 SMs, which is 1.35 blocks an SM (an earlier
+#: comment here said "two blocks an SM"; 2 x 142 = 284, so that was wrong), 1024 on the MI325X's 304 CUs). The
+#: comptime column constant, so the packed route's rule reads no process slot per call. The shipped tile
+#: step-down reads the floor scaled by the device's SM count (`gemm_nv_block_floor`,
+#: gemm/checks/gemm_identical.mojo: equal to this constant from 95 to 142 SMs, so on the L40S and the A100);
+#: this default-off route keeps the constant until its owed A/B, whose row names the SM count it ran on.
+comptime GEMM_LEAF_PTR_MIN_BLOCKS = GEMM_TILE_MIN_BLOCKS_DEFAULT
+
+
+def identical_gemm_leaf_ptr_into[RPT: Int,FS: Int](
+    ctx: DeviceContext,
+    c: MutPointer[Float32,MutAnyOrigin],
+    a: MutPointer[Float32,MutAnyOrigin],
+    b: MutPointer[Float32,MutAnyOrigin],
+    m: Int,n: Int,k: Int,leaf: Int,p_count: Int,
+    a_si: Int,a_sp: Int,b_sp: Int,b_sj: Int,
+) raises:
+    """One asynchronous all-leaves launch of the packed body (`identical_gemm_kpack_kernel`, the `kpack_hg`
+    spelling: padded 16-byte page, gather staging, hardware fold flush) with the partition `(leaf, p_count)`
+    GIVEN BY THE CALLER instead of `contract_partition(k)`, over raw device pointers and operand strides:
+
+        A_eff[i, p] = a[i * a_si + p * a_sp]      B_eff[p, j] = b[p * b_sp + j * b_sj]      C[i, j] = c[i * n + j]
+
+    The kernel reads `leaf` and `p_count` as arguments and nothing else about the partition (`_leaf_bounds`:
+    leaf t is `[t leaf, min((t + 1) leaf, k))`), so the order it computes is, per cell,
+
+        s_t = chain over p in leaf t, ascending, seeded +0.0: acc = ftz(fma(ftz(A_eff[i, p]), ftz(B_eff[p, j]), acc))
+        C[i, j] = ftz(T(ftz(s_0), ..., ftz(s_{P-1})))        T = the contract's 7.2 tree; no addition at P = 1
+
+    With `leaf = k, p_count = 1` that is ONE ascending chain over the whole of k and `C = ftz(ftz(acc_k)) =
+    acc_k`: the sequence GEMM's word (sequence/gemm_packed_route.mojo writes both orders out side by side).
+    The partition must cover k exactly (`(p_count - 1) leaf < k <= p_count leaf`) and fit the instantiation's
+    fold stack (`p_count <= 2^(FS - 1)`); anything else is refused before the launch. `c` must be dense
+    (row stride `n`) and must not overlap `a` or `b` (blocks store C while others gather the operands): the
+    caller's contract, as for every sequence GEMM kernel; no buffer is looked up here.
+
+    MIRRORS `gemm_identical._kpack_launch` (the page count, the page-fits assert, the grid) because that
+    launcher takes `DeviceBuffer`s and the sequence executor holds raw pointers: a view per operand per call
+    would be three constructions on a hot path. A change to the kernel's argument block
+    must be made here too. `RPT, FS` = `(GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE)` or
+    `(GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL)`: the two kernels the NVIDIA build already carries, so
+    the arm adds no kernel there."""
+    comptime assert GEMM_LEAF_PTR_COLUMN, "identical_gemm_leaf_ptr_into: IDENTICAL on the NVIDIA or AMD column only"
+    comptime assert RPT == GEMM_KPACK_RPT or RPT == TUNED_RPT, "identical_gemm_leaf_ptr_into: the wide or the stepped-down packed tile"
+    if m<=0 or n<=0:
+        return
+    if k<=0 or leaf<=0 or p_count<=0 or (p_count-1)*leaf>=k or p_count*leaf<k:
+        raise Error("identical_gemm_leaf_ptr_into: (leaf, p_count) does not partition k")
+    if p_count>(1<<(FS-1)):
+        raise Error("identical_gemm_leaf_ptr_into: more leaves than this kernel's fold stack covers")
+    comptime NTH = TUNED_TPB
+    comptime TR = NTH // TUNED_TC
+    comptime BM = RPT * TR
+    comptime BN = GEMM_KPACK_CPT * TUNED_TC
+    # `_kpack_launch`'s page: TR A line groups of `KS RPT + PAD` words and TC B line groups of `KS CPT + PAD`.
+    comptime PAGE_BYTES = (BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
+    comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
+        TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
+    ]()
+    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
+        "identical_gemm_leaf_ptr_into: one packed page of this geometry exceeds the column's shared limit"
+    )
+    comptime kern = identical_gemm_kpack_kernel[
+        RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES, False, False,
+        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True
+    ]
+    var g = _tile_grid(m,n,BM,BN,False)
+    ctx.enqueue_function[kern](
+        c,
+        a,
+        b,
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        Int32(leaf),
+        Int32(p_count),
+        Int32(a_si),
+        Int32(a_sp),
+        Int32(b_sp),
+        Int32(b_sj),
+        Int32(0),
+        Int32(0),
+        grid_dim=(g[0], 1, 1),
+        block_dim=(NTH, 1, 1),
+    )
+
+
+#: lane fx-leftovers-product (2026-11-19; `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed): whether this build
+#: fuses a sequence follower (bias, bias + activation, the activation derivative) into the packed store of
+#: `identical_gemm_leaf_ptr_epi_into`. The packed body's columns, as `GEMM_LEAF_PTR_COLUMN`; a GEMM sabotage build keeps
+#: the product and its follower launch (the epilogue is the clean body's store).
+comptime GEMM_LEAF_PTR_EPI = GEMM_LEAF_PTR_COLUMN and is_defined["MOJOLEARN_GEMM_FAST_EPI"]() and not ANY_SABOTAGE
+
+
+def identical_gemm_leaf_ptr_epi_into[RPT: Int,FS: Int,EPI: Int](
+    ctx: DeviceContext,
+    c: MutPointer[Float32,MutAnyOrigin],
+    a: MutPointer[Float32,MutAnyOrigin],
+    b: MutPointer[Float32,MutAnyOrigin],
+    m: Int,n: Int,k: Int,leaf: Int,p_count: Int,
+    a_si: Int,a_sp: Int,b_sp: Int,b_sj: Int,
+    epi_p: MutPointer[Float32,MutAnyOrigin],
+    epi_i: Int,
+) raises:
+    """`identical_gemm_leaf_ptr_into` with the follower in the product's store: ONE asynchronous all-leaves launch of
+    `identical_gemm_kpack_epi_ptr_kernel[..., EPI]` where the plain route issues the product and then a follower
+    launch over the same m n cells. `EPI` is `GEMM_EPI_PLUS_BIAS` (`epi_p` = the bias row, n words),
+    `GEMM_EPI_BIAS_ACT` (the bias row; `epi_i` = the activation code) or `GEMM_EPI_ACT_BWD` (`epi_p` = the forward
+    activations, m n words dense; `epi_i` = the activation code). The product's leaves, chain and fold are
+    `identical_gemm_leaf_ptr_into`'s; the kinds and the unchanged-bits argument are beside `GEMM_EPI_BIAS_ACT` in
+    gemm_identical.mojo. The same refusals; `epi_p` must not overlap `c` (a block stores C cells another block's
+    thread could otherwise read as the operand). The page, the grid and the first twelve arguments MIRROR
+    `identical_gemm_leaf_ptr_into` (and so `_kpack_launch`): a change there is made here too. Arm only: a build
+    without `GEMM_LEAF_PTR_EPI` raises before any launch (the caller's rule answers 0 there and never calls)."""
+    comptime assert RPT == GEMM_KPACK_RPT or RPT == TUNED_RPT, "identical_gemm_leaf_ptr_epi_into: the wide or the stepped-down packed tile"
+    comptime assert EPI == GEMM_EPI_PLUS_BIAS or EPI == GEMM_EPI_BIAS_ACT or EPI == GEMM_EPI_ACT_BWD, (
+        "identical_gemm_leaf_ptr_epi_into: a store epilogue kind that reads a second buffer"
+    )
+    comptime if not GEMM_LEAF_PTR_EPI:
+        raise Error("identical_gemm_leaf_ptr_epi_into: this build has no fused packed store (GEMM_LEAF_PTR_EPI is False)")
+    else:
+        if m<=0 or n<=0:
+            return
+        if k<=0 or leaf<=0 or p_count<=0 or (p_count-1)*leaf>=k or p_count*leaf<k:
+            raise Error("identical_gemm_leaf_ptr_epi_into: (leaf, p_count) does not partition k")
+        if p_count>(1<<(FS-1)):
+            raise Error("identical_gemm_leaf_ptr_epi_into: more leaves than this kernel's fold stack covers")
+        comptime NTH = TUNED_TPB
+        comptime TR = NTH // TUNED_TC
+        comptime BM = RPT * TR
+        comptime BN = GEMM_KPACK_CPT * TUNED_TC
+        comptime PAGE_BYTES = (BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
+        comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
+            TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
+        ]()
+        comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
+            "identical_gemm_leaf_ptr_epi_into: one packed page of this geometry exceeds the column's shared limit"
+        )
+        # The epi-ptr kernel's comptime list: the single-product kernel's without GROUP, SAB and DIAG.
+        comptime kern = identical_gemm_kpack_epi_ptr_kernel[
+            RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES,
+            GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, True, True, EPI
+        ]
+        var g = _tile_grid(m,n,BM,BN,False)
+        ctx.enqueue_function[kern](
+            c,
+            a,
+            b,
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(leaf),
+            Int32(p_count),
+            Int32(a_si),
+            Int32(a_sp),
+            Int32(b_sp),
+            Int32(b_sj),
+            epi_p,
+            Int32(epi_i),
+            grid_dim=(g[0], 1, 1),
+            block_dim=(NTH, 1, 1),
+        )
+
+
 def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
+    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units arm END TO END. The workspace-less entry (the Mamba
+    # projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast` build
+    # with the arm on ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A
+    # product the size rule takes now goes through `identical_gemm_into`, whose first block is the arm; the
+    # workspace also holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge
+    # under 64) fail the rule and keep the line below. Per call under the arm: the integer size test; a taken
+    # product makes the one allocation and the one wait the incumbent entry makes. Off: not compiled.
+    # lane fx-fast-bf16: the bf16 arm takes the same entry (its rule, its scratch in the same one allocation).
+    comptime if (GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL)) or (
+            GEMM_FAST_BF16_UNITS and allow_vendor):
+        if matrix_units_takes(m,n,k) or (allow_vendor and bf16_units_takes(m,n,k)):
+            neural_validate(m,n,k,op)
+            var units_ws = ctx.enqueue_create_buffer[DType.float32](
+                max(identical_gemm_workspace_max_floats(m,n,k),
+                    max(matrix_units_workspace_floats(m,n,k,op),bf16_units_workspace_floats(m,n,k))))
+            try:
+                identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,units_ws,m,n,k,op)
+            except error:
+                ctx.synchronize()
+                raise error
+            ctx.synchronize()
+            _ = units_ws^
+            return
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
         return
@@ -235,6 +466,10 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     _ = workspace^
 
 
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) gemm_workspace_epi_takes and gemm_workspace_run_epi (the join in the product's store), with gemm/checks/gemm_epilogue.mojo, its suite and its check deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+
+
 # TOMBSTONE NN05 (MOJOLEARN_IDN_NEURAL_NN05, neural_gemm_pair=nn05, deleted
 # 2026-10-08 by lane grid-act-4): _neural_pair_kernel ran the gate and up
 # projections as one kernel, one A load feeding both contractions, same leaf
@@ -244,77 +479,15 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
 # main 4e3da4282.
 
 
-def identical_gemm_pair_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
-    var count = identical_gemm_workspace_max_floats(m,n,k)
-    comptime if NN07:
-        count += m*k
-    return max(1,count)
-
-
-def identical_gemm_pair_into(ctx: DeviceContext,
-    mut c1: DeviceBuffer[DType.float32],mut c2: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],mut b1: DeviceBuffer[DType.float32],
-    mut b2: DeviceBuffer[DType.float32],mut ws: DeviceBuffer[DType.float32],
-    m: Int,n: Int,k: Int,op: Int) raises:
-    neural_validate(m,n,k,op)
-    if len(c1)<m*n or len(c2)<m*n or len(a)<m*k or len(b1)<n*k or len(b2)<n*k:
-        raise Error("neural pair operand storage too short")
-    if len(ws)<identical_gemm_pair_workspace_max_floats(m,n,k):
-        raise Error("neural pair workspace too short")
-    if m==0 or n==0:
-        return
-    if (_overlaps(c1,m*n,c2,m*n) or _overlaps(c1,m*n,a,m*k)
-        or _overlaps(c2,m*n,a,m*k) or _overlaps(c1,m*n,b1,n*k)
-        or _overlaps(c1,m*n,b2,n*k) or _overlaps(c2,m*n,b1,n*k)
-        or _overlaps(c2,m*n,b2,n*k) or _overlaps(ws,len(ws),a,m*k)
-        or _overlaps(ws,len(ws),b1,n*k) or _overlaps(ws,len(ws),b2,n*k)
-        or _overlaps(ws,len(ws),c1,m*n) or _overlaps(ws,len(ws),c2,m*n)):
-        raise Error("neural pair outputs/workspace must be disjoint from live operands")
-    var actual_op = op
-    var input = DeviceBuffer[DType.float32](ctx,a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),len(a),owning=False)
-    var scratch_offset = 0
-    var st = neural_strides(op,m,n,k)
-    comptime if NN07:
-        if k>0:
-            input = DeviceBuffer[DType.float32](ctx,ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m*k,owning=False)
-            ctx.enqueue_function[_neural_operand_pack_kernel](input,a,Int32(m),Int32(k),Int32(st[0]),Int32(st[1]),
-                grid_dim=((m*k+127)//128,1,1),block_dim=(128,1,1))
-            scratch_offset = m*k
-            if op==OP_TN:
-                actual_op = OP_NN
-    var scratch = DeviceBuffer[DType.float32](ctx,(ws.unsafe_ptr()+scratch_offset).unsafe_origin_cast[MutAnyOrigin](),
-        len(ws)-scratch_offset,owning=False)
-    # NN05's fused pair kernel arm (deleted 2026-10-08, see the tombstone above)
-    # ran here; both projections are the identical GEMM.
-    identical_gemm_into(ctx,c1,input,b1,scratch,m,n,k,actual_op)
-    comptime if NN07 and _PAIR_CONTROL:
-        if k>0:
-            # B repeats the same producer; A shares its completed stage.
-            # Both include packing in the whole model operation.
-            ctx.enqueue_function[_neural_operand_pack_kernel](input,a,Int32(m),Int32(k),Int32(st[0]),Int32(st[1]),
-                grid_dim=((m*k+127)//128,1,1),block_dim=(128,1,1))
-    identical_gemm_into(ctx,c2,input,b2,scratch,m,n,k,actual_op)
-    _ = input^
-    _ = scratch^
-
-
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_FILL_SPLITK (noise/loser: mamba2 NV 1.248, transformer NV 1.39) deleted 2026-10-11 by 026a811d5; code recoverable at 026a811d5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_FILL_SPLITK.patch
 struct GemmWorkspace(Movable):
     """One in-order model context; no mutable global plan or operand cache."""
     var buffer: DeviceBuffer[DType.float32]
-    var last_m: Int
-    var last_n: Int
-    var last_k: Int
-    var cached_plan: Int
 
     def __init__(out self,ctx: DeviceContext) raises:
         step_count_device_alloc()
         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
-        self.last_m = -1
-        self.last_n = -1
-        self.last_k = -1
-        self.cached_plan = PLAN_FLAT
 
     def _ensure(mut self,ctx: DeviceContext,required: Int) raises:
         if required>len(self.buffer):
@@ -328,61 +501,16 @@ struct GemmWorkspace(Movable):
         mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
             neural_validate(m,n,k,op)
-        comptime if NN12 and _CONTROL:
-            # B charges fresh scratch and its last-consumer wait per product.
-            # OFF keeps the pre-existing model workspace reuse unchanged.
-            identical_gemm[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-            return
         var required = identical_gemm_workspace_max_floats(m,n,k)
-        comptime if NN12 and not _CONTROL:
-            if required>_RETAINED:
-                identical_gemm[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
-                return
+        # lane fx-fast-matrix-units (arm only): room for the transpose of A of an OP_TN the matrix unit takes.
+        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+            required = max(required,matrix_units_workspace_floats(m,n,k,op))
+        # lane fx-fast-bf16 (arm only): room for the bf16 images of both operands of a product the bf16 unit takes.
+        comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
+            required = max(required,bf16_units_workspace_floats(m,n,k))
         self._ensure(ctx,required)
-        comptime if NN12 and NN10 and not _CONTROL and ((NEURAL_GEMM_ROLES & ROLE) != 0):
-            _admit_product(c,a,b,self.buffer,m,n,k,op)
-            if m==0 or n==0:
-                return
-            if self.last_m!=m or self.last_n!=n or self.last_k!=k:
-                self.cached_plan = _selected_cost_plan(m,n,k)
-                self.last_m = m
-                self.last_n = n
-                self.last_k = k
-            _profile_or_cost_into(ctx,c,a,b,self.buffer,m,n,k,op,self.cached_plan)
-        else:
-            identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
-
-    def run_pair(mut self,ctx: DeviceContext,mut c1: DeviceBuffer[DType.float32],
-        mut c2: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
-        mut b1: DeviceBuffer[DType.float32],mut b2: DeviceBuffer[DType.float32],
-        m: Int,n: Int,k: Int,op: Int) raises:
-        neural_validate(m,n,k,op)
-        var required = identical_gemm_pair_workspace_max_floats(m,n,k)
-        comptime if NN12 and _CONTROL:
-            var temporary = ctx.enqueue_create_buffer[DType.float32](required)
-            try:
-                identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,temporary,m,n,k,op)
-            except error:
-                ctx.synchronize()
-                raise error
-            ctx.synchronize()
-            _ = temporary^
-            return
-        comptime if NN12 and not _CONTROL:
-            if required>_RETAINED:
-                var temporary = ctx.enqueue_create_buffer[DType.float32](required)
-                try:
-                    identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,temporary,m,n,k,op)
-                except error:
-                    ctx.synchronize()
-                    raise error
-                ctx.synchronize()
-                _ = temporary^
-                return
-        self._ensure(ctx,required)
-        identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,self.buffer,m,n,k,op)
+        identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
 
     def close(mut self,ctx: DeviceContext) raises:
         ctx.synchronize()
         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
-        self.last_m = -1

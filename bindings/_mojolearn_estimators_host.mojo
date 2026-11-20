@@ -50,7 +50,28 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
+from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
+from core.linear_boundary_types import LinearPredictRequest
+from core.logistic_native_api import (
+    QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
+    QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
+    QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
+)
+from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
+from core.mojolearn_estimators_host_run import (
+    _pp_load, _pp_out, tsvd_transform_host_words, inverse_transform_host_words,
+    _publish_linear_entry_table, _publish_estimators_qn_table,
+)
+from glm.host.linear_svc_native_host import LINEAR_SVC_HOST_API
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from core.dbscan_native_host import DBSCAN_HOST_API, DBSCANHostKernels
+from core.dbscan_native_api import DBSCANFitRequest
+from core.kde_native_host import KDE_HOST_API, KDEHostKernels
+from core.kde_native_api import KDEQueryRequest
+from core.pca_native_host import PCA_HOST_API
+from core.tsvd_native_host import TSVD_HOST_API
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -59,33 +80,32 @@ from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding
-from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
-from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
+from bindings.py2mojo_cluster_est_pack import dbscan_core_arrays_host_binding
+from providers.python.core_py2mojo_rows_pyapi_pack import py2mojo_rows_host_binding
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.host_finite_scan import host_finite_status
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
+from decomposition.pca_ops_entry_host import PCA_OPS_HOST_API, pca_ops_host_v1, pca_fit_owned_host_run_words
+from core.decomp_entry_table_pca import pca_ops_publish
+from core.neighbors_entry_table import NeighborsEntryKey
+from bindings.py_balanced import py_setattr
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
-    host_inverse_transform_into,
-    host_ols_predict_into,
     host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
-    host_qn_decision_into,
-    host_qn_decision_multi_into,
-    host_qn_predict_binary_into,
-    host_qn_sigmoid_into,
-    host_qn_softmax_into,
-    host_tsvd_transform_into,
 )
 from core.labeled_reference_host_predict import (
     LABELED_PREDICT_HOST_SABOTAGE,
@@ -110,11 +130,12 @@ from decomposition.host.pca_full_oracle import (
 )
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
+from glm.host.ols_prep_host import ols_prep_host
 from glm.host.gram_solve_host import host_linear_gram_fit
 from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
-from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
+from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE
 from core.device_fold import host_sum_f32_fixed
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -135,9 +156,7 @@ from preprocessing.host.scaler_oracle import (
 from core.estimators_host_impl import (
     _positive,
     cd_predict_host_run,
-    dbscan_fit_host_run,
     host_pca_validate_first,
-    kde_score_samples_host_run,
     kernel_ridge_predict_host_run,
     labeled_reference_predict_host_run,
     minmax_transform_host_run,
@@ -145,11 +164,9 @@ from core.estimators_host_impl import (
     ols_fit_host_run,
     pca_fit_full_host_run,
     pca_fit_host_run,
-    pca_fit_owned_host_run,
     pca_randomized_owned_host_run,
     pca_whiten_check_host,
     pca_whiten_host_run,
-    qn_fit_host_run,
     rbf_sampler_transform_host_run,
     ridge_fit_host_run,
     standard_transform_host_run,
@@ -159,10 +176,16 @@ from core.estimators_host_impl import (
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every buffer address and size the owners pass): one
+    # type-pointer compare and a native integer read; no class-name strings,
+    # module lookup or operator.index call. bool is its own class, so it
+    # never takes this path. Anything else keeps the full admission below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("estimators host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -269,17 +292,14 @@ def kde_score_samples_binding(
     var has_weights = _index(params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
-    var weights = List[Float32]()
+    var weights_address = 0
     if has_weights:
-        weights = read_f32(_index(weights_addr), max(0, n_train))
-    var train_address = _index(train_addr)
-    var query_address = _index(query_addr)
+        weights_address = _index(weights_addr)
+    var request = KDEQueryRequest(Int(tp), Int(qp), weights_address, Int(op), n_train, n_query,
+                                  n_features, Float64(bandwidth), has_weights, want_total, kname^, mname^)
     var total = Float64(0.0)
     with GILReleased(Python()):
-        total = kde_score_samples_host_run(
-            tp, qp, op, weights, has_weights, n_train, n_query, n_features,
-            bandwidth, kname, mname, want_total,
-        )
+        total = KDEHostKernels.query(request)
     if want_total:
         return PythonObject(total)
     return PythonObject(n_query)
@@ -368,8 +388,8 @@ def tsvd_fit_binding(
 ) raises -> PythonObject:
     """`TruncatedSVD.fit` on the host by `host_tsvd_fit`: params `n_rows,
     n_features, n_components`; components and singular values written.
-    Returns 0."""
-    if len(params) != 3:
+    Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit: params must contain 3 values")
     var x_address = _index(x_addr)
     var cp = f32_ptr(_index(components_addr))
@@ -377,9 +397,15 @@ def tsvd_fit_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
-        tsvd_fit_host_run(x_address, cp, sp, nr, nf, nc)
-    return PythonObject(0)
+        if test and nr >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = Int(host_finite_status(x_address, nr * nf))
+        if status == 0:
+            tsvd_fit_host_run(x_address, cp, sp, nr, nf, nc)
+    return PythonObject(status)
 
 
 def tsvd_explained_binding(
@@ -419,8 +445,8 @@ def tsvd_fit_explained_binding(
     """The GPU binding's `tsvd_fit_explained` (lane fg-pca T1) on the host:
     `host_tsvd_fit` then `host_tsvd_explained` on the components just
     written, exactly the two calls above in order (the host column has no
-    upload to save). Returns 0."""
-    if len(params) != 3:
+    upload to save). Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit_explained: params must contain 3 values")
     var x_address = _index(x_addr)
     var c_address = _index(components_addr)
@@ -431,14 +457,21 @@ def tsvd_fit_explained_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
-        tsvd_fit_explained_host_run(x_address, c_address, cp, sp, ep, rp, nr, nf, nc)
-    return PythonObject(0)
+        if test and nr >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = Int(host_finite_status(x_address, nr * nf))
+        if status == 0:
+            tsvd_fit_explained_host_run(x_address, c_address, cp, sp, ep, rp, nr, nf, nc)
+    return PythonObject(status)
 
 
 def lm_classical_stats_binding() raises -> PythonObject:
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    return PythonObject(Int(C02_LINEAR_PAIR))
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
+    return PythonObject(0)
 
 
 def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -523,36 +556,39 @@ def pca_fit_owned_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`PCA.fit` / `fit_transform` for the exact solvers in one call on the
-    host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`): the GPU
-    binding's contract. params: n_rows, n_features, n_components, dense (1:
-    svd_solver='full'), keep mode (0: every component, 1: the fraction
-    the fraction, 2: "mle"), whiten, the fraction; an output address (0: none) gets X's
-    projection. Returns (kept count, noise variance)."""
-    if len(params) != 7:
+    host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`):
+    the five public arrays written at n_components, the kept count chosen,
+    and with an output address (0: none) X projected onto the kept
+    components. params: n_rows, n_features, n_components, dense (1:
+    svd_solver='full'), keep mode (0: every component, 1: the fraction, 2:
+    "mle"), whiten, the fraction, and OPTIONALLY (lane a7d) a finite flag: 1
+    asks for X's finite status word. Returns (kept count, noise variance),
+    with the status word third when asked (0 = finite; the door refuses
+    otherwise).
+    UNPACK and PACK only: the body is decomposition/pca_ops_entry_host.mojo `pca_fit_owned_host_run_words`, which
+    the PCA owned-fit table (core/decomp_entry_table_pca.mojo) also calls.
+    The export remains for bindings/pca_fit_native_door.mojo,
+    bindings/msel_device.mojo and python/mojolearn/host_surface.py."""
+    if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
-    var x_address = Int(py=x_addr)
-    var cp = f32_ptr(Int(py=components_addr))
-    var mp = f32_ptr(Int(py=mean_addr))
-    var ep = f32_ptr(Int(py=explained_addr))
-    var rp = f32_ptr(Int(py=ratio_addr))
-    var sp = f32_ptr(Int(py=singular_addr))
-    var oa = Int(py=out_addr)
-    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var nc = Int(py=params[2])
-    var dense = Int(py=params[3]) != 0
-    var keep_mode = Int(py=params[4])
-    var whiten = Int(py=params[5]) != 0
+    var test = len(params) == 8 and Int(py=params[7]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var a: List[Int] = [Int(py=x_addr), Int(py=components_addr), Int(py=mean_addr), Int(py=explained_addr),
+                        Int(py=ratio_addr), Int(py=singular_addr), Int(py=out_addr), 0,
+                        Int(word.unsafe_ptr()) if test else 0]
+    var p: List[Int] = [Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]),
+                        Int(py=params[4]), Int(py=params[5])]
     var fraction = Float64(py=params[6])
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        var fitted = pca_fit_owned_host_run(
-            x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
-        )
+        var fitted = pca_fit_owned_host_run_words(a, p, fraction)
         kept = fitted[0]
         noise = fitted[1]
+    var status = Int(word[0])
+    _ = word^  # the body wrote it through its address; keep it alive past the read
+    if test:
+        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(status))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 
@@ -571,7 +607,9 @@ def pca_fit_randomized_binding(
     the GPU binding's contract. params: n_rows, n_features, n_components,
     n_oversamples, power iterations, auto (1: iterated_power='auto'),
     whiten, the Philox seed mod 2^32. Returns the noise variance."""
-    if len(params) != 8:
+    # Lane a8d: an optional ninth value, the finite flag: 1 asks for X's
+    # finite status word (returned as [noise, word]; a flagged X is not fit).
+    if len(params) != 8 and len(params) != 9:
         raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
     var x_address = Int(py=x_addr)
     var cp = f32_ptr(Int(py=components_addr))
@@ -589,12 +627,44 @@ def pca_fit_randomized_binding(
     var auto = Int(py=params[5]) != 0
     var whiten = Int(py=params[6]) != 0
     var s = Int(py=params[7])
+    var test = len(params) == 9 and Int(py=params[8]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         noise = pca_randomized_owned_host_run(
-            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten,
+            word_addr,
         )
+    if test:
+        return Python.list(PythonObject(noise), PythonObject(Int(word[0])))
     return PythonObject(noise)
+
+
+def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
+    """LinearRegression / Ridge general-route preparation in one call:
+    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
+    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
+    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
+    centered by their means (with intercept) and row-scaled by sqrt(w)
+    (with weights); the means are written with intercept. Returns 0."""
+    # ne2-g-linear (N403): one crossing for what was up to fourteen.
+    if len(addresses) != 9 or len(params) != 4:
+        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
+                    "params rows, cols, intercept, means_mode required")
+    var a = List[Int](capacity=9)
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        a.append(Int(py=addresses[i]))
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    var intercept = Int(py=params[2]) != 0
+    var mode = Int(py=params[3])
+    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
+        if a[i] == 0 and i != 2 and (intercept or i < 5):
+            raise Error("lm_ols_prep: null buffer address")
+    with GILReleased(Python()):
+        ols_prep_host(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
+    return PythonObject(0)
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -689,8 +759,10 @@ def linear_gram_fit_binding(
     (glm/host/gram_solve_host.mojo): params `n_rows, n_features, alpha,
     center`; returns 0 (coef, and with center mu and ymean, written) or 1
     (nothing written; the caller's incumbent route)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
     comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: this build lacks the route (FAST, or -D MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF)")
+        raise Error("linear_gram_fit: this build lacks the route (FAST)")
     if len(params) != 4:
         raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
     var x_address = _index(x_addr)
@@ -702,6 +774,9 @@ def linear_gram_fit_binding(
     var nf = _index(params[1])
     var alpha = Float32(Float64(py=params[2]))
     var center = _index(params[3]) != 0
+    # The null-address refusal read_f32 made before the in-place read.
+    _ = f32_ptr(x_address)
+    _ = f32_ptr(y_address)
     var status = 1
     with GILReleased(Python()):
         _positive(nr, "n_rows")
@@ -709,66 +784,9 @@ def linear_gram_fit_binding(
         if alpha > Float32(0.0) and nf == 1:
             status = 1
         else:
-            var x = read_f32(x_address, nr * nf)
-            var y = read_f32(y_address, nr)
-            status = host_linear_gram_fit(x, y, nr, nf, alpha, center, wp, mp, ymp)
+            # ne2-g-linear (N406): X and y read in place (no owned copies).
+            status = host_linear_gram_fit(x_address, y_address, nr, nf, alpha, center, wp, mp, ymp)
     return PythonObject(status)
-
-
-def qn_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`qnFit` on the host by `host_qn_fit` (L-BFGS, or OWL-QN when the
-    l1 penalty is nonzero; the binary logistic loss, or the softmax loss at
-    `n_classes > 2`, lane/cpu-training-batch3). params: n_rows, n_features,
-    n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
-    linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
-    has_sample_weight, an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
-    the value a 13-field call gets; all eight ids since
-    lane/expose-qn-objectives, 2026-09-20), and an OPTIONAL 15th, `svr_eps`
-    (0 when absent). `coef_addr` holds `n_targets *
-    (n_features + fit_intercept)` floats, written; `info_addr[0]` receives
-    the objective, `[1]` the OPT_RETCODE; returns num_iters.
-    Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
-    the address of `n_rows` float32 per-row weights (the device binding's
-    contract)."""
-    if len(params) < 13 or len(params) > 16:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, and a 16th, the sample_weight address, when has_sample_weight is 1")
-    var x_address = _index(x_addr)
-    var y_address = _index(y_addr)
-    var wp = f32_ptr(_index(coef_addr))
-    var ip = f32_ptr(_index(info_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var nc = _index(params[2])
-    var l1 = Float64(py=params[3])
-    var l2 = Float64(py=params[4])
-    var grad_tol = Float64(py=params[5])
-    var change_tol = Float64(py=params[6])
-    var max_iter = _index(params[7])
-    var ls_max = _index(params[8])
-    var mem = _index(params[9])
-    var fit_intercept = _index(params[10]) != 0
-    var normalized = _index(params[11]) != 0
-    var has_sw = _index(params[12]) != 0
-    var loss = _index(params[13]) if len(params) >= 14 else 0
-    var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) != 16:
-        raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
-    var sw_address = _index(params[15]) if has_sw else 0
-    var iters = 0
-    with GILReleased(Python()):
-        iters = qn_fit_host_run(
-            x_address, y_address, wp, ip, nr, nf, nc, l1, l2, grad_tol,
-            change_tol, max_iter, ls_max, mem, fit_intercept, normalized,
-            has_sw, loss, sw_address, svr_eps,
-        )
-    return PythonObject(iters)
-
 
 def dbscan_fit_binding(
     x_addr: PythonObject,
@@ -863,18 +881,11 @@ def _dbscan_fit_run(
     var max_iter = _index(params[5])
     var eps_nn_method = _index(params[6])
     var metric = _index(params[7])
-    if budget != 0:
-        raise Error(
-            "mojolearn: no CPU implementation of DBSCAN.fit with"
-            " max_mbytes_per_batch yet; the host runs one batch of every row"
-            " and does not size a device it does not have"
-        )
+    var request = DBSCANFitRequest(x_address, Int(lp), wa, core_address, nr, nf, min_samples,
+                                   budget, max_iter, eps_nn_method, metric, eps)
     var passes = 0
     with GILReleased(Python()):
-        passes = dbscan_fit_host_run(
-            x_address, lp, wa, core_address, nr, nf, eps, min_samples,
-            max_iter, eps_nn_method, metric,
-        )
+        passes = DBSCANHostKernels.fit(request)
     return PythonObject(passes)
 
 
@@ -882,33 +893,76 @@ def _dbscan_fit_run(
 # 2026-09-13). Each keeps the GPU binding's name, arity and params list.
 
 
+
+def tsvd_native_api_v1_binding() raises -> PythonObject:
+    var api = TSVD_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def dbscan_native_api_v1_binding() raises -> PythonObject:
+    var api = DBSCAN_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def kde_native_api_v1_binding() raises -> PythonObject:
+    var api = KDE_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def pca_native_api_v1_binding() raises -> PythonObject:
+    var api = PCA_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def linear_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def linear_svc_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_SVC_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def logistic_native_api_v1_binding() raises -> PythonObject:
+    var api = LOGISTIC_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def linear_predict_native_api_v1_binding() raises -> PythonObject:
+    var api = LINEAR_PREDICT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def ols_predict_binding(
-    x_addr: PythonObject,
-    coef_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """`LinearRegression.predict` and `Ridge.predict` on the host:
-    `out[n_rows] = X[n_rows x n_features] . coef + intercept` by
-    `host_ols_predict`. params, as in the GPU binding: n_rows, n_features,
-    intercept (a float; `Float32(Float64(...))` as there). Returns 0."""
+    """Legacy address door; shares the typed prediction implementation."""
     if len(params) != 3:
         raise Error("ols_predict: params must contain n_rows, n_features, intercept")
-    var x_address = _index(x_addr)
-    var coef_address = _index(coef_addr)
-    var op = f32_ptr(_index(out_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var intercept = Float32(Float64(py=params[2]))
+    var xp = f32_ptr(_index(x_addr))
+    var cp = f32_ptr(_index(coef_addr))
+    var dst = f32_ptr(_index(out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        _index(params[0]), _index(params[1]), Float64(py=params[2]), False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        # DEVIATION 2920: X read in place, the rows split across the host
-        # thread policy, the predictions written straight to `out`.
-        host_ols_predict_into(
-            f32_ptr(x_address), f32_ptr(coef_address), op, nr, nf, intercept,
-            host_predict_task_count(nr),
-        )
+        _ = linear_predict_host(request)
+    return PythonObject(0)
+
+
+def ols_predict_wide_binding(
+    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Legacy address door; shares the typed prediction implementation."""
+    if len(params) != 3:
+        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
+    var xp = f32_ptr(_index(x_addr))
+    var cp = f32_ptr(_index(coef_addr))
+    var dst = f64_ptr(_index(out_addr))
+    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
+        _index(params[0]), _index(params[1]), Float64(py=params[2]), True)
+    with GILReleased(Python()):
+        _ = linear_predict_host(request)
     return PythonObject(0)
 
 
@@ -920,8 +974,8 @@ def tsvd_transform_binding(
 ) raises -> PythonObject:
     """`TruncatedSVD.transform` on the host: `out[n_rows x n_components] =
     X . components^T` by `host_tsvd_transform`. params: n_rows, n_features,
-    n_components. Returns 0."""
-    if len(params) != 3:
+    n_components. Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_transform: params must contain 3 values")
     var x_address = _index(x_addr)
     var c_address = _index(components_addr)
@@ -929,15 +983,11 @@ def tsvd_transform_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        _positive(nc, "n_components")
-        host_tsvd_transform_into(
-            f32_ptr(x_address), f32_ptr(c_address), op, nr, nf, nc,
-            host_predict_task_count(nr),
-        )
-    return PythonObject(0)
+        status = tsvd_transform_host_words(x_address, c_address, op, nr, nf, nc, test)
+    return PythonObject(status)
 
 
 def pca_transform_binding(
@@ -949,7 +999,9 @@ def pca_transform_binding(
 ) raises -> PythonObject:
     """`PCA.transform` (whiten=False) on the host: center by `mean_`, then
     `out = (X - mean) . components^T` by `host_pca_transform`. params:
-    n_rows, n_features, n_components. Returns 0. The whitened pair is
+    n_rows, n_features, n_components. Returns X's finite status word (0 =
+    every word finite: the door's deferred finite test, lane a6; a non-zero
+    word means the door refuses and discards `out`). The whitened pair is
     `pca_whiten_transform` and `pca_whiten_inverse_transform` below."""
     if len(params) != 3:
         raise Error("pca_transform: params must contain 3 values")
@@ -964,11 +1016,15 @@ def pca_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        host_pca_transform_into(
-            f32_ptr(x_address), f32_ptr(m_address), f32_ptr(c_address),
-            op, nr, nf, nc, host_predict_task_count(nr),
-        )
-    return PythonObject(0)
+    # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+    var status = Int(host_finite_status(x_address, nr * nf))
+    if status == 0:
+        with GILReleased(Python()):
+            host_pca_transform_into(
+                f32_ptr(x_address), f32_ptr(m_address), f32_ptr(c_address),
+                op, nr, nf, nc, host_predict_task_count(nr),
+            )
+    return PythonObject(status)
 
 
 def inverse_transform_binding(
@@ -996,15 +1052,7 @@ def inverse_transform_binding(
     var nc = _index(params[2])
     var add_mean = _index(params[3]) != 0
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        _positive(nc, "n_components")
-        var components = read_f32(c_address, nc * nf)
-        var mu = read_f32(m_address, nf) if add_mean else List[Float32]()
-        host_inverse_transform_into(
-            f32_ptr(z_address), components, mu, op, nr, nf, nc, add_mean,
-            host_predict_task_count(nr),
-        )
+        inverse_transform_host_words(z_address, c_address, m_address, op, nr, nf, nc, add_mean)
     return PythonObject(0)
 
 
@@ -1091,30 +1139,54 @@ def qn_decision_function_binding(
     absent or below 3 is the binary shape; `n_classes > 2` the softmax
     shape by `host_qn_decision_multi`, `w` the column-major `C x dims`
     block and out `n_rows * n_classes` floats row-major. Returns 0."""
-    if len(params) != 3 and len(params) != 4:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
+    # lane a8c: an optional 5th, the host address of the deferred finite
+    # status word of X (the GPU binding's contract): the host column tests
+    # the words it reads (core/host_finite_scan.mojo, parallel SIMD tasks)
+    if len(params) < 3 or len(params) > 5:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept, an optional n_classes and an optional status address")
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f32_ptr(_index(out_addr))
     var nr = _index(params[0])
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
-    var nc = _index(params[3]) if len(params) == 4 else 1
+    var nc = _index(params[3]) if len(params) >= 4 else 1
+    var status = _index(params[4]) if len(params) == 5 else 0
+    var request = QnQueryRequest(x_address, w_address, Int(op), status, nr, nf, nc, fi, False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        # DEVIATION 2920: X read in place, the rows split across the host
-        # thread policy, the scores written straight to `out`.
-        if nc > 2:
-            host_qn_decision_multi_into(
-                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, nc, fi,
-                host_predict_task_count(nr),
-            )
-        else:
-            host_qn_decision_into(
-                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, fi,
-                host_predict_task_count(nr),
-            )
+        QnHostKernels.query(QN_NATIVE_DECISION, request)
+    return PythonObject(0)
+
+
+def qn_proba_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict_proba` in one call on the host: `qn_decision_function` then
+    the sigmoid (n_classes < 3: out float64 (n_rows, 2)) or softmax link,
+    the same restatements as the two entries called in turn, the scores in
+    native scratch. params: n_rows, n_features, fit_intercept, n_classes and
+    an optional 5th, log (0/1): 1 writes `log(p)` (`py2mojo_rows` ROWS_LOG's
+    words, `predict_log_proba`) instead of `p`. Returns 0."""
+    # ne2-g-linear (N361): the GPU binding's contract; log_proba in the same
+    # call (was qn_proba then a py2mojo_rows crossing over the output).
+    # lane a8c: an optional 6th, the deferred finite status word's address
+    if len(params) < 4 or len(params) > 6:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes, an optional log flag and an optional status address")
+    var log_out = len(params) >= 5 and _index(params[4]) != 0
+    var status = _index(params[5]) if len(params) == 6 else 0
+    var x_address = _index(x_addr)
+    var w_address = _index(coef_addr)
+    var op = f64_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var fi = _index(params[2]) != 0
+    var nc = _index(params[3])
+    var request = QnQueryRequest(x_address, w_address, Int(op), status, nr, nf, nc, fi, log_out)
+    with GILReleased(Python()):
+        QnHostKernels.query(QN_NATIVE_PROBA, request)
     return PythonObject(0)
 
 
@@ -1125,11 +1197,13 @@ def qn_predict_binary_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """Host binary `qn_predict`, the GPU binding's address contract."""
-    if len(params) != 3:
-        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    # lane a8c: an optional 4th, the deferred finite status word's address
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept and an optional status address")
     var nr = _index(params[0])
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
+    var status = _index(params[3]) if len(params) == 4 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_index(out_addr))
     # Every PythonObject is read BEFORE the GIL is released. `_index` calls
     # into the interpreter, and calling it inside GILReleased (as this entry
@@ -1137,12 +1211,9 @@ def qn_predict_binary_binding(
     # PyObject_GetAttrString on the first binary logistic fixture.
     var xp = f32_ptr(_index(x_addr))
     var wp = f32_ptr(_index(coef_addr))
+    var request = QnQueryRequest(Int(xp), Int(wp), Int(op), status, nr, nf, 1, fi, False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        host_qn_predict_binary_into(
-            xp, wp, op, nr, nf, fi, host_predict_task_count(nr),
-        )
+        QnHostKernels.query(QN_NATIVE_BINARY, request)
     return PythonObject(0)
 
 
@@ -1161,13 +1232,9 @@ def qn_softmax_binding(
     var op = f64_ptr(_index(out_addr))
     var nr = _index(params[0])
     var nc = _index(params[1])
-    if nc < 3:
-        raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    var request = QnLinkRequest(s_address, Int(op), nr, nc)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        host_qn_softmax_into(
-            f32_ptr(s_address), op, nr, nc, host_predict_task_count(nr)
-        )
+        QnHostKernels.link(QN_NATIVE_SOFTMAX, request)
     return PythonObject(0)
 
 
@@ -1183,11 +1250,9 @@ def qn_sigmoid_binding(
     var s_address = _index(scores_addr)
     var op = f64_ptr(_index(out_addr))
     var nr = _index(params[0])
+    var request = QnLinkRequest(s_address, Int(op), nr, 2)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        host_qn_sigmoid_into(
-            f32_ptr(s_address), op, nr, host_predict_task_count(nr)
-        )
+        QnHostKernels.link(QN_NATIVE_SIGMOID, request)
     return PythonObject(0)
 
 
@@ -1211,18 +1276,6 @@ def qn_sigmoid_binding(
 # ===========================================================================
 
 
-def _pp_load(addr: Int, n: Int) raises -> List[Float32]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return read_f32(addr, max(0, n))
-
-
-def _pp_out(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return f32_ptr(addr)
-
-
 def standard_transform_binding(
     x_addr: PythonObject, mean_addr: PythonObject, scale_addr: PythonObject,
     out_addr: PythonObject, params: PythonObject,
@@ -1241,11 +1294,15 @@ def standard_transform_binding(
         raise Error("StandardScaler: positive dimensions with n*d<=Int32.max required")
     if with_mean < 0 or with_mean > 1 or with_std < 0 or with_std > 1:
         raise Error("StandardScaler: flags must be 0 or 1")
-    var x = _pp_load(_index(x_addr), n * d)
-    var mean = _pp_load(_index(mean_addr), d)
-    var scale = _pp_load(_index(scale_addr), d)
+    var x_address = _index(x_addr)
+    var mean_address = _index(mean_addr)
+    var scale_address = _index(scale_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var mean = _pp_load(mean_address, d)
+        var scale = _pp_load(scale_address, d)
         standard_transform_host_run(x, mean, scale, output, n, d, inverse, with_mean, with_std)
     return PythonObject(n * d)
 
@@ -1269,11 +1326,15 @@ def minmax_transform_binding(
         raise Error("MinMaxScaler: positive dimensions with n*d<=Int32.max required")
     if not isfinite(lower) or not isfinite(upper) or lower >= upper:
         raise Error("MinMaxScaler: finite increasing Float32 feature range required")
-    var x = _pp_load(_index(x_addr), n * d)
-    var scale = _pp_load(_index(scale_addr), d)
-    var offset = _pp_load(_index(min_addr), d)
+    var x_address = _index(x_addr)
+    var scale_address = _index(scale_addr)
+    var offset_address = _index(min_addr)
     var output = _pp_out(_index(out_addr))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x = _pp_load(x_address, n * d)
+        var scale = _pp_load(scale_address, d)
+        var offset = _pp_load(offset_address, d)
         minmax_transform_host_run(x, scale, offset, output, n, d, inverse, clip, lower, upper)
     return PythonObject(n * d)
 
@@ -1331,16 +1392,17 @@ def kernel_ridge_predict_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
-    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    var x_fit_address = Int(py=addrs[0])
+    var dual_address = Int(py=addrs[1])
+    var x_new_address = Int(py=addrs[2])
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var x_fit = read_f32(x_fit_address, max(0, n * d))
+        var dual = read_f32(dual_address, max(0, n * t))
+        var x_new = read_f32(x_new_address, max(0, q * d))
         kernel_ridge_predict_host_run(
             op, x_fit, dual, x_new, n, d, t, kernel, degree, gamma, coef0, q
         )
-    _ = x_fit^
-    _ = dual^
-    _ = x_new^
     return PythonObject(0)
 
 
@@ -1371,17 +1433,18 @@ def nystroem_transform_binding(
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var components_address = Int(py=addrs[0])
+    var normalization_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[5])
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var components = read_f32(components_address, max(0, q * d))
+        var normalization = read_f32(normalization_address, max(0, q * q))
+        var x = read_f32(x_address, max(0, m * d))
         nystroem_transform_host_run(
             op, components, normalization, x, q, d, kernel, degree, gamma, coef0, m
         )
-    _ = components^
-    _ = normalization^
-    _ = x^
     return PythonObject(0)
 
 
@@ -1407,22 +1470,37 @@ def rbf_sampler_transform_binding(
     var q = Int(py=params[1])
     var scale = Float32(Float64(py=params[5]))
     var m = Int(py=params[6])
-    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
-    var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var weights_address = Int(py=addrs[0])
+    var offset_address = Int(py=addrs[1])
+    var x_address = Int(py=addrs[2])
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
+        # The owned copies are taken with the GIL released (native memcpy only).
+        var weights = read_f32(weights_address, max(0, d * q))
+        var offset = read_f32(offset_address, max(0, q))
+        var x = read_f32(x_address, max(0, m * d))
         rbf_sampler_transform_host_run(op, weights, offset, x, d, q, scale, m)
-    _ = weights^
-    _ = offset^
-    _ = x^
     return PythonObject(0)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+
+def _publish_decomp_pca_ops(module: PythonObject) raises:
+    # The CPU column of the PCA owned-fit table
+    # (core/decomp_entry_table_pca.mojo): the TSNE owner's 'pca' start calls
+    # this entry with plain values and reads the key from the module
+    # attribute `decomp_pca_native_key`. The `pca_fit_owned` export remains
+    # for its other callers.
+    var api = PCA_OPS_HOST_API.get_or_create_ptr()
+    pca_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
+                    pca_ops_host_v1)
+    py_setattr(module, "decomp_pca_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+
 def build__mojolearn_estimators_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_estimators_host")
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")
@@ -1451,6 +1529,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        module.def_function[lm_ols_prep_binding]("lm_ols_prep")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[linear_gram_fit_binding]("linear_gram_fit")
         module.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
@@ -1460,8 +1539,17 @@ def build__mojolearn_estimators_host() -> PythonObject:
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
-        module.def_function[qn_fit_binding]("qn_fit")
+        module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        module.def_function[pca_native_api_v1_binding]("pca_native_api_v1")
+        module.def_function[kde_native_api_v1_binding]("kde_native_api_v1")
+        module.def_function[dbscan_native_api_v1_binding]("dbscan_native_api_v1")
+        module.def_function[tsvd_native_api_v1_binding]("tsvd_native_api_v1")
+        module.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
+        module.def_function[linear_svc_native_api_v1_binding]("linear_svc_native_api_v1")
+        module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
+        module.def_function[qn_proba_binding]("qn_proba")
+        module.def_function[ols_predict_wide_binding]("ols_predict_wide")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
@@ -1477,6 +1565,10 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
         module.def_function[nystroem_transform_binding]("nystroem_transform")
         module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
-        return module.finalize()
+        var published_module = module.finalize()
+        _publish_linear_entry_table()
+        _publish_estimators_qn_table()
+        _publish_decomp_pca_ops(published_module)
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_estimators_host: ", error))

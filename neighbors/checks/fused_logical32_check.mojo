@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.impl.detail.fused_l2_knn import fused_l2_knn
 from neighbors.impl.topk.logical_warp32 import logical32_source_lane
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import upload_f32
+from checks.native_tests.kit import download_host_into
 
 
 def check_case(ctx: DeviceContext, m: Int, k: Int) raises:
@@ -44,8 +45,8 @@ def check_case(ctx: DeviceContext, m: Int, k: Int) raises:
     var ho = ctx.enqueue_create_host_buffer[DType.float32](m * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](m * k)
     fused_l2_knn(ctx, dq, dqn, dx, dxn, output, indices, m, N, D, k, False)
-    ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=output)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=indices)
+    download_host_into[DType.float32](ctx, output, ho)
+    download_host_into[DType.uint32](ctx, indices, hi)
     ctx.synchronize()
     for row in range(m):
         var order = List[Int]()
@@ -71,7 +72,7 @@ def check_case(ctx: DeviceContext, m: Int, k: Int) raises:
     print("FUSED_LOGICAL32_CASE_PASS", m, k, "cells", m * k)
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("fused logical32 gate requires IDENTICAL")
     comptime if is_defined["MOJOLEARN_REQUIRE_CDNA_TARGET"]():

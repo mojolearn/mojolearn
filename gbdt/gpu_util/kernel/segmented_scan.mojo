@@ -111,7 +111,7 @@ device-wide scan (`archive/reference/VENDOR_LIBS.md` 3b/3c), so it is written ou
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill

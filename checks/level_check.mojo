@@ -58,7 +58,7 @@ def check_one_level() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -74,7 +74,7 @@ def check_one_level() raises:
             host_bin.unsafe_ptr().unsafe_store(r, UInt8(v))
             if f == informative and v == 1:
                 informative_ones += 1
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bin)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -100,13 +100,13 @@ def check_one_level() raises:
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(g))
         total_w += 1.0
         total_g += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
 
     var res = run_one_level(
@@ -169,7 +169,7 @@ def check_tree(max_depth: Int) raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -190,7 +190,7 @@ def check_tree(max_depth: Int) raises:
             x ^= x >> 17
             x ^= x << 5
             host_bin.unsafe_ptr().unsafe_store(r, UInt8(Int(x & 1)))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=host_bin.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, host_bin)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -221,13 +221,13 @@ def check_tree(max_depth: Int) raises:
             tg += -g
         else:
             tg += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
 
     var sizes = run_tree(
@@ -302,7 +302,7 @@ def check_mixed_tree(max_depth: Int) raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * n_columns)
     for i in range(n_rows * n_columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var lay = build_layout(folds)
@@ -323,7 +323,7 @@ def check_mixed_tree(max_depth: Int) raises:
             hb.unsafe_ptr().unsafe_store(
                 r, UInt8(Int(x % UInt32(folds[f] + 1)))
             )
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows),
             cf.mask,
@@ -354,13 +354,13 @@ def check_mixed_tree(max_depth: Int) raises:
             tg += -g
         else:
             tg += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
     ctx.synchronize()
 
     # No cursor here: growth only. `apply_to_cursor` defaults off, so this
@@ -427,11 +427,11 @@ def check_mixed_tree(max_depth: Int) raises:
     print("  mixed-width tree grows, splits and conserves every row")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. The depths `checks/probe_main.mojo` runs under
     # "ONE FULL LEVEL (GPU, end to end)". `check_hist_depends_on_partition`
     # runs beside these there but lives in `hist_dump_check` and has its
-    # own task (`pixi run check-hist-dump`).
+    # own task (`pixi run check-native-gpu hist_dump_check`).
     print("ONE FULL LEVEL (GPU, end to end):")
     check_one_level()
     check_tree(1)
@@ -439,3 +439,22 @@ def main() raises:
     check_tree(6)
     check_mixed_tree(4)
     check_mixed_tree(6)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("level_check", cpu=False, gpu=True, serial="", run=run_cases)

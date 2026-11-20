@@ -127,6 +127,8 @@ def main() raises:
     var cursor_test = ctx.enqueue_create_buffer[DType.float32](n_test)
     var h_cur = ctx.enqueue_create_host_buffer[DType.float32](n_test)
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     print(
         name, "holdout:", n_train, "train /", n_test, "test rows,",

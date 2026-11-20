@@ -43,11 +43,9 @@ comptime LS_MSE = 1
 comptime LS_MAE = 2
 comptime LS_HUBER = 3
 comptime LS_BCE_LOGITS = 4
-# Forward only: the clipped-probability log-loss terms of the MLP trainer
-# (sequence/mlp.mojo op_mlp_rowloss, one term per element instead of one
-# chain per row). No VJP: the trainer seeds its own combined derivative.
-comptime LS_LOG_PROB = 5
-comptime LS_BINARY_LOG_PROB = 6
+# TOMBSTONE: LS_LOG_PROB (5) / LS_BINARY_LOG_PROB (6) (dead: reached only from autograd/checks/losses.mojo) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch
+# (codes 5 and 6 stay unused so LS_CROSS_ENTROPY keeps its word)
 # Row loss from logits and integer codes (OP_LS_CE_FWD / OP_LS_CE_VJP).
 comptime LS_CROSS_ENTROPY = 7
 
@@ -121,19 +119,8 @@ def loss_term(kind: Int, p: Float32, y: Float32, delta: Float32) -> Float32:
         var pos = x if x > 0 else Float32(0)
         var soft = ftz(identical_log1p(ftz(identical_exp(-_abs(x)))))
         return add(sub(pos, mul(x, y)), soft)
-    if kind == LS_LOG_PROB:
-        if y == Float32(0):
-            return Float32(0)
-        return -mul(y, ftz(identical_log(clip_probability(p))))
-    # LS_BINARY_LOG_PROB
-    var pc = clip_probability(p)
-    var acc = Float32(0)
-    if y != Float32(0):
-        acc = mul(y, ftz(identical_log(pc)))
-    var ny = sub(Float32(1), y)
-    if ny != Float32(0):
-        acc = add(acc, mul(ny, ftz(identical_log(sub(Float32(1), pc)))))
-    return -acc
+    # unreachable: loss_value_into and the tape refuse any other kind
+    return Float32(0)
 
 
 @always_inline

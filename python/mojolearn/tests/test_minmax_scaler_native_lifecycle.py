@@ -28,6 +28,40 @@ def _bits(value):
     return np.asarray(value).tobytes()
 
 
+def test_checkpoint_statistics_keep_writable_independent_owners_after_input_closes():
+    # Array owner publication is a Python seam; schema and bit-pattern cases
+    # are covered directly by archive_minmax.mojo.
+    words = np.asarray([0x80000000, 0x7FC12345], dtype="<u4")
+    names = ("data_min", "data_max", "data_range", "scale", "min")
+    fields = dict(format="mojolearn-scaler-1", estimator="MinMaxScaler",
+                  numeric_mode="identical", meta=np.asarray([2, 7, 0], dtype="<i8"),
+                  feature_range=np.asarray([0., 1.], dtype="<f8"))
+    fields.update({name: words.view("<f4").copy() for name in names})
+    source = io.BytesIO()
+    np.savez(source, **fields)
+    source.seek(0)
+    loaded = audit_native_call(ml.MinMaxScaler.load, source).assert_native()
+    assert not source.closed
+    source.close()
+    for name in names:
+        value = vars(loaded)[name + "_"]
+        assert isinstance(value, Array)
+        assert value.order == "C"
+        assert np.asarray(value).flags.writeable
+        assert _bits(value) == words.tobytes()
+    np.asarray(loaded.scale_)[0] = np.float32(7.)
+    assert np.asarray(loaded.scale_)[0] == np.float32(7.)
+    assert _bits(loaded.data_min_) == words.tobytes()
+    # Saving must reread the public writable owner, without a stale snapshot.
+    destination = io.BytesIO()
+    assert audit_native_call(loaded.save, destination).assert_native() is destination
+    destination.seek(0)
+    with np.load(destination, allow_pickle=False) as saved:
+        assert saved["scale"].tobytes() == _bits(loaded.scale_)
+        assert saved["data_min"].tobytes() == words.tobytes()
+        assert saved["meta"].tolist() == [2, 7, 0]
+
+
 def test_constructor_params_and_fitted_predicate_are_native():
     m = audit_native_call(ml.MinMaxScaler, (-2, 3), copy=False, clip=True).assert_native()
     assert audit_native_call(m.get_params).assert_native() == dict(

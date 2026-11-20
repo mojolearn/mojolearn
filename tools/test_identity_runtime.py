@@ -341,11 +341,10 @@ def test_ptx_record_needs_the_ptx_label_and_back(run_fixture, monkeypatch, ptx_l
     args, state, _ = run_fixture
     ml = sys.modules["mojolearn"]
     monkeypatch.setattr(ml, "vendor", lambda: "cuda")
-    backend = ModuleType("mojolearn._backend")
-    backend.gpu_arch = lambda: "sm_80" if ptx_loaded else "sm_89"
-    backend.baseline_selection_receipt = lambda: dict(selected="ptx") if ptx_loaded else None
-    monkeypatch.setitem(sys.modules, "mojolearn._backend", backend)
-    monkeypatch.setattr(ml, "_backend", backend, raising=False)
+    # identity_break reads mojolearn.runtime_report() (gpu_arch, code_kind "ptx" exactly when the PTX baseline set
+    # was selected); before 2026-11-15 it read _backend.gpu_arch() and _backend.baseline_selection_receipt().
+    report = dict(gpu_arch="sm_80" if ptx_loaded else "sm_89", code_kind="ptx" if ptx_loaded else "native")
+    monkeypatch.setattr(ml, "runtime_report", lambda: report, raising=False)
     args.vendor = label
     if refused:
         with pytest.raises(SystemExit, match='vendor label'):

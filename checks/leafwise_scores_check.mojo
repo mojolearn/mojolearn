@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The LOSSGUIDE score kernel, against a host recomputation and five teeth.
 
-    pixi run check-leafwise-scores
+    pixi run check-native-gpu leafwise_scores_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
@@ -86,7 +86,7 @@ from gbdt.options.catboost_options import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_L2,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, pinned_mul_f32
 
 
 comptime N_BF = 37
@@ -233,8 +233,15 @@ def host_add_leaf[
             score = fma(sum, mu, score)
             denum_sqr = fma(weight * mu, mu, denum_sqr)
         else:
-            score += sum * mu
-            denum_sqr += weight * mu * mu
+            # THE NAIVE WALK MUST BE UNFUSED ON EVERY HOST (fb11, 2026-11-17).
+            # Written as `score += sum * mu`, the host compiler contracts it
+            # into an fma wherever the target has one (x86-64-v3, arm64;
+            # checks/numerics.mojo THE PINNED PRODUCT), the naive walk then
+            # equals the fused walk on every shape, and G1 went blind on the
+            # L40S host: 36 of 36 ties. `pinned_mul_f32` is the correctly
+            # rounded product no code generator can fuse into the add.
+            score += pinned_mul_f32(sum, mu)
+            denum_sqr += pinned_mul_f32(weight * mu, mu)
     else:
         if weight > Float32(1e-20):
             score += (sum * sum) / (weight + LAMBDA)
@@ -350,11 +357,11 @@ def run_device[
     for i in range(len(fx.feature_weight)):
         h_fw.unsafe_ptr().unsafe_store(i, fx.feature_weight[i])
 
-    ctx.enqueue_copy(dst_buf=d_hist, src_ptr=h_hist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ps, src_ptr=h_ps.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_skip, src_ptr=h_skip.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_hist, h_hist)
+    upload_host_into[DType.float32](ctx, d_ps, h_ps)
+    upload_host_into[DType.uint8](ctx, d_skip, h_skip)
+    upload_host_into[DType.uint32](ctx, d_fid, h_fid)
+    upload_host_into[DType.float32](ctx, d_fw, h_fw)
     ctx.synchronize()
 
     ctx.enqueue_function[compute_optimal_split_kernel[score_function]](
@@ -380,8 +387,8 @@ def run_device[
 
     var h_s = ctx.enqueue_create_host_buffer[DType.float32](n_slots)
     var h_b = ctx.enqueue_create_host_buffer[DType.uint32](n_slots)
-    ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_score)
-    ctx.enqueue_copy(dst_ptr=h_b.unsafe_ptr(), src_buf=d_bin)
+    download_host_into[DType.float32](ctx, d_score, h_s)
+    download_host_into[DType.uint32](ctx, d_bin, h_b)
     ctx.synchronize()
 
     var out = List[Tuple[Float32, Int]]()
@@ -649,6 +656,25 @@ def check_leafwise_scores(ctx: DeviceContext) raises:
     print("leafwise scores check: PASS")
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_leafwise_scores(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("leafwise_scores_check", cpu=False, gpu=True, serial="", run=run_cases)

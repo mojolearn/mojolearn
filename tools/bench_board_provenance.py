@@ -31,7 +31,7 @@ def sha(path):
 def requested_path():
     """Explicit route constraint, or auto when the installed loader selects it.
 
-    A standalone mojolearn-nvidia-ptx install needs no architecture override.
+    MOJOLEARN_GPU_ARCH=sm_80 selects the PTX set in mojolearn-nvidia.
     The controller may use a different interpreter from the timed worker;
     collect() verifies that worker's actual plugin and PTX selection receipt.
     """

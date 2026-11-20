@@ -6,15 +6,15 @@ running `pq_search_cell` / `sq_search_cell` / `rq_search_cell`:
 
   1. `coarse_kernel`: one thread per (query, list), `pq_coarse_dist`, the
      cell `pq_next_probe` evaluates, stored once instead of once per probe.
-  2. `probe_kernel`: one thread per query, `pq_next_probe`'s walk over those
-     stored values (the same comparisons on the same words, so the same
+  2. `probe_group_kernel`: one threadgroup per query, `pq_next_probe`'s
+     walk over those stored values (the same comparisons on the same words, so the same
      lists in the same order; the host twin is `_probe_walk`).
   3. a score kernel, one threadgroup per (query, probe), one thread per list
      slot: each candidate's distance by the cell's own statements (the PQ
      lookup entries `pq_lut_entry` computed once per (query, probe) into
      threadgroup memory -- the same function of the same inputs, so the same
      words -- and summed over subspaces ascending as before).
-  4. `select_kernel`: one thread per query, the cell's `pq_insert` over the
+  4. `select_part_kernel` and the tree join: the cell's `pq_insert` over the
      stored distances in the cell's order (probe order, then slot order,
      masked rows skipped), so the top-k, NaN handling included, and the
      candidate count are the cell's.
@@ -23,7 +23,7 @@ The old kernels ran ~1000 threads (one per query) that recomputed every
 coarse distance for every probe; this runs one thread per candidate.
 Queries go in chunks so the candidate buffer stays under CAND_BUDGET floats."""
 
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -31,7 +31,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.switches import ANN3_SCAN_SELECT
 from x_ann.vsearch_fast import IDN_PQ_LUT_TILED, PQ_LUT_TILED, PQ_SCAN_FUSED
 from x_ann.ivf_pq_core import (
@@ -85,7 +85,8 @@ def coarse_kernel(count: Int32, q0: Int32, queries: F32P, dim: Int32, centers: F
 # column's limit; the fits gate keeps `coarse_kernel` where it does not).
 # A GEMM form (|q|^2 + |c|^2 - 2 q.c) would change the fold and cancel at
 # small distances; the direct difference keeps the contract.
-# -D MOJOLEARN_ANN_COARSE_TILED_OFF restores `coarse_kernel`.
+# TOMBSTONE: MOJOLEARN_ANN_COARSE_TILED_OFF (old path, EXP:1651 A/B owed and never run) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 291a2b23f0.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN_COARSE_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CT_Q = 64
 comptime CT_L = 64
 comptime CT_FC = 16
@@ -94,8 +95,7 @@ comptime CT_TPB = 256
 comptime CT_R = 4
 comptime CT_XS = CT_FC + 1  # padded rows (bank spread)
 comptime CT_SMEM_BYTES = 4 * (CT_Q * CT_XS + CT_L * CT_XS)
-comptime COARSE_TILED = (not is_defined["MOJOLEARN_ANN_COARSE_TILED_OFF"]()
-                         and lib_smem_page_fits_for[TARGET_COLUMN, CT_SMEM_BYTES]())
+comptime COARSE_TILED = lib_smem_page_fits_for[TARGET_COLUMN, CT_SMEM_BYTES]()
 
 
 def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, centers: F32P, n_lists_: Int32, cd: F32P):
@@ -114,7 +114,7 @@ def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, cente
     var cs = stack_allocation[CT_L * CT_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var ta = tid // 16
     var tb = tid - ta * 16
-    var acc = InlineArray[Float32, CT_R * CT_R](fill=Float32(0.0))
+    var acc = Array[Float32, CT_R * CT_R](fill=Float32(0.0))
     var f0 = 0
     while f0 < dim:
         var fc = min(CT_FC, dim - f0)
@@ -132,8 +132,8 @@ def coarse_tiled_kernel(c_: Int32, q0_: Int32, queries: F32P, dim_: Int32, cente
             q += CT_TPB
         barrier()
         for f in range(fc):
-            var qv = InlineArray[Float32, CT_R](fill=Float32(0.0))
-            var cv = InlineArray[Float32, CT_R](fill=Float32(0.0))
+            var qv = Array[Float32, CT_R](fill=Float32(0.0))
+            var cv = Array[Float32, CT_R](fill=Float32(0.0))
             comptime for i in range(CT_R):
                 qv[i] = qs[(ta + 16 * i) * CT_XS + f]
                 cv[i] = cs[(tb + 16 * i) * CT_XS + f]
@@ -198,15 +198,6 @@ def _probe_walk_seq_kern(lq: Int, cd: F32P, nl: Int, np: Int, offsets: I32P, pro
         p += 1
 
 
-def probe_kernel(mc: Int32, cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P, probes: I32P, pstart: I32P):
-    """`pq_next_probe`'s walk over the stored coarse distances; an unused
-    probe is -1. pstart = the probe's first position in the query's
-    candidate row (probes in walk order, slots in list order)."""
-    var lq = _tid()
-    if lq < Int(mc):
-        _probe_walk_seq_kern(lq, cd, Int(n_lists), Int(n_probes), offsets, probes, pstart)
-
-
 @always_inline
 def _nan_bits(v: Float32) -> Bool:
     """NaN by its bits (a float compare may be folded under fast math)."""
@@ -219,7 +210,7 @@ comptime PTPB = 256
 
 
 def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P, probes: I32P, pstart: I32P):
-    """`probe_kernel` with one threadgroup per query (lane ann-apple2). Each
+    """`pq_next_probe`'s walk with one threadgroup per query (lane ann-apple2). Each
     probe is the minimum under the TOTAL order (distance, list id) of the
     lists after the previous probe: each thread takes the minimum of its
     lists (l = t, t + PTPB, ...) through `pq_probe_takes`, then a tree over
@@ -507,18 +498,6 @@ def _select_seq_kern(
     out_n.unsafe_store(qi, Int32(n_cand))
 
 
-def select_kernel(
-    mc: Int32, q0: Int32, n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P,
-    pstart: I32P, stride: Int32, cand: F32P, k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
-):
-    """The cell's top-k: `pq_insert` over the stored distances in the cell's
-    order, masked rows skipped and not counted."""
-    var lq = _tid()
-    if lq < Int(mc):
-        _select_seq_kern(lq, Int(q0) + lq, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride),
-                    cand, Int(k), out_d, out_i, out_n)
-
-
 #: threads per query in the split top-k (lane ann-apple2)
 comptime SEL_T = 128
 
@@ -648,7 +627,7 @@ def select_merge_kernel(
 #: the widest k of the one-launch top-k (16 KB of threadgroup memory)
 comptime SEL_KM = 16
 comptime SCAN_SELECT_GROUP = (
-    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 
 
@@ -675,8 +654,8 @@ def select_group_kernel(
     var sd = stack_allocation[SEL_T * SEL_KM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
-    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var ld = Array[Float32, SEL_KM](fill=pq_inf())
+    var li = Array[Int32, SEL_KM](fill=Int32(-1))
     var n_cand = 0
     var has_nan = False
     for p in range(np):
@@ -754,6 +733,9 @@ def select_group_kernel(
                 out_d.unsafe_store(qi * kk + s, sd[s])
                 out_i.unsafe_store(qi * kk + s, si[s])
             out_n.unsafe_store(qi, Int32(total))
+# TOMBSTONE: MOJOLEARN_ANN3_SCAN_SELECT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at f7c28fb531.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 #: slots per thread per window of the fused scan (lane af-vsearch): SEL_T x
@@ -762,12 +744,14 @@ def select_group_kernel(
 comptime PQ_FUSED_R = 8
 
 
+# TOMBSTONE: MOJOLEARN_PQ_LUT_TILED_OFF (old path, rollback of the recorded FAST+Apple winner) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at 2d4a91f2b9.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_LUT_TILED_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 def pq_score_tiled_kernel(
     q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
     codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P,
     pstart: I32P, stride: Int32, mask: I32P, cand: F32P,
 ):
-    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_LUT_TILED`; `_OFF` rolls back): `pq_score_kernel`
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_LUT_TILED`): `pq_score_kernel`
     with the lookup table staged in TILES of at most LUT_MAX entries (whole
     subspaces per tile), so Istella's 55 x 256 table (14,080 entries, which
     main evaluates per candidate from device memory because it does not fit)
@@ -865,12 +849,14 @@ def _pq_fused_seq(  # device-helper: the fused PQ kernel thread's NaN-order fall
     out_n.unsafe_store(qi, Int32(n_cand))
 
 
+# TOMBSTONE: MOJOLEARN_PQ_SCAN_FUSED_OFF (old path, rollback of the recorded FAST+Apple winner) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at 6badf96786.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_SCAN_FUSED_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
 def pq_scan_fused_kernel(
     q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
     codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P, mask: I32P,
     k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
 ):
-    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_SCAN_FUSED`; `_OFF` rolls back): the IVF-PQ
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_SCAN_FUSED`): the IVF-PQ
     score and top-k in ONE launch, one threadgroup of SEL_T per query, for
     k <= SEL_KM. For each probed list, in windows of SEL_T x PQ_FUSED_R
     slots: the lookup table is staged in tiles (`pq_score_tiled_kernel`'s
@@ -902,8 +888,8 @@ def pq_scan_fused_kernel(
     var qr = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
-    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var ld = Array[Float32, SEL_KM](fill=pq_inf())
+    var li = Array[Int32, SEL_KM](fill=Int32(-1))
     var n_cand = 0
     var has_nan = False
     var jt = LUT_MAX // nc
@@ -922,7 +908,7 @@ def pq_scan_fused_kernel(
         var stop = Int(offsets.unsafe_load(l + 1))
         var w0 = start
         while w0 < stop:
-            var accs = InlineArray[Float32, PQ_FUSED_R](fill=Float32(0.0))
+            var accs = Array[Float32, PQ_FUSED_R](fill=Float32(0.0))
             var j0 = 0
             while j0 < pd:
                 var jn = pd - j0
@@ -1099,19 +1085,23 @@ def ivf_scan_search[KIND: Int](
     # TOMBSTONE (lane postmerge-act-3, 2026-10-09): fg-ivf A5 `IDN_PQ_SCAN_FUSED` (this kernel in IDENTICAL)
     # removed: slower, ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x, recall equal
     # (nv n0669-n0671, amd a1131->a1132). Recoverable at main a47bd9fb2.
-    comptime if KIND == 0 and PQ_SCAN_FUSED and not is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]():
+    comptime if KIND == 0 and PQ_SCAN_FUSED:
         fused = k <= SEL_KM and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
     var dcand = ctx.enqueue_create_buffer[DType.float32](1 if fused else mc * stride)
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
     var dqn = ctx.enqueue_create_buffer[DType.float32]((mc * np) if KIND == 2 else 1)
-    comptime SERIAL = is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]()
+    # TOMBSTONE: MOJOLEARN_ANN_SERIAL_SCAN (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 4123dcbcc5.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN_SERIAL_SCAN.patch; record in docs/TOMBSTONES.md.
     # lane ann-apple3, FAST on Apple, OPT-IN: the top-k of a chunk in one
     # launch when k fits (`select_group_kernel`); the partial lists then live
     # in threadgroup memory and these device buffers are one word
     var grouped = False
     comptime if SCAN_SELECT_GROUP:
         grouped = k <= SEL_KM and not fused
-    var no_parts = SERIAL or grouped or fused
+    var no_parts = grouped or fused
+    # TOMBSTONE: MOJOLEARN_ANN3_SCAN_SELECT (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at f7c28fb531.
+    # Restore: git apply experiments/removed/MOJOLEARN_ANN3_SCAN_SELECT.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     var dpd = ctx.enqueue_create_buffer[DType.float32](1 if no_parts else mc * SEL_T * k)
     var dpi = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T * k)
     var dpn = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T)
@@ -1155,22 +1145,18 @@ def ivf_scan_search[KIND: Int](
         var c = mc if m - q0 > mc else m - q0
         enqueue_coarse(ctx, c, q0, dq, dim, dc, n_lists, rebind[F32P](dcd.unsafe_ptr()))
         st.mark(ctx, "coarse")
-        comptime if SERIAL:
-            ctx.enqueue_function[probe_kernel](
-                Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
-                dpstart.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
-            )
-        else:
-            ctx.enqueue_function[probe_group_kernel](
-                dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
-                dpstart.unsafe_ptr(), grid_dim=c, block_dim=PTPB,
-            )
+        ctx.enqueue_function[probe_group_kernel](
+            dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
+            dpstart.unsafe_ptr(), grid_dim=c, block_dim=PTPB,
+        )
         st.mark(ctx, "probe")
         comptime if KIND == 0:
             # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04: the fused scan
             # (`PQ_SCAN_FUSED`) or the tiled-table score (`PQ_LUT_TILED`)
             # lane fg-ivf A4: the tiled score is IDENTICAL's default too
-            # (`IDN_PQ_LUT_TILED`; `-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` rolls back)
+            # (`IDN_PQ_LUT_TILED`)
+            # TOMBSTONE: MOJOLEARN_IDN_PQ_LUT_TILED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-14-cluster); code recoverable at 474a188ef2.
+            # Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
             var tiled = False
             comptime if PQ_LUT_TILED or IDN_PQ_LUT_TILED:
                 tiled = (not fused) and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
@@ -1215,48 +1201,41 @@ def ivf_scan_search[KIND: Int](
                 grid_dim=c * np, block_dim=STPB,
             )
         st.mark(ctx, "score")
-        comptime if SERIAL:
-            ctx.enqueue_function[select_kernel](
+        comptime if SCAN_SELECT_GROUP:
+            if grouped:
+                ctx.enqueue_function[select_group_kernel](
+                    Int32(q0), Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
+                    Int32(stride), dcand.unsafe_ptr(), Int32(k), dd, di, dn, grid_dim=c, block_dim=SEL_T,
+                )
+        if not grouped and not fused:
+            ctx.enqueue_function[select_part_kernel](
+                Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
+                dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
+                grid_dim=c, block_dim=SEL_T,
+            )
+            # the tree join (lane ann-apple2): SEL_T lists -> 1, ping-pong
+            var ad = rebind[F32P](dpd.unsafe_ptr())
+            var ai = rebind[I32P](dpi.unsafe_ptr())
+            var bd = rebind[F32P](dpd2.unsafe_ptr())
+            var bi = rebind[I32P](dpi2.unsafe_ptr())
+            var lists = SEL_T
+            while lists > 1:
+                var pairs = lists // 2
+                ctx.enqueue_function[select_pair_kernel](
+                    Int32(c * pairs), Int32(pairs), Int32(k), ad, ai, bd, bi, grid_dim=_grid(c * pairs), block_dim=TPB,
+                )
+                var td = ad
+                var ti = ai
+                ad = bd
+                ai = bi
+                bd = td
+                bi = ti
+                lists = pairs
+            ctx.enqueue_function[select_merge_kernel](
                 Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
                 dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-                dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
+                ad, ai, dpn.unsafe_ptr(), dd, di, dn, Int32(1), grid_dim=_grid(c), block_dim=TPB,
             )
-        else:
-            comptime if SCAN_SELECT_GROUP:
-                if grouped:
-                    ctx.enqueue_function[select_group_kernel](
-                        Int32(q0), Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
-                        Int32(stride), dcand.unsafe_ptr(), Int32(k), dd, di, dn, grid_dim=c, block_dim=SEL_T,
-                    )
-            if not grouped and not fused:
-                ctx.enqueue_function[select_part_kernel](
-                    Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                    dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
-                    grid_dim=c, block_dim=SEL_T,
-                )
-                # the tree join (lane ann-apple2): SEL_T lists -> 1, ping-pong
-                var ad = rebind[F32P](dpd.unsafe_ptr())
-                var ai = rebind[I32P](dpi.unsafe_ptr())
-                var bd = rebind[F32P](dpd2.unsafe_ptr())
-                var bi = rebind[I32P](dpi2.unsafe_ptr())
-                var lists = SEL_T
-                while lists > 1:
-                    var pairs = lists // 2
-                    ctx.enqueue_function[select_pair_kernel](
-                        Int32(c * pairs), Int32(pairs), Int32(k), ad, ai, bd, bi, grid_dim=_grid(c * pairs), block_dim=TPB,
-                    )
-                    var td = ad
-                    var ti = ai
-                    ad = bd
-                    ai = bi
-                    bd = td
-                    bi = ti
-                    lists = pairs
-                ctx.enqueue_function[select_merge_kernel](
-                    Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
-                    dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-                    ad, ai, dpn.unsafe_ptr(), dd, di, dn, Int32(1), grid_dim=_grid(c), block_dim=TPB,
-                )
         st.mark(ctx, "select")
         q0 += c
     ctx.synchronize()

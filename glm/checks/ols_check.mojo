@@ -158,8 +158,8 @@ def _solve(
         if noise != 0.0:
             target += noise * (_u01(i, 99, 3) - 0.5)
         hb.unsafe_ptr().unsafe_store(i, Float32(target * y_scale))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
 
     # Through `olsFit`'s dispatch (`ols.cuh:112`), not around it. Calling
@@ -170,7 +170,7 @@ def _solve(
     )
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
 
     var result = List[Float64]()
@@ -382,8 +382,8 @@ def _solve_shaped(ctx: DeviceContext, n: Int, d: Int) raises -> List[Float64]:
             ha.unsafe_ptr().unsafe_store(i * d + k, Float32(v))
             target += v * _true_w(k)
         hb.unsafe_ptr().unsafe_store(i, Float32(target))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
 
     ols_fit(
@@ -392,7 +392,7 @@ def _solve_shaped(ctx: DeviceContext, n: Int, d: Int) raises -> List[Float64]:
     )
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var result = List[Float64]()
     for k in range(d):
@@ -426,22 +426,19 @@ def _solve_shaped_algo(
         ha.unsafe_ptr().unsafe_store(i, Float32(_u01(i, 0, 11) - 0.5))
     for i in range(n):
         hb.unsafe_ptr().unsafe_store(i, Float32(_u01(i, 1, 12) - 0.5))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
+    upload_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
         n, d, algo,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var result = List[Float64]()
     for k in range(d):
         result.append(Float64(hw.unsafe_ptr().unsafe_load(k)))
-    _ = ha^
-    _ = hb^
-    _ = hw^
     return result^
 
 
@@ -509,9 +506,10 @@ from checks.kernel_matrix import (
     vendor_fp32_matmul_is_lossy,
     vendor_fp32_matmul_precision_name,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 
 def _mode_name() -> String:
@@ -752,15 +750,15 @@ def _fit_bits(
     ctx.synchronize()
     for i in range(n * d + pad):
         big.unsafe_ptr().unsafe_store(i, poison)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=cov_a, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=q, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=qs, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=s_vec, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ab, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=inv, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=a_alias, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=a_alias2, src_ptr=big.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, w, big)
+    upload_host_into[DType.float32](ctx, cov_a, big)
+    upload_host_into[DType.float32](ctx, q, big)
+    upload_host_into[DType.float32](ctx, qs, big)
+    upload_host_into[DType.float32](ctx, s_vec, big)
+    upload_host_into[DType.float32](ctx, ab, big)
+    upload_host_into[DType.float32](ctx, inv, big)
+    upload_host_into[DType.float32](ctx, a_alias, big)
+    upload_host_into[DType.float32](ctx, a_alias2, big)
     ctx.synchronize()
 
     # THE FIXTURE IS THE CARD'S: bit-assembled, no host float arithmetic, so
@@ -793,10 +791,9 @@ def _fit_bits(
         big.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt))
     for i in range(n):
         big_b.unsafe_ptr().unsafe_store(i, _hash_f32(i, salt + 1))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=big_b.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, big)
+    upload_host_into[DType.float32](ctx, b, big_b)
     ctx.synchronize()
-    _ = big_b^
 
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
@@ -804,7 +801,7 @@ def _fit_bits(
     )
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var out = List[UInt32]()
     for k in range(d):
@@ -829,8 +826,6 @@ def _fit_bits(
     _ = inv
     _ = a_alias
     _ = a_alias2
-    _ = big^
-    _ = hw^
     return out^
 
 
@@ -1250,16 +1245,16 @@ def _fit_f32_dropped(
         ha.unsafe_ptr().unsafe_store(i, a[i])
     for i in range(n):
         hb.unsafe_ptr().unsafe_store(i, b[i])
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
     ctx.synchronize()
     ols_fit(
         ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, n, d, OLS_ALGO_EIG,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](d * d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
-    ctx.enqueue_copy(dst_ptr=hq.unsafe_ptr(), src_buf=qs)
+    download_host_into[DType.float32](ctx, dw, hw)
+    download_host_into[DType.float32](ctx, qs, hq)
     ctx.synchronize()
     for k in range(d):
         coef.append(hw.unsafe_ptr().unsafe_load(k))
@@ -1282,10 +1277,6 @@ def _fit_f32_dropped(
     _ = inv
     _ = xa
     _ = xa2
-    _ = ha^
-    _ = hb^
-    _ = hw^
-    _ = hq^
     return dropped
 
 
@@ -1320,16 +1311,16 @@ def _fit_wide_dropped(
         ha.unsafe_ptr().unsafe_store(i, a[i])
     for i in range(n):
         hb.unsafe_ptr().unsafe_store(i, b[i])
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
     ctx.synchronize()
     ols_fit(
         ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, n, d, OLS_ALGO_EIG,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
     var hq = ctx.enqueue_create_host_buffer[DType.float32](d * d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
-    ctx.enqueue_copy(dst_ptr=hq.unsafe_ptr(), src_buf=qs)
+    download_host_into[DType.float32](ctx, dw, hw)
+    download_host_into[DType.float32](ctx, qs, hq)
     ctx.synchronize()
     for k in range(d):
         coef.append(hw.unsafe_ptr().unsafe_load(k))
@@ -1352,10 +1343,6 @@ def _fit_wide_dropped(
     _ = inv
     _ = xa
     _ = xa2
-    _ = ha^
-    _ = hb^
-    _ = hw^
-    _ = hq^
     return dropped
 
 
@@ -2036,14 +2023,14 @@ def _fit_from_host64(
         ha.unsafe_ptr().unsafe_store(i, Float32(a[i]))
     for i in range(n):
         hb.unsafe_ptr().unsafe_store(i, Float32(b[i]))
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
     ctx.synchronize()
     ols_fit(
         ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, n, d, OLS_ALGO_EIG,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+    download_host_into[DType.float32](ctx, dw, hw)
     ctx.synchronize()
     var out = List[Float64]()
     for k in range(d):
@@ -2059,9 +2046,6 @@ def _fit_from_host64(
     _ = inv
     _ = xa
     _ = xa2
-    _ = ha^
-    _ = hb^
-    _ = hw^
     return out^
 
 
@@ -2443,19 +2427,19 @@ def _fit_weighted64(
     for i in range(n):
         hb.unsafe_ptr().unsafe_store(i, Float32(b[i]))
         hs.unsafe_ptr().unsafe_store(i, Float32(sw[i]))
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dsw, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
+    upload_host_into[DType.float32](ctx, dsw, hs)
     ctx.synchronize()
     ols_fit_weighted(
         ctx, da, db, dw, cov, q, qs, sv, ab, inv, xa, xa2, dsw, n, d,
         OLS_ALGO_EIG,
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=da)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=db)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dsw)
+    download_host_into[DType.float32](ctx, dw, hw)
+    download_host_into[DType.float32](ctx, da, ha)
+    download_host_into[DType.float32](ctx, db, hb)
+    download_host_into[DType.float32](ctx, dsw, hs)
     ctx.synchronize()
     var out = List[Float64]()
     for k in range(d):
@@ -2480,10 +2464,6 @@ def _fit_weighted64(
     _ = inv
     _ = xa
     _ = xa2
-    _ = ha^
-    _ = hb^
-    _ = hs^
-    _ = hw^
     return out^
 
 

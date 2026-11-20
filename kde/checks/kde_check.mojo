@@ -187,9 +187,10 @@ from checks.numerics import (
     identical_log,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 comptime N_TRAIN = 200
 comptime N_QUERY = 37
@@ -232,12 +233,11 @@ def _weight_fixture(n: Int, salt: Int) -> List[Float32]:
 
 def _read(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return out^
 
 
@@ -253,9 +253,8 @@ def _upload(
         host.unsafe_ptr().unsafe_store(i, poison)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^
     return buf^
 
 
@@ -294,7 +293,7 @@ def _device_scores(
     var hp = ctx.enqueue_create_host_buffer[DType.float32](n_query + pad)
     for i in range(n_query + pad):
         hp.unsafe_ptr().unsafe_store(i, poison)
-    ctx.enqueue_copy(dst_buf=dout, src_ptr=hp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dout, hp)
     ctx.synchronize()
     var sum_w = Float32(n_train)
     if has_weights:
@@ -315,7 +314,6 @@ def _device_scores(
     _ = dquery^
     _ = dweights^
     _ = dout^
-    _ = hp^
     return out^
 
 

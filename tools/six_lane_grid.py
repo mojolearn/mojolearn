@@ -3,7 +3,8 @@
 
 Inputs (never the stale catalog.json/matrix.json.gz define lists):
   experiments/six_lane_integration/grid_controls/*.json  (mojolearn.grid-controls/1)
-  core/six_lane_experiment_guards.mojo                    (guard exclusions, evaluated here)
+  core/six_lane_experiment_guards.mojo                    (guard exclusions, evaluated here, with
+  core/experiment_guards_<family>.mojo                     every family's module: tools/experiment_guards.py)
 Workload ids come from the harness's saved recipes: the existing matrix's workload
 inventory (ids only), the registered full-input variants (classification-full-v1,
 tsvd-full-v1, mlp-full-v1) and the neural board lanes.
@@ -33,6 +34,8 @@ sys.path.insert(0, str(ROOT / 'tools'))
 
 CONTROLS_DIR = ROOT / 'experiments/six_lane_integration/grid_controls'
 GUARDS = ROOT / 'core/six_lane_experiment_guards.mojo'
+import experiment_guards  # noqa: E402  (the shared file + core/experiment_guards_<family>.mojo, split 2026-11-04)
+GUARD_FILES = [ROOT / rel for rel in experiment_guards.guard_files(ROOT)]
 OUT_DIR = ROOT / 'experiments/six_lane_integration/grid'
 PHASE2_DIR = ROOT / 'experiments/six_lane_integration/grid-phase2'
 CAP = 16
@@ -125,7 +128,8 @@ def unique(items):
 
 # ---------------------------------------------------------------------- guards
 class Guards:
-    """Evaluates core/six_lane_experiment_guards.mojo for a define set.
+    """Evaluates the guard modules (GUARD_FILES: core/six_lane_experiment_guards.mojo and
+    core/experiment_guards_<family>.mojo) for a define set.
 
     Every `comptime NAME = expr` and `comptime assert cond, "msg"` line is
     translated to Python (is_defined -> _d, get_defined_int -> _i). Anything the
@@ -134,7 +138,21 @@ class Guards:
     """
 
     def __init__(self, text):
+        """TEXT: one guard module's source, or a list of them (every module of GUARD_FILES, in order)."""
         self.steps = []
+        texts = [text] if isinstance(text, str) else list(text)
+        for one in texts:
+            self._parse(one)
+        if not any(s[0] == 'assert' for s in self.steps):
+            raise ValueError('No guard asserts parsed')
+        self.pairs = []
+
+    @classmethod
+    def of_files(cls, paths=None):
+        """The guards of every module in PATHS (default GUARD_FILES)."""
+        return cls([Path(p).read_text() for p in (GUARD_FILES if paths is None else paths)])
+
+    def _parse(self, text):
         body = text.split('def _check_configuration', 1)[1].split('return True', 1)[0]
         for raw in body.splitlines():
             line = raw.strip()
@@ -154,9 +172,6 @@ class Guards:
                 self.steps.append(('let', m.group(1), compile(m.group(2), 'guard', 'eval')))
                 continue
             raise ValueError('Unrecognized guard line: ' + line)
-        if not any(s[0] == 'assert' for s in self.steps):
-            raise ValueError('No guard asserts parsed')
-        self.pairs = []
 
     def add_pair(self, a, b, reason):
         """A source-level exclusion outside the guard file (a binding's own comptime assert)."""
@@ -1021,7 +1036,8 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='fu
     extended = crosses != 'full' or survivors is not None or pair_seconds is not None or cap == 0
     pair_seconds = dict(pair_seconds or PAIR_SECONDS)
     phase1_all, phase1_doc = (load_phase1(survivors) if survivors is not None else ({}, None))
-    guards = Guards(Path(guards_path).read_text())
+    guard_paths = GUARD_FILES if Path(guards_path) == GUARDS else [Path(guards_path)]
+    guards = Guards([p.read_text() for p in guard_paths])
     controls, algorithms, removed, owed_misc, files = load_controls(controls_dir)
     for a, b, why in source_exclusions(controls):
         guards.add_pair(a, b, why)
@@ -1170,7 +1186,8 @@ def generate(controls_dir=CONTROLS_DIR, guards_path=GUARDS, cap=CAP, crosses='fu
         schema='mojolearn.six-lane-grid-plan/1', mode=MODE, status='PLANNED_NOT_RUN',
         all_switches='NOT MEASURED until each config has an A/A floor, scored A/B on NVIDIA and AMD, identity and quality evidence',
         inputs=dict(grid_controls=files, guards=dict(path=str(Path(guards_path).relative_to(ROOT)) if Path(guards_path).is_relative_to(ROOT) else str(guards_path),
-                                                       sha256=file_sha(guards_path), asserts=guards.assert_count),
+                                                       sha256=file_sha(guards_path), asserts=guards.assert_count,
+                                                       modules={(str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)): file_sha(p) for p in guard_paths}),
                     stale_not_used=['experiments/six_lane_integration/catalog.json (define lists)',
                                     'experiments/six_lane_integration/workload_ids.json (ids of the retired six-lane matrix; its define lists are not used)']),
         vendors=VENDORS, measurement=dict(excluded_warmups=1, scored_samples=1, rule='owner: one run per arm; Apple does not vote on IDENTICAL'),

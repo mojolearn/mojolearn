@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 BACKENDS = {'nvidia': 'cuda', 'amd': 'hip'}
-ARMS = ('on', 'off')
+ARMS = ('on',)  # the off arm (IDN_ALL_OFF) was deleted 2026-11-15
 CORE_FIELDS = {'sha', 'plan_sha256', 'data_manifest_sha256', 'neural_fixture_sha256'}
 
 

@@ -9,6 +9,7 @@ bit must be equal. Build with -D MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE=1 to see
 it fail.
 """
 from std.os import getenv, setenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_RESAMPLE
 from std.memory import bitcast
 
 from core.identity_trace import first_divergence
@@ -48,8 +49,7 @@ def _same(a: List[Float32], b: List[Float32], what: String) raises:
 
 
 def _arm(count: Int, path: String) raises:
-    if not setenv("MOJOLEARN_RESAMPLE_DEVICE_COUNT", String(count), True):
-        raise Error("setenv failed")
+    device_plan_check_count(count, DEVICE_PLAN_RESAMPLE)
     with open(path, "w") as fh:
         fh.write("")
     if not setenv("MOJOLEARN_IDENTITY_TRACE", path, True):

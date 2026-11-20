@@ -82,8 +82,8 @@ def api_case(epochs=4, seed=873):
     scalars = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0., o["tol"], o["gamma"],
                o["huber_delta"]] + [float(f) for f in model._table()]
     params = np.ascontiguousarray(fields["params_"], dtype=np.float32)
-    expected = [params, np.ascontiguousarray(fields["_opt_m"], dtype=np.float32),
-                np.ascontiguousarray(fields["_opt_v"], dtype=np.float32),
+    expected = [params, np.ascontiguousarray(fields["optimizer_m_"], dtype=np.float32),
+                np.ascontiguousarray(fields["optimizer_v_"], dtype=np.float32),
                 np.ascontiguousarray(fields["_fit_state"], dtype=np.int64).view(np.int32),
                 np.asarray(model.loss_curve_, dtype=np.float32)]
     return [x, y, np.zeros(params.size, np.float32)], program, options, scalars, expected

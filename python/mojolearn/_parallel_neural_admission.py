@@ -29,7 +29,7 @@ def connect(context, owner_cls, model_cls):
         '_handle',
     )
     # Worker sockets are the native POSIX transport's PyCapsule owners
-    # (bindings/native_transport.mojo _transport_own, since 60209fa2a), not
+    # (bindings/native_transport_door.mojo _transport_own, since 60209fa2a), not
     # _socket.socket. A capsule has no Python-level hooks, and the transport
     # validates the capsule name before every use. _socket.CAPI is a capsule,
     # so its type is the exact CPython capsule type on every supported Python.

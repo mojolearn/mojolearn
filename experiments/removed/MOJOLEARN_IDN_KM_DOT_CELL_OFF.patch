@@ -1,0 +1,48 @@
+diff --git a/kernel_methods/checks/kernel_matrix.mojo b/kernel_methods/checks/kernel_matrix.mojo
+index 364ee23f38..01e6c5aa08 100644
+--- a/kernel_methods/checks/kernel_matrix.mojo
++++ b/kernel_methods/checks/kernel_matrix.mojo
+@@ -466,8 +466,9 @@ comptime KM_RBF_CELL_MAX_D = 64
+ 
+ 
+ #: fix-kg1-kernel (2026-10-04, audit B11), IDENTICAL, ON by default
+-#: (FAST keeps the GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL`
+-#: and `km_oracle.mojo` follow the same gate): the POLYNOMIAL and SIGMOID kernel
++#: (`-D MOJOLEARN_IDN_KM_DOT_CELL_OFF` restores the
++#: GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL` and
++#: `km_oracle.mojo` read the same defines): the POLYNOMIAL and SIGMOID kernel
+ #: matrices at k <= KM_DOT_CELL_MAX_D features are ONE launch, one thread per
+ #: cell, the dot as one chain over the features ascending
+ #: (`identical_mul_add(a, b, acc)`) and the epilogue line of
+@@ -477,9 +478,9 @@ comptime KM_RBF_CELL_MAX_D = 64
+ #: run this kernel and the host column runs the same line. The chain reads
+ #: a_ic * b_jc, the same word as b_jc * a_ic, so a self-kernel computes the
+ #: upper triangle and mirrors it.
+-# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 16e283c44f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+ comptime KM_DOT_CELL_MAX_D = 64
+diff --git a/kernel_methods/host/km_host_oracle.mojo b/kernel_methods/host/km_host_oracle.mojo
+index dc90c52493..a7d64d63cc 100644
+--- a/kernel_methods/host/km_host_oracle.mojo
++++ b/kernel_methods/host/km_host_oracle.mojo
+@@ -218,10 +218,10 @@ def kmh_validate_kernel(
+ 
+ #: fix-kg1-kernel (audit B11): the host column of
+ #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
+-#: default), the same gate and the same feature bound.
+-# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 16e283c44f.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: default), the same defines and the same feature bound.
++comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+ comptime KMH_DOT_CELL_MAX_D = 64

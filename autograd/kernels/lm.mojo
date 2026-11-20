@@ -7,15 +7,13 @@ sabotage switches) and the chunked LM head's GEMM backward
 (chunked_lm_head_v2_gemm_backward_into and its two chunk kernels, moved
 unchanged out of training/chunked_lm_head_v2.mojo)."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from max.gpu.host import DeviceBuffer, DeviceContext
-from training.neural_identical_experiments import IDN_CE_GRAD_FUSED
 from core.step_phase import step_count_launch
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul
 from training.checks.loss_contract import CeConfig, REDUCTION_NONE, ce_divisor, ce_smoothing_targets
 from training.checks.loss import (
-    ANY_LOSS_SABOTAGE,
     CE_TPB,
     SAB_GRAD_DIVISOR_IS_N,
     SAB_GRAD_RECIPROCAL_MUL,
@@ -75,39 +73,8 @@ def ce_weights_kernel(
     )
 
 
-def ce_weights_dlogits_kernel(
-    weights: MutPointer[Float32, MutAnyOrigin],
-    dlogits: MutPointer[Float32, MutAnyOrigin],
-    expo: MutPointer[Float32, MutAnyOrigin],
-    denom: MutPointer[Float32, MutAnyOrigin],
-    targets: MutPointer[Int32, MutAnyOrigin],
-    t_target: Float32, t_other: Float32, divisor: Float32,
-    n_rows_in: Int32, vocab_in: Int32, ignore_index_in: Int32,
-):
-    """NN52: the clean L14 and L16 cells, with a local probability value.
-
-    Same-cell aliases used by the resident LM remain valid: load expo before
-    either store, store the probability first and the final gradient last.
-    Distinct buffers still receive every probability, including ignored rows.
-    Sabotage builds retain the original kernels at the launcher below.
-    """
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var vocab = Int(vocab_in)
-    if cell >= Int(n_rows_in) * vocab:
-        return
-    var row = cell // vocab
-    var v = cell - row * vocab
-    var w = ftz(identical_div(ftz(expo.unsafe_load(cell)), ftz(denom.unsafe_load(row))))
-    var y = Int(targets.unsafe_load(row))
-    weights.unsafe_store(cell, w)
-    if y == Int(ignore_index_in):
-        dlogits.unsafe_store(cell, Float32(0.0))
-        return
-    var t = t_target if v == y else t_other
-    var d = ftz(ftz(w) - ftz(t))
-    dlogits.unsafe_store(cell, ftz(identical_div(d, divisor)))
-
-
+# TOMBSTONE: MOJOLEARN_IDN_CE_GRAD_FUSED (unmeasured opt-in arm) use deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is training/neural_identical_experiments.mojo); code recoverable at 1f01978253.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_GRAD_FUSED.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 def ce_dlogits_kernel(
     dlogits: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -228,16 +195,6 @@ def identical_ce_backward_into(
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
-
-    comptime if IDN_CE_GRAD_FUSED and not ANY_LOSS_SABOTAGE:
-        step_count_launch()
-        ctx.enqueue_function[ce_weights_dlogits_kernel](
-            weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
-            denom.unsafe_ptr(), targets.unsafe_ptr(), tv[0], tv[1], divisor,
-            Int32(n_rows), Int32(vocab), Int32(cfg.ignore_index),
-            grid_dim=(_grid_for(cells), 1, 1), block_dim=(CE_TPB, 1, 1),
-        )
-        return
 
     step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](

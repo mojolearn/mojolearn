@@ -46,14 +46,14 @@ transposes theirs to get it, `spectral.cuh:47-52`).
 """
 
 from core.hostptr import copy_f32
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, upload_f32
 from spectral.impl.spectral_predict_common import SpectralPredictionState
@@ -90,12 +90,10 @@ from spectral.impl.sparse.solver.lanczos_types import (
 #: FAST on Apple: the Lanczos basis width for sparse Laplacians (fewer
 #: than `FAST_NCV_DENSE_ROW` entries per row), in place of the reference's
 #: `max(2k + 1, 20)`; still clamped to `n - k`. Same tolerance, same
-#: residual test. `-D MOJOLEARN_SPECTRAL_NCV_FAST_OFF` keeps the reference.
-comptime SPECTRAL_NCV_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SPECTRAL_NCV_FAST_OFF"]()
-)
+#: residual test.
+# TOMBSTONE: MOJOLEARN_SPECTRAL_NCV_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 10d6718946.
+# Restore: git apply experiments/removed/MOJOLEARN_SPECTRAL_NCV_FAST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SPECTRAL_NCV_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime FAST_NCV = 48
 comptime FAST_NCV_DENSE_ROW = 64
 comptime FAST_NCV_MIN_N = 8192 if is_defined[

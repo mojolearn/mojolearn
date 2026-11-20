@@ -47,12 +47,11 @@ columns outside SymmetricTree (`bindings/_mojolearn_gbdt_host.mojo`, the
 route runs only with more than one permutation, i.e. with CTR columns.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import identical_mul_add
 from core.device_zero import enqueue_fill
 from core.pinned_reduce import halving_block_sum
 
@@ -337,39 +336,7 @@ def enqueue_bk_copy_u32(
     )
 
 
-def _bk_apply_kernel(
-    bins: MutPointer[UInt32, MutAnyOrigin],
-    leaf_values: MutPointer[Float32, MutAnyOrigin],
-    learning_rate: Float32,
-    cursor: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`add_model_value_kernel`'s per-row statement, `cursor[r] =
-    identical_mul_add(est[leaf], rate, cursor[r])`, with row r's leaf read
-    from `bins[r]` instead of a partition range: the same operands and the
-    same one rounding per row, so the cursor bits are the partition path's
-    for the same leaf values."""
-    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if r < Int(n_in):
-        var raw = leaf_values.unsafe_load(Int(bins.unsafe_load(r)))
-        cursor.unsafe_store(
-            r, identical_mul_add(raw, learning_rate, cursor.unsafe_load(r))
-        )
-
-
-def enqueue_bin_keyed_apply(
-    ctx: DeviceContext,
-    mut bins: DeviceBuffer[DType.uint32],
-    mut leaf_values: DeviceBuffer[DType.float32],
-    learning_rate: Float32,
-    mut cursor: DeviceBuffer[DType.float32],
-    n_rows: Int,
-) raises:
-    """`AppendModels` onto the ORIGINAL-order cursor from per-row leaf ids."""
-    if n_rows < 1:
-        return
-    ctx.enqueue_function[_bk_apply_kernel](
-        bins.unsafe_ptr(), leaf_values.unsafe_ptr(), learning_rate,
-        cursor.unsafe_ptr(), Int32(n_rows),
-        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
+# TOMBSTONE note (fb11 follow-up, 2026-11-17): `_bk_apply_kernel` / `enqueue_bin_keyed_apply` removed:
+# no caller since MOJOLEARN_TREES_CTR_SORTFREE_SUMS was deleted (2026-11-15, lane/expdel2-42-trees);
+# that experiment's patch (experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch)
+# calls it, so restoring it restores this function from 8cc12e71fe as well.

@@ -1,0 +1,17 @@
+{
+  "source": "python/mojolearn/tests/test_linalg_decompositions.py::test_eigh_device_equals_host_byte_for_byte",
+  "numpy": "2.5.2",
+  "seed": 5,
+  "generator_sha256": "cf3fdf2eaf49ab1d0fc0e65033a81fc96a4ace95c4d91292598f16918493e609",
+  "files": [
+    {
+      "file": "eigh-64x5-sym.f32",
+      "shape": [
+        5,
+        5
+      ],
+      "sha256": "166d556bcf90fa3b87af7d2aeaefa62299a06ad9aeb857a07fbc55e0b60f67e0"
+    }
+  ],
+  "limits": "Input generation only; NumPy's float32 product is part of the recorded bytes."
+}

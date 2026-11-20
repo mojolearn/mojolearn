@@ -153,12 +153,7 @@ class SmokeTests(unittest.TestCase):
     def run_smoke(self, *args, env=None, timeout=120):
         e = dict(os.environ, MOJOLEARN_RUNPOD_KEY_FILE=str(self.dir / 'no-key'),
                  MOJOLEARN_DO_TOKEN_FILE=str(self.dir / 'no-token'),
-                 MOJOLEARN_DO_GPU_LOCK=str(self.dir / 'gpu.lock'),
-                 # never the real Hot Aisle key or API from a test
-                 MOJOLEARN_HOTAISLE_KEY_FILE=str(self.dir / 'no-hotaisle-key'),
-                 MOJOLEARN_HOTAISLE_API='http://127.0.0.1:9/nothing-here',
-                 MOJOLEARN_HOTAISLE_SLOT_PREFIX=str(self.dir / 'ha-slot'),
-                 MOJOLEARN_HOTAISLE_CREATE_LOCK=str(self.dir / 'ha-create.lock'))
+                 MOJOLEARN_DO_GPU_LOCK=str(self.dir / 'gpu.lock'))
         e.pop('RUNPOD_API_KEY', None)
         e.update(env or {})
         # The Mac-side steps run `python3` (the reference diff imports numpy): this test's own
@@ -226,11 +221,8 @@ class SmokeTests(unittest.TestCase):
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
                            '--column', self.selection(), '--out', str(self.dir / 'o'))
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn('provider auto: RunPod once, Hot Aisle when RunPod has no', r.stdout)
-        self.assertIn('DigitalOcean when Hot Aisle refuses before a create', r.stdout)
-        self.assertIn('hotaisle MI300X VM spec auto', r.stdout)
-        self.assertIn('Hot Aisle dead-men compose', r.stdout)
-        self.assertIn('no Hot Aisle key here', r.stdout)
+        self.assertIn('provider auto: RunPod once, DigitalOcean when RunPod has no', r.stdout)
+        self.assertNotIn('Hot Aisle', r.stdout)
         self.assertIn('"gpuTypeIds": ["AMD Instinct MI300X OAM"]', r.stdout)
         self.assertIn('size gpu-mi325x1-256gb  regions tor1,nyc2', r.stdout)
         self.assertIn('"region":"tor1","size":"gpu-mi325x1-256gb","image":188571990', r.stdout)
@@ -259,15 +251,10 @@ class SmokeTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('--provider do is for --vendor hip', r.stderr)
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--provider', 'lambda')
-        self.assertIn('--provider must be runpod, hotaisle, do or auto', r.stderr)
-        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--provider', 'hotaisle')
-        self.assertIn('--provider hotaisle is for --vendor hip', r.stderr)
+        self.assertIn('--provider must be runpod, do or auto', r.stderr)
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
-                           '--column', self.selection(), '--hotaisle-spec', '4gpu')
-        self.assertIn('--hotaisle-spec must be 1gpu, 2gpu or auto', r.stderr)
-        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
-                           '--column', self.selection(), '--hotaisle-cap', 'ten')
-        self.assertIn('--hotaisle-cap must be a dollar figure', r.stderr)
+                           '--column', self.selection(), '--provider', 'hotaisle')
+        self.assertIn('--provider must be runpod, do or auto', r.stderr)
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
                            '--column', self.selection(), '--do-regions', 'tor1;rm')
         self.assertIn('--do-regions', r.stderr)
@@ -356,7 +343,6 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(len(self.posts(log, '/rp/pods')), 1, log)            # RunPod tried ONCE
         self.assertIn("RunPod has no 'AMD Instinct MI300X OAM' to give", r.stdout)
-        self.assertIn('Hot Aisle REFUSED: no usable Hot Aisle key', r.stdout)
         self.assertIn('FALLING BACK to DigitalOcean', r.stdout)
         do_posts = self.posts(log, '/do/droplets')
         self.assertEqual(len(do_posts), 1, log)
@@ -513,15 +499,16 @@ class SmokeTests(unittest.TestCase):
 
     def test_split_ssh_path_ships_all_dependencies_as_pip_installs_them(self):
         """Every dependency is shipped, hashed, installed and named."""
-        nvidia, amd, ptx = self.plugin(), self.plugin('mojolearn_amd'), self.plugin('mojolearn_nvidia_ptx')
+        # the NVIDIA wheel carries its PTX set (2026-11-05): two plugin wheels
+        nvidia, amd = self.plugin(), self.plugin('mojolearn_amd')
         r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(amd), '--plugin', str(nvidia),
-                               '--plugin', str(ptx), vendor='hip')
+                               vendor='hip')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         receipt = json.loads((out / 'results.json').read_text())
         self.assertEqual(sorted(p['wheel'].rsplit('/', 1)[-1] for p in receipt['plugins']),
-                         sorted([nvidia.name, amd.name, ptx.name]))
+                         sorted([nvidia.name, amd.name]))
         box = (out / 'box.sh').read_text()
-        self.assertEqual(box.count(f'--plugin {self.dir / "box" / "wheel-smoke"}/'), 3)
+        self.assertEqual(box.count(f'--plugin {self.dir / "box" / "wheel-smoke"}/'), 2)
         self.assertIn(nvidia.name, (out / 'smoke.txt').read_text())
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
@@ -584,15 +571,14 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
 # ---------------------------------------------------------------- --from-index
 IV = '0.9.0'
 PROJECTS = {name: name.replace('-', '_') for name in (
-    'mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')}
+    'mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd')}
 # mojolearn (the Linux meta wheel) -> core + both vendors; the core requires
 # no vendor; each vendor requires the core (2026-10-20)
 PROJECT_REQUIRES = {
     'mojolearn': ('mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd'),
     'mojolearn-core': (),
-    'mojolearn-nvidia': ('mojolearn-core', 'mojolearn-nvidia-ptx'),
+    'mojolearn-nvidia': ('mojolearn-core',),
     'mojolearn-amd': ('mojolearn-core',),
-    'mojolearn-nvidia-ptx': ('mojolearn-core',),
 }
 
 
@@ -639,7 +625,7 @@ FAKE_BOX = r'''import json, os, pathlib
 d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
 vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
 (d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
-projects = ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')
+projects = ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd')
 (d / 'install.log').write_text('Successfully installed ' + ' '.join(projects) + ' numpy\n')
 (d / 'pip_report.json').write_text(json.dumps({'install': []}))
 (d / 'dists.txt').write_text(''.join(n + '==' + v + '\n' for n in projects))
@@ -779,15 +765,14 @@ class FromIndexTests(unittest.TestCase):
         env = self.serve()
         e = dict(os.environ, MOJOLEARN_RUNPOD_KEY_FILE=str(self.dir / 'no-key'),
                  MOJOLEARN_DO_TOKEN_FILE=str(self.dir / 'no-token'), MOJOLEARN_DO_GPU_LOCK=str(self.dir / 'gpu.lock'),
-                 MOJOLEARN_HOTAISLE_KEY_FILE=str(self.dir / 'no-hotaisle-key'),
-                 MOJOLEARN_HOTAISLE_API='http://127.0.0.1:9/nothing-here', **env)
+                 **env)
         e.pop('RUNPOD_API_KEY', None)
         r = subprocess.run(['bash', str(ROOT / 'tools/index_install_check.sh'), IV, 'testpypi',
                             '--out', str(self.dir / 'o')], capture_output=True, text=True, timeout=120, env=e)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('DRY RUN NVIDIA: plan composed', r.stdout)
         self.assertIn('DRY RUN AMD: plan composed', r.stdout)
-        self.assertIn('provider hotaisle (Hot Aisle only)', r.stdout)
+        self.assertIn('provider do (DigitalOcean only)', r.stdout)
         self.assertIn('vendor hip', r.stdout)
         self.assertFalse((self.dir / 'o').exists())
         env = self.serve(missing=('mojolearn-nvidia',))

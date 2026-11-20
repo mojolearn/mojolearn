@@ -20,7 +20,7 @@ launch reads first, so iterations are queued in batches and the host reads
 the state word once a batch. Off Apple nothing waits; on Apple each
 iteration's launches are one witness unit (in place, so a cut raises).
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, sti, i2f, row_dot
 from x_linear.tops import fold_parts, fold_blocks, fold_fa, fold_sq, FOLD_BLOCK, t_cholesky
@@ -315,7 +315,7 @@ def _qg_iter_fin_body(nb: Int32, nd: Int32, d: Int32, cols: Int32, fw: FP, fp: F
         var tl = q_tail(fw, Int(nd), dd, mi, o[1], o[2], o[7], o[8], o[10],
                         fold_parts(sc, 0, b), fold_parts(sc, b, b), fold_parts(sc, 2 * b, b),
                         fold_parts(sc, 3 * b, b), ld(state, QS_YNORM), rho,
-                        ld(fp, 1), ld(fp, 2), ld(fp, 3), ld(fp, 4) != Float32(0), Int(it))
+                        ld(fp, 1), ld(fp, 2), ld(fp, 3), Int(it))
         st(state, QS_ITERS, i2f(Int(it) + 1))
         st(state, QS_RESCALE, Float32(0))
         st(state, QS_READY, Float32(1))
@@ -714,7 +714,7 @@ def quantile_fit_grid(
     wp += 1
     if not wit.ok(ctx, wp, "QuantileRegressor polish setup"):
         wit.fail()
-    var hps = List[Float32](length=QP_WORDS, fill=Float32(0))
+    var hps = List[Float32](unsafe_uninit_length=QP_WORDS)
     ctx.enqueue_copy(dst_ptr=hps.unsafe_ptr(), src_buf=dps)
     ctx.synchronize()
     if hps[QP_DONE] == Float32(0):

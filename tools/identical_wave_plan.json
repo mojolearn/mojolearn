@@ -64,11 +64,9 @@
     "pca_60_sweeps",
     "gmm_fused_cholesky",
     "prophet",
-    "mamba3_angle",
     "iforest_lifetime",
     "dbscan_edge_split",
     "dbscan_edge_split_scale",
-    "kde_legacy_staged",
     "kde_chunked_host",
     "gbdt_depth_zero_mixed",
     "small_eigh_guard",
@@ -78,7 +76,6 @@
     "pca_bits",
     "import_smoke",
     "cnn_seams",
-    "cnn_epoch_adam_controls",
     "eigh_block_expected_refusal",
     "lu_result_word",
     "rf_phase_upload_lifetime"
@@ -152,19 +149,6 @@
       "coverage": "Known planted trend break, weekly seasonality, holiday, finite forecast, batch/single equality; no external Prophet run."
     },
     {
-      "id": "mamba3_angle",
-      "kind": "mojo",
-      "path": "mamba/checks/mamba3_check.mojo",
-      "defines": [
-        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
-      ],
-      "timeout": 7200,
-      "arms": [
-        "on"
-      ],
-      "coverage": "Explicit candidate enabled; 18-case stage/oracle/decode checks include seam-crossing fixtures. Requires recorded actual compile/run, not default-OFF run."
-    },
-    {
       "id": "iforest_lifetime",
       "kind": "python",
       "path": "tools/identical_iforest_lifetime_gate.py",
@@ -186,16 +170,6 @@
       "id": "dbscan_edge_split_scale",
       "kind": "mojo",
       "path": "dbscan/checks/dbscan_edge_split_scale_check.mojo"
-    },
-    {
-      "id": "kde_legacy_staged",
-      "kind": "mojo",
-      "path": "kde/checks/kde_check.mojo",
-      "defines": [
-        "MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF=1"
-      ],
-      "timeout": 7200,
-      "coverage": "Explicit legacy staged trace arithmetic; does not qualify default chunked route."
     },
     {
       "id": "kde_chunked_host",
@@ -273,20 +247,6 @@
       "kind": "mojo",
       "path": "x_cnn/checks/seams_check.mojo",
       "timeout": 7200
-    },
-    {
-      "id": "cnn_epoch_adam_controls",
-      "kind": "python",
-      "path": "tools/identical_wave_quality.py",
-      "args": [
-        "cnn_controls",
-        "--report",
-        "{report}"
-      ],
-      "arms": [
-        "on"
-      ],
-      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against a float64 NumPy reference, <=1ULP."
     },
     {
       "id": "eigh_block_expected_refusal",

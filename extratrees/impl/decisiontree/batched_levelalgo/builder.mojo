@@ -2,11 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.collections import InlineArray
-from core.tree_math import tree_log
-from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
-from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
-from std.memory import bitcast, memcpy
+# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS, MOJOLEARN_TREES_T14_EXACT, MOJOLEARN_TREES_T12_BYTES, MOJOLEARN_TREES_T13_BYTES (T11/T14_EXACT folded to their constants here; T12/T13 byte budgets read their default constants) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T12_BYTES.expdel2-40-trees.patch; experiments/removed/MOJOLEARN_TREES_T13_BYTES.expdel2-40-trees.patch
+from std.memory import bitcast, unsafe_memcpy
 
 from ensemble.instruments import StageTimes
 
@@ -53,15 +51,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     node_feature_range_decode_kernel,
     node_feature_is_constant,
-    draw_threshold_device,
     range_key,
-    range_unkey,
-    RANGE_KEY_MIN_SEED,
-    RANGE_KEY_MAX_SEED,
-    classification_key_shift,
-    regression_key,
-    SCORE_SAB_NONE,
-    T05_SMALL_NODE_ROWS,
     node_nonconstant_flag_kernel,
     FeatureRange,
     WorkloadPlan,
@@ -98,7 +88,6 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     phase_setup_b_kernel,
 )
 from std.time import perf_counter_ns
-from std.os import getenv
 
 from core.device_liveness import assert_device_alive
 from core.identity_trace import IdentityTrace
@@ -162,17 +151,15 @@ from extratrees.impl.decisiontree.batched_levelalgo.split import (
 from extratrees.checks.pcg_rng import key_for
 from extratrees.checks.pcg_rng import PCGenerator, uniform_int_u32
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.atomic import Atomic
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from max.gpu.primitives.block import min as block_min
-from max.gpu.primitives.block import max as block_max
-from max.gpu.primitives.block import sum as block_sum
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, size_of
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -1328,9 +1315,6 @@ def _exact_candidate(
         metric = gain_per_split(
             left_p, total_p, 0, g_ncls, g_len, g_left, g_msl
         )
-        comptime if T14 and not T14_EXACT:
-            if not is_classification and criterion == CRITERION_MSE and not weighted_reg:
-                metric = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(Float32(cell.n_total),Float32(cell.n_left),Float32(acc_total[0]),Float32(acc_left[0]))))
         num = cell.gini_num
         den = cell.gini_den
     _ = acc_left^
@@ -1441,10 +1425,6 @@ def set_leaf_predictions_exact_host(
         if not tree.sparsetree[node_id].IsLeaf():
             continue
         var rng = node_instances[node_id]
-        comptime if T14 and not T14_EXACT:
-            if not is_classification and row_w_addr == 0:
-                tree.vector_leaf[node_id*k] = et_leaf_moment_host(dataset.row_ids,labels_q,Int(rng.begin),Int(rng.count),inv_scale)
-                continue
         var acc = List[Int32](length=k, fill=Int32(0))
         var seen = Int32(0)
         var w_seen = Int32(0)
@@ -1975,30 +1955,6 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
     )
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
-    var parent_terms = InlineArray[Float32,32](fill=Float32(0))
-    comptime if T06 and not WEIGHTED:
-        if entropy and n_classes <= 32:
-            var node = idx
-            var width = Int(columns_per_node)
-            var start = node*width
-            if start >= n_cells:
-                return
-            n_cells = min(n_cells,start+width)
-            idx = start
-            stride = 1
-            for feature in range(start,n_cells):
-                if in_status[unsafe_offset=feature] == SCORE_STATUS_SCORED:
-                    var inv_len = ftz(Float32(1)/Float32(in_n_total[unsafe_offset=feature]))
-                    for c in range(n_classes):
-                        var count = in_acc_total[unsafe_offset=feature*n_classes+c]
-                        if count != 0:
-                            var value = ftz(Float32(count)*inv_len)
-                            var term = ftz(value*tree_log(value))
-                            parent_terms[c] = ftz(term/tree_log(Float32(2)))
-                    break
-    # T06 preserves the same class fold and exact parent statements; only the
-    # per-node transform lifetime changes. Cached terms are never weighted.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     while idx < n_cells:
         if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
@@ -2027,17 +1983,8 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
                 g_ncls = 1
             if entropy:
                 # DEVIATION 459: the float gain is the metric AND the key.
-                var g = Float32(0)
-                if T06 and not WEIGHTED and n_classes <= 32:
-                    var objective = EntropyObjectiveFunction[DType.float32](Int32(n_classes),min_samples_leaf)
-                    g = objective.GainPerSplitCached(
-                        in_acc_left.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
-                        in_acc_total.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
-                        in_n_total[unsafe_offset=idx],in_n_left[unsafe_offset=idx],parent_terms,
-                    )
-                else:
-                    g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
-                        g_len,g_left,g_msl)
+                var g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
+                    g_len,g_left,g_msl)
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
                 cand_den[unsafe_offset=idx] = Int64(1)
@@ -2069,11 +2016,6 @@ def _score_to_candidate_body[WEIGHTED: Bool, WEIGHTED_REG: Bool = False](
                     g_left,
                     g_msl,
                 )
-                comptime if T14 and not T14_EXACT and not WEIGHTED_REG:
-                    if criterion_in == CRITERION_MSE:
-                        cand_metric[unsafe_offset=idx] = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
-                            Float32(in_n_total[unsafe_offset=idx]),Float32(in_n_left[unsafe_offset=idx]),
-                            Float32(in_acc_total[unsafe_offset=idx]),Float32(in_acc_left[unsafe_offset=idx]))))
                 cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
                 cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
             cand_valid[unsafe_offset=idx] = Int32(1)
@@ -2238,204 +2180,8 @@ def score_to_candidate_weighted_reg_kernel(
         columns_per_node,
     )
 
-comptime ET_SMALL_NODE_TPB = T05_SMALL_NODE_ROWS
-"""T05 one row per lane, two exact class-count planes of at most 32 Int32s.
-
-The capacity is a portable 128-thread block, not a dataset or tree-size gate.
-Every admitted row stays in a register from its range read through threshold
-scoring. Integer shared counts take 256 bytes; range/threshold scratch is
-bounded independently of feature count. Larger nodes keep the incumbent path.
-NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-"""
-
-
-def small_node_raw_split_kernel[CLASSIFICATION: Bool](
-    cand_quesval: MutPointer[Float32, MutAnyOrigin],
-    cand_colid: MutPointer[Int32, MutAnyOrigin],
-    cand_metric: MutPointer[Float32, MutAnyOrigin],
-    cand_nleft: MutPointer[Int32, MutAnyOrigin],
-    cand_num: MutPointer[Int64, MutAnyOrigin],
-    cand_den: MutPointer[Int64, MutAnyOrigin],
-    cand_valid: MutPointer[Int32, MutAnyOrigin],
-    nonconstant: MutPointer[Int32, MutAnyOrigin],
-    out_min: MutPointer[Float32, MutAnyOrigin],
-    out_max: MutPointer[Float32, MutAnyOrigin],
-    out_missing: MutPointer[Int32, MutAnyOrigin],
-    out_draw: MutPointer[Float32, MutAnyOrigin],
-    data: MutPointer[Float32, MutAnyOrigin],
-    rows: MutPointer[Int32, MutAnyOrigin],
-    labels: MutPointer[Int32, MutAnyOrigin],
-    items: MutPointer[NodeWorkItem, MutAnyOrigin],
-    columns: MutPointer[Int32, MutAnyOrigin],
-    tree_ids: MutPointer[Int32, MutAnyOrigin],
-    n_rows: Int32,
-    n_columns_per_node: Int32,
-    n_acc: Int32,
-    seed: UInt64,
-    min_samples_leaf: Int32,
-    criterion: Int32,
-):
-    """T05/C45: one raw-value range, random draw, statistic and score block.
-
-    Called after ordinary conversion, which initializes invalid small-node
-    candidates from the deliberately empty separate range cells. This block
-    replaces those candidates and supplies the ranges/draw consumed by tracing.
-    Statistics remain shared: no intermediate class/moment arrays are written.
-    Feature sampling and the following canonical split reducer are unchanged.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    var nid = Int(block_idx.x)
-    var feature = Int(block_idx.y)
-    var tid = Int(thread_idx.x)
-    var length = Int(items[unsafe_offset=nid].instances.count)
-    if length <= 0 or length > ET_SMALL_NODE_TPB or n_acc < 1 or n_acc > 32:
-        return
-    var begin = Int(items[unsafe_offset=nid].instances.begin)
-    var slot = nid * Int(n_columns_per_node) + feature
-    var col = Int(columns[unsafe_offset=slot])
-    if tid == 0:
-        cand_quesval[unsafe_offset=slot] = Float32.MIN_FINITE
-        cand_colid[unsafe_offset=slot] = Int32(-1)
-        cand_metric[unsafe_offset=slot] = Float32.MIN_FINITE
-        cand_nleft[unsafe_offset=slot] = Int32(0)
-        cand_num[unsafe_offset=slot] = Int64(0)
-        cand_den[unsafe_offset=slot] = Int64(0)
-        cand_valid[unsafe_offset=slot] = Int32(0)
-
-    # At most one row per lane, also at most one row per lane in the
-    # incumbent range block. Its key-space min/max, missing sentinel and
-    # signed-zero choices therefore need no new floating reduction graph.
-    var row = 0
-    var value = Float32(0)
-    var lo_key = RANGE_KEY_MIN_SEED
-    var hi_key = RANGE_KEY_MAX_SEED
-    var missing = Int32(0)
-    if tid < length:
-        row = Int(rows[unsafe_offset=begin+tid])
-        value = data[unsafe_offset=col*Int(n_rows)+row]
-        if value != value:
-            missing = Int32(1)
-        else:
-            lo_key = range_key(value)
-            hi_key = lo_key
-    var minimum = block_min[block_size=ET_SMALL_NODE_TPB](lo_key)
-    barrier()
-    var maximum = block_max[block_size=ET_SMALL_NODE_TPB](hi_key)
-    barrier()
-    var missing_total = block_sum[block_size=ET_SMALL_NODE_TPB](missing)
-    barrier()
-    var threshold = stack_allocation[1,Float32,address_space=AddressSpace.SHARED]()
-    var active = stack_allocation[1,Int32,address_space=AddressSpace.SHARED]()
-    if tid == 0:
-        var lo = range_unkey(minimum)
-        var hi = range_unkey(maximum)
-        if lo > hi:
-            lo = Float32(1)
-            hi = Float32(-1)
-        out_min[unsafe_offset=slot] = lo
-        out_max[unsafe_offset=slot] = hi
-        out_missing[unsafe_offset=slot] = missing_total
-        var extent = FeatureRange(lo,hi,missing_total)
-        var constant = node_feature_is_constant(extent,Int32(length))
-        if not constant:
-            _ = Atomic.fetch_add(nonconstant.unsafe_offset(nid),Int32(1))
-        active[unsafe_offset=0] = Int32(0)
-        threshold[unsafe_offset=0] = Float32(0)
-        if missing_total == 0 and not constant:
-            var key = key_for(seed,tree_ids[unsafe_offset=nid].cast[DType.uint32](),
-                UInt32(Int(items[unsafe_offset=nid].idx)),UInt32(col))
-            threshold[unsafe_offset=0] = draw_threshold_device(key,extent)
-            out_draw[unsafe_offset=slot] = threshold[unsafe_offset=0]
-            active[unsafe_offset=0] = Int32(1)
-    barrier()
-    if active[unsafe_offset=0] == 0:
-        return
-
-    var histogram = stack_allocation[64,Int32,address_space=AddressSpace.SHARED]()
-    if tid < 64:
-        histogram[unsafe_offset=tid] = Int32(0)
-    barrier()
-    var left = Int32(0)
-    if tid < length:
-        var label = labels[unsafe_offset=row]
-        var goes_left = value <= threshold[unsafe_offset=0]
-        left = Int32(1) if goes_left else Int32(0)
-        comptime if CLASSIFICATION:
-            if label >= 0 and label < n_acc:
-                _ = Atomic.fetch_add(histogram.unsafe_offset(32+Int(label)),Int32(1))
-                if goes_left:
-                    _ = Atomic.fetch_add(histogram.unsafe_offset(Int(label)),Int32(1))
-        else:
-            _ = Atomic.fetch_add(histogram.unsafe_offset(32),label)
-            if goes_left:
-                _ = Atomic.fetch_add(histogram,label)
-    var left_count = block_sum[block_size=ET_SMALL_NODE_TPB](left)
-    barrier()
-    if tid != 0:
-        return
-    var right_count = Int32(length)-left_count
-    if left_count < min_samples_leaf or right_count < min_samples_leaf or left_count == 0 or right_count == 0:
-        return
-    comptime if CLASSIFICATION:
-        for c in range(Int(n_acc)):
-            if histogram[unsafe_offset=32+c] == Int32(length):
-                return
-
-    # Exactly node_feature_score_finalize_kernel's integer key, then the
-    # same score helpers used by score_to_candidate_kernel. The canonical
-    # feature/tie reduction stays a separate consumer of these winners.
-    var numerator = Int64(0)
-    var denominator = Int64(0)
-    comptime if CLASSIFICATION:
-        var sq_left = Int64(0)
-        var sq_right = Int64(0)
-        for c in range(Int(n_acc)):
-            var lv = Int64(Int(histogram[unsafe_offset=c]))
-            var rv = Int64(Int(histogram[unsafe_offset=32+c]-histogram[unsafe_offset=c]))
-            sq_left += lv*lv
-            sq_right += rv*rv
-        var nl = Int64(Int(left_count))
-        var nr = Int64(Int(right_count))
-        var shift = Int64(classification_key_shift(length))
-        numerator = (sq_left >> shift)*nr+(sq_right >> shift)*nl
-        denominator = nl*nr
-    else:
-        if not regression_key(Int64(Int(histogram[unsafe_offset=0])),
-            Int64(Int(histogram[unsafe_offset=32])),Int(left_count),
-            Int(right_count),length,SCORE_SAB_NONE,numerator,denominator):
-            return
-    # The canonical helpers accept generic device pointers. Shared storage is
-    # live through this finalization, after the block barrier above.
-    var gain = Float32(0)
-    if criterion == CRITERION_ENTROPY:
-        # T06's parent cache belongs to the separate multi-feature score
-        # pass. A fused feature already consumes its exact counts once.
-        gain = entropy_gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
-            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
-            0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
-        numerator = float_gain_key(gain)
-        denominator = Int64(1)
-    elif criterion == CRITERION_POISSON or criterion == CRITERION_GAMMA or criterion == CRITERION_INVERSE_GAUSSIAN:
-        gain = regression_deviance_gain(histogram[unsafe_offset=0],
-            histogram[unsafe_offset=32],left_count,Int32(length),criterion)
-        numerator = float_gain_key(gain)
-        denominator = Int64(1)
-    else:
-        gain = gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
-            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
-            0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
-        comptime if T14 and not T14_EXACT and not CLASSIFICATION:
-            if criterion == CRITERION_MSE:
-                gain = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
-                    Float32(length),Float32(left_count),
-                    Float32(histogram[unsafe_offset=32]),Float32(histogram[unsafe_offset=0]))))
-    cand_quesval[unsafe_offset=slot] = threshold[unsafe_offset=0]
-    cand_colid[unsafe_offset=slot] = Int32(col)
-    cand_metric[unsafe_offset=slot] = gain
-    cand_nleft[unsafe_offset=slot] = left_count
-    cand_num[unsafe_offset=slot] = numerator
-    cand_den[unsafe_offset=slot] = denominator
-    cand_valid[unsafe_offset=slot] = Int32(1)
+# (Sweep 2026-11-15: ET_SMALL_NODE_TPB, small_node_raw_split_kernel and _enqueue_small_node_splits, reached only
+# under the folded T05, removed.)
 
 
 def row_ids_sequence_kernel(
@@ -2588,7 +2334,7 @@ def transpose_to_row_major_kernel(
 #: split the rows the same way (code(x) <= c  <=>  x <= q[c]). Measured on
 #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
 #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
-#: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+#: code space, both moved RMSE).
 #: The IDENTICAL arm of this search (`MOJOLEARN_IDN_ET_BINNED_U16`, fam2-forests
 #: 2026-10-04) was a measured loser (2026-10-05 full-harness A/B: NVIDIA 1.064x,
 #: AMD 1.025x slower, RMSE worse on Istella and Year; evidence
@@ -2597,17 +2343,16 @@ def transpose_to_row_major_kernel(
 #: trees-small 2026-10-07 (docs/apple-fast/EXPERIMENTS.md row). FAST only now.
 comptime ET_BINNED_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
+# TOMBSTONE: MOJOLEARN_ET_BINNED_OFF (old path of the FAST Apple binned default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_BINNED_OFF.patch
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
-#: between taxi (16 columns, slower) and istella (220, faster). Removed as
-#: benchmark-tuned on 2026-10-04: binning now applies at every width;
-#: UNMEASURED.
-comptime ET_BINNED_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_ET_BINNED"]()
-comptime ET_BINNED_MIN_COLS = 64 if ET_BINNED_LEGACY_NARROW else 1
+#: FAST + Apple: binning applies at every width (the n_cols >= 64 gate was
+#: removed as benchmark-tuned on 2026-10-04).
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ET_BINNED (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_BINNED.patch
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
 
@@ -3033,8 +2778,8 @@ struct DeviceDataset(Movable):
 
     def search_data_ptr(mut self) -> MutPointer[Float32, MutAnyOrigin]:
         """The matrix the range and score passes read."""
-        comptime if ET_ROW_MAJOR:
-            return self.d_data_rm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        # TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+        # Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
         return self.d_data.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
@@ -3087,7 +2832,7 @@ def upload_dataset(
         d_data = ctx.enqueue_create_buffer[DType.float32](count)
         var h_data = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
-        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+        unsafe_memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
         ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
         ctx.synchronize()
         _ = h_data^
@@ -3097,7 +2842,7 @@ def upload_dataset(
     )
     ctx.synchronize()
     if not labels_on_device:
-        memcpy(
+        unsafe_memcpy(
             dest=h_labels.unsafe_ptr(),
             src=class_ids.unsafe_ptr(),
             count=Int(n_rows),
@@ -3162,7 +2907,7 @@ def class_ids_device_kernel(
         out_ids[unsafe_offset=i] = Int32(Int(v))
     else:
         out_ids[unsafe_offset=i] = Int32(0)
-        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+        _ = Atomic[Int32].min(first_bad, Int32(i))
 
 
 def upload_dataset_labels_f32(
@@ -3198,7 +2943,7 @@ def upload_dataset_labels_f32(
     var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
     var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
-    memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
     ctx.enqueue_memset(d_bad, Int32(n))
     ctx.enqueue_function[class_ids_device_kernel](
@@ -3312,7 +3057,7 @@ def upload_dataset_labels_quantized(
     var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
-    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
     # reads back one word, so the upload above has landed after it
     var mag = device_abs_sum_blocked(ctx, d_y, n)
@@ -3408,7 +3153,7 @@ def upload_dataset_labels_quantized_weighted(
     var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.synchronize()
-    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
     ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
     var has_w = weights_addr != 0 and n > 0
     if has_w:
@@ -3786,9 +3531,7 @@ DEVIATION 203's partition assumes that tiling: two copies that drifted would
 put a block's rows somewhere its scatter does not write.
 
 The value comes from `_device_tpb()`: 128 (cuML's `TPB_DEFAULT`) unless a
-measurement arm overrides it with `-D MOJOLEARN_ET_TPB_512=1`
-(tools/et_profile_leg.sh builds those arms
-side by side with the default on a rented box).
+64-lane wavefront, where it is 512 (DEVIATION 1943).
 """
 
 
@@ -3841,6 +3584,9 @@ def _device_tpb() -> Int:
     must alternate arms inside one window, not assume independence.
     ==================================================================
     """
+    # TOMBSTONE: MOJOLEARN_AFT_F06, MOJOLEARN_ET_TPB_1024, MOJOLEARN_ET_TPB_512, MOJOLEARN_ET_TPB_128 (unmeasured opt-in arms; the width arms above are history) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_F06.patch; experiments/removed/MOJOLEARN_ET_TPB_1024.patch; experiments/removed/MOJOLEARN_ET_TPB_512.patch; experiments/removed/MOJOLEARN_ET_TPB_128.patch
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F06 (Apple fast opt-in arm; the ET_TPB_* width arms stay deleted) back as it was, default off; default path unchanged.
     # AFT F06: two 32-lane SIMD groups per block reduces the live score
     # reduction footprint. Keep range/partition work-map geometry coupled
     # through DEVICE_TPB, as the stable scatter consumes that same map.
@@ -3849,22 +3595,17 @@ def _device_tpb() -> Int:
     # speed evidence; opt-in and uncompiled/unverified/unmeasured.
     if (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and is_defined["MOJOLEARN_AFT_F06"]()
     ):
         return 64
-    if is_defined["MOJOLEARN_ET_TPB_1024"]():
-        return 1024
-    if is_defined["MOJOLEARN_ET_TPB_512"]():
-        return 512
-    if is_defined["MOJOLEARN_ET_TPB_128"]():
-        return 128
     return 128 if WARP_SIZE <= 32 else 512
 
 comptime DEVICE_MAX_ACC = _device_max_acc()
 """Widest per-cell class accumulator the score kernel's shared memory admits
 (DEVIATION 172). One definition, for the same reason DEVICE_TPB is one.
-32 unless a DEVIATION 2021 measurement arm narrows it. Normal classification
+32; `-D MOJOLEARN_ET_MAX_ACC_32` keeps the fixed full-width score kernel (the
+reference arm of extratrees/tools/check_accumulator_dispatch.sh). Normal classification
 fits dispatch to 4/8/16/32-wide score kernels without narrowing this limit."""
 
 
@@ -3917,12 +3658,8 @@ def _device_max_acc() -> Int:
     Search tiling and block-size tuning remain independent opt-in arms.
     ==================================================================
     """
-    if is_defined["MOJOLEARN_ET_MAX_ACC_4"]():
-        return 4
-    if is_defined["MOJOLEARN_ET_MAX_ACC_8"]():
-        return 8
-    if is_defined["MOJOLEARN_ET_MAX_ACC_16"]():
-        return 16
+    # TOMBSTONE: MOJOLEARN_ET_MAX_ACC_4, MOJOLEARN_ET_MAX_ACC_8, MOJOLEARN_ET_MAX_ACC_16 (unmeasured opt-in arms; the paragraph above is history) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch
     return 32
 
 comptime FOREST_SAB_NONE = Int32(0)
@@ -3935,30 +3672,26 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 0, so their partitions overwrite each other. The forest must move -- this is
 the gate watching that the slot offsets are what isolate the trees."""
 
-comptime ET_ROW_MAJOR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_ET_ROW_MAJOR"]()
-)
+# TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm: the swapped (feature-major) search grid) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
 
-comptime ET_TILED_SEARCH_APPLE_DEFAULT = (
-    has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_ET_TILED_SEARCH_OFF (old path of the measured Apple default, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_OFF.patch
+comptime ET_TILED_SEARCH_APPLE_DEFAULT = TARGET_HAS_APPLE_GPU
 """Apple FAST default for the two tiled search kernels below. Apple M4, 1M
 rows, 100 trees, alternating processes, model hashes unchanged: taxireg
 (k = 16 of 16) 20.7 -> 6.4 s (0.310), Istella-S regression (k = 220 of 220)
 182.6 -> 87.6 s (0.480); classification (k = 4 of 16, 15 of 220) takes the
-original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
-`-D MOJOLEARN_ET_TILED_SEARCH_OFF` turns both off on Apple."""
+original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both."""
 
 comptime ET_TILED_SEARCH_APPLE_IDENTICAL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and ET_TILED_SEARCH_APPLE_DEFAULT
-    and not (
-        is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
 """Apple IDENTICAL (trees-apple2, 2026-09-28): the two tiled search kernels
 under IDENTICAL too, bit-inert by construction. The range kernel folds in
 range_key space under IDENTICAL (the one-feature kernel's IDENTICAL arm),
@@ -3966,53 +3699,50 @@ so the same min, max and NaN count; the regression score kernel publishes
 the same integer counts and label sums (integers, any order). Same
 `2k >= n_cols` gate (`ensure_row_major`), so only fits that sample at least
 half the features (the regressors at max_features 1.0) take them. Never
-binned codes: `ET_BINNED_REG` stays FAST. `-D
-MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
+binned codes: `ET_BINNED_REG` stays FAST."""
 
 comptime IDN_ET_TILED_SEARCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
-    and not (
-        is_defined["MOJOLEARN_IDN_ET_TILED_SEARCH_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not TARGET_HAS_APPLE_GPU
 )
+# TOMBSTONE: MOJOLEARN_IDN_ET_TILED_SEARCH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_TILED_SEARCH_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
 """fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the two tiled
 search kernels Apple IDENTICAL already takes (`ET_TILED_SEARCH_APPLE_IDENTICAL`
 above, the same bit-inert argument: a key-space range fold, integer counts
 and label sums). A fit that samples at least half its features (the
 regressors at max_features 1.0) reads each row id and quantized label once
 per `ET_FEATURE_TILE` features from a row-major X instead of once per
-feature from a column gather. The host column is untouched (same cells).
-`-D MOJOLEARN_IDN_ET_TILED_SEARCH_OFF` keeps the one-feature kernels."""
+feature from a column gather. The host column is untouched (same cells)."""
 
+# TOMBSTONE: MOJOLEARN_ET_RANGE_TILED (unmeasured opt-in arm (force-on off Apple); the tiled range kernel stays the Apple and IDENTICAL default) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_RANGE_TILED.patch
 comptime ET_RANGE_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and (
-        is_defined["MOJOLEARN_ET_RANGE_TILED"]()
-        or ET_TILED_SEARCH_APPLE_DEFAULT
-    )
+    and ET_TILED_SEARCH_APPLE_DEFAULT
 ) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
 """FAST experiment: the range pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
 
+# TOMBSTONE: MOJOLEARN_AFCL_T09 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T09.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFCL_T09 (Apple fast opt-in arm) back as it was, default off; default path unchanged.
 # AFCL-T09: eight sampled features per task halves the private range/score
 # tile footprint and admits more independent tasks on Apple. Every selected
 # feature keeps its RNG identity and full row set; this changes no threshold.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T09 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T09"]()
 )
 comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
 
 comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-# T07: 128 lanes, all candidate columns in strided lanes; existing exact
-# comparator and feature/node RNG salts retained. Same total winner graph.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime ET_REDUCE_TPB = 128 if T07 else DEVICE_TPB
+comptime ET_REDUCE_TPB = DEVICE_TPB
 """DEVIATION 5611 (2026-09-27): under IDENTICAL every node's candidates are
 reduced by ONE block (`blocks_per_node = 1`), so `split_reduce_kernel`
 never merges two blocks through the node's device mutex. That merge reads
@@ -4024,25 +3754,26 @@ order (exact key, then DEVIATION 463's keyed tie), so one block's grid-stride
 fold picks the node's split that any arrival order of a correct merge picks:
 the same bits on every other column. FAST keeps `ceildiv(k, TPB)` blocks."""
 
+# TOMBSTONE: MOJOLEARN_ET_SCORE_TILED (unmeasured opt-in arm (force-on off Apple); the tiled score kernel stays the Apple and IDENTICAL default) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_SCORE_TILED.patch
 comptime ET_SCORE_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and (
-        is_defined["MOJOLEARN_ET_SCORE_TILED"]()
-        or ET_TILED_SEARCH_APPLE_DEFAULT
-    )
+    and ET_TILED_SEARCH_APPLE_DEFAULT
 ) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
 """FAST experiment: the REGRESSION score pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_score_reg_tiled_kernel`)."""
 
-comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
+comptime ET_RM_DATA = ET_RANGE_TILED or ET_SCORE_TILED
 """FAST experiment: a row-major copy of X feeds the range and score passes,
 whose grids put the feature slot on the fast axis so the blocks reading
 one row chunk's features run together and share its cache lines."""
 
+# TOMBSTONE: MOJOLEARN_ET_RM_NARROW, MOJOLEARN_ET_RM_NARROW_OFF (unmeasured opt-in arm and its old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_RM_NARROW.patch; experiments/removed/MOJOLEARN_ET_RM_NARROW_OFF.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_ET_RM_NARROW (force-on knob off Apple; its _OFF rollback stays deleted) back as it was, default off; default path unchanged.
 comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
-    has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"]()
+    TARGET_HAS_APPLE_GPU
 )
 """Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
 builds the row-major copy when one row's floats fit a 64-byte line
@@ -4051,16 +3782,13 @@ so a classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel.
 The range kernel's cells are the same min/max/NaN counts either way.
 M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
 taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
-ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
+ms, hence the quarter gate."""
 
-comptime ET_RM_LINE_BYTES = (
-    64
-    if (
-        is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-    else 128
-)
+# TOMBSTONE: MOJOLEARN_ET_RM_LINE_HW_OFF (old path (the 64-byte line), no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_RM_LINE_HW_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+comptime ET_RM_LINE_BYTES = 128
 """lane/no-dim-idn (2026-10-04): the line `ET_RM_NARROW` compares a row
 against. It was a literal 64 bytes, i.e. `n_cols <= 16`, exactly the board's
 taxi width. It is now the cache line of the targets this arm runs on: 128
@@ -4069,26 +3797,31 @@ a row of up to 32 float32 columns is one line fetch however many of its
 features are sampled, and the quarter gate (`4k >= n_cols`, from the
 RandomTreesEmbedding k = 1 slowdown) still bounds the wasted bytes per line
 at three quarters at any width. Bit-inert: the range cells are the same
-either way. `-D MOJOLEARN_ET_RM_LINE_HW_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
-restore 64 (A/B arm B)."""
-comptime ET_RM_NARROW_GENERAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_LEGACY_NARROW_ET_RM"]()
-)
+either way."""
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_ET_RM (old path, A/B owed but never run (EXP:1330)) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_ET_RM.patch
+comptime ET_RM_NARROW_GENERAL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """lane apple-fast-no-narrow-2 (2026-10-04): FAST drops the quarter gate
-(see `ensure_row_major`); IDENTICAL keeps it, over main's ET_RM_LINE_BYTES line. `-D
-MOJOLEARN_LEGACY_NARROW_ET_RM` restores the quarter gate in FAST."""
+(see `ensure_row_major`); IDENTICAL keeps it, over main's ET_RM_LINE_BYTES line."""
 
 
 @always_inline
 def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
-    """The range/score grid: (row blocks, features), swapped under
-    ET_ROW_MAJOR."""
-    comptime if ET_ROW_MAJOR:
-        return (k, row_blocks, 1)
+    """The range/score grid: (row blocks, features)."""
+    # TOMBSTONE: MOJOLEARN_ET_ROW_MAJOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_ROW_MAJOR.patch
     return (row_blocks, k, 1)
 
 
+# TOMBSTONE: MOJOLEARN_AFT_F07 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F07.patch
+# TOMBSTONE: MOJOLEARN_ET_PART_ROWS, MOJOLEARN_ET_PART_ROWS_OFF (force-on knob off Apple and the old path of the Apple FAST default (promoted on Apple M3 Ultra only, aft-ab-etpr; NVIDIA/AMD FAST A/B owed, FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_PART_ROWS.patch; experiments/removed/MOJOLEARN_ET_PART_ROWS_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ET_PART_ROWS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_PART_ROWS_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F07 (Apple fast) and MOJOLEARN_ET_PART_ROWS (force-on knob off Apple; ET_PART_ROWS_OFF and IDN_ET_PART_ROWS_OFF stay deleted) back as it was, default off; default path unchanged.
 # AFT F07: double the partition's rows/lane relative to the search work
 # budget. At the shipped Apple geometry this is 4096 rows/block, reducing
 # count/scan/scatter workgroup count without changing stable row order.
@@ -4096,20 +3829,13 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F07 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F07"]()
 )
-comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
-    SEARCH_ROWS_PER_THREAD
-    if (
+comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (SEARCH_ROWS_PER_THREAD if (
+    (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and (
-            is_defined["MOJOLEARN_ET_PART_ROWS"]()
-            or (
-                has_apple_gpu_accelerator()
-                and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
-            )
-        )
+        and (is_defined["MOJOLEARN_ET_PART_ROWS"]() or TARGET_HAS_APPLE_GPU)
     )
     or (
         # fam-forests (2026-10-04), `IDN_ET_PART_ROWS`: IDENTICAL on NVIDIA
@@ -4122,16 +3848,10 @@ comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
         # thread keeps its rows in order after the previous thread, blocks
         # in order), so `row_ids` is the same array as at ROWS == 1: no bit
         # moves and the host column is untouched.
-        # `-D MOJOLEARN_IDN_ET_PART_ROWS_OFF` restores one row per thread.
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not has_apple_gpu_accelerator()
-        and not (
-            is_defined["MOJOLEARN_IDN_ET_PART_ROWS_OFF"]()
-            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        )
+        and not TARGET_HAS_APPLE_GPU
     )
-    else 1
-)
+) else 1)
 """FAST: the partition's four kernels fold the search's rows per thread
 too, on the SAME `TPB * R` workload tile the search staged, so a plain cycle
 no longer restages `d_wl` and drains before partitioning, and each block
@@ -4139,45 +3859,40 @@ pays its scans once per `TPB * R` rows instead of per `TPB`. Row order
 within a side stays stable by block and by thread; nothing downstream
 reads it (DEVIATION 203). THE FAST APPLE DEFAULT since 2026-10-02 (M3 Ultra
 board shapes, aft-ab-etpr: taxi 3.87 -> 3.04 s, Istella 4.37 -> 4.14 s, same
-hashes); `-D MOJOLEARN_ET_PART_ROWS_OFF` is the A arm. Elsewhere opt-in
-(`-D MOJOLEARN_ET_PART_ROWS=1`); Apple M4 1M rows was a wash."""
+hashes); Apple M4 1M rows was a wash."""
 
 comptime ET_PART_FLAGS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or TARGET_HAS_APPLE_GPU)
     and PART_ROWS_PER_THREAD == 1
-    and not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_ET_PART_FLAGS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_PART_FLAGS_OFF.patch
 """FAST, and IDENTICAL on Apple since 2026-09-28 (the same directions, so the
 same partition: a data movement, bit-inert): the partition's count pass
 stores each row's direction as one byte
 (`LevelWorkspace.d_part_flags`) and the scatter pass reads it instead of
-gathering the split column again. Same directions, same partition.
-`-D MOJOLEARN_ET_PART_FLAGS_OFF` restores the second gather."""
+gathering the split column again. Same directions, same partition."""
 
 comptime ET_STAGE_LIVE_PREFIX = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or has_apple_gpu_accelerator()
+        or TARGET_HAS_APPLE_GPU
         # fam-forests (2026-10-04), `IDN_ET_STAGE_LIVE`: IDENTICAL on NVIDIA
         # and AMD too. Only the live prefix is ever read, so no bit moves.
-        # `-D MOJOLEARN_IDN_ET_STAGE_LIVE_OFF` restores full-capacity staging.
-        or (
-            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and not (
-                is_defined["MOJOLEARN_IDN_ET_STAGE_LIVE_OFF"]()
-                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-            )
-        )
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     )
-    and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ET_STAGE_LIVE_OFF, MOJOLEARN_ET_STAGE_FULL_CAPACITY (old paths (full-capacity staging), no A/B recorded) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_STAGE_LIVE_OFF.patch; experiments/removed/MOJOLEARN_ET_STAGE_FULL_CAPACITY.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-40-trees.patch
 """FAST, and IDENTICAL on Apple since 2026-09-28 (only the live prefix is
 ever read, so moving less is bit-inert): `stage_batch` compares, snapshots
 and uploads each staging
 slot's LIVE prefix (the batch's nodes and workload blocks) instead of the
 workspace's full capacity. At the Apple FAST batch width (32768 nodes, about
 40k workload blocks at 1M rows) the full-capacity path moved every slot's
-whole capacity each batch. `-D MOJOLEARN_ET_STAGE_FULL_CAPACITY` restores it."""
+whole capacity each batch."""
 
 comptime PHASE_SETUP = 0
 comptime PHASE_STAGE = 1
@@ -4272,17 +3987,19 @@ struct PhaseClock(Movable):
         return "?"
 
 
-comptime STAGE_TIMES_ENV = "MOJOLEARN_STAGE_TIMES"
-"""Set `MOJOLEARN_STAGE_TIMES=1` and the shipping forest entry points run
-their fit under an ENABLED `PhaseClock` and print stage -> seconds at fit
-end. Read ONCE PER FIT, in the wrapper; unset (the shipping state), the
-wrappers construct the same inert clock they always did and the fit is
-byte-for-byte the untimed program."""
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 def stage_times_enabled() -> Bool:
-    """The one place `STAGE_TIMES_ENV` is read: once, at fit entry."""
-    return String(getenv(STAGE_TIMES_ENV)) == "1"
+    """Built with `-D MOJOLEARN_STAGE_TIMES`: the shipping forest entry points
+    run their fit under an ENABLED `PhaseClock` and print stage -> seconds at
+    fit end. Without it (the shipping build) the wrappers construct the same
+    inert clock they always did and the fit is byte-for-byte the untimed
+    program."""
+    return STAGE_TIMES_ON
 
 
 def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
@@ -4312,6 +4029,9 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
     print("  total ->", Float64(total) / 1e9, "s")
 
 
+# TOMBSTONE: MOJOLEARN_AFT_F08 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F08.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F08 (Apple fast opt-in arm) back as it was, default off; default path unchanged.
 # AFT F08: permit 1 GiB total for the two Int32 row-slot planes, versus
 # the default 512 MiB. More whole trees then expose independent nodes in
 # one frontier; each tree retains its feature RNG and node growth policy.
@@ -4320,7 +4040,7 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F08"]()
 ) else (1 << 26)
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
@@ -4419,7 +4139,7 @@ def _stage_upload_if_changed[
                         j += 1
                 if same_live:
                     return
-            memcpy(dest=hp, src=sp, count=live)
+            unsafe_memcpy(dest=hp, src=sp, count=live)
             var view = dst.create_sub_buffer[dt](0, live)
             ctx.enqueue_copy(dst_buf=view, src_ptr=sp)
             return
@@ -4429,35 +4149,26 @@ def _stage_upload_if_changed[
                 return
         var same = True
         # DEVIATION 2488: full-capacity byte equality, 16 bytes at a time.
-        # The retained scalar build arm isolates this one mechanism in A/B.
-        comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
-            for i in range(n):  # small-loop(n: staging slot capacity of launch descriptors): A/B arm compares host staging bytes only
-                if hp.unsafe_load(i) != sp.unsafe_load(i):
+        # TOMBSTONE: MOJOLEARN_ET_SCALAR_STAGE_COMPARE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+        # Restore: git apply experiments/removed/MOJOLEARN_ET_SCALAR_STAGE_COMPARE.expdel2-40-trees.patch
+        var sb = sp.bitcast[UInt8]()
+        var hb = hp.bitcast[UInt8]()
+        var count = n * size_of[Scalar[dt]]()
+        var i = 0
+        while i + 16 <= count:
+            if hb.unsafe_load[width=16](i) != sb.unsafe_load[width=16](i):
+                same = False
+                break
+            i += 16
+        if same:
+            while i < count:
+                if hb.unsafe_load(i) != sb.unsafe_load(i):
                     same = False
                     break
-        else:
-            var sb = sp.bitcast[UInt8]()
-            var hb = hp.bitcast[UInt8]()
-            var count = n * size_of[Scalar[dt]]()
-            var i = 0
-            while i + 16 <= count:
-                if hb.unsafe_load[width=16](i) != sb.unsafe_load[width=16](i):
-                    same = False
-                    break
-                i += 16
-            if same:
-                while i < count:
-                    if hb.unsafe_load(i) != sb.unsafe_load(i):
-                        same = False
-                        break
-                    i += 1
+                i += 1
         if same:
             return
-    comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
-        for i in range(n):
-            hp.unsafe_store(i, sp.unsafe_load(i))
-    else:
-        memcpy(dest=hp, src=sp, count=n)
+    unsafe_memcpy(dest=hp, src=sp, count=n)
     ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
 
 
@@ -4674,7 +4385,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
     # class accumulators); the unweighted launches below are unchanged.
     if dataset.weighted:
         ctx.enqueue_function[
-            node_feature_score_weighted_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+            node_feature_score_weighted_kernel[TPB, MAX_ACC, False]
         ](
             ws.d_nleft.unsafe_ptr(),
             ws.d_ntotal.unsafe_ptr(),
@@ -4731,7 +4442,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
         )
         return
     ctx.enqueue_function[
-        node_feature_score_kernel[TPB, MAX_ACC, True, ET_ROW_MAJOR]
+        node_feature_score_kernel[TPB, MAX_ACC, True, False]
     ](
         ws.d_nleft.unsafe_ptr(),
         ws.d_ntotal.unsafe_ptr(),
@@ -4786,7 +4497,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
     )
 
 
-def _enqueue_raw_range[FUSED_SMALL: Bool](
+def _enqueue_raw_range(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
     mut dataset: DeviceDataset,
@@ -4795,16 +4506,11 @@ def _enqueue_raw_range[FUSED_SMALL: Bool](
     columns_per_node: Int,
     tiled: Bool,
 ) raises:
-    """Existing raw-value range launch with an explicit T05 node owner.
-
-    Keeping the choice in a compile-time kernel argument preserves the existing
-    raw kernel ABI for direct callers. Both variants use the same stored input
-    layout and workload descriptors; only T05 skips its bounded fused nodes.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
+    """The raw-value range launch. The kernels' FUSED_SMALL parameter is
+    always False here since the T05 sweep (2026-11-15)."""
     comptime TPB = DEVICE_TPB
     if tiled:
-        ctx.enqueue_function[node_feature_range_tiled_kernel[TPB,ET_FEATURE_TILE,DType.float32,FUSED_SMALL]](
+        ctx.enqueue_function[node_feature_range_tiled_kernel[TPB,ET_FEATURE_TILE,DType.float32,False]](
             ws.d_minkey.unsafe_ptr(),ws.d_maxkey.unsafe_ptr(),
             ws.d_missing.unsafe_ptr(),ws.d_merges.unsafe_ptr(),
             dataset.d_data_rm.unsafe_ptr(),d_row_ids.unsafe_ptr(),
@@ -4816,7 +4522,7 @@ def _enqueue_raw_range[FUSED_SMALL: Bool](
             block_dim=(TPB,1,1),
         )
     else:
-        ctx.enqueue_function[node_feature_range_kernel[TPB,ET_ROW_MAJOR,FUSED_SMALL]](
+        ctx.enqueue_function[node_feature_range_kernel[TPB,False,False]](
             ws.d_minkey.unsafe_ptr(),ws.d_maxkey.unsafe_ptr(),
             ws.d_missing.unsafe_ptr(),ws.d_merges.unsafe_ptr(),
             dataset.search_data_ptr(),d_row_ids.unsafe_ptr(),
@@ -4826,38 +4532,6 @@ def _enqueue_raw_range[FUSED_SMALL: Bool](
             Int32(columns_per_node),Int32(0),
             grid_dim=search_grid(n_blocks,columns_per_node),block_dim=(TPB,1,1),
         )
-
-
-def _enqueue_small_node_splits[CLASSIFICATION: Bool](
-    ctx: DeviceContext,
-    mut ws: LevelWorkspace,
-    mut dataset: DeviceDataset,
-    mut d_row_ids: DeviceBuffer[DType.int32],
-    n_nodes: Int,
-    columns_per_node: Int,
-    n_acc: Int32,
-    seed: UInt64,
-    params: DecisionTreeParams,
-) raises:
-    """T05 production raw-value fusion before the existing winner reducer.
-
-    Range kernels reserve the same <=ET_SMALL_NODE_TPB nodes. The fused launch
-    reuses existing sampled columns, logical tree/node IDs and candidate slots.
-    Ordinary range-only surveys and quantile-code routes never reserve nodes.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    ctx.enqueue_function[small_node_raw_split_kernel[CLASSIFICATION]](
-        ws.c_q.unsafe_ptr(),ws.c_c.unsafe_ptr(),ws.c_m.unsafe_ptr(),
-        ws.c_l.unsafe_ptr(),ws.c_nu.unsafe_ptr(),ws.c_de.unsafe_ptr(),ws.c_v.unsafe_ptr(),
-        ws.d_nonconst.unsafe_ptr(),ws.d_min.unsafe_ptr(),ws.d_max.unsafe_ptr(),
-        ws.d_missing.unsafe_ptr(),ws.d_thresh.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),d_row_ids.unsafe_ptr(),dataset.d_labels.unsafe_ptr(),
-        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        ws.d_colids.unsafe_ptr(),ws.d_tree.unsafe_ptr(),
-        dataset.n_rows,Int32(columns_per_node),n_acc,seed,
-        params.min_samples_leaf,params.split_criterion,
-        grid_dim=(n_nodes,columns_per_node),block_dim=ET_SMALL_NODE_TPB,
-    )
 
 
 def split_tie_tally_kernel(
@@ -4938,15 +4612,6 @@ def search_batch_enqueue(
     if n_nodes == 0:
         return
     var n_cells = n_nodes * Int(k)
-    # T05 exclusive small-node dispatch. Survey passes must populate every
-    # range, while scored raw-value nodes may keep their statistics shared.
-    # One row per fused lane bounds registers and preserves range key seams.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and n_classes <= 32 else Int32(0)
-    if dataset.weighted:
-        # lane sk-kernels: the fused small-node pass counts rows, not
-        # weights; the weighted classifier keeps the score + finalize pair.
-        fused_small_rows = Int32(0)
 
     # --- per-batch device buffers ------------------------------------
     ref d_min = ws.d_min
@@ -5018,11 +4683,8 @@ def search_batch_enqueue(
     # of their old phases; the timed program was always the serialized
     # one, and no seeded value moves.
     # =================================================================
-    # T04: every future larger frontier is initialized at its own extent.
-    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var setup_nodes = n_nodes if T04 else ws.cap_nodes
-    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
+    var setup_nodes = ws.cap_nodes
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
@@ -5126,10 +4788,7 @@ def search_batch_enqueue(
     var tiled_range = False
     comptime if ET_RANGE_TILED:
         tiled_range = dataset.has_rm
-    if fused_small_rows != 0:
-        _enqueue_raw_range[True](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
-    else:
-        _enqueue_raw_range[False](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
+    _enqueue_raw_range(ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -5175,12 +4834,10 @@ def search_batch_enqueue(
     # by fused half B above (the survey skips half B and never gets here).
     # Keep the fixed-width measurement arms, including a 32-wide baseline.
     # Normal fits retain all 32 supported classes through runtime dispatch.
-    comptime FIXED_ACC = (
-        is_defined["MOJOLEARN_ET_MAX_ACC_4"]()
-        or is_defined["MOJOLEARN_ET_MAX_ACC_8"]()
-        or is_defined["MOJOLEARN_ET_MAX_ACC_16"]()
-        or is_defined["MOJOLEARN_ET_MAX_ACC_32"]()
-    )
+    # TOMBSTONE: MOJOLEARN_ET_MAX_ACC_4, MOJOLEARN_ET_MAX_ACC_8, MOJOLEARN_ET_MAX_ACC_16 (unmeasured opt-in arms) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_MAX_ACC_4.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_8.patch; experiments/removed/MOJOLEARN_ET_MAX_ACC_16.patch
+    # ET_MAX_ACC_32 kept: the reference arm of check_accumulator_dispatch.sh.
+    comptime FIXED_ACC = is_defined["MOJOLEARN_ET_MAX_ACC_32"]()
     comptime if FIXED_ACC:
         _enqueue_classification_score[DEVICE_MAX_ACC](
             ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
@@ -5263,9 +4920,6 @@ def search_batch_enqueue(
             block_dim=64,
         )
 
-    if fused_small_rows != 0:
-        _enqueue_small_node_splits[True](ctx,ws,dataset,d_row_ids,
-            n_nodes,k,n_classes,seed,params)
 
     # --- 6. evalBestSplit's reduction ---------------------------------
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
@@ -5457,7 +5111,7 @@ def search_batch(
     # in the range pass; the sync above is the batch's ONE drain, so the
     # values are complete here and nowhere earlier did the host need them.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    memcpy(
+    unsafe_memcpy(
         dest=any_nonconst.unsafe_ptr(),
         src=ws.h_nonconst.unsafe_ptr(),
         count=n_nodes,
@@ -5466,7 +5120,7 @@ def search_batch(
     # --- 8. the batch's splits, as `:492-494` hands them to the host --
     # (packed by `pack_splits_kernel` above; one block copy, no host loop)
     var splits = List[Split](length=n_nodes, fill=Split())
-    memcpy(
+    unsafe_memcpy(
         dest=splits.unsafe_ptr(),
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
@@ -5499,20 +5153,21 @@ def search_batch(
 # SAME BITS: node ids, queue order per tree and every draw are the host
 # queue's (see the kernel module's doc), so the trees equal what the host
 # queue produced and the host column (`train_tree_exact*`) is unchanged. This
-# is the default on every vendor in IDENTICAL and FAST; there is no arm that
-# restores the host queue on the GPU route. `NodeQueue` stays as the host
-# column's queue (`host_builder.mojo`, `train_tree_exact`) and the checks'.
+# was the default on every vendor in IDENTICAL and FAST from 2026-10-04 to
+# 2026-11-13; it is now the best-first route (and the depth-wise route under
+# `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`), and the depth-wise default is
+# the host queue (`_et_run_depthwise_host`, see the block above
+# `ET_DEVICE_QUEUE`; the plain depth-wise device loop arm lost A/B ab3). `NodeQueue` is also the host column's queue
+# (`host_builder.mojo`, `train_tree_exact`) and the checks'.
 # =============================================================================
 
-comptime ET_LOOP_K = max(1, T11_LEVELS) if T11 else (
-    1 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K1"]() else (
-        2 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K2"]() else (
-            8 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K8"]() else 4
-        )
-    )
-)
+# TOMBSTONE: MOJOLEARN_ET_DEVICE_LOOP_K1, MOJOLEARN_ET_DEVICE_LOOP_K2, MOJOLEARN_ET_DEVICE_LOOP_K8 (unmeasured opt-in arms) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K1.patch; experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K2.patch; experiments/removed/MOJOLEARN_ET_DEVICE_LOOP_K8.patch
+# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS (DROP, EXP:1582; T11 folded to False here) deleted 2026-11-15 by lane/expdel2-40-trees; code recoverable at 6641db4b18.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-40-trees.patch
+comptime ET_LOOP_K = 4
 """Batches (best-first: cycles) enqueued per header drain. A scheduling
-parameter: it moves no bit. `-D MOJOLEARN_ET_DEVICE_LOOP_K1/_K2/_K8`."""
+parameter: it moves no bit."""
 
 comptime ETL_SRC_BATCH = 0
 comptime ETL_SRC_SUB = 1
@@ -5797,6 +5452,13 @@ struct EtDeviceLoop(Movable):
     var f_cap: Int
     var hdr: DeviceBuffer[DType.int32]
     var h_hdr: HostBuffer[DType.int32]
+    #: `ET_DEVICE_LOOP_EARLY_EXIT`: the device view of `ETL_H_NSUB` and its
+    #: pinned 4-byte landing word (`read_nsub`). Empty (no view, no pinned
+    #: allocation) unless the define is on: the default route allocates
+    #: exactly what it did before the early-exit lane (hot-path audit
+    #: 2026-11-13, BLOCK builder.mojo:5875).
+    var nsub_d: Optional[DeviceBuffer[DType.int32]]
+    var h_nsub: Optional[HostBuffer[DType.int32]]
     var queue: DeviceBuffer[DType.int32]
     var g_nodes: DeviceBuffer[DType.uint8]
     var g_meta: DeviceBuffer[DType.int32]
@@ -5829,6 +5491,12 @@ struct EtDeviceLoop(Movable):
     var pt_gpos: DeviceBuffer[DType.int32]
     var pt_splits: DeviceBuffer[DType.uint8]
     var tree_base: DeviceBuffer[DType.int32]
+    #: lane t2-trees-on-executor: the arena / FIFO buffers (and the copy
+    #: views onto them) a growth in `ensure` replaced, kept alive until the
+    #: next header drain settles the copies that read them (`drain` clears
+    #: them), so a growth enqueues its copies and drains nothing itself
+    var retired_u8: List[DeviceBuffer[DType.uint8]]
+    var retired_i32: List[DeviceBuffer[DType.int32]]
 
     def __init__(
         out self, ctx: DeviceContext, g: Int, max_batch: Int, f_cap: Int
@@ -5843,12 +5511,6 @@ struct EtDeviceLoop(Movable):
         var chunks = (nb + ETL_TPB - 1) // ETL_TPB
         var fcap = f_cap if f_cap > 0 else 1
         var cap0 = g + 2 * ET_LOOP_K * nb
-        comptime if T13:
-            # Group-owned node/queue arena reserves one bounded capacity for
-            # reuse across all frontier batches and trees in this group.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            var bytes_per_node = size_of[SparseTreeNode[DType.float32]]() + 4*ETL_META_INTS + 4*ETL_Q_INTS
-            cap0 = max(cap0,T13_BYTES//max(1,bytes_per_node))
         self.g = g
         self.max_batch = nb
         self.n_chunks_cap = chunks
@@ -5857,6 +5519,13 @@ struct EtDeviceLoop(Movable):
         self.f_cap = f_cap
         self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
         self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
+        self.nsub_d = Optional[DeviceBuffer[DType.int32]]()
+        self.h_nsub = Optional[HostBuffer[DType.int32]]()
+        comptime if ET_DEVICE_LOOP_EARLY_EXIT:
+            self.nsub_d = self.hdr.create_sub_buffer[DType.int32](
+                ETL_H_NSUB, 1
+            )
+            self.h_nsub = ctx.enqueue_create_host_buffer[DType.int32](1)
         self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
         self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
             cap0 * size_of[SparseTreeNode[DType.float32]]()
@@ -5907,6 +5576,24 @@ struct EtDeviceLoop(Movable):
             g * size_of[Split]()
         )
         self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
+        self.retired_u8 = List[DeviceBuffer[DType.uint8]]()
+        self.retired_i32 = List[DeviceBuffer[DType.int32]]()
+
+    def read_nsub(mut self, ctx: DeviceContext) raises -> Int:
+        """`ET_DEVICE_LOOP_EARLY_EXIT`: the batch's rescue count
+        (`ETL_H_NSUB`, written by `etl_retry_kernel`), read back as ONE
+        4-byte word after a synchronize. Not a header drain: the retired
+        buffers stay alive until the next `drain`."""
+        if not self.h_nsub or not self.nsub_d:
+            raise Error(
+                "EtDeviceLoop.read_nsub: built without"
+                " MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
+            )
+        ctx.enqueue_copy(
+            dst_buf=self.h_nsub.value(), src_buf=self.nsub_d.value()
+        )
+        ctx.synchronize()
+        return Int(self.h_nsub.value().unsafe_ptr()[unsafe_offset=0])
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
@@ -5916,6 +5603,9 @@ struct EtDeviceLoop(Movable):
         """The loop's one readback: the header, then a synchronize."""
         ctx.enqueue_copy(dst_buf=self.h_hdr, src_buf=self.hdr)
         ctx.synchronize()
+        # past the drain: the buffers an `ensure` growth replaced
+        self.retired_u8.clear()
+        self.retired_i32.clear()
         var ov = self.word(ETL_H_OVERFLOW)
         if ov != 0:
             raise Error(
@@ -5947,7 +5637,7 @@ struct EtDeviceLoop(Movable):
         """`NodeQueue.__init__` for the group: tree ids, roots, header."""
         var h_tree = ctx.enqueue_create_host_buffer[DType.int32](self.g)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_tree.unsafe_ptr(),
             src=tree_ids.unsafe_ptr() + first,
             count=self.g,
@@ -5979,7 +5669,13 @@ struct EtDeviceLoop(Movable):
         """Call right after a drain. Grows the node arena so `extra` more
         records fit, and re-packs the FIFO's live stretch `[head, tail)` to
         the front of a buffer with `extra` more entries of room (its header
-        words rewritten to match). Rare (doubling), so it synchronizes."""
+        words rewritten to match). Enqueue only (lane t2-trees-on-executor):
+        the copies run in stream order before the next batch's pop, and the
+        replaced buffers stay alive in `retired_*` until the next header
+        drain; the three synchronizes a growth used to pay are deleted.
+        The growth itself stays a host decision: Mojo has no device-side
+        allocation, and a worst-case arena (2 x rows nodes per tree for the
+        whole group) would cost gigabytes at the group cap."""
         comptime NB = size_of[SparseTreeNode[DType.float32]]()
         var used = self.word(ETL_H_NODES)
         if used + extra > self.node_cap:
@@ -6001,11 +5697,12 @@ struct EtDeviceLoop(Movable):
                     0, used * ETL_META_INTS
                 )
                 ctx.enqueue_copy(dst_buf=dm, src_buf=sm)
-                ctx.synchronize()
-                _ = dn^
-                _ = sn^
-                _ = dm^
-                _ = sm^
+                self.retired_u8.append(dn^)
+                self.retired_u8.append(sn^)
+                self.retired_i32.append(dm^)
+                self.retired_i32.append(sm^)
+            self.retired_u8.append(self.g_nodes.copy())
+            self.retired_i32.append(self.g_meta.copy())
             self.g_nodes = nn^
             self.g_meta = nm^
             self.node_cap = cap
@@ -6023,17 +5720,19 @@ struct EtDeviceLoop(Movable):
                     head * ETL_Q_INTS, live * ETL_Q_INTS
                 )
                 ctx.enqueue_copy(dst_buf=dq, src_buf=sq)
-                ctx.synchronize()
-                _ = dq^
-                _ = sq^
+                self.retired_i32.append(dq^)
+                self.retired_i32.append(sq^)
+            self.retired_i32.append(self.queue.copy())
             self.queue = nq^
             self.queue_cap = qcap
             # The device header equals `h_hdr` here (drained, nothing queued
-            # since): shift the two FIFO words and put the header back.
+            # since): shift the two FIFO words and put the header back. The
+            # upload reads `h_hdr` in stream order before the next drain's
+            # download writes it, and the host does not touch `h_hdr` in
+            # between, so it needs no synchronize of its own.
             self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_HEAD] = Int32(0)
             self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_TAIL] = Int32(live)
             ctx.enqueue_copy(dst_buf=self.hdr, src_ptr=self.h_hdr.unsafe_ptr())
-            ctx.synchronize()
 
     def enqueue_pop(
         mut self,
@@ -6422,9 +6121,9 @@ struct EtDeviceLoop(Movable):
                 length=n_s,
                 fill=SparseTreeNode[DType.float32].CreateLeafNode(Int32(0)),
             )
-            memcpy(dest=nodes.unsafe_ptr(), src=np + base, count=n_s)
+            unsafe_memcpy(dest=nodes.unsafe_ptr(), src=np + base, count=n_s)
             var leaves = List[Float32](length=n_s * k_out, fill=Float32(0.0))
-            memcpy(
+            unsafe_memcpy(
                 dest=leaves.unsafe_ptr(),
                 src=lp + base * k_out,
                 count=n_s * k_out,
@@ -6516,26 +6215,25 @@ def _et_enqueue_partition(
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
-    comptime if not C48:
-        ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
-            ws.d_blk_off.unsafe_ptr(),
-            ws.d_blk_left.unsafe_ptr(),
-            ws.d_blk_base.unsafe_ptr(),
-            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            splits,
-            params.min_impurity_decrease,
-            params.min_samples_leaf,
-            PART_MB_SAB_NONE,
-            mismatch,
-            grid_dim=(n_part, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+    ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
+        ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_left.unsafe_ptr(),
+        ws.d_blk_base.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        splits,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        mismatch,
+        grid_dim=(n_part, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
     ctx.enqueue_function[
-        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS, C48]
+        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS]
     ](
         ws.d_row_alt.unsafe_ptr(),
         d_row_ids.unsafe_ptr(),
-        ws.d_blk_left.unsafe_ptr() if C48 else ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_off.unsafe_ptr(),
         dataset.d_data.unsafe_ptr(),
         ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
         ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
@@ -6587,8 +6285,18 @@ def _et_rescue[
     compacted into a sub-batch, surveyed over every column, given a column
     by `rescue_pick_kernel`, searched with `k = 1`, and the rescued splits
     replace theirs where a column was found. Launched at the batch's bounds;
-    an empty sub-batch is all dummies and does nothing."""
+    an empty sub-batch is all dummies and does nothing.
+
+    Under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` the host reads the
+    sub-batch's count back (one 4-byte word) and skips the rest when it is
+    zero (see the block above `ET_DEVICE_LOOP_EARLY_EXIT`)."""
     lp.enqueue_retry(ctx, ws, n_bound)
+    comptime if ET_DEVICE_LOOP_EARLY_EXIT:
+        # driver-loop: over rescue rounds -- one per batch; the 4-byte count
+        # decides whether this batch's rescue runs (the host queue's
+        # "rescue only a batch that needs it"), never a loop over rows.
+        if lp.read_nsub(ctx) == 0:
+            return
     lp.enqueue_stage(
         ctx, ws, ETL_SRC_SUB, ETL_H_NSUB, n_bound, Int(n_cols), tile_s,
         tile_p, bound_s, scalar_tree,
@@ -6866,6 +6574,384 @@ def _et_run_bestfirst[
     return cyc
 
 
+# =============================================================================
+# RESTORED DEFAULT (lane restore-rf-et-forest-loop, 2026-11-13): the HOST
+# QUEUE level loop for the depth-wise merged-frontier ET forest, as it ran
+# before cpu4-forest (40286f2d28^, the route the 0.8.25 board measured): one
+# `NodeQueue` per in-flight tree, one merged batch per level cycle, the batch's
+# splits read back once, DEVIATION 205's rescue enqueued ONLY when a node needs
+# it, the partition, the push on the host. Board (same output hash, same
+# settings): istella NV 3,763 ms (f4c126ae66, 2026-10-01) -> 4,917 (10-09,
+# device loop); taxi NV 2,520 -> 4,359; AMD 1,198 / 889 at f4c126ae66, no
+# device-loop AMD row on record. Source: history audit
+# hist-trees-neighbors-cluster row 2 (best_ever.txt). The device loop
+# (40286f2d28) was never A/B'd against this loop. Its structural cost: the
+# host cannot see whether a batch has nodes to rescue, so EVERY batch
+# enqueues the rescue at the batch's proven bounds (retry compaction, an
+# all-column range survey over `n_cols` columns, the pick, the restage, a
+# one-column search, the merge) plus the second stage before the partition
+# and the push kernels; the host loop launches the rescue only for a batch
+# that has a node with all sampled columns constant.
+# Same kernels, same draws keyed by (seed, tree, node), same per-tree FIFO
+# order and node ids (the device loop was built to equal this queue: see
+# `kernels/et_loop_kernels.mojo`'s module doc), so no output bit moves.
+# Best-first growth (`max_leaf_nodes`) keeps the device loop (the board grows
+# depth-wise; the host best-first forest driver is not restored).
+# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal):
+# the plain device loop for depth-wise growth was arm/base 1.030 geomean over 6
+# cells (istella fit 4596 -> 4823 ms 1.05, taxi fit 4298 -> 4323 1.01; infer
+# 0.93-1.11), so the host queue stays the one depth-wise route.
+# TOMBSTONE: MOJOLEARN_IDN_ET_DEVICE_LOOP (LOSER: depth-wise device loop, arm/base geomean 1.030 over 6 cells, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ET_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
+# =============================================================================
+
+# THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
+# loop that EARLY-EXITS the rescue like the host queue. `-D
+# MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
+# stays the depth-wise default; the plain device loop runs best-first only). It
+# decides whether the device loop may skip a batch's DEVIATION 205 rescue
+# when no node needs it. The rescue's first kernel (`etl_retry_kernel`)
+# writes the batch's rescue count into `ETL_H_NSUB`; the host reads that ONE
+# 4-byte word back (`EtDeviceLoop.read_nsub`) and, when it is zero, skips
+# the rest of the rescue: the sub-batch stage, the all-column survey, the
+# pick, the restage, the `k = 1` search and the merge, which over an empty
+# sub-batch are all dummies (the merge stops at `ETL_H_NSUB`, so
+# `b_splits` is unchanged, and the partition's stage rewrites every
+# workspace word the partition reads). SAME BITS as the plain device loop and
+# the host queue. Depth-wise growth runs the device loop under this define;
+# best-first growth (device loop in every arm) skips the empty rescue too.
+# Owed A/B: row `et-device-loop-early-exit` in bench/results/paper_compare/
+# owed-pre0867.json (RUN OWED, NVIDIA + AMD, istella + taxi, fit).
+comptime ET_DEVICE_LOOP_EARLY_EXIT = is_defined[
+    "MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT"
+]()
+# The early-exit form runs the depth-wise group on the device.
+comptime ET_DEVICE_QUEUE = ET_DEVICE_LOOP_EARLY_EXIT
+
+
+def _et_search_host[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[List[Split], List[Int32]]:
+    """The objective's host-staged batch search (`search_batch` /
+    `search_batch_regression`): the batch's splits and its any-non-constant
+    flags, read back after the batch's one drain (both empty when
+    `range_only`)."""
+    comptime if IS_CLF:
+        var f = search_batch(
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_classes,
+            n_rows, n_cols, item_trees, seed, use_sampler, List[Int32](),
+            range_only, clock,
+        )
+        return (f[0].copy(), f[1].copy())
+    else:
+        var f = search_batch_regression(
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_rows,
+            n_cols, item_trees, seed, use_sampler, List[Int32](), range_only,
+            clock,
+        )
+        return (f[0].copy(), f[1].copy())
+
+
+def _et_run_depthwise_host[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    mut d_mismatch: DeviceBuffer[DType.int32],
+    params: DecisionTreeParams,
+    k: Int,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    sabotage: Int32,
+    tree_ids: List[Int32],
+    first: Int,
+    mut clock: PhaseClock,
+    mut trace: IdentityTrace,
+    gi: Int,
+) raises -> Int:
+    """`Builder::train`'s loop for the whole group on the HOST queues
+    (DEVIATION 211's merged frontier, 40286f2d28^'s body on today's search,
+    partition and staging): per level cycle, pop every tree's queue into one
+    batch, search, rescue the nodes whose sampled columns were all constant
+    (DEVIATION 205), partition, push. Returns the cycle count. `d_mismatch`
+    is the partition's direction-test tally (zeroed by the caller), read
+    once here after the last cycle."""
+    comptime TPB = DEVICE_TPB
+    var g = len(queues)
+    var max_batch = Int(params.max_batch_size)
+    var cyc = 0
+    while True:  # driver-loop: over the group's level cycles
+        var work_items = List[NodeWorkItem]()
+        var item_trees = List[Int32]()
+        var seg_queue = List[Int]()
+        var seg_start = List[Int]()
+        var seg_count = List[Int]()
+        for s in range(g):  # driver-loop: over the group's tree slots
+            if len(work_items) >= max_batch:
+                break
+            if not queues[s].has_work():
+                continue
+            var got = queues[s].pop_up_to(max_batch - len(work_items))
+            if len(got) == 0:
+                continue
+            seg_queue.append(s)
+            seg_start.append(len(work_items))
+            seg_count.append(len(got))
+            for i in range(len(got)):  # driver-loop: over one tree's popped nodes
+                work_items.append(got[i])
+                item_trees.append(tree_ids[first + s])
+        if len(work_items) == 0:
+            clock.tick(ctx, PHASE_HOST_QUEUE)
+            break
+        if sabotage == FOREST_SAB_SCALAR_TREE:
+            var scalar_tree = item_trees[0]
+            var scalar_len = len(item_trees)
+            item_trees = List[Int32](length=scalar_len, fill=scalar_tree)
+        var n_nodes = len(work_items)
+        clock.tick(ctx, PHASE_HOST_QUEUE)
+
+        var found = _et_search_host[IS_CLF](
+            ctx, ws, dataset, d_row_ids, work_items, k, params, n_classes,
+            n_rows, n_cols, item_trees, seed, True, False, clock,
+        )
+        var splits = found[0].copy()
+        var any_nonconst = found[1].copy()
+        var tag_pre = String("")
+        if trace.enabled:
+            tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            trace.record_device(ctx, tag_pre + "colids", ws.d_colids, n_nodes * k)
+            trace.record_device(ctx, tag_pre + "range.min", ws.d_min, n_nodes * k)
+            trace.record_device(ctx, tag_pre + "range.max", ws.d_max, n_nodes * k)
+            trace.record_device(
+                ctx, tag_pre + "draw.thresh", ws.d_thresh, n_nodes * k
+            )
+            trace.record_device(ctx, tag_pre + "reduce.colid", ws.r_c, n_nodes)
+            comptime if IS_CLF:
+                trace.record_device(ctx, tag_pre + "reduce.num", ws.r_nu, n_nodes)
+                trace.record_device(ctx, tag_pre + "reduce.den", ws.r_de, n_nodes)
+            else:
+                trace.record_device(ctx, tag_pre + "reduce.gain", ws.r_m, n_nodes)
+
+        # DEVIATION 205: the nodes whose sampled columns were all constant
+        # (`etl_retry_kernel`'s test, in batch order).
+        var retry = List[Int]()
+        for i in range(n_nodes):  # driver-loop: over the batch's tree nodes
+            if any_nonconst[i] == 0 and work_items[i].instances.count > 0:
+                retry.append(i)
+        if len(retry) > 0:
+            var sub = List[NodeWorkItem]()
+            var sub_trees = List[Int32]()
+            for j in range(len(retry)):  # driver-loop: over the batch's nodes to rescue
+                sub.append(work_items[retry[j]])
+                sub_trees.append(item_trees[retry[j]])
+            var n_sub = len(sub)
+            _ = _et_search_host[IS_CLF](
+                ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                n_classes, n_rows, n_cols, sub_trees, seed, False, True, clock,
+            )
+            var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+            var h_pick = ctx.enqueue_create_host_buffer[DType.int32](n_sub)
+            ctx.enqueue_function[rescue_pick_kernel](
+                d_pick.unsafe_ptr(),
+                ws.d_colids.unsafe_ptr(),
+                ws.d_min.unsafe_ptr(),
+                ws.d_max.unsafe_ptr(),
+                ws.d_missing.unsafe_ptr(),
+                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                ws.d_tree.unsafe_ptr(),
+                Int32(n_sub),
+                n_cols,
+                seed,
+                grid_dim=ceildiv(n_sub, 64),
+                block_dim=64,
+            )
+            ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+            # The survey's staging copies retire before the one-column
+            # search restages the same pinned slots (DEVIATION 450's
+            # invariant, made explicit: this drain runs only for a batch
+            # that has a node to rescue).
+            ctx.synchronize()
+            var res2 = _et_search_host[IS_CLF](
+                ctx, ws, dataset, d_row_ids, sub, 1, params, n_classes,
+                n_rows, n_cols, sub_trees, seed, False, False, clock,
+            )
+            var rescued = res2[0].copy()
+            var pick = h_pick.unsafe_ptr()
+            for j in range(n_sub):  # driver-loop: over the batch's nodes to rescue
+                if pick[unsafe_offset=j] >= Int32(0):
+                    splits[retry[j]] = rescued[j]
+            _ = d_pick^
+            _ = h_pick^
+        if trace.enabled:
+            unsafe_memcpy(
+                dest=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+                src=splits.unsafe_ptr(),
+                count=n_nodes,
+            )
+            trace.record_host(
+                tag_pre + "split.records",
+                ws.h_splits.unsafe_ptr(),
+                n_nodes * size_of[Split](),
+            )
+
+        # THE PARTITION (deviation 203). With equal search and partition
+        # tiles and no rescue, `d_items` / `d_wl` still hold this batch's
+        # search staging (`IDN_ET_PART_ROWS`); otherwise restage.
+        var plan = build_workload_info(work_items, TPB * PART_ROWS_PER_THREAD)
+        if len(retry) > 0 or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD:
+            stage_batch(ctx, ws, work_items, item_trees, plan, k)
+            ctx.synchronize()
+        unsafe_memcpy(
+            dest=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            src=splits.unsafe_ptr(),
+            count=n_nodes,
+        )
+        ctx.enqueue_copy(dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr())
+        _et_enqueue_partition(
+            ctx, ws, dataset, d_row_ids,
+            ws.d_splits.unsafe_ptr()
+            .unsafe_bitcast[Split]()
+            .unsafe_origin_cast[MutAnyOrigin](),
+            n_nodes, plan.n_blocks_dimx, params, n_rows,
+            d_mismatch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        )
+        clock.tick(ctx, PHASE_PARTITION)
+        if trace.enabled:
+            trace.record_device(ctx, tag_pre + "partition.rowids", d_row_ids)
+        cyc += 1
+
+        # `NodeQueue::Push` per tree, each tree's own segment of the batch.
+        for t in range(len(seg_queue)):  # driver-loop: over the batch's tree slots
+            var items_s = List[NodeWorkItem]()
+            var splits_s = List[Split]()
+            for j in range(seg_count[t]):  # driver-loop: over one tree's nodes in the batch
+                items_s.append(work_items[seg_start[t] + j])
+                splits_s.append(splits[seg_start[t] + j])
+            queues[seg_queue[t]].push(items_s, splits_s)
+        clock.tick(ctx, PHASE_HOST_PUSH)
+
+    var h_mm = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_mm, src_buf=d_mismatch)
+    ctx.synchronize()
+    var pm = Int(h_mm.unsafe_ptr()[unsafe_offset=0])
+    _ = h_mm^
+    if pm != 0:
+        raise Error(
+            "ET host level loop: "
+            + String(pm)
+            + " partitioned nodes sent a different number of rows left"
+            " than their split's n_left (the search and the partition"
+            " disagree on the direction test) -- a builder bug"
+        )
+    return cyc
+
+
+def _et_host_total_nodes(queues: List[NodeQueue[DType.float32]]) -> Int:
+    """The group's node count across its host queues."""
+    var total = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots
+        total += len(queues[s].tree.sparsetree)
+    return total
+
+
+def _et_host_upload_nodes(
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut d_nodes: DeviceBuffer[DType.uint8],
+    mut d_ranges: DeviceBuffer[DType.uint8],
+    total_nodes: Int,
+) raises:
+    """The host queues' finished trees, concatenated tree by tree in local-id
+    order (what `EtDeviceLoop.enqueue_scatter` builds on the device), as two
+    block copies per tree and one upload each."""
+    var n_alloc = total_nodes if total_nodes > 0 else 1
+    var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_alloc * size_of[SparseTreeNode[DType.float32]]()
+    )
+    var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
+        n_alloc * size_of[InstanceRange]()
+    )
+    ctx.synchronize()
+    var np = h_nodes.unsafe_ptr().unsafe_bitcast[
+        SparseTreeNode[DType.float32]
+    ]()
+    var rp = h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
+    var base = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots, two block copies each
+        var n_s = len(queues[s].tree.sparsetree)
+        unsafe_memcpy(
+            dest=np + base,
+            src=queues[s].tree.sparsetree.unsafe_ptr(),
+            count=n_s,
+        )
+        unsafe_memcpy(
+            dest=rp + base,
+            src=queues[s].node_instances.unsafe_ptr(),
+            count=n_s,
+        )
+        base += n_s
+    if total_nodes > 0:
+        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+    ctx.synchronize()
+    _ = h_nodes^
+    _ = h_ranges^
+
+
+def _et_host_download_trees(
+    ctx: DeviceContext,
+    mut queues: List[NodeQueue[DType.float32]],
+    mut d_leaves: DeviceBuffer[DType.float32],
+    total_nodes: Int,
+    k_out: Int,
+    mut trees_out: List[TreeMetaDataNode[DType.float32]],
+) raises:
+    """The group's model, once: the leaf values come back in one copy and
+    each host queue's tree takes its `vector_leaf` as one block copy."""
+    var n_alloc = total_nodes if total_nodes > 0 else 1
+    var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+        n_alloc * k_out
+    )
+    if total_nodes > 0:
+        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+    ctx.synchronize()
+    var lv = h_leaves.unsafe_ptr()
+    var base = 0
+    for s in range(len(queues)):  # driver-loop: over the group's tree slots, one block copy each
+        var tree = queues[s].get_tree()
+        var n_s = len(tree.sparsetree)
+        var leaves = List[Float32](length=n_s * k_out, fill=Float32(0.0))
+        unsafe_memcpy(
+            dest=leaves.unsafe_ptr(), src=lv + base * k_out, count=n_s * k_out
+        )
+        tree.vector_leaf = leaves^
+        trees_out.append(tree^)
+        base += n_s
+    _ = h_leaves^
+
+
 def train_forest_classification_device(
     ctx: DeviceContext,
     mut dataset: DeviceDataset,
@@ -6881,8 +6967,8 @@ def train_forest_classification_device(
     """The shipping entry point: an INERT clock, so no synchronize is ever
     added -- see `PhaseClock`. `_timed` below is the same function with the
     micro-step clock threaded; `bench/fit_once.mojo` calls it directly.
-    `MOJOLEARN_STAGE_TIMES=1` (read once, here) enables the clock and prints
-    stage -> seconds at fit end -- see `STAGE_TIMES_ENV`.
+    A `-D MOJOLEARN_STAGE_TIMES` build enables the clock and prints
+    stage -> seconds at fit end -- see `STAGE_TIMES_ON`.
 
     `bootstrap` / `n_sampled_rows` (DEVIATION 460): with `bootstrap` each
     tree's row slot is a with-replacement sample of `n_sampled_rows` rows
@@ -7060,11 +7146,6 @@ def train_forest_classification_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
-    comptime if T12:
-        # Account for both row-id streams plus each tree's bounded queue;
-        # immutable dataset remains shared. IDs/archive positions do not move.
-        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
-        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -7140,19 +7221,44 @@ def train_forest_classification_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
-        var shared_base = (
-            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
-        )
-        lp.init_roots(
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
+        # and for best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
+        # and keeps a one-slot stub loop that it never drives.
+        var use_lp = bestfirst or ET_DEVICE_QUEUE
+        var lp = EtDeviceLoop(
             ctx,
-            tree_ids,
-            first,
-            slot_rows,
-            shared_base,
-            et_root_expandable(params, slot_rows),
-            bestfirst,
+            g if use_lp else 1,
+            Int(params.max_batch_size) if use_lp else 1,
+            f_cap,
         )
+        var queues = List[NodeQueue[DType.float32]]()
+        var d_mismatch = ctx.enqueue_create_buffer[DType.int32](1)
+        if use_lp:
+            var shared_base = (
+                Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE
+                else Int32(0)
+            )
+            lp.init_roots(
+                ctx,
+                tree_ids,
+                first,
+                slot_rows,
+                shared_base,
+                et_root_expandable(params, slot_rows),
+                bestfirst,
+            )
+        else:
+            for s in range(g):  # driver-loop: over the group's tree slots, one queue each
+                var base = Int32(s) * slot_rows
+                if sabotage == FOREST_SAB_SHARED_ROW_BASE:
+                    base = Int32(0)
+                queues.append(
+                    NodeQueue[DType.float32](
+                        params, slot_rows, n_classes, tree_ids[first + s], base
+                    )
+                )
+            ctx.enqueue_memset(d_mismatch, Int32(0))
         clock.tick(ctx, PHASE_SETUP)
         var cyc: Int
         if bestfirst:
@@ -7161,10 +7267,16 @@ def train_forest_classification_device_timed(
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
             )
-        else:
+        elif use_lp:
             cyc = _et_run_depthwise[True](
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
                 n_rows, n_cols, seed, sabotage, clock, trace, gi,
+            )
+        else:
+            cyc = _et_run_depthwise_host[True](
+                ctx, queues, ws, dataset, d_row_ids, d_mismatch, params,
+                Int(k), n_classes, n_rows, n_cols, seed, sabotage, tree_ids,
+                first, clock, trace, gi,
             )
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
@@ -7174,7 +7286,9 @@ def train_forest_classification_device_timed(
         # each tree's nodes in local-id order, its ranges beside them), and
         # the model comes back once (`download_trees`).
         var k_out = Int(n_classes)
-        var total_nodes = lp.word(ETL_H_NODES)
+        var total_nodes = (
+            lp.word(ETL_H_NODES) if use_lp else _et_host_total_nodes(queues)
+        )
         var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
             n_alloc * size_of[SparseTreeNode[DType.float32]]()
@@ -7186,7 +7300,10 @@ def train_forest_classification_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
-        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        if use_lp:
+            lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        else:
+            _et_host_upload_nodes(ctx, queues, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- each
@@ -7204,9 +7321,15 @@ def train_forest_classification_device_timed(
                 ctx, d_leaves, d_visit, d_nodes, d_ranges, d_row_ids,
                 dataset, k_out, total_nodes,
             )
-        lp.download_trees(
-            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
-        )
+        if use_lp:
+            lp.download_trees(
+                ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first,
+                out,
+            )
+        else:
+            _et_host_download_trees(
+                ctx, queues, d_leaves, total_nodes, k_out, out
+            )
         if trace.enabled:
             # The leaf pass's output for the whole group: the values the
             # model returns, still concatenated across the group's trees.
@@ -7217,13 +7340,20 @@ def train_forest_classification_device_timed(
         # DEVIATION 2663's measurement define: what the group's level loop
         # did, from the device header's tallies.
         comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
-            print(
-                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
-                " nodes=", lp.word(ETL_H_STAT_NODES),
-                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
-                " rescued=", lp.word(ETL_H_STAT_RESCUED),
-                " max_batch=", params.max_batch_size,
-            )
+            if use_lp:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc,
+                    " nodes=", lp.word(ETL_H_STAT_NODES),
+                    " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                    " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                    " max_batch=", params.max_batch_size,
+                )
+            else:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc, " host_queue=1 max_batch=", params.max_batch_size,
+                )
         else:
             _ = cyc
         # Mojo frees a buffer at its LAST USE; these must outlive every
@@ -7233,6 +7363,8 @@ def train_forest_classification_device_timed(
         _ = d_leaves^
         _ = d_visit^
         _ = lp^
+        _ = queues^
+        _ = d_mismatch^
         _ = d_row_ids^
         _ = ws^
         gi += 1
@@ -7307,17 +7439,11 @@ def search_batch_regression_enqueue(
     if n_nodes == 0:
         return
     var n_cells = n_nodes * Int(k)
-    # T05 operates on exact raw feature values. The optional incumbent code
-    # representation has a separate threshold-snapping contract and keeps B.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and not dataset.bins_active() else Int32(0)
     # lane sk-final: the weighted regressor's cells hold two accumulators
-    # (Z, W; the workspace was built with `n_classes = 2`), and the fused
-    # small-node pass sums labels over row counts, so it stays off.
+    # (Z, W; the workspace was built with `n_classes = 2`).
     var n_acc_reg = 1
     if dataset.weighted:
         n_acc_reg = 2
-        fused_small_rows = Int32(0)
 
     ref d_min = ws.d_min
     ref d_max = ws.d_max
@@ -7368,11 +7494,8 @@ def search_batch_regression_enqueue(
     # no grid sync) is at the classification twin's launch. The one twin
     # difference: the class-accumulator extent is `n_cells` (one output),
     # exactly what the old score-init launch passed here.
-    # T04: every future larger frontier is initialized at its own extent.
-    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var setup_nodes = n_nodes if T04 else ws.cap_nodes
-    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
+    var setup_nodes = ws.cap_nodes
+    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
@@ -7489,10 +7612,8 @@ def search_batch_regression_enqueue(
             grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
-    elif fused_small_rows != 0:
-        _enqueue_raw_range[True](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     else:
-        _enqueue_raw_range[False](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
+        _enqueue_raw_range(ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -7538,7 +7659,7 @@ def search_batch_regression_enqueue(
         # cell. Its trainer never bins X, so the raw thresholds stand; the
         # counts and sums are integers, the same in any kernel's order.
         ctx.enqueue_function[
-            node_feature_score_weighted_reg_kernel[TPB, MAX_ACC, ET_ROW_MAJOR]
+            node_feature_score_weighted_reg_kernel[TPB, MAX_ACC, False]
         ](
             d_nleft.unsafe_ptr(),
             d_ntotal.unsafe_ptr(),
@@ -7624,7 +7745,7 @@ def search_batch_regression_enqueue(
         )
     else:
         ctx.enqueue_function[
-            node_feature_score_kernel[TPB, MAX_ACC, False, ET_ROW_MAJOR]
+            node_feature_score_kernel[TPB, MAX_ACC, False, False]
         ](
             d_nleft.unsafe_ptr(),
             d_ntotal.unsafe_ptr(),
@@ -7764,9 +7885,6 @@ def search_batch_regression_enqueue(
             grid_dim=ceildiv(n_cells, 64),
             block_dim=64,
         )
-    if fused_small_rows != 0:
-        _enqueue_small_node_splits[False](ctx,ws,dataset,d_row_ids,
-            n_nodes,k,Int32(1),seed,params)
 
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
     # capacity) were seeded by fused half B above.
@@ -7945,14 +8063,14 @@ def search_batch_regression(
 
     # DEVIATION 450: the deferred `h_nonconst` read -- see the twin.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    memcpy(
+    unsafe_memcpy(
         dest=any_nonconst.unsafe_ptr(),
         src=ws.h_nonconst.unsafe_ptr(),
         count=n_nodes,
     )
 
     var splits = List[Split](length=n_nodes, fill=Split())
-    memcpy(
+    unsafe_memcpy(
         dest=splits.unsafe_ptr(),
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
@@ -8018,7 +8136,7 @@ def train_forest_regression_device(
     bf_sabotage: Int32 = BESTFIRST_SAB_NONE,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The shipping entry point: an INERT clock -- see `PhaseClock` and the
-    classification twin above. `MOJOLEARN_STAGE_TIMES=1` (read once, here)
+    classification twin above. A `-D MOJOLEARN_STAGE_TIMES` build
     enables the clock and prints stage -> seconds at fit end. `bootstrap` /
     `n_sampled_rows` as in the classification twin (DEVIATION 460)."""
     var clock = PhaseClock(stage_times_enabled())
@@ -8137,11 +8255,6 @@ def train_forest_regression_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
-    comptime if T12:
-        # Account for both row-id streams plus each tree's bounded queue;
-        # immutable dataset remains shared. IDs/archive positions do not move.
-        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
-        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -8194,7 +8307,7 @@ def train_forest_regression_device_timed(
         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
             # lane sk-final: a weighted fit's score pass reads raw X, so its
             # ranges must be raw too (no binned codes)
-            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS and not dataset.weighted:
+            if dataset.has_rm and not dataset.weighted:
                 dataset.ensure_binned(ctx)
         var ws = make_level_workspace(
             ctx,
@@ -8213,19 +8326,44 @@ def train_forest_regression_device_timed(
         var f_cap = 0
         if bestfirst:
             f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
-        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
-        var shared_base = (
-            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
-        )
-        lp.init_roots(
+        # The device loop runs under `-D MOJOLEARN_IDN_ET_DEVICE_LOOP_EARLY_EXIT`
+        # and for best-first growth; the default depth-wise group runs the HOST
+        # queues (`_et_run_depthwise_host`, the block above `ET_DEVICE_QUEUE`)
+        # and keeps a one-slot stub loop that it never drives.
+        var use_lp = bestfirst or ET_DEVICE_QUEUE
+        var lp = EtDeviceLoop(
             ctx,
-            tree_ids,
-            first,
-            slot_rows,
-            shared_base,
-            et_root_expandable(params, slot_rows),
-            bestfirst,
+            g if use_lp else 1,
+            Int(params.max_batch_size) if use_lp else 1,
+            f_cap,
         )
+        var queues = List[NodeQueue[DType.float32]]()
+        var d_mismatch = ctx.enqueue_create_buffer[DType.int32](1)
+        if use_lp:
+            var shared_base = (
+                Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE
+                else Int32(0)
+            )
+            lp.init_roots(
+                ctx,
+                tree_ids,
+                first,
+                slot_rows,
+                shared_base,
+                et_root_expandable(params, slot_rows),
+                bestfirst,
+            )
+        else:
+            for s in range(g):  # driver-loop: over the group's tree slots, one queue each
+                var base = Int32(s) * slot_rows
+                if sabotage == FOREST_SAB_SHARED_ROW_BASE:
+                    base = Int32(0)
+                queues.append(
+                    NodeQueue[DType.float32](
+                        params, slot_rows, Int32(1), tree_ids[first + s], base
+                    )
+                )
+            ctx.enqueue_memset(d_mismatch, Int32(0))
         clock.tick(ctx, PHASE_SETUP)
         var cyc: Int
         if bestfirst:
@@ -8234,10 +8372,16 @@ def train_forest_regression_device_timed(
                 n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
                 gi,
             )
-        else:
+        elif use_lp:
             cyc = _et_run_depthwise[False](
                 ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
                 n_rows, n_cols, seed, sabotage, clock, trace, gi,
+            )
+        else:
+            cyc = _et_run_depthwise_host[False](
+                ctx, queues, ws, dataset, d_row_ids, d_mismatch, params,
+                Int(k), Int32(1), n_rows, n_cols, seed, sabotage, tree_ids,
+                first, clock, trace, gi,
             )
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
@@ -8247,7 +8391,9 @@ def train_forest_regression_device_timed(
         # each tree's nodes in local-id order, its ranges beside them), and
         # the model comes back once (`download_trees`).
         var k_out = 1
-        var total_nodes = lp.word(ETL_H_NODES)
+        var total_nodes = (
+            lp.word(ETL_H_NODES) if use_lp else _et_host_total_nodes(queues)
+        )
         var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
             n_alloc * size_of[SparseTreeNode[DType.float32]]()
@@ -8259,7 +8405,10 @@ def train_forest_regression_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
-        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        if use_lp:
+            lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
+        else:
+            _et_host_upload_nodes(ctx, queues, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- the
@@ -8305,9 +8454,15 @@ def train_forest_regression_device_timed(
                 grid_dim=(total_nodes, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-        lp.download_trees(
-            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
-        )
+        if use_lp:
+            lp.download_trees(
+                ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first,
+                out,
+            )
+        else:
+            _et_host_download_trees(
+                ctx, queues, d_leaves, total_nodes, k_out, out
+            )
         if trace.enabled:
             # The leaf pass's output for the whole group: the values the
             # model returns, still concatenated across the group's trees.
@@ -8318,13 +8473,20 @@ def train_forest_regression_device_timed(
         # DEVIATION 2663's measurement define: what the group's level loop
         # did, from the device header's tallies.
         comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
-            print(
-                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
-                " nodes=", lp.word(ETL_H_STAT_NODES),
-                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
-                " rescued=", lp.word(ETL_H_STAT_RESCUED),
-                " max_batch=", params.max_batch_size,
-            )
+            if use_lp:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc,
+                    " nodes=", lp.word(ETL_H_STAT_NODES),
+                    " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                    " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                    " max_batch=", params.max_batch_size,
+                )
+            else:
+                print(
+                    "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=",
+                    cyc, " host_queue=1 max_batch=", params.max_batch_size,
+                )
         else:
             _ = cyc
         # Mojo frees a buffer at its LAST USE; these must outlive every
@@ -8334,6 +8496,8 @@ def train_forest_regression_device_timed(
         _ = d_leaves^
         _ = d_visit^
         _ = lp^
+        _ = queues^
+        _ = d_mismatch^
         _ = d_row_ids^
         _ = ws^
         gi += 1

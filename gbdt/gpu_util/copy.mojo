@@ -22,7 +22,7 @@ Reference: the copy operations in `catboost/cuda/cuda_util/`, which are CUB or
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 
 comptime COPY_BLOCK = 256

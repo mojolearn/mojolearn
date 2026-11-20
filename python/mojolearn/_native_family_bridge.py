@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the compiled owner of the classical estimator
-families' public methods (bindings/family_native.mojo): k-means,
+families' public methods (bindings/family_native_door.mojo): k-means,
 neighbors, kernels, model selection and the rest of lane
 migrate-classical-b. A public method of a connected class is one call,
 `_NATIVE(self, "family_<op>", args, _NATIVE_CONTEXT)`; the native owner
@@ -37,8 +37,17 @@ def shared_context():
     if _CONTEXT is None:
         from types import BuiltinFunctionType
         from ._native_classical_bridge import _state_context
+        from ._labels import ClassLabels
         context = _state_context()
-        context.update(family_builtin_type=BuiltinFunctionType)
+        # The classifier label class every family door's label admission reads
+        # (bindings/label_admission_native_unpack.mojo, logistic_admission_unpack.mojo,
+        # prep_lda_admission_door.mojo, trees_public_state_unpack.mojo). It was
+        # written by the SVM and sequence-forecast imports, so a lazily loaded
+        # neighbors or semi-supervised family read no key (lane lazy-import-fix).
+        context.update(family_builtin_type=BuiltinFunctionType,
+                       classifier_labels_class=ClassLabels,
+                       classifier_labels_namespace=dict(vars(ClassLabels)),
+                       classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
         _CONTEXT = context
         _connect_context_module()
     return _CONTEXT
@@ -97,7 +106,7 @@ def connect_bindings(*names):
                     if _backend._CPU_ONLY is None:
                         raise TypeError("host binding facade cannot serve a GPU operation")
                     basename = vars(binding)['_HostBinding__basename']
-                    binding = _backend.load_host_module(basename)  # cpu-route: import connection of an explicitly selected CPU-only binding
+                    binding = _backend.load_host_module(basename)  # import-time: import connection of an explicitly selected CPU-only binding
                     reader = _backend._host_prefix(basename) + '_numeric_mode'
                 elif type(binding) is _backend._NoGpuBinding:
                     raise ImportError(_backend._no_cpu_implementation(

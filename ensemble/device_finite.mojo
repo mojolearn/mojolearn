@@ -6,24 +6,24 @@ binding skips its pooled host NaN scan. The refusal raises
 `FOREST_NONFINITE_REFUSAL`, which the Python fit turns into the same
 ValueError it raised before. The iforest pattern (bfd1d7cc6).
 
-`-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF` keeps the host scans (the A/B arm);
-IDENTICAL compiles the old path. No bits of any fit move: the scan only
+IDENTICAL compiles the old path (the `-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF`
+rollback is deleted). No bits of any fit move: the scan only
 reads X."""
 
 # Default since the M3 A/B (b272364e4, n=2, identical output hashes): ET
 # taxi 2,867 -> 2,829 ms, istella 4,143 -> 4,059 ms; RF neutral.
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
+# TOMBSTONE: MOJOLEARN_FOREST_DEVICE_FINITE_OFF (old path of the FAST+Apple default; promoted on Apple M3 only, the path exists only on Apple) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at cffcc56511.
+# Restore: git apply experiments/removed/MOJOLEARN_FOREST_DEVICE_FINITE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime FOREST_DEVICE_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_FOREST_DEVICE_FINITE_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 comptime FOREST_NONFINITE_REFUSAL = (

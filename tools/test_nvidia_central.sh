@@ -79,7 +79,7 @@ EOF
 chmod 755 "$W/fake_devpod.sh"
 export MOJOLEARN_ORCHESTRATOR=1 PATH="$W/bin:$PATH" MOJOLEARN_DEVPOD_STATE="$W/devpods" MOJOLEARN_NVC_HOME="$W/nvc" MOJOLEARN_NVC_CONF="$W/none.env" \
     MOJOLEARN_NVC_NO_API=1 MOJOLEARN_NVC_DEVPOD="$W/fake_devpod.sh" MOJOLEARN_NVC_WATCH_FAKE_DELETE=1 NVC_WATCH_SECONDS=3 \
-    NVC_STOCK_WAIT=0 NVC_STOCK_WAIT_1=0
+    NVC_STOCK_WAIT=0 NVC_STOCK_WAIT_1=0 NVC_GPU_COUNTS="4 2 1"   # the count walk below; the default is 1 (one L40S)
 N="$ROOT/tools/nvidia_central.sh"
 # the fake S3 every submitted job persists to (the containers reach the Mac at host.docker.internal)
 S3PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1])')
@@ -102,11 +102,13 @@ check "install: queue up, 2 slots, lease OK" "grep -q 'LEASE OK' $W/up1.log && g
 check "install retired the fixed runpod_guard watchdog on the pod" "docker exec $C1 bash -c '! pgrep -f \"[s]leep 7000\" > /dev/null && [ ! -e /tmp/mojolearn-lease.pid ]'"
 wp=$(cat "$W/devpods/nvc1/deadman.pid")
 check "the Mac watcher replaced the dead-man in deadman.pid" "kill -0 $wp && ps -p $wp -o command= | grep -q watch.sh && ! pgrep -f 'sleep 7100' > /dev/null"
-MOJOLEARN_NVC_TEST_BALANCE=50 $N up 1 > "$W/up2.log" 2>&1
-check "up at N is idempotent: nothing rented" "grep -q 'already up' $W/up2.log && [ \$(grep -c '^fake dev_pod up' $W/devpod_calls) = 2 ]"
+MOJOLEARN_NVC_TEST_BALANCE=50 $N up > "$W/up2.log" 2>&1
+check "up with no N brings one pod (a measurement needs one): nothing rented" "grep -q 'already up' $W/up2.log && [ \$(grep -c '^fake dev_pod up' $W/devpod_calls) = 2 ]"
 echo $C2 > "$W/next_container"
-MOJOLEARN_NVC_TEST_BALANCE=50 $N up 2 > "$W/up3.log" 2>&1
-check "up 2 adds exactly nvc2" "[ -f $W/devpods/nvc2/state.env ] && [ ! -e $W/devpods/nvc3 ]"
+check "up --pods 1 is idempotent too" "MOJOLEARN_NVC_TEST_BALANCE=50 $N up --pods 1 2>&1 | grep -q 'already up'"
+check "up refuses a stray argument" "! $N up --pods 1 extra 2>/dev/null"
+MOJOLEARN_NVC_TEST_BALANCE=50 $N up --pods 2 > "$W/up3.log" 2>&1
+check "up --pods 2 adds exactly nvc2" "[ -f $W/devpods/nvc2/state.env ] && [ ! -e $W/devpods/nvc3 ]"
 check "up refuses N over the 3-pod cap" "! $N up 4 2>/dev/null"
 
 echo "== sync, sh"
@@ -127,6 +129,8 @@ id2=$($N submit lane-a /root/ev-lane-a/gate.sh)
 check "submit prints pod-qualified ids" "[ $id1 = $pa-0001 ] && [ $id2 = $pa-0002 ]"
 check "submit refuses a cap over 240" "! $N submit lane-a --cap 241 /root/ev-lane-a/gate.sh 2>/dev/null"
 check "submit refuses more GPUs than the pod has" "! $N submit lane-a --gpus 3 /root/ev-lane-a/gate.sh 2>/dev/null"
+check "submit refuses an --env value that would need quoting" "! $N submit lane-a --env 'SCOPE=a b' /root/ev-lane-a/gate.sh 2>/dev/null"
+check "submit refuses a lower-case --env key" "! $N submit lane-a --env scope=all /root/ev-lane-a/gate.sh 2>/dev/null"
 $N queue > "$W/queue.log" 2>&1
 check "queue lists both pods and the jobs" "grep -q '== nvc1' $W/queue.log && grep -q '== nvc2' $W/queue.log && grep -q 'lane-a' $W/queue.log"
 check "cancel by another lane is refused" "! $N cancel lane-b $id2 2>/dev/null"
@@ -134,9 +138,9 @@ $N cancel lane-a $id2 > /dev/null
 waitfor 30 "$N status $id1 2>/dev/null | grep -q '^job 0001: done'"
 check "status: the 2-GPU job done, saw CUDA 0,1" "$N status $id1 | grep -q '^job 0001: done' && $N log $id1 | grep -q 'gpus=0,1 job=0001'"
 check "the cancelled job is cancelled" "$N status $id2 | grep -q 'cancelled'"
-fin1=$(ls "$W"/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | head -1)
-check "submit persisted the job: final.tgz in the fake R2 with the job's output" "[ -n \"$fin1\" ] && tar -xzOf \"$fin1\" ./command.log | grep -q 'gpus=0,1 job=0001'"
-check "the final.tgz sha256 sidecar matches" "[ -n \"$fin1\" ] && [ \"\$(cut -c1-64 \"$fin1.sha256\")\" = \"\$(shasum -a 256 \"$fin1\" | cut -c1-64)\" ]"
+fin1=$(ls "$W"/s3/measurements/box-jobs/*/nvc-lane-a-*/final.00.tgz 2>/dev/null | head -1)
+check "submit persisted the job: final.00.tgz (one streamed piece) in the fake R2 with the job's output" "[ -n \"$fin1\" ] && tar -xzOf \"$fin1\" ./command.log | grep -q 'gpus=0,1 job=0001'"
+check "the final.00.tgz sha256 sidecar matches" "[ -n \"$fin1\" ] && [ \"\$(cut -c1-64 \"$fin1.sha256\")\" = \"\$(shasum -a 256 \"$fin1\" | cut -c1-64)\" ]"
 check "submit --no-persist refuses without MOJOLEARN_ALLOW_UNPERSISTED=1" "! $N submit lane-a --no-persist /root/ev-lane-a/gate.sh 2>/dev/null && grep -q REFUSED $W/persist/unpersisted.log"
 check "submit refuses a script that is not on the box" "! $N submit lane-a /root/ev-lane-a/nope.sh 2>/dev/null"
 check "run takes a free slot and sees one GPU" "[ \"\$($N run lane-b 'echo \$CUDA_VISIBLE_DEVICES' 2>/dev/null)\" = 0 ]"
@@ -152,7 +156,7 @@ check "down refuses while a job runs" "! $N down $pa 2>/dev/null && [ -f $W/devp
 waitfor 30 "$N status $idl 2>/dev/null | grep -q ': running'"   # a job cancelled while queued never runs
 $N cancel lane-a $idl > /dev/null
 waitfor 90 "$N status $idl 2>/dev/null | grep -q cancelled"
-check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.tgz 2>/dev/null | wc -l) -ge 2 ]"
+check "a cancelled job still uploads its final.tgz (the TERM trap)" "[ \$(ls $W/s3/measurements/box-jobs/*/nvc-lane-a-*/final.00.tgz 2>/dev/null | wc -l) -ge 2 ]"
 
 echo "== the Mac watcher deletes a pod that stops answering"
 wb=$(cat "$W/devpods/$pb/deadman.pid"); cb=$( [ $pb = nvc1 ] && echo $C1 || echo $C2 )

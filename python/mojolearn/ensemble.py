@@ -41,7 +41,7 @@ and `'Lossguide'` grow CatBoost's NON-SYMMETRIC trees (on the surface since
 tree scikit-learn grows -- same shape, CatBoost's score and estimator.
 
 X IS ROW-MAJOR HERE AND COLUMN-MAJOR INSIDE. `fit` materializes Fortran
-order ONCE, straight from the caller's buffer (`_buffer.as_f32_colmajor`,
+order ONCE, straight from the caller's buffer (the native input admission,
 DEVIATION 1887). On a 800,000 x 100 C-order matrix that is a 320 MB copy,
 and it is reported rather than hidden -- pass `X` already float32 and in
 Fortran order and it is a zero-copy borrow, a promise this docstring made
@@ -51,7 +51,7 @@ C order and once back).
 INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2330). `X`, `y`,
 `sample_weight` and the eval pair are anything the buffer protocol
 exposes -- an ndarray, an `array.array`, a `mojolearn.Array` -- or a
-nested list; `_buffer.as_f32_colmajor` / `as_f32_c` do the one
+nested list; the native input admission does the one
 conversion. Every array this module RETURNS (`predict`, `predict_proba`,
 `predict_classes`, `loss_curve_`, `test_loss_curve_`,
 `get_tree_leaf_counts`, `get_leaf_values`) is a `mojolearn.Array`, not an
@@ -126,7 +126,7 @@ __all__ = [
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
 from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _native_trees_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -136,7 +136,7 @@ _MODEL_FORMAT = "mojolearn-gbdt-1"
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled tree-ensemble owner: `predict`, `predict_proba`,
 # `predict_classes`, the tree inspection reads and the OrderedRMSE and
-# FeatureFreq fits are one native call each (bindings/trees_public_gbdt.mojo).
+# FeatureFreq fits are one native call each (bindings/trees_public_gbdt_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
@@ -191,7 +191,6 @@ _PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
 #: pair `[1 - p, p]` as float64 (DEVIATION 2980, the resident door's spelling
 #: of `gbdt_sigmoid_pair`)
 _PREDICT_SIGMOID_PAIR = 3
-_PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
@@ -496,8 +495,6 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 # on the host side of this module. None of them touches a result bit.
 
 
-#: `np.iinfo(np.uint32).max`, as the literal.
-_U32_MAX = 4294967295
 
 
 # Maintainer notes moved out of the public docstring (CatBoost 1.2.10 source references):
@@ -575,7 +572,7 @@ _U32_MAX = 4294967295
 #   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
 # - loss_curve_: CatBoost's functionValue negated and divided by the row count.
 # - best_iteration_: the error tracker's best (error_tracker.h:73-75).
-class GradientBoosting(NumericModeMixin):
+class GradientBoosting(_NumericModeMixin):
     """Gradient-boosted decision trees with CatBoost's GPU learner as the reference.
 
     Fits an ensemble of trees with CatBoost's growth policies (oblivious
@@ -833,7 +830,7 @@ class GradientBoosting(NumericModeMixin):
     # One-call native public class (OrderedRMSE and the FeatureFreq model
     # inherit it): the constructor takes numeric_mode itself, and fit /
     # predict / predict_proba are one call each whose native owner
-    # (bindings/trees_gbdt_adapter_lifecycle.mojo `gbdt_model_public_operation`)
+    # (bindings/trees_gbdt_adapter_lifecycle_door.mojo `gbdt_model_public_operation`)
     # does the fitted check, input admission, fit tracking, feature-name
     # checks and NumPy results, so _mode installs no Python wrappers.
     _mojolearn_native_public = True
@@ -893,7 +890,7 @@ class GradientBoosting(NumericModeMixin):
         numeric_mode=None,
     ):
         # The constructor's checks and its stored state are the native
-        # owner's (bindings/trees_public_gbdt_fit.mojo `gbdt_initialize`),
+        # owner's (bindings/trees_public_gbdt_fit_door.mojo `gbdt_initialize`),
         # shared with the scikit-learn adapters' learner.
         _TREES(self, "trees_gbdt_init", (
             loss, n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, random_state, loss_alpha,
@@ -1142,11 +1139,11 @@ class GradientBoosting(NumericModeMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-# `save` and `load` are one native call each: bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each: bindings/archive_schema_native_door.mojo
 # writes this schema, the members, dtypes and refusals of the 0.8.55 Python
 # `save` (the model text as UTF-8 `<u1` bytes, the numeric mode `predict` would
 # use now, the int64 meta and the float64 bias), and
-# bindings/host_archive_native.mojo `host_archive_public_gbdt` builds the loaded
+# bindings/host_archive_native_door.mojo `host_archive_public_gbdt` builds the loaded
 # model, reading the output dimension through the GBDT binding connected here.
 _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),
@@ -1162,7 +1159,7 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("f8", "bias", (("float", "bias_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 
-# The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit.mojo).
+# The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit_door.mojo).
 _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(
     multi_output_losses=MULTI_OUTPUT_LOSSES, multi_regression_losses=MULTI_REGRESSION_LOSSES,
     querywise_losses=_QUERYWISE_LOSSES, od_types=OD_TYPES, border_types=BORDER_TYPES,
@@ -1206,7 +1203,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         self, sources, learning_rate=0.03, l2_leaf_reg=3.0, random_state=0, *, numeric_mode=None
     ):
         # The GradientBoosting constructor and the sources checks are the
-        # native owner's (bindings/trees_public_gbdt_fit.mojo
+        # native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_feature_freq_construct`).
         _TREES(self, "trees_gbdt_feature_freq_init",
                (sources, learning_rate, l2_leaf_reg, random_state, numeric_mode), _TREES_CONTEXT)
@@ -1259,7 +1256,7 @@ class OrderedRMSE(GradientBoosting):
         l2_leaf_reg=3.0, border_count=128, *, numeric_mode=None,
     ):
         # The ordered settings' checks and the GradientBoosting constructor
-        # are the native owner's (bindings/trees_public_gbdt_fit.mojo
+        # are the native owner's (bindings/trees_public_gbdt_fit_door.mojo
         # `gbdt_ordered_construct`).
         _TREES(self, "trees_gbdt_ordered_init",
                (n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, numeric_mode), _TREES_CONTEXT)
@@ -1283,6 +1280,15 @@ class OrderedRMSE(GradientBoosting):
         self
         """
         return _TREES(self, "trees_public_gbdt_model_ordered_fit", (X, y, permutation, sample_weight), _TREES_CONTEXT)
+
+# glue: set_params rebuilds these two through their native constructors with no
+# Python __init__ frame; the argument tuples mirror the __init__ bodies above.
+from ._mode import _connect_native_init  # noqa: E402
+_connect_native_init(ExperimentalTwoLevelFeatureFreq, _TREES, "trees_gbdt_feature_freq_init",
+                     ("sources", "learning_rate", "l2_leaf_reg", "random_state", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(OrderedRMSE, _TREES, "trees_gbdt_ordered_init",
+                     ("n_estimators", "max_depth", "learning_rate", "l2_leaf_reg", "border_count", "numeric_mode"),
+                     _TREES_CONTEXT)
 
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor

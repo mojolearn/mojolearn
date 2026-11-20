@@ -8,7 +8,34 @@ from __future__ import annotations
 
 import struct
 
-from mojolearn.importers._graph import (INT_DTYPES, ONNX_DTYPE, Resolved, TensorInfo, onnx_dtype_name)
+from mojolearn.importers import UnsupportedModel
+# oracle subject: Resolved is the product's native analysis record this oracle returns and the test compares field by
+# field with the native resolution; TensorInfo is the product IR tensor the native reader puts in every graph the
+# oracle walks. Neither has a public route.
+from mojolearn.importers._graph import Resolved, TensorInfo  # oracle subject: the product IR the oracle reads and returns
+
+# ---- local copies of importers/_graph.py's dtype tables (python/mojolearn/importers/_graph.py, 2026-11-15) ----
+# ONNX TensorProto.DataType codes the import reads, by IR name
+ONNX_DTYPE = {1: "f32", 10: "f16", 16: "bf16", 11: "f64", 7: "i64", 6: "i32", 9: "bool"}
+# every other code, by name, for refusal messages
+ONNX_DTYPE_REFUSED = {
+    0: "undefined", 2: "uint8", 3: "int8", 4: "uint16", 5: "int16", 8: "string", 12: "uint32",
+    13: "uint64", 14: "complex64", 15: "complex128", 17: "float8e4m3fn", 18: "float8e4m3fnuz",
+    19: "float8e5m2", 20: "float8e5m2fnuz", 21: "uint4", 22: "int4", 23: "float4e2m1",
+}
+ITEMSIZE = {"f32": 4, "f16": 2, "bf16": 2, "f64": 8, "i64": 8, "i32": 4, "bool": 1}
+FLOAT_DTYPES = frozenset(("f32", "f16", "bf16", "f64"))
+INT_DTYPES = frozenset(("i64", "i32", "bool"))
+
+
+def onnx_dtype_name(code):
+    """The readable name of an ONNX DataType code (the result of autograd/import_reader.mojo onnx_dtype_name)."""
+    if code in ONNX_DTYPE:
+        return ONNX_DTYPE[code]
+    if code in ONNX_DTYPE_REFUSED:
+        return ONNX_DTYPE_REFUSED[code]
+    return "data type " + str(code)
+
 
 _STRUCT = {"i64": "q", "i32": "i", "bool": "B"}
 
@@ -706,7 +733,6 @@ def resolve(g, shapes=None):
 
 def resolve_shapes(g, shapes=None):
     """``resolve``'s shapes; raises UnsupportedModel on any problem."""
-    from mojolearn.importers._graph import UnsupportedModel
     r = resolve(g, shapes)
     if r.problems:
         raise UnsupportedModel(g.source, r.problems)

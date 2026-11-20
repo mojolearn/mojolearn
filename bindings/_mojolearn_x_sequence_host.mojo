@@ -8,75 +8,90 @@ classes run unchanged on a CPU-only install (`_backend._HOST_MODULES`).
 
 The sabotage arm (`x_sequence_host_sabotage`, -D MOJOLEARN_HOST_SABOTAGE=1)
 runs the GEMM reduction k descending (`sequence/ops.mojo`)."""
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from sequence.model_host_dispatch import NATIVE_MODEL_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.autograd_python_errors_pyapi import graph_python_error
-from std.ffi import _Global
-from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
-from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
-from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from providers.python.autograd_python_errors_pyapi_unpack import graph_python_error
+from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
+from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
+from providers.python.autograd_program_public_request_pyapi_pack import ops_program_public_call_py
+from providers.python.autograd_session_public_dispatch_pyapi_unpack import NativeSessionPublicAPI
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_connect_py, ops_owned_program_call_py
-from providers.python.autograd_owned_program_dispatch_pyapi import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
-from providers.python.autograd_owned_program_factory_pyapi import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
-from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
+from providers.python.autograd_owned_program_public_pyapi_door import ops_owned_program_connect_py, ops_owned_program_call_py
+from providers.python.autograd_owned_program_dispatch_pyapi_unpack import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
+from providers.python.autograd_owned_program_factory_pyapi_unpack import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
+from providers.python.autograd_session_frontend_pyapi_door import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
-from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
+from providers.python.autograd_session_lifetime_pyapi_pack import ops_session_create_py
+from providers.python.small_mlp_program_pyapi_pack import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from sequence.opt_entry_host import publish_seq_opt_host_entries
 from sequence.exec import HostExec
-from providers.python.sequence_opt_public_host_pyapi import (
-    seq_optimizer_init_host_py,
-    seq_optimizer_step_host_py,
-    seq_lamb_step_host_py,
-    seq_adafactor_step_host_py,
-    seq_optimizer_state_host_py,
-    seq_optimizer_export_host_py,
-    seq_optimizer_import_host_py,
-    seq_optimizer_close_host_py,
-)
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
-from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
-from providers.python.autograd_program_control_pyapi import ops_program_control_py
-from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
-from providers.python.autograd_distributed_pyapi import (
+from sequence.xseq_glue_host import publish_x_sequence_host
+from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
+from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py
+from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
+from providers.python.autograd_distributed_pyapi_unpack import (
     distributed_object,
-    distributed_devices, distributed_open, distributed_load, distributed_fit_py,
-    distributed_run_py, distributed_state_py, distributed_residency_py,
-    distributed_save_py, distributed_close_py, distributed_enter_py,
+    distributed_devices,
+    distributed_fit_py,
+    distributed_enter_py,
 )
-from providers.python.autograd_partition_pyapi import (
-    partition_open, partition_load, partition_fit_py, partition_run_py,
-    partition_state_py, partition_residency_py, partition_save_py,
-    partition_close_py, partition_enter_py, partition_profile_py,
+from providers.python.autograd_distributed_pyapi_pack import (
+    distributed_open,
+    distributed_load,
+    distributed_run_py,
+    distributed_state_py,
+    distributed_residency_py,
+    distributed_save_py,
+    distributed_close_py,
 )
-from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
-from providers.python.autograd_pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from providers.python.autograd_pyapi import model_gather_labels_py
-from providers.python.autograd_pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from providers.python.autograd_pyapi import model_import_params_py
+from providers.python.autograd_partition_pyapi_unpack import (
+    partition_fit_py,
+    partition_enter_py,
+)
+from providers.python.autograd_partition_pyapi_pack import (
+    partition_open,
+    partition_load,
+    partition_run_py,
+    partition_state_py,
+    partition_residency_py,
+    partition_save_py,
+    partition_close_py,
+    partition_profile_py,
+)
+from providers.python.autograd_program_control_grad_pyapi_pack import ops_program_control_vjp_py
+from providers.python.autograd_pyapi_door import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from providers.python.autograd_pyapi_door import model_gather_labels_py
+from providers.python.autograd_pyapi_door import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
+from providers.python.autograd_pyapi_door import model_import_params_py
 from core.label_cast import host_unique_inverse_cast
-from providers.python.autograd_pyapi import ops_shape_py
+from providers.python.autograd_pyapi_door import ops_shape_py
 from autograd.ops_api import OPS_HOST
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py, onnx_native_api_py
-from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
+from providers.python.autograd_import_reader_pyapi_unpack import onnx_native_api_py
+from providers.python.autograd_import_reader_pyapi_pack import onnx_read_py, onnx_info_py, onnx_buffers_py
+from providers.python.autograd_import_resolve_pyapi_pack import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
-from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
-from providers.python.autograd_graph_metadata_pyapi import graph_record_c
-from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
-from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
-from providers.python.sequence_pyapi import moe_backward_py
+from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c
+from providers.python.autograd_graph_metadata_pyapi_door import graph_record_c
+from providers.python.autograd_import_lower_pyapi_unpack import onnx_import_py, onnx_import_file_py
+from providers.python.autograd_model_verify_pyapi_pack import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from providers.python.autograd_model_checkpoint_pyapi_pack import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
+from providers.python.sequence_pyapi_door import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
+from providers.python.sequence_pyapi_door import moe_backward_py
+from core.shared_slot import SharedSlot
+from sequence.small_mlp_entry_host import publish_neural_small_mlp_host
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -117,21 +132,6 @@ def optimizer_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObje
     return opt_step_py(ex, addrs, ip, fp)
 
 
-def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return stl_py(ex, addrs, ip)
-
-
-def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return var_fit_py(ex, addrs, ip)
-
-
-def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return var_forecast_py(ex, addrs, ip)
-
-
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return mlp_fit_py(ex, addrs, ip, fp)
@@ -142,8 +142,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
-comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[HostExec, OPS_HOST],
-    name="MojoSessionPublicOPS_HOSTAPIv1", init_fn=NativeSessionPublicAPI[HostExec, OPS_HOST].__init__]
+comptime SESSION_PUBLIC_API = SharedSlot[NativeSessionPublicAPI[HostExec, OPS_HOST], ("MojolearnSessionPublicOPS_HOSTAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_HOSTAPIFastV3")]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -222,6 +221,17 @@ def model_import_params_binding(
 
 # The operation session (autograd/ops_api.mojo): one HostExec and one tape kept
 # between calls, tensors by handle.
+def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: PythonObject,
+    floats: PythonObject) raises -> PythonObject:
+    """SmallMLPTrainer's captured program (autograd/small_mlp_program.mojo)."""
+    var code = Int(py=op)
+    if code == SMALL_MLP_PROGRAM_OPEN:
+        return small_mlp_program_open_py[HostExec, OPS_HOST](HostExec(), addresses, ints, floats)
+    if code == SMALL_MLP_PROGRAM_SESSIONS:
+        return small_mlp_sessions_py[HostExec, OPS_HOST](HostExec(), addresses, ints)
+    return small_mlp_program_run_py[HostExec, OPS_HOST](code, addresses, ints)
+
+
 def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
     return ops_session_create_py[HostExec, OPS_HOST](HostExec(), record)
 
@@ -346,8 +356,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[HostExec, OPS_HOST](id)
 
 
-comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name="MojoOwnedProgramPublicOPS_HOSTAPIv1", init_fn=NativeOwnedProgramPublicAPI.__init__]
+comptime OWNED_PROGRAM_PUBLIC_API = SharedSlot[NativeOwnedProgramPublicAPI, ("MojolearnOwnedProgramPublicOPS_HOSTAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_HOSTAPIFastV3")]
 
 
 def owned_program_public_native_binding(
@@ -394,7 +403,7 @@ def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr)
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_program_public_call expects three arguments")
-        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        var result = ops_program_public_call_py[HostExec, OPS_HOST](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -405,7 +414,7 @@ def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_session_call expects three arguments")
-        var result = ops_session_public_call_py(args[0], args[1], args[2])
+        var result = ops_session_public_call_py[HostExec, OPS_HOST](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -556,54 +565,6 @@ def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) 
     return layer_norm_py(ex, addrs, ip, fp)
 
 
-def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return theta_py(ex, addrs, ip, fp)
-
-
-def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return croston_py(ex, addrs, ip)
-
-
-def croston_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return croston_forecast_py(ex, addrs, ip)
-
-
-def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return ets_py(ex, addrs, ip, fp)
-
-
-def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return garch_py(ex, addrs, ip)
-
-
-def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return prophet_days_py(addrs, ip)
-
-
-def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_features_py(ex, addrs, ip, fp)
-
-
-def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_changepoints_py(addrs, ip, fp)
-
-
-def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_fit_py(ex, addrs, ip, fp)
-
-
-def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return prophet_predict_py(ex, addrs, ip)
-
-
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return moe_forward_py(ex, addrs, ip)
@@ -619,22 +580,9 @@ def onnx_read_binding(path: PythonObject) raises -> PythonObject:
     return onnx_read_py(path)
 
 
-def onnx_info_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_info_py(h)
-
-
 def onnx_buffers_binding(h: PythonObject) raises -> PythonObject:
     """The address of each buffer graph h holds (the model file, its own bytes, each external data file)."""
     return onnx_buffers_py(h)
-
-
-def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
-    """importers._graph.resolve of a graph read by onnx_read."""
-    return onnx_resolve_py(h, names, flat)
-
-
-def onnx_close_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_close_py(h)
 
 
 def onnx_import_binding(
@@ -656,8 +604,16 @@ def onnx_import_file_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_sequence_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence_host")
+        # The forecaster operations, published in the
+        # sequence table (core/xseq_entry_table.mojo) for the sequence owner
+        # (bindings/xseq_*_native.mojo); their former Python entries are gone.
+        publish_x_sequence_host()
+        # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
+        # program; the Python entry remains for its other callers and the boundary tests.
+        publish_neural_small_mlp_host()
         m.def_function[host_numeric_mode_binding]("x_sequence_host_numeric_mode")
         m.def_function[host_vendor_binding]("x_sequence_host_vendor")
         m.def_function[host_column_binding]("x_sequence_host_column")
@@ -667,18 +623,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        # the public optimizers' one native call per method (sequence/opt_public*.mojo)
-        m.def_function[seq_optimizer_init_host_py]("seq_optimizer_init")
-        m.def_function[seq_optimizer_step_host_py]("seq_optimizer_step")
-        m.def_function[seq_lamb_step_host_py]("seq_lamb_step")
-        m.def_function[seq_adafactor_step_host_py]("seq_adafactor_step")
-        m.def_function[seq_optimizer_state_host_py]("seq_optimizer_state")
-        m.def_function[seq_optimizer_export_host_py]("seq_optimizer_export")
-        m.def_function[seq_optimizer_import_host_py]("seq_optimizer_import")
-        m.def_function[seq_optimizer_close_host_py]("seq_optimizer_close")
-        m.def_function[stl_binding]("stl")
-        m.def_function[var_fit_binding]("var_fit")
-        m.def_function[var_forecast_binding]("var_forecast")
+        # the public optimizers (sequence/opt_public*.mojo, published by publish_seq_opt_host_entries
+        # below) and var_fit / var_forecast / stl (the sequence table) have no Python entry here.
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
@@ -702,6 +648,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[HostExec, OPS_HOST]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
+        m.def_function[small_mlp_program_binding]("small_mlp_program")
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")
@@ -750,29 +697,18 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[layer_norm_binding]("layer_norm")
-        m.def_function[theta_binding]("theta")
-        m.def_function[croston_binding]("croston")
-        m.def_function[croston_forecast_binding]("croston_forecast")
-        m.def_function[ets_binding]("ets")
-        m.def_function[garch_binding]("garch")
-        m.def_function[prophet_days_binding]("prophet_days")
-        m.def_function[prophet_features_binding]("prophet_features")
-        m.def_function[prophet_changepoints_binding]("prophet_changepoints")
-        m.def_function[prophet_fit_binding]("prophet_fit")
-        m.def_function[prophet_predict_binding]("prophet_predict")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
         m.def_function[onnx_native_api_py]("onnx_native_api_v1")
         m.def_function[onnx_read_binding]("onnx_read")
-        m.def_function[onnx_info_binding]("onnx_info")
         m.def_function[onnx_buffers_binding]("onnx_buffers")
-        m.def_function[onnx_resolve_binding]("onnx_resolve")
-        m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
         m.def_py_c_function(graph_record_c, "ops_graph_record")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_host_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))

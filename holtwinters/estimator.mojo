@@ -23,19 +23,21 @@ keeps the `DeviceBuffer`s can call the implemented entries directly).
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from core.hostptr import copy_f32
+from core.transfer import transfer_download_f32_list, transfer_download_list, transfer_upload_list
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 from checks.numerics import ftz
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTsaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnTsaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTsaContextFastV3"
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnHoltWintersTransferStagesIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnHoltWintersTransferStagesFastV1"
 
 
 from core.identity_trace import IdentityTrace
@@ -123,45 +125,23 @@ struct HWFit(Movable):
 
 
 def upload_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
     var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    return transfer_upload_list[DType.float32](ctx, values, n, n if n > 0 else 1)
 
 
 def download_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-        ctx.synchronize()
-        _ = view^
-    var out = List[Float32]()
-    out.reserve(n)
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words. Gone: a pinned buffer per call and
+    # one append per word.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int32]:
-    var host = ctx.enqueue_create_host_buffer[DType.int32](n if n > 0 else 1)
-    if n > 0:
-        var view = buf.create_sub_buffer[DType.int32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-        ctx.synchronize()
-        _ = view^
-    var out = List[Int32]()
-    out.reserve(n)
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo: as `download_f32` above (one copy, one wait).
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 def holtwinters_fit_host_traced(
@@ -550,21 +530,21 @@ def holtwinters_fit_ptr(
     if direct >= 0:
         return direct
     # the traced sequence: bulk copies in and out, no per-cell host walk
-    var data = List[Float32](length=_cells, fill=Float32(0.0))
-    memcpy(dest=data.unsafe_ptr(), src=data_ptr, count=_cells)
+    var data = List[Float32](unsafe_uninit_length=_cells)
+    unsafe_memcpy(dest=data.unsafe_ptr(), src=data_ptr, count=_cells)
     var fitted = holtwinters_fit_host(
         data, n, batch_size, frequency, start_periods, seasonal, eps, init_method
     )
     var components_len = len(fitted.level)
-    memcpy(dest=comps_ptr, src=fitted.level.unsafe_ptr(), count=components_len)
-    memcpy(dest=comps_ptr + components_len, src=fitted.trend.unsafe_ptr(), count=components_len)
-    memcpy(dest=comps_ptr + 2 * components_len, src=fitted.season.unsafe_ptr(), count=components_len)
-    memcpy(dest=stats_ptr, src=fitted.sse.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + batch_size, src=fitted.alpha.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + 2 * batch_size, src=fitted.beta.unsafe_ptr(), count=batch_size)
-    memcpy(dest=stats_ptr + 3 * batch_size, src=fitted.gamma.unsafe_ptr(), count=batch_size)
-    memcpy(dest=flags_ptr, src=fitted.niter.unsafe_ptr(), count=batch_size)
-    memcpy(dest=flags_ptr + batch_size, src=fitted.criterion.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=comps_ptr, src=fitted.level.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=comps_ptr + components_len, src=fitted.trend.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=comps_ptr + 2 * components_len, src=fitted.season.unsafe_ptr(), count=components_len)
+    unsafe_memcpy(dest=stats_ptr, src=fitted.sse.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + batch_size, src=fitted.alpha.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + 2 * batch_size, src=fitted.beta.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=stats_ptr + 3 * batch_size, src=fitted.gamma.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=flags_ptr, src=fitted.niter.unsafe_ptr(), count=batch_size)
+    unsafe_memcpy(dest=flags_ptr + batch_size, src=fitted.criterion.unsafe_ptr(), count=batch_size)
     _ = data^
     _ = fitted^
     return components_len
@@ -635,13 +615,13 @@ def holtwinters_forecast_ptr(
     fitted.level = List[Float32](length=components_len, fill=Float32(0.0))
     fitted.trend = List[Float32](length=components_len, fill=Float32(0.0))
     fitted.season = List[Float32](length=components_len, fill=Float32(0.0))
-    memcpy(dest=fitted.level.unsafe_ptr(), src=comps_ptr, count=components_len)
-    memcpy(dest=fitted.trend.unsafe_ptr(), src=comps_ptr + components_len, count=components_len)
-    memcpy(dest=fitted.season.unsafe_ptr(), src=comps_ptr + 2 * components_len, count=components_len)
+    unsafe_memcpy(dest=fitted.level.unsafe_ptr(), src=comps_ptr, count=components_len)
+    unsafe_memcpy(dest=fitted.trend.unsafe_ptr(), src=comps_ptr + components_len, count=components_len)
+    unsafe_memcpy(dest=fitted.season.unsafe_ptr(), src=comps_ptr + 2 * components_len, count=components_len)
     # `h <= 0` is refused inside `holtwinters_forecast_host_traced`, by name,
     # in their words ("h must be > 0. Currently: ...").
     var fc = holtwinters_forecast_host(fitted, h)
-    memcpy(dest=out_ptr, src=fc.unsafe_ptr(), count=h * batch_size)
+    unsafe_memcpy(dest=out_ptr, src=fc.unsafe_ptr(), count=h * batch_size)
     _ = fitted^
     return h * batch_size
 

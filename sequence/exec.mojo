@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """WHERE AN OPERATION RUNS. `Exec` (`sequence/exec_trait.mojo`) is the one interface the lane's algorithms
-are written against (`sequence/recurrent.mojo`); `HostExec` (here, no GPU
-import) runs each operation as an ascending host loop over its elements and
+are written against (`sequence/recurrent.mojo`); `HostExec` (here; no GPU
+binding imports it, and since lane x7b it imports the block step ops' host
+arm, whose step-op layouts live with the device table in
+autograd/block_step_ops.mojo) runs each operation as an ascending host loop over its elements and
 `DeviceExec` (`sequence/exec_device.mojo`) as one GPU thread per element.
 The element body is the same function (`sequence/ops.mojo::apply`), so the
 two agree bit for bit by construction.
@@ -21,7 +23,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
 so the many tiny launches of a small recurrent step stay on the calling
 thread. A single task runs on the calling thread without touching the
 pool."""
-from std.memory import memcpy, memset_zero
+from std.memory import unsafe_memcpy, unsafe_memset_zero
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -34,6 +36,17 @@ from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+# Lane x7b: the block step ops' host arm (its imports reach the step-op
+# layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
+from autograd.block_step_host import (
+    HostStepScratch, host_step_run, host_step_backward, host_block_step_reports, host_attn_append_restore,
+)
+# Lane x56d: the generation ops' host arm.
+from autograd.generation_host import lm_pick_host, lm_alive_host
+
+from autograd.lm_head_v2_host import lm_head_v2_host_run
+from autograd.small_mlp_host import small_mlp_host_run
+from autograd.cnn_block_host import cnn_op_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -71,6 +84,7 @@ from sequence.ops import (
     OP_LAMB_TRUST,
     OP_STL,
     OP_THETA,
+    OP_THETA_FORECAST,
     OP_CROSTON,
     OP_ETS,
     OP_GARCH,
@@ -78,6 +92,9 @@ from sequence.ops import (
     OP_PROPHET_FIT,
     OP_PROPHET_PREDICT,
     OP_PROPHET_FG_PART,
+    OP_PROPHET_LB_YMAX,
+    OP_PROPHET_LB_INIT,
+    OP_PROPHET_LB_STEP,
     OP_CHOLSOLVE,
     OP_VAR_FORECAST,
     OP_MOE_ROUTE,
@@ -137,16 +154,17 @@ def _element_weight[OP: Int](a: Args) -> Int:
     elif OP == OP_LAMB_SEGFOLD or OP == OP_LAMB_CLIP or OP == OP_LAMB_TRUST:
         return _HEAVY
     elif (
-        OP == OP_STL or OP == OP_THETA or OP == OP_CROSTON or OP == OP_ETS
+        OP == OP_STL or OP == OP_THETA or OP == OP_THETA_FORECAST or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
         or OP == OP_VAR_FORECAST or OP == OP_SEG_SUMSQ or OP == OP_LAMB_RATIO
+        or OP == OP_PROPHET_LB_INIT or OP == OP_PROPHET_LB_STEP
     ):
         return _HEAVY
     elif (
         OP == OP_CE or OP == OP_SOFTMAX or OP == OP_MLP_ROWLOSS
         or OP == OP_AF_ROW or OP == OP_AF_COL or OP == OP_LN_FWD or OP == OP_CHUNK_SUMSQ
         or OP == OP_LN_BWD_X or OP == OP_PROPHET_FEATURES
-        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE or OP == OP_PROPHET_FG_PART
+        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE or OP == OP_PROPHET_FG_PART or OP == OP_PROPHET_LB_YMAX
         or OP == OP_MOE_HIDDEN or OP == OP_MOE_OUT
     ):
         return 256
@@ -199,6 +217,7 @@ def _host_apply[OP: Int](t: Int, a: Args):
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct HostExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = False
     var bufs: List[FP]
     var buf_sizes: List[Int]
     var execution_profile: ExecutionProfile
@@ -211,8 +230,12 @@ struct HostExec(Exec, Movable):
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
+    #: lane x7b: the block step ops' host-arm entries of the sessions on this
+    #: executor (autograd/block_step_host.mojo)
+    var steps: HostStepScratch
 
     def __init__(out self):
+        self.steps = HostStepScratch()
         self.bufs = List[FP]()
         self.buf_sizes = List[Int]()
         self.execution_profile = ExecutionProfile()
@@ -229,7 +252,7 @@ struct HostExec(Exec, Movable):
     def alloc(mut self, n: Int) raises -> FP:
         var count = n if n > 0 else 1
         var p = alloc[Float32](count)
-        memset_zero(p, count)
+        unsafe_memset_zero(p, count)
         var q = FP(unsafe_from_address=Int(p))
         self.bufs.append(q)
         self.buf_sizes.append(count)
@@ -257,7 +280,7 @@ struct HostExec(Exec, Movable):
 
     def _profiled_upload(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0:
-            memcpy(dest=dst, src=src, count=n)
+            unsafe_memcpy(dest=dst, src=src, count=n)
             self.execution_profile.copied(3, n * 4)
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
@@ -267,7 +290,7 @@ struct HostExec(Exec, Movable):
 
     def _profiled_download(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0 and Int(dst) != Int(src):
-            memcpy(dest=dst, src=src, count=n)
+            unsafe_memcpy(dest=dst, src=src, count=n)
             self.execution_profile.copied(3, n * 4)
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
@@ -311,7 +334,8 @@ struct HostExec(Exec, Movable):
         # products the shape rule selects take the split-K order, one
         # OP_GK_SPLIT element a cell (DeviceExec takes the same rule, so the
         # same words); the column sums of OP_AGK_GEMM_EPI stay OP_COLSUM_DIV.
-        # MOJOLEARN_IDN_GEMM_SPLITK_OFF: the host GEMM below, as before.
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (unmeasured old path, EXP:2180 PENDING: the GEMM without the split-K order; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at f15596c0c6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)
@@ -455,3 +479,52 @@ struct HostExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b-step-ops-host-arm: the block step ops' host arm
+    # (autograd/block_step_host.mojo), reached by generic session code
+    # through the Exec trait.
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        host_step_run(self.steps, code, bufs, counts, ints, fs, y_out, record)
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        host_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        host_block_step_reports(self.steps, code, w_addr, s_addr, dsts)
+
+    def step_forget(mut self, addr: Int):
+        self.steps.forget(addr)
+
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        host_attn_append_restore(self.steps, kvs, words)
+
+    def step_weights_changed(mut self, addr: Int):
+        self.steps.weights_changed(addr)
+
+    def step_clear(mut self):
+        self.steps.clear()
+
+    # Lane x56d: the generation ops' host arm (autograd/generation_host.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        lm_pick_host(logits, n_logits, rows, n_rows, ints, fs, ids)
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        lm_alive_host(rows, n_rows, b, dst)
+
+    # Lane m2-neural-leftovers: the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo), reached through the Exec trait.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        lm_head_v2_host_run(backward, bufs, rows, vocab, width)
+
+    # Lane r1-restore-measured-winners: the small MLP op's host arm
+    # (autograd/small_mlp_host.mojo), reached through the Exec trait.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        small_mlp_host_run(backward, bufs, dims)
+
+    # Lane r1-restore-measured-winners: the CNN conv block and head ops'
+    # host arm (autograd/cnn_block_host.mojo), reached through the Exec trait.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        cnn_op_host_run(op, bufs, cprm, pprm, words)

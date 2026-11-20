@@ -9,7 +9,7 @@
 # The default binding implements covariance_type='full', init_params 'kmeans'
 # (through the identity-certified k-means) and 'random' (position-mapped Philox
 # draws, DEVIATION 1733), n_init=1, warm_start=False; every other option is
-# routed to the cluster lane's mixture driver (bindings/mixture_native.mojo `_gmm_ext_fit`).
+# routed to the cluster lane's mixture driver (bindings/mixture_native_door.mojo `_gmm_ext_fit`).
 # A collapsed component raises (DEVIATION 1723). No speed claim.
 """Gaussian mixture models.
 
@@ -17,14 +17,14 @@
 with scikit-learn's parameter names and meanings.
 """
 from . import _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
 # The compiled family owners, connected once at import: fit, fit_predict,
 # predict, predict_proba, score_samples, score, bic and aic of
-# GaussianMixture and BayesianGaussianMixture (bindings/mixture_native.mojo)
-# and `sample` (bindings/svm_mixture_native.mojo) are one native call each,
+# GaussianMixture and BayesianGaussianMixture (bindings/mixture_native_door.mojo)
+# and `sample` (bindings/svm_mixture_native_door.mojo) are one native call each,
 # with binding selection owned by native code. The covariance-type and init tables
 # are the option-parity solver's codes (x_cluster/entries.mojo::bgmm_entry).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
@@ -43,7 +43,7 @@ _native_family_bridge.tables(
 _GMM_FORMAT = "mojolearn-gmm-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
@@ -51,7 +51,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # log_det_chol_ is `_compute_log_det_cholesky`'s answer from the device fold
 # (DEVIATION 1726), never re-derived from the diagonal in Python.
 # converged_=False: scikit-learn warns, this reports (DEVIATION 1746).
-class GaussianMixture(NumericModeMixin):
+class GaussianMixture(_NumericModeMixin):
     """Gaussian mixture model fitted by expectation-maximization.
 
     Follows scikit-learn's `GaussianMixture`: every parameter has the same
@@ -154,7 +154,7 @@ class GaussianMixture(NumericModeMixin):
     # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
     # (2026-09-27, lane/algos-cluster): any option this binding does not carry
     # runs the same EM on the cluster lane's mixture driver
-    # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native.mojo `_gmm_ext_fit`).
+    # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native_door.mojo `_gmm_ext_fit`).
     # The default fit is untouched and keeps its recorded bits.
     def _extension(self):
         return _NATIVE(self, "family_mix_gmm_public_binding", (), _NATIVE_CONTEXT)

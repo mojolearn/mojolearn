@@ -12,18 +12,33 @@
 # host 2. BOX_GPU_COMPILE_JOBS / BOX_HOST_COMPILE_JOBS override individual sets.
 # Old installed sets are preserved under previous/ before new sets activate.
 #
+# SMALL COMPILES (2026-11-04). Each set builds ONE GROUP AT A TIME through
+# tools/bincache.py (key rule closure-v2: the group's own import closure, the
+# variables its inputs read, the toolchain, the box OS): a group whose key is
+# in the box's hot directory (BOX_BINCACHE_HOT_DIR, default
+# /root/.mojolearn_bincache/hot, kept across jobs on the box) or in a staged R2
+# URL map (BOX_BINCACHE_MAP, default /root/.mojolearn_bincache/urls.tsv; the
+# Mac stages it with tools/bincache_leg.sh) is placed, not compiled, so a box
+# job after a change compiles only the groups whose closure the change
+# reaches. Every group is staged under build/box-verify/<set>/ (gitignored),
+# then moved into the run's artifacts/ with an index written from the plan;
+# verification, VERIFIED-before-record and activation are unchanged.
+# BOX_BINCACHE=0 compiles every group. `--plan` prints, per group, `hit (...)`
+# or `compile: <reason>` (tools/bincache.py explain) and builds nothing.
+#
 # Then the owed GPU evidence (2026-10-21, docs/plans/BOX_JOBS_20261021.md), each
 # a function guarded by what the box has, each step `st`-logged, none aborting
 # the chain. BOX_JOBS (empty by default) explicitly picks them:
 #   dist      physical multi-GPU checks, only with 2+ GPUs on the box
 #   graphopt  captured-graph optimizer A/B on the saved full workloads (both vendors)
 #   witness   native NVIDIA witness: four PTX discrepancies + four tree batch probes
-#   stage64   NVIDIA MOJOLEARN_IDN_GEMM_STAGE64 A/B (MLP + recurrent, HIGGS)
 # The Mac stages the data first (tools/stage_from_r2.sh): corpus/enwik8/input.txt
-# for dist, gbm-bench/higgs/higgs_speed.npz for stage64.
+# for dist.
 set -uo pipefail
 CONTROLLER=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
-[ $# = 2 ] || { echo "usage: box_merged_verify.sh nvidia|amd <sha>" >&2; exit 2; }
+PLAN=0
+[ "${1:-}" != --plan ] || { PLAN=1; shift; }
+[ $# = 2 ] || { echo "usage: box_merged_verify.sh [--plan] nvidia|amd <sha>" >&2; exit 2; }
 V=$1; SHA=$2
 case $V in nvidia|amd) ;; *) echo "unknown vendor: $V" >&2; exit 2;; esac
 [[ $SHA =~ ^[0-9a-fA-F]{7,40}$ ]] || { echo "expected a commit SHA" >&2; exit 2; }
@@ -34,6 +49,7 @@ case $O in /*) ;; *) echo "BOX_OUT_DIR must be absolute" >&2; exit 2;; esac
 mkdir "$O" || { echo "BOX_OUT_DIR must be a new directory: $O" >&2; exit 2; }
 O=$(cd "$O" && pwd -P)
 echo "box_merged_verify: outputs $O"
+exec 3>&1
 exec >> "$O/job.log" 2>&1
 st() { echo "$(date -u +%H:%M:%SZ) $*" | tee -a "$O/status.txt"; }
 finish() { local rc=$?; printf '%s\n' "$rc" > "$O/exit-code"; st "DONE rc=$rc"; }
@@ -79,7 +95,7 @@ for b in $BOX_BUILDS; do case $b in
 esac; done
 [ "$have_gpu:$have_host" = 1:1 ] || die "qualification requires both gpu-identical and host; stale sets cannot be reused"
 case ${BOX_RECORD:-1} in 0|1) ;; *) die "BOX_RECORD must be 0 or 1";; esac
-for j in ${BOX_JOBS:-}; do case $j in dist|graphopt|witness|stage64) ;; *) die "unknown BOX_JOBS entry $j";; esac; done
+for j in ${BOX_JOBS:-}; do case $j in dist|graphopt|witness) ;; *) die "unknown BOX_JOBS entry $j";; esac; done
 # A wheel/plugin set or explicit binding override would shadow the fresh flat set.
 for d in cuda hip cpu; do
   [ ! -d "python/mojolearn/$d" ] || [ -z "$(find "python/mojolearn/$d" -name '*.so' -print -quit)" ] || die "vendor binaries in $d shadow checkout builds"
@@ -118,6 +134,45 @@ done
 st "label $LABEL gpus=$NGPU; concurrent sets=1; compiler workers gpu=$GPU_COMPILE_JOBS host=$HOST_COMPILE_JOBS"
 printf 'commit\t%s\nvendor\t%s\narch\t%s\nbuilds\t%s\njobs\t1\ngpu_compile_jobs\t%s\nhost_compile_jobs\t%s\n' \
   "$SHA" "$V" "$ARCH" "$BOX_BUILDS" "$GPU_COMPILE_JOBS" "$HOST_COMPILE_JOBS" > "$O/run.tsv"
+case ${BOX_BINCACHE:-1} in 0|1) ;; *) die "BOX_BINCACHE must be 0 or 1";; esac
+STAGE=build/box-verify
+HOT=${BOX_BINCACHE_HOT_DIR:-/root/.mojolearn_bincache/hot}
+MAP=${BOX_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
+# The cache partition: this box class; the OS, toolchain and target are key fields.
+IMAGE=box-verify:$V
+# group_env <set>: the variables one group of the set compiles under, exactly
+# the per-set environment the whole-set build used.
+group_env() {
+  local common=(MOJOLEARN_PACKAGE_BYTE_LM=1 MOJOLEARN_COMMIT="$SHA" MOJOLEARN_BINCACHE="${BOX_BINCACHE:-1}"
+    MOJOLEARN_BINCACHE_SHELL=sh MOJOLEARN_BINCACHE_OUT="$O/bincache" MOJOLEARN_BINCACHE_HOT_DIR="$HOT"
+    MOJOLEARN_BINCACHE_MAP="$MAP" MOJOLEARN_BINCACHE_IMAGE="$IMAGE")
+  case $1 in
+    identical) GENV=(MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V"
+      MOJOLEARN_COMPILE_JOBS="$GPU_COMPILE_JOBS" "${common[@]}");;
+    host) GENV=(MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= MOJOLEARN_COMPILE_JOBS="$HOST_COMPILE_JOBS"
+      "${common[@]}");;
+  esac
+}
+# group_args <kind> <stem> <set>: merged_build.sh's arguments for one group. The
+# root path is fixed (packaging/linux/build_sets.sh: the compiler embeds it).
+group_args() { GARGS=("$1" --group "$2" --outdir "$STAGE/$3" --rootdir "/tmp/mojolearn-merged-roots/$3"); }
+if [ "$PLAN" = 1 ]; then
+  PPY=${BOX_PLAN_PYTHON:-python3}
+  : > "$O/plan.txt"
+  for b in $BOX_BUILDS; do
+    case $b in gpu-identical) d=identical k=gpu;; host) d=host k=host;; esac
+    group_env "$d"
+    while read -r stem _cls _members; do
+      [ -n "$stem" ] || continue
+      group_args "$k" "$stem" "$d"
+      line=$(env "${GENV[@]}" MOJOLEARN_BINCACHE_OUTPUTS="$STAGE/$d/$stem.so" \
+        "$PPY" tools/bincache.py explain bindings/merged_build.sh "${GARGS[@]}" 2>&1 | tail -n 1)
+      printf '%s/%s: %s\n' "$d" "$stem" "$line" | tee -a "$O/plan.txt" >&3
+    done < <("$PPY" tools/merged_bindings.py plan --dir "$d" --platform linux --byte-lm 1)
+  done
+  st "PLAN $(grep -c ': hit ' "$O/plan.txt") hit(s), $(grep -c ': compile' "$O/plan.txt") compile(s); see plan.txt"
+  exit 0
+fi
 pixi install --locked > "$O/pixi.log" 2>&1; rc=$?; st "pixi rc=$rc"
 [ "$rc" = 0 ] || die "pixi install failed; no build or verification"
 PY=$(pixi run -q python -c 'import sys; print(sys.executable)') || die "cannot locate Python"
@@ -131,7 +186,7 @@ printf 'variable\tvalue\n' > "$O/build-environment.tsv"
 for name in MOJOLEARN_LINUX_CPU MOJOLEARN_COMPILE_JOBS MOJOLEARN_BUILD_DEFINE_FLAGS \
   MOJOLEARN_AMD_COMPILE_JOBS BOX_GPU_COMPILE_JOBS BOX_HOST_COMPILE_JOBS \
   MOJOLEARN_BUILD_EXTRA_DEFINES MOJOLEARN_MOJO_BUILD_FLAGS MOJOLEARN_MERGED_PYTHON \
-  MOJOLEARN_EXTRA_DEFINES MOJOLEARN_MAMBA_DEFINES MOJOLEARN_ATTENTION_MEMORY_PROFILE \
+  MOJOLEARN_EXTRA_DEFINES MOJOLEARN_MAMBA_DEFINES \
   MOJOLEARN_ALLOW_NO_GPU CC CFLAGS LDFLAGS LD_LIBRARY_PATH TMPDIR; do
   printf '%s\t%s\n' "$name" "${!name-<unset>}" >> "$O/build-environment.tsv"
 done
@@ -139,23 +194,39 @@ TIMEV=()
 /usr/bin/time --version >/dev/null 2>&1 && TIMEV=(/usr/bin/time -v)
 printf 'build\texit_code\n' > "$O/build-status.tsv"
 mb() {
-  local tag=$1 dir=$2; shift 2
-  printf '%q ' env "$@" MOJOLEARN_PACKAGE_BYTE_LM=1 pixi run -q sh bindings/merged_build.sh "${tag%%-*}" \
-    --outdir "$O/artifacts/$dir" > "$O/build-$tag.command"
-  printf '\n' >> "$O/build-$tag.command"
-  "${TIMEV[@]}" env "$@" MOJOLEARN_PACKAGE_BYTE_LM=1 pixi run -q sh bindings/merged_build.sh "${tag%%-*}" \
-    --outdir "$O/artifacts/$dir" > "$O/build-$tag.log" 2> "$O/build-$tag.time"
-  local rc=$?
+  local tag=$1 dir=$2 kind=${1%%-*} rc=0 stem cls members n=0
+  rm -rf "$STAGE/$dir" "$O/artifacts/$dir"
+  mkdir -p "$STAGE/$dir" "$O/artifacts/$dir" || return 2
+  : > "$O/build-$tag.command"; : > "$O/build-$tag.log"; : > "$O/build-$tag.time"
+  group_env "$dir"
+  local plan
+  plan=$("$PY" tools/merged_bindings.py plan --dir "$dir" --platform linux --byte-lm 1) && [ -n "$plan" ] || rc=2
+  while [ "$rc" = 0 ] && read -r stem cls members; do
+    group_args "$kind" "$stem" "$dir"
+    local cmd=(env "${GENV[@]}" MOJOLEARN_BINCACHE_OUTPUTS="$STAGE/$dir/$stem.so" pixi run -q python3 tools/bincache.py
+      build bindings/merged_build.sh "${GARGS[@]}")
+    printf '%q ' "${cmd[@]}" >> "$O/build-$tag.command"; printf '\n' >> "$O/build-$tag.command"
+    "${TIMEV[@]}" "${cmd[@]}" >> "$O/build-$tag.log" 2>> "$O/build-$tag.time" || rc=$?
+    n=$((n + 1))
+  done <<< "$plan"
+  if [ "$rc" = 0 ]; then
+    # Place the staged files and write the set's index from the plan (a cache
+    # hit places the binary only; merged_build.sh indexes what it compiled).
+    while read -r stem cls members; do
+      if [ -f "$STAGE/$dir/$stem.so" ]; then mv "$STAGE/$dir/$stem.so" "$O/artifacts/$dir/$stem.so" || rc=2; fi
+      "$PY" tools/merged_bindings.py index --outdir "$O/artifacts/$dir" --stem "$stem" --members "$members" \
+        < /dev/null >> "$O/build-$tag.log" 2>&1 || rc=2
+    done <<< "$plan"
+  fi
+  rm -rf "$STAGE/$dir"
   printf '%s\t%s\n' "$tag" "$rc" >> "$O/build-status.tsv"
-  st "BUILD $tag rc=$rc peak_rss_gb=$(awk '/Maximum resident/ {printf "%.1f", $6/1048576}' "$O/build-$tag.time")"
+  st "BUILD $tag rc=$rc groups=$n hits=$(grep -c '^BINCACHE [a-z-]*hit ' "$O/build-$tag.log") compiled=$(grep -c '^BINCACHE .*+built' "$O/build-$tag.log") peak_rss_gb=$(awk '/Maximum resident/ {if ($6>m) m=$6} END {printf "%.1f", m/1048576}' "$O/build-$tag.time")"
   return "$rc"
 }
 failed=0
 for b in $BOX_BUILDS; do case $b in
-  gpu-identical) mb "$b" identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V" \
-    MOJOLEARN_COMPILE_JOBS="$GPU_COMPILE_JOBS" || failed=1;;
-  host) mb "$b" host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= \
-    MOJOLEARN_COMPILE_JOBS="$HOST_COMPILE_JOBS" || failed=1;;
+  gpu-identical) mb "$b" identical || failed=1;;
+  host) mb "$b" host || failed=1;;
 esac; done
 [ "$failed" = 0 ] || die "required build failed; previous artifacts untouched; no verification"
 for d in identical host; do
@@ -204,7 +275,6 @@ fi
 [ -n "${RUNPOD_POD_ID:-}" ] || export RUNPOD_POD_ID=$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^RUNPOD_POD_ID=//p')
 [ -n "$RUNPOD_POD_ID" ] || unset RUNPOD_POD_ID
 CORPUS=$PWD/training/corpus/enwik8/input.txt
-HIGGS=/root/datasets/gbm-bench/higgs/higgs_speed.npz
 # run <dir> <name> <seconds> cmd...: one logged step; rc 124 is a timeout. Never aborts the chain.
 run() { local d=$1 n=$2 t=$3; shift 3; mkdir -p $d; timeout -k 30 $t "$@" > $d/$n.log 2>&1; local rc=$?
   printf '%s\t%s\n' "$n" "$rc" >> $d/status.tsv; st "$(basename $d) $n rc=$rc $(grep -v '^\s*$' $d/$n.log | tail -n 1 | cut -c1-160)"; return $rc; }
@@ -340,40 +410,10 @@ EOF
   st "WITNESS rows=$(($(wc -l < $X/witness.tsv)-1)) native==ptx: $(awk -F'\t' 'NR>1 && $8=="yes"{y++} NR>1 && $8=="NO"{n++} END{printf "yes=%d NO=%d", y, n}' $X/witness.tsv)"
 }
 
-# 4. NVIDIA STAGE64 A/B (sequence/ops.mojo GEMM_STAGE_V2: default off since 2026-10-19 on the AMD numbers;
-# NVIDIA never measured). Per-binding x_sequence builds into python/mojolearn/identical, where a member's own
-# file shadows the merged one; both arms build the same way, one run per arm, then the own file is removed so
-# the merged binding serves again. Same bits is the contract (one fold chain): a digest that moves is a bug.
-job_stage64() {
-  [ $V = nvidia ] || { st "STAGE64 SKIP: NVIDIA only (AMD measured 2026-10-19)"; return 0; }
-  local S=$O/stage64; mkdir -p $S
-  [ -f $HIGGS ] || { st "STAGE64 SKIP: $HIGGS not staged (tools/stage_from_r2.sh ... gbm-bench/higgs/higgs_speed.npz)"; return 0; }
-  local own=python/mojolearn/identical/_mojolearn_x_sequence.so pair tag defs algos
-  for pair in "default:" "stage64:MOJOLEARN_IDN_GEMM_STAGE64=1" "stage64-rec:MOJOLEARN_IDN_GEMM_STAGE64=1,MOJOLEARN_SEQ_REC_STAGE64=1"; do
-    tag=${pair%%:*}; defs=${pair#*:}; rm -f $own
-    MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_TARGET_COLUMN=nvidia MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_DEFINES=$defs \
-      run $S build-$tag 2400 pixi run -q sh bindings/build_x_sequence.sh || continue
-    for algos in lstm,gru,rnn mlp; do
-      MOJOLEARN_NUMERIC_MODE=identical run $S race-$tag-${algos//,/-} 2400 $PY tools/sequence_speed.py --algos $algos --data $HIGGS \
-        --rows 1000000 --out $S/race-$tag-${algos//,/-}.json
-      $PY -c "import json,sys; d=json.load(open(sys.argv[1])); [print('$tag\t%s\t%.4f\t%s' % (r['algo'], r['fit_s'], r['digest'])) for r in d['records']]" \
-        $S/race-$tag-${algos//,/-}.json >> $S/ab.tsv 2>> $S/ab.err
-    done
-  done
-  rm -f $own; st "STAGE64 own x_sequence removed; merged serves again"
-  $PY - $S/ab.tsv > $S/verdict.tsv 2>> $S/ab.err <<'EOF'
-import sys
-rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1]) if l.strip()]
-base = {a: (float(s), d) for t, a, s, d in rows if t == "default"}
-print("arm\talgo\tdefault_s\tarm_s\tarm/default\tsame_bits")
-for t, a, s, d in rows:
-    if t != "default" and a in base:
-        print("%s\t%s\t%.4f\t%.4f\t%.4f\t%s" % (t, a, base[a][0], float(s), float(s) / base[a][0], "yes" if d == base[a][1] else "NO"))
-EOF
-  while read -r line; do st "STAGE64 $line"; done < <(tail -n +2 $S/verdict.tsv)
-}
+# (job stage64, the NVIDIA MOJOLEARN_IDN_GEMM_STAGE64 / SEQ_REC_STAGE64 A/B, is gone: both defines were deleted
+# 2026-11-15, docs/TOMBSTONES.md.)
 
 for j in ${BOX_JOBS:-}; do
-  case $j in dist|graphopt|witness|stage64) st "JOB $j start"; job_$j; st "JOB $j end";; *) st "JOB $j unknown; skipped";; esac
+  case $j in dist|graphopt|witness) st "JOB $j start"; job_$j; st "JOB $j end";; *) st "JOB $j unknown; skipped";; esac
 done
 st "qualification complete; optional job results remain separate in their status.tsv files"

@@ -1,0 +1,6269 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-75f3-32-core-processor",
+ "commit": "58f304919890e6116cf5d99a0c8c7a95efd57135",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "tokenizer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "08b10bbc6f4b565b"
+   ],
+   "parts": [
+    {
+     "ids": "ed2a6e565ad478ee",
+     "decoded": "0960ee7396510405",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "1939b74da0333639"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6e235476cc31241f"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.11597552709281445,
+    "stages": {
+     "repeat=1/train": 0.10171378217637539,
+     "repeat=1/infer-save-reload": 0.0011353883892297745,
+     "repeat=1/batch": 0.012515789829194546,
+     "repeat=1/batchgrad": 9.229034185409546e-05,
+     "repeat=1/batchscale": 7.45607540011406e-05,
+     "repeat=1/ragged": 7.239077240228653e-05,
+     "repeat=1/stepfull": 6.935000419616699e-05
+    }
+   }
+  },
+  "tokenizer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "94eb3bf4446a414a"
+   ],
+   "parts": [
+    {
+     "ids": "ac5ec774bd28c29a",
+     "decoded": "2434a655a2b9395d",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "3b5edfe0d355b03e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "48f42ce5bfd939ae"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.023990281857550144,
+    "stages": {
+     "repeat=1/train": 0.007549109868705273,
+     "repeat=1/infer-save-reload": 0.001563563011586666,
+     "repeat=1/batch": 0.014405455440282822,
+     "repeat=1/batchgrad": 6.198044866323471e-05,
+     "repeat=1/batchscale": 5.553942173719406e-05,
+     "repeat=1/ragged": 5.4960139095783234e-05,
+     "repeat=1/stepfull": 5.452055484056473e-05
+    }
+   }
+  },
+  "tokenizer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e61f50aae6c6dbd9"
+   ],
+   "parts": [
+    {
+     "ids": "dbb4147d347bedd8",
+     "decoded": "88e6f419f5c5e001",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "471b06ab4e24044f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0a2474e3f79bd1c9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.019161192700266838,
+    "stages": {
+     "repeat=1/train": 0.007535289973020554,
+     "repeat=1/infer-save-reload": 0.0006259847432374954,
+     "repeat=1/batch": 0.010549093596637249,
+     "repeat=1/batchgrad": 6.522145122289658e-05,
+     "repeat=1/batchscale": 5.75995072722435e-05,
+     "repeat=1/ragged": 5.454942584037781e-05,
+     "repeat=1/stepfull": 5.454104393720627e-05
+    }
+   }
+  },
+  "tokenizer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "30fd2b8c5fdcf9e1"
+   ],
+   "parts": [
+    {
+     "ids": "6eb177c23b0d4377",
+     "decoded": "4ef02cedee2d7e75",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "c4af8e403d8a4ff5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "023683c8a469bd0b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.018769669346511364,
+    "stages": {
+     "repeat=1/train": 0.007198287174105644,
+     "repeat=1/infer-save-reload": 0.0006363149732351303,
+     "repeat=1/batch": 0.010493723675608635,
+     "repeat=1/batchgrad": 6.263144314289093e-05,
+     "repeat=1/batchscale": 5.519948899745941e-05,
+     "repeat=1/ragged": 5.522090941667557e-05,
+     "repeat=1/stepfull": 5.431007593870163e-05
+    }
+   }
+  },
+  "tokenizer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c55a5605e8de64b8"
+   ],
+   "parts": [
+    {
+     "ids": "02c25cc2577571b8",
+     "decoded": "3e6693ced86d1a36",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "e881084e86e9c718"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "52a4b46c6638283e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.018675479106605053,
+    "stages": {
+     "repeat=1/train": 0.007137047126889229,
+     "repeat=1/infer-save-reload": 0.0006258850917220116,
+     "repeat=1/batch": 0.010466423816978931,
+     "repeat=1/batchgrad": 6.26295804977417e-05,
+     "repeat=1/batchscale": 6.543099880218506e-05,
+     "repeat=1/ragged": 5.690101534128189e-05,
+     "repeat=1/stepfull": 5.7850033044815063e-05
+    }
+   }
+  },
+  "tokenizer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8b9f4a27b574806e"
+   ],
+   "parts": [
+    {
+     "ids": "0218a3e8d308caae",
+     "decoded": "d69f14f8374599ba",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "0ce2094be5609967"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ed742c6961610923"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.02294736262410879,
+    "stages": {
+     "repeat=1/train": 0.007652441039681435,
+     "repeat=1/infer-save-reload": 0.0010781092569231987,
+     "repeat=1/batch": 0.013782279565930367,
+     "repeat=1/batchgrad": 6.214994937181473e-05,
+     "repeat=1/batchscale": 5.517154932022095e-05,
+     "repeat=1/ragged": 5.452986806631088e-05,
+     "repeat=1/stepfull": 5.4230913519859314e-05
+    }
+   }
+  },
+  "tokenizer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "46adf25a7982a9a6"
+   ],
+   "parts": [
+    {
+     "ids": "76b640fd4ce37add",
+     "decoded": "b09de69b8e254549",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "5315d2de648bc57b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b3db5e08a72d5afc"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01842327695339918,
+    "stages": {
+     "repeat=1/train": 0.00703679583966732,
+     "repeat=1/infer-save-reload": 0.0006442954763770103,
+     "repeat=1/batch": 0.010305902920663357,
+     "repeat=1/batchgrad": 6.243959069252014e-05,
+     "repeat=1/batchscale": 5.564093589782715e-05,
+     "repeat=1/ragged": 6.292946636676788e-05,
+     "repeat=1/stepfull": 5.482044070959091e-05
+    }
+   }
+  },
+  "tokenizer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "08b10bbc6f4b565b"
+   ],
+   "parts": [
+    {
+     "ids": "ed2a6e565ad478ee",
+     "decoded": "0960ee7396510405",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "1939b74da0333639"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "428ccb5ef4e44ab4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01899160072207451,
+    "stages": {
+     "repeat=1/train": 0.006966934539377689,
+     "repeat=1/infer-save-reload": 0.000620565377175808,
+     "repeat=1/batch": 0.011034637689590454,
+     "repeat=1/batchgrad": 4.764087498188019e-05,
+     "repeat=1/batchscale": 4.1239894926548004e-05,
+     "repeat=1/ragged": 4.083104431629181e-05,
+     "repeat=1/stepfull": 4.077982157468796e-05
+    }
+   }
+  },
+  "tokenizer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd7e602ad066e3d5"
+   ],
+   "parts": [
+    {
+     "ids": "8b4dd35a33607074",
+     "decoded": "1beaafcce11fe487",
+     "roundtrip": "96d4915936ea48ba",
+     "n_vocab": "75bfe7b95e03a83f"
+    }
+   ],
+   "infer": [
+    "2188bf1646406ed2"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b680bde5e6e8d3c8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.018452906981110573,
+    "stages": {
+     "repeat=1/train": 0.0071109868586063385,
+     "repeat=1/infer-save-reload": 0.000593964010477066,
+     "repeat=1/batch": 0.010299942456185818,
+     "repeat=1/batchgrad": 6.134994328022003e-05,
+     "repeat=1/batchscale": 6.789062172174454e-05,
+     "repeat=1/ragged": 5.534011870622635e-05,
+     "repeat=1/stepfull": 5.418993532657623e-05
+    }
+   }
+  },
+  "bpe-trainer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ed8b49585df3d85"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008945290930569172,
+    "stages": {
+     "repeat=1/train": 0.008411087095737457,
+     "repeat=1/infer-save-reload": 1.8860213458538055e-05,
+     "repeat=1/batch": 6.945058703422546e-05,
+     "repeat=1/batchgrad": 5.9300102293491364e-05,
+     "repeat=1/batchscale": 5.8380886912345886e-05,
+     "repeat=1/ragged": 5.875155329704285e-05,
+     "repeat=1/stepfull": 5.844980478286743e-05
+    }
+   }
+  },
+  "bpe-trainer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6e31039662bb21c0"
+   ],
+   "parts": [
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "n_tokens": "d97a3e841ef6bd72",
+     "n_merges": "87b0e2146ab311bd",
+     "n_ties_broken": "3c80798a857ce605"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007920922711491585,
+    "stages": {
+     "repeat=1/train": 0.007438489235937595,
+     "repeat=1/infer-save-reload": 1.6549602150917053e-05,
+     "repeat=1/batch": 5.8970414102077484e-05,
+     "repeat=1/batchgrad": 5.5771321058273315e-05,
+     "repeat=1/batchscale": 6.374157965183258e-05,
+     "repeat=1/ragged": 5.492940545082092e-05,
+     "repeat=1/stepfull": 5.422160029411316e-05
+    }
+   }
+  },
+  "bpe-trainer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "228eeeab1e7e2a50"
+   ],
+   "parts": [
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "n_tokens": "177c88281b081a6f",
+     "n_merges": "957a46faf78b9dbc",
+     "n_ties_broken": "d13880042d3c804e"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0076267411932349205,
+    "stages": {
+     "repeat=1/train": 0.007144036702811718,
+     "repeat=1/infer-save-reload": 1.6320496797561646e-05,
+     "repeat=1/batch": 5.924049764871597e-05,
+     "repeat=1/batchgrad": 5.5670738220214844e-05,
+     "repeat=1/batchscale": 5.4970383644104004e-05,
+     "repeat=1/ragged": 5.4391101002693176e-05,
+     "repeat=1/stepfull": 5.408097058534622e-05
+    }
+   }
+  },
+  "bpe-trainer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "08115320ec780dad"
+   ],
+   "parts": [
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "n_tokens": "e531040db3dbc4e9",
+     "n_merges": "f25375b2e8683d0a",
+     "n_ties_broken": "a280e90014323e20"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00618634931743145,
+    "stages": {
+     "repeat=1/train": 0.005711506120860577,
+     "repeat=1/infer-save-reload": 1.6050413250923157e-05,
+     "repeat=1/batch": 5.885027348995209e-05,
+     "repeat=1/batchgrad": 5.564000457525253e-05,
+     "repeat=1/batchscale": 5.445070564746857e-05,
+     "repeat=1/ragged": 5.456991493701935e-05,
+     "repeat=1/stepfull": 5.4710544645786285e-05
+    }
+   }
+  },
+  "bpe-trainer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "10fc06a0110e6188"
+   ],
+   "parts": [
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "n_tokens": "17e8082df8df7c0e",
+     "n_merges": "ae1160511a9de01d",
+     "n_ties_broken": "51ba3d7d0f06b584"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007159278728067875,
+    "stages": {
+     "repeat=1/train": 0.006682814098894596,
+     "repeat=1/infer-save-reload": 1.6420148313045502e-05,
+     "repeat=1/batch": 5.916133522987366e-05,
+     "repeat=1/batchgrad": 5.591008812189102e-05,
+     "repeat=1/batchscale": 5.513988435268402e-05,
+     "repeat=1/ragged": 5.452055484056473e-05,
+     "repeat=1/stepfull": 5.479995161294937e-05
+    }
+   }
+  },
+  "bpe-trainer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f02e7de54464b781"
+   ],
+   "parts": [
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "7e9b25c6ab9fd0f4"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0069709662348032,
+    "stages": {
+     "repeat=1/train": 0.006485181860625744,
+     "repeat=1/infer-save-reload": 1.625996083021164e-05,
+     "repeat=1/batch": 5.889032036066055e-05,
+     "repeat=1/batchgrad": 5.5470503866672516e-05,
+     "repeat=1/batchscale": 5.497969686985016e-05,
+     "repeat=1/ragged": 5.7460740208625793e-05,
+     "repeat=1/stepfull": 5.741044878959656e-05
+    }
+   }
+  },
+  "bpe-trainer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f1dc3bb473bd2a1"
+   ],
+   "parts": [
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "n_tokens": "381a673f586a94a8",
+     "n_merges": "016f9b389c74a3af",
+     "n_ties_broken": "8fbcb01bac48432e"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006822765804827213,
+    "stages": {
+     "repeat=1/train": 0.0063584307208657265,
+     "repeat=1/infer-save-reload": 1.6110949218273163e-05,
+     "repeat=1/batch": 5.840044468641281e-05,
+     "repeat=1/batchgrad": 5.58607280254364e-05,
+     "repeat=1/batchscale": 5.490053445100784e-05,
+     "repeat=1/ragged": 5.456060171127319e-05,
+     "repeat=1/stepfull": 5.434080958366394e-05
+    }
+   }
+  },
+  "bpe-trainer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ed8b49585df3d85"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0068817948922514915,
+    "stages": {
+     "repeat=1/train": 0.006470160558819771,
+     "repeat=1/infer-save-reload": 1.6219913959503174e-05,
+     "repeat=1/batch": 4.605017602443695e-05,
+     "repeat=1/batchgrad": 4.159100353717804e-05,
+     "repeat=1/batchscale": 4.1039660573005676e-05,
+     "repeat=1/ragged": 5.081109702587128e-05,
+     "repeat=1/stepfull": 4.085991531610489e-05
+    }
+   }
+  },
+  "bpe-trainer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ce5f06bff1bca0ac"
+   ],
+   "parts": [
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "n_tokens": "841c67b5a6b86e8e",
+     "n_merges": "a2f2801070a3b256",
+     "n_ties_broken": "2125639377726aa4"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008981301449239254,
+    "stages": {
+     "repeat=1/train": 0.008456847630441189,
+     "repeat=1/infer-save-reload": 1.852959394454956e-05,
+     "repeat=1/batch": 6.340164691209793e-05,
+     "repeat=1/batchgrad": 5.9291720390319824e-05,
+     "repeat=1/batchscale": 5.843956023454666e-05,
+     "repeat=1/ragged": 5.809124559164047e-05,
+     "repeat=1/stepfull": 5.829986184835434e-05
+    }
+   }
+  },
+  "bpe-vocabulary/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.029710547998547554,
+    "stages": {
+     "repeat=1/train": 0.02921876311302185,
+     "repeat=1/infer-save-reload": 1.627020537853241e-05,
+     "repeat=1/batch": 6.095040589570999e-05,
+     "repeat=1/batchgrad": 5.594082176685333e-05,
+     "repeat=1/batchscale": 6.567966192960739e-05,
+     "repeat=1/ragged": 5.458015948534012e-05,
+     "repeat=1/stepfull": 5.4220668971538544e-05
+    }
+   }
+  },
+  "bpe-vocabulary/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "377756b17a7d25ef"
+   ],
+   "parts": [
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "identity": "0dcd935583ee5fe3",
+     "ids": "5524efea7dec2bde",
+     "decoded": "1801b04fd35666a1",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.030901366844773293,
+    "stages": {
+     "repeat=1/train": 0.030417362228035927,
+     "repeat=1/infer-save-reload": 1.6439706087112427e-05,
+     "repeat=1/batch": 6.212014704942703e-05,
+     "repeat=1/batchgrad": 5.596037954092026e-05,
+     "repeat=1/batchscale": 5.47897070646286e-05,
+     "repeat=1/ragged": 5.428120493888855e-05,
+     "repeat=1/stepfull": 5.4409727454185486e-05
+    }
+   }
+  },
+  "bpe-vocabulary/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ceba105a1d56a94b"
+   ],
+   "parts": [
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "identity": "63c408dab81d7396",
+     "ids": "f674f19737c5c97a",
+     "decoded": "6efad01f0e84ff17",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.037705191411077976,
+    "stages": {
+     "repeat=1/train": 0.03722679801285267,
+     "repeat=1/infer-save-reload": 1.65402889251709e-05,
+     "repeat=1/batch": 6.307102739810944e-05,
+     "repeat=1/batchgrad": 5.603954195976257e-05,
+     "repeat=1/batchscale": 5.4731033742427826e-05,
+     "repeat=1/ragged": 5.448050796985626e-05,
+     "repeat=1/stepfull": 5.4690055549144745e-05
+    }
+   }
+  },
+  "bpe-vocabulary/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e5784e8510c4fc65"
+   ],
+   "parts": [
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "identity": "d0c2adf17fe29c8a",
+     "ids": "1adcdd4e92998d09",
+     "decoded": "6e70c922a53f3a6d",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.026259959675371647,
+    "stages": {
+     "repeat=1/train": 0.025763606652617455,
+     "repeat=1/infer-save-reload": 1.9159168004989624e-05,
+     "repeat=1/batch": 6.162095814943314e-05,
+     "repeat=1/batchgrad": 5.538947880268097e-05,
+     "repeat=1/batchscale": 5.520135164260864e-05,
+     "repeat=1/ragged": 5.416944622993469e-05,
+     "repeat=1/stepfull": 6.478000432252884e-05
+    }
+   }
+  },
+  "bpe-vocabulary/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "29ca89044830a85f"
+   ],
+   "parts": [
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "identity": "52c762ba21d072b5",
+     "ids": "2642b8d543acd7b5",
+     "decoded": "ab30200095e80263",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.029247264377772808,
+    "stages": {
+     "repeat=1/train": 0.028759120032191277,
+     "repeat=1/infer-save-reload": 1.627020537853241e-05,
+     "repeat=1/batch": 5.957018584012985e-05,
+     "repeat=1/batchgrad": 6.647128611803055e-05,
+     "repeat=1/batchscale": 5.844142287969589e-05,
+     "repeat=1/ragged": 5.591008812189102e-05,
+     "repeat=1/stepfull": 5.450006574392319e-05
+    }
+   }
+  },
+  "bpe-vocabulary/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a785f5969fb257f2"
+   ],
+   "parts": [
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "identity": "8ae287188e26bca4",
+     "ids": "9ca1ca858615a0b0",
+     "decoded": "d79dd0f9e3dcad7a",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0359258558601141,
+    "stages": {
+     "repeat=1/train": 0.035406503826379776,
+     "repeat=1/infer-save-reload": 1.640990376472473e-05,
+     "repeat=1/batch": 8.748099207878113e-05,
+     "repeat=1/batchgrad": 6.86105340719223e-05,
+     "repeat=1/batchscale": 5.528051406145096e-05,
+     "repeat=1/ragged": 6.120093166828156e-05,
+     "repeat=1/stepfull": 5.440041422843933e-05
+    }
+   }
+  },
+  "bpe-vocabulary/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "173e1bde0f84a4ec"
+   ],
+   "parts": [
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "identity": "fda24323326979da",
+     "ids": "a978a736ec2d641d",
+     "decoded": "9b40a069bcb9d6a7",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.028154175728559494,
+    "stages": {
+     "repeat=1/train": 0.027629590593278408,
+     "repeat=1/infer-save-reload": 1.7249956727027893e-05,
+     "repeat=1/batch": 8.26595351099968e-05,
+     "repeat=1/batchgrad": 7.230974733829498e-05,
+     "repeat=1/batchscale": 5.8230943977832794e-05,
+     "repeat=1/ragged": 5.922000855207443e-05,
+     "repeat=1/stepfull": 5.456991493701935e-05
+    }
+   }
+  },
+  "bpe-vocabulary/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.03081604652106762,
+    "stages": {
+     "repeat=1/train": 0.03035083319991827,
+     "repeat=1/infer-save-reload": 1.9039958715438843e-05,
+     "repeat=1/batch": 5.545932799577713e-05,
+     "repeat=1/batchgrad": 4.5690685510635376e-05,
+     "repeat=1/batchscale": 4.4629909098148346e-05,
+     "repeat=1/ragged": 4.4560059905052185e-05,
+     "repeat=1/stepfull": 4.428066313266754e-05
+    }
+   }
+  },
+  "bpe-vocabulary/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cc0f30dc6d3e929b"
+   ],
+   "parts": [
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "identity": "581c697b6fd58ce8",
+     "ids": "96ff8817ef1b4463",
+     "decoded": "64d2d241bfb1b540",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.023334335535764694,
+    "stages": {
+     "repeat=1/train": 0.022841001860797405,
+     "repeat=1/infer-save-reload": 1.6310252249240875e-05,
+     "repeat=1/batch": 7.75512307882309e-05,
+     "repeat=1/batchgrad": 5.903933197259903e-05,
+     "repeat=1/batchscale": 5.495082587003708e-05,
+     "repeat=1/ragged": 5.468074232339859e-05,
+     "repeat=1/stepfull": 5.44106587767601e-05
+    }
+   }
+  },
+  "tokenized-corpus/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.027309018187224865,
+    "stages": {
+     "repeat=1/train": 0.02612299844622612,
+     "repeat=1/infer-save-reload": 2.1220184862613678e-05,
+     "repeat=1/batch": 0.0005367938429117203,
+     "repeat=1/batchgrad": 0.00018943194299936295,
+     "repeat=1/batchscale": 8.796155452728271e-05,
+     "repeat=1/ragged": 5.465000867843628e-05,
+     "repeat=1/stepfull": 4.650093615055084e-05
+    }
+   }
+  },
+  "tokenized-corpus/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ae1f351ccc072ed4"
+   ],
+   "parts": [
+    {
+     "tokens": "904190b383b57a1f",
+     "identity": "809d9887392d488e",
+     "batches": "388571ba350e36bf",
+     "schedule": "857a72df02ea9ae8",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.022362268529832363,
+    "stages": {
+     "repeat=1/train": 0.021810193546116352,
+     "repeat=1/infer-save-reload": 2.020038664340973e-05,
+     "repeat=1/batch": 9.709130972623825e-05,
+     "repeat=1/batchgrad": 4.7869980335235596e-05,
+     "repeat=1/batchscale": 4.6020373702049255e-05,
+     "repeat=1/ragged": 5.902070552110672e-05,
+     "repeat=1/stepfull": 4.6079978346824646e-05
+    }
+   }
+  },
+  "tokenized-corpus/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "775ab845193498f0"
+   ],
+   "parts": [
+    {
+     "tokens": "bdf2f9ecc4cc17d3",
+     "identity": "854bb3952a12b619",
+     "batches": "aec7bcef1f01aa9e",
+     "schedule": "983ddea91a391024",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.025297412648797035,
+    "stages": {
+     "repeat=1/train": 0.024747456423938274,
+     "repeat=1/infer-save-reload": 1.9059516489505768e-05,
+     "repeat=1/batch": 0.00015907175838947296,
+     "repeat=1/batchgrad": 4.674028605222702e-05,
+     "repeat=1/batchscale": 4.2681582272052765e-05,
+     "repeat=1/ragged": 4.2100436985492706e-05,
+     "repeat=1/stepfull": 4.259031265974045e-05
+    }
+   }
+  },
+  "tokenized-corpus/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "959cb78ae887b9c0"
+   ],
+   "parts": [
+    {
+     "tokens": "35662d24c6737efd",
+     "identity": "d770edf4debe2aa0",
+     "batches": "b03b4fe8e778fc64",
+     "schedule": "9c9bb827fbb9f834",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.031834544613957405,
+    "stages": {
+     "repeat=1/train": 0.029609346762299538,
+     "repeat=1/infer-save-reload": 3.247987478971481e-05,
+     "repeat=1/batch": 0.001165100373327732,
+     "repeat=1/batchgrad": 9.838119149208069e-05,
+     "repeat=1/batchscale": 6.162934005260468e-05,
+     "repeat=1/ragged": 5.648098886013031e-05,
+     "repeat=1/stepfull": 5.2590854465961456e-05
+    }
+   }
+  },
+  "tokenized-corpus/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79821375c8f5a221"
+   ],
+   "parts": [
+    {
+     "tokens": "47e79b47c91a1d14",
+     "identity": "f61937f940ec392f",
+     "batches": "de55e70bccc8ccc5",
+     "schedule": "92ba895b37e160be",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.033453887328505516,
+    "stages": {
+     "repeat=1/train": 0.03272511065006256,
+     "repeat=1/infer-save-reload": 1.9390136003494263e-05,
+     "repeat=1/batch": 0.00025683268904685974,
+     "repeat=1/batchgrad": 6.63604587316513e-05,
+     "repeat=1/batchscale": 4.712957888841629e-05,
+     "repeat=1/ragged": 4.6269968152046204e-05,
+     "repeat=1/stepfull": 5.6101009249687195e-05
+    }
+   }
+  },
+  "tokenized-corpus/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cb4a54b07b2acfcb"
+   ],
+   "parts": [
+    {
+     "tokens": "86555be593f61f74",
+     "identity": "f584ae38e5e8ed55",
+     "batches": "ce94986e9f620677",
+     "schedule": "419569c4af55eb72",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.024352935142815113,
+    "stages": {
+     "repeat=1/train": 0.023713229224085808,
+     "repeat=1/infer-save-reload": 1.918058842420578e-05,
+     "repeat=1/batch": 0.00014186091721057892,
+     "repeat=1/batchgrad": 7.126107811927795e-05,
+     "repeat=1/batchscale": 6.600003689527512e-05,
+     "repeat=1/ragged": 6.205029785633087e-05,
+     "repeat=1/stepfull": 5.9830956161022186e-05
+    }
+   }
+  },
+  "tokenized-corpus/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "41542aee2d840085"
+   ],
+   "parts": [
+    {
+     "tokens": "c132dfe8206a69b2",
+     "identity": "de7d8bf820adeb85",
+     "batches": "60ef5ae3b02ca571",
+     "schedule": "a89e3d7e0d7569cf",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.02386945951730013,
+    "stages": {
+     "repeat=1/train": 0.023223345167934895,
+     "repeat=1/infer-save-reload": 2.1200627088546753e-05,
+     "repeat=1/batch": 0.00012505054473876953,
+     "repeat=1/batchgrad": 7.247086614370346e-05,
+     "repeat=1/batchscale": 6.779097020626068e-05,
+     "repeat=1/ragged": 7.197912782430649e-05,
+     "repeat=1/stepfull": 6.36707991361618e-05
+    }
+   }
+  },
+  "tokenized-corpus/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.029396395199000835,
+    "stages": {
+     "repeat=1/train": 0.028996982611715794,
+     "repeat=1/infer-save-reload": 1.7459504306316376e-05,
+     "repeat=1/batch": 5.470961332321167e-05,
+     "repeat=1/batchgrad": 3.6479905247688293e-05,
+     "repeat=1/batchscale": 3.442075103521347e-05,
+     "repeat=1/ragged": 3.4360215067863464e-05,
+     "repeat=1/stepfull": 3.388151526451111e-05
+    }
+   }
+  },
+  "tokenized-corpus/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9d903acaa22028ed"
+   ],
+   "parts": [
+    {
+     "tokens": "794f53d794a1bc17",
+     "identity": "4d06d459289a0f8d",
+     "batches": "d7b56471fe1bd1a4",
+     "schedule": "c5c6af0d1e9f48db",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.02364397794008255,
+    "stages": {
+     "repeat=1/train": 0.02319216448813677,
+     "repeat=1/infer-save-reload": 1.706089824438095e-05,
+     "repeat=1/batch": 7.442012429237366e-05,
+     "repeat=1/batchgrad": 4.6591274440288544e-05,
+     "repeat=1/batchscale": 4.458986222743988e-05,
+     "repeat=1/ragged": 4.511140286922455e-05,
+     "repeat=1/stepfull": 4.4279731810092926e-05
+    }
+   }
+  },
+  "hf-tokenizer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a66a961b530381ae"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bd52da98a5aa9de7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07914587203413248,
+    "stages": {
+     "repeat=1/train": 0.07800724357366562,
+     "repeat=1/infer-save-reload": 0.0006231050938367844,
+     "repeat=1/batch": 0.00013927090913057327,
+     "repeat=1/batchgrad": 5.4051168262958527e-05,
+     "repeat=1/batchscale": 4.5170076191425323e-05,
+     "repeat=1/ragged": 4.4090673327445984e-05,
+     "repeat=1/stepfull": 4.355981945991516e-05
+    }
+   }
+  },
+  "hf-tokenizer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "51972798872aec9c"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "13766777471b8df0",
+     "llama3_ids": "13766777471b8df0",
+     "qwen2_ids": "13766777471b8df0",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "13766777471b8df0",
+     "specials": "8c4c3d03d7d6dd9a",
+     "decoded": "2434a655a2b9395d",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "edd443e990005131"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0867058327421546,
+    "stages": {
+     "repeat=1/train": 0.08558418415486813,
+     "repeat=1/infer-save-reload": 0.0006238250061869621,
+     "repeat=1/batch": 0.00011433009058237076,
+     "repeat=1/batchgrad": 4.864111542701721e-05,
+     "repeat=1/batchscale": 5.684979259967804e-05,
+     "repeat=1/ragged": 4.498939961194992e-05,
+     "repeat=1/stepfull": 4.37907874584198e-05
+    }
+   }
+  },
+  "hf-tokenizer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "98097fb17bd433f1"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "33c064b896480ec1",
+     "llama3_ids": "33c064b896480ec1",
+     "qwen2_ids": "33c064b896480ec1",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "33c064b896480ec1",
+     "specials": "7c33ce931c3692f3",
+     "decoded": "88e6f419f5c5e001",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "f382f25be8d68a80"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07748260907828808,
+    "stages": {
+     "repeat=1/train": 0.07638365961611271,
+     "repeat=1/infer-save-reload": 0.0006091548129916191,
+     "repeat=1/batch": 0.00011733174324035645,
+     "repeat=1/batchgrad": 4.826020449399948e-05,
+     "repeat=1/batchscale": 4.346109926700592e-05,
+     "repeat=1/ragged": 4.2640604078769684e-05,
+     "repeat=1/stepfull": 4.2331404983997345e-05
+    }
+   }
+  },
+  "hf-tokenizer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "87eeb61a3e92ff6e"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "6132bdc878267ba3",
+     "llama3_ids": "6132bdc878267ba3",
+     "qwen2_ids": "6132bdc878267ba3",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "6132bdc878267ba3",
+     "specials": "47c6b51cae8dce9b",
+     "decoded": "4ef02cedee2d7e75",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "f046458747ed168a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07074915524572134,
+    "stages": {
+     "repeat=1/train": 0.06964067742228508,
+     "repeat=1/infer-save-reload": 0.0006214743480086327,
+     "repeat=1/batch": 8.37305560708046e-05,
+     "repeat=1/batchgrad": 4.6650879085063934e-05,
+     "repeat=1/batchscale": 4.718918353319168e-05,
+     "repeat=1/ragged": 5.495082587003708e-05,
+     "repeat=1/stepfull": 4.7869980335235596e-05
+    }
+   }
+  },
+  "hf-tokenizer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5ece48a8ed9d767b"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "7dd08e33ed5cc18e",
+     "llama3_ids": "7dd08e33ed5cc18e",
+     "qwen2_ids": "7dd08e33ed5cc18e",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "7dd08e33ed5cc18e",
+     "specials": "a286800023849bcf",
+     "decoded": "3e6693ced86d1a36",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "59b5ad5dfbff7c9f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07099774666130543,
+    "stages": {
+     "repeat=1/train": 0.0699462890625,
+     "repeat=1/infer-save-reload": 0.0006138049066066742,
+     "repeat=1/batch": 6.71902671456337e-05,
+     "repeat=1/batchgrad": 4.942994564771652e-05,
+     "repeat=1/batchscale": 4.4980086386203766e-05,
+     "repeat=1/ragged": 4.419032484292984e-05,
+     "repeat=1/stepfull": 4.413072019815445e-05
+    }
+   }
+  },
+  "hf-tokenizer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e44a34c85554b75d"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "cf626f0df8ed4b34",
+     "llama3_ids": "cf626f0df8ed4b34",
+     "qwen2_ids": "cf626f0df8ed4b34",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "cf626f0df8ed4b34",
+     "specials": "fbccfd06e002895d",
+     "decoded": "d69f14f8374599ba",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "50ac7ce6d419bb19"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07943837344646454,
+    "stages": {
+     "repeat=1/train": 0.0783927459269762,
+     "repeat=1/infer-save-reload": 0.0006126547232270241,
+     "repeat=1/batch": 6.58910721540451e-05,
+     "repeat=1/batchgrad": 4.633050411939621e-05,
+     "repeat=1/batchscale": 4.330091178417206e-05,
+     "repeat=1/ragged": 4.305969923734665e-05,
+     "repeat=1/stepfull": 4.306994378566742e-05
+    }
+   }
+  },
+  "hf-tokenizer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9dde8189ff29a5a9"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "e8502ceef04e551f",
+     "llama3_ids": "e8502ceef04e551f",
+     "qwen2_ids": "e8502ceef04e551f",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "e8502ceef04e551f",
+     "specials": "795173f1e8316e26",
+     "decoded": "b09de69b8e254549",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "df35f527935672e5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07643712125718594,
+    "stages": {
+     "repeat=1/train": 0.07539864256978035,
+     "repeat=1/infer-save-reload": 0.0005891351029276848,
+     "repeat=1/batch": 6.675999611616135e-05,
+     "repeat=1/batchgrad": 4.6040862798690796e-05,
+     "repeat=1/batchscale": 5.73107972741127e-05,
+     "repeat=1/ragged": 4.4889748096466064e-05,
+     "repeat=1/stepfull": 4.4119544327259064e-05
+    }
+   }
+  },
+  "hf-tokenizer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a66a961b530381ae"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bd52da98a5aa9de7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07333192601799965,
+    "stages": {
+     "repeat=1/train": 0.0723560182377696,
+     "repeat=1/infer-save-reload": 0.0005929647013545036,
+     "repeat=1/batch": 4.900991916656494e-05,
+     "repeat=1/batchgrad": 3.567058593034744e-05,
+     "repeat=1/batchscale": 3.4411437809467316e-05,
+     "repeat=1/ragged": 3.33394855260849e-05,
+     "repeat=1/stepfull": 3.2891519367694855e-05
+    }
+   }
+  },
+  "hf-tokenizer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "66223380ebeea5bb"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "f7c0618396e2b2a2",
+     "llama3_ids": "f7c0618396e2b2a2",
+     "qwen2_ids": "f7c0618396e2b2a2",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "f7c0618396e2b2a2",
+     "specials": "5d0ca683c43f6569",
+     "decoded": "1beaafcce11fe487",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bb8c8efd6d04f6cf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.058291676454246044,
+    "stages": {
+     "repeat=1/train": 0.05726007744669914,
+     "repeat=1/infer-save-reload": 0.000582144595682621,
+     "repeat=1/batch": 6.235018372535706e-05,
+     "repeat=1/batchgrad": 5.374103784561157e-05,
+     "repeat=1/batchscale": 4.334002733230591e-05,
+     "repeat=1/ragged": 4.2749568819999695e-05,
+     "repeat=1/stepfull": 4.390999674797058e-05
+    }
+   }
+  },
+  "hf-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7f4b353f4b4a5355"
+   ],
+   "parts": [
+    {
+     "every": "084fccb384fc2388",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4281345009803772,
+    "stages": {
+     "repeat=1/train": 0.3709376147016883,
+     "repeat=1/infer-save-reload": 0.004626807756721973,
+     "repeat=1/batch": 0.05163912195712328,
+     "repeat=1/batchgrad": 0.0002076001837849617,
+     "repeat=1/batchscale": 0.00013770069926977158,
+     "repeat=1/ragged": 0.00015208125114440918,
+     "repeat=1/stepfull": 0.00014216173440217972
+    }
+   }
+  },
+  "hf-causal-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "11dde725985f9f51"
+   ],
+   "parts": [
+    {
+     "every": "7284b8f4f0c01f2f",
+     "logits": "31c30f8c0ea0ad9c",
+     "generate": "f4d5dd53c326b79f",
+     "step": "c4e5aa26c69859fd",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "efb513a514c39d67"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "73aef1570825d468"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.42292504850775003,
+    "stages": {
+     "repeat=1/train": 0.37028802931308746,
+     "repeat=1/infer-save-reload": 0.004956090822815895,
+     "repeat=1/batch": 0.0469267750158906,
+     "repeat=1/batchgrad": 0.0001110415905714035,
+     "repeat=1/batchscale": 7.738173007965088e-05,
+     "repeat=1/ragged": 7.115118205547333e-05,
+     "repeat=1/stepfull": 6.780028343200684e-05
+    }
+   }
+  },
+  "hf-causal-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "06adebec36f98223"
+   ],
+   "parts": [
+    {
+     "every": "ce2f66ccdc3a1ce1",
+     "logits": "a0641131ca09b686",
+     "generate": "4afb828154b71339",
+     "step": "fc54fbc702d33d1b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "9c6318b3ff266f0f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b2dfd7cd9cf444df"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.41864913422614336,
+    "stages": {
+     "repeat=1/train": 0.36596601363271475,
+     "repeat=1/infer-save-reload": 0.005032019689679146,
+     "repeat=1/batch": 0.04708647634834051,
+     "repeat=1/batchgrad": 7.603131234645844e-05,
+     "repeat=1/batchscale": 9.05115157365799e-05,
+     "repeat=1/ragged": 7.3959119617939e-05,
+     "repeat=1/stepfull": 6.87604770064354e-05
+    }
+   }
+  },
+  "hf-causal-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f1fb8af33a37bdc1"
+   ],
+   "parts": [
+    {
+     "every": "5c45f53ca50d21ea",
+     "logits": "5deeb2b77b89c972",
+     "generate": "6bb81335da9f8bac",
+     "step": "ad5c54965484fd0d",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "7da1277e513d4391"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "97051f4a7819532e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4210903849452734,
+    "stages": {
+     "repeat=1/train": 0.3641905402764678,
+     "repeat=1/infer-save-reload": 0.00500194076448679,
+     "repeat=1/batch": 0.05139040946960449,
+     "repeat=1/batchgrad": 8.250027894973755e-05,
+     "repeat=1/batchscale": 6.638001650571823e-05,
+     "repeat=1/ragged": 6.356090307235718e-05,
+     "repeat=1/stepfull": 6.207078695297241e-05
+    }
+   }
+  },
+  "hf-causal-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e4663f118483a431"
+   ],
+   "parts": [
+    {
+     "every": "aba8d3a1d7c0e969",
+     "logits": "3333a75866b17725",
+     "generate": "e62ad5b7bf17f82d",
+     "step": "1a1089653d39d322",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "0da206610b865ba6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0c52595dfa1179f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4331466807052493,
+    "stages": {
+     "repeat=1/train": 0.37941758055239916,
+     "repeat=1/infer-save-reload": 0.004910338670015335,
+     "repeat=1/batch": 0.048025503754615784,
+     "repeat=1/batchgrad": 0.00011418946087360382,
+     "repeat=1/batchscale": 8.196942508220673e-05,
+     "repeat=1/ragged": 7.414072751998901e-05,
+     "repeat=1/stepfull": 6.578024476766586e-05
+    }
+   }
+  },
+  "hf-causal-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f30542ceb69ff098"
+   ],
+   "parts": [
+    {
+     "every": "967aaacf6fd88147",
+     "logits": "8a41f078bdfa8cd9",
+     "generate": "240ca654c853a30f",
+     "step": "feec0c6daa5e24cc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "b6ddbb4c407db282"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ecda286f05a73eaa"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4276948971673846,
+    "stages": {
+     "repeat=1/train": 0.37085514329373837,
+     "repeat=1/infer-save-reload": 0.004641147330403328,
+     "repeat=1/batch": 0.051711213774979115,
+     "repeat=1/batchgrad": 7.44108110666275e-05,
+     "repeat=1/batchscale": 6.073992699384689e-05,
+     "repeat=1/ragged": 5.6969933211803436e-05,
+     "repeat=1/stepfull": 5.675014108419418e-05
+    }
+   }
+  },
+  "hf-causal-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7f4b353f4b4a5355"
+   ],
+   "parts": [
+    {
+     "every": "084fccb384fc2388",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.41990495566278696,
+    "stages": {
+     "repeat=1/train": 0.36349254474043846,
+     "repeat=1/infer-save-reload": 0.004583337344229221,
+     "repeat=1/batch": 0.05132162943482399,
+     "repeat=1/batchgrad": 7.970165461301804e-05,
+     "repeat=1/batchscale": 6.298068910837173e-05,
+     "repeat=1/ragged": 5.992967635393143e-05,
+     "repeat=1/stepfull": 5.861092358827591e-05
+    }
+   }
+  },
+  "hf-causal-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7f4b353f4b4a5355"
+   ],
+   "parts": [
+    {
+     "every": "084fccb384fc2388",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.41903096809983253,
+    "stages": {
+     "repeat=1/train": 0.3669299818575382,
+     "repeat=1/infer-save-reload": 0.004645617678761482,
+     "repeat=1/batch": 0.047036116011440754,
+     "repeat=1/batchgrad": 5.595013499259949e-05,
+     "repeat=1/batchscale": 4.4129788875579834e-05,
+     "repeat=1/ragged": 4.273001104593277e-05,
+     "repeat=1/stepfull": 4.108063876628876e-05
+    }
+   }
+  },
+  "hf-causal-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a316ab0ab037b960"
+   ],
+   "parts": [
+    {
+     "every": "b4fb323403747316",
+     "logits": "3a2a57ac304f0b7b",
+     "generate": "b9394c70797b4910",
+     "step": "e16068bef2cff08b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "bfaf8d3dadcbab54"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "921a3eb50c0e6439"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.415444178506732,
+    "stages": {
+     "repeat=1/train": 0.36128017771989107,
+     "repeat=1/infer-save-reload": 0.005247731693089008,
+     "repeat=1/batch": 0.04814551491290331,
+     "repeat=1/batchgrad": 8.183065801858902e-05,
+     "repeat=1/batchscale": 6.804149597883224e-05,
+     "repeat=1/ragged": 5.9419311583042145e-05,
+     "repeat=1/stepfull": 5.478132516145706e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06699866522103548,
+    "stages": {
+     "repeat=1/train": 0.06649271119385958,
+     "repeat=1/infer-save-reload": 2.287980169057846e-05,
+     "repeat=1/batch": 7.250159978866577e-05,
+     "repeat=1/batchgrad": 5.694013088941574e-05,
+     "repeat=1/batchscale": 5.4531730711460114e-05,
+     "repeat=1/ragged": 5.3860247135162354e-05,
+     "repeat=1/stepfull": 5.273986607789993e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ea6fa6626573f0d8"
+   ],
+   "parts": [
+    {
+     "greedy": "cf6edd207e633492",
+     "sampled": "3f0ccc9538ff34ef"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06789086200296879,
+    "stages": {
+     "repeat=1/train": 0.06740016862750053,
+     "repeat=1/infer-save-reload": 1.764018088579178e-05,
+     "repeat=1/batch": 6.52410089969635e-05,
+     "repeat=1/batchgrad": 5.465000867843628e-05,
+     "repeat=1/batchscale": 5.252007395029068e-05,
+     "repeat=1/ragged": 5.235150456428528e-05,
+     "repeat=1/stepfull": 5.26895746588707e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "16c7a2cf444fb58a"
+   ],
+   "parts": [
+    {
+     "greedy": "bcc0c483865538be",
+     "sampled": "d1b0113ab5e42f91"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06791245378553867,
+    "stages": {
+     "repeat=1/train": 0.06742377951741219,
+     "repeat=1/infer-save-reload": 1.704040914773941e-05,
+     "repeat=1/batch": 6.585009396076202e-05,
+     "repeat=1/batchgrad": 5.3991563618183136e-05,
+     "repeat=1/batchscale": 5.5519863963127136e-05,
+     "repeat=1/ragged": 5.097128450870514e-05,
+     "repeat=1/stepfull": 5.0129368901252747e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fe44a7aef13f6acf"
+   ],
+   "parts": [
+    {
+     "greedy": "b5142f7081a9ae65",
+     "sampled": "2d363dc8a3f9a4ed"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.063560557551682,
+    "stages": {
+     "repeat=1/train": 0.0630709445104003,
+     "repeat=1/infer-save-reload": 3.2959505915641785e-05,
+     "repeat=1/batch": 6.553065031766891e-05,
+     "repeat=1/batchgrad": 5.311146378517151e-05,
+     "repeat=1/batchscale": 5.1889568567276e-05,
+     "repeat=1/ragged": 5.013123154640198e-05,
+     "repeat=1/stepfull": 4.9740076065063477e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f18670237c50cd91"
+   ],
+   "parts": [
+    {
+     "greedy": "84068478c89740ff",
+     "sampled": "90ad6db50e19f500"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06782312225550413,
+    "stages": {
+     "repeat=1/train": 0.0673276586458087,
+     "repeat=1/infer-save-reload": 1.7051585018634796e-05,
+     "repeat=1/batch": 6.536953151226044e-05,
+     "repeat=1/batchgrad": 5.381088703870773e-05,
+     "repeat=1/batchscale": 5.22807240486145e-05,
+     "repeat=1/ragged": 5.1789917051792145e-05,
+     "repeat=1/stepfull": 6.728153675794601e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1399a55ba9f66ecd"
+   ],
+   "parts": [
+    {
+     "greedy": "fddb7770b50e705f",
+     "sampled": "8cdeeed7fffcf02d"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06810510437935591,
+    "stages": {
+     "repeat=1/train": 0.06762559991329908,
+     "repeat=1/infer-save-reload": 1.692958176136017e-05,
+     "repeat=1/batch": 6.497092545032501e-05,
+     "repeat=1/batchgrad": 5.4049305617809296e-05,
+     "repeat=1/batchscale": 5.220063030719757e-05,
+     "repeat=1/ragged": 5.2100978791713715e-05,
+     "repeat=1/stepfull": 5.08306547999382e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06816939450800419,
+    "stages": {
+     "repeat=1/train": 0.06770028080791235,
+     "repeat=1/infer-save-reload": 1.676008105278015e-05,
+     "repeat=1/batch": 6.398092955350876e-05,
+     "repeat=1/batchgrad": 5.4139643907547e-05,
+     "repeat=1/batchscale": 5.1841139793395996e-05,
+     "repeat=1/ragged": 5.125999450683594e-05,
+     "repeat=1/stepfull": 4.986114799976349e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "27a9d0f7b489c914"
+   ],
+   "parts": [
+    {
+     "greedy": "9c6c53355c79b9f5",
+     "sampled": "5286f2681a1e9c43"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06370776891708374,
+    "stages": {
+     "repeat=1/train": 0.06326618604362011,
+     "repeat=1/infer-save-reload": 1.6840174794197083e-05,
+     "repeat=1/batch": 6.617140024900436e-05,
+     "repeat=1/batchgrad": 4.730001091957092e-05,
+     "repeat=1/batchscale": 4.491955041885376e-05,
+     "repeat=1/ragged": 4.254095256328583e-05,
+     "repeat=1/stepfull": 4.2450614273548126e-05
+    }
+   }
+  },
+  "hf-causal-lm-stream/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9499112b167c1d35"
+   ],
+   "parts": [
+    {
+     "greedy": "975b2b774d035e8e",
+     "sampled": "d255e0802ed444a6"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06774741038680077,
+    "stages": {
+     "repeat=1/train": 0.06728556752204895,
+     "repeat=1/infer-save-reload": 1.673959195613861e-05,
+     "repeat=1/batch": 6.135087460279465e-05,
+     "repeat=1/batchgrad": 5.294010043144226e-05,
+     "repeat=1/batchscale": 5.131121724843979e-05,
+     "repeat=1/ragged": 5.0080008804798126e-05,
+     "repeat=1/stepfull": 4.978012293577194e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79890c8a561b93d9"
+   ],
+   "parts": [
+    {
+     "greedy": "cd3c55028f4aad42",
+     "sampled": "7bda506c41837b5b",
+     "prompt": "0c087c9ac16b6394",
+     "continuation": "62f8cafadd612319",
+     "resumed": "cd3c55028f4aad42",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10231379698961973,
+    "stages": {
+     "repeat=1/train": 0.10181493312120438,
+     "repeat=1/infer-save-reload": 1.699943095445633e-05,
+     "repeat=1/batch": 6.484147161245346e-05,
+     "repeat=1/batchgrad": 5.440041422843933e-05,
+     "repeat=1/batchscale": 5.255080759525299e-05,
+     "repeat=1/ragged": 6.50603324174881e-05,
+     "repeat=1/stepfull": 5.2220188081264496e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "88d27e1e96157b93"
+   ],
+   "parts": [
+    {
+     "greedy": "575fe7c4e0757857",
+     "sampled": "fdb244b314c6fcee",
+     "prompt": "bfa2ae17a0a57805",
+     "continuation": "c88a3b9e0372b371",
+     "resumed": "575fe7c4e0757857",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10118412785232067,
+    "stages": {
+     "repeat=1/train": 0.10068661533296108,
+     "repeat=1/infer-save-reload": 1.676008105278015e-05,
+     "repeat=1/batch": 6.08004629611969e-05,
+     "repeat=1/batchgrad": 5.316082388162613e-05,
+     "repeat=1/batchscale": 5.0419941544532776e-05,
+     "repeat=1/ragged": 5.2020885050296783e-05,
+     "repeat=1/stepfull": 5.027931183576584e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c5f99024cc4c65b"
+   ],
+   "parts": [
+    {
+     "greedy": "4c1bf1d773871d64",
+     "sampled": "0509839c1edb5607",
+     "prompt": "5d54ea4dce433758",
+     "continuation": "bdecc3ab22fb22f5",
+     "resumed": "4c1bf1d773871d64",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10398892033845186,
+    "stages": {
+     "repeat=1/train": 0.10350490733981133,
+     "repeat=1/infer-save-reload": 1.6880221664905548e-05,
+     "repeat=1/batch": 6.281118839979172e-05,
+     "repeat=1/batchgrad": 5.2629970014095306e-05,
+     "repeat=1/batchscale": 5.0191767513751984e-05,
+     "repeat=1/ragged": 6.48200511932373e-05,
+     "repeat=1/stepfull": 4.9551017582416534e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "24b47be3aa9c12c8"
+   ],
+   "parts": [
+    {
+     "greedy": "4786f955dd2310cf",
+     "sampled": "0580414946cf31c5",
+     "prompt": "c147284c934f4856",
+     "continuation": "104790a69e26cffc",
+     "resumed": "4786f955dd2310cf",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10279352217912674,
+    "stages": {
+     "repeat=1/train": 0.1022610766813159,
+     "repeat=1/infer-save-reload": 1.964997500181198e-05,
+     "repeat=1/batch": 7.310044020414352e-05,
+     "repeat=1/batchgrad": 5.735084414482117e-05,
+     "repeat=1/batchscale": 5.5089592933654785e-05,
+     "repeat=1/ragged": 5.336012691259384e-05,
+     "repeat=1/stepfull": 5.341973155736923e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e4f71ea88fcd602a"
+   ],
+   "parts": [
+    {
+     "greedy": "56fac802dd123f8b",
+     "sampled": "35964e0e42d8f418",
+     "prompt": "691e2ad3a9e24596",
+     "continuation": "d8f98ffbf9b53938",
+     "resumed": "56fac802dd123f8b",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10306707303971052,
+    "stages": {
+     "repeat=1/train": 0.10259972978383303,
+     "repeat=1/infer-save-reload": 1.697055995464325e-05,
+     "repeat=1/batch": 6.120093166828156e-05,
+     "repeat=1/batchgrad": 5.300994962453842e-05,
+     "repeat=1/batchscale": 5.165953189134598e-05,
+     "repeat=1/ragged": 5.102064460515976e-05,
+     "repeat=1/stepfull": 5.010981112718582e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cbeadb4945b7e101"
+   ],
+   "parts": [
+    {
+     "greedy": "a56e88bc611f291b",
+     "sampled": "503c23d95d2d9fbb",
+     "prompt": "e7983d70970102ca",
+     "continuation": "c49c117f42b4e8aa",
+     "resumed": "a56e88bc611f291b",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10457586590200663,
+    "stages": {
+     "repeat=1/train": 0.10380486026406288,
+     "repeat=1/infer-save-reload": 1.9960105419158936e-05,
+     "repeat=1/batch": 0.00013285130262374878,
+     "repeat=1/batchgrad": 0.00010299030691385269,
+     "repeat=1/batchscale": 8.553080260753632e-05,
+     "repeat=1/ragged": 7.958151400089264e-05,
+     "repeat=1/stepfull": 7.56802037358284e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79890c8a561b93d9"
+   ],
+   "parts": [
+    {
+     "greedy": "cd3c55028f4aad42",
+     "sampled": "7bda506c41837b5b",
+     "prompt": "0c087c9ac16b6394",
+     "continuation": "62f8cafadd612319",
+     "resumed": "cd3c55028f4aad42",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10392616130411625,
+    "stages": {
+     "repeat=1/train": 0.10336034558713436,
+     "repeat=1/infer-save-reload": 1.7900019884109497e-05,
+     "repeat=1/batch": 8.613057434558868e-05,
+     "repeat=1/batchgrad": 6.374996155500412e-05,
+     "repeat=1/batchscale": 6.670039147138596e-05,
+     "repeat=1/ragged": 5.9390440583229065e-05,
+     "repeat=1/stepfull": 5.755014717578888e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79890c8a561b93d9"
+   ],
+   "parts": [
+    {
+     "greedy": "cd3c55028f4aad42",
+     "sampled": "7bda506c41837b5b",
+     "prompt": "0c087c9ac16b6394",
+     "continuation": "62f8cafadd612319",
+     "resumed": "cd3c55028f4aad42",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10346142668277025,
+    "stages": {
+     "repeat=1/train": 0.10297879297286272,
+     "repeat=1/infer-save-reload": 1.7760321497917175e-05,
+     "repeat=1/batch": 7.74012878537178e-05,
+     "repeat=1/batchgrad": 5.157012492418289e-05,
+     "repeat=1/batchscale": 4.726089537143707e-05,
+     "repeat=1/ragged": 4.602968692779541e-05,
+     "repeat=1/stepfull": 4.431139677762985e-05
+    }
+   }
+  },
+  "hf-causal-lm-text/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "17bb456c70940ec1"
+   ],
+   "parts": [
+    {
+     "greedy": "900e8d442bc4a347",
+     "sampled": "4123cfe970045c4b",
+     "prompt": "33379c821f674640",
+     "continuation": "03a6fc850934ad8c",
+     "resumed": "900e8d442bc4a347",
+     "fingerprint": "0322b4f0108bf813",
+     "blocks": "e6bd86443df8ce07"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10222587641328573,
+    "stages": {
+     "repeat=1/train": 0.10169476270675659,
+     "repeat=1/infer-save-reload": 1.745019108057022e-05,
+     "repeat=1/batch": 7.48196616768837e-05,
+     "repeat=1/batchgrad": 7.81714916229248e-05,
+     "repeat=1/batchscale": 5.663000047206879e-05,
+     "repeat=1/ragged": 5.527026951313019e-05,
+     "repeat=1/stepfull": 5.45307993888855e-05
+    }
+   }
+  },
+  "hf-model-surface/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "06c5d1da840e72c5"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "f47de0b21de4de11",
+     "shards": "0b935b3cef5e1e1b",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06152457185089588,
+    "stages": {
+     "repeat=1/train": 0.06100545730441809,
+     "repeat=1/infer-save-reload": 1.742970198392868e-05,
+     "repeat=1/batch": 7.124058902263641e-05,
+     "repeat=1/batchgrad": 6.95614144206047e-05,
+     "repeat=1/batchscale": 5.725119262933731e-05,
+     "repeat=1/ragged": 5.440041422843933e-05,
+     "repeat=1/stepfull": 5.44404610991478e-05
+    }
+   }
+  },
+  "hf-model-surface/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ce308d9e8131929c"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "20452532fca9526f",
+     "shards": "215f3276c6b72c04",
+     "weights": "634fedb46815a2fa",
+     "logits": "6270a0ad0674d081",
+     "gathered": "6270a0ad0674d081",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.058850170113146305,
+    "stages": {
+     "repeat=1/train": 0.058258614502847195,
+     "repeat=1/infer-save-reload": 2.001039683818817e-05,
+     "repeat=1/batch": 7.896125316619873e-05,
+     "repeat=1/batchgrad": 6.343144923448563e-05,
+     "repeat=1/batchscale": 5.987938493490219e-05,
+     "repeat=1/ragged": 5.996040999889374e-05,
+     "repeat=1/stepfull": 5.834084004163742e-05
+    }
+   }
+  },
+  "hf-model-surface/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "865762ffb2abf0b9"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "1d9c6a3494b3b984",
+     "shards": "9a0951e692b40642",
+     "weights": "634fedb46815a2fa",
+     "logits": "59c536b0bb143a06",
+     "gathered": "59c536b0bb143a06",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.05688811372965574,
+    "stages": {
+     "repeat=1/train": 0.05641129054129124,
+     "repeat=1/infer-save-reload": 1.693982630968094e-05,
+     "repeat=1/batch": 6.523076444864273e-05,
+     "repeat=1/batchgrad": 5.3940340876579285e-05,
+     "repeat=1/batchscale": 5.149003118276596e-05,
+     "repeat=1/ragged": 4.991050809621811e-05,
+     "repeat=1/stepfull": 4.931073635816574e-05
+    }
+   }
+  },
+  "hf-model-surface/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6b44f7d34ecf4fc1"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "077bb412555c02f9",
+     "shards": "1f0c715bfeaa48b8",
+     "weights": "634fedb46815a2fa",
+     "logits": "c095f863aed358b2",
+     "gathered": "c095f863aed358b2",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06185527332127094,
+    "stages": {
+     "repeat=1/train": 0.061346529982984066,
+     "repeat=1/infer-save-reload": 1.737009733915329e-05,
+     "repeat=1/batch": 6.906036287546158e-05,
+     "repeat=1/batchgrad": 7.039029151201248e-05,
+     "repeat=1/batchscale": 5.2791088819503784e-05,
+     "repeat=1/ragged": 5.070958286523819e-05,
+     "repeat=1/stepfull": 5.0310976803302765e-05
+    }
+   }
+  },
+  "hf-model-surface/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fabc532da30ea5f2"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "69c1b182ea104baf",
+     "shards": "b1e3cdb645e10d0c",
+     "weights": "634fedb46815a2fa",
+     "logits": "b244a585d18b8dc5",
+     "gathered": "b244a585d18b8dc5",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06048008240759373,
+    "stages": {
+     "repeat=1/train": 0.05996821913868189,
+     "repeat=1/infer-save-reload": 1.729000359773636e-05,
+     "repeat=1/batch": 8.013006299734116e-05,
+     "repeat=1/batchgrad": 5.634035915136337e-05,
+     "repeat=1/batchscale": 5.4531730711460114e-05,
+     "repeat=1/ragged": 5.4739415645599365e-05,
+     "repeat=1/stepfull": 5.1880255341529846e-05
+    }
+   }
+  },
+  "hf-model-surface/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59423772ce99fff1"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "ea65deb0a5612f00",
+     "shards": "8e45d44bcf714710",
+     "weights": "634fedb46815a2fa",
+     "logits": "ed520e56620cb2d6",
+     "gathered": "ed520e56620cb2d6",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.05631595943123102,
+    "stages": {
+     "repeat=1/train": 0.05583034548908472,
+     "repeat=1/infer-save-reload": 1.7220154404640198e-05,
+     "repeat=1/batch": 6.789062172174454e-05,
+     "repeat=1/batchgrad": 5.483068525791168e-05,
+     "repeat=1/batchscale": 5.343090742826462e-05,
+     "repeat=1/ragged": 5.24008646607399e-05,
+     "repeat=1/stepfull": 5.1519833505153656e-05
+    }
+   }
+  },
+  "hf-model-surface/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "31d8b2293a10fd37"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "d081378cab9c9b16",
+     "shards": "d8595c08cad58602",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06070638541132212,
+    "stages": {
+     "repeat=1/train": 0.06020095106214285,
+     "repeat=1/infer-save-reload": 1.673959195613861e-05,
+     "repeat=1/batch": 6.913114339113235e-05,
+     "repeat=1/batchgrad": 5.5779702961444855e-05,
+     "repeat=1/batchscale": 5.3919851779937744e-05,
+     "repeat=1/ragged": 5.2821822464466095e-05,
+     "repeat=1/stepfull": 5.22807240486145e-05
+    }
+   }
+  },
+  "hf-model-surface/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "06c5d1da840e72c5"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "f47de0b21de4de11",
+     "shards": "0b935b3cef5e1e1b",
+     "weights": "634fedb46815a2fa",
+     "logits": "8bb6dc4443942376",
+     "gathered": "8bb6dc4443942376",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.059911297634243965,
+    "stages": {
+     "repeat=1/train": 0.05944336485117674,
+     "repeat=1/infer-save-reload": 1.7200596630573273e-05,
+     "repeat=1/batch": 7.59512186050415e-05,
+     "repeat=1/batchgrad": 4.7750771045684814e-05,
+     "repeat=1/batchscale": 4.534982144832611e-05,
+     "repeat=1/ragged": 4.309043288230896e-05,
+     "repeat=1/stepfull": 4.217959940433502e-05
+    }
+   }
+  },
+  "hf-model-surface/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4a8b99b9c7b1e162"
+   ],
+   "parts": [
+    {
+     "config": "96f7412cc13836ee",
+     "plan": "d82c88bb497c1294",
+     "header": "ae058d68022b2e91",
+     "mapped": "eb55cee85639be89",
+     "shards": "6c1a40775d74e793",
+     "weights": "634fedb46815a2fa",
+     "logits": "39f3e6c859549ae5",
+     "gathered": "39f3e6c859549ae5",
+     "flags": "c1a79284c8bfc104"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; its outputs are train parts, digested whole)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.056380280293524265,
+    "stages": {
+     "repeat=1/train": 0.05588408745825291,
+     "repeat=1/infer-save-reload": 1.6910023987293243e-05,
+     "repeat=1/batch": 7.209088653326035e-05,
+     "repeat=1/batchgrad": 5.8230943977832794e-05,
+     "repeat=1/batchscale": 5.403999239206314e-05,
+     "repeat=1/ragged": 5.22807240486145e-05,
+     "repeat=1/stepfull": 5.21903857588768e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "linalg-eigh": "fixed-order-gram-1",
+  "x-metrics-regression": "metrics-undefined-weighted-score-1",
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "tsvd": "explained-variance-train-contract-1",
+  "umap": "save-option-extras-contract-2",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "et-clf-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-class-weights": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-multiclass-offgrid": "weighted-trees-batch-2026-10-20-v1",
+  "et-reg-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+  "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 75F3 32-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "MIXED:cpu,unreadable",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host",
+   "_mojolearn_x_linear": "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster": "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors": "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp": "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep": "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence": "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees": "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn": "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann": "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics": "_mojolearn_x_metrics_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host",
+   "_mojolearn_runtime_classical_host",
+   "_mojolearn_runtime_sequential_host",
+   "_mojolearn_runtime_manifold_host",
+   "_mojolearn_runtime_model_selection_host",
+   "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "svc-gamma-scale",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "et-clf-weighted",
+   "et-reg-weighted",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "scaler-fit-transform",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gp-lml-theta",
+   "gpc",
+   "gpc-multiclass",
+   "mamba1-decode-session",
+   "mamba2-decode-session",
+   "mamba3-decode-session",
+   "transformer-decode-session",
+   "transformer-decode-load-state",
+   "transformer-forward-tape",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "safetensors-widen-f16",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "pca-inverse",
+   "pca-whiten-inverse",
+   "tsvd-inverse",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-multiclass-defaults",
+   "gbdt-class-weights",
+   "gbdt-multiclass-offgrid",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-binary-columns",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-ranking-defaults",
+   "gbdt-query-rmse",
+   "gbdt-query-rmse-pointwise",
+   "gbdt-pair-logit-pointwise",
+   "gbdt-yeti-rank-pointwise",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "resample-bca",
+   "resample-unpaired",
+   "resample-perm-samples",
+   "resample-utils",
+   "native-schedule-series",
+   "optim-owner-lifecycle",
+   "optim-io-capability",
+   "optim-sgd",
+   "training-chunked-lm-head",
+   "training-mlp-sessions",
+   "public-residual-dropout",
+   "public-numeric-metadata",
+   "public-set-params",
+   "neural-trainer-unfused",
+   "samba-optimizer-state",
+   "optim-adam-clip",
+   "optim-maximize",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "ivf-short-fill",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "cross-vendor-fold",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "hf-causal-lm-stream",
+   "hf-causal-lm-text",
+   "hf-model-surface",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "gemm-int15",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "saved-model-host-infer-trees",
+   "classical-float16-sequences",
+   "lowbit-conversions",
+   "grad-accumulation",
+   "x-sgd-clf",
+   "x-sgd-reg",
+   "x-glm-poisson",
+   "x-glm-gamma",
+   "x-glm-tweedie",
+   "x-huber",
+   "x-bayes-ridge",
+   "x-ard",
+   "x-lars",
+   "x-lasso-lars",
+   "x-quantile",
+   "x-perceptron",
+   "x-pa-clf",
+   "x-pa-reg",
+   "x-sgd-ocsvm",
+   "x-ridge-clf",
+   "x-ridge-cv",
+   "x-lasso-cv",
+   "x-enet-cv",
+   "x-logistic-cv",
+   "x-isotonic",
+   "x-glm-poisson-sw",
+   "x-huber-sw",
+   "x-quantile-sw",
+   "x-sgd-clf-w",
+   "x-sgd-reg-sw",
+   "x-ridge-clf-w",
+   "x-ridge-cv-sw",
+   "x-bayes-ridge-sw",
+   "x-logistic-cv-w",
+   "x-lasso-lars-pos",
+   "x-lasso-cv-pos",
+   "x-huber-outliers",
+   "x-sgd-clf-proba",
+   "x-logistic-cv-proba",
+   "x-ridge-cv-kfold",
+   "x-cluster-minibatch-kmeans",
+   "x-cluster-bisecting-kmeans",
+   "x-cluster-meanshift",
+   "x-cluster-optics",
+   "x-cluster-affinity-propagation",
+   "x-cluster-bgmm",
+   "x-cluster-minibatch-options",
+   "x-cluster-bisecting-options",
+   "x-cluster-meanshift-binned",
+   "x-cluster-optics-metrics",
+   "x-cluster-ap-precomputed",
+   "x-cluster-bgmm-inits",
+   "x-cluster-bgmm-covtypes",
+   "x-cluster-minibatch-partial",
+   "x-cluster-gmm-options",
+   "x-cluster-dbscan-metrics",
+   "x-cluster-hdbscan-epsilon",
+   "x-cluster-kmeans-init",
+   "x-cluster-agglo-linkages",
+   "x-cluster-agglo-connectivity",
+   "x-cluster-spectral-affinities",
+   "x-neighbors-lof",
+   "x-neighbors-nearest-centroid",
+   "x-neighbors-ocsvm",
+   "x-neighbors-kpca",
+   "x-neighbors-poly-sketch",
+   "x-neighbors-additive-chi2",
+   "x-neighbors-skewed-chi2",
+   "x-neighbors-label-propagation",
+   "x-neighbors-label-spreading",
+   "x-neighbors-knn-imputer",
+   "x-neighbors-pagerank",
+   "x-neighbors-connected-components",
+   "x-neighbors-louvain",
+   "x-neighbors-svgp",
+   "x-neighbors-gamma-scale",
+   "x-neighbors-svm-weights",
+   "x-neighbors-svc-sigmoid",
+   "x-neighbors-svr-kernels",
+   "x-neighbors-svc-multiclass",
+   "x-neighbors-krr-options",
+   "x-neighbors-svm-precomputed",
+   "x-neighbors-km-kernels",
+   "x-neighbors-gp-cov",
+   "x-neighbors-metrics",
+   "x-neighbors-svc-probability",
+   "public-sparse-encode",
+   "x-decomp-rsvd-rank-deficient",
+   "x-decomp-umap-options",
+   "x-decomp-pca-randomized",
+   "x-decomp-als",
+   "x-decomp-robust-cov",
+   "x-decomp-manifold",
+   "x-decomp-lda",
+   "x-decomp-sparse-pca",
+   "x-decomp-dict-learning",
+   "x-decomp-pls",
+   "x-decomp-lstsq-rsvd",
+   "x-decomp-lu",
+   "x-decomp-spectral-rbf",
+   "x-decomp-factor-analysis",
+   "x-decomp-fastica",
+   "x-decomp-nmf",
+   "x-decomp-ipca",
+   "x-decomp-grp",
+   "x-decomp-srp",
+   "x-decomp-eigh-wide-linalg",
+   "x-decomp-eigh-wide-fastica",
+   "x-decomp-eigh-wide-rotation",
+   "x-decomp-eigh-wide-factor-analysis",
+   "x-decomp-eigh-wide-mincovdet",
+   "x-decomp-eigh-wide-kpca",
+   "x-prep-robust-scaler",
+   "x-prep-maxabs-scaler",
+   "x-prep-ordinal-encoder",
+   "x-prep-onehot-encoder",
+   "x-prep-target-encoder",
+   "x-prep-simple-imputer",
+   "x-prep-kbins",
+   "x-prep-gaussian-nb",
+   "x-prep-multinomial-nb",
+   "x-prep-bernoulli-nb",
+   "x-prep-lda",
+   "x-prep-qda",
+   "x-prep-quantile-transformer",
+   "x-prep-power-transformer",
+   "x-prep-normalizer",
+   "x-prep-polynomial-features",
+   "x-prep-spline-transformer",
+   "x-prep-binarizer",
+   "x-prep-label-encoder",
+   "x-prep-label-binarizer",
+   "x-prep-multilabel-binarizer",
+   "x-prep-iterative-imputer",
+   "x-prep-variance-threshold",
+   "x-prep-select-kbest",
+   "x-prep-mutual-info",
+   "x-prep-rfe",
+   "x-prep-complement-nb",
+   "x-prep-categorical-nb",
+   "x-prep-priors",
+   "x-prep-robust-scaler-unit-variance",
+   "x-prep-simple-imputer-indicator",
+   "x-prep-inverse-transforms",
+   "x-prep-encoder-options",
+   "x-prep-da-solvers",
+   "x-prep-nb-weights",
+   "x-prep-encoder-categories",
+   "x-prep-user-objects",
+   "x-prep-label-binarizer-multilabel",
+   "x-prep-infrequent",
+   "x-prep-nb-partial",
+   "x-prep-kbins-methods",
+   "x-prep-score-edges",
+   "x-prep-mi-discrete",
+   "x-prep-kbins-weights",
+   "x-prep-spline-options",
+   "x-prep-iterative-options",
+   "x-prep-scaler-options",
+   "sequence-lstm",
+   "sequence-gru",
+   "sequence-rmsprop",
+   "sequence-adagrad",
+   "sequence-autoarima",
+   "sequence-stl",
+   "sequence-var",
+   "sequence-mlp",
+   "sequence-rnn",
+   "sequence-lion",
+   "sequence-adafactor",
+   "sequence-lamb",
+   "sequence-adamax",
+   "sequence-nadam",
+   "sequence-lr-schedulers",
+   "sequence-layernorm",
+   "sequence-theta",
+   "sequence-croston",
+   "sequence-ets",
+   "sequence-garch",
+   "sequence-prophet",
+   "sequence-moe",
+   "sequence-tape-sequential",
+   "sequence-tape-program",
+   "sequence-moe-backward",
+   "sequence-export-roundtrip",
+   "sequence-onnx-import",
+   "sequence-program-save-load",
+   "sequence-device-tensor",
+   "sequence-adafactor-device",
+   "sequence-lamb-device",
+   "sequence-optimizer-state",
+   "sequence-layernorm-backward",
+   "public-theta-variants",
+   "trees-dt-clf",
+   "trees-dt-reg",
+   "trees-dt-random",
+   "trees-rf-weighted",
+   "trees-et-deviance",
+   "trees-gbdt-multirmse",
+   "trees-bagging-clf",
+   "trees-bagging-reg",
+   "trees-adaboost-clf",
+   "trees-adaboost-reg",
+   "trees-dart-reg",
+   "trees-dart-clf",
+   "trees-dart-options",
+   "trees-random-embedding",
+   "trees-voting-clf",
+   "trees-voting-reg",
+   "trees-stacking-clf",
+   "trees-stacking-reg",
+   "trees-multioutput",
+   "trees-onevsrest",
+   "trees-calibrated",
+   "trees-oob-cv-link",
+   "trees-shap-tree",
+   "trees-shap-kernel",
+   "trees-shap-permutation",
+   "multioutput-ridge",
+   "x-cnn-conv2d",
+   "x-cnn-conv1d",
+   "x-cnn-pool",
+   "x-cnn-trainer",
+   "x-cnn-batchnorm",
+   "x-cnn-dropout2d",
+   "x-cnn-globalpool",
+   "x-cnn-resnet-block",
+   "x-cnn-gcn",
+   "x-cnn-sage",
+   "x-cnn-conv-options",
+   "x-cnn-pool-options",
+   "x-cnn-bn-options",
+   "x-cnn-gnn-options",
+   "x-cnn-trainer-options",
+   "public-cnn-layer-fit",
+   "public-cnn-classifier-predict",
+   "x-ann-ivf-pq",
+   "x-ann-tsne",
+   "x-ann-tsne-pca",
+   "x-ann-cagra",
+   "x-ann-ivf-sq",
+   "x-ann-refine",
+   "x-ann-filter",
+   "x-ann-ivf-rabitq",
+   "ivf-filter",
+   "x-ann-cagra-filter",
+   "x-ann-refine-euclidean",
+   "x-metrics-classification",
+   "x-metrics-regression",
+   "x-metrics-ranking",
+   "x-metrics-cluster",
+   "x-metrics-splitters",
+   "x-metrics-search",
+   "x-metrics-classification-report",
+   "x-metrics-permutation-test-score",
+   "public-scorer-factories",
+   "public-validation-learning-curves",
+   "public-randomized-search"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_native_forest_host": {
+    "error": "ImportError: mojolearn: /root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so exports no native_forest_host_vendor(); a host binding must read back its vendor, numeric mode and column",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616
+   },
+   "_mojolearn_native_host": {
+    "error": "ImportError: mojolearn: /root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so exports no native_host_vendor(); a host binding must read back its vendor, numeric mode and column",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224
+   },
+   "_mojolearn_native_neural_host": {
+    "error": "ImportError: mojolearn: /root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so exports no native_neural_host_vendor(); a host binding must read back its vendor, numeric mode and column",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656
+   },
+   "_mojolearn_native_tokenizer_host": {
+    "error": "ImportError: mojolearn: /root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so exports no native_tokenizer_host_vendor(); a host binding must read back its vendor, numeric mode and column",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848
+   },
+   "_mojolearn_native_x_host": {
+    "error": "ImportError: mojolearn: /root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so exports no native_x_host_vendor(); a host binding must read back its vendor, numeric mode and column",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_classical_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_manifold_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_model_selection_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_sequential_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_x_ann_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_cluster_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_cnn_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_x_decomp_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_linear_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_metrics_host": {
+    "column": "cpu",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "sabotage": false
+   },
+   "_mojolearn_x_neighbors_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_prep_host": {
+    "column": "cpu",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "sabotage": false
+   },
+   "_mojolearn_x_sequence_host": {
+    "column": "cpu",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "sabotage": false
+   },
+   "_mojolearn_x_trees_host": {
+    "column": "cpu",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.64",
+  "package_dir": "/root/mojolearn-identity/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "binding_provenance_protocol": "loaded-native-v2",
+  "bindings": [
+   {
+    "module": "mojolearn._host._mojolearn_arima_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_byte_lm_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_core_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_infer_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_estimators_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forecast_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forest_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gbdt_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_infer_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_infer_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_search_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_kernel_methods_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_linalg_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mamba_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_metrics_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_infer_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_native_forest_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_native_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_native_neural_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_native_tokenizer_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_native_x_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_neural_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_preprocessing_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_resample_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_rf_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_classical_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_manifold_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_model_selection_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_sequential_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_solver_host",
+    "sha256": "eb1f78fbc8ef93eab5accfafea678bdacb7efa8bce5369c916004984fb30997f",
+    "size": 31017224,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_svm_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tokenizer_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_training_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_transformer_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_trees_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tsa_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_ann_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_cluster_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_cnn_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_decomp_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_linear_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_metrics_host",
+    "sha256": "a681c65f6849870d796dedd61ae7678ab5cbc9219c1a029de7cc22c13bbc4d28",
+    "size": 30870848,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_neighbors_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_prep_host",
+    "sha256": "17cb1bfc90b80a217f93c33a816293a65af0ec37fdaffe08bec2ed88f3c2dd74",
+    "size": 15642240,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_x_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_sequence_host",
+    "sha256": "b516f2a318b019a6fe78d58d22972ec28aba0280a8d8d950eea1be5af36a4780",
+    "size": 18442656,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_trees_host",
+    "sha256": "429e622ba02d560e4400b7969ef3e964936140afff25f132e0bc5ed6c40d215a",
+    "size": 5782616,
+    "file": "/root/mojolearn-identity/python/mojolearn/host/_mojolearn_native_forest_host.so",
+    "path_source": "__file__"
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 2,
+  "source_sha256": "0eb64a005ef7c8cc5b84614744acdd2270f436f6650ff84cbfd43e829136aa00",
+  "options": {
+   "require_backend": "cpu",
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "tokenizer,bpe-trainer,bpe-vocabulary,tokenized-corpus,hf-tokenizer,hf-causal-lm,hf-causal-lm-stream,hf-causal-lm-text,hf-model-surface",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "7d7e318f589e13a3260471d88b3667ae609191167ce221ea6df669bb84558002",
+  "environment_digests": {
+   "BLIS_NUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "MKL_NUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "MODULAR_HOME": "91db7accab16a3237e27590c607e714f6bf27cc6dfacfc51c45f424fb2de46a6",
+   "MOJOLEARN_BOX_PERSIST": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "MOJOLEARN_CPU_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "MOJOLEARN_NUMERIC_MODE": "319e2ba078f51cfad133ae161e413fb38dcfdd3b5348907aa82d909f8d86d800",
+   "MOJOLEARN_PERSIST_TAG": "ed887a76adac0f3c71e83cf624ba4ace711e94aa7d2231393519dd30eede91bd",
+   "MOJOLEARN_RESULTS_DIR": "c74c7b7638e7a43c2a94b25736daf45c544729e2bd219f1d5536cc91051d9286",
+   "MOJOLEARN_VENDOR": "68ab84f7c6d0f5781585eb1b5289499fb29081b918f71ebddb5f72021c9ef9c5",
+   "NUMEXPR_MAX_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "NUMEXPR_NUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "OMP_DYNAMIC": "4e523a5ae5b4636c75901b79fafbd3912e41dc7987414e688b09d4b436ff22b3",
+   "OMP_MAX_ACTIVE_LEVELS": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+   "OMP_NUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "OMP_THREAD_LIMIT": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "OPENBLAS_NUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+   "VECLIB_MAXIMUM_THREADS": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+  },
+  "provenance": {
+   "commit": "58f304919890e6116cf5d99a0c8c7a95efd57135",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-75f3-32-core-processor",
+   "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ },
+ "execution_leases": [
+  {
+   "kind": "mac_slot",
+   "token_present": false,
+   "token_sha256": null
+  }
+ ]
+}

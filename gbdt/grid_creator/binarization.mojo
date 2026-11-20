@@ -68,7 +68,7 @@ from checks.numerics import (
 #: and the host column move together. Defined here because this module is
 #: GPU-free and both sides import it.
 #: `-D MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host `best_split` on both sides.
+#: `-D MOJOLEARN_IDN_ALL_OFF`, deleted 2026-11-15) restored the host `best_split` on both sides.
 #: lane/cpu3-gbdt-b (2026-10-04): ALWAYS ON, every mode. The host-grid arm
 #: was CPU work inside the GPU fit, so `train_ordered_rmse` no longer has it
 #: (no `_OFF`); the host column keeps reading this constant so it builds the
@@ -76,11 +76,8 @@ from checks.numerics import (
 #: `MOJOLEARN_IDN_ALL_OFF` no longer move it.
 comptime IDN_ORDERED_RMSE_DEVICE_GRID = True
 
-comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
-"""DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear
-LowerBound/UpperBound walks in `_update_best_split`; unset (the default) takes
-the binary searches, which return the same indices. RUN OWED; see
-`_update_best_split`."""
+# TOMBSTONE: MOJOLEARN_2635_LINEAR_BOUNDS (DELETE-ARM, linear LowerBound/UpperBound walks, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 824cf67b84.
+# Restore: git apply experiments/removed/MOJOLEARN_2635_LINEAR_BOUNDS.patch; record in docs/TOMBSTONES.md.
 
 
 def _penalty_max_sum_log(weight: Float64) -> Float64:
@@ -145,7 +142,7 @@ def _update_best_split(mut b: TFeatureBin, values: List[Float32]):
     first index holding it and the first index past it. Their `LowerBound`
     and `UpperBound`.
 
-    DEVIATION 2635 (2026-09-11, gbdt-speed lane; RUN OWED, see below): both
+    DEVIATION 2635 (2026-09-11, gbdt-speed lane): both
     are BINARY searches now, as theirs are (`std::lower_bound` /
     `std::upper_bound`). The linear walks assumed "the ranges shrink fast",
     which is false on a column with a long run of one value (taxi's
@@ -155,38 +152,28 @@ def _update_best_split(mut b: TFeatureBin, values: List[Float32]):
     `v < mid_value` and `v <= mid_value` are each true on a prefix of any
     range, and the binary search returns the same `lb` and `ub` the walks
     did; the scores, the heap order and the borders follow unchanged.
-    `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the walks (the A/B arm).
-    RUN OWED on a GPU box: `pixi run check-greedylogsum`,
-    `pixi run check-binarization`, the gbdt identity checks, and the
-    interleaved taxi and Istella-S timing against the walks.
     """
     var mid = b.bin_start + (b.bin_end - b.bin_start) // 2
     var mid_value = values[mid]
 
     var lb = b.bin_start
     var ub = mid
-    comptime if LINEAR_BOUNDS_2635:
-        while lb < mid and values[lb] < mid_value:
-            lb += 1
-        while ub < b.bin_end and values[ub] <= mid_value:
-            ub += 1
-    else:
-        # first index in [bin_start, mid) with values[i] >= mid_value, else mid
-        var hi = mid
-        while lb < hi:
-            var m = lb + (hi - lb) // 2
-            if values[m] < mid_value:
-                lb = m + 1
-            else:
-                hi = m
-        # first index in [mid, bin_end) with values[i] > mid_value, else bin_end
-        var hi2 = b.bin_end
-        while ub < hi2:
-            var m2 = ub + (hi2 - ub) // 2
-            if values[m2] <= mid_value:
-                ub = m2 + 1
-            else:
-                hi2 = m2
+    # first index in [bin_start, mid) with values[i] >= mid_value, else mid
+    var hi = mid
+    while lb < hi:
+        var m = lb + (hi - lb) // 2
+        if values[m] < mid_value:
+            lb = m + 1
+        else:
+            hi = m
+    # first index in [mid, bin_end) with values[i] > mid_value, else bin_end
+    var hi2 = b.bin_end
+    while ub < hi2:
+        var m2 = ub + (hi2 - ub) // 2
+        if values[m2] <= mid_value:
+            ub = m2 + 1
+        else:
+            hi2 = m2
 
     var score_left = _calc_split_score(b.bin_start, b.bin_end, lb)
     var score_right = _calc_split_score(b.bin_start, b.bin_end, ub)

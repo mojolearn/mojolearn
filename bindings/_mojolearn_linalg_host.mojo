@@ -37,11 +37,13 @@ CPU-only install `python/mojolearn/_cholesky_impl.py` binds
 through the trailing update's `gemm_oracle` leaf walk (chol_oracle's
 header, THE SABOTAGE).
 """
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from gemm.host.linalg_dispatch import LINALG_NATIVE_TABLE
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
@@ -114,6 +116,7 @@ from decomposition.linalg_host_impl import (
     quantize_int15_host_run,
     dequantize_int15_host_run,
 )
+from gemm.host.causal_entry_host import publish_causal_linalg_host
 
 
 #: Cells per output, so `m * n` and `m * k` stay far from any Int edge.
@@ -121,10 +124,15 @@ comptime LINALG_HOST_MAX_EXTENT = 1073741824
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and size word the doors pass) is its own
+    # index: read natively, no class-name strings, module lookup or Python
+    # call (p3 rank 409). Anything else takes the full path below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("linalg host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -282,9 +290,12 @@ def cholesky_factor_binding(
             " addressable, got " + String(n)
         )
     var jitter = Float32(Float64(py=params[1]))
-    var a = read_f32(_index(addrs[0]), n * n)
+    # The owned input copy is made with the GIL released (p3 rank 513).
+    var a_address = _index(addrs[0])
+    var a = List[Float32]()
     var info = 0
     with GILReleased(Python()):
+        a = read_f32(a_address, n * n)
         info = cholesky_factor_host_run(a, n, jitter, lp, sp)
     _ = a^
     return PythonObject(info)
@@ -684,8 +695,12 @@ def linalg_native_api_v1_binding() raises -> PythonObject:
 
 
 def build__mojolearn_linalg_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_linalg_host")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_linalg_host()
         module.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         module.def_function[linalg_host_numeric_mode_binding]("linalg_host_numeric_mode")
         module.def_function[linalg_host_vendor_binding]("linalg_host_vendor")

@@ -39,10 +39,10 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 # =========================================================================
 """
 
-from experiments.classical_identical_ideas.linear_controls import C22_TRIANGLE
-from svm.impl.classical_kernel_device import classical_triangle_kernel
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.info import has_apple_gpu_accelerator
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm; owner lane/expdel2-06-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at efe4d2c321.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+from max.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -51,11 +51,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.gemm import gemm_nt
-from core.multi_gpu import peer_clone
-from core.step_phase import STEP_PHASE_TIMERS
 from std.os import getenv
-from core.host_parallel import host_parallelize
-from core.device_plan import device_plan_device, device_plan_setting
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -110,11 +106,11 @@ def row_norm_l2sq_kernel(
 #: Apple IDENTICAL: the RBF epilogue on a (columns, rows) grid, so no cell
 #: divides its flat index by `cols` (a 64-bit integer division, emulated on
 #: Apple's GPU). Same per-cell arithmetic.
-#: `-D MOJOLEARN_SVM_RBF_EPILOGUE_1D` keeps the flat grid.
+# TOMBSTONE: MOJOLEARN_SVM_RBF_EPILOGUE_1D (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 58cc0078e2.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_RBF_EPILOGUE_1D.patch; record in docs/TOMBSTONES.md.
 comptime RBF_EPILOGUE_2D = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 
@@ -388,13 +384,13 @@ def rbf_fused_tile(
 # so DEVIATION 2492's kernel shape can evaluate the same cell in one launch
 # with the pinned arithmetic: the chain over exactly k terms, then
 # `rbf_kernel_expanded_kernel`'s expression character for character. No bit
-# moves, on any vendor, and the host column is untouched. Every vendor;
-# `-D MOJOLEARN_SVM_IDN_FUSED_TILE_OFF` (or the master
-# `MOJOLEARN_IDN_ALL_OFF`) keeps the two launches, and so do the two sabotage
-# builds, which must keep failing through the kernels they name.
+# moves, on any vendor, and the host column is untouched. Every vendor; the
+# two sabotage builds keep the two launches, which must keep failing through
+# the kernels they name.
+# TOMBSTONE: MOJOLEARN_SVM_IDN_FUSED_TILE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 8398142558.
+# Restore: git apply experiments/removed/MOJOLEARN_SVM_IDN_FUSED_TILE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SVM_IDN_FUSED_TILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not SAB_STD_EXP
     and not SAB_NO_FTZ
 )
@@ -523,7 +519,6 @@ def kernel_op(
     mut norm_a: DeviceBuffer[DType.float32],
     mut norm_b: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
-    distribute: Bool = True,
 ) raises:
     """`KernelOp(handle, kernel, x1, n1, n_cols, x2, n2, output, norm_x1,
     norm_x2)`: `output[m x n] = K(a_i, b_j)`, row-major. `GramMatrixBase::
@@ -532,29 +527,12 @@ def kernel_op(
     `kernel_workspace_floats(m, n, k)` floats."""
     if m <= 0 or n <= 0:
         return
-    comptime if C22_TRIANGLE:
-        # Pointer equality proves one immutable dataset on both sides; a
-        # square cross-kernel between distinct datasets is not symmetric.
-        if m == n and Int(a.unsafe_ptr()) == Int(b.unsafe_ptr()) and (kp.kernel == KERNEL_LINEAR or kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_POLYNOMIAL or kp.kernel == KERNEL_TANH):
-            ctx.enqueue_function[classical_triangle_kernel](
-                a.unsafe_ptr(), norm_a.unsafe_ptr(), output.unsafe_ptr(), Int32(n), Int32(k), Int32(kp.kernel),
-                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree), grid_dim=_grid(n * n), block_dim=KM_TPB,
-            )
-            return
-    if distribute:
-        # The calling thread's device plan when a native driver bound one
-        # (core/device_plan.mojo), else the worker-process variable.
-        var setting = device_plan_setting("MOJOLEARN_SVM_DEVICE_COUNT")
-        if setting != "" and setting != "1":
-            var count = Int(setting)
-            if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-                raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL: _kernel_rows(ctx, kp, output, a, b, m, n, k, norm_a, norm_b, count)
-            return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
     # Apple only. 0.8.19's NVPTX/AMDGPU FAST hang was NOT these kernels: it was the
-    # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (gated above).
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (now gated
+    # in svm/multi_gpu.mojo::kernel_matrix_dispatch, which names _kernel_rows
+    # under IDENTICAL only).
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
             if rbf_fused_tile(ctx, output, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return
@@ -601,110 +579,3 @@ def kernel_op(
         )
     elif kp.kernel != KERNEL_LINEAR:
         raise Error("svm kernel_op: unimplemented kernel " + String(kp.kernel))
-
-
-@fieldwise_init
-struct SVMKernelShard(Movable):
-    var ctx: DeviceContext
-    var a: DeviceBuffer[DType.float32]
-    var b: DeviceBuffer[DType.float32]
-    var norm_a: DeviceBuffer[DType.float32]
-    var norm_b: DeviceBuffer[DType.float32]
-    var out: DeviceBuffer[DType.float32]
-    var ws: DeviceBuffer[DType.float32]
-    var first: Int
-    var rows: Int
-
-    def __deinit__(deinit self):
-        _ = self.a^
-        _ = self.b^
-        _ = self.norm_a^
-        _ = self.norm_b^
-        _ = self.out^
-        _ = self.ws^
-        try:
-            self.ctx.synchronize()
-        except:
-            pass
-        _ = self.ctx^
-
-
-def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
-    mut output: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int,
-    mut norm_a: DeviceBuffer[DType.float32], mut norm_b: DeviceBuffer[DType.float32],
-    count: Int,
-) raises:
-    """Partition output rows, retaining each original FP32-v1 contraction.
-
-    The feature axis is never split or padded. Original norm bytes and the
-    original RBF epilogue are reused. The SMO working set, updates and stopping
-    rules remain on the root. Per-call staging is not a speed/capacity claim.
-
-    THE NEGATIVE CONTROL. `-D MOJOLEARN_SVM_PARALLEL_SABOTAGE=1` makes every
-    owner above rank 0 read its left operand rows, and its RBF row norms, one
-    row early. `rows` is unchanged, the per-shard allocations keep their sizes
-    and the write-back keeps the true `shard.first`, so nothing but the values
-    contracted moves. It is a `comptime if`, so no production bit can move, and
-    it is INERT AT ONE DEVICE: the shift is guarded by `rank > 0` and a
-    one-device column has only rank 0. That is what makes a moved `par-svm`,
-    `par-svm-svr`, `par-kernel-ridge` or `par-nystroem` cell attributable to the
-    define rather than to the second device. (`MOJOLEARN_SVM_DEVICE_COUNT` is
-    also what `kernel_methods/checks/kernel_matrix.mojo` reads, which is why
-    the kernel-method lanes sit behind this one define.) Owed a two-device
-    column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
-    """
-    ctx.synchronize()
-    var active = min(count, m)
-    comptime if STEP_PHASE_TIMERS:
-        if active > 1:
-            raise Error("parallel SVM cannot use process-global GEMM phase counters")
-    var shards = List[SVMKernelShard]()
-    for rank in range(active):
-        var first = m * rank // active
-        var rows = m * (rank + 1) // active - first
-        var source = first
-        comptime if is_defined["MOJOLEARN_SVM_PARALLEL_SABOTAGE"]():
-            # Check-only arm: later owners read their left rows one row early.
-            if rank > 0:
-                source = first - 1
-        var device = DeviceContext(device_id=device_plan_device(rank))
-        var av = a.create_sub_buffer[DType.float32](source * k, rows * k)
-        var bv = b.create_sub_buffer[DType.float32](0, n * k)
-        var na = norm_a.create_sub_buffer[DType.float32](source if kp.kernel == KERNEL_RBF else 0,
-                                                        rows if kp.kernel == KERNEL_RBF else 1)
-        var nb = norm_b.create_sub_buffer[DType.float32](0, n if kp.kernel == KERNEL_RBF else 1)
-        var local_a = peer_clone(ctx, device, av)
-        var local_b = peer_clone(ctx, device, bv)
-        var local_na = peer_clone(ctx, device, na)
-        var local_nb = peer_clone(ctx, device, nb)
-        var output = device.enqueue_create_buffer[DType.float32](rows * n)
-        var workspace = device.enqueue_create_buffer[DType.float32](kernel_workspace_floats(rows, n, k))
-        device.synchronize()
-        shards.append(SVMKernelShard(device^, local_a^, local_b^, local_na^, local_nb^,
-                                     output^, workspace^, first, rows))
-    var failures = List[Int](length=active, fill=0)
-    var sp = rebind[MutPointer[SVMKernelShard, MutUntrackedOrigin]](shards.unsafe_ptr())
-    var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
-    def task(rank: Int) {imm sp, imm fp, imm kp, imm n, imm k}:
-        try:
-            ref shard = sp[rank]
-            kernel_op(shard.ctx, kp, shard.out, shard.a, shard.b, shard.rows, n, k,
-                      shard.norm_a, shard.norm_b, shard.ws, False)
-            shard.ctx.synchronize()
-        except:
-            fp[rank] = 1
-    if active == 1:
-        task(0)
-    else:
-        host_parallelize(task, active)
-    for rank in range(active):
-        if failures[rank] != 0:
-            raise Error("SVM kernel row shard failed: " + String(rank))
-    for rank in range(active):
-        ref shard = shards[rank]
-        var destination = output.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
-        shard.out.enqueue_copy_to(destination)
-        shard.ctx.synchronize()
-    _ = shards^
-    ctx.synchronize()

@@ -16,11 +16,10 @@ file's) until they are uploaded to the device.
 # the reader's bytes. import_model reads a path in one native call
 # (onnx_import_file) and never builds a GraphIR. The former Python reader is
 # the test oracle in tests/_onnx_reader_oracle.py.
-from __future__ import annotations
+from __future__ import annotations as _annotations
 
-from ._graph import GraphIR, Node, Resolved, TensorInfo, UnsupportedModel, _Native, _READER_NATIVE, _READER_CONTEXT
+from ._graph import _Native, _READER_NATIVE, _READER_CONTEXT
 
-OPSET_MIN = 13
 
 
 def reader_error(status, message, missing, path):

@@ -1,0 +1,56 @@
+{
+  "family": "Spectral fit and embedding numerical slice",
+  "status": "CPU7/GPU9 authored, uncompiled and unrun",
+  "dependencies": ["f0201aa23b", "764e2ad158", "bcc32168f4"],
+  "entries": {
+    "cpu": "checks/native_tests/spectral_native_cpu.mojo",
+    "gpu": "checks/native_tests/spectral_native_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_native_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_native_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 7,
+    "gpu": 9,
+    "common_graphs": [
+      "Original150x2 embedding input, seed20260920; components2, neighbors15, solverseed5, tolerance1e-5: finite complete output.",
+      "Same original150x2 input/settings, tolerance1e-2: finite complete output.",
+      "Original80x80 affinity from first80 rows; components2, solverseed5, tolerance1e-5: actual COO provider output.",
+      "Original150x2: clustering3/classes and4 components vs embedding3/drop-first and manifold4/keep-first; neighbors10, solverseed3, tolerance1e-5; exact original column relationships.",
+      "Original150x150 affinity vs explicit zero diagonal, components2, solverseed3, tolerance1e-5; exact original embedding relationship through COO route.",
+      "Original150x2 normalized vs raw Laplacian, components2, neighbors10, solverseed3, tolerance1e-5: raw stays finite and differs.",
+      "Original120x3 RNG2 separated blobs: clusters2/components2, neighbors8, solverseed5, tolerance1e-5; same-label halves, distinct labels across halves, labels in0..1, invariant to label permutation."
+    ],
+    "additional_gpu_graphs": [
+      "Original80x80 affinity through actual dense provider.",
+      "Original150x150 positive-diagonal vs hollow affinity through actual dense provider."
+    ],
+    "storage": "NaN-filled interiors detect incomplete output writes; endpoint guards, full expected output extents and unchanged borrowed input words. All raw-address owners remain named through final native uses."
+  },
+  "originals": [
+    "python/mojolearn/tests/test_spectral_embedding.py:56::test_fit_transform_shape_and_repeatability",
+    "python/mojolearn/tests/test_spectral_embedding.py:73::test_embedding_is_the_clustering_embedding_without_its_trivial_column",
+    "python/mojolearn/tests/test_spectral_embedding.py:83::test_precomputed_drops_the_diagonal",
+    "python/mojolearn/tests/test_spectral_embedding.py:94::test_unnormalized_laplacian_is_a_different_embedding",
+    "python/mojolearn/tests/test_spectral_embedding.py:103::test_eigen_tol_float_is_the_lanczos_tolerance",
+    "python/mojolearn/tests/test_cpu_training_e2.py:229::test_spectral_runs_on_the_host_when_built"
+  ],
+  "oracle": "Original column/diagonal relations and planted class partition; no mirrored eigensolver, historical fitted-output hash, basis/sign normalization or altered tolerance. Saved fixtures contain original inputs only.",
+  "parallel_plan": "CPU7 independent full graphs use host_parallelize; cell assertions also run in parallel. GPU9 graphs execute in order on one physical GPU; numerical kernels remain parallel. The shared-context concurrent-submission failure remains open and separate.",
+  "compile_flags": {
+    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "python_retained": [
+    "All original tests remain until native acceptance.",
+    "Output Python identity/dtype/shape/metadata, public defaults/auto-tolerance aliases and parameter refusals remain Python boundary coverage.",
+    "Existing repeat-fit/process/archive/interoperability tests remain; no new development identity campaign.",
+    "Prediction, retained numerical state, resident ownership and assignment-route coverage are a following native slice; no claim they are covered here."
+  ],
+  "source_evidence": "E/pca-native-tests/spectral-native-static.json",
+  "reference_manifest": "checks/native_tests/fixtures/spectral/references.json",
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}

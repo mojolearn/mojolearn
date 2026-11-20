@@ -2,12 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from ensemble.tree_identical_ideas import T02, T03, T04, T05, T05_ROW_VISITS, T07, T11, T11_LEVELS, T13, T13_BYTES, histogram_task_rows
-from std.gpu import WARP_SIZE
-from std.sys.compile import is_defined, get_defined_int
+from max.gpu import WARP_SIZE
+from std.sys.compile import is_defined
 from std.math import ceildiv
-from std.memory import memcpy
-from std.sys.info import has_apple_gpu_accelerator, size_of
+from std.memory import unsafe_memcpy
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
@@ -46,13 +46,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_find_best_splits_kernel,
     HIST_ZERO_AFTER_READ_DEFAULT,
     HIST_SPLIT_CANDIDATES_DEFAULT,
-    SMALL_NODE_FUSED_DEFAULT,
-    SMALL_NODE_ROWS,
-    SPLIT_REDUCE_PINNED_DEFAULT,
-    small_node_split_kernel,
     merge_split_candidates_kernel,
-    merge_split_candidates_parallel_kernel,
-    clear_live_histogram_bins_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -61,9 +55,9 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
     LOOP_HDR_WORDS,
-    LOOP_H_DEPTH,
     LOOP_H_CUR,
     LOOP_H_HEAD,
+    LOOP_H_NEXT,
     LOOP_H_NODES,
     LOOP_H_OVERFLOW,
     LOOP_H_TAIL,
@@ -88,9 +82,8 @@ from ensemble.decisiontree.decisiontree import (
     TreeMetaDataNode,
 )
 from ensemble.flatnode import SparseTreeNode
-from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import RetainedCountHistograms
 
-# I18: real forest caller, restricted to exact unweighted integer counts.
+# I18 (history; the builder caller was removed by the 2026-11-15 sweep): real forest caller, restricted to exact unweighted integer counts.
 # PENDING qualification; default OFF. Explicit IDENTICAL opt-in only.
 # No feature resampling or weighted/fixed-point algebra is admitted. The
 # cache's byte cap is a resource bound; it never selects benchmark shapes.
@@ -101,8 +94,12 @@ from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import Re
 # One same-process warmup/score, identity evidence reused. Full-workload
 # NVIDIA+AMD qualification remains pending; default OFF. Evidence:
 # overnight-ab-20261006/amd/normalized-measurements.json, I18.
-comptime RETAINED_COUNT_HIST = T03 or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]())
-comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
+# TOMBSTONE: MOJOLEARN_TREE_EXACT_SIBLING_HIST (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES (unmeasured knob; default 8 MiB kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: RETAINED_COUNT_HIST (= the folded T03) and RETAINED_COUNT_HIST_BYTES removed with the
+# builder's retained-count fields and branches; retained_count_histograms.mojo stays for experiments/performance_ideas/I18.)
 
 # `builder.cuh:161` -- "default threads per block for most kernels in here"
 comptime TPB_DEFAULT = 128
@@ -146,22 +143,31 @@ comptime TPB_DEFAULT = 128
 # now runs 6; the pass width only regroups (node, column) blocks into
 # launches, every histogram cell and candidate is the same integer, and Apple
 # IDENTICAL already runs 40 against the others 10 with equal forests, so no
-# bit moves. `-D MOJOLEARN_IDN_RF_COLS40_OFF` restores 10.
+# bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_RF_COLS40_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_COLS40_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
 comptime IDN_RF_COLS40 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not TARGET_HAS_APPLE_GPU
 )
 
+# TOMBSTONE: MOJOLEARN_AFT_F01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F01.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_COLS10 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_COLS10.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_TRIAL_COLS20 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS20.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RF_TRIAL_COLS40 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_TRIAL_COLS40.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F01 and MOJOLEARN_RF_COLS10 (`-D MOJOLEARN_RF_COLS10` keeps 10 on Apple; RF_TRIAL_COLS20/40 stay deleted): opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F01: a power-of-two 32-column pass bounds workspace and reduces the
 # per-pass live histogram bytes versus 40 while retaining every column.
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F01 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F01"]()
 )
 comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
@@ -170,16 +176,11 @@ comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
             or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         )
-        and has_apple_gpu_accelerator()
+        and TARGET_HAS_APPLE_GPU
         and not is_defined["MOJOLEARN_RF_COLS10"]()
     )
     or IDN_RF_COLS40
-) else (
-    # trial arms (trees-apple2): the columns per pass under IDENTICAL
-    20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
-        40 if is_defined["MOJOLEARN_RF_TRIAL_COLS40"]() else 10
-    )
-))
+) else 10)
 
 @always_inline
 def blk_cols_for(n_sampled_cols: Int) -> Int:
@@ -196,18 +197,10 @@ def blk_cols_for(n_sampled_cols: Int) -> Int:
     return min(N_BLKS_FOR_COLS, n)
 
 
-comptime SMALL_NODE_SLOTS = 2048
-# T05 per-node bound (trees-cleanup 2026-10-07). Cost reasoning: the fused
-# block walks its node with TPB_DEFAULT threads, so a node of R rows costs
-# R / TPB serial visits per thread, while the split route pays a zero pass, a
-# global-atomic flush of every (bin, class) cell, a global re-read in
-# find_best_splits and two more launches per column block regardless of R.
-# At up to T05_ROW_VISITS visits per thread (default 32, i.e. 4096 rows at
-# TPB 128, the same bound the FAST host-batch arm uses) the walk is shorter
-# than that fixed overhead; above it the multi-block histogram wins. Int
-# sweep `-D MOJOLEARN_TREES_T05_ROW_VISITS=8|16|32|64`. No data dimension.
-comptime T05_NODE_ROWS = T05_ROW_VISITS * TPB_DEFAULT
-"""Shared bins `small_node_split_kernel` holds per block."""
+# TOMBSTONE: MOJOLEARN_TREES_T05_ROW_VISITS (unmeasured int sweep; 32 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T05_ROW_VISITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: SMALL_NODE_SLOTS, T05_NODE_ROWS and _small_batch_host removed with the folded T05 small-node
+# branches and small_node_split_kernel.)
 
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
@@ -221,24 +214,28 @@ comptime ALIGN_VALUE = 512
 # ours IDENTICAL medians 2475/4036 ms at 1 item, 2274/3743 ms at 4, both
 # candidates' whole range below the baseline's minimum;
 # bench/results/trees_identical/h100_2026-09-10/).
-# `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
-# opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
+# The old opt-in `MOJOLEARN_2011_HIST_ITEMS4` is now the default.
 # A07 `MOJOLEARN_IDN_RF_TASK_ROWS256` (two items/lane, 256-row histogram
 # tasks) DELETED by lane trees-small (2026-10-07): measured NEUTRAL on both
 # vendors (MI325X candidate/baseline 0.993/0.995/0.998; L40S <1.1%; generated
 # 100000x32, 100001x33, 65537x17; overnight-ab-20261006 amd/live/
 # repair-summary.json and nvidia/default-repair-normalized-measurements.json),
-# and a second define on the histogram task-row knob `MOJOLEARN_TREES_T02`
-# sweeps by cost (`histogram_task_rows`). docs/apple-fast/EXPERIMENTS.md row.
+# and the later histogram task-row knob `MOJOLEARN_TREES_T02` was deleted
+# 2026-11-15 (the task rows are HIST_WORKLOAD_GRANULARITY). docs/apple-fast/EXPERIMENTS.md row.
+# TOMBSTONE: MOJOLEARN_AFT_F02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F02.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_2011_HIST_ITEMS1 (old one-item mapping; four items measured faster 2026-09-10) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_2011_HIST_ITEMS1.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: MOJOLEARN_AFT_F02 opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F02: eight rows/lane amortizes each histogram work descriptor over
 # 1024 rows at the fixed 128-lane block, without changing bins or samples.
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_F02 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F02"]()
 )
-comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
+comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else 4
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 
@@ -608,48 +605,48 @@ struct SplitSummary[dtype: DType](TrivialRegisterPassable):
     retry it with fresh columns."""
 
 
-comptime RETRY_PURE_NODES = is_defined["MOJOLEARN_2502_RETRY_PURE"]()
-"""DEVIATION 2502 (2026-09-10), ON BY DEFAULT since 2026-09-11 evening: opt
-out with `-D MOJOLEARN_2502_RETRY_PURE=1` to get the previous forest. It was
-taken to opt-in on 2026-09-11 morning because its win had been measured on
-ONE kind of data (HIGGS, since retired, CONTRIBUTING.md (Performance claims)). It
-then ran on the two datasets of section 9 at 1M rows, IDENTICAL tier, on the
-M4 (`bench/results/rf_2502_m4_2026-09-11/`): taxi 7206..7295 -> 6403..6554
-ms, logloss 0.525912 -> 0.525910; Istella-S 34667..42381 -> 16346..18130 ms,
-logloss 0.145578 -> 0.145560. A fit-time win on both kinds with equal
-logloss is the flip condition, and it was met the same day. The forest a classifier ships CHANGED with this flip (taxi
-1M IDENTICAL hash 0ae984630cfca2a8 -> d8f64dae01de00bd, Istella
-15e38312cb4bb870 -> 574b24d0d7af51d0; the rf-clf fingerprints move, rf-reg
-does not). The text below describes the ON arm.
-
-A PURE NODE IS A LEAF. Their `doSplit`
-retries every node whose sampled columns found no valid split, up to
-`max_sampling_rounds` times with fresh columns, and never asks whether the
-node CAN split. Counted on HIGGS 1M, 100 trees, depth 16, on the M4: round
-0 processes 2.54M nodes over 1.59 billion rows; rounds 1-5 each re-run
-about 527k nodes of 9 rows on average, and 99.2% of them end the batch with
-no split after every column has been tried. Every one of them is pure (the
-leaf vectors say so, 55k per tree audited). The other 0.8% are pure nodes
-too: their Gini gain is not exactly 0 in the objective's arithmetic, and a
-retry with the right column "splits" them into two pure children of the
-same class. scikit-learn leafs a pure node before it looks for a split;
-this flag restores that rule. `find_best_splits_kernel` writes the node's
-purity into the slot's `pure` field and `_read_splits_host` reports it as
-`terminal`: the node is a leaf regardless of any candidate and is never
-retried.
-
-THIS CHANGES THE FOREST. A pure node that used to split into two identical
-children no longer does, and every later node's tree index shifts by the
-nodes not created; the column sampler seeds on that index, so the
-subsequent draws differ. Same algorithm family, a different random
-stream: HIGGS 1M logloss 0.538850 -> 0.538817, AUC 0.809906 -> 0.809830,
-histogram rounds 14,640 -> 3,627 per fit, M4 FAST fit 12.4 s -> 9.1 s
-(hash efd14ab2c09ff57c, 8 of 8 fits equal). Cross-vendor and run-to-run
-identity hold as before (the flag is a function of the class totals); the
-rf-clf fingerprints move under the opt-in
-(`bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`).
-Regression never marks a node (one histogram plane shows no purity), so
-rf-reg forests are unchanged either way."""
+# TOMBSTONE: MOJOLEARN_2502_RETRY_PURE (old pre-2502 forest; the flip measured faster with equal logloss) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_2502_RETRY_PURE.patch; record in docs/TOMBSTONES.md.
+# DEVIATION 2502 (2026-09-10), ON BY DEFAULT since 2026-09-11 evening. It was
+# taken to opt-in on 2026-09-11 morning because its win had been measured on
+# ONE kind of data (HIGGS, since retired, CONTRIBUTING.md (Performance claims)). It
+# then ran on the two datasets of section 9 at 1M rows, IDENTICAL tier, on the
+# M4 (`bench/results/rf_2502_m4_2026-09-11/`): taxi 7206..7295 -> 6403..6554
+# ms, logloss 0.525912 -> 0.525910; Istella-S 34667..42381 -> 16346..18130 ms,
+# logloss 0.145578 -> 0.145560. A fit-time win on both kinds with equal
+# logloss is the flip condition, and it was met the same day. The forest a classifier ships CHANGED with this flip (taxi
+# 1M IDENTICAL hash 0ae984630cfca2a8 -> d8f64dae01de00bd, Istella
+# 15e38312cb4bb870 -> 574b24d0d7af51d0; the rf-clf fingerprints move, rf-reg
+# does not). The text below describes the ON arm.
+#
+# A PURE NODE IS A LEAF. Their `doSplit`
+# retries every node whose sampled columns found no valid split, up to
+# `max_sampling_rounds` times with fresh columns, and never asks whether the
+# node CAN split. Counted on HIGGS 1M, 100 trees, depth 16, on the M4: round
+# 0 processes 2.54M nodes over 1.59 billion rows; rounds 1-5 each re-run
+# about 527k nodes of 9 rows on average, and 99.2% of them end the batch with
+# no split after every column has been tried. Every one of them is pure (the
+# leaf vectors say so, 55k per tree audited). The other 0.8% are pure nodes
+# too: their Gini gain is not exactly 0 in the objective's arithmetic, and a
+# retry with the right column "splits" them into two pure children of the
+# same class. scikit-learn leafs a pure node before it looks for a split;
+# this flag restores that rule. `find_best_splits_kernel` writes the node's
+# purity into the slot's `pure` field and `_read_splits_host` reports it as
+# `terminal`: the node is a leaf regardless of any candidate and is never
+# retried.
+#
+# THIS CHANGES THE FOREST. A pure node that used to split into two identical
+# children no longer does, and every later node's tree index shifts by the
+# nodes not created; the column sampler seeds on that index, so the
+# subsequent draws differ. Same algorithm family, a different random
+# stream: HIGGS 1M logloss 0.538850 -> 0.538817, AUC 0.809906 -> 0.809830,
+# histogram rounds 14,640 -> 3,627 per fit, M4 FAST fit 12.4 s -> 9.1 s
+# (hash efd14ab2c09ff57c, 8 of 8 fits equal). Cross-vendor and run-to-run
+# identity hold as before (the flag is a function of the class totals); the
+# rf-clf fingerprints move under the opt-in
+# (`bench/results/identity_break/apple-m4.identical.rf-2502-2026-09-10.json`).
+# Regression never marks a node (one histogram plane shows no purity), so
+# rf-reg forests are unchanged either way.
 
 def update_workload_info_host[
     o: MutOrigin, //, sabotage: Int = 0
@@ -709,36 +706,6 @@ def update_workload_info_host[
             )
         n_blocks_dimx += n_blocks_per_node
     return n_blocks_dimx
-
-
-def workload_blocks_for_host(work_items: List[NodeWorkItem]) -> Int:
-    """`updateWorkloadInfo`'s running total WITHOUT its writes -- the same
-    `max(ceildiv(count, TPB_DEFAULT), 1)` sum, so a caller that can prove
-    the staged map is already on the device (DEVIATION 1919) can size the
-    grid without restaging. Any edit to `update_workload_info_host`'s block
-    arithmetic must land here in the same commit; the two must agree or
-    the partition grid is short.
-
-    DEVIATION 2011 note: this function is TPB-granular ON PURPOSE and
-    grew no granularity argument -- its one caller is the 1919 reuse
-    path, which exists only when the staged map is also TPB-granular
-    (the reuse is disabled under `HIST_ITEMS_PER_THREAD > 1`)."""
-    var n_blocks_dimx = 0
-    for i in range(len(work_items)):
-        n_blocks_dimx += max(
-            ceildiv(work_items[i].instances.count, TPB_DEFAULT), 1
-        )
-    return n_blocks_dimx
-
-
-def _small_batch_host(work_items: List[NodeWorkItem]) -> Bool:
-    """The host-queue replay's small-node test: every node of the host
-    batch list holds at most `SMALL_NODE_ROWS` rows. The device loop
-    (`dev_n >= 0`) never asks."""
-    for i in range(len(work_items)):
-        if Int(work_items[i].instances.count) > SMALL_NODE_ROWS:
-            return False
-    return True
 
 
 def max_blocks_dimx_for(max_batch_size: Int32, n_sampled_rows: Int) -> Int:
@@ -970,21 +937,80 @@ def compute_shared_memory_config(
 # then partitioned as a subset, which is the same stable partition of the same
 # disjoint row ranges, only later. No arithmetic or order inside any node
 # changes, so no bit moves and the host column is untouched.
-# `-D MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF` restores the two-drain batch.
 # Off under an identity trace (the trace records the candidate round) and
 # under any check sabotage hook.
-comptime IDN_RF_FUSED_PARTITION = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RF_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
+
+# RESTORED DEFAULT (lane restore-rf-et-forest-loop, 2026-11-13): the HOST
+# queue level loop (`begin_batch_replay` / `advance_batch_replay`, K trees
+# pipelined over one queue by `fit_forest_prepared`, one drain per cycle for
+# every in-flight tree) is the fit route again, as at 0.8.25 (32b386409a), the
+# fastest RF fit the boards ever measured, same output hash and settings
+# (500 trees, depth 8, 128 bins, sqrt features):
+#   istella NV 5,045 ms (0.8.25) -> 24,471 (10-05, device loop) -> 30,769
+#   (0.8.55) -> 30,390 (candidate 4c2340386abc); istella AMD 5,107 -> 44,244
+#   -> 45,440 -> 44,680; taxi NV 5,798 -> 8,066 -> 9,443 -> 8,896; taxi AMD
+#   6,754 -> 16,390 -> 16,460 -> 16,370. Sources: bench/results/bench_board/
+#   recovered-2026-09-30/{nvc2/2026-09-29_nvidia,do-amd/2026-09-29_amd}/board.json
+#   at 09bb2eca3b; history audit hist-trees-neighbors-cluster row 1.
+# The structural cost of the device loop (window 32b386409a..a006da73d,
+# e344566c1a made it the only route with no A/B against the host loop; the
+# one A/B on record, 14fd20e348, compared device-loop K values): the host
+# cannot see whether a sampling round has nodes left, so EVERY batch enqueues
+# all `ceil(n_cols / n_sampled_cols)` sampling rounds (istella, 220 columns,
+# sqrt: 16 rounds; taxi far fewer) at proven bounds -- per round the retry
+# compact/stage/map launches, the setup launch, the histogram over
+# `1 + n_bound + rows / TPB` blocks and find_best_splits -- plus two pops,
+# the finalize and four push launches per batch. The host loop launches
+# round zero and stops at the first round with nothing to retry (their
+# `:456`), so its launch count per batch is a handful, not ~8 per round x 16.
+# The loss tracks the round count: 6x on istella, 1.5x / 2.4x on taxi.
+# Same kernels, same node ids, same queue order, same retry sets: the trees
+# (and the output hashes 46ef5c27f84cf904 istella / a660fbfbad84ade8 taxi)
+# do not move; the device loop was built to equal this queue.
+# TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP (LOSER: the plain device level loop as the fit route, fit istella 4407 -> 30417 ms (6.90), taxi 5352 -> 8918 (1.67), infer 1.00; NV L40S ab4 2026-11-18, job nvc-ab-20261118T201200Z-d21ba0) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558. The define only: the device loop's body stays, the early-exit form below runs it (single-round trees, and the batch machinery of every round).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP.patch; record in docs/TOMBSTONES.md.
+
+# THIRD FORM (lane fix-rf-et-device-loop-early-exit, 2026-11-13): the device
+# loop that EARLY-EXITS like the host queue. `-D
+# MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` (default off; the host queue above
+# stays the default). It decides
+# whether the device queue (same kernels, same node ids, same queue order,
+# same retry sets as the plain device loop) may stop a batch's sampling rounds
+# at the first round with nothing to retry. Per round r >= 1 the retry
+# compaction (`launch_loop_retry_next`) writes the round's count into
+# `LOOP_H_NEXT`; the host reads that ONE 4-byte word back and, when it is
+# zero, skips the rest of the batch's rounds (each would be inert: its search
+# runs over dummies, its merge writes nothing, and `loop_retry_finish` then
+# overwrites every split slot from the batch's final splits). At a batch
+# boundary the batch's tail (finish, re-pop, finalize, partition, push) and
+# the NEXT batch's head (pop, round 0, merge, round 1's compaction) are
+# enqueued together and the 16-word header (which carries `LOOP_H_NEXT`) is
+# read once, so a batch costs one drain per round it actually runs; a batch
+# enqueued after the queue emptied is inert end to end, as in the device
+# loop. A tree with one sampling round (`max_sampling_rounds_for == 1`) has
+# nothing to exit early from and runs the device loop's `LOOP_K` batches per
+# drain unchanged. SAME BITS as the plain device loop and the host queue: the
+# rounds skipped are exactly the inert ones. Owed A/B: row
+# `rf-device-loop-early-exit` in bench/results/paper_compare/
+# owed-pre0867.json (RUN OWED, istella + taxi, fit). Wins over the host
+# queue -> promote; loses -> delete with the device loop body.
+comptime IDN_RF_DEVICE_LOOP_EARLY_EXIT = is_defined[
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT"
+]()
+# The device-loop form: the device tables are sized and `begin_tree` takes
+# the device route.
+comptime RF_DEVICE_QUEUE = IDN_RF_DEVICE_LOOP_EARLY_EXIT
 
 # The level loop's control plane ON THE DEVICE (fam2-forests' candidate
-# `IDN_RF_DEVICE_LOOP`; the only GPU route since cpu4-forest, 2026-10-04, in
-# IDENTICAL and FAST on every vendor, no off switch). The queue
+# `IDN_RF_DEVICE_LOOP`; the only GPU route from cpu4-forest, 2026-10-04, to
+# 2026-11-13; its define was deleted 2026-11-19 (tombstone above), the body
+# serves the early-exit form). The queue
 # (`NodeQueue::Pop`/`Push`), the block maps (`updateWorkloadInfo`), the
 # sampling rounds' retry sets (`doSplit`, `:452-458`) and the `max_leaves`
 # budget run as kernels (`kernels/level_loop_kernels.mojo`), so a tree
@@ -996,13 +1022,11 @@ comptime IDN_RF_FUSED_PARTITION = (
 # sampling round runs) and the device makes the excess inert. Same node
 # ids, same queue order, same retry sets, same row kernels: the tree is the
 # one the host queue builds (`ensemble/host/rf_oracle.mojo`, the host
-# column, is untouched), on every vendor. The host queue below
-# (`NodeQueue`, `begin_batch_replay`/`advance_batch_replay`) is reached only by the
-# check sabotage instantiations (`sabotage != 0`, ensemble/checks) and an
-# identity trace (which records per-round host split summaries); a fit
-# never builds it.
-# Batches per drain: default 4; `-D MOJOLEARN_TREES_T11_LEVELS=1|2|4|8|16` is
-# the one sweep. The older `MOJOLEARN_IDN_RF_DEVICE_LOOP_K1/_K2/_K8` defines
+# column, is untouched), on every vendor. Without the define the host queue
+# (`NodeQueue`, `begin_batch_replay`/`advance_batch_replay`) builds every
+# tree, as it already did for the check sabotage instantiations and an
+# identity trace.
+# Batches per drain: 4. The older `MOJOLEARN_IDN_RF_DEVICE_LOOP_K1/_K2/_K8` defines
 # (same knob, measured below) were DELETED by lane trees-small 2026-10-07
 # (docs/apple-fast/EXPERIMENTS.md row).
 # 2026-10-05 real full-harness IDENTICAL A/B: keep K4; K1/K2/K8 not promoted.
@@ -1024,7 +1048,9 @@ comptime IDN_RF_FUSED_PARTITION = (
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_RF_DEVICE_LOOP_K2 (noise) deleted 2026-10-07 by d631a057c; code recoverable at d631a057c^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_DEVICE_LOOP_K2.patch; record in docs/TOMBSTONES.md.
-comptime LOOP_K = max(1, T11_LEVELS) if T11 else 4
+# TOMBSTONE: MOJOLEARN_TREES_T11_LEVELS (EXP:1582 DROP, no gain + duplicate) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T11_LEVELS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+comptime LOOP_K = 4
 
 
 @fieldwise_init
@@ -1369,9 +1395,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     """HIST_SPLIT_CANDIDATES_DEFAULT: one `Split` slot per (node, column
     block) of a round; one byte otherwise."""
     var hist_task_rows: Int
-    var retained_counts: Optional[RetainedCountHistograms]
-    var retained_counts_reset: Bool
-    var retained_counts_phase: Bool
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
     # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
@@ -1459,6 +1482,41 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var loop_batch: Int
     # the tree in flight runs on the device queue
     var loop_active: Bool
+    # `IDN_RF_DEVICE_LOOP_EARLY_EXIT` only: the sampling round whose retry
+    # count (`LOOP_H_NEXT`) the next drain reads (>= 1), whether that drain
+    # read the whole header (a batch boundary) or the one count word, and
+    # the device / pinned views of that word
+    var loop_round: Int
+    var loop_hdr_fresh: Bool
+    # CHECK HOOK: True makes `begin_tree` take the host queue even when a
+    # device-loop form is compiled in, so one binary can grow the same tree
+    # both ways (`checks/native_tests/rf_device_loop_early_exit_gpu_suite`).
+    # Product code never sets it.
+    var force_host_queue: Bool
+    var loop_next_d: DeviceBuffer[DType.int32]
+    var loop_next_h: HostBuffer[DType.int32]
+    # Tree op TREE_OP_FOREST_FINISH (lane t1b-tree-leaf-and-node-ops,
+    # gbdt/tree_ops.mojo): a device-loop tree's finish is ENQUEUED only -- node table to
+    # `SparseTreeNode`s, leaf pass, the two downloads -- and its host model
+    # is assembled by `collect_finished` after the caller's next drain,
+    # instead of the finish draining on its own. `tree_tag` is the caller's
+    # name for the tree being grown (its forest index); the `pending_*`
+    # fields are the one finish in flight; `finished` / `finished_tags` the
+    # collected trees the caller has not taken yet.
+    var tree_tag: Int
+    var pending_nodes: Int
+    var pending_out: Int
+    var pending_tag: Int
+    var pending_treeid: Int32
+    var pending_num_outputs: Int32
+    var pending_h_depth: HostBuffer[DType.int32]
+    var pending_keep_d8: List[DeviceBuffer[DType.uint8]]
+    var pending_keep_h8: List[HostBuffer[DType.uint8]]
+    var pending_keep_dl: List[DeviceBuffer[Self.O.DataT]]
+    var pending_keep_hl: List[HostBuffer[Self.O.DataT]]
+    var pending_keep_di: List[DeviceBuffer[DType.int32]]
+    var finished: List[TreeMetaDataNode[Self.O.DataT]]
+    var finished_tags: List[Int]
 
     def __init__(
         out self,
@@ -1486,17 +1544,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.num_outputs = num_outputs
         self.scales = scales
         self.min_weight_leaf = Float32(0)
-        self.hist_task_rows = histogram_task_rows(Int(params.max_n_bins) * Int(num_outputs) * size_of[Self.O.BinT](), 4 + size_of[Scalar[Self.O.LabelT]](), HIST_WORKLOAD_GRANULARITY)
-        self.retained_counts = None
-        self.retained_counts_reset = True
-        self.retained_counts_phase = False
-        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
-            if n_sampled_rows > 0 and n_sampled_rows <= 2147483647 and n_cols > 0 and Int(params.max_n_bins) > 0 and num_outputs > 0 and n_sampled_cols_for(params.max_features,n_cols) == n_cols:
-                var slots = Int(params.max_n_bins)*Int(num_outputs)
-                var bytes_per_node = n_cols*(4*slots+2)+17
-                var capacity = min(2*n_sampled_rows-1, (RETAINED_COUNT_HIST_BYTES-4-4*LOOP_HDR_WORDS)//bytes_per_node)
-                if capacity >= 3:
-                    self.retained_counts = RetainedCountHistograms(ctx,capacity,n_cols,slots)
+        self.hist_task_rows = HIST_WORKLOAD_GRANULARITY
 
         # `decisiontree.cuh:251-256`. CRITERION_END is the "unset" sentinel
         # their header defaults `split_criterion` to (`decisiontree.hpp:89`),
@@ -1616,7 +1664,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.h_phase = ctx.enqueue_create_host_buffer[DType.uint8](
             wi_span + size_of[WorkloadInfo]() * max_blocks
         )
-        comptime if IDN_RF_FUSED_PARTITION and HIST_ITEMS_PER_THREAD != 1:
+        comptime if IDN_RF_FUSED_PARTITION:
             self.h_phase_spare = ctx.enqueue_create_host_buffer[DType.uint8](
                 wi_span + size_of[WorkloadInfo]() * max_blocks
             )
@@ -1694,11 +1742,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # common case this never regrows; past their `min(100000, ...)`
         # cap the batching loop reuses the same buffers anyway.
         self.leaf_capacity = min(100000, max_nodes(params.max_depth))
-        comptime if T13:
-            # Fit-owned cache, released with Builder; no input/state reuse across
-            # fits. Reserve a resource-bounded leaf page once for all its trees.
-            var bytes_per_leaf = 2 * (size_of[SparseTreeNode[Self.O.DataT]]() + size_of[InstanceRange]() + 4 * max(1, Int(num_outputs)))
-            self.leaf_capacity = max(self.leaf_capacity, min(max(1, 2*n_sampled_rows-1), T13_BYTES // bytes_per_leaf))
         self.leaf_host_capacity = self.leaf_capacity
         var n_out = Int(num_outputs)
         self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
@@ -1728,6 +1771,23 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.loop_cap = 0
         self.loop_batch = 0
         self.loop_active = False
+        self.loop_round = 0
+        self.loop_hdr_fresh = False
+        self.force_host_queue = False
+        self.tree_tag = -1
+        self.pending_nodes = 0
+        self.pending_out = 0
+        self.pending_tag = -1
+        self.pending_treeid = Int32(-1)
+        self.pending_num_outputs = Int32(0)
+        self.pending_h_depth = ctx.enqueue_create_host_buffer[DType.int32](1)
+        self.pending_keep_d8 = List[DeviceBuffer[DType.uint8]]()
+        self.pending_keep_h8 = List[HostBuffer[DType.uint8]]()
+        self.pending_keep_dl = List[DeviceBuffer[Self.O.DataT]]()
+        self.pending_keep_hl = List[HostBuffer[Self.O.DataT]]()
+        self.pending_keep_di = List[DeviceBuffer[DType.int32]]()
+        self.finished = List[TreeMetaDataNode[Self.O.DataT]]()
+        self.finished_tags = List[Int]()
         var cap = 2 * n_sampled_rows + 1
         if Int(params.max_depth) < 29:
             var dense = (1 << (Int(params.max_depth) + 1)) - 1
@@ -1745,13 +1805,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 + String(cap)
                 + " does not fit the device node table's Int32 ids"
             )
-        if n_sampled_rows > 0:
+        # The tables are sized to the node bound only under the device-loop
+        # B arm; the default host queue never reads them (one-entry stubs,
+        # `loop_cap` 0, so `begin_tree` never takes the device route).
+        comptime if not RF_DEVICE_QUEUE:
+            cap = 1
+        if n_sampled_rows > 0 and RF_DEVICE_QUEUE:
             self.loop_cap = cap
         self.loop_hdr = ctx.enqueue_create_buffer[DType.int32](
             LOOP_HDR_WORDS
         )
         self.loop_h_hdr = ctx.enqueue_create_host_buffer[DType.int32](
             LOOP_HDR_WORDS
+        )
+        self.loop_next_d = self.loop_hdr.create_sub_buffer[DType.int32](
+            LOOP_H_NEXT, 1
+        )
+        self.loop_next_h = self.loop_h_hdr.create_sub_buffer[DType.int32](
+            LOOP_H_NEXT, 1
         )
         self.loop_queue = ctx.enqueue_create_buffer[DType.int32](
             cap * LOOP_QUEUE_INTS
@@ -1776,7 +1847,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var multi_round = max_sampling_rounds_for(
             n_cols, self.original_n_sampled_cols
         ) > 1
-        var retry_slots = max_batch if multi_round else 1
+        var retry_slots = max_batch if (
+            multi_round and RF_DEVICE_QUEUE
+        ) else 1
         self.loop_retry = ctx.enqueue_create_buffer[DType.int32](
             loop_retry_words(retry_slots)
         )
@@ -1830,8 +1903,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.treeid = treeid
         # DEVIATION 401 -- per-tree batch numbering restarts with the tree.
         self.trace_batch = -1
-        self.retained_counts_reset = True
-        self.retained_counts_phase = False
         self._invalidate_args_cache()
 
     def stage_sampled_order[
@@ -2132,8 +2203,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             # DEVIATION 2502: a pure node is a leaf whatever its slot
             # holds; the retained fields keep the shape every reader knows.
             var terminal = s.pure != Int32(0)
-            comptime if RETRY_PURE_NODES:
-                terminal = False
             out.append(
                 SplitSummary[Self.O.DataT](
                     s.colid != Int32(-1) and not terminal,
@@ -2192,7 +2261,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         find_argsp: MutPointer[
             FindBestSplitsArgs[Self.O], MutUntrackedOrigin
         ],
-        small_rows: Int = 0,
     ) raises:
         """`Builder::computeSplit`, `:570-626`. The quantiles and the
         objective travel in the staged args blobs -- per tree per width
@@ -2230,14 +2298,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);
         # the launch costs 10 us and writes the same zeros.
         var t_h = instr.times.start()
-        comptime if T04:
-            ctx.enqueue_function[clear_live_histogram_bins_kernel[Self.O]](
-                hist_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(col), Int32(n_bins), grid_dim=(n_work_items,n_blocks_dimy), block_dim=128,
-            )
-        elif HIST_ZERO_AFTER_READ_DEFAULT:
+        comptime if HIST_ZERO_AFTER_READ_DEFAULT:
             # Every cell this round's (node, column) blocks can touch lies
             # in its first `len_histograms` bins; the part below the
             # high-water mark is zero already, so only the new tail is
@@ -2268,35 +2329,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # the launchers take the device pointers. The objective their
         # `:592-596` builds per column block is built at the staging
         # site -- same value, `params` still the only source.
-        var retained = False
-        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
-            if self.retained_counts_phase:
-                ref cache = self.retained_counts.value()
-                if dataset.has_bins:
-                    cache.enqueue[Self.O,True,Self.sampled_labels](ctx,self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),self._workload_ptr().unsafe_origin_cast[MutAnyOrigin](),self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hist_argsp.unsafe_origin_cast[MutAnyOrigin](),col,n_bins,n_blocks_dimx,n_blocks_dimy,n_work_items)
-                else:
-                    cache.enqueue[Self.O,False,Self.sampled_labels](ctx,self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),self._workload_ptr().unsafe_origin_cast[MutAnyOrigin](),self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),hist_argsp.unsafe_origin_cast[MutAnyOrigin](),col,n_bins,n_blocks_dimx,n_blocks_dimy,n_work_items)
-                retained = True
-        if not retained:
-            launch_build_histograms_kernel[
-                Self.O, sampled_labels = Self.sampled_labels
-            ](
-                ctx,
-                self._hist_ptr(),
-                n_bins,
-                dataset,
-                self._work_items_ptr(),
-                col,
-                self.column_samples.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self._workload_ptr(),
-                n_blocks_dimx,
-                n_blocks_dimy,
-                smem_config,
-                hist_argsp,
-                n_classes,
-                small_rows,
-            )
+        launch_build_histograms_kernel[
+            Self.O, sampled_labels = Self.sampled_labels
+        ](
+            ctx,
+            self._hist_ptr(),
+            n_bins,
+            dataset,
+            self._work_items_ptr(),
+            col,
+            self.column_samples.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._workload_ptr(),
+            n_blocks_dimx,
+            n_blocks_dimy,
+            smem_config,
+            hist_argsp,
+            n_classes,
+        )
         instr.times.stop_host("host_hist_launch", t_h)
         # DEVIATION 401 -- the column block's REDUCED histograms, hashed
         # between the histogram kernel and the split kernel so the record
@@ -2320,7 +2370,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         t_h = instr.times.start()
         launch_find_best_splits_kernel[
             Self.O,
-            zero_after=HIST_ZERO_AFTER_READ_DEFAULT and not T04,
+            zero_after=HIST_ZERO_AFTER_READ_DEFAULT,
             candidates=HIST_SPLIT_CANDIDATES_DEFAULT,
         ](
             ctx,
@@ -2339,7 +2389,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Split[Self.O.DataT]](),
             n_classes,
-            small_rows,
+            0,
             self._work_items_ptr(),
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
@@ -2347,21 +2397,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         instr.times.stop_host("host_best_launch", t_h)
 
     def _merge_candidates(mut self, ctx: DeviceContext, n: Int, columns: Int) raises:
-        # T07: per-column candidates are distinct feature IDs. Their existing
-        # comparator is a total order across columns; no same-feature plateau
-        # is split between lanes. The canonical within-feature scan is retained.
-        comptime if T07:
-            ctx.enqueue_function[merge_split_candidates_parallel_kernel[Self.O.DataT]](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n), Int32(columns), grid_dim=n, block_dim=128,
-            )
-        else:
-            ctx.enqueue_function[merge_split_candidates_kernel[Self.O.DataT]](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n), Int32(columns), grid_dim=ceildiv(n,128), block_dim=128,
-            )
+        ctx.enqueue_function[merge_split_candidates_kernel[Self.O.DataT]](
+            self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
+            Int32(n), Int32(columns), grid_dim=ceildiv(n,128), block_dim=128,
+        )
 
     def enqueue_best_splits(
         mut self,
@@ -2492,21 +2532,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.n_cols,
             n_sampled_cols,
         )
-        self.retained_counts_phase = False
-        comptime if RETAINED_COUNT_HIST and Self.O.BinT.is_classification and not Self.O.BinT.weighted:
-            # Metadata and cache kernels limit padded device batches by the
-            # queue header's live prefix. Partial-feature/weighted routes
-            # retain the incumbent. No host queue or count readback is added.
-            if n > 0 and sample_offset == 0 and n_sampled_cols == self.n_cols and Int(dataset.n_sampled_cols) == self.n_cols and self.retained_counts:
-                ref cache = self.retained_counts.value()
-                if self.retained_counts_reset:
-                    cache.reset(ctx)
-                    self.retained_counts_reset = False
-                if dev_n>=0:
-                    cache.prepare_device(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n,self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                else:
-                    cache.prepare(ctx,self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),n)
-                self.retained_counts_phase = True
         # DEVIATION 401 (added with the 2026-08-22 identity audit) -- the
         # round's sampled COLUMNS, the per-node feature-sample RNG's
         # (`fnv1a32_hash(seed, treeid, nodeid)` -> minstd_rand ->
@@ -2528,84 +2553,13 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
 
         # `:497-500` -- ten columns per launch.
         instr.times.stop_host("host_launch_setup", t_h)
-        var small_batch = False
-        var t05_rows = 0
-        comptime if SMALL_NODE_FUSED_DEFAULT:
-            if (dev_n < 0 or T05) and not self.retained_counts_phase and dataset.has_bins and not instr.trace.enabled and Int(
-                self.params.max_n_bins
-            ) * Int(
-                self.num_outputs
-            ) <= SMALL_NODE_SLOTS:
-                comptime if T05:
-                    # T05: a PER-NODE choice made on the device, so it needs
-                    # no host frontier read and works in the device level
-                    # loop. Each fused block reads its node's row count and
-                    # keeps only nodes of at most T05_NODE_ROWS rows; the
-                    # histogram and find_best_splits blocks skip exactly
-                    # those. Large nodes (million-row roots) keep the
-                    # multi-block replicated histogram.
-                    t05_rows = T05_NODE_ROWS
-                else:
-                    small_batch = _small_batch_host(work_items)
         var c = 0
         while c < n_sampled_cols:
-            comptime if T05:
-                if t05_rows > 0:
-                    var dimy5 = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
-                    log_launch_ctx(ctx, "small_node_split_t05")
-                    # No candidate merge here: `_compute_split` merges every
-                    # node's slots once, after its find_best_splits wrote the
-                    # large nodes' slots for the same column block.
-                    ctx.enqueue_function[
-                        small_node_split_kernel[
-                            Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                            Self.sampled_labels, HIST_SPLIT_CANDIDATES_DEFAULT,
-                            SPLIT_REDUCE_PINNED_DEFAULT,
-                        ]
-                    ](
-                        find_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                        self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(c),
-                        self.column_samples.unsafe_ptr()
-                        .unsafe_origin_cast[MutAnyOrigin](),
-                        self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(self.params.max_n_bins),
-                        self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                        Int32(t05_rows),
-                        grid_dim=(n, dimy5),
-                        block_dim=TPB_DEFAULT,
-                    )
-            if small_batch:
-                var dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
-                log_launch_ctx(ctx, "small_node_split")
-                ctx.enqueue_function[
-                    small_node_split_kernel[
-                        Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                        Self.sampled_labels, HIST_SPLIT_CANDIDATES_DEFAULT,
-                    ]
-                ](
-                    find_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                    self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(c),
-                    self.column_samples.unsafe_ptr()
-                    .unsafe_origin_cast[MutAnyOrigin](),
-                    self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(self.params.max_n_bins),
-                    self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
-                    Int32(0),
-                    grid_dim=(n, dimy),
-                    block_dim=TPB_DEFAULT,
-                )
-                comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
-                    self._merge_candidates(ctx, n, dimy)
-            else:
-                self._compute_split(
-                    ctx, dataset, c, n_blocks_dimx, n,
-                    n_sampled_cols, smem_config, instr, tag_prefix,
-                    hist_argsp, find_argsp, t05_rows,
-                )
+            self._compute_split(
+                ctx, dataset, c, n_blocks_dimx, n,
+                n_sampled_cols, smem_config, instr, tag_prefix,
+                hist_argsp, find_argsp,
+            )
             c += N_BLKS_FOR_COLS
         if dev_n >= 0:
             return
@@ -2897,14 +2851,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             )
             instr.times.stop_host("host_enq_hist_retry", t_rt)
             return False
-        # DEVIATION 1919 -- at round 0 the device span already holds this
-        # batch's items and block map (round zero staged `active_items`,
-        # a copy of `work_items`, and no retry restaged a subset).
-        # DEVIATION 2011: under R > 1 the staged map is HISTOGRAM
-        # granularity, which the partition scan's TPB-granular slot math
-        # must never read -- the reuse is off and every batch restages
-        # (priced in the 2011 block). Comptime-folds to `st.round == 0`
-        # under the default flag.
+        # DEVIATION 2011: the staged map is HISTOGRAM granularity, which
+        # the partition scan's TPB-granular slot math must never read, so
+        # every batch restages (priced in the 2011 block).
         var t_ns = instr.times.start()
         if len(st.fused_retry) > 0:
             # `IDN_RF_FUSED_PARTITION`: every node outside `fused_retry`
@@ -2916,7 +2865,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 sub_items.append(st.work_items[st.fused_retry[j]])
                 sub_splits.append(st.final_splits[st.fused_retry[j]])
             self.enqueue_node_split_replay(
-                ctx, dataset, sub_items, sub_splits, reuse_phase_span=False
+                ctx, dataset, sub_items, sub_splits
             )
             instr.times.stop_host("host_enq_partition", t_ns)
             st.phase = 3
@@ -2926,7 +2875,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             dataset,
             st.work_items,
             st.final_splits,
-            reuse_phase_span=(st.round == 0 and HIST_ITEMS_PER_THREAD == 1),
         )
         instr.times.stop_host("host_enq_partition", t_ns)
         st.phase = 1
@@ -2973,27 +2921,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
         work_items: List[NodeWorkItem],
         final_splits: List[SplitSummary[Self.O.DataT]],
-        reuse_phase_span: Bool = False,
     ) raises:
         """The partition half of `doSplit`, `:458-501`, MINUS the trailing
         sync -- the caller's, per the pipelined forest loop (DEVIATION
-        117).
-
-        DEVIATION 1919: `reuse_phase_span=True` asserts the device's
-        packed [items | workload] span ALREADY holds exactly this
-        `work_items` list's staging, so the restage and its
-        `xfer_phase_upload` are skipped. The ONE caller that may pass
-        True is `advance_batch_replay`, and only when `st.round == 0`: round
-        zero staged `st.active_items`, which `begin_batch_replay` made a copy
-        of this very `st.work_items`, and no retry round restaged a
-        subset in between -- so the span's bytes, `cur_wl_rel`, and the
-        block map are byte-for-byte what restaging would produce (and
-        nothing else writes the `d_work_items`/`workload_info` stretch:
-        the splits upload and 1916's fused setup write other regions).
-        Any retry (`st.round > 0`) restages, because the last staging
-        was the shrunken active set. The grid size is recomputed by
-        `workload_blocks_for_host`, the same arithmetic `update_workload_info_host`
-        runs, sans writes."""
+        117)."""
         var n = len(work_items)
         # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
         var ds = dataset.copy()
@@ -3026,19 +2957,15 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 dst_buf=self.splits_d_view.view,
                 src_ptr=self.h_splits.unsafe_ptr(),
             )
-        # DEVIATION 1908: stage both, then ONE packed upload -- unless
-        # DEVIATION 1919 proved the span is already there (see the
-        # docstring).
-        var n_partition_blocks: Int
-        if reuse_phase_span:
-            n_partition_blocks = workload_blocks_for_host(work_items)
-        else:
-            self._stage_work_items_host(work_items)
-            # `:393-407` -- straight into the pinned array, as theirs.
-            n_partition_blocks = update_workload_info_host(
-                work_items, self._h_workload_ptr()
-            )
-            self._enqueue_phase_upload(ctx, n_partition_blocks)
+        # DEVIATION 1908: stage both, then ONE packed upload. (DEVIATION
+        # 1919's span reuse ran only at one item per thread, deleted with
+        # MOJOLEARN_2011_HIST_ITEMS1.)
+        self._stage_work_items_host(work_items)
+        # `:393-407` -- straight into the pinned array, as theirs.
+        var n_partition_blocks = update_workload_info_host(
+            work_items, self._h_workload_ptr()
+        )
+        self._enqueue_phase_upload(ctx, n_partition_blocks)
 
         # DEVIATION 1893/1909: the partition's args blob (dataset only,
         # `n_sampled_cols` restored to `original_n_sampled_cols` above)
@@ -3077,32 +3004,25 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         order, `finalize_pure_splits_kernel` turns each pure slot into a
         leaf (DEVIATION 2502, what `_read_splits_host` did on the host), and
         the partition reads the slots where they are. The staged
-        [items | workload] span is reused under the same condition
-        DEVIATION 1919 states (round zero staged this very list at TPB
-        granularity); otherwise it is restaged from the host list, which
-        is control data the host already owns."""
+        [items | workload] span is restaged from the host list, which is
+        control data the host already owns."""
         var n = len(work_items)
         if n == 0:
             return
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
-        comptime if not RETRY_PURE_NODES:
-            launch_finalize_pure_splits_kernel[Self.O.DataT](
-                ctx, self._splits_ptr(), n
-            )
-        var n_partition_blocks: Int
-        comptime if HIST_ITEMS_PER_THREAD == 1:
-            n_partition_blocks = workload_blocks_for_host(work_items)
-        else:
-            # Histogram and partition use different workload granularities.
-            # The earlier histogram upload may still be reading its pinned
-            # source; stage this upload into the other persistent span.
-            swap(self.h_phase, self.h_phase_spare)
-            self._stage_work_items_host(work_items)
-            n_partition_blocks = update_workload_info_host(
-                work_items, self._h_workload_ptr()
-            )
-            self._enqueue_phase_upload(ctx, n_partition_blocks)
+        launch_finalize_pure_splits_kernel[Self.O.DataT](
+            ctx, self._splits_ptr(), n
+        )
+        # Histogram and partition use different workload granularities.
+        # The earlier histogram upload may still be reading its pinned
+        # source; stage this upload into the other persistent span.
+        swap(self.h_phase, self.h_phase_spare)
+        self._stage_work_items_host(work_items)
+        var n_partition_blocks = update_workload_info_host(
+            work_items, self._h_workload_ptr()
+        )
+        self._enqueue_phase_upload(ctx, n_partition_blocks)
         if not self.node_split_args_ready:
             _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
             self.node_split_args_ready = True
@@ -3159,13 +3079,159 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
              again at partition granularity (`TPB_DEFAULT`: the pop does
              not move the head, so items and map are rebuilt as they were),
              finalize, partition, push."""
-        var max_batch = Int(self.params.max_batch_size)
         var max_rounds = max_sampling_rounds_for(
             self.n_cols, self.original_n_sampled_cols
         )
-        var ds_split = dataset.copy()
-        ds_split.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        for _ in range(LOOP_K):  # driver-loop: over batches per drain
+            self._loop_batch_head(ctx)
+            for r in range(max_rounds):  # driver-loop: over sampling rounds
+                if r > 0:
+                    self._loop_retry_next(ctx, r)
+                self._loop_round(
+                    ctx, dataset, quantiles, smem_config, instr, r, max_rounds
+                )
+            self._loop_batch_tail(ctx, dataset, max_rounds)
+        log_launch_ctx(ctx, "xfer_loop_header")
+        ctx.enqueue_copy(dst_buf=self.loop_h_hdr, src_buf=self.loop_hdr)
+
+    def _ee_multi_round(self) -> Bool:
+        """The early-exit form applies: more than one sampling round."""
+        return max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        ) > 1
+
+    def _loop_n_bound(self) -> Int:
+        """Batch `loop_batch`'s proven item bound, `min(max_batch_size, 2^b)`
+        (the queue at most doubles per batch)."""
+        var max_batch = Int(self.params.max_batch_size)
+        var b = self.loop_batch
+        var n_bound = max_batch
+        if b < 30 and (1 << b) < max_batch:
+            n_bound = 1 << b
+        return n_bound
+
+    def _loop_blocks_bound(self, n_bound: Int) -> Int:
+        """The block map's proven bound for a batch of `n_bound` items."""
+        return 1 + n_bound + self.n_sampled_rows // TPB_DEFAULT
+
+    def _loop_batch_head(mut self, ctx: DeviceContext) raises:
+        """Step 1 of a device-loop batch: pop at histogram granularity
+        (`HIST_WORKLOAD_GRANULARITY`) and build the histogram's block map."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
+        self.cur_wl_rel = calculate_aligned_bytes(
+            n_bound * size_of[NodeWorkItem]()
+        )
+        var hist_scale = self.hist_task_rows // TPB_DEFAULT
+        launch_loop_pop(
+            ctx,
+            self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.loop_queue.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            self.loop_scan.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            max_batch,
+            n_bound,
+            blocks_bound,
+            self.hist_task_rows,
+            hist_scale,
+        )
+
+    def _loop_retry_next(mut self, ctx: DeviceContext, r: Int) raises:
+        """Sampling round `r >= 1`'s retry set: the nodes of round `r - 1`
+        still without a split (and not pure), compacted in batch order into
+        round `r`'s items and map; the count lands in `LOOP_H_NEXT`."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
+        var hist_scale = self.hist_task_rows // TPB_DEFAULT
+        launch_loop_retry_next[Self.O.DataT, False](
+            ctx,
+            self.loop_hdr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self._splits_ptr(),
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            self.loop_items_s.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[NodeWorkItem](),
+            self.loop_retry.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            self.loop_scan.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ](),
+            max_batch,
+            n_bound,
+            blocks_bound,
+            self.hist_task_rows,
+            hist_scale,
+            r == 1,
+        )
+
+    def _loop_round(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+        r: Int,
+        max_rounds: Int,
+    ) raises:
+        """Sampling round `r`'s split search over its column window, then
+        (more than one round) the merge of its candidates into the batch's
+        final splits at their original slots."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
         var no_items = List[NodeWorkItem]()
+        var n_sampled_cols = sampled_cols_in_round(
+            self.n_cols, self.original_n_sampled_cols, r
+        )
+        var ds_round = dataset.copy()
+        ds_round.n_sampled_cols = Int32(n_sampled_cols)
+        self.enqueue_best_splits(
+            ctx, ds_round, quantiles, no_items,
+            r * self.original_n_sampled_cols, n_sampled_cols,
+            smem_config, instr, String(""),
+            dev_n=n_bound, dev_blocks=blocks_bound,
+        )
+        if max_rounds > 1:
+            launch_loop_retry_merge[Self.O.DataT, False](
+                ctx,
+                self.loop_hdr.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ](),
+                self._splits_ptr(),
+                self.loop_final.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[Split[Self.O.DataT]](),
+                self.loop_retry.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ](),
+                max_batch,
+                n_bound,
+                r == 0,
+            )
+
+    def _loop_batch_tail(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        max_rounds: Int,
+    ) raises:
+        """Step 3 of a device-loop batch: the batch's answer back into the
+        split slots, the re-pop at partition granularity (`TPB_DEFAULT`; the
+        pop does not move the head, so items and map are rebuilt as they
+        were), finalize, partition, push. Advances `loop_batch`."""
+        var max_batch = Int(self.params.max_batch_size)
+        var n_bound = self._loop_n_bound()
+        var blocks_bound = self._loop_blocks_bound(n_bound)
         var hdrp = self.loop_hdr.unsafe_ptr().unsafe_origin_cast[
             MutUntrackedOrigin
         ]()
@@ -3175,150 +3241,167 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var scanp = self.loop_scan.unsafe_ptr().unsafe_origin_cast[
             MutUntrackedOrigin
         ]()
-        var retryp = self.loop_retry.unsafe_ptr().unsafe_origin_cast[
-            MutUntrackedOrigin
-        ]()
-        var items_sp = (
-            self.loop_items_s.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[NodeWorkItem]()
+        var ds_split = dataset.copy()
+        ds_split.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        if max_rounds > 1:
+            launch_loop_retry_finish[Self.O.DataT](
+                ctx,
+                self._splits_ptr(),
+                self.loop_final.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin]()
+                .unsafe_bitcast[Split[Self.O.DataT]](),
+                n_bound,
+            )
+        launch_loop_pop(
+            ctx,
+            hdrp,
+            queuep,
+            self._work_items_ptr(),
+            self._workload_ptr(),
+            scanp,
+            max_batch,
+            n_bound,
+            blocks_bound,
+            TPB_DEFAULT,
+            1,
         )
-        var finalp = (
-            self.loop_final.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin]()
-            .unsafe_bitcast[Split[Self.O.DataT]]()
+        launch_loop_finalize[Self.O.DataT, True](
+            ctx,
+            self._splits_ptr(),
+            hdrp,
+            n_bound,
         )
-        var hist_scale = self.hist_task_rows // TPB_DEFAULT
-        for _ in range(LOOP_K):
-            var b = self.loop_batch
-            var n_bound = max_batch
-            if b < 30 and (1 << b) < max_batch:
-                n_bound = 1 << b
-            var blocks_bound = 1 + n_bound + self.n_sampled_rows // TPB_DEFAULT
-            self.cur_wl_rel = calculate_aligned_bytes(
-                n_bound * size_of[NodeWorkItem]()
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(
+                ctx, NodeSplitArgs(ds_split.copy())
             )
-            # 1. pop + the histogram's block map
-            launch_loop_pop(
-                ctx,
-                hdrp,
-                queuep,
-                self._work_items_ptr(),
-                self._workload_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                blocks_bound,
-                self.hist_task_rows,
-                hist_scale,
-            )
-            # 2. every sampling round
-            for r in range(max_rounds):
-                if r > 0:
-                    launch_loop_retry_next[
-                        Self.O.DataT, RETRY_PURE_NODES
-                    ](
-                        ctx,
-                        hdrp,
-                        self._splits_ptr(),
-                        self._work_items_ptr(),
-                        self._workload_ptr(),
-                        items_sp,
-                        retryp,
-                        scanp,
-                        max_batch,
-                        n_bound,
-                        blocks_bound,
-                        self.hist_task_rows,
-                        hist_scale,
-                        r == 1,
-                    )
-                var n_sampled_cols = sampled_cols_in_round(
-                    self.n_cols, self.original_n_sampled_cols, r
-                )
-                var ds_round = dataset.copy()
-                ds_round.n_sampled_cols = Int32(n_sampled_cols)
-                self.enqueue_best_splits(
-                    ctx, ds_round, quantiles, no_items,
-                    r * self.original_n_sampled_cols, n_sampled_cols,
-                    smem_config, instr, String(""),
-                    dev_n=n_bound, dev_blocks=blocks_bound,
-                )
-                if max_rounds > 1:
-                    launch_loop_retry_merge[Self.O.DataT, RETRY_PURE_NODES](
-                        ctx,
-                        hdrp,
-                        self._splits_ptr(),
-                        finalp,
-                        retryp,
-                        max_batch,
-                        n_bound,
-                        r == 0,
-                    )
-            # 3. the batch's answer, the partition map, finalize, partition
-            if max_rounds > 1:
-                launch_loop_retry_finish[Self.O.DataT](
-                    ctx, self._splits_ptr(), finalp, n_bound
-                )
-            launch_loop_pop(
-                ctx,
-                hdrp,
-                queuep,
-                self._work_items_ptr(),
-                self._workload_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                blocks_bound,
-                TPB_DEFAULT,
-                1,
-            )
-            launch_loop_finalize[Self.O.DataT, not RETRY_PURE_NODES](
-                ctx,
-                self._splits_ptr(),
-                hdrp,
-                n_bound,
-            )
-            if not self.node_split_args_ready:
-                _ = self.node_split_args.upload(
-                    ctx, NodeSplitArgs(ds_split.copy())
-                )
-                self.node_split_args_ready = True
-            var argsp = self.node_split_args.device_ptr()
-            launch_node_split_kernel(
-                ctx,
-                ds_split,
-                self._work_items_ptr(),
-                self._splits_ptr(),
-                self._workload_ptr(),
-                blocks_bound,
-                n_bound,
-                self.partition_row_ids.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self.node_split_scratch,
-                argsp,
-            )
-            launch_loop_push[Self.O.DataT](
-                ctx,
-                hdrp,
-                queuep,
-                self.loop_nodes_i.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self.loop_nodes_f.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                self._work_items_ptr(),
-                self._splits_ptr(),
-                scanp,
-                max_batch,
-                n_bound,
-                Int(self.params.max_depth),
-                Int(self.params.min_samples_split),
-                self.loop_cap,
-                Int(self.params.max_leaves),
-            )
-            self.loop_batch += 1
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
+        launch_node_split_kernel(
+            ctx,
+            ds_split,
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            self._workload_ptr(),
+            blocks_bound,
+            n_bound,
+            self.partition_row_ids.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.node_split_scratch,
+            argsp,
+        )
+        launch_loop_push[Self.O.DataT](
+            ctx,
+            hdrp,
+            queuep,
+            self.loop_nodes_i.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.loop_nodes_f.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            scanp,
+            max_batch,
+            n_bound,
+            Int(self.params.max_depth),
+            Int(self.params.min_samples_split),
+            self.loop_cap,
+            Int(self.params.max_leaves),
+        )
+        self.loop_batch += 1
+
+    def _ee_enqueue_batch_head(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+    ) raises:
+        """`IDN_RF_DEVICE_LOOP_EARLY_EXIT`, more than one sampling round: a
+        batch's head (pop, round 0's search and merge, round 1's retry
+        compaction), then the header download the next `advance_tree`
+        reads (its `LOOP_H_NEXT` word is round 1's retry count)."""
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        self._loop_batch_head(ctx)
+        self._loop_round(
+            ctx, dataset, quantiles, smem_config, instr, 0, max_rounds
+        )
+        self._loop_retry_next(ctx, 1)
+        self.loop_round = 1
+        self.loop_hdr_fresh = True
         log_launch_ctx(ctx, "xfer_loop_header")
         ctx.enqueue_copy(dst_buf=self.loop_h_hdr, src_buf=self.loop_hdr)
+
+    def _ee_loop_advance(
+        mut self,
+        ctx: DeviceContext,
+        quantiles: Quantiles[Self.O.DataT],
+        mut ts: TreeState[Self.O],
+        mut instr: FitInstruments,
+    ) raises -> Bool:
+        """`IDN_RF_DEVICE_LOOP_EARLY_EXIT`'s consume step (more than one
+        sampling round). Call ONLY after a synchronize covering the last
+        enqueue's download. After a header download (a batch boundary):
+        queue empty -> finish the tree on the device. Then the pending
+        round's retry count: nonzero -> enqueue that round and the next
+        round's compaction plus the 4-byte count download; zero (or the
+        last round done) -> enqueue the batch's tail and the next batch's
+        head plus the header download."""
+        var hp = self.loop_h_hdr.unsafe_ptr()
+        if self.loop_hdr_fresh:
+            self.loop_hdr_fresh = False
+            if hp.unsafe_load(LOOP_H_OVERFLOW) != Int32(0):
+                raise Error(
+                    "RandomForest device level loop: the tree outgrew the"
+                    + " device node table ("
+                    + String(self.loop_cap)
+                    + " nodes, a proven bound; this is a bug)"
+                )
+            var head = Int(hp.unsafe_load(LOOP_H_HEAD))
+            var tail = Int(hp.unsafe_load(LOOP_H_TAIL))
+            if head == tail:
+                # The batch enqueued with this header popped nothing: it is
+                # inert end to end (as the device loop's trailing batches).
+                var n_nodes = Int(hp.unsafe_load(LOOP_H_NODES))
+                if n_nodes < 1 or n_nodes > self.loop_cap:
+                    raise Error(
+                        "RandomForest device level loop: device header"
+                        + " reports "
+                        + String(n_nodes)
+                        + " nodes"
+                    )
+                self.loop_active = False
+                self._finish_tree_device(ctx, ts, n_nodes, instr)
+                return True
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        var r = self.loop_round
+        # driver-loop: over sampling rounds -- the one 4-byte retry count of
+        # round r decides whether rounds r.. run (the host queue's stop at
+        # the first round with nothing to retry); a decision over model
+        # structure, never a loop over rows or a downloaded buffer.
+        var n_retry = Int(hp.unsafe_load(LOOP_H_NEXT))
+        if n_retry > 0:
+            self._loop_round(
+                ctx, ts.ds, quantiles, ts.smem_config, instr, r, max_rounds
+            )
+            if r + 1 < max_rounds:
+                self._loop_retry_next(ctx, r + 1)
+                self.loop_round = r + 1
+                log_launch_ctx(ctx, "xfer_loop_retry_count")
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_next_h, src_buf=self.loop_next_d
+                )
+                return False
+        self._loop_batch_tail(ctx, ts.ds, max_rounds)
+        self._ee_enqueue_batch_head(
+            ctx, ts.ds, quantiles, ts.smem_config, instr
+        )
+        return False
 
     def _loop_advance(
         mut self,
@@ -3370,14 +3453,15 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         (`loop_tree_kernel`), the leaf kernels run over them, and the
         finished model -- nodes in node-id order (the order
         `NodeQueue::Push` appends in) and the leaf values -- crosses to
-        the host once, as bulk copies into the tree's own lists.
+        the host once, as bulk copies ENQUEUED here; `collect_finished`
+        builds the tree's lists from them after the caller's next drain
+        (TREE_OP_FOREST_FINISH; `ts.tree` stays empty on this path).
         `leaf_counter` is 1 plus one per split (`:111`, every split adds
         two nodes); `depth_counter` is the deepest child's depth
         (`:133-134`), which is the LAST node's: the FIFO hands out ids in
         non-decreasing depth."""
-        comptime if RETAINED_COUNT_HIST:
-            if self.retained_counts and not self.retained_counts_reset:
-                self.retained_counts.value().publish_audit(ctx)
+        # a deferred finish still in flight owns the leaf staging below
+        self._settle_pending(ctx)
         var n_out = Int(ts.ds.num_outputs)
         var t0 = instr.times.start()
         self._ensure_leaf_capacity(ctx, n_nodes, n_out)
@@ -3411,47 +3495,81 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var d_depth = self.loop_nodes_i.create_sub_buffer[DType.int32](
             (n_nodes - 1) * LOOP_NODE_INTS + 5, 1
         )
-        var h_depth = self.loop_h_hdr.create_sub_buffer[DType.int32](
-            LOOP_H_DEPTH, 1
-        )
         log_launch_ctx(ctx, "xfer_loop_tree")
         ctx.enqueue_copy(dst_buf=ht, src_buf=dt)
         log_launch_ctx(ctx, "xfer_leaf_download")
         ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
-        ctx.enqueue_copy(dst_buf=h_depth, src_buf=d_depth)
-        ctx.synchronize()
+        # TREE_OP_FOREST_FINISH: enqueued only; the depth word gets its own
+        # host word (the next tree's header download rewrites `loop_h_hdr`),
+        # and the host model is `collect_finished`'s after the caller's next
+        # drain. The views ride along until then. Deleted by lane
+        # t1b-tree-leaf-and-node-ops (2026-11-09, no define): this finish's own
+        # `ctx.synchronize()` and its in-place host assembly into `ts.tree`
+        # (one drain per finished tree) are deleted; the assembly is
+        # `collect_finished`'s, statement for statement.
+        ctx.enqueue_copy(dst_buf=self.pending_h_depth, src_buf=d_depth)
+        self.pending_nodes = n_nodes
+        self.pending_out = n_out
+        self.pending_tag = self.tree_tag
+        self.pending_treeid = self.treeid
+        self.pending_num_outputs = ts.queue.tree.num_outputs
+        self.pending_keep_d8.append(dt^)
+        self.pending_keep_h8.append(ht^)
+        self.pending_keep_dl.append(dl^)
+        self.pending_keep_hl.append(hl^)
+        self.pending_keep_di.append(d_depth^)
+        instr.times.stop_host("leaf_values", t0)
+        ts.done = True
+
+    def collect_finished(mut self) raises:
+        """TREE_OP_FOREST_FINISH's host half: after a drain that covered a
+        deferred `_finish_tree_device`'s downloads, the tree's host model
+        (the same bulk copies, the same fields) lands in `finished` with its
+        tag in `finished_tags`. Nothing pending: nothing happens."""
+        if self.pending_nodes <= 0:
+            return
+        var n_nodes = self.pending_nodes
+        var n_out = self.pending_out
         var tree = TreeMetaDataNode[Self.O.DataT](
-            self.treeid,
-            self.loop_h_hdr.unsafe_ptr().unsafe_load(LOOP_H_DEPTH),
+            self.pending_treeid,
+            self.pending_h_depth.unsafe_ptr().unsafe_load(0),
             Int32(1 + (n_nodes - 1) // 2),
             Float64(0),
             List[Scalar[Self.O.DataT]](),
             List[SparseTreeNode[Self.O.DataT]](),
-            ts.queue.tree.num_outputs,
+            self.pending_num_outputs,
         )
         tree.sparsetree.resize(n_nodes, SparseTreeNode[Self.O.DataT]())
         tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
-        memcpy(
+        unsafe_memcpy(
             dest=tree.sparsetree.unsafe_ptr(),
             src=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[Self.O.DataT]
             ](),
             count=n_nodes,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=tree.vector_leaf.unsafe_ptr(),
             src=self.leaf_h_leaves.unsafe_ptr(),
             count=n_nodes * n_out,
         )
-        _ = dt^
-        _ = ht^
-        _ = dl^
-        _ = hl^
-        _ = d_depth^
-        _ = h_depth^
-        instr.times.stop(ctx, "leaf_values", t0)
-        ts.tree = tree^
-        ts.done = True
+        self.finished.append(tree^)
+        self.finished_tags.append(self.pending_tag)
+        self.pending_nodes = 0
+        self.pending_keep_d8.clear()
+        self.pending_keep_h8.clear()
+        self.pending_keep_dl.clear()
+        self.pending_keep_hl.clear()
+        self.pending_keep_di.clear()
+
+    def _settle_pending(mut self, ctx: DeviceContext) raises:
+        """A deferred finish still in flight is drained and collected before
+        anything reuses the leaf staging (the next finish, or a host-queue
+        tree's `set_leaf_predictions`). The forest cycle collects after every
+        drain, so on its path this never drains."""
+        if self.pending_nodes > 0:
+            ctx.synchronize()
+            self.collect_finished()
 
     def shared_memory_config(self) raises -> SharedMemoryConfig:
         """`Builder::computeSharedMemoryConfig`, `:522-551`, with this
@@ -3580,8 +3698,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
     ) raises:
         """`Builder::SetLeafPredictions`, `:630-687`, for a tree the HOST
-        queue built (check sabotage instantiations and identity traces
-        only; a fit's tree is finished by `_finish_tree_device`).
+        queue built (every fit tree by default; under
+        `-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT` a fit's tree is finished by
+        `_finish_tree_device` instead).
 
         Their `leafKernel` runs over EVERY node and returns immediately for
         the ones that are not leaves (`:225`), so the launch is sized by
@@ -3603,14 +3722,14 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         if n_nodes == 0:
             return
         self._ensure_leaf_capacity(ctx, n_nodes, n_out)
-        memcpy(
+        unsafe_memcpy(
             dest=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
                 SparseTreeNode[Self.O.DataT]
             ](),
             src=tree.sparsetree.unsafe_ptr(),
             count=n_nodes,
         )
-        memcpy(
+        unsafe_memcpy(
             dest=self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[
                 InstanceRange
             ](),
@@ -3637,7 +3756,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         log_launch_ctx(ctx, "xfer_leaf_download")
         ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=tree.vector_leaf.unsafe_ptr(),
             src=self.leaf_h_leaves.unsafe_ptr(),
             count=n_nodes * n_out,
@@ -3691,10 +3810,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # change behavior under an exported trace variable. Traced fits go
         # through `fit_forest`.
         var instr = FitInstruments.disabled()
+        self.tree_tag = 0
         var ts = self.begin_tree[sabotage](ctx, dataset, quantiles, instr)
         while not ts.done:
             ctx.synchronize()
             _ = self.advance_tree[sabotage](ctx, quantiles, ts, instr)
+        if self.pending_nodes > 0:
+            # a device-loop tree (TREE_OP_FOREST_FINISH): its model lands
+            # after the drain that settles the finish
+            ctx.synchronize()
+            self.collect_finished()
+            var done = self.finished[len(self.finished) - 1].copy()
+            self.finished.clear()
+            self.finished_tags.clear()
+            return done^
         var tree = ts.tree.copy()
         return tree^
 
@@ -3716,8 +3845,6 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # DEVIATION 1909 -- this dataset is the one the cached args
         # blobs will embed; drop whatever an earlier drive staged.
         self._invalidate_args_cache()
-        self.retained_counts_reset = True
-        self.retained_counts_phase = False
         var ds = dataset.copy()
         ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
         var smem_config = self.shared_memory_config()
@@ -3754,15 +3881,16 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             False,
         )
         self.loop_active = False
-        comptime if sabotage == 0:
-            # A fit's tree with an expandable root runs its queue on the
-            # device (the block above `LOOP_K`). The host queue below
-            # serves only the check sabotage instantiations and an
-            # identity trace.
+        comptime if sabotage == 0 and RF_DEVICE_QUEUE:
+            # B arm (`-D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT`, the block
+            # above `RF_DEVICE_QUEUE`): a fit's tree with an expandable root
+            # runs its queue on the device. The default is the host queue
+            # below, the 0.8.25 route.
             if (
                 self.loop_cap > 0
                 and ts.queue.has_work()
                 and not instr.trace.enabled
+                and not self.force_host_queue
             ):
                 self.loop_active = True
                 self.loop_batch = 0
@@ -3785,6 +3913,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                         LOOP_HDR_WORDS + LOOP_QUEUE_INTS
                     ),
                 )
+                comptime if IDN_RF_DEVICE_LOOP_EARLY_EXIT:
+                    if self._ee_multi_round():
+                        self._ee_enqueue_batch_head(
+                            ctx, ts.ds, quantiles, ts.smem_config, instr
+                        )
+                        return ts^
                 self._enqueue_loop_batches(
                     ctx, ts.ds, quantiles, ts.smem_config, instr
                 )
@@ -3814,6 +3948,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         if ts.done:
             return True
         if self.loop_active:
+            comptime if IDN_RF_DEVICE_LOOP_EARLY_EXIT:
+                if self._ee_multi_round():
+                    return self._ee_loop_advance(ctx, quantiles, ts, instr)
             return self._loop_advance(ctx, quantiles, ts, instr)
         # DEVIATION 2510 -- this step's HOST work, stamped piecewise with
         # no drain so the stage table can split `other`: `advance_batch_replay`
@@ -3849,6 +3986,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         DEVIATION 402 times the leaf pass here, where it runs, because
         `set_leaf_predictions` carries its own per-batch syncs and its
         wall time is real device work."""
+        # a deferred device finish still in flight owns the leaf staging
+        self._settle_pending(ctx)
         # DEVIATION 2510 -- the tree copy out of the queue is host work,
         # stamped without a drain.
         var t_copy = instr.times.start()

@@ -1,0 +1,28 @@
+diff --git a/x_decomp/rr_block.mojo b/x_decomp/rr_block.mojo
+index 6aca916073..60b79b7985 100644
+--- a/x_decomp/rr_block.mojo
++++ b/x_decomp/rr_block.mojo
+@@ -53,9 +53,9 @@ quality and GPU identity remain unqualified; the default stays disabled.
+ BITS: a different solver, so different words from the rotation solver at
+ n >= RB_MIN_N, on NVIDIA, AMD, Apple and the host column together (the gate
+ below is one comptime constant every one of them imports; the cells here
+-are the only arithmetic). Its -D MOJOLEARN_IDN_EIGH_BLOCK_ON
+-switch was deleted 2026-11-15 (docs/TOMBSTONES.md): IDN_EIGH_BLOCK is False and
+-the rotation solver runs at every size.
++are the only arithmetic). -D MOJOLEARN_IDN_EIGH_BLOCK_ON explicitly enables
++the experimental candidate; -D MOJOLEARN_IDN_EIGH_BLOCK_OFF (or
++-D MOJOLEARN_IDN_ALL_OFF) restores the rotation solver at every size.
+ 
+ CANDIDATE ARMS (default off, each moves the words on all four columns):
+   -D MOJOLEARN_IDN_EIGH_BLOCK_B8      RB_B = 8  (pivots 16 x 16)
+@@ -72,9 +72,7 @@ from x_decomp.rr import pj_first, pj_second
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at aa77115e1b.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 9ee63b6d65.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_EIGH_BLOCK = False
++comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]()
+ 
+ comptime _RB_B_WIDE = 32 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B32"]() else 16
+ #: columns a block

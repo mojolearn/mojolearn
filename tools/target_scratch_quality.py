@@ -13,7 +13,12 @@ import mojolearn as ml
 
 def dump(path):
     assert os.environ.get('MOJOLEARN_NUMERIC_MODE') == 'fast'
-    from mojolearn._expansion_prep import _prep_binding, _target_scratch
+    from mojolearn._expansion_prep import _prep_binding, _optional_prep_entry
+
+    def _target_scratch(mode):
+        # the binding word the encode door reads (its Python copy was deleted)
+        fn = _optional_prep_entry(_prep_binding(mode), "x_prep_target_scratch") if mode == "fast" else None
+        return bool(fn()) if fn is not None else False
     binding = _prep_binding("fast")
     assert str(binding.x_prep_vendor()) == "metal"
     assert int(binding.x_prep_numeric_mode()) == 0

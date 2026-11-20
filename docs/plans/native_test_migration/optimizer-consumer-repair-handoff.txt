@@ -1,0 +1,58 @@
+Moved optimizer helper consumers: integration repair (2026-11-10)
+
+Cause and dependencies
+  Root bundled productffb compilation found stale same_shape, py_ints and
+  contiguous_addr imports from bindings.optimizer_public_door. Evidence:
+  ~/mojolearn-evidence/python-mojo-migration-20261110/bundled-product-build/
+  host-_mojolearn_native_tokenizer_host.log (original failure retained).
+  Source reviewed against integ/python-boundary-next-20261110 at cd9ed710f6.
+  Needs producer OptimizerInputOwners/three-argument tensor_view and native
+  optimizer_input_plan already present in root; lane does not replace them.
+  Pilot owns optimizer_device_native (14ab3618f9 /679a558c69), public door,
+  router/config. Those files are untouched by this consumer repair.
+
+Repairs
+  Import TensorView/base_format/shape_text from pure bindings.tensor_view;
+  same_shape and optimizer_contiguous_address from training.optimizer_input_plan.
+  Replace removed py_ints shape packing with existing
+  providers.python.array_layout_boundary.native_shape_pack (PyTuple_New and
+  PyTuple_SetItem), removing the Python list/append/builtins.tuple route.
+  No replacement helper implementation or compatibility fallback was added.
+  Remove the unused shape pack import from sequence_moe entirely.
+
+  Every reviewed tensor_view consumer passes an explicit OptimizerInputOwners.
+  Buffer-export leases stay live through consuming native calls and released-GIL
+  gathers, then release in finally on normal returns and error paths. Metadata
+  copies may release after extraction; raw addresses may not escape their pins.
+  Propagate caller pins through linear_host_view/rms_host_view/_rd_operand/_c32,
+  embedding_indices/loss_targets, seq_addr/seq_slots and seq_device_input.
+  In particular borrowed int32 embedding indices and optimizer state addresses
+  previously returned without a retained buffer export now keep that export
+  until the operation finishes. Keeping only a Python object cannot pin a
+  resizable buffer export, hence the explicit leases rather than extra refs.
+
+  Linear/RMS/embedding/cross-entropy/_c32 now call the native contiguous gather
+  while the GIL is released. Contiguous spans stay borrowed; strided gathers
+  retain the same native List scratch owners through the compiled consumer.
+  No kernel, mathematical operation, dtype, shape, supported interface or
+  allocation publication contract changed. No new serial payload traversal.
+
+Affected source groups
+  Eleven stale import consumers repaired, plus five pure-metadata import
+  cleanups. Full changed paths are in the commit. Static SourceGraph from the
+  root checkout reports host: tokenizer, runtime_model_selection, runtime_trees,
+  runtime_family, runtime_decomp, runtime_catalog, runtime_byte_trainer,
+  runtime_parallel, runtime_neural. It reports no identical-group closure hit
+  in that root development manifest; this is scope metadata, not a device pass.
+  Exact members and intersecting sources: optimizer-consumer-groups.json.
+  Use root's existing consolidated product build; do not start a lane build or
+  new loader. Public smoke/regression coverage remains root-owned.
+
+Review and status
+  Reviewed every tensor_view occurrence in the owned consumers and all callers
+  of the changed helper signatures. All48 helper declaration/call lines carry
+  caller pins; this observation is an audit, not a source-count gate.
+  Source import/call-path review, existing static SourceGraph, git diff check
+  only. NO compile/test/timing/identity/box execution by lane. RUN OWED at root.
+  Full audit/transform evidence: ~/mojolearn-evidence/integ-finish-20261110/
+  optimizer-consumer-*.txt/json, optimizer-*-repair.diff and repair scripts.

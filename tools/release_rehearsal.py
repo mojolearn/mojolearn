@@ -14,10 +14,10 @@ compiles nothing and holds the Mac's Metal slot only for the Python tests.
 WHAT 0.8.12 LOST TIME TO, and the step that catches each:
   * the macOS wheel build failed after 16 minutes of compiling because
     `mojolearn/cross_vendor.py` imported NumPy and `math` outside the
-    independent-verification files. `platform-math` stages the package the
-    way the wheel ships it (every shipped .py, plus the two tools copies
-    pack_wheel.py and build_release_wheel.sh add) and runs the wheel audit's
-    Python rules over it.
+    independent-verification files. `platform-math` runs
+    tools/prebuild_check.py's `audits` part on HEAD: the package staged by
+    the packer's own entry functions and the wheel audit's Python rules over
+    it (the measurement build runs the same part before every build).
   * a byte LM surface test broke on a signature change and was patched by
     hand mid-release. `python-tests` runs the whole suite in IDENTICAL mode.
   * the wheel audit's own tests, the docs facts, the extension lists and the
@@ -49,7 +49,6 @@ of that claim is the contract=off column comparison in IDENTITY_PATHS.md
 import argparse
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,27 +56,6 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PKG = ROOT / "python" / "mojolearn"
-
-
-def stage_package(dest):
-    """The Python half of the wheel, laid out as it ships: the packages
-    pyproject.toml lists (mojolearn, mojolearn.models), the top-level
-    `mojolearn_diagnostics` module, and the two tools the builders copy in
-    under package names. Tests do not ship and are not staged."""
-    dest = Path(dest)
-    (dest / "mojolearn" / "models").mkdir(parents=True)
-    for src in sorted(PKG.glob("*.py")):
-        shutil.copy2(src, dest / "mojolearn" / src.name)
-    for src in sorted((PKG / "models").glob("*.py")):
-        shutil.copy2(src, dest / "mojolearn" / "models" / src.name)
-    shutil.copy2(ROOT / "python" / "mojolearn_diagnostics.py", dest / "mojolearn_diagnostics.py")
-    # packaging/linux/pack_wheel.py and packaging/macos/build_release_wheel.sh
-    shutil.copy2(ROOT / "tools" / "identity_break.py", dest / "mojolearn" / "_identity_break.py")
-    for src in sorted((ROOT / "tools" / "identity_lanes").glob("*.py")):
-        shutil.copy2(src, dest / "mojolearn" / f"_identity_lane_{src.name}")
-    shutil.copy2(ROOT / "tools" / "identity_trace_diff.py", dest / "mojolearn" / "_identity_trace_diff.py")
-    return dest
 
 
 def steps(work):
@@ -85,7 +63,6 @@ def steps(work):
                           text=True).stdout.strip()
     token = os.path.expanduser(os.environ.get("MOJOLEARN_DO_TOKEN_FILE", "~/.mojolearn_do_token"))
     py = sys.executable
-    stage = Path(work) / "staged-wheel-tree"
     return [
         ("wheel-audit-tests", ["pixi", "run", "test-wheel-audit"], None),
         # THE ONE STEP THAT CAN TOUCH METAL: the suite imports the package and
@@ -98,9 +75,8 @@ def steps(work):
         ("docs-facts", ["pixi", "run", "check-docs-facts"], None),
         ("ext-lists", [py, "packaging/check_ext_lists.py"], None),
         ("ext-lists-host", [py, "packaging/check_ext_lists.py", "--host"], None),
-        ("platform-math", ["sh", "-c", "%s tools/release_rehearsal.py --stage-only %s && "
-                           "pixi run -e pkg python packaging/portable_math/wheel.py --python-tree %s"
-                           % (shlex.quote(py), shlex.quote(str(stage)), shlex.quote(str(stage)))], None),
+        ("platform-math", [py, "tools/prebuild_check.py", "--commit", head, "--only", "audits",
+                           "--work", str(Path(work) / "prebuild")], None),
         ("nvidia-leg-dry-run", ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
                                 "--source-ref", head, "--gpu", "NVIDIA H100 80GB HBM3",
                                 "--allow-concurrent", "--minutes", "60"],
@@ -108,9 +84,6 @@ def steps(work):
         # The real AMD leg runs in the pinned Ubuntu 22.04 container; dry-run that.
         ("amd-leg-dry-run", ["bash", "tools/do_release061_leg.sh", head, token],
          dict(MOJOLEARN_RELEASE_UBUNTU22="1")),
-        # The same build on Hot Aisle, the route release.py takes when DigitalOcean
-        # has a GPU droplet live: the archive, the scripts and the free stock GET.
-        ("amd-hotaisle-leg-dry-run", ["bash", "tools/hotaisle_release_leg.sh", head], None),
     ]
 
 
@@ -138,12 +111,7 @@ def main(argv=None):
     ap.add_argument("--with", dest="with_", default="",
                     help="comma-separated OPT-IN step names to run as well (%s)" % ", ".join(OPT_IN))
     ap.add_argument("--keep", default="", metavar="DIR", help="write logs here instead of a fresh temp dir")
-    ap.add_argument("--stage-only", default="", metavar="DIR", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
-    if args.stage_only:
-        shutil.rmtree(args.stage_only, ignore_errors=True)
-        stage_package(args.stage_only)
-        return 0
     work = Path(args.keep) if args.keep else Path(tempfile.gettempdir()) / "mojolearn-rehearsal-(temp)"
     only = [n for n in args.only.split(",") if n]
     wanted = set(n for n in args.with_.split(",") if n) | (set(only) & set(OPT_IN))

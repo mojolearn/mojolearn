@@ -129,9 +129,12 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     is `^`.
 """
 
-from transformer.experiments.norm_profile_contract import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4, the NN24 eight-lane fold; owner another lane) oracle arms deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f192693134.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (the MOJOLEARN_IDN_NORM_FIXED_LANES arms only; the NN24 / IDN_NORM arms beside them stay deleted).
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 from std.math import min
 from std.memory import bitcast
@@ -258,6 +261,10 @@ def _gemm_bwd_b(
     if call[4] == BWD_DC_LEFT:
         return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
     return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
+
+
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) the host oracle's one-product form (qkv_fanin_concat_host) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 
 
 def _ones(n: Int) -> List[Float32]:
@@ -738,10 +745,6 @@ def rms_norm_backward_into(
                 var dhj = ftz(identical_mul(ftz(dy[t * dm + j]), ftz(wnorm[j])))
                 dh.append(dhj)
                 c = ftz(identical_mul_add(dhj, ftz(x[t * dm + j]), c))
-            comptime if NN24_NORM_LANES8:
-                c = norm_profile_dot[NN24_LANES](
-                    rebind[MutPointer[Float32, MutAnyOrigin]](dh.unsafe_ptr()),
-                    rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()), 0, t * dm, dm)
             comptime if IDN_NORM_FIXED_LANES:
                 # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
                 c = nfl_dot(
@@ -1177,7 +1180,7 @@ def _bwd_attention_chains(
             # head_dim 64: every lane of the head in flight in one pass over
             # the keys (lane neural-pass10); each lane's chain unchanged.
             if vec_hd == 64:
-                var accs = InlineArray[F32V, V64](fill=F32V(0.0))
+                var accs = Array[F32V, V64](fill=F32V(0.0))
                 for j in range(jlo, jhi + 1):
                     var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
                     var row = vbase + j * hd

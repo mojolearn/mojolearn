@@ -1,0 +1,70 @@
+Typed Logistic coefficient state and class-weight checks (2026-11-10)
+
+Frozen dependencies
+  27a0b43246: core.logistic_model_state, actual host PACK used by public fit.
+  831ed1cba0 plus19b940 context repair and their fixed-call dependencies:
+  core.label_weights_native_api and xtrees.label_weights_native.
+  Root confirmed dependencies are integrated. No product or fixed-descriptor
+  contract suite edited; config4cf fixtures/public scalar seams are next batch.
+
+Coefficient state:22 native fixtures, one host-native suite
+  Eight copy shapes, features/targets/intercept:
+  (0,1,false),(0,3,true),(1,1,false),(1,1,true),(4,3,false),(4,3,true),
+  (257,1025,false),(257,1025,true). Each large case has263425 coefficients;
+  worker chunks cross output rows. Input generation lays logical coefficient
+  values into feature-major QN storage; expected output is the independent
+  target-major logical sequence. Both signed zeros and quiet/signaling NaN
+  payload words are copied exactly. Bias row is copied when enabled, otherwise
+  exact positive-zero intercept words. Empty spans use actual null addresses.
+  Validate extents, source/output guards, unchanged source, then release the
+  source owner and recheck independent output owners. No arithmetic oracle.
+  Eight real span refusals cover null/unaligned weight, coefficient and bias
+  storage plus byte-end overflow. Output sentinels remain unchanged on refusal.
+  Six metadata contracts cover binary/multiclass target count, one-class refusal,
+  negative features, zero targets, stride/intercept and element-byte overflow.
+
+Class weights:8 fixtures each CPU/GPU through actual typed descriptors
+  Four pipelines: empty rows/k3; literal8-row/k3 codes with counts[3,2,3];
+ 262271-row/k7 cyclic codes with closed-form counts and dyadic class/sample
+  weights;17-row/k5 raw class-word gather including signed zero and distinct
+  quiet/signaling NaN payloads. Valid pipelines call counts and row gather;
+  finite cases call sample-weight multiplication. Independent Float64 product
+  of the dyadic factors is narrowed once; counts use literal or division/remainder
+  population expectations, not another kernel. All guards/inputs remain intact.
+  Four actual kernel-error cases: negative and high class codes for counts and
+  row gather. Driver must propagate exact native error text. Row output remains
+  unpublished; count contents may be partial, matching existing semantics, while
+  guards/source stay unchanged. No fake entry or generic ABI envelope test.
+  Native descriptor return counts are checked. Empty spans are real null spans.
+
+Target and parallel policy
+  Model PACK is pure host-native work for every public backend: execute its
+  suite once, with host_parallelize across fixtures and existing PACK workers.
+  CPU class-weight suite has comptime TARGET_COLUMN==COLUMN_CPU; MUST compile
+  with -D MOJOLEARN_COLUMN_CPU=1. This uses the real single producer descriptor,
+  not a test wrapper around host functions. GPU suite asserts non-CPU target.
+  CPU independent fixtures parallelize; GPU descriptors share context, so
+  fixture submissions are ordered and existing kernels retain their parallelism.
+  Existing host counts/row/multiply loops are unchanged, not a speed claim.
+
+Root bundle/task paths
+  Manifest logistic-state-weights-suites.json records exact target/dependencies.
+  Import checks.native_tests.logistic_model_state_suite.run_checks,
+  checks.native_tests.logistic_label_weights_cpu_suite.run_checks (CPU define),
+  and checks.native_tests.logistic_label_weights_gpu_suite.run_checks separately.
+  Thin entries and existing pixi tasks:
+    bash tools/compile_slot.sh pixi run check-native-logistic-model-state
+    bash tools/compile_slot.sh pixi run check-native-logistic-label-weights-cpu
+    bash tools/compile_slot.sh pixi run check-native-logistic-label-weights-gpu
+  Standalone builds use existing mojo build -I . on the matching thin entry;
+  add -D MOJOLEARN_COLUMN_CPU=1 for logistic_label_weights_cpu.mojo.
+  Keep full outputs and fixture counts in root evidence. Product groups are
+  runtime_family/estimators for Logistic state and x_trees for weight provider;
+  no build/loader scheme introduced here.
+
+Status/removals
+  Source/API review, TOML/JSON parse and diff check only; COMPILE/RUN OWED.
+  No lane compilation/tests/product imports/boxes/timing/identity.
+  No Python tests removed in this new-production-contract batch. No unnecessary
+  product mechanism identified: production owns the actual old-envelope removal.
+  Product/kernel/bit changes and A/B define: none.

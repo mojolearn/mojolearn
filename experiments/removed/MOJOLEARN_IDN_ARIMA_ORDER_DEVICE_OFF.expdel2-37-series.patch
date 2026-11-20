@@ -1,0 +1,31 @@
+diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
+index b5bb96ac27..0a32084430 100644
+--- a/bindings/_mojolearn_arima_host.mojo
++++ b/bindings/_mojolearn_arima_host.mojo
+@@ -52,6 +52,7 @@ from checks.kernel_matrix import (
+     column_name,
+ )
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from std.sys.compile import is_defined
+ from arima.host.arima_oracle import (
+     ARIMA_ORACLE_HOST_SABOTAGE,
+     arima_host_fit,
+@@ -122,9 +123,15 @@ def arima_vendor_binding() raises -> PythonObject:
+ #: because this binding does not import the device modules: AutoARIMA's
+ #: criterion is the float32 one (`ic_running_min_f32`) exactly when the
+ #: device binding built from the same defines chooses orders on the device.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF, MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF, MOJOLEARN_IDN_ARIMA_LLONLY_OFF, MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF, MOJOLEARN_ARIMA_ORDER_BATCH_OFF (owned here) and MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF, MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (non-owner sites) old-path terms deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6d8c0423cf.
+-# Restore: git apply experiments/removed/<DEFINE>.patch (owned) or experiments/removed/<DEFINE>.expdel2-37-series.patch (non-owner); record in docs/TOMBSTONES.md.
+-comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
++    or is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
++)
+ 
+ 
+ def arima_order_caps_binding() raises -> PythonObject:

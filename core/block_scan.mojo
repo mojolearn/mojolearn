@@ -122,7 +122,7 @@ fields cannot be carried at their width -- that is DEVIATION 101 in
 # =========================================================================
 """
 
-from std.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu import thread_idx, lane_id, WARP_SIZE
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.info import size_of
@@ -130,21 +130,9 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.gpu.primitives.warp import shuffle_up
-from std.sys.compile import is_defined
 
-comptime BLOCK_SCAN_SHUFFLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE"]()
-)
-"""FAST only: `block_inclusive_sum`'s warp scan moves partials with
-`shuffle_up` (one 32-bit word at a time; every `BlockScanElement` here is
-whole 32-bit words) instead of a shared-memory ladder with two barriers per
-step. Same operands, same order (`addend.plus(partial)`), integer and
-fixed-point adds, so the same results; one barrier per scan instead of
-about eleven. OPT-IN (`-D MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE=1`), NOT
-FLIPPED: Apple M4 RF 1M, hashes unchanged, taxi 1.035, Istella-S 0.974."""
+# TOMBSTONE: MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE (FAST opt-in shuffle_up warp scan, never flipped, no A/B record) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at a9903cb728.
+# Restore: git apply experiments/removed/MOJOLEARN_FAST_BLOCK_SCAN_SHUFFLE.patch; record in docs/TOMBSTONES.md.
 
 
 trait BlockScanElement(TrivialRegisterPassable):
@@ -254,29 +242,15 @@ def block_inclusive_sum[
     # partial on the RIGHT (`:117`). That is the direction a prefix scan
     # needs and it is copied, not re-derived.
     var partial = input
-    comptime if BLOCK_SCAN_SHUFFLE and sabotage == 0 and size_of[T]() % 4 == 0:
-        comptime WORDS = size_of[T]() // 4
-        comptime for step in range(8):
-            comptime offset = 1 << step
-            comptime if offset < WARP_SIZE:
-                var mine = partial
-                var addend = T.zero()
-                var src = UnsafePointer(to=mine).bitcast[UInt32]()
-                var dst = UnsafePointer(to=addend).bitcast[UInt32]()
-                comptime for w in range(WORDS):
-                    dst[w] = shuffle_up(src[w], UInt32(offset))
-                if lane >= offset:
-                    partial = addend.plus(partial)
-    else:
-        var offset = 1
-        while offset < WARP_SIZE:
-            warp_scan[unsafe_offset=tid] = partial
-            barrier()
-            if lane >= offset:
-                var addend = warp_scan[unsafe_offset = tid - offset]
-                partial = addend.plus(partial)
-            barrier()
-            offset *= 2
+    var offset = 1
+    while offset < WARP_SIZE:
+        warp_scan[unsafe_offset=tid] = partial
+        barrier()
+        if lane >= offset:
+            var addend = warp_scan[unsafe_offset = tid - offset]
+            partial = addend.plus(partial)
+        barrier()
+        offset *= 2
 
     # ---- ComputeWarpPrefix (`block_scan_warp_scans.cuh:165-195`) ----
     # "Last lane in each warp shares its warp-aggregate", `__syncthreads()`,

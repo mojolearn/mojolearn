@@ -24,14 +24,13 @@ Lane layernorm-idn N3 (2026-10-09), two waste removals, both default ON:
     activation of 67 MB, uploads x, downloads y, then uploads x and dy and
     downloads dx again per fit, plus two page-faulted zero fills). Nothing
     changes for a host-array x. `MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1` (or
-    `MOJOLEARN_SEQ_DEVICE_IO_OFF=1`, or `MOJOLEARN_IDN_ALL_OFF=1`) is the
-    before arm: the class reports no device I/O and `to_device` returns
+    `MOJOLEARN_SEQ_DEVICE_IO_OFF=1`) is the before arm: the class reports no device I/O and `to_device` returns
     the host array.
   * Kept stats: a resident forward stores its row mean and rstd in two
     M-float resident tensors the layer keeps, and `backward` hands them
     back so the device entry skips its forward recompute (one M x D launch
     and an M x D scratch fewer). The words are the forward's own stores:
-    no bit moves. `MOJOLEARN_LN_KEEP_STATS_OFF=1` (or IDN_ALL_OFF) is the
+    no bit moves. `MOJOLEARN_LN_KEEP_STATS_OFF=1` is the
     before arm (the backward recomputes).
   * The host-array path's y and dx outputs are `np.empty`: the binding
     downloads every element, so the +0.0 fill was two 67 MB passes of
@@ -45,12 +44,11 @@ np = require_numpy('_x_sequence_norm')
 from . import _x_sequence_device as _sequence_device  # glue: connect native tensor storage
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
-_ALL_OFF = _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1"
 #: the before arm of the class device-I/O switch (see the module docstring)
 _CLASS_DEVICE_IO_OFF = (_os.environ.get("MOJOLEARN_LN_CLASS_DEVICE_IO_OFF", "") == "1"
-                        or _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1" or _ALL_OFF)
+                        or _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1")
 #: the before arm of the kept-stats switch: the backward recomputes the forward
-_KEEP_STATS_OFF = _os.environ.get("MOJOLEARN_LN_KEEP_STATS_OFF", "") == "1" or _ALL_OFF
+_KEEP_STATS_OFF = _os.environ.get("MOJOLEARN_LN_KEEP_STATS_OFF", "") == "1"
 _SEQ_CONTEXT["seqln_keep_stats_off"] = _KEEP_STATS_OFF  # glue: the native forward reads the before-arm switch
 
 
@@ -183,10 +181,6 @@ class LayerNorm:
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, numeric_mode=None):
         return _SEQ_NATIVE("seqln_initialize", self,
                            (normalized_shape, eps, elementwise_affine, bias), numeric_mode, _SEQ_CONTEXT)
-
-    def _dev_binding(self):
-        """The sequence binding when it has the resident LayerNorm entry, else None."""
-        return _SEQ_NATIVE("seqln_device_binding", self, (), None, _SEQ_CONTEXT)
 
     @property
     def _device_io(self):

@@ -13,15 +13,16 @@ computes a value a card hashes. Fixture VALUES come from
 
 New check code imports from here (CURRENT DIRECTIVES). Existing drivers
 keep their private copies until the consolidation pass migrates them.
-Tested by `checks/scaffold_check.mojo` (pixi run check-scaffold).
+Tested by `checks/scaffold_check.mojo` (pixi run check-native-gpu scaffold_check).
 """
 
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import bitcast
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.fixture_rng import u16_row_f32
+from checks.native_tests.kit import download as kit_download, upload as kit_upload
 from checks.numerics import numeric_mode_name
 
 
@@ -108,36 +109,14 @@ def mode_name() -> String:
 def upload(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
     """A device copy of `values`, synchronized before it returns. An empty
     list gets a one-element buffer, since a zero-size allocation is refused
-    on some backends."""
-    var n = len(values)
-    var n_buf = n if n > 0 else 1
-    var buf = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
-    ctx.synchronize()
-    if n > 0:
-        unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
-    else:
-        host.unsafe_ptr().unsafe_store(0, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    on some backends. The float32 spelling of the kit's `upload`."""
+    return kit_upload[DType.float32](ctx, values)
 
 
 def download(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    """The first `n` values of `buf`, synchronized."""
-    var out = List[Float32]()
-    if n <= 0:
-        return out^
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = view^
-    return out^
+    """The first `n` values of `buf`, synchronized. The float32 spelling of
+    the kit's `download`."""
+    return kit_download[DType.float32](ctx, buf, n)
 
 
 # --- identity cards and cases ---------------------------------------------

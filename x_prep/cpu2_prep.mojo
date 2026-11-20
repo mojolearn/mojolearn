@@ -38,6 +38,7 @@ Ops (F2_BASE + 12 ..; python/mojolearn/_expansion_prep.py `_OPS`):
   268 c2_mm_merge     MinMaxScaler partial_fit: the running extrema rows
   269 c2_add_i64      64-bit integer add (n_samples_seen_)
   270 c2_nonfinite    count of nonfinite float32 words per chunk
+  271 c2_rfe_keep     RFE: the supported columns in order (float and int32 ids)
 """
 from std.math import isfinite
 from std.memory import bitcast
@@ -46,7 +47,7 @@ from x_prep.py2mojo import splitmix_at
 from checks.soft_f64 import sf64_from_f32, sf64_from_int, sf64_to_f32, sf64_div, sf64_mul
 
 comptime C2_FIRST = 12  # F2_BASE + C2_FIRST is c2_bin_code
-comptime C2_N = 29
+comptime C2_N = 30
 
 comptime _SIGN = UInt64(0x8000000000000000)
 comptime _NEG_INF = UInt64(0xFFF0000000000000)
@@ -417,6 +418,26 @@ def c2_rfe_rank_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 1) + t, ld(f, p(q, 1) + t) + Float32(1))
 
 
+def c2_rfe_keep_unit(t: Int, f: FP, q: IP):
+    """q = [SUP, d, KEEPF, KEEPI]; t = column: when column t is still
+    supported, its position r among the supported columns (the count of
+    supported columns before it) gets KEEPF[r] = t (a float id, exact below
+    2^24, as gather_cols reads it) and KEEPI[r] = t (int32 bits, as
+    c2_rfe_step reads FEAT). Lane w1-readmission-rfe: the next round's
+    column list made on the device, so one program per elimination round
+    steps, ranks and gathers the next block; the O(d) prefix count per
+    column matches c2_rfe_step's O(m) stable rank over the same features."""
+    var sup = p(q, 0)
+    if ld(f, sup + t) == Float32(0):
+        return
+    var r = 0
+    for j in range(t):
+        if ld(f, sup + j) != Float32(0):
+            r += 1
+    f.unsafe_store(p(q, 2) + r, Float32(t))
+    sti(f, p(q, 3) + r, t)
+
+
 # ---------------------------------------------------------------- 258-262 IterativeImputer
 def c2_ii_miss_unit(t: Int, f: FP, q: IP):
     """q = [CNT, KEEP, n, MISS]; t = kept column c: MISS[c] (int32 bits) =
@@ -696,3 +717,5 @@ def run_c2_unit[K: Int](t: Int, f: FP, q: IP):
         c2_add_i64_unit(t, f, q)
     comptime if K == 28:
         c2_nonfinite_unit(t, f, q)
+    comptime if K == 29:
+        c2_rfe_keep_unit(t, f, q)

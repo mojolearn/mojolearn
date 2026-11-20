@@ -20,7 +20,7 @@ buffers; the caller's X is read in place and never written.
 `RDev` is the resident half (pool, upload/download and the device entries);
 `NoRDev` stands in on the host binding, where nothing is resident.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from x_decomp.api import absmax_sign_run, ew_run, gemm_run, move_run, order_f_run, rand_run, svd_run
 from x_decomp.cells import F32Ptr
@@ -63,6 +63,13 @@ trait RDev:
 
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
+        ...
+
+    @staticmethod
+    def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
+        """`upload` with the finite test of the uploaded words on the device
+        (RSVD_FAST_DEVSCAN, restored 2026-11-09): 0 when every word is
+        finite, 1 otherwise."""
         ...
 
     @staticmethod
@@ -142,6 +149,10 @@ struct NoRDev(RDev):
 
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
         raise Error("x_decomp: no resident matrices on the host binding")
 
     @staticmethod
@@ -230,11 +241,14 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
     var mats: List[RKMat]
     var hosts: List[List[Float32]]
     var allocations: List[Int]
+    #: the mats index of this fit's ONE unused broadcast operand (a 0), or -1
+    var zero_operand: Int
 
     def __init__(out self):
         self.mats = List[RKMat]()
         self.hosts = List[List[Float32]]()
         self.allocations = List[Int]()
+        self.zero_operand = -1
 
     def close(mut self) raises:
         # Views may share a device id, so only the allocation ledger frees.
@@ -292,6 +306,55 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             self.mats[a].host = 0
         return self.mats[a].dev
 
+    def device_tested(mut self, a: Int) raises -> Int32:
+        """`device` for a host matrix not yet uploaded, with the finite test of
+        the uploaded words on the device (RSVD_FAST_DEVSCAN, restored
+        2026-11-09 by lane r1-restore-measured-winners): 0 when every word of
+        `a` is finite, 1 otherwise. The upload is the one `device` makes (no
+        extra pass over the host words); the words are copied, never
+        converted, so no bit changes. A matrix already on the device is not
+        re-tested (0)."""
+        comptime if not Self.RES:
+            raise Error("x_decomp: no resident matrices on the host binding")
+        if self.mats[a].dev >= 0:
+            return Int32(0)
+        var n = self.mats[a].rows * self.mats[a].cols
+        var words = self.host(a)
+        var handle = Self.D.alloc(max(n, 1))
+        self.allocations.append(handle)
+        var flagged = 0
+        if n:
+            flagged = Self.D.upload_finite(handle, F32Ptr(unsafe_from_address=words), n)
+        self.mats[a].dev = handle
+        self.mats[a].host = 0
+        return Int32(1) if flagged != 0 else Int32(0)
+
+    def keep(mut self, a: Int) raises -> Int:
+        """A pool id holding `a`'s words that the CALLER now owns (lane
+        ne1-a-decomp-resident: IncrementalPCA's running state kept on the
+        device between calls): `a`'s own device buffer when this kit
+        allocated it (it leaves the ledger, so `close` does not free it),
+        else a fresh buffer with its words uploaded (a view's or a borrowed
+        buffer, or a host matrix). -1 on a host binding. Data movement only."""
+        comptime if Self.RES:
+            var dev = self.mats[a].dev
+            if dev >= 0:
+                for i in range(len(self.allocations)):  # driver-loop: over this kit's device allocations
+                    if self.allocations[i] == dev:
+                        _ = self.allocations.pop(i)
+                        return dev
+            var n = self.mats[a].rows * self.mats[a].cols
+            var words = self.host(a)
+            var handle = Self.D.alloc(max(n, 1))
+            if n:
+                try:
+                    Self.D.upload(handle, F32Ptr(unsafe_from_address=words), n)
+                except error:
+                    Self.D.free(handle)
+                    raise error^
+            return handle
+        return -1
+
     def copy_out(mut self, a: Int, dst: F32Ptr, count: Int) raises:
         """The first `count` words of `a` into caller memory (`_M.out`)."""
         if count <= 0:
@@ -299,7 +362,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if self.mats[a].host == 0:
             Self.D.download(self.mats[a].dev, dst, count)
         else:
-            memcpy(dest=dst, src=F32Ptr(unsafe_from_address=self.mats[a].host), count=count)
+            unsafe_memcpy(dest=dst, src=F32Ptr(unsafe_from_address=self.mats[a].host), count=count)
 
     def constant(mut self, value: Float32) -> Int:
         var out = self.zeros(1, 1)
@@ -324,8 +387,22 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             return 3
         raise Error("x_decomp: randomized PCA has an invalid internal broadcast")
 
+    # Perf (lane perf3-cluster-gp-gate): the typed driver built a fresh
+    # 1 x 1 zero for EVERY ew and every matrix transpose, so on a GPU binding
+    # each of those steps paid a pool allocation and a synchronizing one-word
+    # upload (`dev_upload_run` waits on the queue). The Python kit cached one
+    # device zero per binding (`_dev_one`) and transposed with the source's
+    # own id as the unused index, so its launches pipelined. Same 0 word,
+    # same bits; the host column only saves the small allocations.
+    def unused_operand(mut self) -> Int:
+        """`_M._one` / `_M._dev_one`: the unused broadcast operand (a 1 x 1
+        zero), ONE per fit; on a GPU binding uploaded once."""
+        if self.zero_operand < 0:
+            self.zero_operand = self.zeros(1, 1)
+        return self.zero_operand
+
     def ew(mut self, op: Int, a: Int, b: Int = -1, c: Int = -1, scalar: Float64 = 0.0) raises -> Int:
-        var zero = self.zeros(1, 1)
+        var zero = self.unused_operand()
         var ib = zero if b < 0 else b
         var ic = zero if c < 0 else c
         var bm = 3 if b < 0 else self.broadcast(a, ib)
@@ -406,6 +483,12 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var total = self.sum(rows, True)
         return self.word(total)
 
+    def total_matrix(mut self, a: Int) raises -> Int:
+        """`_Kit.total` as the Python kit returned it: the 1 x 1 matrix, left
+        where it was summed (the same two folds as `total`)."""
+        var rows = self.sum(a, False)
+        return self.sum(rows, True)
+
     def move(
         mut self, a: Int, idx: Int, rows: Int, cols: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int,
         ist: Int, ioff: Int, nsrc: Int, ndst: Int, nidx: Int, resident: Bool,
@@ -446,7 +529,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var src = self.ptr(a)
         var dst = self.ptr(out)
         for r in range(rows):  # small-loop(rows of a host-resident sketch factor): one row copy each
-            memcpy(dest=dst.unsafe_offset(r * width), src=src.unsafe_offset(r * cols + start), count=width)
+            unsafe_memcpy(dest=dst.unsafe_offset(r * width), src=src.unsafe_offset(r * cols + start), count=width)
         return out
 
     def transpose(mut self, a: Int) raises -> Int:
@@ -455,7 +538,9 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if rows == 1 or cols == 1:
             # a vector's transpose is the same words (a view)
             return self.add(self.mats[a].host, self.mats[a].dev, cols, rows)
-        var one = self.zeros(1, 1)
+        # the transpose reads no index: the fit's one unused operand (Perf,
+        # lane perf3-cluster-gp-gate, at `unused_operand`)
+        var one = self.unused_operand()
         return self.move(a, one, cols, rows, _MV_TRANSPOSE, rows * cols, rows, cols, 0, 0, 0,
                          rows * cols, rows * cols, 1, Self.RES)
 
@@ -498,7 +583,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var cols = self.mats[a].cols
         var out = self.zeros(rows, cols)
         var src = self.ptr(a)
-        memcpy(dest=self.ptr(out), src=src, count=rows * cols)
+        unsafe_memcpy(dest=self.ptr(out), src=src, count=rows * cols)
         return out
 
     def rand(mut self, rows: Int, cols: Int, seed: Int) raises -> Int:
@@ -627,7 +712,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             raise Error("x_decomp: randomized PCA padding cannot remove rows")
         var out = self.zeros(rows, cols)
         var src = self.ptr(a)
-        memcpy(dest=self.ptr(out), src=src, count=old_rows * cols)
+        unsafe_memcpy(dest=self.ptr(out), src=src, count=old_rows * cols)
         return out
 
 
@@ -636,7 +721,18 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
 ) raises -> Tuple[Int, Int, Int]:
     """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
     'auto', flip_sign=False, seed)`: (U, S, Vt)."""
-    var transposed = kit.r(original) < kit.c(original)
+    return pca_randomized_core(kit, original, components, oversamples, iterations, seed,
+                               kit.r(original) < kit.c(original))
+
+
+def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
+    mut kit: RKit[E, D, RES], original: Int, components: Int, oversamples: Int, iterations: Int, seed: Int,
+    transposed: Bool,
+) raises -> Tuple[Int, Int, Int]:
+    """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
+    transpose, flip_sign=False, seed)` with the orientation given: the
+    sketch runs on A^T when `transposed` (the public randomized_svd's
+    transpose=True, or 'auto' on a wide A). (U, S, Vt) of A either way."""
     var a = kit.transpose(original) if transposed else original
     var rows = kit.r(a)
     var cols = kit.c(a)
@@ -695,15 +791,49 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
     return (out_u, out_s, out_v)
 
 
+def rkit_x_nonfinite[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], x: Int, total: Float64) raises -> Int32:
+    """X's finite status word (0: every word of kit matrix `x` finite, 1: a
+    NaN or an infinity) given `total`, a sum the fit took over X anyway (a
+    variance or a centred-square total, or a norm). A non-finite X always
+    makes that total NaN, but a FINITE X near the float32 limit can make it
+    overflow (infinity, or NaN from infinity minus infinity). So a finite
+    total settles it (0, no extra work); only a non-finite total re-tests X
+    itself on the device: total(X * 0) is NaN exactly when X holds a NaN or
+    an infinity and +-0 otherwise (a product with 0 never overflows), one
+    elementwise pass and one total, in the kit's own route. Integration of
+    lane a8d (integ/pre-0867-w5): a finite X is never refused as NaN or
+    infinity."""
+    if total == total and total - total == 0.0:
+        return Int32(0)
+    return rkit_x_retest(kit, x)
+
+
+def rkit_x_retest[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], x: Int) raises -> Int32:
+    """X's own finite status word, from total(X * 0): NaN exactly when kit
+    matrix `x` holds a NaN or an infinity, +-0 otherwise (never overflows)."""
+    var zeroed = kit.ew(_OP_SCALE, x, scalar=0.0)
+    var t = kit.total(zeroed)
+    return Int32(1) if t != t else Int32(0)
+
+
 def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, mean_out: F32Ptr, variance_out: F32Ptr, ratio_out: F32Ptr,
     singular_out: F32Ptr, rows: Int, cols: Int, components: Int, oversamples: Int, iterations: Int,
-    auto_iterations: Bool, seed: Int,
+    auto_iterations: Bool, seed: Int, finite_word: Int = 0,
 ) raises -> Float64:
     """`_randomized_decompose(X, components, center=True, ...)` then
     `svd_flip(u_based_decision=False)`: the five public arrays written
     (components x cols, cols, and components each), the noise variance
-    returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`."""
+    returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`.
+    `finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
+    host address of one Int32 that receives X's finite status word (0 =
+    every word finite): the total of the centred squares, which the fit
+    computes anyway, is computed before the decomposition and its word read
+    back (one word down); it is NaN when X holds a NaN or an infinity. A
+    non-finite total from a finite X (overflow near the float32 limit) is
+    told apart by `rkit_x_nonfinite`, which re-tests X itself only then. A
+    flagged X stops the fit (nothing written, 0.0 returned; the door
+    refuses). The same calls on the same operands: no bit change."""
     if rows < 2 or cols < 2:
         raise Error("randomized PCA needs at least two rows and two features")
     if components < 1 or components >= min(rows, cols):
@@ -722,6 +852,22 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         var sums = kit.sum(original, True)
         var mean = kit.ew(_OP_SCALE, sums, scalar=1.0 / Float64(rows))
         var centered = kit.ew(_OP_SUB, original, mean)
+        var data_squared = kit.ew(_OP_SQ, centered)
+        # Perf (lane perf3-cluster-gp-gate): the two totals stay 1 x 1
+        # matrices where they were summed, as `_randomized_decompose` kept
+        # them; reading each word down and uploading it again as a constant
+        # cost a synchronizing download and upload per total on a GPU
+        # binding. The float32 word is the same either way (same bits).
+        # Lane a8d: taken before the decomposition; with `finite_word` its
+        # word is read once as X's finite test (see the docstring).
+        var total = kit.total_matrix(data_squared)
+        if finite_word != 0:
+            var flagged = rkit_x_nonfinite(kit, original, kit.word(total))
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+            if flagged != 0:
+                kit.close()
+                return 0.0
+        total = kit.ew(_OP_SCALE, total, scalar=1.0 / Float64(rows - 1))
         var decomposed = pca_randomized_core(kit, centered, components, oversamples, power, seed)
         var u = decomposed[0]
         var s = decomposed[1]
@@ -732,13 +878,8 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         u = kit.ew(_OP_MUL, u, signst)
         var squared = kit.ew(_OP_SQ, s)
         var variance = kit.ew(_OP_SCALE, squared, scalar=1.0 / Float64(rows - 1))
-        var data_squared = kit.ew(_OP_SQ, centered)
-        var total_value = kit.total(data_squared)
-        var total = kit.constant(Float32(total_value))
-        total = kit.ew(_OP_SCALE, total, scalar=1.0 / Float64(rows - 1))
         var ratio = kit.ew(_OP_DIV, variance, total)
-        var explained_value = kit.total(variance)
-        var explained = kit.constant(Float32(explained_value))
+        var explained = kit.total_matrix(variance)
         var noise = kit.ew(_OP_SUB, total, explained)
         noise = kit.ew(_OP_SCALE, noise, scalar=1.0 / Float64(min(rows, cols) - components))
         kit.copy_out(vt, components_out, components * cols)

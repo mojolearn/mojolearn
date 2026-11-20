@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""ImportedProgram.run is one native call (providers/python/autograd_program_pyapi.mojo
+"""ImportedProgram.run is one native call (providers/python/autograd_program_pyapi_door.mojo
 `ops_imported_run_py`). These tests hold it word for word to the former
 Python path, rebuilt here as an oracle (NumPy views in the session shapes,
 `Session.run`, the outputs viewed and reshaped), and hold the refusals'
 classes and wording."""
+import pathlib
+
 import numpy as np
 import pytest
 
@@ -58,7 +60,6 @@ def _vector_relu(directory, n=6):
 def test_imported_run_equals_former_path(tmp_path):
     from mojolearn import importers
     from mojolearn.tests import _onnx_fixture as fx
-    from mojolearn.tests.test_import_lower import _mixed
     f = fx.write_fixture("linear_layernorm_linear", tmp_path)
     prog = importers.import_model(f.path, shapes={"x": (3, 6)})
     rng = np.random.default_rng(3)
@@ -70,8 +71,10 @@ def test_imported_run_equals_former_path(tmp_path):
     _same(prog.run(wide[:, ::2]), _former_run(prog, wide[:, ::2]))  # a float64 strided view
     _same(prog.run(x.astype(np.int32)), _former_run(prog, x.astype(np.int32)))
     # rank-1 outputs and an int32 argmax output
-    m = _mixed(str(tmp_path))
-    mp = importers.import_model(m.path, shapes={"x": (3, 7)})
+    # test_import_lower._mixed left for the Mojo checks (3927d2c26e); its model
+    # is stored as their fixture (tools/import_lower_native_fixtures.py).
+    mixed = pathlib.Path(__file__).resolve().parents[3] / "checks" / "native_tests" / "fixtures" / "import_lower" / "mixed.onnx"
+    mp = importers.import_model(str(mixed), shapes={"x": (3, 7)})
     xm = rng.standard_normal((3, 7)).astype(np.float32)
     _same(mp.run(xm), _former_run(mp, xm))
     # a rank-1 input, from an array, a reversed view and a list

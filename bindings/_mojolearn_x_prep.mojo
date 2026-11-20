@@ -1,7 +1,8 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES, C08_ONEHOT_FT, C08_ORDINAL_FT, C04_LDA, C56_LDA_INPUT
+from core.experiment_guards_base import BASE_GUARDS_OK
+from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -10,21 +11,26 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import PrepProgramAPI
+from x_prep.transport_device import publish_x_prep_transport_device
+from core.prep_program_native_device import PrepProgramDeviceKernels
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
 from x_prep.folds import I32P
 from x_prep.fastnb_csr import NB_TEXT_CSR, IDN_NB_CSR
-from providers.python.x_prep_fastnb_csr_pyapi import nb_csr_fit_py, nb_csr_jll_py, nb_csr_fit_int_py, nb_csr_jll_chk_py
+from providers.python.x_prep_fastnb_csr_pyapi_pack import nb_csr_fit_py, nb_csr_jll_py, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
 from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
 from x_prep.select_blocked import IDN_SELECT_BLOCKED
 from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
-from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
+from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWS
 from x_prep.proba64 import PROBA64
 from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
@@ -184,28 +190,24 @@ def vendor_binding() raises -> PythonObject:
 #: n=1, output digests identical: onehot taxi 69.7 -> 30.4 ms, ordinal taxi
 #: 67.2 -> 25.3 ms). It was the env switch MOJOLEARN_X_PREP_FAST_UNIQUE=1;
 #: now `x_prep_fast_unique` is registered only when this is on, the Python
-#: side probes it once per binding (no env read), and
-#: `-D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` restores main's path. The old env
-#: name stays harmless.
-comptime X_PREP_FAST_UNIQUE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"]()
-)
+#: side probes it once per binding (no env read). The old env name stays
+#: harmless; `unique_cols` stays the path of every other build.
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_UNIQUE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at c370817612.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_UNIQUE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime X_PREP_FAST_UNIQUE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/B kap2-spl-fused-{istella,taxi} (spline istella 48.1 -> 11.6 ms,
-#: taxi 34.2 -> 10.8 ms, output digests identical; `-D
-#: MOJOLEARN_SPLINE_FAST_FUSED_OFF` reverts): MOJOLEARN_SPLINE_FAST_FUSED registers `x_prep_spline_fused`
+#: taxi 34.2 -> 10.8 ms, output digests identical): MOJOLEARN_SPLINE_FAST_FUSED registers `x_prep_spline_fused`
 #: in the FAST + Apple build only. SplineTransformer.fit then allocates no
 #: n*d arena block when nothing sorts (main's is never written and comes back
 #: from the device unread: 64 MB at the board's 1M x 16) and takes the count /
 #: min / max rows from the blocked units; fit_transform runs ONE program (X up
 #: once, stats, knots, apply). Same knots, same output words.
-comptime SPLINE_FAST_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SPLINE_FAST_FUSED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SPLINE_FAST_FUSED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at a9826a67a5.
+# Restore: git apply experiments/removed/MOJOLEARN_SPLINE_FAST_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SPLINE_FAST_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def spline_fused_binding() raises -> PythonObject:
@@ -269,17 +271,25 @@ def proba64_binding() raises -> PythonObject:
 
 def c08_routes_binding() raises -> PythonObject:
     """C08 routes compiled in (lane classical-encoders): 1 TargetEncoder fit codes,
-    2 OneHotEncoder.fit_transform, 4 OrdinalEncoder.fit_transform."""
-    return PythonObject(Int(C08_TARGET_CODES) | (Int(C08_ONEHOT_FT) << 1) | (Int(C08_ORDINAL_FT) << 2))
+    2 retired (C08 OneHotEncoder arm, deleted 2026-11-15), 4 retired (C08 OrdinalEncoder arm, deleted 2026-11-15)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ORDINAL_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 46115a2bb3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ORDINAL_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_ONEHOT_FT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 59c24bdf40.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_ONEHOT_FT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    return PythonObject(Int(C08_TARGET_CODES))
 
 
 def classical_shared_binding() raises -> PythonObject:
     """Bits read by python/mojolearn/_expansion_prep.py `_classical_shared`:
-    1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 C04_LDA,
-    8 C56_LDA_INPUT; 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
+    1 C08_DICTIONARY, 2 retired (C55, deleted 2026-10-07), 4 retired (C04 LDA, deleted 2026-11-15),
+    8 retired (C56 LDA input, deleted 2026-11-15); 16-48 and 64 retired (C61 NB arms / DA, deleted 2026-10-08
     after grid ge123e6f9: slower on both vendors, quality same)."""
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C56_LDA_INPUT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 859362ebd3.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C56_LDA_INPUT.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C04_LDA (opt-in arm, EXP:1532 DROPPED-serial) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 93b7a49f96.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C04_LDA.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     return PythonObject(
-        Int(C08_DICTIONARY) | (Int(C04_LDA) << 2) | (Int(C56_LDA_INPUT) << 3)
+        Int(C08_DICTIONARY)
     )
 
 
@@ -302,11 +312,13 @@ def idn_fam2_binding() raises -> PythonObject:
     by python/mojolearn/_expansion_prep.py `_idn_fam2` (1 IDN_WDRAW: ops
     230-232, 2 IDN_PERM_DRAW: op 233, 4 IDN_WPICK: op 234, 8
     IDN_PARTIAL_CODES: op 235, 16 IDN_GRAM_BLOCKED: ops 236, 238-240, 32
-    IDN_GRAM_ROWTILE: op 237 (candidate), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
+    retired (IDN_GRAM_ROWTILE, deleted 2026-11-15), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
     block); registered only when one is on."""
+    # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at ba54f83c9b.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
     return PythonObject(
         (1 if IDN_WDRAW else 0) | (2 if IDN_PERM_DRAW else 0) | (4 if IDN_WPICK else 0)
-        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0) | (32 if IDN_GRAM_ROWTILE else 0)
+        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0)
         | (64 if IDN_LABEL_INV else 0) | (IDN_GRAM_ROWS << 16)
     )
 
@@ -316,9 +328,19 @@ def idn_fam2_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_prep.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime PREPPROGRAM_DEVICE_NATIVE_API = SharedSlot[PrepProgramAPI[PrepProgramDeviceKernels], ("MojolearnPrepProgramDeviceNativeV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnPrepProgramDeviceNativeV1Fast")]
+
+
+def x_prep_native_api_v1_binding() raises -> PythonObject:
+    var api = PREPPROGRAM_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_x_prep() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
+        m.def_function[x_prep_native_api_v1_binding]("x_prep_native_api_v1")
         m.def_function[run_binding]("x_prep_run")
         comptime if NB_TEXT_CSR:
             # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
@@ -368,7 +390,7 @@ def build__mojolearn_x_prep() -> PythonObject:
         # Recorded scan/cleanup/backup windows do not overlap these jobs.
         # Default/OFF builds are owed before main merge. _OFF restores counts/downloads; old opt-in is
         # harmless. See docs/apple-fast/ab/target-scratch.md.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_TARGET_SCRATCH_OFF"]():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_TARGET_SCRATCH_OFF"]():
             m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if LABEL_PRESENT:
             m.def_function[label_present_binding]("x_prep_label_present")
@@ -382,6 +404,10 @@ def build__mojolearn_x_prep() -> PythonObject:
             m.def_function[proba64_binding]("x_prep_proba64")
         comptime if PTIMPUTE_FLAGS != 0:
             m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
-        return m.finalize()
+        var published_module = m.finalize()
+        # The native program transport (core/prep_entry_table.mojo) for the
+        # native owners (bindings/x_prep_native_owner.mojo xprep_run).
+        publish_x_prep_transport_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

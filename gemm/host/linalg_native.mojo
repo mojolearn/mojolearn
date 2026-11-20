@@ -7,6 +7,7 @@ from gemm.contract import INT8_MAX_K, INT15_MAX_K, OP_NN, OP_NT, OP_TN
 from std.sys.compile import is_defined
 from gemm.host.gemm_int_slices_oracle import gemm_int_slices_oracle
 from gemm.int_slices_seams import INT_SLICES_MAX_K
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 from decomposition.linalg_host_impl import (
     gemm_host_run,
     gemm_bf16_host_run,
@@ -59,6 +60,9 @@ def gemm_native(
         or k > LINALG_HOST_MAX_EXTENT
     ):
         raise Error("gemm: m, n and k must each be at most 2^30")
+    # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
     # lane/gemm-int-slices (2026-10-28): the HOST COLUMN of the research
     # profile fp32.v2-int behind -D MOJOLEARN_IDN_GEMM_INT_SLICES (default
     # OFF; off, this block compiles to nothing and the CPU column is fp32.v1).
@@ -66,9 +70,16 @@ def gemm_native(
     comptime if is_defined["MOJOLEARN_IDN_GEMM_INT_SLICES"]():
         if k <= INT_SLICES_MAX_K:
             gemm_int_slices_oracle(cp, f32_ptr(a_address), f32_ptr(b_address), m, n, k, op)
+            comptime if NAN_CANON_ON:
+                _ = nan_canon_f32(cp, m * n)
             return m * n
     var wrote = 0
     wrote = gemm_host_run(cp, a_address, b_address, op, m, n, k)
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # `gemm_down_f32` makes on the device columns, over the finished product.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(cp, m * n)
     return wrote
 
 
@@ -96,6 +107,11 @@ def gemm_bf16_native(
         raise Error("gemm_bf16: m, n and k must each be at most 2^30")
     var wrote = 0
     wrote = gemm_bf16_host_run(cp, a_address, b_address, op, m, n, k, a_bf16)
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # `gemm_down_f32` makes on the device columns, over the finished product.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(cp, m * n)
     return wrote
 
 
@@ -125,6 +141,11 @@ def gemm_int8_native(
         raise Error("gemm_int8: m and n must each be at most 2^30")
     var wrote = 0
     wrote = gemm_int8_host_run(cp, qa_address, ea_address, qb_address, eb_address, m, n, k)
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # `gemm_down_f32` makes on the device columns, over the finished product.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(cp, m * n)
     return wrote
 
 
@@ -195,6 +216,11 @@ def gemm_int15_native(addrs: List[Int], params: List[Int]) raises -> Int:
         raise Error("gemm_int15: m and n must each be at most 2^30")
     var wrote = 0
     wrote = gemm_int15_host_run(cp, ah_address, al_address, ea_address, bh_address, bl_address, eb_address, m, n, k)
+    # The CPU column's side of NAN_CANON_ON (default
+    # on; core/nan_canon.mojo): the same pass gemm/host_transport.mojo
+    # `gemm_down_f32` makes on the device columns, over the finished product.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(cp, m * n)
     return wrote
 
 

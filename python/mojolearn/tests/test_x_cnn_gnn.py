@@ -202,3 +202,50 @@ def test_sage_project(aggr):
     np.testing.assert_allclose(y, ry, rtol=1e-5, atol=1e-5)
     np.testing.assert_allclose(dx, rdx, rtol=1e-4, atol=1e-5)
     np.testing.assert_allclose(conv.lin.grad_weight_, (dp * (h > 0)).T @ x64, rtol=1e-4, atol=1e-5)
+
+
+def _ring_chords(n):
+    src = np.concatenate([np.arange(n), np.arange(n), [9, 4, 12]])
+    dst = np.concatenate([(np.arange(n) + 1) % n, (7 * np.arange(n) + 3) % n, [10, 4, 12]])
+    keep = dst != 5
+    return np.stack([src[keep], dst[keep]]).astype(np.int64)
+
+
+@pytest.mark.parametrize("weighted", [False, True])
+def test_forward_again_on_the_cached_graph(weighted):
+    """A second forward on the same edge_index (the cached graph) is admitted
+    and returns the first forward's bits for the same input, and the new
+    input's result for a new one; an in-place edge edit rebuilds the graph."""
+    import mojolearn as ml
+    rng = np.random.default_rng(7)
+    x = np.ascontiguousarray(rng.standard_normal((256, 16)).astype(np.float32))
+    x2 = np.ascontiguousarray(rng.standard_normal((256, 16)).astype(np.float32))
+    ei = _ring_chords(256)
+    w = np.ascontiguousarray(np.abs(rng.standard_normal(ei.shape[1])).astype(np.float32) + np.float32(0.25)) if weighted else None
+    conv = ml.GCNConv(16, 3, improved=weighted, random_state=32)
+    y = np.asarray(conv.forward(x, ei, w)).copy()
+    conv.backward(rng.standard_normal(y.shape).astype(np.float32))
+    again = np.asarray(conv.forward(x, ei, w))
+    assert again.tobytes() == y.tobytes()
+    other = np.asarray(conv.forward(x2, ei, w)).copy()
+    fresh = ml.GCNConv(16, 3, improved=weighted, random_state=32)
+    assert np.asarray(fresh.forward(x2, ei, w)).tobytes() == other.tobytes()
+    ei2 = ei.copy()
+    edited = ei2.copy()
+    edited[1, 0] = (edited[1, 0] + 2) % 256
+    conv.forward(x, ei2, w)
+    ei2[...] = edited
+    after = np.asarray(conv.forward(x, ei2, w))
+    ref = ml.GCNConv(16, 3, improved=weighted, random_state=32)
+    assert after.tobytes() == np.asarray(ref.forward(x, edited, w)).tobytes()
+
+
+def test_sage_forward_again_on_the_cached_graph():
+    """SAGEConv shares the graph cache key; its second forward is admitted."""
+    import mojolearn as ml
+    rng = np.random.default_rng(8)
+    x = np.ascontiguousarray(rng.standard_normal((256, 16)).astype(np.float32))
+    ei = _ring_chords(256)
+    conv = ml.SAGEConv(16, 4, random_state=5)
+    y = np.asarray(conv.forward(x, ei)).copy()
+    assert np.asarray(conv.forward(x, ei)).tobytes() == y.tobytes()

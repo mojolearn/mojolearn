@@ -36,7 +36,7 @@ for rep in $(seq 1 "${AB_REPS:-3}"); do
                 --lane "$l" --shape full --arms ours --ours-python "$OURS_PY" --rounds "${AB_ROUNDS:-5}" \
                 --out "$OUT/race-$label-$rep" --work "$OUT/work" > "$OUT/race-$label-$rep-$l.log" 2>&1
             m=$(grep -E '^NEURAL lane=' "$OUT/race-$label-$rep-$l.log" | sed 's/.*median_ms=\([0-9.]*\).*/\1/')
-            dg=$(grep -E '^NEURAL-ROUND ' "$OUT/race-$label-$rep-$l.log" | tail -1 | sed 's/.*digest=//')
+            dg=$(grep -E '^NEURAL-ROUND ' "$OUT/race-$label-$rep-$l.log" | tail -1 | sed 's/.*digest=\([^ ]*\).*/\1/')
             q=$(grep -E '^NEURAL lane=' "$OUT/race-$label-$rep-$l.log" | sed 's/.*quality=//')
             echo "AB rep=$rep variant=$label lane=$l median_ms=$m digest=$dg quality=$q"
         done

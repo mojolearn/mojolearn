@@ -14,11 +14,9 @@ next draw of the lane's splitmix64 stream. The scores are the per-child
 inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
-from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
@@ -39,15 +37,12 @@ from x_cluster.post_bodies import FM_PROD, FM_VAL
 # they were Float64 chains (the same on the device and the host column; a
 # split pick moves only where two leaf scores agreed to a double's last
 # bits). Labels and centers are untouched unless a pick moves.
-# `-D MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF=1` (or the master) restores the
-# readbacks; the define must reach the host-column build too.
-comptime IDN_BISECT_DEVICE_SCORES = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# FAST keeps the readbacks.
+# TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at d70760e0e8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BISECT_DEVICE_SCORES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # lane fix-c1-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this
 # is the one driver): the column means and the centered matrix on the device.
@@ -60,16 +55,12 @@ comptime IDN_BISECT_DEVICE_SCORES = (
 # once for `ops.kmeans`. BITS: each mean is the float-float fold's quotient
 # where it was a Float64 ascending chain, so a centered word, and anything
 # downstream, can move in the last place; the device and the host column
-# move together. `-D MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF=1` (or the
-# master) restores the host centering; the define must reach the host-column
-# build too.
-comptime IDN_BISECT_DEVICE_CENTER = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# move together. FAST keeps the host centering.
+# TOMBSTONE: MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 9510cb8ef2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BISECT_DEVICE_CENTER = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 struct BisectTree(Movable):
@@ -120,12 +111,16 @@ def bisect_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, k: Int, n_init: Int, init: Int,
     max_iter: Int, tol: Float64, seed: UInt64, largest_cluster: Bool,
     mut tree: BisectTree, mut labels: List[Int32], mut centers: List[Float32],
-    weights: List[Float32] = List[Float32](),
+    weights: List[Float32] = List[Float32](), x_slot: Int = -1,
 ) raises -> Float64:
     """Returns the inertia against the leaf centers. `weights` (empty: unit)
     are sklearn's sample_weight: the data mean stays unweighted (sklearn's
     `_X_mean`), each 2-means is weighted, and so are the inertia scores and
-    the inertia; 'largest_cluster' counts rows."""
+    the inertia; 'largest_cluster' counts rows. `x_slot` (IDENTICAL device
+    entry only, x_cluster/device_execution.mojo): the float slot that already
+    holds X's n * d words, uploaded from the caller's memory; `x` is then a
+    placeholder and is never read (under IDN_BISECT_DEVICE_CENTER every read
+    of X is of its device slot)."""
     from checks.numerics import identical_mul64
 
     var weighted = len(weights) > 0
@@ -139,7 +134,7 @@ def bisect_fit[O: ClusterOps](
         # IDN_BISECT_DEVICE_CENTER: X up once, the means and the centered
         # matrix on the device; `xc` is a one-word placeholder (kmeans_rows
         # fits the gathered slot and only keeps its `x` alive)
-        xs_all = ops.put(x)
+        xs_all = x_slot if x_slot >= 0 else ops.put(x)
         var mean_s = ops.zeros(d)
         xc_s = ops.alloc(n * d)
         ops.center_cols(xs_all, n, d, mean_s, xc_s)
@@ -169,11 +164,8 @@ def bisect_fit[O: ClusterOps](
     var root_center = List[Float32](length=d, fill=Float32(0))
     _ = tree.add(root_center, Float64(0), all_rows^)
     var kinit = INIT_RANDOM if init == INIT_RANDOM else INIT_KMEANS_PLUS_PLUS
-    # One fit-owned subset arena; capacity follows input storage, not board
-    # dimensions. Ordered split membership and all arithmetic stay intact.
-    var retained_subset = ops.empty(n*d) if C39_RETAIN_STATE else -1
-    var retained_ids = ops.zeros_i(n) if C39_RETAIN_STATE else -1
-    var retained_distances = ops.alloc(n) if C39_RETAIN_STATE else -1
+    # TOMBSTONE: MOJOLEARN_C39_RETAIN_STATE (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-05-base); code recoverable at 867d82964a.
+    # Restore: git apply experiments/removed/MOJOLEARN_C39_RETAIN_STATE.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
     for _split in range(k - 1):
         var leaves = tree.leaves()
         var pick = leaves[0]
@@ -224,10 +216,8 @@ def bisect_fit[O: ClusterOps](
             var idx = List[Int32](capacity=m)
             for r in rows:
                 idx.append(Int32(r))
-            var idx_s = retained_ids if C39_RETAIN_STATE else ops.put_i(idx)
-            comptime if C39_RETAIN_STATE:
-                ops.set_i(idx_s,idx)
-            sub_s = retained_subset if C39_RETAIN_STATE else ops.empty(m * d)
+            var idx_s = ops.put_i(idx)
+            sub_s = ops.empty(m * d)
             ops.gather_rows(xc_s, d, idx_s, m, sub_s)
             for it in range(n_init):
                 var c = List[Float32]()
@@ -254,7 +244,7 @@ def bisect_fit[O: ClusterOps](
                 # the float-float fold, two 2-float reads in one wait
                 var cs = ops.put(best_c)
                 var lab_s = ops.put_i(best_l)
-                var dsel = retained_distances if C39_RETAIN_STATE else ops.alloc(m)
+                var dsel = ops.alloc(m)
                 var ws_s = -1
                 if weighted:
                     ws_s = ops.put(sub_w)
@@ -267,8 +257,7 @@ def bisect_fit[O: ClusterOps](
                 var ee = ops.gets([e0, e1], [2, 2])
                 sc[0] = Float64(ee[0][0]) + Float64(ee[0][1])
                 sc[1] = Float64(ee[1][0]) + Float64(ee[1][1])
-                comptime if not C39_RETAIN_STATE:
-                    ops.shrink(dsel)
+                ops.shrink(dsel)
         else:
             var cs = ops.put(best_c)
             var ds = ops.zeros(m * 2)
@@ -289,8 +278,7 @@ def bisect_fit[O: ClusterOps](
             for f in range(d):
                 cen.append(ftz(ftz(best_c[j * d + f]) + ftz(mean[f])))
             ids.append(tree.add(cen, sc[j], child_rows[j].copy()))
-        if not C39_RETAIN_STATE or weighted:
-            ops.shrink(sub_s)
+        ops.shrink(sub_s)
         tree.left[pick] = ids[0]
         tree.right[pick] = ids[1]
         tree.rows[pick] = List[Int]()
@@ -339,6 +327,14 @@ def bisect_predict[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, tree_centers: List[Float32], nodes: List[Int32]
 ) raises -> List[Int32]:
     var xs = ops.put(x)
+    return bisect_predict_slot(ops, xs, n, d, tree_centers, nodes)
+
+
+def bisect_predict_slot[O: ClusterOps](
+    mut ops: O, xs: Int, n: Int, d: Int, tree_centers: List[Float32], nodes: List[Int32]
+) raises -> List[Int32]:
+    """`bisect_predict` over rows already in float slot `xs` (the device
+    tree predict uploads them straight from the caller's words)."""
     var cs = ops.put(tree_centers)
     var ns = ops.put_i(nodes)
     var ls = ops.zeros_i(n)

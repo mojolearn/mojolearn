@@ -12,7 +12,6 @@ from ensemble.decisiontree.batched_levelalgo.objectives import ClassificationObj
 from ensemble.decisiontree.decisiontree import GINI, MSE
 from ensemble.randomforest import RandomForest, fit_forest
 from core.launch_log import log_launch
-from std.sys.compile import is_defined
 
 comptime C = ClassificationObjectiveFunction[DType.float32, DType.int32, ClassificationBin]
 comptime CW = ClassificationObjectiveFunction[DType.float32, DType.int32, WeightedClassificationBin]
@@ -80,7 +79,11 @@ def run[O: ObjectiveLike](ctx: DeviceContext, name: String, classes: Int, bins: 
 
 def main() raises:
     print("numeric_mode", numeric_mode_name())
-    print("tile2", is_defined["MOJOLEARN_RF_HIST_COLUMNS2"](), "tile4", is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]())
+    # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS2 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS2.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_RF_HIST_COLUMNS4 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+    # Restore: git apply experiments/removed/MOJOLEARN_RF_HIST_COLUMNS4.patch; record in docs/TOMBSTONES.md.
+    print("tile2", False, "tile4", False)
     var ctx = DeviceContext()
     run[C](ctx, "c2_boot", 2, 128, True, False)
     run[C](ctx, "c5_no_boot", 5, 64, False, False)

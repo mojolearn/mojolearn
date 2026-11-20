@@ -6,82 +6,23 @@ search split into two binding calls, the index and the table saved, and two
 inference bindings that ship (`_mojolearn_ivf_search_host`,
 `_mojolearn_embedding_infer_host`) with no build and no backward.
 
-Source checks run on a box with nothing built. The runtime checks run where a
+The save/load and refusal checks run anywhere. The runtime checks run where a
 binding is built and say when they skip. The bit claim against the GPU
-columns is identity_break's ivf, ivf-euclidean and embedding lanes and
-tools/classical_host_gate.py over the Metal recording.
+columns is the verification's ivf, ivf-euclidean and embedding lanes.
 
     cd python && python -m pytest mojolearn/tests/test_ivf_embedding_cpu_inference.py
 """
 import os
-import re
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mojolearn import _backend, host_surface
+from mojolearn import _backend
 from mojolearn._ivf_impl import IVFIndex, _IVF_FORMAT
 from mojolearn.embedding import Embedding, _EMBEDDING_FORMAT
 
-ROOT = Path(__file__).resolve().parents[3]
-REGISTERED = re.compile(r'def_function\[\w+\]\(\s*"(\w+)"\s*\)')
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _registered(rel):
-    return set(REGISTERED.findall(_read(rel)))
-
-
-# -- source -------------------------------------------------------------------
-
-def test_inference_families_ship_and_carry_no_training():
-    for fam, route, reference, forbidden, served in (
-        ("ivf_search", "_mojolearn_ivf", "ivf", ("ivf_flat_build", "ivf_flat_build_and_search"), "ivf_flat_search"),
-        ("embedding_infer", "_mojolearn_embedding", "embedding", ("embedding_backward",), "embedding_forward"),
-    ):
-        f = host_surface.family(fam)
-        assert f["ships_in_wheel"] and f["routes"] is None and f["serves"] == (route,)
-        # The reference binding ships too since lane/ship-cpu-host-families
-        # (2026-09-16); what this family still guarantees is a binary with no
-        # build or backward in it, asserted by name below.
-        assert host_surface.family(reference)["ships_in_wheel"]
-        names = _registered(host_surface.binding_source(fam))
-        assert served in names
-        for name in forbidden:
-            assert name not in names, f"{fam} registers {name}"
-        assert host_surface.inference_routes()[route] == f["binding"]
-
-
-def test_gpu_and_reference_bindings_register_build_and_search():
-    for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo"):
-        names = _registered(rel)
-        assert {"ivf_flat_build", "ivf_flat_search"} <= names, rel
-    shared = _read("bindings/ivf_index_arrays.mojo")
-    assert "ivf_validate_index_arrays" in shared
-    # Both bindings take their search from the ONE shared source, and since
-    # lane/laneless-public-classes (2026-09-19) that source carries the
-    # partial (disjoint-shard) search and the Euclidean root as well, so both
-    # binaries answer a DistributedIVFIndex worker through the same file.
-    # The import may be parenthesized across lines, which is why the names
-    # are matched inside the import's own span rather than on one line.
-    for rel in ("bindings/_mojolearn_ivf_host.mojo", "bindings/_mojolearn_ivf_search_host.mojo"):
-        text = _read(rel)
-        head = re.search(r"from bindings\.ivf_host_search import (\([^)]*\)|[^\n]*)", text)
-        assert head, rel
-        for name in ("ivf_flat_search_binding", "ivf_flat_partial_search_binding",
-                     "ivf_finalize_distances_binding"):
-            assert re.search(r"\b%s\b" % name, head.group(1)), f"{rel}: {name}"
-        assert {"ivf_flat_partial_search", "ivf_finalize_distances"} <= _registered(rel), rel
-    for rel in ("bindings/_mojolearn_embedding_host.mojo", "bindings/_mojolearn_embedding_infer_host.mojo"):
-        assert "from bindings.embedding_host_forward import" in _read(rel), rel
-
-
 def _fake_index(n=12, dim=3, n_lists=3):
-    from mojolearn._buffer import as_f32_c, as_i32_c
+    from mojolearn.tests._typed_input import as_f32_c, as_i32_c
     rng = np.random.default_rng(0)
     m = IVFIndex(n_lists=n_lists, n_probes=2, n_neighbors=4, metric="euclidean", random_state=5)
     m.numeric_mode = "identical"
@@ -157,7 +98,7 @@ def test_the_search_binding_refuses_a_broken_index():
     q = np.zeros((2, 3), np.float32)
     d, i = h.search(q)
     assert d.shape == (2, 4) and i.shape == (2, 4)
-    from mojolearn._buffer import as_i32_c
+    from mojolearn.tests._typed_input import as_i32_c
     h.list_indices_ = as_i32_c(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 10], np.int32), ndim=1, name="i")[0]
     with pytest.raises(Exception, match="ascending"):
         h.search(q)
@@ -170,13 +111,11 @@ def test_the_search_binding_refuses_a_broken_index():
                     reason="the ivf reference and search host bindings are not both built here")
 def test_a_saved_host_index_searches_the_same_bytes_on_the_shipped_binding(tmp_path):
     import mojolearn
-    from mojolearn._cpu_reference import reference_training
     if _backend._CPU_ONLY is None:
         pytest.skip("a GPU set loaded; the reference fit would run on the GPU")
     x = np.random.default_rng(2).standard_normal((512, 8)).astype(np.float32)
     q = np.random.default_rng(3).standard_normal((16, 8)).astype(np.float32)
-    with reference_training():
-        m = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1).fit(x)
+    m = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1).fit(x)
     d0, i0 = m.search(q)
     one = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=1)
     path = str(tmp_path / "ivf.npz")
@@ -202,36 +141,13 @@ def test_a_saved_table_looks_up_on_the_shipped_binding(tmp_path):
     y = np.asarray(h.forward(ids))
     sabotaged = bool(_backend.load_host_module("_mojolearn_embedding_infer_host").embedding_infer_host_sabotage())
     assert (y.tobytes() == w[ids].tobytes()) != sabotaged
-    with pytest.raises(Exception, match="embedding_backward|internal bitwise verifier"):
+    # The host install has no training entry; the native layer owner refuses
+    # backward by name (bindings/embedding_layer_native_door.mojo).
+    with pytest.raises(RuntimeError, match="this Embedding install has no training entry"):
         h.backward(ids, np.zeros((5, 4), np.float32))
 
 
 # -- stage 2: IVFIndex.extend (2026-09-15) -------------------------------------
-
-def test_extend_is_registered_on_the_gpu_reference_and_shipped_bindings():
-    for rel in ("bindings/_mojolearn_ivf.mojo", "bindings/_mojolearn_ivf_host.mojo",
-                "bindings/_mojolearn_ivf_search_host.mojo"):
-        assert "ivf_flat_extend" in _registered(rel), rel
-    for fam in ("ivf", "ivf_search"):
-        assert "ivf_flat_extend" in host_surface.family(fam)["exports"], fam
-    assert "ivf-extend" in host_surface.family("ivf")["training_lanes"]
-    assert "ivf-extend" in host_surface.family("ivf_search")["inference_lanes"]
-
-
-def test_extend_uses_the_build_assignment_and_one_layout_rule():
-    gpu = _read("ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo")
-    body = gpu[gpu.index("def ivf_flat_extend("):]
-    assert "predict(ctx, dx, x_norm, centroids, labels, min_dist, kp, n_new, dim)" in body
-    # 8a1a79513: the device builds the extended layout itself
-    # (`ivf_extend_layout_device`, the same offsets, ids and rows the host
-    # column's `extend_list_layout` builds)
-    assert "ivf_extend_layout_device(" in body
-    host = _read("ivf/host/ivf_host.mojo")
-    hbody = host[host.index("def host_ivf_extend("):]
-    assert "host_assign(" in hbody and "extend_list_layout(" in hbody
-    layout = _read("ivf/checks/list_layout.mojo")
-    assert "out_indices[slot] = UInt32(n_rows + j)" in layout
-
 
 def test_extend_refuses_without_an_index_and_on_a_changed_metric():
     with pytest.raises(ValueError, match="before extend"):
@@ -240,7 +156,7 @@ def test_extend_refuses_without_an_index_and_on_a_changed_metric():
     with pytest.raises(ValueError, match="features"):
         m.extend(np.zeros((2, 4), np.float32))
     m.metric = "sqeuclidean"
-    with pytest.raises(ValueError, match="a built index has one metric"):
+    with pytest.raises(ValueError, match="metric does not name the metric this index was built under"):
         m.extend(np.zeros((2, 3), np.float32))
 
 
@@ -254,10 +170,8 @@ def test_clone_copies_and_does_not_alias():
 
 
 def _extend_pair(host_cls):
-    from mojolearn._cpu_reference import reference_training
     x = np.random.default_rng(6).standard_normal((600, 6)).astype(np.float32)
-    with reference_training():
-        base = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=2).fit(x[:400])
+    base = IVFIndex(n_lists=8, n_probes=3, n_neighbors=5, random_state=2).fit(x[:400])
     return base, x
 
 

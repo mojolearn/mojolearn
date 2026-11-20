@@ -1,0 +1,32 @@
+diff --git a/sequence/prophet.mojo b/sequence/prophet.mojo
+index af50ff640c..1544895af0 100644
+--- a/sequence/prophet.mojo
++++ b/sequence/prophet.mojo
+@@ -21,6 +21,7 @@ by the caller in float64 (exact fmod, one rounding) and the trigonometry by
+ the portable float32 seams, so the features are the same bits everywhere."""
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_mul, identical_sin, identical_sqrt
++from std.sys.compile import is_defined
+ from std.memory import bitcast
+ from checks.soft_f64 import SF64_NAN, SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_lt, sf64_sub, sf64_to_f32
+ 
+@@ -38,13 +39,12 @@ comptime MEM = 5
+ #: kernel (PROPHET_COOP, which reads this switch) and the host column's
+ #: `op_prophet_fit` replays the same folds in the same order one after
+ #: another (`_coop_fg`, `_dot_coop` below). Same model, priors, start, line
+-#: search and stopping rules (the one-thread-chain rollback defines were
+-#: deleted 2026-11-15).
+-# TOMBSTONE: MOJOLEARN_IDN_PROPHET_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PROPHET_COOP_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+-comptime PROPHET_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: search and stopping rules. `-D MOJOLEARN_IDN_PROPHET_COOP_OFF=1` (or
++#: MOJOLEARN_IDN_ALL_OFF) restores the one-thread chain on the device
++#: (prophet_fit_team) and in the host column.
++comptime PROPHET_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_PROPHET_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: the cooperative block's threads and simdgroup width, restated for the
+ #: host replay; prophet_coop.mojo's PROPHET_COOP_TPB and PW are these
+ comptime COOP_NT = 256

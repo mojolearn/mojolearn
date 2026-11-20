@@ -1,0 +1,29 @@
+diff --git a/sequence/fit_team.mojo b/sequence/fit_team.mojo
+index 9143896dd7..f5b2372394 100644
+--- a/sequence/fit_team.mojo
++++ b/sequence/fit_team.mojo
+@@ -37,6 +37,7 @@ Slicing: the optimizers stop at an iteration boundary (`nm_steps`,
+ `lbfgs_steps` with a budget) and keep their state in each thread's private
+ row, so a resumed fit runs the same iterations as one call."""
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from x_linear.team import team_barrier
+@@ -166,11 +167,11 @@ def garch_team_shared(n: Int) -> Int:
+ #: (`_garch_sigma2_reg`, sequence/garch.mojo `_garch_step_reg`'s statements,
+ #: which are garch_sigma2's for these orders) instead of reading both back
+ #: from device memory each step; sigma2 is still stored. Bits unchanged.
+-# TOMBSTONE: MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GARCH_LEAD_REG_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 476f794798.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+-comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: -D MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
++#: garch_sigma2 on the lead.
++comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_GARCH_LEAD_REG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ @always_inline

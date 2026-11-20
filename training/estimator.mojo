@@ -91,17 +91,16 @@ time.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.memory import memcpy
-from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import unsafe_memcpy
+from max.gpu import block_dim, block_idx, thread_idx
 from training.maximize import maximize_negate
-from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from std.time import perf_counter_ns
 
-from core.staged_download import download_f32_into
+from core.staged_download import download_f32_into, staged_copy_f32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # lane afn-optim (2026-10-03): the Apple FAST candidates (False aliases on
@@ -153,6 +152,7 @@ from training.checks.optimizer_contract import (
     OptimizerConfig,
     refuse_nonfinite_scalar,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -411,12 +411,13 @@ def identical_optimizer_step_host(
 #: (`training/afn_optim.mojo`, created once per shape) on every vendor,
 #: instead of six to eight device allocations a call. Every launch writes a
 #: scratch cell before it reads it, as with a fresh (uninitialized) buffer:
-#: no bit moves. -D MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF restores the fresh
-#: buffers. FAST has no pooled scratch.
+#: no bit moves. FAST has no pooled scratch.
+# TOMBSTONE: MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch
 comptime IDN_OPT_SCRATCH_POOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, M3 rab19 adam within +-2%) deleted 2026-10-09 on
 # lane/owed-deletions-D2: FAST's share of this switch; code recoverable at b639a2bd2.
@@ -433,43 +434,62 @@ def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType
         return ctx.enqueue_create_buffer[DType.float32](n)
 
 
+# Optimizer transport switches (lane envgate-train-seq-mamba, 2026-11-15).
+# Before, each was an environment read + string compare per optimizer step (and clip):
+# MOJOLEARN_OPT_POOL / MOJOLEARN_OPT_STAGE / MOJOLEARN_OPT_PIPE forced either
+# side at run time, MOJOLEARN_OPT_PIPE_FLOATS set the chunk. Now each is a
+# build constant holding the same per-column default (ROUTE-OK,
+# docs/plans/ENV_GATES_2026-11-15.md); the other side is a -D arm:
+#   -D MOJOLEARN_OPT_POOL / -D MOJOLEARN_OPT_POOL_OFF    force pooled buffers on / off
+#   -D MOJOLEARN_OPT_STAGE / -D MOJOLEARN_OPT_STAGE_OFF  force the staged download on / off
+#   -D MOJOLEARN_OPT_PIPE / -D MOJOLEARN_OPT_PIPE_OFF    force the pipelined transport on / off
+#   -D MOJOLEARN_OPT_PIPE_FLOATS=<n>                     pipeline chunk in floats (n >= 1024)
+# Transport choices only: no bit moves on either side.
+
+#: pooled per-handle parameter/gradient device buffers (lane neural-pass34):
+#: the Apple column by default, a fresh pair per step elsewhere. On the L40S
+#: the pooled pair read Adam's step 21 -> 25-31 ms (sgd/adamw even) while the
+#: M3 Ultra's gain came from the pool and the staged download together.
+comptime OPT_POOL_BUFFERS = (
+    TARGET_COLUMN == COLUMN_APPLE or is_defined["MOJOLEARN_OPT_POOL"]()
+) and not is_defined["MOJOLEARN_OPT_POOL_OFF"]()
+
+#: staged (pinned) download of the resident step (lane neural-pass26): the
+#: Apple column by default, the raw copy elsewhere. On the M3 Ultra the staged
+#: download is the lever (sgd/adam/adamw 348-363 ms raw -> 111-112 ms staged),
+#: on the L40S the raw path is faster (staged read 20-25% slower), on the
+#: MI325X they are even.
+comptime OPT_DOWNLOAD_STAGED = (
+    TARGET_COLUMN == COLUMN_APPLE or is_defined["MOJOLEARN_OPT_STAGE"]()
+) and not is_defined["MOJOLEARN_OPT_STAGE_OFF"]()
+
+
+@always_inline
 def opt_pool_buffers() -> Bool:
     """Whether the resident step keeps per-handle parameter/gradient device
-    buffers (lane neural-pass34): the Apple column by default, a fresh pair
-    per step elsewhere; MOJOLEARN_OPT_POOL=0/1 forces either. On the L40S
-    the pooled pair read Adam's step 21 -> 25-31 ms (sgd/adamw even) while
-    the M3 Ultra's gain came from the pool and the staged download together.
-    A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_OPT_POOL"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    buffers: the build constant OPT_POOL_BUFFERS."""
+    return OPT_POOL_BUFFERS
 
 
+@always_inline
 def opt_download_staged() -> Bool:
-    """Whether the resident step downloads through its pinned stage (lane
-    neural-pass26): the Apple column by default, the raw copy elsewhere;
-    MOJOLEARN_OPT_STAGE=0/1 forces either. Measured on the boxes with the
-    pooled buffers in place: on the M3 Ultra the staged download is the
-    lever (the sgd/adam/adamw cells 348-363 ms raw -> 111-112 ms staged;
-    the raw device-to-host-pointer download is slow there), on the L40S the
-    raw path is faster (the staged one read 20-25% slower) and on the
-    MI325X they are even. A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_OPT_STAGE"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+    """Whether the resident step downloads through its pinned stage: the
+    build constant OPT_DOWNLOAD_STAGED."""
+    return OPT_DOWNLOAD_STAGED
 
 
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
     """`memcpy(dst, src, n)`: the transport copy between a pinned stage and the
-    caller's host buffer. One copy on the calling thread: no host task pool
-    on a GPU install (cpu-gpu-cleanup n-train-mamba, 2026-10-02; the copy
-    over host tasks of lane neural-pass26 is gone). The pipelined transport
-    below overlaps this copy with the DMA of the other stage half. A
+    caller's host buffer, over contiguous spans across the host's cores
+    (core/staged_download.mojo `staged_copy_f32`). fx-leftovers-product
+    (2026-11-19): it was one copy on the calling thread since 2026-10-02
+    (cpu-gpu-cleanup n-train-mamba, for a source hook that is retired),
+    which is the per-megabyte host pass of the cross-entropy logits going
+    up and of every optimizer and MLP staging chunk. The pipelined transport
+    below still overlaps this copy with the DMA of the other stage half. A
     transport choice: no bit moves."""
-    if n > 0:
-        memcpy(dest=dst, src=src, count=n)
+    # parallel: float32 copy over contiguous spans across the host's cores
+    staged_copy_f32(dst, src, n)
 
 
 # ===========================================================================
@@ -490,9 +510,10 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
 # chunk i - 1 out of the other. One in-order context, so every ordering below
 # is a `ctx.synchronize()`; nothing computes here and no bit moves.
 #
-# `MOJOLEARN_OPT_PIPE=0/1` forces the route off/on (the A/B; default on for
-# the NVIDIA and AMD columns, off elsewhere), and
-# `MOJOLEARN_OPT_PIPE_FLOATS` sets the chunk (default 2^21 floats, 8 MB).
+# `-D MOJOLEARN_OPT_PIPE_OFF` / `-D MOJOLEARN_OPT_PIPE` force the route
+# off/on (the A/B; default on for the NVIDIA and AMD columns, off elsewhere),
+# and `-D MOJOLEARN_OPT_PIPE_FLOATS=<n>` sets the chunk (default 2^21 floats,
+# 8 MB). Both were run-time environment reads per step until 2026-11-15.
 #
 # A stage half is free when the transfer that used it last has been waited
 # for: every entry here begins with a wait (a previous call's last upload DMA
@@ -504,29 +525,28 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
 
-#: the default chunk, floats (8 MB): eight chunks for a 64 MB tensor
-comptime OPT_PIPE_FLOATS = 1 << 21
+#: the chunk, floats (default 8 MB: eight chunks for a 64 MB tensor); a size
+#: choice for any tensor, not keyed on a board shape
+comptime OPT_PIPE_FLOATS = get_defined_int["MOJOLEARN_OPT_PIPE_FLOATS", 1 << 21]()
+
+#: the pipelined transport: on for the NVIDIA and AMD columns, off elsewhere
+comptime OPT_PIPE_ON = (
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
+    or is_defined["MOJOLEARN_OPT_PIPE"]()
+) and not is_defined["MOJOLEARN_OPT_PIPE_OFF"]()
 
 
+@always_inline
 def opt_pipe_on() -> Bool:
     """Whether the optimizer step and the clip move their buffers through
-    the pipelined stage (MOJOLEARN_OPT_PIPE forces either)."""
-    var v = String(getenv("MOJOLEARN_OPT_PIPE"))
-    comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
-        return v != "0"
-    return v == "1"
+    the pipelined stage: the build constant OPT_PIPE_ON."""
+    return OPT_PIPE_ON
 
 
+@always_inline
 def opt_pipe_floats() -> Int:
-    var v = String(getenv("MOJOLEARN_OPT_PIPE_FLOATS"))
-    if v == "":
-        return OPT_PIPE_FLOATS
-    try:
-        var n = Int(v)
-        if n >= 1024:
-            return n
-    except:
-        pass
+    """The pipeline chunk in floats: the build constant OPT_PIPE_FLOATS."""
+    comptime assert OPT_PIPE_FLOATS >= 1024, "MOJOLEARN_OPT_PIPE_FLOATS must be >= 1024"
     return OPT_PIPE_FLOATS
 
 
@@ -539,8 +559,8 @@ struct _OptStage(Defaultable, Movable):
         self.ch = 0
 
 
-comptime _STAGE_NAME = "MojoTrainingOptPipeStageIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingOptPipeStageFast"
-comptime _STAGE = _Global[StorageType=_OptStage, name=_STAGE_NAME, init_fn=_OptStage.__init__]
+comptime _STAGE_NAME = "MojolearnTrainingOptPipeStageIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTrainingOptPipeStageFastV1"
+comptime _STAGE = SharedSlot[_OptStage, _STAGE_NAME]
 
 
 def _stage_half(ctx: DeviceContext, ch: Int, half: Int) raises -> _FP:
@@ -677,8 +697,8 @@ comptime OPT_IO_DOWN_G = 8
 comptime OPT_IO_ALL = 15
 #: Whether the binding offers the device-handle entries
 #: (`optimizer_resident_step_io` and the put/get pair). IDENTICAL, GPU
-#: columns. `-D MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF` (or the master) hides
-#: them, and the Python optimizers then refuse `params_to_device`.
+#: columns; the CPU column hides them, and the Python optimizers then refuse
+#: `params_to_device`.
 #: lane fam2-neural: `maximize=True` ON THE DEVICE. The bindings negated the
 #: gradient on the host before the upload (a one-thread loop over N floats,
 #: `maximize_negated_copy`) and negated the clipped gradient again after the
@@ -686,11 +706,12 @@ comptime OPT_IO_ALL = 15
 #: sign bit in the device gradient buffer instead (`maximize_negate`, the
 #: same exact XOR, one thread per element) before the step and again after
 #: it, so the buffer and any download hold the caller's sign: the same bits.
-#: `-D MOJOLEARN_IDN_MAXIMIZE_DEV_OFF` keeps `Optimizer.step` on the host loop.
+# TOMBSTONE: MOJOLEARN_IDN_MAXIMIZE_DEV_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch
 comptime IDN_MAXIMIZE_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (is_defined["MOJOLEARN_IDN_MAXIMIZE_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime MAXIMIZE_TPB = 256
 
@@ -713,10 +734,12 @@ def maximize_negate_device(ctx: DeviceContext, mut g: DeviceBuffer[DType.float32
     )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch
 comptime IDN_OPT_PARAMS_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (is_defined["MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
@@ -741,8 +764,11 @@ comptime IDN_OPT_PARAMS_RESIDENT = (
 #: apple-fast-rec-ab2 @ 40027eb8e): sgd 330.3 -> 208.7 ms, adam 337.5 -> 209.6,
 #: adamw 332.1 -> 209.8; output digests identical A == B (the quality evidence:
 #: the lane has no quality metric). KEEP: the FAST + Apple default since then;
-#: rollback -D MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (the old -D name is harmless).
-comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"]()
+#: the _OFF rollback is deleted (below).
+# TOMBSTONE: MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (old path beside the measured FAST Apple default) deleted
+# 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+# Restore: git apply experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch
+comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST
 
 
 def identical_optimizer_step_resident_io(
@@ -1328,7 +1354,7 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
 # recorded stage; nothing is written to the caller's outputs on a refusal.
 # The A/B switch back to the mirror is removed (lane gap-neural-overhead2).
 # No bit moves: the same kernels read the same uploaded bytes.
-comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
+comptime _CE_STAGE_POOL = "MojolearnDownloadStagesTrainingIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesTrainingFastV1"
 # The N * V device buffers of the host entry (logits, dlogits, shift, expo,
 # weights, the smoothing logp) and the GEMM workspace are kept between calls
 # in this pool (core/device_pool.mojo, lane gap-neural-overhead2) instead of
@@ -1337,7 +1363,7 @@ comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERI
 # cell, ignored rows included), the logits are uploaded whole, and the
 # workspace is gated dirty-safe (`identical_ce_workspace_max_floats`): a
 # buffer's previous words never reach a result. Storage only: no bit moves.
-comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
+comptime _CE_DEV_POOL = "MojolearnDevPoolCeIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDevPoolCeFastV2"
 
 
 #: lane fam-neural (2026-10-04): THE LOGITS GO UP THROUGH THE PIPELINED
@@ -1349,17 +1375,19 @@ comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMER
 #: other) wherever that pipeline is on (`opt_pipe_on`: NVIDIA and AMD by
 #: default, MOJOLEARN_OPT_PIPE forces either) and the tensor is at least one
 #: chunk. The same bytes into the same device buffer: no bit moves.
-#: `-D MOJOLEARN_IDN_CE_PIPE_UP_OFF` is the before arm (the raw copy).
-comptime IDN_CE_PIPE_UP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_CE_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_CE_PIPE_UP_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch
+comptime IDN_CE_PIPE_UP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    # None under SUM/MEAN when the caller has no row buffer (row N118, as in
+    # `identical_ce_loss_dev` and `ce_loss_host_into`): the rows are then not
+    # written; `identical_ce_loss_resident` takes the Optional as it is.
+    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
     dlogits_ptr: MutPointer[Float32, MutUntrackedOrigin],
     logits_ptr: MutPointer[Float32, MutUntrackedOrigin],
     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -1380,9 +1408,10 @@ def identical_ce_loss_host(
                        `+0.0` under `REDUCTION_NONE`, where the certified
                        forward returns before seam L13 and there is no
                        scalar to write.
-        `row_ptr`      N float32, WRITTEN on every call: the per-row loss
-                       before any reduction. This is the only output under
-                       `REDUCTION_NONE`.
+        `row_ptr`      N float32, WRITTEN on every call when present: the
+                       per-row loss before any reduction. This is the only
+                       output under `REDUCTION_NONE`; None (SUM or MEAN only)
+                       skips the rows.
         `dlogits_ptr`  N * V float32, WRITTEN only when `want_grad != 0`.
                        May be any one-element buffer otherwise.
         `logits_ptr`   N * V float32, READ, row-major
@@ -1436,8 +1465,8 @@ def identical_ce_loss_host(
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
 
     # The targets as a host List (N int32: one memcpy), for `ce_count`.
-    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
-    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    var h_targets = List[Int32](unsafe_uninit_length=n_rows)
+    unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     # The shape third of `ce_refuse_inputs` here, before any buffer is
     # sized from N * V; the non-finite scan and the targets walk are the
     # first statement of `identical_ce_forward_into`
@@ -1488,7 +1517,7 @@ def identical_ce_loss_host(
 def identical_ce_loss_dev(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
     mut dlogits: DeviceBuffer[DType.float32],
     mut logits: DeviceBuffer[DType.float32],
     targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -1510,8 +1539,8 @@ def identical_ce_loss_dev(
     bit moves. Returns `count`."""
     identical_ce_admit_call(reduction, want_grad, n_rows)
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
-    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
-    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    var h_targets = List[Int32](unsafe_uninit_length=n_rows)
+    unsafe_memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
     ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)
     _ = h_targets^
@@ -1547,7 +1576,7 @@ def _ce_ret[pool: StaticString](var b: DeviceBuffer[DType.float32]) raises:
 def identical_ce_loss_resident[pool: StaticString = ""](
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: Optional[MutPointer[Float32, MutUntrackedOrigin]],
     mut dlogits: DeviceBuffer[DType.float32],
     mut logits: DeviceBuffer[DType.float32],
     mut targets: DeviceBuffer[DType.int32],
@@ -1567,12 +1596,16 @@ def identical_ce_loss_resident[pool: StaticString = ""](
     already run the refusals and `ce_count`."""
     # lane afn-optim: FAST + Apple + MOJOLEARN_AFN_LOSS_FUSED takes the
     # fused two-launch form; every other build runs the code below.
+    # `row_ptr` is None when the caller has no use for the per-row losses
+    # (SUM or MEAN, row N118); the fused form always writes them, so that
+    # call takes the code below.
     comptime if AFN_LOSS_FUSED:
-        afn_ce_loss_resident(
-            ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
-            reduction, want_grad, cfg,
-        )
-        return
+        if row_ptr:
+            afn_ce_loss_resident(
+                ctx, loss_ptr, row_ptr.value(), dlogits, logits, targets, n_rows, count,
+                reduction, want_grad, cfg,
+            )
+            return
     var vocab = cfg.vocab
     var cells = n_rows * vocab
     var smoothing = cfg.smoothing_is_spelled()
@@ -1660,7 +1693,12 @@ def identical_ce_loss_resident[pool: StaticString = ""](
     ctx.synchronize()
 
     # ---- Transport out.
-    ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
+    # Lane ne3-c-blocks-embedding (row N118): no `row_ptr` (None: SUM or
+    # MEAN, admitted by the binding) skips the per-row download; the rows are
+    # still computed, so no stage and no bit changes. Optional, because a
+    # `Pointer` is never null.
+    if row_ptr:
+        ctx.enqueue_copy(dst_ptr=row_ptr.value(), src_buf=row)
     if reduction != REDUCTION_NONE:
         ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss)
     ctx.synchronize()

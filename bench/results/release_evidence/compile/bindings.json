@@ -1,0 +1,1741 @@
+{
+ "bindings": [
+  {
+   "decision": "BUILD",
+   "identity_digest": "5c7eb2915e4c0139c940d66defd9c844409e5339f48bb1be8700b2e329203488",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "eba221dd5fee2f4743f4c20c78e1ff613977d8b9d65f6e59e86cae6f54401ef7",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "eabcb2e1b905d5522315bd71bcce6392d63d9251a5370f875f6961855252d9f3",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "233388b11bff56a14f399a7a232cb17363f1eb23eea29e9722b0b016ec9572c0",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "91fca5884b523a2352050b942b856e2bbe4ba28a6030fe83b3ea42eddb2609fc",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e690c4b559a6c06cf929b31baa9342528cf4ba34f67887c2308af35454863358",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "04080663f1d5a224a98631af0c2b6ece88fd9c824dd966de285afc60fe3e537e",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "80574de126f386e7acd22c4e5869ae2d50bbc4369e218adccaff3c2cae2a267f",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "87d5cbdee8f2eb06ff655a67f99b56f1f5460593e0d2033f90e6091094baaea8",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4b85492bcb5b618ab69fd7edd5486403232fc8070e7c9a7eac643876e7ae93f9",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ad11118e58599b2d8980b90d2539571ae32c643fc38bea218f72476bccb287d6",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "49fcd60586d55a1430ef1c48b4c38ea0893c60707c87131df50218aa1f778e4d",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "47fa98125a132bddd08b2ed605f997fe9d6726a74668217a3ef58352194641b5",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "aa85f1126667e02e2c24177cecd8b2dd25fd3051387f34121f8b88e9234977d1",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "acb1eb60324414ddd58783afb7ddd0f2d11ba4cab967be8efab508f477d146f9",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8082d99bd186334d073b10939c49085ee5f80f843366d2a5004efa465bba52f0",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "be9f2a88f81d32d16716611910615cfeb2b96c95ab5b827b5a3247331b397560",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8bb36526ac55d19351f863939407f8084d086c931eca643a62d925a87aa6789b",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "b09a6ded0a94772b7fcd6d11d21f850687c14b33d063bd1dd4b84c32466bca93",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7150e773dd7804092d389c96c6fdad258faab8b539169d65934665d1ad096557",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "c2e7309b769f08249193fd62eee033402f028165e01229111904c63d22ce86e5",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "eaf7f8cf78163590bb3c430184f91410df3be509cb9fc7aff01c20aa09bd2ac8",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d33c248b5a129c0eb99a2b2033d1888d230a43ac5165f60c0cf3ba8bc2960266",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_linear",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8381fe48ea9b5066683b5f92c57ca63a2938da3e8915a0d0137fc9fa7feab2dc",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cluster",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "13c83881900bd5feb5d818800985fc528cbff80890f64e5edabe345769272b28",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_neighbors",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "aa133d083e2225fd7793086195d59e49b7456240a94be2d5bfa773f5ef6684e2",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_decomp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "db8a5a32085a827b588bd2df6babbb008fc008af4a675b6b929f68f6777d2e6d",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_prep",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "673c19e613964ec53fe6e2e771db02d3878ebbf32e7871f02371f2e075194fc2",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_sequence",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "733aadeb64e5534dad84e453181836534cf4d02e4b130189cdb27a314c5bdf20",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "834b2b9dcfd96c9717a438fc54cbea1fc0ce09c5e4b689f71d61354799a2fc80",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_cnn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "847aa5eee86162f8c1d7c9fa5e2b060084cc40d76b8940e3948ae81415037d05",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_ann",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ec5be18af92d2da1329a664906895e2e2a1d271dc0cb6c2050886bd19b442330",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_x_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ccee9330017fcf172327b56ad86aef2f1546fc3e0a80aa6f203b3eead07f8f85",
+   "key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "373f50eb9a9e3d342abcb72f4d938b75fa22ce907ecea2f112ad770c196b8f6a",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_gbdt",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "6b6496459f891593cae370fea307e19809cb7515d6c839a1759d5febbd2493ba",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_rf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e4ce91e81d0e285fbb375f768a8d2eb67c0a10385914313bb1a03371eac3b1d7",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9f1d8c7cc1d07dbe442ed432df8b8ca1957e04d4468cb22b812f5d2007077609",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "aa0c325fc97c806531029763587f51d5d5bd1d6a33bfbfe502a54bd55865fe6c",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_estimators",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f0e37fd4159ade228fd1eec8a2ee15314ad89f6191b66aff60c1275acbb98558",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_svm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cbdef637c98c20e49ffba5ac13117e2662305eb3e5834ecdc5573ad78b52fc73",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_solver",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "5b94536cde9f8fe86a8b52ee7a1240931328fe24fcff9be49c53b66949fe99c7",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "3c8fd3b4410c77b7d769a1f4da8e958682471b818a599b94f9bd0c7bc4b73c52",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_preprocessing",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4bd05b987398a0cdb86c6ddd95e16bbc45f966c2fafaaec341321aa2b3e65e83",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_tsa",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ada45ef233702b1d9d85489882b82896d29ce77f03bcbc662f377aec2286f8ef",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_linalg",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "deb98e7dbd14415b436e0fc3130e2148b68e4a90a33e8fe99e4242595206c1cb",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_arima",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "dc4f00cecdb92d80947eed1753b555a697f8625cc6764aabb7a861052e14cd88",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_gp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "3af4be56c0ab5deff79aba854e404cb6242bfa978055edefbe0b97d1c9b4c1f6",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_kernel_methods",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "3bb1496647318f2c13ed6cf65630817e537a8191bb3c230645d621f417f4004d",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_mixture",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9cc0388eadc2a4cb5e892d01fc136ca754aa21b63cdef8babe5548b184a0ccab",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_hdbscan",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9b9f491e2065d1012f6b0357e24e76ab16072ced282317227e2b3ab3a729b5ce",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_resample",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "207e34534d6847eb02c91f3a5114b7f577083612ab456d4441712603869a6e87",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_ivf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0b5a38031edddafebfc28129a4a3b208c73db5be69689cbd4e313ce71a590e42",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_training",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d249ef08f7ef38c4325f729f87b720c628916fca6714dff62cee4b2e2e56d504",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_mamba",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "83f5b25156ee60cdf5ea661935bc54a22e4bfa5c14042ea4a0c5d2e823549226",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_transformer",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "c6b3d1378d686978196e5e22ac55a651c51b22e6ae40113e72d7a263f991d873",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_embedding",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "83889a9fc391839d7dd1e5ed6892db591b257e762c47dcd1b4e70ff4b6b2cdba",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_linear",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0ffbd7a5104c0d056f84ca6cab3cb2cb2863f342b6c31aa68014718c24ab00fe",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_cluster",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8a9f3c04889ccf2fce2ebe41aba502952892f6544cce213588e6454f0dfd6a01",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_neighbors",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f2eac59357b8ec5e1129e752c69d084b1f257f86f01137317a2da9061a5ca956",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_decomp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bca44a00c44cb3371c00ae59250501ee61c792188d58231f9f47de3056b2bfcc",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_prep",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2c6b9cbd97dc48e6d714a8f1c5737fd2573d60bb90b77e36749860a07be02dd4",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_sequence",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "298594c5449d1b7c0fbae66feac697919ae4708a066fc1ba42f075971724eab1",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0f6d4fb03ad02ed0ab1e5d7f2a5d1a5b32988187f1ca2c259a5b08e5e749374b",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_cnn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "43e414e05036bcefec7f571541925130317a1c0bc6eaaf081ccaac1bef3f2c46",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_ann",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8d961f4954ee55bf85b94b80d7862f1a6440e63383e265213a974a9cd263a7ba",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_x_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7813679a5f3ce7163d4554804e5003f353539adb62f92d2a65fa07ab1e044896",
+   "key": "linux-64/cuda/sm_80/identical/_mojolearn_byte_lm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d110475d790b1c7517a3c6f3dfa9a70ff40f2fcc3d724d2eb54687c408f40546",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_gbdt",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7d4f2ac674f24c08ff1506a5ad330ce61f8204548c7a7ce9ffcb31e7646a469c",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_rf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f4f15f3a54423f4d30706b867817b6c75748f41cfaa3699536fc14e2db407abc",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "c0c6be13a1d97903cca47b24a46010d7bd88b5955321a331edeb3c46087d8c6b",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7acb68990b887b1bece94ff80001a5791b9d8193dbd7cbf471754d99e571ff13",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_estimators",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "89db33d774dc4745b6f417cf34c652bb5fc01761c9546106ebd0222ad0412068",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_svm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "1134b5ffe7e4874a9f813d570e30728af0d3b2ad1d048c97a9e39b617b422bf2",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_solver",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d78cd0d09a05dfa67a9c5ccceb81b06b05371d51db01dd3d6ce9e0d48157dd2c",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "25c145e6f69f299e855181bf4caa3fdacd32c46135baf36482c1e09a6c433779",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_preprocessing",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "13c1890bbb76cb6dfaf63dea0e70c4cddc3a1a973a34a4936c619fe1583d1dda",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_tsa",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2ac688398ffb2991623155019565c86d02857b9ca73984dd06322b763697868d",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_linalg",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "1b90671a6ef4da359f1d08a30a672f63ff8f7a49501cfa9b17bf9ef54d4bfec6",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_arima",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2b42de719806fa06c1b5e7139f8b1b290cdea57c21b06eb34e3c995413eeb043",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_gp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "b901c33f501850de5dd5e17b13a0b6ff9bb25607423a156f7cdd86d4cb0424e3",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_kernel_methods",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "552e85647920aec9ab7d4584b73a5dbee5c22314e1672de7f4398689c0384536",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_mixture",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bb740946cd727491f06e9036130c8e208f21298f99618219fef275cd8d0f578b",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_hdbscan",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "af1f2011611de8f0891c2ab681cae1c277ffec11df63a3727b503fa0e39e5221",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_resample",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f0251132c4ddd3d1db93d7c53228340ce911722c7df2b25bd143c3e9afa1b30e",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_ivf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8f9ce4828eed2be40bb7d8a15d16eacb00cfa8a63a8af0c7d4db5df895851456",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_training",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "279a9b58e64b9d61b68688ae88f6473dfb98c3993445141734598fb3a30d5807",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_mamba",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d85742d07aac7754da16a3e8b0d1ffcb676b780486b0e9b307f056775b28c9bf",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_transformer",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "df8822d87dce1736342852d1a7a431cca58969550b0c52f4fb69e889aebd5cdf",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_embedding",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9fb7298ff4572d8ade1c226599e787c18cd3adc3ad6c115c3fef760af4744c56",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_linear",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e89afa02963cf5260c3196030736922de773305545416c115056b6395e4507a2",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_cluster",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "651ebafbc3dc49fd6a7fd9cf54039fffc64e2163e2ff7e6613ef69b04a136be5",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_neighbors",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e965ab530ba7f5b681fcd5b0e467405dff47192ee8bac6b76fddfd4cddb8f72a",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_decomp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "674b2a5e2992d4b7cf94344cd99a454ad2971f86bcdde66a7ce055420f2a4368",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_prep",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "90b259682037af98349831966197eb06932e84bf23fe0b5a3aa67fb8eb44db40",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_sequence",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2848394f1402f5608ec15e31fc39fb4f8e373f6499cb8cc7a1b93f71849cc0df",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a5e3c206ba6d1598dd159eded0b8618ba18945ff02b0673e1510d8b310eef8df",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_cnn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "6c136f4d56d9cc453062d8e1e4eb69ade24a787330875ceba01796e1618c98c7",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_ann",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "62ffc4cf1e2733100c8f441c1ffc340a7e054e96c964e5384eb0e66f659cb3d4",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_x_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "aa6f3bd85b4313a83b401cd1b2a7d229a6c51bb7e4ff068f67cd880afd3e23d9",
+   "key": "linux-64/hip/gfx942/identical/_mojolearn_byte_lm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "40ec874a2559e8af1145687fc544aa6651359e3afbb4ea75d6de4470330049e9",
+   "key": "linux-64/host/-/host/_mojolearn_byte_lm_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "17fabf803a979b9d713609e82add5f5682347958b9479ca51f3535aa5dd8b4ed",
+   "key": "linux-64/host/-/host/_mojolearn_forest_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "c2964ce1fca65cc78a50f52ff9753e045ca049cf5eaeca23947929bd4eba90b1",
+   "key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "252d95a0c3d74642e33d45bbc8a1828513332149f6a1eb646549821c911d931e",
+   "key": "linux-64/host/-/host/_mojolearn_neural_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0c791cb4299e088528546089c9aa7a13890f71e43556508ed5fff5afb4ea46b3",
+   "key": "linux-64/host/-/host/_mojolearn_core_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f647b493ad06d07c2c6c04293f6685a74dbfc7a70016773b09d76848efa9fe41",
+   "key": "linux-64/host/-/host/_mojolearn_linalg_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "dab4864470aae0ad7cdcf3c0971e59725c1d157f1b18e2d5854279880165e441",
+   "key": "linux-64/host/-/host/_mojolearn_estimators_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a27d16f27fe819503e14c838b4bb15bd482ce9e741deb9ae7c9916c2449d5582",
+   "key": "linux-64/host/-/host/_mojolearn_metrics_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7e9b4c031ed69f99a244983efb5ff9ce84d47fb26417c95c3cfc5d236c7a03c3",
+   "key": "linux-64/host/-/host/_mojolearn_preprocessing_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bd1a4b4b0d9877fc6a072eb654b8e3f290eb9f32a6e75c171348f1567a130389",
+   "key": "linux-64/host/-/host/_mojolearn_tsa_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "dc5173526d450da92de57c34ce07d19bd99f9104d220413f4a3a4254f8e7cd8b",
+   "key": "linux-64/host/-/host/_mojolearn_solver_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "de37e361db14b1bb2a48d395d3ff0ba3517972ff2565aea7b6f49bb5672d9895",
+   "key": "linux-64/host/-/host/_mojolearn_svm_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "06b8353b8bb5c8dbc927e09de5a3f81b555eddbb4a76b3ba0e889eb0067e7453",
+   "key": "linux-64/host/-/host/_mojolearn_trees_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "081faa1ee9b071c3481021afb30fc89d42b1b6cf5dd03303c4c71ed68d58547a",
+   "key": "linux-64/host/-/host/_mojolearn_rf_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cf7e3f84e398e4e39ac5f670f7a9ad4f46f22d23a1a5a3ed8524eecbc40f5eb9",
+   "key": "linux-64/host/-/host/_mojolearn_gp_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "93d51f060b7f88562e9a5804712bbbad4b289e1a3e524e59ea034654d20e1a82",
+   "key": "linux-64/host/-/host/_mojolearn_kernel_methods_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "712199fb5f9992227e4893e49d40e519f782626910f125f86f0c82843a2ebff9",
+   "key": "linux-64/host/-/host/_mojolearn_mixture_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "394b49494fb065e1db96fdbebd9676ebd3d3c1038af4898d04261125943b9689",
+   "key": "linux-64/host/-/host/_mojolearn_mixture_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "14d7d8975597ccb4f82fcfebc5fe4e692de67d2c6e3290ec82b9608338c1c2ce",
+   "key": "linux-64/host/-/host/_mojolearn_hdbscan_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "52909242f15a728b604548cc798b225037b1920b39a79dbc02788276cc8f3772",
+   "key": "linux-64/host/-/host/_mojolearn_gp_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4f94a21036cab68e649faea8250f508df723564dae9f7b1e16d990ca7ac332a9",
+   "key": "linux-64/host/-/host/_mojolearn_hdbscan_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d811c76f7aca5a58ee151ae9471596edd60c2a0b2e277be47a181aef37f26d24",
+   "key": "linux-64/host/-/host/_mojolearn_gbdt_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f706de5c4b7a4d1134c4548976b20563ab018dc8eaea9c42b32cecb473e70b36",
+   "key": "linux-64/host/-/host/_mojolearn_training_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9629860de6aa8ceba8496a43a9049a51eb08e4f5b58222bdc775b1fd93e3386e",
+   "key": "linux-64/host/-/host/_mojolearn_resample_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "28f5c6e641598dfb12f77c4b08ed39e6040e88ca311ff58b2ce002a0a255489a",
+   "key": "linux-64/host/-/host/_mojolearn_mamba_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cccb9a1e48bbe96c5a8b3ebe5dfaff56ab537254053a3f8e8076b86c483efa17",
+   "key": "linux-64/host/-/host/_mojolearn_arima_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "6cefeba53bfc8341a561bfefca1b4fe9b0f069492df8024ed089fb2e73491b47",
+   "key": "linux-64/host/-/host/_mojolearn_embedding_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bf3ee6269c24b275f243395b44c63f3f78a3fdd4b694060784ff0092a79722ff",
+   "key": "linux-64/host/-/host/_mojolearn_embedding_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "09aa5b63c15d0fd3b97a9452783191c56a5496fe0af11ede8b181f5f0b946c08",
+   "key": "linux-64/host/-/host/_mojolearn_ivf_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a1c25578efdf6762d94a5fa6fbda8ca5c05f75942703617baf6125e0f523fdbe",
+   "key": "linux-64/host/-/host/_mojolearn_ivf_search_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d42c64fced007c567209d0abb1cbab40e4904649f3596770ca57c02d62b8c1ef",
+   "key": "linux-64/host/-/host/_mojolearn_forecast_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8e5ddd0079cf0e6d676a46554f92567b70c5f83fe05216efbd3120573bc9eb6b",
+   "key": "linux-64/host/-/host/_mojolearn_transformer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4e89c9a28d47760141bb070c4f50624f52efabb4bd68876d7295f8dd454f80ad",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_classical_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "93a253bff8333fde9b481b04f171395ce591c56d9180079c770907d9dd053427",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_trees_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "472f60749aea5e248ab5cd1e9d20c87a6d58c40fddc2012b6232d9a8ed32c3bb",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_family_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a9ea39900ebe6e2e230d564a4ff24bf1ea587c83f83421f65c9f834a5ee825c3",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_prep_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "23f48a7702843d3de535028dc1a85578568386e1b0bf4853fe1d65b4495a54de",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_decomp_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "efd7202e27f9eab80333a6433fdef1db982990e1b49000fa8d1656fb756f92bc",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_linear_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "09c255bef901d1ac6a698571300a57d4b93a4b2df4f1080f8ce26e32db04c3b5",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_catalog_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "fccb3a13238ecc3c6f346bc31d3daeca3e4c300addbf54d29b4f4dfd3411737e",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_xseq_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8eab84b5ce2cd2be6ba2ce317c7c8c2b26a94bb90c196f794a70b6fb1b11d7d1",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_byte_trainer_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "93cc2744c7886e15e734609acd2914cdcab533e8af4ac2a85bb066dd02767be5",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_parallel_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "5d8c908d71c78025b47c822cf178d4792f8e3b86c7e361813c6fd8c840d96015",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_neural_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a07b9df5e5fd2283de31a5c4aa48644b67b954251226a393ddbca3b59814b265",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_sequential_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7a944a3b314a08ca6238851cc00ff06de7557ed58ce587d41c19202ee5da8b64",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_manifold_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "61952a3443c5d3c05edb8b370fdba7997ae234535fc1d2271c02b962272a2a04",
+   "key": "linux-64/host/-/host/_mojolearn_runtime_model_selection_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e9739efea461d30be7ab115973a30278c043f6b3ae258787555d5d1e1443727c",
+   "key": "linux-64/host/-/host/_mojolearn_x_linear_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "851aeef9e604c31baaf9cf036caaa2d12401a91db3337388131652061bf47314",
+   "key": "linux-64/host/-/host/_mojolearn_x_cluster_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "1125d8e6d9c8f8557c41f5a72e9e09c362c6a38b059cf1a11b3b39e47ff84013",
+   "key": "linux-64/host/-/host/_mojolearn_x_neighbors_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8f38338b59ab0156025145bb64c5184c5a5b29abb7d0df5111e7ace283fa24d3",
+   "key": "linux-64/host/-/host/_mojolearn_x_decomp_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d37545c87ed8b59036922779d4138288653043b38e00e19e3bcd4352b3a74bb4",
+   "key": "linux-64/host/-/host/_mojolearn_x_prep_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "578c98a2cc8a24aa35b8f1482c01a31608c328a710c612828f9a4d96489f36aa",
+   "key": "linux-64/host/-/host/_mojolearn_x_sequence_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f91b7455b51eb0feadc44a75e80e10b2f6e7c314f8bb8173eb6f21b771292109",
+   "key": "linux-64/host/-/host/_mojolearn_x_trees_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bf35144c8d024232967fbfe58b429fadc7ec8a31dfbba411cfc401b06e6c7b63",
+   "key": "linux-64/host/-/host/_mojolearn_x_cnn_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "df7cf8cc0bf2a7718ba56be7a1178449ff5b87b271752552e6834bc44f9ba02e",
+   "key": "linux-64/host/-/host/_mojolearn_x_ann_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8206af50d7bb6521c8808071063b0f3605e34a0a8ba69cfcc87232a023124309",
+   "key": "linux-64/host/-/host/_mojolearn_x_metrics_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0f9ae6709bee6a15def7597d80cf02aac8b8c1bf85867eb3c0c33e76a9d406d0",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_gbdt",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "fa370bd2869141ae0239c9775373c67af71697cde4596896427dbb0b6e16d3fa",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_rf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f1a05949370a9c6d5617bc86d7c5892c4b04cbcd3ec6fadfd1e37b9dfbab20f1",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d7260899265ce9c45977f5a8a207768d114f5e9cb49831127e5724bc0f2dd1ae",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ab4de59018fbee9f76aca42a95b4004910091dda710b18bd289e4b2eb9e5909a",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_estimators",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f18fb142010b83b2176728ae6b73eec0f78b5ac4f5f41cdb46f973d6c890ccc4",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_svm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "99339ab34f3350deec8e47205f2669da0f142c4d349ed95175c0a6acb3743d77",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_solver",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ff1a6d3d7ac70961194efa1ea5756c8fba807514be288a85bdcd0d3a28b4ec54",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "35c45d8de562ba74f748e6f249b34eb8bafe97cbe15366ae21cce15df43cda86",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_preprocessing",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "588360aea6628aae2a33f84a51aaf8930cea3b720c8979f8561e8e94e3111eeb",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_tsa",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "65901b3bbb0f72da31848ca94d7644e9c0e5afb36d619970742a7fe3801139ec",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_linalg",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a2a2a17695b12acb0c0e5172a2e5c7b6c2ee9a36f97358abf03a5b7c8ab9d85e",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_arima",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "3662f6fb64802b41e48ce3aaebde0cd2026f0db970ba2fc6a9d4ee89657be85f",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_gp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "fe4688b5756431d5558e92eef84b62a57c34d367a2828e7486bb32796717f84f",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_kernel_methods",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "78a4ee2a58f75398ab933133c682ab80d3dc66d16c876f109cf46f435cb42052",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_mixture",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "dcac3e689bbbb8ea3a6f30f6c1746d84cc96d90b7ca784e84e39b9d2444c242b",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_hdbscan",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "22ef5d42bd812f280d2737895e392ece5bd4695c6fb5fc34296ef094cb621a4b",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_resample",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4db839ec2ded28621fc53c4c28572ad7c26679fd8ede154147217701c2f49168",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_ivf",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e53659922176be3cdb0df990ff35e185d277eb629a2377cf2bcaeb7428d166b6",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_training",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0d7efe0efc007ba8b6524f806508e23f2516f15cd79ef4f74d81bf789b010500",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_mamba",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7b348b340e8b5f9e41cd0b77f326060a7fe8f85b21cd668b3496eab37750cdf2",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_transformer",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2eb00d6ce3049da1b31c66400aef01b392ad6818e5ac9b1942e614c74b256753",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_embedding",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2efd34cbb91fc94d2dad1cacc832ddaed386960ee66e1c41d345feee29a31bd2",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_linear",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "66a1faa1f3a783acaf9dcf54dbe250cc55990c2034451cd6684a75a9e8fc98a8",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cluster",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f790db6b48948b063dae3ad7d975890b64fcfeda60d1f86355f5a6463ceaf9a8",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_neighbors",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "be1d7305d3cd1afd1864e88887db89c1a50ab5f49dd49c2e446fc3f9621f6a22",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_decomp",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "09e8a5e8f38540ef55ab278e132d98ba6dc1de8e78d430d0f1f64e87fdcb4bac",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_prep",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cd0020a14ef714101153fbb7024b0bd9b5b7e46b8dcc6da256dd1e784f52bae0",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_sequence",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f90bf2a5bb3f33f549f220c0e4a228cefeb1003261c3effae54a88f681abae72",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_trees",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cb082ac4c17ab94a3f7c322ec0d9bbd369bf4cd142af3f7e2939f09a67eccdfb",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cnn",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0331aba75aa49473ef1ab2cc97bc8f0c8352a4255f01b05c86eeb2ee19b08870",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_ann",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e089da5d3005450aa5b7dac12f08a5438f904ce55620e463bfa99b4240b98295",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_x_metrics",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "6f54d5bafdfef75590e24d080805e603daabeca3f29f1995831ef0b482c53eab",
+   "key": "osx-arm64/metal/apple/identical/_mojolearn_byte_lm",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "508be12bfd1e4930fc97bbf30eba91f3e3d773d9bcd8670517484797f55ea9a0",
+   "key": "osx-arm64/host/-/host/_mojolearn_byte_lm_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "577b152f64c75e212b35666d7d37b94bed07098ccb5a6797219d607a62ecdd97",
+   "key": "osx-arm64/host/-/host/_mojolearn_forest_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "eeca378a79e9faa806fcae41e40cfe44d720d14aacf4e3e2a185bcdc3bd6bf4c",
+   "key": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cf2c554bea0d70e25ba61e37432ef5ce3e0e44f8895f04433bf2d2b7767bc9fc",
+   "key": "osx-arm64/host/-/host/_mojolearn_neural_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4411ca9d20dca5d9f9625378776e506e33e9cad006493b85b3f84e70d54bc155",
+   "key": "osx-arm64/host/-/host/_mojolearn_core_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "b9d253233ac2716e6e4a1c7c2928db464d232aa83ae01cf5e793faf34aad29e6",
+   "key": "osx-arm64/host/-/host/_mojolearn_linalg_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0bc7b8685592325909a3dce2f103abea0b2f6e34064673a7cc174bda61d4f6e7",
+   "key": "osx-arm64/host/-/host/_mojolearn_estimators_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "395041b692bd6bab5d622aed9daf6e4f4301a5d52e4dd173a1fd0d9abb5e9991",
+   "key": "osx-arm64/host/-/host/_mojolearn_metrics_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a5904b808fc2fe2aa19cb4d344cf9e4dcd37f59570f2ac73af3935a229081d61",
+   "key": "osx-arm64/host/-/host/_mojolearn_preprocessing_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "bffd07af6376c01cf18ed7232ad5e95e33e3c391583b2721f0aa1848d7145aa8",
+   "key": "osx-arm64/host/-/host/_mojolearn_tsa_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "aa36cfcb974f923e6b49759521c77a1521053d051c3092f470c10d595d4bbd53",
+   "key": "osx-arm64/host/-/host/_mojolearn_solver_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "8c8a2b1ee86b2d634f774e323ad09acffdc714446a419b440c771b05a11fbbf6",
+   "key": "osx-arm64/host/-/host/_mojolearn_svm_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0c57b4e66aef4feb0fb83a0561c278bb47f0ebfd0e15bf084304608e4ad845d7",
+   "key": "osx-arm64/host/-/host/_mojolearn_trees_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "870fe744e298ffabcf96ccffc3eb1a614736d4cf9ecbf09aedbb22f5098fa267",
+   "key": "osx-arm64/host/-/host/_mojolearn_rf_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "42fa142d7e9a36b412e435218b083fe02b9c66b57b00092c4eaef6656f49715d",
+   "key": "osx-arm64/host/-/host/_mojolearn_gp_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d353c8051ea0a794e001373facd6f744142ac5d379ec7b83a79c455a50bc7d11",
+   "key": "osx-arm64/host/-/host/_mojolearn_kernel_methods_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "de13a81fd8dea4a6e2f3d204f89224be8a0421ac5883e5dfd4d54d55226921bf",
+   "key": "osx-arm64/host/-/host/_mojolearn_mixture_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2cd2fda580d7287e53b6e5eb7fb18831ea80a9e5dc33be733502035fbbd73370",
+   "key": "osx-arm64/host/-/host/_mojolearn_mixture_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "4c594ec073d46f8f0cf5866c2ea565e9eac1c1b97d208bb8e49b42cf7db8e424",
+   "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "b7c889455a3b4ce8070a776051c4d5ec9e40b932cd8f4fc9f36f3e0f08b2e645",
+   "key": "osx-arm64/host/-/host/_mojolearn_gp_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "17ebfbad0f0a19051cc296fa5736cc2b3ebaa732c3fa4fa05237a323b806c2db",
+   "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "26eea2b8f06a02fcd7e7693ea1057d7cb1375b25c2eeff2ba11fa233988458ce",
+   "key": "osx-arm64/host/-/host/_mojolearn_gbdt_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "86693ddfae373c086b75cfb53758e159a98c6890b29ab55f1cf0685a35f0163b",
+   "key": "osx-arm64/host/-/host/_mojolearn_training_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "5e9a37d178314d3804949922375bf1e5df46fbed99f46752b3eec9f683fd08c0",
+   "key": "osx-arm64/host/-/host/_mojolearn_resample_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "3b2e3956aaacb2e58ec951e819bceda747a0beba54e33fd5c232b90c7fbd659b",
+   "key": "osx-arm64/host/-/host/_mojolearn_mamba_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7fe078030f86146475089f5bb67c398a86d1161b57eed8937c7c316b3467e23f",
+   "key": "osx-arm64/host/-/host/_mojolearn_arima_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "be9bfe0fb088a0a584b7c8e1c6dfe1d507b3ffc5cac0cc15422bd2f8b7555816",
+   "key": "osx-arm64/host/-/host/_mojolearn_embedding_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9eeb682be45492c348b163bfd049409b73035cdb39eb20c1b49635e2e9e1d481",
+   "key": "osx-arm64/host/-/host/_mojolearn_embedding_infer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "c863eb57ea89f34661bd4ba3270b94405e4af656432780cf13516cc6f6998487",
+   "key": "osx-arm64/host/-/host/_mojolearn_ivf_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0e5e7d5dd44351a87febb16377dc92f4c2bcb521c1dc824e44726961d9801b74",
+   "key": "osx-arm64/host/-/host/_mojolearn_ivf_search_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "a18e7faca0e26236cd23382a6ffa058a7c05ba401cd020facddc0399a79aedaf",
+   "key": "osx-arm64/host/-/host/_mojolearn_forecast_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "88c29f4fa8e3632df3dbe4f03765d8c53387ede0a67ab4ea69c4f206af11b4c1",
+   "key": "osx-arm64/host/-/host/_mojolearn_transformer_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "37896daadc48ad39925e9fac779f926f4df17d321a10fb813be19604737b4100",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_classical_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "cc7411f3e0dea7e0b6f581d9a818aae5a98a9dfb9f92270baeadce04e5bcebd4",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_trees_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "ee170a40a07809828b25983562b7cdb729748632fdf45a03518eb02ecb4c09c9",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_family_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "216f044791f1f63401758d5116d1f01f038e8999499ec752b3459f721de83c9a",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_prep_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "dad85258bc8ad6379151ec9c9e7fe7e3a9c354ba64ab62c5dd65d487e2a9b313",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_decomp_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f38e806a65946c545f86810168295592b375a986af2501d95dd49d16affb9f0f",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_linear_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2f46835f3f390ef41436a2a9bfafff5502bb56394b24dd2ddfa1b109cccd8e68",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_catalog_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "f627b837577a594f2905b45f8a55b0123ff9a115a812446013a9a23fdf5dccc6",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_xseq_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "fb25eeb467e168e337b0b28b86cd0b314684235794f19d8c538a12b2b7bd088e",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_byte_trainer_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2a60c9714977b2b6954621ac7fcf05034c9e2ac93522076a39091bb0652ed763",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_parallel_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "97a12b878697b6796c72153a09e08db4c4477c4e301aab0cbaf0be20f223e6b1",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_neural_host",
+   "reason": "new binding (no build script in the previous release)",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "fb70e1d0f8a83a2607e33b742621bc3a0513e97afa053f6ac31179ec25f1c04e",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_sequential_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9814cf794a468e19b40e630b460cb1e66814f71f3857d51aefaf14611206653c",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_manifold_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "32182aac6622b36008720558a1e19d38fe3589f2cccb14da6cdca03bee761869",
+   "key": "osx-arm64/host/-/host/_mojolearn_runtime_model_selection_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "0c30f1d40f80e5efb4691cc1f40228d154b2a245af65f051a6bca618378f3d00",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_linear_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "d38b904b55043b6ea78fd30449ffa6f94bfa962bc82a572b0d8e1b821b054e9b",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_cluster_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "352c7c141b43b3592759af3f8ab8d171957a362bb8d09ba1aafb7bfbed380b09",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_neighbors_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "be84f15e5e80a99a19c0a8eb8dd79e786f8a905a6be5128fbc6de57528352bb7",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_decomp_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "2e59988eb34b12b3f8bc1ef2ceb96b2419f1ea9ab38637aafcfc66d24db324b6",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_prep_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "e4422da892251e081c05b1c859ab2f35b22b3cf010c95eee8d043719fd3a2855",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_sequence_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "b1882a8b5d1f6c78cb343f756386e47b37a07cf297a15381e80201acb216c3ad",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_trees_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "7af0bcad825f0b73d923e63adceeb7cb81c64d2bb31a139eb133f8cb7dd4a11f",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_cnn_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "63ec23e21938a25b2119d778d2997f542d304f11e1df53934ca57695e8ebf5f0",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_ann_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  },
+  {
+   "decision": "BUILD",
+   "identity_digest": "9e8e0105361ddae001a7b9777dd45f17cc1714ed49f46abc676d70ec30935d41",
+   "key": "osx-arm64/host/-/host/_mojolearn_x_metrics_host",
+   "reason": "changed: builders, closure, toolchain",
+   "reuse_from": null
+  }
+ ],
+ "counts": {
+  "BUILD": 244
+ },
+ "host_toolchain": {
+  "build": "25F84",
+  "developer_dir": "/Applications/Xcode.app/Contents/Developer",
+  "metal": "Apple metal version 32023.883 (metalfe-32023.883)",
+  "product": "26.5.2",
+  "sdk": "26.5",
+  "xcode": "Xcode 26.6"
+ },
+ "leg_reasons": {
+  "cuda-sm_80": "33 binding(s) to build",
+  "cuda-sm_89": "33 binding(s) to build",
+  "hip-gfx942": "33 binding(s) to build"
+ },
+ "legs": [
+  "cuda-sm_89",
+  "cuda-sm_80",
+  "hip-gfx942"
+ ],
+ "previous": {
+  "channel": "pypi",
+  "source_commit": "6519a54c657930757a36a520a03724d78318140e",
+  "version": "0.8.65"
+ },
+ "schema": "mojolearn.release-compile-summary.v1",
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "version": "0.8.66"
+}

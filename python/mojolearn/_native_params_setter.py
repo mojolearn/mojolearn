@@ -49,16 +49,24 @@ class NativeParamsSetter:
 
 def connect(context, parameter_metadata):
     # glue: exact built-in constructor and native storage identities at import
+    import sys
     from types import ModuleType
-    from . import _expansion_linear as linear
     from ._native_classical_bridge import _numpy_free_context
     from ._native_owner_lifetime import connect_owner_context
-    ownership = _numpy_free_context()
-    ownership['native_module_type'] = ModuleType
-    connect_owner_context(ownership)
-    plans = {}
-    for name in _CLASSES:  # glue: fixed native field-assignment constructor schemas
+    # Re-run when a family loads (lane lazy-family-import): the linear plans
+    # are added once, when the linear expansion is loaded; the ownership
+    # context is connected once.
+    ownership = _CONTEXT.get('ownership')
+    if ownership is None:
+        ownership = _numpy_free_context()
+        ownership['native_module_type'] = ModuleType
+        connect_owner_context(ownership)
+    linear = sys.modules.get(__package__ + '._expansion_linear')
+    plans = _CONTEXT['plans']  # filled in place; native callers keep reading this table
+    for name in (_CLASSES if linear is not None else ()):  # glue: fixed native field-assignment constructor schemas
         cls = vars(linear)[name]
+        if cls in plans:
+            continue
         plan = context['family_msel_estimators'][cls]
         if plan['init'] is not None or plan['forest'] is not None or plan.get('initial_fields'):
             raise TypeError('linear parameter setter requires its field-only native constructor plan')

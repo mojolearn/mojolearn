@@ -1,0 +1,18 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 2f4006c8cf..ef9d058c13 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1288,12 +1288,10 @@ comptime LG_EXACT_BATCH = (
+ #: (arm 64). Lossguide only; depthwise never reads the width.
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128 (DELETE-ARM, EXP:113 force-on knob of the FAST Apple default, rule e) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 25eeaf016e.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF (DELETE-OLD-PATH, EXP:113 KEPT 9722e5a2b on Apple M3; one-vendor promotion, rule d) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e50ac0e432.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime _LG_EXACT_BATCH128 = (
+     TARGET_HAS_APPLE_GPU
+     and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
+-)
++) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
+ # TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_BATCH16 (DROPPED-slower) deleted 2026-10-03 by dc23f13c8; code recoverable at dc23f13c8^.
+ # Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_BATCH16.patch; record in docs/TOMBSTONES.md.
+ # TOMBSTONE: MOJOLEARN_AFT_N01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 74a26fca92.

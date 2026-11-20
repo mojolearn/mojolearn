@@ -1,0 +1,296 @@
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index 867dc8e4be..dc7706cdfc 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -712,14 +712,61 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+     return _read_addrs_tail(addrs, 13, what)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
++def transformer_forward_fresh_binding(
++    addrs: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """Stateless prefill: original zero device cache, only y is returned.
++
++    Eleven pointers: x, nine weights, y. Eight scalars: B, L, d_model,
++    n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
++    L (or a window-sized ring), exactly as Python allocate_state(B, L).
++    The zero sentinel cache pointers never reach a transfer in this arm.
++
++    lane/block-options: or 11 + 11 pointers and 8 + 17 scalars, the two
++    option tails appended (this file's tail section, word for word). The
++    gate_proj.weight pointer (slot 7) is 0 under an ungated MLP.
++    """
++    var what = String("transformer_forward_fresh")
++    var raw = _read_addrs_tail(addrs, 11, what)
++    var p = _read_params(params, 8, what)
++    var opts = BlockOptions.from_params(p, 8)
++    # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
++    # two absent cache slots, y, then the tail.
++    var a = List[Int]()
++    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        a.append(raw[i])
++    a.append(0)
++    a.append(0)
++    a.append(raw[10])
++    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
++        a.append(raw[11 + i])
++    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
++    _ = a  # keep the Python object alive through the native call above
++    if a[12] == 0:
++        raise Error("transformer_forward_fresh: null output address")
++    var b = p[0]
++    var l = p[1]
++    var dm = p[2]
++    var nh = p[3]
++    var nkv = p[4]
++    var hd = p[5]
++    var it = p[6]
++    var window = p[7]
++    if b <= 0 or l <= 0:
++        raise Error("transformer_forward_fresh: B and L must be positive")
++    var out_len = 0
++    with GILReleased(Python()):
++        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window, opts)
++    return PythonObject(out_len)
++
++
+ # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
+ # this GPU binding. TransformerBlock decodes and prefills through
+ # `transformer_session_forward` (weights, cache and RoPE retained by the
+-# block's session); this per-call entry, which uploads the nine weights and
+-# both caches per call, is reached only by direct callers of the extension
+-# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
++# block's session) whenever the binding exports it; this per-call entry,
++# which uploads the nine weights and both caches per call, is reached only
++# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
++# of the extension. CPU host bindings export their own host entry.
+ def transformer_forward_binding(
+     addrs: PythonObject,
+     params: PythonObject,
+@@ -817,9 +864,10 @@ def transformer_forward_binding(
+ # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
+ # this GPU binding. TransformerBlock decodes and prefills through
+ # `transformer_session_forward` (weights, cache and RoPE retained by the
+-# block's session); this per-call entry, which uploads the nine weights and
+-# both caches per call, is reached only by direct callers of the extension
+-# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
++# block's session) whenever the binding exports it; this per-call entry,
++# which uploads the nine weights and both caches per call, is reached only
++# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
++# of the extension. CPU host bindings export their own host entry.
+ def transformer_decode_step_binding(
+     addrs: PythonObject,
+     params: PythonObject,
+@@ -1690,6 +1738,11 @@ def build__mojolearn_transformer() -> PythonObject:
+         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
+         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
+         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
++        # NVIDIA's full public A/B gate admits discarded-cache prefill.
++        # Apple retains its prior default until separately priced; the explicit
++        # force flag remains available for its completed arithmetic gate.
++        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
++            m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
+         m.def_function[transformer_decode_step_binding](
+             "transformer_decode_step"
+         )
+diff --git a/bindings/neural_block_public.mojo b/bindings/neural_block_public.mojo
+index b782631230..ace2c844d8 100644
+--- a/bindings/neural_block_public.mojo
++++ b/bindings/neural_block_public.mojo
+@@ -659,9 +659,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
+     if supplied_state is not None and py_get(_fields(mods, supplied_state), "_resident_session") is not None:
+         raise Error("neural block: state is owned by a resident decode session")
+     var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
+-    # Lane x4: MOJOLEARN_TRANSFORMER_LEGACY_SETUP and _SESSION_FRESH removed;
+-    # a binding with the session entries always runs on the block's session.
+-    var reuse = transformer and py_contains(e, "forward_session")
++    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
+     var lock_lease = OperationLockLease(lock)
+     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
+@@ -674,7 +672,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
+             py_setitem(fields, "_native_session", PythonObject(None))
+             py_setitem(fields, "_session_binding", PythonObject(None))
+         if transformer and supplied_state is None and not step and fields["_int15"] is None:
+-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh")
++            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
+             if fresh_session or py_contains(e, "transformer_forward_fresh"):
+                 var y = generation_array([b, l, d])
+                 var keep = List[PythonObject]()
+@@ -1208,7 +1206,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
+         lock_lease.acquire()
+         mods.released()
+         try:
+-            var session = _native_has_entry(mods, entries, "transformer_session_backward")
++            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+             if session:
+                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
+                     causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
+diff --git a/tools/transformer_fresh_prefill_leg.sh b/tools/transformer_fresh_prefill_leg.sh
+new file mode 100755
+index 0000000000..0dbe189e54
+--- /dev/null
++++ b/tools/transformer_fresh_prefill_leg.sh
+@@ -0,0 +1,52 @@
++#!/bin/bash
++set -euo pipefail
++repo=${MOJOLEARN_TRANSFORMER_REPO:?set isolated checkout}
++out=${MOJOLEARN_TRANSFORMER_RESULTS:?set absolute evidence directory}
++if [ "${TF_TRANSFER_ACTIVE:-0}" != 1 ]; then
++ export TF_TRANSFER_ACTIVE=1
++ exec "${MOJOLEARN_PIXI:-pixi}" run --manifest-path "$repo/pixi.toml" bash "$0"
++fi
++cd "$repo"
++python=${MOJOLEARN_TRANSFORMER_PYTHON:-/usr/bin/python3}
++test -f mamba/corpus/gen_corpus.py
++test -f transformer/corpus/gen_corpus.py
++mkdir -p "$out" python/mojolearn/identical bench/speed
++export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$repo/python"
++mojo --version > "$out/compiler.txt"
++nvidia-smi --query-gpu=name,driver_version --format=csv > "$out/gpu.txt"
++"$python" -c 'import numpy,sys; print(sys.version,numpy.__version__)' > "$out/python.txt"
++sha256sum bindings/_mojolearn_transformer.mojo tools/transformer_transfer_check.py > "$out/sources.sha256"
++cp bench/results/mamba3/2026-09-09-statepass/reproduction/seq_py_speed_arm.py bench/speed/
++cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py tools/
++for arm in baseline fresh; do
++ extra=(-D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL=1)
++ if [ "$arm" = fresh ]; then extra=(-D MOJOLEARN_TRANSFORMER_FRESH_PREFILL=1); fi
++ # compiles the entry bindings/entry/entry__mojolearn_transformer.mojo, which imports the module body bindings/_mojolearn_transformer.mojo
++ mojo build -j 2 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o "$out/$arm.so" > "$out/build-$arm.log" 2>&1
++ cp "$out/$arm.so" python/mojolearn/identical/_mojolearn_transformer.so
++ "$python" tools/transformer_transfer_check.py --output "$out/$arm.json" > "$out/check-$arm.log" 2>&1
++ if [ "$arm" = fresh ]; then "$python" tools/transformer_fresh_prefill_check.py > "$out/fresh.log" 2>&1; fi
++ "$python" python/mojolearn/tests/test_transformer_surface.py > "$out/surface-$arm.log" 2>&1
++ "$python" python/mojolearn/tests/test_transformer_hd128.py > "$out/hd128-$arm.log" 2>&1
++ MOJOLEARN_SPEED_DUMP_DIR="$out/dump-$arm" "$python" bench/speed/seq_py_speed_arm.py --lane transformer --rows large --rounds 7 > "$out/price-$arm.log" 2>&1
++done
++"$python" - "$out" <<'PY'
++import hashlib,json,re,statistics,sys
++from pathlib import Path
++p=Path(sys.argv[1]);a=json.loads((p/'baseline.json').read_text());b=json.loads((p/'fresh.json').read_text())
++assert a['sha256']==b['sha256'] and len(a['sha256'])==82
++rows=[]
++for f in sorted((p/'dump-baseline').glob('*.bin')):
++ sha=hashlib.sha256(f.read_bytes()).hexdigest()
++ actual=hashlib.sha256((p/'dump-fresh'/f.name).read_bytes()).hexdigest()
++ assert sha==actual
++ rows.append(dict(file=f.name,bytes=f.stat().st_size,sha256=sha))
++assert len(rows)==2
++prices={}
++for arm in ('baseline','fresh'):
++ samples={}
++ for shape,ms in re.findall(r'^FSPEED lane=transformer arm=ours shape=(\S+) round=\d+ ms=(\S+)',(p/f'price-{arm}.log').read_text(),re.M):samples.setdefault(shape,[]).append(float(ms))
++ assert len(samples)==2
++ prices[arm]={k:dict(samples_ms=v,median_ms=statistics.median(v)) for k,v in samples.items()}
++(p/'summary.json').write_text(json.dumps(dict(arrays_equal=82,large_outputs=rows,timings=prices),indent=2)+'\n')
++PY
+diff --git a/transformer/native_block_dispatch.mojo b/transformer/native_block_dispatch.mojo
+index 1d992ee8f9..f52feff361 100644
+--- a/transformer/native_block_dispatch.mojo
++++ b/transformer/native_block_dispatch.mojo
+@@ -96,14 +96,10 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
+         var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
+         return transformer_session_forward_native(owner[], expanded, p, opts)
+     var result = 0
+-    if op == 4:
+-        # Lane x4: the device per-call fresh prefill was removed (the
+-        # session's fresh prefill, op 2, is the one stateless forward).
+-        raise Error("transformer_forward_fresh: removed from the GPU binding; the session's fresh prefill runs it")
+-    if op == 2:
+-        var base_a = 13
+-        var base_p = 10
+-        var name = "transformer_session_forward_fresh"
++    if op == 2 or op == 4:
++        var base_a = 13 if op == 2 else 11
++        var base_p = 10 if op == 2 else 8
++        var name = "transformer_session_forward_fresh" if op == 2 else "transformer_forward_fresh"
+         if len(a) != base_a and len(a) != base_a + BLOCK_OPTION_ADDRS:
+             raise Error(name + ": addrs must contain " + String(base_a) + " addresses, or "
+                 + String(base_a) + " + " + String(BLOCK_OPTION_ADDRS)
+@@ -111,20 +107,38 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
+         var raw = a.copy()
+         while len(raw) < base_a + BLOCK_OPTION_ADDRS:  # small-loop(pad existing optional block address tail)
+             raw.append(0)
+-        var expanded = raw.copy()
+-        _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
++        var expanded = List[Int]()
++        if op == 2:
++            expanded = raw.copy()
++            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
+         if len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS:
+             raise Error(name + ": params must contain " + String(base_p) + " values, or "
+                 + String(base_p) + " + " + String(BLOCK_OPTION_PARAMS)
+                 + " with the block options tail, got " + String(len(p)))
+         var opts = BlockOptions.from_params(p, base_p)
+-        var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
+-        try:
+-            result = _transformer_run_session[True](owner[], expanded,
+-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+-        except problem:
+-            owner[].clear()
+-            raise problem
++        if op == 2:
++            var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
++            try:
++                result = _transformer_run_session[True](owner[], expanded,
++                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
++            except problem:
++                owner[].clear()
++                raise problem
++        else:
++            for i in range(10):  # small-loop(original ten input/weight address slots)
++                expanded.append(raw[i])
++            expanded.append(0)
++            expanded.append(0)
++            expanded.append(raw[10])
++            for i in range(BLOCK_OPTION_ADDRS):  # small-loop(original optional address tail)
++                expanded.append(raw[11 + i])
++            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9], name)
++            if expanded[12] == 0:
++                raise Error("transformer_forward_fresh: null output address")
++            if p[0] <= 0 or p[1] <= 0:
++                raise Error("transformer_forward_fresh: B and L must be positive")
++            result = _transformer_run[True](expanded,
++                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], opts)
+     elif op == 3 or op == 5:
+         if len(a) != 21 or len(p) != 8:
+             raise Error("transformer backward: expected 21 addresses and 8 scalars (B,"
+diff --git a/transformer/transformer_binding_impl.mojo b/transformer/transformer_binding_impl.mojo
+index 87ca19c1e3..fc11f00e91 100644
+--- a/transformer/transformer_binding_impl.mojo
++++ b/transformer/transformer_binding_impl.mojo
+@@ -1264,7 +1264,7 @@ def _transformer_run_session_int15(
+ 
+ 
+ 
+-def _transformer_run(
++def _transformer_run[discard_cache: Bool = False](
+     a: List[Int],
+     b: Int,
+     l: Int,
+@@ -1334,8 +1334,9 @@ def _transformer_run(
+     # packed at stride s0 (DEVIATION 795(ii)).
+     _btick(ton, tk, "surface.weights_up")
+     var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
+-    kv.k = _upload_addr[False](ctx, a[10], cache_n)
+-    kv.v = _upload_addr[False](ctx, a[11], cache_n)
++    comptime if not discard_cache:
++        kv.k = _upload_addr[False](ctx, a[10], cache_n)
++        kv.v = _upload_addr[False](ctx, a[11], cache_n)
+     kv.s = s0
+     # Per call, from the record (DEVIATION 795(iii) at the default record:
+     # the FROZEN theta). p_max is the cache capacity: pos0 + l <= kv.s_max
+@@ -1366,8 +1367,9 @@ def _transformer_run(
+     # One wait for the three downloads (lane/neural-apple, 2026-09-28): the
+     # owners stay alive through it.
+     _download_addr[False](ctx, stages.residual2, b * l * dm, a[12])
+-    _download_addr[False](ctx, kv.k, cache_n, a[10])
+-    _download_addr[False](ctx, kv.v, cache_n, a[11])
++    comptime if not discard_cache:
++        _download_addr[False](ctx, kv.k, cache_n, a[10])
++        _download_addr[False](ctx, kv.v, cache_n, a[11])
+     ctx.synchronize()
+     _btick(ton, tk, "surface.outputs_down")
+     var out_len = kv.s

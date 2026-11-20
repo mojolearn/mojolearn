@@ -5,7 +5,7 @@ from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, raise_python_exception
 from checks.hdbscan_public_boundary_compile import hdbscan_c
-from bindings.metrics_reg_native import metrics_reg_operation
+from bindings.metrics_reg_door import metrics_reg_operation
 
 
 def regression_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

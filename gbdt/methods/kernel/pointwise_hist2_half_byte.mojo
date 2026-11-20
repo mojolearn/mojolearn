@@ -45,7 +45,7 @@ DEVIATION (arch): `use64BitLoad = IsFullPass` on the modern arm, as in the
 binary kernel.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
 from std.memory import stack_allocation, bitcast
 from std.atomic import Atomic, Ordering
@@ -92,7 +92,6 @@ def compute_split_properties_half_byte_kernel[
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     total_feature_count_in: Int32,
     fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
-    int_slot: Int32,
     dither_ids: Optional[MutPointer[UInt32, MutAnyOrigin]] = None,
 ):
     """`ComputeSplitPropertiesHalfByteImpl` (`:23-94`), copied; under the

@@ -1,0 +1,64 @@
+PCA whitening native kernel/state migration (2026-11-10)
+
+Scope/dependency
+  Three numerical definitions from test_pca_whitening_surface.py move to
+  actual native CPU/GPU functions. No new producer dependency or product edits.
+  Existing exact/randomized PCA owner tests and their independent NumPy SVD
+  oracle are untouched; no SVD implementation was duplicated to migrate them.
+
+Three fixtures per target
+  Planted zero scale: same3x2 input[[1,2],[3,4],[-1,-2]], identity components,
+  zero mean, singular[2,0], fitted rows5. Exact output[[1,4],[3,8],[-1,-4]],
+  exact first-row prefix, repeated full transform, exact inverse to original.
+  Fitted unit variance: original8x2 Cartesian values with x-axis[-3,-1,1,3]
+  and y-axis[-1,1]. Same default covariance PCA fit keeping both components,
+  whitened sample variance(ddof1) equals1 with original rtol2e-5/atol2e-5;
+  first3 transformed rows exactly equal the full result prefix; inverse values
+  use those same original bounds. Independent Float64 centered moments and
+  literal source values provide expectations, not another PCA call.
+  Strict cutoff: same2x2 identity input/components, fitted rows2, zero mean,
+  singular[nextafter(Float32(1e-10),0),Float32(1e-10)]. Construct the predecessor
+  by one UInt32 word decrement, not a new distribution. Exact below-threshold
+  scale1 and at-threshold Float32(1)/threshold; off-axis outputs remain zero.
+  Guard every output/state allocation and finite status. Feature, component,
+  mean and singular words must survive inference unchanged. Owning native Lists
+  remain alive across every raw-address call. No output hashes/tolerance changes.
+
+Call paths/parallel plan
+  CPU core.estimators_host_impl.pca_fit_host_run and pca_whiten_host_run,
+  the actual pure functions called by the host binding. Three independent
+  fixture graphs use host_parallelize; per-cell oracle comparisons also split.
+  GPU decomposition.estimator.pca_fit_host, pca_whiten_transform_host and
+  pca_whiten_inverse_transform_host using the actual shared estimators context.
+  Fit finite-status word and whitening device_checks enabled; tuned fit/GEMM/
+  whitening code unchanged. Shared context/pools require ordered fixture
+  submissions; native kernels preserve their parallel execution. No new
+  concurrency, speed, GPU-vendor agreement or installed-wheel claim.
+
+Python kept/removed
+  Remove only the three remote numerical definitions, their require_remote_gpu
+  helper and now-unused os/sys/_backend imports. Replace obsolete opt-in command
+  in decomposition/PCA_WHITENING_PUBLIC_API.md with actual native suite tasks.
+  Retain four Python definitions/seven parametrized cases unchanged: in-place
+  singular/components/mean corruption, changed singular dtype/layout, zero
+  singular admission, and NaN fit/transform/inverse refusal through real objects.
+  Numerical coverage now exists on the CPU as well; NVIDIA/AMD/Apple runtime
+  results are separate evidence still owned by root, never inferred from source.
+
+Root consolidated build/run
+  New checks/native_tests/pca_whitening_cases.mojo plus importable
+  pca_whitening_cpu_suite.mojo / pca_whitening_gpu_suite.mojo run_checks().
+  Thin pca_whitening_cpu.mojo / pca_whitening_gpu.mojo keep standalone tasks:
+    bash tools/compile_slot.sh pixi run check-native-pca-whitening-cpu
+    bash tools/compile_slot.sh pixi run check-native-pca-whitening-gpu
+  Existing build invocation if standalone:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/pca_whitening_cpu.mojo -o "$HOME/mojolearn-evidence/pca-whitening-cpu"
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/pca_whitening_gpu.mojo -o "$HOME/mojolearn-evidence/pca-whitening-gpu"
+  Product group estimators, host and identical targets, supplies retained Python
+  tests. No new loader/build scheme. Python file uses root installed-wheel
+  parallel test controller; native sources join existing CPU/GPU bundles.
+
+Status
+  Source/API review, Python AST/TOML/JSON parsing and git diff --check only.
+  COMPILE/RUN OWED to root. No lane compilation, tests, boxes or identity.
+  Product/kernel changes, bit changes and A/B define: none.

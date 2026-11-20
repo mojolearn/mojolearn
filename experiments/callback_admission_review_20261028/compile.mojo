@@ -1,7 +1,7 @@
 # Focused Samba configuration/registry compilation; never executed.
 from std.python import PythonObject
-from bindings.samba_config_native import samba_registry, samba_block_shapes
-from bindings.samba_state_native import _samba_registry
+from bindings.samba_config_native_door import samba_registry, samba_block_shapes
+from bindings.samba_state_native_door import _samba_registry
 
 @export
 def compile_registry(config: PythonObject) raises -> PythonObject:

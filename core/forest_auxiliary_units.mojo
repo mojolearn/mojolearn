@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""T39 exact auxiliary-output walk, shared by host and every GPU column.
-Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+"""Exact auxiliary-output walk, shared by host and every GPU column.
 Prefix contract: strict tree-order sum / number of trees in that prefix.
 Outputs are row-major. A zero output address requests no allocation/write.
 """
 from std.memory import bitcast
 from checks.numerics import ftz, identical_div
-from core.forest_experiments import T39_AUXILIARY_WALK
 
 comptime AuxI32 = MutPointer[Int32, MutAnyOrigin]
 comptime AuxF32 = MutPointer[Float32, MutAnyOrigin]
@@ -68,10 +66,9 @@ def _forest_auxiliary_row_shared[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32,
 def forest_auxiliary_row[RF_INPUT: Bool](offsets: AuxI32, colid: AuxI32, threshold: AuxF32, left: AuxI32, leaves: AuxF32,
     x: AuxF32, leaf_out: AuxI32, prefix_out: AuxF32, prediction: AuxF32, totals: AuxF32,
     row: Int, features: Int, trees: Int, outputs: Int, emit_leaf: Bool, emit_prefix: Bool, emit_prediction: Bool) -> Bool:
-    comptime if T39_AUXILIARY_WALK:
-        return _forest_auxiliary_row_shared[RF_INPUT](offsets, colid, threshold, left, leaves, x, leaf_out, prefix_out, prediction,
-            totals, row, features, trees, outputs, emit_leaf, emit_prefix, emit_prediction)
-    # B: requested output consumers perform independent incumbent ordered walks.
+    # TOMBSTONE: MOJOLEARN_TREES_T39_AUXILIARY_WALK (IDENTICAL opt-in one shared walk for every requested auxiliary output; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 96ee21ad13.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T39_AUXILIARY_WALK.patch; record in docs/TOMBSTONES.md.
+    # Requested output consumers perform independent incumbent ordered walks.
     # Prefix p repeats the first p+1 trees. No output-only work is fabricated.
     if emit_leaf:
         if not _forest_auxiliary_row_shared[RF_INPUT](offsets, colid, threshold, left, leaves, x, leaf_out, prefix_out, prediction,
@@ -108,3 +105,4 @@ def forest_auxiliary_host(forest: List[Int], x: Int, leaf_out: Int, prefix_out: 
                 AuxF32(unsafe_from_address=pred_out), totals, r, features, trees, outputs, leaf_out!=0, prefix_out!=0, pred_out!=0)
         if not ok:
             raise Error("forest auxiliary outputs require valid finite trees and input")
+    _ = sums^  # segfaults-4: written only through `totals`; keep it alive past the row loop

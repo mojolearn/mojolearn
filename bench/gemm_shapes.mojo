@@ -98,6 +98,7 @@ table doubles as a batch-invariance smoke test at production shapes.
 """
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from std.sys.compile import is_defined
 
 
 def _mode_name() -> String:
@@ -123,7 +124,16 @@ def _mode_name() -> String:
 #: assertion is an instruction to a human is not a check. It now recomputes
 #: the rule and asserts the crossover behaviour, so a change to either
 #: constant fails here instead of being confirmed by eye and believed.
-comptime K_LEAF_MIN = 128
+# -D MOJOLEARN_GEMM_FAST_LEAF512 (lane fx-gemm-leaf512, 2026-11-19, default
+# off): this independent transcription follows the same define as
+# gemm/contract.mojo's CONTRACT_K_LEAF_MIN (profile v2-leaf512), so the
+# printed leaf counts are the build's own.
+comptime K_LEAF_MIN = (
+    512 if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
+    ) else 128
+)
 comptime MAX_LEAVES = 1024
 
 

@@ -1,0 +1,82 @@
+diff --git a/x_linear/cd.mojo b/x_linear/cd.mojo
+index e50f5a6dd8..67c75226df 100644
+--- a/x_linear/cd.mojo
++++ b/x_linear/cd.mojo
+@@ -27,7 +27,7 @@ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
+     add_acc, axpy_centered,
+ )
+-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
++from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
+ from x_linear.enetcv_blocks import fb_host_stats, fb_host_prep
+ from std.sys.info import is_gpu
+ from x_linear.team import Team
+@@ -58,14 +58,17 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
+     for it in range(max_iter):
+         var w_max = Float32(0)
+         var dw_max = Float32(0)
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT (unqualified opt-in arm, neutral) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner lane/expdel2-06-base); code recoverable at 60ab6074d0.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
++        var next_qw = ld(fw, qw) if d > 0 else Float32(0)
+         for j in range(d):
+             var qjj = ld(fw, gg + j * d + j)
+             if qjj == 0:
++                if j + 1 < d:
++                    next_qw = ld(fw, qw + j + 1)
+                 continue
+             var wj = ld(fw, w + j)
+             var residual = ld(fw, qw + j)
++            comptime if C18_RESIDUAL_NEXT:
++                residual = next_qw
+             var t = fa(fs(ld(fw, q + j), residual), fm(wj, qjj))
+             var nw = fd(fm(fsign(t), fmax(fs(fabs(t), l1), Float32(0))), fa(qjj, l2))
+             if positive and t < 0:
+@@ -76,6 +79,13 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
+                 for k in range(d):
+                     var updated = fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k))
+                     st(fw, qw + k, updated)
++                    # C18: forward the next ordered consumer directly from
++                    # the write; the coordinate order and FMA are unchanged.
++                    comptime if C18_RESIDUAL_NEXT:
++                        if k == j + 1:
++                            next_qw = updated
++            elif j + 1 < d:
++                next_qw = ld(fw, qw + j + 1)
+             var dw = fabs(fs(nw, wj))
+             if dw > dw_max:
+                 dw_max = dw
+@@ -792,17 +802,20 @@ def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, yn
+     for it in range(max_iter):
+         var w_max = Float32(0)
+         var dw_max = Float32(0)
+-        # TOMBSTONE: MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT (unqualified opt-in arm, neutral) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner lane/expdel2-06-base); code recoverable at 60ab6074d0.
+-        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
++        var next_qw = ld(fw, qw + t.tid) if t.tid < d else Float32(0)
+         for j in range(d):
+             var qjj = ld(fw, gg + j * d + j)
+             if qjj == 0:
++                if j + 1 < d and (j + 1) % t.nt == t.tid:
++                    next_qw = ld(fw, qw + j + 1)
+                 continue
+             var s = 8 + (nb & 1) * 2
+             nb += 1
+             if j % t.nt == t.tid:
+                 var wj0 = ld(fw, w + j)
+                 var residual = ld(fw, qw + j)
++                comptime if C18_RESIDUAL_NEXT:
++                    residual = next_qw
+                 var tt = fa(fs(ld(fw, q + j), residual), fm(wj0, qjj))
+                 var nw0 = fd(fm(fsign(tt), fmax(fs(fabs(tt), l1), Float32(0))), fa(qjj, l2))
+                 if positive and tt < 0:
+@@ -818,6 +831,11 @@ def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, yn
+                 for k in range(t.tid, d, t.nt):
+                     var updated = fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k))
+                     st(fw, qw + k, updated)
++                    comptime if C18_RESIDUAL_NEXT:
++                        if k == j + 1:
++                            next_qw = updated
++            elif j + 1 < d and (j + 1) % t.nt == t.tid:
++                next_qw = ld(fw, qw + j + 1)
+             var dw = fabs(fs(nw, wj))
+             if dw > dw_max:
+                 dw_max = dw

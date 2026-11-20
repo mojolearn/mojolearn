@@ -4,103 +4,117 @@
 expansion lane 6). Every entry is `providers/python/sequence_pyapi.mojo`'s, run on a `DeviceExec`; the
 CPU host binding `bindings/_mojolearn_x_sequence_host.mojo` exports the same
 names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.autograd_python_errors_pyapi import graph_python_error
-from std.ffi import _Global
-from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
-from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
-from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from providers.python.autograd_python_errors_pyapi_unpack import graph_python_error
+from providers.python.autograd_session_public_request_pyapi_unpack import ops_session_public_connect_py
+from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
+from providers.python.autograd_program_public_request_pyapi_pack import ops_program_public_call_py
+from providers.python.autograd_session_public_dispatch_pyapi_unpack import NativeSessionPublicAPI
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
-from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_connect_py, ops_owned_program_call_py
-from providers.python.autograd_owned_program_dispatch_pyapi import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
-from providers.python.autograd_owned_program_factory_pyapi import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
-from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
+from providers.python.autograd_owned_program_public_pyapi_door import ops_owned_program_connect_py, ops_owned_program_call_py
+from providers.python.autograd_owned_program_dispatch_pyapi_unpack import NativeOwnedProgramPublicAPI, owned_program_public_native_v1
+from providers.python.autograd_owned_program_factory_pyapi_unpack import owned_program_create_envelope, owned_program_create_devices, owned_program_create_execute
+from providers.python.autograd_session_frontend_pyapi_door import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
-from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
+from providers.python.autograd_session_lifetime_pyapi_pack import ops_session_create_py
+from providers.python.small_mlp_program_pyapi_pack import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from sequence.opt_entry_device import publish_seq_opt_entries
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
-from providers.python.sequence_fit_team_pyapi import garch_team_py, prophet_fit_team_py
-from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
-from providers.python.sequence_ets_team_pyapi import ets_team_applies, ets_team_py
-from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
+from sequence.perf3_seq_resident import seq_resident_release_owner, seq_resident_slots
+from sequence.xseq_glue_device import publish_x_sequence_device
+from providers.python.sequence_pyapi_door import opt_step_py, rnn_fit_py, rnn_predict_py, mlp_fit_py, mlp_predict_py, layer_norm_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
-from providers.python.sequence_opt_public_pyapi import (
-    seq_optimizer_init_py,
-    seq_optimizer_step_py,
-    seq_lamb_step_py,
-    seq_adafactor_step_py,
-    seq_optimizer_state_py,
-    seq_optimizer_export_py,
-    seq_optimizer_import_py,
-    seq_optimizer_close_py,
-)
-from providers.python.sequence_opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
-from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
-from providers.python.autograd_program_device_pyapi import ops_imported_run_device_py
-from providers.python.autograd_torch_program_pyapi import ops_torch_program_run_py
-from providers.python.autograd_program_control_pyapi import ops_program_control_py
-from providers.python.autograd_distributed_pyapi import (
+from providers.python.sequence_opt_resident_pyapi_unpack import adafactor_resident_open_py, lamb_resident_open_py, opt_resident_open_py
+from providers.python.sequence_opt_resident_pyapi_pack import adafactor_resident_step_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_step_py
+from providers.python.autograd_program_pyapi_door import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, ops_imported_run_py
+from providers.python.autograd_program_device_pyapi_unpack import ops_imported_run_device_py
+from providers.python.autograd_torch_program_pyapi_door import ops_torch_program_run_py
+from providers.python.autograd_program_control_pyapi_pack import ops_program_control_py
+from providers.python.autograd_distributed_pyapi_unpack import (
     distributed_object,
-    distributed_devices, distributed_open, distributed_load, distributed_fit_py,
-    distributed_run_py, distributed_state_py, distributed_residency_py,
-    distributed_save_py, distributed_close_py, distributed_enter_py,
+    distributed_devices,
+    distributed_fit_py,
+    distributed_enter_py,
 )
-from providers.python.autograd_partition_pyapi import (
-    partition_open, partition_load, partition_fit_py, partition_run_py,
-    partition_state_py, partition_residency_py, partition_save_py,
-    partition_close_py, partition_enter_py, partition_profile_py,
+from providers.python.autograd_distributed_pyapi_pack import (
+    distributed_open,
+    distributed_load,
+    distributed_run_py,
+    distributed_state_py,
+    distributed_residency_py,
+    distributed_save_py,
+    distributed_close_py,
+)
+from providers.python.autograd_partition_pyapi_unpack import (
+    partition_fit_py,
+    partition_enter_py,
+)
+from providers.python.autograd_partition_pyapi_pack import (
+    partition_open,
+    partition_load,
+    partition_run_py,
+    partition_state_py,
+    partition_residency_py,
+    partition_save_py,
+    partition_close_py,
+    partition_profile_py,
 )
 from sequence.x_sequence_impl import device_executors
-from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
-from providers.python.autograd_pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from providers.python.autograd_pyapi import model_gather_labels_py
-from providers.python.autograd_pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
-from providers.python.autograd_pyapi import model_import_params_py
+from providers.python.autograd_program_control_grad_pyapi_pack import ops_program_control_vjp_py
+from providers.python.autograd_pyapi_door import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from providers.python.autograd_pyapi_door import model_gather_labels_py
+from providers.python.autograd_pyapi_door import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
+from providers.python.autograd_pyapi_door import model_import_params_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
-from providers.python.autograd_pyapi import ops_shape_py
+from providers.python.autograd_pyapi_door import ops_shape_py
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from providers.python.autograd_import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py, onnx_native_api_py
-from providers.python.autograd_import_resolve_pyapi import onnx_resolve_py
+from providers.python.autograd_import_reader_pyapi_unpack import onnx_native_api_py
+from providers.python.autograd_import_reader_pyapi_pack import onnx_read_py, onnx_info_py, onnx_buffers_py
+from providers.python.autograd_import_resolve_pyapi_pack import onnx_resolve_py
 # the lowering onto session operations (autograd/import_lower.mojo)
-from providers.python.autograd_import_frontend_pyapi import ops_import_model_c
-from providers.python.autograd_graph_metadata_pyapi import graph_record_c
-from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_import_file_py
-from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
-from providers.python.sequence_pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from providers.python.sequence_pyapi import moe_backward_py, moe_backward_run
-from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
-from providers.python.sequence_seq_tensor_pyapi import (
+from providers.python.autograd_import_frontend_pyapi_door import ops_import_model_c
+from providers.python.autograd_graph_metadata_pyapi_door import graph_record_c
+from providers.python.autograd_import_lower_pyapi_unpack import onnx_import_py, onnx_import_file_py
+from providers.python.autograd_model_verify_pyapi_pack import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from providers.python.autograd_model_checkpoint_pyapi_pack import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
+from providers.python.sequence_pyapi_door import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
+from providers.python.sequence_pyapi_door import moe_backward_py, moe_backward_resident
+from providers.python.sequence_opt_resident_pyapi_pack import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
+from providers.python.sequence_seq_tensor_pyapi_pack import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
-from providers.python.sequence_layernorm_dev_pyapi import layer_norm_dev_py
+from providers.python.sequence_layernorm_dev_pyapi_unpack import layer_norm_dev_alloc_py
+from providers.python.sequence_layernorm_dev_pyapi_pack import layer_norm_dev_py
 from checks.numerics import NUMERIC_FAST
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 # TOMBSTONE: sched_exp_block (MOJOLEARN_SCHED_FAST_TABLE) (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/sched_exp_block.patch
-from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py
+from providers.python.sequence_moe_dev_pyapi_unpack import moe_forward_dev_alloc_py
+from providers.python.sequence_moe_dev_pyapi_pack import moe_forward_dev_py
+from core.shared_slot import SharedSlot
+from sequence.small_mlp_entry_device import publish_neural_small_mlp_device
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
-#: host zero-filled outputs per call removed; same launches, no bit moves). Default on;
-#: -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF leaves the entry out, so MoEBlock takes the
-#: host-array entry again (the grid's before arm).
-comptime SEQ_MOE_DEVICE_IO = not is_defined["MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF"]()
+#: host zero-filled outputs per call removed; same launches, no bit moves).
+# TOMBSTONE: MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF (old path, A/B owed and never run) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 193542c352.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -109,6 +123,18 @@ def numeric_mode_binding() raises -> PythonObject:
 
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def resident_release_binding(owner: PythonObject) raises -> PythonObject:
+    """`x_sequence_resident_release(owner)`: free model `owner`'s resident
+    fitted block and every posted death (sequence/perf3_seq_resident.mojo, N172)."""
+    seq_resident_release_owner(Int(py=owner))
+    return PythonObject(None)
+
+
+def resident_slots_binding() raises -> PythonObject:
+    """The number of resident fitted blocks (tests only)."""
+    return PythonObject(seq_resident_slots())
 
 
 def rnn_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -186,23 +212,9 @@ def adafactor_resident_step_dev_binding(handle: PythonObject, handles: PythonObj
 def layer_norm_dev_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
                            fp: PythonObject) raises -> PythonObject:
     return layer_norm_dev_py(handles, addrs, ip, fp)
-def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return stl_py(ex, addrs, ip)
-
-
-def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (DROPPED-slower, var taxi-hourly +10.6%) deleted 2026-10-09 on
-    # lane/owed-deletions-D2; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
-    var r = var_fit_py(ex, addrs, ip)
-    return r
-
-
-def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    var r = var_forecast_py(ex, addrs, ip)
-    return r
+def layer_norm_dev_alloc_binding(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
+                                 fp: PythonObject, sizes: PythonObject) raises -> PythonObject:
+    return layer_norm_dev_alloc_py(handles, addrs, ip, fp, sizes)
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -215,8 +227,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
-comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE],
-    name="MojoSessionPublicOPS_DEVICEAPIv1", init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
+comptime SESSION_PUBLIC_API = SharedSlot[NativeSessionPublicAPI[DeviceExec, OPS_DEVICE], ("MojolearnSessionPublicOPS_DEVICEAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_DEVICEAPIFastV3")]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -296,6 +307,17 @@ def model_import_params_binding(
 
 # The operation session (autograd/ops_api.mojo): one DeviceExec and one tape kept
 # between calls, tensors by handle.
+def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: PythonObject,
+    floats: PythonObject) raises -> PythonObject:
+    """SmallMLPTrainer's captured program (autograd/small_mlp_program.mojo)."""
+    var code = Int(py=op)
+    if code == SMALL_MLP_PROGRAM_OPEN:
+        return small_mlp_program_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints, floats)
+    if code == SMALL_MLP_PROGRAM_SESSIONS:
+        return small_mlp_sessions_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints)
+    return small_mlp_program_run_py[DeviceExec, OPS_DEVICE](code, addresses, ints)
+
+
 def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
     return ops_session_create_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
 
@@ -408,8 +430,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[DeviceExec, OPS_DEVICE](id)
 
 
-comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name="MojoOwnedProgramPublicOPS_DEVICEAPIv1", init_fn=NativeOwnedProgramPublicAPI.__init__]
+comptime OWNED_PROGRAM_PUBLIC_API = SharedSlot[NativeOwnedProgramPublicAPI, ("MojolearnOwnedProgramPublicOPS_DEVICEAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_DEVICEAPIFastV3")]
 
 
 def owned_program_public_native_binding(
@@ -453,7 +474,7 @@ def ops_program_public_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr)
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_program_public_call expects three arguments")
-        var result = ops_program_public_call_py(args[0], args[1], args[2])
+        var result = ops_program_public_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -464,7 +485,7 @@ def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C
         var args = PythonObject(from_borrowed=packed)
         if len(args) != 3:
             raise Error("TypeError: ops_session_call expects three arguments")
-        var result = ops_session_public_call_py(args[0], args[1], args[2])
+        var result = ops_session_public_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
         return result.steal_data()
     except error:
         return graph_python_error(error)
@@ -627,67 +648,6 @@ def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) 
     return layer_norm_py(ex, addrs, ip, fp)
 
 
-def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return theta_py(ex, addrs, ip, fp)
-
-
-def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return croston_py(ex, addrs, ip)
-
-
-def croston_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return croston_forecast_py(ex, addrs, ip)
-
-
-def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    comptime if ETS_TEAM or IDN_ETS_TEAM:
-        # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF), and IDENTICAL behind
-        # IDENTICAL by default (off: -D MOJOLEARN_IDN_ETS_TEAM_OFF; the host binding replays it in
-        # sequence/exec.mojo): ETS(A, A|Ad, N) one series per block
-        # (sequence/ets_team.mojo); every other model keeps ets_py
-        if ets_team_applies(ip):
-            return ets_team_py(ex, addrs, ip, fp)
-    return ets_py(ex, addrs, ip, fp)
-
-
-def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """GARCH on the device, one series per block (`sequence/fit_team.mojo`),
-    every batch size: the same statements per series as the host column's
-    `op_garch`."""
-    var ex = DeviceExec()
-    return garch_team_py(ex, addrs, ip)
-
-
-def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return prophet_days_py(addrs, ip)
-
-
-def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return prophet_features_py(ex, addrs, ip, fp)
-
-
-def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_changepoints_py(addrs, ip, fp)
-
-
-def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Prophet fit on the device, one series per block
-    (`sequence/fit_team.mojo`), every batch size: the same statements per
-    series as the host column's `op_prophet_fit`."""
-    var ex = DeviceExec()
-    return prophet_fit_team_py(ex, addrs, ip, fp)
-
-
-def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return prophet_predict_py(ex, addrs, ip)
-
-
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """ip = [T, D, F, E, k, renormalise] uploads the weights at addrs[1..3];
     a seventh entry > 0 is a `moe_weights_put` handle whose device copies
@@ -703,23 +663,14 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`moe_backward` (providers/python/sequence_pyapi.mojo moe_backward_py): ip = [T, D, F,
+    """`moe_backward` (autograd/route_ops.mojo moe_backward_addrs, the tape step): ip = [T, D, F,
     E, k, renormalise]; a seventh entry > 0 is a `moe_weights_put` handle
-    whose device copies are read instead of addrs[1..3]."""
-    if len(ip) == 7 and ival(ip, 6) > 0:
-        if len(addrs) != 13:
-            raise Error("moe_backward: requires 13 addresses and 7 integer parameters")
-        var T = ival(ip, 0)
-        var D = ival(ip, 1)
-        var F = ival(ip, 2)
-        var En = ival(ip, 3)
-        var k = ival(ip, 4)
-        if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-            raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
-        var w = moe_weights_ptrs(ival(ip, 6))
-        var ex = DeviceExec()
-        return moe_backward_run(ex, addrs, T, D, F, En, k, ival(ip, 5), w[0], w[1], w[2])
+    whose device copies are read instead of addrs[1..3]. The argument
+    checks are the entry's."""
     var ex = DeviceExec()
+    if len(ip) == 7 and ival(ip, 6) > 0:
+        var w = moe_weights_ptrs(ival(ip, 6))
+        return moe_backward_resident(ex, addrs, ip, [Int(w[0]), Int(w[1]), Int(w[2])])
     return moe_backward_py(ex, addrs, ip)
 
 
@@ -737,6 +688,10 @@ def moe_forward_dev_binding(handles: PythonObject, ip: PythonObject) raises -> P
     return moe_forward_dev_py(handles, ip)
 
 
+def moe_forward_dev_alloc_binding(handles: PythonObject, ip: PythonObject, sizes: PythonObject) raises -> PythonObject:
+    return moe_forward_dev_alloc_py(handles, ip, sizes)
+
+
 def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
     moe_weights_free(Int(py=h))
     return PythonObject(0)
@@ -747,22 +702,9 @@ def onnx_read_binding(path: PythonObject) raises -> PythonObject:
     return onnx_read_py(path)
 
 
-def onnx_info_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_info_py(h)
-
-
 def onnx_buffers_binding(h: PythonObject) raises -> PythonObject:
     """The address of each buffer graph h holds (the model file, its own bytes, each external data file)."""
     return onnx_buffers_py(h)
-
-
-def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
-    """importers._graph.resolve of a graph read by onnx_read."""
-    return onnx_resolve_py(h, names, flat)
-
-
-def onnx_close_binding(h: PythonObject) raises -> PythonObject:
-    return onnx_close_py(h)
 
 
 def onnx_import_binding(
@@ -784,18 +726,25 @@ def onnx_import_file_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_sequence() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
+        # The forecaster operations, published in the
+        # sequence table (core/xseq_entry_table.mojo) for the sequence owner
+        # (bindings/xseq_*_native.mojo); their former Python entries are gone.
+        publish_x_sequence_device()
+        # Neural-blocks entry table (core/neural_entry_table.mojo): SmallMLPTrainer's
+        # program; the Python entry remains for its other callers and the boundary tests.
+        publish_neural_small_mlp_device()
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")
         m.def_function[vendor_binding]("x_sequence_vendor")
+        m.def_function[resident_release_binding]("x_sequence_resident_release")
+        m.def_function[resident_slots_binding]("x_sequence_resident_slots")
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        m.def_function[stl_binding]("stl")
-        m.def_function[var_fit_binding]("var_fit")
         # TOMBSTONE: sched_exp_block (dead native entry: no Python reader since the schedules went native; MOJOLEARN_SCHED_FAST_TABLE went with it) deleted 2026-10-26 by 9552c0ecb; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/sched_exp_block.patch
-        m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         # the model-description trainer (autograd/model.mojo)
@@ -819,6 +768,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[DeviceExec, OPS_DEVICE]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
+        m.def_function[small_mlp_program_binding]("small_mlp_program")
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")
@@ -874,21 +824,12 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         m.def_function[lamb_resident_step_binding]("lamb_resident_step")
-        # Adafactor's second moment on the device (FAST + Apple default, off
-        # under -D MOJOLEARN_AF_FAST_RESIDENT_OFF; the Python side uses it
-        # only when these exist)
+        # Adafactor's second moment on the device (FAST + Apple default; the
+        # Python side uses it only when these exist)
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
         # the public optimizers' one native call per method (sequence/opt_public*.mojo)
-        m.def_function[seq_optimizer_init_py]("seq_optimizer_init")
-        m.def_function[seq_optimizer_step_py]("seq_optimizer_step")
-        m.def_function[seq_lamb_step_py]("seq_lamb_step")
-        m.def_function[seq_adafactor_step_py]("seq_adafactor_step")
-        m.def_function[seq_optimizer_state_py]("seq_optimizer_state")
-        m.def_function[seq_optimizer_export_py]("seq_optimizer_export")
-        m.def_function[seq_optimizer_import_py]("seq_optimizer_import")
-        m.def_function[seq_optimizer_close_py]("seq_optimizer_close")
         m.def_function[layer_norm_binding]("layer_norm")
         # lane gap-neural-io: resident tensors and the device-I/O entries
         # (the Python side uses them only when they exist; the host binding
@@ -903,16 +844,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_step_dev_binding]("adafactor_resident_step_dev")
         m.def_function[layer_norm_dev_binding]("layer_norm_dev")
-        m.def_function[theta_binding]("theta")
-        m.def_function[croston_binding]("croston")
-        m.def_function[croston_forecast_binding]("croston_forecast")
-        m.def_function[ets_binding]("ets")
-        m.def_function[garch_binding]("garch")
-        m.def_function[prophet_days_binding]("prophet_days")
-        m.def_function[prophet_features_binding]("prophet_features")
-        m.def_function[prophet_changepoints_binding]("prophet_changepoints")
-        m.def_function[prophet_fit_binding]("prophet_fit")
-        m.def_function[prophet_predict_binding]("prophet_predict")
+        m.def_function[layer_norm_dev_alloc_binding]("layer_norm_dev_alloc")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
         m.def_function[moe_weights_put_binding]("moe_weights_put")
@@ -920,16 +852,15 @@ def build__mojolearn_x_sequence() -> PythonObject:
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
         m.def_function[onnx_native_api_py]("onnx_native_api_v1")
         m.def_function[onnx_read_binding]("onnx_read")
-        m.def_function[onnx_info_binding]("onnx_info")
         m.def_function[onnx_buffers_binding]("onnx_buffers")
-        m.def_function[onnx_resolve_binding]("onnx_resolve")
-        m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
         m.def_py_c_function(ops_import_model_c, "ops_import_model")
         m.def_py_c_function(graph_record_c, "ops_graph_record")
-        comptime if SEQ_MOE_DEVICE_IO:
-            m.def_function[moe_forward_dev_binding]("moe_forward_dev")
+        m.def_function[moe_forward_dev_binding]("moe_forward_dev")
+        m.def_function[moe_forward_dev_alloc_binding]("moe_forward_dev_alloc")
+        # The native sequence optimizer door's table (core/byte_lm_entry_table.mojo).
+        publish_seq_opt_entries()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

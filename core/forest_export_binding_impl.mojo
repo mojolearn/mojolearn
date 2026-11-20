@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed export checks and the leaf copy, moved word for word from
 bindings/forest_export_binding.mojo (re-exported there under the same names)."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 def validate_forest_export_counts(trees: Int, nodes: Int, outputs: Int) raises:
@@ -28,4 +28,4 @@ def copy_forest_export_leaves(values: List[Float32], address: Int,
         raise Error("invalid fitted forest leaf export pointer or offset")
     var destination = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
     if len(values):
-        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))

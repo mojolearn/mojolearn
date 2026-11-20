@@ -215,7 +215,7 @@ kernel engineering as well as two arithmetics.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from std.sys import has_accelerator, is_defined

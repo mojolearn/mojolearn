@@ -18,11 +18,14 @@ The sabotage arm (`hdbscan_infer_host_sabotage`) is
 (`-D MOJOLEARN_HOST_SABOTAGE=1`), which reads every core distance of the
 held-out point's neighbor search one neighbor early.
 """
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from hdbscan.native_query_host import HDBSCAN_QUERY_INFER_HOST_API
 
-from bindings.hdbscan_host_predict import (
+from bindings.hdbscan_host_predict_pack import (
     hdbscan_all_points_membership_vectors_binding,
     hdbscan_approximate_predict_binding,
     hdbscan_membership_vector_binding,
@@ -34,6 +37,11 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from hdbscan.host.hdbscan_host_oracle import HDBH_HOST_SABOTAGE
+
+
+def hdbscan_query_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_QUERY_INFER_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def hdbscan_infer_host_numeric_mode_binding() raises -> PythonObject:
@@ -71,6 +79,7 @@ def hdbscan_numeric_mode_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_hdbscan_infer_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_hdbscan_infer_host")
         module.def_function[hdbscan_infer_host_numeric_mode_binding]("hdbscan_infer_host_numeric_mode")
@@ -79,7 +88,7 @@ def build__mojolearn_hdbscan_infer_host() -> PythonObject:
         module.def_function[hdbscan_infer_host_sabotage_binding]("hdbscan_infer_host_sabotage")
         module.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         module.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
-        module.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+        module.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         module.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         module.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
         return module.finalize()

@@ -16,6 +16,7 @@ description words and its parameter words) and the same run outputs word
 for word. Needs the x_sequence binding with the
 ``onnx_import`` entry. Prints LOWER_PARITY lines."""
 import hashlib
+import pathlib
 
 import numpy as np
 import pytest
@@ -118,9 +119,13 @@ def test_fixture_lowering_matches_oracle(tmp_path, name):
 def test_lowering_test_models_match_oracle(tmp_path):
     from mojolearn.tests import test_import_lower as tl
     d = str(tmp_path)
-    _same_import(tmp_path, "mixed", tl._mixed(d).path, {"x": (BATCH, 7)})
-    _same_import(tmp_path, "grouped_conv", tl._grouped_conv(d).path, {"x": (BATCH, 4, 8, 9)})
-    _same_import(tmp_path, "padded_pools", tl._padded_pools(d).path, {"x": (BATCH, 3, 7, 8)})
+    # The mixed, grouped_conv and padded_pools builders left test_import_lower.py
+    # (3927d2c26e); their models are stored as the Mojo checks' fixtures
+    # (tools/import_lower_native_fixtures.py), read here as plain .onnx files.
+    stored = pathlib.Path(__file__).resolve().parents[3] / "checks" / "native_tests" / "fixtures" / "import_lower"
+    _same_import(tmp_path, "mixed", str(stored / "mixed.onnx"), {"x": (BATCH, 7)})
+    _same_import(tmp_path, "grouped_conv", str(stored / "grouped_conv.onnx"), {"x": (BATCH, 4, 8, 9)})
+    _same_import(tmp_path, "padded_pools", str(stored / "padded_pools.onnx"), {"x": (BATCH, 3, 7, 8)})
     _same_import(tmp_path, "refused", tl._refused_model(d), None)
 
 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Newton walker's control flow, against hand-derived trajectories.
 
-    pixi run check-newton-walker
+    pixi run check-native-cpu newton_walker_check
 
 The walker is pure host logic, so its oracle can LIE in controlled ways and
 every expectation below is computed by hand from `descent_helpers.cpp`'s
@@ -282,7 +282,7 @@ def expect(cond: Bool, mut failures: Int, msg: String):
         failures += 1
 
 
-def main() raises:
+def run_checks() raises:
     var _not_pd = 0
     var failures = 0
 
@@ -389,3 +389,20 @@ def main() raises:
     print("newton walker check: quadratic, cliff backtracking, "
           "no-backtracking control, shortcut+regularize, "
           "BLOCKED Hessian at rowSize 2/3/6 + 2 sabotages -- all match")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("newton_walker_check", cpu=True, gpu=False, serial="", run=run_cases)

@@ -4,6 +4,22 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- **One NVIDIA package.** `mojolearn-nvidia` carries both the native kernels for sm_89 and the PTX build for every NVIDIA GPU of compute capability 8.0 or newer; the separate `mojolearn-nvidia-ptx` package is no longer published. An environment that has `mojolearn-nvidia-ptx` from an earlier release can remove it and reinstall the NVIDIA package once: `pip uninstall -y mojolearn-nvidia-ptx && pip install --force-reinstall --no-deps "mojolearn-nvidia==<version>"`.
+
+## 0.8.66 (published 2026-11-05)
+
+- **Classifiers on pandas 3 with pyarrow.** Feature names are read from Arrow-backed string columns (`string[pyarrow]`, `ArrowDtype`), which used to refuse with a storage error.
+- **Sequence programs on Apple.** Tape programs, program save/load and ONNX import connect their native executor once per process. On a Mac with both numeric tiers installed the second tier used to refuse with "captured program connection is already registered".
+- **Public attributes.** `estimators_` of bagging estimators reads through the compiled tree owner.
+- **Constructors.** Native-public constructors reset `numeric_mode` the same way on a repeated `__init__`.
+- **Verification.** The reference table is recorded once per column and reused for unchanged lanes on every platform; nothing is re-verified after it is green.
+
+## 0.8.65 (published 2026-11-04)
+
+- **ARIMA on the CPU.** Parameter extraction after a fit keeps its native input buffers alive, so it no longer crashes.
+- **Byte-level language models.** Ragged token copies keep their source buffers alive through the padded copy.
+- **Multi-GPU training.** Every estimator reads its device plan once at the entry and passes it down; shard code lives in per-family multi-GPU modules. Single-device results are unchanged on Apple, NVIDIA and AMD. Depthwise GBDT level histograms shard across devices again.
+
 ## 0.8.64 (published 2026-11-01)
 
 - **RandomForest notices.** Fit notices (n_bins clamped to the sample count, max_samples ignored without bootstrap, partial out-of-bag scores) are raised as `UserWarning`s instead of being printed to standard output.

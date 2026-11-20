@@ -9,11 +9,10 @@ one process-lifetime context and synchronizes before it returns.
 
 The host twin is x_cnn/host/ops_host.mojo: the same element functions in a
 loop and `gemm_oracle` for the contractions."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -38,37 +37,36 @@ from gemm.checks.gemm_identical import (
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.experiments.neural_tiled_v2 import NI09_TILED_BIAS, neural_bias_gemm
-from x_cnn.neural_col2im import NI14_TILED_COL2IM, NI14_COL2IM, NI14_COL2IM_BOUNDED, neural_col2im_tiled
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+# TOMBSTONE: MOJOLEARN_AFN_CNN_DIRECT (DELETE-ARM, neural MERGED-UNMEASURED, rule f) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_CNN_DIRECT.expdel2-35-neural.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 #: lane afn-mlp (2026-10-03): the Apple FAST tiled direct convolution,
 #: compiled only under FAST + Apple + `-D MOJOLEARN_AFN_CNN_DIRECT`; every
 #: other build runs the paths below unchanged (x_cnn/afn_direct.mojo).
 from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
-from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
-from x_cnn.ops import NN45_CONV_RELU, IDN_CNN_CONV_RELU_ARM, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
-from x_cnn.neural_aux_contract import (
-    NI55_GRAPH_FEATURE4, NI58_SAGE_FEATURE4, NI59_DROPOUT_CHANNEL,
-    NI60_DROPOUT_APPLY4, NEURAL_AUX_FEATURE_TILE,
-)
-from x_cnn.neural_aux_ops import (
-    spmm_feature4_at, sage_max_feature4_at, dropout_apply4_at, dropout_channel_kernel,
-)
+# TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (DELETE-ARM, EXP:1943 record read, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-35-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_CNN_CONV_RELU (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_CONV_RELU.expdel2-35-neural.patch
+# TOMBSTONE: MOJOLEARN_NN47_APPLY_RUNNING (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN47_APPLY_RUNNING.expdel2-35-neural.patch
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
-    im2col_at, im2col_val, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, col2im_bounded_at, fill_one_at,
+    im2col_val, im2col_taps_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
     conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
-    relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, relu_rows_bwd_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
+    relu_fwd_at, relu_bwd_at, relu_val, conv_relu_out_at, add_at, bias_rows_at, linear_bias_val, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
     chan_slice_at, chan_place_at,
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
@@ -76,49 +74,87 @@ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, ada
 # lane bn-grid-stats (2026-10-11, G5): coalesced two-level BN statistics folds
 from x_cnn.ops import (
     IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+    bn_gs_var_running_at, bn_blk_var_running_at,
 )
-# lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
-from x_cnn.ops import (
-    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
-    AH_ROW, adam_hyper_at,
-)
+# lane fam2-neural (2026-10-04): the device loss fold
+from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
+from core.shared_slot import SharedSlot
 
 comptime TPB = 256
 # Neural 2026-10-06 source-only experiment controls. Every new control is
 # default OFF and compiled only for IDENTICAL; ALL_OFF restores reference.
 # No compilation, identity, quality, or performance qualification was run.
-comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NI11_DIRECT_TAPS64 = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI11_DIRECT_CONV_TAPS64"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 umbrella old path, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-35-neural.patch
+comptime _NI_CNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_NI11_DIRECT_CONV_TAPS64 (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI11_DIRECT_CONV_TAPS64.patch
 # NI12 implicit conv: the IDENTICAL default since 2026-10-09 (lane/postmerge-act-6;
 # -D MOJOLEARN_NI12_IMPLICIT_CONV_OFF restores the materialized im2col cols; the
 # old on-define is refused in core/six_lane_experiment_guards.mojo). Post-merge
 # A/B on main, one run per arm (nv2 L40S v1052 -> v1053, MI325X a1152 -> a1153):
 # conv2d NV 9.62 -> 7.12 ms (0.74x) / AMD 9.02 -> 6.23 ms (0.69x), resnet-block
 # NV 21.43 -> 15.76 ms (0.74x) / AMD 22.06 -> 15.37 ms (0.70x); digests unchanged
-# (conv2d 9782257b, resnet-block 263c26c1): no bit change. The bounded im2col arm
-# (-D MOJOLEARN_NN14_BOUNDED_IM2COL) is a competing cols schedule and takes its own
-# path when selected, as before.
+# (conv2d 9782257b, resnet-block 263c26c1): no bit change. (The bounded im2col arm,
+# MOJOLEARN_NN14_BOUNDED_IM2COL, was deleted 2026-11-15 by lane/expdel2-35-neural.)
+# KEPT 2026-11-15 (lane/expdel2-35-neural): the _OFF arm is a measured winner on cnn-clf
+# (grid g50ebe26a5 below), so it is not deleted on reasoning (AGENTS.md).
 # MEASURE OWED / SPLIT CANDIDATE (2026-10-11): grid g50ebe26a5 has the _OFF arm FASTER on cnn-clf synthetic (NV L40S 193.6 -> 173.9 ms,
 # v1446; AMD 303.5 -> 274.0 ms, b0080; avg 0.90x) while the 2026-10-10 promotion A/B had implicit conv winning on conv2d and
 # resnet-block (0.69x-0.74x). Decide per algorithm (cnn-clf off, conv2d/resnet-block on) after one confirm run on both vendors.
-comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]() and not NN14_BOUNDED_IM2COL
-comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
-comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
-comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
-comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
+# DECIDED PER LAYER 2026-11-15 (lane fix-cnn-clf-implicit-conv): not per algorithm but by the
+# layer's own tile fill, `ni12_implicit_layer` below. RUN OWED against both old arms.
+comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12_IMPLICIT_CONV_OFF"]()
+# NI12 FILL RULE (lane fix-cnn-clf-implicit-conv, 2026-11-15). Why implicit conv lost on cnn-clf:
+# `implicit_conv_kernel` is a 64-row x 64-channel register tile and `implicit_wgrad_leaf_kernel`
+# a 64-channel x 64-tap tile; a block costs the same (its staging, its 16-tap slabs, its two
+# barriers a slab) whether or not its channels / taps are live, so a narrow layer pays the full
+# 64-wide tile. cnn-clf's layers (OC 8 over 9 taps, OC 16 over 72 taps) fill 1/8 and 1/4 of the
+# channel axis forward and 1/8 x 9/64 and 1/4 x 72/128 of the wgrad tile, i.e. 2% and 14% of the
+# FMA lanes do work, while the materialized arm scales with OC: the first layer (k <= DC_MAXK)
+# runs `direct_conv_kernel` (one thread a row, which the implicit branch preempted) and the
+# weight gradient the pinned GEMM's TN plan on the saved cols, which picks narrow tiles. Conv2d and
+# resnet-block (OC 64 over 576 taps) fill the tile completely, where the gather saves the cols
+# write + read and implicit wins 0.69x-0.74x. Rule: implicit only when at least half of each tile
+# axis is live on the layer, OC >= 32 and C*KH*KW >= 32 (`NI12_FILL_MIN` = NI12_TN / 2, a
+# property of the tile, not of a board shape: every OC / tap count from 32 up keeps implicit, every
+# narrower layer keeps the measured materialized/direct path). The band 32..63 is unmeasured
+# (owed row ni12-fill-rule-neighbour). Bits: the arms are the same contract words (the
+# promotion's digests did not move), so the per-layer choice moves no bits; the host column has
+# no implicit/materialized split.
+# `-D MOJOLEARN_NI12_IMPLICIT_CONV_OFF` takes the materialized path on every layer (the g50ebe26a5 winner).
+# VERDICT 2026-11-18 on `-D MOJOLEARN_NI12_FILL_RULE_OFF` (implicit conv on every layer, the 2026-10-10 default;
+# A/B ab1, owed row ni12-fill-rule, NVIDIA L40S host 37f71a6102af, driver 595.112.07, wheel d652a4b0a1, base and
+# arm back to back in one job, one run per arm, digests equal on all 6 cells): cnn-clf fit 189.9 -> 218.2 ms (1.15x
+# SLOWER with the arm), resnet-block fit 15.50 -> 16.14 (1.04), conv2d fit / infer and resnet-block infer
+# 1.00-1.01, cnn-clf infer 10.55 -> 10.04 (0.95, a 10 ms cell). No gain: the per-layer fill rule stays the
+# default and the arm is deleted. Limits: NVIDIA only (AGENTS.md part 8); ni12-fill-rule-neighbour (OC 32..63)
+# and the ni12-implicit-conv-off arm are still owed.
+# TOMBSTONE: MOJOLEARN_NI12_FILL_RULE_OFF (DROPPED-slower: implicit on every layer 1.15x on cnn-clf fit, rest 0.95-1.04, NV L40S 2026-11-18) deleted 2026-11-18 by lane/fb15-ab-verdicts; code recoverable at c989eb9222.
+# Restore: git apply experiments/removed/MOJOLEARN_NI12_FILL_RULE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_NI14_COL2IM (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI14_COL2IM.patch
+# (Sweep 2026-11-15: NI14_BOUNDED_COL2IM = False removed with its reader in autograd/kernels/cnn.mojo.)
+# TOMBSTONE: MOJOLEARN_NI15_BIAS_NO_ONES (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NI15_BIAS_NO_ONES.patch
+# (Sweep 2026-11-15: NI15_BIAS_NO_ONES and NI16_CONV_RELU_FUSED (False) removed with their readers in autograd/kernels/cnn.mojo.)
+# TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route, the classifier device epoch) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: IDN_CNN_BN_FUSE, the BasicBlock's BatchNorm epilogues fused (x_cnn_idn_flags bit 6); resnet-block NV 0.94x / AMD 1.02x, conv2d NV 1.14x / AMD 1.03x: noise / slower.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
-#: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
-#: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
+#: simdgroup matrix plans among them).
 #: lane/cnn-apple2: IDENTICAL on Apple also times APPLE_MMA against the
-#: dispatcher outside the weight gradients (`-D MOJOLEARN_XCNN_NO_NT_TUNE`
-#: is the before arm).
+#: dispatcher outside the weight gradients.
+# TOMBSTONE: MOJOLEARN_XCNN_NO_FAST_TUNE (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_FAST_TUNE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_XCNN_NO_FAST_TUNE (the before arm: round 1's FAST, the 4090 split plans and the dispatcher) back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_XCNN_NO_NT_TUNE (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_NT_TUNE.patch
 comptime APPLE_NT_TUNE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
-    and not is_defined["MOJOLEARN_XCNN_NO_NT_TUNE"]()
 )
 comptime APPLE_FAST_TUNE = (
     GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
@@ -151,6 +187,13 @@ struct _CnnContext(Defaultable, Movable):
     #: lane idn-cnn-resident: the leading words of workspace slot
     #: `ONES_WS_SLOT` that already hold 1.0f (`ones_buf`).
     var ones_n: Int
+    #: lane fb15-sync-counts: the parameter blocks already on the device
+    #: (`put_prm`, `put_hyper`), keyed by their 4-byte words, with the clock
+    #: tick of their last use (the least recently used one is rewritten).
+    var prm_keys: List[List[Int32]]
+    var prm_bufs: List[DeviceBuffer[DType.int32]]
+    var prm_used: List[Int]
+    var prm_clock: Int
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
@@ -159,13 +202,18 @@ struct _CnnContext(Defaultable, Movable):
         self.tuned = List[Int]()
         self.pool = List[DeviceBuffer[DType.float32]]()
         self.ones_n = 0
+        self.prm_keys = List[List[Int32]]()
+        self.prm_bufs = List[DeviceBuffer[DType.int32]]()
+        self.prm_used = List[Int]()
+        self.prm_clock = 0
 
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
 #: one pool per binding and tier like the context.
-comptime _XCNN_STAGE_POOL = "MojoDownloadStagesXCnnIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesXCnnFast"
-comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
-comptime X_CNN_CONTEXT = _Global[StorageType=_CnnContext, name=_CTX_NAME, init_fn=_CnnContext.__init__]
+comptime _XCNN_STAGE_POOL = "MojolearnDownloadStagesXCnnIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesXCnnFastV1"
+# lane fb15-sync-counts: V4 / layout version 2 (the parameter-block cache fields)
+comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV4"
+comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME, 2]
 
 
 def cnn_ctx() raises -> DeviceContext:
@@ -206,13 +254,18 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
 # stored word is the element function's (`conv_out_val`,
 # `pool_relu_row_val`); only which thread computes it changes. Threadgroup
 # memory only between the barrier's two sides (no device-memory ordering is
-# assumed). `-D MOJOLEARN_XCNN_NO_TILED_LAYOUT` is the before arm.
-comptime TILED_LAYOUT = not is_defined["MOJOLEARN_XCNN_NO_TILED_LAYOUT"]()
+# assumed).
+# TOMBSTONE: MOJOLEARN_XCNN_NO_TILED_LAYOUT (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_TILED_LAYOUT.patch
+# (Sweep 2026-11-15: TILED_LAYOUT = True removed; its one reader in autograd/kernels/cnn.mojo takes the tiled launch.)
 #: The pooled backward's rows tiled (`rows_bwd_tiled_kernel`) measured
 #: SLOWER on the M4 Pro (block 1 1.44 -> 1.73 ms, block 2 0.75 -> 0.96:
-#: each thread runs four max-pool gathers in series); opt-in only,
-#: `-D MOJOLEARN_XCNN_TILED_ROWS`.
-comptime TILED_ROWS = TILED_LAYOUT and is_defined["MOJOLEARN_XCNN_TILED_ROWS"]()
+#: each thread runs four max-pool gathers in series).
+# TOMBSTONE: MOJOLEARN_XCNN_TILED_ROWS (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_TILED_ROWS.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+#: Opt-in only, `-D MOJOLEARN_XCNN_TILED_ROWS` (TILED_LAYOUT, its old gate, is the folded default True).
+comptime TILED_ROWS = is_defined["MOJOLEARN_XCNN_TILED_ROWS"]()
 comptime _LT = 32
 comptime _LR = 8
 
@@ -242,18 +295,15 @@ def conv_out_tiled_kernel(y2: FP, bias: FP, dst: FP, p: IP, S: Int32, OC: Int32)
 
 
 #: lane/cnn-apple2: im2col one thread per (row, channel) (`im2col_taps_at`).
-#: `-D MOJOLEARN_XCNN_NO_IM2COL_TAPS` is the before arm.
-comptime IM2COL_TAPS = not is_defined["MOJOLEARN_XCNN_NO_IM2COL_TAPS"]()
+# TOMBSTONE: MOJOLEARN_XCNN_NO_IM2COL_TAPS (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_IM2COL_TAPS.patch
 
 
 def _im2col(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut cols: DeviceBuffer[DType.float32],
     mut dp: DeviceBuffer[DType.int32], rows: Int, ckk: Int, C: Int,
 ) raises:
-    comptime if IM2COL_TAPS:
-        launch[im2col_taps_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * C)
-    else:
-        launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    launch[im2col_taps_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * C)
 
 
 # lane/cnn-apple2: THE DIRECT FIRST-LAYER CONVOLUTION. Where k = C*KH*KW is
@@ -265,7 +315,9 @@ def _im2col(
 # im2col words, stored to cols only when the backward reads them) and the
 # weights sit flushed in threadgroup memory; the NCHW store is
 # `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
-# conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
+# conv_out launch.
+# TOMBSTONE: MOJOLEARN_XCNN_NO_DIRECT_CONV (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_DIRECT_CONV.patch
 #: Apple since lane/cnn-apple2; NVIDIA and AMD since nr-small D6
 #: (2026-10-04, roadmap D6 / review "ALREADY WRITTEN, gated"): the cell is
 #: the pinned contract's one-leaf chain on every column (k <= DC_MAXK is one
@@ -273,16 +325,14 @@ def _im2col(
 #: taps), and the kernel uses only `barrier()` over threadgroup memory, so
 #: the words are the GEMM path's. Needs the NV/AMD ID check.
 #: IDENTICAL only on NV/AMD (FAST keeps its AFN direct path there).
-#: -D MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores Apple only.
-comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF.patch
+comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime DIRECT_CONV = (
     TARGET_COLUMN == COLUMN_APPLE
     or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
-) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]() and not NEURAL_GEMM_EXPERIMENT_ENABLED
-comptime DC_MAXK = 64 if NI11_DIRECT_TAPS64 else 32
+) and not NEURAL_GEMM_EXPERIMENT_ENABLED
+comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
 
@@ -310,7 +360,7 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
     var h0 = oh * _gp(p, CP_SH) - _gp(p, CP_PH)
     var w0 = ow * _gp(p, CP_SW) - _gp(p, CP_PW)
     var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
-    var a = InlineArray[Float32, DC_MAXK](fill=Float32(0))
+    var a = Array[Float32, DC_MAXK](fill=Float32(0))
     var q = 0
     for c in range(C):
         for kh in range(KH):
@@ -384,6 +434,19 @@ comptime NI12_RC = 4
 comptime NI12_TMP = NI12_TM + 1
 comptime NI12_TNP = NI12_TN + 1
 comptime NI12_NCELL = NI12_RC * NI12_RC
+#: half a tile axis: the least live channels / taps a layer needs to run implicit (ni12_implicit_layer)
+comptime NI12_FILL_MIN = NI12_TN // 2
+
+
+@always_inline
+def ni12_implicit_layer(OC: Int, ckk: Int) -> Bool:
+    """Whether a conv layer with OC output channels over ckk = C*KH*KW taps
+    runs the implicit conv (forward and weight gradient) or the materialized
+    cols (direct conv / im2col + GEMM). One decision per layer, read by the
+    forward, the backward and the tape's save sizing alike (the fill rule, see the verdict above NI12_IMPLICIT_CONV)."""
+    comptime if not NI12_IMPLICIT_CONV:
+        return False
+    return OC >= NI12_FILL_MIN and ckk >= NI12_FILL_MIN
 
 
 @always_inline
@@ -473,8 +536,8 @@ def implicit_conv_kernel(
             barrier()
             if cnt == NI12_KS:
                 comptime for i in range(NI12_KS):
-                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                     comptime for c in range(NI12_RC):
                         av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                         bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
@@ -483,8 +546,8 @@ def implicit_conv_kernel(
                             acc[a * NI12_RC + b] = rtf_mul_add(av[a], bv[b], acc[a * NI12_RC + b])
             else:
                 for i in range(cnt):
-                    var av = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
-                    var bv = InlineArray[Float32, NI12_RC](fill=Float32(0.0))
+                    var av = Array[Float32, NI12_RC](fill=Float32(0.0))
+                    var bv = Array[Float32, NI12_RC](fill=Float32(0.0))
                     comptime for c in range(NI12_RC):
                         av[c] = atile[i * NI12_TMP + tr + NI12_RS * c]
                         bv[c] = btile[i * NI12_TNP + tc + NI12_RS * c]
@@ -532,9 +595,10 @@ def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
         cand.append(PLAN_SPLIT_16_1X1)
         if m * n <= 4096 and identical_gemm_splitk_fits(m, n, k):
             cand.append(PLAN_SPLITK)
-        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
-            if apple_mma_applies(m, n, k):
-                cand.append(PLAN_APPLE_MMA_SPLIT)
+        # TOMBSTONE: MOJOLEARN_XCNN_NO_MMA_SPLIT (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+        # Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_MMA_SPLIT.patch
+        if apple_mma_applies(m, n, k):
+            cand.append(PLAN_APPLE_MMA_SPLIT)
     else:
         cand.append(PLAN_SPLIT_16_1X1)
         if n >= 64:
@@ -542,13 +606,11 @@ def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
             if apple_mma_applies(m, n, k):
                 cand.append(PLAN_APPLE_MMA)
         # lane/cnn-apple2: the simdgroup matrix kernel over leaf groups
-        # (the weight gradient's long k on grid.y). `-D
-        # MOJOLEARN_XCNN_NO_MMA_SPLIT` is the before arm.
-        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
-            if n >= 8 and apple_mma_applies(m, n, k):
-                cand.append(PLAN_APPLE_MMA_SPLIT)
-                if m >= 64 and n >= 64:
-                    cand.append(PLAN_APPLE_MMA_SPLIT_BIG)
+        # (the weight gradient's long k on grid.y).
+        if n >= 8 and apple_mma_applies(m, n, k):
+            cand.append(PLAN_APPLE_MMA_SPLIT)
+            if m >= 64 and n >= 64:
+                cand.append(PLAN_APPLE_MMA_SPLIT_BIG)
     return cand^
 
 
@@ -785,8 +847,9 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
 #: IDENTICAL now keeps one resident vector of 1.0f words in its own
 #: workspace slot, filled when it first grows to a size and read by every
 #: later backward. The same operand words into the same GEMM: no bit moves.
-#: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
-comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_XCNN_ONES_CACHE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_ONES_CACHE_OFF.patch
+comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime ONES_WS_SLOT = 30
 
 
@@ -800,12 +863,11 @@ comptime ONES_WS_SLOT = 30
 #: stores ftz of the root: `_rtf_cell`'s arithmetic, which every plan equals
 #: (contract 7), with the partition from `contract_partition(k)` alone. Same
 #: bits on every column (the host keeps its pinned host GEMM). Needs the
-#: NV/AMD ID check. -D MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores the GEMM. IDENTICAL, NVIDIA and AMD
+#: NV/AMD ID check. IDENTICAL, NVIDIA and AMD
 #: (Apple keeps its measured plan pick; `_rtf_leaf_partial` is not inlined).
-comptime XCNN_BIAS_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_APPLE and not (
-    is_defined["MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF.patch
+comptime XCNN_BIAS_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_APPLE
 comptime BIAS_WS_SLOT = 29
 comptime BIAS_TPB = 128
 
@@ -829,8 +891,121 @@ def put_i[resident: Bool](ctx: DeviceContext, slot: Int, src: IP, n: Int) raises
     return b^
 
 
+# lane fb15-sync-counts (2026-11-18): THE PARAMETER-BLOCK CACHE. Every entry
+# uploaded its parameter block (a few dozen shape words) on every call: one
+# cuMemcpyHtoDAsync (6-11 us of API time on the L40S, plus the runtime's
+# capture queries) for words that are the same on every call of a layer
+# (global-avgpool infer: 1 of its 1 H2D; batchnorm: 1 of 2; dropout2d: 2 of
+# 2). A block is now uploaded once into its own small device buffer and found
+# again by its words. Bound: `PRM_CACHE_MAX` blocks of at most
+# `PRM_CACHE_WORDS` words; a longer block takes the workspace slot as before.
+# A miss in a full cache rewrites the least recently used block: the rewrite
+# is stream-ordered after every earlier reader on this one context, and an
+# entry uses at most three blocks, so the victim is never one this entry
+# already holds. Kernels only read their parameter blocks. No bit moves.
+comptime PRM_CACHE_MAX = 32
+comptime PRM_CACHE_WORDS = 64
+
+# Resident entries return without their wait (lane fx-rnn-cnn-fit, 2026-11-19; the experiment
+# MOJOLEARN_CNN_FAST_OP_NOWAIT, DEFAULT ON since 2026-11-20, A/B round 3 below; -D MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF
+# builds the old form, every entry waits). Every entry ends in `ctx.synchronize()` so that its host uploads and
+# downloads are finished and its host arrays may go. The CNN program's ops (autograd/cnn_block_op.mojo: the conv
+# block and the head, forward and backward) call the RESIDENT forms from a session that owns every argument as a
+# device buffer, shares this one in-order context and reads nothing on the host before its own wait (the fit's one
+# sync at the end, a predict's download). There the six waits a training step (2 blocks + head, forward and
+# backward; 1,884 in the board's 314-step fit) only stop the host from enqueuing the next launches while the device
+# works. Such a caller passes `may_defer` and the entry returns after its last launch.
+# What still forces the wait (entry_end): a non-resident form (host arrays in flight), and a parameter block too
+# long for the cache (its upload reads the caller's list: prm_block_cached). The cache's own copy of a block is
+# read by a queued upload until that upload runs, so a full cache waits before it rewrites a
+# victim (_prm_cached). Workspace slots are safe without the wait: the context runs launches in order, so an
+# entry's kernels finish before the next entry's launches touch the slot, and `ws` waits before it replaces a
+# buffer. The same launches in the same order on the same words: no bit moves.
+# General, not a shape: any resident caller on this context may pass it. Rows: algos/cnn-clf fit and predict; a
+# neighbouring shape (3 x 32 x 32 images, channels 16, 32) and a non-board model (one block without a pool).
+# MODEL (unmeasured): 6 waits x 20-50 us of a 0.56 ms step.
+# A/B round 2, 2026-11-19 (lane fx-verdicts4; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and
+# arm in one pod job, tag nvc-ab-20261119T154232Z-0642a5; digests and quality equal). Base -> arm ms: cnn-clf fit 208.9
+# -> 166.9 (0.80), infer 11.85 -> 11.96 (1.01); driver CNNClassifier.fit channels [16, 32] 365.4 -> 313.0 (0.86), [24]
+# 240.4 -> 206.7 (0.86). NOT A VERDICT: the harness bound no worker to a NUMA node on that pod and the board pair ran
+# on different nodes (base node 1, arm node 0); the row's other base in the job (node 1) is 187.1, so the row's bases
+# are 12 % apart. Every reading is in the arm's favour and the size is the model's; stays opt-in, owed RUN: re-time
+# with both workers bound to the GPU's node (the harness fix of lane fx-cagra-taxi), then promote on a same-node pair.
+# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
+# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, both workers bound to the GPU's NUMA node 0;
+# digests and quality equal). Base -> arm ms: cnn-clf fit 182.28 -> 162.95 (0.894), infer 10.40 -> 10.11 (0.972);
+# driver CNNClassifier.fit channels [16, 32] (neighbouring shape) 349.1 -> 309.6 (0.887), one block [24] (non-board
+# model) 230.3 -> 204.0 (0.886). PROMOTED: faster on every cell of both rounds, same launches, same bits.
+# The old path (every entry waits) stays behind _OFF until one more measurement confirms; then it is an owed deletion.
+comptime CNN_OP_NOWAIT = not is_defined["MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF"]()
+
+
+@always_inline
+def prm_block_cached(words: List[Int32]) -> Bool:
+    """Whether `put_prm` uploads nothing from the caller's own list for
+    this block: the cache holds its copy, or the block is empty."""
+    return len(words) <= PRM_CACHE_WORDS
+
+
+def entry_end(ctx: DeviceContext, resident: Bool, may_defer: Bool, blocks_cached: Bool) raises:
+    """The wait that ends an entry. Skipped for a resident call whose caller
+    allowed it and whose parameter blocks all came from the cache (see
+    above); MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF keeps every wait."""
+    comptime if CNN_OP_NOWAIT:
+        if resident and may_defer and blocks_cached:
+            return
+    ctx.synchronize()
+
+
+def _prm_cached(ctx: DeviceContext, words: List[Int32]) raises -> Int:
+    """The device address of a cached block holding `words` (uploaded on a
+    miss from the cache's own copy), or 0 when the block is too long for the
+    cache."""
+    var n = len(words)
+    if n == 0 or n > PRM_CACHE_WORDS:
+        return 0
+    var s = _slots()
+    s[].prm_clock += 1
+    var victim = -1
+    for i in range(len(s[].prm_keys)):  # small-loop(prm cache: at most PRM_CACHE_MAX blocks): lookup by words, no data
+        if len(s[].prm_keys[i]) == n:
+            var same = True
+            for j in range(n):  # small-loop(one parameter block: at most PRM_CACHE_WORDS words)
+                if s[].prm_keys[i][j] != words[j]:
+                    same = False
+                    break
+            if same:
+                s[].prm_used[i] = s[].prm_clock
+                return Int(s[].prm_bufs[i].unsafe_ptr())
+        if victim < 0 or s[].prm_used[i] < s[].prm_used[victim]:
+            victim = i
+    if len(s[].prm_keys) < PRM_CACHE_MAX:
+        s[].prm_bufs.append(ctx.enqueue_create_buffer[DType.int32](PRM_CACHE_WORDS))
+        s[].prm_keys.append(words.copy())
+        s[].prm_used.append(s[].prm_clock)
+        victim = len(s[].prm_keys) - 1
+    else:
+        comptime if CNN_OP_NOWAIT:
+            # an entry that returned without its wait may have left the upload of this victim's words queued
+            ctx.synchronize()
+        s[].prm_keys[victim] = words.copy()
+        s[].prm_used[victim] = s[].prm_clock
+    var addr = Int(s[].prm_bufs[victim].unsafe_ptr())
+    var b = view_i(ctx, IP(unsafe_from_address=addr), n)
+    # the source is the cache's own copy of the words: it lives until this
+    # block is the victim of a later miss, after this entry's synchronize
+    ctx.enqueue_copy(dst_buf=b, src_ptr=s[].prm_keys[victim].unsafe_ptr())
+    _ = b^
+    return addr
+
+
 def put_prm(ctx: DeviceContext, slot: Int, prm: List[Int32]) raises -> DeviceBuffer[DType.int32]:
-    """A parameter block into slot `slot` (the caller keeps `prm` alive past its synchronize)."""
+    """A parameter block on the device: the cached copy of its words
+    (`_prm_cached`), or slot `slot` for a block too long for the cache (the
+    caller keeps `prm` alive past its synchronize)."""
+    var addr = _prm_cached(ctx, prm)
+    if addr != 0:
+        return view_i(ctx, IP(unsafe_from_address=addr), len(prm))
     var b = ws_i(ctx, slot, len(prm))
     if len(prm) > 0:
         ctx.enqueue_copy(dst_buf=b, src_ptr=prm.unsafe_ptr())
@@ -838,6 +1013,17 @@ def put_prm(ctx: DeviceContext, slot: Int, prm: List[Int32]) raises -> DeviceBuf
 
 
 def put_hyper(ctx: DeviceContext, slot: Int, h: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    """A float hyperparameter block: the parameter-block cache keyed by its
+    4-byte words (the same bytes; nothing is converted), or slot `slot`."""
+    if len(h) > 0 and len(h) <= PRM_CACHE_WORDS:
+        var words = List[Int32](capacity=len(h))
+        var src = h.unsafe_ptr().bitcast[Int32]()
+        for i in range(len(h)):  # small-loop(one hyperparameter block: at most PRM_CACHE_WORDS words)
+            words.append(src[i])
+        var addr = _prm_cached(ctx, words)
+        _ = words^
+        if addr != 0:
+            return view(ctx, FP(unsafe_from_address=addr), len(h))
     var b = ws(ctx, slot, len(h))
     if len(h) > 0:
         ctx.enqueue_copy(dst_buf=b, src_ptr=h.unsafe_ptr())
@@ -868,9 +1054,10 @@ def fetch_i[resident: Bool](ctx: DeviceContext, buf: DeviceBuffer[DType.int32], 
 
 
 #: lane/cnn-apple2: the most freed resident storage kept for reuse (floats;
-#: 256 MB). `-D MOJOLEARN_XCNN_NO_RES_POOL` is the before arm (no pool).
+#: 256 MB).
+# TOMBSTONE: MOJOLEARN_XCNN_NO_RES_POOL (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_RES_POOL.patch
 comptime RES_POOL_MAX_FLOATS = 64 * 1024 * 1024
-comptime RES_POOL = not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"]()
 
 
 #: lane neural-io-2 (MOJOLEARN_XCNN_RES_NEW_NOZERO, read
@@ -882,19 +1069,19 @@ comptime RES_POOL = not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"]()
 #: plus their launches). `res_alloc_nofill` hands out the same array unfilled
 #: for those callers only (`DeviceTensor._new_out` in
 #: python/mojolearn/_expansion_cnn.py). Every word is written before any read,
-#: so no bit moves. Default on; -D MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF fills
-#: again (the binding then registers `x_cnn_res_alloc_nofill` as the filling
-#: allocation).
-comptime XCNN_RES_NEW_NOZERO = not is_defined["MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF"]()
+#: so no bit moves.
+# TOMBSTONE: MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch
+comptime XCNN_RES_NEW_NOZERO = True
 #: lane neural-io-2 (MOJOLEARN_XCNN_RES_FREE_ASYNC): `res_free` waited for the
 #: whole queue before it returned an array to the reuse pool, a host round
 #: trip per freed tensor (each fit frees its previous y and dx). An array kept
 #: in the pool is only handed out again by `res_alloc` on the same one in-order
 #: context, so every later use is queued behind every earlier one: the wait
 #: ordered nothing. It stays where the array is destroyed (pool over its cap,
-#: or no pool). No bit moves. Default on; -D MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF
-#: waits again on every free.
-comptime XCNN_RES_FREE_ASYNC = RES_POOL and not is_defined["MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF"]()
+#: or no pool). No bit moves.
+# TOMBSTONE: MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_RES_FREE_ASYNC_OFF.patch
 
 
 def res_alloc(n: Int) raises -> Int:
@@ -904,11 +1091,8 @@ def res_alloc(n: Int) raises -> Int:
 
 def res_alloc_nofill(n: Int) raises -> Int:
     """`res_alloc` without the +0.0 fill (XCNN_RES_NEW_NOZERO), for an output
-    whose every word the op stores; the filling `res_alloc` when the switch
-    is off."""
-    comptime if XCNN_RES_NEW_NOZERO:
-        return _res_alloc(n, False)
-    return _res_alloc(n, True)
+    whose every word the op stores."""
+    return _res_alloc(n, False)
 
 
 def _res_alloc(n: Int, fill: Bool) raises -> Int:
@@ -917,21 +1101,20 @@ def _res_alloc(n: Int, fill: Bool) raises -> Int:
     # lane/cnn-apple2: a freed array of at least `need` and at most twice
     # it (the smallest such) instead of a new allocation; zero filled the
     # same way, so the caller sees the same words.
-    comptime if RES_POOL:
-        var s = _slots()
-        var pick = -1
-        for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): smallest fitting slot search, no data
-            var ln = len(s[].pool[j])
-            if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
-                pick = j
-        if pick >= 0:
-            var pb = s[].pool.pop(pick)
-            if fill:
-                pb.enqueue_fill(Float32(0))
-            var paddr = Int(pb.unsafe_ptr())
-            s[].res.append(pb^)
-            _ = ctx^
-            return paddr
+    var s = _slots()
+    var pick = -1
+    for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): smallest fitting slot search, no data
+        var ln = len(s[].pool[j])
+        if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
+            pick = j
+    if pick >= 0:
+        var pb = s[].pool.pop(pick)
+        if fill:
+            pb.enqueue_fill(Float32(0))
+        var paddr = Int(pb.unsafe_ptr())
+        s[].res.append(pb^)
+        _ = ctx^
+        return paddr
     var b = ctx.enqueue_create_buffer[DType.float32](need)
     if fill:
         b.enqueue_fill(Float32(0))
@@ -946,26 +1129,21 @@ def _res_alloc(n: Int, fill: Bool) raises -> Int:
 def res_free(addr: Int) raises:
     # the array may still be read or written by enqueued work
     var ctx = cnn_ctx()
-    comptime if not XCNN_RES_FREE_ASYNC:
-        ctx.synchronize()
     var s = _slots()
     for k in range(len(s[].res)):  # small-loop(res: live resident arrays of the session): address lookup, no data
         if Int(s[].res[k].unsafe_ptr()) == addr:
             var b = s[].res.pop(k)
-            comptime if RES_POOL:
-                # keep it for reuse while the pool stays under its cap
-                # (the wait above ended every use of it; XCNN_RES_FREE_ASYNC:
-                # its next user is queued behind those uses on this context)
-                var held = len(b)
-                for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): pool size total for the cap test
-                    held += len(s[].pool[j])
-                if held <= RES_POOL_MAX_FLOATS:
-                    s[].pool.append(b^)
-                    _ = ctx^
-                    return
-            comptime if XCNN_RES_FREE_ASYNC:
-                # destroyed here: end every queued use of it first
-                ctx.synchronize()
+            # keep it for reuse while the pool stays under its cap
+            # (its next user is queued behind its earlier uses on this context)
+            var held = len(b)
+            for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): pool size total for the cap test
+                held += len(s[].pool[j])
+            if held <= RES_POOL_MAX_FLOATS:
+                s[].pool.append(b^)
+                _ = ctx^
+                return
+            # destroyed here: end every queued use of it first
+            ctx.synchronize()
             _ = b^
             _ = ctx^
             return
@@ -985,45 +1163,12 @@ def res_upload(addr: Int, src: FP, n: Int) raises:
     _ = ctx^
 
 
-def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
-    """Resident dst[r] = resident src[rows[r]] for r < n, `row` 4-byte words
-    each (a word copy; host `rows` are the indices)."""
-    if n <= 0 or row <= 0:
-        return
-    var ctx = cnn_ctx()
-    var di = put_i[False](ctx, 0, rows, n)
-    var prm: List[Int32] = [Int32(row)]
-    var dp = put_prm(ctx, 1, prm)
-    var src = view(ctx, FP(unsafe_from_address=src_addr), 1)
-    var dst = view(ctx, FP(unsafe_from_address=dst_addr), n * row)
-    launch[gather_rows_at](ctx, fp(src), fp(dst), fp(dst), fp(dst), ip(di), ip(dp), n * row)
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = src^
-    _ = dst^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_gather (res_gather, the resident batch row gather; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
-def res_argmax(addr: Int, dst: IP, n: Int, k: Int) raises:
-    """dst[i] (int32, host) = row i's `argmax_row_at` of the resident n x k
-    block at `addr`: only the n labels come down."""
-    if n <= 0 or k <= 0:
-        return
-    var ctx = cnn_ctx()
-    var src = view(ctx, FP(unsafe_from_address=addr), n * k)
-    var out = ws_i(ctx, 0, n)
-    var prm: List[Int32] = [Int32(k)]
-    var dp = put_prm(ctx, 1, prm)
-    launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
-    down_i(ctx, out, dst, n)
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = out^
-    _ = src^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def res_download(addr: Int, dst: FP, n: Int) raises:
@@ -1150,16 +1295,8 @@ def gemm_device(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: 
     return out^
 
 
-def nn14_im2col_slice_kernel(x: FP, cols: FP, p: IP, row0: Int32, count: Int32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(count):
-        nn14_im2col_slice_cell(i, x, cols, p, Int(row0))
-
-
-def nn14_conv_slice_kernel(y2: FP, bias: FP, dst: FP, p: IP, row0: Int32, count: Int32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(count):
-        nn14_conv_slice_cell(i, y2, bias, dst, p, Int(row0))
+# TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (DELETE-ARM, EXP:1943 record read, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-35-neural.patch
 
 
 def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
@@ -1172,20 +1309,11 @@ def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var dbias = m_in(ctx, 2, a[2], OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
-    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var cols = ws(ctx, 4, 1 if implicit else rows * ckk)
+    var y2 = ws(ctx, 5, 1 if implicit else rows * OC)
     var dout = m_out(ctx, 6, a[3], rows * OC, isdev(dev, 3))
-    comptime if NN14_BOUNDED_IM2COL:
-        var row0 = 0
-        while row0 < rows:
-            var take = min(tile_rows, rows - row0)
-            ctx.enqueue_function[nn14_im2col_slice_kernel](fp(dx), fp(cols), ip(dp), Int32(row0), Int32(take * ckk), grid_dim=((take * ckk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
-            device_gemm(ctx, y2, cols, dw, take, OC, ckk, OP_NT)
-            ctx.enqueue_function[nn14_conv_slice_kernel](fp(y2), fp(dbias), fp(dout), ip(dp), Int32(row0), Int32(take * OC), grid_dim=((take * OC + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
-            row0 += take
-    else:
-        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
     m_fetch(ctx, dout, a[3], rows * OC, isdev(dev, 3))
     ctx.synchronize()
     _ = dx^
@@ -1363,8 +1491,9 @@ def mul_into(a: FP, b: FP, n: Int, dst: FP) raises:
     map2_into[mul_at](a, n, b, n, n, prm, dst)
 
 
-def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) raises:
-    """y = x W^T + b: the pinned GEMM NT, then one add per element; a = [x, w, b, y]."""
+def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int, may_defer: Bool = False) raises:
+    """y = x W^T + b: the pinned GEMM NT, then one add per element; a = [x, w, b, y].
+    `may_defer`: see entry_end (all four arguments resident, dev = 15)."""
     var ctx = cnn_ctx()
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
@@ -1384,7 +1513,7 @@ def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rais
         device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
         launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
     m_fetch(ctx, dout, a[3], n * d_out, isdev(dev, 3))
-    ctx.synchronize()
+    entry_end(ctx, dev == 15, may_defer, prm_block_cached(prm))
     _ = prm^
     _ = dx^
     _ = dw^
@@ -1395,9 +1524,12 @@ def linear_forward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rais
     _ = ctx^
 
 
-def linear_forward_into[resident: Bool = False](x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
-    """y = x W^T + b (every argument resident, or every one host)."""
-    linear_forward_m([_a(x), _a(w), _a(bias), _a(dst)], 15 if resident else 0, n, d_in, d_out)
+def linear_forward_into[resident: Bool = False](
+    x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP, may_defer: Bool = False,
+) raises:
+    """y = x W^T + b (every argument resident, or every one host).
+    `may_defer`: see entry_end."""
+    linear_forward_m([_a(x), _a(w), _a(bias), _a(dst)], 15 if resident else 0, n, d_in, d_out, may_defer)
 
 
 def fold_launch(ctx: DeviceContext, a: FP, b: FP, final_dst: FP, pp: IP, count: Int) raises:
@@ -1537,8 +1669,8 @@ def sgd_device(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List
 # channel in threadgroup memory (coalesced), then thread 0 folds them in the
 # same (n, hw) order with the same steps, so every sum is the element
 # function's. Threadgroup memory only across the barriers.
-# `-D MOJOLEARN_XCNN_NO_BN_BLOCK` is the before arm.
-comptime BN_BLOCK = not is_defined["MOJOLEARN_XCNN_NO_BN_BLOCK"]()
+# TOMBSTONE: MOJOLEARN_XCNN_NO_BN_BLOCK (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_XCNN_NO_BN_BLOCK.patch
 comptime BN_TILE = 2048
 comptime BN_TPB = 256
 
@@ -1736,9 +1868,11 @@ def bn_gs_chunk_kernel[MODE: Int](x: FP, g: FP, aux: FP, part: FP, p: IP):
             part.unsafe_store(C * bn_gs_chunks(N * HW) + t, sh1[0])
 
 
-def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
+def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool, aux_src: Int = 0) raises:
     """a = [x, running (2C, in place), aux (2 + 7C, in place: the statistics
-    the backward reads), y]."""
+    the backward reads), y]. `aux_src` (lane fb15-sync-counts): a host aux
+    block copied into the RESIDENT aux on this entry's stream before the
+    launches (0: none), in place of a separate upload entry and its wait."""
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var nr = 2 * C
@@ -1749,6 +1883,8 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     var dx = m_in(ctx, 0, a[0], total, isdev(dev, 0))
     var dr = m_in(ctx, 1, a[1], nr, isdev(dev, 1))
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
+    if aux_src != 0 and isdev(dev, 2):
+        ctx.enqueue_copy(dst_buf=da, src_ptr=FP(unsafe_from_address=aux_src))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
     # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo
@@ -1762,26 +1898,24 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
             ctx.enqueue_function[bn_gs_chunk_kernel[0]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
             launch[bn_gs_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             ctx.enqueue_function[bn_gs_chunk_kernel[1]](fp(dx), fp(dx), fp(da), fp(dpart), ip(dp), grid_dim=(nblk, 1, 1), block_dim=(BN_GS_LANES, 1, 1))
-            launch[bn_gs_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            # lane fb15-sync-counts: the running update rides this launch (x_cnn/ops.mojo)
+            launch[bn_gs_var_running_at](ctx, fp(dpart), fp(da), fp(dr), fp(da), ip(dp), ip(dp), C)
         elif BN_FOLD_BLOCK:
             launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
             launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
             launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
-            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            launch[bn_blk_var_running_at](ctx, fp(dpart), fp(da), fp(dr), fp(da), ip(dp), ip(dp), C)
         else:
-            var blk = False
-            comptime if BN_BLOCK:
-                blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+            var blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
             if blk:
                 ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
             else:
                 launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-    if NN47_APPLY_RUNNING and training:
-        launch[nn47_bn_apply_running_at](ctx, fp(dx), fp(da), fp(dout), fp(dr), ip(dp), ip(dp), total)
-    else:
-        launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
+    launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
+    comptime if not IDN_BN_GRID_STATS and not BN_FOLD_BLOCK:
+        # (the blocked and grid statistics ran it inside their variance launch)
         if training:
             launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
@@ -1841,9 +1975,7 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
         launch[bn_blk_red_at](ctx, fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), ip(dp), nblk)
         launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
-        var blk = False
-        comptime if BN_BLOCK:
-            blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
+        var blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
         if blk:
             ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
         else:
@@ -1885,27 +2017,17 @@ def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Fl
     var dout = m_out(ctx, 4, a[1], n, isdev(dev, 1))
     # lane idn-loss-norm-folds: one draw per (n, c) channel into a table,
     # then the element pass (x_cnn/ops.mojo DROPOUT2D_CH_MASK); same words
-    var nch = Int(prm[0]) * Int(prm[1]) if (DROPOUT2D_CH_MASK or NI60_DROPOUT_APPLY4) else 1
-    # Preserve the existing buffer handle lifetime through synchronization.
-    # NI59 needs no materialized table; its one-word workspace handle is unused.
-    var dtab = ws(ctx, 5, 1 if NI59_DROPOUT_CHANNEL else nch)
-    comptime if NI59_DROPOUT_CHANNEL:
-        var channels = Int(prm[0]) * Int(prm[1])
-        if channels > 0 and n > 0:
-            ctx.enqueue_function[dropout_channel_kernel](
-                fp(dx), fp(mask), fp(dout), fp(dh), ip(dp),
-                grid_dim=(channels, 1, 1), block_dim=(TPB, 1, 1),
-            )
+    var nch = Int(prm[0]) * Int(prm[1]) if DROPOUT2D_CH_MASK else 1
+    var dtab = ws(ctx, 5, nch)
+    # TOMBSTONE: MOJOLEARN_NI59_DROPOUT_CHANNEL (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI59_DROPOUT_CHANNEL.patch
+    # TOMBSTONE: MOJOLEARN_NI60_DROPOUT_APPLY4 (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI60_DROPOUT_APPLY4.patch
+    comptime if DROPOUT2D_CH_MASK:
+        launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
+        launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
     else:
-        comptime if DROPOUT2D_CH_MASK or NI60_DROPOUT_APPLY4:
-            launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
-            comptime if NI60_DROPOUT_APPLY4:
-                var tiles = (Int(prm[2]) + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
-                launch[dropout_apply4_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), nch * tiles)
-            else:
-                launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
-        else:
-            launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
+        launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     m_fetch(ctx, dout, a[1], n, isdev(dev, 1))
     m_fetch(ctx, mask, a[2], n, isdev(dev, 2))
     ctx.synchronize()
@@ -1933,58 +2055,8 @@ def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) r
     return out^
 
 
-# NN48: one node/feature tile per block, sharing CSR column/weight words.
-# 128 features and 32 edges bound the page to 256 bytes and the block to
-# 128 lanes on all vendors. These are reuse/resource choices, no shape
-# threshold or benchmark name. OFF, uncompiled/unmeasured. Host keeps its
-# exact incumbent arithmetic; only read scheduling changes on the device.
-comptime NN48_CSR_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN48_CSR_TILES"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NN48_FEATURES = 128
-comptime NN48_EDGES = 32
-
-
-def nn48_spmm_tiled_kernel(vals: FP, h: FP, dst: FP, q: IP, p: IP):
-    var n = Int(p.unsafe_load(0))
-    var F = Int(p.unsafe_load(1))
-    var mode = Int(p.unsafe_load(3))
-    var tiles = (F + NN48_FEATURES - 1) // NN48_FEATURES
-    var task = Int(block_idx.x)
-    var row = task // tiles
-    var ftile = task % tiles
-    var lane = Int(thread_idx.x)
-    var feature = ftile * NN48_FEATURES + lane
-    var live = feature < F
-    var lo = Int(q.unsafe_load(row))
-    var hi = Int(q.unsafe_load(row + 1))
-    if mode == 3:
-        if live:
-            spmm_at(row * F + feature, vals, h, dst, dst, q, p)
-        return
-    var neighbors = stack_allocation[NN48_EDGES, Int32, address_space=AddressSpace.SHARED]()
-    var weights = stack_allocation[NN48_EDGES, Float32, address_space=AddressSpace.SHARED]()
-    var acc = Float32(0.0)
-    var base = lo
-    while base < hi:
-        var count = min(NN48_EDGES, hi - base)
-        if lane < count:
-            neighbors[lane] = q.unsafe_load(n + 1 + base + lane)
-            if mode == 0 or mode == 2:
-                weights[lane] = ftz(vals.unsafe_load(base + lane))
-        barrier()
-        if live:
-            for k in range(count):
-                var v = ftz(h.unsafe_load(Int(neighbors[k]) * F + feature))
-                if mode == 0:
-                    v = ftz(identical_mul(weights[k], v))
-                elif mode == 2:
-                    v = ftz(identical_div(v, weights[k]))
-                acc = ftz(acc + v)
-        barrier()
-        base += NN48_EDGES
-    if live:
-        if mode == 1 and hi > lo:
-            acc = ftz(identical_div(acc, Float32(hi - lo)))
-        dst.unsafe_store(row * F + feature, acc)
+# TOMBSTONE: MOJOLEARN_NN48_CSR_TILES (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_NN48_CSR_TILES.patch
 
 
 def spmm_m(a: List[Int], dev: Int, nvals: Int, ncsr: Int, prm: List[Int32]) raises:
@@ -1998,15 +2070,9 @@ def spmm_m(a: List[Int], dev: Int, nvals: Int, ncsr: Int, prm: List[Int32]) rais
     var dq = m_in_i(ctx, 2, a[2], ncsr, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
-    comptime if NN48_CSR_TILES:
-        if total > 0:
-            var feature_tiles = (Int(prm[1]) + NN48_FEATURES - 1) // NN48_FEATURES
-            ctx.enqueue_function[nn48_spmm_tiled_kernel](fp(dv), fp(dh), fp(dout), ip(dq), ip(dp), grid_dim=(Int(prm[0]) * feature_tiles, 1, 1), block_dim=(NN48_FEATURES, 1, 1))
-    elif NI55_GRAPH_FEATURE4:
-        var tiles = (Int(prm[1]) + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
-        launch[spmm_feature4_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), Int(prm[0]) * tiles)
-    else:
-        launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
+    # TOMBSTONE: MOJOLEARN_NI55_GRAPH_FEATURE4 (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_NI55_GRAPH_FEATURE4.patch
+    launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
     ctx.synchronize()
     _ = dv^
@@ -2158,9 +2224,8 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
     var n = Int(prm[0])
     var F = Int(prm[1])
     if kind == 0:
-        comptime if NI58_SAGE_FEATURE4:
-            var tiles = (F + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
-            return graph4_device[sage_max_feature4_at](a, b, aux, csr, prm, n * tiles, n * F)
+        # TOMBSTONE: MOJOLEARN_NI58_SAGE_FEATURE4 (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+        # Restore: git apply experiments/removed/MOJOLEARN_NI58_SAGE_FEATURE4.patch
         return graph4_device[sage_max_fwd_at](a, b, aux, csr, prm, n * F, n * F)
     if kind == 1:
         return graph4_device[sage_max_bwd_at](a, b, aux, csr, prm, n * F, n * F)
@@ -2183,35 +2248,43 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
 # kernel, operand or order changes, so no bit moves on any column.
 # IDENTICAL only. The entries are always compiled; `idn_flags()` tells the
 # Python glue which of them to use (bit k = switch k is on), so each has its
-# own before arm and all are off under MOJOLEARN_IDN_ALL_OFF.
+# own bit.
 # cpu2-l11-neural (2026-10-04): FAST takes these plumbing forms too, on every
-# vendor (no bit moves, so nothing for FAST to keep on the host); the `_OFF`
-# defines still restore the List forms for an A/B, and MOJOLEARN_IDN_ALL_OFF
-# stays an IDENTICAL-only master.
-comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-#: bit 0: adaptive pooling through `adaptive_pool_m`. `-D MOJOLEARN_IDN_ADAPT_M_OFF`.
-comptime IDN_ADAPT_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"]()
-#: bit 1: SAGE max / L2 normalize / gcn_norm through `graph_op_m`, `gcn_norm_m`. `-D MOJOLEARN_IDN_GRAPH_M_OFF`.
-comptime IDN_GRAPH_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GRAPH_M_OFF"]()
-#: bit 2: an explicitly padded convolution stays resident (`pad2d_m`). `-D MOJOLEARN_IDN_PAD_M_OFF`.
-comptime IDN_PAD_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PAD_M_OFF"]()
-#: bit 3: a grouped convolution stays resident (`chan_copy_m`). `-D MOJOLEARN_IDN_GROUP_M_OFF`.
-comptime IDN_GROUP_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GROUP_M_OFF"]()
+# vendor (no bit moves, so nothing for FAST to keep on the host).
+comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: bit 0: adaptive pooling through `adaptive_pool_m`.
+# TOMBSTONE: MOJOLEARN_IDN_ADAPT_M_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADAPT_M_OFF.patch
+comptime IDN_ADAPT_M = _FAM_IDN
+#: bit 1: SAGE max / L2 normalize / gcn_norm through `graph_op_m`, `gcn_norm_m`.
+# TOMBSTONE: MOJOLEARN_IDN_GRAPH_M_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAPH_M_OFF.patch
+comptime IDN_GRAPH_M = _FAM_IDN
+#: bit 2: an explicitly padded convolution stays resident (`pad2d_m`).
+# TOMBSTONE: MOJOLEARN_IDN_PAD_M_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PAD_M_OFF.patch
+comptime IDN_PAD_M = _FAM_IDN
+#: bit 3: a grouped convolution stays resident (`chan_copy_m`).
+# TOMBSTONE: MOJOLEARN_IDN_GROUP_M_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GROUP_M_OFF.patch
+comptime IDN_GROUP_M = _FAM_IDN
 #: bit 4: BatchNorm, Dropout2d and ReLU take and return resident tensors
-#: (glue only; the entries are the existing `_m` ones). `-D MOJOLEARN_IDN_LAYER_DEV_IO_OFF`.
-comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV_IO_OFF"]()
+#: (glue only; the entries are the existing `_m` ones).
+# TOMBSTONE: MOJOLEARN_IDN_LAYER_DEV_IO_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LAYER_DEV_IO_OFF.patch
+comptime IDN_LAYER_DEV_IO = _FAM_IDN
 #: bit 5 (lane fam2-neural): `layer.pin_weights()` keeps a layer's weights
 #: resident and the `_m` entries read them there (glue only; the entries are
-#: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
-comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
+#: the existing ones).
+# TOMBSTONE: MOJOLEARN_IDN_PIN_WEIGHTS_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PIN_WEIGHTS_OFF.patch
+comptime IDN_PIN_WEIGHTS = _FAM_IDN
 #: bit 7 (lane cnn-resident-glue, 2026-10-11, G3) CNN resident grads, PROMOTED to the
 #: IDENTICAL default 2026-10-11 (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per
 #: arm, same bits NV==AMD: avg 0.754 over the 9 layer lanes, global-avgpool 0.092,
 #: global-maxpool 0.078, avgpool2d 0.750, batchnorm1d 0.920, batchnorm2d 0.966, conv2d
 #: 0.967, resnet-block 0.982, maxpool1d 0.915, conv1d 1.111 (NV spike); nv2 v0085 / A v0082,
-#: amd a1667 / A a1664). `-D MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF` restores the old glue. The CNN glue keeps everything of a resident call on the
+#: amd a1667 / A a1664). The CNN glue keeps everything of a resident call on the
 #: device: Conv2d/BasicBlock weights auto-pinned on first use (re-pinned when
 #: `weight_`/`bias_` is reassigned), dW/db and BatchNorm's running statistics
 #: and aux block left in resident arrays (`grad_weight_`, `grad_bias_`,
@@ -2224,7 +2297,9 @@ comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHT
 #: resnet-block NV 16.2 -> ~11 ms, AMD 15.5 -> ~10, conv2d -0.4 ms,
 #: global-maxpool 2.9 -> ~1.2 NV. Glue and buffer residency only: the same
 #: entries, kernels and operands, so no bit moves.
-comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF (DELETE-OLD-PATH, EXP:2084 the default is the measured winner, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_RESIDENT_GRADS_OFF.patch
+comptime IDN_CNN_RESIDENT_GRADS = _FAM_IDN
 
 
 def idn_flags() -> Int:
@@ -2346,11 +2421,7 @@ def graph_op_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
     var dp = put_prm(ctx, 4, prm)
     var dout = m_out(ctx, 5, a[3], nf, isdev(dev, 3))
     if kind == 0:
-        comptime if NI58_SAGE_FEATURE4:
-            var tiles = (F + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
-            launch[sage_max_feature4_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n * tiles)
-        else:
-            launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+        launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
     elif kind == 1:
         launch[sage_max_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
     elif kind == 2:
@@ -2503,237 +2574,12 @@ def opt_many_resident[adam: Bool](
     _ = ctx^
 
 
-def res_gather_pair(
-    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, rows: IP, n: Int
-) raises:
-    """lane/cnn-apple2: `res_gather` twice on the same host rows (the batch
-    and its labels) in one entry, one upload of the rows and one wait; the
-    same `gather_rows_at` launches on the same words."""
-    if n <= 0:
-        return
-    var ctx = cnn_ctx()
-    var di = put_i[False](ctx, 0, rows, n)
-    var prm: List[Int32] = [Int32(row), Int32(row2)]
-    var dp = put_prm(ctx, 1, prm)
-    var pp = ip(dp)
-    if row > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp, n * row,
-        )
-    if row2 > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
-            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + 1, n * row2,
-        )
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_gather (res_gather_pair, its two-gather form; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
-# ------------------------------------------------ lane fam2-neural: the device epoch
-# IDN_CNN_EPOCH_DEV (x_cnn/ops.mojo): the pieces `x_cnn_fit_epoch_d` runs so
-# a fit epoch has no host arithmetic and one download (its losses).
-
-
-def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, key: UInt64) raises:
-    """Host dst[0:count] = positions pos .. pos + count - 1 of the epoch's
-    order over n rows (`epoch_rows_at` on the device, then down): for the
-    trainers whose batch is gathered from host memory."""
-    if count <= 0:
-        return
-    var ctx = cnn_ctx()
-    var prm = epoch_rows_prm(n, pos, shuffle, key)
-    var dp = put_prm(ctx, 1, prm)
-    var out = ws_i(ctx, 0, count)
-    var none = ws(ctx, 2, 1)
-    launch[epoch_rows_at](ctx, fp(none), fp(none), fp(none), fp(none), ip(out), ip(dp), count)
-    down_i(ctx, out, dst, count)
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = out^
-    _ = none^
-    _ = ctx^
-
-
-def _ni18_epoch_gather_kernel(src: FP, dst: FP, src2: FP, dst2: FP, p: IP):
-    """One block per sampled row: compute its key once, copy both buffers.
-
-    Resource schedule only: threads stride over row bytes. The permutation
-    is the same shared integer function as the host and reference device
-    paths, and all tensors are copied as Int32 words (including NaN bits).
-    """
-    var row_index = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var selected = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
-    if tid == 0:
-        selected[0] = epoch_row_val(row_index, p)
-    barrier()
-    var chosen = Int(selected[0])
-    var row = Int(p.unsafe_load(EP_LEN))
-    var row2 = Int(p.unsafe_load(EP_LEN + 1))
-    var i = tid
-    while i < row:
-        dst.bitcast[Int32]().unsafe_store(row_index * row + i, src.bitcast[Int32]().unsafe_load(chosen * row + i))
-        i += TPB
-    i = tid
-    while i < row2:
-        dst2.bitcast[Int32]().unsafe_store(row_index * row2 + i, src2.bitcast[Int32]().unsafe_load(chosen * row2 + i))
-        i += TPB
-
-
-def res_gather_pair_perm(
-    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
-    m: Int, shuffle: Bool, key: UInt64,
-) raises:
-    """`res_gather_pair` with the step's rows computed on the device
-    (`epoch_rows_at`, positions pos .. pos + m - 1 of the epoch over n rows)
-    instead of uploaded: nothing crosses the bus."""
-    if m <= 0:
-        return
-    var ctx = cnn_ctx()
-    var prm = epoch_rows_prm(n, pos, shuffle, key)
-    prm.append(Int32(row))
-    prm.append(Int32(row2))
-    var dp = put_prm(ctx, 1, prm)
-    var pp = ip(dp)
-    comptime if NI18_FUSED_EPOCH_GATHER:
-        ctx.enqueue_function[_ni18_epoch_gather_kernel](
-            FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr), pp,
-            grid_dim=(m, 1, 1), block_dim=(TPB, 1, 1),
-        )
-        ctx.synchronize()
-        _ = prm^
-        _ = dp^
-        _ = ctx^
-        return
-    var di = ws_i(ctx, 0, m)
-    launch[epoch_rows_at](
-        ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
-        FP(unsafe_from_address=dst_addr), ip(di), pp, m,
-    )
-    if row > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp + EP_LEN, m * row,
-        )
-    if row2 > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
-            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + EP_LEN + 1,
-            m * row2,
-        )
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = ctx^
-
-
-def adam_hyper_resident(base: List[Float32], step0: Int, nsteps: Int, dst_addr: Int) raises:
-    """Resident dst[9 t : 9 t + 9] = Adam's hyper block of 1-based step
-    step0 + t for t < nsteps (`adam_hyper_at`, one thread per step)."""
-    if nsteps <= 0:
-        return
-    var ctx = cnn_ctx()
-    var db = put_hyper(ctx, 3, base)
-    var prm: List[Int32] = [Int32(step0)]
-    var dp = put_prm(ctx, 4, prm)
-    var dst = FP(unsafe_from_address=dst_addr)
-    launch[adam_hyper_at](ctx, fp(db), dst, dst, dst, ip(dp), ip(dp), nsteps)
-    ctx.synchronize()
-    _ = prm^
-    _ = db^
-    _ = dp^
-    _ = ctx^
-
-
-def adam_hyper_download(base: List[Float32], step0: Int, nsteps: Int, dst: FP) raises:
-    """Host dst[0 : 9 nsteps] = the same blocks (for the per-step entries,
-    which take the block from the caller)."""
-    if nsteps <= 0:
-        return
-    var ctx = cnn_ctx()
-    var db = put_hyper(ctx, 3, base)
-    var prm: List[Int32] = [Int32(step0)]
-    var dp = put_prm(ctx, 4, prm)
-    var out = ws(ctx, 5, nsteps * AH_ROW)
-    launch[adam_hyper_at](ctx, fp(db), fp(out), fp(out), fp(out), ip(dp), ip(dp), nsteps)
-    down(ctx, out, dst, nsteps * AH_ROW)
-    ctx.synchronize()
-    _ = prm^
-    _ = db^
-    _ = dp^
-    _ = out^
-    _ = ctx^
-
-
-def opt_many_resident_h[adam: Bool](
-    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper_addr: Int
-) raises:
-    """`opt_many_resident` with the step's hyper block already on the device
-    at `hyper_addr` (a row of the epoch's resident block): no upload."""
-    var ctx = cnn_ctx()
-    var prm = List[Int32]()
-    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
-        prm.append(Int32(ns[j]))
-    var dp = put_prm(ctx, 4, prm)
-    var pp = ip(dp)
-    var ph = FP(unsafe_from_address=hyper_addr)
-    for j in range(len(ns)):
-        var pw = FP(unsafe_from_address=ws_[j])
-        var pg = FP(unsafe_from_address=gs[j])
-        var pb = FP(unsafe_from_address=bs[j])
-        comptime if adam:
-            launch[adam_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
-        else:
-            launch[sgd_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = ctx^
-
-
-def softmax_xent_res_loss(
-    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP, loss_addr: Int, index: Int
-) raises:
-    """`softmax_xent_into[True]` with the mean loss left on the device:
-    resident loss[index] = the blocked fold of the row losses over n
-    (`blk_fold_at`, what `softmax_xent_into` returns under
-    IDN_XENT_DEV_FOLD). Nothing comes down."""
-    if n <= 0:
-        return
-    var ctx = cnn_ctx()
-    var dl = view(ctx, logits, n * k)
-    var dy = view_i(ctx, labels, n)
-    var prm: List[Int32] = [Int32(n), Int32(k)]
-    var dp = put_prm(ctx, 2, prm)
-    var grad = view(ctx, grad_out, n * k)
-    var proba = view(ctx, proba_out, n * k)
-    var rl = ws(ctx, 5, n)
-    grad.enqueue_fill(Float32(0))
-    rl.enqueue_fill(Float32(0))
-    launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
-    var fprm = fold_plan(n, n, index)
-    var dfp = put_prm(ctx, 7, fprm)
-    var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
-    fold_launch(ctx, fp(rl), fp(pong), FP(unsafe_from_address=loss_addr), ip(dfp), n)
-    ctx.synchronize()
-    _ = fprm^
-    _ = prm^
-    _ = dfp^
-    _ = pong^
-    _ = dl^
-    _ = dy^
-    _ = dp^
-    _ = grad^
-    _ = proba^
-    _ = rl^
-    _ = ctx^
+# TOMBSTONE: the classifier's device epoch pieces (epoch_rows_download, res_gather_pair_perm and its gather kernel, adam_hyper_resident, adam_hyper_download, opt_many_resident_h, softmax_xent_res_loss) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 
 
 # ------------------------------------------------------------ the conv block
@@ -2762,22 +2608,14 @@ def _conv_relu_on_device(
     = 27) runs `direct_conv_kernel` instead: the same cols words (written
     only when `need_cols`), each output cell the contract's one-leaf chain,
     no y2."""
-    comptime if NN14_BOUNDED_IM2COL:
-        var tile_rows = nn14_conv_rows(rows, ckk, OC)
-        var row0 = 0
-        while row0 < rows:
-            var take = min(tile_rows, rows - row0)
-            ctx.enqueue_function[nn14_im2col_slice_kernel](fp(dx), fp(cols), ip(dp), Int32(row0), Int32(take * ckk), grid_dim=((take * ckk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
-            device_gemm(ctx, y2, cols, dw, take, OC, ckk, OP_NT)
-            ctx.enqueue_function[nn14_conv_slice_kernel](fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(row0), Int32(take * OC), grid_dim=((take * OC + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
-            row0 += take
-        return False
     var relu_out = FP(unsafe_from_address=relu_addr) if relu_addr != 0 else fp(yconv)
     var fuse_relu = Int32(1 if relu_addr != 0 else 0)
     comptime if NI12_IMPLICIT_CONV:
-        if rows > 0 and OC > 0:
+        if rows > 0 and OC > 0 and ni12_implicit_layer(OC, ckk):
             # lane gap-gemm-layers: the backward's dW gathers the columns
-            # too (`_implicit_wgrad`), so `need_cols` never builds them.
+            # too (`_implicit_wgrad`, the same per-layer rule), so `need_cols`
+            # never builds them. A narrow layer (ni12_implicit_layer) falls through
+            # to the direct conv / im2col + GEMM below, which honour `need_cols`.
             var lp = contract_partition(ckk)
             ctx.enqueue_function[implicit_conv_kernel](
                 fp(dx), fp(dw), fp(dbias), fp(yconv), ip(dp), Int32(rows),
@@ -2793,6 +2631,7 @@ def _conv_relu_on_device(
                 grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
             )
             return False
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_AFN_CNN_DIRECT opt-in arm back, default off, Apple fast only.
     comptime if AFN_CNN_DIRECT:
         # lane afn-mlp: the shapes im2col + GEMM served, as one tiled launch
         if rows > 0 and afn_conv_direct_applies(ckk, OC):
@@ -2803,10 +2642,6 @@ def _conv_relu_on_device(
             return False
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    comptime if NN45_CONV_RELU:
-        if relu_addr != 0:
-            launch[nn45_conv_out_relu_at](ctx, fp(y2), fp(dbias), fp(yconv), FP(unsafe_from_address=relu_addr), ip(dp), ip(dp), rows * OC)
-            return True
     _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
     return False
 
@@ -2815,26 +2650,24 @@ def _conv_out(
     ctx: DeviceContext, mut y2: DeviceBuffer[DType.float32], mut dbias: DeviceBuffer[DType.float32],
     mut yconv: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, S: Int, OC: Int,
 ) raises:
-    """The GEMM rows to NCHW (+ bias): the tiled kernel, or `conv_out_at`."""
-    comptime if TILED_LAYOUT:
-        if N > 0 and S > 0 and OC > 0:
-            var g = _tiled_grid(N, S, OC)
-            ctx.enqueue_function[conv_out_tiled_kernel](
-                fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(S), Int32(OC),
-                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
-            )
-        return
-    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), N * S * OC)
+    """The GEMM rows to NCHW (+ bias): the tiled kernel."""
+    if N > 0 and S > 0 and OC > 0:
+        var g = _tiled_grid(N, S, OC)
+        ctx.enqueue_function[conv_out_tiled_kernel](
+            fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(S), Int32(OC),
+            grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+        )
 
 
 def conv_block_forward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP,
-    save_cols: Int = 0, save_y: Int = 0,
+    save_cols: Int = 0, save_y: Int = 0, may_defer: Bool = False,
 ) raises:
     """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False.
     Resident with `save_cols` and `save_y` (device addresses, rows*C*KH*KW and
     N*OC*OH*OW floats): the im2col matrix and the conv output are written
-    there for the backward to read instead of recomputing them."""
+    there for the backward to read instead of recomputing them.
+    `may_defer`: see entry_end."""
     var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
@@ -2845,11 +2678,14 @@ def conv_block_forward_into[resident: Bool = False](
     var dw = put[resident](ctx, 1, w, OC * ckk)
     var dbias = put[resident](ctx, 2, bias, OC)
     var dp = put_prm(ctx, 3, cprm)
-    var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
-    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 4, 1 if NI12_IMPLICIT_CONV else tile_rows * ckk)
-    var y2 = ws(ctx, 5, 1 if NI12_IMPLICIT_CONV else tile_rows * OC)
+    var saved = resident and save_y != 0 and save_cols != 0
+    # an implicit layer's save slot is one word (cnn_block_saved_sizes): nothing writes cols
+    var implicit = ni12_implicit_layer(OC, ckk)
+    var ncols = 1 if implicit else rows * ckk
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), ncols) if saved else ws(ctx, 4, ncols)
+    var y2 = ws(ctx, 5, 1 if implicit else rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_AFN_CNN_DIRECT opt-in arm back, default off, Apple fast only.
     comptime if AFN_CNN_DIRECT:
         # lane afn-mlp: without a pool the tiled launch's epilogue writes the
         # ReLU too, so the block is one launch and one wait
@@ -2871,10 +2707,8 @@ def conv_block_forward_into[resident: Bool = False](
             _ = yconv^
             _ = ctx^
             return
-    # NN45 needs the output address before layout; the direct path still
-    # reports False and receives its usual separate ReLU below.
     var pout = outb[resident](ctx, 7, dst, no)
-    var relu_addr = Int(fp(pout)) if NN45_CONV_RELU and not pool else 0
+    var relu_addr = 0
     var fused_relu = _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved, relu_addr)
     # the block's output: the pool's, or the ReLU's when there is no pool
     if pool:
@@ -2884,14 +2718,14 @@ def conv_block_forward_into[resident: Bool = False](
         launch[relu_maxpool_fwd_at](ctx, fp(yconv), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
         fetch[resident](ctx, pout, dst, no)
         fetch_i[resident](ctx, di, idx_out, no)
-        ctx.synchronize()
+        entry_end(ctx, resident, may_defer, prm_block_cached(cprm) and prm_block_cached(pprm))
         _ = dpp^
         _ = di^
     else:
         if not fused_relu:
             launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(pout), fp(pout), ip(dp), ip(dp), ny)
         fetch[resident](ctx, pout, dst, ny)
-        ctx.synchronize()
+        entry_end(ctx, resident, may_defer, prm_block_cached(cprm))
     _ = dx^
     _ = dw^
     _ = dbias^

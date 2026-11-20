@@ -2,7 +2,7 @@
 # Stateless whole training/evaluation owner extracted from its original binding.
 # GIL policy is provided by the shared admission layer. The optional locked
 # teardown remains a separate finalization phase before publication to users.
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from std.memory import bitcast
 from core.hostptr import list_i32
@@ -10,7 +10,7 @@ from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import BYTE_LM_FAST_APPLE
-from training.byte_lm_binding_impl import (ByteLMSession, BYTE_LM_CONTEXT_KEEPER,
+from training.byte_lm_binding_impl import (ByteLMSession,
     _validate_addresses, _read_f32, _require_inputs_unchanged, _write_f32,
     _btick, _bbytes, _require_same_bits, _write_flags_n, _write_loss)
 from training.byte_lm_session_ops import BYTE_LM_NEURAL_CTX
@@ -20,6 +20,13 @@ from training.checks.train_loop import download_f32
 from training.byte_lm import (ByteTrainer, byte_train_step, byte_eval_loss,
     byte_validate_state, byte_validate_device_state, byte_validate_optimizer, byte_validate_tokens)
 comptime _NEURAL_CTX = BYTE_LM_NEURAL_CTX
+# Lane envgate-neural-lm (2026-11-15): the switches below were a getenv
+# each per stateless call; they are build constants with today's defaults.
+comptime _TRANSFORMER_TIMING = is_defined["MOJOLEARN_TRANSFORMER_TIMING"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_KEEP_CONTEXT (opt-in arm, no A/B recorded in four weeks: the run-time switch since 2026-10-21, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_KEEP_CONTEXT.patch; record in docs/TOMBSTONES.md.
+# Diagnostic variant (DEVIATION 2518), default off.
+comptime BYTE_LM_SYNC_BEFORE_TEARDOWN = is_defined["MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN"]()
 
 
 def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: OptimizerConfig,
@@ -39,12 +46,9 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
         raise Error("byte LM: completed step outside admitted bound")
     byte_validate_optimizer(cfg)
     _validate_addresses(addr, action, shape)
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    # DEVIATION 2513: one getenv per call, same cost class as `ton`; the
-    # keeper itself is touched only on a call that creates a context.
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+    var ton = _TRANSFORMER_TIMING
     # DEVIATION 2518: two OPT-IN teardown variants for the stateless path
-    # (retain=False) only, one getenv each per call, OFF by default, no
+    # (retain=False) only, build defines, OFF by default, no
     # effect on the resident session or on any arithmetic. Each prints one
     # witness line when it is on, so a run can prove the branch was reached.
     #   sync_before_teardown: synchronize() immediately before the trainer
@@ -54,7 +58,7 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
     #   teardown_with_gil: release the trainer and the context AFTER the
     #     GILReleased block, i.e. with the GIL held, the way close() does,
     #     instead of inside it.
-    var sync_before_teardown = String(getenv("MOJOLEARN_BYTE_LM_SYNC_BEFORE_TEARDOWN")) == "1"
+    var sync_before_teardown = BYTE_LM_SYNC_BEFORE_TEARDOWN
     var tk = Int(perf_counter_ns())
     # No GPU work before all borrowed inputs become validated owned host lists.
     var initial_p = _read_f32(addr[0], n)
@@ -91,12 +95,6 @@ def byte_lm_run_native(addr: List[Int], action: Int, completed: Int, cfg: Optimi
     try:
         var reused = Bool(session.ctx)
         if not session.ctx:
-            if keep_context:
-                # DEVIATION 2513: a SEPARATE keeper context, created
-                # before the per-call one and never released. Idempotent
-                # after the first creating call. Off: this branch is
-                # not entered and nothing below changes.
-                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
             session.ctx = neural_ctx[_NEURAL_CTX]()
             session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
                 initial_v, flags, completed, cfg, shape)

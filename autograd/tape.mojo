@@ -22,15 +22,15 @@ from autograd.ops import (
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
-    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD, AUTOGRAD_PASS3_DB,
-    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
+    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
+    LOSS_REDUCED,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
     LS_BCE_LOGITS,
 )
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
-from std.memory import memcmp
+from std.memory import unsafe_memcmp
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.composed_ops import OP_AGC_LINEAR_PAIR
 from sequence.gemm_tiled import GR_TILE, seq_gemm_route
@@ -38,7 +38,6 @@ from autograd.embedding_ops import (
     EMBEDDING, AG_EMB_PLAN_AUTO, AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words,
     embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
 )
-from std.sys.compile import is_defined
 from std.memory import bitcast
 # lane ag-rankn-core: rank-N shapes and views (docs/plans/AUTOGRAD_RANKN.md)
 from autograd.rankn import (
@@ -71,8 +70,9 @@ comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it wa
 # a later backward never writes the caller's old seed. gradient() of a
 # borrowing node is the buffer it borrowed (for the root, the seed's
 # storage). Launches: the composed MLP's seed copy and one copy VJP a layer.
-# -D MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF keeps the copies (arm A).
-comptime AUTOGRAD_GRAD_ALIAS = not is_defined["MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF (the copies, arm A; old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_GRAD_ALIAS alias; code recoverable at 4b7b69e04f.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF.patch
 
 # Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 4), default on: ONE
 # LAUNCH FOR A LINEAR (OR MATMUL) NODE'S BACKWARD GEMMS. When both its
@@ -89,9 +89,10 @@ comptime AUTOGRAD_GRAD_ALIAS = not is_defined["MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF
 # (the same chain per word as the tiled, thin and cell routes, the same
 # epilogues; sequence/gemm_tiled.mojo states that contract). Launches: the
 # fused MLP's dH + dW2 (+ db2) 2 -> 1 a batch; the composed MLP's matmul
-# dX + dW 2 -> 1 a layer above the first. -D MOJOLEARN_AUTOGRAD_PAIR_OFF
-# keeps the separate launches (arm A).
-comptime AUTOGRAD_PAIR = not is_defined["MOJOLEARN_AUTOGRAD_PAIR_OFF"]()
+# dX + dW 2 -> 1 a layer above the first.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PAIR_OFF (separate launches, arm A; old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_PAIR alias; code recoverable at 24924c8fc2.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PAIR_OFF.patch
 
 
 def _ranges_overlap(a: Int, a_count: Int, b: Int, b_count: Int) -> Bool:
@@ -558,10 +559,7 @@ struct Tape(Movable):
             return True
         if op >= CUSTOM + RN_TAG_FIRST and op < CUSTOM + RN_TAG_END and self._nodes[i].saved.i10 == RN_VIEW_MARK:
             return True
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            return op == TRANSPOSE
-        else:
-            return False
+        return op == TRANSPOSE
 
     def _fill_view[E: Exec](self, mut ex: E, i: Int) raises:
         """Write pending view i's words into its value buffer (one copy
@@ -629,7 +627,7 @@ struct Tape(Movable):
             # AUTOGRAD_GRAD_ALIAS: a node's own buffer, the one its next
             # backward writes; a borrowed range is its owner's (checked as
             # that node) or the caller's old seed (written by no backward)
-            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+            var g = Int(node.own_grad)
             if node.requires_grad and _ranges_overlap(a, n, g, count):
                 if not (shared >= 0 and self._alias_root(i) == shared and g == a and count == n):
                     raise Error(what + " overlaps the gradient storage of a recorded tensor")
@@ -651,7 +649,7 @@ struct Tape(Movable):
             # the buffer this backward writes (AUTOGRAD_GRAD_ALIAS: the
             # node's own; a range borrowed by an earlier backward is
             # returned before anything is written)
-            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+            var g = Int(node.own_grad)
             if not _ranges_overlap(a, count, g, node.rows * node.cols):
                 continue
             if i == root and g == a:
@@ -731,7 +729,7 @@ struct Tape(Movable):
                 continue
             var before = self._snapshots[k].copy()
             var now = self.values(ex, x)
-            if len(now) != len(before) or memcmp(now.unsafe_ptr(), before.unsafe_ptr(), len(now)) != 0:
+            if len(now) != len(before) or unsafe_memcmp(now.unsafe_ptr(), before.unsafe_ptr(), len(now)) != 0:
                 self.mark_mutated(x)
                 raise Error("tensor storage changed between record and backward")
             return
@@ -1228,7 +1226,7 @@ struct Tape(Movable):
         return p
 
     def strided_view_args[E: Exec](
-        mut self, mut ex: E, source: FP, base: Int, shape: ShapeN, strides: InlineArray[Int, RN_MAX_RANK],
+        mut self, mut ex: E, source: FP, base: Int, shape: ShapeN, strides: Array[Int, RN_MAX_RANK],
     ) raises -> Args:
         """The saved Args of a pending strided view (autograd.rankn
         RN_VIEW_MARK): element c of the view is source[base + sum_k c_k *
@@ -1254,10 +1252,10 @@ struct Tape(Movable):
         a.i10 = RN_VIEW_MARK
         return a
 
-    def _view_strides(self, i: Int) -> InlineArray[Int, RN_MAX_RANK]:
+    def _view_strides(self, i: Int) -> Array[Int, RN_MAX_RANK]:
         """A pending strided view's strides (saved.i1 .. i8)."""
         var a = self._nodes[i].saved
-        var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var st = Array[Int, RN_MAX_RANK](fill=0)
         st[0] = a.i1
         st[1] = a.i2
         st[2] = a.i3
@@ -1270,7 +1268,7 @@ struct Tape(Movable):
 
     def operand_nd[E: Exec](
         self, mut ex: E, x: Tensor,
-    ) raises -> Tuple[FP, Int, ShapeN, InlineArray[Int, RN_MAX_RANK]]:
+    ) raises -> Tuple[FP, Int, ShapeN, Array[Int, RN_MAX_RANK]]:
         """x as a strided read, without a copy: (buffer, base offset, shape,
         element strides). Element c of x is buffer[base + sum_k c_k *
         strides[k]]. A dense tensor is (its values, 0, its shape, row-major
@@ -1282,7 +1280,7 @@ struct Tape(Movable):
         if self._pending(i):
             if self._nodes[i].op == TRANSPOSE:
                 # element (r, c) is the source's (c, r): strides (1, rows)
-                var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+                var st = Array[Int, RN_MAX_RANK](fill=0)
                 st[0] = 1
                 st[1] = self._nodes[i].rows
                 return (self._nodes[i].saved.p0, zero, s, st^)
@@ -1307,13 +1305,13 @@ struct Tape(Movable):
         var st = self._view_strides(i)
         if s.ndim < 1:
             return (True, zero, zero)
-        var lead_d = InlineArray[Int, RN_MAX_RANK](fill=1)
-        var lead_s = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var lead_d = Array[Int, RN_MAX_RANK](fill=1)
+        var lead_s = Array[Int, RN_MAX_RANK](fill=0)
         for k in range(s.ndim - 1):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             lead_d[k] = s.d[k]
             lead_s[k] = st[k]
         var lead = ShapeN(s.ndim - 1, lead_d^)
-        var ls = List[InlineArray[Int, RN_MAX_RANK]]()
+        var ls = List[Array[Int, RN_MAX_RANK]]()
         ls.append(lead_s^)
         rn_collapse(lead, ls)
         if lead.ndim != 1:
@@ -1350,8 +1348,8 @@ struct Tape(Movable):
         var s = self._shapes[xi]
         if len(axes) != s.ndim:
             raise Error("permute: axes must name every axis of the tensor once")
-        var perm = InlineArray[Int, RN_MAX_RANK](fill=0)
-        var seen = InlineArray[Bool, RN_MAX_RANK](fill=False)
+        var perm = Array[Int, RN_MAX_RANK](fill=0)
+        var seen = Array[Bool, RN_MAX_RANK](fill=False)
         var identity = True
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             var k = rn_normalize_axis(axes[j], s.ndim)
@@ -1366,8 +1364,8 @@ struct Tape(Movable):
         # the source as x is read (a view of a view composes its strides)
         var src = self.operand_nd(ex, x)
         var src_strides = src[3].copy()
-        var od = InlineArray[Int, RN_MAX_RANK](fill=1)
-        var fs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var od = Array[Int, RN_MAX_RANK](fill=1)
+        var fs = Array[Int, RN_MAX_RANK](fill=0)
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             od[j] = s.d[perm[j]]
             fs[j] = src_strides[perm[j]]
@@ -1377,7 +1375,7 @@ struct Tape(Movable):
         # reads the upstream (dense, o's shape) at sum_k c_k * so[inv[k]],
         # inv[perm[j]] = j
         var so = o.strides()
-        var vs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var vs = Array[Int, RN_MAX_RANK](fill=0)
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
             vs[perm[j]] = so[j]
         var vjp_words = List[Int]()
@@ -1582,13 +1580,9 @@ struct Tape(Movable):
         # more than two strides (or a base offset) is copied once here; a
         # dense operand or a pending transpose is untouched (no new launch on
         # any existing call)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            if not self._gemm_view(xi)[0]:
-                self._materialize_at(ex, xi)
-            if not self._gemm_view(yi)[0]:
-                self._materialize_at(ex, yi)
-        else:
+        if not self._gemm_view(xi)[0]:
             self._materialize_at(ex, xi)
+        if not self._gemm_view(yi)[0]:
             self._materialize_at(ex, yi)
         var shape = self._lead_shape(xi, self._nodes[yi].cols)  # rank-N metadata only
         var a = self._nodes[xi]
@@ -1597,29 +1591,24 @@ struct Tape(Movable):
             raise Error("matmul inner dimensions differ")
         self._shape(a.rows, b.cols)
         var output = self._alloc(ex, a.rows * b.cols)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            # each operand dense or a transpose view read through its strides
-            # (the GEMM folds the same words in the same k order either
-            # way); the backward reads the same buffers and strides (saved)
-            var l = self._operand(xi)
-            var r = self._operand(yi)
-            _gemm(ex, output, l[0], r[0], a.rows, b.cols, a.cols, l[1], l[2], r[1], r[2])
-            var saved = Args()
-            saved.p0 = l[0]
-            saved.p1 = r[0]
-            saved.i0 = l[3]
-            saved.i1 = r[3]
-            saved.i2 = l[1]
-            saved.i3 = l[2]
-            saved.i4 = r[1]
-            saved.i5 = r[2]
-            saved.i6 = 1
-            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
-            return self._with_shape(t, shape)
-        else:
-            _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
-            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
-            return self._with_shape(t, shape)
+        # each operand dense or a transpose view read through its strides
+        # (the GEMM folds the same words in the same k order either
+        # way); the backward reads the same buffers and strides (saved)
+        var l = self._operand(xi)
+        var r = self._operand(yi)
+        _gemm(ex, output, l[0], r[0], a.rows, b.cols, a.cols, l[1], l[2], r[1], r[2])
+        var saved = Args()
+        saved.p0 = l[0]
+        saved.p1 = r[0]
+        saved.i0 = l[3]
+        saved.i1 = r[3]
+        saved.i2 = l[1]
+        saved.i3 = l[2]
+        saved.i4 = r[1]
+        saved.i5 = r[2]
+        saved.i6 = 1
+        var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
+        return self._with_shape(t, shape)
 
     def linear[E: Exec](
         mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
@@ -1757,18 +1746,14 @@ struct Tape(Movable):
         var n_at = self._use(ex, x)
         var n = self._nodes[n_at]
         var output = self._alloc(ex, n.rows * n.cols)
-        comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            # a view: the copy waits for its first dense reader (_use);
-            # matmul reads n's buffer through strides and never copies
-            var saved = Args()
-            saved.p0 = n.value
-            saved.i0 = n.rows
-            saved.i1 = n.cols
-            saved.i9 = 1
-            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
-        else:
-            _transpose(ex, output, n.value, n.rows, n.cols, True)
-            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
+        # a view: the copy waits for its first dense reader (_use);
+        # matmul reads n's buffer through strides and never copies
+        var saved = Args()
+        saved.p0 = n.value
+        saved.i0 = n.rows
+        saved.i1 = n.cols
+        saved.i9 = 1
+        return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
 
     def _operand(self, i: Int) -> Tuple[FP, Int, Int, Int]:
         """matmul's view of node i: (buffer, row stride, column stride,
@@ -1814,10 +1799,8 @@ struct Tape(Movable):
         var count = n.rows * n.cols if axis == -1 else (n.rows if axis == 0 else n.cols)
         var output = self._alloc(ex, rows * cols)
         var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
-        var word = False
-        comptime if AUTOGRAD_CURVE_WORD:
-            # arm_fold_word: this fold's launch also stores the curve word
-            word = self._word_armed and axis == AXIS_ALL
+        # arm_fold_word: this fold's launch also stores the curve word
+        var word = self._word_armed and axis == AXIS_ALL
         if word:
             var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
             blocked_fold(ex, output, n.value, n.rows, n.cols, axis, factor, partials,
@@ -1935,9 +1918,7 @@ struct Tape(Movable):
         var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
         var output = self._alloc(ex, 1)
         var partials = self._alloc(ex, fold_partials(a.rows, a.cols, AXIS_ALL))
-        var word = False
-        comptime if AUTOGRAD_CURVE_WORD:
-            word = self._word_armed
+        var word = self._word_armed
         if word:
             loss_fold(ex, output, a.value, b.value, a.rows, a.cols, kind, delta, factor, partials,
                       self._word_dst, self._word_factor, True)
@@ -2234,7 +2215,7 @@ struct Tape(Movable):
         else:
             # AUTOGRAD_GRAD_ALIAS: the root's own buffer, never one it
             # borrowed in an earlier backward (a caller's seed)
-            seed = n.own_grad if AUTOGRAD_GRAD_ALIAS else n.grad
+            seed = n.own_grad
         _fill(ex, seed, 1, 1)
         try:
             self._backward(ex, output, seed, rules, accumulate)
@@ -2348,13 +2329,11 @@ struct Tape(Movable):
             if fuse_db:
                 return  # written by edge 1's launch
             # db = column sum of dz over the rows (/ divisor)
-            var blocked = False
-            comptime if AUTOGRAD_PASS2_FOLD:
-                # More rows than one fold block: the blocked fold (chains of
-                # ag_fold_block(rows), parallel over blocks x columns), not
-                # one serial chain over every row a column. One block is the
-                # column sum's chain, so the one-launch column sum stays.
-                blocked = rows > ag_fold_block(rows)
+            # More rows than one fold block: the blocked fold (chains of
+            # ag_fold_block(rows), parallel over blocks x columns), not
+            # one serial chain over every row a column. One block is the
+            # column sum's chain, so the one-launch column sum stays.
+            var blocked = rows > ag_fold_block(rows)
             if blocked:
                 var partials = self._alloc(ex, fold_partials(rows, fo, AXIS_ROWS))
                 blocked_fold(ex, dst, dz, rows, fo, AXIS_ROWS, divisor if divisor > 0 else Float32(1),
@@ -2433,9 +2412,8 @@ struct Tape(Movable):
                 alpha = n.saved.f0
                 dw_epi = EPI_L2GRAD
             # _backward's fuse_db rule (W's gradient is wanted, checked above)
-            comptime if AUTOGRAD_PASS3_DB:
-                db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
-                      and self._nodes[self._parents[n.start + 2]].requires_grad)
+            db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                  and self._nodes[self._parents[n.start + 2]].requires_grad)
         # The route rule (AUTOGRAD_PAIR comment): neither product on the tile,
         # and no few-cell long-K weight product.
         if seq_gemm_route(rows, fi, fo, dx_epi != 0) == GR_TILE:
@@ -2565,11 +2543,10 @@ struct Tape(Movable):
         self._recorded_live = False
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             self._nodes[i].grad_preact = False
-            comptime if AUTOGRAD_GRAD_ALIAS:
-                # every node back on its own buffer: a buffer borrowed by an
-                # earlier backward (a reshape's, an add's, a caller's seed)
-                # is never written by this one
-                self._nodes[i].grad = self._nodes[i].own_grad
+            # every node back on its own buffer: a buffer borrowed by an
+            # earlier backward (a reshape's, an add's, a caller's seed)
+            # is never written by this one
+            self._nodes[i].grad = self._nodes[i].own_grad
             var n = self._nodes[i]
             if not n.requires_grad:
                 continue
@@ -2590,7 +2567,7 @@ struct Tape(Movable):
         elif touched[root]:
             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         elif Int(self._nodes[root].grad) != Int(seed):
-            if AUTOGRAD_GRAD_ALIAS and self._borrows(self._nodes[root]):
+            if self._borrows(self._nodes[root]):
                 # the root borrows the seed: no copy (the seed is read in
                 # place; nothing in this backward writes the root's gradient)
                 self._nodes[root].grad = seed
@@ -2653,7 +2630,7 @@ struct Tape(Movable):
                         # writes its own gradient, unlike LINEAR's act' in
                         # place). No launch.
                         self._nodes[parent].grad = n.grad
-                    elif (AUTOGRAD_GRAD_ALIAS and _passes_upstream(n, edge, p) and consumers[parent] == 1
+                    elif (_passes_upstream(n, edge, p) and consumers[parent] == 1
                             and not n.caller_grad and self._borrows(p)):
                         # a same-shape add's operand (or a subtraction's
                         # left one) consumed only here takes the add's
@@ -2698,11 +2675,10 @@ struct Tape(Movable):
                 rules.apply(ex, n.op - CUSTOM, n.saved, n.value, n.grad, inputs, contributions, rows, cols)
             # AUTOGRAD_PAIR: the edges a paired launch already wrote
             var paired = List[Bool](length=n.count, fill=False)
-            comptime if AUTOGRAD_PAIR:
-                # a matmul that read a transpose view through strides keeps
-                # its two GEMMs (the paired launch reads dense operands)
-                if n.op == LINEAR or (n.op == MATMUL and n.saved.i0 == 0 and n.saved.i1 == 0):
-                    self._pair_backward(ex, n, dz, contributions, first, consumers, paired)
+            # a matmul that read a transpose view through strides keeps
+            # its two GEMMs (the paired launch reads dense operands)
+            if n.op == LINEAR or (n.op == MATMUL and n.saved.i0 == 0 and n.saved.i1 == 0):
+                self._pair_backward(ex, n, dz, contributions, first, consumers, paired)
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
                 var p = self._nodes[parent]
@@ -2724,11 +2700,9 @@ struct Tape(Movable):
                     if n.op == LINEAR:
                         # AUTOGRAD_PASS3_DB: with a bias, a divisor and both
                         # parameter gradients wanted, db rides in dW's launch
-                        var fuse_db = False
-                        comptime if AUTOGRAD_PASS3_DB:
-                            fuse_db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
-                                       and self._nodes[self._parents[n.start + 1]].requires_grad
-                                       and self._nodes[self._parents[n.start + 2]].requires_grad)
+                        var fuse_db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                                   and self._nodes[self._parents[n.start + 1]].requires_grad
+                                   and self._nodes[self._parents[n.start + 2]].requires_grad)
                         var db_dst = contributions[2] if fuse_db else dummy_ptr()
                         self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers, db_dst, fuse_db)
                     elif n.op == MATMUL:

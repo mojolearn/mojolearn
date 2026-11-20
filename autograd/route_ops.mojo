@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # MoE block backward on the tape (lane ag-moe-backward, 2026-10-19;
-# TAPE_EVERYWHERE_PLAN.md path 5). The kernels are autograd/kernels/moe.mojo.
+# the tape plan's path 5, now docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md).
+# The kernels are autograd/kernels/moe.mojo.
 #
 # NEW CAPABILITY, NEW BITS: there is no hand MoE backward, so the tape owns
 # the structure and every VJP is a new kernel; the words are defined by the
 # fold orders below, the same on the host column and every GPU column (the
 # bodies are Exec element functions), one bit version with all columns.
-# -D MOJOLEARN_AUTOGRAD_MOE_OFF restores the old refusal of the backward.
+# The tape is the only MoE backward (lane x9-moe-gcn-rules, 2026-11-09): the
+# MOJOLEARN_AUTOGRAD_MOE_OFF refusal arm is deleted (tombstone below).
 #
 # ---------------------------------------------------------------- the tape graph
 #   x      (variable_into dx)        [T, D]
@@ -19,9 +21,10 @@
 #                                              saved (non-differentiable, outside the
 #                                              tape: the picks are piecewise constant)
 #   h = MOE_HIDDEN(x, gate_up)        [P, F]   silu(gate) * up per pair (the gather
-#                                              of x by the routing order inside)
+#                                              of x by the routing order inside;
+#                                              OP_MOE_HIDDEN, the forward's op, item form)
 #   y = MOE_OUT(h, down, w)           [T, D]   grad storage = the caller's dy (the seed,
-#                                              read in place, no copy)
+#                                              read in place, no copy; OP_MOE_OUT, item form)
 # Between the route and the hidden product the driver groups the pairs by
 # expert (stable: each expert's pairs in ascending pair index), once; the
 # hidden and out VJPs fold each expert's weight gradient over that order.
@@ -38,7 +41,10 @@
 #
 # ---------------------------------------------------------------- launch inventory
 # forward: OP_MOE_ROUTE (T), grouping COUNT (E nb) + TOTAL (E) + BASE
-# (E nb + 1) + SCATTER (P), HIDDEN_FWD (P F), OUT_FWD (T D)        = 7
+# (E nb + 1) + SCATTER (P), OP_MOE_HIDDEN (P F), OP_MOE_OUT (T D)  = 7
+# (the hidden and out ops with a.i4 = a.i6 = 0: their item bodies on every
+# executor, h in pair order, which the VJPs below index; the grouped and
+# register-tiled device forms store h in slot order and stay forward-only)
 # backward: OUT: Q+dh (P F), DW (P), DDOWN (E D F); HIDDEN: DGU (P F), DX
 # (T D), DGATEUP (E 2F D); ROUTE: ROUTE_VJP (T E), ROUTER_DX (T D),
 # ROUTER_DW (E D); the tape's ACCUMULATE of dx (T D)                  = 10
@@ -48,7 +54,8 @@ from std.sys.compile import is_defined
 
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_MOE_ROUTE
+from sequence.ops import FP, Args, OP_MOE_HIDDEN, OP_MOE_OUT, OP_MOE_ROUTE
+from autograd.arg_words import fptr_word
 from autograd.kernels.moe import (
     MOEB_GROUP_BLOCK,
     OP_MOEB_DDOWN,
@@ -60,8 +67,6 @@ from autograd.kernels.moe import (
     OP_MOEB_GROUP_COUNT,
     OP_MOEB_GROUP_SCATTER,
     OP_MOEB_GROUP_TOTAL,
-    OP_MOEB_HIDDEN_FWD,
-    OP_MOEB_OUT_FWD,
     OP_MOEB_Q,
     OP_MOEB_ROUTE_VJP,
     OP_MOEB_ROUTER_DW,
@@ -69,8 +74,8 @@ from autograd.kernels.moe import (
     moeb_group_blocks,
 )
 
-# The MoE backward exists by default; MOJOLEARN_AUTOGRAD_MOE_OFF refuses it as before.
-comptime AUTOGRAD_MOE = not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed: the tape is the only MoE backward) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
 
 # Tags 112-114 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63, LM 64-71).
 comptime MOE_ROUTE = 112
@@ -249,6 +254,15 @@ def moe_group_pairs[E: Exec](mut ex: E, sel: FP, order: FP, poff: FP, n_pairs: I
     ex.free(cnt)
 
 
+def moe_backward_shape_check(T: Int, D: Int, F: Int, En: Int, k: Int) raises:
+    """The MoE backward's one shape check (the address entry below and the
+    tape step both call it; the bindings no longer repeat it)."""
+    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
+        raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
+    if T * k >= MOE_MAX_PAIRS:
+        raise Error("moe_backward: T * k must be below 2^24")
+
+
 def moe_tape_train_step[E: Exec](
     mut ex: E, X: FP, Wg: FP, Gu: FP, Dn: FP, DY: FP,
     DX: FP, DWg: FP, DGu: FP, DDn: FP, Y: FP, L: FP, Sel: FP, W: FP,
@@ -259,13 +273,12 @@ def moe_tape_train_step[E: Exec](
     down [E, D, F] and the output cotangent dy [T, D], the forward's y,
     logits, picks and weights into Y, L, Sel, W and the gradients of x and
     the three weights into DX, DWg, DGu, DDn. Ends on a sync."""
-    comptime if not AUTOGRAD_MOE:
-        raise Error("moe_backward: the backward pass is not available in this build")
-    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-        raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
+    # removed-define refusal, here (every MoE backward reaches this function) and in core/experiment_guards_neural.mojo
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"](), "removed 2026-11-09 (lane/x9-moe-gcn-rules): MOJOLEARN_AUTOGRAD_MOE_OFF (the refusal of the MoE backward) is deleted; the tape is the only MoE backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch"
+    moe_backward_shape_check(T, D, F, En, k)
     var P = T * k
-    if P >= MOE_MAX_PAIRS:
-        raise Error("moe_backward: T * k must be below 2^24")
     # ---- forward: the route (the forward's own launch), the grouping, the products
     var Pr = ex.alloc(T * En)
     var a = Args()
@@ -292,7 +305,8 @@ def moe_tape_train_step[E: Exec](
     b.i0 = D
     b.i1 = F
     b.i2 = k
-    ex.launch[OP_MOEB_HIDDEN_FWD](b, P * F)
+    # a.i4 = a.i6 = 0 (Args' zeros): the item body, h in pair order
+    ex.launch[OP_MOE_HIDDEN](b, P * F)
     var c = Args()
     c.p0 = H
     c.p1 = Dn
@@ -302,7 +316,7 @@ def moe_tape_train_step[E: Exec](
     c.i0 = D
     c.i1 = F
     c.i2 = k
-    ex.launch[OP_MOEB_OUT_FWD](c, T * D)
+    ex.launch[OP_MOE_OUT](c, T * D)
     # ---- record (no launches) and differentiate
     var tape = Tape()
     var x = tape.variable_into(ex, X, DX, T, D)
@@ -321,3 +335,68 @@ def moe_tape_train_step[E: Exec](
     ex.free(poff)
     ex.free(order)
     ex.free(Pr)
+
+
+def moe_backward_addrs[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], resident: List[Int]) raises -> Int:
+    """The public `moe_backward` (every binding: CPU and GPU) straight onto
+    the tape step `moe_tape_train_step`: upload x, dy and (unless resident)
+    the three weights, run the tape, download the eight outputs.
+    addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
+    dy (T, D), dx (T, D) out, drouter (E, D) out, dgate_up (E, 2F, D) out,
+    ddown (E, D, F) out, y (T, D) out, logits (T, E) out, selected (T, k)
+    out as floats, weights (T, k) out]; ip = [T, D, F, E, k, renormalise]
+    plus an optional seventh word (a `moe_weights_put` handle the GPU
+    binding resolved into `resident`). `resident` is empty (upload the
+    weights at addrs[1..3]) or the three device addresses of the router,
+    gate_up and down copies, which are then read in place (addrs[1..3]
+    unread). Lane m1-followups-misc replaced the hand chain
+    `moe_backward_impl` / `moe_backward_run_impl` (sequence/ops_impl.mojo)
+    and the Python doors `moe_backward_py` / `moe_backward_run` with this
+    one entry: the same uploads, launches and downloads, no bit moves."""
+    if len(addrs) != 13 or (len(ip) != 6 and len(ip) != 7):
+        raise Error("moe_backward: requires 13 addresses and 6 or 7 integer parameters")
+    if len(resident) != 0 and len(resident) != 3:
+        raise Error("moe_backward: the resident weights are three device addresses")
+    var T = ip[0]
+    var D = ip[1]
+    var F = ip[2]
+    var En = ip[3]
+    var k = ip[4]
+    var renorm = ip[5]
+    moe_backward_shape_check(T, D, F, En, k)
+    var Wg: FP
+    var Gu: FP
+    var Dn: FP
+    if len(resident) == 3:
+        Wg = fptr_word(resident[0], "router")
+        Gu = fptr_word(resident[1], "gate_up_proj")
+        Dn = fptr_word(resident[2], "down_proj")
+    else:
+        Wg = ex.alloc(En * D)
+        ex.upload(Wg, fptr_word(addrs[1], "router"), En * D)
+        Gu = ex.alloc(En * 2 * F * D)
+        ex.upload(Gu, fptr_word(addrs[2], "gate_up_proj"), En * 2 * F * D)
+        Dn = ex.alloc(En * D * F)
+        ex.upload(Dn, fptr_word(addrs[3], "down_proj"), En * D * F)
+    var X = ex.alloc(T * D)
+    ex.upload(X, fptr_word(addrs[0], "x"), T * D)
+    var DY = ex.alloc(T * D)
+    ex.upload(DY, fptr_word(addrs[4], "dy"), T * D)
+    var DX = ex.alloc(T * D)
+    var DWg = ex.alloc(En * D)
+    var DGu = ex.alloc(En * 2 * F * D)
+    var DDn = ex.alloc(En * D * F)
+    var Y = ex.alloc(T * D)
+    var L = ex.alloc(T * En)
+    var Sel = ex.alloc(T * k)
+    var W = ex.alloc(T * k)
+    moe_tape_train_step(ex, X, Wg, Gu, Dn, DY, DX, DWg, DGu, DDn, Y, L, Sel, W, T, D, F, En, k, renorm)
+    ex.download(fptr_word(addrs[5], "dx"), DX, T * D)
+    ex.download(fptr_word(addrs[6], "drouter"), DWg, En * D)
+    ex.download(fptr_word(addrs[7], "dgate_up"), DGu, En * 2 * F * D)
+    ex.download(fptr_word(addrs[8], "ddown"), DDn, En * D * F)
+    ex.download(fptr_word(addrs[9], "y"), Y, T * D)
+    ex.download(fptr_word(addrs[10], "logits"), L, T * En)
+    ex.download(fptr_word(addrs[11], "selected"), Sel, T * k)
+    ex.download(fptr_word(addrs[12], "weights"), W, T * k)
+    return T * D

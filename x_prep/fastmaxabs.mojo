@@ -19,7 +19,10 @@ in any order), `maxabs_fold_kernel` the largest partial and sklearn's
 `_handle_zeros_in_scale` of it (`zero_to_one`): the program route's
 max_abs_ and scale_ word for word.
 """
-from std.gpu import block_idx, thread_idx
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from x_prep.common import FP, is_nan
@@ -27,20 +30,23 @@ from x_prep.prims import zero_to_one
 from x_prep.device import x_prep_ctx
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from core.device_pool import pool_give, pool_take
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P02: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Halve work per column lane to expose more independent blocks for every
 # width. This doubles partial storage; the existing width policy is unchanged.
-comptime AFCL_P02 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P02"]()
+comptime AFCL_P02 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P02"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d837f02ccf.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: threads per block: one column each, consecutive columns of one row
 comptime MA_TPB = 256
 #: rows per chunk (wide X) and for a narrow X (more chunks, more threads)
 comptime MA_ROWS = 512 if AFCL_P02 else 1024
 comptime MA_ROWS_NARROW = 64 if AFCL_P02 else 128
+# TOMBSTONE: MOJOLEARN_AFCL_P02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at d837f02ccf.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P02.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MA_NARROW = 64
 
 
@@ -96,9 +102,9 @@ def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:
     var ctx = x_prep_ctx()
     comptime if PREP3_MAXABS_POOL:
         # lane/apple-fast-w4-small: pooled buffers, the same launches
-        var px = pool_take["MojoXPrepMaxAbsX"](ctx, n * d)
-        var pp = pool_take["MojoXPrepMaxAbsPart"](ctx, nch * d)
-        var po = pool_take["MojoXPrepMaxAbsOut"](ctx, 2 * d)
+        var px = pool_take["MojolearnXPrepMaxAbsXV2"](ctx, n * d)
+        var pp = pool_take["MojolearnXPrepMaxAbsPartV2"](ctx, nch * d)
+        var po = pool_take["MojolearnXPrepMaxAbsOutV2"](ctx, 2 * d)
         ctx.enqueue_copy(dst_buf=px, src_ptr=FP(unsafe_from_address=x_addr))
         ctx.enqueue_function[maxabs_part_kernel](
             FP(unsafe_from_address=Int(px.unsafe_ptr())), FP(unsafe_from_address=Int(pp.unsafe_ptr())),
@@ -111,9 +117,9 @@ def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:
         )
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=po)
         ctx.synchronize()
-        pool_give["MojoXPrepMaxAbsX"](px^)
-        pool_give["MojoXPrepMaxAbsPart"](pp^)
-        pool_give["MojoXPrepMaxAbsOut"](po^)
+        pool_give["MojolearnXPrepMaxAbsXV2"](px^)
+        pool_give["MojolearnXPrepMaxAbsPartV2"](pp^)
+        pool_give["MojolearnXPrepMaxAbsOutV2"](po^)
         _ = ctx^
         return
     var dx = ctx.enqueue_create_buffer[DType.float32](n * d)

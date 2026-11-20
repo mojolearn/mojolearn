@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): the chi2 samplers' fit entries on
 the GPU binding, FAST + Apple. SCHI2_MOJO_MT, ACHI2_DEVSCAN (with its size
-gate) and SCHI2_LAZYW are DEFAULT, each with an `_OFF` rollback.
+gate) and SCHI2_LAZYW are the FAST + Apple path (their `_OFF` rollbacks are
+deleted, docs/TOMBSTONES.md).
 
-ACHI2_DEVSCAN, DEFAULT in FAST + Apple (bit 1 of `x_neighbors_kfeat_flags`;
-rollback `-D MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF`):
+ACHI2_DEVSCAN, DEFAULT in FAST + Apple (bit 1 of `x_neighbors_kfeat_flags`):
 AdditiveChi2Sampler.fit's negative check (main: `X.min() < 0`, one
 sequential host pass over the 22M floats of the board's istella X, about
 9 of its 12.3 ms) as ONE binding call: X copied from the caller's buffer
@@ -28,8 +28,7 @@ with its sign bit set), wherever it sits; main's sequential minimum can
 hide a negative behind an earlier NaN (min(list) keeps the NaN). Every
 NaN-free input answers as main.
 
-SCHI2_MOJO_MT, DEFAULT in FAST + Apple (bit 2; rollback
-`-D MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`). M3, one run per arm: skewed-chi2
+SCHI2_MOJO_MT, DEFAULT in FAST + Apple (bit 2). M3, one run per arm: skewed-chi2
 istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS
 (byte-identical outputs and refusals). SkewedChi2Sampler.fit's draws
 (main: `_LegacyRandomState`, numpy's legacy MT19937 stream, drawn by a
@@ -44,14 +43,12 @@ directly, ONE synchronize. Bit-identical to main by construction. The
 stream itself is sequential by its definition (sklearn's numbers); it is
 the parameter draw, not a pass over X, and main draws it on the host too.
 
-SCHI2_LAZYW, DEFAULT in FAST + Apple (bit 4; rollback
-`-D MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`; needs SCHI2_MOJO_MT): fit without device work, the weights made inside
+SCHI2_LAZYW, DEFAULT in FAST + Apple (bit 4; with SCHI2_MOJO_MT): fit without device work, the weights made inside
 the first transform's single call (section at the end of this file).
 """
-from std.ffi import _Global
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
@@ -60,18 +57,25 @@ from x_neighbors.device_ops import BLOCK, _grid, skew_transform_kernel, skew_wei
 from x_neighbors.items import FP, U_LOG
 from x_neighbors.items import IP
 from x_neighbors.kfeat_rng import kfeat_pcs_draw_item, kfeat_schi2_draw_item
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
+from core.shared_slot import SharedSlot
 
 
-comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# ACHI2_DEVSCAN: DEFAULT (rollback _OFF), size-gated at XN_ACHI2_DEVSCAN_MIN;
+comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# ACHI2_DEVSCAN: DEFAULT, size-gated at XN_ACHI2_DEVSCAN_MIN;
 # istella 11.2 -> 4.4 ms, w2-w3kf-xn-q PASS (M3, ea6b2035e).
-comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF"]()
-comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"]()
-# SCHI2_LAZYW: DEFAULT (rollback _OFF; needs SCHI2_MOJO_MT, i.e. not its _OFF):
+# TOMBSTONE: MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 327ba1435e.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 0d5b3201e0.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE
+# SCHI2_LAZYW: DEFAULT (with SCHI2_MOJO_MT):
 # skewed-chi2 taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, w2-w3kf-xn-q PASS
 # (M3, ea6b2035e). See `kfeat_schi2_draw`.
-comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT and not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 4cb9cbfa18.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT
 comptime XN_KFEAT_ANY = XN_FAST_ACHI2_DEVSCAN or XN_FAST_SCHI2_MOJO_MT
 
 
@@ -90,7 +94,7 @@ struct _KfeatStage(Defaultable, Movable):
         self.z_cap = 0
 
 
-comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfeatStageFast", init_fn=_KfeatStage.__init__]
+comptime KFEAT_STAGE = SharedSlot[_KfeatStage, "MojolearnXNeighborsKfeatStageFastV1"]
 
 
 def kfeat_flags() -> Int:
@@ -153,7 +157,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
     var blocks = _scan_blocks(cnt)
-    var buf = pool_take["MojoXNeighborsKfeatScan"](ctx, cnt)
+    var buf = pool_take["MojolearnXNeighborsKfeatScanV2"](ctx, cnt)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
     ctx.enqueue_function[negative_partial_kernel](
         st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
@@ -168,7 +172,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         var v = hp[i]
         if v < best:
             best = v
-    pool_give["MojoXNeighborsKfeatScan"](buf^)
+    pool_give["MojolearnXNeighborsKfeatScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 
@@ -251,8 +255,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
         st[].z_cap = count
     var hz = st[].z.value().unsafe_ptr()
     _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
-    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -260,13 +264,13 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
 
 
 # ---------------------------------------------------------------- SCHI2_LAZYW
-# lane apple-fast-w3-kfeat (2026-10-04), DEFAULT, rollback `-D MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`
-# (bit 4; needs SCHI2_MOJO_MT). After SCHI2_MOJO_MT the board's skewed-chi2
+# lane apple-fast-w3-kfeat (2026-10-04), DEFAULT
+# (bit 4; with SCHI2_MOJO_MT). After SCHI2_MOJO_MT the board's skewed-chi2
 # taxi fit (d = 11, 256 components: 2,816 weights) is 1.5 ms against
 # sklearn's 0.6; what is left is not the draw (microseconds) but the one
 # GPU round trip that turns 11 KB of uniforms into the weights (upload,
@@ -307,8 +311,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     var zp = FP(unsafe_from_address=z_addr)
     var wp = FP(unsafe_from_address=w_addr)
     var ctx = xn_ctx()
-    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -316,8 +320,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
 
 
 def kfeat_schi2_transform(
@@ -344,11 +348,11 @@ def kfeat_schi2_transform(
     var outp = FP(unsafe_from_address=out_addr)
     var skew = Float32(skewedness)
     var ctx = xn_ctx()
-    var dx = pool_take["MojoXNeighborsKfeatSkewTX"](ctx, nx)
-    var dl = pool_take["MojoXNeighborsKfeatSkewTL"](ctx, nx)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, nw)
-    var doff = pool_take["MojoXNeighborsKfeatSkewTO"](ctx, nc)
-    var dres = pool_take["MojoXNeighborsKfeatSkewTR"](ctx, nz)
+    var dx = pool_take["MojolearnXNeighborsKfeatSkewTXV2"](ctx, nx)
+    var dl = pool_take["MojolearnXNeighborsKfeatSkewTLV2"](ctx, nx)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV2"](ctx, nw)
+    var doff = pool_take["MojolearnXNeighborsKfeatSkewTOV2"](ctx, nc)
+    var dres = pool_take["MojolearnXNeighborsKfeatSkewTRV2"](ctx, nz)
     ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
     # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
     ctx.enqueue_function[unary_kernel](
@@ -356,7 +360,7 @@ def kfeat_schi2_transform(
         grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
     )
     if pending:
-        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, nw)
+        var dz = pool_take["MojolearnXNeighborsKfeatSkewZV2"](ctx, nw)
         ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
         ctx.enqueue_function[skew_weights_kernel](
             dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
@@ -370,7 +374,7 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+        pool_give["MojolearnXNeighborsKfeatSkewZV2"](dz^)
     else:
         ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
         ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
@@ -380,11 +384,11 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewTX"](dx^)
-    pool_give["MojoXNeighborsKfeatSkewTL"](dl^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
-    pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
-    pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
+    pool_give["MojolearnXNeighborsKfeatSkewTXV2"](dx^)
+    pool_give["MojolearnXNeighborsKfeatSkewTLV2"](dl^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV2"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewTOV2"](doff^)
+    pool_give["MojolearnXNeighborsKfeatSkewTRV2"](dres^)
 
 
 # ------------------------------------------------------- IDENTICAL sketch draws

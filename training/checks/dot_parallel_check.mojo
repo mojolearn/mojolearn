@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only comparison of distributed dot leaves with FP32-v1 oracle/plans."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_SOLVER
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from solver.checks.profile_dot import profile_dot_into, profile_dot_workspace_floats
 from solver.host.profile_dot_host import profile_dot_host
-from gemm.neural_dispatch import GEMM_PLAN_COUNT
+from gemm.checks.gemm_identical import GEMM_PLAN_COUNT
 from metrics.checks.device_io import upload_f32, download_f32
 
 
@@ -30,8 +31,7 @@ def main() raises:
         var c = ctx.enqueue_create_buffer[DType.float32](1)
         var ws = ctx.enqueue_create_buffer[DType.float32](profile_dot_workspace_floats(k))
         for count in range(1, 3):
-            if not setenv("MOJOLEARN_SOLVER_DEVICE_COUNT", String(count), True):
-                raise Error("cannot set device count")
+            device_plan_check_count(count, DEVICE_PLAN_SOLVER)
             # Automatic selects distributed leaves; explicit plans remain probes
             # of their original launches, even inside the cooperative worker.
             for plan in range(-1, GEMM_PLAN_COUNT):

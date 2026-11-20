@@ -25,8 +25,7 @@ def connect(context, selection):
     for mode in ('identical', 'fast'):  # glue: retain existing compiled metric bindings by mode once
         try:
             module = _metrics_impl._get_binding(mode)
-            if type(module) is _backend._HostBinding:
-                module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time connection to the actual CPU metric extension
+            module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
             if type(module) is not ModuleType:
                 raise TypeError('scorer metrics require a compiled extension module')
             bindings[mode] = module

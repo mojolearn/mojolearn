@@ -1,0 +1,103 @@
+{
+  "created_at_utc": "2026-11-11T19:47:20.933272+00:00",
+  "reviewer": "/root/boundary_pilot_resume",
+  "reviewed_producers": [
+    "f4e90945ee1ee63cf6a932ffe65d8bf5ca27216f",
+    "6a96587b8ebb33dd243ce5b543d85a8d80c4025e"
+  ],
+  "focused_repair_reviewed": "25fd92712b6abc8931ca6fde9e53b49b939677ab",
+  "status": "bounded_source_review_complete; all_reported_findings_addressed_in_named_producers; runtime_pending",
+  "execution": {
+    "builds": 0,
+    "tests": 0,
+    "timings": 0,
+    "peer_worktree_edits": 0,
+    "runtime": "unrun",
+    "performance": "not assessed"
+  },
+  "resolved_findings": [
+    {
+      "id": "OC-001",
+      "issue": "Mutable context ndarray identity could admit a custom dtype property.",
+      "before": "bindings/ocsvm_scalar_boundary.mojo:63/74 at6a965",
+      "repair": "_oc_ndarray admits context/modules keys and validates native_numpy_type before dtype/ndim/item access.",
+      "status": "source_rechecked_in25fd"
+    },
+    {
+      "id": "OC-002",
+      "issue": "Rich equality changed the old precomputed route distinction for a one-element rank-one string ndarray.",
+      "before": "bindings/svc_ocsvm_native.mojo:97/268 at6a965",
+      "repair": "oc_precomputed retains exact text and zero-dimensional unwrapping while rank-one arrays continue to later unhashable-key refusal, without NumPy formatting.",
+      "status": "source_rechecked_in25fd"
+    },
+    {
+      "id": "OC-003",
+      "issue": "Inherited unadmitted numeric field conversions could invoke rebound Python conversion hooks.",
+      "before": "nu/degree/coef0/max_iter/tol/_gamma/offset_ svc_float/svc_int calls",
+      "repair": "Same-site _oc_float/_oc_int admission precedes the retained native conversion.",
+      "status": "source_rechecked_in25fd; invalid multi-element object-array refusal distinction remains OC-005"
+    },
+    {
+      "id": "OC-004",
+      "issue": "New private-copy sites used removed Mojo memcpy spelling.",
+      "repair": "unsafe_memcpy replaces only the identifier; core plan otherwise unchanged.",
+      "status": "source_rechecked_in25fd"
+    },
+    {
+      "id": "OC-005",
+      "kind": "invalid-input refusal compatibility",
+      "status": "source_rechecked_in1291580daa5e41276cdf6ed05cab6be9fb03bd85",
+      "path": "bindings/ocsvm_scalar_boundary.mojo",
+      "detail": "oc_scalar_admit raises ValueError with ambiguous-truth wording for a multi-element object ndarray. Reusing that comparison admission in _oc_float/_oc_int changes the old builtin numeric conversion TypeError for such non-scalar arrays (nu/degree/tol etc.).",
+      "limits": "Source finding only; no execution. Supported scalar numeric results and kernels are not implicated. A focused old/new refusal control remains owed.",
+      "repair": "Numeric-only admission returns before object-element access for exact nonscalar ndarrays, allowing existing native int/float conversion to raise its original TypeError. Comparison admission retains ambiguous-truth ValueError."
+    }
+  ],
+  "remaining_findings": [],
+  "audited_invariants": [
+    {
+      "name": "kernel_conservation",
+      "detail": "Independently hashed all11 numerical/shared files listed by producer againsted7d3711a6; all unchanged at6a965 and25fd.",
+      "evidence": "frozen-comparison.json and repaired-snapshot.json"
+    },
+    {
+      "name": "resident_and_gram_routes",
+      "detail": "Original resident flags, module-vs-snapshot paths, fast/identical endpoints, resident solver and nonresident Gram operations remain. New provider is typed transport to existing op_ocsvm_x; host retains absent-resident refusal."
+    },
+    {
+      "name": "request_words",
+      "detail": "Compaction, take_rows/take_cols, variance, kernel, alpha init, Gram/resident solve, kernel_matmul, fused labels, unary offset and sign retain prior dimensions, operation words, Float32 rounds and call order."
+    },
+    {
+      "name": "copies_and_publication",
+      "detail": "Two weighted-prefix copies and weighted support-prefix copy remain in native storage; public support mapping/gather and public output packing remain. Public score storage is written directly; decision and index-conversion intermediates use native owners. Fit fields publish in the prior order."
+    },
+    {
+      "name": "borrowed_buffers_and_images",
+      "detail": "Callers retain admitted input, coefficients, support/public outputs and native scratch after raw-address calls. Operation-local connection retains ordinary and resident providers/images through outer finally. No new unpinned raw pointer was found in reviewed paths."
+    },
+    {
+      "name": "parallel_existing_conversion",
+      "detail": "Precomputed support conversion uses existing checked parallel admitted_convert_vector; no new serial numerical loop or fallback was introduced."
+    },
+    {
+      "name": "canonical_builtin_admission",
+      "detail": "native_loaded_module validates registered builtin export identities; the new scalar admission does not simply trust an unchecked mutable builtins module. Shared connection checks were read transitively."
+    },
+    {
+      "name": "debt_and_proof_limits",
+      "detail": "Existing OneClass coefficient weak-cache tuple remains explicit boundary debt. Authored nativeCPU12 and conditional residentGPU fixtures/public boundary cases are unrun here. This is not a whole-family Python-free, performance, runtime or identity claim."
+    }
+  ],
+  "changes_after_review": "Product through25fd plus exact Numeric admission follow-up129158 reviewed. Any other later source changes remain unreviewed; no runtime or performance acceptance.",
+  "evidence": [
+    "source-snapshot.json",
+    "wip.patch",
+    "frozen-comparison.json",
+    "review-repair.patch",
+    "repaired-snapshot.json",
+    "numeric-refusal-followup.patch"
+  ],
+  "numeric_refusal_followup_reviewed": "1291580daa5e41276cdf6ed05cab6be9fb03bd85",
+  "updated_at_utc": "2026-11-11T19:55:11.349411+00:00"
+}

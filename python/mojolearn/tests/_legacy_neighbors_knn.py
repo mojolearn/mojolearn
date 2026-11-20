@@ -2,17 +2,289 @@
 """Frozen 4398cd5b6 Python bodies of NearestNeighbors.fit and the k-NN
 classifier/regressor fit, predict, predict_proba and score, used only as an
 independent test oracle for their one-call native doors
-(bindings/neighbors_knn_native.mojo). Each function takes the estimator as
+(bindings/neighbors_knn_native_door.mojo). Each function takes the estimator as
 `self` and runs the former statements in the former order."""
-from mojolearn._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
-from mojolearn._labels import decode_labels, encode_labels
-from mojolearn.linear_model import _dtype_name, _is_integer_labels, _shape_of
-from mojolearn.neighbors import _XN, _check_metric_input, _resolve_metric
+from mojolearn import Array
+from mojolearn.tests._oracle_support import addr, addr_ro, base_format, empty, probe, require_numpy, view
+from mojolearn.tests._typed_input import as_f32_c, as_f32_dense_c, as_i64_c
+from mojolearn.tests._legacy_host_inference import decode_labels
+from mojolearn._labels import encode_labels  # oracle subject: the native ORDER RULE encoder (classical_encode_labels: buffers, Series, lists, '<U' and object labels, its refusals); no exact copy, no public route
+
+
+def _shape_of(obj):
+    """Frozen copy of the former `_buffer.shape_of` (deleted from the package
+    2026-11-15 by lane py-buffer: no product caller)."""
+    shape = getattr(obj, "shape", None)
+    if shape is not None:
+        return tuple(shape)
+    if isinstance(obj, (list, tuple)):
+        if obj and isinstance(obj[0], (list, tuple)):
+            return (len(obj), len(obj[0]))
+        return (len(obj),)
+    if hasattr(obj, "__len__"):
+        return (len(obj),)
+    return ()
+_XN = "_mojolearn_x_neighbors"  # copy of `mojolearn.neighbors._XN`
+
+
+# Frozen copies of the former linear_model label helpers (deleted from the
+# product by lane py-dedupe, 2026-11-15: this oracle was their last caller).
+_INT_FORMATS = frozenset("bBhHiIlLqQnN")
+
+
+def _buffer_format(obj):
+    if isinstance(obj, Array):
+        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
+                "<u1": "B", "<f2": "e"}.get(obj.dtype)
+    try:
+        with view(obj) as buf:
+            return buf.format.lstrip("<>=@!|")
+    except TypeError:
+        return None
+
+
+def _is_integer_labels(y):
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return fmt in _INT_FORMATS
+    leaves = _flatten_leaves(y)
+    # `_user_objects.kinds(leaves)[KIND_EXACT_INT]` counts `type(v) is int`
+    return bool(leaves) and sum(1 for v in leaves if type(v) is int) == len(leaves)
+
+
+def _flatten_leaves(y):
+    """The leaves of nested lists and tuples, depth first (the product's `_user_objects` "flatten" read);
+    anything else with `tolist()` is unpacked through it."""
+    if not isinstance(y, (list, tuple)):
+        y = y.tolist() if hasattr(y, "tolist") else list(y)
+        if not isinstance(y, list):
+            return [y]
+    out = []
+    for v in y:
+        if isinstance(v, (list, tuple)):
+            out.extend(_flatten_leaves(v))
+        else:
+            out.append(v)
+    return out
+
+
+def _dtype_name(y):
+    fmt = _buffer_format(y)
+    if fmt is not None:
+        return f"buffer format {fmt!r}"
+    return f"type {type(y).__name__}"
+
+
+# Frozen copies of the former Python metric and weights resolution
+# (python/mojolearn/neighbors.py before lane py-neighbors, 2026-11-14, moved
+# it to neighbors/neighbors_knn_run.mojo and the k-NN door), kept with the
+# frozen bodies above as their independent oracle.
+_DIST_L2_EXPANDED = 0
+_DIST_L2_SQRT_EXPANDED = 1
+_DIST_COSINE_EXPANDED = 2
+_DIST_L1 = 3
+_DIST_L2_SQRT_UNEXPANDED = 5
+_DIST_INNER_PRODUCT = 6
+_DIST_LINF = 7
+_DIST_CANBERRA = 8
+_DIST_LP_UNEXPANDED = 9
+_DIST_CORRELATION_EXPANDED = 10
+_DIST_BRAY_CURTIS = 14
+_DIST_JENSEN_SHANNON = 15
+
+#: cuML's `NearestNeighbors._build_metric_type` (`nearest_neighbors.pyx:
+#: 520-553`), the rows this tree computes. NOT the `pairwise_distances`
+#: table -- cuML has two and they DISAGREE about "euclidean" (that one
+#: sends it to L2SqrtUnexpanded, this one to L2SqrtExpanded). KDE goes
+#: through the other; `python/mojolearn/density.py` has its own.
+_METRIC_TABLE = {
+    "euclidean": _DIST_L2_SQRT_EXPANDED,
+    "l2": _DIST_L2_SQRT_EXPANDED,
+    "sqeuclidean": _DIST_L2_EXPANDED,
+    "cityblock": _DIST_L1,
+    "l1": _DIST_L1,
+    "manhattan": _DIST_L1,
+    "taxicab": _DIST_L1,
+    "chebyshev": _DIST_LINF,
+    "linf": _DIST_LINF,
+    "cosine": _DIST_COSINE_EXPANDED,
+    "minkowski": _DIST_LP_UNEXPANDED,
+    "lp": _DIST_LP_UNEXPANDED,
+    # 2026-09-27 (lane x-neighbors-metrics): distance_ops.mojo::
+    # extra_metric_cell, one thread per cell on the device and the same
+    # function on the host.
+    "canberra": _DIST_CANBERRA,
+    "braycurtis": _DIST_BRAY_CURTIS,
+    "correlation": _DIST_CORRELATION_EXPANDED,
+    "jensenshannon": _DIST_JENSEN_SHANNON,
+    "inner_product": _DIST_INNER_PRODUCT,
+}
+
+_UNSUPPORTED_METRICS = (
+    "haversine",
+)
+
+_NONNEGATIVE_METRICS = frozenset({_DIST_JENSEN_SHANNON})
+
+
+def _check_metric_input(cls_name, value, x):
+    """Refuse input a metric is undefined on, before any device work."""
+    if value in _NONNEGATIVE_METRICS and x.size and float(x.min()) < 0.0:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric='jensenshannon' needs X >= 0 "
+            "(it takes logarithms of the coordinates)"
+        )
+
+_WEIGHTS_UNIFORM = 0
+_WEIGHTS_DISTANCE = 1
+
+_WEIGHTS_TABLE = {"uniform": _WEIGHTS_UNIFORM, "distance": _WEIGHTS_DISTANCE}
+
+
+def _resolve_weights(cls_name, weights):
+    """`weights` -> its value for the Mojo boundary.
+
+    scikit-learn also accepts `None` (treated as uniform, `_base.py:92`)
+    and a CALLABLE (`:116`). `None` is honored; the callable is refused by
+    name, and that refusal is one of the two kinds that are still
+    legitimate -- it is genuinely impossible here, because a Python
+    function cannot be called from inside a GPU kernel and there is no
+    portable way to lift one there.
+    """
+    if weights is None:
+        return _WEIGHTS_UNIFORM
+    if callable(weights):
+        raise ValueError(
+            f"mojolearn {cls_name}: weights=<callable> is NOT IMPLEMENTED. "
+            "scikit-learn calls it on the distance matrix in Python; the "
+            "vote here runs in a GPU kernel and there is no portable way "
+            "to lift a Python function into one. Use 'uniform' or "
+            "'distance'."
+        )
+    if not isinstance(weights, str) or weights not in _WEIGHTS_TABLE:
+        raise ValueError(
+            f"mojolearn {cls_name}: weights={weights!r} is not a "
+            "weighting; use 'uniform' or 'distance'"
+        )
+    return _WEIGHTS_TABLE[weights]
+
+
+def _refuse_inert_p(cls_name, metric, p):
+    """A `p` the resolved op never reads is refused by name.
+
+    Only metric='minkowski'/'lp' reads `p`; cuML passes `self.p` for every
+    metric (`nearest_neighbors.pyx:852-854`) and every other op discards it.
+    Accepting `metric='euclidean', p=3` and running Euclidean is a knob that
+    changes nothing, so any value but the constructor default (2) under
+    another metric raises (the claim-surface census, 2026-09-14; the same
+    rule as GradientBoosting's `bagging_temperature` and `subsample`).
+    """
+    try:
+        is_default = not isinstance(p, bool) and float(p) == 2.0
+    except (TypeError, ValueError):
+        is_default = False
+    if not is_default:
+        raise ValueError(
+            f"mojolearn {cls_name}: p is read only by metric='minkowski' "
+            f"(or 'lp'); metric={metric!r} never reads it, so p={p!r} would "
+            "change nothing. Leave p at its default (2) or ask for "
+            "metric='minkowski'."
+        )
+
+
+def _resolve_metric(cls_name, metric, p):
+    """`(metric_value, metric_arg)` for the Mojo boundary.
+
+    scikit-learn's `metric='minkowski', p=2` IS Euclidean and sklearn
+    collapses it (`effective_metric_`); cuML does NOT (`:1016-1017` just
+    echoes `self.metric`), so `metric='minkowski', p=2` goes through the
+    Lp op there and here. That is deliberate: running a DIFFERENT op for
+    p=2 would make two spellings share one code path and hide a bug in
+    whichever of them is unexercised. The Lp op at p=2 agrees with
+    Euclidean to a few ulp, which is what `neighbors/checks/
+    metric_check.mojo::check_metric_arg_is_reached` clause 3 measures.
+    """
+    if not isinstance(metric, str):
+        raise ValueError(
+            f"mojolearn {cls_name}: metric must be a name, got {metric!r}. "
+            "A callable metric is not implemented: it would have to run inside a "
+            "GPU kernel."
+        )
+    key = metric.lower()
+    if key in _METRIC_TABLE:
+        value = _METRIC_TABLE[key]
+    elif key in _UNSUPPORTED_METRICS:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
+            "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
+            "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
+        )
+    else:
+        raise ValueError(
+            f"mojolearn {cls_name}: unknown metric {metric!r}. Implemented: "
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
+        )
+
+    if value != _DIST_LP_UNEXPANDED:
+        _refuse_inert_p(cls_name, metric, p)
+    arg = 2.0
+    if value == _DIST_LP_UNEXPANDED:
+        arg = float(p)
+        # DEVIATION 552, mirrored here so the message names the Python
+        # parameter the caller actually typed. The Mojo side refuses the
+        # same set by value before any launch.
+        if not (arg > 0.0) or arg != arg or arg == float("inf"):
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' needs a finite "
+                f"p > 0, got {p!r}. p = 0 makes 1/p infinite, p < 0 is not "
+                "a metric, and p = infinity is metric='chebyshev'."
+            )
+        if arg < 1.1754943508222875e-38:
+            raise ValueError(
+                f"mojolearn {cls_name}: metric='minkowski' p={p!r} is "
+                "subnormal in float32; the flush policy differs by vendor "
+                "so this cannot be one arithmetic (DEVIATION 552)"
+            )
+    return value, arg
 
 
 
 # The former NearestNeighbors resident-index helpers, kept with the frozen
 # body: the public class reads its holder through the native attribute slot.
+def whole_float_labels(y):
+    """Frozen copy of the former `_sk_validate.whole_float_labels` (deleted from
+    the package 2026-11-14 by lane py-admission): True when `y` is a float
+    buffer whose every value is a finite whole number."""
+    from mojolearn.tests._oracle_support import all_finite
+    from mojolearn.tests._typed_input import materialize as _materialize
+    # `_sk_validate.describe(y)` == ("buffer", _, "float"): y exports a buffer of a float format
+    if y is None:
+        return False
+    if isinstance(y, Array):
+        if y.dtype not in ("<f4", "<f8", "<f2"):
+            return False
+    else:
+        try:
+            pb = probe(y)
+        except (TypeError, ValueError, BufferError):
+            return False
+        if base_format(pb.format) not in ("f", "d", "e"):
+            return False
+    a, _ = _materialize(y, "y")
+    if a.dtype not in ("<f4", "<f8"):
+        return True
+    if not all_finite(a):
+        return False
+    if a.size == 0 or a.size != max(a.shape):
+        return True
+    # the distinct values (`unique_inverse`) are all whole (`reduce_stat` REDUCE_INTEGRAL) exactly when
+    # every finite value is whole
+    np = require_numpy("the oracle integral scan")
+    v = np.asarray(a).reshape(-1)
+    return bool((np.trunc(v) == v).all())
+
+
 def _holder(self):
     holder = self.__dict__.get("_resident_holder")
     if holder is None:
@@ -42,6 +314,17 @@ def _resident_index_handle(self, binding, idx):
     _holder(self)["index"] = (key, handle, binding)
     return handle
 
+def _dist_params(self):
+    # The former `self._dist_params()`, `[metric, metric_arg, weights]`. Its
+    # `_weights_value` property is a Python data descriptor that the native
+    # attribute guard refuses (bindings/classical_attributes_door.mojo), so the
+    # oracle resolves the same three values from the public parameters.
+    value, arg = _resolve_metric(type(self).__name__, self.metric, self.p)
+    has_weights = type(self)._HAS_WEIGHTS if hasattr(type(self), "_HAS_WEIGHTS") else False
+    weights = _resolve_weights(type(self).__name__, self.weights) if has_weights else _WEIGHTS_UNIFORM
+    return [value, arg, weights]
+
+
 def nn_fit(self, X):
     self._check_refusals()
     self._release_resident_index()
@@ -61,7 +344,6 @@ def clf_fit(self, X, y):
         raise ValueError(f"mojolearn: y must be 1-D or 2-D, got {len(shape)}-D")
     if shape[0] != self.n_samples_fit_:
         raise ValueError(f"mojolearn: y has {shape[0]} rows, X has {self.n_samples_fit_}")
-    from mojolearn._sk_validate import whole_float_labels
     self._label_names = None
     if len(shape) == 1 and not _is_integer_labels(y) and not whole_float_labels(y):
         names, codes = encode_labels(y)
@@ -97,7 +379,7 @@ def _clf_predict(self, X, want_proba):
     if self._index is None or self._y_cols is None:
         raise ValueError("mojolearn: call fit before predict")
     q, _ = as_f32_dense_c(X, ndim=2, name="X")
-    _check_metric_input(type(self).__name__, self._dist_params()[0], q)
+    _check_metric_input(type(self).__name__, _dist_params(self)[0], q)
     if q.shape[1] != self.n_features_in_:
         raise ValueError(f"mojolearn: X has {q.shape[1]} features, index has {self.n_features_in_}")
     k = self.n_neighbors
@@ -119,12 +401,12 @@ def _clf_predict(self, X, want_proba):
         _holder(self)["used_query_tile_"] = resident(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
-            [handle] + params, self._dist_params())
+            [handle] + params, _dist_params(self))
     else:
         _holder(self)["used_query_tile_"] = binding.knn_classify(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
             addr(labels, name="labels"), addr(proba, name="proba"), addr(uniq, name="uniq"),
-            params, self._dist_params())
+            params, _dist_params(self))
     flat = uniq.tolist()
     off = 0
     for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):
@@ -162,7 +444,7 @@ def clf_predict_proba(self, X):
 
 
 def clf_score(self, X, y, sample_weight=None):
-    from mojolearn._expansion_metrics import accuracy_fraction
+    from mojolearn._expansion_metrics import accuracy_fraction  # oracle subject: the native x_metrics accuracy op over labels of any kind; the public accuracy_score refuses str labels under normalize=True
     return accuracy_fraction(y, clf_predict(self, X), sample_weight, getattr(self, "numeric_mode", None))
 
 
@@ -191,7 +473,7 @@ def reg_predict(self, X):
     if self._index is None or self._y_cols is None:
         raise ValueError("mojolearn: call fit before predict")
     q, _ = as_f32_dense_c(X, ndim=2, name="X")
-    _check_metric_input(type(self).__name__, self._dist_params()[0], q)
+    _check_metric_input(type(self).__name__, _dist_params(self)[0], q)
     if q.shape[1] != self.n_features_in_:
         raise ValueError(f"mojolearn: X has {q.shape[1]} features, index has {self.n_features_in_}")
     k = self.n_neighbors
@@ -209,18 +491,18 @@ def reg_predict(self, X):
     if handle is not None:
         _holder(self)["used_query_tile_"] = resident(
             handle, addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
-            addr(out, name="out"), params, self._dist_params())
+            addr(out, name="out"), params, _dist_params(self))
     else:
         _holder(self)["used_query_tile_"] = binding.knn_regress(
             addr_ro(idx, name="idx"), addr_ro(q, name="q"), addr_ro(y_cols, name="y_cols"),
-            addr(out, name="out"), params, self._dist_params())
+            addr(out, name="out"), params, _dist_params(self))
     if self.outputs_2d_:
         return out
     return out.reshape((nq,))
 
 
 def reg_score(self, X, y, sample_weight=None):
-    from mojolearn._metrics_impl import r2_score
+    from mojolearn.metrics import r2_score
     truth, _ = as_f32_c(y, ndim=None, name="y")
     pred, _ = as_f32_c(reg_predict(self, X), ndim=None, name="prediction")
     return r2_score(truth, pred, sample_weight=sample_weight, numeric_mode=getattr(self, "numeric_mode", None))

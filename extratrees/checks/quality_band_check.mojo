@@ -52,7 +52,7 @@ from extratrees.checks.fixtures import (
     hashed_regression,
     shaped_dataset,
 )
-from extratrees.checks.fixture_parity_check import const_heavy_shapes
+from extratrees.checks.fixture_parity_check_suite import const_heavy_shapes
 from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.randomforest.randomforest import (
     predict_class_forest_host,
@@ -229,7 +229,7 @@ def sqrt_ratio(n_cols: Int32) -> Float32:
     return (Float32(k) + 0.5) / Float32(Int(n_cols))
 
 
-def main() raises:
+def run_checks() raises:
     var reference = read_reference()
     print(
         "sklearn quality band, read from",

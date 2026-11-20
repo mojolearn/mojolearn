@@ -69,9 +69,10 @@ from hdbscan.impl.runner import (
     fit_hdbscan,
 )
 from hierarchy.impl.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
+from checks.native_tests.kit import upload_whole_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 comptime FIX_BLOBS = 0
 comptime FIX_DUPS = 1
@@ -152,7 +153,7 @@ def _down_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) rais
 
 def _upload(ctx: DeviceContext, vals: List[Float32]) raises -> DeviceBuffer[DType.float32]:
     var dev = ctx.enqueue_create_buffer[DType.float32](len(vals))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=vals.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, dev, vals)
     ctx.synchronize()
     return dev^
 
@@ -341,7 +342,7 @@ def check_one(
     return bad
 
 
-def main() raises:
+def run_checks() raises:
     comptime if IDENTICAL_BUILD:
         print("sparse_mr_check: IDENTICAL build (assertions)")
     else:

@@ -35,15 +35,14 @@ which thread holds which value and when the barrier falls. The host column is
 untouched (it computes the same graph).
 
 PARAMETERS (execution plan only, no bit moves; sweep per vendor):
-  MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH      channels per block, legal 2|4|8 (default 4)
-  MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS  tokens per staged chunk, legal 16|32|64 (default 32)
+  channels per block: 4 (the CH sweep was deleted 2026-11-15)
+  tokens per staged chunk: 32 (the TOKENS sweep was deleted 2026-11-15)
 Shared memory is `TOK * CH * DSTATE * 4` bytes (8 KiB at the defaults, 32 KiB
 at the largest legal pair), within every column's 32 KiB floor. No rule reads
 a shape: the block geometry is fixed and the grid covers any (batch, dim, L).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -52,8 +51,12 @@ from checks.numerics import (
     identical_mul_add,
 )
 
-comptime M1_PSCAN_CH = get_defined_int["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH", 4]()
-comptime M1_PSCAN_TOK = get_defined_int["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS", 32]()
+# TOMBSTONE: MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH (unmeasured opt-in sweep 2|8 of the channels per block; the default 4 stays) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at b7061d02fc.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch
+comptime M1_PSCAN_CH = 4
+# TOMBSTONE: MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS (unmeasured opt-in sweep 16|64 of the tokens per staged chunk; the default 32 stays) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at ba22935cb9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS.patch
+comptime M1_PSCAN_TOK = 32
 
 
 def m1_persistent_scan_kernel[DSTATE: Int, CH: Int, TOK: Int](
@@ -150,12 +153,6 @@ def m1_persistent_scan[DSTATE: Int](
     mut dskip: DeviceBuffer[DType.float32], batch: Int, seqlen: Int, dim: Int,
 ) raises:
     """ASYNCHRONOUS; the caller synchronizes (selective_scan_fn does)."""
-    comptime assert M1_PSCAN_CH == 2 or M1_PSCAN_CH == 4 or M1_PSCAN_CH == 8, (
-        "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH: legal set 2|4|8"
-    )
-    comptime assert M1_PSCAN_TOK == 16 or M1_PSCAN_TOK == 32 or M1_PSCAN_TOK == 64, (
-        "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS: legal set 16|32|64"
-    )
     if batch <= 0 or dim <= 0:
         return
     var blocks = batch * ((dim + M1_PSCAN_CH - 1) // M1_PSCAN_CH)

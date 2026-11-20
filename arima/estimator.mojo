@@ -87,13 +87,16 @@ MI325X (bench/results/identity_break/2026-09-14_136-lanes/).
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_download_f32_into, transfer_upload_list, transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnArimaTransferStagesIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnArimaTransferStagesFastV1"
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoArimaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoArimaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnArimaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnArimaContextFastV3"
 
 
 from core.identity_trace import IdentityTrace
@@ -188,37 +191,19 @@ def _refuse_shape(batch_size: Int, n_obs: Int, who: String) raises:
 def _upload_f32(
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """Copy `n` floats from the caller's memory onto the device.
-
-    The host staging buffer is kept live past the `synchronize` on purpose.
-    Mojo frees a buffer at its LAST USE and `.unsafe_ptr()` is a use, so
-    without the trailing `_ = host^` the staging allocation can be gone
-    before the copy it feeds has run (mojo-buffer-freed-at-last-use). Copied
-    from `tsa/estimator.mojo`, which learned it the same way."""
-    var count = n if n > 0 else 1
-    var buf = ctx.enqueue_create_buffer[DType.float32](count)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    copy_f32(ptr, host.unsafe_ptr(), max(0, n))
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
-
+    """Copy `n` floats from the caller's memory onto the device (a one-cell
+    buffer when `n` is 0). core/transfer.mojo (lane fx-transfer-helpers,
+    2026-11-18): read in place at `ptr`, which the caller keeps alive for the
+    whole call, and drained before the return; the pinned staging buffer and
+    the host copy into it per call are gone."""
+    return transfer_upload_ptr[DType.float32](ctx, ptr, n if n > 0 else 0, n if n > 0 else 1)
 
 def _upload_list(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
-    """`values` onto the device, the staging buffer kept live past the
-    synchronize as `_upload_f32` keeps it."""
+    """`values` onto the device (a one-cell buffer for an empty list), read
+    in place from the list (core/transfer.mojo). Gone: a pinned buffer per
+    call and one store per word into it."""
     var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](max(1, n))
-    var host = ctx.enqueue_create_host_buffer[DType.float32](max(1, n))
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    return transfer_upload_list[DType.float32](ctx, values, n, max(1, n))
 
 
 def _download_f32(
@@ -230,14 +215,10 @@ def _download_f32(
     """Copy the whole of `buf` back into the caller's memory. `buf` must be
     exactly `n` floats long; every buffer handed here is allocated at that
     length by the routine that produced it."""
-    if n <= 0:
-        return
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    for i in range(n):
-        ptr.unsafe_store(i, host.unsafe_ptr().unsafe_load(i))
-    _ = host^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the caller's pages. Gone: a pinned buffer per call and one
+    # load and store per word out of it.
+    transfer_download_f32_into[_XFER_POOL](ctx, buf, n, ptr)
 
 
 def _write_list_f32(
@@ -609,6 +590,38 @@ def _predict_into(
     _ = fut_stage^
     _ = exog_stage^
     _ = y_host^
+    var written = arima_predict_device(
+        ctx, y, exog, exog_fut, xin, out_ptr, batch_size, n_obs, start, end, order
+    )
+    _ = xin^
+    _ = exog_fut^
+    _ = exog^
+    _ = y^
+    _ = ctx^
+    return written
+
+
+def arima_predict_device(
+    ctx: DeviceContext,
+    mut y: DeviceBuffer[DType.float32],
+    mut exog: DeviceBuffer[DType.float32],
+    mut exog_fut: DeviceBuffer[DType.float32],
+    mut xin: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    start: Int,
+    end: Int,
+    order: ARIMAOrder,
+) raises -> Int:
+    """The device half of `_predict_into`, shared with the resident fitted
+    state (arima/resident_state.mojo, lane ne1-a-decomp-tsa): `y`, `exog`
+    (filter layout) and `xin` (the packed fitted parameters) are already on
+    `ctx`, `exog_fut` holds this call's future regressors. Every one of them
+    is only read (`predict_x` writes its own differenced copies), so a
+    resident copy serves any number of calls with the bytes a per-call
+    upload would have staged: the same kernels over the same words."""
+    var predict_ld = end - start
     var params = ARIMAParams(ctx, order, batch_size)
     unpack(ctx, params, order, batch_size, xin)
     ctx.synchronize()
@@ -621,14 +634,8 @@ def _predict_into(
         ctx, y, exog, exog_fut, batch_size, n_obs, start, end, order, params, True
     )
     _download_f32(ctx, res.y_p, out_ptr, predict_ld * batch_size)
-
     _ = res^
     _ = params^
-    _ = xin^
-    _ = exog_fut^
-    _ = exog^
-    _ = y^
-    _ = ctx^
     return predict_ld * batch_size
 
 

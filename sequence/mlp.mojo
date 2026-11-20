@@ -17,6 +17,10 @@ epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
 from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
+from sequence.act_values import (
+    ACT_IDENTITY, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX,
+    op_act, op_act_bwd, act_value, act_bwd_value,
+)
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
@@ -34,7 +38,6 @@ from std.sys.compile import is_defined
 #:   block sums ascending (`op_mlp_rowpart`, `op_mlp_bloss`). A layer of at
 #:   most AF_NORM_BLOCK weights and a batch of at most MLP_ROW_BLOCK rows is
 #:   one block: the old chain, the old bits; larger ones get new bits.
-#:   -D MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.
 #: MLP_EPOCH_DEV (roadmap D13): the epoch order is `op_mlp_perm` on the
 #:   executor (the x_cnn Feistel permutation, integers only) instead of a
 #:   host Fisher-Yates walk and an N-word upload per epoch, and the epoch
@@ -42,28 +45,37 @@ from std.sys.compile import is_defined
 #:   rows, ascending fmas, divided by N) instead of a float64 fold on the
 #:   host of every batch loss; one word comes back per epoch for the
 #:   stopping rule. New shuffle order and new curve bits on every column.
-#:   -D MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.
-#: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
-comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
-comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _MLP_IDN
+# TOMBSTONE: MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92d4b79ec8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.patch
+comptime MLP_BLOCKED_FOLDS = _MLP_IDN
+# TOMBSTONE: MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 0064646ba8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.patch
+comptime MLP_EPOCH_DEV = _MLP_IDN
 #: MLP_LOSSBLOCK (lane ag-pass3-lossblock, 2026-10-19; the loss-section
 #:   comment block below): the per-batch seed, row-loss and L2 sums in two
 #:   launches with the tape's fold rule, and the epoch loss as a blocked fold.
 #:   Default on wherever MLP_BLOCKED_FOLDS is; bit version mlp-lossblock-1
-#:   (new reported-loss bits). -D MOJOLEARN_MLP_LOSSBLOCK_OFF restores the
-#:   MLP_BLOCKED_FOLDS kernels (op_mlp_rowloss, op_mlp_l2part, op_mlp_l2fold,
-#:   op_mlp_rowpart, op_mlp_bloss, op_mlp_epoch_loss) for the A/B.
-comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"]()
+#:   (new reported-loss bits).
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_OFF (old path; EXP:2159 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at e06ff6f0f3.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_OFF.patch
+# The trainer no longer launches the MLP_BLOCKED_FOLDS-only loss kernels (op_mlp_l2part / l2fold via _l2_blocked,
+# op_mlp_rowpart; OP_MLP_EPOCH_LOSS went in the 2026-11-15 sweep); they stay registered (sequence/dispatch.mojo, another lane's file) and
+# autograd/checks/lossblock_cases.mojo still runs _l2_blocked and op_mlp_rowpart as its reference.
+comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS
 #: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
 #:   loss block's row losses one thread per row (B threads in op_mlp_lb_part,
 #:   each storing its row's loss term) and the row-block sums by many threads
 #:   in the fold launch, in place of ceil(B / R) part threads that each chained
 #:   R rows of software logs. Same bits by construction (the loss-section
-#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is;
-#:   -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF restores the pass-3 row-block threads
-#:   for the A/B.
-comptime MLP_LB_ROWS = MLP_LOSSBLOCK and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"]()
+#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is.
+# TOMBSTONE: MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6ed945170f.
+# Restore: git apply experiments/removed/MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF.patch
+# The pass-3 row-block body stays as mlp_loss_block[False] (sequence/mlp_fit.mojo), which
+# autograd/checks/lossblock_cases.mojo runs beside the default as its same-words reference.
+comptime MLP_LB_ROWS = MLP_LOSSBLOCK
 # NI52 scheduling-only subarm: leave the exact epoch Feistel mapping intact,
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
@@ -74,11 +86,11 @@ comptime MLP_DEVICE_EPOCH_ORDER = MLP_EPOCH_DEV and is_defined[
 comptime MLP_L2_BLOCK = AF_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
 
-comptime ACT_IDENTITY = 0
-comptime ACT_LOGISTIC = 1
-comptime ACT_TANH = 2
-comptime ACT_RELU = 3
-comptime ACT_SOFTMAX = 4
+# The activation codes, `op_act`, `op_act_bwd`, `act_value` and `act_bwd_value`
+# moved word for word to sequence/act_values.mojo (a module with no gemm
+# import, so the packed GEMM's store epilogue can call them; lane
+# fx-leftovers-product, 2026-11-19). Imported back at the top of this file:
+# every `from sequence.mlp import ...` of those names still resolves.
 
 comptime EPI_BIAS_ACT = 1
 comptime EPI_L2GRAD = 2
@@ -94,35 +106,6 @@ def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
 
-def op_act(t: Int, a: Args):
-    """p0[t] = act(p0[t]); i0 activation (not softmax)."""
-    var z = ld(a.p0, t)
-    var k = a.i0
-    if k == ACT_LOGISTIC:
-        z = ftz(identical_sigmoid(z))
-    elif k == ACT_TANH:
-        z = ftz(identical_tanh(z))
-    elif k == ACT_RELU:
-        z = z if z > Float32(0.0) else Float32(0.0)
-    st(a.p0, t, z)
-
-
-def op_act_bwd(t: Int, a: Args):
-    """p0[t] (delta) *= act'(p1[t]) written through the activation's output,
-    the reference's inplace_*_derivative; i0 activation."""
-    var d = ld(a.p0, t)
-    var z = ld(a.p1, t)
-    var k = a.i0
-    if k == ACT_LOGISTIC:
-        d = mul(mul(d, z), sub(Float32(1.0), z))
-    elif k == ACT_TANH:
-        d = mul(d, sub(Float32(1.0), mul(z, z)))
-    elif k == ACT_RELU:
-        if z == Float32(0.0):
-            d = Float32(0.0)
-    st(a.p0, t, d)
-
-
 # ------------------------------------------------------------------ the loss block
 #: THE PER-BATCH LOSS AND L2 BLOCK (lane ag-pass3-lossblock, 2026-10-19).
 #: Shared by the hand trainer and every tape arm (sequence/mlp_fit.mojo runs
@@ -130,7 +113,7 @@ def op_act_bwd(t: Int, a: Args):
 #: MI325X, HIGGS 1M x 28, (256,) b512, 1954 batches, MOJOLEARN_AG_PROFILE=2:
 #: codes 26/28/90/91/92 are ~360 ms of a 1218 ms profiled tape step.
 #:
-#: Before (MLP_BLOCKED_FOLDS, -D MOJOLEARN_MLP_LOSSBLOCK_OFF keeps it), per
+#: Before (MLP_BLOCKED_FOLDS, the deleted MOJOLEARN_MLP_LOSSBLOCK_OFF arm), per
 #: batch, L <= 4 layers: 5 launches (L > 4: 2 L + 3).
 #:   OP_MLP_ROWLOSS (26)  B threads; chain O loss terms a row.
 #:   OP_MLP_L2PART  (90)  one thread per AF_NORM_BLOCK = 4096 weights; chain
@@ -177,7 +160,7 @@ def op_act_bwd(t: Int, a: Args):
 #:   once-an-epoch norm would report a different number. The curve feeds
 #:   tol / n_iter_no_change every epoch, so the term is always consumed; it
 #:   is made cheap instead (2 launches, short chains, many threads).
-#: MLP_LB_ROWS (the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF keeps the
+#: MLP_LB_ROWS (the default; mlp_loss_block[False] keeps the
 #: layout above), per batch, L <= 4 layers: 3 launches (L > 4: 2 ceil(L / 4)
 #: + 1). The pass-3 part launch's critical path was one row-block thread's
 #: chain of R(B) rows of O loss terms, two software logs a term under
@@ -185,9 +168,11 @@ def op_act_bwd(t: Int, a: Args):
 #: NVIDIA); the seed threads idled after one subtract.
 #:   OP_MLP_LB_PART (1600) i3 = 1: B O seed threads, then B row threads
 #:                        (rowloss[row] = mlp_row_loss(row), chain O terms),
-#:                        then the weight blocks as above. i3 = 2 (the data
-#:                        sum comes from -D MOJOLEARN_AUTOGRAD_LOSS): no row
-#:                        threads. HIGGS: 512 + 512 + 56 + 4.
+#:                        then the weight blocks as above. HIGGS: 512 + 512
+#:                        + 56 + 4. (i3 = 2, no row threads for the data sum
+#:                        of -D MOJOLEARN_AUTOGRAD_LOSS, went with that arm.)
+#: TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+#: Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 #:   OP_MLP_LB_FOLD (1601) i11 = 2, once per group of four layers: ceil(B /
 #:                        R(B)) row-block threads on the first group (rowparts
 #:                        [k] = rowloss[k R : min((k + 1) R, B)] added
@@ -347,35 +332,9 @@ def op_gemm_epi_tail(t: Int, a: Args):
 # accumulator in registers and the cell is stored once. SAME BITS: the
 # reloaded word was ld(st(acc)) = ftz(ftz(acc)) = acc (fma3 already flushes),
 # and every other operand and operation is the follower's, in its order.
-# The bodies below are op_act's and op_act_bwd's verbatim (the hand path's
-# own ops are left as they are).
-@always_inline
-def act_value(z_in: Float32, k: Int) -> Float32:
-    """op_act's body on a value: act(z), activation code k (not softmax)."""
-    var z = z_in
-    if k == ACT_LOGISTIC:
-        z = ftz(identical_sigmoid(z))
-    elif k == ACT_TANH:
-        z = ftz(identical_tanh(z))
-    elif k == ACT_RELU:
-        z = z if z > Float32(0.0) else Float32(0.0)
-    return z
-
-
-@always_inline
-def act_bwd_value(d_in: Float32, z: Float32, k: Int) -> Float32:
-    """op_act_bwd's body on values: delta times act'(z), z the activation."""
-    var d = d_in
-    if k == ACT_LOGISTIC:
-        d = mul(mul(d, z), sub(Float32(1.0), z))
-    elif k == ACT_TANH:
-        d = mul(d, sub(Float32(1.0), mul(z, z)))
-    elif k == ACT_RELU:
-        if z == Float32(0.0):
-            d = Float32(0.0)
-    return d
-
-
+# The value bodies (`act_value`, `act_bwd_value`: op_act's and op_act_bwd's
+# verbatim) are in sequence/act_values.mojo; the hand path's own ops are
+# left as they are.
 @always_inline
 def gemm_epi_value(
     acc: Float32, ci: Int, n: Int, epi: Int, epi_arg: Int, p3: FP, f0: Float32, f1: Float32,
@@ -570,18 +529,6 @@ def op_mlp_perm(t: Int, a: Args):
     a.p0.unsafe_store(t, Float32(Int(x)))
 
 
-def op_mlp_epoch_loss(t: Int, a: Args):
-    """One thread: p1[i3] = (sum over batches bi ascending of p0[bi] * B_bi,
-    one fma each from zero) / i2, B_bi = min(i1, i2 - bi i1); i0 batches,
-    i1 batch rows, i2 = N rows."""
-    var acc = Float32(0.0)
-    for bi in range(a.i0):
-        var off = bi * a.i1
-        var B = a.i1 if off + a.i1 <= a.i2 else a.i2 - off
-        acc = fma3(ld(a.p0, bi), Float32(B), acc)
-    st(a.p1, a.i3, div(acc, Float32(a.i2)))
-
-
 # ------------------------------------------------------------------ pass-3 loss block (MLP_LOSSBLOCK)
 # The kernels of the loss-section comment block above (lane
 # ag-pass3-lossblock). Block lengths are mlp_lb_block = autograd/ops.mojo
@@ -655,8 +602,8 @@ def op_mlp_lb_part(t: Int, a: Args):
         p5[q] = the block's squared weights, one fma each ascending from
         +0.0 (sumsq_fold), R = mlp_lb_block(c).
     MLP_LB_ROWS (i3 = 1): the row blocks are replaced by B row threads,
-    p3[row] = mlp_row_loss(row) (p3 the row-loss scratch [B]); i3 = 2: no
-    row threads (the data sum comes from elsewhere). i3 = 0: the row blocks."""
+    p3[row] = mlp_row_loss(row) (p3 the row-loss scratch [B]). i3 = 0: the row
+    blocks."""
     var O = a.i1
     var B = a.i2
     var ne = B * O
@@ -667,7 +614,7 @@ def op_mlp_lb_part(t: Int, a: Args):
     if a.i3 != 0:
         # MLP_LB_ROWS: one thread per row, its O terms; the block sums are
         # op_mlp_lb_fold's (i11 = 2)
-        var nrow = B if a.i3 == 1 else 0
+        var nrow = B
         if r < nrow:
             st(a.p3, r, mlp_row_loss(a.p0, a.p1, r * O, O, a.i0))
             return
@@ -705,8 +652,7 @@ def _lb_weight_block(a: Args, q: Int):
 @always_inline
 def op_mlp_lb_fold(t: Int, a: Args):
     """MLP_LOSSBLOCK, the second launch: one thread. p0 the data partials
-    (i5 of them: the row blocks, or the one data sum of -D
-    MOJOLEARN_AUTOGRAD_LOSS), p1 this group's L2 block partials, p2 the batch
+    (i5 of them: the row blocks), p1 this group's L2 block partials, p2 the batch
     losses, p3 the L per-layer ||W||^2. i0 batch index, i1 B, i2 O, i3 L,
     i4 loss, i6..i9 the group's layer counts (0 = absent), i10 the group's
     first layer, i11 = 1 on the last group; f0 = 0.5 alpha.

@@ -20,8 +20,9 @@ class TestNativeBinaryPredict(unittest.TestCase):
         model._w = Array.from_buffer(np.array([1.0, -1.0], dtype=np.float32))
         model.classes_ = [-7, 11]
         model.n_features_in_ = 2
-        scores = np.asarray(model.decision_function(x)).copy()
-        expected = np.where(scores > 0.0, 11, -7).astype(np.int64)
+        # Literal threshold result; the same six score rows also run in the
+        # native QN suite. This test retains public labels and callback refusal.
+        expected = np.array([-7, -7, -7, 11, 11, -7], dtype=np.int64)
 
         with patch.object(model, "decision_function",
                           side_effect=AssertionError("predict exported scores")):

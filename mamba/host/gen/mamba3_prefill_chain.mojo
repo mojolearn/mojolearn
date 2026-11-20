@@ -14,7 +14,7 @@ No incoming cache or final-state cotangent is accepted.
 """
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import bitcast
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
 
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
@@ -89,6 +89,11 @@ from mamba.host.gen.mamba3_prefill_backward import (
     _m3_scratch,
     _mtick,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 
 def mamba3_prefill_backward(
@@ -114,9 +119,9 @@ def mamba3_prefill_backward(
         ctx = ctx_in.take()
     else:
         ctx = DeviceContext()
-    # lane/neural-apple2: MOJOLEARN_MAMBA_TIMING=1 prints a wall per stage
+    # lane/neural-apple2: -D MOJOLEARN_MAMBA_TIMING prints a wall per stage
     # (a synchronize around each; measurement only, off by default).
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var tk = Int(perf_counter_ns())
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)

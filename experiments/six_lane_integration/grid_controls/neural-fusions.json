@@ -3,88 +3,19 @@
  "lane": "neural-fusions",
  "branch": "lane/neural-fusions",
  "head": "743c2859e",
- "controls": {
-  "m1_persistent_scan_ch": {
-   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
-   "kind": "int_sweep",
-   "arms": {
-    "2": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=2"
-    ],
-    "4": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=4"
-    ],
-    "8": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH=8"
-    ]
-   },
-   "default": "4",
-   "source": [
-    "mamba/impl/ops/m1_persistent_scan.mojo:54"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "new",
-   "notes": "channels per block; only read with m1_scan on (persistent arm; the guards refuse it with any other arm); sweep per vendor before the grid"
-  },
-  "m1_persistent_scan_tokens": {
-   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
-   "kind": "int_sweep",
-   "arms": {
-    "16": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=16"
-    ],
-    "32": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=32"
-    ],
-    "64": [
-     "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS=64"
-    ]
-   },
-   "default": "32",
-   "source": [
-    "mamba/impl/ops/m1_persistent_scan.mojo:55"
-   ],
-   "binding": "_mojolearn_mamba",
-   "bits_change": false,
-   "status": "new",
-   "notes": "tokens staged per chunk (shared memory TOK*CH*16*4 bytes); only read with m1_scan on (persistent arm; the guards refuse it with any other arm)"
-  }
- },
+ "controls": {},
  "algorithms": {
   "neural:mamba1-forward": {
    "binding": "_mojolearn_mamba",
    "route": "Mamba1Block.forward -> modeling_mamba.mamba_selective_scan -> selective_scan_fn -> m1_persistent_scan (on) | selective_scan_fwd_kernel (off)",
-   "controls": [
-    "m1_persistent_scan_ch",
-    "m1_persistent_scan_tokens",
-    "m1_scan"
-   ],
+   "controls": [],
    "interaction_groups": [
     [
-     "m1_scan",
-     "m1_persistent_scan_ch",
-     "m1_persistent_scan_tokens"
-    ],
-    [
-     "m1_scan",
      "NI38:MOJOLEARN_IDN_M1_STATE_WINDOW (exclusive)",
      "NN34:MOJOLEARN_NN34_AFFINE_PREFIX (supersedes)",
      "NI46:MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"
     ]
    ]
-  },
-  "neural:transformer-forward": {
-   "binding": "_mojolearn_transformer",
-   "route": "TransformerBlock.forward -> llama_decoder_layer -> eager attention (modeling_llama.mojo eager_attention_forward; the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "neural:samba-forward": {
-   "binding": "_mojolearn_transformer",
-   "route": "SambaStack attention layers through the transformer binding -> eager attention (the NN20 summary route was deleted 2026-10-08, lane grid-act-3)",
-   "controls": [],
-   "interaction_groups": []
   }
  },
  "removed": [
@@ -102,6 +33,16 @@
    "define": "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES",
    "control": "nn20_split_kv_leaves",
    "reason": "DELETED 2026-10-08 (lane grid-act-3) with its parent arm attn_softmax=summary_tree (MOJOLEARN_IDN_ATTN_SOFTMAX=1, IDENTICAL grid ge123e6f9 loser, 1.6-43x slower NV/AMD): the split-KV code lived in transformer/experiments/attention_summary_split.mojo and summary_model.mojo, both deleted. Never measured on its own. Code recoverable at main bc10b8b56; define refused in core/six_lane_experiment_guards.mojo."
+  },
+  {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
+   "control": "m1_persistent_scan_ch",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-27-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at b7061d02fc): unmeasured channels-per-block sweep; 4 stays. Refused in core/experiment_guards_neural.mojo; patch experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch."
+  },
+  {
+   "define": "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
+   "control": "m1_persistent_scan_tokens",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-27-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at ba22935cb9): unmeasured tokens-per-chunk sweep; 32 stays. Refused in core/experiment_guards_neural.mojo; patch experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS.patch."
   }
  ],
  "ideas": [

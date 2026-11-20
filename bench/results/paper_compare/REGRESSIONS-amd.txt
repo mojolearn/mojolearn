@@ -1,0 +1,71 @@
+AMD MI300X, 0.8.55 -> 0.8.66, our arm, same explicit params. 42 regressions (>1.10x) of 82 timed
+  trees      iforest                istella  infer      18.0 ->    1486.3 ms  x82.76 Q:PASS
+  trees      iforest                istella  infer      35.6 ->    2929.9 ms  x82.41 Q:INSUFFICIENT
+  classical  ols                    istella  infer      20.5 ->    1422.1 ms  x69.41 Q:PASS
+  classical2 tsvd                   istella  fit        47.6 ->    2892.9 ms  x60.82 Q:PASS
+  classical  ols                    taxi     fit        13.2 ->     637.3 ms  x48.39 Q:PASS
+  trees      iforest                taxi     infer       2.9 ->     124.3 ms  x42.73 Q:PASS
+  trees      iforest                istella  fit       180.1 ->    7124.3 ms  x39.56 Q:PASS
+  classical2 tsvd                   taxi     fit         4.7 ->     147.9 ms  x31.53 Q:PASS
+  trees      iforest                taxi     infer       7.8 ->     233.2 ms  x29.88 Q:INSUFFICIENT
+  trees      rf                     istella  infer      54.9 ->    1600.4 ms  x29.15 Q:PASS
+  trees      rf                     istella  infer     111.7 ->    2950.6 ms  x26.42 Q:INSUFFICIENT
+  classical  ols                    taxi     infer       3.5 ->      74.0 ms  x20.92 Q:PASS
+  classical  kmeans                 istella  fit       405.7 ->    6297.8 ms  x15.52 Q:PASS
+  classical  ols                    istella  fit       446.3 ->    6443.2 ms  x14.44 Q:PASS
+  trees      rf                     taxi     infer      20.0 ->     224.3 ms  x11.23 Q:INSUFFICIENT
+  trees      rf                     taxi     infer      10.0 ->     112.2 ms  x11.19 Q:PASS
+  classical2 knn-reg                istella  fit        31.3 ->     266.4 ms  x8.51 Q:PASS
+  classical2 knn-clf                istella  fit        32.4 ->     266.6 ms  x8.22 Q:PASS
+  trees      iforest                taxi     fit       189.3 ->    1235.5 ms  x6.53 Q:PASS
+  classical  kmeans                 taxi     fit       191.6 ->     889.5 ms  x4.64 Q:PASS
+  classical  pca                    istella  fit        87.0 ->     331.3 ms  x3.81 Q:PASS
+  classical  pca                    taxi     fit        10.4 ->      34.3 ms  x3.29 Q:PASS
+  classical  pca                    istella  infer      30.2 ->      88.9 ms  x2.94 Q:PASS
+  classical  kmeans                 istella  infer      18.9 ->      44.6 ms  x2.36 Q:PASS
+  classical2 knn-reg                taxi     fit         9.1 ->      19.9 ms  x2.19 Q:PASS
+  neural     mamba3-decode          gaussian fit      2872.7 ->    6242.6 ms  x2.17 Q:INSUFFICIENT
+  classical2 knn-clf                taxi     fit        11.0 ->      22.4 ms  x2.03 Q:PASS
+  classical2 linearsvr              istella  fit       104.2 ->     206.5 ms  x1.98 Q:PASS
+  classical  kmeans                 taxi     infer       1.9 ->       3.3 ms  x1.69 Q:PASS
+  neural     samba-decode           bytes    fit      3708.3 ->    5838.0 ms  x1.57 Q:PASS
+  neural     samba-forward          bytes    fit         6.1 ->       9.4 ms  x1.55 Q:PASS
+  neural     mamba1-forward         gaussian fit         3.0 ->       4.6 ms  x1.51 Q:PASS
+  neural     mamba3-forward         gaussian fit         3.5 ->       4.7 ms  x1.35 Q:PASS
+  neural     mamba2-forward         gaussian fit         5.3 ->       6.7 ms  x1.27 Q:PASS
+  classical  hdbscan                istella  fit      1057.4 ->    1338.0 ms  x1.27 Q:PASS
+  trees      gbdt-rank-pairlogit    istella  fit      1691.0 ->    2095.7 ms  x1.24 Q:PASS
+  neural     gemm-bf16              gaussian fit        48.5 ->      57.2 ms  x1.18 Q:PASS
+  neural     gemm-int8              gaussian fit        38.7 ->      45.3 ms  x1.17 Q:PASS
+  classical2 linearsvr              taxi     fit        39.3 ->      45.6 ms  x1.16 Q:PASS
+  neural     lm-forward             bytes    fit        58.5 ->      66.9 ms  x1.14 Q:PASS
+  trees      rf                     istella  fit     45439.7 ->   51226.1 ms  x1.13 Q:PASS
+  neural     transformer-decode     gaussian fit      2444.7 ->    2699.1 ms  x1.10 Q:INSUFFICIENT
+FASTER:
+  classical  svc                    istella  infer      10.3 ->       1.8 ms  x0.18
+  classical2 linearsvc              taxi     fit        69.0 ->      20.1 ms  x0.29
+  neural     mlp-train-step         gaussian fit         3.3 ->       1.0 ms  x0.29
+  neural     sequential-predict     synthetic fit         4.2 ->       2.7 ms  x0.64
+  neural     program-run            gaussian fit         1.2 ->       0.8 ms  x0.66
+  neural     transformer-forward    gaussian fit         8.0 ->       5.8 ms  x0.72
+NOT-RUN / STILL-FAILING:
+  classical  dbscan                 istella  fit   ['STILL-FAILING']
+  classical  dbscan                 taxi     fit   ['STILL-FAILING']
+  trees      gbdt-depthwise         istella  fit   ['NOT-RUN']
+  trees      gbdt-depthwise         istella  fit   ['NOT-RUN']
+  trees      gbdt-depthwise         istella  infer ['NOT-RUN']
+  trees      gbdt-depthwise         istella  infer ['NOT-RUN']
+  trees      gbdt-depthwise         istella  infer ['NOT-RUN']
+  trees      gbdt-depthwise         istella  infer ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     fit   ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     fit   ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     infer ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     infer ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     infer ['NOT-RUN']
+  trees      gbdt-depthwise         taxi     infer ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     fit   ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     fit   ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     infer ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     infer ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     infer ['NOT-RUN']
+  trees      gbdt-lossguide         taxi     infer ['NOT-RUN']

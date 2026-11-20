@@ -8,45 +8,68 @@ x_linear_decision(x_addr, wb_addr, dims, out_addr)
     dims = [n, d, k, link]; wb is k rows of (w_0..w_{d-1}, b)
 The host binding (_mojolearn_x_linear_host.mojo) exports the same names with
 the same address contract and runs the same x_linear/ source on the CPU."""
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from x_linear.ridge_descriptor_device import RIDGE_FIT_DEVICE_API
+from x_linear.x_linear_binding_run import _publish_linear_entry_table
+from x_linear.ops_entry_device import (
+    xl_fit_device_run,
+    xl_decision_device_run, xl_decision_codes_device_run, xl_decision_rows_device_run, xl_huber_out_device_run,
+    xl_class_prep_device_run, xl_spearman_device_run, xl_best_alpha_run,
+)
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
+from providers.python.core_py2mojo_rows_pyapi_pack import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
-from x_linear.spearman_device import spearman_sign_device
 from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
-from x_linear.ops import FP, IP
-from x_linear.ridgecv import ridge_best_alpha
-from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
-from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
-from x_linear.finite_device import XLIN_IDN_DEV_FINITE
-from x_linear.class_prep_device import class_prep_device
-from x_linear.x_linear_input_impl import x_linear_finite_device as _finite
-
-
-def _fp(addr: Int) raises -> FP:
-    if addr == 0:
-        raise Error("x_linear: null float32 buffer address")
-    return FP(unsafe_from_address=addr)
+from checks.numerics import NUMERIC_IDENTICAL
 
 
 def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
-    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
-    var na = Int(py=n)
-    if na <= 0:
-        return PythonObject(-1)
-    return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
+    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN.
+    The native owner calls XL_OP_BEST_ALPHA; this export remains for the
+    Python surface (_surface_linear.py)."""
+    return PythonObject(xl_best_alpha_run(Int(py=scores_addr), Int(py=n)))
+
+
+def ridge_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = RIDGE_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _int32_words(values: PythonObject, count: Int) raises -> List[Int32]:
+    var words = List[Int32](capacity=count)
+    for i in range(count):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
+        words.append(Int32(Int(py=values[i])))
+    return words^
+
+
+def _float32_words(values: PythonObject, count: Int) raises -> List[Float32]:
+    var words = List[Float32](capacity=count)
+    for i in range(count):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
+        words.append(Float32(Float64(py=values[i])))
+    return words^
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
                 ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    # The Python door of XL_OP_FIT (x_linear/ops_entry_device.mojo), kept for
+    # the Python surface (_surface_linear.py, _expansion_linear.py); the
+    # native owner bindings/x_linear_native_door.mojo calls the table.
+    var ipl = _int32_words(ip, Int(py=dims[7]))
+    var fpl = _float32_words(fp, Int(py=dims[8]))
+    var a = Int(py=algo)
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var oa = Int(py=out_addr)
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var n_x = Int(py=dims[2])
@@ -54,69 +77,29 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var n_out = Int(py=dims[4])
     var n_fw = Int(py=dims[5])
     var n_iw = Int(py=dims[6])
-    var n_ip = Int(py=dims[7])
-    var n_fp = Int(py=dims[8])
-    if n <= 0 or d < 0 or n_out <= 0:
-        raise Error("x_linear: positive dimensions required")
-    isotonic_abi_check(Int(py=algo), n, n_y, n_out, n_fw, n_iw, n_ip)
-    var ipl = List[Int32](capacity=n_ip)
-    for i in range(n_ip):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
-        ipl.append(Int32(Int(py=ip[i])))
-    var fpl = List[Float32](capacity=n_fp)
-    for i in range(n_fp):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
-        fpl.append(Float32(Float64(py=fp[i])))
-    var a = Int(py=algo)
-    var x = _fp(Int(py=x_addr))
-    var y = _fp(Int(py=y_addr))
-    var out = _fp(Int(py=out_addr))
-    # lane/idn-sgd-multiblock: the SGD grids test the uploaded words on the
-    # device (x_linear/device.mojo SGD_IDN_DEV_FINITE; the same error)
-    # lane/fam-linear: every other route does the same on the X it uploads
-    # (x_linear/finite_device.mojo XLIN_IDN_DEV_FINITE; the same error)
-    if not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD)):
-        _finite(x, Int(py=dims[2]), "X")
-        _finite(y, Int(py=dims[3]), "y")
     with GILReleased(Python()):
-        fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
+        n_out = xl_fit_device_run(a, xa, ya, n, d, n_x, n_y, n_out, n_fw, n_iw, ipl, fpl, oa)
+    _ = ipl^
+    _ = fpl^
     return PythonObject(n_out)
-
 
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
                      out_addr: PythonObject) raises -> PythonObject:
+    # dims[4] (optional): the host address of the deferred finite status
+    # word of X (lane a1b; core/admitted_finite_status.mojo), 0 or absent
+    # when the door tested X.
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var k = Int(py=dims[2])
     var link = Int(py=dims[3])
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var out = _fp(Int(py=out_addr))
+    var status = Int(py=dims[4]) if len(dims) > 4 else 0
+    var xa = Int(py=x_addr)
+    var wa = Int(py=wb_addr)
+    var oa = Int(py=out_addr)
+    var cells = 0
     with GILReleased(Python()):
-        decision_device(x, wb, n, d, k, link, out)
-    return PythonObject(n * k)
-
-
-def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                           out_addr: PythonObject) raises -> PythonObject:
-    """Each row's class code (int32) of link(X W^T + b): dims = [n, d, k,
-    link, strict, below, above] (k == 1: the threshold at 0; k > 1: the
-    argmax), on the device (lane pyglue-numeric)."""
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    var link = Int(py=dims[3])
-    var strict = Int(py=dims[4])
-    var below = Int(py=dims[5])
-    var above = Int(py=dims[6])
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var out = IP(unsafe_from_address=Int(py=out_addr))
-    with GILReleased(Python()):
-        decision_codes_device(x, wb, n, d, k, link, strict, below, above, out)
-    return PythonObject(n)
+        cells = xl_decision_device_run(xa, wa, n, d, k, link, oa, status)
+    return PythonObject(cells)
 
 
 # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
@@ -131,7 +114,6 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-
 def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                          params: PythonObject) raises -> PythonObject:
     """lane/apple-fast-py2mojo-linear: per-row probability glue on the
@@ -143,72 +125,32 @@ def py2mojo_linear_flags_binding() raises -> PythonObject:
     return PythonObject(py2mojo_linear_flags())
 
 
-def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """The sign (-1, 0, 1) of Spearman's rho of n float32 x and y, exact
-    (x_linear/spearman.mojo, lane cpu2-l10-linear)."""
-    var n = Int(py=n_obj)
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    if n <= 0 or xa == 0 or ya == 0:
-        raise Error("x_linear spearman: n > 0 and two buffers required")
-    var sign = 0
-    with GILReleased(Python()):
-        sign = spearman_sign_device(_p2m_ctx(), FP(unsafe_from_address=xa), FP(unsafe_from_address=ya), n)
-    return PythonObject(sign)
-
-
-def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr: PythonObject,
-                       dims: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """Class counts, 'balanced' class weights and per-row class weights on
-    the device (x_linear/class_prep.mojo, lane cpu2-l10-linear). codes: n
-    int32 class codes in [0, k); sw: n float32 sample weights or 0; cw: k
-    float32 (written when balanced, else read); out: n float32 row weights
-    or 0. dims = [n, k, balanced, weighted]. Returns the largest unweighted
-    class count."""
-    var n = Int(py=dims[0])
-    var k = Int(py=dims[1])
-    var balanced = Int(py=dims[2]) != 0
-    var weighted = Int(py=dims[3]) != 0
-    var ca = Int(py=codes_addr)
-    var sa = Int(py=sw_addr)
-    var wa = Int(py=cw_addr)
-    var oa = Int(py=out_addr)
-    if n <= 0 or k < 1 or ca == 0 or wa == 0:
-        raise Error("x_linear class prep: n > 0, k > 0, codes and class weights required")
-    if weighted and sa == 0:
-        raise Error("x_linear class prep: weighted counts need sample weights")
-    var largest = 0
-    with GILReleased(Python()):
-        largest = class_prep_device(
-            _p2m_ctx(), IP(unsafe_from_address=ca), FP(unsafe_from_address=sa if sa != 0 else wa), sa != 0,
-            FP(unsafe_from_address=wa), n, k, balanced, weighted, FP(unsafe_from_address=oa if oa != 0 else wa),
-            oa != 0)
-    return PythonObject(largest)
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_linear.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+
+
 def build__mojolearn_x_linear() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[ridge_fit_native_api_v1_binding]("ridge_fit_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[best_alpha_binding]("x_linear_best_alpha")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
-        m.def_function[class_prep_binding]("x_linear_class_prep")
-        m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
-        m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
         # TOMBSTONE: x_linear_glm_ydom, x_linear_cls1_flags (dead native entries: constant / switch-word probes nothing reads) deleted 2026-10-26 by 44fc3b5bb; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_linear.patch
         m.def_function[vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_linear_entry_table()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_linear: ", e))

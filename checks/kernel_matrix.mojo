@@ -3,13 +3,10 @@
 """One table: every kernel, every tunable it takes, per GPU vendor."""
 
 from std.sys.compile import is_defined
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_amd_rdna_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from std.sys.info import has_amd_rdna_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
+from checks.mode_policy import ROW_TILE_FREE
 from checks.numerics import (
     NumericMode,
     NUMERIC_FAST,
@@ -18,6 +15,8 @@ from checks.numerics import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime COLUMN_BIT_IDENTICAL = 0
 comptime COLUMN_APPLE = 1
 comptime COLUMN_NVIDIA = 2
@@ -714,18 +713,18 @@ comptime TARGET_COLUMN = (
     COLUMN_INTEL if is_defined["MOJOLEARN_COLUMN_INTEL"]() else
     COLUMN_SPEC_BASELINE if is_defined["MOJOLEARN_COLUMN_SPEC_BASELINE"]() else
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
-    COLUMN_AMD if has_amd_gpu_accelerator() else
-    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_AMD if TARGET_HAS_AMD_GPU else
+    COLUMN_NVIDIA if TARGET_HAS_NVIDIA_GPU else
+    COLUMN_APPLE if TARGET_HAS_APPLE_GPU else
     COLUMN_CPU
 )
 
 
 comptime DETECTED_COLUMN = (
     COLUMN_AMD_RDNA if has_amd_rdna_gpu_accelerator() else
-    COLUMN_AMD if has_amd_gpu_accelerator() else
-    COLUMN_NVIDIA if has_nvidia_gpu_accelerator() else
-    COLUMN_APPLE if has_apple_gpu_accelerator() else
+    COLUMN_AMD if TARGET_HAS_AMD_GPU else
+    COLUMN_NVIDIA if TARGET_HAS_NVIDIA_GPU else
+    COLUMN_APPLE if TARGET_HAS_APPLE_GPU else
     COLUMN_CPU
 )
 
@@ -938,14 +937,12 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
         # record) gather through the index too. Opt-out:
         # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
         # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
-        # IDENTICAL (opt-in until its A/B). fix-g1-gbdt: that opt-in arm
-        # also turns off under the master `-D MOJOLEARN_IDN_ALL_OFF`
-        # (Apple's schedule is its pre-existing default and stays).
+        # IDENTICAL (opt-in until its A/B; Apple's schedule is its
+        # pre-existing default and stays).
         return (
             column == COLUMN_APPLE
             or (
                 is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
-                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
                 and (
                     column == COLUMN_NVIDIA
                     or column == COLUMN_AMD
@@ -1180,7 +1177,9 @@ def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:
 
 def lib_block_size_for[kernel: Int, column: Int]() -> Int:
     """SCHEDULING for most rows, NUMERIC for three of them."""
-    comptime identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # The tile row of the mode policy table (checks/mode_policy.mojo): a tile
+    # that bounds a float fold is fixed unless the row is relaxed.
+    comptime identical = not ROW_TILE_FREE
     comptime numeric_row = lib_block_bounds_a_float_fold[kernel]()
     comptime resolved = (
         COLUMN_BIT_IDENTICAL if identical and numeric_row else column

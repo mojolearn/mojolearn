@@ -47,15 +47,14 @@ TARGETS AND WHO READS THEM (the partition is <device arch>/<image slug>):
                partition none/<rocm image>. NOT read by the default AMD
                release leg; see AMD below.
 
-AMD. The default gfx942 release leg (tools/do_release061_leg.sh or
-tools/hotaisle_release_leg.sh) never stages the binding cache, so nothing
+AMD. The default gfx942 release leg (tools/do_release061_leg.sh) never stages the binding cache, so nothing
 prebuilt reaches it whatever the key. Three alignments would be needed for a
 prebuilt gfx942 entry to be served there: (1) that leg stages and promotes
 like gemm_remote_leg.sh; (2) the key's `device_arch` must name the TARGET
 (MOJOLEARN_GPU_ARCHS) rather than what rocminfo reports, since the CPU pod
 says `none` and the MI325X `gfx942` for the same --target-accelerator
 compile; (3) `image` must name the build container, not the provider
-(`runpod-cpu:<rocm image>` versus a `do:`/`hotaisle:` label for the same
+(`runpod-cpu:<rocm image>` versus a `do:` label for the same
 rocm/dev-ubuntu-22.04 digest), and the leg's exported variables must match
 the CPU route's. Until then the planner reports gfx942 against the CPU-pod
 partition only.
@@ -88,12 +87,40 @@ PLAN_SCHEMA = "mojolearn.prebuild-plan.v1"
 PROFILES = ROOT / "tools" / "prebuild_profiles.json"
 TIERS = ("fast", "identical")
 #: Parts of a key's fields that come from the commit, not the box.
-COMMIT_FIELDS = ("script", "args", "source", "toolchain")
-#: The cheapest box first; a RunPod "no stock" walks to the next.
+COMMIT_FIELDS = ("script", "args", "source", "toolchain", "key_rule", "inputs", "merged")
+#: The ordered sm_89 RunPod walk shared with tools/nvidia_central.sh (one constant, never copied).
+SM89_WALK_FILE = ROOT / "tools" / "runpod_nvidia_sm89.env"
+#: GPU counts tools/gemm_remote_leg.sh accepts (MOJOLEARN_GEMM_LEG_GPU_COUNT).
+LEG_GPU_COUNTS = (1, 2, 4)
+
+
+def shared_walk(path=SM89_WALK_FILE):
+    """(gpu types, gpu counts) from tools/runpod_nvidia_sm89.env: plain KEY="value" lines."""
+    values = {}
+    for line in Path(path).read_text().splitlines():
+        m = re.match(r'^([A-Z0-9_]+)="([^"]*)"\s*$', line.strip())
+        if m:
+            values[m.group(1)] = m.group(2)
+    gpus = [g.strip() for g in values["NVIDIA_SM89_GPUS"].split(",") if g.strip()]
+    counts = [int(c) for c in values["NVIDIA_SM89_GPU_COUNTS"].split()]
+    if not gpus or not counts or any(c not in LEG_GPU_COUNTS for c in counts):
+        raise SystemExit("prebuild: %s must name GPU types and counts among %s" % (path, LEG_GPU_COUNTS))
+    return gpus, counts
+
+
+_SM89_GPUS, _SM89_COUNTS = shared_walk()
+#: The cheapest box first; a RunPod "no stock" walks to the next type, then to the next count. More GPUs
+#: is also more vCPUs: the box sizes its build from its own cores (tools/build_sizing.py), never a job
+#: count passed from here.
 GPU_WALK = {
-    "sm_89": ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation"],
+    "sm_89": _SM89_GPUS,
     "sm_90a": ["NVIDIA H100 PCIe", "NVIDIA H100 80GB HBM3", "NVIDIA H100 NVL", "NVIDIA H200"],
 }
+#: GPUs per pod, tried in order per target; sm_90a stays one GPU (a multi-GPU H100 pod is a price decision
+#: of its own).
+GPU_COUNT_WALK = {"sm_89": _SM89_COUNTS, "sm_90a": [1]}
+#: Dollar cap per GPU of the leg's segment lease (MOJOLEARN_PREBUILD_DOLLAR_CAP overrides the total).
+DOLLAR_CAP_PER_GPU = 6
 NO_STOCK = "no instances currently available"
 EVIDENCE = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", str(Path.home() / "mojolearn-evidence")))
 
@@ -172,30 +199,33 @@ def kind_of(tier, script):
 
 
 class CommitFacts:
-    """The commit-side half of every key, cached per script."""
+    """The commit-side half of every key: the tree and its Linux toolchain."""
 
     def __init__(self, tree):
         self.tree = Path(tree).resolve()
         self.toolchain = linux_toolchain(self.tree)
-        self._src = {}
-
-    def source(self, script):
-        if script not in self._src:
-            path = self.tree / "bindings" / script
-            src, _ = bincache.source_digest(self.tree, str(path), [])
-            self._src[script] = (src, bincache.local_inputs(self.tree, str(path)))
-        return self._src[script]
 
 
 def predict(facts, template, tier, script):
-    """(key, fields) the release box will compute for this build."""
-    src, inputs = facts.source(script)
-    fields = json.loads(json.dumps(template))
-    fields["script"] = "bindings/" + script
-    fields["args"] = []
-    fields["source"] = src
+    """(key, fields) the release box will compute for this build: tools/bincache.py
+    build_fields (key rule closure-v2) over the commit's tree, with the box half
+    from the template. The template's build_env is the union of what the leg
+    exported (capture); the key keeps only what this script reads, exactly as the
+    box's keyed_env does."""
+    environ = dict(template.get("build_env", {}))
+    environ["MOJOLEARN_NUMERIC_MODE"] = template["numeric_mode"]
+    for name, field in (("MOJOLEARN_GPU_ARCHS", "gpu_archs"), ("MOJOLEARN_TARGET_COLUMN", "target_column")):
+        if template.get(field):
+            environ[name] = template[field]
+    declared = template.get("declared", {})
+    fields, _ = bincache.build_fields(facts.tree, str(facts.tree / "bindings" / script), [], environ,
+                                      template["image"], declared=[declared_output(tier, script)],
+                                      shell=declared.get("shell", "bash"),
+                                      dev_arch=template.get("device_arch", "none"), os_info=template["os"],
+                                      plat="linux")
     fields["toolchain"] = facts.toolchain
-    fields["declared"] = dict(fields.get("declared", {}), inputs=inputs, outputs=[declared_output(tier, script)])
+    for k in ("numeric_mode", "gpu_archs", "target_column", "repo_path"):
+        fields[k] = template[k]
     return bincache.key_of(fields), fields
 
 
@@ -224,11 +254,19 @@ def capture(keys_dir):
         if "declared" not in f or f.get("variant"):
             continue
         script = f["script"].split("/")[-1]
-        t = {k: v for k, v in f.items() if k not in COMMIT_FIELDS}
+        t = {k: v for k, v in f.items() if k not in COMMIT_FIELDS and k != "build_env"}
         t["declared"] = {k: v for k, v in f["declared"].items() if k not in ("inputs", "outputs")}
         kind = kind_of(f["numeric_mode"], script)
-        if kind in templates and templates[kind] != t:
-            raise SystemExit("prebuild: two %s builds in %s carry different box fields" % (kind, keys_dir))
+        # closure-v2 keys keep only the variables each script reads, so the
+        # leg's environment is the union of its builds' (one value per name).
+        env = dict(f.get("build_env", {}))
+        if kind in templates:
+            prev = templates[kind]
+            clash = [n for n in set(env) & set(prev["build_env"]) if env[n] != prev["build_env"][n]]
+            if {k: v for k, v in prev.items() if k != "build_env"} != t or clash:
+                raise SystemExit("prebuild: two %s builds in %s carry different box fields" % (kind, keys_dir))
+            env = dict(prev["build_env"], **env)
+        t["build_env"] = env
         templates[kind] = t
     if not templates:
         raise SystemExit("prebuild: no declared (release) build keys in %s" % keys_dir)
@@ -368,17 +406,22 @@ def check_keys(facts, templates, keys_dir, builds):
 
 
 # ---------------------------------------------------------------- rent
-def leg_command(target, prof, commit, out, gpu):
+def leg_command(target, prof, commit, out, gpu, count=1):
     route = prof["route"]
     if route == "gemm-campaign7":
         arch = target.split("-", 1)[1]
+        if int(count) not in LEG_GPU_COUNTS:
+            raise SystemExit("prebuild: %r GPUs per pod is not one of %s" % (count, LEG_GPU_COUNTS))
+        # No MOJOLEARN_BUILD_JOBS: the box sizes its build from its own cores (tools/build_sizing.py).
         env = dict(MOJOLEARN_NVIDIA_CAMPAIGN="7", MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out),
+                   MOJOLEARN_GEMM_LEG_GPU_COUNT=str(int(count)),
                    MOJOLEARN_RUNPOD_KEY_FILE=os.path.expanduser(
                        os.environ.get("MOJOLEARN_RUNPOD_KEY_FILE", "~/.mojolearn_runpod_key")))
         cmd = ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba", "--source-ref", commit,
                "--gpu", gpu, "--allow-concurrent", "--rent",
                "--segment-lease", os.environ.get("MOJOLEARN_PREBUILD_LEASE", "90"),
-               "--dollar-cap", os.environ.get("MOJOLEARN_PREBUILD_DOLLAR_CAP", "6")]
+               "--dollar-cap", os.environ.get("MOJOLEARN_PREBUILD_DOLLAR_CAP",
+                                              str(DOLLAR_CAP_PER_GPU * int(count)))]
         return cmd, env, out / "remote" / "release-build" / "build" / "bincache" / "keys"
     if route == "cpu-pod":
         cmd = ["bash", "tools/release_linux_build.sh", commit, "--archs", target.split("-", 1)[1],
@@ -441,6 +484,15 @@ def no_stock(out):
     return False
 
 
+def rent_walk(name, prof):
+    """[(gpu type, gpus per pod)] in the order a no-stock walk tries them: every type at the first count,
+    then every type at the next (the order tools/nvidia_central.sh walks). A CPU-pod route: [(None, 1)]."""
+    if prof["route"] != "gemm-campaign7":
+        return [(None, 1)]
+    arch = name.split("-", 1)[1]
+    return [(gpu, count) for count in GPU_COUNT_WALK.get(arch, [1]) for gpu in GPU_WALK.get(arch, [None])]
+
+
 def rent(plan, commit, profiles, facts, builds, say=print):
     """One leg per target with missing keys; then re-plan and check keys."""
     results = {}
@@ -450,12 +502,13 @@ def rent(plan, commit, profiles, facts, builds, say=print):
             say("%s: nothing missing, no rental" % name)
             continue
         prof = profiles[name]
-        walk = GPU_WALK.get(name.split("-", 1)[1], [None]) if prof["route"] == "gemm-campaign7" else [None]
-        for gpu in walk:
-            out = EVIDENCE / "prebuild" / commit[:12] / ("%s-%s%s" % (name, stamp, "-" + re.sub(r"\W+", "", gpu) if gpu else ""))
+        for gpu, count in rent_walk(name, prof):
+            tag = ("-%dx" % count if count > 1 else "") + ("-" + re.sub(r"\W+", "", gpu) if gpu else "")
+            out = EVIDENCE / "prebuild" / commit[:12] / ("%s-%s%s" % (name, stamp, tag))
             out.parent.mkdir(parents=True, exist_ok=True)
-            cmd, env, keys_dir = leg_command(name, prof, commit, out, gpu)
-            say("%s: %d missing; renting %s -> %s" % (name, t["counts"]["missing"], gpu or "a CPU pod", out))
+            cmd, env, keys_dir = leg_command(name, prof, commit, out, gpu, count)
+            say("%s: %d missing; renting %s -> %s" % (name, t["counts"]["missing"],
+                                                       ("%dx %s" % (count, gpu)) if gpu else "a CPU pod", out))
             t0 = time.time()
             with open(str(out) + ".log", "w") as log:
                 if prof["route"] == "gemm-campaign7":
@@ -469,7 +522,8 @@ def rent(plan, commit, profiles, facts, builds, say=print):
             if rc != 0 and gpu and no_stock(out):
                 say("  %s: no stock, walking on" % gpu)
                 continue
-            results[name] = dict(rc=rc, wall_seconds=round(wall), out=str(out), gpu=gpu, keys_dir=str(keys_dir))
+            results[name] = dict(rc=rc, wall_seconds=round(wall), out=str(out), gpu=gpu, gpu_count=count,
+                                 keys_dir=str(keys_dir))
             if keys_dir.is_dir():
                 ok, box_only, pred_only = check_keys(facts, prof["templates"], keys_dir, builds)
                 results[name].update(keys_matched=len(ok), box_only=box_only, predicted_only=pred_only)

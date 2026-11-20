@@ -1,15 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""LogisticRegression with more than two classes (lane/logistic-multiclass,
-2026-09-14): the Python surface over the softmax loss.
+"""LogisticRegression public packaging, writable state and archive seams.
 
-Runs as a module, `cd python && python3 -m mojolearn.tests.test_logistic_multiclass_surface`,
-and under pytest. Every arm fits through the GPU binding of this box (the
-softmax arm of `qn_fit`), so it needs a built `_mojolearn_estimators`;
-what it checks is the SURFACE: shapes, the row argmax and its tie rule,
-the softmax rows, the refusals, the file round trip, the string labels, and
-that the binary path still answers its binary shapes. It says NOTHING
-about cross-vendor identity; that is `tools/identity_break.py`'s
-`logistic-multiclass` lane and the classical host gate.
+Original fit workloads remain here to check Python classes, dtypes and shapes.
+Numerical argmax/probability/accuracy oracles and the exact 64-row zero-state
+first-maximum tie execute directly through Mojo QN requests in
+checks/native_tests/logistic_numeric_{cpu,gpu}_suite.mojo. This module does not claim numerical or cross-vendor verification by itself.
 """
 import os
 import sys
@@ -17,7 +12,7 @@ import tempfile
 
 import numpy as np
 
-from mojolearn import Array, linear_model
+from mojolearn import linear_model
 from mojolearn.linear_model import LogisticRegression
 
 
@@ -34,14 +29,7 @@ def _fixture(n=600, d=4, seed=0):
     return X, y
 
 
-def _argmax_first(a):
-    """The tie rule spelled independently of the package: the lowest index
-    among the maxima of each row."""
-    a = np.asarray(a)
-    return np.array([int(np.flatnonzero(row == row.max())[0]) for row in a], dtype=np.int64)
-
-
-def test_three_class_fit_shapes_and_argmax():
+def test_three_class_fit_public_layout():
     X, y = _fixture()
     m = LogisticRegression(max_iter=100).fit(X, y)
     assert m.classes_ == [0, 1, 2]
@@ -51,33 +39,10 @@ def test_three_class_fit_shapes_and_argmax():
     assert scores.shape == (600, 3) and scores.dtype == np.float32
     proba = np.asarray(m.predict_proba(X))
     assert proba.shape == (600, 3) and proba.dtype == np.float64
-    assert np.all(proba >= 0.0) and np.all(proba <= 1.0)
-    assert np.max(np.abs(proba.sum(axis=1) - 1.0)) < 1e-12
     pred = np.asarray(m.predict(X))
-    assert pred.dtype == np.int64
-    assert np.array_equal(pred, _argmax_first(scores))
-    assert np.array_equal(pred, _argmax_first(proba))
-    assert float(np.mean(pred == y)) > 0.9
+    assert pred.shape == (600,) and pred.dtype == np.int64
     assert int(m.retcode_) == 0
-    # the softmax of the decision function, in float64, independently
-    z = scores.astype(np.float64)
-    ref = np.exp(z - z.max(axis=1, keepdims=True))
-    ref = ref / ref.sum(axis=1, keepdims=True)
-    assert np.max(np.abs(proba - ref)) < 1e-12
     return m, X, y
-
-
-def test_tie_rule_first_maximum_wins():
-    X, y = _fixture(n=64)
-    m = LogisticRegression(max_iter=5).fit(X, y)
-    # every logit zero: every row an exact three-way tie
-    m._w = Array.from_list([0.0] * m._w.size, "<f4")
-    scores = np.asarray(m.decision_function(X))
-    assert scores.shape == (64, 3) and not scores.any()
-    pred = np.asarray(m.predict(X))
-    assert np.array_equal(pred, np.zeros(64, dtype=np.int64)), "a tie must go to classes_[0]"
-    proba = np.asarray(m.predict_proba(X))
-    assert np.all(proba == 1.0 / 3.0)
 
 
 def test_three_classes_refuse_l1_by_name():
@@ -102,7 +67,7 @@ def test_binary_path_keeps_its_shapes():
     proba = np.asarray(m.predict_proba(X))
     assert proba.shape == (200, 2)
     pred = np.asarray(m.predict(X))
-    assert np.array_equal(pred, (np.asarray(m.decision_function(X)) > 0).astype(np.int64))
+    assert pred.shape == (200,) and pred.dtype == np.int64
 
 
 def test_save_load_round_trip_carries_the_class_count():
@@ -142,8 +107,7 @@ def test_string_labels_decode_to_a_list():
 
 def main(out=sys.stdout):
     arms = [
-        test_three_class_fit_shapes_and_argmax,
-        test_tie_rule_first_maximum_wins,
+        test_three_class_fit_public_layout,
         test_three_classes_refuse_l1_by_name,
         test_binary_path_keeps_its_shapes,
         test_save_load_round_trip_carries_the_class_count,
@@ -153,13 +117,10 @@ def main(out=sys.stdout):
         arm()
         out.write(f"  {arm.__name__} OK\n")
     out.write(
-        "test_logistic_multiclass_surface: GREEN on %s. Three classes fit\n"
-        "through the softmax loss with (C, n_features) coefficients, the\n"
-        "predict argmax gives the FIRST maximum a tie, predict_proba rows are\n"
-        "the float64 softmax of the decision function, l1 with three classes\n"
-        "refuses by name, the binary shapes are unchanged, the file round\n"
-        "trip carries the class count through classes_, and string labels\n"
-        "decode to a list. Cross-vendor identity is NOT checked here.\n"
+        "test_logistic_multiclass_surface: public boundary checks passed on %s.\n"
+        "Original fit layouts, named L1\n"
+        "refusal, archive class count and label decoding are covered here.\n"
+        "Native numerical suites and cross-vendor verification are separate.\n"
         % linear_model._backend.vendor())
     return 0
 

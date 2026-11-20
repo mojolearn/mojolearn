@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 from std.math import isfinite
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoPreprocessingContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoPreprocessingContextFast"
+comptime _DEVCTX_SLOT = "MojolearnPreprocessingContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnPreprocessingContextFastV3"
 
 from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite
@@ -200,7 +200,7 @@ def _minmax_fit_direct_cls2(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx: DeviceBuffer[DType.float32]
     comptime if PREP_CLS2_MINMAX_POOL:
-        dx = pool_take["MojoPrepCls2MinmaxX"](ctx,n*d)
+        dx = pool_take["MojolearnPrepCls2MinmaxXV2"](ctx,n*d)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     else:
         dx = _upload_direct(ctx,x,n*d)
@@ -222,7 +222,7 @@ def _minmax_fit_direct_cls2(
             res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
             f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     comptime if PREP_CLS2_MINMAX_POOL:
-        pool_give["MojoPrepCls2MinmaxX"](dx^)
+        pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
     else:
         _ = dx^
     if not ok:
@@ -342,9 +342,12 @@ def standard_transform_direct(
 # ~1-2 ms per 64 MB, so a 10^9-byte X saves tens of ms against a ~1 ms
 # kernel). Same kernels on the same words as fit + transform: no bit moves.
 comptime PREP_FAST_FIT_TRANSFORM_FUSED = (
-    _DEVCTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    _DEVCTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"]()
 )
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (Apple FAST opt-in arm, EXP:1597 OPEN, no A/B) deleted 2026-11-15 by lane/expdel2-20-linear (the PREP_FAST_FIT_TRANSFORM_FUSED gate, which nothing read; the direct entries below stay for their binding); code recoverable at 23c6c58415.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def standard_fit_transform_direct(
@@ -416,7 +419,7 @@ def minmax_fit_transform_direct(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx: DeviceBuffer[DType.float32]
     comptime if PREP_CLS2_MINMAX_POOL:
-        dx = pool_take["MojoPrepCls2MinmaxX"](ctx,n*d)
+        dx = pool_take["MojolearnPrepCls2MinmaxXV2"](ctx,n*d)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     else:
         dx = _upload_direct(ctx,x,n*d)
@@ -438,7 +441,7 @@ def minmax_fit_transform_direct(
             f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     if not ok or f[0] != 0 or f[1] != 0:
         comptime if PREP_CLS2_MINMAX_POOL:
-            pool_give["MojoPrepCls2MinmaxX"](dx^)
+            pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
         else:
             _ = dx^
         _ = res^
@@ -463,7 +466,7 @@ def minmax_fit_transform_direct(
         ctx.synchronize()
     _ = dout^; _ = dm^; _ = ds^; _ = res^
     comptime if PREP_CLS2_MINMAX_POOL:
-        pool_give["MojoPrepCls2MinmaxX"](dx^)
+        pool_give["MojolearnPrepCls2MinmaxXV2"](dx^)
     else:
         _ = dx^
     _ = ctx^

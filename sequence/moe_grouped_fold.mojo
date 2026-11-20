@@ -6,8 +6,7 @@ AND THE SWITCH. HOST-SAFE (no device construct): `sequence/moe.mojo`'s items
 import this file, `sequence/moe_grouped.mojo` holds the device side.
 
 MOJOLEARN_IDN_MOE_GROUPED_GEMM: the IDENTICAL default since 2026-10-10
-(lane/postmerge-act-6; `-D MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF` restores
-`moe_reg`'s one-chain tile; the old on-define is refused in
+(lane/postmerge-act-6; the old on-define is refused in
 core/six_lane_experiment_guards.mojo). Post-merge A/B, one run per arm (nv2
 L40S v1052 -> v1055 on main 9f83ea479, MI325X a1152 -> a1155 on main
 0a7b206f1): moe NV 23.16 -> 14.22 ms (0.61x) / AMD 18.79 -> 15.15 ms (0.81x);
@@ -30,16 +29,15 @@ NVIDIA and AMD move together, by the contract.
 `check_stack_fold_is_the_contract_tree`), spelled on an `InlineArray` so this
 file imports nothing from the device GEMM.
 """
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from gemm.contract import contract_leaf_size, leaf_count
 from sequence.ops import FP
 
-comptime MOE_GROUPED_GEMM = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF (old path; EXP:1944 PROMOTED, the grouped GEMM is the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 072f2eee14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_GROUPED_GEMM_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 072f2eee14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+comptime MOE_GROUPED_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -49,7 +47,7 @@ comptime MOE_FOLD_SLOTS = 16
 
 
 @always_inline
-def _fold_push16(mut stack: InlineArray[Float32, MOE_FOLD_SLOTS], mut occ: Int, value: Float32):
+def _fold_push16(mut stack: Array[Float32, MOE_FOLD_SLOTS], mut occ: Int, value: Float32):
     """`gemm_identical._fold_push`: slot d holds a full block of 2^d leaves;
     an occupied level merges `ftz(ftz(stack[d]) + ftz(val))` (the earlier
     leaves on the left) and carries upward; an unpaired leaf waits."""
@@ -67,7 +65,7 @@ def _fold_push16(mut stack: InlineArray[Float32, MOE_FOLD_SLOTS], mut occ: Int, 
 
 
 @always_inline
-def _fold_drain16(stack: InlineArray[Float32, MOE_FOLD_SLOTS], occ: Int) -> Float32:
+def _fold_drain16(stack: Array[Float32, MOE_FOLD_SLOTS], occ: Int) -> Float32:
     """`gemm_identical._fold_drain`: the leftover slots, lowest level first;
     one slot performs no addition."""
     var have = False
@@ -89,7 +87,7 @@ def moe_contract_cell(a: FP, b: FP, k: Int) -> Float32:
     the contract's leaves and tree, the stored word `ftz(root)`."""
     var leaf = contract_leaf_size(k)
     var p_count = leaf_count(k, leaf)
-    var stack = InlineArray[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
+    var stack = Array[Float32, MOE_FOLD_SLOTS](fill=Float32(0.0))
     var occ = 0
     for t in range(p_count):
         var pb = t * leaf

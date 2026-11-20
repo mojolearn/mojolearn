@@ -42,13 +42,13 @@ the dataset, takes 80% of what is left, and divides by a per-row estimate.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
+from dbscan.impl.brute_edge_free import brute_edge_free_applies
 from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 
 
@@ -66,25 +66,22 @@ from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 #: equal to the one-batch fit). `n_iter_` and the trace header's batch count
 #: follow the plan, as they already follow the device's memory size. An
 #: explicit `max_mbytes_per_batch` keeps the reference sizing.
-#: `-D MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF=1` restores it everywhere.
 #: fam2-cluster (2026-10-04): the core mask of `prediction_data=True` goes
 #: straight into the caller's array (see `IDN_DBSCAN_DIRECT_OUT` in
-#: `dbscan/estimator.mojo`; the same `_OFF` define restores the staged copy).
-comptime IDN_DBSCAN_DIRECT_CORE_OUT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: `dbscan/estimator.mojo`).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 251c5ffa6d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_DIRECT_CORE_OUT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at cb78ef01f0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_RBC_ONE_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 
 
@@ -301,8 +298,7 @@ def dbscan_fit_impl_weighted(
     # RBC arm (the runner's `sparse_rbc_mode`, same test) emits CSR and
     # never reads the dense `batch x n_rows` adjacency, which is 2 GB at
     # 50,000 rows and 10 GB at 100,000; it gets one byte. No kernel reads
-    # it, so no bit moves. `-D MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` keeps the
-    # full allocation.
+    # it, so no bit moves.
     # IDN_DBSCAN_RBC_ONE_BATCH (see the define): one planned batch and a
     # memory-derived edge cap on the sparse ball-cover arm. The sparse test
     # is the runner's own (`sparse_rbc_mode`), so the dense adjacency this
@@ -340,10 +336,20 @@ def dbscan_fit_impl_weighted(
     var adj_len = batch * n_rows
     if one_batch_plan:
         adj_len = 1
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE: the runner takes the brute
+    # edge-free route on this same test (a subset of its own: the runner's
+    # brute arm also covers the RBC downgrade) and reads no byte adjacency.
+    # Always False under MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF.
+    if brute_edge_free_applies(
+        eps_nn_method != EPS_NN_RBC, metric, has_weights, n_rows, batch,
+        min_pts,
+    ):
+        adj_len = 1
+    # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_DENSE_ADJ (unmeasured Apple opt-in arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at b054d63e45.
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSE_ADJ.patch; record in docs/TOMBSTONES.md.
     comptime if (
         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-        and has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_DBSCAN_FAST_DENSE_ADJ"]()
+        and TARGET_HAS_APPLE_GPU
     ):
         if eps_nn_method == EPS_NN_RBC and n_features <= 2147483647 // n_rows:
             adj_len = 1

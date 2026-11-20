@@ -2,7 +2,7 @@
 """Typed Samba token-id conversion and row copies moved from bindings/samba_inference_native.mojo
 and bindings/samba_training_native.mojo. Ids arrive as native little-endian integers of
 `item` bytes each, in C order; every range check runs on the full-width value."""
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 
 @always_inline
@@ -63,5 +63,5 @@ def samba_training_ids_into(
 
 def samba_copy_row_prefixes(dst_addr: Int, src_addr: Int, sizes: List[Int], b: Int, l: Int, v: Int):
     for row in range(b):
-        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr) + row * l * v,
+        unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr) + row * l * v,
                src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr) + row * l * v, count=sizes[row] * v)

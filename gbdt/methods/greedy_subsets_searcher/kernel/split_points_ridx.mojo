@@ -59,7 +59,7 @@ byte for byte, so the merge gate's compare passes by construction.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     GATHER_INPLACE_BLOCK,
@@ -148,7 +148,7 @@ def launch_reorder_index_only(
     # launcher takes for the same two kernels.
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var grid_x = split_points_grid_x(n_leaf_slots, sm)
 
     ctx.enqueue_function[copy_index_in_leaves_kernel](

@@ -23,7 +23,7 @@ from x_neighbors.host_ops import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     # ---- 5200: the SMO on an rbf kernel matrix whose rows 1 and 2 are equal (tied gradients)
     var n = 30
@@ -53,12 +53,17 @@ def main() raises:
     var di = zf(1)
     var dit = zi(1)
     op_ocsvm(fa(q), fa(ones), fa(da), fa(di), ia(dit), n, Float32(1e-3), 100000)
+    # the iteration-count cell is written by the op through its address: name it
+    # after the call, or Mojo frees it at `ia(dit)` and the op writes freed
+    # storage (the L40S run of 0c68d6cd27 died in the allocator at the fourth call)
+    _ = dit^
     da.append(di[0])
     same("5200 ocsvm device", count_diff_f32(da, wa))
     var ha = a0.copy()
     var hi = zf(1)
     var hit = zi(1)
     h_ocsvm(fa(q), fa(ones), fa(ha), fa(hi), ia(hit), n, Float32(1e-3), 100000)
+    _ = hit^
     ha.append(hi[0])
     same("5200 ocsvm host", count_diff_f32(ha, wa))
     tr.record_list_f32("x_neighbors.ocsvm", da)
@@ -86,12 +91,14 @@ def main() raises:
     var dwi = zf(1)
     var dwit = zi(1)
     op_ocsvm(fa(q), fa(cw), fa(dw), fa(dwi), ia(dwit), n, Float32(1e-3), 100000)
+    _ = dwit^
     dw.append(dwi[0])
     same("5200 ocsvm weighted device", count_diff_f32(dw, wwa))
     var hw = aw0.copy()
     var hwi = zf(1)
     var hwit = zi(1)
     h_ocsvm(fa(q), fa(cw), fa(hw), fa(hwi), ia(hwit), n, Float32(1e-3), 100000)
+    _ = hwit^
     hw.append(hwi[0])
     same("5200 ocsvm weighted host", count_diff_f32(hw, wwa))
     tr.record_list_f32("x_neighbors.ocsvm_weighted", dw)

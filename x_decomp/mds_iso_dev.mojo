@@ -18,21 +18,20 @@ first iteration scatters the keys; later ones run a thread per group (sum,
 count), a thread per ISO_CHUNK groups (PAVA), a thread per pair of runs per
 tree level (`iso_merge`), a max scan of the block heads (log2(G) launches),
 a thread per group (its block mean) and a thread per pair (the scatter)."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
+from core.device_zero import enqueue_fill_addr
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, _down, xd_ctx
 from x_decomp.mds_iso import ISO_CHUNK, iso_chunk, iso_group_sum, iso_mean, iso_merge
-from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident import pool_buffer, _ptr
 from x_decomp.select_ops import order_less
 
 
 def _iptr(id: Int, n: Int) raises -> I32Ptr:
     """Pooled matrix id as int32 words (made on the host, never in a kernel)."""
-    _ = _ptr(id, n)
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    return I32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    return _ptr(id, n).bitcast[Int32]()
 
 
 def mds_keys_kernel(dis: F32Ptr, keys: F32Ptr, idx: I32Ptr, n: Int32, total: Int32):
@@ -126,12 +125,6 @@ def mds_gst_kernel(keys: F32Ptr, gid: I32Ptr, gst: I32Ptr, m: Int32, dst: I32Ptr
             dst.unsafe_store(0, Int32(g))
 
 
-def zero_kernel(dst: F32Ptr, count: Int32):
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(count):
-        dst.unsafe_store(t, Float32(0))
-
-
 def scatter_keys_kernel(keys: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(m):
@@ -187,12 +180,13 @@ def scatter_disp_kernel(gv: F32Ptr, gid: I32Ptr, idx: I32Ptr, dst: F32Ptr, m: In
 
 def _read_i32(id: Int) raises -> Int:
     """Word 0 of pooled matrix id as an int32, after every launch before it."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var buffer = pool_buffer(id, 1)
     var h = List[Float32](length=1, fill=Float32(0))
     var ctx = xd_ctx()
-    _down(ctx, p[].bufs[id], F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())), 1)
+    _down(ctx, buffer, F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())), 1)
     ctx.synchronize()
     var v = Int(bitcast[DType.int32](h[0]))
+    _ = buffer^
     return v
 
 
@@ -260,7 +254,7 @@ def mds_disp_dev(d_id: Int, dst_id: Int, ids: List[Int], n: Int, m: Int, G: Int,
     device matrices; p = [n, m, G, first]."""
     var po = _ptr(dst_id, n * n)
     var ctx = xd_ctx()
-    ctx.enqueue_function[zero_kernel](po, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
+    enqueue_fill_addr[DType.float32](ctx, Int(po), n * n, Float32(0))
     if m == 0:
         return
     var pk = _ptr(ids[0], m)

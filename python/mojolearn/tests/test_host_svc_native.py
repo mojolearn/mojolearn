@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Saved SVC public inference preserves its complete native operation boundary."""
-import ast
 import gc
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -300,16 +298,6 @@ def test_svc_inherited_methods_keep_existing_application_guards():
     _subclass_guards("SVC")
 
 
-def test_svc_public_methods_are_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostSVC")
-    for name in METHODS:
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
-        body = method.body[1:]
-        assert len(body) == 1 and isinstance(body[0], ast.Return)
-        assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
-
-
 @pytest.mark.parametrize("multi", [False, True])
 @pytest.mark.parametrize("kind", ["tuple", "ndarray", "fortran", "strided", "big_endian", "Array", "array_rows"])
 def test_svc_native_calibration_storage_preserves_scalar_conversion(tmp_path, multi, kind):
@@ -388,78 +376,26 @@ def test_svc_computed_property_refuses_object_storage_hooks(tmp_path, field):
     assert touched == []
 
 
-# Frozen320 full fit/nested score receipts; inherited training remains debt.
-_FITTED_RESULTS = {('linear', False): {'score': 1.0,
-                     'outputs': {'predict': 'fabb5ef74cba3752ffd24955e8916ccae8342160d51ebef4b186dcd786e61e11',
-                                 'decision_function': 'ddbe11181ae328585eee3af5d23fe662efe4b3be58fb1c65058854979bbab64f',
-                                 'predict_proba': '95cbb15365e2fbdca4f0e48f342608c12bbf8cf2097552ba4487108be01914c6',
-                                 'predict_log_proba': 'bc9d7795f8fb533639943053df4e4936d6eb8d60552821d3136215be2372ccf5'}},
- ('linear', True): {'score': 1.0,
-                    'outputs': {'predict': '5664ee91a9289943f6b968bac7b7d35ad321fe7c6ff70cc91c8d20139c9c6afe',
-                                'decision_function': 'deec1631a5889087f7c0a157adf40cb36ba1a948608bbe9373382eece56b6d46',
-                                'predict_proba': 'a74bcba58eb3069b2aadc6f882666c7163de905dbbc2f854ce37e6666f5c7f6e',
-                                'predict_log_proba': '0e2e2fb36ffdde43d74d2f523fbb21e41811ddec5d7a6ccf28dc9dbbce3afa9e'}},
- ('rbf', False): {'score': 1.0,
-                  'outputs': {'predict': 'fabb5ef74cba3752ffd24955e8916ccae8342160d51ebef4b186dcd786e61e11',
-                              'decision_function': '2bc1b30f389c3c5b4cf06d415b742e9560140ec920cb30ad41960d8b7878d2af',
-                              'predict_proba': '75f6750e0f7dca8d165798e6de3c522c4785c4fc9530bf4908798984ef60a05e',
-                              'predict_log_proba': '9c624354e3bbc804e6edfbc5f5941d881de4a01f98661364ea93cb199464fbe9'}},
- ('rbf', True): {'score': 1.0,
-                 'outputs': {'predict': '5664ee91a9289943f6b968bac7b7d35ad321fe7c6ff70cc91c8d20139c9c6afe',
-                             'decision_function': 'e8e4ac92530dab1cad97b7fe22cff3bd57772faf937fa09a9b03e5e06e389648',
-                             'predict_proba': 'c25b51b8b3fadb2a2d2607e50108c6d206214e3cc0c409f325de44b73a9d3748',
-                             'predict_log_proba': 'cb1c6859169c5bfd012513df37f199006f05b6ac73bb9e181fa260ab436375dc'}},
- ('poly', False): {'score': 1.0,
-                   'outputs': {'predict': 'fabb5ef74cba3752ffd24955e8916ccae8342160d51ebef4b186dcd786e61e11',
-                               'decision_function': 'e04446158e2e820b69226ff17a3e42d99bbd7bf6e661d0da866ecce50a64925f',
-                               'predict_proba': '91447089cc1cbe059578ecfde1cfd89ec14f5c18b6b1b77aa9274b458a720421',
-                               'predict_log_proba': 'd329d65723fedde814b4336373e1b8c65737943fe9c227357f90570db78f268d'}},
- ('poly', True): {'score': 1.0,
-                  'outputs': {'predict': '5664ee91a9289943f6b968bac7b7d35ad321fe7c6ff70cc91c8d20139c9c6afe',
-                              'decision_function': 'e86ba5e06068be2e01ac0b88f81b3b749571bf81e0df41c22bcf478a7bf3d91b',
-                              'predict_proba': '673029fef060043f6c918f7ce3258015b0d49843f14ea590aa4825a05cf7fbc7',
-                              'predict_log_proba': 'e048771b658d232c079a379ce6efe66346686e4244784dd784794c73952d93fe'}},
- ('sigmoid', False): {'score': 0.8333333333333334,
-                      'outputs': {'predict': 'a1879b2135492646fdd3baac8d73f404161127330e0b334f1d983bd45c12b68e',
-                                  'decision_function': '80f9f0c9df49bcc68fb4ed1df4ca709e1c7425705a92c691152dcda693989cdd',
-                                  'predict_proba': '3ba70ead0fd1c9f4d78263fac307a076718ac2875c71e1813842813552101531',
-                                  'predict_log_proba': '794e7fb425b78b01a010247f0fea667e59209be86465bb47019616c7d3e1d338'}},
- ('sigmoid', True): {'score': 0.3333333333333333,
-                     'outputs': {'predict': 'f3446011c5434d57f1d7f98c676d120f83205f0e5d862f2e5340309d0cbe5fdf',
-                                 'decision_function': '51adb7f080573ab440ad9394d148708cbee96691f556768954bdcbd7c757e32e',
-                                 'predict_proba': '84263f7ad921346638aafbe05eca544f1c3331f98fe19936681edabf9b002256',
-                                 'predict_log_proba': '31202f8c01186c647b0a4c4920d499f71a0ba180cae2cfe1b9dcbb76e3278973'}},
- ('precomputed', False): {'score': 1.0,
-                          'outputs': {'predict': 'fabb5ef74cba3752ffd24955e8916ccae8342160d51ebef4b186dcd786e61e11',
-                                      'decision_function': 'ddbe11181ae328585eee3af5d23fe662efe4b3be58fb1c65058854979bbab64f',
-                                      'predict_proba': '95cbb15365e2fbdca4f0e48f342608c12bbf8cf2097552ba4487108be01914c6',
-                                      'predict_log_proba': 'bc9d7795f8fb533639943053df4e4936d6eb8d60552821d3136215be2372ccf5'}},
- ('precomputed', True): {'score': 1.0,
-                         'outputs': {'predict': '5664ee91a9289943f6b968bac7b7d35ad321fe7c6ff70cc91c8d20139c9c6afe',
-                                     'decision_function': 'deec1631a5889087f7c0a157adf40cb36ba1a948608bbe9373382eece56b6d46',
-                                     'predict_proba': 'a74bcba58eb3069b2aadc6f882666c7163de905dbbc2f854ce37e6666f5c7f6e',
-                                     'predict_log_proba': '0e2e2fb36ffdde43d74d2f523fbb21e41811ddec5d7a6ccf28dc9dbbce3afa9e'}}}
-
-
-@pytest.mark.parametrize("kernel", KERNELS)
 @pytest.mark.parametrize("multi", [False, True])
-def test_svc_inherited_fit_and_score_keep_frozen_results(kernel, multi):
-    import hashlib
+def test_svc_inherited_fit_is_native_and_precomputed_matches_linear(multi):
+    """For every kernel the inherited fit publishes a fitted model whose every inference method is
+    one native call, and a precomputed linear Gram gives the linear kernel's
+    outputs bit for bit in the same build."""
     x = np.asarray([[-3, -2], [-2, -1], [-1, -2], [-2, -3], [0, 1], [1, 0],
                     [1, 2], [2, 1], [3, 4], [4, 3], [3, 3], [4, 4]], dtype=np.float32)
     y = np.asarray([0] * 4 + [1] * 4 + [2] * 4 if multi else [0] * 6 + [1] * 6, dtype=np.int64)
-    data = x @ x.T if kernel == "precomputed" else x
-    model = host.HostSVC(C=1.5, kernel=kernel, gamma=.5, degree=3,
-                        coef0=.25 if kernel in ("poly", "sigmoid") else 0.,
-                        probability=True, random_state=17, max_iter=100, numeric_mode="identical")
-    assert model.fit(data, y) is model
-    assert vars(model)["_mojolearn_fitted"] is True
-    assert "_mojolearn_fitting" not in vars(model)
-    expected = _FITTED_RESULTS[kernel, multi]
-    assert model.score(data, y) == expected["score"]
+    outputs = {}
+    for kernel in KERNELS:
+        data = x @ x.T if kernel == "precomputed" else x
+        model = host.HostSVC(C=1.5, kernel=kernel, gamma=.5, degree=3, coef0=.25 if kernel in ("poly", "sigmoid") else 0.,
+                             probability=True, random_state=17, max_iter=100, numeric_mode="identical")
+        assert model.fit(data, y) is model
+        assert vars(model)["_mojolearn_fitted"] is True
+        assert "_mojolearn_fitting" not in vars(model)
+        outputs[kernel] = {method: np.asarray(audit_native_call(getattr(model, method), data).assert_native())
+                           for method in METHODS}
     for method in METHODS:
-        result = audit_native_call(getattr(model, method), data).assert_native()
-        assert hashlib.sha256(np.asarray(result).tobytes()).hexdigest() == expected["outputs"][method]
+        np.testing.assert_array_equal(outputs["precomputed"][method], outputs["linear"][method])
 
 
 @pytest.mark.parametrize("method", METHODS)

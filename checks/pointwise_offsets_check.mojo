@@ -68,7 +68,7 @@ def cell_value(part: Int, stat: Int, feature: Int, b: Int) -> Float32:
     return Float32(h + 1)
 
 
-def main() raises:
+def run_checks() raises:
     var failures = 0
 
     # ---------------------------------------------------------------- P1
@@ -258,10 +258,10 @@ def main() raises:
     var d_folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var d_onehot = ctx.enqueue_create_buffer[DType.uint8](n_features)
     var d_hist = ctx.enqueue_create_buffer[DType.float32](n_cells)
-    ctx.enqueue_copy(dst_buf=d_first, src_ptr=first_fold_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=folds_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_onehot, src_ptr=one_hot_host.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hist, src_ptr=hist_host.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_first, first_fold_host)
+    upload_whole_into[DType.uint32](ctx, d_folds, folds_host)
+    upload_whole_into[DType.uint8](ctx, d_onehot, one_hot_host)
+    upload_whole_into[DType.float32](ctx, d_hist, hist_host)
 
     ctx.enqueue_function[scan_pointwise_histograms_kernel](
         d_first.unsafe_ptr(),
@@ -276,7 +276,7 @@ def main() raises:
         block_dim=(64, 1, 1),
     )
     var back = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
-    ctx.enqueue_copy(dst_buf=back, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, back)
     ctx.synchronize()
 
     # host prefix, cell by cell, over the SAME hashed plants
@@ -373,3 +373,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("pointwise offsets: P1-P6 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_offsets_check", cpu=False, gpu=True, serial="", run=run_cases)

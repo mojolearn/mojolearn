@@ -1,0 +1,224 @@
+diff --git b/x_decomp/decomp_owner_dev.mojo a/x_decomp/decomp_owner_dev.mojo
+index da4afadf20..dcfd3dda19 100644
+--- b/x_decomp/decomp_owner_dev.mojo
++++ a/x_decomp/decomp_owner_dev.mojo
+@@ -23,7 +23,8 @@ from x_decomp.lda_fit import LdaArgs
+ from x_decomp.lda_fit_dev import lda_fit_dev_run
+ from x_decomp.kit_device import lda_online_dev_run
+ from x_decomp.fa_fast import (
+-    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, fa_em_run, fa_gram_run,
++    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, FA_TRANSFORM_FUSED, fa_em_run, fa_gram_run,
++    fa_transform_run,
+ )
+ 
+ 
+@@ -89,8 +90,8 @@ struct DevDecomp(DecompDev):
+                 f |= 1
+             comptime if FA_ITER_DEVICE:
+                 f |= 2
+-            # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531 (bit 4 is 0).
+-            # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
++            comptime if FA_TRANSFORM_FUSED:
++                f |= 4
+             comptime if FA_GRAM_DF:
+                 f |= 8
+         return f
+@@ -104,6 +105,10 @@ struct DevDecomp(DecompDev):
+               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+         return fa_em_run(g, psi_src, w_dst, psi_dst, ll_dst, d, nc, n, max_iter, tol)
+ 
++    @staticmethod
++    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
++        _ = fa_transform_run(x, mean, pm, dst, n, d, nc)
++
+     @staticmethod
+     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                  tol: Float64) raises:
+diff --git b/x_decomp/decomp_owner_host.mojo a/x_decomp/decomp_owner_host.mojo
+index cd675dfd8a..ea21e5a33e 100644
+--- b/x_decomp/decomp_owner_host.mojo
++++ a/x_decomp/decomp_owner_host.mojo
+@@ -81,6 +81,10 @@ struct HostDecomp(DecompDev):
+               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+         raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
+ 
++    @staticmethod
++    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
++        raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
++
+     @staticmethod
+     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                  tol: Float64) raises:
+diff --git b/x_decomp/decomp_owner_kit.mojo a/x_decomp/decomp_owner_kit.mojo
+index 1707f8e85e..76b3abe15a 100644
+--- b/x_decomp/decomp_owner_kit.mojo
++++ a/x_decomp/decomp_owner_kit.mojo
+@@ -108,8 +108,7 @@ trait DecompDev:
+     @staticmethod
+     def fa_flags() -> Int:
+         """FactorAnalysis's FAST Apple switches (`x_decomp_fa_defines`): bit 1
+-        GRAM_ONCE, 2 ITER_DEVICE, 8 GRAM_DF (4 was TRANSFORM_FUSED, deleted
+-        2026-11-15); 0 elsewhere."""
++        GRAM_ONCE, 2 ITER_DEVICE, 4 TRANSFORM_FUSED, 8 GRAM_DF; 0 elsewhere."""
+         ...
+ 
+     @staticmethod
+@@ -121,6 +120,10 @@ trait DecompDev:
+               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+         ...
+ 
++    @staticmethod
++    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
++        ...
++
+     @staticmethod
+     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                  tol: Float64) raises:
+diff --git b/x_decomp/fa_fast.mojo a/x_decomp/fa_fast.mojo
+index 03ee2ccafe..71133ca741 100644
+--- b/x_decomp/fa_fast.mojo
++++ a/x_decomp/fa_fast.mojo
+@@ -35,9 +35,9 @@ defines (docs/apple-fast/ab/fa.md):
+   host in main's order and the tol test is main's. Implies GRAM_ONCE's pass.
+ - MOJOLEARN_FA_LIVEBUF: ITER_DEVICE's scratch as one arena buffer (one live
+   Metal buffer instead of ~12) and W + psi read back in one copy.
+-- MOJOLEARN_FA_TRANSFORM_FUSED (`fa_transform_kernel`, transform as one
+-  launch over rows) was NEUTRAL (rab7-fatransform istella +2.0%) and was
+-  deleted 2026-11-15 (docs/TOMBSTONES.md).
++- MOJOLEARN_FA_TRANSFORM_FUSED: `fa_transform_kernel`, transform as one
++  launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
++  threadgroup memory, one row per thread, the n x nc result read back once.
+ - (QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) every ITER_DEVICE
+   arm forms G in double-float (`fa_gram_tile_df_kernel`), factors it once
+   (`fa_chol_df_kernel`, R^T R = G) and takes main's one-sided SVD of
+@@ -143,8 +143,17 @@ comptime FA_LIVEBUF = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_LIVEBUF"]()
+ # TOMBSTONE: MOJOLEARN_FA_LL_DEVICE (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: the FA EM convergence test on the device (double-float ll sum in fa_finish_kernel, a flag read every 4 iterations); only timed with EIG_SMALL (FA_ALL istella +99.3%), alone never timed.
+ # Restore: git apply experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
++#: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
++#: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
++#: FactorAnalysis.transform as one launch over
++#: rows (`fa_transform_kernel`): P = (W / psi)^T cov_z (d x nc) and the mean
++#: in threadgroup memory, one row per thread, in place of a sub, two GEMMs
++#: and their n x d / n x nc intermediates. Limits from the kernel: nc <=
++#: FA_TR_MAXK register accumulators, d (nc + 1) <= FA_TR_FLOATS (a 16 KB
++#: threadgroup page, checked against the column's page). Source
++#: lane/apple-fast-fa@3efbce2af. Prior M3 B arms: istella 6201 ms, taxi
++#: 243 ms against board 10351 / 308 (whole fit + transform lane). No failure.
++comptime FA_TRANSFORM_FUSED = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_TRANSFORM_FUSED"]()
+ #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
+ #: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
+ #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
+@@ -1133,9 +1142,53 @@ def fa_em_run(
+ 
+ 
+ # ------------------------------------------------------------ transform
+-# TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
+-# (fa_transform_kernel / fa_transform_run and the FA_TR_* page limits went with it.)
++comptime FA_TR_TPB = 256
++comptime FA_TR_MAXK = 16
++comptime FA_TR_FLOATS = 4096
++comptime FA_TR_SMEM_BYTES = FA_TR_FLOATS * 4
++comptime FA_TR_FITS = lib_smem_page_fits_for[TARGET_COLUMN, FA_TR_SMEM_BYTES]()
++
++
++def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: Int32, d_in: Int32, nc_in: Int32):
++    """out[row] = (x[row] - mean) P, P d x nc in threadgroup memory with the
++    mean behind it, one row per thread, nc <= FA_TR_MAXK accumulators."""
++    var n = Int(n_in)
++    var d = Int(d_in)
++    var nc = Int(nc_in)
++    var tid = Int(thread_idx.x)
++    var sh = stack_allocation[FA_TR_FLOATS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var np = d * nc
++    for idx in range(tid, np + d, FA_TR_TPB):
++        sh[idx] = pm.unsafe_load(idx) if idx < np else mean.unsafe_load(idx - np)
++    barrier()
++    var row = Int(block_idx.x) * FA_TR_TPB + tid
++    if row >= n:
++        return
++    var acc = Array[Float32, FA_TR_MAXK](fill=Float32(0.0))
++    for j in range(d):
++        var xj = x.unsafe_load(row * d + j) - sh[np + j]
++        for kk in range(nc):
++            acc[kk] += xj * sh[j * nc + kk]
++    for kk in range(nc):
++        dst.unsafe_store(row * nc + kk, acc[kk])
++
++
++def fa_transform_run(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises -> Int:
++    """dst (n x nc, device id) = (X - mean) P for the resident X (n x d),
++    mean (d) and P (d x nc), all device ids; enqueued, no sync. Returns n."""
++    if n < 1 or d < 1 or nc < 1:
++        raise Error("x_decomp fa_transform: empty input")
++    if nc > FA_TR_MAXK or d * nc + d > FA_TR_FLOATS:
++        raise Error("x_decomp fa_transform: P and the mean do not fit the page (nc <= 16, d (nc + 1) <= 4096)")
++    var px = _ptr(x, n * d)
++    var pmean = _ptr(mean, d)
++    var pp = _ptr(pm, d * nc)
++    var po = _ptr(dst, n * nc)
++    var ctx = xd_ctx()
++    ctx.enqueue_function[fa_transform_kernel](
++        px, pmean, pp, po, Int32(n), Int32(d), Int32(nc), grid_dim=(n + FA_TR_TPB - 1) // FA_TR_TPB, block_dim=FA_TR_TPB
++    )
++    return n
+ 
+ 
+ # ------------------------------------------------------------ the defines
+\ No newline at end of file
+diff --git b/x_decomp/fa_owner.mojo a/x_decomp/fa_owner.mojo
+index aebfe78906..aab6f079e0 100644
+--- b/x_decomp/fa_owner.mojo
++++ a/x_decomp/fa_owner.mojo
+@@ -26,8 +26,10 @@ from x_decomp.decomp_owner_kit import (
+ )
+ 
+ comptime LOG_2PI = 1.8378770664093453
+-#: x_decomp/fa_fast.mojo FA_MAX_D (`_FA_MAX_D`)
++#: x_decomp/fa_fast.mojo FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS (`_FA_MAX_D`, ...)
+ comptime _FA_MAX_D = 256
++comptime _FA_TR_MAXK = 16
++comptime _FA_TR_FLOATS = 4096
+ comptime _SMALL = 1e-12
+ comptime _F32_TINY = 1.1754943508222875e-38
+ #: `_ortho_rotation`'s defaults
+@@ -234,17 +236,30 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
+         var mu = kit.add(Int(mean), -1, 1, d)
+         var result = Float64(0.0)
+         if op == FA_TRANSFORM:
+-            # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+-            # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
++            var flags = X.fa_flags()
+             var xm = kit.add(Int(x), -1, n, d)
+-            xm = kit.ew(OP_SUB, xm, mu)
+-            var wpsi = kit.ew(OP_DIV, w, noise)
++            var fused = (flags & 4) != 0 and nc <= _FA_TR_MAXK and d * (nc + 1) <= _FA_TR_FLOATS
++            var y: Int
++            var wpsi: Int
++            if fused:
++                wpsi = kit.ew(OP_DIV, w, noise)
++            else:
++                xm = kit.ew(OP_SUB, xm, mu)
++                wpsi = kit.ew(OP_DIV, w, noise)
+             var eye = kit_eye(kit, nc)
+             var inner = kit.mm(wpsi, w, tb=True)
+             var summed = kit.ew(OP_ADD, eye, inner)
+             var cov_z = kit_inv[E, D, RES, X](kit, summed)
+-            var projected = kit.mm(xm, wpsi, tb=True)
+-            var y = kit.mm(projected, cov_z)
++            if fused:
++                var p = kit.mm(wpsi, cov_z, ta=True)
++                y = kit.device_output(n, nc)
++                var dx = kit.device(xm)
++                var dmu = kit.device(mu)
++                var dp = kit.device(p)
++                X.fa_transform(dx, dmu, dp, kit.mats[y].dev, n, d, nc)
++            else:
++                var projected = kit.mm(xm, wpsi, tb=True)
++                y = kit.mm(projected, cov_z)
+             kit.copy_out(y, out_buf, n * nc)
+         elif op == FA_COVARIANCE:
+             var c = _cov(kit, w, noise)

@@ -278,13 +278,12 @@ vendors instead of varying by vendor.
 from std.math import ceildiv, floor
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.launch_log import log_launch
 from core.launch_clock import log_launch_ctx
 from core.segmented_sort import segmented_sort_keys_f32
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 
 
 # ===========================================================================
@@ -538,14 +537,11 @@ comptime SAMPLE_BLOCK = 256
 # exact half (the integer form is the mathematically exact one); the host
 # column (`ensemble/host/rf_oracle.mojo: host_quantile_bin_index`) and
 # `quantile_bin_index` below change with it, so all four columns agree.
-# `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF` restores the host table everywhere.
-comptime IDN_RF_QBIN_EXACT = not (
-    is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime IDN_RF_QBIN_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_RF_QBIN_EXACT
-)
+# TOMBSTONE: MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch; EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_RF_QBIN_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline

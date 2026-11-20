@@ -9,14 +9,14 @@ from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison
 from mojolearn.tests.test_samba_gradients_native import _reference
-from mojolearn.tests.test_samba_state_native import _assert_state_equal
+from mojolearn.tests.test_samba_state_native import _assert_state_equal, _reference_update
 
 
 def _step(model, inputs, targets):
     return audit_native_call(model.train_step, inputs, targets).assert_native()
 
 
-def _reference_step(model, inputs, targets):
+def _reference_step(model, inputs, targets, *, device_parameters=False):
     # Testing-only explicit recipe, separate from both Samba step coordinators.
     count = int(np.count_nonzero(targets != -100))
     a = model.optimizer.accumulation_steps
@@ -32,8 +32,15 @@ def _reference_step(model, inputs, targets):
                       for name, value in zip(model.names, gradient_bytes)])
     gradients = parts[0] if a == 1 else training.accumulate_grads(parts, tokens=inputs.size)
     loss = losses[0][0] if a == 1 else training.accumulate_grads(losses, tokens=None)[0]
-    norm = model.optimizer.step(gradients, max_norm=model.max_norm)
-    return {"loss": float(loss), "lr": model.optimizer.lr_,
+    if device_parameters:
+        norm = model.optimizer.step_device(gradients, max_norm=model.max_norm)
+        lr = model.optimizer.lr_
+    elif any(not np.asarray(p).flags.writeable for p in model.optimizer.params):
+        norm, lr = _reference_update(model, gradients)
+    else:
+        norm = model.optimizer.step(gradients, max_norm=model.max_norm)
+        lr = model.optimizer.lr_
+    return {"loss": float(loss), "lr": lr,
             "step": model.optimizer.t, "total_norm": norm}
 
 
@@ -42,10 +49,11 @@ def _reference_step(model, inputs, targets):
     (["mamba3", "attention"], 32, 0.125, 1, False, (2, 3)),
     (["attention"], 8, 0.125, 2, True, (4, 64)),
 ])
-@pytest.mark.parametrize("resident", [False, True])
+# The resident optimizer is the one route for a single-device optimizer (the
+# MOJOLEARN_OPTIMIZER_RESIDENT environment arm went 2026-11-15; its build arm
+# -D MOJOLEARN_OPTIMIZER_RESIDENT_OFF lost A/B ab3 and was deleted 2026-11-18).
 def test_native_standard_step_matches_independent_training_recipe(
-        monkeypatch, layers, dm, dropout, accumulation, tied, shape, resident):
-    monkeypatch.setenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1" if resident else "0")
+        monkeypatch, layers, dm, dropout, accumulation, tied, shape):
     config = SambaConfig(19, dm, layers, n_heads=2, n_kv_heads=1,
                          intermediate=48 if dm == 32 else 11,
                          tie_embeddings=tied, dropout=dropout)
@@ -67,7 +75,6 @@ def test_native_standard_step_matches_independent_training_recipe(
         expected = _reference_step(expected_model, inputs, targets)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_forward", lambda *a: pytest.fail("legacy Python coordinator"))
             patch.setattr(SambaStack, "loss_and_grads", lambda *a, **k: pytest.fail("Python gradient wrapper"))
             patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer step"))
             actual = _step(actual_model, inputs, targets)
@@ -124,9 +131,8 @@ def _owner_models():
                        max_norm=0.3, weight_decay=0.02) for _ in range(2)]
 
 
-@pytest.mark.parametrize("resident", [False, True])
-def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch, resident):
-    monkeypatch.setenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1" if resident else "0")
+# Default build: the resident side (see the note above the standard-step test).
+def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch):
     expected, actual = _owner_models()
     for model in (expected, actual):
         # These are separate writable buffers. The model still reads its
@@ -147,8 +153,7 @@ def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch, r
         assert all(a is b for a, b in zip(actual.optimizer.params, aliases))
         for a, b in zip(actual.optimizer.params, expected.optimizer.params):
             assert a.tobytes() == b.tobytes()
-        if actual.optimizer._res is not None:
-            assert actual.optimizer._res_binding is bridge.CONTEXT["entries"].optimizer_resident_open.__self__
+        assert actual.optimizer.resident_ is expected.optimizer.resident_
         for state in (training._STATE_EXP_AVG, training._STATE_EXP_AVG_SQ):
             # Audit the native property entry, including a required resident
             # download. The public property checks below remain unchanged.
@@ -166,20 +171,35 @@ def test_native_step_preserves_device_parameter_owner(monkeypatch, clipping):
         pytest.skip("native optimizer device-parameter entry is unavailable")
     for model in (expected, actual):
         model.max_norm = clipping
+        # Public Samba weights are read-only. The standalone optimizer's
+        # device owner publishes into its own writable parameter buffers.
+        model.optimizer.params = [np.asarray(value).copy() for value in model.optimizer.params]
         model.optimizer.params_to_device()
     inputs = np.array([[1, 2, 4], [3, 5, 6]], dtype="i4")
     targets = np.array([[2, -100, 6], [5, 6, 7]], dtype="i4")
     for _ in range(2):
         stale = actual.flat.tobytes()
-        metrics = _reference_step(expected, inputs, targets)
+        metrics = _reference_step(expected, inputs, targets, device_parameters=True)
         with monkeypatch.context() as patch:
             _poison(patch)
             patch.setattr(training.AdamW, "step_device", lambda *a, **k: pytest.fail("Python device optimizer"))
             assert _step(actual, inputs, targets) == metrics
         assert actual.flat.tobytes() == stale
-        assert actual.optimizer._p_dev and actual.optimizer._g_dev
+        assert actual.optimizer.resident_ and expected.optimizer.resident_
+        # Read the live device gradient through its public owner. This checks
+        # the retained device buffer itself, including clipping, rather than
+        # a Python mirror of the native ownership flags.
+        actual_gradients = [np.full_like(value, 27182.5) for value in actual.optimizer.params]
+        expected_gradients = [np.full_like(value, -27182.5) for value in expected.optimizer.params]
+        assert audit_native_call(actual.optimizer.grads_to_host,
+                                 actual_gradients).assert_native() is actual_gradients
+        assert expected.optimizer.grads_to_host(expected_gradients) is expected_gradients
+        for a, b in zip(actual_gradients, expected_gradients):
+            assert a.tobytes() == b.tobytes()
         actual.optimizer.params_to_host()
         expected.optimizer.params_to_host()
         assert actual.flat.tobytes() == expected.flat.tobytes()
+        for a, b in zip(actual.optimizer.params, expected.optimizer.params):
+            assert a.tobytes() == b.tobytes()
         assert actual.optimizer.exp_avg.tobytes() == expected.optimizer.exp_avg.tobytes()
         assert actual.optimizer.exp_avg_sq.tobytes() == expected.optimizer.exp_avg_sq.tobytes()

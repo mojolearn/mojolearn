@@ -101,7 +101,7 @@ def trees_differ(forest: Forest, a: Int, b: Int) -> Bool:
     return False
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # ---------------- the trees must not be copies ------------------------

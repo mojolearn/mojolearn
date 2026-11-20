@@ -47,7 +47,7 @@ def _digest(values: List[Float32]) -> UInt64:
     return h
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("gemm_stage_ftz_check requires IDENTICAL")
     print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))

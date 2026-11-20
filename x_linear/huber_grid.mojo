@@ -13,7 +13,7 @@ x_linear/lbfgs_device.mojo; the result is assembled on the device and
 comes home once. The host column runs `huber_fit` (x_linear/huber.mojo):
 the same statements on the same values in the same order.
 """
-from std.gpu import block_idx, thread_idx, block_dim
+from max.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, fexp, fm, fd, i2f
@@ -24,7 +24,7 @@ from x_linear.witness import Witness, witness_end
 from x_linear.huber import huber_map_row, huber_finish_t, _huber_part
 from x_linear.vfold import vscratch
 from x_linear.lbfgs_device import (
-    LbObjective, lbfgs_device, lbd_words, lbd_th, lbd_witness_words, LBD_TPB,
+    LbObjective, lbfgs_device, lbd_words, lbd_th, lbd_witness_words, LBD_TPB, lbd_live,
 )
 
 comptime HG_TPB = 256
@@ -40,11 +40,11 @@ def _hg_sigma(th: FP, p: Int) -> Float32:
 
 
 def hg_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, th: FP, sw: Int32, rows: FP,
-                  wf: IP, woff: Int32, nonce: Int32):
+                  wf: IP, woff: Int32, nonce: Int32, halt: FP, gated: Int32):
     var i = Int(block_idx.x) * HG_TPB + Int(thread_idx.x)
     var nn = Int(n)
     var dd = Int(d)
-    if i < nn:
+    if i < nn and lbd_live(halt, gated):
         var p = dd + 2 if fi != 0 else dd + 1
         var sigma = _hg_sigma(th, p)
         var b = ld(th, dd) if fi != 0 else Float32(0)
@@ -54,12 +54,12 @@ def hg_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, th:
 
 
 def hg_part_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, th: FP, cells: Int32, rows: FP,
-                   sw: Int32, scr: FP, nbk: Int32, wf: IP, woff: Int32, nonce: Int32):
+                   sw: Int32, scr: FP, nbk: Int32, wf: IP, woff: Int32, nonce: Int32, halt: FP, gated: Int32):
     var q = Int(block_idx.x) * HG_TPB + Int(thread_idx.x)
     var nn = Int(n)
     var nt = Int(cells) + 5
     var nb = Int(nbk)
-    if q < nt * nb:
+    if q < nt * nb and lbd_live(halt, gated):
         var p = Int(d) + 2 if fi != 0 else Int(d) + 1
         var thr = fm(eps, _hg_sigma(th, p))
         var bk = q // nt
@@ -70,7 +70,10 @@ def hg_part_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, th
     witness_end(wf, woff, nonce)
 
 
-def hg_fold_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP, wf: IP, woff: Int32, nonce: Int32):
+@always_inline
+def _hg_fold(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP):
+    """One thread's task of the fold (the body of both fold kernels: a
+    function launched as a kernel is never called from another kernel)."""
     var o = Int(block_idx.x) * HG_TPB + Int(thread_idx.x)
     var c = Int(cells)
     var nb = Int(nbk)
@@ -85,23 +88,40 @@ def hg_fold_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP, wf: IP, w
         for bk in range(nb):
             k += Int(bitcast[DType.int32](ld(scr, o * nb + bk)))
         st(sums, 4, bitcast[DType.float32](Int32(k)))
+
+
+def hg_fold_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP, wf: IP, woff: Int32, nonce: Int32):
+    """The fold with no halt gate: x_linear/huber_fast.mojo's launch (its
+    own line search; FAST on Apple)."""
+    _hg_fold(scr, nbk, cells, g, sums)
+    witness_end(wf, woff, nonce)
+
+
+def hg_fold_gated_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP, wf: IP, woff: Int32, nonce: Int32,
+                         halt: FP, gated: Int32):
+    """The fold of `HuberObjective`: nothing for a queued unit after the halt."""
+    if lbd_live(halt, gated):
+        _hg_fold(scr, nbk, cells, g, sums)
     witness_end(wf, woff, nonce)
 
 
 def hg_finish_kernel(th: FP, g: FP, f: FP, sums: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, alpha: Float32,
-                     sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
-    """One block: `huber_finish_t` on the folded sums; f[0] by the lead."""
+                     sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32, halt: FP, gated: Int32):
+    """One block: `huber_finish_t` on the folded sums; f[0] by the lead.
+    Nothing for a queued unit after the halt (every thread reads the same
+    word at entry, as `lbd_step_kernel` does)."""
     var t = team_at(Int(thread_idx.x), Int(block_dim.x), parts, 0, 0, 0)
-    var dd = Int(d)
-    var p = dd + 2 if fi != 0 else dd + 1
-    var sigma = _hg_sigma(th, p)
-    var swb = sw != 0
-    var w_all = ld(sums, 3) if swb else Float32(0)
-    var n_out = Int(bitcast[DType.int32](ld(sums, 4)))
-    var fv = huber_finish_t(t, g, 0, th, 0, dd, p, Int(n), eps, alpha, sigma, fm(Float32(2), eps), swb,
-                            ld(sums, 0), ld(sums, 1), n_out, ld(sums, 2), w_all, parts)
-    if t.lead():
-        st(f, 0, fv)
+    if lbd_live(halt, gated):
+        var dd = Int(d)
+        var p = dd + 2 if fi != 0 else dd + 1
+        var sigma = _hg_sigma(th, p)
+        var swb = sw != 0
+        var w_all = ld(sums, 3) if swb else Float32(0)
+        var n_out = Int(bitcast[DType.int32](ld(sums, 4)))
+        var fv = huber_finish_t(t, g, 0, th, 0, dd, p, Int(n), eps, alpha, sigma, fm(Float32(2), eps), swb,
+                                ld(sums, 0), ld(sums, 1), n_out, ld(sums, 2), w_all, parts)
+        if t.lead():
+            st(f, 0, fv)
     witness_end(wf, woff, nonce)
 
 
@@ -165,7 +185,8 @@ struct HuberObjective(LbObjective):
         var cells = self._cells()
         return _blocks(self.n) + _blocks((cells + 5) * fold_blocks(self.n)) + _blocks(cells + 5) + 1
 
-    def enqueue(mut self, mut ctx: DeviceContext, th: FP, g: FP, f: FP, wf: IP, woff: Int, nonce: Int32) raises:
+    def enqueue(mut self, mut ctx: DeviceContext, th: FP, g: FP, f: FP, wf: IP, woff: Int, nonce: Int32,
+                halt: FP, gated: Int32) raises:
         var n = self.n
         var d = self.d
         var cells = self._cells()
@@ -177,20 +198,21 @@ struct HuberObjective(LbObjective):
         var b3 = _blocks(cells + 5)
         ctx.enqueue_function[hg_map_kernel](
             self.x.unsafe_ptr(), self.y.unsafe_ptr(), Int32(n), Int32(d), fi, self.eps, th, sw,
-            self.rows.unsafe_ptr(), wf, Int32(woff), nonce, grid_dim=b1, block_dim=HG_TPB,
+            self.rows.unsafe_ptr(), wf, Int32(woff), nonce, halt, gated, grid_dim=b1, block_dim=HG_TPB,
         )
         ctx.enqueue_function[hg_part_kernel](
             self.x.unsafe_ptr(), self.y.unsafe_ptr(), Int32(n), Int32(d), fi, self.eps, th, Int32(cells),
             self.rows.unsafe_ptr(), sw, self.scr.unsafe_ptr(), Int32(nbk), wf, Int32(woff + b1), nonce,
-            grid_dim=b2, block_dim=HG_TPB,
+            halt, gated, grid_dim=b2, block_dim=HG_TPB,
         )
-        ctx.enqueue_function[hg_fold_kernel](
+        ctx.enqueue_function[hg_fold_gated_kernel](
             self.scr.unsafe_ptr(), Int32(nbk), Int32(cells), g, self.sums.unsafe_ptr(), wf, Int32(woff + b1 + b2),
-            nonce, grid_dim=b3, block_dim=HG_TPB,
+            nonce, halt, gated, grid_dim=b3, block_dim=HG_TPB,
         )
         ctx.enqueue_function[hg_finish_kernel](  # small-launch(d: weights): one block strides the d weights and one vfold sum; n is only the row count as a scalar
             th, g, f, self.sums.unsafe_ptr(), Int32(n), Int32(d), fi, self.eps, self.alpha, sw,
-            self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
+            self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, halt, gated, grid_dim=1,
+            block_dim=LBD_TPB,
         )
 
 

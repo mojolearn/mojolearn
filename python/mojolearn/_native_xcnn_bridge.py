@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the CNN layers
-(bindings/xcnn_native.mojo). A migrated layer method is one call,
+(bindings/xcnn_native_pack.mojo). A migrated layer method is one call,
 `_XCNN(self, "<operation>", args, _XCNN_CONTEXT)`; Python here only connects
 the compiled `_mojolearn_x_cnn` entries of both numeric modes, the switch
-words the binary reports and the layer classes, once, at import. NumPy is optional during setup; native host-array
-operations require its already loaded native metadata."""
+words the binary reports and the layer classes, once, at import. NumPy is not
+imported here; the native owner connects it at the first CNN operation."""
 
 _ENTRY = None
 _CONTEXT = None
 
 #: the compiled entries the CNN layers run (those a binary lacks are absent)
 _NAMES = (
-    "x_cnn_adam_hyper_d",
     "x_cnn_adam_r",
     "x_cnn_adaptive_pool",
     "x_cnn_adaptive_pool_m",
@@ -37,9 +36,6 @@ _NAMES = (
     "x_cnn_csr_upload",
     "x_cnn_dropout2d",
     "x_cnn_dropout2d_m",
-    "x_cnn_epoch_rows",
-    "x_cnn_fit_epoch_d",
-    "x_cnn_fit_epoch_r",
     "x_cnn_gcn_loops",
     "x_cnn_gcn_norm",
     "x_cnn_gcn_norm_m",
@@ -72,15 +68,15 @@ _NAMES = (
     "x_cnn_relu_forward",
     "x_cnn_res_alloc",
     "x_cnn_res_alloc_nofill",
-    "x_cnn_res_argmax",
     "x_cnn_res_download",
     "x_cnn_res_free",
-    "x_cnn_res_gather",
     "x_cnn_res_upload",
     "x_cnn_sgd_r",
     "x_cnn_softmax_xent_r",
     "x_cnn_spmm",
     "x_cnn_spmm_m",
+    "x_cnn_gcn_backward_t",
+    "x_cnn_sage_backward_t",
     "x_cnn_vals_t",
     "x_cnn_vendor",
 )
@@ -112,7 +108,29 @@ def _connect_mode(module):
     idn = int(symbols["x_cnn_idn_flags"]()) if mixed and "x_cnn_idn_flags" in symbols else 0
     idn2 = int(symbols["x_cnn_idn2_flags"]()) if "x_cnn_idn2_flags" in symbols else 0
     profile = str(symbols["x_cnn_numerical_profile"]()) if "x_cnn_numerical_profile" in symbols else None
-    return {"module": module, "symbols": symbols, "mixed": mixed, "idn": idn, "idn2": idn2, "profile": profile}
+    connected = {"module": module, "symbols": symbols, "mixed": mixed, "idn": idn, "idn2": idn2, "profile": profile}
+    _native_key(module, connected)
+    return connected
+
+
+#: The x_cnn entry table's vendor words (core/xcnn_entry_table.mojo), the
+#: mapping `xcnn_entry_vendor` applies at publication.
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _native_key(module, connected):
+    # glue: once at import, the connected x_cnn image's (tier, vendor) key,
+    # which the CNN layer doors read to call its published native entry
+    # instead of its Python entries (lane calltable-xcnn). An image without
+    # one leaves the key absent and the doors refuse.
+    try:
+        probe = getattr(module, "x_cnn_numeric_mode", None) or getattr(module, "x_cnn_host_numeric_mode")
+        mode = int(probe())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(module.x_cnn_vendor()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        connected["native_key"] = (mode, vendor)
 
 
 def connect():
@@ -128,12 +146,9 @@ def connect():
         entry = _binding()._module.xcnn_native_call
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("the CNN layers require the compiled xcnn_native_call entry")
-        # Import setup is outside product execution; the native owner only
-        # connects already loaded native NumPy metadata.
-        try:
-            import numpy
-        except ImportError:
-            pass  # glue: scalar-only metadata operations do not require NumPy
+        # Importing the package never loads NumPy (NUMPY_FREE_CONTRACT.md):
+        # the native owner connects it at the first CNN operation
+        # (bindings/xcnn_common_door.mojo xcnn_connect_numpy).
         from ._native_classical_bridge import _state_context
         context = _state_context()
         # Shared neural metadata admission expects its native scalar tables

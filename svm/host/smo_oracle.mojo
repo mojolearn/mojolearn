@@ -82,7 +82,7 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.host_simd_identical import expf_v, ftz_v
-from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import HostF32Ptr, host_grain_cap, host_predict_chunk, host_predict_task_count
 from svm.impl.grid_fold import FOLD_TPB, fold_blocks
 from svm.impl.smosolver import fold_order_for_host, hash_f32_list
 from svm.impl.svm_parameter import (
@@ -1438,6 +1438,9 @@ def smo_oracle_decision_into(
         task_count = 1
     if task_count > n_query:
         task_count = n_query
+    # perf-host-grain: query rows are independent; a call below the grain
+    # floor on query x support x feature work is one task on this thread
+    task_count = host_grain_cap(task_count, n_query * n_support * max(n_features, 1))
     var chunk = host_predict_chunk(n_query, task_count)
     var qnp = query_norms.unsafe_ptr()
     var snp = support_norms.unsafe_ptr()

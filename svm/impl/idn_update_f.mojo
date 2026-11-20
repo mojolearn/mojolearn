@@ -32,7 +32,7 @@ tanh and precomputed kernels, k > 64 and the multi-device kernel rows keep
 the tile path.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

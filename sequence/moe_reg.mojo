@@ -31,37 +31,37 @@ order inside an expert varies run to run; no cell's chain reads another
 pair, so the words do not. The products' grids are the upper bound
 (T k / 64 + E) x tiles; a block past its expert's pairs returns at once.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
 
 # FAST + Apple default since the M3 A/B (lane/apple-fast-moespeed 2813b2dff,
 # n=1, synthetic, output digest identical): REGTILE 789 -> 72.7 ms;
 # REGTILE+DEVGROUP 73.4 -> 71.9 ms, and DEVGROUP drops the host sync/sort
-# round trip. MOJOLEARN_MOE_REGTILE_OFF turns both off (DEVGROUP needs
-# REGTILE); MOJOLEARN_MOE_DEVGROUP_OFF turns DEVGROUP alone off. The old
+# round trip. DEVGROUP needs REGTILE. The old
 # -D MOJOLEARN_MOE_REGTILE / MOJOLEARN_MOE_DEVGROUP names are harmless.
 # lane/idn-gates (2026-10-04): REGTILE (and DEVGROUP with it) is also the
 # IDENTICAL default on every vendor: every cell's chain is the item's (the
 # same flushed operands, ascending, through the same fma3 from +0.0) and the
 # route tail is the item's statements on the stored logits.
-# -D MOJOLEARN_IDN_GATES_OFF (or MOJOLEARN_MOE_REGTILE_OFF) restores
-# sequence/moe_tiled.mojo in IDENTICAL.
-comptime MOE_REGTILE = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
-)
-comptime MOE_DEVGROUP = MOE_REGTILE and not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-29-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 3dfeb158c0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+# TOMBSTONE: MOJOLEARN_MOE_REGTILE_OFF (old path; EXP:588 KEPT 499e1b72c, promoted on the M3 (FAST) only; the IDENTICAL
+# NVIDIA/AMD A/B of REGTILE against moe_tiled is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 253d6543b0.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_REGTILE_OFF.patch
+comptime MOE_REGTILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_MOE_DEVGROUP_OFF (old path; EXP:587 KEPT 499e1b72c, promoted on the M3 (FAST) only; the IDENTICAL
+# NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 2ca18f9b39.
+# Restore: git apply experiments/removed/MOJOLEARN_MOE_DEVGROUP_OFF.patch
+comptime MOE_DEVGROUP = MOE_REGTILE
 
 #: pairs per block, outputs per block, reduction slab, threads per block
 comptime RM = 64
@@ -125,13 +125,13 @@ def moe_hidden_reg_kernel(
     var gs = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var us = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     # the rows this thread stages: pair rows tr + RS l (their tokens), feature rows tr + RS l
-    var ltok = InlineArray[Int, RC](fill=-1)
+    var ltok = Array[Int, RC](fill=-1)
     comptime for l in range(RC):
         var rp = p0 + tr + RS * l
         if rp < p1:
             ltok[l] = Int(order.unsafe_load(rp)) // k
-    var g = InlineArray[Float32, RC * RC](fill=Float32(0.0))
-    var u = InlineArray[Float32, RC * RC](fill=Float32(0.0))
+    var g = Array[Float32, RC * RC](fill=Float32(0.0))
+    var u = Array[Float32, RC * RC](fill=Float32(0.0))
     var d0 = 0
     while d0 < D:
         var cnt = min(RK, D - d0)
@@ -151,9 +151,9 @@ def moe_hidden_reg_kernel(
         barrier()
         if cnt == RK:
             comptime for i in range(RK):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var gb = InlineArray[Float32, RC](fill=Float32(0.0))
-                var ub = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var gb = Array[Float32, RC](fill=Float32(0.0))
+                var ub = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = xs[i * RMP + tr + RS * c]
                     gb[c] = gs[i * RNP + tc + RS * c]
@@ -164,9 +164,9 @@ def moe_hidden_reg_kernel(
                         u[a * RC + b] = fma3(av[a], ub[b], u[a * RC + b])
         else:
             for i in range(cnt):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var gb = InlineArray[Float32, RC](fill=Float32(0.0))
-                var ub = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var gb = Array[Float32, RC](fill=Float32(0.0))
+                var ub = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = xs[i * RMP + tr + RS * c]
                     gb[c] = gs[i * RNP + tc + RS * c]
@@ -211,12 +211,12 @@ def moe_out_reg_kernel(
     var tc = tid - tr * RS
     var hs = stack_allocation[RK * RMP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var ws = stack_allocation[RK * RNP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var lpair = InlineArray[Int, RC](fill=-1)
+    var lpair = Array[Int, RC](fill=-1)
     comptime for l in range(RC):
         var rp = p0 + tr + RS * l
         if rp < p1:
             lpair[l] = Int(order.unsafe_load(rp))
-    var acc = InlineArray[Float32, RC * RC](fill=Float32(0.0))
+    var acc = Array[Float32, RC * RC](fill=Float32(0.0))
     var f0 = 0
     while f0 < F:
         var cnt = min(RK, F - f0)
@@ -233,8 +233,8 @@ def moe_out_reg_kernel(
         barrier()
         if cnt == RK:
             comptime for i in range(RK):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var bv = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = hs[i * RMP + tr + RS * c]
                     bv[c] = ws[i * RNP + tc + RS * c]
@@ -243,8 +243,8 @@ def moe_out_reg_kernel(
                         acc[a * RC + b] = fma3(av[a], bv[b], acc[a * RC + b])
         else:
             for i in range(cnt):
-                var av = InlineArray[Float32, RC](fill=Float32(0.0))
-                var bv = InlineArray[Float32, RC](fill=Float32(0.0))
+                var av = Array[Float32, RC](fill=Float32(0.0))
+                var bv = Array[Float32, RC](fill=Float32(0.0))
                 comptime for c in range(RC):
                     av[c] = hs[i * RMP + tr + RS * c]
                     bv[c] = ws[i * RNP + tc + RS * c]

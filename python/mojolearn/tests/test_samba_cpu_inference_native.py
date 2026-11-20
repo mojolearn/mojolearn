@@ -12,7 +12,7 @@ from mojolearn.tests.test_causal_model_native_loading import _poison
 from mojolearn.tests.test_samba_inference_native import _assert_layers
 from mojolearn.tests.test_samba_checkpoint_native import _model, _legacy_bytes
 from mojolearn.tests.test_samba_state_native import _reference_state
-from mojolearn import _samba_checkpoint as reference_format
+from mojolearn.tests import _samba_checkpoint as reference_format
 
 
 def _case(layers, format="float32"):

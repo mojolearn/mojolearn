@@ -50,7 +50,7 @@ for f in estimators linalg training transformer embedding kernel_methods gp svm 
     n=$((n + 1))
     if [ $((n % 8)) -eq 0 ]; then wait; fi
 done
-( $S bind head ) & ( $S bind ref MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1 MOJOLEARN_GEMM_NO_KPACK_NARROW=1 MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1 MOJOLEARN_EMB_SERIAL_RUN_BEGIN=1 ) &
+( $S bind head ) & ( $S bind ref MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1 MOJOLEARN_GEMM_NO_KPACK_NARROW=1 MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1 ) &
 ( $S bind timers MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1 ) &
 wait
 cp "$BIN/byte_lm.head.so" python/mojolearn/identical/_mojolearn_byte_lm.so

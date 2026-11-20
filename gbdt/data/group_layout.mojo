@@ -20,7 +20,7 @@ Integer work only: every vendor and the host get the same offsets.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
 

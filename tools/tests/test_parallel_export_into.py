@@ -9,17 +9,21 @@ schedule descriptor table, and the native owner refuses Python-supplied
 callables or storage. These source checks pin the native contract instead;
 the device proof is the H100 leg in
 bench/results/byte_lm_export_fast_2026-09-25/."""
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 
 
 def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
+    # Held-key doors (bindings/parallel_keys_unpack.mojo) read in their by-name form.
+    return plain(rel, (ROOT / rel).read_text(encoding="utf-8"))
 
 
 def test_owner_has_no_instance_callables():
-    owner = _read("bindings/parallel_byte_native.mojo")
+    owner = _read("bindings/parallel_byte_native_door.mojo")
     assert "_entries" not in owner
     assert "py_call_typed" not in owner
     assert '"byte_lm_schedule_api_v1"' in owner
@@ -29,7 +33,7 @@ def test_owner_has_no_instance_callables():
 
 
 def test_into_targets_are_refused_natively_before_the_session():
-    owner = _read("bindings/parallel_byte_native.mojo")
+    owner = _read("bindings/parallel_byte_native_door.mojo")
     for message in ("export target has wrong dtype",
                     "export target must have the exact contiguous one-dimensional shape",
                     "export target is read-only",
@@ -43,7 +47,9 @@ def test_schedule_descriptor_exports():
     binding = _read("bindings/_mojolearn_byte_lm.mojo")
     for name in ("byte_lm_schedule_api_v1", "byte_lm_schedule_create_v1", "byte_lm_schedule_handle_v1"):
         assert f'("{name}")' in binding, name
-    assert 'comptime BYTE_LM_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"' in binding
+    # lane rs-embedding-bytelm: the schedule table is RUN code beside the door.
+    run = _read("training/byte_lm_door_run.mojo")
+    assert 'comptime BYTE_LM_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"' in run
 
 
 def test_public_schedule_wrappers_delegate_once():

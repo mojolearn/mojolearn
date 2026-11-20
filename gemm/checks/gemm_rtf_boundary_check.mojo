@@ -103,10 +103,18 @@ def _kind_word(i: Int, seed: UInt32, kind: Int) -> Float32:
     return bitcast[DType.float32](sign | (e << UInt32(23)) | mant)
 
 
+def _is_nan_word(w: UInt32) -> Bool:
+    return (w & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+
+
 def _fnv(v: List[Float32]) -> UInt64:
+    # A computed NaN hashes as the one quiet word 0x7FC00000, so the printed
+    # hash compares across columns (see the NaN note in `_case`).
     var h = UInt64(0xCBF29CE484222325)
     for i in range(len(v)):
         var w = bitcast[DType.uint32](v[i])
+        if _is_nan_word(w):
+            w = UInt32(0x7FC00000)
         for k in range(4):
             h = h ^ UInt64((w >> UInt32(8 * k)) & UInt32(0xFF))
             h = h * UInt64(0x100000001B3)
@@ -178,11 +186,30 @@ def _case(
         var got = _run(ctx, ha, hb, m, n, k, plan)
         var bad = 0
         var first = -1
+        # A NaN IS A NaN (2026-11-19, first NVIDIA run of this check: draw4
+        # 64x64x300 failed on every plan, device 0x7fffffff against the x86
+        # host oracle's 0xffc00000). The adversarial words hold +-FLT_MAX, so
+        # at k = 300 a cell sums +inf and -inf: IEEE says WHEN that is a NaN,
+        # not its word, and the word is the vendor's (Apple 0x7fc00000,
+        # NVIDIA 0x7fffffff, an x86 host 0xffc00000; `checks/ieee_arith_check`
+        # judges it the same way, and the contract refuses NaN payloads,
+        # IDENTITY_PATHS row 39). A cell where device and oracle are both NaN
+        # agrees and is counted; a NaN on one side only is still a mismatch.
+        var nan_cells = 0
+        var nan_word = UInt32(0)
         for c in range(m * n):
-            if bitcast[DType.uint32](got[c]) != bitcast[DType.uint32](want[c]):
-                bad += 1
-                if first < 0:
-                    first = c
+            var gw = bitcast[DType.uint32](got[c])
+            var ww = bitcast[DType.uint32](want[c])
+            if gw == ww:
+                continue
+            if _is_nan_word(gw) and _is_nan_word(ww):
+                if nan_cells == 0:
+                    nan_word = gw
+                nan_cells += 1
+                continue
+            bad += 1
+            if first < 0:
+                first = c
         var name = String("dispatch") if plan < 0 else gemm_plan_name(plan)
         var line = (
             ("RTFGEMM OK   " if bad == 0 else "RTFGEMM FAIL ") + label
@@ -190,6 +217,11 @@ def _case(
             + " plan=" + name + " mismatches=" + String(bad)
             + " device_fnv=" + _hex(_fnv(got), 16) + " oracle_fnv=" + _hex(_fnv(want), 16)
         )
+        if nan_cells > 0:
+            line += (
+                " nan_cells=" + String(nan_cells) + " device_nan="
+                + _hex(UInt64(nan_word), 8)
+            )
         if bad > 0:
             fails += 1
             line += (
@@ -200,7 +232,7 @@ def _case(
         print(line)
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, (
         "gemm_rtf_boundary_check: build with -D MOJOLEARN_NUMERIC_IDENTICAL=1"
     )

@@ -19,7 +19,7 @@ float64) on the device and the hardware ops on the host, the same IEEE
 results as the Python `(v - mean) * (v - mean)` and `v / max(c, 1)`.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from checks.soft_f64 import sf64_div, sf64_from_int, sf64_mul, sf64_sub
 from xtrees.glue_device import widen_f32_word

@@ -69,7 +69,7 @@ is to not write the cell at all.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_scan import device_first_nonfinite
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isfinite, isinf
 from std.memory import bitcast
 
@@ -89,8 +89,7 @@ from arima.impl.timeSeries.arima_helpers import (
 from arima.impl.lbfgs_device import arima_mark_infeasible_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -703,11 +702,13 @@ def batched_loglike_grad(
 #: parameters perturbed in parameter m - 1 -- instead of N + 1 sequential
 #: filter passes. Members are independent threads of the same kernel, so
 #: every log-likelihood, and so the gradient, is the one the sequential form
-#: computes. `-D MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF` keeps the sequence.
+#: computes.
 #: IDENTICAL on Apple takes the same stacked evaluation (lane
 #: apple-identical-neural, 2026-09-26): it is a schedule, the members' filter
 #: arithmetic is the sequential form's, and the caller keeps IDENTICAL's
-#: flushes. `-D MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF` keeps the sequence there.
+#: flushes.
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF and MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF (old paths, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at b22c6673d4.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF.patch and experiments/removed/MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF.patch; record in docs/TOMBSTONES.md.
 # F17 M3 2026-10-06: n129/257/509 complete search/forecast B/A
 # 1.7453/0.9778/0.9918, quality equal, one warmup+score. Mixed scoped result;
 # retain established default, no new promotion. Evidence ab-20261006/repairs-54c1f35a5/F17.
@@ -726,17 +727,8 @@ def batched_loglike_grad(
 # no cross-vendor IDENTICAL vote. Retain existing default and Apple-only guard.
 # Evidence: ab-20261006/m3/artifacts/repairs-i23-5b467815b/results/I23,
 # overnight-ab-20261006/{amd,nvidia} normalized controls.
-comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"]()
-    )
-    or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        # I23 batch-gradient measurement belongs on Apple; Linux controls excluded.
-        and not is_defined["MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF"]()
-    )
-)
+# I23 batch-gradient measurement belongs on Apple; Linux controls excluded.
+comptime ARIMA_FAST_BATCH_GRAD = TARGET_HAS_APPLE_GPU
 
 
 def _batched_loglike_grad_stacked(

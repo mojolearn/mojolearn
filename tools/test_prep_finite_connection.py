@@ -54,6 +54,9 @@ class PrepFiniteConnection(unittest.TestCase):
         module("._native_classical_bridge", _state_context=lambda: state,
                _numpy_free_context=lambda: output)
         module("._native_labels_bridge", label_context=lambda: {"labels": object()})
+        # Native warning delivery is connected from its own module now; its words join the context.
+        module("._native_classical_warnings", connect_warnings=lambda: {"warning_filters": object()})
+        module("._native_loaded_modules", INTEGRAL_TYPES=(int,))
         door = SimpleNamespace(_module=SimpleNamespace(prep_encode_native_call=repr))
         module(".tokenizer", _binding=lambda: door)
         path = ROOT / "python/mojolearn/_native_prep_encode_bridge.py"

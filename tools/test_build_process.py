@@ -21,7 +21,11 @@ def run(tmp_path, code, **limits):
 
 def alive(pid):
     path = Path('/proc')/str(pid)/'stat'
-    if path.exists() and path.read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+    try:
+        # the process can be reaped between the exists() and the read (ProcessLookupError from the read on Linux)
+        if path.exists() and path.read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+            return False
+    except (ProcessLookupError, FileNotFoundError):
         return False
     try:
         os.kill(pid, 0)

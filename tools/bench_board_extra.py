@@ -17,9 +17,10 @@ protocol, seed and parameter rules, and parameter check.
                                                            the SAME vocabulary (ours, rendered
                                                            as tokenizer.json)
     bpe-train         BpeVocabularyTrainer.train           tokenizers BpeTrainer, byte level
-    lr-step, lr-exponential, lr-onecycle, lr-constant, lr-warmup-linear, lr-warmup-cosine
-                      100,000 steps of the schedule        torch.optim.lr_scheduler, same
-                                                           parameters
+    internal-call-overhead-lr-at
+                      100,000 ConstantLR.lr_at calls       none: call overhead, internal check, not a
+                                                           race (our arm only, against our own prior
+                                                           version on the same box in the same job)
     jl-min-dim        johnson_lindenstrauss_min_dim        scikit-learn's, over one grid
     lowbit-*          mojolearn.linalg quantize_int8, dequantize_int8, quantize_int15,
                       dequantize_int15, matmul_int15, to_bf16, from_bf16
@@ -34,6 +35,7 @@ tools/bench_board_algos.py registers these lanes (kind 'extra') and hands
 `build` and `quality` to this module. Standard library only at import.
 """
 import importlib.util
+from collections import Counter
 import math
 import os
 
@@ -79,31 +81,16 @@ REFINE_K, REFINE_CANDIDATES = 10, 100   # ann-refine: the ANN lanes' k = 10, 10x
 QN = dict(loss="squared_error", fit_intercept=True, l1_strength=0.0, l2_strength=0.0,
           max_iter=1000, tol=1e-4, delta=1e-4 * 0.01, linesearch_max_iter=50, lbfgs_memory=5,
           warm_start=False, penalty_normalized=True)
-SCHED = {
-    "lr-step": ("StepLR", dict(base_lr=0.1, step_size=1000, gamma=0.5)),
-    "lr-exponential": ("ExponentialLR", dict(base_lr=0.1, gamma=0.9999)),
-    "lr-onecycle": ("OneCycleLR", dict(max_lr=0.1, total_steps=SCHED_STEPS, pct_start=0.3,
-                                       anneal_strategy="cos", div_factor=25.0,
-                                       final_div_factor=1e4, three_phase=False)),
-    "lr-constant": ("training.ConstantLR", dict(peak_lr=1e-3, warmup_steps=1000)),
-    "lr-warmup-linear": ("training.WarmupLinearLR", dict(peak_lr=1e-3, warmup_steps=1000,
-                                                         total_steps=SCHED_STEPS, min_lr=1e-5)),
-    "lr-warmup-cosine": ("training.WarmupCosineLR", dict(peak_lr=1e-3, warmup_steps=1000,
-                                                         total_steps=SCHED_STEPS, min_lr=1e-5)),
-}
-TORCH_SCHED_TEXT = {
-    "lr-step": "StepLR(SGD(lr=0.1), step_size=1000, gamma=0.5)",
-    "lr-exponential": "ExponentialLR(SGD(lr=0.1), gamma=0.9999)",
-    "lr-onecycle": "OneCycleLR(SGD(lr=0.1), max_lr=0.1, total_steps=100000, pct_start=0.3, "
-                   "anneal_strategy='cos', div_factor=25, final_div_factor=1e4, "
-                   "three_phase=False, cycle_momentum=False)",
-    "lr-constant": "LinearLR(SGD(lr=1e-3), start_factor=1/1000, end_factor=1, total_iters=999) "
-                   "(warmup to peak, then constant)",
-    "lr-warmup-linear": "SequentialLR([LinearLR(1/1000, 1, 999), LinearLR(1, 1e-5/1e-3, 99000)], "
-                        "milestones=[1000])",
-    "lr-warmup-cosine": "SequentialLR([LinearLR(1/1000, 1, 999), CosineAnnealingLR(T_max=99000, "
-                        "eta_min=1e-5)], milestones=[1000])",
-}
+# NOT A RACE (Andrew, 2026-11-17): the six learning-rate schedule lanes (lr-step, lr-exponential, lr-onecycle,
+# lr-constant, lr-warmup-linear, lr-warmup-cosine) timed a Python loop of single lr_at calls against
+# torch.optim.lr_scheduler: no GPU work, only call overhead, so they were not races. They are gone from the plan, and
+# tools/race_fairness.py rule 1c (lane_class) keeps their stored rows off every board, the paper and the site. ONE
+# internal row stays: ConstantLR(warmup_steps=0), whose lr_at returns peak_lr at every step (no warmup branch, no
+# decay arithmetic), the cheapest schedule, so the row is as close to the pure cost of one lr_at call as a schedule
+# gets. Our arm only; tools/paper_compare.py compares it only with our own prior version on the same box in the same
+# job (its "internal checks" section). The name equals race_fairness.INTERNAL_CALL_OVERHEAD_LANE.
+INTERNAL_LR_LANE = "internal-call-overhead-lr-at"
+INTERNAL_LR = ("training.ConstantLR", dict(peak_lr=1e-3, warmup_steps=0))
 _TS = ("taxi-hourly", "synthetic")
 _TAB = ("taxi", "istella")
 
@@ -182,12 +169,11 @@ def register(add):
                    "bpe-encode: both arms use OUR trained vocabulary (Hugging Face loads it "
                    "from render_tokenizer_json()), trained before the clock"],
             mism=["bpe-train: each library breaks count ties by its own rule"])
-    for slug, (cls, p) in SCHED.items():
-        add(slug, xlane="sequence" if "." not in cls else "training", ours=(cls,), kind="extra",
-            task="sched", block="tensor", datasets=("synthetic",), params=dict(p),
-            quality="x-sched",
-            fit_text="the learning rate of steps 1 .. %d" % SCHED_STEPS,
-            other={"torch-cpu": "torch"}, notes=["torch: " + TORCH_SCHED_TEXT[slug]])
+    add(INTERNAL_LR_LANE, xlane="training", ours=(INTERNAL_LR[0],), kind="extra", task="sched",
+        block="tensor", datasets=("synthetic",), params=dict(INTERNAL_LR[1]), quality="x-sched",
+        fit_text="%d single lr_at calls (steps 1 .. %d)" % (SCHED_STEPS, SCHED_STEPS), other={},
+        notes=["call overhead, internal check (Andrew, 2026-11-17): not a race, no opponent; compared only "
+               "with our own prior version on the same box in the same job"])
     # measure-coverage (2026-10-22, Andrew: every exposed API measured against its peer): the low-bit linalg
     # functions against torch twins of the SAME contract (gemm/IDENTICAL_LOWBIT_CONTRACT.md L-1..L-6,
     # W-1..W-7), explicit in torch ops: per-row power-of-two exponent read from the absmax's exponent field
@@ -608,16 +594,28 @@ def _build_lowbit_train(lane, arm, D, A, t, p, ours, fn, info, rec, Runner, S, n
                 raise ValueError(t)
             return r
 
+        # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): every output was copied (`arr` -> np.array copy=True)
+        # inside the clock, a harness copy the torch twins never made (they copy device to host only). The clock now
+        # holds our call's returned host arrays as they are (`_held`, no copy); outputs() copies them after it.
+        held = A["_held"]
+        info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
+
         def fit():
             r = call()
-            if t == "tr_lmhead":
-                S["o"] = {"loss": np.array([float(r[0])]), "d_hidden": arr(r[1], np.float32),
-                          "d_weight": arr(r[2], np.float32)}
-            elif isinstance(r, tuple):
-                S["o"] = {"out%d" % i: np.asarray(arr(v)) for i, v in enumerate(r)}
-            else:
-                S["o"] = {"out0": np.asarray(arr(r))}
-        return Runner(info, fit, lambda: S["o"], record=rec)
+            S["raw"] = tuple(held(v) for v in r) if isinstance(r, tuple) else held(r)
+
+        def outputs():
+            if "raw" in S:
+                r = S.pop("raw")
+                if t == "tr_lmhead":
+                    S["o"] = {"loss": np.array([float(r[0])]), "d_hidden": arr(r[1], np.float32),
+                              "d_weight": arr(r[2], np.float32)}
+                elif isinstance(r, tuple):
+                    S["o"] = {"out%d" % i: np.asarray(arr(v)) for i, v in enumerate(r)}
+                else:
+                    S["o"] = {"out0": np.asarray(arr(r))}
+            return S["o"]
+        return Runner(info, fit, outputs, record=rec)
 
     import torch
     dev = A["_torch_device"](torch)
@@ -929,13 +927,27 @@ def build(lane, arm, D, A):
         if t == "selectd":
             rec["d_candidates"] = [0, 1]
         if ours:
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): the (n_obs, series) block was made contiguous
+            # (a harness transpose copy) and the results cast INSIDE our clock on every call; the statsmodels arm
+            # reads Y64 made before its clock. The block is made once here, before the clock, and the casts run in
+            # outputs(), after it. Cell: HARNESS_CLOCK_OURS.
+            YT = np.ascontiguousarray(Y.T)
+            held = A["_held"]
+            info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
+
             def fit():
                 if t == "kpss":
-                    st, stat = fn(np.ascontiguousarray(Y.T), return_statistic=True, **p)
-                    S["o"] = {"flag": A["_arr"](st, np.int64), "stat": A["_arr"](stat, np.float64)}
+                    S["raw"] = tuple(held(v) for v in fn(YT, return_statistic=True, **p))
                 else:
-                    S["o"] = {"d": A["_arr"](fn(np.ascontiguousarray(Y.T), **p), np.int64)}
-            return Runner(info, fit, lambda: S["o"], record=rec)
+                    S["raw"] = held(fn(YT, **p))
+
+            def outputs():
+                if "raw" in S:
+                    r = S.pop("raw")
+                    S["o"] = ({"flag": A["_arr"](r[0], np.int64), "stat": A["_arr"](r[1], np.float64)}
+                              if t == "kpss" else {"d": A["_arr"](r, np.int64)})
+                return S["o"]
+            return Runner(info, fit, outputs, record=rec)
         import warnings
         import statsmodels
         from statsmodels.tsa.stattools import kpss
@@ -991,12 +1003,23 @@ def build(lane, arm, D, A):
             # the drawn logits and int64 targets, as on the torch arms (ours hands the same values as int32)
             rec["input_arrays"] = input_arrays(lane, D, A)
 
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): the whole returned gradient was copied (`_arr` ->
+            # np.array copy=True) inside the clock before its first 256 rows were kept; the clock now holds our
+            # returned host gradient (`_held`, no copy), as the torch arm's clock holds its device-to-host copy, and
+            # outputs() keeps the 256 rows after it
+            info["harness_clock"] = A["HARNESS_CLOCK_OURS"]
+
             def fit():
                 loss, g = fn(x, tg32, reduction=p["reduction"], label_smoothing=p["label_smoothing"],
                              ignore_index=p["ignore_index"], return_grad=True)
-                S["o"] = {"loss": np.array([float(loss)]),
-                          "grad": A["_arr"](g, np.float32)[:256].copy()}
-            return Runner(info, fit, lambda: S["o"], record=rec)
+                S["raw"] = (loss, A["_held"](g))
+
+            def outputs():
+                if "raw" in S:
+                    loss, g = S.pop("raw")
+                    S["o"] = {"loss": np.array([float(loss)]), "grad": A["_arr"](g, np.float32)[:256].copy()}
+                return S["o"]
+            return Runner(info, fit, outputs, record=rec)
         import torch
         dev = A["_torch_device"](torch)
         mode = arm.split("-")[1]
@@ -1126,59 +1149,18 @@ def build(lane, arm, D, A):
                     "n": np.array([len(S["tok"])])}
         return Runner(info, fit, out, record=rec)
 
-    # ---- learning-rate schedules
+    # ---- the call-overhead internal check (not a race, Andrew 2026-11-17): our arm only. lr_at is bound once
+    # outside the clock; the clock holds the calls and the list append only, the array is built after it.
     if t == "sched":
         rec["input_arrays"] = input_arrays(lane, D, A)
-        if ours:
-            sched = fn(**p)
-
-            def fit():
-                S["lr"] = np.array([sched.lr_at(k) for k in range(1, SCHED_STEPS + 1)])
-            return Runner(info, fit, lambda: {"lr": S["lr"]}, record=rec)
-        import warnings
-        import torch
-        info.update(library="torch", version=torch.__version__, config=TORCH_SCHED_TEXT[lane])
-        O = torch.optim
-        L = O.lr_scheduler
-
-        def make():
-            base = p.get("base_lr", p.get("max_lr", p.get("peak_lr")))
-            opt = O.SGD([torch.nn.Parameter(torch.zeros(1))], lr=base)
-            if lane == "lr-step":
-                return L.StepLR(opt, step_size=p["step_size"], gamma=p["gamma"])
-            if lane == "lr-exponential":
-                return L.ExponentialLR(opt, gamma=p["gamma"])
-            if lane == "lr-onecycle":
-                return L.OneCycleLR(opt, max_lr=p["max_lr"], total_steps=p["total_steps"],
-                                    pct_start=p["pct_start"], anneal_strategy=p["anneal_strategy"],
-                                    div_factor=p["div_factor"], final_div_factor=p["final_div_factor"],
-                                    three_phase=p["three_phase"], cycle_momentum=False)
-            w = p["warmup_steps"]
-            warm = L.LinearLR(opt, start_factor=1.0 / w, end_factor=1.0, total_iters=w - 1)
-            if lane == "lr-constant":
-                return warm
-            span = p["total_steps"] - w
-            if lane == "lr-warmup-linear":
-                tail = L.LinearLR(opt, start_factor=1.0, end_factor=p["min_lr"] / p["peak_lr"],
-                                  total_iters=span)
-            else:
-                tail = L.CosineAnnealingLR(opt, T_max=span, eta_min=p["min_lr"])
-            return L.SequentialLR(opt, [warm, tail], milestones=[w])
+        if not ours:
+            raise SystemExit("REFUSING: %s is a call-overhead internal check, our arm only (no %s arm)"
+                             % (lane, arm))
+        lr_at = fn(**p).lr_at
 
         def fit():
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                sc = make()
-                out = np.empty(SCHED_STEPS)
-                for k in range(SCHED_STEPS):
-                    out[k] = sc.get_last_lr()[0]
-                    if k + 1 < SCHED_STEPS:
-                        sc.step()
-            S["lr"] = out
-        # measure-coverage (2026-10-24): the torch scheduler class, for the real-implementation check
-        impl = {"lr-step": L.StepLR, "lr-exponential": L.ExponentialLR, "lr-onecycle": L.OneCycleLR,
-                "lr-constant": L.LinearLR}.get(lane, L.SequentialLR)
-        return Runner(info, fit, lambda: {"lr": S["lr"]}, record=dict(rec, __implementation__=impl, **p))
+            S["lr"] = [lr_at(k) for k in range(1, SCHED_STEPS + 1)]
+        return Runner(info, fit, lambda: {"lr": np.asarray(S["lr"], dtype=np.float64)}, record=rec)
 
     # ---- Johnson-Lindenstrauss bound
     if t == "jl":
@@ -1223,6 +1205,17 @@ def quality(lane, D, outs, A):
     t = s["task"]
     q = {arm: {} for arm in outs}
     ref = outs.get("ours")
+    if "ours" in q:
+        # the mode policy mask of the wheel our arm ran on, recorded only when a row is relaxed, so
+        # tools/board_quality.py widens exactly the bounds that row moves (tools/mode_policy_bounds.py)
+        import sys
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import mode_policy_bounds
+        mask = mode_policy_bounds.wheel_policy_mask()
+        if mask:
+            q["ours"]["mode_policy_mask"] = mask
     for arm, o in outs.items():
         e = q[arm]
         try:
@@ -1268,9 +1261,10 @@ def quality(lane, D, outs, A):
                 if ref is not None:
                     theirs = set(bytes(ref["tokens"]).split(b"\x00"))
                     e["jaccard_vs_ours"] = len(mine & theirs) / float(len(mine | theirs))
-            elif t == "sched" and ref is not None:
-                r = ref["lr"].astype(np.float64)
-                e["max_rel_diff_vs_ours"] = float((np.abs(o["lr"] - r) / np.maximum(np.abs(r), 1e-30)).max())
+            elif t == "sched":
+                # ConstantLR(warmup_steps=0): every step's rate is peak_lr rounded to float32
+                peak = float(np.float32(s["params"]["peak_lr"]))
+                e["max_rel_diff_vs_peak_lr"] = float(np.abs(o["lr"] - peak).max() / peak)
             elif t.startswith("lowbit_") or t.startswith("tr_"):
                 e.update(_lowbit_train_quality(np, t, s["params"], o, A["SEED"]))
             elif t == "metric":
@@ -1283,13 +1277,19 @@ def quality(lane, D, outs, A):
                 X64 = np.asarray(_X, dtype=np.float64)
                 hits = 0
                 k = s["params"]["k"]
+                # 0.8.66 AMD measurement smoke (algos/ann-refine, istella and taxi: "quality scorer:
+                # AttributeError('numpy.ndarray' object has no attribute 'get')"): the query slice was named `q`,
+                # the per-arm result dict this function returns, so quality() returned the last query block.
                 for st in range(0, Q.shape[0], 1000):   # untimed float64 reference, 1,000 queries at a time
-                    q = Q[st:st + 1000].astype(np.float64)
+                    qblock = Q[st:st + 1000].astype(np.float64)
                     c = C[st:st + 1000]
-                    d = ((X64[c] - q[:, None, :]) ** 2).sum(-1)
+                    d = ((X64[c] - qblock[:, None, :]) ** 2).sum(-1)
                     best = np.take_along_axis(c, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
                     got = o["indices"][st:st + 1000]
-                    hits += sum(len(set(a) & set(b)) for a, b in zip(best.tolist(), got.tolist()))
+                    # REFINE RECALL FIX (fb12, 2026-11-17): the seeded candidate ids are drawn with replacement, so
+                    # a query's exact top k can hold one id twice; a set intersection counted it once and scored the
+                    # exact answer below 1 (0.892 on the 300-row test). Count with multiplicity.
+                    hits += sum(sum((Counter(a) & Counter(b)).values()) for a, b in zip(best.tolist(), got.tolist()))
                 e["recall_vs_exact_refine"] = hits / float(Q.shape[0] * k)
             elif t == "jl":
                 sk = outs.get("sklearn-cpu")

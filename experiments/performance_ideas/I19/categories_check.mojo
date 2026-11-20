@@ -41,6 +41,7 @@ def check_categories(ctx: DeviceContext) raises:
     var counts=ctx.enqueue_create_buffer[DType.int32](stable_radix_counts_len(513))
     var bsum=ctx.enqueue_create_buffer[DType.int32](stable_radix_bsum_len(513))
     enqueue_ragged_categories(ctx,src,arena,permutation,offsets,descriptor,keys,positions,tk,tv,counts,bsum)
+    _ = values^  # past the drain: a queued copy reads it after its last named use
     var actual=ctx.enqueue_create_host_buffer[DType.float32](total*4+segments)
     ctx.enqueue_copy(dst_buf=actual,src_buf=arena); ctx.synchronize()
     for s in range(segments):

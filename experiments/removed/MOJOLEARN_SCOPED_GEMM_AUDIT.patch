@@ -1,0 +1,2213 @@
+diff --git a/bindings/_mojolearn_estimators.mojo b/bindings/_mojolearn_estimators.mojo
+index 241a0a8874..5960fbd52e 100644
+--- a/bindings/_mojolearn_estimators.mojo
++++ b/bindings/_mojolearn_estimators.mojo
+@@ -14,10 +14,11 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
+ # DEVIATION 2486: shared byte-preserving host copies.
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
+ from std.os import abort
+-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b (its witnesses scoped_gemm_flags, scoped_gemm_count, scoped_gemm_metadata, and the MOJOLEARN_SOFTMAX_G2_AUDIT
+-# witnesses softmax_g2_state / _count / _last / _reset with bindings/softmax_g2_observe.mojo).
+-# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import (
++    AUDIT as SCOPED_AUDIT, GRAM as SCOPED_GRAM, SPLITS as SCOPED_SPLITS,
++    PCA as SCOPED_PCA, TALL as SCOPED_TALL, DENSE as SCOPED_DENSE,
++    NARROW as SCOPED_NARROW, scoped_count, scoped_last,
++)
+ from std.math import isfinite
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+@@ -27,6 +28,8 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
+ from core.py2mojo_linear import py2mojo_linear_flags
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE
++from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_AUDIT
++from bindings.softmax_g2_observe import softmax_g2_state_binding, softmax_g2_count_binding, softmax_g2_last_binding, softmax_g2_reset_binding
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import NUMERIC_FAST as _OLS_FAST
+ from std.sys.compile import is_defined
+@@ -1628,6 +1631,18 @@ def dbscan_core_arrays_binding(
+     return dbscan_core_arrays_device(ctx, x_addr, labels_addr, core_addr, params)
+ 
+ 
++def scoped_gemm_flags_binding() raises -> PythonObject:
++    return PythonObject(Int(SCOPED_TALL) + 2 * Int(SCOPED_DENSE) + 4 * Int(SCOPED_GRAM) + 8 * Int(SCOPED_NARROW) + 16 * Int(SCOPED_SPLITS) + 32 * Int(SCOPED_PCA))
++
++
++def scoped_gemm_count_binding(route: PythonObject, arm: PythonObject) raises -> PythonObject:
++    return PythonObject(scoped_count(Int(py=route), Int(py=arm)))
++
++
++def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
++    return PythonObject(scoped_last(Int(py=index)))
++
++
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators.mojo
+ # (the per-binding build) and in the merged roots tools/merged_bindings.py
+ # writes from bindings/merged_groups.json (one shared file per directory set).
+@@ -1658,6 +1673,10 @@ def build__mojolearn_estimators() -> PythonObject:
+         m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
+         m.def_function[kde_fit_release_binding]("kde_fit_release")
+         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
++        comptime if SCOPED_AUDIT:
++            m.def_function[scoped_gemm_flags_binding]("scoped_gemm_flags")
++            m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
++            m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
+         m.def_function[pca_fit_binding]("pca_fit")
+         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_estimators.patch
+@@ -1702,6 +1721,11 @@ def build__mojolearn_estimators() -> PythonObject:
+         comptime if MULTIOUT_RIDGE:
+             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
+             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
++        comptime if SOFTMAX_AUDIT:
++            m.def_function[softmax_g2_state_binding]("softmax_g2_state")
++            m.def_function[softmax_g2_count_binding]("softmax_g2_count")
++            m.def_function[softmax_g2_last_binding]("softmax_g2_last")
++            m.def_function[softmax_g2_reset_binding]("softmax_g2_reset")
+         m.def_function[qn_fit_binding]("qn_fit")
+         comptime if QN_OVR_ONE_UPLOAD:
+             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
+diff --git a/bindings/_mojolearn_gp.mojo b/bindings/_mojolearn_gp.mojo
+index d085523f67..e7bbb29b4f 100644
+--- a/bindings/_mojolearn_gp.mojo
++++ b/bindings/_mojolearn_gp.mojo
+@@ -173,10 +173,10 @@ from cholesky.estimator import (
+ )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b (its reach counter gp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+-# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+ 
++def gp_shared_sub_count_py() raises -> PythonObject:
++    return PythonObject(shared_sub_count(True))
+ 
+ def gp_numeric_mode_binding() raises -> PythonObject:
+     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+@@ -1437,6 +1437,7 @@ def build__mojolearn_gp() -> PythonObject:
+     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
+     try:
+         var m = PythonModuleBuilder("_mojolearn_gp")
++        m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
+         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+diff --git a/bindings/_mojolearn_scoped_gemm_probe.mojo b/bindings/_mojolearn_scoped_gemm_probe.mojo
+new file mode 100644
+index 0000000000..93f55eaf4e
+--- /dev/null
++++ b/bindings/_mojolearn_scoped_gemm_probe.mojo
+@@ -0,0 +1,137 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Quality-only bindings to actual decomp GEMM and PCA covariance entrances."""
++from core.experiment_guards_base import BASE_GUARDS_OK
++from std.os import abort
++from std.python import PythonObject
++from std.python.bindings import PythonModuleBuilder
++from core.neural_context import process_ctx
++from checks.numerics import GLOBAL_NUMERIC_MODE
++from core.gemm import gemm_nt, gemm_nt_gram
++from gemm.checks.gemm_identical import _fast_vendor_gemm
++from gemm.contract import OP_NN, OP_NT
++from experiments.apple_fast.gemm.scoped_dispatch import (
++    AUDIT, ENABLED, TALL, DENSE, GRAM, NARROW, SPLITS, PCA,
++    scoped_count, scoped_last,
++)
++from x_decomp.device import launch_gemm, DECOMP_FAST_GEMM_MMA
++from decomposition.impl.linalg.detail.pca import compute_covariance
++
++comptime FPtr = UnsafePointer[Float32, MutAnyOrigin]
++
++def abi_py() raises -> PythonObject:
++    return PythonObject(1)
++
++def flags_py() raises -> PythonObject:
++    return PythonObject(Int(TALL) + 2 * Int(DENSE) + 4 * Int(GRAM) + 8 * Int(NARROW) + 16 * Int(SPLITS) + 32 * Int(PCA))
++
++def enabled_py() raises -> PythonObject:
++    return PythonObject(Int(ENABLED and AUDIT and DECOMP_FAST_GEMM_MMA))
++
++def vendor_py() raises -> PythonObject:
++    return PythonObject("metal")
++
++def mode_py() raises -> PythonObject:
++    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
++
++def route_count_py(route: PythonObject, arm: PythonObject) raises -> PythonObject:
++    return PythonObject(scoped_count(Int(py=route), Int(py=arm)))
++
++def metadata_py(index: PythonObject) raises -> PythonObject:
++    return PythonObject(scoped_last(Int(py=index)))
++
++def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonObject) raises -> PythonObject:
++    comptime if not (ENABLED and AUDIT and DECOMP_FAST_GEMM_MMA):
++        raise Error("scoped probe requires FAST Apple and scoped AUDIT")
++    else:
++        if len(dims) != 6 and len(dims) != 7:
++            raise Error("expected m,n,k,ta,tb,alias")
++        var m = Int(py=dims[0])
++        var n = Int(py=dims[1])
++        var k = Int(py=dims[2])
++        var ta = Int(py=dims[3]) != 0
++        var tb = Int(py=dims[4]) != 0
++        var aliased_inputs = Int(py=dims[5]) != 0
++        if m < 1 or n < 1 or k < 1 or max(m * n, max(m * k, n * k)) > 2147483647:
++            raise Error("positive bounded extents required")
++        if aliased_inputs and (m != n or ta == tb or Int(py=aa) != Int(py=bb)):
++            raise Error("alias requires one square Gram input")
++        var ap = FPtr(unsafe_from_address=Int(py=aa))
++        var bp = FPtr(unsafe_from_address=Int(py=bb))
++        var cp = FPtr(unsafe_from_address=Int(py=cc))
++        var ctx = process_ctx["MojoScopedGemmProbeFast"]()
++        var da = ctx.enqueue_create_buffer[DType.float32](m * k)
++        ctx.enqueue_copy(dst_buf=da, src_ptr=ap)
++        var db = da if aliased_inputs else ctx.enqueue_create_buffer[DType.float32](n * k)
++        if not aliased_inputs:
++            ctx.enqueue_copy(dst_buf=db, src_ptr=bp)
++        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
++        # This probe requires the existing AFN default, which does not use scratch.
++        var scratch = ctx.enqueue_create_buffer[DType.float32](1)
++        var entrance = Int(py=dims[6]) if len(dims) == 7 else 0
++        if entrance == 1:
++            if ta or not tb:
++                raise Error("core entrance requires NT")
++            if aliased_inputs:
++                gemm_nt_gram(ctx, dc, da, m, n, k)
++            else:
++                gemm_nt(ctx, dc, da, db, m, n, k)
++        elif entrance == 2:
++            if ta or not _fast_vendor_gemm(ctx, dc, da, db, m, n, k, OP_NT if tb else OP_NN):
++                raise Error("SDK entrance only supports unfused NN/NT")
++        else:
++            launch_gemm(ctx,
++            da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            db.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), m, k, n, ta, tb,
++        )
++        ctx.enqueue_copy(dst_ptr=cp, src_buf=dc)
++        ctx.synchronize()
++        return PythonObject(1)
++
++def covariance_py(xx: PythonObject, cc: PythonObject, mm: PythonObject, after: PythonObject, dims: PythonObject) raises -> PythonObject:
++    comptime if not (ENABLED and AUDIT and DECOMP_FAST_GEMM_MMA):
++        raise Error("scoped probe requires FAST Apple and scoped AUDIT")
++    else:
++        if len(dims) != 3:
++            raise Error("expected rows,cols,restore")
++        var nr = Int(py=dims[0])
++        var nc = Int(py=dims[1])
++        var restore = Int(py=dims[2]) != 0
++        if nr < 2 or nc < 1 or max(nr * nc, nc * nc) > 2147483647:
++            raise Error("invalid covariance shape")
++        var ctx = process_ctx["MojoScopedGemmProbeFast"]()
++        var dx = ctx.enqueue_create_buffer[DType.float32](nr * nc)
++        ctx.enqueue_copy(dst_buf=dx, src_ptr=FPtr(unsafe_from_address=Int(py=xx)))
++        # These are independent transpose/partial-sum scratch buffers.
++        var xa = ctx.enqueue_create_buffer[DType.float32](nr * nc)
++        var xb = ctx.enqueue_create_buffer[DType.float32](nr * nc)
++        var mu = ctx.enqueue_create_buffer[DType.float32](nc)
++        var cov = ctx.enqueue_create_buffer[DType.float32](nc * nc)
++        compute_covariance(ctx, dx, xa, xb, mu, cov, nr, nc, restore)
++        ctx.enqueue_copy(dst_ptr=FPtr(unsafe_from_address=Int(py=cc)), src_buf=cov)
++        ctx.enqueue_copy(dst_ptr=FPtr(unsafe_from_address=Int(py=mm)), src_buf=mu)
++        ctx.enqueue_copy(dst_ptr=FPtr(unsafe_from_address=Int(py=after)), src_buf=dx)
++        ctx.synchronize()
++        return PythonObject(1)
++
++# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo
++# (the per-binding build) and in the merged roots tools/merged_bindings.py
++# writes from bindings/merged_groups.json (one shared file per directory set).
++def build__mojolearn_scoped_gemm_probe() -> PythonObject:
++    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
++    try:
++        var m = PythonModuleBuilder("_mojolearn_scoped_gemm_probe")
++        m.def_function[abi_py]("abi_version")
++        m.def_function[flags_py]("flags")
++        m.def_function[enabled_py]("enabled")
++        m.def_function[mode_py]("numeric_mode")
++        m.def_function[mode_py]("scoped_gemm_probe_numeric_mode")
++        m.def_function[vendor_py]("scoped_gemm_probe_vendor")
++        m.def_function[route_count_py]("route_count")
++        m.def_function[metadata_py]("metadata")
++        m.def_function[gemm_py]("gemm")
++        m.def_function[covariance_py]("covariance")
++        return m.finalize()
++    except e:
++        abort(String("failed scoped GEMM probe: ", e))
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index 2143d441cb..723e3e5e72 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -22,9 +22,10 @@ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial
+ from x_decomp.decomp_owner_dev import DevDecomp
+ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
+ 
+-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+-# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
++
++def x_decomp_shared_sub_count_py() raises -> PythonObject:
++    return PythonObject(shared_sub_count(False))
+ 
+ # TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+ # at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
+@@ -100,6 +101,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         var m = PythonModuleBuilder("_mojolearn_x_decomp")
+         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
+         # F02 audit belongs to the independent LU route as well as MCD.
++        m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+         m.def_function[device_plan_log_binding]("device_plan_log")
+diff --git a/bindings/build_scoped_gemm_probe.sh b/bindings/build_scoped_gemm_probe.sh
+new file mode 100755
+index 0000000000..a18766bac5
+--- /dev/null
++++ b/bindings/build_scoped_gemm_probe.sh
+@@ -0,0 +1,55 @@
++#!/bin/sh
++. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
++. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
++# Scoped decomp/PCA quality probe binding; compile only, never execute on M2.
++set -eu
++MACOS_FLOOR="11.0"
++cd "$(dirname "$0")/.."
++if [ "${MOJOLEARN_BUILD_LOCK_HELD:-}" != 1 ]; then
++    exec tools/with_build_lock.sh sh bindings/build_scoped_gemm_probe.sh "$@"
++fi
++# Match existing bindings: environment deployment target disables Metal AOT.
++unset MACOSX_DEPLOYMENT_TARGET
++# TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
++# binding builds IDENTICAL (the default, bitwise across vendors) or FAST
++# (per-vendor speed, same quality, no bit promise).
++mode=${MOJOLEARN_NUMERIC_MODE:-identical}
++mode_flags=""
++outdir=python/mojolearn
++case "$mode" in
++    fast) expected=0 ;;
++    identical) expected=1; mode_flags="-D MOJOLEARN_NUMERIC_IDENTICAL=1"; outdir=$outdir/identical ;;
++    *) echo "invalid numeric mode: $mode" >&2; exit 2 ;;
++esac
++link_flags=""
++target_flags=""
++if [ "$(uname)" = Darwin ]; then
++    sdk=$(xcrun --sdk macosx --show-sdk-version)
++    link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $sdk"
++    target_flags="--target-cpu apple-m1 --target-accelerator metal:1"
++else
++    case "$(uname -m)" in
++        x86_64) target_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
++    esac
++    if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ]; then
++        case "$MOJOLEARN_GPU_ARCHS" in *,*) echo "one GPU architecture required" >&2; exit 2 ;; esac
++        target_flags="$target_flags --target-accelerator $MOJOLEARN_GPU_ARCHS"
++    fi
++fi
++column_flags=""
++if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
++    column_flags="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
++fi
++mkdir -p build/probe-tmp
++tmpdir=$(mktemp -d "build/probe-tmp/gemm.XXXXXX")
++trap 'rm -rf "$tmpdir"' EXIT INT TERM
++out=$tmpdir/_mojolearn_scoped_gemm_probe.so
++# Intentionally split compiler option lists, consistent with existing builders.
++# compiles the entry bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo, which imports the module body bindings/_mojolearn_scoped_gemm_probe.mojo
++pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
++    $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
++    bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo -o "$out"
++# Compile only, including on Darwin: manager runs quality on M3 only.
++mkdir -p "$outdir"
++mv "$out" "$outdir/_mojolearn_scoped_gemm_probe.so"
++echo "built $outdir/_mojolearn_scoped_gemm_probe.so (compile only)"
+diff --git a/bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo b/bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo
+new file mode 100644
+index 0000000000..157b06e295
+--- /dev/null
++++ b/bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo
+@@ -0,0 +1,12 @@
++# GENERATED by tools/merged_bindings.py entries; do not edit.
++# The per-binding entry for _mojolearn_scoped_gemm_probe: the CPython module init the per-binding
++# build script compiles. The module body is build__mojolearn_scoped_gemm_probe() in
++# bindings/_mojolearn_scoped_gemm_probe.mojo; bindings/merged_build.sh exports the same init from one
++# shared file per directory set (bindings/merged_groups.json).
++from std.python import PythonObject
++from _mojolearn_scoped_gemm_probe import build__mojolearn_scoped_gemm_probe
++
++
++@export
++def PyInit__mojolearn_scoped_gemm_probe() abi("C") -> PythonObject:
++    return build__mojolearn_scoped_gemm_probe()
+diff --git a/bindings/softmax_g2_observe.mojo b/bindings/softmax_g2_observe.mojo
+new file mode 100644
+index 0000000000..905b84d3ce
+--- /dev/null
++++ b/bindings/softmax_g2_observe.mojo
+@@ -0,0 +1,16 @@
++# SPDX-License-Identifier: Apache-2.0
++from std.python import PythonObject
++from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_G2, softmax_count, softmax_last, softmax_reset
++
++def softmax_g2_state_binding() raises -> PythonObject:
++    return PythonObject(Int(SOFTMAX_G2))
++
++def softmax_g2_count_binding(index: PythonObject) raises -> PythonObject:
++    return PythonObject(softmax_count(Int(py=index)))
++
++def softmax_g2_last_binding(index: PythonObject) raises -> PythonObject:
++    return PythonObject(softmax_last(Int(py=index)))
++
++def softmax_g2_reset_binding() raises -> PythonObject:
++    softmax_reset()
++    return PythonObject(1)
+diff --git a/cholesky/checks/fast_trsm.mojo b/cholesky/checks/fast_trsm.mojo
+index 36315370bc..3e90c95df4 100644
+--- a/cholesky/checks/fast_trsm.mojo
++++ b/cholesky/checks/fast_trsm.mojo
+@@ -29,10 +29,16 @@ from layout import TileTensor
+ from layout.tile_layout import row_major
+ from linalg.matmul import matmul
+ from std.utils.index import IndexList
++from std.sys.compile import is_defined
++from gemm.afn_apple_fast import AFN_GEMM_APPLE
++from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
+ 
+-# TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
+-# at f59d913b0b (F02: the lower-triangle subtract through scoped_kernel's SUBTRACT + LOWER epilogue; one-sample M3 fit B/A
+-# 0.95, no verdict row). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++# F02/cholesky M3 2026-10-06 repaired admitted shape2309 reached shared
++# subtract; fit B/A0.9514, solve0.9839, quality equal. Fallback controls301/
++# 1027 gave fit0.1728/1.0274, solve0.7310/1.0019 and do not establish route gain.
++# One warmup+score, small admitted gain; default OFF. Original failure retained.
++# Evidence ab-20261006/repairs-54c1f35a5/results/F02/cholesky.
++comptime CHOL_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"]()
+ 
+ comptime FTS_BLOCK = 512
+ comptime FTS_TPB = 256
+@@ -302,6 +308,17 @@ def fast_gemm_nt_sub_lower(
+     stored and read back. `shape` only gives the output tensor its extent
+     (`m * cols` floats; nothing is written to it)."""
+ 
++    comptime if CHOL_SHARED_SUB:
++        shared_sub_record(True)
++        ctx.enqueue_function[scoped_kernel[64, 64, False, True, True]](
++            a.unsafe_offset((base + off) * n + base + off),
++            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            Int32(m), Int32(cols), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
++            grid_dim=(((m + 63) // 64) * ((cols + 63) // 64), 1, 1), block_dim=(128, 1, 1),
++        )
++        return
++
+     @parameter
+     @always_inline
+     def epi[
+diff --git a/core/gemm.mojo b/core/gemm.mojo
+index e25e4de2dc..5fca8e4e9c 100644
+--- a/core/gemm.mojo
++++ b/core/gemm.mojo
+@@ -5,10 +5,7 @@
+ from layout import TileTensor
+ from layout.tile_layout import row_major
+ from linalg.matmul import matmul
+-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+-# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+-# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+ from gemm.afn_apple_fast import afn_gemm_fp32_ragged_k_ptr_into
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.gpu import block_dim, block_idx, thread_idx
+@@ -483,6 +480,12 @@ def gemm_nt(
+         m, n, k, OP_NT,
+     ):
+         return
++    if try_scoped_gemm[False, 0](
++        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++        m, n, k, k, 1, 1, k, 1, k,
++    ):
++        return
+     var tz = TileTensor(z, row_major(m, n))
+     var tx = TileTensor(x, row_major(m, k))
+     var ty = TileTensor(y, row_major(n, k))
+@@ -543,6 +546,11 @@ def gemm_nt_gram(
+         ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp, m, n, k, OP_NT
+     ):
+         return
++    if try_scoped_gemm[False, 0](
++        ctx, z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xp, xp,
++        m, n, k, k, 1, 1, k, 1, k,
++    ):
++        return
+     var tz = TileTensor(z, row_major(m, n))
+     var tx = TileTensor(xt, row_major(m, k))
+     var ty = TileTensor(xt, row_major(n, k))
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index d46ffcc386..4e85ff2ebd 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -29,10 +29,7 @@ from gemm.afn_apple_fast import (
+     afn_strides,
+     afn_zero_kernel,
+ )
+-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+-# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+-# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+ from gemm.contract import OP_TN
+ 
+ #: lane/apple-fast-gap-linalg2-pca (2026-10-03): PCA_FAST_GRAM_MMA, the FAST +
+@@ -159,10 +156,19 @@ def compute_covariance(
+             var per = (n_rows + splits - 1) // splits
+             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+             splits = (n_rows + per - 1) // per
+-            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+-                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+-                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+-            )
++            # Opt-in scoped G1 fit remains HOLD (2026-10-04), source201fe736,
++            # scoped-pca-fit-istella-q-v1: singular/noise oracle errors worsen
++            # under zero allowance. Report serialization incomplete; no PASS
++            # or timing admission. Existing accepted AFN default is fallback.
++            # PCA transform/inverse evidence uses another route/contract;
++            # see docs/apple-fast/GEMM_INLINE_OUTCOMES.md before any retry.
++            if not try_scoped_gemm[True, 2](
++                ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
++            ):
++                afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
++                    ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
++                    n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
++                )
+             ctx.enqueue_function[scale_in_place_kernel](
+                 cov.unsafe_ptr(),
+                 Int32(n_cols * n_cols),
+diff --git a/experiments/apple_fast/gemm/scoped_dispatch.mojo b/experiments/apple_fast/gemm/scoped_dispatch.mojo
+new file mode 100644
+index 0000000000..17930dcfc9
+--- /dev/null
++++ b/experiments/apple_fast/gemm/scoped_dispatch.mojo
+@@ -0,0 +1,259 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Opt-in strided G1/G2 adapter. No allocation, sync or host numerical work.
++
++Fragment math copied from compiled catalog fa39073607e3b19c4fbfe063a5545a63318f13c2.
++Strides and caller-owned split plans are new and require independent quality.
++Scope selection uses operation metadata only. No production default changes.
++"""
++from max.gpu.compute.arch.mma_apple import _mma_apple_8x8
++from max.gpu.host import DeviceContext
++from std.gpu import block_idx, lane_id, warp_id
++from std.atomic import Atomic
++from std.ffi import _Global
++from std.sys.compile import is_defined
++from gemm.afn_apple_fast import AFN_GEMM_APPLE
++
++# OPEN / default OFF, evidence checked on M3 2026-10-04 (not runner rc).
++# scoped-r2-all-q-v1, source28f06e19/harness5776a5d1: all28 mechanism
++# fixtures PASS, relative-Frobenius bound5e-6, zero maxabs/relative error
++# regression allowance against actual AFN. This is NOT fitted-caller timing.
++# Resident SDK catalog sourcefa390736: G1 tall6.826875->3.524209ms,
++# G2 narrow1.203750->0.865625ms; different baseline from this AFN adapter.
++# Separate shared G1/G5 PCA transforms were faster, inverses slower; none
++# supplies PCA-fit or broad-regime admission. See GEMM_INLINE_OUTCOMES.md.
++# MEASURED scoped M3 callers; mixed results, defaults OFF.
++comptime TALL = is_defined["MOJOLEARN_SCOPED_GEMM_G1_TALL"]()
++comptime DENSE = is_defined["MOJOLEARN_SCOPED_GEMM_G1_DENSE"]()
++# MEASURED scoped M3 callers; mixed results, defaults OFF.
++comptime GRAM = is_defined["MOJOLEARN_SCOPED_GEMM_G1_GRAM"]()
++comptime NARROW = is_defined["MOJOLEARN_SCOPED_GEMM_G2_NARROW"]()
++# MEASURED scoped M3 callers; mixed results, defaults OFF.
++comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
++# HOLD-quality, scoped-pca-fit-istella-q-v1, compiled201fe736, zero allowance:
++# singular_relative1.964589033e-5->1.964642456e-5 and noise_relative
++# .2086188062->.2086434597 worsen; noise_maxabs438.731387->438.783234.
++# Saved report serialization is INCOMPLETE; preserved fields show HOLD,
++# never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
++# is owed; no fit timing/default admission. Mechanism PASS above is separate.
++# MEASURED scoped M3 callers; mixed results, defaults OFF.
++# M3 2026-10-06 F01/default and F02/pca repaired positive-reach fixtures:
++# complete A/B pairs measured, original failed attempts retained. F01 task
++# timings B/A0.4756..1.2118; F02 PCA0.8741..1.1872; SDK0.6982..1.5301.
++# Mixed component outcomes; quality differs within captured FAST contracts,
++# prior broad fit-quality HOLD is not waived. Keep scoped/PCA defaults OFF.
++# One excluded warmup+one scored call. Evidence ab-20261006/repairs-54c1f35a5
++# results/F01 and F02/pca; original results/F02/sdk. No validation retests.
++# Full Istella PCA operation, M3 FAST, source ec3c8c850 (2026-10-06):
++# F01 A=717.265 ms, B=710.393 ms, B/A=0.99042. All 2,043,304 train and
++# 500,000 query rows; preparation, fit, transform, inverse and output reads.
++# One excluded warmup and one score; reconstruction passed, hashes retained.
++# Full taxi also measured all 5,250,086 training/500,000 query rows:
++# A=102.607 ms, B=97.052 ms, B/A=0.94587; reconstruction gate passed.
++# One sample on each dataset does not establish broad adapter admission.
++# Keep OFF; other affected workloads and interactions remain pending.
++# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
++# pca-full-summary.json. F02/pca shares this exact artifact pair/workload;
++# its other adapters remain separately pending.
++comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
++comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
++# LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128
++# K128..512; DENSE M1024..8192 N256..768 K256..768 M>=2N; GRAM M129..1024
++# K>=128; NARROW M>=4096 N2..16 K128..512; N>=2) bracketed board shapes
++# (220 features, 8 classes). Removed as benchmark-tuned on 2026-10-04; the
++# window-free replacement is UNMEASURED.
++comptime LEGACY_WINDOWS = is_defined["MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM"]()
++comptime ENABLED = AFN_GEMM_APPLE and (TALL or DENSE or GRAM or NARROW or AUDIT)
++comptime FPtr = MutPointer[Float32, MutAnyOrigin]
++
++struct ScopeAudit(Defaultable, Movable):
++    var counts: InlineArray[Int, 9]
++    var last: InlineArray[Int, 15]
++    def __init__(out self):
++        self.counts = InlineArray[Int, 9](fill=0)
++        self.last = InlineArray[Int, 15](fill=0)
++
++comptime STATE = _Global[StorageType=ScopeAudit, name="ScopedGemmAuditV1", init_fn=ScopeAudit.__init__]
++
++def scoped_count(route: Int, arm: Int) raises -> Int:
++    if route < 0 or route > 2 or arm < 0 or arm > 2:
++        raise Error("invalid scoped GEMM count")
++    return STATE.get_or_create_ptr()[].counts[route * 3 + arm]
++
++def scoped_last(index: Int) raises -> Int:
++    if index < 0 or index >= 15:
++        raise Error("invalid scoped GEMM metadata index")
++    return STATE.get_or_create_ptr()[].last[index]
++
++
++struct SharedSubAudit(Defaultable, Movable):
++    var lu: Int
++    var chol: Int
++    def __init__(out self):
++        self.lu = 0
++        self.chol = 0
++comptime SUB_STATE = _Global[StorageType=SharedSubAudit, name="SharedSubtractAuditV1", init_fn=SharedSubAudit.__init__]
++
++def shared_sub_record(cholesky: Bool) raises:
++    if cholesky:
++        SUB_STATE.get_or_create_ptr()[].chol += 1
++    else:
++        SUB_STATE.get_or_create_ptr()[].lu += 1
++
++def shared_sub_count(cholesky: Bool) raises -> Int:
++    return SUB_STATE.get_or_create_ptr()[].chol if cholesky else SUB_STATE.get_or_create_ptr()[].lu
++
++
++def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False, LOWER: Bool = False](
++    dst: FPtr, a: FPtr, b: FPtr,
++    m_in: Int32, n_in: Int32, k_in: Int32,
++    a_si_in: Int32, a_sp_in: Int32, b_sp_in: Int32, b_sj_in: Int32, per_in: Int32,
++    dst_stride_in: Int32 = Int32(0),
++):
++    var m = Int(m_in)
++    var n = Int(n_in)
++    var k = Int(k_in)
++    var a_si = Int(a_si_in)
++    var a_sp = Int(a_sp_in)
++    var b_sp = Int(b_sp_in)
++    var b_sj = Int(b_sj_in)
++    var per = Int(per_in)
++    comptime assert not (SPLIT and SUBTRACT), "subtract requires an unsplit accumulation"
++    comptime assert BM % 16 == 0 and BN % 16 == 0
++    comptime RM = BM // 16
++    comptime RN = BN // 16
++    var lane = Int(lane_id())
++    var sg = Int(warp_id())
++    var fr = ((lane & 6) >> 1) + ((lane & 16) >> 2)
++    var fc = ((lane & 1) << 1) + ((lane & 8) >> 1)
++    var cols = (n + BN - 1) // BN
++    var bm = (Int(block_idx.x) // cols) * BM
++    var bn = (Int(block_idx.x) % cols) * BN
++    comptime if LOWER:
++        if bn >= bm + BM:
++            return  # uniform whole-tile rejection, no partial warp exit
++    var sr = (sg // 2) * (BM // 2)
++    var sc = (sg % 2) * (BN // 2)
++    var first = 0
++    var last = k
++    comptime if SPLIT:
++        first = Int(block_idx.y) * per
++        last = min(k, first + per)
++    var acc = InlineArray[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
++    for kb in range(first, last, 16):
++        for ks in range(0, 16, 8):
++            var af = InlineArray[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
++            var bf = InlineArray[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
++            comptime for mi in range(RM):
++                var row = bm + sr + mi * 8 + fr
++                var fragment = SIMD[DType.float32, 2](0)
++                comptime for s in range(2):
++                    var kk = kb + ks + fc + s
++                    if row < m and kk < last:
++                        fragment[s] = a.unsafe_load(row * a_si + kk * a_sp)
++                af[mi] = fragment
++            comptime for ni in range(RN):
++                var fragment = SIMD[DType.float32, 2](0)
++                comptime for s in range(2):
++                    var col = bn + sc + ni * 8 + fc + s
++                    var kk = kb + ks + fr
++                    if col < n and kk < last:
++                        fragment[s] = b.unsafe_load(kk * b_sp + col * b_sj)
++                bf[ni] = fragment
++            comptime for mi in range(RM):
++                comptime for ni in range(RN):
++                    var previous = acc[mi * RN + ni]
++                    _mma_apple_8x8(acc[mi * RN + ni], af[mi], bf[ni], previous)
++    comptime for mi in range(RM):
++        comptime for ni in range(RN):
++            var fragment = acc[mi * RN + ni]
++            comptime for s in range(2):
++                var row = bm + sr + mi * 8 + fr
++                var col = bn + sc + ni * 8 + fc + s
++                if row < m and col < n and (not LOWER or col <= row):
++                    comptime if SPLIT:
++                        _ = Atomic.fetch_add(dst.unsafe_offset(row * n + col), fragment[s])
++                    elif SUBTRACT:
++                        var cell = row * Int(dst_stride_in) + col
++                        dst.unsafe_store(cell, dst.unsafe_load(cell) - fragment[s])
++                    else:
++                        dst.unsafe_store(row * n + col, fragment[s])
++
++
++def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
++    ctx: DeviceContext, dst: FPtr, a: FPtr, b: FPtr,
++    m: Int, n: Int, k: Int, a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
++    splits: Int, per: Int,
++) raises -> Bool:
++    comptime assert ROUTE >= 0 and ROUTE < 3
++    comptime if not ENABLED:
++        return False
++    else:
++        var nn = a_si == k and a_sp == 1 and b_sp == n and b_sj == 1
++        var nt = a_si == k and a_sp == 1 and b_sp == 1 and b_sj == k
++        var tn = a_si == 1 and a_sp == m and b_sp == n and b_sj == 1
++        var aliased_inputs = a == b
++        var arm = 0
++        comptime if LEGACY_WINDOWS:
++            if TALL and nn and m >= 4096 and n >= 32 and n <= 128 and k >= 128 and k <= 512:
++                arm = 1
++            if DENSE and nn and m >= 1024 and m <= 8192 and n >= 256 and n <= 768 and k >= 256 and k <= 768 and m >= 2 * n:
++                arm = 1
++            if GRAM and aliased_inputs and m == n and m >= 129 and m <= 1024 and k >= 128 and (nt or tn):
++                arm = 1
++            if NARROW and nt and m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512:
++                arm = 2
++            if n <= 1:
++                arm = 0
++        else:
++            # Layout only, no shape window. scoped_kernel bounds-checks every
++            # row, column and K index, so any M, N, K >= 1 is correct; one
++            # launch replaces one launch, so no launch-amortization floor.
++            # TALL and DENSE share the 64x64 NN kernel. A self-Gram (aliased,
++            # square) keeps the 64x64 tile; any other NT call takes the 32x32
++            # tile under NARROW.
++            if (TALL or DENSE) and nn:
++                arm = 1
++            if GRAM and aliased_inputs and m == n and (nt or tn):
++                arm = 1
++            elif NARROW and nt:
++                arm = 2
++        if m <= 0 or n <= 0 or k <= 0 or dst == a or dst == b:
++            arm = 0
++        # Shapes and strides travel as Int32 (kernel limit).
++        if max(m * n, max(m * k, n * k)) > 2147483647:
++            arm = 0
++        if splits < 1 or per < 1 or (SPLIT and per % 16 != 0):
++            arm = 0
++        comptime if SPLIT and not SPLITS:
++            arm = 0
++        comptime if ROUTE == 2 and not PCA:
++            arm = 0
++        comptime if AUDIT:
++            var state = STATE.get_or_create_ptr()
++            state[].counts[ROUTE * 3 + arm] += 1
++            state[].last[0] = ROUTE
++            state[].last[1] = arm
++            state[].last[2] = m
++            state[].last[3] = n
++            state[].last[4] = k
++            state[].last[5] = splits
++            state[].last[6] = per
++            state[].last[7] = Int(SPLIT)
++            state[].last[8] = a_si
++            state[].last[9] = a_sp
++            state[].last[10] = b_sp
++            state[].last[11] = b_sj
++            state[].last[12] = Int(aliased_inputs)
++            state[].last[13] = Int(nn)
++            state[].last[14] = Int(nt)
++        if arm == 1:
++            ctx.enqueue_function[scoped_kernel[64, 64, SPLIT]](
++                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
++                grid_dim=(((m + 63) // 64) * ((n + 63) // 64), splits, 1), block_dim=(128, 1, 1),
++            )
++        elif arm == 2:
++            ctx.enqueue_function[scoped_kernel[32, 32, SPLIT]](
++                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
++                grid_dim=(((m + 31) // 32) * ((n + 31) // 32), splits, 1), block_dim=(128, 1, 1),
++            )
++        return arm != 0
+diff --git a/experiments/apple_fast/gemm/softmax_narrow.mojo b/experiments/apple_fast/gemm/softmax_narrow.mojo
+new file mode 100644
+index 0000000000..0e52704caa
+--- /dev/null
++++ b/experiments/apple_fast/gemm/softmax_narrow.mojo
+@@ -0,0 +1,81 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Opt-in G2 for the actual multiclass linear_fwd only. UNVALIDATED.
++
++No change to GEMV, transpose, bias, optimizer, precision or buffer lifecycle.
++No shape window (2026-10-04): every contiguous NT call the kernel can run
++correctly is eligible. Only kernel limits remain (see softmax_gemm_nt).
++"""
++from max.gpu.host import DeviceBuffer, DeviceContext
++from std.ffi import _Global
++from std.sys.compile import is_defined
++from gemm.afn_apple_fast import AFN_GEMM_APPLE
++from core.gemm import gemm_nt
++from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
++
++# F05 M3 2026-10-06 MEASURED binary logistic control plus multiclass
++# softmax tasks; actual softmax reach asserted. Eight fit/predict timings
++# B/A1.1163/1.0155/0.9965/1.0046/0.9649/1.0315/0.9327/0.8884, quality equal.
++# Mixed; keep OFF. One warmup+score; ab-20261006/repairs-54c1f35a5/results/F05.
++comptime SOFTMAX_G2 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_FAST_G2_NARROW"]()
++comptime SOFTMAX_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_G2_AUDIT"]()
++# LEGACY, default OFF: the old window admitted only M>=4096, C 2..16, D 128..512,
++# which brackets the board (istella-like 220 features, 8 classes). Removed as
++# benchmark-tuned on 2026-10-04; the window-free replacement is UNMEASURED.
++comptime SOFTMAX_LEGACY_WINDOW = is_defined["MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2"]()
++
++struct SoftmaxAudit(Defaultable, Movable):
++    var counts: InlineArray[Int, 3]
++    var last: InlineArray[Int, 5]
++    def __init__(out self):
++        self.counts = InlineArray[Int, 3](fill=0)
++        self.last = InlineArray[Int, 5](fill=0)
++
++comptime STATE = _Global[StorageType=SoftmaxAudit, name="SoftmaxG2AuditV1", init_fn=SoftmaxAudit.__init__]
++
++def softmax_count(index: Int) raises -> Int:
++    if index < 0 or index >= 3:
++        raise Error("invalid softmax count")
++    return STATE.get_or_create_ptr()[].counts[index]
++
++def softmax_last(index: Int) raises -> Int:
++    if index < 0 or index >= 5:
++        raise Error("invalid softmax metadata")
++    return STATE.get_or_create_ptr()[].last[index]
++
++def softmax_reset() raises:
++    var state = STATE.get_or_create_ptr()
++    state[].counts = InlineArray[Int, 3](fill=0)
++    state[].last = InlineArray[Int, 5](fill=0)
++
++
++def softmax_gemm_nt(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32],
++                   mut x: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32],
++                   m: Int, n: Int, k: Int) raises:
++    comptime if SOFTMAX_G2 or SOFTMAX_AUDIT:
++        # Kernel limits only. scoped_kernel[32, 32, False] bounds-checks every
++        # row, column and K index, so any M, C, D >= 1 is correct (one launch
++        # replaces one launch, so no launch-amortization floor is needed).
++        # Its shape arguments and strides are Int32, so every operand extent
++        # must fit in Int32.
++        var eligible = m >= 1 and n >= 1 and k >= 1
++        comptime if SOFTMAX_LEGACY_WINDOW:
++            eligible = eligible and m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512
++        eligible = eligible and max(m * n, max(m * k, n * k)) <= 2147483647
++        eligible = eligible and dst.unsafe_ptr() != x.unsafe_ptr() and dst.unsafe_ptr() != weights.unsafe_ptr()
++        eligible = eligible and len(dst) >= m * n and len(x) >= m * k and len(weights) >= n * k
++        var selected = SOFTMAX_G2 and eligible
++        comptime if SOFTMAX_AUDIT:
++            var state = STATE.get_or_create_ptr()
++            state[].counts[0] += Int(eligible)
++            state[].counts[1] += Int(selected)
++            state[].counts[2] += Int(not selected)
++            state[].last[0], state[].last[1], state[].last[2] = m, n, k
++            state[].last[3], state[].last[4] = Int(eligible), Int(selected)
++        if selected:
++            ctx.enqueue_function[scoped_kernel[32, 32, False]](
++                dst.unsafe_ptr(), x.unsafe_ptr(), weights.unsafe_ptr(),
++                Int32(m), Int32(n), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
++                grid_dim=(((m + 31) // 32) * ((n + 31) // 32), 1, 1), block_dim=(128, 1, 1),
++            )
++            return
++    gemm_nt(ctx, dst, x, weights, m, n, k)
+diff --git a/experiments/performance_ideas/F06/native_check.mojo b/experiments/performance_ideas/F06/native_check.mojo
+new file mode 100644
+index 0000000000..09c5136a71
+--- /dev/null
++++ b/experiments/performance_ideas/F06/native_check.mojo
+@@ -0,0 +1,100 @@
++# SPDX-License-Identifier: Apache-2.0
++"""F06 scan/gate/cache checks and actual retained MCD search instantiation.
++Executed only on the qualified Apple runner, never during compilation.
++"""
++from max.gpu.host import DeviceContext
++from x_decomp.cells import F32Ptr, I32Ptr
++from x_decomp.kit import Mat
++from x_decomp.mcd_experiments import McdCompactWorkspace, compact_candidate_count, McdCovReuseWorkspace, reuse_covariance_kernel
++from x_decomp.mcd_fast import fast_mcd_fast
++
++
++def check_compaction(ctx: DeviceContext) raises:
++    # Empty/all/sparse membership, cross-chunk count and stable original IDs.
++    for nc in [7, 4105]:
++        var ws = McdCompactWorkspace(ctx, nc)
++        var gate = ctx.enqueue_create_buffer[DType.int32](nc)
++        var input = List[Int32](length=nc, fill=Int32(0))
++        for scenario in range(3):
++            var expected = List[Int32]()
++            for c in range(nc):
++                var active = scenario == 1 or (scenario == 2 and (c % 7 == 0 or c == nc-1))
++                input[c] = Int32(1) if active else Int32(0)
++                if active: expected.append(Int32(c))
++            ws.ids.enqueue_fill(Int32(-97))
++            ctx.enqueue_copy(dst_buf=gate, src_ptr=input.unsafe_ptr())
++            var live = compact_candidate_count(ctx, ws, I32Ptr(unsafe_from_address=Int(gate.unsafe_ptr())), nc)
++            if live != len(expected): raise Error("F06 compact active count mismatch")
++            var output = ctx.enqueue_create_host_buffer[DType.int32](nc)
++            ctx.enqueue_copy(dst_ptr=output.unsafe_ptr(), src_buf=ws.ids)
++            ctx.synchronize()
++            for c in range(nc):
++                if output[c] != (expected[c] if c < live else Int32(-97)):
++                    raise Error("F06 compact original ID/order/poison mismatch")
++        _ = gate^; _ = ws^
++
++
++def check_reuse(ctx: DeviceContext) raises:
++    var ws = McdCovReuseWorkspace(ctx, 3)
++    var masks = ctx.enqueue_create_buffer[DType.int32](15)
++    var previous = ctx.enqueue_create_buffer[DType.int32](15)
++    var active = ctx.enqueue_create_buffer[DType.int32](3)
++    var loc = ctx.enqueue_create_buffer[DType.float32](6)
++    var prev_loc = ctx.enqueue_create_buffer[DType.float32](6)
++    var cov = ctx.enqueue_create_buffer[DType.float32](12)
++    var prev_cov = ctx.enqueue_create_buffer[DType.float32](12)
++    var a: List[Int32] = [1, 1, 0]
++    var before: List[Int32] = [1,0,1,0,1, 1,0,1,0,1, 1,0,1,0,1]
++    var after = before.copy(); after[8] = Int32(1)
++    ctx.enqueue_copy(dst_buf=masks, src_ptr=after.unsafe_ptr())
++    ctx.enqueue_copy(dst_buf=previous, src_ptr=before.unsafe_ptr())
++    ctx.enqueue_copy(dst_buf=active, src_ptr=a.unsafe_ptr())
++    prev_loc.enqueue_fill(Float32(11)); prev_cov.enqueue_fill(Float32(17))
++    for step in range(2):
++        loc.enqueue_fill(Float32(-97)); cov.enqueue_fill(Float32(-97)); ws.reused.enqueue_fill(Int32(0))
++        ctx.enqueue_function[reuse_covariance_kernel](
++            masks.unsafe_ptr(), previous.unsafe_ptr(), active.unsafe_ptr(), ws.gate.unsafe_ptr(),
++            loc.unsafe_ptr(), prev_loc.unsafe_ptr(), cov.unsafe_ptr(), prev_cov.unsafe_ptr(), ws.reused.unsafe_ptr(),
++            Int32(5), Int32(2), Int32(step), grid_dim=3, block_dim=256)
++        var gates = ctx.enqueue_create_host_buffer[DType.int32](3)
++        var locations = ctx.enqueue_create_host_buffer[DType.float32](6)
++        var covariance = ctx.enqueue_create_host_buffer[DType.float32](12)
++        var count = ctx.enqueue_create_host_buffer[DType.int32](1)
++        ctx.enqueue_copy(dst_ptr=gates.unsafe_ptr(), src_buf=ws.gate)
++        ctx.enqueue_copy(dst_ptr=locations.unsafe_ptr(), src_buf=loc)
++        ctx.enqueue_copy(dst_ptr=covariance.unsafe_ptr(), src_buf=cov)
++        ctx.enqueue_copy(dst_ptr=count.unsafe_ptr(), src_buf=ws.reused)
++        ctx.synchronize()
++        if count[0] != Int32(step): raise Error("F06 reuse invalidation count mismatch")
++        for c in range(3):
++            var hit = step == 1 and c == 0
++            if gates[c] != (Int32(1) if c < 2 and not hit else Int32(0)): raise Error("F06 reuse active gate changed")
++            for j in range(2):
++                if locations[c*2+j] != (Float32(11) if hit else Float32(-97)): raise Error("F06 cached mean mismatch")
++            for j in range(4):
++                if covariance[c*4+j] != (Float32(17) if hit else Float32(-97)): raise Error("F06 cached covariance mismatch")
++    _ = ws^; _ = masks^; _ = previous^; _ = active^; _ = loc^; _ = prev_loc^; _ = cov^; _ = prev_cov^
++
++
++def main() raises:
++    var ctx = DeviceContext()
++    check_compaction(ctx)
++    check_reuse(ctx)
++    # Compile and execute the actual search, retaining its initializer,
++    # stopping/rank, precision, support and final distance consumers.
++    var x = Mat(129, 3)
++    for i in range(129):
++        for j in range(3): x.d[i*3+j] = Float32(((i*37+j*53+i*j*7)%127)-63) / Float32(17)
++    var loc = List[Float32](length=3, fill=Float32(0))
++    var cov = List[Float32](length=9, fill=Float32(0))
++    var support = List[Int32](length=129, fill=Int32(0))
++    var dist = List[Float32](length=129, fill=Float32(0))
++    if not fast_mcd_fast(x, [129,3,67,7], F32Ptr(unsafe_from_address=Int(loc.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(cov.unsafe_ptr())), I32Ptr(unsafe_from_address=Int(support.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dist.unsafe_ptr()))):
++        raise Error("F06 actual MCD search route refused")
++    var selected = 0
++    for i in range(129):
++        if support[i] != Int32(0) and support[i] != Int32(1): raise Error("F06 MCD support is not binary")
++        selected += Int(support[i])
++        if dist[i] != dist[i]: raise Error("F06 MCD distance is NaN")
++    if selected != 67: raise Error("F06 actual raw support count changed")
++    print("F06_NATIVE_PASS stable_compaction support_cache_invalidation actual_search")
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index 23b9d44655..2da2192463 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -132,10 +132,7 @@ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from std.sys import llvm_intrinsic
+ from std.sys.compile import is_defined
+-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+-# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+-# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+ from std.sys.defines import get_defined_int
+ from std.sys.info import is_amd_gpu
+ from core.apple_air import simdgroup_load_legacy_air
+@@ -10452,12 +10449,24 @@ def _fast_vendor_gemm(
+             var vy = TileTensor(b, row_major(k, 1))
+             gemv_gpu(vz, vx, vy, ctx)
+             return True
++        if try_scoped_gemm[False, 1](
++            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            m, n, k, k, 1, 1, k, 1, k,
++        ):
++            return True
+         var tc = TileTensor(c, row_major(m, n))
+         var ta = TileTensor(a, row_major(m, k))
+         var tb = TileTensor(b, row_major(n, k))
+         matmul[transpose_b=True, target="gpu"](tc, ta, tb, ctx)
+         return True
+     if op == OP_NN:
++        if try_scoped_gemm[False, 1](
++            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            m, n, k, k, 1, n, 1, 1, k,
++        ):
++            return True
+         var tc2 = TileTensor(c, row_major(m, n))
+         var ta2 = TileTensor(a, row_major(m, k))
+         var tb2 = TileTensor(b, row_major(k, n))
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 1fd6fd72e9..996cae1824 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -61,9 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ 
+ from core.column_stats import STATS_TPB, xty_kernel
+ from core.gemm import gemm_nt, gemv_n
+-# TOMBSTONE: MOJOLEARN_SOFTMAX_FAST_G2_NARROW (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code
+-# recoverable at f59d913b0b (softmax_gemm_nt through scoped_kernel[32, 32], with MOJOLEARN_SOFTMAX_G2_AUDIT and
+-# MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.softmax_narrow import softmax_gemm_nt
+ from core.pinned_reduce import pinned_block_max, pinned_block_sum
+ from core.strided_walk import (
+     APPLE_IDENTICAL_STEP_UNROLL,
+@@ -1659,7 +1657,7 @@ def linear_fwd(
+             grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+             block_dim=(VEC_ELEM_TPB, 1, 1),
+         )
+-        gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
++        softmax_gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
+         if dims.fit_intercept:
+             var cn = dims.C * n_rows
+             ctx.enqueue_function[add_bias_multi_kernel](
+diff --git a/tools/apple_fast_job_policy.py b/tools/apple_fast_job_policy.py
+index d06789de1f..5cafcaf1fd 100644
+--- a/tools/apple_fast_job_policy.py
++++ b/tools/apple_fast_job_policy.py
+@@ -4,8 +4,11 @@ Importing this module performs no builds, imports of native modules, or jobs.
+ import re
+ 
+ POLICIES = {
++    "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
+     "tools/resample_gpu_gather_pair.py": "verified-downstream-quality",
+     "tools/resample_gpu_gather_timing.py": "verified-scoped-caller",
++    "tools/scoped_pca_recover.py": "reference",
++    "tools/scoped_pca_fit.py": "verified-scoped-pca-fit",
+     "tools/arima_assoc_scan_oracle.py": "reference",
+     "tools/arima_gaussian_scan_oracle.py": "reference",
+     "tools/arima_k1_diagnostics.py": "reference",
+diff --git a/tools/fast_quality_rule.py b/tools/fast_quality_rule.py
+index 204cc0a374..72ec3e0e45 100644
+--- a/tools/fast_quality_rule.py
++++ b/tools/fast_quality_rule.py
+@@ -1,7 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """The FAST quality rule (CLAUDE.md, Andrew 2026-10-04), shared by the FAST
+-quality tools (eigh_w4_quality; mcd_g1_quality, mcd_ordered_quality and
+-eigh_panel_df_pair went with their defines, 2026-11-08; softmax_g2_quality, 2026-11-09).
++quality tools (softmax_g2_quality, eigh_w4_quality; mcd_g1_quality,
++mcd_ordered_quality and eigh_panel_df_pair went with their defines, 2026-11-08).
+ 
+ PASS = no material drop against FAST main (arm A) AND at least as good as the
+ best opponent (when the fixture carries an opponent value). Noise-level
+diff --git a/tools/scoped_gemm_preflight_spec.py b/tools/scoped_gemm_preflight_spec.py
+new file mode 100644
+index 0000000000..2999719ada
+--- /dev/null
++++ b/tools/scoped_gemm_preflight_spec.py
+@@ -0,0 +1,44 @@
++#!/usr/bin/env python3
++"""Print a scoped adapter quality metadata spec. No cloud/native/queue activity.
++
++Run from the clean final harness checkout: COMPILED_SOURCE TAG PROFILE.
++The manager stages the JSON and runs apple_fast_job_preflight.py on M3.
++"""
++import argparse
++import json
++import os
++from scoped_gemm_quality import AUDIT, BINDING, CASES, FLAGS, PCA_CASES, PROFILES, ROOT, verify_source
++from apple_fast_job_policy import policy_for
++
++
++def make_spec(harness, compiled, tag, profile):
++    args = [compiled, tag, profile]
++    script = 'tools/scoped_gemm_quality.py'
++    policy_for(harness, script, args)
++    mask = PROFILES[profile]
++    a = '-D ' + AUDIT
++    b = a + ''.join(' -D ' + flag for i, flag in enumerate(FLAGS) if mask & (1 << i))
++    files = ['bindings/_mojolearn_scoped_gemm_probe.mojo',
++             'experiments/apple_fast/gemm/scoped_dispatch.mojo',
++             'x_decomp/device.mojo', 'decomposition/impl/linalg/detail/pca.mojo']
++    return dict(version=1, tag=tag, harness_source=harness, script=script, args=args,
++                artifacts=[dict(id='probe', kind='pair', compiled_source=compiled,
++                                binding=BINDING, numeric_mode='fast', defines_A=a, defines_B=b)],
++                prerequisites=[],
++                cases=[dict(name=c[0], requires=['probe'], source_files=files)
++                       for c in CASES + PCA_CASES])
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('compiled_source')
++    parser.add_argument('tag')
++    parser.add_argument('profile', choices=PROFILES)
++    args = parser.parse_args()
++    os.chdir(ROOT)
++    harness = verify_source(args.compiled_source)
++    print(json.dumps(make_spec(harness, args.compiled_source, args.tag, args.profile), indent=2))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tools/scoped_gemm_quality.py b/tools/scoped_gemm_quality.py
+new file mode 100644
+index 0000000000..0530224082
+--- /dev/null
++++ b/tools/scoped_gemm_quality.py
+@@ -0,0 +1,246 @@
++#!/usr/bin/env python3
++"""M3-only unscored actual decomp/PCA quality. No timing or installs.
++
++COMPILED_SOURCE TAG PROFILE validates staged A/B manifests, captures each isolated arm,
++then gates against FP64 and A with zero error-regression allowance.
++"""
++import argparse
++import hashlib
++import importlib.util
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++ROOT = Path(__file__).resolve().parents[1]
++BINDING = 'scoped_gemm_probe'
++AUDIT = 'MOJOLEARN_SCOPED_GEMM_AUDIT'
++FLAGS = ['MOJOLEARN_SCOPED_GEMM_' + x for x in
++         ['G1_TALL', 'G1_DENSE', 'G1_GRAM', 'G2_NARROW', 'SPLIT', 'PCA']]
++PROFILES = {'tall': 1, 'dense': 2, 'gram': 4, 'narrow': 8,
++            'gram-split': 20, 'pca': 52, 'all': 63}
++# Only these reviewed harness files may differ from the compiled source.
++HARNESS_ONLY = {
++    'tools/scoped_gemm_quality.py', 'tools/scoped_gemm_preflight_spec.py',
++    'tools/apple_fast_job_policy.py', 'tools/test_scoped_gemm_readiness.py',
++    'docs/apple-fast/ab/scoped-gemm-readiness.md',
++}
++
++
++def verify_source(compiled):
++    harness = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
++    subprocess.run(['git', 'merge-base', '--is-ancestor', compiled, harness], check=True)
++    changed = set(subprocess.check_output(
++        ['git', 'diff', '--name-only', compiled, harness], text=True).splitlines())
++    assert changed <= HARNESS_ONLY, ('compiled/harness production drift', sorted(changed - HARNESS_ONLY))
++    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], check=True)
++    return harness
++
++
++BOUND = 5e-6
++# (name, m, n, k, transpose A/B, aliased inputs, data kind)
++# Generic spread, no shape window: the routes have none since 2026-10-04
++# (old window-edge cases removed). Includes split plans and vector shapes.
++CASES = [
++    ('nn-tall', 50000, 48, 300, 0, 0, 0, 'random'),
++    ('nn-odd', 2003, 97, 37, 0, 0, 0, 'cancel'),
++    ('nn-wide', 3000, 1500, 64, 0, 0, 0, 'dynamic'),
++    ('nn-small', 9, 8, 13, 0, 0, 0, 'random'),
++    ('nn-vector', 20000, 1, 150, 0, 0, 0, 'random'),
++    ('nn-split', 100, 90, 4000, 0, 0, 0, 'cancel'),
++    ('nt-narrow', 200000, 3, 64, 0, 1, 0, 'random'),
++    ('nt-odd', 5003, 37, 700, 0, 1, 0, 'dynamic'),
++    ('nt-wide', 2000, 600, 1500, 0, 1, 0, 'random'),
++    ('nt-vector', 4000, 1, 77, 0, 1, 0, 'cancel'),
++    ('nt-split', 64, 40, 3000, 0, 1, 0, 'random'),
++    ('gram-nt', 1500, 1500, 300, 0, 1, 1, 'random'),
++    ('gram-nt-split', 8, 8, 2000, 0, 1, 1, 'dynamic'),
++    ('gram-nt-odd', 333, 333, 977, 0, 1, 1, 'cancel'),
++    ('gram-tn-split', 97, 97, 5000, 1, 0, 1, 'random'),
++    ('gram-tn', 600, 600, 800, 1, 0, 1, 'dynamic'),
++    ('tn-nonalias-control', 300, 300, 257, 1, 0, 0, 'random'),
++    ('tt-control', 129, 131, 257, 1, 1, 0, 'random'),
++]
++# Covariance actual entrance including its separate split policy and input lifecycle.
++# nc <= 128 takes the caller's fused arm (no scoped call); that is the
++# caller's existing structure, not a route window.
++PCA_CASES = [('pca-fused-control', 2000, 64, 1), ('pca-wide', 3001, 300, 1),
++             ('pca-no-restore', 5000, 700, 0), ('pca-few-rows', 31, 150, 1),
++             ('pca-many-features', 4000, 1500, 1)]
++
++def inputs(case):
++    import numpy as np
++    _, m, n, k, ta, tb, alias, kind = case
++    rng = np.random.default_rng(711)
++    a = rng.standard_normal((k, m) if ta else (m, k)).astype('float32')
++    b = a if alias else rng.standard_normal((n, k) if tb else (k, n)).astype('float32')
++    if kind == 'dynamic':
++        a *= np.float32(16)
++        if not alias:
++            b *= np.float32(1 / 16)
++    elif kind == 'cancel':
++        a.flat[1::2] *= np.float32(-1)
++    return a, b
++
++
++def plan(case):
++    _, m, n, k, ta, tb, alias, _ = case
++    tiles = ((m + 63) // 64) * ((n + 63) // 64)
++    splits = min(640 // tiles, k // 512) if tiles < 640 and k >= 1024 else 1
++    if splits > 1:
++        per = ((k + splits - 1) // splits + 31) // 32 * 32
++        return 1, (k + per - 1) // per, per
++    return 0, 1, k
++
++
++def chosen(case, mask):
++    _, m, n, k, ta, tb, alias, _ = case
++    nn, nt, tn = not ta and not tb, not ta and tb, ta and not tb
++    result = 0
++    # Layout only (scoped_dispatch.try_scoped_gemm, no shape window).
++    if mask & 3 and nn:
++        result = 1
++    if mask & 4 and alias and m == n and (nt or tn):
++        result = 1
++    elif mask & 8 and nt:
++        result = 2
++    if plan(case)[0] and not mask & 16:
++        result = 0
++    return result
++
++
++def capture(so, destination, mask, expected_hash):
++    import numpy as np
++    assert hashlib.sha256(so.read_bytes()).hexdigest() == expected_hash
++    spec = importlib.util.spec_from_file_location('_mojolearn_scoped_gemm_probe', so)
++    mod = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(mod)
++    assert mod.abi_version() == 1 and mod.enabled() == 1 and mod.numeric_mode() == 0
++    assert mod.flags() == mask
++    arrays, rows = {}, []
++    def counts():
++        return [mod.route_count(r, a) for r in range(3) for a in range(3)]
++    for case in CASES:
++        name, m, n, k, ta, tb, alias, _ = case
++        a, b = inputs(case)
++        c = np.full((m, n), np.nan, dtype='float32')
++        before = counts()
++        mod.gemm(a.ctypes.data, b.ctypes.data, c.ctypes.data, [m, n, k, ta, tb, alias])
++        delta = [x-y for x, y in zip(counts(), before)]
++        route, splits, per = plan(case)
++        arm = chosen(case, mask)
++        expected = [0] * 9
++        expected[route * 3 + arm] = 1
++        assert delta == expected, (name, delta, expected)
++        meta = [mod.metadata(i) for i in range(15)]
++        assert meta[:8] == [route, arm, m, n, k, splits, per, route], (name, meta)
++        assert meta[8:13] == [1 if ta else k, m if ta else 1,
++                              1 if tb else n, k if tb else 1, alias]
++        arrays[name] = c
++        rows.append({'case': name, 'metadata': meta, 'counts': delta, 'selected': arm})
++    for name, nr, nc, restore in PCA_CASES:
++        rng = np.random.default_rng(818)
++        x = rng.standard_normal((nr, nc)).astype('float32')
++        c = np.full((nc, nc), np.nan, dtype='float32')
++        mu = np.full(nc, np.nan, dtype='float32')
++        after = np.full_like(x, np.nan)
++        before = counts()
++        mod.covariance(x.ctypes.data, c.ctypes.data, mu.ctypes.data, after.ctypes.data, [nr, nc, restore])
++        delta = [a-b for a, b in zip(counts(), before)]
++        expected = [0] * 9
++        arm = int(mask & 52 == 52 and nc > 128)
++        meta = None
++        if nc > 128:
++            expected[6 + arm] = 1
++            tiles = ((nc + 63) // 64) ** 2
++            initial = max(1, 640 // tiles)
++            per = ((nr + initial - 1) // initial + 31) // 32 * 32
++            splits = (nr + per - 1) // per
++            meta = [mod.metadata(i) for i in range(15)]
++            assert meta[:13] == [2, arm, nc, nc, nr, splits, per, 1, 1, nc, nc, 1, 1]
++        assert delta == expected, (name, delta, expected)
++        arrays[name] = c
++        arrays[name + '-mean'] = mu
++        arrays[name + '-input-after'] = after
++        rows.append({'case': name, 'metadata': meta, 'counts': delta, 'selected': arm})
++    np.savez(destination, **arrays)
++    Path(str(destination) + '.json').write_text(json.dumps(rows, indent=2) + '\n')
++
++
++def main():
++    if len(sys.argv) > 1 and sys.argv[1] == '_capture':
++        capture(Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]), sys.argv[5])
++        return
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('source')
++    parser.add_argument('tag')
++    parser.add_argument('profile', choices=PROFILES)
++    args = parser.parse_args()
++    assert re.fullmatch('[0-9a-f]{40}', args.source)
++    assert re.fullmatch('[A-Za-z0-9_.-]+', args.tag)
++    assert subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip() == 'Apple M3 Ultra'
++    os.chdir(ROOT)
++    harness_source = verify_source(args.source)
++    arms = Path.home() / 'mq/verified-arms' / args.source / BINDING
++    manifest = json.loads((arms / 'manifest.json').read_text())
++    mask = PROFILES[args.profile]
++    expected_a = '-D ' + AUDIT
++    expected_b = expected_a + ''.join(' -D ' + flag for i, flag in enumerate(FLAGS) if mask & (1 << i))
++    assert manifest['source_sha'] == args.source and manifest['binding'] == BINDING
++    assert manifest['numeric_mode'] == 'fast'
++    assert manifest['defines_A'] == expected_a and manifest['defines_B'] == expected_b
++    for arm in 'AB':
++        assert hashlib.sha256((arms / (arm + '.so')).read_bytes()).hexdigest() == manifest['hashes'][arm]
++    directory = Path.home() / 'mq/out' / (args.tag + '-quality')
++    directory.mkdir(parents=True, exist_ok=False)
++    os.environ.update(OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
++    # Isolated Python processes load explicit verified paths; no installed .so assumptions.
++    for arm, flagmask in [('A', 0), ('B', mask)]:
++        subprocess.run([sys.executable, str(Path(__file__).resolve()), '_capture', str(arms / (arm + '.so')), str(directory / (arm + '.npz')), str(flagmask), manifest['hashes'][arm]], check=True)
++        assert hashlib.sha256((arms / (arm + '.so')).read_bytes()).hexdigest() == manifest['hashes'][arm]
++    import numpy as np
++    a, b = np.load(directory / 'A.npz'), np.load(directory / 'B.npz')
++    reached = json.loads((directory / 'B.npz.json').read_text())
++    references = {}
++    for case in CASES:
++        x, y = inputs(case)
++        ta, tb = case[4:6]
++        references[case[0]] = (x.T if ta else x).astype('float64') @ (y.T if tb else y).astype('float64')
++    for name, nr, nc, restore in PCA_CASES:
++        x = np.random.default_rng(818).standard_normal((nr, nc)).astype('float32').astype('float64')
++        centered = x - x.mean(axis=0)
++        references[name] = centered.T @ centered / (nr - 1)
++        references[name + '-mean'] = x.mean(axis=0)
++        references[name + '-input-after'] = x if restore or nc <= 128 else centered
++    rows, failures = [], []
++    for key, ref in references.items():
++        scale = max(1.0, float(np.linalg.norm(ref)))
++        ma = float(np.max(np.abs(a[key].astype('float64') - ref)))
++        mb = float(np.max(np.abs(b[key].astype('float64') - ref)))
++        ea = float(np.linalg.norm(a[key].astype('float64') - ref)) / scale
++        eb = float(np.linalg.norm(b[key].astype('float64') - ref)) / scale
++        finite = bool(np.isfinite(a[key]).all() and np.isfinite(b[key]).all())
++        ok = finite and ea <= BOUND and eb <= BOUND and eb <= ea and mb <= ma
++        if not ok:
++            failures.append(key)
++        rows.append({'case': key, 'A_relative_fro': ea, 'B_relative_fro': eb,
++                     'A_maxabs': ma, 'B_maxabs': mb, 'same_words': bool(np.array_equal(a[key].view('uint32'), b[key].view('uint32'))), 'pass': ok})
++    report = {'source_sha': args.source, 'harness_source': harness_source,
++              'helper_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
++              'packet_hashes': {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
++                                for name in ('A.npz', 'B.npz', 'A.npz.json', 'B.npz.json')}, 'binding': BINDING, 'profile': args.profile,
++              'contract': 'scoped-actual-decomp-pca-quality-v1',
++              'baseline': 'current-main AFN decomp/PCA; small PCA fused Gram unchanged, NOT SDK screen G0',
++              'manifest': manifest, 'bound': BOUND, 'error_regression_allowance': 0,
++              'reach': reached, 'cases': rows, 'failures': failures,
++              'status': 'PASS' if not failures else 'HOLD'}
++    (directory / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
++    print(json.dumps({'report': str(directory / 'report.json'), 'status': report['status'], 'failures': failures}))
++    if failures:
++        raise SystemExit(1)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tools/scoped_pca_fit.py b/tools/scoped_pca_fit.py
+new file mode 100644
+index 0000000000..60127dfd22
+--- /dev/null
++++ b/tools/scoped_pca_fit.py
+@@ -0,0 +1,271 @@
++#!/usr/bin/env python3
++"""Pinned public PCA.fit: SOURCE TAG quality|timing DATA_NPZ DATA_SHA256.
++Timing requires --quality-report PATH --quality-sha SHA256. No builds/repeats.
++"""
++import argparse
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import shutil
++import subprocess
++import sys
++import tempfile
++
++if not __debug__:
++    raise RuntimeError('assertions must be enabled')
++ROOT = Path(__file__).resolve().parents[1]
++CONTRACT = 'scoped-pca-public-fit-istella-v1'
++MODULE = '_mojolearn_estimators'
++A_FLAGS = '-D MOJOLEARN_SCOPED_GEMM_AUDIT'
++B_FLAGS = A_FLAGS + ' -D MOJOLEARN_SCOPED_GEMM_G1_GRAM -D MOJOLEARN_SCOPED_GEMM_SPLIT -D MOJOLEARN_SCOPED_GEMM_PCA'
++BOUND = 5e-6
++METRIC_NAMES = {name+suffix for name in ('mean','variance','ratio','singular','noise','eigen_residual','orthogonality')
++                for suffix in ('_relative','_maxabs')} | {'reconstruction_relative'}
++HARNESS_ONLY = {'tools/scoped_pca_fit.py', 'tools/scoped_pca_fit_spec.py',
++                'tools/test_scoped_pca_fit_contract.py', 'tools/apple_fast_job_policy.py',
++                'docs/apple-fast/ab/scoped-pca-fit.md'}
++
++
++def sha(path):
++    h = hashlib.sha256()
++    with Path(path).open('rb') as stream:
++        for block in iter(lambda: stream.read(1024 * 1024), b''):
++            h.update(block)
++    return h.hexdigest()
++
++
++def record(path, obj):
++    # Finish serialization before creating a receipt; an encoder error must not
++    # leave a truncated file that looks like a finished quality report.
++    payload = json.dumps(obj, indent=2, allow_nan=False) + '\n'
++    with Path(path).open('x') as stream:
++        stream.write(payload)
++
++
++def source_contract(compiled):
++    assert re.fullmatch('[0-9a-f]{40}', compiled)
++    harness = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
++    subprocess.run(['git', 'merge-base', '--is-ancestor', compiled, harness], check=True)
++    changed = set(subprocess.check_output(['git', 'diff', '--name-only', compiled, harness], text=True).splitlines())
++    assert changed <= HARNESS_ONLY, ('production/config drift', sorted(changed - HARNESS_ONLY))
++    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], check=True)
++    return harness
++
++
++def install(src, dst):
++    fd, temp = tempfile.mkstemp(prefix='.scoped-pca-', suffix='.so', dir=dst.parent)
++    os.close(fd)
++    try:
++        shutil.copy2(src, temp)
++        os.replace(temp, dst)
++    finally:
++        Path(temp).unlink(missing_ok=True)
++
++
++def load_x(path, digest):
++    import numpy as np
++    assert sha(path) == digest, 'data pin mismatch'
++    with np.load(path, allow_pickle=False) as z:
++        x = np.array(z['X'], copy=True, order='C')
++    assert x.dtype == np.dtype('float32') and x.ndim == 2
++    assert x.shape[1] == 220 and x.shape[0] >= 128
++    assert x.size <= 2147483647 and np.isfinite(x).all()
++    return x
++
++
++def worker(binary_sha, mask, data, digest, output, scored, preflight):
++    import numpy as np
++    import time
++    sys.path.insert(0, str(ROOT / 'python'))
++    from mojolearn import PCA, _backend
++    module = _backend.binding(MODULE, 'fast')
++    path = Path(module.__file__).resolve()
++    assert path == (ROOT / 'python/mojolearn' / (MODULE + '.so')).resolve()
++    assert sha(path) == binary_sha and module.estimators_numeric_mode() == 0
++    assert module.estimators_vendor() == 'metal' and module.scoped_gemm_flags() == mask
++    for name in ('pca_fit', 'scoped_gemm_count', 'scoped_gemm_metadata'):
++        assert callable(getattr(module, name, None))
++    if preflight:
++        return
++    x = load_x(data, digest)
++    before = [module.scoped_gemm_count(r, a) for r in range(3) for a in range(3)]
++    start = time.perf_counter_ns() if scored else None
++    model = PCA(n_components=10, svd_solver='covariance_eigh', whiten=False, random_state=7)
++    model.fit(x)
++    arrays = {name: np.array(getattr(model, name), copy=True, order='C') for name in
++              ('components_', 'mean_', 'explained_variance_', 'explained_variance_ratio_', 'singular_values_')}
++    arrays['noise_variance_'] = np.asarray(model.noise_variance_, dtype='float64')
++    elapsed = (time.perf_counter_ns() - start) / 1e6 if scored else None
++    counts = [module.scoped_gemm_count(r, a) - before[3*r+a] for r in range(3) for a in range(3)]
++    expected = [0]*9
++    expected[6 + int(mask == 52)] = 1
++    assert counts == expected, ('NO_REACH/unexpected routes', counts)
++    meta = [module.scoped_gemm_metadata(i) for i in range(15)]
++    nr, nf = x.shape
++    initial = max(1, 640 // (((nf+63)//64)**2))
++    per = ((nr + initial - 1)//initial + 31)//32*32
++    splits = (nr+per-1)//per
++    assert meta[:13] == [2, int(mask == 52), nf, nf, nr, splits, per, 1, 1, nf, nf, 1, 1]
++    assert not model.input_copied_
++    assert all(np.isfinite(a).all() for a in arrays.values())
++    with np.load(data, allow_pickle=False) as original:
++        assert np.array_equal(x.view('uint32'), original['X'].view('uint32'))
++    np.savez(output, **arrays)
++    record(str(output)+'.json', dict(binary_sha=binary_sha, mask=mask, shape=list(x.shape),
++           counts=counts, metadata=meta, scored=scored, elapsed_ms=elapsed, input_preserved=True,
++           span='public PCA constructor + fit + first full fitted-output copies'))
++
++
++def oracle(data, digest, output):
++    import numpy as np
++    x = load_x(data, digest)
++    nr, nf = x.shape
++    mean = np.zeros(nf, dtype='float64')
++    for i in range(0, nr, 8192):
++        mean += x[i:i+8192].astype('float64').sum(axis=0)
++    mean /= nr
++    cov = np.zeros((nf,nf), dtype='float64')
++    for i in range(0, nr, 8192):
++        z = x[i:i+8192].astype('float64') - mean
++        cov += z.T @ z
++    cov /= nr-1
++    np.savez(output, mean=mean, cov=cov, eigenvalues=np.linalg.eigvalsh(cov)[::-1], rows=np.asarray(nr))
++
++
++def metrics(packet, reference):
++    import numpy as np
++    with np.load(packet, allow_pickle=False) as p, np.load(reference, allow_pickle=False) as ref:
++        c, mu, ev, ratio, singular = [p[k].astype('float64') for k in
++            ('components_', 'mean_', 'explained_variance_', 'explained_variance_ratio_', 'singular_values_')]
++        assert c.shape == (10,220) and mu.shape == (220,)
++        assert ev.shape == ratio.shape == singular.shape == (10,)
++        assert all(np.isfinite(p[k]).all() for k in p.files)
++        cov, mean, eig, nr = ref['cov'], ref['mean'], ref['eigenvalues'], int(ref['rows'])
++        trace = float(np.trace(cov))
++        assert trace > 0
++        top = eig[:10]
++        errors = {}
++        for name, a, b in [('mean',mu,mean), ('variance',ev,top), ('ratio',ratio,top/trace),
++                           ('singular',singular,np.sqrt(np.maximum(top,0)*(nr-1))),
++                           ('noise',p['noise_variance_'],np.asarray(np.maximum(eig[10:],0).mean()))]:
++            errors[name+'_relative'] = float(np.linalg.norm(a-b))/max(1.0,float(np.linalg.norm(b)))
++            errors[name+'_maxabs'] = float(np.max(np.abs(a-b)))
++        residual = cov @ c.T - c.T*ev
++        errors['eigen_residual_relative'] = float(np.linalg.norm(residual))/max(1.0,float(np.linalg.norm(cov)))
++        errors['eigen_residual_maxabs'] = float(np.max(np.abs(residual)))
++        ortho = c @ c.T - np.eye(10)
++        errors['orthogonality_relative'] = float(np.linalg.norm(ortho))/np.sqrt(10)
++        errors['orthogonality_maxabs'] = float(np.max(np.abs(ortho)))
++        projector = c.T @ c
++        errors['reconstruction_relative'] = float(np.trace(cov - 2*cov@projector + projector@cov@projector))/trace
++        return errors
++
++
++def compare(directory):
++    import math
++    # NumPy scalar division (orthogonality / sqrt(10)) returns np.float64;
++    # its comparison returns np.bool_, which JSON cannot encode. Convert only
++    # scalar representation, preserving the same binary64 values and gates.
++    a,b = [{k: float(v) for k,v in metrics(directory/(arm+'.npz'),directory/'oracle.npz').items()}
++           for arm in 'AB']
++    rows = {k:dict(A=a[k],B=b[k],pass_no_worse=math.isfinite(a[k]) and math.isfinite(b[k]) and b[k]<=a[k]) for k in a}
++    bounded = [k for k in a if k.endswith('_relative') and k!='reconstruction_relative']
++    ok = all(v['pass_no_worse'] for v in rows.values()) and all(a[k]<=BOUND and b[k]<=BOUND for k in bounded)
++    return ok,rows
++
++
++def admit_quality(path, identity):
++    import math
++    prior = json.loads(Path(path).read_text())
++    assert prior['status']=='PASS' and prior['scored'] is False
++    assert all(prior[k]==v for k,v in identity.items())
++    assert set(prior['metrics']) == METRIC_NAMES
++    assert all(r['pass_no_worse'] and math.isfinite(r['A']) and math.isfinite(r['B']) and r['B']<=r['A'] for r in prior['metrics'].values())
++    assert all(r['A'] <= BOUND and r['B'] <= BOUND for k,r in prior['metrics'].items()
++               if k.endswith('_relative') and k != 'reconstruction_relative')
++    assert set(prior['packets'])=={'A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz'}
++    for name,digest in prior['packets'].items():
++        assert sha(Path(path).parent/name)==digest
++    assert prior['A']['counts']==[0,0,0,0,0,0,1,0,0]
++    assert prior['B']['counts']==[0,0,0,0,0,0,0,1,0]
++    return prior
++
++
++def main():
++    if len(sys.argv)>1 and sys.argv[1]=='_capture':
++        _,_,binary_sha,mask,data,digest,out,scored,preflight = sys.argv
++        worker(binary_sha,int(mask),data,digest,Path(out),scored=='1',preflight=='1')
++        return
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('source');p.add_argument('tag');p.add_argument('action',choices=('quality','timing'))
++    p.add_argument('data');p.add_argument('data_sha');p.add_argument('--quality-report');p.add_argument('--quality-sha')
++    a=p.parse_args()
++    assert re.fullmatch('[A-Za-z0-9_.-]+',a.tag) and re.fullmatch('[0-9a-f]{64}',a.data_sha)
++    assert subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip()=='Apple M3 Ultra'
++    os.chdir(ROOT)
++    harness=source_contract(a.source)
++    data=Path(a.data).expanduser().resolve()
++    assert sha(data)==a.data_sha
++    arms=Path.home()/'mq/verified-arms'/a.source/'estimators'
++    manifest=json.loads((arms/'manifest.json').read_text())
++    expected=dict(source_sha=a.source,binding='estimators',numeric_mode='fast',defines_A=A_FLAGS,defines_B=B_FLAGS)
++    assert all(manifest[k]==v for k,v in expected.items())
++    hashes={arm:sha(arms/(arm+'.so')) for arm in 'AB'}
++    assert manifest['hashes']==hashes
++    identity=dict(source_sha=a.source,harness_source=harness,contract=CONTRACT,helper_sha=sha(__file__),
++                  data_sha=a.data_sha,data_path=str(data),manifest=manifest,bound=BOUND,error_regression_allowance=0)
++    if a.action=='timing':
++        assert a.quality_report and a.quality_sha
++        prior_path=Path(a.quality_report).expanduser().resolve()
++        assert sha(prior_path)==a.quality_sha
++        admit_quality(prior_path,identity)
++    else:
++        assert not a.quality_report and not a.quality_sha
++    out=Path.home()/'mq/out'/(a.tag+'-'+a.action)
++    out.mkdir(parents=True,exist_ok=False)
++    target=ROOT/'python/mojolearn'/(MODULE+'.so')
++    assert not target.is_symlink()
++    old=target.exists()
++    if old:
++        shutil.copy2(target,out/'original.so')
++    env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple',MOJOLEARN_BENCH_INSTALLED='0',
++             PYTHONPATH=str(ROOT/'python'),OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
++    env.pop('PYTHONOPTIMIZE',None)
++    def run(arm,preflight):
++        install(arms/(arm+'.so'),target)
++        assert sha(target)==hashes[arm]
++        command=[sys.executable,str(Path(__file__).resolve()),'_capture',hashes[arm],'0' if arm=='A' else '52',
++                 str(data),a.data_sha,str(out/(arm+'.npz')),'1' if a.action=='timing' else '0','1' if preflight else '0']
++        log=out/(arm+('.preflight.log' if preflight else '.log'))
++        with log.open('x') as stream:
++            result=subprocess.run(command,env=env,stdout=stream,stderr=subprocess.STDOUT)
++        if result.returncode:
++            print('\n'.join(log.read_text(errors='replace').splitlines()[-12:]))
++            raise RuntimeError('capture infrastructure/reach failure: '+str(log))
++        assert sha(target)==hashes[arm] and sha(arms/(arm+'.so'))==hashes[arm]
++    try:
++        for arm in 'AB':run(arm,True)
++        if a.action=='timing':
++            key=hashlib.sha256(json.dumps([CONTRACT,a.source,a.data_sha,hashes],sort_keys=True).encode()).hexdigest()
++            record(Path.home()/'mq/out'/('scoped-pca-fit-scored-'+key+'.json'),dict(tag=a.tag,quality_sha=a.quality_sha,**identity))
++            shutil.copy2(prior_path.parent/'oracle.npz',out/'oracle.npz')
++        else:
++            oracle(data,a.data_sha,out/'oracle.npz')
++        for arm in 'AB':run(arm,False)
++        assert sha(data)==a.data_sha
++        ok,rows=compare(out)
++        packets={name:sha(out/name) for name in ('A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz')}
++        report=dict(identity,status='PASS' if ok else 'HOLD',metrics=rows,packets=packets,
++                    A=json.loads((out/'A.npz.json').read_text()),B=json.loads((out/'B.npz.json').read_text()),
++                    scored=a.action=='timing',quality_report_sha=a.quality_sha,board_admitted=False)
++        record(out/'report.json',report)
++        print(json.dumps(dict(status=report['status'],report=str(out/'report.json'),scored=report['scored'])))
++        if not ok:raise SystemExit(1)
++    finally:
++        if old:install(out/'original.so',target)
++        else:target.unlink(missing_ok=True)
++
++
++if __name__=='__main__':main()
+diff --git a/tools/scoped_pca_fit_spec.py b/tools/scoped_pca_fit_spec.py
+new file mode 100644
+index 0000000000..8260915583
+--- /dev/null
++++ b/tools/scoped_pca_fit_spec.py
+@@ -0,0 +1,40 @@
++#!/usr/bin/env python3
++"""Print pinned PCA fit preflight spec; metadata only, no native/cloud work."""
++import argparse
++import json
++import os
++from scoped_pca_fit import A_FLAGS, B_FLAGS, ROOT, source_contract
++from apple_fast_job_policy import policy_for
++
++
++def make_spec(harness, source, tag, action, data, data_sha, quality=None, quality_sha=None):
++    args=[source,tag,action,data,data_sha]
++    prereqs=[dict(id='board-data',kind='file',path=data,sha256=data_sha)]
++    requires=['estimators','board-data']
++    if action=='timing':
++        args+=['--quality-report',quality,'--quality-sha',quality_sha]
++        prereqs.append(dict(id='caller-quality',kind='file',path=quality,sha256=quality_sha,
++                            json_equals=dict(status='PASS',scored=False,source_sha=source,
++                                             harness_source=harness,data_sha=data_sha)))
++        requires.append('caller-quality')
++    policy_for(harness,'tools/scoped_pca_fit.py',args)
++    return dict(version=1,tag=tag,harness_source=harness,script='tools/scoped_pca_fit.py',args=args,
++                artifacts=[dict(id='estimators',kind='pair',compiled_source=source,binding='estimators',
++                                numeric_mode='fast',defines_A=A_FLAGS,defines_B=B_FLAGS)],
++                prerequisites=prereqs,cases=[dict(name='public-pca-fit-full-istella',requires=requires,
++                source_files=['bindings/_mojolearn_estimators.mojo','python/mojolearn/decomposition.py',
++                              'decomposition/estimator.mojo','decomposition/impl/linalg/detail/pca.mojo',
++                              'experiments/apple_fast/gemm/scoped_dispatch.mojo'])])
++
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('source');p.add_argument('tag');p.add_argument('action',choices=('quality','timing'))
++    p.add_argument('data');p.add_argument('data_sha');p.add_argument('--quality-report');p.add_argument('--quality-sha')
++    a=p.parse_args()
++    os.chdir(ROOT)
++    h=source_contract(a.source)
++    print(json.dumps(make_spec(h,a.source,a.tag,a.action,a.data,a.data_sha,a.quality_report,a.quality_sha),indent=2))
++
++
++if __name__=='__main__':main()
+diff --git a/tools/scoped_pca_recover.py b/tools/scoped_pca_recover.py
+new file mode 100644
+index 0000000000..fa87ecb9a1
+--- /dev/null
++++ b/tools/scoped_pca_recover.py
+@@ -0,0 +1,119 @@
++#!/usr/bin/env python3
++"""Recover one known failed JSON report from frozen saved packets, never refit.
++
++SOURCE UNIQUE_TAG [--spec]. --spec prints read-only pinned preflight JSON.
++Execution is M3 serial CPU-only saved-output analysis; no native/GPU imports.
++"""
++import argparse
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++
++from scoped_pca_fit import compare, record, sha, ROOT, CONTRACT, A_FLAGS, B_FLAGS
++
++COMPILED='201fe7367461af236f4adf0331f367d8a02cd29d'
++CAPTURE='c982d77989a42e89034082dcdc86cae6aaf6bc7d'
++REPAIR='9f039067fb32428d0479f1b8c5c0a2af179b1d04'
++CAPTURE_HELPER='feb09e9b615ed2b12c8aa4e96e4a15172a83503a25f20332a5489b89496a99b0'
++INPUT='scoped-pca-fit-istella-q-v1-quality'
++FILES={
++ 'A.npz':'f84e1464c82fb35a3f18e945f0c8abf491c507df53e90284e0a6a0bc68173dc6',
++ 'B.npz':'03f7e134c847e8b7a16f195d5bd3b6002f48833cd0ff3a6cbbb2a70933cfee43',
++ 'A.npz.json':'f7ab9d8a904ac0a5c0a560f472dd1e7ab262b81b1eb0dc08c272041143db68f4',
++ 'B.npz.json':'32fd9d08ab38b3ff66c8a3c25c6d3ed9e08979b7af5226cda9ddcd68afba4318',
++ 'oracle.npz':'ea366d5c091d5998a7f648c00222180739b7e81246780ec04d37682f66c2c06a',
++ 'report.json':'a16202281b80b3c55117e76ccd30b3e6c9f449e8a66c47d1db65c85cf5cc8458',
++}
++# Binary provenance is recorded by capture metadata; recovery never loads them.
++BINARIES={'A':'1226b5c1fe2e61e9ecd03a9f7120889071aa035201f2faaecf6ea864514b55c4',
++          'B':'37cba76b51ef8e8cee5b76f47a2a1d5393c539cf1efba7916b542ddeb3199d94'}
++DATA='725e525180fdbb3f3714f40765668bdc11504214e59064202184f98b62eae6c2'
++
++
++def partial_identity(text):
++    # Exact failed serialization location is hash-bound above. Retain only the
++    # fully serialized identity prefix; do not invent/parse incomplete metrics.
++    marker='  "metrics": {'
++    assert text.count(marker)==1
++    prefix=text.split(marker,1)[0].rstrip()
++    assert prefix.endswith(',')
++    identity=json.loads(prefix[:-1]+'\n}')
++    assert identity['source_sha']==COMPILED and identity['harness_source']==CAPTURE
++    assert identity['helper_sha']==CAPTURE_HELPER and identity['contract']==CONTRACT
++    assert identity['bound']==5e-6 and identity['error_regression_allowance']==0
++    assert identity['data_sha']==DATA and identity['status']=='HOLD'
++    m=identity['manifest']
++    assert m['source_sha']==COMPILED and m['binding']=='estimators' and m['numeric_mode']=='fast'
++    assert m['defines_A']==A_FLAGS and m['defines_B']==B_FLAGS and m['hashes']==BINARIES
++    return identity
++
++
++def spec(source,tag):
++    required=[]
++    prereqs=[]
++    for name,digest in FILES.items():
++        key=name.replace('.','-')
++        required.append(key)
++        prereqs.append(dict(id=key,kind='file',path='~/mq/out/'+INPUT+'/'+name,sha256=digest))
++    return dict(version=1,tag=tag,harness_source=source,script='tools/scoped_pca_recover.py',
++                args=[source,tag],artifacts=[],prerequisites=prereqs,
++                cases=[dict(name='recover-saved-pca-HOLD-no-refit',requires=required,
++                            source_files=['tools/scoped_pca_fit.py'])])
++
++
++def recover(source,tag):
++    assert subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip()=='Apple M3 Ultra'
++    os.chdir(ROOT)
++    assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==source
++    subprocess.run(['git','diff','--quiet','HEAD','--'],check=True)
++    subprocess.run(['git','merge-base','--is-ancestor',REPAIR,source],check=True)
++    # Preserve the repaired comparison implementation exactly; no new fit path.
++    repaired=subprocess.check_output(['git','show',REPAIR+':tools/scoped_pca_fit.py'])
++    assert sha(ROOT/'tools/scoped_pca_fit.py')==hashlib.sha256(repaired).hexdigest()
++    original=subprocess.check_output(['git','show',CAPTURE+':tools/scoped_pca_fit.py'])
++    assert hashlib.sha256(original).hexdigest()==CAPTURE_HELPER
++    directory=Path.home()/'mq/out'/INPUT
++    for name,digest in FILES.items():assert sha(directory/name)==digest,(name,'input changed')
++    identity=partial_identity((directory/'report.json').read_text())
++    metadata={arm:json.loads((directory/(arm+'.npz.json')).read_text()) for arm in 'AB'}
++    for arm,mask,index in [('A',0,6),('B',52,7)]:
++        m=metadata[arm]
++        counts=[0]*9;counts[index]=1
++        assert m['binary_sha']==BINARIES[arm] and m['mask']==mask and m['counts']==counts
++        assert m['shape']==[2043304,220] and m['scored'] is False and m['elapsed_ms'] is None
++        assert m['input_preserved'] is True
++        assert m['metadata'][:13]==[2,int(arm=='B'),220,220,2043304,40,51104,1,1,220,220,1,1]
++    out=Path.home()/'mq/out'/(tag+'-recovery')
++    out.mkdir(parents=True,exist_ok=False)
++    # Uses saved small fitted outputs + 220x220 FP64 oracle only. It neither
++    # opens the full data block nor runs models, native modules or any GPU job.
++    ok,rows=compare(directory)
++    assert not ok,'unexpected PASS on frozen known-HOLD evidence; manual review required'
++    for name,digest in FILES.items():assert sha(directory/name)==digest
++    report=dict(identity,metrics=rows,packets={k:v for k,v in FILES.items() if k!='report.json'},
++                A=metadata['A'],B=metadata['B'],scored=False,board_admitted=False,
++                timing_admitted=False,recovered=True,recovery_source_sha=source,
++                recovery_helper_sha=sha(__file__),recovery_inputs=FILES,
++                recovery_input_directory=str(directory),partial_report_preserved=True,
++                numerical_capture_replayed=False,full_data_oracle_rebuilt=False)
++    record(out/'report.json',report)
++    failures=[k for k,v in rows.items() if not v['pass_no_worse']]
++    bounds=[k for k,v in rows.items() if k.endswith('_relative') and k!='reconstruction_relative'
++            and (v['A']>5e-6 or v['B']>5e-6)]
++    print(json.dumps(dict(status='HOLD',report=str(out/'report.json'),regressions=failures,
++                          bound_failures=bounds,replayed=False)))
++
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('source');p.add_argument('tag');p.add_argument('--spec',action='store_true')
++    a=p.parse_args()
++    assert re.fullmatch('[0-9a-f]{40}',a.source) and re.fullmatch('[A-Za-z0-9_.-]+',a.tag)
++    if a.spec:print(json.dumps(spec(a.source,a.tag),indent=2))
++    else:recover(a.source,a.tag)
++
++
++if __name__=='__main__':main()
+diff --git a/tools/softmax_g2_quality.py b/tools/softmax_g2_quality.py
+new file mode 100644
+index 0000000000..81212842b6
+--- /dev/null
++++ b/tools/softmax_g2_quality.py
+@@ -0,0 +1,133 @@
++#!/usr/bin/env python3
++"""Actual qn_fit multiclass quality gate. M3 only; no timing/build fallback."""
++import argparse, hashlib, importlib.util, json, os, subprocess
++from pathlib import Path
++from fast_quality_rule import RULE, judge
++for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','VECLIB_MAXIMUM_THREADS'):
++    os.environ[key]='1'
++if not __debug__: raise RuntimeError('Assertions required')
++# Generic spread (rows 2k..200k, features 8..1500, classes 2..64), no shape
++# window: the route has none since 2026-10-04 (old window cases removed).
++CASES = {
++ 'r2000-d8-c2':(2000,8,2), 'r5003-d37-c5':(5003,37,5),
++ 'r12000-d97-c11':(12000,97,11), 'r20011-d300-c24':(20011,300,24),
++ 'r8000-d1500-c3':(8000,1500,3), 'r3001-d700-c40':(3001,700,40),
++ 'r60000-d150-c64':(60000,150,64), 'r200000-d64-c9':(200000,64,9),
++}
++POLICY='softmax-g2-real-fit-zero-regression-v2-no-window'  # capture format; judging is fast_quality_rule
++# FAST rule (fast_quality_rule.py): per metric (rtol, atol), lower is better.
++# Losses: 0.1% relative. Stationarity (gradient norm): 2x or 1e-5 (the fit's
++# tolerance scale). Holdout misclassification: 0.2 percentage points (8 of
++# 4,097 query rows). Score / objective agreement with the FP64 recompute:
++# 1.5x or 1e-5 (fp32 fold order).
++TOL={'train':(1e-3,1e-6),'holdout':(1e-3,1e-6),'gradient':(1.0,1e-5),
++     'classification':(0.0,2e-3),'scores':(0.5,1e-5),'train_scores':(0.5,1e-5),
++     'objective_error':(0.5,1e-5)}
++
++def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
++def write(p,data):
++    with Path(p).open('x') as f: json.dump(data,f,indent=2,allow_nan=False)
++def make(case):
++    import numpy as np
++    n,d,c=CASES[case];rng=np.random.default_rng(2026100411)
++    teacher=rng.normal(size=(d,c))/np.sqrt(d)
++    x=rng.normal(size=(n,d)).astype(np.float32)
++    q=rng.normal(size=(4097,d)).astype(np.float32)
++    y=np.argmax(x.astype(float)@teacher+.2*rng.normal(size=(n,c)),axis=1).astype(np.float32)
++    qy=np.argmax(q.astype(float)@teacher+.2*rng.normal(size=(len(q),c)),axis=1).astype(np.float32)
++    assert len(np.unique(y))==c
++    return x,y,q,qy
++
++def capture(a):
++    import numpy as np
++    assert os.environ.get('MOJOLEARN_NUMERIC_MODE')=='fast'
++    source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
++    assert source==a.source and len(source)==40
++    assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],text=True).strip()
++    binary=Path(a.binding).resolve(strict=True);assert sha(binary)==a.binding_sha256
++    output=Path(a.output);output.parent.mkdir(parents=True,exist_ok=True)
++    assert not output.exists() and not Path(str(output)+'.json').exists()
++    write(str(output)+'.started.json',dict(source=source,case=a.case,arm=a.arm,status='RUNNING'))
++    spec=importlib.util.spec_from_file_location('_mojolearn_estimators',binary)
++    binding=importlib.util.module_from_spec(spec);spec.loader.exec_module(binding)
++    assert int(binding.estimators_numeric_mode())==0 and str(binding.estimators_vendor())=='metal'
++    assert int(binding.softmax_g2_state())==a.arm
++    n,d,c=CASES[a.case];x,y,q,qy=make(a.case)
++    w=np.zeros((d+1,c),np.float32);info=np.full(2,np.nan,np.float32)
++    phases={}
++    def counts(name):
++        phases[name]=dict(counts=[int(binding.softmax_g2_count(i)) for i in range(3)],
++                          last=[int(binding.softmax_g2_last(i)) for i in range(5)])
++    binding.softmax_g2_reset()
++    iterations=int(binding.qn_fit(x.ctypes.data,y.ctypes.data,w.ctypes.data,info.ctypes.data,
++        [n,d,c,0.,0.,1e-4,1e-5,30,30,5,1,0,0,2]))
++    counts('fit')
++    arrays=dict(x=x,y=y,q=q,qy=qy,coef=w,info=info,iterations=np.array(iterations))
++    for name,data in [('train',x),('query',q)]:
++        scores=np.full((len(data),c),np.nan,np.float32);binding.softmax_g2_reset()
++        binding.qn_decision_function(data.ctypes.data,w.ctypes.data,scores.ctypes.data,[len(data),d,1,c])
++        counts(name);arrays[name+'_scores']=scores
++    assert all(np.isfinite(value).all() for value in arrays.values())
++    for phase,rows in [('fit',n),('train',n),('query',len(q))]:
++        expected=rows>=1 and c>=1 and d>=1  # kernel limits only (no window)
++        reached=phases[phase]['counts']
++        assert reached[1]+reached[2]>0, 'NO_REACH '+phase
++        assert (reached[0]>0) if expected else (reached[0]==0)
++        assert reached[1]==(reached[0] if a.arm else 0)
++        assert phases[phase]['last']==[rows,c,d,int(expected),int(expected and a.arm==1)]
++    with output.open('xb') as f: np.savez(f,**arrays)
++    write(str(output)+'.json',dict(policy=POLICY,source=source,case=a.case,arm=a.arm,
++        binding=str(binary),binding_sha256=a.binding_sha256,capture_sha256=sha(output),
++        input_sha256=hashlib.sha256(x.tobytes()+y.tobytes()+q.tobytes()+qy.tobytes()).hexdigest(),
++        phases=phases,scored_timings=0,promotion_authorized=False))
++
++def compare(a):
++    import numpy as np
++    A,B=[np.load(p,allow_pickle=False) for p in (a.a,a.b)]
++    ma,mb=[json.loads(Path(str(p)+'.json').read_text()) for p in (a.a,a.b)]
++    for key in ('policy','source','case','input_sha256'): assert ma[key]==mb[key]
++    assert ma['policy']==POLICY and ma['arm']==0 and mb['arm']==1
++    assert ma['capture_sha256']==sha(a.a) and mb['capture_sha256']==sha(a.b)
++    assert all(np.array_equal(A[k],B[k]) for k in ('x','y','q','qy'))
++    assert all(np.isfinite(v).all() for arm in (A,B) for v in arm.values())
++    metrics={}
++    def le(name,av,bv):
++        metrics[name]=judge(av,bv,*TOL[name])
++    def softmax(z):
++        zz=z-z.max(axis=1,keepdims=True);e=np.exp(zz)
++        return e/e.sum(axis=1,keepdims=True),zz
++    def loss(z,y):
++        _,zz=softmax(z)
++        return np.mean(np.log(np.exp(zz).sum(axis=1))-zz[np.arange(len(y)),y.astype(int)])
++    details=[]
++    for arm in (A,B):
++        x=arm['x'].astype(float);w=arm['coef'].astype(float)
++        z=x@w[:-1]+w[-1];qz=arm['q'].astype(float)@w[:-1]+w[-1]
++        prob,_=softmax(z);prob[np.arange(len(x)),arm['y'].astype(int)]-=1
++        grad=np.vstack((x.T@prob/len(x),prob.mean(axis=0)))
++        details.append(dict(train=loss(z,arm['y']),holdout=loss(qz,arm['qy']),
++            gradient=np.linalg.norm(grad),classification=np.mean(qz.argmax(1)!=arm['qy']),
++            scores=np.max(np.abs(arm['query_scores'].astype(float)-qz)),
++            train_scores=np.max(np.abs(arm['train_scores'].astype(float)-z)),
++            objective_error=abs(float(arm['info'][0])-loss(z,arm['y']))))
++    for key in details[0]: le(key,details[0][key],details[1][key])
++    status_equal=bool(A['info'][1]==B['info'][1])
++    good=all(m['ok'] for m in metrics.values()) and status_equal
++    write(a.output,dict(policy=POLICY,source=ma['source'],case=ma['case'],
++        status='PASS' if good else 'HOLD',metrics=metrics,retcode_equal=status_equal,
++        phases_A=ma['phases'],phases_B=mb['phases'],rule=RULE,
++        opponent_status='not in this fixture: the board metric vs the best opponent is judged on the board',
++        strict_le_all_info=all(m['strict_le_info'] for m in metrics.values()),
++        scored_timings=0,promotion_authorized=False))
++    return 0 if good else 1
++
++def main():
++    assert subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip()=='Apple M3 Ultra'
++    p=argparse.ArgumentParser(description=__doc__);s=p.add_subparsers(dest='mode',required=True)
++    c=s.add_parser('capture')
++    for key in ('source','binding','binding-sha256','output'):c.add_argument('--'+key,required=True)
++    c.add_argument('--case',choices=CASES,required=True);c.add_argument('--arm',type=int,choices=(0,1),required=True)
++    c=s.add_parser('compare')
++    for key in ('a','b','output'):c.add_argument('--'+key,required=True)
++    a=p.parse_args();return capture(a) if a.mode=='capture' else compare(a)
++if __name__=='__main__':raise SystemExit(main())
+diff --git a/tools/test_scoped_gemm_readiness.py b/tools/test_scoped_gemm_readiness.py
+new file mode 100644
+index 0000000000..4d5f28ff40
+--- /dev/null
++++ b/tools/test_scoped_gemm_readiness.py
+@@ -0,0 +1,59 @@
++#!/usr/bin/env python3
++"""Metadata-only regression checks: never import NumPy/native or run GPU work."""
++import subprocess
++import unittest
++from unittest.mock import patch
++
++from apple_fast_job_policy import policy_for
++from scoped_gemm_preflight_spec import make_spec
++from scoped_gemm_quality import verify_source
++
++H = 'a' * 40
++C = 'b' * 40
++
++
++class ReadinessTest(unittest.TestCase):
++    def test_spec_complete(self):
++        spec = make_spec(H, C, 'scoped-r2-q-v1', 'all')
++        self.assertEqual(spec['args'], [C, 'scoped-r2-q-v1', 'all'])
++        # 787d78337 replaced the window-edge cases with a generic spread:
++        # 18 GEMM cases + 5 PCA covariance cases.
++        self.assertEqual(len(spec['cases']), 23)
++        self.assertTrue(all(c['requires'] == ['probe'] for c in spec['cases']))
++        artifact = spec['artifacts'][0]
++        self.assertEqual(artifact['compiled_source'], C)
++        self.assertEqual(artifact['defines_A'], '-D MOJOLEARN_SCOPED_GEMM_AUDIT')
++        self.assertEqual(artifact['defines_B'].count('-D '), 7)
++        self.assertEqual(spec['prerequisites'], [])  # direct probe, no package install
++
++    def test_policy_rejects_invalid_contract(self):
++        for args in ([C, 'tag'], ['main', 'tag', 'all'], [C, '../tag', 'all'],
++                     [C, 'tag', 'unknown'], [C, 'tag', 'all', 'timing']):
++            with self.subTest(args=args), self.assertRaises(ValueError):
++                policy_for(H, 'tools/scoped_gemm_quality.py', args)
++
++    def test_source_accepts_tools_only(self):
++        with patch('scoped_gemm_quality.subprocess.check_output',
++                   side_effect=[H + '\n', 'tools/scoped_gemm_quality.py\n']), \
++             patch('scoped_gemm_quality.subprocess.run') as run:
++            self.assertEqual(verify_source(C), H)
++            self.assertEqual(run.call_count, 2)  # ancestor and clean tracked source
++
++    def test_source_rejects_native_or_config_drift(self):
++        for file in ('bindings/_mojolearn_scoped_gemm_probe.mojo', 'pixi.lock',
++                     'python/mojolearn/_buffer.py', 'tools/unreviewed.py'):
++            with self.subTest(file=file), \
++                 patch('scoped_gemm_quality.subprocess.check_output', side_effect=[H, file]), \
++                 patch('scoped_gemm_quality.subprocess.run'), self.assertRaises(AssertionError):
++                verify_source(C)
++
++    def test_source_rejects_nonancestor(self):
++        with patch('scoped_gemm_quality.subprocess.check_output', return_value=H), \
++             patch('scoped_gemm_quality.subprocess.run',
++                   side_effect=subprocess.CalledProcessError(1, ['git'])), \
++             self.assertRaises(subprocess.CalledProcessError):
++            verify_source(C)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tools/test_scoped_pca_fit_contract.py b/tools/test_scoped_pca_fit_contract.py
+new file mode 100644
+index 0000000000..ccdebd40cd
+--- /dev/null
++++ b/tools/test_scoped_pca_fit_contract.py
+@@ -0,0 +1,106 @@
++#!/usr/bin/env python3
++"""Metadata-only tests. No NumPy, native module, model, GPU or compiler import."""
++import copy
++import json
++from pathlib import Path
++import unittest
++from unittest.mock import patch
++from apple_fast_job_policy import policy_for
++from scoped_pca_fit import admit_quality, source_contract, METRIC_NAMES, compare, record
++from scoped_pca_fit_spec import make_spec
++
++H='a'*40
++C='b'*40
++D='c'*64
++
++
++class ContractTests(unittest.TestCase):
++    def test_spec_artifacts_and_data(self):
++        s=make_spec(H,C,'test-q','quality','/data/big-istella.npz',D)
++        self.assertEqual(s['args'],[C,'test-q','quality','/data/big-istella.npz',D])
++        self.assertEqual(s['artifacts'][0]['defines_B'].count('-D '),4)
++        self.assertEqual(s['cases'][0]['requires'],['estimators','board-data'])
++        self.assertEqual(s['prerequisites'][0]['sha256'],D)
++
++    def test_timing_requires_receipt(self):
++        with self.assertRaises(ValueError):
++            policy_for(H,'tools/scoped_pca_fit.py',[C,'test-t','timing','/data',D])
++        s=make_spec(H,C,'test-t','timing','/data',D,'/q/report.json',D)
++        self.assertEqual(s['prerequisites'][1]['json_equals']['scored'],False)
++
++    def test_policy_rejects_bad_source_tag_hash(self):
++        for args in (['main','t','quality','/data',D],[C,'../t','quality','/data',D],
++                     [C,'t','quality','/data','invalid']):
++            with self.assertRaises(ValueError):policy_for(H,'tools/scoped_pca_fit.py',args)
++
++    def test_source_rejects_native_drift(self):
++        with patch('scoped_pca_fit.subprocess.check_output',side_effect=[H,'decomposition/estimator.mojo\n']), \
++             patch('scoped_pca_fit.subprocess.run'),self.assertRaises(AssertionError):
++            source_contract(C)
++
++    def test_source_allows_only_reviewed_tools(self):
++        with patch('scoped_pca_fit.subprocess.check_output',side_effect=[H,'tools/scoped_pca_fit.py\n']), \
++             patch('scoped_pca_fit.subprocess.run'):
++            self.assertEqual(source_contract(C),H)
++
++    def test_foreign_scalar_comparisons_serialize_as_builtin_bool(self):
++        class ForeignBool:
++            def __init__(self, value): self.value=value
++            def __bool__(self): return self.value
++        class ForeignFloat(float):
++            def __le__(self, other): return ForeignBool(super().__le__(other))
++        foreign=ForeignFloat(0.0)
++        with self.assertRaises(TypeError): json.dumps(foreign <= foreign)
++        with patch('scoped_pca_fit.metrics', return_value={k:foreign for k in METRIC_NAMES}):
++            ok,rows=compare(Path('/unused'))
++        self.assertIs(ok,True)
++        self.assertTrue(all(type(v['A']) is float and type(v['pass_no_worse']) is bool for v in rows.values()))
++        json.dumps(rows,allow_nan=False)
++
++    def test_serialization_failure_creates_no_partial_receipt(self):
++        with patch.object(Path,'open') as opened,self.assertRaises(TypeError):
++            record(Path('/unused'),dict(unsupported=object()))
++        opened.assert_not_called()
++
++    def test_recovery_metadata_pins_all_six_inputs(self):
++        from scoped_pca_recover import FILES, spec
++        self.assertEqual(len(FILES),6)
++        self.assertTrue(all(len(v)==64 and all(c in '0123456789abcdef' for c in v) for v in FILES.values()))
++        s=spec(H,'recovery-test')
++        self.assertEqual(s['artifacts'],[])
++        self.assertEqual(len(s['prerequisites']),6)
++        self.assertEqual(policy_for(H,s['script'],s['args']),'reference')
++
++    def test_recovery_retains_capture_identity_not_recovery_identity(self):
++        from scoped_pca_recover import partial_identity, COMPILED, CAPTURE, CAPTURE_HELPER, CONTRACT, DATA, BINARIES, A_FLAGS, B_FLAGS
++        identity=dict(source_sha=COMPILED,harness_source=CAPTURE,helper_sha=CAPTURE_HELPER,
++                      contract=CONTRACT,bound=5e-6,error_regression_allowance=0,data_sha=DATA,status='HOLD',
++                      manifest=dict(source_sha=COMPILED,binding='estimators',numeric_mode='fast',
++                                    defines_A=A_FLAGS,defines_B=B_FLAGS,hashes=BINARIES))
++        prefix=json.dumps(identity,indent=2)[:-2]+',\n  "metrics": {\n'
++        self.assertEqual(partial_identity(prefix),identity)
++        with self.assertRaises(AssertionError):partial_identity(prefix.replace('"HOLD"','"PASS"'))
++
++    def receipt(self):
++        return dict(status='PASS',scored=False,source_sha=C,
++                    metrics={k:dict(A=0.0,B=0.0,pass_no_worse=True) for k in METRIC_NAMES},
++                    packets={k:D for k in ('A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz')},
++                    A=dict(counts=[0,0,0,0,0,0,1,0,0]),B=dict(counts=[0,0,0,0,0,0,0,1,0]))
++
++    def test_admission_rejects_regression_missing_packets_and_no_reach(self):
++        good=self.receipt()
++        bad=[]
++        for field,value in [('status','HOLD'),('scored',True),('source_sha',H),('packets',{}),('metrics',{})]:
++            r=copy.deepcopy(good);r[field]=value;bad.append(r)
++        r=copy.deepcopy(good);r['B']['counts']=[0]*9;bad.append(r)
++        r=copy.deepcopy(good);r['metrics']['mean_relative']['B']=1.0;bad.append(r)
++        for r in bad:
++            with patch.object(Path,'read_text',return_value=json.dumps(r)), \
++                 patch('scoped_pca_fit.sha',return_value=D),self.assertRaises(AssertionError):
++                admit_quality(Path('/quality/report.json'),dict(source_sha=C))
++        with patch.object(Path,'read_text',return_value=json.dumps(good)), \
++             patch('scoped_pca_fit.sha',return_value=D):
++            self.assertEqual(admit_quality(Path('/quality/report.json'),dict(source_sha=C))['status'],'PASS')
++
++
++if __name__=='__main__':unittest.main()
+diff --git a/tools/verify_coverage_audit.py b/tools/verify_coverage_audit.py
+index 427423b98b..f29c23032c 100644
+--- a/tools/verify_coverage_audit.py
++++ b/tools/verify_coverage_audit.py
+@@ -1534,6 +1534,7 @@ ANNOTATIONS = {
+     "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
+     "device_plan_log": ("n/a", [], "read only by the retired `verify --par` two-device placement witness "
+                         "(_verify_par PoolWitness, removed 2026-10-31): device groups, no data value"),
++    "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
+     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
+        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
+     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 630ecf0212..018f8aa160 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -25,10 +25,7 @@ from gemm.afn_apple_fast import (
+     afn_launch_tile,
+     afn_zero_kernel,
+ )
+-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+-# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+-# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+-# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+ from decomposition.linalg_public_device import device_qr_r
+ from decomposition.linalg_types import _validate_shape
+ from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
+@@ -1919,13 +1916,21 @@ def _launch_gemm_mma(
+             grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
+             block_dim=(AFN_ZERO_TPB, 1, 1),
+         )
+-        afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+-            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
+-        )
++        # OPEN: scoped source28f06e19 passed28 mechanism fixtures on M3
++        # (scoped-r2-all-q-v1, bound5e-6, zero error-regression allowance).
++        # Split-boundary PASS is not downstream fitted quality or a speed
++        # claim; broad default stays OFF. See GEMM_INLINE_OUTCOMES.md.
++        if not try_scoped_gemm[True, 1](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, splits, per):
++            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
++                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
++            )
+     else:
+-        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+-            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+-        )
++        # OPEN: non-split G1/G2 mechanism PASS has no actual AFN timing
++        # admission. SDK catalog wins cannot promote this caller by analogy.
++        if not try_scoped_gemm[False, 0](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, 1, k):
++            afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
++                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
++            )
+ 
+ 
+ def launch_gemm(
+diff --git a/x_decomp/lu_fast_mma.mojo b/x_decomp/lu_fast_mma.mojo
+index 6bd0ce9243..df98effb91 100644
+--- a/x_decomp/lu_fast_mma.mojo
++++ b/x_decomp/lu_fast_mma.mojo
+@@ -60,6 +60,7 @@ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for
+ from checks.numerics import ftz, identical_mul_add
++from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
+ from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
+ from x_decomp.cells import F32Ptr, I32Ptr, lu_swap_elem
+ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+@@ -73,9 +74,17 @@ comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJO
+ #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
+ comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
+ comptime LFM_PANEL = 32
+-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
+-# at f59d913b0b (F02: the trailing subtract through scoped_kernel's SUBTRACT epilogue, with its shared_sub_record counter).
+-# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
++# Shared direct fragments retain the caller strided subtract epilogue. No
++# additional buffer or pass; eligibility is kernel limits, never board size.
++# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
++# M3 F02/default measured 2026-10-06: n=257,319,513 factor A_over_B
++# 0.624,0.936,0.958; solve 0.708,0.812,1.005. One excluded warmup +
++# one scored public call, current compiled A/B artifacts reused. Candidate
++# mostly regresses; retain OFF. Identity/compile not retested. Caller
++# 67d0efb29, both builds 05b4dd48a; raw timings/hashes/metrics retained at
++# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default.
++# Single-sample component evidence; not a universal full-workload decision.
++comptime LFM_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"]()
+ 
+ comptime _M64 = SIMD[DType.float32, 64]
+ comptime LFM_SGM = 2
+@@ -194,6 +203,14 @@ def lfm_swaps_trsm_kernel(
+ def _lfm_gemm_sub(ctx: DeviceContext, a: F32Ptr, n: Int, r0: Int, c0: Int, p0: Int, m: Int, nc: Int, k: Int) raises:
+     if m <= 0 or nc <= 0 or k <= 0:
+         return
++    comptime if LFM_SHARED_SUB:
++        shared_sub_record(False)
++        ctx.enqueue_function[scoped_kernel[64, 64, False, True]](
++            a.unsafe_offset(r0 * n + c0), a.unsafe_offset(r0 * n + p0), a.unsafe_offset(p0 * n + c0),
++            Int32(m), Int32(nc), Int32(k), Int32(n), Int32(1), Int32(n), Int32(1), Int32(k), Int32(n),
++            grid_dim=(((m + 63) // 64) * ((nc + 63) // 64), 1, 1), block_dim=(128, 1, 1),
++        )
++        return
+     var tiles = ((m + LFM_BM - 1) // LFM_BM) * ((nc + LFM_BN - 1) // LFM_BN)
+     ctx.enqueue_function[lfm_gemm_sub_kernel](
+         a, Int32(n), Int32(r0), Int32(c0), Int32(p0), Int32(m), Int32(nc), Int32(k),

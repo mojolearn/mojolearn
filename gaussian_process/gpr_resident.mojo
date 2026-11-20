@@ -27,14 +27,11 @@ bits; the host column is untouched) and:
 No identity trace and no sabotage arm: the card stages and the negative
 controls stay on `gpr_fit_host` / `gpr_predict_host`, which the checks call.
 
-Switch (IDENTICAL only, ON by default, off under `MOJOLEARN_IDN_ALL_OFF`):
-`-D MOJOLEARN_IDN_GPR_PTR_OFF` clears bit 1 of `gp_idn_caps` and the Python
-glue calls `gpr_fit` / `gpr_predict`.
+IDENTICAL only, always on: bit 1 of `gp_idn_caps` is set on every IDENTICAL build.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -86,12 +83,12 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_TN
 
-#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GPR_PTR_OFF` restores `gpr_fit` / `gpr_predict`'s host
-#: lists, host walks and per-scalar waits).
-comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, always on.
+# TOMBSTONE: MOJOLEARN_IDN_GPR_PTR_OFF (no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at b2a4adf292.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; the resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 508bbde394.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-07-base.patch
+comptime GPR_IDN_PTR = _CTX_MODE == _CTX_IDENTICAL
 
 comptime _GP = MutPointer[Float32, MutAnyOrigin]
 comptime _GI = MutPointer[Int32, MutAnyOrigin]
@@ -114,7 +111,7 @@ def gp_clamp_count_kernel(clamped: _GI, cnt: _GI, n: Int32):
     var t = Int(block_idx.x) * GP_YDOT_TPB + Int(thread_idx.x)
     if t < Int(n):
         if clamped.unsafe_load(t) != Int32(0):
-            _ = Atomic[DType.int32].fetch_add(cnt, Int32(1))
+            _ = Atomic[Int32].fetch_add(cnt, Int32(1))
 
 
 def gpr_fit_ptr_device(
@@ -139,21 +136,22 @@ def gpr_fit_ptr_device(
         raise Error("gpr_fit: an output has a null address")
     if y_addr == 0:
         raise Error("gpr_fit: y has a null address")
+    if n_train <= 0 or n_features <= 0:
+        raise Error("gpr_fit: X must have at least one row and one feature, got " + String(n_train) + " x "
+                    + String(n_features))
+    if x_addr == 0:
+        raise Error("gpr_fit: X has a null address")
     var n = n_train
     var ctx = _family_ctx()
-    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once, nested fits included, and refuses a non-finite X in scikit-learn's wording before this entry (providers/python/gp_public_lifecycle_pyapi.mojo); recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=_GP(unsafe_from_address=x_addr))
     var dy = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=dy, src_ptr=_GP(unsafe_from_address=y_addr))
-    var bad = device_first_nonfinite(ctx, dy, n)
-    if bad >= 0:
-        var is_nan = device_classify_nonfinite(ctx, dy, bad)
-        raise Error(
-            "gpr_fit_host: y contains "
-            + ("NaN" if is_nan else "infinity")
-            + " at index "
-            + String(bad)
-            + "; refused by name before any model launch (DEVIATION 1768)"
-        )
+    # y keeps its scan: a nested fit's door does not test y (the public
+    # door's target check runs at depth 0 only). One wording (lane a8a).
+    if device_first_nonfinite(ctx, dy, n) >= 0:
+        raise Error("Input y contains NaN or infinity (GaussianProcessRegressor).")
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
@@ -166,25 +164,31 @@ def gpr_fit_ptr_device(
     # alpha IS the profile's jitter (DEVIATION 1751): `gpr_fit_host`'s calls.
     chol_validate_jitter(alpha)
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-    var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-    # the factor home, before the solve (which only reads it)
-    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
-
     var ddual = ctx.enqueue_create_buffer[DType.float32](n)
-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
     var nbf = gpc_fold_blocks(n)
     var dpart = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
     var dyd = ctx.enqueue_create_buffer[DType.float32](1)
-    var diag = dwork.create_sub_buffer[DType.float32](0, n)
-    var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
     var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hyd = ctx.enqueue_create_host_buffer[DType.float32](1)
     var logdet = Float32(0.0)
     var ydotalpha = Float32(0.0)
     var lml = Float32(0.0)
+    var info = 0
+    var nb_ran = nb_pin
+    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+    # The factor, the log-determinant and the solve on the measured 0.8.66
+    # route (`potrf_lower` with its one info read, then the branch on the
+    # host; lane fable-perf-classical-0855).
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    # the factor home, before the solve (which only reads it)
+    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
+    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    var diag = dwork.create_sub_buffer[DType.float32](0, n)
+    var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
     if run.info == 0:
         # `chol_logdet`'s two launches, the scalar left on the device
         ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
@@ -208,20 +212,24 @@ def gpr_fit_ptr_device(
         enqueue_fill(ctx, ddual, Float32(0.0))
     ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
     ctx.synchronize()
-    if run.info == 0:
+    info = run.info
+    nb_ran = run.nb
+    if info == 0:
         logdet = hld.unsafe_ptr().unsafe_load(0)
         ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
         lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
+    _ = diag^
+    _ = scalar^
+    _ = ws^
+    _ = dwork^
+    _ = dlparts^
     # info, nb, logdet, ydotalpha, lml; each float32 widens to float64 exactly.
     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalars_addr)
-    sp.unsafe_store(0, Float64(run.info))
-    sp.unsafe_store(1, Float64(run.nb))
+    sp.unsafe_store(0, Float64(info))
+    sp.unsafe_store(1, Float64(nb_ran))
     sp.unsafe_store(2, Float64(logdet))
     sp.unsafe_store(3, Float64(ydotalpha))
     sp.unsafe_store(4, Float64(lml))
-    var info = run.info
-    _ = diag^
-    _ = scalar^
     _ = hld^
     _ = hyd^
     _ = dx^
@@ -229,10 +237,7 @@ def gpr_fit_ptr_device(
     _ = dls^
     _ = dk^
     _ = dstack^
-    _ = ws^
-    _ = dwork^
     _ = ddual^
-    _ = dlparts^
     _ = dpart^
     _ = dyd^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -285,7 +290,6 @@ def gpr_predict_ptr_device(
     gp_validate_kernel(kernel, n_features)
     var kss = gp_kernel_diag(kernel)
 
-    var trace = IdentityTrace()
     var ctx = _family_ctx()
     var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
     var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
@@ -295,6 +299,46 @@ def gpr_predict_ptr_device(
     var dl = ctx.enqueue_create_buffer[DType.float32](n_train * n_train if return_std else 1)
     if return_std:
         ctx.enqueue_copy(dst_buf=dl, src_ptr=_GP(unsafe_from_address=l_addr))
+    var n_clamped = gpr_predict_dev(
+        ctx, dx, ddual, dl, dxs, n_train, n_features, n_star, kernel, kss,
+        return_std, unnorm, y_std, y_mean, mean_addr, var_addr, std_addr, clamped_addr,
+    )
+    _ = dx^
+    _ = dxs^
+    _ = ddual^
+    _ = dl^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+    return n_clamped
+
+
+def gpr_predict_dev(
+    ctx: DeviceContext,
+    dx: DeviceBuffer[DType.float32],
+    mut ddual: DeviceBuffer[DType.float32],
+    mut dl: DeviceBuffer[DType.float32],
+    dxs: DeviceBuffer[DType.float32],
+    n_train: Int,
+    n_features: Int,
+    n_star: Int,
+    kernel: GPKernelSpec,
+    kss: Float32,
+    return_std: Bool,
+    unnorm: Bool,
+    y_std: Float32,
+    y_mean: Float32,
+    mean_addr: Int,
+    var_addr: Int,
+    std_addr: Int,
+    clamped_addr: Int,
+) raises -> Int:
+    """The predict launches over device copies of X_train (`dx`), the dual
+    (`ddual`), the factor (`dl`, read only with `return_std`) and the
+    checked query (`dxs`): the body `gpr_predict_ptr_device` runs after its
+    own uploads and `gpr_predict_resident_device`
+    (gaussian_process/gp_resident_state.mojo) runs over the kept copies of
+    the same bytes, so both give the same bits. Returns the clamp count."""
+    var trace = IdentityTrace()
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkcross = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n_train, n_star))
@@ -340,11 +384,7 @@ def gpr_predict_ptr_device(
     else:
         ctx.synchronize()
 
-    _ = dx^
-    _ = dxs^
     _ = dls^
-    _ = ddual^
-    _ = dl^
     _ = dkcross^
     _ = dstack^
     _ = dmean^
@@ -354,6 +394,4 @@ def gpr_predict_ptr_device(
     _ = dclamp^
     _ = dcnt^
     _ = hcnt^
-    # DEVIATION 1946: the context dies LAST.
-    _ = ctx^
     return n_clamped

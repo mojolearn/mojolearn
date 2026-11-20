@@ -117,7 +117,7 @@ class Pipelines(Base):
         self.assertEqual(r.go(), 1)
         self.assertIn("macos-smoke", order)       # the Mac pipeline still builds and smokes
         for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd", "gate-nvidia",
-                      "gate-amd", "publish-macos", "publish-core-linux", "publish-nvidia-ptx", "publish-nvidia",
+                      "gate-amd", "publish-macos", "publish-core-linux", "publish-nvidia",
                       "publish-amd", "publish-meta-linux"):
             self.assertIn(later, r.STEPS)
             self.assertNotIn(later, order)
@@ -132,12 +132,12 @@ class Pipelines(Base):
     def test_mac_failing_leaves_the_linux_publish_done(self):
         r, order = self.staged(fail={"macos-smoke"})
         self.assertEqual(r.go(), 1)
-        for step in ("publish-core-linux", "publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
+        for step in ("publish-core-linux", "publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertTrue(r.recorded(step), step)
         self.assertFalse(r.recorded("publish-macos"))
         self.assertIn("gpu-column-nvidia", order)
         self.assertIn("gpu-column-amd", order)
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "nvidia"])
         text = "\n".join(r.lines)
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
@@ -149,7 +149,7 @@ class Pipelines(Base):
             self.assertLess(order.index("linux-pack"), order.index(gate))
             self.assertLess(order.index(gate), order.index("publish-macos"))
             self.assertLess(order.index(gate), order.index("publish-core-linux"))
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
         r, _ = self.staged(fail={"linux-pack"})
@@ -164,12 +164,12 @@ class Pipelines(Base):
         self.assertIn("linux-pack", order)
         # the finish line and the record run again for the newly published platforms
         self.assertIn("finish-line", order)
-        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia"])
         self.assertNotIn("linux-pack", r2.state.get("failures", {}))
 
     def test_without_publish_both_pipelines_are_held(self):
         r, order = self.staged(publish=None)
-        for platform in ("core-linux", "nvidia-ptx", "nvidia", "amd", "meta-linux", "macos"):
+        for platform in ("core-linux", "nvidia", "amd", "meta-linux", "macos"):
             setattr(r, "step_publish_" + platform.replace("-", "_"),
                     lambda platform=platform: r.publish(platform, None, None))
         self.assertEqual(r.go(), 1)
@@ -177,10 +177,11 @@ class Pipelines(Base):
         # mojolearn-core publishes first: held, it holds every other Linux package
         self.assertIn("core-linux: HELD at publish-core-linux", text)
         self.assertIn("amd: HELD at publish-core-linux", text)
-        self.assertIn("nvidia: BLOCKED at publish-nvidia-ptx, which needs publish-core-linux (held)", text)
+        # one NVIDIA wheel (2026-11-05): NVIDIA waits on the core directly, like AMD
+        self.assertIn("nvidia: HELD at publish-core-linux", text)
         self.assertIn("macos: HELD at publish-macos", text)
         self.assertTrue(r.state["failures"]["publish-core-linux"]["held"])
-        for step in ("publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
+        for step in ("publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertFalse(r.recorded(step), "no vendor publishes before mojolearn-core")
 
     def test_the_pipelines_are_generic(self):
@@ -195,7 +196,10 @@ class Pipelines(Base):
         self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack"])
         # e1f7f8e24: every publish, the Mac's included, waits for both candidate gates
         # 2026-10-24: and for the Apple installed-wheel adapter smoke
-        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "gate-apple", "gate-nvidia", "gate-amd"])
+        # 2026-11-06: and the TestPyPI rehearsal of its bytes, which needs both gates
+        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "gate-apple", "gate-nvidia", "gate-amd",
+                                                          release.REHEARSAL_STEP])
+        self.assertEqual(release.NEEDS[release.REHEARSAL_STEP], ["gate-nvidia", "gate-amd"])
         for gone in ("release-check", "macos-self-test", "linux-joint-diff"):
             self.assertNotIn(gone, release.Release.STEPS)
 
@@ -408,7 +412,7 @@ class Status(Base):
         self.assertIn("rerun: relaunch it", text)
         self.assertRegex(text, r"hip-gfx942 +running +pid ")
         self.assertRegex(text, r"nvidia +owed +no final Linux wheel yet")
-        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, nvidia-ptx: owed, amd: owed, meta-linux: owed", text)
+        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, amd: owed, meta-linux: owed", text)
         self.assertIn("a rerun would:", text)
 
     def test_the_flag_parses_alone(self):
@@ -516,6 +520,9 @@ class SourceAndTooling(Base):
         receipt.write_text(json.dumps(dict(status="PASSED", scope="expanded", source_commit=Y,
                                           wheel_sha256=release.sha256(whl))))
         r.apple_adapters_ok = lambda: (True, "PASSED")  # the Apple adapter gate (tested in test_adapter_gate.py)
+        # 2026-11-06: the TestPyPI rehearsal passed for these bytes (tools/test_release_testpypi_rehearsal.py)
+        r.state["steps"][release.REHEARSAL_STEP] = dict(done=True, commit=Y, at="t",
+                                                         wheels={"macos": release.sha256(whl)})
         # e1f7f8e24: publication requires both candidate gates
         r.gate_ok = lambda vendor: (False, "no gate report")
         with self.assertRaisesRegex(release.StepFailed, "publication requires both candidate gates"):

@@ -48,10 +48,6 @@ class UnsupportedModel(ValueError):
         return _READER_NATIVE("unsupported_construct", self, (source, problems), _READER_CONTEXT)
 
 
-def _message(source, problems):
-    return _READER_NATIVE("unsupported_message", source, problems, _READER_CONTEXT)
-
-
 # ---------------------------------------------------------------- the IR ----
 
 @dataclass(frozen=True)

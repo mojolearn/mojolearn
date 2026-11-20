@@ -4,9 +4,10 @@
 2026-10-03): DEVIATION 2881's projected L-BFGS (`gp_optim_items.mojo`) with
 its state resident in device buffers, evaluating the likelihood and its
 gradient in place (`gpr_lml_grad_host`'s kernels, in its order) at the
-parameter table the optimizer writes from theta. One call runs every start;
-the only words that come home during a run are the Cholesky's `info` and
-the optimizer's stop word, once per evaluation. Before, the state machine was
+parameter table the optimizer writes from theta. One call runs every start
+on the measured 0.8.66 loop (`potrf_lower` with its info read, the stop word
+read per evaluation; lane restore-classical-measured-routes). Before, the
+state machine was
 Python (`_gp_optimizer.py`) and every evaluation rebuilt the kernel on the
 host, uploaded X and y, and downloaded the likelihood and the gradient.
 
@@ -17,17 +18,17 @@ WHITE leaf reads its value from the device parameter table
 cell) and the length scales are read from the device table as they always
 were."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
+    CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
     add_jitter,
     chol_default_nb_hint,
     chol_nb_for,
-    CHOL_NB_PINNED,
     chol_validate_jitter,
     chol_workspace_floats,
     enqueue_logdet,
@@ -91,6 +92,7 @@ from gaussian_process.gp_optim_items import (
     GP_OPT_SI_LEN,
     GP_OPT_SI_STOP,
     GP_OPT_TPB,
+    GP_STOP_RUNNING,
     gp_opt_final_item,
     gp_opt_init_item,
     gp_opt_run_end_item,
@@ -148,14 +150,28 @@ def gp_opt_init_kernel(
     gp_opt_init_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, bnd, dpar, dls, Int(run), s0, s1)
 
 
-def gp_opt_step_kernel(
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by lane/fb12-loser-arms: gp_opt_step_kernel and gp_opt_advance_kernel, the device run sequencer's kernels; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+
+
+# TOMBSTONE: gp_opt_run_end_kernel and the per-evaluation host loop of gpr_optimize_device (superseded by the device run sequencer) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch
+# RESTORED 2026-11-13 (lane restore-classical-measured-routes): the
+# per-evaluation host loop and its two kernels are the default again (the
+# measured 0.8.66 route); the device run sequencer (-D
+# MOJOLEARN_IDN_CHOL_OPS_FIT) was deleted 2026-11-17.
+
+
+def gp_opt_step_host_kernel(
     st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, work: _P, n: Int32, lml: _P, graw: _P,
     t: Int32, info: Int32,
 ):
-    """The optimizer's step after an evaluation. Thread 0 first combines the
-    likelihood's three scalar terms (`gp_log_marginal_likelihood_value(y^T
-    alpha_, log|K| at work[n], n)`, the fit's own) into `lml`; thread 0 is
-    also the only reader of it in the step."""
+    """0.8.66's `gp_opt_step_kernel`: the optimizer's
+    step after an evaluation, `info` read home by `potrf_lower`. Thread 0
+    first combines the likelihood's three scalar terms
+    (`gp_log_marginal_likelihood_value(y^T alpha_, log|K| at work[n], n)`,
+    the fit's own) into `lml`; thread 0 is also the only reader of it in
+    the step."""
     if Int(thread_idx.x) == 0 and Int(info) == 0:
         lml.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), work.unsafe_load(Int(n)), Int(n)))
     gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, Int(info))
@@ -340,6 +356,131 @@ def gp_kernel_matrix_grad_dev(
     _ = xs2^
 
 
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (_gpr_optimize_ops_runs, the device run sequencer over the Cholesky ops)
+
+
+def _gpr_optimize_host_runs(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut dpar: DeviceBuffer[DType.float32],
+    mut dls: DeviceBuffer[DType.float32],
+    mut dbnd: DeviceBuffer[DType.float32],
+    mut dtmap: DeviceBuffer[DType.int32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dstack: DeviceBuffer[DType.float32],
+    mut dgrad: DeviceBuffer[DType.float32],
+    mut dxs: DeviceBuffer[DType.float32],
+    mut ddual: DeviceBuffer[DType.float32],
+    mut dkinv: DeviceBuffer[DType.float32],
+    mut dgpart: DeviceBuffer[DType.float32],
+    mut dgraw: DeviceBuffer[DType.float32],
+    mut dypart: DeviceBuffer[DType.float32],
+    mut dyd: DeviceBuffer[DType.float32],
+    mut dlml: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
+    mut dsi: DeviceBuffer[DType.int32],
+    mut drec: DeviceBuffer[DType.float32],
+    n: Int,
+    n_features: Int,
+    nt: Int,
+    nb: Int,
+    nbf: Int,
+    n_runs: Int,
+    kernel: GPKernelSpec,
+    free: List[Int32],
+    alpha: Float32,
+    seed_lo: UInt32,
+    seed_hi: UInt32,
+) raises:
+    """Every run of `gpr_optimize_device` on the measured 0.8.66 route (the
+    default; copied from 4da49ab7a0^): per evaluation `potrf_lower` with
+    its info read, `chol_logdet`'s two launches with the scalar left in
+    `dwork[n]`, `cho_solve` for alpha_ and K_inv, the gradient fold, the
+    step, and the stop word read home; the host enqueues each run's start
+    and end. On return the optimizer state `dst` / `dsi` and the records
+    `drec` are final; the caller enqueues the winner."""
+    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    var hstop = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var stop_word = dsi.create_sub_buffer[DType.int32](GP_OPT_SI_STOP, 1)
+    ctx.synchronize()
+    var ctrace = IdentityTrace()
+    # the likelihood's `n` (its `(n/2) log(2 pi)` term and log|K|'s slot in
+    # dwork): a constant of the step's scalar combine, never a loop bound
+    var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
+    for run in range(n_runs):  # driver-loop: over optimizer restarts (model structure)
+        ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
+            _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
+            Int32(nt), Int32(run), seed_lo, seed_hi,
+            grid_dim=1, block_dim=GP_OPT_TPB,
+        )
+        var evals = 0
+        while True:  # driver-loop: over optimizer evaluations, one stop-word read each, bounded by eval_cap
+            evals += 1
+            if evals > eval_cap:
+                raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
+            # the likelihood and its gradient at the parameter table, in place
+            gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free, dxs)
+            add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+            var chol = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+            var info = chol.info
+            if info == 0:
+                var diag = dwork.create_sub_buffer[DType.float32](0, n)
+                var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
+                ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
+                    diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
+                    grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+                )
+                enqueue_logdet(ctx, _gp(diag), _gp(dlparts), _gp(scalar), n)
+                _ = diag^
+                _ = scalar^
+                ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
+                cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+                if nbf > 0:
+                    ctx.enqueue_function[gpr_ydot_part_kernel](
+                        _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
+                        grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+                    )
+                ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
+                enqueue_fill(ctx, dkinv, Float32(0.0))
+                ctx.enqueue_function[gp_eye_kernel](
+                    _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
+                )
+                cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
+                ctx.enqueue_function[gp_grad_part_kernel](
+                    _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(nt * nb), _gp(dgpart),
+                    grid_dim=(nt * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+                )
+                ctx.enqueue_function[gp_grad_fin_kernel](
+                    _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
+                    grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+                )
+            ctx.enqueue_function[gp_opt_step_host_kernel](  # small-launch(nt: hyperparameters): one block strides the theta-sized optimizer stages; n is a constant of the likelihood
+                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), Int32(n),
+                _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
+                grid_dim=1, block_dim=GP_OPT_TPB,
+            )
+            # the one word home per evaluation: the stop word
+            ctx.enqueue_copy(dst_ptr=hstop.unsafe_ptr(), src_buf=stop_word)
+            ctx.synchronize()
+            if Int(hstop.unsafe_ptr().unsafe_load(0)) != 0:
+                break
+        ctx.enqueue_function[gp_opt_run_end_kernel](  # small-launch(nt: hyperparameters): one block records one restart over the theta entries only
+            _gp(dst), _gi(dsi), _gp(drec), Int32(nt), Int32(run), grid_dim=1, block_dim=GP_OPT_TPB,
+        )
+    ctx.synchronize()
+    _ = hstop^
+    _ = stop_word^
+    _ = ws^
+    _ = dwork^
+    _ = dlparts^
+
+
 def gpr_optimize_device(
     x: List[Float32],
     n_train: Int,
@@ -392,10 +533,6 @@ def gpr_optimize_device(
     var dgrad = ctx.enqueue_create_buffer[DType.float32](max(nt * cells, 1))
     # GP_IDN_PRESCALE's scaled copy of X, one for the whole run
     var dxs = ctx.enqueue_create_buffer[DType.float32](max(n * n_features, 1))
-    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
     var ddual = ctx.enqueue_create_buffer[DType.float32](n)
     var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
     var nb = gp_grad_blocks(n)
@@ -410,82 +547,26 @@ def gpr_optimize_device(
     var drec = ctx.enqueue_create_buffer[DType.float32](n_runs * 4)
     var dout = ctx.enqueue_create_buffer[DType.float32](2 * nt)
     enqueue_fill(ctx, dst, Float32(0.0))
-    var hstop = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var stop_word = dsi.create_sub_buffer[DType.int32](GP_OPT_SI_STOP, 1)
     ctx.synchronize()
     _ = htmap^
 
-    var ctrace = IdentityTrace()
-    # the likelihood's `n` (its `(n/2) log(2 pi)` term and log|K|'s slot in
-    # dwork): a constant of the step's scalar combine, never a loop bound
-    var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
-    for run in range(n_runs):
-        ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
-            _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
-            Int32(nt), Int32(run), seed_lo, seed_hi,
-            grid_dim=1, block_dim=GP_OPT_TPB,
-        )
-        var evals = 0
-        while True:
-            evals += 1
-            if evals > eval_cap:
-                raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
-            # the likelihood and its gradient at the parameter table, in place
-            gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free, dxs)
-            add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-            var chol = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-            var info = chol.info
-            if info == 0:
-                var diag = dwork.create_sub_buffer[DType.float32](0, n)
-                var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
-                ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
-                    diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
-                    grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
-                )
-                enqueue_logdet(ctx, _gp(diag), _gp(dlparts), _gp(scalar), n)
-                _ = diag^
-                _ = scalar^
-                ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
-                cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
-                if nbf > 0:
-                    ctx.enqueue_function[gpr_ydot_part_kernel](
-                        _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
-                        grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
-                    )
-                ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
-                enqueue_fill(ctx, dkinv, Float32(0.0))
-                ctx.enqueue_function[gp_eye_kernel](
-                    _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
-                )
-                cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
-                ctx.enqueue_function[gp_grad_part_kernel](
-                    _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(nt * nb), _gp(dgpart),
-                    grid_dim=(nt * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-                )
-                ctx.enqueue_function[gp_grad_fin_kernel](
-                    _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
-                    grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-                )
-            ctx.enqueue_function[gp_opt_step_kernel](  # small-launch(nt: hyperparameters): one block strides the theta-sized optimizer stages; n is a constant of the likelihood
-                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), Int32(n),
-                _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
-                grid_dim=1, block_dim=GP_OPT_TPB,
-            )
-            # the one word home per evaluation: the stop word
-            ctx.enqueue_copy(dst_ptr=hstop.unsafe_ptr(), src_buf=stop_word)
-            ctx.synchronize()
-            if Int(hstop.unsafe_ptr().unsafe_load(0)) != 0:
-                break
-        ctx.enqueue_function[gp_opt_run_end_kernel](  # small-launch(nt: hyperparameters): one block records one restart over the theta entries only
-            _gp(dst), _gi(dsi), _gp(drec), Int32(nt), Int32(run), grid_dim=1, block_dim=GP_OPT_TPB,
-        )
+    # ROUTE (lane restore-classical-measured-routes, 2026-11-13): the
+    # measured 0.8.66 loop: `potrf_lower` with its info read per panel, the
+    # stop word read per evaluation, the host enqueuing each run's start and
+    # end.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    _gpr_optimize_host_runs(
+        ctx, dx, dy, dpar, dls, dbnd, dtmap, dk, dstack, dgrad, dxs, ddual, dkinv, dgpart, dgraw, dypart,
+        dyd, dlml, dst, dsi, drec, n, n_features, nt, nb, nbf, n_runs, kernel, free, alpha, seed_lo, seed_hi,
+    )
     ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
         _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
     )
     # the results land straight in their lists (no host unpack loops)
     var theta = List[Float32](length=nt, fill=Float32(0.0))
     var values = List[Float32](length=nt, fill=Float32(0.0))
-    var runs = List[Float32](length=n_runs * 4, fill=Float32(0.0))
+    var runs = List[Float32](unsafe_uninit_length=n_runs * 4)
     var hsi = ctx.enqueue_create_host_buffer[DType.int32](GP_OPT_SI_LEN)
     var out_theta = dout.create_sub_buffer[DType.float32](0, nt)
     var out_values = dout.create_sub_buffer[DType.float32](nt, nt)
@@ -498,8 +579,6 @@ def gpr_optimize_device(
     _ = out_theta^
     _ = out_values^
     _ = hsi^
-    _ = hstop^
-    _ = stop_word^
     _ = dx^
     _ = dy^
     _ = dpar^
@@ -510,9 +589,6 @@ def gpr_optimize_device(
     _ = dstack^
     _ = dgrad^
     _ = dxs^
-    _ = ws^
-    _ = dwork^
-    _ = dlparts^
     _ = ddual^
     _ = dkinv^
     _ = dgpart^

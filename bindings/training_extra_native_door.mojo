@@ -1,0 +1,373 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Native public training functions routed through the optimizer native door
+(bindings/optimizer_native_router.mojo): `residual_dropout`,
+`residual_dropout_backward` (python/mojolearn/_residual_dropout_impl.py),
+`chunked_lm_head_loss` and `mlp_inference_sessions`
+(python/mojolearn/_training_impl.py). Each is one call: the buffer
+admission and float32 / int32 preparation, the shape refusals in the Python
+bodies' words, the outputs, the compiled training entry with the same
+argument words, and the result. `mlp_inference_sessions` runs the small-MLP
+program's forward (autograd/small_mlp_program.mojo, op SESSIONS).
+"""
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get, py_fields
+from bindings.py_typed_call import py_call_typed
+from bindings.optimizer_public_door import tensor_view, new_array
+from bindings.tensor_view import TensorView, base_format, shape_text
+from training.optimizer_input_plan import optimizer_contiguous_address
+from providers.python.array_layout_boundary_pack import native_shape_pack
+from bindings.optimizer_device_native_door import shape_count, device_entries, device_shape, device_allocate
+from bindings.optimizer_admission_door import opt_value
+from bindings.training_embedding_native_door import embedding_indices
+from bindings.py_cpython_table import cpython_table
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.optimizer_keys_unpack import OPTIMIZER_OPN_RESIDUAL_DROPOUT
+from bindings.py_balanced import py_item
+
+
+
+def _entry(entries: PythonObject, name: PythonObject, missing: String) raises -> PythonObject:
+    """A connected compiled training entry, refused by name when this build
+    lacks it. `name` is a held key (bindings/optimizer_keys_unpack.mojo); its
+    String is built only for the refusal."""
+    var entry = py_get(entries, name)
+    if entry is None:
+        raise Error("ImportError: " + missing + String(py=name))
+    return entry
+
+
+# ---------------------------------------------------------------- residual dropout
+
+def _rd_operand(value: PythonObject, name: String, mut view: TensorView, mut buffer_pins: OptimizerInputOwners) raises -> Int:
+    """`_residual_dropout_impl._operand`: a C-contiguous native float32
+    buffer; its element count."""
+    if not tensor_view(value, view, buffer_pins):
+        raise Error("TypeError: mojolearn: " + name + " does not support the buffer protocol")
+    if base_format(view.fmt) != "f" or view.itemsize != 4 or not view.c_contig:
+        raise Error("ValueError: " + name + " must be a C-contiguous native float32 buffer")
+    var count = shape_count(view.shape)
+    if count > 2147483647:
+        raise Error("ValueError: " + name + " exceeds the native element index range")
+    return count
+
+
+def _rd_uint(value: PythonObject, name: String, bits: Int, b: PythonObject,
+             index_fn: PythonObject) raises -> UInt64:
+    """`_residual_dropout_impl._uint`, read into a native word (lane
+    p3-neural-blocks: the range checks and the low/high split were about
+    twelve Python integer operations per call). `b` and `index_fn`
+    (builtins and operator.index) are looked up once by the caller; an exact
+    int skips operator.index. Same refusals: a bool is a TypeError, a value
+    outside [0, 2**bits) a ValueError."""
+    if py_type(value) is b.bool:
+        raise Error("TypeError: " + name + " must be an unsigned integer")
+    var index = value if py_type(value) is b.int else py_call_typed(index_fn, value)
+    ref cpy = Python().cpython()
+    var word = cpy.lib.get_function[UInt64]("PyLong_AsUnsignedLongLong")(index._obj_ptr)
+    if word == UInt64(0xFFFFFFFFFFFFFFFF) and cpy.PyErr_Occurred():
+        # Negative or wider than 64 bits.
+        cpython_table()[].PyErr_Clear()
+        raise Error("ValueError: " + name + " is outside its unsigned integer range")
+    if bits < 64 and word >= (UInt64(1) << UInt64(bits)):
+        raise Error("ValueError: " + name + " is outside its unsigned integer range")
+    _ = index
+    return word
+
+
+def _rd_params(count: Int, p: PythonObject, seed: PythonObject, stream: PythonObject,
+               offset: PythonObject) raises -> PythonObject:
+    """`_residual_dropout_impl._params`: [count, offset, seed low, seed high,
+    stream, p]."""
+    var b = native_loaded_module("builtins")
+    var index_fn = native_loaded_module("operator").index
+    var s = _rd_uint(seed, "seed", 64, b, index_fn)
+    var st = _rd_uint(stream, "stream", 32, b, index_fn)
+    var off = _rd_uint(offset, "offset", 63, b, index_fn)
+    # offset < 2**63 here, so the comparison against 2**63 - 1 - count is exact
+    # in signed words (count is a nonnegative element count).
+    if Int(off) > 9223372036854775807 - count:
+        raise Error("ValueError: offset plus element count exceeds the native Philox range")
+    if py_type(p) is b.bool:
+        raise Error("TypeError: p must be a real dropout probability")
+    # p admission, FP32 rounding and scale arithmetic are the entry's
+    return Python.list(count, Int(off), Int(s & UInt64(4294967295)), Int(s >> UInt64(32)), Int(st),
+                       py_call_typed(b.float, p))
+
+
+def _rd_device_operand(value: PythonObject, name: String, entries: PythonObject, context: PythonObject,
+                       mut shape: List[Int]) raises -> PythonObject:
+    """A training device array of the identical binding: its fields; its
+    shape into `shape`."""
+    var nk = optimizer_keys()
+    if py_type(value) is not py_item(context, nk[].k_device_class):
+        raise Error("TypeError: mojolearn: " + name + " must be a device array like the first operand")
+    opt_value(value, context)
+    var fields = py_fields(value)
+    if py_item(fields, nk[].k__b) is not py_item(entries, nk[].k_module):
+        raise Error("ValueError: residual_dropout device arrays must belong to the identical training binding")
+    shape = device_shape(py_item(fields, nk[].k_shape), context)
+    var count = shape_count(shape)
+    if count != Int(py=py_item(fields, nk[].k_size)):
+        raise Error("ValueError: residual_dropout device shape does not match its stored element count")
+    if count < 1:
+        raise Error("ValueError: residual_dropout device arrays must be nonempty")
+    if count > 2147483647:
+        raise Error("ValueError: " + name + " exceeds the native element index range")
+    return fields
+
+
+def _rd_device(operation: Int, values: PythonObject, entries: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """Lane ne3-c-blocks-embedding (row N117): residual dropout on training
+    device arrays. The outputs are new device arrays of the same binding and
+    the layer runs on the resident handles (`residual_dropout_dev` /
+    `residual_dropout_backward_dev`): no upload, no download. The same
+    parameter words and kernels as the host-array call."""
+    var missing = String("residual dropout on device arrays requires updated training binding: missing ")
+    var nk = optimizer_keys()
+    var native = device_entries(py_item(entries, nk[].k_module), context)
+    var shape = List[Int]()
+    var first = _rd_device_operand(values[0], "values" if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT else "gradient",
+                                   entries, context, shape)
+    var count = shape_count(shape)
+    if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT:
+        var residual_shape = List[Int]()
+        var second = _rd_device_operand(values[1], "residual", entries, context, residual_shape)
+        if len(residual_shape) != len(shape):
+            raise Error("ValueError: values and residual must have identical shapes")
+        for i in range(len(shape)):  # driver-loop: over shape words of the two operands
+            if residual_shape[i] != shape[i]:
+                raise Error("ValueError: values and residual must have identical shapes")
+        var params = _rd_params(count, values[2], values[3], values[4], values[5])
+        var result = device_allocate(native, shape, context)
+        var written = py_call_typed(_entry(native, nk[].k_residual_dropout_dev, missing),
+                                    Python.list(py_item(py_fields(result), nk[].k_h), py_item(first, nk[].k_h), py_item(second, nk[].k_h)), params)
+        if Int(py=written) != count:
+            raise Error("RuntimeError: residual_dropout returned an incomplete output")
+        return result
+    var params = _rd_params(count, values[1], values[2], values[3], values[4])
+    var d_values = device_allocate(native, shape, context)
+    var d_residual = device_allocate(native, shape, context)
+    var written = py_call_typed(_entry(native, nk[].k_residual_dropout_backward_dev, missing),
+                                Python.list(py_item(py_fields(d_values), nk[].k_h), py_item(py_fields(d_residual), nk[].k_h), py_item(first, nk[].k_h)), params)
+    if Int(py=written) != count:
+        raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
+    return Python.tuple(d_values, d_residual)
+
+
+def training_residual_dropout(operation: Int, values: PythonObject, entries: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    """values: (values, residual, p, seed, stream, offset) for the forward,
+    (gradient, p, seed, stream, offset) for the backward; identical mode.
+    Training device arrays run on the device (`_rd_device`)."""
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var nk = optimizer_keys()
+        if py_type(values[0]) is py_item(context, nk[].k_device_class):
+            return _rd_device(operation, values, entries, context)
+        var missing = String("residual dropout requires updated training binding: missing ")
+        if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT:
+            var vv = TensorView()
+            var rv = TensorView()
+            var count = _rd_operand(values[0], "values", vv, buffer_pins)
+            var residual_count = _rd_operand(values[1], "residual", rv, buffer_pins)
+            if len(rv.shape) != len(vv.shape) or residual_count != count:
+                raise Error("ValueError: values and residual must have identical shapes")
+            for i in range(len(vv.shape)):  # driver-loop: over shape words of the two operands
+                if vv.shape[i] != rv.shape[i]:
+                    raise Error("ValueError: values and residual must have identical shapes")
+            var params = _rd_params(count, values[2], values[3], values[4], values[5])
+            var result = new_array(vv.shape, "<f4")
+            var written = py_call_typed(_entry(entries, nk[].k_residual_dropout, missing),
+                                        PythonObject(vv.addr if count else 0), PythonObject(rv.addr if count else 0),
+                                        result._addr if count else PythonObject(0), params)
+            _ = rv  # keep the Python object alive through the native call above
+            _ = vv  # keep the Python object alive through the native call above
+            _ = result  # keep the Python object alive through the native call above
+            if Int(py=written) != count:
+                raise Error("RuntimeError: residual_dropout returned an incomplete output")
+            _ = result  # keep the Python object alive through the native calls above
+            _ = rv  # keep the Python object alive through the native calls above
+            _ = vv  # keep the Python object alive through the native calls above
+            return result
+        var gv = TensorView()
+        var count = _rd_operand(values[0], "gradient", gv, buffer_pins)
+        var params = _rd_params(count, values[1], values[2], values[3], values[4])
+        var d_values = new_array(gv.shape, "<f4")
+        var d_residual = new_array(gv.shape, "<f4")
+        var written = py_call_typed(_entry(entries, nk[].k_residual_dropout_backward, missing),
+                                    PythonObject(gv.addr if count else 0), d_values._addr if count else PythonObject(0),
+                                    d_residual._addr if count else PythonObject(0), params)
+        _ = d_values  # keep the Python object alive through the native call above
+        _ = gv  # keep the Python object alive through the native call above
+        _ = d_residual  # keep the Python object alive through the native call above
+        if Int(py=written) != count:
+            raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
+        _ = d_residual  # keep the Python object alive through the native calls above
+        _ = d_values  # keep the Python object alive through the native calls above
+        _ = gv  # keep the Python object alive through the native calls above
+        return Python.tuple(d_values, d_residual)
+
+
+    finally:
+        _ = buffer_pins^
+
+# ---------------------------------------------------------------- float32 operands
+
+
+def _c32(value: PythonObject, name: String, site: String, mut view: TensorView,
+         mut keep: List[List[Float32]], mut buffer_pins: OptimizerInputOwners) raises -> Int:
+    """`_training_impl._c32`: a native float32 buffer, refused by name
+    otherwise and when empty; the address of its values in C order."""
+    if not tensor_view(value, view, buffer_pins) or base_format(view.fmt) != "f" or view.itemsize != 4:
+        raise Error("TypeError: mojolearn." + site + ": " + name + " must be float32")
+    if len(view.shape) == 0 and not view.is_array:
+        view.shape.append(1)
+        view.strides.append(4)
+    if shape_count(view.shape) == 0:
+        var what = String("feature(s)") if len(view.shape) == 2 and view.shape[0] != 0 else String("sample(s)")
+        var text = shape_text(view.shape)
+        raise Error("ValueError: mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+                    + " (shape=" + text + ") while a minimum of 1 is required.")
+    with GILReleased(Python()):
+        return optimizer_contiguous_address(view, keep)
+
+
+# ---------------------------------------------------------------- the chunked LM head
+
+def training_chunked_lm_head(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """values: (hidden, weight, targets, return_grad)."""
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var b = native_loaded_module("builtins")
+        var site = String("training.chunked_lm_head_loss")
+        var keep = List[List[Float32]]()
+        var hv = TensorView()
+        var wv = TensorView()
+        var ha = _c32(values[0], "hidden", site, hv, keep, buffer_pins)
+        var wa = _c32(values[1], "weight", site, wv, keep, buffer_pins)
+        if len(hv.shape) != 2 or len(wv.shape) != 2:
+            raise Error("ValueError: mojolearn." + site + ": hidden must be (rows, width) and weight (vocab, width)")
+        var rows = hv.shape[0]
+        var width = hv.shape[1]
+        var vocab = wv.shape[0]
+        if width != wv.shape[1]:
+            raise Error("ValueError: mojolearn." + site + ": hidden has width " + String(width) + ", weight has width "
+                        + String(wv.shape[1]))
+        if vocab < 2:
+            raise Error("ValueError: mojolearn." + site + ": vocab must be at least 2, got " + String(vocab))
+        var targets = embedding_indices(values[2], context, buffer_pins)
+        var count = Int(py=targets[2])
+        if count != rows:
+            raise Error("ValueError: mojolearn." + site + ": " + String(count) + " targets for " + String(rows) + " rows")
+        var loss = new_array([1], "<f4")
+        var row_max = new_array([rows], "<f4")
+        var row_denom = new_array([rows], "<f4")
+        var plist = Python.list(rows, vocab, width)
+        var result: PythonObject
+        var nk = optimizer_keys()
+        if not Bool(py=py_call_typed(b.bool, values[3])):
+            _ = py_call_typed(_entry(entries, nk[].k_chunked_lm_head_v2_loss, "mojolearn: this training binding lacks "),
+                              Python.list(loss._addr, row_max._addr, row_denom._addr, ha, wa, targets[1]), plist)
+            _ = row_denom  # keep the Python object alive through the native call above
+            _ = row_max  # keep the Python object alive through the native call above
+            _ = loss  # keep the Python object alive through the native call above
+            result = PythonObject(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
+            _ = loss  # keep the Python object alive through the native call above
+        else:
+            var d_hidden = new_array([rows, width], "<f4")
+            var d_weight = new_array([vocab, width], "<f4")
+            _ = py_call_typed(_entry(entries, nk[].k_chunked_lm_head_v2_train, "mojolearn: this training binding lacks "),
+                              Python.list(loss._addr, row_max._addr, row_denom._addr, d_hidden._addr, d_weight._addr,
+                                          ha, wa, targets[1]), plist)
+            _ = d_weight  # keep the Python object alive through the native call above
+            _ = d_hidden  # keep the Python object alive through the native call above
+            _ = row_denom  # keep the Python object alive through the native call above
+            _ = row_max  # keep the Python object alive through the native call above
+            _ = loss  # keep the Python object alive through the native call above
+            result = Python.tuple(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]),
+                                  d_hidden, d_weight)
+            _ = loss  # keep the Python object alive through the native call above
+        _ = keep^
+        _ = targets^
+        return result
+
+
+    finally:
+        _ = buffer_pins^
+
+# ---------------------------------------------------------------- MLP inference sessions
+
+
+def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises -> PythonObject:
+    """values: (inputs, weight1, bias1, weight2, bias2)."""
+    var buffer_pins = OptimizerInputOwners()
+    try:
+        var b = native_loaded_module("builtins")
+        var site = String("mlp_inference_sessions")
+        var keep = List[List[Float32]]()
+        var w1v = TensorView()
+        var b1v = TensorView()
+        var w2v = TensorView()
+        var b2v = TensorView()
+        var w1 = _c32(values[1], "weight1", site, w1v, keep, buffer_pins)
+        var b1 = _c32(values[2], "bias1", site, b1v, keep, buffer_pins)
+        var w2 = _c32(values[3], "weight2", site, w2v, keep, buffer_pins)
+        var b2 = _c32(values[4], "bias2", site, b2v, keep, buffer_pins)
+        if len(w1v.shape) != 2 or len(w2v.shape) != 2:
+            raise Error("ValueError: MLP session weights must be matrices")
+        var hidden = w1v.shape[0]
+        var width = w1v.shape[1]
+        var out_width = w2v.shape[0]
+        if (w2v.shape[1] != hidden or len(b1v.shape) != 1 or b1v.shape[0] != hidden
+                or len(b2v.shape) != 1 or b2v.shape[0] != out_width):
+            raise Error("ValueError: MLP session weight/bias shapes do not agree")
+        # the session inputs: shape tuples and C-order addresses, never row values
+        var inputs = py_call(b.list, values[0])
+        var shapes = Python.list()
+        var addresses = Python.list()
+        var views = List[TensorView]()
+        # Bound append methods are read once, not twice per session array.
+        var shapes_append = py_call(b.getattr, shapes, "append")
+        var addresses_append = py_call(b.getattr, addresses, "append")
+        for i in range(len(inputs)):  # driver-loop: over the caller's session arrays
+            var view = TensorView()
+            var address = _c32(inputs[i], "session input", site, view, keep, buffer_pins)
+            _ = py_call(shapes_append, native_shape_pack(view.shape))
+            _ = py_call(addresses_append, PythonObject(address))
+            views.append(view^)
+        # TOMBSTONE: MOJOLEARN_MLP_SESSIONS_PACKED (opt-in arm, RUN OWED, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 1c0608ab17.
+        # Restore: git apply experiments/removed/MOJOLEARN_MLP_SESSIONS_PACKED.patch; record in docs/TOMBSTONES.md.
+        # DEFAULT (restored 2026-11-09 by integration lane i2-integrate-seven
+        # from 0ce88411d3): one native call into the training binding's
+        # `mlp_sessions`, one forward per session (training/neural_session_mlp
+        # .mojo). The output is sized here from the views already read above
+        # (the `mlp_sessions_rows` rule: at least one session, every session a
+        # (rows, width) matrix), not by a second call that re-reads the shape
+        # tuples.
+        var nk = optimizer_keys()
+        var sessions_entry = _entry(entries, nk[].k_mlp_sessions, "mojolearn: this training binding lacks ")
+        if len(views) == 0:
+            raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        var total_rows = 0
+        for i in range(len(views)):  # driver-loop: over the caller's session arrays (shape words, not data)
+            if len(views[i].shape) != 2 or views[i].shape[1] != width or views[i].shape[0] < 0:
+                raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+            total_rows += views[i].shape[0]
+        var output = new_array([total_rows, out_width], "<f4")
+        var wrote = py_call_typed(sessions_entry,
+                                  Python.list(output._addr, w1, b1, w2, b2), addresses, shapes,
+                                  Python.list(width, hidden, out_width))
+        _ = output  # keep the Python object alive through the native call above
+        if Int(py=wrote) != total_rows * out_width:
+            raise Error("RuntimeError: MLP sessions returned an invalid output count")
+        _ = output  # keep the Python object alive through the native calls above
+        _ = keep^
+        _ = views^
+        _ = inputs^
+        return output
+    finally:
+        _ = buffer_pins^

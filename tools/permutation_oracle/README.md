@@ -1,6 +1,6 @@
 # The CTR estimation permutation oracle
 
-Generates `bench/permutation_oracle.txt`, which `pixi run check-permutation`
+Generates `bench/permutation_oracle.txt`, which `pixi run check-native-cpu ctr_permutation_check`
 reads. Regenerate with
 
     c++ -std=c++17 -O2 -I tools/permutation_oracle \

@@ -56,15 +56,13 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 ===================================================
 """
 
-from core.device_plan import device_plan_device, device_plan_setting
 from std.math import fma, log2
-from std.memory import bitcast, memcpy, stack_allocation
-from max.gpu.memory import AddressSpace
+from std.memory import bitcast, unsafe_memcpy
 from max.gpu.sync import barrier
 from std.sys import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -85,7 +83,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
-    IF_FAST_ROWMAJOR, IF_T41_TREE_BATCH, IF_T42_CORRECTION_CACHE, IF_WORK_PLANES, if_correction_table_kernel,
+    IF_FAST_ROWMAJOR, IF_WORK_PLANES,
     build_isolation_trees_global_kernel,
     if_finite_scan_kernel,
     if_finite_scan_ftz_kernel,
@@ -106,43 +104,15 @@ from checks.numerics import (
     identical_pow,
 )
 from std.os import getenv
-from core.host_parallel import host_parallelize
-from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32, float_to_sortable, sortable_to_float
+from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from metrics.checks.device_io import upload_i32
 
 
-# C50 / T31: exact IF vector nodes, independent of the RF/ET packed control.
-# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime IF_C50_PACKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C50_IF_PACKED"]()
-
-
-def if_pack_nodes_kernel(feature: MutPointer[Int32, MutAnyOrigin], threshold: MutPointer[Float32, MutAnyOrigin],
-    left: MutPointer[Int32, MutAnyOrigin], right: MutPointer[Int32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin], nodes: Int32):
-    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if i < Int(nodes):
-        packed.unsafe_store(4*i, feature.unsafe_load(i))
-        packed.unsafe_store(4*i+1, bitcast[DType.int32](threshold.unsafe_load(i)))
-        packed.unsafe_store(4*i+2, left.unsafe_load(i))
-        packed.unsafe_store(4*i+3, right.unsafe_load(i))
-
-
-def if_packed_paths_kernel(x: MutPointer[Float32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin],
-    offsets: MutPointer[Int32, MutAnyOrigin], result: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, trees: Int32):
-    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if row >= Int(rows):
-        return
-    var total = Float32(0)
-    for t in range(Int(trees)):
-        var base = Int(offsets.unsafe_load(t))
-        var node = 0
-        var words = packed.unsafe_load[width=4](4*base)
-        while words[0] >= 0:
-            var value = x.unsafe_load(row*Int(features)+Int(words[0]))
-            node = Int(words[2] if value < bitcast[DType.float32](words[1]) else words[3])
-            words = packed.unsafe_load[width=4](4*(base+node))
-        total = ftz(total+bitcast[DType.float32](words[1]))
-    result.unsafe_store(row, ftz(total/Float32(trees)))
+# TOMBSTONE: MOJOLEARN_TREES_C50_IF_PACKED (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_C50_IF_PACKED.patch
+# (Sweep 2026-11-15: IF_C50_PACKED, if_pack_nodes_kernel and IsolationForestModel.packed_nodes, reached only
+# under the folded arm, were removed; `if_packed_paths_kernel` went with the arm.)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +215,6 @@ struct IsolationForestModel(Movable):
     var global_tree_max_depth: DeviceBuffer[DType.int32]
     var tree_n_nodes_host: List[Int32]
     var tree_max_depth_host: List[Int32]
-    var packed_nodes: Optional[DeviceBuffer[DType.int32]]
     var fitted: Bool
     var shards: List[IFModelShard]
 
@@ -267,7 +236,6 @@ struct IsolationForestModel(Movable):
         self.global_tree_max_depth = ctx.enqueue_create_buffer[DType.int32](1)
         self.tree_n_nodes_host = List[Int32]()
         self.tree_max_depth_host = List[Int32]()
-        self.packed_nodes = Optional[DeviceBuffer[DType.int32]]()
         self.fitted = False
         self.shards = List[IFModelShard]()
         ctx.synchronize()
@@ -578,17 +546,14 @@ def _upload_rowmajor_fast(
 #: every scoring call. The device buffer holds the same words (`ftz` per
 #: cell, `poison` in the tail), so no bit moves and the host column is
 #: untouched; a non-finite cell raises `check_finite_by_name`'s message.
-#: `-D MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF` restores the List route.
 #: cpu2-l6-bindings (2026-10-04): the device route is the default on EVERY
 #: tier and vendor (FAST included); the FAST List route was a host copy of
 #: the query on a GPU route. Same words (`ftz` per cell) either way.
-comptime IDN_IF_QUERY_DEVICE = not (
-    is_defined["MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF"]()
-    or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 4f2861aaea.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF.patch
+comptime IDN_IF_QUERY_DEVICE = True
 
 #: Lane fam2-forests (IDENTICAL speed wave 3): the fitted forest stays
 #: RESIDENT between binding calls (`isolation_forest/estimator.mojo`,
@@ -597,12 +562,12 @@ comptime IDN_IF_QUERY_DEVICE = not (
 #: re-ran the contamination quantile over the training rows). The resident
 #: forest is the one `fit` built, so the scores are the refit's bit for bit
 #: (the forest is a pure function of the seed and the X bits) and the host
-#: column is untouched. `-D MOJOLEARN_IDN_IF_RESIDENT_OFF` restores the
-#: refit-per-call form.
-comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: column is untouched.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IF_RESIDENT_OFF (DELETE-OLD-PATH, no A/B recorded, rule b; non-owner fold) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 6cdde19637.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_RESIDENT_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md
+comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Lane fam2-forests: the scoring epilogue of the resident entry runs on the
 #: device and the result is downloaded straight into the caller's buffer.
@@ -612,12 +577,12 @@ comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 #: cell under the GIL: three serial host passes over n values per scoring
 #: call. The kernels do one exact float32 negation (and one float32
 #: subtraction, the operation the host loop did), so no bit moves.
-#: Applies inside the resident entry only. `-D
-#: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF` restores the host epilogue.
-comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: Applies inside the resident entry only.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, rule e, EXP:2438; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 882d15f175.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-45-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded, rule b) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 0454762fc4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF.patch
+comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _upload_colmajor_as_rowmajor_device(
@@ -736,7 +701,7 @@ def read_f32(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Float32](length=n, fill=Float32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -749,7 +714,7 @@ def read_i32(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Int32](length=n, fill=Int32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -762,7 +727,7 @@ def read_i64(
     ctx.synchronize()
     # one bulk copy into the returned List (no host pass)
     var out = List[Int64](length=n, fill=Int64(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -859,6 +824,41 @@ def if_score_epilogue_kernel(
     scores.unsafe_store(i, v)
 
 
+# Lane restore-iforest-kde (2026-11-13, history audit row 4): the public
+# score_samples / decision_function are float64 (scikit-learn's dtype), and
+# since 115b5eb8bb (2026-10-28) the public door widened the float32 scores
+# with a second host pass (admit_family_f64) into a second allocation after
+# the download. Record measurement of candidate 4c2340386abc, taxi
+# score_samples NVIDIA L40S (ms): 0.8.44 2.70 / 4.80, 0.8.55 3.27 / 5.61,
+# candidate 5.32 / 8.63 (test / large). Here the epilogue writes the float64
+# words itself and the download lands in the caller's float64 buffer: no
+# float32 host buffer, no cast pass. BITS UNCHANGED: the value is the same
+# float32 `-paper` (minus the float32 offset) as if_score_epilogue_kernel,
+# widened exactly to float64, which is what the host cast wrote.
+# Not on Apple (Metal has no float64). `-D MOJOLEARN_IDN_IF_SCORES_F64_OFF`
+# restores the float32 download plus the door's cast (the B arm of the owed
+# A/B, bench/results/paper_compare/owed-pre0867.json).
+comptime IDN_IF_SCORES_F64 = not TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_IDN_IF_SCORES_F64_OFF"]()
+
+
+def if_score_epilogue_f64_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    wide: MutPointer[Float64, MutAnyOrigin],
+    n_in: Int32,
+    subtract: Int32,
+    offset: Float32,
+):
+    """`if_score_epilogue_kernel`'s float32 value, stored widened to
+    float64 in `wide` (the public score dtype). `scores` is not written."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var v = -scores.unsafe_load(i)
+    if subtract != 0:
+        v = v - offset
+    wide.unsafe_store(i, Float64(v))
+
+
 def if_predict_epilogue_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     predictions: MutPointer[Int32, MutAnyOrigin],
@@ -880,8 +880,26 @@ def if_predict_epilogue_kernel(
 # ---------------------------------------------------------------------------
 
 
+@fieldwise_init
+struct IFFitShape(Copyable, Movable):
+    """What `IsolationForest.fit_prologue` resolves for the tree build: the
+    column-major block's address (0 when X is lent row-major at `src_addr`)
+    and the per-tree sizes."""
+
+    var cm_addr: Int
+    var n_sampled_rows: Int
+    var max_depth: Int
+    var n_sampled_features: Int
+    var n_trees: Int
+    var total_nodes: Int
+
+
 struct IsolationForest(Movable):
-    """`IsolationForest<float>`: the params and the three methods."""
+    """`IsolationForest<float>`: the params and the three methods.
+
+    Single-device only. The multi-device fit (whole-tree shards over a
+    `DevicePlan`) is `isolation_forest/multi_gpu.mojo::fit_dispatch`, which
+    calls `fit` unchanged when the plan holds one device."""
 
     var params: IF_params
 
@@ -901,25 +919,19 @@ struct IsolationForest(Movable):
                 "n_estimators must be > 0, got " + String(self.params.n_estimators)
             )
 
-    def fit(
+    def fit_prologue(
         self,
-        ctx: DeviceContext,
         input_colmajor: List[Float32],
         n_rows: Int,
         n_cols: Int,
         mut model: IsolationForestModel,
-        mut trace: IdentityTrace,
-        knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
         src_addr: Int = 0,
-        global_tree_start: Int = 0,
-        distribute: Bool = True,
         colmajor_addr: Int = 0,
-    ) raises:
-        """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
-        `max_depth`, `n_sampled_features`, `c_normalization`,
-        `max_nodes_per_tree`; allocate; `build_isolation_forest_global`;
-        sync. `input_colmajor` is column-major `n_rows x n_cols` as theirs
-        (`isolation_forest.hpp:118`)."""
+    ) raises -> IFFitShape:
+        """The host-side head of `fit`: argument checks, the per-tree sizes
+        and the model's scalar fields. No device work. `fit` runs it first;
+        the multi-device fit (`isolation_forest/multi_gpu.mojo`) runs it on
+        the root model before building whole-tree shards."""
         self.error_checking(n_rows, n_cols)
         # DEVIATION 2638: with `src_addr` (a borrowed ROW-major X, the binding's
         # path) `input_colmajor` is empty and the scan rides the threaded upload.
@@ -967,20 +979,38 @@ struct IsolationForest(Movable):
         if total_nodes > 2147483647:
             raise Error("Isolation Forest node offsets exceed int range.")
         model.has_feature_indices = n_sampled_features < n_cols
+        return IFFitShape(
+            cm_addr, n_sampled_rows, max_depth, n_sampled_features, n_trees,
+            total_nodes,
+        )
 
-        if distribute:
-            var setting = device_plan_setting("MOJOLEARN_IFOREST_DEVICE_COUNT")
-            if setting != "" and setting != "1":
-                var count = Int(setting)
-                if count < 1 or count > 64:
-                    raise Error("parallel IsolationForest requires 1..64 devices")
-                if trace.enabled:
-                    raise Error("parallel IsolationForest does not export diagnostic traces")
-                comptime if IF_C50_PACKED:
-                    raise Error("C50 IF packed model requires one device; pooled packed models remain pending")
-                _fit_tree_shards(ctx, input_colmajor, src_addr, n_rows, n_cols,
-                                 self.params, model, knobs, count)
-                return
+    def fit(
+        self,
+        ctx: DeviceContext,
+        input_colmajor: List[Float32],
+        n_rows: Int,
+        n_cols: Int,
+        mut model: IsolationForestModel,
+        mut trace: IdentityTrace,
+        knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+        src_addr: Int = 0,
+        global_tree_start: Int = 0,
+        colmajor_addr: Int = 0,
+    ) raises:
+        """`IsolationForest::fit` (`:70-140`): resolve `n_sampled_rows`,
+        `max_depth`, `n_sampled_features`, `c_normalization`,
+        `max_nodes_per_tree`; allocate; `build_isolation_forest_global`;
+        sync. `input_colmajor` is column-major `n_rows x n_cols` as theirs
+        (`isolation_forest.hpp:118`)."""
+        var shape = self.fit_prologue(
+            input_colmajor, n_rows, n_cols, model, src_addr, colmajor_addr
+        )
+        var cm_addr = shape.cm_addr
+        var n_sampled_rows = shape.n_sampled_rows
+        var max_depth = shape.max_depth
+        var n_sampled_features = shape.n_sampled_features
+        var n_trees = shape.n_trees
+        var total_nodes = shape.total_nodes
 
         var pad = knobs.pad
         var poison = knobs.poison
@@ -1028,14 +1058,9 @@ struct IsolationForest(Movable):
         # Keep diagnostics' full-tree archive when explicitly requested.
         var scratch_stride = model.max_nodes_per_tree*IF_SCRATCH_WORDS_PER_NODE+IF_RNG_STATE_WORDS
         var batch_trees = n_trees
-        comptime if IF_T41_TREE_BATCH:
-            if not trace.enabled:
-                var live_bytes = 4*n_sampled_rows*n_sampled_features + 8*n_sampled_rows + 4*IF_WORK_PLANES*n_sampled_rows + 4*scratch_stride
-                batch_trees = max(1, min(n_trees, (128*1024*1024)//max(1, live_bytes)))
-        var corrections = ctx.enqueue_create_buffer[DType.float32](n_sampled_rows+1 if IF_T42_CORRECTION_CACHE else 1)
-        comptime if IF_T42_CORRECTION_CACHE:
-            ctx.enqueue_function[if_correction_table_kernel](corrections.unsafe_ptr(), Int32(n_sampled_rows+1),
-                grid_dim=(n_sampled_rows+256)//256, block_dim=256)
+        # (Sweep 2026-11-15: the folded IF_T41_TREE_BATCH cap and IF_T42_CORRECTION_CACHE table were removed;
+        # `corrections` is the one-word placeholder the build kernel takes.)
+        var corrections = ctx.enqueue_create_buffer[DType.float32](1)
         var subsample_buffer = _poisoned_f32(
             ctx, batch_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
@@ -1114,11 +1139,6 @@ struct IsolationForest(Movable):
         comptime if DIAG_TRACE:
             print("if_diag: build kernel synchronize returned", flush=True)
 
-        comptime if IF_C50_PACKED:
-            model.packed_nodes = ctx.enqueue_create_buffer[DType.int32](4*total_nodes)
-            ctx.enqueue_function[if_pack_nodes_kernel](model.node_feature.unsafe_ptr(), model.node_threshold.unsafe_ptr(),
-                model.node_left.unsafe_ptr(), model.node_right.unsafe_ptr(), model.packed_nodes.value().unsafe_ptr(), Int32(total_nodes),
-                grid_dim=(total_nodes+255)//256, block_dim=256)
         model.tree_n_nodes_host = read_i32(ctx, model.global_tree_n_nodes, n_trees)
         model.tree_max_depth_host = read_i32(ctx, model.global_tree_max_depth, n_trees)
         model.shards = List[IFModelShard]()
@@ -1222,12 +1242,6 @@ struct IsolationForest(Movable):
         var threads = path_tpb
         var path_rows_per_block = threads * AFT_IF_PATH_ROWS
         var blocks = (n_rows + path_rows_per_block - 1) // path_rows_per_block
-        comptime if IF_C50_PACKED:
-            ctx.enqueue_function[if_packed_paths_kernel](_mp_f32(input_rowmajor), _mp_i32(model.packed_nodes.value()),
-                _mp_i32(model.global_tree_offsets), avg_path_lengths.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-                Int32(self.params.n_estimators), grid_dim=(blocks,1,1), block_dim=(threads,1,1))
-            ctx.synchronize()
-            return
         comptime if DIAG_TRACE:
             print("if_diag: path kernel enqueue begin", flush=True)
         ctx.enqueue_function[compute_path_lengths_global_kernel](
@@ -1492,44 +1506,48 @@ def score_samples_into(
     _ = scores^
 
 
-# T43: exact 32-bit radix selection, two independent order statistics.
-# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime IF_T43_RADIX_SELECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T43_RADIX_SELECT"]()
+def score_samples_into_f64(
+    ctx: DeviceContext,
+    forest: IsolationForestModel,
+    input_rowmajor: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    knobs: IFLaunchKnobs,
+    src_addr: Int,
+    out_addr: Int,
+    subtract_offset: Bool,
+    offset: Float32,
+) raises:
+    """`score_samples_into` with the public float64 output (IDN_IF_SCORES_F64):
+    `n_rows` float64 written at the host address `out_addr`, the same
+    float32 values widened exactly on the device."""
+    if out_addr == 0:
+        raise Error("score_samples_into_f64: the output address is null")
+    var trace = IdentityTrace.disabled()
+    var scores = _score_samples_device(
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
+    )
+    var wide = ctx.enqueue_create_buffer[DType.float64](n_rows)
+    var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb
+    ctx.enqueue_function[if_score_epilogue_f64_kernel](
+        scores.unsafe_ptr(),
+        wide.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(1) if subtract_offset else Int32(0),
+        offset,
+        grid_dim=(blocks, 1, 1),
+        block_dim=(knobs.path_tpb, 1, 1),
+    )
+    var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=wide)
+    ctx.synchronize()
+    _ = scores^
+    _ = wide^
 
-def if_select_two_kernel(scores: MutPointer[Float32, MutAnyOrigin], selected: MutPointer[Float32, MutAnyOrigin],
-                         n: Int32, lo: Int32, hi: Int32):
-    var tid = Int(thread_idx.x)
-    var rank = Int(lo if Int(block_idx.x) == 0 else hi)
-    var counts = stack_allocation[256, Int32, address_space=AddressSpace.SHARED]()
-    var prefix = UInt32(0)
-    var mask = UInt32(0)
-    var bit = 31
-    while bit >= 0:
-        var flag = UInt32(1) << UInt32(bit)
-        var count = 0
-        var r = tid
-        while r < Int(n):
-            var key = float_to_sortable(bitcast[DType.uint32](scores.unsafe_load(r)))
-            if (key & mask) == prefix and (key & flag) == 0:
-                count += 1
-            r += 256
-        counts.unsafe_store(tid, Int32(count))
-        barrier()
-        var stride = 128
-        while stride > 0:
-            if tid < stride:
-                counts.unsafe_store(tid, counts.unsafe_load(tid)+counts.unsafe_load(tid+stride))
-            barrier()
-            stride //= 2
-        var zeros = Int(counts.unsafe_load(0))
-        if rank >= zeros:
-            prefix |= flag
-            rank -= zeros
-        mask |= flag
-        barrier()
-        bit -= 1
-    if tid == 0:
-        selected.unsafe_store(Int(block_idx.x), bitcast[DType.float32](sortable_to_float(prefix)))
+
+# TOMBSTONE: MOJOLEARN_TREES_T43_RADIX_SELECT (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at b623cedc91.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T43_RADIX_SELECT.patch
+# (`IF_T43_RADIX_SELECT`, `if_select_two_kernel` and its branch in `contamination_offset`.)
 
 
 def contamination_offset(
@@ -1567,23 +1585,6 @@ def contamination_offset(
         grid_dim=(blocks, 1, 1),
         block_dim=(knobs.path_tpb, 1, 1),
     )
-    comptime if IF_T43_RADIX_SELECT:
-        var index = q/100.0*Float64(n_rows-1)
-        var lo = max(0, min(n_rows-1, Int(index)))
-        var hi = min(lo+1, n_rows-1)
-        var selected = ctx.enqueue_create_buffer[DType.float32](2)
-        var h = ctx.enqueue_create_host_buffer[DType.float32](2)
-        ctx.enqueue_function[if_select_two_kernel](scores.unsafe_ptr(), selected.unsafe_ptr(), Int32(n_rows), Int32(lo), Int32(hi),
-            grid_dim=2, block_dim=256)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=selected)
-        ctx.synchronize()
-        var a = Float64(h.unsafe_ptr().unsafe_load(0))
-        var b = Float64(h.unsafe_ptr().unsafe_load(1))
-        var result = fma(b-a, index-Float64(lo), a)
-        _ = h^
-        _ = selected^
-        _ = scores^
-        return result
     var src = scores.create_sub_buffer[DType.float32](0, n_rows)
     var dst = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var work_a = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -1660,123 +1661,6 @@ def predict_into(
     ctx.synchronize()
     _ = scores^
     _ = preds^
-
-
-def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
-    src_addr: Int, rows: Int, columns: Int, params: IF_params,
-    mut model: IsolationForestModel, knobs: IFLaunchKnobs, count: Int,
-) raises:
-    """Build canonical whole-tree ranges and retain each owner's model buffers.
-
-    Training data remains replicated. No complete forest is allocated on the
-    root; only successful owners are published after every worker joins.
-
-    THE NEGATIVE CONTROL is `-D MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE=1`
-    below. Unlike the other `par-*` arms it perturbs an RNG STREAM rather than a
-    row offset, because `first` is a curand subsequence base and nothing else:
-    every buffer is indexed by the LOCAL tree id. The shard's trees are then
-    entirely different rather than slightly shifted, so expect a large delta.
-    Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding
-    restates this driver, so no CPU column can watch it fire.
-    """
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("parallel IsolationForest requires IDENTICAL")
-    var active = min(count, params.n_estimators)
-    ctx.synchronize()
-    var shards = List[IFModelShard]()
-    for rank in range(active):
-        var first = params.n_estimators * rank // active
-        var width = params.n_estimators * (rank + 1) // active - first
-        var device = DeviceContext(device_id=device_plan_device(rank))
-        var feature_indices = device.enqueue_create_buffer[DType.int32](1)
-        var feature = device.enqueue_create_buffer[DType.int32](1)
-        var threshold = device.enqueue_create_buffer[DType.float32](1)
-        var left = device.enqueue_create_buffer[DType.int32](1)
-        var right = device.enqueue_create_buffer[DType.int32](1)
-        var offsets = device.enqueue_create_buffer[DType.int32](1)
-        var nodes = device.enqueue_create_buffer[DType.int32](1)
-        var depths = device.enqueue_create_buffer[DType.int32](1)
-        shards.append(IFModelShard(device^, feature_indices^, feature^,
-            threshold^, left^, right^, offsets^, nodes^, depths^, first, width,
-            List[Int32](), List[Int32]()))
-    var failures = List[Int](length=active, fill=0)
-    var sp = rebind[MutPointer[IFModelShard, MutUntrackedOrigin]](shards.unsafe_ptr())
-    var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failures.unsafe_ptr())
-    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](input_colmajor.unsafe_ptr())
-    var size = len(input_colmajor)
-    var config = params.copy()
-    def task(rank: Int) {imm sp, imm fp, imm xp, imm size, imm src_addr,
-                         imm rows, imm columns, imm knobs, imm config}:
-        try:
-            ref shard = sp[rank]
-            # cpu4-forest: the owner uploads the shared column-major block
-            # from its address (no per-owner host copy)
-            var data = List[Float32]()
-            var cm_addr = 0
-            if src_addr == 0:
-                cm_addr = Int(xp)
-            var local_config = config.copy()
-            local_config.n_estimators = shard.count
-            var forest = IsolationForest(local_config)
-            var local = IsolationForestModel(shard.ctx)
-            var trace = IdentityTrace.disabled()
-            var tree_base = shard.first
-            comptime if is_defined["MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE"]():
-                # Check-only arm: later owners seed their trees one RNG stream
-                # early. `shard.first` is the curand subsequence base and has
-                # exactly one consumer -- this call -- so no allocation, no
-                # length and no validation can see it; `shard.count` still
-                # sizes every buffer and every published tree. INERT AT ONE
-                # DEVICE (`active` is 1, only rank 0 runs), which is what makes
-                # a moved `par-iforest` cell attributable to the define rather
-                # than to the second device.
-                if rank > 0:
-                    tree_base = shard.first - 1
-            forest.fit(shard.ctx, data, rows, columns, local, trace,
-                       knobs, src_addr, tree_base, False, cm_addr)
-            swap(shard.global_feature_indices, local.global_feature_indices)
-            swap(shard.node_feature, local.node_feature)
-            swap(shard.node_threshold, local.node_threshold)
-            swap(shard.node_left, local.node_left)
-            swap(shard.node_right, local.node_right)
-            swap(shard.global_tree_offsets, local.global_tree_offsets)
-            swap(shard.global_tree_n_nodes, local.global_tree_n_nodes)
-            swap(shard.global_tree_max_depth, local.global_tree_max_depth)
-            swap(shard.tree_n_nodes_host, local.tree_n_nodes_host)
-            swap(shard.tree_max_depth_host, local.tree_max_depth_host)
-            _ = local^
-            shard.ctx.synchronize()
-        except:
-            fp[rank] = 1
-    if active == 1:
-        task(0)
-    else:
-        host_parallelize(task, active)
-    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
-        if failures[rank] != 0:
-            raise Error("IsolationForest tree shard failed: " + String(rank))
-    var node_counts = List[Int32]()
-    var max_depths = List[Int32]()
-    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
-        for tree in range(shards[rank].count):  # small-loop(shards[rank].count: trees of one owner): two metadata words per tree, no rows
-            node_counts.append(shards[rank].tree_n_nodes_host[tree])
-            max_depths.append(shards[rank].tree_max_depth_host[tree])
-    model.tree_n_nodes_host = node_counts^
-    model.tree_max_depth_host = max_depths^
-    # A model previously fitted on one device must also release its old full
-    # root arrays. Allocate every placeholder before replacing any storage.
-    var empty_root = IsolationForestModel(ctx)
-    swap(model.global_feature_indices, empty_root.global_feature_indices)
-    swap(model.node_feature, empty_root.node_feature)
-    swap(model.node_threshold, empty_root.node_threshold)
-    swap(model.node_left, empty_root.node_left)
-    swap(model.node_right, empty_root.node_right)
-    swap(model.global_tree_offsets, empty_root.global_tree_offsets)
-    swap(model.global_tree_n_nodes, empty_root.global_tree_n_nodes)
-    swap(model.global_tree_max_depth, empty_root.global_tree_max_depth)
-    model.shards = shards^
-    _ = empty_root^
-    model.fitted = True
 
 
 def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,

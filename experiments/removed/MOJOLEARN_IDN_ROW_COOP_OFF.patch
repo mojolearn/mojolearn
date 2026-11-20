@@ -1,0 +1,30 @@
+diff --git a/autograd/row_ops.mojo b/autograd/row_ops.mojo
+index c6927b21c3..fbd9c2b00c 100644
+--- a/autograd/row_ops.mojo
++++ b/autograd/row_ops.mojo
+@@ -2,8 +2,9 @@
+ # Row bodies of the softmax family and the AUC sort's in-block stages (lane
+ # ag-pass6-rows, pass-6 ideas C and I), shared by HostExec and DeviceExec.
+ #
+-# IDEA C, ROW_COOP (the IDENTICAL route; the one-chain rows stay for FAST).
+-# Softmax, log-softmax, their VJP, the cross-entropy
++# IDEA C, MOJOLEARN_IDN_ROW_COOP (IDENTICAL default; -D
++# MOJOLEARN_IDN_ROW_COOP_OFF or MOJOLEARN_IDN_ALL_OFF restores the one-chain
++# rows and their bits). Softmax, log-softmax, their VJP, the cross-entropy
+ # row loss and VJP and the fused mean-SCE VJP were one thread per row, a
+ # serial chain over the columns of software exponentials (~100 dependent
+ # operations each): 512 x 256 softmax 105 / 248 us NV / AMD, CE 512 x 256
+@@ -48,12 +49,9 @@ from checks.numerics import (
+     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ROW_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+-# lane/expdel2-24-neural; code recoverable at 5d81d356e0. ROW_COOP stays the IDENTICAL-mode alias.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
+ comptime ROW_COOP = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not (is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+ # lane/expdel2-24-neural; code recoverable at fe0b691d9b. The block sort is the only route (autograd/metrics.mojo).

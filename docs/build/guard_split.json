@@ -1,0 +1,4804 @@
+{
+ "base": "9ee5208756",
+ "start": 10,
+ "end": 487,
+ "records": [
+  {
+   "kind": "batch",
+   "header": [],
+   "modules": [
+    "neural",
+    "trees",
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      11
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_NI12_IMPLICIT_CONV",
+      "MOJOLEARN_NN14_BOUNDED_IM2COL"
+     ]
+    },
+    {
+     "lines": [
+      12
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN12",
+      "MOJOLEARN_NI01_TRAINING_WORKSPACE"
+     ]
+    },
+    {
+     "lines": [
+      13
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_NI55_GRAPH_FEATURE4",
+      "MOJOLEARN_NN48_CSR_TILES"
+     ]
+    },
+    {
+     "lines": [
+      14
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_NI59_DROPOUT_CHANNEL",
+      "MOJOLEARN_NI60_DROPOUT_APPLY4"
+     ]
+    },
+    {
+     "lines": [
+      15
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2",
+      "MOJOLEARN_NN53_HEAD_CHUNK512"
+     ]
+    },
+    {
+     "lines": [
+      16
+     ],
+     "module": "trees",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_AFT_P02",
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
+     ]
+    },
+    {
+     "lines": [
+      17
+     ],
+     "module": "trees",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_AFT_P07",
+      "MOJOLEARN_SHAP_FAST_ROW_PAIR"
+     ]
+    },
+    {
+     "lines": [
+      18
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,linear",
+     "defines": [
+      "MOJOLEARN_AFCL_G01",
+      "MOJOLEARN_KNN_FAST_MMA_OFF"
+     ]
+    },
+    {
+     "lines": [
+      19
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_NN53_HEAD_CHUNK2048",
+      "MOJOLEARN_NN53_HEAD_CHUNK512"
+     ]
+    },
+    {
+     "lines": [
+      20
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_AFN26_MAMBA1_CHUNKS16",
+      "MOJOLEARN_AFN26_MAMBA1_CHUNKS64"
+     ]
+    },
+    {
+     "lines": [
+      21
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_AFN26_MAMBA3_THREADS256",
+      "MOJOLEARN_AFN26_MAMBA3_THREADS64"
+     ]
+    },
+    {
+     "lines": [
+      22
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_AFN26_EMB_THREADS128",
+      "MOJOLEARN_AFN26_EMB_THREADS64"
+     ]
+    },
+    {
+     "lines": [
+      23
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_AFN26_ATTN_NORM_TPB128",
+      "MOJOLEARN_AFN26_ATTN_NORM_TPB512"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    24
+   ],
+   "modules": [
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      25
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_C52_PAIR_128",
+      "MOJOLEARN_C52_PAIR_512"
+     ]
+    },
+    {
+     "lines": [
+      26
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural,series",
+     "defines": [
+      "MOJOLEARN_C52_PAIR_ROWS"
+     ]
+    },
+    {
+     "lines": [
+      27
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C19_ORDERED_128",
+      "MOJOLEARN_CLASSICAL_C19_ORDERED_32"
+     ]
+    },
+    {
+     "lines": [
+      28
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    29
+   ],
+   "modules": [
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      30
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1",
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16",
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2",
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32",
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4"
+     ]
+    },
+    {
+     "lines": [
+      31,
+      32
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster",
+     "defines": [
+      "MOJOLEARN_IDN_KMEANS_CONV_CHUNK"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    33,
+    34,
+    35
+   ],
+   "module": "shared",
+   "basis": "code:base,cluster,decomposition,kernel,linear,neural,series",
+   "defines": [
+    "MOJOLEARN_CLASSICAL_C06_NORM_ROWS",
+    "MOJOLEARN_CLASSICAL_C06_SMALL_D_THREAD"
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    36,
+    37
+   ],
+   "modules": [
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      38
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS"
+     ]
+    },
+    {
+     "lines": [
+      39
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS",
+      "MOJOLEARN_CLASSICAL_ENETCV_SCORE_BLOCKS_OFF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    40
+   ],
+   "modules": [
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      41
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS"
+     ]
+    },
+    {
+     "lines": [
+      42
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS",
+      "MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS_OFF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    43,
+    44
+   ],
+   "modules": [
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      45
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
+      "MOJOLEARN_IDN_QN_EXACT_TRIALS"
+     ]
+    },
+    {
+     "lines": [
+      46
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_C58_TEAM64"
+     ]
+    },
+    {
+     "lines": [
+      47
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural,series",
+     "defines": [
+      "MOJOLEARN_C58_TEAM_MIB"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    48
+   ],
+   "modules": [
+    "kernel",
+    "series"
+   ],
+   "items": [
+    {
+     "lines": [
+      49
+     ],
+     "module": "kernel",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C20_ROW_CACHE"
+     ]
+    },
+    {
+     "lines": [
+      50
+     ],
+     "module": "series",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_C60_DIFF_REUSE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    51,
+    52
+   ],
+   "module": "neural",
+   "basis": "evidence:1",
+   "defines": [
+    "MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    53,
+    54
+   ],
+   "module": "cluster",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_CC_FAST",
+    "MOJOLEARN_CC_FAST_OFF"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    55,
+    56
+   ],
+   "module": "cluster",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_C29_STREAM_TOPK",
+    "MOJOLEARN_C29_TILE",
+    "MOJOLEARN_C29_TILE_128"
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    57,
+    58,
+    59
+   ],
+   "modules": [
+    "neural",
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      60
+     ],
+     "module": "neural",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_SCHED_FAST_TABLE",
+      "MOJOLEARN_SCHED_FAST_TABLE_OFF"
+     ]
+    },
+    {
+     "lines": [
+      61
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_PURITY_3_OFF",
+      "MOJOLEARN_PURITY_6_OFF"
+     ]
+    },
+    {
+     "lines": [
+      62
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH"
+     ]
+    },
+    {
+     "lines": [
+      63
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_STAGE_PAD"
+     ]
+    },
+    {
+     "lines": [
+      64
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS"
+     ]
+    },
+    {
+     "lines": [
+      65
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_STREAM_GROUP"
+     ]
+    },
+    {
+     "lines": [
+      66
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    67,
+    68,
+    69,
+    70
+   ],
+   "modules": [
+    "shared",
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      71,
+      72,
+      75,
+      76
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural",
+     "defines": [
+      "MOJOLEARN_GEMM_ARM_TRIAL",
+      "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",
+      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE"
+     ]
+    },
+    {
+     "lines": [
+      73,
+      74
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES"
+     ]
+    },
+    {
+     "lines": [
+      77,
+      78,
+      81,
+      82
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural",
+     "defines": [
+      "MOJOLEARN_IDN_CE_DENOM_ROWFOLD",
+      "MOJOLEARN_IDN_GEMM_LEAF",
+      "MOJOLEARN_IDN_NEURAL_CHAINS"
+     ]
+    },
+    {
+     "lines": [
+      79,
+      80
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_CHAINS"
+     ]
+    },
+    {
+     "lines": [
+      83,
+      84
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE"
+     ]
+    },
+    {
+     "lines": [
+      85,
+      86
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_ATTN_HEAD_SHARE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    87,
+    88,
+    89
+   ],
+   "modules": [
+    "neural",
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      90
+     ],
+     "module": "neural",
+     "basis": "evidence:51",
+     "defines": [
+      "MOJOLEARN_IDN_ATTN_SOFTMAX"
+     ]
+    },
+    {
+     "lines": [
+      91
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_ATTN_V2_TQ"
+     ]
+    },
+    {
+     "lines": [
+      92,
+      93
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_ATTN_STASH"
+     ]
+    },
+    {
+     "lines": [
+      94,
+      95
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NORM"
+     ]
+    },
+    {
+     "lines": [
+      96,
+      97
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_ROPE"
+     ]
+    },
+    {
+     "lines": [
+      98
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN01"
+     ]
+    },
+    {
+     "lines": [
+      99
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN02"
+     ]
+    },
+    {
+     "lines": [
+      100
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN03"
+     ]
+    },
+    {
+     "lines": [
+      101
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN04"
+     ]
+    },
+    {
+     "lines": [
+      102
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN08"
+     ]
+    },
+    {
+     "lines": [
+      103
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN09"
+     ]
+    },
+    {
+     "lines": [
+      104
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN10"
+     ]
+    },
+    {
+     "lines": [
+      105
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN11"
+     ]
+    },
+    {
+     "lines": [
+      106
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN15"
+     ]
+    },
+    {
+     "lines": [
+      107
+     ],
+     "module": "neural",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_LEAF"
+     ]
+    },
+    {
+     "lines": [
+      108
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN06"
+     ]
+    },
+    {
+     "lines": [
+      109
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NI02_GEMM_STREAM_PARTIALS"
+     ]
+    },
+    {
+     "lines": [
+      110
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NI08_GEMM_LEAF_256"
+     ]
+    },
+    {
+     "lines": [
+      111
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+     ]
+    },
+    {
+     "lines": [
+      112
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NI09_TILED_BIAS"
+     ]
+    },
+    {
+     "lines": [
+      113
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN17_GQA_FOUR_HEADS"
+     ]
+    },
+    {
+     "lines": [
+      114
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"
+     ]
+    },
+    {
+     "lines": [
+      115
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+     ]
+    },
+    {
+     "lines": [
+      116
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_ATTENTION_V2"
+     ]
+    },
+    {
+     "lines": [
+      117
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_NN22_EAGER_DKDV_PAIR"
+     ]
+    },
+    {
+     "lines": [
+      118
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_NN23_ROWDOT_DS"
+     ]
+    },
+    {
+     "lines": [
+      119
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN24_NORM_LANES8"
+     ]
+    },
+    {
+     "lines": [
+      120
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN25_RMS_SPLIT_SCALE"
+     ]
+    },
+    {
+     "lines": [
+      121
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_RMS_ROW_BLOCK"
+     ]
+    },
+    {
+     "lines": [
+      122
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN26_TRAIN_SWIGLU"
+     ]
+    },
+    {
+     "lines": [
+      123
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN27_QK_ROPE_PAIR"
+     ]
+    },
+    {
+     "lines": [
+      124
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_ROPE_CACHE"
+     ]
+    },
+    {
+     "lines": [
+      125
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN28_DEAD_TRAINING_CACHE"
+     ]
+    },
+    {
+     "lines": [
+      126
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"
+     ]
+    },
+    {
+     "lines": [
+      127
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_ATTN_V1_PACKED_ESTASH"
+     ]
+    },
+    {
+     "lines": [
+      128
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    129,
+    130,
+    131
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      132
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS"
+     ]
+    },
+    {
+     "lines": [
+      133
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN36_SHARED_DECAY"
+     ]
+    },
+    {
+     "lines": [
+      134
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_M2_YOFF_EXP_CACHE"
+     ]
+    },
+    {
+     "lines": [
+      135
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN33_YDIAG_ROWS8"
+     ]
+    },
+    {
+     "lines": [
+      136
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN33_CSTATE_P16"
+     ]
+    },
+    {
+     "lines": [
+      137
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN39_M2_GRAD_TREE"
+     ]
+    },
+    {
+     "lines": [
+      138
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_M2_GRAD_LEAF128"
+     ]
+    },
+    {
+     "lines": [
+      139
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN45_CONV_RELU"
+     ]
+    },
+    {
+     "lines": [
+      140
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NI16_CONV_RELU_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      141
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN43_WGRAD_FIXED128"
+     ]
+    },
+    {
+     "lines": [
+      142
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_WGRAD_LEAF256"
+     ]
+    },
+    {
+     "lines": [
+      143
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_LN_LEAF32"
+     ]
+    },
+    {
+     "lines": [
+      144
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"
+     ]
+    },
+    {
+     "lines": [
+      145
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN44_STABLE_GROUP"
+     ]
+    },
+    {
+     "lines": [
+      146
+     ],
+     "module": "neural",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_NN52_CE_WEIGHT_GRAD"
+     ]
+    },
+    {
+     "lines": [
+      147
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN54_LOSS_PROFILE"
+     ]
+    },
+    {
+     "lines": [
+      148
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2"
+     ]
+    },
+    {
+     "lines": [
+      149
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"
+     ]
+    },
+    {
+     "lines": [
+      150
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_LM_OWNED_TOKENS"
+     ]
+    },
+    {
+     "lines": [
+      151
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN60_BLOCK_VIEWS"
+     ]
+    },
+    {
+     "lines": [
+      152
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN60_EMB_HEAD_VIEWS"
+     ]
+    },
+    {
+     "lines": [
+      153
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_LM_PARAM_VIEWS"
+     ]
+    },
+    {
+     "lines": [
+      154
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN56_GROUPED_ADAM"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    155,
+    156
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      157
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_M3_S17_TAIL_DBUF"
+     ]
+    },
+    {
+     "lines": [
+      158
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN55_BLOCK_STATUS"
+     ]
+    },
+    {
+     "lines": [
+      159
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN32_RETAIN_FORWARD"
+     ]
+    },
+    {
+     "lines": [
+      160
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS"
+     ]
+    },
+    {
+     "lines": [
+      161
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_SAMBA_FORWARD_TAPE"
+     ]
+    },
+    {
+     "lines": [
+      162
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_TRAIN_BACKWARD_SCRATCH"
+     ]
+    },
+    {
+     "lines": [
+      163
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NN62_LIFETIME_ARENA"
+     ]
+    },
+    {
+     "lines": [
+      164
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_M2_YOFF_EXP"
+     ]
+    },
+    {
+     "lines": [
+      165
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_M2_YD_ROWS"
+     ]
+    },
+    {
+     "lines": [
+      166
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_M2_CS_PT"
+     ]
+    },
+    {
+     "lines": [
+      167
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_M2_GRAD_FOLD"
+     ]
+    },
+    {
+     "lines": [
+      168
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_CNN_CONV_RELU"
+     ]
+    },
+    {
+     "lines": [
+      169
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_WGRAD"
+     ]
+    },
+    {
+     "lines": [
+      170
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_LN_LEAF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    171,
+    172
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      173
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_CE_TOKEN_FOLD"
+     ]
+    },
+    {
+     "lines": [
+      174
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_CE_TOKEN_FOLD"
+     ]
+    },
+    {
+     "lines": [
+      175
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_LM_RESIDENT_TOKENS"
+     ]
+    },
+    {
+     "lines": [
+      176
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_LM_VIEWS"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    177,
+    178
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      179
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_LM_GROUPED_ADAM"
+     ]
+    },
+    {
+     "lines": [
+      180
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_TRAIN_SCRATCH"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    181,
+    182
+   ],
+   "modules": [
+    "shared",
+    "trees",
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      183
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_TILE_SHORT_K"
+     ]
+    },
+    {
+     "lines": [
+      184
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_FS2"
+     ]
+    },
+    {
+     "lines": [
+      185
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"
+     ]
+    },
+    {
+     "lines": [
+      186
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"
+     ]
+    },
+    {
+     "lines": [
+      187
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_TREES_T09"
+     ]
+    },
+    {
+     "lines": [
+      188
+     ],
+     "module": "trees",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_TREES_T27"
+     ]
+    },
+    {
+     "lines": [
+      189
+     ],
+     "module": "trees",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_TREES_C47_GBDT"
+     ]
+    },
+    {
+     "lines": [
+      190
+     ],
+     "module": "trees",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_TREES_HIST_REP_BPSM"
+     ]
+    },
+    {
+     "lines": [
+      191
+     ],
+     "module": "neural",
+     "basis": "evidence:7",
+     "defines": [
+      "MOJOLEARN_IDN_M1_PERSISTENT_SCAN",
+      "MOJOLEARN_IDN_M1_STATE_WINDOW",
+      "MOJOLEARN_NN34_AFFINE_PREFIX"
+     ]
+    },
+    {
+     "lines": [
+      192,
+      193,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200
+     ],
+     "module": "shared",
+     "basis": "code:neural,trees",
+     "defines": [
+      "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
+      "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH",
+      "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS",
+      "MOJOLEARN_IDN_M1_SCAN",
+      "MOJOLEARN_NI14_BOUNDED_COL2IM",
+      "MOJOLEARN_NI14_COL2IM",
+      "MOJOLEARN_NI14_TILED_COL2IM",
+      "MOJOLEARN_TREES_C50_GB_PACKED"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    201,
+    202
+   ],
+   "modules": [
+    "decomposition",
+    "kernel",
+    "series",
+    "linear",
+    "cluster",
+    "trees",
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      203
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO"
+     ]
+    },
+    {
+     "lines": [
+      204
+     ],
+     "module": "kernel",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE"
+     ]
+    },
+    {
+     "lines": [
+      205
+     ],
+     "module": "series",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_C58_SHARED_PREP"
+     ]
+    },
+    {
+     "lines": [
+      206
+     ],
+     "module": "linear",
+     "basis": "evidence:8",
+     "defines": [
+      "MOJOLEARN_QN_IDN_DCONV",
+      "MOJOLEARN_QN_IDN_DCONV_POLL_2",
+      "MOJOLEARN_QN_IDN_DCONV_POLL_8"
+     ]
+    },
+    {
+     "lines": [
+      207
+     ],
+     "module": "cluster",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_IDN_GMM_COV_SYM"
+     ]
+    },
+    {
+     "lines": [
+      208
+     ],
+     "module": "trees",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_TREES_T19"
+     ]
+    },
+    {
+     "lines": [
+      209
+     ],
+     "module": "linear",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE"
+     ]
+    },
+    {
+     "lines": [
+      210
+     ],
+     "module": "trees",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_TREES_T22"
+     ]
+    },
+    {
+     "lines": [
+      211
+     ],
+     "module": "trees",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_TREES_ORD_STD_GRIDFOLD"
+     ]
+    },
+    {
+     "lines": [
+      212
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C24_ROWS2048"
+     ]
+    },
+    {
+     "lines": [
+      213
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"
+     ]
+    },
+    {
+     "lines": [
+      214
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IVF_DIRECT_DISTANCE"
+     ]
+    },
+    {
+     "lines": [
+      215
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"
+     ]
+    },
+    {
+     "lines": [
+      216
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2",
+      "MOJOLEARN_IDN_GEMM_GROUP_SLACK_OFF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    217
+   ],
+   "modules": [
+    "shared",
+    "cluster",
+    "linear",
+    "trees",
+    "decomposition"
+   ],
+   "items": [
+    {
+     "lines": [
+      218
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_C37_FUSED_ACCUMULATE",
+      "MOJOLEARN_C37_FUSED_ROWS"
+     ]
+    },
+    {
+     "lines": [
+      219
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KMEANS_DIRECT_DISTANCE"
+     ]
+    },
+    {
+     "lines": [
+      220
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_GRAPH_DIRECT_DISTANCE"
+     ]
+    },
+    {
+     "lines": [
+      221
+     ],
+     "module": "linear",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_OZAKI_LINALG"
+     ]
+    },
+    {
+     "lines": [
+      222
+     ],
+     "module": "trees",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_TREES_HIST_MULTISTAT"
+     ]
+    },
+    {
+     "lines": [
+      223
+     ],
+     "module": "trees",
+     "basis": "evidence:8",
+     "defines": [
+      "MOJOLEARN_TREES_T29_VERSIONED"
+     ]
+    },
+    {
+     "lines": [
+      224
+     ],
+     "module": "linear",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS"
+     ]
+    },
+    {
+     "lines": [
+      225
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_PCA_COV"
+     ]
+    },
+    {
+     "lines": [
+      226
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_PCA_COV"
+     ]
+    },
+    {
+     "lines": [
+      227
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    228
+   ],
+   "modules": [
+    "linear",
+    "neural",
+    "base",
+    "shared"
+   ],
+   "items": [
+    {
+     "lines": [
+      229
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C08_UNIQUE_SCAN"
+     ]
+    },
+    {
+     "lines": [
+      230
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_C58_FORECAST4"
+     ]
+    },
+    {
+     "lines": [
+      231
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS",
+      "MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS"
+     ]
+    },
+    {
+     "lines": [
+      232
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_CLASSICAL_C13_FOLD_STATS_OFF"
+     ]
+    },
+    {
+     "lines": [
+      233
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_NN20_SPLIT_KV",
+      "MOJOLEARN_IDN_NN20_SPLIT_KV_LEAVES"
+     ]
+    },
+    {
+     "lines": [
+      234,
+      235
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    236
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      237
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_SAMBA_RESIDENT_STEP"
+     ]
+    },
+    {
+     "lines": [
+      238
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    239
+   ],
+   "modules": [
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      240
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_ACT_RETAIN"
+     ]
+    },
+    {
+     "lines": [
+      241
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_ACT_RETAIN",
+      "MOJOLEARN_IDN_ACT_RETAIN_OFF"
+     ]
+    },
+    {
+     "lines": [
+      242
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_NN05"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    243
+   ],
+   "modules": [
+    "shared",
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      244
+     ],
+     "module": "shared",
+     "basis": "code:base,cluster,decomposition,kernel,linear,neural",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_LEAF",
+      "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"
+     ]
+    },
+    {
+     "lines": [
+      245
+     ],
+     "module": "neural",
+     "basis": "code",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    246
+   ],
+   "modules": [
+    "cluster",
+    "base"
+   ],
+   "items": [
+    {
+     "lines": [
+      247
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_PQ_DEVICE_CODEBOOKS"
+     ]
+    },
+    {
+     "lines": [
+      248
+     ],
+     "module": "base",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_XPREP_PINNED_UPLOAD",
+      "MOJOLEARN_XPREP_PINNED_UPLOAD_OFF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    249
+   ],
+   "modules": [
+    "linear",
+    "base"
+   ],
+   "items": [
+    {
+     "lines": [
+      250
+     ],
+     "module": "linear",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_SGD_EPOCH_KERNEL"
+     ]
+    },
+    {
+     "lines": [
+      251
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_XPREP_DEVICE_CODES"
+     ]
+    },
+    {
+     "lines": [
+      252
+     ],
+     "module": "base",
+     "basis": "evidence:8",
+     "defines": [
+      "MOJOLEARN_XPREP_NO_SLOT_HOP"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    253
+   ],
+   "modules": [
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      254
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IVF_IDN_STRIDED_INIT"
+     ]
+    },
+    {
+     "lines": [
+      255
+     ],
+     "module": "cluster",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_PQ_SCAN_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      256
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IVF_LAYOUT_SCATTER"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    257
+   ],
+   "modules": [
+    "decomposition"
+   ],
+   "items": [
+    {
+     "lines": [
+      258
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT"
+     ]
+    },
+    {
+     "lines": [
+      259
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_TSNE_REP_TILE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    260
+   ],
+   "modules": [
+    "decomposition",
+    "linear",
+    "neural"
+   ],
+   "items": [
+    {
+     "lines": [
+      261
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_JACOBI_ROUND_ROBIN"
+     ]
+    },
+    {
+     "lines": [
+      262
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_GRAM_FF_FALLBACK"
+     ]
+    },
+    {
+     "lines": [
+      263
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK",
+      "MOJOLEARN_IDN_PCA_RR_ONE_BLOCK_STEPS"
+     ]
+    },
+    {
+     "lines": [
+      264
+     ],
+     "module": "neural",
+     "basis": "evidence:7",
+     "defines": [
+      "MOJOLEARN_IDN_AF_VEC_FUSED"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    265
+   ],
+   "modules": [
+    "series",
+    "trees",
+    "decomposition"
+   ],
+   "items": [
+    {
+     "lines": [
+      266
+     ],
+     "module": "series",
+     "basis": "evidence:7",
+     "defines": [
+      "MOJOLEARN_ARIMA_FAST_CSS_SEARCH"
+     ]
+    },
+    {
+     "lines": [
+      267
+     ],
+     "module": "series",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_ARIMA_FAST_STEPWISE"
+     ]
+    },
+    {
+     "lines": [
+      268
+     ],
+     "module": "series",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT"
+     ]
+    },
+    {
+     "lines": [
+      269
+     ],
+     "module": "series",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_ARIMA_FAST_D_CONCURRENT"
+     ]
+    },
+    {
+     "lines": [
+      270
+     ],
+     "module": "trees",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_EST_REUSE_PART"
+     ]
+    },
+    {
+     "lines": [
+      271
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_EST_SHRINK_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      272
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_KSHAP_FAST_OVERLAP"
+     ]
+    },
+    {
+     "lines": [
+      273
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_PSHAP_FAST_OVERLAP"
+     ]
+    },
+    {
+     "lines": [
+      274
+     ],
+     "module": "trees",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_MC_CLASS_BATCH_DERIV"
+     ]
+    },
+    {
+     "lines": [
+      275
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_MC_CLASS_BATCH_EST"
+     ]
+    },
+    {
+     "lines": [
+      276
+     ],
+     "module": "trees",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_PL_PAIRS_ONCE"
+     ]
+    },
+    {
+     "lines": [
+      277
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_AFCL_L09",
+      "MOJOLEARN_QR_FAST_DEV"
+     ]
+    },
+    {
+     "lines": [
+      278
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_SVD_FAST_CHOLQR"
+     ]
+    },
+    {
+     "lines": [
+      279
+     ],
+     "module": "series",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_RESAMPLE_FAST_RANK_SORT"
+     ]
+    },
+    {
+     "lines": [
+      280
+     ],
+     "module": "series",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"
+     ]
+    },
+    {
+     "lines": [
+      281
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SYM_DERIV_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      282
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SYM_LEAF_FROM_STATS"
+     ]
+    },
+    {
+     "lines": [
+      283
+     ],
+     "module": "trees",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_SYM_REUSE_PARTITION"
+     ]
+    },
+    {
+     "lines": [
+      284
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SYM_GATHER_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      285
+     ],
+     "module": "trees",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_SYM_PART_STATS_PAR"
+     ]
+    },
+    {
+     "lines": [
+      286
+     ],
+     "module": "trees",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SYM_HIST_MULT"
+     ]
+    },
+    {
+     "lines": [
+      287
+     ],
+     "module": "trees",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_SYM_SCAN_SUB_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      288
+     ],
+     "module": "series",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_TSA2_KPSS"
+     ]
+    },
+    {
+     "lines": [
+      289
+     ],
+     "module": "trees",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    290
+   ],
+   "modules": [
+    "neural",
+    "base"
+   ],
+   "items": [
+    {
+     "lines": [
+      291
+     ],
+     "module": "neural",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+      "MOJOLEARN_AFN_OPT_FUSE_SCAN"
+     ]
+    },
+    {
+     "lines": [
+      292
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_AFN26_OPT_VEC4",
+      "MOJOLEARN_AFN_OPT_VEC4"
+     ]
+    },
+    {
+     "lines": [
+      293
+     ],
+     "module": "neural",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+      "MOJOLEARN_AFN_OPT_RESIDENT_STATE"
+     ]
+    },
+    {
+     "lines": [
+      294
+     ],
+     "module": "base",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_MI_ALL"
+     ]
+    },
+    {
+     "lines": [
+      295
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_MI_FAST_FOLDS"
+     ]
+    },
+    {
+     "lines": [
+      296
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_MOE_FAST_MMA_KB32"
+     ]
+    },
+    {
+     "lines": [
+      297
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_OPT_FAST_MAP_DOWN"
+     ]
+    },
+    {
+     "lines": [
+      298
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_OPT_FAST_RAW_DOWN"
+     ]
+    },
+    {
+     "lines": [
+      299
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_OPT_FAST_PIPE_CH"
+     ]
+    },
+    {
+     "lines": [
+      300
+     ],
+     "module": "base",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_PTIMPUTE_ALL"
+     ]
+    },
+    {
+     "lines": [
+      301
+     ],
+     "module": "base",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_PT_SPEC"
+     ]
+    },
+    {
+     "lines": [
+      302
+     ],
+     "module": "base",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_PT_FUSED_TRANSFORM"
+     ]
+    },
+    {
+     "lines": [
+      303
+     ],
+     "module": "base",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_PT_FOLD_NOX"
+     ]
+    },
+    {
+     "lines": [
+      304
+     ],
+     "module": "neural",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_LSTM_SCAN",
+      "MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"
+     ]
+    },
+    {
+     "lines": [
+      305
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"
+     ]
+    },
+    {
+     "lines": [
+      306
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
+     ]
+    },
+    {
+     "lines": [
+      307
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_MAP_DOWN"
+     ]
+    },
+    {
+     "lines": [
+      308
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_RAW_DOWN"
+     ]
+    },
+    {
+     "lines": [
+      309
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_SEQ_FAST_VAR_NODRAIN"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    310
+   ],
+   "modules": [
+    "cluster",
+    "linear",
+    "decomposition",
+    "base"
+   ],
+   "items": [
+    {
+     "lines": [
+      311
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_BGMM_ESTEP1"
+     ]
+    },
+    {
+     "lines": [
+      312
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_CAGRA_FAST_IVFG_LOWD"
+     ]
+    },
+    {
+     "lines": [
+      313
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_CAGRA_FAST_SEEDS4"
+     ]
+    },
+    {
+     "lines": [
+      314
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_CHOL_FAST_BLOCKED"
+     ]
+    },
+    {
+     "lines": [
+      315
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_AFCL_L08"
+     ]
+    },
+    {
+     "lines": [
+      316
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_DECOMP_FAST_GEMM_TILED"
+     ]
+    },
+    {
+     "lines": [
+      317
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_FA_ALL"
+     ]
+    },
+    {
+     "lines": [
+      318
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_FA_EIG_SMALL"
+     ]
+    },
+    {
+     "lines": [
+      319
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_FA_LL_DEVICE"
+     ]
+    },
+    {
+     "lines": [
+      320
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_HDBSCAN2_ALL"
+     ]
+    },
+    {
+     "lines": [
+      321
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_AFCL_G04"
+     ]
+    },
+    {
+     "lines": [
+      322
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_HDB_CORE_TILE"
+     ]
+    },
+    {
+     "lines": [
+      323
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_HDB_DEV_BORUVKA"
+     ]
+    },
+    {
+     "lines": [
+      324
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IVF_COARSE_FAISS_INIT"
+     ]
+    },
+    {
+     "lines": [
+      325
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IVF_COARSE_INIT_QOLD"
+     ]
+    },
+    {
+     "lines": [
+      326
+     ],
+     "module": "cluster",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IVF_REFINE_TEAM"
+     ]
+    },
+    {
+     "lines": [
+      327
+     ],
+     "module": "cluster",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_KAPPROX_DEVICE"
+     ]
+    },
+    {
+     "lines": [
+      328
+     ],
+     "module": "cluster",
+     "basis": "evidence:5",
+     "defines": [
+      "MOJOLEARN_SPARSE_RP_DEVICE"
+     ]
+    },
+    {
+     "lines": [
+      329
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_KDE2_ALL"
+     ]
+    },
+    {
+     "lines": [
+      330
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_KDE_KERNEL_VARIANTS"
+     ]
+    },
+    {
+     "lines": [
+      331
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_KDE_LSE_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      332
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_KDE_NORM_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      333
+     ],
+     "module": "linear",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_KDE_SAMPLE_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      334
+     ],
+     "module": "base",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"
+     ]
+    },
+    {
+     "lines": [
+      335
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_LLE_FAST_NULL_CANON"
+     ]
+    },
+    {
+     "lines": [
+      336
+     ],
+     "module": "decomposition",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_MCD_DEVICE_CSTEPS"
+     ]
+    },
+    {
+     "lines": [
+      337
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_QN_FAST_COALESCED_OFF"
+     ]
+    },
+    {
+     "lines": [
+      338
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_SVD_QFIX"
+     ]
+    },
+    {
+     "lines": [
+      339
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_SVD_QOLD"
+     ]
+    },
+    {
+     "lines": [
+      340
+     ],
+     "module": "decomposition",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_TSVD_FAST_CHOLQR3"
+     ]
+    },
+    {
+     "lines": [
+      341
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+     ]
+    },
+    {
+     "lines": [
+      342
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_DBSCAN_FAST_DENSEBALL"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    343
+   ],
+   "modules": [
+    "neural",
+    "linear"
+   ],
+   "items": [
+    {
+     "lines": [
+      344
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_NI12_IMPLICIT_CONV"
+     ]
+    },
+    {
+     "lines": [
+      345
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_MOE_GROUPED_GEMM"
+     ]
+    },
+    {
+     "lines": [
+      346
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_LN_ROW_WARP"
+     ]
+    },
+    {
+     "lines": [
+      347
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_COLVAR_FUSED"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    348
+   ],
+   "modules": [
+    "neural",
+    "decomposition",
+    "linear",
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      349
+     ],
+     "module": "neural",
+     "basis": "evidence:6",
+     "defines": [
+      "MOJOLEARN_IDN_CNN_BN_FUSE"
+     ]
+    },
+    {
+     "lines": [
+      350
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_EMB_SCAN_DEFERRED",
+      "MOJOLEARN_IDN_EMB_SCAN_DEFERRED_OFF"
+     ]
+    },
+    {
+     "lines": [
+      351
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE"
+     ]
+    },
+    {
+     "lines": [
+      352
+     ],
+     "module": "linear",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_CD_GRAM_EPOCHS_64"
+     ]
+    },
+    {
+     "lines": [
+      353
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KNN_AMD_LEGACY_SCHEDULE"
+     ]
+    },
+    {
+     "lines": [
+      354
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KNN_AMD_BLOCK_TOPK_ALL_K"
+     ]
+    },
+    {
+     "lines": [
+      355
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KNN_AMD_EXACT_CHAIN"
+     ]
+    },
+    {
+     "lines": [
+      356
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KNN_IDENTICAL_WIDEK_RADIX"
+     ]
+    },
+    {
+     "lines": [
+      357
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_MOE_FAST_MMA_WIDE"
+     ]
+    },
+    {
+     "lines": [
+      358
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_MOE_FAST_MMA_PF"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    359
+   ],
+   "modules": [
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      360
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_DBSCAN_EPS_TILE"
+     ]
+    },
+    {
+     "lines": [
+      361
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP"
+     ]
+    },
+    {
+     "lines": [
+      362
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_HDB_MST_SEED_KNN"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    363
+   ],
+   "modules": [
+    "linear"
+   ],
+   "items": [
+    {
+     "lines": [
+      364
+     ],
+     "module": "linear",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE"
+     ]
+    },
+    {
+     "lines": [
+      365
+     ],
+     "module": "linear",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_DBSCAN_CC_HOOK"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    366,
+    367
+   ],
+   "modules": [
+    "linear",
+    "kernel"
+   ],
+   "items": [
+    {
+     "lines": [
+      368
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_LU_NB128"
+     ]
+    },
+    {
+     "lines": [
+      369
+     ],
+     "module": "kernel",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_CHOL_NB128"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    370,
+    371
+   ],
+   "modules": [
+    "linear",
+    "neural",
+    "decomposition",
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      372
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_LU_DELAYED_UPDATE"
+     ]
+    },
+    {
+     "lines": [
+      373
+     ],
+     "module": "neural",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_SEQ_FMA"
+     ]
+    },
+    {
+     "lines": [
+      374
+     ],
+     "module": "decomposition",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_OLS_R_TRISOLVE"
+     ]
+    },
+    {
+     "lines": [
+      375
+     ],
+     "module": "linear",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF"
+     ]
+    },
+    {
+     "lines": [
+      376
+     ],
+     "module": "neural",
+     "basis": "evidence:3",
+     "defines": [
+      "MOJOLEARN_IDN_MAMBA1_ELEMENTWISE_FUSED"
+     ]
+    },
+    {
+     "lines": [
+      377
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_NEURAL_GEMM_OZAKI_SLICES"
+     ]
+    },
+    {
+     "lines": [
+      378
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_KNN_DIRECT_DISTANCE"
+     ]
+    },
+    {
+     "lines": [
+      379
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_DBSCAN_DIRECT_DISTANCE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    380,
+    381
+   ],
+   "modules": [
+    "base",
+    "shared",
+    "linear"
+   ],
+   "items": [
+    {
+     "lines": [
+      382
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_LAB_UNIQUE_HIST"
+     ]
+    },
+    {
+     "lines": [
+      383
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_LAB_CODES_DIRECT"
+     ]
+    },
+    {
+     "lines": [
+      384
+     ],
+     "module": "base",
+     "basis": "evidence:4",
+     "defines": [
+      "MOJOLEARN_IDN_LAB_ONE_ENTRY"
+     ]
+    },
+    {
+     "lines": [
+      385
+     ],
+     "module": "shared",
+     "basis": "evidence:none",
+     "defines": [
+      "MOJOLEARN_IDN_GEMM_NV_MICROTILE"
+     ]
+    },
+    {
+     "lines": [
+      386
+     ],
+     "module": "linear",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_BM_GRAM_RB4"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    387
+   ],
+   "modules": [
+    "base",
+    "linear",
+    "cluster",
+    "kernel",
+    "trees"
+   ],
+   "items": [
+    {
+     "lines": [
+      388
+     ],
+     "module": "base",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_DRADIX_RANGE_PASSES"
+     ]
+    },
+    {
+     "lines": [
+      389
+     ],
+     "module": "linear",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_KDE_QTILE"
+     ]
+    },
+    {
+     "lines": [
+      390
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_NC_FIT_LEAN"
+     ]
+    },
+    {
+     "lines": [
+      391
+     ],
+     "module": "kernel",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_SVC_ONE_BLOCK"
+     ]
+    },
+    {
+     "lines": [
+      392
+     ],
+     "module": "trees",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_PSHAP_RESIDENT"
+     ]
+    },
+    {
+     "lines": [
+      393
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_MBK_RESIDENT"
+     ]
+    },
+    {
+     "lines": [
+      394
+     ],
+     "module": "cluster",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED"
+     ]
+    },
+    {
+     "lines": [
+      395
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_TSNE_REP_RB4"
+     ]
+    },
+    {
+     "lines": [
+      396
+     ],
+     "module": "cluster",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_HDB_ROUND_LEAN"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    397,
+    398,
+    399
+   ],
+   "modules": [
+    "neural",
+    "series"
+   ],
+   "items": [
+    {
+     "lines": [
+      400
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_CNN_RESIDENT_GRADS"
+     ]
+    },
+    {
+     "lines": [
+      401
+     ],
+     "module": "neural",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_BN_GRID_STATS"
+     ]
+    },
+    {
+     "lines": [
+      402
+     ],
+     "module": "neural",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IDN_NM_SPEC"
+     ]
+    },
+    {
+     "lines": [
+      403
+     ],
+     "module": "series",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_ETS_TEAM"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    404,
+    405,
+    406
+   ],
+   "module": "neural",
+   "basis": "evidence:7",
+   "defines": [
+    "MOJOLEARN_IDN_CNN_DX_IMPLICIT"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    407,
+    408,
+    409
+   ],
+   "module": "neural",
+   "basis": "evidence:7",
+   "defines": [
+    "MOJOLEARN_IDN_CNN_WGRAD_LEAF1024"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    410,
+    411,
+    412
+   ],
+   "module": "neural",
+   "basis": "evidence:6",
+   "defines": [
+    "MOJOLEARN_IDN_GPOOL_WARP"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    413,
+    414,
+    415
+   ],
+   "module": "neural",
+   "basis": "evidence:4",
+   "defines": [
+    "MOJOLEARN_IDN_MOE_RESIDENT"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    416,
+    417,
+    418
+   ],
+   "module": "linear",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_IDN_GFF_GRAM_TILED"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    419,
+    420
+   ],
+   "module": "linear",
+   "basis": "evidence:4",
+   "defines": [
+    "MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"
+   ]
+  },
+  {
+   "kind": "whole",
+   "header": [
+    421
+   ],
+   "modules": [
+    "decomposition"
+   ],
+   "items": [
+    {
+     "lines": [
+      422
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_RR_ONE_BLOCK_D"
+     ]
+    },
+    {
+     "lines": [
+      423
+     ],
+     "module": "decomposition",
+     "basis": "name",
+     "defines": [
+      "MOJOLEARN_IDN_RR_ONE_BLOCK_D_STEPS"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    424,
+    425
+   ],
+   "module": "decomposition",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_IDN_SVD_TALL_LEAN"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    426,
+    427
+   ],
+   "module": "linear",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_IDN_TSQR_RSTACK_TREE"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    428,
+    429
+   ],
+   "module": "decomposition",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_IDN_XD_KIT_GEMM"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    430,
+    431
+   ],
+   "module": "decomposition",
+   "basis": "name",
+   "defines": [
+    "MOJOLEARN_IDN_RSVD_ORTH_LEAN"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    432,
+    433
+   ],
+   "module": "trees",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_IDN_LG_FUSED_CHAIN"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    434,
+    435
+   ],
+   "module": "trees",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_IDN_CTR_PERM_GRID"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    436,
+    437,
+    438,
+    439,
+    440
+   ],
+   "module": "neural",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_IDN_GEMM_FILL_SPLITK"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    441,
+    442,
+    443
+   ],
+   "module": "neural",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_IDN_LM_LEAN_STEP"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    444,
+    445,
+    446
+   ],
+   "module": "neural",
+   "basis": "evidence:2",
+   "defines": [
+    "MOJOLEARN_IDN_LM_LOGITS_LEAN"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    447,
+    448,
+    449
+   ],
+   "module": "neural",
+   "basis": "evidence:6",
+   "defines": [
+    "MOJOLEARN_IDN_ATTN_DEFER_REGIME"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    450,
+    451,
+    452
+   ],
+   "module": "neural",
+   "basis": "evidence:4",
+   "defines": [
+    "MOJOLEARN_IDN_TF_SESSION_LEAN"
+   ]
+  },
+  {
+   "kind": "batch",
+   "header": [
+    453,
+    454,
+    455
+   ],
+   "modules": [
+    "trees",
+    "cluster"
+   ],
+   "items": [
+    {
+     "lines": [
+      456
+     ],
+     "module": "trees",
+     "basis": "evidence:1",
+     "defines": [
+      "MOJOLEARN_RF_FAST_QSAMPLE"
+     ]
+    },
+    {
+     "lines": [
+      457
+     ],
+     "module": "cluster",
+     "basis": "evidence:2",
+     "defines": [
+      "MOJOLEARN_IVF_FAST_STRIDED_COARSE"
+     ]
+    }
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    458,
+    459,
+    460,
+    461,
+    462,
+    463,
+    464
+   ],
+   "module": "neural",
+   "basis": "evidence:4",
+   "defines": [
+    "MOJOLEARN_AUTOGRAD_RNN",
+    "MOJOLEARN_AUTOGRAD_RNN_OFF"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    465,
+    466,
+    467,
+    468,
+    469,
+    470,
+    471
+   ],
+   "module": "neural",
+   "basis": "evidence:23",
+   "defines": [
+    "MOJOLEARN_AUTOGRAD_MAMBA",
+    "MOJOLEARN_AUTOGRAD_MAMBA_OFF"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    472,
+    473,
+    474,
+    475,
+    476,
+    477,
+    478,
+    479
+   ],
+   "module": "neural",
+   "basis": "code",
+   "defines": [
+    "MOJOLEARN_AUTOGRAD_CNN",
+    "MOJOLEARN_AUTOGRAD_CNN_OFF",
+    "MOJOLEARN_AUTOGRAD_LM",
+    "MOJOLEARN_AUTOGRAD_LM_OFF",
+    "MOJOLEARN_AUTOGRAD_MLP_OFF",
+    "MOJOLEARN_AUTOGRAD_SMALL_MLP",
+    "MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF",
+    "MOJOLEARN_AUTOGRAD_TRANSFORMER",
+    "MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"
+   ]
+  },
+  {
+   "kind": "whole",
+   "lines": [
+    480,
+    481,
+    482,
+    483,
+    484,
+    485,
+    486
+   ],
+   "module": "neural",
+   "basis": "evidence:6",
+   "defines": [
+    "MOJOLEARN_AUTOGRAD_SAMBA",
+    "MOJOLEARN_AUTOGRAD_SAMBA_OFF"
+   ]
+  }
+ ],
+ "modules": {
+  "neural": [
+   [
+    11,
+    12,
+    13,
+    14,
+    15,
+    19,
+    20,
+    21,
+    22,
+    23
+   ],
+   [
+    51,
+    52
+   ],
+   [
+    57,
+    58,
+    59,
+    60,
+    62,
+    63,
+    64,
+    65,
+    66
+   ],
+   [
+    67,
+    68,
+    69,
+    70,
+    73,
+    74,
+    79,
+    80,
+    83,
+    84,
+    85,
+    86
+   ],
+   [
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128
+   ],
+   [
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    150,
+    151,
+    152,
+    153,
+    154
+   ],
+   [
+    155,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161,
+    162,
+    163,
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    170
+   ],
+   [
+    171,
+    172,
+    173,
+    174,
+    175,
+    176
+   ],
+   [
+    177,
+    178,
+    179,
+    180
+   ],
+   [
+    181,
+    182,
+    191
+   ],
+   [
+    228,
+    230,
+    233
+   ],
+   [
+    236,
+    237,
+    238
+   ],
+   [
+    239,
+    240,
+    241,
+    242
+   ],
+   [
+    243,
+    245
+   ],
+   [
+    260,
+    264
+   ],
+   [
+    290,
+    291,
+    292,
+    293,
+    296,
+    297,
+    298,
+    299,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309
+   ],
+   [
+    343,
+    344,
+    345,
+    346
+   ],
+   [
+    348,
+    349,
+    350,
+    357,
+    358
+   ],
+   [
+    370,
+    371,
+    373,
+    376,
+    377
+   ],
+   [
+    397,
+    398,
+    399,
+    400,
+    401,
+    402
+   ],
+   [
+    404,
+    405,
+    406
+   ],
+   [
+    407,
+    408,
+    409
+   ],
+   [
+    410,
+    411,
+    412
+   ],
+   [
+    413,
+    414,
+    415
+   ],
+   [
+    436,
+    437,
+    438,
+    439,
+    440
+   ],
+   [
+    441,
+    442,
+    443
+   ],
+   [
+    444,
+    445,
+    446
+   ],
+   [
+    447,
+    448,
+    449
+   ],
+   [
+    450,
+    451,
+    452
+   ],
+   [
+    458,
+    459,
+    460,
+    461,
+    462,
+    463,
+    464
+   ],
+   [
+    465,
+    466,
+    467,
+    468,
+    469,
+    470,
+    471
+   ],
+   [
+    472,
+    473,
+    474,
+    475,
+    476,
+    477,
+    478,
+    479
+   ],
+   [
+    480,
+    481,
+    482,
+    483,
+    484,
+    485,
+    486
+   ]
+  ],
+  "trees": [
+   [
+    16,
+    17
+   ],
+   [
+    181,
+    182,
+    187,
+    188,
+    189,
+    190
+   ],
+   [
+    201,
+    202,
+    208,
+    210,
+    211
+   ],
+   [
+    217,
+    222,
+    223
+   ],
+   [
+    265,
+    270,
+    271,
+    272,
+    273,
+    274,
+    275,
+    276,
+    281,
+    282,
+    283,
+    284,
+    285,
+    286,
+    287,
+    289
+   ],
+   [
+    387,
+    392
+   ],
+   [
+    432,
+    433
+   ],
+   [
+    434,
+    435
+   ],
+   [
+    453,
+    454,
+    455,
+    456
+   ]
+  ],
+  "shared": [
+   [
+    18
+   ],
+   [
+    24,
+    25,
+    26,
+    27,
+    28
+   ],
+   [
+    29,
+    30,
+    31,
+    32
+   ],
+   [
+    33,
+    34,
+    35
+   ],
+   [
+    36,
+    37,
+    38,
+    39
+   ],
+   [
+    40,
+    41,
+    42
+   ],
+   [
+    43,
+    44,
+    45,
+    46,
+    47
+   ],
+   [
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    75,
+    76,
+    77,
+    78,
+    81,
+    82
+   ],
+   [
+    87,
+    88,
+    89,
+    111
+   ],
+   [
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+   ],
+   [
+    201,
+    202,
+    215,
+    216
+   ],
+   [
+    217,
+    218
+   ],
+   [
+    228,
+    234,
+    235
+   ],
+   [
+    243,
+    244
+   ],
+   [
+    380,
+    381,
+    385
+   ]
+  ],
+  "kernel": [
+   [
+    48,
+    49
+   ],
+   [
+    201,
+    202,
+    204
+   ],
+   [
+    366,
+    367,
+    369
+   ],
+   [
+    387,
+    391
+   ]
+  ],
+  "series": [
+   [
+    48,
+    50
+   ],
+   [
+    201,
+    202,
+    205
+   ],
+   [
+    265,
+    266,
+    267,
+    268,
+    269,
+    279,
+    280,
+    288
+   ],
+   [
+    397,
+    398,
+    399,
+    403
+   ]
+  ],
+  "cluster": [
+   [
+    53,
+    54
+   ],
+   [
+    55,
+    56
+   ],
+   [
+    57,
+    58,
+    59,
+    61
+   ],
+   [
+    201,
+    202,
+    207,
+    213,
+    214
+   ],
+   [
+    217,
+    219,
+    220
+   ],
+   [
+    246,
+    247
+   ],
+   [
+    253,
+    254,
+    255,
+    256
+   ],
+   [
+    310,
+    311,
+    312,
+    313,
+    315,
+    320,
+    321,
+    322,
+    323,
+    324,
+    325,
+    326,
+    327,
+    328,
+    341
+   ],
+   [
+    348,
+    353,
+    354,
+    355,
+    356
+   ],
+   [
+    359,
+    360,
+    361,
+    362
+   ],
+   [
+    370,
+    371,
+    378,
+    379
+   ],
+   [
+    387,
+    390,
+    393,
+    394,
+    395,
+    396
+   ],
+   [
+    453,
+    454,
+    455,
+    457
+   ]
+  ],
+  "decomposition": [
+   [
+    201,
+    202,
+    203
+   ],
+   [
+    217,
+    225,
+    226
+   ],
+   [
+    257,
+    258,
+    259
+   ],
+   [
+    260,
+    261,
+    263
+   ],
+   [
+    265,
+    277,
+    278
+   ],
+   [
+    310,
+    316,
+    317,
+    318,
+    319,
+    335,
+    336,
+    338,
+    339,
+    340
+   ],
+   [
+    348,
+    351
+   ],
+   [
+    370,
+    371,
+    374
+   ],
+   [
+    421,
+    422,
+    423
+   ],
+   [
+    424,
+    425
+   ],
+   [
+    428,
+    429
+   ],
+   [
+    430,
+    431
+   ]
+  ],
+  "linear": [
+   [
+    201,
+    202,
+    206,
+    209,
+    212
+   ],
+   [
+    217,
+    221,
+    224,
+    227
+   ],
+   [
+    228,
+    229,
+    232
+   ],
+   [
+    249,
+    250
+   ],
+   [
+    260,
+    262
+   ],
+   [
+    310,
+    314,
+    329,
+    330,
+    331,
+    332,
+    333,
+    337,
+    342
+   ],
+   [
+    343,
+    347
+   ],
+   [
+    348,
+    352
+   ],
+   [
+    363,
+    364,
+    365
+   ],
+   [
+    366,
+    367,
+    368
+   ],
+   [
+    370,
+    371,
+    372,
+    375
+   ],
+   [
+    380,
+    381,
+    386
+   ],
+   [
+    387,
+    389
+   ],
+   [
+    416,
+    417,
+    418
+   ],
+   [
+    419,
+    420
+   ],
+   [
+    426,
+    427
+   ]
+  ],
+  "base": [
+   [
+    228,
+    231
+   ],
+   [
+    246,
+    248
+   ],
+   [
+    249,
+    251,
+    252
+   ],
+   [
+    290,
+    294,
+    295,
+    300,
+    301,
+    302,
+    303
+   ],
+   [
+    310,
+    334
+   ],
+   [
+    380,
+    381,
+    382,
+    383,
+    384
+   ],
+   [
+    387,
+    388
+   ]
+  ]
+ }
+}

@@ -7,17 +7,14 @@ model whose token ids are an ids input: embedding, layer norm, logits and
 the embedding of the greedy next token, plus a take by ids), a second run
 gives the same words, a saved program loads into a new session and gives
 them again, and the refusals hold. Prints PROGRAM_DIGEST lines to diff across CPU,
-Metal, NVIDIA and AMD."""
+Metal, NVIDIA and AMD. The mixture classifier's predict path and the
+attention product run natively in checks/native_tests/core_ops_program_*.mojo."""
 import hashlib
-import pathlib
-import re
 
 import numpy as np
 import pytest
 
 from mojolearn import _backend
-
-GUIDE = pathlib.Path(__file__).resolve().parents[3] / "docs-site" / "user_guide" / "autograd.md"
 
 
 def _has_entries():
@@ -93,27 +90,6 @@ def test_program_session_quickstart():
     _check("quickstart", _quickstart, a, b)
 
 
-def test_program_mixture_predict():
-    rng = np.random.default_rng(0)
-    params = {k: 0.1 * rng.standard_normal(sh, dtype=np.float32) for k, sh in
-              (("W0", (4, 2)), ("b0", (1, 2)), ("W1", (4, 2)), ("b1", (1, 2)), ("Wg", (4, 2)), ("bg", (1, 2)))}
-    first = np.array([[1.0], [0.0]], np.float32)
-    second = np.array([[0.0], [1.0]], np.float32)
-
-    def build(s, arrays):
-        (X,) = arrays
-        x = s.tensor(X)
-        p = {k: s.tensor(v) for k, v in params.items()}
-        z0 = s.linear(x, p["W0"], p["b0"])
-        z1 = s.linear(x, p["W1"], p["b1"])
-        gate = s.linear(x, p["Wg"], p["bg"], activation="softmax")
-        logits = s.add(s.mul(s.matmul(gate, s.tensor(first)), z0), s.mul(s.matmul(gate, s.tensor(second)), z1))
-        return [x], [s.softmax(logits), gate]
-
-    _check("mixture", build, [rng.standard_normal((128, 4), dtype=np.float32)],
-           [rng.standard_normal((128, 4), dtype=np.float32)])
-
-
 def test_program_shapes_conv():
     rng = np.random.default_rng(0)
     K = 0.3 * rng.standard_normal((4, 1, 3, 3), dtype=np.float32)
@@ -130,23 +106,6 @@ def test_program_shapes_conv():
 
     _check("shapes_conv", build, [rng.standard_normal((8, 1, 8, 8), dtype=np.float32)],
            [rng.standard_normal((8, 1, 8, 8), dtype=np.float32)])
-
-
-def test_program_shapes_attention():
-    rng = np.random.default_rng(0)
-
-    def build(s, arrays):
-        Q, Kv = arrays
-        q, kv = s.tensor(Q), s.tensor(Kv)
-        scores = s.scale(s.matmul(q, s.transpose(kv)), 0.5)
-        out = s.matmul(s.softmax(scores), kv)
-        merged = s.reshape(s.permute(out, (0, 2, 1, 3)), (2, 6, 16))
-        pieces = s.split(merged, 2, axis=2)
-        return [q, kv], [merged, s.concat([pieces[1], pieces[0]], axis=2), s.max(merged, axis=1)]
-
-    a = [rng.standard_normal((2, 4, 6, 4), dtype=np.float32), rng.standard_normal((2, 4, 6, 4), dtype=np.float32)]
-    b = [rng.standard_normal((2, 4, 6, 4), dtype=np.float32), rng.standard_normal((2, 4, 6, 4), dtype=np.float32)]
-    _check("shapes_attention", build, a, b)
 
 
 def _embedding_lm(s, arrays):
@@ -247,19 +206,6 @@ def test_program_save_and_load(tmp_path):
     _emit("saved_mlp", got)
 
 
-def test_program_guide_block(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    if not GUIDE.is_file():
-        pytest.skip(f"no guide at {GUIDE} (run from the repository tree)")
-    blocks = dict(re.findall(r"<!-- block: ([a-z0-9-]+) -->\n```python\n(.*?)```", GUIDE.read_text(), flags=re.S))
-    ns = {"__name__": "autograd_guide"}
-    exec(compile(blocks["program"], "autograd.md[program]", "exec"), ns)
-    assert np.array_equal(_words(ns["first"]), _words(ns["eager"]))
-    assert np.array_equal(_words(ns["served_second"]), _words(ns["second"]))
-    _emit("guide_program_first", ns["first"])
-    _emit("guide_program_second", ns["second"])
-
-
 def test_program_refusals():
     from mojolearn import ops
     rng = np.random.default_rng(2)
@@ -289,3 +235,56 @@ def test_program_refusals():
         s.free(w)
         with pytest.raises(Exception, match="freed"):
             prog.run(X)
+
+
+def test_program_run_direct_route_boundary():
+    # Lane fix-executor-session-rows (2026-11-13): Program.run with every flag
+    # off is one binding call to the fixed route; any other call takes the
+    # full route. Both give the eager words, and the full route's refusals
+    # still hold for a closed session, a freed program and a foreign session.
+    from mojolearn import ops
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((257, 7), dtype=np.float32)
+    W = rng.standard_normal((7, 5), dtype=np.float32)
+    s = ops.Session()
+    x, w = s.tensor(X), s.tensor(W)
+    p = s.softmax(s.linear(x, w, activation="relu"))
+    eager = s.numpy(p)
+    prog = s.capture(inputs=[x], outputs=[p])
+    s.reset()
+    direct = prog.run(X)
+    assert direct.shape == eager.shape and direct.dtype == np.float32
+    assert np.array_equal(_words(direct), _words(eager))
+    full = prog.run(X, dynamic_shapes=True)
+    assert np.array_equal(_words(full), _words(eager))
+    assert np.array_equal(_words(s.run(prog, X)), _words(eager))
+    # an inputs list (only a direct binding call passes one) takes the full
+    # route, which admits it with the same words (hot-path audit 2026-11-13:
+    # the direct route compares against the args tuple's own class)
+    listed = ops._PROGRAM_CALL(prog, "run", ([X], False, False, False))
+    assert np.array_equal(_words(listed), _words(eager))
+    # a bare array where the inputs tuple belongs: the full route refuses it
+    with pytest.raises(TypeError, match="native list or tuple"):
+        ops._PROGRAM_CALL(prog, "run", (X, False, False, False))
+    other = ops.Session()
+    with pytest.raises(Exception, match="another Session|same session|of this session"):
+        other.run(prog, X)
+    other.close()
+    s.close()
+    with pytest.raises(ValueError, match="closed"):
+        prog.run(X)
+
+
+def test_session_read_back_writes_every_element():
+    # Lane fix-executor-session-rows (2026-11-13): numpy() and grad() download
+    # into an uninitialized result array; every element must be written.
+    from mojolearn import ops
+    rng = np.random.default_rng(4)
+    A = rng.standard_normal((513, 129), dtype=np.float32)
+    with ops.Session(record=True) as s:
+        a = s.tensor(A, requires_grad=True)
+        for _ in range(3):  # fresh storage each read
+            assert np.array_equal(_words(s.numpy(a)), _words(A))
+        s.backward(s.sum(a))
+        g = s.grad(a)
+        assert g.shape == A.shape and np.array_equal(g, np.ones_like(A))

@@ -86,13 +86,9 @@ THE ARMS
 
 from std.math import ceildiv
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-    size_of,
-)
-from std.gpu import WARP_SIZE
+from std.sys.info import size_of
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
+from max.gpu import WARP_SIZE
 from max.gpu.host import DeviceContext
 
 from extratrees.checks.fixed_point import (
@@ -172,6 +168,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     SCORE_STATUS_UNVISITED,
     TPB_DEFAULT,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime TPB = TPB_DEFAULT
@@ -240,11 +237,11 @@ arm went red on 2026-08-26.)"""
 
 
 def _vendor() -> String:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return "Apple"
-    elif has_nvidia_gpu_accelerator():
+    elif TARGET_HAS_NVIDIA_GPU:
         return "NVIDIA"
-    elif has_amd_gpu_accelerator():
+    elif TARGET_HAS_AMD_GPU:
         return "AMD"
     else:
         return "unknown vendor"
@@ -465,7 +462,7 @@ def _oracle(
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "regression_score_check requires a GPU"
 
     print("========================================================")
@@ -692,13 +689,13 @@ def main() raises:
     for i in range(plan.n_blocks_dimx):
         wl_ptr[unsafe_offset=i] = plan.info[i]
 
-    ctx.enqueue_copy(dst_buf=d_data, src_ptr=s_data.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_row_ids, src_ptr=s_row_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_colids, src_ptr=s_colids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_lab, src_ptr=s_lab.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_lab_big, src_ptr=s_lab_big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_items, src_ptr=s_items.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wl, src_ptr=s_wl.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_data, s_data)
+    upload_host_into[DType.int32](ctx, d_row_ids, s_row_ids)
+    upload_host_into[DType.int32](ctx, d_colids, s_colids)
+    upload_host_into[DType.int32](ctx, d_lab, s_lab)
+    upload_host_into[DType.int32](ctx, d_lab_big, s_lab_big)
+    upload_host_into[DType.uint8](ctx, d_items, s_items)
+    upload_host_into[DType.uint8](ctx, d_wl, s_wl)
     ctx.synchronize()
 
     # ------------------------------------------------------------------
@@ -748,9 +745,9 @@ def main() raises:
     var r_min = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     var r_max = ctx.enqueue_create_host_buffer[DType.float32](n_cells)
     var r_missing = ctx.enqueue_create_host_buffer[DType.int32](n_cells)
-    ctx.enqueue_copy(dst_buf=r_min, src_buf=d_min)
-    ctx.enqueue_copy(dst_buf=r_max, src_buf=d_max)
-    ctx.enqueue_copy(dst_buf=r_missing, src_buf=d_missing)
+    download_host_into[DType.float32](ctx, d_min, r_min)
+    download_host_into[DType.float32](ctx, d_max, r_max)
+    download_host_into[DType.int32](ctx, d_missing, r_missing)
     ctx.synchronize()
 
     print("")
@@ -799,7 +796,7 @@ def main() raises:
     ctx.synchronize()
     for i in range(n_nodes):
         h_tree_ids.unsafe_ptr().unsafe_store(i, Int32(TREE_ID))
-    ctx.enqueue_copy(dst_buf=d_tree_ids, src_ptr=h_tree_ids.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_tree_ids, h_tree_ids)
     ctx.synchronize()
 
     var arms = List[Int32]()
@@ -920,14 +917,14 @@ def main() raises:
         var o_den = ctx.enqueue_create_host_buffer[DType.int64](n_cells)
         var o_left = ctx.enqueue_create_host_buffer[DType.int32](n_acc_cells)
         var o_total = ctx.enqueue_create_host_buffer[DType.int32](n_acc_cells)
-        ctx.enqueue_copy(dst_buf=o_status, src_buf=d_status)
-        ctx.enqueue_copy(dst_buf=o_thresh, src_buf=d_thresh)
-        ctx.enqueue_copy(dst_buf=o_n_left, src_buf=d_n_left)
-        ctx.enqueue_copy(dst_buf=o_n_total, src_buf=d_n_total)
-        ctx.enqueue_copy(dst_buf=o_num, src_buf=d_num)
-        ctx.enqueue_copy(dst_buf=o_den, src_buf=d_den)
-        ctx.enqueue_copy(dst_buf=o_left, src_buf=d_acc_left)
-        ctx.enqueue_copy(dst_buf=o_total, src_buf=d_acc_total)
+        download_host_into[DType.int32](ctx, d_status, o_status)
+        download_host_into[DType.float32](ctx, d_thresh, o_thresh)
+        download_host_into[DType.int32](ctx, d_n_left, o_n_left)
+        download_host_into[DType.int32](ctx, d_n_total, o_n_total)
+        download_host_into[DType.int64](ctx, d_num, o_num)
+        download_host_into[DType.int64](ctx, d_den, o_den)
+        download_host_into[DType.int32](ctx, d_acc_left, o_left)
+        download_host_into[DType.int32](ctx, d_acc_total, o_total)
         ctx.synchronize()
 
         var cells = List[ScoredCandidate]()
@@ -970,7 +967,6 @@ def main() raises:
     # Mojo frees a buffer at its LAST USE; the launches above read this one
     # and the loop's synchronize must come first.
     _ = d_tree_ids^
-    _ = h_tree_ids^
 
     # ------------------------------------------------------------------
     # The host oracle, for both label planes.
@@ -1555,16 +1551,16 @@ def main() raises:
         t_ts.unsafe_ptr().unsafe_store(
             i, split_tie_salt_for(UInt32(TREE_ID), UInt32(i))
         )
-    ctx.enqueue_copy(dst_buf=c_q, src_ptr=t_q.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_c, src_ptr=t_c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_m, src_ptr=t_m.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_l, src_ptr=t_l.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_nu, src_ptr=t_nu.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_de, src_ptr=t_de.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_v, src_ptr=t_v.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=e_nb, src_ptr=t_nb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=e_nc, src_ptr=t_nc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=e_ts, src_ptr=t_ts.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, c_q, t_q)
+    upload_host_into[DType.int32](ctx, c_c, t_c)
+    upload_host_into[DType.float32](ctx, c_m, t_m)
+    upload_host_into[DType.int32](ctx, c_l, t_l)
+    upload_host_into[DType.int64](ctx, c_nu, t_nu)
+    upload_host_into[DType.int64](ctx, c_de, t_de)
+    upload_host_into[DType.int32](ctx, c_v, t_v)
+    upload_host_into[DType.int32](ctx, e_nb, t_nb)
+    upload_host_into[DType.int32](ctx, e_nc, t_nc)
+    upload_host_into[DType.uint32](ctx, e_ts, t_ts)
     ctx.enqueue_memset(e_mx, Int32(0))
     ctx.synchronize()
 
@@ -1614,12 +1610,12 @@ def main() raises:
     var u_nu = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
     var u_de = ctx.enqueue_create_host_buffer[DType.int64](n_nodes)
     var u_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-    ctx.enqueue_copy(dst_buf=u_q, src_buf=e_q)
-    ctx.enqueue_copy(dst_buf=u_c, src_buf=e_c)
-    ctx.enqueue_copy(dst_buf=u_l, src_buf=e_l)
-    ctx.enqueue_copy(dst_buf=u_nu, src_buf=e_nu)
-    ctx.enqueue_copy(dst_buf=u_de, src_buf=e_de)
-    ctx.enqueue_copy(dst_buf=u_v, src_buf=e_v)
+    download_host_into[DType.float32](ctx, e_q, u_q)
+    download_host_into[DType.int32](ctx, e_c, u_c)
+    download_host_into[DType.int32](ctx, e_l, u_l)
+    download_host_into[DType.int64](ctx, e_nu, u_nu)
+    download_host_into[DType.int64](ctx, e_de, u_de)
+    download_host_into[DType.int32](ctx, e_v, u_v)
     ctx.synchronize()
 
     # Mojo frees a buffer at its LAST USE, and the salt buffers' last natural
@@ -1627,7 +1623,6 @@ def main() raises:
     # both past the drain so the queued reads cannot outlive them, exactly as
     # `d_tree_ids`/`h_tree_ids` are held above.
     _ = e_ts^
-    _ = t_ts^
 
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     # Mojo frees at LAST USE, so without this the buffer releases above run

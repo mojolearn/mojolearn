@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`cross_entropy_kernel` against a float64 host oracle and libm anchors.
 
-    pixi run check-logloss-target
+    pixi run check-native-gpu logloss_target_check
 
 WHAT GATES WHAT. The kernel is the implementation of `CrossEntropyImpl`
 (`pointwise_targets.cu:327-390`), the one kernel Logloss and CrossEntropy
@@ -64,7 +64,7 @@ def close(a: Float64, b: Float64, tol: Float64) -> Bool:
     return abs(a - b) <= tol * (1.0 + max(abs(a), abs(b)))
 
 
-def main() raises:
+def run_checks() raises:
     comptime N = 4133
     var ctx = DeviceContext()
 
@@ -107,13 +107,13 @@ def main() raises:
                 var w = Float32(0.5 + 2.0 * frac(i, UInt64(44)))
                 # the six libm anchors sit in the first slots of their mode
                 if has_border and i < 5:
-                    var av: InlineArray[Float32, 5] = [
+                    var av: Array[Float32, 5] = [
                         0.3, -1.7, 200.0, -200.0, 1.0
                     ]
-                    var at: InlineArray[Float32, 5] = [
+                    var at: Array[Float32, 5] = [
                         1.0, 0.0, 0.0, 1.0, 0.5
                     ]
-                    var aw: InlineArray[Float32, 5] = [
+                    var aw: Array[Float32, 5] = [
                         1.0, 2.5, 1.0, 1.0, 1.0
                     ]
                     v = av[i]
@@ -126,9 +126,9 @@ def main() raises:
                 h_p.unsafe_ptr().unsafe_store(i, v)
                 h_t.unsafe_ptr().unsafe_store(i, t)
                 h_w.unsafe_ptr().unsafe_store(i, w)
-            ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+            upload_host_into[DType.float32](ctx, d_t, h_t)
+            upload_host_into[DType.float32](ctx, d_w, h_w)
+            upload_host_into[DType.float32](ctx, d_p, h_p)
 
             if has_border:
                 ctx.enqueue_function[cross_entropy_kernel[True]](
@@ -154,9 +154,9 @@ def main() raises:
                     grid_dim=(BLOCKS, 1, 1),
                     block_dim=(MSE_BLOCK_SIZE, 1, 1),
                 )
-            ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=d_stats)
-            ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=d_fv)
-            ctx.enqueue_copy(dst_ptr=h_mag.unsafe_ptr(), src_buf=d_mag)
+            download_host_into[DType.float32](ctx, d_stats, h_stats)
+            download_host_into[DType.float32](ctx, d_fv, h_fv)
+            download_host_into[DType.float32](ctx, d_mag, h_mag)
             ctx.synchronize()
 
             # float64 host oracle, same formula, straight through
@@ -202,7 +202,7 @@ def main() raises:
             # include each case's weight. This is the leg that pins
             # `std.math.exp`/`log` to an oracle OUTSIDE this repository.
             if has_border and has_weights:
-                var want: InlineArray[Float64, 5] = [
+                var want: Array[Float64, 5] = [
                     0.42555748318834097,
                     -0.38616316270883677,
                     -1.0,
@@ -259,13 +259,13 @@ def main() raises:
                 t = Float32(frac(i, UInt64(33)))
             var w = Float32(0.5 + 2.0 * frac(i, UInt64(44)))
             if has_border and i < 5:
-                var av: InlineArray[Float32, 5] = [
+                var av: Array[Float32, 5] = [
                     0.3, -1.7, 200.0, -200.0, 1.0
                 ]
-                var at: InlineArray[Float32, 5] = [
+                var at: Array[Float32, 5] = [
                     1.0, 0.0, 0.0, 1.0, 0.5
                 ]
-                var aw: InlineArray[Float32, 5] = [
+                var aw: Array[Float32, 5] = [
                     1.0, 2.5, 1.0, 1.0, 1.0
                 ]
                 v = av[i]
@@ -278,9 +278,9 @@ def main() raises:
             h_p.unsafe_ptr().unsafe_store(i, v)
             h_t.unsafe_ptr().unsafe_store(i, t)
             h_w.unsafe_ptr().unsafe_store(i, w)
-        ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_t, h_t)
+        upload_host_into[DType.float32](ctx, d_w, h_w)
+        upload_host_into[DType.float32](ctx, d_p, h_p)
         if has_border:
             ctx.enqueue_function[cross_entropy_kernel[True, True]](
                 d_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(N),
@@ -301,8 +301,8 @@ def main() raises:
                 grid_dim=(BLOCKS, 1, 1),
                 block_dim=(MSE_BLOCK_SIZE, 1, 1),
             )
-        ctx.enqueue_copy(dst_ptr=h_stats.unsafe_ptr(), src_buf=d_stats)
-        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=d_fv)
+        download_host_into[DType.float32](ctx, d_stats, h_stats)
+        download_host_into[DType.float32](ctx, d_fv, h_fv)
         ctx.synchronize()
 
         var fv_ref = Float64(0.0)
@@ -340,7 +340,7 @@ def main() raises:
         # der2 libm anchors (CPython float64, decimal-pasted). Slot 3's
         # 1e-40 sits in the zero band by design: float32 flushes it.
         if has_border:
-            var want2: InlineArray[Float64, 5] = [
+            var want2: Array[Float64, 5] = [
                 0.24445831169074586,
                 0.32651436741552015,
                 0.0,
@@ -369,3 +369,22 @@ def main() raises:
         "logloss target check: 4 mode passes x", N,
         "rows, anchors, planted borders, fv/mags -- all match"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("logloss_target_check", cpu=False, gpu=True, serial="", run=run_cases)

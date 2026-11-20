@@ -3,9 +3,8 @@
 """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
 device (lane/apple-fast-cluster, 2026-10-02). Switch: `MINIBATCH_FAST_DEV`
 below, taken by `x_cluster/minibatch.mojo` `minibatch_fit`: on by default
-in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it
-off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is harmless). No
-build reads the environment.
+in FAST on Apple (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is
+harmless). No build reads the environment.
 
 Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
 range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
@@ -22,8 +21,8 @@ uploaded at once, and each step is four launches with no synchronize:
   * `_mbf_assign_kernel`: a thread per batch row, the nearest center
     (centers staged in threadgroup memory), the row's label and squared
     distance, the block's distance sum (the batch inertia's partials);
-  * `_mbf_sum_kernel`: a block per (center, 256-row chunk) folds the
-    chunk's rows of that center per feature, with the count;
+  * `_mbf_sum_cmp_kernel`: a block per (center, 256-row chunk) folds the
+    chunk's rows of that center per feature (compacted, ascending), with the count;
   * `_mbf_finish_kernel`: a thread per (center, feature) cell:
     `c * w`, `+ sum`, `w += count`, `* (1 / w)` (sklearn
     `update_center_dense`'s steps), into the NEXT history slot; the inertia;
@@ -38,10 +37,10 @@ stop takes that step's centers and counts from the history. FAST promises
 quality, not bits: the summation order and the reassignment stream
 differ from the step loop's. IDENTICAL compiles none of this.
 """
-from std.gpu import block_idx, thread_idx
-from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_idx, thread_idx
+from std.memory import stack_allocation
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -52,11 +51,9 @@ from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
-# `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
-comptime MINIBATCH_FAST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 336732d51d.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four Apple SIMD groups per block reduce the register/shared footprint and
 # increase independent assignment blocks. Keep the center chunk equal to
@@ -65,8 +62,11 @@ comptime MINIBATCH_FAST_DEV = (
 # partial-sum association can move FAST bits and the stopping trajectory.
 comptime AFCL_G07 = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_AFCL_G07"]()
 comptime MBF_TPB = 128 if AFCL_G07 else 256
+# TOMBSTONE: MOJOLEARN_AFCL_G07 (never-run Apple FAST programme card: four SIMD groups per block, MBF_TPB 128) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 01c1811429.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G07.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime MBF_CH = MBF_TPB
-"""Batch rows per chunk of `_mbf_sum_kernel`."""
+"""Batch rows per chunk of `_mbf_sum_cmp_kernel`."""
 comptime MBF_MAX_KD = 4096
 """Center cells staged in threadgroup memory (16 KB)."""
 comptime MBF_MAX_K = 256
@@ -76,32 +76,25 @@ comptime MBF_MAX_BATCH = 4096
 # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN (DROPPED) deleted 2026-10-03 by 2b40bf184; code recoverable at 2b40bf184^.
 # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN.patch; record in docs/TOMBSTONES.md.
-# Bound speculative stopping work more tightly while retaining the same
-# batch schedule and convergence tests; group size is independent of data
-# dimensions. Qualification must compare reported completed iterations.
-# MEASURED M3 FAST; broader workload evidence remains separate.
-# F15/stopping M3 2026-10-06: 6 scored caller times; B/A
-# 0.9557..0.9820 (small single-sample gains); FAST candidate remains OFF.
-# Scored FAST quality 3/3 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/stopping.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-comptime MBF_GROUP = 8 if (MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"]()) else 32
+# TOMBSTONE: MOJOLEARN_CLUSTER_FAST_STOP_GROUP8 (opt-in arm, 8 steps per group; F15/stopping M3 2026-10-06 B/A 0.9557..0.9820 single-sample, never promoted, no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 47c2b3d78f.
+# Restore: git apply experiments/removed/MOJOLEARN_CLUSTER_FAST_STOP_GROUP8.patch; record in docs/TOMBSTONES.md.
+comptime MBF_GROUP = 32
 """Steps enqueued between two reads of the batch inertias."""
 
 # lane/apple-fast-gap-cls2 (2026-10-03): MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL
 # (x_cluster/minibatch_ptr.mojo): X's device buffer from a pool kept between
 # fits, not a fresh 880 MB allocation per fit at Istella's shape. FAST + Apple
 # default since the M3 A/B (n=1, quality identical): minibatch-kmeans istella
-# 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. -D MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF
-# turns it off; the old -D name stays harmless.
+# 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. The old -D name stays harmless.
 # F15/scratch-reuse M3 2026-10-06: 6 scored caller times; B/A
 # 0.9673..1.0293 (mixed/regressing); existing default retained.
 # Scored FAST quality 3/3 within existing bands; PASS.
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/scratch-reuse.
 # Compilation/identity reused. No combined-toggle/full-board claim.
-comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"]()
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF (old path: a fresh X buffer per FAST Apple MiniBatchKMeans fit; EXP:520 KEEP pool default) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 0c46943130.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV
 
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 
@@ -115,29 +108,31 @@ comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 # them lane by lane in threadgroup memory. k <= MBF_RG_MAXK, else the old
 # kernel. FAST: the distance's summation order changes (quality, not bits).
 # FAST + Apple default since the M3 A/B clus3-mbk-rowgrp-istella (n=1):
-# minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical;
-# -D MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF turns it off.
-comptime MBK_CLS3_ROWGRP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF"]()
+# minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical.
+# It is taken wherever MINIBATCH_FAST_DEV is (`minibatch_fast_steps`).
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at b5c9d4c9c7.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime MBF_RG_W = 32
 """Threads per batch row."""
 comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W
 comptime MBF_RG_MAXK = 16
 
 # MBK_W2_SUMCMP, DEFAULT in FAST + Apple (lane/apple-fast-w2-clres):
-# `_mbf_sum_kernel` first compacts its center's rows of the 256-row chunk (a
+# the center sum first compacts its center's rows of the 256-row chunk (a
 # 256-wide prefix scan of the flags, row offsets in threadgroup memory) and
 # each feature thread sums only those rows, in the SAME ascending row order,
 # instead of walking all 256 rows per feature: same float sums, same bits.
 # M3, one run per arm: istella 147.2 -> 144.7 ms, taxi 43.9 -> 39.9 ms;
 # w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
-# MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
 # F15/center-accumulation M3 2026-10-06: 6 scored caller times; B/A
 # 0.9863..1.0222 (mixed/regressing); existing default retained.
 # Scored FAST quality 3/3 within existing bands; PASS.
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/center-accumulation.
 # Compilation/identity reused. No combined-toggle/full-board claim.
-comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: `_mbf_sum_kernel`, the full 256-row chunk walk per feature; EXP:888 DEFAULT is the compacted sum) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 3334115827.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV
 # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: MiniBatchKMeans' last all-rows labelling as the CLS3_ROWGRP 32-thread-per-row assignment (_mbf_label_rg_kernel); istella 146.6 -> 144.0 ms, taxi 45.3 -> 46.3 (noise); F15 B/A 0.947..1.125 mixed.
 # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
@@ -197,7 +192,7 @@ def _mbf_assign_kernel(
 def _mbf_assign_rg_kernel(
     x: FPtr, idx: IPtr, batch: Int32, c: FPtr, k: Int32, d: Int32, lab: IPtr, dist: FPtr, ipart: FPtr,
 ):
-    """MBK_CLS3_ROWGRP: `_mbf_assign_kernel` with a 32-thread group per row
+    """CLS3_MBK_ROWGRP: `_mbf_assign_kernel` with a 32-thread group per row
     (see the switch). Ties to the lower center, as there."""
     var tid = Int(thread_idx.x)
     var g = tid // MBF_RG_W
@@ -250,48 +245,15 @@ def _mbf_assign_rg_kernel(
         ipart[Int(block_idx.x)] = a
 
 
-def _mbf_sum_kernel(
-    x: FPtr, idx: IPtr, batch: Int32, lab: IPtr, k: Int32, d: Int32, nchunk: Int32, part: FPtr, cpart: IPtr,
-):
-    var b = Int(block_idx.x)
-    var NC = Int(nchunk)
-    var j = b // NC
-    var c = b - j * NC
-    var tid = Int(thread_idx.x)
-    var D = Int(d)
-    var flag = stack_allocation[MBF_CH, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var cnts = stack_allocation[MBF_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var t0 = c * MBF_CH
-    var cnt = Int(batch) - t0
-    if cnt > MBF_CH:
-        cnt = MBF_CH
-    var mine = 0
-    for r in range(tid, cnt, MBF_TPB):
-        var w = Int(lab[t0 + r]) == j
-        flag[r] = Int32(1) if w else Int32(0)
-        if w:
-            mine += 1
-    cnts[tid] = Int32(mine)
-    barrier()
-    var o = (j * NC + c) * D
-    for f in range(tid, D, MBF_TPB):
-        var a = Float32(0)
-        for r in range(cnt):
-            if flag[r] != Int32(0):
-                a = ftz(a + ftz(x[Int(idx[t0 + r]) * D + f]))
-        part[o + f] = a
-    if tid == 0:
-        var within = 0
-        for u in range(MBF_TPB):
-            within += Int(cnts[u])
-        cpart[j * NC + c] = Int32(within)
+# TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: `_mbf_sum_kernel`, the full 256-row chunk walk per feature; EXP:888 DEFAULT is the compacted sum) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 3334115827.
+# Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def _mbf_sum_cmp_kernel(
     x: FPtr, idx: IPtr, batch: Int32, lab: IPtr, k: Int32, d: Int32, nchunk: Int32, part: FPtr, cpart: IPtr,
 ):
-    """MBK_W2_SUMCMP: `_mbf_sum_kernel` over the compacted rows of center
-    `j` in chunk `c` (ascending row order, so the same sums). MBF_CH ==
+    """MBK_W2_SUMCMP: the per-feature sum over the compacted rows of center
+    `j` in chunk `c` (ascending row order, so the full-chunk walk's sums). MBF_CH ==
     MBF_TPB: thread `tid` owns chunk row `tid`."""
     comptime assert MBF_CH == MBF_TPB, "the compacted sum gives each thread one chunk row"
     var b = Int(block_idx.x)
@@ -543,16 +505,14 @@ def minibatch_fast_steps(
     squared center shift (`_mbf_shift_kernel`, after the reassignment, as the
     loop measures it) and the convergence check stops at the first step past
     0 whose shift is `<= tol`, before the no-improvement count, as the loop
-    does. `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the
-    unit / tol <= 0 gate in the drivers."""
+    does."""
     comptime if MINIBATCH_FAST_DEV:
         if k * d > MBF_MAX_KD or k > MBF_MAX_K or batch > MBF_MAX_BATCH or batch < 1 or n_steps < 1 or k < 1:
             return False
         var G = MBF_GROUP
         var kd = k * d
-        var rg = False
-        comptime if MBK_CLS3_ROWGRP:
-            rg = k <= MBF_RG_MAXK
+        # MBK_CLS3_ROWGRP (the FAST + Apple default): a 32-thread group per row
+        var rg = k <= MBF_RG_MAXK
         var nblk = (batch + MBF_TPB - 1) // MBF_TPB
         if rg:
             nblk = (batch + MBF_RG_ROWS - 1) // MBF_RG_ROWS
@@ -653,16 +613,12 @@ def minibatch_fast_steps(
                         x, pi, Int32(batch), ci, Int32(k), Int32(d), p_lab, p_dist, p_ipart,
                         grid_dim=nblk, block_dim=MBF_TPB,
                     )
-                comptime if MBK_W2_SUMCMP:
-                    ctx.enqueue_function[_mbf_sum_cmp_kernel](
-                        x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
-                        grid_dim=k * nchunk, block_dim=MBF_TPB,
-                    )
-                else:
-                    ctx.enqueue_function[_mbf_sum_kernel](
-                        x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
-                        grid_dim=k * nchunk, block_dim=MBF_TPB,
-                    )
+                # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: `_mbf_sum_kernel`, the full 256-row chunk walk per feature; EXP:888 DEFAULT is the compacted sum) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 3334115827.
+                # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch; record in docs/TOMBSTONES.md.
+                ctx.enqueue_function[_mbf_sum_cmp_kernel](
+                    x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
+                    grid_dim=k * nchunk, block_dim=MBF_TPB,
+                )
                 ctx.enqueue_function[_mbf_finish_kernel](
                     ci, wi, p_part, p_cpart, Int32(nchunk), Int32(k), Int32(d), co, wo, p_ipart, Int32(nblk),
                     p_in + g, grid_dim=ncell_blk, block_dim=MBF_TPB,

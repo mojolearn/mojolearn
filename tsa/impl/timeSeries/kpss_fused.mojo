@@ -36,40 +36,53 @@ centred series in threadgroup memory and runs every stage of
 Stages 1-3 fold the same partials in the same order as the eight-launch
 path; under FAST the block fold is the library's, as there.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import isfinite
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.hostptr import copy_f32
 from core.pinned_reduce import pinned_block_min, pinned_block_prefix_sum, pinned_block_sum
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.stationarity import kpss_lags, kpss_pvalue, kpss_s2B_coefficients, kpss_stat_from_sums
 
 #: lane/apple-fast-gap-tsa: the KPSS test as one launch over ONE device
 #: buffer (input and packed outputs) and ONE host stage, one download
 #: (`kpss_rounds`); FAST + Apple only. Default since the M3 A/B (n=1,
 #: quality identical; kpss taxi-hourly 5.2 -> 1.5 ms, synthetic 5.3 -> 2.0 ms);
-#: -D MOJOLEARN_TSA_FAST_KPSS_PACK_OFF turns it off; the old
-#: -D MOJOLEARN_TSA_FAST_KPSS_PACK is harmless.
-comptime TSA_KPSS_PACK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"]()
+#: the old -D MOJOLEARN_TSA_FAST_KPSS_PACK is harmless.
+# TOMBSTONE: MOJOLEARN_TSA_FAST_KPSS_PACK_OFF (old path, EXP:1848 default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch; record in docs/TOMBSTONES.md.
+#: lane fb15-sync-counts (2026-11-18), IDENTICAL on every vendor, OPT-IN
+#: (owed A/B, NVIDIA L40S: select-d synthetic and taxi-hourly fit, kpss fit):
+#: `kpss_test` and `select_d` as `kpss_rounds`' ONE launch, one upload, one
+#: download, one wait, where the IDENTICAL default is `kpss_one_wait` /
+#: `select_d_fast` (9 and 19 launches per call; the profile of d652a4b0a1 puts
+#: 1.38 ms of select-d's 1.62 ms wall on the host, mostly per-launch enqueue
+#: cost). Every fold in the kernel is pinned (`pinned_block_sum` halving
+#: tree, `pinned_block_prefix_sum` at 32 lanes, `identical_mul_add`, `ftz`),
+#: so the GPU columns agree; but the eta scan is chunked, not the eight-launch
+#: path's, so the statistic's BITS CHANGE and the host column
+#: (`tsa/checks/kpss_oracle.mojo::kpss_host_f32`) must replay this kernel's
+#: fold before the switch can be promoted. Series past KPSS_FUSED_MAX_N, D > 0
+#: and d > 0 (kpss) keep the default path.
+comptime TSA_IDN_ONE_LAUNCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TSA_FAST_KPSS_ONE_LAUNCH"]()
 )
+comptime TSA_KPSS_PACK = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or TSA_IDN_ONE_LAUNCH
 #: lane/apple-fast-gap-tsa: `select_d` as one launch (every round of a
 #: series inside its block, the first stationary order chosen there), the
 #: same packed buffers, one download; FAST + Apple only. Default since the
 #: M3 A/B (n=1, quality identical; select-d taxi-hourly 8.5 -> 2.0 ms,
-#: synthetic 8.0 -> 2.2 ms); -D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF turns it
-#: off; the old -D MOJOLEARN_TSA_FAST_SELD_FUSED is harmless.
-comptime TSA_SELD_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED_OFF"]()
-)
+#: synthetic 8.0 -> 2.2 ms); the old -D MOJOLEARN_TSA_FAST_SELD_FUSED is
+#: harmless.
+# TOMBSTONE: MOJOLEARN_TSA_FAST_SELD_FUSED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 60cbec7970.
+# Restore: git apply experiments/removed/MOJOLEARN_TSA_FAST_SELD_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TSA_SELD_FUSED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or TSA_IDN_ONE_LAUNCH
 #: words per series in the packed output: stat, flag, first bad index
 #: (-1 none), chosen d
 comptime KPSS_PACK_W = 4

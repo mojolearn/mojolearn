@@ -36,8 +36,10 @@ under IDENTICAL. The guards are `kpss_test_host`'s, `kpss_test`'s and
 `tsa/impl/timeSeries/stationarity.mojo`, `tsa/impl/timeSeries/
 arima_helpers.mojo`); the flag is `kpss_pvalue(stat) > pval_threshold`.
 """
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -50,7 +52,7 @@ from checks.kernel_matrix import (
 )
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.holtwinters_host_predict import (
+from bindings.holtwinters_host_predict_door import (
     HW_PREDICT_SABOTAGE,
     holtwinters_forecast_binding,
     holtwinters_predict_binding,
@@ -65,15 +67,24 @@ from holtwinters.impl.runner import (
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
-from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
+from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 
 
 def _index(value: PythonObject) raises -> Int:
+    # p3-cnn-sequence-tsa: an exact int (every argument the public wrapper
+    # builds) is read directly: no class-name reads, no operator module
+    # lookup, no Python call. Anything else keeps the checks below.
+    ref cpy = Python().cpython()
+    var zero = PythonObject(0)
+    var cls = PythonObject(from_owned=cpy.PyObject_Type(value._obj_ptr))
+    var int_type = PythonObject(from_owned=cpy.PyObject_Type(zero._obj_ptr))
+    if cls is int_type:
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("tsa host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -184,6 +195,7 @@ def holtwinters_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tsa_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_tsa_host")
         module.def_function[tsa_host_numeric_mode_binding]("tsa_host_numeric_mode")

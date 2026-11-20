@@ -48,6 +48,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
     HIST2_SMEM_MODE,
 )
 from gbdt.gpu_data.feature_blocks import blocks_for
+from core.device_plan import plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
@@ -57,7 +58,7 @@ from gbdt.methods.doc_parallel_boosting import (
 from gbdt.train import TrainedModel, predict_floats
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     # The model format must cover the full UInt64 hash domain. A direct
     # decimal parse through Int64 cannot represent this value.
@@ -302,7 +303,7 @@ def main() raises:
     var host_words = ctx.enqueue_create_host_buffer[DType.uint32](
         len(staged_borders.compressed.words)
     )
-    ctx.enqueue_copy(dst_ptr=host_words.unsafe_ptr(), src_buf=device_words)
+    download_host_into[DType.uint32](ctx, device_words, host_words)
     ctx.synchronize()
     for i in range(len(staged_borders.compressed.words)):
         if host_words[i] != staged_borders.compressed.words[i]:
@@ -336,7 +337,7 @@ def main() raises:
     var h_base = ctx.enqueue_create_host_buffer[DType.uint32](6)
     for r in range(6):
         h_base.unsafe_ptr().unsafe_store(r, secondary[r])
-    ctx.enqueue_copy(dst_buf=base_device, src_ptr=h_base.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, base_device, h_base)
     var stats = ctx.enqueue_create_buffer[DType.float32](12)
     var h_stats = ctx.enqueue_create_host_buffer[DType.float32](12)
     var grad_mag = Float32(0.0)
@@ -351,12 +352,12 @@ def main() raises:
         var g = tensor_signal + base_signal
         h_stats.unsafe_ptr().unsafe_store(6 + r, g)
         grad_mag += -g if g < Float32(0.0) else g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, h_stats)
     var rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](6)
     for r in range(6):
         h_rows.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=rows, src_ptr=h_rows.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, rows, h_rows)
     var cursor = ctx.enqueue_create_buffer[DType.float32](6)
     ctx.enqueue_memset(cursor, Float32(0.0))
     var splits = List[TBinarySplit]()
@@ -402,8 +403,8 @@ def main() raises:
     # The baseline monolith above remains the independent first-level oracle.
     var sync_rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var sync_stats = ctx.enqueue_create_buffer[DType.float32](12)
-    ctx.enqueue_copy(dst_buf=sync_rows, src_ptr=h_rows.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sync_stats, src_ptr=h_stats.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, sync_rows, h_rows)
+    upload_host_into[DType.float32](ctx, sync_stats, h_stats)
     var sync_layout = pinned_initial.compressed.layout.copy()
     var sync_blocks = blocks_for(sync_layout, 6)
     var sync_state = TSynchronizedSymmetricLevelState(
@@ -413,8 +414,8 @@ def main() raises:
     sync_state.initialize_tree(ctx, Float32(6.0), grad_mag)
     var reference_rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var reference_stats = ctx.enqueue_create_buffer[DType.float32](12)
-    ctx.enqueue_copy(dst_buf=reference_rows, src_ptr=h_rows.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=reference_stats, src_ptr=h_stats.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, reference_rows, h_rows)
+    upload_host_into[DType.float32](ctx, reference_stats, h_stats)
     var reference_layout = pinned_initial.compressed.layout.copy()
     var reference_blocks = blocks_for(reference_layout, 6)
     var reference_state = TSynchronizedSymmetricLevelState(
@@ -431,8 +432,8 @@ def main() raises:
     # form independently of the manual two-level state checks below.
     var production_rows = ctx.enqueue_create_buffer[DType.uint32](6)
     var production_stats = ctx.enqueue_create_buffer[DType.float32](12)
-    ctx.enqueue_copy(dst_buf=production_rows, src_ptr=h_rows.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=production_stats, src_ptr=h_stats.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, production_rows, h_rows)
+    upload_host_into[DType.float32](ctx, production_stats, h_stats)
     var production_zeros: List[UInt32] = [0, 0, 0, 0, 0, 0]
     var production_columns = List[List[UInt32]]()
     production_columns.append(cindex.copy())
@@ -455,7 +456,7 @@ def main() raises:
     production_borders.append(production_border1^)
     production_borders.append(List[Float32]())
     var production_result = run_sequential_two_level_feature_freq_tree(
-        ctx, production_initial, x, production_base_cindex,
+        plan_for_single(), ctx, production_initial, x, production_base_cindex,
         production_columns, production_folds,
         production_one_hot, 6, 3, 2, grid, production_rows, production_stats,
         Float32(6.0), grad_mag, SCORE_FUNCTION_COSINE, False,
@@ -781,3 +782,22 @@ def main() raises:
     if conserved_rows != 6:
         raise Error("synchronized tensor driver lost rows across two levels")
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("tree_ctr_slice_check", cpu=False, gpu=True, serial="", run=run_cases)

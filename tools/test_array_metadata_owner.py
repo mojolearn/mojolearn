@@ -22,21 +22,30 @@ def _method(source, name):
 
 
 def test_replacement_keeps_original_owner_and_current_storage_separate():
-    source = (ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
-    assert len(re.findall(r'^\s+self\.owner\s*=', source, re.M)) == 1
-    assert 'self.owner = owner' in _method(source, '__init__')
+    # Since c7893b3b8d the typed view (core/array_metadata.mojo) holds no Python storage; the door-side ArrayPin
+    # holds `keep` (current storage) and `owner` (the original exporter snapshot). A replacement updates the view
+    # and the pin's `keep`, never the pin's `owner`.
+    door = (ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
+    assert len(re.findall(r'^\s+self\.owner\s*=', door, re.M)) == 2      # the empty pin and the owning pin
+    assert 'self.owner = owner' in door.split('def __init__(out self, keep: PythonObject, owner: PythonObject)', 1)[1]
+    view = (ROOT/'core/array_metadata.mojo').read_text()
+    assert 'PythonObject' not in view.split('struct ArrayMetadata', 1)[1]
     for name in ('replace_f32', 'replace_f64'):
-        body = _method(source, name)
-        assert 'self.keep = keep' in body
-        assert 'self.owner =' not in body
-        assert 'array_owner_once(' not in body
-        assert 'array_slot_once(' not in body
+        body = _method(view, name)
+        assert 'self.keep' not in body and 'self.owner' not in body
         assert 'self.copied = True' in body
         assert 'self.owned_writable = True' in body
+    for rel in ('bindings/admitted_family_door.mojo', 'providers/python/preprocessing_input_pyapi_door.mojo',
+                'providers/python/prep_transform_pyapi_pack.mojo'):
+        text = (ROOT/rel).read_text()
+        assert text.count('.replace_f32(') + text.count('.replace_f64(') >= 1, rel
+        assert '.owner = ' not in text, rel
+        for site in re.split(r'\.replace_f(?:32|64)\(', text)[1:]:
+            assert 'pin.keep = ' in '\n'.join(site.splitlines()[:3]), rel   # the pin keeps the new storage
 
 
 def test_original_mutable_array_slot_owners_are_snapshotted_independently():
-    source = (ROOT/'providers/python/array_metadata_pyapi.mojo').read_text()
+    source = (ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     owner = source.split('def array_owner_once(', 1)[1].split('\ndef ', 1)[0]
     for slot in ('_store', '_base', '_pin', '_mv'):
         assert f'array_slot_once(value, "{slot}", context)' in owner

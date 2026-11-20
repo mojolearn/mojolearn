@@ -13,7 +13,7 @@ from dbscan.checks.dbscan_check import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     check_dbscan()
     check_dbscan_batching_agrees()
     check_dbscan_tiny_budget_agrees()

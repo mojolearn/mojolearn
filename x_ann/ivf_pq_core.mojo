@@ -132,7 +132,7 @@ def pq_probe_takes(d: Float32, l: Int, prev_d: Float32, prev_l: Int, best_d: Flo
     """DEVIATION 5804's comparison: list l (coarse distance d) comes after
     the previous probe (prev_d, prev_l) and before the best so far (best_d,
     best_l) in the total order (distance, list id). `pq_next_probe` and the
-    device walk (`x_ann/ivf_scan_device.mojo::probe_kernel`) both use it."""
+    device walk (`x_ann/ivf_scan_device.mojo::probe_group_kernel`) both use it."""
     var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
     return after and (best_l < 0 or d < best_d or (d == best_d and l < best_l))
 

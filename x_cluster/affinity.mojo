@@ -18,27 +18,24 @@ every fold ascending, the lowest index on an argmax tie) and one for the
 exemplar flags; the convergence window (one flag read an iteration), the
 exemplar refinement and the labels are device primitives too (lane
 cgr2-cluster; the host column runs the reference's loops)."""
-from std.sys.compile import is_defined
-
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import dist_slot
 
-# Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven.
-# `-D MOJOLEARN_AP_EXACT=1`: the same values by less work (the median by the
-# grid-wide radix select straight from the device's distances, the two final
-# diagonals gathered on the device, the equal-similarities scan stopped at
-# its first difference); since lane cgr2-cluster every build takes these
-# (the radix median, the device diagonals, the device equality test), so the
-# define changes nothing. `-D MOJOLEARN_AP_SPLIT=1`: the availability column
-# sums folded over row slices (bits move; the paired quality check).
-comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
+# Since lane cgr2-cluster every build takes the radix median, the device
+# diagonals and the device equality test (lane cluster-apple3's AP_EXACT
+# steps). `-D MOJOLEARN_AP_SPLIT=1`: the availability column sums folded over
+# row slices (bits move; the paired quality check).
+# TOMBSTONE: MOJOLEARN_AP_EXACT (SUPERSEDED) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 854fde92db.
+# Restore: git apply experiments/removed/MOJOLEARN_AP_EXACT.patch; record in docs/TOMBSTONES.md.
 # AP_SPLIT is the FAST + Apple DEFAULT since the M3 A/B (lane
 # apple-fast-cluster2: affinity-prop istella 394.8 -> 264.8 ms, n=1, quality
-# identical); off with `-D MOJOLEARN_AP_SPLIT_OFF`. The old
-# `-D MOJOLEARN_AP_SPLIT=1` is harmless; other FAST columns stay as before.
-comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_AP_SPLIT_OFF"]()
+# identical). The old `-D MOJOLEARN_AP_SPLIT=1` is harmless; other FAST
+# columns stay as before.
+# TOMBSTONE: MOJOLEARN_AP_SPLIT_OFF (old path; EXP:496 KEPT the split as the FAST + Apple default; FAST is Apple only, so no NVIDIA or AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 864c5c4f46.
+# Restore: git apply experiments/removed/MOJOLEARN_AP_SPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
 
 
 def affinity_fit[O: ClusterOps](

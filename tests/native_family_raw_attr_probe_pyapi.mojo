@@ -2,8 +2,8 @@ from std.os import abort
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder
-from bindings.family_raw_attr import family_raw_get_or
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.family_raw_attr_pack import family_raw_get_or
+from bindings.optimizer_public_words_unpack import optimizer_python_error
 
 def read_c(self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:

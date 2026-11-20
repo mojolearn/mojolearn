@@ -44,6 +44,11 @@ from mojolearn._verify_native_runtime import audit_native_call
 payload = json.load(sys.stdin)
 X, y, w, tmp = payload["x"], payload["y"], payload["w"], payload["tmp"]
 n, d = len(X), len(X[0])
+# Warm-up iterations before the steady-state windows (was two windows, 200).
+# The windows stay at 100 iterations: sys.getallocatedblocks reads 30 to 60
+# blocks of noise per window whatever its length (windows of 25 read 33, 56,
+# 42), so a shorter window could not hold the one-block-per-iteration bound.
+WARM = 100
 
 
 def clean(operation, *args, error=None, **kwargs):
@@ -159,27 +164,32 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         assert [sys.getrefcount(v) for v in (X, y, w)] == counts
         # An Array takes no weak reference: an output held by one name must
         # count as a fresh Array held the same way, and a fitted coef_ as one
-        # held by a dictionary and a name.
+        # held by a dictionary and a name, plus the one pin of the model's
+        # native state record (LinearStateOwner, fc1ae0c62e: the native state
+        # reads coef_ by address, so the record keeps it alive; the record is
+        # the model's and dies with it, which the weak references below check).
         fresh = Array((n,), "<f8")
         assert sys.getrefcount(result) == sys.getrefcount(fresh)
         coef = object.__getattribute__(local, "coef_")
         holder = {"coef_": Array((d,))}
         held = holder["coef_"]
-        assert sys.getrefcount(coef) == sys.getrefcount(held)
+        assert sys.getrefcount(coef) == sys.getrefcount(held) + 1
         return [weakref.ref(local), weakref.ref(restored)]
     references = run()
     gc.collect()
     assert [ref for ref in references if ref() is not None] == []
 
-    def cycle():
-        for _ in range(100):  # repeated whole public operations
+    calls = 100  # iterations per window; each runs three public operations
+
+    def cycle(count=calls):
+        for _ in range(count):  # repeated whole public operations
             model.fit(X, y).predict(X)
             model.score(X, y)
-    cycle()
-    cycle()
-    # A leak grows every window of 300 operations; a one-time lazy allocation
-    # (seen once in the third cycle on the Apple route, then flat) does not.
-    # So the gauge reads three windows and holds the smallest growth.
+    cycle(WARM)
+    # A leak grows every window of 3 * calls operations; a one-time lazy
+    # allocation (seen once in the third cycle on the Apple route, then flat)
+    # does not. So the gauge reads three windows and holds the smallest
+    # growth, under one block per iteration.
     growth = []
     for _ in range(3):
         gc.collect()
@@ -187,7 +197,7 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         cycle()
         gc.collect()
         growth.append(sys.getallocatedblocks() - before)
-    assert min(growth) < 100, growth
+    assert min(growth) < calls, growth
     out[name] = r
 
 assert not any(m == "numpy" or m.startswith("numpy.") for m in sys.modules)

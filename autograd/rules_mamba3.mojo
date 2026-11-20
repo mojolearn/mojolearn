@@ -64,7 +64,6 @@
 #
 # Import direction: this module imports the mamba modules; no mamba module
 # imports autograd.
-from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -94,7 +93,7 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Dims,
     Mamba3Weights,
 )
-from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output, mamba_refuse_grad_output_on_device
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
@@ -136,6 +135,11 @@ from autograd.kernels.mamba3_prefill import (
     _m3_scratch,
     _mtick,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the opaque M3_BLOCK rule, tag 72, and the hand Mamba-3 prefill backward walk it called; superseded by the stage rules below) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
@@ -204,6 +208,11 @@ def _m3_same(p: FP, buf: DeviceBuffer[DType.float32], what: String) raises:
 
 
 # ------------------------------------------------------------------ per block state
+# TOMBSTONE: MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD (M3_SCRATCH_HELD: one arena a Mamba-3 block backward, one zero fill a step, no per-block wait; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job
+# nvc-ab-20261119T154232Z-0642a5, base and arm in one job, digests and quality equal: samba-train-step 48.73 -> 48.57
+# ms, 1.00; lm-train-step 1.00; samba-forward 1.02; driver steps 41.60 -> 42.69, 56.33 -> 56.24, 22.38 -> 20.96)
+# deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13. This file's text is the pre-arm text again.
+# Restore: git apply experiments/removed/MOJOLEARN_SAMBA_FAST_STEP_SCRATCH_HELD.patch; record in docs/TOMBSTONES.md.
 struct Mamba3TapeScratch(Movable):
     """Every intermediate the hand walk allocates for one block backward
     (other than the four node gradients of Mamba3TapeBlock and the ten
@@ -888,6 +897,59 @@ def mamba3_tape_backward_on(
     return g^
 
 
+def mamba3_step_backward(
+    ctx: DeviceContext,
+    mut w: Mamba3DeviceWeights,
+    mut st: Mamba3DeviceStages,
+    mut x: DeviceBuffer[DType.float32],
+    d_out: FP,
+    d_x: FP,
+    d_w: FP,
+    at: List[Int],
+    b: Int,
+    l: Int,
+) raises:
+    """The VJP of a RECORDED run of the block step op OPS_M3_STEP (lane
+    x56d-mamba-samba-train-and-host; autograd/block_step_ops.mojo
+    `mamba_step_train_run` kept `st` and `x`, the zero-state prefill on the
+    entry's weights `w`): `mamba3_tape_backward_on` over those stages, no
+    forward recomputed. d(block output) `d_out` (outer tape storage, copied
+    and refused like the public backward's grad_output); d_x and the nine
+    weight gradients at `at` (`_m3_weight_sizes` order: norm_w, w_in,
+    dt_bias, bnorm_w, cnorm_w, b_bias, c_bias, d_skip, w_out) of `d_w`."""
+    var dims = st.dims.copy()
+    var m = b * l
+    var dm = dims.d_model
+    var nh = dims.nheads
+    var d_output = mamba_zeros[False](ctx, m * dm)
+    ctx.enqueue_copy(dst_buf=d_output.create_sub_buffer[DType.float32](0, m * dm),
+                     src_buf=_m3_view(ctx, d_out, m * dm))
+    mamba_refuse_grad_output_on_device(ctx, String("mamba3"), d_output, m * dm)
+    var ton = _MAMBA_TIMING
+    var g = mamba3_tape_backward_on(ctx, w, st, x, d_output, b, l, dims, ton)
+    _m3_put(ctx, d_x, g.x, m * dm)
+    _m3_put(ctx, d_w + at[0], g.block_norm_weight, dm)
+    _m3_put(ctx, d_w + at[1], g.in_proj_weight, dims.d_in_proj() * dm)
+    _m3_put(ctx, d_w + at[2], g.dt_bias, nh)
+    _m3_put(ctx, d_w + at[3], g.B_norm_weight, M3_D_STATE)
+    _m3_put(ctx, d_w + at[4], g.C_norm_weight, M3_D_STATE)
+    _m3_put(ctx, d_w + at[5], g.B_bias, nh * M3_D_STATE)
+    _m3_put(ctx, d_w + at[6], g.C_bias, nh * M3_D_STATE)
+    _m3_put(ctx, d_w + at[7], g.D, nh)
+    _m3_put(ctx, d_w + at[8], g.out_proj_weight, dm * dims.d_inner)
+    # the copies read g: one wait before it goes
+    ctx.synchronize()
+    _ = g^
+    _ = d_output^
+
+
+def _m3_put(ctx: DeviceContext, dst: FP, src: DeviceBuffer[DType.float32], n: Int) raises:
+    """dst[0:n] = src[0:n] on the device (a gradient into the outer tape)."""
+    if n <= 0:
+        return
+    ctx.enqueue_copy(dst_buf=_m3_view(ctx, dst, n), src_buf=src.create_sub_buffer[DType.float32](0, n))
+
+
 def mamba3_tape_backward(
     weights: Mamba3Weights,
     input: List[Float32],
@@ -905,7 +967,7 @@ def mamba3_tape_backward(
         raise Error("mamba3 backward: input and grad_output lengths must equal B*L*d_model")
     var dims = weights.dims.copy()
     var m = b * l
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)
     var stages = Mamba3DeviceStages(ctx, b, l, 0, dims)

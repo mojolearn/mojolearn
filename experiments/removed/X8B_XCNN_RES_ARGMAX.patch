@@ -1,0 +1,213 @@
+diff --git a/bindings/_mojolearn_x_cnn.mojo b/bindings/_mojolearn_x_cnn.mojo
+index 92618d56aa..73e0375f4f 100644
+--- a/bindings/_mojolearn_x_cnn.mojo
++++ b/bindings/_mojolearn_x_cnn.mojo
+@@ -48,6 +48,7 @@ from x_cnn.device import (
+     res_free,
+     res_upload,
+     res_download,
++    res_argmax,
+     res_gather,
+     res_gather_pair,
+     opt_many_resident,
+@@ -737,8 +738,17 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
+     return PythonObject(n)
+ 
+ 
+-# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+-# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
++def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
++    """dst (int32, n) = each row's first largest column of the resident
++    n x k block h (params [n, k]), computed on the device; only the labels
++    come down (lane pyglue-numeric: the classifier's numpy argmax)."""
++    var n = Int(py=params[0])
++    var k = Int(py=params[1])
++    var hh = Int(py=h)
++    var dst = _ip(dst_addr)
++    with GILReleased(Python()):
++        res_argmax(hh, dst, n, k)
++    return PythonObject(n)
+ 
+ 
+ def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+@@ -1249,7 +1259,7 @@ def build__mojolearn_x_cnn() -> PythonObject:
+         m.def_function[res_free_binding]("x_cnn_res_free")
+         m.def_function[res_upload_binding]("x_cnn_res_upload")
+         m.def_function[res_download_binding]("x_cnn_res_download")
+-        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
++        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+         m.def_function[res_gather_binding]("x_cnn_res_gather")
+diff --git a/bindings/_mojolearn_x_cnn_host.mojo b/bindings/_mojolearn_x_cnn_host.mojo
+index 9f15358371..7e2b3b2fd8 100644
+--- a/bindings/_mojolearn_x_cnn_host.mojo
++++ b/bindings/_mojolearn_x_cnn_host.mojo
+@@ -22,7 +22,7 @@ from x_cnn.ops import NN14_BOUNDED_IM2COL
+ from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
+ from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
+ from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
+-from x_cnn.ops import FP, IP
++from x_cnn.ops import FP, IP, argmax_row_at
+ from x_cnn.host.gemm_host import gemm_host_into
+ from x_cnn.host.ops_host import conv2d_forward_into, conv2d_backward_into
+ from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
+@@ -49,6 +49,7 @@ from x_cnn.host.binding_entries_impl import (
+     pool_counts as _pool_counts,
+     check_labels_below,
+     csr_checked,
++    argmax_rows_into,
+     gather_rows_f32,
+ )
+ from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
+@@ -750,8 +751,16 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
+     return PythonObject(nn)
+ 
+ 
+-# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+-# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
++def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
++    """The GPU binding's `x_cnn_res_argmax` on host memory: the same item."""
++    var n = Int(py=params[0])
++    var k = Int(py=params[1])
++    if n > 0 and k > 0:
++        var src = FP(unsafe_from_address=Int(py=h))
++        var dst = IP(unsafe_from_address=Int(py=dst_addr))
++        with GILReleased(Python()):  # p3-cnn-sequence-tsa
++            argmax_rows_into(src, dst, n, k)
++    return PythonObject(n)
+ 
+ 
+ def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+@@ -901,7 +910,7 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
+         m.def_function[res_free_binding]("x_cnn_res_free")
+         m.def_function[res_upload_binding]("x_cnn_res_upload")
+         m.def_function[res_download_binding]("x_cnn_res_download")
+-        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
++        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+         m.def_function[res_gather_binding]("x_cnn_res_gather")
+diff --git a/python/mojolearn/_native_xcnn_bridge.py b/python/mojolearn/_native_xcnn_bridge.py
+index 8a25b13824..3268c4f120 100644
+--- a/python/mojolearn/_native_xcnn_bridge.py
++++ b/python/mojolearn/_native_xcnn_bridge.py
+@@ -68,6 +68,7 @@ _NAMES = (
+     "x_cnn_relu_forward",
+     "x_cnn_res_alloc",
+     "x_cnn_res_alloc_nofill",
++    "x_cnn_res_argmax",
+     "x_cnn_res_download",
+     "x_cnn_res_free",
+     "x_cnn_res_gather",
+diff --git a/python/mojolearn/_surface_cnn.py b/python/mojolearn/_surface_cnn.py
+index 8db0a8083d..0f9f0d1b37 100644
+--- a/python/mojolearn/_surface_cnn.py
++++ b/python/mojolearn/_surface_cnn.py
+@@ -46,7 +46,7 @@ FAMILIES = (
+             "x_cnn_spmm", "x_cnn_gcn_norm", "x_cnn_pad2d_forward", "x_cnn_pad2d_backward",
+             "x_cnn_adaptive_pool", "x_cnn_graph_op",
+             "x_cnn_vendor",
+-            "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_gather",
++            "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_argmax", "x_cnn_res_gather",
+             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
+             "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r",
+             "x_cnn_idn2_flags",
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index 4191e4708e..ed108a023b 100644
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -68,7 +68,7 @@ from x_cnn.ops import (
+     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
+     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
+     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
+-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at,
++    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
+     chan_slice_at, chan_place_at,
+ )
+ # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+@@ -1004,8 +1004,24 @@ def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
+     _ = ctx^
+ 
+ 
+-# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+-# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
++def res_argmax(addr: Int, dst: IP, n: Int, k: Int) raises:
++    """dst[i] (int32, host) = row i's `argmax_row_at` of the resident n x k
++    block at `addr`: only the n labels come down."""
++    if n <= 0 or k <= 0:
++        return
++    var ctx = cnn_ctx()
++    var src = view(ctx, FP(unsafe_from_address=addr), n * k)
++    var out = ws_i(ctx, 0, n)
++    var prm: List[Int32] = [Int32(k)]
++    var dp = put_prm(ctx, 1, prm)
++    launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
++    down_i(ctx, out, dst, n)
++    ctx.synchronize()
++    _ = prm^
++    _ = dp^
++    _ = out^
++    _ = src^
++    _ = ctx^
+ 
+ 
+ def res_download(addr: Int, dst: FP, n: Int) raises:
+diff --git a/x_cnn/host/binding_entries_impl.mojo b/x_cnn/host/binding_entries_impl.mojo
+index 5140909045..34d2eb72bd 100644
+--- a/x_cnn/host/binding_entries_impl.mojo
++++ b/x_cnn/host/binding_entries_impl.mojo
+@@ -14,7 +14,7 @@ from std.memory import memcpy
+ from core.hostptr import read_i32
+ from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
+ from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW
+-from x_cnn.ops import FP, IP
++from x_cnn.ops import FP, IP, argmax_row_at
+ 
+ 
+ @always_inline
+@@ -61,8 +61,13 @@ def csr_checked(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) raises ->
+     return (csr^, prm^)
+ 
+ 
+-# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+-# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
++def argmax_rows_into(src: FP, dst: IP, n: Int, k: Int):
++    """`x_cnn_res_argmax` on host memory: `argmax_row_at` for rows 0 .. n-1."""
++    var prm = List[Int32](length=1, fill=Int32(k))
++    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    for i in range(n):
++        argmax_row_at(i, src, src, src, src, dst, pp)
++    _ = prm^
+ 
+ 
+ def gather_rows_f32(
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index 7799835473..e351e95164 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -343,8 +343,22 @@ def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
+     dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
+ 
+ 
+-# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+-# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
++def argmax_row_at(i: Int, proba: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
++    """q[i] = the column of row i's first largest value (k = p[0] columns;
++    a NaN wins at its first occurrence, as numpy's argmax): the classifier's
++    predict on the device (lane pyglue-numeric: numpy's argmax on the host)."""
++    var k = Int(p.unsafe_load(0))
++    var base = i * k
++    var best = 0
++    var bv = proba.unsafe_load(base)
++    for j in range(1, k):
++        if bv != bv:
++            break
++        var v = proba.unsafe_load(base + j)
++        if v != v or v > bv:
++            best = j
++            bv = v
++    q.unsafe_store(i, Int32(best))
+ 
+ 
+ # ---------------------------------------------------------------- pooling

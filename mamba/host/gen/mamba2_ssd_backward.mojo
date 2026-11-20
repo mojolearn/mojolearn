@@ -17,6 +17,8 @@ from std.os import abort
 from mamba.host.device_shim import host_launch, launch_count
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from std.memory import stack_allocation
 from mamba.host.gen.device_optimizations import IDN_M2_SSD_TILES
 
@@ -38,9 +40,11 @@ from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.host.gen.modeling_mamba import mamba_scratch
 
 
-# NN39: shared pure Mojo profile imported by both device and checked-in
-# generated host source. Future regeneration preserves the same import.
-from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, IDN_M2_GRAD_FOLD_ARM, nn39_gradient_tree
+# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 and 2) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is mamba/impl/ops/neural_gradient_profile.mojo); code recoverable at d788d4c3f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 (NN39 tile tree) and 2 (NI44 128-row leaves) of the Mamba-2 gradient fold) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 92dbaa2ecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: mamba/impl/ops/neural_gradient_profile.mojo deleted: IDN_M2_GRAD_FOLD_ARM, NN39_M2_GRAD_TREE and nn39_gradient_tree had no importer.)
 
 comptime M2_SSD_BWD_TPB = 128
 
@@ -48,8 +52,7 @@ comptime M2_SSD_BWD_TPB = 128
 # lane nr-mamba (2026-10-04), roadmap B6. IDENTICAL only; every column
 # (NVIDIA, AMD, Apple and the generated host column) runs this same source.
 #
-# IDN_M2_BWD_CELL (default ON; `-D MOJOLEARN_IDN_M2_BWD_CELL_OFF` or
-# `-D MOJOLEARN_IDN_ALL_OFF` restores main): the conv backward's per-cell
+# IDN_M2_BWD_CELL (IDENTICAL; FAST keeps main's kernels): the conv backward's per-cell
 # parts (d_conv, d_in) and the S9/S10 per-cell parts (d_dt, d_dtraw) run one
 # thread per cell, where main ran one thread per channel (conv, over B x L)
 # or per head (nh threads in all, over B x T). Each cell is the same chain,
@@ -66,25 +69,13 @@ comptime M2_SSD_BWD_TPB = 128
 # upstream reads them (the optimizer state follows them). The tile height
 # is a constant, not a shape rule.
 # ---------------------------------------------------------------------------
-comptime IDN_M2_BWD_CELL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_M2_BWD_CELL_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at a6c819032b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
 ]()
-# NI44 V subarm: halve each logical gradient leaf to expose twice the
-# independent token work before the same ascending tile merge. 128 is a fixed
-# reduction granularity, not a benchmark shape; all host/GPU columns change
-# the graph together. Existing allocation uses m2_fold_tiles, including tails.
-# Default OFF. No gradient/trajectory quality or performance claim is made.
-comptime IDN_M2_GRAD_LEAF128 = (
-    IDN_M2_BWD_FOLD_TILED
-    and IDN_M2_GRAD_FOLD_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
+comptime M2_BWD_FOLD_ROWS = 256
 
 
 def m2_fold_rows_per_tile(rows: Int) -> Int:
@@ -214,7 +205,7 @@ def mamba2_cstate_ddecay_into(
     var _l1_a10 = Int32(qv)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10}:
         mamba2_cstate_ddecay_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10)
-    host_launch(_launch_1, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
 
 
 def mamba2_s18_direct_dpass_kernel(gid_: Int,
@@ -435,7 +426,7 @@ def mamba2_s18_direct_dpass_into(
     var _l2_a10 = Int32(qv)
     def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10}:
         mamba2_s18_direct_dpass_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10)
-    host_launch(_launch_2, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_2, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     var extra_cells = b * nh * nc * qv
     var dc_cells = b * t_work * M2_D_STATE
     if dc_cells > extra_cells:
@@ -455,7 +446,7 @@ def mamba2_s18_direct_dpass_into(
     var _l3_a12 = Int32(qv)
     def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8, imm _l3_a9, imm _l3_a10, imm _l3_a11, imm _l3_a12}:
         mamba2_s18_dc_ddacs_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8, _l3_a9, _l3_a10, _l3_a11, _l3_a12)
-    host_launch(_launch_3, launch_count((_grid(extra_cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_3, launch_count((_grid(extra_cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
 
 
 struct Mamba2SSDScaleReduction(Movable):
@@ -658,7 +649,7 @@ def mamba2_conv_backward_prefill_into(
         var _l4_a7 = Int32(cd)
         def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7}:
             mamba2_conv_backward_dconv_cell_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7)
-        host_launch(_launch_4, launch_count((_grid(rows * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_4, launch_count((_grid(rows * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 67)
         var _l5_a0 = output.d_in_xbc.unsafe_ptr()
         var _l5_a1 = output.d_conv.unsafe_ptr()
         var _l5_a2 = w.unsafe_ptr()
@@ -667,7 +658,7 @@ def mamba2_conv_backward_prefill_into(
         var _l5_a5 = Int32(cd)
         def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5}:
             mamba2_conv_backward_din_cell_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5)
-        host_launch(_launch_5, launch_count((_grid(rows * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_5, launch_count((_grid(rows * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
         var per = m2_fold_rows_per_tile(rows)
         var tiles = m2_fold_tiles(rows)
         var _l6_a0 = output.fold_part.unsafe_ptr()
@@ -682,7 +673,7 @@ def mamba2_conv_backward_prefill_into(
         var _l6_a9 = Int32(tiles)
         def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7, imm _l6_a8, imm _l6_a9}:
             mamba2_conv_dw_partial_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7, _l6_a8, _l6_a9)
-        host_launch(_launch_6, launch_count((_grid(tiles * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_6, launch_count((_grid(tiles * cd), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
         var _l7_a0 = output.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l7_a1 = output.d_b.unsafe_ptr()
         var _l7_a2 = output.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -694,7 +685,7 @@ def mamba2_conv_backward_prefill_into(
         var _l7_a8 = Int32(0)
         def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8}:
             m2_fold_tiles_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8)
-        host_launch(_launch_7, launch_count((_grid(cd * 5), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_7, launch_count((_grid(cd * 5), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     else:
         var _l8_a0 = output.d_conv.unsafe_ptr()
         var _l8_a1 = output.d_in_xbc.unsafe_ptr()
@@ -713,7 +704,7 @@ def mamba2_conv_backward_prefill_into(
         var _l8_a14 = Int32(dip)
         def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8, imm _l8_a9, imm _l8_a10, imm _l8_a11, imm _l8_a12, imm _l8_a13, imm _l8_a14}:
             mamba2_conv_backward_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8, _l8_a9, _l8_a10, _l8_a11, _l8_a12, _l8_a13, _l8_a14)
-        host_launch(_launch_8, launch_count((_grid(cd),1,1), (M2_SSD_BWD_TPB,1,1)))
+        host_launch(_launch_8, launch_count((_grid(cd),1,1), (M2_SSD_BWD_TPB,1,1)), 0)
 
 
 def mamba2_postconv_merge_kernel(gid_: Int,
@@ -755,7 +746,7 @@ def mamba2_postconv_merge_into(
     var _l9_a7 = Int32(xc)
     def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3, imm _l9_a4, imm _l9_a5, imm _l9_a6, imm _l9_a7}:
         mamba2_postconv_merge_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3, _l9_a4, _l9_a5, _l9_a6, _l9_a7)
-    host_launch(_launch_9, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_9, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 17)
 def mamba2_cstate_dxd_db_kernel(gid_: Int,
     d_xd: MutPointer[Float32, MutAnyOrigin], d_b: MutPointer[Float32, MutAnyOrigin],
     d_b_total: MutPointer[Float32, MutAnyOrigin], d_b_cb: MutPointer[Float32, MutAnyOrigin],
@@ -1195,11 +1186,8 @@ def m2_fold_tiles_kernel(gid_: Int,
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    comptime if NN39_M2_GRAD_TREE:
-        acc = nn39_gradient_tree(part, tiles, cols, c)
-    else:
-        for tile in range(1, tiles):
-            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    for tile in range(1, tiles):
+        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:
@@ -1267,7 +1255,7 @@ def _m2_da_product_into(
         var _l10_a4 = Int32(nh)
         def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2, imm _l10_a3, imm _l10_a4}:
             mamba2_da_cell_kernel(gid_, _l10_a0, _l10_a1, _l10_a2, _l10_a3, _l10_a4)
-        host_launch(_launch_10, launch_count((_grid(bt * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_10, launch_count((_grid(bt * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 15)
         var per = m2_fold_rows_per_tile(bt)
         var tiles = m2_fold_tiles(bt)
         var _l11_a0 = output.fold_part.unsafe_ptr()
@@ -1280,7 +1268,7 @@ def _m2_da_product_into(
         var _l11_a7 = Int32(1)
         def _launch_11(gid_: Int) {imm _l11_a0, imm _l11_a1, imm _l11_a2, imm _l11_a3, imm _l11_a4, imm _l11_a5, imm _l11_a6, imm _l11_a7}:
             m2_fold_rows_partial_kernel(gid_, _l11_a0, _l11_a1, _l11_a2, _l11_a3, _l11_a4, _l11_a5, _l11_a6, _l11_a7)
-        host_launch(_launch_11, launch_count((_grid(tiles * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_11, launch_count((_grid(tiles * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
         var _l12_a0 = output.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l12_a1 = output.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l12_a2 = output.d_a_log.unsafe_ptr()
@@ -1292,7 +1280,7 @@ def _m2_da_product_into(
         var _l12_a8 = Int32(1)
         def _launch_12(gid_: Int) {imm _l12_a0, imm _l12_a1, imm _l12_a2, imm _l12_a3, imm _l12_a4, imm _l12_a5, imm _l12_a6, imm _l12_a7, imm _l12_a8}:
             m2_fold_tiles_kernel(gid_, _l12_a0, _l12_a1, _l12_a2, _l12_a3, _l12_a4, _l12_a5, _l12_a6, _l12_a7, _l12_a8)
-        host_launch(_launch_12, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_12, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     else:
         var _l13_a0 = output.d_a.unsafe_ptr()
         var _l13_a1 = output.d_a_log.unsafe_ptr()
@@ -1304,7 +1292,7 @@ def _m2_da_product_into(
         var _l13_a7 = Int32(nh)
         def _launch_13(gid_: Int) {imm _l13_a0, imm _l13_a1, imm _l13_a2, imm _l13_a3, imm _l13_a4, imm _l13_a5, imm _l13_a6, imm _l13_a7}:
             mamba2_da_product_backward_kernel(gid_, _l13_a0, _l13_a1, _l13_a2, _l13_a3, _l13_a4, _l13_a5, _l13_a6, _l13_a7)
-        host_launch(_launch_13, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_13, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
 
 
 def mamba2_reverse_cumsum_and_da_into(
@@ -1324,7 +1312,7 @@ def mamba2_reverse_cumsum_and_da_into(
     var _l14_a6 = Int32(qv)
     def _launch_14(gid_: Int) {imm _l14_a0, imm _l14_a1, imm _l14_a2, imm _l14_a3, imm _l14_a4, imm _l14_a5, imm _l14_a6}:
         mamba2_reverse_cumsum_kernel(gid_, _l14_a0, _l14_a1, _l14_a2, _l14_a3, _l14_a4, _l14_a5, _l14_a6)
-    host_launch(_launch_14, launch_count((_grid(b * nh * nc), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_14, launch_count((_grid(b * nh * nc), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     _m2_da_product_into(
         ctx, output, False, dt, a, b * t_work, nh
     )
@@ -1360,7 +1348,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     var _l15_a10 = Int32(qv)
     def _launch_15(gid_: Int) {imm _l15_a0, imm _l15_a1, imm _l15_a2, imm _l15_a3, imm _l15_a4, imm _l15_a5, imm _l15_a6, imm _l15_a7, imm _l15_a8, imm _l15_a9, imm _l15_a10}:
         mamba2_ydiag_matrix_backward_kernel(gid_, _l15_a0, _l15_a1, _l15_a2, _l15_a3, _l15_a4, _l15_a5, _l15_a6, _l15_a7, _l15_a8, _l15_a9, _l15_a10)
-    host_launch(_launch_15, launch_count((_grid(b * nc * qv * qv), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_15, launch_count((_grid(b * nc * qv * qv), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     var _l16_a0 = output.d_b_cb.unsafe_ptr()
     var _l16_a1 = output.d_c_cb.unsafe_ptr()
     var _l16_a2 = output.d_cb_ydiag.unsafe_ptr()
@@ -1373,7 +1361,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     var _l16_a9 = Int32(qv)
     def _launch_16(gid_: Int) {imm _l16_a0, imm _l16_a1, imm _l16_a2, imm _l16_a3, imm _l16_a4, imm _l16_a5, imm _l16_a6, imm _l16_a7, imm _l16_a8, imm _l16_a9}:
         mamba2_cb_backward_kernel(gid_, _l16_a0, _l16_a1, _l16_a2, _l16_a3, _l16_a4, _l16_a5, _l16_a6, _l16_a7, _l16_a8, _l16_a9)
-    host_launch(_launch_16, launch_count((_grid(b * t_work * M2_D_STATE), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_16, launch_count((_grid(b * t_work * M2_D_STATE), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     var cstate_cells = b * t_work * nh * M2_HEADDIM
     if b * t_work * M2_D_STATE > cstate_cells:
         cstate_cells = b * t_work * M2_D_STATE
@@ -1394,7 +1382,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     var _l17_a14 = Int32(qv)
     def _launch_17(gid_: Int) {imm _l17_a0, imm _l17_a1, imm _l17_a2, imm _l17_a3, imm _l17_a4, imm _l17_a5, imm _l17_a6, imm _l17_a7, imm _l17_a8, imm _l17_a9, imm _l17_a10, imm _l17_a11, imm _l17_a12, imm _l17_a13, imm _l17_a14}:
         mamba2_cstate_dxd_db_kernel(gid_, _l17_a0, _l17_a1, _l17_a2, _l17_a3, _l17_a4, _l17_a5, _l17_a6, _l17_a7, _l17_a8, _l17_a9, _l17_a10, _l17_a11, _l17_a12, _l17_a13, _l17_a14)
-    host_launch(_launch_17, launch_count((_grid(cstate_cells),1,1), (M2_SSD_BWD_TPB,1,1)))
+    host_launch(_launch_17, launch_count((_grid(cstate_cells),1,1), (M2_SSD_BWD_TPB,1,1)), 0)
     var _l18_a0 = output.d_da_seg.unsafe_ptr()
     var _l18_a1 = output.d_da_total.unsafe_ptr()
     var _l18_a2 = output.d_seg_ydiag.unsafe_ptr()
@@ -1407,7 +1395,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     var _l18_a9 = Int32(qv)
     def _launch_18(gid_: Int) {imm _l18_a0, imm _l18_a1, imm _l18_a2, imm _l18_a3, imm _l18_a4, imm _l18_a5, imm _l18_a6, imm _l18_a7, imm _l18_a8, imm _l18_a9}:
         mamba2_seg_backward_kernel(gid_, _l18_a0, _l18_a1, _l18_a2, _l18_a3, _l18_a4, _l18_a5, _l18_a6, _l18_a7, _l18_a8, _l18_a9)
-    host_launch(_launch_18, launch_count((_grid(b * t_work * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_18, launch_count((_grid(b * t_work * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     _m2_da_product_into(
         ctx, output, True, dt, a, b * t_work, nh
     )
@@ -1433,7 +1421,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l19_a18 = Int32(qv)
         def _launch_19(gid_: Int) {imm _l19_a0, imm _l19_a1, imm _l19_a2, imm _l19_a3, imm _l19_a4, imm _l19_a5, imm _l19_a6, imm _l19_a7, imm _l19_a8, imm _l19_a9, imm _l19_a10, imm _l19_a11, imm _l19_a12, imm _l19_a13, imm _l19_a14, imm _l19_a15, imm _l19_a16, imm _l19_a17, imm _l19_a18}:
             mamba2_ydiag_xd_backward_tile_kernel(gid_, _l19_a0, _l19_a1, _l19_a2, _l19_a3, _l19_a4, _l19_a5, _l19_a6, _l19_a7, _l19_a8, _l19_a9, _l19_a10, _l19_a11, _l19_a12, _l19_a13, _l19_a14, _l19_a15, _l19_a16, _l19_a17, _l19_a18)
-        host_launch(_launch_19, launch_count((b * t_work * nh, 1, 1), (M2_HEADDIM, 1, 1)))
+        host_launch(_launch_19, launch_count((b * t_work * nh, 1, 1), (M2_HEADDIM, 1, 1)), 0)
     else:
         var _l20_a0 = output.d_xd_ydiag.unsafe_ptr()
         var _l20_a1 = output.d_x_from_xd.unsafe_ptr()
@@ -1456,7 +1444,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l20_a18 = Int32(qv)
         def _launch_20(gid_: Int) {imm _l20_a0, imm _l20_a1, imm _l20_a2, imm _l20_a3, imm _l20_a4, imm _l20_a5, imm _l20_a6, imm _l20_a7, imm _l20_a8, imm _l20_a9, imm _l20_a10, imm _l20_a11, imm _l20_a12, imm _l20_a13, imm _l20_a14, imm _l20_a15, imm _l20_a16, imm _l20_a17, imm _l20_a18}:
             mamba2_ydiag_xd_backward_kernel(gid_, _l20_a0, _l20_a1, _l20_a2, _l20_a3, _l20_a4, _l20_a5, _l20_a6, _l20_a7, _l20_a8, _l20_a9, _l20_a10, _l20_a11, _l20_a12, _l20_a13, _l20_a14, _l20_a15, _l20_a16, _l20_a17, _l20_a18)
-        host_launch(_launch_20, launch_count((_grid(b * t_work * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_20, launch_count((_grid(b * t_work * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     comptime if IDN_M2_BWD_CELL:
         var bt = b * t_work
         var _l21_a0 = output.d_dtraw.unsafe_ptr()
@@ -1469,7 +1457,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l21_a7 = dt_hi
         def _launch_21(gid_: Int) {imm _l21_a0, imm _l21_a1, imm _l21_a2, imm _l21_a3, imm _l21_a4, imm _l21_a5, imm _l21_a6, imm _l21_a7}:
             mamba2_dt_cell_kernel(gid_, _l21_a0, _l21_a1, _l21_a2, _l21_a3, _l21_a4, _l21_a5, _l21_a6, _l21_a7)
-        host_launch(_launch_21, launch_count((_grid(bt * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_21, launch_count((_grid(bt * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 84)
         var per = m2_fold_rows_per_tile(bt)
         var tiles = m2_fold_tiles(bt)
         var _l22_a0 = output.fold_part.unsafe_ptr()
@@ -1482,7 +1470,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l22_a7 = Int32(0)
         def _launch_22(gid_: Int) {imm _l22_a0, imm _l22_a1, imm _l22_a2, imm _l22_a3, imm _l22_a4, imm _l22_a5, imm _l22_a6, imm _l22_a7}:
             m2_fold_rows_partial_kernel(gid_, _l22_a0, _l22_a1, _l22_a2, _l22_a3, _l22_a4, _l22_a5, _l22_a6, _l22_a7)
-        host_launch(_launch_22, launch_count((_grid(tiles * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_22, launch_count((_grid(tiles * nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
         var _l23_a0 = output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l23_a1 = output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var _l23_a2 = output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -1494,7 +1482,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l23_a8 = Int32(0)
         def _launch_23(gid_: Int) {imm _l23_a0, imm _l23_a1, imm _l23_a2, imm _l23_a3, imm _l23_a4, imm _l23_a5, imm _l23_a6, imm _l23_a7, imm _l23_a8}:
             m2_fold_tiles_kernel(gid_, _l23_a0, _l23_a1, _l23_a2, _l23_a3, _l23_a4, _l23_a5, _l23_a6, _l23_a7, _l23_a8)
-        host_launch(_launch_23, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_23, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     else:
         var _l24_a0 = output.d_dtraw.unsafe_ptr()
         var _l24_a1 = output.d_dt_bias.unsafe_ptr()
@@ -1507,7 +1495,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var _l24_a8 = dt_hi
         def _launch_24(gid_: Int) {imm _l24_a0, imm _l24_a1, imm _l24_a2, imm _l24_a3, imm _l24_a4, imm _l24_a5, imm _l24_a6, imm _l24_a7, imm _l24_a8}:
             mamba2_dt_backward_kernel(gid_, _l24_a0, _l24_a1, _l24_a2, _l24_a3, _l24_a4, _l24_a5, _l24_a6, _l24_a7, _l24_a8)
-        host_launch(_launch_24, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+        host_launch(_launch_24, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
 
 
 def mamba2_merge_dacs_kernel(gid_: Int,
@@ -1641,7 +1629,7 @@ def mamba2_reverse_chunk_state_into(
     var _l25_a11 = Int32(qv)
     def _launch_25(gid_: Int) {imm _l25_a0, imm _l25_a1, imm _l25_a2, imm _l25_a3, imm _l25_a4, imm _l25_a5, imm _l25_a6, imm _l25_a7, imm _l25_a8, imm _l25_a9, imm _l25_a10, imm _l25_a11}:
         mamba2_reverse_chunk_state_kernel(gid_, _l25_a0, _l25_a1, _l25_a2, _l25_a3, _l25_a4, _l25_a5, _l25_a6, _l25_a7, _l25_a8, _l25_a9, _l25_a10, _l25_a11)
-    host_launch(_launch_25, launch_count((_grid(chains), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_25, launch_count((_grid(chains), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
 
 
 def mamba2_reduce_scale_product_into(
@@ -1686,7 +1674,7 @@ def mamba2_reduce_scale_product_into(
     var _l26_a6 = Int32(qv)
     def _launch_26(gid_: Int) {imm _l26_a0, imm _l26_a1, imm _l26_a2, imm _l26_a3, imm _l26_a4, imm _l26_a5, imm _l26_a6}:
         mamba2_scale_to_dacs_kernel(gid_, _l26_a0, _l26_a1, _l26_a2, _l26_a3, _l26_a4, _l26_a5, _l26_a6)
-    host_launch(_launch_26, launch_count((_grid(rows), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_26, launch_count((_grid(rows), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 50)
     var _l27_a0 = reduction.d_dacs_decay.unsafe_ptr()
     var _l27_a1 = state.d_decay_cstate.unsafe_ptr()
     var _l27_a2 = decay.unsafe_ptr()
@@ -1694,7 +1682,7 @@ def mamba2_reduce_scale_product_into(
     var _l27_a4 = Int32(qv)
     def _launch_27(gid_: Int) {imm _l27_a0, imm _l27_a1, imm _l27_a2, imm _l27_a3, imm _l27_a4}:
         mamba2_decay_to_dacs_kernel(gid_, _l27_a0, _l27_a1, _l27_a2, _l27_a3, _l27_a4)
-    host_launch(_launch_27, launch_count((_grid(rows), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_27, launch_count((_grid(rows), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 0)
     var dacs_cells = rows * qv
     var _l28_a0 = reduction.d_dacs_total.unsafe_ptr()
     var _l28_a1 = state.d_dacs_yoff.unsafe_ptr()
@@ -1703,4 +1691,4 @@ def mamba2_reduce_scale_product_into(
     var _l28_a4 = Int32(dacs_cells)
     def _launch_28(gid_: Int) {imm _l28_a0, imm _l28_a1, imm _l28_a2, imm _l28_a3, imm _l28_a4}:
         mamba2_merge_dacs_kernel(gid_, _l28_a0, _l28_a1, _l28_a2, _l28_a3, _l28_a4)
-    host_launch(_launch_28, launch_count((_grid(dacs_cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
+    host_launch(_launch_28, launch_count((_grid(dacs_cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)), 16)

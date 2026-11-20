@@ -39,7 +39,7 @@ def tame(var x: List[Float32]) -> List[Float32]:
     return x^
 
 
-def main() raises:
+def run_checks() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp rows_check (DEVIATIONS 5310-5313, 5316, 5321)")
     var info = zeros(1)

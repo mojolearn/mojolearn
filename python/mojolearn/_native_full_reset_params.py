@@ -2,35 +2,13 @@
 """Import-time schemas for full-reset field-only parameter setters."""
 from types import BuiltinFunctionType
 from .tokenizer import _binding
-from . import _expansion_trees as _m0
-from . import _expansion_neighbors as _m1
-from . import _expansion_cluster as _m2
-from . import _hierarchy_impl as _m3
-from . import _expansion_ann as _m4
-from . import density as _m6
-from . import _solver_impl as _m7
-from . import mixture as _m9
-from . import _gpc_impl as _m10
-from . import _gp_impl as _m11
-from . import hdbscan as _m12
-from . import _ivf_impl as _m13
-from . import _iforest_impl as _m14
-from . import _expansion_linear as _m15
-from . import cluster as _m16
-from . import neighbors as _m17
-from . import kernel_methods as _m18
-from . import svm as _m19
-from . import decomposition as _m21
-from . import _svm_impl as _m22
-from . import _spectral_impl as _m23
-from . import _umap_impl as _m24
 
 _ENTRY = _binding()._module.full_reset_params_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset parameter setters require a compiled native entry')
 # The same event schemas are the whole original constructors: the public
 # __init__ of every class below is one call to this entry
-# (bindings/full_reset_constructor_native.mojo).
+# (bindings/full_reset_constructor_native_door.mojo).
 _INIT_ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_INIT_ENTRY) is not BuiltinFunctionType:
     raise TypeError('full-reset constructors require a compiled native entry')
@@ -46,95 +24,104 @@ _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
 # original signature, which the native constructor plan retains verbatim.
 # Keep an explicit vetted inventory; field-only construction alone does not
 # establish that the remaining methods of every _CLASSES member are native.
+# Class names, resolved through _CLASS_SOURCES when their family loads.
 _NATIVE_PUBLIC_CLASSES = (
-    _m17.NearestNeighbors,
-    _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor,
-    _m17.RadiusNeighbors,
-    _m1.LocalOutlierFactor,
-    _m1.NearestCentroid,
-    _m13.IVFIndex,
-    _m4.IVFPQIndex,
-    _m4.IVFSQIndex,
-    _m4.IVFRaBitQIndex,
-    _m4.CagraIndex,
+    'NearestNeighbors',
+    'KNeighborsClassifier',
+    'KNeighborsRegressor',
+    'RadiusNeighbors',
+    'LocalOutlierFactor',
+    'NearestCentroid',
+    'IVFIndex',
+    'IVFPQIndex',
+    'IVFSQIndex',
+    'IVFRaBitQIndex',
+    'CagraIndex',
 )
 # Native archives below also replace the old post-load fit wrapper. Their
 # sole package hook (NearestNeighbors' empty resident holder) is published by
 # host_archive_native; the connected identity refuses changed/user hooks.
 _NATIVE_PUBLIC_LOADERS = (
-    _m17.NearestNeighbors, _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor, _m17.RadiusNeighbors, _m13.IVFIndex,
+    'NearestNeighbors',
+    'KNeighborsClassifier',
+    'KNeighborsRegressor',
+    'RadiusNeighbors',
+    'IVFIndex',
 )
-_CLASSES = (
-    _m0.AdaBoostClassifier,
-    _m0.AdaBoostRegressor,
-    _m1.AdditiveChi2Sampler,
-    _m2.AffinityPropagation,
-    _m3.AgglomerativeClustering,
-    _m0.BaggingClassifier,
-    _m0.BaggingRegressor,
-    _m2.BayesianGaussianMixture,
-    _m2.BisectingKMeans,
-    _m4.CagraIndex,
-    _m0.CalibratedClassifierCV,
-    _m6.DBSCAN,
-    _m7.ElasticNet,
-    _m9.GaussianMixture,
-    _m10.GaussianProcessClassifier,
-    _m11.GaussianProcessRegressor,
-    _m12.HDBSCAN,
-    _m13.IVFIndex,
-    _m4.IVFPQIndex,
-    _m4.IVFRaBitQIndex,
-    _m4.IVFSQIndex,
-    _m14.IsolationForest,
-    _m15.IsotonicRegression,
-    _m16.KMeans,
-    _m1.KNNImputer,
-    _m17.KNeighborsClassifier,
-    _m17.KNeighborsRegressor,
-    _m6.KernelDensity,
-    _m1.KernelPCA,
-    _m18.KernelRidge,
-    _m1.LabelPropagation,
-    _m1.LabelSpreading,
-    _m7.Lasso,
-    _m19.LinearSVC,
-    _m19.LinearSVR,
-    _m1.LocalOutlierFactor,
-    _m1.Louvain,
-    _m2.MeanShift,
-    _m2.MiniBatchKMeans,
-    _m0.MultiOutputClassifier,
-    _m0.MultiOutputRegressor,
-    _m1.NearestCentroid,
-    _m17.NearestNeighbors,
-    _m18.Nystroem,
-    _m2.OPTICS,
-    _m1.OneClassSVM,
-    _m0.OneVsRestClassifier,
-    _m21.PCA,
-    _m1.PageRank,
-    _m1.PolynomialCountSketch,
-    _m18.RBFSampler,
-    _m17.RadiusNeighbors,
-    _m0.RandomTreesEmbedding,
-    _m15.SGDOneClassSVM,
-    _m22.SVC,
-    _m1.SVGP,
-    _m22.SVR,
-    _m1.SkewedChi2Sampler,
-    _m23.SpectralClustering,
-    _m23.SpectralEmbedding,
-    _m0.StackingClassifier,
-    _m0.StackingRegressor,
-    _m4.TSNE,
-    _m21.TruncatedSVD,
-    _m24.UMAP,
-    _m0.VotingClassifier,
-    _m0.VotingRegressor,
-)
+# Class name -> the package module that defines it (lane lazy-family-import,
+# 2026-11-12): a family is connected when it loads (`collect()` then
+# `install()`/`connect()` from `_families`), never imported by this module.
+_CLASS_SOURCES = {
+    'AdaBoostClassifier': '_expansion_trees',
+    'AdaBoostRegressor': '_expansion_trees',
+    'AdditiveChi2Sampler': '_expansion_neighbors',
+    'AffinityPropagation': '_expansion_cluster',
+    'AgglomerativeClustering': '_hierarchy_impl',
+    'BaggingClassifier': '_expansion_trees',
+    'BaggingRegressor': '_expansion_trees',
+    'BayesianGaussianMixture': '_expansion_cluster',
+    'BisectingKMeans': '_expansion_cluster',
+    'CagraIndex': '_expansion_ann',
+    'CalibratedClassifierCV': '_expansion_trees',
+    'DBSCAN': 'density',
+    'ElasticNet': '_solver_impl',
+    'GaussianMixture': 'mixture',
+    'GaussianProcessClassifier': '_gpc_impl',
+    'GaussianProcessRegressor': '_gp_impl',
+    'HDBSCAN': 'hdbscan',
+    'IVFIndex': '_ivf_impl',
+    'IVFPQIndex': '_expansion_ann',
+    'IVFRaBitQIndex': '_expansion_ann',
+    'IVFSQIndex': '_expansion_ann',
+    'IsolationForest': '_iforest_impl',
+    'IsotonicRegression': '_expansion_linear',
+    'KMeans': 'cluster',
+    'KNNImputer': '_expansion_neighbors',
+    'KNeighborsClassifier': 'neighbors',
+    'KNeighborsRegressor': 'neighbors',
+    'KernelDensity': 'density',
+    'KernelPCA': '_expansion_neighbors',
+    'KernelRidge': 'kernel_methods',
+    'LabelPropagation': '_expansion_neighbors',
+    'LabelSpreading': '_expansion_neighbors',
+    'Lasso': '_solver_impl',
+    'LinearSVC': 'svm',
+    'LinearSVR': 'svm',
+    'LocalOutlierFactor': '_expansion_neighbors',
+    'Louvain': '_expansion_neighbors',
+    'MeanShift': '_expansion_cluster',
+    'MiniBatchKMeans': '_expansion_cluster',
+    'MultiOutputClassifier': '_expansion_trees',
+    'MultiOutputRegressor': '_expansion_trees',
+    'NearestCentroid': '_expansion_neighbors',
+    'NearestNeighbors': 'neighbors',
+    'Nystroem': 'kernel_methods',
+    'OPTICS': '_expansion_cluster',
+    'OneClassSVM': '_expansion_neighbors',
+    'OneVsRestClassifier': '_expansion_trees',
+    'PCA': 'decomposition',
+    'PageRank': '_expansion_neighbors',
+    'PolynomialCountSketch': '_expansion_neighbors',
+    'RBFSampler': 'kernel_methods',
+    'RadiusNeighbors': 'neighbors',
+    'RandomTreesEmbedding': '_expansion_trees',
+    'SGDOneClassSVM': '_expansion_linear',
+    'SVC': '_svm_impl',
+    'SVGP': '_expansion_neighbors',
+    'SVR': '_svm_impl',
+    'SkewedChi2Sampler': '_expansion_neighbors',
+    'SpectralClustering': '_spectral_impl',
+    'SpectralEmbedding': '_spectral_impl',
+    'StackingClassifier': '_expansion_trees',
+    'StackingRegressor': '_expansion_trees',
+    'TSNE': '_expansion_ann',
+    'TruncatedSVD': 'decomposition',
+    'UMAP': '_umap_impl',
+    'VotingClassifier': '_expansion_trees',
+    'VotingRegressor': '_expansion_trees',
+}
+# The loaded classes of _CLASS_SOURCES, in its order (`collect()`).
+_CLASSES = ()
 # Modules that need NumPy at import stay lazy: `import mojolearn` never imports
 # NumPy. Each one calls connect_module(globals()) as its last statement, which
 # connects these classes with the same schemas, order and native context.
@@ -147,10 +134,13 @@ _DEFERRED_MODULES = {
 # Constructor write events: field, parameter/constant, borrowed value/name,
 # NumericModeMixin post-constructor rule. Repeated events preserve insertion
 # order; fixed nonparameter fields are part of the original constructor state.
+# A _mojolearn_native_public class has no NumericModeMixin wrapper: its own
+# constructor body writes numeric_mode unconditionally, so that event carries
+# no rule (False), as tools/native_full_reset_constructor_schemas.json audits.
 _EVENTS = {
     'AdaBoostClassifier': (('estimator', 'parameter', 'estimator', False), ('n_estimators', 'parameter', 'n_estimators', False), ('learning_rate', 'parameter', 'learning_rate', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'constant', None, True), ('algorithm', 'parameter', 'algorithm', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'AdaBoostRegressor': (('estimator', 'parameter', 'estimator', False), ('n_estimators', 'parameter', 'n_estimators', False), ('learning_rate', 'parameter', 'learning_rate', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'constant', None, True), ('loss', 'parameter', 'loss', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'AdditiveChi2Sampler': (('sample_steps', 'parameter', 'sample_steps', False), ('sample_interval', 'parameter', 'sample_interval', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'AdditiveChi2Sampler': (('sample_steps', 'parameter', 'sample_steps', False), ('sample_interval', 'parameter', 'sample_interval', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'AffinityPropagation': (('damping', 'parameter', 'damping', False), ('max_iter', 'parameter', 'max_iter', False), ('convergence_iter', 'parameter', 'convergence_iter', False), ('copy', 'parameter', 'copy', False), ('preference', 'parameter', 'preference', False), ('affinity', 'parameter', 'affinity', False), ('verbose', 'parameter', 'verbose', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'AgglomerativeClustering': (('n_clusters', 'parameter', 'n_clusters', False), ('metric', 'parameter', 'metric', False), ('connectivity', 'parameter', 'connectivity', False), ('linkage', 'parameter', 'linkage', False), ('c', 'parameter', 'c', False), ('memory', 'parameter', 'memory', False), ('compute_full_tree', 'parameter', 'compute_full_tree', False), ('distance_threshold', 'parameter', 'distance_threshold', False), ('compute_distances', 'parameter', 'compute_distances', False), ('prediction_data', 'parameter', 'prediction_data', False)),
     'BaggingClassifier': (('estimator', 'parameter', 'estimator', False), ('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('bootstrap_features', 'parameter', 'bootstrap_features', False), ('oob_score', 'parameter', 'oob_score', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('random_state', 'parameter', 'random_state', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'constant', None, True), ('numeric_mode', 'parameter', 'numeric_mode', False)),
@@ -163,7 +153,7 @@ _EVENTS = {
     'CrostonOptimized': (('alias', 'parameter', 'alias', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'CrostonSBA': (('alias', 'parameter', 'alias', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'DBSCAN': (('eps', 'parameter', 'eps', False), ('min_samples', 'parameter', 'min_samples', False), ('metric', 'parameter', 'metric', False), ('algorithm', 'parameter', 'algorithm', False), ('max_mbytes_per_batch', 'parameter', 'max_mbytes_per_batch', False), ('max_iterations', 'parameter', 'max_iterations', False), ('prediction_data', 'parameter', 'prediction_data', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'ElasticNet': (('alpha', 'parameter', 'alpha', False), ('l1_ratio', 'parameter', 'l1_ratio', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('solver', 'parameter', 'solver', False), ('selection', 'parameter', 'selection', False), ('precompute', 'parameter', 'precompute', False), ('copy_X', 'parameter', 'copy_X', False), ('warm_start', 'parameter', 'warm_start', False), ('positive', 'parameter', 'positive', False), ('random_state', 'parameter', 'random_state', False)),
+    'ElasticNet': (('alpha', 'parameter', 'alpha', False), ('l1_ratio', 'parameter', 'l1_ratio', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('solver', 'parameter', 'solver', False), ('selection', 'parameter', 'selection', False), ('precompute', 'parameter', 'precompute', False), ('copy_X', 'parameter', 'copy_X', False), ('warm_start', 'parameter', 'warm_start', False), ('positive', 'parameter', 'positive', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'GRUClassifier': (('hidden_size', 'parameter', 'hidden_size', False), ('num_layers', 'parameter', 'num_layers', False), ('optimizer', 'parameter', 'optimizer', False), ('learning_rate', 'parameter', 'learning_rate', False), ('batch_size', 'parameter', 'batch_size', False), ('max_epochs', 'parameter', 'max_epochs', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('optimizer_options', 'parameter', 'optimizer_options', False), ('nonlinearity', 'parameter', 'nonlinearity', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('predict_chunk', 'parameter', 'predict_chunk', False), ('lr_schedule', 'parameter', 'lr_schedule', False)),
     'GRURegressor': (('hidden_size', 'parameter', 'hidden_size', False), ('num_layers', 'parameter', 'num_layers', False), ('optimizer', 'parameter', 'optimizer', False), ('learning_rate', 'parameter', 'learning_rate', False), ('batch_size', 'parameter', 'batch_size', False), ('max_epochs', 'parameter', 'max_epochs', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('optimizer_options', 'parameter', 'optimizer_options', False), ('nonlinearity', 'parameter', 'nonlinearity', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('predict_chunk', 'parameter', 'predict_chunk', False), ('lr_schedule', 'parameter', 'lr_schedule', False)),
     'GaussianMixture': (('n_components', 'parameter', 'n_components', False), ('covariance_type', 'parameter', 'covariance_type', False), ('tol', 'parameter', 'tol', False), ('reg_covar', 'parameter', 'reg_covar', False), ('max_iter', 'parameter', 'max_iter', False), ('init_params', 'parameter', 'init_params', False), ('random_state', 'parameter', 'random_state', False), ('n_init', 'parameter', 'n_init', False), ('warm_start', 'parameter', 'warm_start', False), ('means_init', 'parameter', 'means_init', False), ('weights_init', 'parameter', 'weights_init', False), ('precisions_init', 'parameter', 'precisions_init', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
@@ -176,22 +166,22 @@ _EVENTS = {
     'IVFSQIndex': (('n_lists', 'parameter', 'n_lists', False), ('n_probes', 'parameter', 'n_probes', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('kmeans_n_iters', 'parameter', 'kmeans_n_iters', False), ('random_state', 'parameter', 'random_state', False), ('max_train_points_per_cluster', 'parameter', 'max_train_points_per_cluster', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IsolationForest': (('n_estimators', 'parameter', 'n_estimators', False), ('max_samples', 'parameter', 'max_samples', False), ('max_depth', 'parameter', 'max_depth', False), ('max_features', 'parameter', 'max_features', False), ('bootstrap', 'parameter', 'bootstrap', False), ('contamination', 'parameter', 'contamination', False), ('random_state', 'parameter', 'random_state', False), ('warm_start', 'parameter', 'warm_start', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'IsotonicRegression': (('y_min', 'parameter', 'y_min', False), ('y_max', 'parameter', 'y_max', False), ('increasing', 'parameter', 'increasing', False), ('out_of_bounds', 'parameter', 'out_of_bounds', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'KMeans': (('n_clusters', 'parameter', 'n_clusters', False), ('init', 'parameter', 'init', False), ('n_init', 'parameter', 'n_init', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('random_state', 'parameter', 'random_state', False), ('init_centroids', 'parameter', 'init_centroids', False), ('metric', 'parameter', 'metric', False), ('oversampling_factor', 'parameter', 'oversampling_factor', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'KMeans': (('n_clusters', 'parameter', 'n_clusters', False), ('init', 'parameter', 'init', False), ('n_init', 'parameter', 'n_init', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('random_state', 'parameter', 'random_state', False), ('init_centroids', 'parameter', 'init_centroids', False), ('metric', 'parameter', 'metric', False), ('oversampling_factor', 'parameter', 'oversampling_factor', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'KNNImputer': (('missing_values', 'parameter', 'missing_values', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('weights', 'parameter', 'weights', False), ('metric', 'parameter', 'metric', False), ('copy', 'parameter', 'copy', False), ('add_indicator', 'parameter', 'add_indicator', False), ('keep_empty_features', 'parameter', 'keep_empty_features', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'KNeighborsClassifier': (('n_neighbors', 'parameter', 'n_neighbors', False), ('query_tile', 'parameter', 'query_tile', False), ('metric', 'parameter', 'metric', False), ('algorithm', 'parameter', 'algorithm', False), ('p', 'parameter', 'p', False), ('_index', 'constant', None, False), ('numeric_mode', 'constant', None, True), ('weights', 'parameter', 'weights', False), ('_y_cols', 'constant', None, False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'KNeighborsRegressor': (('n_neighbors', 'parameter', 'n_neighbors', False), ('query_tile', 'parameter', 'query_tile', False), ('metric', 'parameter', 'metric', False), ('algorithm', 'parameter', 'algorithm', False), ('p', 'parameter', 'p', False), ('_index', 'constant', None, False), ('numeric_mode', 'constant', None, True), ('weights', 'parameter', 'weights', False), ('_y_cols', 'constant', None, False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'KernelDensity': (('bandwidth', 'parameter', 'bandwidth', False), ('algorithm', 'parameter', 'algorithm', False), ('kernel', 'parameter', 'kernel', False), ('metric', 'parameter', 'metric', False), ('atol', 'parameter', 'atol', False), ('rtol', 'parameter', 'rtol', False), ('breadth_first', 'parameter', 'breadth_first', False), ('leaf_size', 'parameter', 'leaf_size', False), ('metric_params', 'parameter', 'metric_params', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'KernelPCA': (('n_components', 'parameter', 'n_components', False), ('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('kernel_params', 'parameter', 'kernel_params', False), ('alpha', 'parameter', 'alpha', False), ('fit_inverse_transform', 'parameter', 'fit_inverse_transform', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('iterated_power', 'parameter', 'iterated_power', False), ('remove_zero_eig', 'parameter', 'remove_zero_eig', False), ('random_state', 'parameter', 'random_state', False), ('copy_X', 'parameter', 'copy_X', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'KernelPCA': (('n_components', 'parameter', 'n_components', False), ('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('kernel_params', 'parameter', 'kernel_params', False), ('alpha', 'parameter', 'alpha', False), ('fit_inverse_transform', 'parameter', 'fit_inverse_transform', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('iterated_power', 'parameter', 'iterated_power', False), ('remove_zero_eig', 'parameter', 'remove_zero_eig', False), ('random_state', 'parameter', 'random_state', False), ('copy_X', 'parameter', 'copy_X', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'KernelRidge': (('alpha', 'parameter', 'alpha', False), ('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'LSTMClassifier': (('hidden_size', 'parameter', 'hidden_size', False), ('num_layers', 'parameter', 'num_layers', False), ('optimizer', 'parameter', 'optimizer', False), ('learning_rate', 'parameter', 'learning_rate', False), ('batch_size', 'parameter', 'batch_size', False), ('max_epochs', 'parameter', 'max_epochs', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('optimizer_options', 'parameter', 'optimizer_options', False), ('nonlinearity', 'parameter', 'nonlinearity', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('predict_chunk', 'parameter', 'predict_chunk', False), ('lr_schedule', 'parameter', 'lr_schedule', False)),
     'LSTMRegressor': (('hidden_size', 'parameter', 'hidden_size', False), ('num_layers', 'parameter', 'num_layers', False), ('optimizer', 'parameter', 'optimizer', False), ('learning_rate', 'parameter', 'learning_rate', False), ('batch_size', 'parameter', 'batch_size', False), ('max_epochs', 'parameter', 'max_epochs', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('optimizer_options', 'parameter', 'optimizer_options', False), ('nonlinearity', 'parameter', 'nonlinearity', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('predict_chunk', 'parameter', 'predict_chunk', False), ('lr_schedule', 'parameter', 'lr_schedule', False)),
-    'LabelPropagation': (('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'LabelSpreading': (('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('alpha', 'parameter', 'alpha', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'Lasso': (('alpha', 'parameter', 'alpha', False), ('l1_ratio', 'constant', 1.0, False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('solver', 'parameter', 'solver', False), ('selection', 'parameter', 'selection', False), ('precompute', 'parameter', 'precompute', False), ('copy_X', 'parameter', 'copy_X', False), ('warm_start', 'parameter', 'warm_start', False), ('positive', 'parameter', 'positive', False), ('random_state', 'parameter', 'random_state', False)),
-    'LinearSVC': (('penalty', 'parameter', 'penalty', False), ('loss', 'parameter', 'loss', False), ('C', 'parameter', 'C', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('penalized_intercept', 'parameter', 'penalized_intercept', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('linesearch_max_iter', 'parameter', 'linesearch_max_iter', False), ('lbfgs_memory', 'parameter', 'lbfgs_memory', False), ('class_weight', 'parameter', 'class_weight', False), ('multi_class', 'parameter', 'multi_class', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'LinearSVR': (('penalty', 'parameter', 'penalty', False), ('loss', 'parameter', 'loss', False), ('C', 'parameter', 'C', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('penalized_intercept', 'parameter', 'penalized_intercept', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('linesearch_max_iter', 'parameter', 'linesearch_max_iter', False), ('lbfgs_memory', 'parameter', 'lbfgs_memory', False), ('epsilon', 'parameter', 'epsilon', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'LabelPropagation': (('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
+    'LabelSpreading': (('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('alpha', 'parameter', 'alpha', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
+    'Lasso': (('alpha', 'parameter', 'alpha', False), ('l1_ratio', 'constant', 1.0, False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('solver', 'parameter', 'solver', False), ('selection', 'parameter', 'selection', False), ('precompute', 'parameter', 'precompute', False), ('copy_X', 'parameter', 'copy_X', False), ('warm_start', 'parameter', 'warm_start', False), ('positive', 'parameter', 'positive', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
+    'LinearSVC': (('penalty', 'parameter', 'penalty', False), ('loss', 'parameter', 'loss', False), ('C', 'parameter', 'C', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('penalized_intercept', 'parameter', 'penalized_intercept', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('linesearch_max_iter', 'parameter', 'linesearch_max_iter', False), ('lbfgs_memory', 'parameter', 'lbfgs_memory', False), ('class_weight', 'parameter', 'class_weight', False), ('multi_class', 'parameter', 'multi_class', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
+    'LinearSVR': (('penalty', 'parameter', 'penalty', False), ('loss', 'parameter', 'loss', False), ('C', 'parameter', 'C', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('penalized_intercept', 'parameter', 'penalized_intercept', False), ('tol', 'parameter', 'tol', False), ('max_iter', 'parameter', 'max_iter', False), ('linesearch_max_iter', 'parameter', 'linesearch_max_iter', False), ('lbfgs_memory', 'parameter', 'lbfgs_memory', False), ('epsilon', 'parameter', 'epsilon', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'LocalOutlierFactor': (('n_neighbors', 'parameter', 'n_neighbors', False), ('algorithm', 'parameter', 'algorithm', False), ('leaf_size', 'parameter', 'leaf_size', False), ('metric', 'parameter', 'metric', False), ('p', 'parameter', 'p', False), ('metric_params', 'parameter', 'metric_params', False), ('contamination', 'parameter', 'contamination', False), ('novelty', 'parameter', 'novelty', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
-    'Louvain': (('resolution', 'parameter', 'resolution', False), ('threshold', 'parameter', 'threshold', False), ('max_level', 'parameter', 'max_level', False), ('seed', 'parameter', 'seed', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'Louvain': (('resolution', 'parameter', 'resolution', False), ('threshold', 'parameter', 'threshold', False), ('max_level', 'parameter', 'max_level', False), ('seed', 'parameter', 'seed', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'MLPClassifier': (('hidden_layer_sizes', 'parameter', 'hidden_layer_sizes', False), ('activation', 'parameter', 'activation', False), ('solver', 'parameter', 'solver', False), ('alpha', 'parameter', 'alpha', False), ('batch_size', 'parameter', 'batch_size', False), ('learning_rate', 'parameter', 'learning_rate', False), ('learning_rate_init', 'parameter', 'learning_rate_init', False), ('power_t', 'parameter', 'power_t', False), ('max_iter', 'parameter', 'max_iter', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('tol', 'parameter', 'tol', False), ('verbose', 'parameter', 'verbose', False), ('warm_start', 'parameter', 'warm_start', False), ('momentum', 'parameter', 'momentum', False), ('nesterovs_momentum', 'parameter', 'nesterovs_momentum', False), ('early_stopping', 'parameter', 'early_stopping', False), ('validation_fraction', 'parameter', 'validation_fraction', False), ('beta_1', 'parameter', 'beta_1', False), ('beta_2', 'parameter', 'beta_2', False), ('epsilon', 'parameter', 'epsilon', False), ('n_iter_no_change', 'parameter', 'n_iter_no_change', False), ('max_fun', 'parameter', 'max_fun', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'MLPRegressor': (('hidden_layer_sizes', 'parameter', 'hidden_layer_sizes', False), ('activation', 'parameter', 'activation', False), ('solver', 'parameter', 'solver', False), ('alpha', 'parameter', 'alpha', False), ('batch_size', 'parameter', 'batch_size', False), ('learning_rate', 'parameter', 'learning_rate', False), ('learning_rate_init', 'parameter', 'learning_rate_init', False), ('power_t', 'parameter', 'power_t', False), ('max_iter', 'parameter', 'max_iter', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('tol', 'parameter', 'tol', False), ('verbose', 'parameter', 'verbose', False), ('warm_start', 'parameter', 'warm_start', False), ('momentum', 'parameter', 'momentum', False), ('nesterovs_momentum', 'parameter', 'nesterovs_momentum', False), ('early_stopping', 'parameter', 'early_stopping', False), ('validation_fraction', 'parameter', 'validation_fraction', False), ('beta_1', 'parameter', 'beta_1', False), ('beta_2', 'parameter', 'beta_2', False), ('epsilon', 'parameter', 'epsilon', False), ('n_iter_no_change', 'parameter', 'n_iter_no_change', False), ('max_fun', 'parameter', 'max_fun', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'MeanShift': (('bandwidth', 'parameter', 'bandwidth', False), ('seeds', 'parameter', 'seeds', False), ('bin_seeding', 'parameter', 'bin_seeding', False), ('min_bin_freq', 'parameter', 'min_bin_freq', False), ('cluster_all', 'parameter', 'cluster_all', False), ('n_jobs', 'parameter', 'n_jobs', False), ('max_iter', 'parameter', 'max_iter', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
@@ -202,10 +192,10 @@ _EVENTS = {
     'NearestNeighbors': (('n_neighbors', 'parameter', 'n_neighbors', False), ('query_tile', 'parameter', 'query_tile', False), ('metric', 'parameter', 'metric', False), ('algorithm', 'parameter', 'algorithm', False), ('p', 'parameter', 'p', False), ('_index', 'constant', None, False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'Nystroem': (('kernel', 'parameter', 'kernel', False), ('gamma', 'parameter', 'gamma', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'OPTICS': (('min_samples', 'parameter', 'min_samples', False), ('max_eps', 'parameter', 'max_eps', False), ('metric', 'parameter', 'metric', False), ('p', 'parameter', 'p', False), ('metric_params', 'parameter', 'metric_params', False), ('cluster_method', 'parameter', 'cluster_method', False), ('eps', 'parameter', 'eps', False), ('xi', 'parameter', 'xi', False), ('predecessor_correction', 'parameter', 'predecessor_correction', False), ('min_cluster_size', 'parameter', 'min_cluster_size', False), ('algorithm', 'parameter', 'algorithm', False), ('leaf_size', 'parameter', 'leaf_size', False), ('memory', 'parameter', 'memory', False), ('n_jobs', 'parameter', 'n_jobs', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'OneClassSVM': (('kernel', 'parameter', 'kernel', False), ('degree', 'parameter', 'degree', False), ('gamma', 'parameter', 'gamma', False), ('coef0', 'parameter', 'coef0', False), ('tol', 'parameter', 'tol', False), ('nu', 'parameter', 'nu', False), ('shrinking', 'parameter', 'shrinking', False), ('cache_size', 'parameter', 'cache_size', False), ('verbose', 'parameter', 'verbose', False), ('max_iter', 'parameter', 'max_iter', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'OneClassSVM': (('kernel', 'parameter', 'kernel', False), ('degree', 'parameter', 'degree', False), ('gamma', 'parameter', 'gamma', False), ('coef0', 'parameter', 'coef0', False), ('tol', 'parameter', 'tol', False), ('nu', 'parameter', 'nu', False), ('shrinking', 'parameter', 'shrinking', False), ('cache_size', 'parameter', 'cache_size', False), ('verbose', 'parameter', 'verbose', False), ('max_iter', 'parameter', 'max_iter', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'OneVsRestClassifier': (('estimator', 'parameter', 'estimator', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'PCA': (('n_components', 'parameter', 'n_components', False), ('copy', 'parameter', 'copy', False), ('tol', 'parameter', 'tol', False), ('whiten', 'parameter', 'whiten', False), ('svd_solver', 'parameter', 'svd_solver', False), ('iterated_power', 'parameter', 'iterated_power', False), ('n_oversamples', 'parameter', 'n_oversamples', False), ('power_iteration_normalizer', 'parameter', 'power_iteration_normalizer', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'PageRank': (('alpha', 'parameter', 'alpha', False), ('personalization', 'parameter', 'personalization', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('nstart', 'parameter', 'nstart', False), ('weight', 'parameter', 'weight', False), ('dangling', 'parameter', 'dangling', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'PageRank': (('alpha', 'parameter', 'alpha', False), ('personalization', 'parameter', 'personalization', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('nstart', 'parameter', 'nstart', False), ('weight', 'parameter', 'weight', False), ('dangling', 'parameter', 'dangling', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'PolynomialCountSketch': (('gamma', 'parameter', 'gamma', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'RBFSampler': (('gamma', 'parameter', 'gamma', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
     'RNNClassifier': (('hidden_size', 'parameter', 'hidden_size', False), ('num_layers', 'parameter', 'num_layers', False), ('optimizer', 'parameter', 'optimizer', False), ('learning_rate', 'parameter', 'learning_rate', False), ('batch_size', 'parameter', 'batch_size', False), ('max_epochs', 'parameter', 'max_epochs', False), ('shuffle', 'parameter', 'shuffle', False), ('random_state', 'parameter', 'random_state', False), ('optimizer_options', 'parameter', 'optimizer_options', False), ('nonlinearity', 'parameter', 'nonlinearity', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('predict_chunk', 'parameter', 'predict_chunk', False), ('lr_schedule', 'parameter', 'lr_schedule', False)),
@@ -214,9 +204,9 @@ _EVENTS = {
     'RandomTreesEmbedding': (('n_estimators', 'parameter', 'n_estimators', False), ('max_depth', 'parameter', 'max_depth', False), ('min_samples_split', 'parameter', 'min_samples_split', False), ('min_samples_leaf', 'parameter', 'min_samples_leaf', False), ('min_weight_fraction_leaf', 'parameter', 'min_weight_fraction_leaf', False), ('max_leaf_nodes', 'parameter', 'max_leaf_nodes', False), ('min_impurity_decrease', 'parameter', 'min_impurity_decrease', False), ('sparse_output', 'parameter', 'sparse_output', False), ('n_jobs', 'parameter', 'n_jobs', False), ('random_state', 'parameter', 'random_state', False), ('verbose', 'parameter', 'verbose', False), ('warm_start', 'parameter', 'warm_start', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'SGDOneClassSVM': (('batch_size', 'parameter', 'batch_size', False), ('nu', 'parameter', 'nu', False), ('fit_intercept', 'parameter', 'fit_intercept', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('shuffle', 'parameter', 'shuffle', False), ('verbose', 'parameter', 'verbose', False), ('random_state', 'parameter', 'random_state', False), ('learning_rate', 'parameter', 'learning_rate', False), ('eta0', 'parameter', 'eta0', False), ('power_t', 'parameter', 'power_t', False), ('warm_start', 'parameter', 'warm_start', False), ('average', 'parameter', 'average', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'SVC': (('C', 'parameter', 'C', False), ('kernel', 'parameter', 'kernel', False), ('degree', 'parameter', 'degree', False), ('gamma', 'parameter', 'gamma', False), ('coef0', 'parameter', 'coef0', False), ('tol', 'parameter', 'tol', False), ('cache_size', 'parameter', 'cache_size', False), ('max_iter', 'parameter', 'max_iter', False), ('nochange_steps', 'parameter', 'nochange_steps', False), ('verbose', 'parameter', 'verbose', False), ('output_type', 'parameter', 'output_type', False), ('random_state', 'parameter', 'random_state', False), ('class_weight', 'parameter', 'class_weight', False), ('decision_function_shape', 'parameter', 'decision_function_shape', False), ('probability', 'parameter', 'probability', False), ('break_ties', 'parameter', 'break_ties', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'SVGP': (('n_inducing', 'parameter', 'n_inducing', False), ('inducing_points', 'parameter', 'inducing_points', False), ('kernel_variance', 'parameter', 'kernel_variance', False), ('lengthscale', 'parameter', 'lengthscale', False), ('noise_variance', 'parameter', 'noise_variance', False), ('jitter', 'parameter', 'jitter', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'SVGP': (('n_inducing', 'parameter', 'n_inducing', False), ('inducing_points', 'parameter', 'inducing_points', False), ('kernel_variance', 'parameter', 'kernel_variance', False), ('lengthscale', 'parameter', 'lengthscale', False), ('noise_variance', 'parameter', 'noise_variance', False), ('jitter', 'parameter', 'jitter', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'SVR': (('kernel', 'parameter', 'kernel', False), ('degree', 'parameter', 'degree', False), ('gamma', 'parameter', 'gamma', False), ('coef0', 'parameter', 'coef0', False), ('tol', 'parameter', 'tol', False), ('C', 'parameter', 'C', False), ('epsilon', 'parameter', 'epsilon', False), ('cache_size', 'parameter', 'cache_size', False), ('verbose', 'parameter', 'verbose', False), ('max_iter', 'parameter', 'max_iter', False), ('nochange_steps', 'parameter', 'nochange_steps', False), ('output_type', 'parameter', 'output_type', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'SkewedChi2Sampler': (('skewedness', 'parameter', 'skewedness', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', True)),
+    'SkewedChi2Sampler': (('skewedness', 'parameter', 'skewedness', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'SpectralClustering': (('n_clusters', 'parameter', 'n_clusters', False), ('n_components', 'parameter', 'n_components', False), ('random_state', 'parameter', 'random_state', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('n_init', 'parameter', 'n_init', False), ('eigen_tol', 'parameter', 'eigen_tol', False), ('affinity', 'parameter', 'affinity', False), ('gamma', 'parameter', 'gamma', False), ('assign_labels', 'parameter', 'assign_labels', False), ('prediction_data', 'parameter', 'prediction_data', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('degree', 'parameter', 'degree', False), ('coef0', 'parameter', 'coef0', False), ('kernel_params', 'parameter', 'kernel_params', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False)),
     'SpectralEmbedding': (('n_components', 'parameter', 'n_components', False), ('affinity', 'parameter', 'affinity', False), ('random_state', 'parameter', 'random_state', False), ('n_neighbors', 'parameter', 'n_neighbors', False), ('gamma', 'parameter', 'gamma', False), ('eigen_solver', 'parameter', 'eigen_solver', False), ('eigen_tol', 'parameter', 'eigen_tol', False), ('n_jobs', 'parameter', 'n_jobs', False), ('verbose', 'parameter', 'verbose', False)),
     'StackingClassifier': (('estimators', 'parameter', 'estimators', False), ('final_estimator', 'parameter', 'final_estimator', False), ('cv', 'parameter', 'cv', False), ('stack_method', 'parameter', 'stack_method', False), ('n_jobs', 'parameter', 'n_jobs', False), ('passthrough', 'parameter', 'passthrough', False), ('verbose', 'parameter', 'verbose', False), ('numeric_mode', 'constant', None, True), ('numeric_mode', 'parameter', 'numeric_mode', True)),
@@ -252,11 +242,18 @@ class NativeFullResetParams:
         return _ENTRY(self, params, _CONTEXT)
 
 
+def collect():
+    """Refresh `_CLASSES` with the classes of the loaded families."""
+    global _CLASSES
+    from ._native_declared_constructors import loaded_classes
+    _CLASSES = loaded_classes(_CLASS_SOURCES)
+
+
 def _install(classes):
     # glue: install only source-vetted classes before class-layout snapshots
     import inspect
+    import sys
     from ._mode import ParamsMixin
-    from . import _classical_host
     from ._native_public_attributes import _resolved
     from ._native_archive_bridge import connect as archive_connection
     archive = archive_connection()[1].get('host_archive_context')
@@ -298,12 +295,18 @@ def _install(classes):
     # The explicit host inference subclasses have their own constructor and
     # storage contracts. Keep their existing setter debt visible: changing a
     # selected base must not silently replace a host setter with a refusal.
+    # The host module may load before or after its bases' families, so its
+    # descendants of any installed base are kept on the original setter.
+    host = sys.modules.get(__package__ + '._classical_host')
     previous = _CONTEXT.get('deferred_host_classes', ())
-    deferred = tuple(cls for cls in vars(_classical_host).values()  # glue: fixed built-in descendants outside this migration
-                     if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
-                     and cls.__module__ == _classical_host.__name__
-                     and any(base in classes for base in cls.__mro__[1:])  # glue: fixed host ancestry during import
-                     and _resolved(cls, 'set_params', _CONTEXT['missing']) is ParamsMixin.set_params)
+    installed = set(_CONTEXT['originals'])
+    deferred = () if host is None else tuple(
+        cls for cls in vars(host).values()  # glue: fixed built-in descendants outside this migration
+        if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
+        and cls.__module__ == host.__name__ and 'set_params' not in vars(cls)
+        and any(base in installed for base in cls.__mro__[1:])  # glue: fixed host ancestry at connection
+        and _resolved(cls, 'set_params', _CONTEXT['missing']) in (ParamsMixin.set_params,
+                                                                   NativeFullResetParams.set_params))
     for cls in deferred:  # glue: preserve the original unconverted host contract before changing bases
         cls.set_params = ParamsMixin.set_params
     _CONTEXT['deferred_host_classes'] = previous + deferred
@@ -318,17 +321,18 @@ def _install(classes):
         function.__doc__ = original.__doc__
         function.__signature__ = _CONTEXT['plans'][cls]['signature']
         cls.__init__ = function
-        if cls in _NATIVE_PUBLIC_LOADERS and archive is not None:
+        if cls.__name__ in _NATIVE_PUBLIC_LOADERS and archive is not None:
             archive.setdefault('host_archive_native_loader_hooks', {})[cls] = (
                 _resolved(cls, '_mojolearn_after_fit', _CONTEXT['missing']),
                 _CONTEXT['missing'])
-        if cls in _NATIVE_PUBLIC_CLASSES:
+        if cls.__name__ in _NATIVE_PUBLIC_CLASSES:
             cls._mojolearn_native_public = True
 
 
 def install():
-    # glue: the NumPy-free classes; _DEFERRED_MODULES connect when they load
-    _install(_CLASSES)
+    # glue: the loaded NumPy-free classes not installed yet; _DEFERRED_MODULES
+    # connect when they load
+    _install(tuple(cls for cls in _CLASSES if cls not in _CONTEXT['originals']))
     from ._native_mode_reconstruction import install as install_reconstruction
     install_reconstruction(_CONTEXT, NativeFullResetParams.set_params)
 
@@ -341,6 +345,7 @@ def _connect(classes, parameter_metadata):
     protected = ('__new__', '__init__', 'set_params', 'get_params', '_get_param_names',
                  '__getattribute__', '__getattr__', '__setattr__', '__delattr__', '__del__', '__dict__', '__slots__')
     for cls in classes:  # glue: final snapshots after native attribute installation
+        _CONTEXT.setdefault('connected_classes', set()).add(cls)
         plan = _CONTEXT['plans'][cls]
         class_protected = protected + (('_parameters', '_extras') if plan['validation_kind'] == 'umap' else ())
         mro = type.__dict__['__mro__'].__get__(cls)
@@ -367,9 +372,13 @@ def _connect(classes, parameter_metadata):
 def connect(parameter_metadata, linear, declared, estimator_context):
     # glue: final method/storage identities and already-supported native setters
     from ._native_public_attributes import _CONTEXT as attributes
-    _connect(_CLASSES, parameter_metadata)
+    # Each class is snapshotted once, when its family first connects; a later
+    # family load never re-reads an already connected class.
+    done = _CONTEXT.setdefault('connected_classes', set())
+    _connect(tuple(cls for cls in _CLASSES if cls not in done), parameter_metadata)
     from ._native_mode_reconstruction import finish as finish_reconstruction
-    finish_reconstruction(_CONTEXT, parameter_metadata, tuple(_CONTEXT.get('reconstruction_classes', ())))
+    finish_reconstruction(_CONTEXT, parameter_metadata,
+                          tuple(cls for cls in _CONTEXT.get('reconstruction_classes', ()) if cls not in done))
     native_setters = {}
     # Export identity and ABI are connection metadata, not transitive runtime
     # qualification. The nested ownership/callback tests must pass before

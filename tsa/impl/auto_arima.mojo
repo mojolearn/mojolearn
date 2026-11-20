@@ -57,12 +57,11 @@ def select_d(
             + String(d_max) + ", D=" + String(D) + "), refused by name"
         )
     comptime if SELECT_D_FAST:
-        # FAST on Apple (lane/apple-fast-select, default; -D MOJOLEARN_SELECT_D_OFF off): every round on the
+        # FAST on Apple (lane/apple-fast-select, default): every round on the
         # device, one download (tsa/impl/select_d_fast.mojo)
         return select_d_fast(ctx, d_y, batch_size, n_obs, D, s, d_max, pval_threshold)
     comptime if SELECT_D_IDN:
-        # IDENTICAL on every vendor (lane/fam-timeseries; -D
-        # MOJOLEARN_IDN_SELECT_D_OFF off): the same device rounds, one
+        # IDENTICAL on every vendor (lane/fam-timeseries): the same device rounds, one
         # download. A refusal (shape or non-finite input) is not reported
         # from there: the loop below raises it by its own name and index.
         # A differencing refusal (D > 0 with s < 2) is left to the loop

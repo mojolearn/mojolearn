@@ -19,7 +19,7 @@ constant 1 (every writer writes the same word), so its result does not depend
 on thread order, grid shape or vendor.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext

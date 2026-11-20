@@ -87,18 +87,19 @@ column and a column constant after one difference; both report
 `stat = 0x00000000`, `stationary = True`, in both modes.
 """
 
-from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HOST_MIN_TASK_WORK, host_predict_task_count_work, host_predict_chunk
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -107,7 +108,10 @@ from tsa.impl.timeSeries.arima_helpers import prepare_data
 # Two independent per-lane chains reduce recurrence dependency in the series
 # sums without changing the shared STATS_TPB launch or any KPSS lag/decision.
 # The existing block reduction combines the two chain totals; bits may change.
-comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P11"]()
+comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P11"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P11.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 #: Table 1, Kwiatkowski 1992 (`stationarity.cuh:131-132`), as `float`.
@@ -227,39 +231,8 @@ def s2B_accumulation_kernel(
     (y[t]*y[t+k])`, serial in `k` ascending per cell. `coeff_a * k + coeff_b`
     and `acc += coeff * dp` are both row-9 contractions (nvcc fuses them):
     `identical_mul_add`."""
-    # C60: four adjacent time cells share a sliding lag window. Each cell's
-    # k chain is unchanged, and no window crosses a series boundary.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    comptime if C60_LAG4:
-        var task = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-        var n = Int(n_obs_in)
-        var groups = (n+3)//4
-        var series = task//groups
-        if series >= Int(n_total_in)//n:
-            return
-        var sample = (task%groups)*4
-        var base = series*n+sample
-        var xv = InlineArray[Float32, 4](fill=Float32(0))
-        var lagv = InlineArray[Float32, 4](fill=Float32(0))
-        var acc = InlineArray[Float32, 4](fill=Float32(0))
-        comptime for lane in range(4):
-            if sample+lane < n:
-                xv[lane] = ftz(data[base+lane])
-            if sample+lane+1 < n:
-                lagv[lane] = ftz(data[base+lane+1])
-        for k in range(1, Int(lags_in)+1):
-            var coeff = ftz(identical_mul_add(coeff_a, Float32(k), coeff_b))
-            comptime for lane in range(4):
-                if sample+lane < n-k:
-                    var dp = ftz(xv[lane]*lagv[lane])
-                    acc[lane] = ftz(identical_mul_add(coeff, dp, acc[lane]))
-            comptime for lane in range(3):
-                lagv[lane] = lagv[lane+1]
-            lagv[3] = ftz(data[base+k+4]) if sample+k+4 < n else Float32(0)
-        comptime for lane in range(4):
-            if sample+lane < n:
-                accumulator[base+lane] = acc[lane]
-        return
+    # TOMBSTONE: MOJOLEARN_C60_LAG4 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= Int(n_total_in):
         return
@@ -303,11 +276,12 @@ def cumsum_by_series_kernel(
 #: block of KPSS_SCAN_TPB threads per series, instead of one thread walking
 #: the whole series. THE BITS OF `cumsum`, `eta` AND THE STATISTIC CHANGE
 #: (a different association of the same sums), on all four columns together.
-#: `-D MOJOLEARN_IDN_KPSS_SCAN_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: serial scan on the device and in the host column. FAST is unchanged.
-comptime KPSS_SCAN_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KPSS_SCAN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: FAST keeps the serial scan.
+# TOMBSTONE: MOJOLEARN_IDN_KPSS_SCAN_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KPSS_SCAN_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+comptime KPSS_SCAN_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: threads of the one block per series; part of the fold's definition (the
 #: chunk width is `ceil(n / KPSS_SCAN_TPB)`), never launch geometry
 comptime KPSS_SCAN_TPB = 256
@@ -525,9 +499,9 @@ def _kpss_test(
     sc.lags = lags
     var coeffs = kpss_s2B_coefficients(n_obs, lags)
     # Second sum in eq. 10 (second part of s^2)
-    # Four consecutive times share lag loads; round within each series so a
-    # partial final group never consumes the next series.
-    var lag_tasks = batch_size * ((n_obs + 3) // 4) if C60_LAG4 else total
+    # TOMBSTONE: MOJOLEARN_C60_LAG4 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+    # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.expdel2-36-neural-series-linear.patch; record in docs/TOMBSTONES.md.
+    var lag_tasks = total
     ctx.enqueue_function[s2B_accumulation_kernel](
         sc.accumulator.unsafe_ptr(), sc.y_cent.unsafe_ptr(), Int32(lags),
         Int32(n_obs), Int32(total), coeffs[0], coeffs[1],
@@ -643,20 +617,58 @@ def _refuse_non_finite(
         )
 
 
+def _kpss_flags_span(src: Int, dst: Int, n: Int):
+    """`dst[i] = src[i] != 0` for `n` bytes at host addresses `src` and
+    `dst`. A Bool is one byte holding 0 or 1, so the result is written as
+    that byte."""
+    var s = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src)
+    var d = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst)
+    for i in range(n):
+        d.unsafe_store(i, UInt8(1) if s.unsafe_load(i) != UInt8(0) else UInt8(0))
+
+
+def _kpss_flags_from_bytes(src: Int, dst: Int, n: Int):
+    """The stationary flags' bytes as Bools, one pass: contiguous spans
+    across the host's cores above the grain floor, the calling thread below
+    it (no worker count is read then)."""
+    if n < 2 * HOST_MIN_TASK_WORK:
+        _kpss_flags_span(src, dst, n)
+        return
+    # parallel: the flag conversion over spans across host cores
+    var tasks = host_predict_task_count_work(n, n)
+    if tasks <= 1:
+        _kpss_flags_span(src, dst, n)
+        return
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _span(t: Int) {imm src, imm dst, imm n, imm chunk}:
+        var lo = t * chunk
+        if lo >= n:
+            return
+        var hi = min(lo + chunk, n)
+        _kpss_flags_span(src + lo, dst + lo, hi - lo)
+
+    host_parallelize(_span, tasks)
+
+
 def download_results(
     ctx: DeviceContext, res: KpssResult, batch_size: Int
 ) raises -> Tuple[List[Bool], List[Float32]]:
     """Read `(stationary flags, statistics)` back to the host."""
-    var hr = ctx.enqueue_create_host_buffer[DType.uint8](batch_size)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
-    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=res.scratch.results)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=res.scratch.stat)
+    if batch_size <= 0:
+        return (List[Bool](), List[Float32]())
+    # lane fx-dup-next (2026-11-19): both results go down into lists of their
+    # final length (the statistics straight into the returned list), one wait
+    # as before, and the flag bytes become Bools in one pass split over the
+    # host's cores above the grain floor. Gone: two pinned host buffers per
+    # call and one append per series into two growing lists on one thread.
+    var raw = List[UInt8](unsafe_uninit_length=batch_size)
+    var stats = List[Float32](unsafe_uninit_length=batch_size)
+    ctx.enqueue_copy(dst_ptr=raw.unsafe_ptr(), src_buf=res.scratch.results)
+    ctx.enqueue_copy(dst_ptr=stats.unsafe_ptr(), src_buf=res.scratch.stat)
     ctx.synchronize()
-    var flags = List[Bool]()
-    var stats = List[Float32]()
-    for i in range(batch_size):
-        flags.append(hr.unsafe_ptr().unsafe_load(i) != 0)
-        stats.append(hs.unsafe_ptr().unsafe_load(i))
-    _ = hr^
-    _ = hs^
+    var flags = List[Bool](unsafe_uninit_length=batch_size)
+    _kpss_flags_from_bytes(Int(raw.unsafe_ptr()), Int(flags.unsafe_ptr()), batch_size)
+    # `raw` is named here, after the drain and the pass that reads it.
+    _ = raw^
     return (flags^, stats^)

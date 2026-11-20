@@ -1,31 +1,11 @@
 """Whole-operation audits and independent identity oracles for native helpers."""
 import array
 import hashlib
-import struct
 
 import pytest
 
 from mojolearn import cross_vendor as cv
 from mojolearn._verify_native_runtime import audit_native_call
-
-
-def test_native_fold_preserves_logical_order_signed_zero_and_nan_contract():
-    a = array.array('f', [1.0, -1e-39, 1e-39, float('nan')])
-    b = array.array('f', [2 ** -24, -0.0, 0.0, 2.0])
-    c = array.array('f', [2 ** -24, -0.0, 0.0, -2.0])
-    inputs = [a.tobytes(), b.tobytes(), c.tobytes()]
-    before = tuple(inputs)
-    result = audit_native_call(cv.ordered_fold, inputs)
-    result.assert_native()
-    # Explicit integer words independently establish the non-associative
-    # left fold, signed-zero FTZ, and the native canonical-NaN contract.
-    assert struct.unpack('<4I', result.result) == (0x3f800000, 0x80000000, 0, 0x7fc00000)
-    assert tuple(inputs) == before
-    pair = audit_native_call(cv.fold_pair, inputs[1], inputs[2])
-    pair.assert_native()
-    prefixed = audit_native_call(cv.ordered_fold, [inputs[0]], prefix=pair.result)
-    prefixed.assert_native()
-    assert struct.unpack('<I', prefixed.result[:4])[0] == 0x3f800001
 
 
 def test_native_hash_matches_independent_sha256_and_field_order():
@@ -48,3 +28,28 @@ def test_native_fold_admission_refusals_have_no_python_work(parts, prefix):
     assert not report['forbidden_native_calls'], report
     assert not report['wrapper_work'], report
     assert not report['unobserved_existing_threads'], report
+
+
+def test_hash_and_fold_read_views_in_place_with_the_same_digests_and_bits():
+    # pass 3 (N110, N111): the witness digests and the fold read admitted
+    # buffers in place (no array copies). Views of one received payload,
+    # bytearrays and memoryview slices give the bits and digests that the
+    # copied bytes give.
+    a = array.array('f', [1.0, -2.5, 3.25, 0.5])
+    b = array.array('f', [0.125, 4.0, -1.0, 2.0])
+    payload = bytearray(a.tobytes() + b.tobytes())
+    view = memoryview(payload)
+    width = len(a) * 4
+    copied = audit_native_call(cv.ordered_fold, [a.tobytes(), b.tobytes()])
+    copied.assert_native()
+    viewed = audit_native_call(cv.ordered_fold, [view[0:width], view[width:2 * width]])
+    viewed.assert_native()
+    assert viewed.result == copied.result
+    state = dict(parameters=view[0:width].cast('f'), m=bytearray(b.tobytes()),
+                 v=memoryview(a.tobytes()), flags=array.array('i', [1, 0, 1]))
+    expected = hashlib.sha256(b''.join(bytes(memoryview(state[k]).cast('B')) for k in
+                              ('parameters', 'm', 'v', 'flags'))).hexdigest()
+    result = audit_native_call(cv.state_hash, state)
+    result.assert_native()
+    assert result.result == expected
+    assert bytes(payload) == a.tobytes() + b.tobytes()

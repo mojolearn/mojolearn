@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Sequential, the model-description trainer over the autograd tape
-(autograd/model.mojo): small models (scikit-learn-test sizes) whose loss
-falls, prediction shapes, the same bits for the same seed across two fits,
-and the refusals of bad descriptions. Runs on whichever sequence binding the
+(autograd/model.mojo), at the Python boundary: inputs as they are (dtypes,
+orders, strides, labels), the refusals of bad descriptions and options, and
+the input_shape admission. The training values (loss falls, shapes, the same
+bits for the same seed, early stopping, dropout resume, rank-N models) are
+the native check checks/native_tests/training_autograd_model.mojo. Runs on whichever sequence binding the
 install resolves (CPU, Metal, NVIDIA or AMD); skipped when the binding
 predates the model entries."""
 import hashlib
@@ -38,66 +40,6 @@ def _digest(model):
     return hashlib.sha256(np.ascontiguousarray(model.params_).tobytes()).hexdigest()[:16]
 
 
-def test_regression_loss_falls_and_shapes():
-    X, yr, _, _ = _data()
-    m = ml.Sequential().linear(8).tanh().linear(1).compile(loss="mse", optimizer="adam", lr=0.02)
-    m.fit(X, yr, epochs=30, batch_size=32, seed=0)
-    assert m.n_iter_ == 30 and len(m.loss_curve_) == 30
-    assert m.loss_curve_[-1] < 0.5 * m.loss_curve_[0]
-    assert m.predict(X).shape == (120,)
-    y2 = np.stack([yr, -yr], axis=1)
-    m2 = ml.Sequential().linear(4).relu().linear(2).compile(loss="huber", optimizer="momentum", lr=0.01)
-    m2.fit(X, y2, epochs=10, batch_size=40, seed=1)
-    assert m2.predict(X).shape == (120, 2)
-    assert m2.loss_curve_[-1] < m2.loss_curve_[0]
-
-
-def test_layer_norm_and_residual():
-    X, yr, _, _ = _data()
-    m = (ml.Sequential().linear(6).layer_norm().relu().linear(6).residual(2).linear(1)
-         .compile(loss="mse", optimizer="adamw", lr=0.01, weight_decay=0.01, schedule="step", step_size=5,
-                  gamma=0.5))
-    m.fit(X, yr, epochs=15, batch_size=30, seed=2)
-    assert m.loss_curve_[-1] < m.loss_curve_[0]
-    assert m.predict(X).shape == (120,)
-
-
-def test_classifiers():
-    X, _, y3, yb = _data()
-    c = ml.Sequential().linear(8).relu().linear(3).compile(loss="cross_entropy", optimizer="adam", lr=0.02)
-    c.fit(X, y3, epochs=20, batch_size=32, seed=0)
-    assert c.loss_curve_[-1] < c.loss_curve_[0]
-    p = c.predict_proba(X)
-    assert p.shape == (120, 3)
-    np.testing.assert_allclose(p.sum(axis=1), 1.0, atol=1e-5)
-    assert set(np.unique(c.predict(X))) <= set(c.classes_)
-    b = ml.Sequential().linear(4).tanh().linear(1).compile(loss="bce_with_logits", optimizer="sgd", lr=0.1)
-    b.fit(X, yb, epochs=20, batch_size=20, seed=0, shuffle=False)
-    assert b.loss_curve_[-1] < b.loss_curve_[0]
-    assert b.predict_proba(X).shape == (120, 2)
-    assert b.predict(X).shape == (120,)
-
-
-def test_same_seed_same_bits():
-    X, yr, y3, _ = _data()
-    for loss, y, width in (("mse", yr, 1), ("cross_entropy", y3, 3)):  # two small models
-        digests, curves = [], []
-        for _ in range(2):  # two fits with one seed
-            m = ml.Sequential().linear(6).relu().linear(width).compile(loss=loss, lr=0.01)
-            m.fit(X, y, epochs=5, batch_size=16, seed=7)
-            digests.append(_digest(m))
-            curves.append(m.loss_curve_)
-            print(f"MODEL_DIGEST {loss} {digests[-1]}")
-        assert digests[0] == digests[1] and curves[0] == curves[1]
-
-
-def test_early_stop():
-    X, yr, _, _ = _data()
-    m = ml.Sequential().linear(1).compile(loss="mse", optimizer="sgd", lr=1e-6, tol=10.0, n_iter_no_change=2)
-    m.fit(X, yr, epochs=50, batch_size=60, seed=0)
-    assert m.n_iter_ < 50
-
-
 @pytest.mark.parametrize("build, message", [
     (lambda: ml.Sequential().relu(), "Linear"),
     (lambda: ml.Sequential().linear(4).residual(0).linear(2).residual(-1), "width"),
@@ -124,19 +66,6 @@ def test_bad_options():
         ml.Sequential().linear(3).softmax().compile(loss="cross_entropy").fit(X, y3, epochs=1)
     with pytest.raises(ValueError, match="classes"):
         ml.Sequential().linear(2).compile(loss="cross_entropy").fit(X, y3, epochs=1)
-
-
-def test_dropout_trains():
-    X, yr, _, _ = _data()
-    m = ml.Sequential().linear(8).relu().dropout(0.2).linear(1).compile(loss="mse", lr=0.01)
-    m.fit(X, yr, epochs=5, batch_size=32, seed=0)
-    assert m.predict(X).shape == (120,)
-    np.testing.assert_array_equal(m.predict(X), m.predict(X))
-    other = ml.Sequential().linear(8).relu().dropout(0.2).linear(1).compile(loss="mse", lr=0.01)
-    other.fit(X, yr, epochs=2, batch_size=32, seed=0)
-    other.fit(X, yr, epochs=3, batch_size=32, resume=True)
-    np.testing.assert_array_equal(m.params_, other.params_)
-    print("USABILITY_DIGEST dropout", _digest(m))
 
 
 # ---------------------------------------------------------------- inputs as they are
@@ -318,30 +247,21 @@ def _has_rankn_model():
 
 
 @pytest.mark.skipif(not _has_rankn_model(), reason="the sequence binding has no rank-N models (rebuild it)")
-def test_rank4_conv_model():
-    # a small image classifier: conv2d -> relu -> max_pool2d -> flatten -> linear
+def test_rank4_conv_model_flat_rows_and_refusals():
+    # The training values (same bits, loss, parameter count, probabilities) are
+    # the native check training_autograd_model; this keeps the input_shape
+    # admission: flat rows of a model with an input_shape train as the samples.
     rng = np.random.default_rng(3)
     X = rng.standard_normal((48, 2, 7, 9)).astype(np.float32)
     y = (X[:, 0, :3].mean(axis=(1, 2)) > X[:, 1, 4:].mean(axis=(1, 2))).astype(np.int64)
-    digests = []
-    for _ in range(2):  # two fits with one seed
-        m = (ml.Sequential().conv2d(3, 3, padding=1).relu().max_pool2d(2).flatten().linear(2)
-             .compile(loss="cross_entropy", optimizer="adam", lr=0.02))
-        m.fit(X, y, epochs=12, batch_size=16, seed=5)
-        digests.append(_digest(m))
-        print(f"RANKN_MODEL_DIGEST conv2d {digests[-1]}")
-    assert digests[0] == digests[1]
-    assert np.isfinite(m.params_).all() and m.loss_curve_[-1] < m.loss_curve_[0]
-    # 3 x (2 x 3 x 3) weights + 3 biases, then (3 * 3 * 4) x 2 + 2
-    assert m.params_.shape == (3 * 2 * 9 + 3 + 36 * 2 + 2,)
-    p = m.predict_proba(X)
-    assert p.shape == (48, 2) and np.allclose(p.sum(axis=1), 1.0, atol=1e-5)
-    # the same samples as flat rows of a model with an input_shape
+    m = (ml.Sequential().conv2d(3, 3, padding=1).relu().max_pool2d(2).flatten().linear(2)
+         .compile(loss="cross_entropy", optimizer="adam", lr=0.02))
+    m.fit(X, y, epochs=12, batch_size=16, seed=5)
     flat = (ml.Sequential(input_shape=(2, 7, 9)).conv2d(3, 3, padding=1).relu().max_pool2d(2).flatten()
             .linear(2).compile(loss="cross_entropy", optimizer="adam", lr=0.02))
     flat.fit(X.reshape(48, -1), y, epochs=12, batch_size=16, seed=5)
-    assert _digest(flat) == digests[0]
-    assert np.array_equal(flat.predict_proba(X), p)
+    assert _digest(flat) == _digest(m)
+    assert np.array_equal(flat.predict_proba(X), m.predict_proba(X))
     with pytest.raises(ValueError, match="input_shape"):
         flat.fit(np.ascontiguousarray(X[:, :, :6]), y, epochs=1)
     with pytest.raises(Exception, match="one vector per sample"):
@@ -349,13 +269,6 @@ def test_rank4_conv_model():
 
 
 @pytest.mark.skipif(not _has_rankn_model(), reason="the sequence binding has no rank-N models (rebuild it)")
-def test_rank3_sequence_model_with_permute_and_reshape():
-    rng = np.random.default_rng(4)
-    X = rng.standard_normal((40, 5, 6)).astype(np.float32)
-    y = X[:, :, 0].sum(axis=1) - X[:, 0, :].mean(axis=1)
-    m = (ml.Sequential().linear(4).tanh().permute((1, 0)).reshape((-1,)).linear(1)
-         .compile(loss="mse", optimizer="adam", lr=0.02))
-    m.fit(X, y, epochs=10, batch_size=8, seed=1)
-    assert m.loss_curve_[-1] < m.loss_curve_[0]
-    assert m.predict(X).shape == (40,)
+def test_rank3_sequence_model_layer_listing():
+    m = ml.Sequential().linear(4).tanh().permute((1, 0)).reshape((-1,)).linear(1)
     assert m.layers[2] == ("permute", (1, 0, -1, -1, -1, -1), 0.0)

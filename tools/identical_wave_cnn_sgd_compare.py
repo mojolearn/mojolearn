@@ -7,8 +7,8 @@ import re
 from pathlib import Path
 
 EXPECTED = {
-    'cnn-primitives': {'xent-33', 'xent-1024', 'xent-1025', 'epoch-1', 'epoch-2', 'epoch-3',
-                       'epoch-1000', 'epoch-65537', 'adam-hyper-0', 'adam-hyper-1'},
+    # TOMBSTONE: the cnn-primitives suite deleted 2026-11-09 by lane/x8b-cnn-resident-predict (its entries went
+    # with the CNNClassifier hand epoch); code recoverable at 7c9d9d5575.
     'cnn-training': {'cnn-sgd', 'cnn-adam'},
     'sgd': {'sgd-ovr-sgd', 'sgd-ovr-perceptron', 'sgd-ovr-pa', 'sgd-nan-refusal', 'sgd-overflow-refusal'},
 }
@@ -26,7 +26,7 @@ def compare(paths, required):
         expected = EXPECTED[core['suite']]
         if core['suite'] == 'sgd' and core['fixture_profile'] == 'medium':
             expected = expected | {'sgd-ovr-sgd-largebatch'}
-        if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] not in ('on', 'off'):
+        if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] != 'on':
             raise ValueError('invalid source or arm identity')
         if not re.fullmatch('[0-9a-f]{64}', core['harness_sha256']):
             raise ValueError('invalid fixture harness identity')

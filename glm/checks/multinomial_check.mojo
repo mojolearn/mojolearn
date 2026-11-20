@@ -86,7 +86,7 @@ the outputs:
 from std.math import exp, isinf, isnan, log, sqrt
 from std.memory import bitcast
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
@@ -132,9 +132,10 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime MN_ROWS = 2048
 comptime MN_COLS = 5
 
@@ -244,7 +245,7 @@ struct FitResult(Movable):
 def _upload(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](len(h))
     var tmp = h.copy()
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=tmp.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, buf, tmp)
     ctx.synchronize()
     _ = tmp^
     return buf^
@@ -252,12 +253,11 @@ def _upload(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DType.f
 
 def _download(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
     var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, hb)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb^
     return out^
 
 

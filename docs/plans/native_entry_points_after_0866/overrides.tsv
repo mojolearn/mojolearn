@@ -1,0 +1,32 @@
+# source_table	workstream	reason (hand-assigned after reading the row; collect_owed.py applies these last)
+source_table	workstream	reason
+p3-trees.md:10	B-device-rows	moved from A-resident-state by reading: bindings/trees_public_boost.mojo:1457-1515,1332-1362
+p3-trees.md:21	B-device-rows	moved from A-resident-state by reading: bindings/trees_public_boost.mojo:693-712
+p3-trees.md:9	B-device-rows	moved from A-resident-state by reading: bindings/trees_public_boost.mojo:1052-1080,1119-1157
+p3-trees.md:19	B-device-rows	moved from E-admitted-call by reading: bindings/_mojolearn_x_trees.mojo:107-132
+p3-p3-core-cpython.md:40	E-admitted-call	moved from A-resident-state by reading: bindings/archive_schema_native.mojo:533-547,557-591,858-881,
+p3-p3-core-cpython.md:11	E-admitted-call	moved from B-device-rows by reading: bindings/archive_schema_native.mojo:172-197,272-297,460-465,
+p3-p3-cnn-sequence-tsa.md:23	E-admitted-call	moved from C-training-sessions by reading: providers/python/autoarima_lifecycle_pyapi.mojo:20-37,142-20
+p3-p3-cnn-sequence-tsa.md:36	E-admitted-call	moved from C-training-sessions by reading: python/mojolearn/_tsa_impl.py:834
+p3-p3-cnn-sequence-tsa.md:21	G-fused-entries	moved from C-training-sessions by reading: providers/python/autoarima_search_pyapi.mojo:329-344
+p3-p3-cnn-sequence-tsa.md:77	G-fused-entries	moved from C-training-sessions by reading: bindings/tsa_autoarima_native.mojo:76-103,186-199
+p3-p3-cnn-sequence-tsa.md:37	A-resident-state	moved from C-training-sessions by reading: bindings/_mojolearn_arima.mojo:433-509,512-596
+p3-p3-cnn-sequence-tsa.md:41	A-resident-state	moved from C-training-sessions by reading: bindings/tsa_arima_native.mojo:413-442
+p3-p3-cnn-sequence-tsa.md:42	A-resident-state	moved from C-training-sessions by reading: bindings/tsa_hw_native.mojo:242-288,384-407,304
+p3-p3-cnn-sequence-tsa.md:48	A-resident-state	moved from C-training-sessions by reading: bindings/xseq_forecast_native.mojo:159-206,328-375
+p3-p3-cnn-sequence-tsa.md:50	A-resident-state	moved from C-training-sessions by reading: bindings/xseq_prophet_native.mojo:305-350
+p3-p3-lm-tokenizer.md:34	H-labels-metrics	moved from C-training-sessions by reading: python/mojolearn/models/tokenizer.py
+p3-p3-lm-tokenizer.md:47	H-labels-metrics	moved from C-training-sessions by reading: python/mojolearn/tokenizer.py
+p3-p3-lm-tokenizer.md:33	C-training-sessions	moved from C-training-sessions by reading: python/mojolearn/lm_corpus.py:260,373
+p3-p3-lm-tokenizer.md:68	C-training-sessions	moved from C-training-sessions by reading: bindings/lm_corpus_public_native.mojo:301,252
+p3-p3-msel-parallel.md:14	C-training-sessions	moved from C-training-sessions by reading: bindings/cross_vendor_native.mojo:1003-1005
+p3-p3-msel-parallel.md:7	C-training-sessions	moved from J-product-gaps by reading: bindings/cross_vendor_native.mojo:97-125
+p3-p3-msel-parallel.md:10	J-multi-device-and-gaps	moved from J-product-gaps by reading: bindings/parallel_shard_native.mojo:464
+p3-p3-msel-parallel.md:16	J-multi-device-and-gaps	moved from J-product-gaps by reading: bindings/parallel_neighbor_worker.mojo:205-213
+p3-p3-msel-parallel.md:20	J-multi-device-and-gaps	moved from J-product-gaps by reading: bindings/parallel_shard_native.mojo:376,428,515
+p3-p3-neural-blocks.md:29	C-training-sessions	moved from A-resident-state by reading: bindings/training_cross_entropy_native.mojo:126-153
+p3-p3-neural-blocks.md:56	C-training-sessions	moved from A-resident-state by reading: bindings/neural_gemm_boundary.mojo:16,17
+p3-p3-samba-optim-autograd.md:23	C-training-sessions	moved from G-fused-entries by reading: python/mojolearn/_training_impl.py:494,553,561
+p3-p3-neural-blocks.md:31	D-generation-sessions	moved from A-resident-state by reading: providers/python/transformer_resident_pyapi.mojo:59-64
+p3-p3-neural-blocks.md:17	D-generation-sessions	moved from A-resident-state by reading: providers/python/transformer_resident_pyapi.mojo:10-12
+p3-p3-lm-tokenizer.md:65	D-generation-sessions	moved from A-resident-state by reading: bindings/causal_checkpoint.mojo:_checkpoint_pinned_bytes

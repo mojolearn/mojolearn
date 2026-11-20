@@ -37,7 +37,7 @@ forward-use order q, k, v). No approximation.
 
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -64,7 +64,7 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 
 comptime AFN_LMGRAD_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )

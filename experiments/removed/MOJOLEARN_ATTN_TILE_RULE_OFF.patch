@@ -1,0 +1,27 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 9190c9f3e0..f2d62c0cbc 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -4609,7 +4609,10 @@ comptime TILED_TT = 16
+ 
+ #: lane/no-bench-tuning-2 (2026-10-04): the two constants above were measured
+ #: at one board shape (192 dq blocks / 384 dkdv blocks on 142 SMs and 304
+-#: CUs). The rows (dq) or keys (dkdv) per block are chosen per launch from the grid,
++#: CUs). They now stay only as the explicit A/B arms and as the rollback:
++#: `-D MOJOLEARN_ATTN_TILE_RULE_OFF=1` (or any explicit DQ_TQ* / DKDV_BJ*
++#: define) launches the comptime constants exactly as before. By default the
++#: rows (dq) or keys (dkdv) per block are chosen per launch from the grid,
+ #: the head size and the device by one stated rule, `attn_rows_tile_rule`:
+ #:   - the largest tile in [lo, hi] (powers of two) whose grid
+ #:     `groups * ceil(rows / tile)` still gives every SM / CU at least
+@@ -4624,9 +4627,7 @@ comptime TILED_TT = 16
+ #: is an execution-plan choice the contract does not read: same bits at
+ #: every tile, on every vendor (no host-column change).
+ #: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
+-# TOMBSTONE: MOJOLEARN_ATTN_TILE_RULE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at 3a02a72be4.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_TILE_RULE_OFF.patch
+-comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime ATTN_DQ_TQ_PINNED = (
+     ATTN_TILE_RULE_OFF
+ )

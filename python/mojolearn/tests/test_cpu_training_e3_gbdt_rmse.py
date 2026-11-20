@@ -1,21 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream E batch 3, CPU training for the gbdt-rmse lane (2026-09-14),
-checked from SOURCE so it runs on a box with nothing built, plus a runtime
-check that runs only where the gbdt host binding is built and the package
-took the CPU-only path.
-
-What the source checks hold: the manifest declares gbdt-rmse on the gbdt
-family with the RMSE oracle among its host modules; the binding dispatches
-`loss="RMSE"` to the RMSE oracle, lifts the loss refusal for RMSE only,
-lifts `boost_from_average=True` for RMSE only, and refuses by name any
-`leaf_estimation_iterations` other than 1 under RMSE; the RMSE oracle imports
-no GPU module and no module outside the symmetric oracle's reuse set; it
-spells the device constructs a bit claim rests on (the Float32 narrowing of
-the target average, the flushed der, the negated squared residual, the
-Hessian guard and the `1e-20` epsilon, the minimum leaf weight zero, the
-fused cursor update, the `bias` record after `losses`); the sabotage define
-reaches the RMSE leaf; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
+"""CPU training for the gbdt-rmse lane: a runtime check that runs only where
+the gbdt host binding is built and the package took the CPU-only path.
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): a small RMSE fit runs twice through the host
@@ -29,103 +15,18 @@ gate's, not this file's.
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import re
 import sys
-from pathlib import Path
 
 import mojolearn
-from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-ORACLE = "gbdt/host/gbdt_oracle_rmse.mojo"
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-REFUSAL = "no CPU implementation of _mojolearn_gbdt.gbdt_fit for "
+from mojolearn import _backend
 
 
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
+# test_binding_dispatches_rmse_and_lifts_only_its_refusals deleted: a source-text check of
+# bindings/_mojolearn_gbdt_host.mojo. 285ac89b42 moved the host binding's RUN (the RMSE
+# dispatch and its refusals) into gbdt/mojolearn_gbdt_host_run.mojo. RMSE/MAE/Quantile/MAPE
+# host fits and their refusals run natively: checks/native_tests/gbdt_public_fits.mojo.
 
 
-def test_manifest_declares_gbdt_rmse():
-    fam = host_surface.family("gbdt")
-    assert "gbdt-rmse" in fam["training_lanes"]
-    assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
-    assert "gbdt-rmse" in host_surface.covered_lanes()
-    assert "RMSE" in host_surface.TRAINING_LANE_NAMES["gbdt-rmse"]
-
-
-def test_binding_dispatches_rmse_and_lifts_only_its_refusals():
-    src = _read(host_surface.binding_source("gbdt"))
-    assert "from gbdt.host.gbdt_oracle_rmse import" in src
-    assert 'var is_rmse = loss == String("RMSE")' in src
-    assert 'if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:' in src
-    # lane/catboost-parity: MAE, Quantile and MAPE joined RMSE's seeded
-    # cursor (their CalcSampleQuantile constant)
-    assert "if boost_from_average == 1 and not is_rmse and not quantile_family:" in src
-    assert "if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:" in src
-    assert "gbdt_rmse_host_fit(" in src and "gbdt_rmse_host_model_text(fit)" in src
-    assert "boost_from_average != 0" in src, "unset and True must resolve the seeded cursor"
-    assert f'"{REFUSAL}"' in src
-
-
-def test_oracle_imports_no_gpu_module():
-    text = _read(ORACLE)
-    assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
-    imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)))
-    assert imports == [
-        "checks.numerics", "gbdt.data.permutation",
-        "gbdt.gpu_data.compressed_index_builder",
-        "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
-        "gbdt.host.gbdt_oracle", "gbdt.metrics.sample_quantile", "std.math", "std.memory",
-    ], imports
-    # optimal_const_for_loss.mojo imports the pointwise target kernels; the
-    # starting constant's blocked-tree average (shared with the device since
-    # efeb15bd8) lives in the CPU-safe sample_quantile.mojo the host imports
-    assert "optimal_const_for_loss" not in "".join(re.findall(r"^from .*$", text, re.M)), (
-        "the optimum constant module imports a kernel module; take sample_quantile's"
-    )
-    assert not GPU_IMPORTS.search(_read("gbdt/metrics/sample_quantile.mojo"))
-
-
-def test_oracle_spells_the_bit_carrying_constructs():
-    text = _read(ORACLE)
-    shared = _read("gbdt/metrics/sample_quantile.mojo")
-    assert "calculate_weighted_target_average(targets, List[Float32](), False)" in text
-    assert "return Float32(target_sum / summary_weight)" in shared, "the float return"
-    assert "summary_weight = Float64(n)" in shared, "the exact unweighted count"
-    assert "var der = ftz(weight * (relev - val))" in text, "the flushed der"
-    assert "var score = -weight * ((relev - val) * (relev - val))" in text, "the negated score"
-    assert "s_g[t] = abs(r.der)" in text, "the der magnitude reads the flushed plane"
-    assert "var hessian = w + reg" in text
-    assert "if hessian <= Float32(0.0):" in text
-    assert "var v = g / (hessian + Float32(1e-20))" in text
-    assert "if w < GBDT_RMSE_MIN_LEAF_WEIGHT:" in text
-    assert "comptime GBDT_RMSE_MIN_LEAF_WEIGHT = Float32(1e-20)" in text
-    assert "identical_mul_add(leaf_values[leaf], lr, cursor[row])" in text
-    assert "model_leaves.append(leaf_values[i] * lr)" in text, "the host rescale"
-    assert 'String("bias ") + gbdt_f64_token(bias)' in text
-    # a zero bias writes no record; zero BY BITS since lane/catboost-parity
-    # (a -0.0 bias is theirs to report and is written)
-    assert "if bitcast[DType.uint64](bias) == UInt64(0):" in text, "a zero bias writes no record"
-    assert "var cursor = List[Float32](length=n_rows, fill=start_value)" in text
-
-
-def test_level_loop_twins_are_named_in_both_oracles():
-    assert "TWIN" in _read(ORACLE) and "gbdt_oracle_rmse.mojo" in _read("gbdt/host/gbdt_oracle.mojo")
-
-
-def test_sabotage_define_moves_the_rmse_leaf():
-    text = _read(ORACLE)
-    assert host_surface.sabotage_define("gbdt") == "MOJOLEARN_HOST_SABOTAGE"
-    assert "GBDT_ORACLE_HOST_SABOTAGE" in text
-    assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text
-    assert "reg = reg + Float32(1.0)" in text
-
-
-
-@reference_training()
 def test_gradient_boosting_rmse_fits_on_the_host_when_built():
     if _backend._CPU_ONLY is None:
         print("SKIP: a GPU set loaded; the host route is not taken here")

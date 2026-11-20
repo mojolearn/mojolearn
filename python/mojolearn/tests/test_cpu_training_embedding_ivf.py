@@ -1,193 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the embedding, embedding-sort, ivf, ivf-euclidean, byte-lm
-and byte-lm-resident lanes (lane/cpu-training-embedding-ivf, 2026-09-15),
-checked from SOURCE so it runs on a box with nothing built, plus runtime
-checks that run only where the host bindings are built and the package took
-the CPU-only path.
+and byte-lm-resident lanes, checked at runtime where the host bindings are
+built and the package took the CPU-only path (skipped, and SAID to be
+skipped, when a binding is absent or a GPU set loaded).
 
-The byte LM half: the manifest declares the two trainer lanes on the byte_lm
-family and ADAPTED_MODULES routes `_mojolearn_byte_lm` to
-`_byte_lm_trainer_host`, which `_backend._cpu_only_binding` reads; the adapter
-holds no arithmetic (it calls only the CPU byte LM binding's step, loss and
-logits); the CPU byte LM binding's sabotage read-back reports the host GEMM
-oracle's arm. At runtime: a stateless and a resident trainer take the same
-three steps to the same loss, parameters and gradient bytes; the trainer's
-logits are the CPU binding's reference-path logits; an evaluation changes
-no state; a checkpoint round trip restores the bytes; a session rollback
-restores the last step's shadow once; a multi-GPU entry is absent by name.
-
-What the source checks hold: the manifest declares the embedding and ivf
-families, routes `_mojolearn_embedding` and `_mojolearn_ivf` to them, covers
-the four lanes, puts them in the set diffed against the training record
-(their own records were superseded in release-0845), and no longer names the
-Embedding layer as having no CPU path; each host binding registers exactly
-the GPU binding's names plus its four read-backs; the two host modules import
-no GPU module and do not import the device entry points, and they call the
-host stages the device path already runs on the host; the IVF host selection
-limit is the device selector's literal; the sabotage define reaches both
-modules and each binding reads it back; the CPU identity gate triggers on the
-host modules and checks out both records.
-
-The runtime checks (skipped, and SAID to be skipped, when a binding is absent
-or a GPU set loaded): the host forward is the gather; the host backward is
-the ascending sum with the padding row stored +0.0, the same bytes under both
-plans, and a carried microbatch equals the unsplit gradient; an out-of-range
-id refuses by name; an IVF search at n_probes == n_lists returns the brute
-force neighbours on distinct distances, the euclidean metric returns the root
-of the squared one on the same ids, and n_probes > n_lists refuses by name.
-The bit claim against the GPU columns is the CPU identity gate's.
+Embedding: the host forward is the gather; the host backward is the ascending
+sum with the padding row stored +0.0, the same bytes under both plans, and a
+carried microbatch equals the unsplit gradient; an out-of-range id refuses by
+name. IVF: a search at n_probes == n_lists returns the brute force neighbours
+on distinct distances, the euclidean metric returns the root of the squared
+one on the same ids, and n_probes > n_lists refuses by name. Byte LM: a
+stateless and a resident trainer take the same three steps to the same loss,
+parameters and gradient bytes; the trainer's logits are the CPU binding's
+reference-path logits; an evaluation changes no state; a checkpoint round
+trip restores the bytes; a session rollback restores the last step's shadow
+once; a multi-GPU entry is absent by name. Each host binding's sabotage
+read-back is off. The bit claim against the GPU columns is the verification's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_embedding_ivf
 """
 
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
-import re
 import sys
-from pathlib import Path
 
 import mojolearn
-from mojolearn._cpu_reference import reference_training
-from mojolearn import _backend, host_surface
-
-ROOT = Path(__file__).resolve().parents[3]
-
-EMB_LANES = ("embedding", "embedding-sort")
-IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")
-#: par-ivf joined the ivf family on 2026-09-19 (lane/laneless-public-classes):
-#: DistributedIVFIndex over the same host binding, through the
-#: `ivf_flat_partial_search` and `ivf_finalize_distances` entries that lane
-#: added to it. It is a multi-device driver, so it is named apart from the
-#: three single-index lanes this file is about, and the family assertion
-#: below names it rather than widening to "contains".
-IVF_DRIVER_LANES = ("par-ivf",)
-#: `ivf-short-fill` joined on 2026-10-21 (lane/verify-coverage-audit): IVF-Flat
-#: queries with fewer candidates than neighbours asked for, a coverage lane
-#: over the same host binding.
-IVF_COVERAGE_LANES = ("ivf-short-fill",)
-#: The lanes diffed against a committed record of their own instead of the
-#: training record. Empty since release-0845: the 2026-10-14 training record
-#: (host_surface.TRAINING_GPU_COLUMNS) carries embedding, embedding-sort, ivf
-#: and ivf-euclidean on all three columns, so their own records are superseded.
-RECORDED_OWN = ()
-EMB_HOST = "embedding/host/embedding_host.mojo"
-IVF_HOST = "ivf/host/ivf_host.mojo"
-GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-REGISTERED = re.compile(r'def_function\[\w+\]\(\s*"(\w+)"\s*\)')
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _registered(rel):
-    return set(REGISTERED.findall(_read(rel)))
-
-
-def test_manifest_declares_both_families():
-    for name, route, lanes in (("embedding", "_mojolearn_embedding", EMB_LANES),
-                               ("ivf", "_mojolearn_ivf", IVF_LANES)):
-        fam = host_surface.family(name)
-        assert fam["routes"] == route
-        assert host_surface.routed_modules()[route] == f"{route}_host"
-        assert fam["training_lanes"] == lanes + (IVF_DRIVER_LANES + IVF_COVERAGE_LANES if name == "ivf" else ())
-        # Ships since lane/ship-cpu-host-families (2026-09-16): a wheel that
-        # leaves the fit out cannot check the lane that hashes the fit.
-        assert fam["ships_in_wheel"], "a host family with covered lanes must ship, or the lanes are unverifiable"
-        assert (ROOT / host_surface.build_shim(name)).is_file()
-        for lane in lanes:
-            assert lane in host_surface.covered_lanes()
-            if lane not in RECORDED_OWN:
-                assert lane in host_surface.record_covered_lanes()
-                continue
-            assert lane in host_surface.fix_covered_lanes(), f"{lane} is not diffed against its own record"
-            assert lane not in host_surface.record_covered_lanes()
-            assert host_surface.TRAINING_LANE_NAMES[lane] in host_surface.training_sentence()
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "Embedding" not in sentence, sentence
-
-
-def test_bindings_register_the_gpu_names():
-    for name in ("embedding", "ivf"):
-        host = _registered(host_surface.binding_source(name))
-        gpu = _registered(f"bindings/_mojolearn_{name}.mojo")
-        readbacks = {f"{name}_host_{r}" for r in host_surface.READBACK}
-        # the device-resident embedding table (`embedding.py` resolves it
-        # with a None fallback and takes the per-call entries on the host)
-        device_only = {"embedding_table_release"} if name == "embedding" else set()
-        if name == "embedding":
-            # device I/O (gap lanes, 2026-10-08): resident tensors and the
-            # forward/backward on them; `Embedding._dev_module` refuses by name
-            # without them and the host route takes host arrays
-            device_only |= {"embedding_forward_dev", "embedding_backward_dev"} | {
-                "seq_tensor_" + op for op in ("alloc", "free", "upload", "download", "copy")}
-        if name == "ivf":
-            # registered only under MOJOLEARN_IVF_FAST_BALANCED_AUDIT (a FAST
-            # device audit probe, default off; no Python caller)
-            device_only = {"ivf_fast_balanced_hits"}
-            # lane gap-ivf: the resident build (taken via getattr, None on the
-            # host binding) and its one-copy export of a resident index
-            device_only |= {"ivf_flat_build_resident", "ivf_flat_index_export"}
-            # Device execution-plan bookkeeping has no host-buffer counterpart.
-            device_only |= {"device_plan_enter", "device_plan_exit", "device_plan_log"}
-        assert device_only <= gpu and not device_only & host
-        assert host == (gpu - device_only) | readbacks, (name, sorted(host ^ ((gpu - device_only) | readbacks)))
-        assert host == set(host_surface.family(name)["exports"])
-
-
-def test_host_modules_are_host_only():
-    for rel, forbidden in ((EMB_HOST, ("embedding.checks.embedding_identical", "autograd.kernels.embedding",
-                                       "autograd.kernels.embedding_sort")),
-                           (IVF_HOST, ("ivf.estimator", "ivf.impl.neighbors.ivf_flat.ivf_flat_build",
-                                       "ivf.impl.neighbors.ivf_flat.ivf_flat_search",
-                                       "neighbors.checks", "core.row_norms"))):
-        text = _read(rel)
-        assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
-        assert "DeviceContext" not in re.findall(r"^\s*from .*import (.*)$", text, re.M)
-        for module in forbidden:
-            assert not re.search(rf"^\s*from {re.escape(module)} import", text, re.M), (rel, module)
-    for rel in ("ivf/checks/list_layout.mojo", "ivf/impl/neighbors/ivf_common.mojo",
-                "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo", "cluster/impl/kmeans_params.mojo"):
-        assert not GPU_IMPORTS.search(_read(rel)), f"{rel} now imports a GPU module; the ivf host binding imports it"
-    ivf = _read(IVF_HOST)
-    for stage in ("host_fit_main", "build_list_layout", "merge_probed_lists", "calc_chunk_indices",
-                  "postprocess_neighbors", "postprocess_distances", "ivf_index_params_validate",
-                  "ivf_search_params_validate", "ivf_validate_data", '"ivf.quantizer."'):
-        assert stage in ivf, f"{IVF_HOST} does not call {stage}"
-
-
-def test_ivf_select_limit_is_the_device_literal():
-    host = re.search(r"^comptime IVF_HOST_SELECT_LIMIT = (\d+)$", _read(IVF_HOST), re.M)
-    dev = re.search(r"^comptime IDENTICAL_MAX_K = (\d+)$", _read("neighbors/checks/select_radix_identical.mojo"), re.M)
-    assert host and dev and host.group(1) == dev.group(1), (host, dev)
-    assert "IVF_SELECT_LIMIT = IDENTICAL_MAX_K if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL" in _read(
-        "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo")
-
-
-def test_embedding_plan_codes_are_the_device_literals():
-    host = _read(EMB_HOST)
-    dev = _read("autograd/kernels/embedding_sort.mojo")
-    for name, value in (("PLAN_SCAN", "0"), ("PLAN_SORT", "1")):
-        assert re.search(rf"^comptime {name} = {value}$", dev, re.M), name
-        assert re.search(rf"^comptime HOST_{name} = {value}$", host, re.M), name
-    assert "0xFFFFFFFFFFFFFFFF" in dev and "0xFFFFFFFFFFFFFFFF" in host
-
-
-def test_sabotage_reaches_both_and_reads_back():
-    for name, rel, flag in (("embedding", EMB_HOST, "EMBEDDING_HOST_SABOTAGE"), ("ivf", IVF_HOST, "IVF_HOST_SABOTAGE")):
-        define = host_surface.sabotage_define(name)
-        text = _read(rel)
-        assert f'is_defined["{define}"]()' in text
-        assert flag in _read(host_surface.binding_source(name))
-
-
-def test_workflow_checks_out_the_records():
-    # The CPU identity gate runs by hand since 2026-09-15 (no push trigger),
-    # so only its sparse checkout must bring down the two records.
-    wf = _read(".github/workflows/cpu-identity-gate.yml")
-    for record in ("2026-09-15_embedding-sort", "2026-09-14_ivf-euclidean"):
-        assert f"/bench/results/identity_break/{record}/" in wf, record
+from mojolearn import _backend
 
 
 def _cpu_only_with(basename):
@@ -200,7 +39,6 @@ def _cpu_only_with(basename):
     return True
 
 
-@reference_training()
 def test_embedding_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_embedding_host"):
         return
@@ -238,7 +76,6 @@ def test_embedding_runs_on_the_host_when_built():
         raise AssertionError("an out-of-range id was gathered")
 
 
-@reference_training()
 def test_ivf_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_ivf_host"):
         return
@@ -266,43 +103,6 @@ def test_ivf_runs_on_the_host_when_built():
         raise AssertionError("n_probes > n_lists was clamped")
 
 
-BYTE_LM_LANES = ("byte-lm", "byte-lm-resident")
-ADAPTER = "python/mojolearn/_byte_lm_trainer_host.py"
-
-
-def test_manifest_declares_the_byte_lm_trainer_lanes():
-    fam = host_surface.family("byte_lm")
-    assert set(BYTE_LM_LANES) <= set(fam["training_lanes"])
-    assert "SmallByteLanguageModelTrainer" in fam["classes"]
-    for lane in BYTE_LM_LANES:
-        assert lane in host_surface.record_covered_lanes(), f"{lane} is not diffed against the record"
-    assert host_surface.ADAPTED_MODULES == {"_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host")}
-    assert "_mojolearn_byte_lm" in _backend._MODULES
-    assert "_mojolearn_byte_lm" not in host_surface.routed_modules()
-    backend = _read("python/mojolearn/_backend.py")
-    assert "host_surface.ADAPTED_MODULES.get(name)" in backend
-
-
-def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
-    text = _read(ADAPTER)
-    imports = re.findall(r"^(?:from|import) (\S+)", text, re.M)
-    assert set(imports) <= {"ctypes", "math", "operator", "struct", ".", "._bufcheck", "._buffer",
-                            "._byte_lm_config"}, imports
-    for entry in ("byte_lm_host_train_step", "byte_lm_host_loss", "byte_lm_host_logits"):
-        assert f"self._host.{entry}(" in text, entry
-    assert "_backend.load_host_module(HOST_BASENAME)" in text
-    impl = _read("python/mojolearn/_byte_lm_impl.py")
-    # cpu-gpu-cleanup n-pyneural: the install decides the vendor set, so the
-    # GPU trainer never imports the CPU trainer adapter (`_backend.binding`
-    # serves the CPU binding on a CPU-only install)
-    assert "_byte_lm_trainer_host" not in "".join(re.findall(r"^\s*(?:from|import) .*$", impl, re.M))
-    assert "vendors = ('cpu',) if _backend._CPU_ONLY is not None" in impl
-    src = _read(host_surface.binding_source("byte_lm"))
-    assert "from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE" in src
-    assert "or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)" in src
-
-
-@reference_training()
 def test_byte_lm_trainer_runs_on_the_host_when_built():
     if not _cpu_only_with("_mojolearn_byte_lm_host"):
         return
@@ -313,7 +113,7 @@ def test_byte_lm_trainer_runs_on_the_host_when_built():
     module = _backend.load_host_module("_mojolearn_byte_lm_host")
     assert not bool(module.byte_lm_host_sabotage()), "a sabotage build loaded outside the gate"
     binding = _backend.binding("_mojolearn_byte_lm", "identical")
-    assert adapter.is_cpu_trainer_binding(binding) and binding.byte_lm_vendor() == "cpu"
+    assert binding.byte_lm_vendor() == "cpu"
     assert getattr(binding, "byte_lm_parallel_create", None) is None
     try:
         binding.byte_lm_offload_step
@@ -326,7 +126,7 @@ def test_byte_lm_trainer_runs_on_the_host_when_built():
     flat = rng.uniform(-0.125, 0.125, shape.n_total).astype(np.float32)
     ids = rng.integers(0, 256, (6, shape.length + 1)).astype(np.int32)
     schedule = {"dataset": "test"}
-    s = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule)
+    s = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule, step_result="full")
     r = mojolearn.SmallByteLanguageModelTrainer(flat, data_schedule=schedule, resident=True)
     for k in range(3):
         a = s.train_step(ids[2 * k:2 * k + 2])

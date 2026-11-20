@@ -3,103 +3,23 @@
  "lane": "neighbors-small-ports",
  "branch": "lane/neighbors-small-ports",
  "head": "5445778af",
- "controls": {
-  "IDN_NC_FIT_LEAN": {
+ "controls": {},
+ "algorithms": {},
+ "removed": [
+  {
    "define": "MOJOLEARN_IDN_NC_FIT_LEAN_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_NC_FIT_LEAN_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_neighbors/nan_cells_device.mojo:236"
-   ],
-   "binding": "_mojolearn_x_neighbors",
-   "bits_change": false,
-   "status": "promoted:w2-decide-algos-20261011",
-   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): knn-imputer istella 0.093 (NV .099 AMD .087); v0105/a1687 vs A v0104/a1686. `MOJOLEARN_IDN_NC_FIT_LEAN_OFF` restores the old path. Before: IDENTICAL KNNImputer.fit runs only the per-column NaN count kernel (integer atomics, order-free) instead of the full cell compaction + D2H; same words. A/B knn-imputer istella nv+amd."
+   "control": "IDN_NC_FIT_LEAN",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-15-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the rollback of the PROMOTED IDENTICAL lean KNNImputer fit (EXP:2049, lane/w2-decide-algos 2026-10-11); _NC_FIT_LEAN_IDN = IDENTICAL mode. No bit change; define refused in core/experiment_guards_cluster.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   },
-  "IDN_MBK_RESIDENT": {
+  {
    "define": "MOJOLEARN_IDN_MBK_RESIDENT_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_MBK_RESIDENT_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_cluster/minibatch_ptr.mojo:83",
-    "x_cluster/minibatch.mojo:210",
-    "bindings/_mojolearn_x_cluster.mojo:71"
-   ],
-   "binding": "_mojolearn_x_cluster",
-   "bits_change": false,
-   "status": "promoted:w2-decide-algos-20261011",
-   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): minibatch-kmeans istella 0.309 (NV .195 AMD .423), taxi 0.555 (NV .421 AMD .690); v0107/a1689 vs A v0106/a1688. `MOJOLEARN_IDN_MBK_RESIDENT_OFF` restores the old path. Before: IDENTICAL MiniBatchKMeans uploads X from the caller's pointer (no read_f32 host list), scans it on the device (Python skips all_finite), minibatch_fit runs on the resident slot with device gathers of the same rows; step loop unchanged; same words. A/B minibatch-kmeans istella + taxi nv+amd."
+   "control": "IDN_MBK_RESIDENT",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-15-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the rollback of the PROMOTED IDENTICAL resident MiniBatchKMeans fit (EXP:2050, lane/w2-decide-algos 2026-10-11); MBK_IDN_RESIDENT = IDENTICAL mode. No bit change; define refused in core/experiment_guards_cluster.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
   },
-  "IDN_PSHAP_RESIDENT": {
+  {
    "define": "MOJOLEARN_IDN_PSHAP_RESIDENT_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_PSHAP_RESIDENT_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "xtrees/agnostic_device.mojo:120",
-    "xtrees/api.mojo:pshap_values_linear_binding",
-    "python/mojolearn/_expansion_trees.py:PermutationExplainer._linear_wb"
-   ],
-   "binding": "_mojolearn_x_trees",
-   "bits_change": false,
-   "status": "promoted:w2-decide-algos-20261011",
-   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): permutation-shap istella 0.097, taxi 0.022 (AMD .128/.033); v0109/a1691 vs A v0108/a1690. `MOJOLEARN_IDN_PSHAP_RESIDENT_OFF` restores the old path. Before: IDENTICAL PermutationExplainer over this library's linear regressors: synthetic rows + x_linear decision statements + means + marginals on the device per chunk, chunk budget 2^28 words; same words as the callback path. A/B permutation-shap istella + taxi nv+amd."
+   "control": "IDN_PSHAP_RESIDENT",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-46-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): EXP:2051 KEEP, promoted 2026-10-11 (NV 0.097, AMD 0.128) (rule e). No bit change; define refused in core/experiment_guards_trees.mojo; code recoverable at 5002a250c9."
   }
- },
- "algorithms": {
-  "algos:knn-imputer": {
-   "binding": "_mojolearn_x_neighbors",
-   "route": "KNNImputer.fit -> _nan_cells(colmiss_only=1) -> nan_cells_device (NC_FIT_LEAN)",
-   "controls": [
-    "IDN_NC_FIT_LEAN"
-   ],
-   "interaction_groups": [
-    [
-     "IDN_NC_FIT_LEAN"
-    ]
-   ]
-  },
-  "algos:minibatch-kmeans": {
-   "binding": "_mojolearn_x_cluster",
-   "route": "MiniBatchKMeans.fit -> x_cluster_call ENTRY_MINIBATCH -> minibatch_entry_ptr_idn -> minibatch_fit(xs_res)",
-   "controls": [
-    "IDN_MBK_RESIDENT"
-   ],
-   "interaction_groups": [
-    [
-     "IDN_MBK_RESIDENT"
-    ]
-   ]
-  },
-  "algos:permutation-shap": {
-   "binding": "_mojolearn_x_trees",
-   "route": "PermutationExplainer.shap_values -> _linear_wb -> x_trees_pshap_values_linear -> pshap_values_linear",
-   "controls": [
-    "IDN_PSHAP_RESIDENT"
-   ],
-   "interaction_groups": [
-    [
-     "IDN_PSHAP_RESIDENT"
-    ]
-   ]
-  }
- },
- "removed": []
+ ]
 }

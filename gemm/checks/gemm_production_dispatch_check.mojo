@@ -24,6 +24,8 @@ from gemm.checks.gemm_identical import (
     gemm_mfma16_waves,
     gemm_nv_step_kpack_rows,
     gemm_tile_min_blocks,
+    gemm_nv_block_floor,
+    GEMM_TILE_MIN_BLOCKS_DEFAULT,
     amd_short_contract_large_output,
     choose_gemm_plan,
     contract_partition,
@@ -92,7 +94,17 @@ def _check_small_bodies(m: Int, n: Int, k: Int) raises:
         assert_true(((m + rows - 1) // rows) * ((n + 63) // 64) >= gemm_tile_min_blocks())
 
 
-def main() raises:
+def run_checks() raises:
+    # The NVIDIA floor from the SM count (pure rule, any column): the measured
+    # part keeps its measured floor, neighbours within a third share it, and
+    # an unknown count is the column default.
+    assert_true(gemm_nv_block_floor(142) == 192)
+    assert_true(gemm_nv_block_floor(108) == 192)
+    assert_true(gemm_nv_block_floor(132) == 192)
+    assert_true(gemm_nv_block_floor(95) == 192)
+    assert_true(gemm_nv_block_floor(94) == 128)
+    assert_true(gemm_nv_block_floor(143) == 256)
+    assert_true(gemm_nv_block_floor(0) == GEMM_TILE_MIN_BLOCKS_DEFAULT)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         # The measured board rows (d_model 768) still take the 64x64 plan.
         assert_true(choose_gemm_plan(1024, 768, 768) == PLAN_TUNED_64_4X4)
@@ -141,20 +153,42 @@ def main() raises:
         assert_true(choose_gemm_plan(768, 3072, 2048) == PLAN_TUNED_128_8X8)
     # AMD short-contraction band (a pure host rule, checked on every column):
     # 4 < P <= 8 leaves of 128, i.e. 512 < k <= 1024, with a large output.
-    assert_true(amd_short_contract_large_output(4096, 768, 768))
-    assert_true(amd_short_contract_large_output(2048, 1024, 768))
-    assert_true(amd_short_contract_large_output(4096, 768, 513))
-    assert_true(amd_short_contract_large_output(4096, 768, 640))
-    assert_true(amd_short_contract_large_output(4096, 768, 896))
-    assert_true(amd_short_contract_large_output(4096, 768, 1024))
-    assert_true(not amd_short_contract_large_output(4096, 768, 512))
-    assert_true(not amd_short_contract_large_output(4096, 768, 1025))
-    assert_true(not amd_short_contract_large_output(4096, 768, 3072))
-    assert_true(not amd_short_contract_large_output(2048, 768, 768))
-    assert_true(not amd_short_contract_large_output(1024, 4096, 768))
-    # The band's leaf bounds are what the rule's comment says they are.
-    assert_true(contract_partition(640)[1] == 5)
-    assert_true(contract_partition(1024)[1] == 8)
+    # The band is stated in leaves (5..8), so its k range follows the
+    # profile's leaf: 512 < k <= 1024 under v1 (the literals below), and
+    # 2048 < k <= 4096 under -D MOJOLEARN_GEMM_FAST_LEAF512 (lane
+    # fx-gemm-leaf512, 2026-11-19; the rule's stated cost is per-leaf
+    # staging amortized over few leaves, so it follows the leaf count).
+    comptime if not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
+    ):
+        assert_true(amd_short_contract_large_output(4096, 768, 768))
+        assert_true(amd_short_contract_large_output(2048, 1024, 768))
+        assert_true(amd_short_contract_large_output(4096, 768, 513))
+        assert_true(amd_short_contract_large_output(4096, 768, 640))
+        assert_true(amd_short_contract_large_output(4096, 768, 896))
+        assert_true(amd_short_contract_large_output(4096, 768, 1024))
+        assert_true(not amd_short_contract_large_output(4096, 768, 512))
+        assert_true(not amd_short_contract_large_output(4096, 768, 1025))
+        assert_true(not amd_short_contract_large_output(4096, 768, 3072))
+        assert_true(not amd_short_contract_large_output(2048, 768, 768))
+        assert_true(not amd_short_contract_large_output(1024, 4096, 768))
+        # The band's leaf bounds are what the rule's comment says they are.
+        assert_true(contract_partition(640)[1] == 5)
+        assert_true(contract_partition(1024)[1] == 8)
+    else:
+        assert_true(amd_short_contract_large_output(4096, 768, 3072))
+        assert_true(amd_short_contract_large_output(2048, 1024, 3072))
+        assert_true(amd_short_contract_large_output(4096, 768, 2049))
+        assert_true(amd_short_contract_large_output(4096, 768, 4096))
+        assert_true(not amd_short_contract_large_output(4096, 768, 768))
+        assert_true(not amd_short_contract_large_output(4096, 768, 2048))
+        assert_true(not amd_short_contract_large_output(4096, 768, 4097))
+        assert_true(not amd_short_contract_large_output(2048, 768, 3072))
+        assert_true(not amd_short_contract_large_output(1024, 4096, 3072))
+        assert_true(contract_partition(512)[1] == 1)
+        assert_true(contract_partition(2560)[1] == 5)
+        assert_true(contract_partition(4096)[1] == 8)
     # NVIDIA fold-stack class: the measured GPT-3-small dWeight shape keeps
     # FS4 under the generalized rule, and the class is a pure leaf bound.
     assert_true(gemm_kpack_fold_slots_for(6, 0) == 4)

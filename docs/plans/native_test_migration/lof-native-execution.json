@@ -1,0 +1,60 @@
+{
+  "suite": "lof_native",
+  "product_dependency": "a9acd91a2c62aa0d3fa73178f85498e2a575fc2d",
+  "execution": "uncompiled and unrun; root CPU/GPU bundles owed",
+  "parallel": "20 independent actual host descriptor graphs use host_parallelize; independent oracle comparison cells parallel.",
+  "coverage": {
+    "0-11": "Original 60x5 seed0/every-ninth-row-times6; k1/7/59 (public k200 clamp retained at boundary); auto/.1/.25/.5 contamination. Finite admission, neighbor distances, densities, scores, offsets, int64 labels. Routes tiled/old-items/unfused distributed across unchanged parameter combinations.",
+    "12-13": "Original 25x5 query seed3/every-ninth-row-times6; fitted k6; auto/.2 contamination. Independent query distances/densities/scores/decisions/int64 labels.",
+    "14-16": "Original public mutation fixture 4x2 at 0,1,2,9; queries .5,8. Hand-derived rational oracles for every stage and quartile; all three routes.",
+    "17-19": "NaN deferred finite status with original 4x2 public input; all three routes, immutable input bits."
+  },
+  "reference": {
+    "path": "checks/native_tests/fixtures/lof/metadata.json",
+    "files": 22,
+    "method": "Independent Float64 NumPy Euclidean norm/full stable sort/vectorized mathematical LOF definitions and percentile; separate hand-derived rational cases. No native or legacy Python product execution.",
+    "rtol": 2e-06,
+    "atol": 2e-06,
+    "bound_source": "Existing LOF public decision relationship test uses 2e-6/2e-6. These new independent numerical checks use that bound; original duplicated-path bit-equality comparisons are retired instead of running development identity. No failing result was used to adjust expectations."
+  },
+  "python_migration": {
+    "rewritten_definitions": 2,
+    "preserved_parameter_cases": 14,
+    "removed_legacy_numerical_comparisons": 4,
+    "removed_legacy_class": "LegacyLocalOutlierFactor",
+    "removed_class_lines": 167,
+    "removed_unused_imports": [
+      "zeros",
+      "_p2m_sort_rows",
+      "_U_IDENTITY"
+    ],
+    "retained": "Public call admission/return self, score and output shape/dtype, fitted metadata and k clamp, five exact full refusal strings, one-sample/novelty refusals; finite lane public mutation/refusal hooks untouched. Other NC/Imputer legacy classes unchanged."
+  },
+  "lifetime": "Native plan/source/query/label/output owners are named after all descriptor raw-pointer calls and in finally on exceptions; label int64 writes have boundary guards.",
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_COLUMN_CPU=1"
+  ],
+  "product_files_changed": [],
+  "gpu_execution": "Same 20 graphs and oracles, one graph at a time on one physical GPU through xn_native_v1 device descriptor. All nine required operations exist; no fallback. Kernels/oracle cells remain parallel; concurrent shared-context failure remains separate and unresolved.",
+  "static_checks": [
+    "Python AST",
+    "TOML parse",
+    "JSON parse",
+    "reference file hashes",
+    "git diff --check; Mojo source review only"
+  ],
+  "cpu_fixtures": 20,
+  "gpu_fixtures": 20,
+  "gpu_operations": [
+    "sqdist",
+    "knn_select",
+    "knn_sq",
+    "knn_sq_tiled",
+    "unary",
+    "lof_lrd",
+    "lof_score",
+    "p2m_row_sort",
+    "p2m_sign_label"
+  ]
+}

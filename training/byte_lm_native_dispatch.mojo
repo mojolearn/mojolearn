@@ -2,7 +2,6 @@
 # Typed ByteLM engine table over the common native descriptor provider.
 # Session handles are minted only by its compiled boundary and retain their
 # exact ByteLMSession owner there; no CPython object layout enters this file.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -18,9 +17,14 @@ from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from training.checks.optimizer_contract import OptimizerConfig
 from training.byte_lm import byte_validate_optimizer
 from training.byte_lm_logits import BYTE_LOGITS_MAX_BATCH, BYTE_LOGITS_MAX_CELLS
+from core.shared_slot import SharedSlot
 
 comptime BYTE_LM_NATIVE_ABI_NAME = "mojolearn.training.byte_lm.v1"
-comptime BYTE_LM_NATIVE_OPERATION_COUNT = 12
+# Operation 12 (2026-11-07, plan section 2C): `n_steps` training steps on an
+# open session from its admitted configuration; a = [session, ids, losses,
+# flags], p = [n_steps, completed], no scalars.
+comptime BYTE_LM_OPERATION_STEPS = 12
+comptime BYTE_LM_NATIVE_OPERATION_COUNT = 13
 
 
 def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -58,6 +62,10 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
         out[2] = Int(owner[].usable)
         out[3] = Int(Bool(owner[].trainer))
         return 4
+    # TOMBSTONE: operation 12 (BYTE_LM_OPERATION_STEPS, byte_owner_steps) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]) and runs them as one Program.fit; code recoverable at the deletion commit's parent.
+    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+    if op == BYTE_LM_OPERATION_STEPS:
+        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
     if len(p) != 17 or len(f) != 8:
         raise Error("byte LM native ABI: invalid configuration descriptor")
     if p[9] != 0 and p[9] != 1:
@@ -112,7 +120,10 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
             byte_scatter_named(admitted[8], named, shape)
         return result
     if op == 1:
-        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1)
+        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+        if p[14] < 0 or p[14] > 999999:
+            raise Error("byte LM native ABI: invalid step count")
+        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))
     if op == 2 or op == 6:
         var batch = p[14]
         var length = p[15]
@@ -164,5 +175,4 @@ struct ByteLmNativeTable(Defaultable, Movable):
         self.entries.append(byte_lm_native_v1)
 
 
-comptime BYTE_LM_NATIVE_TABLE = _Global[StorageType=ByteLmNativeTable,
-    name="MojoByteLmNativeTableV1", init_fn=ByteLmNativeTable.__init__]
+comptime BYTE_LM_NATIVE_TABLE = SharedSlot[ByteLmNativeTable, ("MojolearnByteLmNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmNativeTableFastV3")]

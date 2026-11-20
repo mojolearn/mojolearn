@@ -1,0 +1,173 @@
+diff --git b/x_neighbors/checks/oracles.mojo a/x_neighbors/checks/oracles.mojo
+index 4ab5c80589..0bf9c78854 100644
+--- b/x_neighbors/checks/oracles.mojo
++++ a/x_neighbors/checks/oracles.mojo
+@@ -11,7 +11,7 @@ from checks.numerics import (
+     ftz, identical_mul_add, identical_mul, identical_div, identical_exp, identical_log, identical_sqrt,
+     identical_tanh, identical_cos, identical_sin,
+ )
+-from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks
++from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks, XN_IMPUTE_TIE_MEAN
+ 
+ 
+ def _a(x: Float32, y: Float32) -> Float32:
+@@ -752,30 +752,29 @@ def o_knn_impute(x: List[Float32], fx: List[Float32], n: Int, m: Int, d: Int, k:
+                 num = ftz(identical_mul_add(ftz(fx[sel_i[s] * d + c]), w, num))
+                 den = _a(den, w)
+             var val = ftz(identical_div(num, den))
+-            # the tie mean (x_neighbors/items.mojo `knn_impute_tie_mean_item`): uniform
++            # the tie mean (x_neighbors/items.mojo `XN_IMPUTE_TIE_MEAN`): uniform
+             # weights, k donors found: the donors closer than the k-th distance
+             # plus the mean of every donor AT it for the remaining slots, both
+             # sums in ascending donor order. variant 1 keeps the plain selection
+             # (the tie-break separation check needs the two rules apart).
+-            # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+-            # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+-            if weights == 0 and variant == 0 and len(sel_d) == k:
+-                var dk = sel_d[k - 1]
+-                var sum_lt = Float32(0)
+-                var sum_eq = Float32(0)
+-                var c_lt = 0
+-                var c_eq = 0
+-                for u in range(len(cand_d)):
+-                    var dv = fx[cand_i[u] * d + c]
+-                    if cand_d[u] < dk:
+-                        sum_lt = _a(sum_lt, dv)
+-                        c_lt += 1
+-                    elif cand_d[u] == dk:
+-                        sum_eq = _a(sum_eq, dv)
+-                        c_eq += 1
+-                if c_eq > 0 and c_lt < k:
+-                    var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+-                    val = ftz(identical_div(_a(sum_lt, fill), Float32(k)))
++            comptime if XN_IMPUTE_TIE_MEAN:
++                if weights == 0 and variant == 0 and len(sel_d) == k:
++                    var dk = sel_d[k - 1]
++                    var sum_lt = Float32(0)
++                    var sum_eq = Float32(0)
++                    var c_lt = 0
++                    var c_eq = 0
++                    for u in range(len(cand_d)):
++                        var dv = fx[cand_i[u] * d + c]
++                        if cand_d[u] < dk:
++                            sum_lt = _a(sum_lt, dv)
++                            c_lt += 1
++                        elif cand_d[u] == dk:
++                            sum_eq = _a(sum_eq, dv)
++                            c_eq += 1
++                    if c_eq > 0 and c_lt < k:
++                        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
++                        val = ftz(identical_div(_a(sum_lt, fill), Float32(k)))
+             out.append(val)
+     return out^
+ 
+diff --git b/x_neighbors/items.mojo a/x_neighbors/items.mojo
+index 863c9bdfdc..03428cd8ce 100644
+--- b/x_neighbors/items.mojo
++++ a/x_neighbors/items.mojo
+@@ -1309,8 +1309,9 @@ def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
+ # `knn_impute_tie_mean_cells_kernel` in iter_device.mojo run these same
+ # statements). Distance weights keep the scan's result. Bits change for
+ # uniform KNNImputer cells with a tie at D_k, on every column together.
+-# TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+-# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
++# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (A arm) restores the lower-index
++# rule in every mode.
++comptime XN_IMPUTE_TIE_MEAN = not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]()
+ 
+ 
+ @always_inline
+@@ -1454,10 +1455,9 @@ def knn_impute_item(
+         bd.unsafe_store(s, dist)
+         bi.unsafe_store(s, Int32(j))
+     knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
+-    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+-    if weights == 0:
+-        knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
++    comptime if XN_IMPUTE_TIE_MEAN:
++        if weights == 0:
++            knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
+ 
+ 
+ def knn_impute_cell_item(
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index c3a07cf2b7..1d9d3e8812 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -57,7 +57,7 @@ from x_neighbors.nan_cells_device import (
+ )
+ from x_neighbors.graph_dev import pr_iterate_gpu
+ from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
+-from x_neighbors.items import knn_impute_tie_mean_item
++from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
+ from x_neighbors.items import XN_TREE, xn_tree_slot
+ from checks.numerics import identical_mul, identical_div, identical_sqrt
+ from std.memory import bitcast as _bc
+@@ -1259,14 +1259,13 @@ def op_knn_impute_tiled(
+             d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+         )
+-    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+-    if weights == 0:
+-        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+-            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+-            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+-        )
++    comptime if XN_IMPUTE_TIE_MEAN:
++        if weights == 0:
++            ctx.enqueue_function[knn_impute_tie_mean_kernel](
++                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
++                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
++                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
++            )
+     _down(ctx, d_res, res, n * d)
+     ctx.synchronize()
+     _ = d_cells^
+@@ -1278,8 +1277,8 @@ def op_knn_impute_tiled(
+     _ = ctx^
+ 
+ 
+-# KNNImputer's tie mean: the rule and its history are at
+-# `knn_impute_tie_mean_item` in x_neighbors/items.mojo (every mode and vendor and
++# KNNImputer's tie mean: the rule, its history and the define are at
++# `XN_IMPUTE_TIE_MEAN` in x_neighbors/items.mojo (every mode and vendor and
+ # the host column since lane quality-fix-identical, 2026-10-15). This kernel
+ # runs `knn_impute_tie_mean_item`'s statements with the fit rows staged per
+ # block (d <= IMP_MAX_D); `knn_impute_tie_mean_cells_kernel` runs the item
+@@ -1745,20 +1744,19 @@ def _op_knn_impute_rows(
+         Int64(m), Int64(d), Int64(k), Int64(weights),
+         grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
+     )
+-    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+-    if weights == 0 and d <= IMP_MAX_D:
+-        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+-            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+-            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+-        )
+-    elif weights == 0:
+-        ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
+-            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+-            d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+-            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+-        )
++    comptime if XN_IMPUTE_TIE_MEAN:
++        if weights == 0 and d <= IMP_MAX_D:
++            ctx.enqueue_function[knn_impute_tie_mean_kernel](
++                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
++                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
++                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
++            )
++        elif weights == 0:
++            ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
++                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
++                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
++                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
++            )
+     _down(ctx, d_res, res, n * d)
+     ctx.synchronize()
+     _ = d_cells^

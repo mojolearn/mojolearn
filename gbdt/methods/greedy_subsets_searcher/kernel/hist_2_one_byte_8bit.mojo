@@ -46,10 +46,11 @@ the same dual-branch flush every histogram kernel in this package uses.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
-from std.gpu.primitives import warp
-from std.gpu.primitives.warp import vote
-from std.gpu.intrinsics import ldg
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
+from max.gpu.primitives import warp
+from max.gpu.primitives.warp import vote
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -106,7 +107,13 @@ comptime H8_MIN_DOCS = H8_LANE * H8_UNROLL * H8_LOAD * (H8_BLOCK // H8_LANE)
 # cells keep their bits. Apple (no 64-bit atomics; Metal wave vote unprobed) keeps
 # the incumbent arithmetic under either define: same bits, other code.
 # NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
+# TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 02e2a7dbe7.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime H8_PACKED = HIST_PACKED_GH and TARGET_COLUMN != COLUMN_APPLE
+# TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at fdbf0a0b1b.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime H8_WAVE_AGG = HIST_WARP_AGG and TARGET_COLUMN != COLUMN_APPLE
 #: the 64-bit atomic needs the (stat 0, stat 1) pair 8-byte aligned; cells are
 #: `(bin << 3) + (f << 1) + stat`, so the pair starts on an even cell and the
@@ -138,8 +145,7 @@ def h8_add_point(
     arms of the other kernels dropped theirs: atomics make the
     serialization protect nothing, and associativity keeps the bits."""
 
-    @parameter
-    for i in range(4):
+    comptime for i in range(4):
         var f = (tid + i) & 3
         var bin = Int((ci >> UInt32(24 - 8 * f)) & UInt32(255))
         var cell = slice_base + (bin << 3) + (f << 1)
@@ -300,8 +306,7 @@ def h8_reduce_and_flush(
     while start < H8_SLICE:
         var acc = smem[start]
 
-        @parameter
-        for s in range(1, H8_SLICES):
+        comptime for s in range(1, H8_SLICES):
             acc += smem[start + s * H8_SLICE]
         smem[start] = acc
         start += H8_BLOCK
@@ -323,8 +328,7 @@ def h8_reduce_and_flush(
             var device_offset = group_offset * stat_count * leaf_count
             var entries_per_leaf = stat_count * group_size
 
-            @parameter
-            for stat in range(2):
+            comptime for stat in range(2):
                 var q = smem[(fold << 3) + (fid << 1) + stat]
                 if q != Int32(0):
                     var dst_base = (
@@ -447,34 +451,34 @@ def hist2_8bit_kernel[
     var pe = tid
     while pe < ALIGN_SIZE:
         if local_block_idx == 0 and pe < head_len:
-            var hb = ldg(bins_p + (p_offset + pe))
+            var hb = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
             comptime if preq:
-                var pq1 = ldg(qs + (p_offset + pe))
-                var pq2 = ldg(qs + (stat_line_size + p_offset + pe))
+                var pq1 = (qs + (p_offset + pe)).unsafe_load[invariant=True]()
+                var pq2 = (qs + (stat_line_size + p_offset + pe)).unsafe_load[invariant=True]()
                 h8_add_point(hb, pq1, pq2, tid, slice_base, smem)
             else:
                 var u = hist2_dither(p_offset + pe)
                 var hq1 = hist2_quantize(
-                    ldg(stats + (p_offset + pe)), fixed_scale, u
+                    (stats + (p_offset + pe)).unsafe_load[invariant=True](), fixed_scale, u
                 )
                 var hq2 = hist2_quantize(
-                    ldg(stats + (stat_line_size + p_offset + pe)),
+                    (stats + (stat_line_size + p_offset + pe)).unsafe_load[invariant=True](),
                     fixed_scale, u,
                 )
                 h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
         if local_block_idx == 0 and pe < tail_len:
-            var tb = ldg(bins_p + (tail_start + pe))
+            var tb = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
             comptime if preq:
-                var pt1 = ldg(qs + (tail_start + pe))
-                var pt2 = ldg(qs + (stat_line_size + tail_start + pe))
+                var pt1 = (qs + (tail_start + pe)).unsafe_load[invariant=True]()
+                var pt2 = (qs + (stat_line_size + tail_start + pe)).unsafe_load[invariant=True]()
                 h8_add_point(tb, pt1, pt2, tid, slice_base, smem)
             else:
                 var u = hist2_dither(tail_start + pe)
                 var tq1 = hist2_quantize(
-                    ldg(stats + (tail_start + pe)), fixed_scale, u
+                    (stats + (tail_start + pe)).unsafe_load[invariant=True](), fixed_scale, u
                 )
                 var tq2 = hist2_quantize(
-                    ldg(stats + (stat_line_size + tail_start + pe)),
+                    (stats + (stat_line_size + tail_start + pe)).unsafe_load[invariant=True](),
                     fixed_scale, u,
                 )
                 h8_add_point(tb, tq1, tq2, tid, slice_base, smem)
@@ -505,40 +509,38 @@ def hist2_8bit_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var lb = InlineArray[UInt32, H8_POINTS](fill=0)
-        var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
-        var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
+        var lb = Array[UInt32, H8_POINTS](fill=0)
+        var lq1 = Array[Int32, H8_POINTS](fill=0)
+        var lq2 = Array[Int32, H8_POINTS](fill=0)
 
-        @parameter
-        for k in range(H8_UNROLL):
+        comptime for k in range(H8_UNROLL):
             if active:
                 comptime if preq:
-                    var wb = ldg[width=H8_LOAD, alignment=4](
+                    var wb = (
                         b_ptr + H8_LANE * H8_LOAD * k
-                    )
-                    var w1 = ldg[width=H8_LOAD, alignment=4](
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                    var w1 = (
                         q1_ptr + H8_LANE * H8_LOAD * k
-                    )
-                    var w2 = ldg[width=H8_LOAD, alignment=4](
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                    var w2 = (
                         q2_ptr + H8_LANE * H8_LOAD * k
-                    )
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
                     comptime for e in range(H8_LOAD):
                         lb[k * H8_LOAD + e] = wb[e]
                         lq1[k * H8_LOAD + e] = w1[e]
                         lq2[k * H8_LOAD + e] = w2[e]
                 else:
-                    var vb = ldg[width=H8_LOAD, alignment=4](
+                    var vb = (
                         b_ptr + H8_LANE * H8_LOAD * k
-                    )
-                    var v1 = ldg[width=H8_LOAD, alignment=4](
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                    var v1 = (
                         s1_ptr + H8_LANE * H8_LOAD * k
-                    )
-                    var v2 = ldg[width=H8_LOAD, alignment=4](
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                    var v2 = (
                         s2_ptr + H8_LANE * H8_LOAD * k
-                    )
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
 
-                    @parameter
-                    for e in range(H8_LOAD):
+                    comptime for e in range(H8_LOAD):
                         var u = hist2_dither(
                             pos_base + H8_LANE * H8_LOAD * k + e
                         )
@@ -559,8 +561,7 @@ def hist2_8bit_kernel[
         else:
             if active:
 
-                @parameter
-                for k in range(H8_POINTS):
+                comptime for k in range(H8_POINTS):
                     h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         b_ptr += stripe_size
         s1_ptr += stripe_size
@@ -680,20 +681,20 @@ def hist2_8bit_gather_kernel[
     var pe = tid
     while pe < ALIGN_SIZE:
         if local_block_idx == 0 and pe < head_len and preq:
-            var prow = Int(ldg(indices + (p_offset + pe)))
-            var pb = ldg(cindex_p + prow)
-            var pq1 = ldg(qs + (p_offset + pe))
-            var pq2 = ldg(qs + (stat_line_size + p_offset + pe))
+            var prow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            var pb = (cindex_p + prow).unsafe_load[invariant=True]()
+            var pq1 = (qs + (p_offset + pe)).unsafe_load[invariant=True]()
+            var pq2 = (qs + (stat_line_size + p_offset + pe)).unsafe_load[invariant=True]()
             h8_add_point(pb, pq1, pq2, tid, slice_base, smem)
         if local_block_idx == 0 and pe < tail_len and preq:
-            var trow_q = Int(ldg(indices + (tail_start + pe)))
-            var tb_q = ldg(cindex_p + trow_q)
-            var tq1_q = ldg(qs + (tail_start + pe))
-            var tq2_q = ldg(qs + (stat_line_size + tail_start + pe))
+            var trow_q = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            var tb_q = (cindex_p + trow_q).unsafe_load[invariant=True]()
+            var tq1_q = (qs + (tail_start + pe)).unsafe_load[invariant=True]()
+            var tq2_q = (qs + (stat_line_size + tail_start + pe)).unsafe_load[invariant=True]()
             h8_add_point(tb_q, tq1_q, tq2_q, tid, slice_base, smem)
         if local_block_idx == 0 and pe < head_len and not preq:
-            var hrow = Int(ldg(indices + (p_offset + pe)))
-            var hb = ldg(cindex_p + hrow)
+            var hrow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            var hb = (cindex_p + hrow).unsafe_load[invariant=True]()
             var u = hist2_dither(p_offset + pe)
             # DEVIATION 1902 (`ridx_stats`): stationary planes, both stats
             # ride the same gathered row id as the bin. The dither key
@@ -702,31 +703,29 @@ def hist2_8bit_gather_kernel[
             var hs1: Float32
             var hs2: Float32
 
-            @parameter
-            if ridx_stats:
-                hs1 = ldg(stats + hrow)
-                hs2 = ldg(stats + (stat_line_size + hrow))
+            comptime if ridx_stats:
+                hs1 = (stats + hrow).unsafe_load[invariant=True]()
+                hs2 = (stats + (stat_line_size + hrow)).unsafe_load[invariant=True]()
             else:
-                hs1 = ldg(stats + (p_offset + pe))
-                hs2 = ldg(stats + (stat_line_size + p_offset + pe))
+                hs1 = (stats + (p_offset + pe)).unsafe_load[invariant=True]()
+                hs2 = (stats + (stat_line_size + p_offset + pe)).unsafe_load[invariant=True]()
             var hq1 = hist2_quantize(hs1, fixed_scale, u)
             var hq2 = hist2_quantize(hs2, fixed_scale, u)
             h8_add_point(hb, hq1, hq2, tid, slice_base, smem)
         if local_block_idx == 0 and pe < tail_len and not preq:
-            var trow = Int(ldg(indices + (tail_start + pe)))
-            var tb = ldg(cindex_p + trow)
+            var trow = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            var tb = (cindex_p + trow).unsafe_load[invariant=True]()
             var u = hist2_dither(tail_start + pe)
             var ts1: Float32
             var ts2: Float32
 
-            @parameter
-            if ridx_stats:
+            comptime if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
-                ts1 = ldg(stats + trow)
-                ts2 = ldg(stats + (stat_line_size + trow))
+                ts1 = (stats + trow).unsafe_load[invariant=True]()
+                ts2 = (stats + (stat_line_size + trow)).unsafe_load[invariant=True]()
             else:
-                ts1 = ldg(stats + (tail_start + pe))
-                ts2 = ldg(stats + (stat_line_size + tail_start + pe))
+                ts1 = (stats + (tail_start + pe)).unsafe_load[invariant=True]()
+                ts2 = (stats + (stat_line_size + tail_start + pe)).unsafe_load[invariant=True]()
             var tq1 = hist2_quantize(ts1, fixed_scale, u)
             var tq2 = hist2_quantize(ts2, fixed_scale, u)
             h8_add_point(tb, tq1, tq2, tid, slice_base, smem)
@@ -757,58 +756,54 @@ def hist2_8bit_gather_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var lb = InlineArray[UInt32, H8_POINTS](fill=0)
-        var lq1 = InlineArray[Int32, H8_POINTS](fill=0)
-        var lq2 = InlineArray[Int32, H8_POINTS](fill=0)
+        var lb = Array[UInt32, H8_POINTS](fill=0)
+        var lq1 = Array[Int32, H8_POINTS](fill=0)
+        var lq2 = Array[Int32, H8_POINTS](fill=0)
 
-        @parameter
-        for k in range(H8_UNROLL):
+        comptime for k in range(H8_UNROLL):
             if active and preq:
-                var wi = ldg[width=H8_LOAD, alignment=4](
+                var wi = (
                     i_ptr + H8_LANE * H8_LOAD * k
-                )
-                var w1 = ldg[width=H8_LOAD, alignment=4](
+                ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                var w1 = (
                     q1_ptr + H8_LANE * H8_LOAD * k
-                )
-                var w2 = ldg[width=H8_LOAD, alignment=4](
+                ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                var w2 = (
                     q2_ptr + H8_LANE * H8_LOAD * k
-                )
+                ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
                 comptime for e in range(H8_LOAD):
-                    lb[k * H8_LOAD + e] = ldg(cindex_p + Int(wi[e]))
+                    lb[k * H8_LOAD + e] = (cindex_p + Int(wi[e])).unsafe_load[invariant=True]()
                     lq1[k * H8_LOAD + e] = w1[e]
                     lq2[k * H8_LOAD + e] = w2[e]
             if active and not preq:
-                var vi = ldg[width=H8_LOAD, alignment=4](
+                var vi = (
                     i_ptr + H8_LANE * H8_LOAD * k
-                )
+                ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
                 var v1 = SIMD[DType.float32, H8_LOAD](0.0)
                 var v2 = SIMD[DType.float32, H8_LOAD](0.0)
 
-                @parameter
-                if not ridx_stats:
-                    v1 = ldg[width=H8_LOAD, alignment=4](
+                comptime if not ridx_stats:
+                    v1 = (
                         s1_ptr + H8_LANE * H8_LOAD * k
-                    )
-                    v2 = ldg[width=H8_LOAD, alignment=4](
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
+                    v2 = (
                         s2_ptr + H8_LANE * H8_LOAD * k
-                    )
+                    ).unsafe_load[width=H8_LOAD, alignment=4, invariant=True]()
 
-                @parameter
-                for e in range(H8_LOAD):
+                comptime for e in range(H8_LOAD):
                     var u = hist2_dither(
                         pos_base + H8_LANE * H8_LOAD * k + e
                     )
-                    lb[k * H8_LOAD + e] = ldg(cindex_p + Int(vi[e]))
+                    lb[k * H8_LOAD + e] = (cindex_p + Int(vi[e])).unsafe_load[invariant=True]()
 
-                    @parameter
-                    if ridx_stats:
+                    comptime if ridx_stats:
                         # DEVIATION 1902: both stats join the bins' scalar
                         # gather through the same loaded row id; the wide
                         # loads above are traded for it.
-                        v1[e] = ldg(stats + Int(vi[e]))
-                        v2[e] = ldg(
+                        v1[e] = (stats + Int(vi[e])).unsafe_load[invariant=True]()
+                        v2[e] = (
                             stats + (stat_line_size + Int(vi[e]))
-                        )
+                        ).unsafe_load[invariant=True]()
                     lq1[k * H8_LOAD + e] = hist2_quantize(
                         v1[e], fixed_scale, u
                     )
@@ -825,8 +820,7 @@ def hist2_8bit_gather_kernel[
         else:
             if active:
 
-                @parameter
-                for k in range(H8_POINTS):
+                comptime for k in range(H8_POINTS):
                     h8_add_point(lb[k], lq1[k], lq2[k], tid, slice_base, smem)
         i_ptr += stripe_size
         s1_ptr += stripe_size

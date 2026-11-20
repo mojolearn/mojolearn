@@ -1,0 +1,91 @@
+diff --git a/training/estimator.mojo b/training/estimator.mojo
+index d73471c480..4d6113315b 100644
+--- a/training/estimator.mojo
++++ b/training/estimator.mojo
+@@ -411,13 +411,12 @@ def identical_optimizer_step_host(
+ #: (`training/afn_optim.mojo`, created once per shape) on every vendor,
+ #: instead of six to eight device allocations a call. Every launch writes a
+ #: scratch cell before it reads it, as with a fresh (uninitialized) buffer:
+-#: no bit moves. FAST has no pooled scratch.
+-# TOMBSTONE: MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+-# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF.patch
++#: no bit moves. -D MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF restores the fresh
++#: buffers. FAST has no pooled scratch.
+ comptime IDN_OPT_SCRATCH_POOL = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++    and not (is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, M3 rab19 adam within +-2%) deleted 2026-10-09 on
+ # lane/owed-deletions-D2: FAST's share of this switch; code recoverable at b639a2bd2.
+@@ -678,8 +677,8 @@ comptime OPT_IO_DOWN_G = 8
+ comptime OPT_IO_ALL = 15
+ #: Whether the binding offers the device-handle entries
+ #: (`optimizer_resident_step_io` and the put/get pair). IDENTICAL, GPU
+-#: columns; the CPU column hides them, and the Python optimizers then refuse
+-#: `params_to_device`.
++#: columns. `-D MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF` (or the master) hides
++#: them, and the Python optimizers then refuse `params_to_device`.
+ #: lane fam2-neural: `maximize=True` ON THE DEVICE. The bindings negated the
+ #: gradient on the host before the upload (a one-thread loop over N floats,
+ #: `maximize_negated_copy`) and negated the clipped gradient again after the
+@@ -687,12 +686,11 @@ comptime OPT_IO_ALL = 15
+ #: sign bit in the device gradient buffer instead (`maximize_negate`, the
+ #: same exact XOR, one thread per element) before the step and again after
+ #: it, so the buffer and any download hold the caller's sign: the same bits.
+-# TOMBSTONE: MOJOLEARN_IDN_MAXIMIZE_DEV_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+-# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAXIMIZE_DEV_OFF.patch
++#: `-D MOJOLEARN_IDN_MAXIMIZE_DEV_OFF` keeps `Optimizer.step` on the host loop.
+ comptime IDN_MAXIMIZE_DEV = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++    and not (is_defined["MOJOLEARN_IDN_MAXIMIZE_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime MAXIMIZE_TPB = 256
+ 
+@@ -715,12 +713,10 @@ def maximize_negate_device(ctx: DeviceContext, mut g: DeviceBuffer[DType.float32
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+-# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF.patch
+ comptime IDN_OPT_PARAMS_RESIDENT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++    and not (is_defined["MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ 
+@@ -745,11 +741,8 @@ comptime IDN_OPT_PARAMS_RESIDENT = (
+ #: apple-fast-rec-ab2 @ 40027eb8e): sgd 330.3 -> 208.7 ms, adam 337.5 -> 209.6,
+ #: adamw 332.1 -> 209.8; output digests identical A == B (the quality evidence:
+ #: the lane has no quality metric). KEEP: the FAST + Apple default since then;
+-#: the _OFF rollback is deleted (below).
+-# TOMBSTONE: MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (old path beside the measured FAST Apple default) deleted
+-# 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF.patch
+-comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST
++#: rollback -D MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (the old -D name is harmless).
++comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"]()
+ 
+ 
+ def identical_optimizer_step_resident_io(
+@@ -1356,10 +1349,11 @@ comptime _CE_DEV_POOL = "MojolearnDevPoolCeIdenticalV2" if GLOBAL_NUMERIC_MODE =
+ #: other) wherever that pipeline is on (`opt_pipe_on`: NVIDIA and AMD by
+ #: default, MOJOLEARN_OPT_PIPE forces either) and the tensor is at least one
+ #: chunk. The same bytes into the same device buffer: no bit moves.
+-# TOMBSTONE: MOJOLEARN_IDN_CE_PIPE_UP_OFF (old path, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term (old path; owner elsewhere)
+-# deleted 2026-11-15 by lane/expdel2-31-neural; code recoverable at 51b81017d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_PIPE_UP_OFF.patch
+-comptime IDN_CE_PIPE_UP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: `-D MOJOLEARN_IDN_CE_PIPE_UP_OFF` is the before arm (the raw copy).
++comptime IDN_CE_PIPE_UP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (is_defined["MOJOLEARN_IDN_CE_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
++)
+ 
+ 
+ def identical_ce_loss_host(

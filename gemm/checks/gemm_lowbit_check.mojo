@@ -75,8 +75,9 @@ from gemm.host.gemm_lowbit_oracle import (
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NN, OP_NT, OP_TN, op_name
 from gemm.host.gemm_oracle import gemm_oracle
+from checks.native_tests.kit import download_host_into, upload_host_into
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 comptime POISON = Float32(-987654.0)
 
 
@@ -263,9 +264,8 @@ def _upload_f32(ctx: DeviceContext, h: List[Float32]) raises -> DeviceBuffer[DTy
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 
@@ -278,9 +278,8 @@ def _upload_u16(ctx: DeviceContext, h: List[UInt16]) raises -> DeviceBuffer[DTyp
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.uint16](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 
@@ -293,9 +292,8 @@ def _upload_i8(ctx: DeviceContext, h: List[Int8]) raises -> DeviceBuffer[DType.i
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.int8](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 
@@ -308,9 +306,8 @@ def _upload_i32(ctx: DeviceContext, h: List[Int32]) raises -> DeviceBuffer[DType
     ctx.synchronize()
     for i in range(len(h)):
         hb.unsafe_ptr().unsafe_store(i, h[i])
-    ctx.enqueue_copy(dst_buf=d, src_ptr=hb.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d, hb)
     ctx.synchronize()
-    _ = hb
     return d^
 
 
@@ -324,7 +321,7 @@ def _poisoned(ctx: DeviceContext, count: Int) raises -> DeviceBuffer[DType.float
 def _download_f32(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32], count: Int, tag: String) raises -> List[Float32]:
     var hb = ctx.enqueue_create_host_buffer[DType.float32](count)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d)
+    download_host_into[DType.float32](ctx, d, hb)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(count):
@@ -332,43 +329,39 @@ def _download_f32(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32], count:
         if _bits(v) == _bits(POISON):
             raise Error("POISON SURVIVED at cell " + String(i) + " of " + tag)
         out.append(v)
-    _ = hb
     return out^
 
 
 def _download_u16(ctx: DeviceContext, mut d: DeviceBuffer[DType.uint16], count: Int) raises -> List[UInt16]:
     var hb = ctx.enqueue_create_host_buffer[DType.uint16](count)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d)
+    download_host_into[DType.uint16](ctx, d, hb)
     ctx.synchronize()
     var out = List[UInt16]()
     for i in range(count):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb
     return out^
 
 
 def _download_i8(ctx: DeviceContext, mut d: DeviceBuffer[DType.int8], count: Int) raises -> List[Int8]:
     var hb = ctx.enqueue_create_host_buffer[DType.int8](count)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d)
+    download_host_into[DType.int8](ctx, d, hb)
     ctx.synchronize()
     var out = List[Int8]()
     for i in range(count):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb
     return out^
 
 
 def _download_i32(ctx: DeviceContext, mut d: DeviceBuffer[DType.int32], count: Int) raises -> List[Int32]:
     var hb = ctx.enqueue_create_host_buffer[DType.int32](count)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d)
+    download_host_into[DType.int32](ctx, d, hb)
     ctx.synchronize()
     var out = List[Int32]()
     for i in range(count):
         out.append(hb.unsafe_ptr().unsafe_load(i))
-    _ = hb
     return out^
 
 

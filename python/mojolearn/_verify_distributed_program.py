@@ -7,7 +7,6 @@ physical-device scope and whole-operation Python traces in a JSON report.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
 import hashlib
 import json
 import pathlib
@@ -29,37 +28,21 @@ def _digest(state):
 
 def verify(devices=(0,), expected=None):
     import numpy as np
-    from . import ops, _backend
+    from functools import partial
+    from . import ops
     from ._verify_model import _install
-    from ._verify_native_runtime import audit_native_call
+    from ._verify_native_runtime import audited, audited_context
 
     report = {"format": FORMAT, "install": _install("identical"),
               "devices_requested": list(devices), "cases": [], "runtime_audits": [],
               "physical_multi_gpu": len(devices) > 1, "status": "FAIL"}
+    native = partial(audited, report["runtime_audits"])
+    opened = partial(audited_context, report["runtime_audits"])
 
-    def native(name, operation, *args, **kwargs):
-        audit = audit_native_call(operation, *args, **kwargs)
-        entry = audit.report()
-        entry["operation"] = name
-        report["runtime_audits"].append(entry)
-        return audit.assert_native()
-
-    @contextmanager
-    def opened(name, operation, *args, **kwargs):
-        # Testing-only context controller: audit each complete public boundary.
-        instance = native(name, operation, *args, **kwargs)
-        try:
-            assert native(name + ".enter", instance.__enter__) is instance
-            yield instance
-        finally:
-            native(name + ".exit", instance.__exit__, None, None, None)
-
+    # No entry probe: the public `Program.distribute` call below refuses by
+    # name when the installed binding lacks an entry, and that refusal fails
+    # this verifier the same way.
     try:
-        b = _backend.binding("_mojolearn_x_sequence", "identical")
-        names = ("open", "load", "fit", "run", "state", "residency", "save", "close", "enter", "exit")
-        missing = ["ops_distributed_" + n for n in names if not hasattr(b, "ops_distributed_" + n)]
-        if missing:
-            raise RuntimeError("installed binding lacks entries: " + ", ".join(missing))
         with tempfile.TemporaryDirectory(prefix="mojolearn-distributed-verify-") as directory:
             with ops.Session(numeric_mode="identical") as s:
                 x = s.tensor(np.ones((3, 1), np.float32))

@@ -5,7 +5,7 @@ Each compare/exchange pass has disjoint pairs. Stream-ordered launches are
 its global barriers. Padding and power-of-two slack sort to the sentinel tail.
 """
 from std.sys.compile import is_defined
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -37,8 +37,9 @@ comptime _ID_ONLY_UNSTABLE = is_defined["MOJOLEARN_EMB_SABOTAGE_SORT_KEY_ID_ONLY
 # `perm` are the same words, and dW does not move. Integer work only, so
 # every vendor and the host column agree. The two tie controls above need
 # the bitonic network (an unstable compare, a reversed position code), so
-# either one keeps it. IDENTICAL only; -D MOJOLEARN_IDN_EMB_RADIX_SORT_OFF
-# (or MOJOLEARN_IDN_ALL_OFF) restores the bitonic network.
+# either one keeps it. IDENTICAL only.
+# TOMBSTONE: MOJOLEARN_IDN_EMB_RADIX_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 0899483c36.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EMB_RADIX_SORT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime EMB_RADIX_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I11 sourcecbcc8dcd3303 (2026-10-06) scoped WINNER on both vendors:
@@ -50,7 +51,6 @@ comptime EMB_RADIX_SORT = (
     # enabled default; these measurements do not constitute a new promotion.
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I11 AMD/NVIDIA same-source/same-machine pairs with exact binary hashes.
-    and not (is_defined["MOJOLEARN_IDN_EMB_RADIX_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
     and not _REVERSE_TIES
     and not _ID_ONLY_UNSTABLE
 )

@@ -30,7 +30,7 @@ def _bits(value):
 
 def test_constructor_params_and_fitted_state_are_native():
     m = audit_native_call(ml.MaxAbsScaler, copy=False).assert_native()
-    assert audit_native_call(m.get_params).assert_native() == {"copy": False}
+    assert audit_native_call(m.get_params).assert_native() == {"copy": False, "numeric_mode": None}
     assert not audit_native_call(m.__sklearn_is_fitted__).assert_native()
     audit_native_call(m.fit, _data()).assert_native()
     assert audit_native_call(m.__sklearn_is_fitted__).assert_native()
@@ -163,6 +163,13 @@ def test_pandas_numeric_input_and_target_are_native():
 def test_numpy_free_input_and_target_remain_native():
     script = r'''
 import json,sys
+class NoNumpy:
+    # NumPy absent, as on an install without it (the package connects it at
+    # import only when it is importable)
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] == "numpy":
+            raise ModuleNotFoundError("numpy imported: " + fullname, name="numpy")
+sys.meta_path.insert(0, NoNumpy())
 from array import array
 import mojolearn as ml
 from mojolearn._verify_native_runtime import audit_native_call

@@ -4,10 +4,10 @@ from pathlib import Path
 from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 CORE = (ROOT/'core/operation_lock.mojo').read_text()
-BOUNDARY = (ROOT/'providers/python/operation_lock_pyapi.mojo').read_text()
+BOUNDARY = (ROOT/'providers/python/operation_lock_pyapi_door.mojo').read_text()
 
 
-def test_native_lock_has_no_python_dependency_or_object_layout_cast():
+def test_native_lock_dependencies_resolve_and_avoids_object_layout_cast():
     _, failures = audit(ROOT, ('core.operation_lock',))
     assert not failures, failures
     for name in ('PythonObject', 'PyThread_', 'PyObject_', '_thread.RLock'):
@@ -41,11 +41,15 @@ def test_python_lock_frontend_only_installs_compiled_descriptors():
 
 
 def test_neural_layer_boundaries_use_lease_without_preacquiring_models():
-    for name in ('bindings/neural_block_public.mojo','bindings/neural_prefill_native.mojo'):
-        source = (ROOT/name).read_text()
-        assert 'OperationLockLease(lock)' in source
-        assert 'lock.acquire()' not in source and 'lock.release()' not in source
-        assert 'lock_lease.acquire()' in source and 'lock_lease.release()' in source
+    source = (ROOT/'bindings/neural_block_public_door.mojo').read_text()
+    assert 'OperationLockLease(lock)' in source
+    assert 'lock.acquire()' not in source and 'lock.release()' not in source
+    assert 'lock_lease.acquire()' in source and 'lock_lease.release()' in source
+    # x6-tape-retire (e0dcc46d7e, e49d0ee90d): the prefill door holds no lock of its own; its transformer forward
+    # enters the block door, which takes the lease.
+    prefill = (ROOT/'bindings/neural_prefill_native_door.mojo').read_text()
+    assert 'OperationLockLease' not in prefill and 'lock.acquire()' not in prefill
+    assert 'neural_block_forward_binding(block, x,' in prefill
     assert 'InterruptedError: native operation lock interrupted' in CORE
 
 
@@ -55,10 +59,10 @@ def test_transformer_serialization_restores_a_fresh_native_owner():
     for name in ('__getstate__', '__setstate__'):
         method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == name)
         assert len(method.body) == 1 and isinstance(method.body[0], ast.Return)
-    source = (ROOT/'bindings/neural_block_public.mojo').read_text()
+    source = (ROOT/'bindings/neural_block_public_door.mojo').read_text()
     restore = source.split('def neural_block_setstate_binding')[1].split('def neural_block_c')[0]
     assert 'operation_lock_create()' in restore
     assert 'py_type(state) is not bi.dict' in restore
     save = source.split('def neural_block_getstate_binding')[1].split('def neural_block_setstate_binding')[0]
-    assert 'String("_native_forward_owner")' in save
+    assert 'String("_native_session")' in save
     assert 'elif saved is not None:' in save

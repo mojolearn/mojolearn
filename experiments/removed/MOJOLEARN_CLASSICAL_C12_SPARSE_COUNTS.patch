@@ -1,0 +1,15 @@
+diff --git b/experiments/classical_identical_ideas/shared_controls.mojo a/experiments/classical_identical_ideas/shared_controls.mojo
+index 660dc74e08..999a0902df 100644
+--- b/experiments/classical_identical_ideas/shared_controls.mojo
++++ a/experiments/classical_identical_ideas/shared_controls.mojo
+@@ -108,9 +108,7 @@ comptime C10_RANK_REUSE = False
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at bfc7696dd0.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.patch
+ comptime C11_DRAW_GATHER = False
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 9f2212b4b1.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS.patch
+-comptime C12_SPARSE_COUNTS = False
++comptime C12_SPARSE_COUNTS = CLASSICAL_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"]()
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C55_CLASS_GROUP (quality loss) deleted 2026-10-07 by 213f349ed; code recoverable at 213f349ed^.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C55_CLASS_GROUP.patch; record in docs/TOMBSTONES.md.
+ # C08 independent grouped one-hot emission; immutable dictionary is unchanged.

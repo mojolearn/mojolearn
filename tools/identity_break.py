@@ -145,7 +145,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             on-policy RL section of Thinking Machines, "Defeating
             Nondeterminism in LLM Inference", September 2025). SAMPLER:
             RLPAIR_SEQS = 5 prompts of RLPAIR_PROMPT = 4 held-out ids are
-            prefilled and RLPAIR_DECODE = 12 tokens decoded one step at a
+            prefilled and RLPAIR_DECODE = 8 tokens decoded one step at a
             time through the lane's public state API, greedy (argmax, lowest
             index on a tie, no RNG), recording each chosen id, its logits
             row and its NLL. TRAINER: the realized sequences, teacher
@@ -159,7 +159,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             row equals it, and every further sampler (below) equals it;
             (3) CONTINUOUS BATCHING: row 4 is prefilled and decoded alone for
             3 tokens, then its state joins the batch of the other four at row
-            2; row 1 leaves after token 8; every row's tokens equal the
+            2; row 1 leaves after token 5; every row's tokens equal the
             trainer's. The state rows are gathered and joined through the
             layouts the state classes document (`_rl_take`, `_rl_cat`); the
             Mamba-2/3 states and the KV cache hold ONE cursor per batch, so a
@@ -277,13 +277,16 @@ a record, and it now says so about itself instead of looking like one.
             that moves at A = 4 is condition 5 seen biting (recorded).
     batchscale  SERVING-SCALE B. A whole call of 1024 rows
             and sub-batches of B in {1, 17, 64, 256} at its start, middle and
-            end, every sub-batch row equal to its row of the whole; for the
-            causal sequence models also B = 2 at L = 1024 against every
-            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
-            512, 513, 1023} (the Mamba-3 chunk 64, the GEMM leaf 128, the
-            Mamba-2 chunk 256). Lanes: the sequence blocks, the byte LM lanes
-            (the long length loads the lane's parameters into the default
-            shape with `length=1024`), Samba, and the classical serving set
+            end, every sub-batch row equal to its row of the whole (the
+            causal sequence models since 2026-11-05: a whole call of
+            SEQ_SCALE_WHOLE = 128 rows, B = 256 recorded n/a); for the
+            causal sequence models also B = 2 at L = 300 against every
+            prefix in {1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299}
+            (the Mamba-3 chunk 64, the GEMM leaf 128, the Mamba-2 chunk 256;
+            L = 1024 and the prefixes 511-1023 until 2026-11-05). Lanes: the
+            sequence blocks, the byte LM lanes (the long length loads the
+            lane's parameters into the default shape with `length=300`),
+            Samba, and the classical serving set
             knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
             logistic, pca. Inputs past a fixture's size wrap around it. The
             batch part's sabotage switch sabotages this part too.
@@ -612,6 +615,31 @@ def write_error_sidecar(json_path):
     return path
 
 
+#: The timing series marker (timing_env.harness_timing; TIMING RECORD ONLY,
+#: nothing hashed reads it). 1: every record before 2026-11-06, whose `batch`
+#: and `batchscale` stages also held the harness's own per-row Python (one
+#: row array, bytes, compare and two digest updates per result row; 1.1-4.8 us
+#: a row by host CPU). 2: that work is whole-array and booked to
+#: `<stage>-harness` (HARNESS_STAGE_SUFFIX), not to the stage. A stage time
+#: of version 1 is not like for like with one of version 2:
+#: tools/identity_timing_compare.py treats a change as a break in the series.
+HARNESS_TIMING_VERSION = 2
+HARNESS_STAGE_SUFFIX = "-harness"
+_HARNESS_SECONDS = [0.0]
+
+
+@contextmanager
+def _harness_work():
+    """Harness work inside a timed stage (row form, compares, digests of
+    host arrays): CellTimer books it to `<stage>-harness`. Never around a
+    library call or the `np.asarray` that copies its result down."""
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        _HARNESS_SECONDS[0] += time.perf_counter() - started
+
+
 class CellTimer:
     def __init__(self, label):
         self.label = label
@@ -621,13 +649,19 @@ class CellTimer:
     @contextmanager
     def stage(self, name):
         started = time.perf_counter()
+        harness0 = _HARNESS_SECONDS[0]
         print(f"# START {self.label} {name}", flush=True)
         try:
             yield
         finally:
             seconds = time.perf_counter() - started
-            self.stages[name] = self.stages.get(name, 0.0) + seconds
-            print(f"# DONE {self.label} {name} {seconds:.3f}s", flush=True)
+            harness = _HARNESS_SECONDS[0] - harness0
+            self.stages[name] = self.stages.get(name, 0.0) + (seconds - harness)
+            if harness > 0.0:
+                hname = name + HARNESS_STAGE_SUFFIX
+                self.stages[hname] = self.stages.get(hname, 0.0) + harness
+            print(f"# DONE {self.label} {name} {seconds - harness:.3f}s"
+                  + (f" (+{harness:.3f}s harness)" if harness > 0.0 else ""), flush=True)
 
     def result(self):
         return dict(total_seconds=time.perf_counter() - self.started, stages=dict(self.stages))
@@ -676,7 +710,7 @@ def resume_signature(args, package_dir, harness, provenance):
         with path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 h.update(block)
-    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose")}
+    options = {k: v for k, v in vars(args).items() if k not in ("json", "resume", "verbose", "provenance_lines")}
     env = {k: hashlib.sha256(v.encode()).hexdigest() for k, v in os.environ.items()
            if k != RESUME_LEASE_ENV and k.startswith(("MOJO", "MODULAR", "OMP_", "MKL_", "OPENBLAS_",
                                                      "VECLIB_", "NUMEXPR_", "BLIS_"))}
@@ -735,6 +769,458 @@ def cpu_model():
     except (OSError, subprocess.SubprocessError):
         pass
     return None
+
+
+#: Environment variables that set how many threads a timed cell may use. The
+#: values are recorded as given (None when unset); they are thread counts, not
+#: secrets, and no digest, closure, reuse key or admission reads them.
+TIMING_THREAD_ENV = (
+    "MOJOLEARN_CPU_THREADS", "MOJOLEARN_VERIFY_CPU_THREADS", "MOJOLEARN_BENCH_THREADS",
+    "MOJOLEARN_FOREST_ROW_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS",
+)
+#: `i/N`: this process is shard i of N identity processes running at the same
+#: time on this machine. `run_jobs` sets it for its children; a wrapper that
+#: runs several records side by side sets it too. Unset means not stated.
+TIMING_CONCURRENCY_ENV = "MOJOLEARN_IDENTITY_CONCURRENCY"
+TIMING_ENV_SCHEMA = 1
+
+
+def cgroup_cpu_quota():
+    """CPUs this process's cgroup may use (quota / period), or None when no
+    quota is set or none can be read. cgroup v2 `cpu.max`, then v1
+    `cpu.cfs_quota_us` / `cpu.cfs_period_us`."""
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as fh:
+            quota, _, period = fh.read().strip().partition(" ")
+        if quota != "max" and period:
+            return round(int(quota) / int(period), 3)
+        return None
+    except (OSError, ValueError):
+        pass
+    try:
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us") as fh:
+            quota = int(fh.read().strip())
+        with open("/sys/fs/cgroup/cpu/cpu.cfs_period_us") as fh:
+            period = int(fh.read().strip())
+        return round(quota / period, 3) if quota > 0 and period > 0 else None
+    except (OSError, ValueError):
+        return None
+
+
+def other_identity_processes():
+    """How many other identity_break.py processes run on this machine now
+    (not this one, not its parent supervisor), or None if `ps` cannot be read."""
+    try:
+        out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    mine = {os.getpid(), os.getppid()}
+    count = 0
+    for line in out.splitlines():
+        pid, _, cmd = line.strip().partition(" ")
+        if pid.isdigit() and int(pid) not in mine and "identity_break.py" in cmd:
+            count += 1
+    return count
+
+
+def _thread_count(value):
+    """A thread setting as recorded: the value when it is a count (digits, as every launcher sets it), None when
+    unset, and only the fact that it is set otherwise. The resume signature keeps these variables as digests
+    because a value can carry anything; a record never publishes a value that is not a count
+    (tools/test_identity_runtime.py test_only_exact_scheduler_token_is_excluded_from_environment)."""
+    if value is None:
+        return None
+    return value if value.strip().isdigit() else "set (not a count)"
+
+
+def timing_environment():
+    """What the cells' wall clock ran on, so two records can be judged
+    comparable (2026-11-06, lane/tools-timing-pairs): the CPU model, the
+    logical CPUs, the CPUs this process may run on and its cgroup quota,
+    the thread settings, and how many identity processes shared the machine.
+    TIMING RECORD ONLY: nothing hashed, no digest and no merge or resume
+    check reads it."""
+    try:
+        affinity = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        affinity = None
+    return dict(
+        schema=TIMING_ENV_SCHEMA, harness_timing=HARNESS_TIMING_VERSION, cpu_model=cpu_model(), arch=platform.machine(),
+        logical_cpus=os.cpu_count(), affinity_cpus=affinity, cgroup_cpu_quota=cgroup_cpu_quota(),
+        threads={k: _thread_count(os.environ.get(k)) for k in TIMING_THREAD_ENV},
+        concurrency=os.environ.get(TIMING_CONCURRENCY_ENV),
+        other_identity_processes=other_identity_processes(),
+        started_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    )
+
+
+# --------------------------------------------------------------------------
+# THE RUN BLOCK: what ran the record, where, when and from which wheel
+# --------------------------------------------------------------------------
+#
+# Lane post-record-device-time (Andrew 2026-11-08: "for the verification runs,
+# we record the time of the run and the device we ran it on?"). Every record
+# carries a `run` object and its provenance.txt the matching `run_*` lines
+# (`run_provenance_lines`, printed by `--provenance-lines JSON`):
+#
+#   device      {kind gpu|cpu, model, count_used, unit, index}  the exact device:
+#               nvidia-smi / rocminfo (rocm-smi) / sysctl brand string / cpu model
+#   driver      {nvidia_driver, cuda} | {rocm, amdgpu} | {macos, metal} | {} plus
+#               glibc on Linux
+#   mojo        the Mojo toolchain version (MOJOLEARN_MOJO_VERSION, an installed
+#               mojo/max/modular distribution, then `mojo --version`)
+#   python      {version, implementation}
+#   started_utc, finished_utc, seconds_total, attempts   the first attempt's start,
+#               the last write, the wall seconds of every attempt (a resume adds)
+#   seconds_per_lane {lane: s}   the sum of the lane's cells' timing.total_seconds
+#   wheels      [{name, sha256, version}] from IDENTITY_RECORD_WHEELS (a file of
+#               "<wheel file> <sha256>" lines; record_identity_column.sh exports it
+#               under RECORD_FROM_INSTALLED=1); null for a source-tree run
+#   box         {provider, id, source}: IDENTITY_RECORD_BOX=<provider>:<id> when the
+#               launcher sets it, else derived: github (GITHUB_RUN_ID/GITHUB_JOB),
+#               runpod (RUNPOD_POD_ID), mac (hostname hash), digitalocean (DMI vendor)
+#   host        {kernel, hostname_sha256}
+#   unavailable {field: reason}   every fact that could not be read is null here
+#               with its reason; a record is NEVER refused for a missing fact.
+#
+# PROVENANCE ONLY: nothing hashed, no digest, merge equality, resume signature,
+# reuse key or admission reads the run block. The box and wheel variables do not
+# start with MOJO, so the resume signature's environment digests never see them.
+RUN_FACTS_SCHEMA = 1
+RUN_BOX_ENV = "IDENTITY_RECORD_BOX"
+RUN_WHEELS_ENV = "IDENTITY_RECORD_WHEELS"
+RUN_STAMP = "%Y-%m-%dT%H:%M:%SZ"
+#: the Python distributions that carry a Mojo toolchain, in the order asked
+MOJO_DISTRIBUTIONS = ("mojo", "max", "modular", "mojo-compiler")
+
+
+def _run_command(argv, timeout=20):
+    """(stdout, None) of argv, or (None, why not). Never raises."""
+    import shutil
+    if shutil.which(argv[0]) is None:
+        return None, f"{argv[0]} not on PATH"
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"{argv[0]}: {type(exc).__name__}: {exc}"[:200]
+    if p.returncode != 0:
+        return None, f"{' '.join(argv[:2])} exited {p.returncode}"
+    return p.stdout, None
+
+
+def _visible_device(var):
+    """The first device CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES names (an
+    index or a UUID), or None when unset (device 0 runs)."""
+    raw = (os.environ.get(var) or "").split(",")[0].strip()
+    return raw or None
+
+
+def _pick_row(rows, visible, uuid_of=None):
+    """The row of the device this process sees: by index, then by UUID, else the first."""
+    if not rows:
+        return None
+    if visible is not None and visible.isdigit():
+        for r in rows:
+            if str(r.get("index")) == visible:
+                return r
+    if visible is not None and uuid_of is not None:
+        for r in rows:
+            if uuid_of(r) == visible:
+                return r
+    return rows[0]
+
+
+def _nvidia_device(unavailable):
+    out, why = _run_command(["nvidia-smi", "--query-gpu=index,name,driver_version,uuid",
+                             "--format=csv,noheader"])
+    rows = []
+    for line in (out or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 4:
+            rows.append(dict(index=parts[0], name=parts[1], driver=parts[2], uuid=parts[3]))
+    visible = _visible_device("CUDA_VISIBLE_DEVICES")
+    row = _pick_row(rows, visible, uuid_of=lambda r: r["uuid"])
+    if row is None:
+        unavailable["device.model"] = why or "nvidia-smi listed no GPU"
+        unavailable["driver.nvidia_driver"] = why or "nvidia-smi listed no GPU"
+    plain, why2 = _run_command(["nvidia-smi"])
+    m = re.search(r"CUDA Version:\s*([0-9.]+)", plain or "")
+    if not m:
+        unavailable["driver.cuda"] = why2 or "nvidia-smi printed no CUDA Version"
+    device = dict(model=row["name"] if row else None, index=row["index"] if row else visible)
+    driver = dict(nvidia_driver=row["driver"] if row else None, cuda=m.group(1) if m else None)
+    return device, driver
+
+
+def _amd_device(unavailable):
+    out, why = _run_command(["rocminfo"])
+    rows, cur = [], {}
+    for line in (out or "").splitlines():
+        key, _, value = line.strip().partition(":")
+        key, value = key.strip(), value.strip()
+        if key == "Name" and value.startswith("gfx"):
+            cur = dict(arch=value)
+            rows.append(cur)
+        elif key == "Marketing Name" and cur and "name" not in cur:
+            cur["name"] = value
+    for i, r in enumerate(rows):
+        r["index"] = str(i)
+    row = _pick_row(rows, _visible_device("HIP_VISIBLE_DEVICES") or _visible_device("ROCR_VISIBLE_DEVICES"))
+    model = (row or {}).get("name")
+    if not model:
+        smi, why2 = _run_command(["rocm-smi", "--showproductname"])
+        m = re.search(r"Card (?:Series|series|SKU|Model)\s*:\s*(.+)", smi or "")
+        model = m.group(1).strip() if m else None
+        if not model:
+            unavailable["device.model"] = why or why2 or "rocminfo and rocm-smi named no GPU"
+    rocm = None
+    for p in (os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), ".info", "version"), "/opt/rocm/.info/version"):
+        try:
+            with open(p) as fh:
+                rocm = fh.read().strip() or None
+            break
+        except OSError:
+            continue
+    if not rocm:
+        unavailable["driver.rocm"] = "no /opt/rocm/.info/version (ROCM_PATH)"
+    try:
+        with open("/sys/module/amdgpu/version") as fh:
+            amdgpu = fh.read().strip() or None
+    except OSError:
+        amdgpu = None
+    if not amdgpu:
+        unavailable["driver.amdgpu"] = "no /sys/module/amdgpu/version (an in-tree amdgpu module states none)"
+    return (dict(model=model, index=(row or {}).get("index"), arch=(row or {}).get("arch")),
+            dict(rocm=rocm, amdgpu=amdgpu))
+
+
+def _apple_device(unavailable):
+    model = cpu_model()          # `Apple M4`, `Apple M2 Pro`: the chip the GPU is part of
+    if not model:
+        unavailable["device.model"] = "sysctl machdep.cpu.brand_string unreadable"
+    macos = platform.mac_ver()[0] or None
+    if not macos:
+        unavailable["driver.macos"] = "platform.mac_ver() is empty"
+    out, why = _run_command(["system_profiler", "SPDisplaysDataType"], timeout=30)
+    m = re.search(r"Metal(?: Support| Family)?:\s*(.+)", out or "")
+    cores = re.search(r"Total Number of Cores:\s*(\d+)", out or "")
+    if not m:
+        unavailable["driver.metal"] = why or "system_profiler named no Metal support"
+    return (dict(model=model, gpu_cores=int(cores.group(1)) if cores else None),
+            dict(macos=macos, metal=m.group(1).strip() if m else None))
+
+
+def mojo_toolchain_version():
+    """(version, None) of the Mojo toolchain this machine has, or (None, why not)."""
+    env = (os.environ.get("MOJOLEARN_MOJO_VERSION") or "").strip()
+    if env and env != "unrecorded":
+        return env, None
+    try:
+        from importlib import metadata
+        for dist in MOJO_DISTRIBUTIONS:
+            try:
+                return f"{dist} {metadata.version(dist)}", None
+            except metadata.PackageNotFoundError:
+                continue
+    except Exception:            # never lose a record over a metadata lookup
+        pass
+    out, why = _run_command(["mojo", "--version"])
+    if out and out.strip():
+        return out.strip().splitlines()[0][:120], None
+    return None, ("no MOJOLEARN_MOJO_VERSION, no installed " + "/".join(MOJO_DISTRIBUTIONS)
+                  + " distribution, " + (why or "`mojo --version` printed nothing")
+                  + " (a wheel install carries compiled bindings, not the compiler)")
+
+
+def wheel_version(name):
+    """`mojolearn_nvidia-0.8.66-py3-none-manylinux_2_34_x86_64.whl` -> `0.8.66`, or None."""
+    parts = str(name).split("-")
+    return parts[1] if str(name).endswith(".whl") and len(parts) >= 5 else None
+
+
+def recorded_wheels(package_dir):
+    """([{name, sha256, version}], None) from IDENTITY_RECORD_WHEELS, or (None, why there are none)."""
+    path = os.environ.get(RUN_WHEELS_ENV)
+    if not path:
+        where = Path(package_dir).resolve().parts if package_dir else ()
+        if "site-packages" in where:
+            return None, f"an installed package, but {RUN_WHEELS_ENV} names no wheel list"
+        return None, "recorded from the source tree, not an installed wheel"
+    wheels = []
+    try:
+        with open(path) as fh:
+            for line in fh:
+                bits = line.split()
+                if len(bits) == 2 and re.fullmatch(r"[0-9a-f]{64}", bits[1]):
+                    wheels.append(dict(name=bits[0], sha256=bits[1], version=wheel_version(bits[0])))
+    except OSError as exc:
+        return None, f"{RUN_WHEELS_ENV}={path}: {type(exc).__name__}"
+    return (wheels, None) if wheels else (None, f"{RUN_WHEELS_ENV}={path} holds no '<wheel> <sha256>' line")
+
+
+def box_identity():
+    """{provider, id, source} of the machine: IDENTITY_RECORD_BOX=<provider>:<id> as
+    the launcher set it, else what the environment states. The id is null, with
+    its reason in `source`, when only the provider can be told."""
+    raw = (os.environ.get(RUN_BOX_ENV) or "").strip()
+    if raw:
+        provider, sep, ident = raw.partition(":")
+        if sep and provider and ident:
+            return dict(provider=provider, id=ident, source=RUN_BOX_ENV)
+        return dict(provider=None, id=None, source=f"{RUN_BOX_ENV}={raw[:80]!r} is not <provider>:<id>")
+    if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_RUN_ID"):
+        return dict(provider="github", id="%s/%s" % (os.environ["GITHUB_RUN_ID"], os.environ.get("GITHUB_JOB", "?")),
+                    source="GITHUB_RUN_ID/GITHUB_JOB")
+    if os.environ.get("RUNPOD_POD_ID"):
+        return dict(provider="runpod", id=os.environ["RUNPOD_POD_ID"], source="RUNPOD_POD_ID")
+    if platform.system() == "Darwin":
+        return dict(provider="mac", id=_hostname_hash(), source="hostname sha256 (first 16)")
+    try:
+        with open("/sys/class/dmi/id/sys_vendor") as fh:
+            vendor = fh.read().strip()
+    except OSError:
+        vendor = ""
+    if vendor.lower().startswith("digitalocean"):
+        return dict(provider="digitalocean", id=None,
+                    source=f"DMI vendor only; the launcher sets {RUN_BOX_ENV}=digitalocean:<droplet id>")
+    return dict(provider=None, id=None, source=f"{RUN_BOX_ENV} unset and no provider variable or DMI vendor matched")
+
+
+def _hostname_hash():
+    return hashlib.sha256(platform.node().encode()).hexdigest()[:16]
+
+
+def run_facts_static(vendor_backend, package_dir, devices_used=1):
+    """The facts of a run that do not change while it runs (read once, at start)."""
+    unavailable = {}
+    device, driver = dict(model=None), {}
+    try:
+        if vendor_backend == "cuda":
+            device, driver = _nvidia_device(unavailable)
+        elif vendor_backend == "hip":
+            device, driver = _amd_device(unavailable)
+        elif vendor_backend == "metal":
+            device, driver = _apple_device(unavailable)
+        else:
+            device = dict(model=cpu_model())
+            if not device["model"]:
+                unavailable["device.model"] = "no CPU model string (sysctl, /proc/cpuinfo, lscpu)"
+    except Exception as exc:     # never lose a record over a fact
+        unavailable["device"] = f"{type(exc).__name__}: {exc}"[:200]
+    gpu = vendor_backend in ("cuda", "hip", "metal")
+    threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+    device = dict(kind="gpu" if gpu else "cpu", backend=vendor_backend, **device,
+                  count_used=devices_used if gpu else (int(threads) if (threads or "").isdigit() else os.cpu_count()),
+                  unit="devices" if gpu else "cpu threads")
+    if platform.system() == "Linux":
+        lib, ver = platform.libc_ver()
+        driver["glibc"] = ver if lib == "glibc" and ver else None
+        if not driver["glibc"]:
+            unavailable["driver.glibc"] = f"platform.libc_ver() is {lib or 'empty'}"
+    def guarded(read, empty):
+        try:
+            return read()
+        except Exception as exc:  # never lose a record over a fact
+            return empty(f"{type(exc).__name__}: {exc}"[:200])
+    mojo, why = guarded(mojo_toolchain_version, lambda e: (None, e))
+    if why:
+        unavailable["mojo"] = why
+    wheels, why = guarded(lambda: recorded_wheels(package_dir), lambda e: (None, e))
+    if why:
+        unavailable["wheels"] = why
+    box = guarded(box_identity, lambda e: dict(provider=None, id=None, source=e))
+    if box.get("id") is None:
+        unavailable["box.id"] = box.get("source")
+    u = platform.uname()
+    return dict(schema=RUN_FACTS_SCHEMA, device=device, driver=driver, mojo=mojo,
+                python=dict(version=platform.python_version(), implementation=platform.python_implementation()),
+                wheels=wheels, box=box, host=dict(kernel=f"{u.system} {u.release} {u.machine}",
+                                                  hostname_sha256=_hostname_hash()),
+                unavailable=unavailable)
+
+
+def seconds_per_lane(cells):
+    """{lane: seconds} summed over the lane's cells' `timing.total_seconds`."""
+    out = {}
+    for key, cell in (cells or {}).items():
+        t = ((cell or {}).get("timing") or {}).get("total_seconds") if isinstance(cell, dict) else None
+        if isinstance(t, (int, float)):
+            lane = str(key).partition("/")[0]
+            out[lane] = round(out.get(lane, 0.0) + float(t), 3)
+    return out
+
+
+def run_block(static, cells, started_wall, previous=None, now=None):
+    """The record's `run` object at this write: the static facts, the first
+    attempt's start, now as the end, every attempt's wall seconds and the
+    per-lane seconds of the cells. `previous` is the `run` of a resumed record."""
+    now = time.time() if now is None else now
+    prev = previous if isinstance(previous, dict) else {}
+    first = prev.get("started_utc") or time.strftime(RUN_STAMP, time.gmtime(started_wall))
+    carried = prev.get("seconds_total") if isinstance(prev.get("seconds_total"), (int, float)) else 0.0
+    return dict(static, started_utc=first, finished_utc=time.strftime(RUN_STAMP, time.gmtime(now)),
+                seconds_total=round(carried + max(0.0, now - started_wall), 3),
+                attempts=int(prev.get("attempts") or 0) + 1, seconds_per_lane=seconds_per_lane(cells))
+
+
+def merged_run_block(runs, cells):
+    """One `run` object for a --merge: the first part's facts, the earliest start,
+    the latest end, the parts' summed seconds (they may have run side by side)."""
+    runs = [r for r in runs if isinstance(r, dict)]
+    if not runs:
+        return None
+    starts = [r["started_utc"] for r in runs if r.get("started_utc")]
+    ends = [r["finished_utc"] for r in runs if r.get("finished_utc")]
+    return dict(runs[0], started_utc=min(starts) if starts else None, finished_utc=max(ends) if ends else None,
+                seconds_total=round(sum(float(r.get("seconds_total") or 0.0) for r in runs), 3),
+                attempts=sum(int(r.get("attempts") or 1) for r in runs), parts=len(runs),
+                seconds_per_lane=seconds_per_lane(cells))
+
+
+#: the run_* provenance.txt keys, in the order written
+RUN_PROVENANCE_KEYS = ("run_device", "run_device_count", "run_driver", "run_mojo", "run_python",
+                       "run_started_utc", "run_finished_utc", "run_seconds_total", "run_seconds_per_lane",
+                       "run_wheels", "run_box", "run_host", "run_unavailable")
+
+
+def _flat(d):
+    return ",".join(f"{k}={'null' if v is None else v}" for k, v in sorted((d or {}).items()))
+
+
+def run_provenance_lines(record):
+    """The `run_*` lines of provenance.txt for a record (one `key=value` each;
+    null for an unavailable fact, its reason in run_unavailable)."""
+    run = record.get("run") if isinstance(record, dict) else None
+    if not isinstance(run, dict):
+        return ["run_facts=absent (a record from a harness before the run block)"]
+    dev, box = run.get("device") or {}, run.get("box") or {}
+    null = lambda v: "null" if v is None or v == "" else str(v)
+    wheels = run.get("wheels")
+    values = dict(
+        run_device=null(dev.get("model")), run_device_count=f"{null(dev.get('count_used'))} {dev.get('unit') or ''}".strip(),
+        run_driver=_flat(run.get("driver")) or "null", run_mojo=null(run.get("mojo")),
+        run_python=null((run.get("python") or {}).get("version")),
+        run_started_utc=null(run.get("started_utc")), run_finished_utc=null(run.get("finished_utc")),
+        run_seconds_total=null(run.get("seconds_total")),
+        run_seconds_per_lane=",".join(f"{k}:{v}" for k, v in sorted((run.get("seconds_per_lane") or {}).items())) or "null",
+        run_wheels=",".join(f"{w.get('name')}:{w.get('sha256')}:{null(w.get('version'))}" for w in wheels)
+        if isinstance(wheels, list) and wheels else "null",
+        run_box=f"{null(box.get('provider'))}:{null(box.get('id'))}",
+        run_host="%s %s" % ((run.get("host") or {}).get("kernel") or "null",
+                            (run.get("host") or {}).get("hostname_sha256") or "null"),
+        run_unavailable="; ".join(f"{k}: {v}" for k, v in sorted((run.get("unavailable") or {}).items())) or "none")
+    return [f"{k}={values[k]}".replace("\n", " ") for k in RUN_PROVENANCE_KEYS]
+
+
+def parse_provenance(text):
+    """{key: value} of a provenance.txt (first `=` splits; later lines win)."""
+    out = {}
+    for line in str(text).splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip():
+            out[key.strip()] = value
+    return out
 
 
 def slug(text):
@@ -809,14 +1295,18 @@ def commit_witness():
 
 def host_record(ml):
     """The `host` object of a CPU column: the machine, the host bindings
-    built, and what each reads back (its kernel-matrix column, the column
-    the accelerator predicates detected, its sabotage flag). A binding that
-    refuses to load records the refusal, so a REFUSED cell is attributable
-    to an unbuilt or refused family rather than a bug."""
-    from mojolearn import _backend, host_surface
+    built, the bytes of each, and what each LOADED one reads back (its
+    kernel-matrix column, the column the accelerator predicates detected,
+    its sabotage flag), all from the public `runtime_report()`. Called after
+    the lanes ran: a family a lane used is loaded, and one no lane used is
+    recorded `loaded: False` with its file bytes (it computed nothing in the
+    record). A family whose load refused is attributed by its cells' own
+    refusal."""
+    from mojolearn import host_surface
+    report = ml.runtime_report()
+    rows = report["bindings"]
     families = {}
-    for basename in _backend.host_families_built():
-        prefix = basename[len("_mojolearn_"):]
+    for basename in report["host_families_built"]:
         # The file's bytes (2026-09-15, lane/cpu-training-gate-budget). The
         # host bindings load by path, so `package.bindings` (the loaded
         # `mojolearn._mojolearn*` modules) never lists them, and a CPU column
@@ -824,31 +1314,33 @@ def host_record(ml):
         # to refuse parts that ran different builds.
         digest = {}
         try:
-            path = _backend.host_module_path(basename)
+            path = report["host_paths"][basename]
             with open(path, "rb") as fh:
                 digest = dict(sha256=hashlib.sha256(fh.read()).hexdigest(), size=os.path.getsize(path))
-        except OSError as exc:
+        except (OSError, TypeError) as exc:
             digest = dict(sha256_error=f"{type(exc).__name__}: {exc}"[:200])
-        try:
-            m = _backend.load_host_module(basename)
-            fam = dict(column=str(getattr(m, prefix + "_column")()), **digest)
-            detected = getattr(m, prefix + "_detected_column", None)
-            if detected is not None:
-                fam["detected_column"] = str(detected())
-            sab = getattr(m, prefix + "_sabotage", None)
-            if sab is not None:
-                fam["sabotage"] = bool(sab())
-        except Exception as exc:
-            fam = dict(error=f"{type(exc).__name__}: {exc}"[:300], **digest)
+        row = rows.get("mojolearn._host." + basename)
+        if row is None or not row.get("loaded"):
+            fam = dict(loaded=False, **digest)
+        elif row.get("column") is None:
+            fam = dict(error="the loaded binding reads back no column", **digest)
+        else:
+            fam = dict(column=row["column"], **digest)
+            if row.get("detected_column") is not None:
+                fam["detected_column"] = row["detected_column"]
+            if row.get("sabotage") is not None:
+                fam["sabotage"] = bool(row["sabotage"])
         families[basename] = fam
-    columns = sorted(set(f.get("column", "unreadable") for f in families.values()))
+    # The column of the families that ran (loaded); "none-loaded" when no
+    # host family loaded, which the CPU gate refuses as it refused "none-built".
+    columns = sorted(set(f.get("column", "unreadable") for f in families.values() if f.get("loaded", True)))
     return dict(
         cpu_model=cpu_model(), arch=platform.machine(),
         target_cpu=os.environ.get("MOJOLEARN_TARGET_CPU", "unrecorded"),
         mojo_version=os.environ.get("MOJOLEARN_MOJO_VERSION", "unrecorded"),
         python=platform.python_version(),
-        column=(columns[0] if len(columns) == 1 else ("none-built" if not columns else "MIXED:" + ",".join(columns))),
-        routed=dict(_backend._HOST_MODULES),
+        column=(columns[0] if len(columns) == 1 else ("none-loaded" if not columns else "MIXED:" + ",".join(columns))),
+        routed=dict(host_surface.routed_modules()),
         # The manifest the routing table and the gate lists are read from
         # (the host surface manifest lane, 2026-09-14), and every binding it
         # declares, so a family that is declared but absent from `families`
@@ -1134,6 +1626,56 @@ LANE_REVISIONS = {
     # read OWED to the next record. The random-init lanes did not move.
     "gmm": "classic-kmeanspp-init-1",
     "gmm-sample": "classic-kmeanspp-init-1",
+    # THE 2026-11-05 SHRINK (lane/slow-verification-lanes, Andrew: "fixtures
+    # should be small"): correctness checks, not measurements. Each lane keeps
+    # its branches, arms, parts and fixture kinds; rows, observations,
+    # iterations, tree counts and eigh widths came down. Every committed
+    # column hashed the old input, so these cells read OWED to the next record.
+    "x-prep-da-solvers": "rows-4500-1",
+    "x-prep-nb-weights": "rows-4500-1",
+    "x-prep-rfe": "rows-4500-1",
+    "x-prep-score-edges": "rows-4500-1",
+    "x-prep-priors": "rows-4500-1",
+    "x-cluster-hdbscan-epsilon": "rows-1000-1",
+    "sequence-ets": "obs-48-1",
+    "x-metrics-permutation-test-score": "perms-4-20261105-1",
+    "x-decomp-eigh-wide-linalg": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-fastica": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-rotation": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-factor-analysis": "light-fixture-20261105-1",
+    "x-decomp-eigh-wide-mincovdet": "light-fixture-20261105-1",
+    "x-decomp-umap-options": "light-fixture-20261105-1",
+    "x-decomp-manifold": "light-fixture-20261105-1",
+    "trees-calibrated": "light-fixture-20261105-1",
+    "trees-stacking-clf": "light-fixture-20261105-1",
+    "trees-voting-clf": "light-fixture-20261105-1",
+    "gbdt-symmetric": "light-fixture-20261105-1",
+    "gbdt-symmetric-eval": "noisy-eval-labels-20261108-1",
+    "gbdt-class-weights": "light-fixture-20261105-1",
+    "gbdt-multiclass-offgrid": "light-fixture-20261105-1",
+    "gbdt-ordered": "light-fixture-20261105-1",
+    "gbdt-ordered-bayesian-noise": "light-fixture-20261105-1",
+    "gbdt-binary-columns": "light-fixture-20261105-1",
+    "gbdt-catboost-defaults": "light-fixture-20261105-1",
+    "gbdt-stochastic-arms": "light-fixture-20261105-1",
+    "gbdt-multiclass": "light-fixture-20261105-1",
+    "gbdt-onevsall": "light-fixture-20261105-1",
+    "gbdt-multiclass-defaults": "light-fixture-20261105-1",
+    "gbdt-pointwise-l2-bayesian-eval": "light-fixture-20261105-1",
+    "gbdt-adapter-clf": "light-fixture-20261105-1",
+    "gbdt-yeti-rank": "light-fixture-20261105-1",
+    "kmeans-random": "rows-8192-1",
+    "kmeans-sqrt": "rows-8192-1",
+    "dbscan-weighted": "rows-2000-1",
+    "arima-seasonal-c": "obs-128-1",
+    "arima-exog-seasonal": "obs-128-1",
+    "saved-model-host-infer": "rows-4096-1",
+    "rf-reg-gamma-ig": "rows-2048-1",
+    "bootstrap": "light-fixture-20261105-1",
+    # The neural sequence lanes' 2026-11-05 change is to the batchscale and
+    # rlpair PROTOCOLS (SEQ_SCALE_WHOLE, SCALE_LONG_L, SCALE_PREFIXES,
+    # RLPAIR_DECODE, RLPAIR_LEAVE_AFTER), not to their train input; those parts
+    # carry their own protocol stamp (`_part_protocol`), so no revision here.
 }
 
 
@@ -1276,6 +1818,96 @@ NON_SIZE_REVISIONS = {
         "arithmetic, not input: GaussianMixture's init_params='kmeans' start became the classic "
         "greedy k-means++ instead of k-means|| (2026-09-26, lane/gmm-degenerate-data, DEVIATION 3133 "
         "in mixture/estimator.mojo). The lane still fits the same 6000 x 4 rows"),
+    # 2026-11-05 (lane/slow-verification-lanes): several dimensions moved at once, so no one size key.
+    "x-metrics-permutation-test-score": (
+        "x-metrics-permutation-test-score draws 4 permutations per call instead of 12 (2026-11-05, "
+        "lane/slow-verification-lanes): every permutation is three Ridge fits; the plain and grouped "
+        "counter-generator draws, the score and the p-value parts are unchanged."),
+    "x-decomp-eigh-wide-linalg": (
+        "2026-11-05 lane/slow-verification-lanes: the second eigh width moves from 128 to 65, which is the "
+        "exact-multiple panel arm and the odd-n Jacobi pad arm; 72 is kept."),
+    "x-decomp-eigh-wide-fastica": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 and FastICA max_iter "
+        "from 8 to 4; every iteration still runs the decorrelation eigh."),
+    "x-decomp-eigh-wide-rotation": (
+        "2026-11-05 lane/slow-verification-lanes: quartimax n_components moves from 128 to 65, rows from 4d "
+        "to 2d and EM max_iter from 5 to 3; varimax stays at 72."),
+    "x-decomp-eigh-wide-factor-analysis": (
+        "2026-11-05 lane/slow-verification-lanes: the widths move from 72/128 to 72/65 with rows still "
+        "width - 1, and EM max_iter from 10 to 4."),
+    "x-decomp-eigh-wide-mincovdet": (
+        "2026-11-05 lane/slow-verification-lanes: the MinCovDet widths move from 72/128 to 72/65; rows stay "
+        "at 3d and every hashed part is kept."),
+    "x-decomp-umap-options": (
+        "2026-11-05 lane/slow-verification-lanes: the rows move from 384 to 192 and the epochs from 8 to 4 "
+        "(the array-init pre-fit from 4 to 2); every option arm is kept."),
+    "x-decomp-manifold": (
+        "2026-11-05 lane/slow-verification-lanes: the MDS max_iter values are halved (40/30/25 to 20/15/12) "
+        "and the shift-invert LLE moves from 300 to 240 rows, still above 200."),
+    "trees-calibrated": (
+        "2026-11-05 lane/slow-verification-lanes: both calibrators fit on the first 7001 rows (was 20000) "
+        "with depth-3 trees (was 4), batch protocol on 2001 held-out rows; methods, cv=3 and ensemble arms "
+        "unchanged"),
+    "trees-stacking-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 7001 rows (was 20000), members depth 3 "
+        "(was 4) and forest of 2 trees (was 3), batch protocol on 2001 held-out rows; folds, passthrough "
+        "and final tree unchanged"),
+    "trees-voting-clf": (
+        "2026-11-05 lane/slow-verification-lanes: fit on the first 5001 rows (was 20000), member depths "
+        "4/4/3 (was 5/5/4), forest 2 trees (was 4), bagging 2 members (was 3), batch protocol on 2001 "
+        "held-out rows; weights and soft voting unchanged"),
+    "gbdt-symmetric": (
+        "2026-11-05, lane/slow-verification-lanes: training rows 20000 -> 4000 and both fits' trees 20 -> 8; "
+        "borders254 arm, Logloss, depth 6 and both parts kept"),
+    "gbdt-symmetric-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000, m's trees 20 -> 8 "
+        "to stay gbdt-symmetric's fit; the overfitting od/sh shape and both asserts unchanged. "
+        "2026-11-08, lane/fix-gbdt-symmetric-eval-detector: od and sh score the held-out labels with "
+        "every fifth label flipped (ties never fired and denormal never cut at 4000 rows); m, the rows "
+        "and the tree counts unchanged"),
+    "gbdt-class-weights": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 per policy; "
+        "SymmetricTree, Depthwise, Lossguide and the off-grid class weight kept"),
+    "gbdt-multiclass-offgrid": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "the off-grid class weights and l2 1 kept"),
+    "gbdt-ordered": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 6000 (floored at 5000, "
+        "the min_fold_size arm) and trees 20 -> 8 for both Ordered fits"),
+    "gbdt-ordered-bayesian-noise": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000, the min_fold_size "
+        "arm) and trees 20 -> 8; Bayesian bootstrap, noise and NewtonCosine twin kept"),
+    "gbdt-binary-columns": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 6000 (floored at 5000) and trees 20 -> 8 "
+        "for all six fits; batch part on the first 2048 held-out rows"),
+    "gbdt-catboost-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: the two capped default fits go 20000 rows x 20 trees -> "
+        "4000 x 8; the below-cap 2000-row 50-tree fit is unchanged"),
+    "gbdt-stochastic-arms": (
+        "2026-11-05, lane/slow-verification-lanes: rows stay 4000; trees 20 -> 6 per bootstrap/noise arm "
+        "and 8 -> 4 per pointwise loss; every arm and loss kept"),
+    "gbdt-multiclass": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; MultiClass with "
+        "class weights [1, 2, 0.5] on three classes kept"),
+    "gbdt-onevsall": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; "
+        "MultiClassOneVsAll on the three-class centered target kept"),
+    "gbdt-multiclass-defaults": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8 for both "
+        "multiclass losses at their Bayesian/noise defaults"),
+    "gbdt-pointwise-l2-bayesian-eval": (
+        "2026-11-05, lane/slow-verification-lanes: training and eval rows 20000 -> 4000 and trees 20 -> 8; "
+        "pointwise searcher, L2, Bayesian bootstrap, weights, od and best model kept"),
+    "gbdt-adapter-clf": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and trees 20 -> 8; batch "
+        "predict/predict_proba on the first 2048 held-out rows, decision_function 512 unchanged"),
+    "gbdt-yeti-rank": (
+        "2026-11-05, lane/slow-verification-lanes: rows 20000 -> 4000 and the main fit's trees 20 -> 8; "
+        "the seeded 8-tree depth-4 fit and the RANK_QUERY_SIZES grouping kept"),
+    "bootstrap": (
+        "bootstrap moved from 4096 values x 2048 replicates (1024 for the sorted arms) to 1024 values x "
+        "1024 replicates for every arm, in the lane body and its batch part, on 2026-11-05 "
+        "(lane/slow-verification-lanes)."),
 }
 
 
@@ -1458,6 +2090,63 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
     return f
 
 
+def _saved_fields(est, *keys):
+    """Arrays `keys` of the file the estimator's public `save` writes (an
+    `.npz`), copied out. Where a lane hashed a fitted value the estimator
+    keeps only as private state (a resolved gamma, normalize_y's mean and
+    scale), it reads the same float from the saved model, whose bytes are
+    the public record of that state."""
+    with tempfile.TemporaryDirectory(prefix="ib-saved-") as d:
+        path = os.path.join(d, "model.npz")
+        est.save(path)
+        with np.load(path, allow_pickle=False) as z:
+            return tuple(np.array(z[k]) for k in keys)
+
+
+def _synthetic_bpe(ml):
+    """The synthetic 512-rank vocabulary through the public constructor
+    `BpeTokenizer.from_token_bytes`, where the lanes called the private
+    `BpeTokenizer._synthetic()` (which is that call plus a source label; the
+    identity, ids and bytes do not depend on the label). The token list is the
+    verify fixture `_tokenizer_synthetic.vocabulary()`."""
+    from mojolearn._tokenizer_synthetic import vocabulary
+    return ml.tokenizer.BpeTokenizer.from_token_bytes(vocabulary())
+
+
+#: What each neural model was BUILT FROM, by object: id -> (object, arguments).
+#: A block or a LanguageModelInference copies its weights once at construction
+#: and exposes no public read of them, so the harness keeps the public
+#: arguments it gave the constructor. `_neural_inference` and `_long_byte_lm`
+#: rebuild a model from these (the inference classes take the same
+#: constructor arguments), where they read the private `_W_NAMES`/`_w`,
+#: `_parameters`, `_threaded` and `_threads`. The object is held so its id
+#: is never reused while the entry exists.
+_BUILT = {}
+
+
+def _built(obj, **args):
+    """Record the public constructor arguments of `obj`; return `obj`."""
+    _BUILT[id(obj)] = (obj, args)
+    return obj
+
+
+def _built_args(obj):
+    entry = _BUILT.get(id(obj))
+    if entry is None or entry[0] is not obj:
+        raise RuntimeError(f"identity_break: {type(obj).__name__} was not built through _built, so its "
+                           "constructor arguments are unknown (no private weight read)")
+    return entry[1]
+
+
+def _labels_and_proba(m, X):
+    """The two public classifier views, `predict` and `predict_proba`, in
+    that order. Two public calls (two forest traversals) where the harness
+    used the estimators' private one-traversal `_predict_with_proba`: verify
+    asks what a user can ask, and the labels are the same bytes (`predict`
+    is the first-max decode of `predict_proba`)."""
+    return m.predict(X), m.predict_proba(X)
+
+
 # ---------------------------------------------------------------- lanes
 # One per PUBLIC estimator, plus linalg and metrics. Each returns a hash of
 # the things a user would read back, plus the fitted estimator and what to
@@ -1468,9 +2157,9 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
 @lane("rf-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("rf-reg")
@@ -1485,9 +2174,9 @@ def _(ml, X, yc, yr, Xh=None):
     # a float64 Fortran-order copy takes the column-major fit entry (et_classifier_fit_export)
     mf = ml.ExtraTreesClassifier(n_estimators=4, max_depth=8, random_state=7).fit(
         np.asfortranarray(X[:2000], dtype=np.float64), yc[:2000])
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba), colmajor=_h(mf.predict_proba(X))),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg")
@@ -1505,9 +2194,9 @@ def _(ml, X, yc, yr, Xh=None):
     sk-kernels): fixed-point row weights in the class tallies."""
     w = _hw((X.shape[0],), "et-clf-weighted:sample_weight", 0.5, 1.5)
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc, sample_weight=w)
-    predict, proba = m._predict_with_proba(X)
+    predict, proba = _labels_and_proba(m, X)
     return _fit(dict(predict=_h(predict), proba=_h(proba)),
-                m, lambda e: e._predict_with_proba(Xh))
+                m, lambda e: _labels_and_proba(e, Xh))
 
 
 @lane("et-reg-weighted")
@@ -1529,12 +2218,34 @@ def _(ml, X, yc, yr, Xh=None):
     from its CPU column at depth 1 (taxi, AUC 0.556 vs 0.610), with every
     identity lane green. A fixture column with fewer than 129 distinct
     values quantizes to fewer borders and does not reach the arm."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
-    w = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep every float column far
+    # above the 255 distinct values borders254 needs, the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62).
+    # gbdt-symmetric-eval's `m` is this fit and must stay the same shape.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss").fit(X, yc)
+    w = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               border_count=254).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      borders254=_h(w.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+#: every GBDT_EVAL_FLIP_EVERY-th held-out label is flipped for the
+#: gbdt-symmetric-eval detector and shrink fits (see that lane)
+GBDT_EVAL_FLIP_EVERY = 5
+
+
+def gbdt_eval_noisy_labels(y):
+    """`y` (0/1 int labels) with rows 0, 5, 10, ... flipped: the same bytes on
+    every column, no RNG. Label noise the trees cannot learn from the
+    features, so the held-out loss turns once the margins overshoot."""
+    out = np.asarray(y).copy()
+    out[::GBDT_EVAL_FLIP_EVERY] = 1 - out[::GBDT_EVAL_FLIP_EVERY]
+    return out
 
 
 @lane("gbdt-symmetric-eval")
@@ -1548,8 +2259,8 @@ def _(ml, X, yc, yr, Xh=None):
 
     THREE FITS, AND THE SECOND TWO HAVE A SHAPE OF THEIR OWN FOR A REASON.
 
-    `m` is gbdt-symmetric's fit exactly (20 depth-6 trees at `_gbdt`'s
-    recorded options) plus an eval set, with the detector off and
+    `m` is gbdt-symmetric's fit exactly (its rows, its 8 depth-6 trees at
+    `_gbdt`'s recorded options) plus an eval set, with the detector off and
     `use_best_model` off. Its `predict` and `proba` must therefore be
     gbdt-symmetric's, bit for bit, on every column: an eval set does not
     reach the learn cursor, the borders, the splits or the leaves on the
@@ -1569,18 +2280,43 @@ def _(ml, X, yc, yr, Xh=None):
     `shrunk_proba` did not move at all. The shape below overfits on purpose,
     and the two asserts are what keep it overfitting: a change that makes
     the curve monotone again reads REFUSED on this lane rather than passing
-    with nothing measured."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    base = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    with nothing measured.
+
+    `od` and `sh` score a NOISY copy of the held-out labels: every fifth
+    label flipped (`gbdt_eval_noisy_labels`). The fixture labels are a
+    deterministic rule of columns 3 and 4, so a fit that learns the rule
+    generalizes and the held-out curve has no reason to turn; on `ties`
+    (a 6 x 6 grid of cells shared by both draws) it never does. With a
+    fifth of the held-out labels wrong, every tree that grows the margins
+    past the best calibrated value raises the held-out loss, so the curve
+    has a minimum before the last tree on every fixture by construction,
+    not by the learning rate's luck. `m` keeps the clean labels."""
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and 20000 eval
+    # rows -> 4000 and 4000, `m` at gbdt-symmetric's 8 trees (the two lanes must
+    # stay one fit). The overfitting shape below is kept as measured; fewer rows
+    # overfit sooner, and the two asserts still refuse a fixture on which the
+    # detector or the shrink goes inert.
+    rows = 4000
+    X, yc = X[:rows], yc[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    base = dict(n_estimators=8, max_depth=6, loss="Logloss")
     m = _gbdt(ml.GradientBoosting, use_best_model=False, **base).fit(
-        X, yc, eval_set=(Xh, ych))
-    # the overfitting shape (measured: fires and cuts on all nine fixtures)
+        X, yc, eval_set=(Xe, ych))
+    # The overfitting shape. Measured at 20000 rows to fire and cut on all
+    # nine fixtures with the clean held-out labels; at 4000 rows (the
+    # 2026-11-05 shrink, never measured at that size before the 0.8.66
+    # freeze bc4ecd4518) `ties` never fired and `denormal` never cut, on
+    # NVIDIA, AMD, Apple and the CPU alike. The noisy held-out labels make
+    # the turn structural (docstring above). 2026-11-08,
+    # lane/fix-gbdt-symmetric-eval-detector.
     stop = dict(n_estimators=30, max_depth=7, loss="Logloss",
                 learning_rate=1.8, l2_leaf_reg=3.0)
+    ycn = gbdt_eval_noisy_labels(ych)
     od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=2,
-               use_best_model=False, **stop).fit(X, yc, eval_set=(Xh, ych))
+               use_best_model=False, **stop).fit(X, yc, eval_set=(Xe, ycn))
     sh = _gbdt(ml.GradientBoosting, use_best_model=True,
-               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xh, ych))
+               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xe, ycn))
     if not od.stopped_early_ or len(od.test_loss_curve_) >= stop["n_estimators"]:
         raise RuntimeError(
             "gbdt-symmetric-eval: the Iter detector did not fire (trees="
@@ -1636,12 +2372,20 @@ def _(ml, X, yc, yr, Xh=None):
     is untouched by it. The CPU column trains binary class_weights since
     2026-10-03 (lane/fix-cpu-column2: the weight column through the host
     search planes, WeightsCpu and the leaf oracle)."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Lossguide still fills max_leaves=32 on
+    # 1500 rows (gbdt-lossguide-newtoncosine's floor). 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     cw = [1.0, 1.3101271632087197]
     parts, first = {}, None
     for policy, kw in (("SymmetricTree", dict(max_depth=6, random_strength=1.0, bootstrap_type="No")),
                        ("Depthwise", dict(max_depth=6)),
                        ("Lossguide", dict(max_leaves=32))):
-        m = _gbdt(ml.GradientBoosting, n_estimators=20, grow_policy=policy, loss="Logloss",
+        m = _gbdt(ml.GradientBoosting, n_estimators=trees, grow_policy=policy, loss="Logloss",
                   l2_leaf_reg=1.0, class_weights=cw, **kw).fit(X, yc)
         parts[policy] = _h(m.predict(X))
         first = first or m
@@ -1654,7 +2398,15 @@ def _(ml, X, yc, yr, Xh=None):
     the CPU column carries (gbdt/host/gbdt_oracle_multiclass.mojo restates
     `snap_weights_to_grid_kernel`); gbdt-multiclass's [1, 2, 0.5] is on the
     grid and does not reach the snap's rounding (lane/sym-quality)."""
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass", l2_leaf_reg=1.0,
               class_weights=[1.0, 1.3101271632087197, 0.7]).fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -1673,20 +2425,32 @@ _GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
 
 
 @lane("gbdt-ordered")
+@floor(rows=(5000, "5000 rows is where CatBoost's fold size reaches its min_fold_size arm "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464: below 5000 it is docCount/50, "
+                   "below 500 it is the 1-document cliff), so the Ordered fold structure this lane "
+                   "hashes is the one a real fit trains; set 2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
     configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
     (their four permutations, ten Newton steps per leaf) with an eval set,
     the Iter detector at wait 5 and use_best_model (their test cursor), and
-    an RMSE fit (boost_from_average on, as their unset default), 20 trees of
+    an RMSE fit (boost_from_average on, as their unset default), 8 trees of
     depth 6 each. The fold structure search, every (permutation, fold)
     cursor and the estimation permutation reach the train column through both
     fits' predictions and learn curves and the Logloss fit's held-out curve."""
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 training and eval rows x
+    # 20 trees -> 6000 x 8. 6000 rows sit above the floor's 5000, so the fold
+    # size is min_fold_size and the permutation block stays 1
+    # (ordered_plan.mojo:40, below 50000); the tree count is not the point.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    trees = 8
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
               boosting_type="Ordered", od_type="Iter", od_wait=5
-              ).fit(X, yc, eval_set=(Xh, ych))
-    r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+              ).fit(X, yc, eval_set=(Xe, ych))
+    r = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
               boosting_type="Ordered").fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
@@ -1697,14 +2461,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("gbdt-ordered-bayesian-noise")
+@floor(rows=(5000, "the Ordered fold size is min_fold_size only from 5000 rows up "
+                   "(gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 below it), and the "
+                   "Bayesian bootstrap and score noise here ride those folds; set 2026-11-05, "
+                   "lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Ordered boosting at CatBoost's GPU defaults for the parts `_gbdt`
     pins elsewhere: the Bayesian bootstrap at temperature 1 on the quality
     slices and random_strength 1.0 with its model-length decay, one Logloss
-    fit of 20 depth-6 trees with a NewtonCosine twin (Newton weights in the
+    fit of 8 depth-6 trees with a NewtonCosine twin (Newton weights in the
     search planes). The learning rate is pinned to 0.03 and the leaf count to
     Logloss's ten, so the lane moves only with the bootstrap and the noise."""
-    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered",
+    # 2026-11-05 (lane/slow-verification-lanes): 20000 rows x 20 trees -> 6000 x
+    # 8, above the floor's 5000; eight trees still carry the noise's
+    # model-length decay across trees.
+    rows = 6000                                  # FLOORED, see @floor above
+    X, yc = X[:rows], yc[:rows]
+    kw = dict(n_estimators=8, max_depth=6, loss="Logloss", boosting_type="Ordered",
               learning_rate=0.03, leaf_estimation_iterations=10)
     m = ml.GradientBoosting(**kw).fit(X, yc)
     nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
@@ -1738,6 +2511,10 @@ def _gbdt_binary_columns(X):
 
 
 @lane("gbdt-binary-columns")
+@floor(rows=(5000, "four of this lane's six fits are Ordered, whose fold size is min_fold_size only "
+                   "from 5000 rows up (gbdt/methods/dynamic_boosting_folds.mojo:459-464, docCount/50 "
+                   "below it), so the Ordered fold arm's binary histograms run on real folds; set "
+                   "2026-11-05, lane/slow-verification-lanes."))
 def _(ml, X, yc, yr, Xh=None):
     """Five columns with exactly ONE border each (0/1 flags,
     `_gbdt_binary_columns`), the BinaryFeatures histogram policy
@@ -1751,12 +2528,20 @@ def _(ml, X, yc, yr, Xh=None):
 
     The fits are the configurations the small-pool host route took before
     lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
-    RMSE, at `_gbdt`'s recorded options, 20 depth-6 trees each; the Ordered
+    RMSE, at `_gbdt`'s recorded options, 8 depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
     `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
     OrderedRMSE, whose host restatement shares the Ordered fold arm. The
     model and held-out columns read the Ordered Logloss fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 6000 x 8 per fit. 6000 rows sit above the floor's
+    # 5000 (the Ordered fold arm), keep the root leaf above GATHER_INPLACE_SIZE
+    # 1024 (split_points.mojo:829) and both flag values on every fixture (the
+    # refusal below still checks); the tree count is not what this lane checks.
+    rows = 6000                                  # FLOORED, see @floor above
+    trees = 8
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     X = _gbdt_binary_columns(X)
     Xh = None if Xh is None else _gbdt_binary_columns(Xh)
     for c in _GBDT_BINARY_COLUMNS:
@@ -1772,18 +2557,18 @@ def _(ml, X, yc, yr, Xh=None):
     yc = (np.asarray(yc, dtype=np.int32) ^ X[:, 5].astype(np.int32)).astype(np.int32)
     yr = (np.asarray(yr, dtype=np.float32) + np.float32(1.5) * X[:, 3]
           - np.float32(1.0) * X[:, 8]).astype(np.float32)
-    pc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    pc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Plain").fit(X, yc)
-    pr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    pr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                boosting_type="Plain").fit(X, yr)
-    oc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+    oc = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss",
                boosting_type="Ordered").fit(X, yc)
-    orr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+    orr = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="RMSE",
                 boosting_type="Ordered").fit(X, yr)
-    od = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE",
+    od = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss="RMSE",
                              boosting_type="Ordered", learning_rate=0.03).fit(X, yr)
     perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
-    ormse = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    ormse = ml.OrderedRMSE(n_estimators=trees, max_depth=6).fit(X, yr, permutation=perm)
     return _fit(dict(plain_logloss=_h(pc.predict(X), pc.predict_proba(X)),
                      plain_rmse=_h(pr.predict(X)),
                      plain_curves=_h(np.asarray(pc.loss_curve_, dtype=np.float64),
@@ -1804,14 +2589,23 @@ def _(ml, X, yc, yr, Xh=None):
     the loss: the auto learning rate off the GPU coefficient rows (read back
     as `learning_rate_`), the Bayesian bootstrap at temperature 1,
     random_strength 1 with its model-length decay, and the small-iteration
-    leaf rule (one Newton step below 200 trees and 20 features). 20 trees,
+    leaf rule (one Newton step below 200 trees and 20 features). 8 trees,
     Plain (below 500 trees), Logloss, and the same fit through
-    GradientBoostingClassifier, which defers every default. At 20 trees the
+    GradientBoostingClassifier, which defers every default. At 8 trees the
     auto rate is capped at 0.5 on every fixture, so a third fit, 50 depth-2
     trees on the first 2000 rows, reads the formula below its cap (0.475 on
     the GPU rows; 0.216 on the CPU rows the sabotage arm swaps in)."""
-    m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
-    c = ml.GradientBoostingClassifier(n_estimators=20).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"): the
+    # two capped fits go 20000 rows x 20 trees -> 4000 x 8. The GPU Logloss row
+    # (python/mojolearn/ensemble.py:275) gives 0.031 * (1000/8) ^0.896 = 2.4 at
+    # 4000 rows and 8 trees, still far above the 0.5 cap, and 8 trees are still
+    # below the 200-tree one-Newton-step rule. The below-cap fit keeps its
+    # measured 2000 rows and 50 depth-2 trees (the prefix of a prefix: its bytes
+    # do not move).
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = ml.GradientBoosting(n_estimators=trees, loss="Logloss").fit(X, yc)
+    c = ml.GradientBoostingClassifier(n_estimators=trees).fit(X, yc)
     a = ml.GradientBoosting(n_estimators=50, max_depth=2, loss="Logloss").fit(X[:2000], yc[:2000])
     lr = np.asarray([m.learning_rate_, a.learning_rate_], dtype=np.float64)
     return _fit(dict(predict=_h(m.predict(X)), learning_rate=_h(lr),
@@ -1824,26 +2618,32 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The bootstrap and the score noise on every arm a default fit or a
     `bootstrap_type` reaches, Logloss and RMSE (lane/gbdt-cpu-default-parity,
-    2026-09-20). 20 trees each, everything else unset. SymmetricTree: the
+    2026-09-20). 6 trees each, everything else unset. SymmetricTree: the
     default RMSE fit (Bayesian bootstrap, random_strength 1, its leaves read
     off the bootstrapped planes), the same through GradientBoostingRegressor,
     and Bernoulli and No for both losses (No keeps the noise). Depthwise and
     Lossguide: RMSE at the policy defaults, the Bayesian and Bernoulli
     bootstraps for both losses, and Depthwise with random_strength 1 under
     the Bayesian bootstrap. Then the ten pointwise losses at their defaults
-    (Bayesian bootstrap, random_strength 1), eight trees each. Poisson keeps
+    (Bayesian bootstrap, random_strength 1), four trees each. Poisson keeps
     ten leaf iterations so its backtracking can handle the wide fixture's
     large counts; the small-fit one-step shortcut overflows on both devices.
     The first 4000 rows of the fixture."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # rows stay 4000; 20 trees -> 6 per arm and 8 -> 4 per pointwise loss. On
+    # the Apple column a fit costs per tree, not per row, and this lane runs 28
+    # fits. Six trees still sample six bootstraps and six points of the score
+    # noise's model-length decay; every arm and loss is kept.
     rows = 4000
+    trees, loss_trees = 6, 4
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
-    m = ml.GradientBoosting(n_estimators=20, loss="RMSE").fit(X, yr)
-    reg = ml.GradientBoostingRegressor(n_estimators=20).fit(X, yr)
+    m = ml.GradientBoosting(n_estimators=trees, loss="RMSE").fit(X, yr)
+    reg = ml.GradientBoostingRegressor(n_estimators=trees).fit(X, yr)
     parts = dict(predict=_h(m.predict(X)), regressor=_h(reg.predict(X)))
     curves = [np.asarray(m.loss_curve_, dtype=np.float64)]
 
     def add(name, y, **kw):
-        g = ml.GradientBoosting(n_estimators=20, **kw).fit(X, y)
+        g = ml.GradientBoosting(n_estimators=trees, **kw).fit(X, y)
         parts[name] = _h(g.predict(X))
         curves.append(np.asarray(g.loss_curve_, dtype=np.float64))
 
@@ -1863,9 +2663,9 @@ def _(ml, X, yc, yr, Xh=None):
     for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
                      ("Poisson", dict(leaf_estimation_iterations=10)), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
                      ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
-        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
+        g = ml.GradientBoosting(n_estimators=loss_trees, loss=loss, **kw).fit(X, ypos)
         parts["sym-%s" % loss] = _h(g.predict(X))
-    ce = ml.GradientBoosting(n_estimators=8, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    ce = ml.GradientBoosting(n_estimators=loss_trees, loss="CrossEntropy").fit(X, yc.astype(np.float32))
     parts["sym-CrossEntropy"] = _h(ce.predict(X))
     parts["loss_curves"] = _h(np.concatenate(curves))
     return _fit(parts, m, lambda e: (e.predict(Xh),))
@@ -1949,15 +2749,16 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
     # a two-output (C-order 2-D) y: the fit transposes the labels on the device
-    # (bindings/neighbors_knn_native.mojo -> xn_p2m_transpose_i)
+    # (bindings/neighbors_knn_native_door.mojo -> xn_p2m_transpose_i)
     y2 = np.ascontiguousarray(np.stack([yc[:1024], (X[:1024, 1] > 0).astype(yc.dtype)], axis=1)).astype(np.int64)
     m2 = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:1024], y2)
     parts = dict(predict=_h(m.predict(X[4096:4160])), proba=_h(m.predict_proba(X[4096:4160])),
                  multi=_h(m2.predict(X[4096:4160])))
     # A majority vote can hide a corrupted training label. Check the public
-    # fit's stored label columns against an independent transpose as well;
-    # keep existing output hashes so unchanged reference evidence remains valid.
-    mismatch = _mismatch_bytes("fitted label columns", m2._y_cols,
+    # fit's stored label columns (the `y_cols` member of the public `save`
+    # file, which writes the fitted columns as they are) against an
+    # independent transpose as well.
+    mismatch = _mismatch_bytes("fitted label columns", _saved_fields(m2, "y_cols")[0],
                                "input labels transposed", np.ascontiguousarray(y2.T, dtype=np.int32))
     if mismatch is not None:
         raise NumericalMismatch(mismatch, parts)
@@ -2616,7 +3417,8 @@ def _(ml, X, yc, yr, Xh=None):
     measures whatever CPU the box has."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=False)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=False),
+               parameters=flat, threaded=False, threads=None)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -2694,10 +3496,9 @@ def _(ml, X, yc, yr, Xh=None):
     record ran the shipped profile or `byte-lm-resident`'s one block.
 
     THE PARTS. `profiles` is what the COMPILED side calls each shape, read
-    back through the binding's `byte_lm_config_profile` (the GPU binding
-    computes it natively; on a CPU column `_byte_lm_trainer_host.py` routes
-    it to the host binding's `byte_lm_host_profile`), so the cell records the
-    native name and not Python's. `derived` is the config's own integer
+    back through the public `LanguageModelInference.profile` (the profile
+    the host binding that runs the forward computes; the lane is host-only),
+    so the cell records the native name and not the config's. `derived` is the config's own integer
     table -- the native shape, every offset, n_total, n_tensors and every
     parameter shape -- which is what a checkpoint reader and a weight packer
     both index with. `logits`, `loss` and `next` are a real forward at each
@@ -2729,11 +3530,9 @@ def _(ml, X, yc, yr, Xh=None):
     is kept because it is the part a user reads, and because a real defect in
     the shape arithmetic would move it; it is not evidence of anything on its
     own."""
-    B = ml._backend.binding("_mojolearn_byte_lm", "identical")
     profiles, derived, logits, losses, nexts, flags = [], [], [], [], [], []
     for kw in LM_CONFIG_SHAPES:
         cfg = ml.LanguageModelConfig(**kw)
-        profiles.append(str(B.byte_lm_config_profile(list(cfg.native_shape))))
         derived.extend(cfg.native_shape)
         derived.extend(cfg.offsets)
         derived.extend((cfg.n_total, cfg.n_tensors, len(cfg.parameter_names)))
@@ -2741,6 +3540,7 @@ def _(ml, X, yc, yr, Xh=None):
             derived.extend((len(shp),) + tuple(shp))
         _, flat = _byte_lm_params(cfg)
         m = ml.LanguageModelInference(flat, shape=cfg, threaded=False)
+        profiles.append(str(m.profile))
         ids = _ids(X, cfg.batch, cfg.length + 1, vocab=cfg.vocab_size)
         logits.append(np.asarray(m.logits(ids[:, :-1])).reshape(-1))
         losses.append(np.uint32(m.loss_bits(ids)))
@@ -2765,7 +3565,8 @@ def _(ml, X, yc, yr, Xh=None):
         # `require_shape` and `state_shape` are held there too: they are not
         # on the public surface, so they are a test and not a cell.
         ml.LanguageModelConfig is ml.ByteLanguageModelConfig,
-        default.profile == str(B.byte_lm_config_profile(list(default.native_shape))),
+        default.profile == str(ml.LanguageModelInference(_byte_lm_params(default)[1], shape=default,
+                                                          threaded=False).profile),
         _refused(lambda: ml.LanguageModelInference(np.zeros(3, dtype=np.float32),
                                                    shape=ml.LanguageModelConfig(**LM_CONFIG_SHAPES[0])),
                  "parameters must be float32"),
@@ -2790,7 +3591,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -2804,7 +3605,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
-    blk = ml.Mamba2Block(w)
+    blk = _built(ml.Mamba2Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
 
@@ -2821,10 +3622,10 @@ def _(ml, X, yc, yr, Xh=None):
         # B_norm and C_norm are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("B_norm.weight", "C_norm.weight"))
-    blk = ml.Mamba3Block(w)
+    blk = _built(ml.Mamba3Block(w), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), {})
     # Mamba3Block.session_info -> mamba_public_native.mojo:mamba3_session_info ->
-    # mamba3_prefill_session_info: the counters of the device prefill session the
+    # the session's info operation (op 45 on its registry handle): the counters of the device prefill session the
     # stateless forward above opened. The host column opens none (None there), so
     # the dict is checked, not hashed, and the lane's bits stay the same.
     info = blk.session_info()
@@ -2846,7 +3647,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -2871,7 +3672,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
             "down_proj.weight": (dm, it)},
             near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-        blk = ml.TransformerBlock(ml.lowbit.pack(w, fmt), n_heads=nh, n_kv_heads=nkv)
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.TransformerBlock(wp, n_heads=nh, n_kv_heads=nkv), weights=wp)
         state_kw = dict(max_tokens=32)
     elif base == "mamba1":
         dm, di, r = 32, 64, 2
@@ -2880,7 +3682,8 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
             "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
             ones=("norm.weight",))
-        blk = ml.Mamba1Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba1Block(wp), weights=wp)
         state_kw = {}
     elif base == "mamba2":
         dm, di, nh = 32, 64, 1                      # the mamba2 lane's dims
@@ -2890,17 +3693,26 @@ def _lowbit_block_lane(ml, X, Xh, base, fmt):
             "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
             "out_proj.weight": (dm, di)},
             ones=("block_norm.weight", "norm.weight"))
-        blk = ml.Mamba2Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba2Block(wp), weights=wp)
         state_kw = {}
     else:
         dm = 32
         di = 2 * dm
         w = _block_weights(base, _mamba3_shapes(dm, di), ones=("block_norm.weight",),
                            near_one=("B_norm.weight", "C_norm.weight"))
-        blk = ml.Mamba3Block(ml.lowbit.pack(w, fmt))
+        wp = ml.lowbit.pack(w, fmt)
+        blk = _built(ml.Mamba3Block(wp), weights=wp)
         state_kw = {}
     assert blk.weight_format == fmt, (base, fmt, blk.weight_format)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), state_kw)
+    if base != "transformer":
+        # The mamba low-bit lanes are NEURAL_PUBLIC_LANES: the probe is handed
+        # `_public_est(name, blk)`, already the public inference class on a CPU
+        # column (built from the `_built` weights), so it is asked directly,
+        # as the base mamba lanes do. Wrapping it a second time asked
+        # `_built_args` of an inference object `_built` never saw.
+        return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, base, e).forward(_seq(Xh, 2, 16, dm))),))
 
 
@@ -3080,6 +3892,10 @@ def _lane_refuses(fn, text):
 
 
 @lane("saved-model-host-infer")
+@floor(rows=(4096, "4096 rows are the rows the host readers were already asked to predict, and they "
+                   "still let a depth-8 forest and a depth-6 GBDT grow full depth; the lane checks the "
+                   "saved-model readers, not the builders. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes; no smaller fit measured."))
 def _(ml, X, yc, yr, Xh=None):
     """THE PUBLIC SAVED-MODEL CPU INFERENCE SURFACE by its own names:
     `mojolearn.HostForest`, `mojolearn.HostGBDT`, `mojolearn.host_predict`
@@ -3108,8 +3924,8 @@ def _(ml, X, yc, yr, Xh=None):
     `gbdt-symmetric` lane's GradientBoosting and a RandomForestRegressor
     saved with `inference_engine="parallel_groves"`, each written with
     `save` and read back with `HostForest.from_file` / `HostGBDT.from_file`.
-    Same fits, same fixture, so a cell here and the cell in those lanes are
-    the same arithmetic reached two ways.
+    The same estimator parameters as those lanes, fitted on the fixture's
+    first 4096 rows (2026-11-05; until then the full fixture).
 
     THE PARTS. `rf`, `gbdt` and `groves` are the host predictions (and the
     two probability columns) on training rows. `sha` is each host model's
@@ -3141,12 +3957,19 @@ def _(ml, X, yc, yr, Xh=None):
     the clean value. `sha` does not move under either, and that is correct:
     it hashes the ARCHIVE the estimator wrote, which the host binding only
     reads."""
-    rows = np.ascontiguousarray(X[:4096])
+    # The three fits on 4096 rows, not 20000 (2026-11-05,
+    # lane/slow-verification-lanes): the host predictions were already asked
+    # on X[:4096], and this lane checks the saved-model READERS, not the
+    # builders (the rf-clf and gbdt-symmetric lanes fit the full fixture).
+    # Depth 8 needs at most 256 leaves, so 4096 rows still fill both forests'
+    # depth; the groves engine's 32 fixed groups do not depend on rows.
+    rows = 4096                                  # FLOORED, see @floor above
+    Xr = np.ascontiguousarray(X[:rows])
     held = np.ascontiguousarray(Xh[:512])
-    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(Xr, yc[:rows])
+    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(Xr, yc[:rows])
     gr = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
-                                  inference_engine="parallel_groves").fit(X, yr)
+                                  inference_engine="parallel_groves").fit(Xr, yr[:rows])
     with tempfile.TemporaryDirectory(prefix="ib-saved-model-host-") as d:
         paths = {}
         for tag, est in (("rf", rf), ("gbdt", gb), ("groves", gr)):
@@ -3190,9 +4013,9 @@ def _(ml, X, yc, yr, Xh=None):
     ], dtype=np.int64)
     shas = np.frombuffer(b"".join(bytes.fromhex(m.model_sha256())
                                   for m in (hrf, hgb, hgr)), dtype=np.uint8)
-    return _fit(dict(rf=_h(np.asarray(hrf.predict(rows)), np.asarray(hrf.predict_proba(rows))),
-                     gbdt=_h(np.asarray(hgb.predict(rows)), np.asarray(hgb.predict_proba(rows))),
-                     groves=_h(np.asarray(hgr.predict(rows))),
+    return _fit(dict(rf=_h(np.asarray(hrf.predict(Xr)), np.asarray(hrf.predict_proba(Xr))),
+                     gbdt=_h(np.asarray(hgb.predict(Xr)), np.asarray(hgb.predict_proba(Xr))),
+                     groves=_h(np.asarray(hgr.predict(Xr))),
                      sha=_h(shas), flags=_h(flags)),
                 hrf, lambda e: (np.asarray(e.predict(held)), np.asarray(e.predict_proba(held)),
                                 np.asarray(hgb.predict(held)), np.asarray(hgb.predict_proba(held)),
@@ -3219,13 +4042,22 @@ def _lowbit_operands(A):
 # host fallback until pyglue-sweep (2026-10-03) made the conversion Mojo only;
 # the oracle stays here, in the harness, so `lowbit-conversions` still checks
 # the compiled seam against an independent construction and never NumPy.
+# Infinity and its test without a math module (the wheel's audit refuses
+# platform math, and the product's `_portable_math` is not the harness's to
+# import): `x == x and x - x != 0.0` is true exactly for an infinity.
+_LB_INF = float("inf")
+
+
+def _lb_isinf(v):
+    return v == v and v - v != 0.0
+
+
 def _lbpy_f32(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     try:
         return struct.unpack("<f", struct.pack("<f", v))[0]
     except OverflowError:
-        return math.inf if v > 0 else -math.inf
+        return _LB_INF if v > 0 else -_LB_INF
 
 
 def _lbpy_ftz_bits(x):
@@ -3235,19 +4067,21 @@ def _lbpy_ftz_bits(x):
 
 
 def _lbpy_ftz(v):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
-    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
-        return math.copysign(0.0, v)
+    # v is a nonzero subnormal here, so its sign is `v < 0`
+    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not _lb_isinf(v) and v == v:
+        return -0.0 if v < 0.0 else 0.0
     return v
 
 
 def _lbpy_pow2_f32(e):
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     if e > 127:
-        return math.inf
+        return _LB_INF
     if e < -126:
         return 0.0
-    return math.ldexp(1.0, e)
+    # Exact powers of two from Python ints (2**-126 is a normal double, so the
+    # division is exact); `_portable_math.ldexp` was deleted by 3db84bb031 and
+    # the lowbit-conversions lane raised AttributeError (smoke-triage 2026-11-15).
+    return float(1 << e) if e >= 0 else 1.0 / float(1 << -e)
 
 
 def _lbpy_to_bf16(a):
@@ -3271,7 +4105,6 @@ def _lbpy_from_bf16(bits):
 
 def _lbpy_quantize_int8(a):
     """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905)."""
-    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     a = np.ascontiguousarray(a, dtype=np.float32)
     rows, cols = a.shape
@@ -3289,7 +4122,7 @@ def _lbpy_quantize_int8(a):
         if best == 0.0 or best != best:
             e = 0
         else:
-            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not math.isinf(best) else 0x7F800000
+            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not _lb_isinf(best) else 0x7F800000
             e = (((bits >> 23) & 0xFF) - 127) - 6
         exps[r] = e
         scale = _lbpy_pow2_f32(-e)
@@ -3300,7 +4133,7 @@ def _lbpy_quantize_int8(a):
             s = _lbpy_ftz(_lbpy_f32(x * scale))
             if s != s:
                 continue
-            if math.isinf(s):
+            if _lb_isinf(s):
                 rr = 127.0 if s > 0 else -127.0
             else:
                 rr = float(round(s))
@@ -3603,8 +4436,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("rf-reg-gamma-ig")
+@floor(rows=(2048, "2048 rows still let both depth-8 forests reach 256 leaves and keep every node's "
+                   "histogram multi-block (1 + batch + rows / TPB_DEFAULT blocks, ensemble/decisiontree/"
+                   "batched_levelalgo/builder.mojo:757); the identical route has no row gate. Set "
+                   "2026-11-05 on lane/slow-verification-lanes, near the measured 1500 rf floors."))
 def _(ml, X, yc, yr, Xh=None):
     """Two fits, gamma and inverse gaussian, on a strictly positive target."""
+    # 2048 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # two criteria are the point, and the host column's fit is linear in rows.
+    rows = 2048                                  # FLOORED, see @floor above
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim
     y = _pos(yr)
     g = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7, criterion="gamma").fit(X, y)
     i = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
@@ -3633,8 +4474,16 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass")
 def _(ml, X, yc, yr, Xh=None):
     """MultiClass with class weights on the three-class target."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     t = _three_class_centered(X)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass",
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClass",
                             class_weights=[1.0, 2.0, 0.5]).fit(X, t)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3642,7 +4491,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-onevsall")
 def _(ml, X, yc, yr, Xh=None):
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. All three median-split classes stay
+    # present on every prefix. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3650,11 +4507,19 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-multiclass-defaults")
 def _(ml, X, yc, yr, Xh=None):
     """Public multiclass defaults: Bayesian bootstrap and random strength one."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. Eight trees still carry eight
+    # bootstraps and the noise's model-length decay. 4000 rows keep the root
+    # leaf above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder
+    # arms) and two BK_CHUNK 2048 partials, the second ragged
+    # (bin_keyed_stats.mojo:62); the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X = X[:rows]
     target = _three_class_centered(X)
     parts = {}
     m = None
     for loss in ("MultiClass", "MultiClassOneVsAll"):
-        m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss=loss,
+        m = ml.GradientBoosting(n_estimators=trees, max_depth=6, loss=loss,
                                 class_weights=[1.0, 2.0, 0.5]).fit(X, target)
         parts[loss] = _h(m.predict(X), m.predict_proba(X))
     return _fit(parts, m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -3712,12 +4577,21 @@ def _(ml, X, yc, yr, Xh=None):
     temperature, boost from average on Logloss, an eval set with
     iteration-based early stopping and best-model truncation, and row
     weights: one symmetric fit."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. The eval set is cut to the same 4000
+    # held-out rows. 4000 rows keep the root leaf above GATHER_INPLACE_SIZE 1024
+    # (split_points.mojo:829, both reorder arms) and two BK_CHUNK 2048 partials,
+    # the second ragged (bin_keyed_stats.mojo:62); the tree count is not what
+    # this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
     w = _hw((X.shape[0],), "gbdt-eval:sample_weight", 0.5, 1.5)
-    ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
+    ych = labels_for(Xh, HELDOUT_SEED)[0][:rows]
+    Xe = Xh[:rows]
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="Logloss", score_function="L2",
                             use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
                             boost_from_average=True, od_type="Iter", od_wait=5, use_best_model=True
-                            ).fit(X, yc, sample_weight=w, eval_set=(Xh, ych))
+                            ).fit(X, yc, sample_weight=w, eval_set=(Xe, ych))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -3844,16 +4718,12 @@ def _ctr_saved_or_fit(ml, fit):
         if not path or not os.path.isfile(path):
             raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
                                f"directory of this lane's GPU-saved models (no {path})")
-        from mojolearn._forest_host import binary_path, host_model
-        est = host_model(path)
+        est = ml.host_model(path)
         # the train and batch cells predict through this object, so it takes
         # _probe_fit_host's guard: a forest binding loaded earlier under the
         # shared module name (host_record reads MOJOLEARN_HOST_DIR) is not the
         # MOJOLEARN_FOREST_HOST_BINARY asked for
-        bound = getattr(getattr(est, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        _require_named_forest_binding(ml)
         est.identity_saved_path = path
         return est
     est = fit()
@@ -3929,7 +4799,14 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The sklearn-style classifier adapter, the only caller of the binary
     probability and class entries. It refuses save, so no model column."""
-    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X, yc)
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows x 20 trees -> 4000 x 8. 4000 rows keep the root leaf above
+    # GATHER_INPLACE_SIZE 1024 (split_points.mojo:829, both reorder arms) and
+    # two BK_CHUNK 2048 partials, the second ragged (bin_keyed_stats.mojo:62);
+    # the tree count is not what this lane checks.
+    rows, trees = 4000, 8
+    X, yc = X[:rows], yc[:rows]
+    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=trees, max_depth=6).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      decision=_h(m.decision_function(X[:512]))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
@@ -4045,9 +4922,17 @@ def _(ml, X, yc, yr, Xh=None):
     column refuses sample_weight on every loss. YetiRank has no loss value
     (the target writes 0), so `loss_curve_` is hashed only to pin that.
     Predict is row-wise, so the held-out probe and the batch part apply."""
+    # 2026-11-05 (lane/slow-verification-lanes, "fixtures should be small"):
+    # 20000 rows -> 4000 and the main fit's 20 trees -> 8. 4000 rows carry about
+    # 465 of the uneven RANK_QUERY_SIZES queries (gbdt-pair-logit's floor
+    # measured 178 at 1500 still mixing every grade) and keep the root leaf
+    # above GATHER_INPLACE_SIZE 1024 (split_points.mojo:829). The seeded fit
+    # keeps its 8 depth-4 trees.
+    rows, trees = 4000, 8
+    X, yr = X[:rows], yr[:rows]
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    m = _gbdt(ml.GradientBoosting, n_estimators=trees, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
     e = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
         X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
@@ -4187,7 +5072,7 @@ def _(ml, X, yc, yr, Xh=None):
         "out_proj.weight": (dm, di)},
         ones=("block_norm.weight", "norm.weight"))
     seqlen = 8                                   # FLOORED, see @floor above
-    blk = ml.Mamba2Block(w, dt_limit=(0.5, 0.9))
+    blk = _built(ml.Mamba2Block(w, dt_limit=(0.5, 0.9)), weights=w)
     parts = _block_fit(blk, _seq(X, 2, seqlen, dm), _seq(X, 2, seqlen, dm, skip=1024), {})
     return _fit(parts, blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, seqlen, dm))),))
 
@@ -4205,7 +5090,7 @@ def _(ml, X, yc, yr, Xh=None):
         # the two layernorms are the same shape; at ones they were bitwise
         # equal and a swap of them was invisible (2026-09-16, lane/dead-arms)
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv, window=8), weights=w)
     parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), dict(max_tokens=32))
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer-window", e).forward(_seq(Xh, 2, 16, dm))),))
 
@@ -4259,7 +5144,7 @@ def _(ml, X, yc, yr, Xh=None):
     # named, never a quiet hash.
     s = ml.SmallByteLanguageModelTrainer(_byte_lm_params(shape)[0],
                                          data_schedule={"dataset": "identity_break", "order": "sequential"},
-                                         shape=shape)
+                                         shape=shape, step_result="full")
     for k in range(steps):
         stateless = s.train_step(ids[2 * k:2 * k + 2])
     _same_bytes("resident export_gradients()['flat_gradients']", flat,
@@ -4278,7 +5163,8 @@ def _(ml, X, yc, yr, Xh=None):
     fold's combine is exercised on every box the same way."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2)
+    m = _built(ml.LanguageModelInference(flat, shape=shape, threaded=True, threads=2),
+               parameters=flat, threaded=True, threads=2)
     ids = _ids(X, shape.batch, shape.length + 1)
     return _fit(dict(loss_bits=_h(np.uint32(m.loss_bits(ids))), logits=_h(np.asarray(m.logits(ids[:, :-1]))),
                      next=_h(np.asarray(m.next_bytes(ids[:, :-1])))),
@@ -4428,9 +5314,19 @@ def _(ml, X, yc, yr, Xh=None):
 # -- classical
 
 @lane("kmeans-random")
+@floor(rows=(8192, "8192 is the smallest fit that keeps the GPU centroid update on the privatized "
+                   "accumulators: the per-cluster weight sum takes that arm only at n_samples >= "
+                   "PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:102, :511). Chosen by "
+                   "reading that guard on 2026-11-05 (lane/slow-verification-lanes), not by a sweep."))
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X, Xh))
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # random init, the three restarts and both accumulation arms are the
+    # same; the host oracle's cost is linear in rows, so the CPU column
+    # drops about 2.4x. predict(X) in the probe is held to labels_ on the
+    # same 8192 rows.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, init="random", n_init=3, random_state=3).fit(X[:rows])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_)), m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-array")
@@ -4454,9 +5350,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("dbscan-weighted")
+@floor(rows=(2000, "2000 rows keeps one adjacency batch on every device (dbscan/impl/dbscan.mojo:159, the "
+                   "budget gives far more rows than this), and at eps=0.9 in four columns the weighted "
+                   "fit still has core, border and noise points. Chosen 2026-11-05 on "
+                   "lane/slow-verification-lanes from that reading; not measured below."))
 def _(ml, X, yc, yr, Xh=None):
-    w = _hw((6000,), "dbscan:sample_weight", 0.5, 1.5)
-    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:6000, :4], sample_weight=w)
+    # 2000 rows, not 6000 (2026-11-05, lane/slow-verification-lanes): the
+    # brute adjacency is quadratic in rows, which was 1.1 s a cell on the M4.
+    # The weights are a fresh _hw draw of length rows (the stream is keyed on
+    # the length, so they are not the old 6000's prefix).
+    rows = 2000                                  # FLOORED, see @floor above
+    w = _hw((rows,), "dbscan:sample_weight", 0.5, 1.5)
+    m = ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True).fit(X[:rows, :4], sample_weight=w)
     return _fit(dict(labels=_h(m.labels_)), m, lambda e: (e.predict(Xh[:256, :4]),))
 
 
@@ -4786,11 +5691,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-seasonal-c")
+@floor(observations=(128, "128 observations are 32 periods of the seasonal 4, ample for the seasonal AR start "
+                          "and the rd = 5 Kalman recursion this lane hashes; the identical-mode filter walks "
+                          "every step on one thread per series, so its cost is linear in them. Chosen "
+                          "2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """A seasonal AR block (period 4, so rd = 5 stays inside the
     implemented Kalman kernel; period 12 is refused by name at rd = 13)
     and an explicit intercept."""
-    series = np.ascontiguousarray(X[:512, :4].T)
+    # 128 observations, not 512 (2026-11-05, lane/slow-verification-lanes).
+    # The steady-state chunked scan (arima/impl/fast_kalman_scan.mojo) is
+    # FAST only; identical runs the serial per-series loop at any length.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
     m = ml.ARIMA(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c").fit(series)
     return _fit(dict(ar=_h(m.ar_), sar=_h(m.sar_), mu=_h(m.mu_), sigma2=_h(m.sigma2_), forecast=_h(m.forecast(24))),
                 m, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
@@ -4848,13 +5761,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("arima-exog-seasonal")
+@floor(observations=(128, "128 observations keep 32 periods of the seasonal 4 and 127 differenced steps for "
+                          "the least-squares beta start, the regressors' differencing and the rd = 6 Kalman "
+                          "walk, whose identical-mode cost is linear in steps (19.5 s on the MI300X at 512). "
+                          "Set 2026-11-05 on lane/slow-verification-lanes; nothing below 128 measured."))
 def _(ml, X, yc, yr, Xh=None):
     """Differenced, seasonal, with two regressors (lane/arima-exog,
     2026-09-15): ARIMA(1, 1, 0)(1, 0, 0)_4, so the regressors are differenced
     beside y, their future values are differenced against their past
     (prepare_future_data) and the forecast is undifferenced after the
     observation intercept; rd = 6, r = 5, the implemented Kalman arms."""
-    series, exog, fut24 = _arima_exog_inputs(X)
+    # 128 observations, not the arima-exog lane's 512 (2026-11-05,
+    # lane/slow-verification-lanes): the same layout as _arima_exog_inputs,
+    # built here so arima-exog keeps its inputs. The forecast regressors are
+    # the 24 rows after the training ones, so no train cell reads Xh.
+    observations = 128                           # FLOORED, see @floor above
+    series = np.ascontiguousarray(X[:observations, :4].T)
+    exog = _arima_exog_block(X[:observations], observations)
+    fut24 = _arima_exog_block(X[observations:], 24)
     m = ml.ARIMA(order=(1, 1, 0), seasonal_order=(1, 0, 0, 4)).fit(series, exog)
     return _fit(dict(beta=_h(m.beta_), ar=_h(m.ar_), sar=_h(m.sar_), sigma2=_h(m.sigma2_),
                      forecast=_h(m.forecast(24, exog=fut24))),
@@ -4885,7 +5809,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
     mean, std = m.predict(X[256:320, :4], return_std=True)
     return _fit(dict(alpha=_h(m.alpha_), L=_h(m.L_), lml=_h(np.float64(m.log_marginal_likelihood_value_)),
-                     y_stats=_h(np.float32([m._y_train_mean, m._y_train_std])),
+                     y_stats=_h(_saved_fields(m, "reals")[0][1:3].astype(np.float32)),
                      mean=_h(mean), std=_h(std)),
                 m, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
@@ -4925,9 +5849,9 @@ def _gp_optimize_lane(restarts):
             m = ml.GaussianProcessRegressor(kernel=k, optimizer="fmin_l_bfgs_b")
         m.fit(X[:64, :4], yr[:64])
         mean, std = m.predict(X[64:128, :4], return_std=True)
-        runs = m._optimizer_runs
+        runs = m.optimizer_runs_
         return _fit(dict(theta=_h(np.array(m.kernel_.theta, dtype=np.float64)),
-                         params=_h(np.array(m.kernel_._free_values(), dtype=np.float64)),
+                         params=_h(*_saved_fields(m, "params", "ls")),
                          runs=_h(np.array([[r[0], r[1]] for r in runs], dtype=np.int64),
                                  np.array([r[3] for r in runs], dtype=np.float64)),
                          lml=_h(np.float64(m.log_marginal_likelihood_value_)),
@@ -5032,13 +5956,27 @@ def _(ml, X, yc, yr, Xh=None):
     deficient (a duplicated column), so its smallest singular value is an
     exact zero and the sort has a tie at the bottom; the third is scaled by
     a power of two, which changes every exponent and no mantissa, so the
-    values must scale exactly and the ORDER must not move at all."""
+    values must scale exactly and the ORDER must not move at all. The
+    fourth has constant columns next to large-scale ones (istella's 21
+    constant features): numerically null directions beside a huge one, the
+    input the one-sided Jacobi refused before fix-svdvals-jacobi."""
     a = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
     dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
     scaled = np.ascontiguousarray(a * np.float32(0.125))
     return _fit(dict(generic=_h(ml.linalg.svdvals(a)),
                      rank_deficient=_h(ml.linalg.svdvals(dup)),
-                     scaled=_h(ml.linalg.svdvals(scaled))))
+                     scaled=_h(ml.linalg.svdvals(scaled)),
+                     constant_columns=_h(ml.linalg.svdvals(_svdvals_constant_columns(X)))))
+
+
+def _svdvals_constant_columns(X):
+    """64 x 10 float32: four data columns, two of them scaled by 1e4, and
+    six constant columns (four parallel nonzero ones and two zero ones), so
+    R carries null directions beside columns of squared norm ~1e10."""
+    base = np.asarray(X[:64, :4], dtype=np.float32)
+    big = base * np.asarray([1e4, 1.0, 1e4, 1.0], dtype=np.float32)
+    const = np.asarray([1.0, 3.0, 0.0, 250.0, 0.0, 7.5], dtype=np.float32)
+    return np.ascontiguousarray(np.hstack([big, np.broadcast_to(const, (64, 6))]).astype(np.float32))
 
 
 @lane("metrics-classification")
@@ -5143,7 +6081,7 @@ def _(ml, X, yc, yr, Xh=None):
     of X viewed as bytes (the byte-lm lane's derivation without _ids'
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
     held-out probe encodes Xh's first 4,096 bytes."""
-    tok = ml.tokenizer.BpeTokenizer._synthetic()
+    tok = _synthetic_bpe(ml)
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
@@ -5310,7 +6248,7 @@ def _(ml, X, yc, yr, Xh=None):
         schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
         ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
         try:
-            LC.require_vocabulary(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            LC.require_vocabulary(b.data_schedule(), _synthetic_bpe(ml))
             refused = 0
         except ValueError as exc:
             refused = int("vocabulary mismatch" in str(exc))
@@ -5600,7 +6538,7 @@ def _(ml, X, yc, yr, Xh=None):
             os.remove(os.path.join(loose, st.INDEX_NAME))
             bad = os.path.join(d, "bad")
             os.makedirs(bad, exist_ok=True)
-            badfile = st.write_safetensors(os.path.join(bad, "x.safetensors"),
+            badfile = fx.write_safetensors(os.path.join(bad, "x.safetensors"),
                                            {"t.f64": ("F64", (4,), b"\0" * 32)})
             flags = np.asarray([
                 dtypes.tobytes() == sharded_bytes.tobytes(),
@@ -5758,7 +6696,8 @@ def _(ml, X, yc, yr, Xh=None):
     decoded = np.frombuffer(gpt2.decode_bytes(ids["gpt2"].tolist()), dtype=np.uint8)
     cut = tk.pretokenize(text, "gpt2")
     pieces = [text[a:b] for a, b in zip(cut, cut[1:])]
-    spelled = ml.tokenizer._byte_to_char()
+    from mojolearn._tokenizer_synthetic import byte_to_char
+    spelled = byte_to_char()
     eot, eot_id = "<|endoftext|>", len(tokens)
 
     def spell(bs):
@@ -6056,10 +6995,17 @@ def _(ml, X, yc, yr, Xh=None):
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
         for splits in (3, 5):
-            # the runtime route (the core helpers, the sabotage control
-            # included; lane py-runtime-b moved the Python definition to
-            # mojolearn/tests/_fold_reference.py)
-            folds = [(a.tolist(), b.tolist()) for a, b in ms._default_fold_arrays(labels, splits, clf)]
+            # the product's route: cross_val_score's default folds for
+            # cv=None or an integer are bindings/msel_split_door.mojo
+            # `msel_default_folds` (the core fold helpers, the sabotage
+            # control included), which the public
+            # `model_selection.default_folds` returns: the native owner's
+            # `family_msel_default_folds` operation, the same function
+            # msel_fold_source calls (the Python definition the fold tests
+            # hold it to stays mojolearn/tests/_fold_reference.py). Not
+            # `check_cv(...).split`: that is StratifiedKFold's split, a
+            # different assignment without the msel sabotage arm.
+            folds = [(a.tolist(), b.tolist()) for a, b in ms.default_folds(labels, splits, classifier=clf)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))
@@ -6130,7 +7076,7 @@ def _(ml, X, yc, yr, Xh=None):
     column); the string differs per column by design, so it is checked
     against the selected backend, never hashed."""
     m = ml.KernelRidge(alpha=0.1, kernel="rbf", gamma=0.5).fit(X[:256, :4], yr[:256])
-    if m.vendor_used() != ml._backend.vendor():
+    if m.vendor_used() != ml.vendor():
         raise AssertionError("KernelRidge.vendor_used disagrees with the selected backend")
     return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)), predict=_h(m.predict(X[256:320, :4]))),
                 m, lambda e: (e.predict(Xh[:64, :4]),))
@@ -6316,22 +7262,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("bootstrap")
 def _(ml, X, yc, yr, Xh=None):
-    """resample.bootstrap over the first 4096 values of yr, 2048
+    """resample.bootstrap over the first 1024 values of yr, 1024
     replicates: the Philox index map, the per-replicate folds (mean,
     std), the segmented sort (quantile), the paired two-column statistics
     (pearson, diff_means), the percentile and basic intervals and the
     standard error. Every distribution and every scalar is hashed; the
     r_first slice equality is asserted, as the surface promises it.
 
-    The two SORTED statistics (quantile, trimmed_mean) take 1024
-    replicates, 1024 * 4096 = RESAMPLE_MAX_SORT_CELLS (1 << 22,
-    resample/checks/statistics.mojo), the largest run the sort path admits;
-    at 2048 the lane read REFUSED by name on the M4 on every fixture
-    (2026-09-14 night), and the limit is a comptime constant, so it
-    refused on every vendor and the lane had no cell anywhere."""
+    The two SORTED statistics (quantile, trimmed_mean) are bounded by
+    RESAMPLE_MAX_SORT_CELLS (1 << 22, resample/checks/statistics.mojo);
+    at 2048 replicates of 4096 values the lane read REFUSED by name on
+    every vendor (2026-09-14 night). 1024 * 1024 = 1 << 20 is inside it."""
+    # 1024 values and 1024 replicates, not 4096 and 2048 (2026-11-05,
+    # lane/slow-verification-lanes). Branch reasons: each replicate's fold is
+    # one RESAMPLE_TPB = 256 block (resample/estimator.mojo:173), so 1024
+    # draws still give every thread four; the segmented sort's SORT_BLOCK is
+    # 512 (core/segmented_sort.mojo:98), so a 1024-draw replicate segment and
+    # the 1024-replicate sorted_distribution each still span two sort blocks;
+    # the r_first slice below is unchanged. The cost is n_resamples * n.
     rs = ml.resample
-    x = np.ascontiguousarray(yr[:4096])
-    two = np.ascontiguousarray(np.stack([yr[:4096], X[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yr[:1024])
+    two = np.ascontiguousarray(np.stack([yr[:1024], X[:1024, 3]], 1).astype(np.float32))
     parts = {}
     for name, kw in (("mean", dict(data=x, statistic="mean")),
                      ("std", dict(data=x, statistic="std", method="basic")),
@@ -6339,7 +7290,7 @@ def _(ml, X, yc, yr, Xh=None):
                      ("trimmed", dict(data=x, statistic="trimmed_mean", q_or_prop=0.1, alternative="greater")),
                      ("pearson", dict(data=two, statistic="pearson")),
                      ("diff", dict(data=two, statistic="diff_means", method="basic"))):
-        n_resamples = 1024 if kw["statistic"] in ("quantile", "trimmed_mean") else 2048
+        n_resamples = 1024
         b = rs.bootstrap(n_resamples=n_resamples, random_state=3, **kw)
         parts[name] = _h(b.distribution, b.sorted_distribution,
                          np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0], b.confidence_interval[1]], dtype=np.float64),
@@ -6597,6 +7548,17 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.search(Xh[:64]) + (e.n_candidates_,))
 
 
+def _ivf_copy(ml, index):
+    """An independent IVFIndex holding the same index arrays: the public
+    `save` then `IVFIndex.load` (a loaded index searches and extends, as its
+    docstring says), where the lane used the private `_clone`. An extend on
+    the copy leaves `index` as it was."""
+    with tempfile.TemporaryDirectory(prefix="ib-ivf-copy-") as d:
+        path = os.path.join(d, "index.npz")
+        index.save(path)
+        return ml.IVFIndex.load(path)
+
+
 @lane("ivf-extend")
 def _(ml, X, yc, yr, Xh=None):
     """IVFIndex.extend (python/mojolearn/_ivf_impl.py; lane/inference-embedding-
@@ -6610,8 +7572,8 @@ def _(ml, X, yc, yr, Xh=None):
     model column saves the extended index; the probe searches 64 held-out
     rows."""
     base = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:3072])
-    one = base._clone().extend(X[3072:4096])
-    two = base._clone().extend(X[3072:3584])
+    one = _ivf_copy(ml, base).extend(X[3072:4096])
+    two = _ivf_copy(ml, base).extend(X[3072:3584])
     first = np.asarray(two.extend_labels_).copy()
     two.extend(X[3584:4096])
     for name in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_"):
@@ -6645,7 +7607,7 @@ def _(ml, X, yc, yr, Xh=None):
     # through the native mode metadata; on the CPU column the host binding's
     # GPU-named exports) must name the selected backend. Checked, not hashed:
     # the vendor string differs per column by design.
-    if e.vendor_used() != ml._backend.vendor() or e.numeric_mode_used() != "identical":
+    if e.vendor_used() != ml.vendor() or e.numeric_mode_used() != "identical":
         raise AssertionError("Embedding.vendor_used/numeric_mode_used disagree with the selected backend")
     y = np.asarray(e.forward(ids))
     dw = np.asarray(e.backward(ids, dy))
@@ -6691,15 +7653,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 @lane("kmeans-sqrt")
+@floor(rows=(8192, "the sqrt-expanded fit keeps its weight-per-cluster sum on the privatized GPU arm "
+                   "only while n_samples >= PRIVATE_MIN_WORK = 8192 (cluster/checks/reduce_by_key.mojo:511); "
+                   "below it the plain arm runs. Read from that guard 2026-11-05, "
+                   "lane/slow-verification-lanes; no smaller size measured."))
 def _(ml, X, yc, yr, Xh=None):
     """metric='l2_sqrt_expanded': cuVS's L2SqrtExpanded, the root taken on
     the assignment's reduced distance (`metric_is_sqrt`, `identical_sqrt`,
     DEVIATION 2715) and so in the inertia, the row norms squared as under
     L2Expanded (DEVIATION 2716); a different inertia_ from the squared arm."""
-    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X)
+    # 8192 rows, not 20000 (2026-11-05, lane/slow-verification-lanes): the
+    # sqrt-expanded assignment and inertia are row-local, and 8192 keeps the
+    # privatized weight accumulator the 20000-row fit took.
+    rows = 8192                                  # FLOORED, see @floor above
+    m = ml.KMeans(n_clusters=8, random_state=3, metric="l2_sqrt_expanded").fit(X[:rows])
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
                      inertia=_h(np.float64(m.inertia_)), scales=_h(np.asarray([m.sum_scale_, m.weight_scale_], dtype=np.float64))),
-                m, _km_probe(X, Xh))
+                m, _km_probe(X[:rows], Xh))
 
 
 @lane("kmeans-classic-pp")
@@ -7151,7 +8121,7 @@ def _(ml, X, yc, yr, Xh=None):
         "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
-    blk = ml.Mamba1Block(w)
+    blk = _built(ml.Mamba1Block(w), weights=w)
     from mojolearn.mamba import Mamba1DecodeSession
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
@@ -7191,7 +8161,10 @@ def _(ml, X, yc, yr, Xh=None):
         for t in range(4, 8):  # glue: four steps the reload discards
             sr.step(tok(t))
         sr.load_state()
-        reload_out = np.concatenate([np.asarray(sr.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, Mamba1DecodeSession.decode -> mamba1_session_decode): byte for
+        # byte the four steps, held below to the per-call step.
+        reload_out = np.asarray(sr.decode(np.ascontiguousarray(xr[:, 8:12])))
     plain_r = blk.allocate_state(2)
     for t in range(4):  # glue: the same first four steps, per call
         blk.step(tok(t), plain_r)
@@ -7231,7 +8204,7 @@ def _(ml, X, yc, yr, Xh=None):
     and converts the KV cache between the device layout and the oracle's.
     The class now carries a HOST ARM that owns its copies of the nine (plus
     optional) weights and of the k/v caches and calls those entries in
-    `TransformerBlock._call_impl`'s own address order, options tail included.
+    `transformer_forward`'s address order, options tail included.
     The oracle is still the per-call `block.step`/`block.forward` beside it
     in the cell, and the arm makes NO speed claim.
 
@@ -7263,7 +8236,7 @@ def _(ml, X, yc, yr, Xh=None):
         "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
         "down_proj.weight": (dm, it)},
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+    blk = _built(ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv), weights=w)
 
     from mojolearn.transformer import TransformerDecodeSession
 
@@ -7328,7 +8301,7 @@ def _neural_inference(ml, lane_name, est):
         cls = dict(mamba1=ml.Mamba1BlockInference, mamba3=ml.Mamba3BlockInference).get(
             lane_name, ml.Mamba2BlockInference)
         kw = dict(dt_limit=est.dt_limit) if cls is ml.Mamba2BlockInference else {}
-        return cls(dict(zip(est._W_NAMES, est._w)), **kw)
+        return cls(_built_args(est)["weights"], **kw)
     if lane_name in ("samba", "samba-untied-dropout-accum"):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "samba.ckpt")
@@ -7338,8 +8311,12 @@ def _neural_inference(ml, lane_name, est):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "byte_lm.json")
             est.export_checkpoint(path)
-            return ml.LanguageModelInference.from_checkpoint(path)
-    return ml.TransformerBlockInference(dict(zip(est._W_NAMES, est._w)), n_heads=est.n_heads,
+            # from_checkpoint's defaults; the parameters are the trainer's
+            # public `parameters_`, held to the loaded model's
+            # parameters_sha256 where `_long_byte_lm` rebuilds from them
+            return _built(ml.LanguageModelInference.from_checkpoint(path),
+                          parameters=np.asarray(est.parameters_, dtype=np.float32), threaded=True, threads=None)
+    return ml.TransformerBlockInference(_built_args(est)["weights"], n_heads=est.n_heads,
                                         n_kv_heads=est.n_kv_heads, head_dim=est.head_dim, window=est.window)
 
 
@@ -7451,26 +8428,151 @@ def _prefix_lengths(full):
     return sorted(p for p in {1, 7, full - 1} if 1 <= p < full)
 
 
+def _first_byte_diff(x, y):
+    """Index of the first differing byte of two equal-length byte strings
+    (the caller knows they differ): one vectorised compare, the same index
+    the per-byte `next(j for j in range(len(x)) if x[j] != y[j])` gave."""
+    return int(np.flatnonzero(np.frombuffer(x, dtype=np.uint8) != np.frombuffer(y, dtype=np.uint8))[0])
+
+
+#: 1-D output kinds whose row form (`np.ascontiguousarray(a[i])`, a NumPy
+#: scalar boxed back into a (1,) array) is the element's own bytes, so the
+#: whole output's buffer IS the rows. Not here, so read row by row: the text
+#: and object kinds (refused or converted per element), and floats or complex
+#: wider than 8 / 16 bytes (long double carries padding a scalar need not keep).
+#: A 1-D bool is dense too, with the scalar's normalisation (any nonzero byte
+#: is True, boxed back as 1) applied to the whole buffer.
+_DENSE_ROW_KINDS = "biufcmM"
+
+
+class _OutRows:
+    """One output of one call in row form. DENSE: the whole C-contiguous
+    array, every row of one dtype and shape, the row bytes the rows of the
+    uint8 matrix `u` (n x row bytes). LISTED: one contiguous array per row
+    (a _PerRow output, or an array whose rows are not its buffer's rows)."""
+    __slots__ = ("dt", "shape", "u", "items")
+
+    def __init__(self, dt=None, shape=None, u=None, items=None):
+        self.dt, self.shape, self.u, self.items = dt, shape, u, items
+
+    def row(self, i):
+        if self.items is None:
+            return (self.dt, self.shape, self.u[i].tobytes())
+        v = self.items[i]
+        return (v.dtype.str, v.shape, v.tobytes())
+
+    def meta(self, i):
+        """(dtype string, row byte count) of row i."""
+        if self.items is None:
+            return self.dt, self.u.shape[1]
+        v = self.items[i]
+        return v.dtype.str, v.nbytes
+
+    def flip(self, i):
+        """The sabotage bit: the lowest bit of row i's first byte, on a copy
+        (the dense matrix may be the library's own output buffer)."""
+        if self.items is None:
+            self.u = self.u.copy()
+            self.u[i, 0] ^= 1
+        else:
+            v = self.items[i]
+            flipped = bytearray(v.tobytes())
+            flipped[0] ^= 1
+            self.items[i] = np.frombuffer(bytes(flipped), dtype=v.dtype).reshape(v.shape)
+
+
+def _listed_rows(items, k, what):
+    for v in items:
+        if v.dtype == object or v.dtype.kind in "OUSV":
+            raise TypeError(f"{what}: output {k} is dtype={v.dtype}; pass the numeric arrays")
+    return _OutRows(items=items)
+
+
+def _dense_rows(a, n, k, what):
+    """Row form of an (n, ...) array without a Python step per row, or the
+    per-row form when the array's rows are not its buffer's rows (see
+    _DENSE_ROW_KINDS). The row dtype and shape are read from row 0 as the
+    per-row form reads every row: `np.ascontiguousarray(a[i])`, so a 1-D
+    output's rows are shape (1,)."""
+    kind, size = a.dtype.kind, a.dtype.itemsize
+    if (n == 0 or kind not in _DENSE_ROW_KINDS or (kind == "f" and size > 8) or (kind == "c" and size > 16)):
+        return _listed_rows([np.ascontiguousarray(a[i]) for i in range(n)], k, what)
+    r0 = np.ascontiguousarray(a[0])
+    want = a.shape[1:] if a.ndim > 1 else (1,)
+    if r0.dtype != a.dtype or r0.dtype.str != a.dtype.str or r0.shape != want:
+        # a non-native byte order (a 1-D scalar comes back native) or any
+        # other dtype whose element is not its own row: the per-row form
+        return _listed_rows([np.ascontiguousarray(a[i]) for i in range(n)], k, what)
+    A = np.ascontiguousarray(a)
+    rb = r0.nbytes
+    if rb == 0:
+        u = np.zeros((n, 0), dtype=np.uint8)
+    else:
+        u = A.reshape(-1).view(np.uint8).reshape(n, rb)
+        if kind == "b" and a.ndim == 1:
+            # np.bool_(a[i]) boxes any nonzero byte as 1
+            u = (u != 0).view(np.uint8)
+    return _OutRows(dt=r0.dtype.str, shape=tuple(r0.shape), u=u)
+
+
+class _Rows:
+    """Per-row form of a call's outputs: `rows[i]` is row i as a list of
+    (dtype, shape, bytes) per output, the form the per-row harness built for
+    every row (`for r in rows` reads them in order). Dense outputs keep the
+    whole buffer, so building, comparing and hashing touch no row in Python;
+    `rows[i]` builds one row on demand (the mismatch message, the rows asked
+    alone)."""
+    __slots__ = ("n", "outs")
+
+    def __init__(self, n, outs):
+        self.n, self.outs = n, outs
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i):
+        if not -self.n <= i < self.n:
+            raise IndexError(i)
+        return [o.row(i % self.n) for o in self.outs]
+
+    def __iter__(self):
+        return (self[i] for i in range(self.n))
+
+    def dense(self):
+        return all(o.items is None for o in self.outs)
+
+
 def _as_rows(outputs, n, what):
-    """Per-row form of a call's outputs: a list of n rows, each a tuple of
-    (dtype, shape, bytes) per output. Refuses an output whose leading axis
+    """Per-row form of a call's outputs (a _Rows of n rows, each a list of
+    (dtype, shape, bytes) per output). Refuses an output whose leading axis
     is not the n rows, and an object or text array (as `_h` does)."""
-    rows = [[] for _ in range(n)]
+    outs = []
     for k, o in enumerate(outputs):
         if isinstance(o, _PerRow):
             if len(o) != n:
                 raise ValueError(f"{what}: output {k} has {len(o)} rows, expected {n}")
-            items = [np.ascontiguousarray(np.asarray(v)) for v in o]
+            outs.append(_listed_rows([np.ascontiguousarray(np.asarray(v)) for v in o], k, what))
         else:
             a = np.asarray(o)
             if a.ndim == 0 or a.shape[0] != n:
                 raise ValueError(f"{what}: output {k} has shape {a.shape}, expected leading axis {n}")
-            items = [np.ascontiguousarray(a[i]) for i in range(n)]
-        for i, v in enumerate(items):
-            if v.dtype == object or v.dtype.kind in "OUSV":
-                raise TypeError(f"{what}: output {k} is dtype={v.dtype}; pass the numeric arrays")
-            rows[i].append((v.dtype.str, v.shape, v.tobytes()))
-    return rows
+            outs.append(_dense_rows(a, n, k, what))
+    return _Rows(n, outs)
+
+
+def _host_outputs(outputs):
+    """A call's outputs as host arrays (`np.asarray`, which is where a lazy or
+    device result is copied down): LIBRARY work, kept inside the stage clock;
+    _as_rows, the compares and the digest after it are the harness's own."""
+    out = []
+    for o in outputs:
+        if not isinstance(o, _PerRow):
+            try:
+                o = np.asarray(o)
+            except Exception:
+                pass  # _as_rows raises it again, in output order, as before
+        out.append(o)
+    return out
 
 
 def _elem_hex(b, itemsize, e):
@@ -7485,8 +8587,7 @@ def _row_mismatch(whole, other, name_other):
             return f"output {k}: whole {dw}{list(sw)} vs {name_other} {do}{list(so)}"
         if bw != bo:
             size = np.dtype(dw).itemsize
-            first = next(j for j in range(len(bw)) if bw[j] != bo[j])
-            e = first // size
+            e = _first_byte_diff(bw, bo) // size
             return (f"output {k} element {e}: whole {_elem_hex(bw, size, e)} "
                     f"vs {name_other} {_elem_hex(bo, size, e)}")
     if len(whole) != len(other):
@@ -7494,21 +8595,73 @@ def _row_mismatch(whole, other, name_other):
     return None
 
 
+def _first_moved_row(whole, at, part):
+    """The first row i of `part` (rows `at`.. of `whole`) for which
+    `_row_mismatch(whole[at + i], part[i])` is not None, else None, with no
+    Python step per row for dense outputs: a dtype or shape difference moves
+    every row, and the bytes are compared as two uint8 matrices."""
+    m = part.n
+    if m == 0:
+        return None
+    if len(whole.outs) != len(part.outs):
+        return 0  # every row reads a differing output or the output count
+    bad = np.zeros(m, dtype=bool)
+    for W, P in zip(whole.outs, part.outs):
+        if W.items is None and P.items is None:
+            if W.dt != P.dt or W.shape != P.shape:
+                return 0
+            if W.u.shape[1]:
+                bad |= (W.u[at:at + m] != P.u).any(axis=1)
+        else:
+            # a listed output (ragged rows): the per-row compare, as before
+            for i in range(m):
+                if not bad[i] and W.row(at + i) != P.row(i):
+                    bad[i] = True
+    hit = np.flatnonzero(bad)
+    return int(hit[0]) if hit.size else None
+
+
+def _digest_rows(digest, rows):
+    """`digest.update(f"{dt}{shape}")` then `digest.update(bytes)` per row and
+    output, in row order: for dense outputs the same byte stream laid out as
+    one (rows x (header + row bytes)) matrix and hashed in one update."""
+    if not rows.dense():
+        for r in rows:
+            for dt, shape, b in r:
+                digest.update(f"{dt}{shape}".encode())
+                digest.update(b)
+        return
+    if rows.n == 0 or not rows.outs:
+        return
+    blocks = []
+    for o in rows.outs:
+        head = np.frombuffer(f"{o.dt}{o.shape}".encode(), dtype=np.uint8)
+        blk = np.empty((rows.n, head.size + o.u.shape[1]), dtype=np.uint8)
+        blk[:, :head.size] = head
+        blk[:, head.size:] = o.u
+        blocks.append(blk)
+    stream = blocks[0] if len(blocks) == 1 else np.concatenate(blocks, axis=1)
+    digest.update(np.ascontiguousarray(stream).data)
+
+
 def _sabotage_rows(rows):
     """Flip the lowest bit of the first element of the first floating output
     of the whole-batch rows (one ulp for a float; an integer output is used
     when none floats), in place. A byte flip and not `np.nextafter`, which
     on NumPy 1.x promotes a float32 scalar against a Python float to float64
-    and can round back to the same bits, and which leaves a NaN a NaN."""
+    and can round back to the same bits, and which leaves a NaN a NaN.
+    The first row, then output, that holds a byte of the kind: with dense
+    outputs only, every row has row 0's dtype and size, so row 0 decides."""
     for kinds in ("f", "iub"):
-        for r in rows:
-            for k, (dt, shape, b) in enumerate(r):
-                if np.dtype(dt).kind not in kinds or not b:
+        for i in range(rows.n):
+            for o in rows.outs:
+                dt, nb = o.meta(i)
+                if np.dtype(dt).kind not in kinds or not nb:
                     continue
-                flipped = bytearray(b)
-                flipped[0] ^= 1
-                r[k] = (dt, shape, bytes(flipped))
+                o.flip(i)
                 return
+            if rows.dense():
+                break
 
 
 def _split_bounds(n, min_batch=1):
@@ -7538,31 +8691,40 @@ def _eval_batch_rows(call, alone, sabotage, digest):
         else:
             raise RuntimeError(f"{call.label}: a batch of {mb - 1} no longer refuses ({call.refusal!r} was "
                                f"declared); the refusal was lifted, so drop min_batch and ask rows alone")
-    whole = _as_rows(call.fn(np.ascontiguousarray(call.R)), n, f"{call.label} whole")
-    if sabotage:
-        _sabotage_rows(whole)
+    # The library calls and their `np.asarray` run on the stage clock; the
+    # row form, the compares and the digest run under _harness_work, which
+    # CellTimer books to `<stage>-harness` (HARNESS_TIMING_VERSION 2).
+    out = _host_outputs(call.fn(np.ascontiguousarray(call.R)))
+    with _harness_work():
+        whole = _as_rows(out, n, f"{call.label} whole")
+        if sabotage:
+            _sabotage_rows(whole)
     for i in range(min(alone, n)):
         a = min(i, n - mb)
-        one = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + mb])), mb,
-                       f"{call.label} row {i} alone" if mb == 1 else f"{call.label} rows [{a},{a + mb})")
-        where = "alone" if mb == 1 else f"in a batch of {mb}"
-        m = _row_mismatch(whole[i], one[i - a], where)
+        out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:a + mb])))
+        with _harness_work():
+            one = _as_rows(out, mb, f"{call.label} row {i} alone" if mb == 1 else f"{call.label} rows [{a},{a + mb})")
+            where = "alone" if mb == 1 else f"in a batch of {mb}"
+            m = _row_mismatch(whole[i], one[i - a], where)
         if m:
             return f"BATCH_MOVED:{call.label}:row {i} of {n} {where}:{m}"
     bounds = _split_bounds(n, mb)
     got = []
     for a, b in zip(bounds, bounds[1:]):
-        got.extend(_as_rows(call.fn(np.ascontiguousarray(call.R[a:b])), b - a, f"{call.label} chunk [{a},{b})"))
+        out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:b])))
+        with _harness_work():
+            got.append((a, _as_rows(out, b - a, f"{call.label} chunk [{a},{b})")))
     split_name = "split " + ",".join(str(b - a) for a, b in zip(bounds, bounds[1:]))
-    for i in range(n):
-        m = _row_mismatch(whole[i], got[i], split_name)
-        if m:
-            return f"BATCH_MOVED:{call.label}:row {i} of {n} in {split_name}:{m}"
-    digest.update((f"rows:{call.label}:{n}" + (f":min_batch={mb}" if mb > 1 else "")).encode())
-    for r in whole:
-        for dt, shape, b in r:
-            digest.update(f"{dt}{shape}".encode())
-            digest.update(b)
+    with _harness_work():
+        # the chunks in row order: the first moved row of the first chunk
+        # holding one is the first row the per-row walk reported
+        for a, part in got:
+            i = _first_moved_row(whole, a, part)
+            if i is not None:
+                m = _row_mismatch(whole[a + i], part[i], split_name)
+                return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in {split_name}:{m}"
+        digest.update((f"rows:{call.label}:{n}" + (f":min_batch={mb}" if mb > 1 else "")).encode())
+        _digest_rows(digest, whole)
     return None
 
 
@@ -7592,7 +8754,7 @@ def _eval_batch_prefix(call, sabotage, digest):
             wb, pb = want.tobytes(), P.tobytes()
             if wb != pb:
                 size = want.dtype.itemsize
-                e = next(j for j in range(len(wb)) if wb[j] != pb[j]) // size
+                e = _first_byte_diff(wb, pb) // size
                 idx = np.unravel_index(e, want.shape)
                 pos = int(idx[call.axis])
                 return (f"{where}:position {pos} output {k} element {e}: whole {_elem_hex(wb, size, e)} "
@@ -7683,13 +8845,22 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-catboost-defaults", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
-_batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")
+# 2026-11-05 (lane/slow-verification-lanes): gbdt-binary-columns and
+# gbdt-adapter-clf ask the first 2048 held-out rows rather than all 20000.
+# The harness's per-row compare is Python over every row, and 2048 rows are
+# still several thread blocks at any block size up to 1024, the 1/7/rest
+# split and the 16 rows alone; a derived input is still cut ONCE from the
+# whole held-out slice (`prep(Xh)[sl]`). gbdt-categorical-ctr-tables keeps
+# its whole slice: its CPU role reads checked-in GPU-saved models.
+_GBDT_BATCH_ROWS = slice(0, 2048)
+_batch_decl(_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS, prep=_gbdt_binary_columns),
+            "gbdt-binary-columns")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
-    return (_rows_calls("predict", "predict_proba")(ml, e, Xh)
+    return (_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS)(ml, e, Xh)
             + _rows_calls("decision_function", sl=slice(0, 512))(ml, e, Xh))
 
 
@@ -7703,8 +8874,12 @@ def _batch_iforest(ml, e, Xh):
 
 _batch_decl(_batch_iforest, "iforest", "iforest-tuned")
 
-_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
-            "kmeans-sqrt", "kmeans-classic-pp")
+_batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-array", "kmeans-weighted",
+            "kmeans-classic-pp")
+# The same two calls on 2048 held-out rows (2026-11-05, lane/slow-verification-lanes):
+# the assignment is row-local, so the whole/alone/split protocol is unchanged and
+# the host column stops scoring 20000 rows three times per call.
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 2048)), "kmeans-random", "kmeans-sqrt")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
 #   DBSCAN and AgglomerativeClustering are NOT transductive since
@@ -7985,16 +9160,18 @@ def _range_rows(label, n, fn, min_batch=1, refusal=None):
 BOOTSTRAP_ONE_REFUSAL = "the standard error needs at least 2 resamples"
 
 
-def _batch_resample_inputs(Xh):
+def _batch_resample_inputs(Xh, values=4096):
     """The bootstrap and permutation-test lanes' inputs, derived from the
-    held-out rows by the same rules (labels_for's targets): yr's first 4096
-    values, yr paired with column 3, and the two label groups' first 512
-    rows (the lane's fallback when a group is short). Column 3 alone is
+    held-out rows by the same rules (labels_for's targets): yr's first
+    `values` values, yr paired with column 3, and the two label groups' first
+    512 rows (the lane's fallback when a group is short). Column 3 alone is
     constant over the first 1024 denormal rows, where pearson refuses by
-    name; the lane's pairing is not."""
+    name; the lane's pairing is not. `values` is the lane's own sample size:
+    the bootstrap lane passes 1024 (2026-11-05, lane/slow-verification-lanes),
+    the permutation-test lane keeps the default."""
     ych, yrh = labels_for(Xh, HELDOUT_SEED)
-    x = np.ascontiguousarray(yrh[:4096]).astype(np.float32)
-    two = np.ascontiguousarray(np.stack([yrh[:4096], Xh[:4096, 3]], 1).astype(np.float32))
+    x = np.ascontiguousarray(yrh[:values]).astype(np.float32)
+    two = np.ascontiguousarray(np.stack([yrh[:values], Xh[:values, 3]], 1).astype(np.float32))
     a = np.ascontiguousarray(yrh[:4096][ych[:4096] == 0][:512])
     b = np.ascontiguousarray(yrh[:4096][ych[:4096] == 1][:512])
     if a.size < 8 or b.size < 8:
@@ -8010,7 +9187,7 @@ BATCH_BOOTSTRAP_ARMS = (("mean", dict(statistic="mean")), ("std", dict(statistic
                         ("pearson", dict(statistic="pearson")), ("diff_means", dict(statistic="diff_means")))
 
 
-def _batch_resample(bootstrap, permutation_test, prefix=""):
+def _batch_resample(bootstrap, permutation_test, prefix="", values=4096):
     """resample's own batch-invariance handle (python/mojolearn/resample.py
     module docstring: "replicates [r_first, r_first + n_resamples) of one run
     are bit-identical to the corresponding slice of a whole run"): replicate
@@ -8019,7 +9196,7 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
     The point estimate, interval, standard error and p-value are reductions
     over the run and are not asked."""
     def spec(ml, e, Xh):
-        x, two, a, b = _batch_resample_inputs(Xh)
+        x, two, a, b = _batch_resample_inputs(Xh, values)
         calls = []
         for name, kw in BATCH_BOOTSTRAP_ARMS:
             data = two if kw["statistic"] in ("pearson", "diff_means") else x
@@ -8037,7 +9214,9 @@ def _batch_resample(bootstrap, permutation_test, prefix=""):
 
 
 def _batch_bootstrap_lane(ml, e, Xh):
-    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test)(ml, e, Xh)[:-1]
+    # 1024 values, the lane body's own sample size (2026-11-05,
+    # lane/slow-verification-lanes): the 126 range calls per cell scaled with it.
+    return _batch_resample(ml.resample.bootstrap, ml.resample.permutation_test, values=1024)(ml, e, Xh)[:-1]
 
 
 def _batch_permutation_lane(ml, e, Xh):
@@ -8369,7 +9548,7 @@ def _batch_ivf_extend(ml, e, Xh):
     extends a fresh clone of the fitted index; the ids are not compared,
     because a row's id is its position in the extension by contract."""
     return [_BatchRows("extend (new-row lists)", Xh[:64],
-                       lambda r: (np.asarray(e._clone().extend(r).extend_labels_),))]
+                       lambda r: (np.asarray(_ivf_copy(ml, e).extend(r).extend_labels_),))]
 
 
 _batch_decl(_batch_ivf_extend, "ivf-extend")
@@ -8531,7 +9710,7 @@ def _first_diff(a, b):
     if a.shape != b.shape or a.dtype != b.dtype:
         return f"whole {a.dtype.str}{list(a.shape)} vs {b.dtype.str}{list(b.shape)}"
     size = a.dtype.itemsize
-    e = next(j for j in range(len(ab)) if ab[j] != bb[j]) // size
+    e = _first_byte_diff(ab, bb) // size
     return f"element {e}: whole {_elem_hex(ab, size, e)} vs {_elem_hex(bb, size, e)}"
 
 
@@ -8806,9 +9985,17 @@ BATCHGRAD_DEFAULT = "n/a:no-backward"
 
 SCALE_BATCHES = (1, 17, 64, 256)
 SCALE_WHOLE = 1024
-SCALE_LONG_L = 1024
-#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk
-SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511, 512, 513, 1023)
+#: the long length of the causal sequence models (only their specs read it).
+#: 300, as RAGGED_LONG_LENGTHS: past the Mamba-2 chunk (256) so the long call
+#: has two chunks and an inter-chunk carry, past two v1 GEMM leaves (128) so
+#: the key-position contraction folds three leaves, and past four Mamba-3
+#: chunks (64). It was 1024 until 2026-11-05 (lane/slow-verification-lanes):
+#: the prefixes 511-1023 crossed no boundary 257 does not already cross and
+#: made this part most of the sequence lanes' wall time.
+SCALE_LONG_L = 300
+#: 64 is the Mamba-3 chunk, 128 the v1 GEMM leaf, 256 the Mamba-2 chunk: each
+#: boundary minus one, at, and plus one, then the whole length minus one
+SCALE_PREFIXES = (1, 7, 63, 64, 65, 127, 128, 129, 255, 256, 257, 299)
 
 BATCHSCALE = {}
 
@@ -8830,9 +10017,11 @@ class _ScaleRows:
 
 def _eval_scale_rows(call, sabotage, digest, notes):
     n = call.R.shape[0]
-    whole = _as_rows(call.fn(call.R), n, f"{call.label} whole B={n}")
-    if sabotage:
-        _sabotage_rows(whole)
+    out = _host_outputs(call.fn(call.R))
+    with _harness_work():
+        whole = _as_rows(out, n, f"{call.label} whole B={n}")
+        if sabotage:
+            _sabotage_rows(whole)
     # THE BATCHES THIS CALL ACTUALLY ASKED, not SCALE_BATCHES (2026-09-20).
     # A sub-batch wider than the whole call cannot be taken, and until this
     # date the skip was silent: the digest was seeded with the whole tuple
@@ -8849,16 +10038,16 @@ def _eval_scale_rows(call, sabotage, digest, notes):
             continue
         asked.append(b)
         for a in sorted({0, (n - b) // 2, n - b}):
-            got = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + b])), b, f"{call.label} B={b} at {a}")
-            for i in range(b):
-                m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
-                if m:
+            out = _host_outputs(call.fn(np.ascontiguousarray(call.R[a:a + b])))
+            with _harness_work():
+                got = _as_rows(out, b, f"{call.label} B={b} at {a}")
+                i = _first_moved_row(whole, a, got)
+                if i is not None:
+                    m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
                     return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in B={b} starting at row {a}:{m}"
-    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, asked))}".encode())
-    for r in whole:
-        for dt, shape, raw in r:
-            digest.update(f"{dt}{shape}".encode())
-            digest.update(raw)
+    with _harness_work():
+        digest.update(f"scale:{call.label}:{n}:{','.join(map(str, asked))}".encode())
+        _digest_rows(digest, whole)
     return None
 
 
@@ -8880,9 +10069,25 @@ def _scale_prefix(label, full, fn):
     return call
 
 
+#: the whole call of the causal sequence models' serving-scale rows (the three
+#: specs below; the classical serving set keeps SCALE_WHOLE). 128 rows of
+#: SEQ_LEN = 2048 tokens: wider than the 64-row sub-batch, so B = 1, 17 and 64
+#: each run at three distinct offsets (0, middle, end), and many thread blocks
+#: on every column. B = 256 is wider than the call and `_eval_scale_rows`
+#: records it n/a in the notes and leaves it out of the digest. No sequence
+#: kernel selects a path by batch row count (the only row bound on these
+#: surfaces is a refusal, BYTE_LOGITS_MAX_BATCH = 1024 in
+#: training/byte_lm_logits.mojo), and a Mamba-2 row costs one full 256-token
+#: chunk at any L <= 256 (mamba/impl/modules/ssd_minimal.mojo, "every
+#: intra-chunk structure is ALWAYS length Q"), so the 1024-row call and its
+#: 256-row sub-batches were the bulk of this part. 1024 until 2026-11-05
+#: (lane/slow-verification-lanes).
+SEQ_SCALE_WHOLE = 128
+
+
 def _batchscale_block(ml, blk, Xh):
     dm = blk.d_model
-    x = _tiled(Xh, (SCALE_WHOLE, SEQ_LEN, dm))
+    x = _tiled(Xh, (SEQ_SCALE_WHOLE, SEQ_LEN, dm))
     xl = _tiled(Xh[::-1], (2, SCALE_LONG_L, dm))
     return [_ScaleRows(f"forward L={SEQ_LEN}", x, lambda r: (np.asarray(blk.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -8902,7 +10107,13 @@ def _long_byte_lm(ml, e):
     since 2026-09-16 byte-lm-resident runs one block at d_model 16."""
     shape = ml.ByteLanguageModelConfig(**dict(_byte_lm_shape(ml, e).to_dict(), length=SCALE_LONG_L))
     if isinstance(e, ml.LanguageModelInference):
-        return ml.LanguageModelInference(e._parameters, shape=shape, threaded=e._threaded, threads=e._threads)
+        a = _built_args(e)
+        long_m = ml.LanguageModelInference(a["parameters"], shape=shape, threaded=a["threaded"],
+                                           threads=a["threads"])
+        if long_m.parameters_sha256() != e.parameters_sha256():
+            raise RuntimeError("identity_break: the long byte LM's parameters are not the lane model's "
+                               f"({long_m.parameters_sha256()} != {e.parameters_sha256()})")
+        return long_m
     return ml.SmallByteLanguageModelTrainer(np.asarray(e.parameters_),
                                             data_schedule={"dataset": "identity_break", "order": "sequential"},
                                             shape=shape)
@@ -8910,7 +10121,7 @@ def _long_byte_lm(ml, e):
 
 def _batchscale_byte_lm(ml, e, Xh):
     shape = _byte_lm_shape(ml, e)
-    ids = _tiled_ids(Xh, SCALE_WHOLE, shape.length)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, shape.length)
     long_m = _long_byte_lm(ml, e)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L)
     return [_ScaleRows(f"logits L={shape.length}", ids, lambda r: (np.asarray(e.logits(r)),)),
@@ -8923,7 +10134,7 @@ _batchscale_decl(_batchscale_byte_lm, "byte-lm", "byte-lm-resident", "byte-lm-ho
 
 
 def _batchscale_samba(ml, st, Xh):
-    ids = _tiled_ids(Xh, SCALE_WHOLE, SEQ_LEN, st.config.vocab)
+    ids = _tiled_ids(Xh, SEQ_SCALE_WHOLE, SEQ_LEN, st.config.vocab)
     idl = _tiled_ids(Xh[::-1], 2, SCALE_LONG_L, st.config.vocab)
     return [_ScaleRows(f"forward L={SEQ_LEN}", ids, lambda r: (np.asarray(st.forward(r)),)),
             _scale_prefix(f"forward B=2 L={SCALE_LONG_L}", SCALE_LONG_L,
@@ -9011,7 +10222,7 @@ def _eval_ragged(call, sabotage, digest):
             if ax is not None:
                 pad = np.ascontiguousarray(O[i, n:])
                 if pad.tobytes() != bytes(pad.nbytes):
-                    first = next(j for j, c in enumerate(pad.tobytes()) if c) // pad.dtype.itemsize
+                    first = int(np.flatnonzero(np.frombuffer(pad.tobytes(), dtype=np.uint8))[0]) // pad.dtype.itemsize
                     return f"{where}: padding output element {first} is not +0.0"
     digest.update(f"ragged:{call.label}:{list(call.x.shape)}:{call.lengths}".encode())
     for o in outs:
@@ -9269,8 +10480,10 @@ def _part_protocol(part, alone):
                     uneven_split=GRAD_UNEVEN_SPLIT_NA, carry_splits=[list(BATCH_SPLIT) + ["n"], f"every {alone}"],
                     seq=[GRAD_SEQ_BATCH, GRAD_SEQ_LEN])
     if part == "batchscale":
-        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, long_l=SCALE_LONG_L,
-                    prefixes=list(SCALE_PREFIXES))
+        # seq_whole: the sequence lanes' whole-call rows (SEQ_SCALE_WHOLE), stamped so a
+        # column taken at another whole-call size reads "protocol differs", not DIVERGENT.
+        return dict(batches=list(SCALE_BATCHES), whole=SCALE_WHOLE, seq_whole=SEQ_SCALE_WHOLE,
+                    long_l=SCALE_LONG_L, prefixes=list(SCALE_PREFIXES))
     if part == "stepfull":
         return dict(rows=STEPFULL_ROWS, length=STEPFULL_LENGTH,
                     full="forward(x) from a zero state, one pass",
@@ -9333,8 +10546,16 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
 #: log-probability, so every hashed rlpair cell MUST read RLPAIR_MOVED
 RLPAIR_SABOTAGE_ENV = "MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE"
 
-#: sequences, prompt length and decoded tokens
-RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 12
+#: sequences, prompt length and decoded tokens. 5, 4, 8 since 2026-11-05
+#: (lane/slow-verification-lanes; 5, 4, 12 before): every decoded token is
+#: one native step plus one cross-entropy call per sampler row set, and the
+#: five per-row samplers make most of this part's calls. Eight decoded
+#: tokens keep every event the twelve had: the joiner runs alone for 2
+#: steps, the joined batch for 3, the batch after the leaver for 2
+#: (RLPAIR_LEAVE_AFTER below), and the window-8 transformer's ring KV cache
+#: still fills during decode (positions 4-7) and wraps at position 8, inside
+#: the joined batch. 12 positions in all, the KV cache's `max_tokens`
+RLPAIR_SEQS, RLPAIR_PROMPT, RLPAIR_DECODE = 5, 4, 8
 
 #: the trainer's uneven microbatch split of the RLPAIR_SEQS rows: [0, 2), [2, 5)
 RLPAIR_SPLIT = (2,)
@@ -9344,7 +10565,9 @@ RLPAIR_SPLIT = (2,)
 #: other four at row RLPAIR_JOIN_ROW; sequence 1 leaves once its token
 #: RLPAIR_LEAVE_AFTER is chosen
 RLPAIR_JOINER, RLPAIR_JOIN_AT, RLPAIR_JOIN_ROW = 4, 3, 2
-RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 8
+#: RLPAIR_LEAVE_AFTER < RLPAIR_DECODE - 1, so the batch steps on without
+#: the leaver (8 of 12 until 2026-11-05, 5 of 8 since)
+RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 5
 
 #: the vocabulary of the head the harness puts on a bare sequence block
 RLPAIR_BLOCK_VOCAB = 48
@@ -9727,7 +10950,7 @@ def _rlpair_byte_lm_host(ml, e, Xh):
     REFERENCE forward, `logits(threaded=False)`, the oracles as written; the
     samplers are the lane's own arm and the other arm."""
     shape = e.shape
-    other = not e._threaded
+    other = not _built_args(e)["threaded"]
     samplers = [_rl_prefix_sampler("lane arm prefix recompute", lambda ids: e.logits(ids)),
                 _rl_prefix_sampler(f"threaded={other} prefix recompute",
                                    lambda ids: e.logits(ids, threaded=other, threads=2 if other else None))]
@@ -9856,31 +11079,57 @@ def _host_infer_on(name):
     return lanes is True or (lanes is not None and name in lanes)
 
 
+#: The forest host binding's key in `mojolearn.runtime_report()["bindings"]`
+#: (host bindings load as `mojolearn._host.<basename>`; the bare basename was
+#: never a key, so this check matched nothing before 2026-11-15).
+FOREST_HOST_BINDING = "mojolearn._host._mojolearn_forest_host"
+
+
+def _require_named_forest_binding(ml):
+    """Refuse when the loaded forest host binding is not the file
+    MOJOLEARN_FOREST_HOST_BINARY names (a sabotage build's binary must be the
+    one that predicts), and, when the variable is unset, when it is not this
+    install's own forest host binding (the old check, unchanged in scope).
+    Both paths come from the public runtime report's binding row: the LOADED
+    `path`, and the `expected_path` the product resolves for that binding
+    (the variable, else the install's binding as `_backend.host_module_path`
+    resolves it; `_backend.door_host_binary_path`). A loaded row with no path
+    or no expected path is refused, never passed. A binding not loaded yet
+    has answered nothing."""
+    entry = (ml.runtime_report().get("bindings") or {}).get(FOREST_HOST_BINDING) or {}
+    if not entry.get("loaded"):
+        return
+    bound, want = entry.get("path"), entry.get("expected_path")
+    if not bound or not want:
+        raise RuntimeError(f"the runtime report's {FOREST_HOST_BINDING} row has path {bound!r} and "
+                           f"expected_path {want!r}; the binding that predicted cannot be named")
+    if os.path.realpath(bound) != os.path.realpath(want):
+        raise RuntimeError(f"the forest binding in this process is {bound}, "
+                           f"not MOJOLEARN_FOREST_HOST_BINARY {want}")
+
+
 def _probe_fit_host(fit, name):
     """`_probe_fit` under HOST_INFER_ENV: save, then predict through
     `host_model`. Same return shape."""
     if not _has_save_load(fit.est):
         return None, None, None, "infer: host infer asked of an estimator with no save"
     save, load, suffix = _save_load(fit.est)
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     try:
         with tempfile.TemporaryDirectory(prefix="identity_break_host_") as tmp:
             path = os.path.join(tmp, f"{name}{suffix}")
             getattr(fit.est, save)(path)
             model = _hfile(path)
             try:
-                host = host_model(path)
+                host = ml.host_model(path)
                 # THE BINARY THAT PREDICTED IS THE ONE NAMED (2026-09-15): host_record
                 # loads MOJOLEARN_HOST_DIR's forest binding under the module name
                 # _forest_host reuses from sys.modules, so a MOJOLEARN_FOREST_HOST_BINARY
                 # pointing elsewhere (a sabotage build) was silently not the one asked,
                 # and a forest sabotage column read IDENTICAL on a RunPod x86 pod.
-                bound = getattr(getattr(host, "_binding", None), "__file__", None)
-                if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
-                        os.path.realpath(bound) != os.path.realpath(binary_path())):
-                    raise RuntimeError(f"the forest binding in this process is {bound}, "
-                                       f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
-                infer = _h(*fit.probe(host_model(path)))
+                if type(host).__name__ in ("HostGBDT", "HostForest"):
+                    _require_named_forest_binding(ml)
+                infer = _h(*fit.probe(ml.host_model(path)))
             except Exception as exc:
                 return None, None, None, _exc_text("infer (host_model)", exc)
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
@@ -9906,19 +11155,16 @@ def _probe_saved_host(fit, name):
     columns still hash the file they wrote. A second load that predicts
     differently from the first is refused (the model part reads REFUSED),
     because an n/a model part skips the RELOAD-MOVED comparison."""
-    from mojolearn._forest_host import binary_path, host_model
+    ml = sys.modules["mojolearn"]
     path = fit.est.identity_saved_path
     try:
-        host = host_model(path)
-        bound = getattr(getattr(host, "_binding", None), "__file__", None)
-        if bound is not None and os.path.realpath(bound) != os.path.realpath(binary_path()):
-            raise RuntimeError(f"the forest binding in this process is {bound}, "
-                               f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
+        host = ml.host_model(path)
+        _require_named_forest_binding(ml)
         infer = _h(*fit.probe(host))
     except Exception as exc:
         return None, None, None, _exc_text("infer (saved model)", exc)
     try:
-        reload = _h(*fit.probe(host_model(path)))
+        reload = _h(*fit.probe(ml.host_model(path)))
     except Exception as exc:
         return infer, None, None, _exc_text("model (saved model)", exc)
     if reload != infer:
@@ -10000,9 +11246,7 @@ def _shown(verdict, values):
 
 
 def run(args):
-    from mojolearn._cpu_reference import reference_training
-    with reference_training():
-        return _run_reference(args)
+    return _run_reference(args)
 
 
 def _run_reference(args):
@@ -10028,14 +11272,31 @@ def _run_reference(args):
     # PTX set must never stand for the native NVIDIA column, nor the reverse.
     gpu_arch = code_format = None
     if ml.vendor() == "cuda":
-        from mojolearn import _backend as _ml_backend
-        gpu_arch = _ml_backend.gpu_arch()
-        code_format = "ptx" if _ml_backend.baseline_selection_receipt() is not None else "native"
+        # mojolearn.runtime_report(): `gpu_arch`, and `code_kind` "ptx" exactly
+        # when the PTX baseline set was selected (before: _backend.gpu_arch()
+        # and _backend.baseline_selection_receipt() is not None). `code_mode`
+        # is the compiled numeric mode and never said "ptx": every PTX record
+        # was refused as native until 2026-11-15.
+        report = ml.runtime_report()
+        gpu_arch = report["gpu_arch"]
+        code_format = report["code_kind"]
+        if code_format not in ("ptx", "native"):
+            raise SystemExit(f"REFUSING: runtime_report()['code_kind'] is {code_format!r}, not 'ptx' or 'native'")
         if (code_format == "ptx") != ("ptx" in str(vendor).lower()):
             raise SystemExit(f"REFUSING: the {code_format} CUDA set ({gpu_arch}) is loaded and the vendor label is "
                              f"{vendor!r}; a PTX record is labelled nvidia-ptx-<gpu>-sm80 and only a PTX record is")
     commit, commit_source = commit_witness()
     host = host_record(ml) if ml.vendor() == "cpu" else None
+    timing_env = timing_environment()
+    # THE RUN BLOCK (lane post-record-device-time; see run_facts_static): the
+    # device, drivers, toolchain, wheel and box, read once here; the times and
+    # per-lane seconds at every write. Provenance only, never hashed.
+    run_started = time.time()
+    try:
+        run_static = run_facts_static(str(ml.vendor()), os.path.dirname(ml.__file__), max(1, len(_par_devices())))
+    except Exception as exc:                            # never lose a column over provenance
+        run_static = dict(schema=RUN_FACTS_SCHEMA, unavailable=dict(run=f"{type(exc).__name__}: {exc}"[:200]))
+    run_previous = None
     package = dict(version=getattr(ml, "__version__", "unknown"), package_dir=os.path.dirname(ml.__file__),
                    numpy=np.__version__, python=platform.python_version(),
                    par_devices=",".join(str(d) for d in _par_devices()))
@@ -10120,21 +11381,16 @@ def _run_reference(args):
     if batch_sabotage:
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
-    # THE NON-COOPERATIVE DRIVERS' ARM, READ BACK FROM THE SHIPPED MODULE
-    # rather than from this process's environment (lane/par-sabotage-defines,
-    # 2026-09-20). `_parallel_pool.par_driver_sabotage()` is what the drivers
-    # themselves call, and it needs BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
-    # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`; asking the module means the column
-    # cannot say "clean" while the code says otherwise. It is NOT a harness
-    # switch: nothing in this file is perturbed. What moves is the SHIPPED
-    # partition of `parallel_ensemble`, `parallel_preprocessing`,
-    # `parallel_classical` and `parallel_neighbors`, which is product code and
-    # is exactly what a `par-*` lane exists to check.
-    try:
-        from mojolearn._parallel_pool import par_driver_sabotage as _pds
-        par_driver_sabotage = bool(_pds())
-    except Exception:
-        par_driver_sabotage = False
+    # THE NON-COOPERATIVE DRIVERS' ARM (lane/par-sabotage-defines, 2026-09-20): the same two
+    # variables the native drivers read at call time (bindings/parallel_shard_common_door.mojo
+    # `shard_read_shift`), BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
+    # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`, so the column cannot say "clean" while the drivers
+    # shift. It is NOT a harness switch: nothing in this file is perturbed. What moves is the
+    # SHIPPED partition of `parallel_ensemble`, `parallel_preprocessing`, `parallel_classical`
+    # and `parallel_neighbors`, which is product code and is exactly what a `par-*` lane checks.
+    # (The Python helper that read them moved to python/mojolearn/tests/ on 2026-11-06.)
+    par_driver_sabotage = (os.environ.get("MOJOLEARN_PAR_DRIVER_SABOTAGE") == "1"
+                           and os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1")
     if par_driver_sabotage:
         print("# MOJOLEARN_PAR_DRIVER_SABOTAGE is ON: every non-cooperative driver shard after "
               "the first reads one position early while the merge still writes at the true "
@@ -10169,6 +11425,7 @@ def _run_reference(args):
                                           platform=platform.platform(), python=platform.python_version(),
                                           numpy=np.__version__, fixtures=fixture_hashes, heldout=heldout_hashes))
     leases = [execution_lease()]
+    timing_attempts = []
     if getattr(args, "resume", False):
         cells.update(resume_cells(args.json, signature))
         with open(args.json) as stream:
@@ -10177,6 +11434,12 @@ def _run_reference(args):
         # Keep the lease that produced retained cells as well as this attempt's
         # lease. These are provenance, not inputs to the equality guard above.
         leases = list(previous.get("execution_leases", [])) + leases
+        # the first attempt's start and every attempt's seconds carry over
+        run_previous = previous.get("run")
+        # Retained cells were timed by the earlier attempts: keep their
+        # timing environments next to this one (timing record only).
+        timing_attempts = list(previous.get("timing_env_attempts")
+                               or ([previous["timing_env"]] if previous.get("timing_env") else []))
         print(f"# RESUME {len(cells)} completed cells", flush=True)
 
     def dump(complete):
@@ -10299,6 +11562,17 @@ def _run_reference(args):
         record["package"] = package
         record["resume_signature"] = signature
         record["execution_leases"] = leases
+        try:
+            record["run"] = run_block(run_static, cells, run_started, run_previous)
+        except Exception as exc:                        # never lose a column over provenance
+            record["run"] = dict(run_static, unavailable=dict(run_static.get("unavailable") or {},
+                                                              run=f"{type(exc).__name__}: {exc}"[:200]))
+        # The wall-clock environment (timing record only; see
+        # timing_environment). `timing_env_attempts` lists every attempt's
+        # environment, oldest first, when a resume carried cells over.
+        record["timing_env"] = timing_env
+        if timing_attempts:
+            record["timing_env_attempts"] = timing_attempts + [timing_env]
         atomic_json(args.json, record)
         # The untruncated text of every refusal, beside the JSON. A cell's
         # own error field is capped; this file never is.
@@ -11097,8 +12371,16 @@ def merge(paths, out, allow_separate_builds=False):
     record["complete"] = record["complete"] or record["complete_by_coverage"]
     record["skipped"] = sorted(set(s for _, j in parts for s in j.get("skipped", [])))
     record["merged_from"] = [dict(file=os.path.basename(p), cells=len(j["cells"]), complete=j.get("complete"),
-                                  platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"))
+                                  platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"),
+                                  timing_env=j.get("timing_env"))
                              for p, j in parts]
+    # Shards ran side by side: the merged record states how many, beside the
+    # first part's environment (timing record only).
+    if any(j.get("timing_env") for _, j in parts):
+        record["timing_env_parts"] = len(parts)
+    run = merged_run_block([j.get("run") for _, j in parts], record["cells"])
+    if run is not None:
+        record["run"] = run
     record["merged_separate_builds"] = len(set(json.dumps(_build_digests(j)) for _, j in parts)) > 1
     # A MERGE NEVER LAUNDERS A PARTIAL PART INTO A WHOLE COLUMN (2026-09-20).
     # MERGE_SAME already refuses parts whose `parts_omitted` differ, so this
@@ -11186,7 +12468,10 @@ def run_jobs(args, argv=None):
             if args.resume and part.is_file():
                 cmd.append("--resume")
             stream = open(log, "a" if args.resume else "w")
-            proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT)
+            # Each child records that it ran as shard i of N side by side
+            # (timing_env.concurrency; timing record only).
+            child_env = dict(os.environ, **{TIMING_CONCURRENCY_ENV: f"{i}/{len(shards)}"})
+            proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT, env=child_env)
             running.append((i, proc, stream))
             print(f"# JOB {i} pid={proc.pid} lanes={','.join(shard)}", flush=True)
         codes = {}
@@ -11297,7 +12582,13 @@ def main():
     ap.add_argument("--allow-separate-builds", action="store_true",
                     help="with --merge: admit parts whose binding digests differ (two legs, two builds of the "
                          "same commit on the same box type); every part's digests are kept under merged_from")
+    ap.add_argument("--provenance-lines", default="", metavar="JSON",
+                    help="print the run_* provenance.txt lines of a record (its `run` block) and exit")
     args = ap.parse_args()
+    if args.provenance_lines:
+        with open(args.provenance_lines) as fh:
+            print("\n".join(run_provenance_lines(json.load(fh))))
+        return 0
     if args.jobs < 1:
         raise SystemExit("REFUSING: --jobs must be positive")
     if args.jobs > 1:

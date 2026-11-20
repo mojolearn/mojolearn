@@ -57,7 +57,8 @@ Adapters (``--adapter``):
   installed-runtime       runtime-<vendor> from tools/release_runtime_installed.py
                           (--producer report=DIR/runtime-report.json)
   published-install       published-<vendor> (post stage) from tools/release_published_install.py
-                          (--producer report=DIR/published-report.json)
+                          check: bytes resolved from PyPI equal to the gated candidates, the gate's
+                          receipts by reference (--producer report=DIR/published-report.json)
   macos-release-build     compile-apple from the macOS release build: its binary cache keys
                           recomputed at the frozen source, packaging replayed to the shipped
                           wheel bytes   (--producer wheel= log= cache=)
@@ -193,6 +194,22 @@ def reconstruct(root, revision, version, spec_ids, configuration, log_dir=None):
 
 _VERIFIED = {}
 _REPORTS = {}
+
+
+def adapter_code_digest(name):
+    """sha256 over the adapter's own code (its module and tool files): a prepared report records what that
+    code derived, so a report prepared by other code is another report (0.8.64: a facts shape change made
+    every earlier report fail re-derivation and aborted the status)."""
+    import hashlib
+    module, _ = ADAPTERS[name]
+    paths = sorted({Path(__file__).with_name(module + ".py"), Path(__file__).resolve().parents[1] / tool_of(name)})
+    extra = {"identity-table-admission": ("release_identity_evidence",)}.get(name, ())
+    paths += [Path(__file__).with_name(m + ".py") for m in extra]
+    h = hashlib.sha256()
+    for path in paths:
+        if path.is_file():
+            h.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
+    return h.hexdigest()
 
 
 def load_report(path):

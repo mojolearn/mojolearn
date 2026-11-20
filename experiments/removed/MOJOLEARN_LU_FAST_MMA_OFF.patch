@@ -1,0 +1,30 @@
+diff --git a/x_decomp/lu_fast_mma.mojo b/x_decomp/lu_fast_mma.mojo
+index cb75c41b64..fa07f3ff98 100644
+--- a/x_decomp/lu_fast_mma.mojo
++++ b/x_decomp/lu_fast_mma.mojo
+@@ -1,8 +1,9 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default),
++"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default, rollback `-D MOJOLEARN_LU_FAST_MMA_OFF`),
+ the blocked LU with delayed trailing updates on the Apple matrix unit (FAST
+-on Apple only; needs LU_FAST_STEP1).
++on Apple only; needs LU_FAST_STEP1, so `-D MOJOLEARN_LU_FAST_STEP1_OFF`
++turns it off too).
+ 
+ Main's blocked route (`launch_lu`, panel width LU_PANEL_NB = 32) updates the
+ WHOLE trailing square after every 32-column panel with `lu_trail_rb_kernel`
+@@ -66,10 +67,9 @@ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+ #: DEFAULT in FAST + Apple (lane/apple-fast-w2-linalg). M3, one run per arm:
+ #: lu-factor synthetic 971.7 -> 849.3 ms, lu-solve synthetic 971.9 -> 852.1 ms;
+ #: w2-lumma-quality PASS (factor/solve residual gates, info equal, finite).
+-#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE.
+-# TOMBSTONE: MOJOLEARN_LU_FAST_MMA_OFF (old path: main's per-32-column scalar trailing updates beside the FAST Apple default; EXP:1401 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 53eb025cc0.
+-# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE
++#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE. `-D MOJOLEARN_LU_FAST_MMA_OFF`
++#: restores main's per-32-column scalar trailing updates.
++comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
+ #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
+ comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
+ comptime LFM_PANEL = 32

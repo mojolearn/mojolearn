@@ -5,22 +5,49 @@ IVF quantization arms. Every entry takes (addrs, params) lists; the orders
 are written in providers/python/x_ann_abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from x_ann.abi_shell_impl import rabitq_padded_dim, cagra_check_graph
-from x_ann.filter_topk import filter_topk_host
-from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import check_search
-from providers.python.x_ann_abi_pyapi import a_int, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
-from x_ann.ivf_pq_core import pq_len_of
+from providers.python.x_ann_abi_pyapi_unpack import a_int, in_f32, out_f32, out_i32, p_int, ptr_f32, ptr_i32, py_int_list
 from x_ann.abi import out_f32_to, out_i32_to
-from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
-from x_ann.host.tsne_host import tsne_fit_host
-from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host, ivf_rabitq_build_host, ivf_rabitq_search_host
+from x_ann.host.cagra_host import cagra_build_host
+from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_sq_build_host, refine_host, ivf_rabitq_build_host
+from x_ann.ops_entry_host import (
+    ANN_OPS_HOST_API, ann_ops_host_v1, ann_ivf_pq_search_host_run, ann_ivf_sq_search_host_run,
+    ann_ivf_rabitq_search_host_run, ann_cagra_search_host_run, ann_filter_topk_host_run, ann_tsne_fit_host_run,
+)
+from core.neighbors_entry_table import NeighborsEntryKey
+from core.neighbors_entry_table_ann import ann_ops_publish
+from bindings.py_balanced import py_setattr
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+from core.host_finite_scan import host_finite_status
+
+
+def _query_status(params: PythonObject, at: Int, queries: Int, n: Int,
+                  other: Int = 0, n_other: Int = 0) raises -> Bool:
+    """The CPU column's answer to a search's optional status word `params[at]`
+    (lane a8b-device-x-neighbors-rest; the GPU binding tests the queries
+    behind their upload): one parallel SIMD scan of the `n` query words,
+    written to the word (0 finite, 1 not); `other` / `n_other`, when given,
+    a second span in the same word (refine's dataset). True when the search
+    may run: no word was asked, or the words are finite (a flagged search is
+    skipped and the door refuses)."""
+    if len(params) <= at:
+        return True
+    var address = p_int(params, at)
+    if address == 0:
+        return True
+    if address < 0 or address % 4 != 0:
+        raise Error("x_ann: the status address must be a positive int32-aligned address")
+    # parallel: host_finite_status splits the words across the host's cores
+    var word = host_finite_status(queries, n)
+    if word == 0 and n_other > 0:
+        word = host_finite_status(other, n_other)
+    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store(0, word)
+    return word == 0
 
 
 def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -54,67 +81,17 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n, mask
     (int32 per row, 0 removes the row: the sample filter).
-    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var pq_dim = p_int(params, 3)
-    var pq_bits = p_int(params, 4)
-    var m = p_int(params, 5)
-    var k = p_int(params, 6)
-    var n_probes = p_int(params, 7)
-    check_search(n_lists, m, k, n_probes)
-    var pq_len = pq_len_of(dim, pq_dim)
-    _ = n
-    _ = pq_len
-    var centers = ptr_f32(addrs, 0)
-    var offsets = ptr_i32(addrs, 1)
-    var list_indices = ptr_i32(addrs, 2)
-    var cb = ptr_f32(addrs, 3)
-    var codes = ptr_i32(addrs, 4)
-    var queries = ptr_f32(addrs, 5)
-    var od = ptr_f32(addrs, 6)
-    var oi = ptr_i32(addrs, 7)
-    var on = ptr_i32(addrs, 8)
-    var mask = ptr_i32(addrs, 9)
+    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes[, status] (status: the host
+    address of the int32 word that receives the queries' finite status).
+    UNPACK and PACK only: the body is x_ann/ops_entry_host.mojo `ann_ivf_pq_search_host_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_pq_search_host(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
-                           queries, m, k, n_probes, od, oi, on)
+        m = ann_ivf_pq_search_host_run(a, p)
     return PythonObject(m)
-
-
-def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: x, y0, y_out, kl_out (one float32).
-    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
-    post_exaggeration_learning_rate_factor [, init mode, random_state low 32 bits, high 32 bits]
-    (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
-    x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
-    init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
-    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`)."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var max_iter = p_int(params, 2)
-    var exploration = p_int(params, 3)
-    var perplexity = Float32(Float64(py=params[4]))
-    var exaggeration = Float32(Float64(py=params[5]))
-    var lr = Float32(Float64(py=params[6]))
-    var post_factor = Float32(Float64(py=params[7]))
-    var x = in_f32(addrs, 0, n * d)
-    var mode = p_int(params, 8) if len(params) > 8 else TSNE_INIT_GIVEN
-    var seed = UInt64(0)
-    if len(params) > 10:
-        seed = (UInt64(p_int(params, 10)) << 32) | UInt64(p_int(params, 9))
-    var k = p_int(params, 11) if len(params) > 11 else 2
-    var y0 = tsne_init_y0(
-        mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
-    )
-    var y = List[Float32]()
-    var kl = Float32(0.0)
-    with GILReleased(Python()):
-        tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
-    out_f32(tsne_first_components(y, n, k), addrs, 2)
-    out_f32([kl], addrs, 3)
-    return PythonObject(n)
 
 
 def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -135,30 +112,17 @@ def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
 
 def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, graph, queries, out_d, out_i.
-    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
-    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node)."""
-    var n = p_int(params, 0)
-    var d = p_int(params, 1)
-    var deg = p_int(params, 2)
-    var m = p_int(params, 3)
-    var k = p_int(params, 4)
-    var L = p_int(params, 5)
-    var width = p_int(params, 6)
-    var max_iter = p_int(params, 7)
-    var n_seeds = p_int(params, 8)
-    var rs = p_int(params, 9) if len(params) > 9 else 0
-    if rs < 0:
-        raise Error("CAGRA search: rs must be >= 0")
-    if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
-        raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-    var x = ptr_f32(addrs, 0)
-    var g = ptr_i32(addrs, 1)
-    cagra_check_graph(g, n, deg)
-    var q = ptr_f32(addrs, 2)
-    var od = ptr_f32(addrs, 3)
-    var oi = ptr_i32(addrs, 4)
+    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs[, status]]
+    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node;
+    status: the host address of the int32 word that receives the queries' finite status).
+    UNPACK and PACK only: the body is x_ann/ops_entry_host.mojo `ann_cagra_search_host_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        cagra_search_host(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
+        m = ann_cagra_search_host_run(a, p)
     return PythonObject(m)
 
 
@@ -195,36 +159,23 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, m, k, n_probes."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var m = p_int(params, 3)
-    var k = p_int(params, 4)
-    var n_probes = p_int(params, 5)
-    check_search(n_lists, m, k, n_probes)
-    _ = n
-    var centers = ptr_f32(addrs, 0)
-    var offsets = ptr_i32(addrs, 1)
-    var list_indices = ptr_i32(addrs, 2)
-    var vmin = ptr_f32(addrs, 3)
-    var delta = ptr_f32(addrs, 4)
-    var codes = ptr_i32(addrs, 5)
-    var mask = ptr_i32(addrs, 6)
-    var queries = ptr_f32(addrs, 7)
-    var od = ptr_f32(addrs, 8)
-    var oi = ptr_i32(addrs, 9)
-    var on = ptr_i32(addrs, 10)
+    params: n, dim, n_lists, m, k, n_probes[, status] (the queries' finite status word).
+    UNPACK and PACK only: the body is x_ann/ops_entry_host.mojo `ann_ivf_sq_search_host_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_sq_search_host(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
-                           n_probes, od, oi, on)
+        m = ann_ivf_sq_search_host_run(a, p)
     return PythonObject(m)
 
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
+    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
+    dataset's and queries' finite status word)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
@@ -238,6 +189,8 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var cand = ptr_i32(addrs, 2)
     var od = ptr_f32(addrs, 3)
     var oi = ptr_i32(addrs, 4)
+    if not _query_status(params, 6, a_int(addrs, 1), m * d, a_int(addrs, 0), n * d):
+        return PythonObject(m)
     with GILReleased(Python()):
         refine_host(x, n, d, q, m, cand, k0, k, od, oi, root)
     return PythonObject(m)
@@ -271,53 +224,15 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
 
 def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, seed, m, k, n_probes."""
-    var n = p_int(params, 0)
-    var dim = p_int(params, 1)
-    var n_lists = p_int(params, 2)
-    var seed = p_int(params, 3)
-    var m = p_int(params, 4)
-    var k = p_int(params, 5)
-    var n_probes = p_int(params, 6)
-    check_search(n_lists, m, k, n_probes)
-    var D = rabitq_padded_dim(dim)
-    var words = (D + 31) // 32
-    _ = n
-    _ = words
-    var centers = ptr_f32(addrs, 0)
-    var offsets = ptr_i32(addrs, 1)
-    var list_indices = ptr_i32(addrs, 2)
-    var codes = ptr_i32(addrs, 3)
-    var norms = ptr_f32(addrs, 4)
-    var ips = ptr_f32(addrs, 5)
-    var mask = ptr_i32(addrs, 6)
-    var queries = ptr_f32(addrs, 7)
-    var od = ptr_f32(addrs, 8)
-    var oi = ptr_i32(addrs, 9)
-    var on = ptr_i32(addrs, 10)
+    params: n, dim, n_lists, seed, m, k, n_probes[, status] (the queries' finite status word).
+    UNPACK and PACK only: the body is x_ann/ops_entry_host.mojo `ann_ivf_rabitq_search_host_run`,
+    which the ANN operations table (core/neighbors_entry_table_ann.mojo) also
+    calls. The export remains for python/mojolearn/_expansion_ann.py."""
+    var a = py_int_list(addrs)
+    var p = py_int_list(params)
+    var m = 0
     with GILReleased(Python()):
-        ivf_rabitq_search_host(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
-                               queries, m, k, n_probes, od, oi, on)
-    return PythonObject(m)
-
-
-def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """CAGRA's filtered compaction on the host (x_ann/filter_topk.mojo), the
-    GPU binding's contract: addrs itopk distances, itopk ids, keep, out_d,
-    out_i; params m, n, L, k."""
-    var m = p_int(params, 0)
-    var n = p_int(params, 1)
-    var L = p_int(params, 2)
-    var k = p_int(params, 3)
-    if m <= 0 or n <= 0 or k <= 0 or L < k:
-        raise Error("CAGRA filtered search: need m, n, k >= 1 and itopk_size >= k")
-    var bd = ptr_f32(addrs, 0)
-    var bi = ptr_i32(addrs, 1)
-    var keep = ptr_i32(addrs, 2)
-    var od = ptr_f32(addrs, 3)
-    var oi = ptr_i32(addrs, 4)
-    with GILReleased(Python()):
-        filter_topk_host(bd, bi, keep, m, n, L, k, od, oi)
+        m = ann_ivf_rabitq_search_host_run(a, p)
     return PythonObject(m)
 
 
@@ -342,15 +257,27 @@ def host_sabotage_binding() raises -> PythonObject:
     return PythonObject(X_ANN_HOST_SABOTAGE)
 
 
+def _publish_ann_ops(module: PythonObject) raises:
+    # The CPU column of the ANN operations table
+    # (core/neighbors_entry_table_ann.mojo): the ANN search and TSNE owners
+    # call this entry with plain values and read the key from the module
+    # attribute `x_ann_native_key`. The Python exports remain for
+    # python/mojolearn/_expansion_ann.py.
+    var api = ANN_OPS_HOST_API.get_or_create_ptr()
+    ann_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()),
+                    ann_ops_host_v1)
+    py_setattr(module, "x_ann_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_ann_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_x_ann_host() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_x_ann_host")
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")
         m.def_function[ivf_pq_search_binding]("x_ann_ivf_pq_search")
-        m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
         m.def_function[cagra_build_binding]("x_ann_cagra_build")
         m.def_function[cagra_search_binding]("x_ann_cagra_search")
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
@@ -358,7 +285,6 @@ def build__mojolearn_x_ann_host() -> PythonObject:
         m.def_function[refine_binding]("x_ann_refine")
         # TOMBSTONE: x_ann_py2mojo (dead native entry: a constant A/B probe nothing reads) deleted 2026-10-26 by f9b52032a; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_ann.patch
-        m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
@@ -367,6 +293,8 @@ def build__mojolearn_x_ann_host() -> PythonObject:
         m.def_function[vendor_binding]("x_ann_host_vendor")
         m.def_function[host_column_binding]("x_ann_host_column")
         m.def_function[host_sabotage_binding]("x_ann_host_sabotage")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_ann_ops(published_module)
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_x_ann_host: ", e))

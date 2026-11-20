@@ -34,23 +34,25 @@ from core.step_glue import (
     STEP_GLUE_NOSHADOW,
     STEP_GLUE_OPTSKIP,
     STEP_GLUE_SHIPPED_UPDATE,
-    STEP_GLUE_TRIAL,
     STEP_GLUE_UPDATE_BITS,
     step_glue_arm_from_env,
     step_glue_blocks,
 )
 from core.device_scan import DeviceScanScratch, device_first_token_oob
+from core.hostptr import list_i32
 from core.neural_context import neural_ctx
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from training.neural_identical_experiments import (
-    IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
-    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM, IDN_PARAM_GRAD_VIEWS,
-)
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE (opt-in arm, no A/B recorded; owner elsewhere) folded to False
+# 2026-11-15 by lane/expdel2-31-neural (retain_kv_cache=True); code recoverable at f105b7dcfb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_NO_DECODE_CACHE.expdel2-31-neural.patch
 from checks.vendor import COMPILED_VENDOR
+# TOMBSTONE: MOJOLEARN_AFN_LM_PARAM_VIEWS / MOJOLEARN_AFN26_LM_PARAM_VIEWS (Apple FAST opt-in, never promoted) folded to False
+# 2026-11-15 by lane/expdel2-31-neural; code recoverable at f6652fc1ac.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_PARAM_VIEWS.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from training.byte_lm_afn import (
-    AFN_LM_HEAD_FUSE, AFN_LM_NOSYNC, AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE,
-    afn_ce_fused, afn_reset, afn_status_view, afn_step_finish, afn_upload_ids,
+    AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE, afn_upload_ids,
 )
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig
@@ -72,16 +74,13 @@ from embedding.checks.embedding_identical import (
     ANY_EMB_SABOTAGE,
     EMB_AUTO_SORT_MIN_CELLS,
     identical_embedding_forward_into,
-    identical_embedding_forward_prerefused_into,
 )
-from autograd.kernels.embedding import (
-    emb_run_scratch_ints,
-    identical_embedding_backward_into,
-    identical_embedding_backward_prerefused_into,
-)
-from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
-from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
-from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
+from autograd.kernels.embedding import emb_run_scratch_ints
+# TOMBSTONE: MOJOLEARN_IDN_TRAIN_SCRATCH arms 2/3 (NN62_LIFETIME_ARENA, the shared CE / optimizer lifetime arena;
+# opt-in, no A/B recorded; owner elsewhere) folded to False 2026-11-15 by lane/expdel2-31-neural with the
+# neural_scratch field; code recoverable at e7b9a56a35.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRAIN_SCRATCH.expdel2-31-neural.patch
+from embedding.checks.embedding_oracle import EmbConfig
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE,
@@ -89,14 +88,12 @@ from training.checks.loss import (
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
 )
-from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
     chunked_lm_head_v2_gemm_forward_into,
     chunked_lm_head_v2_gemm_workspace_floats,
 )
-from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
@@ -109,17 +106,21 @@ from training.checks.optimizer import (
 from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
-from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
+from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
 from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages,
 )
-# The step's backward (loss, head, every layer, embedding) runs on one
+# The hand step's backward (loss, head, every layer, embedding) runs on one
 # autograd tape (autograd/rules_lm.mojo).
 from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, lane x7's program step on every column; L40S ba08dac006 lm-train-step bytes 35.71 -> 48.52 ms, B 1.36x slower; training/byte_lm_program.mojo and training/byte_lm_host_program.mojo deleted with it) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+from sequence.ops import FP
 from transformer.impl.llama.fused_attention import (
-    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER,
 )
-from training.byte_lm_one_wait import ByteOneWait, one_wait_require_tokens, one_wait_step_finish
+# TOMBSTONE: training/byte_lm_one_wait.mojo (ByteOneWait, the IDN_TRAIN_ONE_WAIT deferred-check scratch) and the trainer's `one_wait` field deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since the one-wait step went with lane x7); code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
@@ -181,7 +182,7 @@ def timing_bytes(on: Bool, name: String, n_bytes: Int):
     """DEVIATION 2499: the byte count of a transfer phase, on the same
     `timing` line shape the phase timers use (`timing <name> <n> bytes`),
     so a reader can put bandwidth beside conversion. Prints only under
-    `MOJOLEARN_TRANSFORMER_TIMING=1`; costs nothing otherwise."""
+    `-D MOJOLEARN_TRANSFORMER_TIMING`; costs nothing otherwise."""
     if not on:
         return
     print("timing " + name + " " + String(n_bytes) + " bytes")
@@ -208,33 +209,23 @@ not refuse the flag for that reason; the gate reads the availability
 witness and skips the controls on a build without it."""
 
 
-comptime BYTE_LM_STICKY_EAGER = is_defined["MOJOLEARN_BYTE_LM_STICKY_EAGER"]()
+# TOMBSTONE: MOJOLEARN_BYTE_LM_STICKY_EAGER, MOJOLEARN_BYTE_LM_RELEASE_EAGER and MOJOLEARN_BYTE_LM_RETAIN_EAGER (opt-in
+# arms: sticky eager attention after a refusal, forced release, forced retain; no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-31-neural; code recoverable at d879623fb2. The release follows the per-column rule only.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_STICKY_EAGER.patch (and the RELEASE / RETAIN patches)
+comptime BYTE_LM_RELEASE_EAGER = byte_lm_release_eager_for[TARGET_COLUMN]()
 
-comptime BYTE_LM_RELEASE_EAGER = (
-    is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"]() or byte_lm_release_eager_for[TARGET_COLUMN]()
-) and not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"]()
-
-comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
-"""DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
-SEPARATE allocations, the way they were before the LM step memory work
-aliased them.
-
-THIS DEFINE EXISTS TO BE THE OTHER ARM. Aliasing is a storage decision and
-the whole claim about it is that it moves no bit, so the claim is only worth
-something if the unaliased spelling can still be BUILT and RUN beside it on
-the same fixture. `[[mojotrees-switches-must-flip]]`: a flip nobody can flip
-is prose. The shipped build defines nothing and gets the aliased buffers,
-which are 3 * M * V * 4 bytes smaller."""
+# TOMBSTONE: MOJOLEARN_BYTE_LM_CE_UNALIASED (opt-in arm: five separate [M, V] CE buffers, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-31-neural; code recoverable at 578fb1af7e. The aliased buffers are the only spelling;
+# byte_lm_ce_aliased() stays as the witness the binding exports and returns True.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_CE_UNALIASED.patch
+"""DEVIATION 3011: the five `[M, V]` cross-entropy buffers are aliased views
+(the unaliased B arm was deleted 2026-11-15, see the TOMBSTONE above)."""
 
 
 def byte_lm_ce_aliased() -> Bool:
-    """False in a build carrying `-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1`.
-
-    An A/B that cannot tell its two arms apart is not an A/B: without this
-    witness, building the same arm twice and comparing it with itself reads
-    exactly like a passed identity gate."""
-    comptime if BYTE_LM_CE_UNALIASED:
-        return False
+    """True: the cross-entropy buffers are always aliased (the unaliased arm
+    and its define were deleted 2026-11-15)."""
     return True
 
 
@@ -248,9 +239,8 @@ def byte_lm_attn_sticky_fallback() -> Bool:
     process that loaded the binding. A `.so` digest cannot answer it: the
     define gates a single runtime branch on a comptime constant, so the two
     builds differ by about one byte and are the same size."""
-    comptime if not ATTN_STICKY:
-        return False
-    return True
+    # (Sweep 2026-11-15: ATTN_STICKY is deleted; the latch never runs.)
+    return False
 
 
 def byte_lm_attn_kv_corner_guard() -> Bool:
@@ -336,8 +326,8 @@ def _require_device_finite(ctx: DeviceContext, mut scan: DeviceScanScratch,
 # The process context the byte-LM bindings run on (`neural_ctx` caches it per
 # name, so this is the binding's own context, created once, not a new one).
 comptime _BYTE_VALIDATE_CTX = (
-    "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoNeuralByteLMContextFast")
+    "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnNeuralByteLMContextFastV3")
 
 
 def _device_copy_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
@@ -522,7 +512,6 @@ def _byte_validate_allocations(config: ByteConfig) raises:
 
 struct ByteBuffers(Movable):
     """Configured buffers; flat arrays are authoritative, weights are copies."""
-    var neural_scratch: List[NeuralLifetimeArena]
     var config: ByteConfig
     var n_total: Int
     var optimizer_first: Int
@@ -545,8 +534,8 @@ struct ByteBuffers(Movable):
 
     var emb_w: DeviceBuffer[DType.float32]  # [V, d_model]
     var lm_w: DeviceBuffer[DType.float32]  # [V, d_model]
-    var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model]
-    var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model]
+    var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model] hand step's embedding gradient
+    var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model] hand step's head gradient
 
     var ids: DeviceBuffer[DType.int32]  # [M]
     var targets: DeviceBuffer[DType.int32]  # [M]
@@ -640,23 +629,9 @@ struct ByteBuffers(Movable):
         self.norms = _zeros(ctx, config.n_tensors())
         self.total_cell = _zeros(ctx, 1)
         self.out2 = _zeros(ctx, 2)
-        self.neural_scratch = List[NeuralLifetimeArena]()
         var opt_cells = identical_optimizer_workspace_floats(self.offsets)
         var ce_cells = 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
-        comptime if NN62_LIFETIME_ARENA:
-            # CE workspace is dead when forward enqueues its final fold (phase
-            # 0); clipping starts after all backward work (phase 2). Neither is
-            # retained for replay. Both use the same ordered context, and every
-            # scratch read follows its producer. The owner retains the slab
-            # across forward, backward, update and rollback; no async alias
-            # crosses contexts. Fresh steps repeat this fixed phase order.
-            var ranges = List[NeuralLiveRange]()
-            ranges.append(NeuralLiveRange(ce_cells, 0, 0))
-            ranges.append(NeuralLiveRange(opt_cells, 2, 2))
-            self.neural_scratch.append(NeuralLifetimeArena(ctx, ranges, 4 * max(ce_cells, opt_cells)))
-            self.opt_ws = self.neural_scratch[0].view(1, 2)
-        else:
-            self.opt_ws = _zeros(ctx, opt_cells)
+        self.opt_ws = _zeros(ctx, opt_cells)
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
         # Views of the flat parameters (`_bind_emb_head`), not copies.
@@ -668,15 +643,13 @@ struct ByteBuffers(Movable):
         else:
             self.emb_w = _zeros(ctx, V * DM)
             self.lm_w = _zeros(ctx, V * DM)
-        comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
-            # Views of the flat gradient (see BYTE_LM_EMB_HEAD_GRAD_VIEWS).
-            self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
-            self.dw_lm = self.grad.create_sub_buffer[DType.float32](
-                self.offsets[config.n_tensors() - 1], V * DM
-            )
-        else:
-            self.dw_emb = _zeros(ctx, V * DM)
-            self.dw_lm = _zeros(ctx, V * DM)
+        # TOMBSTONE: dw_emb / dw_lm (the hand backward's embedding and head gradients, copies or, under MOJOLEARN_IDN_PARAM_GRAD_VIEWS, views of `grad`) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the program's gradient scratch is the gradient (2 x V x d_model floats freed). Code recoverable at the deletion commit's parent.
+        # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
+        # Restored 2026-11-13 (lane restore-byte-lm-hand-step) as plain buffers
+        # with the hand step: `_byte_backward_tape` writes them and copies them
+        # into `grad` (the IDN_PARAM_GRAD_VIEWS view arm stays deleted).
+        self.dw_emb = _zeros(ctx, V * DM)
+        self.dw_lm = _zeros(ctx, V * DM)
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
@@ -721,10 +694,7 @@ struct ByteBuffers(Movable):
         if config.chunked_lm_head_v2:
             self.ce_shift = _zeros(ctx, 1)
         else:
-            comptime if BYTE_LM_CE_UNALIASED:
-                self.ce_shift = _zeros(ctx, M * V)
-            else:
-                self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
         self.ce_expo = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
         self.ce_denom = _zeros(ctx, M)
         self.ce_logdenom = _zeros(ctx, M)
@@ -741,17 +711,10 @@ struct ByteBuffers(Movable):
             self.ce_weights = _zeros(ctx, 1)
             self.ce_dlogits = _zeros(ctx, 1)
         else:
-            comptime if BYTE_LM_CE_UNALIASED:
-                self.ce_weights = _zeros(ctx, M * V)
-                self.ce_dlogits = _zeros(ctx, M * V)
-            else:
-                self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
-                self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
-        comptime if NN62_LIFETIME_ARENA:
-            self.ce_ws = self.neural_scratch[0].view(0, 0)
-        else:
-            self.ce_ws = _zeros(ctx, ce_cells)
+        self.ce_ws = _zeros(ctx, ce_cells)
 
         var head_scratch = (chunked_lm_head_v2_gemm_workspace_floats(M,V,DM) if config.chunked_lm_head_v2
             else identical_gemm_workspace_max_floats(M,V,DM))
@@ -863,48 +826,28 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 #: Apple only for now: Apple's step glue keeps `param` in place (no swap);
 #: NVIDIA's out-of-place arm swaps it every step, which the re-bind handles,
 #: but that column has not run this yet.
-#: `-D MOJOLEARN_BYTE_LM_COPY_EMB_HEAD` restores the copies.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_COPY_EMB_HEAD (opt-in revert to the emb/head copies, no A/B recorded) deleted 2026-11-15
+# by lane/expdel2-31-neural; code recoverable at 9cc10dddc6.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_COPY_EMB_HEAD.patch
 # NN60: two independently selectable, default-OFF IDENTICAL view arms.
 # Existing sub-buffer APIs supply the mechanism; no new vendor capability is
 # assumed. These source drafts have no compile/identity/full-model A/B evidence.
 # Rebind from the CURRENT owner each call, including after optimizer swaps.
 # L11 (2026-10-07): NN60's arms are arms 1 and 2 of MOJOLEARN_IDN_LM_VIEWS
-# and NN51 is arm 2 of MOJOLEARN_IDN_LM_RESIDENT_TOKENS
 # (training/neural_identical_experiments.mojo).
-comptime NN60_EMB_HEAD_VIEWS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_LM_VIEWS_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime NN51_RESIDENT_TOKEN_VALIDATION = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_LM_RESIDENT_TOKENS_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime NN60_BLOCK_VIEWS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_LM_VIEWS_ARM == 1
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS
-comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS)
-    and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
-)
-# grad-views lane (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF; same bits):
-# `dw_emb` and `dw_lm` are views of the flat `grad` at the offsets the two
-# per-step `_copy_into` calls in `_byte_backward_tape` copied them to (0 and
-# offsets[n_tensors - 1]). Why the bits hold: both are written WHOLE, once a
-# step, before anything reads that range of `grad`: the embedding backward
-# seeds every V x d cell (`emb_seed_kernel`, contract 5.5; EmbConfig.llama
-# has accumulate=False) and then folds the runs; the head dB is a GEMM
-# output (`identical_gemm_backward_b_into`) or, on the chunked v2 head,
-# zeroed then accumulated per chunk (`_chunk_dweight_kernel`). `grad` is
-# never swapped or reassigned (only `param`/m/v swap with their shadows),
-# so the views made once at construction stay bound to the current owner.
-# Nothing reads dw_emb / dw_lm after the old copy point, so the in-place
-# clip inside the update (which now also scales them) is unobservable.
-comptime BYTE_LM_EMB_HEAD_GRAD_VIEWS = IDN_PARAM_GRAD_VIEWS
+# TOMBSTONE: the MOJOLEARN_IDN_ALL_OFF umbrella term (old path; owner elsewhere) removed 2026-11-15 by
+# lane/expdel2-31-neural from NN60_EMB_HEAD_VIEWS, NN60_BLOCK_VIEWS and the live-status rule; code recoverable at 8b520bf1c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-31-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (arms 1 NI32, 2 NN51: resident token validation of the hand training step; no reader since lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
+# (Sweep 2026-11-15: NN60_EMB_HEAD_VIEWS, NN60_BLOCK_VIEWS and BYTE_LM_BLOCK_VIEWS removed: with IDN_LM_VIEWS deleted
+# they were False; the block-view arms of _unpack_block / _byte_backward_tape and _afn_bind_grad_views went with them.)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): BYTE_LM_BLOCK_VIEWS and its block-view arms back for the Apple
+# fast opt-in MOJOLEARN_AFN_LM_PARAM_VIEWS only (the IDENTICAL NN60 / IDN_LM_PARAM_VIEWS terms stay deleted).
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS
+comptime BYTE_LM_EMB_HEAD_VIEWS = TARGET_COLUMN == COLUMN_APPLE
+# TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand train step a view of the flat owners; default off, never promoted; its step went with lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 
 # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
@@ -916,7 +859,7 @@ comptime BYTE_LM_EMB_HEAD_GRAD_VIEWS = IDN_PARAM_GRAD_VIEWS
 
 def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
     """`emb_w` and `lm_w` read the CURRENT flat parameters: fresh views of
-    `param` (after any handle swap), or the two copies under the revert arm."""
+    `param` (after any handle swap), or the two copies where the views are not taken."""
     var n = config.vocab_size * config.d_model
     comptime if BYTE_LM_EMB_HEAD_VIEWS:
         tb.emb_w = tb.param.create_sub_buffer[DType.float32](0, n)
@@ -1031,11 +974,7 @@ struct ByteTrainer(Movable):
     var released_eager_cells: Int
     var grad_step: Int
     # Diagnostic reach witness; counts successful live-status optimizer checks.
-    var embedding_runs: List[OwnedEmbeddingRuns]
     var live_status_steps: Int
-    var one_wait: Optional[ByteOneWait]
-    """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
-    one-wait step; None on a build without the define."""
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32],
@@ -1059,9 +998,7 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.released_eager_cells = 0
         self.grad_step = -1
-        self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
-        self.one_wait = Optional[ByteOneWait]()
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
         self.arena_id = arena_begin()
@@ -1072,11 +1009,12 @@ struct ByteTrainer(Movable):
         self.backward = List[LlamaBackwardStages]()
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
         self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
-        for layer in range(config.n_layers):
+        for layer in range(config.n_layers):  # driver-loop: over decoder layers
             self.weights.append(_block_weights(ctx, initial_params, layer, config))
-            # The trace-disabled trainer uses the existing fused attention path.
-            # Allocate its quadratic stages lazily; eager/diagnostic fallback
-            # still grows them through ensure_*_attention_capacity.
+            # The hand step's per-layer training stages. The trace-disabled
+            # trainer uses the existing fused attention path. Allocate its
+            # quadratic stages lazily; eager/diagnostic fallback still grows
+            # them through ensure_*_attention_capacity.
             self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
             self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
         arena_end(self.arena_id)
@@ -1222,7 +1160,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(Int(ATTN_EXACT_TAIL_GUARD))
     out.append(Int(BYTE_LM_RELEASE_EAGER))
     out.append(tr.released_eager_cells)
-    out.append(Int(BYTE_LM_STICKY_EAGER))
+    out.append(0)  # the sticky-eager flag (arm deleted 2026-11-15); the record keeps its layout
     for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(Int(tr.forward[layer].attn_prefer_eager))
     out.append(Int(ATTN_REPAIR_MASKED_TAIL))
@@ -1272,7 +1210,7 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
     # Device-state validation requires readback. It precedes all numerical work
     # and all writes; downloads themselves are the only device operations here.
     # DEVIATION 2499: step-phase timers, IDENTICAL-only instrumentation
-    # behind MOJOLEARN_TRANSFORMER_TIMING=1 (the switch the block timers
+    # behind -D MOJOLEARN_TRANSFORMER_TIMING (the define the block timers
     # use). Every `timing_tick` synchronizes the context before it reads
     # the clock; on a phase that already ends with its own wait or a host
     # scan the extra wait is a no-op, and where a phase was asynchronous
@@ -1399,6 +1337,82 @@ def byte_train_step_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
     return ByteLeanResult(loss, trainer.completed_steps, trainer.buffers.buf_initialized.copy())
 
 
+def byte_train_steps_resident(ctx: DeviceContext, mut trainer: ByteTrainer, stack: Int, k: Int,
+                              losses: Int) raises -> ByteLeanResult:
+    """`k` steps on device-resident state in one native call: `stack` holds
+    the k admitted batches one after the other (host int32, batch rows of
+    length + 1 each), `losses` receives the k step losses. A refused call
+    commits none of its steps: the failing step is rolled back by its own
+    shadow (`byte_train_step_resident`) and the steps before it from the
+    call's entry state, before the error propagates. The result's loss is
+    the last step's.
+
+    k hand steps, step i the bits of the i-th of k single steps."""
+    _require_profile()
+    byte_validate_optimizer(trainer.optimizer)
+    if not trainer.healthy:
+        raise Error("byte LM: session lost; restore a retained export")
+    if k < 1 or trainer.completed_steps < 0 or trainer.completed_steps + k > 999999:
+        raise Error("byte LM: step bound reached")
+    var loss_out = FP(unsafe_from_address=losses)
+    var config = trainer.config.copy()
+    var n_ids = config.batch * (config.length + 1)
+    if k == 1:
+        # The measured one-step call: no call-level copy of the state.
+        var one = byte_train_step_resident(ctx, trainer,
+            list_i32(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=stack), n_ids))
+        loss_out[0] = one.loss
+        return one^
+    # The call's entry state, so a refusal at step i > 0 commits none of
+    # the call's steps (one D2D copy of param, m, v per call of k > 1).
+    var n = config.n_total()
+    var call_p = _zeros(ctx, n)
+    var call_m = _zeros(ctx, n)
+    var call_v = _zeros(ctx, n)
+    _copy_into(ctx, call_p, trainer.buffers.param, 0, 0, n)
+    _copy_into(ctx, call_m, trainer.buffers.m_state, 0, 0, n)
+    _copy_into(ctx, call_v, trainer.buffers.v_state, 0, 0, n)
+    var call_flags = trainer.buffers.buf_initialized.copy()
+    var call_step = trainer.completed_steps
+    var last = Float32(0)
+    for i in range(k):  # driver-loop: over the call's training steps (one hand step each)
+        var ids = list_i32(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=stack + i * n_ids * 4), n_ids)
+        var failed = False
+        var message = String("")
+        try:
+            var r = byte_train_step_resident(ctx, trainer, ids)
+            loss_out[i] = r.loss
+            last = r.loss
+        except error:
+            failed = True
+            message = String(error)
+        if failed:
+            if i > 0 and trainer.healthy:
+                # The failing step is already rolled back; restore the steps
+                # before it from the call's entry state.
+                trainer.healthy = False
+                trainer.shadow_valid = False
+                _copy_into(ctx, trainer.buffers.param, call_p, 0, 0, n)
+                _copy_into(ctx, trainer.buffers.m_state, call_m, 0, 0, n)
+                _copy_into(ctx, trainer.buffers.v_state, call_v, 0, 0, n)
+                step_count_sync()
+                ctx.synchronize()
+                trainer.buffers.buf_initialized = call_flags.copy()
+                trainer.completed_steps = call_step
+                trainer.grad_step = -1
+                try:
+                    trainer.validate_device_state(ctx, call_step)
+                except lost:
+                    raise Error("byte LM: session lost: " + String(lost) + " (step failure: " + message + ")")
+                trainer.healthy = True
+            raise Error(message)
+    # The entry copies stay alive until every step that may restore them ran.
+    _ = call_p^
+    _ = call_m^
+    _ = call_v^
+    return ByteLeanResult(last, trainer.completed_steps, trainer.buffers.buf_initialized.copy())
+
+
 def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     """Restore `param`, `m_state`, `v_state` and the flags from the shadow
     taken at this step's shadow point (design 4.2 item 4): three D2D
@@ -1434,74 +1448,30 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     return True
 
 
-def _byte_layer_forward_deferred(ctx: DeviceContext, mut tr: ByteTrainer, layer: Int,
-                                 mut trace: IdentityTrace, defer_addr: Int) raises:
-    """IDN_TRAIN_ONE_WAIT: one decoder layer of `_byte_forward_loss`, the
-    same call with the same arguments, its stages armed with the trainer's
-    deferred window for the call and disarmed after it. No completion wait
-    after the layer. A raise inside the call puts the stages back in their
-    slot before it propagates, so the replayed synchronous step finds the
-    trainer's layer list whole."""
-    var config = tr.config.copy()
-    var M = config.batch * config.length
-    var stages = tr.forward.pop(layer)
-    tr.prefill_cache.s = 0
-    var prefix = String("byte.block") + String(layer) + ".forward"
-    var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
-        M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
-    )
-    var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
-        M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
-        tr.weights[layer + 1].opts.norm_bias,
-    )
-    stages.defer_addr = defer_addr
-    try:
-        if layer == 0:
-            if fuse_next:
-                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-            else:
-                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-        else:
-            if fuse_next:
-                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-            else:
-                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-    except error:
-        stages.defer_addr = 0
-        tr.forward.insert(layer, stages^)
-        raise error^
-    stages.defer_addr = 0
-    comptime if BYTE_LM_RELEASE_EAGER:
-        tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
-    tr.forward.insert(layer, stages^)
+# ---------------------------------------------------------------- the hand step (default)
+# RESTORED 2026-11-13 (lane restore-byte-lm-hand-step; AGENTS.md "A measured
+# winner is never deleted on reasoning"). Lane x7-byte-lm-on-executor deleted
+# this step on 2026-11-09 for the program step below with "RUN OWED"; the
+# candidate 4c2340386abc record measured lm-train-step (bytes) at 48.9 ms on
+# the L40S and 50.5 ms on the MI325X against 35.5 / 43.9 ms for this step in
+# 0.8.55 / 0.8.66 (~/mojolearn-evidence/measure-candidate/*-4c2340386abc).
+# The hand step is the default again (the 0.8.55 route and its bits on every
+# GPU column). TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (the program step, opt-in
+# B arm, A/B owed and never run) deleted 2026-11-15 by lane/expdel2-31-neural;
+# code recoverable at f0bffede56.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.patch
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, lane x7's program step on every column; L40S ba08dac006 lm-train-step bytes 35.71 -> 48.52 ms, B 1.36x slower; training/byte_lm_program.mojo and training/byte_lm_host_program.mojo deleted with it) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# Not restored (their defines stay refused): the IDN_TRAIN_ONE_WAIT step,
+# the AFN_LM_NOSYNC and AFN_LM_HEAD_FUSE arms, IDN_LM_RESIDENT_TOKENS and
+# IDN_PARAM_GRAD_VIEWS; the binding's per-step driver stays deleted (the
+# k steps of one call loop here, `byte_train_steps_resident`).
 
 
-def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
+def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                        ids: List[Int32], mut trace: IdentityTrace) raises -> Float32:
-    """Shared forward only. Authoritative params/m/v/flags/t are read-only.
-
-    `deferred` (afn-lm NOSYNC, FAST + Apple only; False everywhere else):
-    the ids go up from `ids` itself with no staging and no wait, and the
-    loss stays on the device (returns 0; the step's one wait reads it).
-    The caller keeps `ids` alive past that wait."""
+    """The hand step's forward and mean loss. Authoritative
+    params/m/v/flags/t are read-only."""
     var config = tr.config.copy()
     var M = config.batch * config.length
     var ton = timing_on()
@@ -1512,22 +1482,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # refusal runs on the device (`byte_require_tokens_device`, the message
     # `byte_validate_tokens` raised) before the embedding gather reads them;
     # its wait also completes the uploads, so `ids` may be released after.
-    # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
-    # it replaces was data-sized CPU work on the GPU route).
     afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
-    # IDN_TRAIN_ONE_WAIT: the same two range scans answered in ONE wait,
-    # still in front of the gather.
-    var tokens_checked = False
-    comptime if IDN_TRAIN_ONE_WAIT and deferred:
-        if tr.one_wait:
-            one_wait_require_tokens(ctx, tr.one_wait.value(), tr.buffers.ids, tr.buffers.targets,
-                M, config.vocab_size)
-            tokens_checked = True
-    if not tokens_checked:
-        byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
+    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
-    for layer in range(config.n_layers):
+    for layer in range(config.n_layers):  # driver-loop: over decoder layers
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
     _bind_emb_head(ctx, tr.buffers, config)
     # No wait: the embedding forward below is the next thing queued on this
@@ -1542,31 +1501,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     timing_bytes(ton, "step.unpack_weights_bytes", unpack_cells * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
-    comptime if NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS:
-        # byte_require_tokens_device above completed the range admission on
-        # these owned IDs. No mutation occurs between that check and gather.
-        # Source draft only: all-vendor identity/full-step qualification pending.
-        emb_refuse_shape(emb, M)
-        identical_embedding_forward_prerefused_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
-    else:
-        identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
+    identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
     # No wait: the block forward loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_forward")
-    # IDN_TRAIN_ONE_WAIT: inside the one-wait step each layer call's
-    # refusal goes into the trainer's deferred window and the per-layer
-    # completion wait is dropped (the release below enqueues its frees).
-    var layer_wait = True
-    var defer_addr = 0
-    comptime if IDN_TRAIN_ONE_WAIT and deferred:
-        if tr.one_wait:
-            layer_wait = False
-            defer_addr = Int(MutPointer(to=tr.one_wait.value().window).unsafe_origin_cast[MutAnyOrigin]())
-    for layer in range(config.n_layers):
-        comptime if IDN_TRAIN_ONE_WAIT and deferred:
-            if defer_addr != 0:
-                _byte_layer_forward_deferred(ctx, tr, layer, trace, defer_addr)
-                continue
+    for layer in range(config.n_layers):  # driver-loop: over decoder layers
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
         var stages = tr.forward.pop(layer)
@@ -1592,12 +1531,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    norm1_ready=norm1_ready)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1606,13 +1544,12 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
-        if layer_wait and _byte_layer_sync():
+                    norm1_ready=norm1_ready)
+        if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()
         comptime if BYTE_LM_RELEASE_EAGER:
@@ -1644,28 +1581,15 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     # first statement: the full logits download and host scan) and then
     # `step.ce_forward` (L1-L13, waited on under the switch only), both from
     # its own clock; this clock is re-read after the call's wait.
-    comptime if AFN_LM_HEAD_FUSE:
-        # afn-lm HEAD_FUSE (FAST + Apple only): softmax, CE, mean loss and
-        # dlogits in one row kernel; the CE backward below is skipped.
-        if not config.chunked_lm_head_v2:
-            var afn_status = afn_status_view(tr.scan)
-            afn_ce_fused(ctx, tr.buffers.ce_loss, tr.buffers.ce_dlogits,
-                tr.buffers.logits, tr.buffers.targets, afn_status, M,
-                config.vocab_size)
-    if not config.chunked_lm_head_v2 and not AFN_LM_HEAD_FUSE:
+    if not config.chunked_lm_head_v2:
         identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
             tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
             tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
             tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
             tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
-            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce, targets_prerefused=NN51_RESIDENT_TOKEN_VALIDATION)
+            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
     # No wait: `download_f32` below waits for the loss itself.
     # A host round trip costs about a dozen kernel launches on Metal.
-    comptime if (AFN_LM_NOSYNC or IDN_TRAIN_ONE_WAIT) and deferred:
-        # IDN_TRAIN_ONE_WAIT: the loss stays on the device; the step's one
-        # wait reads it with its finite check.
-        _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
-        return Float32(0.0)
     if ton:
         tk = Int(perf_counter_ns())
     _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
@@ -1678,147 +1602,26 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
 
 def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
                       ids: List[Int32], resident: Bool = False) raises -> Float32:
-    """Single-device composition; the numerical operation order is unchanged.
-
-    `resident` (the resident step only): admits the IDN_TRAIN_ONE_WAIT step,
-    whose failure path rolls back and replays; the stateless capture keeps
-    the synchronous step."""
-    comptime if AFN_LM_NOSYNC:
-        return _afn_byte_step_nosync(ctx, tr, ids)
-    comptime if IDN_TRAIN_ONE_WAIT and not BYTE_LM_FAULT_INJECT:
-        if resident and not tr.buffers.optimizer_pooled:
-            return _byte_step_one_wait(ctx, tr, ids)
+    """One training step: the hand step's gradient and update. `resident`
+    is kept for the callers' signature (both paths are the same step)."""
+    _ = resident
     var loss = byte_gradient_device(ctx, tr, ids)
     byte_update_device(ctx, tr)
     return loss
 
-
-def _byte_step_one_wait(ctx: DeviceContext, mut tr: ByteTrainer,
-                        ids: List[Int32]) raises -> Float32:
-    """IDN_TRAIN_ONE_WAIT (lane decode-resident, 2026-10-28): the resident
-    step with its deferred checks (training/byte_lm_one_wait.mojo). The same
-    forward, backward, shadow point and update as the synchronous step, in
-    the same order on the same buffers; the token range is one wait, the
-    layer refusals go into the trainer's window, the per-layer waits are
-    dropped, and the loss, gradient and state checks are one status launch
-    read with the window and the loss at the step's last wait.
-
-    Clean: the synchronous step's bytes, returned. Not clean, or any raise
-    inside: the update is rolled back from the shadow it took (when it got
-    that far; `byte_rollback` re-scans the restored state) and the step is
-    replayed synchronously, which raises today's message, or succeeds, as
-    today. The replay starts from the state the step started from, so every
-    message, flag and bit it leaves is the synchronous step's."""
-    if not tr.one_wait:
-        tr.one_wait = ByteOneWait(ctx)
-    var n = tr.config.n_total()
-    tr.one_wait.value().window.begin()
-    var clean = False
-    var loss = Float32(0.0)
-    try:
-        _ = byte_gradient_device[True](ctx, tr, ids)
-        byte_update_device[True](ctx, tr)
-        var r = one_wait_step_finish(ctx, tr.one_wait.value(), tr.buffers.ce_loss, tr.buffers.grad,
-            tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
-        clean = r[0]
-        loss = r[1]
-    except:
-        # Drain what the deferred step enqueued before anything is restored.
-        step_count_sync()
-        ctx.synchronize()
-        clean = False
-    if clean:
-        return loss
-    if tr.shadow_valid:
-        _ = byte_rollback(ctx, tr)
-    # The entry state `byte_train_step_resident` set for this step.
-    tr.healthy = False
-    tr.shadow_valid = False
-    tr.grad_step = -1
-    var sync_loss = byte_gradient_device(ctx, tr, ids)
-    byte_update_device(ctx, tr)
-    return sync_loss
-
-
-def _afn_byte_step_nosync(ctx: DeviceContext, mut tr: ByteTrainer,
-                          ids: List[Int32]) raises -> Float32:
-    """afn-lm NOSYNC (FAST + Apple only): the resident step with ONE host
-    wait. The gradient half runs deferred (no staged upload, no loss
-    download); the update is the shipped shadow copy and the shipped Adam
-    kernel with the shipped scalars, minus the entry scans and the wait;
-    every check of the synchronous step (loss, gradients, then
-    parameters, moments and v >= 0 after the update) is one status launch
-    read back with the loss at the one wait. A failing check raises AFTER
-    the shadow point, so `_byte_recover` rolls the update back: the state
-    a failure leaves is the synchronous step's. `ids` is borrowed for the
-    whole call, past the wait, so its upload never reads freed memory."""
-    if tr.buffers.optimizer_pooled:
-        raise Error("byte LM: pooled optimizer requires its group update")
-    if tr.optimizer.kind == OPT_SGD or tr.optimizer.max_norm > Float32(0.0):
-        raise Error("byte LM: NOSYNC update takes Adam or AdamW without clipping")
-    var config = tr.config.copy()
-    var n = config.n_total()
-    var next_step = tr.completed_steps + 1
-    if next_step >= 1000000:
-        raise Error("byte LM: completed step must be in [0,1000000)")
-    var ton = timing_on()
-    var tk = Int(perf_counter_ns())
-    var status = afn_status_view(tr.scan)
-    afn_reset(ctx, status, tr.buffers.ce_loss, True, False)
-    _ = byte_gradient_device[True](ctx, tr, ids)
-    _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
-    _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
-    _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
-    _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
-    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
-    tr.shadow_step = tr.completed_steps
-    tr.shadow_valid = True
-    _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
-    ref cfg = tr.optimizer
-    var sc = device_step_scalars(cfg, next_step)
-    var is_adamw = Int32(1 if cfg.kind == OPT_ADAMW else 0)
-    step_count_launch()
-    ctx.enqueue_function[adam_update_kernel](
-        tr.buffers.param.unsafe_ptr(),
-        tr.buffers.grad.unsafe_ptr(),
-        tr.buffers.m_state.unsafe_ptr(),
-        tr.buffers.v_state.unsafe_ptr(),
-        tr.buffers.denom_out.unsafe_ptr(),
-        tr.buffers.q_out.unsafe_ptr(),
-        Int32(n),
-        is_adamw,
-        cfg.beta1,
-        cfg.beta2,
-        cfg.eps,
-        cfg.weight_decay,
-        sc.c1,
-        sc.c2,
-        sc.step_size,
-        sc.rt_bc2,
-        sc.decay_mul,
-        cfg.lr,
-        sc.bc1,
-        sc.bc2,
-        grid_dim=(_opt_grid_for(n), 1, 1),
-        block_dim=(OPT_TPB, 1, 1),
-    )
-    _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
-    _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
-    var loss = afn_step_finish(ctx, tr.scan, tr.buffers.ce_loss, tr.buffers.grad,
-        tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
-    timing_tick(ctx, ton, tk, "step.afn_nosync_step")
-    _ = status^
-    _ = ids
-    tr.completed_steps = next_step
-    tr.grad_step = next_step
-    return loss
+# TOMBSTONE: the byte LM's hand step (the per-layer forward `_byte_forward_loss` / `_byte_layer_forward_deferred` with its eight llama_decoder_layer_forward sites, the tape backward wrapper `_byte_backward_tape` over autograd/rules_lm.mojo byte_backward_autograd, the IDN_TRAIN_ONE_WAIT and AFN_LM_NOSYNC step variants, the step-glue update arms `_byte_glue_update` / `_byte_live_status_*`, the eager-scratch release helpers and the certified optimizer step of the trainer) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HAND_STEP").
+# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners as ops: the hand step's embedding backward (radix / scan plan pick) as OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo), its residual2 -> next norm1 fusion as the attention step op's ATTN_STEP_NEXT_NORM arm (autograd/block_step_ops.mojo); A/B -D MOJOLEARN_BYTE_LM_GENERIC_OPS.
+# Restored 2026-11-13 whole by lane restore-byte-lm-hand-step as the DEFAULT step (above): the measured winner (lm-train-step bytes NV 35.5 vs 48.9 ms, AMD 43.9 vs 50.5 ms) stays until an NV + AMD A/B decides; this program step is the B arm -D MOJOLEARN_BYTE_LM_PROGRAM_STEP.
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, lane x7's program step on every column; L40S ba08dac006 lm-train-step bytes 35.71 -> 48.52 ms, B 1.36x slower; training/byte_lm_program.mojo and training/byte_lm_host_program.mojo deleted with it) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 
 
 def _byte_layer_sync() -> Bool:
     """lane/neural-net-experiment (2026-09-30): whether the step waits on
     the host after EVERY layer's forward and backward (sixteen waits a step
     at the board's depth, before the fused attention's own regime reads).
-    `MOJOLEARN_BYTE_LM_LAYER_SYNC=0` skips them: every launch sits on the
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` skips them: every launch sits on the
     one in-order context, the next layer's kernels are enqueued behind this
     layer's, and the eager-scratch release only drops buffer handles whose
     frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
@@ -1826,12 +1629,22 @@ def _byte_layer_sync() -> Bool:
     measured behaviour; the L40S toggle sweep read 1.00 either way) and OFF
     on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
     a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
-    `MOJOLEARN_BYTE_LM_LAYER_SYNC=1` restores them); the step's `step.*`
-    timing ticks read the same either way."""
-    var v = String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC"))
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v == "1"
-    return v != "0"
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` restores them); the step's `step.*`
+    timing ticks read the same either way.
+
+    A build constant since lane envgate-neural-lm (2026-11-15): it was a
+    getenv per layer per step. Column defaults unchanged; B arms
+    `-D MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF` on NVIDIA and AMD (RUN OWED,
+    bench/results/paper_compare/owed-pre0867.json "byte-lm-layer-sync-off";
+    docs/apple-fast/EXPERIMENTS.md) and `-D MOJOLEARN_BYTE_LM_LAYER_SYNC` on
+    Apple."""
+    return BYTE_LM_LAYER_SYNC
+
+
+comptime BYTE_LM_LAYER_SYNC = is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC"]() or (
+    TARGET_COLUMN != COLUMN_APPLE and not is_defined["MOJOLEARN_BYTE_LM_LAYER_SYNC_OFF"]()
+)
+"""See `_byte_layer_sync`: on for NVIDIA and AMD, off on Apple."""
 
 
 def _byte_release_forward_scratch(ctx: DeviceContext,
@@ -1915,7 +1728,7 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     var tk = Int(perf_counter_ns())
     comptime if BYTE_LM_BLOCK_VIEWS:
         # The weight gradients land in the current flat `grad` owner.
-        for layer in range(config.n_layers):
+        for layer in range(config.n_layers):  # driver-loop: over decoder layers
             _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
     # PLAN_SCAN performs 2 * vocab * positions integer probes before the
     # identical row fold; PLAN_SORT is a total-key sort over the positions
@@ -1936,44 +1749,36 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         tr.buffers.ce_ones, tr.buffers.ce_weights, tr.buffers.ce_expo, tr.buffers.ce_denom,
         tr.buffers.ce_logp, tr.buffers.ce_max, tr.buffers.head_ws, tr.buffers.head_bwd_ws,
         tr.buffers.targets, tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-        tr.buffers.emb_perm, tr.embedding_runs, config.batch, config.length, config.vocab_size,
-        config.chunked_lm_head_v2, AFN_LM_HEAD_FUSE and not config.chunked_lm_head_v2,
-        NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS, emb_plan,
+        tr.buffers.emb_perm, config.batch, config.length, config.vocab_size,
+        config.chunked_lm_head_v2, False, False, emb_plan,
     )
     # The tape's backward has drained the queue (its one wait): the
     # per-layer policy and release steps, after every layer.
     for layer in range(config.n_layers):  # driver-loop: over decoder layers
-        comptime if BYTE_LM_STICKY_EAGER:
-            if tr.forward[layer].attn_forward_status == FUSED_CORNER or tr.backward[layer].attn_backward_status == FUSED_CORNER:
-                tr.forward[layer].attn_prefer_eager = True
         comptime if BYTE_LM_RELEASE_EAGER:
             tr.released_eager_cells += _byte_release_eager(ctx, tr.forward[layer], tr.backward[layer])
     timing_tick(ctx, ton, tk, "envelope.backward_tape")
-    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
+    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):  # driver-loop: over decoder layers
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
-    comptime if not BYTE_LM_EMB_HEAD_GRAD_VIEWS:
-        # MOJOLEARN_IDN_PARAM_GRAD_VIEWS: the backward already wrote both
-        # ranges of `grad` through the views, so these copies go.
-        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
-        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
+    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
     timing_tick(ctx, ton, tk, "step.pack_grads")
     var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
-    comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
-        packed_cells = 0
     timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
 
 
-def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
+def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
                          ids: List[Int32]) raises -> Float32:
-    """Internal gradient half. Caller owns admission and transaction recovery.
+    """Internal gradient half (also ParallelByteLM's shard step). Caller
+    owns admission and transaction recovery.
 
-    The forward and loss, then the backward half on the autograd tape
-    (`_byte_backward_tape`)."""
+    The hand step's forward and loss, then the backward half on the
+    autograd tape (`_byte_backward_tape`)."""
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
     tr.released_eager_cells = 0
     var trace = IdentityTrace.disabled()
-    var loss = _byte_forward_loss[deferred](ctx, tr, ids, trace)
+    var loss = _byte_forward_loss(ctx, tr, ids, trace)
     # Every byte LM layer is built with the default block options
     # (_block_weights / _block_weights_dev), which is what the tape records.
     if not byte_lm_tape_eligible(tr.weights):
@@ -1983,14 +1788,8 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     return loss
 
 
-def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer) raises:
-    """Internal update half, including gradient scan, shadow and validation.
-
-    `deferred` (IDN_TRAIN_ONE_WAIT only; False everywhere else): the
-    gradient scan and the post-update state scans are left to the one-wait
-    step's status launch (`one_wait_step_finish`), which checks the same
-    predicates over the same buffers at its one wait; the shadow point and
-    the update are the shipped ones."""
+def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+    """Internal update half, including gradient scan, shadow and validation."""
     if tr.buffers.optimizer_pooled:
         raise Error("byte LM: pooled optimizer requires its group update")
     var config = tr.config.copy()
@@ -2000,8 +1799,7 @@ def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
     # The pre-update gradient scan, on the device (was `_require_finite`
     # over a downloaded mirror): same message, same first index.
-    comptime if not (IDN_TRAIN_ONE_WAIT and deferred):
-        _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
+    _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
     timing_tick(ctx, ton, tk, "step.validate_grads_scan")
     timing_bytes(ton, "step.validate_grads_scan_bytes", n * 4)
     # Host arithmetic on a field nothing below writes before the update, so
@@ -2018,7 +1816,7 @@ def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     var live_validated = False
     # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
@@ -2054,14 +1852,8 @@ def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
     # validate_after as device scans (design 2.3): finite param, m, v and
     # `v >= 0`, by name, with no download.
-    comptime if IDN_TRAIN_ONE_WAIT and deferred:
-        # The host half of `validate_device_state` (no wait): the scans are
-        # the status launch's.
-        if next_step < 0 or next_step >= 1000000:
-            raise Error("byte LM: completed step must be in [0,1000000)")
-    else:
-        if not live_validated:
-            tr.validate_device_state(ctx, next_step)
+    if not live_validated:
+        tr.validate_device_state(ctx, next_step)
     timing_tick(ctx, ton, tk, "step.validate_after_scan")
     timing_bytes(ton, "step.validate_after_scan_bytes", 16 if live_validated else 4 * n * 4)
     tr.completed_steps = next_step
@@ -2105,7 +1897,7 @@ def byte_glue_update_launch(
     with per-tensor flags) and clipping (`max_norm > 0`). The byte LM admits
     neither (`byte_validate_optimizer`). Recorded intermediates are refused
     at compile time on the trial build."""
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not OPT_RECORD_INTERMEDIATES, (
             "the step glue update path does not record denom/q; build the"
             " glue trial without MOJOLEARN_OPT_RECORD"
@@ -2240,7 +2032,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     The fault-injection build is refused at compile time: its `opt_refuse`
     site writes `m_state` between the shadow copy and the optimizer, which
     is the one write the `optskip` argument excludes (brief section 5.2)."""
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if STEP_GLUE_SHIPPED_UPDATE:
         comptime assert not BYTE_LM_FAULT_INJECT, (
             "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
             " not combined: the G4 fault sites assume the shipped update order"
@@ -2285,8 +2077,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
     # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
     comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()
-                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()):
+                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()):
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;
         # the path already refuses fault injection before it changes state.

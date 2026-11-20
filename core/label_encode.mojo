@@ -24,6 +24,7 @@ take the same steps, in the same order:
      (the `_labels.py` ORDER RULE's first-seen representative).
 
 Integers and bit moves only: the two routes give the same bytes."""
+from core.host_parallel import host_parallelize
 
 
 comptime LABEL_KIND_F64 = 0
@@ -56,6 +57,12 @@ def label_sort_key(bits: UInt64, kind: Int) -> UInt64:
     return b ^ _SIGN
 
 
+comptime _UI_CHUNK = 65536  # labels per host-pool task: each task keys, counts or scatters tens of thousands of labels, so the pool's dispatch cost is amortized whatever the label count
+comptime _U64P = MutPointer[UInt64, MutUntrackedOrigin]
+comptime _U32P = MutPointer[UInt32, MutUntrackedOrigin]
+comptime _INTP = MutPointer[Int, MutUntrackedOrigin]
+
+
 def host_unique_inverse(
     src: MutPointer[UInt64, MutUntrackedOrigin], n: Int, kind: Int,
     classes: MutPointer[UInt64, MutUntrackedOrigin],
@@ -63,51 +70,144 @@ def host_unique_inverse(
 ) -> Int:
     """Steps 1-5 above over `n` labels at `src`. Returns the class count,
     or -2 when a label is NaN (nothing is promised about the outputs then).
-    `classes` holds `n` slots, `codes` `n`."""
+    `classes` holds `n` slots, `codes` `n`.
+
+    Every step runs across the host pool in `_UI_CHUNK` label runs
+    (round2-fixes-2; perf audit 3: it was one thread, eight full passes):
+    the keys per run; each radix pass a per-run digit histogram, ONE
+    digit-major prefix over (digit, run) and a per-run stable scatter (a
+    label's destination is the same as the serial pass's, so the order is
+    the same permutation); a pass whose digit is the same for every label is
+    the identity and is skipped; the flags counted per run, one prefix over
+    the runs, then each run emits its codes and class values. Same bytes."""
+    if n <= 0:
+        return 0
+    var units = (n + _UI_CHUNK - 1) // _UI_CHUNK
     # 1. key
     var key = List[UInt64](unsafe_uninit_length=n)
     var row = List[UInt32](unsafe_uninit_length=n)
     var tk = List[UInt64](unsafe_uninit_length=n)
     var tr = List[UInt32](unsafe_uninit_length=n)
-    var nan = False
-    for i in range(n):
-        var b = src.unsafe_load(i)
-        if label_is_nan(b, kind):
-            nan = True
-        key[i] = label_sort_key(b, kind)
-        row[i] = UInt32(i)
-    if nan:
-        return -2
+    var nan_runs = List[Int](length=units, fill=0)
+    var src_at = Int(src)
+    var key_at = Int(key.unsafe_ptr())
+    var row_at = Int(row.unsafe_ptr())
+    var nan_at = Int(nan_runs.unsafe_ptr())
+    def keyed(unit: Int) {imm n, imm kind, imm src_at, imm key_at, imm row_at, imm nan_at}:
+        var sp = _U64P(unsafe_from_address=src_at)
+        var kp = _U64P(unsafe_from_address=key_at)
+        var rp = _U32P(unsafe_from_address=row_at)
+        var stop = min(n, (unit + 1) * _UI_CHUNK)
+        for i in range(unit * _UI_CHUNK, stop):  # native data loop (not a driver loop): labels of one key run
+            var b = sp[i]
+            if label_is_nan(b, kind):
+                _INTP(unsafe_from_address=nan_at)[unit] = 1
+            kp[i] = label_sort_key(b, kind)
+            rp[i] = UInt32(i)
+    host_parallelize(keyed, units)
+    for u in range(units):  # driver-loop: over the key runs (one NaN flag each)
+        if nan_runs[u] != 0:
+            return -2
     # 2. stable LSD radix sort by 8-bit digits
-    var counts = List[Int](length=256, fill=0)
-    for p in range(8):
+    var hist = List[Int](length=units * 256, fill=0)
+    var totals = List[Int](length=256, fill=0)
+    var hist_at = Int(hist.unsafe_ptr())
+    var cur_k = key_at
+    var cur_r = row_at
+    var alt_k = Int(tk.unsafe_ptr())
+    var alt_r = Int(tr.unsafe_ptr())
+    for p in range(8):  # driver-loop: over the eight digit passes
         var shift = UInt64(8 * p)
-        for d in range(256):
-            counts[d] = 0
-        for i in range(n):
-            counts[Int((key[i] >> shift) & UInt64(255))] += 1
+        var in_k = cur_k
+        def count(unit: Int) {imm n, imm shift, imm in_k, imm hist_at}:
+            var kp = _U64P(unsafe_from_address=in_k)
+            var hp = _INTP(unsafe_from_address=hist_at) + unit * 256
+            for d in range(256):  # driver-loop: over the 256 digit counters of one run
+                hp[d] = 0
+            var stop = min(n, (unit + 1) * _UI_CHUNK)
+            for i in range(unit * _UI_CHUNK, stop):  # native data loop (not a driver loop): labels of one count run
+                hp[Int((kp[i] >> shift) & UInt64(255))] += 1
+        host_parallelize(count, units)
+        var single = False
+        for d in range(256):  # driver-loop: over the 256 digits (their totals)
+            var t = 0
+            for u in range(units):  # driver-loop: over the runs of one digit
+                t += hist[u * 256 + d]
+            totals[d] = t
+            if t == n:
+                single = True
+        if single:
+            continue  # every label has this digit: the stable pass is the identity
         var run = 0
-        for d in range(256):
-            var c = counts[d]
-            counts[d] = run
-            run += c
-        for i in range(n):
-            var d = Int((key[i] >> shift) & UInt64(255))
-            var dst = counts[d]
-            counts[d] = dst + 1
-            tk[dst] = key[i]
-            tr[dst] = row[i]
-        for i in range(n):
-            key[i] = tk[i]
-            row[i] = tr[i]
+        for d in range(256):  # driver-loop: over the digits, digit-major prefix of the run offsets
+            for u in range(units):  # driver-loop: over the runs of one digit
+                var c = hist[u * 256 + d]
+                hist[u * 256 + d] = run
+                run += c
+        var in_r = cur_r
+        var out_k = alt_k
+        var out_r = alt_r
+        def scatter(unit: Int) {imm n, imm shift, imm in_k, imm in_r, imm out_k, imm out_r, imm hist_at}:
+            var kp = _U64P(unsafe_from_address=in_k)
+            var rp = _U32P(unsafe_from_address=in_r)
+            var ok = _U64P(unsafe_from_address=out_k)
+            var orr = _U32P(unsafe_from_address=out_r)
+            var hp = _INTP(unsafe_from_address=hist_at) + unit * 256
+            var stop = min(n, (unit + 1) * _UI_CHUNK)
+            for i in range(unit * _UI_CHUNK, stop):  # native data loop (not a driver loop): labels of one scatter run, in row order (stable)
+                var d = Int((kp[i] >> shift) & UInt64(255))
+                var dst = hp[d]
+                hp[d] = dst + 1
+                ok[dst] = kp[i]
+                orr[dst] = rp[i]
+        host_parallelize(scatter, units)
+        alt_k = cur_k
+        alt_r = cur_r
+        cur_k = out_k
+        cur_r = out_r
     # 3. flag, 4. exclusive scan, 5. emit
+    var base = List[Int](length=units, fill=0)
+    var base_at = Int(base.unsafe_ptr())
+    var sk = cur_k
+    var sr = cur_r
+    def flags(unit: Int) {imm n, imm sk, imm base_at}:
+        var kp = _U64P(unsafe_from_address=sk)
+        var c = 0
+        var stop = min(n, (unit + 1) * _UI_CHUNK)
+        for j in range(unit * _UI_CHUNK, stop):  # native data loop (not a driver loop): sorted positions of one flag run
+            if j == 0 or kp[j] != kp[j - 1]:
+                c += 1
+        _INTP(unsafe_from_address=base_at)[unit] = c
+    host_parallelize(flags, units)
     var scan = 0
-    for j in range(n):
-        var flag = 1 if j == 0 or key[j] != key[j - 1] else 0
-        var cls = scan + flag - 1
-        var r = Int(row[j])
-        codes.unsafe_store(r, Int32(cls))
-        if flag == 1:
-            classes.unsafe_store(cls, src.unsafe_load(r))
-        scan += flag
+    for u in range(units):  # driver-loop: over the flag runs, exclusive prefix
+        var c = base[u]
+        base[u] = scan
+        scan += c
+    var codes_at = Int(codes)
+    var classes_at = Int(classes)
+    def emit(unit: Int) {imm n, imm sk, imm sr, imm base_at, imm src_at, imm codes_at, imm classes_at}:
+        var kp = _U64P(unsafe_from_address=sk)
+        var rp = _U32P(unsafe_from_address=sr)
+        var sp = _U64P(unsafe_from_address=src_at)
+        var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=codes_at)
+        var clp = _U64P(unsafe_from_address=classes_at)
+        var running = _INTP(unsafe_from_address=base_at)[unit]
+        var stop = min(n, (unit + 1) * _UI_CHUNK)
+        for j in range(unit * _UI_CHUNK, stop):  # native data loop (not a driver loop): sorted positions of one emit run
+            var flag = 1 if j == 0 or kp[j] != kp[j - 1] else 0
+            var cls = running + flag - 1
+            var r = Int(rp[j])
+            cp[r] = Int32(cls)
+            if flag == 1:
+                clp[cls] = sp[r]
+            running += flag
+    host_parallelize(emit, units)
+    _ = key^  # the buffers above are read and written through their addresses
+    _ = row^
+    _ = tk^
+    _ = tr^
+    _ = nan_runs^
+    _ = hist^
+    _ = base^
     return scan

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`permutation_count`: four CTR column sets, and which one the model gets.
 
-    pixi run check-permutation-count
+    pixi run check-native-gpu permutation_count_check
 
 CatBoost builds `permutation_count` datasets that differ ONLY in their
 permutation-dependent CTR columns (`doc_parallel_dataset_builder.cpp:
@@ -106,6 +106,17 @@ def _predict(
         cat_features=cat,
         permutation_count=perm_count,
         ctr_estimation_permutation_id=est,
+        # BOTH ARMS ESTIMATE (fb11, 2026-11-17; the first L40S run: 2629 of
+        # 4000 rows differ in gate 1). Under the default RMSE + Newton x 1,
+        # DEVIATION 64 keeps the SEARCHER's histogram leaf at one
+        # permutation and runs the estimator at more than one
+        # (`doc_parallel_boosting.mojo` `need_estimation`, "...AND ONLY AT
+        # ONE PERMUTATION"): two float folds of the same Newton step, so
+        # `permutation_count` 1 and 4 took different leaf code and gate 1
+        # compared the deviation, not the permutation sets. Newton x 2 needs
+        # estimation at every permutation count, so the leaf code is shared
+        # and the CTR/permutation plumbing is again the only difference.
+        leaf_estimation_iterations=2,
     )
     return predict_floats(ctx, tm, x, PC_ROWS)
 
@@ -252,5 +263,23 @@ def check_permutation_count() raises:
     print("permutation_count: PASS")
 
 
-def main() raises:
+def run_checks() raises:
     check_permutation_count()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("permutation_count_check", cpu=False, gpu=True, serial="", run=run_cases)

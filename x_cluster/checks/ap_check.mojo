@@ -49,7 +49,7 @@ def oracle_run(s: List[Float32], n: Int, iters: Int, alt: Int) -> List[Float32]:
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     var n = 48
     var d = 4
     var x = seam_fixture(n, d, 9)

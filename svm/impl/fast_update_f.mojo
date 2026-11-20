@@ -15,11 +15,11 @@ into the second half at `i + n_rows`, which shares the kernel row). FAST
 arithmetic: the natural j order, a plain fused multiply-add.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -32,9 +32,12 @@ comptime FUF_TPB = 256
 # norms and alpha deltas add 8 KiB, keeping the total at 24 KiB (below the
 # 32 KiB Apple shared-memory floor). No working-set point or training row is
 # omitted, and the ascending update arithmetic is unchanged.
-comptime AFCL_L06 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L06 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L06"]())
 comptime FUF_TILE_FLOATS = 4096 if AFCL_L06 else 3072
+# TOMBSTONE: MOJOLEARN_AFCL_L06 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-20-linear (the 16 KiB staged page); code recoverable at 1701048c43.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L06.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime FUF_MAX_K = 64
 
 
@@ -67,7 +70,7 @@ def fused_update_f_kernel[KPAD: Int, RBF: Bool](
     var tda = stack_allocation[
         ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var xr = InlineArray[Float32, KPAD](fill=0.0)
+    var xr = Array[Float32, KPAD](fill=0.0)
     var ni = Float32(0.0)
     if active:
         comptime for c in range(KPAD):

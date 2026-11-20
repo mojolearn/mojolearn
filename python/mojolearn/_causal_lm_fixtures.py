@@ -4,7 +4,36 @@ import array
 import json
 from . import _portable_math as math
 import os
-from .models.safetensors import write_safetensors
+import struct
+from .models.safetensors import INDEX_NAME, SINGLE_NAME
+
+
+def write_safetensors(path, tensors, metadata=None):
+    """WRITE a `.safetensors` file from `{name: (dtype, shape, bytes)}`, the
+    verifier's and the tests' synthetic-checkpoint writer. `dtype` is the
+    safetensors spelling, `bytes` the row-major little-endian payload. Fixture
+    code, not a checkpoint saver for models (moved here from
+    models/safetensors.py, lane p5-cpu-route-relabel-and-dead-code)."""
+    header = {}
+    if metadata is not None:
+        header["__metadata__"] = dict(metadata)
+    offset = 0
+    payload = []
+    for name in sorted(tensors):
+        dtype, shape, raw = tensors[name]
+        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
+        payload.append(raw)
+        offset += len(raw)
+    encoded = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    pad = (8 - len(encoded) % 8) % 8
+    encoded += b" " * pad
+    with open(path, "wb") as fh:
+        fh.write(struct.pack("<Q", len(encoded)))
+        fh.write(encoded)
+        for raw in payload:
+            fh.write(raw)
+    return path
+
 
 def _lcg_floats(n, seed, lo=-0.125, hi=0.125):
     """`n` float32 values in [lo, hi) from a 64-bit LCG: hashed, not random,
@@ -90,7 +119,7 @@ def _write_checkpoint(root, cfg, tensors, *, shards=2, bf16=False):
         tensors = conv
     names = sorted(tensors)
     if shards <= 1:
-        write_safetensors(os.path.join(root, "model.safetensors"), tensors)
+        write_safetensors(os.path.join(root, SINGLE_NAME), tensors)
         return root
     weight_map = {}
     per = int(math.ceil(len(names) / shards))
@@ -102,7 +131,7 @@ def _write_checkpoint(root, cfg, tensors, *, shards=2, bf16=False):
         write_safetensors(os.path.join(root, fname), {n: tensors[n] for n in part})
         for n in part:
             weight_map[n] = fname
-    with open(os.path.join(root, "model.safetensors.index.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(root, INDEX_NAME), "w", encoding="utf-8") as fh:
         json.dump({"metadata": {"total_size": 0}, "weight_map": weight_map}, fh)
     return root
 

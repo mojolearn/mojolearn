@@ -72,7 +72,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     # SCATTERED bins, hashed per row and feature, so a cell's expected value
@@ -95,7 +95,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -111,13 +111,13 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     for r in range(n_rows):
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
         hs.unsafe_ptr().unsafe_store(n_rows + r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     # Four partitions of unequal size, so no two leaves can be confused by
     # their totals.
@@ -139,8 +139,8 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     for i in range(max_leaves):
         ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         hzz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hzz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hzz)
 
     # THE POINT: a permuted, non-contiguous request. Leaf 1 is absent.
     var want_ids = List[Int]()
@@ -162,13 +162,13 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
         hid.unsafe_ptr().unsafe_store(i, UInt32(0))
     for i in range(n_live):
         hid.unsafe_ptr().unsafe_store(i, UInt32(want_ids[i]))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
 
     var dense_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var h_dense = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     for i in range(max_leaves):
         h_dense.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=h_dense.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, dense_ids, h_dense)
 
     var hist_cells = max_leaves * stat_count * lay.hist_cells
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -178,8 +178,8 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     for i in range(hist_cells):
         zf.unsafe_ptr().unsafe_store(i, sentinel)
         zi.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=acc, src_ptr=zi.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, zf)
+    upload_host_into[DType.int32](ctx, acc, zi)
 
     var widest = 1
     for b in range(len(blocks)):
@@ -215,7 +215,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     _ = scale_keep^
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
 
     print("  depth", depth, "( 0 = direct, >0 = gather ), replicas",
@@ -288,7 +288,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     print("  non-contiguous leaf ids land in the right slots")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. The bare call `checks/probe_main.mojo` makes under
     # "non-contiguous leaf ids (GPU)", then the FOUR-ARM leaf-id /
     # replication matrix it runs afterwards. Both are needed: the
@@ -303,3 +303,22 @@ def main() raises:
     check_permuted_leaf_ids(0, 16, False)
     check_permuted_leaf_ids(0, 16, True)
     check_permuted_leaf_ids(1, 16, True)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("permuted_ids_check", cpu=False, gpu=True, serial="", run=run_cases)

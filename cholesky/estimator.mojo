@@ -40,12 +40,12 @@ which is what the gates and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_download_f32_list, transfer_upload_list
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.ffi import _Global
 from core.device_pool import pool_give, pool_take
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -56,7 +56,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 #: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
 #: steward 1790601762837). Same kernels, same order, each entry still
 #: synchronizes before it returns, so no bit moves.
-comptime _CTX_NAME = "MojoCholeskyContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoCholeskyContextFast"
+comptime _CTX_NAME = "MojolearnCholeskyContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyContextFastV3"
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnCholeskyTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyTransferStagesFastV1"
 
 
 def _binding_ctx() raises -> DeviceContext:
@@ -86,6 +88,7 @@ from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update,
     chol_rank1_update_workspace_floats,
 )
+from core.shared_slot import SharedSlot
 
 
 @fieldwise_init
@@ -121,32 +124,26 @@ def cholesky_profile_jitter() -> Float32:
     return chol_jitter_pinned()
 
 
+@always_inline
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    # one copy into a list of the final length (lane/neural-pass113): the
-    # element-by-element append regrew the list and cost 0.43 s of a 1.1 s
-    # 8192 factorization on the M4
-    var out = List[Float32](length=n, fill=Float32(0))
-    copy_f32(h.unsafe_ptr(), out.unsafe_ptr(), n)
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words (the pooled pinned stages from
+    # DOWNLOAD_STAGE_MIN floats). Gone: a pinned buffer per call, the zero
+    # fill of the list and the host copy between them. History: the
+    # element-by-element append before lane/neural-pass113 cost 0.43 s of a
+    # 1.1 s 8192 factorization on the M4.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def cholesky_factor_host(
@@ -224,19 +221,20 @@ def cholesky_factor_host(
 #: The factorization itself is `potrf_lower` unchanged: the same words.
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: cholesky synthetic 435 -> 290 ms, residual the same 1.659e-07; tag
-#: gl2-chol-devio-synthetic). -D MOJOLEARN_CHOL_FAST_DEVIO_OFF restores
-#: main's host-List route (the A/B arm).
+#: gl2-chol-devio-synthetic).
 #: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
 #: (the same predicate on the device, `potrf_lower` unchanged, so the same
 #: words; `defer_ok` is honoured under CHOL_FAST_NOSYNC only, which stays
-#: FAST + Apple). -D MOJOLEARN_IDN_GATES_OFF (or the _OFF above) restores
-#: the host-List route in IDENTICAL.
+#: FAST + Apple).
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path, EXP:2479 DELETED old path; the IDENTICAL gates are the default) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d224fbc6f5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple default, EXP:1395 READY-AB) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 70d6bad292.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438; every IDENTICAL default kept) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at af37fc8403.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-16-decomposition.patch; record in docs/TOMBSTONES.md.
 comptime CHOL_FAST_DEVIO = (
-    (
-        (_CTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (_CTX_MODE == _CTX_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
+    (_CTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+    or _CTX_MODE == _CTX_IDENTICAL
 )
 
 
@@ -261,7 +259,7 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 
 
 # ---- lane/apple-fast-s-linalg (2026-10-04): CHOL_FAST_POOLIO ----
-#: FAST + Apple only (rollback `-D MOJOLEARN_CHOL_FAST_POOLIO_OFF`), on top of
+#: On wherever CHOL_FAST_DEVIO is (FAST + Apple and IDENTICAL), on top of
 #: CHOL_FAST_DEVIO. What: DEVIO still makes, every fit at n = 8192, a FRESH
 #: 256 MB pinned host buffer (page faults), copies the caller's matrix into
 #: it on one host thread (`copy_f32`) and DMAs it up, and allocates the
@@ -275,10 +273,9 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 #: unchanged: the same words. Expect: cholesky synthetic 261 -> ~200-235 ms.
 #: CHOL_FAST_POOLIO OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab15-cholpoolio): cholesky 262.4 -> 228.1 ms, residual
-#: identical, digest same. KEEP: the FAST + Apple default; rollback
-#: -D MOJOLEARN_CHOL_FAST_POOLIO_OFF.
-comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"]()
-comptime _CHOL_POOL = "MojoCholFastPoolIO"
+#: identical, digest same. KEEP: the FAST + Apple default (the _OFF rollback
+#: was deleted 2026-11-18, lane fx-env-dead; see the TOMBSTONE below).
+comptime _CHOL_POOL = "MojolearnCholFastPoolIOV2"
 
 
 struct _CholStage(Defaultable, Movable):
@@ -290,7 +287,7 @@ struct _CholStage(Defaultable, Movable):
         self.n = 0
 
 
-comptime CHOL_STAGE = _Global[StorageType=_CholStage, name="MojoCholFastPoolIOStage", init_fn=_CholStage.__init__]
+comptime CHOL_STAGE = SharedSlot[_CholStage, "MojolearnCholFastPoolIOStageV1"]
 
 
 def _chol_stage_ptr(ctx: DeviceContext, cells: Int) raises -> MutPointer[Float32, MutAnyOrigin]:
@@ -382,69 +379,11 @@ def cholesky_factor_devio(
 ) raises -> Int:
     """`cholesky_factor_host` + the binding's copies, FAST IO (see above):
     writes L into lp and info, nb, logdet, jitter into sp; returns info."""
-    comptime if CHOL_FAST_POOLIO:
-        return cholesky_factor_poolio(ap, lp, sp, n, jitter)
-    if n <= 0:
-        raise Error("cholesky: the matrix must have a positive dimension, got n=" + String(n))
-    chol_validate_jitter(jitter)
-    var nb = chol_nb_for(n, CHOL_NB_PINNED)
-    var cells = n * n
-    var ctx = _binding_ctx()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    var dbad = ctx.enqueue_create_buffer[DType.int32](1)
-    var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.synchronize()
-    copy_f32(ap, host.unsafe_ptr(), cells)
-    hbad.unsafe_ptr()[0] = Int32(0)
-    ctx.enqueue_copy(dst_buf=dbad, src_ptr=hbad.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=da, src_ptr=host.unsafe_ptr())
-    ctx.enqueue_function[chol_devio_check_kernel](
-        da.unsafe_ptr(), dbad.unsafe_ptr(), Int32(n), chol_sym_rel_tol(),
-        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-    ctx.synchronize()
-    if hbad.unsafe_ptr()[0] != Int32(0):
-        # the by-name refusal: the host validator on the caller's matrix
-        var a = List[Float32](unsafe_uninit_length=cells)
-        copy_f32(ap, a.unsafe_ptr(), cells)
-        chol_validate_matrix(a, n, "the matrix")
-    var trace = IdentityTrace()
-    # the host route's trace records (no-ops unless the trace is enabled)
-    trace.header("cholesky: n=" + String(n) + " nb=" + String(nb) + " jitter_bits=see CHOL_JITTER_BITS")
-    add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
-    trace.record_device(ctx, "chol.jittered", da, n * n)
-    var run = potrf_lower(
-        ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB, defer_ok=True
-    )
-    comptime if CHOL_FAST_NOSYNC:
-        if run.info != 0:
-            # the deferred route left a full (not partial) sweep: redo it
-            # with the per-panel reads for LAPACK's partial factor
-            ctx.enqueue_copy(dst_buf=da, src_ptr=host.unsafe_ptr())
-            add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
-            run = potrf_lower(ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-    var logdet = Float32(0.0)
-    if run.info == 0:
-        logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=da)
-    ctx.synchronize()
-    copy_f32(host.unsafe_ptr(), lp, cells)
-    sp.unsafe_store(0, Float64(run.info))
-    sp.unsafe_store(1, Float64(run.nb))
-    sp.unsafe_store(2, Float64(logdet))
-    sp.unsafe_store(3, Float64(jitter))
-    _ = host^
-    _ = da^
-    _ = dbad^
-    _ = hbad^
-    _ = ws^
-    _ = dwork^
-    _ = ctx^
-    return run.info
+    # TOMBSTONE: MOJOLEARN_CHOL_FAST_POOLIO_OFF (old path beside the default: DEVIO's fresh pinned host buffer, device
+    # matrix and workspace every fit; no IDENTICAL A/B recorded within four weeks, the FAST record EXP:1414 kept POOLIO)
+    # deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+    # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch; record in docs/TOMBSTONES.md.
+    return cholesky_factor_poolio(ap, lp, sp, n, jitter)
 
 
 def cholesky_solve_host(

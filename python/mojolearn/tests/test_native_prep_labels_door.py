@@ -1,82 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """LabelEncoder, LabelBinarizer and MultiLabelBinarizer run each public
-method as ONE native call (bindings/prep_labels_native.mojo through the
-family door bindings/prep_owner_native.mojo). The source checks run
-without bindings; the oracle checks compare every public method's output
-bytes and fitted attributes with the former Python routes
-(tests/_former_prep_labels.py) and need the built bindings."""
-import ast
-import pathlib
-
+method as ONE native call (bindings/prep_labels_native_door.mojo through the
+family door bindings/prep_owner_native_door.mojo). The runtime audit checks
+that each public method runs with no Python frame and no wrapper work; the
+oracle checks compare every public method's output bytes and fitted
+attributes with the former Python routes (tests/_former_prep_labels.py).
+Both need the built bindings."""
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-PREP = ROOT / "python" / "mojolearn" / "_expansion_prep.py"
-OWNER = ROOT / "bindings" / "prep_labels_native.mojo"
-DOOR = ROOT / "bindings" / "prep_owner_native.mojo"
-
-CLASSES = {
-    "LabelEncoder": ("label_encoder", {"fit": "(y,)", "fit_transform": "(y,)", "transform": "(y,)",
-                                       "inverse_transform": "(y,)"}),
-    "LabelBinarizer": ("label_binarizer", {"fit": "(y,)", "fit_transform": "(y,)", "transform": "(y,)",
-                                           "inverse_transform": "(Y, threshold)"}),
-    "MultiLabelBinarizer": ("multilabel_binarizer", {"fit": "(y,)", "fit_transform": "(y,)",
-                                                     "transform": "(y,)", "inverse_transform": "(yt,)"}),
-}
-
-
-def _class_nodes():
-    tree = ast.parse(PREP.read_text())
-    return {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
-
-
-# ---------------------------------------------------------------- source (no bindings)
-@pytest.mark.parametrize("cls", sorted(CLASSES))
-def test_pure_each_method_is_one_encode_call(cls):
-    node = _class_nodes()[cls]
-    methods = {f.name: f for f in node.body if isinstance(f, ast.FunctionDef)}
-    for name, args in CLASSES[cls][1].items():
-        body = [s for s in methods[name].body
-                if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
-        assert len(body) == 1 and isinstance(body[0], ast.Return), (cls, name)
-        call = body[0].value
-        assert isinstance(call, ast.Call) and ast.unparse(call.func) == "_ENCODE_CALL", (cls, name)
-        assert ast.unparse(call.args[0]) == "self"
-        assert ast.literal_eval(call.args[1]) == name
-        assert ast.unparse(call.args[2]) == args
-        assert ast.unparse(call.args[3]) == "_ENCODE_CONTEXT"
-
-
-def test_pure_owner_kinds_are_connected():
-    text = PREP.read_text()
-    for cls, (kind, _) in CLASSES.items():
-        assert f'{cls}: "{kind}"' in text
-    assert '"x_prep_label_present"' in (ROOT / "python" / "mojolearn" / "_native_prep_encode_bridge.py").read_text()
-
-
-def test_pure_native_owner_dispatches_every_operation():
-    owner = OWNER.read_text()
-    door = DOOR.read_text()
-    assert "prep_labels_call(model, kind, operation, args, context)" in door
-    for cls, (kind, ops) in CLASSES.items():
-        assert f'kind == "{kind}"' in owner
-        for op in ops:
-            assert f'operation == "{op}"' in owner
-    # the x_prep stages the former Python routes staged
-    for stage in ("OP_LAB_LOAD = 119", "OP_SORT_COLS = 0", "OP_UNIQ_COUNT = 120", "OP_UNIQ_SCAN = 121",
-                  "OP_UNIQ_WRITE = 122", "OP_CHUNK_NEG = 123", "OP_LOOKUP = 7", "OP_F2I = 11",
-                  "OP_LABEL_BINARIZE = 51", "OP_SCATTER_ONES = 52", "OP_ROW_ONES = 135",
-                  "OP_INDICATOR = 87", "OP_BLOCK_ARGMAX = 76", "OP_F2_CODE_GATHER = 241",
-                  "OP_C2_BIN_CODE = 242", "OP_CAT_ZERO = 157", "OP_CAT_PRESENT = 158",
-                  "OP_PRES_COUNT = 159", "OP_PRES_WRITE = 160", "OP_COUNT_NEG = 8"):
-        assert stage in owner, stage
-
-
-def test_pure_former_routes_left_the_package():
-    text = PREP.read_text()
-    for name in ("_label_fit_device", "_label_codes_device", "_mlb_flat", "_multilabel_indicator",
-                 "_label_classes", "_stage_class_gather", "_inverse_device", "_transform_flat"):
-        assert f"def {name}(" not in text, name
+# Deleted test_pure_native_owner_dispatches_every_operation: a source-text check
+# of bindings/prep_owner_native.mojo, which fed1b4e384 renamed to
+# prep_owner_native_door.mojo (and which no installed wheel carries). Every
+# public operation of the three classes is checked against the former route
+# by the oracle tests below; no Mojo check covers the dispatch text.
 
 
 # ---------------------------------------------------------------- oracle (bindings: RUN OWED)
@@ -96,9 +32,11 @@ def _state(est):
     return out
 
 
-def _outcome(fn):
+def _outcome(fn, owner=None):
     try:
-        return ("ok", _bytes(fn()))
+        result = fn()
+        # fit returns the estimator: compare "returned self", not two objects
+        return ("ok", "self") if owner is not None and result is owner else ("ok", _bytes(result))
     except Exception as error:  # noqa: BLE001 - the refusal class and text are the result
         return ("raised", type(error).__name__, str(error))
 
@@ -115,10 +53,39 @@ def pair():
     return np, mojolearn, former
 
 
+# ---------------------------------------------------------------- runtime audit (bindings)
+# Replaces the former source checks (an ast parse of _expansion_prep.py) with
+# the behaviour they stood for: every public method of the three classes runs
+# as one native operation, with no Python frame and no wrapper work.
+def _audit_calls(np):
+    y = np.array([10, 30, 20, 10], dtype=np.int64)
+    sets = [[1, 2], [3], [2, 3]]
+    return {
+        "LabelEncoder": (y, [("fit", (y,)), ("transform", (y,)), ("inverse_transform", (np.array([0, 1]),)),
+                             ("fit_transform", (y,))]),
+        "LabelBinarizer": (y, [("fit", (y,)), ("transform", (y,)),
+                               ("inverse_transform", (np.eye(3, dtype=np.float32), 0.5)), ("fit_transform", (y,))]),
+        "MultiLabelBinarizer": (sets, [("fit", (sets,)), ("transform", (sets,)),
+                                       ("inverse_transform", (np.array([[1, 0, 1], [0, 1, 0]]),)),
+                                       ("fit_transform", (sets,))]),
+    }
+
+
+@pytest.mark.parametrize("cls", ["LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer"])
+def test_each_public_method_is_one_native_operation(pair, cls):
+    from mojolearn._verify_native_runtime import audit_native_call
+    np, mojolearn, _ = pair
+    y, calls = _audit_calls(np)[cls]
+    est = getattr(mojolearn, cls)()
+    est.fit(y)
+    for name, args in calls:
+        audit_native_call(getattr(est, name), *args).assert_native()
+
+
 def _compare(new, old, calls):
     for name, args in calls:
-        a = _outcome(lambda: getattr(new, name)(*args))
-        b = _outcome(lambda: getattr(old, name)(*args))
+        a = _outcome(lambda: getattr(new, name)(*args), new)
+        b = _outcome(lambda: getattr(old, name)(*args), old)
         assert a == b, (type(new).__name__, name)
         assert _state(new) == _state(old), (type(new).__name__, name)
 

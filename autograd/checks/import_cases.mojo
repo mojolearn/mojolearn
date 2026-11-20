@@ -26,7 +26,7 @@
 # value bit for bit and gradient against a host scatter-add.
 from std.memory import bitcast
 from std.math import nan, exp, log, sqrt, tanh, sin, cos, erf
-from std.collections import InlineArray
+from std.collections import Array
 from autograd.tape import Tape, Tensor
 from autograd.ops import MULTIPLY
 from autograd.rankn import ShapeN, RN_MAX_RANK
@@ -121,7 +121,7 @@ def _close(name: String, got: List[Float32], want: List[Float64]) raises -> UInt
 
 
 def _shape3(a: Int, b: Int, c: Int) -> ShapeN:
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     d[0] = a
     d[1] = b
     d[2] = c
@@ -718,9 +718,9 @@ def _index_case[E: Exec](mut ex: E, mut tape: Tape, a0: Int, a1: Int) raises -> 
     var name = String("index/4x5x6/axes") + String(a0) + String(a1)
     tape.reset()
     var x = tape.tensor_nd(ex, xv, sx, True)
-    var si = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var si = Array[Int, RN_MAX_RANK](fill=1)
     si[0] = 3
-    var sj = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var sj = Array[Int, RN_MAX_RANK](fill=1)
     sj[1] = 2
     var ti = tape.tensor_nd(ex, iv, ShapeN(2, si), False)
     var tj = tape.tensor_nd(ex, jv, ShapeN(2, sj), False)
@@ -745,7 +745,7 @@ def _index_case[E: Exec](mut ex: E, mut tape: Tape, a0: Int, a1: Int) raises -> 
     for p in range(3):  # small-loop(check oracle, host side)
         for q in range(2):  # small-loop(check oracle, host side)
             for r in range(rest):  # small-loop(check oracle, host side)
-                var c = InlineArray[Int, 3](fill=0)
+                var c = Array[Int, 3](fill=0)
                 var vi = Int(iv[p])
                 c[a0] = vi + d0 if vi < 0 else vi
                 c[a1] = Int(jv[q])

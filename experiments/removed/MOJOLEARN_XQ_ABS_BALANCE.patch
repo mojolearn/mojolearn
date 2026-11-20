@@ -1,0 +1,97 @@
+diff --git a/bindings/x_linear_native_door.mojo b/bindings/x_linear_native_door.mojo
+index 4939e26420..f4a795fa2d 100644
+--- a/bindings/x_linear_native_door.mojo
++++ b/bindings/x_linear_native_door.mojo
+@@ -1197,7 +1197,7 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
+     var tol = fields["tol"]
+     var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, has_sw]
+     var fp: List[Float64] = [_float(q), _float(fields["alpha"]), _float(py_call(_op().truediv, tol, PythonObject(100.0))),
+-                             _float(tol), 1.0]  # fp[4]: unread since MOJOLEARN_XQ_ABS_BALANCE went (TOMBSTONE in x_linear/quantile.mojo)
++                             _float(tol), 0.0 if labels_env("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0]
+     var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
+                       d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
+     _ = yy  # keep the Python object alive through the native call above
+diff --git a/x_linear/quantile.mojo b/x_linear/quantile.mojo
+index df1cf42406..e1fc942991 100644
+--- a/x_linear/quantile.mojo
++++ b/x_linear/quantile.mojo
+@@ -59,17 +59,16 @@ def _soft(a: Float32, t: Float32) -> Float32:
+ 
+ 
+ @always_inline
+-def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32) -> Float32:
+-    """The residual balancing's rho factor (2, 1/2 or 0 = keep): the
+-    residuals RELATIVE to their stopping tolerances, prim/eps_p against
+-    dual/eps_d (OSQP's rule)."""
+-    # TOMBSTONE: MOJOLEARN_XQ_ABS_BALANCE (env arm, DECIDED by quality: the absolute rule compared two norms in
+-    # different units; on standardized Istella-S and taxi it doubled rho to ~4000x its start, float32 ADMM drifted
+-    # off the LP optimum (Istella-S r2 -1.7e11) and never met the tolerance in 5000 iterations) deleted 2026-11-18
+-    # by lane/fx-env-dead; code recoverable at 0c65d61fed. The request word fp[4] is no longer read.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XQ_ABS_BALANCE.patch
+-    var p = fm(prim_n, eps_d)
+-    var dl = fm(dual_n, eps_p)
++def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32, rel: Bool) -> Float32:
++    """The residual balancing's rho factor (2, 1/2 or 0 = keep). rel (the
++    default, fp[4] = 1): the residuals RELATIVE to their stopping
++    tolerances, prim/eps_p against dual/eps_d (OSQP's rule); the absolute
++    rule (prim against dual, fp[4] = 0, MOJOLEARN_XQ_ABS_BALANCE=1) compares
++    two norms in different units and on standardized Istella-S and taxi
++    doubled rho to ~4000x its start, where float32 ADMM drifts off the LP
++    optimum (Istella-S r2 -1.7e11) and never meets the tolerance (5000 iterations)."""
++    var p = fm(prim_n, eps_d) if rel else prim_n
++    var dl = fm(dual_n, eps_p) if rel else dual_n
+     if p > fm(Float32(10), dl):
+         return Float32(2)
+     if dl > fm(Float32(10), p):
+@@ -218,7 +217,7 @@ def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: F
+ 
+ def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, dq: Int,
+            abn: Float32, rn: Float32, prim_rows: Float32, un_rows: Float32, ynorm: Float32, rho: Float32,
+-           alpha: Float32, eps_abs: Float32, eps_rel: Float32, it: Int) -> Tuple[Int, Float32]:
++           alpha: Float32, eps_abs: Float32, eps_rel: Float32, rel_bal: Bool, it: Int) -> Tuple[Int, Float32]:
+     """One iteration after its row folds (A' dr folded into rhs): the z- and
+     v-updates, the residuals, the stop rule and the balancing. Returns
+     (0 go on | 1 converged | 2 rescaled, the rho factor); a rescale has
+@@ -261,7 +260,7 @@ def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int,
+     if prim_n <= eps_p and dual_n <= eps_d:
+         return (1, Float32(1))
+     if (it + 1) % 10 == 0:
+-        var factor = _balance(prim_n, dual_n, eps_p, eps_d)
++        var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
+         if factor != 0:
+             var inv = fd(Float32(1), factor)
+             for j in range(d):
+diff --git a/x_linear/quantile_grid.mojo b/x_linear/quantile_grid.mojo
+index 82f109d37b..82a7f82dd2 100644
+--- a/x_linear/quantile_grid.mojo
++++ b/x_linear/quantile_grid.mojo
+@@ -315,7 +315,7 @@ def _qg_iter_fin_body(nb: Int32, nd: Int32, d: Int32, cols: Int32, fw: FP, fp: F
+         var tl = q_tail(fw, Int(nd), dd, mi, o[1], o[2], o[7], o[8], o[10],
+                         fold_parts(sc, 0, b), fold_parts(sc, b, b), fold_parts(sc, 2 * b, b),
+                         fold_parts(sc, 3 * b, b), ld(state, QS_YNORM), rho,
+-                        ld(fp, 1), ld(fp, 2), ld(fp, 3), Int(it))
++                        ld(fp, 1), ld(fp, 2), ld(fp, 3), ld(fp, 4) != Float32(0), Int(it))
+         st(state, QS_ITERS, i2f(Int(it) + 1))
+         st(state, QS_RESCALE, Float32(0))
+         st(state, QS_READY, Float32(1))
+diff --git a/x_linear/quantile_host.mojo b/x_linear/quantile_host.mojo
+index 943491de5f..7add394f70 100644
+--- a/x_linear/quantile_host.mojo
++++ b/x_linear/quantile_host.mojo
+@@ -65,6 +65,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
+     var alpha = ld(fp, 1)
+     var eps_abs = ld(fp, 2)
+     var eps_rel = ld(fp, 3)
++    var rel_bal = ld(fp, 4) != Float32(0)
+     var sw = ldi(ip, 2) != 0
+     var m = d + 1 if fi else d
+     var o = q_layout(n, d, m)
+@@ -216,7 +217,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
+             lo = hi
+         rhs_ready = True
+         var tl = q_tail(fw, n + d, d, m, beta, rhs, z, v, dq, abn, rn, prim, un, ynorm, rho,
+-                        alpha, eps_abs, eps_rel, it)
++                        alpha, eps_abs, eps_rel, rel_bal, it)
+         if tl[0] == 1:
+             converged = True
+             break

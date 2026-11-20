@@ -37,9 +37,12 @@ def test_split_reads_loaded_stdlib_without_import_callbacks(monkeypatch):
 
 
 @pytest.mark.parametrize('replacement', ['missing', 'object', 'subclass', 'exact-module', 'module-getattr', 'export'])
-def test_split_refuses_missing_or_hooked_module_before_hooks(replacement, monkeypatch):
-    source = Array.from_list([[float(row)] for row in range(12)], '<f4')
-    splitter = ms.KFold(3)
+def test_cv_refuses_missing_or_hooked_module_before_hooks(replacement, monkeypatch):
+    # KFold.split compares exact ints natively and no longer reads `operator`
+    # (lane p3-msel-parallel, row 202: msel_cmp/msel_int native for exact
+    # ints). RepeatedKFold.get_n_splits still multiplies through the
+    # connected `operator` module, so it exercises the same connection check.
+    splitter = ms.RepeatedKFold(n_splits=3, n_repeats=2)
     calls = []
 
     class Hooks:
@@ -74,7 +77,7 @@ def test_split_refuses_missing_or_hooked_module_before_hooks(replacement, monkey
     else:
         monkeypatch.setattr(sys.modules['operator'], 'lt', forbidden)
         category, message = TypeError, 'native module connection export changed'
-    observed = audit_native_call(splitter.split, source)
+    observed = audit_native_call(splitter.get_n_splits)
     monkeypatch.undo()
     _clean_refusal(observed, category, message)
     assert not calls

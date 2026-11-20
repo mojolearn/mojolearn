@@ -2,7 +2,7 @@
 
 The arena program runner itself (`_Prog.run`: entry routing, the mandatory
 x_prep_run refusal, in-out ranges that skip resident caching) is native since
-lane migrate-prog-staging (bindings/arena_prog_native.mojo); its cases run
+lane migrate-prog-staging (bindings/arena_prog_native_door.mojo); its cases run
 against the compiled binding, not against a Python stand-in."""
 import ast
 from pathlib import Path

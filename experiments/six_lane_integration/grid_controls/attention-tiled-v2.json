@@ -4,65 +4,7 @@
  "branch": "lane/attention-tiled-v2",
  "head": "cd4a0e870",
  "controls": {},
- "algorithms": {
-  "neural:lm-forward": {
-   "binding": "_mojolearn_byte_lm",
-   "route": "byte_lm forward -> modeling_llama eager_attention_forward -> (IDN_ATTENTION_V2) _model_attention_v2_forward -> attention_v2_model_forward -> _forward_tiled[HD, ATTN_V2_TQ]",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "attn_tile_order",
-     "attn_fwd_tq_rule"
-    ]
-   ]
-  },
-  "neural:lm-train-step": {
-   "binding": "_mojolearn_byte_lm",
-   "route": "byte_lm train step -> modeling_llama eager_attention_forward -> attention_v2_model_forward (_forward_tiled); backward transformer_backward.mojo:3628 -> attention_v2_model_backward -> _prepare_tiled, _dq_tiled, _dkdv_tiled",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "attn_tile_order",
-     "attn_fwd_tq_rule",
-     "attn_stash"
-    ]
-   ]
-  },
-  "neural:transformer-forward": {
-   "binding": "_mojolearn_transformer",
-   "route": "transformer binding forward -> modeling_llama eager_attention_forward -> attention_v2_model_forward -> _forward_tiled",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "attn_tile_order",
-     "attn_fwd_tq_rule"
-    ]
-   ]
-  },
-  "neural:samba-forward": {
-   "binding": "_mojolearn_mamba + _mojolearn_transformer",
-   "route": "samba attention layers -> _mojolearn_transformer -> modeling_llama eager_attention_forward -> attention_v2_model_forward -> _forward_tiled",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "attn_tile_order",
-     "attn_fwd_tq_rule"
-    ]
-   ]
-  },
-  "neural:samba-train-step": {
-   "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
-   "route": "samba attention layers forward (_forward_tiled) + transformer_backward attention_v2_model_backward (_prepare_tiled, _dq_tiled, _dkdv_tiled)",
-   "controls": [],
-   "interaction_groups": [
-    [
-     "attn_tile_order",
-     "attn_fwd_tq_rule",
-     "attn_stash"
-    ]
-   ]
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_ATTN_V2_TQ",

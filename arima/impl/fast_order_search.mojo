@@ -9,9 +9,9 @@ Output rows retain input grid order, so Python's first-minimum IC tie rule
 is unchanged. No order pruning or approximation is performed.
 
 lane/fam2-timeseries (2026-10-04), IDENTICAL on every vendor, each with its
-own `_OFF` (all off under MOJOLEARN_IDN_ALL_OFF; FAST builds unchanged):
+own `_OFF` (FAST builds unchanged):
 
-ARIMA_ORDER_CAP (`-D MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF=1`). The group's held
+ARIMA_ORDER_CAP (its `_OFF` deleted 2026-11-15). The group's held
 workspace was unbounded under IDENTICAL (members = batch x sum over the
 group's orders of N + 1, four float32 arrays of members x n_obs). A group is
 now split, in grid order, into chunks whose members x n_obs stay under
@@ -20,7 +20,7 @@ returns 0 before any device work, and the caller takes the per-order fits
 (whose evaluation has its own bound). Chunking moves no bit: every order
 keeps its own parameters and every member is its own filter thread.
 
-ARIMA_ORDER_DEVICE (`-D MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF=1`). The search
+ARIMA_ORDER_DEVICE (its `_OFF` deleted 2026-11-15). The search
 stays on the device between the upload and one final download: each order's
 starting point goes from `pack` straight into its optimizer (was a download,
 a host finite walk and a re-upload per order; the finite test is a device
@@ -30,12 +30,12 @@ Jones transform and filter recurrence `_loglike_at` ran one order at a time
 after downloading and re-uploading `x`), marked -inf on a refusal code by
 `order_ll_kernel`.
 
-ARIMA_ORDER_SEASONAL (`-D MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF=1`, needs
+ARIMA_ORDER_SEASONAL (its `_OFF` deleted 2026-11-15; needs
 ORDER_DEVICE). Seasonal grids (P, Q, one D, one s) take the grouped search:
 orders are grouped by r = max(p + s P, q + s Q + 1) and k after one shared
 differencing (d, D, s), r <= 5 as `validate_order` allows.
 
-ARIMA_ORDER_IC_DEVICE (`-D MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF=1`, needs
+ARIMA_ORDER_IC_DEVICE (its `_OFF` deleted 2026-11-15; needs
 ORDER_DEVICE). The information criterion and the first-minimum order choice
 run on the device (`order_ic_argmin_kernel`): ic = fma(-2, loglike, penalty)
 in float32, one rounding (the product is exact, so no contraction choice
@@ -46,9 +46,9 @@ vendor, and the host column takes the same formula
 (`bindings/hotpath_helpers.mojo::ic_running_min_f32_host_binding`).
 """
 from std.math import inf, isfinite
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.neural_context import process_ctx
 from arima.estimator import _DEVCTX_SLOT, _upload_f32, _write_list_f32, _write_list_i32
@@ -69,17 +69,25 @@ from tsa.impl.timeSeries.arima_helpers import prepare_data
 from glm.impl.qn.qn_util import LBFGSParam
 
 
-comptime _ORDER_IDN = (
-    ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime ARIMA_ORDER_CAP = _ORDER_IDN and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF"]()
-comptime ARIMA_ORDER_DEVICE = _ORDER_IDN and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series (owner);
+# this term folded by lane/expdel2-47-promote; code recoverable at 6f7dab47a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-47-promote.patch; record in docs/TOMBSTONES.md.
+comptime _ORDER_IDN = ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 7cbcdf1758.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARIMA_ORDER_CAP = _ORDER_IDN
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 1b2ff989e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARIMA_ORDER_DEVICE = _ORDER_IDN
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 63fd8bf564.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARIMA_ORDER_SEASONAL = (
-    ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"]()
+    ARIMA_ORDER_DEVICE
 )
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at f25113893d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ARIMA_ORDER_IC_DEVICE = (
-    ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
+    ARIMA_ORDER_DEVICE
 )
 comptime ORDER_TPB = 128
 
@@ -101,14 +109,22 @@ comptime ORDER_TPB = 128
 #: SEARCH_REUSE OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab16-arimareuse): autoarima synthetic 18229.7 -> 13688.1 ms,
 #: taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical. KEEP: the
-#: OFF again since 2026-10-05 (opt-in -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE): the reuse path adopts the search's fit without the
+#: OFF again 2026-10-05 to 2026-11-15 (was opt-in): the reuse path adopts the search's fit without the
 #: device-written aic/bic (ARIMA._adopt_fit got no `ics`), so FAST AutoARIMA failed on main (NameError, then TypeError on M3 rab23/rab24).
 #: Computing aic/bic in Python is not allowed (no-host-routes). Lane arima-ics (2026-10-05): ARIMA._adopt_fit now gets them from the
 #: plain fit's device kernel (`arima_ic_kernel` via `arima_ic_from_loglike`) over the adopted log-likelihood; still opt-in pending the M3 A/B.
 #: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall, both deleted) was slower than this
 #: alone, so only this one is on.
+#: PROMOTED 2026-11-15 (lane/expdel2-47-promote, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md "PROMOTE"):
+#: the default on its measured column only, FAST + Apple GPU; rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF.
+#: A/B rab16-arimareuse (M3 Ultra, afc_ab_def, full board size, 1 run per arm, 2026-10-05; EXPERIMENTS.md
+#: ARIMA_FAST_SEARCH_REUSE row, KEEP): autoarima synthetic 18229.7 -> 13688.1 ms (0.751x), taxi-hourly
+#: 16386.5 -> 9872.2 ms (0.602x), forecast_rmse identical. Apple only, NVIDIA/AMD never measured (FAST is Apple
+#: only). IDENTICAL is untouched on every vendor and the host column (the mode term below is False there): no
+#: IDENTICAL bit changes. The old positive define is refused in core/experiment_guards_series.mojo.
 comptime ARIMA_FAST_SEARCH_REUSE = (
-    ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"]()
+    ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+    and not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"]()
 )
 
 

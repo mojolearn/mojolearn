@@ -36,7 +36,7 @@ CatBoost's atomics are portable to us and it would be easy to assume
 otherwise.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -80,6 +80,11 @@ def write_compressed_index_kernel(
 # G05: a 512-thread group stages the same at-most-256 borders while
 # halving group occupancy pressure. Eight rows/lane and comparisons stay.
 # Uncompiled/unverified/unmeasured; A/B uses the same quantization route.
+# TOMBSTONE: MOJOLEARN_AFT_G05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at a2d4deb701.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G05.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AFCL_T03 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 10b9a4c50c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T03.expdel2-42-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime BINARIZE_BLOCK_SIZE = 512 if AFT_G05 or AFCL_T03 else 1024
 comptime BINARIZE_DOCS_PER_THREAD = 8
 
@@ -165,13 +170,12 @@ def binarize_float_feature_kernel(
         shared_borders[tid] = borders.unsafe_load(tid + 1)
     barrier()
 
-    var index = InlineArray[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
-    var feature_values = InlineArray[Float32, BINARIZE_DOCS_PER_THREAD](
+    var index = Array[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
+    var feature_values = Array[Float32, BINARIZE_DOCS_PER_THREAD](
         fill=Float32(0.0)
     )
 
-    @parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             feature_values[j] = values.unsafe_load(idx)
@@ -179,14 +183,12 @@ def binarize_float_feature_kernel(
     for border in range(borders_count):
         var border_value = shared_borders[border]
 
-        @parameter
-        for j in range(BINARIZE_DOCS_PER_THREAD):
+        comptime for j in range(BINARIZE_DOCS_PER_THREAD):
             # bit-pattern compare, not the float `>`: see `exact_f32_gt`
             if exact_f32_gt(feature_values[j], border_value):
                 index[j] += 1
 
-    @parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             var bin = dst.unsafe_load(base + idx)
@@ -205,6 +207,9 @@ def binarize_float_feature_kernel(
 # G06: retain 2048 rows per block but halve threads and double independent
 # rows per worker, amortizing the shared word/border table over more work
 # per lane. This deliberately trades registers for occupancy; no evidence.
+# TOMBSTONE: MOJOLEARN_AFT_G06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at eedd37dfb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G06.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime PACK_BLOCK = 128 if AFT_G06 else 256
 comptime PACK_DOCS = 16 if AFT_G06 else 8
 #: the most features one compressed-index word holds (the binary policy's
@@ -288,7 +293,7 @@ def pack_cindex_words_kernel(
             j += PACK_BLOCK
     barrier()
     var i = Int(block_idx.x) * PACK_BLOCK * PACK_DOCS + tid
-    var word = InlineArray[UInt32, PACK_DOCS](fill=0)
+    var word = Array[UInt32, PACK_DOCS](fill=0)
     for e in range(ne):
         var cnt = Int(sh_meta[e])
         var off = Int(sh_meta[PACK_MAX_ENTRIES + e])
@@ -296,11 +301,10 @@ def pack_cindex_words_kernel(
         var shift = sh_meta[3 * PACK_MAX_ENTRIES + e]
         var mask = sh_meta[4 * PACK_MAX_ENTRIES + e]
         var sub = sh_sub[e]
-        var vals = InlineArray[Float32, PACK_DOCS](fill=Float32(0.0))
-        var bins = InlineArray[UInt32, PACK_DOCS](fill=0)
+        var vals = Array[Float32, PACK_DOCS](fill=Float32(0.0))
+        var bins = Array[UInt32, PACK_DOCS](fill=0)
 
-        @parameter
-        for j in range(PACK_DOCS):
+        comptime for j in range(PACK_DOCS):
             var idx = i + j * PACK_BLOCK
             if idx < n:
                 var v = x_cols.unsafe_load(col * n + idx)
@@ -310,19 +314,16 @@ def pack_cindex_words_kernel(
         for b in range(cnt):
             var bv = sh_vals[off + b]
 
-            @parameter
-            for j in range(PACK_DOCS):
+            comptime for j in range(PACK_DOCS):
                 # bit-pattern compare, as `binarize_float_feature_kernel`
                 # (`exact_f32_gt`: Metal flushes subnormal compare operands)
                 if exact_f32_gt(vals[j], bv):
                     bins[j] += 1
 
-        @parameter
-        for j in range(PACK_DOCS):
+        comptime for j in range(PACK_DOCS):
             word[j] |= (bins[j] & mask) << shift
 
-    @parameter
-    for j in range(PACK_DOCS):
+    comptime for j in range(PACK_DOCS):
         var idx = i + j * PACK_BLOCK
         if idx < n:
             cindex.unsafe_store(w * n + idx, word[j])
@@ -360,8 +361,7 @@ def transpose_rows_to_columns_kernel(
     while rt < n_row_tiles:
         var r0 = rt * TR_TILE
 
-        @parameter
-        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+        comptime for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lr = ty + k * TR_ROWS_PER_PASS
             var r = r0 + lr
             var c = c0 + tx
@@ -369,8 +369,7 @@ def transpose_rows_to_columns_kernel(
                 tile[lr * (TR_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
         barrier()
 
-        @parameter
-        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+        comptime for k in range(TR_TILE // TR_ROWS_PER_PASS):
             var lc = ty + k * TR_ROWS_PER_PASS
             var c = c0 + lc
             var r = r0 + tx

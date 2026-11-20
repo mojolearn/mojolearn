@@ -37,7 +37,7 @@ The threadgroup barrier here orders THREADGROUP memory only, which is all
 this kernel needs (every device write is by the lane that later reads it,
 or never read in this launch).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

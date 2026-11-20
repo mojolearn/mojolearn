@@ -72,12 +72,11 @@ WHAT IS NOT HERE
   queue. Scheduling, not numeric.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.impl.label.classlabels import make_monotonic, map_label_kernel, LABEL_TPB
 from neighbors.impl.selection.distance_weights import (
@@ -94,11 +93,12 @@ from neighbors.impl.selection.distance_weights import (
 #: copies, a host round trip of the set, five drains) and a subtract-one
 #: pass, on every predict. Integer only; the tally reads the same column
 #: indices, so no output bit moves and the host column is untouched.
-#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the old sequence.
-comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: FAST keeps the old sequence.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (old make_monotonic relabel under IDENTICAL, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 33130c2d0a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
 #: weights='distance' computes the weights in a kernel
@@ -109,11 +109,11 @@ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and n
 #: it. No bit moves; the host column keeps `host_distance_weights`.
 #: cpu3-neighbors (2026-10-04): the kernel is now the only GPU route, in
 #: every mode and when traced (the trace records the device weights); the
-#: host loop and this define's off arm are gone from the vote. The constant
-#: stays for callers that still read it.
-comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: host loop and this define's off arm are gone from the vote.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF (old path already gone; the constant had no reader) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at bb292f4946.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF.patch; record in docs/TOMBSTONES.md.
 
 comptime KNN_TPB_X = 32
 """`template <int TPB_X = 32>` on all three launchers. A scheduling number;
@@ -599,7 +599,7 @@ def device_distance_weights(
         Int32(n_queries), Int32(k),
         grid_dim=(n_queries + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
     )
-    var h_flag = List[Int32](length=1, fill=Int32(0))
+    var h_flag = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
     ctx.synchronize()
     var got = Int(h_flag[0])
@@ -654,7 +654,7 @@ def device_check_index_range(
         d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(count), Int64(n_index),
         grid_dim=(count + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
     )
-    var h_flag = List[Int32](length=1, fill=Int32(0))
+    var h_flag = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
     ctx.synchronize()
     var got = Int(h_flag[0])

@@ -25,20 +25,11 @@ THREAD_ENV=('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','VECLIB_M
 # These pairs own competing schedules/graphs, so neither may silently mask the
 # other. More detailed lane guards remain in their source and retained catalogs.
 CONFLICTS=[
- ('MOJOLEARN_NN14_BOUNDED_IM2COL','MOJOLEARN_NI12_IMPLICIT_CONV'),
- ('MOJOLEARN_IDN_NEURAL_NN12','MOJOLEARN_NI01_TRAINING_WORKSPACE'),
- ('MOJOLEARN_NN48_CSR_TILES','MOJOLEARN_NI55_GRAPH_FEATURE4'),
- ('MOJOLEARN_NI59_DROPOUT_CHANNEL','MOJOLEARN_NI60_DROPOUT_APPLY4'),
  ('MOJOLEARN_NN34_AFFINE_PREFIX','MOJOLEARN_IDN_M1_STATE_WINDOW'),
- ('MOJOLEARN_NN53_HEAD_CHUNK512','MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2'),
- ('MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF','MOJOLEARN_AFT_P02'),
- ('MOJOLEARN_AFT_P07','MOJOLEARN_SHAP_FAST_ROW_PAIR'),
- ('MOJOLEARN_AFCL_G01','MOJOLEARN_KNN_FAST_MMA_OFF'),
- ('MOJOLEARN_NN53_HEAD_CHUNK512','MOJOLEARN_NN53_HEAD_CHUNK2048'),
  ('MOJOLEARN_AFN26_MAMBA1_CHUNKS16','MOJOLEARN_AFN26_MAMBA1_CHUNKS64'),
  ('MOJOLEARN_AFN26_MAMBA3_THREADS64','MOJOLEARN_AFN26_MAMBA3_THREADS256'),
  ('MOJOLEARN_AFN26_EMB_THREADS64','MOJOLEARN_AFN26_EMB_THREADS128'),
- ('MOJOLEARN_AFN26_ATTN_NORM_TPB128','MOJOLEARN_AFN26_ATTN_NORM_TPB512'),
+ ('MOJOLEARN_AFN26_ATTN_NORM_TPB128','MOJOLEARN_AFN26_ATTN_NORM_TPB512'),  # restored 2026-11-15 (lane/restore-apple-fast-neural)
 ]
 
 RETIRED_NEURAL={'MOJOLEARN_'+x for x in (
@@ -95,7 +86,6 @@ def combine(configs):
     # idea with named arms, so exclusivity holds by construction. Retired
     # defines are refused here and by core/six_lane_experiment_guards.mojo.
     for key in sorted(keys & RETIRED_NEURAL):problems.append('Retired define '+key+' (grid_controls/neural-gemm-attn-dedupe.json)')
-    if 'MOJOLEARN_IDN_ALL_OFF' in keys:problems.append('Blanket ALL_OFF cannot define an incumbent')
     return config([k+'='+v for k,v in sorted(ds.items())],env,runtime),problems
 
 

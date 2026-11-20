@@ -73,8 +73,8 @@ flips the lowest mantissa bit of every distance AFTER its chain and
 epilogue, so any request that ran through this file returns moved bits.
 """
 from std.bit import count_trailing_zeros
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor, vote
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor, vote
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext

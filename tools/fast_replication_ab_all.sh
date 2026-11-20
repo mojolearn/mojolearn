@@ -14,7 +14,7 @@
 # what is under suspicion, and these are the two candidates still standing
 # after 2040 was refuted.
 set -u
-DEFINES="${MOJOLEARN_AB_DEFINES:-MOJOLEARN_2041_FAST_CHUNKS_PIN MOJOLEARN_2042_FAST_NO_LOOKBACK}"
+DEFINES="${MOJOLEARN_AB_DEFINES:-MOJOLEARN_2042_FAST_NO_LOOKBACK}"  # 2041_FAST_CHUNKS_PIN deleted 2026-11-15
 BASE="${MOJOLEARN_AB_OUT_BASE:-bench/results/fast_replication_ab/$(date +%Y-%m-%d_%H%M%S)}"
 rc_all=0
 for d in $DEFINES; do

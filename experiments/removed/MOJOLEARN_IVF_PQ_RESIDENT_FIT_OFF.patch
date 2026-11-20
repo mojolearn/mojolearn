@@ -1,0 +1,14 @@
+diff --git a/x_ann/switches.mojo b/x_ann/switches.mojo
+index a7caaf4109..c134403478 100644
+--- a/x_ann/switches.mojo
++++ b/x_ann/switches.mojo
+@@ -200,6 +200,6 @@ comptime IVF_PQ_ONE_UPLOAD = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+ #: uploads them again and gathers them into list order. `codes_` is
+ #: exported on first read (`x_ann_index_export_codes`, outside fit and
+ #: search). No bit moves: the handle holds the words prepare would upload.
+-# TOMBSTONE: MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF (old path; default by lane fg-ivf without a recorded A/B; NVIDIA and AMD A/B owed) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at eeb08a9c40.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IVF_PQ_RESIDENT_FIT = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++comptime IVF_PQ_RESIDENT_FIT = (
++    GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IVF_PQ_RESIDENT_FIT_OFF"]()
++)

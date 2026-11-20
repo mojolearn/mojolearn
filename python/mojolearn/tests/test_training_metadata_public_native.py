@@ -135,7 +135,7 @@ import builtins, json, sys
 class BlockDependencies:
     def find_spec(self, name, path=None, target=None):
         if name.split('.')[0] in ('numpy', 'scipy', 'sklearn', 'pandas'):
-            raise ModuleNotFoundError(name)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)  # as an absent module does
 sys.meta_path.insert(0, BlockDependencies())
 from mojolearn import training as T, _backend
 from mojolearn._verify_native_runtime import audit_native_call

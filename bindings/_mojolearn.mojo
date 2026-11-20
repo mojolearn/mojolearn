@@ -79,11 +79,10 @@ hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
 """
 
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.experiment_guards_base import BASE_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_shell_impl import (
-    all_finite_host_f32,
-    all_finite_host_f64,
     cast_f64_to_f32_host,
     nonzero_f64_count_host,
     nonzero_f64_fill_host,
@@ -94,7 +93,6 @@ from core.dense_coo import (
     nonzero_f32_fill as dense_nonzero_f32_fill,
 )
 from core.dense_coo_device import knn_affinity_f32_device
-from core.label_encode_device import device_unique_inverse
 # lane cpu2-l2-labels: the label helpers below run their device twins
 # directly, on every tier (no host loop left in this GPU binding).
 from core.hotpath_device import (
@@ -105,62 +103,49 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
-    device_class_ratio_f64,
-    device_encode_labels,
-    device_gather_u64,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
-from bindings.normal_dist_helpers import truncnorm_draws_binding
-from bindings.lr_table_helpers import (
+from core.label_rows_device import LRD_MAX_N
+from bindings.normal_dist_helpers_pack import truncnorm_draws_binding
+from bindings.lr_table_helpers_door import (
     lr_schedule_exact_binding,
-    lr_schedule_at_c, lr_schedule_series_c,
+    lr_schedule_at_c,
 )
-from bindings.optimizer_public_door import entry_init
-from bindings.array_helpers import (
-    nsum_f64_binding,
+from bindings.array_helpers_pack import (
     row_means_f64_binding,
     fsum_f64_binding,
-    row_stds_f64_binding,
 )
-from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
 from core.ic_min_device import device_ic_running_min
-from bindings.hotpath_helpers import (
+from bindings.hotpath_helpers_door import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    strat_alloc_i64_binding,
-    group_fold_assign_i32_binding,
-    strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
 # falls back to its host helper of bindings/hotpath_helpers.mojo when its
 # -D MOJOLEARN_IDN_HPDEV_*_OFF switch or -D MOJOLEARN_IDN_ALL_OFF is given).
-from bindings.hotpath_device import (
+from bindings.hotpath_device_door import (
     check_indices_i64_binding,
     equal_elements_binding,
     fold_ids_binding,
     gather_i32_binding,
     indices_overlap_i64_binding,
     select_fold_i64_binding,
+    select_folds_i64_binding,
     arange_i64_binding,
     leave_range_i64_binding,
     mask_from_indices_u8_binding,
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
-    fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
     bincount2_i32_binding,
-    first_seen_i32_binding,
     strat_fold_assign_i32_binding,
-    hpdev_try_cast_f64_to_f32,
     # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
     # host loops below and in bindings/array_helpers.mojo are the host column
-    # and the fallback for what a twin does not cover)
-    hpdev_try_all_finite,
-    hpdev_try_transpose_to_f32,
+    # and the fallback for what a twin does not cover); the typed device
+    # tries (hpdev_try_*) are imported from core/hotpath_device_run.mojo
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
@@ -169,42 +154,58 @@ from bindings.hotpath_device import (
     normal_init_f32_binding,
     cast_elements_binding,
 )
+from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpose_to_f32
 # lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
 # fold-row gather, cross_val_predict scatter, binary proba column and the
 # parallel forest's offset merge (bindings/msel_device.mojo).
-from bindings.msel_device import (
+from bindings.msel_device_unpack import (
+    logistic_fold_native_api_v1_binding,
+    pca_fold_native_api_v1_binding,
+    tsvd_fold_native_api_v1_binding,
+    kmeans_fit_fold_binding,
+    kmeans_predict_fold_binding,
+    kmeans_transform_fold_binding,
+)
+from bindings.msel_device_pack import (
     msel_put_binding,
-    msel_alloc_binding,
-    msel_read_binding,
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
-    msel_scatter_rows_binding,
-    msel_proba_column_binding,
-    msel_rebase_offsets_i32_binding,
-    msel_split_table_i32_binding,
-    msel_group_fold_perm_i32_binding,
 )
+# lane calltable-msel: the same model-selection helpers as one native entry
+# for the model-selection doors (core/msel_entry_table.mojo).
+from core.msel_helpers_device import publish_msel_helpers_device
 from std.os import abort
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from core.labels_native_api import LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
+from core.labels_native_device import LabelsDeviceKernels
+from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
+from bindings.labels_legacy_boundary_unpack import labels_legacy_prepare, labels_legacy_address
+from bindings.labels_legacy_boundary_pack import labels_legacy_unique
+
 from checks.vendor import COMPILED_VENDOR
+from core.base_helpers_device import publish_base_helpers_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from bindings.parallel_base_entry_device import CORE_DEVCTX_SLOT, publish_parallel_base_device
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+#: Defined once beside the parallel base entry that shares it
+#: (bindings/parallel_base_entry_device.mojo).
+comptime _DEVCTX_SLOT = CORE_DEVCTX_SLOT
 
 
-from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
+from cluster.estimator import kmeans_predict, kmeans_transform
 from cluster.resident_centers import (
     kmeans_centers_prepare,
     kmeans_centers_release,
@@ -212,6 +213,7 @@ from cluster.resident_centers import (
     kmeans_transform_resident,
 )
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
+from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
     knn_index_classify,
     knn_index_prepare,
@@ -229,40 +231,17 @@ from neighbors.estimator import (
     radius_neighbors_fill,
     rbc_knn_search,
 )
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    """A caller's float32 buffer, borrowed, never owned.
-
-    The origin is untracked because the owner is a NumPy array on the other
-    side of the boundary and Mojo cannot see it. The wrapper holds that array
-    throughout the call, which is the whole contract.
-    """
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return f32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    """A caller's float64 buffer, borrowed, never owned; `_f32_ptr`'s twin
-    (DEVIATION 2321). The same helper, spelled the same way, sits in
-    `bindings/_mojolearn_gbdt.mojo`, `_mojolearn_estimators.mojo`,
-    `_mojolearn_svm.mojo` and `_mojolearn_gp.mojo`."""
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return f64_ptr(addr)
-
-
-def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null buffer address")
-    return u32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int32 buffer address")
-    return i32_ptr(addr)
+from core.shared_slot import SharedSlot
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_ops_publish, neighbors_vendor_word
+from neighbors.ops_entry_device import NEIGHBORS_OPS_DEVICE_API, neighbors_ops_device_v1
+from bindings.py_balanced import py_setattr
+# wave 8 run split: the RUN half of this binding (address helpers, the
+# KMeans/labels native tables, the QN fold publish, the KMeans fits and the
+# device label encoder) lives in core/mojolearn_run.mojo.
+from core.mojolearn_run import (
+    _f32_ptr, _f64_ptr, _u32_ptr, _i32_ptr, KMEANS_NATIVE_TABLE, LABELS_NATIVE_TABLE,
+    _publish_qn_fold_table, kmeans_fit_run, kmeans_fit_transform_run, encode_labels_run,
+)
 
 
 # ===========================================================================
@@ -292,17 +271,60 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 
 def _dist_triple(dist_params: PythonObject) raises -> Tuple[Int, Float32, Int]:
-    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked."""
-    if len(dist_params) != 3:
+    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked. A
+    fourth value is the host address of the finite status word
+    (`_dist_status`)."""
+    if len(dist_params) != 3 and len(dist_params) != 4 and len(dist_params) != 7:
         raise Error(
             "knn: dist_params must hold 3 values (metric, metric_arg,"
-            " weights), got " + String(len(dist_params))
+            " weights), optionally a status address, and with it a fold's"
+            " three store words, got " + String(len(dist_params))
         )
     return (
         Int(py=dist_params[0]),
         Float32(Float64(py=dist_params[1])),
         Int(py=dist_params[2]),
     )
+
+
+def _dist_status(dist_params: PythonObject) raises -> Int:
+    """The optional fourth `dist_params` value (lane a7b-device-x-neighbors):
+    the host address of an int32 word that receives the finite status of the
+    queries the entry uploads (core/admitted_finite_status.mojo; 0 = finite).
+    0 (or absent): not asked; the door tested its X itself."""
+    if len(dist_params) < 4:
+        return 0
+    var address = Int(py=dist_params[3])
+    if address < 0 or address % 4 != 0:
+        raise Error("knn: the status address must be a positive int32-aligned address")
+    return address
+
+
+def _dist_fold(dist_params: PythonObject) raises -> Tuple[Int, Int, Int]:
+    """The optional fifth to seventh `dist_params` values (lane
+    a8b-device-x-neighbors-rest): a model-selection fold whose rows are the
+    queries, `(base id, base rows, index id)` in model selection's store,
+    gathered on the device by the resident entry (`knn_fold_ready`); the
+    status address then names two int32 words (finite, index range).
+    `(-1, 0, -1)` when absent: the queries are the host words at
+    `queries_addr`."""
+    if len(dist_params) < 7:
+        return (-1, 0, -1)
+    var base = Int(py=dist_params[4])
+    var rows = Int(py=dist_params[5])
+    var index = Int(py=dist_params[6])
+    if base < 0 or rows < 1 or index < 0:
+        raise Error("knn: a fold needs a resident base id, its row count and an index id")
+    if _dist_status(dist_params) == 0:
+        raise Error("knn: a fold needs the status words' address")
+    return (base, rows, index)
+
+def _refuse_status(dist_params: PythonObject, what: String) raises:
+    """The per-call entries (index uploaded every call) do not test their
+    words: the doors reach them only on the host binding; a status request
+    here is refused rather than left unanswered."""
+    if _dist_status(dist_params) != 0:
+        raise Error(what + ": the finite status word is answered by the resident entries only")
 
 
 def knn_search_binding(
@@ -349,6 +371,7 @@ def knn_search_binding(
     var sq = Int(py=params[4]) != 0
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_search")
 
     var used: Int
     with GILReleased(Python()):
@@ -368,17 +391,24 @@ def knn_index_prepare_binding(
     `knn_search_resident` searches through. `params` is `[n_index,
     n_features]`; the bytes at `index_addr` are copied to the device
     inside this call and never read again by a search except for the
-    host-side refusals. Release with `knn_index_release`."""
-    if len(params) != 2:
-        raise Error("knn_index_prepare: params must hold n_index, n_features")
+    host-side refusals. Release with `knn_index_release`.
+
+    A third `params` value (lane a7b-device-x-neighbors) is the host address
+    of an int32 word that receives the finite status of the uploaded index
+    (0 = finite); on a non-finite index nothing is kept and the handle is 0."""
+    if len(params) != 2 and len(params) != 3:
+        raise Error("knn_index_prepare: params must hold n_index, n_features and optionally a status address")
     var ip = _f32_ptr(Int(py=index_addr))
     var ni = Int(py=params[0])
     var nf = Int(py=params[1])
+    var status = 0 if len(params) == 2 else Int(py=params[2])
     if ni <= 0 or nf <= 0:
         raise Error("knn_index_prepare: n_index and n_features must be positive")
+    if status < 0 or status % 4 != 0:
+        raise Error("knn_index_prepare: the status address must be a positive int32-aligned address")
     var handle: Int
     with GILReleased(Python()):
-        handle = knn_index_prepare(ip, ni, nf)
+        handle = knn_index_prepare(ip, ni, nf, status)
     return PythonObject(handle)
 
 
@@ -419,11 +449,14 @@ def knn_search_resident_binding(
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
     var h = Int(py=handle)
+    var status = _dist_status(dist_params)
+    if _dist_fold(dist_params)[0] >= 0:
+        raise Error("knn_search_resident: fold queries are taken by the resident classify / regress entries only")
     var used: Int
     with GILReleased(Python()):
         used = knn_index_search(
             h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1], True,
+            dt[0], dt[1], True, status,
         )
     return PythonObject(used)
 
@@ -491,12 +524,15 @@ def knn_classify_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_classify")
 
     var used: Int
+    # The binding entry reads the neighbors device plan once and passes it down.
+    var dplan = neighbors_device_plan()
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_classifier_predict(
-            ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
+            dplan, ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
             want_proba, qt, dt[0], dt[1], dt[2],
         )
         ctx.synchronize()
@@ -544,6 +580,7 @@ def knn_regress_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_regress")
 
     var used: Int
     with GILReleased(Python()):
@@ -601,11 +638,13 @@ def knn_classify_resident_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
+    var fold = _dist_fold(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_classify(
             h, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
-            want_proba, qt, dt[0], dt[1], dt[2],
+            want_proba, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2],
         )
     return PythonObject(used)
 
@@ -638,12 +677,19 @@ def knn_regress_resident_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
+    var fold = _dist_fold(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_regress(
-            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
+            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2]
         )
     return PythonObject(used)
+
+
+def kmeans_native_api_v1_binding() raises -> PythonObject:
+    var table = KMEANS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def kmeans_fit_binding(
@@ -681,10 +727,15 @@ def kmeans_fit_binding(
     `inertia_check` (False by default, per cuVS) governs only the IN-LOOP
     cost. This docstring used to say "0.0 when it was NEVER COMPUTED",
     which was false (corrected 2026-08-23).
+
+    `params[11]` (OPTIONAL, lane a7d-device-x-decomp-cluster): 1 asks for
+    X's finite status word, tested on the device after the upload; it is
+    then the fifth value returned (0 = finite; a nonzero word means the fit
+    stopped before it ran and the door refuses).
     """
-    if len(params) != 10 and len(params) != 11:
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -706,34 +757,30 @@ def kmeans_fit_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
 
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var r = kmeans_fit(
-            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
-            0.0, ovs,
-            # TOMBSTONE: MOJOLEARN_KMEANS_FAST_LAZY_SHIFT (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-            # Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
-            # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
-            lazy_shift=False,
-        )
+        var r = kmeans_fit_run(xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm, ovs, word_addr)
         inertia = r.inertia
         n_iter = r.n_iter
         sum_scale = r.sum_scale
         weight_scale = r.weight_scale
-        ctx.synchronize()
 
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -750,10 +797,12 @@ def kmeans_predict_binding(
     2 n_clusters, 3 metric. `out_labels_addr` is `n_samples` uint32 (the
     caller's int32 array is the same bytes). The pass is `kmeans_fit`'s
     final assignment (`cluster/estimator.mojo::kmeans_predict`), so predict
-    on the training rows is `labels_`."""
-    if len(params) != 4:
+    on the training rows is `labels_`. `params[4]` (OPTIONAL, lane a7d): 1
+    asks for X's finite status word over the upload, returned instead of
+    n_samples (0 = finite)."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -763,10 +812,15 @@ def kmeans_predict_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -781,10 +835,11 @@ def kmeans_transform_binding(
 
     `params` is, in this exact order: 0 n_samples, 1 n_features,
     2 n_clusters, 3 metric. `out_addr` is `n_samples x n_clusters` float32,
-    row-major (`cluster/estimator.mojo::kmeans_transform`)."""
-    if len(params) != 4:
+    row-major (`cluster/estimator.mojo::kmeans_transform`). `params[4]`
+    (OPTIONAL, lane a7d): as `kmeans_predict`'s."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -794,10 +849,15 @@ def kmeans_transform_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
+        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -815,10 +875,11 @@ def kmeans_fit_transform_binding(
     `out_transform_addr` is `n_samples x n_clusters` float32, written with
     the distances to the final centroids from the design and centroids
     already on the device (`cluster/estimator.mojo::kmeans_transform_device`,
-    the same kernels and bytes as a separate `kmeans_transform`)."""
-    if len(params) != 10 and len(params) != 11:
+    the same kernels and bytes as a separate `kmeans_transform`).
+    `params[11]` (OPTIONAL, lane a7d): as `kmeans_fit_binding`'s."""
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -837,30 +898,28 @@ def kmeans_fit_transform_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var r = kmeans_fit(
-            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
-            0.0, ovs,
-            lazy_shift=False,
-            transform_out=tp,
-        )
+        var r = kmeans_fit_transform_run(xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm, ovs, tp, word_addr)
         inertia = r.inertia
         n_iter = r.n_iter
         sum_scale = r.sum_scale
         weight_scale = r.weight_scale
-        ctx.synchronize()
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -895,10 +954,12 @@ def kmeans_predict_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_predict` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -908,8 +969,13 @@ def kmeans_predict_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm)
+        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -920,10 +986,12 @@ def kmeans_transform_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_transform` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -933,9 +1001,22 @@ def kmeans_transform_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm)
+        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
+
+
+def mojolearn_mode_policy_mask_binding() raises -> PythonObject:
+    """The mode policy rows this binary was compiled with
+    (`checks/mode_policy.mojo`): bit i set = row i relaxed. 0 in every
+    identical build. Read by `python -m mojolearn verify`, which refuses an
+    identical set that reports anything else."""
+    return PythonObject(Int(mode_policy_mask()))
 
 
 def mojolearn_numeric_mode_binding() raises -> PythonObject:
@@ -980,9 +1061,9 @@ def radius_neighbors_count_binding(
     That is why there are two of these and not one; the reasoning is in
     `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
     """
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
-            "radius_neighbors_count: params must hold 6 values, got "
+            "radius_neighbors_count: params must hold 6 values and optionally a status address, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -994,12 +1075,19 @@ def radius_neighbors_count_binding(
     var rad = Float32(Float64(py=params[3]))
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
+    # Lane a7b-device-x-neighbors: params[6], when present, is the host
+    # address of the int32 finite status word of the uploaded queries (0 =
+    # finite; the door refuses otherwise). The index was tested once at fit
+    # or archive load (lane a8b-device-x-neighbors-rest).
+    var status = 0 if len(params) == 6 else Int(py=params[6])
+    if status < 0 or status % 4 != 0:
+        raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_count(
-            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
+            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg, status
         )
         ctx.synchronize()
     return PythonObject(nnz)
@@ -1164,7 +1252,12 @@ def cast_f64_to_f32_binding(
         return PythonObject(0)
     # lane cpu2-l1-input: the device narrowing is the default (it was the
     # fam2-shared candidate arm); False means the host loop below runs.
-    if hpdev_try_cast_f64_to_f32(Int(py=src_addr), Int(py=dst_addr), count):
+    var cast_src = Int(py=src_addr)
+    var cast_dst = Int(py=dst_addr)
+    var cast_done = False
+    with GILReleased(Python()):
+        cast_done = hpdev_try_cast_f64_to_f32(cast_src, cast_dst, count)
+    if cast_done:
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1203,7 +1296,12 @@ def cast_colmajor_f64_to_f32_binding(
     if nr == 0 or nc == 0:
         return PythonObject(0)
     # lane cpu2-l1-input: the fused cast-and-transpose on the device.
-    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, True):
+    var tr_src = Int(py=src_addr)
+    var tr_dst = Int(py=dst_addr)
+    var tr_done = False
+    with GILReleased(Python()):
+        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, True)
+    if tr_done:
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1241,7 +1339,12 @@ def transpose_f32_binding(
     if nr == 0 or nc == 0:
         return PythonObject(0)
     # lane cpu2-l1-input: the transpose on the device.
-    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, False):
+    var tr_src = Int(py=src_addr)
+    var tr_dst = Int(py=dst_addr)
+    var tr_done = False
+    with GILReleased(Python()):
+        tr_done = hpdev_try_transpose_to_f32(tr_src, tr_dst, nr, nc, False)
+    if tr_done:
         return PythonObject(0)
     var sp = _f32_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1349,56 +1452,22 @@ def nonzero_f64_fill_binding(
 # ===========================================================================
 
 
-def all_finite_f32_binding(
-    addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """1 if every one of the `n` float32 values at `addr` is finite, else 0
-    (DEVIATION 2322). `n == 0` is 1: an empty buffer has no non-finite
-    element. A negative `n` is refused rather than read.
-
-    NaN, +inf and -inf all fail; subnormals PASS, because they are finite
-    numbers and `isfinite` says so. This is the test
-    `bindings/_mojolearn_estimators.mojo::_pca_whiten_finite` applies,
-    one element at a time, with no SIMD width and no early-exit trick a
-    different backend could reorder: the FIRST non-finite element ends the
-    scan and the answer is the same whichever element it was.
-    """
-    var p = _f32_ptr(Int(py=addr))
+def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var address = Int(py=addr)
     var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "all_finite_f32: n must be non-negative, got " + String(count)
-        )
-    # lane cpu2-l1-input: the scan on the device (one status word back).
-    var dev = hpdev_try_all_finite(Int(py=addr), count, False)
-    if dev >= 0:
-        return PythonObject(dev)
-    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
-    var ok: Int = 1
+    var result = 0
     with GILReleased(Python()):
-        ok = all_finite_host_f32(p, count)
-    return PythonObject(ok)
+        result = LabelsDeviceKernels.finite(address, count, False)
+    return PythonObject(result)
 
 
-def all_finite_f64_binding(
-    addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """`all_finite_f32_binding` over float64 values (DEVIATION 2323); the
-    same rules, including subnormals passing and `n == 0` answering 1."""
-    var p = _f64_ptr(Int(py=addr))
+def all_finite_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var address = Int(py=addr)
     var count = Int(py=n)
-    if count < 0:
-        raise Error(
-            "all_finite_f64: n must be non-negative, got " + String(count)
-        )
-    var dev = hpdev_try_all_finite(Int(py=addr), count, True)
-    if dev >= 0:
-        return PythonObject(dev)
-    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
-    var ok: Int = 1
+    var result = 0
     with GILReleased(Python()):
-        ok = all_finite_host_f64(p, count)
-    return PythonObject(ok)
+        result = LabelsDeviceKernels.finite(address, count, True)
+    return PythonObject(result)
 
 
 # NumPy-free host byte gathering. These do no learning:
@@ -1494,48 +1563,17 @@ def scatter_rows_bytes_binding(
 # ===========================================================================
 
 
-def _encode_labels_binding[dt: DType](
-    src_addr: PythonObject, n: PythonObject, classes_addr: PythonObject,
-    max_classes: PythonObject, codes_addr: PythonObject,
-) raises -> PythonObject:
-    """The ORDER RULE's encoder over `n` values of `dt` at `src_addr`, on the
-    device: the sorted distinct values land at `classes_addr` (capacity
-    `max_classes`) and one int32 code per row at `codes_addr`. Returns the
-    class count, or -1 when the cap was exceeded or a label is NaN (nothing
-    is promised about either output then; `_labels._encode_labels_native`
-    then runs `unique_inverse`)."""
+def _encode_labels_binding[dt: DType](src_addr: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, max_classes: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var cap = Int(py=max_classes)
-    if count < 1:
-        raise Error("encode_labels: n must be positive, got " + String(count))
-    if cap < 1:
-        raise Error("encode_labels: max_classes must be positive")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-        raise Error("encode_labels: null buffer address")
-    if count > HPD_MAX_N:
-        return PythonObject(-1)
-    var code = -1
-    comptime if dt == DType.float32:
-        code = HPD_F32
-    comptime if dt == DType.float64:
-        code = HPD_F64
-    comptime if dt == DType.int32:
-        code = HPD_I32
-    comptime if dt == DType.int64:
-        code = HPD_I64
-    comptime if dt == DType.uint32:
-        code = HPD_U32
-    comptime if dt == DType.uint8:
-        code = HPD_U8
-    if code < 0:
-        raise Error("encode_labels: dtype without a device encoder")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var k = -1
+    var capacity = Int(py=max_classes)
+    var source = Int(py=src_addr)
+    var classes = Int(py=classes_addr)
+    var codes = Int(py=codes_addr)
+    var result = 0
     with GILReleased(Python()):
-        k = device_encode_labels(
-            ctx, Int(py=src_addr), code, count, Int(py=classes_addr), cap, Int(py=codes_addr)
-        )
-    return PythonObject(k)
+        result = encode_labels_run[dt](source, count, classes, capacity, codes)
+    return PythonObject(result)
 
 
 def encode_labels_f32_binding(
@@ -1580,64 +1618,40 @@ def encode_labels_u8_binding(
     return _encode_labels_binding[DType.uint8](src_addr, n, classes_addr, max_classes, codes_addr)
 
 
-def _gather_u64_device(
-    name: String, table_addr: PythonObject, n_table: PythonObject,
-    codes_addr: PythonObject, n: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """`dst[i] = table[codes[i]]` over 64-bit table words and int64 codes
-    on the device (`core/hotpath_device.mojo::device_gather_u64`, a move of
-    words, so one kernel serves int64 and float64 tables). Lane
-    cpu2-l2-labels: the host loop that ran here on FAST and on every refusal
-    is gone; the host column keeps it (`bindings/host_helpers.mojo`). A code
-    outside `[0, n_table)` raises before any byte of `dst` is written."""
+def _gather_u64_device(name: String, table_addr: PythonObject, n_table: PythonObject,
+    codes_addr: PythonObject, n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
     var count = Int(py=n)
-    var nt = Int(py=n_table)
-    if count < 0 or nt < 1:
-        raise Error(name + ": n must be non-negative and the table non-empty")
+    var classes = Int(py=n_table)
+    labels_gather_shape(name, count, classes)
     if count == 0:
         return PythonObject(0)
-    if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error(name + ": null buffer address")
-    if count > HPD_MAX_N or nt > HPD_MAX_N:
-        raise Error(name + ": more rows than the device gather holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var ok = False
+    var message = name + ": null buffer address"
+    var table = labels_legacy_address(table_addr, message)
+    var codes = labels_legacy_address(codes_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsGatherRequest(table, codes, dst, classes, count)
+    var kind = 1 if name == "gather_i64" else 2
     with GILReleased(Python()):
-        ok = device_gather_u64(
-            ctx, Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
-        )
-    if not ok:
-        raise Error(name + ": code out of range")
+        LabelsDeviceKernels.gather(kind, request)
     return PythonObject(0)
 
 
-def class_ratio_f64_binding(
-    counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
-) raises -> PythonObject:
-    """Per-class ratios of k int64 class counts on the device (lane
-    py-runtime-b, `core/hotpath_device.mojo::device_class_ratio_f64`): mode
-    0, scikit-learn's 'balanced' weight n / (k * count_c); mode 1, the prior
-    count_c / n, in soft binary64 (the words of Python's `int / int`; the host
-    column is `bindings/array_helpers.mojo`). Returns nonzero when a mode-0
-    count is zero (the caller raises ZeroDivisionError)."""
-    var kk = Int(py=k)
-    var nn = Int(py=n)
-    var m = Int(py=mode)
-    if kk <= 0:
+def class_ratio_f64_binding(counts_addr: PythonObject, k: PythonObject, n: PythonObject,
+    mode: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    var classes = Int(py=k)
+    var count = Int(py=n)
+    var native_mode = Int(py=mode)
+    if classes <= 0:
         return PythonObject(0)
-    if m != 0 and m != 1:
-        raise Error("class_ratio_f64: mode is 0 (balanced) or 1 (prior)")
-    if m == 1 and nn == 0:
-        raise Error("class_ratio_f64: the prior of zero rows")
-    if Int(py=counts_addr) == 0 or Int(py=out_addr) == 0:
-        raise Error("class_ratio_f64: null buffer address")
-    if kk > HPD_MAX_N:
-        raise Error("class_ratio_f64: more classes than the kernel holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var zeros = 0
+    labels_ratio_shape(classes, count, native_mode)
+    var message = String("class_ratio_f64: null buffer address")
+    var counts = labels_legacy_address(counts_addr, message)
+    var dst = labels_legacy_address(out_addr, message)
+    var request = LabelsRatioRequest(counts, dst, classes, count, native_mode)
+    var result = 0
     with GILReleased(Python()):
-        zeros = device_class_ratio_f64(ctx, Int(py=counts_addr), kk, nn, m, Int(py=out_addr))
-    return PythonObject(zeros)
+        result = LabelsDeviceKernels.ratio(request)
+    return PythonObject(result)
 
 
 def gather_i64_binding(
@@ -1658,31 +1672,19 @@ def gather_f64_binding(
     return _gather_u64_device("gather_f64", table_addr, n_table, codes_addr, n, dst_addr)
 
 
-def _argmax_rows_device(
-    name: String, wide: Bool, scores_addr: PythonObject, n_rows: PythonObject,
-    n_cols: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """Row-wise first-max-wins argmax over a C-order [n_rows, n_cols] block
-    into int64 codes (DEVIATION 2500), the rule of `_labels.argmax_rows`:
-    strictly greater replaces, so ties keep the lowest column, and a NaN
-    never replaces, so a row whose column 0 is NaN answers 0. On the device
-    (`core/label_rows_device.mojo`, lane cpu2-l2-labels: integer order keys
-    of the IEEE words, the host column's bytes on every vendor); the host
-    loop that ran here is gone, the host column keeps it
-    (`bindings/host_helpers.mojo`)."""
+def _argmax_rows_device(name: String, wide: Bool, scores_addr: PythonObject,
+    n_rows: PythonObject, n_cols: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
     var rows = Int(py=n_rows)
     var cols = Int(py=n_cols)
-    if rows < 0 or cols < 1:
-        raise Error(name + ": n_rows must be non-negative and n_cols positive")
+    labels_argmax_shape(name, rows, cols)
     if rows == 0:
         return PythonObject(0)
-    if Int(py=scores_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error(name + ": null buffer address")
-    if rows > LRD_MAX_N or cols > LRD_MAX_N:
-        raise Error(name + ": more rows or columns than the device argmax holds")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var message = name + ": null buffer address"
+    var scores = labels_legacy_address(scores_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsArgmaxRequest(scores, dst, rows, cols)
     with GILReleased(Python()):
-        device_argmax_rows(ctx, Int(py=scores_addr), wide, rows, cols, Int(py=dst_addr))
+        LabelsDeviceKernels.argmax(wide, request)
     return PythonObject(0)
 
 
@@ -1700,33 +1702,6 @@ def argmax_rows_f64_binding(
 ) raises -> PythonObject:
     """`_argmax_rows_device` over float64 scores."""
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
-
-
-def shard_topk_merge_f32_binding(
-    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
-    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
-) raises -> PythonObject:
-    """`shard_topk_merge_f32` (bindings/array_helpers.mojo's contract: 0, 1
-    a local id outside its shard, 2 fewer than k candidates) on the device
-    (lane cpu4-python, core/shard_merge_device.mojo); the host loop is the
-    host binding's column."""
-    var s_count = Int(py=n_shards)
-    var nq = Int(py=n_queries)
-    var kk = Int(py=k)
-    if s_count < 1 or nq < 0 or kk < 1:
-        raise Error("shard_topk_merge_f32: bad dimensions")
-    if nq == 0:
-        return PythonObject(0)
-    if Int(py=table_addr) == 0 or Int(py=out_dist_addr) == 0 or Int(py=out_idx_addr) == 0:
-        raise Error("shard_topk_merge_f32: null buffer address")
-    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
-    var od = Int(py=out_dist_addr)
-    var oi = Int(py=out_idx_addr)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var rc = 0
-    with GILReleased(Python()):
-        rc = device_shard_topk_merge_f32(ctx, tp, s_count, nq, kk, od, oi)
-    return PythonObject(rc)
 
 
 def _ic_running_min_device(
@@ -1771,34 +1746,6 @@ def ic_running_min_f32_binding(
                                   ic_addr, best_ic_addr, best_idx_addr)
 
 
-def argmax_last_rows_f32_binding(
-    logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dims = [b, l, v]: the first-max argmax (DEVIATION 2500's rule) of the
-    LAST position of each row of float32 logits `[b, l, v]` into int64
-    `dst[b]`, on the device (lane cpu4-python: the callers' host row gather
-    `gather_rows_bytes` before `argmax_rows_f32` is gone)."""
-    if len(dims) != 3:
-        raise Error("argmax_last_rows_f32: dims [b, l, v]")
-    var b = Int(py=dims[0])
-    var l = Int(py=dims[1])
-    var v = Int(py=dims[2])
-    if b < 0 or l < 1 or v < 1:
-        raise Error("argmax_last_rows_f32: b must be non-negative, l and v positive")
-    if b == 0:
-        return PythonObject(0)
-    if Int(py=logits_addr) == 0 or Int(py=dst_addr) == 0:
-        raise Error("argmax_last_rows_f32: null buffer address")
-    if b > LRD_MAX_N // l or v > LRD_MAX_N:
-        raise Error("argmax_last_rows_f32: more rows or columns than the device argmax holds")
-    var la = Int(py=logits_addr)
-    var da = Int(py=dst_addr)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    with GILReleased(Python()):
-        device_argmax_last_f32(ctx, la, b, l, v, da)
-    return PythonObject(0)
-
-
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
 
@@ -1810,44 +1757,6 @@ def argmax_last_rows_f32_binding(
 # `_spectral_impl._DenseCOO` and `SpectralEmbedding._precomputed_knn_affinity`
 # (compares and the exact values 0, 0.5, 1; no fold).
 # ===========================================================================
-
-
-def nonzero_f32_count_binding(src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """How many of the `n` float32 values at `src` satisfy `v != 0.0`."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("nonzero_f32_count: n must be non-negative, got " + String(count))
-    if count == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var nz = 0
-    with GILReleased(Python()):
-        nz = dense_nonzero_f32_count(sp, count)
-    return PythonObject(nz)
-
-
-def nonzero_f32_fill_binding(
-    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, outs: PythonObject, capacity: PythonObject,
-) raises -> PythonObject:
-    """`nonzero_f64_fill` over a C-contiguous float32 `[rows, cols]` matrix:
-    row, column and value of every `v != 0.0`, row major. Returns the count."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var cap = Int(py=capacity)
-    if nr < 0 or nc < 0 or cap < 0:
-        raise Error("nonzero_f32_fill: rows, cols and capacity must be non-negative")
-    if len(outs) != 3:
-        raise Error("nonzero_f32_fill: outs must hold 3 addresses, got " + String(len(outs)))
-    if nr == 0 or nc == 0:
-        return PythonObject(0)
-    var sp = f32_ptr(Int(py=src_addr))
-    var rp = i32_ptr(Int(py=outs[0]))
-    var cp = i32_ptr(Int(py=outs[1]))
-    var vp = f32_ptr(Int(py=outs[2]))
-    var k = 0
-    with GILReleased(Python()):
-        k = dense_nonzero_f32_fill(sp, nr, nc, rp, cp, vp, cap)
-    return PythonObject(k)
 
 
 def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1882,34 +1791,9 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(0)
 
 
-def unique_inverse_binding(
-    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-) raises -> PythonObject:
-    """`np.unique(y, return_inverse=True)` for `n` 64-bit labels at
-    `src_addr` (`kind` 0: float64, 1: int64) on the device
-    (`core/label_encode_device.mojo`, cpu-gpu-cleanup w2-pyglue): the sorted
-    distinct values' 64 bits land at `classes_addr` (n slots), one int32
-    code per row at `codes_addr`. Returns the class count. A NaN label
-    raises the ORDER RULE's message. The core host binding runs the host
-    twin (`core/label_encode.mojo`) under this name."""
-    var count = Int(py=n)
-    var k_ind = Int(py=kind)
-    if count < 1:
-        raise Error("unique_inverse: n must be positive, got " + String(count))
-    if k_ind != 0 and k_ind != 1:
-        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-        raise Error("unique_inverse: null buffer address")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var k: Int
-    with GILReleased(Python()):
-        k = device_unique_inverse(
-            ctx, Int(py=src_addr), count, k_ind, Int(py=classes_addr), Int(py=codes_addr)
-        )
-    if k == -2:
-        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
-    return PythonObject(k)
+def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+    return labels_legacy_unique[LabelsDeviceKernels](src_addr, n, kind, classes_addr, codes_addr)
 
 
 # ===========================================================================
@@ -1938,121 +1822,76 @@ def unique_inverse_binding(
 # scikit-learn's message for each). Labels are checked before weights.
 # ===========================================================================
 
-comptime PT_ENCODE_CAP = 4096
-comptime PT_W_NONFINITE = -3
-comptime PT_W_NEGATIVE = -4
-comptime PT_W_ALL_ZERO = -5
-comptime PT_ALLOW_NEGATIVE = 1
-comptime PT_ALLOW_ALL_ZERO = 2
+
+def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject, w_addr: PythonObject,
+    w_code: PythonObject, w_flags: PythonObject) raises -> PythonObject:
+    return labels_legacy_prepare[LabelsDeviceKernels](y_addr, y_code, n,
+        classes_addr, codes_addr, w_addr, w_code, w_flags)
 
 
-def _pt_encode(
-    y_addr: PythonObject, y_code: Int, n: PythonObject, classes_addr: Int,
-    cap: Int, codes_addr: PythonObject,
-) raises -> Int:
-    """The capped encoder `encode_labels_<dt>` for dtype code `y_code`."""
-    var ca = PythonObject(classes_addr)
-    var cp = PythonObject(cap)
-    if y_code == 0:
-        return Int(py=encode_labels_f32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 1:
-        return Int(py=encode_labels_f64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 2:
-        return Int(py=encode_labels_i32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 3:
-        return Int(py=encode_labels_i64_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 4:
-        return Int(py=encode_labels_u32_binding(y_addr, n, ca, cp, codes_addr))
-    if y_code == 5:
-        return Int(py=encode_labels_u8_binding(y_addr, n, ca, cp, codes_addr))
-    raise Error("prepare_targets: label dtype code must be 0..5, got " + String(y_code))
+# ===========================================================================
+# labels_native_api_v3 (native-only execution; core/labels_native_api.mojo): the
+# label path's base-binding steps over THIS binding's device helpers, on the
+# kit_call descriptor ABI. Each operation calls the same entry the Python
+# callable table called (same validation, same kernels, same order), so no
+# byte moves. The boundary releases the GIL and pins owners across the
+# complete typed native operation; the entry never constructs Python objects.
+# ===========================================================================
 
 
-def prepare_targets_binding(
-    y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
-    classes_addr: PythonObject, codes_addr: PythonObject,
-    w_addr: PythonObject, w_code: PythonObject, w_flags: PythonObject,
-) raises -> PythonObject:
-    """See the block comment above."""
-    var count = Int(py=n)
-    if count < 0:
-        raise Error("prepare_targets: n must be non-negative, got " + String(count))
-    var k = 0
-    if Int(py=y_addr) != 0:
-        if count < 1:
-            raise Error("prepare_targets: labels need n >= 1")
-        if Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
-            raise Error("prepare_targets: null label output address")
-        var yc = Int(py=y_code)
-        var wide_kind = 0 if (yc == 0 or yc == 1) else 1
-        var wide_code = 1 if wide_kind == 0 else 3
-        var cap = count if count < PT_ENCODE_CAP else PT_ENCODE_CAP
-        if yc == wide_code:
-            # 64-bit labels: the encoder writes the classes in place
-            k = _pt_encode(y_addr, yc, n, Int(py=classes_addr), cap, codes_addr)
-        else:
-            var tmp = List[UInt64](length=cap, fill=0)
-            var tmp_addr = Int(tmp.unsafe_ptr())
-            k = _pt_encode(y_addr, yc, n, tmp_addr, cap, codes_addr)
-            if k > 0:
-                # widen the k classes (exact: float32 -> float64, int -> int64)
-                _ = cast_elements_binding(
-                    PythonObject(tmp_addr), y_code, classes_addr,
-                    PythonObject(wide_code), PythonObject(k),
-                )
-            _ = tmp^
-        if k < 0:
-            # more classes than the cap, or a NaN label: `unique_inverse` over
-            # the widened labels (no cap; it raises the NaN refusal)
-            if yc == wide_code:
-                k = Int(py=unique_inverse_binding(
-                    y_addr, n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-            else:
-                var wide = List[UInt64](length=count, fill=0)
-                var wide_addr = Int(wide.unsafe_ptr())
-                var st = Int(py=cast_elements_binding(
-                    y_addr, y_code, PythonObject(wide_addr), PythonObject(wide_code), n
-                ))
-                if st != 0:
-                    raise Error("prepare_targets: labels do not widen to 64 bits")
-                k = Int(py=unique_inverse_binding(
-                    PythonObject(wide_addr), n, PythonObject(wide_kind), classes_addr, codes_addr
-                ))
-                _ = wide^
-    if Int(py=w_addr) != 0 and count > 0:
-        var wc = Int(py=w_code)
-        var flags = Int(py=w_flags)
-        var fin: Int
-        if wc == 1:
-            fin = Int(py=all_finite_f64_binding(w_addr, n))
-        elif wc == 0:
-            fin = Int(py=all_finite_f32_binding(w_addr, n))
-        else:
-            raise Error("prepare_targets: weight dtype code must be 0 or 1, got " + String(wc))
-        if fin == 0:
-            return PythonObject(PT_W_NONFINITE)
-        var lo = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(0)))
-        if (flags & PT_ALLOW_NEGATIVE) == 0 and lo < 0:
-            return PythonObject(PT_W_NEGATIVE)
-        if (flags & PT_ALLOW_ALL_ZERO) == 0:
-            var hi = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(1)))
-            if not (hi > 0 or lo < 0):
-                return PythonObject(PT_W_ALL_ZERO)
-    return PythonObject(k)
+def labels_native_api_v3_binding() raises -> PythonObject:
+    var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+from core.spectral_preparation_api import SpectralPreparationAPI
+from core.spectral_preparation_device import SpectralPreparationDevice
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
+
+comptime _SPECTRAL_PREPARATION_SLOT = "MojolearnSpectralPreparationDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_PREP_IDENTICAL else "MojolearnSpectralPreparationDeviceFastV1"
+comptime SPECTRAL_PREPARATION_API = SharedSlot[SpectralPreparationAPI[SpectralPreparationDevice], _SPECTRAL_PREPARATION_SLOT]
+
+
+def spectral_preparation_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_PREPARATION_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_neighbors_ops(module: PythonObject) raises:
+    # The device column of the neighbors operations table
+    # (core/neighbors_entry_table.mojo): the k-NN owner
+    # (bindings/neighbors_knn_native.mojo) calls this entry with plain values
+    # and reads the key from the module attribute `neighbors_native_key`.
+    # The `knn_*` Python exports remain for the unconverted callers:
+    # bindings/parallel_neighbor_worker_door.mojo, bindings/host_knn_predict_native.mojo
+    # and python/mojolearn/_native_parallel_shard.py. A build with no GPU
+    # vendor ("none") publishes nothing and records no key.
+    var word = neighbors_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = NEIGHBORS_OPS_DEVICE_API.get_or_create_ptr()
+    neighbors_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
+                          neighbors_ops_device_v1)
+    py_setattr(module, "neighbors_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
+
+
 def build__mojolearn() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn")
+        m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+        # TOMBSTONE: LABELS_NATIVE_API_V1_V2 registrations deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b. Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
+        m.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
+        m.def_function[mojolearn_mode_policy_mask_binding]("mojolearn_mode_policy_mask")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_index_prepare_binding]("knn_index_prepare")
         m.def_function[knn_index_release_binding]("knn_index_release")
@@ -2064,6 +1903,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[knn_classify_resident_binding]("knn_classify_resident")
         m.def_function[knn_regress_resident_binding]("knn_regress_resident")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
+        m.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[kmeans_transform_binding]("kmeans_transform")
         m.def_function[kmeans_fit_transform_binding]("kmeans_fit_transform")
@@ -2083,8 +1923,6 @@ def build__mojolearn() -> PythonObject:
         m.def_function[transpose_f32_binding]("transpose_f32")
         m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
-        m.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
-        m.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         m.def_function[unique_inverse_binding]("unique_inverse")
         # lane migrate-shared-labels: the shared argument-and-label entry
@@ -2094,22 +1932,31 @@ def build__mojolearn() -> PythonObject:
         m.def_function[all_finite_f64_binding]("all_finite_f64")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        # lane calltable-msel: the model-selection helper table, for the
+        # native model-selection doors in another extension module.
+        publish_msel_helpers_device()
         m.def_function[msel_put_binding]("msel_put")
-        m.def_function[msel_alloc_binding]("msel_alloc")
-        m.def_function[msel_read_binding]("msel_read")
         m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
-        m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
-        m.def_function[msel_proba_column_binding]("msel_proba_column")
-        m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
-        m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
-        m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
+        m.def_function[logistic_fold_native_api_v1_binding]("logistic_fold_native_api_v1")
+        m.def_function[pca_fold_native_api_v1_binding]("pca_fold_native_api_v1")
+        m.def_function[tsvd_fold_native_api_v1_binding]("tsvd_fold_native_api_v1")
+        m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
+        m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
+        m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
         # bindings/hotpath_helpers.mojo that stand in for per-row Python.
+        # The base helper table (core/base_entry_table.mojo) serves check_indices_i64,
+        # bincount_i64, reduce_stat, equal_elements, bincount2_i32, row_means_f64,
+        # assign_fold_i64, count_fold_hits_i64 and mark_split_roles_f32 to native
+        # doors; their Python exports below remain for the Python package
+        # (`_buffer._native` users) and the doors not yet converted
+        # (bindings/trees_public_gbdt_fit_door.mojo, trees_public_forest.mojo and the
+        # x_linear_native.mojo fold sites, owned by sibling call-table lanes).
         m.def_function[cast_elements_binding]("cast_elements")
         m.def_function[reduce_stat_binding]("reduce_stat")
         m.def_function[equal_elements_binding]("equal_elements")
@@ -2118,6 +1965,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         m.def_function[fold_ids_binding]("fold_ids")
         m.def_function[select_fold_i64_binding]("select_fold_i64")
+        m.def_function[select_folds_i64_binding]("select_folds_i64")
         m.def_function[arange_i64_binding]("arange_i64")
         m.def_function[leave_range_i64_binding]("leave_range_i64")
         m.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
@@ -2127,7 +1975,6 @@ def build__mojolearn() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_core.patch
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
-        m.def_function[fold_pair_f32_binding]("fold_pair_f32")
         m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         m.def_function[bincount_i64_binding]("bincount_i64")
         m.def_function[assign_fold_i64_binding]("assign_fold_i64")
@@ -2135,41 +1982,39 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
-        m.def_function[normal_init_f32_binding]("normal_init_f32")
         # TOMBSTONE: adam_hyper_f64 (dead native entry: no live caller) deleted 2026-10-26 by ce303e2d1; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/adam_hyper_f64.patch
-        m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
-        m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
-        m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
-        m.def_function[nsum_f64_binding]("nsum_f64")
         m.def_function[row_means_f64_binding]("row_means_f64")
         m.def_function[truncnorm_draws_binding]("truncnorm_draws")
         m.def_function[fsum_f64_binding]("fsum_f64")
-        m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/lr_schedule_fill.patch
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
-        m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
-        m.def_py_c_function(entry_init, "optimizer_door_init")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
-        m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
-        m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_qn_fold_table()
+        _publish_neighbors_ops(published_module)
+        # The base helper table (core/base_entry_table.mojo): the same
+        # helpers for native callers in other extension modules.
+        publish_base_helpers_device()
+        # The parallel base table (core/parallel_entry_table.mojo): the
+        # parallel owners call its entry natively, not this module's doors.
+        publish_parallel_base_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn module: ", e))
 

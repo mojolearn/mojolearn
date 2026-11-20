@@ -25,14 +25,14 @@ step: alpha's two halves add in float32 (Python added them in float64) and
 residual test, which still decides convergence on the host.
 """
 
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from max.gpu import block_dim, block_idx, thread_idx
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
-from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident import pool_buffer, _ptr, pool_alloc, pool_free
+from x_decomp.eigh_ops import eigh_op_tridiag
+from core.step_gate import step_gate_open_word
+from max.gpu.host import DeviceBuffer
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;
@@ -47,7 +47,7 @@ from x_decomp.resident import _ptr, pool_alloc, pool_free
 #: The scalar steps moved to the cells' flush-to-zero arithmetic (alpha's
 #: halves add in float32, beta through the correctly rounded sqrt, 1 / beta
 #: through the correctly rounded division): FAST Apple's words change.
-comptime KPCA_FAST_LANCZOS_DEV = True
+# (Sweep 2026-11-15: comptime KPCA_FAST_LANCZOS_DEV removed; always True, nothing read it.)
 
 
 def lz_sub_kernel(w: F32Ptr, t: F32Ptr, ab: F32Ptr, c: F32Ptr, j: Int32, add: Int32, n: Int32):
@@ -114,15 +114,59 @@ def dev_lanczos_run(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: I
 
 #: lane/apple-fast-gap-linalg2-kpca: IPCA_FAST_DEV, the FAST + Apple default
 #: (M3 A/B, one run per arm: incremental-pca taxi 159 -> 136 ms, output digest
-#: bit-identical; tag gl2k-ipca-dev-taxi). -D MOJOLEARN_IPCA_FAST_DEV_OFF
-#: restores the host stack (the A/B arm).
-#: No kernel of its own: IncrementalPCA.fit (python/mojolearn/_expansion_decomp.py)
-#: reads this constant and stacks each batch on the device (`_Kit.vstack_dev`,
-#: the PLACE_COLS move) instead of downloading the centered batch to stack it
-#: on the host and uploading it again, and reads its public arrays once after
-#: the last batch instead of after every batch.
-comptime IPCA_FAST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
-)
+#: bit-identical; tag gl2k-ipca-dev-taxi): IncrementalPCA.fit stacks each batch
+#: on the device instead of downloading the centered batch to stack it on the
+#: host. No kernel of its own, and nothing read the constant any more (the
+#: Python reader is gone), so IPCA_FAST_DEV went with its rollback.
+# TOMBSTONE: MOJOLEARN_IPCA_FAST_DEV_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 91dc329408.
+# Restore: git apply experiments/removed/MOJOLEARN_IPCA_FAST_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+
+
+def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises -> Int:
+    """The Lanczos projected solve on the device (lane n9-decomp-eigh-families,
+    2026-11-09): T of the batch's own alphas (ab[0, j)) and betas (ab[cap,
+    cap + j - 1)), read where `dev_lanczos_run` wrote them, through the
+    executor op x_decomp/eigh_ops.mojo `eigh_op_tridiag` (bisection and
+    twisted vectors, the Jacobi of T on a refusal) into the pool matrices w
+    (1 x j, ascending) and z (j x j, eigenvector c in column c,
+    sign-flipped). The host column runs `eigh_op_tridiag_host`
+    (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`). One sync, for the
+    status word: a solve that holds on neither route raises.
+
+    Before, the driver (bindings/mani_decomp_native.mojo) assembled T as a
+    j x j host matrix and ran the dense eigh on it (an upload of j^2 floats
+    and the dense route per basis round)."""
+    if j < 1 or j > cap:
+        raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
+    var source = pool_buffer(iab, 2 * cap)
+    var weights = pool_buffer(iw, j)
+    var vectors = pool_buffer(iz, j * j)
+    var ctx = xd_ctx()
+    var d = source.create_sub_buffer[DType.float32](0, j)
+    var e = source.create_sub_buffer[DType.float32](cap, max(j - 1, 1))
+    var w = weights.create_sub_buffer[DType.float32](0, j)
+    var z = vectors.create_sub_buffer[DType.float32](0, j * j)
+    var gate = step_gate_open_word(ctx)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    eigh_op_tridiag(ctx, gate, d, e, w, z, status, j)
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var bad = Int(hs.unsafe_ptr().unsafe_load(0))
+    _ = d^
+    _ = e^
+    _ = w^
+    _ = z^
+    _ = source^
+    _ = weights^
+    _ = vectors^
+    _ = gate^
+    _ = status^
+    _ = hs^
+    if bad != 0:
+        raise Error(
+            "x_decomp: the Lanczos projected tridiagonal solve (j = " + String(j) + ") did not hold on the"
+            " bisection route nor on its Jacobi fallback. An unconverged decomposition is not returned as if"
+            " it were one (DEVIATION 590)."
+        )
+    return j

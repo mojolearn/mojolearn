@@ -1,0 +1,552 @@
+name: Native checks
+
+# The native Mojo checks (checks/native_tests/, one shared runner: runner.mojo, registry.mojo, run_cpu.mojo) compiled
+# and run on the free GitHub Linux runners. The integration compile (tools/release.py candidate) builds the bindings
+# only, never the checks; the orchestrator dispatches this after each integration merge
+# (docs/plans/TEST_MIGRATION_2026-11-14.md). GPU checks run on the rented L40S pod with
+# tools/ops/native_checks_gpu_job.sh.
+#
+# plan: list the registered checks of the column matching `filter` from the source (registry.mojo and each check's
+# register(); tools/ops/native_checks_report.py plan) and deal them into ceil(checks/25) shards (cap 20) by a stable
+# hash. build: ONE compile of the column's main (`mojo build` of run_cpu.mojo with -D MOJOLEARN_COLUMN_CPU=1) for
+# every check; a failed build is the row build-<column> and every planned check reads MISSING. check: each shard
+# runs the prebuilt binary once per check name (`run_cpu <name>`, one process per check so a crash stays in its row)
+# with a per-check timeout, keeps going after a failure and writes results/<name>.txt plus logs/<name>.log.
+# summary: merges every shard into SUMMARY.md and fails the run when any check failed or never reported.
+#
+# host-parse (2026-11-15, tools/prebuild_check.py): every release host group the Linux CPU leg builds
+# (tools/merged_bindings.py plan --dir host --layout release, 17 groups at 6153a52c7b) generated as merged_build.sh does
+# and put through `mojo build --emit llvm --no-optimization` with the host set's defines and CPU: parse, type check and
+# elaboration, no LLVM optimisation and no machine code. One runner per group, all in parallel (each `-j` its cores).
+# It catches a host unit that does not parse even when no check imports it (f29f76bf57: `var fn` in two doors,
+# native checks 166/166). `suite` picks: all (default: the checks and host-parse), checks, host-parse.
+#
+# device-parse (lane fx-build-tools, 2026-11-18; runs with host-parse): every release `identical` device group (tools/
+# merged_bindings.py plan --dir identical --layout release, the byte LM in, as the release sets build it) put through
+# the same `mojo build --emit llvm --no-optimization` with the NVIDIA sm_89 column's flags (-D MOJOLEARN_NUMERIC_IDENTICAL=1
+# -D MOJOLEARN_COLUMN_NVIDIA --target-accelerator sm_89), no GPU. It catches what parse, type check and elaboration
+# catch in a GPU unit (three base builds of Nov 17-18 failed in `identical` units after host-parse passed). It cannot
+# catch what only the optimised lowering, ptxas, the sm_80 PTX format, the link or a run on a GPU finds; a group
+# whose only errors are the unoptimised lowering's refusals passes as elaborated, as in host-parse.
+#
+# parse reliability (lane fx-trees-device-parse, 2026-11-19): device-parse _mojolearn_native_trees lost its runner after
+# ~48 minutes three times (heads dbdc7e886f, 0c68d6cd27 run 44474273295 attempt 1, 59b236f82e run 44544357561 attempt 1;
+# GitHub: "The hosted runner lost communication with the server ... starves it for CPU/Memory", job logs not kept)
+# while re-runs passed in 9 to 14.6 minutes, every other group at most 9.5 (the trees group's parse time crept from 9
+# to 14.6 minutes in a day: the swap-paging signature on the 16 GB runner at -j nproc). So: (1) every parse job runs
+# the parse-group step of tools/ops/native_checks_steps.sh, which kills the compile at PARSE_LIMIT_SECONDS (a 25 minute step timeout backs it) and always
+# uploads its log, result-<key>.txt and memory-<key>.txt (sampled host RAM and swap peaks, the step cgroup's
+# memory.peak and memory.swap.peak); (2) the trees group, the only one near the limit, is parsed as two jobs dealt from
+# its unit list (PARSE_SPLIT in plan), each at -j nproc: no group's -j is lowered; (3) device-parse-triage reruns ONCE,
+# on a fresh runner, a device group whose job left no result (runner lost, step timeout) or was killed at its limit,
+# never a compile error; device-parse-verdict decides the device groups from the last attempt of each, so device-parse
+# itself is continue-on-error. tools/prebuild_check.py counts a group as passed when its retry passed.
+#
+# step bodies (lane fx-cpu-box-checks, 2026-11-19): every job's body is a step of tools/ops/native_checks_steps.sh,
+# checked out from the workflow's own commit (github.workflow_sha) at .wf/ beside the ref under test, so the workflow
+# on main runs on any older ref; tools/ops/cpu_box_checks_job.sh runs the same steps on a rented CPU box
+# (tools/cpu_central.sh check), every group at once across its cores. One copy of the check logic.
+#
+# apple-parse (lane fx-apple-fast-ci, 2026-11-20; suite=apple-parse only, never part of `all`): the Apple sets of the
+# Darwin plan (the legacy `fast` set, built with no -D MOJOLEARN_NUMERIC_IDENTICAL, and the Apple column of the
+# `identical` set; apple_sets picks, `host` adds the CPU column on the Apple CPU) CROSS-elaborated on Linux runners:
+# --target-triple arm64-apple-macosx11.0 --target-cpu apple-m1 and one named accelerator (apple_accel for a
+# default-class file, metal:1 for a metal1 file, as bindings/merged_build.sh passes it). No Apple machine. It is the
+# same parse-group step as the two parses above (tools/ops/native_checks_steps.sh, the Apple kinds); the same step on a
+# GitHub-hosted Mac is .github/workflows/apple-fast-check.yml. What it cannot find: anything the Metal lowering, the
+# metallib, the link or a run on an Apple GPU finds.
+#
+# MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger):
+#   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> [-f filter='spectral_*,gbdt_*'] [-f suite=host-parse]
+#   gh workflow run native-checks.yml --ref main -f ref=<sha|branch> -f suite=apple-parse [-f apple_sets=fast,identical]
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit or branch to check out and run"
+        required: true
+      column:
+        description: "column to build and run (the GitHub runners have no GPU: cpu)"
+        required: false
+        default: "cpu"
+      filter:
+        description: "comma separated globs over check names"
+        required: false
+        default: "*"
+      timeout:
+        description: "seconds per check before TIMEOUT (rc 124)"
+        required: false
+        default: "900"
+      suite:
+        description: "all (the checks and host-parse), checks, host-parse (every release host group parsed), or apple-parse (the Apple sets cross-elaborated on Linux)"
+        required: false
+        default: "all"
+      apple_sets:
+        description: "suite apple-parse: comma list of fast, identical, host"
+        required: false
+        default: "fast,identical"
+      apple_units_per_job:
+        description: "suite apple-parse: most units of one merged file per runner (0 = whole files); 4 deals the 8-unit trees file into two parts, as PARSE_SPLIT does for device-parse"
+        required: false
+        default: "4"
+      apple_accel:
+        description: "suite apple-parse: --target-accelerator of a default-class file (apple-m1 .. apple-m5)"
+        required: false
+        default: "apple-m2"
+
+run-name: "native-checks ${{ inputs.ref }} ${{ inputs.suite || 'all' }} ${{ inputs.column }} ${{ inputs.filter }}"
+
+permissions:
+  contents: read
+
+env:
+  # in-step limit of one parse (seconds); the parse step's timeout-minutes (25) backs it up
+  PARSE_LIMIT_SECONDS: "1320"
+  # the step bodies live in tools/ops/native_checks_steps.sh, read from the workflow's own commit (.wf/, below)
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      sha: ${{ steps.plan.outputs.sha }}
+      host_matrix: ${{ steps.plan.outputs.host_matrix }}
+      host_count: ${{ steps.plan.outputs.host_count }}
+      device_matrix: ${{ steps.plan.outputs.device_matrix }}
+      device_count: ${{ steps.plan.outputs.device_count }}
+      apple_matrix: ${{ steps.plan.outputs.apple_matrix }}
+      apple_count: ${{ steps.plan.outputs.apple_count }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: |
+            tools/ops/native_checks_steps.sh
+            tools/ops/apple_fast_check.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: List and shard the matching checks
+        id: plan
+        env:
+          IN_FILTER: ${{ inputs.filter }}
+          IN_COLUMN: ${{ inputs.column }}
+          IN_SUITE: ${{ inputs.suite || 'all' }}
+          APPLE_SETS: ${{ inputs.apple_sets || 'fast,identical' }}
+          APPLE_UNITS_PER_JOB: ${{ inputs.apple_units_per_job || '4' }}
+        run: bash .wf/tools/ops/native_checks_steps.sh plan
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-checks-plan
+          path: |
+            plan.json
+            planned.txt
+            host.json
+            device.json
+            apple.json
+
+  host-parse:
+    needs: plan
+    if: needs.plan.outputs.host_count != '0' && needs.plan.outputs.host_count != ''
+    name: host-parse ${{ matrix.key }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.host_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # Elaboration of the largest group is held in memory; the whole-set host compile was killed at 16 GB without
+      # swap (release-linux-build.yml, run 40272710760). The same swap helper, sized for one group.
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 16 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.key }} (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 25
+        env:
+          KIND: host
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: host-parse-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  device-parse:
+    needs: plan
+    if: needs.plan.outputs.device_count != '0' && needs.plan.outputs.device_count != ''
+    name: device-parse ${{ matrix.key }} sm_89
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # device-parse-verdict decides the device groups from each group's last attempt (a lost runner is retried once)
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.device_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # a device group's release compile recorded 10-12.5 GiB (tools/release_github_build.py RECORDED_UNIT_PEAK_GIB)
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 24 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.key }} for sm_89 (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 25
+        env:
+          KIND: device
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: device-parse-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  # The Apple sets, cross-elaborated (see the header). One runner per merged file, all in parallel, each -j its cores;
+  # every file's errors are collected (fail-fast off), and a failed file fails the run.
+  apple-parse:
+    needs: plan
+    if: needs.plan.outputs.apple_count != '0' && needs.plan.outputs.apple_count != ''
+    name: apple-parse ${{ matrix.key }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.apple_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 24 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.key }} for the Apple target (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 25
+        env:
+          KIND: ${{ matrix.kind }}
+          CLS: ${{ matrix.cls }}
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+          APPLE_ACCEL: ${{ inputs.apple_accel || 'apple-m2' }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: apple-parse-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  # Runner losses and limit kills of device-parse get ONE retry on a fresh runner; a compile error is never retried.
+  device-parse-triage:
+    needs: [plan, device-parse]
+    if: ${{ !cancelled() && needs.plan.outputs.device_count != '0' && needs.plan.outputs.device_count != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      retry_matrix: ${{ steps.triage.outputs.retry_matrix }}
+      retry_count: ${{ steps.triage.outputs.retry_count }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true  # every group's runner lost: nothing to download, every group is retried
+        with:
+          pattern: device-parse-*
+          path: parse
+      - name: Pick the groups to retry (no result, timeout or killed)
+        id: triage
+        env:
+          DEVICE_MATRIX: ${{ needs.plan.outputs.device_matrix }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          def result(art, key):
+              f = pathlib.Path("parse") / art / f"result-{key}.txt"
+              if not f.exists():
+                  return {"kind": "missing"}
+              return dict(x.split("=", 1) for x in f.read_text().split() if "=" in x)
+          WHY = {"missing": "no result: runner lost or the step timed out", "timeout": "killed at its limit",
+                 "killed": "SIGKILL"}
+          retry = []
+          for e in json.loads(os.environ["DEVICE_MATRIX"]):
+              kind = result(f"device-parse-{e['key']}", e["key"]).get("kind", "missing")
+              why = WHY.get(kind)
+              print(f"{e['key']}: kind={kind}" + (f" -> retry once ({why})" if why else ""))
+              if why:
+                  retry.append(e)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as o:
+              o.write(f"retry_matrix={json.dumps(retry)}\nretry_count={len(retry)}\n")
+          PY
+
+  device-parse-retry:
+    needs: [plan, device-parse-triage]
+    if: ${{ !cancelled() && needs.device-parse-triage.outputs.retry_count != '0' && needs.device-parse-triage.outputs.retry_count != '' }}
+    name: device-parse retry ${{ matrix.key }} sm_89
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.device-parse-triage.outputs.retry_matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # a device group's release compile recorded 10-12.5 GiB (tools/release_github_build.py RECORDED_UNIT_PEAK_GIB)
+      - name: Swap
+        run: bash tools/gha_release_box.sh swap 24 "$RUNNER_TEMP/swap.txt" || echo "no swap added"
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Parse and elaborate ${{ matrix.key }} for sm_89 (mojo build --emit llvm --no-optimization)
+        timeout-minutes: 25
+        env:
+          KIND: device
+          STEM: ${{ matrix.stem }}
+          KEY: ${{ matrix.key }}
+          MEMBERS: ${{ matrix.members }}
+        run: bash .wf/tools/ops/native_checks_steps.sh parse-group
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: device-parse-retry-${{ matrix.key }}
+          path: |
+            out/*.log
+            out/*.txt
+
+  # The device groups' verdict: each group's last attempt (the retry when there was one) must pass.
+  device-parse-verdict:
+    needs: [plan, device-parse, device-parse-triage, device-parse-retry]
+    if: ${{ !cancelled() && needs.plan.outputs.device_count != '0' && needs.plan.outputs.device_count != '' }}
+    name: parse-verdict device
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          pattern: device-parse-*
+          path: parse
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Each device group's last attempt
+        env:
+          DEVICE_MATRIX: ${{ needs.plan.outputs.device_matrix }}
+          RETRY_MATRIX: ${{ needs.device-parse-triage.outputs.retry_matrix || '[]' }}
+        run: bash .wf/tools/ops/native_checks_steps.sh verdict
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # The one cache writer: the shard jobs restore the environment this saves (keyed by the pixi.lock hash)
+      # instead of every shard solving at once (the cross-compile-check.yml pattern, same Mojo pin from pixi.lock).
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: true
+          environments: default
+      - name: Build the column's main once
+        env:
+          IN_COLUMN: ${{ inputs.column }}
+        run: bash .wf/tools/ops/native_checks_steps.sh build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-checks-build
+          path: out/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-binary-${{ inputs.column }}
+          path: bin/
+
+  check:
+    needs: [plan, build]
+    if: needs.plan.outputs.count != '0'
+    name: shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-binary-${{ inputs.column }}
+          path: bin
+      - name: Run the shard's checks with the prebuilt binary
+        env:
+          TASKS: ${{ matrix.tasks }}
+          IN_TIMEOUT: ${{ inputs.timeout }}
+          IN_COLUMN: ${{ inputs.column }}
+        run: bash .wf/tools/ops/native_checks_steps.sh shard
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-checks-${{ matrix.shard }}
+          path: out/
+
+  summary:
+    needs: [plan, build, check]
+    if: always() && needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # the step bodies (tools/ops/native_checks_steps.sh) from the workflow's own commit, so this workflow runs on any
+      # older ref; the rented CPU box (tools/cpu_central.sh check) runs the same script
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .wf
+          sparse-checkout: tools/ops/native_checks_steps.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-checks-*
+          path: merged
+          merge-multiple: true
+      - name: Merge into SUMMARY.md
+        env:
+          SOURCE_SHA: ${{ needs.plan.outputs.sha }}
+        run: bash .wf/tools/ops/native_checks_steps.sh summary
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: native-checks-summary
+          path: |
+            SUMMARY.md
+            REPORT.txt

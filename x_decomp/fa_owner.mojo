@@ -22,14 +22,12 @@ from x_decomp.fa_em import FaArgs, dsum_f32_run, fa_em_main_check
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB,
-    kit_colmean, kit_diag_add, kit_eigh, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
+    kit_colmean, kit_diag_add, kit_eigh, kit_eigh_desc, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
 )
 
 comptime LOG_2PI = 1.8378770664093453
-#: x_decomp/fa_fast.mojo FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS (`_FA_MAX_D`, ...)
+#: x_decomp/fa_fast.mojo FA_MAX_D (`_FA_MAX_D`)
 comptime _FA_MAX_D = 256
-comptime _FA_TR_MAXK = 16
-comptime _FA_TR_FLOATS = 4096
 comptime _SMALL = 1e-12
 comptime _F32_TINY = 1.1754943508222875e-38
 #: `_ortho_rotation`'s defaults
@@ -84,11 +82,10 @@ def _gram_loop[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         var sqrt_psi_t = kit.transpose(sqrt_psi)
         var both = kit.ew(OP_DIV, left, sqrt_psi_t)
         var scaled = kit.ew(OP_SCALE, both, scalar=1.0 / Float64(n))
-        var eig = kit_eigh[E, D, RES, X](kit, scaled)
-        var ev = kit_reversed_columns(kit, eig[0])
-        var s2 = kit.ew(OP_MAXS, ev, scalar=0.0)
-        var v_rev = kit_reversed_columns(kit, eig[1])
-        var vfull = kit.transpose(v_rev)
+        # lane n9-decomp-eigh-families: descending and resident (no w / V round trip)
+        var eig = kit_eigh_desc[E, D, RES, X](kit, scaled)
+        var s2 = kit.ew(OP_MAXS, eig[0], scalar=0.0)
+        var vfull = kit.transpose(eig[1])
         var lead = kit_rows(kit, vfull, 0, nc)
         var signs = kit.absmax_signs(lead, False)
         var vt = kit.ew(OP_MUL, lead, signs)
@@ -237,30 +234,17 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         var mu = kit.add(Int(mean), -1, 1, d)
         var result = Float64(0.0)
         if op == FA_TRANSFORM:
-            var flags = X.fa_flags()
+            # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+            # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
             var xm = kit.add(Int(x), -1, n, d)
-            var fused = (flags & 4) != 0 and nc <= _FA_TR_MAXK and d * (nc + 1) <= _FA_TR_FLOATS
-            var y: Int
-            var wpsi: Int
-            if fused:
-                wpsi = kit.ew(OP_DIV, w, noise)
-            else:
-                xm = kit.ew(OP_SUB, xm, mu)
-                wpsi = kit.ew(OP_DIV, w, noise)
+            xm = kit.ew(OP_SUB, xm, mu)
+            var wpsi = kit.ew(OP_DIV, w, noise)
             var eye = kit_eye(kit, nc)
             var inner = kit.mm(wpsi, w, tb=True)
             var summed = kit.ew(OP_ADD, eye, inner)
             var cov_z = kit_inv[E, D, RES, X](kit, summed)
-            if fused:
-                var p = kit.mm(wpsi, cov_z, ta=True)
-                y = kit.device_output(n, nc)
-                var dx = kit.device(xm)
-                var dmu = kit.device(mu)
-                var dp = kit.device(p)
-                X.fa_transform(dx, dmu, dp, kit.mats[y].dev, n, d, nc)
-            else:
-                var projected = kit.mm(xm, wpsi, tb=True)
-                y = kit.mm(projected, cov_z)
+            var projected = kit.mm(xm, wpsi, tb=True)
+            var y = kit.mm(projected, cov_z)
             kit.copy_out(y, out_buf, n * nc)
         elif op == FA_COVARIANCE:
             var c = _cov(kit, w, noise)

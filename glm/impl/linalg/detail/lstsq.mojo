@@ -127,12 +127,12 @@ from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from std.atomic import Atomic
-from std.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx as _ols_tidx
+from max.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx as _ols_tidx
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n, pinned_gemm_nt_kernel
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.xtdz_coalesced import xty_launch
 from core.column_stats import (
@@ -165,10 +165,13 @@ from glm.impl.matrix.math import (
 #: change (the order of each cell's sum).
 comptime OLS_FAST_SMALL_NT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_OLS_FAST_SMALL_NT"]()
 )
 comptime OLS_FAST_SMALL_NT_MAX = 64
+# TOMBSTONE: MOJOLEARN_OLS_FAST_SMALL_NT (Apple FAST opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (OLS_FAST_SMALL_NT, _MAX and the step-5 pinned product); code recoverable at 6dee0ea324.
+# Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_SMALL_NT.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: The elementwise launch width steps 3b and 4 used to hardcode. SCHEDULING,
 #: and provably so: each thread owns one output cell, so this number cannot
@@ -263,7 +266,7 @@ def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, dst: MutP
     if i < Int(n):
         var mag = abs(v.unsafe_load(i))
         if mag == mag and mag > Float32(0.0):
-            _ = Atomic[DType.int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
+            _ = Atomic[Int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
 
 
 def ols_device_abs_max(ctx: DeviceContext, mut v: DeviceBuffer[DType.float32], n: Int, tpb: Int) raises -> Float32:
@@ -463,7 +466,7 @@ def lstsq_eig_traced(
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
     comptime if IDN_JACOBI_ROUND_ROBIN:
-        # lane fg-linear L1 (default ON 2026-10-09, -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF for the cyclic block;
+        # lane fg-linear L1 (IDENTICAL default since 2026-10-09; the MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted, the cyclic block is FAST only;
         # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
         # round-robin rounds, every rotation of a round in parallel, the same
         # layout out (cov_a diagonal = eigenvalues, q columns = vectors,

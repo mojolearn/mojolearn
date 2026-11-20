@@ -1,0 +1,75 @@
+diff --git a/kernel_methods/rbf_resident.mojo b/kernel_methods/rbf_resident.mojo
+index 731b9487cf..7b4af83375 100644
+--- a/kernel_methods/rbf_resident.mojo
++++ b/kernel_methods/rbf_resident.mojo
+@@ -1,7 +1,8 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """lane apple-fast-w2-kfeat (2026-10-04): RBFSampler.fit_transform in ONE
+-binding call, DEFAULT in FAST + Apple.
++binding call, DEFAULT in FAST + Apple (rollback
++`-D MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`).
+ 
+ Main's fit_transform is two binding calls. `fit` makes two fresh device
+ buffers, waits, draws W and b, waits, and downloads each through a fresh
+@@ -62,13 +63,12 @@ from core.shared_slot import SharedSlot
+ 
+ # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
+ # M3, one run per arm: rbf-sampler istella 93.4 -> 76.3 ms; w2-kfeat-rbf-q-r1
+-# PASS (byte-identical outputs). Main's two-call fit + transform stays the
+-# path of every other build.
+-# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at fd51cb8d40.
+-# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
++# PASS (byte-identical outputs). MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF restores
++# main's two-call fit + transform.
+ comptime KM_FAST_RBF_RESIDENT = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+     and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
+     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
+ )
+ 
+diff --git a/tools/kfeat_pair.py b/tools/kfeat_pair.py
+index 12ccfa68e7..2c2844b120 100644
+--- a/tools/kfeat_pair.py
++++ b/tools/kfeat_pair.py
+@@ -32,9 +32,7 @@ FIXTURE = "kfeat-v2"  # lane apple-fast-w3-kfeat: gate, lazy-weights and staged
+ REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
+     # RBF_RESIDENT, SRP_STRAT, SCHI2_MOJO_MT, ACHI2_DEVSCAN, SCHI2_LAZYW and RBF_STAGED are
+     # default since their promotion; their _OFF forms build the old arm.
+-    # kernel_methods: RBF_RESIDENT_OFF and RBF_STAGED_OFF are deleted (lane expdel-06-base-cluster-kernel,
+-    # docs/TOMBSTONES.md); every FAST + Apple kernel_methods arm has both compiled in.
+-    "kernel_methods": ("rbf_resident", lambda ds: True),
++    "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds),
+     # x_neighbors: the three _OFF rollbacks are deleted (lane expdel-01-cluster, docs/TOMBSTONES.md);
+     # every FAST + Apple x_neighbors arm carries bits 1, 2 and 4.
+     "x_neighbors": ("kfeat_flags", lambda ds: 7),
+@@ -42,10 +40,11 @@ REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the
+ }
+ # extra reach keys checked as well (lane apple-fast-w3-kfeat)
+ REACH_EXTRA = {
+-    "kernel_methods": ("rbf_staged", lambda ds: 1),
++    # RBF_STAGED_OFF deleted 2026-11-15 (lane expdel-06-base-cluster-kernel): STAGED rides RBF_RESIDENT.
++    "kernel_methods": ("rbf_staged", lambda ds: 1 if "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds else 0),
+ }
+ ALLOWED = {
+-    "kernel_methods": set(),
++    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"},
+     "x_neighbors": set(),
+     "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
+ }
+diff --git a/tools/kfeat_quality.py b/tools/kfeat_quality.py
+index fdb8fe1836..f72e1ac610 100644
+--- a/tools/kfeat_quality.py
++++ b/tools/kfeat_quality.py
+@@ -7,8 +7,8 @@
+   compare kernel_methods|x_neighbors|x_decomp A.npz B.npz
+ 
+ Tolerances, fixed before any result:
+-- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, its _OFF arm
+-  deleted 2026-11-15, docs/TOMBSTONES.md) and x_neighbors
++- kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, old arm =
++  MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF) and x_neighbors
+   (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, default now, old arm =
+   MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
+   now, old arm = MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): the

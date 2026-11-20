@@ -39,9 +39,10 @@ of deviation 52.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_upload_list
 
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
@@ -691,7 +692,7 @@ struct THistoryBasedCtrCalcerGpu(Movable):
         var h = ctx.enqueue_create_host_buffer[DType.uint8](self.size)
         ctx.synchronize()
         # one bulk copy into the stage (lane cpu4-gbdt; was a per-row loop)
-        memcpy(dest=h.unsafe_ptr(), src=sample.unsafe_ptr(), count=self.size)
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=sample.unsafe_ptr(), count=self.size)
         ctx.enqueue_copy(
             dst_buf=self.binarized_sample, src_ptr=h.unsafe_ptr()
         )
@@ -874,8 +875,8 @@ def compute_simple_ctrs_gpu(
     var h_target = ctx.enqueue_create_host_buffer[DType.uint8](n)
     var h_order = ctx.enqueue_create_host_buffer[DType.uint32](n)
     ctx.synchronize()
-    memcpy(dest=h_target.unsafe_ptr(), src=binarized_target.unsafe_ptr(), count=n)
-    memcpy(dest=h_order.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_target.unsafe_ptr(), src=binarized_target.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_order.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
     var d_target = ctx.enqueue_create_buffer[DType.uint8](n)
     var d_order = ctx.enqueue_create_buffer[DType.uint32](n)
     ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_target.unsafe_ptr())
@@ -1128,7 +1129,7 @@ def download_ctr_columns(
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=cols[c])
         ctx.synchronize()
         var column = List[Float32](unsafe_uninit_length=n)
-        memcpy(dest=column.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=column.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
         out.append(column^)
     _ = h^
     return out^
@@ -1217,15 +1218,11 @@ def _upload_codes(
 ) raises -> DeviceBuffer[DType.uint32]:
     """A host code list on the device, one bulk copy (the list entries'
     adapter; `train` passes resident codes instead)."""
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per call, a memcpy into it and a wait before it.
     var n = len(cat_codes)
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](max(n, 1))
-    ctx.synchronize()
-    memcpy(dest=h.unsafe_ptr(), src=cat_codes.unsafe_ptr(), count=n)
-    var d = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    return transfer_upload_list[DType.uint32](ctx, cat_codes, n, max(n, 1))
 
 
 def compute_simple_ctrs_device(

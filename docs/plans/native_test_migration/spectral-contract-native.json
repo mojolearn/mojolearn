@@ -1,0 +1,35 @@
+{
+  "family": "Spectral typed request and descriptor contracts",
+  "status": "58 CPU fixtures authored, uncompiled and unrun",
+  "dependency": "f0201aa23b",
+  "entry": "checks/native_tests/spectral_contract.mojo",
+  "suite": "checks.native_tests.spectral_contract_suite.run_checks",
+  "coverage": {
+    "driver_prescribed_wire": 28,
+    "provider_prescribed_typed_fields": 9,
+    "provider_error_propagation": 9,
+    "malformed_envelope_refusals": 11,
+    "provider_table": 1,
+    "total": 58
+  },
+  "cases": [
+    "All three existing fit input routes with retained-state flag off/on.",
+    "All three embedding routes with both Laplacian normalization and drop-first flags off/on; distinct Lanczos/output widths.",
+    "Both affinity modes for direct query, resident preparation and resident query.",
+    "Every fixed operation, exact integer result/handle9007199254740993, seed4294967295 and binary64 tolerance0.10000000000000002.",
+    "Every operation propagates the exact native error; malformed request reports once without publishing a result.",
+    "Missing result, unknown operation, metadata arguments, fit span counts, missing embedding/query/resident/release spans and preparation scalar count.",
+    "Named provider table retains one callable fixed entry."
+  ],
+  "oracle": "Prescribed raw wire fields are checked independently of the product dispatcher, then dispatcher decoding is checked by a typed mock provider. No numerical formula, algorithm, provider implementation or public admission is emulated.",
+  "parallel_plan": "All58 independent fixtures use host_parallelize, with private inline request/result/error storage; no GPU work or shared mutable fixture state.",
+  "compile_flags": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+  "limits": [
+    "Fake data addresses are compared only and never reach numerical kernels.",
+    "This does not test fitted state ownership, public parameter admission, provider capabilities or numerical backends; those concrete APIs remain pending.",
+    "No native compile/runtime, installed boundary, cross-vendor identity or performance claim."
+  ],
+  "python_deletions": 0,
+  "product_or_kernel_changes": 0,
+  "evidence": "E/pca-native-tests/spectral-contract-static.json"
+}

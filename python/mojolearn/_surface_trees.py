@@ -48,7 +48,7 @@ FAMILIES = (
             "trees-shap-kernel",
             "trees-shap-permutation",
             # lane verify-coverage-20261024: MultiOutputRegressor over Ridge,
-            # the fused multi-target ridge predict (ridge_predict_multi)
+            # the fused multi-target ridge predict (the ridge multi table's RM_PREDICT)
             "multioutput-ridge",
         ),
         inference_lanes=(),
@@ -76,13 +76,15 @@ FAMILIES = (
             "PermutationExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
-        host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
+        host_modules=("xtrees/ops.mojo", "providers/python/xtrees_api_pyapi_door.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
                       "xtrees/dart_units.mojo", "xtrees/dart_host.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "label_weights_native_api_v1",
             "x_trees_host_numeric_mode", "x_trees_host_vendor", "x_trees_host_column", "x_trees_host_sabotage",
             "x_trees_numeric_mode", "x_trees_vendor",
             "x_trees_sample_indices", "x_trees_weighted_sample", "x_trees_gather_f32", "x_trees_gather_i32",
-            "x_trees_accumulate", "x_trees_accumulate_onehot", "x_trees_accumulate_cols",
+            "x_trees_accumulate", "x_trees_accumulate_onehot", "x_trees_accumulate_cols", "x_trees_accumulate_cols_many",
             "x_trees_argmax_rows", "x_trees_argmax_rows_f32", "x_trees_scale", "x_trees_softmax_rows", "x_trees_scale_to_f32", "x_trees_put_f32",
             "x_trees_samme_step", "x_trees_r2_step", "x_trees_weighted_median",
             "x_trees_apply", "x_trees_gradients", "x_trees_leaf_newton", "x_trees_tree_score_add", "x_trees_uniform",
@@ -96,14 +98,15 @@ FAMILIES = (
             "x_trees_platt_apply_strided", "x_trees_isotonic_predict_strided", "x_trees_complement_pairs",
             "x_trees_indicator_codes", "x_trees_column_f64",
             "x_trees_transpose_f64", "x_trees_bag_rows", "x_trees_unseen_rows",
-            "x_trees_stack_w64", "x_trees_binary_proba", "x_trees_py2mojo", "x_trees_exact_sum",
+            "x_trees_stack_w64", "x_trees_rows_any_unset", "x_trees_binary_proba", "x_trees_exact_sum",
             "x_trees_count_rows", "x_trees_count_equal", "x_trees_oob_r2", "x_trees_class_counts",
             "x_trees_remap_cols", "x_trees_positive_codes", "x_trees_spread_leaves", "x_trees_leaf_numbering",
             "x_trees_iota_i32", "x_trees_fill_class_major_f64", "x_trees_code_counts", "x_trees_class_rows",
-            # fam2-forests: IDN_DART_DEVICE host twin, native tree shape, SHAP device-model entries
-            "x_trees_dart_open", "x_trees_dart_step", "x_trees_dart_add", "x_trees_dart_close",
-            "x_trees_dart_predict",
+            # fam2-forests: native tree shape, SHAP device-model entries (the x_trees_dart_* round and
+            # predict entries left with lane calltable-gbdt-forest-dart: native DART table only)
             "x_trees_tree_shape",
+            # perf lanes: the fused OneVsRest and calibrated-probability epilogues
+            "x_trees_ovr_assemble", "x_trees_calibrated_proba",
             "x_trees_agn_model_load", "x_trees_agn_model_release", "x_trees_kshap_solve_model", "x_trees_pshap_values_model",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_trees_tree_shap_cache_create", "x_trees_tree_shap_cache_values", "x_trees_tree_shap_cache_release",

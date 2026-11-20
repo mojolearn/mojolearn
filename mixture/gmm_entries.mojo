@@ -3,6 +3,7 @@
 """Typed GPU entries behind `bindings/_mojolearn_mixture.mojo`'s Python doors
 (lane thin-trees-metrics, 2026-10-21: the `_gmm_*_run` bodies moved word for
 word out of that shell; no Python here)."""
+from std.memory import unsafe_memcpy
 from core.hostptr import copy_f32
 from mixture.estimator import (
     GaussianMixtureModel,
@@ -29,8 +30,11 @@ def _gmm_fit_run(
     pp: MutPointer[Float32, MutUntrackedOrigin],
     lp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    labels_address: Int = 0,
 ) raises -> Int:
-    var model = gaussian_mixture_fit(x, n, d, params)
+    # `labels_address` non-zero: fit_predict's labels (n int32 words) are
+    # written by the fit itself (mixture/estimator.mojo, N401).
+    var model = gaussian_mixture_fit(x, n, d, params, labels_address=labels_address)
     var k = model.n_components
     copy_f32(model.weights.unsafe_ptr(), wp, k)
     copy_f32(model.means.unsafe_ptr(), mp, k * d)
@@ -73,8 +77,11 @@ def _gmm_predict_run(
     op: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
     var labels = gaussian_mixture_predict(model, x, n)
-    for i in range(n):
-        op.unsafe_store(i, labels[i])
+    # One block copy into the caller's int32 buffer (was a per-row store
+    # loop; p3 rank 98).
+    if n > 0:
+        unsafe_memcpy(dest=op, src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(labels.unsafe_ptr())), count=n)
+    _ = labels^
 
 
 def _gmm_sample_run(
@@ -87,8 +94,9 @@ def _gmm_sample_run(
     var labels = List[Int32](length=max(0, n), fill=Int32(0))
     var x = gaussian_mixture_sample(model, n, seed, labels)
     copy_f32(x.unsafe_ptr(), xp, n * model.n_features)
-    for i in range(n):
-        yp.unsafe_store(i, labels[i])
+    if n > 0:
+        unsafe_memcpy(dest=yp, src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(labels.unsafe_ptr())), count=n)
+    _ = labels^
 
 
 def _gmm_score_bic_aic_run(

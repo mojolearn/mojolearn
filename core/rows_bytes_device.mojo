@@ -13,7 +13,7 @@ walks stay the host bindings' columns (`bindings/host_helpers.mojo`,
 `bindings/hotpath_helpers.mojo`).
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 comptime _TPB = 256
@@ -57,7 +57,7 @@ def _last_writer_kernel(idx: _I64, m_: Int32, owner: _I32):
     """owner[idx[i]] = the largest i naming that row (the host loop's last)."""
     var i = _tid()
     if i < Int(m_):
-        _ = Atomic[DType.int32].max(owner + Int(idx.unsafe_load(i)), Int32(i))
+        _ = Atomic[Int32].max(owner + Int(idx.unsafe_load(i)), Int32(i))
 
 
 def _scatter_bytes_kernel(src: _U8, idx: _I64, m_: Int32, width_: Int32, owner: _I32, dst: _U8):

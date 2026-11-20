@@ -1,0 +1,50 @@
+diff --git a/kde/impl/neighbors/kernel_density.mojo b/kde/impl/neighbors/kernel_density.mojo
+index 79601eaa58..29a3ef6b84 100644
+--- a/kde/impl/neighbors/kernel_density.mojo
++++ b/kde/impl/neighbors/kernel_density.mojo
+@@ -2159,7 +2159,7 @@ def kde_score_samples_tiled_identical(
+     # layout-aware), so a q_tpb / chunk_rows_in schedule or the layout
+     # never moves a bit and the pass agrees with the entry and the host.
+     # `chunk_rows_in` stays the max-pass grid only. With
+-    # FAST the serial
++    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF the serial
+     # fold below runs, the staged pass's and the host's serial fold.
+     if kde_chunk_lse_metric_applies(metric):
+         var lse_rows = kde_chunk_rows_for(n_train)
+@@ -2588,7 +2588,7 @@ def kde_score_samples_fused_identical(
+     # serial per-query chain, and the entry's, the staged pass's and the
+     # host column's bits. `k_cells` / `sum_tpb` / `chunk_rows_in` schedule
+     # only the serial-fold arm and are validated above either way. With
+-    # FAST the fused
++    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF the fused
+     # serial fold below runs.
+     if kde_chunk_lse_metric_applies(metric):
+         kde_score_samples_chunk_lse_identical(
+@@ -3429,13 +3429,14 @@ def kde2_score_samples_fast_apple(
+ # lane/review-fixes), so a trace recording never changes the bits. The
+ # explicit tiled matrix pass folds its matrix in the same chunks and the
+ # opt-in fused pass (`fused_only`) takes this chunked pass (box-run-2-kde),
+-# so every route gives one set of bits. FAST keeps the tiled matrix pass.
++# so every route gives one set of bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF`
++# restores the tiled matrix pass and the host's serial row fold.
+ # ===========================================================================
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 9dcc758292.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF"]()
++)
+ 
+ 
+ def kde_chunk_rows_for(n_train: Int, chunk_rows_in: Int = KDE_TILED_CHUNK_ROWS) -> Int:
+@@ -4209,7 +4210,7 @@ def kde_score_samples_device(
+             )
+         else:
+             # lane/fam-neighbors: the chunked log-sum-exp is the IDENTICAL
+-            # default (KDE_IDN_CHUNK_LSE above); FAST takes the tiled pass.
++            # default (KDE_IDN_CHUNK_LSE above); _OFF restores the tiled pass.
+             comptime if KDE_IDN_CHUNK_LSE or C52_PAIR:
+                 kde_score_samples_chunk_lse_identical(
+                     ctx, train, query, weights, has_weights, sum_weights,

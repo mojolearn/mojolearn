@@ -1,0 +1,115 @@
+{
+  "source_commit": "14ad3ca7ab",
+  "numpy": "2.5.3",
+  "source_files": [
+    "test_cpu_training_e.py",
+    "test_tsvd_native_boundary.py"
+  ],
+  "seed": 7,
+  "generator_sha256": "8480363e6ea71b174bbeb4614e33dd35ba80116d0c55ba72653e01709e5a367f",
+  "files": [
+    {
+      "file": "host-512x5.f32",
+      "shape": [
+        512,
+        5
+      ],
+      "sha256": "d8a94b616f5367aadf4f1d26ccbd4d194bce0125ed73760140a7ac0cdbed905c"
+    },
+    {
+      "file": "host-512x5-singular.f64",
+      "shape": [
+        5
+      ],
+      "sha256": "305e383182eac362630468a7bd559aad9e3e1d071a3881d371fd0101958270e8"
+    },
+    {
+      "file": "host-512x5-vectors.f64",
+      "shape": [
+        5,
+        5
+      ],
+      "sha256": "6f783589eca716fb9aaa8cccbce34e5699e018931f8221ecbaf96d681d49cf99"
+    },
+    {
+      "file": "host-512x5-variance.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "341f4a7a74daa53985edfdf6a22aa8e162ad32357333e8d116ed1903dac4aec4"
+    },
+    {
+      "file": "host-512x5-ratio.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "d4879a65390db404618e14cb03a4fdd6a9cc94c97363aa898b1775bbf10f76d1"
+    },
+    {
+      "file": "host-512x5-selected-variance.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "1e217840f02c6e280e523e1b13468da5039c7f3ff04d66498d81dd3b50cc74ab"
+    },
+    {
+      "file": "host-512x5-selected-ratio.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "ad06005989bfa584c0f2ef7cf52f2d862e032daf3f1f4f3766d4e28c743637e4"
+    },
+    {
+      "file": "boundary-6x3.f32",
+      "shape": [
+        6,
+        3
+      ],
+      "sha256": "0f88e217b7a11fa84ed375c660174f7b2c25a9af5cdb6bc06a122f836d27c08b"
+    },
+    {
+      "file": "boundary-6x3-singular.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "bdf2003cfd17e57ca1a3d7a4d9a1eacd7d892b1e3a88eb0326f7142d08a24914"
+    },
+    {
+      "file": "boundary-6x3-vectors.f64",
+      "shape": [
+        3,
+        3
+      ],
+      "sha256": "1b319006e55334d4916b2d59d68cf545e99b8d63ce9f48209ad301b48509fb3b"
+    },
+    {
+      "file": "boundary-6x3-variance.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "c9927b68c9b37716d37017187d3be13ad092fd9366a328523148c6031f937749"
+    },
+    {
+      "file": "boundary-6x3-ratio.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "397449bc2f4d8498b409a4270a23a75671c950204814a34382be981da2e3ee6a"
+    },
+    {
+      "file": "boundary-6x3-selected-variance.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "03d2fda0624b8872232c08d2e2076006877ff1c37fc4926ba48486c009cbbedd"
+    },
+    {
+      "file": "boundary-6x3-selected-ratio.f64",
+      "shape": [
+        2
+      ],
+      "sha256": "512efa6f998350a63136edc0ab1d5c9700d531e72c6e5722a9bc8be4e99e961b"
+    }
+  ],
+  "limits": "Independent reference generation only; no Mojolearn compile, execution, timing or identity evidence."
+}

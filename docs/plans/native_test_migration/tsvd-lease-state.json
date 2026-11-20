@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "dependency": "14ad3ca7ab",
+  "fixtures": 12,
+  "status": "Source reviewed only; uncompiled/unrun",
+  "coverage": {
+    "all_identity_match_mismatch_combinations": 8,
+    "zero_lease": 1,
+    "take_once_and_native_close": 1,
+    "move_preserves_driver_and_owned_token": 1,
+    "consumption_preserves_other_fields_and_independent_replacement_owner": 1
+  },
+  "parallelism": "Independent fixtures use host_parallelize",
+  "boundary_retained": "Python owner registration, destructor/reference pins and public invalidation remain in pilot test_tsvd_native_boundary.py",
+  "kernel_changes": false,
+  "removed": "Nothing identified: additive native state types need matching/lifetime coverage; no existing boundary assertion removed.",
+  "command": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_lease_state.mojo"
+}

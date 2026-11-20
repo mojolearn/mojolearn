@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS rows 9 and 10, measured on this backend: div, sqrt, FMA.
 
-    pixi run check-ieee-arith
+    pixi run check-native-gpu ieee_arith_check
 
 Row 10 says division and `sqrt` in scoring are IEEE-correct "unless a
 backend substitutes a fast reciprocal or rsqrt -- verify per backend",
@@ -47,6 +47,15 @@ first.
                         mismatches once NaN is judged as NaN (the first
                         run counted the payload as 9 mismatches).
 
+    8. THE IDENTICAL SEAMS (fb11, 2026-11-17): arms 2 and 4 through
+                        `portable_sqrtf` and `portable_divf`, the code
+                        identical mode runs, judged on every pattern
+                        against the flush model. Arms 2 and 4 now
+                        CHARACTERIZE the vendor sqrt (approximate on
+                        NVIDIA, DEVIATION 258) and arm 8 carries the
+                        identity verdict for sqrt; division stays judged
+                        raw because `portable_divf` is one hardware div.
+
 ## Why the references are exact, not approximate
 
 For div and sqrt: computing in Float64 and rounding once to Float32 IS
@@ -75,8 +84,9 @@ fast-math substitution is diagnosed from WHICH inputs break (reciprocals
 break denormals first).
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma, sqrt
+from checks.numerics import portable_divf, portable_sqrtf
 
 from std.sys import argv
 
@@ -111,6 +121,26 @@ def arith_kernel(
         out_cos.unsafe_store(i, av / sqrt(bp))
         # the contraction canary: written as the naive chain on purpose
         out_fma.unsafe_store(i, av * bv + cv)
+
+
+def seam_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    bpos: MutPointer[Float32, MutAnyOrigin],
+    out_sqrt: MutPointer[Float32, MutAnyOrigin],
+    out_cos: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    # ARM 8 (fb11, 2026-11-17): arms 2 and 4 again, through the IDENTICAL
+    # seams (`identical_sqrt` -> `portable_sqrtf`, `identical_div` ->
+    # `portable_divf`), called directly so the arm does not depend on the
+    # build's numeric mode. Arms 2 and 4 characterize the VENDOR's sqrt;
+    # this arm judges what identical mode actually runs on the device.
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var av = a.unsafe_load(i)
+        var bp = bpos.unsafe_load(i)
+        out_sqrt.unsafe_store(i, portable_sqrtf(abs(av)))
+        out_cos.unsafe_store(i, portable_divf(av, portable_sqrtf(bp)))
 
 
 comptime SZ_CASES = 16
@@ -197,7 +227,7 @@ def _splitmix(x: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
 
     var ha = ctx.enqueue_create_host_buffer[DType.float32](N)
@@ -232,10 +262,10 @@ def main() raises:
     var db = ctx.enqueue_create_buffer[DType.float32](N)
     var dc = ctx.enqueue_create_buffer[DType.float32](N)
     var dbp = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc, src_ptr=hc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dbp, src_ptr=hbp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, ha)
+    upload_host_into[DType.float32](ctx, db, hb)
+    upload_host_into[DType.float32](ctx, dc, hc)
+    upload_host_into[DType.float32](ctx, dbp, hbp)
 
     var o_div = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sqrt = ctx.enqueue_create_buffer[DType.float32](N)
@@ -252,16 +282,29 @@ def main() raises:
         block_dim=(BLOCK, 1, 1),
     )
 
+    var o_sqrt_id = ctx.enqueue_create_buffer[DType.float32](N)
+    var o_cos_id = ctx.enqueue_create_buffer[DType.float32](N)
+    ctx.enqueue_function[seam_kernel](
+        da.unsafe_ptr(), dbp.unsafe_ptr(), o_sqrt_id.unsafe_ptr(),
+        o_cos_id.unsafe_ptr(), Int32(N),
+        grid_dim=(N + BLOCK - 1) // BLOCK,
+        block_dim=(BLOCK, 1, 1),
+    )
+
     var r_div = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_sqrt = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_l2 = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_cos = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_fma = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_div.unsafe_ptr(), src_buf=o_div)
-    ctx.enqueue_copy(dst_ptr=r_sqrt.unsafe_ptr(), src_buf=o_sqrt)
-    ctx.enqueue_copy(dst_ptr=r_l2.unsafe_ptr(), src_buf=o_l2)
-    ctx.enqueue_copy(dst_ptr=r_cos.unsafe_ptr(), src_buf=o_cos)
-    ctx.enqueue_copy(dst_ptr=r_fma.unsafe_ptr(), src_buf=o_fma)
+    download_host_into[DType.float32](ctx, o_div, r_div)
+    download_host_into[DType.float32](ctx, o_sqrt, r_sqrt)
+    download_host_into[DType.float32](ctx, o_l2, r_l2)
+    download_host_into[DType.float32](ctx, o_cos, r_cos)
+    download_host_into[DType.float32](ctx, o_fma, r_fma)
+    var r_sqrt_id = ctx.enqueue_create_host_buffer[DType.float32](N)
+    var r_cos_id = ctx.enqueue_create_host_buffer[DType.float32](N)
+    download_host_into[DType.float32](ctx, o_sqrt_id, r_sqrt_id)
+    download_host_into[DType.float32](ctx, o_cos_id, r_cos_id)
     ctx.synchronize()
 
     var q_div = r_div.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -269,6 +312,11 @@ def main() raises:
     var q_l2 = r_l2.unsafe_ptr().unsafe_bitcast[UInt32]()
     var q_cos = r_cos.unsafe_ptr().unsafe_bitcast[UInt32]()
     var q_fma = r_fma.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var q_sqrt_id = r_sqrt_id.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var q_cos_id = r_cos_id.unsafe_ptr().unsafe_bitcast[UInt32]()
+    var wrong_seam_sqrt = 0
+    var wrong_seam_cos = 0
+    var shown_seam = 0
 
     var wrong_div = 0
     var wrong_sqrt = 0
@@ -350,6 +398,32 @@ def main() raises:
                     hex(_bits(ref_sqrt)),
                 )
                 shown_sq += 1
+        # ARM 8: the seams are judged on EVERY pattern, denormals included,
+        # against the flush model they are written to (operands and result
+        # flushed, one correctly rounded op each); NaN is judged as NaN.
+        var seam_sqrt_ref = ftz_sqrt
+        var seam_t_sq = _ftz(Float32(sqrt(Float64(_ftz(bp)))))
+        var seam_cos_ref = _ftz(
+            Float32(Float64(_ftz(av)) / Float64(seam_t_sq))
+        )
+        if not _same_or_both_nan(q_sqrt_id.unsafe_load(i), seam_sqrt_ref):
+            wrong_seam_sqrt += 1
+            if shown_seam < 6:
+                print(
+                    "  SEAM sqrt mismatch: a=", hex(_bits(av)), " device=",
+                    hex(q_sqrt_id.unsafe_load(i)), " ref=",
+                    hex(_bits(seam_sqrt_ref)),
+                )
+                shown_seam += 1
+        if not _same_or_both_nan(q_cos_id.unsafe_load(i), seam_cos_ref):
+            wrong_seam_cos += 1
+            if shown_seam < 6:
+                print(
+                    "  SEAM cosine mismatch: a=", hex(_bits(av)), " b'=",
+                    hex(_bits(bp)), " device=", hex(q_cos_id.unsafe_load(i)),
+                    " ref=", hex(_bits(seam_cos_ref)),
+                )
+                shown_seam += 1
         if q_l2.unsafe_load(i) != _bits(ref_l2):
             wrong_l2 += 1
         if q_cos.unsafe_load(i) != _bits(ref_cos):
@@ -464,10 +538,10 @@ def main() raises:
         hsb.unsafe_ptr().unsafe_store(i, bv2)
         hsc.unsafe_ptr().unsafe_store(i, -prod)
         hsbp.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=sa, src_ptr=hsa.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sb, src_ptr=hsb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sc, src_ptr=hsc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=sbp, src_ptr=hsbp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, sa, hsa)
+    upload_host_into[DType.float32](ctx, sb, hsb)
+    upload_host_into[DType.float32](ctx, sc, hsc)
+    upload_host_into[DType.float32](ctx, sbp, hsbp)
     ctx.synchronize()
     ctx.enqueue_function[arith_kernel](
         sa.unsafe_ptr(), sb.unsafe_ptr(), sc.unsafe_ptr(), sbp.unsafe_ptr(),
@@ -476,7 +550,7 @@ def main() raises:
         grid_dim=((sepN + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hs_out.unsafe_ptr(), src_buf=s_out)
+    download_host_into[DType.float32](ctx, s_out, hs_out)
     ctx.synchronize()
 
     var built_sep = 0
@@ -582,9 +656,9 @@ def main() raises:
     var dz_b = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
     var dz_c = ctx.enqueue_create_buffer[DType.float32](SZ_CASES)
     var dz_o = ctx.enqueue_create_buffer[DType.float32](SZ_CASES * SZ_OUTS)
-    ctx.enqueue_copy(dst_buf=dz_a, src_ptr=sz_a.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dz_b, src_ptr=sz_b.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dz_c, src_ptr=sz_c.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dz_a, sz_a)
+    upload_host_into[DType.float32](ctx, dz_b, sz_b)
+    upload_host_into[DType.float32](ctx, dz_c, sz_c)
     ctx.synchronize()
     ctx.enqueue_function[signed_zero_kernel](
         dz_a.unsafe_ptr(), dz_b.unsafe_ptr(), dz_c.unsafe_ptr(),
@@ -592,7 +666,7 @@ def main() raises:
         grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=sz_o.unsafe_ptr(), src_buf=dz_o)
+    download_host_into[DType.float32](ctx, dz_o, sz_o)
     ctx.synchronize()
 
     var sz_fail = 0
@@ -663,16 +737,42 @@ def main() raises:
             " this backend (see the <-- columns above)"
         )
 
-    var non_denorm = (
-        (wrong_div - denorm_div)
-        + (wrong_sqrt - denorm_sqrt)
-        + (neither - denorm_neither)
+    # ARM 8 VERDICT (fb11, 2026-11-17). The vendor's `std.math.sqrt` is
+    # APPROXIMATE on NVIDIA (`sqrt.approx.ftz.f32`, measured on the H100
+    # 2026-08-23 and the L40S 2026-11-17: 176,577 of 2^20 normals one ulp
+    # off): IDENTITY_PATHS row 10 IS real there, and DEVIATION 258 closed it
+    # by construction -- identical mode never calls the vendor sqrt, it calls
+    # `identical_sqrt` = `portable_sqrtf`. So the raw sqrt arm (2) and the
+    # raw cosine shape (4) CHARACTERIZE the backend and are printed, and the
+    # identity claim is judged on what identical runs: the seam arm (8),
+    # which must be zero wrong on every pattern. Raw DIVISION stays judged
+    # (below): `portable_divf` IS one hardware division, so a fast
+    # reciprocal there would break identical mode directly. Which product
+    # kernels still reach the vendor sqrt is a PTX question (grep
+    # `sqrt.approx` per entry), not one this arm can answer.
+    print(
+        "  SEAM (identical): sqrt", wrong_seam_sqrt, "wrong;  cosine",
+        wrong_seam_cos, "wrong  (judged, every pattern)",
     )
+    var raw_sqrt_normals = wrong_sqrt - denorm_sqrt
+    if raw_sqrt_normals != 0:
+        print(
+            "  raw std.math.sqrt is APPROXIMATE on this backend:",
+            raw_sqrt_normals, "normals wrong -- recorded (DEVIATION 258);",
+            " identical mode must reach it only through identical_sqrt",
+        )
+    if wrong_seam_sqrt + wrong_seam_cos != 0:
+        raise Error(
+            "the IDENTICAL sqrt/cosine seam diverges from the correctly"
+            " rounded flush model on this backend -- identical mode is not"
+            " the same arithmetic here (portable_sqrtf / portable_divf)"
+        )
+    var non_denorm = (wrong_div - denorm_div) + (neither - denorm_neither)
     if non_denorm != 0:
         raise Error(
-            "non-denormal divergence on this backend: a fast reciprocal,"
-            " rsqrt, or third arithmetic is present -- IDENTITY_PATHS"
-            " row 10 is REAL beyond FTZ"
+            "non-denormal divergence on this backend: a fast reciprocal"
+            " or third arithmetic is present in DIVISION or a*b+c --"
+            " IDENTITY_PATHS row 10 is REAL beyond FTZ"
         )
     if wrong_div + wrong_sqrt + neither != 0:
         print(
@@ -739,7 +839,37 @@ def _fma_denormal_involved(
     return prod != 0.0 and prod < 1.1754943508222875e-38
 
 
+def _same_or_both_nan(got: UInt32, want: Float32) -> Bool:
+    """Bit equality, with any NaN equal to any NaN (IEEE specifies WHEN a
+    NaN arises, not its payload; ARM 7 judges NaN the same way)."""
+    var got_nan = (got & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
+        got & UInt32(0x007FFFFF)
+    ) != UInt32(0)
+    if got_nan and want != want:
+        return True
+    return got == _bits(want)
+
+
 def _bits(x: Float32) -> UInt32:
     var tmp = List[Float32]()
     tmp.append(x)
     return tmp.unsafe_ptr().unsafe_bitcast[UInt32]().unsafe_load(0)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ieee_arith_check", cpu=False, gpu=True, serial="", run=run_cases)

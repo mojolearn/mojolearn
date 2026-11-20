@@ -61,6 +61,7 @@ root, `kernels/soft_clustering.cuh:34-44` climbs only from a larger id).
 """
 
 from std.atomic import Atomic
+from core.host_finite_scan import host_all_finite_f32, host_first_nonfinite_f32
 from max.gpu.host import DeviceContext
 
 from hdbscan.impl.detail.tree_device import (
@@ -716,12 +717,13 @@ def refuse_soft_clustering_inputs(
 def refuse_nonfinite_queries(q: List[Float32], n_q: Int, d: Int) raises:
     """DEVIATION 1607 at the query boundary: a NaN or infinite query cell
     would carry the vendor's NaN payload into a distance. Refused by name."""
-    from std.math import isfinite
-
-    for i in range(n_q * d):
-        if not isfinite(q[i]):
-            raise Error(
-                "hdbscan.approximate_predict: points_to_predict has a NaN or"
-                " infinite value at row " + String(i // d) + ", column "
-                + String(i % d) + "; refused by name (DEVIATION 1607)"
-            )
+    # parallel: the one host finite scan; the index walk runs only on a refusal
+    var cells = rebind[MutPointer[Float32, MutUntrackedOrigin]](q.unsafe_ptr())
+    if host_all_finite_f32(cells, n_q * d):
+        return
+    var i = host_first_nonfinite_f32(cells, n_q * d)
+    raise Error(
+        "hdbscan.approximate_predict: points_to_predict has a NaN or"
+        " infinite value at row " + String(i // d) + ", column "
+        + String(i % d) + "; refused by name (DEVIATION 1607)"
+    )

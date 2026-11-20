@@ -64,7 +64,10 @@ a different token count from the sequences alone, and clause 9.2 of the
 optimizer contract says that count is part of the numerical specification;
 a caller who wants per-sequence gradients runs the sequences as their own
 calls and accumulates.
-"""
+
+Callers (lane py-tail, 2026-11-15): no product module imports this file any
+more (the ragged batch is admitted, padded and zeroed by the native doors);
+the tests use it as the reference for `lengths=`."""
 
 import array
 import operator
@@ -101,12 +104,6 @@ def _lengths_array(lengths, batch, length, what):
             raise ValueError(f"mojolearn {what}: lengths[{at}] = {arr[at]} is outside [1, L = {length}] "
                              "(right padding: a row has at least one real position and at most L)")
     return arr
-
-
-def lengths_for(lengths, batch, length, what):
-    """`lengths` as a tuple of `batch` Python ints, each in [1, length],
-    refused by name otherwise."""
-    return tuple(_lengths_array(lengths, batch, length, what))
 
 
 def _row_bytes(arr):

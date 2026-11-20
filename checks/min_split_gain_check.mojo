@@ -60,7 +60,7 @@ def check(ctx: DeviceContext, policy: String, threshold: Float64,
             raise Error("disabled threshold changes default model bytes")
 
 
-def main() raises:
+def run_checks() raises:
     print("numeric_mode", numeric_mode_name())
     var ctx = DeviceContext()
     for policy in [String("Depthwise"), String("Lossguide")]:
@@ -71,3 +71,21 @@ def main() raises:
         check(ctx, policy, 1023.999, 2)
         check(ctx, policy, 1024, 1)
     print("MIN SPLIT GAIN GREEN")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("min_split_gain_check", cpu=False, gpu=True, serial="", run=run_cases)

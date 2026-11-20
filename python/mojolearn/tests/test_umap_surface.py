@@ -9,39 +9,11 @@ import numpy as np
 from mojolearn import UMAP
 
 
-# Literal pins follow the shared round-robin projected eigensolve introduced
-# by 844929695/a97730465. The September10 pins used cyclic Jacobi; retained
-# stage captures locate the first changed stage at spectral initialization.
-# Exact inputs and all64 layout words agree across Apple Metal, AMD gfx942,
-# NVIDIA Ada native and experimental PTX (each repeat-stable). This two-case
-# evidence does not qualify unmeasured devices or the broader PTX surface.
-# Old/new words, source SHAs and raw evidence hashes are retained in
-# bench/results/umap_round_robin_pins_2026-10-04/comparison.json.
-# Keep literals so installed-wheel tests need no repository/evidence files.
-# Repinned 2026-10-08 (lane rehearsal-suite-green) from this Mac's IDENTICAL
-# Metal column: the layouts moved by a few ulps since the 2026-09 pins (bits
-# may change between versions; the repeat checks below hold them stable).
-LAYOUT_BITS = np.array([
-    3245070096, 1074042411, 3228888279, 3239233640,
-    3237928427, 3203993724, 3215931591, 1091897539,
-    1068472091, 1091895758, 1090606104, 3207501378,
-    1092535950, 3235377189, 1091864365, 3227045188,
-], dtype=np.uint32).reshape(8, 2)
-
-BROADER_LAYOUT_BITS = np.array([
-    3226497000, 1086260798, 3227178554, 1036433928,
-    1089708114, 3216624924, 1082121456, 1082849697,
-    3221162157, 3238030912, 3230010965, 3201815628,
-    1069619814, 1091856905, 3196772973, 3238703680,
-    3227506494, 3205232299, 1062341195, 1091962546,
-    3206499019, 1085703294, 3229833468, 1071493997,
-    3236548473, 3229965506, 1050597661, 1086962268,
-    3219069631, 3204773181, 3235819480, 3232328914,
-    3168001690, 1082114376, 3219719040, 1059509553,
-    1089551540, 3231064605, 1052606071, 3225822990,
-    1074975858, 1093105335, 1088974209, 3224322712,
-    3203895133, 3223456848, 1081193635, 1092231415,
-], dtype=np.uint32).reshape(16, 3)
+# The numerical checks of this file (the pinned IDENTICAL layout words, repeat
+# bits, finite layouts, the parameter profiles and the optimizer controls) are
+# the Mojo check checks/native_tests/neighbors_umap_surface_* (pixi run
+# check-native-neighbors-umap-surface-cpu / -gpu). This file keeps the public
+# storage, dtype, input conversion, refusal and option-surface checks.
 
 class UMAPSurfaceTests(unittest.TestCase):
     def setUp(self):
@@ -67,17 +39,10 @@ class UMAPSurfaceTests(unittest.TestCase):
         # DEVIATION 2460: the layout is a mojolearn.Array; dtype and bits are
         # read through np.asarray (zero-copy), the checks are unchanged.
         self.assertEqual(np.asarray(layout).dtype, np.float32)
-        self.assertTrue(np.isfinite(layout).all())
         self.assertFalse(model.input_copied_)
         self.assertEqual(model.n_features_in_, 1)
         self.assertEqual(model.numeric_mode_used(), self.mode)
         np.testing.assert_array_equal(before, self.x)
-        if self.mode == "identical":
-            np.testing.assert_array_equal(np.asarray(layout).view(np.uint32), LAYOUT_BITS)
-        if self.mode == "identical":
-            again = self.estimator().fit_transform(self.x)
-            np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
-                                          np.asarray(again).view(np.uint32))
 
     def test_conversion_readonly_and_fit(self):
         model = self.estimator()
@@ -92,7 +57,6 @@ class UMAPSurfaceTests(unittest.TestCase):
         x = np.square(np.arange(1, 13, dtype=np.float32)).reshape(-1, 1)
         layout = self.estimator(n_components=3).fit_transform(x)
         self.assertEqual(layout.shape, (12, 3))
-        self.assertTrue(np.isfinite(layout).all())
 
     def test_multidimensional_parameter_profiles(self):
         # Exact dyadic inputs avoid platform-dependent fixture generation.
@@ -114,31 +78,7 @@ class UMAPSurfaceTests(unittest.TestCase):
                 layout = model.fit_transform(x)
                 self.assertEqual(layout.shape, (16, config["n_components"]))
                 self.assertEqual(model.n_features_in_, 3)
-                self.assertTrue(np.isfinite(layout).all())
-                self.assertGreater(float(np.ptp(layout)), 0.0)
-                if self.mode == "identical" and config["n_components"] == 3:
-                    np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
-                                                  BROADER_LAYOUT_BITS)
                 np.testing.assert_array_equal(x, before)
-                if self.mode == "identical":
-                    again = UMAP(n_epochs=12, numeric_mode=self.mode,
-                                 **config).fit_transform(x)
-                    np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
-                                                  np.asarray(again).view(np.uint32))
-
-    def test_optimizer_controls(self):
-        baseline = self.estimator().fit_transform(self.x)
-        explicit = self.estimator(learning_rate=1.0, repulsion_strength=1.0,
-                                  negative_sample_rate=5).fit_transform(self.x)
-        self.assertEqual(baseline.tobytes(), explicit.tobytes())
-        for controls in (dict(learning_rate=0.5), dict(repulsion_strength=2.0),
-                         dict(negative_sample_rate=0)):
-            with self.subTest(**controls):
-                layout = self.estimator(**controls).fit_transform(self.x)
-                self.assertTrue(np.isfinite(layout).all())
-                self.assertNotEqual(layout.tobytes(), baseline.tobytes())
-                again = self.estimator(**controls).fit_transform(self.x)
-                self.assertEqual(layout.tobytes(), again.tobytes())
 
     def test_invalid_optimizer_controls(self):
         for field in ("learning_rate", "repulsion_strength"):

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): RBFSampler.fit_transform in ONE
-binding call, DEFAULT in FAST + Apple (rollback
-`-D MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`).
+binding call, DEFAULT in FAST + Apple.
 
 Main's fit_transform is two binding calls. `fit` makes two fresh device
 buffers, waits, draws W and b, waits, and downloads each through a fresh
@@ -29,9 +28,7 @@ the same order on the same words: every output bit is main's. A NaN or
 infinity in X raises main's transform message after that wait (the outputs
 are then never handed out).
 """
-from std.ffi import _Global
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
@@ -58,23 +55,23 @@ from kernel_methods.checks.random_features import (
 )
 from kernel_methods.estimator import _family_ctx
 from core.staged_download import download_f32_into, DOWNLOAD_CHUNK_FLOATS, _stage_take, _stage_give, _stage_enqueue
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
+from core.shared_slot import SharedSlot
 
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
 # M3, one run per arm: rbf-sampler istella 93.4 -> 76.3 ms; w2-kfeat-rbf-q-r1
-# PASS (byte-identical outputs). MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF restores
-# main's two-call fit + transform.
-comptime KM_FAST_RBF_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
-    and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
-)
+# PASS (byte-identical outputs). Main's two-call fit + transform stays the
+# path of every other build.
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at fd51cb8d40.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
+comptime KM_FAST_RBF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
-# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (rollback -D MOJOLEARN_KM_FAST_RBF_STAGED_OFF;
-# needs KM_FAST_RBF_RESIDENT). M3, source ea6b2035e, one run per arm:
+# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (wherever KM_FAST_RBF_RESIDENT is).
+# M3, source ea6b2035e, one run per arm:
 # rbf-sampler istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS (byte-identical).
 # Lane apple-fast-w3-kfeat, 2026-10-04: the
 # projection (m x q; 100,000 x 256 = 102 MB at the board's istella shape)
@@ -91,12 +88,15 @@ comptime KM_FAST_RBF_RESIDENT = (
 # first wait (which therefore also covers the GEMM and the epilogue).
 # The output stays the caller's ordinary (mapped) memory: handing out the
 # pinned stage itself would leave the caller reading write-combined memory.
-comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
-comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_STAGED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1c52d8514e.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
+# The raw one-copy projection download in `_rbf_unpiped` went with it.
+comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT
+comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
 
 
 #: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
-#: Apple default (needs KM_FAST_RBF_STAGED); rollback -D MOJOLEARN_KM_FAST_RBF_PIPE_OFF.
+#: Apple default (needs KM_FAST_RBF_STAGED).
 #: What: fit_transform as a pipeline over row blocks of ~8 MiB of output
 #: (`_rbf_pipe_rows`): block k's X rows go up, its GEMM and epilogue run, its
 #: projection goes into a pinned stage; while the GPU does block k + 1 the one
@@ -115,7 +115,10 @@ comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
 #: rab12-rbfpipe): rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms,
 #: kernel_rel_error identical. KEEP: the FAST + Apple default since then
 #: (the old -D name is harmless).
-comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"]()
+# TOMBSTONE: MOJOLEARN_KM_FAST_RBF_PIPE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at e6a4e9f1a7.
+# Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_PIPE_OFF.patch; record in docs/TOMBSTONES.md.
+# `_rbf_unpiped` stays: it serves outputs too small for two pipeline blocks.
+comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED
 
 
 def _rbf_pipe_rows(m: Int, q: Int) -> Int:
@@ -164,7 +167,7 @@ struct _RbfStage(Defaultable, Movable):
         self.host = Optional[HostBuffer[DType.int32]]()
 
 
-comptime _RBF_STAGE = _Global[StorageType=_RbfStage, name="MojoKmRbfResidentStageFast", init_fn=_RbfStage.__init__]
+comptime _RBF_STAGE = SharedSlot[_RbfStage, "MojolearnKmRbfResidentStageFastV1"]
 
 
 def _rbf_gemm(
@@ -229,12 +232,8 @@ def _rbf_unpiped(
     ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
-    comptime if KM_FAST_RBF_STAGED:
-        # waits inside (its first wait covers everything queued above)
-        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
-    else:
-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
-        ctx.synchronize()
+    # waits inside (its first wait covers everything queued above)
+    download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
     _ = psub^
 
 
@@ -287,10 +286,10 @@ def rbf_sampler_fit_transform_resident(
         # SCAN_BLOCKS partials plus one slot for their device-folded minimum
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS + 1)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var dw = pool_take["MojoKmRbfResW"](ctx, d * q)
-    var db = pool_take["MojoKmRbfResB"](ctx, q)
-    var dx = pool_take["MojoKmRbfResX"](ctx, nx)
-    var dz = pool_take["MojoKmRbfResZ"](ctx, nz)
+    var dw = pool_take["MojolearnKmRbfResWV2"](ctx, d * q)
+    var db = pool_take["MojolearnKmRbfResBV2"](ctx, q)
+    var dx = pool_take["MojolearnKmRbfResXV2"](ctx, nx)
+    var dz = pool_take["MojolearnKmRbfResZV2"](ctx, nz)
     km_random_weights(ctx, dw, seed, d, q, sigma, KM_RF_TPB, KMSAB_NONE)
     km_random_offsets(ctx, db, seed, q, KM_RF_TPB)
     var blocks = _scan_blocks(nx)
@@ -326,9 +325,9 @@ def rbf_sampler_fit_transform_resident(
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
                         _ = tsub^
-                memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
-            _stage_give[_RBF_STAGE_POOL](stages.pop())
-            _stage_give[_RBF_STAGE_POOL](stages.pop())
+                unsafe_memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
+            _stage_give[_RBF_STAGE_POOL](ctx, stages.pop())
+            _stage_give[_RBF_STAGE_POOL](ctx, stages.pop())
     if not piped:
         _rbf_unpiped(ctx, dx, dw, db, dz, xaddr, w_addr, b_addr, z_addr, m, d, q, nx, nz, blocks, scale)
     var best = st[].host.value().unsafe_ptr()[0]
@@ -336,10 +335,10 @@ def rbf_sampler_fit_transform_resident(
     var is_nan = False
     if bad >= 0:
         is_nan = device_classify_nonfinite(ctx, dx, bad)
-    pool_give["MojoKmRbfResW"](dw^)
-    pool_give["MojoKmRbfResB"](db^)
-    pool_give["MojoKmRbfResX"](dx^)
-    pool_give["MojoKmRbfResZ"](dz^)
+    pool_give["MojolearnKmRbfResWV2"](dw^)
+    pool_give["MojolearnKmRbfResBV2"](db^)
+    pool_give["MojolearnKmRbfResXV2"](dx^)
+    pool_give["MojolearnKmRbfResZV2"](dz^)
     if bad >= 0:
         if is_nan:
             raise Error("rbf_sampler transform X: NaN at flat index " + String(bad) + "; refused by name (DEVIATION 1686)")

@@ -43,8 +43,13 @@ wrappers without a leg to point at.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.experiment_guards_base import BASE_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from metrics.mojolearn_metrics_run import (
+    _f32_ptr, _i32_ptr, _load_i32, _load_f32, _guard_spectral_outputs, _guard_embedding_output,
+    precision_recall_curve_run, confusion_matrix_run, _spectral_write_outputs, _spectral_write_embedding,
+    _spectral_state_copy, spectral_predict_run,
+)
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -52,21 +57,17 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from max.gpu.host import DeviceContext
-from core.neural_context import process_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+# This binding's ONE process-lifetime DeviceContext slot
+# ("MojolearnMetricsContext*V3", core/neural_context.mojo) is now named by
+# its users: umap/ops_entry_device.mojo, metrics/estimator.mojo and the
+# spectral modules.
+from metrics.r2_entry_device import _r2_value, _r2_weighted_value, publish_metrics_r2_device
 
-#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoMetricsContextFast"
-
-from std.math import isfinite
-from std.memory import memcpy
-from metrics.metrics_entries_impl import device_finite_f32_list
-from umap.estimator import fit_transform as umap_fit_transform
-from umap.sparse_estimator import sparse_fit_transform
-from umap.transform import transform as umap_transform
-from umap.params import UMAPParams
+from std.memory import unsafe_memcpy
+from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
+from core.neighbors_entry_table_umap import UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, umap_ops_publish
+from umap.ops_entry_device import UMAP_OPS_DEVICE_API, umap_ops_device_v1, umap_ops_device_words
+from bindings.py_balanced import py_setattr
 
 from metrics.estimator import (
     accuracy_score_host,
@@ -83,12 +84,12 @@ from metrics.estimator import (
     regression_error_host,
     log_loss_host,
     binary_ranking_host,
-    confusion_matrix_host,
     precision_recall_fscore_host,
     rand_score_host,
     silhouette_host,
     trustworthiness_host,
     v_measure_score_host,
+    homogeneity_completeness_v_measure_host,
 )
 from spectral.estimator import (
     spectral_embedding_dataset_host,
@@ -99,44 +100,18 @@ from spectral.estimator import (
     spectral_fit_predict_dense_host_keep,
     spectral_fit_predict_graph_host,
     spectral_fit_predict_graph_host_keep,
-    spectral_predict_host,
 )
 from spectral.impl.spectral_predict_common import (
     SpectralPredictionState,
     spectral_predict_check_state,
+    spectral_predict_validate,
 )
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
-
-
-def _load_i32(addr: Int, n: Int) raises -> List[Int32]:
-    return read_i32(addr, max(0, n))
-
-
-def _load_f32(addr: Int, n: Int) raises -> List[Float32]:
-    return read_f32(addr, max(0, n))
-
-
-def _device_finite_f32(values: List[Float32]) raises -> Bool:
-    """cpu3-bindings: the finiteness refusal of an embedding (or a caller's
-    initial embedding) as one device scan (`core/input_device`), one status
-    word back, instead of a host walk over every value."""
-    if len(values) == 0:
-        return True
-    return device_finite_f32_list(process_ctx[_DEVCTX_SLOT](), values)
-
-
-def _store_f32_list(output: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
-    """One memcpy of `values` into the caller's output (no per-value loop)."""
-    if len(values) > 0:
-        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
-    _ = len(values)
+from spectral.impl.spectral_predict_resident import (
+    spectral_resident_count,
+    spectral_resident_predict,
+    spectral_resident_prepare,
+    spectral_resident_release,
+)
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:
@@ -310,12 +285,12 @@ def r2_score_weighted_binding(
     """
     _want(String("r2_score_weighted"), params, 1)
     var n = Int(py=params[0])
-    var y = _load_f32(Int(py=y_addr), n)
-    var yh = _load_f32(Int(py=y_hat_addr), n)
-    var w = _load_f32(Int(py=w_addr), n)
+    var y_word = Int(py=y_addr)
+    var yh_word = Int(py=y_hat_addr)
+    var w_word = Int(py=w_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = r2_score_weighted_host(y, yh, w, n)
+        out = _r2_weighted_value(y_word, yh_word, w_word, n)
     return PythonObject(Float64(out))
 
 
@@ -427,6 +402,30 @@ def v_measure_score_binding(
     return PythonObject(out)
 
 
+def homogeneity_completeness_v_measure_binding(
+    y_true_addr: PythonObject,
+    y_pred_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`(homogeneity, completeness, v_measure)` of one remapped label pair in
+    one call: the labels uploaded once, the same values the three single
+    entries return. `params` as `v_measure_score`: `0 n, 1
+    lower_class_range, 2 upper_class_range, 3 beta (float)`."""
+    _want(String("homogeneity_completeness_v_measure"), params, 4)
+    var n = Int(py=params[0])
+    var lower = Int32(Int(py=params[1]))
+    var upper = Int32(Int(py=params[2]))
+    var beta = Float64(py=params[3])
+    var yt = _load_i32(Int(py=y_true_addr), n)
+    var yp = _load_i32(Int(py=y_pred_addr), n)
+    var h = Float64(0.0)
+    var c = Float64(0.0)
+    var v = Float64(0.0)
+    with GILReleased(Python()):
+        homogeneity_completeness_v_measure_host(yt, yp, n, lower, upper, beta, h, c, v)
+    return Python.tuple(PythonObject(h), PythonObject(c), PythonObject(v))
+
+
 # ===========================================================================
 # Group B: r2 and KL divergence. float32 in, float32 out.
 # ===========================================================================
@@ -446,11 +445,11 @@ def r2_score_binding(
     """
     _want(String("r2_score"), params, 1)
     var n = Int(py=params[0])
-    var y = _load_f32(Int(py=y_true_addr), n)
-    var yh = _load_f32(Int(py=y_pred_addr), n)
+    var y_word = Int(py=y_true_addr)
+    var yh_word = Int(py=y_pred_addr)
     var out = Float32(0.0)
     with GILReleased(Python()):
-        out = r2_score_host(y, yh, n)
+        out = _r2_value(y_word, yh_word, n)
     return PythonObject(Float64(out))
 
 
@@ -497,13 +496,7 @@ def precision_recall_curve_binding(true_addr: PythonObject, score_addr: PythonOb
     var thresholds = _f32_ptr(Int(py=threshold_addr))
     var m = 0
     with GILReleased(Python()):
-        var result = binary_ranking_host[True](y,scores,n)
-        m = result[1]
-        var curve = result[0].unsafe_ptr()
-        memcpy(dest=precision, src=curve, count=m + 1)
-        memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
-        memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
-        _ = len(result[0])
+        m = precision_recall_curve_run(y, scores, n, precision, recall, thresholds)
     return PythonObject(m)
 
 
@@ -537,18 +530,8 @@ def confusion_matrix_binding(
         raise Error("confusion_matrix: null output")
     var y = _load_i32(Int(py=true_addr),n)
     var p = _load_i32(Int(py=pred_addr),n)
-    if normalization == 0:
-        var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
-        with GILReleased(Python()):
-            var values = confusion_matrix_host[DType.int64](y,p,n,k,normalization)
-            memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
-            _ = len(values)
-    else:
-        var output = _f32_ptr(address)
-        with GILReleased(Python()):
-            var values = confusion_matrix_host[DType.float32](y,p,n,k,normalization)
-            memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
-            _ = len(values)
+    with GILReleased(Python()):
+        confusion_matrix_run(y, p, n, k, normalization, address)
     return PythonObject(k*k)
 
 
@@ -572,7 +555,7 @@ def precision_recall_fscore_binding(
     var written = 0
     with GILReleased(Python()):
         var values = precision_recall_fscore_host(y,p,n,k,average,positive,zero,selected)
-        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
         written = len(values)
     return PythonObject(written)
 
@@ -642,7 +625,7 @@ def silhouette_binding(
     with GILReleased(Python()):
         mean = silhouette_host(x, lab, n_rows, n_cols, n_labels, chunk, scores)
     if n_rows > 0:
-        memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
+        unsafe_memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
     _ = len(scores)
     return PythonObject(Float64(mean))
 
@@ -688,36 +671,6 @@ def trustworthiness_binding(
 # ===========================================================================
 # spectral: cuML's `ML::SpectralClustering::fit_predict`, two overloads.
 # ===========================================================================
-
-
-def _guard_spectral_outputs(
-    labels: List[Int32],
-    embedding: List[Float32],
-    n_samples: Int,
-    n_components: Int,
-) raises:
-    """The two output buffers were sized by the Python caller from
-    `n_samples` and `n_components`. Check what came back BEFORE writing a
-    single element into them.
-
-    `n_out == n_components` holds on the clustering path because cuVS's
-    clustering overload sets `drop_first = false`, so this cannot fire
-    today. It is here because the day it CAN fire -- somebody threading
-    `drop_first` through, say -- the alternative is a silent heap overrun
-    in a NumPy array, which is the worst failure this boundary can have."""
-    if len(labels) != n_samples:
-        raise Error(
-            "spectral clustering: the kernel returned " + String(len(labels))
-            + " labels for " + String(n_samples)
-            + " samples; the output buffer was sized for n_samples"
-        )
-    if len(embedding) != n_samples * n_components:
-        raise Error(
-            "spectral clustering: the kernel returned "
-            + String(len(embedding)) + " embedding floats, but the output"
-            " buffer was sized for n_samples * n_components = "
-            + String(n_samples * n_components)
-        )
 
 
 def spectral_fit_predict_dataset_binding(
@@ -769,10 +722,7 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -826,28 +776,12 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
 # SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20): cuML's
 # `ML::SpectralEmbedding::transform`, the dataset and the COO overloads.
-
-
-def _guard_embedding_output(
-    embedding: List[Float32], n_samples: Int, n_out: Int, n_cols: Int
-) raises:
-    """The output buffer was sized by the Python caller for `n_samples x
-    n_cols`; check what came back before writing into it."""
-    if n_out != n_cols or len(embedding) != n_samples * n_cols:
-        raise Error(
-            "spectral embedding: the kernel returned " + String(len(embedding))
-            + " floats in " + String(n_out) + " columns, but the output buffer"
-            " was sized for " + String(n_samples) + " x " + String(n_cols)
-        )
 
 
 def spectral_embedding_dataset_binding(
@@ -895,8 +829,7 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -947,8 +880,7 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -972,10 +904,7 @@ def _write_spectral_state(
     var evec = _f32_ptr(Int(py=addrs[first + 1]))
     var dg = _f32_ptr(Int(py=addrs[first + 2]))
     var cent = _f32_ptr(Int(py=addrs[first + 3]))
-    memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
-    memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
-    memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
-    memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
+    _spectral_state_copy(state, ev, evec, dg, cent)
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -1016,10 +945,7 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1057,10 +983,7 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1108,10 +1031,7 @@ def spectral_fit_predict_dense_binding(
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     if keep:
         _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(labels)
-    _ = len(embedding)
+    _spectral_write_outputs(labels, embedding, lp, ep, n_samples)
     return PythonObject(n_out)
 
 
@@ -1151,8 +1071,7 @@ def spectral_embedding_dense_binding(
     if n_out < 0:
         return PythonObject(n_out)
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
-    _ = len(embedding)
+    _spectral_write_embedding(embedding, ep)
     return PythonObject(n_out)
 
 
@@ -1193,17 +1112,115 @@ def spectral_predict_binding(
     var olp = _i32_ptr(Int(py=addrs[6]))
     var oep = _f32_ptr(Int(py=addrs[7]))
     with GILReleased(Python()):
-        var out = spectral_predict_host(
+        spectral_predict_run(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
-            n_neighbors, affinity, state,
+            n_neighbors, affinity, state, olp, oep,
+        )
+    return PythonObject(0)
+
+
+def spectral_predict_prepare_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`spectral_predict_prepare` (lane ne1-a-cluster-spectral, N326): take
+    `SpectralClustering`'s prediction state once
+    (spectral/impl/spectral_predict_resident.mojo) and return its handle.
+
+    `addrs`: training rows (n_train x n_features; 0 for precomputed),
+    eigenvalues (k), eigenvectors (n_train x k), diag (n_train), centroids
+    (n_clusters x k). `params`: n_train, n_queries, n_features, n_components,
+    n_clusters, n_neighbors, affinity, the words `spectral_predict` takes;
+    the call's shape is validated first, as `spectral_predict` does."""
+    if len(addrs) != 5:
+        raise Error("spectral_predict_prepare: addrs must contain 5 addresses, got " + String(len(addrs)))
+    _want(String("spectral_predict_prepare"), params, 7)
+    var n_train = Int(py=params[0])
+    var n_queries = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var k = Int(py=params[3])
+    var n_clusters = Int(py=params[4])
+    var n_neighbors = Int(py=params[5])
+    var affinity = Int(py=params[6])
+    spectral_predict_validate(n_train, n_queries, n_features, k, n_clusters, n_neighbors, affinity)
+    var train_x = List[Float32]()
+    if affinity == 0:
+        train_x = _load_f32(Int(py=addrs[0]), n_train * n_features)
+    var state = SpectralPredictionState()
+    state.eigenvalues = _load_f32(Int(py=addrs[1]), k)
+    state.eigenvectors = _load_f32(Int(py=addrs[2]), n_train * k)
+    state.diag = _load_f32(Int(py=addrs[3]), n_train)
+    state.centroids = _load_f32(Int(py=addrs[4]), n_clusters * k)
+    var handle = 0
+    with GILReleased(Python()):
+        handle = spectral_resident_prepare(train_x^, n_train, n_features, k, n_clusters, affinity, state)
+    return PythonObject(handle)
+
+
+def spectral_predict_resident_binding(
+    handle: PythonObject, addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`spectral_predict_resident(handle, addrs, params)`: `spectral_predict`
+    on the handle's state. `addrs`: input, out labels, out embedding (as
+    `spectral_predict`'s 0, 6 and 7); `params`: `spectral_predict`'s seven
+    words. Returns 0."""
+    if len(addrs) != 3:
+        raise Error("spectral_predict_resident: addrs must contain 3 addresses, got " + String(len(addrs)))
+    _want(String("spectral_predict_resident"), params, 7)
+    var h = Int(py=handle)
+    var n_train = Int(py=params[0])
+    var n_queries = Int(py=params[1])
+    var n_features = Int(py=params[2])
+    var k = Int(py=params[3])
+    var n_clusters = Int(py=params[4])
+    var n_neighbors = Int(py=params[5])
+    var affinity = Int(py=params[6])
+    var width = n_train if affinity == 1 else n_features
+    var input = _load_f32(Int(py=addrs[0]), n_queries * width)
+    var olp = _i32_ptr(Int(py=addrs[1]))
+    var oep = _f32_ptr(Int(py=addrs[2]))
+    with GILReleased(Python()):
+        var out = spectral_resident_predict(
+            h, input, n_train, n_queries, n_features, k, n_clusters, n_neighbors, affinity,
         )
         if len(out.labels) != n_queries or len(out.embedding) != n_queries * k:
             raise Error("spectral_predict: the kernel returned the wrong number of outputs")
-        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
-        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        unsafe_memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        unsafe_memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
         _ = len(out.labels)
         _ = len(out.embedding)
     return PythonObject(0)
+
+
+def spectral_predict_release_binding(handle: PythonObject) raises -> PythonObject:
+    """`spectral_predict_release(handle)`: drop the resident state (quiet for
+    a released handle)."""
+    spectral_resident_release(Int(py=handle))
+    return PythonObject(0)
+
+
+def spectral_predict_count_binding() raises -> PythonObject:
+    """The number of live resident spectral handles (tests only)."""
+    return PythonObject(spectral_resident_count())
+
+
+# The UMAP exports below are UNPACK + the typed body of the UMAP operations
+# table (umap/ops_entry_device.mojo `umap_ops_device_words`) + PACK. UMAP's
+# owner (bindings/mani_umap_native.mojo) calls the table entry instead; the
+# exports remain for the unconverted callers tools/qualify_umap_wheel.py,
+# tools/umap_transform_quality_check.py and the host surface list
+# python/mojolearn/host_surface.py.
+
+
+def _umap_ints(params: PythonObject, positions: List[Int]) raises -> List[Int]:
+    var words = List[Int](capacity=len(positions))
+    for i in range(len(positions)):  # small-loop(no: the UMAP parameter words, at most 11): UNPACK
+        words.append(Int(py=params[positions[i]]))
+    return words^
+
+
+def _umap_floats(params: PythonObject, positions: List[Int]) raises -> List[Float64]:
+    var words = List[Float64](capacity=len(positions))
+    for i in range(len(positions)):  # small-loop(no: the UMAP parameter words, at most 10): UNPACK
+        words.append(Float64(py=params[positions[i]]))
+    return words^
 
 
 def umap_fit_transform_binding(
@@ -1220,41 +1237,19 @@ def umap_fit_transform_binding(
     """
     if len(params) != 10:
         _want(String("umap_fit_transform"), params, 13)
-    var n = Int(py=params[0])
-    var d = Int(py=params[1])
-    var seed = Int(py=params[9])
-    if d < 1 or seed < 0:
-        raise Error("UMAP requires positive features and a nonnegative seed")
-    var config = UMAPParams(
-        n_neighbors=Int(py=params[2]), n_components=Int(py=params[3]),
-        n_epochs=Int(py=params[4]), min_dist=Float32(Float64(py=params[5])),
-        spread=Float32(Float64(py=params[6])),
-        set_op_mix_ratio=Float32(Float64(py=params[7])),
-        local_connectivity=Float32(Float64(py=params[8])),
-        random_seed=UInt64(seed),
-    )
+    var int_at: List[Int] = [0, 1, 2, 3, 4, 9]
+    var float_at: List[Int] = [5, 6, 7, 8]
     if len(params) == 13:
-        config.learning_rate = Float32(Float64(py=params[10]))
-        config.repulsion_strength = Float32(Float64(py=params[11]))
-        config.negative_sample_rate = Int(py=params[12])
-    config.validate(n)
-    if (config.n_components != 2 and config.n_components != 3) or (
-        n < 2 * config.n_components + 4
-    ):
-        raise Error("UMAP requires 2D/3D output and enough samples for spectral init")
-    var x = _load_f32(Int(py=x_addr), n * d)
-    var output = _f32_ptr(Int(py=embedding_addr))
-    var embedding = List[Float32]()
+        int_at.append(12)
+        float_at.append(10)
+        float_at.append(11)
+    var addresses: List[Int] = [Int(py=x_addr), Int(py=embedding_addr)]
+    var ints = _umap_ints(params, int_at)
+    var floats = _umap_floats(params, float_at)
+    var columns = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        embedding = umap_fit_transform(ctx, x, n, d, config)
-        ctx.synchronize()
-    if len(embedding) != n * config.n_components:
-        raise Error("UMAP returned an unexpected embedding shape")
-    if not _device_finite_f32(embedding):
-        raise Error("UMAP returned a non-finite embedding")
-    _store_f32_list(output, embedding)
-    return PythonObject(config.n_components)
+        columns = umap_ops_device_words(UMAP_OP_FIT, addresses, ints, floats)
+    return PythonObject(columns)
 
 
 def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1267,61 +1262,16 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
     target_dims, 19 target_n_neighbors (0: n_neighbors), 20 target_weight."""
     _want(String("umap_fit_transform_ex addresses"), addrs, 4)
     _want(String("umap_fit_transform_ex"), params, 21)
-    var n = Int(py=params[0])
-    var d = Int(py=params[1])
-    var seed = Int(py=params[9])
-    if d < 1 or seed < 0:
-        raise Error("UMAP requires positive features and a nonnegative seed")
-    var config = UMAPParams(
-        n_neighbors=Int(py=params[2]), n_components=Int(py=params[3]),
-        n_epochs=Int(py=params[4]), min_dist=Float32(Float64(py=params[5])),
-        spread=Float32(Float64(py=params[6])),
-        set_op_mix_ratio=Float32(Float64(py=params[7])),
-        local_connectivity=Float32(Float64(py=params[8])),
-        random_seed=UInt64(seed),
-        learning_rate=Float32(Float64(py=params[10])),
-        repulsion_strength=Float32(Float64(py=params[11])),
-        negative_sample_rate=Int(py=params[12]),
-        metric=Int(py=params[13]),
-        metric_arg=Float32(Float64(py=params[14])),
-        curve_a=Float32(Float64(py=params[15])),
-        curve_b=Float32(Float64(py=params[16])),
-    )
-    config.validate(n)
-    var tkind = Int(py=params[17])
-    var tdims = Int(py=params[18])
-    var tk = Int(py=params[19])
-    var tw = Float32(Float64(py=params[20]))
-    var init_addr = Int(py=addrs[2])
-    var target_addr = Int(py=addrs[3])
-    if config.n_components < 1 or config.n_components > 32:
-        raise Error("UMAP supports 1 to 32 output dimensions")
-    if init_addr == 0 and n < 2 * config.n_components + 4:
-        raise Error("UMAP has too few samples for spectral init")
-    if tkind < 0 or tkind > 2 or (tkind != 0 and (target_addr == 0 or tdims < 1)):
-        raise Error("UMAP supervised target is malformed")
-    if tk < 0 or tk > n or not (tw >= Float32(0.0) and tw <= Float32(1.0)):
-        raise Error("UMAP target_n_neighbors or target_weight is out of range")
-    var x = _load_f32(Int(py=addrs[0]), n * d)
-    var init = List[Float32]()
-    if init_addr != 0:
-        init = _load_f32(init_addr, n * config.n_components)
-        if not _device_finite_f32(init):
-            raise Error("UMAP initial embedding must be finite")
-    var target = List[Float32]()
-    if tkind != 0:
-        target = _load_f32(target_addr, n * tdims)
-    var output = _f32_ptr(Int(py=addrs[1]))
-    var embedding = List[Float32]()
+    var int_at: List[Int] = [0, 1, 2, 3, 4, 9, 12, 13, 17, 18, 19]
+    var float_at: List[Int] = [5, 6, 7, 8, 10, 11, 14, 15, 16, 20]
+    var addr_at: List[Int] = [0, 1, 2, 3]
+    var addresses = _umap_ints(addrs, addr_at)
+    var ints = _umap_ints(params, int_at)
+    var floats = _umap_floats(params, float_at)
+    var columns = 0
     with GILReleased(Python()):
-        with process_ctx[_DEVCTX_SLOT]() as ctx:
-            embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw)
-    if len(embedding) != n * config.n_components:
-        raise Error("UMAP returned an unexpected embedding shape")
-    if not _device_finite_f32(embedding):
-        raise Error("UMAP returned a non-finite embedding")
-    _store_f32_list(output, embedding)
-    return PythonObject(config.n_components)
+        columns = umap_ops_device_words(UMAP_OP_FIT_EX, addresses, ints, floats)
+    return PythonObject(columns)
 
 
 def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1334,46 +1284,26 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     _want(String("umap_transform addresses"), addrs, 4)
     if len(params) != 11 and len(params) != 18:
         _want(String("umap_transform parameters"), params, 14)
-    var n = Int(py=params[0])
-    var rows = Int(py=params[1])
-    var d = Int(py=params[2])
-    var seed = Int(py=params[10])
-    if n < 2 or rows < 1 or d < 1 or seed < 0:
-        raise Error("UMAP transform requires positive dimensions and a nonnegative seed")
-    var config = UMAPParams(
-        n_neighbors=Int(py=params[3]), n_components=Int(py=params[4]),
-        n_epochs=Int(py=params[5]), min_dist=Float32(Float64(py=params[6])),
-        spread=Float32(Float64(py=params[7])),
-        set_op_mix_ratio=Float32(Float64(py=params[8])),
-        local_connectivity=Float32(Float64(py=params[9])), random_seed=UInt64(seed),
-    )
+    var int_at: List[Int] = [0, 1, 2, 3, 4, 5, 10]
+    var float_at: List[Int] = [6, 7, 8, 9]
     if len(params) >= 14:
-        config.learning_rate = Float32(Float64(py=params[11]))
-        config.repulsion_strength = Float32(Float64(py=params[12]))
-        config.negative_sample_rate = Int(py=params[13])
+        int_at.append(13)
+        float_at.append(11)
+        float_at.append(12)
     if len(params) == 18:
         # lane/algos-decomp option parity: metric, metric_arg, a, b
-        config.metric = Int(py=params[14])
-        config.metric_arg = Float32(Float64(py=params[15]))
-        config.curve_a = Float32(Float64(py=params[16]))
-        config.curve_b = Float32(Float64(py=params[17]))
-    config.validate(n)
-    if config.n_components < 1 or config.n_components > 32:
-        raise Error("UMAP transform supports 1 to 32 output dimensions")
-    var training = _load_f32(Int(py=addrs[0]), n * d)
-    var fitted = _load_f32(Int(py=addrs[1]), n * config.n_components)
-    var queries = _load_f32(Int(py=addrs[2]), rows * d)
-    var output = _f32_ptr(Int(py=addrs[3]))
-    var embedding = List[Float32]()
+        int_at.append(14)
+        float_at.append(15)
+        float_at.append(16)
+        float_at.append(17)
+    var addr_at: List[Int] = [0, 1, 2, 3]
+    var addresses = _umap_ints(addrs, addr_at)
+    var ints = _umap_ints(params, int_at)
+    var floats = _umap_floats(params, float_at)
+    var columns = 0
     with GILReleased(Python()):
-        with process_ctx[_DEVCTX_SLOT]() as ctx:
-            embedding = umap_transform(ctx, training, fitted, queries, n, rows, d, config)
-    if len(embedding) != rows * config.n_components:
-        raise Error("UMAP transform returned an unexpected shape")
-    if not _device_finite_f32(embedding):
-        raise Error("UMAP transform returned a non-finite embedding")
-    _store_f32_list(output, embedding)
-    return PythonObject(config.n_components)
+        columns = umap_ops_device_words(UMAP_OP_TRANSFORM, addresses, ints, floats)
+    return PythonObject(columns)
 
 
 def umap_numeric_mode_binding() raises -> PythonObject:
@@ -1394,9 +1324,45 @@ def metrics_vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+from core.shared_slot import SharedSlot
+from core.spectral_native_provider import SpectralProviderAPI
+from core.spectral_native_device import SpectralDeviceKernels
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
+
+comptime _SPECTRAL_API_SLOT = "MojolearnSpectralDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_IDENTICAL else "MojolearnSpectralDeviceFastV1"
+comptime SPECTRAL_API = SharedSlot[SpectralProviderAPI[SpectralDeviceKernels], _SPECTRAL_API_SLOT]
+
+
+def spectral_native_api_v1_binding() raises -> PythonObject:
+    var api = SPECTRAL_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def _publish_umap_ops(module: PythonObject) raises:
+    # The device column of the UMAP operations table
+    # (core/neighbors_entry_table_umap.mojo): UMAP's owner
+    # (bindings/mani_umap_native.mojo) calls this entry with plain values,
+    # reads the key from the module attribute `umap_native_key` and compares
+    # its mode with the requested one. A build with no GPU vendor ("none")
+    # publishes nothing and records no key.
+    var word = neighbors_vendor_word(COMPILED_VENDOR)
+    if word < 0:
+        return
+    var api = UMAP_OPS_DEVICE_API.get_or_create_ptr()
+    umap_ops_publish(NeighborsEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api[].entries.unsafe_ptr()),
+                     umap_ops_device_v1)
+    py_setattr(module, "umap_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(word)))
+
+
 def build__mojolearn_metrics() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
+        # R^2 for native callers in other modules (core/metrics_entry_table.mojo);
+        # the Python r2_score entries below stay for mojolearn.metrics.
+        publish_metrics_r2_device()
+        m.def_function[spectral_native_api_v1_binding]("spectral_native_api_v1")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")
@@ -1418,6 +1384,7 @@ def build__mojolearn_metrics() -> PythonObject:
         m.def_function[homogeneity_score_binding]("homogeneity_score")
         m.def_function[completeness_score_binding]("completeness_score")
         m.def_function[v_measure_score_binding]("v_measure_score")
+        m.def_function[homogeneity_completeness_v_measure_binding]("homogeneity_completeness_v_measure")
         m.def_function[r2_score_binding]("r2_score")
         m.def_function[roc_auc_score_binding]("roc_auc_score")
         m.def_function[precision_recall_curve_binding]("precision_recall_curve")
@@ -1444,11 +1411,17 @@ def build__mojolearn_metrics() -> PythonObject:
             "spectral_fit_predict_graph_state"
         )
         m.def_function[spectral_predict_binding]("spectral_predict")
+        m.def_function[spectral_predict_prepare_binding]("spectral_predict_prepare")
+        m.def_function[spectral_predict_resident_binding]("spectral_predict_resident")
+        m.def_function[spectral_predict_release_binding]("spectral_predict_release")
+        m.def_function[spectral_predict_count_binding]("spectral_predict_count")
         m.def_function[spectral_embedding_dataset_binding]("spectral_embedding_dataset")
         m.def_function[spectral_embedding_graph_binding]("spectral_embedding_graph")
         m.def_function[spectral_fit_predict_dense_binding]("spectral_fit_predict_dense")
         m.def_function[spectral_embedding_dense_binding]("spectral_embedding_dense")
-        return m.finalize()
+        var published_module = m.finalize()
+        _publish_umap_ops(published_module)
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_metrics: ", e))
 

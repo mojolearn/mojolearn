@@ -1,0 +1,54 @@
+Mojolearn native BF16 conversion tests, 2026-11-10
+
+Scope
+  New checks/native_tests/bf16_conversion_{cases,cpu,gpu}.mojo call
+  decomposition.linalg_host_impl's to_bf16_host_run/from_bf16_host_run and
+  gemm.checks.gemm_lowbit's bf16_narrow/bf16_widen directly. No Python,
+  bindings, callbacks, product/kernel edits, or identity hashes.
+
+Independent oracle and coverage per executor
+  264,105 float32 words narrowed and then widened:
+    Every 16-bit upper half x low tails {0,0x7fff,0x8000,0xffff}, plus
+    37 x 53 words with 13-bit significands over eight binades.
+  65,536 raw BF16 words independently widened (all encodings).
+  Integer quotient/remainder implements ties-to-even without calling or
+  copying the product's add-bias helper. Explicit expectations cover signed
+  zeros, subnormal flush before narrowing, infinities, NaN quieting/payload,
+  rounding carry/overflow, exact widening, and even/odd ties.
+  The old NumPy random values are replaced by a deterministic native sample
+  with the same shape/distribution plus exhaustive upper-half coverage.
+  No tolerance, recorded expected hash, or host-vendor reference is used.
+
+Parallel plan
+  CPU: 322 independent chunks on existing host_parallelize.
+  GPU: all fixtures packed into existing parallel element kernels; the
+  narrow-then-widen dependency is ordered. Host preparation and oracle
+  checks also run in 322 independent chunks on host_parallelize.
+  One existing DeviceContext; no per-fixture context creation or Python.
+
+Python changes and remaining migration
+  test_linalg_lowbit.py retains a 2 x 2 ndarray/raw-pointer boundary check:
+  return dtype/shape, raw binding count, buffer write and route sentinels.
+  The previous NumPy BF16 rounding/shift arithmetic oracle is removed.
+  Existing BF16/int8 GEMM arithmetic tests and refusal tests remain;
+  this file is partially migrated, not claimed complete.
+  The generic low-bit reference tests elsewhere are unchanged.
+
+Orchestrator commands (no compile/test run by this lane)
+  bash tools/compile_slot.sh pixi run check-native-bf16-cpu
+  bash tools/compile_slot.sh pixi run check-native-bf16-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/bf16_conversion_cpu.mojo -o "$HOME/mojolearn-evidence/native-bf16-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/bf16_conversion_gpu.mojo -o "$HOME/mojolearn-evidence/native-bf16-gpu"
+  Apply existing target flags for NVIDIA and AMD compile legs.
+  Retained Python boundary bindings: _mojolearn_linalg/_mojolearn_linalg_host.
+  python3 -m pytest mojolearn/tests/test_linalg_lowbit.py -k conversion_packs
+  Save complete logs; compilation is distinct from runtime correctness.
+
+Status
+  Source-reviewed/diff checked only; CPU/GPU compile/run are RUN OWED to
+  orchestrator. No box jobs or timings. Product bits/performance unchanged.
+  A/B define: none (test-only). All earlier test batches remain frozen.
+  Inventory reviewed 27 files; 589 remain explicitly pending semantic review.
+  Newly reviewed Python dtype warning/protocol/refusal tests remain Python
+  because they test Python interoperability. Rank-N ops need a native split.

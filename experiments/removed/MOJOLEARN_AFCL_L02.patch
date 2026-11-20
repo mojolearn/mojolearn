@@ -1,0 +1,45 @@
+diff --git a/x_linear/fast_gram.mojo b/x_linear/fast_gram.mojo
+index d00c1c8775..6f2dbff2a9 100644
+--- a/x_linear/fast_gram.mojo
++++ b/x_linear/fast_gram.mojo
+@@ -49,10 +49,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime XL_RIDGE_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ 
++# AFCL-L02: NEVER RUN — PENDING MEASUREMENT. Source-only, uncompiled,
++# unverified; defaults OFF. Four fold accumulators
++# reduce dependency depth without dropping any statistic or changing FP32.
+ # TOMBSTONE: MOJOLEARN_AFCL_L01 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at a6680ec95a.
+ # Restore: git apply experiments/removed/MOJOLEARN_AFCL_L01.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_AFCL_L02 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 35e386db98.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L02.patch; record in docs/TOMBSTONES.md.
++comptime AFCL_L02 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++                    and is_defined["MOJOLEARN_AFCL_L02"]())
+ comptime FG_TPB = 256
+ comptime FG_CH = 8192
+ """Rows per chunk when the Gram has 8 or more tile pairs."""
+@@ -109,10 +112,20 @@ def _aug(x: FP, y: FP, d: Int, t_n: Int, i: Int, c: Int) -> Float32:
+ 
+ @always_inline
+ def _fg_fold(src: FP, base: Int, stride: Int, count: Int) -> Float32:
+-    var total = Float32(0)
+-    for ch in range(count):
+-        total += ld(src, base + ch * stride)
+-    return total
++    comptime if AFCL_L02:
++        var partial = SIMD[DType.float32, 4](0)
++        var ch = 0
++        while ch < count:
++            comptime for lane in range(4):
++                if ch + lane < count:
++                    partial[lane] += ld(src, base + (ch + lane) * stride)
++            ch += 4
++        return (partial[0] + partial[1]) + (partial[2] + partial[3])
++    else:
++        var total = Float32(0)
++        for ch in range(count):
++            total += ld(src, base + ch * stride)
++        return total
+ 
+ 
+ @always_inline

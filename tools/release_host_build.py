@@ -63,7 +63,7 @@ def generator_dir_digest(inventory, rel):
     the archive carries there)."""
     prefix = rel.rstrip('/') + '/'
     h = hashlib.sha256()
-    for path in gs.sorted_rels(p for p, _ in inventory if p.startswith(prefix)):
+    for path in gs.sorted_rels(p for p, _ in inventory if p == rel or p.startswith(prefix)):
         h.update(path.encode() + b'\0' + dict(inventory)[path].encode() + b'\n')
     return h.hexdigest()
 
@@ -119,7 +119,9 @@ def check_member_stamp(name, row, ident, closures, generated, inventory):
     require(gs.closure_hash([r for r in rows if r[0] not in gs.GENERATED]) == ident['closure']['digest'],
             'stamp source closure differs (committed closure)')
     for path, _ in reached:
-        require(ident.get('generators') == generator_dir_digest(inventory, gs.GENERATOR_DIRS[path]),
+        recorded = (ident.get('generators') if path == gs.UNICODE_TABLE
+                    else ident.get('generated_inputs', {}).get(path))
+        require(recorded == generator_dir_digest(inventory, gs.GENERATOR_DIRS[path]),
                 'binding identity generator inputs differ from the tracked generator')
 
 
@@ -392,6 +394,7 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
     if group_plan is not None:
         capture.update(command=commands, group_plan=group_plan, retained_inputs=before, admitted_inputs=context)
     write(out / 'compile-inputs.json', capture)  # Written before any subprocess begins.
+    gs.prepare_sources(root, out / "generated-preparation", env=env, runner=run_logged)
     build_exit = 0
     for number, argv in enumerate(commands):
         build_exit = run_logged(argv, root, env, out / ('build-%s.log' % number))
@@ -412,8 +415,8 @@ def build(root, runtime_build, out, compiler_sha, pixi_env='gbmbench', patchelf=
                                 ','.join(sorted(plan[f]))], root, env, out / ('stamp-' + f[:-3] + '.log'))
         stamps[f] = json.loads(binding_stamps.stamp_path(raw_output).read_text())
     write(out / 'binding-stamp.json', stamps)
-    # The compile read gitignored generated sources (the tokenizer unicode
-    # table) that git archive, and so the binding identities, never carry.
+    # The compile read gitignored generated Unicode tables that git archive,
+    # and so the binding identities, never carry.
     # Retain them with their tracked generator inputs and each reaching
     # member's closure rows, so record() can join stamp and identity exactly.
     generated_closures = {}

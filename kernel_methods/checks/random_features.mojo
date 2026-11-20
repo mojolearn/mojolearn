@@ -146,10 +146,10 @@ GENERATOR AND ITS TRANSFORM:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.philox import PhiloxState
@@ -559,7 +559,7 @@ def km_basis_candidates_kernel(
         return
     var k = draw_permutation_key(key_join(lo_bits, hi_bits), 0, j)
     if k <= key_join(thr_lo, thr_hi):
-        var slot = Int(Atomic[DType.int32].fetch_add(count, Int32(1)))
+        var slot = Int(Atomic[Int32].fetch_add(count, Int32(1)))
         ckey.unsafe_store(slot, k)
         cidx.unsafe_store(slot, Int32(j))
 
@@ -732,7 +732,7 @@ def random_offsets_kernel(
 # no random draw, projection, scale or cosine approximation is changed.
 # Applies to callers of km_feature_map_epilogue, including the resident
 # RBFSampler pipeline. Existing fused-projection paths bypass this candidate.
-comptime AFCL_L12 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L12 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L12"]())
 
 

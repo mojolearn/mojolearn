@@ -1,0 +1,58 @@
+Mojolearn kernel-method numerical test migration (2026-11-10)
+
+Original reviewed file:python/mojolearn/tests/test_km_kernels.py.
+Despite its old name,test_kernel_matrix_cells_match_scikit_learn tested
+Nystroem's complete basis reconstruction, not just direct pairwise cells.
+Both original numeric cases now run through actual native Nystroem fit and
+transform:training80x6,n_components12,seed1,cosine/chi2,atol5e-3/rtol1e-7.
+The basis query rows are independently gathered from X[component_indices],
+then the Float64 Gram of native embedding is compared with the independent
+sklearn reference at those rows. IdentityTrace is disabled; no record/hash.
+
+Native entries/importable suites:
+  checks/native_tests/kernel_methods_cells_cpu.mojo
+  checks/native_tests/kernel_methods_cells_cpu_suite.mojo::run_checks
+  checks/native_tests/kernel_methods_cells_gpu.mojo
+  checks/native_tests/kernel_methods_cells_gpu_suite.mojo::run_checks
+CPU command includes -D MOJOLEARN_COLUMN_CPU=1. CPU27fixtures run concurrently;
+GPU21fixture submissions are ordered on the actual shared kernel-method device
+context. Native input decoding/gathers/cell comparisons use host_parallelize.
+
+Coverage:
+  12original-data direct matrices:cosine,chi2gamma1,chi2gamma.3,additive_chi2,
+    at79x81/80x80/81x79 cells (six input features).
+  4edge matrices:zero rows/denominators,orthogonal/scaled vectors,adjacent
+    Float32 values and small normal vectors.
+  1signed cosine matrix.
+  2raw-driver empty result shapes (public positive-dimension admission is
+    separate; these do not claim empty public fits are accepted).
+  2original Nystroem basis reconstruction cases.
+  CPU only6negative-input minimum cases:actual family_min_f32 read by the chi2
+    public refusal,negative zero and negatives at worker/start/tail positions.
+The minimum cases do not claim to test the exception wrapper; the existing
+KernelRidge/Nystroem negative-input Python test remains intact.
+
+Independent data:
+  checks/native_tests/fixtures/kernel_methods_cells/reference.json
+  generate_reference.py never imports/runs Mojolearn. It records the original
+  first80Float32 input rows unchanged,adds one neighboring row, and invokes
+  sklearn.metrics.pairwise Float64 references. NumPy2.5.3/sklearn1.9.1,source
+  hashes,raw fixture hashes and explicit settings are recorded. Independent
+  reference jobs run in parallel. No product test or identity was run in lane.
+  Full generation log:~/mojolearn-evidence/python-mojo-migration-20261110/
+  kernel-methods-reference-generation.log
+
+Python split:
+  Retained public negative-input fit refusals for both estimators/kernels.
+  Retained all4whole KernelRidge sklearn comparisons at original alpha/gamma,
+  data and rtol2e-3/atol2e-3.
+  Replaced the Nystroem numerical test with2public basis/index/component/
+  normalization/output shape and owner/input-preservation cases. Its numerical
+  Gram assertion now lives in Mojo, so it is not duplicated in Python.
+  Removed repeated-fit/predict/transform same-bits assertions; cross-vendor
+  identity remains the one release verification, not this development suite.
+
+No product algorithms,kernels,dispatch choices,defaults or A/B defines changed.
+No source guard added. Validation:Python AST,TOML/JSON parse,git diff --check,
+independent reference generation only. NO Mojo compilation/native execution/
+pytest/product fit/timing/identity occurred. Orchestrator owns those results.

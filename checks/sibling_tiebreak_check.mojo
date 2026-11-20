@@ -47,7 +47,7 @@ WHAT THIS FILE CHECKS, and why each part is here.
    measurement.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -119,7 +119,7 @@ def run_planner(
     var h_sz = ctx.enqueue_create_host_buffer[DType.uint32](n)
     for i in range(n):
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
-    ctx.enqueue_copy(dst_buf=d_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_sz, h_sz)
 
     var d_c = ctx.enqueue_create_buffer[DType.uint32](half)
     var d_f = ctx.enqueue_create_buffer[DType.uint32](half)
@@ -149,9 +149,9 @@ def run_planner(
     var hc = ctx.enqueue_create_host_buffer[DType.uint32](half)
     var hf = ctx.enqueue_create_host_buffer[DType.uint32](half)
     var hw = ctx.enqueue_create_host_buffer[DType.uint32](half)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_c)
-    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=d_f)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=d_w)
+    download_host_into[DType.uint32](ctx, d_c, hc)
+    download_host_into[DType.uint32](ctx, d_f, hf)
+    download_host_into[DType.uint32](ctx, d_w, hw)
     ctx.synchronize()
 
     var out = List[Int]()
@@ -161,10 +161,6 @@ def run_planner(
         out.append(Int(hf.unsafe_ptr().unsafe_load(i)))
     for i in range(half):
         out.append(Int(hw.unsafe_ptr().unsafe_load(i)))
-    _ = h_sz^
-    _ = hc^
-    _ = hf^
-    _ = hw^
     _ = d_sz^
     _ = d_c^
     _ = d_f^
@@ -327,7 +323,7 @@ def build_fixture_cindex(
         ref cf = lay.features[f]
         for r in range(FIX_ROWS):
             hb.unsafe_ptr().unsafe_store(r, UInt8(fixture_bin(f, r)))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * FIX_ROWS), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(FIX_ROWS), cindex.unsafe_ptr(),
@@ -335,7 +331,6 @@ def build_fixture_cindex(
             block_dim=WRITE_BLOCK_SIZE,
         )
         ctx.synchronize()
-    _ = hb^
     _ = bins^
 
 
@@ -401,13 +396,13 @@ def measure_subtraction_blast_radius() raises:
         hs.unsafe_ptr().unsafe_store(FIX_ROWS + r, g)
         wmag += 1.0
         gmag += Float64(g) if g >= Float32(0.0) else -Float64(g)
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](FIX_ROWS)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](FIX_ROWS)
     for r in range(FIX_ROWS):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     # THE TIE, made of real rows: leaf 0 is the parent (every row), leaf 1
     # the left half and leaf 2 the right half, which on this factorial
@@ -430,8 +425,8 @@ def measure_subtraction_blast_radius() raises:
     for i in range(max_leaves):
         ho.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         hz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hz)
 
     var n_live = 3
     var ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
@@ -439,8 +434,8 @@ def measure_subtraction_blast_radius() raises:
     var hid = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     for i in range(max_leaves):
         hid.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense_ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
+    upload_host_into[DType.uint32](ctx, dense_ids, hid)
 
     var cells = lay.hist_cells
     var hist_cells = max_leaves * stat_count * cells
@@ -482,7 +477,7 @@ def measure_subtraction_blast_radius() raises:
     ctx.synchronize()
 
     var base = ctx.enqueue_create_host_buffer[DType.float32](hist_cells)
-    ctx.enqueue_copy(dst_ptr=base.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, base)
     ctx.synchronize()
 
     var from_ids = ctx.enqueue_create_buffer[DType.uint32](1)
@@ -512,11 +507,11 @@ def measure_subtraction_blast_radius() raises:
                     3 * stat_count * cells + s * cells + c,
                     base.unsafe_ptr().unsafe_load(s * cells + c),
                 )
-        ctx.enqueue_copy(dst_buf=hist, src_ptr=work.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, hist, work)
         h_from.unsafe_ptr().unsafe_store(0, UInt32(3))
         h_what.unsafe_ptr().unsafe_store(0, UInt32(computed))
-        ctx.enqueue_copy(dst_buf=from_ids, src_ptr=h_from.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=what_ids, src_ptr=h_what.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, from_ids, h_from)
+        upload_host_into[DType.uint32](ctx, what_ids, h_what)
         ctx.synchronize()
 
         ctx.enqueue_function[substract_histograms_kernel](
@@ -526,7 +521,7 @@ def measure_subtraction_blast_radius() raises:
             block_dim=(256, 1, 1),
         )
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=derived.unsafe_ptr(), src_buf=hist)
+        download_host_into[DType.float32](ctx, hist, derived)
         ctx.synchronize()
 
         var differ = 0
@@ -571,16 +566,6 @@ def measure_subtraction_blast_radius() raises:
         "of", 2 * stat_count * cells, "compared",
     )
     _ = scale_keep^
-    _ = hs^
-    _ = hi^
-    _ = ho^
-    _ = hz^
-    _ = hid^
-    _ = h_from^
-    _ = h_what^
-    _ = work^
-    _ = derived^
-    _ = base^
 
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     # Mojo frees at LAST USE, so without this the buffer releases above run
@@ -616,8 +601,8 @@ def measure_fit(n_trees: Int, depth: Int, pointwise: Bool) raises:
     for r in range(FIX_ROWS):
         ht.unsafe_ptr().unsafe_store(r, fixture_target(r))
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var model = TAdditiveModel()
@@ -712,7 +697,7 @@ def measure_fit(n_trees: Int, depth: Int, pointwise: Bool) raises:
         )
 
 
-def main() raises:
+def run_checks() raises:
     # THE MEASUREMENTS RUN FIRST and the gate last, deliberately: the gate
     # RAISES, and a gate that raises before the numbers are printed turns a
     # measurement run into a stack trace.
@@ -723,3 +708,22 @@ def main() raises:
     measure_fit(24, 6, True)
     print()
     check_planner_matches_theirs()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("sibling_tiebreak_check", cpu=False, gpu=True, serial="", run=run_cases)

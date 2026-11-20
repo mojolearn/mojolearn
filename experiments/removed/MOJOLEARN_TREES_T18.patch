@@ -1,0 +1,15 @@
+diff --git a/gbdt/trees_identical_switches.mojo b/gbdt/trees_identical_switches.mojo
+index ebcfe33dcd..2a64e35bed 100644
+--- a/gbdt/trees_identical_switches.mojo
++++ b/gbdt/trees_identical_switches.mojo
+@@ -33,9 +33,7 @@ comptime T17_BATCH = 128 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
+ # TOMBSTONE: MOJOLEARN_TREES_T20 (DROPPED) deleted 2026-10-07 by 359df2d05; code recoverable at 359df2d05^.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T20.patch; record in docs/TOMBSTONES.md.
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+-# TOMBSTONE: MOJOLEARN_TREES_T18 (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 967d4d7eef.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T18.patch
+-comptime T18 = False
++comptime T18 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T18"]()
+ 
+ # T19 (fused partition chain under IDENTICAL) deleted 2026-10-08 by lane/grid-losers-1: grid ge123e6f9 quality loss
+ # (gbdt-depthwise istella AUC -0.43%, logloss +20.7%); see docs/apple-fast/EXPERIMENTS.md. T19_DEFER below is independent.

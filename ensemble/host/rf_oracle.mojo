@@ -113,9 +113,10 @@ moves.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the rf-clf and rf-reg lanes is the measurement.
 """
-from ensemble.tree_identical_ideas import T14, T14_EXACT
-from ensemble.tree_moments import balanced_mse_gain, moment_pair, moment_finish
-from checks.soft_f64 import sf64_from_f32
+# TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
+# TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.patch (same patch as T14)
 from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
@@ -1040,8 +1041,6 @@ def host_mse_gain(
     var inv_len = ftz(Float32(1.0) / parent_weight.cast[DType.float32]())
     var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
     var left_label_sum = ftz(_dequantize(label_sums[i], scale))
-    comptime if T14 and not T14_EXACT:
-        return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum,left_label_sum)
     var p1 = ftz(-label_sum * label_sum)
     var parent_obj = ftz(p1 * inv_len)
     var lsq = ftz(left_label_sum * left_label_sum)
@@ -1111,8 +1110,6 @@ def host_weighted_reg_gain(
         return ftz(gain * inv_len)
     # MSE
     var inv_len = ftz(Float32(1.0) / parent_weight)
-    comptime if T14 and not T14_EXACT:
-        return balanced_mse_gain(parent_weight, left_weight, label_sum, left_label_sum)
     var p1 = ftz(-label_sum * label_sum)
     var parent_obj = ftz(p1 * inv_len)
     var lsq = ftz(left_label_sum * left_label_sum)
@@ -1161,13 +1158,13 @@ def host_quantile_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int
 
     fam2-forests `IDN_RF_QBIN_DEVICE`: the device computes the index in
     exact integers (`quantile_bin_index_exact`), and this host column
-    computes the same expression; `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF`
-    (or `MOJOLEARN_IDN_ALL_OFF`) restores the Float64 form on both."""
+    computes the same expression. Other modes keep the Float64 form."""
+    # TOMBSTONE: MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF (unmeasured old path) deleted 2026-11-15 by expdel2-39-trees (this file's read); code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF.expdel2-39-trees.patch
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch) deleted 2026-11-15 by expdel2-39-trees (this file's read); code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-39-trees.patch (same hunk as the QBIN patch)
     # lane/review-fixes: the device gate's mode term too (quantiles.mojo)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-        is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    ):
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var ri = (2 * (bin + 1) * sample_count + max_n_bins) // (2 * max_n_bins)
         var idx_i = ri - 1
         if idx_i < 0:
@@ -1393,15 +1390,15 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
-comptime RF_ORACLE_WBOOT_INT = True
-"""fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
-in exact integers, the host column of
-`ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
-draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
-weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
-`_OFF` define are gone), so the host column draws the integer stream in
-every mode too; the Float64 `weight_cdf` arm below is no longer reached
-for a weighted bootstrap."""
+# (Sweep 2026-11-15: the always-True RF_ORACLE_WBOOT_INT constant was folded into its two readers.)
+# fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
+# in exact integers, the host column of
+# `ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
+# draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
+# weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
+# `_OFF` define are gone), so the host column draws the integer stream in
+# every mode too; the Float64 `weight_cdf` arm below is no longer reached
+# for a weighted bootstrap.
 
 
 def host_weight_quantum(bits: UInt32, max_bits: UInt32) -> UInt64:
@@ -1458,33 +1455,32 @@ def host_sampled_rows(
 ) raises -> List[Int32]:
     """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`: the two
     unweighted arms and the weighted bootstrap (`weight_cdf` non-empty;
-    under `RF_ORACLE_WBOOT_INT` the integer `weight_qcdf` decides)."""
+    the integer `weight_qcdf` decides when it is non-empty)."""
     var rows = List[Int32](capacity=n_sampled)
-    comptime if RF_ORACLE_WBOOT_INT:
-        if bootstrap and len(weight_qcdf) > 0:
-            # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
-            # 32-bit seed, subsequence = the sample index, Lemire's bounded
-            # draw over [0, total), then upper_bound.
-            var total = weight_qcdf[n_rows - 1]
-            var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
-            for i in range(n_sampled):
-                var qsub = UInt64(i)
-                comptime if RF_ORACLE_HOST_SABOTAGE:
-                    qsub = qsub + UInt64(1)
-                var qgen = host_pcg_init(qseed, qsub, UInt64(0))
-                var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
-                var qlo = 0
-                var qhi = n_rows
-                while qlo < qhi:
-                    var qmid = (qlo + qhi) // 2
-                    if weight_qcdf[qmid] <= u:
-                        qlo = qmid + 1
-                    else:
-                        qhi = qmid
-                if qlo > n_rows - 1:
-                    qlo = n_rows - 1
-                rows.append(Int32(qlo))
-            return rows^
+    if bootstrap and len(weight_qcdf) > 0:
+        # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
+        # 32-bit seed, subsequence = the sample index, Lemire's bounded
+        # draw over [0, total), then upper_bound.
+        var total = weight_qcdf[n_rows - 1]
+        var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
+        for i in range(n_sampled):
+            var qsub = UInt64(i)
+            comptime if RF_ORACLE_HOST_SABOTAGE:
+                qsub = qsub + UInt64(1)
+            var qgen = host_pcg_init(qseed, qsub, UInt64(0))
+            var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
+            var qlo = 0
+            var qhi = n_rows
+            while qlo < qhi:
+                var qmid = (qlo + qhi) // 2
+                if weight_qcdf[qmid] <= u:
+                    qlo = qmid + 1
+                else:
+                    qhi = qmid
+            if qlo > n_rows - 1:
+                qlo = n_rows - 1
+            rows.append(Int32(qlo))
+        return rows^
     if bootstrap and len(weight_cdf) > 0:
         # `:2098-2135`: `uniform_double_host` over `[0, weight_sum)` at stride
         # 110592 (`core/philox.mojo:357-379`, one generator per subsequence),
@@ -1809,9 +1805,8 @@ def rf_host_fit(
     if len(weights) > 0:
         # Their two refusals by value (`prepare_weights`), both arms.
         weight_cdf = host_weight_cdf(weights, n_rows)
-        comptime if RF_ORACLE_WBOOT_INT:
-            if p.bootstrap:
-                weight_qcdf = host_weight_qcdf(weights, n_rows)
+        if p.bootstrap:
+            weight_qcdf = host_weight_qcdf(weights, n_rows)
     if weighted_obj:
         # `bindings/_mojolearn_rf.mojo` (cpu3-bindings): the total in the
         # blocked binary64 order the device scan uses
@@ -2163,33 +2158,9 @@ def _rf_host_tree(
         else:
             var label_sum = Int32(0)
             var cnt = UInt32(0)
-            comptime if T14:
-                # Same V1 row-ID partial membership and reduction as GPU.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                var partial = List[Int32](length=128,fill=Int32(0))
-                for j in range(begin,begin+count):
-                    var row = Int(row_ids[j])
-                    partial[row%128] += Int32(labels_f[row]*label_scale)
-                var moments = List[UInt64](length=128,fill=UInt64(0))
-                comptime if not T14_EXACT:
-                    for logical in range(128):
-                        moments[logical] = sf64_from_f32(ftz(_dequantize(partial[logical],label_scale)))
-                var distance = 64
-                while distance > 0:
-                    for logical in range(distance):
-                        partial[logical] += partial[logical+distance]
-                        comptime if not T14_EXACT:
-                            moments[logical] = moment_pair(moments[logical],moments[logical+distance])
-                    distance //= 2
-                label_sum = partial[0]
-                cnt = UInt32(count)
-                comptime if not T14_EXACT:
-                    vleaf[node*n_out] = moment_finish(moments[0],Float32(count))
-                    continue
-            else:
-                for j in range(begin, begin + count):
-                    label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
-                    cnt = cnt + UInt32(1)
+            for j in range(begin, begin + count):
+                label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
+                cnt = cnt + UInt32(1)
             # `SetLeafVector` (`objectives.mojo:1354-1376`).
             var weight = Int64(Int(cnt))
             if weight > 0:

@@ -70,11 +70,11 @@ def hist2_slice_offset_5(tid: Int) -> Int:
 def hist2_add_points_5[
     n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -101,13 +101,12 @@ def hist2_add_points_5[
 
     # stat1[k] = flag ? s2[k] : s1[k];  stat2[k] = flag ? s1[k] : s2[k];
     # The pre-quantized pair rides the same swap.
-    var stat1 = InlineArray[Float32, n](fill=Float32(0.0))
-    var stat2 = InlineArray[Float32, n](fill=Float32(0.0))
-    var qstat1 = InlineArray[Int32, n](fill=Int32(0))
-    var qstat2 = InlineArray[Int32, n](fill=Int32(0))
+    var stat1 = Array[Float32, n](fill=Float32(0.0))
+    var stat2 = Array[Float32, n](fill=Float32(0.0))
+    var qstat1 = Array[Int32, n](fill=Int32(0))
+    var qstat2 = Array[Int32, n](fill=Int32(0))
 
-    @parameter
-    for k in range(n):
+    comptime for k in range(n):
         if flag == 1:
             stat1[k] = s2[k]
             stat2[k] = s1[k]
@@ -119,15 +118,13 @@ def hist2_add_points_5[
             qstat1[k] = q1[k]
             qstat2[k] = q2[k]
 
-    @parameter
-    for i in range(4):
+    comptime for i in range(4):
         var f = (2 * i + tid) & 6
 
-        var offsets = InlineArray[Int, n](fill=0)
-        var keep = InlineArray[Bool, n](fill=False)
+        var offsets = Array[Int, n](fill=0)
+        var keep = Array[Bool, n](fill=False)
 
-        @parameter
-        for k in range(n):
+        comptime for k in range(n):
             var bin = Int((ci[k] >> UInt32(24 - (f << 2))) & UInt32(255))
             offsets[k] = f + 32 * (bin & 31)
             keep[k] = bin != 32
@@ -136,8 +133,7 @@ def hist2_add_points_5[
         # the DEVIATION note in the module docstring.
         turn_sync()
 
-        @parameter
-        for k in range(n):
+        comptime for k in range(n):
             var offset1 = slice_base + offsets[k] + flag
             var add1 = Float32(0.0)
             var qadd1 = Int32(0)
@@ -148,8 +144,7 @@ def hist2_add_points_5[
 
         turn_sync()
 
-        @parameter
-        for k in range(n):
+        comptime for k in range(n):
             var offset2 = slice_base + offsets[k] + (1 - flag)
             var add2 = Float32(0.0)
             var qadd2 = Int32(0)
@@ -189,8 +184,7 @@ def hist2_reduce_tail_5[
         if fold < max_fold_count:
             var src = 2048 + 32 * fold + 2 * f + is_second_stat
 
-            @parameter
-            for in_warp_hist in range(4):
+            comptime for in_warp_hist in range(4):
                 acc += smem[src + (in_warp_hist << 3)]
 
             smem[max_fold_count * 4 * is_second_stat + max_fold_count * f + fold] = acc

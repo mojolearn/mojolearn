@@ -1,0 +1,44 @@
+{
+  "family": "Spectral original prediction and retained numerical state",
+  "status": "CPU6/GPU6 authored, uncompiled and unrun",
+  "dependencies": ["f0201aa23b", "764e2ad158", "bcc32168f4", "07dd5500e4"],
+  "entries": {
+    "cpu": "checks/native_tests/spectral_prediction_cpu.mojo",
+    "gpu": "checks/native_tests/spectral_prediction_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_prediction_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_prediction_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 6,
+    "gpu": 6,
+    "graphs": [
+      "Original120x2 RNG20260915 input; clusters/components3, neighbors8, n_init10, solverseed3, tolerance1e-5. Retained state leaves fit outputs unchanged; three classes; abs(1+theta)>1e-3; finite/in-range batch prediction; selected19 single queries (every7th plus row5), reversed row order and original2 far queries.",
+      "Original120x120 independently prepared affinity, clusters/components3, neighbors10, n_init10, solverseed3, tolerance1e-5. Retained state leaves fit outputs unchanged; finite/in-range query; selected11 single rows (every11th); original2 new affinity rows including zero-degree query.",
+      "Original duplicated240x2 input/settings; full240 query, rows0/120/7/127 alone and matching predictions across the two120-row copies.",
+      "Original120-row fitted state with eigenvalue column1 set to-1; original first3 nearest-neighbor queries refuse DEVIATION2860 before outputs are published.",
+      "Original precomputed120-row fitted state; first2 query rows with[0,3]=-0.5 refuse negative affinity before outputs are published.",
+      "Original precomputed120-row fitted state; first2 query rows with[1,0]=Inf refuse non-finite affinity before outputs are published."
+    ],
+    "storage": "Flat native owners for all state/output spans, complete NaN-filled output checks, canaries, unchanged source words and refusal output nonpublication."
+  },
+  "original": "python/mojolearn/tests/test_spectral_predict.py::arm_nearest_neighbors and arm_precomputed",
+  "oracle": "Original retained-state, query ordering and duplicate-label relations; known label range/finite-state/eigenvalue threshold. No copied predictor or eigensolver. Training predict==fit labels and extension==fit embedding remain report-only and are NOT asserted.",
+  "routes": "Host dataset/COO fit plus host query; GPU dataset/dense fit plus actual GPU query. No host substitute for a GPU numerical route.",
+  "parallel_plan": "CPU6 full graphs and selected single-row queries use host_parallelize with private output/error storage. GPU graphs and single-row queries execute in order on the physical GPU; kernels retain parallelism. The separate concurrent shared-context failure remains open.",
+  "compile_flags": {
+    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "python_retained": [
+    "All original numerical checks remain until native replacements pass.",
+    "Save/load/host-archive, Float64 input normalization, public Array shape/dtype, fitted-state/public feature-width and scalar/affinity refusals remain Python seams.",
+    "NaN nearest-neighbor input admission is a public preparation refusal, not asserted on the unchecked core query API.",
+    "Registry/cache lifetime, provider replacement, readonly/rebound public arrays and resident upload telemetry are not claimed by this numerical slice."
+  ],
+  "source_evidence": "E/pca-native-tests/spectral-prediction-static.json",
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}

@@ -45,8 +45,8 @@ kernel puts in a block -- and a helper implemented without its call site is a
 helper implemented from a guess.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.math import ceil, log2
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.bit import bit_width
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -145,21 +145,27 @@ struct PointwisePartOffsetsHelper(Copyable, ImplicitlyCopyable, Movable):
     def data_partition_offset(
         self, part_id: UInt32, fold_id: UInt32
     ) -> UInt32:
-        """`GetDataPartitionOffset` (`:78-81`), including their float `log2`.
+        """`GetDataPartitionOffset` (`:78-81`).
 
-        Theirs is
-            `1 << (ui32)ceil(log2((float)FoldCount))`
-        and this is the same expression in the same precision. It is NOT
-        rewritten as a bit trick: `ceil(log2(x))` on a float is not
-        `32 - clz(x - 1)` at every input, and the two disagree exactly at
-        the powers of two, where `log2` is the value most likely to land a
-        hair below the integer it should be. Their expression is the
-        contract; a faster one that agrees on the cases we happen to run is
-        a different contract.
+        Theirs is `1 << (ui32)ceil(log2((float)FoldCount))`, whose exact
+        value is the smallest `b` with `FoldCount <= 1 << b`, i.e. the bit
+        width of `FoldCount - 1` (1 -> 0, 2 -> 1, 16 -> 4, 17 -> 5). That is
+        what this computes, in integers.
+
+        IDENTITY (lane fb13, 2026-11-17): the float form lowered on NVPTX to
+        `lg2.approx.ftz.f32` (an NVIDIA-only approximation; 50 pointwise
+        kernels of the 0.8.67-dev wheel carried it), while the host and AMD
+        columns ran a correctly rounded log2. A correctly rounded log2 gives
+        the exact value at every fold count below 2^22 (log2(2^k) is exact;
+        log2(2^k + 1) exceeds k by more than half an ulp of k there), so this
+        integer form agrees with the float contract wherever the float form
+        is itself exact, and it is the same instruction on every column.
+        ctr_bins_builder.int_log2 is the same identity, compared over every
+        value in [1, 2^20]. Bits: none change at any fold count a fit uses.
         """
-        var fold_stripe = UInt32(
-            1
-        ) << UInt32(ceil(log2(Float32(self.fold_count))))
+        var fold_stripe = UInt32(1) << UInt32(
+            bit_width(self.fold_count - UInt32(1))
+        )
         return part_id * fold_stripe + fold_id
 
 

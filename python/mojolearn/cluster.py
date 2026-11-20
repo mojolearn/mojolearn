@@ -3,7 +3,7 @@
 """k-means on the GPU. Reference: cuVS."""
 
 from . import _mojolearn, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The saved k-means model (lane/kmeans-save, 2026-09-16), read by
 #: `mojolearn.host_model` through `_classical_host.HostKMeans`. One format
@@ -13,38 +13,38 @@ from ._mode import NumericModeMixin
 _KMEANS_FORMAT = "mojolearn-kmeans-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # The compiled family owner, connected once at import: `fit`, `predict`,
 # `transform`, `fit_predict` and `fit_transform` are one native call each
-# (bindings/kmeans_native.mojo), which validates the inputs with the
+# (bindings/kmeans_native_unpack.mojo), which validates the inputs with the
 # refusals below, allocates the outputs, runs the binding's kmeans_fit /
 # kmeans_predict / kmeans_transform and stores the fitted attributes. The
 # shell hands it the binding `_bind` resolves for the model's numeric mode.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
-INIT_KMEANS_PLUS_PLUS = 0
-INIT_RANDOM = 1
-INIT_ARRAY = 2
+_INIT_KMEANS_PLUS_PLUS = 0
+_INIT_RANDOM = 1
+_INIT_ARRAY = 2
 
-METRIC_L2_EXPANDED = 0
-METRIC_L2_SQRT_EXPANDED = 1
+_METRIC_L2_EXPANDED = 0
+_METRIC_L2_SQRT_EXPANDED = 1
 
 _INIT_NAMES = {
-    "k-means++": INIT_KMEANS_PLUS_PLUS,
-    "random": INIT_RANDOM,
-    "array": INIT_ARRAY,
+    "k-means++": _INIT_KMEANS_PLUS_PLUS,
+    "random": _INIT_RANDOM,
+    "array": _INIT_ARRAY,
 }
 
 #: init code -> the name `save` writes for it, so a model built with the
 #: integer code round-trips to the spelling the class documents.
 _INIT_SAVED = {
-    INIT_KMEANS_PLUS_PLUS: "k-means++",
-    INIT_RANDOM: "random",
-    INIT_ARRAY: "array",
+    _INIT_KMEANS_PLUS_PLUS: "k-means++",
+    _INIT_RANDOM: "random",
+    _INIT_ARRAY: "array",
 }
 
 #: cuVS's `DistanceType` members the kernel knows, by cuVS's own names
@@ -62,26 +62,27 @@ _INIT_SAVED = {
 #: table is still refused BY NAME by `_metric_code` below, which is the
 #: property the routing existed to provide.
 _METRIC_NAMES = {
-    "euclidean": METRIC_L2_EXPANDED,
-    "l2_expanded": METRIC_L2_EXPANDED,
-    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "euclidean": _METRIC_L2_EXPANDED,
+    "l2_expanded": _METRIC_L2_EXPANDED,
+    "l2_sqrt_expanded": _METRIC_L2_SQRT_EXPANDED,
 }
 
 #: metric code -> the name `save` writes for it. `euclidean` and
 #: `l2_expanded` are the same code and the same arithmetic; the first is what
 #: the class documents as the default, so it is the spelling that travels.
 _METRIC_SAVED = {
-    METRIC_L2_EXPANDED: "euclidean",
-    METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
+    _METRIC_L2_EXPANDED: "euclidean",
+    _METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
 }
 
 
 # `KMeans.fit`, `predict` and `transform` refuse a NaN or an infinity in X,
-# sample_weight or init_centroids BY NAME before any launch
-# (bindings/kmeans_native.mojo `_kmeans_f32`): before that check a NaN row
-# reached the kernel and `fit` returned a NaN centroid, `inertia_` of
-# FLT_MAX and label -1 for the row, all silently (scikit-learn's
-# `validate_data` refuses the same input).
+# sample_weight or init_centroids (bindings/kmeans_native_unpack.mojo `_kmeans_x`;
+# lane a7d: X's finite status word comes from the kernel entry over its own
+# upload, the refusal is the one admission wording "Input X contains NaN or
+# infinity (KMeans)."): before that check a NaN row reached the kernel and
+# `fit` returned a NaN centroid, `inertia_` of FLT_MAX and label -1 for the
+# row, all silently (scikit-learn's `validate_data` refuses the same input).
 
 
 # Maintainer notes (moved from the docstring):
@@ -103,7 +104,7 @@ _METRIC_SAVED = {
 #   iteration's; cuVS and scikit-learn both run the extra pass.
 # - DEVIATION 2369: attributes are `_array.Array`s (NumPy-free) where they were
 #   ndarrays.
-class KMeans(NumericModeMixin):
+class KMeans(_NumericModeMixin):
     """K-means clustering.
 
     Partitions the rows of `X` into `n_clusters` groups by minimizing the
@@ -120,12 +121,12 @@ class KMeans(NumericModeMixin):
     ----------
     n_clusters : int, default 8
         Number of clusters. Must not exceed the number of rows.
-    init : {'k-means++', 'random', 'array'}, array or callable, default 'k-means++'
+    init : {'k-means++', 'random', 'array'} or array, default 'k-means++'
         How the starting centers are chosen. 'array' takes them from
         `init_centroids`. An array of shape `(n_clusters, n_features)` is used
         directly as the starting centers (`init_centroids` is then ignored).
-        A callable is called as `init(X, n_clusters, random_state)` and must
-        return such an array.
+        A callable is not accepted: compute the starting centers first and
+        pass them as an array.
     n_init : int, default 1
         Number of restarts. Each restart draws different starting centers;
         the one with the lowest final inertia is kept.
@@ -183,7 +184,7 @@ class KMeans(NumericModeMixin):
     >>> distances = model.transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
@@ -216,9 +217,8 @@ class KMeans(NumericModeMixin):
         self.oversampling_factor = oversampling_factor
         self.numeric_mode = numeric_mode
 
-    # A callable `init` is called once with the fit's rows and its centers
-    # take the 'array' path (bindings/kmeans_native.mojo, scikit-learn's
-    # `init(X, n_clusters, random_state=...)`); an array `init` takes the
+    # A callable `init` is refused before it is called (no Python runs in
+    # the fit: bindings/kmeans_native_unpack.mojo); an array `init` takes the
     # 'array' path with `init_centroids` ignored.
     def fit(self, X, y=None, sample_weight=None):
         """Compute the k-means clustering of `X`.
@@ -330,10 +330,10 @@ class KMeans(NumericModeMixin):
         return _NATIVE(self, "family_kmeans_fit_transform", (None, X, sample_weight), _NATIVE_CONTEXT)
 
     # The fitted centroids live on the device after the first query, under
-    # `_resident_holder` (bindings/kmeans_native.mojo `_kmeans_resident`).
+    # `_resident_holder` (bindings/kmeans_native_unpack.mojo `_kmeans_resident`).
     # A pickle or a deepcopy carries no device handle; the copy uploads its
-    # own at its first query. No Python `__del__`: dropping an instance
-    # releases the handle through the native finalizer connected below.
+    # own at its first query. The Mojo resident owner releases its native
+    # handle after the last query drops its reference.
     def __getstate__(self):
         return _NATIVE(self, "family_kmeans_getstate", (), _NATIVE_CONTEXT)
 
@@ -413,7 +413,7 @@ _native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
     ("choice", "metric", "@metric", dict(_METRIC_NAMES), dict(_METRIC_SAVED), None, "ValueError",
      f"mojolearn: metric must be one of {sorted(_METRIC_NAMES)}, got {{value}}",
      f"mojolearn KMeans.save: metric {{value}} is code {{code}}, which is not one of {sorted(_METRIC_SAVED)}"),
-    ("choice", "init", "@init", dict(_INIT_NAMES), dict(_INIT_SAVED), ("array", INIT_ARRAY), "ValueError",
+    ("choice", "init", "@init", dict(_INIT_NAMES), dict(_INIT_SAVED), ("array", _INIT_ARRAY), "ValueError",
      f"mojolearn KMeans.save: init must be one of {sorted(_INIT_NAMES)}, got {{value}}",
      f"mojolearn KMeans.save: init code {{code}} is not one of {sorted(_INIT_SAVED)}"),
     ("need", "labels_", "AttributeError", "'{cls}' object has no attribute 'labels_'"),
@@ -428,12 +428,6 @@ _native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
     ("f8", "reals", (("float", "inertia_"), ("float", "sum_scale_"), ("float", "weight_scale_"),
                      ("float", "tol"), ("float", "oversampling_factor"))),
 ), host_archive_kmeans_metrics=dict(_METRIC_NAMES), host_archive_kmeans_starts=dict(_INIT_NAMES))
-
-
-# Dropping a fitted instance releases its resident centroids through the
-# minting binding's `kmeans_centers_release` (bindings/host_archive_lifetime.mojo
-# "entry" plans); the handle lives in `_resident_holder["index"]`.
-_native_archive_bridge.lifetime(KMeans, "kmeans_centers_release", "_resident_holder")
 
 
 __all__ = ["KMeans"]

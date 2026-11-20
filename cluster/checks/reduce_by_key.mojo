@@ -65,19 +65,21 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
 # owns every tunable in this tree; changing TARGET_COLUMN there rebuilds
 # this kernel for another vendor with no edit in this file.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime REDUCE_BY_KEY_TPB = lib_block_size_for[
     K_LIB_REDUCE_BY_KEY, TARGET_COLUMN
 ]()
@@ -763,7 +765,7 @@ def finish_sum_kernel(
 #: bench/results/box-run-2-20261005/candidate/). For skinny data (d about 10)
 #: only `n / 1024 * d` threads are busy at 1024; 256 quadruples the busy
 #: threads and the table (`n / 256 * k * d` Int32 cells).
-#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1`
 #: restores 1024. `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1` stays an opt-in
 #: candidate for wide data and wins over the default. The old opt-in
 #: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` is now a no-op. Int32 totals: no
@@ -785,7 +787,7 @@ def finish_sum_kernel(
 # and scale selection are unchanged. Keep the existing experimental blocked
 # accumulator enabled in BOTH arms; this does not promote it on Apple.
 comptime AFCL_G06 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G06"]()
 )
 comptime BLOCK_ACC_ROWS_BASELINE = (
@@ -793,14 +795,12 @@ comptime BLOCK_ACC_ROWS_BASELINE = (
     if (
         # A08 AMD loser on stated fits; retained as an explicit experimental arm.
         is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
-        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
     else (
         1024
         if (
             # A08 AMD loser on stated fits; retained as an explicit experimental arm.
             is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
-            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
         else 256
     )
@@ -1255,26 +1255,9 @@ def copy_f32_gated_kernel(
         dst.unsafe_store(i, src.unsafe_load(i))
 
 
-def kmeans_conv_step_kernel(
-    state: MutPointer[Int32, MutAnyOrigin],
-    shift: MutPointer[Float32, MutAnyOrigin],
-    thresh: Float32,
-    it: Int32,
-):
-    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the stopping rule on the
-    device. One thread. `state[0]` is the done flag, `state[1]` the iteration
-    that converged. `thresh` is the host's Float64 `tol` rounded UP to Float32
-    (`kmeans_shift_threshold`), so `shift < thresh` here is exactly the
-    host's `Float64(shift) < tol` for every Float32 `shift`, NaN included
-    (false both ways). One comparison of two Float32 values: the same bit on
-    every vendor."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    if state.unsafe_load(0) != Int32(0):
-        return
-    if shift.unsafe_load(0) < thresh:
-        state.unsafe_store(1, it)
-        state.unsafe_store(0, Int32(1))
+# TOMBSTONE: kmeans_conv_step_kernel (MERGED into the executor loop's criterion op) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+# Its body is `loop_below_kernel` (autograd/program_loop_device.mojo), which also stores the iteration register.
+# Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
 
 
 def launch_accumulate_centroid_sums_blocked_gated[

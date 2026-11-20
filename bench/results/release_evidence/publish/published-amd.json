@@ -1,0 +1,206 @@
+{
+  "schema": "mojolearn.release-published-install.v2",
+  "tool": "tools/release_published_install.py",
+  "vendor": "amd",
+  "version": "0.8.66",
+  "backend": "hip",
+  "index_url": "https://pypi.org/simple",
+  "source_revision": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+  "published": {
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+    "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+  },
+  "mismatch": [],
+  "gate_verdict": "gate-amd PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-gradients, autograd/autograd-higher, autograd/autograd-import-ops, autograd/autograd-lm-tape, autograd/autograd-mamba-tape, autograd/autograd-mlp-identity, autograd/autograd-public, autograd/autograd-samba-tape, autograd/autograd-small-mlp-tape, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+  "coverage": [
+    {
+      "id": "index-resolution",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 6,
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "published-artifact-hashes",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 2,
+      "completed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "wheel-integrity",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 3,
+      "completed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "gate-evidence",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 6,
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "checks": {
+    "index-resolution": [
+      {
+        "name": "index",
+        "passed": true,
+        "index": "https://pypi.org/simple"
+      },
+      {
+        "name": "distributions",
+        "passed": true,
+        "resolved": [
+          "mojolearn-amd",
+          "mojolearn-core"
+        ],
+        "wanted": [
+          "mojolearn-core",
+          "mojolearn-amd"
+        ]
+      },
+      {
+        "name": "resolved:mojolearn-core",
+        "passed": true,
+        "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "files": [
+          "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl"
+        ],
+        "pip_exit": 0
+      },
+      {
+        "name": "index-digest:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "index_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+        "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      },
+      {
+        "name": "resolved:mojolearn-amd",
+        "passed": true,
+        "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "files": [
+          "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl"
+        ],
+        "pip_exit": 0
+      },
+      {
+        "name": "index-digest:mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "index_sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed",
+        "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+      }
+    ],
+    "published-artifact-hashes": [
+      {
+        "name": "candidate:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "published_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+        "candidate": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "candidate_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      },
+      {
+        "name": "candidate:mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "published_sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed",
+        "candidate": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "candidate_sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+      }
+    ],
+    "wheel-integrity": [
+      {
+        "name": "record:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "members": 442,
+        "problems": []
+      },
+      {
+        "name": "record:mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "members": 15,
+        "problems": []
+      },
+      {
+        "name": "packaged-commit",
+        "passed": true,
+        "packaged": [
+          "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+        ],
+        "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+      }
+    ],
+    "gate-evidence": [
+      {
+        "name": "gate-verdict",
+        "passed": true,
+        "verdict": "gate-amd PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-gradients, autograd/autograd-higher, autograd/autograd-import-ops, autograd/autograd-lm-tape, autograd/autograd-mamba-tape, autograd/autograd-mlp-identity, autograd/autograd-public, autograd/autograd-samba-tape, autograd/autograd-small-mlp-tape, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+        "refused": null
+      },
+      {
+        "name": "evidence:gate-evidence/a7e2f1d5e50f220c-runtime-report.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json",
+        "sha256": "a7e2f1d5e50f220c84f709e3b3725e1d1474bf4dd290a73bee77e83946d121f7"
+      },
+      {
+        "name": "evidence:gate-evidence/7d7a538419d885bf-mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/repacked/linux/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+        "sha256": "7d7a538419d885bfb0f721cfe78372f347d6c88b4c4c78ac6fce29e8c1585021"
+      },
+      {
+        "name": "evidence:gate-evidence/f3a735d8e52483cd-mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/repacked/macos/mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+        "sha256": "f3a735d8e52483cde3f35fa51be893fcf6916e0f3c519b732530a2739fb8bd7e"
+      },
+      {
+        "name": "gated-bytes:mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+      },
+      {
+        "name": "gated-bytes:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      }
+    ]
+  },
+  "status": "passed",
+  "exit_code": 0,
+  "evidence": [
+    {
+      "path": "request.json",
+      "sha256": "ccc17ca830f6c627af3dcf0db75bbbb0959d8e9ab0771966ea57dcb52e09b990"
+    },
+    {
+      "path": "wheels/mojolearn-core/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+    },
+    {
+      "path": "wheels/mojolearn-amd/mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+      "path": "gate-evidence/a7e2f1d5e50f220c-runtime-report.json",
+      "sha256": "a7e2f1d5e50f220c84f709e3b3725e1d1474bf4dd290a73bee77e83946d121f7"
+    },
+    {
+      "path": "gate-evidence/7d7a538419d885bf-mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+      "sha256": "7d7a538419d885bfb0f721cfe78372f347d6c88b4c4c78ac6fce29e8c1585021"
+    },
+    {
+      "path": "gate-evidence/f3a735d8e52483cd-mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+      "sha256": "f3a735d8e52483cde3f35fa51be893fcf6916e0f3c519b732530a2739fb8bd7e"
+    }
+  ]
+}

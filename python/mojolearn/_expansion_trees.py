@@ -29,15 +29,13 @@ import weakref
 
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes, full, zeros
-from ._buffer import memory_at
 from ._mode import NumericModeMixin, available_if
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
-from ._mode import ClassifierScoreMixin, RegressorScoreMixin
+from ._mode import _connect_native_init
 from ._forest_protocol import forest_estimator
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
-    RandomForestClassifier, RandomForestRegressor, _refuse,
+    RandomForestClassifier, RandomForestRegressor,
     _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
 from . import _native_archive_bridge, _native_trees_bridge
@@ -46,9 +44,13 @@ from . import _native_archive_bridge, _native_trees_bridge
 # is one native call.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled tree-ensemble owner: a DecisionTree*'s `fit`, `predict` and
-# `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
+# `predict_proba` are one native call each (bindings/trees_public_forest_door.mojo;
 # splitter='random' grows one extra-trees tree there).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 import sys as _native_module_sys
 from ._native_loaded_modules import connect_module as _connect_native_module
 # Bagging member publication uses this owner after the module's lazy import;
@@ -88,19 +90,26 @@ __all__ = [
 # out loud: splits are searched over `n_bins` per-feature quantiles (cuML's
 # rule, default 128), not every midpoint; and `splitter='random'` and
 # `max_leaf_nodes` (best-first growth) are refused by name.
-_DT_DEPTH = None
 
 
-def _dt_common(splitter, max_features, max_leaf_nodes):
-    """The random splitter is ExtraTrees' builder (Geurts: one random
-    threshold per candidate feature), fitted as ONE tree without bootstrap;
-    best-first growth (`max_leaf_nodes`) exists on that builder only."""
-    if splitter not in ("best", "random"):
-        raise ValueError(f"splitter must be 'best' or 'random', got {splitter!r}")
-    if splitter == "best" and max_leaf_nodes is not None:
-        _refuse("max_leaf_nodes with splitter='best'", "best-first growth exists on the random"
-                " splitter's builder (extratrees/, DEVIATIONS 466-469); pass splitter='random'.")
-    return None if splitter == "random" else max_leaf_nodes
+# `_dt_common` (the splitter and best-first refusals) is the native owner's
+# `_rf_arguments` (bindings/trees_public_forest_door.mojo), run at fit on
+# the stored parameters; lane py-trees (2026-11-14) deleted its Python copy.
+
+
+class _TreeSave:
+    """The single trees' `save` (one native call), shared by both.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def save(self, path):
+        """Save the fitted tree to ``path``.
+
+        Raises ``NotImplementedError`` for a tree fitted with
+        ``splitter="random"``.
+        """
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
 
 # sample_weight goes through the weighted RF fit entry (the weighted
@@ -186,6 +195,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     >>> model = mojolearn.DecisionTreeClassifier(max_depth=4).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -208,18 +218,9 @@ class DecisionTreeClassifier(RandomForestClassifier):
         inference_engine="auto",
         numeric_mode=None,
     ):
-        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
-        super().__init__(
-            n_estimators=1, criterion=criterion, max_depth=max_depth,
-            min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
-            bootstrap=False, random_state=random_state, class_weight=class_weight,
-            ccp_alpha=ccp_alpha, monotonic_cst=monotonic_cst, n_bins=n_bins,
-            n_streams=1, device=device, inference_engine=inference_engine,
-            numeric_mode=numeric_mode,
-        )
-        self.splitter = splitter
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -237,15 +238,15 @@ class DecisionTreeClassifier(RandomForestClassifier):
         -------
         self
         """
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_fit, (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_depth, (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_n_leaves, (), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the class distribution of each row's leaf.
@@ -253,19 +254,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
-
-    def save(self, path):
-        """Save the fitted tree to ``path``.
-
-        Raises ``NotImplementedError`` for a tree fitted with
-        ``splitter="random"``.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
 
 
 # sample_weight goes through the weighted regressor entry
@@ -347,6 +340,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
     >>> model = mojolearn.DecisionTreeRegressor(max_depth=6).fit(X, y)
     >>> pred = model.predict(X)
     """
+    save = _TreeSave.save
 
     def __init__(
         self,
@@ -368,19 +362,9 @@ class DecisionTreeRegressor(RandomForestRegressor):
         inference_engine="auto",
         numeric_mode=None,
     ):
-        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
-        # n_bins=None: the tier's default, resolved at fit (`_dt_tier_bins`)
-        super().__init__(
-            n_estimators=1, criterion=criterion, max_depth=max_depth,
-            min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
-            bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
-            monotonic_cst=monotonic_cst, n_bins=128 if n_bins is None else n_bins, n_streams=1,
-            device=device, inference_engine=inference_engine,
-            numeric_mode=numeric_mode,
-        )
-        self.splitter = splitter
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
@@ -398,31 +382,23 @@ class DecisionTreeRegressor(RandomForestRegressor):
         -------
         self
         """
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_fit, (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
-        return _TREES(self, "trees_public_forest_depth", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_depth, (), _TREES_CONTEXT)
 
     def get_n_leaves(self):
         """Return the number of leaves of the fitted tree."""
-        return _TREES(self, "trees_public_forest_n_leaves", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_n_leaves, (), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
-
-    def save(self, path):
-        """Save the fitted tree to ``path``.
-
-        Raises ``NotImplementedError`` for a tree fitted with
-        ``splitter="random"``.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+        return _TREES(self, _OP.trees_public_forest_predict, (X,), _TREES_CONTEXT)
 
 
 # A tree saves in the random forest format, refusing a splitter='random'
-# tree first (bindings/archive_schema_native.mojo runs the schema); `load`
+# tree first (bindings/archive_schema_native_door.mojo runs the schema); `load`
 # is the random forest's one native call.
 _TREE_SAVE_SCHEMA = (
     ("refuse_set", "_random_inner", "NotImplementedError",
@@ -437,21 +413,22 @@ _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
 # this module are BUILD-TIME defines of the x_trees binding (`-D
-# MOJOLEARN_TE_<NAME>_OFF` turns one off; providers/python/xtrees_api_pyapi.mojo `x_trees_fast_switches` is the bit
+# MOJOLEARN_TE_<NAME>_OFF` turns one off; providers/python/xtrees_api_pyapi_door.mojo `x_trees_fast_switches` is the bit
 # set the FAST + Apple build fills, 0 in every other build), read through
 # the binding once per fit: no env read. IDENTICAL (the default) runs the
 # code above and below them unchanged. Each is ON by default in the FAST +
-# Apple build since the M3 A/B (providers/python/xtrees_api_pyapi.mojo XTREES_FAST_SWITCHES):
+# Apple build since the M3 A/B (providers/python/xtrees_api_pyapi_door.mojo XTREES_FAST_SWITCHES):
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`;
-#     the native meta-estimator owner, bindings/trees_public_meta.mojo);
-#   MOJOLEARN_TE_ADA_SESSION  the AdaBoost members fit the one staged device
-#     copy of X (the exact forest data session DART opens by default);
-#   MOJOLEARN_TE_ADA_SESSION_SHARE  with it, later members reuse the first
-#     member's quantile tables (may move bits: a quality gate, not a digest).
+#     the native meta-estimator owner, bindings/trees_public_meta_door.mojo);
+#   MOJOLEARN_TE_ADA_SESSION_SHARE  the AdaBoost members' data session (every
+#     build opens it) lets later members reuse the first member's quantile
+#     tables (may move bits: a quality gate, not a digest).
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF / MOJOLEARN_IDN_ADA_SESSION_OFF (bits 2 and 128, escapes from the AdaBoost
+# data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 _TE_NATIVE_SPLITS = 1
-_TE_ADA_SESSION = 2
 _TE_ADA_SESSION_SHARE = 4
 #   MOJOLEARN_KSHAP_FAST_BATCH (lane apple-fast-gap-kapprox2; M3 kernel-shap
 #     istella 27,011 -> 15,325 ms, same rel_error): Kernel/Permutation SHAP reuse one host buffer for
@@ -459,7 +436,7 @@ _TE_ADA_SESSION_SHARE = 4
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
 #   MOJOLEARN_AGN_IDN_SYN_POOL (lane idn-shap-pca; an IDENTICAL build's
-#     switch, -D MOJOLEARN_AGN_IDN_SYN_POOL_OFF clears it): Kernel/Permutation
+#     default): Kernel/Permutation
 #     SHAP hand every chunk the same host buffer for the synthetic rows (the
 #     device side builds them in one pooled buffer). Moves no bit.
 _AGN_IDN_SYN_POOL = 16
@@ -471,129 +448,18 @@ _AGN_IDN_SYN_POOL = 16
 #     from the previous coalition's (`x_trees_pshap_dsynth` +
 #     `x_trees_pshap_dvalues`); see xtrees/agnostic_device.mojo.
 _PSHAP_DELTA = 32
-#   _XT_IDN_ADA_SESSION (lane fam-forests; an IDENTICAL build's switch, -D
-#     MOJOLEARN_IDN_ADA_SESSION_OFF clears it): the AdaBoost members fit the
-#     one staged device copy of X through the EXACT session. Moves no bit.
-#     Bit 128 since the 2026-10-05 merge (was 32 on the IDENTICAL branch;
-#     main took 32 for PSHAP_DELTA; providers/python/xtrees_api_pyapi.mojo XTREES_FAST_SWITCHES).
-_IDN_ADA_SESSION = 128
 # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
 # on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
-
-
-def _trees_fast_tier(est):
-    """True when `est` runs on the FAST tier (its own `numeric_mode`, else
-    the process default)."""
-    from . import _backend
-    mode = getattr(est, "numeric_mode", None)
-    mode = _backend.default_mode() if mode is None else str(mode).strip().lower()
-    return mode == "fast"
-
-
-def _trees_switch(est, bit):
-    """True when `est` runs on the FAST tier and its x_trees binding was
-    built with the define `bit` stands for (`x_trees_fast_switches`)."""
-    if not _trees_fast_tier(est):
-        return False
-    query = getattr(est._bind(), "x_trees_fast_switches", None)
-    return callable(query) and (int(query()) & bit) != 0
-
-
-def _trees_build_switch(est, bit):
-    """True when `est`'s x_trees binding was built with the define `bit`
-    stands for, on whichever tier that define belongs to
-    (`x_trees_fast_switches`)."""
-    query = getattr(est._bind(), "x_trees_fast_switches", None)
-    return callable(query) and (int(query()) & bit) != 0
-
-
-def _trees_py2mojo(est):
-    """True when `est`'s x_trees binding runs the wrapper glue (cv folds,
-    OneVsRest targets, MultiOutputClassifier columns, binary (1 - p, p)
-    rows) itself: `x_trees_py2mojo`, 1 in every build unless `-D
-    MOJOLEARN_PY2MOJO_trees_OFF` (lane apple-fast-py2mojo-trees, the A/B
-    arm A that restores main's Python row loops)."""
-    query = getattr(est._bind(), "x_trees_py2mojo", None)
-    return callable(query) and int(query()) != 0
 
 
 class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
 
-    def _arange(self, n):
-        """int32 0 .. n - 1, written by the binding (`x_trees_iota_i32`, a
-        device kernel on a GPU build), not a Python list of n ints."""
-        n = int(n)
-        out = empty((n,), "<i4")
-        if n > 0:
-            self._bind().x_trees_iota_i32(addr(out, name="iota"), [n])
-        return out
-
-    def _class_major(self, inits, n):
-        """K * n float64, class c's block all `inits[c]` (class-major), filled
-        by the binding (`x_trees_fill_class_major_f64`, a device kernel on a
-        GPU build); K = 1 is (n,)."""
-        K, n = len(inits), int(n)
-        vals = Array.from_list([float(v) for v in inits], "<f8")  # glue: the K class inits
-        out = empty((K * n,), "<f8")
-        if K * n > 0:
-            self._bind().x_trees_fill_class_major_f64(addr_ro(vals, name="inits"), addr(out, name="score"), [n, K])
-        return out
-
-    def _indices(self, n_pool, n_draw, replace, seed, stream):
-        """`n_draw` indices of [0, n_pool): with replacement in draw order;
-        without, the drawn SET in ascending index order (xtrees/ops.mojo
-        `sample_indices`' random-key selection)."""
-        out = empty((n_draw,), "<i4")
-        self._bind().x_trees_sample_indices(addr(out, name="indices"),
-                                            [int(n_pool), int(n_draw), 1 if replace else 0, int(seed), int(stream)])
-        return out
-
-    def _gather(self, Xa, rows, cols):
-        n_src, d_src = Xa.shape
-        out = empty((len(rows), len(cols)), "<f4")
-        self._bind().x_trees_gather_f32(addr_ro(Xa, name="X"), addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
-                                        addr(out, name="gathered"), [n_src, d_src, len(rows), len(cols)])
-        return out
-
-    def _gather_codes(self, codes, rows):
-        out = empty((len(rows),), "<i4")
-        self._bind().x_trees_gather_i32(addr_ro(codes, name="codes"), addr_ro(rows, name="rows"),
-                                        addr(out, name="gathered"), [len(codes), len(rows)])
-        return out
-
-    def _gather_vec(self, v, rows):
-        """A float32 vector gathered at rows (as an n x 1 matrix)."""
-        col = Array.from_list([0], "<i4")
-        return self._gather(v.reshape((len(v), 1)), rows, col).reshape((len(rows),))
-
-    def _acc_cols(self, acc, x, cols, n, k, weight=1.0):
-        xa, _ = as_f32_c(x, ndim=2, name="sub-estimator output")
-        self._bind().x_trees_accumulate_cols(addr(acc, name="acc"), addr_ro(xa, name="x"),
-                                             addr_ro(cols, name="cols"), [n, k, len(cols), float(weight)])
-
-    def _acc(self, acc, x, n, weight=1.0):
-        xa, _ = as_f32_c(x, ndim=1, name="sub-estimator output")
-        self._bind().x_trees_accumulate(addr(acc, name="acc"), addr_ro(xa, name="x"), [n, float(weight)])
-
-    def _acc_votes(self, acc, codes, n, k, on, off=0.0):
-        self._bind().x_trees_accumulate_onehot(addr(acc, name="acc"), addr_ro(codes, name="codes"),
-                                               [n, k, float(on), float(off)])
-
-    def _scale(self, acc, divisor):
-        self._bind().x_trees_scale(addr(acc, name="acc"), [len(acc), float(divisor)])
-
-    def _argmax(self, acc, n, k):
-        out = empty((n,), "<i4")
-        self._bind().x_trees_argmax_rows(addr_ro(acc, name="scores"), addr(out, name="argmax"), [n, k])
-        return out
-
-    def _codes_of(self, labels_out, classes):
-        """Map an estimator's predicted labels (its classes_ are our codes)
-        to int32 codes."""
-        return as_i32_c(labels_out, ndim=1, name="predicted codes")[0]
+    # TOMBSTONE: _indices / _gather / _gather_codes / _gather_vec / _acc_cols / _acc / _scale (no
+    # caller: bindings/trees_public_boost_door.mojo owns the bagging and boosting gathers) deleted
+    # 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 # ------------------------------------------------------------------ Bagging
@@ -629,22 +495,74 @@ class _BaggingBase(_TreesEnsembleBase):
     # staging of X, the trees batched) instead of a Python loop that draws,
     # gathers and stages X per member. The members' rows are drawn by the
     # forest's own bootstrap stream. `estimators_` slices the forest into
-    # per-tree members when it is read. `MOJOLEARN_HR2_BAGGING_MEMBERS=1`
-    # keeps the per-member loop (the A/B arm; deleted once the gates pass).
+    # per-tree members when it is read. The build define
+    # `-D MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS` keeps the per-member loop
+    # (the A/B arm; deleted once the gates pass).
     @property
     def estimators_(self):
         """The fitted members, as a list of estimators."""
-        return _TREES(self, "trees_bagging_members", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_bagging_members, (), _TREES_CONTEXT)
 
     @estimators_.setter
     def estimators_(self, value):
-        return _TREES(self, "trees_bagging_members_set", (value,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_bagging_members_set, (value,), _TREES_CONTEXT)
 
-    def _slice_members(self):
-        """The batched forest's trees as fitted member estimators."""
-        return _TREES(self, "trees_bagging_members_slice", (), _TREES_CONTEXT)
+class _BoostClassifierScore:
+    """The bagged and boosted classifiers' `score`: one native call (the native
+    predict and the native accuracy).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
-class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
+
+
+class _BoostRegressorScore:
+    """The bagged and boosted regressors' `score`: one native call (the native
+    predict and the native R^2).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, _OP.trees_public_boost_score, (X, y, sample_weight), _TREES_CONTEXT)
+
+
+class BaggingClassifier(_BaggingBase):
     """A bagging ensemble of classifiers.
 
     Follows scikit-learn's ``BaggingClassifier``: each member is fitted on a
@@ -721,6 +639,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     >>> model = mojolearn.BaggingClassifier(n_estimators=20, random_state=0).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -750,7 +669,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Mean of the members' class probabilities, float64.
@@ -758,33 +677,13 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest mean probability."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
-
-class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
+class BaggingRegressor(_BaggingBase):
     """A bagging ensemble of regressors.
 
     Follows scikit-learn's ``BaggingRegressor``: each member is fitted on a
@@ -854,6 +753,7 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     >>> model = mojolearn.BaggingRegressor(n_estimators=20, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -884,30 +784,11 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Mean of the members' predictions, float64."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
 # ----------------------------------------------------------------- AdaBoost
 # Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
@@ -926,7 +807,7 @@ class _AdaBoostBase(_TreesEnsembleBase):
         self.learning_rate = learning_rate
         self.random_state = random_state
 
-class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
+class AdaBoostClassifier(_AdaBoostBase):
     """An AdaBoost classifier (SAMME).
 
     Follows scikit-learn's ``AdaBoostClassifier`` with the SAMME algorithm:
@@ -983,6 +864,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     >>> model = mojolearn.AdaBoostClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1017,7 +899,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         ValueError
             If the first member is worse than random guessing.
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Weighted member votes, float64.
@@ -1025,7 +907,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns shape (n_samples,) for two classes (positive favors
         ``classes_[1]``) and (n_samples, n_classes) otherwise.
         """
-        return _TREES(self, "trees_public_boost_decision_function", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_decision_function, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities from the decision function (softmax), float64.
@@ -1033,33 +915,13 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest weighted vote."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
-
-class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
+class AdaBoostRegressor(_AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
     Follows scikit-learn's ``AdaBoostRegressor``: each member is fitted on a
@@ -1112,6 +974,7 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     >>> model = mojolearn.AdaBoostRegressor(n_estimators=50, random_state=0).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1141,30 +1004,11 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted median of the members' predictions."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
@@ -1196,16 +1040,15 @@ class _DARTBase(_TreesEnsembleBase):
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST on
     # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
-    # lane cpu2-l5-trees; default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
-    # fam2-forests, every IDENTICAL build (GPU kernels and the host twin
-    # xtrees/dart_host.mojo, default unless -D MOJOLEARN_IDN_DART_DEVICE_OFF);
+    # lane cpu2-l5-trees) and, since lane fam2-forests, every IDENTICAL build
+    # (GPU kernels and the host twin xtrees/dart_host.mojo);
     # the only builds that register x_trees_dart_open; lane py-runtime-b deleted
     # main's host loop `_boost_loop`, so the round is required). The score, gradients and leaf values are
     # float32 on the device and the dropped trees come off and go back as
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
 
-class DARTRegressor(RegressorScoreMixin, _DARTBase):
+class DARTRegressor(_DARTBase):
     """Gradient boosting with DART dropout, squared-error loss.
 
     Follows LightGBM's ``boosting="dart"`` with the L2 objective: in each
@@ -1289,6 +1132,7 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTRegressor(n_estimators=50).fit(X, y)
     >>> pred = model.predict(X)
     """
+    score = _BoostRegressorScore.score
     _estimator_type = "regressor"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1301,8 +1145,8 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
-        _TREES(self, "trees_dart_construct", (
+        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
+        _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
@@ -1315,32 +1159,13 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Raw boosted score of each row, float64."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
-    def score(self, X, y, sample_weight=None):
-        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True targets.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            R^2; 1.0 is a perfect fit.
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
-
-class DARTClassifier(ClassifierScoreMixin, _DARTBase):
+class DARTClassifier(_DARTBase):
     """Gradient boosting with DART dropout, classification.
 
     Follows LightGBM's ``boosting="dart"``: binary log loss for two classes,
@@ -1427,6 +1252,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     >>> model = mojolearn.DARTClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    score = _BoostClassifierScore.score
     _estimator_type = "classifier"
     #: the native lifecycle owner (trees_public_boost_*) tracks fits and validates inputs;
     #: no Python fit-tracking or output wrappers are installed
@@ -1439,8 +1265,8 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
                  reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
                  feature_fraction_seed=2, bagging_seed=3, numeric_mode=None):
         # The checks and the stored parameters are the native owner's
-        # (bindings/trees_boost_constructor_native.mojo `dart_construct`).
-        _TREES(self, "trees_dart_construct", (
+        # (bindings/trees_boost_constructor_native_unpack.mojo `dart_construct`).
+        _TREES(self, _OP.trees_dart_construct, (
             n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda, max_bin,
             drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed, random_state,
             reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq, feature_fraction_seed,
@@ -1455,7 +1281,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y, None), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Raw boosted scores, float64.
@@ -1463,7 +1289,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         Shape (n_samples,) for two classes (the log-odds of ``classes_[1]``),
         (n_samples, n_classes) otherwise.
         """
-        return _TREES(self, "trees_public_boost_decision_function", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_decision_function, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, float64, shape (n_samples, n_classes).
@@ -1471,31 +1297,11 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         For two classes the columns are ``[1 - p, p]`` with ``p`` the sigmoid
         of the raw score; for more, the softmax of the per-class raw scores.
         """
-        return _TREES(self, "trees_public_boost_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest score."""
-        return _TREES(self, "trees_public_boost_predict", (X,), _TREES_CONTEXT)
-
-    def score(self, X, y, sample_weight=None):
-        """Mean accuracy of ``predict(X)`` against ``y``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True labels.
-        sample_weight : array-like of shape (n_samples,), default None
-            Sample weights.
-
-        Returns
-        -------
-        float
-            Fraction of samples predicted correctly (weighted when
-            ``sample_weight`` is given).
-        """
-        return _TREES(self, "trees_public_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_predict, (X,), _TREES_CONTEXT)
 
 # ----------------------------------------------------- RandomTreesEmbedding
 # Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding
@@ -1602,7 +1408,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_boost_fit", (X, y), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit, (X, y), _TREES_CONTEXT)
 
     def apply(self, X):
         """Leaf reached by each row in each tree.
@@ -1610,7 +1416,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns an int32 array of shape (n_samples, n_trees) of node ids,
         numbered within each tree.
         """
-        return _TREES(self, "trees_public_boost_apply", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_apply, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """One-hot encode the leaves of ``X``.
@@ -1618,13 +1424,13 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns a dense float64 array of shape
         (n_samples, ``n_output_features_``).
         """
-        return _TREES(self, "trees_public_boost_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_transform, (X,), _TREES_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit on ``X``, then return ``transform(X)``."""
-        return _TREES(self, "trees_public_boost_fit_transform", (X, y), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_boost_fit_transform, (X, y), _TREES_CONTEXT)
 
-# The bagged and boosted ensembles' native owner (bindings/trees_public_boost.mojo):
+# The bagged and boosted ensembles' native owner (bindings/trees_public_boost_door.mojo):
 # each class's schema, the member classes it assembles and their fixed tables.
 _BOOST_MEMBERS = dict(trees_dt_classifier=DecisionTreeClassifier, trees_dt_regressor=DecisionTreeRegressor,
                       trees_rf_classifier=RandomForestClassifier, trees_rf_regressor=RandomForestRegressor,
@@ -1639,51 +1445,6 @@ _native_trees_bridge.register_boost(RandomTreesEmbedding, "rte")
 
 
 # ------------------------------------------------------ wrappers: helpers
-
-
-class _FoldRows(list):
-    """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
-    the one buffer the device filled, kept alive here."""
-    __slots__ = ("_owner",)
-
-
-# The device fold law (sklearn's unshuffled StratifiedKFold / KFold) the
-# meta-estimator owner launches (bindings/trees_public_meta.mojo
-# `_native_folds`), kept here as the reference its test reads.
-def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
-    """`_trees_splits` for an int cv with the fold assignment and the fold
-    row lists made on the device (xtrees/folds_device.mojo through
-    `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
-    sklearn's unshuffled StratifiedKFold / KFold law; the host column runs
-    the same law in Mojo (lane cgr4-py-compute), every tier
-    (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
-    Array in [0, n_classes) (stratified) or None (KFold). The lists are
-    zero-copy int32 views into one downloaded buffer: fold i's rows outside
-    it, ascending, then inside it, ascending."""
-    b = est._bind()
-    counts = empty((n_splits + 1,), "<i4")
-    rows = empty((n_splits * n,), "<i4")
-    if codes is not None:
-        c32 = as_i32_c(codes, ndim=1, name="codes")[0]
-        k = int(n_classes)
-    else:
-        c32, k = counts, 0
-    status = int(b.x_trees_device_folds(addr_ro(c32, name="codes"), addr(rows, name="rows"),
-                                        addr(counts, name="counts"), [n, n_splits, k]))
-    if status == 1:
-        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
-    if status != 0:
-        raise ValueError("y codes outside [0, n_classes)")
-    cnt = [int(v) for v in counts.tolist()[:n_splits]]  # glue: fold sizes and offsets over n_splits folds
-    used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1  # glue: fold sizes and offsets over n_splits folds
-    out = _FoldRows()
-    out._owner = rows
-    for i in range(used):  # glue: fold sizes and offsets over n_splits folds
-        base = rows._addr + 4 * i * n
-        tr = memory_at(base, 4 * (n - cnt[i]), writable=False).cast("i")
-        te = memory_at(base + 4 * (n - cnt[i]), 4 * cnt[i], writable=False).cast("i")
-        out.append((tr, te))
-    return out
 
 
 class _FitTransformMixin:
@@ -1707,7 +1468,7 @@ class _FitTransformMixin:
         array of shape (n_samples, n_output_features), float64
             The transformed training data.
         """
-        return _TREES(self, "trees_public_meta_fit_transform", (X, y, fit_params), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit_transform, (X, y, fit_params), _TREES_CONTEXT)
 
 
 class _MetaClassifierScore:
@@ -1732,7 +1493,7 @@ class _MetaClassifierScore:
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _MetaRegressorScore:
@@ -1756,12 +1517,12 @@ class _MetaRegressorScore:
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _TreesWrapperBase(_TreesEnsembleBase):
     """The meta-estimators' base: each public method is one call into
-    bindings/trees_public_meta.mojo (operations `trees_meta_*`), which
+    bindings/trees_public_meta_door.mojo (operations `trees_meta_*`), which
     fits and queries the members through their own public methods."""
 
 
@@ -1771,7 +1532,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
-class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingClassifier(_MetaClassifierScore, _FitTransformMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
     Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
@@ -1856,7 +1617,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     @available_if(lambda self: self.voting != "hard")
     def predict_proba(self, X):
@@ -1869,7 +1630,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels by weighted vote (hard) or averaged probabilities (soft).
@@ -1879,7 +1640,7 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """The members' outputs side by side.
@@ -1891,10 +1652,10 @@ class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransform
             (n_samples, n_estimators * n_classes); with ``voting="hard"``, every
             member's predicted class code, shape (n_samples, n_estimators).
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
-class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingRegressor(_MetaRegressorScore, _FitTransformMixin, _TreesWrapperBase):
     """Average the predictions of several regressors.
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
@@ -1964,7 +1725,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted average of the members' predictions.
@@ -1973,7 +1734,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples,), float64
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """Every member's prediction side by side.
@@ -1982,7 +1743,7 @@ class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMix
         -------
         array of shape (n_samples, n_estimators), float64
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
 # ---------------------------------------------------------------- Stacking
@@ -2019,10 +1780,10 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_meta_features), float64
         """
-        return _TREES(self, "trees_public_meta_transform", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_transform, (X,), _TREES_CONTEXT)
 
 
-class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBase):
+class StackingClassifier(_MetaClassifierScore, _StackingBase):
     """Stack classifiers and train a final classifier on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingClassifier``. ``fit`` refits every member on
@@ -2045,8 +1806,8 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled stratified folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given, but its test sets must cover every row exactly
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given, but its test sets must cover every row exactly
         once, else ``ValueError``.
     stack_method : {"auto", "predict_proba", "decision_function", "predict"}, default "auto"
         The member method whose output is stacked. ``"auto"`` takes the first
@@ -2116,7 +1877,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
             When a member's output width differs between folds (a class missing
             from a fold's training rows).
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels with the final estimator on the stacked outputs.
@@ -2126,7 +1887,7 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """The final estimator's class probabilities on the stacked outputs.
@@ -2135,10 +1896,10 @@ class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBa
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
 
-class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase):
+class StackingRegressor(_MetaRegressorScore, _StackingBase):
     """Stack regressors and train a final regressor on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingRegressor``. ``fit`` refits every member on
@@ -2160,8 +1921,8 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled ``KFold`` folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given, but its test sets must cover every row exactly
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given, but its test sets must cover every row exactly
         once, else ``ValueError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.
@@ -2218,7 +1979,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict with the final estimator on the stacked member predictions.
@@ -2227,7 +1988,7 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
         -------
         array of shape (n_samples,)
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- MultiOutput
@@ -2235,12 +1996,12 @@ class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase)
 # :200, one clone per column of Y; predict stacks the columns;
 # MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
 # 2-D buffer; a classifier's labels per column are encoded to codes.
-#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
+#: lane apple-fast-meta (FAST + Apple default):
 #: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
-#: (glm/impl/ridge_multi.mojo) when the estimators binding exports
-#: ridge_fit_multi; the native owner takes that route (trees_public_meta.mojo
+#: (glm/impl/ridge_multi.mojo) when the estimators binding publishes the
+#: ridge multi table (core/linear_entry_table_multi.mojo); the native owner takes that route (trees_public_meta.mojo
 #: `_multioutput_ridge_fit`), every other binding the per-target route.
-class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapperBase):
+class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
     """Fit one regressor per target column.
 
     Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
@@ -2298,7 +2059,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Every target's prediction, one column per output.
@@ -2307,7 +2068,7 @@ class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapp
         -------
         array of shape (n_samples, n_outputs)
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
 class MultiOutputClassifier(_TreesWrapperBase):
@@ -2372,7 +2133,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict every output's labels.
@@ -2383,7 +2144,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             For numeric labels, int64 when every output's labels are integers,
             else float64.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Every output's class probabilities.
@@ -2394,7 +2155,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             One float64 array of shape (n_samples, n_classes_j) per output, its
             columns in the order of ``classes_[j]``.
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Subset accuracy: the fraction of rows whose every output is
@@ -2415,7 +2176,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             Fraction of rows with all outputs correct (weighted when
             ``sample_weight`` is given).
         """
-        return _TREES(self, "trees_public_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_score, (X, y, sample_weight), _TREES_CONTEXT)
 
 
 # --------------------------------------------------------------- OneVsRest
@@ -2425,7 +2186,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
 # predict_proba :470 each class's positive probability, rows normalised in
 # the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
 # where sklearn divides 0 / 0.
-class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
+class OneVsRestClassifier(_MetaClassifierScore, _TreesWrapperBase):
     """Multiclass classification with one binary classifier per class.
 
     Follows scikit-learn's ``OneVsRestClassifier``: ``fit`` trains one clone of
@@ -2490,7 +2251,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         self
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class whose binary classifier scores highest.
@@ -2500,7 +2261,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities.
@@ -2513,7 +2274,7 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
         -------
         array of shape (n_samples, n_classes), float64
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- Calibration
@@ -2534,9 +2295,9 @@ class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrap
 #: The x_prep one-program CalibratedClassifierCV(GaussianNB) fit
 #: (MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple) was assembled by the prep
 #: family's Python program builder; the native owner takes the reference
-#: route (bindings/trees_public_meta.mojo, header note).
+#: route (bindings/trees_public_meta_door.mojo, header note).
 
-class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
+class CalibratedClassifierCV(_MetaClassifierScore, _TreesWrapperBase):
     """Calibrate a classifier's probabilities with cross-validation.
 
     Follows scikit-learn's ``CalibratedClassifierCV``. The calibrator reads the
@@ -2561,11 +2322,12 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         ``ValueError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled stratified folds (``>= 2``); None
-        means 5. A splitter object's ``split(X, y)`` or an iterable of index
-        pairs is used as given; with ``ensemble=False`` their test sets must
+        means 5. A splitter from ``mojolearn.model_selection`` or a list of
+        (train, test) index pairs is used as given; with ``ensemble=False`` their test sets must
         cover every row exactly once, else ``ValueError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most folds fitted at once. ``None`` uses every core; ``-1`` every
+        core, ``-k`` every core but ``k - 1``. The result does not depend on it.
     ensemble : bool, default True
         True: one (classifier, calibrators) pair per fold, the classifier fitted
         on the fold's training rows and calibrated on its test rows;
@@ -2623,7 +2385,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         ValueError
             When ``cv`` asks for more folds than some class has members.
         """
-        return _TREES(self, "trees_public_meta_fit", (X, y, None), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_fit, (X, y, None), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Calibrated class probabilities.
@@ -2635,7 +2397,7 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         -------
         array of shape (n_samples, n_classes)
         """
-        return _TREES(self, "trees_public_meta_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict_proba, (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest calibrated probability.
@@ -2645,10 +2407,10 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        return _TREES(self, "trees_public_meta_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_public_meta_predict, (X,), _TREES_CONTEXT)
 
 
-# The meta-estimators' native owner (bindings/trees_public_meta.mojo): each
+# The meta-estimators' native owner (bindings/trees_public_meta_door.mojo): each
 # class's schema.
 _native_trees_bridge.register_meta(VotingClassifier, "voting_classifier")
 _native_trees_bridge.register_meta(VotingRegressor, "voting_regressor")
@@ -2745,7 +2507,7 @@ class TreeExplainer(_TreesEnsembleBase):
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent",
                  model_output="raw", numeric_mode=None):
-        return _TREES(self, "trees_explainer_init",
+        return _TREES(self, _OP.trees_explainer_init,
                       (model, data, feature_perturbation, model_output, numeric_mode), _TREES_CONTEXT)
 
     def close(self):
@@ -2753,7 +2515,7 @@ class TreeExplainer(_TreesEnsembleBase):
 
         After ``close``, ``shap_values`` raises ``RuntimeError``.
         """
-        return _TREES(self, "trees_explainer_close", (), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_explainer_close, (), _TREES_CONTEXT)
 
     def shap_values(self, X):
         """SHAP values of the rows of ``X``.
@@ -2770,11 +2532,11 @@ class TreeExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_explainer_values", (X,), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_explainer_values, (X,), _TREES_CONTEXT)
 
 
 # KernelExplainer / PermutationExplainer: every operation is one call into the
-# native owner (bindings/trees_agnostic_native.mojo). It admits the model
+# native owner (bindings/trees_agnostic_native_door.mojo). It admits the model
 # through its compiled model-selection plan, evaluates it there (never its
 # Python predict) and drives the xtrees agnostic kernels and chunk loops.
 class KernelExplainer(_TreesEnsembleBase):
@@ -2835,7 +2597,7 @@ class KernelExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data, *, link="identity", random_state=None, numeric_mode=None):
-        return _TREES(self, "trees_agnostic_kernel_init",
+        return _TREES(self, _OP.trees_agnostic_kernel_init,
                       (model, data, random_state, link, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
@@ -2859,7 +2621,7 @@ class KernelExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_agnostic_kernel_values", (X, nsamples, l1_reg), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_agnostic_kernel_values, (X, nsamples, l1_reg), _TREES_CONTEXT)
 
 
 class PermutationExplainer(_TreesEnsembleBase):
@@ -2913,7 +2675,7 @@ class PermutationExplainer(_TreesEnsembleBase):
     _mojolearn_native_public = True
 
     def __init__(self, model, data, *, random_state=None, numeric_mode=None):
-        return _TREES(self, "trees_agnostic_permutation_init",
+        return _TREES(self, _OP.trees_agnostic_permutation_init,
                       (model, data, random_state, None, numeric_mode), _TREES_CONTEXT)
 
     def shap_values(self, X, npermutations=10):
@@ -2934,7 +2696,7 @@ class PermutationExplainer(_TreesEnsembleBase):
             Shape (n_samples, n_features) for one output, else
             (n_samples, n_features, n_outputs).
         """
-        return _TREES(self, "trees_agnostic_permutation_values", (X, npermutations), _TREES_CONTEXT)
+        return _TREES(self, _OP.trees_agnostic_permutation_values, (X, npermutations), _TREES_CONTEXT)
 
 
 def _connect_explainers():
@@ -2960,3 +2722,21 @@ def _connect_explainers():
 
 
 _connect_explainers()
+
+
+# glue: set_params rebuilds these through their native constructors with no
+# Python __init__ frame (python/mojolearn/_mode.py `_connect_native_init`);
+# each argument tuple mirrors the __init__ body of its class above.
+_DART_INIT_ARGS = (
+    "n_estimators", "learning_rate", "num_leaves", "max_depth", "min_child_samples", "reg_lambda", "max_bin",
+    "drop_rate", "max_drop", "skip_drop", "xgboost_dart_mode", "uniform_drop", "drop_seed", "random_state",
+    "reg_alpha", "max_delta_step", "colsample_bytree", "subsample", "subsample_freq", "feature_fraction_seed",
+    "bagging_seed", "numeric_mode")
+_connect_native_init(DARTRegressor, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
+_connect_native_init(DARTClassifier, _TREES, _OP.trees_dart_construct, _DART_INIT_ARGS, _TREES_CONTEXT)
+_connect_native_init(TreeExplainer, _TREES, _OP.trees_explainer_init,
+                     ("model", "data", "feature_perturbation", "model_output", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(KernelExplainer, _TREES, _OP.trees_agnostic_kernel_init,
+                     ("model", "data", "random_state", "link", "numeric_mode"), _TREES_CONTEXT)
+_connect_native_init(PermutationExplainer, _TREES, _OP.trees_agnostic_permutation_init,
+                     ("model", "data", "random_state", None, "numeric_mode"), _TREES_CONTEXT)

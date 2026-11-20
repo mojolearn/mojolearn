@@ -48,6 +48,7 @@ from ensemble.decisiontree.batched_levelalgo.quantiles import (
     Quantiles,
 )
 from ensemble.decisiontree.decisiontree import DecisionTreeParams, GINI
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -105,19 +106,19 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
                 j * N_ROWS + i, Float32(cls) + Float32(0.5) * _jitter(i, j)
             )
     var dx = ctx.enqueue_create_buffer[DT](N_ROWS * N_COLS)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
 
     var hy = ctx.enqueue_create_host_buffer[LT](N_ROWS)
     for i in range(N_ROWS):
         hy.unsafe_ptr().unsafe_store(i, Int32(i % N_CLASSES))
     var dy = ctx.enqueue_create_buffer[LT](N_ROWS)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[LT](ctx, dy, hy)
 
     var hr = ctx.enqueue_create_host_buffer[DType.int32](N_ROWS)
     for i in range(N_ROWS):
         hr.unsafe_ptr().unsafe_store(i, Int32(i))
     var dr = ctx.enqueue_create_buffer[DType.int32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=dr, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dr, hr)
 
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
@@ -171,7 +172,7 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
     # The sampler's own output for the LAST batch -- nodes 1 and 2.
     var n_read = 2 * out.k
     var hs = ctx.enqueue_create_host_buffer[DType.int32](n_read)
-    ctx.enqueue_copy(dst_buf=hs, src_buf=builder.column_samples)
+    download_buffer_into[DType.int32](ctx, builder.column_samples, hs)
     ctx.synchronize()
     for i in range(n_read):
         out.samples.append(hs.unsafe_ptr().unsafe_load(i))
@@ -182,9 +183,6 @@ def _fit[sabotage: Int](ctx: DeviceContext) raises -> FitOut:
     _ = dy^
     _ = dr^
     _ = dsw^
-    _ = hx^
-    _ = hy^
-    _ = hr^
     _ = builder^
     return out^
 
@@ -222,7 +220,7 @@ def _violations(f: FitOut) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("sampled_cols_check --", N_COLS, "columns, max_features 0.25")
     print()

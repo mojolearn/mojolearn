@@ -36,10 +36,9 @@ transforms from a saved model on a CPU without a GPU.
 # `1 / n_features`, one Python division, correctly rounded on every host.
 # No speed claim: the lane has no published number and this door adds none.
 
-from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._mode import NumericModeMixin
-from ._native_robust_bridge import native_method
-from ._mode import RegressorScoreMixin
+from . import _native_archive_bridge, _native_family_bridge
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._native_robust_bridge import native_method as _native_method
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -48,11 +47,11 @@ _NYSTROEM_FORMAT = "mojolearn-nystroem-1"
 _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-# The compiled family owner (bindings/kernel_methods_native.mojo), connected
+# The compiled family owner (bindings/kernel_methods_native_door.mojo), connected
 # once at import: KernelRidge `fit`/`predict` and Nystroem `fit`/`transform`/
 # `fit_transform` are one native call each. The native lifecycle selects the
 # binding and owns fitted checks, feature metadata and finished public results;
@@ -69,64 +68,34 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 #: laplacian at 5. A renumbering on either side is a WRONG KERNEL, not a
 #: failure, which is why the surface test plants a fixture whose answer
 #: moves if the codes move.
-KERNEL_LINEAR = 0
-KERNEL_POLYNOMIAL = 1
-KERNEL_RBF = 2
-KERNEL_SIGMOID = 3
-KERNEL_PRECOMPUTED = 4
-KERNEL_LAPLACIAN = 5
-KERNEL_COSINE = 6
-KERNEL_CHI2 = 7
-KERNEL_ADDITIVE_CHI2 = 8
+_KERNEL_LINEAR = 0
+_KERNEL_POLYNOMIAL = 1
+_KERNEL_RBF = 2
+_KERNEL_SIGMOID = 3
+_KERNEL_LAPLACIAN = 5
+_KERNEL_COSINE = 6
+_KERNEL_CHI2 = 7
+_KERNEL_ADDITIVE_CHI2 = 8
 
 _KERNELS = {
-    "linear": KERNEL_LINEAR,
-    "poly": KERNEL_POLYNOMIAL,
-    "polynomial": KERNEL_POLYNOMIAL,
-    "rbf": KERNEL_RBF,
-    "sigmoid": KERNEL_SIGMOID,
-    "laplacian": KERNEL_LAPLACIAN,
-    "cosine": KERNEL_COSINE,
-    "chi2": KERNEL_CHI2,
-    "additive_chi2": KERNEL_ADDITIVE_CHI2,
+    "linear": _KERNEL_LINEAR,
+    "poly": _KERNEL_POLYNOMIAL,
+    "polynomial": _KERNEL_POLYNOMIAL,
+    "rbf": _KERNEL_RBF,
+    "sigmoid": _KERNEL_SIGMOID,
+    "laplacian": _KERNEL_LAPLACIAN,
+    "cosine": _KERNEL_COSINE,
+    "chi2": _KERNEL_CHI2,
+    "additive_chi2": _KERNEL_ADDITIVE_CHI2,
 }
 
-#: Kernels that read gamma. Under 'linear' it is ignored on both sides,
-#: exactly as scikit-learn's `pairwise_kernels` ignores it.
-_NEEDS_GAMMA = frozenset({KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_SIGMOID, KERNEL_LAPLACIAN})
 
 _native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_codes=dict(_MODE_CODE))
 
 
-def _real(v, name, where):
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        raise TypeError(
-            f"mojolearn {where}: {name} must be a real number, got "
-            f"{type(v).__name__}"
-        )
-    return float(v)
-
-
-class _KernelMethodBase(NumericModeMixin):
+class _KernelMethodBase(_NumericModeMixin):
     _BINDING = "_mojolearn_kernel_methods"
     _WHERE = "kernel method"
-
-    def _extension(self):
-        """The binding for THIS estimator's tier, with the binary's own
-        compile-time answer cross-checked against it (the GP's pattern)."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "kernel_methods_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn {self._WHERE}: numeric_mode={want!r} was requested "
-                    f"but {mod.__name__} reports compile-time mode code {got}; "
-                    "the binary and the directory it sits in disagree, rebuild "
-                    "it with bash bindings/build_kernel_methods.sh"
-                )
-        return mod
 
 
 # Maintainer notes: `alpha` IS the Cholesky ridge (DEVIATION 1660); a kernel
@@ -135,7 +104,7 @@ class _KernelMethodBase(NumericModeMixin):
 # non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
 # are each cell one pinned chain. `info_` is LAPACK's info from the
 # factorization.
-class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
+class KernelRidge(_KernelMethodBase):
     """Kernel ridge regression.
 
     Follows `sklearn.kernel_ridge.KernelRidge` (and cuML's). Fitting forms
@@ -216,7 +185,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
     # scikit-learn's `_solve_cholesky_kernel` weighted arm: `sw = sqrt(w)`
     # (binary64, rounded once to float32), `y * sw`, `K * outer(sw, sw)`,
     # then `dual_coef * sw` (float32 on both columns, DEVIATION 1688).
-    @native_method
+    @_native_method
     def fit(self, X, y, sample_weight=None):
         """Fit the kernel ridge model.
 
@@ -240,7 +209,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
 
     # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
     # (DEVIATION 1680).
-    @native_method
+    @_native_method
     def predict(self, X):
         """Predict with the fitted model: `K(X, X_fit_) @ dual_coef_`.
 
@@ -257,7 +226,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         """
         return _NATIVE(self, "family_km_krr_predict", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
 
@@ -280,7 +249,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
                        _NATIVE_CONTEXT)
 
     # The fitted X and dual live on the device after the first predict,
-    # under `_resident_holder` (bindings/kernel_methods_native.mojo). A
+    # under `_resident_holder` (bindings/kernel_methods_native_door.mojo). A
     # pickle or a deepcopy carries no device handle; the copy uploads its
     # own at its first predict. Dropping an instance releases the handle
     # through the native finalizer connected below the classes.
@@ -315,6 +284,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -329,7 +299,6 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
             A fitted model, ready to predict, with the saved numeric mode.
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
-
 
 
 # Maintainer notes: `random_state` seeds `km_basis_indices`, the device
@@ -407,7 +376,7 @@ class Nystroem(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
-    @native_method
+    @_native_method
     def fit(self, X, y=None):
         """Choose the basis rows and compute the normalization.
 
@@ -425,7 +394,7 @@ class Nystroem(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_nys_fit", (None, X, y), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def transform(self, X):
         """Map `X` to the approximate kernel feature space.
 
@@ -441,7 +410,7 @@ class Nystroem(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_nys_transform", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -481,6 +450,7 @@ class Nystroem(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a transformer written by `save`.
 
@@ -496,7 +466,6 @@ class Nystroem(_KernelMethodBase):
             numeric mode.
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
-
 
 
 # Maintainer notes: gamma <= 0 is refused on the Mojo host. gamma='scale' uses
@@ -556,7 +525,7 @@ class RBFSampler(_KernelMethodBase):
         self.n_components = n_components
         self.random_state = random_state
 
-    @native_method
+    @_native_method
     def fit(self, X, y=None):
         """Draw the random weights and offsets.
 
@@ -577,7 +546,7 @@ class RBFSampler(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_rbf_fit", (None, X, y), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
 
@@ -593,7 +562,7 @@ class RBFSampler(_KernelMethodBase):
         """
         return _NATIVE(self, "family_km_rbf_transform", (None, X), _NATIVE_CONTEXT)
 
-    @native_method
+    @_native_method
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
 
@@ -633,6 +602,7 @@ class RBFSampler(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @_native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a sampler written by `save`.
 
@@ -648,7 +618,6 @@ class RBFSampler(_KernelMethodBase):
             again), ready to transform, with the saved numeric mode.
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
-
 
 
 _bridge = _native_archive_bridge
@@ -696,7 +665,7 @@ del _bridge
 _native_archive_bridge.lifetime(KernelRidge, "kernel_ridge_resident_release", "_resident_holder")
 
 # The classes the multi-GPU kernel-method drivers admit
-# (bindings/kernel_methods_native.mojo `family_km_par_*`).
+# (bindings/kernel_methods_native_door.mojo `family_km_par_*`).
 _native_family_bridge.tables(family_km_par_classes=(KernelRidge, Nystroem))
 
 

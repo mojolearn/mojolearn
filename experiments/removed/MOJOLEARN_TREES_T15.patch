@@ -1,0 +1,168 @@
+diff --git a/ensemble/randomforest.mojo b/ensemble/randomforest.mojo
+index 135fc0becf..52b556a0e9 100644
+--- a/ensemble/randomforest.mojo
++++ b/ensemble/randomforest.mojo
+@@ -7,7 +7,7 @@ from ensemble.rf_notices import (
+     rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
+     RF_NOTICE_MAX_SAMPLES_IGNORED,
+ )
+-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES
++from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES, T15
+ from std.math import fma
+ from max.gpu import block_dim, block_idx, global_idx, thread_idx
+ from std.sys import size_of
+@@ -54,6 +54,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+ )
+ from core.device_liveness import assert_device_alive
+ from std.memory import bitcast, unsafe_memcpy
++from ensemble.importance_device import ImportanceStore
+ from ensemble.oob_device import (
+     OOB_STATS,
+     OOB_TPB,
+@@ -64,6 +65,7 @@ from ensemble.oob_device import (
+     rf_oob_reg_ysum_kernel,
+     rf_oob_append_tree_kernel,
+     rf_oob_rows_kernel,
++    rf_oob_rows_outputs_kernel,
+     rf_oob_score_kernel,
+ )
+ from xtrees.oob import (
+@@ -1716,27 +1718,46 @@ def compute_oob_score[
+     )
+     var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
+     log_launch_ctx(ctx, "oob_rows")
+-    # TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+-    ctx.enqueue_function[rf_oob_rows_kernel](
+-        x.unsafe_ptr(),
+-        d_masks.unsafe_ptr(),
+-        store.d_off.unsafe_ptr(),
+-        store.d_col.unsafe_ptr(),
+-        store.d_q.unsafe_ptr(),
+-        store.d_left.unsafe_ptr(),
+-        store.d_leaf.unsafe_ptr(),
+-        d_acc.unsafe_ptr(),
+-        d_cnt.unsafe_ptr(),
+-        Int32(n_rows),
+-        Int32(n_cols),
+-        Int32(n_trees),
+-        Int32(num_outputs),
+-        Int32(1) if row_major else Int32(0),
+-        Int32(1) if sabotage == 1 else Int32(0),
+-        grid_dim=_ceildiv(n_rows, OOB_TPB),
+-        block_dim=OOB_TPB,
+-    )
++    comptime if T15:
++        ctx.enqueue_function[rf_oob_rows_outputs_kernel](
++            x.unsafe_ptr(),
++            d_masks.unsafe_ptr(),
++            store.d_off.unsafe_ptr(),
++            store.d_col.unsafe_ptr(),
++            store.d_q.unsafe_ptr(),
++            store.d_left.unsafe_ptr(),
++            store.d_leaf.unsafe_ptr(),
++            d_acc.unsafe_ptr(),
++            d_cnt.unsafe_ptr(),
++            Int32(n_rows),
++            Int32(n_cols),
++            Int32(n_trees),
++            Int32(num_outputs),
++            Int32(1) if row_major else Int32(0),
++            Int32(1) if sabotage == 1 else Int32(0),
++            grid_dim=_ceildiv(n_rows*num_outputs, OOB_TPB),
++            block_dim=OOB_TPB,
++        )
++    else:
++        ctx.enqueue_function[rf_oob_rows_kernel](
++            x.unsafe_ptr(),
++            d_masks.unsafe_ptr(),
++            store.d_off.unsafe_ptr(),
++            store.d_col.unsafe_ptr(),
++            store.d_q.unsafe_ptr(),
++            store.d_left.unsafe_ptr(),
++            store.d_leaf.unsafe_ptr(),
++            d_acc.unsafe_ptr(),
++            d_cnt.unsafe_ptr(),
++            Int32(n_rows),
++            Int32(n_cols),
++            Int32(n_trees),
++            Int32(num_outputs),
++            Int32(1) if row_major else Int32(0),
++            Int32(1) if sabotage == 1 else Int32(0),
++            grid_dim=_ceildiv(n_rows, OOB_TPB),
++            block_dim=OOB_TPB,
++        )
+     var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
+         n_rows * num_outputs
+     )
+@@ -3122,6 +3143,10 @@ def fit_forest_prepared[
+     )
+     # cpu4-forest: the OOB model is appended on the device as each tree
+     # finishes (`OobForestStore`); nothing is allocated without OOB.
++    var importance_stores = List[ImportanceStore]()
++    comptime if T15:
++        if feature_importances:
++            importance_stores.append(ImportanceStore(ctx,Int(rf_params.n_trees),n_cols,True))
+     var oob_store = OobForestStore(
+         ctx,
+         Int(rf_params.n_trees),
+@@ -3258,6 +3283,10 @@ def fit_forest_prepared[
+                     ctx, oob_store, builders[k],
+                     len(ts.tree.sparsetree), next_tree,
+                 )
++                if len(importance_stores) > 0:
++                    importance_stores[0].append[O.DataT](ctx,
++                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
++                        len(ts.tree.sparsetree), next_tree)
+                 forest.trees[next_tree] = ts.tree.copy()
+                 _record_tree(instr, forest.trees[next_tree], next_tree)
+                 instr.times.stop_host("tree_copy", t_host)
+@@ -3315,6 +3344,10 @@ def fit_forest_prepared[
+                 _oob_append_from_builder(
+                     ctx, oob_store, builders[k], n_done, slot_tree[k],
+                 )
++                if len(importance_stores) > 0:
++                    importance_stores[0].append[O.DataT](ctx,
++                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
++                        n_done, slot_tree[k])
+                 if not deferred:
+                     forest.trees[slot_tree[k]] = states[k].tree.copy()
+                     _record_tree(
+@@ -3444,10 +3477,19 @@ def fit_forest_prepared[
+         )
+         instr.times.stop(ctx, "oob", t_stage)
+ 
++    # T15 requested importance: A consumes live builder statistics while each
++    # tree finishes; B is the incumbent native host fold of exported statistics.
++    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+     if feature_importances:
+-        var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
+-        compute_feature_importances_host(forest,importance_values)
+-        forest.feature_importances_ = importance_values^
++        comptime if T15:
++            var values = importance_stores[0].finish(ctx)
++            for c in range(n_cols):  # small-loop(n_cols: fitted per-feature importances): casts the d device results into the model
++                forest.feature_importances_.append(Scalar[O.DataT](values[c]))
++        else:
++            var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
++            compute_feature_importances_host(forest,importance_values)
++            forest.feature_importances_ = importance_values^
++    _ = importance_stores^
+ 
+     # Mojo frees a value at its LAST USE, and every buffer above reached a
+     # kernel as a raw pointer. These uses keep them alive past the final
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index c2f17e02b2..319404b416 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -64,9 +64,7 @@ comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024](
+ # Folded constants kept for importers in other lanes' files.
+ comptime T14 = False
+ comptime T14_EXACT = False
+-# TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+-comptime T15 = False
++comptime T15 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T15"]()
+ comptime C48 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48"]()
+ 
+ @always_inline

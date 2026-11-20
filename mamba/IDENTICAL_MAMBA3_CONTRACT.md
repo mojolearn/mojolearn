@@ -460,6 +460,53 @@ this block, which maps an all-zero token to `+0.0` already. Forward only
 changes) and refused with a carried state. The gate is the `ragged` part of
 tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
 
+### Backward S17 chunk-end tail (2026-11-18)
+
+The backward is outside this profile's claim (section 10), but its orders are
+pinned in code and are the same on every column. This clause records the one
+whose order has an experiment arm. Code: `autograd/kernels/mamba3.mojo`
+(`mamba3_s17_operands_kernel` and the tail kernels); the host column is the
+same source through `tools/mamba_host_gen.py`
+(`mamba/host/gen/mamba3_backward.mojo`).
+
+For a chunk `c` of one (batch, head), with `Q` the chunk size, `P` the head
+dimension (64), `N` the state size (128), `carry[p][n]` the next chunk's
+total state adjoint (`+0.0` on the last chunk), `last = da_cs` at the
+chunk's last slot, `de_j = identical_exp(ftz(last - da_cs_j))` and
+`el = identical_exp(last)`, the chunk-end token's `d_dacs_rec` receives
+
+    tail = sum over j < Q (token c*Q + j inside the sequence), p < P, n < N of
+               carry[p][n] * ((v[j][p] * k[j][n]) * de_j)
+         + sum over p < P, n < N of carry[p][n] * (h[p][n] * el)
+
+with every product `ftz(identical_mul(...))` in the bracketing shown and every
+accumulation step `acc = ftz(identical_mul_add(carry[p][n], term, acc))`, then
+`d_dacs_rec = ftz(d_dacs_rec + tail)`.
+
+- **Serial order (history: the default before 2026-11-19; its switch `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE_OFF` and code were deleted on 2026-11-20).** ONE chain from `+0.0`: the token terms `j` ascending,
+  then `p` ascending, then `n` ascending; then the state terms `p` ascending,
+  `n` ascending. `(Q + 1) * P * N` serial steps (532,480 at `Q = 64`).
+- **Default order since 2026-11-19 (the arm `MOJOLEARN_MAMBA3_FAST_S17_TAIL_TREE`, promoted on the NVIDIA L40S A/B:
+  samba-train-step 50.37 -> 38.33 ms, loss equal to one float32 step). "The default" in the rest of this item
+  names the serial order above.**
+  `N` lane chains and one tree. Lane `n`, from `+0.0`, takes the terms with
+  that `n` in the default chain's own order: token terms `j` ascending then
+  `p` ascending, then the state terms `p` ascending (`(Q + 1) * P` steps).
+  The `N` lane partials, ascending `n`, are folded by the fixed balanced
+  tree of `gemm/IDENTICAL_FP32_CONTRACT.md` 7.2 (adjacent pairing, an odd
+  tail carried with no arithmetic, nodes `ftz(ftz(x) + ftz(y))`, the result
+  `ftz`); `tail` is that value. The terms are the default's; only the order
+  of the additions differs, so the bits differ from the default wherever
+  `carry` is nonzero (any sequence longer than one chunk) and are equal for a
+  single chunk. The device kernel (`mamba3_s17_tail_tree_kernel`) and the host
+  column call the same two functions (`_m3_s17_tail_lane`,
+  `_m3_s17_tail_tree`); no column has its own order. The tree reads no block
+  size, warp width or launch count.
+- Check: `mamba/checks/mamba3_s17_tail_tree_check.mojo` (host; three chunks
+  with a partial last one; either order within 1e-3 of the float64 sum
+  relative to the sum of absolute terms; the arm's tree bit-equal to
+  `gemm_oracle.mojo::fold_balanced_tree`).
+
 ## 10. Not claimed
 
 - "Bit-identical AI inference" is not claimed; ONE Mamba-3 SISO block is.

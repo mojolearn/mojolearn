@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Opt-in Apple FAST row gather, recovered independently of old resample bundle."""
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 
 
 def gather_rows_f32_kernel(
@@ -22,14 +22,17 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-P10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Keep 256 threads but exchange feature reuse for more rows per block. This
 # covers every width with masked tails; it is not an input-width dispatch rule.
-comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P10"]()
+comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P10"]()
 comptime GATHER_COLS = 16 if AFCL_P10 else 32
+# TOMBSTONE: MOJOLEARN_AFCL_P10 (never-run Apple FAST programme card: 16-column gather tiles) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 72ae22cf1f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime GATHER_ROWS = 256 // GATHER_COLS
 
 
@@ -89,20 +92,5 @@ def permutation_merge_kernel(
     dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
 
 
-# C11 deterministic counter draws at the output consumer, preserving the
-# exact utils_draw_kernel index (key, replicate=0, output row). No index
-# storage, no pointer-based cache and no mutable generator state.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-from resample.checks.index_map import draw_row_index, key_join
-
-
-def classical_draw_gather_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
-    key_lo: Int32, key_hi: Int32, n_in: Int32, count_in: Int32, d_in: Int32,
-):
-    var o = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    var d = Int(d_in)
-    if o < Int(count_in)*d:
-        var row = o//d
-        var selected = Int(draw_row_index(key_join(key_lo, key_hi), 0, row, n_in))
-        dst.unsafe_store(o, src.unsafe_load(selected*d+o%d))
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (opt-in IDENTICAL arm, no A/B recorded; non-owner site, owner expdel2-07-base): classical_draw_gather_kernel, launched only by that arm, deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 72ae22cf1f.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch; record in docs/TOMBSTONES.md.

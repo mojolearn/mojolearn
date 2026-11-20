@@ -25,7 +25,6 @@ metrics functions and is loaded through `_metrics_impl._get_binding`.
 
 from . import _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
-from ._buffer import _native, addr, empty
 from . import _native_spectral_umap_bridge
 
 __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
@@ -35,13 +34,10 @@ __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
 _SPECTRAL_FORMAT = "mojolearn-spectral-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-#: The prediction data a `prediction_data=True` fit keeps.
-_PREDICTION_ATTRS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
 
 _AFFINITIES = ("nearest_neighbors", "precomputed")
 #: SpectralEmbedding's affinities: the two above, scikit-learn's 'rbf' and
@@ -54,9 +50,6 @@ _CLUSTER_AFFINITIES = _EMBED_AFFINITIES
 #: SpectralClustering's label assignments: cuVS's k-means, and scikit-learn's
 #: two others on the same embedding (x_cluster/spectral_assign.mojo).
 _ASSIGN_LABELS = ("kmeans", "discretize", "cluster_qr")
-#: `x_cluster/entries.mojo::ENTRY_SPECTRAL_ASSIGN` and its method codes.
-_E_SPECTRAL_ASSIGN = 12
-_ASSIGN_CODES = {"discretize": 0, "cluster_qr": 1}
 
 #: cuVS's own struct default for the eigensolver tolerance
 #: (`cuvs/preprocessing/spectral_embedding.hpp:59`, `tolerance{1e-5f}`).
@@ -66,14 +59,13 @@ DEFAULT_EIGEN_TOL = 1e-5
 #: `raft::random::RngState rng_state{0}`).
 DEFAULT_SEED = 0
 
-# The compiled family owner (bindings/cfb_spectral.mojo): every public method
+# The compiled family owner (bindings/cfb_spectral_door.mojo): every public method
 # is one native call; its owner selects among these import-time connections.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
                              family_cfb_se_affinities=_EMBED_AFFINITIES,
                              family_cfb_predict_affinities=_AFFINITIES,
                              family_cfb_assign_labels=_ASSIGN_LABELS,
-                             family_cfb_assign_codes=dict(_ASSIGN_CODES),
                              family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL,
                              family_spectral_umap_bindings=_native_spectral_umap_bridge.connect())
 
@@ -84,10 +76,10 @@ def _coo_triples(A, who="SpectralClustering"):
     Same behavior as cuML's `spectral_clustering.pyx:306-312`, which accepts
     scipy or cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a
     dense input; converting a dense matrix through COO drops exact zeros. A
-    sparse input is recognized by duck type (a `tocoo()` whose result
-    carries `shape`, `row`, `col` and `data`); nothing is imported to ask.
-    The scan is native (bindings/cfb_spectral.mojo, the base binding's
-    `nonzero_f64_count` / `nonzero_f64_fill`).
+    sparse input is an exact SciPy container, read natively from its stored
+    buffers; no method of the input (`tocoo()`) is called and nothing is
+    imported to ask. The scan is native (bindings/cfb_spectral_door.mojo, the
+    base binding's `nonzero_f64_count` / `nonzero_f64_fill`).
     """
     return _NATIVE(None, "family_cfb_coo_triples", (A, who),
                    _NATIVE_CONTEXT)
@@ -198,7 +190,7 @@ class SpectralClustering(ParamsMixin):
         0.0, which disables the convergence test.
     affinity : str, default "nearest_neighbors"
         ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
-        ``"precomputed"`` (``X`` is a square affinity matrix, dense or sparse),
+        ``"precomputed"`` (``X`` is a square dense affinity matrix),
         ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``, scikit-learn's kernel)
         or ``"precomputed_nearest_neighbors"`` (k-NN connectivity of a
         precomputed distance matrix, symmetrized as ``0.5 * (C + C.T)``). A
@@ -306,7 +298,7 @@ class SpectralClustering(ParamsMixin):
         ----------
         X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
             Training data, or with ``affinity="precomputed"`` a square
-            nonnegative affinity matrix (dense or sparse); with
+            nonnegative dense affinity matrix; with
             ``"precomputed_nearest_neighbors"`` a square distance matrix.
             Values must be finite.
         y : ignored
@@ -385,7 +377,7 @@ class SpectralClustering(ParamsMixin):
           (Euclidean), each with weight 0.5. Training degrees are unchanged.
         - ``"precomputed"``: ``X`` is the affinity between the new rows and
           the training rows, shape ``(n_new, n_train)``, finite and
-          nonnegative. A sparse matrix is densified.
+          nonnegative.
 
         Training rows passed to ``predict`` are not guaranteed to get their
         ``labels_``: as a query, a row sees itself with weight 0.5 rather
@@ -498,34 +490,8 @@ _native_archive_bridge.register(SpectralClustering, _SPECTRAL_FORMAT, (
 ), host_archive_spectral_affinities=tuple(_CLUSTER_AFFINITIES))
 
 
-class _DenseCOO:
-    """A dense float32 matrix (`_expansion_decomp._M`) as the duck-typed COO
-    `_coo_triples` reads: row-major order, exact zeros dropped (what
-    `sp.coo_matrix(dense)` keeps), -0.0 a zero and NaN kept. The scan is the
-    base binding's `nonzero_f32_count` / `nonzero_f32_fill`
-    (core/dense_coo.mojo, lane/py-dn-kern 2026-09-28; its CPU route is the
-    core host binding), which replaced a Python n^2 loop making the same
-    `v != 0.0` test on the same float32 values (DEVIATION 2489's float32
-    twin). Pure data movement."""
-
-    def __init__(self, m):
-        n_r, n_c = m.r, m.c
-        src = m.addr
-        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0  # cpu-route: float32 host matrix read once by nonzero_f32_count on a CPU-only install
-        self.shape = (n_r, n_c)
-        self.row = empty((nnz,), "<i4")
-        self.col = empty((nnz,), "<i4")
-        self.data = empty((nnz,), "<f4")
-        if nnz:
-            wrote = int(_native("nonzero_f32_fill")(  # cpu-route: float32 host matrix read once by nonzero_f32_fill on a CPU-only install
-                src, n_r, n_c,
-                [addr(self.row, name="rows"), addr(self.col, name="cols"), addr(self.data, name="vals")],
-                nnz))
-            if wrote != nnz:
-                raise RuntimeError(f"mojolearn: nonzero_f32_fill wrote {wrote} of {nnz} entries")
-
-    def tocoo(self):
-        return self
+# `_DenseCOO` (the Python wrapper over nonzero_f32_count / nonzero_f32_fill)
+# had no caller left and is deleted (lane py-tail, 2026-11-15).
 
 
 # Maintainer notes (moved from the docstring). Reference: cuML's
@@ -553,10 +519,10 @@ class SpectralEmbedding(ParamsMixin):
         must number fewer than ``n_samples``.
     affinity : str, default "nearest_neighbors"
         ``"nearest_neighbors"`` (symmetrized k-NN connectivity of ``X``),
-        ``"precomputed"`` (``X`` is a square affinity matrix, dense or
-        sparse), ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``) or
-        ``"precomputed_nearest_neighbors"`` (``X`` is a distance matrix or
-        sparse distance graph; the ``n_neighbors`` nearest per row,
+        ``"precomputed"`` (``X`` is a square dense affinity matrix),
+        ``"rbf"`` (``exp(-gamma * ||x_i - x_j||**2)``) or
+        ``"precomputed_nearest_neighbors"`` (``X`` is a dense distance
+        matrix; the ``n_neighbors`` nearest per row,
         symmetrized as ``0.5 * (C + C.T)``). A callable or any other name
         raises ``ValueError``.
     random_state : int or None, default None
@@ -633,7 +599,7 @@ class SpectralEmbedding(ParamsMixin):
     def _validate_params(self):
         """The constructor checks, run first in `fit`; the converted values
         go to private attributes, which the fit reads
-        (bindings/cfb_spectral.mojo)."""
+        (bindings/cfb_spectral_door.mojo)."""
         return _NATIVE(self, "family_cfb_se_validate", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
@@ -643,8 +609,8 @@ class SpectralEmbedding(ParamsMixin):
         ----------
         X : array-like of shape (n_samples, n_features) or (n_samples, n_samples)
             Training data, or a square affinity (``"precomputed"``) or
-            distance (``"precomputed_nearest_neighbors"``) matrix, dense or
-            sparse. Values must be finite.
+            distance (``"precomputed_nearest_neighbors"``) matrix, dense.
+            Values must be finite; a SciPy sparse matrix raises ``TypeError``.
         y : ignored
 
         Returns
@@ -665,7 +631,7 @@ class SpectralEmbedding(ParamsMixin):
         """scikit-learn's affinity='precomputed_nearest_neighbors' of a
         precomputed distance matrix, symmetrized 0.5 * (C + C^T), as an
         n x n float32 Array (and `affinity_matrix_`): the base binding's
-        `knn_affinity_f32` (bindings/cfb_spectral.mojo)."""
+        `knn_affinity_f32` (bindings/cfb_spectral_door.mojo)."""
         return _NATIVE(self, "family_cfb_se_knn_affinity", (X,),
                        _NATIVE_CONTEXT)
 

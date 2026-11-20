@@ -1,0 +1,238 @@
+# Per-estimator `fast` trial: which door families answer `Estimator(numeric_mode='fast')` alike in EVERY public
+# operation, on the BUILT Linux CPU wheel of one measurement build (fx-fast-selector2-RESULT.md, RUN OWED 3).
+# `test_fast_selector.py -k BuiltInstallFamilies` runs against the installed wheel with
+# MOJOLEARN_FAST_ANSWER_TRIAL_FAMILIES=<families> (a trial mask of core/mode_answer.mojo's door families, never a
+# package switch); `exact_families` adds a second trial with exactly a candidate set, because a trial with every
+# bit answers the shared RESOLVER / METADATA steps for all families at once.
+#
+# THE PRODUCT IS THE REPORT: fast_ledger.json and SUMMARY.md (one line per door family: answered / mixed / refused /
+# unavailable / crashed, and for each row that is not whole the refusing operation's message, which names the door
+# the next lane edits). A `mixed` row is expected and does not fail the run; a unit that left no ledger does.
+# It gates nothing; no merge or release step waits on it.
+#
+# WHERE THE WHEEL COMES FROM: exactly as verify-smoke.yml (the measurement build's core wheel, uploaded to R2 by
+# tools/ops/verify_smoke_dispatch.py, fetched by tools/ops/fetch_built_wheel.sh, installed by
+# tools/ops/wheel_verify_smoke.sh's `install` step). Dispatch (the workflow file must exist on --ref):
+#   python3 tools/ops/verify_smoke_dispatch.py --workflow fast-trial --wheel-dir <.../linux/final> --ref <branch> \
+#       [--families 0xfffffff] [--exact-families 0x88] [--shards 1]
+#
+# MODE coverage (lane fx-coverage-smokes, 2026-11-20): THE CPU COVERAGE SMOKE on the same installed CPU wheel: every
+# public class of mojolearn.__all__ constructed, fitted and each public method called once in `identical`, one class per
+# process (restarted past a crash), ran / refused / not covered / crashed per call (tools/ops/fast_trial.py coverage).
+# Report: coverage_ledger.json + SUMMARY.md (totals, the list that does NOT run on CPU with its messages), artifact
+# cpu-coverage-<ref>. It gates nothing. Dispatch:
+#   python3 tools/ops/verify_smoke_dispatch.py --workflow cpu-coverage --wheel-dir <.../linux/final> --ref <branch> --shards 4
+#
+# PARALLEL PLAN: one (trial, estimator) per process across every core of each runner (tools/ops/fast_trial.py,
+# worker count from the allocation, lowered only by MemAvailable), and across `shards` matrix runners (unit k on
+# shard k % shards). Each unit's seconds and peak RSS are in units.tsv; raise `shards` when a runner takes over
+# about 15 minutes.
+
+name: Fast trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "the wheel's source commit (40 hex): its test_fast_selector.py runs against the wheel"
+        required: true
+      wheel_url:
+        description: "a presigned GET of the built core wheel (mojolearn_core-*.whl)"
+        required: true
+      wheel_name:
+        description: "the wheel's file name"
+        required: true
+      wheel_sha256:
+        description: "the wheel's sha256"
+        required: true
+      families:
+        description: "trial mask of door families (core/mode_answer.mojo bits); 0xfffffff is every family"
+        required: false
+        default: "0xfffffff"
+      exact_families:
+        description: "empty, or a candidate set: a second trial with exactly these bits"
+        required: false
+        default: ""
+      shards:
+        description: "matrix runners the units are split across"
+        required: false
+        default: "1"
+      mode:
+        description: "trial (the per-estimator fast trial) or coverage (the CPU coverage smoke of every public class)"
+        required: false
+        default: "trial"
+      tests_from:
+        description: "source (default: the wheel commit's test_fast_selector.py) or tooling (this run's ref's copy, for a wheel whose test predates a trial fix)"
+        required: false
+        default: "source"
+      python:
+        description: "Python version (the release CPU column's)"
+        required: false
+        default: "3.12"
+      token:
+        description: "a label the dispatcher finds its run by"
+        required: false
+        default: ""
+
+run-name: "${{ inputs.mode == 'coverage' && 'cpu-coverage' || 'fast-trial' }} ${{ inputs.ref }} ${{ inputs.families }} ${{ inputs.exact_families }} ${{ inputs.token }}"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        env:
+          SHARDS: ${{ inputs.shards }}
+          FAMILIES: ${{ inputs.families }}
+          EXACT: ${{ inputs.exact_families }}
+          MODE: ${{ inputs.mode }}
+        shell: bash
+        run: |
+          set -eu
+          case "$MODE" in trial|coverage) ;; *) echo "mode must be trial or coverage" >&2; exit 2;; esac
+          [[ "$SHARDS" =~ ^[1-9][0-9]?$ ]] || { echo "shards must be 1..99" >&2; exit 2; }
+          for m in "$FAMILIES" ${EXACT:+"$EXACT"}; do
+            [[ "$m" =~ ^(0x[0-9a-fA-F]{1,8}|[0-9]{1,10})$ ]] || { echo "bad family mask: $m" >&2; exit 2; }
+          done
+          echo "shards=$(python3 -c "import json,sys; print(json.dumps(list(range(int(sys.argv[1])))))" "$SHARDS")" >> "$GITHUB_OUTPUT"
+
+  trial:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # TWO CHECKOUTS (as verify-smoke.yml): tooling/ is this run's own ref (the trial driver), source/ the wheel's
+      # commit (the test it runs against the wheel).
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ inputs.python }}
+      - name: Fetch the built core wheel (sha256 checked)
+        env:
+          WHEEL_URL: ${{ inputs.wheel_url }}
+          WHEEL_NAME: ${{ inputs.wheel_name }}
+          WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+          REF: ${{ inputs.ref }}
+        # the one fetch path, shared with verify-smoke.yml
+        run: bash tooling/tools/ops/fetch_built_wheel.sh "$RUNNER_TEMP/wheels"
+      - name: Install the wheel (verify smoke's install step) and pytest
+        env:
+          VENV: ${{ runner.temp }}/trial-venv/venv
+          STEPS: install
+        run: |
+          rc=0   # `bash -eo pipefail` (GitHub's bash): capture the rc with ||, or a failure skips the lines after it
+          bash tooling/tools/ops/wheel_verify_smoke.sh "$RUNNER_TEMP/wheels" "$RUNNER_TEMP/install-out" || rc=$?
+          cat "$RUNNER_TEMP/install-out/SUMMARY.txt"
+          [ "$rc" -eq 0 ] || exit "$rc"
+          "$VENV/bin/python" -m pip install --disable-pip-version-check --no-input -q --no-cache-dir pytest==8.3.5
+      - name: The trial or the coverage smoke (one unit per process on every core)
+        env:
+          MODE: ${{ inputs.mode }}
+          VENV: ${{ runner.temp }}/trial-venv/venv
+          FAMILIES: ${{ inputs.families }}
+          EXACT: ${{ inputs.exact_families }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ inputs.shards }}
+          TESTS_FROM: ${{ inputs.tests_from }}
+        run: |
+          case "$TESTS_FROM" in source|tooling) ;; *) echo "tests_from must be source or tooling" >&2; exit 2;; esac
+          rc=0   # `bash -eo pipefail`: the rc is captured with ||, so the log tail and its copy always run
+          echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2), $(free -g | awk '/Mem:/{print $2}') GiB"
+          if [ "$MODE" = coverage ]; then
+            # every public class of the installed CPU wheel, one per process, on every core of the runner
+            python3 tooling/tools/ops/fast_trial.py coverage --python "$VENV/bin/python" --out "$RUNNER_TEMP/trial-out" \
+              --shard "$SHARD" --shards "$SHARDS" --workers "$(nproc)" > "$RUNNER_TEMP/trial.log" 2>&1 || rc=$?
+            tail -n 40 "$RUNNER_TEMP/trial.log"
+            cp "$RUNNER_TEMP/trial.log" "$RUNNER_TEMP/trial-out/trial.log"
+            exit "$rc"
+          fi
+          python3 tooling/tools/ops/fast_trial.py run --python "$VENV/bin/python" \
+            --tests-root "$TESTS_FROM/python/mojolearn/tests" --out "$RUNNER_TEMP/trial-out" \
+            --families "$FAMILIES" --exact "$EXACT" --shard "$SHARD" --shards "$SHARDS" --workers "$(nproc)" \
+            > "$RUNNER_TEMP/trial.log" 2>&1 || rc=$?
+          tail -n 70 "$RUNNER_TEMP/trial.log"
+          cp "$RUNNER_TEMP/trial.log" "$RUNNER_TEMP/trial-out/trial.log"
+          exit "$rc"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: fast-trial-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/trial-out/
+          retention-days: 14
+          if-no-files-found: warn
+
+  summary:
+    needs: trial
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: fast-trial-shard-*
+          path: shards
+      - name: fast_ledger.json (or coverage_ledger.json) and SUMMARY.md
+        env:
+          TESTS_FROM: ${{ inputs.tests_from }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -eu
+          case "$TESTS_FROM" in source|tooling) ;; *) echo "tests_from must be source or tooling" >&2; exit 2;; esac
+          mkdir -p report
+          outs=(); for d in shards/fast-trial-shard-*; do outs+=(--out "$d"); done
+          [ "${#outs[@]}" -gt 0 ] || { echo "no shard artifact" >&2; exit 1; }
+          if [ "$MODE" = coverage ]; then
+            python3 tooling/tools/ops/fast_trial.py coverage-summary "${outs[@]}" \
+              --ledger report/coverage_ledger.json --md report/SUMMARY.md
+            cat report/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+            head -n 40 report/SUMMARY.md
+            exit 0
+          fi
+          python3 tooling/tools/ops/fast_trial.py summary "${outs[@]}" --tests-root "$TESTS_FROM/python/mojolearn/tests" \
+            --ledger report/fast_ledger.json --md report/SUMMARY.md
+          cat report/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          head -n 60 report/SUMMARY.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: ${{ inputs.mode == 'coverage' && 'cpu-coverage' || 'fast-trial' }}-${{ inputs.ref }}
+          path: report/
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,174 @@
+{
+  "source": "test_ipca_native_boundary.py::_data/_model and partial-fit running count",
+  "shape": [
+    6,
+    3
+  ],
+  "components": 2,
+  "batch_size": 3,
+  "numpy": "2.5.2",
+  "workers": 10,
+  "oracle": "Float64 covariance update/eigh, with explicit rank-two retention; direct full-history mean/population variance. No product execution.",
+  "generator_sha256": "b4c006bb3cc1812e91212aadbb61b06080da0cce9c49447f4efd1425cbabbcaf",
+  "files": [
+    {
+      "file": "source.f32",
+      "shape": [
+        6,
+        3
+      ],
+      "sha256": "35aba2bc48d21527aa835614c6a23ee680180cb2c012d808223a7f9193401010"
+    },
+    {
+      "file": "first3-mean.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "09dc076f82c8014e510db92c32ee965d0c10de59ed972479b2f03e961f176787"
+    },
+    {
+      "file": "first3-population-variance.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "e24c039051646e96d66db6feb5d634eabb1403ed8521447cf81e0afd77d00c41"
+    },
+    {
+      "file": "first3-singular.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "0c2b054f2117c38dc86b3b1202817e449125fa489267d1844cfa30b405470751"
+    },
+    {
+      "file": "first3-vectors.f64",
+      "shape": [
+        3,
+        3
+      ],
+      "sha256": "34356493790ac184e8a645c40fd161a6b3b42239d79ebba1bc496e4238b0e623"
+    },
+    {
+      "file": "first3-explained.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "14259271200363932d1a9f3810a125c562fe7d6ebf3cd3a62e568f9e0778b616"
+    },
+    {
+      "file": "first3-ratio.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "b5741051a6519df508a6883cbb433249832184263cd4e3a33742e02c333ea034"
+    },
+    {
+      "file": "first3-noise.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "1065ed1b44074e58b43dd10e1f6c376c00df31422fa740e6ebb2a54b0bf96f1b"
+    },
+    {
+      "file": "all6-mean.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "3b5a17f4106796bb6bf94460e89f271ba39d81b7ce0fc8cc803c5d816a5f392f"
+    },
+    {
+      "file": "all6-population-variance.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "15eebb6cb36a96fa515d05eab29ac0f4159e4c7c8b9b3d4212bff8c2d322a57a"
+    },
+    {
+      "file": "all6-singular.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "ae46ca838b942499c0521c7ef997ea866bc525f23bea72860feb799fdfb93a6f"
+    },
+    {
+      "file": "all6-vectors.f64",
+      "shape": [
+        3,
+        3
+      ],
+      "sha256": "a90e58eec80a14e57890a17dbe29096bcc9b7d6d3a190b532bac175e3eaff3a5"
+    },
+    {
+      "file": "all6-explained.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "5c8677365eb236beeddbaaaa5118c0924111e365556b4737979f13c377f0d1c7"
+    },
+    {
+      "file": "all6-ratio.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "1eab7f0315d642b55f48c68438949f013b0b154bebd2ce567c4590bf9d9d49b2"
+    },
+    {
+      "file": "all6-noise.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "071beb266c72a32c77eb4f546a1e98509c37674fba01b19662cf20634cbcf89e"
+    },
+    {
+      "file": "repeated12-mean.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "3b5a17f4106796bb6bf94460e89f271ba39d81b7ce0fc8cc803c5d816a5f392f"
+    },
+    {
+      "file": "repeated12-population-variance.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "97a1a60f556f91d0a59d90207b3007c9d1a91148d52090af1a994dc64e96f791"
+    },
+    {
+      "file": "repeated12-singular.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "68d5d9589a3c23a1d3fe26eaa085b9d8e1007ac428594ce8909c05dbf0158e2b"
+    },
+    {
+      "file": "repeated12-vectors.f64",
+      "shape": [
+        3,
+        3
+      ],
+      "sha256": "6ded1a7ac754f98c147a7e485bd2c575df631c958d5f6f2665a9d9c76dce6e14"
+    },
+    {
+      "file": "repeated12-explained.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "672081c94ca57cb303b46d3768b2eacffa99aa25c476dd6e103a013160ceeb8d"
+    },
+    {
+      "file": "repeated12-ratio.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "b640f4204e502554344a2bdaa359da9e0d3e6cbcb920c86da95873556e44a159"
+    },
+    {
+      "file": "repeated12-noise.f64",
+      "shape": [
+        1
+      ],
+      "sha256": "a4188f44b55f23a6a4159d085977c203e6e244c4029d95649613f98d8001546d"
+    }
+  ],
+  "execution": "Reference preparation only; no compile/runtime/identity/performance result."
+}

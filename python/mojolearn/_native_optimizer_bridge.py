@@ -23,12 +23,9 @@ def connect(training):
                    for cls in guarded)  # glue: snapshot native record and array layouts
     bindings = {}
     metadata_bindings = {}
-    entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
-               "optimizer_door_state_set", "optimizer_door_load_state", "optimizer_door_zero",
-               "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
-               "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
+    entries = ("optimizer_native_api_v1", "training_numeric_mode",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
-               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload",
+               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "optimizer_resident_download", "optimizer_resident_upload",
                "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions",
                "residual_dropout", "residual_dropout_backward")
     optional_entries = ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev", "chunked_lm_head_v2_loss",
@@ -51,33 +48,30 @@ def connect(training):
                 try:
                     entry = getattr(binding, name)
                 except (ImportError, AttributeError, NotImplementedError):
-                    if name.startswith("train_dev_") or name in optional_entries:
+                    if name in optional_entries:
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"optimizer requires compiled {name}")
                 cells[name] = entry
             cells["module"] = binding
+            try:  # glue: mlp_inference_sessions runs the x_sequence binding's small-MLP program (op SESSIONS)
+                program = getattr(_backend.binding("_mojolearn_x_sequence", mode), "small_mlp_program")
+                if isinstance(program, BuiltinFunctionType):
+                    cells["small_mlp_program"] = program
+            except (ImportError, AttributeError, ValueError, RuntimeError, NotImplementedError):
+                pass  # glue: refused by name at the call (training_extra_native._entry)
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
             if mode not in metadata_bindings:
                 metadata_bindings[mode] = bindings[mode]
-    init = _buffer._native("optimizer_door_init")  # cpu-route: native parameter registry metadata only
-    if not isinstance(init, BuiltinFunctionType):
-        raise TypeError("optimizer requires compiled optimizer_door_init")
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
     _backend.default_mode()  # glue: initialize metadata's shared default before public native calls
     input_context = _numpy_free_context()
     input_context["native_module_type"] = ModuleType
-    schedule_entries = {}
-    for name in ("lr_schedule_at", "lr_schedule_series"):  # glue: retain native scalar schedule entries at import
-        entry = training._lr_native(name)  # cpu-route: compiled exact learning-rate scalar ABI, never a training/data kernel
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"schedule requires compiled {name}")
-        schedule_entries[name] = entry
     context = {
-        "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
+        "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap), "mapping_types": (dict, OrderedDict),
         # Fixed native identities; mutable builtins names cannot admit hooks.
@@ -85,8 +79,9 @@ def connect(training):
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
+        "type_name": vars(type)["__name__"].__get__,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
-        "guards": guards, "bindings": bindings, "init": init,
+        "guards": guards, "bindings": bindings,
         "training_metadata_bindings": metadata_bindings,
         "training_metadata_types": (str, int, BuiltinFunctionType, tuple),
         "training_metadata_strip": str.strip, "training_metadata_lower": str.lower,
@@ -120,7 +115,15 @@ def connect(training):
         raise TypeError("optimizer ownership requires a compiled finalizer descriptor")
     training._Optimizer.__del__ = descriptor(MethodType(optimizer_finalizer, context))
     context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
-    names += ("__del__",)
+    # A schedule's attribute edit and deletion rebuild its native rate block
+    # in the native hook itself (bindings/optimizer_native_router_door.mojo
+    # schedule_attribute_c); the descriptor binds the schedule, as __del__ does.
+    schedule_attribute = module.optimizer_schedule_attribute
+    if not isinstance(schedule_attribute, BuiltinFunctionType):
+        raise TypeError("schedule settings require the compiled schedule attribute hook")
+    training._LrTable.__setattr__ = descriptor(MethodType(schedule_attribute, context))
+    training._LrTable.__delattr__ = descriptor(MethodType(schedule_attribute, context))
+    names += ("__del__", "__delattr__")
     context["guards"] = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain finalizer and layout identities after native descriptor connection
                               for cls in guarded)  # glue: snapshot admitted owner layouts at import
     return native, context
@@ -176,17 +179,21 @@ def connect_sequence_device(training, device):
     context["sequence_device_getters"] = {name: vars(device.SequenceDeviceTensor)[name].__get__ for name in slots}  # glue: retain native slot getters at import
     context["sequence_device_setters"] = {name: vars(device.SequenceDeviceTensor)[name].__set__ for name in slots if name != "__weakref__"}  # glue: retain native slot setters at import
     bindings = {}
-    required = ("seq_optimizer_init", "seq_optimizer_step", "seq_lamb_step", "seq_adafactor_step",
-                "seq_optimizer_state", "seq_optimizer_export", "seq_optimizer_import", "seq_optimizer_close")
+    # The optimizer operations run through the image's native entry table
+    # (core/byte_lm_entry_table.mojo, sequence/opt_entry_abi.mojo); the former
+    # seq_optimizer_* Python entries are deleted (lane calltable-byte-lm).
+    required = ()
     optional = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy",
                 "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
                 "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
-                "layer_norm", "layer_norm_dev", "moe_forward", "moe_backward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
+                "layer_norm", "layer_norm_dev", "layer_norm_dev_alloc", "moe_forward", "moe_backward", "moe_forward_dev",
+                "moe_forward_dev_alloc", "moe_weights_put", "moe_weights_free")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)
             cells = {"module": binding}
+            _sequence_native_key(cells, binding)
             for name in required + optional:  # glue: retain fixed compiled symbols at import
                 entry = getattr(binding, name, None)
                 if entry is None and name in optional:
@@ -219,17 +226,37 @@ def connect_sequence_device(training, device):
     return training._OPT_NATIVE, context
 
 
+#: The native entry tables' vendor words (core/byte_lm_entry_table.mojo).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+def _sequence_native_key(cells, binding):
+    # glue: once at import, the connected x_sequence image's (tier, vendor)
+    # key, which the native optimizer door reads instead of looking entries
+    # up by name. An image without one leaves the key absent and the door
+    # refuses.
+    try:
+        mode = int(binding.x_sequence_numeric_mode())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(binding.x_sequence_vendor()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        cells["native_key"] = (mode, vendor)
+
+
 def connect_embedding(training, embedding_cls, archive_context):
     # glue: connect the Embedding layer's compiled entries and its native
     # lifetime descriptors once, at package import
     from types import BuiltinFunctionType, MethodType
     from . import _backend
     from .tokenizer import _binding
-    try:
-        from . import _x_sequence_device  # glue: connect the resident owner before public operations when its optional dependency exists
-    except ModuleNotFoundError as error:
-        if error.name != "numpy":
-            raise
+    # glue: connect the resident owner at import only when NumPy is already
+    # loaded; importing it otherwise loaded NumPy for every `import mojolearn`.
+    # Without it, device=True asks for `mojolearn._x_sequence_device` (or
+    # `to_device`) by name (bindings/embedding_layer_native_door.mojo).
+    import sys
+    if "numpy" in sys.modules:
+        from . import _x_sequence_device  # noqa: F401
     context = training._OPT_CONTEXT
     bindings = {}
     names = ("embedding_forward", "embedding_backward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
@@ -243,6 +270,10 @@ def connect_embedding(training, embedding_cls, archive_context):
                 entry = getattr(module, name, None)
                 if isinstance(entry, BuiltinFunctionType):
                     cells[name] = entry
+            # glue: the binding's fixed tier and vendor answers, read once at
+            # import: the native entry table key (core/neural_entry_table.mojo)
+            cells["entry_mode"] = int(module.embedding_numeric_mode())
+            cells["entry_vendor"] = str(module.embedding_vendor())
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
@@ -261,11 +292,11 @@ def connect_embedding(training, embedding_cls, archive_context):
     # glue: connect the optional host lookup ABI once, including host_model.
     # Unavailable installs retain a refusal string instead of a runtime loader.
     try:
-        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # cpu-route: import-time connection for explicitly selected CPU-only host_model lookup
+        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # import-time: import-time connection for explicitly selected CPU-only host_model lookup
         context["embedding_host_binding"] = {"module": host_module, **{
             name: getattr(host_module, name) for name in names  # glue: fixed host ABI connection at import
             if isinstance(getattr(host_module, name, None), BuiltinFunctionType)
-        }}
+        }, "entry_mode": int(host_module.embedding_numeric_mode()), "entry_vendor": "cpu", "entry_infer": True}
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
         context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
     context["embedding_host_names"] = names

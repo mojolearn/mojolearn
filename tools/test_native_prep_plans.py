@@ -10,6 +10,8 @@ import types
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from boundary_keys_plain import plain  # noqa: E402
 PACKAGE = ROOT / "python/mojolearn"
 MODULES = ("_expansion_linear", "_solver_impl", "_svm_impl", "svm", "_gp_impl", "kernel_methods", "neighbors",
            "linear_model", "_expansion_trees", "model_selection", "_metrics_impl")
@@ -58,6 +60,17 @@ def plans(monkeypatch):
     backend.binding = lambda name, mode: (name, mode)
     monkeypatch.setitem(sys.modules, backend.__name__, backend)
     package._backend = backend
+    # The composed call reads its bindings from the family connection (_native_family_bridge
+    # connect_bindings; lane imputer-gp-native-module, 2026-11-16), not from _backend.binding.
+    bridge = types.ModuleType(package.__name__ + "._native_family_bridge")
+    shared = {"family_binding_connections": {}}
+    bridge.shared_context = lambda: shared
+    def connect_bindings(*names):
+        for name in names:
+            shared["family_binding_connections"][name] = {mode: ((name, mode),) for mode in ("identical", "fast")}
+    bridge.connect_bindings = connect_bindings
+    monkeypatch.setitem(sys.modules, bridge.__name__, bridge)
+    package._native_family_bridge = bridge
     spec = importlib.util.spec_from_file_location(package.__name__ + ".plans", PACKAGE / "_native_msel_prep.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -95,9 +108,15 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
         assert fit is not None, name
         native = next(node.value for node in ast.walk(fit)
                       if isinstance(node, ast.Return) and isinstance(node.value, ast.Call))
-        assert isinstance(native.args[1], ast.Constant), name
+        # The operation is a string constant or a named code on the family's operation table
+        # (`_OP.trees_public_boost_fit`, the integer codes of `_operation_codes()`).
+        op_node = native.args[1]
+        if isinstance(op_node, ast.Attribute) and isinstance(op_node.value, ast.Name) and op_node.value.id == '_OP':
+            public_operation = op_node.attr
+        else:
+            assert isinstance(op_node, ast.Constant), name
+            public_operation = op_node.value
         operation, recipe = plan["methods"]["fit"]
-        public_operation = native.args[1].value
         if public_operation == 'trees_public_meta_fit':
             # Public doors own lifecycle/output conversion; composed estimators
             # intentionally target the internal Array ABI. Verify the bridge
@@ -106,9 +125,25 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
                             'StackingRegressor', 'MultiOutputRegressor', 'MultiOutputClassifier',
                             'OneVsRestClassifier', 'CalibratedClassifierCV'}
             assert operation == 'trees_meta_fit', name
-            lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle.mojo').read_text()
+            lifecycle = (ROOT / 'bindings/trees_public_meta_lifecycle_pack.mojo').read_text()
             assert 'if operation == "trees_public_meta_fit":\n        method = "fit"' in lifecycle
-            assert 'meta_operation(model, "trees_meta_" + method, call_args, context)' in lifecycle
+            # Admission runs once per configuration and the admitted kind is passed down (cb376df254).
+            assert 'meta_admitted_operation(model, kind, "trees_meta_" + method, call_args, context)' in lifecycle
+        elif public_operation == 'trees_public_boost_fit':
+            # Boost/bagging/DART/RTE public doors (2c61cfe498) own the
+            # lifecycle and forward to the internal trees_boost_* ABI, the
+            # same split as the meta doors above.
+            assert operation == 'trees_boost_fit', name
+            lifecycle = (ROOT / 'providers/python/tree_boost_public_lifecycle_pyapi_pack.mojo').read_text()
+            assert 'var method = String(operation[byte=String("trees_public_boost_").byte_length():])' in lifecycle
+            # The boost kind is resolved once per call and passed down (boost_operation_of, fed1b4e384).
+            assert 'boost_operation_of(model, kind, "trees_boost_" + method, call_args, context)' in lifecycle
+            dispatch = (ROOT / 'bindings/trees_public_native_door.mojo').read_text()
+            # The dispatcher routes by the leaf code's range (lane bw3-trees,
+            # bindings/operation_names_trees.mojo); a name the table lacks keeps the prefix.
+            assert ('if operation >= TREES_FIRST_PUBLIC_BOOST and operation < TREES_END_PUBLIC_BOOST:\n'
+                    '        return tree_boost_public_operation(model, name, args, context)') in dispatch
+            assert 'if operation.startswith("trees_public_boost_"):\n        return tree_boost_public_operation(' in dispatch
         else:
             assert operation == public_operation, name
         expected = native.args[2].elts
@@ -117,12 +152,18 @@ def test_restored_fit_plans_match_public_native_argument_order(plans):
             if isinstance(source, ast.Name):
                 assert item == {"X": ("arg", 0), "y": ("arg", 1),
                                 "sample_weight": ("keyword", "sample_weight", None)}[source.id], name
+            elif isinstance(source, ast.Constant) and source.value is None and item[0] == "binding":
+                # The public door passes None in the binding slot and resolves its own
+                # connected module natively; the composed plan hands the binding in.
+                pass
             elif isinstance(source, ast.Constant):
                 assert item == ("constant", source.value), name
             else:
                 assert item[0] == "binding", name
         checked.append(name)
-    assert len(checked) == 44
+    # Every fit plan was checked against its public call; the registry grows as families gain
+    # native plans (44 when this was written, 48 at f776cb552c), never shrinks.
+    assert len(checked) == sum(1 for plan in registry.values() if "fit" in plan["methods"]) >= 48
 
 
 def test_native_plans_preserve_posterior_and_weight_semantics(plans):
@@ -141,23 +182,24 @@ def test_native_plans_preserve_posterior_and_weight_semantics(plans):
 
 
 def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks():
-    source = (ROOT / "bindings/prep_select_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_select_native_door.mojo").read_text()
     assert source.count("y, fit_params, context)") == 2
     assert 'context, fit_params)' in source
     assert 'len(fit_params) != 0' not in source
     assert 'attrgetter' not in source
     assert '_call(b.getattr, Python.tuple(est' not in source
-    helper = (ROOT / "bindings/prep_native_estimator.mojo").read_text()
+    helper = plain("bindings/prep_native_estimator_door.mojo",
+                   (ROOT / "bindings/prep_native_estimator_door.mojo").read_text())
     assert 'plan["fields_get"]' in helper
 
 
 def test_posterior_is_native_prediction_and_existing_draw_algorithm():
-    source = (ROOT / "bindings/prep_iterimp_native.mojo").read_text()
+    source = (ROOT / "bindings/prep_iterimp_native_door.mojo").read_text()
     assert 'prep_estimator_call(est, "predict_std"' in source
     assert 'truncnorm_draws_binding(' in source
     assert 'inspect.signature' not in source
     assert '_method(est' not in source
-    dispatch = (ROOT / "bindings/msel_estimator_native.mojo").read_text()
+    dispatch = (ROOT / "bindings/msel_estimator_native_door.mojo").read_text()
     # The native dispatch context now admits the full classical buffer/pandas
     # surface. NumPy must be connected before first-call keyword admission;
     # key/type checks still precede the exact compiled entry invocation.
@@ -172,7 +214,7 @@ def test_posterior_is_native_prediction_and_existing_draw_algorithm():
 
 
 def test_meta_owners_do_not_call_member_methods_or_python_constructors():
-    source = (ROOT / 'bindings/trees_public_meta.mojo').read_text()
+    source = (ROOT / 'bindings/trees_public_meta_door.mojo').read_text()
     forbidden = ('py_call(member.fit', 'py_call(e.fit', '.predict,', '.predict_proba,',
                  '.decision_function,', 'est.get_params', 'c.split,', 'est._validate_params',
                  'py_call(_import(', '_call_kw(r2,', 'target.tolist', 'col.tolist',
@@ -180,18 +222,22 @@ def test_meta_owners_do_not_call_member_methods_or_python_constructors():
     for token in forbidden:
         assert token not in source, token
     assert 'prep_native_split(c, X, y, context)' in source
-    assert 'prep_estimator_call(model, "__admit__"' in source
+    # Constructor admission runs once per configuration in its own door (cb376df254).
+    admission = (ROOT / 'bindings/trees_meta_admission_door.mojo').read_text()
+    assert 'prep_estimator_call(model, "__admit__"' in admission
     assert 'msel_admit(args, prep_native_context(context))' in source
-    assert '"family_mcls_r2"' in source
+    # The r2 score is passed as the metrics owner's leaf code (lane bw2-metrics).
+    assert 'metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_R2,' in source
     assert 'native_estimator_defaults' in source
-    assert 'native_estimator_entry=model_selection._NATIVE' in (PACKAGE / '__init__.py').read_text()
-    linear = (ROOT / 'bindings/x_linear_native.mojo').read_text()
+    # The entry is connected when the family loads (b6aa87e41d), not in __init__.
+    assert 'native_estimator_entry=selection._NATIVE' in (PACKAGE / '_families.py').read_text()
+    linear = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
     assert 'py_call(cv.split' not in linear
     assert 'prep_native_split(cv, x_source, y_source, context)' in linear
 
 
 def test_native_clone_bounds_recursive_configurations():
-    source = (ROOT / 'bindings/msel_estimator_native.mojo').read_text()
+    source = (ROOT / 'bindings/msel_estimator_native_door.mojo').read_text()
     assert source.count('if depth > 64:') == 2
     assert 'msel_native_clone(value, context, depth + 1)' in source
     assert 'msel_clone_parameter(given[names[k]], context, depth + 1)' in source

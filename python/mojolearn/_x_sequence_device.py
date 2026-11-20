@@ -15,27 +15,22 @@ CPU host binding, a build that lacks them) `to_device` returns the float32
 array it was given, so the caller's code runs unchanged on host arrays.
 
 Glue only: argument checks, handles and shapes; no arithmetic on data."""
-from ._optional_numpy import require_numpy
-np = require_numpy('_x_sequence_device')
+# No NumPy here: the module only holds handles and calls its native owner,
+# and the package connects it at import (_native_optimizer_bridge
+# connect_embedding), which must not load NumPy (NUMPY_FREE_CONTRACT.md).
 
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 _BINDING = "_mojolearn_x_sequence"
 #: the before arm of the A/B (as x_cnn's MOJOLEARN_XCNN_DEVICE_IO_OFF):
 #: `to_device` returns the host array, so every call takes the host-array
-#: entries again; the wave's MOJOLEARN_IDN_ALL_OFF arm turns it off too
-_DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1"
-                  or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
+#: entries again
+_DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1"
 _ENTRIES = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download")
 
 
 def _size(shape):
     return _SEQ_NATIVE("seqdev_size_of", None, (shape,), None, _SEQ_CONTEXT)
-
-
-def resident_binding(b):
-    """Whether binding `b` has the resident tensor entries."""
-    return _SEQ_NATIVE("seqdev_resident", None, (b,), None, _SEQ_CONTEXT)
 
 
 class SequenceDeviceTensor:
@@ -91,19 +86,10 @@ class SequenceDeviceTensor:
         return _SEQ_NATIVE("seqdev_finalize", self, (), None, _SEQ_CONTEXT)
 
 
-def is_seq_tensor(x):
-    return _SEQ_NATIVE("seqdev_is", None, (x,), None, _SEQ_CONTEXT)
-
-
 def to_device(x, numeric_mode=None):
     """float32 array `x` as a `SequenceDeviceTensor` (uploaded once, here),
     or `x` itself as a float32 array on a binding without resident tensors."""
     return _SEQ_NATIVE("seqdev_to", None, (x,), numeric_mode, _SEQ_CONTEXT)
-
-
-def on_binding(b, *ts):
-    """Whether every one of `ts` is a resident tensor of binding `b`."""
-    return _SEQ_NATIVE("seqdev_on", None, (b, ts), None, _SEQ_CONTEXT)
 
 
 __all__ = ["SequenceDeviceTensor", "to_device"]

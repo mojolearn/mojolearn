@@ -439,13 +439,13 @@ def arm_refusals(rep):
                SVR(kernel="linear", epsilon=float("nan")).fit, x, y)
     bad_y = y.copy()
     bad_y[7] = np.float32("nan")
-    rep.raises(arm, Exception, "non-finite value at flat index 7",
-               "a NaN target is refused BY NAME with its index (DEVIATION 636)",
+    rep.raises(arm, Exception, "Input y contains NaN or infinity (SVR).",
+               "a NaN target is refused in scikit-learn's wording",
                SVR(kernel="linear").fit, x, bad_y)
     bad_x = x.copy()
     bad_x[3, 2] = np.float32("inf")
-    rep.raises(arm, Exception, "non-finite value at flat index",
-               "a non-finite X cell is refused BY NAME (DEVIATION 636)",
+    rep.raises(arm, Exception, "Input X contains NaN or infinity (SVR).",
+               "a non-finite X cell is refused in scikit-learn's wording",
                SVR(kernel="linear").fit, bad_x, y)
 
 

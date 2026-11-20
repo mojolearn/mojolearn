@@ -11,21 +11,16 @@ each one carries the previous gradient forward (``backward(ids, dy, grad=...)``)
 There is no autograd here: the layer holds the table and computes the two calls; it
 never updates `weight` itself.
 """
-from . import _backend, _native_archive_bridge
-from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
-from ._mode import NumericModeMixin
+from . import _native_archive_bridge
+from ._mode import NumericModeMixin as _NumericModeMixin
 
-_MODE_CODE = {"fast": 0, "identical": 1}
 _NO_PADDING = -1
-#: ORDER MATCHES autograd/kernels/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
-#: PLAN_AUTO = 2 is embedding/checks/embedding_identical.mojo's.
-_PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
 #: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
 #: lane/inference-embedding-ivf-cholesky, 2026-09-15).
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
 
 # The compiled saved-model owner, connected once at import: `save` is one
-# native call (bindings/archive_schema_native.mojo writes the schema
+# native call (bindings/archive_schema_native_door.mojo writes the schema
 # registered after the class).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
@@ -41,7 +36,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # upward on the IDENTICAL tier; clause (d) holds counts, perm and dW bit-identical across plans).
 # backward's grad carry: contract 7.4. Device I/O (lane gap-neural-io): forward(device=True) returns
 # a SequenceDeviceTensor; a binding without the resident entries refuses device=True by name.
-class Embedding(NumericModeMixin):
+class Embedding(_NumericModeMixin):
     """Embedding table with a reproducible gather and dense gradient, as `torch.nn.Embedding`.
 
     The table is the layer's own float32 copy, taken at construction (and again whenever
@@ -122,54 +117,23 @@ class Embedding(NumericModeMixin):
     # -- the resident device table (bindings/_mojolearn_embedding.mojo) ------
     # The layer's `__setattr__` (assigning `weight` releases the table) and
     # `__del__` are the native lifetime entry, installed after the class
-    # (bindings/embedding_layer_native.mojo).
+    # (bindings/embedding_layer_native_door.mojo).
 
     def __getstate__(self):
         return _EMBEDDING_NATIVE("emblayer_state", self, (), None, _EMBEDDING_CONTEXT)
 
-    def _extension(self):
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "embedding_numeric_mode", None)
-        if fn is not None and int(fn()) != _MODE_CODE.get(want):
-            raise RuntimeError(
-                f"mojolearn Embedding: numeric_mode={want!r} was requested but {mod.__name__} "
-                "reports another compile-time mode; rebuild it with bash bindings/build_embedding.sh"
-            )
-        return mod
-
-    def _ids(self, ids):
-        raw, _ = _materialize(ids, "ids")
-        if raw.dtype[1] not in "iu":
-            # Before this check a float id was cast to int32 and 1.5 read
-            # row 1, silently. torch refuses a float index tensor; an id is
-            # a row number, so a non-integer one is refused by name.
-            raise TypeError(
-                f"mojolearn Embedding: ids must be integers, got dtype "
-                f"{raw.dtype!r}; a float id is refused rather than truncated"
-            )
-        a, _ = as_i32_c(raw, ndim=None, name="ids")
-        return a.reshape((int(a.size),)), tuple(a.shape)
-
     # -- device I/O (lane gap-neural-io) ------------------------------------
+    # The id dtype refusal, the binding mode cross-check, the device-entry
+    # probe and the resident backward's shape refusals run in Mojo
+    # (bindings/embedding_layer_native_door.mojo); the dead Python twins
+    # `_extension`, `_ids`, `_dev_module`, `_is_dev` and `_backward_dev` are
+    # gone (lane py-lm-neural, 2026-11-14).
 
     _device_io = True
-
-    def _dev_module(self):
-        mod = self._extension()
-        if not all(callable(getattr(mod, n, None)) for n in  # glue: the named binding entry points
-                   ("seq_tensor_alloc", "embedding_forward_dev", "embedding_backward_dev")):
-            raise RuntimeError(f"mojolearn Embedding: {mod.__name__} has no device I/O entries; "
-                               "use host arrays (device=False)")
-        return mod
 
     def to_device(self, a):
         """Upload a float32 array once, for use as `dy` in `backward` on the device."""
         return _EMBEDDING_NATIVE("emblayer_to_device", self, (a,), None, _EMBEDDING_CONTEXT)
-
-    def _is_dev(self, x):
-        from ._x_sequence_device import is_seq_tensor
-        return is_seq_tensor(x)
 
     def forward(self, ids, device=False):
         """Look up rows: ``weight[ids]``.
@@ -216,36 +180,6 @@ class Embedding(NumericModeMixin):
         # the shipped embedding_infer binding carries no backward at all.
         return _EMBEDDING_NATIVE("emblayer_backward", self, (ids, dy, grad), None, _EMBEDDING_CONTEXT)
 
-    def _backward_dev(self, flat, shape, dy, grad):
-        """`backward` on a resident dy: the gradient as a resident tensor."""
-        from ._x_sequence_device import SequenceDeviceTensor
-        mod = self._dev_module()
-        t, d, v = int(flat.size), self.embedding_dim, self.num_embeddings
-        if dy.b is not mod or tuple(dy.shape) != shape + (d,):
-            raise ValueError(f"mojolearn Embedding: dy has shape {tuple(dy.shape)}, want {shape + (d,)} "
-                             "(on this layer's binding)")
-        accumulate = 0
-        if grad is None:
-            dw = SequenceDeviceTensor._new(mod, (v, d))
-        else:
-            if self._is_dev(grad):
-                if grad.b is not mod or tuple(grad.shape) != (v, d):
-                    raise ValueError(f"mojolearn Embedding: grad has shape {tuple(grad.shape)}, want ({v}, {d})")
-                dw = grad.copy()          # the carry's bits; `grad` itself is not modified
-            else:
-                prev, _ = as_f32_c(grad, ndim=2, name="grad")
-                if tuple(prev.shape) != (v, d):
-                    raise ValueError(f"mojolearn Embedding: grad has shape {tuple(prev.shape)}, want ({v}, {d})")
-                dw = SequenceDeviceTensor._wrap(mod, prev)
-            accumulate = 1
-        pad = _NO_PADDING if self.padding_idx is None else int(self.padding_idx)
-        mod.embedding_backward_dev(
-            # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_backward_dev_binding.
-            [addr_ro(flat, name="ids")], [dy.h, dw.h],
-            [v, d, t, pad, accumulate, _PLAN_CODE[self.plan]],
-        )
-        return dw
-
     # -- saved tables (lane/inference-embedding-ivf-cholesky, 2026-09-15) ---
 
     def save(self, path):
@@ -264,7 +198,7 @@ class Embedding(NumericModeMixin):
 
 # The 0.8.55 writer's members, in its order (members are written sorted).
 # `save` is connected here; `load` is the layer's own native entry
-# (bindings/embedding_layer_native.mojo), which builds the layer with its
+# (bindings/embedding_layer_native_door.mojo), which builds the layer with its
 # native lifetime.
 _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
     *_native_archive_bridge.head(_EMBEDDING_FORMAT),
@@ -276,7 +210,7 @@ _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
 
 
 # Package-import connection: the native forward/load owner and the native
-# `__setattr__` / `__del__` of the layer (bindings/embedding_layer_native.mojo).
+# `__setattr__` / `__del__` of the layer (bindings/embedding_layer_native_door.mojo).
 from . import _training_impl as _embedding_training  # noqa: E402
 from ._native_optimizer_bridge import connect_embedding as _connect_embedding  # noqa: E402
 _EMBEDDING_NATIVE, _EMBEDDING_CONTEXT = _connect_embedding(_embedding_training, Embedding, _ARCHIVE_CONTEXT)

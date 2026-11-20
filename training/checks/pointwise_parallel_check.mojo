@@ -8,6 +8,8 @@ from checks.pointwise_identical_multiplier_check import (
 )
 from gbdt.methods.pointwise_kernels import FoldsHistogram, POLICY_ONE_BYTE
 from gbdt.methods.pointwise_multi_gpu import pointwise_feature_shards
+from core.device_plan import device_plan_current
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
 def run_sharded_policy(
@@ -39,14 +41,16 @@ def run_sharded_policy(
     if p.policy == POLICY_ONE_BYTE:
         fh = folds_histogram_from_folds(p.folds)
 
+    # The plan a binding entry would pass: no plan is bound here, so rank r is device r.
+    var plan = device_plan_current("MOJOLEARN_GBDT_DEVICE_COUNT")
     var d_hist = ctx.enqueue_create_buffer[DType.float32](2 * line2)
     var h_hist = ctx.enqueue_create_host_buffer[DType.float32](2 * line2)
     ctx.enqueue_memset(d_hist, Float32(0.0))
 
     pointwise_feature_shards(ctx,p.policy,d_off,d_first,d_folds,d_oh,
         d_ci,d_tgt,d_wt,d_idx,d_parts1,d_hist,n,p.line,N_ROWS,1,1,
-        True,fh.copy(),sm_count,FIXED_SCALE,2)
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+        True,fh.copy(),sm_count,FIXED_SCALE,2,plan)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     var bits = List[UInt32]()
     var hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -55,8 +59,8 @@ def run_sharded_policy(
 
     pointwise_feature_shards(ctx,p.policy,d_off,d_first,d_folds,d_oh,
         d_ci,d_tgt,d_wt,d_idx,d_parts2,d_hist,n,p.line,N_ROWS,2,1,
-        False,fh.copy(),sm_count,FIXED_SCALE,2)
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+        False,fh.copy(),sm_count,FIXED_SCALE,2,plan)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
     for k in range(2 * line2):
@@ -91,9 +95,9 @@ def main() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_COLUMNS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices)
+    upload_whole_into[DType.float32](ctx, d_tgt, target)
+    upload_whole_into[DType.float32](ctx, d_wt, weight)
     ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex.unsafe_ptr())
 
     var parts1: List[UInt32] = [UInt32(0), UInt32(N_ROWS)]
@@ -102,8 +106,8 @@ def main() raises:
     ]
     var d_parts1 = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_parts2 = ctx.enqueue_create_buffer[DType.uint32](4)
-    ctx.enqueue_copy(dst_buf=d_parts1, src_ptr=parts1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_parts2, src_ptr=parts2.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts1, parts1)
+    upload_whole_into[DType.uint32](ctx, d_parts2, parts2)
     ctx.synchronize()
     _ = indices[0]
     _ = target[0]

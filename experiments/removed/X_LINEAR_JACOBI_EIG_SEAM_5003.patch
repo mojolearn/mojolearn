@@ -1,0 +1,241 @@
+diff --git b/tools/identity_lanes/linear.checks a/tools/identity_lanes/linear.checks
+index 2f0013aaba..5f60566ece 100644
+--- b/tools/identity_lanes/linear.checks
++++ a/tools/identity_lanes/linear.checks
+@@ -2,6 +2,7 @@
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5000_dot_order.patch
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5001_flush.patch
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5002_cholesky_order.patch
++x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5003_jacobi_order.patch
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5004_shuffle_map.patch
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5005_last_max.patch
+ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5006_host_nan.patch
+diff --git b/x_linear/bayes.mojo a/x_linear/bayes.mojo
+index acfacf3d8d..d852000393 100644
+--- b/x_linear/bayes.mojo
++++ a/x_linear/bayes.mojo
+@@ -24,7 +24,7 @@ from std.sys.compile import is_defined
+ from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
+-    cholesky, chol_solve, centered_gram, centered_xty, mean_of,
++    cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+     add_acc, axpy_acc, axpy_centered,
+ )
+ from std.sys.info import is_gpu, has_apple_gpu_accelerator
+diff --git b/x_linear/checks/sabotage/seam_5003_jacobi_order.patch a/x_linear/checks/sabotage/seam_5003_jacobi_order.patch
+new file mode 100644
+index 0000000000..a0c4292272
+--- /dev/null
++++ a/x_linear/checks/sabotage/seam_5003_jacobi_order.patch
+@@ -0,0 +1,12 @@
++--- a/x_linear/ops.mojo
+++++ b/x_linear/ops.mojo
++@@ -223,7 +223,8 @@
++     for _ in range(max_sweeps):
++         var rotated = False
++         for p in range(m):
++-            for q in range(p + 1, m):
+++            for qq in range(p + 1, m):
+++                var q = m - 1 - (qq - p - 1)  # SABOTAGE 5003
++                 var apq = ld(a, aoff + p * m + q)
++                 var app = ld(a, aoff + p * m + p)
++                 var aqq = ld(a, aoff + q * m + q)
+diff --git b/x_linear/checks/seams_check.mojo a/x_linear/checks/seams_check.mojo
+index 560b13018a..a00bd2bcc5 100644
+--- b/x_linear/checks/seams_check.mojo
++++ a/x_linear/checks/seams_check.mojo
+@@ -19,7 +19,7 @@ from std.sys.info import CompilationTarget
+ from core.identity_trace import IdentityTrace
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from checks.numerics import ftz
+-from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, shuffle, fexp, flog
++from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, jacobi_eig, shuffle, fexp, flog
+ from x_linear.dispatch import decision_one
+ from x_linear.team import team_work, solo
+ from x_linear.lars import lars_fit
+@@ -27,7 +27,7 @@ from x_linear.isotonic import isotonic_predict
+ from x_linear.cd import alpha_grid_value
+ from x_linear.checks.seams_oracle import (
+     flush, dot_pinned, dot_reversed, dot_unfused, add, add_unflushed,
+-    cholesky_pinned, cholesky_reversed_inner, splitmix, shuffle_mod, shuffle_mulshift,
++    cholesky_pinned, cholesky_reversed_inner, jacobi, splitmix, shuffle_mod, shuffle_mulshift,
+     argmax_abs_first, argmax_abs_last, CANONICAL_NAN_BITS,
+     score_intercept_last, score_intercept_first, exp_pinned, log_pinned, exp_libm, log_libm,
+     grid_pinned, grid_logspace,
+@@ -161,8 +161,29 @@ def check_cholesky(mut card: IdentityTrace) raises:
+     print("PASS 5002 cholesky: column-ascending, inner-ascending factor")
+ 
+ 
+-# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+-# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
++def check_jacobi(mut card: IdentityTrace) raises:
++    """DEVIATION 5003: cyclic Jacobi, p ascending then q ascending."""
++    var m = 6
++    var a = _spd(m, 31)
++    var wa = a.copy()
++    var wv = List[Float32](length=m * m, fill=0)
++    jacobi(wa, wv, m, 60, False)
++    var xa = a.copy()
++    var xv = List[Float32](length=m * m, fill=0)
++    jacobi(xa, xv, m, 60, True)
++    var sep = False
++    for i in range(m * m):
++        if _bits(wv[i]) != _bits(xv[i]):
++            sep = True
++    _require(sep, "VACUOUS jacobi fixture: q ascending and q descending sweeps agree")
++    var ga = a.copy()
++    var gv = List[Float32](length=m * m, fill=0)
++    jacobi_eig(_p(ga), 0, _p(gv), 0, m, 60)
++    for i in range(m * m):
++        _require(_bits(ga[i]) == _bits(wa[i]), "jacobi: eigenvalue matrix entry " + String(i))
++        _require(_bits(gv[i]) == _bits(wv[i]), "jacobi: eigenvector entry " + String(i))
++    card.record_host("x_linear.seam5003.jacobi", _u(gv), m * m)
++    print("PASS 5003 jacobi: p-ascending, q-ascending sweep")
+ 
+ 
+ def check_shuffle(mut card: IdentityTrace) raises:
+@@ -328,14 +349,15 @@ def main() raises:
+     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
+     var path = getenv("MOJOLEARN_XLINEAR_CARD", "/tmp/x_linear_seams.card")
+     var card = IdentityTrace.to_path(path)
+-    card.header("x_linear seams (DEVIATIONS 5000-5009 but 5003)")
++    card.header("x_linear seams (DEVIATIONS 5000-5009)")
+     check_dot(card)
+     check_flush(card)
+     check_cholesky(card)
++    check_jacobi(card)
+     check_shuffle(card)
+     check_tie(card)
+     check_nan(card)
+     check_intercept(card)
+     check_transcendentals(card)
+     check_grid(card)
+-    print("PASS x_linear seams: 9 seams, card", path)
++    print("PASS x_linear seams: 10 seams, card", path)
+diff --git b/x_linear/checks/seams_oracle.mojo a/x_linear/checks/seams_oracle.mojo
+index 17ee2738aa..362afb324b 100644
+--- b/x_linear/checks/seams_oracle.mojo
++++ a/x_linear/checks/seams_oracle.mojo
+@@ -105,14 +105,62 @@ def cholesky_reversed_inner(mut a: List[Float32], m: Int):
+             a[i * m + j] = div(t, r)
+ 
+ 
+-# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+-# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
+-
++# 5003: the Jacobi sweep ---------------------------------------------------------
+ 
+ def _abs(x: Float32) -> Float32:
+     return -x if x < 0 else x
+ 
+ 
++def _sign(x: Float32) -> Float32:
++    if x > 0:
++        return Float32(1)
++    if x < 0:
++        return Float32(-1)
++    return Float32(0)
++
++
++def jacobi(mut a: List[Float32], mut v: List[Float32], m: Int, sweeps: Int, q_descending: Bool):
++    """Cyclic Jacobi, p ascending and q ascending (or q descending, the
++    unpinned order), Rutishauser's rotation, the 1e-9 relative skip."""
++    for i in range(m):
++        for j in range(m):
++            v[i * m + j] = Float32(1) if i == j else Float32(0)
++    for _ in range(sweeps):
++        var rotated = False
++        for p in range(m):
++            for qq in range(p + 1, m):
++                var q = (m - 1 - (qq - p - 1)) if q_descending else qq
++                var apq = a[p * m + q]
++                var app = a[p * m + p]
++                var aqq = a[q * m + q]
++                var scale = sqrt_(_abs(mul(app, aqq)))
++                if _abs(apq) <= mul(Float32(1e-9), scale) or apq == 0:
++                    continue
++                rotated = True
++                var theta = div(sub(aqq, app), mul(Float32(2), apq))
++                var t = div(_sign(theta) if theta != 0 else Float32(1),
++                            add(_abs(theta), sqrt_(add(mul(theta, theta), Float32(1)))))
++                var c = div(Float32(1), sqrt_(add(mul(t, t), Float32(1))))
++                var s = mul(t, c)
++                for k in range(m):
++                    var akp = a[k * m + p]
++                    var akq = a[k * m + q]
++                    a[k * m + p] = sub(mul(c, akp), mul(s, akq))
++                    a[k * m + q] = add(mul(s, akp), mul(c, akq))
++                for k in range(m):
++                    var apk = a[p * m + k]
++                    var aqk = a[q * m + k]
++                    a[p * m + k] = sub(mul(c, apk), mul(s, aqk))
++                    a[q * m + k] = add(mul(s, apk), mul(c, aqk))
++                for k in range(m):
++                    var vkp = v[k * m + p]
++                    var vkq = v[k * m + q]
++                    v[k * m + p] = sub(mul(c, vkp), mul(s, vkq))
++                    v[k * m + q] = add(mul(s, vkp), mul(c, vkq))
++        if not rotated:
++            return
++
++
+ # 5004: the shuffle --------------------------------------------------------------
+ 
+ def splitmix(mut s: UInt64) -> UInt64:
+diff --git b/x_linear/ops.mojo a/x_linear/ops.mojo
+index 0f33828a62..80821d2bdc 100644
+--- b/x_linear/ops.mojo
++++ a/x_linear/ops.mojo
+@@ -503,8 +503,49 @@ def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
+         i -= 1
+ 
+ 
+-# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+-# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
++def jacobi_eig(a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
++    """Cyclic Jacobi (Golub & Van Loan, Algorithm 8.5.3, the classical
++    rotation of Rutishauser's form) on the symmetric m x m block at `aoff`:
++    eigenvalues land on its diagonal, eigenvectors in the COLUMNS of `v`.
++    Sweep order p ascending, q ascending; stops when a whole sweep rotates
++    nothing (every |a_pq| below 1e-9 * sqrt(a_pp a_qq)) or at `max_sweeps`.
++    DEVIATION 5003 (IDENTITY_PATHS row 103): this sweep order and rotation."""
++    for i in range(m):
++        for j in range(m):
++            st(v, voff + i * m + j, Float32(1) if i == j else Float32(0))
++    for _ in range(max_sweeps):
++        var rotated = False
++        for p in range(m):
++            for q in range(p + 1, m):
++                var apq = ld(a, aoff + p * m + q)
++                var app = ld(a, aoff + p * m + p)
++                var aqq = ld(a, aoff + q * m + q)
++                var scale = fsqrt(fabs(fm(app, aqq)))
++                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
++                    continue
++                rotated = True
++                var theta = fd(fs(aqq, app), fm(Float32(2), apq))
++                var tt = fd(fsign(theta) if theta != 0 else Float32(1),
++                            fa(fabs(theta), fsqrt(fa(fm(theta, theta), Float32(1)))))
++                var c = fd(Float32(1), fsqrt(fa(fm(tt, tt), Float32(1))))
++                var s = fm(tt, c)
++                for k in range(m):
++                    var akp = ld(a, aoff + k * m + p)
++                    var akq = ld(a, aoff + k * m + q)
++                    st(a, aoff + k * m + p, fs(fm(c, akp), fm(s, akq)))
++                    st(a, aoff + k * m + q, fa(fm(s, akp), fm(c, akq)))
++                for k in range(m):
++                    var apk = ld(a, aoff + p * m + k)
++                    var aqk = ld(a, aoff + q * m + k)
++                    st(a, aoff + p * m + k, fs(fm(c, apk), fm(s, aqk)))
++                    st(a, aoff + q * m + k, fa(fm(s, apk), fm(c, aqk)))
++                for k in range(m):
++                    var vkp = ld(v, voff + k * m + p)
++                    var vkq = ld(v, voff + k * m + q)
++                    st(v, voff + k * m + p, fs(fm(c, vkp), fm(s, vkq)))
++                    st(v, voff + k * m + q, fa(fm(s, vkp), fm(c, vkq)))
++        if not rotated:
++            return
+ 
+ 
+ def col_means(x: FP, n: Int, d: Int, rows: IP, n_rows: Int, use_rows: Bool, res: FP, ooff: Int):

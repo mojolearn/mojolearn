@@ -49,15 +49,14 @@ squared, and the root is taken over the `k` selected distances
 where cuVS takes it. `ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2`
 searches the metric; the identity_break lane is `ivf-euclidean`.
 """
-from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
+from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 from ._native_neighbor_queries import native_method as _native_query_method
 
 # The compiled saved-model owner, connected once at import (`save`/`load`).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit` is one native
-# call (bindings/neighbors_ann_native.mojo); its metric and mode tables are
+# call (bindings/neighbors_ann_native_door.mojo); its metric and mode tables are
 # added to the shared context below them.
 _FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
 
@@ -72,38 +71,23 @@ _METRICS = {
     "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
     "l2": METRIC_L2_SQRT_EXPANDED,
 }
-_METRIC_CODES = (METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED)
 _METRIC_NAMES = {METRIC_L2_EXPANDED: "sqeuclidean", METRIC_L2_SQRT_EXPANDED: "euclidean"}
 
-# The tables IVFIndex.fit's native owner reads (`_metric_code`, `_extension`).
+# The tables IVFIndex.fit's native owner reads (bindings/neighbors_ann_native_door.mojo:
+# the metric code and the binary's mode check).
 _native_family_bridge.tables(family_xn_ann_ivf_metrics=dict(_METRICS), family_xn_ann_ivf_mode_codes=dict(_MODE_CODE))
 
 #: The saved-index format tag (`save`, `load`, `mojolearn.host_model`).
 _IVF_FORMAT = "mojolearn-ivf-flat-1"
 
-#: The index arrays, in the binding's address order, with dtype and trailing
-#: shape (`None` stands for the row count or the list count).
-_INDEX_ARRAYS = (
-    ("centers_", "<f4"),
-    ("center_norms_", "<f4"),
-    ("list_offsets_", "<i4"),
-    ("list_indices_", "<i4"),
-    ("list_data_", "<f4"),
-)
+# Lane py-tail (2026-11-15): the uncalled Python twins of the native IVF
+# owner (`_int_param`, `_extension`, `_metric_code`, `_entry`, `_is_built`,
+# `_materialize_list_data`, `_resident_key`, `_resident_handle`,
+# `_release_resident`, `_INDEX_ARRAYS`) are deleted; bindings/
+# neighbors_ann_native_door.mojo owns them. The frozen test oracle keeps its
+# copies (tests/_legacy_neighbors_ann.py).
 
 
-def _int_param(name, v):
-    if isinstance(v, bool) or not isinstance(v, int):
-        raise TypeError(f"mojolearn IVFIndex: {name} must be an int, got {type(v).__name__}")
-    return int(v)
-
-
-# n_probes has no default (policy 1); n_probes > n_lists raises on the Mojo
-# host rather than clamping (policy 2); a build under each metric trains the
-# k-means quantizer on a different reduction (policy 4). The euclidean root is
-# taken over the k selected squared distances
-# (ivf/impl/neighbors/ivf_common.mojo::postprocess_distances), where cuVS
-# takes it; ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2.
 class IVFIndex(NumericModeMixin):
     """Approximate nearest-neighbor index with inverted lists (IVF-Flat).
 
@@ -199,62 +183,6 @@ class IVFIndex(NumericModeMixin):
         self.metric = metric
         self.random_state = random_state
 
-    def _extension(self):
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "ivf_numeric_mode", None)
-        if fn is not None and int(fn()) != _MODE_CODE.get(want):
-            raise RuntimeError(
-                f"mojolearn IVFIndex: numeric_mode={want!r} was requested but {mod.__name__} "
-                "reports another compile-time mode; rebuild it with bash bindings/build_ivf.sh"
-            )
-        return mod
-
-    def _metric_code(self):
-        if isinstance(self.metric, str):
-            if self.metric not in _METRICS:
-                raise ValueError(f"mojolearn IVFIndex: metric must be one of {sorted(_METRICS)}, got {self.metric!r}")
-            return _METRICS[self.metric]
-        if isinstance(self.metric, bool) or self.metric not in _METRIC_CODES:
-            raise ValueError(f"mojolearn IVFIndex: the metric codes are {METRIC_L2_EXPANDED} (L2Expanded) and {METRIC_L2_SQRT_EXPANDED} (L2SqrtExpanded), got {self.metric!r}")
-        return int(self.metric)
-
-    @staticmethod
-    def _entry(mod, name):
-        fn = getattr(mod, name, None)
-        if fn is None:
-            raise ImportError(
-                f"mojolearn IVFIndex: {getattr(mod, '__name__', mod)} exports no {name}; "
-                "this binary predates the build and search split, rebuild it with bash bindings/build_ivf.sh"
-            )
-        return fn
-
-    def _is_built(self):
-        """`fit` (or `load`) has run: the list vectors are in numpy or held
-        on the device by the resident build. Glue: reads two dict keys and
-        never makes the vectors."""
-        d = self.__dict__
-        return "list_data_" in d or "_device_list_data" in d
-
-
-    def _materialize_list_data(self):
-        """Write the resident index's list vectors into a new numpy array
-        (`ivf_flat_index_export`, one device copy in Mojo) and re-key the held
-        handle to it: the handle keeps serving searches, since the array holds
-        the words it holds."""
-        d = self.__dict__
-        if "_device_list_data" not in d:
-            return
-        cached = d.get("_resident")
-        if cached is None:
-            raise RuntimeError("mojolearn IVFIndex: the resident index was released before its list data was read")
-        n, dim = self.n_rows_, self.n_features_in_
-        data = empty((n * dim,), "<f4")
-        cached[2].ivf_flat_index_export(cached[1], addr(data, name="list_data_"), n * dim)
-        d["list_data_"] = data.reshape((n, dim))
-        del d["_device_list_data"]
-        d["_resident"] = (self._resident_key(False) + (id(cached[2]),), cached[1], cached[2])
-
     # On a GPU binding with `ivf_flat_build_resident` the index stays on the
     # device: the four small arrays are written here, the list vectors stay in
     # the binding's resident handle that `search` names, and `list_data_` is
@@ -284,81 +212,15 @@ class IVFIndex(NumericModeMixin):
     # -- the resident index (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo,
     # the closure of DEVIATION 1804) --
 
-    def _resident_key(self, partial):
-        # a resident build's list vectors are on the device ("device" marks
-        # them); reading the dict, not the attribute, so no export happens
-        arrays = tuple(self.__dict__.get(name) for name, _dtype in _INDEX_ARRAYS)  # glue: the five index array names
-        return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
-                      for a, (name, _dtype) in zip(arrays, _INDEX_ARRAYS)),  # glue: addresses of five index arrays
-                self.n_rows_, self.n_features_in_, self.n_lists_, self.metric_code_, bool(partial))
-
-    def _resident_handle(self, native, partial=False):
-        """The handle of this index held by `native` (admitted, copied and,
-        on a GPU binding, uploaded ONCE by `ivf_flat_index_prepare`),
-        reused while the five index arrays are the same objects at the same
-        addresses and shapes; None where the loaded binding has no such door
-        (a binary built before it), in which case the search takes the
-        per-call path. `neighbors.py::_resident_index_handle`'s rule."""
-        try:
-            prepare = native.ivf_flat_index_prepare
-        except (ImportError, AttributeError):
-            return None
-        key = self._resident_key(partial) + (id(native),)
-        cached = self.__dict__.get("_resident")
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        # another binding or a partial-storage search: the vectors come to
-        # numpy first, then the handle is replaced by a prepared one
-        self._materialize_list_data()
-        self._release_resident()
-        n, dim = self.n_rows_, self.n_features_in_
-        handle = int(prepare(
-            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_prepare).
-            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
-             addr_ro(self.center_norms_, name="center_norms_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"),
-             addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(self.list_data_.reshape((n * dim,)), name="list_data_")],
-            # n, dim, n_lists, metric, partial_storage
-            [n, dim, self.n_lists_, self.metric_code_, 1 if partial else 0],
-        ))
-        self._resident = (key, handle, native)
-        return handle
-
-    def _release_resident(self):
-        """Drop the held index, if any. Quiet on a binding that cannot be
-        reached any more (interpreter shutdown) or a handle already gone."""
-        # a resident build's vectors live only in the handle: export first
-        self._materialize_list_data()
-        cached = self.__dict__.pop("_resident", None)
-        if cached is None:
-            return
-        try:
-            cached[2].ivf_flat_index_release(cached[1])
-        except Exception:  # noqa: BLE001
-            pass
-
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no handle: the integer means
         something only in the process and registry that minted it. A resident
         build's list vectors are exported first, so the copy carries them."""
         return _NATIVE_QUERY(self, "getstate", (), _QUERY_CONTEXT)
-
-    @staticmethod
-    def _search_filter(filter, n):
-        if filter is None:
-            return None
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_ivf_impl')
-        f = np.asarray(filter)
-        if f.shape != (n,) or f.dtype != np.bool_:
-            raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "
-                             "one flag per indexed row")
-        return np.ascontiguousarray(f.astype(np.int32))
 
     # filter: cuVS's sample filter, applied to the merged candidates of the
     # probed lists before any distance (DEVIATION 5863); a short query is
@@ -437,18 +299,10 @@ class IVFIndex(NumericModeMixin):
     def _clone(self):
         """A new instance holding copies of this index's arrays (cuVS
         `ivf_flat::clone`'s role), so an extend on it leaves this one as it
-        was."""
-        if not self._is_built():
-            raise ValueError("mojolearn IVFIndex: call fit (or load) before _clone")
-        c = type(self)(n_lists=self.n_lists, n_probes=self.n_probes, n_neighbors=self.n_neighbors,
-                       kmeans_n_iters=self.kmeans_n_iters, metric=self.metric, random_state=self.random_state)
-        c.numeric_mode = getattr(self, "numeric_mode", None)
-        for name, dtype in _INDEX_ARRAYS:  # glue: the five index array names
-            a = getattr(self, name)
-            setattr(c, name, frombytes(a.tobytes(), dtype, tuple(a.shape)))
-        c.n_features_in_, c.n_rows_, c.n_lists_, c.metric_code_ = (
-            self.n_features_in_, self.n_rows_, self.n_lists_, self.metric_code_)
-        return c
+        was. One native operation (`_ivf_clone` in
+        bindings/neighbor_query_native_door.mojo): stamped admission, one memcpy
+        per array, no hooked attribute reads."""
+        return _NATIVE_QUERY(self, "clone", (), _QUERY_CONTEXT)
 
     # -- saved indexes (lane/inference-embedding-ivf-cholesky, 2026-09-15) --
 
@@ -458,7 +312,7 @@ class IVFIndex(NumericModeMixin):
     # save and load are one native call each: the schema below the class
     # (a resident build's `list_data_`, held only on the device, is exported
     # into the file by the binding's ivf_flat_index_export, leaving the
-    # index unchanged) and bindings/host_archive_native.mojo
+    # index unchanged) and bindings/host_archive_native_door.mojo
     # `host_archive_ivf`, as HostIVFIndex loads.
     def save(self, path):
         """Write the built index to `path` as an ``.npz`` file.

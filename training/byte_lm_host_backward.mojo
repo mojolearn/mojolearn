@@ -51,11 +51,23 @@ thread's floating-point environment (`core/host_parallel.mojo`, DEVIATION
 5900). So the block oracles' per-row stages, the loss's rows
 (`training/loss_host_rows.mojo`) and the optimizer's elements
 (`training/optimizer_host_rows.mojo`) run over host tasks. The loss and the
-optimizer keep the serial oracle calls one environment value away
-(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`); `tools/byte_lm_host_step_check.py`
-compares the two, every byte of every step, and
+optimizer keep the serial oracle calls one build define away
+(`-D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF`); `tools/byte_lm_host_step_check.py`
+compares the two builds, every byte of every step, and
 `tools/byte_lm_cpu_train_gate.py cpu` compares either against the recorded
 three-vendor bytes. Nothing lets a thread accumulate as it finishes.
+
+RESTORED 2026-11-13 (lane restore-byte-lm-host-step) as the CPU column's
+DEFAULT training step and loss, beside the GPU columns' restored hand step
+(training/byte_lm.mojo): lane x7b deleted it on 2026-11-09 when the GPU
+columns moved to the captured program; with the hand step back as the GPU
+default, the program on a host session (training/byte_lm_host_program.mojo)
+would no longer give the GPU columns' words. The program arm
+(-D MOJOLEARN_BYTE_LM_PROGRAM_STEP) was deleted 2026-11-17 (lane
+fb12-loser-arms, L40S B 1.36x slower), so every column runs this step. Restored unchanged from 5fff22515a except that
+`byte_host_adamw` stays in training/byte_lm_host_execution.mojo and the
+unused import of training/chunked_lm_head_host.mojo (never called; not
+restored) is gone.
 
 BATCH COMPOSITION IS PART OF THE CLAIM. Nine of the gradients contract over
 the token count, so `gemm_backward.mojo`'s own statement applies: the gradient
@@ -64,7 +76,7 @@ twice. A pass here is a statement at the shape it ran at.
 """
 
 from std.memory import unsafe_memcpy
-from std.os import getenv
+from std.sys.compile import is_defined
 
 from core.host_lanes import host_f32_uninit
 from gemm.contract import OP_NT
@@ -83,10 +95,9 @@ from training.byte_lm_host import (
 )
 from training.checks.loss_contract import CeConfig
 from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
-from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.optimizer_oracle import optimizer_step_oracle
 from training.loss_host_rows import ce_host_rows
-from training.chunked_lm_head_host import chunked_lm_head_gemm_host_train
 from training.optimizer_host_rows import adam_host_rows
 from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights
 from transformer.checks.transformer_oracle import (
@@ -103,24 +114,21 @@ from transformer.checks.transformer_backward_oracle import (
 )
 
 
+comptime BYTE_LM_HOST_STEP_ROWS = not is_defined["MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF"]()
+"""True unless `-D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF`: the loss's rows and
+the optimizer's elements over host tasks (module note); the define restores
+the serial oracle calls for both, which is what the check tool compares
+against (a second build since lane envgate-neural-lm, 2026-11-15; it was
+`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`, a getenv per host step)."""
+
+
 def byte_host_step_rows() -> Bool:
-    """True unless MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0: the loss's rows and the
-    optimizer's elements over host tasks (module note); 0 restores the serial
-    oracle calls for both, which is what the check tool compares against."""
-    return String(getenv("MOJOLEARN_BYTE_LM_HOST_STEP_ROWS")) != "0"
+    """See BYTE_LM_HOST_STEP_ROWS: a build constant."""
+    return BYTE_LM_HOST_STEP_ROWS
 
 
-def byte_host_adamw(lr: Float32, beta1: Float32, beta2: Float32,
-                    eps: Float32, weight_decay: Float32) -> OptimizerConfig:
-    """The byte LM's optimizer, spelled the one way its own validator allows.
-
-    `byte_validate_optimizer` (training/byte_lm.mojo) refuses anything but
-    positive-lr AdamW with finite legal betas and eps, no clipping, no
-    momentum, no dampening and no nesterov, so the remaining fields are zero
-    because that is the only value they may take here, not because zero is a
-    convenient default."""
-    return OptimizerConfig(OPT_ADAMW, lr, beta1, beta2, eps, weight_decay,
-                           Float32(0.0), Float32(0.0), False, Float32(0.0))
+# `byte_host_adamw` lives in training/byte_lm_host_execution.mojo since lane
+# x7b (one definition; this module does not need it).
 
 
 struct ByteHostStep(Movable):

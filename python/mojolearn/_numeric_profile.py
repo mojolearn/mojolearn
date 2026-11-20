@@ -101,8 +101,6 @@ with the change and the upper end of its interval both under 1 percent; and
 an end-to-end time with the conversion costs counted. `quality` holds only
 what was measured; a row never carries an estimate.
 """
-import os
-
 __all__ = ["DEFAULT", "ENV", "PROFILES", "REJECTED", "MEASURED",
            "NumericProfileSpeedWarning", "canonical", "default_profile",
            "set_default_profile", "resolve", "profiles", "measured",
@@ -220,20 +218,18 @@ class NumericProfileSpeedWarning(UserWarning):
 
 _warned = set()
 
+# The compiled numeric profile operations (`numeric_profile_native_door.mojo`),
+# bound by `_native_numeric_profile.connect` at package import. Every function
+# below is one call into it; validation, refusals, defaults and the speed
+# warning run in Mojo.
+_CALL = None
+_CONTEXT = None
+
 
 def canonical(name, what="numeric_profile"):
     """The name of a registered profile. A rejected arithmetic is refused
     with its measured reason, anything else with the registered names."""
-    if not isinstance(name, str):
-        raise TypeError(f"mojolearn: {what} must be a profile name (a str), got {type(name).__name__}")
-    key = name.strip()
-    if key in PROFILES:
-        return key
-    if key in REJECTED:
-        raise ValueError(f"mojolearn: {what}={name!r} is not offered: {REJECTED[key]}. "
-                         f"Registered: {', '.join(PROFILES)}")
-    raise ValueError(f"mojolearn: {what}={name!r} is not a registered numeric profile; "
-                     f"registered: {', '.join(PROFILES)}")
+    return _CALL("canonical", (name, what), _CONTEXT)
 
 
 def measured(profile, vendor=None):
@@ -265,69 +261,28 @@ def measured(profile, vendor=None):
     >>> import mojolearn
     >>> rows = mojolearn.numeric_profile_measured("fixed15_v1")
     """
-    rows = MEASURED.get(canonical(profile), {})
-    return dict(rows) if vendor is None else rows.get(vendor)
-
-
-def _this_vendor():
-    try:
-        from . import _backend
-        return _backend.vendor()
-    except Exception:  # noqa: BLE001  (loaded by path, or no binding on this box)
-        return None
+    return _CALL("measured", (profile, vendor), _CONTEXT)
 
 
 def _warn_if_slow_here(key, vendor=None):
     """Once per profile and vendor: say so when the profile was measured to
-    take longer than fp32_v1 on the vendor this process runs on."""
-    vendor = _this_vendor() if vendor is None else vendor
-    row = MEASURED.get(key, {}).get(vendor) if vendor else None
-    if row is None or row["over"][0] <= 1.0 or (key, vendor) in _warned:
-        return None
-    _warned.add((key, vendor))
-    import warnings
-    lo, hi = row["over"]
-    msg = (f"mojolearn: numeric profile {key!r} was measured on {row['box']} to take {lo:g} to {hi:g} "
-           f"times {BASELINE}'s time ({row['what']}; {row['source']}). Its bits are the same on every "
-           f"vendor; on this one it costs time. numeric_profile={BASELINE!r} (or "
-           f"{ENV}={BASELINE}) gives the previous arithmetic.")
-    warnings.warn(msg, NumericProfileSpeedWarning, stacklevel=3)
-    return msg
+    take longer than fp32_v1 on `vendor` (None: the vendor this process runs
+    on). Returns the message, or None."""
+    return _CALL("warn_if_slow", (key, vendor), _CONTEXT)
 
 
 USES = ("inference", "training")
 
 
-def _refuse_unavailable(key, what, use="inference"):
-    if use not in USES:
-        raise ValueError(f"mojolearn: use must be one of {USES}, got {use!r}")
-    row = PROFILES[key]
-    if not row[use]:
-        other = "inference" if use == "training" else "training"
-        also = f" It is available for {other}." if row[other] else ""
-        raise NotImplementedError(
-            f"mojolearn: {what}={key!r} is registered ({row['note']}) and is refused for {use}; "
-            f"it is never replaced by {BASELINE!r} silently.{also} Use numeric_profile={BASELINE!r}.")
-    return key
-
-
-def _family(family):
-    if family is not None and family not in FAMILIES:
-        raise ValueError(f"mojolearn: family must be one of {FAMILIES} or None, got {family!r}")
-    return family
-
-
 def computes(profile, family):
     """True when `family` computes under `profile`."""
-    fams = PROFILES[canonical(profile)]["computes"]
-    return fams is None or _family(family) in fams
+    return _CALL("computes", (profile, family), _CONTEXT)
 
 
 def default_reaches(profile, family):
     """True when a call in `family` that names no profile gets `profile`
     while it is the inference default."""
-    fams = PROFILES[canonical(profile)]["default_for"]
-    return fams is None or _family(family) in fams
+    return _CALL("default_reaches", (profile, family), _CONTEXT)
 
 
 _defaults = {}
@@ -361,15 +316,7 @@ def default_profile(use="inference"):
     >>> mojolearn.numeric_profile()
     'fp32_v1'
     """
-    if use not in USES:
-        raise ValueError(f"mojolearn: use must be one of {USES}, got {use!r}")
-    if use not in _defaults:
-        if use == "inference":
-            env = os.environ.get(ENV, "").strip()
-            _defaults[use] = _refuse_unavailable(canonical(env, ENV), ENV) if env else DEFAULT
-        else:
-            _defaults[use] = TRAINING_DEFAULT
-    return _defaults[use]
+    return _CALL("default", (use,), _CONTEXT)
 
 
 def set_default_profile(name, use="inference"):
@@ -402,10 +349,7 @@ def set_default_profile(name, use="inference"):
     >>> import mojolearn
     >>> previous = mojolearn.set_numeric_profile("fp32_v1")
     """
-    prev = default_profile(use)
-    _defaults[use] = _refuse_unavailable(canonical(name, "set_numeric_profile"),
-                                         "set_numeric_profile", use)
-    return prev
+    return _CALL("set_default", (name, use), _CONTEXT)
 
 
 def resolve(name=None, what="numeric_profile", use="inference", family=None):
@@ -415,22 +359,7 @@ def resolve(name=None, what="numeric_profile", use="inference", family=None):
     returns). A NAME is validated, and refused by name when the profile is
     not available for `use` or does not compute `family`; it is never
     replaced by another profile."""
-    _family(family)
-    if name is None:
-        key = default_profile(use)
-        if family is not None and not (computes(key, family) and default_reaches(key, family)):
-            key = BASELINE
-    else:
-        key = canonical(name, what)
-        if family is not None and not computes(key, family):
-            raise NotImplementedError(
-                f"mojolearn: {what}={key!r} does not compute the {family!r} family (it computes "
-                f"{', '.join(PROFILES[key]['computes'])}); it is never replaced by {BASELINE!r} "
-                f"silently. Use numeric_profile={BASELINE!r}.")
-    _refuse_unavailable(key, what, use)
-    if key != BASELINE:
-        _warn_if_slow_here(key)
-    return key
+    return _CALL("resolve", (name, what, use, family), _CONTEXT)
 
 
 def require_training(what, name=None):
@@ -438,7 +367,7 @@ def require_training(what, name=None):
     caller named nothing (the inference default never reaches a trainer),
     else the named profile, refused by name unless it has passed for
     training."""
-    return resolve(name, what, use="training")
+    return _CALL("resolve", (name, what, "training", None), _CONTEXT)
 
 
 def profiles():
@@ -461,12 +390,7 @@ def profiles():
     >>> [p["name"] for p in mojolearn.numeric_profiles()]
     ['fp32_v1', 'fixed15_v1']
     """
-    return tuple({"name": k, "default": k == DEFAULT, "training_default": k == TRAINING_DEFAULT,
-                  **v, "products": dict(v["products"]),
-                  "computes": None if v["computes"] is None else tuple(v["computes"]),
-                  "default_for": None if v["default_for"] is None else tuple(v["default_for"]),
-                  "quality": dict(v["quality"]), "measured": dict(MEASURED.get(k, {}))}
-                 for k, v in PROFILES.items())  # glue: one record per numeric profile
+    return _CALL("profiles", (), _CONTEXT)
 
 
 def state_field(profile):
@@ -474,25 +398,13 @@ def state_field(profile):
     `fp32_v1` (so an fp32_v1 checkpoint's bytes do not change, and a state
     with no field reads as fp32_v1), the name otherwise; a state written
     under the opt-in profile `fixed15_v1` carries it."""
-    key = canonical(profile)
-    return {} if key == BASELINE else {STATE_KEY: key}
-
-
-def _saved(state, what):
-    saved = state.get(STATE_KEY) if hasattr(state, "get") else None
-    return BASELINE if saved is None else canonical(saved, f"{what} {STATE_KEY}")
+    return _CALL("state_field", (profile,), _CONTEXT)
 
 
 def check_saved(state, profile, what="state"):
     """Refuse by name a state written under another profile than the one
     this object computes under. A state with no field is `fp32_v1`."""
-    saved = _saved(state, what)
-    mine = canonical(profile)
-    if saved != mine:
-        raise ValueError(f"mojolearn: {what} was written under numeric profile {saved!r} and this "
-                         f"object computes under {mine!r}; a run keeps one arithmetic, "
-                         f"so build the object with numeric_profile={saved!r}")
-    return saved
+    return _CALL("check_saved", (state, profile, what), _CONTEXT)
 
 
 def adopt_saved(state, name=None, what="state", use="inference"):
@@ -501,7 +413,4 @@ def adopt_saved(state, name=None, what="state", use="inference"):
     with no field is `fp32_v1`, whatever the process default is now); a
     caller who named a different one is refused by name. The adopted
     profile must still be available for `use`."""
-    saved = _saved(state, what)
-    if name is not None:
-        check_saved(state, name, what)
-    return _refuse_unavailable(saved, f"{what} {STATE_KEY}", use)
+    return _CALL("adopt_saved", (state, name, what, use), _CONTEXT)

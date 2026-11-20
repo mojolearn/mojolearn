@@ -1,5 +1,6 @@
 """Constructor connection/source guards; these do not claim native runtime success."""
 import ast
+import re
 import inspect
 from pathlib import Path
 from types import ModuleType
@@ -27,9 +28,11 @@ def fixture():
         method=next(n for n in node.body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
         exec(compile(ast.Module(body=[method],type_ignores=[]),'<constructor oracle>','exec'),namespace)
         original=namespace['__init__']
+        # Each vetted constructor declares numeric_mode itself and assigns it
+        # in its body (no mode wrapper appends it); the oracle signature is the
+        # declared one, and numeric_mode must be part of it.
         signature=inspect.signature(original)
-        signature=signature.replace(parameters=[*signature.parameters.values(),inspect.Parameter('numeric_mode',inspect.Parameter.KEYWORD_ONLY,default=None)])
-        original.__signature__=signature
+        assert 'numeric_mode' in signature.parameters
         cls=type(node.name,(),{'__init__':original});classes.append(cls);signatures[cls]=signature
     order=selected();classes.sort(key=lambda cls:order.index(cls.__name__))
     body=[n for n in ast.parse(CONNECTOR.read_text()).body if isinstance(n,ast.FunctionDef)]
@@ -80,7 +83,7 @@ def test_additional_constructor_work_requires_explicit_new_schema():
 
 
 def test_installer_precedes_all_layout_snapshots():
-    text=(ROOT/'python/mojolearn/__init__.py').read_text()
+    text=(ROOT/'python/mojolearn/_families.py').read_text()  # the package's class connections
     calls=['_install_linear_constructors(', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
            '_connect_native_cv(', '_connect_params_setter(', '_connect_params_metadata_classes(', '_connect_linear_constructors(']
     positions=[text.index(call) for call in calls];assert positions==sorted(positions)
@@ -90,7 +93,7 @@ def test_constructor_has_one_native_call_and_no_python_lifecycle_fallback():
     tree=ast.parse(CONNECTOR.read_text());factory=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_initializer')
     wrapper=factory.body[0];assert isinstance(wrapper,ast.FunctionDef)
     assert len(wrapper.body)==1 and ast.unparse(wrapper.body[0])=='return _ENTRY(self, args, kwargs, _CONTEXT)'
-    native=(ROOT/'bindings/linear_constructor_native.mojo').read_text()
+    native=(ROOT/'bindings/linear_constructor_native_pack.mojo').read_text()
     for forbidden in ('Python.import_module','.__init__(','.__setattr__(','.bind(', 'fields.clear', 'fields.pop', 'native_storage_allocate'):
         assert forbidden not in native
     assert native.index('_release_admit(previous,') < native.index('py_setitem(fields, order[i]')
@@ -98,7 +101,7 @@ def test_constructor_has_one_native_call_and_no_python_lifecycle_fallback():
     assert 'py_get(_class_fields(hooks[i][0]), hooks[i][1]) is not hooks[i][2]' in native
     assert 'native_instance_item(fields, "numeric_mode")' in native
     assert 'var previous = native_instance_item(fields, name)' in native
-    assert 'fields[' not in native
+    assert not re.search(r'(?<![\w.])fields\[', native)   # instance fields only through native_instance_item
     assert '_resolved(py_type(model), "numeric_mode", context["missing"])' in native
     registration=(ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
     assert '\n        module.def_py_c_function(linear_constructor_c, "linear_constructor_native_call")\n' in registration
@@ -126,4 +129,5 @@ def test_field_order_matches_each_original_constructor_body():
     originals={node.name:node for node in tree.body if isinstance(node,ast.ClassDef)}
     for cls,plan in ns['_CONTEXT']['plans'].items():
         function=next(n for n in originals[cls.__name__].body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
-        assert plan['order']==tuple(fields(function))+('numeric_mode',)
+        assert plan['order']==tuple(fields(function))
+        assert plan['order'][-1]=='numeric_mode'

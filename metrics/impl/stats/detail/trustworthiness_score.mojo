@@ -66,7 +66,7 @@ holds the k+1 neighbor distances).
 from core.hostptr import copy_f32
 from std.math import fma
 from std.atomic import Atomic
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -82,7 +82,6 @@ from metrics.checks.pinned_sum import (
     physical_block_count,
 )
 from neighbors.estimator import knn_search_traced, _knn_search_traced_retaining
-from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 #: lane fam2-prep-metrics (2026-10-04), IDENTICAL, ON by default: the embedded
@@ -91,11 +90,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: host walk that copied the n x (k+1) indices into a list and their upload
 #: are gone; the list is built only for a caller that asks (`want_idx`) or a
 #: card. The same indices, the same integer rank sum: no bit moves.
-#: -D MOJOLEARN_IDN_TRUST_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the round trip.
-comptime IDN_TRUST_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_TRUST_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_IDN_TRUST_DEV_OFF, MOJOLEARN_IDN_ALL_OFF (old paths, no A/B recorded; umbrella EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at d8a165cb14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRUST_DEV_OFF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_TRUST_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: lane fix-c1-cluster (2026-10-04), IDENTICAL, ON by default: the k-NN reads
@@ -103,15 +100,10 @@ comptime IDN_TRUST_DEV = (
 #: same bytes; the caller holds the list across the call), so the n x d host
 #: staging copy into a pinned host buffer (and that buffer) are gone.
 #: The search uploads the same bytes, so the same indices and rank sum: no bit
-#: moves. -D MOJOLEARN_IDN_TRUST_NO_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the staging copy.
-comptime IDN_TRUST_NO_STAGE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_TRUST_NO_STAGE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: moves.
+# TOMBSTONE: MOJOLEARN_IDN_TRUST_NO_STAGE_OFF, MOJOLEARN_IDN_ALL_OFF (old paths, no A/B recorded; umbrella EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at d8a165cb14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRUST_NO_STAGE_OFF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_TRUST_NO_STAGE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: The threadgroup slab for the k+1 embedded-neighbor distances and ranks.

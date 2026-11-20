@@ -6,8 +6,8 @@ import re
 from check_neural_native_boundary import NATIVE_ROOTS, audit
 
 ROOT = Path(__file__).resolve().parents[1]
-BINDING = (ROOT / 'bindings/causal_lm_public.mojo').read_text()
-PROVIDER = (ROOT / 'providers/python/generation_metadata_pyapi.mojo').read_text()
+BINDING = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
+PROVIDER = (ROOT / 'providers/python/generation_metadata_pyapi_door.mojo').read_text()
 NATIVE = (ROOT / 'core/generation_metadata.mojo').read_text()
 
 
@@ -99,8 +99,12 @@ def test_existing_standalone_and_profile_routes_remain_available():
     assert 'GenerationLayerSnapshot(_block(mods, model, i), kind, planes)' in layer
     body = function('_causal_layer_run_bound')
     assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
-    for route in ('"forward15"', '"forward15_host"', '"forward_session"',
-                  'generation_native_forward(', 'neural_descriptor_execute('):
+    # 3daf242df3: the CPU block runs through the CausalLM entry table (plain and fixed15 ops); the GPU block runs
+    # its native session (plain and fixed15 ops); the bound Python forward/decode entries remain the fallback.
+    for route in ('CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD',
+                  'transformer_block_session_run(session,',
+                  'NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD',
+                  'e["decode" if step else "forward"]'):
         assert route in body
     # Resident session setup retains its original, separate metadata admission.
     assert '_transformer_params(' in BINDING

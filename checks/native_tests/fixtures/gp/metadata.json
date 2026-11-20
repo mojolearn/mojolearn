@@ -1,0 +1,1400 @@
+{
+  "status": "Independent reference preparation only; native tests not compiled or run",
+  "numpy": "2.5.2",
+  "workers": 10,
+  "gpr_profiles": 14,
+  "classifier_input_profiles": 3,
+  "artifacts": [
+    {
+      "file": "surface16-source.f32",
+      "shape": [
+        16,
+        2
+      ],
+      "dtype": "<f4",
+      "bytes": 128,
+      "sha256": "589baefd498a75977c57acd313402fafa7af8fe3a5504140bb7b5872dbe50787"
+    },
+    {
+      "file": "surface16-target.f32",
+      "shape": [
+        16
+      ],
+      "dtype": "<f4",
+      "bytes": 64,
+      "sha256": "f1a708bea3d6d2398e32a593a35f0a2de918ef4cce0b0071a4a4492bc6039d06"
+    },
+    {
+      "file": "surface16-query.f32",
+      "shape": [
+        16,
+        2
+      ],
+      "dtype": "<f4",
+      "bytes": 128,
+      "sha256": "589baefd498a75977c57acd313402fafa7af8fe3a5504140bb7b5872dbe50787"
+    },
+    {
+      "file": "surface16-mean.f64",
+      "shape": [
+        16
+      ],
+      "dtype": "<f8",
+      "bytes": 128,
+      "sha256": "ee271cdeef583cee95a499f16ce5588a3bc28ca391dfd839215c27658ef2bd3b"
+    },
+    {
+      "file": "surface16-covariance.f64",
+      "shape": [
+        16,
+        16
+      ],
+      "dtype": "<f8",
+      "bytes": 2048,
+      "sha256": "3523d1297a593a12ec80500c3f01ae51cc71a2f1556802aa9f936dbbdd8cf43f"
+    },
+    {
+      "file": "surface16-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "326a465a790cc374145e498348020ba122550d3a0f8568205957a594d3c5a36a"
+    },
+    {
+      "file": "cov60-source.f32",
+      "shape": [
+        60,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 720,
+      "sha256": "85a478f1af43edacd68cfd9b14530bdf03566e44f32e082c730c66730c5591f3"
+    },
+    {
+      "file": "cov60-target.f32",
+      "shape": [
+        60
+      ],
+      "dtype": "<f4",
+      "bytes": 240,
+      "sha256": "9faf47165de76243cafba7fec20ffc217f6156f7d749705d721905d49005cc14"
+    },
+    {
+      "file": "cov60-query.f32",
+      "shape": [
+        20,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 240,
+      "sha256": "e92c0504122dcc8e28c5574ebaa6ce2432a92ea718ee74a02e6adc65795b6d97"
+    },
+    {
+      "file": "cov60-mean.f64",
+      "shape": [
+        20
+      ],
+      "dtype": "<f8",
+      "bytes": 160,
+      "sha256": "d794e6f1a8331c05c56346ae4979be3d3647f50d54ce873549026232db627039"
+    },
+    {
+      "file": "cov60-covariance.f64",
+      "shape": [
+        20,
+        20
+      ],
+      "dtype": "<f8",
+      "bytes": 3200,
+      "sha256": "eb98961c78eabe80bb9d1fd9b5688b4a9a1f87bc8c171f2644609a96c04b1cb9"
+    },
+    {
+      "file": "cov60-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "5c5372afa554029600df1cceb2769d1847c758725270bd7d8e5488eea19efb0f"
+    },
+    {
+      "file": "cov60norm-source.f32",
+      "shape": [
+        60,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 720,
+      "sha256": "85a478f1af43edacd68cfd9b14530bdf03566e44f32e082c730c66730c5591f3"
+    },
+    {
+      "file": "cov60norm-target.f32",
+      "shape": [
+        60
+      ],
+      "dtype": "<f4",
+      "bytes": 240,
+      "sha256": "da2fef715e82242d1236262f845f1edeab7baf79fffaa75a612a106f6495143b"
+    },
+    {
+      "file": "cov60norm-query.f32",
+      "shape": [
+        20,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 240,
+      "sha256": "e92c0504122dcc8e28c5574ebaa6ce2432a92ea718ee74a02e6adc65795b6d97"
+    },
+    {
+      "file": "cov60norm-mean.f64",
+      "shape": [
+        20
+      ],
+      "dtype": "<f8",
+      "bytes": 160,
+      "sha256": "296f6b02584fc908b7cf733c23d232dbca38ac1ab0ecd29e18c6b5a64336b004"
+    },
+    {
+      "file": "cov60norm-covariance.f64",
+      "shape": [
+        20,
+        20
+      ],
+      "dtype": "<f8",
+      "bytes": 3200,
+      "sha256": "5c1ca8ff89f5e91431e56b3403fd232a7d4d0302d5aedaed08b841e9ff8b4b46"
+    },
+    {
+      "file": "cov60norm-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "7e6393566f904ea35a6a9c828f47417ee1fa1451fee61e160348135b7590a6b3"
+    },
+    {
+      "file": "normalize96-source.f32",
+      "shape": [
+        96,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 1152,
+      "sha256": "863dba1b8c1695eb86dd450090a49def56ddb44ab13550f359c16bb34c86ee96"
+    },
+    {
+      "file": "normalize96-target.f32",
+      "shape": [
+        96
+      ],
+      "dtype": "<f4",
+      "bytes": 384,
+      "sha256": "4d49ac69739502cb65672249df082417c8642798dc704387937c52876e712653"
+    },
+    {
+      "file": "normalize96-query.f32",
+      "shape": [
+        24,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 288,
+      "sha256": "bc03b811ae5439929c176f55809e9ed8bc381f891af6ea75ab9eec6f67755962"
+    },
+    {
+      "file": "normalize96-mean.f64",
+      "shape": [
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 192,
+      "sha256": "fe53ae16e0549a1bed771632e4ac0efc8b58aca80f32fcdd02ef35efbd306252"
+    },
+    {
+      "file": "normalize96-covariance.f64",
+      "shape": [
+        24,
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 4608,
+      "sha256": "924c06915d8983d0447a744236876e438122027d7126e626425e9078a2c6db76"
+    },
+    {
+      "file": "normalize96-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "f3f940480f9088ee1e00d7645e939f50f00387acc95aa6da09efa7afc6d54471"
+    },
+    {
+      "file": "constant96-source.f32",
+      "shape": [
+        96,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 1152,
+      "sha256": "863dba1b8c1695eb86dd450090a49def56ddb44ab13550f359c16bb34c86ee96"
+    },
+    {
+      "file": "constant96-target.f32",
+      "shape": [
+        96
+      ],
+      "dtype": "<f4",
+      "bytes": 384,
+      "sha256": "24fa2514d83166bd7bb7faf12316fee926912b053fc37db3f5e0125bc22125aa"
+    },
+    {
+      "file": "constant96-query.f32",
+      "shape": [
+        24,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 288,
+      "sha256": "bc03b811ae5439929c176f55809e9ed8bc381f891af6ea75ab9eec6f67755962"
+    },
+    {
+      "file": "constant96-mean.f64",
+      "shape": [
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 192,
+      "sha256": "85876256eced3f28bfcde4a77b97d819820177a1769972d95391c5c2691f6ea0"
+    },
+    {
+      "file": "constant96-covariance.f64",
+      "shape": [
+        24,
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 4608,
+      "sha256": "0b2211670508017ce01269b049ba722cf075c949af10f6cba39ddd71f110c9d1"
+    },
+    {
+      "file": "constant96-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "8a5fb31d9a85e00817409f6ae2bce37bb9c5af26d123511c0350280d297bd815"
+    },
+    {
+      "file": "sample_shape96-source.f32",
+      "shape": [
+        96,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 1152,
+      "sha256": "863dba1b8c1695eb86dd450090a49def56ddb44ab13550f359c16bb34c86ee96"
+    },
+    {
+      "file": "sample_shape96-target.f32",
+      "shape": [
+        96
+      ],
+      "dtype": "<f4",
+      "bytes": 384,
+      "sha256": "4d49ac69739502cb65672249df082417c8642798dc704387937c52876e712653"
+    },
+    {
+      "file": "sample_shape96-query.f32",
+      "shape": [
+        24,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 288,
+      "sha256": "bc03b811ae5439929c176f55809e9ed8bc381f891af6ea75ab9eec6f67755962"
+    },
+    {
+      "file": "sample_shape96-mean.f64",
+      "shape": [
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 192,
+      "sha256": "a68964851d20d2b62c35828a95aa9d0f992ced8d2f8a45f3abf4ba82fa542a69"
+    },
+    {
+      "file": "sample_shape96-covariance.f64",
+      "shape": [
+        24,
+        24
+      ],
+      "dtype": "<f8",
+      "bytes": 4608,
+      "sha256": "0b2211670508017ce01269b049ba722cf075c949af10f6cba39ddd71f110c9d1"
+    },
+    {
+      "file": "sample_shape96-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "32d7c9cce0cd757bed7c298a86a0b47cee917a4f7e9af110600f11a668843b03"
+    },
+    {
+      "file": "sample_moments96-source.f32",
+      "shape": [
+        96,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 1152,
+      "sha256": "707e23eab2661f8c1f1808dfb828d854f37eb606ac1e33fd7ebf5565efcbae96"
+    },
+    {
+      "file": "sample_moments96-target.f32",
+      "shape": [
+        96
+      ],
+      "dtype": "<f4",
+      "bytes": 384,
+      "sha256": "c51cb028f5ee2451f2eec39c9536ba3c745d94286fb403f324065e9db6de4d75"
+    },
+    {
+      "file": "sample_moments96-query.f32",
+      "shape": [
+        6,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 72,
+      "sha256": "704334d837d2dd75df9ebff2f36a797dca04978d4c1a7b6337d3b54df23193e4"
+    },
+    {
+      "file": "sample_moments96-mean.f64",
+      "shape": [
+        6
+      ],
+      "dtype": "<f8",
+      "bytes": 48,
+      "sha256": "799477d4be99dcc6567c1e6ddfb2b079ab8ec0ab043203790e422b336420dcb7"
+    },
+    {
+      "file": "sample_moments96-covariance.f64",
+      "shape": [
+        6,
+        6
+      ],
+      "dtype": "<f8",
+      "bytes": 288,
+      "sha256": "8a3c58603ce8811c94e32ae03cbea12435b897a076748b7da7fa133173a6073a"
+    },
+    {
+      "file": "sample_moments96-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "9e20c0ccaee6c67ed2732b070f64d3e2867e34955d7c66fa6fd412e08ab97c4e"
+    },
+    {
+      "file": "gradient_rbf40-source.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_rbf40-target.f32",
+      "shape": [
+        40
+      ],
+      "dtype": "<f4",
+      "bytes": 160,
+      "sha256": "417b56075f5a0ae2c6c85dbd301f8c4f64b37711d66509ed317ab370ed6398b3"
+    },
+    {
+      "file": "gradient_rbf40-query.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_rbf40-mean.f64",
+      "shape": [
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 320,
+      "sha256": "d1662b89f5d15baa78f725dff53c777f9f47c44aad50e5980cc6df0994cb0120"
+    },
+    {
+      "file": "gradient_rbf40-covariance.f64",
+      "shape": [
+        40,
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 12800,
+      "sha256": "2d3d71c398a424e073e0faf1587b25d3a359a97a1c65574a16b5326a735dd0ed"
+    },
+    {
+      "file": "gradient_rbf40-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "52bf67aeb73be79e590f5340424bea7caa29a8d8813f0a181bd8725d9880ec0c"
+    },
+    {
+      "file": "gradient_rbf40-gradient.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "f9a9d1ad46f97dda1a84a0a9253add920adcb1d420cf2c9164ad101c9765d438"
+    },
+    {
+      "file": "gradient_matern05_40-source.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern05_40-target.f32",
+      "shape": [
+        40
+      ],
+      "dtype": "<f4",
+      "bytes": 160,
+      "sha256": "417b56075f5a0ae2c6c85dbd301f8c4f64b37711d66509ed317ab370ed6398b3"
+    },
+    {
+      "file": "gradient_matern05_40-query.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern05_40-mean.f64",
+      "shape": [
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 320,
+      "sha256": "85d29cf81ad04ab50ed4db136a6fdc6a86edd199e375d89e56c6a3fe0a660b42"
+    },
+    {
+      "file": "gradient_matern05_40-covariance.f64",
+      "shape": [
+        40,
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 12800,
+      "sha256": "916ef8dcc0cad6d28bf36cf043def6e23551a59359dbad561d29917cb44d3bae"
+    },
+    {
+      "file": "gradient_matern05_40-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "bcf2ddccfe74c5bf2e81a9430e29e57b23afbc559fcaacb19de3e8036d3b8d4b"
+    },
+    {
+      "file": "gradient_matern05_40-gradient.f64",
+      "shape": [
+        3
+      ],
+      "dtype": "<f8",
+      "bytes": 24,
+      "sha256": "ed49e4a31af310521292c6541eba9627dffdc1ce710690c3d32e18c59deaef23"
+    },
+    {
+      "file": "gradient_matern15_40-source.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern15_40-target.f32",
+      "shape": [
+        40
+      ],
+      "dtype": "<f4",
+      "bytes": 160,
+      "sha256": "417b56075f5a0ae2c6c85dbd301f8c4f64b37711d66509ed317ab370ed6398b3"
+    },
+    {
+      "file": "gradient_matern15_40-query.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern15_40-mean.f64",
+      "shape": [
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 320,
+      "sha256": "72f11caf3b5782e9fc5e3b5cba1ed7a96fb5a01eaee724b2914869bb5e247ee1"
+    },
+    {
+      "file": "gradient_matern15_40-covariance.f64",
+      "shape": [
+        40,
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 12800,
+      "sha256": "21c09e4b697b74899198f8f76cb155eca98810d3982a6d9228083b9f1ef1891e"
+    },
+    {
+      "file": "gradient_matern15_40-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "18cf430799d473cbb0bb242888304e0124a6926e7e95e700ffb8fd8061f316fd"
+    },
+    {
+      "file": "gradient_matern15_40-gradient.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "7bfe0823613c985a91ac23cdb35f97018ee9bb4e34413f999256cb4a5075dcd4"
+    },
+    {
+      "file": "gradient_matern25_40-source.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern25_40-target.f32",
+      "shape": [
+        40
+      ],
+      "dtype": "<f4",
+      "bytes": 160,
+      "sha256": "417b56075f5a0ae2c6c85dbd301f8c4f64b37711d66509ed317ab370ed6398b3"
+    },
+    {
+      "file": "gradient_matern25_40-query.f32",
+      "shape": [
+        40,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 480,
+      "sha256": "42d5e78bd9281482c23313cbd73a629b996d1a3596d74dff40b425bec9a1d819"
+    },
+    {
+      "file": "gradient_matern25_40-mean.f64",
+      "shape": [
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 320,
+      "sha256": "1a2cf26c89c8c94ef3b583d2b406f90fe9a4da9cf521c2d05ec4cd60354f4a91"
+    },
+    {
+      "file": "gradient_matern25_40-covariance.f64",
+      "shape": [
+        40,
+        40
+      ],
+      "dtype": "<f8",
+      "bytes": 12800,
+      "sha256": "2292750e455701aab8b40df88e28e31c7001dc691ec69c1edeff5ab061168e3e"
+    },
+    {
+      "file": "gradient_matern25_40-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "e2d79d4155590cf2a4bc9e291e9b39f31568a5a2dce0c34209337e5eba43cb6c"
+    },
+    {
+      "file": "gradient_matern25_40-gradient.f64",
+      "shape": [
+        3
+      ],
+      "dtype": "<f8",
+      "bytes": 24,
+      "sha256": "a1b2cb5a12da029b5192eb7a94b07574ca6da8aa885fb0a5b7f455acbcd2440a"
+    },
+    {
+      "file": "optimize48-source.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 576,
+      "sha256": "739425bd77ca127b8cbe82b74585a6dfc1a9cb0c2c5a501e0ae4c51a3cd7493b"
+    },
+    {
+      "file": "optimize48-target.f32",
+      "shape": [
+        48
+      ],
+      "dtype": "<f4",
+      "bytes": 192,
+      "sha256": "82a2dbf4eff2020ff92a5f732ac5d48592bd24817b54da6f82990c3ed8f3a942"
+    },
+    {
+      "file": "optimize48-query.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 576,
+      "sha256": "739425bd77ca127b8cbe82b74585a6dfc1a9cb0c2c5a501e0ae4c51a3cd7493b"
+    },
+    {
+      "file": "optimize48-mean.f64",
+      "shape": [
+        48
+      ],
+      "dtype": "<f8",
+      "bytes": 384,
+      "sha256": "29ff99df70dab564d34a3da474c8063ee84b1312521f45d6752b4caec8188e2f"
+    },
+    {
+      "file": "optimize48-covariance.f64",
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "<f8",
+      "bytes": 18432,
+      "sha256": "4461b98ced8e526b5e14d28db1b53522d2c4b5c4de236ed51d983327c97710c4"
+    },
+    {
+      "file": "optimize48-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "600b028b6ca47948d667302da8e4abbe80d79f958dabc05c9f4d68173c05a24d"
+    },
+    {
+      "file": "restart48-source.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 576,
+      "sha256": "8c4e08b192b117ab9374c423bc266510ea2a09a01a1c2dd9c0dab53294ee21a0"
+    },
+    {
+      "file": "restart48-target.f32",
+      "shape": [
+        48
+      ],
+      "dtype": "<f4",
+      "bytes": 192,
+      "sha256": "0132c80f760ccca62a84382bcadb9b3a4a57f483457783640f19c128df962a74"
+    },
+    {
+      "file": "restart48-query.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 576,
+      "sha256": "8c4e08b192b117ab9374c423bc266510ea2a09a01a1c2dd9c0dab53294ee21a0"
+    },
+    {
+      "file": "restart48-mean.f64",
+      "shape": [
+        48
+      ],
+      "dtype": "<f8",
+      "bytes": 384,
+      "sha256": "7c3d4d37d41d9ffd21e5f6c4e0d6148abde01be8badba609e18cf802f7c2a2c8"
+    },
+    {
+      "file": "restart48-covariance.f64",
+      "shape": [
+        48,
+        48
+      ],
+      "dtype": "<f8",
+      "bytes": 18432,
+      "sha256": "e12a3b673418f307e305c6e348ee88aba54ca39e4a8545ff74f9319f472a8aac"
+    },
+    {
+      "file": "restart48-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "f186e06fc59f6c91b1395cc1bf84e4c0c5ee5d07f2a485ca480ac5b6fd5a7026"
+    },
+    {
+      "file": "parallel64-source.f32",
+      "shape": [
+        64,
+        4
+      ],
+      "dtype": "<f4",
+      "bytes": 1024,
+      "sha256": "9f13b0f8675b7cb2e5ace0d25af0ed2e180c261286a284909252aa2c96085131"
+    },
+    {
+      "file": "parallel64-target.f32",
+      "shape": [
+        64
+      ],
+      "dtype": "<f4",
+      "bytes": 256,
+      "sha256": "68a029bfbf44a1c6ca3ea5667f16d1f951ed37b9eba691cd0363576575b45242"
+    },
+    {
+      "file": "parallel64-query.f32",
+      "shape": [
+        32,
+        4
+      ],
+      "dtype": "<f4",
+      "bytes": 512,
+      "sha256": "1844edeff13566c0995e8f588f2e9b4fd665bef71323adc74e79fbf3fc1fb216"
+    },
+    {
+      "file": "parallel64-mean.f64",
+      "shape": [
+        32
+      ],
+      "dtype": "<f8",
+      "bytes": 256,
+      "sha256": "1c88e2dc3429970700d425fbe8dca095ed473b3235fdd034cc68a43a85204d43"
+    },
+    {
+      "file": "parallel64-covariance.f64",
+      "shape": [
+        32,
+        32
+      ],
+      "dtype": "<f8",
+      "bytes": 8192,
+      "sha256": "2df005c0f20a038d9308d0e7bc9bec97ca8c02b1f9ddd011a8043bbec34fd8b7"
+    },
+    {
+      "file": "parallel64-statistics.f64",
+      "shape": [
+        5
+      ],
+      "dtype": "<f8",
+      "bytes": 40,
+      "sha256": "f264762aca2384e88ddc531b8fcf2ed7743a0295d9cd21c889f488ce57f2eaea"
+    },
+    {
+      "file": "classifier48-source.f32",
+      "shape": [
+        48,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 576,
+      "sha256": "02c5b1f021e4bfa6928cab4f7848e1b8153f128a2e9aed90b50795a0a8eb29d3"
+    },
+    {
+      "file": "classifier48-query.f32",
+      "shape": [
+        10,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 120,
+      "sha256": "8137edbac0ddb3ada974fdcaa0f4c3ba26f30d7652fac6a1331e7583618dca7e"
+    },
+    {
+      "file": "classifier48-labels2.i32",
+      "shape": [
+        48
+      ],
+      "dtype": "<i4",
+      "bytes": 192,
+      "sha256": "c3e297bfd2a4fc0b86e322a1d20c0914dd7fe1e91d8e6e6f548f41b0457b9f94"
+    },
+    {
+      "file": "classifier48-labels3.i32",
+      "shape": [
+        48
+      ],
+      "dtype": "<i4",
+      "bytes": 192,
+      "sha256": "1832bb4612c5aab7e2651cd1c4bbce4492bf3ea03200e26843ec1a4928989403"
+    },
+    {
+      "file": "partition9-source.f32",
+      "shape": [
+        9,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 108,
+      "sha256": "1f97be7841818e405ed316fe96b8657dd13791651d70a3692c3dc2a21b9373e2"
+    },
+    {
+      "file": "partition9-query.f32",
+      "shape": [
+        5,
+        3
+      ],
+      "dtype": "<f4",
+      "bytes": 60,
+      "sha256": "3dea8ea227542fceeaffe70446110607c4e750d21e5dd1d26dfe4d76004067a3"
+    },
+    {
+      "file": "partition9-labels2.i32",
+      "shape": [
+        9
+      ],
+      "dtype": "<i4",
+      "bytes": 36,
+      "sha256": "d6cf75579ab0200c3a96e245d891aaaf09a14e3cf1bff7a6f7ccf21137889862"
+    },
+    {
+      "file": "partition9-labels3.i32",
+      "shape": [
+        9
+      ],
+      "dtype": "<i4",
+      "bytes": 36,
+      "sha256": "f0f05679062d8d21b52c291de821383c6faaf59c2f7c71b89ea2026f69128725"
+    },
+    {
+      "file": "classifier64-source.f32",
+      "shape": [
+        64,
+        4
+      ],
+      "dtype": "<f4",
+      "bytes": 1024,
+      "sha256": "9f13b0f8675b7cb2e5ace0d25af0ed2e180c261286a284909252aa2c96085131"
+    },
+    {
+      "file": "classifier64-query.f32",
+      "shape": [
+        32,
+        4
+      ],
+      "dtype": "<f4",
+      "bytes": 512,
+      "sha256": "1844edeff13566c0995e8f588f2e9b4fd665bef71323adc74e79fbf3fc1fb216"
+    },
+    {
+      "file": "classifier64-labels2.i32",
+      "shape": [
+        64
+      ],
+      "dtype": "<i4",
+      "bytes": 256,
+      "sha256": "abe62aeb24676d931a3385c6fd770cab231f497903de95d6c918f6e4a61b5a4a"
+    },
+    {
+      "file": "classifier64-labels3.i32",
+      "shape": [
+        64
+      ],
+      "dtype": "<i4",
+      "bytes": 256,
+      "sha256": "0b3ec805f7b285f20a2d864d9e5ff94a89602a256b1f74e8aa8807870c256669"
+    }
+  ],
+  "profiles": [
+    {
+      "name": "surface16",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          0.25,
+          0.25
+        ],
+        "amplitude": 1.0,
+        "white": 0,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_surface.py::main POSTERIOR",
+      "purpose": "original training recovery bound 2^-14; status/clamp/covariance invariants",
+      "gradient": false,
+      "rows": 16,
+      "features": 2,
+      "queries": 16,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 253.0548768004176,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ],
+      "reference_recovery_max_abs": 2.3856247786113727e-05
+    },
+    {
+      "name": "cov60",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_return_cov.py::test_cov_is_symmetric_and_its_diagonal_is_the_variance",
+      "purpose": "exact symmetry; diagonal sqrt versus native std rtol1e-3/atol1e-4",
+      "gradient": false,
+      "rows": 60,
+      "features": 3,
+      "queries": 20,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 164.4465510574729,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "cov60norm",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": true,
+      "origin": "test_gp_return_cov.py::test_cov_is_symmetric_and_its_diagonal_is_the_variance",
+      "purpose": "exact symmetry; diagonal sqrt versus native std rtol1e-3/atol1e-4",
+      "gradient": false,
+      "rows": 60,
+      "features": 3,
+      "queries": 20,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 164.4465510574729,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "normalize96",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": true,
+      "origin": "test_gp_normalize_y.py::_data",
+      "purpose": "target mean within1e-3; original external sklearn mean/std seams retained",
+      "gradient": false,
+      "rows": 96,
+      "features": 3,
+      "queries": 24,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 239.76467700902637,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "constant96",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": true,
+      "origin": "test_gp_normalize_y.py::test_constant_target_scales_by_one",
+      "purpose": "constant normalization mean7/std1; finite prediction",
+      "gradient": false,
+      "rows": 96,
+      "features": 3,
+      "queries": 24,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 239.76467700902637,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "sample_shape96",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_sample_y.py::arm_shape",
+      "purpose": "original 5 draws/key1 and default1; finite values; public rank/shape retained",
+      "gradient": false,
+      "rows": 96,
+      "features": 3,
+      "queries": 24,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 239.76467700902637,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "sample_moments96",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_sample_y.py::arm_moments",
+      "purpose": "4000 draws/key3; original6SE+1e-4 mean bound and .08 relative std bound",
+      "gradient": false,
+      "rows": 96,
+      "features": 3,
+      "queries": 6,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 236.36734399131822,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "gradient_rbf40",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          0.8,
+          1.2,
+          2.0
+        ],
+        "amplitude": 1.5,
+        "white": 0.2,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_gradient",
+      "purpose": "native central differences h1e-2/<5e-3; independent analytic gradient bound1e-3",
+      "gradient": true,
+      "rows": 40,
+      "features": 3,
+      "queries": 40,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 97.93157862635411,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ],
+      "gradient_order": [
+        "log_constant_product",
+        "log_length_scale_0",
+        "log_length_scale_1",
+        "log_length_scale_2",
+        "log_white"
+      ]
+    },
+    {
+      "name": "gradient_matern05_40",
+      "options": {
+        "kind": "matern05",
+        "scales": [
+          1.1
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_gradient",
+      "purpose": "native central differences h1e-2/<5e-3; independent analytic gradient bound1e-3",
+      "gradient": true,
+      "rows": 40,
+      "features": 3,
+      "queries": 40,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 28.484456428808613,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ],
+      "gradient_order": [
+        "log_constant_product",
+        "log_length_scale",
+        "log_white"
+      ]
+    },
+    {
+      "name": "gradient_matern15_40",
+      "options": {
+        "kind": "matern15",
+        "scales": [
+          1.0,
+          0.6,
+          1.4
+        ],
+        "amplitude": 0.7,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_gradient",
+      "purpose": "native central differences h1e-2/<5e-3; independent analytic gradient bound1e-3",
+      "gradient": true,
+      "rows": 40,
+      "features": 3,
+      "queries": 40,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 36.22545735536723,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ],
+      "gradient_order": [
+        "log_constant_product",
+        "log_length_scale_0",
+        "log_length_scale_1",
+        "log_length_scale_2",
+        "log_white"
+      ]
+    },
+    {
+      "name": "gradient_matern25_40",
+      "options": {
+        "kind": "matern25",
+        "scales": [
+          0.9
+        ],
+        "amplitude": 1.0,
+        "white": 0.2,
+        "additive": 0.3,
+        "free_amplitude": false
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_gradient",
+      "purpose": "native central differences h1e-2/<5e-3; independent analytic gradient bound1e-3",
+      "gradient": true,
+      "rows": 40,
+      "features": 3,
+      "queries": 40,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 83.3039158191215,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ],
+      "gradient_order": [
+        "log_length_scale",
+        "log_constant_sum",
+        "log_white"
+      ]
+    },
+    {
+      "name": "optimize48",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_optimize",
+      "purpose": "unchanged fmin_l_bfgs_b start; positive steps and improved likelihood; no reference optimizer",
+      "gradient": false,
+      "rows": 48,
+      "features": 3,
+      "queries": 48,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 133.90478420932175,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "restart48",
+      "options": {
+        "kind": "matern25",
+        "scales": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_gp_optimizer.py::arm_restarts",
+      "purpose": "original2 restarts/key7; best saved run/earliest tie; no repeated-fit bits check",
+      "gradient": false,
+      "rows": 48,
+      "features": 3,
+      "queries": 48,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 104.59304743715846,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    },
+    {
+      "name": "parallel64",
+      "options": {
+        "kind": "rbf",
+        "scales": [
+          1.0
+        ],
+        "amplitude": 1.0,
+        "white": 0.1,
+        "additive": 0.0,
+        "free_amplitude": true
+      },
+      "normalize": false,
+      "origin": "test_parallel_public_drivers.py::_gaussian_process",
+      "purpose": "single actual native graph; retain public multi-device controller",
+      "gradient": false,
+      "rows": 64,
+      "features": 4,
+      "queries": 32,
+      "alpha": 9.5367431640625e-07,
+      "covariance_condition": 81.41565542082101,
+      "statistics_order": [
+        "target_mean",
+        "target_std",
+        "lml",
+        "logdet",
+        "y_dot_dual"
+      ]
+    }
+  ],
+  "classifier_reference": "Original inputs/labels only; no mirrored Newton or OVR implementation",
+  "product_imports": false,
+  "existing_python_removed": 0
+}

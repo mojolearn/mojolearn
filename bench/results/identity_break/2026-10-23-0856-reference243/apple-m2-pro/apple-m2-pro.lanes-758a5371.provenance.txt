@@ -1,9 +1,0 @@
-commit=243b2478d4255786c082699eaa014460a1671b72
-label=apple-m2-pro
-backend=metal
-scope=all shard= lanes_override=yes
-repeats=1 cpu_threads=3
-host=Darwin 25.5.0 arm64 MacBook-Air-1-terrabyte.local
-date=2026-10-23T19:16:56Z
-dirty_tracked=none
-record_sha256=d6acbae9f69d0fdcd84ffdb835c40b27b8881d2f1e4b85db24d527f71d174343

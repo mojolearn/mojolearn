@@ -32,19 +32,17 @@ chain, k ascending from +0.0 (OP_GK_SPLIT with i11 = 1 runs them in its
 own launch on the device, extra blocks one thread a column; the host runs
 OP_COLSUM_DIV after the cells), the same word as every other route.
 
--D MOJOLEARN_IDN_GEMM_SPLITK_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-one chain a cell on every column (arm A: today's digests). FAST keeps its
-own routes (no split here)."""
-from std.sys.compile import is_defined
-
+FAST keeps its own routes (no split here)."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, add, gemm_dot, ld, st
 from sequence.mlp import gemm_epi_value
 from autograd.ops import OP_AGK_GEMM_EPI
 
-comptime GEMM_SPLITK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_SPLITK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_SPLITK_OFF (old path; EXP:2180 PENDING, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6817978647.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_SPLITK_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6817978647.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+comptime GEMM_SPLITK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: the split opcode (pass-6 gemm range 2100..2199, registered in
 #: sequence/dispatch.mojo): element t = one output cell, the whole split
@@ -54,8 +52,8 @@ comptime OP_GK_SPLIT = 2100
 comptime OP_GK_FIRST = OP_GK_SPLIT
 comptime OP_GK_LAST = OP_GK_SPLIT
 
-#: the shortest block: one gemm_dot round of 64 staged terms
-#: (GEMM_STAGE_V2_WIDE), so every block but the last is one load round
+#: the shortest block: 64 terms (four gemm_dot rounds of GEMM_STAGE 16;
+#: the 64-wide stage it was sized for is deleted)
 comptime SK_MIN_BLOCK = 64
 #: the most blocks a cell: the device folds a cell's partials inside one
 #: 256-thread block (threadgroup memory), so S <= 256
@@ -75,10 +73,9 @@ comptime SK_REUSE_EDGE = 8
 #:    GPU, so the tile's reuse cannot pay for the idle device;
 #:  - both edges >= SK_WIDE_EDGE (the 64 x 64 tile family) below
 #:    SK_WIDE_BLOCKS 64 x 64 tiles: under 8 busy multiprocessors of 142 /
-#:    304, each folding the whole K. The family is the shape's, never the
-#:    -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF arm's, so that define moves no bit.
+#:    304, each folding the whole K. The family is the shape's.
 #: Above every bound the tiles' reuse costs less than the split's loads
-#: (an estimate the A/B decides: MOJOLEARN_IDN_GEMM_SPLITK_OFF).
+#: (an estimate; the split's A/B was never run).
 comptime SK_THIN_CELLS = 1 << 15
 comptime SK_TILE_CELLS = 1 << 14
 comptime SK_WIDE_EDGE = 64

@@ -1,0 +1,23 @@
+{
+  "suite": "kpca_state",
+  "fixtures": 38,
+  "dependency": "2c3a36c216 after c613f33133",
+  "execution": "uncompiled and unrun; root bundle owed",
+  "coverage": {
+    "0-11": "existing route thresholds/capabilities, explicit requested/default/zero/capacity cases",
+    "12-15": "vector/matrix shape rank including zero dimensions",
+    "16-18": "native zeroed scratch, empty null addresses, complete initialized writes",
+    "19-20": "negative dimension and element overflow before allocation",
+    "21-24": "eigen value/vector rooms, nonnull empty dummies, nonaliasing and move ownership",
+    "25": "nested typed options/query copy independence",
+    "26-27": "alpha divide/multiply Boolean request slots",
+    "28-29": "fused query and precomputed source-reuse envelopes, exact Float32 gamma/coef0 rounding",
+    "30-35": "kernel, distinct colsum/rowsum, divide, center and matmul operation/field slots",
+    "36-37": "byte overflow and moved scratch allocation"
+  },
+  "parallel": "All independent cases and storage word initialization/checks use host_parallelize; fixed descriptor metadata checks only are serial.",
+  "lifetime": "Raw pointer writes happen while named scratch storage remains live; descriptor backing spans and result owners are supplied by the existing fixed-call driver. Fake buffer addresses never dereferenced.",
+  "product_changes": [],
+  "python_removed": [],
+  "limits": "Prescribed wire oracle performs no centering/eigen/query numerical work. Production dense-fit plan/correction still owned by pilot and awaited for numerical tests."
+}

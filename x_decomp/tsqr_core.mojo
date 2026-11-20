@@ -44,19 +44,24 @@ way decomposition/host/pca_full_oracle.mojo restates it. A zero column
 (||x|| flushed to 0) is a zero diagonal and tau = 0 (DEVIATION 588): no
 refusal, its reflector's stored tail is zeroed so no later product reads it.
 """
-from experiments.classical_identical_ideas.linear_controls import C24_PANEL8, C24_ROWS2048, C24_TREE4
+from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 
 #: rows per leaf block (the last block takes the remainder)
-comptime TS_TREE_ARITY = 4 if C24_TREE4 else 2
-#: (2048 by default since lane/grid-flips-1; `-D MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF` = 4096)
-comptime TS_ROWS = 2048 if C24_ROWS2048 else 4096
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C24_TREE4 (measured grid arm, not promoted) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-06-base); code recoverable at 671756a458.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_TREE4.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime TS_TREE_ARITY = 2
+#: (2048 since lane/grid-flips-1)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF (old path, EXP:1638 PROMOTED) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-06-base); code recoverable at 6f8587ae6b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_ROWS2048_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime TS_ROWS = 2048
 #: chains per inner product over a block's rows (the fold width)
 comptime TS_P = 16
 #: columns per panel (also the device's column lanes)
-comptime TS_NB = 8 if C24_PANEL8 else 16
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C24_PANEL8 (measured grid arm, not promoted) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-06-base); code recoverable at 14b094a93f.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime TS_NB = 16
 #: device threads per block: TS_P row groups x TS_NB column lanes
 comptime TS_TPB = TS_P * TS_NB
 #: the widest matrix the route takes (a leaf block holds >= TS_ROWS rows, a
@@ -93,12 +98,27 @@ comptime TS_MAX_N = 512
 # tree apply tiles C's columns over threadgroups (TS_TPB a tile) with the
 # reflector staged the same way. Bits change in the tree's norms only; the
 # column updates keep their chains.
-comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#
+# MEASUREMENT OWED (lane restore-classical-measured-routes, 2026-11-13): both
+# switches went in as IDENTICAL defaults (3c5c5592a0, 2026-10-08) with no
+# recorded A/B. Board cells on record, one each: ols taxi fit AMD 7.915 ms
+# (de2b2b739, before) -> 12.18 (0a7b206f1, after) -> 14.19 (candidate
+# 4c2340386abc); NVIDIA went the other way (17.51 -> 14.33 ms), ols istella
+# NV 1029 -> 653 ms, qr istella NV 1177 -> 850 ms. Not flipped (NVIDIA
+# gained); the vendor-average A/B decides: owed row tsqr-wy-pair-tree-par in
+# bench/results/paper_compare/owed-pre0867.json (arms: default,
+# -D MOJOLEARN_IDN_TSQR_WY_PAIR_OFF, -D MOJOLEARN_IDN_TSQR_TREE_PAR_OFF, both;
+# ols / qr / svd / lstsq taxi + istella, NV + AMD).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_WY_PAIR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 094d2402ca.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_WY_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime TS_WY_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_WY_PAIR_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_TSQR_TREE_PAR_OFF (old path, EXP:479 run owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bc3f9433a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_TREE_PAR_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+comptime TS_TREE_PAR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_TSQR_TREE_PAR_OFF"]()
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 #: reflectors of a panel pair (the pair's T2 is TS_W2 x TS_W2)
@@ -128,7 +148,7 @@ def ts_tree_fold(mut s: List[Float32]):
         w = w // 2
 
 # lane/classical-structural (2026-10-07), IDENTICAL only (default on since
-# 2026-10-10, below; `-D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF` turns it off). randomized_svd orthonormalizes its
+# 2026-10-10, below). randomized_svd orthonormalizes its
 # tall sketch (m x l, l small) nine times per fit through `orth`: two passes
 # of the sliced Householder `qr_factor` (64 slices x 32 threads, 18 serial
 # reflector steps each), a one-thread rank guard and a per-row trsm, about
@@ -155,12 +175,11 @@ def ts_tree_fold(mut s: List[Float32]):
 #   istella 194.5 -> 160.2 (0.824) / 231.6 -> 141.6 (0.611), 0.710x combined;
 #   taxi     68.9 ->  52.2 (0.757) / 114.3 ->  61.5 (0.538), 0.638x combined.
 # Bits change vs the old default (one TSQR Householder pass) on the host
-# column and both GPU vendors together. Absent = TSQR orth in IDENTICAL;
-# -D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF restores the two-pass route
-# (the old on-define is refused by core/six_lane_experiment_guards.mojo).
-comptime RSVD_IDN_TSQR_ORTHO = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF"]()
-)
+# column and both GPU vendors together: TSQR orth in IDENTICAL (the old
+# on-define is refused by core/six_lane_experiment_guards.mojo).
+# TOMBSTONE: MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF (old path, EXP:1993 PROMOTED (IDENTICAL default)) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 77c81ac782.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RSVD_IDN_TSQR_ORTHO = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def orth_tsqr_shape_ok(m: Int, l: Int) -> Bool:
@@ -206,7 +225,7 @@ def ts_first_row(lo: Int, g: Int) -> Int:
     return lo + d
 
 
-def ts_fold(p: InlineArray[Float32, TS_P]) -> Float32:
+def ts_fold(p: Array[Float32, TS_P]) -> Float32:
     """The fold of the TS_P chains: p[t] += p[t + h] for h = 8, 4, 2, 1, each
     sum flushed; p[0]."""
     var w = p.copy()

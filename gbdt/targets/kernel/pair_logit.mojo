@@ -69,7 +69,7 @@ magnitudes are per-block partials through `pinned_block_sum`, folded by
 the magnitudes per 256 ROWS.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -96,6 +96,9 @@ from gbdt.targets.kernel.pair_logit_group import (
     launch_pair_logit_group_setup,
 )
 
+# TOMBSTONE: MOJOLEARN_AFT_N07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 373b9aa16d.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # N07 explicit-pair route: four simdgroups per block reduce physical
 # occupancy cost. Buffer sizing and function-value reductions use this
 # exact width. No performance/quality evidence; default OFF.
@@ -591,6 +594,9 @@ def pair_logit_row_kernel[estimation: Bool, second_order: Bool](
     if in_range:
         var k = Int(ep_offsets.unsafe_load(i))
         var end = Int(ep_offsets.unsafe_load(i + 1))
+        # TOMBSTONE: MOJOLEARN_AFT_N08 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 208c366f20.
+        # Restore: git apply experiments/removed/MOJOLEARN_AFT_N08.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
         # N08 preserves ascending endpoint order, while making two
         # independent code/direction/scale loads available per loop. No
         # performance or quality evidence; the odd final endpoint is kept.

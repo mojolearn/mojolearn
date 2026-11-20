@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only bit checks of every pinned Gram partial and the final fold."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_GRAM
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from core.gram_splitk import _splitk_launch, _splitk_launch_centered, gram_splitk_chunk_count
@@ -32,15 +33,13 @@ def main() raises:
             var p_one = ctx.enqueue_create_buffer[DType.float32](pcells)
             var p_many = ctx.enqueue_create_buffer[DType.float32](pcells)
             for centered in range(2):
-                if not setenv("MOJOLEARN_GRAM_DEVICE_COUNT", "1", True):
-                    raise Error("cannot set reference device count")
+                device_plan_check_count(1, DEVICE_PLAN_GRAM)
                 if centered == 0:
                     _splitk_launch(ctx, one, x, p_one, m, k)
                 else:
                     _splitk_launch_centered(ctx, one, x, mu, p_one, m, k)
                 ctx.synchronize()
-                if not setenv("MOJOLEARN_GRAM_DEVICE_COUNT", "2", True):
-                    raise Error("cannot set distributed device count")
+                device_plan_check_count(2, DEVICE_PLAN_GRAM)
                 if centered == 0:
                     _splitk_launch(ctx, many, x, p_many, m, k)
                 else:

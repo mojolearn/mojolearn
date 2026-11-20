@@ -43,11 +43,11 @@ pointers cross only `@always_inline` callees.
 """
 
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -71,7 +71,7 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 #: The tier and the vendor every candidate is behind.
 comptime AFN_GEMM2_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime AFN_GEMM2_ALL = AFN_GEMM2_APPLE and is_defined["MOJOLEARN_AFN_GEMM2_ALL"]()
@@ -380,7 +380,7 @@ def afn2_gemm_kernel[
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[NPG * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[NPG * BALLOC, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
     var a_ofast = a_si == 1 and a_sp != 1
     var b_ofast = b_sj == 1 and b_sp != 1
     var ke = k
@@ -428,8 +428,8 @@ def afn2_gemm_kernel[
                         _afn2_gload[BN, KB, NT, BT](b, b_sj, b_sp, n0, n, k1, min(KB, k - k1), tid, b_ofast)
                     )
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _afn2_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime if DIRECT_B:

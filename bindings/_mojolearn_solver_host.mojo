@@ -48,14 +48,19 @@ cell hashes it (the train column is `labels_`), and `_hierarchy_impl.py`
 publishes what it reads. `info[1]`, `n_connected_components`, is 1, the
 literal `single_linkage.mojo` returns on the pairwise arm.
 """
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call as _balanced_call
+from bindings.py_balanced import py_type as _balanced_type
 from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
+from core.solver_entry_table import SolverEntryKey, solver_ops_publish
+from solver.ops_entry_host import SOLVER_OPS_HOST_API, solver_ops_host_v1
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hierarchy.solver_descriptor_host import HIERARCHY_SOLVER_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -87,10 +92,16 @@ def hierarchy_solver_native_api_v1_binding() raises -> PythonObject:
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Exact Python int (every buffer address and size the owners pass): one
+    # type-pointer compare and a native integer read; no class-name strings,
+    # module lookup or operator.index call. bool is its own class, so it
+    # never takes this path. Anything else keeps the full admission below.
+    if _balanced_type(value) is _balanced_type(PythonObject(0)):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("solver host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -285,10 +296,20 @@ def linkage_fit_binding(
     return PythonObject(-1)
 
 
+def _publish_solver_ops() raises:
+    # The CPU column of the solver operations table
+    # (core/solver_entry_table.mojo): the linear owner's ElasticNet / Lasso
+    # calls this entry. The `cd_fit` / `cd_predict` exports above remain for
+    # the Python tests and tools that call the binding directly.
+    var api = SOLVER_OPS_HOST_API.get_or_create_ptr()
+    solver_ops_publish(SolverEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(api[].entries.unsafe_ptr()), solver_ops_host_v1)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_solver_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_solver_host")
         module.def_function[solver_host_numeric_mode_binding]("solver_host_numeric_mode")
@@ -300,6 +321,8 @@ def build__mojolearn_solver_host() -> PythonObject:
         module.def_function[cd_predict_binding]("cd_predict")
         module.def_function[linkage_fit_binding]("linkage_fit")
         module.def_function[hierarchy_solver_native_api_v1_binding]("hierarchy_solver_native_api_v1")
-        return module.finalize()
+        var published_module = module.finalize()
+        _publish_solver_ops()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_solver_host: ", error))

@@ -87,9 +87,10 @@ bootstrap arrives.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from max.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from gbdt.data.permutation import TRandom
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
@@ -107,6 +108,15 @@ from gbdt.methods.pointwise_optimization_subsets import (
     split_subsets_from_desc,
     update_subsets_stats,
 )
+from gbdt.methods.kernel.tree_gate_walk import (
+    TREE_STRUCT_DEPTH,
+    TREE_STRUCT_SPLITS,
+    TREE_STRUCT_SPLIT_WORDS,
+    TREE_STRUCT_STATUS,
+    tree_op_gate_walk,
+    tree_structure_words,
+)
+from core.device_zero import enqueue_fill
 from gbdt.methods.kernel.pointwise_split_resolve import (
     PW_FUSED_SEARCH,
     PW_SENTINEL_ID,
@@ -123,16 +133,11 @@ from gbdt.gpu_util.kernel.transform import (
     launch_split_planes_f32,
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
-#: lane/apple-fast-sym-iter: FAST + Apple aliases, default OFF
-#: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
-from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
 from gbdt.trees_identical_switches import (
     T22,
     IDN_ORD_CAT_PLANES,
-    IDN_ORD_INDEX_SHARED,
-    ORD_HIST_FOLD_SKIP,
 )
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
@@ -167,10 +172,10 @@ from gbdt.models.oblivious_model import (
 # word of document docIndices[p]), the calcer and the split table take the
 # stride `doc_count`, and the levels read position `subsets.Indices[i]`
 # directly: the same word for every (position, feature), in the same order,
-# so the same histograms and splits. `MOJOLEARN_ORDERED_FOLD_INDEX=0`
+# so the same histograms and splits. Without `-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`
 # restores the per-level gather.
 def ordered_fold_index() -> Bool:
-    """OPT-IN (`MOJOLEARN_ORDERED_FOLD_INDEX=1`) since lane/neural-pass124:
+    """OPT-IN (`-D MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX`) since lane/neural-pass124:
     the histogram accumulators key their quantizer's dither on the row id
     they are handed (`hist2_dither(row)`), and on the fold-order index that
     id is the fold POSITION, not the document: where a stat is not exactly
@@ -179,12 +184,12 @@ def ordered_fold_index() -> Bool:
     sat on the grid). Off, the levels gather document ids and the cells are
     main's. Keying the dither on docIndices[position] would make it a pure
     layout change; it measured 6% of pw.hist on the L40S."""
-    return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) == "1"
+    # lane fx-env-dead (2026-11-18): the run-time env read
+    # MOJOLEARN_ORDERED_FOLD_INDEX=1 is now this build define (default off,
+    # unchanged), so the host and device columns read one decision.
+    return is_defined["MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX"]()
 
 
-#: E IDN_ORD_INDEX_SHARED: the pool key of the fold position -> permutation
-#: index map (permutation ids are >= 0)
-comptime ORD_POS_MAP_KEY = -2
 
 
 def fold_cindex_gather_kernel(
@@ -308,6 +313,13 @@ struct PointwiseTreeWorkspace(Movable):
     var d_feat_table: DeviceBuffer[DType.uint32]
     var h_winners_ids: HostBuffer[DType.uint32]
     var h_winners_scores: HostBuffer[DType.float32]
+    # lane t1-tree-builder-ops: the tree's structure record written by the
+    # device gate walk (`tree_op_gate_walk`, gbdt/methods/kernel/
+    # tree_gate_walk.mojo) and its host copy on the one drain; the open
+    # gate word the walk takes outside a device loop.
+    var d_structure: DeviceBuffer[DType.int32]
+    var h_structure: HostBuffer[DType.int32]
+    var d_gate_open: DeviceBuffer[DType.int32]
 
     def __init__(
         out self,
@@ -352,6 +364,14 @@ struct PointwiseTreeWorkspace(Movable):
         self.h_winners_scores = ctx.enqueue_create_host_buffer[
             DType.float32
         ](2 * max_depth)
+        self.d_structure = ctx.enqueue_create_buffer[DType.int32](
+            tree_structure_words(max_depth)
+        )
+        self.h_structure = ctx.enqueue_create_host_buffer[DType.int32](
+            tree_structure_words(max_depth)
+        )
+        self.d_gate_open = ctx.enqueue_create_buffer[DType.int32](1)
+        enqueue_fill(ctx, self.d_gate_open, Int32(0))
 
         # the same three values the host loop read from
         # `layout.features[fid]`, plus the same `one_hot[fid]` guard
@@ -414,8 +434,17 @@ def fit_oblivious_tree_structure_traced(
     std_scale_word: List[DeviceBuffer[DType.float32]] = List[
         DeviceBuffer[DType.float32]
     ](),
+    # The fit's device plan, read once at the binding entry and handed to
+    # the scores calcer (`gbdt_hist_dispatch` owns the one-vs-many choice).
+    device_plan: DevicePlan = plan_for_single(),
     # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # `sym_parts_out` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
+    # Lane t1-tree-builder-ops: tree op TREE_OP_SEARCH (gbdt/tree_ops.mojo).
+    # True enqueues the level loop and the gate walk behind `gate` and
+    # returns an empty list: the structure record stays in
+    # `pool[0].d_structure` for the round's later ops, no drain.
+    enqueue_only: Bool = False,
+    gate: Optional[DeviceBuffer[DType.int32]] = None,
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -518,18 +547,11 @@ def fit_oblivious_tree_structure_traced(
     # gather positions -> permutation indices (the pre-T22 gather through a
     # fold position map) and the dither keys on perm[i], the document id
     # T22 keys on. Needs a cached permutation id and a full permutation.
-    var shared_index = False
-    comptime if IDN_ORD_INDEX_SHARED:
-        shared_index = (
-            fold_count > 1 and permutation_id >= 0
-            and len(permutation) == n_rows
-        )
-        if shared_index:
-            fold_order = False
+    # (Sweep 2026-11-15: the folded IDN_ORD_INDEX_SHARED permutation-order index (E) was removed.)
     # the histogram and split kernels read the caller's `cindex` unless a
     # per-permutation index stands in (T22's fold-order copy, or E's
     # permutation-order copy), both held in `d_fold_cindex`
-    var use_fold_ci = fold_order or shared_index
+    var use_fold_ci = fold_order
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
@@ -622,7 +644,8 @@ def fit_oblivious_tree_structure_traced(
         # nothing was hard-coded and nothing needed rewriting. The subsets
         # branch immediately above already took the fold path.
         var calcer_new = ScoresCalcerOnCompressedDataSet(
-            ctx, blocks, layout, stride, max_depth, global_ids, fold_count
+            device_plan,
+            ctx, blocks, layout, stride, max_depth, global_ids, fold_count,
         )
         pool.append(
             PointwiseTreeWorkspace(
@@ -671,75 +694,18 @@ def fit_oblivious_tree_structure_traced(
             if pool[0].doc_ids_keys[i] == permutation_id:
                 cached = i
     var d_doc_ids: DeviceBuffer[DType.uint32]
-    # E: the permutation on the device (the dither's position -> document
-    # id map, indexed by permutation index) and the permutation-order index,
-    # one entry each when `shared_index`
-    var e_perm_ids = List[DeviceBuffer[DType.uint32]]()
-    var e_index = List[DeviceBuffer[DType.uint32]]()
-    # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the plain arm never reads
-    # `d_doc_ids`, `d_fold_cindex` or `d_observations` (all three are the
-    # fold arm's), so a handle onto a pooled word stands in for the three
-    # allocations main makes per tree (one of them `doc_count` wide).
+    # TOMBSTONE: MOJOLEARN_SYM_BUF_ARENA (NEUTRAL: rab7-symbufarena 1000-taxi -0.2%; F12 M3 B/A 0.93..1.01 mixed) pooled fold dummies
+    # deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 0f457a0c03.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_BUF_ARENA.patch
     var sym_pooled_dummies = False
-    comptime if SYM_BUF_ARENA:
-        sym_pooled_dummies = fold_count == 1
+    # lane t2-trees-on-executor: TREE_OP_SEARCH returns without a drain, so a
+    # per-call allocation would be released while the level launches are
+    # still queued; the plain arm never reads the three, so it takes the
+    # pooled stand-ins as well (no allocation per round of a device loop).
+    if enqueue_only and fold_count == 1:
+        sym_pooled_dummies = True
     if sym_pooled_dummies:
         d_doc_ids = pool[0].d_best_ids.copy()
-    elif shared_index:
-        # E: `d_doc_ids` is the fold POSITION -> permutation index map
-        # (`make_fold_doc_indices_device` at the identity: position
-        # offsets[f] + i of either slice holds prefix row i), one for every
-        # permutation, pooled under the reserved key ORD_POS_MAP_KEY; the
-        # permutation and its permutation-order index pooled per id (the
-        # pool's `doc_ids` / `fold_cindex` slots, as T22 pools its copy)
-        var pm = -1
-        for i in range(len(pool[0].doc_ids_keys)):  # small-loop(doc_ids_keys: cached permutation ids, a handful): cache lookup by id only
-            if pool[0].doc_ids_keys[i] == ORD_POS_MAP_KEY:
-                pm = i
-        if pm >= 0:
-            d_doc_ids = pool[0].doc_ids[pm].copy()
-        else:
-            d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](doc_count)
-            var no_perm = ctx.enqueue_create_buffer[DType.uint32](1)
-            _ = make_fold_doc_indices_device(
-                ctx, folds, no_perm, False, d_doc_ids
-            )
-            ctx.synchronize()
-            _ = no_perm^
-            pool[0].doc_ids_keys.append(ORD_POS_MAP_KEY)
-            pool[0].doc_ids.append(d_doc_ids.copy())
-            # a one-word stand-in keeps `fold_cindex` index-aligned
-            pool[0].fold_cindex.append(ctx.enqueue_create_buffer[DType.uint32](1))
-        if cached >= 0:
-            e_perm_ids.append(pool[0].doc_ids[cached].copy())
-            e_index.append(pool[0].fold_cindex[cached].copy())
-        else:
-            var d_perm_e = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            ctx.enqueue_copy(dst_buf=d_perm_e, src_ptr=permutation.unsafe_ptr())
-            var n_cols_e = _cindex_columns(layout)
-            var d_index_e = ctx.enqueue_create_buffer[DType.uint32](
-                max(n_cols_e * n_rows, 1)
-            )
-            # P[c, i] = cindex[c, perm[i]]: the fold-order gather at
-            # doc_count = n_rows with the permutation as the id list
-            ctx.enqueue_function[fold_cindex_gather_kernel](
-                cindex.unsafe_ptr(),
-                d_perm_e.unsafe_ptr(),
-                d_index_e.unsafe_ptr(),
-                Int32(n_rows),
-                Int32(n_rows),
-                Int32(n_cols_e),
-                grid_dim=max((n_cols_e * n_rows + 255) // 256, 1),
-                block_dim=256,
-            )
-            ctx.synchronize()
-            # held past the drain: the upload read the host list
-            _ = len(permutation)
-            pool[0].doc_ids_keys.append(permutation_id)
-            pool[0].doc_ids.append(d_perm_e.copy())
-            pool[0].fold_cindex.append(d_index_e.copy())
-            e_perm_ids.append(d_perm_e^)
-            e_index.append(d_index_e^)
     elif cached >= 0:
         d_doc_ids = pool[0].doc_ids[cached].copy()
     else:
@@ -772,8 +738,6 @@ def fit_oblivious_tree_structure_traced(
     var d_fold_cindex: DeviceBuffer[DType.uint32]
     if sym_pooled_dummies:
         d_fold_cindex = pool[0].d_best_ids.copy()
-    elif shared_index:
-        d_fold_cindex = e_index[0].copy()
     elif fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
         d_fold_cindex = pool[0].fold_cindex[cached].copy()
     elif fold_order:
@@ -868,10 +832,6 @@ def fit_oblivious_tree_structure_traced(
     # bin p, the fold bits); the fixed 8-bit histogram routes its small
     # leading ones to the small-fold kernel. Empty = no skip.
     var fold_part_sizes = List[Int]()
-    comptime if ORD_HIST_FOLD_SKIP:
-        if fold_count > 1 and len(fold_layout.parts) == fold_count:
-            for p in range(fold_count):  # small-loop(fold_count: fold partitions, 2F): host sizes of the fold plan
-                fold_part_sizes.append(Int(fold_layout.parts[p].size))
 
     for depth in range(max_depth):
         # their `Gather(groupedByBinObservations, observations,
@@ -892,11 +852,6 @@ def fit_oblivious_tree_structure_traced(
         var dither_ids = Optional[MutPointer[UInt32, MutAnyOrigin]]()
         comptime if ORD_DOC_ID_STORAGE:
             if fold_order:dither_ids = d_doc_ids.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        comptime if IDN_ORD_INDEX_SHARED:
-            # E: `docs` holds permutation indices; perm[i] is the document
-            # id, T22's dither key
-            if shared_index:
-                dither_ids = e_perm_ids[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if len(std_scale_word) > 0:
             var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
                 std_scale_word[0].unsafe_ptr().unsafe_offset(1)
@@ -1151,15 +1106,58 @@ def fit_oblivious_tree_structure_traced(
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner
-    # records hold every level and ride home behind everything the loop
+    # records hold every level; the gates (below) walk them on the device
+    # and the structure record rides home behind everything the loop
     # enqueued.
+    #
+    # ============ THE GATES, POST-TREE ================================
+    # The host loop applied these BEFORE each split; the walk applies them
+    # in LEVEL ORDER, so the first stop at level k discards levels k..
+    # exactly as the loop would never have grown them, and the returned
+    # structure is unchanged record for record. Lane t1-tree-builder-ops:
+    # the walk is the device op TREE_OP_GATE_WALK
+    # (`tree_gate_walk_kernel`, the host loop that stood here statement for
+    # statement; integer work, so the same structure on every column). The
+    # host keeps only the copy into `TBinarySplit`s and the raise.
+    #
+    # `split_type`, and the constants are NOT in the order the names
+    # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
+    # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else
+    # 0` makes every ORDINARY feature an equality test, which still
+    # grows a well-formed tree of the right depth with the right
+    # splits and partitions the rows completely differently -- 8
+    # non-empty leaves instead of 12. That is how this was found:
+    # identical structure, different leaf values. The kernel writes
+    # TAKE_BIN for a one-hot feature (word 3 of `d_feat_table`, the same
+    # `one_hot[fid]` guard) and TAKE_GREATER otherwise.
     times.begin(ctx)
-    ctx.enqueue_copy(
-        dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
+    if enqueue_only:
+        # TREE_OP_SEARCH: the walk behind the loop's gate, nothing drained.
+        # The level launches above are round-local (subsets, histograms,
+        # winner slots); the structure record is the round's output.
+        var g = gate.value().copy() if gate else pool[0].d_gate_open.copy()
+        tree_op_gate_walk(
+            ctx, g, pool[0].d_winners_ids,
+            pool[0].d_feat_table, max_depth, pool[0].d_structure,
+        )
+        times.end(ctx, "pw.walk")
+        return structure^
+    tree_op_gate_walk(
+        ctx, pool[0].d_gate_open, pool[0].d_winners_ids,
+        pool[0].d_feat_table, max_depth, pool[0].d_structure,
     )
     ctx.enqueue_copy(
-        dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
+        dst_buf=pool[0].h_structure, src_buf=pool[0].d_structure
     )
+    if trace.enabled:
+        # the winner records feed only the identity checkpoint now
+        ctx.enqueue_copy(
+            dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
+        )
+        ctx.enqueue_copy(
+            dst_buf=pool[0].h_winners_scores,
+            src_buf=pool[0].d_winners_scores,
+        )
     # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the final
     # partition's records on this drain); code recoverable at b639a2bd2.
     ctx.synchronize()
@@ -1169,65 +1167,35 @@ def fit_oblivious_tree_structure_traced(
     # Every level's (feature, bin) and score pair, exactly as the one
     # drain brought them home; hashed from the HOST copies, so this adds
     # no device traffic of its own.
-    trace.record_host(
-        tree_tag + ".winners.ids",
-        pool[0].h_winners_ids.unsafe_ptr(),
-        2 * max_depth,
-    )
-    trace.record_host(
-        tree_tag + ".winners.scores",
-        pool[0].h_winners_scores.unsafe_ptr(),
-        2 * max_depth,
-    )
+    if trace.enabled:
+        trace.record_host(
+            tree_tag + ".winners.ids",
+            pool[0].h_winners_ids.unsafe_ptr(),
+            2 * max_depth,
+        )
+        trace.record_host(
+            tree_tag + ".winners.scores",
+            pool[0].h_winners_scores.unsafe_ptr(),
+            2 * max_depth,
+        )
 
-    # ============ THE GATES, POST-TREE ================================
-    # The host loop applied these BEFORE each split; the walk applies them
-    # in LEVEL ORDER, so the first stop at level k discards levels k..
-    # exactly as the loop would never have grown them, and the returned
-    # structure is unchanged record for record.
-    for depth2 in range(max_depth):  # small-loop(max_depth: tree levels, at most 16): the winner records become the split list
-        var fid_u = pool[0].h_winners_ids[2 * depth2]
-        var bin_u = pool[0].h_winners_ids[2 * depth2 + 1]
-
-        if fid_u == PW_SENTINEL_ID:
-            raise Error(
-                "best split is undefined at depth "
-                + String(depth2)
-                + ": every candidate scored non-finite. Theirs raises the"
-                " same way (`:122`)."
-            )
-
-        var fid = Int(fid_u)
-        var is_one_hot = False
-        if len(one_hot) == len(layout.features):
-            is_one_hot = one_hot[fid]
-
-        # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
-        var seen = False
-        for i in range(len(structure)):  # small-loop(structure: splits so far, at most 16): the HasSplit repeat test
-            if (
-                structure[i].feature_id == Int32(fid)
-                and structure[i].bin_idx == Int32(bin_u)
-            ):
-                seen = True
-        if seen:
-            break
-
-        # `split_type`, and the constants are NOT in the order the names
-        # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
-        # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else
-        # 0` makes every ORDINARY feature an equality test, which still
-        # grows a well-formed tree of the right depth with the right
-        # splits and partitions the rows completely differently -- 8
-        # non-empty leaves instead of 12. That is how this was found:
-        # identical structure, different leaf values.
+    var hs = pool[0].h_structure.unsafe_ptr()
+    var status = Int(hs.unsafe_load(TREE_STRUCT_STATUS))
+    if status > 0:
+        raise Error(
+            "best split is undefined at depth "
+            + String(status - 1)
+            + ": every candidate scored non-finite. Theirs raises the"
+            " same way (`:122`)."
+        )
+    var kept = Int(hs.unsafe_load(TREE_STRUCT_DEPTH))
+    for k in range(kept):  # small-loop(kept: tree levels, at most 16): the device structure record becomes the split list
+        var at = TREE_STRUCT_SPLITS + TREE_STRUCT_SPLIT_WORDS * k
         structure.append(
             TBinarySplit(
-                Int32(fid),
-                Int32(bin_u),
-                Int32(BIN_SPLIT_TAKE_BIN) if is_one_hot else Int32(
-                    BIN_SPLIT_TAKE_GREATER
-                ),
+                hs.unsafe_load(at),
+                hs.unsafe_load(at + 1),
+                hs.unsafe_load(at + 2),
             )
         )
 
@@ -1253,6 +1221,7 @@ def fit_oblivious_tree_structure(
     bootstrapped_observations: Bool = False,
     folds: List[TFold] = List[TFold](),
     permutation: List[UInt32] = List[UInt32](),
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> List[TBinarySplit]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `fit_oblivious_tree_structure_traced` with BOTH
@@ -1280,6 +1249,7 @@ def fit_oblivious_tree_structure(
         bootstrapped_observations=bootstrapped_observations,
         folds=folds,
         permutation=permutation,
+        device_plan=device_plan,
     )
 
 

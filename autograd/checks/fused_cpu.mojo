@@ -3,6 +3,6 @@ from sequence.exec import HostExec
 from autograd.checks.fused_cases import run_fused_cases
 
 
-def main() raises:
+def run_checks() raises:
     var ex = HostExec()
     run_fused_cases(ex)

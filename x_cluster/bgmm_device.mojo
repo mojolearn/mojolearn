@@ -73,6 +73,15 @@ comptime ST_KEEP = 10
 """Per word: the workspace into p1 (the best init so far)."""
 comptime ST_W = 11
 """One thread: the mixture weights."""
+comptime ST_COMMIT = 12
+"""Per word, the EM loop's gated commit (lane n1-gmm-bgmm-loops): the
+workspace into p1 (the committed state) while the freeze pair p2 is open
+(p2[0] == 0). Iterations enqueued past the stop leave p1 as the stopping
+iteration's."""
+comptime ST_FREEZE = 13
+"""One thread, after ST_COMMIT: while the freeze pair p1 is open, the
+iteration `aux` into p1[1] and, when the workspace's converged or error
+flag is set, p1[0] = 1 (the loop's stop word)."""
 
 comptime BGMM_CHOL_ERROR = "Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data."
 
@@ -269,7 +278,7 @@ def bgmm_cells(step: Int, kc: Int, d: Int) -> Int:
         return kc * d + kc
     if step == ST_F:
         return kc * dd + kc * d + kc
-    if step == ST_KEEP:
+    if step == ST_KEEP or step == ST_COMMIT:
         return 2 * BgL(kc, d).total
     return 1
 
@@ -669,6 +678,16 @@ def _w_cell(w: FPtr, kc: Int, d: Int, cfg: Int):
 
 
 @always_inline
+def _freeze_cell(w: FPtr, p1: FPtr, aux: Int):
+    """ST_FREEZE: the EM loop's stop word from the workspace's flags."""
+    if p1[0] != Float32(0):
+        return
+    p1[1] = Float32(aux)
+    if w[2 * SC_CONV] != Float32(0) or w[2 * SC_ERR] != Float32(0):
+        p1[0] = Float32(1)
+
+
+@always_inline
 def bgmm_cell(step: Int, w: FPtr, p1: FPtr, p2: FPtr, p3: FPtr, kc: Int, d: Int, cfg: Int, aux: Int, t: Int):
     """Cell t of a step (every step but ST_CHOL)."""
     if step == ST_PRIOR:
@@ -691,6 +710,11 @@ def bgmm_cell(step: Int, w: FPtr, p1: FPtr, p2: FPtr, p3: FPtr, kc: Int, d: Int,
         _d_cell(w, p1, kc, d, cfg)
     elif step == ST_KEEP:
         p1[t] = w[t]
+    elif step == ST_COMMIT:
+        if p2[0] == Float32(0):
+            p1[t] = w[t]
+    elif step == ST_FREEZE:
+        _freeze_cell(w, p1, aux)
     elif step == ST_W:
         _w_cell(w, kc, d, cfg)
 

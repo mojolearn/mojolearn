@@ -26,7 +26,7 @@ def explicit_defines(values):
         if not re.fullmatch(r'MOJOLEARN_[A-Z0-9_]+(?:=[1-9][0-9]*)?',value):
             raise ValueError('invalid explicit compile define: '+value)
         name=value.split('=',1)[0]
-        if name=='MOJOLEARN_IDN_ALL_OFF' or name.startswith(('MOJOLEARN_NUMERIC_','MOJOLEARN_COLUMN_')):
+        if name.startswith(('MOJOLEARN_NUMERIC_','MOJOLEARN_COLUMN_')):
             raise ValueError('use --arm/--mode/--vendor instead of overriding '+name)
         if name in seen: raise ValueError('duplicate explicit compile define: '+name)
         seen.add(name); result.append(value if '=' in value else value+'=1')
@@ -164,7 +164,8 @@ def main():
     p.add_argument('--python',required=True,type=Path)
     p.add_argument('--vendor',required=True,choices=('nvidia','amd'))
     p.add_argument('--gpu-arch', help='Actual device target; required for new NVIDIA architectures such as sm_120')
-    p.add_argument('--arm',choices=('on','off'),default='on')
+    # The off arm (-D MOJOLEARN_IDN_ALL_OFF) was deleted 2026-11-15 (docs/TOMBSTONES.md); 'on' is the one arm.
+    p.add_argument('--arm',choices=('on',),default='on')
     p.add_argument('--mode',choices=('identical','fast'),default='identical')
     p.add_argument('--define',action='append',default=[],help='Explicit MOJOLEARN_NAME[=positive_integer]; omit presence flags to disable, never use =0')
     p.add_argument('--candidate-recipe',help='ID from tools/identical_candidate_recipes.json at --sha')
@@ -186,8 +187,8 @@ def main():
         values=list(a.define)
         if a.neural_idea:
             if a.mode!='identical': raise ValueError('neural ideas require --mode identical')
-            if a.candidate_recipe or a.define or a.arm=='off':
-                raise ValueError('--neural-idea cannot mix with --candidate-recipe, --define, or --arm off; each idea records its own A/B controls')
+            if a.candidate_recipe or a.define:
+                raise ValueError('--neural-idea cannot mix with --candidate-recipe or --define; each idea records its own A/B controls')
             neural,values=neural_recipe(a.repo,a.sha,a.neural_idea,a.neural_variant,a.recipe_role or 'candidate')
         elif a.neural_variant:
             raise ValueError('--neural-variant requires --neural-idea')
@@ -217,7 +218,7 @@ def main():
     env=dict(clean_env,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ.get('PATH',''),
              MOJOLEARN_NUMERIC_MODE=a.mode,MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_GPU_ARCHS=arch,
              MOJOLEARN_TARGET_COLUMN=a.vendor,PYTHONUNBUFFERED='1',MOJOLEARN_SKIP_BUILD_GATE='1',
-             MOJOLEARN_MOJO_BUILD_FLAGS=' '.join('-D '+d for d in (['MOJOLEARN_IDN_ALL_OFF=1'] if a.arm=='off' else [])+defines),
+             MOJOLEARN_MOJO_BUILD_FLAGS=' '.join('-D '+d for d in defines),
              PYTHONPATH=str(source/'python'),LD_LIBRARY_PATH=str(source/'python/mojolearn/.libs')+':'+os.environ.get('LD_LIBRARY_PATH',''))
     if neural:
         for key,value in neural['runtime_environment'].items():

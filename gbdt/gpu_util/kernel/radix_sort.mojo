@@ -77,9 +77,9 @@ differs in THEIR code: `SortWithoutCub` scans a flag array while
 the same `cub::DeviceScan::ExclusiveSum` over a different input iterator.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.primitives.block import prefix_sum
 
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
@@ -285,6 +285,13 @@ def launch_radix_sort_bins(
         )
 
 
+# TOMBSTONE: MOJOLEARN_GBDT_FAST_RADIX8 (launch_radix_sort_low_bins, radix_low_offsets_len, radix_low_block_sums_len:
+# the low-bit sorts, CTR bins by category code and the leaf partition by leaf id, on core/stable_radix_sort's
+# eight-bit digits; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T154232Z-0642a5, digests and
+# quality equal on 30 cells: fit lossguide 0.975 / 0.965, ordered 0.99 / 1.00, depthwise 1.00 / 1.01, multiclass
+# 1.02 / 1.01, symmetric 1.03 / 1.02; its rule needed every row at least as fast) deleted 2026-11-19 by
+# lane/fx-verdicts4; code recoverable at 8f3f639b13.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_FAST_RADIX8.patch; record in docs/TOMBSTONES.md.
 def float_sort_key_kernel(
     keys: MutPointer[UInt32, MutAnyOrigin], n_in: Int32, forward: Int32
 ):
@@ -418,7 +425,7 @@ struct DeviceFloatSorter(Movable):
             # the device already untwiddled the keys: one bulk host copy
             var hp = self.host.unsafe_ptr()
             var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
-            memcpy(dest=vbits, src=hp, count=n)
+            unsafe_memcpy(dest=vbits, src=hp, count=n)
         return values^
 
     def sort(

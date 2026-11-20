@@ -27,14 +27,13 @@ EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
 and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
 weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
 truncated-normal posterior draw (in Mojo since lane py-runtime round 3:
-bindings/normal_dist_helpers.mojo) and the O(d^2) `_abs_corr` /
+bindings/normal_dist_helpers_pack.mojo) and the O(d^2) `_abs_corr` /
 `_neighbours` normalisation (n_nearest_features). IterativeImputer with a
 user `estimator` otherwise runs its data-sized plumbing as x_prep units
 (x_prep/iterative.mojo `ii_rcount` .. `ii_scatter`: row selection, gathers,
 the clipped float32 store; the stop is `ii_rowabs` / `ii_conv`).
 """
 import array
-import ctypes
 from . import _portable_math as math
 import numbers
 import operator
@@ -43,10 +42,9 @@ import os
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
-from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT, sklearn_tags as _sklearn_tags
 from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
 from ._native_robust_bridge import native_method as _native_robust_method
 
@@ -85,22 +83,21 @@ _OPS = dict(
     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
-    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default;
-    # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF has none) runs them (it exports x_prep_cls2_cat)
+    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default)
+    # runs them (it exports x_prep_cls2_cat)
     cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
-    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column;
-    # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
+    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column)
+    # run them (`_idn_int` bit 2); IDENTICAL also
     # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
     csb1_part=162, csb1_neg=163,
     # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
-    # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
+    # (`_idn_int` bit 8) densifies a CSR input
     csr_dense=164,
     # lane fam-prep-metrics: the IDENTICAL bindings (device and host column) run them
-    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo, -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF has
-    # none; bit 4: the blocked univariate scores, x_prep/select_blocked.mojo,
-    # -D MOJOLEARN_IDN_SELECT_BLOCKED_OFF has none)
+    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo; bit 4: the blocked univariate scores,
+    # x_prep/select_blocked.mojo)
     csb1_ss=165, fcb_part=166, fcb_fin=167, frb_part1=168, frb_mean=169, frb_part2=170, frb_fin=171,
-    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo, -D MOJOLEARN_IDN_PT_BLOCKED_OFF has none
+    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo
     ptb_part1=172, ptb_mean=173, ptb_part2=174, ptb_fin=175, ptb_step=176,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
@@ -118,21 +115,13 @@ _OPS = dict(
     c2_isum=248, c2_inf_m0=249, c2_inf_m1=250, c2_inf_map=251, c2_imp_stats=252, c2_key64=253, c2_topk=254,
     c2_gt=255, c2_rfe_step=256, c2_rfe_rank=257, c2_ii_miss=258, c2_ii_pos=259, c2_ii_ord=260, c2_ii_rand=261,
     c2_colmax=262, c2_grid=263, c2_nan_sub=264, c2_nan_rows=265, c2_cnt0=266, c2_mm_keep=267, c2_mm_merge=268,
-    c2_add_i64=269, c2_nonfinite=270,
+    c2_add_i64=269, c2_nonfinite=270, c2_rfe_keep=271,
     # TOMBSTONE: MOJOLEARN_IDN_LAB_UNIQUE_HIST, MOJOLEARN_IDN_LAB_CODES_DIRECT, MOJOLEARN_IDN_LAB_ONE_ENTRY (losers: label-encoder 2.1-2.6x, label-binarizer istella 1.15-1.39x slower, NV + AMD) deleted 2026-10-11 by de9ce7b39; code recoverable at de9ce7b39^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LAB_UNIQUE_HIST_CODES_DIRECT_ONE_ENTRY.patch
     # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
-    # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
+    # binding exports x_prep_proba64 (FAST)
     q64_softmax=213,
 )
-_PARAMS = 14
-_NONE = -1
-
-
-def _native_helper(key):
-    """The base binding's host helper `key` (`_buffer._native`)."""
-    from ._buffer import _native
-    return _native(key)
 
 
 def _prep_binding(mode):
@@ -148,73 +137,9 @@ def _optional_prep_entry(binding, name):
         return None
 
 
-def _p2m_chunks(n, per=1):
-    """(rows a chunk, chunks) for the chunk-parallel p2m units: at most
-    _II_CH chunks, and at most 2**24 count words when each chunk keeps `per`."""
-    ch = max(_II_CH, -(-n // _II_CH), -(-n * per // 2 ** 24), 1)
-    return ch, max(1, -(-n // ch))
-
-
-def _p2m_class_rows(pr, co, n, K, rows=True):
-    """Stages (p2m_ccount .. p2m_cwrite): the class counts of the float codes
-    at `co` (int32 words, TOT) and, with rows, the rows grouped by class,
-    ascending inside a class (int32 words, ROWS). Returns (ROWS or None, TOT)."""
-    ch, nch = _p2m_chunks(n, K)
-    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
-    pr.stage("p2m_ccount", nch, co, n, K, ch, cnt)
-    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
-    if not rows:
-        return None, tot
-    start, ro = pr.alloc(K), pr.alloc(n)
-    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
-    pr.stage("p2m_cwrite", nch, co, n, K, ch, cnt, start, ro)
-    return ro, tot
-
-
-def _p2m_sel(pr, xo, n, d, mode, dst):
-    """Stages (p2m_sel_count .. p2m_sel_write): per column j of the (n, d)
-    block at xo, the selected rows ascending at dst + j*n (mode 0: the
-    non-NaN words; mode 1: the indices of the positive rows). Returns the
-    offset of the d counts (int32 words)."""
-    ch, nch = _p2m_chunks(n)
-    cnt, tot = pr.alloc(d * nch), pr.alloc(d)
-    pr.stage("p2m_sel_count", d * nch, xo, n, d, ch, nch, mode, cnt)
-    pr.stage("p2m_sel_scan", d, cnt, nch, tot)
-    pr.stage("p2m_sel_write", d * nch, xo, n, d, ch, nch, mode, cnt, dst)
-    return tot
-
-
-#: the smallest output (words) that `_Prog.output` keeps out of the arena
-_OUT_MIN_WORDS = 2 ** 27
-
-#: IterativeImputer(estimator=...): the most chunks of its row selection
-#: (`ii_rcount` / `ii_rwrite`), so `uniq_scan` folds at most this many counts
-_II_CH = 1024
-
-#: lane prep-apple3: host-side changes, each with a name. A name in
-#: _R3_DEFAULT is on; MOJOLEARN_XPREP_R3_ON / MOJOLEARN_XPREP_R3_OFF (names
-#: joined by "+" or ",", or "all") switch names on and off for an A/B arm. None
-#: of them moves a bit: they change where words live and which stages run.
-#: All five are default since request 1790627886703 (M3 Ultra: every FAST and
-#: IDENTICAL digest equal with them on, every case as fast or faster).
-#:   imputer_nosort  SimpleImputer sorts only for median / most_frequent
-#:   mapped          a large host arena or output is an anonymous mapping
-#:                   (zero pages arrive when first written; nothing is
-#:                   touched to allocate it)
-#:   view            a large read is a view of the mapped block, not a copy
-#:   work            blocks a stage writes whole and Python never reads
-#:                   (the sorted columns, LDA's centered rows) are device
-#:                   scratch
-#:   te_arrays       TargetEncoder hands targets and folds over as arrays
-_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
-_R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
-#: the smallest read that is a view (the smallest mapped block, 2**18 words,
-#: is bindings/arena_prog_native.mojo PREP_MAP_MIN_WORDS)
-_VIEW_MIN_WORDS = 2 ** 20
-
 #: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
 #: but "0": on):
-#:   MOJOLEARN_XPREP_DIRECT   an input of at least _DIRECT_MIN_WORDS words goes
+#:   MOJOLEARN_XPREP_DIRECT   (now the build define -D MOJOLEARN_XPREP_FAST_DIRECT_OFF, 2026-11-18) an input of at least _DIRECT_MIN_WORDS words goes
 #:                            up to the device FROM ITS OWN BUFFER (a store
 #:                            slot for the length of the run, copied device to
 #:                            device into the arena) instead of being copied
@@ -232,7 +157,7 @@ _VIEW_MIN_WORDS = 2 ** 20
 #:                            means and variances take the blocked order for
 #:                            n > _XB rows (GaussianNB's theta_, var_ and
 #:                            epsilon_; non-integer feature counts).
-#: _DIRECT_MIN_WORDS (2**20 words) is bindings/arena_prog_native.mojo PREP_DIRECT_MIN_WORDS
+#: _DIRECT_MIN_WORDS (2**20 words) is bindings/arena_prog_native_door.mojo PREP_DIRECT_MIN_WORDS
 #: x_prep/blocked.mojo XB: the rows a block unit folds
 _XB = 2048
 #: CategoricalNB's block histograms hold at most this many words; past it
@@ -247,85 +172,13 @@ def _blocked():
     return _switch("MOJOLEARN_XPREP_BLOCKED")
 
 
-def _col_stats(pr, xo, n, d, out, var=True):
-    """col_stats' six rows of d into `out` (count, mean, variance, min, max,
-    max |x|), in the blocked order when `_blocked()`; var=False leaves the
-    variance row unwritten (its consumers here read the other rows)."""
-    if not _blocked():
-        pr.stage("col_stats", d, xo, n, d, out)
-        return
-    nb = (n + _XB - 1) // _XB
-    part = pr.work(5 * nb * d)
-    pr.stage("colb_part", nb * d, xo, n, d, part, nb)
-    pr.stage("colb_fold", d, part, nb, d, out)
-    if var:
-        ss = pr.work(nb * d)
-        pr.stage("colb_ss", nb * d, xo, n, d, out, ss, nb)
-        pr.stage("colb_var", d, ss, nb, d, out)
-
-
-#: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
-#: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
-#: PT_COLBATCH, 8 SI_ONEPASS, 32 PT_SCORE_STABLE),
-#: probed once per binding; 0 on a build without them (every other tier and
-#: vendor, and the host). The device's own comptime switches do the fusing;
-#: a program only shrinks the arena blocks the device no longer touches.
-_PTIMPUTE_FLAGS = {}
 # TOMBSTONE: MOJOLEARN_PT_SPEC (DROP: +10% vs COLBATCH) deleted 2026-10-09 on lane/owed-deletions-D2: flag bit 2 and
 # _PT_FAST_SPEC; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_SPEC.patch
-
-
-def _ptimpute_flags(mode):
-    if mode != "fast":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _PTIMPUTE_FLAGS.get(key)
-    if v is None:
-        entry = _optional_prep_entry(binding, "x_prep_ptimpute_flags")
-        v = _PTIMPUTE_FLAGS[key] = int(entry()) if entry is not None else 0
-    return v
 
 
 #: lane/apple-fast-prep2: the QSELECT switch, read once at import (not on a fit path); the
 #: native owners (RobustScaler, SimpleImputer) take the median by radix select with it
 _X_PREP2_QSELECT = os.environ.get("MOJOLEARN_X_PREP_FAST_QSELECT") == "1"
-
-
-def _r3(name):
-    """Whether the lane prep-apple3 change `name` is on."""
-    def names(var):
-        v = [t.strip() for t in os.environ.get(var, "").replace("+", ",").split(",") if t.strip()]  # glue: parses an env var name list
-        return set(_R3_NAMES) if "all" in v else set(v)
-    off = names("MOJOLEARN_XPREP_R3_OFF")
-    if name in off:
-        return False
-    return name in _R3_DEFAULT or name in names("MOJOLEARN_XPREP_R3_ON")
-
-
-def _take(store, off, n, shape, code):
-    """The n words of `store` at off as an Array of 4-byte `code` items
-    ("f" or "i"): the whole array.array itself, a view of a large mapped
-    block (`view`), else a copy."""
-    dtype = "<f4" if code == "f" else "<i4"
-    if n <= 0:
-        return Array._owned(array.array(code), shape, dtype, "C")
-    if isinstance(store, memoryview):
-        part = store[off:off + n]
-        if part.format != code:
-            part = part.cast("B").cast(code)
-        if n >= _VIEW_MIN_WORDS and _r3("view"):
-            return Array._view_of(Array.from_buffer(part), shape, "C")
-        out = array.array(code)
-        out.frombytes(part.cast("B"))
-        return Array._owned(out, shape, dtype, "C")
-    if store.typecode == code:
-        if off == 0 and n == len(store):
-            return Array._owned(store, shape, dtype, "C")
-        return Array._owned(store[off:off + n], shape, dtype, "C")
-    out = array.array(code)
-    out.frombytes(store[off:off + n].tobytes())
-    return Array._owned(out, shape, dtype, "C")
 
 
 class _Scratch:
@@ -335,7 +188,7 @@ class _Scratch:
     read back by `get` into its own host buffer (no copy out of the arena).
     Both resolve when the program runs (host arena size, then the scratch,
     then the output) and never cross to the device from the host; the host
-    binding, or MOJOLEARN_XPREP_OUT=0 for the output, gets them as plain
+    binding, or a build with -D MOJOLEARN_XPREP_FAST_OUT_OFF for the output, gets them as plain
     arena words."""
     __slots__ = ("off", "kind")
 
@@ -348,205 +201,19 @@ class _Scratch:
 
 
 class _Prog:
-    """One program: an arena layout, the inputs copied into it, and stages."""
-
-    def __init__(self):
-        self.size = 0
-        self.scratch_size = 0
-        self.out_size = None
-        self._inputs = []
-        self._inout = []
-        self._stages = []
-        self.arena = None
-        self._out = None
-        self._out_at = None
-        self._out_code = "f"
-        #: callables run(self) right after the device returns (lane fam2-prep-metrics:
-        #: refusals a program decides on the device, e.g. `_stage_partial_codes`)
-        self._after = []
-
-    def alloc(self, n):
-        off = self.size
-        self.size += max(int(n), 0)
-        return off
-
-    def scratch(self, n):
-        """n device-only words that a stage writes before any stage reads them."""
-        off = self.scratch_size
-        self.scratch_size += max(int(n), 0)
-        return _Scratch(off)
-
-    def work(self, n):
-        """n words that ONE stage writes whole before any stage reads them and
-        that Python never reads (lane prep-apple3, `work`): device scratch,
-        so they neither cross the bus nor touch host memory. Arena words
-        when the change is off."""
-        return self.scratch(n) if _r3("work") else self.alloc(n)
-
-    def output(self, n, code="f"):
-        """The program's output: n words that arrive zeroed (as `alloc`'s),
-        read back only through `get` (code "f") or `get_i32` (code "i"), one
-        per program. Below _OUT_MIN_WORDS it is plain arena words: measured
-        on the M4 Pro, the region only pays for itself on very large outputs
-        (taxi OneHotEncoder, 566M words: 1.68 -> 1.50 s; HIGGS, 88M words:
-        0.52 -> 0.58 s)."""
-        if int(n) < _OUT_MIN_WORDS:
-            return self.alloc(n)
-        if self.out_size is not None:
-            raise ValueError("x_prep: one output region per program")
-        self.out_size = max(int(n), 0)
-        self._out_code = code
-        return _Scratch(0, "o")
-
-    def put(self, arr, inout=False):
-        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
-        inout (lane prep-apple3): a stage writes these words and Python reads
-        them after the run, so they come back from the device (a plain input
-        never does, and a read of one is refused). A `_arena_io.DeviceRows`
-        (a fold's rows, lane cpu4-misc) is kept as it is: `run` gathers it
-        on the device, or copies its host rows when the binding cannot."""
-        if isinstance(arr, _arena_io.DeviceRows):
-            if inout or arr.dtype != "<f4":
-                arr = arr.materialize()
-        if not (isinstance(arr, (Array, _arena_io.DeviceRows)) and arr.dtype == "<f4"
-                and (isinstance(arr, _arena_io.DeviceRows) or arr._has_order("C"))):
-            arr = as_f32_c(arr, ndim=None, name="input")[0]
-        off = self.alloc(arr.size)
-        self._inputs.append((off, arr, "f"))
-        if inout and arr.size:
-            self._inout.append((off, off + arr.size))
-        return off
-
-    def put_list(self, values, inout=False):
-        flat = [float(v) for v in values] or [0.0]  # glue: packs a caller parameter list into the program buffer
-        return self.put(Array._from_flat(flat, (len(flat),), "<f4"), inout=inout)
-
-    def put_scalar(self, value):
-        return self.put_list([value])
-
-    def put_codes(self, codes):
-        """int32 codes -> offset of their float values (an i2f stage)."""
-        if not (isinstance(codes, Array) and codes.dtype == "<i4"):
-            codes = Array.from_list([int(c) for c in codes], "<i4")  # glue: packs caller code list into program buffer
-        bits = self.alloc(codes.size)
-        self._inputs.append((bits, codes, "i"))
-        out = self.alloc(codes.size)
-        self.stage("i2f", codes.size, bits, out)
-        return out
-
-    def put_words(self, words):
-        """An int32 Array's words as they are (no conversion stage) -> offset."""
-        off = self.alloc(words.size)
-        self._inputs.append((off, words, "i"))
-        return off
-
-    def put_ints(self, values):
-        """int32 words (read by `ldi`) -> offset."""
-        codes = Array.from_list([int(v) for v in values] or [0], "<i4")  # glue: packs caller int parameters into program buffer
-        off = self.alloc(codes.size)
-        self._inputs.append((off, codes, "i"))
-        return off
-
-    def stage(self, op, total, *params):
-        if len(params) > _PARAMS:
-            raise ValueError("x_prep: too many stage parameters")
-        self._stages.append([_OPS[op], int(total)] + [v if isinstance(v, _Scratch) else int(v) for v in params]  # glue: builds one stage parameter record
-                            + [0] * (_PARAMS - len(params)))
-
-    def run(self, mode):
-        """Run the program on the x_prep binding (GPU, or the host binding on
-        a CPU-only install): one native call that owns the arena layout and
-        stores, the input copies, resident, direct and device-gathered
-        inputs, the range descriptors and the run
-        (bindings/arena_prog_native.mojo). The program's refusals
-        (`_after`) run before its first result is read."""
-        return _PROG_CALL(self, "x_prep_run", (mode,), _PROG_CONTEXT)
-
-    def _refuse(self):
-        """Run the program's post-run refusals once, before any result is
-        read (lane fam2-prep-metrics: refusals a program decides on the
-        device, e.g. `_stage_partial_codes`)."""
-        hooks, self._after = self._after, []
-        for fn in hooks:  # glue: the program's post-run refusal hooks
-            fn(self)
-
-    def _check(self, off, n):
-        """An input's words never come back from the device (the ranges
-        runner, lane py-shared): a read of one is refused on every backend,
-        so a program that reads an input after a stage wrote it fails loudly
-        instead of reading the host's stale copy."""
-        for lo, hi in getattr(self, "_in_spans", ()):  # glue: walks the program span records
-            if off < hi and lo < off + n:
-                raise AssertionError(f"x_prep: arena [{off}, {off + n}) was read but is an input, "
-                                     "which never comes back")
-
-    def _read(self, off, shape, code):
-        if self._after:
-            self._refuse()
-        shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
-        n = 1
-        for s in shape:  # glue: walks the shape tuple entries
-            n *= s
-        if isinstance(off, _Scratch):
-            if off.kind != "o":
-                raise ValueError("x_prep: scratch words never reach the host")
-            if self._out is not None:
-                return _take(self._out, off.off, n, shape, code)
-            off = self._out_at + off.off
-        else:
-            self._check(off, n)
-        return _take(self.arena, off, n, shape, code)
-
-    def get(self, off, shape):
-        return self._read(off, shape, "f")
-
-    def get_i32(self, off, shape):
-        return self._read(off, shape, "i")
-
-    def get_f64(self, off, shape):
-        """An (rows, cols) block of float64 values written as word pairs (low, high) by `q64_softmax`:
-        the 2 * prod(shape) words reinterpreted as bytes (glue: no arithmetic)."""
-        rows, cols = shape
-        words = self._read(off, (2 * rows * cols,), "i")
-        out = array.array("d")
-        out.frombytes(words.tobytes())
-        return Array._owned(out, shape, "<f8", "C")
-
-    def values(self, off, n):
-        """Python floats of n arena entries (for integer bookkeeping)."""
-        if self._after:
-            self._refuse()
-        self._check(off, n)
-        return self.arena[off:off + n].tolist()
+    """The x_prep program record. The native owners build each program and the
+    shared runner fills this record's fields (bindings/prep_classify_prog_door.mojo
+    `ClsProg.run`, bindings/arena_prog_native_door.mojo `_prep_run`); the runner
+    admits only this class. The Python program builder that filled it before
+    the native owners (alloc, stage, put, get, the input-span read check) is
+    the test oracle `mojolearn/tests/_prep_prog_oracle.py` (lane
+    pyout-small-families)."""
 
 
 def _mode():
     return _backend.default_mode()
 # TOMBSTONE: MOJOLEARN_X_PREP_FAST_NONEG (DROPPED-noise) deleted 2026-10-03 by 10a9ab8eb; code recoverable at 10a9ab8eb^.
 # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_NONEG.patch; record in docs/TOMBSTONES.md.
-
-
-#: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,
-#: bindings/_mojolearn_x_prep.mojo X_PREP_FAST_UNIQUE; built with
-#: -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF it does not), probed once per binding
-_FAST_UNIQUE = {}
-
-
-def _fast_on(name, mode):
-    """Whether the switch `name` is on for the FAST tier (`mode` is the
-    estimator's numeric mode, `_backend.default_mode`). UNIQUE is the
-    binding's comptime default (a cached probe). Off, or on another tier,
-    every route below is the old one."""
-    if mode != "fast":
-        return False
-    if name == "UNIQUE":
-        binding = _prep_binding(mode)
-        key = id(binding)
-        on = _FAST_UNIQUE.get(key)
-        if on is None:
-            on = _FAST_UNIQUE[key] = _optional_prep_entry(binding, "x_prep_fast_unique") is not None
-        return on
-    return False
 
 
 def encode_labels(y):
@@ -565,26 +232,8 @@ def decode_labels(classes, codes):
     return _labels.decode_labels(classes, codes)
 
 
-def _x2d(X, name="X"):
-    if isinstance(X, _arena_io.DeviceRows):
-        # a fold's rows on the device (lane cpu4-misc): float32 2-D rows of
-        # a C-contiguous base stay a handle for `_Prog.put`; anything else
-        # takes its host rows and the usual conversion
-        if X.dtype == "<f4" and X.ndim == 2:
-            arr = X
-        else:
-            arr = as_f32_c(X.materialize(), ndim=2, name=name)[0]
-    else:
-        arr = as_f32_c(X, ndim=2, name=name)[0]
-    if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] == 0:
-        raise ValueError(f"mojolearn: {name} must be a nonempty two-dimensional array")
-    if arr.size > 2 ** 31 - 1:
-        raise ValueError(f"mojolearn: {name} exceeds the native Int32 indexing bound")
-    return arr
-
-
 class _PrepBase(SklearnTagsMixin):
-    """sklearn's parameter protocol, tags and fit_transform for the lane's classes."""
+    """sklearn's parameter protocol and tags for the lane's classes."""
     _parameters = ()
 
     def get_params(self, deep=True):
@@ -614,40 +263,11 @@ class _PrepBase(SklearnTagsMixin):
         """
         return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
-    # Only a class with a `transform` has `fit_transform` (scikit-learn's
-    # TransformerMixin): a classifier or detector on this base has neither.
-    @available_if(lambda self: hasattr(self, "transform"))
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return self.fit(X, y, **fit_params).transform(X)
-
-    def _check_fitted(self):
-        if not hasattr(self, "n_features_in_"):
-            raise RuntimeError(f"mojolearn: this {type(self).__name__} instance is not fitted yet")
-
-    def _check_width(self, arr):
-        if arr.shape[1] != self.n_features_in_:
-            raise ValueError(f"mojolearn: X has {arr.shape[1]} features, {type(self).__name__} "
-                             f"was fitted with {self.n_features_in_}")
+    # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): every package
+    # class on this base with a `transform` defines its own; the private intermediate
+    # `_SelectorMixin` is never instantiated.
 
 
-def _affine(mode, X, center, scale):
-    """(X - center) / scale on the device (either may be None)."""
-    arr = _x2d(X)
-    n, d = arr.shape
-    pr = _Prog()
-    xo = pr.put(arr)
-    co = pr.put(center) if center is not None else _NONE
-    so = pr.put(scale) if scale is not None else _NONE
-    out = pr.output(n * d)
-    pr.stage("affine", n * d, xo, n * d, d, co, so, out)
-    return pr.run(mode).get(out, (n, d))
 
 
 # ---------------------------------------------------------------- scalers
@@ -678,6 +298,8 @@ class RobustScaler(_PrepBase):
     unit_variance : bool, default False
         Also divide the scale by ``norm.ppf(q_max) - norm.ppf(q_min)``, so that normally distributed
         data ends with unit variance. Requires ``0 < q_min < q_max < 100`` (``ValueError`` otherwise).
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -698,15 +320,16 @@ class RobustScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
+    _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance", "numeric_mode")
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_robust_scaler(cls, _ROBUST_CONTEXT)
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
-                 unit_variance=False):
-        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance), _ROBUST_CONTEXT)
+                 unit_variance=False, numeric_mode=None):
+        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance, numeric_mode),
+                            _ROBUST_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -717,7 +340,9 @@ class RobustScaler(_PrepBase):
         return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _ROBUST_CALL(self, "tags", (), _ROBUST_CONTEXT)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
         return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
@@ -751,6 +376,8 @@ class MaxAbsScaler(_PrepBase):
     ----------
     copy : bool, default True
         Accepted for scikit-learn compatibility; transform always returns a new array.
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -773,7 +400,7 @@ class MaxAbsScaler(_PrepBase):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("copy",)
+    _parameters = ("copy", "numeric_mode")
 
     _mojolearn_native_public = True
 
@@ -781,8 +408,8 @@ class MaxAbsScaler(_PrepBase):
         super().__init_subclass__(**kwargs)
         _register_maxabs_scaler(cls, _MAXABS_CONTEXT)
 
-    def __init__(self, *, copy=True):
-        return _MAXABS_CALL(self, "init", (copy,), _MAXABS_CONTEXT)
+    def __init__(self, *, copy=True, numeric_mode=None):
+        return _MAXABS_CALL(self, "init", (copy, numeric_mode), _MAXABS_CONTEXT)
 
     def get_params(self, deep=True):
         """Return this scaler's constructor parameters as a dictionary."""
@@ -793,7 +420,7 @@ class MaxAbsScaler(_PrepBase):
         return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _MAXABS_CALL(self, "tags", (), _MAXABS_CONTEXT)
+        return _sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
         return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)
@@ -816,144 +443,23 @@ class MaxAbsScaler(_PrepBase):
 
 
 # ---------------------------------------------------------------- encoders
-#: lane/apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): the packed distinct
-#: values' host region (words), the presence flags per column, flags per chunk
-_CAT_CAP = 1 << 16
-_CAT_R = 4096
-_CAT_CH = 64
-#: binding -> its `x_prep_cls2_cat` bits (0 when it has none), probed once
-_CLS2_CAT = {}
 
 
-def _cls2_cat(mode):
-    """lane/apple-fast-gap-cls2: bit 1 PACK, bit 2 PRESENT on the FAST
-    binding built with them (x_prep/cat_cls2.mojo), else 0."""
-    if mode != "fast":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _CLS2_CAT.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_cls2_cat")
-        v = _CLS2_CAT[key] = int(fn()) if fn is not None else 0
-    return v
+class _EncodeFitTransform:
+    """The encoders' and imputer's `fit_transform`: one call into the encode owner.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
 
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
 
-def _fit_categories_cls2(mode, arr, bits):
-    """`_fit_categories`' lists with the distinct values packed into a small
-    host region (PACK) and, with PRESENT, found by presence flags instead of
-    a sort. None (nothing kept) when a column is not small non-negative
-    integers under PRESENT, or the values do not fit the region: the caller
-    runs main's program."""
-    n, d = arr.shape
-    pr = _Prog()
-    xo = pr.put(arr)
-    co = pr.alloc(d)
-    cap = min(n * d, _CAT_CAP)
-    pk = pr.alloc(cap)
-    bad = None
-    if bits & 2:
-        R, ch = _CAT_R, _CAT_CH
-        nch = -(-R // ch)
-        bad = pr.alloc(d)
-        fl = pr.work(d * R)
-        uo = pr.work(d * R)
-        pr.stage("cat_zero", d * R, fl)
-        pr.stage("cat_present", n * d, xo, n, d, R, fl, bad)
-        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
-            cnt, off = pr.work(nch), pr.work(nch)
-            pr.stage("pres_count", nch, fl + c * R, R, ch, cnt)
-            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
-            pr.stage("pres_write", nch, fl + c * R, R, ch, off, uo + c * R)
-        pr.stage("cat_pack", d * R, uo, R, d, co, cap, pk)
-    else:
-        so = pr.work(n * d)
-        uo = pr.work(n * d)
-        pr.stage("sort_cols", d, xo, n, d, so, 1)
-        ch = _label_chunk(n)
-        nch = -(-n // ch)
-        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
-            cnt, off = pr.work(nch), pr.work(nch)
-            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
-            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
-            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
-        pr.stage("cat_pack", n * d, uo, n, d, co, cap, pk)
-    pr.run(mode)
-    if bad is not None and any(v != 0 for v in pr.get_i32(bad, (d,)).tolist()):  # glue: reads the per-column overflow flags the device set (d-sized: feature count)
-        return None
-    counts = [int(v) for v in pr.values(co, d)]  # glue: reads per-column category counts for slicing (d-sized: feature count)
-    if sum(counts) > cap:  # glue: capacity check before slicing outputs (counts-sized: per-column category counts)
-        return None
-    out, o = [], 0
-    for c in range(d):  # glue: slices the per-column category outputs (d-sized: feature count)
-        out.append(pr.get(pk + o, counts[c]))
-        o += counts[c]
-    return out
-
-
-def _fit_categories(mode, arr):
-    """Per column, the sorted distinct values (-0.0 folded into 0.0), on the
-    device: a sort per column and a run scan."""
-    n, d = arr.shape
-    cls2 = _cls2_cat(mode)
-    if cls2 & 1 and _fast_on("UNIQUE", mode):
-        got = _fit_categories_cls2(mode, arr, cls2)
-        if got is not None:
-            return got
-    pr = _Prog()
-    xo = pr.put(arr)
-    so = pr.work(n * d)
-    uo = pr.alloc(n * d)
-    co = pr.alloc(d)
-    pr.stage("sort_cols", d, xo, n, d, so, 1)
-    if _fast_on("UNIQUE", mode):
-        # lane/apple-fast-prep (2026-10-02), X_PREP_FAST_UNIQUE (FAST + Apple
-        # default since the M3 A/B; -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF):
-        # `unique_cols` (x_prep/prims.mojo unique_cols_unit) is ONE thread per
-        # column walking every sorted row (taxi onehot / ordinal fit: 5
-        # threads over 1M rows each, after a parallel sort). Here each column
-        # takes the labels' chunked run scan (x_prep/labels.mojo uniq_count /
-        # uniq_scan / uniq_write, ~sqrt(n) rows a thread): the same words
-        # (`key` equality on the sorted column, the first word of every run,
-        # the count as a float at co[c]).
-        ch = _label_chunk(n)
-        nch = -(-n // ch)
-        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
-            cnt, off = pr.work(nch), pr.work(nch)
-            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
-            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
-            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
-    else:
-        pr.stage("unique_cols", d, so, n, d, uo, co)
-    pr.run(mode)
-    counts = [int(v) for v in pr.values(co, d)]  # glue: reads per-column category counts for slicing (d-sized: feature count)
-    return [pr.get(uo + c * n, counts[c]) for c in range(d)]  # glue: slices the per-column category outputs (d-sized: feature count)
-
-
-def _category_block(pr, categories):
-    """Every column's categories in one (d, kmax) block. Returns (offset, kmax)."""
-    kmax = max(c.size for c in categories)  # glue: largest category count for the program layout (categories-sized: per-column category arrays)
-    block = [0.0] * (len(categories) * kmax)
-    for j, cats in enumerate(categories):  # glue: stages per-column category tables (categories-sized: per-column category arrays)
-        block[j * kmax:j * kmax + cats.size] = cats.tolist()
-    return pr.put_list(block), kmax
-
-
-def _codes(pr, arr, categories, *, device_only=False):
-    """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset)."""
-    n, d = arr.shape
-    xo = pr.put(arr)
-    uo, kmax = _category_block(pr, categories)
-    co = pr.put_list([c.size for c in categories])  # glue: packs per-column category sizes (categories-sized: per-column category arrays)
-    codes = pr.scratch(n * d) if device_only else pr.alloc(n * d)
-    pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
-    if device_only:
-        # TargetEncoder consumes the codes only; unknown counts are unused.
-        return codes, None
-    neg = pr.alloc(d)
-    pr.stage("count_neg", d, codes, n, d, neg)
-    return codes, neg
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
 
 class OrdinalEncoder(_PrepBase):
@@ -1009,8 +515,9 @@ class OrdinalEncoder(_PrepBase):
     >>> X = np.array([[3.0, 10.0], [1.0, 20.0], [3.0, 10.0]], dtype=np.float32)
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -1029,16 +536,6 @@ class OrdinalEncoder(_PrepBase):
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -1106,8 +603,9 @@ class OneHotEncoder(_PrepBase):
     >>> X = np.array([[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.OneHotEncoder(drop="first").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -1128,16 +626,6 @@ class OneHotEncoder(_PrepBase):
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
@@ -1146,76 +634,6 @@ class OneHotEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- target encoder
-def _stage_folds(pr, n, n_folds, seed, shuffle, codes=_NONE, n_classes=0):
-    """Stages TargetEncoder's cross-fit fold of every row (lane cpu2-l3-prep:
-    on the device, every tier; the host entries x_prep_kfold_folds /
-    x_prep_strat_folds walked a serial Fisher-Yates). Without `codes` (the
-    float class codes' offset): KFold, c2_kfold. With them: StratifiedKFold,
-    the rows grouped by class (p2m_ccount .. p2m_cwrite), each class's start
-    in first-seen order (c2_strat_meta), its rows' folds (c2_strat_fold).
-    Unshuffled, the reference's folds; shuffled, a seed-keyed permutation of
-    the positions (of each class's fold block), integers only. Returns (the
-    folds' float codes offset, the refusal flag offset or None: 1.0 when
-    every class has fewer rows than n_folds)."""
-    s = int(seed) & 0xFFFFFFFFFFFFFFFF
-    fo = pr.alloc(max(n, 1))
-    if codes == _NONE:
-        pr.stage("c2_kfold", n, _seed_words(pr, s), n, n_folds, 1 if shuffle else 0, fo)
-        return fo, None
-    K = n_classes
-    ch, nch = _p2m_chunks(n, K)
-    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
-    pr.stage("p2m_ccount", nch, codes, n, K, ch, cnt)
-    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
-    start, ro = pr.alloc(K), pr.alloc(n)
-    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
-    pr.stage("p2m_cwrite", nch, codes, n, K, ch, cnt, start, ro)
-    meta, flag = pr.alloc(2 * K), pr.alloc(1)
-    pr.stage("c2_strat_meta", K, start, tot, ro, K, meta)
-    pr.stage("c2_strat_flag", 1, tot, K, n_folds, flag)
-    pr.stage("c2_strat_fold", n, ro, start, tot, codes, meta, n_folds, _seed_words(pr, s), 1 if shuffle else 0, fo)
-    return fo, flag
-
-
-def _refuse_folds(pr, flag, n_folds):
-    """After the run: the reference's refusal when every class is smaller
-    than n_folds (one word read back)."""
-    if flag is None:
-        return
-
-    def refuse(prog, flag=flag):
-        if prog.values(flag, 1)[0] != 0:
-            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in "
-                             "each class")
-    pr._after.append(refuse)
-
-
-def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
-    """The folds `_stage_folds` gives TargetEncoder's fit, as int32 words
-    (one program; `codes` a list or an int32 Array of class codes)."""
-    pr = _Prog()
-    co = pr.put_codes(codes) if codes is not None else _NONE
-    fo, flag = _stage_folds(pr, n, n_folds, seed, shuffle, co, n_classes)
-    _refuse_folds(pr, flag, n_folds)
-    out = pr.alloc(max(n, 1))
-    pr.stage("f2i", n, fo, out)
-    pr.run(_mode())
-    got = pr.get_i32(out, n)
-    return got if as_array else got.tolist()
-
-
-_TARGET_SCRATCH = {}
-
-
-def _target_scratch(mode):
-    if mode != "fast":
-        return False
-    binding = _prep_binding(mode)
-    key = id(binding)
-    if key not in _TARGET_SCRATCH:
-        fn = _optional_prep_entry(binding, "x_prep_target_scratch")
-        _TARGET_SCRATCH[key] = bool(fn()) if fn is not None else False
-    return _TARGET_SCRATCH[key]
 
 
 # The fold shuffle draws from random_state by splitmix64 (sklearn draws numpy's).
@@ -1283,7 +701,7 @@ class TargetEncoder(_PrepBase):
     >>> Xt = mojolearn.TargetEncoder().fit_transform(X, y)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True, "categorical": True}
@@ -1362,8 +780,9 @@ class SimpleImputer(_PrepBase):
     >>> X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
     >>> mojolearn.SimpleImputer(strategy="median").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -1381,33 +800,8 @@ class SimpleImputer(_PrepBase):
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
-
-
-def join_column_blocks(parts, ranges, n, d, mode=None):
-    """The (n, d) float32 matrix whose columns [start, end) are the C-order
-    (n, end - start) Array parts[k] for ranges[k]: one `colblock` stage per
-    part in one program (word copies, on the device on a GPU install)."""
-    pr = _Prog()
-    out = pr.output(n * d)
-    for (start, end), part in zip(ranges, parts):  # glue: stages one copy per column block (parts-sized: column block parts)
-        w = end - start
-        if w <= 0 or n <= 0:
-            continue
-        pr.stage("colblock", n * w, pr.put(part), w, out, d, start)
-    pr.run(_mode() if mode is None else mode)
-    return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- discretizer
@@ -1471,8 +865,9 @@ class KBinsDiscretizer(_PrepBase):
     >>> X = np.random.default_rng(0).random((1000, 4), dtype=np.float32)
     >>> Xt = mojolearn.KBinsDiscretizer(n_bins=4, encode="ordinal").fit_transform(X)
     """
+    fit_transform = _EncodeFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
@@ -1489,16 +884,6 @@ class KBinsDiscretizer(_PrepBase):
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
@@ -1514,7 +899,7 @@ class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
     # Every subclass is a one-call native public class: the owner runs the
-    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # whole lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _estimator_type = "classifier"
     #: lane cpu4-misc: fit and every scoring method take a
@@ -1614,118 +999,11 @@ class _Classifier(_PrepBase):
         raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
 
-#: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
-_IDN_INT = {}
-_IDN_NB_ONEPASS, _IDN_NB_CSR, _IDN_NB_CSR_DENSE = 2, 4, 8
-
-
-def _idn_int(mode):
-    """Lane idn-int-prep: the IDENTICAL binding's integer prep switches
-    (bindings/_mojolearn_x_prep.mojo `idn_int_binding`: 1 IDN_LABEL, 2
-    IDN_NB_ONEPASS, 4 IDN_NB_CSR, 8 IDN_NB_CSR_DENSE), 0 on another tier or a
-    build with none."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_INT.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_int")
-        v = int(fn()) if fn is not None else 0
-        _IDN_INT[key] = v
-    return v
-
-
-def _seed_words(pr, seed):
-    """A uint64 seed as two int32 words (low, high) -> offset."""
-    lo, hi = seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF
-    return pr.put_ints([lo - (1 << 32) if lo >= 1 << 31 else lo, hi - (1 << 32) if hi >= 1 << 31 else hi])
-
-
-#: binding -> its `x_prep_idn_fam` bits (0 when it has none), probed once
-_IDN_FAM = {}
-_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED, _IDN_PT_BLOCKED = 1, 2, 4, 8
-#: `_cls`: the most partial words (blocks x classes x columns) a blocked
-#: class_stats stage keeps; past it the serial stage (a function of the shape
-#: only, so the device and the host column agree)
-_CLS_BLOCK_WORDS = 2 ** 26
-
-
-def _idn_fam(mode):
-    """Lane fam-prep-metrics: the IDENTICAL binding's family switches
-    (bindings/_mojolearn_x_prep*.mojo `idn_fam_binding`: 1 IDN_STATS_BLOCKED,
-    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED, 8 IDN_PT_BLOCKED, 16
-    IDN_RR_EIGH: informational), 0 on another tier or a build
-    with none. The device and the host column export the same bits, so both
-    stage the same program."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_FAM.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_fam")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM[key] = v
-    return v
-
-
-def _cs(pr, mode, xo, n, d, out, var=True):
-    """A col_stats stage: x_prep/blocked.mojo's blocked order under
-    IDN_STATS_BLOCKED (IDENTICAL; `_col_stats`), else one thread per column
-    over every row. var=False: the caller reads no variance (the blocked
-    order then skips that pass)."""
-    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED:
-        _col_stats(pr, xo, n, d, out, var=var)
-    else:
-        pr.stage("col_stats", d, xo, n, d, out)
-
-
-def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail):
-    """An unweighted class_stats stage: x_prep/blocked.mojo's blocked order
-    under IDN_STATS_BLOCKED (IDENTICAL; `_class_stats`) while its partial
-    tables stay within _CLS_BLOCK_WORDS, else one thread per (class, column)
-    over every row (`tail`: the serial stage's trailing parameters)."""
-    nb = (n + _XB - 1) // _XB
-    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
-        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode)
-    else:
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
-
-
-# Tried 2026-10-08 (C61 single-pass class statistics, csbm_part / csbm_fold / csbm_pool, x_prep ops 190-192;
-# MOJOLEARN_CLASSICAL_C61_NB_CLASS_STATS=1|2 and MOJOLEARN_CLASSICAL_C61_DA_CLASS_STATS, run ge123e6f9): slower on
-# both vendors, quality SAME. gaussian-nb arm 1 NV/AMD 1.58x/1.05x istella, 1.42x/1.08x taxi; arm 2 1.57x/1.02x,
-# 1.37x/1.03x; lda-clf 1.38x/1.04x, 1.54x/1.11x. Deleted with the defines refused; recoverable at main bc10b8b56.
-def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None):
-    """class_stats, or its weighted form when a sample_weight offset is given;
-    in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
-    _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
-    one unit per (block, column) walks X once for every class (csb1_part /
-    csb1_ss; the same words as csb_part / csb_ss)."""
-    if _blocked():
-        nb = (n + _XB - 1) // _XB
-        w = _NONE if wo is None else wo
-        ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
-        if var != _NONE and mean == _NONE:
-            mean = pr.work(K * d)
-        onepass = mode is not None and bool(_idn_fam(mode) & _IDN_CLASS_ONEPASS)
-        if onepass:
-            pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, _NONE, _NONE)
-        else:
-            pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
-        pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
-        if var != _NONE and onepass:
-            pr.stage("csb1_ss", nb * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
-            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
-        elif var != _NONE:
-            pr.stage("csb_ss", nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
-            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
-        return
-    if wo is None:
-        pr.stage("class_stats", total, xo, n, d, yo, K, cnt, mean, var, sums)
-    else:
-        pr.stage("class_stats_w", total, xo, n, d, yo, K, cnt, mean, var, sums, wo)
+# `_idn_int`, `_idn_fam`, `_target_scratch`, `_ptimpute_flags` and the
+# `_PrepBase` fitted/width checks: their Python copies are deleted (lane
+# py-msel-prep-cnn, 2026-11-14); the doors read the binding words
+# (bindings/prep_classify_common_door.mojo `idn_int` / `idn_fam`,
+# bindings/prep_encode_native_door.mojo `_target_scratch` / `_check_width`).
 
 
 #: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
@@ -1760,6 +1038,8 @@ class GaussianNB(_Classifier):
         the class frequencies in the training data.
     var_smoothing : float, default 1e-9
         Fraction of the largest feature variance added to every variance.
+    numeric_mode : {"fast", "identical"} or None, default None
+        Numeric mode; None uses the library default. ``'fast'`` is available on Apple GPUs only.
 
     Attributes
     ----------
@@ -1789,11 +1069,12 @@ class GaussianNB(_Classifier):
     >>> model = mojolearn.GaussianNB().fit(X, y)
     >>> model.predict(X[:5])
     """
-    _parameters = ("priors", "var_smoothing")
+    _parameters = ("priors", "var_smoothing", "numeric_mode")
 
-    def __init__(self, *, priors=None, var_smoothing=1e-9):
+    def __init__(self, *, priors=None, var_smoothing=1e-9, numeric_mode=None):
         self.priors = priors
         self.var_smoothing = var_smoothing
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
@@ -1823,23 +1104,9 @@ class _DiscreteNB(_Classifier):
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
         CSR. Also IDENTICAL on every vendor's device binding (lane
-        idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
-        everywhere else: FAST off Apple, the host column,
-        -D MOJOLEARN_NB_TEXT_CSR_OFF."""
-        if not cls._csr_ok:
-            return False
-        mode = _mode()
-        try:
-            if mode == "identical":
-                # lane idn-int-prep: the IDENTICAL device binding on every
-                # vendor (IDN_NB_CSR; the host column has no CSR entry and
-                # takes the dense block: the same words)
-                return bool(_idn_int(mode) & _IDN_NB_CSR)
-            if mode != "fast":
-                return False
-            return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
-        except Exception:
-            return False
+        idn-int-prep, IDN_NB_CSR). False everywhere else: FAST off Apple
+        and the host column."""
+        return _CLS_CALL(cls, "nb_csr_ready", (cls._csr_ok,), _CLS_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
@@ -2229,6 +1496,23 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)
 
 
+class _StatelessFitTransform:
+    """The stateless-owner transformers' `fit_transform`: one native call.
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
+
+
 # ---------------------------------------------------------------- additions: transformers
 # Transform is sklearn's two-sided interpolation; 'normal' uses Acklam's
 # inverse normal CDF in float32, clipped at sklearn's +-5.1993.
@@ -2278,8 +1562,9 @@ class QuantileTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).exponential(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.QuantileTransformer(output_distribution="normal").fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -2297,16 +1582,6 @@ class QuantileTransformer(_PrepBase):
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
@@ -2356,8 +1631,9 @@ class PowerTransformer(_PrepBase):
     >>> X = np.random.default_rng(0).lognormal(size=(1000, 4)).astype(np.float32)
     >>> Xt = mojolearn.PowerTransformer().fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
@@ -2370,16 +1646,6 @@ class PowerTransformer(_PrepBase):
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
@@ -2479,8 +1745,9 @@ class PolynomialFeatures(_PrepBase):
     >>> X = np.arange(6, dtype=np.float32).reshape(3, 2)
     >>> mojolearn.PolynomialFeatures(degree=2).fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
@@ -2495,16 +1762,6 @@ class PolynomialFeatures(_PrepBase):
 
     def transform(self, X):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
-
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 class SplineTransformer(_PrepBase):
@@ -2560,7 +1817,7 @@ class SplineTransformer(_PrepBase):
     >>> Xt = mojolearn.SplineTransformer(n_knots=6, degree=3).fit_transform(X)
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
@@ -2578,9 +1835,11 @@ class SplineTransformer(_PrepBase):
         self.sparse_output = sparse_output
 
 
-    def _mojolearn_allows_nan(self):
-        """handle_missing='zeros' takes NaN (its rows' spline features are 0)."""
-        return self.handle_missing == "zeros"
+    #: handle_missing='zeros' takes NaN (its rows' spline features are 0): a
+    #: class constant `_sk_validate._nan_rule` reads once per class (was a
+    #: `_mojolearn_allows_nan()` method called on every validated call).
+    _mojolearn_nan_parameter = ("handle_missing", "zeros")
+
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
 
@@ -2625,8 +1884,9 @@ class Binarizer(_PrepBase):
     >>> X = np.array([[-1.0, 0.5], [2.0, 0.0]], dtype=np.float32)
     >>> mojolearn.Binarizer(threshold=0.25).fit_transform(X)
     """
+    fit_transform = _StatelessFitTransform.fit_transform
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     _parameters = ("threshold", "copy")
 
@@ -2640,88 +1900,11 @@ class Binarizer(_PrepBase):
     def transform(self, X, copy=None):
         return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
-    def fit_transform(self, X, y=None, **fit_params):
-        """Fit to ``X``, then transform ``X``.
-
-        Returns
-        -------
-        array
-            The transformed data.
-        """
-        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
-
 
 # ---------------------------------------------------------------- label transformers
-_F32_EXACT = 2 ** 24
 
 
-# lane neural-pass137: a numeric label BUFFER (an ndarray, an Array) takes the
-# device from its own bytes. The route it replaces built Python objects for
-# every label five times over (tolist, the float32 exactness test, the float
-# list, the float32 Array, the type sets) in fit and again in transform, then
-# ran two programs whose unique scan and unknown count were ONE thread
-# walking every row. Here: one upload of the raw words, `lab_load` (the
-# float32 word the old route would have built, NaN where float32 cannot hold
-# the label, which sends the call back to the old route), the device sort, a
-# chunked run scan, and for fit_transform the codes in the same program.
-# The old route stays for labels no numeric buffer holds (str, bool, lists).
-# The label encoders' routes live in bindings/prep_labels_native.mojo; this
-# buffer view remains for preprocessing.py's integer counts.
-_LABEL_KIND = {"<f4": (0, 1), "<i4": (1, 1), "<u4": (2, 1), "<i8": (3, 2), "<f8": (4, 2)}
-
-
-class _LabelBuf:
-    __slots__ = ("kind", "words", "n", "is_float", "_src")
-
-    def __init__(self, kind, words, n, is_float, src):
-        self.kind, self.words, self.n, self.is_float, self._src = kind, words, n, is_float, src
-
-
-def _label_buffer(y):
-    """A numeric label vector as raw int32 words (a view, no copy, of a
-    contiguous buffer), or None: the old route (lists, str or bool labels,
-    other dtypes, a matrix, an empty y; lane pyglue-numeric deleted the
-    MOJOLEARN_XPREP_LABELS switch)."""
-    if isinstance(y, (list, tuple, str, bytes)):
-        return None
-    from ._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
-    if not isinstance(y, Array):
-        if not _has_buffer(y):
-            return None
-        with Buf(y, name="y") as b:
-            if typestr_of(b) == "|b1":
-                return None
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        return None
-    spec = _LABEL_KIND.get(arr.dtype)
-    if spec is None or arr.size == 0 or arr.ndim < 1 or arr.size != max(arr.shape):  # glue: shape check of the label argument
-        return None
-    kind, wpe = spec
-    nw = arr.size * wpe
-    if nw > 2 ** 30:
-        return None
-    store = _raw_store_type("i", nw).from_address(arr._addr)
-    store._keep = arr
-    words = Array._owned(store, (nw,), "<i4", "C")
-    return _LabelBuf(kind, words, arr.size, arr.dtype in ("<f4", "<f8"), arr)
-
-
-def _label_chunk(n):
-    """Rows per chunk of the run scan and the unknown count (bookkeeping
-    only: every chunking writes the same words)."""
-    # exact integer square root by integer Newton steps (no platform math)
-    m = int(n)
-    r = m
-    if m > 1:
-        y = (r + 1) // 2
-        while y < r:
-            r, y = y, (y + m // y) // 2
-    return max(1024, r + 1)
-
-
-# Each public operation is one native call (bindings/prep_labels_native.mojo):
+# Each public operation is one native call (bindings/prep_labels_native_door.mojo):
 # numeric labels run on the device (sort + run scan for classes_, a binary
 # search for transform), a numeric label buffer crossing as its raw words, so
 # fit_transform is one program; str labels take the native str-label lookup.
@@ -2748,7 +1931,7 @@ class LabelEncoder(_PrepBase):
     >>> enc.inverse_transform(np.array([0, 2]))
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
@@ -2768,16 +1951,7 @@ class LabelEncoder(_PrepBase):
         return _ENCODE_CALL(self, "inverse_transform", (y,), _ENCODE_CONTEXT)
 
 
-def _class_words(pr, out, n, ints):
-    """The n 64-bit class words a program wrote (f2_code_gather, c2_add_i64), as an int64 or
-    float64 Array (one byte copy, no Python object per label)."""
-    words = pr.get_i32(out, 2 * n)
-    store = array.array("q" if ints else "d")
-    store.frombytes(ctypes.string_at(words._addr, 8 * n))
-    return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
-
-
-# One native call per public operation (bindings/prep_labels_native.mojo):
+# One native call per public operation (bindings/prep_labels_native_door.mojo):
 # numeric labels take the device route, str labels the native lookup.
 class LabelBinarizer(_PrepBase):
     """Binarize labels in a one-vs-all fashion.
@@ -2823,7 +1997,7 @@ class LabelBinarizer(_PrepBase):
     >>> lb.transform(np.array([1, 6]))
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms a 1-D label vector, not an X matrix
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
@@ -2848,7 +2022,7 @@ class LabelBinarizer(_PrepBase):
         return _ENCODE_CALL(self, "inverse_transform", (Y, threshold), _ENCODE_CONTEXT)
 
 
-# One native call per public operation (bindings/prep_labels_native.mojo):
+# One native call per public operation (bindings/prep_labels_native_door.mojo):
 # numeric labels take the device route (a sort, a binary search, a scatter
 # of ones), str labels the native lookup.
 class MultiLabelBinarizer(_PrepBase):
@@ -2885,7 +2059,7 @@ class MultiLabelBinarizer(_PrepBase):
     >>> mlb.fit_transform([[1, 2], [3], [2, 3]])
     """
     # One native call per public method; the native owner runs the whole
-    # lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags: transforms label collections, not an X matrix
     _sklearn_input_tags = {"two_d_array": False}
@@ -3043,7 +2217,7 @@ class IterativeImputer(_PrepBase):
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     # Every subclass is a one-call native public class: the owner runs the
-    # whole lifecycle (bindings/public_lifecycle_owner.mojo), so no `_mode` wrappers.
+    # whole lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
     def get_support(self, indices=False):
         """Return the selected features.
@@ -3319,7 +2493,7 @@ class SelectKBest(_SelectorMixin):
 
 
 #: MOJOLEARN_MI_WORK=1: the mutual-information work blocks are device scratch on
-#: the FAST tier (read once at import; bindings/prep_select_native.mojo).
+#: the FAST tier (read once at import; bindings/prep_select_native_door.mojo).
 _MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
 
 
@@ -3370,7 +2544,7 @@ def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=T
 
 
 # Brute-force neighbour scans on the device; the tie-breaking noise is drawn
-# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native.mojo.
+# from random_state by splitmix64 (sklearn draws numpy's). See bindings/prep_select_native_door.mojo.
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
     """Estimate the mutual information between each feature and a continuous target.
@@ -3693,7 +2867,7 @@ _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
 
 
 # Import-time connection; Binarizer, Normalizer and PolynomialFeatures hand
-# each public operation off once to Mojo (bindings/prep_stateless_native.mojo).
+# each public operation off once to Mojo (bindings/prep_stateless_native_door.mojo).
 from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
@@ -3703,7 +2877,7 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
 
 # Import-time connection; the imputers, discretizer, encoders, SplineTransformer,
 # SelectKBest, RFE, the label encoders and the score functions hand each public
-# operation off once to Mojo (bindings/prep_owner_native.mojo, the family door).
+# operation off once to Mojo (bindings/prep_owner_native_door.mojo, the family door).
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
@@ -3719,13 +2893,13 @@ _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
 
 
 # Import-time connection; the naive Bayes and discriminant-analysis classifiers
-# hand each public operation off once to Mojo (bindings/prep_classify_native.mojo).
+# hand each public operation off once to Mojo (bindings/prep_classify_native_door.mojo).
 from ._native_prep_classify_bridge import connect as _connect_classify
 _CLS_CALL, _CLS_CONTEXT = _connect_classify(
     {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
-# RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
+# RFE and the mutual-information functions (bindings/prep_select_native_door.mojo) run
 # their programs on the classifier owner's arena-runner context.
 # prep_encode_entry: SelectKBest's mutual_info score functions re-enter the
-# encode owner's compiled entry (bindings/prep_encode_native.mojo `_select_fit`).
+# encode owner's compiled entry (bindings/prep_encode_native_door.mojo `_select_fit`).
 _ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK, prep_encode_entry=_ENCODE_CALL)

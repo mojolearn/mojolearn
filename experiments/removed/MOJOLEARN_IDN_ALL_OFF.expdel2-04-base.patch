@@ -1,0 +1,113 @@
+diff --git a/core/label_device_steps.mojo b/core/label_device_steps.mojo
+index df29a73136..3fc406ff2e 100644
+--- a/core/label_device_steps.mojo
++++ b/core/label_device_steps.mojo
+@@ -5,6 +5,7 @@ The measured switches, dtype/size coverage, kernels and host refusal replay
+ are unchanged from bindings.hotpath_device. Callers own GIL/owner admission.
+ """
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from core.hotpath_impl import (
+     HOTPATH_SABOTAGE, HpStat, HP_STAT_INT, HP_STAT_FLOAT, HP_STAT_TUPLE,
+@@ -19,9 +20,10 @@ from core.hotpath_device import (
+ from core.hotpath_device_impl import device_all_finite_span
+ from core.neural_context import process_ctx
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-comptime LABELS_DEVICE_BASE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE
++comptime LABELS_DEVICE_BASE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_HPDEV_ELEM_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 18a80bdd0b.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_ELEM_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime LABELS_DEVICE_ELEM = LABELS_DEVICE_BASE
+diff --git a/core/query_x_held.mojo b/core/query_x_held.mojo
+index 76e6ebbdad..357d3392b5 100644
+--- a/core/query_x_held.mojo
++++ b/core/query_x_held.mojo
+@@ -22,7 +22,8 @@ passes its own nonzero `mark` to the status kernel, which stores that mark
+ on a hit and nothing otherwise; the call's word is flagged when it equals
+ the call's mark (no per-call fill). Per call that leaves: one H2D copy, the
+ status kernel, one D2H copy of two words, as before, and no allocation and
+-no fill launch.
++no fill launch. `MOJOLEARN_IDN_ALL_OFF` restores the per-call buffers
++everywhere.
+ 
+ MEMORY. One held query per live model, on the model's own context, freed
+ with the model (lease close, handle release) or replaced when a call needs
+@@ -38,6 +39,7 @@ put that finds the slot already filled drops its buffers.
+ NUMERICS. None: the same bytes reach the same kernels; the status words are
+ predicates on bits.
+ """
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ from core.ctx_key import ctx_cache_key
+ from core.device_zero import enqueue_fill
+@@ -47,10 +49,7 @@ from core.device_zero import enqueue_fill
+ # pair per call and fills the status per call.
+ # TOMBSTONE: MOJOLEARN_IDN_QUERY_X_HELD_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at a75f345253.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_QUERY_X_HELD_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-# The name stays (resident kernel holders import it) as the folded constant.
+-comptime IDN_QUERY_X_HELD = True
++comptime IDN_QUERY_X_HELD = not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ 
+ # The last mark before the held status pair is filled again and the marks
+ # restart at 1 (one fill every 2^31 - 1 calls).
+diff --git a/core/scratch_pool.mojo b/core/scratch_pool.mojo
+index 8fdded4d18..ca307147df 100644
+--- a/core/scratch_pool.mojo
++++ b/core/scratch_pool.mojo
+@@ -14,7 +14,8 @@ the freed buffers by capacity and hands them back on the next take; the
+ words copied are the same, so no bit moves.
+ 
+ DEFAULT OFF CANDIDATE (never timed on current source): `-D
+-MOJOLEARN_IDN_SCRATCH_POOL` turns it on. Off, every take allocates and
++MOJOLEARN_IDN_SCRATCH_POOL` turns it on; `-D MOJOLEARN_IDN_ALL_OFF` keeps it
++off. Off, every take allocates and
+ every give frees, exactly the per-call form.
+ 
+ Changes against the old branch: (1) the process environment switch
+@@ -39,9 +40,7 @@ from core.shared_slot import SharedSlot
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_SCRATCH_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 2ec9cce908.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SCRATCH_POOL = is_defined["MOJOLEARN_IDN_SCRATCH_POOL"]()
++comptime IDN_SCRATCH_POOL = is_defined["MOJOLEARN_IDN_SCRATCH_POOL"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ 
+ #: free entries kept per kind; a give past this frees the buffer instead
+ comptime SCRATCH_POOL_KEEP = 64
+diff --git a/core/segmented_sort.mojo b/core/segmented_sort.mojo
+index 550e2f719f..9156d5a457 100644
+--- a/core/segmented_sort.mojo
++++ b/core/segmented_sort.mojo
+@@ -91,6 +91,7 @@ from std.memory import bitcast, stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ #: Threads per block for every kernel here. See PORTABILITY above.
+@@ -126,12 +127,11 @@ comptime FLOAT32_KEY_BITS = 32
+ #: `offsets` buffer, so the form runs only when R8_BINS * blocks_wide <=
+ #: seg_size (seg_size >= R8_BINS); smaller segments keep the one-bit passes.
+ #: Shared pages: SORT_BLOCK Int32 = 2 KB (under every column's 16 KB floor).
+-#: The one-bit kernels stay for ensemble/randomforest.mojo.
++#: `-D MOJOLEARN_IDN_ALL_OFF` restores the one-bit passes. The one-bit
++#: kernels stay for ensemble/randomforest.mojo.
+ # TOMBSTONE: MOJOLEARN_IDN_SEG_RADIX8_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at af0618e292.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEG_RADIX8_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime R8_BITS = 8
+ comptime R8_BINS = 256
+ comptime R8_PASSES = FLOAT32_KEY_BITS // R8_BITS

@@ -49,9 +49,23 @@ extratrees/checks/bestfirst_check.mojo
 "
 
 failed=0
+cpu_names=""
+gpu_names=""
 for c in $checks; do
   if [ ! -f "$c" ]; then
     printf 'SKIP  %s (not present)\n' "$c"
+    continue
+  fi
+  # A registered check has no main(): its file is the suite (`run_checks`) and
+  # checks/native_tests/extratrees_<stem>.mojo is its entry in the one native
+  # runner (lane fx-checks-orphans, 2026-11-18). It runs below, by name.
+  name="extratrees_$(basename "$c" .mojo)"
+  if [ -f "checks/native_tests/$name.mojo" ]; then
+    if grep -q 'cpu=True' "checks/native_tests/$name.mojo"; then
+      cpu_names="$cpu_names $name"
+    else
+      gpu_names="$gpu_names $name"
+    fi
     continue
   fi
   if pixi run mojo run ${MOJOLEARN_MOJO_DEFINES:-} -I . "$c" >/tmp/et_check.$$ 2>&1; then
@@ -59,6 +73,18 @@ for c in $checks; do
   else
     printf 'FAIL  %s\n' "$c"
     tail -20 /tmp/et_check.$$
+    failed=1
+  fi
+done
+for column in cpu gpu; do
+  if [ "$column" = cpu ]; then names="$cpu_names"; else names="$gpu_names"; fi
+  [ -n "$names" ] || continue
+  # $names is a word list of registered check names.
+  if pixi run check-native-$column $names >/tmp/et_check.$$ 2>&1; then
+    printf 'ok    native %s:%s\n' "$column" "$names"
+  else
+    printf 'FAIL  native %s\n' "$column"
+    grep -E '^(CHECK|FAIL)' /tmp/et_check.$$ | grep -v 'failed=0' | tail -20
     failed=1
   fi
 done

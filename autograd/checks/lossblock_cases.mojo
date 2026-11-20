@@ -10,7 +10,7 @@
 # Lane ag-pass5-loss (MLP_LB_ROWS): every case also runs the pass-3 layout
 # (mlp_loss_block[False]) beside the default and fails on any differing word
 # of the seed, the per-layer norms or the batch loss, with the data sum from
-# the rows and handed in (-D MOJOLEARN_AUTOGRAD_LOSS's i5 = 1); the grid
+# the rows; the grid
 # B in {64, 512, 4096, 65536} x O in {1, 3, 10} covers one and many row
 # blocks and multi-output rows.
 from sequence.exec_trait import Exec
@@ -100,7 +100,7 @@ def _batch_case[E: Exec](
     var dl2 = ex.alloc(L)
     var dloss = ex.alloc(2)
     var drl = ex.alloc(B)
-    mlp_loss_block(ex, net, dP, dpred, dy, dseed, drow, dl2p, dl2, dloss, 1, B, kind, half, dummy_ptr(), 0, drl)
+    mlp_loss_block(ex, net, dP, dpred, dy, dseed, drow, dl2p, dl2, dloss, 1, B, kind, half, drl)
     # the pass-3 layout (MLP_LB_ROWS off): must give the same words
     var rseed = ex.alloc(B * O)
     var rrow = ex.alloc(mlp_lb_row_parts(B))
@@ -108,20 +108,11 @@ def _batch_case[E: Exec](
     var rl2 = ex.alloc(L)
     var rloss = ex.alloc(2)
     mlp_loss_block[False](
-        ex, net, dP, dpred, dy, rseed, rrow, rl2p, rl2, rloss, 1, B, kind, half, dummy_ptr(), 0, dummy_ptr(),
+        ex, net, dP, dpred, dy, rseed, rrow, rl2p, rl2, rloss, 1, B, kind, half, dummy_ptr(),
     )
-    # the data sum handed in (one partial), both layouts
-    var given = List[Float32](length=1, fill=Float32(3.25))
-    var dgiven = ex.alloc(1)
-    ex.upload(dgiven, _ptr(given), 1)
-    var gloss = ex.alloc(2)
-    var gloss_old = ex.alloc(2)
-    var gseed = ex.alloc(B * O)
-    var gl2 = ex.alloc(L)
-    mlp_loss_block(ex, net, dP, dpred, dy, gseed, drow, dl2p, gl2, gloss, 1, B, kind, half, dgiven, 1, drl)
-    mlp_loss_block[False](
-        ex, net, dP, dpred, dy, gseed, rrow, rl2p, gl2, gloss_old, 1, B, kind, half, dgiven, 1, dummy_ptr(),
-    )
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+    # The handed-in data sum case (the arm's i5 = 1, both layouts) went with the arm.
     # the previous kernels (MLP_BLOCKED_FOLDS), as mlp_fit issued them
     var oseed = ex.alloc(B * O)
     var orow = ex.alloc(B)
@@ -173,16 +164,11 @@ def _batch_case[E: Exec](
     var r_l2 = List[Float32](length=L, fill=0)
     var r_loss = List[Float32](length=2, fill=0)
     var r_seed = List[Float32](length=B * O, fill=0)
-    var g_loss = List[Float32](length=2, fill=0)
-    var g_loss_old = List[Float32](length=2, fill=0)
     ex.download(_ptr(r_l2), rl2, L)
     ex.download(_ptr(r_loss), rloss, 2)
     ex.download(_ptr(r_seed), rseed, B * O)
-    ex.download(_ptr(g_loss), gloss, 2)
-    ex.download(_ptr(g_loss_old), gloss_old, 2)
     # MLP_LB_ROWS against the pass-3 layout, word for word
     var rows_same = bitcast[DType.uint32](loss[1]) == bitcast[DType.uint32](r_loss[1])
-    rows_same = rows_same and bitcast[DType.uint32](g_loss[1]) == bitcast[DType.uint32](g_loss_old[1])
     for l in range(L):  # driver-loop: over layers
         if bitcast[DType.uint32](l2[l]) != bitcast[DType.uint32](r_l2[l]):
             rows_same = False
@@ -236,7 +222,6 @@ def _batch_case[E: Exec](
         "rel", e, "same_old", same_old, "rows_same", rows_same, "l2_digest", _digest(l2),
         "loss_digest", bitcast[DType.uint32](loss[1]), "PASS" if ok else "FAIL",
     )
-    _ = given^
     _ = params^
     _ = pred^
     _ = y^

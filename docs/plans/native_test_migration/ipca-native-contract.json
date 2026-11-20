@@ -1,0 +1,22 @@
+{
+  "suite": "ipca_contract",
+  "fixtures": 34,
+  "dependency": "e97482b20b",
+  "execution": "uncompiled and unrun; root bundle owed",
+  "coverage": {
+    "0": "metadata operation/result slots",
+    "1-2": "fit keep Boolean, six distinct output addresses, dimensions, signed-zero Float64 noise, seven integer output words",
+    "3-6": "partial resident/keep Boolean combinations, previous/output addresses, history dimensions, five state ids and result",
+    "7-14": "query inverse/whiten/resident combinations, shape/addresses/state",
+    "15-18": "prepare/free preserve valid-zero and positive handles",
+    "19-21": "minus-one empty ids and independent copies of nested request/output/state",
+    "22-28": "unknown/metadata/fit/partial/query/prepare/free malformed envelopes",
+    "29-32": "each missing integer or Float64 result span for fit and partial",
+    "33": "missing global result span with heap-owned error output"
+  },
+  "parallel": "host_parallelize over all 34 independent fixtures; five-field identity checks are fixed wire metadata",
+  "lifetime": "Drivers own heap result Lists. Malformed envelope backing/output Lists pinned in finally; missing-result NativeCallOutput kept in owned heap List, never inline address escaping. No fake numerical buffer is dereferenced; fake handles only reach test oracle.",
+  "python_removed": [],
+  "product_changes": [],
+  "limits": "Wire oracle implements no incremental SVD, numerical loop or resident pool. Actual numerical coverage follows."
+}

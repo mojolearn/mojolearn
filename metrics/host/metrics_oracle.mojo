@@ -121,6 +121,7 @@ same define also perturbs a VALUE each metric reads:
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the metrics lane is the measurement.
 """
+from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from std.math import fma
 from std.math import sqrt
 from std.memory import bitcast
@@ -128,7 +129,7 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count, host_predict_task_count_work
 #: lane fam2-prep-metrics: the IDENTICAL label epilogues are soft binary64 in a chunked
 #: order (metrics/impl/stats/detail/sf_epilogue_core.mojo), on the device and here alike
 from metrics.impl.stats.detail.sf_epilogue_core import IDN_METRIC_EPI, entropy_sf_list, mi_sf_list
@@ -903,11 +904,7 @@ def host_v_measure(
     """`v_measure`, `v_measure.mojo:29`."""
     var h = host_homogeneity_score(truth, pred, size, lower, upper)
     var c = host_homogeneity_score(pred, truth, size, lower, upper)
-    if c + h == 0.0:
-        return 0.0
-    var num = (1.0 + beta) * h * c
-    var den = beta * h + c
-    return num / den
+    return v_measure_from(h, c, beta)
 
 
 # ===========================================================================
@@ -990,7 +987,9 @@ def host_silhouette(
     for _ in range(n_rows):
         scores.append(Float32(0.0))
     var sp = scores.unsafe_ptr()
-    var tasks = host_predict_task_count(n_rows)
+    # perf-host-grain: a score owns one row; the grain floor on the
+    # all-pairs distance work
+    var tasks = host_predict_task_count_work(n_rows, n_rows * n_rows * max(n_cols, 1))
     var row_chunk = host_predict_chunk(n_rows, tasks)
 
     def _rows(task: Int) {imm x, imm y, imm counts, imm sp, imm row_chunk, imm n_rows, imm n_cols, imm n_labels}:

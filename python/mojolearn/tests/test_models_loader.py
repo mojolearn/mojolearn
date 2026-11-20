@@ -37,14 +37,13 @@ import tempfile
 import pytest
 
 from mojolearn import Array, lowbit
-from mojolearn import _bpe_trainer
+from mojolearn.tests import _bpe_trainer
 from mojolearn import _tokenizer_synthetic as syn
 from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, Tokenizer,
                               UnsupportedModel, plan_for)
-from mojolearn.models import causal_lm as _cl
 from mojolearn.models import tokenizer as _tk
-from mojolearn.models.safetensors import write_safetensors, widen_f16
-from mojolearn.tokenizer import _byte_to_char
+from mojolearn._causal_lm_fixtures import write_safetensors
+from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
 
 
 # ---------------------------------------------------------------- helpers
@@ -217,23 +216,17 @@ def test_safetensors_reader_dtypes_round_trip_and_widen_exactly():
             assert sf.metadata == {"format": "pt"}
             a = sf.read("a.f32")
             assert isinstance(a, Array) and a.dtype == "<f4" and a.shape == (3, 4) and a.tobytes() == f32.tobytes()
+            # The widening's values (every F16 and BF16 bit pattern through
+            # checkpoint_widen_halves) are checks/native_tests/models_checkpoint_widen.mojo;
+            # here the reader routes each dtype to it: 0x3C00 is 1.0 as a half,
+            # 0x3F80 is 1.0 as a bfloat16.
             b = sf.read("b.f16")
             assert b.dtype == "<f4" and b.shape == (12,)
-            # oracle: struct's own half -> double -> float, exact since f16 is a subset of f32
-            want = array.array("f", struct.unpack("<12e", h16.tobytes()))
-            got = array.array("f")
-            got.frombytes(b.tobytes())
-            for k in range(12):
-                if want[k] != want[k]:
-                    assert got[k] != got[k]  # a NaN stays a NaN
-                    assert (struct.unpack("<I", struct.pack("<f", got[k]))[0] & 0x80000000) == (h16[k] & 0x8000) << 16
-                else:
-                    assert struct.pack("<f", got[k]) == struct.pack("<f", want[k]), k
+            assert b.tobytes()[:4] == struct.pack("<f", 1.0)
             c = sf.read("c.bf16")
             assert c.dtype == "<f4" and c.shape == (3, 4)
-            shifted = array.array("I", [v << 16 for v in bf]).tobytes()
-            assert c.tobytes() == shifted
-            assert sf.read("c1.bf16").tobytes() == shifted
+            assert c.tobytes()[:4] == struct.pack("<f", 1.0)
+            assert sf.read("c1.bf16").tobytes() == c.tobytes()
             bits = sf.read("c.bf16", bf16="bits")
             assert isinstance(bits, lowbit.BF16Weight) and bits.bits.tobytes() == bf.tobytes()
             assert sf.read("c1.bf16", bf16="bits").dtype == "<u2"  # 1-D bits stay a plain Array
@@ -245,20 +238,9 @@ def test_safetensors_reader_dtypes_round_trip_and_widen_exactly():
                 sf.read("nope")
 
 
-def test_f16_widening_is_bit_exact_over_every_half():
-    """All 65536 float16 bit patterns against struct's oracle (finite ones
-    by float32 bytes, NaNs by sign and NaN-ness)."""
-    h = array.array("H", range(65536))
-    got = widen_f16(Array._owned(h, (65536,), "<u2", "C"))
-    g = array.array("I")
-    g.frombytes(got.tobytes())
-    for k in range(65536):
-        (w,) = struct.unpack("<e", struct.pack("<H", k))
-        if w != w:
-            assert (g[k] & 0x7F800000) == 0x7F800000 and (g[k] & 0x007FFFFF) != 0
-            assert (g[k] >> 31) == (k >> 15)
-        else:
-            assert g[k] == struct.unpack("<I", struct.pack("<f", w))[0], k
+# test_f16_widening_is_bit_exact_over_every_half moved to
+# checks/native_tests/byte_lm_models_loader_f16_*.mojo (lane tmig-lm-1): all
+# 65,536 halves through the host and device widening against a value oracle.
 
 
 def test_checkpoint_follows_the_sharded_index():
@@ -272,9 +254,40 @@ def test_checkpoint_follows_the_sharded_index():
                 a = ck.read(name)
                 assert a.shape == shape and a.tobytes() == raw
             assert "model.layers.1.mlp.up_proj.weight" in ck
+            # Loader internals the verify lane hf-model-surface held until
+            # 2026-11-16 (it now reads through the public surface): one
+            # SafetensorsFile per shard, opened once and reused.
+            for name in tensors:
+                f = ck.info(name).file
+                assert ck._file(f) is ck._file(f)
+                assert ck._file(f).read(name).tobytes() == ck.read(name).tobytes()
         single = _write_checkpoint(os.path.join(d, "s"), cfg, tensors, shards=1)
         with Checkpoint.open(single) as ck:
             assert len(ck.names()) == len(tensors)
+        # The single file's map is the whole file, byte for byte.
+        path = os.path.join(single, "model.safetensors")
+        with open(path, "rb") as handle:
+            whole = handle.read()
+        sf = SafetensorsFile(path)
+        try:
+            assert bytes(sf._map()) == whole
+        finally:
+            sf.close()
+        # CausalLM._read_weights returns the checkpoint's top-level tensors
+        # and the layer maps the plan names, the dict CausalLM(plan, weights)
+        # takes.
+        plan = plan_for(HFConfig(cfg))
+        with Checkpoint.open(single) as ck:
+            weights = CausalLM._read_weights(ck, plan, "float32")
+        assert weights["embed"].tobytes() == tensors[plan.embed_name][2]
+        for key, name in (("norm", plan.norm_name), ("head", plan.head_name)):
+            if name is not None:
+                assert weights[key].tobytes() == tensors[name][2]
+        assert len(weights["layers"]) == plan.n_layers
+        for i, layer in enumerate(weights["layers"]):
+            for key, name, rows in plan.layer_weights(i):
+                if rows is None:
+                    assert layer[key].tobytes() == tensors[name][2]
         with pytest.raises(FileNotFoundError):
             Checkpoint.open(os.path.join(d, "missing"))
 
@@ -364,51 +377,30 @@ def test_refusals_name_the_model_type_field_and_value(cfg, words):
         assert w in msg, (w, msg)
 
 
-class _TodayBlock:
-    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None, window=0):
-        pass
+# test_block_kwargs_follow_the_live_signature DELETED (pyout-neural-lm, 2026-11-11):
+# it exercised the Python `causal_lm._block_kwargs`/`_accepted_options`, which no
+# product path called (bindings/causal_lm_construct_door.mojo builds the block options).
 
 
-class _FullBlock:
-    def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None, window=0,
-                 rope_theta=10000.0, rope_scaling=None, rope_dim=None, max_positions=8192,
-                 qkv_bias=False, o_bias=False, norm="rmsnorm", norm_eps=1e-5, norm_bias=False,
-                 mlp="swiglu", mlp_bias=False, qk_norm=False, attn_softcap=None):
-        pass
+# test_greedy_argmax_ties_go_to_the_lowest_index DELETED (smoke-triage, 2026-11-15):
+# it exercised the Python `causal_lm._argmax_last`, deleted by 0e718fef73 (greedy
+# decoding is native, bindings/causal_lm_public_door.mojo). The loading test below
+# holds generate to the stateful path through the test-side oracle `_argmax_last`.
 
 
-def test_block_kwargs_follow_the_live_signature():
-    """Independent of whether lane B1 has landed: the rule is exercised on
-    two stand-in signatures, today's and the full interface."""
-    fixed = plan_for(HFConfig(_llama_config()))            # eps 1e-6, theta 10000: what today's block fixes
-    assert _cl._block_kwargs(fixed, _TodayBlock) == {"n_kv_heads": 1}
-    assert _cl._block_kwargs(fixed, _FullBlock) == {"n_kv_heads": 1, "norm_eps": 1e-6}
-    l3 = plan_for(HFConfig(_llama_config(rms_norm_eps=1e-5, rope_theta=500000.0)))
-    with pytest.raises(UnsupportedModel) as e:
-        _cl._block_kwargs(l3, _TodayBlock)
-    assert "rope_theta=500000.0" in str(e.value) and "_TodayBlock" in str(e.value) and "fixes rope_theta=10000.0" in str(e.value)
-    assert _cl._block_kwargs(l3, _FullBlock) == {"n_kv_heads": 1, "rope_theta": 500000.0}
-    eps = plan_for(HFConfig(_llama_config(rms_norm_eps=1e-5)))
-    with pytest.raises(UnsupportedModel, match="norm_eps=1e-05.*rms_norm_eps"):
-        _cl._block_kwargs(eps, _TodayBlock)
-    assert _cl._block_kwargs(eps, _FullBlock) == {"n_kv_heads": 1}
-    q2 = plan_for(HFConfig(_llama_config(model_type="qwen2")))
-    with pytest.raises(UnsupportedModel, match="qkv_bias=True.*attention_bias"):
-        _cl._block_kwargs(q2, _TodayBlock)
-    assert _cl._block_kwargs(q2, _FullBlock) == {"n_kv_heads": 1, "norm_eps": 1e-6, "qkv_bias": True}
-    win = plan_for(HFConfig(_llama_config(model_type="mistral", sliding_window=16)))
-    assert _cl._block_kwargs(win, _TodayBlock) == {"n_kv_heads": 1, "window": 16}
-    # the live class: its signature is read, whatever it is today
-    from mojolearn._transformer_impl import TransformerBlock
-    acc = _cl._accepted_options(TransformerBlock)
-    assert acc is None or {"n_heads", "n_kv_heads", "head_dim", "window"} <= acc
-
-
-def test_greedy_argmax_ties_go_to_the_lowest_index():
-    logits = Array.from_list([[[0.0, 1.0, 1.0, -1.0], [2.0, 2.0, 2.0, 2.0]],
-                              [[5.0, 5.0, 6.0, 6.0], [-1.0, -3.0, -1.0, -2.0]]], "<f4")
-    assert _cl._argmax_last(logits, 2, 2, 4).tolist() == [0, 0]
-    assert _cl._argmax_last(logits.reshape((4, 1, 4)), 4, 1, 4).tolist() == [1, 0, 2, 0]
+def _argmax_last(logits, b, t, v):
+    """Test oracle: per batch row, the lowest index of the maximum logit at the
+    last position (a sequential strict-greater scan, the native greedy rule)."""
+    rows = logits.reshape((b, t, v)).tolist()
+    out = []
+    for row in rows:
+        last = row[t - 1]
+        best = 0
+        for i in range(1, v):
+            if last[i] > last[best]:
+                best = i
+        out.append(best)
+    return out
 
 
 # ------------------------------------------------------------- loading
@@ -438,11 +430,11 @@ def test_load_llama_checkpoint_shapes_names_and_greedy_generate_is_deterministic
         # and it is the stateful path token by token
         state = lm.allocate_state(2, 9)
         lg = lm.forward(ids, state)
-        nxt = _cl._argmax_last(lg, 2, 5, 64).tolist()  # an int32 (b,) Array since cpu4-python
+        nxt = _argmax_last(lg, 2, 5, 64)
         assert nxt == [row[5] for row in a.tolist()]
         step = lm.step(Array.from_list([[v] for v in nxt], "<i4"), state)
         assert step.shape == (2, 64) and state.positions == 6
-        assert _cl._argmax_last(step.reshape((2, 1, 64)), 2, 1, 64).tolist() == [row[6] for row in a.tolist()]
+        assert _argmax_last(step.reshape((2, 1, 64)), 2, 1, 64) == [row[6] for row in a.tolist()]
         with pytest.raises(ValueError, match="max_positions"):
             lm.generate(ids, 200)
         with pytest.raises(ValueError, match=r"\[0, 64\)"):
@@ -570,25 +562,13 @@ def _small_vocab():
     return tokens, merges
 
 
+# The hand-computed cuts of the three patterns (19 cases) moved to
+# checks/native_tests/tokenizer_pretokenize_cuts.mojo (lane
+# tests-prune-remaining-models): the entry `pretokenize_pattern` the door runs.
+# One case per pattern stays here for the public door's pattern names.
 @pytest.mark.parametrize("pattern, text, pieces", [
-    ("llama3", b"Hello world", [b"Hello", b" world"]),
-    ("llama3", b"IT'S", [b"IT", b"'S"]),
-    ("llama3", b"a  b", [b"a", b" ", b" b"]),
     ("llama3", b"12345", [b"123", b"45"]),
-    ("llama3", b" 123", [b" ", b"123"]),
-    ("llama3", b"x,\n\ny", [b"x", b",\n\n", b"y"]),
-    ("llama3", b"a \n b", [b"a", b" \n", b" b"]),
-    ("llama3", b"-hello", [b"-hello"]),
-    ("llama3", b"hi\n", [b"hi", b"\n"]),
-    ("llama3", b"a   ", [b"a", b"   "]),
-    ("llama3", b"tab\tx", [b"tab", b"\tx"]),
-    ("llama3", b"we're", [b"we", b"'re"]),
-    ("llama3", b"caf\xc3\xa9 2024!", [b"caf\xc3\xa9", b" ", b"202", b"4", b"!"]),
-    ("llama3", b"\xff\xfe", [b"\xff", b"\xfe"]),
     ("qwen2", b"12345", [b"1", b"2", b"3", b"4", b"5"]),
-    ("qwen2", b"Hello world", [b"Hello", b" world"]),
-    ("gpt2", b"IT'S", [b"IT", b"'", b"S"]),
-    ("gpt2", b"a  b", [b"a", b" ", b" b"]),
     ("gpt2", b"12345", [b"12345"]),
 ])
 def test_pretokenize_cuts_as_the_pattern_says(pattern, text, pieces):

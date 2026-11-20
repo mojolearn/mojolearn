@@ -23,7 +23,8 @@ another session is running GPU work on this box.
 """
 
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceAttribute, DeviceContext
+from max.gpu.host import DeviceContext
+from core.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import compute_partition_stats
 from gbdt.methods.kernel.pointwise_scores import update_partition_props
@@ -34,7 +35,7 @@ comptime REPS = 5
 
 def main() raises:
     var ctx = DeviceContext()
-    var sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var sm = device_multiprocessor_count(ctx)
 
     var tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var wts = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
@@ -45,6 +46,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=tgt, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=wts, src_ptr=ht.unsafe_ptr())
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
 
     print(
         "device SM count", sm, ";", N_ROWS, "rows;", REPS,
@@ -90,6 +92,10 @@ def main() raises:
         ctx.enqueue_copy(dst_buf=po, src_ptr=hpo.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=psz, src_ptr=hpz.unsafe_ptr())
         ctx.synchronize()
+        _ = hp^  # past the drain: a queued copy reads it after its last named use
+        _ = hpid^  # past the drain: a queued copy reads it after its last named use
+        _ = hpo^  # past the drain: a queued copy reads it after its last named use
+        _ = hpz^  # past the drain: a queued copy reads it after its last named use
 
         var t_theirs = Float64(1e18)
         var t_ours = Float64(1e18)

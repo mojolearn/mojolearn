@@ -3,11 +3,11 @@
 Rows contain k slots, sorted by column. Duplicates and missing neighbors
 become -1 padding. No n-by-m storage or scan, including graph normalization.
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 
 from std.memory import bitcast
+from core.host_finite_scan import host_all_finite_f32
 from checks.numerics import ftz, identical_div, identical_sqrt, identical_mul_add
 from x_neighbors.items import FP, IP, _add
 
@@ -53,17 +53,8 @@ def op_lp_knn_graph(idx: Int, cols: Int, vals: Int, n: Int, m: Int, k: Int, vari
             denom = _add(denom, Float32(1))
         if denom == Float32(0):
             denom = Float32(1)
-        comptime if C43_RESIDENT_NORMALIZATION:
-            if variant == 0 and counts[i] > 0:
-                # C43 compact propagation descriptor: a negative first value
-                # stores the positive row degree; other values remain zero.
-                # Connectivity weights are nonnegative, so this format is
-                # disjoint from materialized coefficients and prediction rows.
-                # Its consumer performs the identical quotient once per row/
-                # output chain and retains ascending neighbor accumulation.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                pv.unsafe_store(i*k, -denom)
-                continue
+        # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+        # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
         for e in range(counts[i]):
             var j = Int(pc.unsafe_load(i * k + e))
             var value = Float32(1)
@@ -81,10 +72,8 @@ def op_lp_knn_graph(idx: Int, cols: Int, vals: Int, n: Int, m: Int, k: Int, vari
 
 
 def lp_knn_finite(x: FP, count: Int) -> Bool:
-    for t in range(count):
-        if (bitcast[DType.uint32](x.unsafe_load(t)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return False
-    return True
+    # parallel: the one host finite scan (was a serial bits loop over m x c)
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x)), count)
 
 
 def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
@@ -92,18 +81,14 @@ def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
     var i = t // c
     var j = t % c
     var acc = Float32(0)
-    var raw_row = False
-    var row_weight = Float32(0)
-    comptime if C43_RESIDENT_NORMALIZATION:
-        if k > 0 and vals.unsafe_load(i*k) < Float32(0):
-            raw_row = True
-            row_weight = ftz(identical_div(Float32(1),-vals.unsafe_load(i*k)))
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     if finite:
         for e in range(k):
             var p = Int(cols.unsafe_load(i * k + e))
             if p < 0:
                 break
-            var a = row_weight if raw_row else ftz(vals.unsafe_load(i * k + e))
+            var a = ftz(vals.unsafe_load(i * k + e))
             if a != Float32(0):
                 acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(p * c + j)), acc))
     else:
@@ -112,7 +97,7 @@ def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
         for p in range(m):
             var a = Float32(0)
             if e < k and Int(cols.unsafe_load(i * k + e)) == p:
-                a = row_weight if raw_row else ftz(vals.unsafe_load(i * k + e))
+                a = ftz(vals.unsafe_load(i * k + e))
                 e += 1
             acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(p * c + j)), acc))
     res.unsafe_store(t, acc)

@@ -40,9 +40,8 @@ this version, on all four columns together. The unblocked factor with a
 fused multiply-add per term is at least as accurate as the blocked one.
 
 `-D MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1` restores the per-component chain on
-the device AND in the host columns (they read this same constant), as does
-the master `-D MOJOLEARN_IDN_ALL_OFF=1`. The define must reach the
-host-column build as well as the device build.
+the device AND in the host columns (they read this same constant). The
+define must reach the host-column build as well as the device build.
 """
 
 from std.sys.compile import is_defined
@@ -79,13 +78,15 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 # Isolated one_drain_off now measured, same cases: AMD 0.987/1.000/1.010
 # (mixed near-neutral), NVIDIA 1.010/1.020/1.532 (losses); see estimator.mojo.
 # Retain both existing ON defaults and the full-board limitation.
+# TOMBSTONE: MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at fe73c6b687.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not is_defined["MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def gmm_idn_chol_applies(d: Int) -> Bool:

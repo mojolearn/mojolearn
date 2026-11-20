@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Main-run UMAP transform gate; existing fit-byte gates remain unchanged."""
+"""Main-run UMAP transform gate; existing fit-byte gates remain unchanged.
+
+The transform numerics (finite unseen queries, repeat bits, the fitted
+embedding left unchanged, three-dimensional single queries, optimizer
+controls) are the Mojo check checks/native_tests/neighbors_umap_surface_*;
+this file keeps the public conversion, snapshot, shortcut and refit guards."""
 import unittest
 
 import numpy as np
@@ -53,19 +58,15 @@ class UMAPTransformTests(unittest.TestCase):
         second = model.transform(query)
         self.assertEqual(first.shape, (3, 2))
         self.assertEqual(np.asarray(first).dtype, np.float32)
-        self.assertTrue(np.isfinite(first).all())
         np.testing.assert_array_equal(first, second)
         np.testing.assert_array_equal(model.embedding_, saved_embedding)
         self.assertFalse(np.shares_memory(np.asarray(first), np.asarray(second)))
-        first = np.asarray(first)
-        self.assertGreater(float(np.max(np.abs(first[0] - first[-1]))), 0)
 
     def test_three_dimensions_and_single_query(self):
         x = np.arange(12, dtype=np.float32).reshape(-1, 1)
         model = self.model(n_components=3).fit(x)
         result = model.transform(np.array([[2.5]], dtype=np.float32))
         self.assertEqual(result.shape, (1, 3))
-        self.assertTrue(np.isfinite(result).all())
 
     def test_optimizer_controls_and_fitted_parameter_guard(self):
         query = np.array([[0.5], [3], [17]], dtype=np.float32)
@@ -74,8 +75,6 @@ class UMAPTransformTests(unittest.TestCase):
             with self.subTest(**controls):
                 model = self.model(**controls).fit(self.x)
                 result = model.transform(query)
-                self.assertTrue(np.isfinite(result).all())
-                self.assertEqual(result.tobytes(), model.transform(query).tobytes())
                 key, value = next(iter(controls.items()))
                 setattr(model, key, value + 1)
                 with self.assertRaisesRegex(ValueError, "changed after fit"):

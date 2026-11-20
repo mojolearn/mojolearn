@@ -55,8 +55,7 @@ is about.
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
-from cholesky.checks.trsm import CHOL_SOLVE_TPB
+from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_NB_PINNED, chol_workspace_floats
 from core.identity_trace import (
     IdentityTrace,
     first_divergence,
@@ -138,7 +137,8 @@ from mixture.checks.gmm_sabotage import (
 )
 from mixture.checks.mstep import (
     gmm_chol_dwork_floats,
-    gmm_chol_workspace_floats,
+    gmm_chol_ws_floats,
+    gmm_chol_ws_offset,
     gmm_m_step,
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
@@ -153,9 +153,10 @@ from checks.numerics import (
     identical_mul,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 #: Where the per-check cards go. `/tmp` so the check runs on any box.
 comptime SCRATCH = "/tmp"
@@ -265,9 +266,8 @@ def _upload(
         host.unsafe_ptr().unsafe_store(i, poison)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^
     return buf^
 
 
@@ -276,12 +276,11 @@ def _download(
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+    download_host_into[DType.float32](ctx, view, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = view^
     return out^
 
@@ -1584,7 +1583,7 @@ def check_iteration_count_is_identical() raises:
     var p2 = _params_for(which2)
     var m3 = gaussian_mixture_fit(
         x2, n2, d2, p2, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", card,
     )
     var card_lines = read_trace_lines(card)
@@ -1650,7 +1649,7 @@ def check_collapse_is_identical() raises:
     try:
         var _m = gaussian_mixture_fit(
             x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+            CHOL_ELEM_TPB, GMM_SAB_NONE,
             "gmm", a_path,
         )
     except e:
@@ -1658,7 +1657,7 @@ def check_collapse_is_identical() raises:
     try:
         var _m = gaussian_mixture_fit(
             x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+            CHOL_ELEM_TPB, GMM_SAB_NONE,
             "gmm", b_path,
         )
     except e:
@@ -1762,8 +1761,8 @@ def check_launch_invariance() raises:
     Four arms:
 
       (a) a whole fit at two SCHEDULING configurations -- `elem_tpb` 256/64,
-          `row_tpb` 128/32, `comp_tpb` 32/8, `solve_tpb` 256/8, `panel_tpb`
-          128/32 -- with the iteration count and every parameter cell
+          `row_tpb` 128/32, `comp_tpb` 32/8, `chol_elem_tpb` 256/64 (the
+          Cholesky's own launch widths left with `potrf_lower`, 2026-11-09) -- with the iteration count and every parameter cell
           compared;
       (b) an E-step at 0 and 37 floats of POISONED padding on every buffer;
       (c) ONE POINT SCORED ALONE against the same point inside the batch,
@@ -1790,11 +1789,11 @@ def check_launch_invariance() raises:
         var params = _params_for(which)
 
         var a = gaussian_mixture_fit(
-            x, n, d, params, 256, 128, 32, 256, 128, 256, GMM_SAB_NONE,
+            x, n, d, params, 256, 128, 32, 256, GMM_SAB_NONE,
             "gmm",
         )
         var b = gaussian_mixture_fit(
-            x, n, d, params, 64, 32, 8, 8, 32, 64, GMM_SAB_NONE, "gmm"
+            x, n, d, params, 64, 32, 8, 64, GMM_SAB_NONE, "gmm"
         )
         var diff = _models_agree(a, b)
         if diff == -1:
@@ -1965,12 +1964,12 @@ def check_card_is_emitted() raises:
 
     var m1 = gaussian_mixture_fit(
         x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", a_path,
     )
     var m2 = gaussian_mixture_fit(
         x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", b_path,
     )
 
@@ -2086,7 +2085,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if _models_agree(base, run) != 0:
                 moved_on = which
@@ -2212,7 +2211,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if base.n_iter != run.n_iter or base.converged != run.converged:
                 moved_on2 = which
@@ -2342,7 +2341,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if _models_agree(base, run) != 0:
                 moved3 = which
@@ -2506,7 +2505,7 @@ def check_gmm_sabotages() raises:
     try:
         var _m = gaussian_mixture_fit(
             cx, cn, cd, cp, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB,
+            CHOL_ELEM_TPB,
             GMM_SAB_COLLAPSE_RESET, "gmm",
         )
     except e:
@@ -2553,6 +2552,89 @@ def check_gmm_sabotages() raises:
     )
 
 
+def check_chain_workspace_is_leased() raises:
+    """The precision chain's factor workspace is a region of the fit's
+    `dwork`, sized once (lane fix-gmm-chol-leftovers, 2026-11-13).
+
+    1. The layout: at d = 8, 33, 300 the workspace region starts past the
+       three fixed regions on a 64-float boundary and ends at
+       `gmm_chol_dwork_floats(d)`; on the default route it holds
+       `potrf_lower`'s workspace at the pinned width.
+    2. The run: at d = 300 (seven 32-wide panels and more, the route the fit
+       takes where no one-launch factor applies), two components of a
+       diagonally dominant covariance, the chain runs TWICE against ONE
+       `dwork` of exactly `gmm_chol_dwork_floats(300)` floats, as two EM
+       iterations of one fit do. `potrf_lower` refuses a workspace shorter
+       than it needs, so a pass is the lease holding the factor; the two
+       runs' precisions and log-determinants must be the same bits (the
+       reused region changes no word).
+    """
+    var dims: List[Int] = [8, 33, 300]
+    for i in range(len(dims)):
+        var dl = dims[i]
+        var off = gmm_chol_ws_offset(dl)
+        if off < 2 * dl * dl + dl + 1 or off % 64 != 0:
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace offset " + String(off))
+        if gmm_chol_dwork_floats(dl) != off + gmm_chol_ws_floats(dl):
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " dwork does not end at the workspace")
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+        if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
+            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
+
+    var d = 300
+    var ncomp = 2
+    var dd = d * d
+    var cov_h = List[Float32](length=ncomp * dd, fill=0.0)
+    var state = UInt32(12345)
+    for kc in range(ncomp):
+        for r in range(d):
+            for c in range(r):
+                state = state * UInt32(1664525) + UInt32(1013904223)
+                # off-diagonal in [-0.001, 0.001): every row sum < 0.3 < the diagonal
+                var v = (Float32(Int(state >> 8)) / Float32(16777216.0) - Float32(0.5)) * Float32(0.002)
+                cov_h[kc * dd + r * d + c] = v
+                cov_h[kc * dd + c * d + r] = v
+            cov_h[kc * dd + r * d + r] = Float32(1.0) + Float32(kc) * Float32(0.25)
+    var ctx = DeviceContext()
+    var quiet = IdentityTrace.disabled()
+    var cov = _upload(ctx, cov_h, 0, Float32(0.0))
+    var chol_l = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var linv = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var prec = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var ldc = ctx.enqueue_create_buffer[DType.float32](ncomp)
+    var dwork = ctx.enqueue_create_buffer[DType.float32](gmm_chol_dwork_floats(d))
+    var first = gmm_precision_cholesky(
+        ctx, cov, chol_l, linv, prec, ldc, dwork, d, ncomp, quiet, String("lease.first")
+    )
+    if first.info != 0:
+        raise Error("check_chain_workspace_is_leased: first run info=" + String(first.info))
+    var prec1 = _download(ctx, prec, ncomp * dd)
+    var ld1 = _download(ctx, ldc, ncomp)
+    var second = gmm_precision_cholesky(
+        ctx, cov, chol_l, linv, prec, ldc, dwork, d, ncomp, quiet, String("lease.second")
+    )
+    if second.info != 0:
+        raise Error("check_chain_workspace_is_leased: second run info=" + String(second.info))
+    var prec2 = _download(ctx, prec, ncomp * dd)
+    var ld2 = _download(ctx, ldc, ncomp)
+    for i in range(ncomp * dd):
+        if not _same_bits(prec1[i], prec2[i]):
+            raise Error("check_chain_workspace_is_leased: precision word " + String(i) + " moved on reuse")
+    for kc in range(ncomp):
+        if not _same_bits(ld1[kc], ld2[kc]):
+            raise Error("check_chain_workspace_is_leased: log-determinant " + String(kc) + " moved on reuse")
+    _ = cov^
+    _ = chol_l^
+    _ = linv^
+    _ = prec^
+    _ = ldc^
+    _ = dwork^
+    print("  check_chain_workspace_is_leased: d=300 x2 on one dwork of " + String(gmm_chol_dwork_floats(d)) + " floats: PASS")
+
+
 def main() raises:
     print(
         "== mixture/checks/gmm_check.mojo ["
@@ -2564,6 +2646,7 @@ def main() raises:
         + " =="
     )
     check_gmm_refusals()
+    check_chain_workspace_is_leased()
     check_collapse_is_identical()
     check_iteration_count_is_identical()
     check_estep_vs_oracle()

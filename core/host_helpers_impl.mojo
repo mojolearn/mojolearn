@@ -7,9 +7,9 @@ raise, GILReleased); the loops live here with no Python import, word for
 word as they were in the binding (lane thin-core, 2026-10-21: a pure move,
 no bit change).
 """
-from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import (
     host_list_ptr_u32,
@@ -25,22 +25,14 @@ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 def all_finite_f32(p: _F32P, count: Int) -> Int:
     """1 if every one of the `count` float32 values at `p` is finite, else 0."""
-    var ok: Int = 1
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            ok = 0
-            break
-    return ok
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    return 1 if host_all_finite_f32(p, count) else 0
 
 
 def all_finite_f64(p: _F64P, count: Int) -> Int:
     """`all_finite_f32` over float64 values."""
-    var ok: Int = 1
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            ok = 0
-            break
-    return ok
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    return 1 if host_all_finite_f64(p, count) else 0
 
 
 def cast_f64_to_f32(sp: _F64P, dp: _F32P, count: Int):
@@ -99,7 +91,7 @@ def gather_rows_bytes(
     if not invalid:
         for r in range(no):
             var index = Int(idx.unsafe_load(r))
-            memcpy(dest=dst + r * width, src=src + index * width, count=width)
+            unsafe_memcpy(dest=dst + r * width, src=src + index * width, count=width)
     return invalid
 
 

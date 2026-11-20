@@ -33,6 +33,8 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
+    _ = hx^  # past the drain: a queued copy reads it after its last named use
     var params = KMeansParams.default()
     params.n_clusters = k
     params.init = INIT_ARRAY

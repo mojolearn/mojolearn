@@ -9,7 +9,7 @@ __all__ = ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing',
            'forecast_exponential_smoothing']
 
 # The partition, the workers and the merge are the installed native owner
-# (bindings/parallel_forecast_native.mojo, on the native local process pool):
+# (bindings/parallel_forecast_native_door.mojo, on the native local process pool):
 # each public function is one call into it.
 from . import _native_process  # noqa: F401  (connects the native process pool)
 from . import _backend

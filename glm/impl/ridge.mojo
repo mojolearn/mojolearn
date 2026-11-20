@@ -65,8 +65,7 @@ no equivalent), and `n_alpha > 1` (their signature carries an array and
 reads `alpha[0]` only: `ridge.cuh:67`).
 """
 
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -106,14 +105,14 @@ comptime RIDGE_SMALL_THRESH = Float32(1.0e-10)
 #: vendors keep `ridgeSolve`'s route. Default since the M3 A/B
 #: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
 #: on top of RIDGE_RESIDENT, istella 729 -> 542 ms, taxi 21.7 -> 22.7 ms).
-#: Depends on RIDGE_RESIDENT: off with -D MOJOLEARN_RIDGE_NO_U_OFF or
-#: -D MOJOLEARN_RIDGE_RESIDENT_OFF; the old -D MOJOLEARN_RIDGE_NO_U define
-#: is now harmless.
+#: Depends on RIDGE_RESIDENT.
+# TOMBSTONE: MOJOLEARN_RIDGE_NO_U_OFF (old path; EXP:246 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 620c4ce37c.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RIDGE_RESIDENT_OFF (old path; EXP:247 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3fcdcb78f6.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RIDGE_NO_U = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"]()
-    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 

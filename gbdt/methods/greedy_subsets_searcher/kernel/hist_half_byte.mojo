@@ -32,8 +32,9 @@ the bounds test is `fold < features[fid].Folds`.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -94,7 +95,7 @@ comptime POINTS_PER_ITER = UNROLL * LOAD_SIZE
 
 #: The mode this build compiles against; see `checks/numerics.mojo`. Same
 #: row as `hist_binary.mojo`, and the flush below follows the matrix.
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
 
 #: Logical replication width from the kernel matrix. Its uses partition the
 #: row axis into complete, disjoint `LOAD_SIZE` runs; it neither indexes a
@@ -255,8 +256,8 @@ def half_byte_hist_kernel(
             # `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
             # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is
             # its Mojo spelling.
-            hb = ldg(bins_p + (p_offset + pe))
-            hs = ldg(stats_p + (p_offset + pe))
+            hb = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
@@ -264,8 +265,8 @@ def half_byte_hist_kernel(
         if local_block_idx == 0 and pe < tail_len:
             # `Ldg(bins, tailOffset + idx)` and `Ldg(stats, tailOffset + idx)`
             # (`compute_hist_loop_one_stat.cuh:98-99`).
-            tb = ldg(bins_p + (tail_start + pe))
-            ts = ldg(stats_p + (tail_start + pe))
+            tb = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -289,8 +290,7 @@ def half_byte_hist_kernel(
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
-    if not uniform:
+    comptime if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
         # matrix claims one exists. Write that path before flipping the row.
@@ -322,8 +322,8 @@ def half_byte_hist_kernel(
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
 
         # `Ldg((uint4*) bins, warpSize * k)` and its `float4` twin
         # (`compute_hist_loop_one_stat.cuh:366-375`). Indexing a `uint4*` by
@@ -335,8 +335,7 @@ def half_byte_hist_kernel(
         # the entire reason `AlignMemoryAccess` exists, and it is what makes
         # a 4-wide load legal as well as fast. Only the uniform-iteration
         # guard remains, and that one is ours.
-        @parameter
-        for k in range(UNROLL):
+        comptime for k in range(UNROLL):
             if active:
                 # `Ldg((uint4*) bins, warpSize * k)` and
                 # `Ldg((float4*) stats, warpSize * k)`
@@ -347,23 +346,21 @@ def half_byte_hist_kernel(
                 # is `n_rows` (`greedy_search_helper.mojo`), so a column base
                 # is not 4-element aligned in general and the width-4 load
                 # keeps the element alignment the plain load already assumed.
-                var vb = ldg[width=LOAD_SIZE, alignment=4](
+                var vb = (
                     b_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
-                var vs = ldg[width=LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
+                var vs = (
                     s_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
 
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = vb[e]
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless
                 # because the stat is 0.0, and it keeps this lane inside
                 # every sync below.
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
@@ -383,14 +380,11 @@ def half_byte_hist_kernel(
         # its low three bits, so no two lanes of the tile can land on the
         # same slot however many `k` they run. That is exactly why the sync
         # belongs on `i`.
-        @parameter
-        for batch in range(UNROLL):
+        comptime for batch in range(UNROLL):
 
-            @parameter
-            for i in range(8):
+            comptime for i in range(8):
 
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     var t = local_stats[batch * LOAD_SIZE + e]
                     var slot = slice_base + add_point_slot(
                         local_bins[batch * LOAD_SIZE + e], tid, i
@@ -430,8 +424,7 @@ def half_byte_hist_kernel(
 
     var acc2 = Float32(0.0)
     if tid < 128:
-        @parameter
-        for group in range(4):
+        comptime for group in range(4):
             # row 10: reduce-stage intermediate, flushed (no-op under
             # FAST).
             acc2 = ftz(acc2 + smem[reduce_stage2_slot(tid, group)])
@@ -510,8 +503,7 @@ def half_byte_hist_kernel(
                     TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
-                @parameter
-                if det:
+                comptime if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
                         # DEVIATION 1898: the reference's atomicAdd is relaxed; the
@@ -703,17 +695,16 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
             # (`compute_hist_loop_one_stat.cuh:130-132`). All three streams
             # are read-only for the kernel's lifetime, which is what `Ldg`
             # declares.
-            var hrow = Int(ldg(indices + (p_offset + pe)))
-            hb = ldg(cindex_p + hrow)
+            var hrow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            hb = (cindex_p + hrow).unsafe_load[invariant=True]()
 
-            @parameter
-            if ridx_stats:
+            comptime if ridx_stats:
                 # DEVIATION 1902: the stat plane is stationary and the
                 # stat rides the SAME gathered row id as the bin
                 # (`split_points_ridx.mojo`'s invariant).
-                hs = ldg(stats_p + hrow)
+                hs = (stats_p + hrow).unsafe_load[invariant=True]()
             else:
-                hs = ldg(stats_p + (p_offset + pe))
+                hs = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(hb, hs, tid, slice_base, smem)
 
         var tb = UInt32(0)
@@ -722,15 +713,14 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
             # `Ldg(indices, tailOffset + idx)`, `Ldg(cindex, loadIdx)`,
             # `Ldg(stats, tailOffset + idx)`
             # (`compute_hist_loop_one_stat.cuh:149-151`).
-            var trow = Int(ldg(indices + (tail_start + pe)))
-            tb = ldg(cindex_p + trow)
+            var trow = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            tb = (cindex_p + trow).unsafe_load[invariant=True]()
 
-            @parameter
-            if ridx_stats:
+            comptime if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
-                ts = ldg(stats_p + trow)
+                ts = (stats_p + trow).unsafe_load[invariant=True]()
             else:
-                ts = ldg(stats_p + (tail_start + pe))
+                ts = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
         add_half_byte_point(tb, ts, tid, slice_base, smem)
         pe += BLOCK_SIZE
 
@@ -754,8 +744,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
     # each carrying its own workaround.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
-    if not uniform:
+    comptime if not uniform:
         # Deliberately unimplemented rather than silently wrong: the literal
         # CatBoost loop needs a lane-local sync, and reaching here means the
         # matrix claims one exists. Write that path before flipping the row.
@@ -787,8 +776,8 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
         var active = it < iter_count
         # Their two unrolled loops: gather the batch, then add it. Kept in
         # that order because it is what keeps the loads in flight.
-        var local_bins = InlineArray[UInt32, POINTS_PER_ITER](fill=0)
-        var local_stats = InlineArray[Float32, POINTS_PER_ITER](fill=0)
+        var local_bins = Array[UInt32, POINTS_PER_ITER](fill=0)
+        var local_stats = Array[Float32, POINTS_PER_ITER](fill=0)
 
         # Their gather batch (`compute_hist_loop_one_stat.cuh:406-424`):
         #
@@ -803,8 +792,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
         #
         # NO per-element bounds test: the peel above leaves a whole number of
         # warp iterations, so an ACTIVE iteration is wholly in range.
-        @parameter
-        for k in range(UNROLL):
+        comptime for k in range(UNROLL):
             if active:
                 # `Ldg((int4*) indices, warpSize * k)` and
                 # `Ldg((float4*) stats, warpSize * k)`
@@ -815,19 +803,17 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                 # is `n_rows` (`greedy_search_helper.mojo`), so a column base
                 # is not 4-element aligned in general and the width-4 load
                 # keeps the element alignment the plain load already assumed.
-                var vi = ldg[width=LOAD_SIZE, alignment=4](
+                var vi = (
                     i_ptr + LANE_WIDTH * LOAD_SIZE * k
-                )
+                ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
                 var vs = SIMD[DType.float32, LOAD_SIZE](0.0)
 
-                @parameter
-                if not ridx_stats:
-                    vs = ldg[width=LOAD_SIZE, alignment=4](
+                comptime if not ridx_stats:
+                    vs = (
                         s_ptr + LANE_WIDTH * LOAD_SIZE * k
-                    )
+                    ).unsafe_load[width=LOAD_SIZE, alignment=4, invariant=True]()
 
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     # THE GATHER: position -> row -> bin. The compressed
                     # index is never permuted, so after a reorder position no
                     # longer names a row. See hist_binary for the full note.
@@ -835,23 +821,21 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                     # its y, z, w twins
                     # (`compute_hist_loop_one_stat.cuh:415-418`). Scalar,
                     # because a gather has no vector form.
-                    local_bins[k * LOAD_SIZE + e] = ldg(
+                    local_bins[k * LOAD_SIZE + e] = (
                         cindex_p + Int(vi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
 
-                    @parameter
-                    if ridx_stats:
+                    comptime if ridx_stats:
                         # DEVIATION 1902: the stat joins the bins' scalar
                         # gather through the same loaded row id; the wide
                         # load above is traded for it.
-                        vs[e] = ldg(stats_p + Int(vi[e]))
+                        vs[e] = (stats_p + Int(vi[e])).unsafe_load[invariant=True]()
                     local_stats[k * LOAD_SIZE + e] = vs[e]
             else:
                 # No row: contribute zero. The slot it lands in is harmless
                 # because the stat is 0.0, and it keeps this lane inside
                 # every sync below.
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     local_bins[k * LOAD_SIZE + e] = UInt32(0)
                     local_stats[k * LOAD_SIZE + e] = Float32(0.0)
 
@@ -871,14 +855,11 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
         # its low three bits, so no two lanes of the tile can land on the
         # same slot however many `k` they run. That is exactly why the sync
         # belongs on `i`.
-        @parameter
-        for batch in range(UNROLL):
+        comptime for batch in range(UNROLL):
 
-            @parameter
-            for i in range(8):
+            comptime for i in range(8):
 
-                @parameter
-                for e in range(LOAD_SIZE):
+                comptime for e in range(LOAD_SIZE):
                     var t = local_stats[batch * LOAD_SIZE + e]
                     var slot = slice_base + add_point_slot(
                         local_bins[batch * LOAD_SIZE + e], tid, i
@@ -918,8 +899,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
 
     var acc2 = Float32(0.0)
     if tid < 128:
-        @parameter
-        for group in range(4):
+        comptime for group in range(4):
             # row 10: reduce-stage intermediate, flushed (no-op under
             # FAST).
             acc2 = ftz(acc2 + smem[reduce_stage2_slot(tid, group)])
@@ -998,8 +978,7 @@ def half_byte_hist_gather_kernel[ridx_stats: Bool = False](
                     TARGET_COLUMN, PIN_DETERMINISM
                 ]()
 
-                @parameter
-                if det:
+                comptime if det:
                     if active_block_count > 1:
                         var q = Int32(val * fixed_scale)
                         # DEVIATION 1898: the reference's atomicAdd is relaxed; the

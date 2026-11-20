@@ -4,16 +4,13 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from max.gpu.host.device_attribute import DeviceAttribute
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from core.device_units import device_multiprocessor_count
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_classical import AFCL_T04
 
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, _radix_pass
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
-from gbdt.methods.kernel.sym_fast import (
-    SYM_SORT_SWAP,
-)
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.methods.kernel.pointwise_scores import (
     update_partition_props,
@@ -24,6 +21,9 @@ from gbdt.gpu_util.partitions_reduce import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_AFCL_T04 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 23de5304ed.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T04.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime SPLIT_BLOCK_SIZE = 128 if AFCL_T04 else 256
 """`constexpr int blockSize = 256` (`gpu_data/kernel/split.cu:211`)."""
 
@@ -575,7 +575,7 @@ def create_subsets(
 
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var chunks = partition_stats_chunks(sm, 1)
     var stat_partials = ctx.enqueue_create_buffer[DType.float32](
         max_part_count * 1 * chunks
@@ -741,48 +741,21 @@ def split_subsets_from_desc(
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
 
-    comptime if SYM_SORT_SWAP:
-        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SORT_SWAP` (FAST +
-        # Apple only). `launch_radix_sort_bins` over ONE bit is one
-        # `_radix_pass` into `tmp_bins` / `tmp_indices` followed by two
-        # `copy_u32_kernel` launches that move the answer back (its
-        # ping-pong flip). The pass is the same; the copies become a
-        # handle swap, which is what their `TCudaBuffer::Swap` would be.
-        # Every consumer takes `subsets.bins` / `subsets.indices` by name
-        # after this call (the level loop re-reads `subsets.indices.copy()`
-        # each level; `reset_subsets` refills both), and `tmp_*` are
-        # scratch of the same length, so the swap is invisible to them.
-        if subsets.doc_count > 0:
-            var sort_blocks = (
-                subsets.doc_count + REORDER_BLOCK - 1
-            ) // REORDER_BLOCK
-            _radix_pass(
-                ctx,
-                subsets.doc_count,
-                Int(depth),
-                sort_blocks,
-                subsets.bins,
-                subsets.indices,
-                subsets.tmp_bins,
-                subsets.tmp_indices,
-                subsets.scan_offsets,
-                subsets.block_sums,
-            )
-            swap(subsets.bins, subsets.tmp_bins)
-            swap(subsets.indices, subsets.tmp_indices)
-    else:
-        launch_radix_sort_bins(
-            ctx,
-            subsets.doc_count,
-            Int(depth),
-            Int(depth) + 1,
-            subsets.bins,
-            subsets.indices,
-            subsets.tmp_bins,
-            subsets.tmp_indices,
-            subsets.scan_offsets,
-            subsets.block_sums,
-        )
+    # TOMBSTONE: MOJOLEARN_SYM_SORT_SWAP (NEUTRAL: rab7-symsortswap istella +0.3%, taxi +0.1%) one-pass sort with a
+    # handle swap deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at 1805cb6b73.
+    # Restore: git apply experiments/removed/MOJOLEARN_SYM_SORT_SWAP.patch
+    launch_radix_sort_bins(
+        ctx,
+        subsets.doc_count,
+        Int(depth),
+        Int(depth) + 1,
+        subsets.bins,
+        subsets.indices,
+        subsets.tmp_bins,
+        subsets.tmp_indices,
+        subsets.scan_offsets,
+        subsets.block_sums,
+    )
 
     subsets.current_depth += 1
 

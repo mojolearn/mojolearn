@@ -48,7 +48,7 @@ The historical one-block loop and training bindings were not modified by this sl
 
 ## Standalone native binding (authored, not executed)
 
-`bindings/_mojolearn_byte_lm.mojo` exports `byte_lm_run(addresses, params)` plus `byte_lm_numeric_mode()`, `byte_lm_vendor()` and `byte_lm_profile()`. It opens no device at import. The Python wrapper must validate all witnesses before numerical work, own every contiguous array for the call, and commit only complete successful outputs.
+`bindings/_mojolearn_byte_lm.mojo` exports `byte_lm_run_configured(addresses, params, shape)` plus `byte_lm_numeric_mode()`, `byte_lm_vendor()` and `byte_lm_profile()`. It opens no device at import. The Python wrapper must validate all witnesses before numerical work, own every contiguous array for the call, and commit only complete successful outputs.
 
 The address list is exactly `[in_param,in_m,in_v,in_flags_i32,in_ids_i32,out_param,out_m,out_v,out_grad,out_flags_i32,out_loss_f32]`. Parameters are exactly `[action,completed,kind,lr,beta1,beta2,eps,weight_decay,momentum,dampening,nesterov,max_norm]`. Kind 2 is AdamW. Action 1 trains and returns `completed+1`; action 0 evaluates, requires `out_grad=0`, and returns the unchanged completed step. The other output state buffers are required in both modes. Array counts are 34,944 FP32 for parameters/moments/gradients, 20 int32 flags, 66 int32 IDs, and one FP32 loss. Input flags must be exactly 0 or 1. Training admits `0 <= completed < 999999`; evaluation also admits the terminal completed step 999999.
 

@@ -1,0 +1,9 @@
+commit=4f7cdf9c2fd3fa6ecf5c8915ea7cff5720075595
+label=nvidia-ptx-l4-sm80
+backend=cuda
+scope=all shard= lanes_override= lane_selection=auto-reuse
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 5ce362abaf1c
+date=2026-11-02T04:55:06Z
+dirty_tracked=none
+record_sha256=0a4c7561deac1fbd620b4966590928f267ef370d31c3119db559956dbc22f095

@@ -1,7 +1,7 @@
 # Emit the gfx942 LLVM IR (optimized) and assembly of the Holt-Winters device
 # kernels, one section per kernel, so cold compiles can be compared stage by stage.
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
+from max.gpu.host import get_gpu_target
 from holtwinters.impl.internal.hw_eval import holtwinters_eval_gpu_global_kernel
 from holtwinters.impl.internal.hw_optim import holtwinters_optim_gpu_global_kernel
 from holtwinters.impl.internal.hw_estimate import (

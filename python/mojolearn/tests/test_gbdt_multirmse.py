@@ -20,7 +20,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from mojolearn._cpu_reference import reference_training
 
 
 def _fixture(n=512, d=4, seed=11):
@@ -43,7 +42,6 @@ def _model(**kw):
     return GradientBoosting(**params)
 
 
-@reference_training()
 def test_learns_every_target_and_predicts_raw():
     X, y = _fixture()
     m = _model().fit(X, y)
@@ -59,7 +57,6 @@ def test_learns_every_target_and_predicts_raw():
     assert np.all(err < base), (err, base)
 
 
-@reference_training()
 def test_same_seed_twice_is_the_same_model():
     X, y = _fixture()
     a = _model().fit(X, y)
@@ -68,7 +65,6 @@ def test_same_seed_twice_is_the_same_model():
     assert np.asarray(a.predict(X)).tobytes() == np.asarray(b.predict(X)).tobytes()
 
 
-@reference_training()
 def test_refusals_by_name():
     X, y = _fixture()
     with pytest.raises(Exception, match="n_targets >= 2|ndim|2-D|dimension"):
@@ -99,11 +95,10 @@ def test_catboost_multirmse_quality_is_comparable():
         bootstrap_type="No", random_strength=0.0, border_count=128,
         random_seed=0, verbose=False, allow_writing_files=False, **kw,
     ).fit(Xt, yt)
-    with reference_training():
-        ours = _model(n_estimators=kw["iterations"], max_depth=kw["depth"],
-                      learning_rate=kw["learning_rate"],
-                      l2_leaf_reg=kw["l2_leaf_reg"]).fit(Xt, yt)
-        ours_pred = np.asarray(ours.predict(Xv), dtype=np.float64)
+    ours = _model(n_estimators=kw["iterations"], max_depth=kw["depth"],
+                  learning_rate=kw["learning_rate"],
+                  l2_leaf_reg=kw["l2_leaf_reg"]).fit(Xt, yt)
+    ours_pred = np.asarray(ours.predict(Xv), dtype=np.float64)
     cb_pred = np.asarray(cb.predict(Xv), dtype=np.float64)
     ours_mse = float(np.mean((yv - ours_pred) ** 2))
     cb_mse = float(np.mean((yv - cb_pred) ** 2))

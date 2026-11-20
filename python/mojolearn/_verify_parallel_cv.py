@@ -20,9 +20,9 @@ from ._parallel_cv_witness import array_digest, retain_completed, read_records, 
 from ._verify_distributed import verify_distribution_records
 
 __all__ = ['main', 'source_identity', 'validate_receipt', 'compare']
-PROTOCOL = 'parallel-cv-v3'
+PROTOCOL = 'parallel-cv-v4'
 PROFILE_FILES = frozenset(('__init__.py', '_verify_parallel_cv.py', '_parallel_cv_witness.py',
-                           'model_selection.py', 'parallel_model_selection.py', '_parallel_pool.py',
+                           'model_selection.py', 'parallel_model_selection.py',
                            '_gpu_witness.py', '_verify_distributed.py',
                            '_native_parallel_cv.py', '_native_parallel_cv_worker.py',
                            '_native_msel_dispatch.py', '_native_msel_more.py'))
@@ -188,19 +188,25 @@ def main(argv=None):
     except (ImportError, AttributeError):
         parser.error('CV capture requires NumPy; install the optional mojolearn[test] extra')
     import mojolearn as ml
-    from . import _backend
     from .parallel_model_selection import _capture
-    if _backend.numeric_mode() != 'identical':
+    from ._verify_native_runtime import loaded_binding
+    if ml.numeric_mode() != 'identical':
         parser.error('CV capture requires identical numeric mode in a fresh process')
     if ml.vendor() not in ('cuda', 'hip') or (args.require_backend and ml.vendor() != args.require_backend):
         parser.error('requested GPU backend is not active; CPU fallback is not evidence')
     package = Path(ml.__file__).resolve().parent
     source = source_identity()
     dist, distribution = distribution_identity(package)
-    native = _backend.binding('_mojolearn_gbdt', 'identical')
-    binding_path = Path(native.__file__).resolve()
-    bindings = {'_mojolearn_gbdt': {'path': str(binding_path), 'vendor': _backend.read_vendor(native),
-                                  'sha256': hashlib.sha256(binding_path.read_bytes()).hexdigest()}}
+    # The public boosting names load the boosting family and its identical
+    # gbdt binding; mojolearn.runtime_report() then names that binding (its
+    # path, compiled vendor read-back and SHA-256).
+    _ = ml.GradientBoostingClassifier, ml.GradientBoostingRegressor
+    gbdt = loaded_binding('_mojolearn_gbdt', 'identical')
+    if gbdt is None:
+        parser.error('the identical gbdt binding is not loaded; CV capture cannot name its native artifact')
+    binding_path = Path(gbdt['path']).resolve()
+    bindings = {'_mojolearn_gbdt': {'path': str(binding_path), 'vendor': gbdt['vendor'],
+                                  'sha256': gbdt['identity']}}
     for name, filename in ml.model_selection._NATIVE_CONTEXT['family_msel_parallel']['artifact_paths'].items():
         owner_path = Path(filename).resolve()
         bindings['_native_' + name] = {'path': str(owner_path),

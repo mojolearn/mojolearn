@@ -19,6 +19,7 @@ from gemm.checks.gemm_identical import (
 from gemm.checks.gemm_identical import PLAN_FLAT
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.checks.gemm_oracle import gemm_oracle
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 def _small(outer: Int, p: Int) -> Float32:
@@ -83,16 +84,16 @@ def _run_gather(
         hB.unsafe_ptr().unsafe_store(i, hb[i])
     for i in range(mn):
         hC.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc, src_ptr=hC.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, hA)
+    upload_host_into[DType.float32](ctx, db, hB)
+    upload_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     _kpack_run[GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
         GEMM_KPACK_KS, GEMM_KPACK_FS, False, GEMM_KPACK_PAD,
         GEMM_KPACK_ALIGN, 0, True, True](
         ctx, dc, da, db, m, n, k, op, group_leaves)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hC.unsafe_ptr(), src_buf=dc)
+    download_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(mn):
@@ -113,9 +114,6 @@ def _run_gather(
     _ = da
     _ = db
     _ = dc
-    _ = hA
-    _ = hB
-    _ = hC
     return out^
 
 
@@ -128,7 +126,7 @@ def _digest(values: List[Float32]) -> UInt64:
     return h
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("gemm_stage_ftz_check requires IDENTICAL")
     print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))

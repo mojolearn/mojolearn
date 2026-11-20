@@ -4,8 +4,8 @@
 array (lane/apple-fast-mbkspeed, 2026-10-03). Switch: `MBK_ZEROCOPY`
 below, DEFAULT on FAST+Apple since the M3 A/B (lane/apple-fast-mbkspeed
 d844f180a, n=1: minibatch-kmeans istella 351 -> 256 ms, taxi 51.1 -> 48.5 ms,
-silhouette identical .1182 / .138); `-D MOJOLEARN_MBK_ZEROCOPY_OFF` turns it
-off (the old `-D MOJOLEARN_MBK_ZEROCOPY` is harmless); taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
+silhouette identical .1182 / .138; the old `-D MOJOLEARN_MBK_ZEROCOPY` is
+harmless); taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
 
 Cause: the binding copies X into a FRESH host list (`read_f32`,
 bindings/_mojolearn_x_cluster.mojo `call_binding`) before `ops.put` uploads
@@ -21,14 +21,12 @@ samples and the picked init centers are gathered from the resident X on
 the device (`_gather_slot`, `_kpp_indices_slot`; lane cpu3-core). Everything
 else is `minibatch_fit`'s FAST path word for word (the same seeded draws in
 the same order, `ops.minibatch_fast` for the steps, `nearest_all` for the
-labels), so a fit returns what the copying path returns. Unit weights and
-tol <= 0 only (the board's shape; the device steps take nothing else):
-anything else returns False and the binding takes the copying path.
+labels), so a fit returns what the copying path returns. Unit weights only
+(weights return False and the binding takes the copying path).
 IDENTICAL compiles none of this.
 """
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_cluster.bodies import SplitMix64
@@ -36,18 +34,19 @@ from x_cluster.common import nearest_all, sum_f64
 from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit
-from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 from x_cluster.out import ClusterOut
 
+# TOMBSTONE: MOJOLEARN_MBK_ZEROCOPY_OFF (old path: the copying FAST Apple MiniBatchKMeans fit; EXP:486 KEPT 51493c7a8, promoted on Apple M3 only; FAST is Apple only, so no other vendor A/B is owed) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 238261963f.
+# Restore: git apply experiments/removed/MOJOLEARN_MBK_ZEROCOPY_OFF.patch; record in docs/TOMBSTONES.md.
 comptime MBK_ZEROCOPY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and MINIBATCH_FAST_DEV
-    and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and MINIBATCH_FAST_DEV
 )  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
 
 #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only (default since
-#: verdicts batch 6; rollback `-D MOJOLEARN_MBK_FAST_DEVSCAN_OFF`). What: MiniBatchKMeans.fit refuses NaN/inf
+#: verdicts batch 6). What: MiniBatchKMeans.fit refuses NaN/inf
 #: with the base binding's `all_finite_f32` (python/mojolearn/_expansion_cluster.py
 #: `_f32`), a single-thread host loop with an early-exit branch over every
 #: value: 220 million floats (880 MB) at the board's istella 1M x 220, on the
@@ -60,8 +59,10 @@ comptime MBK_ZEROCOPY = (
 #: MBK_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab15-mbkdevscan): minibatch-kmeans istella 142.3 -> 83.5 ms,
 #: taxi 40.4 -> 37.2 ms, silhouette identical. KEEP: the FAST + Apple
-#: default; rollback -D MOJOLEARN_MBK_FAST_DEVSCAN_OFF.
-comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY and not is_defined["MOJOLEARN_MBK_FAST_DEVSCAN_OFF"]()
+#: default wherever MBK_ZEROCOPY is.
+# TOMBSTONE: MOJOLEARN_MBK_FAST_DEVSCAN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at a16e423aa4.
+# Restore: git apply experiments/removed/MOJOLEARN_MBK_FAST_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY
 #: the message Python maps back to its ValueError
 comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 
@@ -82,11 +83,10 @@ comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 #: and scan, ~150-200 ms); the device step loop (D7b) is a separate step.
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): minibatch-kmeans istella 0.309 (NV 0.195,
-#: AMD 0.423), taxi 0.555 (NV 0.421, AMD 0.690); same bits; runs v0107/a1689 vs A v0106/a1688. -D
-#: MOJOLEARN_IDN_MBK_RESIDENT_OFF restores the old path.
-comptime MBK_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_MBK_RESIDENT_OFF"]()
-)
+#: AMD 0.423), taxi 0.555 (NV 0.421, AMD 0.690); same bits; runs v0107/a1689 vs A v0106/a1688.
+# TOMBSTONE: MOJOLEARN_IDN_MBK_RESIDENT_OFF (old path: the IDENTICAL copying MiniBatchKMeans fit; EXP:2050 KEEP, promoted 2026-10-11 on NVIDIA and AMD) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ddca540bed.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MBK_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MBK_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: the binding scans X on the device (Python skips its host scan)
 comptime MBK_DEVSCAN_ANY = MBK_FAST_DEVSCAN or MBK_IDN_RESIDENT
 
@@ -145,7 +145,7 @@ def minibatch_entry_ptr(
 ) raises -> Bool:
     """`entries.minibatch_entry` with X read from `xp` (nx values, alive for
     the call). False (nothing done, `out` untouched) outside the switch or
-    for weights (tol > 0 only under the GENERAL_OFF define), or a shape the device steps refuse before any
+    for weights, or a shape the device steps refuse before any
     work (the binding then copies X and runs `minibatch_entry`)."""
     comptime if MBK_ZEROCOPY:
         var n = ip[0]
@@ -154,8 +154,9 @@ def minibatch_entry_ptr(
         # lane/no-bench-tuning-2: tol > 0 runs here too (the device steps
         # stop on the squared center shift); weights take `minibatch_entry`,
         # whose weighted init and draws run the same device steps
-        var tol_ok = fp[0] <= 0 or not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
-        if has_w or not tol_ok or n * d != nx:
+        # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: the unit-weight, tol <= 0 gate of the FAST Apple device steps; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 653e50e4f4.
+        # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF.patch; record in docs/TOMBSTONES.md.
+        if has_w or n * d != nx:
             return False
         var p = MiniBatchParams(
             k=ip[2], max_iter=ip[3], batch_size=ip[4], tol=fp[0], max_no_improvement=ip[5],
@@ -191,21 +192,19 @@ def minibatch_entry_ptr(
         # X straight from the caller's array: no host list, no synchronize
         # here (the stream orders every later kernel behind the copy; the
         # first read below synchronizes, and `xp` outlives the call)
-        var xbuf: DeviceBuffer[DType.float32]
-        comptime if MBK_CLS2_POOL:
-            # lane/apple-fast-gap-cls2: a pooled buffer, returned below
-            xbuf = pool_take["MojoXClusterCls2MbkX"](ops.ctx, nx)
-        else:
-            xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
+        # lane/apple-fast-gap-cls2: a pooled buffer, returned below
+        # (MBK_CLS2_POOL is MINIBATCH_FAST_DEV, which the enclosing switch requires)
+        # TOMBSTONE: MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF (old path: a fresh X buffer per FAST Apple MiniBatchKMeans fit; EXP:520 KEEP pool default) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 0c46943130.
+        # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+        var xbuf: DeviceBuffer[DType.float32] = pool_take["MojolearnXClusterCls2MbkXV2"](ops.ctx, nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
-        comptime if MBK_FAST_DEVSCAN:
-            # Python skipped its host scan (ip[12] = 1): scan the device copy
-            if len(ip) > 12 and ip[12] != 0:
-                if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
-                    ops.ctx.synchronize()
-                    comptime if MBK_CLS2_POOL:
-                        pool_give["MojoXClusterCls2MbkX"](xbuf^)
-                    raise Error(MBK_NONFINITE_MSG)
+        # Python skipped its host scan (ip[12] = 1): scan the device copy
+        # (MBK_FAST_DEVSCAN is MBK_ZEROCOPY, the enclosing switch)
+        if len(ip) > 12 and ip[12] != 0:
+            if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
+                ops.ctx.synchronize()
+                pool_give["MojolearnXClusterCls2MbkXV2"](xbuf^)
+                raise Error(MBK_NONFINITE_MSG)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
 
@@ -283,11 +282,10 @@ def minibatch_entry_ptr(
         # Tried: the row-group all-rows labelling here.
         # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG.patch; record in docs/TOMBSTONES.md.
         nearest_all(ops, xs, n, c, k, d, labels, dist)
-        comptime if MBK_CLS2_POOL:
-            # nearest_all read its labels back (a synchronize): no launch
-            # still reads X; the slot's later entries are not used again
-            ops.ctx.synchronize()
-            pool_give["MojoXClusterCls2MbkX"](ops.f.pop(xs))
+        # nearest_all read its labels back (a synchronize): no launch
+        # still reads X; the slot's later entries are not used again
+        ops.ctx.synchronize()
+        pool_give["MojolearnXClusterCls2MbkXV2"](ops.f.pop(xs))
         var n_iter = (steps_done * batch + n - 1) // n
         var inertia = sum_f64(dist, n)
         out.f.append(c^)

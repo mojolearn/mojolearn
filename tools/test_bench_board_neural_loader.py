@@ -40,3 +40,18 @@ class NeuralTwinLoader(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MambaInputsWithoutTorch(unittest.TestCase):
+    """0.8.66 AMD measurement smoke: the measured venv has no torch, and the Mamba lanes' input step imported
+    mamba/corpus/gen_corpus.py (torch at module top), so no Mamba recipe reached its parameter probe."""
+
+    def test_mamba_weight_spec_reads_the_corpus_metadata_without_torch(self):
+        with patch.dict(sys.modules, {"torch": None, "torch.nn.functional": None}):
+            neural._MAMBA_METADATA.clear()
+            for model in ("mamba1", "mamba2", "mamba3"):
+                spec, (xshape, xrange) = neural.mamba_weight_spec(model, dict(d_model=64, batch=2, length=8))
+                self.assertEqual([n for n, _, _ in spec], list(neural.MAMBA_NAMES[model]))
+                self.assertEqual(xshape, (2, 8, 64))
+                self.assertTrue(all(lo <= hi for _, _, (lo, hi) in spec))
+        neural._MAMBA_METADATA.clear()

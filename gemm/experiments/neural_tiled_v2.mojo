@@ -5,13 +5,12 @@ These kernels share canonical leaf boundaries, FMA/FTZ steps and balanced
 fold helpers with production GEMM. Physical tiles stage operands only. They
 do not use vendor-specific reduction collectives or reduced precision.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined, get_defined_int
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import OP_NT
 from gemm.checks.gemm_identical import (
@@ -19,8 +18,11 @@ from gemm.checks.gemm_identical import (
     contract_partition, gemm_operand_strides,
 )
 
-comptime _NEURAL_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
+# TOMBSTONE: MOJOLEARN_NI07_GROUPED_PROJECTIONS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at e862759b5c.
+# Restore: git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch; record in docs/TOMBSTONES.md.
+comptime NI07_GROUPED_PROJECTIONS = False
 # TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE=1 (slower) deleted 2026-10-09 by d48c5eaaf; code recoverable at d48c5eaaf^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE-arm1.patch; record in docs/TOMBSTONES.md.
 # NI09 = the CNN arm (mask bit 2) of MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE, now
@@ -29,7 +31,9 @@ comptime NI07_GROUPED_PROJECTIONS = _NEURAL_ARMS and is_defined["MOJOLEARN_NI07_
 # projection) was DELETED as an IDENTICAL grid ge123e6f9 loser, mlp-train-step
 # NV 2.0 -> 3.8 / AMD 3.5 -> 3.4 ms (1.367x slower), same bits; recoverable at
 # main 8ed94710a. core/six_lane_experiment_guards.mojo refuses bit 1.
-comptime NI09_TILED_BIAS = _NEURAL_ARMS and (get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE", 0]() & 2) != 0
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE (NI09 CNN arm; EXP:1767 loser, AMD flat, NV 1.9x) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at d95e19da90.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch; record in docs/TOMBSTONES.md.
+comptime NI09_TILED_BIAS = False
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime BiasFn = def(Float32, Float32) thin -> Float32
 # A 256-thread block owns 16x16 outputs and 2 KiB of operand staging.

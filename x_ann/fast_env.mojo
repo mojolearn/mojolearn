@@ -11,27 +11,26 @@
 """The ann family's FAST-on-Apple defaults (lane/apple-fast-ann, 2026-10-02).
 
 Each switch is `True` only in a FAST build on the Apple column
-(`ANN_FAST_APPLE`; CAGRA_FAST_SEEDS and CAGRA_FAST_ITERS in every mode since
-2026-10-15, see there) unless its `-D MOJOLEARN_<NAME>_OFF` build define is
-given; an IDENTICAL build compiles each to `False`, so the old path is the
-only path there and its bits never move. No switch is an environment read
-(a `getenv` would be a host step on a fit or search path). The old
-`-D MOJOLEARN_<NAME>=1` opt-in defines are harmless no-ops now.
+(`ANN_FAST_APPLE`; the CAGRA seed and iteration floors of
+`x_ann/cagra_core.mojo::cg_search_budget` apply in every mode since
+2026-10-15, see there); an IDENTICAL build compiles each to `False`, so the
+old path is the only path there and its bits never move. No switch is an
+environment read (a `getenv` would be a host step on a fit or search path).
 (The file keeps its first name, fast_env, so imports still resolve.)"""
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: the compile gate of every switch here: FAST on Apple
-comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: The exact k-NN graph (CAGRA build, t-SNE affinities) for rows wider than
 #: 64 features: candidate rows staged in threadgroup memory a feature chunk
 #: at a time (`knn_tiled_bigd_kernel`) instead of the untiled cell.
 #: FAST+Apple default since the M3 A/B (n=1): CAGRA istella 173,188 ->
-#: 21,240 ms, recall .9838 unchanged. `-D MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`
-#: restores the untiled cell.
-comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_KNN_BIGD_OFF"]()
+#: 21,240 ms, recall .9838 unchanged. The untiled cell stays the IDENTICAL path.
+# TOMBSTONE: MOJOLEARN_ANN_FAST_KNN_BIGD_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 54b6a264fc.
+# Restore: git apply experiments/removed/MOJOLEARN_ANN_FAST_KNN_BIGD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_KNN_BIGD = ANN_FAST_APPLE
 
 #: IVF-PQ build: every subspace codebook trained by one batched Lloyd loop
 #: on the device (`x_ann/pq_kmeans_device.mojo`) over the residuals already
@@ -39,9 +38,10 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_K
 #: downloaded residual matrix. FAST+Apple default since the M3 A/B (n=1,
 #: istella): IVF-PQ 6,049 -> 2,503 ms (recall .5995 -> .7561), IVF-refine
 #: 6,032 -> 2,507 (recall .8622 -> .982), IVF-filter 6,050 -> 2,517 (recall
-#: .6527 -> .801). `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` restores
-#: the host codebooks.
-comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
+#: .6527 -> .801). The host codebooks stay the path outside FAST+Apple.
+# TOMBSTONE: MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 577b878c96.
+# Restore: git apply experiments/removed/MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_WIDE (DROPPED-semantics) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_DOT.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_P32 (DROPPED-quality) deleted 2026-10-03 by 3852df59b; code recoverable at 3852df59b^.
@@ -64,11 +64,14 @@ comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLE
 #:         expanded form cancels in float32, misordering close neighbors.
 #: FAST+Apple default since the M3 A/B (one run per arm): CAGRA istella
 #: 21,210 -> 1,254 ms, recall .9838 -> .9972 (IVFG+EXACTD+SEEDS+ITERS).
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_OFF` restores the exact graph;
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF` the expanded-form tile.
-comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"]()
+#: The exact graph stays the path outside FAST+Apple and IVFG's refusals.
+#: EXACTD is the only IVFG graph tile (`cg_ivfg_kernel`).
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 71c8454b4f.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2f74cb72ed.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE
 comptime CAGRA_FAST_IVFG_PROBES = 16
-comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"]()
 
 #: lane/apple-fast-w2-cagra (2026-10-04): IVFG (with EXACTD) for rows of 64
 #: features or fewer too. Cause: CAGRA taxi (400,000 x 11) still builds the
@@ -84,14 +87,15 @@ comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_
 #: moves the search, infer_ms, not the build), DEFAULT in FAST + Apple:
 #: M3, one run per arm, taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6);
 #: w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella).
-#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` restores the exact low-d
-#: graph and the 1x seeds. Plain LOWD without SEEDS4 failed recall (taxi
+#: The IVFG graph is taken at every width wherever IVFG is (the exact low-d
+#: graph stays the path outside FAST+Apple). Plain LOWD without SEEDS4 failed recall (taxi
 #: .997925 -> .997125, w2-cagra-lowd-q); its opt-in define is deleted.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: the low-d IVFG graph WITHOUT SEEDS4 (opt-in with LOWD_SEEDS4_OFF); taxi recall@10 .997925 -> .997125. The low-d graph stays as part of the LOWD_SEEDS4 default.
 # Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD.patch; record in docs/TOMBSTONES.md.
-comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"]()
-comptime CAGRA_FAST_IVFG_LOWD = _CAGRA_LOWD_SEEDS4
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at b26ab50a56.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG
 
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
@@ -103,7 +107,7 @@ comptime CAGRA_FAST_IVFG_LOWD = _CAGRA_LOWD_SEEDS4
 #: log_{deg/2}(n) iterations (cuVS's auto rule adds the log term; 2x lets
 #: the walk converge). FAST+Apple default since the M3 A/B (one run per
 #: arm): taxi recall .4838 -> .9979 (SEEDS+ITERS), build 2,859 -> 2,900 ms
-#: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
+#: (noise).
 #: SEEDS4: four times the seed work (taxi .9997); on by default with
 #: LOWD_SEEDS4 above.
 # TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS4 (DROPPED-semantics) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
@@ -119,8 +123,9 @@ comptime _CAGRA_SEEDS4 = _CAGRA_LOWD_SEEDS4
 #: (quality-vs-opponent-20261015). Only the walk's budget moves, not its
 #: order, so identical stays the same bits on every column; the bits of
 #: identical CAGRA search change from the last version. The 4x seed work
-#: (SEEDS4) stays FAST + Apple. `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` /
-#: `_ITERS_OFF` (A arms) restore cuVS's defaults in every mode.
-comptime CAGRA_FAST_SEEDS = (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]()) or _CAGRA_SEEDS4
+#: (SEEDS4) stays FAST + Apple.
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_SEEDS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at b978a9b483.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_SEEDS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
-comptime CAGRA_FAST_ITERS = not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
+# TOMBSTONE: MOJOLEARN_CAGRA_FAST_ITERS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at e5aba92ace.
+# Restore: git apply experiments/removed/MOJOLEARN_CAGRA_FAST_ITERS_OFF.patch; record in docs/TOMBSTONES.md.

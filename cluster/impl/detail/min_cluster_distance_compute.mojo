@@ -46,16 +46,16 @@ One departure of theirs is copied even though it looks like a bug guard:
 The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
-from experiments.classical_identical_ideas.graph_controls import (
-    KMEANS_ROW_ASSIGN, KMEANS_ROW_ASSIGN_MAX_KD,
-)
-from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
+# TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured opt-in arm, owner expdel2-05-base; non-owner site) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 8929636547.
+# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: always-False kmeans_row_assign_takes, its two launch branches and cluster/impl/detail/classical_assignment.mojo removed.)
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from cluster.multi_gpu import assignment_device_count, assignment_parallel
+from core.device_plan import DevicePlan
+from cluster.multi_gpu import assignment_device_count, assignment_parallel, kmeans_device_plan
 
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
@@ -82,13 +82,10 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator_cores,
 )
-from std.ffi import _Global
-from std.sys.compile import is_defined
-from std.sys.info import has_amd_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceAttribute
 
-#: lane fg-ivf (read_ivf.md idea B5), DEFAULT ON on NVIDIA and AMD
-#: (`-D MOJOLEARN_KMEANS_LIVE_CORES_OFF` restores the table row): the fused
+#: lane fg-ivf (read_ivf.md idea B5), ON on NVIDIA and AMD: the fused
 #: assignment grid (`launch_config_generator`'s minGridSize = numSMs x
 #: blocks per SM) reads numSMs from the device (`MULTIPROCESSOR_COUNT`, once
 #: per process) instead of `gpu_cores_for`'s stand-in parts (108 for an
@@ -99,26 +96,25 @@ from max.gpu.host import DeviceAttribute
 #: row tiles, each row's fold inside one block whatever `grid.y` is. Apple
 #: keeps its row (FAST is the Apple FAST peer's; the query costs ~1.3 ms per
 #: call on Metal).
-comptime KMEANS_LIVE_CORES = not is_defined["MOJOLEARN_KMEANS_LIVE_CORES_OFF"]()
+# TOMBSTONE: MOJOLEARN_KMEANS_LIVE_CORES_OFF (old path beside the default, the stand-in table row on NVIDIA and AMD; EXP:1671
+# PENDING, no A/B recorded within four weeks) deleted 2026-11-18 by lane/fx-env-dead; code recoverable at 0c65d61fed.
+# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_LIVE_CORES_OFF.patch; record in docs/TOMBSTONES.md.
 
 
-struct _LiveCores(Movable):
+struct _LiveCores(Defaultable, Movable):
     var cores: Int
 
     def __init__(out self):
         self.cores = 0
 
 
-comptime _KMEANS_LIVE_CORES_SLOT = _Global[
-    StorageType=_LiveCores, name="MojolearnKmeansFusedGridLiveCores", init_fn=_LiveCores.__init__
-]
+comptime _KMEANS_LIVE_CORES_SLOT = SharedSlot[_LiveCores, "MojolearnKmeansFusedGridLiveCoresV1"]
 
 
 def kmeans_fused_grid_cores(ctx: DeviceContext) -> Int:
     """The SM / CU count the fused grid is sized from: the device's (cached
-    after the first query) under `KMEANS_LIVE_CORES` on NVIDIA and AMD, else
-    0 (the table row)."""
-    comptime if KMEANS_LIVE_CORES and (has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator()):
+    after the first query) on NVIDIA and AMD, else 0 (the table row)."""
+    comptime if TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU:
         try:
             var slot = _KMEANS_LIVE_CORES_SLOT.get_or_create_ptr()
             if slot[].cores <= 0:
@@ -131,21 +127,9 @@ from cluster.impl.distance.unfused_distance_nn import (
     REDUCE_MIN_TPB,
     reduce_min_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
-
-def kmeans_row_assign_takes(n_clusters: Int, n_features: Int) -> Bool:
-    """KMEANS_ASSIGN (graph_controls.mojo): the row-register kernel takes this
-    assignment. The expanded row arms do only while the per-thread chain
-    `k * d` is at most `KMEANS_ROW_ASSIGN_MAX_KD` (cost rule, see there); past
-    it the tiled kernel keeps the launch. Either kernel gives the expanded
-    arms the same bits."""
-    comptime if not KMEANS_ROW_ASSIGN:
-        return False
-    # Tried 2026-10-08 (MOJOLEARN_KMEANS_DIRECT_DISTANCE, arm direct4 of kmeans_assign, run ge123e6f9): (x-c)^2 distances in
-    # place of the expansion; NV/AMD kmeans istella 12.7x/6.2x, taxi 1.78x/1.96x SLOWER; inertia SAME -> deleted (both direct
-    # arms). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-    return n_clusters * n_features <= KMEANS_ROW_ASSIGN_MAX_KD
 
 def compute_centroid_norms(
     ctx: DeviceContext,
@@ -166,6 +150,7 @@ def compute_centroid_norms(
 def _launch_fused[
     veclen: Int, kblk: Int, tr: Int, tc: Int
 ](
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut out_key: DeviceBuffer[DType.uint32],
     mut out_value: DeviceBuffer[DType.float32],
@@ -198,18 +183,11 @@ def _launch_fused[
     call feeds the occupancy query -- theirs passes the double-buffered
     `P::SmemSize` because that is what their kernel allocates.
     """
-    if kmeans_row_assign_takes(n_clusters, n_features):
-        ctx.enqueue_function[classical_assign_kernel](
-            out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
-            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
-            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
-        )
-        return
-    var device_count = assignment_device_count()
+    var device_count = assignment_device_count(dplan)
     if device_count > 1:
         assignment_parallel[veclen, kblk, tr, tc](ctx, out_key, out_value,
             x, centroids, x_norm, centroid_norm, n_samples, n_clusters,
-            n_features, is_sqrt, device_count)
+            n_features, is_sqrt, device_count, dplan)
         return
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
@@ -217,7 +195,7 @@ def _launch_fused[
     comptime smem_stride = kblk + veclen
     comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
 
-    # lane fg-ivf B5: numSMs from the device (`KMEANS_LIVE_CORES`; 0 = the table row)
+    # lane fg-ivf B5: numSMs from the device (0 = the table row)
     var cfg = launch_config_generator_cores(
         n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes, kmeans_fused_grid_cores(ctx)
     )
@@ -239,6 +217,43 @@ def _launch_fused[
 
 
 def min_cluster_and_distance_compute(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    metric: Int,
+    batch_samples: Int,
+    batch_centroids: Int,
+) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    min_cluster_and_distance_compute(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        x_norm,
+        centroids,
+        centroid_norm,
+        dist_buf,
+        out_key,
+        out_value,
+        n_samples,
+        n_features,
+        n_clusters,
+        metric,
+        batch_samples,
+        batch_centroids,
+    )
+
+
+def min_cluster_and_distance_compute(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -295,21 +310,21 @@ def min_cluster_and_distance_compute(
             _launch_fused[
                 4, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         elif vl == 2:
             _launch_fused[
                 2, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         else:
             _launch_fused[
                 1, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
     else:
@@ -317,21 +332,21 @@ def min_cluster_and_distance_compute(
             _launch_fused[
                 4, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         elif vl == 2:
             _launch_fused[
                 2, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
         else:
             _launch_fused[
                 1, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
             ](
-                ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
+                dplan, ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
             )
 
@@ -354,21 +369,14 @@ def _launch_fused_gated[
 ) raises:
     """`_launch_fused` on one device with the kernel gated on `gate[0]`
     (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
-    out the multi-device split (`assignment_device_count() == 1`)."""
-    if kmeans_row_assign_takes(n_clusters, n_features):
-        ctx.enqueue_function[classical_assign_gated_kernel](
-            gate.unsafe_ptr(), out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
-            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
-            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
-        )
-        return
+    out the multi-device split (`assignment_device_count(dplan) == 1`)."""
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
     comptime nblk = 4 * tc
     comptime smem_stride = kblk + veclen
     comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
 
-    # lane fg-ivf B5: numSMs from the device (`KMEANS_LIVE_CORES`; 0 = the table row)
+    # lane fg-ivf B5: numSMs from the device (0 = the table row)
     var cfg = launch_config_generator_cores(
         n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes, kmeans_fused_grid_cores(ctx)
     )

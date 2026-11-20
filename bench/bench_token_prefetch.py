@@ -9,7 +9,7 @@ import resource
 import tempfile
 import time
 
-from mojolearn.lm_corpus import CORPUS_SCHEMA, TOKENS_SCHEMA, TokenBatches
+from mojolearn.lm_corpus import _CORPUS_SCHEMA as CORPUS_SCHEMA, _TOKENS_SCHEMA as TOKENS_SCHEMA, TokenBatches
 
 
 def make_tokens(root, count):

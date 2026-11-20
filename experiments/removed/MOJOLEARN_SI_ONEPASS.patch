@@ -1,0 +1,16 @@
+diff --git a/x_prep/fastpt.mojo b/x_prep/fastpt.mojo
+index d486620b5c..5449b4ad97 100644
+--- a/x_prep/fastpt.mojo
++++ b/x_prep/fastpt.mojo
+@@ -87,9 +87,8 @@ comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
+ #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
+ #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
+ #: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
+-# TOMBSTONE: MOJOLEARN_SI_ONEPASS (force-on knob; the one-pass col_stats is the FAST+Apple default, EXP:1888) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 11e4797706.
+-# Restore: git apply experiments/removed/MOJOLEARN_SI_ONEPASS.patch
+-comptime SI_ONEPASS = _FAST_APPLE and not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]()
++comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]()
++                                       or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
+ #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
+ #: the Python layer shrinks the buffers the device no longer touches by them
+ #: (bit 2 was PT_SPEC, bit 4 PT_FUSED_TRANSFORM and bit 16 PT_FOLD_NOX, all deleted 2026-10-09)

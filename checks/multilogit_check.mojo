@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`multilogit` against libm, against algebra, and against an already-gated kernel.
 
-    pixi run check-multilogit
+    pixi run check-native-gpu multilogit_check
 
 NO CATBOOST COUNTERPART: a gate, so `checks/`.
 
@@ -224,9 +224,9 @@ def run_case(
             apx.append(Float64(Float32(a)))
             h_p.unsafe_ptr().unsafe_store(k * n + i, Float32(a))
 
-    ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_pred, src_ptr=h_p.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_target, h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_pred, h_p)
     ctx.synchronize()
 
     launch_multilogit_value_and_der(
@@ -234,7 +234,7 @@ def run_case(
         d_idx, False, d_fv, True, d_der, n, d_magdummy, False,
     )
     var h_der = ctx.enqueue_create_host_buffer[DType.float32](eff * n)
-    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
+    download_host_into[DType.float32](ctx, d_der, h_der)
     ctx.synchronize()
 
     var bad = 0
@@ -289,7 +289,7 @@ def run_case(
             ctx, num_classes, n, d_w, True, d_pred, n, d_der2, row, n,
         )
         var h2 = ctx.enqueue_create_host_buffer[DType.float32](eff * n)
-        ctx.enqueue_copy(dst_ptr=h2.unsafe_ptr(), src_buf=d_der2)
+        download_host_into[DType.float32](ctx, d_der2, h2)
         ctx.synchronize()
         for i in range(n):
             var approx = List[Float64]()
@@ -386,10 +386,10 @@ def check_two_class_collapse(ctx: DeviceContext) raises -> Int:
         h_p.unsafe_ptr().unsafe_store(
             i, Float32(hashed_unit(UInt64(0x66), i) * 8.0 - 4.0)
         )
-    ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ce_target, src_ptr=h_c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_pred, src_ptr=h_p.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_target, h_t)
+    upload_host_into[DType.float32](ctx, d_ce_target, h_c)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_pred, h_p)
     ctx.synchronize()
 
     launch_multilogit_value_and_der(
@@ -411,9 +411,9 @@ def check_two_class_collapse(ctx: DeviceContext) raises -> Int:
     var h_der = ctx.enqueue_create_host_buffer[DType.float32](n)
     var h_d2 = ctx.enqueue_create_host_buffer[DType.float32](n)
     var h_ce = ctx.enqueue_create_host_buffer[DType.float32](2 * n)
-    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
-    ctx.enqueue_copy(dst_ptr=h_d2.unsafe_ptr(), src_buf=d_der2)
-    ctx.enqueue_copy(dst_ptr=h_ce.unsafe_ptr(), src_buf=d_ce)
+    download_host_into[DType.float32](ctx, d_der, h_der)
+    download_host_into[DType.float32](ctx, d_der2, h_d2)
+    download_host_into[DType.float32](ctx, d_ce, h_ce)
     ctx.synchronize()
 
     var bad = 0
@@ -475,9 +475,9 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
                 k * n + i,
                 Float32(hashed_unit(UInt64(0xF3 + k), i) * 5.0 - 2.5),
             )
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_t, h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_p, h_p)
     ctx.synchronize()
 
     launch_multilogit_value_and_der(
@@ -491,9 +491,9 @@ def check_search_mode(ctx: DeviceContext, num_classes: Int) raises -> Int:
     var h_e = ctx.enqueue_create_host_buffer[DType.float32](eff * n)
     var h_s = ctx.enqueue_create_host_buffer[DType.float32]((1 + eff) * n)
     var h_m = ctx.enqueue_create_host_buffer[DType.float32](2 * blocks)
-    ctx.enqueue_copy(dst_ptr=h_e.unsafe_ptr(), src_buf=d_est)
-    ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_srch)
-    ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_mag)
+    download_host_into[DType.float32](ctx, d_est, h_e)
+    download_host_into[DType.float32](ctx, d_srch, h_s)
+    download_host_into[DType.float32](ctx, d_mag, h_m)
     ctx.synchronize()
 
     var bad = 0
@@ -611,9 +611,9 @@ def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
                 k * n + i,
                 Float32(hashed_unit(UInt64(0xB3 + k), i) * 12.0 - 6.0),
             )
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_t, h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_p, h_p)
     ctx.synchronize()
 
     launch_one_vs_all_value_and_der[False](
@@ -629,8 +629,8 @@ def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
     var h_d2 = ctx.enqueue_create_host_buffer[DType.float32](
         num_classes * n
     )
-    ctx.enqueue_copy(dst_ptr=h_der.unsafe_ptr(), src_buf=d_der)
-    ctx.enqueue_copy(dst_ptr=h_d2.unsafe_ptr(), src_buf=d_der2)
+    download_host_into[DType.float32](ctx, d_der, h_der)
+    download_host_into[DType.float32](ctx, d_der2, h_d2)
     ctx.synchronize()
 
     var bad = 0
@@ -645,8 +645,8 @@ def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
             h_pl.unsafe_ptr().unsafe_store(
                 i, h_p.unsafe_ptr().unsafe_load(k * n + i)
             )
-        ctx.enqueue_copy(dst_buf=d_ce_t, src_ptr=h_c.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_plane, src_ptr=h_pl.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_ce_t, h_c)
+        upload_host_into[DType.float32](ctx, d_plane, h_pl)
         ctx.synchronize()
         ctx.enqueue_function[cross_entropy_kernel[False, True]](
             d_ce_t.unsafe_ptr(), d_w.unsafe_ptr(), Int32(n),
@@ -656,7 +656,7 @@ def check_one_vs_all(ctx: DeviceContext, num_classes: Int) raises -> Int:
             grid_dim=(ce_blocks, 1, 1),
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
-        ctx.enqueue_copy(dst_ptr=h_ce.unsafe_ptr(), src_buf=d_ce)
+        download_host_into[DType.float32](ctx, d_ce, h_ce)
         ctx.synchronize()
         for i in range(n):
             var w = Float64(h_w.unsafe_ptr().unsafe_load(i))
@@ -706,9 +706,9 @@ def check_clip_prob_differs(ctx: DeviceContext) raises -> Int:
         hp.unsafe_ptr().unsafe_store(i, Float32(-40.0))
         hw2.unsafe_ptr().unsafe_store(i, Float32(1.0))
         ht2.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=d_p, src_ptr=hp.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=hw2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=ht2.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_p, hp)
+    upload_host_into[DType.float32](ctx, d_w, hw2)
+    upload_host_into[DType.float32](ctx, d_t, ht2)
     ctx.synchronize()
 
     launch_one_vs_all_second_der(
@@ -723,8 +723,8 @@ def check_clip_prob_differs(ctx: DeviceContext) raises -> Int:
     )
     var h2 = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hce = ctx.enqueue_create_host_buffer[DType.float32](2 * n)
-    ctx.enqueue_copy(dst_ptr=h2.unsafe_ptr(), src_buf=d_der2)
-    ctx.enqueue_copy(dst_ptr=hce.unsafe_ptr(), src_buf=d_ce)
+    download_host_into[DType.float32](ctx, d_der2, h2)
+    download_host_into[DType.float32](ctx, d_ce, hce)
     ctx.synchronize()
     var ova = Float64(h2.unsafe_ptr().unsafe_load(0))
     var ce = Float64(hce.unsafe_ptr().unsafe_load(n))
@@ -831,6 +831,25 @@ def check_multilogit(ctx: DeviceContext) raises:
     print("multilogit check: PASS")
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_multilogit(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("multilogit_check", cpu=False, gpu=True, serial="", run=run_cases)

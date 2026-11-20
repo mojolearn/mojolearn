@@ -12,10 +12,8 @@ precedent). The device binding runs this fit on its grid driver
 (x_linear/device.mojo `fit_device`, `logcv_fit_grid` in x_linear/logcv_grid.mojo); the statements here are unchanged,
 so the host column's bits are unchanged.
 """
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.tops import FOLD_BLOCK
 from x_linear.ops_host import par_rows
-from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight
 from x_linear.ops import fd, i2f, sti
 from x_linear.ops import FP, IP, axpy_acc, fa, fexp, fill, flog, fm, fmax, fs, ld, ldi, row_dots, st
 from x_linear.lbfgs import Objective, lbfgs
@@ -117,11 +115,11 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
                 st(pg, o, Float32(0))
             acc = fa(acc, pacc)
             pacc = Float32(0)
-            if sw and not C13_LOGCV_WEIGHTS:
+            if sw:
                 wrows = fa(wrows, pw)
                 pw = Float32(0)
         rows += 1
-        if sw and not C13_LOGCV_WEIGHTS:
+        if sw:
             pw = fa(pw, ld(y, 2 * n + i))
         pacc = fa(pacc, ld(sl, i))
         for k in range(kp):
@@ -133,11 +131,9 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
         for o in range(p):
             st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
         acc = fa(acc, pacc)
-        if sw and not C13_LOGCV_WEIGHTS:
+        if sw:
             wrows = fa(wrows, pw)
     _ = pl^
-    comptime if C13_LOGCV_WEIGHTS:
-        wrows = ld(fp, 1) if sw else Float32(0)
     return logcv_finish(g, goff, th, toff, kp, d, sw, c, rows, acc, wrows)
 
 
@@ -202,7 +198,9 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
     var p = kp * stride
     var th = 0
     var cslot = p
-    var extra = nf + 2 if C13_LOGCV_WEIGHTS else 1
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    var extra = 1
     var work = p + extra + n * (kp + 1)
     var sc = kp * d + kp + 2
     if t.lead():
@@ -211,15 +209,9 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
         sti(iw, 3, ldi(ip, 5))
     var cptr = fw + cslot
     var hitr = t.row(0)
-    comptime if C13_LOGCV_WEIGHTS:
-        for f in range(t.tid, nf, t.nt):
-            st(cptr, 2 + f, lcv_disjoint_weight(y, n, f, ldi(ip, 5) != 0))
-        t.sync()
     for f in range(nf):
         var cnt = rows(t, y, n, f, kp)
         if t.lead():
-            comptime if C13_LOGCV_WEIGHTS:
-                st(cptr, 1, lcv_retained_weight(cptr + 2, nf, f))
             sti(iw, 2, f)
             sti(iw, 4, cnt)
             fill(fw, th, p, Float32(0))
@@ -246,8 +238,6 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
             if ci == 0 or m > bs:  # DEVIATION 5005: the first best C
                 best = ci
                 bs = m
-        comptime if C13_LOGCV_WEIGHTS:
-            st(cptr, 1, lcv_retained_weight(cptr + 2, nf, -1))
         sti(iw, 2, -1)
         st(fw, cslot, ld(fp, 1 + best))
         fill(fw, th, p, Float32(0))

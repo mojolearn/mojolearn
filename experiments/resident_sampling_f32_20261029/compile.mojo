@@ -19,6 +19,7 @@ def main() raises:
     var scratch = GenerationSamplingScratch()
     scratch.use_f32_policy = True
     _ = generation_pick_row(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(logits.unsafe_ptr())), 4, False, 1, 0, 0.9, 7, 0, 3, scratch)
+    _ = logits^  # lastuse-audit: the call reads it through an untracked address; Mojo frees a local at its last named use
     var ctx = DeviceContext()
     var scores = ctx.enqueue_create_buffer[DType.float32](4)
     var order = ctx.enqueue_create_buffer[DType.int32](4)

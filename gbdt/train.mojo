@@ -22,14 +22,16 @@ from gbdt.options.child_hessian import child_hessian_threshold, check_child_hess
 from gbdt.models.trained_model import TrainedModel
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_upload_list
 
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,
@@ -108,6 +110,7 @@ from checks.numerics import (
     NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     identical_exp64,
+    identical_log2_64,
 )
 from checks.numerics import ftz as _hr2_ftz
 from gbdt.grid_creator.gls_borders_device import device_float_borders
@@ -143,12 +146,12 @@ from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
 )
-from std.memory import bitcast, memcpy
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import bitcast, unsafe_memcpy
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane cpu4-gbdt (2026-10-04): the permutation-INDEPENDENT simple CTR
 #: (FeatureFreq) is written by `compute_simple_ctrs_device_resident` in every
@@ -168,7 +171,6 @@ from std.sys.info import has_apple_gpu_accelerator
 #: lane/apple-fast-sym-feat (2026-10-03): the switches live in
 #: `gbdt/gpu_data/sym_feat_switches.mojo` (FAST + Apple only, default OFF).
 from gbdt.gpu_data.sym_feat_switches import (
-    GBDT_EVAL_SKIP_EMPTY,
     GBDT_INDEX_PACK_DEVICE,
     GBDT_QUANT_DEVICE,
 )
@@ -329,26 +331,9 @@ from gbdt.options.catboost_options import (
 
 
 
-def _sym_feat_test_cindex(
-    ctx: DeviceContext,
-    x_colmajor: List[Float32],
-    n_rows: Int,
-    borders: List[List[Float32]],
-    fold_counts: List[Int],
-    nan_treatment: List[Int],
-    eval_rows: Int,
-) raises -> DeviceBuffer[DType.uint32]:
-    """The held-out arm's compressed index: `_build_cindex_from_floats`,
-    except under `GBDT_EVAL_SKIP_EMPTY` (lane/apple-fast-sym-feat, FAST +
-    Apple only) with NO held-out rows, where nothing reads the index and
-    the one-row dummy build (a launch and two uploads per bordered feature,
-    a drain per eight) is replaced by a one-word allocation."""
-    comptime if GBDT_EVAL_SKIP_EMPTY:
-        if eval_rows == 0:
-            return ctx.enqueue_create_buffer[DType.uint32](1)
-    return _build_cindex_from_floats(
-        ctx, x_colmajor, n_rows, borders, fold_counts, nan_treatment,
-    )
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL: rab7-gbdtevalskipem istella +0.0%, taxi +0.4%) deleted 2026-11-15
+# by lane/expdel-05-trees (`_sym_feat_test_cindex`, the one-word index for an empty eval set); code recoverable at 8815b00d75.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
 
 
 def _build_cindex_from_floats(
@@ -457,11 +442,11 @@ def _build_cindex_from_floats(
                         "There are NaNs in feature number " + String(f)
                         + " but there were no NaNs in the learn dataset"
                     )
-            memcpy(dest=hx, src=src, count=n_rows)
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         else:
             # a substituting treatment copies the raw bytes and substitutes
             # on the device after the upload (cpu-gpu-cleanup t-gbdt)
-            memcpy(dest=hx, src=src, count=n_rows)
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
@@ -645,7 +630,7 @@ def _cindex_from_device_columns(
     var packed = False
     comptime if GBDT_INDEX_PACK_DEVICE:
         var tab = _qd_pack_word_table(lay, dev_col_of, borders, nan_treatment)
-        if tab.fits and lay.columns > 0 and len(tab.col) > 0:
+        if tab.fits and len(tab.col) > 0:
             var ne = len(tab.col)
             var nw = lay.columns
             var h_ws = ctx.enqueue_create_host_buffer[DType.uint32](nw + 1)
@@ -900,7 +885,7 @@ def _build_cindex_from_columns(
         # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
         # full-column NaN scan saw none in THIS SAME buffer, so it needs no
         # pass at all.
-        memcpy(dest=hx, src=src, count=n_rows)
+        unsafe_memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
@@ -993,7 +978,7 @@ def _build_cindex_fused(
             staged += 1
             continue
         var hx = hxs[slot].unsafe_ptr()
-        memcpy(dest=hx, src=column_ptrs[f], count=n_rows)
+        unsafe_memcpy(dest=hx, src=column_ptrs[f], count=n_rows)
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         if treat != NAN_TREATMENT_AS_IS:
             _enqueue_nan_substitute(
@@ -1056,7 +1041,10 @@ def sample_indices_for_borders_reference(
     if sn >= nrr:
         for i in range(nrr):
             sample_idx.append(UInt32(i))
-    elif sn > 1 and Float64(sn) > Float64(nrr) / log2(Float64(sn)):
+    # identical_log2_64 (lane fb13-identity-audit, 2026-11-17): the branch picks
+    # which sampler draws, so a host log2 that differs in the last bit at a
+    # near-tie would draw a different border sample on that host.
+    elif sn > 1 and Float64(sn) > Float64(nrr) / identical_log2_64(Float64(sn)):
         # their partial Fisher-Yates over an iota: `std::swap(result[i],
         # result[rand->Uniform(i, n)])` for i in [0, k)
         sample_idx.resize(nrr, UInt32(0))
@@ -1221,6 +1209,9 @@ def train(
     # (`y[dim * n_rows + row]`), the layout their device target is stored in
     # (`multilogit.cu:514`, `targets + idx + dim * targetAlignSize`).
     target_dim: Int = 1,
+    # The fit's device plan, read once at the binding entry (one device by
+    # default) and passed to the Plain and the Ordered fit.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1948,7 +1939,7 @@ def train(
         d_btarget = ctx.enqueue_create_buffer[DType.uint8](n_rows)
         var h_bt = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
         ctx.synchronize()
-        memcpy(
+        unsafe_memcpy(
             dest=h_bt.unsafe_ptr(),
             src=binarized_target.unsafe_ptr(),
             count=n_rows,
@@ -2141,7 +2132,7 @@ def train(
                     # the raw column is the code column (validated above)
                     var col = List[Float32]()
                     col.resize(unsafe_uninit_length=n_rows)
-                    memcpy(
+                    unsafe_memcpy(
                         dest=col.unsafe_ptr(),
                         src=x_src + f * n_rows,
                         count=n_rows,
@@ -2982,9 +2973,9 @@ def train(
         for _ in range(len(fold_counts)):  # small-loop(fold_counts: features of the one-row placeholder): one zero per feature for an empty eval set
             eval_expanded.append(Float32(0.0))
 
-    var test_cindex = _sym_feat_test_cindex(
+    var test_cindex = _build_cindex_from_floats(
         ctx, eval_expanded, t_rows, borders, fold_counts,
-        column_nan_treatment, eval_rows,
+        column_nan_treatment,
     )
 
     var approx_dim = 1
@@ -3040,9 +3031,10 @@ def train(
         var o_layout = build_layout(fold_counts, column_one_hot)
         var o_out = fit_ordered(
             ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
-            max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+            max_depth, device_multiprocessor_count(ctx),
             column_one_hot, o_opts, o_model, trace, test_arm,
             od_kind, od_pvalue, od_wait,
+            device_plan=device_plan,
         )
         # `ShrinkToBestIteration`, the Plain fit's own block below
         if want_best_model == 1 and len(o_out.test_losses) > 0:
@@ -3130,6 +3122,7 @@ def train(
         pair_winners=pair_list.winners.copy(),
         pair_losers=pair_list.losers.copy(),
         pair_weights=pair_list.weights.copy(),
+        device_plan=device_plan,
     )
     host_times.stop_host("train_fit_with_test", t_phase)
     t_phase = host_times.start()
@@ -3191,14 +3184,10 @@ def _upload_ctr_column(
             "CTR column has " + String(len(col)) + " values for "
             + String(n_rows) + " rows"
         )
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.synchronize()
-    memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
-    var d = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per call, a memcpy into it and a wait before it.
+    return transfer_upload_list[DType.float32](ctx, col, n_rows, n_rows)
 
 
 def _ctr_borders_device(
@@ -3430,7 +3419,22 @@ def _quantize_training_columns(
             # the column decides its own NaN mode, and a column that has
             # NaNs spends ONE of `border_count` on the sentinel. The grid
             # was built on the device above (`device_float_borders`).
-            column_nan_treatment[f] = nan_value_treatment(dev_modes[dev_k])
+            # A float column records the treatment of the nan_mode the fit was
+            # GIVEN, not only of the mode its own rows needed. A column with a
+            # NaN in the learn rows has `dev_modes[dev_k] == option`, so its
+            # code is what it was. A column with none used to record AsIs, and
+            # a later predict refused its first missing value ("There are NaNs
+            # in feature number N but there were no NaNs in the learn
+            # dataset"). The rule is the algorithm's own: under Min a missing
+            # value is below every observed value (AsFalse, -inf, bin 0, the
+            # `value > border` false side of every split on the column), under
+            # Max above every one (AsTrue, +inf, the last bin). The column
+            # still gets no NaN border (its mode stays Forbidden for the border
+            # budget), so no bin of a row without a NaN moves. Forbidden keeps
+            # AsIs and the refusal: there the caller said a NaN is an error.
+            # One-hot and CTR columns keep AsIs: a code has no order to be
+            # below or above.
+            column_nan_treatment[f] = nan_value_treatment(nan_mode_opt_early)
             fold_counts.append(len(dev_borders[dev_k]))
             borders.append(dev_borders[dev_k].copy())
             dev_k += 1
@@ -3539,6 +3543,8 @@ def train_ordered_rmse_ptr(
     learning_rate: Float32 = Float32(0.03),
     l2_leaf_reg: Float32 = Float32(3.0),
     sample_weight: List[Float32] = List[Float32](),
+    # The fit's device plan, read once at the binding entry.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> TrainedModel:
     """cpu2-l6-bindings: `train_ordered_rmse` with the column-major X read
     from the caller's address. X goes to the device ONCE, is refused for
@@ -3599,8 +3605,9 @@ def train_ordered_rmse_ptr(
     var result = fit_ordered_rmse(
         ctx, layout, cindex, y, sample_weight, permutation,
         n_estimators, max_depth,
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+        device_multiprocessor_count(ctx),
         learning_rate, l2_leaf_reg,
+        device_plan=device_plan,
     )
     var exported_model = result.model.copy()
     return TrainedModel(

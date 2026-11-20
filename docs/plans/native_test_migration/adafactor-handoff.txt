@@ -1,0 +1,51 @@
+Mojolearn native Adafactor numerical migration, 2026-11-10
+
+Coverage
+  CPU: two independent fixtures, original 5x4 matrix and length-three vector.
+  GPU: both shapes through per-call entry and retained resident-state entry,
+  four fixtures total. Every fixture runs six steps, lr .02, beta2_decay -.8,
+  eps1 2^-23, eps2 .001, clipping threshold1, weight_decay .05.
+  Independent Float64 reference follows original relative rate, parameter RMS,
+  decoupled decay, factored row/column mean variance or full vector variance,
+  denominator floor, and update RMS clipping. Native fixed dyadic data replaces
+  RNG setup; no product arithmetic helper computes expected values. Original
+  parameter rtol1e-4/atol1e-5 stays unchanged; extra row/column/variance-state
+  comparisons use those same bounds. No old hashes or self-comparison oracle.
+
+Native interfaces
+  sequence.ops_impl.adafactor_step_impl(ex, native addresses, integer extents,
+  Float64 config) on HostExec and DeviceExec. GPU additionally calls
+  adafactor_resident_open/step, opt_resident_move to read second moments, and
+  opt_resident_close. Resident fixtures require the existing default
+  AF_RESIDENT implementation; they are not marked passed for an OFF build.
+  Both current GPU routes retain their original adafactor_core kernels.
+  Owner Lists remain live after final raw-address use and consumption. The
+  vector's unused column slot stays zero; matrix/vector moments are independent.
+
+Parallelism
+  CPU shapes run via host_parallelize. Native oracle row/column/variance/update
+  cells use the existing pool; each small whole-tensor RMS reduction and the
+  six optimizer steps are dependent. GPU fixture submission is ordered for
+  shared sequence_ctx/resident ownership, kernels/oracle units parallel. No
+  concurrent GPU ownership or busy-core measurement claimed; no box allocated.
+
+Python remaining/deleted
+  All six definitions in test_x_sequence_optim.py remain public options/state
+  publication seams (Adafactor renamed accordingly). The Adafactor NumPy
+  arithmetic driver, norm/mean/outer/update loop and runtime oracle imports
+  are removed. Matrix/vector public keyword decoding, shapes/dtypes, step
+  count and state publication remain. This finishes that file's numerical
+  migration; the five elementwise families are the previous frozen batch.
+
+Root commands, lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-adafactor-cpu
+  bash tools/compile_slot.sh pixi run check-native-adafactor-gpu
+  Compile-only with current normal flags/target:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/adafactor_cpu.mojo -o "$HOME/mojolearn-evidence/adafactor-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/adafactor_gpu.mojo -o "$HOME/mojolearn-evidence/adafactor-gpu"
+  Run each exact binary. Installed boundary family _mojolearn_x_sequence:
+  pytest python/mojolearn/tests/test_x_sequence_optim.py
+
+Status
+  Source/AST/TOML/diff review only. Compile/runtime owed. No product changes,
+  new loader/build scheme, Python runtime fallback, identity, timing or A/B.

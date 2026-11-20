@@ -157,7 +157,7 @@ html_copy_source = False
 # The site root is the current release (older releases are not kept).
 html_baseurl = "https://docs.mojolearn.org/"
 # Link previews: the same card as every mojolearn.org page (_templates/layout.html writes the og:/twitter: tags).
-html_context["share_image"] = "https://mojolearn.org/social-v3.png"
+html_context["share_image"] = "https://mojolearn.org/social-v4.png"
 html_context["share_description"] = "mojolearn documentation: install, user guide and API reference for reproducible GPU machine learning."
 sitemap_url_scheme = "{link}"
 

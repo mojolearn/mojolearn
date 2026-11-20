@@ -84,9 +84,9 @@ while, silently. `checks/partitions_reduce_check.mojo` runs a 40,000-row
 leaf through a one-block grid to keep it from becoming one again.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.primitives.block import sum as block_sum
 
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
@@ -277,6 +277,9 @@ def partition_stats_chunks(sm_count: Int, n_stats: Int) -> Int:
     one pin, both readers.
     """
     comptime _identical = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # TOMBSTONE: MOJOLEARN_2041_FAST_CHUNKS_PIN (DELETE-ARM, FAST chunk-count pin, Apple fast opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at d51ccf732f.
+    # Restore: git apply experiments/removed/MOJOLEARN_2041_FAST_CHUNKS_PIN.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     # DEVIATION 2041, OFF BY DEFAULT. The second candidate for why IDENTICAL
     # BEATS FAST on the gbdt lane. The first -- the histogram replication
     # factor, DEVIATION 2040 -- was capped and measured on an MI325X and
@@ -362,7 +365,7 @@ def compute_partition_stats(
     # caching is theirs; querying per call was ours and cost ~9 ms/tree.
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var max_chunks = partition_stats_chunks(sm, n_stats)
     var launched = max_chunks
     if row_bound >= 0:

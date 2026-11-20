@@ -15,6 +15,7 @@ from std.math import isfinite
 from std.memory import bitcast
 
 from core.hostptr import read_f32
+from core.host_finite_scan import host_any_nan_f32, host_copy_f32_any_nan
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
     SF64_ONE,
@@ -314,25 +315,31 @@ def _refuse_predict(what: String) raises:
 # ===========================================================================
 
 
-def gbdt_host_has_nan_f32(x: List[Float32]) -> Bool:
-    """True when any value of `x` is NaN (`v != v`), stopping at the first."""
-    var has_nan = False
-    for i in range(len(x)):
-        if x[i] != x[i]:
+# fx-leftovers-product (2026-11-19): `gbdt_host_has_nan_f32` (the scan of an
+# already copied list) is removed; its one caller reads through
+# `gbdt_host_read_f32_nan`, which tests during the copy.
+
+
+def gbdt_host_read_f32_nan(addr: Int, n: Int, mut has_nan: Bool) raises -> List[Float32]:
+    """The fit's owned copy of the `n` float32 words at host address `addr`
+    (`read_f32`'s list), with `has_nan` set when any of them is a NaN (never
+    cleared). fx-leftovers-product (2026-11-19): the fit copied X with one
+    serial memcpy and then walked the copy again for the NaN test; here the
+    test rides the copy's own loads."""
+    # parallel: one copy + any-NaN pass over spans across host cores
+    if n < 0:
+        raise Error("mojolearn: negative float32 copy length")
+    var values = List[Float32](unsafe_uninit_length=n)
+    if n > 0:
+        if host_copy_f32_any_nan(addr, Int(values.unsafe_ptr()), n):
             has_nan = True
-            break
-    return has_nan
+    return values^
 
 
 def gbdt_host_has_nan_ptr(xs: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
-    """True when any of the `n` values at `xs` is NaN, stopping at the first."""
-    var has_nan = False
-    for i in range(n):
-        var v = xs.unsafe_load(i)
-        if v != v:
-            has_nan = True
-            break
-    return has_nan
+    """True when any of the `n` values at `xs` is NaN (tested on bits)."""
+    # parallel: the one host any-NaN scan (was a serial `v != v` loop)
+    return host_any_nan_f32(xs, n)
 
 
 def gbdt_host_eval_const(ey: List[Float32], n_eval_rows: Int) -> Bool:

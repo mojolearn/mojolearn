@@ -1,0 +1,266 @@
+diff --git a/resample/gather_fast.mojo b/resample/gather_fast.mojo
+index eaccfea492..3b48f18b2b 100644
+--- a/resample/gather_fast.mojo
++++ b/resample/gather_fast.mojo
+@@ -21,12 +21,15 @@ def gather_rows_f32_kernel(
+ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ 
+-# TOMBSTONE: MOJOLEARN_AFCL_P10 (never-run Apple FAST programme card: 16-column gather tiles) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 72ae22cf1f.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P10.patch; record in docs/TOMBSTONES.md.
+-comptime GATHER_COLS = 32
++# AFCL-P10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
++# Keep 256 threads but exchange feature reuse for more rows per block. This
++# covers every width with masked tails; it is not an input-width dispatch rule.
++comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P10"]()
++comptime GATHER_COLS = 16 if AFCL_P10 else 32
+ comptime GATHER_ROWS = 256 // GATHER_COLS
+ 
+ 
+@@ -86,5 +89,20 @@ def permutation_merge_kernel(
+     dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (opt-in IDENTICAL arm, no A/B recorded; non-owner site, owner expdel2-07-base): classical_draw_gather_kernel, launched only by that arm, deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 72ae22cf1f.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
++# C11 deterministic counter draws at the output consumer, preserving the
++# exact utils_draw_kernel index (key, replicate=0, output row). No index
++# storage, no pointer-based cache and no mutable generator state.
++# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++from resample.checks.index_map import draw_row_index, key_join
++
++
++def classical_draw_gather_kernel(
++    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
++    key_lo: Int32, key_hi: Int32, n_in: Int32, count_in: Int32, d_in: Int32,
++):
++    var o = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
++    var d = Int(d_in)
++    if o < Int(count_in)*d:
++        var row = o//d
++        var selected = Int(draw_row_index(key_join(key_lo, key_hi), 0, row, n_in))
++        dst.unsafe_store(o, src.unsafe_load(selected*d+o%d))
+diff --git a/resample/estimator.mojo b/resample/estimator.mojo
+index f8613a2f75..b5c7fc591d 100644
+--- a/resample/estimator.mojo
++++ b/resample/estimator.mojo
+@@ -35,13 +35,16 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
+ # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+ from core.device_plan import DevicePlan, plan_for_single
+ from core.hostptr import copy_f32, f32_ptr, i32_ptr
+-from resample.gather_fast import GATHER_COLS, GATHER_ROWS, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
++from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
++from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
+ from resample.fast_apple import (
+     RESAMPLE_FAST_APPLE,
+     perm_select_fast,
+ )
+ from std.math import ceildiv
+ from std.os import getenv
++from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.neural_context import process_ctx
+@@ -269,6 +272,8 @@ def resample_fast_defines() -> Int:
+         m |= 32
+     comptime if CV_FAST_TRUST_FOLDS:
+         m |= 64
++    comptime if RESAMPLE_FAST_GATHER_NARROW:
++        m |= 128
+     return m
+ 
+ 
+@@ -608,12 +613,15 @@ def _launch_bootstrap_stat(
+         )
+ 
+ 
+-#: The default selects the first group's threshold by radix select at every
+-#: pooled length.
+-# TOMBSTONE: MOJOLEARN_PERM_COUNT_RANK (opt-in B arm keeping the counting-rank kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_PERM_COUNT_RANK.patch; record in docs/TOMBSTONES.md.
++#: A/B (gap-fails2, 2026-10-02): `-D MOJOLEARN_PERM_COUNT_RANK` keeps main's
++#: counting-rank kernel up to `PERM_MAX_POOLED`; the default selects the
++#: first group's threshold by radix select at every pooled length. Same
++#: membership mask, same folds, so the same bits.
++comptime PERM_COUNT_RANK_AB = is_defined["MOJOLEARN_PERM_COUNT_RANK"]()
++
++
+ def perm_uses_select(n_pooled: Int) -> Bool:
+-    return True
++    return not PERM_COUNT_RANK_AB or n_pooled > PERM_MAX_POOLED
+ 
+ 
+ def _launch_perm_stat_at[
+@@ -2317,15 +2325,13 @@ def resample_indices_host(
+ # Historical wide-row regression retained; no dataset-specific switch.
+ # Initial metadata failures produced NO scores. Full receipt hashes are in
+ # docs/apple-fast/ab/resample-gpu-recovery.md.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (opt-in IDENTICAL arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_OFF (old path, EXP:1131 reconciled; the FAST + Apple gather default kept) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-    and TARGET_HAS_APPLE_GPU)
++# C11 is an independent default-off IDENTICAL arm; Apple FAST retains main's default.
++comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
+     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
+     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
+     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
++    and not is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_OFF"]())
+ 
+ 
+ # Pair independent array transfers on one stream. Source/output DeviceBuffers
+@@ -2341,13 +2347,12 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+ # remain limitations. Explicit *_OFF flags take precedence over old opt-ins.
+ # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
+ # resample-full-summary.json; model is stateless, output/index hashes saved.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF (old path beside the Apple FAST default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-    and TARGET_HAS_APPLE_GPU)
++    and TARGET_HAS_APPLE_GPU
+     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
+     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
+     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
++    and not is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF"]())
+ 
+ # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
+ # B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Historical losses.
+@@ -2361,10 +2366,9 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+ # control. Earlier small-workload losses remain. F19 permutation stays OFF.
+ # Evidence beside the F04 summary: resample-combined-summary.json and boards.
+ # Decision: resample-promotion.json in the same evidence directory.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF (old path beside the Apple FAST default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+-    and TARGET_HAS_APPLE_GPU)
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"]())
+ 
+ 
+ def resample_gather_grouped(
+@@ -2397,9 +2401,7 @@ def resample_gather_grouped(
+ # F19 M3 permutation complete calls B/A2.0031/2.1569/1.0847 at509x3/521x129/997x67;
+ # resample control1.6429/0.6770/0.4746. Quality equal, one warmup+score; keep OFF.
+ # Evidence ab-20261006/repairs-54c1f35a5/F19; no unmeasured combination promotion.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE (opt-in FAST arm, F19 slower, no promotion) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch; record in docs/TOMBSTONES.md.
+-comptime RESAMPLE_FAST_DEVICE_PERMUTE = False
++comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
+ 
+ def resample_permutation_gather_gpu(
+     n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
+@@ -2415,7 +2417,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
+     Input/output copies are transport, not host row indexing. No retained pointers.
+     """
+     comptime if RESAMPLE_GPU_GATHER:
+-        comptime if not REPLACE:
++        comptime if not REPLACE and not RESAMPLE_FAST_DEVICE_PERMUTE:
+             return False
+         utils_validate(n, count, REPLACE)
+         if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
+@@ -2428,6 +2430,27 @@ def resample_gather_gpu[REPLACE: Bool = True](
+                 return False
+         var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if REPLACE else RESAMPLE_KIND_UTILS_PERMUTE)
+         var ctx = process_ctx[_DEVCTX_SLOT]()
++        # C11 A regenerates draws at each consumed output. B retains the
++        # materialized index array. Each input owns independent buffers and
++        # every queued copy completes before its buffers leave scope.
++        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++        comptime if C11_DRAW_GATHER and REPLACE:
++            for a in range(len(srcs)):
++                var d = widths[a]
++                var source = ctx.enqueue_create_buffer[DType.float32](n*d)
++                var output = ctx.enqueue_create_buffer[DType.float32](count*d)
++                ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
++                ctx.enqueue_function[classical_draw_gather_kernel](
++                    output.unsafe_ptr(), source.unsafe_ptr(), key_lo(key), key_hi(key),
++                    Int32(n), Int32(count), Int32(d),
++                    grid_dim=ceildiv(count*d, 256), block_dim=256,
++                )
++                ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=output)
++                ctx.synchronize()
++                _ = output^
++                _ = source^
++            _ = ctx^
++            return True
+         var draw_count = count if REPLACE else n
+         var rows = ctx.enqueue_create_buffer[DType.int32](draw_count)
+         var keys = ctx.enqueue_create_buffer[DType.uint64](1 if REPLACE else n)
+@@ -2496,8 +2519,8 @@ def resample_gather_gpu[REPLACE: Bool = True](
+         return False
+ 
+ 
+-#: Formerly `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
+-#: 2026-10-04; READY-AB, opt-in, FAST + Apple, removed unmeasured): resample(replace=True)'s
++#: `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
++#: 2026-10-04; READY-AB, opt-in, FAST + Apple): resample(replace=True)'s
+ #: gather on the device for NARROW rows only. RESAMPLE_GPU_GATHER (above)
+ #: was mixed: taxi (11 floats = 44 B a row) 68.5 -> 58.8 ms, istella (220
+ #: floats = 880 B) 390.8 -> 805.4 ms. Why, from the Apple transfer costs
+@@ -2514,10 +2537,10 @@ def resample_gather_gpu[REPLACE: Bool = True](
+ #: caller's output), and the indices come back in the same launch. The draw
+ #: is `resample_indices_replace_into`'s launch: the same integers, the same
+ #: rows, bit-identical outputs.
+-# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW, MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES (opt-in FAST arm and its width knob, EXP:1404 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+-# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch and experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch; record in docs/TOMBSTONES.md.
+-comptime RESAMPLE_FAST_GATHER_NARROW = False
+-comptime GATHER_NARROW_MAX_BYTES = 128
++comptime RESAMPLE_FAST_GATHER_NARROW = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW"]())
++comptime GATHER_NARROW_MAX_BYTES = get_defined_int["MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES", 128]()
+ 
+ 
+ def resample_gather_narrow(
+@@ -2529,4 +2552,43 @@ def resample_gather_narrow(
+     dsts[a] (count x widths[a] float32). Returns the bit mask of the arrays
+     gathered (the caller gathers the rest with the indices), -1 in a build
+     without the define. Synchronized; nothing retained."""
+-    return -1
++    comptime if RESAMPLE_FAST_GATHER_NARROW:
++        utils_validate(n, count, True)
++        if count <= 0:
++            return 0
++        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
++        var ctx = process_ctx[_DEVCTX_SLOT]()
++        var rows = ctx.enqueue_create_buffer[DType.int32](count)
++        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
++        ctx.enqueue_function[utils_draw_kernel](
++            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
++            Int32(n), Int32(count), Int32(1),
++            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
++        )
++        ctx.enqueue_copy(dst_ptr=i32_ptr(idx_dst), src_buf=rows.create_sub_buffer[DType.int32](0, count))
++        var keep = List[DeviceBuffer[DType.float32]]()
++        var done = 0
++        for a in range(len(srcs)):
++            var d = widths[a]
++            if d <= 0 or d * 4 > GATHER_NARROW_MAX_BYTES or count * d > 2147483647 or n * d > 2147483647:
++                continue
++            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
++            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=f32_ptr(srcs[a]))
++            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
++            ctx.enqueue_function[gather_rows_f32_kernel](
++                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
++                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
++            )
++            ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=dout)
++            keep.append(dsrc^)
++            keep.append(dout^)
++            done |= 1 << a
++        ctx.synchronize()
++        _ = keep^
++        _ = rows^
++        _ = keys^
++        # DEVIATION 1946: the context dies LAST.
++        _ = ctx^
++        return done
++    else:
++        return -1

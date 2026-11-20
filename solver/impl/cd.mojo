@@ -103,17 +103,17 @@ can reach a bit, and `check_cd_is_launch_invariant` is what keeps that
 sentence true.
 """
 
-from core.device_plan import device_plan_setting
+from core.device_plan import DevicePlan, device_plan_current
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 
-from core.gemm import gemm_nt, gemv_n
+from core.gemm import gemv_n
 from checks.numerics import NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from solver.checks.profile_dot import (
@@ -186,11 +186,12 @@ comptime CD_SQUARED_GUARD = Float32(1.0e-5)
 #: same soft-threshold / (G_jj + l2) update and guard, c -= G[:, j] dw --
 #: instead of two axpys and a dot over all n_rows per coordinate. The same
 #: cyclic algorithm and convergence test on the same objective; only the
-#: rounding differs. `-D MOJOLEARN_CD_FAST_GRAM_OFF` keeps the row sweeps.
+#: rounding differs.
+# TOMBSTONE: MOJOLEARN_CD_FAST_GRAM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at d75e2fbb7a.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_FAST_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 #: Widest design the Gram path takes. Was 256 (just above istella's 220
 #: features); removed as benchmark-tuned on 2026-10-04, replacement
@@ -204,43 +205,9 @@ comptime CD_FAST_GRAM = (
 comptime CD_GRAM_MAX_COLS = 256 if is_defined[
     "MOJOLEARN_LEGACY_NARROW_CD_GRAM"
 ]() else 2 * 8192
-comptime CD_GRAM_ROWS = 256
 comptime CD_GRAM_CELLS = 1024
-
-
-def cd_gram_partial_kernel(
-    b: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
-    p1_in: Int32,
-    n_in: Int32,
-):
-    """CD_FAST_GRAM: block k's float32 partial of [X ; y] [X ; y]^T over
-    rows [k * CD_GRAM_ROWS, ...), one thread per cell; the host sums the
-    partials in float64 so the Gram is not one 1M-long float32 chain."""
-    var p1 = Int(p1_in)
-    var n = Int(n_in)
-    var t = Int(thread_idx.x)
-    var r0 = Int(block_idx.x) * CD_GRAM_ROWS
-    var r1 = r0 + CD_GRAM_ROWS
-    if r1 > n:
-        r1 = n
-    var sh = stack_allocation[
-        CD_GRAM_ROWS * 32, Scalar[DType.float32], address_space = AddressSpace.SHARED
-    ]()
-    var e = t
-    while e < p1 * CD_GRAM_ROWS:
-        var a = e // CD_GRAM_ROWS
-        var i = e % CD_GRAM_ROWS
-        sh[e] = b[a * n + r0 + i] if r0 + i < r1 else Float32(0)
-        e += CD_GRAM_CELLS
-    barrier()
-    if t < p1 * p1:
-        var a = t // p1
-        var c = t % p1
-        var acc = Float32(0)
-        for i in range(r1 - r0):
-            acc += sh[a * CD_GRAM_ROWS + i] * sh[c * CD_GRAM_ROWS + i]
-        part[Int(block_idx.x) * p1 * p1 + t] = acc
+# TOMBSTONE: MOJOLEARN_CD_FAST_GRID_GRAM_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear (cd_gram_partial_kernel, CD_GRAM_ROWS and the staged [X ; y] copy + gemm_nt Gram arm of cd_fit_traced); code recoverable at e592fb6e9f.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRID_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 #: lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_CD_GRAM_BLOCKS=1`): the
@@ -293,6 +260,9 @@ def cd_gram_blocks_kernel(
                 acc += y[i] * y[i]
         part[blk * cells + c] = acc
         c += CD_GB_TPB
+# TOMBSTONE: MOJOLEARN_CD_GRAM_BLOCKS (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (cd_gram_blocks_kernel, CD_GB_ROWS, CD_GB_TPB, CD_GRAM_CELLS and its branch in cd_fit_traced); code recoverable at 6e1b6c3514.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_GRAM_BLOCKS.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 
@@ -329,13 +299,16 @@ def cd_gram_blocks_kernel(
 #       CD_FAST_GRAM does not hold (IDENTICAL builds compile the old code).
 #
 # Default on (FAST + Apple) since the M3 A/B (istella n=1: lasso 264 -> 149
-# ms with both, enet 262 -> 143 ms, r2 .2616 -> .2609). `-D
-# MOJOLEARN_CD_FAST_GRID_GRAM_OFF` turns off both (the row-major arm reads
-# the grid Gram's tiles); `-D MOJOLEARN_CD_FAST_ROWMAJOR_OFF` the row-major
-# arm alone. The old `-D MOJOLEARN_CD_FAST_GRID_GRAM` / `_ROWMAJOR` names are
-# harmless.
-comptime CD_FAST_GRID_GRAM = CD_FAST_GRAM and not is_defined["MOJOLEARN_CD_FAST_GRID_GRAM_OFF"]()
-comptime CD_FAST_ROWMAJOR = CD_FAST_GRID_GRAM and not is_defined["MOJOLEARN_CD_FAST_ROWMAJOR_OFF"]()
+# ms with both, enet 262 -> 143 ms, r2 .2616 -> .2609). The grid Gram is the
+# only Gram of the CD_FAST_GRAM path (its `_OFF` rollback to the staged copy
+# + `gemm_nt` / `cd_gram_partial_kernel` was deleted 2026-11-15), and the
+# row-major arm takes every shape the grid Gram serves (its `_OFF` rollback
+# was deleted 2026-11-15 too). The old `-D MOJOLEARN_CD_FAST_GRID_GRAM` /
+# `_ROWMAJOR` names are harmless.
+comptime CD_FAST_GRID_GRAM = CD_FAST_GRAM
+# TOMBSTONE: MOJOLEARN_CD_FAST_ROWMAJOR_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 7d40f892a7.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CD_FAST_ROWMAJOR = CD_FAST_GRID_GRAM
 comptime CD_GG_TPB = 256
 comptime CD_GG_CH = 8192
 comptime CD_GG_TS = 32
@@ -552,12 +525,12 @@ def cd_grid_gram_red_kernel(
 # Round 1's two-launch form (06ef7f558, reverted) put the axpys inside the
 # leaf chains and lengthened them; here the axpys stay a coalesced
 # elementwise pass. The last coordinate's closing axpy stays its own launch.
-# -D MOJOLEARN_CD_THREE_LAUNCH_OFF=1 restores the six-launch sweep.
 
+# TOMBSTONE: MOJOLEARN_CD_THREE_LAUNCH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at b7039f2e07.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_THREE_LAUNCH_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_THREE_LAUNCH = (
     APPLE_LEAF_PREFETCH
     and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_CD_THREE_LAUNCH_OFF"]()
 )
 
 
@@ -586,15 +559,16 @@ def cd_axpy_pair_kernel(
 
 comptime CD_STEP_TPB = 256
 comptime CD_STEP_MAX_BLOCKS = 64
+# TOMBSTONE: MOJOLEARN_CD_TWO_STEP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at f2dad24e5a.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_TWO_STEP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_TWO_STEP = (
     CD_THREE_LAUNCH
     and not SAB_SOFT_SWAP
     and not SAB_ZERO_FOLD_MAX
     and not SAB_ZERO_FOLD_MAX_SWAPPED
-    and not is_defined["MOJOLEARN_CD_TWO_STEP_OFF"]()
 )
 """lane/linear-apple2: TWO launches per coordinate (Apple, IDENTICAL, on by
-default; -D MOJOLEARN_CD_TWO_STEP_OFF=1 returns to three). The fold and the
+default). The fold and the
 update of coordinate `prev` move into the NEXT coordinate's axpy launch,
 `cd_step_kernel`: every block folds the P partials itself (the same tree)
 and runs the update body on its own copy, so every block holds the same -r
@@ -619,7 +593,13 @@ def cd_step_kernel(
     n_in: Int32,
     p_in: Int32,
     l1_alpha: Float32,
+    stop: MutPointer[Float32, MutAnyOrigin],
 ):
+    # lane n2-cd-qn-glm-loops: a sweep queued after the device decided the
+    # stop (`cd_sweep_end_kernel`, stop[0] != 0) does nothing; every thread
+    # reads the same word before the first barrier
+    if stop.unsafe_load(0) != Float32(0.0):
+        return
     var tid = Int(thread_idx.x)
     var nth = Int(block_dim.x)
     var bid = Int(block_idx.x)
@@ -732,18 +712,19 @@ def cd_step_kernel(
 # on the same words. The leaf partials go to the other half of a two-buffer
 # workspace, which the NEXT coordinate's launch folds with the same tree.
 # Every stored word is the same expression of the same words, so no bit
-# moves. -D MOJOLEARN_CD_FUSED_OFF=1 restores the six-launch sweep.
+# moves.
 comptime CD_FUSED_LEAVES = 4
 comptime CD_FUSED_STEPS = 128
 comptime CD_FUSED_TPB = 128
 comptime CD_FUSED_PER_THREAD = CD_FUSED_LEAVES * CD_FUSED_STEPS // CD_FUSED_TPB
+# TOMBSTONE: MOJOLEARN_CD_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 1048118370.
+# Restore: git apply experiments/removed/MOJOLEARN_CD_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime CD_FUSED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not SAB_SOFT_SWAP
     and not SAB_ZERO_FOLD_MAX
     and not SAB_ZERO_FOLD_MAX_SWAPPED
-    and not is_defined["MOJOLEARN_CD_FUSED_OFF"]()
 )
 
 
@@ -763,7 +744,11 @@ def cd_fused_step_kernel(
     leaf_in: Int32,
     p_in: Int32,
     l1_alpha: Float32,
+    stop: MutPointer[Float32, MutAnyOrigin],
 ):
+    # lane n2-cd-qn-glm-loops: gated like `cd_step_kernel`
+    if stop.unsafe_load(0) != Float32(0.0):
+        return
     var tid = Int(thread_idx.x)
     var nth = Int(block_dim.x)
     var bid = Int(block_idx.x)
@@ -868,9 +853,9 @@ def cd_fused_step_kernel(
         my_end = n
     var acc = Float32(0.0)
     # the window's operands, loaded one window ahead of their use
-    var rv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
-    var pv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
-    var cv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var rv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var pv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var cv = Array[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
     var w = 0
     comptime for u in range(CD_FUSED_PER_THREAD):
         var e = tid + u * CD_FUSED_TPB
@@ -989,6 +974,39 @@ def cd_fold_update_kernel(
         cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
 
 
+def cd_sweep_end_kernel(
+    conv: MutPointer[Float32, MutAnyOrigin],
+    last: MutPointer[Float32, MutAnyOrigin],
+    cst: MutPointer[Float32, MutAnyOrigin],
+    tol: Float32,
+):
+    """The end of one row sweep of the two-step / fused coordinate (lane
+    n2-cd-qn-glm-loops), one thread: the sweep's last maxima `last[0..2]`
+    (-r, coef_max, diff_max) into `conv` (the words the host used to copy
+    there), the sweep count `cst[1]` (UInt32 bits) + 1, the maxima into
+    `cst[2..3]`, and the stopping test the host ran (`coef_max < tol or
+    diff_max / coef_max < tol`, the same Float32 operands) into `cst[0]`.
+    Once `cst[0]` is set it does nothing, and neither do the gated step
+    kernels of the sweeps queued after it, so the host reads `cst` once per
+    CD_ROW_POLL sweeps and the fit stops at the same sweep with the same
+    words."""
+    if cst.unsafe_load(0) != Float32(0.0):
+        return
+    var neg_r = last.unsafe_load(0)
+    var cmax = last.unsafe_load(1)
+    var dmax = last.unsafe_load(2)
+    conv.unsafe_store(0, neg_r)
+    conv.unsafe_store(1, cmax)
+    conv.unsafe_store(2, dmax)
+    cst.unsafe_store(
+        1, bitcast[DType.float32](bitcast[DType.uint32](cst.unsafe_load(1)) + UInt32(1))
+    )
+    cst.unsafe_store(2, cmax)
+    cst.unsafe_store(3, dmax)
+    if cmax < tol or (dmax / cmax) < tol:
+        cst.unsafe_store(0, Float32(1.0))
+
+
 # ===========================================================================
 # lane/fam-linear (2026-10-04): IDENTICAL GRAM SWEEPS, EVERY VENDOR
 # ===========================================================================
@@ -1022,8 +1040,8 @@ def cd_fold_update_kernel(
 # arithmetic, and `solver/impl/cd_gram_rule.mojo` is the one shape rule both
 # read. A traced fit (MOJOLEARN_IDENTITY_TRACE) and a fit that wants the
 # residual keep the row sweeps on both columns, so the stage card and its
-# checks are unchanged. `-D MOJOLEARN_CD_IDN_GRAM_OFF` restores the row
-# sweeps (pass it to the host build too).
+# checks are unchanged. MOJOLEARN_CD_IDN_GRAM_OFF is deleted (TOMBSTONE in
+# solver/impl/cd_gram_rule.mojo).
 comptime CD_IDN_GRAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and CD_IDN_GRAM_ON
@@ -1033,6 +1051,14 @@ comptime CD_IDN_GRAM = (
 )
 comptime CD_IDN_GRAM_TPB = 256
 comptime CD_IDN_GRAM_EPOCHS = 16
+#: launches queued between host reads of the Gram state (lane
+#: n2-cd-qn-glm-loops): at most CD_IDN_GRAM_POLL - 1 empty launches after
+#: convergence, each returning at entry
+comptime CD_IDN_GRAM_POLL = 4
+#: row sweeps queued between host reads on the fused NVIDIA / AMD row path
+#: (`cd_sweep_end_kernel` decides the stop on the device; the gated step
+#: kernels of a sweep after it return at entry)
+comptime CD_ROW_POLL = 8
 
 
 def cd_idn_gram_sweep_kernel(
@@ -1050,9 +1076,15 @@ def cd_idn_gram_sweep_kernel(
     (n_cols <= CD_IDN_GRAM_TPB). `state`: [0] 1 once converged, [1] the
     epochs run so far (UInt32 bits), [2] coef_max and [3] diff_max of the last epoch run.
     After convergence the remaining epochs do no work (the barriers stay
-    unconditional so every thread takes the same path)."""
+    unconditional so every thread takes the same path). A launch that
+    starts converged returns at once (lane n2-cd-qn-glm-loops): every thread
+    reads the same `state[0]` word, written by an earlier launch, so the
+    whole block leaves before its first barrier and the host can queue
+    CD_IDN_GRAM_POLL launches between reads. No stored word changes."""
     var tid = Int(thread_idx.x)
     var p = Int(p_in)
+    if state.unsafe_load(0) != Float32(0.0):
+        return
     # sh: 0 delta, 1 coef_max, 2 diff_max, 3 done
     var sh = stack_allocation[
         4, Scalar[DType.float32], address_space = AddressSpace.SHARED
@@ -1301,6 +1333,38 @@ def cd_fit_traced(
     want_residual: Bool,
     row_major: Bool = False,
 ) raises -> Tuple[Int, Float32]:
+    """Plan-less entry: reads the solver plan once and forwards."""
+    return cd_fit_traced(
+        device_plan_current("MOJOLEARN_SOLVER_DEVICE_COUNT"),
+        ctx, x, n_rows, n_cols, labels, coef, fit_intercept, epochs, loss,
+        alpha, l1_ratio, shuffle, tol, has_sample_weight, trace, prefix,
+        launch, residual_out, want_residual, row_major,
+    )
+
+
+def cd_fit_traced(
+    plan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut labels: DeviceBuffer[DType.float32],
+    mut coef: DeviceBuffer[DType.float32],
+    fit_intercept: Bool,
+    epochs: Int,
+    loss: Int,
+    alpha: Float32,
+    l1_ratio: Float32,
+    shuffle: Bool,
+    tol: Float32,
+    has_sample_weight: Bool,
+    mut trace: IdentityTrace,
+    prefix: String,
+    launch: CdLaunch,
+    mut residual_out: DeviceBuffer[DType.float32],
+    want_residual: Bool,
+    row_major: Bool = False,
+) raises -> Tuple[Int, Float32]:
     """`cdFit` with a stage card, a scheduling surface and the residual
     handed out. The dispatch guards first, in their order.
 
@@ -1504,7 +1568,7 @@ def cd_fit_traced(
                     _ = gp^
                     _ = hgp^
             var gmu = List[Float64](capacity=p1)
-            if not blocks_done and (row_major or CD_FAST_GRID_GRAM):
+            if not blocks_done:
                 # lane/apple-fast-linear: the product on the grid (see
                 # cd_grid_gram_kernel's banner); row_major also takes the
                 # means from the chunks and centers the tiles at them
@@ -1564,42 +1628,6 @@ def cd_fit_traced(
                 _ = dgram^
                 _ = hgram^
                 _ = hmu^
-            if not blocks_done:
-                # B = [X^T rows | y] as (p + 1) x n_rows row-major: X is column-
-                # major, so its columns are already the first p rows.
-                var bmat = ctx.enqueue_create_buffer[DType.float32](p1 * n_rows)
-                ctx.enqueue_copy(
-                    dst_buf=bmat.create_sub_buffer[DType.float32](0, p * n_rows),
-                    src_buf=x.create_sub_buffer[DType.float32](0, p * n_rows),
-                )
-                ctx.enqueue_copy(
-                    dst_buf=bmat.create_sub_buffer[DType.float32](p * n_rows, n_rows),
-                    src_buf=labels.create_sub_buffer[DType.float32](0, n_rows),
-                )
-                var n_parts = (n_rows + CD_GRAM_ROWS - 1) // CD_GRAM_ROWS
-                var gext = ctx.enqueue_create_buffer[DType.float32](
-                    p1 * p1 if p1 * p1 > CD_GRAM_CELLS else n_parts * p1 * p1
-                )
-                var bview = bmat.create_sub_buffer[DType.float32](0, p1 * n_rows)
-                var hg = ctx.enqueue_create_host_buffer[DType.float32](len(gext))
-                if p1 * p1 > CD_GRAM_CELLS:
-                    gemm_nt(ctx, gext, bmat, bview, p1, p1, n_rows)
-                    n_parts = 1
-                else:
-                    ctx.enqueue_function[cd_gram_partial_kernel](
-                        bmat.unsafe_ptr(), gext.unsafe_ptr(), Int32(p1),
-                        Int32(n_rows), grid_dim=(n_parts, 1, 1),
-                        block_dim=(CD_GRAM_CELLS, 1, 1),
-                    )
-                ctx.enqueue_copy(dst_buf=hg, src_buf=gext)
-                ctx.synchronize()
-                for k in range(n_parts):
-                    for q in range(p1 * p1):
-                        gsum[q] += Float64(hg.unsafe_ptr().unsafe_load(k * p1 * p1 + q))
-                _ = bview^
-                _ = bmat^
-                _ = gext^
-                _ = hg^
             var G = List[Float64](capacity=p * p)
             var c = List[Float64](capacity=p)
             for a in range(p):
@@ -1686,21 +1714,32 @@ def cd_fit_traced(
             # Tried: C2's 64 epochs a launch at n_cols <= 64.
             # Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_GRAM_EPOCHS_64.patch; record in docs/TOMBSTONES.md.
             var per_launch = CD_IDN_GRAM_EPOCHS
+            # lane n2-cd-qn-glm-loops: CD_IDN_GRAM_POLL launches between host
+            # reads (a converged launch returns at entry), one read per
+            # CD_IDN_GRAM_POLL * CD_IDN_GRAM_EPOCHS epochs instead of one per
+            # CD_IDN_GRAM_EPOCHS. Same epochs, same words, same n_iter.
+            var queued = n_iter
             while n_iter < epochs:
-                var e_here = epochs - n_iter
-                if e_here > per_launch:
-                    e_here = per_launch
-                ctx.enqueue_function[cd_idn_gram_sweep_kernel](
-                    gram.unsafe_ptr(), gq.unsafe_ptr(), coef.unsafe_ptr(),
-                    squared.unsafe_ptr(), gst.unsafe_ptr(), Int32(gp),
-                    Int32(e_here), l1_alpha, tol,
-                    grid_dim=(1, 1, 1), block_dim=(CD_IDN_GRAM_TPB, 1, 1),
-                )
+                var launches = 0
+                while launches < CD_IDN_GRAM_POLL and queued < epochs:  # driver-loop: over launches of CD_IDN_GRAM_EPOCHS epochs; the device freezes at convergence
+                    var e_here = epochs - queued
+                    if e_here > per_launch:
+                        e_here = per_launch
+                    ctx.enqueue_function[cd_idn_gram_sweep_kernel](
+                        gram.unsafe_ptr(), gq.unsafe_ptr(), coef.unsafe_ptr(),
+                        squared.unsafe_ptr(), gst.unsafe_ptr(), Int32(gp),
+                        Int32(e_here), l1_alpha, tol,
+                        grid_dim=(1, 1, 1), block_dim=(CD_IDN_GRAM_TPB, 1, 1),
+                    )
+                    queued += e_here
+                    launches += 1
                 ctx.enqueue_copy(dst_ptr=h_gst.unsafe_ptr(), src_buf=gst)
                 ctx.synchronize()
                 n_iter = Int(bitcast[DType.uint32](h_gst.unsafe_ptr().unsafe_load(1)))
                 if h_gst.unsafe_ptr().unsafe_load(0) != Float32(0.0):
                     break
+                # not converged: the device ran every queued epoch
+                n_iter = queued
             _ = x_b^
             _ = gws^
             _ = gram^
@@ -1712,10 +1751,11 @@ def cd_fit_traced(
     var three = False
     var part = contract_partition(n_rows)
     comptime if CD_THREE_LAUNCH:
-        var dc = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
+        # `plan.single()` is the old `dc == "" or dc == "1"` test on
+        # MOJOLEARN_SOLVER_DEVICE_COUNT, by definition: same gate, same bits.
         three = (
             launch.dot_plan < 0
-            and (dc == "" or dc == "1")
+            and plan.single()
             and part[1] > 0
             and choose_gemm_plan(1, 1, n_rows) == PLAN_SPLITK
         )
@@ -1725,10 +1765,9 @@ def cd_fit_traced(
     # lane/gap-nv-classical2: the one-launch coordinate off Apple
     var fused = False
     comptime if CD_FUSED:
-        var dcf = device_plan_setting("MOJOLEARN_SOLVER_DEVICE_COUNT")
         fused = (
             launch.dot_plan < 0
-            and (dcf == "" or dcf == "1")
+            and plan.single()
             and part[1] > 0
             and part[1] <= CONTRACT_MAX_LEAVES
         )
@@ -1741,71 +1780,102 @@ def cd_fit_traced(
     var conv_b = ctx.enqueue_create_buffer[DType.float32](3)
     var in_a = True  # coef_in is `coef` (else coef_b)
     var step_blocks = min(CD_STEP_MAX_BLOCKS, (n_rows + CD_STEP_TPB - 1) // CD_STEP_TPB)
+    # lane n2-cd-qn-glm-loops: the stop test runs on the device at each
+    # sweep's end (`cd_sweep_end_kernel` into `cst`), and the step kernels of
+    # a sweep queued after it return at entry, so the fused NVIDIA / AMD path
+    # reads `cst` once per CD_ROW_POLL sweeps instead of syncing every sweep.
+    # The same sweeps run on the same words and the fit stops at the same
+    # sweep: no bit moves. A traced fit (its records are per sweep) and the
+    # Apple two-step path (its leaf launches are not gated) read every sweep.
+    var cst = ctx.enqueue_create_buffer[DType.float32](4)
+    var h_cst = ctx.enqueue_create_host_buffer[DType.float32](4)
+    ctx.enqueue_memset(cst, Float32(0.0))
+    var row_poll = 1
+    if fused and not trace.enabled:
+        row_poll = CD_ROW_POLL
+    var two_start = n_iter
+    var two_queued = n_iter
     if two:
         ctx.enqueue_copy(dst_buf=coef_b, src_buf=coef)
     while device_sweeps and two and n_iter < epochs:
-        var pa = coef.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var pb = coef_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var cin = pa if in_a else pb
-        var cout = pb if in_a else pa
-        var vin = conv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var vout = conv_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        ctx.enqueue_memset(conv, Float32(0.0))
-        for j in range(n_cols + 1):
-            var ci = ri[j] if j < n_cols else -1
-            var prev = ri[j - 1] if j > 0 else -1
-            if fused:
-                var wa = ws_rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                var wb = ws_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-                var w_in = wa if ws_in_a else wb
-                var w_out = wb if ws_in_a else wa
-                ctx.enqueue_function[cd_fused_step_kernel](
-                    residual.unsafe_ptr(), x.unsafe_ptr(), w_in, w_out,
-                    cin, cout, squared.unsafe_ptr(), vin, vout,
-                    Int32(prev), Int32(ci), Int32(n_rows), Int32(part[0]),
-                    Int32(part[1]), l1_alpha,
-                    grid_dim=(fused_blocks, 1, 1), block_dim=(CD_FUSED_TPB, 1, 1),
-                )
-                if ci >= 0:
-                    ws_in_a = not ws_in_a
-            else:
-                ctx.enqueue_function[cd_step_kernel](
-                    residual.unsafe_ptr(), x.unsafe_ptr(), ws_rows.unsafe_ptr(),
-                    cin, cout, squared.unsafe_ptr(), vin, vout,
-                    Int32(prev), Int32(ci), Int32(n_rows), Int32(part[1]), l1_alpha,
-                    grid_dim=(step_blocks, 1, 1), block_dim=(CD_STEP_TPB, 1, 1),
-                )
-            if prev >= 0:
-                var t = vin
-                vin = vout
-                vout = t
-            if ci >= 0 and not fused:
-                ctx.enqueue_function[identical_gemm_leaf_kernel](
-                    ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
-                    residual.unsafe_ptr(),
-                    Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
-                    Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
-                    grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                    block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                )
-        # the last update's maxima are in `vin`; keep them in `conv`
-        if vin != conv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]():
-            ctx.enqueue_copy(dst_buf=conv, src_buf=conv_b)
-        in_a = not in_a
-        ctx.enqueue_copy(dst_ptr=h_conv.unsafe_ptr(), src_buf=conv)
+        var in_chunk = 0
+        while in_chunk < row_poll and two_queued < epochs:  # driver-loop: over sweeps queued between reads of the device stop word
+            var pa = coef.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var pb = coef_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var cin = pa if in_a else pb
+            var cout = pb if in_a else pa
+            var vin = conv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var vout = conv_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var stop_p = cst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            ctx.enqueue_memset(conv, Float32(0.0))
+            for j in range(n_cols + 1):  # driver-loop: over coordinates, each depends on the previous update
+                var ci = ri[j] if j < n_cols else -1
+                var prev = ri[j - 1] if j > 0 else -1
+                if fused:
+                    var wa = ws_rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                    var wb = ws_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                    var w_in = wa if ws_in_a else wb
+                    var w_out = wb if ws_in_a else wa
+                    ctx.enqueue_function[cd_fused_step_kernel](
+                        residual.unsafe_ptr(), x.unsafe_ptr(), w_in, w_out,
+                        cin, cout, squared.unsafe_ptr(), vin, vout,
+                        Int32(prev), Int32(ci), Int32(n_rows), Int32(part[0]),
+                        Int32(part[1]), l1_alpha, stop_p,
+                        grid_dim=(fused_blocks, 1, 1), block_dim=(CD_FUSED_TPB, 1, 1),
+                    )
+                    if ci >= 0:
+                        ws_in_a = not ws_in_a
+                else:
+                    ctx.enqueue_function[cd_step_kernel](
+                        residual.unsafe_ptr(), x.unsafe_ptr(), ws_rows.unsafe_ptr(),
+                        cin, cout, squared.unsafe_ptr(), vin, vout,
+                        Int32(prev), Int32(ci), Int32(n_rows), Int32(part[1]), l1_alpha,
+                        stop_p,
+                        grid_dim=(step_blocks, 1, 1), block_dim=(CD_STEP_TPB, 1, 1),
+                    )
+                if prev >= 0:
+                    var t = vin
+                    vin = vout
+                    vout = t
+                if ci >= 0 and not fused:
+                    ctx.enqueue_function[identical_gemm_leaf_kernel](
+                        ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
+                        residual.unsafe_ptr(),
+                        Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
+                        Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
+                        grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                        block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                    )
+            # the last update's maxima are in `vin`: into `conv`, the count
+            # and the stop test into `cst` (this replaced the host copy of
+            # conv_b into conv and the host test)
+            ctx.enqueue_function[cd_sweep_end_kernel](
+                conv.unsafe_ptr(), vin, cst.unsafe_ptr(), tol,
+                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+            )
+            in_a = not in_a
+            two_queued += 1
+            in_chunk += 1
+        ctx.enqueue_copy(dst_ptr=h_cst.unsafe_ptr(), src_buf=cst)
         ctx.synchronize()
-        var coef_max = h_conv.unsafe_ptr().unsafe_load(1)
-        var diff_max = h_conv.unsafe_ptr().unsafe_load(2)
-        n_iter += 1
-        var tag = prefix + ".sweep" + _pad3(n_iter - 1)
-        if in_a:
-            record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
-        else:
-            record_device_canon(ctx, trace, tag + ".coef", coef_b, n_cols, canon_ws)
-        record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
-        record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
-        if coef_max < tol or (diff_max / coef_max) < tol:
+        n_iter = two_start + Int(bitcast[DType.uint32](h_cst.unsafe_ptr().unsafe_load(1)))
+        var stopped = h_cst.unsafe_ptr().unsafe_load(0) != Float32(0.0)
+        # the buffer holding the newest coefficients, from the sweeps the
+        # device ran (a sweep after the stop flips nothing)
+        in_a = (n_iter - two_start) % 2 == 0
+        if trace.enabled:
+            # row_poll == 1: one sweep since the last read
+            var tag = prefix + ".sweep" + _pad3(n_iter - 1)
+            if in_a:
+                record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
+            else:
+                record_device_canon(ctx, trace, tag + ".coef", coef_b, n_cols, canon_ws)
+            record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
+            record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
+        if stopped:
             break
+    _ = h_cst^
+    _ = cst^
     if two and not in_a:
         ctx.enqueue_copy(dst_buf=coef, src_buf=coef_b)
     while device_sweeps and three and not two and n_iter < epochs:

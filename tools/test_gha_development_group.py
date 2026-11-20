@@ -190,5 +190,10 @@ def test_timeout_collection_retains_generated_checkout_input():
     stop=text.index('      - uses: actions/upload-artifact',start)
     step=text[start:stop]
     assert 'if: always()' in step
-    assert 'source/tokenizer/impl/unicode_table_generated.mojo' in step
+    # the step retains every generated file through tools/generated_sources.py retain (2cc0cbf88f), whose
+    # GENERATED registry names the tokenizer Unicode table
+    assert 'source/tools/generated_sources.py" retain' in step and '--repo "$GITHUB_WORKSPACE/source"' in step
+    import sys; sys.path.insert(0, str(root / 'tools'))
+    import generated_sources
+    assert 'tokenizer/impl/unicode_table_generated.mojo' in generated_sources.GENERATED
     assert 'development-out/generated-source' in step

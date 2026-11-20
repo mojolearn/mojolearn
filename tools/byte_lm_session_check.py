@@ -15,7 +15,7 @@ DEVIATION 2514 at fixture A (B2/L7/DM24, 3 layers, V513):
   G3  exported arrays and the ids array mutated after the call: the next
       step equals the stateless arm; `load_state_dict` of the mutated
       export is refused (negative v) and the live session is untouched.
-  G4  failed-update controls: the Python post-check fault always; the five
+  G4  failed-update controls: the five
       native faults only when the binding reports
       `byte_lm_fault_inject_available()` (a gate build with
       `-D MOJOLEARN_BYTE_LM_FAULT_INJECT=1`). Each: export before, one
@@ -27,9 +27,9 @@ DEVIATION 2514 at fixture A (B2/L7/DM24, 3 layers, V513):
       is now KEPT after an admission refusal, nothing was written).
 
 The stateless arm creates one context per call and the resident runs
-create one each, in one process: the DEVIATION 2494 shape. If the
-second-context hang is open on the box, run with
-MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 (DEVIATION 2513) and say so in the record.
+create one each, in one process: the DEVIATION 2494 shape. (The opt-in
+context keeper, MOJOLEARN_BYTE_LM_KEEP_CONTEXT, was deleted 2026-11-19; the
+neural context is process-lifetime.)
 """
 import argparse
 import hashlib
@@ -77,7 +77,7 @@ def main():
 
     # The stateless reference arm, run once; every resident run compares
     # against these captures.
-    control = Trainer(parameters, shape=shape, data_schedule=schedule)
+    control = Trainer(parameters, shape=shape, data_schedule=schedule, step_result='full')
     control_results, control_states = [], []
     control_eval = None
     for k, batch in enumerate(batches):
@@ -177,7 +177,9 @@ def main():
 
     # G4: failed-update controls at step 8, each followed by one good step.
     binding = impl._load(shape)
-    faults = [('python_post', 'post-check sabotage')]
+    # The Python post-check sabotage arm went with `_byte_lm_impl._array`
+    # (pyout-neural-lm, 2026-11-11): the native door owns that admission.
+    faults = []
     native_faults = [('loss_nonfinite', 'byte LM: nonfinite loss at 0'),
                      ('grad_nonfinite', 'byte LM: nonfinite gradients at 0'),
                      ('opt_refuse', 'optimizer: NaN in exp_avg at flat index 5'),
@@ -187,21 +189,11 @@ def main():
                         and binding.byte_lm_fault_inject_available())
     if fault_inject:
         faults += native_faults
-    original_array = impl._array
-
-    def reject_flags(value, shape_, name, dtype='<f4'):
-        if name == 'flags':
-            raise RuntimeError('post-check sabotage')
-        return original_array(value, shape_, name, dtype)
-
     k = n_gate
     for name, expected in faults:
         before = second.export_state()
         owner = second._native_session
-        if name == 'python_post':
-            impl._array = reject_flags
-        else:
-            os.environ['MOJOLEARN_BYTE_LM_FAULT'] = name
+        os.environ['MOJOLEARN_BYTE_LM_FAULT'] = name
         try:
             try:
                 second.train_step(batches[k])
@@ -213,7 +205,6 @@ def main():
             else:
                 raise AssertionError('%s: the faulted step did not raise' % name)
         finally:
-            impl._array = original_array
             os.environ.pop('MOJOLEARN_BYTE_LM_FAULT', None)
         assert second._native_session is owner, name
         after = second.export_state()

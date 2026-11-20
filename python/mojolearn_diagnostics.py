@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Dependency-light diagnostics for the installed MojoLearn distribution.
+"""Dependency-light diagnostics for the installed Mojolearn distribution.
 
 This module intentionally lives outside ``mojolearn``. Importing a package
 submodule first executes ``mojolearn.__init__``, which selects and loads the
@@ -148,62 +148,188 @@ def _installed_gpu_sets(native_files: list[dict[str, Any]]) -> list[str]:
     return sorted(sets)
 
 
-def _installed_tiers(native_files: list[dict[str, Any]]) -> dict[str, Any]:
-    """Which numeric tiers this install actually carries.
+#: The index every merged set directory ships beside its native files
+#: (`{"format": 1, "files": {"<stem>.so": [member modules]}}`), written by
+#: bindings/merged_build.sh, held to bindings/merged_groups.json by
+#: packaging/linux/merged_layout.py and read by python/mojolearn/_merged.py to
+#: load each member. It is the wheel's own statement of which native files a
+#: directory must hold, so it is what completeness is judged against.
+BINDING_INDEX = "_mojolearn_merged.json"
+#: The CPU set directory (mojolearn/host/). It serves `identical` on the CPU
+#: (packaging/linux/pack_wheel.py records it supported_modes=['identical']).
+HOST_SET = "host"
+_SET_ROLES = (*NUMERIC_TIERS, HOST_SET)
 
-    A wheel that shipped fewer tiers than the caller expects is the single
-    most confusing failure this library has: `numeric_mode="fast"`
-    raises from a missing-binary stub BY NAME, which is the correct
-    behaviour, but the answer to "why" lives in the wheel's contents rather
-    than in the traceback. This puts it in the report.
 
-    Read off the installed file list rather than by importing, so it still
-    answers when the extensions do not load at all -- the same reason this
-    module lives outside the package.
+def _binding_indexes() -> list[dict[str, Any]]:
+    """Read every shipped binding index (file names only, no absolute paths).
+
+    A file read, not an import, so it answers when the extensions do not load.
     """
-    counts: dict[str, int] = {tier: 0 for tier in NUMERIC_TIERS}
-    # THE VENDOR AXIS (2026-08-29). The Linux wheel lays the same tiers
-    # out once per vendor, mojolearn/cuda/... and mojolearn/hip/..., and
-    # stages the MAX runtime under a `.libs/` directory. Runtime libraries
-    # are not extensions and are not counted; extensions are counted per
-    # vendor as well as per tier, so "20 fast" reads as two vendors' sets
-    # and not as a doubled macOS wheel.
-    by_vendor: dict[str, dict[str, int]] = {}
+    records: list[dict[str, Any]] = []
+    for name in NATIVE_DISTRIBUTIONS:
+        try:
+            distribution = importlib.metadata.distribution(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        for relative in distribution.files or ():
+            relative_text = str(relative)
+            if Path(relative_text).name != BINDING_INDEX:
+                continue
+            absolute = Path(distribution.locate_file(relative))
+            record: dict[str, Any] = {
+                "distribution": name,
+                "relative_path": relative_text,
+                "exists": absolute.is_file(),
+            }
+            if record["exists"]:
+                try:
+                    document = json.loads(absolute.read_text(encoding="utf-8"))
+                    files = document.get("files") if isinstance(document, dict) else None
+                    if not isinstance(files, dict) or not files or not all(
+                            isinstance(f, str) and f.endswith(".so") and "/" not in f
+                            for f in files):
+                        raise ValueError("not a binding index")
+                    record["files"] = sorted(files)
+                except (OSError, ValueError):
+                    record["unreadable"] = True
+            records.append(record)
+    return records
+
+
+def _set_vendor(parts: tuple[str, ...]) -> str:
+    """'flat' for the package-level directories, else `<vendor>[/<arch>]`."""
+    vendor = "flat"
+    for i, part in enumerate(parts):
+        if part in _GPU_DIRECTORIES:
+            vendor = part
+            # THE ARCHITECTURE AXIS (2026-08-30): one directory per GPU
+            # architecture under the vendor.
+            if i + 1 < len(parts) and _ARCH_RE.match(parts[i + 1]):
+                vendor = f"{part}/{parts[i + 1]}"
+    return vendor
+
+
+def _set_role(parts: tuple[str, ...]) -> str:
+    """The set a directory holds: mojolearn/[<vendor>/<arch>/]identical ->
+    identical, mojolearn/host -> host, the package or <vendor>/<arch>
+    directory itself -> fast (the legacy fast tier directory)."""
+    last = parts[-1] if parts else ""
+    return last if last in _SET_ROLES else "fast"
+
+
+def _installed_tiers(native_files: list[dict[str, Any]],
+                     indexes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Which numeric tiers this install carries, and whether each native set
+    directory holds every file the wheel says it ships.
+
+    Read off the installed file list and the shipped binding indexes rather
+    than by importing, so it still answers when the extensions do not load at
+    all -- the same reason this module lives outside the package.
+
+    COMPLETENESS IS WHAT THE WHEEL SAYS, NEVER A COUNT (2026-11-20). Until
+    then a set directory was called INCOMPLETE when it held between 1 and 14
+    extensions, a constant from before the bindings were merged into groups
+    (bindings/merged_groups.json, 2026-10-20). A merged directory ships a few
+    group files, so every healthy Linux install read "numeric tiers
+    INCOMPLETE: identical"; and mojolearn/host/ was counted as the fast tier.
+    Now a directory is:
+
+      complete     it ships a binding index and holds every file it names
+      incomplete   a file its index names, or the wheel RECORD lists, is not
+                   on disk (each one named), or its index is listed but absent
+                   or unreadable
+      unknown      no index (a per-binding or older wheel): the doctor cannot
+                   tell whether a binding is missing, and says so
+    """
+    directories: dict[str, dict[str, Any]] = {}
+
+    def entry(parts: tuple[str, ...]) -> dict[str, Any]:
+        key = "/".join(parts)
+        if key not in directories:
+            directories[key] = {"parts": parts, "present": set(), "listed_absent": set(),
+                                "expected": None, "index_problem": None}
+        return directories[key]
+
     for record in native_files:
         relative = record["relative_path"]
-        if not relative.endswith(".so") or not record.get("exists"):
+        if not relative.endswith(".so"):
             continue
         parts = Path(relative).parts
         if not parts[-1].startswith("_mojolearn"):
             continue  # a staged runtime library, not an extension
-        # mojolearn/_mojolearn_rf.so -> fast; mojolearn/identical/... -> identical
-        parent = parts[-2] if len(parts) >= 2 else ""
-        tier = parent if parent in counts else "fast"
-        counts[tier] += 1
-        vendor = "flat"
-        for i, part in enumerate(parts):
-            if part in _GPU_DIRECTORIES:
-                vendor = part
-                # THE ARCHITECTURE AXIS (2026-08-30): one directory per GPU
-                # architecture under the vendor. Keyed together so "20 fast"
-                # under one vendor reads as two architectures' sets and not
-                # as a doubled set.
-                if i + 1 < len(parts) and _ARCH_RE.match(parts[i + 1]):
-                    vendor = f"{part}/{parts[i + 1]}"
-        by_vendor.setdefault(vendor, {t: 0 for t in NUMERIC_TIERS})[tier] += 1
+        d = entry(parts[:-1])
+        (d["present"] if record.get("exists") else d["listed_absent"]).add(parts[-1])
+    for record in indexes or ():
+        parts = Path(record["relative_path"]).parts
+        d = entry(parts[:-1])
+        if not record.get("exists"):
+            d["index_problem"] = "listed in the wheel RECORD, absent on disk"
+        elif record.get("unreadable"):
+            d["index_problem"] = "unreadable"
+        else:
+            d["expected"] = set(record["files"])
+
+    counts: dict[str, int] = {role: 0 for role in _SET_ROLES}
+    by_vendor: dict[str, dict[str, int]] = {}
+    sets: list[dict[str, Any]] = []
+    missing_files: list[str] = []
+    incomplete: list[str] = []
+    cannot_tell: list[str] = []
+    for key in sorted(directories):
+        d = directories[key]
+        parts = d["parts"]
+        role = _set_role(parts)
+        vendor = _set_vendor(parts)
+        present = d["present"]
+        counts[role] += len(present)
+        if present:
+            by_vendor.setdefault(vendor, {r: 0 for r in _SET_ROLES})[role] += len(present)
+        missing = set(d["listed_absent"])
+        if d["expected"] is not None:
+            missing |= d["expected"] - present
+        named = [f"{key}/{name}" for name in sorted(missing)]
+        if d["index_problem"]:
+            named.append(f"{key}/{BINDING_INDEX} ({d['index_problem']})")
+        if named:
+            status = "incomplete"
+            missing_files.extend(named)
+            tier = "identical" if role == HOST_SET else role
+            if tier not in incomplete:
+                incomplete.append(tier)
+        elif d["expected"] is not None:
+            status = "complete"
+        else:
+            status = "unknown"
+            cannot_tell.append(key)
+        sets.append({"directory": key, "vendor": vendor, "set": role,
+                     "status": status, "files": len(present), "missing": named})
+
+    # The host set is the identical set on the CPU, so it makes `identical`
+    # present on a CPU-only install.
+    tier_files = {"fast": counts["fast"], "identical": counts["identical"] + counts[HOST_SET]}
+    present_tiers = [tier for tier in NUMERIC_TIERS if tier_files[tier] > 0]
+    # OFF APPLE THE NAME `fast` IS ANSWERED BY THE IDENTICAL SET when no fast
+    # set is installed (python/mojolearn/_backend.py fast_answer), so it is
+    # not reported as a tier whose request raises.
+    answered_by = {}
+    if (platform.system() != "Darwin" and "fast" not in present_tiers
+            and "identical" in present_tiers):
+        answered_by["fast"] = "identical"
     return {
-        "expected_extensions_per_tier": 15,
-        "present": [tier for tier in NUMERIC_TIERS if counts[tier] > 0],
-        "absent": [tier for tier in NUMERIC_TIERS if counts[tier] == 0],
+        "present": present_tiers,
+        "absent": [tier for tier in NUMERIC_TIERS
+                   if tier not in present_tiers and tier not in answered_by],
+        "answered_by": answered_by,
         "extensions_by_tier": counts,
         "extensions_by_vendor_and_tier": by_vendor,
-        # A tier with SOME of its extensions is worse than one with none: the
-        # package imports and only the estimators needing the missing binding
-        # raise, so it is worth naming as its own state rather than as present.
-        "incomplete": [
-            tier for tier in NUMERIC_TIERS
-            if any(0 < v[tier] < 15 for v in by_vendor.values())
-        ],
+        "sets": sets,
+        # A tier with SOME of its files is worse than one with none: the
+        # package imports and only the estimators needing the missing file
+        # raise, so it is named as its own state, with the files.
+        "incomplete": [tier for tier in NUMERIC_TIERS if tier in incomplete],
+        "missing_files": missing_files,
+        "cannot_tell": cannot_tell,
     }
 
 
@@ -369,7 +495,7 @@ def collect_diagnostics() -> dict[str, Any]:
         "distributions": _distribution_versions(),
         "native_files": native_files,
         "gpu_sets": _installed_gpu_sets(native_files),
-        "numeric_tiers": _installed_tiers(native_files),
+        "numeric_tiers": _installed_tiers(native_files, _binding_indexes()),
         "gpu": gpu,
         "support": _support_classification(probe),
         "mojo_version": _run(["mojo", "--version"]),
@@ -393,7 +519,7 @@ def _summary(report: dict[str, Any]) -> str:
     support = report["support"]
     probe = report["import_probe"]
     lines = [
-        "MojoLearn doctor",
+        "Mojolearn doctor",
         f"recorded: {report['recorded_at_utc']}",
         "platform: {system} {release} {machine}".format(**report["platform"]),
         f"python: {report['platform']['python_version']}",
@@ -426,12 +552,23 @@ def _summary(report: dict[str, Any]) -> str:
                 ", ".join(tiers["absent"])
             )
         )
+    for tier, answer in tiers.get("answered_by", {}).items():
+        lines.append(f"numeric mode {tier}: answered by the {answer} set (no separate {tier} set on this platform)")
     if tiers["incomplete"]:
         lines.append(
-            "numeric tiers INCOMPLETE: {} (some estimators will raise)".format(
+            "numeric tiers INCOMPLETE: {} (estimators served by a missing file will raise)".format(
                 ", ".join(tiers["incomplete"])
             )
         )
+        lines.extend(f"  missing: {name}" for name in tiers["missing_files"])
+    if tiers.get("cannot_tell"):
+        lines.append(
+            "native set completeness: cannot tell for {} (the wheel ships no binding index there)".format(
+                ", ".join(tiers["cannot_tell"])
+            )
+        )
+    elif tiers.get("sets") and not tiers["incomplete"]:
+        lines.append("native sets complete: every file each binding index names is installed")
     probe_result = probe.get("result", {})
     if not probe_result.get("ok") and probe_result.get("type"):
         lines.append(f"import error type: {probe_result['type']}")
@@ -510,7 +647,7 @@ def command_bug_report(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mojolearn",
-        description="MojoLearn diagnostics and support-bundle tools.",
+        description="Mojolearn diagnostics and support-bundle tools.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

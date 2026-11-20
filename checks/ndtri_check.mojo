@@ -5,7 +5,7 @@
 the way `check-division` certifies `portable_divf`.
 
     tools/with_identical_mode.sh pixi run mojo run -I . checks/ndtri_check.mojo
-    (tools/with_identical_mode.sh pixi run check-ndtri; a FAST build is refused:
+    (tools/with_identical_mode.sh pixi run check-native-gpu ndtri_check; a FAST build is refused:
     its ops are the stdlib's, which differ by vendor by design)
 
 ## 2^20 hashed inputs per function, in classes (lane i's class is a function
@@ -41,7 +41,7 @@ ndtr, x:   0 uniform [-6, 6]   1 [-1, 1]   2 the tails [-14, -5] and [5, 14]
      it where the accuracy bound might not).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erfc, exp, log, sqrt
 from std.memory import bitcast
 from std.os import getenv
@@ -204,7 +204,7 @@ def _require(ok: Bool, what: String) raises:
         raise Error("FAIL ndtri check: " + what)
 
 
-def main() raises:
+def run_checks() raises:
     print("ndtri check (DEVIATION 5410, IDENTITY_PATHS row 220); build mode", numeric_mode_name())
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("ndtri check: build under NUMERIC_IDENTICAL (tools/with_identical_mode.sh); this build is "
@@ -288,8 +288,8 @@ def main() raises:
         var dx = ctx.enqueue_create_buffer[DType.float32](N)
         var dq = ctx.enqueue_create_buffer[DType.float32](N)
         var dc = ctx.enqueue_create_buffer[DType.float32](N)
-        ctx.enqueue_copy(dst_buf=dp, src_ptr=hp.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+        upload_whole_into[DType.float32](ctx, dp, hp)
+        upload_whole_into[DType.float32](ctx, dx, hx)
         ctx.enqueue_function[ndtri_kernel](
             dp.unsafe_ptr(), dx.unsafe_ptr(), dq.unsafe_ptr(), dc.unsafe_ptr(), Int32(N),
             grid_dim=(N + BLOCK - 1) // BLOCK,
@@ -297,8 +297,8 @@ def main() raises:
         )
         var rq = List[Float32](length=N, fill=Float32(0))
         var rc = List[Float32](length=N, fill=Float32(0))
-        ctx.enqueue_copy(dst_ptr=rq.unsafe_ptr(), src_buf=dq)
-        ctx.enqueue_copy(dst_ptr=rc.unsafe_ptr(), src_buf=dc)
+        download_whole_into[DType.float32](ctx, dq, rq)
+        download_whole_into[DType.float32](ctx, dc, rc)
         ctx.synchronize()
         var mq = 0
         var mc = 0
@@ -330,3 +330,22 @@ def main() raises:
     card.record_list_f32("5410.ndtri_ndtr.fixture", words)
     print("CERTIFICATE ndtri fnv1a", hex(fq), "ndtr fnv1a", hex(fc), "(", N, "lanes each; the same on every column)")
     print("PASS ndtri check")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_whole_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ndtri_check", cpu=False, gpu=True, serial="", run=run_cases)

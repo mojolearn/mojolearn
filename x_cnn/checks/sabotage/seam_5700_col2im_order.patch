@@ -1,9 +1,11 @@
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index e351e95164..a9c7447aad 100644
 --- a/x_cnn/ops.mojo
 +++ b/x_cnn/ops.mojo
-@@ -185,7 +185,7 @@
-     var ckk = C * KH * KW
-     var acc = Float32(0)
-     for a in range(KH):
+@@ -267,7 +267,7 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
+             kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
+             kw1 = min(KW, (w + PW) // DW + 1)
+     for a in range(kh0, kh1):
 -        var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
 +        var kh = KH - 1 - a
          var th = h + PH - kh * DH

@@ -1,0 +1,33 @@
+diff --git a/neighbors/estimator.mojo b/neighbors/estimator.mojo
+index 069e855a8f..42ee60e584 100644
+--- a/neighbors/estimator.mojo
++++ b/neighbors/estimator.mojo
+@@ -123,6 +123,7 @@ from core.identity_trace import IdentityTrace
+ from core.device_fold import device_sum_i32
+ from core.device_plan import DevicePlan
+ from neighbors.impl.multi_gpu import knn_device_count, neighbors_device_plan, parallel_knn_rows
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ from std.math import sqrt
+@@ -257,17 +258,16 @@ from neighbors.impl.ball_cover.ball_cover import (
+ 
+ 
+ # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
+-# Other columns retain 256.
++# Other columns retain 256 unless explicitly opting into qualification.
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
+ # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
+ # (`knn_nvidia_schedule_column`; AMD's legacy 256 arm was removed
+ # 2026-10-10, docs/TOMBSTONES.md). Query tiling never moves a bit.
+ # TOMBSTONE: MOJOLEARN_KNN_LEGACY_QUERY_TILE (old 256 tile path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 31c68bae2d.
+ # Restore: git apply experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512 (opt-in 512 tile on the other columns, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 2535c4cc75.
+-# Restore: git apply experiments/removed/MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512.patch; record in docs/TOMBSTONES.md.
+ comptime QUERY_TILE_512_CANDIDATE = (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and knn_nvidia_schedule_column(TARGET_COLUMN)
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and (knn_nvidia_schedule_column(TARGET_COLUMN) or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
+ )
+ # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
+ # replaces the 512 candidate where it is set; 0 keeps the historical rule.

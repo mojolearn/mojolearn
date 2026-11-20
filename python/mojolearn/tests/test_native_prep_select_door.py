@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """RFE and the mutual-information functions are one native call each
-(bindings/prep_select_native.mojo, through the family door). The former
+(bindings/prep_select_native_door.mojo, through the family door). The former
 Python routines are kept here as the oracle: the native door must return the
 same bits and set the same attributes.
 
@@ -16,7 +16,7 @@ import pytest
 
 import os
 
-_ORACLE_NAMES = ("Array", "_Prog", "_Scratch", "_cs", "_codes", "_class_counts", "_fit_categories",
+_ORACLE_NAMES = ("Array", "_Prog", "_Scratch", "_cs", "_codes", "_fit_categories",
                  "_label_buffer", "_mode", "_x2d", "as_f32_c", "encode_labels", "full", "_MI_WORK")
 
 
@@ -24,13 +24,23 @@ def _load():
     """mojolearn and the names the oracle below uses (needs the bindings)."""
     import mojolearn as ml
     from mojolearn import _expansion_prep as ep
+    from mojolearn.tests import _prep_prog_oracle as oracle
     g = globals()
     for name in _ORACLE_NAMES:  # the oracle reads these module globals
-        g[name] = getattr(ep, name)
+        g[name] = getattr(oracle, name)
     return ml, ep
 
 
 # ---------------------------------------------------------------- the former Python routines (oracle)
+def _class_counts(codes, K):
+    """Rows per class code. The package's own helper left with the Python
+    routes it served; the oracle keeps the former counting (test-only)."""
+    counts = [0] * K
+    for c in codes.tolist():
+        counts[c] += 1
+    return counts
+
+
 def _key_words(values, d):
     """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
     int64 buffer as its own words; anything else (a user score function's
@@ -315,6 +325,18 @@ def test_pure_former_helpers_gone():
         assert name not in defs, name
 
 
+def test_program_builder_left_the_package():
+    """The Python program builder and its staging helpers are the test oracle
+    (tests/_prep_prog_oracle.py); the package keeps only the record class the
+    native runner fills."""
+    defs = _defs(_tree())
+    assert not [name for name in defs if name.startswith("_Prog.")]
+    for name in ("_take", "_codes", "_category_block", "_fit_categories", "_fit_categories_cls2", "_native_folds",
+                 "_stage_folds", "_refuse_folds", "_cs", "_cls", "_col_stats", "_class_stats", "_x2d",
+                 "_label_buffer", "_label_chunk", "_class_words", "_seed_words", "_r3"):
+        assert name not in defs, name
+
+
 # ---------------------------------------------------------------- oracle (bindings; RUN OWED)
 def _data(n=300, d=8, seed=0):
     _load()
@@ -383,6 +405,15 @@ def test_mutual_info_matches_former(df):
     Xd[:, 7] = np.floor(Xd[:, 7])
     _same(ml.mutual_info_classif(Xd, y, discrete_features=df, random_state=3),
           _mutual_info(Xd, y, True, df, 3, 3))
+    # A continuous column declared discrete has one sample per value, so the
+    # regression estimator's neighbour search over each value finds nobody;
+    # scikit-learn raises ValueError there too (test_x_prep_selection).
+    mask = _mi_discrete_mask(df, Xd.shape[1])
+    raw = [j for j in range(Xd.shape[1]) if mask[j] and j not in (0, 3, 7)]  # glue: test oracle, 8 columns
+    if raw:
+        with pytest.raises(ValueError, match=f"discrete feature {raw[0]} has one sample per value"):
+            ml.mutual_info_regression(Xd, yr, discrete_features=df, n_neighbors=4, random_state=None)
+        return
     _same(ml.mutual_info_regression(Xd, yr, discrete_features=df, n_neighbors=4, random_state=None),
           _mutual_info(Xd, yr, False, df, 4, None))
 

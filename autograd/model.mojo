@@ -9,8 +9,8 @@ optimizer step; every number is computed by executor launches (parallel, with
 the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
 and AMD. Host loops run over layers, batches and epochs only.
 """
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
-from std.memory import bitcast, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
@@ -21,9 +21,12 @@ from sequence.recurrent import OptConfig, OptState, opt_step
 from sequence.gemm_split import gemm_split_shape
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
-from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, AUTOGRAD_CURVE_WORD
+from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
 from autograd.layers import NeuralRules, layer_norm
-from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF (per-batch gather, old path) folded here 2026-11-15 by
+# lane/expdel2-24-neural (owner expdel2-23-neural, autograd/data.mojo); code recoverable at 988a3742d1.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF.expdel2-24-neural.patch
+from autograd.data import gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
 from autograd.cast_ops import gather_labels_device, upload_cast, validation_codes
@@ -36,7 +39,9 @@ from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
 comptime HAS_DROPOUT = True
-comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_HAS_INFERENCE (tape.no_grad around predict, opt-in arm, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at fd8abcf837.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_HAS_INFERENCE.patch
 
 # LAUNCHES (lane ag-pass1-launches, read from the code; tape.mojo's
 # _linear_to and softmax_cross_entropy have the per-node detail).
@@ -55,8 +60,10 @@ comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
 #   Seed: one fill straight into the loss's gradient (was fill + copy).
 # Bits: the fused path is a bit version of its own (its GEMM epilogue and
 # column-sum bias gradient sum in a different order than the composed ops);
-# -D MOJOLEARN_AUTOGRAD_MODEL_UNFUSED keeps the composed nodes, for checks.
-comptime MODEL_UNFUSED = is_defined["MOJOLEARN_AUTOGRAD_MODEL_UNFUSED"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MODEL_UNFUSED (the composed nodes, opt-in check arm, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 5cc4c35385.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.patch
+# (Sweep 2026-11-15: the MODEL_UNFUSED = False constant removed; nothing read it.)
 
 # ---------------------------------------------------------------- whole-set predict (lane seq-predict-tiled, 2026-10-28)
 #: -D MOJOLEARN_IDN_SEQ_TILED_PREDICT (default OFF, A/B pending on NVIDIA; REPORT idea 7): model_predict
@@ -78,10 +85,12 @@ comptime MODEL_UNFUSED = is_defined["MOJOLEARN_AUTOGRAD_MODEL_UNFUSED"]()
 #: sequence pool's cap (SEQ_POOL_BYTES 3 GiB, so a predict never evicts the pooled fit buffers), a small
 #: share of every supported GPU's memory, and keeps every buffer under 2^28 floats so the kernels' Int32
 #: element offsets cannot overflow.
-#: MOJOLEARN_IDN_ALL_OFF also forces it off.
-comptime SEQ_TILED_PREDICT = is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"]() and not is_defined[
-    "MOJOLEARN_IDN_ALL_OFF"
-]()
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_TILED_PREDICT (whole-set predict chunk, opt-in arm, A/B never run) deleted 2026-11-15
+# by lane/expdel2-24-neural with PREDICT_WHOLE_SET_BYTES and _predict_split_same; code recoverable at d19ca4f0c2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (sequential-predict, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
+comptime SEQ_TILED_PREDICT = is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"]()
 comptime PREDICT_WHOLE_SET_BYTES = 1 << 30
 
 # ---------------------------------------------------------------- description
@@ -621,11 +630,6 @@ struct _ModelForwardTopology(Movable):
 
     def __init__(out self, spec: ModelSpec):
         self.activations = List[Int]()
-        comptime if MODEL_UNFUSED:
-            # Version 2 historically still fuses; legacy v1 does not consume
-            # topology in an unfused build, so do not prepare unused metadata.
-            if spec.version != SPEC2_VERSION:
-                return
         self.activations = List[Int](length=spec.n_layers(), fill=0)
         for i in range(spec.n_layers()):  # driver-loop: operation setup over model topology
             if spec.kinds[i] == LAYER_LINEAR:
@@ -648,22 +652,16 @@ def _model_forward_prepared[E: Exec](
             var fo = spec.arg0[i]
             var off = spec.param_off[i]
             var w = _param(tape, ex, P, Gr, off, fi, fo, train)
-            comptime if MODEL_UNFUSED:
-                h = tape.matmul(ex, h, w)
-                if spec.arg1[i] == 1:
-                    var b = _param(tape, ex, P, Gr, off + fi * fo, 1, fo, train)
-                    h = tape.add(ex, h, b)
-            else:
-                var bias: Optional[Tensor] = None
-                if spec.arg1[i] == 1:
-                    bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
-                var act = topology.activations[i]
-                h = tape.linear(ex, h, w, bias, act)
-                if act != 0:
-                    # the activation layer i + 1 rode in this node; layer i's
-                    # own (pre-activation) output is referenced by no layer
-                    outs.append(h)
-                    i += 1
+            var bias: Optional[Tensor] = None
+            if spec.arg1[i] == 1:
+                bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
+            var act = topology.activations[i]
+            h = tape.linear(ex, h, w, bias, act)
+            if act != 0:
+                # the activation layer i + 1 rode in this node; layer i's
+                # own (pre-activation) output is referenced by no layer
+                outs.append(h)
+                i += 1
         elif k == LAYER_RELU:
             h = tape.relu(ex, h)
         elif k == LAYER_SIGMOID:
@@ -819,8 +817,6 @@ def _fused_codes(cfg: FitConfig) -> Bool:
     """True when the batch target is the (B, 1) class codes and the loss is
     one softmax_cross_entropy node (the default build, cross_entropy on
     class codes)."""
-    comptime if MODEL_UNFUSED:
-        return False
     return cfg.loss == LOSS_CROSS_ENTROPY and cfg.target == TARGET_CODES
 
 
@@ -1045,14 +1041,12 @@ def model_fit_state[E: Exec](
     # AUTOGRAD_GATHER_EPOCH (autograd/data.mojo, lane ag-pass5-composed): one
     # gather an epoch into a permuted copy when it fits; each batch is then
     # a slice of it (xb and yb point into the copy). The same words.
-    var epoch_gather = False
     var Xp = dummy_ptr()
     var Yp = dummy_ptr()
-    comptime if AUTOGRAD_GATHER_EPOCH:
-        epoch_gather = gather_epoch_fits(N, D + TW)
-        if epoch_gather:
-            Xp = ex.alloc(N * D)
-            Yp = ex.alloc(N * TW)
+    var epoch_gather = gather_epoch_fits(N, D + TW)
+    if epoch_gather:
+        Xp = ex.alloc(N * D)
+        Yp = ex.alloc(N * TW)
     var n_batches = (N + bs - 1) // bs
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
@@ -1120,19 +1114,17 @@ def model_fit_state[E: Exec](
             ia.p0 = didx
             ex.launch[OP_SEQ_IOTA](ia, N)
         var lr = model_lr(cfg, epoch)
-        comptime if AUTOGRAD_GATHER_EPOCH:
-            # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
-            if epoch_gather and (cfg.shuffle or e == 0):
-                gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
+        # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
+        if epoch_gather and (cfg.shuffle or e == 0):
+            gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
         for bi in range(n_batches):  # driver-loop: over batches
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
             var gathered = False
-            comptime if AUTOGRAD_GATHER_EPOCH:
-                if epoch_gather:
-                    xb = Xp + off * D
-                    yb = Yp + off * TW
-                    gathered = True
+            if epoch_gather:
+                xb = Xp + off * D
+                yb = Yp + off * TW
+                gathered = True
             if not gathered:
                 # X and Y rows of the batch in one launch
                 var gx = Args()
@@ -1150,13 +1142,12 @@ def model_fit_state[E: Exec](
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
             var out = _model_forward_prepared(tape, ex, spec, P, Gr, x, True, cfg.seed, step, topology)
-            comptime if AUTOGRAD_CURVE_WORD:
-                # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
-                # launch stores the batch's curve word mul(loss, B), the word
-                # tape.scale stores; cross-entropy's loss is not a fold
-                # output (a scale of one), so it keeps the two launches below
-                if cfg.loss != LOSS_CROSS_ENTROPY:
-                    tape.arm_fold_word(dloss + bi, Float32(B))
+            # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
+            # launch stores the batch's curve word mul(loss, B), the word
+            # tape.scale stores; cross-entropy's loss is not a fold
+            # output (a scale of one), so it keeps the two launches below
+            if cfg.loss != LOSS_CROSS_ENTROPY:
+                tape.arm_fold_word(dloss + bi, Float32(B))
             var loss = model_loss(tape, ex, cfg, out, target)
             var word_done = tape.disarm_fold_word(loss)
             if spec.version == SPEC2_VERSION:
@@ -1237,7 +1228,7 @@ def model_fit_state[E: Exec](
     ex.download(Mio, s1, np_)
     ex.download(Vio, s2, np_)
     if resume and start > 0:
-        memcpy(dest=curve, src=curve_prev, count=start)
+        unsafe_memcpy(dest=curve, src=curve_prev, count=start)
     ex.download(curve + start, dcurve, n_iter)
     St[FS_VALID] = 1
     St[FS_EPOCH] = Int64(start + n_iter)
@@ -1343,8 +1334,6 @@ def model_predict[E: Exec](
     while b0 < N:  # driver-loop: over row chunks (bounded tape scratch)
         var B = bs if b0 + bs <= N else N - b0
         tape.reset()
-        comptime if HAS_INFERENCE:
-            tape.no_grad()  # depends on lane ag-forward (inference mode)
         var x = tape.variable(ex, dX + b0 * D, B, D, False)
         var out = _model_forward_prepared(tape, ex, spec, P, P, x, False, UInt64(0), 0, topology)
         if transform == OUT_SOFTMAX:
@@ -1352,8 +1341,6 @@ def model_predict[E: Exec](
         elif transform == OUT_SIGMOID or transform == OUT_PROBA2 or transform == OUT_THRESHOLD:
             out = tape.sigmoid(ex, out)
         _copy(ex, dout + b0 * O, tape.value(out), B * O)
-        comptime if HAS_INFERENCE:
-            tape.record()
         b0 += B
     if transform == OUT_PROBA2:
         var two = ex.alloc(N * 2)

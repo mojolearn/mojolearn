@@ -8,34 +8,34 @@ EXPERIMENTS.md untried candidates (`grid-fast/controls/`) and the M3 FAST board 
 - **Arms**: A = FAST main (shipped FAST defaults plus any prerequisite the card keeps in both arms); B = the candidate (as tools/aft_ab.sh and tools/afc_ab_def.sh use them).
 - **Promoted `_OFF` arms are not gridded**: every promoted FAST default (a *_OFF rollback exists) was A/B'd on top of the defaults current at its promotion, so the shipped FAST default is the all-on point and the M3 board measures it on every row; promoted arms enter only as arm A.
 - **Builds**: FAST builds only (MOJOLEARN_NUMERIC_MODE=fast through the scripts); no `MOJOLEARN_NUMERIC_IDENTICAL` define anywhere.
-- **Identity**: none. FAST needs no identical anything (CLAUDE.md); there is no identity column.
+- **Identity**: none. FAST needs no identical anything (AGENTS.md); there is no identity column.
 
 ## Totals
 
 | item | count |
 |---|---|
-| controls (48 AFT + 54 AFCL + 17 authored: untried rows, their group partners, lane R8) | 119 |
-| excluded controls | 8 |
-| (control, lane) pairs excluded for an unresolvable binding | 15 |
+| controls (48 AFT + 54 AFCL + 3 authored: untried rows, their group partners, lane R8) | 105 |
+| excluded controls | 5 |
+| (control, lane) pairs excluded for an unresolvable binding | 5 |
 | card lane recipes without an M3 board row or script | 8 |
-| algorithms (board lanes) with configs | 92 |
-| **configs** (build 414, env 8) | **422** |
-| board workloads touched | 181 |
-| **A/B cells** (configs x workloads, one box) | **820** |
-| A/A lines (one per workload x binding x script) | 187 |
-| queue lines (`grid-fast-queue.txt`) | 1007 |
+| algorithms (board lanes) with configs | 87 |
+| **configs** (build 353, env 8) | **361** |
+| board workloads touched | 171 |
+| **A/B cells** (configs x workloads, one box) | **700** |
+| A/A lines (one per workload x binding x script) | 177 |
+| queue lines (`grid-fast-queue.txt`) | 877 |
 | deferred singles/all-on (cap) | 0 |
-| deferred interaction-group crosses | 31 groups, 97 configs |
-| builds before packing (2 per build config + main) | 876 |
-| **builds after packing** (144 packs x 2 + 48 main; 64 packs with >1 member) | **336** |
-| distinct (binding, define set) among them | 161 |
+| deferred interaction-group crosses | 29 groups, 87 configs |
+| builds before packing (2 per build config + main) | 754 |
+| **builds after packing** (117 packs x 2 + 48 main; 55 packs with >1 member) | **282** |
+| distinct (binding, define set) among them | 125 |
 
-Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gf4de9e3`.
+Cap: 16 configs per lane. One run per arm (aft_ab.sh pairs 1; afc_ab_def.sh / afc_ab.sh reps 1 rounds 1). Box: m3 only. Run id `gf7b7a62`.
 
 ## Verdict rule
 
 - **timing**: per workload on the M3: FASTER / SLOWER only when |log(B/A)| of the scored clock (AFC-DEF-SUMMARY / AFT-MEDIAN median_ms) exceeds the M3 A/A floor for the same workload (its grid A/A line: both arms the FAST main build); otherwise NO_VERDICT. One box votes (apple); there is no second vendor
-- **identity**: NOT_REQUIRED: FAST needs no identical anything (CLAUDE.md): no same bits across vendors, none vs arm A, none run to run
+- **identity**: NOT_REQUIRED: FAST needs no identical anything (AGENTS.md): no same bits across vendors, none vs arm A, none run to run
 - **quality**: the board quality metric of B must not drop vs arm A (FAST main) on any workload: tools/af_quality.py, rel 1e-3 / abs 1e-6, the gate tools/af_board_apply.py enforces (which also refuses a row worse than the best opponent); a noise-level change, a different fold order or different bits never hold a candidate
 - **promotion**: FASTER on at least one workload, SLOWER on none, quality held: the switch becomes the FAST default with a *_OFF rollback and a code comment citing the A/B numbers, plus one docs/apple-fast/EXPERIMENTS.md row; a loser (slower, noise, quality drop) is deleted from the code and gets its row
 - **default_state**: every switch is NOT MEASURED until then
@@ -48,7 +48,7 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 
 | lane | workloads | #configs | configs | deferred | builds |
 |---|---|---|---|---|---|
-| trees:et | istella, taxi | 14 | s AFT_F06<br>s AFT_F07<br>s AFT_F08<br>s AFT_F09<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>s AFCL_T09<br>all AFT_F06, AFT_F07, AFT_F08, AFT_F09, AFT_P01, AFT_P03, AFT_P04, AFCL_T09<br>x AFT_F07, AFT_F08<br>x AFT_F06, AFT_F08<br>x AFT_F06, AFT_F07<br>x AFT_F06, AFT_F07, AFT_F08 | cross AFT_P01/AFT_P02/AFT_P03/AFT_P04: 5 | 14 packs, trees |
+| trees:et | istella, taxi | 13 | s AFT_F06<br>s AFT_F07<br>s AFT_F08<br>s AFT_F09<br>s AFT_P02<br>s AFT_P04<br>s AFCL_T09<br>all AFT_F06, AFT_F07, AFT_F08, AFT_F09, AFT_P02, AFT_P04, AFCL_T09<br>x AFT_F07, AFT_F08<br>x AFT_F06, AFT_F08<br>x AFT_F06, AFT_F07<br>x AFT_F06, AFT_F07, AFT_F08<br>x AFT_P02, AFT_P04 | - | 13 packs, trees |
 | trees:gbdt-categorical | taxi, taxicat | 15 | s AFT_G05<br>s AFT_G06<br>s AFT_G08<br>s AFT_G09<br>s AFT_G10<br>s AFT_N01<br>s AFT_N02<br>s AFT_N04<br>s AFT_P05<br>s AFT_P06<br>s AFCL_T03<br>s AFCL_T07<br>s AFCL_T12<br>all AFT_G05, AFT_G08, AFT_G09, AFT_G10, AFT_N01, AFT_N02, AFT_N04, AFT_P05, AFT_P06, AFCL_T03, AFCL_T07, AFCL_T12<br>x AFT_P05, AFT_P06 | cross AFT_G05/AFT_G06/AFT_G09/AFT_G10: 7<br>cross AFT_N01/AFT_N02/AFT_N04: 4<br>cross AFCL_T03/AFCL_T07/AFCL_T12: 4 | 15 packs, gbdt |
 | trees:gbdt-depthwise | istella, taxi | 16 | s AFT_G05<br>s AFT_G06<br>s AFT_G07<br>s AFT_G08<br>s AFT_N02<br>s AFT_N03<br>s AFT_N04<br>s AFT_N06<br>s AFT_P05<br>s AFT_P06<br>s AFCL_T01<br>s AFCL_T02<br>s AFCL_T03<br>s AFCL_T06<br>s AFCL_T07<br>all AFT_G05, AFT_G07, AFT_G08, AFT_N02, AFT_N03, AFT_N04, AFT_N06, AFT_P05, AFT_P06, AFCL_T01, AFCL_T02, AFCL_T03, AFCL_T06, AFCL_T07 | cross AFT_G07/AFT_G08: 1<br>cross AFT_N02/AFT_N03/AFT_N04/AFT_N06: 11<br>cross AFT_P05/AFT_P06: 1<br>cross AFCL_T01/AFCL_T02: 1<br>cross AFCL_T01/AFCL_T02/AFCL_T06: 3<br>cross AFCL_T03/AFCL_T07: 1 | 16 packs, gbdt |
 | trees:gbdt-lossguide | istella, taxi | 16 | s AFT_G05<br>s AFT_G06<br>s AFT_G07<br>s AFT_G08<br>s AFT_N01<br>s AFT_N02<br>s AFT_N04<br>s AFT_P05<br>s AFT_P06<br>s AFCL_T01<br>s AFCL_T02<br>s AFCL_T03<br>s AFCL_T06<br>s AFCL_T07<br>all AFT_G05, AFT_G07, AFT_G08, AFT_N01, AFT_N02, AFT_N04, AFT_P05, AFT_P06, AFCL_T01, AFCL_T02, AFCL_T03, AFCL_T06, AFCL_T07<br>x AFT_G07, AFT_G08 | cross AFT_N01/AFT_N02/AFT_N04: 4<br>cross AFT_P05/AFT_P06: 1<br>cross AFCL_T01/AFCL_T02: 1<br>cross AFCL_T01/AFCL_T02/AFCL_T06: 3<br>cross AFCL_T03/AFCL_T07: 1 | 16 packs, gbdt |
@@ -59,31 +59,31 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | trees:gbdt-symmetric | istella, taxi | 16 | s AFT_G01<br>s AFT_G02<br>s AFT_G03<br>s AFT_G04<br>s AFT_G05<br>s AFT_G06<br>s AFT_G07<br>s AFT_G08<br>s AFT_P05<br>s AFT_P06<br>s AFCL_T03<br>s AFCL_T04<br>s AFCL_T05<br>s AFCL_T06<br>s AFCL_T07<br>all AFT_G01, AFT_G02, AFT_G03, AFT_G04, AFT_G05, AFT_G07, AFT_G08, AFT_P05, AFT_P06, AFCL_T03, AFCL_T04, AFCL_T06, AFCL_T07 | cross AFT_G01/AFT_G02/AFT_G03: 4<br>cross AFT_G07/AFT_G08: 1<br>cross AFT_P05/AFT_P06: 1<br>cross AFCL_T04/AFCL_T05: 1<br>cross AFCL_T03/AFCL_T07: 1 | 16 packs, gbdt |
 | trees:gbdt-symmetric-1000 | istella, taxi | 16 | s AFT_G01<br>s AFT_G02<br>s AFT_G03<br>s AFT_G04<br>s AFT_G05<br>s AFT_G06<br>s AFT_G07<br>s AFT_G08<br>s AFT_P05<br>s AFT_P06<br>s AFCL_T03<br>s AFCL_T04<br>s AFCL_T05<br>s AFCL_T07<br>all AFT_G01, AFT_G02, AFT_G03, AFT_G04, AFT_G05, AFT_G07, AFT_G08, AFT_P05, AFT_P06, AFCL_T03, AFCL_T04, AFCL_T07<br>x AFT_G07, AFT_G08 | cross AFT_G01/AFT_G02/AFT_G03: 4<br>cross AFT_P05/AFT_P06: 1<br>cross AFCL_T04/AFCL_T05: 1<br>cross AFCL_T03/AFCL_T07: 1 | 16 packs, gbdt |
 | trees:iforest | istella, taxi | 9 | s AFT_F10<br>s AFT_F11<br>s AFT_F12<br>s AFCL_T10<br>all AFT_F10, AFT_F11, AFT_F12, AFCL_T10<br>x AFT_F11, AFT_F12<br>x AFT_F10, AFT_F11<br>x AFT_F10, AFT_F12<br>x AFT_F10, AFT_F11, AFT_F12 | - | 9 packs, svm |
-| trees:rf | istella, taxi | 12 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>s AFCL_T08<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04, AFCL_T08<br>x AFT_F01, AFT_F02 | cross AFT_P01/AFT_P02/AFT_P03/AFT_P04: 5 | 12 packs, rf |
+| trees:rf | istella, taxi | 11 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>s AFCL_T08<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04, AFCL_T08<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 11 packs, rf |
 
 ### classical and tree-wrapper lanes of tools/bench_board_algos.py (AFC_FAMILY=algos)
 
 | lane | workloads | #configs | configs | deferred | builds |
 |---|---|---|---|---|---|
-| algos:adaboost-clf | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
-| algos:adaboost-reg | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
+| algos:adaboost-clf | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
+| algos:adaboost-reg | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
 | algos:ard | istella, taxi | 3 | s AFCL_L01<br>s AFCL_L02<br>all AFCL_L01, AFCL_L02 | - | 3 packs, x_linear |
-| algos:autoarima | synthetic, taxi-hourly | 11 | s AFCL_P12<br>s ARIMA_FAST_CONST_BOTH<br>s ARIMA_FAST_ROOT_CHECK<br>s ARIMA_FAST_KPSS_D<br>s AUTOARIMA_SEARCH_QOLD (env)<br>s AFCL_P11<br>all AFCL_P12, ARIMA_FAST_CONST_BOTH, ARIMA_FAST_ROOT_CHECK, ARIMA_FAST_KPSS_D<br>x ARIMA_FAST_ROOT_CHECK, ARIMA_FAST_KPSS_D<br>x ARIMA_FAST_CONST_BOTH, ARIMA_FAST_KPSS_D<br>x ARIMA_FAST_CONST_BOTH, ARIMA_FAST_ROOT_CHECK<br>x ARIMA_FAST_CONST_BOTH, ARIMA_FAST_ROOT_CHECK, ARIMA_FAST_KPSS_D | - | 10 packs, arima/tsa |
-| algos:bagging-clf | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
-| algos:bagging-reg | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
+| algos:autoarima | synthetic, taxi-hourly | 5 | s AFCL_P12<br>s ARIMA_FAST_ROOT_CHECK<br>s AUTOARIMA_SEARCH_QOLD (env)<br>s AFCL_P11<br>all AFCL_P12, ARIMA_FAST_ROOT_CHECK | - | 4 packs, arima/tsa |
+| algos:bagging-clf | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
+| algos:bagging-reg | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
 | algos:bayesian-ridge | istella, taxi | 3 | s AFCL_L01<br>s AFCL_L02<br>all AFCL_L01, AFCL_L02 | - | 3 packs, x_linear |
 | algos:categorical-nb | istella, taxi | 3 | s AFCL_P03<br>s NB_CAT_ATOMIC<br>all AFCL_P03, NB_CAT_ATOMIC | - | 3 packs, x_prep |
 | algos:complement-nb | istella, taxi, text | 1 | s AFCL_P04 | - | 1 packs, x_prep |
 | algos:dart | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P11<br>s AFT_P12<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05<br>x AFT_F01, AFT_F02<br>x AFT_P11, AFT_P12 | - | 10 packs, rf/x_trees |
 | algos:dart-reg | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P11<br>s AFT_P12<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05<br>x AFT_F01, AFT_F02<br>x AFT_P11, AFT_P12 | - | 10 packs, rf/x_trees |
-| algos:decision-tree-clf | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
-| algos:decision-tree-reg | istella, taxi | 16 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P01<br>s AFT_P02<br>s AFT_P03<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P01, AFT_P03, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P03, AFT_P04<br>x AFT_P02, AFT_P04<br>x AFT_P01, AFT_P04<br>x AFT_P01, AFT_P03<br>x AFT_P01, AFT_P03, AFT_P04 | - | 16 packs, rf |
+| algos:decision-tree-clf | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
+| algos:decision-tree-reg | istella, taxi | 10 | s AFT_F01<br>s AFT_F02<br>s AFT_F03<br>s AFT_F04<br>s AFT_F05<br>s AFT_P02<br>s AFT_P04<br>all AFT_F01, AFT_F02, AFT_F03, AFT_F04, AFT_F05, AFT_P02, AFT_P04<br>x AFT_F01, AFT_F02<br>x AFT_P02, AFT_P04 | - | 10 packs, rf |
 | algos:elliptic-envelope | istella, taxi | 1 | s AFCL_L13 | - | 1 packs, x_decomp |
 | algos:enet-cv | istella, taxi | 1 | s AFCL_L03 | - | 1 packs, x_linear |
 | algos:gaussian-nb | istella, taxi | 1 | s AFCL_P13 | - | 1 packs, x_prep |
 | algos:huber | istella, taxi | 1 | s AFCL_L04 | - | 1 packs, x_linear |
 | algos:iterative-imputer | istella, taxi | 4 | s AFCL_P06<br>s X_PREP_FAST_II_CONV (env)<br>s X_PREP_FAST_II_GRAM_TILE (env)<br>x X_PREP_FAST_II_CONV, X_PREP_FAST_II_GRAM_TILE (env) | - | 1 packs, x_prep |
-| algos:ivf | istella, taxi | 4 | s AFCL_G05<br>s AFCL_G06<br>s AFCL_G09<br>all AFCL_G05, AFCL_G06, AFCL_G09 | - | 4 packs, ivf |
+| algos:ivf | istella, taxi | 3 | s AFCL_G05<br>s AFCL_G09<br>all AFCL_G05, AFCL_G09 | - | 3 packs, ivf |
 | algos:kpss | synthetic, taxi-hourly | 1 | s AFCL_P11 | - | 1 packs, tsa |
 | algos:lars | istella, taxi | 3 | s AFCL_L01<br>s AFCL_L02<br>all AFCL_L01, AFCL_L02 | - | 3 packs, x_linear |
 | algos:lasso-cv | istella, taxi | 1 | s AFCL_L03 | - | 1 packs, x_linear |
@@ -99,11 +99,9 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | algos:ocsvm | istella, taxi | 1 | s AFCL_L06 | - | 1 packs, svm |
 | algos:pa-clf | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
 | algos:pa-reg | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
-| algos:pca | istella, taxi | 1 | s AFCL_L07 | - | 1 packs, estimators |
 | algos:perceptron | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
 | algos:power-transformer | istella, taxi | 1 | s AFCL_P01 | - | 1 packs, x_prep |
 | algos:qda | istella, taxi | 3 | s AFCL_L01<br>s AFCL_L02<br>all AFCL_L01, AFCL_L02 | - | 3 packs, x_prep |
-| algos:qn-reg | istella, taxi | 1 | s AFCL_L05 | - | 1 packs, estimators |
 | algos:random-trees-embedding | istella, taxi | 10 | s AFT_F06<br>s AFT_F07<br>s AFT_F08<br>s AFT_F09<br>s AFCL_T09<br>all AFT_F06, AFT_F07, AFT_F08, AFT_F09, AFCL_T09<br>x AFT_F07, AFT_F08<br>x AFT_F06, AFT_F08<br>x AFT_F06, AFT_F07<br>x AFT_F06, AFT_F07, AFT_F08 | - | 10 packs, trees |
 | algos:rbf-sampler | istella, taxi | 1 | s AFCL_L12 | - | 1 packs, kernel_methods |
 | algos:resample | istella, taxi | 1 | s AFCL_P10 | - | 1 packs, resample |
@@ -114,7 +112,7 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | algos:select-f-classif | istella, taxi | 1 | s AFCL_P07 | - | 1 packs, x_prep |
 | algos:select-f-regression | istella, taxi | 1 | s AFCL_P07 | - | 1 packs, x_prep |
 | algos:select-mutual-info | istella, taxi | 1 | s MI_WORK (env) | - | 0 packs, x_prep |
-| algos:select-mutual-info-reg | istella, taxi | 4 | s MI_REG_RANKMAJOR<br>s MI_REG_SORTCOUNT<br>s MI_WORK (env)<br>all MI_REG_RANKMAJOR, MI_REG_SORTCOUNT | - | 3 packs, x_prep |
+| algos:select-mutual-info-reg | istella, taxi | 2 | s MI_REG_SORTCOUNT<br>s MI_WORK (env) | - | 1 packs, x_prep |
 | algos:select-r-regression | istella, taxi | 1 | s AFCL_P07 | - | 1 packs, x_prep |
 | algos:sgd-clf | istella, taxi | 3 | s AFCL_L14<br>s SGD_FAST_EPOCH_RESIDENT<br>all AFCL_L14, SGD_FAST_EPOCH_RESIDENT | - | 3 packs, x_linear |
 | algos:sgd-ocsvm | istella, taxi | 1 | s AFCL_L14 | - | 1 packs, x_linear |
@@ -132,15 +130,12 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 | classical2:agglomerative | istella, taxi | 1 | s AFCL_G14 | - | 1 packs, solver |
 | classical2:arima | synthetic | 1 | s AFCL_P12 | - | 1 packs, arima |
 | classical2:ets | synthetic | 1 | s AFCL_P14 | - | 1 packs, tsa |
-| classical2:gmm | istella, taxi | 4 | s AFCL_G05<br>s AFCL_G06<br>s AFCL_G08<br>all AFCL_G05, AFCL_G06, AFCL_G08 | - | 4 packs, mixture |
+| classical2:gmm | istella, taxi | 3 | s AFCL_G05<br>s AFCL_G08<br>all AFCL_G05, AFCL_G08 | - | 3 packs, mixture |
 | classical2:gpc | istella, taxi | 1 | s AFCL_L11 | - | 1 packs, gp |
 | classical2:gpr | istella, taxi | 1 | s AFCL_L11 | - | 1 packs, gp |
-| classical2:knn-clf | istella, taxi | 2 | s AFCL_G01<br>s AFCL_G02 | - | 2 packs, base |
-| classical2:knn-reg | istella, taxi | 2 | s AFCL_G01<br>s AFCL_G02 | - | 2 packs, base |
-| classical2:linearsvc | istella, taxi | 1 | s AFCL_L05 | - | 1 packs, estimators |
-| classical2:linearsvr | istella, taxi | 1 | s AFCL_L05 | - | 1 packs, estimators |
-| classical2:logreg | istella, taxi | 1 | s AFCL_L05 | - | 1 packs, estimators |
-| classical2:spectral | istella, taxi | 5 | s AFCL_G01<br>s AFCL_G05<br>s AFCL_G06<br>s AFCL_G11<br>all AFCL_G01, AFCL_G05, AFCL_G06, AFCL_G11 | - | 5 packs, metrics |
+| classical2:knn-clf | istella, taxi | 1 | s AFCL_G01 | - | 1 packs, base |
+| classical2:knn-reg | istella, taxi | 1 | s AFCL_G01 | - | 1 packs, base |
+| classical2:spectral | istella, taxi | 4 | s AFCL_G01<br>s AFCL_G05<br>s AFCL_G11<br>all AFCL_G01, AFCL_G05, AFCL_G11 | - | 4 packs, metrics |
 | classical2:spectral-embedding | istella, taxi | 3 | s AFCL_G01<br>s AFCL_G11<br>all AFCL_G01, AFCL_G11 | - | 3 packs, metrics |
 | classical2:svr | istella, taxi | 1 | s AFCL_L06 | - | 1 packs, svm |
 | classical2:umap | istella, taxi | 3 | s AFCL_G01<br>s AFCL_G10<br>all AFCL_G01, AFCL_G10 | - | 3 packs, metrics |
@@ -149,10 +144,10 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 
 | lane | workloads | #configs | configs | deferred | builds |
 |---|---|---|---|---|---|
-| classical:dbscan | istella (excl. taxi) | 3 | s AFCL_G03<br>s DBSCAN_FAST_CC_BATCH<br>all AFCL_G03, DBSCAN_FAST_CC_BATCH | - | 3 packs, estimators |
-| classical:hdbscan | istella, taxi | 4 | s AFCL_G01<br>s AFCL_G04<br>s AFCL_G14<br>all AFCL_G01, AFCL_G04, AFCL_G14 | - | 4 packs, hdbscan |
+| classical:dbscan | istella (excl. taxi) | 1 | s AFCL_G03 | - | 1 packs, estimators |
+| classical:hdbscan | istella, taxi | 3 | s AFCL_G01<br>s AFCL_G14<br>all AFCL_G01, AFCL_G14 | - | 3 packs, hdbscan |
 | classical:kde | istella, taxi | 1 | s AFCL_G13 | - | 1 packs, estimators |
-| classical:kmeans | istella, taxi | 3 | s AFCL_G05<br>s AFCL_G06<br>all AFCL_G05, AFCL_G06 | - | 3 packs, base |
+| classical:kmeans | istella, taxi | 1 | s AFCL_G05 | - | 1 packs, base |
 | classical:knn | istella, taxi | 1 | s AFCL_G01 | - | 1 packs, base |
 | classical:svc | istella, taxi | 1 | s AFCL_L06 | - | 1 packs, svm |
 
@@ -160,13 +155,10 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 
 | control | define | source | reason |
 |---|---|---|---|
-| AFCL_L08 | `MOJOLEARN_AFCL_L08` | afcl | no mapped board lane with a resolvable binding (see unmapped / binding exclusions) |
 | AFCL_L09 | `MOJOLEARN_AFCL_L09` | afcl | no mapped board lane with a resolvable binding (see unmapped / binding exclusions) |
 | AFCL_P08 | `MOJOLEARN_AFCL_P08` | afcl | no board lane recipe the Apple A/B scripts can race |
 | AFCL_P09 | `MOJOLEARN_AFCL_P09` | afcl | no board lane recipe the Apple A/B scripts can race |
 | AFT_N05 | `MOJOLEARN_AFT_N05` | aft-N | unreached: card: board_default_exercises_candidate=false; Set min_split_gain=None identically in A and B; the current board value0.0 bypasses device selection. Do not silently label the unchanged board route as N05. |
-| KSHAP_FAST_DEVICE_MODEL | `MOJOLEARN_KSHAP_FAST_DEVICE_MODEL` | apple-fast-round2 | not reached on the board: R8: the board kernel-shap row explains a NumPy ridge closure (no device model), so the switch is not reached on the board; reached by KernelExplainer over a mojolearn forest (owed off-board A/B below) |
-| PSHAP_FAST_DEVICE_MODEL | `MOJOLEARN_PSHAP_FAST_DEVICE_MODEL` | apple-fast-round2 | not reached on the board: R8: the board permutation-shap row explains the NumPy ridge closure, so the switch is not reached on the board; reached by PermutationExplainer over a mojolearn forest (owed off-board A/B below) |
 | X_PREP_FAST_FIT_TRANSFORM_FUSED | `MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED` | apple-fast-round2 | not reached on the board: R8: the board standard-scaler row times fit(X) then transform(Xq) on different arrays, so the fused path is not reached on the board; reached by StandardScaler.fit_transform (owed off-board A/B below) |
 
 ## Binding exclusions (control on one lane)
@@ -175,16 +167,6 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 |---|---|---|
 | AFCL_L01 | classical2:ridge | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_linear/fast_gram.mojo; the card bindings that do (x_linear, x_prep) are not loaded by this lane |
 | AFCL_L02 | classical2:ridge | unreached on the board route: the lane's Python module loads only estimators (lane binding estimators), none of which imports x_linear/fast_gram.mojo; the card bindings that do (x_linear, x_prep) are not loaded by this lane |
-| AFCL_L08 | algos:nmf | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:factor-analysis | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:pls | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:pls-canonical | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:cca | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:als | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:randomized-svd | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:qr | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | algos:svd | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_gemm.mojo |
-| AFCL_L08 | classical:ols | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors or lane binding estimators imports x_decomp/fast_gemm.mojo |
 | AFCL_L09 | algos:qr | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_qr.mojo |
 | AFCL_L09 | algos:randomized-svd | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors imports x_decomp/fast_qr.mojo |
 | AFCL_L09 | classical:ols | unreached by import scan: no binding of x_decomp, linalg, metrics, x_neighbors or lane binding estimators imports x_decomp/fast_qr.mojo |
@@ -206,12 +188,7 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 
 | define | kind | reason |
 |---|---|---|
-| `MOJOLEARN_HUBER_FAST_BLOCK512` | promoted | promoted: the FAST + Apple default since rab19-huber512 with rollback MOJOLEARN_HUBER_FAST_BLOCK512_OFF (x_linear/huber_fast.mojo:32); the board measures it |
-| `MOJOLEARN_PURITY2_2_OFF` | promoted | promoted _OFF arm (the logreg default since b994bfc88); promoted arms are not gridded, the board measures the all-on point |
-| `MOJOLEARN_FA_LIVEBUF` | blocked-quality | factor-analysis sits under HOLD-quality (FA_ALL / FA_GRAM_ONCE / FA_ITER_DEVICE); a speed cell on a held path is wasted |
 | `MOJOLEARN_SVGP_FAST_BSPLIT` | other-tool | needs tools/svgp_fast_quality.py first and tools/svgp_fast_pair.py, not the afc A/B scripts |
-| `MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD` | identical | IDENTICAL switch (nv/amd), not FAST: it is in the IDENTICAL grid |
-| `MOJOLEARN_IDN_GMM_COV_SYM` | identical | IDENTICAL switch (nv/amd), not FAST: it is in the IDENTICAL grid |
 | `MOJOLEARN_BPE_TRAIN_DEVICE, BPE_ENCODE_DEVICE, BPE_LIVEBUF, BPE_GROUP_FILTER, BPE_MERGE_BATCH, BPE_ALL (7 rows)` | out-of-scope | tokenizer, not trees/classical; not on main |
 | `MOJOLEARN_AFN_OPT_FUSE_SCAN, AFN_OPT_VEC4, AFN_OPT_RESIDENT_STATE` | out-of-scope | neural optimizers, not trees/classical |
 | `MOJOLEARN_OPT_FAST_PIPE_CH=524288` | out-of-scope | neural optimizer pipeline, not trees/classical |
@@ -222,8 +199,6 @@ configs in priority order (`s` single, `all` all-on, `x` cross); env configs are
 Lines the owning lane wrote for routes the board rows do not reach (or for a non-board shape); not in `grid-fast-queue.txt`.
 
 - `lq add m3 CMD lane/apple-fast-round2 afr2-sgd-er-reg-synth 'AFC_FAMILY=algos bash tools/afc_ab_def.sh afr2-sgd-er-reg-synth x_linear sgd-reg s-r600000-f48 1 1 "" "-D MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"'` (apple-fast-round2)
-- `lq add m3 CMD lane/apple-fast-round2 afr2-kshap-dm-rf 'bash tools/afr2_ab.sh afr2-kshap-dm-rf x_trees kshap-rf "-D MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"'` (apple-fast-round2)
-- `lq add m3 CMD lane/apple-fast-round2 afr2-pshap-dm-rf 'bash tools/afr2_ab.sh afr2-pshap-dm-rf x_trees pshap-rf "-D MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"'` (apple-fast-round2)
 - `lq add m3 CMD lane/apple-fast-round2 afr2-scaler-ft 'bash tools/afr2_ab.sh afr2-scaler-ft preprocessing scaler-ft "-D MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"'` (apple-fast-round2)
 
 ## How to queue (not run by this lane)

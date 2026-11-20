@@ -22,7 +22,7 @@ flushed on load and each intermediate is stored through `ftz` (one local
 per op) so a non-FTZ backend rounds where Metal rounds.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz
 

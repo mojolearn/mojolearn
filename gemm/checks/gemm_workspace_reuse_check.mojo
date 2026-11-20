@@ -13,7 +13,7 @@ from gemm.checks.gemm_step_arms import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GEMM_REUSE_GROUP_WS, "this check must exercise reusable grouped scratch"
     var ctx = DeviceContext()
     var ws = GemmWorkspace(ctx)
@@ -27,12 +27,23 @@ def main() raises:
             n = 769
             k = 1537
         elif shape == 2:
-            k = 257
+            # The shrink shape (fewer leaf groups than shape 0). It was
+            # k = 257 until 2026-11-19: since c98e7d4a6a (2026-10-01) the
+            # NVIDIA column steps a short chain (k <= GEMM_TILE_SHORT_K, 512)
+            # with under 192 blocks of 128x128 down to the 64x64 tile, all
+            # leaves in one launch and no group scratch, so the shipped
+            # dispatch never asked for grouped scratch there and the check
+            # stopped as blind on its first NVIDIA run. A k between the
+            # short-chain and the long-chain (4096) step-down gates keeps the
+            # 128x128 plan and its grouped scratch, like shapes 0 and 1.
+            k = 641
         var mn = m*n
         var gl = gemm_default_ksplit_leaves(m,n,k)
         var required = identical_gemm_workspace_max_floats(m,n,k)
         if gl <= 0 or required <= 1:
-            raise Error("blind shape: grouped workspace not selected")
+            raise Error("blind shape: grouped workspace not selected (shape="
+                        + String(shape) + " " + String(m) + "x" + String(n) + "x" + String(k)
+                        + " group_leaves=" + String(gl) + " required=" + String(required) + ")")
         var a = ctx.enqueue_create_buffer[DType.float32](m*k)
         var b = ctx.enqueue_create_buffer[DType.float32](k*n)
         var c0 = ctx.enqueue_create_buffer[DType.float32](mn)

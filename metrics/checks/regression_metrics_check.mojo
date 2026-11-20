@@ -76,7 +76,7 @@ ROW 39 AUDIT (2026-08-23) additions:
     0xffc00000, where it fails)
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import log, sqrt
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -118,7 +118,7 @@ from checks.numerics import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime N = 4099
 
 

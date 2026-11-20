@@ -8,9 +8,9 @@ cluster-cpu, 2026-09-28). HOST ONLY: no `std.gpu`, no `max.gpu`.
 contiguous tasks (`core/host_predict_threads.mojo`'s policy:
 MOJOLEARN_CPU_THREADS, else one task per physical core). The tasks go
 through `core/host_parallel.mojo::host_parallelize` (every task in the
-caller's floating-point environment, DEVIATION 5900) once that module is on
-main; until then they run in order on the calling thread (the brief: never
-parallelize a host loop without it). The split, and so every index's
+caller's floating-point environment, DEVIATION 5900; enabled by lane
+perf-host-grain, 2026-11-06, before which they ran in order on the calling
+thread). The split, and so every index's
 arithmetic, is the same either way. A caller hands it
 only bodies whose indices are independent: index t writes only its own
 output cells and reads nothing another index writes in the same call. Each
@@ -30,6 +30,7 @@ from std.memory import bitcast
 from std.sys import llvm_intrinsic
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 #: Scalar operations one task should carry at least, so a small call (a
@@ -61,10 +62,12 @@ def host_cells[F: def(Int) -> None](ref body: F, n: Int, cost: Int):
         for t in range(lo, hi):
             body(t)
 
-    # serial until core/host_parallel.mojo is on main (module docstring);
-    # then: host_parallelize(task, tasks)
-    for ci in range(tasks):
-        task(ci)
+    # lane perf-host-grain (2026-11-06): core/host_parallel.mojo is on main,
+    # so the tasks go over the pool as the module docstring planned. The
+    # split is the one the in-order loop ran, every index is independent and
+    # every task runs in the caller's floating-point environment, so no bit
+    # moves; HOST_CELLS_GRAIN above already kept small calls on this thread.
+    host_parallelize(task, tasks)
 
 
 @always_inline

@@ -42,7 +42,7 @@ def run[O: ClusterOps](
     return q^
 
 
-def main() raises:
+def run_checks() raises:
     var n = 80
     var d = 4
     var kc = 5

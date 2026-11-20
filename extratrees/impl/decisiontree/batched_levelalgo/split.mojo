@@ -64,10 +64,9 @@ struct Split(ImplicitlyCopyable, Movable):
 
 from std.atomic import Atomic, Ordering
 from core.device_mutex import claim_device_mutex
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
-from std.gpu.primitives import warp
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
+from max.gpu.primitives import warp
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -75,8 +74,10 @@ from extratrees.checks.pcg_rng import FNV1A32_BASIS, fmix32, fnv1a32
 
 
 
-comptime ET_TIE_BREAK_KEYED = not is_defined["MOJOLEARN_ET_TIE_MAX_COLID"]()
-"""DEVIATION 463's build switch."""
+# TOMBSTONE: MOJOLEARN_ET_TIE_MAX_COLID (DELETE-ARM, opt-in max-colid tie rule, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 47831cc734.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_TIE_MAX_COLID.patch; record in docs/TOMBSTONES.md.
+comptime ET_TIE_BREAK_KEYED = True
+"""DEVIATION 463's keyed tie break, the only rule (the checks import the name)."""
 
 comptime SPLIT_TIE_SALT: UInt32 = 0x7B31C853
 """DEVIATION 463's salt."""
@@ -270,9 +271,7 @@ struct SplitExact(ImplicitlyCopyable, Movable):
                     and self.key.valid != 0
                     and sabotage != SPLIT_SAB_FLOAT_KEY
                 ):
-                    var keyed = False
-                    comptime if ET_TIE_BREAK_KEYED:
-                        keyed = sabotage != SPLIT_SAB_MAX_COLID_TIE
+                    var keyed = sabotage != SPLIT_SAB_MAX_COLID_TIE
                     if keyed:
                         update_result = keyed_tie_wins(
                             tie_salt, other.split, self.split

@@ -41,7 +41,7 @@ visible.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -51,6 +51,7 @@ from neighbors.impl.matrix.detail.select_warpsort import (
     warpsort_topk_block_kernel,
 )
 from neighbors.impl.topk.warp_topk import WarpSelect
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime WS_ROWS = 8
@@ -185,7 +186,7 @@ def _one_case[
                 # share the k-th value and the tie handling is exercised.
                 v = Float32(Int(v * Float32(8.0))) / Float32(8.0)
             host.unsafe_ptr().unsafe_store(r * length + c, v)
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     _run_warpsort[capacity, block_warps](
@@ -198,9 +199,9 @@ def _one_case[
     var hw = ctx.enqueue_create_host_buffer[DType.float32](rows * eff_k)
     var hwi = ctx.enqueue_create_host_buffer[DType.uint32](rows * eff_k)
     var hr = ctx.enqueue_create_host_buffer[DType.float32](rows * eff_k)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w_val)
-    ctx.enqueue_copy(dst_ptr=hwi.unsafe_ptr(), src_buf=w_idx)
-    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=r_val)
+    download_host_into[DType.float32](ctx, w_val, hw)
+    download_host_into[DType.uint32](ctx, w_idx, hwi)
+    download_host_into[DType.float32](ctx, r_val, hr)
     ctx.synchronize()
 
     var bad = 0
@@ -297,14 +298,14 @@ def check_warpsort_reach_by_sabotage() raises:
     for r in range(rows):
         for c in range(length):
             host.unsafe_ptr().unsafe_store(r * length + c, _cell(r, c, 21))
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     _run_warpsort[CAP, BW](ctx, d_in, d_inidx, w_val, w_idx, rows, length, K)
     var base_v = ctx.enqueue_create_host_buffer[DType.float32](rows * K)
     var base_i = ctx.enqueue_create_host_buffer[DType.uint32](rows * K)
-    ctx.enqueue_copy(dst_ptr=base_v.unsafe_ptr(), src_buf=w_val)
-    ctx.enqueue_copy(dst_ptr=base_i.unsafe_ptr(), src_buf=w_idx)
+    download_host_into[DType.float32](ctx, w_val, base_v)
+    download_host_into[DType.uint32](ctx, w_idx, base_i)
     ctx.synchronize()
 
     # The window: big enough that the planted value MUST come back first,
@@ -315,14 +316,14 @@ def check_warpsort_reach_by_sabotage() raises:
     host.unsafe_ptr().unsafe_store(
         VICTIM_ROW * length + VICTIM_COL, PLANTED
     )
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     _run_warpsort[CAP, BW](ctx, d_in, d_inidx, w_val, w_idx, rows, length, K)
     var sab_v = ctx.enqueue_create_host_buffer[DType.float32](rows * K)
     var sab_i = ctx.enqueue_create_host_buffer[DType.uint32](rows * K)
-    ctx.enqueue_copy(dst_ptr=sab_v.unsafe_ptr(), src_buf=w_val)
-    ctx.enqueue_copy(dst_ptr=sab_i.unsafe_ptr(), src_buf=w_idx)
+    download_host_into[DType.float32](ctx, w_val, sab_v)
+    download_host_into[DType.uint32](ctx, w_idx, sab_i)
     ctx.synchronize()
 
     # 1. the planted value is in the victim row, with the right payload
@@ -439,7 +440,7 @@ def _one_warpselect_case[
     for r in range(rows):
         for c in range(length):
             host.unsafe_ptr().unsafe_store(r * length + c, _cell(r, c, salt))
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     ctx.enqueue_function[
@@ -457,8 +458,8 @@ def _one_warpselect_case[
 
     var hk = ctx.enqueue_create_host_buffer[DType.float32](rows * k)
     var hv = ctx.enqueue_create_host_buffer[DType.uint32](rows * k)
-    ctx.enqueue_copy(dst_ptr=hk.unsafe_ptr(), src_buf=d_ok)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=d_ov)
+    download_host_into[DType.float32](ctx, d_ok, hk)
+    download_host_into[DType.uint32](ctx, d_ov, hv)
     ctx.synchronize()
 
     var bad = 0
@@ -533,7 +534,7 @@ def check_warpselect_reach_by_sabotage() raises:
     for r in range(rows):
         for c in range(length):
             host.unsafe_ptr().unsafe_store(r * length + c, _cell(r, c, 41))
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     ctx.enqueue_function[_warpselect_probe_kernel[32, 2]](
@@ -542,14 +543,14 @@ def check_warpselect_reach_by_sabotage() raises:
     )
     ctx.synchronize()
     var base_k = ctx.enqueue_create_host_buffer[DType.float32](rows * K)
-    ctx.enqueue_copy(dst_ptr=base_k.unsafe_ptr(), src_buf=d_ok)
+    download_host_into[DType.float32](ctx, d_ok, base_k)
     ctx.synchronize()
 
     comptime VICTIM_ROW = 5
     comptime VICTIM_COL = 1777
     comptime PLANTED = Float32(-9999.0)
     host.unsafe_ptr().unsafe_store(VICTIM_ROW * length + VICTIM_COL, PLANTED)
-    ctx.enqueue_copy(dst_buf=d_in, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_in, host)
     ctx.synchronize()
 
     ctx.enqueue_function[_warpselect_probe_kernel[32, 2]](
@@ -559,8 +560,8 @@ def check_warpselect_reach_by_sabotage() raises:
     ctx.synchronize()
     var sab_k = ctx.enqueue_create_host_buffer[DType.float32](rows * K)
     var sab_v = ctx.enqueue_create_host_buffer[DType.uint32](rows * K)
-    ctx.enqueue_copy(dst_ptr=sab_k.unsafe_ptr(), src_buf=d_ok)
-    ctx.enqueue_copy(dst_ptr=sab_v.unsafe_ptr(), src_buf=d_ov)
+    download_host_into[DType.float32](ctx, d_ok, sab_k)
+    download_host_into[DType.uint32](ctx, d_ov, sab_v)
     ctx.synchronize()
 
     var found = False

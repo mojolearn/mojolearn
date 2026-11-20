@@ -2,13 +2,46 @@
 """Frozen b32103c00 Python paths of PageRank.fit, Louvain.fit/fit_predict,
 connected_components and SVGP.fit/predict/score, used only as an independent
 test oracle for their one-call native doors (lane native-neighbors-20261024)."""
+import os
 import struct
 
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty, zeros
-from mojolearn._lazy_out import _empty_out
-from mojolearn._expansion_neighbors import (
-    _XNeighbors, _f32, _f32_1d, _i32, _f32_scalar, _p2m_relabel, _OLD_ITEMS, _U_IDENTITY,
-)
+import mojolearn
+from mojolearn import Array
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, zeros, empty_out as _empty_out
+from mojolearn.tests._typed_input import as_f32_c
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
+
+# Local copies of the product's python/mojolearn/_expansion_neighbors.py helpers and flags.
+_U_IDENTITY = 6  # position 6 of `_U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)`
+_OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+
+
+def _take_rows(self, X, rows):
+    # oracle copy of the model helper deleted by ec78e70324 (product has no caller; recoverable at 8579360a2e)
+    rows = _i32(rows, "rows")
+    out = _empty_out((len(rows), X.shape[1]), "<f4")
+    self._op("take_rows", [(X, 0), (rows, 0), (out, 1)], (len(rows), X.shape[1], X.shape[0]))
+    return out
+
+
+def _f32_scalar(v):
+    """A Python double rounded once to float32, as a Python float."""
+    return Array.from_list([float(v)], "<f4").tolist()[0]
+
+
+def _p2m_relabel(est, lab, name=None):
+    """(count, labels): lab renumbered by first occurrence on the device
+    (`xn_p2m_relabel`), or None when a label falls outside [0, n)."""
+    n = lab.shape[0]
+    out = empty((max(n, 1),), "<i4")
+    info = empty((2,), "<i4")
+    getattr(est._bind(name), "xn_p2m_relabel")(
+        [addr_ro(lab, name="xn_p2m_relabel input"), addr(out, name="xn_p2m_relabel output"),
+         addr(info, name="xn_p2m_relabel output")], [n], [])
+    cnt, bad = info.tolist()
+    if bad:
+        return None
+    return int(cnt), out
 
 
 def _adjacency(A):
@@ -170,7 +203,9 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         raise NotImplementedError("connected_components: connection='strong' is not implemented")
     if connection not in ("weak", "strong"):
         raise ValueError("connection must be 'weak' or 'strong'")
-    est = _XNeighbors()
+    # oracle subject: the x_neighbors binding driver (`_op` / `_bind`) of a public estimator; the former
+    # internal `_XNeighbors()` base has no public name, PageRank inherits it unchanged.
+    est = mojolearn.PageRank()
     est.numeric_mode = numeric_mode
     csr = _csr_of(A)
     if csr is not None:
@@ -383,7 +418,7 @@ def svgp_fit(self, X, y):
         Z = _f32(self.inducing_points, "inducing_points")
     else:
         M = min(int(self.n_inducing), n)
-        Z = self._take_rows(X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
+        Z = _take_rows(self, X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
     M = Z.shape[0]
     # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
     # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile
@@ -451,7 +486,7 @@ def svgp_predict(self, X):
 
 def svgp_score(self, X, y, sample_weight=None):
     """`RegressorScoreMixin.score` as SVGP inherited it."""
-    from mojolearn._metrics_impl import r2_score
+    from mojolearn.metrics import r2_score
     truth, _ = as_f32_c(y, ndim=None, name="y")
     pred, _ = as_f32_c(svgp_predict(self, X), ndim=None, name="prediction")
     return r2_score(truth, pred, sample_weight=sample_weight,

@@ -117,6 +117,13 @@ def main() raises:
         var t3 = perf_counter_ns()
         print("TIMING_MS", rep, Float64(t1 - t0) / 1.0e6,
               Float64(t3 - t2) / 1.0e6)
+    _ = h_bin^  # past the drain: a queued copy reads it after its last named use
+    _ = h_ci^  # past the drain: a queued copy reads it after its last named use
+    _ = h_eq^  # past the drain: a queued copy reads it after its last named use
+    _ = h_leaf^  # past the drain: a queued copy reads it after its last named use
+    _ = h_mask^  # past the drain: a queued copy reads it after its last named use
+    _ = h_off^  # past the drain: a queued copy reads it after its last named use
+    _ = h_shift^  # past the drain: a queued copy reads it after its last named use
     with a.map_to_host() as ah, b.map_to_host() as bh:
         for i in range(N * DIM):
             if ah[i].to_bits() != bh[i].to_bits():

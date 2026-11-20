@@ -21,7 +21,7 @@ are integer adds of per-(row block, column) counts: exact in any order.
 A cell is missing when its exponent is all ones and its mantissa is not
 zero (a NaN), tested on the bits so no fast-math can fold `v != v`."""
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -31,8 +31,7 @@ from x_neighbors.device_ops import xn_ctx, _down_i
 from core.device_fold import device_sum_i32
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
-from std.sys.compile import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 
 comptime NC_TPB = 256
@@ -212,18 +211,21 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
 # download) is the transform's. With colmiss_only=1 the op runs the column
 # count kernel alone and stores their sum as the total (integer adds, the
 # same count). FAST + Apple default since the M3 A/B gmp-imp-taxi (with
-# TIE_MEAN); -D MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF restores the full pass.
-comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                            and not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"]())
+# TIE_MEAN); the full pass stays the path of every other build.
+# TOMBSTONE: MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 51fa31eeda.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NC_COLMISS_ONLY = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
-# FAST Apple default; MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF restores main.
+# FAST Apple default.
 # M3 w2-knn-lean-gpu-taxi-r1: 2.2 -> 0.8 ms; knn-lean-gpu-v2 quality
 # PASS: 31 arrays exact (transforms/flags/counts/total/empty refusal,
 # wide all-missing/all-present and pool reuse). Measured sourcef9c5887a8.
 # Both column counts and total use parallel GPU integer atomics; host does
 # no count reduction. Synchronize before return/pool reuse. See EXPERIMENTS.
-comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF (old path: the host count reduction of the FAST Apple KNNImputer fit; EXP:1049 DEFAULT) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at d91ea2daf9.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY
 
 # lane/neighbors-small-ports (2026-10-11, idea D3): -D MOJOLEARN_IDN_NC_FIT_LEAN admits
 # the same lean fit on IDENTICAL (default off, OPEN). Structural reason: KNNImputer.fit
@@ -235,9 +237,10 @@ comptime _NC_FIT_LEAN_FAST = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FA
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): knn-imputer istella 0.093 (NV 0.099, AMD
 #: 0.087); nearest-centroid 1.00/1.05 untouched; same bits; runs v0105/a1687 vs A v0104/a1686,
-#: v0103/a1685 vs A v0102/a1684. -D MOJOLEARN_IDN_NC_FIT_LEAN_OFF restores the old path.
-comptime _NC_FIT_LEAN_IDN = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-                             and not is_defined["MOJOLEARN_IDN_NC_FIT_LEAN_OFF"]())
+#: v0103/a1685 vs A v0102/a1684.
+# TOMBSTONE: MOJOLEARN_IDN_NC_FIT_LEAN_OFF (old path: the full cell compaction in the IDENTICAL KNNImputer fit; EXP:2049 KEEP, promoted 2026-10-11 on NVIDIA and AMD) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5ff291e065.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NC_FIT_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _NC_FIT_LEAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NC_FIT_LEAN = _NC_FIT_LEAN_FAST or _NC_FIT_LEAN_IDN
 
 
@@ -278,8 +281,8 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
     var total = n * d
     comptime if NC_FIT_LEAN:
         if colmiss_only == 1:
-            var bx = pool_take["MojoXNeighborsNanFitX"](ctx, total)
-            var bc = pool_take["MojoXNeighborsNanFitCmTotal"](ctx, d + 1)
+            var bx = pool_take["MojolearnXNeighborsNanFitXV2"](ctx, total)
+            var bc = pool_take["MojolearnXNeighborsNanFitCmTotalV2"](ctx, d + 1)
             if total > 0:
                 ctx.enqueue_copy(dst_buf=bx, src_ptr=FP(unsafe_from_address=x))
             ctx.enqueue_memset(bc, Float32(0.0))   # the int32 zero's bits
@@ -295,8 +298,8 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
             ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=info),
                              src_buf=bc.create_sub_buffer[DType.int32](d, 1))
             ctx.synchronize()
-            pool_give["MojoXNeighborsNanFitX"](bx^)
-            pool_give["MojoXNeighborsNanFitCmTotal"](bc^)
+            pool_give["MojolearnXNeighborsNanFitXV2"](bx^)
+            pool_give["MojolearnXNeighborsNanFitCmTotalV2"](bc^)
             return
     comptime if NC_COLMISS_ONLY:
         if colmiss_only == 1:
@@ -350,7 +353,7 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
         var threads = nrb * d
         ctx.enqueue_function[nan_colmiss_kernel](xp, d_cm.unsafe_ptr(), Int64(n), Int64(d),
                                                  grid_dim=(threads + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
-    var hinfo = List[Int32](length=1, fill=Int32(0))
+    var hinfo = List[Int32](unsafe_uninit_length=1)
     ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=d_info)
     if d > 0:
         _down_i(ctx, d_cm, colmiss, d)

@@ -1,0 +1,314 @@
+[
+  {
+    "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn",
+    "HEAD": "465268739989b40d582aca7de41f14fde2e4209d",
+    "branch": "refs/heads/merge/small-tooling-20261111",
+    "status": [
+      "?? docs/measurements/latest/auto/bench-board-amd.json",
+      "?? docs/measurements/latest/auto/bench-board-apple-smoke.json",
+      "?? docs/measurements/latest/auto/bench-board-apple.json",
+      "?? docs/measurements/latest/auto/bench-board-nvidia.json"
+    ],
+    "status_exit": 0,
+    "branch_name": "merge/small-tooling-20261111",
+    "remote_head": null
+  },
+  {
+    "worktree": "/Users/andrewhendel/.cache/mojolearn-sites/mojolearn",
+    "HEAD": "bb9077c09fa6d2f0395bb9b869cb78d005422dd9",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+0ce88411d382/source/0ce88411d382",
+    "HEAD": "0ce88411d382095258b0356164f84969fa8f9214",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.em1/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.em8/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.greedyoff/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.sgd1/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.svd1/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96/source/cd02a3f6fe96",
+    "HEAD": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/admit-tree",
+    "HEAD": "9d70418446aa876bfd10ea5e7c19d31199610939",
+    "branch": "refs/heads/ref/43b5f7c320e0",
+    "status": [
+      " M docs/verification/latest/auto/identity-apple-m4.json",
+      "?? docs/verification/latest/auto/identity-amd-mi325x.json",
+      "?? docs/verification/latest/auto/identity-cpu-amd-epyc-7763-64-core-processor.json",
+      "?? docs/verification/latest/auto/identity-cpu-amd-epyc-9v45-96-core-processor.json",
+      "?? docs/verification/latest/auto/identity-nvidia-l40s.json",
+      "?? docs/verification/latest/auto/identity-nvidia-ptx-l40s-sm80.json"
+    ],
+    "status_exit": 0,
+    "branch_name": "ref/43b5f7c320e0",
+    "remote_head": "9d70418446aa876bfd10ea5e7c19d31199610939"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/43b5f7c320e0",
+    "HEAD": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/abcd7a637456",
+    "HEAD": "abcd7a6374565a9ce79447abee1296993a6e09a1",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/bc4ecd4518a9",
+    "HEAD": "bc4ecd4518a90965f8646de0f7b61819d58b79f0",
+    "detached": "",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": ""
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/apple-emb9",
+    "HEAD": "b9c8519e16347762d0b7f9d2ba36e86c0560522d",
+    "branch": "refs/heads/lane/apple-emb9",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/apple-emb9",
+    "remote_head": "b9c8519e16347762d0b7f9d2ba36e86c0560522d"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/boundary-ridge-native-20261110",
+    "HEAD": "11ded379b3cee833fc577eaba5b9865060a5bb73",
+    "branch": "refs/heads/lane/boundary-mojo12-string-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/boundary-mojo12-string-20261111",
+    "remote_head": "11ded379b3cee833fc577eaba5b9865060a5bb73"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-python-followon-20261111",
+    "HEAD": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+    "branch": "refs/heads/preinteg/native-consolidated-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "preinteg/native-consolidated-20261111",
+    "remote_head": "33b043de8b94b06d79f750ba6ae4c34533cc594d"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-python-next-20261110",
+    "HEAD": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "branch": "refs/heads/integ/python-boundary-next-20261110",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "integ/python-boundary-next-20261110",
+    "remote_head": "21f43e730fe059e5f5a1e4ba9bd4f36fff9268ea"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-python-repair-20261110",
+    "HEAD": "ddc7339720a033ce16d5e3c5cccc066d431cbec8",
+    "branch": "refs/heads/integ/python-boundary-repair-20261110",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "integ/python-boundary-repair-20261110",
+    "remote_head": "3562c0494edc37455a8bbbe88948fd93182429ec"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-select2",
+    "HEAD": "23a69302e94e17b08c22d42cbfdd0342346e4a72",
+    "branch": "refs/heads/integ/select2-20261105",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "integ/select2-20261105",
+    "remote_head": null
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-tooling-20261105b",
+    "HEAD": "f4d37b4c5b9b24af6e667b9b2285404f4471339d",
+    "branch": "refs/heads/integ/tooling-20261105b",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "integ/tooling-20261105b",
+    "remote_head": "5143bba16edd4210ba745a7fe7c2051f9ffc9520"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/integ-w3",
+    "HEAD": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "branch": "refs/heads/integ/python-boundary-20261110",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "integ/python-boundary-20261110",
+    "remote_head": "f71b8635460146d157fd40310766aa5fd1a92dae"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/lane-select-glue-attribution",
+    "HEAD": "3eebfe3e4ee73faa417aaa4dc853075e91bb338e",
+    "branch": "refs/heads/lane/lane-select-glue-attribution",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/lane-select-glue-attribution",
+    "remote_head": "3eebfe3e4ee73faa417aaa4dc853075e91bb338e"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/lane-select-pandas-conservative-20261111",
+    "HEAD": "591e66ba5865b5d532b831984c759a5def2a9be1",
+    "branch": "refs/heads/lane/lane-select-pandas-conservative-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/lane-select-pandas-conservative-20261111",
+    "remote_head": "591e66ba5865b5d532b831984c759a5def2a9be1"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/main-integration-20261110",
+    "HEAD": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "branch": "refs/heads/main",
+    "status": [
+      "?? PREINTEGRATION_MERGE_HOLD_20261111"
+    ],
+    "status_exit": 0,
+    "branch_name": "main",
+    "remote_head": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/mojo-finite-tests-20261110",
+    "HEAD": "731b06a5cb26669d22fdb8c84ce51fa9dee7a388",
+    "branch": "refs/heads/lane/mojo-finite-tests-20261110",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/mojo-finite-tests-20261110",
+    "remote_head": "731b06a5cb26669d22fdb8c84ce51fa9dee7a388"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/mojo-gpr-score-tests-20261111",
+    "HEAD": "ee2b7485990956dfaa5e81f411e114d011ba1f16",
+    "branch": "refs/heads/lane/mojo-gpr-score-tests-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/mojo-gpr-score-tests-20261111",
+    "remote_head": "ee2b7485990956dfaa5e81f411e114d011ba1f16"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/mojo-native-tests-20261110",
+    "HEAD": "c8942f9ba6c274ccca3db4293a691069cdb9b5cb",
+    "branch": "refs/heads/lane/mojo-native-tests-20261110",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/mojo-native-tests-20261110",
+    "remote_head": "c8942f9ba6c274ccca3db4293a691069cdb9b5cb"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/native-entry-table-20261111",
+    "HEAD": "5fa0da28531420bbcde0c1466763f38b5c0618b3",
+    "branch": "refs/heads/lane/native-entry-table-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/native-entry-table-20261111",
+    "remote_head": "5fa0da28531420bbcde0c1466763f38b5c0618b3"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/ne-bisect-hang",
+    "HEAD": "a002c5dfbe238574054ea134d7aaa73d3251b5bd",
+    "branch": "refs/heads/lane/ne-bisect-hang",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/ne-bisect-hang",
+    "remote_head": "a002c5dfbe238574054ea134d7aaa73d3251b5bd"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/ne-fix-hang3",
+    "HEAD": "23d145442e31e89796125dc07f5b1eefc1ce4759",
+    "branch": "refs/heads/lane/ne-fix-hang3",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/ne-fix-hang3",
+    "remote_head": "23d145442e31e89796125dc07f5b1eefc1ce4759"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/ne-fix-hang4",
+    "HEAD": "fd39b43fc03c291a885ebb0b530d5f5bef3e5afd",
+    "branch": "refs/heads/lane/ne-fix-hang4",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/ne-fix-hang4",
+    "remote_head": "fd39b43fc03c291a885ebb0b530d5f5bef3e5afd"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/nvidia-one-wheel",
+    "HEAD": "bd21a17d0a373fbeb490d0d22b3f190654086269",
+    "branch": "refs/heads/lane/nvidia-one-wheel",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/nvidia-one-wheel",
+    "remote_head": "bd21a17d0a373fbeb490d0d22b3f190654086269"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/reference-admit",
+    "HEAD": "f9ad06b001463e1812492e6eb1a092955973bd80",
+    "branch": "refs/heads/ref/fca4c4773eff",
+    "status": [
+      " M docs/verification/latest/auto/identity-apple-m4.json",
+      "?? docs/verification/latest/auto/identity-cpu-amd-epyc-7542-32-core-processor.json"
+    ],
+    "status_exit": 0,
+    "branch_name": "ref/fca4c4773eff",
+    "remote_head": "f9ad06b001463e1812492e6eb1a092955973bd80"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-wt/svm-native-20261111",
+    "HEAD": "1291580daa5e41276cdf6ed05cab6be9fb03bd85",
+    "branch": "refs/heads/lane/svm-native-20261111",
+    "status": [],
+    "status_exit": 0,
+    "branch_name": "lane/svm-native-20261111",
+    "remote_head": "1291580daa5e41276cdf6ed05cab6be9fb03bd85"
+  }
+]

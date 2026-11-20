@@ -5,7 +5,7 @@ The job axis changes operand/output offsets only. The production FLAT body's
 leaf boundaries and fold are called unchanged; contractions are never joined.
 This tests launch batching separately from tiled shared-operand staging.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import (
     _flat_cell_body, contract_partition, gemm_operand_strides,

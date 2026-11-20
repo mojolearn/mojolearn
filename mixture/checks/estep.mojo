@@ -75,12 +75,12 @@ keeping it out of the E-step keeps the E-step total: given parameters, it
 cannot fail.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from mixture.meanll_order import GMM_MEANLL_CHUNK, gmm_meanll_levels_floats
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import exp as fast_exp, log as fast_log
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -89,6 +89,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
+from mixture.step_keep import (
+    GMM_KEEP_BATCH_MU, GMM_KEEP_BATCH_PREC, GMM_KEEP_BATCH_WS, GMM_KEEP_BATCH_Y, GMM_KEEP_STACK_MU, GMM_KEEP_STACK_PREC,
+    GMM_KEEP_STACK_WS, GMM_KEEP_STACK_Y, gmm_keep_buffer,
+)
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -136,7 +140,7 @@ comptime GMM_ELEM_TPB = 256
 # Each row retains its complete component/feature fold and stable logsumexp;
 # more independent blocks trade staged-parameter reuse for occupancy.
 comptime AFCL_G08 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G08"]()
 )
 
@@ -511,7 +515,7 @@ def log_resp_kernel(
 
 comptime GMM_FAST_ESTEP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_GMM_FAST_FUSED_ESTEP_OFF"]()
 )
 """FAST on Apple: the E-step's per-component `X . P_k` GEMMs, `mu_k . P_k`,
@@ -1017,14 +1021,14 @@ def gmm_estep_scratch_floats(n: Int, d: Int) -> Int:
 #: takes the stacked E-step on the NVIDIA and AMD columns too. Same words
 #: (the argument above is vendor neutral); whether the launches it saves
 #: outweigh the `n x Kd` operand there is for the orchestrator's A/B to say.
-#: Off under `MOJOLEARN_IDN_ALL_OFF`.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_GMM_ESTEP_STACK = (
     is_defined["MOJOLEARN_IDN_GMM_ESTEP_STACK"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GMM_ESTEP_STACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and (has_apple_gpu_accelerator() or IDN_GMM_ESTEP_STACK)
+    and (TARGET_HAS_APPLE_GPU or IDN_GMM_ESTEP_STACK)
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
@@ -1099,10 +1103,11 @@ def mahal_stacked_kernel(
 # Remains OFF: these representative fits lose, and full-board qualification
 # remains pending. Other existing GMM controls are unchanged.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime GMM_COMPONENT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GMM_COMPONENT_BATCH_FLOATS = 1 << 22  # all extra scratch <=16 MiB
 
@@ -1169,6 +1174,7 @@ def gmm_e_step(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    keep_addr: Int = 0,
 ) raises:
     """**THE E-STEP.** Given the parameters, produce `mahal`, `wlp`,
     `rowmax`, `lse`, `logresp` and the mean log likelihood.
@@ -1293,11 +1299,12 @@ def gmm_e_step(
             # their own row stride. Both GEMMs and the consumer are stream
             # ordered before the next batch reuses these buffers.
             var kdmax = width*d
-            var pbatch = ctx.enqueue_create_buffer[DType.float32](d*kdmax)
-            var ybatch = ctx.enqueue_create_buffer[DType.float32](n*kdmax)
-            var mbatch = ctx.enqueue_create_buffer[DType.float32](width*kdmax)
+            # held by the EM loop's keep (mixture/step_keep.mojo): no drain
+            var pbatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_PREC, d*kdmax)
+            var ybatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_Y, n*kdmax)
+            var mbatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_MU, width*kdmax)
             var wsmax = gmm_component_batch_workspace(n,d,width)
-            var bws = ctx.enqueue_create_buffer[DType.float32](wsmax)
+            var bws = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_WS, wsmax)
             for first in range(0,ncomp,width):
                 var count = min(width,ncomp-first)
                 var kd = count*d
@@ -1308,7 +1315,8 @@ def gmm_e_step(
                 identical_gemm_into(ctx,mbatch,mus,pbatch,bws,count,kd,d,OP_NN)
                 ctx.enqueue_function[mahal_component_batch_kernel](ybatch.unsafe_ptr(),mbatch.unsafe_ptr(),mahal.unsafe_ptr(),Int32(n),Int32(d),Int32(ncomp),Int32(first),Int32(count),grid_dim=((n*count+row_tpb-1)//row_tpb,1,1),block_dim=(row_tpb,1,1))
                 _ = ps^; _ = mus^
-            ctx.synchronize()
+            if keep_addr == 0:
+                ctx.synchronize()
             _ = pbatch^; _ = ybatch^; _ = mbatch^; _ = bws^
     var stacked = False
     comptime if GMM_ESTEP_STACK:
@@ -1319,12 +1327,12 @@ def gmm_e_step(
         )
     if stacked:
         var kd = ncomp * d
-        var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)
-        var ystack = ctx.enqueue_create_buffer[DType.float32](n * kd)
-        var mstack = ctx.enqueue_create_buffer[DType.float32](ncomp * kd)
+        var pstack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_PREC, d * kd)
+        var ystack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_Y, n * kd)
+        var mstack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_MU, ncomp * kd)
         var w1 = identical_gemm_workspace_max_floats(n, kd, d)
         var w2 = identical_gemm_workspace_max_floats(ncomp, kd, d)
-        var sws = ctx.enqueue_create_buffer[DType.float32](max(w1, w2))
+        var sws = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_WS, max(w1, w2))
         ctx.enqueue_function[stack_prec_kernel](
             prec.unsafe_ptr(), pstack.unsafe_ptr(), Int32(d), Int32(ncomp),
             grid_dim=((d * kd + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -1337,7 +1345,8 @@ def gmm_e_step(
             grid_dim=((n * ncomp + row_tpb - 1) // row_tpb, 1, 1),
             block_dim=(row_tpb, 1, 1),
         )
-        ctx.synchronize()
+        if keep_addr == 0:
+            ctx.synchronize()
         _ = pstack^
         _ = ystack^
         _ = mstack^

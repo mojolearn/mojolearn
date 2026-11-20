@@ -2,22 +2,24 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Borrowed Float32 arrays; GPU arithmetic; no context or pointer retained."""
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.hostptr import f32_ptr
+from core.experiment_guards_base import BASE_GUARDS_OK
+from preprocessing.mojolearn_preprocessing_run import ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.shared_slot import SharedSlot
+from core.scaler_native_api import ScalerProviderAPI
+from core.scaler_native_device import ScalerDeviceKernels
+from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
+from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
+from x_prep.transport_abi import xp_vendor_word
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
 from preprocessing.minmax import PREP_FAST_MINMAX
 from preprocessing.estimator import PREP_FAST_FIT_TRANSFORM_FUSED, standard_fit_transform_direct, minmax_fit_transform_direct
-
-
-def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("preprocessing: null Float32 pointer")
-    return f32_ptr(addr)
 
 
 def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -209,6 +211,9 @@ def standard_fit_transform_direct_binding(
     with GILReleased(Python()):
         ok = standard_fit_transform_direct(x,n,d,with_mean,with_std,stats,output)
     return PythonObject(ok)
+# TOMBSTONE: MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (unmeasured opt-in arm, EXP:1597 OPEN: the FAST + Apple standard_fit_transform_direct export) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 7fbbccf216.
+# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.expdel2-01-base.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def standard_fit_transform_binding(
@@ -272,9 +277,32 @@ def vendor_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_preprocessing.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+comptime SCALER_DEVICE_NATIVE_API = SharedSlot[ScalerProviderAPI[ScalerDeviceKernels], ("MojolearnScalerDeviceNativeV1Identical" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnScalerDeviceNativeV1Fast")]
+
+
+def scaler_native_api_v1_binding() raises -> PythonObject:
+    var api = SCALER_DEVICE_NATIVE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def publish_scaler_table_device() raises:
+    """Publish this image's scaler kernel entry in the prep entry table
+    (family PREP_TABLE_SCALER) at module init, keyed like the x_prep
+    transport (x_prep/transport_device.mojo): a build with no GPU vendor
+    word publishes nothing, so the host image owns vendor word 0."""
+    var word = xp_vendor_word(String(COMPILED_VENDOR))
+    if word <= 0:
+        return
+    var api = SCALER_DEVICE_NATIVE_API.get_or_create_ptr()
+    prep_table_publish[PREP_TABLE_SCALER](PrepEntryKey(Int(GLOBAL_NUMERIC_MODE), word), Int(api),
+        [String(SCALER_NATIVE_ABI)], [SCALER_OP_COUNT], api[].entries)
+
+
 def build__mojolearn_preprocessing() -> PythonObject:
+    comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing")
+        m.def_function[scaler_native_api_v1_binding]("scaler_native_api_v1")
         m.def_function[standard_fit_binding]("standard_fit")
         m.def_function[standard_transform_binding]("standard_transform")
         m.def_function[fit_binding]("minmax_fit")
@@ -291,6 +319,8 @@ def build__mojolearn_preprocessing() -> PythonObject:
         m.def_function[minmax_fit_transform_binding]("minmax_fit_transform")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[vendor_binding]("preprocessing_vendor")
-        return m.finalize()
+        var published_module = m.finalize()
+        publish_scaler_table_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_preprocessing: ",e))

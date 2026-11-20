@@ -1,0 +1,32 @@
+{
+  "source": "python/mojolearn/tests/test_gmm_sample.py::_blobs",
+  "numpy": "2.5.2",
+  "generator_sha256": "b03b2cf423b8f07f164b9ed078f3f302bb4a83a6420dc163140fca27a689f871",
+  "files": [
+    {
+      "file": "blobs-seed1-3000x3.f32",
+      "shape": [
+        3000,
+        3
+      ],
+      "sha256": "4675ccdaf0bece783c16841e09ac4fef0da7afd31b593e95c3c3f065724b7fbf"
+    },
+    {
+      "file": "blobs-seed2-6000x3.f32",
+      "shape": [
+        6000,
+        3
+      ],
+      "sha256": "789f4a9b178af569ae13fa329d6bf99239d4226df8d59e4f264f66f4325a8e1d"
+    },
+    {
+      "file": "blobs-seed3-3000x3.f32",
+      "shape": [
+        3000,
+        3
+      ],
+      "sha256": "90abbe68f7a275e8ded72a865341b2d6bfec90e165aa00658ae2456f661afee5"
+    }
+  ],
+  "limits": "Input generation only; no Mojolearn execution, timing or identity evidence."
+}

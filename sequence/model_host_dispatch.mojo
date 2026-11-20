@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Target-specific ownership only; both doors share the same whole-model engine.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_HOST
 from autograd.program_import_request import program_import_request
@@ -9,9 +8,12 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
+from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
 from sequence.model_outputs_host import model_output_host
 from sequence.exec import HostExec
 from core.label_cast import host_unique_inverse_cast
+from core.shared_slot import SharedSlot
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -58,6 +60,25 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             ops_session_close[HostExec, OPS_HOST](addresses[0])
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
             return 0
+        if op == CNN_FIT or op == CNN_PREDICT or op == CNN_OPEN:
+            # lane x8-cnn-on-executor: CNNClassifier as one captured program
+            # (Program.fit) on a fresh executor; lane x8b: predict replays the
+            # forward on the resident registry session CNN_OPEN made (the
+            # binding opens it with the GIL held, as SESSION_OPEN)
+            var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
+            var written = 0
+            if op == CNN_FIT:
+                written = cnn_fit_program[HostExec](HostExec(), cnn.addresses, cnn.options, cnn.floats)
+            elif op == CNN_OPEN:
+                if nf != 0:
+                    raise Error("native CNN: the resident open takes no scalar descriptors")
+                written = cnn_open_program[HostExec, OPS_HOST](HostExec(), cnn.addresses, cnn.options)
+            else:
+                if nf != 0:
+                    raise Error("native CNN: predict takes no scalar descriptors")
+                written = cnn_predict_program[HostExec, OPS_HOST](cnn.addresses, cnn.options)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = written
+            return 0
         var ex = HostExec()
         var value = 0
         if op >= RNN_FIT:
@@ -97,5 +118,4 @@ struct NativeModelAPI(Defaultable, Movable):
         self.entries.append(model_native_v1)
 
 
-comptime NATIVE_MODEL_API = _Global[StorageType=NativeModelAPI,
-    name="MojoWholeModelHostNativeAPIv1", init_fn=NativeModelAPI.__init__]
+comptime NATIVE_MODEL_API = SharedSlot[NativeModelAPI, ("MojolearnWholeModelHostNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelHostNativeAPIFastV3")]

@@ -4,7 +4,7 @@ layout kernel. The device VJP is assembled on the tape
 (autograd/rules_mamba.mojo::mamba1_tape_backward), which launches this file's
 kernel; the CPU column's hand walk is mamba/host/mamba1_prefill_chain.mojo.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from mamba.checks.mamba_fixture import D_CONV
 
 

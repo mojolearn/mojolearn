@@ -5,11 +5,12 @@ out=${1:?absolute output directory}
 arch=${2:-gfx942}
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+. bindings/compile_jobs.sh  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 mkdir -p "$out"
 git rev-parse HEAD > "$out/source-head.txt"
 git diff --binary HEAD > "$out/source-changes.patch"
 cp .git/devpod_synced "$out/synced-source.txt" 2>/dev/null || true
-tar -czf "$out/adapter-source.tar.gz" adapters tools/build_native_adapters.sh tools/check_native_adapters.py
+tar -czf "$out/adapter-source.tar.gz" adapters tools/build_native_adapters.sh tools/check_native_adapters.py bindings/compile_jobs.sh
 pixi run mojo --version > "$out/compiler.txt" 2>&1
 host_flags=()
 target_flags=()
@@ -33,7 +34,7 @@ case "$(uname -s)" in
 esac
 # Python is an external build controller. This process-group deadline works on
 # Linux and macOS without requiring a GNU timeout executable on the Apple host.
-python3 - "$out" pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" \
+python3 - "$out" pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" \
     --emit shared-lib "${host_flags[@]}" "${target_flags[@]}" \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${column_flags[@]}" -I . -I bindings \
     adapters/native/c_api.mojo -o "$out/libmojolearn_adapter.so" <<'PY'

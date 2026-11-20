@@ -42,10 +42,11 @@ def policy_environment(environment):
     """The release producer always collects the ordinary full fixture/part set.
 
     The ledger decides the lanes (unchanged PASS units are reused by
-    begin_many) and passes them as LANES, so the recorder's own automatic reuse
-    and its FULL=1 override do not apply: a forced re-record of unchanged lanes
-    goes through the ledger's explicit --redo --rerun-reason, never FULL."""
-    for key in ('FIXTURES', 'PARTIAL_COLUMN', 'SKIP', 'ONLY_CHANGED', 'SHARD', 'FULL',
+    begin_many) and passes them as LANES, so the recorder's own opt-in reuse
+    (REUSE=1) does not apply and is refused here, as is the retired FULL: a
+    forced re-record of unchanged lanes goes through the ledger's explicit
+    --redo --rerun-reason."""
+    for key in ('FIXTURES', 'PARTIAL_COLUMN', 'SKIP', 'ONLY_CHANGED', 'SHARD', 'FULL', 'REUSE',
                 'MOJOLEARN_IDENTITY_N', 'MOJOLEARN_IDENTITY_WIDE', 'MOJOLEARN_PAR_DEVICES'):
         require(not environment.get(key), key + ' narrows or overrides the release column; remove it')
     require(environment.get('REPEATS', '1') == '1', 'release identity needs exactly one repeat')

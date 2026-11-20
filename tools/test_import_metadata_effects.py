@@ -117,6 +117,14 @@ def test_rebound_callee_does_not_acquire_old_function_permission():
     assert not proof("context['formats'] = dict(formats)", caller)
 
 
+# lane_select._metadata_registry_guard proves _FORMATS keeps its literal contents only while the expansion doors'
+# and scaler bridges' reviewed import hashes are current; since 2026-10-24 every one of them has moved, so the real
+# guard keeps broad selection (safe) and any proof over the real connector would be vacuous. These tests check the
+# connector analysis itself, as if the registry review were current: the stub keeps the guard's shape conditions.
+def REVIEWED_GUARD(rel, name, mutators):
+    return rel == "python/mojolearn/_classical_host.py" and name == "_FORMATS" and len(mutators) == 1
+
+
 def real_connector_call():
     rel = "python/mojolearn/_classical_host.py"
     calls = [
@@ -132,15 +140,33 @@ def real_connector_call():
     return rel, calls[0]
 
 
-def test_actual_archive_connector_is_storage_and_native_descriptor_installation():
+def test_actual_archive_connector_publishes_class_derived_metadata_and_stays_wide():
+    # b345355285 made the connector publish host_archive_fitted_estimators from callable(getattr(cls, "fit", None))
+    # over the registry's classes: a class-derived value (like hasattr, refused above), so the real connector is
+    # not metadata-only and lane_select keeps broad selection for _FORMATS edits, even with a current review.
     rel, call = real_connector_call()
-    assert metadata_only_call(
+    assert not metadata_only_call(
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, REVIEWED_GUARD
+    )
+    assert not metadata_only_call(
         rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
     )
-    # Erasing the proof of the native descriptor factory must remove admission.
-    assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, ls._parse, lambda *args: False, ls._metadata_registry_guard
-    )
+
+
+def test_try_blocks_are_analysed_on_every_path():
+    # 8927e97ba6 put a try/except around an import-time probe in the archive connector
+    assert proof("""
+        try:
+            mode = int(unknown_probe())
+        except Exception:
+            mode = -1
+        context['formats'] = {fmt: dict(classes) for fmt, classes in formats.items()}
+    """)
+    for handler in ("    for classes in formats.values():\n        for cls in classes.values():\n            cls.changed()",
+                    "    publish(formats)"):
+        assert not proof("try:\n    mode = 1\nexcept Exception:\n" + handler)
+        assert not proof("try:\n    mode = 1\nfinally:\n" + handler)
+        assert not proof("try:\n" + handler + "\nexcept Exception:\n    pass")
 
 
 def test_actual_tree_descriptor_installation_requires_a_proved_plain_class(monkeypatch):
@@ -154,7 +180,7 @@ def test_actual_tree_descriptor_installation_requires_a_proved_plain_class(monke
     cls.keywords.append(ast.keyword(arg="metaclass", value=ast.Name(id="UnknownMeta", ctx=ast.Load())))
     monkeypatch.setattr(ls, "_parse", lambda p: tree if p == path else original(p))
     assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, REVIEWED_GUARD
     )
 
 
@@ -177,14 +203,16 @@ def test_actual_connector_perturbations_require_wide_selection(extra):
     connect.body.extend(ast.parse(dedent(extra)).body)
     parse = lambda path: changed if path == bridge else ls._parse(path)
     assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {"_FORMATS"}, parse, ls._native_metadata_factory, REVIEWED_GUARD
     )
 
 
-def test_class_layout_edits_do_not_enable_the_method_only_exception():
+def test_class_layout_edits_do_not_enable_the_method_only_exception(monkeypatch):
+    monkeypatch.setattr(ls, "_metadata_registry_guard", REVIEWED_GUARD)
     rel, call = real_connector_call()
     assert ls._import_time_hits(ast.Expr(value=call), {"_FORMATS"}, set(), set()) == "_FORMATS"
-    assert ls._import_time_hits(ast.Expr(value=call), {"_FORMATS"}, set(), set(), rel=rel) is None
+    # the real connector is not metadata-only (b345355285), so the method-only exception never applies to it
+    assert ls._import_time_hits(ast.Expr(value=call), {"_FORMATS"}, set(), set(), rel=rel) == "_FORMATS"
 
 
 def test_a_native_factory_that_executes_its_argument_is_not_storage(monkeypatch):
@@ -203,7 +231,7 @@ def test_a_native_factory_that_executes_its_argument_is_not_storage(monkeypatch)
     monkeypatch.setattr(ls._MojoDefGraph, "text", changed)
     rel, call = real_connector_call()
     assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, REVIEWED_GUARD
     )
 
 
@@ -249,7 +277,7 @@ def test_new_expansion_providers_and_module_hooks_invalidate_the_registry_proof(
     changed = ast.parse(text)
     monkeypatch.setattr(ls, "_parse", lambda p: changed if p == path else original(p))
     assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, REVIEWED_GUARD
     )
 
 
@@ -271,7 +299,7 @@ def test_changing_an_existing_imported_connector_invalidates_import_review(monke
     changed = ast.parse(source.replace(signature, signature + '\n' + extra))
     monkeypatch.setattr(ls, '_parse', lambda p: changed if p == path else original(p))
     assert not metadata_only_call(
-        rel, call, {'_FORMATS'}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {'_FORMATS'}, ls._parse, ls._native_metadata_factory, REVIEWED_GUARD
     )
 
 

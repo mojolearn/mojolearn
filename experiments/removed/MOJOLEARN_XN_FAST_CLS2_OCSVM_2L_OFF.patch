@@ -1,0 +1,26 @@
+diff --git a/x_neighbors/ocsvm_dev.mojo b/x_neighbors/ocsvm_dev.mojo
+index ed3612df9a..291fdf1ce9 100644
+--- a/x_neighbors/ocsvm_dev.mojo
++++ b/x_neighbors/ocsvm_dev.mojo
+@@ -74,8 +74,8 @@ comptime OCSVM_CHUNK = 64
+ comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ # All three are the FAST + Apple default since the M3 A/B (n=1, quality
+ # identical): ocsvm taxi 375.7 -> 65.0 ms (RES+2L+CHUNK256; RES alone -77%).
+-# -D MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF turns CHUNK256 off; the old
+-# -D names stay harmless. RES and 2L have no rollback:
++# -D MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF / _CHUNK256_OFF turn those two
++# off; the old -D names stay harmless. RES has no rollback:
+ # TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 976cce176d.
+ # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime OCSVM_CLS2_RES = _OC_FA
+@@ -99,9 +99,7 @@ comptime OCSVM_IDN_RES = _OC_IDN
+ comptime OCSVM_X_ON = OCSVM_CLS2_RES or OCSVM_IDN_RES
+ # TOMBSTONE: MOJOLEARN_IDN_OCSVM_2L_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 8930967ba7.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_OCSVM_2L_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF (old path, EXP:357 KEEP FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at b69e215f3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime OCSVM_CLS2_2L = _OC_FA or _OC_IDN
++comptime OCSVM_CLS2_2L = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()) or _OC_IDN
+ comptime OCSVM_CLS2_CHUNK256 = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()) or (
+     _OC_IDN and is_defined["MOJOLEARN_IDN_OCSVM_CHUNK256"]()
+ )

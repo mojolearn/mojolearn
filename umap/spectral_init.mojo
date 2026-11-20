@@ -4,7 +4,7 @@
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
@@ -19,14 +19,18 @@ from spectral.impl.preprocessing.detail.spectral_embedding import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 comptime UMAP_INIT_TOL_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_UMAP_INIT_TOL"]()
-    and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
 )
+# TOMBSTONE: MOJOLEARN_UMAP_INIT_TOL (opt-in arm, quality loss, no A/B kept) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at ade07601c8.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_INIT_TOL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_UMAP_INIT_TOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 976872a147.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_INIT_TOL_OFF.patch; record in docs/TOMBSTONES.md.
 """FAST on Apple: the spectral INITIALIZATION solves to 1e-3 instead of
 cuVS's 1e-5; the layout is only a starting point the optimizer then moves.
 At 1e-4 (umap-learn's `eigsh` tolerance) taxi 100k took 37 Lanczos restarts,
@@ -155,7 +159,7 @@ def _spectral_post_pass_device(
         grid_dim=(blocks, 1, 1),
         block_dim=(SPECTRAL_POST_TPB, 1, 1),
     )
-    var ws = List[Int32](length=3 * n_components, fill=Int32(0))
+    var ws = List[Int32](unsafe_uninit_length=3 * n_components)
     ctx.enqueue_copy(dst_ptr=ws.unsafe_ptr(), src_buf=d_ws)
     ctx.synchronize()
     # The refusals in the host walk's order: column by column, a non-finite
@@ -175,7 +179,7 @@ def _spectral_post_pass_device(
         grid_dim=(blocks, 1, 1),
         block_dim=(SPECTRAL_POST_TPB, 1, 1),
     )
-    var out = List[Float32](length=total, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=total)
     ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=d_out)
     ctx.synchronize()
     _ = d_ws^

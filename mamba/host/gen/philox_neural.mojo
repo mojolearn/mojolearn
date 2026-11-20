@@ -36,6 +36,7 @@ and the span `hi - lo` are HOST float32 scalars handed in by the caller.
 
 from mamba.host.device_shim import host_launch, launch_count
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_first_nonfinite_f32
 from std.memory import bitcast
 from mamba.host.device_shim import DeviceContext
 
@@ -235,11 +236,12 @@ def neural_rng_host(
             raise Error("mojolearn neural rng: dropout p must be in [0, 1)")
         if b <= Float32(0.0):
             raise Error("mojolearn neural rng: dropout scale must be > 0")
-        for i in range(n):
-            if not isfinite(in_ptr.unsafe_load(i)):
-                raise Error(
-                    "mojolearn neural rng: non-finite dropout input at " + String(i)
-                )
+        # parallel: the one host finite scan; the index walk runs only on a refusal
+        if not host_all_finite_f32(in_ptr, n):
+            raise Error(
+                "mojolearn neural rng: non-finite dropout input at "
+                + String(host_first_nonfinite_f32(in_ptr, n))
+            )
     var in_n = n if reads_input else 1
     var out_buf = ctx.enqueue_create_buffer[DType.float32](n)
     var in_buf = ctx.enqueue_create_buffer[DType.float32](in_n)
@@ -258,7 +260,7 @@ def neural_rng_host(
     var _l1_a9 = b
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9}:
         neural_rng_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9)
-    host_launch(_launch_1, launch_count(((n + NRNG_TPB - 1) // NRNG_TPB, 1, 1), (NRNG_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count(((n + NRNG_TPB - 1) // NRNG_TPB, 1, 1), (NRNG_TPB, 1, 1)), 0)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out_buf)
     ctx.synchronize()

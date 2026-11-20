@@ -3,8 +3,7 @@
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
 from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
-from ._buffer import all_finite, as_f32_c
-from ._mode import NumericModeMixin, available_if
+from ._mode import NumericModeMixin as _NumericModeMixin, available_if as _available_if
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -21,76 +20,16 @@ _DBSCAN_UNSTORED = (
 )
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
-def _check_queries(X, n_features, where):
-    """The query checks `DBSCAN.predict` and
-    `AgglomerativeClustering.predict` share: float32 C order, the fitted
-    feature count, at least one row, and every value finite (a NaN query
-    has no distance order to take a nearest row from)."""
-    q, _ = as_f32_c(X, ndim=2, name="X")
-    if q.shape[1] != n_features:
-        raise ValueError(
-            f"mojolearn {where}: X has {q.shape[1]} features, the fit saw {n_features}"
-        )
-    if q.shape[0] < 1:
-        raise ValueError(f"mojolearn {where}: X has no rows; refused by name")
-    if not all_finite(q):
-        raise ValueError(
-            f"mojolearn {where}: X contains a NaN or an infinity; a non-finite "
-            "query has no distance order to take a nearest row from, so it is "
-            "refused by name"
-        )
-    return q
 
-EPS_NN_BRUTE_FORCE = 0
-EPS_NN_RBC = 1
 
-_ALGORITHMS = {
-    "rbc": EPS_NN_RBC,
-    "brute": EPS_NN_BRUTE_FORCE,
-}
-
-DBSCAN_METRIC_L2 = 0
-DBSCAN_METRIC_L1 = 1
-DBSCAN_METRIC_COSINE = 2
-DBSCAN_METRIC_PRECOMPUTED = 3
-
-#: scikit-learn's spellings for the two metrics this implementation serves, mapped to
-#: the codes `bindings/_mojolearn_estimators.mojo` slot 7 carries. 'l1',
-#: 'cityblock' and 'manhattan' are one metric under three names in
-#: scikit-learn and in cuML's own pairwise table, and `kde/` already accepts
-#: all three, so this table does too.
-_METRICS = {
-    "euclidean": DBSCAN_METRIC_L2,
-    "l2": DBSCAN_METRIC_L2,
-    "manhattan": DBSCAN_METRIC_L1,
-    "l1": DBSCAN_METRIC_L1,
-    "cityblock": DBSCAN_METRIC_L1,
-    "cosine": DBSCAN_METRIC_COSINE,
-    "precomputed": DBSCAN_METRIC_PRECOMPUTED,
-}
-
-# The compiled family owner (bindings/cluster_native.mojo): DBSCAN.predict is
-# one native call, handed the binding `_bind` resolves; it reads this table.
+# DBSCAN option codes and arm admission live in core/dbscan_native_state.mojo.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-
-#: The metric each algorithm arm can serve. The ball cover computes Euclidean
-#: distances for its landmark radii and its three pruning bounds
-#: (`neighbors/impl/ball_cover/`), so it serves L2 only; the brute
-#: arm serves both. Stated as data rather than as an `if` so the error
-#: message below can list the arm that DOES serve what was asked.
-_ARM_METRICS = {
-    "rbc": (DBSCAN_METRIC_L2, DBSCAN_METRIC_PRECOMPUTED),
-    "brute": (DBSCAN_METRIC_L2, DBSCAN_METRIC_L1, DBSCAN_METRIC_COSINE, DBSCAN_METRIC_PRECOMPUTED),
-}
-_native_family_bridge.tables(family_dbscan_metrics=dict(_METRICS),
-                             family_cfb_dbscan_algorithms=dict(_ALGORITHMS),
-                             family_cfb_dbscan_arms=dict(_ARM_METRICS))
 
 
 # Maintainer notes (moved from the class docstring). House rule: a parameter that is accepted and
@@ -118,7 +57,7 @@ _native_family_bridge.tables(family_dbscan_metrics=dict(_METRICS),
 #   through the arms-agree gate on both vendors but has no cross-vendor card of its own yet.
 # - labels_ numbering: cuML's `final_relabel` + `relabelForSkl`. n_iter_: `dbscan/estimator.mojo`
 #   records the history of the "not the batch count" sentence.
-class DBSCAN(NumericModeMixin):
+class DBSCAN(_NumericModeMixin):
     """Density-based clustering (DBSCAN).
 
     Groups points that lie in dense regions and marks isolated points as
@@ -279,9 +218,8 @@ class DBSCAN(NumericModeMixin):
         return _NATIVE(self, "family_density_dbscan_fit_predict", (X, y, sample_weight), _NATIVE_CONTEXT)
 
     # The core rows of a `prediction_data=True` fit stay on the device under
-    # a handle held in `_resident_holder` (bindings/cfb_resident.mojo); no
-    # Python `__del__`: dropping an instance releases it through the native
-    # finalizer connected below the class (`_native_archive_bridge.lifetime`).
+    # a typed owner pinned by `_resident_holder`; no Python `__del__`.
+    # Its native destructor releases after the final active prediction pin.
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle (the integer is
         meaningful only in the process that minted it); the copy uploads its
@@ -298,7 +236,7 @@ class DBSCAN(NumericModeMixin):
     # the GPU binding and the CPU host binding (`core/labeled_reference_host_predict.mojo`) compute the
     # same bytes. On 'rbc' the noise guarantee holds where the ball cover's predicate agrees with the
     # brute arm's (`check_dbscan_rbc_matches_brute`) and is not promised past that.
-    @available_if(lambda self: bool(self.prediction_data))
+    @_available_if(lambda self: bool(self.prediction_data))
     def predict(self, X):
         """Label new rows using the fitted clustering.
 
@@ -366,6 +304,11 @@ class DBSCAN(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
+# The metric spellings a DBSCAN archive may carry (the native door owns the codes;
+# `host_archive_native.mojo` only checks membership by name). The dict that held
+# the codes left with the DBSCAN migration (6af766f4d1) and this name stayed in use.
+_METRICS = ("euclidean", "l2", "manhattan", "l1", "cityblock", "cosine", "precomputed")
+
 _native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
     _native_archive_bridge.fitted("labels_"),
     ("need_true", "prediction_data", "ValueError", _DBSCAN_UNSTORED),
@@ -380,7 +323,7 @@ _native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
     ("f8", "eps", (("float", "eps"),)),
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("int", "min_samples"))),
 ), host_archive_dbscan_metrics=tuple(_METRICS))
-_native_archive_bridge.lifetime(DBSCAN, "labeled_reference_release", "_resident_holder")
+# Resident cleanup belongs to DBSCAN's typed native owner.
 
 
 # Maintainer notes (moved from the class docstring): `kde/`, DEVIATIONS 600-604, kde/README.md.
@@ -398,7 +341,7 @@ _native_archive_bridge.lifetime(DBSCAN, "labeled_reference_release", "_resident_
 #   any finite positive normal p; the two-line binding change is in kde/README.md's HAND-OFF.
 # - score_samples measured 2026-08-23 within 1e-6 of sklearn on every kernel. The compact-kernel
 #   sentinel is DEVIATION 603 (kde/README.md).
-class KernelDensity(NumericModeMixin):
+class KernelDensity(_NumericModeMixin):
     """Kernel density estimation.
 
     Estimates the density of the training data with a brute-force sum
@@ -492,7 +435,7 @@ class KernelDensity(NumericModeMixin):
 
     # The constructor checks (`_validate_params`), the device-resident fit
     # handle and its release live in the native owner
-    # (bindings/neighbors_kde_native.mojo): `fit`, `score_samples` and `score`
+    # (bindings/neighbors_kde_native_door.mojo): `fit`, `score_samples` and `score`
     # are one native call each.
 
     def _release_resident_fit(self):
@@ -501,9 +444,8 @@ class KernelDensity(NumericModeMixin):
         already released (a copied instance)."""
         return _NATIVE(self, "family_density_kde_release", (), _NATIVE_CONTEXT)
 
-    # No Python `__del__`: dropping an instance releases its device fit
-    # through the native finalizer connected below the class
-    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+    # No Python `__del__`: the typed resident owner's native destructor
+    # releases its device fit after the last in-flight query drops its pin.
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle (the integer is
@@ -574,8 +516,8 @@ class KernelDensity(NumericModeMixin):
         return _NATIVE(self, "family_density_kde_score", (X,), _NATIVE_CONTEXT)
 
     def sample(self, n_samples=1, random_state=None):
-        """Not implemented; always raises ``NotImplementedError`` (cuML has
-        no ``sample`` either)."""
+        # Not implemented (the native owner refuses by name); listed in
+        # docs-site/api_exclude.txt, so it is omitted from the docs.
         return _NATIVE(self, "family_density_kde_sample", (n_samples, random_state), _NATIVE_CONTEXT)
 
     # npz layout (kde svc host lane, 2026-09-14): `x` <f4 as fitted, `weights` <f4 only when fit took
@@ -616,7 +558,7 @@ class KernelDensity(NumericModeMixin):
 
 
 # `save` and `load` are one native call each: the schema below, and
-# bindings/host_archive_native.mojo `host_archive_density` with the load's
+# bindings/host_archive_native_door.mojo `host_archive_density` with the load's
 # refusals. The resident device fit is released by the native finalizer.
 _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     _native_archive_bridge.fitted("_x"),
@@ -628,7 +570,7 @@ _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("setflag", "_w"))),
     ("when_set", "_w", (("array", "weights", "_w"),)),
 ))
-_native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")
+# Resident teardown belongs to the typed native owner stored in `_resident`.
 
 # KernelDensity resolves the import-connected entry inside native execution.
 _native_family_bridge.connect_bindings("_mojolearn_estimators")
@@ -639,7 +581,6 @@ from ._native_owner_lifetime import connect_owner_context as _connect_density_ow
 _connect_density_owner_context(_NATIVE_CONTEXT)
 _native_family_bridge.tables(
     density_dbscan_class=DBSCAN, density_kde_class=KernelDensity,
-    density_retained_bindings=[],
     density_dbscan_parameters=('eps', 'min_samples', 'metric', 'algorithm', 'max_mbytes_per_batch', 'max_iterations', 'prediction_data', 'numeric_mode'),
     density_kde_parameters=('bandwidth', 'algorithm', 'kernel', 'metric', 'atol', 'rtol', 'breadth_first', 'leaf_size', 'metric_params', 'numeric_mode'),
 )

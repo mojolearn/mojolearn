@@ -1,0 +1,27 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+index af8f7bab9d..24f48eac81 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
+@@ -166,13 +166,17 @@ An untraced build only. The seeding runs on the device (below)."""
+ 
+ # TOMBSTONE: MOJOLEARN_IVF_FAST_STRIDED_COARSE (DROPPED-noise) deleted 2026-10-15 by 1a76955b5; code recoverable at 1a76955b5^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch
+-# TOMBSTONE: MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF (old path beside the Apple FAST default, EXP:2135 OPEN) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at c09e6cced1.
+-# Restore: git apply experiments/removed/MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IVF_FAST_RANDOM_INIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime IVF_FAST_RANDOM_INIT = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
++)
+ #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+ #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+-#: IVF-family rows faster, recall_at_10 identical. ACCEPT.
+-"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03): the coarse quantizer starts from n_lists
++#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
++#: rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF` (k-means|| seeding).
++"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
++rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF`): the coarse quantizer starts from n_lists
+ DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
+ rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
+ k-means|| seeding (8 rounds of every-row-to-candidate distances, each with

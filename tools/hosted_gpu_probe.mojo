@@ -14,7 +14,7 @@ answers the wrong question.
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, block_idx
+from max.gpu import thread_idx, block_idx
 
 
 def double_kernel(
@@ -37,6 +37,7 @@ def main() raises:
         h.unsafe_ptr().unsafe_store(i, Float32(i))
     ctx.enqueue_copy(dst_buf=din, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     ctx.enqueue_function[double_kernel](
         dout.unsafe_ptr(), din.unsafe_ptr(),

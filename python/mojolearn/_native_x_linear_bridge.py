@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the linear expansion
-estimators and the coordinate-descent pair (bindings/x_linear_native.mojo)
+estimators and the coordinate-descent pair (bindings/x_linear_native_door.mojo)
 and its fixed ABI. Nothing here runs when a public method is called."""
 
-#: The x_linear binding's entries the owner calls.
-_X_LINEAR_ENTRIES = ("x_linear_fit", "x_linear_decision", "x_linear_decision_codes", "x_linear_class_prep",
-                     "py2mojo_rows", "x_linear_spearman_sign", "x_linear_best_alpha")
 #: The base binding's fold, index and score helpers the cv fits call
 #: (`_buffer._native`, always the identical binary).
 _BASE_HELPERS = ("fold_ids", "select_fold_i64", "assign_fold_i64", "check_indices_i64", "count_fold_hits_i64",
                  "mark_split_roles_f32", "row_means_f64", "gather_rows_bytes", "reduce_stat")
-_X_LINEAR_OPTIONAL = ("x_linear_numeric_mode", "x_linear_vendor")
 
 
 def _refusal(error):
@@ -19,17 +15,12 @@ def _refusal(error):
 
 
 def _linear_entries(module):
-    # glue: retain checked compiled entries of one x_linear binding at connection
-    from types import BuiltinFunctionType
-    entries = {}
-    for name in _X_LINEAR_ENTRIES + _X_LINEAR_OPTIONAL:  # glue: fixed native exports
-        entry = getattr(module, name, None)
-        if entry is None and name in _X_LINEAR_OPTIONAL:
-            continue
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"the x_linear owner requires compiled {name}")
-        entries[name] = entry
-    return entries
+    # glue: the canonical native connection of one x_linear binding, admitted
+    # once at import against the table it publishes. The owner calls that
+    # binding's x_linear operations table (core/linear_entry_table_ext.mojo)
+    # through this connection's key; no compiled Python entry is retained.
+    from ._native_classical_bridge import _native_table_cells
+    return _native_table_cells(module, "x_linear")
 
 
 def connect(tables, solver=None):
@@ -59,7 +50,7 @@ def connect(tables, solver=None):
             module = _backend.binding("_mojolearn_x_metrics", mode)
             table = {}
             for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",  # glue: fixed native exports
-                         "x_metrics_run_out", "x_metrics_run_ranges"):
+                         "x_metrics_run_out", "x_metrics_run_ranges", "metrics_program_native_api_v1"):
                 entry = getattr(module, name, None)
                 if entry is None and name in ("x_metrics_run_out", "x_metrics_run_ranges"):
                     continue
@@ -70,8 +61,16 @@ def connect(tables, solver=None):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metrics[mode] = _refusal(error)
     cd, host_predict = "ImportError: the coordinate-descent solver is not connected here", None
+    cd_modes = {"identical": cd, "fast": cd}
     if solver is not None:
         cd = _connect_cd(solver)
+        # An explicit ElasticNet / Lasso numeric_mode selects that tier's image; None keeps `cd`.
+        cd_modes[selected] = cd
+        other = "fast" if selected == "identical" else "identical"
+        try:
+            cd_modes[other] = _connect_cd(_backend.binding("_mojolearn_solver", other))
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+            cd_modes[other] = _refusal(error)
         # an explicit host Lasso / ElasticNet predicts through the classical
         # door's host entry (`_HostCD.predict`)
         from .linear_model import _native_classical, _CLASSICAL
@@ -90,13 +89,20 @@ def connect(tables, solver=None):
             helpers[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
             helpers[name] = _refusal(error)
+    # glue: once at import, the base helper table key the native door reads
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        helpers["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        helpers["base_native_key"] = _refusal(error)
     from ._labels import ClassLabels
     # The connected public class-label type native classifier fits publish.
     context.update(classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
                    classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
     context.update(xl_helpers=helpers, xl_undefined_warning=UndefinedMetricWarning,
                    xl_decimal=decimal.Decimal, xl_pow_context=_POW_CONTEXT)
-    context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd,
+    context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd, cd_solver_modes=cd_modes,
                    cd_host_predict=host_predict, environment=os.environ._data,
                    xl_sgd_clf_loss=dict(tables.get("sgd_clf_loss", {})), xl_sgd_reg_loss=dict(tables.get("sgd_reg_loss", {})),
                    xl_sgd_penalty=dict(tables.get("sgd_penalty", {})), xl_sgd_lr=dict(tables.get("sgd_lr", {})),
@@ -105,16 +111,22 @@ def connect(tables, solver=None):
     return call, context
 
 
+#: The native tables' vendor words (core/solver_entry_table.mojo
+#: solver_vendor_word applies the same mapping at publication).
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
 def _connect_cd(solver):
-    # glue: retain the solver binding's two compiled entries at connection
-    from types import BuiltinFunctionType
+    # glue: once at import, the connected solver image's (tier, vendor) key
+    # of the solver operations table (core/solver_entry_table.mojo); the
+    # owner calls the image's published cd_fit / cd_predict entry with it,
+    # never the binding's Python exports (lane calltable-solver-estimators).
     try:
-        cd = {}
-        for name in ("cd_fit", "cd_predict"):  # glue: fixed native exports
-            entry = getattr(solver, name)
-            if not isinstance(entry, BuiltinFunctionType):
-                raise TypeError(f"ElasticNet requires compiled {name}")
-            cd[name] = entry
-        return cd
+        mode_probe = getattr(solver, "solver_numeric_mode", None) or getattr(solver, "solver_host_numeric_mode")
+        mode = int(mode_probe())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(solver.solver_vendor()), -1)  # import-time: the image's vendor
+        if vendor < 0 or mode not in (0, 1):
+            raise ImportError("the coordinate-descent solver image publishes no native table")
+        return (mode, vendor)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         return _refusal(error)

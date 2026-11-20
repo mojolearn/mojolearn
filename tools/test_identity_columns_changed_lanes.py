@@ -186,7 +186,9 @@ def test_release_floor_ancestry_is_one_git_call_per_record_commit(tmp_path, monk
     monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
     monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
     monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
-    monkeypatch.setattr(ic, "release_floor", lambda: "c" * 40)
+    monkeypatch.setattr(ic, "release_floor_info", lambda: {"commit": "c" * 40, "tags": {}})
+    monkeypatch.setattr(ic, "floor_receipts_for", lambda table, info, lanes, cls, points, log_dir=None:
+                        {lane: {"ok": True, "reason": "receipt"} for lane in lanes})
     asked = []
     monkeypatch.setattr(ic, "is_ancestor", lambda a, b: asked.append(a) or a == "a" * 40)
     monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
@@ -198,3 +200,260 @@ def test_release_floor_ancestry_is_one_git_call_per_record_commit(tmp_path, monk
     assert ic.cmd_changed_lanes(args) == 0
     assert sorted(asked) == ["a" * 40, "b" * 40]
     capsys.readouterr()
+
+
+def test_floor_moves_only_receipted_rows(tmp_path, monkeypatch, capsys):
+    """FLOOR RECEIPTS (lane ledger-floor-receipts): a row recorded before the release floor is measured
+    from the floor only when the floor holds an admitted receipt for it; every other row is measured
+    from its own record commit, as the ledger does."""
+    lanes = ["lane_ok", "lane_no", "lane_new"]
+    records = [{"commit": "a" * 40, "commit_time": 1}, {"commit": "d" * 40, "commit_time": 3}]
+    cells = {f"{lane}/base": {"train": {"ref": f"{i:016x}", "cols": {"nvidia": 1 if lane == "lane_new" else 0}}}
+             for i, lane in enumerate(lanes)}
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": cells, "records": records}))
+    monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
+    floor = {"commit": "c" * 40, "tags": {"nvidia": "alpha-api-0.8.64-nvidia-x", "amd": "alpha-api-0.8.64-amd-x"}}
+    monkeypatch.setattr(ic, "release_floor_info", lambda: floor)
+    seen = {}
+
+    def receipts(table_doc, info, older, cls, points, log_dir=None):
+        seen.update(info=info, older=sorted(older), cls=cls, digest=table_doc["cells"]["lane_ok/base"]["train"]["ref"])
+        return {"lane_ok": {"ok": True, "reason": "admitted receipt"},
+                "lane_no": {"ok": False, "reason": "the floor rests on a waived row: identity-nvidia/lane_no"}}
+    monkeypatch.setattr(ic, "floor_receipts_for", receipts)
+    monkeypatch.setattr(ic, "is_ancestor", lambda a, b: a == "a" * 40)
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: [ref])
+    # Only the record commit's diff reaches anything: lane_no (and lane_ok, were it measured from it).
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": ["lane_ok", "lane_no"] if ref == "a" * 40 else [], "unattributed": [],
+                         "stopped_early": False})
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=False,
+                                 backend="cuda", floor_desc="")
+    assert ic.cmd_changed_lanes(args) == 0
+    out, err = capsys.readouterr()
+    assert out.strip() == "lane_no"
+    assert seen["older"] == ["lane_no", "lane_ok"] and seen["info"] is floor and seen["cls"] == "nvidia"
+    assert seen["digest"] == "0" * 16
+    assert "1 of 2 row(s) recorded before it are measured from it" in err
+    assert "no floor for lane_no: the floor rests on a waived row" in err
+
+
+def test_floor_receipts_for_needs_the_table_and_every_class(monkeypatch):
+    calls = []
+
+    def fake(root, head, info, wanted, log_dir=None):
+        calls.append(sorted(wanted))
+        return {key: {"ok": key != ("lane_b", "amd"), "reason": f"r {key[1]}"} for key in wanted}
+    import release_identity_reference as rir
+    monkeypatch.setattr(rir, "floor_receipts", fake)
+    table = {"cells": {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0}}},
+                       "lane_b/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 0, "amd": 1}}}}}
+    points = {"lane_c": {"source": "bench/results/identity_break/x/nvidia.identical.json"}}
+    got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_a", "lane_b", "lane_c"], "",
+                                points)
+    assert calls == [[("lane_a", "nvidia"), ("lane_b", "amd"), ("lane_b", "nvidia")]]
+    assert got["lane_a"]["ok"] and not got["lane_b"]["ok"] and got["lane_b"]["reason"] == "r amd"
+    assert not got["lane_c"]["ok"] and "column record" in got["lane_c"]["reason"]
+    calls.clear()
+    got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_b"], "nvidia", {})
+    assert calls == [[("lane_b", "nvidia")]] and got["lane_b"]["ok"]
+
+
+# ------------------------------------ per-class since (lane planner-per-class-since, 2026-11-05)
+# At 874dc2043b the plan owed 513/513 nvidia and amd lanes: table mode dated each
+# lane from the OLDEST record of ANY class in its cell, so the never re-recorded
+# ptx record (old commit) outvoted the fresh nvidia/amd records at HEAD.
+
+N, O, P = "e" * 40, "a" * 40, "b" * 40      # new nvidia record, old ptx record, an old nvidia record
+
+
+def _per_class_run(tmp_path, monkeypatch, backend, cells, changed_since):
+    lanes = sorted({key.partition("/")[0] for key in cells})
+    records = [{"commit": N, "commit_time": 30}, {"commit": O, "commit_time": 10},
+               {"commit": P, "commit_time": 20}]
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": cells, "records": records}))
+    monkeypatch.setattr(ic, "harness", lambda: types.SimpleNamespace(LANES=lanes))
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "vref", lambda: types.SimpleNamespace(stale_reference_lanes=lambda t, h: []))
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: [ref])
+    # Commit c's diff reaches the lanes in changed_since[c]; HEAD is N, so nothing changed since N.
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": sorted(changed_since.get(ref, ())), "unattributed": [], "stopped_early": False})
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=True,
+                                 backend=backend, floor_desc="", cls="", records=[], summary_json="")
+    assert ic.cmd_changed_lanes(args) == 0
+    return args
+
+
+def _owed(capsys):
+    out, err = capsys.readouterr()
+    return [l for l in out.strip().split(",") if l], err
+
+
+def test_table_mode_dates_each_lane_from_its_own_class(tmp_path, monkeypatch, capsys):
+    """A cell at a NEW nvidia record and an OLD ptx record (agreeing digests): planning nvidia at HEAD = N
+    reuses the lane; measured from the ptx record the lane's closure changed, so the old rule owed it."""
+    cells = {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0, "amd": 0, "ptx": 1}}}}
+    changed = {O: {"lane_a"}, P: {"lane_a"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == [] and "class nvidia (backend cuda): 1 lane(s)" in err
+    _per_class_run(tmp_path, monkeypatch, "hip", cells, changed)
+    assert _owed(capsys)[0] == []
+    # No backend: the oldest record of any class (the ptx one) still decides, as before.
+    _per_class_run(tmp_path, monkeypatch, "", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_a"] and "table since" not in err
+
+
+def test_ptx_class_still_owes_a_lane_resting_on_the_old_ptx_record(tmp_path, monkeypatch, capsys):
+    """The ptx column plans with --class (reuse_points): its own record is the old one, so it stays owed."""
+    cells = {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0, "ptx": 1}}}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, {O: {"lane_a"}})
+    assert _owed(capsys)[0] == []
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {N: 30, O: 10, P: 20}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    monkeypatch.setattr(ic, "deepen_for_reuse", lambda points, log=None: None)
+    h = types.SimpleNamespace(FIXTURES=["base"], LANES=["lane_a"], fixture=lambda f: (0, 0, 0),
+                              heldout=lambda f: 0, _h=lambda x: "h")
+    table = json.loads((tmp_path / "table.json").read_text())
+    table["harness_sha256"] = "H"
+    pts = ic.reuse_points(h, ["lane_a"], table, "ptx", [])
+    assert pts["lane_a"]["commit"] == O          # ptx rests on its own old record -> its closure changed -> owed
+    pts = ic.reuse_points(h, ["lane_a"], table, "nvidia", [])
+    assert pts["lane_a"]["commit"] == N
+
+
+def test_table_mode_own_class_older_than_a_change_stays_owed(tmp_path, monkeypatch, capsys):
+    """No widening: a lane whose own nvidia row is old and changed since stays owed, and a lane with no
+    nvidia row in a required part has no reference and stays owed."""
+    cells = {"lane_old/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 2, "ptx": 1}}},
+             "lane_mix/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 0}},
+                               "predict": {"ref": "3" * 16, "cols": {"nvidia": 2}}},
+             "lane_none/base": {"train": {"ref": "4" * 16, "cols": {"amd": 0, "ptx": 1}}},
+             "lane_opt/base": {"train": {"ref": "5" * 16, "cols": {"nvidia": 0}},
+                               "rlpair": {"ref": "6" * 16, "cols": {"apple": 1}}}}
+    changed = {P: {"lane_old", "lane_mix"}, O: {"lane_old", "lane_mix", "lane_none", "lane_opt"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_mix", "lane_none", "lane_old"]
+    assert "1 lack one" in err
+
+
+# ------------------------------------ n/a placeholder parts (lane planner-na-parts, 2026-11-05)
+# After f038e50b19 the nvidia plan still owed 46 lanes (mlp, samba-*, optim-*, ...) "since 0db362a62516":
+# every real part sat at the new nvidia record; only the rlpair "n/a:no-sampler" placeholder kept an old
+# record index, and a placeholder carries no reference bits (identity_admission_guard skips it too).
+
+def test_na_placeholder_part_does_not_date_a_lane(tmp_path, monkeypatch, capsys):
+    cells = {"lane_na/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0}},
+                              "rlpair": {"ref": "n/a:no-sampler", "cols": {"nvidia": 2, "amd": 2}}},
+             "lane_old/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 2}},
+                               "rlpair": {"ref": "n/a:no-sampler", "cols": {"nvidia": 2}}}}
+    changed = {P: {"lane_na", "lane_old"}, O: {"lane_na", "lane_old"}}
+    _per_class_run(tmp_path, monkeypatch, "cuda", cells, changed)
+    owed, err = _owed(capsys)
+    assert owed == ["lane_old"]                  # its train cell itself rests on the old record
+    assert "class nvidia (backend cuda): 2 lane(s)" in err and "0 lack one" in err
+    # --class mode (reuse_points) agrees: the table row of lane_na rests on N, lane_old on P.
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {N: 30, O: 10, P: 20}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    h = types.SimpleNamespace(FIXTURES=["base"], LANES=["lane_na", "lane_old"], fixture=lambda f: (0, 0, 0),
+                              heldout=lambda f: 0, _h=lambda x: "h")
+    table = json.loads((tmp_path / "table.json").read_text())
+    table["harness_sha256"] = "H"
+    pts = ic.reuse_points(h, ["lane_na", "lane_old"], table, "nvidia", [])
+    assert pts["lane_na"]["commit"] == N and pts["lane_old"]["commit"] == P
+
+
+def test_na_placeholder_is_only_the_n_a_prefix():
+    assert ic.is_placeholder_part({"ref": "n/a:no-sampler"})
+    assert not ic.is_placeholder_part({"ref": "1" * 16})
+    assert not ic.is_placeholder_part({"ref": None, "conflict": True})
+    assert not ic.is_placeholder_part({"ref": "N/A"})
+
+
+# ------------------------------------ declared no-route lanes are N/A on cpu, not KNOWN-BAD (lane planner-na-parts)
+# The 874dc2043b cpu plan read KNOWN-BAD 3 for optim-resident-io, sequence-device-release and
+# training-device-cross-entropy: their cpu cells REFUSED because the harness itself declares them
+# GPU_ONLY_LANES (no cpu route). An undeclared refusal, or a declared lane that DIVERGED, stays known-bad.
+
+C1, C2 = "c1" * 20, "c2" * 20
+
+
+def _cpu_record(path, cls, lanes, verdicts):
+    cells = {}
+    for lane in lanes:
+        verdict = verdicts.get(lane, "STABLE")
+        cells[f"{lane}/base"] = {"verdict": verdict, "hashes": [] if verdict == "REFUSED" else ["0" * 16],
+                                 "infer_verdict": "N/A",
+                                 **({"error": "RuntimeError: requires the resident ABI"} if verdict == "REFUSED" else {})}
+    doc = dict(mode="identical", complete=True, vendor=cls, commit=C2, cells=cells,
+               fixtures={"base": dict(X="h", y_clf="h", y_reg="h")}, heldout={"base": dict(X="h")},
+               lane_revisions={})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc))
+
+
+def _na_run(tmp_path, monkeypatch, cls, verdicts, gpu_only, lanes, changed=None):
+    v = types.SimpleNamespace(record_device_class=lambda j, p: (j.get("vendor"), None),
+                              admit=lambda j, p, known_lanes=(): None, stale_reference_lanes=lambda t, h: [])
+    h = types.SimpleNamespace(LANES=list(lanes), FIXTURES=("base",), LANE_REVISIONS={}, GPU_ONLY_LANES=gpu_only,
+                              _h=lambda x: "h", fixture=lambda f: (1, 2, 3), heldout=lambda f: 4)
+    monkeypatch.setattr(ic, "harness", lambda: h)
+    monkeypatch.setattr(ic, "vref", lambda: v)
+    monkeypatch.setattr(ic, "profile_lanes", lambda h, scope: list(lanes))
+    monkeypatch.setattr(ic, "_commit_time", lambda c, cache: {C1: 100, C2: 200}.get(c))
+    monkeypatch.setattr(ic, "harness_sha256", lambda h: "H")
+    monkeypatch.setattr(ic, "is_shallow", lambda: False)
+    monkeypatch.setattr(ic, "deepen_for_reuse", lambda points, log=None: None)
+    monkeypatch.setattr(lane_select, "lane_sources", lambda: ({l: [] for l in lanes}, {}))
+    monkeypatch.setattr(lane_select, "changed_paths", lambda ref: ["x.mojo"])
+    monkeypatch.setattr(lane_select, "select", lambda paths, ref=None, sources=None, backend=None, stop_when=None:
+                        {"lanes": sorted((changed or {}).get(ref, ())), "unattributed": [], "stopped_early": False})
+    table = tmp_path / "table.json"
+    table.write_text(json.dumps({"cells": {}, "records": []}))
+    recs = tmp_path / "records"
+    _cpu_record(recs / f"{cls}.identical.json", cls, [l for l in lanes if l != "no-evidence"], verdicts)
+    summary = tmp_path / "reuse.json"
+    args = types.SimpleNamespace(table=str(table), since="", scope="all", no_release_floor=True,
+                                 backend="cpu" if cls == "cpu" else "metal", floor_desc="", cls=cls,
+                                 records=[str(recs)], summary_json=str(summary))
+    assert ic.cmd_changed_lanes(args) == 0
+    return json.loads(summary.read_text())
+
+
+def test_declared_no_cpu_route_refusal_is_na_not_known_bad(tmp_path, monkeypatch, capsys):
+    lanes = ["ok", "resident", "diverged", "undeclared", "no-evidence"]
+    gpu_only = {"resident": "no resident buffers", "diverged": "declared", "no-evidence": "declared"}
+    doc = _na_run(tmp_path, monkeypatch, "cpu",
+                  {"resident": "REFUSED", "diverged": "DIVERGENT", "undeclared": "REFUSED"}, gpu_only, lanes)
+    out, err = capsys.readouterr()
+    assert out.strip() == ""                                   # nothing owed: no-evidence is n/a, not recorded
+    assert "REUSED 1 RECORD 0 KNOWN-BAD 2 of 5 (all) N/A 2" in err
+    assert sorted(doc["not_applicable"]) == ["no-evidence", "resident"]
+    assert sorted(doc["known_bad"]) == ["diverged", "undeclared"]
+    assert "no resident buffers" in doc["not_applicable"]["resident"]["reason"]
+    assert "# n/a resident:" in err and "# known-bad undeclared:" in err
+    import reference_refresh as rr
+    assert rr.parse_selection(err) == dict(record=0, reused=1, known_bad=2, total=5, not_applicable=2)
+    import release_plan
+    facts = release_plan.lane_facts(doc, None, "cpu")
+    assert facts["resident"]["owed"] is False and facts["resident"]["not_applicable"] is True
+
+
+def test_declared_lane_is_not_na_on_a_gpu_class(tmp_path, monkeypatch, capsys):
+    """GPU_ONLY_LANES speaks for the cpu class only: an Apple refusal (e.g. a TypeError) stays known-bad."""
+    lanes = ["ok", "resident"]
+    doc = _na_run(tmp_path, monkeypatch, "apple", {"resident": "REFUSED"}, {"resident": "declared"}, lanes)
+    err = capsys.readouterr()[1]
+    assert "REUSED 1 RECORD 0 KNOWN-BAD 1 of 2 (all) N/A 0" in err
+    assert doc["not_applicable"] == {} and sorted(doc["known_bad"]) == ["resident"]

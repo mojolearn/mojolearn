@@ -96,6 +96,7 @@ def bench_level(n_rows: Int, repeats: Int) raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var host_bin = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -138,6 +139,8 @@ def bench_level(n_rows: Int, repeats: Int) raises:
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
     ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
     ctx.synchronize()
+    _ = hi^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
 
     # Warm up: the first launch of each kernel pays Metal pipeline creation,
     # which is not what is being measured.
@@ -233,6 +236,15 @@ def bench_histogram_only(n_rows: Int, repeats: Int) raises:
         stat_count * n_features
     )
     ctx.synchronize()
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = b^  # past the drain: a queued copy reads it after its last named use
+    _ = c^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = q1^  # past the drain: a queued copy reads it after its last named use
+    _ = q2^  # past the drain: a queued copy reads it after its last named use
+    _ = q3^  # past the drain: a queued copy reads it after its last named use
+    _ = q4^  # past the drain: a queued copy reads it after its last named use
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     # DEVIATION 95: `fixed_scale` is a DEVICE pointer. Built ONCE, OUTSIDE
     # the timing loop -- `upload_scale` drains, and a drain inside the
@@ -327,6 +339,10 @@ def bench_partition_only(n_rows: Int, repeats: Int) raises:
     var chunk_offsets = ctx.enqueue_create_buffer[DType.uint32](max_chunks)
     var leaf_zeros = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = b^  # past the drain: a queued copy reads it after its last named use
+    _ = c^  # past the drain: a queued copy reads it after its last named use
+    _ = hf^  # past the drain: a queued copy reads it after its last named use
 
     var best = 0
     for i in range(repeats + 1):
@@ -421,12 +437,19 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     var hnf = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
     var hnf2 = ctx.enqueue_create_host_buffer[DType.uint32](n_features)
     ctx.synchronize()
+    _ = h1a^  # past the drain: a queued copy reads it after its last named use
+    _ = h1b^  # past the drain: a queued copy reads it after its last named use
+    _ = h2a^  # past the drain: a queued copy reads it after its last named use
+    _ = h2b^  # past the drain: a queued copy reads it after its last named use
+    _ = h2c^  # past the drain: a queued copy reads it after its last named use
+    _ = hu^  # past the drain: a queued copy reads it after its last named use
     for f in range(n_features):
         hnf.unsafe_ptr().unsafe_store(f, UInt32(1))
         hnf2.unsafe_ptr().unsafe_store(f, UInt32(f))
     ctx.enqueue_copy(dst_buf=nf, src_ptr=hnf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=nf2, src_ptr=hnf2.unsafe_ptr())
     ctx.synchronize()
+    _ = hnf^  # past the drain: a queued copy reads it after its last named use
     _ = hnf2^
 
     var hist = ctx.enqueue_create_buffer[DType.float32](
@@ -469,6 +492,7 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     scan_ids_h.unsafe_ptr().unsafe_store(1, UInt32(1))
     ctx.enqueue_copy(dst_buf=scan_ids, src_ptr=scan_ids_h.unsafe_ptr())
     ctx.synchronize()
+    _ = scan_ids_h^  # past the drain: a queued copy reads it after its last named use
     best = 0
     for i in range(repeats + 1):
         var t0 = perf_counter_ns()
@@ -499,6 +523,8 @@ def bench_remaining_phases(n_rows: Int, repeats: Int) raises:
     ctx.enqueue_copy(dst_buf=sb_bff, src_ptr=sb_hbf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=sb_ffw, src_ptr=sb_hfw.unsafe_ptr())
     ctx.synchronize()
+    _ = sb_hbf^  # past the drain: a queued copy reads it after its last named use
+    _ = sb_hfw^  # past the drain: a queued copy reads it after its last named use
 
     # score
     best = 0
@@ -598,6 +624,7 @@ def bench_tree(n_rows: Int, max_depth: Int, repeats: Int) raises:
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -697,6 +724,7 @@ def bench_replication_interleaved(
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # past the drain: a queued copy reads it after its last named use
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
@@ -843,6 +871,15 @@ def bench_wide_histogram_interleaved(n_rows: Int, repeats: Int) raises:
 
     var sums = ctx.enqueue_create_buffer[DType.float32](group_size)
     ctx.synchronize()
+    _ = a^  # past the drain: a queued copy reads it after its last named use
+    _ = b^  # past the drain: a queued copy reads it after its last named use
+    _ = c^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = hz^  # past the drain: a queued copy reads it after its last named use
+    _ = q1^  # past the drain: a queued copy reads it after its last named use
+    _ = q2^  # past the drain: a queued copy reads it after its last named use
+    _ = q3^  # past the drain: a queued copy reads it after its last named use
+    _ = q4^  # past the drain: a queued copy reads it after its last named use
 
     var s1 = List[Float64]()
     var s16 = List[Float64]()
@@ -939,6 +976,7 @@ def build_mixed_dataset(
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
     ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
     ctx.synchronize()
+    _ = z^  # keep-alive past the drain (the enqueue_copy reads it until then)
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
     var bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)

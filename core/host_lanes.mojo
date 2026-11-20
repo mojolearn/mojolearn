@@ -21,12 +21,11 @@ from std.math import abs, floor, fma, max, min
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import simd_width_of
 
-from std.os import getenv
-from std.sys import llvm_intrinsic
+from std.sys import llvm_intrinsic, is_defined
 from std.time import perf_counter_ns
 
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
+from core.host_predict_threads import HOST_MIN_TASK_WORK, host_predict_task_count, host_predict_task_count_work
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -404,11 +403,18 @@ def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
     host_parallelize(_copy, tasks)
 
 
+#: `-D MOJOLEARN_HOST_BLOCK_TIMING` builds time the host block oracles.
+#: Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per oracle call.
+comptime HOST_BLOCK_TIMING_ON = is_defined["MOJOLEARN_HOST_BLOCK_TIMING"]()
+
+
 def host_block_timing_on() -> Bool:
-    """MOJOLEARN_HOST_BLOCK_TIMING set: the block oracles print a wall per
-    stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the host twin
-    of MOJOLEARN_MAMBA_TIMING. Off, nothing is read or printed."""
-    return String(getenv("MOJOLEARN_HOST_BLOCK_TIMING")) != ""
+    """Built with `-D MOJOLEARN_HOST_BLOCK_TIMING`: the block oracles print a
+    wall per stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the
+    host twin of MOJOLEARN_MAMBA_TIMING. Off (the default build), nothing is
+    read or printed."""
+    return HOST_BLOCK_TIMING_ON
 
 
 def host_tick(on: Bool, mut t: Int, name: StaticString):
@@ -421,8 +427,10 @@ def host_tick(on: Bool, mut t: Int, name: StaticString):
     t = now
 
 
-#: Scalar operations below which a row split is not worth a thread fork.
-comptime HOST_ROW_TASK_MIN_WORK = 1 << 16
+#: Scalar operations below which a row split is not worth a thread fork:
+#: the shared grain floor (`core/host_predict_threads.mojo::HOST_MIN_TASK_WORK`,
+#: its cost reasoning stated there).
+comptime HOST_ROW_TASK_MIN_WORK = HOST_MIN_TASK_WORK
 
 
 def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
@@ -430,10 +438,9 @@ def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
     operations each: the host thread policy (`core/host_predict_threads.mojo`)
     capped so every task gets at least HOST_ROW_TASK_MIN_WORK operations. A
     schedule knob: it moves no bit."""
-    var work = rows * max(work_per_row, 1)
-    if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
+    if rows <= 1:
         return 1
-    return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
+    return host_predict_task_count_work(rows, rows * max(work_per_row, 1))
 
 
 def all_finite(values: List[Float32]) -> Bool:

@@ -56,14 +56,15 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from gemm.linalg_dispatch import LINALG_NATIVE_TABLE
 from gemm.linalg_native import _f32_ptr, _dev_f32, _dev_u16, _dev_i8, _dev_i32, _refuse_lowbit_shape, _LowbitSlot, _LOWBIT_POOL, _lowbit_run, _lowbit_tick, gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
 
@@ -75,7 +76,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
+comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnLinalgContextFastV3"
 
 
 from x_decomp.cells import F32Ptr
@@ -95,7 +96,6 @@ from gemm.host_transport import (
     gemm_up_f32,
     gemm_up_u16,
 )
-from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
@@ -110,16 +110,15 @@ from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 from gemm.afn_apple_fast import (
     AFN_EPI_BIAS,
     AFN_EPI_BIAS_GELU,
-    AFN_EPI_BIAS_RESID,
     AFN_EPI_BIAS_SILU,
     AFN_EPI_NONE,
     AFN_GEMM_BF16_MMA,
     AFN_GEMM_EPILOGUE,
     afn_gemm_bf16_bits_into,
-    afn_gemm_fused_into,
 )
 from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
-from std.gpu import block_dim, block_idx, thread_idx
+from gemm.linalg_fused_run import gemm_fused_run
+from max.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,
@@ -129,7 +128,7 @@ from gemm.checks.gemm_int15 import (
 from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.apple_fast_bf16_public import (
+from bindings.apple_fast_bf16_public_door import (
     initialize_fast_bf16_boundary,
     fast_bf16_available_binding,
     fast_to_bf16_binding,
@@ -138,6 +137,7 @@ from bindings.apple_fast_bf16_public import (
     public_fast_to_bf16_binding,
     public_fast_from_bf16_binding,
 )
+from gemm.causal_entry_device import publish_causal_linalg_device
 
 
 
@@ -199,7 +199,7 @@ def gemm_binding(
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(4):  # small-loop(4 scalar descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -268,7 +268,7 @@ def gemm_bf16_binding(
     var native_a_addr = Int(py=a_addr)
     var native_b_addr = Int(py=b_addr)
     var native_params = List[Int]()
-    for i in range(5):  # small-loop(5 scalar descriptor words)
+    for i in range(5):  # driver-loop: over 5 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -297,7 +297,7 @@ def gemm_int8_binding(
     var native_qb_addr = Int(py=qb_addr)
     var native_eb_addr = Int(py=eb_addr)
     var native_params = List[Int]()
-    for i in range(3):  # small-loop(3 scalar descriptor words)
+    for i in range(3):  # driver-loop: over 3 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -346,23 +346,7 @@ def gemm_fused_binding(
         raise Error("gemm_fused: this binding was built without MOJOLEARN_AFN_GEMM_EPILOGUE")
     else:
         with GILReleased(Python()):
-            var ctx = process_ctx[_DEVCTX_SLOT]()
-            var da = _dev_f32(ctx, a_address, m * k)
-            var db = _dev_f32(ctx, b_address, n * k)
-            var dbias = _dev_f32(ctx, bias_address, n if epi != AFN_EPI_NONE else 0)
-            var dres = _dev_f32(ctx, resid_address, m * n if epi == AFN_EPI_BIAS_RESID else 0)
-            var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-            if not afn_gemm_fused_into(ctx, dc, da, db, dbias, dres, m, n, k, op, epi):
-                raise Error("gemm_fused: the fused route declined the shape")
-            ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-            ctx.synchronize()
-            _ = da^
-            _ = db^
-            _ = dbias^
-            _ = dres^
-            _ = dc^
-            # DEVIATION 3010: drain the frees before the block ends.
-            ctx.synchronize()
+            gemm_fused_run(c_address, a_address, b_address, bias_address, resid_address, m, n, k, op, epi)
         return PythonObject(m * n)
 
 
@@ -383,7 +367,7 @@ def quantize_int8_binding(
     var native_e_addr = Int(py=e_addr)
     var native_x_addr = Int(py=x_addr)
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -406,7 +390,7 @@ def dequantize_int8_binding(
     var native_q_addr = Int(py=q_addr)
     var native_e_addr = Int(py=e_addr)
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -451,10 +435,10 @@ def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> Pyth
     if len(addrs) != 7:
         raise Error("gemm_int15: expected 7 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(7):  # small-loop(7 buffer descriptor words)
+    for i in range(7):  # driver-loop: over 7 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(3):  # small-loop(3 scalar descriptor words)
+    for i in range(3):  # driver-loop: over 3 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -472,10 +456,10 @@ def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> 
     if len(addrs) != 4:
         raise Error("quantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(4):  # small-loop(4 buffer descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -492,10 +476,10 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
     if len(addrs) != 4:
         raise Error("dequantize_int15: expected 4 buffer addresses")
     var native_addrs = List[Int]()
-    for i in range(4):  # small-loop(4 buffer descriptor words)
+    for i in range(4):  # driver-loop: over 4 fixed buffer descriptor words (constant count, never data-sized)
         native_addrs.append(Int(py=addrs[i]))
     var native_params = List[Int]()
-    for i in range(2):  # small-loop(2 scalar descriptor words)
+    for i in range(2):  # driver-loop: over 2 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -514,7 +498,7 @@ def to_bf16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -533,7 +517,7 @@ def from_bf16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -555,7 +539,7 @@ def from_f16_binding(
     var native_dst_addr = Int(py=dst_addr)
     var native_src_addr = Int(py=src_addr)
     var native_params = List[Int]()
-    for i in range(1):  # small-loop(1 scalar descriptor words)
+    for i in range(1):  # driver-loop: over 1 fixed scalar descriptor words (constant count, never data-sized)
         native_params.append(Int(py=params[i]))
     var result = 0
     with GILReleased(Python()):
@@ -596,8 +580,13 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var rp = f32_ptr(Int(py=addrs[1]))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
-    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    # The owned copy the device door takes is made with the GIL released
+    # (it was taken under the GIL; p3 rank 295). The door's List signature
+    # (decomposition/linalg_door_impl.mojo) keeps the copy itself.
+    var a_address = Int(py=addrs[0])
+    var a = List[Float32]()
     with GILReleased(Python()):
+        a = read_f32(a_address, max(0, n_rows * n_cols))
         qr_r_device_into(a, n_rows, n_cols, rp)
     _ = a^
     return PythonObject(n_cols)
@@ -651,8 +640,13 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     var sp = f32_ptr(Int(py=addrs[1]))
     var n_rows = Int(py=params[0])
     var n_cols = Int(py=params[1])
-    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    # The owned copy the device door takes is made with the GIL released
+    # (it was taken under the GIL; p3 rank 295). The door's List signature
+    # (decomposition/linalg_door_impl.mojo) keeps the copy itself.
+    var a_address = Int(py=addrs[0])
+    var a = List[Float32]()
     with GILReleased(Python()):
+        a = read_f32(a_address, max(0, n_rows * n_cols))
         svdvals_device_into(a, n_rows, n_cols, sp)
     _ = a^
     return PythonObject(n_cols)
@@ -667,8 +661,12 @@ def linalg_native_api_v1_binding() raises -> PythonObject:
 
 
 def build__mojolearn_linalg() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_linalg_device()
         m.def_function[linalg_native_api_v1_binding]("linalg_native_api_v1")
         m.def_function[linalg_vendor_binding]("linalg_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")

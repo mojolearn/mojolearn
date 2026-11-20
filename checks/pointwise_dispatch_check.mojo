@@ -177,7 +177,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     pointwise_one_byte_fixed_for,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -185,14 +185,17 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.methods.kernel.split_properties_helpers import (
+    PW_PRIVATE_DOC_SLOTS,
     estimate_block_per_feature_multiplier,
 )
+from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import PW_WRITE_EPS
 from gbdt.methods.pointwise_kernels import (
     FoldsHistogram,
     PW_MAX_MULTIPLIER,
     compute_hist2,
     compute_hist2_non_binary,
     folds_histogram_from_folds,
+    pw_int_slots_on,
 )
 
 # 24,000 rows is not decoration. `EstimateBlockPerFeatureMultiplier` refuses
@@ -490,7 +493,7 @@ def compare(
     return bad
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
     var fx = Fixture()
@@ -502,37 +505,37 @@ def main() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_COLUMNS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=fx.indices.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=fx.target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=fx.weight.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=fx.cindex.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, fx.indices)
+    upload_whole_into[DType.float32](ctx, d_tgt, fx.target)
+    upload_whole_into[DType.float32](ctx, d_wt, fx.weight)
+    upload_whole_into[DType.uint32](ctx, d_ci, fx.cindex)
 
     var d_ob_off = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_first = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_folds = ctx.enqueue_create_buffer[DType.uint32](N_OB)
     var d_ob_oh = ctx.enqueue_create_buffer[DType.uint8](N_OB)
-    ctx.enqueue_copy(dst_buf=d_ob_off, src_ptr=fx.ob_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_first, src_ptr=fx.ob_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_folds, src_ptr=fx.ob_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ob_oh, src_ptr=fx.ob_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_ob_off, fx.ob_offset)
+    upload_whole_into[DType.uint32](ctx, d_ob_first, fx.ob_first)
+    upload_whole_into[DType.uint32](ctx, d_ob_folds, fx.ob_folds)
+    upload_whole_into[DType.uint8](ctx, d_ob_oh, fx.ob_one_hot)
 
     var d_hb_off = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_first = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_folds = ctx.enqueue_create_buffer[DType.uint32](N_HB)
     var d_hb_oh = ctx.enqueue_create_buffer[DType.uint8](N_HB)
-    ctx.enqueue_copy(dst_buf=d_hb_off, src_ptr=fx.hb_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_first, src_ptr=fx.hb_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_folds, src_ptr=fx.hb_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hb_oh, src_ptr=fx.hb_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_hb_off, fx.hb_offset)
+    upload_whole_into[DType.uint32](ctx, d_hb_first, fx.hb_first)
+    upload_whole_into[DType.uint32](ctx, d_hb_folds, fx.hb_folds)
+    upload_whole_into[DType.uint8](ctx, d_hb_oh, fx.hb_one_hot)
 
     var d_b_off = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_first = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_folds = ctx.enqueue_create_buffer[DType.uint32](N_B)
     var d_b_oh = ctx.enqueue_create_buffer[DType.uint8](N_B)
-    ctx.enqueue_copy(dst_buf=d_b_off, src_ptr=fx.b_offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_first, src_ptr=fx.b_first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_folds, src_ptr=fx.b_folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_b_oh, src_ptr=fx.b_one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_b_off, fx.b_offset)
+    upload_whole_into[DType.uint32](ctx, d_b_first, fx.b_first)
+    upload_whole_into[DType.uint32](ctx, d_b_folds, fx.b_folds)
+    upload_whole_into[DType.uint8](ctx, d_b_oh, fx.b_one_hot)
 
     # =============================================================== F1
     # one part, offset 8, 23,800 rows: not the whole pool, so a launcher
@@ -541,7 +544,7 @@ def main() raises:
     var p_n = 23800
     var parts1: List[UInt32] = [UInt32(p_off), UInt32(p_n)]
     var d_parts1 = ctx.enqueue_create_buffer[DType.uint32](2)
-    ctx.enqueue_copy(dst_buf=d_parts1, src_ptr=parts1.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts1, parts1)
 
     var one_off: List[Int] = [p_off]
     var one_len: List[Int] = [p_n]
@@ -594,9 +597,9 @@ def main() raises:
         d_b.unsafe_ptr(), fx.b_line, True, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
-    ctx.enqueue_copy(dst_buf=h_hb, src_buf=d_hb)
-    ctx.enqueue_copy(dst_buf=h_b, src_buf=d_b)
+    download_host_into[DType.float32](ctx, d_ob, h_ob)
+    download_host_into[DType.float32](ctx, d_hb, h_hb)
+    download_host_into[DType.float32](ctx, d_b, h_b)
     ctx.synchronize()
 
     var got_ob = List[Float32]()
@@ -659,7 +662,7 @@ def main() raises:
     var d_parts64 = ctx.enqueue_create_buffer[DType.uint32](
         2 * n_parts_wide
     )
-    ctx.enqueue_copy(dst_buf=d_parts64, src_ptr=parts64.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts64, parts64)
 
     var wide = fx.ob_line * 2 * n_parts_wide
     var d_ob_wide = ctx.enqueue_create_buffer[DType.float32](wide)
@@ -676,7 +679,7 @@ def main() raises:
         d_ob_wide.unsafe_ptr(), fx.ob_line, True, ob_hist, SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob_wide, src_buf=d_ob_wide)
+    download_host_into[DType.float32](ctx, d_ob_wide, h_ob_wide)
     ctx.synchronize()
 
     var got_wide = List[Float32]()
@@ -777,9 +780,31 @@ def main() raises:
     for k in range(line2):
         seed2[k] = Float32(k % 89 + 5)
     var raw_ob = tally_one_byte(fx, one_off, one_len)
+    # THE INT-SLOT ROUTE STORES (fb11, 2026-11-17; the first L40S run read
+    # 2004 of 3090 cells "wrong", every one the raw tally without the seed).
+    # Under the routed 8-bit launch in a non-FAST build,
+    # `compute_hist2_non_binary_dev` splits the documents at M > 1 into
+    # private Int32 slots and `pw_fold_int_slots_kernel` folds them and
+    # STORES the multiplier-1 cell (the 1e-20 write guard included): the
+    # cell is the same at every M by design (pointwise_kernels.mojo, "THE
+    # 8-BIT DOCUMENT SPLIT WITH THE ONE-BLOCK BITS"), so the M > 1 atomic
+    # writeback this gate was written for does not exist on that route.
+    # What stays observable is that the split was TAKEN and folded to the
+    # one-block store: every tallied cell replaced, every untallied cell
+    # left at its seed. A launch that dropped to the float atomic would keep
+    # the seed under every cell and fail here.
+    var int_slot_store = False
+    comptime if pw_routed and not PW_PRIVATE_DOC_SLOTS and GLOBAL_NUMERIC_MODE != NUMERIC_FAST:
+        var est = m_2c
+        if est > PW_MAX_MULTIPLIER:
+            est = PW_MAX_MULTIPLIER
+        int_slot_store = pw_int_slots_on() and est > 1 and (est & (est - 1)) == 0
     var want2c = zeros(line2)
     for k in range(line2):
-        want2c[k] = seed2[k] + raw_ob[k]
+        if int_slot_store:
+            want2c[k] = raw_ob[k] if abs(raw_ob[k]) > PW_WRITE_EPS else seed2[k]
+        else:
+            want2c[k] = seed2[k] + raw_ob[k]
 
     ctx.enqueue_copy(dst_buf=d_ob, src_ptr=seed2.unsafe_ptr())
     comptime if pw_routed:
@@ -828,7 +853,7 @@ def main() raises:
             d_ob.unsafe_ptr(), ob_hist.feature_count_for_bits(8, 8), sm_2c,
             FIXED_SCALE,
         )
-    ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
+    download_host_into[DType.float32](ctx, d_ob, h_ob)
     ctx.synchronize()
 
     var got2c = List[Float32]()
@@ -860,7 +885,7 @@ def main() raises:
         parts4.append(UInt32(f3_off[p]))
         parts4.append(UInt32(f3_len[p]))
     var d_parts4 = ctx.enqueue_create_buffer[DType.uint32](8)
-    ctx.enqueue_copy(dst_buf=d_parts4, src_ptr=parts4.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts4, parts4)
 
     # each part's own scanned histogram, which is what must come back
     var per_part = List[List[Float32]]()
@@ -895,7 +920,7 @@ def main() raises:
         d_ob4.unsafe_ptr(), fx.ob_line, False, ob_hist, SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_ob4, src_buf=d_ob4)
+    download_host_into[DType.float32](ctx, d_ob4, h_ob4)
     ctx.synchronize()
 
     var got4 = List[Float32]()
@@ -975,7 +1000,7 @@ def main() raises:
                 N_ROWS, d_parts1.unsafe_ptr(), 1, 1, True, fx.ob_line,
                 d_ob.unsafe_ptr(), fcb, SM_COUNT, FIXED_SCALE,
             )
-        ctx.enqueue_copy(dst_buf=h_ob, src_buf=d_ob)
+        download_host_into[DType.float32](ctx, d_ob, h_ob)
         ctx.synchronize()
         var claimed = String("")
         for g in range(4):
@@ -1026,7 +1051,7 @@ def main() raises:
         d_sent.unsafe_ptr(), fx.hb_line, False, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_sent, src_buf=d_sent)
+    download_buffer_into[DType.float32](ctx, d_sent, h_sent)
     ctx.synchronize()
     var bad5 = 0
     for k in range(fx.hb_line * 2):
@@ -1045,7 +1070,7 @@ def main() raises:
         d_sent.unsafe_ptr(), fx.hb_line, True, FoldsHistogram(), SM_COUNT,
         FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_sent, src_buf=d_sent)
+    download_buffer_into[DType.float32](ctx, d_sent, h_sent)
     ctx.synchronize()
     var bad5b = 0
     for k in range(fx.hb_line * 2):
@@ -1182,3 +1207,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("pointwise dispatch: F1-F7 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_dispatch_check", cpu=False, gpu=True, serial="", run=run_cases)

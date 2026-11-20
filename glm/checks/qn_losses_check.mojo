@@ -72,7 +72,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
-from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
+from glm.host.qn_oracle import host_qnt_sum, host_qnt_xty
 from glm.checks.multinomial_check import (
     _download,
     _hex32,
@@ -117,7 +117,7 @@ from checks.numerics import (
 )
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime QL_ROWS = 2048
 comptime QL_COLS = 5
 comptime SVR_EPS = Float32(0.25)
@@ -603,22 +603,14 @@ def _host_evaluate(
     var reg_h = _host_tikhonov(hw, d, l2, g)
     var alpha = Float32(1.0 / Float64(n))
     # QN_TILED (lane/gap-linear-nv): the C == 1 evaluation's sums are tiled
-    comptime if HOST_QN_TILED:
-        loss_h = host_qnt_sum(terms, n)
-        var xt = host_qnt_xty(xh, dz, n, d)
-        for k in range(d):
-            var st = ftz(alpha * xt[k])
-            g[k] = ftz(st + g[k])
-        g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
-        return ftz(loss_h + reg_h)
-    # the gradient is the tile order with QN_TILED off too (`linear_bwd`'s
-    # `qntm_tiled_into`, lane debt-block-per-n 2026-10-21)
-    var xt0 = host_qnt_xty(xh, dz, n, d)
+    # TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+    # Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+    loss_h = host_qnt_sum(terms, n)
+    var xt = host_qnt_xty(xh, dz, n, d)
     for k in range(d):
-        var s = ftz(alpha * xt0[k])
-        g[k] = ftz(s + g[k])
-    var ratio = Float32(1.0) / Float32(n)
-    g[d] = ftz(_host_sum_terms(dz, n) * ratio)
+        var st = ftz(alpha * xt[k])
+        g[k] = ftz(st + g[k])
+    g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
     return ftz(loss_h + reg_h)
 
 

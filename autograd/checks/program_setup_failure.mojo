@@ -13,6 +13,7 @@ from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED
 
 
 struct FaultExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = False
     var host: HostExec
     var kind: Int
     var at: Int
@@ -71,6 +72,45 @@ struct FaultExec(Exec, Movable):
 
     def execution_profile_end(mut self) raises -> ExecutionProfile:
         return self.host.execution_profile_end()
+
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        self.host.step_run(code, bufs, counts, ints, fs, y_out, record)
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        self.host.step_backward(w, s, q, d_out, d_x, d_w)
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        self.host.step_reports(code, w_addr, s_addr, dsts)
+
+    def step_forget(mut self, addr: Int):
+        self.host.step_forget(addr)
+
+    def step_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        self.host.step_append_restore(kvs, words)
+
+    def step_weights_changed(mut self, addr: Int):
+        self.host.step_weights_changed(addr)
+
+    def step_clear(mut self):
+        self.host.step_clear()
+
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        self.host.gen_pick(logits, n_logits, rows, n_rows, ints, fs, ids)
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        self.host.gen_alive(rows, n_rows, b, dst)
+
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        self.host.lm_head_v2_host(backward, bufs, rows, vocab, width)
+
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        self.host.small_mlp_host(backward, bufs, dims)
+
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        self.host.cnn_op_host(op, bufs, cprm, pprm, words)
 
 
 def require(condition: Bool, message: String) raises:
@@ -175,7 +215,7 @@ def check_cast_fault(integer: Bool, kind: Int) raises:
     _ = integers^
 
 
-def main() raises:
+def run_checks() raises:
     var cases = 0
     for conditional in range(2):
         # Dataset setup plus all five optimizer-state allocations and the

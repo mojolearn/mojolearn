@@ -3,7 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
-from bindings.cfb_agglo import cfb_agglo_operation
+from bindings.cfb_agglo_door import cfb_agglo_operation
 
 
 @export

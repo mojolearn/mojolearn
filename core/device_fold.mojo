@@ -34,7 +34,7 @@ Every add is flushed (`checks.numerics.ftz`), so a subnormal is zero on
 every vendor; no multiply appears, so no fused multiply-add can change a bit.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
@@ -42,6 +42,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import ftz
 from core.device_scan import SCAN_TPB, SCAN_BLOCKS, NONFINITE_NONE
+from core.device_zero import enqueue_fill_n
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len, frs_exclusive_scan, frs_scan_blocks
 
 comptime _I32P = MutPointer[Int32, MutAnyOrigin]
@@ -160,12 +161,6 @@ def _mark_kernel(flags: _I32P, keys: _I32P, n_in: Int32, mask: Int32, m_in: Int3
     var key = Int(keys.unsafe_load(i) & mask)
     if key >= 0 and key < Int(m_in):
         flags.unsafe_store(key, Int32(1))
-
-
-def _zero_i32_kernel(buf: _I32P, n_in: Int32):
-    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
-    if i < Int(n_in):
-        buf.unsafe_store(i, Int32(0))
 
 
 def _eq_flag_kernel(src: _I32P, n_in: Int32, value: Int32, flag: _I32P, scan: _I32P):
@@ -409,10 +404,7 @@ def device_count_distinct_keys(
     if n <= 0 or m <= 0:
         return 0
     var flags = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[_zero_i32_kernel](
-        flags.unsafe_ptr(), Int32(m),
-        grid_dim=((m + SCAN_TPB - 1) // SCAN_TPB, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-    )
+    enqueue_fill_n(ctx, flags, m, Int32(0))
     ctx.enqueue_function[_mark_kernel](
         flags.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), mask, Int32(m),
         grid_dim=((n + SCAN_TPB - 1) // SCAN_TPB, 1, 1), block_dim=(SCAN_TPB, 1, 1),

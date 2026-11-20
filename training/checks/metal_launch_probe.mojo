@@ -28,7 +28,7 @@ on its grid; `launch_sync` minus `launch_only` is the price of a host
 round trip; `sync_only` is that price on an idle queue.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer

@@ -24,9 +24,9 @@ minima over indices are exact, so the refusal, the index and the message
 are the old ones on every vendor and on the host column; the update
 arithmetic is the same inlined body (`_adam_update_body`,
 `_sgd_update_element`), so the bits do not move.
--D MOJOLEARN_IDN_OPT_GATE_SCAN_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-old scans; `MOJOLEARN_OPT_SCAN_FUSED=0` at run time still selects main's
-four separate scans; `MOJOLEARN_OPT_TRUST_INPUTS` still means no scan.
+The old-scan rollbacks (MOJOLEARN_IDN_OPT_GATE_SCAN_OFF, MOJOLEARN_IDN_ALL_OFF)
+and the MOJOLEARN_OPT_TRUST_INPUTS no-scan arm are deleted (2026-11-15);
+the fused gate scan is the only IDENTICAL path.
 
 MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH (D12). SGD was one launch per tensor
 only because the momentum flag is per tensor (contract 7.3b). The flag now
@@ -35,19 +35,18 @@ the flags), and each thread finds its tensor by a binary search over the
 offsets, so the flag is still a per-TENSOR value (every element of tensor
 j reads flag j). The per-element arithmetic is `sgd_update_kernel`'s body,
 so the bits do not move. Same design as the FAST `AFN_OPT_MULTITENSOR`.
--D MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF (or MOJOLEARN_IDN_ALL_OFF).
+Its rollback MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF is deleted (2026-11-15).
 
 MOJOLEARN_IDN_OPT_CLIP_BATCHED (D12). The step's clip calls
 `identical_clip_grad_norm_batched` (the same GEMMs in the same order, J
 per-tensor waits removed) instead of `identical_clip_grad_norm`. Same
 bits by construction (its docstring). Any clip sabotage build still takes
 the original inside the batched entry.
--D MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF (or MOJOLEARN_IDN_ALL_OFF).
+Its rollback MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF is deleted (2026-11-15).
 """
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.os import getenv
-from std.sys.compile import is_defined
+from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -70,22 +69,20 @@ from core.step_phase import (
 from training.checks.optimizer_contract import opt_nonfinite_message
 
 
-comptime OPT_GATE_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_OPT_GATE_SCAN_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-    and not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"]()
-)
-comptime OPT_SGD_ONE_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime OPT_CLIP_BATCHED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_OPT_GATE_SCAN_OFF, MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH_OFF, MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF (old-path rollbacks beside the IDENTICAL defaults, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 25599a616f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch (one patch for the three)
+
+# TOMBSTONE: MOJOLEARN_OPT_TRUST_INPUTS (opt-in skip of the gate scan, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF terms (owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 25599a616f.
+# Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.expdel2-32-neural.patch
+comptime OPT_GATE_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime OPT_SGD_ONE_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime OPT_CLIP_BATCHED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: The fused refusal scan inside the gated step (lane envgate-train-seq-mamba,
+#: 2026-11-15): a build constant holding today's default (on); before, an
+#: environment read per step. ROUTE-DEFAULT-SUSPECT, no A/B on record: B arm
+#: `-D MOJOLEARN_OPT_SCAN_FUSED_OFF` (main's separate scans), RUN OWED in
+#: bench/results/paper_compare/owed-pre0867.json ("opt-scan-fused-off").
+comptime OPT_SCAN_FUSED = not is_defined["MOJOLEARN_OPT_SCAN_FUSED_OFF"]()
 
 #: Gate cells: 0..3 the smallest non-finite index in param, grad, m, v
 #: (or NONFINITE_NONE); 4 the gate (nonzero refuses the step).
@@ -213,7 +210,7 @@ def opt_gate_fold_kernel[FOUR: Bool](
 
 def opt_gate_wanted(offsets: List[Int]) -> Bool:
     """The gated path runs when the build has it, the run did not ask for
-    main's separate scans (`MOJOLEARN_OPT_SCAN_FUSED=0`), and the step has
+    main's separate scans (`-D MOJOLEARN_OPT_SCAN_FUSED_OFF`), and the step has
     at least one tensor and one element (otherwise main's path, which
     handles the degenerate shapes, runs unchanged)."""
     comptime if not OPT_GATE_SCAN:
@@ -222,7 +219,7 @@ def opt_gate_wanted(offsets: List[Int]) -> Bool:
         return False
     if offsets[len(offsets) - 1] <= 0:
         return False
-    return String(getenv("MOJOLEARN_OPT_SCAN_FUSED")) != "0"
+    return OPT_SCAN_FUSED
 
 
 def opt_gate_begin(

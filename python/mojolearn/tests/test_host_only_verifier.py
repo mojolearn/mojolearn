@@ -60,7 +60,7 @@ def test_host_only_replay_matches_and_both_fault_controls_diverge(lane):
     # the table-wide two-witness policy, or a per-lane entry that overrides it
     assert table.get("lane_admission", {}).get(lane, {}).get("policy", table["admission_policy"]) == dict(
         min_repeats=1, min_witnesses=2, input_witness_required=True,
-        property_protocol_required=True)
+        property_protocol_required=True, cpu_host_only_witnesses=1)
 
 
 def _assert_columns_match_record_class(table, entry):

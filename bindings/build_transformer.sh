@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Build the transformer block CPython extension into
 # python/mojolearn/_mojolearn_transformer.so. Run from anywhere; requires
 # pixi.
@@ -87,7 +88,7 @@ LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xli
 TARGET_FLAGS="--target-cpu apple-m1"
 if [ "$(uname)" != "Darwin" ]; then
     case "$(uname -m)" in
-        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) TARGET_FLAGS="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
         *)      TARGET_FLAGS="" ;;   # linux arm: host cpu + its GPU
     esac
 fi
@@ -141,13 +142,8 @@ export MOJOLEARN_SKIP_BUILD_GATE=1
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) MEMORY_DEFINE= ;;
-    recompute) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=1" ;;
-    packed) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=2" ;;
-    alias-y) MEMORY_DEFINE="-D MOJOLEARN_IDN_ATTN_STASH=3" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, alias-y, or recompute' >&2; exit 2 ;;
-esac
+# MOJOLEARN_ATTENTION_MEMORY_PROFILE (recompute / packed / alias-y) is gone: it only selected
+# -D MOJOLEARN_IDN_ATTN_STASH, deleted 2026-11-15 (docs/TOMBSTONES.md); estash is the one profile.
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-transformer.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -159,8 +155,8 @@ out="$tmpdir/_mojolearn_transformer.so"
 # export function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 # compiles the entry bindings/entry/entry__mojolearn_transformer.mojo, which imports the module body bindings/_mojolearn_transformer.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE $MEMORY_DEFINE \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/entry/entry__mojolearn_transformer.mojo \

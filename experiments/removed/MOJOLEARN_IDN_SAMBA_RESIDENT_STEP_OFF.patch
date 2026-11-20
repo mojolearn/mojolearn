@@ -1,0 +1,47 @@
+diff --git b/bindings/_mojolearn_training.mojo a/bindings/_mojolearn_training.mojo
+index b654849a81..6ea9af1382 100644
+--- b/bindings/_mojolearn_training.mojo
++++ a/bindings/_mojolearn_training.mojo
+@@ -148,7 +148,7 @@ from providers.python.training_samba_afn_pyapi_pack import (
+ # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
+ # train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
+ # default since 2026-10-08, lane grid-act-4; off under
+-# MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
++# -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
+ # shell can ask (training/samba_resident.mojo).
+ from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
+ from core.philox_neural import neural_rng_host
+@@ -753,7 +753,7 @@ def samba_head_loss_binding(
+ # ===========================================================================
+ # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
+ # 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
+-# ge123e6f9); its _OFF rollback was deleted 2026-11-15, lane expdel-04-neural).
++# ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
+ # One SambaResidentSession per SambaStack (the primitive entry's op 12; the
+ # Python entries samba_resident_open/step/accumulated_step and
+ # samba_resident_native_handle_v1 were deleted by lane samba-sessions-native,
+diff --git b/training/neural_identical_experiments.mojo a/training/neural_identical_experiments.mojo
+index 2a77653a89..aa7b88e2b7 100644
+--- b/training/neural_identical_experiments.mojo
++++ a/training/neural_identical_experiments.mojo
+@@ -92,15 +92,13 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
+ # layers and op count, not with any one shape. Measured alone against the
+ # incumbent; it now combines with the promoted m3_angle_carry_cache and
+ # act_retain=2 and attn_stash=recompute (Samba only), and the post-merge race
+-# measures the combination. Default on in IDENTICAL. The NI34 chunked head
+-# (MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2) spells a different head, so a chunked-head
+-# build takes the per-op route (was a refused pair); IDN_ALL_OFF does too.
+-# TOMBSTONE: MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF (superseded: IDN_SAMBA_RESIDENT_STEP PROMOTED grid ge123e6f9,
+-# samba-forward NV 12.0 -> 5.3 / AMD 8.8 -> 5.8 ms, samba-train-step NV 96.0 -> 39.2 / AMD 147.2 -> 114.2 ms, hashes
+-# equal) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 5bfce25001.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF.patch
++# measures the combination. Default on in IDENTICAL; -D
++# MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route. The NI34
++# chunked head (MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2) spells a different head, so a
++# chunked-head build takes the per-op route (was a refused pair).
+ comptime IDN_SAMBA_RESIDENT_STEP = (
+     _ENABLED
++    and not is_defined["MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
+ )
+ # Samba stateless forward route (lane restore-samba-resident-forward,

@@ -1,0 +1,15 @@
+diff --git a/gbdt/trees_identical_switches.mojo b/gbdt/trees_identical_switches.mojo
+index 544be4aefa..ef7f4de0c1 100644
+--- a/gbdt/trees_identical_switches.mojo
++++ b/gbdt/trees_identical_switches.mojo
+@@ -85,9 +85,7 @@ comptime T25 = False
+ comptime T28 = False
+ 
+ # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+-# TOMBSTONE: MOJOLEARN_TREES_T29 (DELETE-ARM, rule e, EXP:1869: opt-in, never measured against the default) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at a6ac1678d7.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T29.patch
+-comptime T29 = False
++comptime T29 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T29"]()
+ 
+ # Tried 2026-10-08 (MOJOLEARN_TREES_T29_VERSIONED, the 'versioned' arm of T29, run ge123e6f9): the generated V1 PairLogit
+ # objective (gbdt/targets/kernel/tree_t29_pair.mojo + tree_t29_units.mojo, host _group_values_t29); NV/AMD gbdt-rank-pairlogit

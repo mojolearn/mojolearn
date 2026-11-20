@@ -31,7 +31,9 @@ def test_host_native_provider_reuse_and_transactional_outputs():
     provider = model._native_provider
     audit_native_call(model.loss, ids).assert_native()
     assert model._native_provider is provider
-    assert _HOST_TRAIN(model, 'native_provider_info', (), _HOST_TRAIN_CONTEXT)[1][3] == 2
+    # one step (operation 3) and one loss: since 78d248303b `loss` is the forward alone (operation 2)
+    counts = _HOST_TRAIN(model, 'native_provider_info', (), _HOST_TRAIN_CONTEXT)[1]
+    assert counts[3] == 1 and counts[2] == 1, counts
     before = tuple(np.asarray(x).tobytes() for x in (model.parameters_, model.m_, model.v_))
     completed = model.completed_steps
     factory = model._binding.byte_lm_host_api_v1
@@ -124,7 +126,9 @@ def test_inference_constructor_native_flat_named_packed_and_atomic_admission():
     assert model.weight_format == 'float32' and np.asarray(model._parameters).tobytes() == flat.tobytes()
     for fmt in ('bfloat16', 'int8'):
         packed = lowbit.pack(named, fmt)
-        materialized = lowbit.unpack(packed)
+        # `unpack` returns the float32 dict and the stored format.
+        materialized, stored = lowbit.unpack(packed)
+        assert stored == fmt
         expected = np.concatenate([np.asarray(materialized[name]).ravel() for name in shape.parameter_names])
         result = audit_native_call(LanguageModelInference, packed, shape=shape, threads=1).assert_native()
         assert result.weight_format == fmt and np.asarray(result._parameters).tobytes() == expected.tobytes()
@@ -149,7 +153,8 @@ def test_host_inference_checkpoint_native_integrity_and_file_errors(tmp_path):
     from mojolearn._byte_lm_impl import SmallByteLanguageModelTrainer
     from mojolearn._verify_native_runtime import audit_native_call
     template = _model()
-    trainer = SmallByteLanguageModelTrainer(template.parameters_, shape=template.shape, resident=False)
+    trainer = SmallByteLanguageModelTrainer(template.parameters_, data_schedule={'corpus': 'host-provider-test'},
+                                            shape=template.shape, resident=False)
     path = tmp_path / 'state.json'
     trainer.export_checkpoint(path)
     restored = audit_native_call(LanguageModelInference.from_checkpoint, path, threads=1).assert_native()
@@ -179,6 +184,7 @@ def test_cpu_language_model_public_provider_matches_host_owner(monkeypatch, tmp_
     expected = _model()
     ids = np.array([[1, 3, 5, 7, 9]], dtype='i4')
     trainer = audit_native_call(impl.SmallByteLanguageModelTrainer, expected.parameters_,
+                               data_schedule={'corpus': 'host-provider-test'},
                                shape=expected.shape, resident=resident).assert_native()
     baseline_bits = expected.train_step(ids)
     actual = audit_native_call(trainer.train_step, ids).assert_native()

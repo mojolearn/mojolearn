@@ -19,7 +19,6 @@ NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 | MOJOLEARN_TREES_HIST_SYM_FEATURE_PARALLEL | switch | on/off | greedy_search_helper.mojo `replication_for` |
 """
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -27,11 +26,19 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Idea 1: grad+hess of one point in ONE 64-bit shared atomic (NVIDIA/AMD;
 # Apple has no 64-bit atomics and keeps the two Int32 atomics). Range proof
 # in `hist_2_one_byte_8bit.h8_add_point`.
+# TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at e312bd1c25.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch
+# (Sweep 2026-11-15: the unread HIST_PACKED_GH constant was removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"]()
 
 # Idea 2: wave-aggregated atomics. When every lane of a hardware wave holds
 # the same (feature, bin) cell, the wave sums its addends with one shuffle
 # reduction and ONE lane issues the atomic. See `h8_add_point_wave`.
+# TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at 1082bcb01c.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.patch
+# (Sweep 2026-11-15: the unread HIST_WARP_AGG constant was removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime HIST_WARP_AGG = _IDN and is_defined["MOJOLEARN_TREES_HIST_WARP_AGG"]()
 
 # Tried 2026-10-08 (MOJOLEARN_TREES_HIST_MULTISTAT = 4 | 8, run ge123e6f9): MultiClass one-byte histograms, one cindex

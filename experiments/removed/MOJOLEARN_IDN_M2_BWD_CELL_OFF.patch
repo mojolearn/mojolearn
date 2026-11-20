@@ -1,0 +1,28 @@
+diff --git a/autograd/kernels/mamba2_ssd.mojo b/autograd/kernels/mamba2_ssd.mojo
+index 37dd2805bb..241c0e1750 100644
+--- a/autograd/kernels/mamba2_ssd.mojo
++++ b/autograd/kernels/mamba2_ssd.mojo
+@@ -48,7 +48,8 @@ comptime M2_SSD_BWD_TPB = 128
+ # lane nr-mamba (2026-10-04), roadmap B6. IDENTICAL only; every column
+ # (NVIDIA, AMD, Apple and the generated host column) runs this same source.
+ #
+-# IDN_M2_BWD_CELL (IDENTICAL; FAST keeps main's kernels): the conv backward's per-cell
++# IDN_M2_BWD_CELL (default ON; `-D MOJOLEARN_IDN_M2_BWD_CELL_OFF` or
++# `-D MOJOLEARN_IDN_ALL_OFF` restores main): the conv backward's per-cell
+ # parts (d_conv, d_in) and the S9/S10 per-cell parts (d_dt, d_dtraw) run one
+ # thread per cell, where main ran one thread per channel (conv, over B x L)
+ # or per head (nh threads in all, over B x T). Each cell is the same chain,
+@@ -65,9 +66,10 @@ comptime M2_SSD_BWD_TPB = 128
+ # upstream reads them (the optimizer state follows them). The tile height
+ # is a constant, not a shape rule.
+ # ---------------------------------------------------------------------------
+-# TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at a6c819032b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_M2_BWD_CELL = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_M2_BWD_CELL_OFF"]()
++)
+ comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
+     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
+ ]()

@@ -178,7 +178,7 @@ def check_zero_rows(mut card: IdentityTrace) raises:
     print("PASS zero rows: uniform, never 0/0")
 
 
-def main() raises:
+def run_checks() raises:
     var path = getenv("MOJOLEARN_XTREES_CARD", "/tmp/xtrees_glue.card")
     var card = IdentityTrace.to_path(path)
     card.header("xtrees glue seams (DEVIATIONS 5600-5605)")

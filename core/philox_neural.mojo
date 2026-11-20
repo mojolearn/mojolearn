@@ -32,8 +32,9 @@ implementations and FAST uses the vendor's. The scale `s = 1 / (1 - p)`
 and the span `hi - lo` are HOST float32 scalars handed in by the caller.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_first_nonfinite_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 
@@ -233,11 +234,12 @@ def neural_rng_host(
             raise Error("mojolearn neural rng: dropout p must be in [0, 1)")
         if b <= Float32(0.0):
             raise Error("mojolearn neural rng: dropout scale must be > 0")
-        for i in range(n):
-            if not isfinite(in_ptr.unsafe_load(i)):
-                raise Error(
-                    "mojolearn neural rng: non-finite dropout input at " + String(i)
-                )
+        # parallel: the one host finite scan; the index walk runs only on a refusal
+        if not host_all_finite_f32(in_ptr, n):
+            raise Error(
+                "mojolearn neural rng: non-finite dropout input at "
+                + String(host_first_nonfinite_f32(in_ptr, n))
+            )
     var in_n = n if reads_input else 1
     var out_buf = ctx.enqueue_create_buffer[DType.float32](n)
     var in_buf = ctx.enqueue_create_buffer[DType.float32](in_n)

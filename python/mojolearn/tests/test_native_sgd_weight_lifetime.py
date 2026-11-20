@@ -15,7 +15,7 @@ def test_unit_class_weights_preserve_weighted_sgd_fit(n_classes):
     # A fresh debug allocator poisons freed array.array storage. Without it,
     # a dropped class-weight Array can still contain plausible old numbers.
     env = dict(os.environ, PYTHONMALLOC="debug", MOJOLEARN_NUMERIC_MODE="identical")
-    source = str(Path(__file__).resolve().parents[2])
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT as source  # the runtime this process imported
     env["PYTHONPATH"] = source + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     body = textwrap.dedent("""
         import sys

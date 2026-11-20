@@ -17,10 +17,6 @@ ARITHMETIC LANDED IN THOSE WRAPPERS.** A paper draft said "neural
 training is internal, not a public API"; that sentence was true and this
 module is the only thing that was wrong with it.
 
-The small-MLP additions expose bias/ReLU, ReLU backward and ascending-row
-sum from `training/mlp_ops.mojo`. They require IDENTICAL and bounded shapes;
-their new arithmetic needs separate root-run qualification. Existing loss
-and optimizer arithmetic is unchanged.
 
 WHERE THE MEASUREMENT STOPS, AND IT IS UNEVEN. The loss contract card (md5
 `a87615d9`) and the optimizer contract card (md5 `97d160b0`) are
@@ -59,14 +55,17 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
 `training/estimator.mojo` and this file; 1591 through 1599 are unassigned.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
-from bindings.residual_dropout_boundary import residual_dropout_binding, residual_dropout_backward_binding
-from bindings.neural_gemm_boundary import neural_gemm_binding
+from bindings.residual_dropout_boundary_pack import (
+    residual_dropout_binding, residual_dropout_backward_binding,
+    residual_dropout_dev_binding, residual_dropout_backward_dev_binding,
+)
 from training.neural_session_mlp import nn_mlp_sessions_device
 
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from core.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr as _f32_ptr, i32_ptr as _i32_ptr
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from bindings.sha256_door import sha256_hexdigest
@@ -76,22 +75,24 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
-from training.small_mlp_dispatch import SMALL_MLP_NATIVE_TABLE
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from training.optimizer_native_gpu import OPTIMIZER_NATIVE_GPU_API
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 from checks.vendor import COMPILED_VENDOR
+from core.samba_entry_table_training import publish_samba_training_primitives
 from max.gpu.host import DeviceContext, HostBuffer
 
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
-from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
-from bindings.optimizer_public_door import entry_zero
-from bindings.optimizer_public_pyapi import (
-    optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
-    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding,
-    optimizer_resident_download_binding, optimizer_resident_open_binding,
-    optimizer_resident_step_binding, optimizer_resident_step_io_binding,
-    optimizer_resident_upload_binding, maximize_dev_available_binding,
+from training.optimizer_public import per_call_step
+from bindings.optimizer_public_pyapi_pack import (
+    optimizer_resident_close_binding,
+    optimizer_resident_download_binding,
+    optimizer_resident_open_binding,
+    optimizer_resident_step_binding,
+    optimizer_resident_step_io_binding,
+    optimizer_resident_upload_binding,
+    maximize_dev_available_binding,
 )
 from training.estimator import (
     identical_clip_grad_norm_addrs_host,
@@ -110,21 +111,7 @@ from training.estimator import (
     identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, OPT_IO_UP_G, IDN_MAXIMIZE_DEV,
     maximize_negate_device,
 )
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
-from training.mlp_ops import (
-    mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
-    mlp_train_step_host, mlp_validate_shape,
-)
-#: lane afn-mlp (2026-10-03): the Apple FAST resident session, registered
-#: only under FAST + Apple + `-D MOJOLEARN_AFN_MLP_RESIDENT` / `_MULTISTEP`
-#: / `_ALL` (training/mlp_fast.mojo); absent from every other build.
-from training.mlp_fast import (
-    MLP_MULTISTEP, MLP_RESIDENT,
-    mlp_resident_close_host, mlp_resident_download_host, mlp_resident_open_host,
-    mlp_resident_step_host, mlp_resident_upload_host, mlp_resident_registry,
-    FT_TOTAL, RS_OFF_P, RS_OFF_G, RS_OFF_M, RS_OFF_V,
-)
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
     chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host,
@@ -142,33 +129,26 @@ from training.samba_ops import (
 # lane afn-samba (2026-10-03): the fused Samba entries exist only in an
 # Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
 # is false everywhere else and nothing below registers.
+# TOMBSTONE: MOJOLEARN_AFN_SAMBA_FUSE (record read: EXP:2363 DELETED, superseded) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 3b87ca11bd.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_SAMBA_FUSE.expdel2-01-base.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from training.samba_afn import AFN_SAMBA_FUSE
-from providers.python.training_samba_afn_pyapi import (
+from providers.python.training_samba_afn_pyapi_pack import (
     samba_afn_embedding_backward_tied_binding,
-    samba_afn_norm_head_forward_binding,
     samba_afn_tail_train_binding,
 )
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
 # train step, registered only when IDN_SAMBA_RESIDENT_STEP holds (IDENTICAL
-# default since 2026-10-08, lane grid-act-4; off under
-# -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2); `samba_resident_enabled` is registered always so the Python
+# default since 2026-10-08, lane grid-act-4); `samba_resident_enabled` is registered always so the Python
 # shell can ask (training/samba_resident.mojo).
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
-from training.samba_resident import (
-    SambaResidentSession,
-    samba_resident_forward,
-    samba_resident_train_step,
-    samba_resident_accumulated_step,
-)
 from core.philox_neural import neural_rng_host
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
+# lane x6-samba-on-executor (2026-11-09): the Samba stack program, the one
+# device path of SambaStack.forward / step and SambaDecodeSession
+# (training/samba_program.mojo), is reached through the Samba program table
+# (training/samba_program_entry.mojo, published by
+# publish_samba_training_primitives); no Python entry here.
+from training.causal_entry_device import publish_causal_training_device
 
 
 def training_numeric_mode_binding() raises -> PythonObject:
@@ -342,7 +322,7 @@ def _handles(handles: PythonObject, want: Int, name: String) raises -> List[Int]
     if len(handles) != want:
         raise Error(name + ": handles must contain " + String(want) + " entries, got " + String(len(handles)))
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: device array handles of one op call): reads handle list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: device array handles of one op call): reads handle list, not data
         out.append(Int(py=handles[i]))
     return out^
 
@@ -417,6 +397,18 @@ def linear_backward_dev_binding(handles: PythonObject, params: PythonObject) rai
     return PythonObject(count)
 
 
+def _ce_row_ptr(row_addr: PythonObject, reduction: Int) raises -> Optional[MutPointer[Float32, MutUntrackedOrigin]]:
+    """The per-row loss buffer. Address 0 is accepted when `reduction` is
+    SUM or MEAN (lane ne3-c-blocks-embedding, row N118): the caller has no
+    use for the rows, so the drivers skip their download (None: a `Pointer`
+    is never null); under NONE the rows are the result and a null address is
+    refused as before."""
+    var address = Int(py=row_addr)
+    if address == 0 and reduction != 0:
+        return None
+    return _f32_ptr(address)
+
+
 def ce_loss_dev_binding(
     loss_addr: PythonObject,
     row_addr: PythonObject,
@@ -433,12 +425,12 @@ def ce_loss_dev_binding(
         raise Error("ce_loss_dev: params must contain 7 values, got " + String(len(params)))
     var hs = _handles(handles, 2, "ce_loss_dev")
     var lp = _f32_ptr(Int(py=loss_addr))
-    var rp = _f32_ptr(Int(py=row_addr))
+    var reduction = Int(py=params[3])
+    var rp = _ce_row_ptr(row_addr, reduction)
     var tp = _i32_ptr(Int(py=targets_addr))
     var n_rows = Int(py=params[0])
     var vocab = Int(py=params[1])
     var ignore_index = Int(py=params[2])
-    var reduction = Int(py=params[3])
     var num_items = Int(py=params[4])
     var want_grad = Int(py=params[5])
     var label_smoothing = Float32(Float64(py=params[6]))
@@ -486,8 +478,10 @@ def ce_loss_binding(
         `loss_addr`     1 float32, written when `reduction != 0`; left +0.0
                         under `REDUCTION_NONE`, where the certified forward
                         returns before seam L13
-        `row_addr`      N float32, the per-row loss, written on every call.
-                        The only output under `REDUCTION_NONE`
+        `row_addr`      N float32, the per-row loss, written on every call
+                        that names one. The only output under
+                        `REDUCTION_NONE`; under SUM or MEAN it may be 0
+                        (no rows are downloaded)
         `dlogits_addr`  N * V float32, written only when `want_grad != 0`.
                         May be a one-element buffer otherwise, but NEVER 0:
                         `_f32_ptr` refuses a null address
@@ -508,14 +502,14 @@ def ce_loss_binding(
             "ce_loss: params must contain 7 values, got " + String(len(params))
         )
     var lp = _f32_ptr(Int(py=loss_addr))
-    var rp = _f32_ptr(Int(py=row_addr))
+    var reduction = Int(py=params[3])
+    var rp = _ce_row_ptr(row_addr, reduction)
     var dp = _f32_ptr(Int(py=dlogits_addr))
     var xp = _f32_ptr(Int(py=logits_addr))
     var tp = _i32_ptr(Int(py=targets_addr))
     var n_rows = Int(py=params[0])
     var vocab = Int(py=params[1])
     var ignore_index = Int(py=params[2])
-    var reduction = Int(py=params[3])
     var num_items = Int(py=params[4])
     var want_grad = Int(py=params[5])
     var label_smoothing = Float32(Float64(py=params[6]))
@@ -529,290 +523,12 @@ def ce_loss_binding(
     return PythonObject(count)
 
 
-def mlp_bias_activation_binding(
-    input_addr: PythonObject, bias_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """C-row-major f32 bias + optional ReLU; params=[rows,cols,relu_flag].
-
-    Borrow input rows*cols, bias cols and output rows*cols floats.
-    Returns rows*cols after synchronous copyback; IDENTICAL only.
-    """
-    if len(params) != 3:
-        raise Error("mlp_bias_activation params must be [rows,cols,relu_flag]")
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    var relu_flag = Int(py=params[2])
-    mlp_validate_shape(rows, cols)
-    if relu_flag != 0 and relu_flag != 1:
-        raise Error("mlp_bias_activation relu_flag must be 0 or 1")
-    var xp = _f32_ptr(Int(py=input_addr))
-    var bp = _f32_ptr(Int(py=bias_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_bias_activation_host(ctx, xp, bp, op, rows, cols, relu_flag)
-    return PythonObject(count)
+# TOMBSTONE: the small-MLP primitives mlp_bias_activation, mlp_relu_backward, mlp_sum_rows (training/mlp_ops.mojo _mlp_kernel and its *_host functions; on the CPU column training/host/mlp_oracle.mojo host_mlp_relu_backward / host_mlp_sum_rows and core/mojolearn_training_host_impl.mojo *_host_into) and the mlp_sessions / mlp_sessions_rows entries (MOJOLEARN_NN64_SESSION_PACK) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3. Their callers (ParallelNeuralTrainer's shard gradient, SmallMLPTrainer's inference sessions) run the trainer's captured program (autograd/small_mlp_program.mojo).
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
 
 
-def mlp_relu_backward_binding(
-    activation_addr: PythonObject, incoming_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params=[rows,cols]; all three borrowed buffers hold rows*cols f32.
-
-    Derivative is incoming where activation>0, otherwise +0 (including zero).
-    Returns rows*cols after synchronous copyback; IDENTICAL only.
-    """
-    if len(params) != 2:
-        raise Error("mlp_relu_backward params must be [rows,cols]")
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    mlp_validate_shape(rows, cols)
-    var ap = _f32_ptr(Int(py=activation_addr))
-    var gp = _f32_ptr(Int(py=incoming_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_relu_backward_host(ctx, ap, gp, op, rows, cols)
-    return PythonObject(count)
-
-
-def mlp_sum_rows_binding(
-    input_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params=[rows,cols]; borrow rows*cols input and cols output f32.
-
-    Returns cols after synchronous ascending-row sum; IDENTICAL only.
-    """
-    if len(params) != 2:
-        raise Error("mlp_sum_rows params must be [rows,cols]")
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    mlp_validate_shape(rows, cols)
-    var xp = _f32_ptr(Int(py=input_addr))
-    var op = _f32_ptr(Int(py=out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_sum_rows_host(ctx, xp, op, rows, cols)
-    return PythonObject(count)
-
-
-def mlp_train_step_binding(
-    addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """The small MLP's whole step as ONE call (lane/apple-mlp-fused,
-    2026-09-30): the same GEMMs, bias/ReLU/row-sum launches, cross-entropy
-    and AdamW step `SmallMLPTrainer` made through twelve binding calls, the
-    intermediates kept on the device. Returns `rows * 3`, the logits written.
-
-    addresses, in this exact order (mirrored word for word in
-    `python/mojolearn/_mlp_impl.py::_fused`):
-
-        0  x        rows x 8 f32, read
-        1  y        rows i32 classes 0..2, read (unread under mode 0)
-        2  w1       16 x 8 f32   read; WRITTEN IN PLACE under mode 2
-        3  b1       16 f32       "
-        4  w2       3 x 16 f32   "
-        5  b2       3 f32        "
-        6  m        195 f32      read and written under mode 2 (any one
-                                 float otherwise, never 0)
-        7  v        195 f32      "
-        8  flags    4 i32        read and written back under mode 2
-        9  loss     1 f32        written (modes 1 and 2)
-        10 logits   rows x 3 f32 written
-        11 dw1      16 x 8 f32   written (modes 1 and 2)
-        12 db1      16 f32       "
-        13 dw2      3 x 16 f32   "
-        14 db2      3 f32        "
-        15 dx       rows x 8 f32 written when want_input_grad (else any
-                                 one float, never 0)
-        16 info     3 f32        the optimizer's info, +0.0 (no clip)
-
-    params, in this exact order:
-
-        0  rows              1..256
-        1  mode              0 forward only, 1 forward and backward,
-                             2 the whole step
-        2  t                 the optimizer's ONE-BASED step (mode 2)
-        3  lr                (float)
-        4  beta1             (float)
-        5  beta2             (float)
-        6  eps               (float)
-        7  weight_decay      (float)
-        8  want_input_grad   0 or 1
-
-    A silent reorder here is a WRONG ANSWER and not a crash. If you change
-    either list, change `_fused` in the same edit.
-    """
-    var a = _addrs(addresses, 17, "mlp_train_step")
-    _params(params, 9, "mlp_train_step")
-    var rows = Int(py=params[0])
-    var mode = Int(py=params[1])
-    var t = Int(py=params[2])
-    var lr = Float32(Float64(py=params[3]))
-    var beta1 = Float32(Float64(py=params[4]))
-    var beta2 = Float32(Float64(py=params[5]))
-    var eps = Float32(Float64(py=params[6]))
-    var weight_decay = Float32(Float64(py=params[7]))
-    var want_input_grad = Int(py=params[8])
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_train_step_host(
-            ctx,
-            _f32_ptr(a[0]), _i32_ptr(a[1]),
-            _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),
-            _f32_ptr(a[6]), _f32_ptr(a[7]), _i32_ptr(a[8]),
-            _f32_ptr(a[9]), _f32_ptr(a[10]),
-            _f32_ptr(a[11]), _f32_ptr(a[12]), _f32_ptr(a[13]), _f32_ptr(a[14]),
-            _f32_ptr(a[15]), _f32_ptr(a[16]),
-            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
-        )
-    return PythonObject(count)
-
-
-# ---------------------------------------------------------------------------
-# lane afn-mlp (2026-10-03): the small MLP's RESIDENT SESSION on Apple FAST.
-# `python/mojolearn/_mlp_impl.py::SmallMLPTrainer` opens one per trainer when
-# the binding exposes `mlp_resident_open`; weights and moments live on the
-# device between steps and come down only for `state_dict`.
-# ---------------------------------------------------------------------------
-
-
-def mlp_resident_open_binding(
-    addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """addresses = [w1, b1, w2, b2, m, v] (read); params = [cap_k], the most
-    minibatches one `mlp_resident_steps` call may run. Returns the handle."""
-    var a = _addrs(addresses, 6, "mlp_resident_open")
-    _params(params, 1, "mlp_resident_open")
-    var cap_k = Int(py=params[0])
-    var h = -1
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        h = mlp_resident_open_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]), cap_k,
-        )
-    return PythonObject(h)
-
-
-def mlp_resident_download_binding(
-    handle: PythonObject, addresses: PythonObject,
-) raises -> PythonObject:
-    """addresses = [w1, b1, w2, b2, m, v] (written): the session's state."""
-    var a = _addrs(addresses, 6, "mlp_resident_download")
-    var h = Int(py=handle)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        mlp_resident_download_host(
-            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]),
-        )
-    return PythonObject(h)
-
-
-def mlp_resident_close_binding(handle: PythonObject) raises -> PythonObject:
-    var h = Int(py=handle)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        mlp_resident_close_host(ctx, h)
-    return PythonObject(h)
-
-
-def mlp_resident_steps_binding(
-    handle: PythonObject, addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`k` steps on the session (mirrored word for word in
-    `python/mojolearn/_mlp_impl.py::SmallMLPTrainer._resident_steps`):
-
-        addresses: x (k*rows x 8), y (k*rows i32), losses (k f32, written),
-                   logits (rows x 3, the last step's), dw1, db1, dw2, db2
-                   (the last step's), dx (rows x 8 when want_input_grad,
-                   else any one float)
-        params:    rows, k, mode, t, lr, beta1, beta2, eps, weight_decay,
-                   want_input_grad
-
-    `k > 1` is compiled under MOJOLEARN_AFN_MLP_MULTISTEP only. Returns
-    `rows * 3`."""
-    var a = _addrs(addresses, 9, "mlp_resident_steps")
-    _params(params, 10, "mlp_resident_steps")
-    var h = Int(py=handle)
-    var rows = Int(py=params[0])
-    var k = Int(py=params[1])
-    var mode = Int(py=params[2])
-    var t = Int(py=params[3])
-    var lr = Float32(Float64(py=params[4]))
-    var beta1 = Float32(Float64(py=params[5]))
-    var beta2 = Float32(Float64(py=params[6]))
-    var eps = Float32(Float64(py=params[7]))
-    var weight_decay = Float32(Float64(py=params[8]))
-    var want_input_grad = Int(py=params[9])
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_resident_step_host(
-            ctx, h, _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]), _f32_ptr(a[6]), _f32_ptr(a[7]), _f32_ptr(a[8]),
-            rows, k, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
-        )
-    return PythonObject(count)
-
-
-def mlp_resident_apply_binding(
-    handle: PythonObject, addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`SmallMLPTrainer.apply_gradients` on the open session (lane
-    migrate-neural-2): the packed gradient [dw1, db1, dw2, db2] goes up into
-    the session's gradient slot and `optimizer_step`'s AdamW step (the same
-    `identical_optimizer_step_resident_io` on the same registry offsets
-    [0, 128, 144, 192, 195]) updates the session's weights and moments in
-    place; nothing comes down, so the session stays open.
-
-        addresses: grads (195 f32), flags (4 i32, read and written),
-                   info (3 f32, written)
-        params:    t, lr, beta1, beta2, eps, weight_decay
-
-    Returns 195."""
-    var a = _addrs(addresses, 3, "mlp_resident_apply")
-    _params(params, 6, "mlp_resident_apply")
-    var h = Int(py=handle)
-    var t = Int(py=params[0])
-    var lr = Float32(Float64(py=params[1]))
-    var beta1 = Float32(Float64(py=params[2]))
-    var beta2 = Float32(Float64(py=params[3]))
-    var eps = Float32(Float64(py=params[4]))
-    var weight_decay = Float32(Float64(py=params[5]))
-    var n = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var arena = mlp_resident_registry(h)
-        var p_v = arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL)
-        var g_v = arena.create_sub_buffer[DType.float32](RS_OFF_G, FT_TOTAL)
-        var m_v = arena.create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
-        var v_v = arena.create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
-        var p_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
-        var g_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
-        var offsets: List[Int32] = [0, 128, 144, 192, 195]
-        n = identical_optimizer_step_resident_io(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[0]), m_v, v_v, p_v, g_v, p_stage, g_stage,
-            offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), _i32_ptr(a[1]), _f32_ptr(a[2]),
-            4, 2, t, 0, lr, beta1, beta2, eps, weight_decay, Float32(0.0), Float32(0.0), Float32(0.0),
-            OPT_IO_UP_G,
-        )
-        _ = offsets^
-        _ = p_v^
-        _ = g_v^
-        _ = m_v^
-        _ = v_v^
-        _ = p_stage^
-        _ = g_stage^
-        _ = arena^
-    return PythonObject(n)
+# TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
 
 
 # ===========================================================================
@@ -830,7 +546,7 @@ def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):  # small-loop(want: buffer addresses of one op call): reads pointer list, not data
+    for i in range(want):  # driver-loop: over argument words (fixed count, not data); small-loop(want: buffer addresses of one op call): reads pointer list, not data
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))
@@ -844,11 +560,6 @@ def _params(params: PythonObject, want: Int, name: String) raises:
             name + ": params must contain " + String(want) + " values, got "
             + String(len(params))
         )
-
-
-def small_mlp_api_binding() raises -> PythonObject:
-    var api = SMALL_MLP_NATIVE_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def neural_primitives_api_binding() raises -> PythonObject:
@@ -936,7 +647,7 @@ def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises 
     if n == 0:
         raise Error("MLP sessions require at least one (rows, width) input")
     var total = 0
-    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
+    for i in range(n):  # driver-loop: over sessions; small-loop(n: session shape tuples): reads caller metadata, not data
         var shape = shapes[i]
         if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
             raise Error("MLP sessions require at least one (rows, width) input")
@@ -956,7 +667,7 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
         raise Error("neural MLP sessions: metadata length mismatch")
     var inputs = List[Int]()
     var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
+    for i in range(n_sessions):  # driver-loop: over sessions; small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
         inputs.append(Int(py=input_addresses[i]))
         rows.append(Int(py=shapes[i][0]))
     var in_width = Int(py=dims[0])
@@ -966,39 +677,6 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
     with GILReleased(Python()):
         var ctx = neural_ctx[_NEURAL_CTX]()
         count = nn_mlp_sessions_device(ctx, inputs, rows, _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[0]), in_width, hidden, out_width)
-    return PythonObject(count)
-
-
-def mlp_sessions_resident_binding(handle: PythonObject, addresses: PythonObject, input_addresses: PythonObject,
-                                  shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`mlp_sessions` reading the weights of open training session `handle`
-    where they are (lane migrate-neural-2: `mlp_inference_sessions` no
-    longer downloads the session to upload it again). addresses = [output];
-    the rest as `mlp_sessions`."""
-    if len(addresses) != 1 or Int(py=addresses[0]) == 0:
-        raise Error("mlp_sessions_resident: addresses must be [output]")
-    _params(dims, 3, "mlp_sessions")
-    var n_sessions = len(shapes)
-    if len(input_addresses) != n_sessions:
-        raise Error("neural MLP sessions: metadata length mismatch")
-    var inputs = List[Int]()
-    var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
-        inputs.append(Int(py=input_addresses[i]))
-        rows.append(Int(py=shapes[i][0]))
-    var in_width = Int(py=dims[0])
-    var hidden = Int(py=dims[1])
-    var out_width = Int(py=dims[2])
-    var out = _f32_ptr(Int(py=addresses[0]))
-    var h = Int(py=handle)
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var arena = mlp_resident_registry(h)
-        var reg = Optional[DeviceBuffer[DType.float32]](arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL))
-        count = nn_mlp_sessions_device(ctx, inputs, rows, out, out, out, out, out, in_width, hidden, out_width, reg)
-        _ = reg^
-        _ = arena^
     return PythonObject(count)
 
 
@@ -1066,10 +744,12 @@ def samba_head_loss_binding(
 # ===========================================================================
 # THE DEVICE-RESIDENT SAMBA FORWARD AND TRAIN STEP (lane S1 samba-resident,
 # 2026-10-07; IDENTICAL default since 2026-10-08 (lane grid-act-4, grid
-# ge123e6f9); -D MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF restores the per-op route).
-# One `_SambaResidentSession` per Python `SambaStack` (samba_resident_open),
-# then one call per forward (samba_resident_forward) or per optimizer step
-# (samba_resident_step): the registry, the gradient, the activations and the
+# ge123e6f9); its _OFF rollback was deleted 2026-11-15, lane expdel-04-neural).
+# One SambaResidentSession per SambaStack (the primitive entry's op 12; the
+# Python entries samba_resident_open/step/accumulated_step and
+# samba_resident_native_handle_v1 were deleted by lane samba-sessions-native,
+# 2026-11-12), then one call per optimizer step (ops 17/18; the forward runs
+# SambaStackProgram since lane x6): the registry, the gradient, the activations and the
 # block stages stay on the device; the Python side keeps no per-layer loop.
 # The optimizer's moments are the Python optimizer's resident pair (an
 # `optimizer_resident_open` handle). Same kernels, operands and order as the
@@ -1077,193 +757,37 @@ def samba_head_loss_binding(
 # ===========================================================================
 
 
-def samba_resident_native_handle_binding(session: PythonObject) raises -> PythonObject:
-    # Checked ownership admission for sessions created by the public binding.
-    return PythonObject(Int(session.downcast_value_ptr[SambaResidentSession]()))
-
-
 def samba_resident_enabled_binding() raises -> PythonObject:
     """Whether this build carries the resident Samba entries."""
     return PythonObject(IDN_SAMBA_RESIDENT_STEP)
 
 
-def samba_resident_open_binding(
-    layers: PythonObject, params: PythonObject, param_addr: PythonObject
-) raises -> PythonObject:
-    """Open a stack's residency. `layers` = one code per layer in stack order
-    (0 mamba3, 1 attention); `params` = [vocab, d_model, n_heads, n_kv_heads,
-    head_dim, intermediate, tie_embeddings (0/1), norm_eps (float), n_total]
-    (the attention shape slots are 0 when the stack has no attention layer);
-    `param_addr` = the flat float32 registry (n_total floats, read once here).
-    Returns the session object; pass it to the two entries below."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_open: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        _params(params, 9, "samba_resident_open")
-        var kinds = List[Int]()
-        for i in range(len(layers)):  # small-loop(layers: one kind code per layer): reads codes, not data
-            kinds.append(Int(py=layers[i]))
-        var vocab = Int(py=params[0])
-        var dm = Int(py=params[1])
-        var nh = Int(py=params[2])
-        var nkv = Int(py=params[3])
-        var hd = Int(py=params[4])
-        var it = Int(py=params[5])
-        var tie = Int(py=params[6]) != 0
-        var eps = Float32(Float64(py=params[7]))
-        var n_total = Int(py=params[8])
-        var pp = _f32_ptr(Int(py=param_addr))
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var session = SambaResidentSession(
-            ctx, kinds, vocab, dm, nh, nkv, hd, it, tie, eps, n_total, pp
-        )
-        return PythonObject(alloc=session^)
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward_binding (the resident forward entry; SambaStack.forward runs SambaStackProgram) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
-def samba_resident_forward_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """`SambaStack.forward`, resident. addresses = [params (n_total f32,
-    read), ids (b*l i32), logits (b*l*vocab f32, written)]; params = [b, l].
-    Returns `b * l * vocab`."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_forward: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        var owner = session.downcast_value_ptr[SambaResidentSession]()
-        var a = _addrs(addresses, 3, "samba_resident_forward")
-        _params(params, 2, "samba_resident_forward")
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        if owner[].busy:
-            raise Error("samba_resident_forward: session busy")
-        owner[].busy = True
-        var cells = 0
-        try:
-            with GILReleased(Python()):
-                cells = samba_resident_forward(
-                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), b, l
-                )
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return PythonObject(cells)
+# ===========================================================================
+# THE SAMBA STACK PROGRAM (lane x6-samba-on-executor, 2026-11-09; plan row X6,
+# owed row N094; training/samba_program.mojo). ONE runtime path for every
+# Samba inference call on a device build: `SambaStack.forward` (stateless or
+# with a state), `SambaStack.step` and `SambaDecodeSession`. Each layer is one
+# executor step op; the hidden state never leaves the device. The per-call
+# doors open a program per (batch, capacity) and reload the caller's registry
+# and state on every call (the registry is the public truth); a decode session
+# owns its program, loaded once at open.
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD (DELETED: the resident forward
+# samba_resident_forward, the provider forward and the decode residency
+# SambaDecodeResident, superseded by SambaStackProgram, lane x6) deleted
+# 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+# ===========================================================================
 
-
-def samba_resident_step_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject,
-    handle: PythonObject,
-) raises -> PythonObject:
-    """`SambaStack.train_step` at accumulation_steps 1, resident.
-    addresses = [params (n_total f32, read and WRITTEN IN PLACE), ids (b*l
-    i32), targets (b*l i32), offsets (J+1 i32), buf_initialized (J i32,
-    written), info (3 f32, written: clip_ran, total_norm, coef), loss (1 f32,
-    written)]; params = [b, l] + the `optimizer_step` params list (its 12 or
-    13 slots, word for word); `handle` = the optimizer's resident moments
-    (`optimizer_resident_open`, n_total floats). Returns `count`, the number
-    of targets that are not the ignore index."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        var owner = session.downcast_value_ptr[SambaResidentSession]()
-        var a = _addrs(addresses, 7, "samba_resident_step")
-        if len(params) != 14 and len(params) != 15:
-            raise Error(
-                "samba_resident_step: params must contain 14 or 15 values, got "
-                + String(len(params))
-            )
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        var n_tensors = Int(py=params[2])
-        var kind = Int(py=params[3])
-        var t = Int(py=params[4])
-        var nesterov = Int(py=params[5])
-        var lr = Float32(Float64(py=params[6]))
-        var beta1 = Float32(Float64(py=params[7]))
-        var beta2 = Float32(Float64(py=params[8]))
-        var eps = Float32(Float64(py=params[9]))
-        var weight_decay = Float32(Float64(py=params[10]))
-        var momentum = Float32(Float64(py=params[11]))
-        var dampening = Float32(Float64(py=params[12]))
-        var max_norm = Float32(Float64(py=params[13]))
-        if len(params) == 15 and Int(py=params[14]) != 0:
-            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
-        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
-        if owner[].busy:
-            raise Error("samba_resident_step: session busy")
-        owner[].busy = True
-        var count = 0
-        try:
-            with GILReleased(Python()):
-                var pool = OPT_POOL.get_or_create_ptr()
-                count = samba_resident_train_step(
-                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
-                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
-                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
-                    b, l, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
-                    weight_decay, momentum, dampening, max_norm,
-                )
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return PythonObject(count)
-
-
-def samba_resident_accumulated_step_binding(
-    session: PythonObject, addresses: PythonObject, params: PythonObject,
-    handle: PythonObject,
-) raises -> PythonObject:
-    """`SambaStack.train_step` at accumulation_steps a > 1 (no dropout), one
-    resident program (training/samba_resident.mojo
-    samba_resident_accumulated_step). addresses as `samba_resident_step`;
-    params = [b, l, a, total target count] + the `optimizer_step` params
-    list (its 12 or 13 slots). Returns the target count."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("samba_resident_accumulated_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    else:
-        var owner = session.downcast_value_ptr[SambaResidentSession]()
-        var a = _addrs(addresses, 7, "samba_resident_accumulated_step")
-        if len(params) != 16 and len(params) != 17:
-            raise Error("samba_resident_accumulated_step: params must contain 16 or 17 values, got " + String(len(params)))
-        var b = Int(py=params[0])
-        var l = Int(py=params[1])
-        var steps = Int(py=params[2])
-        var total = Int(py=params[3])
-        var n_tensors = Int(py=params[4])
-        var kind = Int(py=params[5])
-        var t = Int(py=params[6])
-        var nesterov = Int(py=params[7])
-        var lr = Float32(Float64(py=params[8]))
-        var beta1 = Float32(Float64(py=params[9]))
-        var beta2 = Float32(Float64(py=params[10]))
-        var eps = Float32(Float64(py=params[11]))
-        var weight_decay = Float32(Float64(py=params[12]))
-        var momentum = Float32(Float64(py=params[13]))
-        var dampening = Float32(Float64(py=params[14]))
-        var max_norm = Float32(Float64(py=params[15]))
-        if len(params) == 17 and Int(py=params[16]) != 0:
-            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
-        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
-        if owner[].busy:
-            raise Error("samba_resident_step: session busy")
-        owner[].busy = True
-        var count = 0
-        try:
-            with GILReleased(Python()):
-                var pool = OPT_POOL.get_or_create_ptr()
-                count = samba_resident_accumulated_step(
-                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
-                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
-                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
-                    b, l, steps, total, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
-                    weight_decay, momentum, dampening, max_norm,
-                )
-        except error:
-            owner[].busy = False
-            raise error
-        owner[].busy = False
-        return PythonObject(count)
+# Lane samba-sessions-native (2026-11-12): the program and decode-session
+# entries (`samba_program_enabled/open/shape/forward`, `samba_decode_open/
+# step/tokens/export/load`) and their Python program objects moved behind
+# native registry handles: training/samba_program_entry.mojo (the same
+# SambaStackProgram calls, in the same order), published in the Samba
+# program table (core/samba_entry_table_programs.mojo) at module init.
 
 
 def accumulate_binding(
@@ -1326,7 +850,8 @@ def neural_rng_binding(
     return PythonObject(count)
 
 
-from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+# TOMBSTONE: MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2 (record read: superseded by the measured resident Samba step, IDN_SAMBA_RESIDENT_STEP PROMOTED) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 86fbae4d17.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-01-base.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 
@@ -1334,8 +859,6 @@ def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""
     var profile = String("baseline")
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
-    if IDN_CHUNKED_LM_HEAD_V2:
-        profile += "+head-serial-logit-chunked-v2"
     # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
     if CONTRACT_K_LEAF_MIN != 128:
         profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
@@ -1344,7 +867,7 @@ def training_experiment_profile_binding() raises -> PythonObject:
 
 def training_chunked_lm_head_enabled_binding() raises -> PythonObject:
     """NI34 profile selector shared by native-host and GPU Samba wrappers."""
-    return PythonObject(IDN_CHUNKED_LM_HEAD_V2)
+    return PythonObject(False)
 
 
 def chunked_lm_head_v2_loss_binding(
@@ -1400,7 +923,13 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_training.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def optimizer_native_api_binding() raises -> PythonObject:
+    var api = OPTIMIZER_NATIVE_GPU_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def build__mojolearn_training() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
@@ -1409,6 +938,9 @@ def build__mojolearn_training() -> PythonObject:
     # promises quality, never bits.
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_training_device()
         m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")
@@ -1420,14 +952,6 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        m.def_py_c_function(optimizer_door_step_c, "optimizer_door_step")
-        m.def_py_c_function(optimizer_door_io_c, "optimizer_door_io")
-        m.def_py_c_function(optimizer_door_state_c, "optimizer_door_state")
-        m.def_py_c_function(optimizer_door_state_set_c, "optimizer_door_state_set")
-        m.def_py_c_function(optimizer_door_load_state_c, "optimizer_door_load_state")
-        m.def_py_c_function(optimizer_door_clip_c, "optimizer_door_clip")
-        m.def_py_c_function(optimizer_door_accumulate_c, "optimizer_door_accumulate")
-        m.def_py_c_function(entry_zero, "optimizer_door_zero")
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
         m.def_function[optimizer_resident_close_binding]("optimizer_resident_close")
         m.def_function[optimizer_resident_download_binding]("optimizer_resident_download")
@@ -1445,34 +969,23 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[linear_forward_dev_binding]("linear_forward_dev")
             m.def_function[linear_backward_dev_binding]("linear_backward_dev")
             m.def_function[ce_loss_dev_binding]("ce_loss_dev")
+            # lane ne3-c-blocks-embedding (row N117): residual dropout on device arrays
+            m.def_function[residual_dropout_dev_binding]("residual_dropout_dev")
+            m.def_function[residual_dropout_backward_dev_binding]("residual_dropout_backward_dev")
             # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
             # Restore: git apply experiments/removed/dead_entries_training.patch
         # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_training.patch
         m.def_function[ce_loss_binding]("ce_loss")
-        m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
-        m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
-        m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
-        m.def_function[mlp_train_step_binding]("mlp_train_step")
-        comptime if MLP_RESIDENT:
-            # lane afn-mlp: Apple FAST only, behind its define
-            m.def_function[mlp_resident_open_binding]("mlp_resident_open")
-            m.def_function[mlp_resident_download_binding]("mlp_resident_download")
-            m.def_function[mlp_resident_close_binding]("mlp_resident_close")
-            m.def_function[mlp_resident_steps_binding]("mlp_resident_step")
-            m.def_function[mlp_resident_apply_binding]("mlp_resident_apply")
-            m.def_function[mlp_sessions_resident_binding]("mlp_sessions_resident")
-        comptime if MLP_MULTISTEP:
-            m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
+        # TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
-        m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
-        m.def_function[small_mlp_api_binding]("small_mlp_api_v1")
+        m.def_function[optimizer_native_api_binding]("optimizer_native_api_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
         m.def_function[rms_norm_backward_binding]("rms_norm_backward")
         m.def_function[linear_forward_binding]("linear_forward")
-        m.def_function[neural_gemm_binding]("neural_gemm")
         m.def_function[mlp_sessions_binding]("mlp_sessions")
         m.def_function[mlp_sessions_rows_binding]("mlp_sessions_rows")
         m.def_function[residual_dropout_binding]("residual_dropout")
@@ -1480,15 +993,7 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[linear_backward_binding]("linear_backward")
         m.def_function[samba_head_loss_binding]("samba_head_loss")
         m.def_function[samba_resident_enabled_binding]("samba_resident_enabled")
-        comptime if IDN_SAMBA_RESIDENT_STEP:
-            # lane S1 samba-resident: IDENTICAL only, behind its define
-            _ = m.add_type[SambaResidentSession]("_SambaResidentSession")
-            m.def_function[samba_resident_open_binding]("samba_resident_open")
-            m.def_function[samba_resident_forward_binding]("samba_resident_forward")
-            m.def_function[samba_resident_step_binding]("samba_resident_step")
-            m.def_function[samba_resident_accumulated_step_binding]("samba_resident_accumulated_step")
         comptime if AFN_SAMBA_FUSE:
-            m.def_function[samba_afn_norm_head_forward_binding]("samba_afn_norm_head_forward")
             m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")
             m.def_function[samba_afn_embedding_backward_tied_binding]("samba_afn_embedding_backward_tied")
         m.def_function[accumulate_binding]("accumulate")
@@ -1498,6 +1003,9 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[chunked_lm_head_v2_train_binding]("chunked_lm_head_v2_train")
         m.def_function[training_chunked_lm_head_enabled_binding]("training_chunked_lm_head_enabled")
         m.def_function[training_experiment_profile_binding]("training_experiment_profile")
+        # Native Samba callers read this image's primitive entry from the
+        # table, not through the module (lane calltable-samba-mamba).
+        publish_samba_training_primitives()
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_training: ", e))

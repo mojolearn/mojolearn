@@ -76,13 +76,13 @@ def _fit(
         if a < 0.0:
             a = -a
         gmag += a
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](ES_ROWS)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](ES_ROWS)
     for r in range(ES_ROWS):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var cursor = ctx.enqueue_create_buffer[DType.float32](ES_ROWS)
     ctx.enqueue_memset(cursor, Float32(0.0))
@@ -198,6 +198,25 @@ def check_early_stop_rollback() raises:
     print("  rerun bit-identical: the rollback is deterministic")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     check_early_stop_rollback()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("early_stop_check", cpu=False, gpu=True, serial="", run=run_cases)

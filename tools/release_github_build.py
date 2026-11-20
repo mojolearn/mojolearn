@@ -79,7 +79,10 @@ file, masks it, fetches the map into a 0600 file outside every artifact, and
 keeps only its own PUT slots. After the run the Mac deletes the map object and
 promotes an inbox upload only when the object in R2 hashes to the archive the
 job itself recorded (GHA/bincache/hot_sha256.tsv), so a leaked slot URL cannot
-plant bytes under a key. gfx942 codegen is not reproducible from a cold cache,
+plant bytes under a key. A key holds one content: bincache promote refuses an
+upload whose key already holds other files (BINCACHE CONFLICT, both sha256),
+and only the HOST_GROUPS_OWNER leg promotes the vendor-neutral host groups
+that every leg compiles under one key. gfx942 codegen is not reproducible from a cold cache,
 so the AMD set refuses to build without the cache unless --allow-cold-amd.
 """
 import argparse
@@ -111,6 +114,18 @@ IMAGE_DECL = "runpod-cpu:" + IMAGE
 #: same route; release061_remote_build.sh gives it the ptx code format
 #: (Andrew 2026-10-10: PTX is a normal target; no flag).
 ARCHS = {"sm_90a": "cuda", "sm_89": "cuda", "sm_80": "cuda", "gfx942": "hip"}
+#: THE ONE LEG WHOSE VENDOR-NEUTRAL HOST GROUPS GO TO THE BINDING CACHE
+#: (2026-11-05, finding 3 of docs/release/0.8.66-release-state.md). Every leg
+#: compiles the host groups under ONE key (no GPU input is keyed), and the hip
+#: leg's _mojolearn_native_series_host.so came out with other bytes than the
+#: cuda legs': one key, two contents, the last promote winning. Only this
+#: leg's host-group archives are promoted (promote); the other legs read them
+#: from the cache when it has them (a hit: the same bytes) and otherwise
+#: compile their own copy for their own tree, which is never offered to the
+#: cache. bincache.py promote refuses any key that already holds other bytes,
+#: so a stray upload can never replace the owner's. sm_89 is the leg host
+#: composition already takes the host bytes from.
+HOST_GROUPS_OWNER = "sm_89"
 #: Upload slots each job (a shard, or the assemble job) may PUT into.
 SLOTS_PER_JOB = 80
 MAP_HOURS = 8
@@ -236,7 +251,13 @@ WHOLE_DIR_PEAK_GIB = {
 #:           _neural_host 7.95, _forest_host 8.66, _x_host 8.07
 #: Each shard records its own peak (GHA/memory.txt): raise a row when a run
 #: records more, never lower one below a recorded value. A group not named
-#: here plans at its directory's whole-set peak.
+#: here (a stem bindings/merged_groups.json gained by splitting a group, as the
+#: 2026-11-04 host split did: _mojolearn_native_classical_host and
+#: _mojolearn_native_series_host left _mojolearn_native_host and
+#: _mojolearn_native_tokenizer_host) plans at the largest row of its tier and
+#: vendor: a split only removes members, so the largest measured group bounds
+#: it, and its first build records its own peak (docs/build/HOT_GROUPS.md).
+#: A tier with no row at all plans at its directory's whole-set peak.
 UNIT_PEAK_GIB = {
     ("identical", "_mojolearn_native", "cuda"): 13, ("identical", "_mojolearn_native", "hip"): 13,
     ("identical", "_mojolearn_native_trees", "cuda"): 13, ("identical", "_mojolearn_native_trees", "hip"): 12,
@@ -258,7 +279,55 @@ UNIT_PEAK_GIB = {
     ("host", "_mojolearn_native_neural_host", "cuda"): 10, ("host", "_mojolearn_native_neural_host", "hip"): 10,
     ("host", "_mojolearn_native_forest_host", "cuda"): 11, ("host", "_mojolearn_native_forest_host", "hip"): 11,
     ("host", "_mojolearn_native_x_host", "cuda"): 10, ("host", "_mojolearn_native_x_host", "hip"): 11,
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): each new
+    # group starts at its parent's row (the classical groups at
+    # _mojolearn_native_host's, which held the classical member until
+    # 2026-11-04; the tokenizer groups at the tokenizer's; the orchestration
+    # group at x_host's). A split only removes members, so the parent bounds
+    # it; the first build records each group's own peak, and its row is set
+    # from that measurement.
+    ("host", "_mojolearn_native_classical_host", "cuda"): 14, ("host", "_mojolearn_native_classical_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_trees_host", "cuda"): 14, ("host", "_mojolearn_native_classical_trees_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_family_host", "cuda"): 14, ("host", "_mojolearn_native_classical_family_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_prep_host", "cuda"): 14, ("host", "_mojolearn_native_classical_prep_host", "hip"): 13,
+    ("host", "_mojolearn_native_classical_decomp_host", "cuda"): 14, ("host", "_mojolearn_native_classical_decomp_host", "hip"): 13,
+    ("host", "_mojolearn_native_catalog_host", "cuda"): 14, ("host", "_mojolearn_native_catalog_host", "hip"): 14,
+    ("host", "_mojolearn_native_xseq_host", "cuda"): 14, ("host", "_mojolearn_native_xseq_host", "hip"): 14,
+    ("host", "_mojolearn_native_byte_trainer_host", "cuda"): 14, ("host", "_mojolearn_native_byte_trainer_host", "hip"): 14,
+    ("host", "_mojolearn_native_parallel_host", "cuda"): 14, ("host", "_mojolearn_native_parallel_host", "hip"): 14,
+    ("host", "_mojolearn_native_neural_doors_host", "cuda"): 14, ("host", "_mojolearn_native_neural_doors_host", "hip"): 14,
+    ("host", "_mojolearn_native_orchestration_host", "cuda"): 10, ("host", "_mojolearn_native_orchestration_host", "hip"): 11,
 }
+#: THE RECORDED PEAK OF ONE MERGED UNIT ON A FREE RUNNER, GiB (lane fx-build-tools, 2026-11-18): the largest
+#: cgroup peak plus swap (GHA/shards/<i>/memory.txt) of a shard job that compiled that one unit, over every leg
+#: under ~/mojolearn-evidence/release-candidates/0.8.67.dev0+* (13-52 jobs a unit, sm_89 and sm_80 alike),
+#: rounded up to 0.5 (table: ~/mojolearn-evidence/briefs-20261118/fx-build-tools-peaks.txt). It counts the job's
+#: page cache and the route's own baseline (a shard of cache hits alone recorded 6.3 GiB), so the sum of two is
+#: above what two units compiled side by side hold: the d652a4b0a1 arm assemble jobs compiled host units two at
+#: a time at 9.5 GiB. Used only to put units side by side on one runner (pack_units); a packed job's swap is
+#: still sized from UNIT_PEAK_GIB, and a unit not named here gets a runner of its own.
+RECORDED_UNIT_PEAK_GIB = {
+    ("identical", "_mojolearn_native", "cuda"): 12.5, ("identical", "_mojolearn_native_trees", "cuda"): 11.5,
+    ("identical", "_mojolearn_native_cluster", "cuda"): 11.0, ("identical", "_mojolearn_native_sequence", "cuda"): 10.0,
+    ("host", "_mojolearn_native_classical_family_host", "cuda"): 11.0,
+    ("host", "_mojolearn_native_neural_host", "cuda"): 10.5, ("host", "_mojolearn_native_parallel_host", "cuda"): 10.5,
+    ("host", "_mojolearn_native_classical_trees_host", "cuda"): 10.0,
+    ("host", "_mojolearn_native_tokenizer_host", "cuda"): 10.0,
+    ("host", "_mojolearn_native_classical_prep_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_neural_doors_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_orchestration_host", "cuda"): 9.0, ("host", "_mojolearn_native_x_host", "cuda"): 9.0,
+    ("host", "_mojolearn_native_xseq_host", "cuda"): 8.5,
+    ("host", "_mojolearn_native_byte_trainer_host", "cuda"): 7.5,
+    ("host", "_mojolearn_native_classical_decomp_host", "cuda"): 7.5,
+    ("host", "_mojolearn_native_forest_host", "cuda"): 6.5, ("host", "_mojolearn_native_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_catalog_host", "cuda"): 6.0, ("host", "_mojolearn_native_classical_host", "cuda"): 6.0,
+    ("host", "_mojolearn_native_series_host", "cuda"): 5.5,
+}
+#: MERGED UNITS SIDE BY SIDE ON ONE RUNNER: a merged compile runs 2 compiler workers (MOJOLEARN_COMPILE_JOBS=2,
+#: tools/gha_release_box.sh) and the free runner has 4 vCPU, so two fill its cores; the workflow's `jobs` input
+#: (default 2) runs them at once (packaging/linux/build_sets.sh pool). One job of fixed cost (free disk, image,
+#: checkouts: 5.2 of a 13.4 minute shard, the 15:58Z arm batch of 2026-11-18) then carries two compiles.
+UNITS_PER_JOB = 2
 #: A per-binding build: two at a time fit a free runner (0.8.24..0.8.52 runs).
 PER_BINDING_PEAK_GIB = 6
 #: The host producer (tools/release_host_build.py) compiles the host groups one
@@ -310,6 +379,9 @@ def unit_peak_gib(entry, vendor, merged):
     row = UNIT_PEAK_GIB.get((tier, unit_group(entry), vendor))
     if row is not None:
         return row
+    measured = [v for (t, _g, vv), v in UNIT_PEAK_GIB.items() if t == tier and vv == vendor]
+    if measured:
+        return max(measured)
     return WHOLE_DIR_PEAK_GIB.get((tier, vendor), max(WHOLE_DIR_PEAK_GIB.values()))
 
 
@@ -501,7 +573,10 @@ def split(builds, shards, weights=None):
 #: shard per compile: the identical, fast and host groups, the adapters, plus
 #: the assemble job; 4 + 4 + 5 + 1 + 1 at the 0.8.59 split, with room to add
 #: a group). The plan refuses a source that needs more (build_plan).
-MERGED_JOBS_PER_SET = 18
+#: 24 since the 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6):
+#: a Linux set plans 4 identical + 17 host compiles + the assemble job = 22,
+#: and two to spare; each job is 80 presigned PUTs (SLOTS_PER_JOB), nothing else.
+MERGED_JOBS_PER_SET = 24
 
 
 def unit_seconds(entry, vendor, merged, share=1.0):
@@ -527,9 +602,12 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     for arch in sets:
         vendor = ARCHS[arch]
         rows = [r for r in include if r["arch"] == arch]
-        shard_s = [JOB_OVERHEAD_SECONDS + sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
-                                              for e in r["only"].split())
-                   // (1 if merged else 2) + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
+        # merged units of one row run side by side (pack_units): the row takes its longest unit's seconds
+        shard_s = [JOB_OVERHEAD_SECONDS + (max(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
+                                               for e in r["only"].split()) if merged else
+                                           sum(unit_seconds(e, vendor, merged, shares.get(e, 1.0))
+                                               for e in r["only"].split()) // 2)
+                   + (adapters(vendor) if merged and arch != "sm_80" else 0) for r in rows]
         asm = 0 if compile_only else JOB_OVERHEAD_SECONDS + ASSEMBLE_ROUTE_SECONDS + (adapters(vendor) if arch != "sm_80" else 0)
         out[arch] = dict(jobs=len(rows) + (0 if compile_only else 1), wall_s=max(shard_s or [0]) + asm, runner_s=sum(shard_s) + asm,
                          swap_gib=max([r["swap_gib"] for r in rows] or [0]))
@@ -544,7 +622,51 @@ def estimate(include, merged, sets, host, host_donor=False, shares=None, compile
     return out, total
 
 
-def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups=""):
+def recorded_peak_gib(entry, vendor):
+    """RECORDED_UNIT_PEAK_GIB of one merged entry, or None (never packed)."""
+    return RECORDED_UNIT_PEAK_GIB.get((unit_tier(entry), unit_group(entry), vendor))
+
+
+def pack_units(rows, per_job=UNITS_PER_JOB, ram_gib=RUNNER_RAM_GIB):
+    """SEVERAL MERGED UNITS PER SHARD JOB (lane fx-build-tools, 2026-11-18). ROWS are one set's one-unit shard
+    rows (build_plan); units whose RECORDED peaks sum to the runner's RAM or less share a job, up to PER_JOB at
+    once (they run side by side, so the job's wall is about its longest unit's, not the sum). Largest first, each
+    takes the largest partners that still fit; deterministic. A unit without a recorded peak, or with no partner
+    that fits, keeps a job of its own. A packed row keeps its first unit's shard index (each index names that
+    job's upload slots, tools/bincache.py plan_lines, so it stays unique and inside jobs_per_set); its planning
+    peak is the sum of its units' UNIT_PEAK_GIB, and its swap is sized from that."""
+    if per_job < 2:
+        return rows
+    order = sorted(rows, key=lambda r: (-(recorded_peak_gib(r["only"], r["vendor"]) or ram_gib + 1), r["only"]))
+    used, out = set(), []
+    for r in order:
+        if r["only"] in used:
+            continue
+        used.add(r["only"])
+        group = [r]
+        load = recorded_peak_gib(r["only"], r["vendor"])
+        if load is not None:
+            for c in order:
+                if len(group) >= per_job:
+                    break
+                peak = recorded_peak_gib(c["only"], c["vendor"])
+                if c["only"] in used or peak is None or load + peak > ram_gib:
+                    continue
+                used.add(c["only"])
+                group.append(c)
+                load += peak
+        if len(group) == 1:
+            out.append(r)
+            continue
+        entries = sorted(e for g in group for e in g["only"].split())
+        peak = sum(g["peak_gib"] for g in group)
+        out.append(dict(r, shard=min(g["shard"] for g in group), only=" ".join(entries), n=len(entries),
+                        weight=sum(g["weight"] for g in group), peak_gib=peak, swap_gib=swap_gib(peak),
+                        unit=unit_slug(" ".join(entries))))
+    return sorted(out, key=lambda r: (r["set_index"], r["shard"]))
+
+
+def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups="", skip_units=""):
     """The run's plan document: one shard row per compile slice (merged: one
     compile per row), its swap, the device sets, the host producer, and the
     estimate. Refuses what a free runner cannot build."""
@@ -594,20 +716,44 @@ def build_plan(src, tokens, shards, modes=None, host_donor=False, compile_groups
             raise SystemExit("compile-groups contains unknown or empty selections: " + " ".join(sorted(selected - known)))
         include = [r for r in include if r["only"] in selected]
         nbuilds = len(selected)
+    skipped = []
+    # the assemble job's swap covers every unit of the set: a skipped unit the cache misses compiles there
+    assemble_swap = max([r["swap_gib"] for r in include] or [0])
+    if skip_units:
+        # A B ARM'S BASE UNITS (lane arm-build-reuse, 2026-11-16; tools/release_reuse.py unit_plan): a merged
+        # compile whose source closure names none of the arm's defines has the base build's content key
+        # (tools/bincache.py scope_build_defines), so its archive is in the binding cache and its shard job would
+        # only fetch it. It gets no shard job; the assemble job's unchanged route takes it from the cache (a miss
+        # compiles there: slower, never wrong). An entry this plan does not know is refused, never guessed.
+        if not merged or compile_groups:
+            raise SystemExit("skip-units requires a merged device set and no compile-groups")
+        skip = set(skip_units.split())
+        known = {r["only"] for r in include}
+        if skip - known:
+            raise SystemExit("skip-units names entries this plan does not build: " + " ".join(sorted(skip - known)))
+        skipped = sorted({r["only"] for r in include if r["only"] in skip})
+        include = [r for r in include if r["only"] not in skip]
+    if merged and not compile_groups:
+        # units side by side on one runner, after the skips (a skip names one unit): pack_units
+        include = [r for si in range(len(sets)) for r in pack_units([r for r in include if r["set_index"] == si])]
     per_set, total = estimate(include, bool(merged), sets, host, host_donor, shares, bool(compile_groups))
     return dict(matrix=dict(include=include), sets=sets, host=host, builds=nbuilds, shards=shards,
                 jobs_per_set=jobs_per_set, modes=list(modes or []),
                 layout=None if merged is None else ("merged" if merged else "per-binding"), members=members,
-                compile_groups=compile_groups, compile_only=bool(compile_groups),
-                assemble_swap_gib=max([r["swap_gib"] for r in include] or [0]),
+                compile_groups=compile_groups, compile_only=bool(compile_groups), skipped_units=skipped,
+                assemble_swap_gib=assemble_swap,
                 host_swap_gib=swap_gib(HOST_PRODUCER_PEAK_GIB) if host else 0,
+                # Who offers the vendor-neutral host groups to the binding cache
+                # (HOST_GROUPS_OWNER): the owner leg; every other set reads them
+                # from the cache or compiles a copy for its own tree only.
+                host_groups=dict(owner=HOST_GROUPS_OWNER, roles={s: host_groups_role(s) for s in sets}),
                 estimate=dict(per_set=per_set, total=total))
 
 
 def cmd_plan(a):
     import release_modes
     modes = release_modes.parse_modes(a.modes) if a.modes else None
-    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor, a.compile_groups)
+    doc = build_plan(a.src, a.sets.split(), a.shards, modes, a.host_donor, a.compile_groups, a.skip_units)
     text = json.dumps(doc, indent=1)
     if a.json:
         Path(a.json).write_text(text + "\n")
@@ -615,7 +761,9 @@ def cmd_plan(a):
         with open(a.github_output, "a") as fh:
             fh.write("matrix=" + json.dumps(doc["matrix"], separators=(",", ":")) + "\n")
             fh.write("sets=" + json.dumps(doc["sets"], separators=(",", ":")) + "\n")
+            # a set whose every unit is skipped still assembles (from the cache): the shard job then has no matrix
             fh.write("has_devices=" + ("true" if doc["sets"] else "false") + "\n")
+            fh.write("has_shards=" + ("true" if doc["matrix"]["include"] else "false") + "\n")
             fh.write("host=" + ("true" if doc["host"] else "false") + "\n")
             fh.write("host_donor=" + ("true" if doc["host"] and a.host_donor else "false") + "\n")
             fh.write("jobs_per_set=%d\n" % doc["jobs_per_set"])
@@ -623,9 +771,15 @@ def cmd_plan(a):
             fh.write("host_swap_gib=%d\n" % doc["host_swap_gib"])
     print(f"layout {doc['layout']}, modes {' '.join(doc['modes']) or 'build_sets.sh default'}, "
           f"{doc['builds']} compiles per set")
+    for entry in doc["skipped_units"]:
+        print(f"skipped (the base build's archive, taken by the assemble job from the binding cache): {entry}")
     for row in doc["matrix"]["include"]:
         print(f"{row['vendor']}-{row['arch']} shard {row['shard']} [{row['unit']}]: {row['n']} builds, "
               f"weight {row['weight']}, planning peak {row['peak_gib']} GiB, swap {row['swap_gib']} GiB")
+    for s, role in doc["host_groups"]["roles"].items():
+        print(f"host groups {s}: " + ("owner (its archives go to the binding cache)" if role == "owner" else
+                                      f"fetch from the cache, else compile for this tree only "
+                                      f"(owner {doc['host_groups']['owner']})"))
     if doc["host"]:
         print("host producer: tools/release_host_build.py build, donor "
               + ("host_donor_url" if a.host_donor else f"this run's {doc['sets'][0]} set"))
@@ -766,12 +920,72 @@ def gh(*args, check=True):
     return r.stdout
 
 
+#: `gh` failures that say nothing about the run: GitHub's quota and abuse refusals (HTTP 403/429, "secondary rate
+#: limit", the "scraping" notice), its 5xx answers and the network. On 2026-11-13 ten candidate controllers (30 legs
+#: polling every minute) emptied the 5000/h core quota and the "scraping" refusal of `gh run view` killed legs whose
+#: runs went on to succeed. These are retried, never a failed leg.
+RETRYABLE_GH = re.compile(r"http (403|429|5\d\d)\b|rate limit|scraping|abuse detection|error connecting|"
+                          r"connection reset|connection refused|timed out|timeout|unexpected eof|"
+                          r"temporarily unavailable|tls handshake", re.I)
+#: the quota part of RETRYABLE_GH: wait for the quota's reset, not a fixed pause
+RATE_LIMITED_GH = re.compile(r"http (403|429)\b|rate limit|scraping|abuse detection", re.I)
+#: a run polled this long is polled at LONG_POLL_SECONDS (a 30-leg wave fits the quota)
+LONG_RUN_SECONDS = 600
+LONG_POLL_SECONDS = 300
+
+
+def gh_retryable(text):
+    return bool(RETRYABLE_GH.search(str(text)))
+
+
+def rate_limit_wait():
+    """Seconds to wait after a quota refusal: until `gh api rate_limit` says the core quota resets when it is
+    empty (that endpoint costs no quota), else one minute (a secondary limit); 60 to 3600 s, 300 s when unreadable."""
+    r = subprocess.run([GH, "api", "rate_limit", "--jq", '.resources.core | "\\(.remaining) \\(.reset)"'],
+                       capture_output=True, text=True)
+    try:
+        remaining, reset = (int(x) for x in r.stdout.split())
+    except ValueError:
+        return 300
+    if remaining > 0:
+        return 60
+    return int(min(3600, max(60, reset - time.time() + 5)))
+
+
+def gh_read(*args, deadline=None):
+    """A READ-ONLY `gh` call (run view, run list, workflow list, run download) retried while it fails for a
+    retryable reason (RETRYABLE_GH): quota refusals sleep until the quota resets, the rest back off from 30 s
+    to 10 min. Never used for a workflow dispatch (a dispatch is not repeated). Raises the last error when the
+    failure is not retryable or the next wait would pass DEADLINE (time.time() seconds)."""
+    pause = 30
+    while True:
+        try:
+            return gh(*args)
+        except RuntimeError as exc:
+            if not gh_retryable(exc):
+                raise
+            wait = rate_limit_wait() if RATE_LIMITED_GH.search(str(exc)) else pause
+            pause = min(pause * 2, 600)
+            if deadline is not None and time.time() + wait >= deadline:
+                raise
+            say(f"gh {' '.join(args[:2])}: retryable failure, again in {wait} s: {str(exc)[-160:]}")
+            time.sleep(wait)
+
+
+def poll_pause(base, running_seconds):
+    """The pause between two status reads of a run: BASE while the run is young, LONG_POLL_SECONDS once it has
+    run LONG_RUN_SECONDS (a shard compile takes tens of minutes; a minute's poll only spends quota)."""
+    if running_seconds is None or running_seconds < LONG_RUN_SECONDS:
+        return base
+    return max(base, LONG_POLL_SECONDS)
+
+
 def workflow_id():
     """The workflow's numeric id. A workflow that is not on the default branch
     yet is found by its path among the registered ones (GitHub resolves a
     file name only on the default branch)."""
-    out = gh("api", "--paginate", "repos/{owner}/{repo}/actions/workflows",
-             "--jq", '.workflows[] | "\\(.id) \\(.path)"')
+    out = gh_read("api", "--paginate", "repos/{owner}/{repo}/actions/workflows",
+                  "--jq", '.workflows[] | "\\(.id) \\(.path)"')
     for line in out.splitlines():
         wid, _, path = line.strip().partition(" ")
         if path == ".github/workflows/" + WORKFLOW and wid.isdigit():
@@ -779,9 +993,15 @@ def workflow_id():
     raise SystemExit(f".github/workflows/{WORKFLOW} is not registered with GitHub (docs/RELEASE_CHECKLIST.md 2d)")
 
 
-def tooling_ref(ref):
+def tooling_ref(ref, recorded=""):
     """(branch, sha): the branch the workflow runs from must hold exactly this
-    checkout's HEAD, and the route files must be committed."""
+    checkout's HEAD, and the route files must be committed.
+
+    RECORDED is the tooling sha a measurement build recorded at its first launch (release_candidate.py). On a
+    resume the branch may have moved on (2026-11-13: origin/main moved under the tooling checkout and every resume
+    refused with "push it"). The run then uses the branch tip, which is accepted when the tip still holds RECORDED
+    and its route files (the bytes the runners use) are the recorded ones and this checkout's; the returned sha is
+    the tip, the commit the run reports."""
     head = git("rev-parse", "HEAD")
     dirty = git("status", "--porcelain", "--", *ROUTE_FILES)
     if dirty:
@@ -789,10 +1009,35 @@ def tooling_ref(ref):
     branch = ref or git("rev-parse", "--abbrev-ref", "HEAD")
     remote = subprocess.run(["git", "-C", str(ROOT), "ls-remote", "origin", "refs/heads/" + branch],
                             capture_output=True, text=True).stdout.split()
-    if not remote or remote[0] != head:
-        raise SystemExit(f"origin/{branch} is {remote[0][:12] if remote else 'absent'}, this checkout is "
-                         f"{head[:12]}: push it (the runners use the pushed tooling)")
-    return branch, head
+    if remote and remote[0] == head:
+        return branch, head
+    if remote and recorded:
+        tip = remote[0]
+        why = recorded_tooling_problem(branch, tip, head, recorded)
+        if why is None:
+            say(f"origin/{branch} moved to {tip[:12]}; it holds the recorded tooling {recorded[:12]} with the same "
+                f"route files, so the run uses it")
+            return branch, tip
+        raise SystemExit(f"origin/{branch} is {tip[:12]}, the recorded tooling {recorded[:12]}: {why}")
+    raise SystemExit(f"origin/{branch} is {remote[0][:12] if remote else 'absent'}, this checkout is "
+                     f"{head[:12]}: push it (the runners use the pushed tooling)")
+
+
+def recorded_tooling_problem(branch, tip, head, recorded):
+    """Why the branch TIP cannot stand in for the RECORDED tooling sha, or None (see tooling_ref)."""
+    def ok(*args):
+        return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True).returncode == 0
+    if not ok("cat-file", "-e", tip + "^{commit}"):
+        ok("fetch", "-q", "--no-write-fetch-head", "origin", "refs/heads/" + branch)
+        if not ok("cat-file", "-e", tip + "^{commit}"):
+            ok("fetch", "-q", "--no-write-fetch-head", "origin", tip)
+    if not ok("merge-base", "--is-ancestor", recorded, tip):
+        return "the branch no longer holds the recorded sha (push a branch that does, or pass --ref)"
+    if not ok("diff", "--quiet", recorded, tip, "--", *ROUTE_FILES):
+        return "the route files changed since the recorded sha (" + ", ".join(ROUTE_FILES[-2:]) + " ...)"
+    if not ok("diff", "--quiet", head, tip, "--", *ROUTE_FILES):
+        return f"this checkout ({head[:12]}) has other route files than the branch tip; push it"
+    return None
 
 
 def mint_map(creds, jobs_per_set, nsets, leg):
@@ -808,7 +1053,7 @@ def mint_map(creds, jobs_per_set, nsets, leg):
 
 def find_run(tag, branch, wid, tries=30, pause=5):
     for _ in range(tries):
-        rows = json.loads(gh("run", "list", "--workflow", wid, "--branch", branch, "--event", "workflow_dispatch",
+        rows = json.loads(gh_read("run", "list", "--workflow", wid, "--branch", branch, "--event", "workflow_dispatch",
                              "--limit", "30", "--json", "databaseId,displayTitle,headSha,url") or "[]")
         for r in rows:
             if tag in (r.get("displayTitle") or ""):
@@ -826,26 +1071,18 @@ def seconds(a, b):
 
 
 def wait_run(run_id, timeout_min, pause):
+    """The run's final view. Its status is read every PAUSE seconds while the run is young and every
+    LONG_POLL_SECONDS after LONG_RUN_SECONDS (poll_pause); a status read that fails for a retryable reason
+    (gh_read: the network, 5xx, quota or "scraping" refusals) is retried, never a failed leg. Both 216d04c7c
+    collectors exited on a transient api.github.com error while their remote jobs continued (2026-10-26); thirty
+    legs at one poll a minute emptied the core quota and the refusals killed legs whose runs succeeded
+    (2026-11-13)."""
     deadline = time.time() + timeout_min * 60
+    began = time.time()
     last = None
     while True:
-        # A failed status read must not strand an otherwise healthy build's
-        # artifacts. Retry only this read, never workflow dispatch. Both
-        # 216d04c7c collectors exited on a transient api.github.com connection
-        # error while their remote jobs continued (2026-10-26).
-        for attempt in range(3):
-            try:
-                view = json.loads(gh("run", "view", str(run_id), "--json",
-                                     "status,conclusion,jobs,headSha,url,createdAt,updatedAt"))
-                break
-            except RuntimeError as exc:
-                transient = any(text in str(exc).lower() for text in (
-                    "error connecting", "connection reset", "connection refused",
-                    "timed out", "timeout", "http 502", "http 503", "http 504"))
-                if not transient or attempt == 2 or time.time() >= deadline:
-                    raise
-                say(f"run {run_id} status read failed; retry {attempt + 1}/2: {exc}")
-                time.sleep(min(5, max(0, deadline - time.time())))
+        view = json.loads(gh_read("run", "view", str(run_id), "--json",
+                                  "status,conclusion,jobs,headSha,url,createdAt,updatedAt", deadline=deadline))
         jobs = view.get("jobs") or []
         line = ", ".join(f"{j['name']}={j.get('conclusion') or j.get('status')}" for j in jobs)
         if line != last:
@@ -855,7 +1092,8 @@ def wait_run(run_id, timeout_min, pause):
             return view
         if time.time() > deadline:
             raise SystemExit(f"run {run_id} did not finish in {timeout_min} min ({view.get('url')})")
-        time.sleep(pause)
+        running = seconds(view.get("createdAt"), dt.datetime.now(dt.timezone.utc).isoformat())
+        time.sleep(poll_pause(pause, max(running or 0, time.time() - began)))
 
 
 def verify_tree(release_build, vendor, arch, commit):
@@ -896,8 +1134,32 @@ def verify_tree(release_build, vendor, arch, commit):
                   f" + {len(staged)} runtime libraries, all as proved")
 
 
-def promote(out, creds):
-    """Promote the run's inbox uploads whose R2 object is the archive a job recorded."""
+def host_groups_role(arch):
+    """"owner" when this leg's vendor-neutral host-group archives go to the
+    binding cache, "fetch" when the leg takes them from the cache (a hit) and
+    never offers its own (HOST_GROUPS_OWNER)."""
+    return "owner" if arch == HOST_GROUPS_OWNER else "fetch"
+
+
+def owner_skip(keys_dir, key, arch):
+    """True when KEY is a vendor-neutral build this (non-owner) leg must not
+    promote. An unreadable key record is not skipped here: bincache promote
+    refuses it on its own (check_upload_row)."""
+    import bincache
+    if not arch or host_groups_role(arch) == "owner":
+        return False
+    try:
+        fields = json.loads((Path(keys_dir) / (key + ".json")).read_text())
+    except (OSError, ValueError):
+        return False
+    return bincache.vendor_neutral(fields)
+
+
+def promote(out, creds, arch=""):
+    """Promote the run's inbox uploads whose R2 object is the archive a job
+    recorded. A leg that does not own the host groups (HOST_GROUPS_OWNER)
+    promotes none of its vendor-neutral archives, so the cache only ever
+    receives the owner leg's bytes for them."""
     import bincache
     gha = Path(out) / "GHA" / "bincache"
     up = gha / "uploads.tsv"
@@ -907,12 +1169,15 @@ def promote(out, creds):
     for line in (gha / "hot_sha256.tsv").read_text().splitlines() if (gha / "hot_sha256.tsv").is_file() else []:
         k, _, h = line.partition("\t")
         want[k] = h
-    good, refused = [], []
+    good, refused, not_owner = [], [], []
     for row in up.read_text().splitlines():
         parts = row.split("\t")
         if len(parts) != 5:
             continue
         leg, slot, _, key = parts[:4]
+        if owner_skip(gha / "keys", key, arch):
+            not_owner.append(row)
+            continue
         with tempfile.NamedTemporaryFile() as tmp:
             code = bincache.http_get(bincache.presign("GET", f"{bincache.INBOX_PREFIX}/{leg}/{slot}.tar.gz", 600, creds),
                                      tmp.name)
@@ -928,9 +1193,16 @@ def promote(out, creds):
     env = dict(os.environ, **creds)
     r = subprocess.run([sys.executable, str(ROOT / "tools/bincache.py"), "promote", str(stage)],
                        capture_output=True, text=True, env=env)
-    (Path(out) / "GHA" / "promote.log").write_text(r.stdout + r.stderr
-                                                    + "".join(f"  refused (not the job's archive): {x}\n" for x in refused))
-    return (r.stdout.strip().splitlines() or ["?"])[-1] + (f"; {len(refused)} refused (bytes not the job's)" if refused else "")
+    (Path(out) / "GHA" / "promote.log").write_text(
+        r.stdout + r.stderr
+        + "".join(f"  refused (not the job's archive): {x}\n" for x in refused)
+        + "".join(f"  not promoted (host groups belong to the {HOST_GROUPS_OWNER} leg): {x}\n" for x in not_owner))
+    lines = r.stdout.strip().splitlines()
+    summary = next((x for x in reversed(lines) if x.startswith("BINCACHE PROMOTED")), lines[-1] if lines else "?")
+    conflicts = [x.strip() for x in lines if x.strip().startswith("BINCACHE CONFLICT")]
+    return (summary + (f"; {len(refused)} refused (bytes not the job's)" if refused else "")
+            + (f"; {len(not_owner)} host-group uploads left to the {HOST_GROUPS_OWNER} leg" if not_owner else "")
+            + "".join(f"\n  {x}" for x in conflicts))
 
 
 def verify_host(out, commit):
@@ -999,13 +1271,40 @@ def upload_donor(creds, donor, tag):
     return bincache.presign("GET", key, MAP_HOURS * 3600, creds), digest, key
 
 
-def download(run_id, name, out, failed):
-    """Artifact NAME of the run, moved into OUT (merged into what is there)."""
+#: download attempts per artifact, and the exit code of a collector whose run SUCCEEDED but whose artifact could
+#: not be downloaded: not a failed leg (release.py relaunches the leg attached to the run, --run-id)
+DOWNLOAD_TRIES = 6
+DOWNLOAD_PENDING_EXIT = 75
+
+
+def download(run_id, name, out, failed, conclusion=None):
+    """Artifact NAME of the run, moved into OUT (merged into what is there). A failed download is retried up to
+    DOWNLOAD_TRIES times with backoff (quota refusals wait for the quota's reset); after that, for a run that
+    concluded success the collector exits DOWNLOAD_PENDING_EXIT, never a failed leg (2026-11-13: download timeouts
+    and resets under the emptied quota marked succeeded runs' legs failed). A failed run's download is retried only
+    for a network or quota error (its artifact may never have been made)."""
     with tempfile.TemporaryDirectory() as td:
-        r = subprocess.run([GH, "run", "download", str(run_id), "-n", name, "-D", td], capture_output=True, text=True)
-        if r.returncode != 0:
-            names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
-            raise SystemExit(f"no artifact {name} from run {run_id} ({r.stderr.strip()[-200:]}); failed jobs: {names}")
+        pause = 30
+        for attempt in range(1, DOWNLOAD_TRIES + 1):
+            shutil.rmtree(td, ignore_errors=True)
+            Path(td).mkdir(parents=True, exist_ok=True)
+            r = subprocess.run([GH, "run", "download", str(run_id), "-n", name, "-D", td],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                break
+            err = r.stderr.strip()[-200:]
+            # a succeeded run's artifact exists: every failure is retried; a failed run's only on the network/quota
+            if attempt == DOWNLOAD_TRIES or (conclusion != "success" and not gh_retryable(r.stderr)):
+                names = "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed) or "none failed"
+                if conclusion == "success":
+                    say(f"DOWNLOAD PENDING: run {run_id} succeeded but artifact {name} did not download in "
+                        f"{DOWNLOAD_TRIES} tries ({err}); the leg is relaunched attached to the run (--run-id)")
+                    raise SystemExit(DOWNLOAD_PENDING_EXIT)
+                raise SystemExit(f"no artifact {name} from run {run_id} ({err}); failed jobs: {names}")
+            wait = rate_limit_wait() if RATE_LIMITED_GH.search(r.stderr) else pause
+            pause = min(pause * 2, 600)
+            say(f"artifact {name} of run {run_id}: download {attempt}/{DOWNLOAD_TRIES} failed, again in {wait} s: {err}")
+            time.sleep(wait)
         src = Path(td) / ("leg" if (Path(td) / "leg").is_dir() else "")
         Path(out).mkdir(parents=True, exist_ok=True)
         for p in sorted(src.iterdir()):
@@ -1018,6 +1317,34 @@ def download(run_id, name, out, failed):
             shutil.move(str(p), str(dest))
 
 
+#: the small artifact of a set's GHA records (timings, cache outcomes, the binding-cache uploads the Mac promotes)
+#: that the assemble job uploads beside the set's tree (lane fx-pack-offload, 2026-11-19)
+RECORDS_ARTIFACT = "release-{name}-gha"
+#: GHA/records-only.json: what a --records-only collector collected instead of the tree
+RECORDS_ONLY_SCHEMA = "mojolearn.leg-records-only.v1"
+
+
+def run_artifacts(run_id):
+    """The artifact names of RUN_ID (read-only, retried like every gh read)."""
+    out = gh_read("api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/artifacts", "--paginate",
+                  "--jq", ".artifacts[].name")
+    return [x.strip() for x in out.splitlines() if x.strip()]
+
+
+def records_only_ok(out, commit, defines=""):
+    """(ok, why) of a --records-only leg at OUT (tools/release.py RemoteLeg): its GHA/records-only.json names a run
+    of COMMIT with DEFINES that concluded success and whose records artifact was collected. The set's tree stays on
+    GitHub; the measurement build's pack job (.github/workflows/candidate-pack.yml) downloads and verifies it."""
+    doc = read_doc(Path(out) / "GHA" / "records-only.json")
+    if doc.get("schema") != RECORDS_ONLY_SCHEMA:
+        return False, f"no records-only receipt in {Path(out) / 'GHA'}"
+    if doc.get("source_commit") != commit or (doc.get("defines") or "") != (defines or ""):
+        return False, "the records-only receipt is of another commit or other defines"
+    if doc.get("conclusion") != "success" or not str(doc.get("run") or "").isdigit():
+        return False, f"the run {doc.get('run')} did not conclude success"
+    return True, f"run {doc['run']} succeeded; its tree stays on GitHub for the pack job"
+
+
 def run_modes(text):
     """The release modes the box builds: --modes, else MOJOLEARN_RELEASE_MODES
     (release.py sets it for every leg), else the release's default, identical."""
@@ -1028,15 +1355,87 @@ def run_modes(text):
         raise SystemExit(str(exc))
 
 
-def write_run_id(gha, run, attached=False):
+def write_run_id(gha, run, attached=False, source_commit=None, defines=None):
     """GHA/run-id.json: the producer run of this leg, written the moment it is
     known (before the wait). A collector that dies while the run goes on leaves
     it, so release.py reads that run's state instead of guessing (0.8.64: the
     sm_89 leg's begun compile runs stayed open after run 41364664603 failed)."""
     (gha / "run-id.json").write_text(json.dumps(dict(
         databaseId=run.get("databaseId"), url=run.get("url"), displayTitle=run.get("displayTitle"),
-        headSha=run.get("headSha"), attached=attached,
+        headSha=run.get("headSha"), attached=attached, source_commit=source_commit, defines=defines or None,
         recorded_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
+
+
+DEFINE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?")
+
+
+def normalize_defines(text):
+    """The MOJOLEARN_BUILD_DEFINES spelling (NAME=V,NAME2; bindings/build_defines.sh) of TEXT, given either way:
+    `NAME=V,NAME2` or `-D NAME=V -D NAME2`. Sorted by name, so one define set has one spelling (one candidate
+    label, one cache key). Empty for none; a malformed entry or a name given twice is refused."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if text.startswith("-D"):
+        parts = text.split()
+        if len(parts) % 2 or any(flag != "-D" for flag in parts[0::2]):
+            raise SystemExit(f"--defines: write '-D NAME=V -D NAME2', not {text!r}")
+        entries = parts[1::2]
+    else:
+        entries = [e for e in text.split(",") if e]
+    bad = [e for e in entries if not DEFINE_RE.fullmatch(e)]
+    if bad:
+        raise SystemExit(f"--defines: not NAME or NAME=VALUE: {', '.join(bad)}")
+    names = [e.split("=", 1)[0] for e in entries]
+    if len(set(names)) != len(names):
+        raise SystemExit(f"--defines: a name is given twice: {text!r}")
+    return ",".join(sorted(entries, key=lambda e: e.split("=", 1)[0]))
+
+
+def read_doc(path):
+    try:
+        doc = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def drop_r2(creds, keys):
+    """Delete the run's R2 objects (URL map, host donor) after a successful collection; a failed delete only
+    leaves an object whose presigned URLs expire."""
+    if not creds or not keys:
+        return
+    import bincache
+    for key in keys:
+        try:
+            bincache.r2_request(creds, "DELETE", key)
+        except Exception:  # glue: a leftover object expires with its URLs
+            pass
+
+
+def succeeded_run(gha, commit, defines=""):
+    """The run GHA/run-id.json names when that run built COMMIT with DEFINES and concluded success, else None:
+    such a leg is collected again by --run-id, never dispatched again (release.py launch_detached; 2026-11-13: legs
+    whose runs succeeded were marked failed by the quota refusals and rebuilt from scratch). The commit and defines
+    come from run-id.json, else the dispatch.json of the same run; a leg that records neither is not attached."""
+    rid = read_doc(Path(gha) / "run-id.json")
+    disp = read_doc(Path(gha) / "dispatch.json")
+    run_id = rid.get("databaseId")
+    if not (isinstance(run_id, int) or (isinstance(run_id, str) and run_id.isdigit())):
+        return None
+    source = rid.get("source_commit") or disp.get("source_commit")
+    built = rid["defines"] if "defines" in rid else disp.get("defines")
+    if source != commit or (built or "") != (defines or ""):
+        return None
+    try:
+        view = json.loads(gh_read("run", "view", str(run_id), "--json", "status,conclusion,displayTitle"))
+    except (RuntimeError, ValueError):
+        return None
+    if disp.get("tag") and not rid.get("attached") and disp["tag"] not in (view.get("displayTitle") or ""):
+        return None
+    if view.get("status") == "completed" and view.get("conclusion") == "success":
+        return int(run_id)
+    return None
 
 
 def cmd_run(a):
@@ -1048,11 +1447,19 @@ def cmd_run(a):
         raise SystemExit("--compile-groups requires one --arch and no host producer/donor")
     if a.reuse_host_groups and not a.host:
         raise SystemExit("--reuse-host-groups requires --host")
+    if a.records_only and (not a.arch or a.host or a.compile_groups):
+        raise SystemExit("--records-only is a measurement build's collector of one --arch set (no host, no "
+                         "--compile-groups)")
     if a.arch and a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
     if a.host and not a.arch and not a.host_donor and not a.run_id:
         raise SystemExit("--host without --arch needs --host-donor DIR (a retained <leg>/release-build/build)")
     modes = run_modes(a.modes)
+    defines = normalize_defines(a.defines)
+    if defines and a.compile_groups:
+        raise SystemExit("--defines builds a candidate set; it takes no --compile-groups")
+    if a.skip_units and (not defines or not a.arch or a.host):
+        raise SystemExit("--skip-units is a B arm's (--defines) on one --arch with no host producer")
     vendor = ARCHS.get(a.arch)
     name = f"{vendor}-{a.arch}" if a.arch else None
     out = Path(a.out).resolve()
@@ -1074,11 +1481,16 @@ def cmd_run(a):
                          "(gfx942 codegen varies run to run); pass --allow-cold-amd to build it anyway")
     cleanup = []
     if a.run_id:
-        run = json.loads(gh("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
+        run = json.loads(gh_read("run", "view", str(a.run_id), "--json", "databaseId,displayTitle,headSha,url"))
         say(f"attached to run {a.run_id} ({run.get('url')})")
-        write_run_id(gha, run, attached=True)
+        # the R2 objects of the dispatch that made this run (release.py copies its dispatch.json here on an
+        # attach): dropped once this collection succeeds, as the dispatching collector would have
+        prior = read_doc(gha / "dispatch.json")
+        if prior.get("tag") and prior["tag"] in (run.get("displayTitle") or ""):
+            cleanup = list(prior.get("r2_objects") or [])
+        write_run_id(gha, run, attached=True, source_commit=a.commit, defines=defines)
     else:
-        branch, head = tooling_ref(a.ref)
+        branch, head = tooling_ref(a.ref, a.tooling_sha)
         tag = f"gha-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{os.urandom(3).hex()}"
         map_url = donor_url = donor_sha = ""
         jobs_per_set = max(a.shards + 1, MERGED_JOBS_PER_SET)
@@ -1103,29 +1515,27 @@ def cmd_run(a):
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
            "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
            "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}",
-           "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}")
+           "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}",
+           # only when set: a workflow ref without the `defines` input still takes every release dispatch
+           *(["-f", f"defines={defines}"] if defines else []),
+           *(["-f", f"skip_units={a.skip_units}"] if a.skip_units else []))
         (gha / "dispatch.json").write_text(json.dumps(dict(
-            tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
+            tag=tag, branch=branch, tooling_commit=head, recorded_tooling=a.tooling_sha or None, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
             host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
-            reuse_host_groups=a.reuse_host_groups,
+            reuse_host_groups=a.reuse_host_groups, defines=defines or None, skip_units=a.skip_units or None,
             dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
         if run.get("headSha") != head:
             raise SystemExit(f"the run is at {run.get('headSha')}, this checkout at {head}")
         a.run_id = run["databaseId"]
-        write_run_id(gha, run)
-    try:
-        view = wait_run(a.run_id, a.timeout_min, a.poll)
-    finally:
-        if cleanup and creds:
-            import bincache
-            for key in cleanup:
-                try:
-                    bincache.r2_request(creds, "DELETE", key)
-                except Exception:
-                    pass
+        write_run_id(gha, run, source_commit=a.commit, defines=defines)
+    # The binding-cache map and the host donor stay in R2 until this collection succeeds (drop_r2 below): a
+    # collector that dies while the run goes on must not take them from its pending jobs (2026-11-13: a crashed
+    # collector's cleanup deleted the map and the run's assemble job failed HTTP 404 on "Binding-cache map").
+    # Left behind, their presigned URLs expire after MAP_HOURS and the next dispatch of the leg overwrites the map.
+    view = wait_run(a.run_id, a.timeout_min, a.poll)
     rows = []
     for j in view.get("jobs") or []:
         rows.append((j.get("name", ""), j.get("conclusion") or j.get("status"), j.get("startedAt"),
@@ -1138,8 +1548,8 @@ def cmd_run(a):
         # a complete set, an assembled build proof or an installed/runtime pass.
         dest = out / "shard-artifacts"
         dest.mkdir(exist_ok=True)
-        gh("run", "download", str(a.run_id), "--pattern", f"shard-{a.arch}-*", "--dir", str(dest))
-        download(a.run_id, "plan", gha / "plan", failed)
+        gh_read("run", "download", str(a.run_id), "--pattern", f"shard-{a.arch}-*", "--dir", str(dest))
+        download(a.run_id, "plan", gha / "plan", failed, view.get("conclusion"))
         plan = json.loads((gha / "plan" / "plan.json").read_text())
         expected = [r for r in plan["matrix"]["include"] if r["arch"] == a.arch]
         if not plan.get("compile_only") or plan.get("compile_groups") != a.compile_groups or not expected:
@@ -1153,16 +1563,42 @@ def cmd_run(a):
         message = f"COMPILE ONLY: {len(archives)} archives retained for {len(expected)} groups; no complete-build or runtime claim"
         (gha / "summary.txt").write_text(message + "\n")
         say(message)
+        if ok:
+            drop_r2(creds, cleanup)
         return 0 if ok else 1
     lines = [f"run {view.get('url')} {view.get('conclusion')}"]
     ok = True
-    if a.arch:
-        download(a.run_id, f"release-{name}", out, failed)
+    tree = bool(a.arch)
+    if a.arch and a.records_only and view.get("conclusion") == "success" and not failed:
+        # RECORDS ONLY (lane fx-pack-offload, 2026-11-19): a measurement build packs on GitHub
+        # (.github/workflows/candidate-pack.yml downloads, verifies and packs the trees there), so this collector
+        # takes only the set's GHA records: the binding-cache uploads it promotes below and the timings. A failed
+        # run, or a run of a workflow ref without the records artifact, downloads the whole tree as before (its
+        # build logs name the first error; the old ref has nothing smaller).
+        records = RECORDS_ARTIFACT.format(name=name)
+        if records in run_artifacts(a.run_id):
+            download(a.run_id, records, gha, failed, view.get("conclusion"))
+            (gha / "records-only.json").write_text(json.dumps(dict(
+                schema=RECORDS_ONLY_SCHEMA, run=str(a.run_id), source_commit=a.commit, defines=defines or None,
+                conclusion=view.get("conclusion"), artifact=records, tree=f"release-{name}",
+                collected_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
+            lines.append(f"TREE ON GITHUB: artifact release-{name} of run {a.run_id} (records only here; the pack "
+                         "job downloads and verifies the tree)")
+            tree = False
+        else:
+            say(f"run {a.run_id} has no {records} artifact (a workflow ref before it): downloading the whole tree")
+    if tree:
+        download(a.run_id, f"release-{name}", out, failed, view.get("conclusion"))
         good, why = verify_tree(out / name / "release-build", vendor, a.arch, a.commit)
         ok &= good
         lines.append(("TREE OK: " if good else "TREE REFUSED: ") + why)
+        if a.records_only and view.get("conclusion") == "success" and not failed and good:
+            (gha / "records-only.json").write_text(json.dumps(dict(
+                schema=RECORDS_ONLY_SCHEMA, run=str(a.run_id), source_commit=a.commit, defines=defines or None,
+                conclusion=view.get("conclusion"), artifact=f"release-{name}", tree=f"release-{name}",
+                collected_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
     if a.host:
-        download(a.run_id, "host-build", out / "host-build", failed)
+        download(a.run_id, "host-build", out / "host-build", failed, view.get("conclusion"))
         good, why = verify_host(out / "host-build", a.commit)
         ok &= good
         lines.append(("HOST OK: " if good else "HOST REFUSED: ") + why)
@@ -1172,9 +1608,10 @@ def cmd_run(a):
     if failed:
         lines.append("FAILED JOBS: " + "; ".join(f"{x[0]} ({x[1]}) {x[5]}" for x in failed))
     if ok and creds and a.arch and not a.no_bincache:
-        lines.append("binding cache: " + promote(out, creds))
+        lines.append("binding cache: " + promote(out, creds, a.arch))
     if ok:
-        lines += next_steps(out, name, a)
+        lines += next_steps(out, name if tree or not a.arch else None, a)
+        drop_r2(creds, cleanup)
     (out / "wall.txt").write_text(f"wall_seconds={wall} run={a.run_id} conclusion={view.get('conclusion')}\n")
     (gha / "summary.txt").write_text("\n".join(lines) + "\n")
     for line in lines:
@@ -1209,6 +1646,8 @@ def main(argv=None):
                    "build_sets.sh's default tiers")
     p.add_argument("--host-donor", action="store_true", help="the dispatch carries host_donor_url")
     p.add_argument("--compile-groups", default="", help="compile only: device, or exact merged shard entries")
+    p.add_argument("--skip-units", default="", help="merged shard entries with no shard job: a B arm's units "
+                   "whose bytes are its base build's (tools/release_reuse.py unit_plan); assembly still runs")
     p.add_argument("--json")
     p.add_argument("--github-output")
     p.set_defaults(fn=cmd_plan)
@@ -1252,7 +1691,16 @@ def main(argv=None):
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--compile-groups", default="", help="retain only selected compilation archives; no assembly")
     p.add_argument("--reuse-host-groups", action="store_true", help="host producer compiles only changed groups against donor")
+    p.add_argument("--skip-units", default="", help="shard entries the run does not compile in shard jobs (a B arm's "
+                   "units its base build already compiled; the assemble job takes them from the binding cache)")
+    p.add_argument("--defines", default="", help="candidate build defines (NAME=V,NAME2 or '-D NAME=V -D NAME2'): "
+                   "the workflow's `defines`, MOJOLEARN_BUILD_DEFINES in every compile (tools/release.py candidate)")
+    p.add_argument("--records-only", action="store_true", help="a measurement build packed on GitHub "
+                   "(.github/workflows/candidate-pack.yml): collect the set's GHA records (release-<set>-gha) and "
+                   "promote its binding-cache uploads; the tree stays on GitHub (a failed run downloads it)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
+    p.add_argument("--tooling-sha", default="", help="the tooling sha a measurement build recorded at its first "
+                   "launch: a moved --ref is accepted while it holds this sha with the same route files")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)
     p.set_defaults(fn=cmd_run)

@@ -15,8 +15,7 @@ entry's bits. Cosine keeps DEVIATION 5113: the reference rows are scaled to
 unit rows by the same `cosine_unit_rows` before their one upload, the
 queries before theirs.
 """
-from std.ffi import _Global
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -34,10 +33,11 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     dbscan_metric_threshold,
 )
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: The estimators binding's ONE process-lifetime DeviceContext slot (the
 #: same name `bindings/_mojolearn_estimators.mojo` uses).
-comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEstimatorsContextFast"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
 struct ResidentLabeledReference(Movable):
@@ -73,8 +73,8 @@ struct ResidentLabeledReference(Movable):
         ctx.synchronize()
         var ur = List[Float32]()
         if metric == LABELED_METRIC_COSINE:
-            var rr = List[Float32](length=n_refs * d, fill=Float32(0))
-            memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
+            var rr = List[Float32](unsafe_uninit_length=n_refs * d)
+            unsafe_memcpy(dest=rr.unsafe_ptr(), src=refs_ptr, count=n_refs * d)
             ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
             ctx.enqueue_copy(dst_buf=refs, src_ptr=ur.unsafe_ptr())
         else:
@@ -104,23 +104,18 @@ struct ResidentLabeledReference(Movable):
         _ = self.ctx^
 
 
-struct LabeledReferenceRegistry(Movable):
+struct LabeledReferenceRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentLabeledReference]
     var next_id: Int
+    var metadata_lock: List[Int64]
 
     def __init__(out self):
         self.entries = Dict[Int, ResidentLabeledReference]()
         self.next_id = 1
+        self.metadata_lock = List[Int64](length=1, fill=0)
 
 
-comptime LABELED_REFERENCE_REGISTRY = _Global[
-    StorageType=LabeledReferenceRegistry,
-    name=(
-        "MojoLabeledReferenceIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoLabeledReferenceFast"
-    ),
-    init_fn=LabeledReferenceRegistry.__init__,
-]
+comptime LABELED_REFERENCE_REGISTRY = SharedSlot[LabeledReferenceRegistry, ( "MojolearnLabeledReferenceIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLabeledReferenceFastV2" ), 2]
 
 
 def labeled_reference_prepare(
@@ -134,21 +129,65 @@ def labeled_reference_prepare(
     """Upload a reference set once; the handle every later predict names."""
     var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
     var entry = ResidentLabeledReference(refs_ptr, n_refs, keys_ptr, labels_ptr, n_features, metric)
-    if state[].next_id == 9223372036854775807:
-        raise Error("resident labeled reference handle space exhausted")
-    var handle = state[].next_id
-    state[].next_id += 1
-    state[].entries[handle] = entry^
-    return handle
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if state[].next_id == 9223372036854775807:
+            raise Error("resident labeled reference handle space exhausted")
+        var handle = state[].next_id
+        state[].next_id += 1
+        state[].entries[handle] = entry^
+        return handle
+    finally:
+        shared_slot_unlock(lock)
 
 
 def labeled_reference_release(handle: Int) raises:
     """Drop the device copy; a released handle is refused by every later call."""
     var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident labeled reference handle")
-    var released = state[].entries.pop(handle)
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var released: Optional[ResidentLabeledReference] = None
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        released = state[].entries.pop(handle)
+    finally:
+        shared_slot_unlock(lock)
+    # Device frees and the existing context drain run after unlocking.
     _ = released^
+
+
+@fieldwise_init
+struct LabeledReferenceLease(Movable):
+    """Owning references to one registry entry; no tensor bytes are copied."""
+    var ctx: DeviceContext
+    var refs: DeviceBuffer[DType.float32]
+    var keys: DeviceBuffer[DType.int32]
+    var labels: DeviceBuffer[DType.int32]
+    var n_refs: Int
+    var n_features: Int
+    var metric: Int
+
+    def __deinit__(deinit self):
+        _ = self.labels^
+        _ = self.keys^
+        _ = self.refs^
+        _ = self.ctx^
+
+
+def labeled_reference_lease(handle: Int) raises -> LabeledReferenceLease:
+    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
+    var lock = state[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if handle not in state[].entries:
+            raise Error("unknown or released resident labeled reference handle")
+        ref entry = state[].entries[handle]
+        return LabeledReferenceLease(entry.ctx.copy(), entry.refs.copy(), entry.keys.copy(), entry.labels.copy(),
+                                      entry.n_refs, entry.n_features, entry.metric)
+    finally:
+        shared_slot_unlock(lock)
 
 
 def labeled_reference_predict_resident(
@@ -163,10 +202,7 @@ def labeled_reference_predict_resident(
 ) raises:
     """`labeled_reference_predict` over a resident reference set: the same
     refusals, the same kernel and launch chunks; only the queries cross."""
-    var state = LABELED_REFERENCE_REGISTRY.get_or_create_ptr()
-    if handle not in state[].entries:
-        raise Error("unknown or released resident labeled reference handle")
-    ref entry = state[].entries[handle]
+    var entry = labeled_reference_lease(handle)
     if entry.n_features != n_features or entry.metric != metric:
         raise Error(
             "labeled_reference_predict_resident: the handle was prepared with "
@@ -185,8 +221,8 @@ def labeled_reference_predict_resident(
     entry.ctx.synchronize()
     var uq = List[Float32]()
     if metric == LABELED_METRIC_COSINE:
-        var qq = List[Float32](length=n_queries * d, fill=Float32(0))
-        memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
+        var qq = List[Float32](unsafe_uninit_length=n_queries * d)
+        unsafe_memcpy(dest=qq.unsafe_ptr(), src=queries_ptr, count=n_queries * d)
         uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")
         entry.ctx.enqueue_copy(dst_buf=queries, src_ptr=uq.unsafe_ptr())
     else:
@@ -248,9 +284,10 @@ def labeled_reference_predict_resident(
     entry.ctx.synchronize()
     entry.ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=out_labels)
     entry.ctx.synchronize()
-    memcpy(dest=out_labels_ptr, src=hl.unsafe_ptr(), count=n_queries)
+    unsafe_memcpy(dest=out_labels_ptr, src=hl.unsafe_ptr(), count=n_queries)
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.
     _ = hl^
     _ = queries^
     _ = out_labels^
     _ = out_refs^
+    _ = entry^  # Retain all registry-owned handles through the final download.

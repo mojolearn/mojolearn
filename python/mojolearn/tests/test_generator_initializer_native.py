@@ -3,6 +3,7 @@
 import pytest
 
 from mojolearn import _native_samba_bridge as bridge
+from mojolearn import _portable_math as _pm
 from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
 from .test_generator_draw_native import LegacyDraws, bits, checked
@@ -12,22 +13,22 @@ class LegacyInitializers(LegacyDraws):
     # Test-only copies of the pre-migration public formulas and their order.
     def kaiming_uniform(self, shape, fan_in, a=None):
         if a is None:
-            a = training.math.sqrt(5.)
-        gain = training.math.sqrt(2. / (1. + float(a)*float(a)))
-        bound = gain * training.math.sqrt(3. / float(int(fan_in)))
+            a = _pm.sqrt(5.)
+        gain = _pm.sqrt(2. / (1. + float(a)*float(a)))
+        bound = gain * _pm.sqrt(3. / float(int(fan_in)))
         return self.uniform(shape, -bound, bound)
 
     def xavier_uniform(self, shape, fan_in, fan_out, gain=1.):
-        bound = float(gain) * training.math.sqrt(6. / float(int(fan_in)+int(fan_out)))
+        bound = float(gain) * _pm.sqrt(6. / float(int(fan_in)+int(fan_out)))
         return self.uniform(shape, -bound, bound)
 
     def kaiming_normal(self, shape, fan_in, gain=None):
         if gain is None:
-            gain = training.math.sqrt(2.)
-        return self.normal(shape, 0., float(gain)/training.math.sqrt(float(int(fan_in))))
+            gain = _pm.sqrt(2.)
+        return self.normal(shape, 0., float(gain)/_pm.sqrt(float(int(fan_in))))
 
     def xavier_normal(self, shape, fan_in, fan_out, gain=1.):
-        return self.normal(shape, 0., float(gain)*training.math.sqrt(2. / float(int(fan_in)+int(fan_out))))
+        return self.normal(shape, 0., float(gain)*_pm.sqrt(2. / float(int(fan_in)+int(fan_out))))
 
 
 CASES = [
@@ -86,8 +87,8 @@ def test_initializer_invokes_cached_c_abi_without_python_math_or_loader(monkeypa
         raise AssertionError('Python portable-math wrapper or loader executed')
 
     with monkeypatch.context() as patch:
-        patch.setattr(training.math, 'sqrt', poison)
-        patch.setattr(training.math, '_load', poison)
+        patch.setattr(_pm, 'sqrt', poison)  # _training_impl no longer imports _portable_math (b53aac9ac4)
+        patch.setattr(_pm, '_load', poison)
         bits(checked(gen.kaiming_uniform, shape, **options), expected)
 
 

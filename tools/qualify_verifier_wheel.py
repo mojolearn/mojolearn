@@ -18,7 +18,7 @@ COMMAND_TIMEOUT_SECONDS = 180  # Keep this standalone shipped runner dependency-
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
 #: alone to the box, stdlib only, with no checkout beside it).
 PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
-    "mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx")}
+    "mojolearn-nvidia", "mojolearn-amd")}  # the NVIDIA wheel carries its PTX set (2026-11-05)
 
 
 def admit(kind, doc, models):
@@ -233,6 +233,11 @@ def runner(manifest, receipt, output):
     return save, run
 
 
+#: --no-identity-lanes: the jobs that execute identity lanes, dropped when the one column record ran them
+IDENTITY_LANE_JOBS = ("models", "extended", "self-test")
+IDENTITY_RECORDED_ONCE = "recorded-once"
+
+
 def qualify_jobs(run, save, manifest, python, work, output, models, scope, devices, version):
     """The smoke's jobs against an installed package: the same for a wheel
     installed here and for a package pip resolved from an index."""
@@ -250,6 +255,11 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
         "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "1", "--batch-checks", "--no-models"],
         "self-test": ["--self-test"],
     }
+    if manifest.get("identity_lanes") == IDENTITY_RECORDED_ONCE:
+        # ONE EXECUTION OF THE IDENTITY LANES PER DEVICE CLASS (Andrew 2026-11-05, release.py
+        # --identity-on-wheels): the column record of these exact installed wheels
+        # (tools/identity_wheel_record.py) ran every owed lane; these three re-ran a subset of them.
+        commands = {name: flags for name, flags in commands.items() if name not in IDENTITY_LANE_JOBS}
     if scope == 'cpu-only':
         commands = {name: flags for name, flags in commands.items() if name in ('coverage', 'models')}
     manifest['expanded'] = expanded_checks(run, python, work, output,
@@ -285,7 +295,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
 LOCATE_INSTALLED = """import importlib.metadata as md,importlib.util,json
 spec=importlib.util.find_spec('mojolearn')
 dists={}
-for n in ('mojolearn','mojolearn-core','mojolearn-nvidia','mojolearn-amd','mojolearn-nvidia-ptx'):
+for n in ('mojolearn','mojolearn-core','mojolearn-nvidia','mojolearn-amd'):
     try: dists[n]=md.version(n)
     except md.PackageNotFoundError: dists[n]=None
 print(json.dumps(dict(package=list(spec.submodule_search_locations)[0] if spec else None,distributions=dists)))
@@ -308,6 +318,7 @@ def qualify_installed(parser, args):
     if receipt.exists():
         parser.error("use a fresh output directory")
     manifest = dict(wheel=None, wheel_sha256=None, status="INCOMPLETE", jobs=[], scope=args.scope,
+                    **({"identity_lanes": IDENTITY_RECORDED_ONCE} if args.no_identity_lanes else {}),
                     source_commit=None, release_qualified=False, expanded=None,
                     require_ptx=args.require_ptx,
                     installed_from=dict(python=python, expected_version=args.expected_version))
@@ -320,8 +331,12 @@ def qualify_installed(parser, args):
             manifest["installed_from"].update(located)
             wrong = {n: v for n, v in located["distributions"].items() if v is not None and v != args.expected_version}
             installed_names = {n for n, v in located["distributions"].items() if v is not None}
-            required = {"mojolearn-core"} if installed_names.intersection(
-                {"mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx"}) else {"mojolearn"}
+            # The core wheel is the install for a vendor plugin and, alone, the CPU-only install (the CPU
+            # checks job installs mojolearn-core by itself); "mojolearn" is required only for the
+            # single-wheel installs (the macOS wheel, the Linux meta package).
+            core_install = bool(installed_names & {"mojolearn-nvidia", "mojolearn-amd"}) or (
+                installed_names & {"mojolearn", "mojolearn-core"} == {"mojolearn-core"})
+            required = {"mojolearn-core"} if core_install else {"mojolearn"}
             wrong.update({name: None for name in required - installed_names})
             if wrong:
                 raise RuntimeError(f"installed distributions not at {args.expected_version}: {wrong}")
@@ -373,6 +388,9 @@ def main():
     parser.add_argument('--installed-python', type=Path,
                         help='qualify the mojolearn already installed for this interpreter (no wheel, no install)')
     parser.add_argument('--expected-version', help='with --installed-python: the version that must be installed')
+    parser.add_argument('--no-identity-lanes', action='store_true',
+                        help='drop the models, extended and self-test jobs: the one identity column record of '
+                             'these wheels ran their lanes (release.py --identity-on-wheels)')
     args = parser.parse_args()
     if args.require_ptx and args.scope != 'expanded':
         parser.error('--require-ptx needs expanded GPU scope')
@@ -418,6 +436,7 @@ def main():
     if len({p["distribution"] for p in plugins}) != len(plugins):
         parser.error("one --plugin per distribution")
     manifest = dict(wheel=str(wheel), wheel_sha256=digest, status="INCOMPLETE", jobs=[],
+                    **({"identity_lanes": IDENTITY_RECORDED_ONCE} if args.no_identity_lanes else {}),
                     scope=args.scope, source_commit=source_commit, release_qualified=False,
                     expanded=None, require_ptx=args.require_ptx)
     if plugins:

@@ -1,0 +1,106 @@
+name: Tool tests
+
+# The repository tool tests (tools/run_tool_tests.sh: every tools/test_*.py and tools/tests/test_*.py) on the free GitHub
+# Linux runners, so the orchestrator's laptop does not run them (2026-11-18: 10 pytest workers beside the arm packer
+# drove a 16 GB laptop to 15 of 16 GB swap; the run took over 50 minutes there and was stopped twice).
+#
+# The files are dealt into SHARDS runners by position in the sorted list; each runner runs its files across all of its
+# cores (run_tool_tests.sh takes the worker count from nproc and splits the heavy lane_select files by test id). The
+# summary job fails the run when any shard failed. Tooling only: it gates nothing and reports nothing to a release.
+#
+# MANUAL ONLY (light-checks.yml refuses any other workflow with a push or schedule trigger):
+#   gh workflow run tool-tests.yml --ref main -f ref=<sha|branch>
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit or branch to check out and run"
+        required: true
+
+run-name: "tool-tests ${{ inputs.ref }}"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tool-tests-${{ inputs.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    env:
+      TT_SHARDS: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref }}
+          # full history: release_reuse diffs against the last release's source commit and the verify
+          # anchor tests read HEAD~1; a depth-1 checkout has neither
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: test
+      - name: Tool tests, shard ${{ matrix.shard }} of 12 (all cores of the runner)
+        env:
+          TT_SHARD: ${{ matrix.shard }}
+        run: |
+          set -u
+          mapfile -t ALL < <(ls tools/test_*.py tools/tests/test_*.py | LC_ALL=C sort)
+          FILES=()
+          for i in "${!ALL[@]}"; do [ $((i % TT_SHARDS)) -eq "$TT_SHARD" ] && FILES+=("${ALL[$i]}"); done
+          echo "shard $TT_SHARD: ${#FILES[@]} of ${#ALL[@]} files, $(nproc) cores"
+          export MOJOLEARN_TOOL_TESTS_OUT="$RUNNER_TEMP/tool-tests"
+          export MOJOLEARN_TEST_PY="$PWD/.pixi/envs/test/bin/python"
+          rc=0
+          bash tools/run_tool_tests.sh "${FILES[@]}" > "$RUNNER_TEMP/run.log" 2>&1 || rc=$?
+          tail -n 40 "$RUNNER_TEMP/run.log"
+          cp "$RUNNER_TEMP/run.log" "$MOJOLEARN_TOOL_TESTS_OUT/run.log" 2> /dev/null || true
+          echo "$rc" > "$MOJOLEARN_TOOL_TESTS_OUT/shard-rc.txt" 2> /dev/null || true
+          exit "$rc"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: tool-tests-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/tool-tests
+          retention-days: 14
+          if-no-files-found: warn
+
+  summary:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: shards
+      - name: Summary
+        run: |
+          set -u
+          bad=0
+          {
+            echo "# Tool tests"
+            for d in shards/tool-tests-shard-*; do
+              rc=$(cat "$d/shard-rc.txt" 2> /dev/null || echo missing)
+              echo "- $(basename "$d"): rc $rc; $(tail -n 1 "$d/run.log" 2> /dev/null | cut -c1-200)"
+              [ "$rc" = 0 ] || bad=1
+            done
+            [ "$(ls -d shards/tool-tests-shard-* 2> /dev/null | wc -l)" -eq 12 ] || { echo "- fewer than 12 shards reported"; bad=1; }
+          } | tee SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$bad"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: tool-tests-summary
+          path: SUMMARY.md
+          retention-days: 14

@@ -39,7 +39,7 @@ def check[dt: DType](ctx: DeviceContext, n: Int) raises:
     print("PASS WP8", dt, "elements", n)
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check[DType.uint8](ctx, 1)
     check[DType.uint8](ctx, 15)

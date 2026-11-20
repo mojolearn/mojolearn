@@ -6,7 +6,7 @@ Every profile uses this SAME scalar arithmetic body on host and device. A
 profile may change bits across versions, never between vendors in one run.
 No compilation, identity, quality or timing has been run for this source.
 """
-from std.sys.compile import is_defined, get_defined_int
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import (
@@ -14,33 +14,40 @@ from gemm.contract import (
     GEMM_LEAF_ARM, GEMM_LEAF_ARM_NEURAL128, GEMM_LEAF_ARM_NEURAL256,
 )
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime NEURAL_EXPERIMENTS_ALLOWED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 # Leaf length and accumulator chains stay separate controls.
 # NN03 = the neural arms (1 neural128, 2 neural256) of the ONE leaf switch
 # MOJOLEARN_IDN_GEMM_LEAF (gemm/contract.mojo); arm 3 (all256) changes the
 # contract for every caller instead and leaves this profile unchanged.
-# NN04 = MOJOLEARN_IDN_NEURAL_CHAINS=2|4 (absent: one chain). The former enable
-# defines IDN_NEURAL_NN03/IDN_NEURAL_NN04/IDN_NEURAL_LEAF are gone.
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_CHAINS (NN04, 2|4 accumulator chains: opt-in arm, no A/B recorded; one chain kept) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at a9109164e5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch; record in docs/TOMBSTONES.md.
+# The former enable defines IDN_NEURAL_NN03/IDN_NEURAL_NN04/IDN_NEURAL_LEAF are gone.
 # All OFF pending four-column identity, neural quality and BOTH voting vendors'
 # full-workload A/Bs. No inherited I04 component result admits these profiles.
 comptime NN03 = NEURAL_EXPERIMENTS_ALLOWED and (
     GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL128 or GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
 )
-comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"]()
+comptime NN04 = False
 comptime NEURAL_PROFILE_CHANGED = NN03 or NN04
 comptime NEURAL_LEAF = (
     256 if NN03 and GEMM_LEAF_ARM == GEMM_LEAF_ARM_NEURAL256
     else (128 if NN03 else CONTRACT_K_LEAF_MIN)
 )
-comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",1]() if NN04 else 1
+comptime NEURAL_CHAINS = 1
 
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:
     """The cap is numerical profile data; it never reads m/n or hardware."""
-    comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "profile leaf (leaf 64 deleted: I04 loser)"
+    # MIN_LEAF == CONTRACT_K_LEAF_MIN: NEURAL_LEAF is the contract's leaf when no
+    # neural arm is on, and callers instantiate this with it even on a branch
+    # they do not take; under -D MOJOLEARN_GEMM_FAST_LEAF512 that is 512.
+    comptime assert (
+        MIN_LEAF == 128 or MIN_LEAF == 256 or MIN_LEAF == CONTRACT_K_LEAF_MIN
+    ), "profile leaf (leaf 64 deleted: I04 loser)"
     if k <= 0:
         return (1, 0)
     var leaf = min(k, MIN_LEAF)
@@ -149,29 +156,3 @@ def neural_cell[CHAINS: Int, SLOTS: Int = 16](
     return neural_fold_drain[SLOTS](stack,occupied)
 
 
-def neural_profile_host[MIN_LEAF: Int = 128, CHAINS: Int = 1](
-    c: MutPointer[Float32, MutAnyOrigin], a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin], m: Int, n: Int, k: Int, op: Int,
-) raises:
-    neural_validate(m,n,k,op)
-    var part = neural_partition[MIN_LEAF](k)
-    var st = neural_strides(op,m,n,k)
-    for row in range(m):
-        for col in range(n):
-            c.unsafe_store(row*n+col,neural_cell[CHAINS](a,b,row,col,k,part[0],part[1],
-                st[0],st[1],st[2],st[3]))
-
-
-def neural_profile_ab_host[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False](
-    c: MutPointer[Float32, MutAnyOrigin], a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin], m: Int, n: Int, k: Int, op: Int,
-) raises:
-    comptime L = LEAF if CANDIDATE and NN03 else CONTRACT_K_LEAF_MIN
-    comptime C = CHAINS if CANDIDATE and NN04 else 1
-    neural_profile_host[L,C](c,a,b,m,n,k,op)
-
-
-def neural_profile_label[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False]() -> String:
-    comptime L = LEAF if CANDIDATE and NN03 else CONTRACT_K_LEAF_MIN
-    comptime C = CHAINS if CANDIDATE and NN04 else 1
-    return "neural.fp32.leaf" + String(L) + ".chains" + String(C) + ".pair-tree.v1"

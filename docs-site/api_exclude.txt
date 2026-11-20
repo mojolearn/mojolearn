@@ -40,19 +40,19 @@ ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)
 OrderedRMSE	needs installed-artifact qualification (unverified)
 GPT2Tokenizer	deprecated alias of BpeTokenizer; its page renders blank
 # Members (Class.member or module.member): skipped by conf.py's autodoc-skip-member hook.
-SmallMLPTrainer.train_steps	Apple FAST multistep build only; raises RuntimeError elsewhere
-TransformerBlock.forward_with_tape	tape API not in the shipped binding; unverified
-TransformerBlock.backward_from_tape	tape API not in the shipped binding; unverified
+SmallMLPTrainer.train_steps	now on every vendor (captured program); no NVIDIA and AMD reference records yet
 Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
-resample.fast_defines	internal build switches, no meaning to users
+KernelPCA.inverse_transform	not implemented: needs the pre-image map of fit_inverse_transform=True, which is not implemented
+KernelDensity.sample	not implemented: drawing points from the fitted density is not provided
 ensemble.catboost_auto_learning_rate	host scalar helper behind GradientBoosting's automatic learning rate; no verifier lane calls it directly
 parallel_causal_lm.ParallelCausalLM	multi-GPU layer ownership: no cross-vendor qualification
 linalg_fast.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+linalg_fast.matmul_fused	Apple fast opt-in arm (MOJOLEARN_AFN_GEMM_EPILOGUE), never run
 # Direct native aliases report their binding module to autodoc.
 _mojolearn_linalg.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
@@ -107,3 +107,25 @@ GenerationStream.info	native generation stream metadata; current cross-vendor qu
 GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
 mojolearn.ops.Session.rms_norm
 mojolearn.ops.Session.rotary
+SmallByteLanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
+LanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
+Program.decode	new device decode loop: not compiled or run yet
+mojolearn.ops.Session.state	new carried-state upload: not compiled or run yet
+_GBDTAdapter.save	GradientBoostingClassifier/Regressor.save always raises NotImplementedError (no adapter archive format; pickle works)
+_GBDTAdapter.load	GradientBoostingClassifier/Regressor.load always raises NotImplementedError (no adapter archive format; pickle works)
+Session.mamba_block	added 2026-11-19, not yet in a release verification
+Session.mamba_step	added 2026-11-19, not yet in a release verification
+Session.attention_block	added 2026-11-19, not yet in a release verification
+Session.attention_step	added 2026-11-19, not yet in a release verification
+Session.small_mlp	added 2026-11-19, not yet in a release verification
+Session.lm_head_loss	added 2026-11-19, not yet in a release verification
+Session.lm_embedding	added 2026-11-19, not yet in a release verification
+Session.lm_rows	added 2026-11-19, not yet in a release verification
+Session.lm_pick	added 2026-11-19, not yet in a release verification
+Session.lm_alive	added 2026-11-19, not yet in a release verification
+Session.conv_block	added 2026-11-19, not yet in a release verification
+Session.conv_linear	added 2026-11-19, not yet in a release verification
+Session.lstm	added 2026-11-19, not yet in a release verification
+Session.gru	added 2026-11-19, not yet in a release verification
+Session.rnn	added 2026-11-19, not yet in a release verification
+check	added 2026-11-20, not yet run from an installed wheel on a GPU (also skips the estimator method `.check`, conf.py _skip_member by name)

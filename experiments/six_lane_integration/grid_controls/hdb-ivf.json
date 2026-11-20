@@ -3,54 +3,18 @@
  "lane": "hdb-ivf",
  "branch": "lane/hdb-ivf",
  "head": "407e20adb",
- "controls": {
-  "idn_pq_trainset_strided": {
-   "define": "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_ann/switches.mojo",
-    "x_ann/ivf_pq_device.mojo",
-    "x_ann/host/ivf_pq_host.mojo"
-   ],
-   "binding": [
-    "_mojolearn_x_ann",
-    "_mojolearn_x_ann_host"
-   ],
-   "bits_change": true,
-   "status": "promoted:w2-decide-algos-20261011",
-   "note": "PROMOTED to the IDENTICAL default 2026-10-11 by lane/w2-decide-algos (same-box A/B on main c8ef6c66d, one run per arm, NV L40S + AMD MI325X): ivf-pq istella 0.458, ivf-refine 0.463; bits change NV==AMD; recall_at_10 0.8021->0.8088 / 0.9946->0.9960; v0131/a1713 vs A v0128/a1710. `MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF` restores the old path. Before: Batched PQ codebooks train on min(n, 256*n_codes) stride-sampled rows; device and host twin together. Recall gate at the board's k against arm A and cuVS."
-  }
- },
- "algorithms": {
-  "algos:ivf-refine": {
-   "binding": "_mojolearn_x_ann",
-   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
-   "controls": [
-    "idn_pq_trainset_strided"
-   ],
-   "interaction_groups": []
-  },
-  "algos:ivf-pq": {
-   "binding": "_mojolearn_x_ann",
-   "route": "build -> ivf_pq_build_device -> pq_codebooks_device",
-   "controls": [
-    "idn_pq_trainset_strided"
-   ],
-   "interaction_groups": []
-  }
- },
+ "controls": {},
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_HDB_ROUND_LEAN",
    "control": "idn_hdb_round_lean",
    "reason": "DELETED 2026-10-11 (lane w2-decide-algos, deletion 826f3d57e): NOISE: hdbscan istella 0.997, taxi 1.008; v0133/a1715 vs A v0132/a1714. Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_LEAN.patch; docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF",
+   "control": "idn_pq_trainset_strided",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-14-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 532b33e7ba; patch experiments/removed/MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF.patch): old path beside the default; the default is kept, no bit change. Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
   }
  ]
 }

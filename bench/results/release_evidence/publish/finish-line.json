@@ -1,0 +1,14 @@
+{
+ "at": "2026-11-08T20:54:03Z",
+ "platforms": [
+  "macos",
+  "linux",
+  "nvidia",
+  "amd",
+  "linux-meta"
+ ],
+ "result": "mojolearn: PyPI serves mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl with the shipped sha256; mojolearn-core: PyPI serves mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn-nvidia: PyPI serves mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn-amd: PyPI serves mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256; mojolearn: PyPI serves mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl with the shipped sha256",
+ "schema": "mojolearn.release-finish-line.v1",
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "version": "0.8.66"
+}

@@ -56,12 +56,14 @@ returns a HOST Float32; with the regularizer the host adds `loss + reg`
 the convergence test branch on, and every operand of it is pinned above.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
-from experiments.apple_fast.gemm.softmax_narrow import softmax_gemm_nt
+# TOMBSTONE: MOJOLEARN_SOFTMAX_FAST_G2_NARROW (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code
+# recoverable at f59d913b0b (softmax_gemm_nt through scoped_kernel[32, 32], with MOJOLEARN_SOFTMAX_G2_AUDIT and
+# MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from core.pinned_reduce import pinned_block_max, pinned_block_sum
 from core.strided_walk import (
     APPLE_IDENTICAL_STEP_UNROLL,
@@ -93,16 +95,18 @@ from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
 # TOMBSTONE: MOJOLEARN_QN_FAST_GRID_SUMS (DROPPED-noise) deleted 2026-10-03 by 5f1e86fd0; code recoverable at 5f1e86fd0^.
 # Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_GRID_SUMS.patch; record in docs/TOMBSTONES.md.
-from glm.impl.qn.multi_gpu import gradient_columns
+from core.device_plan import DevicePlan
+from glm.impl.qn.multi_gpu import glm_device_plan, gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.sys.compile import is_defined
 
+# TOMBSTONE: MOJOLEARN_QN_FAST_XTDZ_OFF (old path; EXP:1930 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 83e86f6d61.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_XTDZ_OFF.patch; record in docs/TOMBSTONES.md.
 comptime QN_FAST_XTDZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
 across blocks, X read once) instead of one block per output cell walking
@@ -184,6 +188,9 @@ from checks.rtf_seam import rtf_mul_add
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape, qntm_chunk_cells, qntm_ws_floats
+# lane ne2-i-j (N453): the tile-order kernels live in their own module so the
+# GLM column shards (glm/impl/qn/multi_gpu.mojo) launch the same ones.
+from glm.impl.qn.qn_tiled_multi import qntm_partial_kernel, qntm_fold_kernel, qntm_tiled_into
 
 
 @fieldwise_init
@@ -303,14 +310,13 @@ def mean_kernel(
 # ---------------------------------------------------------------------------
 
 # Default on (FAST + Apple) since the M3 A/B (istella n=1: logreg 3,893 ->
-# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). `-D
-# MOJOLEARN_QN_FAST_BLOCKS_OFF` keeps the nine-launch evaluation; the old
+# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). The `_OFF`
+# rollback was deleted 2026-11-15 (docs/TOMBSTONES.md); the nine-launch
+# evaluation stays the path of every other build. The old
 # `-D MOJOLEARN_QN_FAST_BLOCKS` name is harmless.
-comptime QN_FAST_BLOCKS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_FAST_BLOCKS_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 1385d5e6ff.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_FAST_BLOCKS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_BLOCKS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime QNB_ROWS = 1024
 comptime QNB_TPB = 256
 
@@ -467,15 +473,12 @@ def qn_block_fold_kernel(
 # pinned halving tree. The epilogues (cuBLAS's alpha/beta, the bias
 # `sum * (1 / N)`, the loss store) are unchanged. The words differ from the
 # 256-chain order and are the same on NVIDIA, AMD, Apple and the host column
-# (`glm/host/qn_oracle.mojo::host_qnt_*`). `-D MOJOLEARN_QN_TILED_OFF=1`
-# restores the 256-chain kernels (the A/B define; pass it to the host build
-# too).
+# (`glm/host/qn_oracle.mojo::host_qnt_*`).
 # ---------------------------------------------------------------------------
 
-comptime QN_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_QN_TILED_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_TILED_OFF (old path; EXP:2203 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at da95043b31.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime QNT_ROWS = 256
 comptime QNT_TPB = 256
 
@@ -499,7 +502,7 @@ comptime QNT_TPB = 256
 #                    identical; M2 linsvr-lsbatch-taxi-x -38.8%.
 #                    `-D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF` reverts.
 #   QN_LSVR_ALL      DEFAULT at every width since 2026-10-04 (the old
-#                    n_features <= 32 bound is MOJOLEARN_LEGACY_NARROW_QN_ALL;
+#                    n_features <= 32 bound is deleted;
 #                    dconv keeps the fused register bound QNF_MAX_D); on top
 #                    of the two above: QN_FAST_TILED (the tiled objective,
 #                    FAST arithmetic) and QN_FAST_DCONV (the line search's
@@ -512,8 +515,6 @@ comptime QNT_TPB = 256
 #                    (`qn_tiled_applies` and `dconv_applies` test d; the same
 #                    pattern as SGD_FAST_PS_SIMD's SPS_MAX_D). M2
 #                    linsvr-all-taxi-x 292.2 -> 58.6 ms.
-#                    `-D MOJOLEARN_LSVR_ALL_OFF` reverts to LS_BATCH + SLIM;
-#                    either part's _OFF also turns ALL off.
 #
 # Dropped (code on lane/apple-fast-linsvr @ c649076a4; docs/apple-fast/
 # EXPERIMENTS.md): FASTPATH_FIX alone (M3 istella +1.5%), FUSED_GRAD alone
@@ -521,33 +522,30 @@ comptime QNT_TPB = 256
 # DUAL_CD (unjudged).
 # ---------------------------------------------------------------------------
 
-comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime QN_FAST_SLIM = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"]()
-comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF"]()
+comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_LSVR_EVAL_SLIM_OFF (old path; EXP:285 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at e9b815205e.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_EVAL_SLIM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_SLIM = QN_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF (old path; EXP:288 promoted on Apple only; NVIDIA/AMD A/B owed (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 07f25ee298.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_FAST_LS_BATCH = QN_FAST_APPLE
 comptime QN_FAST_FUSED = QN_FAST_LS_BATCH
-comptime QN_LSVR_ALL = QN_FAST_SLIM and QN_FAST_LS_BATCH and not is_defined["MOJOLEARN_LSVR_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_LSVR_ALL_OFF (old path; EXP:283 record read, the default is the kept path) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at ff4bf11f19.
+# Restore: git apply experiments/removed/MOJOLEARN_LSVR_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_LSVR_ALL = QN_FAST_SLIM and QN_FAST_LS_BATCH
 comptime QN_FAST_TILED = QN_LSVR_ALL
 #: lane/apple-fast-linsvr: device-side line-search decision + convergence
 #: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
 comptime QN_FAST_DCONV = QN_LSVR_ALL
-#: LEGACY, default OFF: QN_LSVR_ALL's old width bound admitted only
-#: n_features <= 32, chosen between taxi (d ~ 11, -77%) and istella (d ~ 220,
-#: +6.2%). Removed as benchmark-tuned on 2026-10-04: the tiled objective now
-#: serves every d (UNMEASURED). The device line search (dconv) keeps only the
-#: fused pass's register bound QNF_MAX_D.
-comptime QN_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_QN_ALL"]()
+#: QN_LSVR_ALL's old n_features <= 32 bound was removed as benchmark-tuned on
+#: 2026-10-04: the tiled objective serves every d. The device line search
+#: (dconv) keeps only the fused pass's register bound QNF_MAX_D.
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_QN_ALL (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (QN_ALL_LEGACY_WIDTH and its two reads); code recoverable at e1833e6a98.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_QN_ALL.patch; record in docs/TOMBSTONES.md.
 #: the fused pass: threads per block, rows per thread, the register bound on d
 comptime QNF_TPB = 256
 comptime QNF_RPT = 16
 comptime QNF_MAX_D = 32
-#: QN_LSVR_ALL's width bound, a size rule tied to the fused pass's register
-#: bound rather than to a board row: ALL's tiled objective and device line
-#: search pay off when one thread keeps the whole weight vector in registers
-#: (d <= QNF_MAX_D); wider d spills to per-column loops, where LS_BATCH + SLIM
-#: is the better plan (one wide-d A/B, d ~ 220: +6.2% under ALL). Same value
-#: as before (32): no route or bit moves. Needs neighbor-shape validation
-#: (d 24, 32, 33, 48, 64).
-comptime QN_ALL_MAX_D = QNF_MAX_D
 #: line-search candidates one fused pass sums: the point itself and the next
 #: QNF_LS_K - 1 backtracking steps
 comptime QNF_LS_K = 4
@@ -559,8 +557,6 @@ def qn_tiled_applies(d: Int, c: Int) -> Bool:
     comptime if QN_TILED:
         return c == 1
     comptime if QN_FAST_TILED:
-        comptime if QN_ALL_LEGACY_WIDTH:
-            return c == 1 and d <= QN_ALL_MAX_D
         return c == 1
     return False
 
@@ -692,29 +688,29 @@ def _qnf_partial_body[DMAX: Int, K: Int](
         comptime if K > 1:
             bias_p = xp.unsafe_load(d)
             bias_d = drt.unsafe_load(d)
-    var wr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var pr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var dr = InlineArray[Float32, DMAX](fill=Float32(0.0))
-    var acc = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    var wr = Array[Float32, DMAX](fill=Float32(0.0))
+    var pr = Array[Float32, DMAX](fill=Float32(0.0))
+    var dr = Array[Float32, DMAX](fill=Float32(0.0))
+    var acc = Array[Float32, DMAX](fill=Float32(0.0))
     comptime for j in range(DMAX):
         if j < d:
             wr[j] = w.unsafe_load(j)
             comptime if K > 1:
                 pr[j] = xp.unsafe_load(j)
                 dr[j] = drt.unsafe_load(j)
-    var steps = InlineArray[Float32, K](fill=Float32(0.0))
+    var steps = Array[Float32, K](fill=Float32(0.0))
     comptime if K > 1:
         var st = step0
         comptime for c in range(K):
             steps[c] = st
             st = st * ls_dec
-    var acc_c = InlineArray[Float32, K](fill=Float32(0.0))
+    var acc_c = Array[Float32, K](fill=Float32(0.0))
     var acc_dz = Float32(0.0)
     var acc_lt = Float32(0.0)
     var r = blk * (QNF_TPB * QNF_RPT) + tid
     for _ in range(QNF_RPT):
         if r < n:
-            var xr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+            var xr = Array[Float32, DMAX](fill=Float32(0.0))
             var zi = bias
             comptime for j in range(DMAX):
                 if j < d:
@@ -1028,11 +1024,9 @@ def qn_slim_epilogue_gated_kernel(
 # NO BIT MOVES: `g[j] = ftz(sc + ftz(l2 * w_j))` is the sum the beta = 1
 # fold formed (an addition, commuted); the regularizer value, `dot_self` /
 # `nrm1` / `nrm_max` and the l1 term are those kernels' chains and folds.
-# `-D MOJOLEARN_QN_IDN_SLIM_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
-# separate launches.
-comptime QN_IDN_SLIM = QN_TILED and not (
-    is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_IDN_SLIM_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at cf050feb2f.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_SLIM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_IDN_SLIM = QN_TILED
 
 
 @always_inline
@@ -1208,13 +1202,11 @@ def qnt_fold_kernel(
 # outputs o, o + 256, ... when D + 2 > 256), X now cache-resident.
 # `qnt_fold_kernel` follows unchanged. NO BIT MOVES: every chain is the one
 # the four launches ran, so the host column is untouched.
-# `-D MOJOLEARN_QN_IDN_FUSED_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
-# four launches.
 # ---------------------------------------------------------------------------
 
-comptime QN_IDN_FUSED = QN_TILED and not (
-    is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_IDN_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 42a2855cbe.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_IDN_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime QN_IDN_FUSED = QN_TILED
 # Tried 2026-10-08 (MOJOLEARN_QN_IDN_DCONV, run ge123e6f9): IDENTICAL device step-1 Armijo + convergence loop, host polls a state block;
 # NV/AMD logreg istella 1.046/1.053, taxi 1.028/1.066; linearsvc istella 1.008/1.038, taxi 0.946/0.983;
 # linearsvr istella 1.045/1.025, taxi 1.058/1.075; quality same -> neutral/slower, deleted. Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
@@ -1335,7 +1327,7 @@ def _qn_idn_fused_body(
 #: 0.0): the same words. Apple only (NVIDIA / AMD keep their measured shape);
 #: QNI_G is picked so QNI_G * (D + 2) <= QNT_ROWS. -D
 #: MOJOLEARN_QN_IDN_FUSED_MULTI_OFF keeps one tile a block.
-comptime QN_IDN_FUSED_MULTI = has_apple_gpu_accelerator() and not is_defined[
+comptime QN_IDN_FUSED_MULTI = TARGET_HAS_APPLE_GPU and not is_defined[
     "MOJOLEARN_QN_IDN_FUSED_MULTI_OFF"
 ]()
 
@@ -1499,15 +1491,11 @@ def qn_tile_sum(
     is_mean: Bool,
 ) raises:
     """out_v[0] = sum(v[0:n]) (or its mean) in the tile order; partials in
-    ws[0, qnt_tiles(n)), which the caller sizes. FAST A/B arm: `-D
-    MOJOLEARN_PURITY2_2_OFF` folds the n rows as ONE tile (one chain, the
-    old one-block cost class); IDENTICAL ignores it (the host column folds
-    QNT_ROWS tiles)."""
+    ws[0, qnt_tiles(n)), which the caller sizes."""
+    # TOMBSTONE: MOJOLEARN_PURITY2_2_OFF (old path, no A/B recorded; EXP:721 OPEN) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at eb10315ddd.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY2_2_OFF.patch; record in docs/TOMBSTONES.md.
     var tiles = qnt_tiles(n)
     var rows = QNT_ROWS
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_PURITY2_2_OFF"]():
-        tiles = 1
-        rows = max(n, 1)
     ctx.enqueue_function[qn_tile_sum_partial_kernel](
         ws.unsafe_ptr(), v, Int32(n), Int32(tiles), Int32(rows),
         grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1),
@@ -1605,100 +1593,8 @@ def qn_tiled_multi_applies(n_rows: Int, d: Int, c: Int) -> Bool:
     return False
 
 
-def qntm_partial_kernel(
-    part: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    dz: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    d_in: Int32,
-    c_in: Int32,
-    tiles_in: Int32,
-    b0_in: Int32,
-    cnt_in: Int32,
-):
-    """Pass 1: thread `(k, bl)`, `bl` fastest, the `X^T dZ` cell `b = b0 +
-    bl` (`b = c + C*j`) over tile `k`'s rows ascending. Stores
-    `part[bl * tiles + k]`. The cells `[b0, b0 + cnt)` are one chunk of
-    `qntm_tiled_into`; a chunk never changes a cell's chain."""
-    var n = Int(n_in)
-    var D = Int(d_in)
-    var C = Int(c_in)
-    var tiles = Int(tiles_in)
-    var cnt = Int(cnt_in)
-    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var k = gid // cnt
-    var bl = gid - k * cnt
-    if k >= tiles:
-        return
-    var b = Int(b0_in) + bl
-    var c = b % C
-    var j = b // C
-    var r0 = k * QNT_ROWS
-    var r1 = min(n, r0 + QNT_ROWS)
-    var acc = strided_mul_add[1](x, D, j, dz, C, c, r1, r0)
-    part.unsafe_store(bl * tiles + k, acc)
-
-
-def qntm_fold_kernel(
-    out_v: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
-    tiles_in: Int32,
-    b0_in: Int32,
-):
-    """Pass 2: block `bl`, STATS_TPB lanes, the pinned fold of cell `b0 +
-    bl`'s tile partials into `out_v[b0 + bl]` (the cuBLAS epilogue follows
-    as before)."""
-    var tiles = Int(tiles_in)
-    var bl = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var acc = strided_ftz_sum[STATS_TPB](part, 1, bl * tiles, tiles, tid, Float32(0.0))
-    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
-    if tid == 0:
-        out_v.unsafe_store(Int(b0_in) + bl, s0)
-
-
-def qntm_tiled_into(
-    ctx: DeviceContext,
-    mut xtdz: DeviceBuffer[DType.float32],
-    mut x: DeviceBuffer[DType.float32],
-    mut dz: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],
-    n_rows: Int,
-    d: Int,
-    C: Int,
-) raises:
-    """`xtdz[c + C*j] = X^T dZ` in the tile order (`qntm_partial_kernel`,
-    then `qntm_fold_kernel` per cell), for any `C >= 1`: the order of the
-    host column's `host_qnt_xty` (C == 1) and its tiled multinomial
-    gradient (C > 1). The cells run in chunks of `qntm_chunk_cells` so the
-    partials fit `ws` (`qntm_ws_floats` floats); every chunk is the same
-    chains and fold, so the bits do not depend on the chunking.
-    Asynchronous. Lane debt-block-per-n (2026-10-21): this replaced
-    `xtdz_multi_kernel` / `xty_kernel`, one block per cell walking all n
-    rows, wherever the gradient took them."""
-    comptime assert not (is_defined["MOJOLEARN_QN_TILED_MULTI_OFF"]() or is_defined["MOJOLEARN_QN_TILED_MULTI_ALL"]()), "removed (lane debt-block-per-n, 2026-10-21): QN_TILED_MULTI_OFF selected xtdz_multi_kernel (one block per gradient cell walking all n rows) and QN_TILED_MULTI_ALL is now the rule"
-    var cd = C * d
-    if cd < 1:
-        return
-    var tiles = qnt_tiles(n_rows)
-    var chunk = qntm_chunk_cells(n_rows, cd)
-    var n_chunks = (cd + chunk - 1) // chunk
-    for ci in range(n_chunks):  # driver-loop: over workspace-bounded chunks of gradient cells
-        var b0 = ci * chunk
-        var cnt = min(chunk, cd - b0)
-        var threads = tiles * cnt
-        if threads >= 1:
-            ctx.enqueue_function[qntm_partial_kernel](
-                ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-                Int32(n_rows), Int32(d), Int32(C), Int32(tiles),
-                Int32(b0), Int32(cnt),
-                grid_dim=((threads + QNT_TPB - 1) // QNT_TPB, 1, 1),
-                block_dim=(QNT_TPB, 1, 1),
-            )
-        ctx.enqueue_function[qntm_fold_kernel](
-            xtdz.unsafe_ptr(), ws.unsafe_ptr(), Int32(tiles), Int32(b0),
-            grid_dim=(cnt, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+# `qntm_partial_kernel`, `qntm_fold_kernel` and `qntm_tiled_into` moved to
+# glm/impl/qn/qn_tiled_multi.mojo unchanged (lane ne2-i-j, N453).
 
 
 def qn_grad_tiles_needed(d: Int, c: Int) -> Bool:
@@ -1745,7 +1641,7 @@ def linear_fwd(
             grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
-        softmax_gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
+        gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
         if dims.fit_intercept:
             var cn = dims.C * n_rows
             ctx.enqueue_function[add_bias_multi_kernel](
@@ -1770,6 +1666,7 @@ def linear_fwd(
 
 
 def linear_bwd(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut g: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -1790,14 +1687,17 @@ def linear_bwd(
     # lane fam2-linear: the tiled `C > 1` gradient is decided first (one
     # rule with the host column), so no other route computes these cells
     var tiled_multi = qn_tiled_multi_applies(n_rows, d, dims.C)
-    var distributed = False
-    if not tiled_multi:
-        distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
+    # lane ne2-i-j (N453): the column shards run the same tile order
+    # (`gradient_columns`), so a plan of several devices takes them at every
+    # C; they used to be skipped whenever the tile order applied, which ran
+    # every multinomial fit with `devices=` on one device. One device: False,
+    # and the routes below run as before.
+    var distributed = gradient_columns(dplan, ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
         var fast_done = False
-        if tiled_multi:
+        if tiled_multi and not distributed:
             qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         comptime if QN_FAST_XTDZ:
@@ -1928,6 +1828,9 @@ struct GLMWithData(Movable):
     var gnorm_at: Int
     var gnorm_raw: Float32
     var last_pen: Float32
+    # The GLM device plan, read once where the fit builds its objective and
+    # passed to `linear_bwd` (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    var dplan: DevicePlan
 
     def __init__(
         out self,
@@ -1940,6 +1843,22 @@ struct GLMWithData(Movable):
         l2: Float32,
         svr_eps: Float32 = Float32(0.0),
     ) raises:
+        """Reads the GLM device plan once and runs the planned constructor."""
+        self = Self(glm_device_plan(), ctx, x^, y^, n_rows, dims, loss, l2, svr_eps)
+
+    def __init__(
+        out self,
+        dplan: DevicePlan,
+        ctx: DeviceContext,
+        var x: DeviceBuffer[DType.float32],
+        var y: DeviceBuffer[DType.float32],
+        n_rows: Int,
+        dims: GLMDims,
+        loss: Int,
+        l2: Float32,
+        svr_eps: Float32 = Float32(0.0),
+    ) raises:
+        self.dplan = dplan.copy()
         self.dims = dims
         self.n_rows = n_rows
         self.loss = loss
@@ -2112,7 +2031,7 @@ struct GLMWithData(Movable):
         backward. Returns the loss value the device scalar held."""
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
         var loss_host = self.get_loss_and_dz(ctx)
-        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
+        linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
         return loss_host
 
     def evaluate(
@@ -2131,7 +2050,6 @@ struct GLMWithData(Movable):
         mut w: DeviceBuffer[DType.float32],
         mut g: DeviceBuffer[DType.float32],
         pen_len: Int,
-        drain: Bool = True,
     ) raises -> Float32:
         """`evaluate`, and when `pen_len > 0` also `nrm1(w[0:pen_len])` into
         `last_pen` (OWL-QN's `f_wrap` term, `qn_linesearch.owlqn_objective`).
@@ -2149,17 +2067,9 @@ struct GLMWithData(Movable):
         words of `slots` and come home behind ONE synchronize, where there
         were two (three with `grad_norm`, four under OWL-QN). The host
         arithmetic on them is unchanged."""
-        if not drain:
-            # The deferred (no-drain) evaluation is the exact-trials line
-            # search's (qn_linesearch.mojo:171), which either define admits:
-            # MOJOLEARN_CLASSICAL_C17_LS_TRIALS (2 trials) or
-            # MOJOLEARN_IDN_QN_EXACT_TRIALS (4 trials, I12 loser, kept off).
-            # Lane grid-fixups-1 (2026-10-08): this gate named only the second,
-            # so every C17 cell raised at round 0 (grid ge123e6f9, logreg /
-            # linearsvc / linearsvr on NVIDIA and AMD). Same predicate as the
-            # line-search gate now; nothing else reads the define here.
-            comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_CLASSICAL_C17_LS_TRIALS"]() or is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]())):
-                raise Error("qn: deferred exact evaluation requires IDENTICAL trial experiment")
+        # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: the `drain` parameter (always True: no caller passed it) and its refusal and deferred-return branches removed.)
         self.n_evals += 1
         self.gnorm_at = 0
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
@@ -2189,7 +2099,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+                linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
         else:
             ctx.enqueue_memset(g, Float32(0.0))
             # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
@@ -2211,7 +2121,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+                linear_bwd(self.dplan, ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
         comptime if QN_FAST_SLIM:
@@ -2245,15 +2155,10 @@ struct GLMWithData(Movable):
                 s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        if drain:
-            read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
+        read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
         _ = s1^
         _ = s2^
         _ = s3^
-        if not drain:
-            # Caller copies slots before the next evaluation reuses them,
-            # then performs the same host scalar finish after one wait.
-            return Float32(0)
         var loss_host = self.stage.unsafe_ptr().unsafe_load(0)
         self.gnorm_raw = self.stage.unsafe_ptr().unsafe_load(2)
         self.gnorm_at = Int(g.unsafe_ptr())
@@ -2465,7 +2370,6 @@ struct GLMWithData(Movable):
             return (
                 qn_fused_applies(self.dims.D, self.dims.C)
                 and not self.weighted
-                and (not QN_ALL_LEGACY_WIDTH or self.dims.D <= QN_ALL_MAX_D)
                 and self.dims.n_param <= STATS_TPB
             )
         return False
@@ -2585,6 +2489,13 @@ struct GLMWithData(Movable):
         var d = self.dims.D
         var tiles = qnt_tiles(n)
         var cells = tiles * (d + 2)
+        # lane ne2-i-j (N453): a plan of several devices shards the gradient
+        # columns (IDENTICAL only; FAST keeps its one-device objective). One
+        # device never enters.
+        comptime if QN_TILED:
+            if not self.dplan.single():
+                self._enqueue_tiled_columns(ctx, w, g, set_zero)
+                return
         comptime if QN_IDN_FUSED:
             if not self.weighted:
                 # lane fam2-linear: the forward, the loss map and the tile
@@ -2635,6 +2546,59 @@ struct GLMWithData(Movable):
             Int32(0) if set_zero else Int32(1),
             Int32(1) if self.dims.fit_intercept else Int32(0),
             grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+
+    def _enqueue_tiled_columns(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+    ) raises:
+        """`enqueue_tiled` over a plan of several devices (lane ne2-i-j,
+        plan row N453): the same words in `g` and `slots[0]`.
+
+        The root runs the four-launch forward and loss map (the chains
+        QN_IDN_FUSED keeps), so `z` holds dZ and `loss_terms` the row terms.
+        The `D` gradient cells go to the column shards (`gradient_columns`:
+        `qntm_tiled_into` at C == 1, `qnt_partial_kernel`'s chain for an
+        output `o < D` and `qnt_fold_kernel`'s fold), then
+        `gemm_epilogue_kernel` applies `qnt_fold_kernel`'s epilogue
+        (`ftz(alpha * s)`, `+ g` rounded when `set_zero` is False) with the
+        same `alpha`. The two row sums stay on the root: `qnt_partial_kernel`
+        and `qnt_fold_kernel` with `d_in = 0` run exactly their outputs `D`
+        (the dZ sum: the bias mean into `g[D]`) and `D + 1` (the loss into
+        `slots[0]`), with `g` offset by `D`; neither chain reads X or `D`."""
+        var n = self.n_rows
+        var d = self.dims.D
+        var tiles = qnt_tiles(n)
+        var alpha = Float32(1.0 / Float64(n))
+        linear_fwd(ctx, self.z, self.x, w, self.w_weights, n, self.dims)
+        self.enqueue_loss_and_dz(
+            ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False
+        )
+        # synchronous: the shards read the dZ the loss map just wrote
+        _ = gradient_columns(self.dplan, ctx, self.xtdz, self.x, self.z, n, d, 1)
+        var sums = tiles * 2
+        ctx.enqueue_function[qnt_partial_kernel](
+            self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.z.unsafe_ptr(),
+            self.loss_terms.unsafe_ptr(), Int32(n), Int32(0), Int32(tiles),
+            grid_dim=((sums + QNT_TPB - 1) // QNT_TPB, 1, 1),
+            block_dim=(QNT_TPB, 1, 1),
+        )
+        ctx.enqueue_function[qnt_fold_kernel](
+            (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+            self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+            Int32(n), Int32(0), Int32(tiles), alpha,
+            Int32(0) if set_zero else Int32(1),
+            Int32(1) if self.dims.fit_intercept else Int32(0),
+            grid_dim=(2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+        ctx.enqueue_function[gemm_epilogue_kernel](
+            g.unsafe_ptr(), self.xtdz.unsafe_ptr(), Int32(d), alpha,
+            Int32(0) if set_zero else Int32(1),
+            grid_dim=((d + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
+            block_dim=(VEC_ELEM_TPB, 1, 1),
         )
 
     def enqueue_blocks(

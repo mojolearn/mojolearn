@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The two entries every GPU binding with a multi-GPU owner loop registers
+as `device_plan_enter` / `device_plan_exit` (lane/native-parallel-driver-
+20261024, docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+
+A native driver door (bindings/parallel_plan_door.mojo) calls them around
+the plain owner: the plan lives in the binding's own DSO, where its owner
+loops read it (core/device_plan.mojo), bound to the calling thread."""
+from std.python import PythonObject
+
+from std.python import Python
+from bindings.py_balanced import py_call
+from bindings.native_loaded_module_door import native_loaded_module
+from core.device_plan import device_plan_enter, device_plan_exit, device_plan_log_take, device_plan_ranks_take
+
+
+def device_plan_enter_binding(devices: PythonObject, families: PythonObject) raises -> PythonObject:
+    """Bind `devices` (distinct nonnegative device indices; rank r runs on
+    `devices[r]`, the root on `devices[0]`) to the calling thread until
+    `device_plan_exit`, for the owner families in `families`
+    (core/device_plan.mojo DEVICE_PLAN_* bits). Returns the number of
+    devices."""
+    var ids = List[Int]()
+    for i in range(len(devices)):  # driver-loop: over the selected device indices
+        ids.append(Int(py=devices[i]))
+    device_plan_enter(ids, Int(py=families))
+    return PythonObject(len(ids))
+
+
+def device_plan_exit_binding() raises -> PythonObject:
+    """Release the calling thread's device plan."""
+    device_plan_exit()
+    return PythonObject(None)
+
+
+def device_plan_log_binding() raises -> PythonObject:
+    """`(plans, ranks)`, and an empty record: `plans` is the device groups
+    bound in this binding since the last call, as a list of tuples (the
+    placement record); `ranks` is the number of distinct owner ranks whose
+    device an owner loop opened for its shard under a bound plan since the
+    last call (core/device_plan.mojo `used`): the count of devices, logical
+    or physical, that received work. The one-GPU multi-device gate
+    (tools/logical_shard_identity.py) fails a 2- or 3-device arm whose
+    `ranks` is below 2 (lane perf3-cluster-gp-gate; before it the entry
+    returned the plan list alone and nothing read it)."""
+    var ranks = device_plan_ranks_take()
+    var plans = device_plan_log_take()
+    var out = Python.list()
+    # Empty logs need no module connection. Retain the constructor across plans.
+    var tuple_type = PythonObject(None)
+    if len(plans) != 0:
+        tuple_type = native_loaded_module("builtins").tuple
+    for i in range(len(plans)):  # driver-loop: over the logged plans
+        var ids = Python.list()
+        for r in range(len(plans[i])):  # driver-loop: over a logged plan's ranks
+            _ = ids.append(PythonObject(plans[i][r]))
+        _ = out.append(py_call(tuple_type, ids))
+    return Python.tuple(out, PythonObject(ranks))

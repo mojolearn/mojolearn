@@ -1,0 +1,42 @@
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index b649b15640..5016522ff6 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -1916,10 +1916,12 @@ comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
+ #: chunks per (task, leaf) run in the batched reduce
+ comptime ORDERED_BAT_CHUNKS = 8
+ 
+-from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G12
++from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G11, AFT_G12
+ 
+-# TOMBSTONE: MOJOLEARN_AFT_G11 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 03c050a585.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G11.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
++# G11: four SIMD groups per prefix-task chunk reduce shared/register demand.
++# Keep every prefix, eight chunks, every weight and RNG mapping unchanged.
++# Uncompiled/unverified/unmeasured; only the FAST sum association changes.
++comptime AFT_ORDERED_REDUCE_BLOCK = 128 if AFT_G11 else ORDERED_BLOCK
+ # G12: independent four-row tiles amortize task-bound lookup, retaining the
+ # per-row leaf and task. Four bounds-checked coalesced stores need little
+ # register state; no dataset/dimension rule. No performance/quality evidence.
+@@ -2021,9 +2023,9 @@ def _ord_bat_reduce_kernel[objective: Int](
+         a1 += d[1]
+         a2 += weight
+         idx += Int(block_dim.x)
+-    var s0 = pinned_block_sum[block_size=ORDERED_BLOCK](a0)
+-    var s1 = pinned_block_sum[block_size=ORDERED_BLOCK](a1)
+-    var s2 = pinned_block_sum[block_size=ORDERED_BLOCK](a2)
++    var s0 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a0)
++    var s1 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a1)
++    var s2 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a2)
+     if Int(thread_idx.x) == 0:
+         var at = 3 * (
+             ((Int(task_base_in) + tl) * Int(leaf_cap_in) + b) * nc + c
+@@ -2159,7 +2161,7 @@ def _launch_ord_bat_reduce(
+             Int32(ORDERED_BAT_CHUNKS), Int32(task_base), alpha, border,
+             partials.unsafe_ptr(),
+             grid_dim=(ORDERED_BAT_CHUNKS, n_tasks * n_leaves, 1),
+-            block_dim=(ORDERED_BLOCK, 1, 1),
++            block_dim=(AFT_ORDERED_REDUCE_BLOCK, 1, 1),
+         )
+ 
+     if objective == OBJECTIVE_RMSE:

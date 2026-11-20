@@ -6,7 +6,7 @@ check exact ordered (distance,index) ties. The full public knn_search sweeps
 exercise neighboring low-dimensional widths and just outside that region.
 """
 from neighbors.checks.knn_check import check_fused_griddimx_merge
-from neighbors.checks.knn_identity_check import check_knn_fused_tie_set_is_geometry_invariant
+from neighbors.checks.knn_identity_check_suite import check_knn_fused_tie_set_is_geometry_invariant
 from neighbors.checks.query_batch_check import _case
 from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 

@@ -1,0 +1,137 @@
+diff --git a/providers/python/transformer_decode_pyapi.mojo b/providers/python/transformer_decode_pyapi.mojo
+index d2cd9c9cee..b0319ba6ab 100644
+--- a/providers/python/transformer_decode_pyapi.mojo
++++ b/providers/python/transformer_decode_pyapi.mojo
+@@ -19,6 +19,7 @@ from bindings.transformer_public_native import _transformer_fields, _transformer
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+ from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
++from providers.python.transformer_resident_pyapi import transformer_resident_decode_handle, transformer_resident_decode_call_handle
+ from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
+ from core.hostptr import f32_ptr
+ from transformer.block_options import BlockOptions
+@@ -40,6 +41,9 @@ struct TransformerDecodeHandle(Movable, Writable):
+     var optional: List[List[Float32]]
+     var k_cache: List[Float32]
+     var v_cache: List[Float32]
++    # N186: the provider's native handle of `device`, resolved once at open
++    # (0 when no provider route). `device` retains its owner.
++    var native_handle: Int
+     # N181: the compiled entries a step, state transfer or close calls,
+     # resolved once at open by _TRANSFORMER_DECODE_* index (None when the
+     # binding lacks one; the use raises the same refusal as before).
+@@ -70,6 +74,7 @@ struct TransformerDecodeHandle(Movable, Writable):
+         self.optional = List[List[Float32]]()
+         self.k_cache = List[Float32]()
+         self.v_cache = List[Float32]()
++        self.native_handle = 0
+         self.entries = List[PythonObject]()
+         self.block_generation = 0
+         self.state_generation = 0
+@@ -553,12 +558,15 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
+             if i != 1:
+                 open_p.append(p[i])
+         handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
+-        # Lane x4: one device open. A float32 session runs on the attention
+-        # step op (`transformer_decode_session_open_step_op`); fixed15_v1
+-        # keeps its resident planes. The descriptor-provider arm of the
+-        # public session (MOJOLEARN_NEURAL_NATIVE_DISPATCH ops 18-24) is gone.
+-        cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
+-            handle.device, py_ints(a), py_ints(open_p)))
++        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
++            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
++                _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
++            handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)
++            cached = transformer_resident_decode_call_handle(handle.provider, handle.device, handle.native_handle,
++                19 if packed else 18, a, open_p)
++        else:
++            cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open"),
++                handle.device, py_ints(a), py_ints(open_p)))
+     else:
+         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
+             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
+@@ -668,8 +676,12 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
+             h[].device, py_ints([px, py]), py_ints([length, cached])))
+     elif h[].device is not None:
+         var p: List[Int] = [cached] if step else [length, cached]
+-        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
+-            h[].device, py_ints([px, py]), py_ints(p)))
++        if h[].provider is not None:
++            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
++                20 if step else 21, [px, py], p)
++        else:
++            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
++                h[].device, py_ints([px, py]), py_ints(p)))
+     else:
+         var a: List[Int] = [px]
+         for i in range(len(h[].weights)):  # driver-loop: native session-owned weight addresses
+@@ -733,7 +745,10 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
+     if h[].device is not None:
+         var a: List[Int] = [pieces[0], pieces[1]]
+         var p: List[Int] = [cached] if load else []
+-        if load:
++        if h[].provider is not None:
++            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
++                23 if load else 22, a, p)
++        elif load:
+             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_LOAD), h[].device, py_ints(a), py_ints(p)))
+         else:
+             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_EXPORT), h[].device, py_ints(a)))
+@@ -770,7 +785,10 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
+     h[].open = False
+     py_setitem(state_fields, "_resident_session", PythonObject(None))
+     if h[].device is not None:
+-        _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
++        if h[].provider is not None:
++            _ = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle, 24, [], [])
++        else:
++            _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
+     h[].weights.clear(); h[].optional.clear(); h[].k_cache.clear(); h[].v_cache.clear()
+ 
+ 
+diff --git a/transformer/native_decode_dispatch.mojo b/transformer/native_decode_dispatch.mojo
+index 712b1d996f..222bc50f22 100644
+--- a/transformer/native_decode_dispatch.mojo
++++ b/transformer/native_decode_dispatch.mojo
+@@ -4,7 +4,8 @@
+ from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
+ from transformer.transformer_binding_impl import (
+     TransformerDecodeSession, _require_session_open, _check_base_addrs,
+-    _session_open_run, _session_open_run_int15, _session_export_run, _session_load_run,
++    _session_open_run, _session_open_run_int15, _session_step_run,
++    _session_forward_run, _session_export_run, _session_load_run,
+ )
+ 
+ 
+@@ -67,19 +68,24 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
+             raise problem
+         owner[].usable = True
+         return result
+-    if op == 5 or op == 6:
+-        # Lane x4: the descriptor step (5) and forward (6) served only the
+-        # public decode session's provider arm, which now runs the attention
+-        # step op through its binding entries; the CausalLM layers use open,
+-        # export, load and close only.
+-        raise Error("transformer decode: the descriptor step and forward were removed; use the session entries")
+     if len(a) != 2 or a[0] == 0 or a[1] == 0:
+         raise Error("transformer decode: expected two nonnull buffer addresses")
+-    if op == 8 and len(p) != 1:
++    if (op == 5 or op == 8) and len(p) != 1:
+         raise Error("transformer decode: expected cached_tokens")
++    if op == 6 and (len(p) != 2 or p[0] <= 0):
++        raise Error("transformer decode forward: expected positive L and cached_tokens")
+     if op == 7 and len(p) != 0:
+         raise Error("transformer decode export: unexpected scalars")
++    if op == 5 or op == 6:
++        var claimed = p[0] if op == 5 else p[1]
++        if owner[].cached() != claimed:
++            raise Error("transformer decode session: the caller believes cached_tokens = " + String(claimed)
++                + " but the resident cache holds " + String(owner[].cached()))
+     try:
++        if op == 5:
++            return _session_step_run(owner[], a[0], a[1])
++        if op == 6:
++            return _session_forward_run(owner[], a[0], a[1], p[0])
+         if op == 7:
+             return _session_export_run(owner[], a[0], a[1])
+         if op == 8:

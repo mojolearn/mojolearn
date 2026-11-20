@@ -17,6 +17,7 @@ import sklearn.naive_bayes as sknb
 import sklearn.covariance as skc
 import sklearn.model_selection as skm
 import mojolearn as ml
+from mojolearn.tests._sklearn_oracle import needs_reference, older_reference
 
 
 def _cats(seed=0, n=400, d=4):
@@ -46,7 +47,8 @@ def test_infrequent():
             if a is not None:
                 np.testing.assert_array_equal(np.asarray(a), b)
         np.testing.assert_array_equal(np.asarray(m.transform(Xh)), r.transform(Xh))
-        for hu in ("infrequent_if_exist", "ignore", "warn"):
+        # handle_unknown='warn' maps unknowns differently before scikit-learn 1.9 (ours: 1.9's)
+        for hu in ("infrequent_if_exist", "ignore") + (("warn",) if not older_reference() else ()):
             for drop in (None, "first", "if_binary"):
                 if drop is not None and kw.get("max_categories") == 1:
                     continue
@@ -126,8 +128,9 @@ def test_covariance_estimator():
         assert not calls, "QDA called the covariance_estimator's Python fit"
     # The supported path: covariance_estimator=None and the native solver.
     q = ml.QuadraticDiscriminantAnalysis(solver="eigen").fit(X, y)
-    rq = skd.QuadraticDiscriminantAnalysis(solver="eigen").fit(X, y)
-    np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
+    if not older_reference():  # the reference QDA has no `solver` in 1.7 (the newest on Python 3.10)
+        rq = skd.QuadraticDiscriminantAnalysis(solver="eigen").fit(X, y)
+        np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
     for cls, kw in ((ml.LinearDiscriminantAnalysis, dict(solver="svd")),
                     (ml.QuadraticDiscriminantAnalysis, dict(solver="svd")),
                     (ml.LinearDiscriminantAnalysis, dict(solver="lsqr", shrinkage=0.5))):
@@ -139,6 +142,7 @@ def test_covariance_estimator():
             raise AssertionError(f"{cls.__name__} {kw} accepted a covariance_estimator")
 
 
+@needs_reference("the reference TargetEncoder takes only an int cv")
 def test_target_encoder_cv_categories():
     rng = np.random.default_rng(6)
     X = rng.integers(0, 5, (200, 2)).astype(np.float32)
@@ -163,9 +167,9 @@ def test_target_encoder_cv_categories():
         assert "got KFold" in str(error)
     else:
         raise AssertionError("TargetEncoder accepted a scikit-learn splitter object")
-    m = ml.TargetEncoder(categories=cats, cv=ml.KFold(4), smooth=2.0)
+    m = ml.TargetEncoder(categories=cats, cv=ml.model_selection.KFold(4), smooth=2.0)
     np.testing.assert_array_equal(np.asarray(m.fit_transform(X, y)),
-                                  np.asarray(ml.TargetEncoder(categories=cats, cv=list(ml.KFold(4).split(X, y)),
+                                  np.asarray(ml.TargetEncoder(categories=cats, cv=list(ml.model_selection.KFold(4).split(X, y)),
                                                               smooth=2.0).fit_transform(X, y)))
     try:
         ml.TargetEncoder(cv=[(np.arange(100), np.arange(100))]).fit_transform(X, y)
@@ -240,6 +244,8 @@ def test_kbins_sample_weight():
                np.ones(301, np.float32)):
         for kw in (dict(strategy="quantile"), dict(strategy="quantile", quantile_method="inverted_cdf"),
                    dict(strategy="uniform"), dict(strategy="kmeans")):
+            if older_reference() and kw == dict(strategy="quantile"):
+                continue  # before 1.9 the reference's default quantile_method refuses sample weights
             for nb in (3, 5):
                 m = ml.KBinsDiscretizer(n_bins=nb, encode="ordinal", **kw).fit(X, sample_weight=sw)
                 with warnings.catch_warnings():

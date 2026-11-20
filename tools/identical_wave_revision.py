@@ -60,10 +60,10 @@ def main():
             require(gate['args']==['--out','{report}'],'unexpected IF repair')
             gate.pop('args')
     require(normalized==oldplan,'unreviewed plan changes')
-    require(set(old['arms'])=={'on','off'},'old arms incomplete')
+    require('on' in old['arms'],'old on arm missing')
     identity=dict(old['identity'],plan_sha256=digest(a.plan))
     prepared={};origins={}
-    for arm in ('on','off'):
+    for arm in ('on',):
         source=a.old/arm/'source';clean(source)
         recorded=read(a.old/arm/'build-products.json')
         require(recorded and inventory(source)==recorded,'old product inventory changed')
@@ -72,7 +72,7 @@ def main():
         for key,value in dict(sha=SHA,arm=arm,vendor=identity['vendor'],arch=identity['gpu_arch'],mode='identical',status='PASS').items():
             require(supp.get(key)==value,'supplement context mismatch: '+key)
         require(supp['expected_builders']==['linalg','linalg_host'] and set(supp['modules'])=={'linalg','linalg_host'},'supplement module inventory differs')
-        require(supp['effective_mojo_build_flags']==('-D MOJOLEARN_IDN_ALL_OFF=1' if arm=='off' else ''),'supplement flags differ')
+        require(supp['effective_mojo_build_flags']=='','supplement flags differ')
         require(not supp['explicit_defines'],'unexpected numerical define')
         require(supp['bootstrap'] and all(x['rc']==0 for x in supp['bootstrap']),'supplement bootstrap failed')
         extra={}

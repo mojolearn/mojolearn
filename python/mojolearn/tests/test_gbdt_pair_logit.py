@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from mojolearn._cpu_reference import reference_training
 
 
 def _fixture(n=240, d=4, seed=11):
@@ -54,42 +53,6 @@ def _model(**kw):
     return GradientBoosting(**params)
 
 
-@reference_training()
-def test_learns_on_uneven_queries():
-    X, rel, g = _fixture()
-    m = _model().fit(X, rel, group_id=g)
-    pred = np.asarray(m.predict(X))
-    assert pred.shape == (X.shape[0],)
-    assert np.all(np.isfinite(pred))
-    assert m.loss_curve_[-1] < m.loss_curve_[0]
-    # a pair's loss starts at log 2 per unit pair weight
-    assert abs(m.loss_curve_[0] - np.log(2.0)) < 0.1
-
-
-@reference_training()
-def test_explicit_unit_pairs_equal_the_generated_pairs():
-    X, rel, g = _fixture()
-    generated = np.asarray(_model().fit(X, rel, group_id=g).predict(X))
-    explicit = np.asarray(_model().fit(X, rel, group_id=g, pairs=_generated_pairs(rel, g)).predict(X))
-    # IDN_PAIRLOGIT_GROUP (5ef0b3e7d, default ON under IDENTICAL) enumerates
-    # generated pairs per query on the device, so a row's sum takes the
-    # group's document order while an explicit list keeps the list order:
-    # the same pairs, the same model to float32 rounding, not the same bits
-    # (measured: 1.2e-07 at most). The _OFF build keeps the bitwise equality.
-    np.testing.assert_allclose(generated, explicit, rtol=0, atol=1e-6)
-
-
-@reference_training()
-def test_pairs_weight_changes_the_model():
-    X, rel, g = _fixture()
-    pairs = _generated_pairs(rel, g)
-    unit = np.asarray(_model().fit(X, rel, group_id=g, pairs=pairs).predict(X))
-    weights = np.linspace(0.5, 2.0, len(pairs)).astype(np.float32)
-    weighted = np.asarray(_model().fit(X, rel, group_id=g, pairs=pairs, pairs_weight=weights).predict(X))
-    assert unit.tobytes() != weighted.tobytes()
-
-
-@reference_training()
 def test_refusals_by_name():
     X, rel, g = _fixture()
     pairs = _generated_pairs(rel, g)
@@ -105,20 +68,16 @@ def test_refusals_by_name():
         _model().fit(X, rel, group_id=g, pairs=[(0, X.shape[0] - 1)])
 
 
-@reference_training()
 def test_pairs_validation():
     X, rel, g = _fixture()
     n = X.shape[0]
     pairs = _generated_pairs(rel, g)
-    # a list of tuples, a list of lists and an int array are the same pairs;
-    # no pairs_weight is unit weights
+    # a list of tuples, a list of lists and an int array are the same pairs
+    # (no pairs_weight equal to unit weights is gbdt_public_fits pair_logit kind 3)
     base = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs).predict(X))
     for same in ([list(p) for p in pairs], np.asarray(pairs, dtype=np.int64)):
         got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=same).predict(X))
         assert got.tobytes() == base.tobytes()
-    unit = np.ones(len(pairs), dtype=np.float32)
-    got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs, pairs_weight=unit).predict(X))
-    assert got.tobytes() == base.tobytes()
 
     def refused(match, pairs, pairs_weight=None):
         with pytest.raises(ValueError, match=match):

@@ -7,12 +7,12 @@ from ensemble.rf_notices import (
     rf_notice, RF_NOTICE_OOB_PARTIAL, RF_NOTICE_BINS_CLAMPED,
     RF_NOTICE_MAX_SAMPLES_IGNORED,
 )
-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, RF_SAMPLE_SET, RF_SAMPLE_SORTED, RF_SAMPLE_FUSED, T12, T12_BYTES, T15
+# TOMBSTONE: MOJOLEARN_TREES_RF_SAMPLE (ALWAYS_OFF_DELETE, EXP:1610) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_RF_SAMPLE.patch
 from std.math import fma
-from std.gpu import block_dim, block_idx, global_idx, thread_idx
-from std.sys import size_of
+from max.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
@@ -53,8 +53,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
-from std.memory import bitcast, memcpy
-from ensemble.importance_device import ImportanceStore
+from std.memory import bitcast, unsafe_memcpy
 from ensemble.oob_device import (
     OOB_STATS,
     OOB_TPB,
@@ -65,7 +64,6 @@ from ensemble.oob_device import (
     rf_oob_reg_ysum_kernel,
     rf_oob_append_tree_kernel,
     rf_oob_rows_kernel,
-    rf_oob_rows_outputs_kernel,
     rf_oob_score_kernel,
 )
 from xtrees.oob import (
@@ -137,11 +135,12 @@ comptime INT32_MAX: Int32 = 2147483647
 # and forest fingerprints remain unchanged.
 comptime LABELS_SAMPLED_ORDER = True
 
-# Optional bootstrap-row sorting preserves the drawn multiset. Stable
+# Bootstrap-row sorting preserves the drawn multiset. Stable
 # partitioning then keeps node ranges ascending. Integer/fixed-point
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
-# `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
+# TOMBSTONE: MOJOLEARN_2010_ROWS_SORTED (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_2010_ROWS_SORTED.patch
 #
 # fam2-forests' `MOJOLEARN_IDN_RF_ROWS_SORTED` (sorted bootstrap rows on
 # NVIDIA/AMD, wide data only) was DELETED by lane trees-small (2026-10-07):
@@ -157,18 +156,11 @@ comptime LABELS_SAMPLED_ORDER = True
 # per-tree drain. Same Int32 row ids as the host copy_if: no bit moves. (This
 # replaces fam2-forests' `IDN_RF_WEIGHT_ROWS_DEVICE`, whose `_OFF` define and
 # host-compacted upload are gone.)
-comptime ROWS_SORTED_SAMPLE = RF_SAMPLE_SORTED if RF_SAMPLE_SET else (
-    is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
-    or (
-        has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
-        # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
-        and not (
-            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        )
-    )
-)
+# TOMBSTONE: MOJOLEARN_RF_ROWS_SORTED_OFF (unmeasured old path) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_ROWS_SORTED_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path switch) deleted 2026-11-15 by expdel2-39-trees (this file's read); code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-39-trees.patch
+comptime ROWS_SORTED_SAMPLE = TARGET_HAS_APPLE_GPU
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28 (the drawn
 multiset and every integer / fixed-point histogram, count and leaf are
 unchanged; only `row_ids` order moves): sorted bootstrap rows on WIDE data (`ROWS_SORTED_MIN_COLS`
@@ -176,7 +168,7 @@ columns and up), where a node's rows then read the row-major bins in
 ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
 13.0-14.0 s, istellareg 92 -> 88 s; taxi / taxireg (16 columns) are ~7%
 slower with it (the sort costs more than the locality saves), so they keep
-the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order.
+the drawn order.
 The edge is a RANGE rule from the cache line, not a board row: below 64
 columns a row's uint8 bins fit one 64-byte line (the same boundary as
 `RF_BINS_ROW_MAJOR`), so ascending rows buy little locality and the sort is
@@ -195,16 +187,13 @@ comptime ROWS_SORTED_MIN_COLS = 64
 # bytes are unchanged; weighted and non-bootstrap arms keep their old route.
 # H100 Taxi and Istella repeated-fit trials were bitwise/quality identical and
 # improved the median of process medians. NVIDIA therefore ships the fused
-# route. HIP remains unchanged after a small Taxi regression on MI325X. The
-# explicit candidate define still permits experiments on other vendors, and
-# OFF restores the old two-launch route everywhere.
-comptime FUSED_BOOTSTRAP_GATHER = RF_SAMPLE_FUSED if RF_SAMPLE_SET else (
-    not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
-    and (
-        has_nvidia_gpu_accelerator()
-        or is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"]()
-    )
-)
+# route. HIP remains unchanged after a small Taxi regression on MI325X;
+# AMD and Apple keep the two-launch route.
+# TOMBSTONE: MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER.patch
+# TOMBSTONE: MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF (unmeasured old path) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF.patch
+comptime FUSED_BOOTSTRAP_GATHER = TARGET_HAS_NVIDIA_GPU
 comptime FUSED_BOOTSTRAP_GATHER_SABOTAGE = is_defined[
     "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE"
 ]()
@@ -1718,46 +1707,27 @@ def compute_oob_score[
     )
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
     log_launch_ctx(ctx, "oob_rows")
-    comptime if T15:
-        ctx.enqueue_function[rf_oob_rows_outputs_kernel](
-            x.unsafe_ptr(),
-            d_masks.unsafe_ptr(),
-            store.d_off.unsafe_ptr(),
-            store.d_col.unsafe_ptr(),
-            store.d_q.unsafe_ptr(),
-            store.d_left.unsafe_ptr(),
-            store.d_leaf.unsafe_ptr(),
-            d_acc.unsafe_ptr(),
-            d_cnt.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            Int32(n_trees),
-            Int32(num_outputs),
-            Int32(1) if row_major else Int32(0),
-            Int32(1) if sabotage == 1 else Int32(0),
-            grid_dim=_ceildiv(n_rows*num_outputs, OOB_TPB),
-            block_dim=OOB_TPB,
-        )
-    else:
-        ctx.enqueue_function[rf_oob_rows_kernel](
-            x.unsafe_ptr(),
-            d_masks.unsafe_ptr(),
-            store.d_off.unsafe_ptr(),
-            store.d_col.unsafe_ptr(),
-            store.d_q.unsafe_ptr(),
-            store.d_left.unsafe_ptr(),
-            store.d_leaf.unsafe_ptr(),
-            d_acc.unsafe_ptr(),
-            d_cnt.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            Int32(n_trees),
-            Int32(num_outputs),
-            Int32(1) if row_major else Int32(0),
-            Int32(1) if sabotage == 1 else Int32(0),
-            grid_dim=_ceildiv(n_rows, OOB_TPB),
-            block_dim=OOB_TPB,
-        )
+    # TOMBSTONE: MOJOLEARN_TREES_T15 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T15.patch
+    ctx.enqueue_function[rf_oob_rows_kernel](
+        x.unsafe_ptr(),
+        d_masks.unsafe_ptr(),
+        store.d_off.unsafe_ptr(),
+        store.d_col.unsafe_ptr(),
+        store.d_q.unsafe_ptr(),
+        store.d_left.unsafe_ptr(),
+        store.d_leaf.unsafe_ptr(),
+        d_acc.unsafe_ptr(),
+        d_cnt.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        Int32(n_trees),
+        Int32(num_outputs),
+        Int32(1) if row_major else Int32(0),
+        Int32(1) if sabotage == 1 else Int32(0),
+        grid_dim=_ceildiv(n_rows, OOB_TPB),
+        block_dim=OOB_TPB,
+    )
     var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
         n_rows * num_outputs
     )
@@ -1878,7 +1848,7 @@ def compute_oob_score[
     oob_predictions = List[Float64](
         length=n_rows * num_outputs, fill=Float64(0.0)
     )
-    memcpy(
+    unsafe_memcpy(
         dest=oob_predictions.unsafe_ptr().bitcast[UInt64](),
         src=h_acc.unsafe_ptr(),
         count=n_rows * num_outputs,
@@ -2586,6 +2556,24 @@ def n_sampled_rows_for(
     return Int(f)
 
 
+def _take_finished[
+    O: ObjectiveLike, sampled_labels: Bool
+](
+    mut builder: Builder[O, sampled_labels],
+    mut forest: RandomForestMetaData[O.DataT, O.LabelT],
+    mut instr: FitInstruments,
+) raises:
+    """TREE_OP_FOREST_FINISH's landing (lane t1b-tree-leaf-and-node-ops):
+    every tree `builder.collect_finished` assembled moves to its forest
+    index (`tree_tag`), with the tree's identity checkpoints."""
+    for i in range(len(builder.finished)):  # driver-loop: over the slot's collected trees (at most two)
+        var idx = builder.finished_tags[i]
+        forest.trees[idx] = builder.finished[i].copy()
+        _record_tree(instr, forest.trees[idx], idx)
+    builder.finished.clear()
+    builder.finished_tags.clear()
+
+
 def _record_tree[
     dt: DType
 ](mut instr: FitInstruments, tree: TreeMetaDataNode[dt], idx: Int) raises:
@@ -2684,6 +2672,7 @@ def fit_forest[
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
     notices_to_stderr: Bool = True,
+    weights_on_device: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2695,7 +2684,7 @@ def fit_forest[
         ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
         rf_params, prep, False, scales, sample_weight_host, row_major,
         oob_score, host_x_addr, tree_start, feature_importances,
-        min_weight_leaf, notices_to_stderr,
+        min_weight_leaf, notices_to_stderr, weights_on_device,
     )
 
 
@@ -2721,10 +2710,15 @@ def fit_forest_prepared[
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
     notices_to_stderr: Bool = True,
+    weights_on_device: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
     """`RandomForest::fit`, `randomforest.cuh:286-370`. THE FOREST LOOP.
+
+    `weights_on_device` (lane n5-prophet-adaboost-loops): `sample_weight`
+    holds the fit's n_rows weights although `sample_weight_host` is empty
+    (a caller whose weights never leave the device: AdaBoost's rounds).
 
     `min_weight_leaf` (lane sk-kernels) is scikit-learn's least summed
     sample weight per child, read by the weighted objectives only
@@ -2876,7 +2870,7 @@ def fit_forest_prepared[
     # same data session left is used as it is (its quantile sample was
     # drawn with THAT fit's seed); otherwise the table is this fit's own.
     var t_stage = instr.times.start()
-    var use_bins = Int(rf_params.tree_params.max_n_bins) <= (65536 if T08 and T08_BITS == 16 else 256)
+    var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
     # RF_BINS_ROW_MAJOR (Apple): row-major bins when a row's bins fit one
     # 64-byte line, or (FAST only, RF_BINS_ROW_MAJOR_WIDE) the trees
     # sample at least half the features.
@@ -2890,10 +2884,8 @@ def fit_forest_prepared[
                     rf_params.tree_params.max_features, n_cols
                 ) >= n_cols
             )
-    comptime if T08:
-        # Existing uint8 quantile IDs are exact, including boundary behavior.
-        # A layout experiment never enables ET's lossy uint16 quantization.
-        bins_row_major = use_bins and T08_LAYOUT == 1
+    # TOMBSTONE: MOJOLEARN_TREES_T08 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08.patch (with _LAYOUT and _BITS)
     var prep_kept = False
     if keep_prep and len(prep) == 1:
         if (
@@ -2923,11 +2915,6 @@ def fit_forest_prepared[
             row_major,
         )
         var bin_bytes = n_rows*n_cols
-        comptime if T08:
-            comptime if T08_LAYOUT == 3:
-                bin_bytes = ((n_rows+31)//32)*32*n_cols
-            comptime if T08_BITS == 16:
-                bin_bytes *= 2
         var d_bins_new = ctx.enqueue_create_buffer[DType.uint8](bin_bytes if use_bins else 1)
         prep.append(
             ForestPrep(
@@ -2998,7 +2985,7 @@ def fit_forest_prepared[
         if instr.trace.enabled:
             instr.trace.record_device(ctx, "forest.binned", prep[0].d_bins)
 
-    var has_sw = len(sample_weight_host) > 0
+    var has_sw = len(sample_weight_host) > 0 or weights_on_device
     # DEVIATION 2510 -- "host_setup": sampler, K builders, the shared
     # splits staging and the forest preallocation, stamped host-only so
     # the stage table can split `other`. Off unless MOJOLEARN_STAGE_TIMES=1.
@@ -3017,12 +3004,8 @@ def fit_forest_prepared[
     if k_streams < 1:
         k_streams = 1
 
-    comptime if T12:
-        # A complete Builder arena plus its row streams per active tree.
-        # Capacity is a byte budget, stable logical tree IDs remain unchanged.
-        var hist_bytes = Int(rf_params.tree_params.max_batch_size) * Int(rf_params.tree_params.max_n_bins) * max(1,n_unique_labels) * 40 * size_of[O.BinT]()
-        var slot_bytes = max(1, hist_bytes + n_sampled * (16 + 2 * size_of[Scalar[O.LabelT]]()))
-        k_streams = max(1, min(Int(rf_params.n_trees), T12_BYTES // slot_bytes))
+    # TOMBSTONE: MOJOLEARN_TREES_T12 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_T12.patch (with MOJOLEARN_TREES_T12_BYTES)
 
     var sampler = RowSampler(
         ctx,
@@ -3033,11 +3016,10 @@ def fit_forest_prepared[
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
         n_slots=k_streams,
-        sort_rows=RF_SAMPLE_SORTED or is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
-        or n_cols >= ROWS_SORTED_MIN_COLS,
+        sort_rows=n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
-        if len(sample_weight_host) < n_rows:
+        if not weights_on_device and len(sample_weight_host) < n_rows:
             raise Error(
                 "sample_weight holds "
                 + String(len(sample_weight_host))
@@ -3119,10 +3101,6 @@ def fit_forest_prepared[
     )
     # cpu4-forest: the OOB model is appended on the device as each tree
     # finishes (`OobForestStore`); nothing is allocated without OOB.
-    var importance_stores = List[ImportanceStore]()
-    comptime if T15:
-        if feature_importances:
-            importance_stores.append(ImportanceStore(ctx,Int(rf_params.n_trees),n_cols,True))
     var oob_store = OobForestStore(
         ctx,
         Int(rf_params.n_trees),
@@ -3250,6 +3228,7 @@ def fit_forest_prepared[
                         )
                 else:
                     builders[k].stage_sampled_order(ctx, dataset)
+            builders[k].tree_tag = next_tree
             var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
             instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
@@ -3258,10 +3237,6 @@ def fit_forest_prepared[
                     ctx, oob_store, builders[k],
                     len(ts.tree.sparsetree), next_tree,
                 )
-                if len(importance_stores) > 0:
-                    importance_stores[0].append[O.DataT](ctx,
-                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
-                        len(ts.tree.sparsetree), next_tree)
                 forest.trees[next_tree] = ts.tree.copy()
                 _record_tree(instr, forest.trees[next_tree], next_tree)
                 instr.times.stop_host("tree_copy", t_host)
@@ -3295,6 +3270,11 @@ def fit_forest_prepared[
         t_stage = instr.times.start()
         ctx.synchronize()
         instr.times.stop_host("device_wait", t_stage)
+        # the trees whose finish the previous pass enqueued (TREE_OP_FOREST_FINISH,
+        # lane t1b-tree-leaf-and-node-ops: their downloads rode the drain above)
+        for k in range(len(builders)):  # driver-loop: over the K pipeline slots
+            builders[k].collect_finished()
+            _take_finished(builders[k], forest, instr)
         for k in range(len(states)):
             if slot_tree[k] < 0:
                 continue
@@ -3304,18 +3284,21 @@ def fit_forest_prepared[
                 continue
             while True:
                 t_host = instr.times.start()
+                # a deferred device finish (`pending_nodes`) has no host
+                # model yet: the device tree's node count is the builder's;
+                # a host-queue tree carries its model in `states[k].tree`
+                var deferred = builders[k].pending_nodes > 0
+                var n_done = builders[k].pending_nodes if deferred else len(
+                    states[k].tree.sparsetree
+                )
                 _oob_append_from_builder(
-                    ctx, oob_store, builders[k],
-                    len(states[k].tree.sparsetree), slot_tree[k],
+                    ctx, oob_store, builders[k], n_done, slot_tree[k],
                 )
-                if len(importance_stores) > 0:
-                    importance_stores[0].append[O.DataT](ctx,
-                        builders[k].leaf_d_tree.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_bitcast[SparseTreeNode[O.DataT]](),
-                        len(states[k].tree.sparsetree), slot_tree[k])
-                forest.trees[slot_tree[k]] = states[k].tree.copy()
-                _record_tree(
-                    instr, forest.trees[slot_tree[k]], slot_tree[k]
-                )
+                if not deferred:
+                    forest.trees[slot_tree[k]] = states[k].tree.copy()
+                    _record_tree(
+                        instr, forest.trees[slot_tree[k]], slot_tree[k]
+                    )
                 instr.times.stop_host("tree_copy", t_host)
                 if next_tree >= n_trees:
                     slot_tree[k] = -1
@@ -3406,6 +3389,7 @@ def fit_forest_prepared[
                             )
                     else:
                         builders[k].stage_sampled_order(ctx, dataset)
+                builders[k].tree_tag = next_tree
                 states[k] = builders[k].begin_tree(
                     ctx, dataset, quantiles, instr
                 )
@@ -3417,6 +3401,10 @@ def fit_forest_prepared[
 
     t_host = instr.times.start()
     ctx.synchronize()
+    # the last deferred finishes (TREE_OP_FOREST_FINISH) rode that drain
+    for k in range(len(builders)):  # driver-loop: over the K pipeline slots
+        builders[k].collect_finished()
+        _take_finished(builders[k], forest, instr)
     # Mojo frees a value at its LAST USE; the builders' buffers must
     # outlive every launch that read them, so they are released only
     # after the drain above. The shared splits staging (DEVIATION 1908)
@@ -3435,19 +3423,10 @@ def fit_forest_prepared[
         )
         instr.times.stop(ctx, "oob", t_stage)
 
-    # T15 requested importance: A consumes live builder statistics while each
-    # tree finishes; B is the incumbent native host fold of exported statistics.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     if feature_importances:
-        comptime if T15:
-            var values = importance_stores[0].finish(ctx)
-            for c in range(n_cols):  # small-loop(n_cols: fitted per-feature importances): casts the d device results into the model
-                forest.feature_importances_.append(Scalar[O.DataT](values[c]))
-        else:
-            var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
-            compute_feature_importances_host(forest,importance_values)
-            forest.feature_importances_ = importance_values^
-    _ = importance_stores^
+        var importance_values = List[Scalar[O.DataT]](length=n_cols,fill=0)
+        compute_feature_importances_host(forest,importance_values)
+        forest.feature_importances_ = importance_values^
 
     # Mojo frees a value at its LAST USE, and every buffer above reached a
     # kernel as a raw pointer. These uses keep them alive past the final

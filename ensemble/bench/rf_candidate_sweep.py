@@ -29,10 +29,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 VARIANTS = {
     "baseline": (),
-    "sorted": ("MOJOLEARN_2010_ROWS_SORTED",),
+    # sorted (2010_ROWS_SORTED), copies4 (2012_SMEM_COPIES4) and their combination were
+    # deleted 2026-11-15 (docs/TOMBSTONES.md).
     "items4": ("MOJOLEARN_2011_HIST_ITEMS4",),
-    "copies4": ("MOJOLEARN_2012_SMEM_COPIES4",),
-    "combined": ("MOJOLEARN_2011_HIST_ITEMS4", "MOJOLEARN_2012_SMEM_COPIES4"),
 }
 
 
@@ -88,10 +87,9 @@ def main() -> None:
                     sys.stderr.write(result.stderr)
                     raise RuntimeError(f"{key} exited {result.returncode}")
                 values, model_hashes = [], []
-                expected = ["CONFIG", "1" if mode == "identical" else "0", "sorted",
-                            "True" if "MOJOLEARN_2010_ROWS_SORTED" in VARIANTS[variant] else "False",
+                expected = ["CONFIG", "1" if mode == "identical" else "0", "sorted", "False",
                             "items", "4" if "MOJOLEARN_2011_HIST_ITEMS4" in VARIANTS[variant] else "1",
-                            "copies", "4" if "MOJOLEARN_2012_SMEM_COPIES4" in VARIANTS[variant] else "1"]
+                            "copies", "1"]
                 config = []
                 for line in result.stdout.splitlines():
                     parts = line.split()

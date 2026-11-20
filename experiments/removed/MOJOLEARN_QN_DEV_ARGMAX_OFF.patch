@@ -1,0 +1,22 @@
+diff --git a/glm/estimator.mojo b/glm/estimator.mojo
+index 090604c968..dfeca4fa3b 100644
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -779,11 +779,12 @@ def qn_predict_binary_host(
+ #: took the row argmax on the host (`_labels.argmax_rows`) after the device
+ #: scored. The argmax now runs on the device (one thread per row) and the
+ #: int64 codes download straight into the caller's buffer.
+-#: No bit moves: the same strict `>` from column 0.
+-# TOMBSTONE: MOJOLEARN_QN_DEV_ARGMAX_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 4218560b53.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch; record in docs/TOMBSTONES.md.
+-# QN_DEV_ARGMAX stays as the constant its importers read.
+-comptime QN_DEV_ARGMAX = True
++#: `-D MOJOLEARN_QN_DEV_ARGMAX_OFF` (or the master `MOJOLEARN_IDN_ALL_OFF`)
++#: leaves the entry unregistered, and the Python layer falls back to the host
++#: scan. No bit moves: the same strict `>` from column 0.
++comptime QN_DEV_ARGMAX = not (
++    is_defined["MOJOLEARN_QN_DEV_ARGMAX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ # Lane a8c: the code kernels (`_positive_code_kernel`, `_argmax_key`,

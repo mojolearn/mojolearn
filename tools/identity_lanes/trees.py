@@ -159,13 +159,25 @@ _batch_decl(_rows_calls("transform", "apply"), "trees-random-embedding")
 
 
 @lane("trees-voting-clf")
+@floor(rows=(4097, "every member's root node must exceed T05_NODE_ROWS = 4096 (ensemble/decisiontree/batched_levelalgo/"
+                   "builder.mojo:209) so the multi-block histogram route runs at the root and the small-node walk "
+                   "below it; voting fits each member on all rows; 2026-11-05 lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    """Soft voting with weights over three different members."""
-    m = ml.VotingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=5)),
-                             ("rf", ml.RandomForestClassifier(n_estimators=4, max_depth=5, random_state=3)),
-                             ("bag", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=4), n_estimators=3,
+    """Soft voting with weights over three different members. The members fit
+    on the first `rows` rows and predict the whole fixture."""
+    # 5001 rows (2026-11-05, lane/slow-verification-lanes; was the whole
+    # 20000-row fixture): above the 4096-row T05 small-node bound, so every
+    # member's root takes the multi-block histogram and its children the fused
+    # small-node walk, both as before; above the 512-row quantile RNG arm
+    # (ensemble/decisiontree/batched_levelalgo/quantiles.mojo:53); odd, so the
+    # last histogram block is partial. Fewer trees and one level less per
+    # member: the member count and depth are not what the lane checks.
+    rows = 5001
+    m = ml.VotingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=4)),
+                             ("rf", ml.RandomForestClassifier(n_estimators=2, max_depth=4, random_state=3)),
+                             ("bag", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=3), n_estimators=2,
                                                           random_state=5))],
-                            voting="soft", weights=[1.0, 2.0, 0.5]).fit(X, yc)
+                            voting="soft", weights=[1.0, 2.0, 0.5]).fit(X[:rows], yc[:rows])
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), transform=_h(m.transform(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -178,17 +190,29 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
-_batch_decl(_rows_calls("predict", "predict_proba"), "trees-voting-clf")
+# 2001 held-out rows for the batch protocol (2026-11-05, lane/slow-verification-lanes; was all 20000):
+# odd, eight 256-thread blocks with a partial last one; the per-row and split checks are unchanged.
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 2001)), "trees-voting-clf")
 _batch_decl(_rows_calls("predict"), "trees-voting-reg")
 
 
 @lane("trees-stacking-clf")
+@floor(rows=(6145, "each of the three stratified folds trains a member on 2/3 of the rows, which must exceed "
+                   "T05_NODE_ROWS = 4096 (ensemble/decisiontree/batched_levelalgo/builder.mojo:209) so the fold "
+                   "fits keep the multi-block root and small-node children; 2026-11-05 lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    """Three stratified folds of held-out probabilities, passthrough, a tree on top."""
-    m = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=4)),
-                               ("rf", ml.RandomForestClassifier(n_estimators=3, max_depth=4, random_state=3))],
+    """Three stratified folds of held-out probabilities, passthrough, a tree on
+    top. Fitted on the first `rows` rows; predicts the whole fixture."""
+    # 7001 rows (2026-11-05, lane/slow-verification-lanes; was the whole
+    # 20000-row fixture): a fold's training part is ~4667 rows, above the
+    # 4096-row T05 small-node bound and the 512-row quantile RNG arm, so the
+    # member fits take the same routes as before; odd, so blocks and folds are
+    # uneven. One level less and two forest trees: not what the lane checks.
+    rows = 7001
+    m = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=3)),
+                               ("rf", ml.RandomForestClassifier(n_estimators=2, max_depth=3, random_state=3))],
                               final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3,
-                              passthrough=True).fit(X, yc)
+                              passthrough=True).fit(X[:rows], yc[:rows])
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -201,7 +225,9 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
-_batch_decl(_rows_calls("predict", "predict_proba"), "trees-stacking-clf")
+# 2001 held-out rows for the batch protocol (2026-11-05, lane/slow-verification-lanes; was all 20000):
+# odd, eight 256-thread blocks with a partial last one; the per-row and split checks are unchanged.
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 2001)), "trees-stacking-clf")
 _batch_decl(_rows_calls("predict"), "trees-stacking-reg")
 
 
@@ -230,16 +256,30 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "trees-onevsrest")
 
 
 @lane("trees-calibrated")
+@floor(rows=(6145, "each of the three calibration folds fits its tree on 2/3 of the rows, which must exceed "
+                   "T05_NODE_ROWS = 4096 (ensemble/decisiontree/batched_levelalgo/builder.mojo:209), keeping the "
+                   "multi-block root split in every fold fit; 2026-11-05 lane/slow-verification-lanes"))
 def _(ml, X, yc, yr, Xh=None):
-    """Sigmoid (Platt, per fold, ensembled) and isotonic (cross-validated scores) calibration."""
-    s = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="sigmoid", cv=3).fit(X, yc)
-    i = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="isotonic", cv=3,
-                                  ensemble=False).fit(X, yc)
+    """Sigmoid (Platt, per fold, ensembled) and isotonic (cross-validated
+    scores) calibration. Fitted on the first `rows` rows; predicts the whole
+    fixture."""
+    # 7001 rows (2026-11-05, lane/slow-verification-lanes; was the whole
+    # 20000-row fixture): a fold's training part is ~4667 rows, above the
+    # 4096-row T05 small-node bound and the 512-row quantile RNG arm, so the
+    # fold trees take the same routes as before; the calibrators still see
+    # ~2334 held-out scores per fold. Both methods, cv=3 and ensemble on/off stay.
+    rows = 7001
+    s = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=3), method="sigmoid", cv=3).fit(
+        X[:rows], yc[:rows])
+    i = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=3), method="isotonic", cv=3,
+                                  ensemble=False).fit(X[:rows], yc[:rows])
     return _fit(dict(sigmoid=_h(s.predict_proba(X)), isotonic=_h(i.predict_proba(X)), predict=_h(s.predict(X))),
                 s, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
-_batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")
+# 2001 held-out rows for the batch protocol (2026-11-05, lane/slow-verification-lanes; was all 20000):
+# odd, eight 256-thread blocks with a partial last one; the per-row and split checks are unchanged.
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 2001)), "trees-calibrated")
 
 
 @lane("trees-oob-cv-link")

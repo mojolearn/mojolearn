@@ -1,0 +1,247 @@
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index b0077bea6c..af26480182 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -1470,6 +1470,19 @@ def id_norm_finish_kernel(
+     dst.unsafe_store(0, ftz(_host_sqrt(sq.unsafe_load(0))))
+ 
+ 
++def id_scale_dev_kernel(
++    dst: MutPointer[Float32, MutAnyOrigin],
++    src: MutPointer[Float32, MutAnyOrigin],
++    s_ptr: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """`scale_vector_kernel` with the divisor read from a device scalar."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= Int(n_in):
++        return
++    dst.unsafe_store(i, ftz(src.unsafe_load(i) / s_ptr.unsafe_load(0)))
++
++
+ def id_axpy_neg_dev_kernel(
+     y: MutPointer[Float32, MutAnyOrigin],
+     x: MutPointer[Float32, MutAnyOrigin],
+@@ -1484,6 +1497,160 @@ def id_axpy_neg_dev_kernel(
+     y.unsafe_store(i, ftz(identical_mul_add(a, x.unsafe_load(i), y.unsafe_load(i))))
+ 
+ 
++def lanczos_restart_identical_dev(
++    ctx: DeviceContext,
++    mut A: DeviceCoo,
++    mut V: DeviceBuffer[DType.float32],
++    mut u: DeviceBuffer[DType.float32],
++    mut ritz: DeviceBuffer[DType.float32],
++    eigenvectors_k: List[Float32],
++    mut alpha: List[Float32],
++    mut beta: List[Float32],
++    beta_k: List[Float32],
++    k: Int,
++    ncv: Int,
++    mut v: DeviceBuffer[DType.float32],
++    mut aux_uu: DeviceBuffer[DType.float32],
++    mut vv: DeviceBuffer[DType.float32],
++    mut tmp: DeviceBuffer[DType.float32],
++    mut trace: IdentityTrace,
++    mut step: Int,
++    tpb: Int,
++    restarts: Int,
++) raises:
++    """One restart of `lanczos_smallest` (`:544-701`) under LANCZOS_ID_DEV:
++    the ritz GEMM of the previous solve (deferred to here, V is untouched
++    in between), the re-orthogonalization, V[k] / V[k + 1] and the
++    `lanczos_aux` steps from `k + 1`, enqueued with one wait at the end.
++    Every reduction is the pinned `identical_gemm`; the norms, the division
++    and `-alpha_k` read device words the host path would have read back."""
++    var n = A.n
++    var step0 = step
++    var nws = identical_gemm_workspace_max_floats(k, n, ncv)
++    nws = max(nws, identical_gemm_workspace_max_floats(k, 1, n))
++    nws = max(nws, identical_gemm_workspace_max_floats(n, 1, k))
++    nws = max(nws, identical_gemm_workspace_max_floats(1, 1, n))
++    for i in range(k + 1, ncv):
++        nws = max(nws, identical_gemm_workspace_max_floats(i + 1, 1, n))
++        nws = max(nws, identical_gemm_workspace_max_floats(n, 1, i + 1))
++    var ws = ctx.enqueue_create_buffer[DType.float32](max(nws, 1))
++    var d_alpha = ctx.enqueue_create_buffer[DType.float32](ncv)
++    var d_beta = ctx.enqueue_create_buffer[DType.float32](ncv)
++    var d_e = ctx.enqueue_create_buffer[DType.float32](ncv * k)
++    var d_bk = ctx.enqueue_create_buffer[DType.float32](k)
++    var h = ctx.enqueue_create_host_buffer[DType.float32](2 * ncv + ncv * k + k)
++    var scal = ctx.enqueue_create_buffer[DType.float32](4)
++    ctx.synchronize()
++    var hp = h.unsafe_ptr()
++    for j in range(ncv):
++        hp.unsafe_store(j, alpha[j])
++        hp.unsafe_store(ncv + j, beta[j])
++    for j in range(ncv * k):
++        hp.unsafe_store(2 * ncv + j, eigenvectors_k[j])
++    for j in range(k):
++        hp.unsafe_store(2 * ncv + ncv * k + j, beta_k[j])
++    ctx.enqueue_copy(dst_buf=d_alpha, src_ptr=hp)
++    ctx.enqueue_copy(dst_buf=d_beta, src_ptr=hp + ncv)
++    ctx.enqueue_copy(dst_buf=d_e, src_ptr=hp + 2 * ncv)
++    ctx.enqueue_copy(dst_buf=d_bk, src_ptr=hp + 2 * ncv + ncv * k)
++    var dot_c = scal.create_sub_buffer[DType.float32](0, 1)
++    var sq_c = scal.create_sub_buffer[DType.float32](1, 1)
++    var r_sq = scal.create_sub_buffer[DType.float32](2, 1)
++    var r_nrm = scal.create_sub_buffer[DType.float32](3, 1)
++    var uv = u.create_sub_buffer[DType.float32](0, n)
++    var vk = V.create_sub_buffer[DType.float32](k * n, n)
++    var dak = d_alpha.create_sub_buffer[DType.float32](k, 1)
++    var g = _grid(n, tpb)
++    # ritz = E_k^T V (the previous solve's), then V[0..k) = ritz  (:544-547)
++    identical_gemm_into(ctx, ritz, d_e, V, ws, k, n, ncv, OP_TN)
++    ctx.enqueue_function[copy_kernel](
++        V.unsafe_ptr(), ritz.unsafe_ptr(), Int32(k * n),
++        grid_dim=(_grid(k * n, tpb), 1, 1), block_dim=(tpb, 1, 1),
++    )
++    # uu = V[0..k) u; u = u - V^T uu  (:552-578)
++    identical_gemm_into(ctx, aux_uu, V, u, ws, k, 1, n, OP_NT)
++    identical_gemm_into(ctx, tmp, V, aux_uu, ws, n, 1, k, OP_TN)
++    ctx.enqueue_function[sub_kernel](
++        u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
++        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++    )
++    # unrm = ||u||; V[k] = u / unrm  (:580-592)
++    identical_gemm_into(ctx, r_sq, u, uv, ws, 1, 1, n, OP_NT)
++    ctx.enqueue_function[id_norm_finish_kernel](
++        r_sq.unsafe_ptr(), r_nrm.unsafe_ptr(),
++        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
++    )
++    ctx.enqueue_function[id_scale_dev_kernel](
++        V.unsafe_ptr().unsafe_offset(k * n), u.unsafe_ptr(),
++        r_nrm.unsafe_ptr(), Int32(n),
++        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++    )
++    # u = A V[k]  (:594-624)
++    spmv_enqueue(ctx, A, u, V, k * n, n, tpb)
++    # alpha[k] = dot(V[k], u) straight into d_alpha[k]; u -= alpha_k V[k]
++    identical_gemm_into(ctx, dak, vk, u, ws, 1, 1, n, OP_NT)
++    ctx.enqueue_function[id_axpy_neg_dev_kernel](
++        u.unsafe_ptr(), V.unsafe_ptr().unsafe_offset(k * n),
++        d_alpha.unsafe_ptr().unsafe_offset(k), Int32(n),
++        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++    )
++    # temp = V[0..k)^T beta_k; u = u - temp  (:640-671)
++    identical_gemm_into(ctx, tmp, V, d_bk, ws, n, 1, k, OP_TN)
++    ctx.enqueue_function[sub_kernel](
++        u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
++        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++    )
++    # beta[k] = ||u|| into d_beta[k]; V[k + 1] = u / beta[k]  (:673-687)
++    identical_gemm_into(ctx, r_sq, u, uv, ws, 1, 1, n, OP_NT)
++    ctx.enqueue_function[id_norm_finish_kernel](
++        r_sq.unsafe_ptr(), d_beta.unsafe_ptr().unsafe_offset(k),
++        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
++    )
++    ctx.enqueue_function[id_scale_dev_kernel](
++        V.unsafe_ptr().unsafe_offset((k + 1) * n), u.unsafe_ptr(),
++        d_beta.unsafe_ptr().unsafe_offset(k), Int32(n),
++        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++    )
++    step += 1
++    # lanczos_aux from k + 1  (:689-701)
++    _id_dev_enqueue_steps(
++        ctx, A, V, u, v, aux_uu, vv, tmp, ws, scal, dot_c, sq_c, uv, d_alpha,
++        d_beta, k + 1, ncv, ncv, step, tpb,
++    )
++    ctx.enqueue_copy(dst_ptr=hp, src_buf=d_alpha)
++    ctx.enqueue_copy(dst_ptr=hp + ncv, src_buf=d_beta)
++    ctx.synchronize()
++    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
++        alpha[j] = hp.unsafe_load(j)
++        beta[j] = hp.unsafe_load(ncv + j)
++    trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
++    trace.record_scalar_f32(_step_tag(step0, "beta"), beta[k])
++    # The host path raises here, before running the steps it would divide
++    # by zero in; the steps ran, the verdict is the same raise.
++    if beta[k] == Float32(0.0):
++        raise Error(
++            "lanczos: restart breakdown, beta[k] == 0 at restart "
++            + String(restarts) + " (DEVIATION 774: theirs divides by it)"
++        )
++    for j in range(k + 1, ncv):
++        trace.record_scalar_f32(_step_tag(step0 + j - k, "alpha"), alpha[j])
++        trace.record_scalar_f32(_step_tag(step0 + j - k, "beta"), beta[j])
++    _ = uv^
++    _ = vk^
++    _ = dak^
++    _ = dot_c^
++    _ = sq_c^
++    _ = r_sq^
++    _ = r_nrm^
++    _ = scal^
++    _ = ws^
++    _ = d_alpha^
++    _ = d_beta^
++    _ = d_e^
++    _ = d_bk^
++    _ = h^
++
++
+ def lanczos_aux(
+     ctx: DeviceContext,
+     mut A: DeviceCoo,
+@@ -1711,12 +1878,16 @@ def lanczos_solve_ritz(
+ #: read-back rides the Ritz solve's own wait; and the residual norm is one
+ #: `identical_gemm_into` on the pooled cells. Every float operation is the
+ #: one LANCZOS_ID_DEV ran, on the same words, so no bit moves and the host
+-#: column is unchanged.
++#: column is unchanged. `-D MOJOLEARN_IDN_LANCZOS_POOL_OFF=1` restores the
++#: per-restart allocations and waits.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_LANCZOS_POOL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 9464ff72b3.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_LANCZOS_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_LANCZOS_POOL = LANCZOS_ID_DEV
++comptime IDN_LANCZOS_POOL = (
++    LANCZOS_ID_DEV
++    and not (
++        is_defined["MOJOLEARN_IDN_LANCZOS_POOL_OFF"]()
++    )
++)
+ 
+ 
+ def lanczos_pool_ws_floats(n: Int, k: Int, ncv: Int) -> Int:
+@@ -1816,7 +1987,7 @@ def id_norm_scale_kernel(
+     nrm_out: MutPointer[Float32, MutAnyOrigin],
+     n_in: Int32,
+ ):
+-    """`id_norm_finish_kernel` then a division by that device norm in one launch:
++    """`id_norm_finish_kernel` then `id_scale_dev_kernel` in one launch:
+     every thread derives the same norm word from the same squared norm,
+     thread 0 stores it, each element is divided by it."""
+     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+@@ -1860,7 +2031,7 @@ def lanczos_restart_pooled(
+     restarts: Int,
+     mut sweeps: Int,
+ ) raises -> Float32:
+-    """The LANCZOS_ID_DEV restart + `lanczos_solve_ritz` + `_residual`
++    """`lanczos_restart_identical_dev` + `lanczos_solve_ritz` + `_residual`
+     on the solve's pooled buffers (`IDN_LANCZOS_POOL`). `alpha[0..k)` /
+     `beta[0..k)` hold the caller's restart values on entry. Returns the
+     residual; `eigenvalues_k`, `eigenvectors_k`, `beta_k`, `alpha`, `beta`
+@@ -2262,6 +2433,22 @@ def lanczos_smallest_dev(
+             trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
+             ritz_stale = True
+             continue
++        comptime if LANCZOS_ID_DEV:
++            lanczos_restart_identical_dev(
++                ctx, A, V, u, ritz, eigenvectors_k, alpha, beta, beta_k, k,
++                ncv, v, aux_uu, vv, tmp, trace, step, tpb, restarts,
++            )
++            iter += ncv - k
++            sweeps = lanczos_solve_ritz(
++                ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
++                eigenvectors_k,
++            )
++            res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
++            trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
++            trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
++            trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
++            ritz_stale = True
++            continue
+         # V[0..k) = ritz vectors (x_T, k x n)  (:544-547)
+         ctx.enqueue_function[copy_kernel](
+             V.unsafe_ptr(), ritz.unsafe_ptr(), Int32(k * n),

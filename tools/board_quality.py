@@ -8,6 +8,8 @@ Unknown metrics require review; finite output alone is not equal quality.
 """
 import math
 
+import mode_policy_bounds
+
 POLICY = "mojolearn.quality-parity.v9"
 # Absolute score units (one percentage point for bounded scores).
 ABSOLUTE = dict.fromkeys(("accuracy", "auc", "roc_auc", "r2", "recall_at_k",
@@ -144,6 +146,16 @@ SELF_REFERENCE = {
 }
 
 
+def policy_mask(cell):
+    """The mode policy mask our cell records (`mode_policy_mask` on the cell or in its quality; the race drivers
+    write it only when it is not 0). A cell without it is mask 0: the FP32 bounds."""
+    for holder in (cell or {}, (cell or {}).get("quality") or {}):
+        value = holder.get("mode_policy_mask")
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return 0
+
+
 def metric_value(cell, quality, metric):
     """The arm's recorded value, or the self-reference value when the arm IS the metric's reference."""
     value = quality.get(metric)
@@ -231,7 +243,9 @@ def compare(ours, theirs):
             kind, margin = "both-disagreements-at-most", AGREEMENT[metric]
             observed = max(1.0 - a, 1.0 - b)
         else:
-            kind, margin, observed = "both-reference-errors-at-most", REFERENCE[metric], max(abs(a), abs(b))
+            # the FP32 margin, widened only by a row our wheel reports relaxed (mask 0 or absent: unchanged)
+            margin = mode_policy_bounds.reference_margin(metric, REFERENCE[metric], policy_mask(ours))
+            kind, observed = "both-reference-errors-at-most", max(abs(a), abs(b))
         check = dict(metric=metric, ours=a, opponent=b, comparison=kind,
                      margin=margin, observed=observed,
                      verdict="PASS" if observed <= margin else "FAIL")

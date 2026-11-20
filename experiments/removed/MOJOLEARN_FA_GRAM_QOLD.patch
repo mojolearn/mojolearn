@@ -1,0 +1,35 @@
+diff --git a/x_decomp/fa_fast.mojo b/x_decomp/fa_fast.mojo
+index cf095e3948..ff32e2e3db 100644
+--- a/x_decomp/fa_fast.mojo
++++ b/x_decomp/fa_fast.mojo
+@@ -43,7 +43,8 @@ defines (docs/apple-fast/ab/fa.md):
+   R D / sqrt(n) per iteration (`fa_rs_svd_block_kernel` / `rs_round_kernel`)
+   instead of the float32 eigh of D G D / n, which squared the condition
+   number (Istella held-out mean_log_likelihood 92.898 against main's
+-  99.487). See FA_GRAM_DF below.
++  99.487). MOJOLEARN_FA_GRAM_QOLD keeps the float32 route; GRAM_ONCE alone
++  (the Python loop) keeps it too. See FA_GRAM_DF below.
+ """
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.math import sqrt
+@@ -127,7 +128,7 @@ comptime FA_ITER_DEVICE = FA_FAST_APPLE
+ # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531.
+ # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
+ #: (FAST + Apple, QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) the
+-#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it.
++#: ITER_DEVICE loop's spectral step. Every ITER_DEVICE arm takes it unless -D MOJOLEARN_FA_GRAM_QOLD keeps the float32 route.
+ #: Cause: the float32 Gram + float32 eigh of D G D / n resolve B = D G D / n
+ #: only to eps ||B||, but the psi of a column the factors explain sits at
+ #: relative psi_j / var_j (1e-8 on Istella) of B_jj; FA_ALL's Istella held-out
+@@ -147,9 +148,8 @@ comptime FA_ITER_DEVICE = FA_FAST_APPLE
+ #:      the residual it must resolve is sqrt(psi / var) ~ 1e-4 >> eps.
+ #: float32 numpy model (~/mojolearn-evidence/fa-quality/fa_model.py, results
+ #: beside it): see docs/apple-fast/EXPERIMENTS.md `FA_GRAM_DF`.
+-# TOMBSTONE: MOJOLEARN_FA_GRAM_QOLD (old path: the float32 Gram + eigh route; EXP:1263 KEPT the QUALITY-FIX default) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 319c915ad2.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_GRAM_QOLD.patch; record in docs/TOMBSTONES.md.
+-comptime FA_GRAM_DF = FA_ITER_DEVICE
++comptime FA_GRAM_QOLD = is_defined["MOJOLEARN_FA_GRAM_QOLD"]()
++comptime FA_GRAM_DF = FA_ITER_DEVICE and not FA_GRAM_QOLD
+ #: (FAST + Apple, lane apple-slow-paths 2026-10-17) the FA_GRAM_DF loop's
+ #: grid SVD enqueues FA_SVD_GROUP sweeps between two convergence readbacks,
+ #: each sweep on its own flag slice with its own lowest-flag word

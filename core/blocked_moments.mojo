@@ -13,7 +13,7 @@ per-cell reference cells it reproduces bit for bit).
 No warp shuffles, no atomics, no hardware-sized geometry: the bits are a
 function of (n, d) and the profile constants only, so NVIDIA and AMD agree.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

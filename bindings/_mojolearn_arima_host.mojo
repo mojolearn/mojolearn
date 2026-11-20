@@ -28,7 +28,7 @@ refuses is refused here in the same sentence), `_refuse_shape`
 (`:165-175`), the `max_iterations` bound, `_predict_into`'s start and end
 checks (`:422-433`) and the forecast's `n_steps` bound (`:536-540`). After
 it, `arima_host_refuse_unrestated` refuses by name the parameter values
-whose arms the host file does not restate (p, q or P above 1, any Q, d + D
+whose arms the host file does not restate (p, q, P or Q above 1, d + D
 of 2, p + q + k of 0). Since 2026-09-15 `arima_predict` answers an in-sample
 prediction (`start < n_obs`) through `arima_host_predict`, from
 `bindings/arima_host_predict.mojo`, which the forecast inference binding
@@ -39,6 +39,7 @@ The sabotage arm (`arima_host_sabotage`) is
 finite-difference step doubles, so every fitted model this binary returns
 differs.
 """
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -51,7 +52,6 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 from arima.host.arima_oracle import (
     ARIMA_ORACLE_HOST_SABOTAGE,
     arima_host_fit,
@@ -61,18 +61,14 @@ from arima.host.arima_oracle import (
 # since 2026-09-15, shared with the inference binding
 # bindings/_mojolearn_forecast_host.mojo; `_order` (the device's own
 # `validate_order(order)`) and `_refuse_shape` are in arima/host/arima_host_entries.mojo.
-from bindings.arima_host_predict import (
+from bindings.arima_host_predict_pack import (
     arima_forecast_binding,
     arima_predict_binding,
 )
 # The typed fit body (lane thin-trees-metrics, 2026-10-21), moved word for
 # word out of `arima_fit_binding` with `_order` and `_refuse_shape`.
 from arima.host.arima_host_entries import arima_host_fit_into
-
-
-comptime ARIMA_METHOD_MLE = 0
-comptime ARIMA_METHOD_CSS = 1
-comptime ARIMA_METHOD_CSS_ML = 2
+from arima.host.mojolearn_arima_host_run import _refuse_method
 
 
 def arima_host_numeric_mode_binding() raises -> PythonObject:
@@ -126,15 +122,9 @@ def arima_vendor_binding() raises -> PythonObject:
 #: because this binding does not import the device modules: AutoARIMA's
 #: criterion is the float32 one (`ic_running_min_f32`) exactly when the
 #: device binding built from the same defines chooses orders on the device.
-comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
-    or is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF, MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF, MOJOLEARN_IDN_ARIMA_LLONLY_OFF, MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF, MOJOLEARN_ARIMA_ORDER_BATCH_OFF (owned here) and MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF, MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF (non-owner sites) old-path terms deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6d8c0423cf.
+# Restore: git apply experiments/removed/<DEFINE>.patch (owned) or experiments/removed/<DEFINE>.expdel2-37-series.patch (non-owner); record in docs/TOMBSTONES.md.
+comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def arima_order_caps_binding() raises -> PythonObject:
@@ -150,32 +140,6 @@ def arima_numeric_mode_binding() raises -> PythonObject:
     """The build's tier as the `NUMERIC_*` code, which `_arima_impl.py`
     cross-checks against the mode the package asked for."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
-
-
-def _refuse_method(method: Int) raises:
-    """`arima/estimator.mojo::_refuse_method` (`:114-142`), its words."""
-    if method == ARIMA_METHOD_MLE:
-        return
-    if method == ARIMA_METHOD_CSS:
-        raise Error(
-            "ARIMA: method='css' is not implemented; the conditional sum of"
-            " squares log-likelihood (batched_arima.cu:271-391,"
-            " conditional_sum_of_squares and sum_of_squares_kernel) and its"
-            " `truncate` parameter have no implementation. Only MLE is offered;"
-            " refused by name (arima/NOT_IMPLEMENTED.tsv)"
-        )
-    if method == ARIMA_METHOD_CSS_ML:
-        raise Error(
-            "ARIMA: method='css-ml' is not implemented; it starts the maximum"
-            " likelihood fit from the CSS optimum, and the CSS"
-            " log-likelihood (batched_arima.cu:271-391) has no implementation. Only"
-            " MLE is offered; refused by name (arima/NOT_IMPLEMENTED.tsv)"
-        )
-    raise Error(
-        "ARIMA: method code " + String(method) + " is not one of MLE ("
-        + String(ARIMA_METHOD_MLE) + "), CSS (" + String(ARIMA_METHOD_CSS)
-        + ") or CSS-ML (" + String(ARIMA_METHOD_CSS_ML) + ")"
-    )
 
 
 def arima_fit_binding(
@@ -246,6 +210,7 @@ def arima_fit_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_arima_host() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_arima_host")
         module.def_function[arima_host_numeric_mode_binding]("arima_host_numeric_mode")

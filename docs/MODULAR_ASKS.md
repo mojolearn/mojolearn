@@ -3,6 +3,76 @@
 Features we wait for instead of working around (CLAUDE.md, "Wait for Mojo and Modular"). One section per ask:
 what we need, where it would be used, what we do meanwhile.
 
+## Mojo 1.2.0 / MAX 26.7.0 recheck (2026-11-11)
+
+The owner approved upgrading from Mojo 1.0.0 / MAX 26.5.0. The local recheck
+used Mojo 1.2.0 (`2016d0cd`) / MAX 26.7.0. Complete sources, compiler output,
+controls and runtime failures are retained in
+`~/mojolearn-evidence/modular-check-20261111/`; `SUMMARY.md` and `results.tsv`
+distinguish the minimal probes from full product and fixture qualification.
+The upgrade integration and compilation remain owned by the orchestrator.
+
+- **IPCA nested immutable List capture: fixed upstream.** The original
+  `13_immutable_nested_capture` and flat/no-closure controls compile with exit
+  zero. The prior compiler crash (139) remains preserved. The temporary,
+  owner-authorized six-field test-room layout is removed: the original nested
+  storage is restored with all CPU15/GPU17 cases and oracles intact. Full
+  restored-fixture compilation and execution remain pending; a minimal
+  compile is not a numerical runtime result. No issue was filed.
+- **DBSCAN mutable field capture: fixed upstream.**
+  `01_mutable_field_capture` and both controls now compile with exit zero.
+  The existing scoped mutable borrow in `dbscan_state_suite.mojo` retains
+  all 33 parallel writes, the owner move and allocation-identity assertions.
+  The formerly blocked 28 fixtures still await full compilation/execution.
+  No issue was filed; old diagnostics and reproduction sources remain.
+- **DeadArgumentElimination `surveyUse`: fixed upstream.**
+  `dbscan/checks/compiler_repro_dead_arg_elim.mojo` compiles on the new
+  toolchain; the old abort (134) remains preserved. Existing
+  [Modular issue #7164](https://github.com/modular/modular/issues/7164) was
+  closed as completed on 2026-10-14. This does not establish DBSCAN runtime
+  correctness by itself.
+- **OPTICS capture: our ownership error, not an open compiler bug.**
+  Mojo 1.2 diagnoses competing captured container/interior origins. The
+  fixture now captures one outer result-storage pointer and derives its
+  nested read-only field pointers within the callback. It retains the owner,
+  parallel row checks, nine CPU/GPU cases and every numerical assertion;
+  no copy, cast or serial replacement is introduced. Compilation/execution
+  of the correction remain pending. The original diagnostic/control remain.
+- **Runtime PythonObject defaults: still open, filed as
+  [Modular issue #7543](https://github.com/modular/modular/issues/7543).**
+  `PythonObject(None)` used as a runtime argument default is evaluated at
+  compile time and fails on both versions; explicitly passing it compiles.
+  The 18-line reproduction, control and filed ask are retained under `src/`
+  and `issues/default_arg.md`. Keep explicit runtime arguments; no Python
+  fallback or compiler patch is authorized.
+- **Loop-carried PythonObject read then reassigned: new in 1.2.0, filed as
+  [Modular issue #7546](https://github.com/modular/modular/issues/7546).**
+  A `PythonObject` local read and then reassigned in the same loop iteration
+  fails lowering with `_cpython.mojo:2208:24: error: operand #1 does not
+  dominate this use` (the destructor's `kgen.call_indirect` uses the loop's
+  block argument). Mojo 1.0.0 compiles and runs the same 14-line file. It
+  blocked seven host units (byte_trainer, orchestration, classical_trees,
+  classical_family, tokenizer, classical_prep, classical_decomp) at eight
+  loops, every one a `PythonObject(None)` "not read yet" sentinel. Those
+  sentinels are now typed `Optional[PythonObject]` (same reads, same order),
+  which lowers on 1.2.0. Reproducer, control, bisection steps and the filed
+  text: `~/mojolearn-evidence/mojo12-dominate/` (`dominate_min.mojo`,
+  `dominate_control.mojo`, `ISSUE.md`). No lowering-flag change, toolchain
+  patch or Python fallback. Once #7546 is fixed the Optional form stays: it is
+  the typed form of an absent value, not a workaround.
+- **Concurrent shared DeviceContext submission on Metal: still open, filed
+  as [Modular issue #7544](https://github.com/modular/modular/issues/7544).**
+  The retained recheck failed in two of three runs on each version. Selecting
+  streams still failed in four of six runs; the Apple context reported one
+  stream. Sources and complete failures are in `src/`, `out/` and
+  `issues/metal.md`. Ordered GPU numerical suites make no shared-context
+  concurrency claim. No fallback, unsupported runtime patch or unchanged
+  rerun is introduced by this fixture update.
+
+The mutual-recursion/default deadlock and missing-kernelId cases were not
+reproduced with a new minimal case. The older AMD/NVIDIA/Linux asks below
+were not rechecked on those platforms and retain their existing status.
+
 ## Masked (subset) warp reduction and native grouping on AMD (2026-10-07, lane trees-hist-ideas)
 
 **Need.** Warp-aggregated histogram atomics in their general form: lanes that hit the same histogram cell
@@ -224,6 +294,12 @@ tested.
 **Where.** Every Linux release build: the host bindings ship once in `mojolearn-core`, and the release proves that
 every build leg produced them.
 
+**Cause found on our side (2026-11-13, lane bincache-define-host-leg).** `mojo build --help` says
+`--target-features` "Defaults to the host features", independently of `--target-cpu`. Our scripts pinned only the
+CPU, so the build machine's features reached the compile. Every Linux x86-64 pin now passes
+`--target-features` with the x86-64-v3 list (`bindings/merged_build.sh`). This ask is withdrawn once one candidate
+shows equal host bytes from runners with different CPUs; then the composition below is deleted.
+
 **Meanwhile.** `tools/release.py` linux-wait passes a host byte mismatch with identical recorded inputs to
 `tools/release_host_composition.py`, which ships the host owner leg's (cuda/sm_89) retained bytes in every set under
 a witnessed receipt. Any difference in source, compiler or flags is still refused. Evidence:
@@ -258,3 +334,141 @@ which, since the module has a caller that passes 0.0.
 bits (the same answer as IEEE `!=` for every input). The pod build of that spelling matches the NVIDIA record on all
 180 gmm and gmm-sample parts. Evidence: `~/mojolearn-evidence/rel0863/pptrace/` (`gmm_card_linux3.tsv`,
 `pp_gmm4.json`) and `~/mojolearn-evidence/rel0863/gmm-trace/gmm_trace_linux_cpu.tsv`.
+
+## Compile time and memory of one `mojo build` grow far faster than its source closure; nothing is reused across builds (2026-11-04, small-compiles-everywhere)
+
+**Need.** Either a supported unit of separate compilation that a later `mojo build` can reuse (a
+precompiled package of shared, already-instantiated modules whose bytes are a pure function of
+their sources and flags), or a deterministic, content-addressed compile cache inside `mojo build`.
+And a per-module compile profile (time and peak memory per imported module, like
+`-ftime-trace`), so we can see which module of a group dominates.
+
+**Measured (no compile was run for this entry; the numbers are the retained 0.8.65 release
+records).** One merged compile per group on a 16 GiB GitHub runner, closure = distinct Mojo files
+the group imports (docs/build/COMPILE_CLOSURES.md):
+
+| group (Linux, host set, CPU column) | closure files | seconds sm_89 / sm_80 / gfx942 leg | recorded peak |
+|---|---:|---|---|
+| `_mojolearn_native_forest_host` (15 members) | 440 | 200 / 107 / 143 | 11 GiB |
+| `_mojolearn_native_neural_host` (9 members) | 421 | 547 / 415 / 459 | 10 GiB |
+| `_mojolearn_native_x_host` (9 members) | 555 | 369 / 454 / 463 | 10-11 GiB |
+| `_mojolearn_native_host` (7 members) | 702 | 1563 / 1164 / 1655 | 13-14 GiB |
+| `_mojolearn_native_tokenizer_host` (6 members) | 739 | 1530 / 1205 / 2107 | 14 GiB (stopped at 15 GiB on 2026-11-02) |
+
+The two slowest host groups read 1.3-1.7x the files of the fastest but take 6-15x as long and sit
+next to the runner's memory limit; a single whole-set host compile passed 40 GB in 0.8.59. Forty
+files (`core/device_plan.mojo`, the experiment guards, the shared kernels) are in every one of the
+9 Linux groups and are recompiled, and their generics re-instantiated, by each of the 9 compiles
+of every leg, because no compiled form of a module survives one `mojo build`.
+
+**Where.** Every release leg (9 groups x 3 Linux legs, 13 groups on the Mac), every
+`tools/box_merged_verify.sh` identity job, every development build.
+
+**Meanwhile.** Standard optimized builds only (no -O0, no hand-split modules). We cache whole
+group binaries by exact source closure (tools/bincache.py, key rule closure-v2), so a change
+recompiles only the groups whose closure it reaches, and we propose smaller groups by closure
+overlap (docs/build/COMPILE_CLOSURES.md). Neither removes the per-group cost of the shared files.
+
+## Mojo 1.2 no longer unrolls or if-converts a trip-count-4 loop branching on its induction variable (NVPTX) (2026-11-16, sqrt-comptime-step)
+
+**What we see.** `portable_sqrtf` (`checks/numerics.mojo`, source unchanged since 0.8.55) ends in a four-candidate
+correction, `for k in range(4): if k == 0: cb = yb - 1 elif k == 1: ... else: cb = yb + 2`, then a residual compare.
+Mojo 1.0.0 fully unrolled it and lowered the chain to `selp` (1,604 sites in 395 kernels of 0.8.55). Mojo 1.2.0 (2016d0cd)
+emits a rotated loop with `setp`/`bra` chains (0 `selp`, 1,054 branch-form sites). In
+`pinned_distance_register_tile_kernel` (32 inlined square roots per thread) registers went 81 -> 119 and warps per SM on
+sm_89 at 128 threads per block 20 -> 16 (SASS: ISETP +262, IMAD +172, BRA +96, FSEL -64); kNN, HDBSCAN and KDE rows on
+the NVIDIA L40S are 1.31-1.58x slower than 0.8.55. Evidence: `~/mojolearn-evidence/kernel-attribution-20261116/`
+(ATTRIBUTION.md, the `fam_55_67/knn` PTX and SASS diffs).
+
+**Smallest reproducer.**
+
+```mojo
+def pick(x: Float32, y: Float32) -> Float32:
+    var yb = rebind[UInt32](y.to_bits())
+    var best = y
+    var rb = abs(fma(-y, y, x))
+    for k in range(4):
+        var cb: UInt32
+        if k == 0:
+            cb = yb - 1
+        elif k == 1:
+            cb = yb + 1
+        elif k == 2:
+            cb = yb - 2
+        else:
+            cb = yb + 2
+        var c = bitcast[DType.float32](cb)
+        var r = abs(fma(-c, c, x))
+        if r < rb:
+            best = c
+            rb = r
+    return best
+# Kernel: out[i] = pick(x[i], y[i]) inlined 32 times per thread; build for sm_89 with Mojo 1.0.0 and 1.2.0 and
+# compare `selp` counts in the PTX and registers per thread in the cubin.
+```
+
+**The ask.** Restore the 1.0 lowering (full unroll plus if-conversion to selects) for a constant-trip-count loop whose
+body branches on the induction variable, or say which pass or option changed (LLVM unroll, SimplifyCFG or
+SpeculativeExecution thresholds for NVPTX) and how to request the old behaviour.
+
+**Meanwhile.** An ordinary source form, not a patch of compiler output: the step is written as `comptime for k in range(4)`
+with a compile-time offset, the same operations in the same order (bits unchanged). It is the default since 2026-11-18
+(NVIDIA L40S A/B ab2: digests equal on 36 cells, hdbscan taxi 0.80, knn taxi 0.84; docs/apple-fast/EXPERIMENTS.md);
+`-D MOJOLEARN_NUMERICS_FAST_SQRT_COMPTIME_STEP_OFF` restores the run-time loop. The ask stands: the loop form is the
+natural one and Mojo 1.0 compiled it to selects. Nothing has been sent to Modular.
+
+## A raw `METH_FASTCALL | METH_KEYWORDS` method on a bound type (2026-11-17, fb2-lr)
+
+**What.** `PythonTypeBuilder.def_py_c_method` (Mojo 1.2, std/python/bindings.mojo) accepts `PyCFunction`
+(`METH_VARARGS`), `PyCFunctionWithKeywords` (`METH_VARARGS | METH_KEYWORDS`) and `PyCFunctionFast` (`METH_FASTCALL`).
+There is no form for `PyCFunctionFastWithKeywords` (`METH_FASTCALL | METH_KEYWORDS`, signature
+`(self, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)`); the source says "is not implemented here yet".
+
+**Why it matters.** A public per-step scalar method (`schedule.lr_at(t)`, called once per optimizer step, 100,000
+times in a board row) must accept `t=` by keyword, as the Python method it replaced did. The only keyword-accepting
+raw form makes CPython pack a one-item tuple on every positional call; `METH_FASTCALL` would pass the argument in
+place and pay for keywords only when `kwnames` is non-null.
+
+**Smallest reproducer.**
+```mojo
+from std.python import PythonObject
+from std.python._cpython import PyObjectPtr, Py_ssize_t
+from std.python.bindings import PythonModuleBuilder
+
+struct Box(Movable, Writable):
+    var x: Int
+    def __init__(out self): self.x = 0
+
+def get_c(py_self: PyObjectPtr, args: Pointer[PyObjectPtr, MutUntrackedOrigin],
+          nargs: Py_ssize_t, kwnames: PyObjectPtr) abi("C") -> PyObjectPtr:
+    return py_self
+
+# m.add_type[Box]("Box").def_py_c_method(get_c, "get")   # no overload accepts this signature
+```
+
+**The ask.** A `def_py_c_method` (and `def_py_c_function`) overload taking `PyCFunctionFastWithKeywords`, registered
+with `METH_FASTCALL | METH_KEYWORDS`; ideally also have `def_method` with keyword support use it.
+
+**Meanwhile.** `lr_at` / `bits_at` use the supported `METH_VARARGS | METH_KEYWORDS` form
+(bindings/lr_schedule_block_door.mojo): one CPython tuple per call, no other per-call work of ours. Sent to Modular
+on 2026-11-17 with Andrew's word: https://github.com/modular/modular/issues/7640 (checked first: not in 1.2.0 or
+upstream main, no existing issue; #6521 names it as not yet done).
+
+## `cuStreamIsCapturing` on every enqueue, and host cost per `enqueue_function` (2026-11-18, fb15-sync-counts; NOT SENT)
+
+**What.** nsys on an L40S (driver 595.112.07, MAX 26.7 / Mojo 1.2, wheel d652a4b0a1) counts about two
+`cuStreamIsCapturing` calls per enqueued operation (copy, launch, memset, event record) and per
+`DeviceContext.synchronize`: global-avgpool infer 6 per call (1 H2D + 1 launch + 1 sync), batchnorm2d 18, layernorm
+47, select-d fit 81, label-encoder fit 71, isotonic predict 60, adagrad fit 109. Each takes 1-2 us of API time
+(select-d 0.014 ms x 81 = 1.1 ms per fit, label-encoder 0.74 ms per fit, adagrad 2.0 ms per fit). None of these calls
+is ours: no Mojolearn source calls or wraps it; it is inside the runtime's enqueue path (`libAsyncRTMojoBindings`,
+`libKGENCompilerRTShared`).
+
+**Ask.** Query the capture state once per stream (or when a capture begins or ends through the runtime), not on every
+enqueue; a stream this process never captures cannot change state between enqueues.
+
+**Second ask, same path.** Small entries spend 50-80 us per launch on the host outside the CUDA API (select-d fit:
+1.38 ms for 19 launches; global-avgpool infer: 84 us for 1 launch). Please document the per-call cost of
+`ctx.enqueue_function[kernel](...)` (function lookup or compile cache, argument packing) and whether a function
+compiled once (`ctx.compile_function[kernel]()`) and enqueued with its handle skips that work; and whether dropping a
+`DeviceBuffer` frees it in stream order (so a free after enqueued work needs no `synchronize`).

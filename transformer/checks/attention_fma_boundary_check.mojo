@@ -4,7 +4,7 @@
 Other columns' software FMA may flush before rounding at the same boundary;
 this scoped regression does not certify cross-column numerical equivalence.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -26,7 +26,7 @@ def compare_kernel(results: MutPointer[Float32, MutAnyOrigin], words: MutPointer
     results.unsafe_store(3 * i + 2, ftz(identical_mul_add(ftz(a), ftz(b), acc)))
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     comptime if not FUSED_HW_FTZ_FMA:
         print("SKIP: NVIDIA-only FMA boundary gate; other-column audit remains open")

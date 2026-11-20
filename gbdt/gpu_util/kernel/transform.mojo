@@ -51,7 +51,7 @@ here, and implementing a function nothing reaches is the defect
 `CONTRIBUTING.md` (Evidence must be able to fail) names.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 

@@ -1,0 +1,206 @@
+{
+  "schema": "mojolearn.release-published-install.v2",
+  "tool": "tools/release_published_install.py",
+  "vendor": "nvidia",
+  "version": "0.8.66",
+  "backend": "cuda",
+  "index_url": "https://pypi.org/simple",
+  "source_revision": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+  "published": {
+    "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+    "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+  },
+  "mismatch": [],
+  "gate_verdict": "gate-nvidia PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-public, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+  "coverage": [
+    {
+      "id": "index-resolution",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 6,
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "published-artifact-hashes",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 2,
+      "completed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "wheel-integrity",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 3,
+      "completed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "gate-evidence",
+      "status": "passed",
+      "exit_code": 0,
+      "expected": 6,
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "checks": {
+    "index-resolution": [
+      {
+        "name": "index",
+        "passed": true,
+        "index": "https://pypi.org/simple"
+      },
+      {
+        "name": "distributions",
+        "passed": true,
+        "resolved": [
+          "mojolearn-core",
+          "mojolearn-nvidia"
+        ],
+        "wanted": [
+          "mojolearn-core",
+          "mojolearn-nvidia"
+        ]
+      },
+      {
+        "name": "resolved:mojolearn-core",
+        "passed": true,
+        "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "files": [
+          "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl"
+        ],
+        "pip_exit": 0
+      },
+      {
+        "name": "index-digest:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "index_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+        "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      },
+      {
+        "name": "resolved:mojolearn-nvidia",
+        "passed": true,
+        "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "files": [
+          "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl"
+        ],
+        "pip_exit": 0
+      },
+      {
+        "name": "index-digest:mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "index_sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725",
+        "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+      }
+    ],
+    "published-artifact-hashes": [
+      {
+        "name": "candidate:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "published_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e",
+        "candidate": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "candidate_sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      },
+      {
+        "name": "candidate:mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "published_sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725",
+        "candidate": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "candidate_sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+      }
+    ],
+    "wheel-integrity": [
+      {
+        "name": "record:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "members": 442,
+        "problems": []
+      },
+      {
+        "name": "record:mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "members": 21,
+        "problems": []
+      },
+      {
+        "name": "packaged-commit",
+        "passed": true,
+        "packaged": [
+          "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+        ],
+        "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513"
+      }
+    ],
+    "gate-evidence": [
+      {
+        "name": "gate-verdict",
+        "passed": true,
+        "verdict": "gate-nvidia PASS: identity recorded once from these wheels; device-check units passed or reused; logical-shard gate MATCH; measurement smoke SOFT FAIL; None runtime cases; SOFT FAIL (fix lanes owed): autograd/autograd-public, autograd/import-torch-smoke, autograd/real-model-smoke, measuresmoke, runtime",
+        "refused": null
+      },
+      {
+        "name": "evidence:gate-evidence/2f72351cdeca3267-runtime-report.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json",
+        "sha256": "2f72351cdeca32674a8c5637a7e7108565d18e9d655d8de23b82f8ac5deb9255"
+      },
+      {
+        "name": "evidence:gate-evidence/7d7a538419d885bf-mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/repacked/linux/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+        "sha256": "7d7a538419d885bfb0f721cfe78372f347d6c88b4c4c78ac6fce29e8c1585021"
+      },
+      {
+        "name": "evidence:gate-evidence/f3a735d8e52483cd-mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+        "passed": true,
+        "source": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/repacked/macos/mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+        "sha256": "f3a735d8e52483cde3f35fa51be893fcf6916e0f3c519b732530a2739fb8bd7e"
+      },
+      {
+        "name": "gated-bytes:mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+      },
+      {
+        "name": "gated-bytes:mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+        "passed": true,
+        "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+      }
+    ]
+  },
+  "status": "passed",
+  "exit_code": 0,
+  "evidence": [
+    {
+      "path": "request.json",
+      "sha256": "7c78d0854a65e0be49ef1f7a209b9fcbe6d6d1b1cb585981f9f8c43b3dce2cbc"
+    },
+    {
+      "path": "wheels/mojolearn-core/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "40ea7a5592ee32ce9e4171b311895165a92b408048277eab40989b216924218e"
+    },
+    {
+      "path": "wheels/mojolearn-nvidia/mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+      "path": "gate-evidence/2f72351cdeca3267-runtime-report.json",
+      "sha256": "2f72351cdeca32674a8c5637a7e7108565d18e9d655d8de23b82f8ac5deb9255"
+    },
+    {
+      "path": "gate-evidence/7d7a538419d885bf-mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl.repack.json",
+      "sha256": "7d7a538419d885bfb0f721cfe78372f347d6c88b4c4c78ac6fce29e8c1585021"
+    },
+    {
+      "path": "gate-evidence/f3a735d8e52483cd-mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl.repack.json",
+      "sha256": "f3a735d8e52483cde3f35fa51be893fcf6916e0f3c519b732530a2739fb8bd7e"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "status": "Source reviewed only; not compiled or run",
+  "suite": "checks/native_tests/native_device_concurrency_suite.mojo",
+  "entry": "checks/native_tests/native_device_concurrency.mojo",
+  "primary_phases": 5,
+  "dependencies": {
+    "x_decomp_context_stage": "4c76f65dd548a5d2148c30655231b436f08fbc00",
+    "x_decomp_fixed_plan": "469ea0c8e025ba5f2ade3163f334d75a3b9cf01c",
+    "x_neighbors_context": "8c2209b3727896b300f40f9dc59025bdf67044a4",
+    "x_neighbors_generator": "20a5d04736a0e13e3d7b2c944f581ceefaa61caf",
+    "core_device_pool": "c07626c77d75aa1ed5a5d48a386e4ea118bd5216",
+    "x_decomp_resident_pool": "15ed627362ba244d5248e4de99997031fb8a7515"
+  },
+  "coverage": [
+    {
+      "phase": 1,
+      "purpose": "Concurrent first xd_ctx publication with real 17-cell DevExec.ew operations; equal retained runtime handles and independently expected per-owner values"
+    },
+    {
+      "phase": 2,
+      "purpose": "Concurrent first xn_ctx publication with real 19-cell op_unary operations; equal retained runtime handles and independently expected per-owner values"
+    },
+    {
+      "phase": 3,
+      "purpose": "Distinct per-owner positional arrays at XD_STAGE_MIN+1/+18/+35; real DevExec.ew scale and download; guarded destinations and unchanged source ownership"
+    },
+    {
+      "phase": 4,
+      "purpose": "Two dependent resident-pool ownership waves with different values: allocate concurrently, held-ID/pointer uniqueness, grow scratch metadata while other live handles upload/compute/read/download, concurrent live-count reads, same-class free-list reuse, joined baseline restoration"
+    },
+    {
+      "phase": 5,
+      "purpose": "Three dependent isolated core/device_pool waves: exact-sized simultaneous owners, unique live pointers, real enqueue_fill/download, concurrent take/give, quiescent idle-byte/list accounting"
+    }
+  ],
+  "execution_requirements": [
+    "Fresh process; run before any x_decomp/x_neighbors operation. Importable run_checks is valid first only; later execution does not cover first publication.",
+    "No sibling algorithm suite running concurrently: exact resident counts are checked only after all workers join.",
+    "MOJOLEARN_NATIVE_TEST_WORKERS must match allocated affinity/cgroup cores on rented hosts; local default num_logical_cores(). At least two workers required.",
+    "All independent owners run through host_parallelize. Observed overlapping_call_regions must be at least two for actual operation phases. This is not a busy-core measurement or a timing result.",
+    "Use existing normal compiler flags plus -D MOJOLEARN_NUMERIC_IDENTICAL=1; GPU column required."
+  ],
+  "memory": "Largest source/destination arrays are about 2 MiB host plus about 2 MiB device per worker; Apple existing pinned stage is 64 MiB shared. No new fixed worker cap. Root retains measured memory/resource responsibility.",
+  "oracle": "Analytic exact small integer patterns distinct by owner and cell; no hashes, learned output references, repeated fits or identity campaign.",
+  "isolation": "MojolearnNativeConcurrencyDevicePool20261110V2, using DEVICE_POOL_LAYOUT=2. Quiescent metadata observations touch this fixture slot only. Resident live IDs restored to baseline.",
+  "limitations": [
+    "Uncompiled/unrun; no race-freedom claim from source review.",
+    "Bounded overlap coverage does not prove every possible interleaving.",
+    "Apple shared pinned-stage coverage applies only to Apple column. NVIDIA/AMD exercise existing raw download route.",
+    "No multi-chunk 64-MiB staging-boundary case or 2-GiB generic-pool eviction stress; those are outside the bounded memory fixture.",
+    "No device timing, installed-wheel or cross-vendor identity evidence."
+  ],
+  "deletions": "Nothing identified: these are new focused correctness fixtures for synchronization repairs; no numerical suite or tuned kernel is replaced.",
+  "source_references": {
+    "raising_closure_syntax": "https://mojolang.org/1.0.0/docs/reference/closure-declarations/",
+    "logical_cpu_api": "https://mojolang.static.modular.com/1.0.0/docs/std/sys/info/num_logical_cores/"
+  }
+}

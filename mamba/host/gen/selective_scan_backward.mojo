@@ -562,7 +562,7 @@ def selective_scan_checkpoint_fn(
         var _l1_a8 = Int32(dim)
         def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8}:
             kern(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8)
-        host_launch(_launch_1, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)))
+        host_launch(_launch_1, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -856,7 +856,7 @@ def selective_scan_bwd_scan_into(
         var _l2_a13 = Int32(dim)
         def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5, imm _l2_a6, imm _l2_a7, imm _l2_a8, imm _l2_a9, imm _l2_a10, imm _l2_a11, imm _l2_a12, imm _l2_a13}:
             kern(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5, _l2_a6, _l2_a7, _l2_a8, _l2_a9, _l2_a10, _l2_a11, _l2_a12, _l2_a13)
-        host_launch(_launch_2, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)))
+        host_launch(_launch_2, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1112,7 +1112,7 @@ def mamba_bwd_dbc_into(
         var _l3_a8 = Int32(dim)
         def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6, imm _l3_a7, imm _l3_a8}:
             akern(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6, _l3_a7, _l3_a8)
-        host_launch(_launch_3, launch_count((_grid(m * dim, block_size), 1, 1), (block_size, 1, 1)))
+        host_launch(_launch_3, launch_count((_grid(m * dim, block_size), 1, 1), (block_size, 1, 1)), 0)
         return
 
     var part = neural_partition[NEURAL_LEAF](dim) if NEURAL_PROFILE_CHANGED else contract_partition(dim)
@@ -1130,7 +1130,7 @@ def mamba_bwd_dbc_into(
     var _l4_a10 = Int32(part[1])
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7, imm _l4_a8, imm _l4_a9, imm _l4_a10}:
         kern(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7, _l4_a8, _l4_a9, _l4_a10)
-    host_launch(_launch_4, launch_count((_grid(m * MAX_DSTATE, block_size), 1, 1), (block_size, 1, 1)))
+    host_launch(_launch_4, launch_count((_grid(m * MAX_DSTATE, block_size), 1, 1), (block_size, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1385,7 +1385,7 @@ def mamba_bwd_da_into(
         var _l5_a9 = Int32(dim)
         def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8, imm _l5_a9}:
             akern(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8, _l5_a9)
-        host_launch(_launch_5, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)))
+        host_launch(_launch_5, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)), 0)
         return
 
     _require(
@@ -1407,7 +1407,7 @@ def mamba_bwd_da_into(
     var _l6_a9 = Int32(dim)
     def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6, imm _l6_a7, imm _l6_a8, imm _l6_a9}:
         kern(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6, _l6_a7, _l6_a8, _l6_a9)
-    host_launch(_launch_6, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)))
+    host_launch(_launch_6, launch_count((_grid(total, block_size), 1, 1), (block_size, 1, 1)), 0)
     var width = dim * MAX_DSTATE
     var _l7_a0 = dA.unsafe_ptr()
     var _l7_a1 = dA_partial.unsafe_ptr()
@@ -1415,7 +1415,7 @@ def mamba_bwd_da_into(
     var _l7_a3 = Int32(width)
     def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3}:
         mamba_bwd_param_fold_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3)
-    host_launch(_launch_7, launch_count((_grid(width, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)))
+    host_launch(_launch_7, launch_count((_grid(width, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)), 0)
 
 
 def mamba_bwd_param_fold_into(
@@ -1442,7 +1442,7 @@ def mamba_bwd_param_fold_into(
     var _l8_a3 = Int32(width)
     def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3}:
         mamba_bwd_param_fold_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3)
-    host_launch(_launch_8, launch_count((_grid(width, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)))
+    host_launch(_launch_8, launch_count((_grid(width, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1497,7 +1497,7 @@ def mamba_bwd_da_log_into(
     var _l9_a3 = Int32(n)
     def _launch_9(gid_: Int) {imm _l9_a0, imm _l9_a1, imm _l9_a2, imm _l9_a3}:
         mamba_bwd_da_log_kernel(gid_, _l9_a0, _l9_a1, _l9_a2, _l9_a3)
-    host_launch(_launch_9, launch_count((_grid(n, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)))
+    host_launch(_launch_9, launch_count((_grid(n, BWD_CELL_TPB), 1, 1), (BWD_CELL_TPB, 1, 1)), 18)
 
 
 # ===========================================================================

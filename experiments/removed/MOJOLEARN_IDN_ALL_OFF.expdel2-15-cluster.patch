@@ -1,0 +1,126 @@
+diff --git b/x_cluster/device_post.mojo a/x_cluster/device_post.mojo
+index 0325468474..28b9fb55b8 100644
+--- b/x_cluster/device_post.mojo
++++ a/x_cluster/device_post.mojo
+@@ -367,11 +367,12 @@ def optics_step_kernel(
+ #: and the set each step scans are the two kernels' own, so the picks, the
+ #: reachabilities and the predecessors are the same words.
+ #: `-D MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF=1` restores the two launches.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_OPTICS_FUSED_STEP = C41_FUSED_MINIMA or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
++    and not (
++        is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
+ )
+ 
+ 
+diff --git b/x_neighbors/items.mojo a/x_neighbors/items.mojo
+index d4ac71eb19..4e702c9c19 100644
+--- b/x_neighbors/items.mojo
++++ a/x_neighbors/items.mojo
+@@ -52,10 +52,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ #: (x_neighbors/iter_device.mojo `nc_means_part_kernel` ...) with the pinned
+ #: arithmetic. Bits change (centroids, the pooled std, the dataset centroid)
+ #: when n > XN_NC_CHUNK_ROWS, on all four columns together.
+-#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF restores the whole-column chains.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]()
++#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
++#: whole-column chains.
++comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime XN_NC_CHUNK_ROWS = 16384
+ 
+ 
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index 67972c4fd6..eded464f5d 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -879,9 +879,8 @@ comptime KNN_TILE_MAX_D = 64
+ #: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
+ #: out (the rows' k-th distances are published in threadgroup memory per y
+ #: tile); in the row kernel the check runs every 8 features.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: Both off under MOJOLEARN_IDN_ALL_OFF.
++comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
+ comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+ 
+@@ -1999,10 +1998,10 @@ comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
+ #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
+ #: `identical_mul_add`, features ascending from +0 over exactly d) and
+ #: `unary_item`'s identity step, so the words are the per-cell kernel's.
+-#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` restores it.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]()
++#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores it.
++comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime SVGP_RBFTILE = SVGP_FAST_RBFTILE or IDN_SVGP_RBFTILE
+ comptime SVGP_RBF_T = 64
+ comptime SVGP_RBF_TP = SVGP_RBF_T + 1
+@@ -2169,10 +2168,8 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
+ #: default on every vendor (two_prod commutes bit for bit and every entry
+ #: keeps its p-ascending fold; the four solves are the column item's own);
+ #: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+ comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
+-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ # TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
+ # Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+@@ -2325,11 +2322,11 @@ comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
+ #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
+ #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
+ #: so no contraction choice can move a word: the factor of the one-column
+-#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` restores one
+-#: column per launch.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]()
++#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` (or
++#: MOJOLEARN_IDN_ALL_OFF) restores one column per launch.
++comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
+ #: panel width (columns per launch)
+ comptime SVGP_CHOL_PB = 16
+diff --git b/x_neighbors/kfeat_rng.mojo a/x_neighbors/kfeat_rng.mojo
+index 8789d80704..1e128b363c 100644
+--- b/x_neighbors/kfeat_rng.mojo
++++ a/x_neighbors/kfeat_rng.mojo
+@@ -34,7 +34,7 @@ same in expectation; the particular tables for a given seed differ from
+ scikit-learn's. A numpy RandomState or None keeps the MT19937 path (the
+ caller's generator is the contract there).
+ 
+-`-D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF` drops the
++`-D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) drops the
+ bindings, and the glue falls back to the MT19937 draws.
+ 
+ Nothing here imports a GPU module, so the CPU-only host binding compiles it
+@@ -51,9 +51,9 @@ from x_neighbors.items import FP, IP, skew_weights_item
+ # keeps the same uniform/z/offset distributions, so quality is unchanged and
+ # only FAST's bits move). The `_OFF` defines keep their meaning for the
+ # IDENTICAL A/B only.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+-comptime XN_IDN_SKETCH_CTR = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not is_defined["MOJOLEARN_IDN_XN_SKETCH_CTR_OFF"]()
++comptime XN_IDN_SKETCH_CTR = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not (
++    is_defined["MOJOLEARN_IDN_XN_SKETCH_CTR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ comptime KFEAT_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+ comptime KFEAT_KEY_SALT: UInt64 = 0x4B46454154524E47

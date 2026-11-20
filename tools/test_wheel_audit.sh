@@ -8,4 +8,4 @@ cd "$(dirname "$0")/.."
 [ -x .pixi/envs/test/bin/python ] || pixi install -e test
 [ -x .pixi/envs/pkg/bin/python ] || pixi install -e pkg
 SP=$(.pixi/envs/test/bin/python -c 'import os, pytest; print(os.path.dirname(os.path.dirname(pytest.__file__)))')
-exec .pixi/envs/pkg/bin/python -c "import sys; sys.path.append('$SP'); import pytest; sys.exit(pytest.main(['-q', '-p', 'no:cacheprovider', 'packaging/portable_math/test_wheel.py', 'packaging/linux/test_ptx_contract.py', 'packaging/linux/test_cubin_contract.py']))"
+exec .pixi/envs/pkg/bin/python -c "import sys; sys.path.append('$SP'); import pytest; sys.exit(pytest.main(['-q', '-p', 'no:cacheprovider', 'packaging/portable_math/test_wheel.py', 'packaging/linux/test_ptx_contract.py', 'packaging/linux/test_hip_contract.py', 'packaging/macos/test_air_contract.py', 'packaging/linux/test_isa_baseline_linux.py', 'packaging/linux/test_cubin_contract.py']))"

@@ -13,12 +13,23 @@ from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
 
-from core.launch_log import _LAUNCH_LOG
+from core.launch_log import _LAUNCH_LOG, _activity_lock_word
+from core.shared_slot import shared_slot_lock, shared_slot_unlock
 
 
 def log_launch_ctx(ctx: DeviceContext, name: StringSlice) raises:
-    """`log_launch`, plus the `RF_LAUNCH_CLOCK` drain when that is set."""
+    """`log_launch` (the activity record's count included), plus the
+    `RF_LAUNCH_CLOCK` drain when that is set."""
     var st = _LAUNCH_LOG.get_or_create_ptr()
+    if not st[].watch:
+        return
+    # lane fx-verify-trace: the activity record counts the named launch (one
+    # Bool test, `watch`, when neither it nor the log is on)
+    if st[].counting:
+        var lock = _activity_lock_word(st)
+        shared_slot_lock(lock)
+        st[].record.launch(String(name))
+        shared_slot_unlock(lock)
     if not st[].enabled:
         return
     if not st[].clock:

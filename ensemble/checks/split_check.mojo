@@ -48,8 +48,8 @@ The four arms:
      each other on purpose.
 """
 
-from std.gpu import WARP_SIZE, block_idx, block_dim, thread_idx
-from std.gpu.primitives.id import lane_id
+from max.gpu import WARP_SIZE, block_idx, block_dim, thread_idx
+from max.gpu.primitives.id import lane_id
 from max.gpu.host import DeviceContext
 from std.memory import stack_allocation
 from std.sys.info import size_of
@@ -57,6 +57,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from ensemble.decisiontree.batched_levelalgo.split import Split
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime DT = DType.float32
 comptime TPB = 256
@@ -382,7 +383,7 @@ def _run_device(
     var hq = ctx.enqueue_create_host_buffer[DType.float32](N_BINS)
     for b in range(N_BINS):
         hq.unsafe_ptr().unsafe_store(b, Float32(b) * 10.0)
-    ctx.enqueue_copy(dst_buf=quantiles, src_ptr=hq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, quantiles, hq)
 
     # Their `initSplit` (`split.cuh:284-289`) seeds every slot with a
     # default Split; without it the mutex merge would read garbage.
@@ -392,14 +393,13 @@ def _run_device(
     var sp_ptr = hs.unsafe_ptr().unsafe_bitcast[Split[DT]]()
     for n in range(N_NODES):
         sp_ptr[unsafe_offset=n] = Split[DT]()
-    ctx.enqueue_copy(dst_buf=splits, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, splits, hs)
     ctx.synchronize()
     # Mojo frees a value at its LAST USE, and `hq`'s last use above was
     # the enqueue itself -- the buffer was dead while its copy was still
     # queued (freed-at-enqueue UAF, found by the perf lane on the gbdt
     # path 2026-08-22; contention-sensitive, so a green check proves
     # nothing). Keep-alives AFTER the synchronize.
-    _ = hq^
     _ = hs^
 
     ctx.enqueue_function[_reduce_kernel](
@@ -414,7 +414,7 @@ def _run_device(
     var out = ctx.enqueue_create_host_buffer[DType.uint8](
         N_NODES * size_of[Split[DT]]()
     )
-    ctx.enqueue_copy(dst_buf=out, src_buf=splits)
+    download_host_into[DType.uint8](ctx, splits, out)
     ctx.synchronize()
     # Device form of the freed-at-enqueue UAF: `mutexes` died at its
     # `.unsafe_ptr()` in the kernel argument list. Keep-alive AFTER the
@@ -563,7 +563,7 @@ def arm_d_sabotage(ctx: DeviceContext, n_slots: Int) raises -> Int:
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     print("split_check: ensemble/decisiontree/batched_levelalgo/split.mojo")
     print("  mirroring split.cuh @ cuml v26.08.00 265b9da6")
     var failures = 0

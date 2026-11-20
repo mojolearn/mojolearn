@@ -5,6 +5,7 @@ Run with MOJOLEARN_GENERATION_DEVICE=cpu or gpu. These are correctness/lifetime
 fixtures, never timing evidence. Source-only lanes syntax-check but do not run.
 """
 import gc
+import os
 import pickle
 
 import numpy as np
@@ -12,13 +13,20 @@ import pytest
 
 from mojolearn import Array
 from mojolearn.tests.test_generation_native import load_fixture, block_reference
+from mojolearn.tests._build_arms import built_with
 
 
-@pytest.fixture(autouse=True)
-def local_layer_route(monkeypatch):
-    # Exercise the operation-local layer snapshot even when a GPU resident
-    # session is available. Existing generation tests qualify that other route.
-    monkeypatch.setenv('MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD', '0')
+# Exercise the operation-local layer snapshot even when a GPU resident
+# session is available. Existing generation tests qualify that other route.
+# The route is a build define since lane envgate-neural-lm (2026-11-15): on a
+# GPU these run against the -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF wheel
+# (the former autouse MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD=0); a CPU install
+# has no resident session, so the default wheel serves.
+pytestmark = pytest.mark.skipif(
+    os.environ.get('MOJOLEARN_GENERATION_DEVICE') == 'gpu'
+    and not built_with('MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF'),
+    reason='the GPU layer-snapshot route needs a wheel built with -D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF',
+)
 
 
 @pytest.mark.parametrize('family', ['llama', 'mamba', 'mamba2'])
@@ -86,17 +94,22 @@ def test_stream_retains_model_and_weight_owners_after_caller_release(tmp_path):
     assert np.array_equal(np.asarray(stream.read(4)), expected)
 
 
-def test_failed_snapshot_admission_cleans_busy_and_marks_stream_unusable(tmp_path):
+def test_failed_snapshot_admission_cleans_busy_and_leaves_the_stream_intact(tmp_path):
     model = load_fixture(tmp_path)
     stream = model.stream(np.array([[1, 3]], dtype='i4'), 3)
-    # Exact Array metadata refusal occurs while constructing the lazy snapshot.
-    # Never forge a pointer: only invalidate its documented contiguous order.
+    # Exact Array metadata refusal occurs while admitting the snapshot, before
+    # the read changes the stream. Never forge a pointer: only invalidate its
+    # documented contiguous order.
     model._head.order = 'F'
-    with pytest.raises(Exception, match='contiguous|order|C-order'):
+    with pytest.raises(Exception, match='strides differ from its declared layout'):
         stream.read(2)
-    assert stream.info()['usable'] is False
-    with pytest.raises(Exception, match='lost after a failed call'):
-        stream.read(1)
+    # Not left busy, and refused again by the same admission, not as busy.
+    with pytest.raises(Exception, match='strides differ from its declared layout'):
+        stream.read(2)
+    model._head.order = 'C'
+    # Nothing was consumed: the stream reads what a fresh one reads.
+    expected = np.asarray(model.stream(np.array([[1, 3]], dtype='i4'), 3).read(2)).copy()
+    assert np.array_equal(np.asarray(stream.read(2)), expected)
 
 
 def test_layer_weight_owner_replacement_is_seen_on_next_forward(tmp_path):

@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 
 from mojolearn.models import Checkpoint, SafetensorsFile
-from mojolearn.models.safetensors import TensorInfo, write_safetensors
+from mojolearn.models.safetensors import TensorInfo
+from mojolearn._causal_lm_fixtures import write_safetensors
 from mojolearn.models.tokenizer import PATTERNS, pattern_name
 
 
@@ -59,7 +60,7 @@ def test_tensor_info_reports_size_and_nbytes():
 
 
 @pytest.mark.parametrize("fields,error,match", [
-    ((5, "F32", (2, 3), 0, 24, "f"), TypeError, "name and dtype must be str"),
+    ((5, "F32", (2, 3), 0, 24, "f"), TypeError, "model metadata requires exact strings"),
     (("w", "F32", (-2, 3), 0, 24, "f"), ValueError, "non-negative dimensions"),
     (("w", "F32", (2, 3), 24, 0, "f"), ValueError, r"0 <= begin <= end"),
     (("w", "F32", (2, 3), 0, 20, "f"), ValueError, "bytes differ from dtype/shape"),
@@ -72,6 +73,10 @@ def test_tensor_info_refuses_what_the_header_parser_refuses(fields, error, match
 def test_pattern_name_names_every_known_spelling():
     for name, spellings in PATTERNS.items():
         assert [pattern_name(s) for s in spellings] == [name] * len(spellings)
+    # pattern_name is total (bindings/tokenizer_public_native_door.mojo
+    # vocab_pattern): an unknown spelling or a non-str is not a known
+    # pattern, None; never converted. test_neural_public_coverage_p1's
+    # test_pattern_name_is_total holds the same contract.
     for unknown in (r"\w+", "", 5, b"\\s+", None):
         assert pattern_name(unknown) is None
 

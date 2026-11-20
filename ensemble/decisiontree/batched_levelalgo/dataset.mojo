@@ -66,9 +66,8 @@ passed as a `DatasetView`, not as loose scalars.
 =================================================================
 """
 
-from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -80,11 +79,7 @@ from checks.numerics import (
 
 
 comptime RF_BINS_ROW_MAJOR = (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    )
-    and has_apple_gpu_accelerator()
+    TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
 """Apple FAST, and Apple IDENTICAL for narrow data only
@@ -103,6 +98,9 @@ kernel's column tile reads one row's bins from one cache line instead of
 one line per column. Same indices. Apple M4, 1M rows: taxireg (k 16 of 16)
 0.681, taxi (k 4 of 16) 0.921, Istella-S (k 15 of 220) 1.197 when forced --
 hence the gate. `-D MOJOLEARN_RF_BINS_COLUMN_MAJOR` turns it off."""
+# TOMBSTONE: MOJOLEARN_RF_BINS_COLUMN_MAJOR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_BINS_COLUMN_MAJOR.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was (the define turns the Apple row-major bins off), default off; default path unchanged.
 
 comptime RF_BINS_ROW_MAJOR_WIDE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """The wide-data half of the `RF_BINS_ROW_MAJOR` gate (`2k >= n_cols` with
@@ -185,18 +183,11 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
         """DEVIATION 314: the precomputed `lower_bound` index for
         (row, col). Valid only when `has_bins`; same offset formula as
         `value` above, or ROW-major under `RF_BINS_ROW_MAJOR` (FAST)."""
-        comptime if T08:
-            var offset = Int(col)*Int(self.n_rows)+Int(row)
-            comptime if T08_LAYOUT == 1:
-                offset = Int(row)*Int(self.n_cols)+Int(col)
-            elif T08_LAYOUT == 3:
-                # 32 logical rows per column tile, fixed for every vendor;
-                # allocation pads only the last tile, never a data row/drop.
-                offset = ((Int(row)//32)*Int(self.n_cols)+Int(col))*32+Int(row)%32
-            comptime if T08_BITS == 16:
-                return Int32(self.bins.unsafe_bitcast[UInt16]()[unsafe_offset=offset])
-            else:
-                return Int32(self.bins[unsafe_offset=offset])
+        # TOMBSTONE: MOJOLEARN_TREES_T08_LAYOUT (unmeasured knob; layout 1 kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_LAYOUT.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # TOMBSTONE: MOJOLEARN_TREES_T08_BITS (unmeasured knob; 8 bits kept) deleted 2026-11-15 by lane/expdel2-38-trees; code recoverable at 52922acecb.
+        # Restore: git apply experiments/removed/MOJOLEARN_TREES_T08_BITS.expdel2-38-trees.patch; record in docs/TOMBSTONES.md.
+        # (Sweep 2026-11-15: the folded T08 row-major-bins branch was removed here.)
         comptime if RF_BINS_ROW_MAJOR:
             if self.bins_row_major:
                 return Int32(

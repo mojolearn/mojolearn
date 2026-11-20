@@ -1,0 +1,50 @@
+Mojolearn native schedule correctness migration, 2026-11-10
+
+25 native host fixtures
+  Original StepLR(.1,7,.5), ExponentialLR(.05,.9), OneCycleLR(.2,40)
+  (default pct_start .3, div25, final_div1e4, cosine two-phase) against the
+  independent Float64 closed forms formerly in test_x_sequence_sched.py.
+  Preserve all40 original one-based steps and relative bounds1e-7 for power
+  schedules and1e-6 for OneCycle; no new absolute allowance. Scalar, bulk and
+  sliced requests for each family under ordinary and LR_EXACT_ONLY specs give
+  18 fixtures. The21-step slice starts at9 and has its own independent oracle.
+  Three boundary fixtures: below-one start returns status/index without output
+  writes; zero-length fill writes nothing; OneCycle40..43 returns two valid
+  cells then LR_BEYOND at index2 without writing the tail/guards.
+  Three literal warmup/tail fixtures: Constant/Linear/Cosine with dyadic
+  expected words, including exact cosine endpoints/midpoint. One PublicStep
+  consumer fixture checks unscheduled override, one-based schedule resolution,
+  and translated non-one-based/exhausted-schedule refusals.
+
+Oracle and concurrency
+  Expected power/cosine arithmetic uses std.math pow/cos and local equations,
+  never product numerical helpers; literal fixtures use direct expected words.
+  Each output buffer has sentinel guards. Scalar steps and independent fixtures
+  run through host_parallelize. The existing product table run stays bounded
+  and unmodified. No Python imports, objects, callbacks, old reference hashes
+  or new runtime math path. One host check is intentional: these values are
+  host scalar metadata consumed identically by CPU and GPU optimizer dispatch,
+  with no separate GPU schedule kernel to claim tested.
+
+Python retained/removed
+  test_x_sequence_sched.py keeps two definitions: original public constructor
+  options, Python float/f32 representability and array metadata; actual
+  ExponentialLR assignment on public Adamax and reported final rate. Remove
+  the Python _onecycle cosine formula,40-step math driver, math import and
+  serial __main__ test invocation. Its exact-rounding precision verifier
+  sequence/checks/sched_check.py, _lr_reference.py, sabotage and final-verifier
+  registration remain unchanged; this batch does not claim their migration.
+
+Root commands, lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-lr-schedule
+  Compile-only, normal flags:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/lr_schedule_check.mojo -o "$HOME/mojolearn-evidence/lr-schedule"
+  Run the exact binary. Existing core sequence.lr_table and
+  training.optimizer_public_common APIs; no new producer dependency.
+  Installed boundary family _mojolearn_x_sequence/_mojolearn_training:
+  pytest python/mojolearn/tests/test_x_sequence_sched.py
+  This is development correctness; do not launch global identity here.
+
+Status
+  Source/AST/TOML/JSON/diff checks only; compile/runtime owed to root. No
+  product/kernel edits, new loader/build scheme, timing, box, A/B or release.

@@ -47,6 +47,12 @@ import time
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCHEMA = "mojolearn.adapter-wheel-smoke.v1"
+#: the bound of a compile/training phase (--seconds)
+PHASE_SECONDS = 900
+#: the bound of an install-<framework> phase (--install-seconds): the torch install is a download of about 3 GB of
+#: wheels, and at 900 s it was killed on a pod whose PyPI route ran at 160 kB/s (0.8.66 run i, 2026-11-08). Slow is
+#: not broken; the compile and training phases keep PHASE_SECONDS.
+INSTALL_SECONDS = 2400
 
 PROBE = r'''
 import importlib.metadata as md, importlib.util as iu, json
@@ -188,7 +194,8 @@ def main(argv=None):
     ap.add_argument("--device", default="mps" if sys.platform == "darwin" else "cuda:0")
     ap.add_argument("--install", default="", help="comma list of torch,max to pip-install first")
     ap.add_argument("--require", default="", help="comma list of torch,max that must be present and run")
-    ap.add_argument("--seconds", type=int, default=900, help="bound per phase")
+    ap.add_argument("--seconds", type=int, default=PHASE_SECONDS, help="bound per compile/training phase")
+    ap.add_argument("--install-seconds", type=int, default=INSTALL_SECONDS, help="bound per install phase")
     a = ap.parse_args(argv)
     words = lambda s: [w for w in s.split(",") if w]  # glue: parse the comma lists
     install, require = words(a.install), words(a.require)
@@ -211,7 +218,7 @@ def main(argv=None):
             cmds = {}
             report["problems"].append("install: %s%s" % (exc, (" (%s)" % facts["extras_error"]) if facts.get("extras_error") else ""))
         for name, cmd in cmds.items():
-            report["phases"][name] = run(name, cmd, out, a.seconds)
+            report["phases"][name] = run(name, cmd, out, a.install_seconds)
             if report["phases"][name]["exit"] != 0:
                 report["problems"].append(f"{name} failed (exit {report['phases'][name]['exit']})")
         if install:

@@ -109,6 +109,7 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
         # separately so an IDENTICAL import cannot mask a missing FAST binary.
         case " $MODES " in *' fast '*)
             if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=fast \
+                    MOJOLEARN_BYTE_LM_PROFILE_PY="$here/packaging/byte_lm_profile.py" \
                     "$tmp/venv/bin/python" - <<'PYBYTEFAST'
 import os, pathlib, sys
 import mojolearn
@@ -122,7 +123,11 @@ assert pathlib.Path(native.__file__).resolve() == _want, (native.__file__, _want
 if os.environ.get('MOJOLEARN_MERGED_BINDINGS', '1') == '1':
     assert _merged.is_merged_file(str(_want)), f'{_want} is not a merged file; the wheel is not in the merged layout'
 assert native.byte_lm_numeric_mode() == 0 and native.byte_lm_vendor() == 'metal'
-assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# Base profile plus this binary's arithmetic tags (packaging/byte_lm_profile.py; an arm define adds one).
+import importlib.util
+_ps = importlib.util.spec_from_file_location('_byte_lm_profile', os.environ['MOJOLEARN_BYTE_LM_PROFILE_PY'])
+_pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+_pm.check(native.byte_lm_profile())
 print('Byte LM FAST native available; numerical training qualification separate')
 PYBYTEFAST
             ); then :; else
@@ -131,6 +136,7 @@ PYBYTEFAST
         esac
         # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
+                MOJOLEARN_BYTE_LM_PROFILE_PY="$here/packaging/byte_lm_profile.py" \
                 "$tmp/venv/bin/python" - <<'PYBYTE'
 import os, pathlib, sys
 import mojolearn
@@ -145,7 +151,11 @@ assert pathlib.Path(native.__file__).resolve() == _want, (native.__file__, _want
 if _merged_layout:
     assert _merged.is_merged_file(str(_want)), f'{_want} is not a merged file; the wheel is not in the merged layout'
 assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
-assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+# Base profile plus this binary's arithmetic tags (packaging/byte_lm_profile.py; an arm define adds one).
+import importlib.util
+_ps = importlib.util.spec_from_file_location('_byte_lm_profile', os.environ['MOJOLEARN_BYTE_LM_PROFILE_PY'])
+_pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
+_pm.check(native.byte_lm_profile())
 # THE CPU TRAINING BINDING, FROM THE INSTALLED WHEEL. It is reached through its
 # own path helper rather than _backend.binding(), so nothing above would notice
 # its absence, and a LanguageModelHostTrainer that raises at construction is

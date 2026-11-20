@@ -3,6 +3,6 @@ from sequence.exec import HostExec
 from autograd.checks.fold_cases import run_fold_cases
 
 
-def main() raises:
+def run_checks() raises:
     var ex = HostExec()
     run_fold_cases(ex)

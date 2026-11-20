@@ -4,7 +4,7 @@
 2026-10-04, roadmap B11).
 
 IDN_MAMBA_RMS_TREE (IDENTICAL, default ON; `-D MOJOLEARN_IDN_MAMBA_RMS_TREE_OFF`
-or `-D MOJOLEARN_IDN_ALL_OFF` restores main's one serial chain per row): the
+restores main's one serial chain per row): the
 row's sum of squares over d_model is MAMBA_RMS_LANES strided lane chains
 (lane k folds j = k, k + 32, k + 64, ... ascending, `acc = fma(x, x, acc)`
 from +0.0, each step flushed), then a balanced pairwise tree over the 32 lane
@@ -29,10 +29,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 
 comptime MAMBA_RMS_LANES = 32
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH) deleted here 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-26-neural.patch
 comptime IDN_MAMBA_RMS_TREE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IDN_MAMBA_RMS_TREE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_MAMBA_SABOTAGE_S1_FOLD_DESCENDING"]()
     and not is_defined["MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M"]()
 )

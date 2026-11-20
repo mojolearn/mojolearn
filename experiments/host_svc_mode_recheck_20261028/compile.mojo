@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.host_svc_native import host_svc_attribute_c
+from bindings.host_svc_native_door import host_svc_attribute_c
 
 
 @export

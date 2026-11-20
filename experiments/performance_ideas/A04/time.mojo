@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Time separate physical-wave versus paired logical-group reductions."""
 from std.time import perf_counter_ns
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from max.gpu.host import DeviceContext
 from gemm.experiments.subwave_membership import membership_kernel
 from gemm.checks.gemm_step_arms import gemm_step_env_int

@@ -1,0 +1,19 @@
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index 8014a82eb8..f1c8f386ed 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -937,12 +937,12 @@ comptime SGD_CHUNK_DEFAULT = 64
+ # weight) writes its own slot and the kernel strides them over block_dim, so
+ # the words do not depend on the width: at batch 256 and istella's 220
+ # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
++# `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 2c034b8d40.
+-# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime SGD_IDN_CHUNK_WIDE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]()
+ )
+ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
+ 

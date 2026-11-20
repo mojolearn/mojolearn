@@ -51,7 +51,7 @@ def _same(name: String, got: List[Float32], want: List[Float32]) raises:
 
 
 def _sh(dims: List[Int]) -> ShapeN:
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     for k in range(len(dims)):  # small-loop(len(dims): tensor rank, at most 8)
         d[k] = dims[k]
     return ShapeN(len(dims), d)

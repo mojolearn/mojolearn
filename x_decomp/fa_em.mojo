@@ -12,14 +12,12 @@ stopping test in the same order. So the IDENTICAL words are the Python
 driver's on every column; x_decomp/fa_em_dev.mojo runs the same statements
 on resident device matrices."""
 from std.math import inf, sqrt
-from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT,
-    mat_const, mat_from, mat_rows, mat_t, mat_vec_t,
+    mat_const, mat_from, mat_rows, mat_t, mat_vec_t, svd_order,
 )
-from x_decomp.moves import order_f
 
 comptime FA_SMALL: Float64 = 1e-12
 comptime FA_LOG_FLOOR: Float64 = 1.1754943508222875e-38
@@ -52,22 +50,9 @@ def rev_cols(A: Mat) -> Mat:
     return out^
 
 
-def svd_desc(s: Mat, v: Mat, mut sd: Mat, mut vt: Mat) raises:
-    """`_Kit.svd`'s tail: o = the stable ascending order of -s (NaN refused,
-    `order_f`), S = s[o] (1 x n) and Vt = the rows of v^T in that order."""
-    var n = s.c
-    var neg = Mat(1, n)
-    for i in range(n):  # small-loop(n: singular values, one per feature): exact negations
-        neg.d[i] = -s.d[i]
-    var o = Mat(n, 1)
-    order_f(neg.p(), n, o.p())
-    sd = Mat(1, n)
-    vt = Mat(n, n)
-    for a in range(n):  # small-loop(n: singular values, one per feature): the descending gather
-        var j = Int(o.d[a])
-        sd.d[a] = s.d[j]
-        for i in range(n):  # small-loop(n: features): exact copies
-            vt.d[a * n + i] = v.d[i * n + j]
+# TOMBSTONE: `svd_desc` (a second copy of x_decomp/kit.mojo `svd_order`, the same statements) deleted 2026-11-09 by
+# lane n9b-device-svd-qr; code recoverable at 5b5490960d. The host column calls `svd_order`; the resident kit orders
+# on the device (x_decomp/svd_ops.mojo). Restore: git apply experiments/removed/N9B_RESIDENT_SVD.patch
 
 
 def fa_mask(nc: Int, d: Int, keep: Bool) -> Mat:
@@ -118,7 +103,7 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
             E.svd(B.p(), B.r, B.c, s.p(), v.p())
             var sv = Mat(0, 0)
             Vfull = Mat(0, 0)
-            svd_desc(s, v, sv, Vfull)
+            svd_order(s, v, sv, Vfull)
             s2 = k.ew1(OP_SQ, sv, 0.0)
         else:
             var Z = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
@@ -130,11 +115,10 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
         var Vt = mat_rows(Vfull, 0, nc)
         var sk = cols_of(s2, 0, nc)
         var unexp = dsum(s2, nc, d) if nc < d else 0.0
-        comptime if C27_FA_COMPONENTS:
-            W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, mat_vec_t(sk.copy()), sqrt_psi, 0.0)
-        else:
-            W = k.ew2(OP_MUL, Vt, mat_vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
-            W = k.ew2(OP_MUL, W, sqrt_psi)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS (its use here: the fused loadings cell) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner lane/expdel2-06-base); code recoverable at 60183a47dc.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS.expdel2-17-decomposition.patch.
+        W = k.ew2(OP_MUL, Vt, mat_vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
+        W = k.ew2(OP_MUL, W, sqrt_psi)
         var lsk = k.ew1(OP_LOGS, sk, FA_LOG_FLOOR)
         var slog = dsum(lsk, 0, lsk.n())
         var lps = k.ew1(OP_LOGS, psi, FA_LOG_FLOOR)

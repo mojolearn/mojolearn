@@ -18,10 +18,10 @@ and the Cholesky extension and the two triangular solves on the active set
 (at most nnz rows) run on thread 0 in threadgroup memory. Same selection,
 same refit (`omp_row`'s spellings, x_decomp/cells.mojo), no device scratch.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -46,8 +46,11 @@ from x_decomp.cells import F32Ptr, div0, mul, sqrt0, sub
 #: (the threadgroup Cholesky's side); otherwise the old kernel runs.
 comptime DECOMP_FAST_OMP_BLOCK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]()
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_OMP_BLOCK (opt-in arm: one OMP block per row; EXP:449 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 0d75c7cca2.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_OMP_BLOCK.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 )
 comptime OMP_TPB = 128
 """Threads of an OMP block; k atoms at most OMP_TPB."""

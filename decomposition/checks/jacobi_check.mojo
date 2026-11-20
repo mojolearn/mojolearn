@@ -42,7 +42,7 @@ in `_TOL_*` below and printed with every result, so a reader never has to
 guess what "passes" meant.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import sqrt
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -74,9 +74,10 @@ from checks.numerics import (
     identical_sqrt,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 
 def _mode_name() -> String:
@@ -160,7 +161,7 @@ def _run_device(
     ctx.synchronize()
     for i in range(n * n):
         h.unsafe_ptr().unsafe_store(i, Float32(a[i]))
-    ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a_buf, h)
     ctx.synchronize()
 
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
@@ -178,9 +179,9 @@ def _run_device(
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hi = ctx.enqueue_create_host_buffer[DType.float32](3)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a_buf)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_buf)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=i_buf)
+    download_host_into[DType.float32](ctx, a_buf, ha)
+    download_host_into[DType.float32](ctx, v_buf, hv)
+    download_host_into[DType.float32](ctx, i_buf, hi)
     ctx.synchronize()
 
 
@@ -539,7 +540,7 @@ def _run_device_f32[rot_tpb: Int = JACOBI_ROT_TPB](
     ctx.synchronize()
     for i in range(n * n):
         h.unsafe_ptr().unsafe_store(i, a[i])
-    ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a_buf, h)
     ctx.synchronize()
 
     ctx.enqueue_function[jacobi_eigh_kernel[rot_tpb]](
@@ -557,9 +558,9 @@ def _run_device_f32[rot_tpb: Int = JACOBI_ROT_TPB](
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hi = ctx.enqueue_create_host_buffer[DType.float32](3)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a_buf)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_buf)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=i_buf)
+    download_host_into[DType.float32](ctx, a_buf, ha)
+    download_host_into[DType.float32](ctx, v_buf, hv)
+    download_host_into[DType.float32](ctx, i_buf, hi)
     ctx.synchronize()
 
     a_out.clear()
@@ -798,7 +799,7 @@ def check_jacobi_fold_shape() raises:
     ctx.synchronize()
     for i in range(_FOLD_PROBE_TPB):
         ha.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.synchronize()
     ctx.enqueue_function[jacobi_fold_probe_kernel](
         op.unsafe_ptr(),
@@ -808,8 +809,8 @@ def check_jacobi_fold_shape() raises:
         block_dim=(_FOLD_PROBE_TPB, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hp.unsafe_ptr(), src_buf=op)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=ol)
+    download_host_into[DType.float32](ctx, op, hp)
+    download_host_into[DType.float32](ctx, ol, hl)
     ctx.synchronize()
     var pinned = hp.unsafe_ptr().unsafe_load(0)
     var library = hl.unsafe_ptr().unsafe_load(0)
@@ -1839,7 +1840,7 @@ def _run_device_f32_four_phase(
     ctx.synchronize()
     for i in range(n * n):
         h.unsafe_ptr().unsafe_store(i, a[i])
-    ctx.enqueue_copy(dst_buf=a_buf, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a_buf, h)
     ctx.synchronize()
 
     ctx.enqueue_function[jacobi_eigh_kernel_four_phase](
@@ -1857,9 +1858,9 @@ def _run_device_f32_four_phase(
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
     var hi = ctx.enqueue_create_host_buffer[DType.float32](3)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a_buf)
-    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=v_buf)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=i_buf)
+    download_host_into[DType.float32](ctx, a_buf, ha)
+    download_host_into[DType.float32](ctx, v_buf, hv)
+    download_host_into[DType.float32](ctx, i_buf, hi)
     ctx.synchronize()
 
     a_out.clear()
@@ -1870,7 +1871,6 @@ def _run_device_f32_four_phase(
     var info = List[Float32]()
     for i in range(3):
         info.append(hi.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return info^
 
 

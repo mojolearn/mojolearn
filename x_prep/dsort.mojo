@@ -26,9 +26,9 @@ memory (TILE words, 4 KB), the longer strides one global pass each. No
 arithmetic, only comparisons and moves of words, so there is no reduction
 order to keep: the result is the heapsort's, bit for bit, by construction.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -214,8 +214,9 @@ def sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
     )
     var pairs = tot // 2
     var quads = tot // 4
-    # MOJOLEARN_XPREP_SORT_QUAD=0: one pass per stride (the A/B arm)
-    var quad = getenv("MOJOLEARN_XPREP_SORT_QUAD", "1") != "0"
+    # -D MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF: one pass per stride (the A/B arm; lane fx-env-dead
+    # 2026-11-18: was the run-time env read MOJOLEARN_XPREP_SORT_QUAD=0 per sort; default unchanged)
+    var quad = not is_defined["MOJOLEARN_XPREP_FAST_SORT_QUAD_OFF"]()
     var k = 2 * TILE
     while k <= big_n:
         var j = k // 2

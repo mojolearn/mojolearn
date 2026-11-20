@@ -80,20 +80,19 @@ def test_public_forward_loss_match_primitive_recipe(monkeypatch, layers, dropout
     before_rng = model.generator.state_dict()
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(SambaStack, "_forward", lambda *a, **k: pytest.fail("Python model orchestration"))
-        patch.setattr(SambaStack, "_forward_resident", lambda *a, **k: pytest.fail("Python resident orchestration"))
         actual = audit_native_call(model.forward, inputs).assert_native()
         loss = audit_native_call(model.loss, inputs, targets).assert_native()
     assert actual.shape == expected.shape
     assert actual.tobytes() == expected.tobytes()
     assert np.float32(loss).tobytes() == np.float32(expected_loss).tobytes()
     assert model.generator.state_dict() == before_rng
-    if dropout == 0.0 and hasattr(bridge.CONTEXT["entries"], "samba_resident_enabled"):
-        if bridge.CONTEXT["entries"].samba_resident_enabled():
-            assert model._resident_handle is not None
-            handle = model._resident_handle
-            audit_native_call(model.forward, inputs).assert_native()
-            assert model._resident_handle is handle
+    program = getattr(model, "_samba_program", None)
+    if program is not None:
+        # A device build runs the stack program, opened once per shape and
+        # kept as its native handle owner (no Python program object).
+        assert type(program).__name__ == "_SambaProgramHandle"
+        audit_native_call(model.forward, inputs).assert_native()
+        assert model._samba_program is program
 
 
 @pytest.mark.parametrize("layers", [["attention"], ["mamba3"], ["mamba3", "attention"]])
@@ -110,7 +109,6 @@ def test_public_stateful_forward_and_dedicated_step_preserve_complete_state(monk
         expected = _reference(reference, ids, expected_states, step)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_forward_state", lambda *a, **k: pytest.fail("Python state traversal"))
             value = audit_native_call(model.step if step else model.forward, ids, actual).assert_native()
         assert value.shape == ((2, 19) if step else expected.shape)
         assert value.tobytes() == expected.tobytes()
@@ -145,3 +143,126 @@ def test_public_inference_refusals_are_native(operation, args):
     report = result.report()
     for name in ("python_frames", "wrapper_work", "forbidden_native_calls", "unobserved_existing_threads"):
         assert not report[name], report
+
+
+def test_stateless_forward_leaves_block_reports_untouched():
+    # lane perf-neural-sessions (2026-11-13): a stack's Mamba-3 blocks discard
+    # their reports, so the stateless forward on a device build requests none
+    # (as the 0.8.55 resident forward did): no report arrays are allocated or
+    # published. A CPU-only install's host image has no optional reports
+    # (checks/native_tests/mamba3_prefill_session.mojo unit 7 requires the host
+    # caps to lack MAMBA3_CAP_REPORTS_OPTIONAL), so its per-block calls publish
+    # them as a block forward does.
+    from mojolearn import _backend
+    _, model = _models(["mamba3", "attention"])
+    block = model._blocks[0]
+    names = ("h_last_", "k_last_", "v_last_", "theta_last_")
+    before = {name: vars(block).get(name) for name in names}
+    audit_native_call(model.forward, np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")).assert_native()
+    if _backend.vendor() == "cpu":
+        for name in names:
+            assert vars(block).get(name) is not None, name
+        return
+    for name, value in before.items():
+        assert vars(block).get(name) is value, name
+
+
+def test_device_stateless_forward_takes_the_resident_route():
+    # lane restore-samba-resident-forward (2026-11-13): on a device build the
+    # stateless forward runs the resident session's forward (descriptor op
+    # 16), the measured samba-forward winner; the stack program is its B arm
+    # (-D MOJOLEARN_SAMBA_PROGRAM_FORWARD) and serves a dropout stack. The
+    # door records the arm it ran; the host route (CPU builds) records none.
+    _, model = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    audit_native_call(model.forward, ids).assert_native()
+    route = vars(model).get("_samba_forward_route")
+    if route is None:
+        pytest.skip("host route: no device forward route on this build")
+    if model.numeric_mode != "identical":
+        assert route == "program"
+        return
+    assert route == "resident"
+    assert vars(model).get("_samba_program") is None
+    # The session is the one the train step uses (op 12 owner).
+    assert vars(model).get("_resident_handle") is not None
+    _, dropped = _models(["attention"], dropout=0.125)
+    audit_native_call(dropped.forward, ids).assert_native()
+    assert vars(dropped).get("_samba_forward_route") == "program"
+
+
+def test_resident_forward_uploads_unchanged_weights_once():
+    # lane fix-samba-weight-upload (2026-11-13): the resident forward keys its
+    # device registry by the registry address and that registry's epoch
+    # (core/weight_epoch.mojo RegistryKey). Two forwards with unchanged weights make one
+    # registry upload between them; every registry writer (train_step,
+    # load_state_dict) stamps the registry, so the next forward uploads again and
+    # its logits are the new weights' bits, never stale ones.
+    model, twin = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    targets = np.array([[2, 3, 4], [5, 6, 7]], dtype="i4")
+    first = np.asarray(audit_native_call(model.forward, ids).assert_native()).copy()
+    if vars(model).get("_samba_forward_route") != "resident":
+        pytest.skip("no resident forward on this build")
+    uploads = vars(model)["_samba_resident_uploads"]
+    second = np.asarray(audit_native_call(model.forward, ids).assert_native()).copy()
+    assert vars(model)["_samba_resident_uploads"] == uploads, "unchanged weights were uploaded again"
+    assert second.tobytes() == first.tobytes()
+    saved = model.state_dict()
+    model.train_step(ids, targets)
+    twin.train_step(ids, targets)
+    trained = np.asarray(model.forward(ids)).copy()
+    assert vars(model)["_samba_resident_uploads"] > uploads, "train_step did not invalidate the resident registry"
+    # the twin's fresh session holds the trained weights: the same bits
+    assert trained.tobytes() == np.asarray(twin.forward(ids)).tobytes()
+    assert trained.tobytes() != first.tobytes()
+    uploads = vars(model)["_samba_resident_uploads"]
+    model.load_state_dict(saved)
+    restored = np.asarray(model.forward(ids)).copy()
+    assert vars(model)["_samba_resident_uploads"] > uploads, "load_state_dict did not invalidate the resident registry"
+    assert restored.tobytes() == first.tobytes()
+
+
+def test_resident_forward_two_models_alternating_upload_once_each():
+    # lane fix-samba-weight-epoch-per-model (2026-11-13): each stack's resident
+    # registry is keyed by its own registry's epoch (core/weight_epoch.mojo
+    # RegistryKey), not the process epoch. Two models alternating forwards
+    # upload once each at their first call and never after; a train_step on A
+    # re-uploads A once and leaves B's copy current.
+    a, b = _models(["mamba3", "attention"])
+    ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
+    targets = np.array([[2, 3, 4], [5, 6, 7]], dtype="i4")
+    first_a = np.asarray(a.forward(ids)).copy()
+    if vars(a).get("_samba_forward_route") != "resident":
+        pytest.skip("no resident forward on this build")
+    first_b = np.asarray(b.forward(ids)).copy()
+    ua = vars(a)["_samba_resident_uploads"]
+    ub = vars(b)["_samba_resident_uploads"]
+    for _ in range(3):
+        assert np.asarray(a.forward(ids)).tobytes() == first_a.tobytes()
+        assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
+    assert vars(a)["_samba_resident_uploads"] == ua, "A re-uploaded unchanged weights while B ran"
+    assert vars(b)["_samba_resident_uploads"] == ub, "B re-uploaded unchanged weights while A ran"
+    a.train_step(ids, targets)
+    ua = vars(a)["_samba_resident_uploads"]
+    trained = np.asarray(a.forward(ids)).copy()
+    assert vars(a)["_samba_resident_uploads"] == ua + 1, "A's write did not re-upload A exactly once"
+    assert trained.tobytes() != first_a.tobytes()
+    assert np.asarray(b.forward(ids)).tobytes() == first_b.tobytes()
+    assert vars(b)["_samba_resident_uploads"] == ub, "a write to A re-uploaded B"
+
+
+class _HookedInt(int):
+    def __index__(self):  # pragma: no cover - must never run
+        raise AssertionError("Python hook ran inside a native Samba forward")
+
+
+def test_read_only_forward_still_refuses_hooks_in_fields_it_reads():
+    # The read-only admission walks only the fields forward reads; each of them
+    # keeps the full walk's refusal.
+    _, model = _models(["attention"])
+    ids = np.array([[1, 2, 3]], dtype="i4")
+    audit_native_call(model.forward, ids).assert_native()
+    vars(model)["n_total"] = _HookedInt(model.n_total)
+    with pytest.raises(TypeError):
+        model.forward(ids)

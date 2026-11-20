@@ -11,7 +11,7 @@ autograd/kernels/mamba3_prefill.mojo).
 No incoming cache or final-state cotangent is accepted.
 """
 from std.memory import bitcast
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -20,7 +20,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnNeuralMambaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnNeuralMambaContextFastV3"
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -93,6 +93,11 @@ from autograd.kernels.mamba3_prefill import (
     _m3_scratch,
     _mtick,
 )
+# `-D MOJOLEARN_MAMBA_TIMING`: the Mamba timing ticks (DIAGNOSTIC). Was an
+# environment read per call of the launch helpers below until 2026-11-15
+# (lane envgate-train-seq-mamba); the default build passes a constant False.
+comptime _MAMBA_TIMING = is_defined["MOJOLEARN_MAMBA_TIMING"]()
+
 
 
 def mamba3_prefill_backward(
@@ -118,9 +123,9 @@ def mamba3_prefill_backward(
         ctx = ctx_in.take()
     else:
         ctx = process_ctx[_DEVCTX_SLOT]()
-    # lane/neural-apple2: MOJOLEARN_MAMBA_TIMING=1 prints a wall per stage
+    # lane/neural-apple2: -D MOJOLEARN_MAMBA_TIMING prints a wall per stage
     # (a synchronize around each; measurement only, off by default).
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var ton = _MAMBA_TIMING
     var tk = Int(perf_counter_ns())
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)

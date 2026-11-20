@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Frozen 32011bb32 CPU IsolationForest fit and validation test oracle."""
 import numbers
-from mojolearn import _sk_validate
-from mojolearn._buffer import as_f32_c, all_finite
-from mojolearn._labels import is_bool
+from mojolearn import _sk_validate  # oracle subject: the product's scikit-learn fit admission (before_fit/reraise/after_fit drive the native labels admission entry; ~600 lines, no public route)
+from mojolearn.tests._oracle_support import all_finite
+from mojolearn.tests._typed_input import as_f32_c
 from mojolearn.tests._legacy_host_inference import iforest
+
+
+def is_bool(value):
+    """Copy of `mojolearn._labels.is_bool`: Python's `bool` or NumPy's `bool_`, without importing NumPy."""
+    return isinstance(value, bool) or type(value).__name__ == "bool_"
 
 
 def parameters(self):

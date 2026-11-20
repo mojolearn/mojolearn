@@ -59,6 +59,7 @@ run gradient-build 600 pixi run mojo build -j 2 --target-cpu x86-64-v3 \
     -o "$OUT/train-gradient-capture"
 run gradient-capture 180 env MOJOLEARN_TRAIN_CAPTURE_OUTPUT="$OUT/gradient-capture" \
     "$OUT/train-gradient-capture"
+run gradient-seal 60 "$PY" tools/transformer_training_gradient_oracle.py seal "$OUT/gradient-capture"
 run gradient-oracle 180 "$PY" tools/transformer_training_gradient_oracle.py \
     "$OUT/gradient-capture" --expected-vendor "$vendor" --output "$OUT/gradient-oracle.json"
 # A failed prerequisite stops here. Never broaden a run after a failed gate.
@@ -66,8 +67,7 @@ run training-build 600 bash bindings/build_training.sh
 run linalg-build 600 bash bindings/build_linalg.sh
 run mlp-surface-and-reference 240 "$PY" -m pytest -q \
     python/mojolearn/tests/test_small_mlp_surface.py
-run mlp-numerical-edges 240 "$PY" -m pytest -q \
-    python/mojolearn/tests/test_small_mlp_numerical_edges.py
+run mlp-numerical-edges 600 pixi run check-native-gpu training_small_mlp
 run mlp-continuous 240 "$PY" tools/small_mlp_training_capture.py capture --out "$OUT/mlp-continuous"
 run mlp-head 120 "$PY" tools/small_mlp_training_capture.py capture --head --out "$OUT/mlp-head"
 run mlp-resume 180 "$PY" tools/small_mlp_training_capture.py capture \

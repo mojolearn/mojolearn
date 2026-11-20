@@ -6,21 +6,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_program_reuses_shared_registry_before_metadata_or_conversion():
-    arrays = (ROOT / 'providers/python/autograd_program_arrays_pyapi.mojo').read_text()
+    arrays = (ROOT / 'providers/python/autograd_program_arrays_pyapi_door.mojo').read_text()
     assert 'classical_connect_numpy(admission)' in arrays
     assert 'sequential_admit_value(value, state[].admission)' in arrays
     assert 'native_array_ndarray_view(value, state[].admission)' in arrays
-    source = (ROOT / 'providers/python/autograd_program_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_program_pyapi_door.mojo').read_text()
     entry = source.split('def program_input(', 1)[1].split('\ndef ', 1)[0]
     assert entry.index('program_native_input(value)') < entry.index('array_input(a,')
     assert 'hasattr' not in entry
-    scalar = source.split('def _sequence_values(', 1)[1].split('\ndef ', 1)[0]
+    # Leaves are read in _leaf_f64 (lane p2-labels-lists-arrays): exact int/float/bool by their C
+    # slot; any other scalar is admitted by program_numeric_scalar before its conversion.
+    scalar = source.split('def _leaf_f64(', 1)[1].split('\ndef ', 1)[0]
     assert scalar.index('program_numeric_scalar(a)') < scalar.index('Float64(py=a)')
-    assert 'hasattr' not in scalar
+    assert 'hasattr' not in scalar and 'hasattr' not in source.split('def _sequence_values(', 1)[1].split('\ndef ', 1)[0]
 
 
 def test_embedding_reuses_admitted_descriptor_instead_of_dtype_hook():
-    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi_door.mojo').read_text()
     assert 'hasattr, args[1], "dtype"' not in source
     assert 'input.src.itemsize == 4 else 10' in source
     assert '_ = args  # retain original external array exporters' in source

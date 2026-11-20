@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Theta on one simdgroup per series with the Nelder-Mead candidates
 evaluated side by side (lane/apple-fast-gap-tsa,
-FAST + Apple, on THETA_REG; default on, -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF off;
+FAST + Apple, on THETA_REG; always on there;
 docs/apple-fast/notes/gap-tsa.md).
 
 `op_theta` runs one thread per series (64 threads on the board's taxi-hourly
@@ -25,9 +25,8 @@ evaluations the serial run skips are simply not used. Lanes 4..31 repeat
 lane 0's point. Everything else (the ACF test, the decomposition, the
 final runs, the forecast) runs on every lane identically; lane 0 stores
 the outputs."""
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu.primitives.warp import shuffle_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from sequence.coop_lane import coop_src
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
@@ -38,15 +37,18 @@ from sequence.theta import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 
 #: the switch (FAST + Apple with THETA_REG). Default since the M3 A/B (n=1,
-#: quality identical; theta taxi-hourly 218 -> 20.3 ms);
-#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
+#: quality identical; theta taxi-hourly 218 -> 20.3 ms); the old
 #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
-comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF (superseded: SEQ_FAST_THETA_SPEC KEPT 6c0ba4379, M3
+# gaptsa-thetaspec-theta-taxi-hourly 218 -> 20.3 ms, quality identical) deleted 2026-11-15 by lane/expdel-04-neural;
+# code recoverable at c5925a0e35.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch
+comptime THETA_SPEC_FAST = THETA_REG_FAST
 #: IDENTICAL twin (lane seq-nm-spec 2026-10-11, idea E1), PROMOTED to the IDENTICAL default 2026-10-11
 #: (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per arm,
 #: same bits NV==AMD: theta 0.178/0.118, optimized-theta 0.152/0.100,
 #: dynamic-optimized-theta 0.251/0.339, damped-ets 0.141/0.126; nv2 v0098 / A v0097, amd a1680 / A a1679).
-#: -D MOJOLEARN_IDN_NM_SPEC_OFF restores the serial Nelder-Mead. Structural reason: op_theta runs one thread per
+#: -D MOJOLEARN_IDN_NM_SPEC_OFF (deleted 2026-11-15) restored the serial Nelder-Mead. Structural reason: op_theta runs one thread per
 #: series and its Nelder-Mead evaluates the reflection, then the expansion
 #: or a contraction, back to back (2 + k whole-series passes on a shrink),
 #: a latency-bound serial chain with 64 threads on the taxi-hourly cell.
@@ -61,11 +63,11 @@ comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST
 #: (sequence/exec_device.mojo, SEQ_COOP_NVAMD). Expected: theta taxi-hourly
 #: AMD 596 -> ~130 ms, optimized-theta 626 -> ~150 ms (critical path from
 #: ~1.5-2 evaluations per iteration to 1, shrinks from 2 + k to 1).
-comptime THETA_SPEC_IDN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_NM_SPEC_OFF (old path; EXP:2086 KEEP, the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.expdel2-30-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
+comptime THETA_SPEC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime THETA_SPEC = THETA_SPEC_FAST or THETA_SPEC_IDN
 
 
@@ -169,7 +171,7 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
 
 
 @always_inline
-def _put(mut arr: InlineArray[Float32, 12], i: Int, v: Float32) -> Bool:
+def _put(mut arr: Array[Float32, 12], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -177,7 +179,7 @@ def _put(mut arr: InlineArray[Float32, 12], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _putf(mut arr: InlineArray[Float32, 4], i: Int, v: Float32) -> Bool:
+def _putf(mut arr: Array[Float32, 4], i: Int, v: Float32) -> Bool:
     var old = bitcast[DType.uint32](arr[i])
     var w = ftz(v)
     arr[i] = w
@@ -185,28 +187,28 @@ def _putf(mut arr: InlineArray[Float32, 4], i: Int, v: Float32) -> Bool:
 
 
 @always_inline
-def _co(arr: InlineArray[Float32, 4], j: Int, k: Int) -> Float32:
+def _co(arr: Array[Float32, 4], j: Int, k: Int) -> Float32:
     return arr[j] if j < k else Float32(0.0)
 
 
 @always_inline
-def _row(S: InlineArray[Float32, 12], r: Int, j: Int, k: Int) -> Float32:
+def _row(S: Array[Float32, 12], r: Int, j: Int, k: Int) -> Float32:
     return S[r * k + j] if j < k else Float32(0.0)
 
 
 @always_inline
 def nm_spec(
-    ev: ThetaEv, mut x: InlineArray[Float32, 4], lo: InlineArray[Float32, 4], hi: InlineArray[Float32, 4],
+    ev: ThetaEv, mut x: Array[Float32, 4], lo: Array[Float32, 4], hi: Array[Float32, 4],
     k: Int, lane: Int, init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32, snap_on: Bool,
 ) -> Int:
     """`nelder_mead` (sequence/nm.mojo, k <= 3, no stall rule) with the
     candidates of each step evaluated across lanes; x receives the best
     vertex; returns the iteration count. Every lane calls it and every
     lane returns the same words."""
-    var S = InlineArray[Float32, 12](fill=Float32(0.0))
-    var F = InlineArray[Float32, 4](fill=Float32(0.0))
-    var SN = InlineArray[Float32, 12](fill=Float32(0.0))
-    var SNF = InlineArray[Float32, 4](fill=Float32(0.0))
+    var S = Array[Float32, 12](fill=Float32(0.0))
+    var F = Array[Float32, 4](fill=Float32(0.0))
+    var SN = Array[Float32, 12](fill=Float32(0.0))
+    var SNF = Array[Float32, 4](fill=Float32(0.0))
     # nm_start: the clamped start in every row, the diagonal perturbed
     for i in range(k + 1):
         for j in range(k):
@@ -228,12 +230,12 @@ def nm_spec(
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
     var sigma = sub(Float32(1.0), ftz(identical_div(Float32(1.0), nf)))
-    var xo = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xr = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xe = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xc = InlineArray[Float32, 4](fill=Float32(0.0))
-    var xi = InlineArray[Float32, 4](fill=Float32(0.0))
-    var order = InlineArray[Int, 4](fill=0)
+    var xo = Array[Float32, 4](fill=Float32(0.0))
+    var xr = Array[Float32, 4](fill=Float32(0.0))
+    var xe = Array[Float32, 4](fill=Float32(0.0))
+    var xc = Array[Float32, 4](fill=Float32(0.0))
+    var xi = Array[Float32, 4](fill=Float32(0.0))
+    var order = Array[Int, 4](fill=0)
     var changed = True
     var have_snap = False
     var snap_it = 0
@@ -441,9 +443,9 @@ def op_theta_spec(t: Int, lane: Int, a: Args):
         var a0 = Float32(0.5) if oa else a.f1
         var t0 = Float32(2.0) if ((fixed & 4) == 0 or model == STM or model == DSTM) else a.f2
         var ev = ThetaEv(yd, n, model == DSTM or model == DOTM, ol, oa, ot, l0, a0, t0, inv[0], inv[1], inv[2])
-        var x = InlineArray[Float32, 4](fill=Float32(0.0))
-        var lo = InlineArray[Float32, 4](fill=Float32(0.0))
-        var hi = InlineArray[Float32, 4](fill=Float32(0.0))
+        var x = Array[Float32, 4](fill=Float32(0.0))
+        var lo = Array[Float32, 4](fill=Float32(0.0))
+        var hi = Array[Float32, 4](fill=Float32(0.0))
         var k = 0
         if ol:
             x[k] = ftz(l0)

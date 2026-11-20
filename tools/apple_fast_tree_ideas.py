@@ -84,8 +84,6 @@ def selection(cards: dict[str, dict], ids: list[str]) -> dict:
         conflicts = {value.split("=", 1)[0] for value in conflicts}
         if conflicts & candidate_names:
             raise ValueError(f"{card['id']} conflicts with {sorted(conflicts & candidate_names)}")
-    if {"MOJOLEARN_AFT_P07", "MOJOLEARN_SHAP_FAST_ROW_PAIR"} <= candidate_names:
-        raise ValueError("P07 and the pre-existing SHAP row-pair arm are alternatives")
     return {
         "status": "source_selection_only_not_executed",
         "mode": "fast",

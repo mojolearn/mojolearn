@@ -113,12 +113,11 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
      returned.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
 from std.os import getenv
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).

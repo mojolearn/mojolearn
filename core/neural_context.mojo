@@ -27,8 +27,11 @@ use and kept for the process. Same kernels, same launches, same order on one
 stream, every entry still synchronizes before it returns, so no bit moves.
 
 Storage: `std.ffi._Global` (x_cnn/device.mojo's pattern). The caller passes
-the slot NAME, one per binding and numeric tier, so a FAST and an IDENTICAL
-.so in one process never share a slot and no two bindings share one.
+the slot NAME, one per binding and numeric tier. A `_Global` is one slot per
+process per NAME (core/shared_slot.mojo): every module of any .so that spells
+the same name shares the one context, and two names are two contexts (and two
+streams) on the same GPU, so a buffer made under one name is read under the
+same name (core/msel_device_x.mojo `msel_device_x_context` is the model).
 
 THE ONE ACCESSOR FOR EVERY BINDING (lane/devctx-lifetime, 2026-09-28).
 `process_ctx[name]()` is the process-lifetime context of every binding entry,
@@ -39,8 +42,9 @@ per-call `DeviceContext()` in a binding entry onto this accessor (the proof is
 tools/devctx_lifetime_proof.sh). Rules for a caller:
 
   * One slot name per binding .so and numeric tier, spelled
-    `"Mojo<Binding>ContextIdentical" if <mode> == IDENTICAL else
-    "Mojo<Binding>ContextFast"`. A library module reached by one GPU binding
+    `"Mojolearn<Binding>ContextIdenticalV3" if <mode> == IDENTICAL else
+    "Mojolearn<Binding>ContextFastV3"` (V3: `_NeuralContext` layout 3; every
+    name moves together when the layout version moves). A library module reached by one GPU binding
     takes THAT binding's name, so the binding holds one context in all.
   * Call it only on a device path. A CPU-only install never reaches it: the
     host bindings do not call it, and nothing here runs at import, so no
@@ -60,64 +64,109 @@ created on first use), so the root follows the selection and no context is
 created and destroyed per call. Without a plan nothing changes. The root
 device enters no value: the same kernels run in the same order on it.
 """
-from std.ffi import _Global
+from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceContext
 
-from std.atomic import Atomic, Ordering
+from core.device_plan import DevicePlan, device_plan_current
+from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
 
-from core.device_plan import device_plan_root
+#: Layout version of `_NeuralContext` (core/shared_slot.mojo rule): bump on
+#: any field change. V2 added the layout word and the root branch's use of
+#: the lock word. V3 (lane s2, 2026-11-09): `device_lock` holds two words,
+#: the lock and the root context's published flag (lock-free reads after the
+#: first creation); every slot name moved to V3 with it.
+comptime _NEURAL_CONTEXT_LAYOUT = 3
+
+#: `device_lock` word 1: 0 until the root context is stored, then 1 for the
+#: process (the context is never replaced, so a reader that sees 1 with an
+#: acquire load reads it without the lock).
+comptime _ROOT_PUBLISHED = 1
 
 
 struct _NeuralContext(Defaultable, Movable):
     var ctx: Optional[DeviceContext]
     var device_ids: List[Int]
     var device_contexts: List[DeviceContext]
-    # guards the per-device lists: two threads running drivers with different
-    # roots in one binding may open their contexts at the same time
+    # word 0 guards the root context's creation and the per-device lists: two
+    # threads entering GPU-released entries of any module naming the slot, or
+    # running drivers with different roots, may open a context at the same
+    # time; word 1 is the root context's published flag (_ROOT_PUBLISHED)
     var device_lock: List[Int64]
 
     def __init__(out self):
+        # side-effect free: the runtime may run it twice and destroy the
+        # loser (core/shared_slot.mojo, first creation); no context here
         self.ctx = Optional[DeviceContext]()
         self.device_ids = List[Int]()
         self.device_contexts = List[DeviceContext]()
-        self.device_lock = List[Int64](length=1, fill=Int64(0))
+        self.device_lock = List[Int64](length=2, fill=Int64(0))
+
+
+def neural_device_plan() raises -> DevicePlan:
+    """The calling thread's device plan, read once at an entry, for its root
+    only (`DevicePlan.root`, the plan's first device or -1); no family's count
+    setting is consulted, so the name is empty."""
+    return device_plan_current("", "")
 
 
 def process_ctx[name: StaticString]() raises -> DeviceContext:
     """The binding's shared context (slot `name`), created on first use and
     kept for the process; on the calling thread's device-plan root when a
-    plan whose root is not device 0 is bound."""
-    comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
+    plan whose root is not device 0 is bound. Reads the plan once."""
+    return process_ctx[name](neural_device_plan())
+
+
+def process_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
+    """`process_ctx` on the root of a plan the entry already read."""
+    comptime SLOT = SharedSlot[_NeuralContext, name, _NEURAL_CONTEXT_LAYOUT]
     var slot = SLOT.get_or_create_ptr()
-    var root = device_plan_root()
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
+    var root = dplan.root
     if root > 0:
-        var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
-        while True:  # driver-loop: spin on the per-device list's lock word
-            var expected = Int64(0)
-            if Atomic.compare_exchange[
-                success_ordering=Ordering.SEQUENTIAL,
-                failure_ordering=Ordering.RELAXED,
-            ](lock, expected, Int64(1)):
-                break
+        shared_slot_lock(lock)
         try:
             for i in range(len(slot[].device_ids)):  # driver-loop: over the devices this binding has opened
                 if slot[].device_ids[i] == root:
                     var found = slot[].device_contexts[i].copy()
-                    Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+                    shared_slot_unlock(lock)
                     return found^
             var ctx = DeviceContext(device_id=root)
             slot[].device_contexts.append(ctx.copy())
             slot[].device_ids.append(root)
-            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            shared_slot_unlock(lock)
             return ctx^
         except error:
-            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            shared_slot_unlock(lock)
             raise error^
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    # the root context. After its first creation every call reads it with no
+    # lock: the published flag is stored (release) only after the Optional is
+    # written, and the context is never replaced, so an acquire load of 1
+    # makes the read safe (lane s2: the lock was taken on every call before).
+    var published = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr() + _ROOT_PUBLISHED)
+    if Atomic.load[ordering=Ordering.ACQUIRE](published) == 1:
+        return slot[].ctx.value().copy()
+    # first use: one creation under concurrent first use (two threads in
+    # GPU-released entries of any module naming this slot would otherwise
+    # both create one and drop one while its kernels may still run). The
+    # test is under the lock too: an Optional is not read while it is written.
+    shared_slot_lock(lock)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+            Atomic.store[ordering=Ordering.RELEASE](published, Int64(1))
+        var root_ctx = slot[].ctx.value().copy()
+        shared_slot_unlock(lock)
+        return root_ctx^
+    except error:
+        shared_slot_unlock(lock)
+        raise error^
 
 
 def neural_ctx[name: StaticString]() raises -> DeviceContext:
     """`process_ctx` under the name the neural bindings first used."""
     return process_ctx[name]()
+
+
+def neural_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
+    """`process_ctx` on the root of a plan the entry already read."""
+    return process_ctx[name](dplan)

@@ -1,9 +1,0 @@
-commit=243b2478d4255786c082699eaa014460a1671b72
-label=nvidia-rtx6000ada-sm89
-backend=cuda
-scope=all shard= lanes_override=yes
-repeats=1 cpu_threads=3
-host=Linux 6.8.0-136-generic x86_64 cd3e4578fc82
-date=2026-10-23T19:07:27Z
-dirty_tracked=none
-record_sha256=31b8c697bfbbe3bcf053c01ca07afc56682e82a2e76a77864de6a004f8886b7f

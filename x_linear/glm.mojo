@@ -19,9 +19,8 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, seq_rows, row_dots,
 )
-from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from std.sys.info import is_gpu
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from x_linear.team import Team
 from x_linear.tops import (
@@ -93,31 +92,6 @@ def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Flo
     if what == 1:
         return fs(a2, fm(y, a1))
     return fs(fm(fs(Float32(2), power), a2), fm(fm(fs(Float32(1), power), y), a1))
-
-
-def _unit_all(power: Float32, link: Int, y: Float32, eta: Float32) -> Tuple[Float32, Float32, Float32]:
-    """C16 shares link values; loss, first and second derivative keep B seams.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    if link == GLM_LINK_IDENTITY:
-        var r = fs(eta, y)
-        return (fm(Float32(0.5), fm(r, r)), r, Float32(1))
-    if power == 0:
-        var mu = fexp(eta)
-        var r = fs(mu, y)
-        return (fm(Float32(0.5), fm(r, r)), fm(r, mu), fm(mu, fs(fm(Float32(2), mu), y)))
-    if power == 1:
-        var mu = fexp(eta)
-        return (fs(mu, fm(y, eta)), fs(mu, y), mu)
-    if power == 2:
-        var e = fexp(-eta)
-        var ye = fm(y, e)
-        return (fa(eta, ye), fs(Float32(1), ye), ye)
-    var a2 = fexp(fm(fs(Float32(2), power), eta))
-    var a1 = fexp(fm(fs(Float32(1), power), eta))
-    var ya1 = fm(y, a1)
-    return (fs(fd(a2, fs(Float32(2), power)), fd(ya1, fs(Float32(1), power))),
-            fs(a2, ya1), fs(fm(fs(Float32(2), power), a2), fm(fm(fs(Float32(1), power), y), a1)))
 
 
 def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,

@@ -11,12 +11,15 @@ from training.checks.chunked_lm_head_oracle import chunked_lm_head_v2_oracle
 from gemm.neural_dispatch import identical_gemm_workspace_max_floats
 
 
-def main() raises:
+def run_checks() raises:
     comptime rows = 7
     # Exercise a complete 1024-token chunk plus the one-token tail.  The
     # backward must keep both dHidden's token fold and dWeight's row fold
     # unchanged across that boundary.
-    comptime vocab = LM_HEAD_V2_CHUNK + 1
+    # The GEMM-panel profile: three complete panels plus
+    # the one-token tail, so the dHidden fold over panels has a merged pair
+    # and a carried tail, and the denominator tree an odd last leaf.
+    comptime vocab = 3 * LM_HEAD_V2_CHUNK + 1
     comptime width = 17
     var hidden = List[Float32]()
     for i in range(rows * width):
@@ -56,28 +59,9 @@ def main() raises:
             d_hidden[rows * width - 1].to_bits() != first_dh or
             d_weight[vocab * width - 1].to_bits() != first_dw):
         raise Error("chunked lm head v2 repeated device result moved")
-    var hd = ctx.enqueue_create_buffer[DType.float32](rows * width)
-    var wd = ctx.enqueue_create_buffer[DType.float32](vocab * width)
-    var td = ctx.enqueue_create_buffer[DType.int32](rows)
-    var ld = ctx.enqueue_create_buffer[DType.float32](1)
-    var md = ctx.enqueue_create_buffer[DType.float32](rows)
-    var dd = ctx.enqueue_create_buffer[DType.float32](rows)
-    var rd = ctx.enqueue_create_buffer[DType.float32](rows)
-    var dhd = ctx.enqueue_create_buffer[DType.float32](rows * width)
-    var dwd = ctx.enqueue_create_buffer[DType.float32](vocab * width)
-    var chunk = ctx.enqueue_create_buffer[DType.float32](rows * LM_HEAD_V2_CHUNK)
-    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(rows, LM_HEAD_V2_CHUNK, width))
-    ctx.enqueue_copy(dst_buf=hd, src_ptr=hp)
-    ctx.enqueue_copy(dst_buf=wd, src_ptr=wp)
-    ctx.enqueue_copy(dst_buf=td, src_ptr=tp)
-    chunked_lm_head_v2_gemm_forward_into(ctx, ld, md, dd, rd, chunk, ws, hd, wd, td, rows, vocab, width)
-    chunked_lm_head_v2_gemm_backward_into(ctx, dhd, dwd, chunk, ws, hd, wd, td, md, dd, rows, vocab, width)
-    ctx.enqueue_copy(dst_ptr=lp, src_buf=ld)
-    ctx.enqueue_copy(dst_ptr=mp, src_buf=md)
-    ctx.enqueue_copy(dst_ptr=dp, src_buf=dd)
-    ctx.enqueue_copy(dst_ptr=dhp, src_buf=dhd)
-    ctx.enqueue_copy(dst_ptr=dwp, src_buf=dwd)
-    ctx.synchronize()
+    # The ByteLM GEMM-logit form equals the default scalar oracle at this
+    # width. Under the arm the door above is what the oracle describes, and
+    # its downloads are compared below as they are.
     var oracle = chunked_lm_head_v2_oracle(hidden, weight, targets, rows, vocab, width)
     if loss[0].to_bits() != oracle.loss.to_bits():
         raise Error("chunked lm head v2 device loss differs from CPU oracle")

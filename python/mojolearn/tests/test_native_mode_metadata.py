@@ -94,7 +94,13 @@ def test_forest_readback_keeps_its_identical_fit_mode(monkeypatch):
     monkeypatch.setitem(_mode._MODE_METADATA_CONTEXT['backend_fields'], '_DEFAULT_MODE', 'fast')
     assert clean(mode) == 'identical'
     model.numeric_mode = 'fast'
-    clean(mode, error=ValueError)
+    # Where the identical set answers `fast` (off Apple, no fast set; FOREST
+    # and METADATA in core/mode_answer.mojo MODE_FAMILIES_ANSWERED) the word
+    # names the set the forest was fitted with, so the read-back answers it.
+    if _backend.fast_answer() == 'identical':
+        assert clean(mode) == 'identical'
+    else:
+        clean(mode, error=ValueError)
 
 
 def test_python_binary_readback_replacement_is_refused_without_calling_it():

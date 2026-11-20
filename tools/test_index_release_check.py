@@ -52,13 +52,14 @@ class PrecheckTests(unittest.TestCase):
         self.assertIn(f"mojolearn-amd=={V} is not on testpypi (HTTP 404)", problems[0])
 
     def test_the_dependency_graph(self):
-        # mojolearn (meta) -> core + both vendors; core -> nothing; vendors -> core (NVIDIA also ptx).
+        # mojolearn (meta) -> core + both vendors; core -> nothing; vendors -> core (no PTX project since 2026-11-05).
         self.assertEqual(PROJECTS[:2], ("mojolearn", "mojolearn-core"))
         self.assertEqual(set(REQUIRES["mojolearn"]), {"mojolearn-core", "mojolearn-nvidia", "mojolearn-amd"})
         self.assertEqual(REQUIRES["mojolearn-core"], ())
-        self.assertEqual(set(REQUIRES["mojolearn-nvidia"]), {"mojolearn-core", "mojolearn-nvidia-ptx"})
+        self.assertEqual(REQUIRES["mojolearn-nvidia"], ("mojolearn-core",))
         self.assertEqual(REQUIRES["mojolearn-amd"], ("mojolearn-core",))
-        self.assertEqual(REQUIRES["mojolearn-nvidia-ptx"], ("mojolearn-core",))
+        self.assertNotIn("mojolearn-nvidia-ptx", REQUIRES)
+        self.assertNotIn("mojolearn-nvidia-ptx", PROJECTS)
 
     def test_a_core_pinning_a_vendor_is_refused(self):
         # The pre-2026-10-20 graph: the core required both vendors.

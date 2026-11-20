@@ -23,7 +23,7 @@ VERSION = "0.8.57"
 
 
 def wheel_files(tmp_path, vendor):
-    names = ["mojolearn_core", "mojolearn_" + vendor] + (["mojolearn_nvidia_ptx"] if vendor == "nvidia" else [])
+    names = ["mojolearn_core", "mojolearn_" + vendor]  # the NVIDIA wheel carries its PTX set (2026-11-05)
     out = []
     for name in names:
         path = tmp_path / f"{name}-{VERSION}-py3-none-manylinux_2_35_x86_64.whl"
@@ -52,7 +52,7 @@ def test_nvidia_job_goes_through_nvidia_central_submit_persisted(tmp_path):
     indir = "/root/release-gate/0.8.57/nvidia/stamp-release-light-v1/in"
     res = f"/root/results-release-gate/0.8.57/nvidia/stamp-release-light-v1/{tag}/results"
     assert plan.sync() == ["bash", "tools/nvidia_central.sh", "sync", "release-gate", str(tmp_path / "source")]
-    assert plan.launch() == ["bash", "tools/nvidia_central.sh", "submit", "release-gate", "--cap", "180",
+    assert plan.launch() == ["bash", "tools/nvidia_central.sh", "submit", "release-gate", "--cap", "240",
                              "--note", tag, "--results", res, f"{indir}/release_gate_job.sh"]
     assert plan.upload(f"{indir}/gate.env") == ["bash", "tools/nvidia_central.sh", "sh", "release-gate",
                                                 f"cat > {indir}/gate.env"]
@@ -65,7 +65,7 @@ def test_nvidia_job_goes_through_nvidia_central_submit_persisted(tmp_path):
     wheels = [f"{indir}/{w.name}" for w in plan.wheels]
     assert plan.gate == ["tools/gate_smoke_box.py", "nvidia", "0.8.57", f"{work}/out", "all",
                          "--profile", "release-light-v1",
-                         "--candidate-wheel", wheels[0], "--candidate-wheel", wheels[1], "--candidate-wheel", wheels[2],
+                         "--candidate-wheel", wheels[0], "--candidate-wheel", wheels[1],
                          "--source-commit", COMMIT, "--autograd-manifest", f"{work}/out/autograd-bin/build-manifest.json"]
     # every script the job runs is committed: the job script is the repository's own file, uploaded verbatim
     assert (RG.ROOT / RG.JOB_SCRIPT, f"{indir}/release_gate_job.sh", True) in plan.uploads()
@@ -99,12 +99,58 @@ def test_gate_env_is_bash_that_carries_the_exact_argv(tmp_path):
     build_line = next(l for l in env.splitlines() if l.startswith("BUILD_ARGV=("))
     assert shlex.split(build_line[len("BUILD_ARGV=("):-1]) == plan.build
     assert "GATE_TARGET=sm_89" in env and f"GATE_SOURCE_COMMIT={COMMIT}" in env and "GATE_REUSE=0" in env
+    # the job script clips the runtime qualifier to the minutes the NVIDIA submit cap leaves
+    assert f"GATE_JOB_CAP_MINUTES={RG.NV_CAP_MIN}" in env and f"GATE_RUNTIME_MINUTES={RG.RUNTIME_MINUTES}" in env
+    amd = RG.Runner(args(tmp_path, "amd")).make_plan()[0].env_text()
+    assert "GATE_JOB_CAP_MINUTES=0" in amd
+
+
+def test_the_runtime_qualifier_budget_fits_the_job_and_stops_itself():
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    # the qualifier's own run budget sits inside the outer timeout, so it writes its report on a stop
+    assert '--timeout $(( (rt_min - 10) * 60 ))' in text and 'timeout "${rt_min}m"' in text
+    assert RG.NV_CAP_MIN <= 240 and RG.RUNTIME_MINUTES >= 150  # 0.8.65: ~125 min of tests on the L40S
 
 
 def test_the_job_script_takes_its_argv_from_gate_env_and_keeps_the_gate_unchanged():
     text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
     assert '"${BUILD_ARGV[@]}"' in text and 'python3 "${GATE_ARGV[@]}"' in text
     assert "MOJOLEARN_RESULTS_DIR" in text and "mojolearn-ops" not in text and "lq" not in text.split()
+
+
+def job_function(name):
+    """The text of one shell function of the job script (from `name() {` to its closing `}` line)."""
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text().splitlines()
+    start = text.index(f"{name}() {{")
+    end = text.index("}", start)
+    return "\n".join(text[start:end + 1]) + "\n"
+
+
+def test_the_job_copies_only_existing_reports_and_never_the_autograd_tmp_symlinks(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0").mkdir(parents=True)
+    (out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0" / "test_xcurrent").symlink_to(
+        "/tmp/pytest-of-root/pytest-0/test_x0")
+    (out / "autograd-smoke" / "tmp" / "scratch.bin").write_bytes(b"scratch")
+    (out / "autograd-smoke" / "autograd-public.log").write_text("21 passed\n")
+    (out / "gate-smoke.json").write_text('{"verdict":"PASS"}\n')
+    (out / "autograd-smoke.json").write_text("{}\n")
+    assert not (out / "smoke.log").exists()           # a GATE_FETCH pattern that matches nothing
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "Cannot stat" not in r.stderr and "smoke.log" not in r.stderr
+    assert (dst / "gate-smoke.json").read_text() == '{"verdict":"PASS"}\n'
+    assert (dst / "autograd-smoke.json").exists()
+    assert (dst / "autograd-smoke" / "autograd-public.log").read_text() == "21 passed\n"
+    assert not (dst / "autograd-smoke" / "tmp").exists()
+    assert not any(p.is_symlink() for p in dst.rglob("*"))
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    assert 'copy_reports "$GATE_WORK/out" "$RES/out"' in text
 
 
 # ------------------------------------------------------------------ release.py run_gate
@@ -117,7 +163,7 @@ def runner(tmp_path, adapters=True):
     r.dry, r.version, r.commit = True, VERSION, COMMIT
     r.rel, r.base = tmp_path / "rel" / COMMIT[:12], tmp_path / "rel"
     r.args = SimpleNamespace(gate_autograd_root=None)
-    r.gate_ok = lambda vendor: (False, "no gate report")
+    r.gate_ok = lambda vendor, measure=True: (False, "no gate report")
     r.gate_out = lambda vendor: r.rel / f"gate-{vendor}" / "stamp-release-light-v1"
     r.source_checkout = lambda create=True: tmp_path / "source"
     r.candidate_gate_wheels = lambda vendor: wheel_files(tmp_path, vendor)
@@ -136,15 +182,24 @@ def test_release_run_gate_builds_the_exact_job_command(tmp_path, monkeypatch, ve
     expected = [release.PY, "tools/ops/release_gate.py", vendor, VERSION, "--source-commit", COMMIT,
                 "--source-tree", str(tmp_path / "source"), "--out", str(out),
                 "--state", str(r.rel / "gates" / f"{vendor}-stamp-release-light-v1.job.json"),
-                "--profile", "release-light-v1", "--max-wait-hours", "72"]
+                "--profile", "release-light-v1", "--max-wait-hours", "72", "--until", "hard"]
     for w in wheel_files(tmp_path, vendor):
         expected += ["--candidate-wheel", str(w)]
+    # ONE box job: the measurement smoke is its last phase (Andrew 2026-11-08), no second submit, sync or copy
     assert r.calls == [expected]
     would = [line for line in r.said if line.startswith("    would: ")]
     launch = [line for line in would if (" submit release-gate " if vendor == "nvidia" else " run rel-") in line]
-    assert len(launch) == 1
+    assert len(launch) == 1 and "-gate-" in launch[0] and not any("measuresmoke-job" in l for l in would)
+    assert any("release_measurement_smoke.py run" in l for l in would)
     wrapper = "tools/nvidia_central.sh" if vendor == "nvidia" else "tools/do_amd_steward.sh"
-    assert launch[0].startswith("    would: bash " + wrapper)
+    assert all(l.startswith("    would: bash " + wrapper) for l in launch)
+    if vendor == "nvidia":
+        assert "--cap 240 " in launch[0]
+    # --strict: the step waits for the final upload (the smoke included), as before
+    r.args.strict = True
+    r.calls.clear()
+    r.run_gate(vendor)
+    assert r.calls[0][r.calls[0].index("--until") + 1] == "final"
     assert not any("mojolearn-ops" in line or "release_lq_smoke" in line for line in r.said)
 
 
@@ -182,11 +237,20 @@ def recorded():
     fixture.doCleanups()
 
 
+def passing_measure_smoke(vendor, ids=("algos/a/taxi/rows=2000", "neural/b/gaussian/shape=small")):
+    """A passing out/measuresmoke/measuresmoke.json (tools/release_measurement_smoke.py summarize)."""
+    import release_measurement_smoke as MS
+    return MS.summarize(vendor, list(ids), {i: dict(verdict=MS.PASS, reason="", batch=0) for i in ids}, {})
+
+
 class FakeBox:
     """The wrappers and R2 as one fake: uploads land in .files, the submit queues, fetch serves REPORT."""
 
-    def __init__(self, report, vendor, polls_before_final=1, job_exit="0"):
+    def __init__(self, report, vendor, polls_before_final=1, job_exit="0", runtime=None, measure="pass"):
         self.report, self.vendor, self.files, self.calls = report, vendor, {}, []
+        self.measure = passing_measure_smoke(vendor) if measure == "pass" else measure
+        # the installed-runtime qualifier's report the job fetches (out/runtime-<vendor>/runtime-report.json)
+        self.runtime = dict(status="passed", exit_code=0, cases=7300) if runtime is None else runtime
         self.lists, self.polls_before_final, self.job_exit = 0, polls_before_final, job_exit
         self.ptag = ("nvc-release-gate-20261101T000000Z-abc123" if vendor == "nvidia"
                      else "rel-0.8.57-gate-amd-20261101T000000Z-20261101T000001Z-def456")
@@ -198,6 +262,8 @@ class FakeBox:
         if argv[:2] == ["bash", "tools/nvidia_central.sh"] and argv[2] == "submit":
             out.stdout = "nvc1-0007\n"
             out.stderr = f"box_persist: job {self.ptag} persists to R2 measurements/box-jobs/x/ (fetch: ...)\n"
+        elif argv[0] == "sh" and argv[1].endswith("dataset_store.sh") and argv[2] == "presign":
+            out.stdout = "https://r2.example/%s?signed\n" % argv[3]   # the measurement smoke's data plan
         elif argv[2] in ("sh", "ssh") and command.startswith("cat > "):
             self.files[command[len("cat > "):]] = stdin.read()
             out.stdout = b""
@@ -216,6 +282,14 @@ class FakeBox:
             final = Path(argv[argv.index("--dest") + 1]) / "final"
             (final / "out").mkdir(parents=True)
             (final / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
+            if self.measure is not None:
+                # the job's last phase lands in <gate out>/measuresmoke with the final upload
+                smoke = final / "out" / "measuresmoke"
+                smoke.mkdir(parents=True)
+                (smoke / "measuresmoke.json").write_text(json.dumps(self.measure))
+            if self.runtime:
+                (final / "out" / f"runtime-{self.vendor}").mkdir()
+                (final / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))
             (final / "job").mkdir()
             (final / "job" / "status.json").write_text(json.dumps(dict(phase="complete", exit=0)))
         return out
@@ -257,6 +331,7 @@ def test_a_recorded_gate_report_comes_home_and_release_judges_it_exactly_as_befo
     ok, why = r.gate_ok(vendor)
     assert ok, why
     assert why.startswith("PASS: 11 installed correctness records, 24 autograd entries, three adapter phases")
+    assert "7300 installed-runtime cases" in why
     # the same report, one record short, fails exactly as before
     broken = json.loads(home.read_text())
     broken["correctness"]["jobs"].pop()
@@ -280,6 +355,101 @@ def test_a_rerun_resumes_the_queued_job_instead_of_submitting_again(tmp_path, mo
     assert sum(1 for c in box.calls if c[2] == "submit") == submits == 1
 
 
+# ------------------------------------------------------------------ the smoke runs last: HARD parts home first
+class HardBox(FakeBox):
+    """The job's phase hard-done upload lands first (a `hard` ring slot, the manifest still `running`, the box
+    running the measurement smoke); the final upload (out/measuresmoke/ included) once .final_ready."""
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.final_ready = False
+
+    def run(self, argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
+        if "box_persist.py" in str(argv[1]) and "--list" in argv:
+            self.calls.append(argv)
+            dest = Path(argv[argv.index("--dest") + 1])
+            dest.mkdir(parents=True, exist_ok=True)
+            state = "final" if self.final_ready else "running"
+            ups = [dict(seq=1, name="00.tgz", label="periodic"), dict(seq=2, name="01.tgz", label="hard")]
+            (dest / "manifest.json").write_text(json.dumps(dict(state=state, uploads=ups)))
+            return SimpleNamespace(returncode=0, stdout=f"MANIFEST state={state} exit=0 updated=x uploads=2\n",
+                                   stderr="")
+        if "box_persist.py" in str(argv[1]) and "--extract" in argv and not self.final_ready:
+            self.calls.append(argv)
+            dest = Path(argv[argv.index("--dest") + 1])
+            slot = dest / "01"
+            (slot / "out" / f"runtime-{self.vendor}").mkdir(parents=True)
+            (slot / "out" / "gate-smoke.json").write_text(json.dumps(self.report))
+            (slot / "out" / f"runtime-{self.vendor}" / "runtime-report.json").write_text(json.dumps(self.runtime))
+            (slot / "out" / RG.HARD_MARKER).write_text(json.dumps(dict(
+                schema="mojolearn.release-gate-hard.v1", vendor=self.vendor, version=VERSION, source_commit=COMMIT,
+                tag="t", exit=0)))
+            return SimpleNamespace(returncode=0, stdout=f"VERIFIED 01.tgz -> {dest / '01.tgz'}\n"
+                                                        f"EXTRACTED 01.tgz -> {slot} (0 skipped)\n", stderr="")
+        return super().run(argv, cwd, stdin, timeout, capture_output, text)
+
+
+@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
+def test_the_gate_returns_once_the_hard_parts_are_home_and_await_final_brings_the_smoke(tmp_path, monkeypatch,
+                                                                                         recorded, vendor):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor=vendor, verdict="PASS"), vendor)
+    a = args(tmp_path, vendor)
+    assert a.until == "hard"
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    # the HARD reports are home, the smoke is not (the box still runs it), and the job's state stays for await-final
+    assert (a.out / "gate-smoke.json").is_file() and (a.out / RG.HARD_MARKER).is_file()
+    assert not (a.out / "measuresmoke").exists()
+    state = json.loads(Path(a.state).read_text())
+    assert state["tag"] == box.ptag and state["hard_home_at"]
+    assert sum(1 for c in box.calls if c[2] in ("submit", "run")) == 1       # one job, never a second
+    # the smoke's data plan travelled with the one job
+    assert any(k.endswith("/in/" + RG.MEASURE_SMOKE_DATA) for k in box.files)
+    # later: the final upload lands; await-final brings it home by tag and drops the state
+    box.final_ready = True
+    rc = RG.await_final(["--state", a.state, "--out", str(a.out), "--poll-seconds", "0"],
+                        runner=lambda aa: RG.Runner(aa, run=box.run, sleep=lambda s: None))
+    assert rc == 0 and (a.out / "measuresmoke" / "measuresmoke.json").is_file()
+    assert not Path(a.state).exists()
+    # nothing left to await: a second call says so and fails closed
+    assert RG.await_final(["--state", a.state, "--out", str(a.out)]) == 1
+
+
+def test_until_final_waits_for_the_smoke_as_before(tmp_path, monkeypatch, recorded):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor="amd", verdict="PASS"), "amd")
+    a = args(tmp_path, "amd", **{"--until": "final"})
+    polls = []
+
+    def sleep(seconds):
+        polls.append(seconds)
+        box.final_ready = len(polls) >= 2
+
+    assert RG.Runner(a, run=box.run, sleep=sleep, popen=box.popen).main() == 0
+    assert (a.out / "measuresmoke" / "measuresmoke.json").is_file() and not Path(a.state).exists()
+
+
+def test_a_hard_snapshot_of_another_candidate_is_not_taken_for_this_one(tmp_path, monkeypatch, recorded):
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = HardBox(dict(recorded.gate, vendor="amd", verdict="PASS"), "amd")
+    a = args(tmp_path, "amd")
+    r = RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen)
+    plan = r.make_plan()[0]
+    a.source_commit = "b" * 40                    # the marker names commit a*40
+    assert r.bring_home_hard(plan, box.ptag) is None
+
+
+def test_the_hard_label_is_a_ring_slot_of_a_running_job():
+    text = (RG.ROOT / "tools" / "box_persist_run.sh").read_text()
+    assert 'case "$label" in periodic|hard) ring=1 ;; esac' in text
+    assert 'case "$label" in periodic|hard) state=running ;;' in text
+    assert 'export MOJOLEARN_PERSIST_RUNNER="$SELF" MOJOLEARN_PERSIST_JSON="$JSON"' in text
+    assert RG.hard_landed(Path("/nonexistent")) is False
+
+
 def test_an_amd_job_whose_connection_dropped_is_found_by_its_minted_tag(tmp_path, monkeypatch):
     home = tmp_path / "persist"
     home.mkdir()
@@ -298,3 +468,350 @@ def test_dry_run_prints_the_submissions_and_runs_nothing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert calls == [] and "would: bash tools/do_amd_steward.sh run rel-0.8.57-gate-amd-" in out
     assert "mojolearn-ops" not in out
+
+
+# ------------------------------------------------------------------ adopt a landed result instead of relaunching
+def landed_fetch(tmp_path, report, tag="nvc-release-gate-20261102T061047Z-864f9c", state="final"):
+    """A fetch dir as tools/box_persist.py fetch leaves it: manifest.json + a verified final.tgz whose out/ holds
+    REPORT and one of pytest's absolute <test>current symlinks (what aborted the 0.8.64 extraction)."""
+    import io
+    import tarfile
+    d = tmp_path / "gates" / f"fetch-{tag}"
+    d.mkdir(parents=True)
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        link = tarfile.TarInfo("out/autograd-smoke/tmp/pytest-of-root/pytest-0/test_xcurrent")
+        link.type, link.linkname = tarfile.SYMTYPE, "/tmp/pytest-of-root/pytest-0/test_x0"
+        tf.addfile(link)
+        for name, body in (("out/gate-smoke.json", json.dumps(report).encode()),
+                           ("job/status.json", b'{"phase":"complete","exit":0}')):
+            info = tarfile.TarInfo(name)
+            info.size = len(body)
+            tf.addfile(info, io.BytesIO(body))
+    (d / "final.tgz").write_bytes(buf.getvalue())
+    (d / "manifest.json").write_text(json.dumps(dict(tag=tag, state=state, exit=0, uploads=[
+        dict(name="final.tgz", seq=3, sha256=hashlib.sha256(buf.getvalue()).hexdigest())])))
+    return d
+
+
+def landed_report(tmp_path, vendor, **over):
+    wheels = {w.name.split("-")[0]: hashlib.sha256(w.read_bytes()).hexdigest() for w in wheel_files(tmp_path, vendor)}
+    doc = dict(vendor=vendor, version=VERSION, source_commit=COMMIT, profile=profiles.LIGHT, verdict="PASS",
+               candidate=dict(source_commit=COMMIT, vendor=vendor, version=VERSION, wheels=wheels))
+    doc.update(over)
+    return doc
+
+
+def no_wrapper(*argv, **kw):
+    raise AssertionError(f"a wrapper was called: {argv}")
+
+
+def test_a_landed_pass_for_this_candidate_is_adopted_and_no_job_is_launched(tmp_path, capsys):
+    a = args(tmp_path, "nvidia")
+    report = landed_report(tmp_path, "nvidia")
+    landed_fetch(tmp_path, report)
+    assert RG.Runner(a, run=no_wrapper, popen=no_wrapper).main() == 0
+    assert json.loads((a.out / "gate-smoke.json").read_text()) == report
+    assert (a.out / "job" / "status.json").is_file()
+    assert not (a.out / "autograd-smoke" / "tmp" / "pytest-of-root" / "pytest-0" / "test_xcurrent").is_symlink()
+    out = capsys.readouterr().out
+    assert "adopted nvc-release-gate-20261102T061047Z-864f9c: PASS" in out and "no job launched" in out
+
+
+@pytest.mark.parametrize("change", ["wheels", "commit", "fail", "not-final"])
+def test_a_landed_result_for_another_candidate_or_a_fail_is_not_adopted(tmp_path, monkeypatch, recorded, change):
+    a = args(tmp_path, "nvidia")
+    report = landed_report(tmp_path, "nvidia")
+    if change == "wheels":
+        report["candidate"]["wheels"] = dict(report["candidate"]["wheels"], mojolearn_core="0" * 64)
+    elif change == "commit":
+        report["source_commit"] = report["candidate"]["source_commit"] = "b" * 40
+    elif change == "fail":
+        report["verdict"] = "FAIL"
+    landed_fetch(tmp_path, report, state="running" if change == "not-final" else "final")
+    assert RG.Runner(a, run=no_wrapper, popen=no_wrapper).adopt_landed() is None
+    assert not (a.out / "gate-smoke.json").exists()
+    # and the gate launches as before
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    box = FakeBox(dict(recorded.gate, vendor="nvidia"), "nvidia")
+    RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main()
+    assert sum(1 for c in box.calls if c[2] == "submit") == 1
+
+
+# ------------------------------------------------------------------ the gate runner overlay
+def head():
+    import subprocess
+    return subprocess.run(["git", "-C", str(RG.ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
+def test_the_gate_runner_overlay_is_an_input_only_when_bytes_differ(tmp_path):
+    a = args(tmp_path, "nvidia")
+    a.source_commit = head()                      # the tooling's own bytes: nothing to overlay
+    plan, key_same, _, _ = RG.Runner(a).make_plan()
+    assert plan.overlay is None
+    assert not any(r.endswith(("route-overlay.tgz", "route-overlay.json")) for _, r, _ in plan.uploads())
+    assert "GATE_OVERLAY_SHA256=\n" in plan.env_text()
+    a = args(tmp_path, "nvidia")                  # COMMIT has none of these files: every one differs
+    plan, key_other, _, _ = RG.Runner(a).make_plan()
+    assert sorted(plan.overlay["files"]) == sorted(RG.GATE_OVERLAY)
+    remotes = [r for _, r, _ in plan.uploads()]
+    assert f"{plan.indir}/route-overlay.tgz" in remotes and f"{plan.indir}/route-overlay.json" in remotes
+    assert key_same != key_other
+
+
+def test_the_job_applies_the_overlay_after_the_build_and_before_the_gate():
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    build, overlay, gate = text.index("\nPHASE=build"), text.index("\nPHASE=overlay"), text.index("\nPHASE=gate")
+    assert build < overlay < gate
+    block = text[overlay:gate]
+    assert 'echo "before $f' in block and 'echo "after $f' in block and "route-overlay.txt" in block
+    assert '"$GATE_OVERLAY_SHA256"' in block and "GATE_OVERLAY[*]" in block
+    assert "git checkout -q --" in text[text.index("finish() {"):]       # restored on exit: the tree stays clean
+
+
+def test_gate_ok_accepts_the_verified_overlay_and_refuses_other_bytes(tmp_path, monkeypatch, recorded):
+    import release_tooling
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    vendor = "nvidia"
+    report = dict(recorded.gate, vendor=vendor, candidate=dict(recorded.identity, vendor=vendor))
+    import gate_autograd_artifacts as A
+    report["autograd_artifacts"] = dict(report["autograd_artifacts"], vendor=vendor, files=[
+        dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
+        for name, source in A.expected(vendor).items()])
+    identity = report["candidate"]
+    box = FakeBox(report, vendor)
+    a = args(tmp_path, vendor)
+    a.source_commit = identity["source_commit"]
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    env = next(v for k, v in box.files.items() if k.endswith("/gate.env")).decode()
+    tgz = next(v for k, v in box.files.items() if k.endswith("/route-overlay.tgz"))
+    assert f"GATE_OVERLAY_SHA256={hashlib.sha256(tgz).hexdigest()}\n" in env
+    r = object.__new__(FakeRelease)
+    r.version, r.dry = VERSION, False
+    r.candidate_gate_identity = lambda v: identity
+    r.gate_out = lambda v: a.out
+    assert r.gate_ok(vendor)[0]                    # no overlay record: the source commit's own runner
+    m = release_tooling.overlay_manifest(RG.ROOT, head(), identity["source_commit"], RG.GATE_OVERLAY)
+    (a.out / "route-overlay.json").write_text(json.dumps(m))
+    lines = [f"before {rel} absent" for rel in m["files"]]
+    (a.out / "route-overlay.txt").write_text("\n".join(
+        lines + [f"after {rel} {row['tooling_sha256']}" for rel, row in m["files"].items()]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert ok, why
+    (a.out / "route-overlay.txt").write_text("\n".join(lines + [f"after {rel} {'0' * 64}" for rel in m["files"]]) + "\n")
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "not the overlaid bytes" in why
+    (a.out / "route-overlay.json").unlink()
+    ok, why = r.gate_ok(vendor)
+    assert not ok and "without its route-overlay.json" in why
+
+
+@pytest.mark.parametrize("runtime", [
+    dict(status="failed", exit_code=1, qualifier_exit=1, error="ValueError: no junit report; the tests did not run",
+         timed_out=dict(kind="run", budget_s=900, elapsed_s=900.4), partial_tests=dict(total=1700, passed=1700)),
+    dict(status="failed", exit_code=1, qualifier_exit=1, error="ValueError: no junit report; the tests did not run"),
+    {},  # no report: the qualifier was killed or never ran
+], ids=["timed-out", "failed", "missing"])
+def test_a_gate_whose_runtime_qualifier_did_not_pass_fails_and_names_the_report(tmp_path, monkeypatch, recorded,
+                                                                               runtime):
+    # 0.8.65: the gate printed PASS while runtime-<vendor>/runtime-report.json said "failed".
+    monkeypatch.setattr(RG, "job_script_committed", lambda: None)
+    monkeypatch.setattr(RG, "on_origin_main", lambda commit: True)
+    monkeypatch.setenv("MOJOLEARN_RELEASE_ADAPTERS", "1")
+    vendor = "amd"
+    report = dict(recorded.gate, vendor=vendor, candidate=dict(recorded.identity, vendor=vendor))
+    report["correctness"] = dict(report["correctness"], installed=dict(vendor="hip"))
+    import gate_autograd_artifacts as A
+    report["autograd_artifacts"] = dict(report["autograd_artifacts"], vendor=vendor, files=[
+        dict(file=name, source=source, exit_code=0, sha256="e" * 64, source_sha256="f" * 64)
+        for name, source in A.expected(vendor).items()])
+    identity = report["candidate"]
+    box = FakeBox(report, vendor, runtime=runtime)
+    a = args(tmp_path, vendor)
+    assert RG.Runner(a, run=box.run, sleep=lambda s: None, popen=box.popen).main() == 0
+    r = object.__new__(FakeRelease)
+    r.version, r.dry = VERSION, False
+    r.candidate_gate_identity = lambda v: identity
+    r.gate_out = lambda v: a.out
+    # fail soft (tools/release_verdicts.py): the runtime qualifier is SOFT, recorded, and the gate passes
+    r.rel, r.say = tmp_path / "rel" / "soft", (lambda msg: None)
+    r.args = SimpleNamespace(strict=False, state_dir=str(tmp_path / "state"))
+    ok, why = r.gate_ok(vendor)
+    assert ok and "SOFT FAIL (fix lanes owed): runtime" in why
+    import release_verdicts as RV
+    assert [f["name"] for f in RV.load(r.rel)] == ["runtime"]
+    # --strict: the old verdict
+    r.args = SimpleNamespace(strict=True)
+    ok, why = r.gate_ok(vendor)
+    path = a.out / f"runtime-{vendor}" / "runtime-report.json"
+    assert not ok and why.startswith(release.Release.RUNTIME_GATE_FAILED) and str(path) in why
+    if runtime.get("timed_out"):
+        assert "run timeout after 900.4 s" in why and "1700/1700" in why
+    # run_gate refuses at once: the smoke passed and the qualifier ran, so nothing is relaunched
+    r.readiness_status = lambda write=False: None
+    r.readiness = lambda: SimpleNamespace(begin=lambda name: "run-1")
+    launched = []
+    r.must = lambda *a, **k: launched.append(a)
+    with pytest.raises(release.StepFailed, match="runtime qualifier"):
+        r.run_gate(vendor)
+    assert launched == []
+
+
+# ------------------------------------------------------------------ the disk (0.8.66 run t filled the 80 GB pod)
+def test_the_job_never_copies_a_venv_into_the_results(tmp_path):
+    import subprocess
+    out = tmp_path / "work" / "out"
+    venv = out / "runtime-nvidia" / "qualify" / "run" / "venv" / "lib"
+    venv.mkdir(parents=True)
+    (venv / "big.so").write_bytes(b"x" * 1024)
+    (out / "runtime-nvidia" / "runtime-report.json").write_text('{"passed":true}\n')
+    dst = tmp_path / "res" / "out"
+    dst.mkdir(parents=True)
+    script = ("set -euo pipefail\n" + "GATE_FETCH=(" + " ".join(shlex.quote(p) for p in RG.GATE_FETCH) + ")\n"
+              + job_function("copy_reports") + f"copy_reports {shlex.quote(str(out))} {shlex.quote(str(dst))}\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert (dst / "runtime-nvidia" / "runtime-report.json").exists()
+    assert not (dst / "runtime-nvidia" / "qualify" / "run" / "venv").exists()
+
+
+def test_the_job_logs_the_disk_free_after_every_phase(tmp_path):
+    import re
+    import subprocess
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    phases = re.findall(r"^PHASE=([a-z-]+)$", text, re.M)
+    for prev in phases[phases.index("tree"):]:
+        if prev == "complete":
+            continue
+        assert re.search(r"^disk_line %s$" % re.escape(prev), text, re.M), prev
+    assert re.search(r"^disk_line start$", text, re.M)
+    fns = "\n".join(l for l in text.splitlines() if l.startswith(("say() ", "disk_free_gb() ", "disk_line() ")))
+    script = "GATE_WORK=%s\n%s\ndisk_line hard-done\n" % (shlex.quote(str(tmp_path)), fns)
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert re.search(r"release-gate-job\] DISK free=[0-9]+\.[0-9]GB after hard-done$", r.stdout.strip()), r.stdout
+
+
+def test_the_job_refuses_a_box_with_less_free_than_the_plan_needs_and_drops_venvs_once_home(tmp_path):
+    text = (RG.ROOT / RG.JOB_SCRIPT).read_text()
+    start = text[text.index("disk_line start"):text.index("for ((i = 0; i < ${#GATE_ARGV[@]}")]
+    assert "GATE_DISK_NEED_GB" in start and "DISK REFUSED" in start and "exit 3" in start
+    hard = text[text.index("\nPHASE=hard-done"):text.index("\nPHASE=measuresmoke\n")]
+    assert 'if [ "$HARD_HOME" = 1 ]; then' in hard and "identity-venv" in hard and "qualify/run/venv" in hard
+    assert hard.index("persist_hard\n") < hard.index('if [ "$HARD_HOME" = 1 ]; then')
+    smoke = text[text.index("\nPHASE=measuresmoke\n"):text.index("\nPHASE=complete")]
+    assert '--data-plan "$IN/measuresmoke-data.json"' in smoke and '--max-work-gb "${GATE_MEASURE_SMOKE_MAX_GB:-8}"' in smoke
+    assert "release_measurement_smoke.py stage" not in text      # no whole-plan stage: the smoke stages per group
+    assert smoke.index("measuresmoke exited") < smoke.index('rm -rf "$GATE_WORK/measure-venv" "$GATE_WORK/fixture-venv"')
+
+
+def test_gate_env_carries_the_disk_plan(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gate_disk_plan", RG.ROOT / "tools/ops/gate_disk_plan.py")
+    D = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(D)
+    env = RG.Runner(args(tmp_path, "nvidia")).make_plan()[0].env_text()
+    assert f"GATE_DISK_NEED_GB={D.job_need_gb()}" in env and f"GATE_MEASURE_SMOKE_MAX_GB={D.SMOKE_CAP_GB:g}" in env
+    # the job's need is the measured items plus the smoke cap; the pod adds its base and 20 GB headroom
+    assert D.job_need_gb() >= sum(D.JOB_WRITES_GB.values()) + D.SMOKE_CAP_GB
+    assert D.pod_disk_gb() >= D.job_need_gb() + D.POD_BASE_GB + D.HEADROOM_GB and D.pod_disk_gb() % 10 == 0
+    assert D.pod_disk_gb(smoke_cap_gb=100) > D.pod_disk_gb()
+    dev_pod = (RG.ROOT / "tools/dev_pod.sh").read_text()
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in dev_pod
+    assert 'tools/ops/gate_disk_plan.py" pod-gb' in (RG.ROOT / "tools/nvidia_central.sh").read_text()
+
+
+def test_stage_skips_files_on_the_box_and_copies_in_parallel(tmp_path):
+    # lane fx-pod-job (2026-11-18): one `ssh cat >` per file, one after the other, took 57 min for 42 arms; a file
+    # already on the box at its sha256 (the base wheels, the stored board) was sent again on every stage
+    import threading
+    files = []
+    for i in range(6):
+        f = tmp_path / f"w{i}.whl"
+        f.write_bytes(b"wheel %d" % i)
+        files.append(f)
+    box, lock, live, peak = {}, threading.Lock(), [0], [0]
+
+    class StubPlan:
+        indir = "/root/pc-in/x"
+
+        def sync(self):
+            return None
+
+        def box_sh(self, command):
+            return ["bash", "tools/nvidia_central.sh", "sh", "lane", command]
+
+        def prepare(self):
+            return self.box_sh("mkdir -p /root/pc-in/x; echo READY")
+
+        def uploads(self):
+            return [(f, f"/root/pc-in/x/{f.name}", False) for f in files]
+
+        def upload(self, remote):
+            return self.box_sh("cat > " + remote)
+
+        def verify(self, remotes, executables):
+            return self.box_sh("sha256sum " + " ".join(remotes))
+
+    def run(argv, cwd=None, stdin=None, timeout=None, capture_output=True, text=True):
+        out = SimpleNamespace(returncode=0, stdout="", stderr="")
+        command = argv[-1]
+        if command.startswith("cat > "):
+            with lock:
+                live[0] += 1
+                peak[0] = max(peak[0], live[0])
+            import time
+            time.sleep(0.05)
+            data = stdin.read()
+            with lock:
+                box[command[len("cat > "):]] = data
+                live[0] -= 1
+        elif "sha256sum" in command:
+            out.stdout = "".join(f"{hashlib.sha256(v).hexdigest()}  {k}\n" for k, v in box.items())
+        elif "READY" in command:
+            out.stdout = "READY\n"
+        return out
+
+    sent = []
+    r = RG.Runner(SimpleNamespace(), run=run)
+    real = run
+
+    def counting(argv, **kw):
+        if argv[-1].startswith("cat > "):
+            sent.append(argv[-1])
+        return real(argv, **kw)
+
+    r.run = counting
+    old = RG.STAGE_STREAMS
+    RG.STAGE_STREAMS = 4
+    try:
+        r.stage(StubPlan())
+        assert len(sent) == 6 and set(box) == {f"/root/pc-in/x/{f.name}" for f in files}
+        assert peak[0] > 1                       # parallel streams
+        sent.clear()
+        r.stage(StubPlan())                      # a restage: every file is on the box at its sha256
+        assert sent == []
+        box["/root/pc-in/x/w0.whl"] = b"stale"
+        r.stage(StubPlan())                      # a changed file is sent again, and only it
+        assert sent == ["cat > /root/pc-in/x/w0.whl"] and box["/root/pc-in/x/w0.whl"] == b"wheel 0"
+    finally:
+        RG.STAGE_STREAMS = old
+
+
+def test_stage_streams_fit_the_link_and_timeouts_scale_with_size():
+    # lane fx-pod-job2 (2026-11-18): 10 streams over a 2.6 MB/s link gave each 0.26 MB/s and a 54 MB wheel hit its
+    # fixed 569 s timeout (stage-ab4-try1.log). Streams stop at what the link carries; the timeout follows the
+    # file's size over its share of the link
+    assert RG.STAGE_STREAMS <= max(1, -(-RG.STAGE_LINK_MBPS // RG.STAGE_STREAM_MBPS)) or "MOJOLEARN_STAGE_STREAMS" in \
+        __import__("os").environ
+    mb54 = 54 * 10 ** 6
+    two = RG.stage_copy_timeout(mb54, 2, link_mbps=2.6)
+    ten = RG.stage_copy_timeout(mb54, 10, link_mbps=2.6)
+    assert two >= 300 + 3 * 54 / 1.3 - 1                  # its share is one stream's 1.3 MB/s
+    assert ten > 900 and ten > 2 * two                    # ten streams share the link: 0.26 MB/s each, 3x slack
+    assert RG.stage_copy_timeout(2 * mb54, 2, link_mbps=2.6) > two      # scales with the size
+    assert RG.stage_copy_timeout(1600, 2) < 310                         # a small file keeps the base allowance

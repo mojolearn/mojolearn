@@ -1,0 +1,36 @@
+diff --git a/preprocessing/estimator.mojo b/preprocessing/estimator.mojo
+index 2618885845..2bb7b45572 100644
+--- a/preprocessing/estimator.mojo
++++ b/preprocessing/estimator.mojo
+@@ -5,6 +5,9 @@ from max.gpu import block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.neural_context import process_ctx
+ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
++from checks.numerics import NUMERIC_FAST
++from std.sys.compile import is_defined
++from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ 
+ #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+ #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+@@ -327,7 +330,7 @@ def standard_transform_direct(
+     return ok
+ 
+ 
+-# ---- fit_transform on one upload (lane apple-fast-round2) ----
++# ---- MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (lane apple-fast-round2) ----
+ # FAST + Apple experiment, default off. StandardScaler.fit_transform(X) was
+ # fit (X up, scan, stats, rows home) then transform (the SAME X up again,
+ # the stats up, kernel, scans, output home): two n*d uploads of one array.
+@@ -338,8 +341,10 @@ def standard_transform_direct(
+ # copy and one host round trip saved (on Apple, shared-memory uploads of
+ # ~1-2 ms per 64 MB, so a 10^9-byte X saves tens of ms against a ~1 ms
+ # kernel). Same kernels on the same words as fit + transform: no bit moves.
+-# TOMBSTONE: MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (Apple FAST opt-in arm, EXP:1597 OPEN, no A/B) deleted 2026-11-15 by lane/expdel2-20-linear (the PREP_FAST_FIT_TRANSFORM_FUSED gate, which nothing read; the direct entries below stay for their binding); code recoverable at 23c6c58415.
+-# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
++comptime PREP_FAST_FIT_TRANSFORM_FUSED = (
++    _DEVCTX_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and is_defined["MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED"]()
++)
+ 
+ 
+ def standard_fit_transform_direct(

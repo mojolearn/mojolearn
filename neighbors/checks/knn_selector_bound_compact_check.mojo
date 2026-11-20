@@ -33,6 +33,7 @@ from neighbors.checks.knn_selector_bound_compact import (
     SBC_DEPTH,
     bound_compact_select_launch,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime ROWS = 6
 
@@ -83,7 +84,7 @@ def check_case(length: Int, k: Int, select_min: Bool) raises -> Int:
         var distances_old = ctx.enqueue_create_buffer[DType.float32](ROWS * k)
         var indices_old = ctx.enqueue_create_buffer[DType.uint32](ROWS * k)
         var flags = ctx.enqueue_create_buffer[DType.uint32](ROWS)
-        ctx.enqueue_copy(dst_buf=values, src_ptr=host.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, values, host)
         bound_compact_select_launch(
             ctx, values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             distances.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -96,11 +97,11 @@ def check_case(length: Int, k: Int, select_min: Bool) raises -> Int:
             indices_old.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             ROWS, length, k, select_min,
         )
-        ctx.enqueue_copy(dst_ptr=new_d.unsafe_ptr(), src_buf=distances)
-        ctx.enqueue_copy(dst_ptr=new_i.unsafe_ptr(), src_buf=indices)
-        ctx.enqueue_copy(dst_ptr=old_d.unsafe_ptr(), src_buf=distances_old)
-        ctx.enqueue_copy(dst_ptr=old_i.unsafe_ptr(), src_buf=indices_old)
-        ctx.enqueue_copy(dst_ptr=host_flags.unsafe_ptr(), src_buf=flags)
+        download_host_into[DType.float32](ctx, distances, new_d)
+        download_host_into[DType.uint32](ctx, indices, new_i)
+        download_host_into[DType.float32](ctx, distances_old, old_d)
+        download_host_into[DType.uint32](ctx, indices_old, old_i)
+        download_host_into[DType.uint32](ctx, flags, host_flags)
         ctx.synchronize()
         var flagged = 0
         for row in range(ROWS):
@@ -138,13 +139,12 @@ def check_case(length: Int, k: Int, select_min: Bool) raises -> Int:
             if row == 0 and length == 65536 and flag != 0:
                 raise Error("bound-compact check: the hashed row was flagged at 65,536 columns")
         print("SELECTOR_BOUND_CASE_PASS", length, k, select_min, "cells", ROWS * k, "flagged_rows", flagged)
-        _ = host^
         _ = values^
         _ = flags^
         return flagged
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("bound-compact selector check requires IDENTICAL")
     var lengths: List[Int] = [64, 65, 255, 256, 257, 2047, 2048, 4096, 6784, 16384, 65536, 65537]

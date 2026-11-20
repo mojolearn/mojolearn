@@ -524,31 +524,41 @@ def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
     return w^
 
 
-def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[Float32]:
-    """Two passes (alt 1: one) of R = host_qr_r (decomposition/'s host twin
-    of qr_factor), the rank guard (alt 2: none), Q = A R^-1 by forward
-    substitution per row, ascending."""
+def _o_rank_guard(mut r: List[Float32], l: Int):
+    """DEVIATION 5318 on an l x l upper R, in place: column j is dependent
+    when its residual R[j, j] is at most 2^-16 of the column's norm (both
+    over max |R[., j]|); its diagonal becomes 0."""
+    for j in range(l):
+        var col = List[Float32]()
+        var big = Float32(0)
+        for t in range(j + 1):
+            col.append(ftz(r[t * l + j]))
+            big = max(big, abs(col[t]))
+        if big > Float32(0):
+            var ss = Float32(0)
+            for t in range(j + 1):
+                var u = o_div0(col[t], big)
+                ss = o_fma(u, u, ss)
+            var dj = o_div0(col[j], big)
+            if o_mul(dj, dj) <= o_mul(Float32(2.3283064365386963e-10), ss):
+                r[j * l + j] = Float32(0)
+
+
+def oracle_orth_diag(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> Tuple[List[Float32], List[Float32]]:
+    """THE TWO-PASS ROUTE (`orth_diag` in every mode; `orth` for the shapes
+    the TSQR does not take, and in FAST): two passes (alt 1: one) of R =
+    host_qr_r (decomposition/'s host twin of qr_factor), the rank guard (alt
+    2: none), Q = A R^-1 by forward substitution per row, ascending. Returns
+    (Q, diag): diag[j] the product of the passes' guarded R[j, j], from 1."""
     var q = a.copy()
+    var diag = List[Float32](length=l, fill=Float32(1))
     var passes = 1 if alt == 1 else 2
     for _ in range(passes):
         var r = host_qr_r(q, m, l)
         if alt != 2:
-            # DEVIATION 5318: column j is dependent when its residual R[j, j]
-            # is at most 2^-16 of the column's norm (both over max |R[., j]|).
-            for j in range(l):
-                var col = List[Float32]()
-                var big = Float32(0)
-                for t in range(j + 1):
-                    col.append(ftz(r[t * l + j]))
-                    big = max(big, abs(col[t]))
-                if big > Float32(0):
-                    var ss = Float32(0)
-                    for t in range(j + 1):
-                        var u = o_div0(col[t], big)
-                        ss = o_fma(u, u, ss)
-                    var dj = o_div0(col[j], big)
-                    if o_mul(dj, dj) <= o_mul(Float32(2.3283064365386963e-10), ss):
-                        r[j * l + j] = Float32(0)
+            _o_rank_guard(r, l)
+        for j in range(l):
+            diag[j] = o_mul(diag[j], r[j * l + j])
         var nq = List[Float32](length=m * l, fill=Float32(0))
         for i in range(m):
             for j in range(l):
@@ -557,7 +567,121 @@ def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[F
                     acc = o_fma(-nq[i * l + t], r[t * l + j], acc)
                 nq[i * l + j] = o_div0(acc, r[j * l + j])
         q = nq^
-    return q^
+    return (q^, diag^)
+
+
+#: The TSQR's shape constants, restated (x_decomp/tsqr_core.mojo TS_ROWS,
+#: TS_P, TS_NB).
+comptime O_TS_ROWS = 2048
+comptime O_TS_P = 16
+comptime O_TS_NB = 16
+
+
+def _o_ts_dot(
+    x: List[Float32], ldx: Int, cx: Int, y: List[Float32], ldy: Int, cy: Int, lo: Int, hi: Int, alt: Int
+) -> Float32:
+    """sum over rows [lo, hi) of x[i, cx] y[i, cy] in the TSQR's order: O_TS_P
+    chains (row i into chain i mod O_TS_P, ascending, from 0), the chains
+    folded by halving, each sum flushed (alt 1: one ascending chain)."""
+    if alt == 1:
+        var one = Float32(0)
+        for i in range(lo, hi):
+            one = o_fma(x[i * ldx + cx], y[i * ldy + cy], one)
+        return one
+    var part = List[Float32](length=O_TS_P, fill=Float32(0))
+    for i in range(lo, hi):
+        var g = i % O_TS_P
+        part[g] = o_fma(x[i * ldx + cx], y[i * ldy + cy], part[g])
+    var h = O_TS_P // 2
+    while h > 0:
+        for t in range(h):
+            part[t] = o_add(part[t], part[t + h])
+        h = h // 2
+    return part[0]
+
+
+def oracle_orth_tsqr(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[Float32]:
+    """IDENTICAL `orth` since 2026-10-10 (06865c6d84, RSVD_IDN_TSQR_ORTHO):
+    ONE blocked TSQR pass, restated for one leaf block and one panel (m < 2
+    O_TS_ROWS, l <= O_TS_NB; other shapes are refused). The Householder
+    reflectors one column at a time (DEVIATION 586's reflector; a zero column
+    is a zero diagonal and tau = 0), each applied to the columns to its
+    right; the compact WY factor T (larft, forward, columnwise); R's rank
+    guard (DEVIATION 5318; alt 2: none); then Q C = (I - Y T Y^T) [C; 0]
+    with C = diag(R[j, j] != 0), so a dependent column of Q is exactly 0.
+    Every inner product is `_o_ts_dot` (alt 1: one ascending chain)."""
+    if l < 1 or m < l or l > O_TS_NB or m // O_TS_ROWS > 1:
+        raise Error("oracle_orth_tsqr restates one leaf block and one panel only")
+    var y = a.copy()
+    var t = List[Float32](length=l * l, fill=Float32(0))
+    # the reflectors
+    for j in range(l):
+        var sigma = _o_ts_dot(y, l, j, y, l, j, j, m, alt)
+        var normx = ftz(identical_sqrt(sigma))
+        var ajj = ftz(y[j * l + j])
+        var tau = Float32(0)
+        if normx == Float32(0):
+            for i in range(j, m):
+                y[i * l + j] = Float32(0)
+        else:
+            var sg = Float32(-1) if ajj >= Float32(0) else Float32(1)
+            var rjj = ftz(sg * normx)
+            var u1 = ftz(ajj - rjj)
+            tau = ftz(identical_div(ftz(ftz(-sg) * u1), normx))
+            y[j * l + j] = rjj
+            for i in range(j + 1, m):
+                y[i * l + j] = ftz(identical_div(ftz(y[i * l + j]), u1))
+        t[j * l + j] = tau
+        if tau != Float32(0):
+            for c in range(j + 1, l):
+                var ajc = ftz(y[j * l + c])
+                var tail = _o_ts_dot(y, l, j, y, l, c, j + 1, m, alt)
+                var td = ftz(identical_mul(tau, ftz(ajc + tail)))
+                y[j * l + c] = ftz(ajc - td)
+                for i in range(j + 1, m):
+                    y[i * l + c] = o_fma(-td, y[i * l + j], y[i * l + c])
+    # T[0:p, p] = -tau_p T[0:p, 0:p] (Y^T y_p)
+    for p in range(1, l):
+        var gq = List[Float32](length=l, fill=Float32(0))
+        for q in range(p):
+            var gtail = _o_ts_dot(y, l, q, y, l, p, p + 1, m, alt)
+            gq[q] = ftz(ftz(y[p * l + q]) + gtail)
+        var ntau = -t[p * l + p]
+        for q in range(p):
+            var ts = Float32(0)
+            for kk in range(q, p):
+                ts = o_fma(t[q * l + kk], gq[kk], ts)
+            t[q * l + p] = ftz(identical_mul(ntau, ts))
+    var r = List[Float32](length=l * l, fill=Float32(0))
+    for i in range(l):
+        for c in range(i, l):
+            r[i * l + c] = ftz(y[i * l + c])
+    if alt != 2:
+        _o_rank_guard(r, l)
+    # Q C, C = diag(R[j, j] != 0)
+    var x = List[Float32](length=m * l, fill=Float32(0))
+    for j in range(l):
+        if r[j * l + j] != Float32(0):
+            x[j * l + j] = Float32(1)
+    for c in range(l):
+        var z = List[Float32](length=l, fill=Float32(0))
+        for p in range(l):
+            var ztail = _o_ts_dot(y, l, p, x, l, c, p + 1, m, alt)
+            z[p] = ftz(ftz(x[p * l + c]) + ztail)
+        var w = List[Float32](length=l, fill=Float32(0))
+        for p in range(l):
+            var wp = Float32(0)
+            for q in range(p, l):
+                wp = o_fma(t[p * l + q], z[q], wp)
+            w[p] = wp
+        for i in range(m):
+            var acc = ftz(x[i * l + c])
+            var top = min(l, i + 1)
+            for p in range(top):
+                var yv = Float32(1) if i == p else ftz(y[i * l + p])
+                acc = o_fma(-w[p], yv, acc)
+            x[i * l + c] = acc
+    return x^
 
 
 # ------------------------------------------------------------ row solvers (5310-5312)

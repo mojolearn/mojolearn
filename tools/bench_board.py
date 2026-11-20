@@ -422,7 +422,7 @@ CLASSICAL_OPPONENTS = {
         "dbscan": ("cuml-gpu",),             # cuml-gpu-rbc overflows at 1M rows
         "hdbscan": ("cuml-gpu",),
     },
-    "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
+    "amd": {                                 # the AMD arms (first raced by the Hot Aisle classical leg, removed 2026-11-18)
         # FAIRNESS FIX (2026-10-13 audit, the author's correction): the harness-written torch
         # k-means / kNN are REPLACED by a library on AMD, hipVS (AMD's cuVS port, AMD_HIPVS
         # below): hipvs-gpu races, and scikit-learn on the CPU drops out by gpu_opponents_first.
@@ -644,6 +644,16 @@ def _sha256_file(path, chunk=1 << 20):
                 break
             h.update(b)
     return h.hexdigest()
+
+
+_SMALL_ROWS = []
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py, loaded once per process."""
+    if not _SMALL_ROWS:
+        _SMALL_ROWS.append(_load_tool("bench_board_small_rows"))
+    return _SMALL_ROWS[0]
 
 
 def _load_tool(name):
@@ -1227,6 +1237,63 @@ def amd_xgboost_fallback(pins):
     return [r for r in (trees[1] if trees else []) if r.lower().startswith("xgboost==")]
 
 
+#: The ours-only venv's packages besides scikit-learn, at the versions the repo pins (pixi.lock; the `bench`
+#: environment every recorded timing was taken under first): pandas (the pandas-input rows, forest_speed_arm and
+#: the trees data helpers) and huggingface_hub (bench_board_neural.lm_checkpoint fetches the causal-lm-generate
+#: checkpoint in the arm's own python when the box lacks it). Read from the lock, never written here, so the pin
+#: cannot drift (lane candidate-build replaced measure-prep's literal pandas==2.2.3, which no file pinned).
+OURS_ONLY_LOCKED = ("pandas", "huggingface_hub")
+LOCK_ENV_ORDER = ("bench", "gbmbench", "default", "test")
+
+
+def locked_version(name, lock=None, envs=LOCK_ENV_ORDER):
+    """NAME's version in pixi.lock (the linux-64 package of the first environment in ENVS that has it), or None.
+    pixi.lock lists each environment's packages by URL: conda `.../linux-64/<name>-<ver>-<build>.conda`, PyPI
+    `.../<name>-<ver>-py3-none-any.whl`."""
+    lock = lock or os.path.join(REPO, "pixi.lock")
+    try:
+        lines = open(lock).read().splitlines()
+    except OSError:
+        return None
+    found, env, platform = {}, None, None
+    want = re.compile(r"/" + re.escape(name) + r"-(\d+(?:\.\d+)*)-")
+    for line in lines:
+        if line == "packages:":
+            break
+        m = re.match(r"^  ([a-z][\w-]*):$", line)
+        if m:
+            env, platform = m.group(1), None
+            continue
+        m = re.match(r"^      ([a-z0-9-]+):$", line)
+        if m:
+            platform = m.group(1)
+            continue
+        m = want.search(line)
+        if m and env and platform == "linux-64":
+            found.setdefault(env, m.group(1))
+    return next((found[e] for e in envs if e in found), None)
+
+
+def ours_only_requirements(pins, lock=None):
+    """The third-party packages an ours-only board venv installs beside our wheels: the scikit-learn pin of
+    the trees opponent set (the drivers' data helpers and metrics; it pulls numpy, scipy, joblib and
+    threadpoolctl), its catboost pin (the border oracle of our pre-binned arms, never raced here), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
+    drivers is an opponent arm's (lazy, inside that arm) or a download step's (pyarrow for parquet)."""
+    trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
+    sk = [r for r in (trees[1] if trees else []) if r.lower().startswith("scikit-learn==")]
+    out = sk or ["scikit-learn"]
+    # SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): our own pre-binned arms (`ours-prebinned` on
+    # gbdt-depthwise, `ours-gain0` on gbdt-lossguide; tools/board_pairing.py) fit on the GreedyLogSum bin ids that
+    # CatBoost's own Pool.quantize computes (tools/speed_gbdt_arm.py prebinned_data, untimed, the border oracle).
+    # Without catboost in this venv the trees driver refused both own arms ("No module named 'catboost'"), the
+    # probe built nothing and the four rows smoked as "arm=- not run". The oracle's pin is the trees set's.
+    out += [r for r in (trees[1] if trees else []) if r.lower().startswith("catboost==")][:1] or ["catboost"]
+    for name in OURS_ONLY_LOCKED:
+        version = locked_version(name, lock)
+        out.append("%s==%s" % (name, version) if version else name)
+    return out
+
+
 def opponent_requirements(vendor, pins):
     """[(extra index or None, [reqs])] to install for this vendor.
 
@@ -1399,6 +1466,10 @@ def child_env(ctx, extra=None):
     env["MOJOLEARN_REPO_COMMIT"] = ctx.get("commit") or "unknown"
     env["PYTHONUNBUFFERED"] = "1"
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
+    # one NUMA plan per job (lane fx-numa-bind-smoke, 2026-11-19; tools/numa_place.py job_plan): made once here and
+    # inherited by every driver, so a race's parameter probe and its timed worker carry the same placement
+    numa = _numa_place()
+    env[numa.PLAN_ENV] = json.dumps(numa.job_plan(), sort_keys=True)
     if ctx["vendor"] == "amd":
         # FAIRNESS FIX (2026-10-13 audit): setup set this only in its own
         # process. A later smoke/timing worker could not import HIP CuPy, so
@@ -1656,9 +1727,48 @@ def box_key(box):
     return key
 
 
+#: the system state of this process (load_host_probe): GPU uuid and driver from the box's probe, the kernel release and
+#: boot id read here. A board resumed after a pod restart is a new process with a new boot id, so each race's record
+#: says which side of the restart it was timed on (fb-harness, 2026-11-17).
+_RACE_SOFTWARE = {}
+
+
+def boot_id():
+    """/proc/sys/kernel/random/boot_id, or None (not Linux)."""
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
 def race_host():
-    """Where a race ran: the hostname and, on RunPod, the pod id."""
-    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID")}
+    """Where a race ran: the hostname, on RunPod the pod id, and the host probe's host_id (MOJOLEARN_HOST_ID, set by
+    main from --host-probe): tools/paper_compare.py refuses to compare races of two host ids (2026-11-14). Plus the
+    system state it ran under (gpu_uuid, driver, kernel, boot_id): paper_compare gives a verdict only when both arms
+    ran under one and the same (2026-11-17)."""
+    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID"),
+            "host_id": os.environ.get("MOJOLEARN_HOST_ID") or None,
+            "gpu_uuid": _RACE_SOFTWARE.get("gpu_uuid"), "driver": _RACE_SOFTWARE.get("driver"),
+            "kernel": platform.release() or None, "boot_id": boot_id()}
+
+
+def load_host_probe(path):
+    """The host probe (tools/ops/host_probe.py) of this box, or None without one. Sets MOJOLEARN_HOST_ID for
+    race_host (the drivers and workers inherit it). An unreadable probe refuses: a board without its box's identity
+    can not be compared (AGENTS.md "Times are compared only on the same box")."""
+    if not path:
+        return None
+    try:
+        with open(path) as fh:
+            probe = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("bench_board: cannot read the host probe %s: %s" % (path, exc))
+    if not probe.get("host_id"):
+        raise SystemExit("bench_board: the host probe %s has no host_id" % path)
+    os.environ["MOJOLEARN_HOST_ID"] = probe["host_id"]
+    _RACE_SOFTWARE.update(gpu_uuid=probe.get("gpu_uuid"), driver=(probe.get("gpu") or {}).get("driver"))
+    return probe
 
 
 # ---------------------------------------------------------------------------
@@ -1804,6 +1914,18 @@ def setup_python(args, vendor, out, log):
                  "bytes": os.path.getsize(wfile)}
         if run_logged(pip + [wfile], None, log, 3600) != 0:
             raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
+    if getattr(args, "ours_install_only", False):
+        # OURS-ONLY VENV (lane measure-prep, 2026-11-09): an ours-only board (no --with-opponents) times no
+        # opponent, so torch, RAPIDS, the ROCm builds, hipVS, mamba-ssm and the neural/algos opponent sets are
+        # dead weight (the 0.8.66 paper smoke venv was 13 GB per shard). Only what our drivers and the quality
+        # metrics import beside our wheel: scikit-learn (pinned with the trees opponents; brings scipy) and pandas.
+        if args.with_opponents or getattr(args, "opponents_only", False):
+            raise SystemExit("bench_board: --ours-install-only is for ours-only boards (no --with-opponents, "
+                             "no --opponents-only)")
+        deps = ours_only_requirements(opponent_pins())
+        if run_logged(pip + deps, None, log, 3600) != 0:
+            raise SystemExit("bench_board: ours-only dependencies %s failed; see %s" % (" ".join(deps), log))
+        return python, wheel
     # torch FIRST: the opponent sets that depend on torch (torch-geometric,
     # gpytorch, ...) then resolve against the pinned build instead of pulling
     # PyPI's newest torch (another CUDA major on Linux)
@@ -2014,8 +2136,8 @@ def setup_arm_venvs(args, vendor, out, log, arms=None):
     (tools/bench_board_algos.py ARM_VENVS), created and installed under the
     cache. A failed install is not fatal: the arm then refuses by name in its
     race, in the board's venv."""
-    if "algos" not in (args.families or ""):
-        return {}
+    if "algos" not in (args.families or "") or getattr(args, "ours_install_only", False):
+        return {}       # --ours-install-only: these are opponent libraries' venvs; an ours-only board races none
     cache = cache_dir(args, out)
     wanted = set(ALGOS.ARM_VENVS.get(vendor, {})) if arms is None else set(arms)
     if args.skip_install or args.python_env:
@@ -2273,11 +2395,18 @@ def parse_tree_log(path):
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
     bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
-    states = {}
+    states, calls = {}, {}
+    small = _small_rows()
     with open(path, errors="replace") as fh:
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
-            if head == "BENCH_BINDING":
+            if head == "FSPEED":
+                # SMALL ROWS (2026-11-15): a scored round of more than one call carries calls= min_ms= max_ms=
+                f = _kv(rest)
+                rec = small.parse_suffix(f)
+                if rec is not None and f.get("arm"):
+                    calls.setdefault(f["arm"], []).append(dict(rec, round=f.get("round")))
+            elif head == "BENCH_BINDING":
                 f = _kv(rest)
                 bindings[f.get("arm")] = f
             elif head == "FSPEED-WARMUP":
@@ -2317,7 +2446,40 @@ def parse_tree_log(path):
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
             "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
-            "libraries": libs, "state_receipts": states}
+            "libraries": libs, "state_receipts": states, "scored_calls": calls}
+
+
+#: attribution runs only: the own arms (and their order) a tree race times; see select_own_arms
+OWN_ARMS_ENV = "MOJOLEARN_BENCH_OWN_ARMS"
+
+
+def select_own_arms(races, environ=None):
+    """ATTRIBUTION RUNS ONLY (tools/ops/attribution_job.sh): MOJOLEARN_BENCH_OWN_ARMS (comma list) narrows every tree
+    race to exactly those planned own arms, in that order (one arm alone, or the arm-order test); a board never sets
+    it. The race's `our_arms` and `arms` are narrowed, not only the driver command: fb3-attr-tool (2026-11-17, L40S
+    attribution job) -- the env used to reach tree_cmd alone, so the preflight still expected a probe of every
+    planned own arm and refused `ours-prebinned` / `ours-gain0` alone with "missing parameter/version probe: ours"
+    (bench_board rc 1, four runs on each wheel). An arm the race does not plan is refused by name."""
+    env = os.environ if environ is None else environ
+    forced = [a.strip() for a in (env.get(OWN_ARMS_ENV) or "").split(",") if a.strip()]
+    if not forced:
+        return races
+    out = []
+    for race in races:
+        ours = race.get("our_arms") or {}
+        own = [a for a in ours if a != "ours-ab"]
+        if race.get("family") != "trees" or not own:
+            out.append(race)
+            continue
+        unknown = [a for a in forced if a not in own]
+        if unknown:
+            raise ValueError("%s names arms the race does not plan: %s (planned: %s)"
+                             % (OWN_ARMS_ENV, ",".join(unknown), ",".join(own)))
+        keep = {a: ours[a] for a in forced}
+        if "ours-ab" in ours:
+            keep["ours-ab"] = ours["ours-ab"]
+        out.append(dict(race, our_arms=keep, arms=list(keep) + [a for a in race["arms"] if a not in ours]))
+    return out
 
 
 def tree_cmd(ctx, race):
@@ -2332,6 +2494,13 @@ def tree_cmd(ctx, race):
                 "--arms", ",".join(race["opponents"])]
     else:
         cmd += ["--ours-only"]
+    # board-smoke-3 (2026-11-16): only the planned own arms are built and timed (the driver otherwise
+    # times every paired own arm, e.g. gbdt-categorical's `ours` whose catboost-cpu is not on a GPU board,
+    # and its unplanned cells refuse the race). `ours-ab` stays --ours-ab's.
+    # ATTRIBUTION RUNS: MOJOLEARN_BENCH_OWN_ARMS already narrowed and ordered race["our_arms"] (select_own_arms)
+    own = [a for a in ours if a != "ours-ab"]
+    if own and not ctx.get("opponents_only"):
+        cmd += ["--own-arms", ",".join(own)]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
     if ctx.get("opponents_only"):
@@ -2382,6 +2551,28 @@ def flag_recompiles(cells):
     return cells
 
 
+#: a cell's explicit reason for a quality it does not record (bench_board_infer, bench_board_neural); shown with the
+#: cell, never a gate and never a quality failure of the arm
+QUALITY_UNAVAILABLE = "quality_unavailable"
+#: quality keys that are not a score: a cell holding only these recorded no quality
+QUALITY_NON_METRIC = ("scorer", "reference", "rows", QUALITY_UNAVAILABLE)
+
+
+#: inference batches the scorer is defined not to score, per family: the trees `large` batch is the first
+#: --infer-large-rows TRAINING rows (bench/speed/forest_speed_arm.py), a throughput batch; only `test` is scored, and
+#: the 0.8.55 record is "not-scored" too. The completion check never asks these for quality (records written before
+#: bench_board_infer stated quality_unavailable included).
+UNSCORED_INFER_BATCHES = {"trees": ("large",)}
+
+
+def unscored_by_design(rec, phase, cell):
+    """The reason a cell has no quality by design (no scorer is defined for it), else None."""
+    if phase == "infer" and cell.get("batch") in UNSCORED_INFER_BATCHES.get(rec.get("family"), ()):
+        return "%s infer batch %s: training rows, no scorer by design (the test batch is scored)" % (
+            rec.get("family"), cell.get("batch"))
+    return None
+
+
 def mark_not_scored(cells):
     """"ok" only if scored (lane harness-evidence, 2026-10-14). A cell timed in every round whose quality scorer
     failed or never ran gets status "not-scored" and `scorer_error`; its times stay exactly as measured. The
@@ -2393,8 +2584,9 @@ def mark_not_scored(cells):
             continue
         q = c.get("quality") or {}
         why = BQ.scorer_failure(q)
-        if why is None and not any(k not in ("scorer", "reference", "rows") for k in q):
-            why = "the race recorded no quality for this arm (its scorer did not run)"
+        if why is None and not any(k not in QUALITY_NON_METRIC for k in q):
+            why = (("quality unavailable: " + str(q[QUALITY_UNAVAILABLE])) if q.get(QUALITY_UNAVAILABLE) else
+                   "the race recorded no quality for this arm (its scorer did not run)")
         if why is not None:
             c.update(status=NOT_SCORED, scorer_error=why[:2000])
     return cells
@@ -2433,11 +2625,20 @@ def measurement_completion(rec):
                     missing.append(key)
             quality = cell.get("quality") or {}
             why = BQ.scorer_failure(quality)
-            if why or cell.get("status") == NOT_SCORED:
-                missing.append("quality scorer: " + str(why or cell.get("scorer_error") or "not scored"))
+            declared = quality.get(QUALITY_UNAVAILABLE) or unscored_by_design(rec, phase, cell)
+            if why:
+                missing.append("quality scorer: " + str(why))
+            elif declared and not any(k not in QUALITY_NON_METRIC for k in quality):
+                # QUALITY-MISSING FIX (2026-11-13): a cell that states why it records no quality (the trees large
+                # batch: training rows) is recorded with its reason, not incomplete; the reason is shown
+                pass
+            elif cell.get("status") == NOT_SCORED:
+                missing.append("quality scorer: " + str(cell.get("scorer_error") or "not scored"))
             elif not any(k not in ("scorer", "reference", "rows") for k in quality):
                 missing.append("quality scores")
             for metric in sorted(metrics):
+                if declared and metric not in quality:
+                    continue    # the cell's own reason covers the metrics it does not record
                 if not finite(BQ.metric_value(cell, quality, metric)):
                     missing.append("quality metric: " + metric)
             if missing:
@@ -2489,6 +2690,8 @@ def tree_cells(ctx, race, parsed):
                                             "source": "tools/speed_gbdt_arm.py run"},
                                    "fit_verdict_line": parsed["verdict_line"]},
                     verdict=parsed["verdict"] or "UNKNOWN")
+        # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
+        cell.update(_small_rows().cell_fields((parsed.get("scored_calls") or {}).get(arm)))
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
         lib = (parsed.get("libraries") or {}).get(arm) or {}
         cell["library_version"] = lib.get("version")
@@ -2560,9 +2763,72 @@ def strip_our_cpu(result):
 # Classical: prep once, race per (lane, dataset); read the race JSON
 # ---------------------------------------------------------------------------
 
-def classical_data_dir(ctx, rows):
+# ---------------------------------------------------------------------------
+# --inputs synthetic: the release measurement smoke's inputs, generated on the box (tools/smoke_inputs.py)
+# ---------------------------------------------------------------------------
+
+#: {race id: {input, verify_lanes, files}} from --inputs-map (tools/release_measurement_smoke.py smoke_inputs); empty
+#: outside the smoke's synthetic mode
+INPUT_MAP = {}
+INPUT_VERIFY = "verify fixture"
+#: a fixture race's data directories carry this after their rows tag, so its fixture blocks never meet the blocks a
+#: sliced-file or no-verify-lane race of the same (block, dataset) reads
+FIXTURE_DIR_TAG = "-verify-fixtures"
+
+
+def fixture_race(race):
+    """True for a race whose prep takes fixture `base` instead of its dataset: on the verify fixture in the map
+    and reading a data file (a race reading no file keeps the driver's own seeded inputs)."""
+    rec = INPUT_MAP.get(race.get("id")) if INPUT_MAP else None
+    return bool(rec and rec.get("input") == INPUT_VERIFY and rec.get("files"))
+
+
+def set_inputs(args):
+    """--inputs: 'datasets' (every timed run) or 'synthetic' (--smoke only, with --inputs-map): THE SMOKE STAGES NO
+    DATA. A race on the verify fixture preps from fixture `base`; every dataset file another race's loader opens is
+    generated on the box in its own schema (tools/smoke_inputs.py), under <out>/work/, which --drop-race-scratch
+    deletes once the race's record is written. The mode reaches every driver through this process's environment
+    (child_env copies it)."""
+    mode = getattr(args, "inputs", None) or "datasets"
+    if mode == "datasets":
+        if getattr(args, "inputs_map", None):
+            raise SystemExit("bench_board: --inputs-map is for --inputs synthetic")
+        return mode
+    if not args.smoke:
+        raise SystemExit("bench_board: --inputs synthetic is for --smoke runs (a timed board reads its datasets)")
+    if not getattr(args, "inputs_map", None):
+        raise SystemExit("bench_board: --inputs synthetic needs --inputs-map (release_measurement_smoke.py writes it)")
+    with open(args.inputs_map) as fh:
+        doc = json.load(fh)
+    INPUT_MAP.clear()
+    INPUT_MAP.update(doc.get("recipes", doc))
+    SI = _smoke_inputs()
+    os.environ[SI.MODE_ENV] = mode
+    os.environ[SI.SYNTH_DIR_ENV] = os.path.join(os.path.abspath(os.path.expanduser(args.out)), "work",
+                                                "smoke-synthetic")
+    return mode
+
+
+_SMOKE_INPUTS = []
+
+
+def _smoke_inputs():
+    if not _SMOKE_INPUTS:
+        _SMOKE_INPUTS.append(_load_tool("smoke_inputs"))
+    return _SMOKE_INPUTS[0]
+
+
+def _synthetic_on():
+    return os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic"
+
+
+def _fixture_tag(race):
+    return FIXTURE_DIR_TAG if race is not None and fixture_race(race) else ""
+
+
+def classical_data_dir(ctx, rows, race=None):
     base = ctx["ctd_data"] or os.path.join(ctx["out"], "ctd-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_classical_prep(ctx, races):
@@ -2571,9 +2837,9 @@ def ensure_classical_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = classical_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = classical_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (CLASSICAL_BLOCK[p[0]], p[1]))))
         if not missing:
@@ -2584,7 +2850,9 @@ def ensure_classical_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2593,12 +2861,27 @@ def ensure_classical_prep(ctx, races):
                   % (rc, log), flush=True)
 
 
+def race_round_seconds(path):
+    """{race id: seconds} from a --race-round-seconds file ({"round_seconds": {...}}), or {} without one."""
+    if not path:
+        return {}
+    with open(path) as fh:
+        doc = json.load(fh)
+    return {str(k): int(v) for k, v in (doc.get("round_seconds") or {}).items() if v}
+
+
+def round_seconds_for(ctx, race, default):
+    """The per-round ceiling of one race: its own cap (--race-round-seconds, a stored-base A/B arm), else
+    --round-seconds, else the family default DEFAULT."""
+    return (ctx.get("race_round_seconds") or {}).get(race.get("id")) or ctx["round_seconds"] or default
+
+
 def classical_cmd(ctx, race):
     lane, ds = race["lane"], race["dataset"]
-    rsec = ctx["round_seconds"] or classical_round_seconds(lane, ds, ctx["vendor"])
+    rsec = round_seconds_for(ctx, race, classical_round_seconds(lane, ds, ctx["vendor"]))
     cmd = [ctx["python"], "-u", ctx["classical_driver"], "race",
            "--lane", lane, "--dataset", ds,
-           "--data", classical_data_dir(ctx, race["rows"]),
+           "--data", classical_data_dir(ctx, race["rows"], race),
            "--out", os.path.join(ctx["out"], "raw", "classical", "rows-" + rows_tag(race["rows"])),
            "--work", os.path.join(ctx["out"], "work"),
            "--root", REPO,
@@ -2615,9 +2898,9 @@ def classical_cmd(ctx, race):
     return cmd, env, ceiling
 
 
-def more_data_dir(ctx, rows):
+def more_data_dir(ctx, rows, race=None):
     base = ctx.get("more_data") or os.path.join(ctx["out"], "more-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_more_prep(ctx, races):
@@ -2626,9 +2909,9 @@ def ensure_more_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "classical2":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
-        d = more_data_dir(ctx, rows)
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
+        d = more_data_dir(ctx, rows, r0)
         missing = sorted(p for p in pairs if not os.path.exists(
             os.path.join(d, "%s-%s.json" % (MORE.block_of(p[0]), p[1]))))
         if not missing:
@@ -2639,7 +2922,9 @@ def ensure_more_prep(ctx, races):
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: classical2 prep rows=%s lanes=%s datasets=%s"
               % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
         rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
@@ -2654,10 +2939,10 @@ def more_round_seconds(rows):
 
 def more_cmd(ctx, race):
     """tools/bench_board_more.py race for one classical2 (lane, dataset)."""
-    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    rsec = round_seconds_for(ctx, race, more_round_seconds(race["rows"]))
     cmd = [ctx["python"], "-u", ctx["more_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", more_data_dir(ctx, race["rows"]),
+           "--data", more_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "classical2", "rows-" + rows_tag(race["rows"])),
@@ -2676,9 +2961,9 @@ def more_json_path(ctx, race):
                         "%s-%s.json" % (race["lane"], race["dataset"]))
 
 
-def algos_data_dir(ctx, rows):
+def algos_data_dir(ctx, rows, race=None):
     base = ctx.get("algos_data") or os.path.join(ctx["out"], "algos-data")
-    return os.path.join(base, "rows-" + rows_tag(rows))
+    return os.path.join(base, "rows-" + rows_tag(rows) + _fixture_tag(race))
 
 
 def ensure_algos_prep(ctx, races):
@@ -2687,15 +2972,20 @@ def ensure_algos_prep(ctx, races):
     need = {}
     for r in races:
         if r["family"] == "algos":
-            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
-    for rows, pairs in need.items():
+            need.setdefault((r["rows"], fixture_race(r)), (r, set()))[1].add((r["lane"], r["dataset"]))
+    for (rows, fixture), (r0, pairs) in need.items():
         lanes = sorted({p[0] for p in pairs})
         dss = sorted({p[1] for p in pairs if p[1] in DATASETS}) or ["taxi"]
-        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows),
+        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows, r0),
                "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
         if rows:
             cmd += ["--max-rows", str(int(rows))]
-        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s.log" % rows_tag(rows))
+        if fixture:
+            cmd += ["--inputs", "verify-fixtures"]
+        if INPUT_MAP:
+            # the smoke's inputs: exactly the races' datasets, so no block is built from data its group did not stage
+            cmd += ["--race-datasets", ",".join(sorted({p[1] for p in pairs}))]
+        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s%s.log" % (rows_tag(rows), _fixture_tag(r0)))
         print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
               % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
         if _in_smoke_worker():
@@ -2712,12 +3002,167 @@ def ensure_algos_prep(ctx, races):
                   % (rc, log), flush=True)
 
 
+#: The neural-layer fixtures (tools/neural_fixtures.py) are the one place torch makes the inputs and initial weights
+#: of our arm on the algos layer lanes (conv2d, gcn, graphsage, moe, ...). SMOKE-NOT-RUN FIX (2026-11-13, candidate
+#: 4c2340386abc): the ours-only measurement job staged no fixture set, so every such row's parameter probe refused
+#: ("neural fixtures missing ... no <cache>/algos-data/neural-fixtures/manifest.json"), preflight dropped the
+#: recipe, and the smoke reported "arm=- not run" on both vendors. With --fixtures-venv the board makes the set
+#: itself, untimed and before any probe: a CPU-torch venv (FIXTURES_TORCH_INDEX, torch at the board's pinned
+#: version without its device suffix, torch-geometric at the algos pin) that only runs `neural_fixtures.py
+#: generate`; our arm never imports torch, and CPU torch gives every vendor the same bytes.
+FIXTURES_TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
+FIXTURES_VENV_MARKER = ".mojolearn-fixtures-venv"
+
+
+def fixtures_requirements(vendor):
+    """[numpy, torch==<board pin, no +cuda/+rocm suffix>, torch-geometric==<algos pin>, NEURAL_PINS...].
+
+    QUALITY-MISSING FIX (2026-11-13, candidate ba08dac006 L40S): the same CPU-torch venv is the interpreter of the
+    neural forward lanes' untimed eager FP32 quality reference (bench_board_neural --reference-python), which needs
+    einops (the Mamba-1 reference scan) and transformers (the transformer twin); the ours-only measurement venv has
+    no torch, so rel_fro_vs_torch_eager_fp32 was silently missing on mamba1/2/3-forward and transformer-forward."""
+    torch = DEFAULT_TORCH_SPEC.get(vendor) or DEFAULT_TORCH_SPEC["apple"]
+    torch = torch.split()[0].split("+")[0]
+    pyg = [r for r in ALGOS.PINS_COMMON if r.lower().startswith("torch-geometric==")]
+    return ["numpy", torch] + pyg[:1] + list(NEURAL_PINS)
+
+
+def ensure_reference_python(ctx, races):
+    """The CPU-torch reference interpreter for the neural races whose quality has a torch reference
+    (bench_board_neural.TORCH_REFERENCE_LANES), made from --fixtures-venv; ctx["reference_python"]. Without
+    --fixtures-venv nothing is made and the reference runs in the race's own --theirs-python (a full opponent
+    venv has torch); when that fails the arm's cell says quality_unavailable, never a silent gap."""
+    lanes = set(NEURAL_TORCH_REFERENCE_LANES)
+    if not ctx.get("fixtures_venv") or not any(r["family"] == "neural" and r["lane"] in lanes for r in races):
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the reference venv failed (see %s); the torch quality reference says "
+              "quality_unavailable" % log, flush=True)
+        return None
+    ctx["reference_python"] = py
+    return py
+
+
+#: bench_board_neural.TORCH_REFERENCE_LANES (kept literal: this module never imports the neural driver)
+NEURAL_TORCH_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
+
+
+def layer_races(races):
+    """The algos races whose own arm reads the neural fixtures (lane kind "layer")."""
+    return [r for r in races if r["family"] == "algos"
+            and (ALGOS.LANES.get(r["lane"]) or {}).get("kind") == "layer"]
+
+
+def ensure_fixtures_venv(vdir, vendor, log):
+    """The generator interpreter at `vdir` (made once; parallel smoke shards share it under a lock), or None."""
+    import fcntl
+    reqs = fixtures_requirements(vendor)
+    py = os.path.join(vdir, "bin", "python")
+    marker = os.path.join(vdir, FIXTURES_VENV_MARKER)
+    os.makedirs(os.path.dirname(os.path.abspath(vdir)) or ".", exist_ok=True)
+    with open(os.path.abspath(vdir) + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(marker) as fh:
+                if fh.read().split() == reqs and os.path.exists(py):
+                    return py
+        except OSError:
+            pass
+        if not os.path.exists(py) and run_logged([sys.executable, "-m", "venv", vdir], None, log, 1800) != 0:
+            return None
+        pip = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+        if run_logged(pip + ["--index-url", FIXTURES_TORCH_INDEX, "--extra-index-url", "https://pypi.org/simple"]
+                      + reqs[:2], None, log, 3600) != 0:
+            return None
+        if len(reqs) > 2 and run_logged(pip + reqs[2:], None, log, 3600) != 0:
+            return None
+        with open(marker, "w") as fh:
+            fh.write("\n".join(reqs) + "\n")
+        return py
+
+
+def fixtures_cover(fixdir, races, data_dirs):
+    """Whether the manifest in `fixdir` was generated over every data dir and lane these races read."""
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            man = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    have_dirs = {os.path.abspath(d) for d in man.get("data_dirs") or []}
+    have_lanes = {e.get("lane") for e in (man.get("entries") or {}).values()}
+    return (set(data_dirs) <= have_dirs) and {r["lane"] for r in races} <= have_lanes
+
+
+def ensure_neural_fixtures(ctx, races):
+    """Untimed: make the neural-layer fixture set the layer races' own arm reads, beside their algos blocks
+    (tools/neural_fixtures.default_dir), when --fixtures-venv is given and the set there does not cover them.
+    Without it (or on a failure) nothing is made and those races refuse by name in their probe, which the
+    preflight and the smoke verdict now carry ("probe refused: ... neural fixtures missing"), never "not run"."""
+    layer = layer_races(races)
+    if not layer:
+        return None
+    NF = _load_tool("neural_fixtures")
+    dirs = sorted({os.path.abspath(algos_data_dir(ctx, r["rows"], r)) for r in layer})
+    fixdir = NF.default_dir(dirs[0])
+    if fixtures_cover(fixdir, layer, dirs):
+        return fixdir
+    if not ctx.get("fixtures_venv"):
+        print("bench_board: neural fixtures missing for %d layer race(s) under %s and no --fixtures-venv; "
+              "their own arm refuses by name" % (len(layer), fixdir), flush=True)
+        return None
+    log = os.path.join(ctx["out"], "logs", "neural-fixtures.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    py = ensure_fixtures_venv(ctx["fixtures_venv"], ctx["vendor"], log)
+    if not py:
+        print("bench_board: the fixtures venv failed (see %s); the layer races refuse by name" % log, flush=True)
+        return None
+    # every algos mirror present beside them (the board's c1 cache holds the smoke's rows and the full rows): one
+    # manifest covers both, so the timed board does not regenerate what its smoke shard made
+    base = os.path.dirname(dirs[0])
+    present = os.listdir(base) if os.path.isdir(base) else []
+    mirrors = sorted({os.path.join(base, d) for d in present
+                      if d.startswith("rows-") and os.path.isdir(os.path.join(base, d))} | set(dirs))
+    lanes = sorted({r["lane"] for r in layer} | _fixture_lanes(fixdir))
+    tmp = fixdir + ".new"
+    shutil.rmtree(tmp, ignore_errors=True)
+    cmd = [py, "-u", os.path.join(HERE, "neural_fixtures.py"), "generate", "--out", tmp, "--lanes", ",".join(lanes)]
+    for d in mirrors:
+        cmd += ["--data", d]
+    env = child_env(ctx)
+    env.pop(NF.ENV_DIR, None)
+    print("bench_board: neural fixtures: generating %s over %d mirror(s) into %s" % (",".join(lanes), len(mirrors),
+                                                                                    fixdir), flush=True)
+    rc = run_logged(cmd, env, log, 3600, nice=ctx["nice"])
+    if rc == 0:
+        rc = run_logged([sys.executable, os.path.join(HERE, "neural_fixtures.py"), "verify", "--dir", tmp],
+                        None, log, 1800)
+    if rc != 0:
+        print("bench_board: neural fixtures generate/verify rc %d (see %s); the layer races refuse by name"
+              % (rc, log), flush=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        return None
+    shutil.rmtree(fixdir, ignore_errors=True)
+    os.replace(tmp, fixdir)
+    return fixdir
+
+
+def _fixture_lanes(fixdir):
+    try:
+        with open(os.path.join(fixdir, "manifest.json")) as fh:
+            return {e.get("lane") for e in (json.load(fh).get("entries") or {}).values()} - {None}
+    except (OSError, ValueError):
+        return set()
+
+
 def algos_cmd(ctx, race):
     """tools/bench_board_algos.py race for one algos (lane, dataset)."""
-    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    rsec = round_seconds_for(ctx, race, more_round_seconds(race["rows"]))
     cmd = [ctx["python"], "-u", ctx["algos_driver"], "race",
            "--lane", race["lane"], "--dataset", race["dataset"],
-           "--data", algos_data_dir(ctx, race["rows"]),
+           "--data", algos_data_dir(ctx, race["rows"], race),
            "--arms", ",".join(race["arms"]),
            "--rounds", str(ctx["rounds"]),
            "--out", os.path.join(ctx["out"], "raw", "algos", "rows-" + rows_tag(race["rows"])),
@@ -2763,7 +3208,7 @@ def neural_round_seconds(shape):
 
 def neural_cmd(ctx, race):
     """tools/bench_board_neural.py race for one neural lane."""
-    rsec = ctx["round_seconds"] or neural_round_seconds(race.get("shape"))
+    rsec = round_seconds_for(ctx, race, neural_round_seconds(race.get("shape")))
     cmd = [ctx["python"], "-u", ctx["neural_driver"], "race",
            "--lane", race["lane"], "--shape", race.get("shape") or "full",
            "--arms", ",".join(race["arms"]),
@@ -2774,6 +3219,8 @@ def neural_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec), "--keep-outputs"]
+    if ctx.get("reference_python") and race["lane"] in NEURAL_TORCH_REFERENCE_LANES:
+        cmd += ["--reference-python", shlex.quote(ctx["reference_python"])]
     if race.get("dataset") == "higgs":
         cmd += ["--higgs", race_data_files(ctx, race)[0][1]]
     n = len(race["arms"])
@@ -2878,6 +3325,9 @@ def classical_cells(ctx, race, r):
                     library_version=info.get("version"),
                     comparability={"span": span, "span_asymmetry": asym},
                     verdict=verdict)
+        # SMALL ROWS (2026-11-15): calls per scored run and the spread of every call (median_ms is their median)
+        cell.update(_small_rows().cell_fields(a.get("scored_calls")))
+        cell.update(host_fields(info, a.get("host_usage"), "fit"))
         # FAIRNESS FIX (2026-10-13 audit): an arm the driver marks `not_opponent` (a sibling of
         # a compile arm that timed out: bench_board_neural.mark_not_opponents) was recorded as
         # an ordinary opponent and silently became the fastest opponent. It is now a "context"
@@ -2914,6 +3364,38 @@ def classical_cells(ctx, race, r):
 # ---------------------------------------------------------------------------
 # Cells and ratios
 # ---------------------------------------------------------------------------
+
+_NUMA_PLACE = []
+
+
+def _numa_place():
+    """tools/numa_place.py, loaded once per process."""
+    if not _NUMA_PLACE:
+        _NUMA_PLACE.append(_load_tool("numa_place"))
+    return _NUMA_PLACE[0]
+
+
+def host_fields(info, host_usage, phase):
+    """Lane fx-harness (2026-11-18): what a cell records about the host under its scored calls.
+    worker_numa   the NUMA node(s) the worker ran and allocated on, and the placement asked (tools/numa_place.py)
+    host_usage    system time, user time, minor and major faults of the scored calls (per call and summed), and
+                  host_stall: system time above half the wall (tools/paper_compare.py HOST-STALL, never a REGRESSION)
+    harness_clock the revision of what the harness keeps inside this lane's clock, when a lane declares one
+                  (tools/paper_compare.py HARNESS-CLOCK: a row whose baseline was timed under another revision is
+                  shown and never counted as FASTER)
+    Only the fields a worker recorded are written (older workers record none)."""
+    out = {}
+    info = info or {}
+    if info.get("worker_numa") is not None:
+        out["worker_numa"] = info["worker_numa"]
+    if info.get("harness_clock"):
+        out["harness_clock"] = info["harness_clock"]
+    use = _numa_place().phase_summary(host_usage, phase) if host_usage else None
+    if use is not None:
+        out["host_usage"] = use
+        out["host_stall"] = use["host_stall"]
+    return out
+
 
 def base_cell(ctx, race, arm, mode):
     lib = arm_library(arm)
@@ -3213,7 +3695,17 @@ _R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
 
 
 def race_data_files(ctx, race):
-    """[(name, path)] of the data files a race reads; [] for seeded data."""
+    """[(name, path)] of the data files a race reads; [] for seeded data. In the smoke's synthetic mode: [] for a race
+    on the verify fixture, and each file's synthetic stand-in (written on the box when the race's loader opens it)."""
+    if fixture_race(race):
+        return []
+    if _synthetic_on():
+        SI = _smoke_inputs()
+        return [(n, os.path.join(SI.synthetic_dir(), SI._schema_of(p))) for n, p in _race_data_files(ctx, race)]
+    return _race_data_files(ctx, race)
+
+
+def _race_data_files(ctx, race):
     fam, lane, ds = race["family"], race["lane"], race["dataset"]
     if fam == "neural":
         # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-27: HIGGS fit
@@ -3251,6 +3743,11 @@ def race_data_sha(ctx, race, box):
             return "mojolearn-sources:git %s" % (c[:-len("-dirty")] + "+dirty" if c.endswith("-dirty") else c)
         return None
     files = race_data_files(ctx, race)
+    if not files and fixture_race(race):
+        return "identity fixture %s (tools/identity_break.py)" % _smoke_inputs().FIXTURE
+    if files and _synthetic_on():
+        return "synthetic smoke inputs (tools/smoke_inputs.py: %s)" % ", ".join(
+            _smoke_inputs()._schema_of(p) for _, p in files)
     if not files:
         return "synthetic (seed %d)" % SEED
     cache = ctx.setdefault("data_sha", {})
@@ -3312,6 +3809,12 @@ def params_probe(ctx, race, arms, scorer=None):
     log = os.path.join(probe_dir, "probe.log")
     out = {}
     if race["family"] == "trees":
+        # board-smoke-3 (2026-11-16): the trees driver's --arms names opponents only; own arm names
+        # there were refused "not built here" (ours-catboost-gpu), and every own arm was built. Own arms
+        # go to --own-arms (tree_cmd), the rest to --arms.
+        own = race.get("our_arms") or {}
+        sub = dict(sub, our_arms={a: m for a, m in own.items() if a in arms or a == "ours-ab"},
+                   opponents=[a for a in arms if a not in own])
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
         rc, process = probe_run(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
@@ -3378,6 +3881,35 @@ def params_probe(ctx, race, arms, scorer=None):
     return out
 
 
+#: A driver's refusal line for one arm in a probe log: FSPEED-REFUSED (trees), ALGOS-REFUSED (algos), ...
+_PROBE_REFUSAL = re.compile(r"^([A-Z0-9]+-REFUSED)\b.*?\barm=(\S+)\s+(.*)$")
+
+
+def probe_refusals(log_path, arms):
+    """{arm: first refusal text} the race's driver printed for `arms` in its probe log. SMOKE-NOT-RUN FIX
+    (2026-11-13, candidate 4c2340386abc): the preflight said only "missing parameter/version probe: ours" and the
+    smoke "arm=- not run" for ten rows whose probe log named the cause ("neural fixtures missing", "No module named
+    'catboost'"); the cause now travels with the problem. A generic "not built here" follow-up never replaces an
+    earlier specific line."""
+    out = {}
+    try:
+        with open(log_path, errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return out
+    starts = [i for i, line in enumerate(lines) if re.match(r"=== \d{4}-\d\d-\d\dT", line)]
+    for line in lines[starts[-1] if starts else 0:]:     # the last probe run only (the log is appended to)
+        m = _PROBE_REFUSAL.match(line)
+        if not m or m.group(2) not in arms:
+            continue
+        text = m.group(3).strip()
+        if m.group(2) in out and "not built here" in text:
+            continue
+        if m.group(2) not in out or "not built here" in out[m.group(2)]:
+            out[m.group(2)] = text[:400]
+    return out
+
+
 def real_implementation(record):
     """Whether an opponent arm's parameter record names the real library class it constructed: a module
     that is not the harness itself (__main__, bench_*, tools.*). A wrapper defined in the harness is
@@ -3425,6 +3957,11 @@ def preflight_check(ctx, race, arms):
     except P.ParamsRefused as exc:
         report = dict(verdict="REFUSED", arms=records, problems=[str(exc)], exceptions=[])
     report["problems"].extend("missing parameter/version probe: " + a for a in missing)
+    # the probe log is read only for a missing arm (the causes it names are for those); a race with every probe
+    # present reads no file (fb12, 2026-11-17: the call read it on every race and needed ctx/race keys it never used)
+    refused = probe_refusals(os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."),
+                                          "probe.log"), missing) if missing else {}
+    report["problems"].extend("probe refused %s: %s" % kv for kv in sorted(refused.items()))
     # Failed probes still retain their settings for diagnosis; partial output
     # from a failed process can never admit a timed race.
     report["problems"].extend("parameter probe failed (rc %s): %s" % (p["probe_rc"], a)
@@ -4795,18 +5332,65 @@ def select_opponent_arms(races, spec):
     return selected
 
 
+#: FAIRNESS FIX (2026-10-30): (race key glob, arm glob) the "trees/*" LightGBM rows above no longer cover:
+#: the driver builds LightGBM on gbdt-lossguide (tools/speed_gbdt_arm.py lightgbm_arms, paired with
+#: `ours-gain0`), so a missing probe or a refusal there is a failure, never a planned refusal.
+PLANNED_REFUSAL_EXEMPT = [("trees/gbdt-lossguide/*", "lightgbm-*")]
+
+
 def _planned_refusal(vendor, key, arm):
     import fnmatch
+    if any(fnmatch.fnmatch(key, kg) and fnmatch.fnmatch(arm, ag) for kg, ag in PLANNED_REFUSAL_EXEMPT):
+        return None
     for v, kg, ag, why in PLANNED_REFUSALS:
         if fnmatch.fnmatch(vendor, v) and fnmatch.fnmatch(key, kg) and fnmatch.fnmatch(arm, ag):
             return why
     return None
 
 
-def smoke_verdict(race, rec, vendor):
-    """[(arm, reason)] of what keeps this race from passing ([] = PASS)."""
+def _evidence_failure_text(rec):
+    """Why the evidence seal failed this record (tools/bench_board_evidence.py seal sets `evidence_failure`, not
+    `failure`), with the first missing items of each incomplete own cell, or None.
+
+    0.8.66 AMD measurement smoke: classical2/ets, classical2/ivf (istella, taxi) and trees/gbdt-categorical/taxi
+    reported only "status failed" (rc 0): the seal's "incomplete worker evidence" and its missing list stayed on
+    the box."""
+    why = rec.get("evidence_failure")
+    if not why:
+        return None
+    gaps = []
+    for field in ("cells", "infer_cells"):
+        for c in rec.get(field) or []:
+            missing = (c.get("measurement") or {}).get("missing") or []
+            if c.get("status") == "ok" and missing:
+                gaps.append("%s %s: %s" % (c.get("arm"), "infer" if field == "infer_cells" else "fit",
+                                           ", ".join(str(m) for m in missing[:4])))
+    return why + ("; missing " + " | ".join(gaps[:3]) if gaps else "")
+
+
+def preflight_dropped(result, race_id):
+    """The preflight record of a race the plan audit kept from running ({"status", "problems", ...}), or None."""
+    for field in ("failed_preflight_recipes", "skipped_recipes"):
+        rec = (result.get(field) or {}).get(race_id)
+        if rec is not None:
+            return dict(rec, status=rec.get("status") or ("FAILED" if field.startswith("failed") else "REFUSED"))
+    return None
+
+
+def smoke_verdict(race, rec, vendor, preflight=None):
+    """[(arm, reason)] of what keeps this race from passing ([] = PASS). `preflight` is the race's record in
+    failed_preflight_recipes / skipped_recipes (preflight_dropped) when the plan audit kept it from running.
+
+    SMOKE-NOT-RUN FIX (2026-11-13, candidate 4c2340386abc): a race dropped by the preflight had no record and was
+    reported as "arm=- not run" on ten paper rows on both vendors; its preflight problems (with the driver's own
+    refusal line, probe_refusals) are now the reason. "not run" is left only for a race nothing ever reached."""
     import fnmatch
     if rec is None:
+        if preflight is not None:
+            problems = [str(p) for p in preflight.get("problems") or []] or ["no problem recorded"]
+            # the driver's refusal first: it names the cause the generic "missing probe" lines only imply
+            problems.sort(key=lambda p: not p.startswith("probe refused "))
+            return [("-", "preflight %s: %s" % (preflight.get("status"), "; ".join(problems[:4])[:600]))]
         return [("-", "not run")]
     fails = []
     # Resume/review may reconstruct the plan; use the retained actual binding
@@ -4822,8 +5406,8 @@ def smoke_verdict(race, rec, vendor):
             return [("-", "missing explicit unsupported capability record")]
         return []
     if rec.get("status") != "done":
-        fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(rec.get("failure")))
-                                            if rec.get("failure") else "")))
+        why = rec.get("failure") or _evidence_failure_text(rec)
+        fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(why)) if why else "")))
     if rec.get("params_check") != "MATCHED":
         fails.append(("-", "BOARD-PARAMS %s" % rec.get("params_check")))
     key = smoke_key(race)
@@ -4856,11 +5440,45 @@ def smoke_verdict(race, rec, vendor):
     return fails
 
 
+def drop_race_scratch(out, rec, keep_evidence=False):
+    """--drop-race-scratch (the release measurement smoke, 2026-11-08: its scratch filled an 80 GB pod): once a race's
+    record is in board.json, its driver scratch (out/work, the scored arrays the drivers write there) and its local
+    evidence directory (the per-race archives of those arrays) are deleted. The record, the logs and raw/ (the
+    drivers' small JSON results) stay. Nothing outside `out` is touched. Returns the bytes freed.
+    KEEP_EVIDENCE (a timed board, fb-harness 2026-11-17: the full-board job filled the 80 GB pod): only out/work goes,
+    and only when the race's evidence was retained (its archive holds every work/ file the race wrote:
+    bench_board_evidence seal). Why nothing in work/ is shared between races: every driver writes there only the
+    files of its own race, named by lane, dataset (and shape, arm) and written during that race (the classical,
+    classical2 and algos scored arrays and quality references, the neural race's input file, which a timed race
+    always writes afresh: bench_board_neural.make_inputs); no driver reads a file another race wrote, and the shared
+    generated inputs (the prepared blocks) live in the cache (--cache), not in work/."""
+    import shutil
+    root = os.path.realpath(out)
+    if keep_evidence and rec.get("evidence_failure"):
+        return 0
+    targets = [os.path.join(root, "work")]
+    if rec.get("evidence_directory") and not keep_evidence:
+        targets.append(os.path.join(root, str(rec["evidence_directory"])))
+    freed = 0
+    for t in targets:
+        t = os.path.realpath(t)
+        if t == root or not t.startswith(root + os.sep) or not os.path.isdir(t):
+            continue
+        for dirpath, _, files in os.walk(t):
+            for f in files:
+                try:
+                    freed += os.lstat(os.path.join(dirpath, f)).st_size
+                except OSError:
+                    pass
+        shutil.rmtree(t, ignore_errors=True)
+    return freed
+
+
 def write_smoke(out, races, result, vendor, shard):
     """smoke.json and the SMOKE PASS/FAIL lines; returns the number failing."""
     verdicts = {}
     for r in races:
-        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor)
+        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor, preflight_dropped(result, r["id"]))
         verdicts[smoke_key(r)] = {"id": r["id"], "pass": not fails,
                                   "unsupported": unsupported_our_arms(r),
                                   "eligible": not (bool(r.get("our_arms")) and set(r["our_arms"]) <= set(unsupported_our_arms(r))),
@@ -4952,6 +5570,10 @@ def build_parser():
                    help="PyPI wheel manifest (tools/pypi_wheel_install.py); timing refuses unless ours "
                         "loads from its files, and every cell records it. A GPU box installing "
                         "--mojolearn-version writes <out>/wheel-manifest.json itself")
+    p.add_argument("--host-probe", default=os.environ.get("MOJOLEARN_HOST_PROBE") or None,
+                   help="tools/ops/host_probe.py JSON of this box (default $MOJOLEARN_HOST_PROBE): stored as "
+                        "box.host_probe and its host_id in every race's host record, so tools/paper_compare.py "
+                        "compares a time only with a time from the same box (AGENTS.md, 2026-11-14)")
     p.add_argument("--cache", default=None,
                    help="venv, wheel download and classical blocks (default <out>/cache; "
                         "a leg puts it outside the fetched directory)")
@@ -4964,6 +5586,10 @@ def build_parser():
                    help="venv sees the image's packages (the CUDA or ROCm torch on a rented box)")
     p.add_argument("--skip-install", action="store_true",
                    help="install nothing; the interpreter already holds mojolearn and the opponents")
+    p.add_argument("--ours-install-only", action="store_true",
+                   help="ours-only board: install our wheels plus scikit-learn and pandas, no opponent stack")
+    p.add_argument("--install-only", action="store_true",
+                   help="make the venv, install, check the wheel and our GPU set, print BOARD-INSTALL and exit")
     p.add_argument("--opponent-wheels", default=None,
                    help="offline opponent install from this staged wheel dir (tools/opponent_wheels.sh)")
     p.add_argument("--torch-spec", default=None,
@@ -4983,6 +5609,10 @@ def build_parser():
                    help="trees: process deadline per race (MOJOLEARN_SPEED_DEADLINE_S)")
     p.add_argument("--round-seconds", type=int, default=0,
                    help="classical per-round ceiling (0: per lane default)")
+    p.add_argument("--race-round-seconds", default=None,
+                   help="a JSON file whose \"round_seconds\" maps race ids to their own per-round ceiling (classical, "
+                        "more, algos, neural): tools/measure_owed.py writes it for an A/B arm capped at a stored base "
+                        "time; a round that reaches it stops and the cell records the timeout")
     p.add_argument("--nice", type=int, default=0)
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
@@ -5020,6 +5650,18 @@ def build_parser():
     p.add_argument("--measurement-source", default=None, metavar="JSON",
                    help="with --preflight-only: reuse this retained source snapshot {source, inventory} "
                         "(tools/gpu_gap_campaign.py --smoke writes it once)")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "synthetic"),
+                   help="with --smoke: synthetic stages no data: every race named on the verify fixture in "
+                        "--inputs-map runs on the identity verification's fixture `base`, every dataset loader on a "
+                        "file generated on the box in its own schema (tools/smoke_inputs.py); the timed board always "
+                        "reads its datasets")
+    p.add_argument("--inputs-map", default=None, metavar="JSON",
+                   help="with --inputs synthetic: {race id: {input, verify_lanes, files}} "
+                        "(tools/release_measurement_smoke.py smoke_inputs)")
+    p.add_argument("--drop-race-scratch", action="store_true",
+                   help="delete each race's driver scratch (work/) once its record is written to board.json; with "
+                        "--smoke also its local evidence directory (the smoke judges the record only). A timed board "
+                        "keeps its evidence, and its work/ when the evidence was not retained")
     p.add_argument("--race-ids", default=None, metavar="IDS|@FILE",
                    help="keep exactly these planned race ids (comma list or @file); unknown ids are refused")
     p.add_argument("--retime-cpu-opponents", action="store_true", help="fresh CPU opponents for this harness; GPU opponents stay missing-only")
@@ -5076,6 +5718,10 @@ def build_parser():
                    help=argparse.SUPPRESS)
     p.add_argument("--algos-data", default=None,
                    help="algos block dir (default <cache>/algos-data); prep is untimed and once")
+    p.add_argument("--fixtures-venv", default=None, metavar="DIR",
+                   help="make the neural-layer fixtures our arm reads on the algos layer lanes (untimed, before "
+                        "any probe) with a CPU-torch venv at DIR (made once, shared under a lock); without it a "
+                        "box with no fixture set refuses those races by name")
     return p
 
 
@@ -5303,13 +5949,15 @@ def main(argv=None):
         races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
     if getattr(args, "race_ids", None):
         races = select_race_ids(races, args.race_ids)
+    races = select_own_arms(races)
     if args.opponent_arms:
         if not args.opponents_only:
             raise SystemExit('--opponent-arms requires --opponents-only')
         races = select_opponent_arms(races, args.opponent_arms)
     if args.shard:
         races = shard_races(races, args.shard)
-    needed, corpus_missing = data_needs(races, datasets)
+    # the smoke's synthetic inputs need no dataset on the box: nothing is checked, nothing is staged
+    needed, corpus_missing = data_needs(races, datasets) if set_inputs(args) == "datasets" else ([], [])
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
@@ -5389,6 +6037,12 @@ def main(argv=None):
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))
+    if getattr(args, "install_only", False):
+        # ONE INSTALL PER BOX (lane measure-prep): the venv and its wheel manifest are made once; every smoke
+        # shard and the timed board then take --python-env <it> --skip-install --wheel-manifest <it>
+        print("BOARD-INSTALL python=%s manifest=%s source=%s sha256=%s"
+              % (python, args.wheel_manifest, (wheel or {}).get("source"), (wheel or {}).get("sha256")), flush=True)
+        return 0
     if artifact_identity:
         # Validate installed bytes before spending GPU time, using the exact
         # interpreter handed to workers. This is not a worker-load receipt.
@@ -5416,6 +6070,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
+           "race_round_seconds": race_round_seconds(args.race_round_seconds),
            "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
@@ -5423,10 +6078,15 @@ def main(argv=None):
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
            "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
-           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
+           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data")),
+           "fixtures_venv": (os.path.abspath(os.path.expanduser(args.fixtures_venv))
+                             if getattr(args, "fixtures_venv", None) else None)}
     ctx["artifact_manifest"] = os.path.abspath(args.artifact_manifest) if args.artifact_manifest else None
     ctx["artifact_identity"] = artifact_identity
     box = box_fingerprint(ctx)
+    probe = load_host_probe(getattr(args, "host_probe", None))
+    if probe:
+        box["host_probe"] = probe
     if artifact_identity:
         box["artifact_identity"] = artifact_identity
         box["artifact_hardware"] = _load_tool("bench_board_provenance").hardware_receipt(
@@ -5466,8 +6126,15 @@ def main(argv=None):
                 "bench_board: REFUSING to resume %s on a different box or wheel:\n  was %s\n  now %s\n"
                 "One board is one box and one set of library bytes; use a new --out."
                 % (out, json.dumps(old, sort_keys=True), json.dumps(new, sort_keys=True)))
-        result.setdefault("box_history", []).append({"resumed": now_utc(), "packages": box["packages"]})
+        result.setdefault("box_history", []).append({"resumed": now_utc(), "packages": box["packages"],
+                                                     "boot_id": boot_id(), "kernel": platform.release() or None,
+                                                     "driver": (box.get("gpu") or {}).get("driver")})
         result["box"] = box
+    # every boot this board's races ran under (a job resumed after a pod restart carries two): tools/paper_compare.py
+    # prints them per arm and gives no verdict across two (fb-harness, 2026-11-17)
+    b_id = boot_id()
+    if b_id and b_id not in result.setdefault("boot_ids", []):
+        result["boot_ids"].append(b_id)
     result["config"] = {"artifact_identity": artifact_identity,
                         "harness_sha256": smoke_files_sha256(), "vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
@@ -5520,8 +6187,15 @@ def main(argv=None):
         ensure_more_prep(ctx, todo)
     if any(r["family"] == "algos" for r in todo):
         ensure_algos_prep(ctx, todo)
+        ensure_neural_fixtures(ctx, todo)
+    if any(r["family"] == "neural" for r in todo):
+        ensure_reference_python(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
+    if _synthetic_on():
+        # the prep's synthetic files are read into its blocks now: they go at once (a race's loader writes its own)
+        import shutil
+        shutil.rmtree(_smoke_inputs().synthetic_dir(), ignore_errors=True)
     if getattr(args, "prep_only", False):
         # smoke-fixes (2026-10-14): the campaign smoke stages every recipe's untimed block prep ONCE before its
         # per-recipe loop, so no recipe's 5 s check is spent preparing data
@@ -5564,6 +6238,8 @@ def main(argv=None):
         _load_tool('retain_run_summary').try_retain(
             _load_tool('retain_run_summary').retain_board, out, result, smoke=args.smoke)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
+        if getattr(args, "drop_race_scratch", False):
+            drop_race_scratch(out, rec, keep_evidence=not args.smoke)   # a timed board keeps its evidence
         if _load_tool("bench_board_evidence").blocks_campaign(rec):
             print("bench_board: stopped after retaining local evidence: " + rec["evidence_failure"], flush=True)
             return 1

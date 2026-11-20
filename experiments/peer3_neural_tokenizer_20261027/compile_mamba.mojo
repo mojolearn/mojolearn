@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Small compile-only public boundary roots. Do not execute these raw doors.
 from std.python._cpython import PyObjectPtr
-from bindings.mamba_public_native import mamba_native_c
+from bindings.mamba_public_native_door import mamba_native_c
 
 
 @export

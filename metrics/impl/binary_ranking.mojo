@@ -5,19 +5,22 @@
 Reference: cuML v26.08.00 python/cuml/cuml/metrics/_ranking.py
 _binary_clf_curve, _group_same_scores, _calculate_area_under_curve; sklearn
 metrics/_ranking.py precision_recall_curve for no-positive and terminal policy.
-Deviations: existing stable 32-pass radix replaces CuPy argsort; exact integer
+Deviations: the stable eight-bit-digit radix sort replaces CuPy argsort; exact integer
 scan replaces float group atomics. AUC uses the equivalent tie-aware pair-count
 formula with an exact Int64 tree fold instead of floating trapezoids. This fixes
 the result in all modes (integer sums); ratios separately convert counts to Float32.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import ftz, identical_div
 from metrics.checks.device_io import download_f32
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, scan_key_bit_kernel
+from gbdt.gpu_util.kernel.radix_sort import scan_key_bit_kernel
+from core.stable_radix_sort import (
+    stable_radix_bsum_len, stable_radix_counts_len, stable_radix_sort_pairs_u32,
+)
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK, scan_block_sums_kernel, add_block_carry_kernel
 
 
@@ -197,8 +200,12 @@ def binary_ranking[curve: Bool](
     var labels = ctx.enqueue_create_buffer[DType.uint32](n)
     var temp_keys = ctx.enqueue_create_buffer[DType.uint32](n)
     var temp_labels = ctx.enqueue_create_buffer[DType.uint32](n)
-    var prefix = ctx.enqueue_create_buffer[DType.int32](n)
-    var block_sums = ctx.enqueue_create_buffer[DType.int32](blocks)
+    # `prefix` and `block_sums` are also the sort's digit counts and scan
+    # sums (dead before the label scan below writes them), so they are sized
+    # for the larger of the two uses: no buffer is added for the sort.
+    var sort_bsum = stable_radix_bsum_len(n)
+    var prefix = ctx.enqueue_create_buffer[DType.int32](stable_radix_counts_len(n))
+    var block_sums = ctx.enqueue_create_buffer[DType.int32](blocks if blocks > sort_bsum else sort_bsum)
     var output_size = 3*n+2 if curve else 1
     var output = ctx.enqueue_create_buffer[DType.float32](output_size)
     output.enqueue_fill(0)
@@ -219,7 +226,17 @@ def binary_ranking[curve: Bool](
         grid_dim=blocks,
         block_dim=REORDER_BLOCK,
     )
-    launch_radix_sort_bins(ctx,n,0,32,keys,labels,temp_keys,temp_labels,prefix,block_sums)
+    # The eight-bit-digit stable sort (four passes of five launches) in place
+    # of the one-bit sort (32 passes of four launches: 128 launches on every
+    # ROC-AUC, average-precision and curve call), as the SVM working-set sort
+    # took on every GPU on 2026-10-02 (`svm/impl/workingset.mojo`). No bit
+    # moves: both are LSD sorts whose every pass is stable, over the full
+    # 32-bit key, so both give the one stable order by key (equal keys keep
+    # input order), and the four passes end in `keys`/`labels` as the 32
+    # passes did. Integer work only. General cause: one launch round per key
+    # bit, for any n and any scores. Checked by
+    # `metrics/checks/host_binary_ranking_check.mojo` (tied scores included).
+    stable_radix_sort_pairs_u32(ctx,n,32,keys,labels,temp_keys,temp_labels,prefix,block_sums)
     ctx.enqueue_function[scan_key_bit_kernel](
         labels.unsafe_ptr(),
         Int32(0),

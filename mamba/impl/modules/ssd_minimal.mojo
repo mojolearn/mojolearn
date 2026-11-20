@@ -68,26 +68,30 @@ EVERYTHING HERE IS RUN OWED. No kernel below has compiled or run; the
 commands live in `mamba/checks/mamba2_check.mojo`'s header.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined, get_defined_int
+from max.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA2_SSD_MMA (neural MERGED-UNMEASURED FAST+Apple arm: S12, S13/S14, S15/S16 on simdgroup 8x8
+# tiles) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 1ef421ae42.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA2_SSD_MMA.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
 #: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
 #: every other build takes the three cell kernels below unchanged.
 from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA, IDN_M2_SSD_TILES
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from std.memory import stack_allocation
-from max.gpu.memory import AddressSpace
-from max.gpu.sync import barrier
 from mamba.impl.modules.afn_ssd_mma import (
     afn_m2_cb_g_mma,
     afn_m2_cstate_mma,
     afn_m2_ydiag_mma,
     afn_ssd_mma_applies,
 )
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_STATE,
@@ -118,18 +122,19 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
 ]()
 
 #: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
-#: ON; `-D MOJOLEARN_IDN_M2_CB_LOWER_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
-#: restores main): S12's G = C.B folds only j <= i and writes an explicit
+#: ON): S12's G = C.B folds only j <= i and writes an explicit
 #: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
 #: recorded, arena-allocated stage). Every reader (S13's M = G o L, the
 #: backward's ydiag and cb gradients) reads j <= i only, so no output bit
 #: moves; the RECORDED cb.G stage changes above the diagonal, on every column
 #: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 comptime IDN_M2_CB_LOWER = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I08 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IDN_M2_CB_LOWER_OFF (unmeasured old path beside the lower-triangle default) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d9f1a09f89.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.expdel2-27-neural.patch
 )
 comptime SSD_ANY_SABOTAGE = (
     SAB_SEGSUM_DESCENDING
@@ -370,78 +375,8 @@ def m2_seg_l_kernel(
 # ===========================================================================
 
 
-# NN37 schedules only the inherited lower-triangle arm's live cells.
-# cb_g is explicitly zeroed first because traces/backward may read upper
-# cells. The zero-fill launch and full memory traffic belong in its A/B.
-# OFF, uncompiled/unmeasured; baseline lower-arm disabled means unavailable.
-comptime NN37_TRIANGLE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_M2_CB_LOWER and is_defined["MOJOLEARN_NN37_TRIANGLE_TASKS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-
-
-def nn37_m2_cb_triangle_kernel(
-    cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
-    xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
-    b_in: Int32,
-    t_in: Int32,
-    di_in: Int32,
-    cd_in: Int32,
-    nc_in: Int32,
-    q_in: Int32,
-):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    var triangle = qv * (qv + 1) // 2
-    var task = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if task >= b * nc * triangle:
-        return
-    var group = task // triangle
-    var packed = task % triangle
-    var bb = group // nc
-    var c = group % nc
-    # Integer upper-bound search for triangular row starts; never use a
-    # vendor sqrt or precision-dependent inverse-triangle calculation.
-    var low = 0
-    var high = qv
-    while low + 1 < high:
-        var mid = (low + high) // 2
-        if mid * (mid + 1) // 2 <= packed:
-            low = mid
-        else:
-            high = mid
-    var i = low
-    var j = packed - i * (i + 1) // 2
-    var c0 = c * qv
-    var real = t_work - c0
-    if real > qv:
-        real = qv
-    var acc = Float32(0.0)
-    var live = i < real and j < real
-    comptime if IDN_M2_CB_LOWER:
-        # B9: above the diagonal is never read; explicit +0.0 (below).
-        live = live and j <= i
-    if live:
-        var ti = bb * t_work + c0 + i
-        var tj = bb * t_work + c0 + j
-        for n in range(M2_D_STATE):
-            acc = ftz(
-                identical_mul_add(
-                    ftz(xbc.unsafe_load(ti * cd + di + M2_D_STATE + n)),  # C
-                    ftz(xbc.unsafe_load(tj * cd + di + n)),  # B
-                    acc,
-                )
-            )
-        acc = ftz(acc)
-    else:
-        # A padded row's B or C is exact +0.0 everywhere: the leaf is a
-        # fold of exact zeros from a +0.0 seed, which is +0.0 -- written
-        # directly, same bits as the fold (gemm section 9's argument).
-        acc = Float32(0.0)
-    cb_g.unsafe_store(((bb * nc + c) * qv + i) * qv + j, acc)
-
-
+# TOMBSTONE: MOJOLEARN_NN37_TRIANGLE_TASKS (unmeasured opt-in arm: packed lower-triangle S12 tasks) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 617acefe68.
+# Restore: git apply experiments/removed/MOJOLEARN_NN37_TRIANGLE_TASKS.patch
 def m2_cb_g_kernel(
     cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
@@ -747,17 +682,18 @@ comptime M2_SSD_TILED = (
 # tile across 16 value channels (18 KiB). Both fit inside the existing
 # conservative 20 KiB resource guard. No dataset/shape-specific dispatch.
 # All newly introduced switches are OFF, uncompiled and unmeasured.
-# L11 (2026-10-07): the NN33 booleans became integer tile sweeps, one per
-# kernel: -D MOJOLEARN_IDN_M2_YD_ROWS=4|8 (default 4; 8 also halves YD_JC to
-# 32 to keep the page) and -D MOJOLEARN_IDN_M2_CS_PT=8|16 (default 8). The
-# legal sets are asserted in core/six_lane_experiment_guards.mojo. Tiles
-# move no bit; they may be tuned per vendor.
-comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# L11 (2026-10-07): the NN33 booleans became integer tile sweeps; both
+# sweeps were deleted 2026-11-15 (YD_ROWS 8, CS_PT 8 are the constants).
+# Tiles move no bit.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) folded here 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at dc4096f0f8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
+comptime _M2_TILE_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # PROMOTED 2026-10-11 (grid g50ebe26a5, single-switch arm m2_yd_rows=8 vs today's defaults, one run per arm): mamba2-forward
 # gaussian NV L40S 13.079 -> 5.688 ms (v1223), AMD MI325X 4.551 -> 4.388 ms (a1344); avg ratio 0.648; hash 0350b90b on both
-# vendors. Default is now 8; -D MOJOLEARN_IDN_M2_YD_ROWS=4 restores the old tile.
-comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_YD_ROWS", 8]() == 8
-comptime NN33_CSTATE_P16 = _M2_TILE_SWEEP and get_defined_int["MOJOLEARN_IDN_M2_CS_PT", 8]() == 16
+# vendors. Default is now 8.
+# TOMBSTONE: MOJOLEARN_IDN_M2_YD_ROWS (the =4 old tile beside the promoted 8-row default, EXP:2012) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 0de19ddf45.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YD_ROWS.patch
+comptime NN33_YDIAG_ROWS8 = _M2_TILE_SWEEP
 comptime M2_YD_ROWS = 8 if NN33_YDIAG_ROWS8 else 4
 comptime M2_YD_JC = 32 if NN33_YDIAG_ROWS8 else 64
 comptime M2_YD_QMAX = 256
@@ -765,10 +701,18 @@ comptime M2_YD_THREADS = M2_YD_ROWS * M2_HEADDIM
 #: C_state tile: one (b, c, h) and CS_PT columns p, all 128 n (one thread
 #: per n); B * decay staged CS_IC rows at a time. Page: (32 * 128 + 32 * 8)
 #: * 4 = 17,408 bytes.
-comptime M2_CS_PT = 16 if NN33_CSTATE_P16 else 8
+# TOMBSTONE: MOJOLEARN_IDN_M2_CS_PT (unmeasured opt-in arm =16: sixteen value channels per C_state tile) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at d51cd251ff.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CS_PT.patch
+comptime M2_CS_PT = 8
 comptime M2_CS_IC = 32
 
 
+# TOMBSTONE: MOJOLEARN_IDN_SSD_OCCUPANCY (unmeasured opt-in arm, A/B never run: coalesced S10, shared-tile S12 and S18/S19
+# kernels) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 44ec9b2ec9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
+# (Sweep 2026-11-15: the unread IDN_SSD_OCCUPANCY = False constant removed.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (mamba2-forward, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
 # ===========================================================================
 # lane nv-occupancy (2026-10-28, idea 8 of neural-perf-ideas-20261028):
 # MOJOLEARN_IDN_SSD_OCCUPANCY (IDENTICAL, default OFF; device columns only).
@@ -808,7 +752,6 @@ comptime IDN_SSD_OCCUPANCY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_SSD_OCCUPANCY"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not SSD_ANY_SABOTAGE
     and not SAB_2712_UNBOUNDED
 )
@@ -957,9 +900,8 @@ comptime M2_RETAIN_GL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m2_retain_gl=on vs today's defaults, one run per arm): mamba2-forward gaussian
     # NV L40S 13.079 -> 5.690 ms (v1242), AMD MI325X 4.551 -> 4.554 ms (a1350); avg ratio 0.660; hash 0350b90b on both vendors.
-    # Default ON; -D MOJOLEARN_IDN_M2_RETAIN_GL_OFF restores the recompute path.
-    and not is_defined["MOJOLEARN_IDN_M2_RETAIN_GL_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IDN_M2_RETAIN_GL_OFF (old recompute path beside the promoted default, EXP:2013) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at a93584a744.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_RETAIN_GL_OFF.patch
     and not SSD_ANY_SABOTAGE
 )
 comptime M2_RETAIN_GL_MAX_CELLS = 1<<22
@@ -1327,101 +1269,13 @@ def m2_statepass_kernel(
 # ===========================================================================
 
 
-# NN36: OFF and unmeasured. Channel sharing is based on the existing
-# fixed Mamba head layout, not an observed benchmark shape. Host computes
-# the same explicitly rounded exp; no changed arithmetic profile.
-# L11 (2026-10-07): NN36 and NI39 are two arms of ONE switch,
-# -D MOJOLEARN_IDN_M2_YOFF_EXP=0|1|2: 0 recompute exp per cell (default),
-# 1 = NN36 block-shared exp (GPU shared memory; host takes arm 0's
-# expression), 2 = NI39 global per-position exp cache. Same exp, same bits.
-comptime IDN_M2_YOFF_EXP_ARM = get_defined_int["MOJOLEARN_IDN_M2_YOFF_EXP", 0]()
-comptime NN36_SHARED_DECAY = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_M2_YOFF_EXP_ARM == 1 and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_M2_YOFF_EXP (unmeasured opt-in arms 1 = NN36 block-shared exp, 2 = NI39 global exp cache)
+# deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 4e23c6d887.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_YOFF_EXP.patch
+# (Sweep 2026-11-15: the unread NN36_SHARED_DECAY = False constant removed.)
 
 
-def nn36_m2_yoff_shared_exp_kernel(
-    yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
-    y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
-    ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
-    xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
-    pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
-    dacs: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
-    b_in: Int32,
-    t_in: Int32,
-    nh_in: Int32,
-    di_in: Int32,
-    cd_in: Int32,
-    nc_in: Int32,
-    q_in: Int32,
-):
-    var b = Int(b_in)
-    var t_work = Int(t_in)
-    var nh = Int(nh_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var nc = Int(nc_in)
-    var qv = Int(q_in)
-    comptime n_state = M2_D_STATE
-    var pn = M2_HEADDIM * n_state
-    # One block owns a logical token/head; one lane owns each value
-    # channel. The same exp word is reused without changing the dot chain.
-    var logical = Int(block_idx.x)
-    var p = Int(thread_idx.x)
-    var hh = logical % nh
-    var ti = logical // nh
-    var bb = ti // t_work
-    var t = ti % t_work
-    var c = t // qv
-    var i = t % qv
-    var shared_scale = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
-    if p == 0:
-        shared_scale[0] = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))))
-    barrier()
-    var cell = logical * M2_HEADDIM + p
-
-    # C . h_prev over n: one serial ascending leaf (k = 128).
-    var acc = Float32(0.0)
-    for n in range(n_state):
-        acc = ftz(
-            identical_mul_add(
-                ftz(xbc.unsafe_load(ti * cd + di + n_state + n)),
-                ftz(
-                    pass_states.unsafe_load(
-                        (((bb * nc + c) * nh + hh) * pn) + p * n_state + n
-                    )
-                ),
-                acc,
-            )
-        )
-    acc = ftz(acc)
-    var sc = shared_scale[0]
-    var yo = ftz(identical_mul(acc, sc))
-    yoff.unsafe_store(cell, yo)
-    y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
-
-
-# NI39: cache exp(dacs) once per logical (batch, head, chunk, position),
-# shared across the 64 independent output channels. The exact portable exp
-# expression is unchanged; the host's uncached expression is the S counterpart.
-# Default OFF. Allocation and the lifetime drain are part of whole-op A/B;
-# no speed, identity, quality or full-workload claim has been measured.
-comptime IDN_M2_YOFF_EXP_CACHE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_M2_YOFF_EXP_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and not SSD_ANY_SABOTAGE
-)
-
-
-def m2_yoff_exp_cache_kernel(
-    cached: MutPointer[Float32, MutAnyOrigin],
-    dacs: MutPointer[Float32, MutAnyOrigin], cells_in: Int32,
-):
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell < Int(cells_in):
-        cached.unsafe_store(cell, ftz(identical_exp(ftz(dacs.unsafe_load(cell)))))
-
-
-def m2_yoff_y_kernel[CACHED_EXP: Bool = False](
+def m2_yoff_y_kernel(
     yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
@@ -1473,16 +1327,11 @@ def m2_yoff_y_kernel[CACHED_EXP: Bool = False](
             )
         )
     acc = ftz(acc)
-    var sc: Float32
-    comptime if CACHED_EXP:
-        # In this specialization dacs holds exp(dacs), not the log prefix.
-        sc = ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
-    else:
-        sc = ftz(
-            identical_exp(
-                ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
-            )
+    var sc = ftz(
+        identical_exp(
+            ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
         )
+    )
     var yo = ftz(identical_mul(acc, sc))
     yoff.unsafe_store(cell, yo)
     y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
@@ -1499,15 +1348,14 @@ def m2_yoff_y_kernel[CACHED_EXP: Bool = False](
 # gives 8 blocks per (b, c, h), so even one (b, c) per head keeps more
 # blocks than a 100+ SM/CU device has resident slots. Page:
 # (64 * 129 + 4 * 128 + 4) * 4 = 35,088 bytes: fits NVIDIA's 48 KiB and
-# AMD's 64 KiB; Apple's 32 KiB column keeps the cell kernel. Taken only on
-# the default exp arm (MOJOLEARN_IDN_M2_YOFF_EXP=0).
+# AMD's 64 KiB; Apple's 32 KiB column keeps the cell kernel. (Restored 2026-11-15: the
+# MOJOLEARN_IDN_M2_YOFF_EXP arms it excluded are deleted, so it no longer tests them.)
 comptime M2_YO_RL = 4
 comptime M2_YO_ROWS = 32
 comptime M2_YO_THREADS = M2_YO_RL * M2_HEADDIM
 comptime M2_YO_PAGE = (M2_HEADDIM * M2_OCC_LD + M2_YO_RL * M2_D_STATE + M2_YO_RL) * 4
 comptime M2_OCC_YOFF = (
     IDN_SSD_OCCUPANCY
-    and IDN_M2_YOFF_EXP_ARM == 0
     and lib_smem_page_fits_for[TARGET_COLUMN, M2_YO_PAGE]()
 )
 
@@ -1718,6 +1566,7 @@ def ssd_forward(
         grid_dim=(_grid(b * nc * nh * qv), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_AFN_MAMBA2_SSD_MMA opt-in arm back, default off, Apple fast only.
     var mma = False
     comptime if AFN_MAMBA2_SSD_MMA:
         mma = afn_ssd_mma_applies(qv)
@@ -1725,21 +1574,7 @@ def ssd_forward(
         afn_m2_cb_g_mma(ctx, cb_g, xbc_work, b, t_work, di, cd, nc, qv)
         afn_m2_ydiag_mma(ctx, ydiag, cb_g, seg_l, xd, b, t_work, nh, nc, qv)
     else:
-        comptime if NN37_TRIANGLE_TASKS:
-            cb_g.enqueue_fill(Float32(0.0))
-            ctx.enqueue_function[nn37_m2_cb_triangle_kernel](
-                cb_g.unsafe_ptr(),
-                xbc_work.unsafe_ptr(),
-                Int32(b),
-                Int32(t_work),
-                Int32(di),
-                Int32(cd),
-                Int32(nc),
-                Int32(qv),
-                grid_dim=(_grid(b * nc * (qv * (qv + 1) // 2)), 1, 1),
-                block_dim=(MAMBA2_TPB, 1, 1),
-            )
-        elif M2_OCC_CB:
+        comptime if M2_OCC_CB:
             var cb_nt = (qv + M2_CB_T - 1) // M2_CB_T
             ctx.enqueue_function[m2_cb_g_tile_kernel](
                 cb_g.unsafe_ptr(),
@@ -1865,50 +1700,7 @@ def ssd_forward(
         grid_dim=(_grid(b * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    comptime if NN36_SHARED_DECAY:
-        ctx.enqueue_function[nn36_m2_yoff_shared_exp_kernel](
-            yoff.unsafe_ptr(),
-            y_out.unsafe_ptr(),
-            ydiag.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            pass_states.unsafe_ptr(),
-            dacs.unsafe_ptr(),
-            Int32(b),
-            Int32(t_work),
-            Int32(nh),
-            Int32(di),
-            Int32(cd),
-            Int32(nc),
-            Int32(qv),
-            grid_dim=(b * t_work * nh, 1, 1),
-            block_dim=(M2_HEADDIM, 1, 1),
-        )
-    elif IDN_M2_YOFF_EXP_CACHE:
-        var cache_index = len(retained)
-        var cache_cells = b * nh * nc * qv
-        retained.append(ctx.enqueue_create_buffer[DType.float32](cache_cells))
-        ctx.enqueue_function[m2_yoff_exp_cache_kernel](
-            retained[cache_index].unsafe_ptr(), dacs.unsafe_ptr(), Int32(cache_cells),
-            grid_dim=(_grid(cache_cells), 1, 1), block_dim=(MAMBA2_TPB, 1, 1),
-        )
-        ctx.enqueue_function[m2_yoff_y_kernel[True]](
-            yoff.unsafe_ptr(),
-            y_out.unsafe_ptr(),
-            ydiag.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            pass_states.unsafe_ptr(),
-            retained[cache_index].unsafe_ptr(),
-            Int32(b),
-            Int32(t_work),
-            Int32(nh),
-            Int32(di),
-            Int32(cd),
-            Int32(nc),
-            Int32(qv),
-            grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
-    elif M2_OCC_YOFF:
+    comptime if M2_OCC_YOFF:
         ctx.enqueue_function[m2_yoff_tile_kernel](
             yoff.unsafe_ptr(),
             y_out.unsafe_ptr(),
@@ -1927,7 +1719,7 @@ def ssd_forward(
             block_dim=(M2_YO_THREADS, 1, 1),
         )
     else:
-        ctx.enqueue_function[m2_yoff_y_kernel[False]](
+        ctx.enqueue_function[m2_yoff_y_kernel](
             yoff.unsafe_ptr(),
             y_out.unsafe_ptr(),
             ydiag.unsafe_ptr(),

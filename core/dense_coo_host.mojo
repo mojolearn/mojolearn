@@ -4,7 +4,7 @@
 from std.builtin.sort import sort
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -55,7 +55,9 @@ def knn_affinity_f32(
     var bptr = bad_kind.unsafe_ptr()
     var sptr = start.unsafe_ptr()
     var optr = order.unsafe_ptr()
-    var tasks = host_predict_task_count(n)
+    # perf-host-grain: each task owns its rows of C and bad_kind; the
+    # grain floor on the n x n cells a row walk touches
+    var tasks = host_predict_task_count_work(n, 2 * n * n)
     var chunk = host_predict_chunk(n, tasks)
 
     def _rows(task: Int) {imm dense, imm rows, imm cols, imm vals, imm sparse, imm n, imm k, imm chunk,

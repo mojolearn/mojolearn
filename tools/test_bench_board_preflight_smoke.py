@@ -68,11 +68,13 @@ def test_missing_scorer_receipt_is_a_problem_and_trees_are_not_checked(monkeypat
     assert not any("scorer" in p for p in rep["problems"])
 
 
-def test_without_the_flag_the_probe_signature_is_unchanged(monkeypatch):
+def test_without_the_flag_the_probe_signature_is_unchanged(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(B, "params_probe", lambda ctx, r, arms: calls.append(arms) or {})
-    B.preflight_check(dict(vendor="amd"), dict(family="classical", lane="ridge", our_arms={"ours": "identical"}),
-                      ["ours"])
+    # a missing probe reads the race's probe log for its cause (SMOKE-NOT-RUN FIX): the ctx and race carry out and id
+    B.preflight_check(dict(vendor="amd", out=str(tmp_path)),
+                      dict(id="classical/ridge/taxi/rows=full", family="classical", lane="ridge",
+                           our_arms={"ours": "identical"}), ["ours"])
     assert calls == [["ours"]]
 
 
@@ -92,7 +94,7 @@ def test_mamba_reference_torch_arms_are_excluded_by_name_not_missing_probes(monk
 
 def test_macos_manifest_is_core_only():
     assert P.distributions("apple") == ["mojolearn"]
-    assert P.distributions("nvidia") == ["mojolearn-core", "mojolearn-nvidia", "mojolearn-nvidia-ptx"]
+    assert P.distributions("nvidia") == ["mojolearn-core", "mojolearn-nvidia"]  # PTX ships in mojolearn-nvidia
     assert P.distributions("amd") == ["mojolearn-core", "mojolearn-amd"]
     assert P.distributions("nvidia", legacy=True) == ["mojolearn", "mojolearn-nvidia"]
     with pytest.raises(ValueError):

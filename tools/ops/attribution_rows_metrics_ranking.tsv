@@ -1,0 +1,10 @@
+# The owed re-time of lane fx-metrics-ranking (2026-11-19), for tools/ops/attribution_job.sh (AT_ROWS_FILE; the form
+# is tools/ops/attribution_rows.tsv). Pair job nvc1-0012 read these rows as 1.65x and 1.20x between two of our
+# wheels (7f5eac7eab against d3549c756b) whose code on this path and whose output hashes are the same: the coverage
+# row compared a median of 20 calls with one call and the ranking row is one call on each side. Here both wheels make
+# 20 forced calls each (AT_ARMS=candidate,prior-d3549c756b), so the medians are the same quantity; part B gives the
+# per-call launch, copy and host split of the 10-17 ms. The taxi rows are the neighbouring shape (11 labels for 16).
+algos/metric-coverage-error/istella/rows=full	fit	ours	timing=planned
+algos/metric-label-ranking-average-precision-score/istella/rows=full	fit	ours	timing=planned
+algos/metric-label-ranking-average-precision-score/taxi/rows=full	fit	ours	timing=planned
+algos/metric-ndcg-score/istella/rows=full	fit	ours	timing=planned

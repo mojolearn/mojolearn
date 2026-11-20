@@ -1,0 +1,16 @@
+# The rows tools/ops/call_profile_job.sh profiles by default (CP_ROWS_FILE names another file of this form).
+# One row per line, whitespace separated: race id, forced phase, then optional `name=<row>` (default: the lane, with
+# `-<phase>` when the same race is listed twice). Phase: `fit`, or `infer` for an algos race (its inference phase is
+# named `infer`), `infer/<batch>` for a tree race. Small calls that carry a fixed extra cost on wheel d652a4b0a1
+# (L40S, 2026-11-17, ~/mojolearn-evidence/measure-candidate/build-d652a4b0a1/tg/SUMMARY-TG-nvidia.txt), and the
+# internal call-overhead row as the control with a known thin path (one host call per step, no GPU work).
+algos/global-avgpool/synthetic/rows=full	fit	name=global-avgpool-fit
+algos/global-avgpool/synthetic/rows=full	infer	name=global-avgpool-infer
+algos/avgpool1d/synthetic/rows=full	infer	name=avgpool1d-infer
+algos/batchnorm2d/synthetic/rows=full	infer	name=batchnorm2d-infer
+algos/layernorm/synthetic/rows=full	infer	name=layernorm-infer
+algos/adagrad/synthetic/rows=full	fit	name=adagrad-fit
+algos/select-d/synthetic/rows=full	fit	name=select-d-fit
+algos/isotonic/taxi/rows=full	infer	name=isotonic-taxi-infer
+algos/label-encoder/istella/rows=full	fit	name=label-encoder-istella-fit
+algos/internal-call-overhead-lr-at/synthetic/rows=full	fit	name=lr-at-control

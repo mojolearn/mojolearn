@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only forest-export result conversion root; never execute.
-from bindings.forest_export_binding import forest_export_py_list_i64, forest_export_py_list_f64
+from bindings.forest_export_binding_unpack import forest_export_py_list_i64, forest_export_py_list_f64
 
 
 def main() raises:

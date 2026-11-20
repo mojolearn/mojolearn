@@ -4,7 +4,7 @@
 The public `fit`, `predict`, `predict_proba` and `score` methods of the
 forests (RandomForest*, ExtraTrees*, DecisionTree*) and the other tree
 ensembles are one call each into the compiled classical owner
-(`bindings/classical_native.mojo`, operations `trees_*`, implemented in
+(`bindings/classical_native_pack.mojo`, operations `trees_*`, implemented in
 `bindings/trees_public_*.mojo`). That native operation validates the
 parameters, reads X and y, encodes the labels, checks the weights, chooses
 the fit entry and the inference engine, launches the kernels and assigns the
@@ -47,25 +47,15 @@ def _unavailable(error):
     return unavailable
 
 
-def _refusal(error):
-    # glue: a refusal recorded at import as "<Class>: <message>", the class
-    # the native owner raises again (the nearest builtin base the owner's
-    # error prefixes name)
-    for base in (ImportError, AttributeError, TypeError, RuntimeError, ValueError):  # glue: the fixed refusal classes
-        if isinstance(error, base):
-            return f"{base.__name__}: {error}"
-    return f"RuntimeError: {error}"
+# One refusal spelling for the import-time bridges (lane py-dedupe, 2026-11-15).
+from ._native_labels_bridge import _refusal  # noqa: E402
 
 
 def _entries(module):
     # glue: retain the binding's compiled entry points once at connection
     from types import BuiltinFunctionType, ModuleType
     from . import _backend
-    if type(module) is _backend._HostBinding:
-        # A CPU-only install: the family's compiled host binding stands
-        # behind the proxy; its entries are read once here, not through the
-        # proxy's Python lookup at call time.
-        module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: a CPU-only install connects its compiled host binding once
+    module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:
@@ -81,6 +71,52 @@ def _entries(module):
     return table
 
 
+#: The trees entry table's vendor words (core/trees_entry_table.mojo), the
+#: mapping xtrees/glue_runs.mojo::x_trees_glue_vendor applies at publication.
+_NATIVE_VENDORS = {"cpu": 0, "metal": 1, "cuda": 2, "hip": 3}
+
+
+#: The images whose native callers read a (tier, vendor) key, with the two
+#: probes each exports: x_trees (lane calltable-trees; its glue and DART
+#: tables), gbdt (lane calltable-gbdt-forest-dart; core/gbdt_entry_table.mojo)
+#: and the two forest images (lane calltable-forest; core/forest_entry_table.mojo).
+_NATIVE_KEYED = {
+    "_mojolearn_x_trees": ("x_trees_numeric_mode", "x_trees_vendor", "x_trees_native_key"),
+    "_mojolearn_gbdt": ("gbdt_numeric_mode", "gbdt_vendor", "gbdt_native_key"),
+    "_mojolearn_rf": ("rf_numeric_mode", "rf_vendor", "rf_native_key"),
+    "_mojolearn_trees": ("trees_numeric_mode", "trees_vendor", "trees_native_key"),
+}
+
+
+def _native_key(table, name):
+    # glue: once at import, the connected image's (tier, vendor) key, which
+    # its native callers read instead of looking entries up by name. An image
+    # without one leaves the key absent and its native callers refuse.
+    mode_probe, vendor_probe, slot = _NATIVE_KEYED[name]
+    try:
+        mode = int(table[mode_probe]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(table[vendor_probe]()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        table[slot] = (mode, vendor)
+
+
+def _estimators_native_key(table):
+    # glue: once at import, the connected estimators image's (tier, vendor)
+    # key, which MultiOutputRegressor's one-program ridge reads to reach the
+    # ridge multi table (core/linear_entry_table_multi.mojo; lane
+    # calltable-base-helpers). An image without one leaves the key absent and
+    # the native caller fits one member per column, as before.
+    try:
+        mode = int(table["estimators_numeric_mode"]())  # import-time: the image's compiled tier
+        vendor = _NATIVE_VENDORS.get(str(table["estimators_vendor"]()), -1)  # import-time: the image's vendor
+    except Exception:  # noqa: BLE001 - absent probes leave the key absent
+        return
+    if vendor >= 0 and mode in (0, 1):
+        table["estimators_native_key"] = (mode, vendor)
+
+
 def _bindings():
     # glue: connect each tree binding of both numeric modes once at import
     from . import _backend
@@ -93,6 +129,10 @@ def _bindings():
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
                 per_mode[name] = _refusal(error)
+            if name == "_mojolearn_estimators" and isinstance(per_mode[name], dict):
+                _estimators_native_key(per_mode[name])
+            if name in _NATIVE_KEYED and isinstance(per_mode[name], dict):
+                _native_key(per_mode[name], name)
         connected[mode] = per_mode
     return connected
 
@@ -106,6 +146,13 @@ def _helpers():
             table[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
             table[name] = _refusal(error)
+    # glue: once at import, the base helper table key the native doors read
+    # (lane calltable-base-helpers); a binary without one records the refusal
+    from ._buffer import base_native_key
+    try:
+        table["base_native_key"] = base_native_key()
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        table["base_native_key"] = _refusal(error)
     return table
 
 
@@ -128,7 +175,7 @@ def connect():
     except ImportError as error:
         _ENTRY, _CONTEXT = _unavailable(error), {"trees_unavailable": str(error)}
         return _ENTRY, _CONTEXT
-    import numbers
+    from ._native_loaded_modules import REAL_TYPES, INTEGRAL_TYPES
     import types
     from ._labels import ClassLabels
     from ._native_labels_bridge import label_context
@@ -141,7 +188,7 @@ def connect():
         trees_boost_classes={}, trees_meta_classes={},
         trees_constructors={}, trees_gbdt_adapter_constructors={}, trees_state_layouts={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
-        trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
+        trees_real_type=REAL_TYPES, trees_integral_type=INTEGRAL_TYPES,
         classifier_labels_class=ClassLabels,
         classifier_labels_namespace=dict(vars(ClassLabels)),
         classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
@@ -211,15 +258,11 @@ def register(cls, kind, **tables):
 
 
 def _connect_public_iforest(cls):
-    # glue: import-time removal of the former validation/output decorators;
-    # iforest_public_lifecycle owns the complete public operation natively.
-    import inspect
-    for name in ('fit', 'fit_predict', 'score_samples', 'decision_function', 'predict'):  # glue: fixed native public doors
-        setattr(cls, name, inspect.unwrap(getattr(cls, name)))
-    # The native archive loader already publishes fitted state; no Python
-    # loader callback is needed after the one archive binding call.
-    loader = inspect.getattr_static(cls, 'load')
-    cls.load = classmethod(inspect.unwrap(loader.__func__))
+    # glue: iforest_public_lifecycle owns the complete public operation
+    # natively, and the native archive loader publishes the fitted state. A
+    # package class gets no Python validation/output/loader wrappers at its
+    # definition (`_mode`, lane py-mode-wrappers 2026-11-15), so the former
+    # unwrap loop here is deleted; only the marker remains.
     cls._mojolearn_native_public = True
 
 
@@ -259,8 +302,9 @@ def connect_gbdt_parameters(base, classes, metadata):
         context['trees_state_layouts'][cls] = {
             'classical_public_layouts': {cls: layout}, 'classical_public_installed': True}
     context['trees_gbdt_parameter_metadata'] = metadata
-    # glue: each adapter's public owner now performs validation, tracking and
-    # output conversion; remove only the former package-installed decorators.
+    # glue: each adapter's public owner performs validation, tracking and
+    # output conversion; the package installs no Python decorators on these
+    # classes (`_mode`), so nothing is unwrapped here.
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     module = _binding()._module
@@ -269,13 +313,6 @@ def connect_gbdt_parameters(base, classes, metadata):
         raise TypeError('native GBDT adapters require compiled attribute entries')
     descriptor = factory(MethodType(attribute, context))
     for cls in (base,) + tuple(classes):  # glue: fixed adapter public classes
-        for name in ('fit', 'predict', 'predict_proba', 'decision_function', 'score'):  # glue: public native doors
-            method = getattr(cls, name, None)
-            if inspect.isfunction(method):
-                setattr(cls, name, inspect.unwrap(method))
-        loader = inspect.getattr_static(cls, 'load', None)
-        if isinstance(loader, classmethod):
-            cls.load = classmethod(inspect.unwrap(loader.__func__))
         cls.__getattribute__ = descriptor
         cls._mojolearn_native_public = True
         layout = _layout(cls, descriptor)
@@ -289,17 +326,13 @@ def connect_gbdt_parameters(base, classes, metadata):
 
 def _connect_public_forest(cls, context):
     # Connect the existing native fit/predict owner to the exact built-in
-    # classes. Unwrap only the known mode/validation/output decorators: their
-    # semantics now live in trees_public_lifecycle_native, not Python frames.
+    # classes. Validation, fit tracking and output conversion live in
+    # trees_public_lifecycle_native; the package installs no Python
+    # decorators on these classes (`_mode`), so nothing is unwrapped here.
     rows, getter, previous = context['trees_constructors'][cls]
-    import inspect
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     from ._native_classical_bridge import _layout
-    for name in ('fit', '_fit_with_tree_start', 'predict', 'predict_proba', 'score', 'apply', 'predict_with_leaves', 'staged_predict'):  # glue: fixed public tree doors
-        method = getattr(cls, name, None)
-        if inspect.isfunction(method):
-            setattr(cls, name, inspect.unwrap(method))
     module = _binding()._module
     attribute = module.standard_scaler_attribute_call
     factory = module.classical_attribute_descriptor
@@ -322,7 +355,7 @@ def _connect_public_forest(cls, context):
 
 def register_boost(cls, kind, **tables):
     """Connect one bagged or boosted tree ensemble class at its definition:
-    `kind` names its schema in bindings/trees_public_boost.mojo
+    `kind` names its schema in bindings/trees_public_boost_door.mojo
     ("bagging_classifier", "ada_regressor", "dart_classifier", "rte", ...);
     `tables` are its fixed lookup tables and the member classes it builds."""
     _, context = connect()
@@ -335,19 +368,23 @@ def register_boost(cls, kind, **tables):
 
 def register_meta(cls, kind):
     """Connect one meta-estimator class at its definition: `kind` names its
-    schema in bindings/trees_public_meta.mojo ("voting_classifier",
+    schema in bindings/trees_public_meta_door.mojo ("voting_classifier",
     "stacking_regressor", "multioutput_classifier", "ovr", "calibrated", ...)."""
     _, context = connect()
     if "trees_unavailable" in context:
         return
     context["trees_meta_classes"][cls] = kind
-    # These classes already completed their constructor/numeric-mode setup.
-    # Replace the old fit/validation/output decorators only on these public
-    # methods; trees_public_meta_lifecycle now owns their runtime semantics.
-    # Keep constructors and the still-unported parameter setter visible.
+    # These classes already completed their constructor/numeric-mode setup;
+    # trees_public_meta_lifecycle owns their runtime semantics. The package
+    # installs no Python decorators on them (`_mode`, lane py-mode-wrappers
+    # 2026-11-15), so nothing is unwrapped: each public door is bound as the
+    # class's own plain function. getattr on the class returns an
+    # `available_if`'s function, so VotingClassifier.predict_proba becomes
+    # plain too (as before): its availability is the native door's call-time
+    # refusal under voting='hard', with no Python __get__ per access.
     import inspect
     for name in ('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'):  # glue: fixed public meta-estimator doors
         method = getattr(cls, name, None)
         if inspect.isfunction(method):
-            setattr(cls, name, inspect.unwrap(method))
+            setattr(cls, name, method)
     cls._mojolearn_native_public = True

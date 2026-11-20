@@ -85,8 +85,9 @@ DETERMINISTIC run to run, which CatBoost's own float path is not.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 
 from max.gpu.memory import AddressSpace
@@ -182,8 +183,7 @@ def hist2_acc_dtype[smem_mode: Int]() -> DType:
     """The shared accumulator's element type: theirs is float, the shared
     slice variant is Int32 fixed point (`hist2_smem_add`)."""
 
-    @parameter
-    if smem_mode == HIST_SMEM_SHARED2_I32:
+    comptime if smem_mode == HIST_SMEM_SHARED2_I32:
         return DType.int32
     else:
         return DType.float32
@@ -197,8 +197,7 @@ def hist2_smem_slots[smem_mode: Int]() -> Int:
     threads, or 4096 at 256."""
     comptime block = hist2_block_size[smem_mode]()
 
-    @parameter
-    if smem_mode == HIST_SMEM_SHARED2_I32:
+    comptime if smem_mode == HIST_SMEM_SHARED2_I32:
         return (block // (2 * LANE_WIDTH)) * 1024
     else:
         return block * hist_floats_per_thread_for[K_HIST_2_ONE_BYTE]()
@@ -281,16 +280,14 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
 
     var off: Int
 
-    @parameter
-    if bits == 5:
+    comptime if bits == 5:
         off = hist2_slice_offset_5(tid)
     elif bits == 6:
         off = hist2_slice_offset_6(tid)
     else:
         off = hist2_slice_offset_7(tid)
 
-    @parameter
-    if smem_mode == HIST_SMEM_SHARED2_I32:
+    comptime if smem_mode == HIST_SMEM_SHARED2_I32:
         # `1024 * (tid / 32)` becomes `1024 * (tid / 64)`; nothing else moves.
         return off - 1024 * (tid // 32) + 1024 * (tid // 64)
     else:
@@ -300,11 +297,11 @@ def hist2_slice_offset[bits: Int, smem_mode: Int](tid: Int) -> Int:
 def hist2_add_points[
     bits: Int, n: Int, dt: DType
 ](
-    ci: InlineArray[UInt32, n],
-    s1: InlineArray[Float32, n],
-    s2: InlineArray[Float32, n],
-    q1: InlineArray[Int32, n],
-    q2: InlineArray[Int32, n],
+    ci: Array[UInt32, n],
+    s1: Array[Float32, n],
+    s2: Array[Float32, n],
+    q1: Array[Int32, n],
+    q2: Array[Int32, n],
     tid: Int,
     slice_base: Int,
     smem: UnsafePointer[
@@ -319,8 +316,7 @@ def hist2_add_points[
     the pre-quantized stats (`hist2_quantize` at the load sites); the
     per-bit bodies are mode-blind except the one `hist2_smem_add` call."""
 
-    @parameter
-    if bits == 5:
+    comptime if bits == 5:
         hist2_add_points_5[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
     elif bits == 6:
         hist2_add_points_6[n, dt](ci, s1, s2, q1, q2, tid, slice_base, smem)
@@ -396,8 +392,7 @@ def hist2_reduce[bits: Int, dt: DType, smem_mode: Int](
     one; the tails leave it to this caller so it exists exactly once)."""
     hist2_reduce_to_one_warp[dt, smem_mode](tid, smem)
 
-    @parameter
-    if bits == 5:
+    comptime if bits == 5:
         hist2_reduce_tail_5[dt](tid, smem)
     elif bits == 6:
         hist2_reduce_tail_6[dt](tid, smem)
@@ -509,8 +504,7 @@ def hist2_add_to_global_memory[
                     is_second_stat * 4 * hist_size + fid * hist_size + fold
                 ]
 
-                @parameter
-                if dt == DType.int32:
+                comptime if dt == DType.int32:
                     # The shared-Int32 arm: the cell is already fixed point
                     # at `fixed_scale`. See the DEVIATION BLOCK above.
                     var q = rebind[Scalar[DType.int32]](cell)
@@ -541,8 +535,7 @@ def hist2_add_to_global_memory[
                             TARGET_COLUMN, PIN_DETERMINISM
                         ]()
 
-                        @parameter
-                        if det:
+                        comptime if det:
                             if block_count > 1:
                                 # `NUMERIC_IDENTICAL`: partials sum as Int32.
                                 var q = Int32(val * fixed_scale)
@@ -714,25 +707,24 @@ def hist2_one_byte_kernel[
     comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
     while pe < PEEL_END:
-        var hb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var hb = Array[UInt32, 1](fill=UInt32(0))
+        var hs1 = Array[Float32, 1](fill=Float32(0.0))
+        var hs2 = Array[Float32, 1](fill=Float32(0.0))
+        var hq1 = Array[Int32, 1](fill=Int32(0))
+        var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
-            hb[0] = ldg(bins_p + (p_offset + pe))
-            hq1[0] = ldg(qs_p + (p_offset + pe))
-            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+            hb[0] = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq1[0] = (qs_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq2[0] = (qs_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(bins, idx)`, `Ldg(stats, idx)`,
             # `Ldg(stats, idx + statsLineSize)`
             # (`compute_hist_loop_two_stats.cuh:81-83`).
-            hb[0] = ldg(bins_p + (p_offset + pe))
-            hs1[0] = ldg(stats_p + (p_offset + pe))
-            hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
+            hb[0] = (bins_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs1[0] = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hs2[0] = (stats_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
 
-            @parameter
-            if DT == DType.int32:
+            comptime if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
                 hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
                 hq2[0] = hist2_quantize(hs2[0], fixed_scale, u)
@@ -740,24 +732,23 @@ def hist2_one_byte_kernel[
             hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
         )
 
-        var tb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var tb = Array[UInt32, 1](fill=UInt32(0))
+        var ts1 = Array[Float32, 1](fill=Float32(0.0))
+        var ts2 = Array[Float32, 1](fill=Float32(0.0))
+        var tq1 = Array[Int32, 1](fill=Int32(0))
+        var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
-            tb[0] = ldg(bins_p + (tail_start + pe))
-            tq1[0] = ldg(qs_p + (tail_start + pe))
-            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+            tb[0] = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq1[0] = (qs_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq2[0] = (qs_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < tail_len and not preq:
             # `Ldg(bins, tailOffset + idx)` and the two stat loads
             # (`compute_hist_loop_two_stats.cuh:100-102`).
-            tb[0] = ldg(bins_p + (tail_start + pe))
-            ts1[0] = ldg(stats_p + (tail_start + pe))
-            ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
+            tb[0] = (bins_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts1[0] = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            ts2[0] = (stats_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
 
-            @parameter
-            if DT == DType.int32:
+            comptime if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
                 tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
                 tq2[0] = hist2_quantize(ts2[0], fixed_scale, u)
@@ -787,8 +778,7 @@ def hist2_one_byte_kernel[
     # at this point, which applies verbatim.
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
-    if not uniform:
+    comptime if not uniform:
         return
 
     var max_iters = (aligned_size + stripe_size - 1) // stripe_size
@@ -802,17 +792,17 @@ def hist2_one_byte_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var local_bins = InlineArray[UInt32, HIST2_POINTS_PER_ITER](fill=0)
-        var local_stats1 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_bins = Array[UInt32, HIST2_POINTS_PER_ITER](fill=0)
+        var local_stats1 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_stats2 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q1 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
-        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q2 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
 
@@ -820,41 +810,38 @@ def hist2_one_byte_kernel[
         # `Ldg((float4*) (stats + statsLineSize), ...)`
         # (`compute_hist_loop_two_stats.cuh:386-396`). Same element-space
         # stride and the same `alignment=4` note as `hist_one_byte.mojo`.
-        @parameter
-        for k in range(HIST2_UNROLL):
+        comptime for k in range(HIST2_UNROLL):
             if active and preq:
-                var wb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var wb = (
                     b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq1 = (
                     q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq2 = (
                     q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = wb[e]
                     local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
                     local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
             elif active:
-                var vb = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var vb = (
                     b_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var vs1 = (
                     s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var vs2 = (
                     s_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
 
-                @parameter
-                for e in range(HIST2_LOAD_SIZE):
+                comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = vb[e]
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 
-                    @parameter
-                    if DT == DType.int32:
+                    comptime if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
                         )
@@ -866,8 +853,7 @@ def hist2_one_byte_kernel[
                         )
             else:
                 # No row: contribute zero, stay inside every sync.
-                @parameter
-                for e in range(HIST2_LOAD_SIZE):
+                comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
                     local_stats2[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
@@ -1026,34 +1012,32 @@ def hist2_one_byte_gather_kernel[
     comptime PEEL_END = ((ALIGN_SIZE + BLOCK - 1) // BLOCK) * BLOCK
     var pe = tid
     while pe < PEEL_END:
-        var hb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var hs1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hs2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var hq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var hq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var hb = Array[UInt32, 1](fill=UInt32(0))
+        var hs1 = Array[Float32, 1](fill=Float32(0.0))
+        var hs2 = Array[Float32, 1](fill=Float32(0.0))
+        var hq1 = Array[Int32, 1](fill=Int32(0))
+        var hq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < head_len and preq:
-            hb[0] = ldg(cindex_p + Int(ldg(indices + (p_offset + pe))))
-            hq1[0] = ldg(qs_p + (p_offset + pe))
-            hq2[0] = ldg(qs_p + (p_offset + pe + stat_line_size))
+            hb[0] = (cindex_p + Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())).unsafe_load[invariant=True]()
+            hq1[0] = (qs_p + (p_offset + pe)).unsafe_load[invariant=True]()
+            hq2[0] = (qs_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < head_len and not preq:
             # `Ldg(indices, idx)`, `Ldg(cindex, loadIdx)`, both stat loads
             # (`compute_hist_loop_two_stats.cuh:134-137`).
-            var hrow = Int(ldg(indices + (p_offset + pe)))
-            hb[0] = ldg(cindex_p + hrow)
+            var hrow = Int((indices + (p_offset + pe)).unsafe_load[invariant=True]())
+            hb[0] = (cindex_p + hrow).unsafe_load[invariant=True]()
 
-            @parameter
-            if ridx_stats:
+            comptime if ridx_stats:
                 # DEVIATION 1902: stationary planes, both stats ride the
                 # same gathered row id as the bin -- same bits as the
                 # permuted plane held here (`split_points_ridx.mojo`).
-                hs1[0] = ldg(stats_p + hrow)
-                hs2[0] = ldg(stats_p + (hrow + stat_line_size))
+                hs1[0] = (stats_p + hrow).unsafe_load[invariant=True]()
+                hs2[0] = (stats_p + (hrow + stat_line_size)).unsafe_load[invariant=True]()
             else:
-                hs1[0] = ldg(stats_p + (p_offset + pe))
-                hs2[0] = ldg(stats_p + (p_offset + pe + stat_line_size))
+                hs1[0] = (stats_p + (p_offset + pe)).unsafe_load[invariant=True]()
+                hs2[0] = (stats_p + (p_offset + pe + stat_line_size)).unsafe_load[invariant=True]()
 
-            @parameter
-            if DT == DType.int32:
+            comptime if DT == DType.int32:
                 var u = hist2_dither(p_offset + pe)
                 hq1[0] = hist2_quantize(hs1[0], fixed_scale, u)
                 hq2[0] = hist2_quantize(hs2[0], fixed_scale, u)
@@ -1061,31 +1045,29 @@ def hist2_one_byte_gather_kernel[
             hb, hs1, hs2, hq1, hq2, tid, slice_base, smem
         )
 
-        var tb = InlineArray[UInt32, 1](fill=UInt32(0))
-        var ts1 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var ts2 = InlineArray[Float32, 1](fill=Float32(0.0))
-        var tq1 = InlineArray[Int32, 1](fill=Int32(0))
-        var tq2 = InlineArray[Int32, 1](fill=Int32(0))
+        var tb = Array[UInt32, 1](fill=UInt32(0))
+        var ts1 = Array[Float32, 1](fill=Float32(0.0))
+        var ts2 = Array[Float32, 1](fill=Float32(0.0))
+        var tq1 = Array[Int32, 1](fill=Int32(0))
+        var tq2 = Array[Int32, 1](fill=Int32(0))
         if local_block_idx == 0 and pe < tail_len and preq:
-            tb[0] = ldg(cindex_p + Int(ldg(indices + (tail_start + pe))))
-            tq1[0] = ldg(qs_p + (tail_start + pe))
-            tq2[0] = ldg(qs_p + (tail_start + pe + stat_line_size))
+            tb[0] = (cindex_p + Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())).unsafe_load[invariant=True]()
+            tq1[0] = (qs_p + (tail_start + pe)).unsafe_load[invariant=True]()
+            tq2[0] = (qs_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
         if local_block_idx == 0 and pe < tail_len and not preq:
             # (`compute_hist_loop_two_stats.cuh:154-157`)
-            var trow = Int(ldg(indices + (tail_start + pe)))
-            tb[0] = ldg(cindex_p + trow)
+            var trow = Int((indices + (tail_start + pe)).unsafe_load[invariant=True]())
+            tb[0] = (cindex_p + trow).unsafe_load[invariant=True]()
 
-            @parameter
-            if ridx_stats:
+            comptime if ridx_stats:
                 # DEVIATION 1902, as on the head peel above.
-                ts1[0] = ldg(stats_p + trow)
-                ts2[0] = ldg(stats_p + (trow + stat_line_size))
+                ts1[0] = (stats_p + trow).unsafe_load[invariant=True]()
+                ts2[0] = (stats_p + (trow + stat_line_size)).unsafe_load[invariant=True]()
             else:
-                ts1[0] = ldg(stats_p + (tail_start + pe))
-                ts2[0] = ldg(stats_p + (tail_start + pe + stat_line_size))
+                ts1[0] = (stats_p + (tail_start + pe)).unsafe_load[invariant=True]()
+                ts2[0] = (stats_p + (tail_start + pe + stat_line_size)).unsafe_load[invariant=True]()
 
-            @parameter
-            if DT == DType.int32:
+            comptime if DT == DType.int32:
                 var u = hist2_dither(tail_start + pe)
                 tq1[0] = hist2_quantize(ts1[0], fixed_scale, u)
                 tq2[0] = hist2_quantize(ts2[0], fixed_scale, u)
@@ -1111,8 +1093,7 @@ def hist2_one_byte_gather_kernel[
 
     comptime uniform = requires_uniform_iteration_for[TARGET_COLUMN]()
 
-    @parameter
-    if not uniform:
+    comptime if not uniform:
         return
 
     var max_iters = (aligned_size + stripe_size - 1) // stripe_size
@@ -1126,79 +1107,74 @@ def hist2_one_byte_gather_kernel[
 
     for it in range(max_iters):
         var active = it < iter_count
-        var local_bins = InlineArray[UInt32, HIST2_POINTS_PER_ITER](fill=0)
-        var local_stats1 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_bins = Array[UInt32, HIST2_POINTS_PER_ITER](fill=0)
+        var local_stats1 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_stats2 = InlineArray[Float32, HIST2_POINTS_PER_ITER](
+        var local_stats2 = Array[Float32, HIST2_POINTS_PER_ITER](
             fill=Float32(0.0)
         )
-        var local_q1 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q1 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
-        var local_q2 = InlineArray[Int32, HIST2_POINTS_PER_ITER](
+        var local_q2 = Array[Int32, HIST2_POINTS_PER_ITER](
             fill=Int32(0)
         )
 
         # Their gather batch (`compute_hist_loop_two_stats.cuh:424-449`):
         # indices and BOTH stat columns load 4-wide; only the bins are
         # gathered one at a time, because a gather has no vector form.
-        @parameter
-        for k in range(HIST2_UNROLL):
+        comptime for k in range(HIST2_UNROLL):
             if active and preq:
-                var wi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var wi = (
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq1 = (
                     q_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
-                var wq2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                var wq2 = (
                     q_ptr + stat_line_size + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 comptime for e in range(HIST2_LOAD_SIZE):
-                    local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
+                    local_bins[k * HIST2_LOAD_SIZE + e] = (
                         cindex_p + Int(wi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
                     local_q1[k * HIST2_LOAD_SIZE + e] = wq1[e]
                     local_q2[k * HIST2_LOAD_SIZE + e] = wq2[e]
             elif active:
-                var vi = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                var vi = (
                     i_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                )
+                ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
                 var vs1 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
                 var vs2 = SIMD[DType.float32, HIST2_LOAD_SIZE](0.0)
 
-                @parameter
-                if not ridx_stats:
-                    vs1 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                comptime if not ridx_stats:
+                    vs1 = (
                         s_ptr + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                    )
-                    vs2 = ldg[width=HIST2_LOAD_SIZE, alignment=4](
+                    ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
+                    vs2 = (
                         s_ptr
                         + stat_line_size
                         + LANE_WIDTH * HIST2_LOAD_SIZE * k
-                    )
+                    ).unsafe_load[width=HIST2_LOAD_SIZE, alignment=4, invariant=True]()
 
-                @parameter
-                for e in range(HIST2_LOAD_SIZE):
-                    local_bins[k * HIST2_LOAD_SIZE + e] = ldg(
+                comptime for e in range(HIST2_LOAD_SIZE):
+                    local_bins[k * HIST2_LOAD_SIZE + e] = (
                         cindex_p + Int(vi[e])
-                    )
+                    ).unsafe_load[invariant=True]()
 
-                    @parameter
-                    if ridx_stats:
+                    comptime if ridx_stats:
                         # DEVIATION 1902: both stats join the bins' scalar
                         # gather through the same loaded row id; the wide
                         # loads above are traded for it.
-                        vs1[e] = ldg(stats_p + Int(vi[e]))
-                        vs2[e] = ldg(
+                        vs1[e] = (stats_p + Int(vi[e])).unsafe_load[invariant=True]()
+                        vs2[e] = (
                             stats_p + (Int(vi[e]) + stat_line_size)
-                        )
+                        ).unsafe_load[invariant=True]()
                     local_stats1[k * HIST2_LOAD_SIZE + e] = vs1[e]
                     local_stats2[k * HIST2_LOAD_SIZE + e] = vs2[e]
 
-                    @parameter
-                    if DT == DType.int32:
+                    comptime if DT == DType.int32:
                         var u = hist2_dither(
                             pos_base + LANE_WIDTH * HIST2_LOAD_SIZE * k + e
                         )
@@ -1210,8 +1186,7 @@ def hist2_one_byte_gather_kernel[
                         )
             else:
 
-                @parameter
-                for e in range(HIST2_LOAD_SIZE):
+                comptime for e in range(HIST2_LOAD_SIZE):
                     local_bins[k * HIST2_LOAD_SIZE + e] = UInt32(0)
                     local_stats1[k * HIST2_LOAD_SIZE + e] = Float32(0.0)
                     local_stats2[k * HIST2_LOAD_SIZE + e] = Float32(0.0)

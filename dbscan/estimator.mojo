@@ -108,7 +108,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 from max.gpu.host import DeviceContext
 
 from dbscan.impl.dbscan import dbscan_fit_impl_weighted
-from std.os import getenv
+from std.sys import is_defined
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_COSINE,
@@ -120,16 +120,13 @@ from core.cosine_rows import cosine_unit_rows
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
-    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_mul,
     identical_sqrt,
 )
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_dim, block_idx, thread_idx
 
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'
@@ -141,34 +138,35 @@ from std.sys.info import has_apple_gpu_accelerator
 #: unit rows carry the bits the host column's call of that function gives.
 #: A row it must refuse is reported through one Int32 cell and refused by
 #: name with the host function's sentence (without the squared norm value).
-#: `-D MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF=1` restores the host scaling.
-comptime IDN_DBSCAN_COSINE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: The host scaling below stays for FAST.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 6ddc7b32e5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+#: DBSCAN phase timer: `-D MOJOLEARN_DBSCAN_PHASES` builds print the phase
+#: times; default builds compile the timer out. Before (lane
+#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: getenv per fit.
+comptime DBSCAN_PHASES_ON = is_defined["MOJOLEARN_DBSCAN_PHASES"]()
+
+
+comptime IDN_DBSCAN_COSINE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the labels (and the
 #: core mask of `prediction_data=True`) are downloaded straight into the
 #: caller's arrays, without a host staging buffer and a per-element host
-#: copy loop. Same bytes. `-D MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF=1`
-#: restores the staged copy.
+#: copy loop. Same bytes. The staged copy stays for FAST.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 251c5ffa6d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_DIRECT_OUT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-# MEASURED M3 FAST; broader workload evidence remains separate.
-# F15/dbscan-outputs M3 2026-10-06: 6 scored caller times; B/A
-# 0.9371..1.7658 (mixed/regressing); FAST candidate remains OFF.
-# Scored FAST quality 3/3 within existing bands; PASS.
-# One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F15/dbscan-outputs.
-# Compilation/identity reused. No combined-toggle/full-board claim.
-) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
+# DBSCAN_FAST_DIRECT_OUT (FAST + Apple arm): F15/dbscan-outputs M3 2026-10-06,
+# B/A 0.9371..1.7658 (mixed/regressing), never promoted.
+# TOMBSTONE: MOJOLEARN_DBSCAN_FAST_DIRECT_OUT (unmeasured-to-promotion Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 48be49ddd8.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_DIRECT_OUT.patch; record in docs/TOMBSTONES.md.
+)
 
 comptime COSINE_TPB = 256
 comptime COSINE_NO_BAD_ROW = Int32(2147483647)
@@ -387,7 +385,7 @@ def dbscan_fit(
         max_mbytes_per_batch,
         cap,
         eps_nn_method,
-        String(getenv("MOJOLEARN_DBSCAN_PHASES")) == "1",
+        DBSCAN_PHASES_ON,
         metric,
         has_weights,
         out_core_addr,

@@ -15,7 +15,7 @@ What it transcribes, all read out of `/private/tmp/catboost-src` at
 `catboost/cuda/cuda_util/helpers.h`, `library/cpp/containers/2d_array` set
 helpers, and the `TFeatureTensor` half of `catboost/cuda/data/feature.h`.
 CityHash comes from `tools/cityhash_oracle/city.cpp`, which is CatBoost's
-vendored CityHash 1.0 and is already the oracle for `pixi run check-cityhash`.
+vendored CityHash 1.0 and is already the oracle for `pixi run check-native-cpu cityhash_check`.
 
 Each fixture's INSERTION ORDER is read out of this file by the Mojo check
 rather than restated there, so the two sides cannot drift about what they

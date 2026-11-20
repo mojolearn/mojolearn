@@ -1,0 +1,35 @@
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index 21c4e5fc9f..b5e8ecebf9 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -52,6 +52,7 @@ from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
+ from std.atomic import Atomic
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index 3d11f84329..c38ef0066f 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -178,13 +178,13 @@ def sparse_mr_search_kernel(
+ # ascending from 0.0, then `mr_edge_weight`; the per-point minimum is over
+ # the total order (key, j), so the merge order of threads, slices and
+ # launches cannot move it. `smr_fold_slices_kernel` folds the slices on the
+-# device and only n_todo pairs come back. No launch bound off Apple.
+-# TOMBSTONE: MOJOLEARN_SMR_TILED_OFF (old path: the per-pair search and its launch bound on NVIDIA and AMD; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4cadcc3fbd.
+-# Restore: git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch; record in docs/TOMBSTONES.md.
++# device and only n_todo pairs come back. No launch bound off Apple. -D
++# MOJOLEARN_SMR_TILED_OFF=1 restores the per-pair kernel and the bound.
+ comptime SMR_TILED = (
+-    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
++    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
++    and not is_defined["MOJOLEARN_SMR_TILED_OFF"]()
+ ) or HDB_SMR_TILED
+-#: lane af-hdbscan2 (2026-10-03), FAST on Apple only (HDB_SMR_TILED, the default):
++#: lane af-hdbscan2 (2026-10-03), FAST on Apple only, -D MOJOLEARN_HDB_SMR_TILED:
+ #: the tiled kernel above runs on Apple too, under a launch bound of
+ #: SMR_APPLE_TILED_MACS multiply-adds (16x the per-pair kernel's: the tiled
+ #: kernel issues 16 FMAs per 8 threadgroup reads, so a launch of this size is

@@ -63,12 +63,15 @@ pairwise addition has no fold-order fault (addition commutes), and the public
 ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
-from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4, the NN24 eight-lane fold; owner another lane) oracle arms deleted here 2026-11-15 by lane/expdel2-32-neural; code recoverable at f192693134.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (the MOJOLEARN_IDN_NORM_FIXED_LANES arms only; the NN24 / IDN_NORM arms beside them stay deleted).
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_lanes import all_finite
 from std.math import isfinite
-from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
 from core.host_parallel import host_parallelize
@@ -104,13 +107,11 @@ comptime HOST_BWD_TWO: Float32 = 2.0
 comptime HOST_RMS_PARALLEL_CELLS = 32768
 """Keep small normalization calls serial; split meaningful tensors by rows."""
 
-comptime HOST_RMS_FORCE_SERIAL = is_defined["MOJOLEARN_HOST_RMS_FORCE_SERIAL"]()
-"""Benchmark control for the previous serial row schedule."""
+# TOMBSTONE: MOJOLEARN_HOST_RMS_FORCE_SERIAL (opt-in serial row schedule, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at a7c1f95c40.
+# Restore: git apply experiments/removed/MOJOLEARN_HOST_RMS_FORCE_SERIAL.patch
 
 
 def _host_rms_tasks(m: Int, dm: Int) -> Int:
-    comptime if HOST_RMS_FORCE_SERIAL:
-        return 1
     if m * dm < HOST_RMS_PARALLEL_CELLS:
         return 1
     return max(1, min(m, num_physical_cores()))
@@ -187,8 +188,6 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
             for j in range(dm):
                 var xj = ftz(xp.unsafe_load(t * dm + j))
                 acc = ftz(identical_mul_add(xj, xj, acc))
-            comptime if NN24_NORM_LANES8:
-                acc = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             comptime if IDN_NORM_FIXED_LANES:
                 # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
                 acc = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
@@ -296,8 +295,6 @@ def host_samba_rms_norm_backward(
                 )
                 dhp.unsafe_store(cell, dhj)
                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
-            comptime if NN24_NORM_LANES8:
-                c = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             comptime if IDN_NORM_FIXED_LANES:
                 # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
                 c = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
@@ -426,7 +423,8 @@ def host_samba_accumulate(
         for i in range(n):
             single.append(ftz(cur[i]))
         return single^
-    var first_nonfinite = n
+    # TOMBSTONE: MOJOLEARN_NN58_ACCUMULATE_STATUS (opt-in accumulated non-finite status, no A/B recorded) and its MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 5b6269eefe.
+    # Restore: git apply experiments/removed/MOJOLEARN_NN58_ACCUMULATE_STATUS.patch
     var pieces = a
     while pieces > 1:
         var pairs = pieces // 2
@@ -437,13 +435,8 @@ def host_samba_accumulate(
                 var right = ftz(cur[(2 * j + 1) * n + e])
                 var value = ftz(identical_mul_add(Float32(1.0), left, right))
                 nxt.append(value)
-                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN58_ACCUMULATE_STATUS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
-                    if not isfinite(value):
-                        first_nonfinite = min(first_nonfinite, e)
         cur = nxt^
         pieces = pairs
-    if first_nonfinite < n:
-        raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(first_nonfinite))
     comptime if GEMM_ORACLE_HOST_SABOTAGE:
         # Pairwise addition has no fold-order fault. Corrupt the actual native
         # result so the ordered-shard reduction's independent oracle can prove

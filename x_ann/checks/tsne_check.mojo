@@ -11,7 +11,6 @@ With MOJOLEARN_IDENTITY_TRACE set, the card holds tsne.<fixture>.embedding
 and tsne.<fixture>.kl."""
 
 from std.memory import bitcast
-from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_exp, identical_mul
 from x_ann.tsne_device import tsne_fit_device
@@ -26,7 +25,7 @@ def y_start(n: Int) -> List[Float32]:
     return y^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var failed = 0
     var trace = IdentityTrace()
@@ -102,22 +101,39 @@ def main() raises:
           "repulsion", sep_rep, "attraction", sep_attr, "gain-branch", sep_gain)
     if sep_knn == 0 or sep_perp == 0 or sep_norm == 0 or sep_rep == 0 or sep_attr == 0:
         print("VACUOUS: a fixture does not separate its seam")
-        exit(2)
+        raise Error("VACUOUS: a fixture does not separate its seam")
+
+    # 5813's lanes: with n <= 64 every lane holds at most one j and the lane
+    # fold is the single chain, so a third fixture has more rows than lanes;
+    # its oracle must differ from the single chain's
+    var n_l = 150
+    var lanes = fixture_wide(n_l, d)
+    var y0_l = y_start(n_l)
+    var kl_a = Float32(0.0)
+    var kl_b = Float32(0.0)
+    var y_lanes = to_fit(lanes, n_l, d, y0_l, perp, Float32(12.0), Float32(50.0), 30, 10, kl_a)
+    var y_chain = to_fit(lanes, n_l, d, y0_l, perp, Float32(12.0), Float32(50.0), 30, 10, kl_b, chain=True)
+    if same_f32(y_lanes, y_chain):
+        print("VACUOUS: the lanes fixture does not separate the 64-lane repulsion from the single chain")
+        raise Error("VACUOUS: the lanes fixture does not separate the 64-lane repulsion from the single chain")
+    print("separation: repulsion lanes vs chain: the embeddings differ")
 
     # ---- device == oracle
-    for f in range(2):
-        var name = String("ties") if f == 0 else String("wide")
-        var x = ties.copy() if f == 0 else wide.copy()
+    for f in range(3):
+        var name = String("ties") if f == 0 else (String("wide") if f == 1 else String("lanes"))
+        var x = ties.copy() if f == 0 else (wide.copy() if f == 1 else lanes.copy())
+        var fn_ = n if f < 2 else n_l
+        var fy = y0.copy() if f < 2 else y0_l.copy()
         var yd = List[Float32]()
         var kd = Float32(0.0)
-        tsne_fit_device(x, n, d, y0, perp, Float32(12.0), Float32(50.0), Float32(1.0), 30, 10, yd, kd)
+        tsne_fit_device(x, fn_, d, fy, perp, Float32(12.0), Float32(50.0), Float32(1.0), 30, 10, yd, kd)
         var ko = Float32(0.0)
-        var yo = to_fit(x, n, d, y0, perp, Float32(12.0), Float32(50.0), 30, 10, ko)
+        var yo = to_fit(x, fn_, d, fy, perp, Float32(12.0), Float32(50.0), 30, 10, ko)
         trace.record_list_f32(String("tsne.") + name + ".embedding", yd)
         trace.record_scalar_f32(String("tsne.") + name + ".kl", kd)
         report(name + ": embedding == oracle (5810-5815)", same_f32(yd, yo), failed)
         report(name + ": KL == oracle", bitcast[DType.uint32](kd) == bitcast[DType.uint32](ko), failed)
     if failed > 0:
         print("tsne_check: FAILED", failed)
-        exit(1)
+        raise Error("tsne_check: FAILED")
     print("tsne_check: ALL OK")

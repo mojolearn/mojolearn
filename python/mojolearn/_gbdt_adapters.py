@@ -8,7 +8,6 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 """
 import inspect
 
-from ._buffer import all_finite
 
 from . import _native_trees_bridge
 from .ensemble import GradientBoosting
@@ -17,10 +16,10 @@ from ._mode import PublicOutputsMixin, _PARAMS_METADATA, _PARAMS_METADATA_CONTEX
 
 # One NotFittedError for the package; an instance of scikit-learn's too when
 # scikit-learn is imported (see mojolearn.exceptions).
-from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
+from .exceptions import NotFittedError, _not_fitted_error  # noqa: F401
 
 # The compiled tree-ensemble owner: `decision_function`, `predict` and
-# `predict_proba` are one native call each (bindings/trees_public_gbdt.mojo).
+# `predict_proba` are one native call each (bindings/trees_public_gbdt_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
@@ -69,17 +68,10 @@ class _GBDTAdapter(PublicOutputsMixin):
     def _validate_params(self):
         """The parameter checks, run at fit (scikit-learn's convention): the
         learner's constructor refuses what it does not accept."""
-        self._new_learner(self.numeric_mode)
+        return _TREES(self, "trees_public_gbdt_adapter_validate_params", (), _TREES_CONTEXT)
 
     def _new_learner(self, mode):
-        if mode is not None and (not isinstance(mode, str) or
-                mode.strip().lower() not in ('fast', 'identical')):
-            raise ValueError('numeric_mode must be fast, identical or None')
-        if self._loss == 'RMSE' and self.class_weights is not None:
-            raise NotImplementedError('GradientBoostingRegressor does not support class_weights')
-        parameters = self.get_params()
-        parameters['numeric_mode'] = mode
-        return GradientBoosting(loss=self._loss, **parameters)
+        return _TREES(self, "trees_public_gbdt_adapter_new_learner", (mode,), _TREES_CONTEXT)
 
     def get_params(self, deep=True):
         """Return the constructor parameters as a dict."""
@@ -91,7 +83,7 @@ class _GBDTAdapter(PublicOutputsMixin):
 
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
-            raise not_fitted_error(f'{type(self).__name__} is not fitted')
+            raise _not_fitted_error(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
         return _TREES(self, "trees_public_gbdt_adapter_is_fitted", (), _TREES_CONTEXT)
@@ -106,13 +98,14 @@ class _GBDTAdapter(PublicOutputsMixin):
             tags.classifier_tags.multi_class = False
         return tags
 
+    # save / load always refuse (bindings/trees_gbdt_adapter_lifecycle_door.mojo:
+    # no adapter archive format; pickle keeps the adapter state). They are left
+    # out of the public docs (docs-site/api_exclude.txt), never documented as a caveat.
     def save(self, path):
-        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         return _TREES(self, "trees_public_gbdt_adapter_save", (path,), _TREES_CONTEXT)
 
     @classmethod
     def load(cls, path):
-        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         return _TREES(cls, "trees_public_gbdt_adapter_load", (path,), _TREES_CONTEXT)
 
 
@@ -122,8 +115,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
     Fits :class:`GradientBoosting` with ``loss='Logloss'`` on numeric
     features and keeps the original class labels. Exactly two classes are
     required; the positive class is the larger of the two sorted labels.
-    Supports sample weights in ``fit`` and ``score``, and pickling. ``save``
-    and ``load`` are not available; use pickle.
+    Supports sample weights in ``fit`` and ``score``, and pickling.
 
     Parameters
     ----------
@@ -232,8 +224,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
     Fits :class:`GradientBoosting` with ``loss='RMSE'`` on numeric features.
     Predictions are float32. Supports sample weights in ``fit`` and
     ``score``, and pickling. ``class_weights`` raises
-    ``NotImplementedError``. ``save`` and ``load`` are not available; use
-    pickle.
+    ``NotImplementedError``.
 
     Parameters
     ----------
@@ -302,18 +293,6 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """
         return _TREES(self, "trees_public_gbdt_adapter_regressor_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
 
-    @staticmethod
-    def _regression_target(target, name):
-        # `target` comes from as_f32_c: an integer or float64 y is cast to
-        # float32 once by the base binding's converters (scikit-learn takes
-        # any numeric y), so the dtype test below only guards the contract.
-        if target.ndim != 1 or target.size == 0:
-            raise ValueError(f'{name} must be nonempty one-dimensional targets')
-        if target.dtype != "<f4":
-            raise TypeError(f'{name} must have dtype float32')
-        if not all_finite(target):
-            raise ValueError(f'{name} must be finite')
-
     def predict(self, X):
         """Return float32 predictions of shape ``(n_samples,)``."""
         return _TREES(self, "trees_public_gbdt_adapter_regression_predict", (X,), _TREES_CONTEXT)
@@ -326,7 +305,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """
         return _TREES(self, "trees_public_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
-# The adapters' native fit (bindings/trees_public_gbdt_fit.mojo) reads the
+# The adapters' native fit (bindings/trees_public_gbdt_fit_door.mojo) reads the
 # constructor protocol it checks (`get_params`) and builds the learner class.
 _native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_gbdt_adapter_tables=dict(
     base=_GBDTAdapter, learner=GradientBoosting,

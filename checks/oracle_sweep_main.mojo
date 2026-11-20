@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE DEPTH AND FEATURE-COUNT SWEEP of the CatBoost differential.
 
-`archive/plans/NEXT_TWO.md` rung 5's second open item. `pixi run oracle` compares the implementation
+`archive/plans/NEXT_TWO.md` rung 5's second open item. `pixi run check-native-gpu oracle_main` compares the implementation
 against CatBoost at ONE depth (4) and ONE feature count (16), varying only
 the border budget. Both of those are structural: depth decides how many
 partitions the histogram helper carries and therefore when the subtraction
@@ -27,7 +27,7 @@ refuses pinned off. `bench/oracle_d4_f16.txt` is byte-identical to
 nothing at the defaults.
 
 THIS DRIVER DOES NOT RAISE ON A DISAGREEING CELL, and that is deliberate.
-`pixi run oracle` is the GATE; this is a MATRIX, and a matrix that stops at
+`pixi run check-native-gpu oracle_main` is the GATE; this is a MATRIX, and a matrix that stops at
 its first red cell reports one number instead of fifteen. Every cell is
 printed at full strength whether it agrees or not
 ([[no-dataset-cherry-picking]]: a cell is never dropped, deferred or retuned
@@ -133,7 +133,7 @@ def main() raises:
     # ------------------------------------------------------------------
     # THE ONE-BYTE ACCUMULATORS AT DEPTH 8, which is the cell the two
     # sweeps above leave empty. The four bit-width fixtures
-    # (`pixi run oracle`) are all at depth 4, and the matrix above is all at
+    # (`pixi run check-native-gpu oracle_main`) are all at depth 4, and the matrix above is all at
     # 15 borders, so the HALF-BYTE kernel is the only one that has ever run
     # at a depth other than 4. Depth is what decides when the histogram
     # helper stops doing full passes and starts recovering a sibling by

@@ -29,7 +29,6 @@ graph); the host column runs the loop below, the same order:
   pair of points, the lowest (row of i, row of j) on a tie, becomes an edge.
 """
 from std.memory import bitcast
-from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 
@@ -149,6 +148,10 @@ def _row_min_open(
             md[i] = p[q]
             return
 
+
+#: x_cluster phase timer, as x_cluster/device_ops.mojo XC_PHASES_ON. Before
+#: (lane envgate-classical-deviceplan): a getenv per agglomerative fit.
+comptime XC_PHASES_ON = is_defined["MOJOLEARN_XC_PHASES"]()
 
 # FAST ONLY (lane cluster-apple3). OPT-IN while unproven:
 # `-D MOJOLEARN_WARD_ROUNDS=1` takes the rounds; the default is the matrix
@@ -288,9 +291,12 @@ def _ward_rounds[O: ClusterOps](
         children.append(Int32(a if a < b else b))
         children.append(Int32(b if a < b else a))
         dist.append(identical_sqrt(mh[s]))
-    if getenv("MOJOLEARN_XC_PHASES") == "1":
+    if XC_PHASES_ON:
         print("XCPHASE agglo.ward_rounds rounds=" + String(rounds) + " merges=" + String(m))
     return True
+# TOMBSTONE: MOJOLEARN_WARD_ROUNDS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at afbd9a0583.
+# Restore: git apply experiments/removed/MOJOLEARN_WARD_ROUNDS.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def agglo_tree[O: ClusterOps](
@@ -424,9 +430,10 @@ def agglo_tree[O: ClusterOps](
                     adj[bj * n + bi] = True
 
     # -------------------------------------------------- the merge loop
-    # MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): the wall time
-    # of the loop's four parts, printed once. Off, four untaken branches a step.
-    var ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
+    # `-D MOJOLEARN_XC_PHASES` (a diagnostic, lane cluster-apple3): the wall
+    # time of the loop's four parts, printed once. Off, four untaken branches
+    # a step.
+    var ph_on = XC_PHASES_ON
     var ph_t = Int(perf_counter_ns()) if ph_on else 0
     var ph_init = 0
     var ph_argmin = 0

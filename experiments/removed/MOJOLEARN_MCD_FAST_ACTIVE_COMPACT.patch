@@ -1,0 +1,438 @@
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index 723e3e5e72..c935502190 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -21,15 +21,19 @@ from x_decomp.ipca_owner_dev import DevIpcaDev
+ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+ from x_decomp.decomp_owner_dev import DevDecomp
+ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
++from x_decomp.mcd_experiments import mcd_experiment_count
++from x_decomp.mcd_bmma import mcd_fast_batch_count
+ 
+ from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+ 
+ def x_decomp_shared_sub_count_py() raises -> PythonObject:
+     return PythonObject(shared_sub_count(False))
+ 
+-# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+-# at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
++def mcd_experiment_count_py(stage: PythonObject) raises -> PythonObject:
++    return PythonObject(mcd_experiment_count(Int(py=stage)))
++
++def mcd_fast_batch_count_py() raises -> PythonObject:
++    return PythonObject(mcd_fast_batch_count())
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
+@@ -300,6 +304,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[mcd_fast_batch_count_py]("mcd_fast_batch_count")
++        m.def_function[mcd_experiment_count_py]("mcd_experiment_count")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_decomp: ", e))
+diff --git a/x_decomp/mcd_bmma.mojo b/x_decomp/mcd_bmma.mojo
+index ec23dc0422..97b49faa0a 100644
+--- a/x_decomp/mcd_bmma.mojo
++++ b/x_decomp/mcd_bmma.mojo
+@@ -24,9 +24,12 @@ through f32 atomics (order free, as on main). A candidate whose gate word
+ is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
+ main zeroed its operands and discarded its output (guarded publication).
+ """
+-# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+-# at f59d913b0b. Same commit (F06): MOJOLEARN_MCD_FAST_COV_REUSE, MOJOLEARN_MCD_FAST_BOUND_BATCH, x_decomp/mcd_experiments.mojo
+-# and the mcd_experiment_count / mcd_fast_batch_count exports. Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
++from std.ffi import _Global
++from std.atomic import Atomic
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
+ 
+ # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2%) and its audit / window defines
+ # MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by a2159de2cb; code recoverable at
+@@ -47,6 +50,29 @@ from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
+ # 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+ 
++# Bound the queued candidate plane independently of features/datasets. This
++# scheduling experiment preserves inactive-candidate gates and input strides;
++# it changes neither support selection nor candidate count.
++# NEVER RUN — PENDING MEASUREMENT: bounded MCD candidate batches.
++# F06 M3 2026-10-06 MEASURED bounded batching: eight task timings B/A
++# 0.9859..1.1788, quality equal; mostly regression, keep OFF. One warmup+score,
++# ab-20261006/repairs-54c1f35a5/results/F06/default.
++comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())
++comptime MCD_CANDIDATE_BATCH = 32
++
++struct McdBatchAudit(Defaultable, Movable):
++    var launches: Int
++    def __init__(out self):
++        self.launches = 0
++
++comptime BATCH_STATE = _Global[StorageType=McdBatchAudit, name="McdCandidateBatchAudit", init_fn=McdBatchAudit.__init__]
++
++def mcd_fast_batch_count() raises -> Int:
++    return BATCH_STATE.get_or_create_ptr()[].launches
++
++
+ #: AFN_TILE_SQUARE's shape (`afn_launch_tile_aux`'s default branch).
+ comptime MB_SGM = 2
+ comptime MB_SGN = 2
+@@ -58,7 +84,7 @@ comptime MB_NT = MB_SGM * MB_SGN * 32
+ comptime MB_ZERO_TPB = 256
+ 
+ 
+-def mcd_bmma_kernel[SPLIT: Bool](
++def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
+     c_in: F32Ptr,
+     a_in: F32Ptr,
+     b_in: F32Ptr,
+@@ -75,6 +101,7 @@ def mcd_bmma_kernel[SPLIT: Bool](
+     a_bs_in: Int32,
+     b_bs_in: Int32,
+     c_bs_in: Int32,
++    ids: I32Ptr,
+ ):
+     """`afn_gemm_mma_kernel[2, 2, 4, 4, AFN_GEMM_KB, f32, f32, SPLIT,
+     AFN_EPI_NONE]` for candidate `block_idx.z`: C_z (+)= A_z . B_z with
+@@ -101,6 +128,8 @@ def mcd_bmma_kernel[SPLIT: Bool](
+     )
+     comptime assert KB % 8 == 0, "mcd_bmma_kernel: whole 8-step fragments"
+     var z = Int(block_idx.z)
++    comptime if COMPACT:
++        z = Int(ids.unsafe_load(z))
+     if gate_all == 0 and gate.unsafe_load(z) == 0:
+         return
+     var a = a_in + z * Int(a_bs_in)
+@@ -209,6 +238,7 @@ def mcd_bmma_zero_kernel(c: F32Ptr, gate: I32Ptr, gate_all: Int32, nc: Int32, ce
+ def launch_gemm_mma_batched(
+     ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool,
+     nc: Int, a_bs: Int, b_bs: Int, c_bs: Int, gate: I32Ptr, gate_all: Bool,
++    compact: Optional[McdCompactWorkspace] = None,
+ ) raises:
+     """`_launch_gemm_mma(ctx, a + z a_bs, b + z b_bs, c + z c_bs, m, k, n,
+     ta, tb)` for every candidate z < nc whose gate word is set (all when
+@@ -228,6 +258,27 @@ def launch_gemm_mma_batched(
+     # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (the TN self-Gram route, its audit counters and legacy window) deleted
+     # 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
+     # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
++    # F06 PENDING: reduced active grid is an explicit FAST Apple experiment.
++    # Count-read completion/scan overhead is included in whole-call timing.
++    # Original IDs own output slots, gate rechecks and split-K windows/seeds.
++    comptime if MCD_FAST_ACTIVE_COMPACT:
++        if Bool(compact) and not gate_all:
++            var live = compact_candidate_count(ctx, compact[], gate, nc)
++            mcd_experiment_hit(0)
++            if live == 0: return
++            var ids = I32Ptr(unsafe_from_address=Int(compact[].ids.unsafe_ptr()))
++            if splits > 1:
++                var per = ((k + splits - 1)//splits + AFN_GEMM_KB - 1)//AFN_GEMM_KB*AFN_GEMM_KB
++                splits = (k + per - 1)//per
++                ctx.enqueue_function[mcd_bmma_zero_kernel](c, gate, ga, Int32(nc), Int32(m*n), Int32(c_bs), grid_dim=max((nc*m*n+MB_ZERO_TPB-1)//MB_ZERO_TPB,1), block_dim=MB_ZERO_TPB)
++                ctx.enqueue_function[mcd_bmma_kernel[True, True]](
++                    c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
++                    grid_dim=(tiles,splits,live), block_dim=(MB_NT,1,1))
++            else:
++                ctx.enqueue_function[mcd_bmma_kernel[False, True]](
++                    c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
++                    grid_dim=(tiles,1,live), block_dim=(MB_NT,1,1))
++            return
+     if splits > 1:
+         var per = (k + splits - 1) // splits
+         per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+@@ -239,14 +290,26 @@ def launch_gemm_mma_batched(
+         ctx.enqueue_function[mcd_bmma_kernel[True]](
+             c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
+             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+-            Int32(a_bs), Int32(b_bs), Int32(c_bs),
++            Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
+             grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1),
+         )
+     else:
++        comptime if MCD_FAST_BOUND_BATCH:
++            for first in range(0, nc, MCD_CANDIDATE_BATCH):
++                var count = min(MCD_CANDIDATE_BATCH, nc - first)
++                ctx.enqueue_function[mcd_bmma_kernel[False]](
++                    c + first * c_bs, a + first * a_bs, b + first * b_bs, gate + first, ga,
++                    Int32(m), Int32(n), Int32(k),
++                    Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
++                    Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
++                    grid_dim=(tiles, 1, count), block_dim=(MB_NT, 1, 1),
++                )
++                BATCH_STATE.get_or_create_ptr()[].launches += 1
++            return
+         ctx.enqueue_function[mcd_bmma_kernel[False]](
+             c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
+             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
+-            Int32(a_bs), Int32(b_bs), Int32(c_bs),
++            Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
+             grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
+         )
+ 
+diff --git a/x_decomp/mcd_experiments.mojo b/x_decomp/mcd_experiments.mojo
+new file mode 100644
+index 0000000000..906d8c4d99
+--- /dev/null
++++ b/x_decomp/mcd_experiments.mojo
+@@ -0,0 +1,141 @@
++# SPDX-License-Identifier: Apache-2.0
++"""F06 bounded phase-owned scheduling/cache state. All numerical work is GPU.
++
++Compaction preserves ascending original candidate IDs. It adds a count
++read/completion before submitting the reduced grid, a cost that full-fit
++timing must include. Covariance reuse admits only identical support masks
++inside one immutable phase; initializer, rank path and reweighting stay live.
++"""
++from std.atomic import Atomic, Ordering
++from std.ffi import _Global
++from std.gpu import block_idx, thread_idx, block_dim
++from std.memory import stack_allocation
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
++from max.gpu.host import DeviceContext, DeviceBuffer
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++from neighbors.impl.ball_cover.scan import (rbc_exclusive_scan_kernel, rbc_pscan_local_kernel, rbc_pscan_chunks_kernel, rbc_pscan_add_kernel, RBC_PSCAN_CHUNK, RBC_SCAN_TPB)
++from x_decomp.cells import F32Ptr, I32Ptr
++
++# F06 M3 2026-10-06 MEASURED, one warmup+score, quality equal; remain OFF.
++# Eight task timings per arm: active compact B/A0.9848..1.2258; covariance
++# reuse1.0059..1.1238; combined0.9935..1.0784. Mostly regressions. Evidence
++# ab-20261006/repairs-54c1f35a5/results/F06.
++# MEASURED M3: active-candidate compaction remains OFF.
++comptime MCD_FAST_ACTIVE_COMPACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"]()
++# MEASURED M3: phase-local covariance reuse remains OFF.
++comptime MCD_FAST_COV_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_COV_REUSE"]()
++# Three Int32 candidate planes occupy at most768KiB; larger phases retain
++# the incumbent route. This resource limit is independent of dataset shapes.
++comptime MCD_EXPERIMENT_CANDIDATES = 65536
++
++struct _McdExperimentAudit(Defaultable, Movable):
++    var compact: Int64
++    var preparations: Int64
++    var reused: Int64
++    def __init__(out self):
++        self.compact = Int64(0)
++        self.preparations = Int64(0)
++        self.reused = Int64(0)
++
++comptime _MCD_EXPERIMENT_AUDIT = _Global[StorageType=_McdExperimentAudit, name="McdExperimentAuditV1", init_fn=_McdExperimentAudit.__init__]
++
++def mcd_experiment_count(stage: Int) raises -> Int:
++    # 0 compact submissions, 1 reuse preparations, 2 actual reused candidates.
++    if stage < 0 or stage >= 3: raise Error("invalid MCD experiment stage")
++    comptime if MCD_FAST_ACTIVE_COMPACT or MCD_FAST_COV_REUSE:
++        ref audit = _MCD_EXPERIMENT_AUDIT.get_or_create_ptr()[]
++        if stage == 0: return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.compact)))
++        if stage == 1: return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.preparations)))
++        return Int(Atomic.load[ordering=Ordering.RELAXED](MutPointer(to=audit.reused)))
++    return 0
++
++def mcd_experiment_hit(stage: Int, count: Int = 1) raises:
++    comptime if MCD_FAST_ACTIVE_COMPACT or MCD_FAST_COV_REUSE:
++        ref audit = _MCD_EXPERIMENT_AUDIT.get_or_create_ptr()[]
++        if stage == 0: _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.compact), Int64(count))
++        elif stage == 1: _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.preparations), Int64(count))
++        else: _ = Atomic.fetch_add[ordering=Ordering.RELAXED](MutPointer(to=audit.reused), Int64(count))
++
++def compact_flags_kernel(gate: I32Ptr, flags: I32Ptr, nc: Int32):
++    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if c < Int(nc): flags.unsafe_store(c, Int32(1) if gate.unsafe_load(c) != 0 else Int32(0))
++
++def compact_ids_kernel(flags: I32Ptr, prefix: I32Ptr, ids: I32Ptr, total: I32Ptr, nc: Int32):
++    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if c < Int(nc) and flags.unsafe_load(c) != 0:
++        ids.unsafe_store(Int(prefix.unsafe_load(c)), Int32(c))
++    if c == 0: total.unsafe_store(0, prefix.unsafe_load(Int(nc)))
++
++struct McdCompactWorkspace(Movable):
++    var flags: DeviceBuffer[DType.int32]
++    var prefix: DeviceBuffer[DType.int32]
++    var ids: DeviceBuffer[DType.int32]
++    var total: DeviceBuffer[DType.int32]
++    var chunks: DeviceBuffer[DType.int32]
++    var capacity: Int
++    def __init__(out self, ctx: DeviceContext, nc: Int) raises:
++        if nc <= 0 or nc > MCD_EXPERIMENT_CANDIDATES: raise Error("MCD compact capacity refused")
++        self.capacity = nc
++        self.flags = ctx.enqueue_create_buffer[DType.int32](nc)
++        self.prefix = ctx.enqueue_create_buffer[DType.int32](nc + 1)
++        self.ids = ctx.enqueue_create_buffer[DType.int32](nc)
++        self.total = ctx.enqueue_create_buffer[DType.int32](1)
++        self.chunks = ctx.enqueue_create_buffer[DType.int32]((nc + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK + 1)
++
++def _device_i32(buf: DeviceBuffer[DType.int32]) -> I32Ptr:
++    # Match mcd_fast._i: kernels mutate phase-owned device allocations,
++    # while the host borrow leaves the buffer owner/metadata unchanged.
++    # Preserve the owner through its phase completion; no allocation/copy.
++    return I32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
++
++def compact_candidate_count(ctx: DeviceContext, ws: McdCompactWorkspace, gate: I32Ptr, nc: Int) raises -> Int:
++    if nc <= 0 or nc > ws.capacity: raise Error("MCD compact source capacity refused")
++    ctx.enqueue_function[compact_flags_kernel](gate, _device_i32(ws.flags), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
++    # Stock integer scan kernels; chunk sums are phase-owned, eliminating
++    # a temporary-allocation drain before the mandatory count read.
++    if nc <= RBC_PSCAN_CHUNK:
++        ctx.enqueue_function[rbc_exclusive_scan_kernel](_device_i32(ws.prefix), _device_i32(ws.flags), Int32(nc), grid_dim=1, block_dim=RBC_SCAN_TPB)
++    else:
++        var chunks = (nc + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK
++        ctx.enqueue_function[rbc_pscan_local_kernel](_device_i32(ws.prefix), _device_i32(ws.chunks), _device_i32(ws.flags), Int32(nc), grid_dim=chunks, block_dim=RBC_SCAN_TPB)
++        ctx.enqueue_function[rbc_pscan_chunks_kernel](_device_i32(ws.chunks), Int32(chunks), grid_dim=1, block_dim=RBC_SCAN_TPB)
++        ctx.enqueue_function[rbc_pscan_add_kernel](_device_i32(ws.prefix), _device_i32(ws.chunks), Int32(nc), Int32(chunks), grid_dim=(nc + 1 + RBC_SCAN_TPB - 1)//RBC_SCAN_TPB, block_dim=RBC_SCAN_TPB)
++    ctx.enqueue_function[compact_ids_kernel](_device_i32(ws.flags), _device_i32(ws.prefix), _device_i32(ws.ids), _device_i32(ws.total), Int32(nc), grid_dim=(nc+255)//256, block_dim=256)
++    var count = ctx.enqueue_create_host_buffer[DType.int32](1)
++    ctx.enqueue_copy(dst_ptr=count.unsafe_ptr(), src_buf=ws.total)
++    ctx.synchronize()
++    var live = Int(count[0])
++    if live < 0 or live > nc: raise Error("MCD compact count invalid")
++    return live
++
++struct McdCovReuseWorkspace(Movable):
++    var gate: DeviceBuffer[DType.int32]
++    var reused: DeviceBuffer[DType.int32]
++    def __init__(out self, ctx: DeviceContext, nc: Int) raises:
++        self.gate = ctx.enqueue_create_buffer[DType.int32](nc)
++        self.reused = ctx.enqueue_create_buffer[DType.int32](1)
++
++def reuse_covariance_kernel(mask: I32Ptr, previous: I32Ptr, active: I32Ptr, gate: I32Ptr,
++    loc: F32Ptr, prev_loc: F32Ptr, cov: F32Ptr, prev_cov: F32Ptr, reused: I32Ptr,
++    rows: Int32, d: Int32, step: Int32):
++    var c = Int(block_idx.x); var tid = Int(thread_idx.x)
++    var changed = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
++    if tid == 0: changed[0] = Int32(0)
++    barrier()
++    if step > 0 and active.unsafe_load(c) != 0:
++        for i in range(tid, Int(rows), 256):
++            if mask.unsafe_load(c * Int(rows) + i) != previous.unsafe_load(c * Int(rows) + i):
++                _ = Atomic.fetch_add[ordering=Ordering.RELAXED](changed, Int32(1))
++    barrier()
++    var reuse = step > 0 and active.unsafe_load(c) != 0 and changed[0] == 0
++    if tid == 0:
++        gate.unsafe_store(c, Int32(1) if active.unsafe_load(c) != 0 and not reuse else Int32(0))
++        if reuse: _ = Atomic.fetch_add[ordering=Ordering.RELAXED](reused, Int32(1))
++    if reuse:
++        # Prior moments are valid only for this exact immutable phase/support.
++        # No cached determinant/precision: incumbent rank/control still run.
++        for j in range(tid, Int(d), 256): loc.unsafe_store(c * Int(d) + j, prev_loc.unsafe_load(c * Int(d) + j))
++        for j in range(tid, Int(d) * Int(d), 256): cov.unsafe_store(c * Int(d) * Int(d) + j, prev_cov.unsafe_load(c * Int(d) * Int(d) + j))
+diff --git a/x_decomp/mcd_fast.mojo b/x_decomp/mcd_fast.mojo
+index dc15ed7aad..84dcd117fe 100644
+--- a/x_decomp/mcd_fast.mojo
++++ b/x_decomp/mcd_fast.mojo
+@@ -78,9 +78,7 @@ from x_decomp.kit import Mat
+ from x_decomp.cells import FOLD_BLOCK
+ from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
+ from x_decomp.mcd_bmma import launch_gemm_mma_batched
+-# TOMBSTONE: MOJOLEARN_MCD_FAST_COV_REUSE (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable at
+-# f59d913b0b (with MOJOLEARN_MCD_FAST_ACTIVE_COMPACT: the phase's compact / reuse workspaces and their arms below).
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
++from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, MCD_FAST_COV_REUSE, MCD_EXPERIMENT_CANDIDATES, McdCompactWorkspace, McdCovReuseWorkspace, reuse_covariance_kernel, mcd_experiment_hit
+ from x_decomp.jacobi2 import dev_barrier
+ 
+ # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
+@@ -915,6 +913,8 @@ def mf_mma_chunk(nc: Int, r: Int, d: Int) -> Int:
+ struct MfPhase(Movable):
+     """One phase: nc candidates in groups of `per`, each over r rows (row
+     group g of `rows`, or the identity), support size h, n_iter steps."""
++    var compact: Optional[McdCompactWorkspace]
++    var reuse: Optional[McdCovReuseWorkspace]
+     var nc: Int
+     var per: Int
+     var r: Int
+@@ -949,6 +949,12 @@ struct MfPhase(Movable):
+ 
+     def __init__(out self, ctx: DeviceContext, nc: Int, per: Int, r: Int, ident: Int, h: Int, n_iter: Int, d: Int,
+                  npair: Int) raises:
++        self.compact = None
++        self.reuse = None
++        comptime if MCD_FAST_ACTIVE_COMPACT and MCD_BMMA:
++            if nc <= MCD_EXPERIMENT_CANDIDATES: self.compact = McdCompactWorkspace(ctx, nc)
++        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
++            if nc <= MCD_EXPERIMENT_CANDIDATES: self.reuse = McdCovReuseWorkspace(ctx, nc)
+         self.nc = nc
+         self.per = per
+         self.r = r
+@@ -1023,7 +1029,7 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
+     comptime if MCD_BMMA:
+         # gate = mm_ran (pinvh ran for the candidate), the publication's mask
+         launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
+-                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
++                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False, ph.compact)
+     else:
+         for c in range(ph.nc):
+             var off = c*d*d
+@@ -1038,6 +1044,8 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
+ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
+                     rows: DeviceBuffer[DType.int32], d: Int, par: Int, hinv: Float32) raises:
+     var gate = _i(ph.active)
++    comptime if MCD_FAST_COV_REUSE:
++        if Bool(ph.reuse): gate = _i(ph.reuse[].gate)
+     var one = ph.mchunk >= ph.nc
+     var c0 = 0
+     while c0 < ph.nc:
+@@ -1057,7 +1065,7 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
+             # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+             if one:
+                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+-                                        cn, ph.r*d, ph.r*d, d*d, gate, False)
++                                        cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
+             else:
+                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                         cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
+@@ -1092,7 +1100,7 @@ def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float3
+             # gate = active, every candidate for the final distances (use_fin)
+             if one:
+                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
+-                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
++                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin, ph.compact)
+             else:
+                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm) + c0*d*d, _f(ph.mm_y), ph.r, d, d, False, False,
+                                         cn, ph.r*d, d*d, ph.r*d, _i(ph.active) + c0, use_fin)
+@@ -1203,6 +1211,9 @@ def _run_phase(
+     var tp = Float64(0)
+     var t0 = Float64(0)
+     var steps = 0
++    var hreused = List[Int32]()
++    comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
++        hreused = List[Int32](length=1, fill=Int32(0))
+     comptime if MCD_PROFILE:
+         t0 = _pms(ctx)
+         tp = t0
+@@ -1236,6 +1247,17 @@ def _run_phase(
+         var par = s % 2
+         steps += 1
+         var moment_gate = _i(ph.active)
++        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
++            if Bool(ph.reuse):
++                ph.reuse[].reused.enqueue_fill(Int32(0))
++                ctx.enqueue_function[reuse_covariance_kernel](
++                    _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.mask0) if par == 1 else _i(ph.mask1),
++                    _i(ph.active), _i(ph.reuse[].gate),
++                    _f(ph.loc1) if par == 1 else _f(ph.loc0), _f(ph.loc0) if par == 1 else _f(ph.loc1),
++                    _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.cov0) if par == 1 else _f(ph.cov1),
++                    _i(ph.reuse[].reused), Int32(r), Int32(d), Int32(s), grid_dim=nc, block_dim=256)
++                moment_gate = _i(ph.reuse[].gate)
++                mcd_experiment_hit(1)
+         comptime if MCD_BATCH_COMPAT:
+             ctx.enqueue_function[mc_compact_kernel](
+                 _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), moment_gate,
+@@ -1281,8 +1303,12 @@ def _run_phase(
+         _det(ctx, ph, d, s, err)
+         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
+         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
++        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
++            if Bool(ph.reuse): ctx.enqueue_copy(dst_ptr=hreused.unsafe_ptr(), src_buf=ph.reuse[].reused)
+         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
+         ctx.synchronize()
++        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
++            if Bool(ph.reuse): mcd_experiment_hit(2, Int(hreused[0]))
+         _lap(ctx, prof, 2, tp)
+         comptime if MCD_SKIP_PINVH:
+             # nobody reads this phase's final distances: the pinvh that only

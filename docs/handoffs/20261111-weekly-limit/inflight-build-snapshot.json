@@ -1,0 +1,40 @@
+{
+  "snapshot_at": "2026-11-11T20:03:40.510052+00:00",
+  "state": "building",
+  "source": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+  "completed": 6,
+  "passed": 4,
+  "failed": 2,
+  "units": [
+    {
+      "name": "351094dc33a60c064650f0aa771c7e088fc38e4c7ae65686535f4551a805bad1",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_host.log"
+    },
+    {
+      "name": "05c28cf893ae533d4f1bff9e1e7998041551ef81f21cb6e66ecf1a7d4721609c",
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_byte_trainer_host.log"
+    },
+    {
+      "name": "54e603771e306b86b891adcbbd43cbfed197f35cd0a3d04873bf82e36df69419",
+      "exit_code": 1,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_orchestration_host.log"
+    },
+    {
+      "name": "17d5c3ba721f55025fcc99ab82a522f8ac85dda160e926531bdc548fb76167dd",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_classical_host.log"
+    },
+    {
+      "name": "d3250fda8a773ed344de280573180ad0c183b4d81cb8c5cc6656e56235eca838",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/host-_mojolearn_native_series_host.log"
+    },
+    {
+      "name": "37bc404d3e72d49fc4bc62eb6e73daf47e5709c87e35857db4f596e2b7b8cb8d",
+      "exit_code": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/consolidated-120-r2/build/identical-_mojolearn_native_trees_m1.log"
+    }
+  ]
+}

@@ -80,7 +80,8 @@ def cmd_write(script, so, stamps=STAMPS, pkg=PKG, repo=REPO):
 
 #: The files a merged build reads besides the members' closures: the build
 #: script, the root generator and the manifest the root is generated from.
-MERGED_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
+#: bindings/compile_jobs.sh (sourced by merged_build.sh) decides its `-j` when MOJOLEARN_COMPILE_JOBS is unset.
+MERGED_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh",
                  "tools/merged_bindings.py", "bindings/merged_groups.json")
 
 

@@ -1,0 +1,52 @@
+Mojolearn native BF16 GEMM tests, 2026-11-10
+
+Scope and coverage per executor
+  Eight original mixed FP32/BF16 GEMMs with (m,n,k,op):
+  (1,32,32,NT), (1,64,128,NT), (2,96,127,NT), (7,33,129,NT),
+  (5,9,256,NN), (9,5,300,TN), (129,129,256,NT), (1,1024,512,NT).
+  Plus the both-BF16 operand case (6,40,200,NT).
+  The native deterministic fixture generator retains the old 13-bit
+  significand/eight-binade distribution and seed labels; exact NumPy RNG
+  matrices are not retained. Integer BF16 conversion expectations supply
+  stored operands without a Python or product-converter preparation path.
+
+Oracle relationships preserved
+  CPU typed gemm_bf16_host_run equals typed fp32 gemm_host_run applied to
+  independently widened operands. GPU BF16 dispatcher output equals both
+  the host BF16 reference and the GPU fp32 dispatcher over widened operands.
+  The both-BF16 case widens A on the GPU before the existing mixed kernel,
+  preserving that product route. The existing normative fp32 GEMM is the
+  arithmetic reference, as in the previous Python tests; this is not a new
+  independent dot-product oracle. Conversion words are independent integer
+  expectations. No tolerances, expected hashes, reruns or product changes.
+
+Parallel plan
+  Nine independent CPU fixtures use host_parallelize; input conversion and
+  word checks split into independent chunks. GPU uses one owned context,
+  ordered shape submissions and the existing parallel GEMM/widening kernels.
+  Reuses existing pinned-buffer test helpers and workspace sizing. No new
+  test loader/build mechanism and no performance/scaling claim.
+
+Python migration finished for this file
+  test_linalg_lowbit.py now keeps only public buffer/dtype/transpose/input-
+  form/raw-pointer ABI and named-error tests. The last numerical GEMM matrices
+  and host/fp32 full comparisons moved to Mojo. Four small public cases cover
+  NN, NT, TN and both-BF16 dispatch with literal route/packing sentinels.
+  Earlier BF16 conversion and INT8 boundary sections are unchanged.
+
+Orchestrator commands (lane performs source review only)
+  bash tools/compile_slot.sh pixi run check-native-bf16-linalg-cpu
+  bash tools/compile_slot.sh pixi run check-native-bf16-linalg-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/bf16_linalg_cpu.mojo -o "$HOME/mojolearn-evidence/native-bf16-linalg-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/bf16_linalg_gpu.mojo -o "$HOME/mojolearn-evidence/native-bf16-linalg-gpu"
+  Depends on the earlier native BF16 integer-oracle and INT8 generator files.
+  Apply standard NVIDIA/AMD target flags for those compile legs.
+  Retained Python bindings: _mojolearn_linalg/_mojolearn_linalg_host.
+  python3 -m pytest mojolearn/tests/test_linalg_lowbit.py
+
+Status
+  CPU/GPU compile/run are RUN OWED to root. No box job, ID or timing run.
+  Product/kernel/defaults unchanged. A/B define: none (test-only).
+  Root reports earlier Rank-N (17 each) and INT8 (5 each) CPU/GPU checks
+  compiled and passed unmodified. Full evidence remains with integration.

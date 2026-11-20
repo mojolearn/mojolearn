@@ -45,14 +45,18 @@ WHAT IT COMPUTES, and from which functions (no arithmetic of its own):
       addresses (x, the nine weights, k_cache, v_cache, y) through the same
       `transformer_host_forward` with the caller's caches, which are read
       at entry and written back. Returns the post-call cached_tokens.
+  `transformer_decode_steps(addrs, params)`
+      `_mojolearn_transformer_host`'s entry of the same name: n decode
+      tokens per row in one call, bytes equal to n `transformer_decode_step`
+      calls (TransformerDecodeSession.decode on the CPU route).
   `mamba3_forward_fresh`
       the block oracle from a constructed zero state, the final state
       discarded. `mamba3_forward_fresh` takes `_mojolearn_mamba`'s fifteen
       addresses (the four report buffers included), the arity
       `Mamba3Block._call_fresh` passes.
   `mamba1_forward`, `mamba1_decode_step` (14 addresses),
-  `mamba2_forward`, `mamba2_decode_step` (16), `mamba3_forward`,
-  `mamba3_decode_step` (25)
+  `mamba2_forward`, `mamba2_decode_step` (16) (Mamba-3's carried-state
+  forward and decode step: ops 4/5 of `mamba_state_api_v1`)
       `_mojolearn_mamba_host`'s entries of the same names and contracts: the
       same three oracles with the state pieces read at entry and written
       back, so `Mamba1Block`, `Mamba2Block` and `Mamba3Block` run their
@@ -64,16 +68,19 @@ moves both MLP projections and every Transformer projection.
 `neural_host_sabotage()` reads it back.
 """
 
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call as _balanced_call, py_type as _py_type
+from bindings.native_class_admission_door import static_builtin_type
 from bindings.sha256_door import sha256_hexdigest
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from core.neural_host_dispatch import NATIVE_HOST_PRIMITIVE_API, NATIVE_HOST_MAMBA_STATE_API, NATIVE_HOST_TRANSFORMER_API, NATIVE_HOST_MAMBA_BLOCK_API
-from core.mojolearn_neural_host_impl import _finite, _opt_read, _transformer_weights_from, _write, _run_forward, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
+from core.mojolearn_neural_host_impl import _opt_read, _write, _run_forward, _run_decode_steps, _m1_weights, _mamba1_run, _m2_weights, _mamba2_run, _m3_weights, _mamba3_run
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -84,9 +91,9 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
+from core.samba_entry_table_neural_host import publish_samba_neural_host_primitives
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 from gemm.host.neural_gemm import gemm_oracle
-from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
@@ -109,7 +116,6 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Weights,
 )
 from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
-from training.host.mlp_oracle import host_mlp_bias_activation
 from training.host.samba_ops_oracle import (
     host_samba_embedding_forward,
     host_samba_linear_forward,
@@ -138,13 +144,24 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
+from core.neural_entry_neural_host import publish_neural_block_neural_host
+from core.causal_entry_neural_host import publish_causal_neural_host
+# RUN (lane rs-neural): the GIL-released bodies of the stateless MLP and
+# transformer prefill entries, typed Mojo only.
+from core.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
 
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and size the wrappers pass) is read
+    # directly: the type identity against the static builtin, no operator
+    # module lookup or Python call (lane p3-neural-blocks; a decode token
+    # paid 22-50 of these). Other integer types keep operator.index below.
+    if _py_type(value) is static_builtin_type("builtins", "int"):
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("neural host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -155,7 +172,7 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(addrs)) != n:
         raise Error(what + ": expected " + String(n) + " addresses, got " + String(Int(py=len(addrs))))
     var out = List[Int](capacity=n)
-    for i in range(n):  # small-loop(address argument words, a fixed count per entry point)
+    for i in range(n):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words, a fixed count per entry point)
         var a = _index(addrs[i])
         if a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -175,7 +192,7 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=n + BLOCK_OPTION_ADDRS)
-    for i in range(got):  # small-loop(address argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(address argument words plus the fixed options tail)
         var a = _index(addrs[i])
         if i < n and i != gate_slot and a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -194,7 +211,7 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=got)
-    for i in range(got):  # small-loop(scalar argument words plus the fixed options tail)
+    for i in range(got):  # driver-loop: over argument words (fixed count, not data); small-loop(scalar argument words plus the fixed options tail)
         out.append(_index(params[i]))
     return out^
 
@@ -262,19 +279,7 @@ def mlp_forward_logits_binding(
         raise Error("mlp_forward_logits: rows must be in [1, 256], got " + String(rows))
     var wrote = 0
     with GILReleased(Python()):
-        var x = read_f32(a[0], rows * 8)
-        var w1 = read_f32(a[1], 16 * 8)
-        var b1 = read_f32(a[2], 16)
-        var w2 = read_f32(a[3], 3 * 16)
-        var b2 = read_f32(a[4], 3)
-        var p1 = gemm_host_rows(x, w1, OP_NT, rows, 16, 8)
-        _finite(p1, String("mlp_forward_logits: the first projection"))
-        var hidden = host_mlp_bias_activation(p1, b1, rows, 16, 1)
-        var p2 = gemm_host_rows(hidden, w2, OP_NT, rows, 3, 16)
-        _finite(p2, String("mlp_forward_logits: the second projection"))
-        var logits = host_mlp_bias_activation(p2, b2, rows, 3, 0)
-        copy_f32(logits.unsafe_ptr(), f32_ptr(a[5]), rows * 3)
-        wrote = rows * 3
+        wrote = mlp_forward_logits_run(a, rows)
     return PythonObject(wrote)
 
 
@@ -290,12 +295,12 @@ def transformer_forward_fresh_binding(
     var opts = BlockOptions.from_params(p, 8)
     # Into `transformer_forward`'s 13 + 11 layout (slots 10 and 11 unused).
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(fixed options-tail address words)
+    for i in range(BLOCK_OPTION_ADDRS):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed options-tail address words)
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -313,13 +318,7 @@ def transformer_forward_fresh_binding(
         raise Error("transformer: d_model, n_heads, n_kv_heads, head_dim and intermediate must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        var w = _transformer_weights_from(a, dm, nh, nkv, hd, it, l, opts, what)
-        var x = read_f32(a[0], b * l * dm)
-        var out = transformer_host_forward(
-            w, x, b, l, l, 0, window, List[Float32](), List[Float32](), False
-        )
-        copy_f32(out.y.unsafe_ptr(), f32_ptr(a[12]), len(out.y))
-        out_len = out.cached_tokens
+        out_len = transformer_forward_fresh_run(a, b, l, dm, nh, nkv, hd, it, window, opts, what)
     return PythonObject(out_len)
 
 
@@ -428,6 +427,25 @@ def transformer_decode_step_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_steps_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`n` decode tokens per row in one call. `addrs`: the thirteen of
+    `transformer_forward`, x and y_out (B, n, d_model). `params`:
+    `transformer_forward`'s ten with L = n: 0 B, 1 n, 2 d_model, 3 n_heads,
+    4 n_kv_heads, 5 head_dim, 6 intermediate, 7 max_tokens, 8 cached_tokens,
+    9 window, optionally the block options tail. Bytes equal n
+    `transformer_decode_step` calls. Returns the post-call cached_tokens."""
+    var what = String("transformer_decode_steps")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    var p = _params_tail(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _run_decode_steps(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+    return PythonObject(out_len)
+
+
 # ===========================================================================
 # Mamba-1, Mamba-2 and Mamba-3: the zero-state prefill, only y written
 # (lane/inference-neural-forward, 2026-09-15). The weights are read in the
@@ -441,7 +459,7 @@ def _shape3(params: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(params)) != n:
         raise Error(what + ": expected " + String(n) + " parameters, got " + String(Int(py=len(params))))
     var out = List[Int](capacity=3)
-    for i in range(3):  # small-loop(the three shape argument words)
+    for i in range(3):  # driver-loop: over argument words (fixed count, not data); small-loop(the three shape argument words)
         out.append(_index(params[i]))
     if out[0] < 1 or out[1] < 1 or out[2] < 1:
         raise Error(what + ": B, L and d_model must be positive")
@@ -546,11 +564,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a0 = _addrs(addrs, 15, String("mamba3_forward_fresh"))
     var a = List[Int]()
-    for i in range(10):  # small-loop(fixed address-word layout)
+    for i in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
-    for _ in range(10):  # small-loop(fixed address-word layout)
+    for _ in range(10):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(0)
-    for i in range(10, 15):  # small-loop(fixed address-word layout)
+    for i in range(10, 15):  # driver-loop: over argument words (fixed count, not data); small-loop(fixed address-word layout)
         a.append(a0[i])
     var b = _index(params[0])
     var l = _index(params[1])
@@ -563,46 +581,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
     return PythonObject(out_len)
 
 
-def mamba3_forward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """25 addresses; params B, L, d_model, buf_len, pending
-    (lane/stateful-cpu-decoding)."""
-    var a = _addrs(addrs, 25, String("mamba3_forward"))
-    if Int(py=len(params)) != 5:
-        raise Error(
-            "mamba3_forward: params must contain 5 values (B, L, d_model,"
-            " buf_len, pending)"
-        )
-    var b = _index(params[0])
-    var l = _index(params[1])
-    var dm = _index(params[2])
-    var q0 = _index(params[3])
-    var pend = _index(params[4])
-    if dm < 1:
-        raise Error("mamba3_forward: d_model must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, l, dm, q0, pend, False)
-    return PythonObject(out_len)
-
-
-def mamba3_decode_step_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The forward at L = 1; params B, d_model, buf_len, pending."""
-    var a = _addrs(addrs, 25, String("mamba3_decode_step"))
-    if Int(py=len(params)) != 4:
-        raise Error(
-            "mamba3_decode_step: params must contain 4 values (B, d_model,"
-            " buf_len, pending)"
-        )
-    var b = _index(params[0])
-    var dm = _index(params[1])
-    var q0 = _index(params[2])
-    var pend = _index(params[3])
-    if dm < 1:
-        raise Error("mamba3_decode_step: d_model must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _mamba3_run(a, b, 1, dm, q0, pend, False)
-    return PythonObject(out_len)
+# The Mamba-3 carried-state forward and decode step are ops 4/5 of this
+# image's `mamba_state_api_v1` descriptor and its CAUSAL_TABLE_MAMBA
+# publication (core/mamba_state_entry_table.mojo); the Python entries
+# `mamba3_forward` / `mamba3_decode_step` are gone (lane
+# mamba3-prefill-handle, 2026-11-12: no product caller).
 
 
 # ===========================================================================
@@ -674,8 +657,15 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_neural_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_block_neural_host()
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_neural_host()
         module.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         module.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         module.def_function[transformer_block_api_binding]("transformer_block_api_v1")
@@ -691,6 +681,7 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
+        module.def_function[transformer_decode_steps_binding]("transformer_decode_steps")
         # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_mamba.patch
         module.def_function[mamba1_forward_binding]("mamba1_forward")
@@ -700,11 +691,12 @@ def build__mojolearn_neural_host() -> PythonObject:
         module.def_function[mamba2_forward_binding]("mamba2_forward")
         module.def_function[mamba2_decode_step_binding]("mamba2_decode_step")
         module.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
-        module.def_function[mamba3_forward_binding]("mamba3_forward")
-        module.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         module.def_function[embedding_forward_binding]("embedding_forward")
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[linear_forward_binding]("linear_forward")
+        # Native Samba callers read this image's primitive entry from the
+        # table, not through the module (lane calltable-samba-mamba).
+        publish_samba_neural_host_primitives()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_neural_host: ", error))

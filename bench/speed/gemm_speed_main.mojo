@@ -71,9 +71,7 @@ fair opponent is `cublas-fp32`:
     ours-v1-identical     identical_gemm_into, profile
                           mojolearn.identical.gemm.fp32.v1, every row
     ours-core-identical   core/gemm.mojo's shipped identical route (the
-                          serial pinned kernels, split-K Gram); with
-                          -D MOJOLEARN_537_GEMM_IDENT_SWAP=1 the NT rows go
-                          to v1 and the arm is named ours-core-swap537-identical
+                          serial pinned kernels, split-K Gram)
 
 MOJOLEARN_SPEED_GEMM_ARMS picks a subset (`v1,core`), MOJOLEARN_SPEED_SHAPES a
 comma-separated subset of row names. Neither touches the FAST build.
@@ -96,7 +94,7 @@ from bench.gemm_shapes import (
 from bench.gemm_shapes import OP_NN as TBL_OP_NN
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from bench.gemm_shapes import OP_TN as TBL_OP_TN
-from core.gemm import GEMM_IDENT_SWAP_537, gemm_nt, gemm_tn
+from core.gemm import gemm_nt, gemm_tn
 from gemm.checks.gemm_identical import (
     choose_gemm_plan,
     gemm_plan_name,
@@ -262,8 +260,7 @@ comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Which of our entries a row is timed through.
 #:   ARM_CORE  `core/gemm.mojo::gemm_nt` / `gemm_tn`, the shipped surface.
-#:             FAST: MAX's matmul. IDENTICAL: the serial pinned kernels,
-#:             or v1 when built with -D MOJOLEARN_537_GEMM_IDENT_SWAP=1.
+#:             FAST: MAX's matmul. IDENTICAL: the serial pinned kernels.
 #:   ARM_V1    `gemm/checks/gemm_identical.mojo::identical_gemm_into`,
 #:             profile mojolearn.identical.gemm.fp32.v1, every orientation.
 #:             Only offered under IDENTICAL: under FAST it would be the
@@ -276,8 +273,8 @@ def _arm_name(arm: Int) -> String:
     if arm == ARM_V1:
         return String("ours-v1-identical")
     comptime if IDENTICAL_BUILD:
-        comptime if GEMM_IDENT_SWAP_537:
-            return String("ours-core-swap537-identical")
+        # TOMBSTONE: MOJOLEARN_537_GEMM_IDENT_SWAP (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at f62f301cd1.
+        # Restore: git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.expdel2-01-base.patch
         return String("ours-core-identical")
     return String("ours")
 
@@ -348,8 +345,7 @@ def _run_arm(ctx: DeviceContext, arm: Int, rounds: Int, smoke: Bool, max_macs: F
                 "FSPEED-NOTE lane=gemm arm="
                 + armname
                 + " core/gemm.mojo under IDENTICAL: pinned_gemm_nt_kernel /"
-                " gram split-K (or v1 when MOJOLEARN_537_GEMM_IDENT_SWAP is"
-                " defined). Strict FP32; fair opponent cublas-fp32."
+                " gram split-K. Strict FP32; fair opponent cublas-fp32."
             )
         else:
             print(

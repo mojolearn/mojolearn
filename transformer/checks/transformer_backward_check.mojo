@@ -296,7 +296,7 @@ kept alive past the `ctx.synchronize()` that reads it, with explicit
 `.unsafe_ptr()` and this repository has lost a night to that.
 """
 
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -356,6 +356,7 @@ from transformer.checks.transformer_backward_oracle import (
     softmax_backward_into,
     transformer_block_backward_oracle,
 )
+from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import (
     PLANT_AT_NONE,
     LlamaDeviceStages,
@@ -955,7 +956,7 @@ def backward_device_dump(
         var n = len(views[i])
         var values = List[Float32](length=n, fill=Float32(0.0))
         if n > 0:
-            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            unsafe_memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
         out.append(values^)
         offset += n
     _ = host^
@@ -1841,6 +1842,10 @@ def clause_a_case(
         diffs[20].n_diff,
         predicted,
     )
+
+
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) check clause (clause_dx_concat) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
 
 
 # ===========================================================================

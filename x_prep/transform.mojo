@@ -618,7 +618,7 @@ def _pt_golden_step(left: Bool, mut a: Float32, mut b: Float32, mut x1: Float32,
     return x2
 
 
-#: the most candidates one round evaluates (2^6 - 1: MOJOLEARN_XPREP_PT_SPEC <= 6)
+#: the most candidates one round evaluates (2^6 - 1: -D MOJOLEARN_XPREP_FAST_PT_SPEC_DEPTH <= 6)
 comptime PT_SPEC_MAX = 63
 
 
@@ -637,7 +637,7 @@ def pt_spts_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(SP + 1, raw(f, S + 3))
         return
     # each node's bracket (a, b, x1, x2) after the outcome that leads to it
-    var br = InlineArray[Float32, 4 * PT_SPEC_MAX](fill=Float32(0))
+    var br = Array[Float32, 4 * PT_SPEC_MAX](fill=Float32(0))
     br[0] = raw(f, S + 0)
     br[1] = raw(f, S + 1)
     br[2] = raw(f, S + 2)

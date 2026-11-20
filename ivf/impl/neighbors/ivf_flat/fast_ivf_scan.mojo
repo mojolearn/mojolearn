@@ -16,13 +16,13 @@ saw a candidate. Distances are the direct sum of squared differences
 host after the order is fixed, as in the pinned path).
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
-from std.gpu.primitives.warp import shuffle_xor, shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
+from max.gpu.primitives.warp import shuffle_xor, shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # AFCL-G09: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
@@ -31,10 +31,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 # The accepted feature cap stays fixed: this changes scheduling only, with
 # the same probed lists, filters, candidates and total-order top-k merge.
 comptime AFCL_G09 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G09"]()
 )
 comptime FIVF_QPB = 2 if AFCL_G09 else 4
+# TOMBSTONE: MOJOLEARN_AFCL_G09 (never-run Apple FAST card) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 06b0e453ba.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G09.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 """Queries (SIMD groups) per block."""
 comptime FIVF_DIM_TILE = 256
 """The narrow query tile: 4 KiB in A, 2 KiB under AFCL-G09."""
@@ -93,8 +96,8 @@ def fast_ivf_scan_kernel[KM: Int, DM: Int = FIVF_DIM_TILE](
     barrier()
     if not active:
         return
-    var td = InlineArray[Float32, KM](fill=Float32.MAX)
-    var ti = InlineArray[UInt32, KM](fill=UInt32.MAX)
+    var td = Array[Float32, KM](fill=Float32.MAX)
+    var ti = Array[UInt32, KM](fill=UInt32.MAX)
     var n_probes = Int(n_probes_in)
     for p in range(n_probes):
         var l = Int(probe_idx[q * n_probes + p])

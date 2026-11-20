@@ -111,7 +111,8 @@ from svm.impl.svc_impl import (
     svc_predict,
     unique_labels_sorted,
 )
-from svm.impl.svr_impl import svr_fit, svr_predict
+from svm.impl.svr_impl import svr_fit_borrowed, svr_predict
+from core.device_query_x import QueryFold
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
@@ -2044,16 +2045,22 @@ def _run_svr_device(
     inlined copy of `svrFitX` until 2026-09-01, written before
     `svm/impl/svr_impl.mojo` existed, and every gate in this file was
     therefore a statement about the copy rather than about the code a caller
-    reaches. `svr_fit` and `svr_predict` are that code; the two Python entry
+    reaches. `svr_fit_borrowed` and `svr_predict` are that code; the two Python entry
     points in `svm/estimator.mojo` call the same pair, so what these 26
     gates measure and what `mojolearn.SVR` runs are now one thing.
     """
     var trace = SmoTrace()
-    var model = svr_fit(
-        ctx, rfx.x, rfx.yr, rfx.n, rfx.k, rfx.param, rfx.kp, card, trace,
-        False, kernel_tile_byte_limit, block_solve_threads, True,
+    # The fixture's X from its own words, one device copy (lane a8a: the
+    # list form of svr_fit is gone; the fixtures are finite).
+    var kp = rfx.kp.copy()
+    var status = List[Int32]()
+    var model = svr_fit_borrowed(
+        ctx, Int(rfx.x.unsafe_ptr()), QueryFold.none(), rfx.yr, rfx.n, rfx.k, rfx.param, kp, card, trace,
+        status, False, False, kernel_tile_byte_limit, block_solve_threads, True,
         scratch_pad, scratch_poison,
     )
+    if status[0] != 0 or status[1] != 0:
+        raise Error("svr fixture: X is not finite")
     var q = _reg_queries(rfx)
     var nq = rfx.n + 37
     var dec = svr_predict(

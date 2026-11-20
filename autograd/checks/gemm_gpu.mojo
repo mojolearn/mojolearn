@@ -6,7 +6,7 @@ from sequence.exec import HostExec
 from autograd.checks.gemm_cases import run_gemm_cases
 
 
-def main() raises:
+def run_checks() raises:
     var dev = DeviceExec()
     var host = HostExec()
     run_gemm_cases(dev, host)

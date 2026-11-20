@@ -60,6 +60,19 @@ NUMPY_ORACLES = {
     "mojolearn/_verify_api_programs.py", "mojolearn/_verify_api_runner.py",
     "mojolearn/_verify_api_training.py", "mojolearn/_verify_api_utilities.py",
     "mojolearn/_verify_light.py",
+    # The verify-model CLI controller: it imports NumPy itself (lazily, with the
+    # install hint) so that verify does not reach into the product's
+    # _optional_numpy guard. Product paths never call it.
+    "mojolearn/_verify_model.py",
+    # The GPU/CPU check: the one module `verify --cross-check` and
+    # `verify --check` both run, and the `--check` controller. They describe and
+    # compare outputs the product already returned (shape, dtype, SHA-256, first
+    # differing element) and load the user's rows file; NumPy is imported
+    # lazily inside those functions. Product paths never call them; the public
+    # `mojolearn.check` (2026-11-20) is this same testing tool under a short
+    # name, routed lazily, and `estimator.check(X)` (_mode.CheckMixin) imports
+    # it inside the method, so `import mojolearn` still loads neither file.
+    "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
 }
 
 
@@ -70,11 +83,12 @@ def native_setup_numpy_imports(tree, relative):
     Product computation remains audited; these imports populate the retained
     native type/descriptor tables once during package/reader installation.
     """
+    # Package import never loads NumPy (NUMPY_FREE_CONTRACT.md): the PCS RNG
+    # (providers/python/pcs_rng_pyapi_pack.mojo), the CNN owner
+    # (bindings/xcnn_common_door.mojo) and resample's result storage connect it
+    # natively at call time, so their former setup imports are refused here.
     setup = {
-        "mojolearn/_expansion_neighbors.py": "_connect_pcs_rng",
-        "mojolearn/_native_xcnn_bridge.py": "connect",
         "mojolearn/importers/_native_reader_bridge.py": "connect",
-        "mojolearn/resample.py": None,
     }
     if relative not in setup:
         return set()
@@ -99,11 +113,6 @@ def native_setup_numpy_imports(tree, relative):
                 continue
             for statement in node.body:
                 if isinstance(statement, ast.Import) and len(statement.names) == 1 and statement.names[0].name == "numpy":
-                    admitted.add(id(statement))
-                elif (relative == "mojolearn/_expansion_neighbors.py" and isinstance(statement, ast.ImportFrom)
-                      and statement.level == 0 and statement.module == "numpy.random"
-                      and {name.name for name in statement.names} ==
-                      {"mtrand", "BitGenerator", "MT19937", "PCG64", "PCG64DXSM", "Philox", "SFC64"}):
                     admitted.add(id(statement))
     return admitted
 
@@ -326,8 +335,8 @@ def python_math_errors(path, relative):
 
 
 def audit_tree(root, python_only=False):
-    """Audit an unpacked wheel. `python_only` is the release rehearsal's
-    dry run over a STAGED SOURCE TREE (tools/release_rehearsal.py): the same
+    """Audit an unpacked wheel. `python_only` is the pre-build dry run over a
+    STAGED SOURCE TREE (tools/prebuild_check.py audits): the same
     NumPy, dependency and Python-math rules over every shipped .py, with the
     native checks off, because a source tree's binaries have not been through
     stage() yet and would fail for that reason alone."""
@@ -488,9 +497,17 @@ def finalize(wheel, helper=None, audit_only=False):
             import sys
             for directory in runtime_dirs:
                 selected_helper = helper
-                if linux and sys.platform != "linux" and selected_helper is None:
-                    selected_helper = directory / "libMojolearnMath.so"
-                    if not selected_helper.is_file():
+                if linux and selected_helper is None:
+                    # The set's own libMojolearnMath.so (built by the leg's stage_libs, recorded in the
+                    # LINUX_PAYLOAD runtime_sha256) is packed as is on EVERY packing host. Rebuilding it
+                    # here with the packer's `cc` (what a Linux packer did until 2026-11-19) shipped
+                    # bytes the payload does not record: the GitHub-packed base of 7f5eac7eab carried
+                    # 9b82408bae1d against its payload's 35c849364120, and release_reuse refused every
+                    # B arm on it. Only an old set without the helper is still built here (Linux only).
+                    own = directory / "libMojolearnMath.so"
+                    if own.is_file():
+                        selected_helper = own
+                    elif sys.platform != "linux":
                         raise ValueError("old Linux sets require --helper built on Linux; new build_sets outputs include it")
                 changes.append({"directory": directory.relative_to(root).as_posix(), **stage(directory, selected_helper)})
             # Python host math loads one vendor-neutral helper by an exact path.
@@ -536,16 +553,9 @@ def main():
     parser.add_argument("wheels", nargs="*", type=Path)
     parser.add_argument("--helper", type=Path)
     parser.add_argument("--audit-only", action="store_true")
-    parser.add_argument("--python-tree", type=Path, metavar="DIR",
-                        help="audit the .py files of a staged package tree (the wheel's root layout) and exit")
     args = parser.parse_args()
-    if args.python_tree:
-        report = audit_tree(args.python_tree, python_only=True)
-        print(json.dumps({"tree": str(args.python_tree), "numpy_optional": report["numpy_optional"],
-                          "python_math_policy": report["python_math_policy"]}))
-        return
     if not args.wheels:
-        parser.error("name at least one wheel, or --python-tree DIR")
+        parser.error("name at least one wheel (a staged source tree: tools/prebuild_check.py --only audits)")
     for wheel in args.wheels:
         report = finalize(wheel, args.helper, args.audit_only)
         print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_optional": report["numpy_optional"],

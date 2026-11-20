@@ -7,74 +7,75 @@ classes (the shuffle and leave-P splitters), have constructors that only
 store their parameters. The resample results are owned by the resample
 provider's native result initializer instead. Their public `__init__` is one call to the
 same native constructor as the full-reset owners
-(bindings/full_reset_constructor_native.mojo); re-initialization releases an
+(bindings/full_reset_constructor_native_door.mojo); re-initialization releases an
 overwritten value under the declared setter's own admission. The write events
 are derived from source by tools/declared_constructor_schemas.py and checked
 against it by tools/test_native_declared_constructor_connection.py.
 """
 from types import BuiltinFunctionType
 from .tokenizer import _binding
-from . import _expansion_prep as _prep
-from . import _expansion_decomp as _decomp
-from . import model_selection as _msel
 
 _ENTRY = _binding()._module.full_reset_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('declared constructors require a compiled native entry')
 _CONTEXT = dict(plans={}, missing=object(), ready=False, originals={}, release_declared=True)
 _CONSTRUCTOR_HOOKS = ('__getattribute__', '__getattr__', '__setattr__')
-_CLASSES = (
-    _decomp.AlternatingLeastSquares,
-    _prep.BernoulliNB,
-    _prep.Binarizer,
-    _decomp.CCA,
-    _prep.CategoricalNB,
-    _decomp.ClassicalMDS,
-    _prep.ComplementNB,
-    _decomp.DictionaryLearning,
-    _decomp.EllipticEnvelope,
-    _decomp.FactorAnalysis,
-    _decomp.FastICA,
-    _prep.GaussianNB,
-    _decomp.GaussianRandomProjection,
-    _msel.GroupShuffleSplit,
-    _decomp.IncrementalPCA,
-    _decomp.Isomap,
-    _prep.IterativeImputer,
-    _prep.KBinsDiscretizer,
-    _prep.LabelBinarizer,
-    _decomp.LatentDirichletAllocation,
-    _msel.LeavePGroupsOut,
-    _msel.LeavePOut,
-    _decomp.LocallyLinearEmbedding,
-    _decomp.MDS,
-    _decomp.MinCovDet,
-    _decomp.MiniBatchDictionaryLearning,
-    _decomp.MiniBatchSparsePCA,
-    _prep.MultiLabelBinarizer,
-    _prep.MultinomialNB,
-    _decomp.NMF,
-    _prep.Normalizer,
-    _prep.OneHotEncoder,
-    _prep.OrdinalEncoder,
-    _decomp.PLSCanonical,
-    _decomp.PLSRegression,
-    _prep.PolynomialFeatures,
-    _prep.PowerTransformer,
-    _prep.QuadraticDiscriminantAnalysis,
-    _prep.QuantileTransformer,
-    _prep.RFE,
-    _prep.SelectKBest,
-    _msel.ShuffleSplit,
-    _prep.SimpleImputer,
-    _decomp.SparseCoder,
-    _decomp.SparsePCA,
-    _decomp.SparseRandomProjection,
-    _prep.SplineTransformer,
-    _msel.StratifiedShuffleSplit,
-    _prep.TargetEncoder,
-    _prep.VarianceThreshold,
-)
+# Class name -> the package module that defines it (lane lazy-family-import,
+# 2026-11-12): a family is connected when it loads, never imported here.
+_CLASS_SOURCES = {
+    'AlternatingLeastSquares': '_expansion_decomp',
+    'BernoulliNB': '_expansion_prep',
+    'Binarizer': '_expansion_prep',
+    'CCA': '_expansion_decomp',
+    'CategoricalNB': '_expansion_prep',
+    'ClassicalMDS': '_expansion_decomp',
+    'ComplementNB': '_expansion_prep',
+    'DictionaryLearning': '_expansion_decomp',
+    'EllipticEnvelope': '_expansion_decomp',
+    'FactorAnalysis': '_expansion_decomp',
+    'FastICA': '_expansion_decomp',
+    'GaussianNB': '_expansion_prep',
+    'GaussianRandomProjection': '_expansion_decomp',
+    'GroupShuffleSplit': 'model_selection',
+    'IncrementalPCA': '_expansion_decomp',
+    'Isomap': '_expansion_decomp',
+    'IterativeImputer': '_expansion_prep',
+    'KBinsDiscretizer': '_expansion_prep',
+    'LabelBinarizer': '_expansion_prep',
+    'LatentDirichletAllocation': '_expansion_decomp',
+    'LeavePGroupsOut': 'model_selection',
+    'LeavePOut': 'model_selection',
+    'LocallyLinearEmbedding': '_expansion_decomp',
+    'MDS': '_expansion_decomp',
+    'MinCovDet': '_expansion_decomp',
+    'MiniBatchDictionaryLearning': '_expansion_decomp',
+    'MiniBatchSparsePCA': '_expansion_decomp',
+    'MultiLabelBinarizer': '_expansion_prep',
+    'MultinomialNB': '_expansion_prep',
+    'NMF': '_expansion_decomp',
+    'Normalizer': '_expansion_prep',
+    'OneHotEncoder': '_expansion_prep',
+    'OrdinalEncoder': '_expansion_prep',
+    'PLSCanonical': '_expansion_decomp',
+    'PLSRegression': '_expansion_decomp',
+    'PolynomialFeatures': '_expansion_prep',
+    'PowerTransformer': '_expansion_prep',
+    'QuadraticDiscriminantAnalysis': '_expansion_prep',
+    'QuantileTransformer': '_expansion_prep',
+    'RFE': '_expansion_prep',
+    'SelectKBest': '_expansion_prep',
+    'ShuffleSplit': 'model_selection',
+    'SimpleImputer': '_expansion_prep',
+    'SparseCoder': '_expansion_decomp',
+    'SparsePCA': '_expansion_decomp',
+    'SparseRandomProjection': '_expansion_decomp',
+    'SplineTransformer': '_expansion_prep',
+    'StratifiedShuffleSplit': 'model_selection',
+    'TargetEncoder': '_expansion_prep',
+    'VarianceThreshold': '_expansion_prep',
+}
+# The loaded classes of _CLASS_SOURCES, in its order (`collect()`).
+_CLASSES = ()
 # Constructor write events: field, parameter/constant, value/name, mode rule
 # (always False: none of these classes is a NumericModeMixin).
 _EVENTS = {
@@ -89,7 +90,7 @@ _EVENTS = {
     'EllipticEnvelope': (('store_precision', 'parameter', 'store_precision', False), ('assume_centered', 'parameter', 'assume_centered', False), ('support_fraction', 'parameter', 'support_fraction', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False), ('contamination', 'parameter', 'contamination', False)),
     'FactorAnalysis': (('n_components', 'parameter', 'n_components', False), ('tol', 'parameter', 'tol', False), ('copy', 'parameter', 'copy', False), ('max_iter', 'parameter', 'max_iter', False), ('noise_variance_init', 'parameter', 'noise_variance_init', False), ('svd_method', 'parameter', 'svd_method', False), ('iterated_power', 'parameter', 'iterated_power', False), ('rotation', 'parameter', 'rotation', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'FastICA': (('n_components', 'parameter', 'n_components', False), ('algorithm', 'parameter', 'algorithm', False), ('whiten', 'parameter', 'whiten', False), ('fun', 'parameter', 'fun', False), ('fun_args', 'parameter', 'fun_args', False), ('max_iter', 'parameter', 'max_iter', False), ('tol', 'parameter', 'tol', False), ('w_init', 'parameter', 'w_init', False), ('whiten_solver', 'parameter', 'whiten_solver', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
-    'GaussianNB': (('priors', 'parameter', 'priors', False), ('var_smoothing', 'parameter', 'var_smoothing', False)),
+    'GaussianNB': (('priors', 'parameter', 'priors', False), ('var_smoothing', 'parameter', 'var_smoothing', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'GaussianRandomProjection': (('n_components', 'parameter', 'n_components', False), ('eps', 'parameter', 'eps', False), ('compute_inverse_components', 'parameter', 'compute_inverse_components', False), ('random_state', 'parameter', 'random_state', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
     'GroupShuffleSplit': (('n_splits', 'parameter', 'n_splits', False), ('test_size', 'parameter', 'test_size', False), ('train_size', 'parameter', 'train_size', False), ('random_state', 'parameter', 'random_state', False)),
     'IncrementalPCA': (('n_components', 'parameter', 'n_components', False), ('whiten', 'parameter', 'whiten', False), ('copy', 'parameter', 'copy', False), ('batch_size', 'parameter', 'batch_size', False), ('numeric_mode', 'parameter', 'numeric_mode', False)),
@@ -137,13 +138,33 @@ def _initializer(owner):
     return __init__
 
 
+def loaded_classes(sources):
+    """The classes of `sources` (class name -> package module) whose module is
+    already imported; never imports one. Shared with _native_full_reset_params."""
+    # glue: fixed class inventory of the families imported so far
+    import sys
+    found = []
+    for name, source in sources.items():  # glue: fixed vetted class table
+        module = sys.modules.get(__package__ + '.' + source)
+        if module is not None:
+            found.append(getattr(module, name))
+    return tuple(found)
+
+
+def collect():
+    """Refresh `_CLASSES` with the classes of the loaded families."""
+    global _CLASSES
+    _CLASSES = loaded_classes(_CLASS_SOURCES)
+
+
 def install():
     # glue: install before every class-layout snapshot; signature/default
     # metadata is copied at import and the original body is kept only as the
     # test oracle.
     import inspect
     from ._native_public_attributes import _resolved
-    for cls in _CLASSES:  # glue: exact source-derived field-only constructor contracts
+    new = tuple(cls for cls in _CLASSES if cls not in _CONTEXT['originals'])
+    for cls in new:  # glue: exact source-derived field-only constructor contracts
         original = _resolved(cls, '__init__', _CONTEXT['missing'])
         if hasattr(original, '__wrapped__'):
             raise TypeError('declared native constructor requires an unwrapped source constructor')
@@ -165,7 +186,7 @@ def install():
                                   if p.kind is p.KEYWORD_ONLY and p.default is p.empty),
             rule_fields=(), label=getattr(original.__code__, 'co_qualname', original.__qualname__))
         _CONTEXT['originals'][cls] = original
-    for cls in _CLASSES:  # glue: one direct native-call constructor per class
+    for cls in new:  # glue: one direct native-call constructor per class
         original = _CONTEXT['originals'][cls]
         function = _initializer(cls)
         function.__name__ = '__init__'
@@ -182,6 +203,8 @@ def connect(declared):
     from ._native_public_attributes import _resolved, _CONTEXT as attributes
     for cls in _CLASSES:  # glue: fixed post-install layout snapshots
         plan = _CONTEXT['plans'][cls]
+        if 'field_names' in plan:
+            continue  # snapshotted when its family first connected
         mro = type.__dict__['__mro__'].__get__(cls)
         fields = tuple(dict.fromkeys(event[0] for event in plan['events']))  # glue: constructor destinations in first-insertion order
         if _resolved(cls, '__setattr__', _CONTEXT['missing']) is not object.__setattr__:

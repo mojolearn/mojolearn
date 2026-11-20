@@ -46,14 +46,17 @@ rows. `n_iter_` is written from the oracle's inner iteration count
 (`OracleResult.n_iter`), which `svc_check` compares per outer iteration
 with the device's trace, but no identity_break cell hashes it.
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.math import isnan
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call as _balanced_call
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call as _balanced_call, py_type as _svm_host_type
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from svm.host.svr_native_host import SVR_HOST_API
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_predict_threads import host_predict_task_count
@@ -70,12 +73,14 @@ from isolation_forest.checks.if_oracle import (
     oracle_scores,
 )
 from isolation_forest.estimator import (
+    IFResidentKey,
     IF_WANT_DECISION_FUNCTION,
     IF_WANT_PREDICT,
     IF_WANT_SCORE_SAMPLES,
     percentile_linear_host,
 )
 from isolation_forest.impl.isolation_forest import (
+    IDN_IF_RESIDENT,
     IF_params,
     check_finite_by_name_host,
 )
@@ -83,7 +88,7 @@ from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
     build_xorwow_tables,
 )
-from providers.python.svm_host_svc_proba_pyapi import (
+from providers.python.svm_host_svc_proba_pyapi_door import (
     svc_pair_epilogue_binding,
     svc_platt_train_binding,
     svc_splitmix_perm_binding,
@@ -109,10 +114,15 @@ from svm.impl.svm_parameter import (
     check_rung1_scope,
 )
 from svm.host.finite_scan import check_finite_ptr
-from std.memory import memcpy
 from svm.host.svm_host_impl import (
+    IForestHostEntry,
     IForestHostRun,
+    if_host_resident_new_token,
+    if_host_resident_put,
+    if_host_resident_release,
+    if_host_resident_take,
     iforest_run_host,
+    iforest_run_host_resident,
     svc_fit_host,
     svc_predict_host,
     svr_fit_host,
@@ -120,14 +130,28 @@ from svm.host.svm_host_impl import (
 )
 
 
-from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
-from providers.python.svm_host_svc_ovo_host_pyapi import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
+from svm.host.svm_host_binding_run import iforest_host_outputs_run, iforest_host_resident_outputs_run
+from isolation_forest.forest_io import IFForestWords, if_imported_key
+from svm.host.iforest_forest_io_host import (
+    if_host_entry_query,
+    if_host_forest_export,
+    if_host_forest_sizes,
+    if_host_imported_if_empty,
+    if_host_resident_fit_if_empty,
+)
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_svc_ovo_host_pyapi_pack import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
 
 def _index(value: PythonObject) raises -> Int:
+    # An exact int (every address and count the owners pass) is read
+    # directly (lane p3-svm-gp-kernel, row 469): no class-name build, module
+    # lookup or operator.index call. Anything else keeps the full path.
+    if _svm_host_type(value) is native_loaded_module("builtins").int:
+        return Int(py=value)
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("svm host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -483,8 +507,26 @@ def iforest_run_binding(
     `decision_function = score_samples - Float32(offset_)`, `predict =
     -(paper > Float32(-offset_) ? 1 : -1)`, `offset_` the contamination
     quantile through `percentile_linear_host` over the training scores or -0.5.
+
+    `IDN_IF_RESIDENT` (lane perf-trees-misc, 2026-11-05): the GPU binding's
+    resident form on the host. A binary whose `iforest_resident()` is 1
+    takes SEVENTEEN params (slot 16 the token: 0 fits a fresh forest and
+    keeps it; a live token with an equal key scores with NO fit) and FOUR
+    info slots (slot 3 the token after the call). Before it the public owner
+    (`bindings/trees_public_iforest.mojo::_run`) found no `iforest_resident`
+    here and the CPU column refit the whole forest on every scoring call.
+    Sixteen params is the refit-per-call form, unchanged.
+
+    Lane fix-iforest-double-fit (2026-11-13): EVERY binary takes the
+    seventeen-param form. A refit-per-call binary (`-D
+    MOJOLEARN_IDN_IF_RESIDENT_OFF`) receives it only from `fit` (token 0):
+    that fit's forest stays in the store just long enough for
+    `iforest_forest_export` to read it out, which drops it. Before it that
+    binary fitted twice per `fit` (here, then again inside the export). Its
+    scoring calls still send sixteen params and refit per call.
     """
-    if len(params) != 16:
+    var resident = len(params) == 17
+    if len(params) != 16 and not resident:
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
         )
@@ -516,6 +558,38 @@ def iforest_run_binding(
     else:
         out_f32_address = _index(out_f32_addr)
     var run = IForestHostRun(List[Float32](), List[Int32](), Float64(-0.5), 0)
+    if resident:
+        # The take and the put run under the GIL; the fit (on a miss) and
+        # the scoring run with it released, on an entry no other thread
+        # can reach while it is out of the store.
+        var token = _index(params[16])
+        var key = IFResidentKey(
+            train_address, n_train, n_features, n_estimators, max_samples_mode,
+            max_samples_int, max_samples_frac, max_depth, max_features_mode,
+            max_features_int, max_features_frac, bootstrap, random_state,
+            contamination_auto, contamination,
+        )
+        var held = if_host_resident_take(token, key)
+        var new_token = 0
+        if len(held) == 0:
+            new_token = if_host_resident_new_token()
+        try:
+            with GILReleased(Python()):
+                run = iforest_run_host_resident(
+                    held, key, new_token, query_address, n_query, want,
+                )
+        except e:
+            # Keep a caller-owned forest after a refused query; a new
+            # token has not reached Python yet, so it is not cached.
+            if new_token == 0:
+                if_host_resident_put(held)
+            raise e
+        var held_token = held[0].token
+        if_host_resident_put(held)
+        iforest_host_resident_outputs_run(
+            run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
+        )
+        return PythonObject(n_query)
     with GILReleased(Python()):
         run = iforest_run_host(
             train_address, query_address, n_train, n_features, n_query, n_estimators,
@@ -523,27 +597,172 @@ def iforest_run_binding(
             max_features_mode, max_features_int, max_features_frac, bootstrap,
             random_state, contamination_auto, contamination, want,
         )
+    iforest_host_outputs_run(run, want, out_i32_address, out_f32_address, n_query, n_features, ip)
+    return PythonObject(n_query)
+
+
+def iforest_resident_binding() raises -> PythonObject:
+    """1 when this binary keeps the fitted host forest resident between
+    calls (`IDN_IF_RESIDENT`) and `iforest_run` takes the 17-value params
+    with a token; 0 otherwise (the refit per call)."""
+    comptime if IDN_IF_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
+    """Drop the resident host forest `token` names (the estimator was
+    refitted or collected). A token nobody holds is a no-op. Returns 0.
+    Every route releases: a refit-per-call binary keeps a forest between
+    `fit`'s `iforest_run` and its export (lane fix-iforest-double-fit)."""
+    if_host_resident_release(_index(token))
+    return PythonObject(0)
+
+
+def _forest_words(words: PythonObject) raises -> IFForestWords:
+    """UNPACK: the seven words of a compact forest (offsets, feature,
+    threshold, left and right addresses, trees, nodes)."""
+    if len(words) != 7:
+        raise Error("iforest forest: seven words are needed, got " + String(len(words)))
+    return IFForestWords(_index(words[0]), _index(words[1]), _index(words[2]), _index(words[3]),
+                         _index(words[4]), _index(words[5]), _index(words[6]))
+
+
+def iforest_forest_export_binding(
+    train_addr: PythonObject, info_addr: PythonObject, params: PythonObject, words: PythonObject,
+) raises -> PythonObject:
+    """The fitted host forest as the compact form `save()` and pickle write
+    (lane fix-iforest-save-device-forest; the GPU binding's contract,
+    `bindings/_mojolearn_svm.mojo::iforest_forest_export_binding`).
+
+    `params` is `iforest_run`'s seventeen (slot 15 unused, slot 16 the
+    token): the forest that token names when its key matches, else a fresh
+    fit from `train_addr` (kept under a new token on a resident binary).
+    `words` empty asks for the sizes only; seven words (the five host
+    addresses, trees, nodes) receive the forest. `info_addr` takes FOUR
+    float64: offset_, max_samples_, n_features_in_, token. Returns
+    `[token, trees, nodes]`."""
+    if len(params) != 17:
+        raise Error("iforest_forest_export: params must contain 17 values, got " + String(len(params)))
+    var key = IFResidentKey(
+        _index(train_addr), _index(params[0]), _index(params[1]), _index(params[3]), _index(params[4]),
+        _index(params[5]), Float64(py=params[6]), _index(params[7]), _index(params[8]),
+        _index(params[9]), Float64(py=params[10]), _index(params[11]) != 0, _index(params[12]),
+        _index(params[13]) != 0, Float64(py=params[14]),
+    )
+    if key.n_train <= 0 or key.n_features <= 0:
+        raise Error("iforest_forest_export: n_train and n_features must both be positive")
+    if key.train_addr == 0:
+        raise Error("iforest_forest_export: the training matrix address is null")
+    var write = len(words) > 0
+    var dst = IFForestWords(0, 0, 0, 0, 0, 0, 0)
+    if write:
+        dst = _forest_words(words)
+    var ip = f64_ptr(_index(info_addr))
+    var token = _index(params[16])
+    # The sizes call keeps its forest in the store on every route, so the
+    # copy call (same token) never fits again; a refit-per-call binary drops
+    # it after the copy.
+    var held = if_host_resident_take(token, key)
+    var new_token = 0
+    if len(held) == 0:
+        new_token = if_host_resident_new_token()
+    var n_trees = 0
+    var n_nodes = 0
+    try:
+        with GILReleased(Python()):
+            if_host_resident_fit_if_empty(held, key, new_token)
+            var sizes = if_host_forest_sizes(held[0].fitted)
+            n_trees = sizes[0]
+            n_nodes = sizes[1]
+            if write:
+                if_host_forest_export(held[0].fitted, dst)
+    except e:
+        if new_token == 0:
+            if_host_resident_put(held)
+        raise e
+    var held_token = held[0].token
+    ip[0] = held[0].fitted.offset_
+    ip[1] = Float64(held[0].fitted.max_samples_)
+    ip[2] = Float64(key.n_features)
+    ip[3] = Float64(held_token)
+    if IDN_IF_RESIDENT or not write:
+        if_host_resident_put(held)
+    return Python.list(PythonObject(held_token), PythonObject(n_trees), PythonObject(n_nodes))
+
+
+def iforest_forest_run_binding(
+    words: PythonObject, query_addr: PythonObject, out_f32_addr: PythonObject, out_i32_addr: PythonObject,
+    info_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """ONE of `score_samples`, `decision_function` or `predict` over a
+    SAVED compact forest (a loaded or unpickled IsolationForest): no
+    training matrix and no fit (lane fix-iforest-save-device-forest).
+
+    `words`: the seven forest words. `params`: n_features, n_query,
+    max_samples_, offset_ (float), want (0, 1, 2), token (0 or the token an
+    earlier call returned: that imported forest scores with no upload).
+    `info_addr` takes FOUR float64 (offset_, max_samples_, n_features_in_,
+    token). Returns `n_query`."""
+    if len(params) != 6:
+        raise Error("iforest_forest_run: params must contain 6 values, got " + String(len(params)))
+    var forest = _forest_words(words)
+    var n_features = _index(params[0])
+    var n_query = _index(params[1])
+    var max_samples_ = _index(params[2])
+    var offset_ = Float64(py=params[3])
+    var want = _index(params[4])
+    var token = _index(params[5])
+    if n_features <= 0 or n_query <= 0:
+        raise Error("iforest_forest_run: n_features and n_query must both be positive")
+    if want < 0 or want > IF_WANT_PREDICT:
+        raise Error("iforest_forest_run: want=" + String(want) + " is not one of 0, 1, 2")
+    var query_address = _index(query_addr)
+    var out_f32_address = 0
+    var out_i32_address = 0
     if want == IF_WANT_PREDICT:
-        var oi = i32_ptr(out_i32_address)
-        memcpy(dest=oi, src=run.labels.unsafe_ptr(), count=n_query)
+        out_i32_address = _index(out_i32_addr)
     else:
-        var of = f32_ptr(out_f32_address)
-        memcpy(dest=of, src=run.values.unsafe_ptr(), count=n_query)
-    ip[0] = run.offset_
-    ip[1] = Float64(run.max_samples_)
-    ip[2] = Float64(n_features)
+        out_f32_address = _index(out_f32_addr)
+    var ip = f64_ptr(_index(info_addr))
+    var key = if_imported_key(forest, n_features, max_samples_, offset_)
+    var held = if_host_resident_take(token, key) if IDN_IF_RESIDENT else List[IForestHostEntry]()
+    var new_token = 0
+    if len(held) == 0:
+        new_token = if_host_resident_new_token() if IDN_IF_RESIDENT else 0
+    var run = IForestHostRun(List[Float32](), List[Int32](), Float64(-0.5), 0)
+    try:
+        with GILReleased(Python()):
+            if_host_imported_if_empty(held, key, new_token, forest, n_features, max_samples_, offset_)
+            run = if_host_entry_query(held, query_address, n_query, n_features, want)
+    except e:
+        if new_token == 0 and IDN_IF_RESIDENT:
+            if_host_resident_put(held)
+        raise e
+    var held_token = held[0].token
+    comptime if IDN_IF_RESIDENT:
+        if_host_resident_put(held)
+    iforest_host_resident_outputs_run(
+        run, want, out_i32_address, out_f32_address, n_query, n_features, held_token, ip
+    )
     return PythonObject(n_query)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
+def svr_native_api_binding() raises -> PythonObject:
+    var table = SVR_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 def svm_native_api_binding() raises -> PythonObject:
     var table = SVC_HOST_NATIVE_API.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
 
 
 def build__mojolearn_svm_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_svm_host")
         module.def_function[svm_host_numeric_mode_binding]("svm_host_numeric_mode")
@@ -554,6 +773,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         module.def_function[svc_fit_binding]("svc_fit")
         module.def_function[svm_native_api_binding]("svm_binary_api_v1")
+        module.def_function[svr_native_api_binding]("svr_native_api_v1")
         module.def_function[svc_predict_binding]("svc_predict")
         module.def_function[svc_pair_epilogue_binding]("svc_pair_epilogue")
         module.def_function[svc_platt_train_binding]("svc_platt_train")
@@ -563,6 +783,10 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")
         module.def_function[iforest_run_binding]("iforest_run")
+        module.def_function[iforest_resident_binding]("iforest_resident")
+        module.def_function[iforest_resident_release_binding]("iforest_resident_release")
+        module.def_function[iforest_forest_export_binding]("iforest_forest_export")
+        module.def_function[iforest_forest_run_binding]("iforest_forest_run")
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")

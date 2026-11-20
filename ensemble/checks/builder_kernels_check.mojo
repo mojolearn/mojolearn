@@ -99,6 +99,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_node_split_kernel,
 )
 from ensemble.flatnode import SparseTreeNode
+from checks.native_tests.kit import upload_host_into
 
 comptime DT = DType.float32
 comptime LT = DType.int32
@@ -263,7 +264,7 @@ def upload_i32(
     var h = ctx.enqueue_create_host_buffer[DType.int32](len(src))
     for i in range(len(src)):
         h[i] = src[i]
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dst, h)
     ctx.synchronize()
     _ = h^
 
@@ -274,7 +275,7 @@ def upload_f32(
     var h = ctx.enqueue_create_host_buffer[DT](len(src))
     for i in range(len(src)):
         h[i] = src[i]
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DT](ctx, dst, h)
     ctx.synchronize()
     _ = h^
 
@@ -287,7 +288,7 @@ def upload_u32(
     var h = ctx.enqueue_create_host_buffer[DType.uint32](len(src))
     for i in range(len(src)):
         h[i] = src[i]
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, dst, h)
     ctx.synchronize()
     _ = h^
 
@@ -303,7 +304,7 @@ def upload_structs[
     var p = h.unsafe_ptr().unsafe_bitcast[T]()
     for i in range(len(src)):
         p[unsafe_offset=i] = src[i].copy()
-    ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, dst, h)
     ctx.synchronize()
     _ = h^
 
@@ -1482,7 +1483,7 @@ def arm_f_sabotage(ctx: DeviceContext, mut fx: Fixture) raises -> Int:
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     print(
         "builder_kernels_check:"
         " ensemble/decisiontree/batched_levelalgo/kernels/"

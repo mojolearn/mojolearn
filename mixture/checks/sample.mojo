@@ -50,7 +50,7 @@ refuse a model the fit accepted. `X` is float32, the model's dtype, where
 scikit-learn's is float64; `y` is int32, `predict`'s dtype.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_div, identical_mul_add

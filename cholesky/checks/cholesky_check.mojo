@@ -152,9 +152,10 @@ from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update_workspace_floats,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 #: Where the per-check cards go. `/tmp` so the check runs on any box.
 comptime SCRATCH = "/tmp"
@@ -231,9 +232,8 @@ def _upload_padded(
         host.unsafe_ptr().unsafe_store(i, poison)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^
     return buf^
 
 
@@ -242,12 +242,11 @@ def _download(
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+    download_host_into[DType.float32](ctx, view, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = view^
     return out^
 

@@ -42,7 +42,7 @@ def same_model(a: FitResult, b: FitResult) raises:
                          b.forest.trees[t].vector_leaf[i].to_bits())
 
 
-def main() raises:
+def run_checks() raises:
     var x: List[Float32] = [0, 1, 2, 3, 4, 5, 6, 7]
     var labels: List[Float32] = [0, 0, 0, 0, 1, 1, 1, 1]
     var targets: List[Float32] = [0.125, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0]

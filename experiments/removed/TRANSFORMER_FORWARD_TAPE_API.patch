@@ -1,0 +1,3372 @@
+diff --git a/bindings/_mojolearn_tokenizer_host.mojo b/bindings/_mojolearn_tokenizer_host.mojo
+index 735dcb747a..e2435178f3 100644
+--- a/bindings/_mojolearn_tokenizer_host.mojo
++++ b/bindings/_mojolearn_tokenizer_host.mojo
+@@ -87,6 +87,7 @@ from bindings.causal_checkpoint import checkpoint_c
+ from bindings.causal_operation_owner import CausalExecutionEntries
+ from bindings.native_identity_type import native_identity_type
+ from bindings.neural_block_public import NativeBlockPlan
++from bindings.transformer_public_native import TransformerPublicTapeOwner
+ from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
+ from bindings.tokenizer_public_native import (
+     tokenizer_public_c, tokenizer_vocab_fingerprint,
+@@ -1327,6 +1328,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
+         module.def_function[sha256_hex_binding]("sha256_hex")
+         module.def_py_c_function(runtime_classical_unavailable_c, "transformer_public_call")
++        _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
+         module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
+         module.def_py_c_function(runtime_classical_unavailable_c, "lm_corpus_public_call")
+         module.def_py_c_function(runtime_classical_unavailable_c, "catalog_public_call")
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index ebfe167612..165839fa3d 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -155,6 +155,7 @@ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
+ from core.neural_context import neural_ctx
+ from checks.vendor import COMPILED_VENDOR
+ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
+@@ -191,7 +192,7 @@ from autograd.kernels.transformer import (
+     BWD_ANY_SABOTAGE,
+     LlamaBackwardStages,
+ )
+-# The session backward below runs on the autograd tape.
++# The session and saved-tape backwards below run on the autograd tape.
+ # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+ # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+ from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
+@@ -227,6 +228,8 @@ from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transfor
+ from transformer.lean_stages import transformer_lean_stages, _lean_for
+ # Typed kernel side of this shell (thin-shell move, pure, no bit change).
+ from transformer.transformer_binding_impl import (
++    _session_forward_tape_run,
++    _session_backward_tape_run,
+     _NEURAL_CTX,
+     _optional_upload,
+     _f32_ptr,
+@@ -241,9 +244,19 @@ from transformer.transformer_binding_impl import (
+     _lean_for_w,
+     _workspace_key,
+     TransformerWorkspace,
++    TransformerBackwardWorkspace,
+     TransformerSession,
++    _weights_key,
++    _base_weight_lens,
++    _weights_same_bits,
++    _weights_host_copy,
++    _weights_recopy,
++    _stage_reset_on,
+     _session_retain_cap_bytes,
++    _session_weights,
+     _transformer_run_session,
++    TransformerForwardTape,
++    _transformer_saved_backward,
+     _transformer_run_session_backward,
+     INT15_ENTRY_ADDRS,
+     INT15_ENTRY_PARAMS,
+@@ -398,10 +411,84 @@ def transformer_vendor_binding() raises -> PythonObject:
+     return PythonObject(String(COMPILED_VENDOR))
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (the standalone tape entries `transformer_forward_tape_enabled`,
+-# `transformer_forward_tape`, `transformer_backward_tape`, `transformer_close_tape`.)
++def transformer_forward_tape_enabled_binding() -> PythonObject:
++    return PythonObject(IDN_SAMBA_FORWARD_TAPE)
++
++
++def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
++    """[x, nine weights, y], [B,L,dm,nh,nkv,hd,it,window] -> owned tape."""
++    comptime if not IDN_SAMBA_FORWARD_TAPE:
++        raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
++    var incoming = _read_addrs_tail(addrs, 11, String("transformer_forward_tape"))
++    # _read_addrs_tail always returns 11 + BLOCK_OPTION_ADDRS slots (zeros
++    # where no options tail was sent), so the old `len(incoming) != 11` test
++    # refused every call. Default options means the tail slots are all zero.
++    for i in range(11, len(incoming)):  # small-loop(incoming: the block options tail slots): validated tensor addresses, not data
++        if incoming[i] != 0:
++            raise Error("transformer forward tape: default options only (no block options tail)")
++    var p = _read_params(params, 8, String("transformer_forward_tape"))
++    if len(p) != 8:
++        raise Error("transformer forward tape: expected 8 shape scalars")
++    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        if incoming[i] == 0:
++            raise Error("transformer forward tape: null address at slot " + String(i))
++    var a = List[Int]()
++    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        a.append(incoming[i])
++    a.append(0)
++    a.append(0)
++    a.append(incoming[10])
++    var tape = TransformerForwardTape(p)
++    with GILReleased(Python()):
++        try:
++            _ = _transformer_run_session[True, True](tape.session, a,
++                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
++        except error:
++            tape.close()
++            raise error
++    return PythonObject(alloc=tape^)
++
++
++def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises -> PythonObject:
++    comptime if not IDN_SAMBA_FORWARD_TAPE:
++        raise Error("transformer backward tape: IDENTICAL opt-in is disabled")
++    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
++    if owner[].busy or owner[].consumed:
++        raise Error("transformer forward tape: busy, closed or already consumed")
++    var a = _read_addrs_tail(addrs, 11, String("transformer_backward_tape"))
++    # _read_addrs_tail pads to 11 + BLOCK_OPTION_ADDRS slots, so the old
++    # `len(a) != 11` test refused every call (the forward tape entry had the
++    # same fault). The backward takes no options: the tail must be zero.
++    for i in range(11, len(a)):  # small-loop(a: the block options tail slots): validated tensor addresses, not data
++        if a[i] != 0:
++            raise Error("transformer backward tape: expected dy and ten outputs, no block options tail")
++    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        if a[i] == 0:
++            raise Error("transformer backward tape: null address at slot " + String(i))
++    owner[].busy = True
++    owner[].consumed = True
++    try:
++        with GILReleased(Python()):
++            try:
++                _transformer_saved_backward(owner[], a)
++            except error:
++                owner[].close()
++                raise error
++            owner[].close()
++    except error:
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    return PythonObject(0)
++
++
++def transformer_close_tape_binding(tape: PythonObject) raises -> PythonObject:
++    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
++    if owner[].busy:
++        raise Error("transformer forward tape: busy")
++    with GILReleased(Python()):
++        owner[].close()
++    return PythonObject(0)
+ 
+ def transformer_session_forward_fresh_binding(
+     session: PythonObject, addrs: PythonObject, params: PythonObject,
+@@ -411,8 +498,8 @@ def transformer_session_forward_fresh_binding(
+     10 and 11 ZERO, the same 10 (+17) params with `smax = L` and
+     `cached_tokens = 0`. The cache is the session's retained buffers,
+     zero-filled on the device; nothing of it crosses the host boundary. This
+-    is `transformer_forward_fresh` on a session: the block's attention step
+-    op arm retained across calls under the budget."""
++    is `transformer_forward_fresh` on a session: weights retained across
++    calls (`_session_weights`), workspace retained under the budget."""
+     var owner = session.downcast_value_ptr[TransformerSession]()
+     if owner[].busy or owner[].closed:
+         raise Error("transformer: session is busy or closed")
+@@ -528,9 +615,14 @@ from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
+ 
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`transformer_tape_create_native_v1`, `transformer_tape_handle_native_v1`.)
++def transformer_tape_create_native_binding() raises -> PythonObject:
++    # Empty typed lifetime admission only; all forward work uses the provider.
++    return PythonObject(alloc=TransformerForwardTape(List[Int]()))
++
++
++def transformer_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject:
++    # Exact registered owner, never an inferred extension object layout.
++    return PythonObject(Int(tape.downcast_value_ptr[TransformerForwardTape]()))
+ 
+ def transformer_block_api_binding() raises -> PythonObject:
+     # Same common named-table transport used by other native sibling entries.
+@@ -1410,9 +1502,28 @@ def transformer_backward_binding(
+ 
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`.)
++def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy:
++        raise Error("transformer tape: session is busy")
++    if len(ticket) != 2:
++        raise Error("transformer tape: owner and epoch required")
++    var cookie = Int(py=ticket[0])
++    var epoch = Int(py=ticket[1])
++    if cookie != Int(owner):
++        raise Error("transformer tape: foreign session")
++    # Closing an older ticket cannot discard a newer forward in this session.
++    if not owner[].closed and epoch == owner[].tape_generation:
++        owner[].invalidate_tape()
++    return PythonObject(0)
++
++
++def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    owner[].invalidate_tape()
++    return PythonObject(0)
+ 
+ 
+ def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
+@@ -1423,9 +1534,85 @@ def transformer_arithmetic_profile_binding() raises -> PythonObject:
+     return PythonObject(transformer_arithmetic_profile())
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`transformer_session_forward_tape`, `transformer_session_backward_tape`.)
++def transformer_session_forward_tape_binding(
++    session: PythonObject, addrs: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """11 buffers x/9 weights/y; ten scalars shape/window/budget/cost.
++
++    Returns native session cookie, epoch, retained flag, counted stage bytes.
++    Copies finish before return. The weight snapshot belongs to this epoch;
++    any subsequent session operation invalidates the unconsumed ticket.
++    """
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        raise Error("transformer tape: IDENTICAL only")
++    if len(addrs) != 11 or len(params) != 10:
++        raise Error("transformer tape: expected 11 addresses and 10 scalars")
++    var a = List[Int]()
++    var p = List[Int]()
++    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        var address = Int(py=addrs[i])
++        if address == 0:
++            raise Error("transformer tape: null buffer address")
++        a.append(address)
++    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
++        p.append(Int(py=params[i]))
++    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
++        raise Error("transformer tape: invalid shape/window/activation budget/cost")
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            try:
++                _session_forward_tape_run(Int(owner), a, p)
++            except error:
++                owner[].clear()
++                raise error
++    except error:
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    var ticket = Python.list()
++    ticket.append(PythonObject(Int(owner)))
++    ticket.append(PythonObject(owner[].tape_generation))
++    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
++    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
++    return ticket
++
++
++def transformer_session_backward_tape_binding(
++    session: PythonObject, addrs: PythonObject, ticket: PythonObject,
++) raises -> PythonObject:
++    """Eleven addresses: dy, dx, norm1,norm2,Q,K,V,O,gate,up,down gradients."""
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if len(addrs) != 11 or len(ticket) != 2:
++        raise Error("transformer tape backward: expected 11 addresses and owner/epoch")
++    var cookie = Int(py=ticket[0])
++    var generation = Int(py=ticket[1])
++    if cookie != Int(owner) or generation != owner[].tape_generation or not owner[].tape:
++        raise Error("transformer tape: stale, foreign or already consumed ticket")
++    var a = List[Int]()
++    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
++        var address = Int(py=addrs[i])
++        if address == 0:
++            raise Error("transformer tape backward: null buffer address")
++        a.append(address)
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            try:
++                _session_backward_tape_run(Int(owner), a, generation)
++            except error:
++                owner[].clear()
++                raise error
++    except error:
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    return PythonObject(0)
+ 
+ 
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer.mojo
+@@ -1466,8 +1653,12 @@ def build__mojolearn_transformer() -> PythonObject:
+         )
+     try:
+         var m = PythonModuleBuilder("_mojolearn_transformer")
++        m.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
++        m.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
+         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
+         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
++        m.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
++        m.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
+         m.def_function[transformer_vendor_binding]("transformer_vendor")
+         m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
+         m.def_function[transformer_numeric_mode_binding](
+@@ -1484,6 +1675,8 @@ def build__mojolearn_transformer() -> PythonObject:
+         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
+         m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
+         m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
++        m.def_function[transformer_tape_create_native_binding]("transformer_tape_create_native_v1")
++        m.def_function[transformer_tape_handle_native_binding]("transformer_tape_handle_native_v1")
+         m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
+         # lane/neural-net-experiment: the stateless prefill on a session.
+         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
+@@ -1494,6 +1687,11 @@ def build__mojolearn_transformer() -> PythonObject:
+             "transformer_decode_step"
+         )
+         m.def_function[transformer_backward_binding]("transformer_backward")
++        _ = m.add_type[TransformerForwardTape]("_TransformerForwardTape")
++        m.def_function[transformer_forward_tape_enabled_binding]("transformer_forward_tape_enabled")
++        m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
++        m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
++        m.def_function[transformer_close_tape_binding]("transformer_close_tape")
+         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_transformer.patch
+         # DEVIATION 2940: the resident decode session.
+diff --git a/bindings/_mojolearn_transformer_host.mojo b/bindings/_mojolearn_transformer_host.mojo
+index 31642a5fa1..79682754ba 100644
+--- a/bindings/_mojolearn_transformer_host.mojo
++++ b/bindings/_mojolearn_transformer_host.mojo
+@@ -92,6 +92,8 @@ from transformer.block_options import (
+ # Typed kernel side of this shell (thin-shell move, pure, no bit change).
+ from transformer.transformer_host_binding_impl import (
+     _backward_run,
++    _session_forward_tape_run,
++    _session_backward_tape_run,
+     _write,
+     _opt_read,
+     _host_weights_from,
+@@ -346,6 +348,7 @@ def transformer_backward_binding(
+ 
+ 
+ 
++from transformer.host.attention_tape import HostAttentionTape
+ from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+ 
+ 
+@@ -364,15 +367,88 @@ def transformer_session_create_binding() raises -> PythonObject:
+ def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
+     var owner = session.downcast_value_ptr[HostTransformerSession]()
+     if owner[].busy:
+-        raise Error("transformer session: session is busy")
++        raise Error("transformer tape: session is busy")
++    owner[].invalidate_tape()
+     owner[].closed = True
+     return PythonObject(0)
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`,
+-# `transformer_session_forward_tape`, `transformer_session_backward_tape`.)
++def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[HostTransformerSession]()
++    if owner[].busy:
++        raise Error("transformer tape: session is busy")
++    if len(ticket) != 2:
++        raise Error("transformer tape: owner and epoch required")
++    var cookie = Int(py=ticket[0])
++    var epoch = Int(py=ticket[1])
++    if cookie != Int(owner):
++        raise Error("transformer tape: foreign session")
++    # Closing an older ticket cannot discard a newer forward in this session.
++    if not owner[].closed and epoch == owner[].generation:
++        owner[].invalidate_tape()
++    return PythonObject(0)
++
++
++def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[HostTransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    owner[].invalidate_tape()
++    return PythonObject(0)
++
++
++def transformer_session_forward_tape_binding(session: PythonObject,addrs: PythonObject,
++                                             params: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[HostTransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or len(params) != 10:
++        raise Error("transformer tape: IDENTICAL and ten scalars required")
++    var a = _addrs(addrs,11,String("transformer tape"))
++    var p = List[Int]()
++    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
++        p.append(Int(py=params[i]))
++    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
++        raise Error("transformer tape: invalid shape/window/activation budget/cost")
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            _session_forward_tape_run(Int(owner), a, p)
++    except error:
++        owner[].invalidate_tape()
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    var ticket=Python.list()
++    ticket.append(PythonObject(Int(owner)))
++    ticket.append(PythonObject(owner[].generation))
++    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
++    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
++    return ticket
++
++
++def transformer_session_backward_tape_binding(session: PythonObject,addrs: PythonObject,
++                                              ticket: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[HostTransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if len(ticket) != 2:
++        raise Error("transformer tape: owner and generation required")
++    var cookie=Int(py=ticket[0])
++    var generation=Int(py=ticket[1])
++    if cookie != Int(owner) or generation != owner[].generation or not owner[].tape:
++        raise Error("transformer tape: stale, foreign or already consumed ticket")
++    var a = _addrs(addrs,11,String("transformer tape backward"))
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            _session_backward_tape_run(Int(owner), a, generation)
++    except error:
++        owner[].invalidate_tape()
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    return PythonObject(0)
+ 
+ 
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer_host.mojo
+@@ -400,6 +476,10 @@ def build__mojolearn_transformer_host() -> PythonObject:
+         module.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
+         module.def_function[transformer_session_create_binding]("transformer_session_create")
+         module.def_function[transformer_session_close_binding]("transformer_session_close")
++        module.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
++        module.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
++        module.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
++        module.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
+         module.def_function[transformer_host_numeric_mode_binding]("transformer_host_numeric_mode")
+         module.def_function[transformer_host_vendor_binding]("transformer_host_vendor")
+         module.def_function[transformer_host_column_binding]("transformer_host_column")
+diff --git a/bindings/causal_lm_public.mojo b/bindings/causal_lm_public.mojo
+index 4dd6afb065..d1d6d18887 100644
+--- a/bindings/causal_lm_public.mojo
++++ b/bindings/causal_lm_public.mojo
+@@ -721,12 +721,8 @@ def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, ses
+         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
+         mods.released()
+     else:
+-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-        # (operation 12, the session tape's invalidation; 13, close, is the one left.)
+-        if operation != 13:
+-            raise Error("transformer session administration: unknown operation")
+-        _ = py_call(_native_function(mods, binding, "transformer_session_close"), session)
++        var name = "transformer_session_invalidate_tape" if operation == 12 else "transformer_session_close"
++        _ = py_call(_native_function(mods, binding, name), session)
+         mods.released()
+ 
+ def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
+diff --git a/bindings/neural_block_public.mojo b/bindings/neural_block_public.mojo
+index 7d00a94be0..ca155803a3 100644
+--- a/bindings/neural_block_public.mojo
++++ b/bindings/neural_block_public.mojo
+@@ -1208,9 +1208,8 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
+                     _ = py_call(_native_function(mods, entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
+                     mods.released()
+             else:
+-                # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-                # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-                # (the session tape's invalidation before a per-call backward.)
++                if fields["_native_session"] is not None and _native_has_entry(mods, entries, "transformer_session_invalidate_tape"):
++                    causal_transformer_admin(mods, entries, fields["_native_session"], 12)
+                 var native = py_get(fields, "_native_block_provider_cache")
+                 if native is not None:
+                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])
+diff --git a/bindings/neural_prefill_native.mojo b/bindings/neural_prefill_native.mojo
+index 65527c9ff8..6904e0a1da 100644
+--- a/bindings/neural_prefill_native.mojo
++++ b/bindings/neural_prefill_native.mojo
+@@ -10,6 +10,7 @@ from providers.python.neural_descriptor_pyapi import (
+     neural_descriptor_execute, neural_descriptor_construct, neural_descriptor_handle,
+     neural_descriptor_reserved_execute,
+ )
++from providers.python.operation_lock_pyapi import OperationLockLease
+ from bindings.causal_lm_construct import _model_f32, _model_shape
+ from bindings.causal_lm_public import _native_function
+ from std.ffi import _Global
+@@ -20,16 +21,15 @@ struct _PrefillVerdicts(Defaultable, Movable):
+     # (hasattr probes and the compiled `*_forward_tape_enabled` /
+     # `*_reports_optional` words, fixed for a binding), resolved once per
+     # entries object instead of on every training step. -1 = not resolved.
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (the transformer forward tape: a TransformerBlock prefill keeps no tape.)
+     var entries: PythonObject
++    var tape_transformer: Int
+     var tape_mamba3: Int
+     var session_mamba3: Int
+     var optional_mamba3: Int
+ 
+     def __init__(out self):
+         self.entries = PythonObject(None)
++        self.tape_transformer = -1
+         self.tape_mamba3 = -1
+         self.session_mamba3 = -1
+         self.optional_mamba3 = -1
+@@ -47,24 +47,28 @@ def _prefill_hold(entries: PythonObject) raises:
+     var v = _PREFILL_VERDICTS.get_or_create_ptr()
+     if v[].entries is None or v[].entries is not entries:
+         v[].entries = entries
++        v[].tape_transformer = -1
+         v[].tape_mamba3 = -1
+         v[].session_mamba3 = -1
+         v[].optional_mamba3 = -1
+ 
+ 
+-def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
+-    """Whether the Mamba-3 binding keeps a forward tape (MOJOLEARN_IDN_ACT_RETAIN=3)."""
++def _prefill_tape_enabled(entries: PythonObject, kind: String) raises -> Bool:
+     _prefill_hold(entries)
+     var v = _PREFILL_VERDICTS.get_or_create_ptr()
+-    if v[].tape_mamba3 >= 0:
+-        return v[].tape_mamba3 == 1
++    var known = v[].tape_transformer if kind == "transformer" else v[].tape_mamba3
++    if known >= 0:
++        return known == 1
+     var bi = native_loaded_module("builtins")
+-    var enabled = Bool(py=py_call(bi.hasattr, entries, "mamba3_forward_tape_enabled"))
++    var enabled = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
+     if enabled:
+-        enabled = Bool(py=_native_function(entries, "mamba3_forward_tape_enabled")())
++        enabled = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+     _prefill_hold(entries)
+     v = _PREFILL_VERDICTS.get_or_create_ptr()
+-    v[].tape_mamba3 = 1 if enabled else 0
++    if kind == "transformer":
++        v[].tape_transformer = 1 if enabled else 0
++    else:
++        v[].tape_mamba3 = 1 if enabled else 0
+     return enabled
+ 
+ 
+@@ -179,14 +183,16 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
+         raise Error("neural prefill tape requires TransformerBlock or Mamba3Block")
+     var entries = neural_training_entries(fields, context)
+     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
++    var enabled = _prefill_tape_enabled(entries, kind)
+     if kind == "transformer":
+-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-        # (`transformer_forward_tape`: a TransformerBlock prefill keeps no
+-        # tape; its backward is `TransformerBlock.backward` on the step op.)
+-        return Python.tuple(neural_block_forward_binding(block, x, PythonObject(None), False, PythonObject(None), context), PythonObject(None))
+-    if not _prefill_tape_enabled(entries):
+-        return Python.tuple(_prefill_mamba3(block, x, entries), PythonObject(None))
++        enabled = enabled and fields["_int15"] is None and not Bool(py=fields["_extended"])
++    if not enabled:
++        var out = PythonObject(None)
++        if kind == "transformer":
++            out = neural_block_forward_binding(block, x, PythonObject(None), False, PythonObject(None), context)
++        else:
++            out = _prefill_mamba3(block, x, entries)
++        return Python.tuple(out, PythonObject(None))
+     var b = Int(py=x.shape[0])
+     var l = Int(py=x.shape[1])
+     var d = Int(py=x.shape[2])
+@@ -199,17 +205,33 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
+         _ = py_call(shapes.append, weights[i].shape)
+     _ = py_call(addresses.append, out._addr)
+     var params = py_ints([b, l, d])
+-    var native = py_get(fields, "_native_mamba_block_provider_cache")
+-    var tape_base = 10
++    var lock = PythonObject(None)
++    if kind == "transformer":
++        for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
++            _ = py_call(params.append, fields[name])
++        lock = fields["_runtime_lock"]
++    var native = py_get(fields, "_native_block_provider_cache" if kind == "transformer" else "_native_mamba_block_provider_cache")
++    var tape_base = 6 if kind == "transformer" else 10
++    var lock_lease = OperationLockLease(lock)
++    if lock is not None:
++        lock_lease.acquire()
+     var handle = PythonObject(None)
+     var opaque = 0
+-    if native is not None:
+-        handle = neural_descriptor_construct(native, _native_function(entries, "mamba3_tape_create_native_v1"))
+-        opaque = neural_descriptor_handle(native, _native_function(entries, "mamba3_tape_handle_native_v1"), handle)
+-        _ = neural_descriptor_reserved_execute(native, handle, opaque, tape_base, tape_base + 1, tape_base + 2,
+-            _neural_int_words(addresses), _neural_int_words(params), [])
+-    else:
+-        handle = py_call(_native_function(entries, "mamba3_forward_tape"), addresses, params)
++    try:
++        if native is not None:
++            handle = neural_descriptor_construct(native, _native_function(entries, kind + "_tape_create_native_v1"))
++            opaque = neural_descriptor_handle(native, _native_function(entries, kind + "_tape_handle_native_v1"), handle)
++            var base = 6 if kind == "transformer" else 10
++            _ = neural_descriptor_reserved_execute(native, handle, opaque, base, base + 1, base + 2,
++                _neural_int_words(addresses), _neural_int_words(params), [])
++        else:
++            handle = py_call(_native_function(entries, kind + "_forward_tape"), addresses, params)
++        if lock is not None:
++            lock_lease.release()
++    except error:
++        if lock is not None:
++            lock_lease.release()
++        raise error
+     return Python.tuple(out, Python.tuple(entries, handle, x.shape, py_call(bi.tuple, shapes), native, PythonObject(opaque), PythonObject(tape_base)))
+ 
+ 
+@@ -217,8 +239,7 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
+     _ = generation_initialize_binding(context["generation_classes"])
+     var bi = native_loaded_module("builtins")
+     var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+-    if String(fields["_native_kind"]) != "mamba3":
+-        raise Error("TypeError: immutable tape belongs to another block family")
++    var kind = String(fields["_native_kind"])
+     var dims = List[Int]()
+     for i in range(len(tape[2])):  # driver-loop: over immutable input shape metadata
+         dims.append(Int(py=tape[2][i]))
+@@ -234,14 +255,25 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
+     var addresses = Python.list(dy._addr)
+     for i in range(len(gradients)):  # driver-loop: over gradient output addresses
+         _ = py_call(addresses.append, gradients[i]._addr)
+-    if len(tape) == 7 and tape[4] is not None:
+-        var base = Int(py=tape[6])
+-        if base != 10:
+-            raise Error("TypeError: immutable tape belongs to another block family")
+-        _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 3,
+-            _neural_int_words(addresses), [], [])
+-    else:
+-        _ = py_call(_native_function(tape[0], "mamba3_backward_tape"), tape[1], addresses)
++    var lock = fields["_runtime_lock"] if kind == "transformer" else PythonObject(None)
++    var lock_lease = OperationLockLease(lock)
++    if lock is not None:
++        lock_lease.acquire()
++    try:
++        if len(tape) == 7 and tape[4] is not None:
++            var base = Int(py=tape[6])
++            if base != (6 if kind == "transformer" else 10):
++                raise Error("TypeError: immutable tape belongs to another block family")
++            _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 3,
++                _neural_int_words(addresses), [], [])
++        else:
++            _ = py_call(_native_function(tape[0], kind + "_backward_tape"), tape[1], addresses)
++        if lock is not None:
++            lock_lease.release()
++    except error:
++        if lock is not None:
++            lock_lease.release()
++        raise error
+     _ = dy^  # the backward entry read `dy` by address
+     var result = bi.dict()
+     py_setitem(result, "x", gradients[0])
+@@ -259,7 +291,9 @@ def neural_prefill_close(tape: PythonObject) raises:
+         _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 4,
+             [], [], [])
+     else:
+-        _ = py_call(_native_function(tape[0], "mamba3_close_tape"), tape[1])
++        var bi = native_loaded_module("builtins")
++        var kind = "transformer" if Bool(py=py_call(bi.hasattr, tape[0], "transformer_close_tape")) else "mamba3"
++        _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
+ 
+ 
+ # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.
+diff --git a/bindings/transformer_public_native.mojo b/bindings/transformer_public_native.mojo
+index df59dce837..c900cda886 100644
+--- a/bindings/transformer_public_native.mojo
++++ b/bindings/transformer_public_native.mojo
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# Public Transformer state ownership. These functions own
++# Public Transformer state and training-ticket ownership. These functions own
+ # admission, buffer retention, native execution, and finished result creation.
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module, NativeModules
+@@ -11,7 +11,14 @@ from bindings.mode_metadata_native import _fields, _class_fields
+ from bindings.native_error_class import error_without_class
+ from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+-from bindings.neural_block_admission import neural_native_scalar, neural_array_slots
++from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_training_entries, _neural_input
++from bindings.neural_block_admission import admit_block_f32, BLOCK_OPERATION
++from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
++from bindings.causal_lm_construct import _model_shape
++from providers.python.operation_lock_pyapi import OperationLockLease
++from providers.python.neural_descriptor_pyapi import neural_descriptor_connect, neural_descriptor_connect_factory_once, neural_descriptor_construct, neural_descriptor_handle
++from providers.python.transformer_session_tape_pyapi import transformer_session_tape_forward, transformer_session_tape_backward, transformer_session_tape_discard
++from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
+ from std.ffi import _Global
+ from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
+ from bindings.native_class_admission import class_record, class_admit, class_watch_ready
+@@ -345,9 +352,42 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
+ 
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`TransformerPublicTapeOwner`, the public `TransformerForwardTape` ticket owner.)
++struct TransformerPublicTapeOwner(Movable, Writable):
++    var block: PythonObject
++    var session: PythonObject
++    var binding: PythonObject
++    var provider: PythonObject
++    var handle: Int
++    var token: List[Int]
++    var shape: List[Int]
++    var configuration: List[Int]
++    var profile: String
++    var numeric_profile: String
++    var weight_shapes: List[List[Int]]
++    var consumed: Bool
++
++    def __init__(out self, block: PythonObject, session: PythonObject, binding: PythonObject,
++                 provider: PythonObject, handle: Int, var token: List[Int],
++                 var shape: List[Int], var configuration: List[Int], var profile: String,
++                 var numeric_profile: String, var weight_shapes: List[List[Int]]):
++        self.block = block
++        self.session = session
++        self.binding = binding
++        self.provider = provider
++        self.handle = handle
++        self.token = token^
++        self.shape = shape^
++        self.configuration = configuration^
++        self.profile = profile^
++        self.numeric_profile = numeric_profile^
++        self.weight_shapes = weight_shapes^
++        self.consumed = False
++
++    def write_to(self, mut writer: Some[Writer]):
++        writer.write("TransformerPublicTapeOwner(consumed=", self.consumed, ")")
++
++    def write_repr_to(self, mut writer: Some[Writer]):
++        self.write_to(writer)
+ 
+ 
+ def _transformer_configuration(mut mods: NativeModules, fields: PythonObject) raises -> List[Int]:
+@@ -385,10 +425,372 @@ def _transformer_same_words(left: List[Int], right: List[Int]) -> Bool:
+ 
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`forward_with_tape`, `backward_from_tape` and the ticket's init/close: their
+-# entry-record admission, compiled-mode cache, provider, handle and publish helpers.)
++def _transformer_block_snapshot(mut mods: NativeModules, block: PythonObject, neural: PythonObject) raises -> PythonObject:
++    _ = neural_record_fields(mods, block, Python.tuple("_native_session", "_session_binding", "_runtime_lock"))
++    return neural_block_snapshot(block, neural)
++
++
++def _transformer_entry_fields(mut mods: NativeModules, entries: PythonObject) raises -> PythonObject:
++    var types = mods.module("types")
++    if py_type(entries) is not types.SimpleNamespace:
++        raise Error("TypeError: Transformer tape requires its connected native entry record")
++    # Exact SimpleNamespace has native member storage, unlike ordinary model
++    # __dict__ getset descriptors. Read that descriptor directly after type
++    # admission; never use a module/instance attribute lookup as an entry probe.
++    var fields = py_call(types.SimpleNamespace.__dict__["__dict__"].__get__, entries, types.SimpleNamespace)
++    neural_string_keys(mods, fields)
++    return fields
++
++
++def _transformer_native_entry(mut mods: NativeModules, entries: PythonObject, name: String) raises -> PythonObject:
++    return _transformer_native_entry_in(mods, _transformer_entry_fields(mods, entries), name)
++
++
++def _transformer_native_entry_in(mut mods: NativeModules, fields: PythonObject, name: String) raises -> PythonObject:
++    # `fields`: the entry record's namespace, admitted once per public call
++    # by _transformer_entry_fields (its key scan is not repeated per entry).
++    var entry = py_get(fields, name)
++    if py_type(entry) is not py_type(mods.module("builtins").len):
++        raise Error("NotImplementedError: Transformer tape lacks its connected compiled " + name + " entry")
++    return entry
++
++
++struct _NumericModes(Defaultable, Movable):
++    # Compiled numeric-mode read-backs, one per connected binding entry. The
++    # entry objects are retained, so an address is never reused.
++    var entries: List[PythonObject]
++    var modes: List[Int]
++
++    def __init__(out self):
++        self.entries = List[PythonObject]()
++        self.modes = List[Int]()
++
++
++comptime _NUMERIC_MODES = _Global[
++    StorageType=_NumericModes, name="MojolearnTransformerNumericModesV1",
++    init_fn=_NumericModes.__init__,
++]
++
++
++def _transformer_compiled_mode(entry: PythonObject) raises -> Int:
++    # A compiled binding's numeric mode is fixed when it is built: read it
++    # once per entry instead of calling it on every forward and backward.
++    var g = _NUMERIC_MODES.get_or_create_ptr()
++    for i in range(len(g[].entries)):  # driver-loop: over connected training bindings
++        if g[].entries[i] is entry:
++            return g[].modes[i]
++    var mode = Int(py=entry())
++    g[].entries.append(entry)
++    g[].modes.append(mode)
++    return mode
++
++
++def _transformer_tape_provider(mut mods: NativeModules, entry_fields: PythonObject) raises -> PythonObject:
++    # The ticket retains this provider through backward/discard. Keep it out
++    # of model state: ordinary getstate/setstate remains unchanged, and the
++    # existing 36-operation block caches need not be resized or invalidated.
++    # N188: connected once per compiled factory and reused (the shared
++    # process record), not a fresh capsule and provider on every forward and
++    # tape construction; a replaced factory connects again.
++    var windowed_result19 = neural_descriptor_connect_factory_once(_transformer_native_entry_in(mods, entry_fields, "transformer_block_api_v1"),
++        String(TRANSFORMER_BLOCK_ABI_NAME), 41)
++    mods.released()
++    return windowed_result19^
++
++
++def _transformer_tape_handle(mut mods: NativeModules, provider: PythonObject, entry_fields: PythonObject, session: PythonObject) raises -> Int:
++    var windowed_result18 = neural_descriptor_handle(provider,
++        _transformer_native_entry_in(mods, entry_fields, "transformer_native_session_handle_v1"), session)
++    mods.released()
++    return windowed_result18^
++
++
++def _transformer_old_binding(mut mods: NativeModules, binding: PythonObject, neural: PythonObject) raises -> PythonObject:
++    # Session cache fields are mutable. A replaced binding must not reach
++    # _native_function's attribute lookup before proving it is connected.
++    var registered = neural["training_bindings"]
++    var keys = py_call(mods.module("builtins").list, registered.keys())
++    for i in range(len(keys)):  # driver-loop: import-time compiled binding identities
++        var entries = registered[keys[i]]["transformer"]
++        if py_type(entries) is not mods.module("builtins").str:
++            if binding is _transformer_entry_fields(mods, entries)["canonical"]:
++                return entries
++    raise Error("TypeError: Transformer session binding is not an admitted native module")
++
++
++def _transformer_tape_entries(mut mods: NativeModules, block: PythonObject, fields: PythonObject, neural: PythonObject) raises -> PythonObject:
++    # Returns (entries, entry_fields): the entry record and its namespace,
++    # admitted once for the whole public call.
++    var bi = mods.module("builtins")
++    var ancestry = py_call(bi.type.__dict__["__mro__"].__get__, py_type(block))
++    for i in range(len(ancestry)):  # driver-loop: preserve the existing inference-only refusal
++        if ancestry[i] is neural["block_classes"]["cpu"]["transformer"]:
++            raise Error("NotImplementedError: TransformerBlockInference loaded binding lacks the native tape API")
++    if py_get(fields, "_int15") is not None or Bool(py=fields["_extended"]):
++        raise Error("NotImplementedError: Transformer training tape requires default FP32 block options")
++    var entries = neural_training_entries(mods, fields, neural)
++    var entry_fields = _transformer_entry_fields(mods, entries)
++    if _transformer_compiled_mode(_transformer_native_entry_in(mods, entry_fields, "transformer_numeric_mode")) != 1:
++        mods.released()
++        raise Error("NotImplementedError: Transformer training tape requires identical mode")
++    mods.released()
++    var live = fields["_neural_live_fields"]
++    for key in [String("_arithmetic_profile"), String("_arithmetic_profile_mode"), String("_arithmetic_profile_changed")]:  # driver-loop: binding profile bookkeeping on the live owner
++        py_setitem(live, key, fields[key])
++    return Python.tuple(entries, entry_fields)
++
++
++def _transformer_tape_publish(mut mods: NativeModules, tape: PythonObject, block: PythonObject, fields: PythonObject,
++                               entries: PythonObject, provider: PythonObject, handle: Int,
++                               token_value: PythonObject, var shape: List[Int],
++                               var weight_shapes: List[List[Int]], var configuration: List[Int], context: PythonObject) raises:
++    var slots = _transformer_fields(mods, tape, context["tape_class"], context["tape_fields"])
++    var bi = mods.module("builtins")
++    if (py_type(token_value) is not bi.tuple and py_type(token_value) is not bi.list) or len(token_value) != 4:
++        raise Error("TypeError: Transformer tape token requires four native integers")
++    var token = List[Int]()
++    for i in range(4):  # driver-loop: original native session ticket words
++        if py_type(token_value[i]) is not bi.int:
++            raise Error("TypeError: Transformer tape token requires native integer words")
++        token.append(Int(py=token_value[i]))
++    var profile = py_get(fields, "_arithmetic_profile")
++    if py_type(profile) is not bi.str:
++        raise Error("TypeError: Transformer tape requires a native arithmetic profile")
++    var owner = TransformerPublicTapeOwner(block, fields["_native_session"], entries.canonical,
++        provider, handle, token.copy(), shape.copy(),
++        configuration^, String(profile), String(fields["numeric_profile"]), weight_shapes^)
++    py_setitem(slots, "_native_owner", PythonObject(alloc=owner^))
++    py_setitem(slots, "_block", block)
++    py_setitem(slots, "_session", fields["_native_session"])
++    py_setitem(slots, "_binding", entries.canonical)
++    py_setitem(slots, "_token", Python.tuple(PythonObject(token[0]), PythonObject(token[1])))
++    py_setitem(slots, "retained", PythonObject(token[2] != 0))
++    py_setitem(slots, "stage_bytes", PythonObject(token[3]))
++    py_setitem(slots, "shape", py_call(bi.tuple, py_ints(shape)))
++    py_setitem(slots, "profile", profile)
++    py_setitem(slots, "_consumed", PythonObject(False))
++
++
++def _transformer_weight_shapes(weights: PythonObject, configuration: List[Int], neural: PythonObject,
++                                mut owners: List[PythonObject], mut addresses: List[Int]) raises -> List[List[Int]]:
++    var shapes = List[List[Int]]()
++    var d = configuration[0]
++    var kw = configuration[2] * configuration[3]
++    var it = configuration[4]
++    var expected = List[List[Int]]()
++    expected.append([d]); expected.append([d])
++    expected.append([d, d]); expected.append([kw, d]); expected.append([kw, d])
++    expected.append([d, d]); expected.append([it, d]); expected.append([it, d]); expected.append([d, it])
++    if len(weights) != len(expected):
++        raise Error("Transformer training tape requires nine base weights")
++    for i in range(len(weights)):  # driver-loop: snapshot each retained weight buffer once
++        var weight = weights[i]  # captured/prepared once by neural_block_snapshot
++        if weight is None:
++            raise Error("Transformer training tape requires all nine base weights")
++        _model_shape(weight, expected[i], "Transformer tape weight")
++        var dims = List[Int]()
++        for j in range(len(weight.shape)):  # driver-loop: fresh admitted native Array shape
++            dims.append(Int(py=weight.shape[j]))
++        shapes.append(dims^)
++        addresses.append(Int(py=weight._addr))
++        owners.append(weight)
++    return shapes^
++
++
++def transformer_forward_with_tape(mut mods: NativeModules, block: PythonObject, input: PythonObject, budget_value: PythonObject,
++                                  cost_value: PythonObject, context: PythonObject, neural: PythonObject) raises -> PythonObject:
++    var fields = _transformer_block_snapshot(mods, block, neural)
++    var admitted_entries = _transformer_tape_entries(mods, block, fields, neural)
++    var entries = admitted_entries[0]
++    var entry_fields = admitted_entries[1]
++    var live = fields["_neural_live_fields"]
++    var provider = _transformer_tape_provider(mods, entry_fields)
++    var budget = _transformer_int(mods, budget_value, "activation_budget_bytes", neural)
++    var cost = _transformer_int(mods, cost_value, "minimum_replay_ops_per_byte", neural)
++    if budget < 0 or cost < 0:
++        raise Error("Transformer activation budget and replay cost must be nonnegative")
++    _ = _transformer_array_slots(mods, context)
++    var configuration = _transformer_configuration(mods, fields)
++    var x = _neural_input(mods, input, configuration[0], False, neural)
++    var shape: List[Int] = [Int(py=x.shape[0]), Int(py=x.shape[1]), configuration[0]]
++    var y = generation_array(shape)
++    var keep = List[PythonObject]()
++    var addresses: List[Int] = [Int(py=x._addr)]
++    var weight_shapes = _transformer_weight_shapes(fields["_w"], configuration, neural, keep, addresses)
++    if len(weight_shapes) != 9:
++        raise Error("Transformer training tape requires nine base weights")
++    addresses.append(Int(py=y._addr))
++    var params: List[Int] = [shape[0], shape[1], configuration[0], configuration[1], configuration[2],
++        configuration[3], configuration[4], configuration[5], budget, cost]
++    var lease = OperationLockLease(fields["_runtime_lock"])
++    lease.acquire()
++    mods.released()
++    var tape = PythonObject(None)
++    try:
++        var session = live["_native_session"]
++        var binding = live["_session_binding"]
++        if session is not None and binding is not entries.canonical:
++            var previous = _transformer_old_binding(mods, binding, neural)
++            # Lifetime cleanup remains this admitted native entry: its close is
++            # idempotent, while the existing GPU handle-admission entry rejects
++            # closed owners. No numerical work uses this compiled close door.
++            _ = py_call(_transformer_native_entry(mods, previous, "transformer_session_close"), session)
++            mods.released()
++            session = PythonObject(None)
++            py_setitem(live, "_native_session", session)
++            py_setitem(live, "_session_binding", PythonObject(None))
++        if session is None:
++            session = neural_descriptor_construct(provider, _transformer_native_entry_in(mods, entry_fields, "transformer_session_create"))
++            mods.released()
++            py_setitem(live, "_native_session", session)
++            py_setitem(live, "_session_binding", entries.canonical)
++        py_setitem(fields, "_native_session", session)
++        var handle = _transformer_tape_handle(mods, provider, entry_fields, session)
++        var report = transformer_session_tape_forward(provider, session, handle, addresses, params)
++        mods.released()
++        tape = py_call(mods.module("builtins").object.__new__, context["tape_class"])
++        _transformer_tape_publish(mods, tape, block, fields, entries, provider, handle,
++            py_ints(report), shape.copy(), weight_shapes^, configuration.copy(), context)
++        lease.release()
++    except problem:
++        mods.released()
++        lease.release()
++        raise problem
++    _ = keep^
++    _ = x^
++    return Python.tuple(y, tape)
++
++
++def transformer_tape_init(mut mods: NativeModules, tape: PythonObject, values: PythonObject, context: PythonObject, neural: PythonObject) raises -> PythonObject:
++    var block = values[0]
++    var fields = _transformer_block_snapshot(mods, block, neural)
++    var admitted_entries = _transformer_tape_entries(mods, block, fields, neural)
++    var entries = admitted_entries[0]
++    var entry_fields = admitted_entries[1]
++    if values[1] is not fields["_native_session"] or values[2] is not entries.canonical:
++        raise Error("Transformer tape requires the block's current native session and binding")
++    var bi = mods.module("builtins")
++    var shape_value = values[4]
++    if py_type(shape_value) is not bi.tuple and py_type(shape_value) is not bi.list:
++        raise Error("TypeError: Transformer tape shape requires an ordinary integer vector")
++    var shape = List[Int]()
++    for i in range(len(shape_value)):  # driver-loop: constructor result shape
++        if py_type(shape_value[i]) is not bi.int or Int(py=shape_value[i]) < 1:
++            raise Error("TypeError: Transformer tape shape requires positive native integers")
++        shape.append(Int(py=shape_value[i]))
++    if len(shape) != 3 or shape[2] != _transformer_stored_int(mods, fields, "d_model"):
++        raise Error("Transformer tape shape must be (B, L, d_model)")
++    if py_type(values[6]) is not bi.str or String(values[6]) != String(fields["_arithmetic_profile"]):
++        raise Error("Transformer tape arithmetic profile differs from the block")
++    var configuration = values[5]
++    if py_type(configuration) is not bi.tuple or len(configuration) != 8:
++        raise Error("TypeError: Transformer tape configuration requires its native tuple schema")
++    var expected = _transformer_configuration(mods, fields)
++    for i in range(6):  # driver-loop: scalar configuration supplied to the public ticket constructor
++        if py_type(configuration[i]) is not bi.int or Int(py=configuration[i]) != expected[i]:
++            raise Error("Transformer tape configuration differs from its block")
++    var tail = configuration[6]
++    if py_type(tail) is not bi.tuple or len(tail) != len(expected) - 6:
++        raise Error("TypeError: Transformer tape options require their native integer tuple")
++    for i in range(len(tail)):  # driver-loop: option configuration words
++        if py_type(tail[i]) is not bi.int or Int(py=tail[i]) != expected[i + 6]:
++            raise Error("Transformer tape options differ from its block")
++    if py_type(configuration[7]) is not bi.str or String(configuration[7]) != String(fields["numeric_profile"]):
++        raise Error("Transformer tape numeric profile differs from its block")
++    var keep = List[PythonObject]()
++    var addresses = List[Int]()
++    var weight_shapes = _transformer_weight_shapes(fields["_w"], expected, neural, keep, addresses)
++    var provider = _transformer_tape_provider(mods, entry_fields)
++    var handle = _transformer_tape_handle(mods, provider, entry_fields, fields["_native_session"])
++    _transformer_tape_publish(mods, tape, block, fields, entries, provider, handle,
++        values[3], shape^, weight_shapes^, expected.copy(), context)
++    _ = keep^
++    return PythonObject(None)
++
++
++def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject, tape: PythonObject, input: PythonObject,
++                                   context: PythonObject, neural: PythonObject) raises -> PythonObject:
++    # The documented contract: anything that is not this block's tape (None,
++    # another object, another block's tape) is refused as a foreign tape with
++    # ValueError, before owner storage is read.
++    var ancestry = py_call(mods.module("builtins").type.__dict__["__mro__"].__get__, py_type(tape))
++    var is_tape = False
++    for i in range(len(ancestry)):  # driver-loop: tape class ancestry metadata
++        is_tape = is_tape or ancestry[i] is context["tape_class"]
++    if not is_tape:
++        raise Error("Transformer tape belongs to another block")
++    var slots = _transformer_fields(mods, tape, context["tape_class"], context["tape_fields"])
++    var hobj = slots["_native_owner"]
++    var owner = hobj.downcast_value_ptr[TransformerPublicTapeOwner]()
++    if owner[].block is not block:
++        raise Error("Transformer tape belongs to another block")
++    var fields = _transformer_block_snapshot(mods, block, neural)
++    var entries = _transformer_tape_entries(mods, block, fields, neural)[0]
++    _ = _transformer_array_slots(mods, context)
++    var dy = admit_block_f32(input, "Transformer tape grad_output", neural, BLOCK_OPERATION)
++    _model_shape(dy, owner[].shape, "Transformer tape grad_output")
++    var lease = OperationLockLease(fields["_runtime_lock"])
++    lease.acquire()
++    mods.released()
++    var result = Python.dict()
++    try:
++        if (owner[].consumed or owner[].session is not fields["_native_session"]
++                or owner[].binding is not entries.canonical
++                or owner[].profile != String(fields["_arithmetic_profile"])
++                or owner[].numeric_profile != String(fields["numeric_profile"])
++                or not _transformer_same_words(owner[].configuration, _transformer_configuration(mods, fields))):
++            raise Error("Transformer stale, consumed or incompatible tape")
++        var keep = List[PythonObject]()
++        var addresses: List[Int] = [Int(py=dy._addr)]
++        var dx = generation_array(owner[].shape)
++        addresses.append(Int(py=dx._addr))
++        py_setitem(result, "x", dx)
++        keep.append(dx)
++        var names = context["weight_names"]
++        for i in range(len(owner[].weight_shapes)):  # driver-loop: one native output buffer per weight
++            var gradient = generation_array(owner[].weight_shapes[i])
++            addresses.append(Int(py=gradient._addr))
++            py_setitem(result, names[i], gradient)
++            keep.append(gradient)
++        owner[].consumed = True
++        py_setitem(slots, "_consumed", PythonObject(True))
++        transformer_session_tape_backward(owner[].provider, owner[].session, owner[].handle,
++            addresses, owner[].token[0], owner[].token[1])
++        mods.released()
++        _ = keep^
++        lease.release()
++    except problem:
++        mods.released()
++        lease.release()
++        raise problem
++    _ = dy^
++    _ = hobj
++    return result
++
++
++def transformer_tape_close(mut mods: NativeModules, tape: PythonObject, context: PythonObject, neural: PythonObject) raises -> PythonObject:
++    var slots = _transformer_fields(mods, tape, context["tape_class"], context["tape_fields"])
++    var hobj = slots["_native_owner"]
++    var owner = hobj.downcast_value_ptr[TransformerPublicTapeOwner]()
++    var fields = neural_block_fields(owner[].block, neural)
++    _ = neural_record_fields(mods, owner[].block, Python.tuple("_native_session", "_runtime_lock"))
++    var lease = OperationLockLease(fields["_runtime_lock"])
++    lease.acquire()
++    mods.released()
++    try:
++        if not owner[].consumed and owner[].session is fields["_native_session"]:
++            transformer_session_tape_discard(owner[].provider, owner[].session, owner[].handle,
++                owner[].token[0], owner[].token[1])
++            mods.released()
++        owner[].consumed = True
++        py_setitem(slots, "_consumed", PythonObject(True))
++        lease.release()
++    except problem:
++        mods.released()
++        lease.release()
++        raise problem
++    _ = hobj
++    return PythonObject(None)
+ 
+ 
+ def transformer_public_call(mut mods: NativeModules, operation: String, values: PythonObject, context: PythonObject, neural: PythonObject) raises -> PythonObject:
+@@ -397,6 +799,16 @@ def transformer_public_call(mut mods: NativeModules, operation: String, values:
+         return transformer_state_init(mods, values[0], values[1], context, neural)
+     if operation == "state_capacity" or operation == "state_keys" or operation == "state_values":
+         return transformer_state_read(mods, values[0], operation, context)
++    if operation == "forward_tape":
++        return transformer_forward_with_tape(mods, values[0], values[1], values[2], values[3], context, neural)
++    if operation == "backward_tape":
++        return transformer_backward_from_tape(mods, values[0], values[1], values[2], context, neural)
++    if operation == "tape_init":
++        return transformer_tape_init(mods, values[0], values[1], context, neural)
++    if operation == "tape_close":
++        return transformer_tape_close(mods, values[0], context, neural)
++    if operation == "tape_reduce":
++        raise Error("TypeError: TransformerForwardTape is a live native owner and cannot be serialized")
+     raise Error("Transformer public operation is not connected: " + operation)
+ 
+ 
+diff --git a/providers/python/transformer_session_tape_pyapi.mojo b/providers/python/transformer_session_tape_pyapi.mojo
+new file mode 100644
+index 0000000000..14f3f0d7f3
+--- /dev/null
++++ b/providers/python/transformer_session_tape_pyapi.mojo
+@@ -0,0 +1,28 @@
++# SPDX-License-Identifier: Apache-2.0
++# Ownership/GIL transport for the budget-aware Transformer SESSION tickets.
++# Inputs, session, table and native four-word report remain retained through
++# the shared descriptor reservation, execution and release boundary.
++from std.python import PythonObject
++from providers.python.neural_descriptor_pyapi import neural_descriptor_reserved_execute
++
++
++def transformer_session_tape_forward(provider: PythonObject, session: PythonObject, handle: Int,
++                                     addresses: List[Int], parameters: List[Int]) raises -> List[Int]:
++    var report = List[Int](length=4, fill=0)
++    var with_report = addresses.copy()
++    with_report.append(Int(report.unsafe_ptr()))
++    _ = neural_descriptor_reserved_execute(provider, session, handle, 36, 37, 38,
++        with_report, parameters, [])
++    return report^
++
++
++def transformer_session_tape_backward(provider: PythonObject, session: PythonObject, handle: Int,
++                                      addresses: List[Int], cookie: Int, epoch: Int) raises:
++    _ = neural_descriptor_reserved_execute(provider, session, handle, 36, 37, 39,
++        addresses, [cookie, epoch], [])
++
++
++def transformer_session_tape_discard(provider: PythonObject, session: PythonObject, handle: Int,
++                                     cookie: Int, epoch: Int) raises:
++    _ = neural_descriptor_reserved_execute(provider, session, handle, 36, 37, 40,
++        [], [cookie, epoch], [])
+diff --git a/python/mojolearn/_native_neural_bridge.py b/python/mojolearn/_native_neural_bridge.py
+index a3a54751d1..3a15a59c7d 100644
+--- a/python/mojolearn/_native_neural_bridge.py
++++ b/python/mojolearn/_native_neural_bridge.py
+@@ -15,9 +15,14 @@ def connect_training(backend, vendor, inference_bindings):
+         "transformer": ("_mojolearn_transformer", (
+             "transformer_vendor", "transformer_numeric_mode", "transformer_backward",
+             "transformer_block_api_v1", "transformer_native_session_handle_v1",
++            "transformer_tape_create_native_v1", "transformer_tape_handle_native_v1",
+             "transformer_session_create", "transformer_session_close",
+-            "transformer_session_backward",
+-            "transformer_arithmetic_profile", "transformer_arithmetic_profile_changed")),
++            "transformer_session_backward", "transformer_session_invalidate_tape",
++            "transformer_session_discard_tape",
++            "transformer_arithmetic_profile", "transformer_arithmetic_profile_changed",
++            "transformer_forward_tape_enabled", "transformer_forward_tape",
++            "transformer_backward_tape", "transformer_close_tape",
++            "transformer_session_forward_tape", "transformer_session_backward_tape")),
+         "mamba": ("_mojolearn_mamba", (
+             "mamba_vendor", "mamba_numeric_mode", "mamba_state_api_v1", "mamba_block_api_v1",
+             "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1",
+diff --git a/python/mojolearn/_transformer_impl.py b/python/mojolearn/_transformer_impl.py
+index 094f5dbad2..8e31851b58 100644
+--- a/python/mojolearn/_transformer_impl.py
++++ b/python/mojolearn/_transformer_impl.py
+@@ -486,9 +486,25 @@ class TransformerState:
+             _native_neural_bridge.CONTEXT)
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`TransformerForwardTape`, the opaque single-use forward ticket.)
++class TransformerForwardTape:
++    """Opaque, single-use native forward ticket returned by a transformer block."""
++
++    def __init__(self, block, session, binding, token, shape, configuration, profile):
++        return _native_neural_bridge.RUNTIME.transformer_public_call(
++            "tape_init", (self, (block, session, binding, token, shape,
++                                 configuration, profile)),
++            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
++
++    def __reduce__(self):
++        return _native_neural_bridge.RUNTIME.transformer_public_call(
++            "tape_reduce", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
++            _native_neural_bridge.CONTEXT)
++
++    def close(self):
++        """Explicitly discard this ticket and its saved native buffers."""
++        return _native_neural_bridge.RUNTIME.transformer_public_call(
++            "tape_close", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
++            _native_neural_bridge.CONTEXT)
+ 
+ 
+ # Profile mojolearn.identical.transformer.fp32.v1 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md),
+@@ -792,10 +808,65 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
+         return _native_neural_bridge.RUNTIME.neural_block_forward(
+             self, x, state, True, None, _native_neural_bridge.CONTEXT)
+ 
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (`TransformerBlock.forward_with_tape` / `backward_from_tape`; `backward` is the
+-    # training path.)
++    # NN32 retains native forward stages; NN31 uses the activation byte budget and optional
++    # replay cost threshold. A budget miss or switches off selects native replay. The budget
++    # covers retained forward stages, excluding input/weight snapshots and transient
++    # forward/backward work. No compilation, identity, quality or timing admission is implied.
++    def forward_with_tape(self, x, *, activation_budget_bytes=536870912,
++                          minimum_replay_ops_per_byte=0):
++        """Training forward that returns ``(output, tape)`` for a later `backward_from_tape`.
++
++        Runs a zero-state forward and keeps what the backward needs. The input and weights
++        are snapshotted, so editing your arrays afterwards does not change the backward. A
++        tape is single-use, cannot be serialized, and is invalidated by any later call on
++        this block. Requires the identical mode and the default float32 block options;
++        otherwise `NotImplementedError`.
++
++        Parameters
++        ----------
++        x : buffer of float32, shape (B, L, d_model)
++            Input activations.
++        activation_budget_bytes : int, default 536870912
++            Bytes of forward activations to keep for the backward; when they do not fit,
++            the backward recomputes the forward instead. Must be >= 0.
++        minimum_replay_ops_per_byte : int, default 0
++            Recompute rather than keep stages whose cost per byte is below this threshold.
++            Must be >= 0.
++
++        Returns
++        -------
++        output : mojolearn.Array of float32, shape (B, L, d_model)
++        tape : object
++            Ticket for `backward_from_tape`.
++        """
++        return _native_neural_bridge.RUNTIME.transformer_public_call(
++            "forward_tape", (self, x, activation_budget_bytes,
++                             minimum_replay_ops_per_byte),
++            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
++
++    def backward_from_tape(self, tape, grad_output):
++        """Gradients for the forward recorded in `tape`.
++
++        Consumes the tape. A tape from another block, an already used tape, or one made
++        before the block's configuration changed raises `ValueError`.
++
++        Parameters
++        ----------
++        tape : object
++            The tape returned by `forward_with_tape`.
++        grad_output : buffer of float32
++            Gradient of the loss with respect to the block output, the output's shape.
++
++        Returns
++        -------
++        dict
++            float32 gradients keyed ``"x"`` plus the nine weight names, each in its
++            tensor's shape.
++        """
++        return _native_neural_bridge.RUNTIME.transformer_public_call(
++            "backward_tape", (self, tape, grad_output),
++            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
++
+     def backward(self, x, grad_output):
+         """Gradients of a zero-state prefill with respect to the input and the weights.
+ 
+@@ -1013,6 +1084,9 @@ _TRANSFORMER_PUBLIC_CONTEXT = {
+     "state_class": TransformerState,
+     "state_fields": ("batch_size", "n_kv_heads", "head_dim", "max_tokens",
+                      "cached_tokens", "window", "k_cache", "v_cache"),
++    "tape_class": TransformerForwardTape,
++    "tape_fields": ("_native_owner", "_block", "_session", "_binding", "_token",
++                    "retained", "stage_bytes", "shape", "profile", "_consumed"),
+     "weight_names": TransformerBlock._W_NAMES,
+     "array_class": _Array,
+     "array_slots": {name: vars(_Array)[name] for name in _Array.__slots__},
+diff --git a/python/mojolearn/_verify_api_neural.py b/python/mojolearn/_verify_api_neural.py
+index a6057929dc..0da0f5e57c 100644
+--- a/python/mojolearn/_verify_api_neural.py
++++ b/python/mojolearn/_verify_api_neural.py
+@@ -52,9 +52,26 @@ def neural_checks(recorder,public,methods):
+                     return state.capacity
+                 return getattr(state,method)()
+             if method=='__call__':return m(x)
+-            # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-            # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-            # (the forward_with_tape / backward_from_tape probes.)
++            if method in ('forward_with_tape','backward_from_tape'):
++                if name=='TransformerBlockInference':
++                    # This documented CPU inference class has no training tape.
++                    # Test its actual public refusal, without claiming backward arithmetic.
++                    if method=='forward_with_tape':
++                        try:m.forward_with_tape(x)
++                        except NotImplementedError as error:
++                            assert 'native tape API' in str(error)
++                            return {'availability':'forward-only inference','numerical_execution':False}
++                    else:
++                        try:m.backward_from_tape(None,np.ones_like(x))
++                        except ValueError as error:
++                            assert 'another block' in str(error)
++                            return {'foreign_tape_refused':True,'numerical_execution':False}
++                    raise AssertionError('inference-only tape admission changed; add numerical fixture')
++                out,tape=m.forward_with_tape(x)
++                try:
++                    return out if method=='forward_with_tape' else m.backward_from_tape(tape,np.full_like(out,.125))
++                finally:
++                    tape.close()
+             if method in ('__getstate__','__setstate__'):
+                 state=m.__getstate__()
+                 restored=object.__new__(cls);restored.__setstate__(state)
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index 53ea4926aa..c86b783908 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -591,6 +591,7 @@ TRAINING_LANE_NAMES = {
+     "mamba3-decode-session": "the resident Mamba-3 decode session",
+     "transformer-decode-session": "the resident Transformer decode session",
+     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
++    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
+     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
+     # variants of families that already had a host path, every one in the
+     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
+@@ -3408,7 +3409,10 @@ FAMILIES = (
+                         # the same entries the `transformer` lane hashes
+                         "transformer-decode-session",
+                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
+-                        "transformer-decode-load-state"),
++                        "transformer-decode-load-state",
++                        # lane verify-coverage-20261024: forward_with_tape,
++                        # backward_from_tape and the tape's close
++                        "transformer-forward-tape"),
+         inference_lanes=(),
+         forest_kinds=(),
+         classes=("TransformerBlock",),
+@@ -3428,7 +3432,8 @@ FAMILIES = (
+             "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
+-            "transformer_session_close",
++            "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
++            "transformer_session_forward_tape", "transformer_session_backward_tape",
+             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+             "transformer_block_api_v1", "transformer_native_session_handle_v1",
+         ),
+@@ -4383,6 +4388,7 @@ PUBLIC_PENDING_LANES = {
+     "gp-lml-theta": "unwatched",
+     "cross-vendor-fold": "unwatched",
+     "transformer-decode-load-state": "unwatched",
++    "transformer-forward-tape": "unwatched",
+     "scaler-fit-transform": "unwatched",
+     "safetensors-widen-f16": "unwatched",
+     "hf-causal-lm-stream": "unwatched",
+diff --git a/python/mojolearn/tests/test_cpu_training_samba.py b/python/mojolearn/tests/test_cpu_training_samba.py
+index 092ebf9605..ba5b95625b 100644
+--- a/python/mojolearn/tests/test_cpu_training_samba.py
++++ b/python/mojolearn/tests/test_cpu_training_samba.py
+@@ -127,9 +127,11 @@ def test_every_entry_samba_reaches_is_on_the_host():
+                 # `transformer_forward_int15`, and a host session under the
+                 # profile is refused by name
+                 | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"}
+-                # the session's fresh forward and backward, each taken only
+-                # behind an `_exports` check
+-                | {"transformer_session_forward_fresh", "transformer_session_backward"},
++                # the retained tape (`transformer_forward_tape_enabled`, absent on
++                # the host, disables it) and the session's fresh forward and
++                # backward, each taken only behind an `_exports` check
++                | {"transformer_forward_tape", "transformer_backward_tape", "transformer_close_tape",
++                   "transformer_session_forward_fresh", "transformer_session_backward"},
+             # The device-resident optimizer pair (`_resident_enabled` takes it
+             # only when the binding exports `_RESIDENT_ENTRIES`; every other
+             # `optimizer_resident_*` call runs on an open pair) and the
+diff --git a/python/mojolearn/tests/test_transformer_public_boundary.py b/python/mojolearn/tests/test_transformer_public_boundary.py
+index 0f2a9d382e..865b0a8d0b 100644
+--- a/python/mojolearn/tests/test_transformer_public_boundary.py
++++ b/python/mojolearn/tests/test_transformer_public_boundary.py
+@@ -106,9 +106,49 @@ def test_state_buffer_protocol_is_not_invoked():
+     assert calls == []
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (the forward_with_tape / backward_from_tape lifecycle, ticket and hook tests.)
++def test_tape_lifecycle_and_gradient_shapes():
++    block = _block()
++    x = np.full((1, 2, 16), .01, dtype=np.float32)
++    y, tape = block.forward_with_tape(x, activation_budget_bytes=0)
++    assert y.shape == x.shape and tape.shape == x.shape
++    with pytest.raises(TypeError):
++        pickle.dumps(tape)
++    gradients = block.backward_from_tape(tape, np.ones_like(x))
++    assert gradients["x"].shape == x.shape
++    assert set(gradients) == {"x", *block._W_NAMES}
++    with pytest.raises(ValueError):
++        block.backward_from_tape(tape, np.ones_like(x))
++    tape.close()
++
++
++def test_tape_close_does_not_discard_newer_ticket():
++    block = _block()
++    x = np.full((1, 2, 16), .01, dtype=np.float32)
++    _, old = block.forward_with_tape(x)
++    _, current = block.forward_with_tape(x)
++    old.close()
++    assert block.backward_from_tape(current, np.ones_like(x))["x"].shape == x.shape
++
++
++def test_tape_rejects_input_and_mutable_model_hooks():
++    block = _block()
++    calls = []
++    class ArrayHook(np.ndarray):
++        @property
++        def shape(self):
++            calls.append("shape")
++            return (1, 2, 16)
++    with pytest.raises(TypeError):
++        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32).view(ArrayHook))
++    assert calls == []
++    class ScalarHook:
++        def __int__(self):
++            calls.append("int")
++            return 16
++    block.d_model = ScalarHook()
++    with pytest.raises(TypeError):
++        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32))
++    assert calls == []
+ 
+ 
+ def test_decode_session_state_roundtrip_and_original_route_bits():
+@@ -196,6 +236,18 @@ def test_decode_rejects_replaced_session_owners():
+         session.discard()
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (the budget-aware tape retention and replay test.)
++def test_budget_aware_tape_retention_and_replay_keep_outputs_and_gradients():
++    block = _block()
++    rng = np.random.default_rng(271)
++    x = rng.normal(0, .01, (1, 2, 16)).astype(np.float32)
++    dy = rng.normal(0, .01, x.shape).astype(np.float32)
++    replay_y, replay = block.forward_with_tape(x, activation_budget_bytes=0)
++    replay_gradients = block.backward_from_tape(replay, dy)
++    retained_y, retained = block.forward_with_tape(x, activation_budget_bytes=536870912)
++    retained_gradients = block.backward_from_tape(retained, dy)
++    assert np.asarray(replay_y).tobytes() == np.asarray(retained_y).tobytes()
++    for name in replay_gradients:
++        assert np.asarray(replay_gradients[name]).tobytes() == np.asarray(retained_gradients[name]).tobytes()
++    # Retention still depends on the established compile-time experiment
++    # policy; the caller budget never promises to override that policy.
++    assert isinstance(retained.retained, bool) and retained.stage_bytes >= 0
+diff --git a/training/neural_attention_owner.mojo b/training/neural_attention_owner.mojo
+new file mode 100644
+index 0000000000..32b1b917e3
+--- /dev/null
++++ b/training/neural_attention_owner.mojo
+@@ -0,0 +1,668 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN31/NN32 native retained-forward and bounded checkpoint components.
++
++SOURCE DRAFT ONLY: no compilation, verification, quality or timing performed.
++The public TransformerBlock tape API now uses BorrowedAttentionTape below.
++Direct ByteTrainer/Samba optimizer ownership remains an optional extension.
++
++The owner MOVES IN a context, weights and RoPE table. It snapshots the input
++on device and owns every forward/backward buffer. It returns a single-use
++owner/generation ticket, never a pointer-based cache guess. Parameter and
++configuration replacement synchronizes and invalidates outstanding tickets.
++A retained A arm calls the actual existing transformer backward on the saved
++LlamaDeviceStages; B discards those stages after forward and recomputes them
++from the owned input snapshot before calling the SAME backward.
++
++Only the default FP32 transformer training profile is supported here. There
++is no dropout, prefix/decode state, changed reduction graph, Python data
++comparison, host tensor arithmetic, graph capture or asynchronous offload.
++The explicit full-prefill restriction prevents guessing how a cache prefix
++or a new option changes replay. Any broader training integration must supply its
++real weight/config mutation hooks and retain model-wide RNG metadata before
++broadening that scope.
++"""
++from std.memory import bitcast
++from std.sys.compile import is_defined
++from max.gpu.host import DeviceBuffer, DeviceContext
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from core.identity_trace import IdentityTrace
++from core.step_phase import step_count_d2d, step_count_device_alloc, step_count_sync
++from transformer.impl.llama.modeling_llama import (
++    LlamaDeviceWeights, LlamaDeviceStages, LlamaDims, LlamaKVCache,
++    LlamaRopeTable, llama_decoder_layer_forward,
++)
++from autograd.kernels.transformer import LlamaBackwardStages
++from autograd.rules_transformer import llama_decoder_layer_backward_autograd
++
++# NN31 (MOJOLEARN_IDN_ACT_RETAIN=2) is the IDENTICAL default since 2026-10-08
++# (lane grid-act-4, grid ge123e6f9: samba-train-step 0.890x, same bits); NN32
++# (=1) stays an arm; -D MOJOLEARN_IDN_ACT_RETAIN_OFF replays.
++# NN32 isolates retention vs replay in one native layer owner. NN31 admits
++# retention by actual retained bytes and replay cost; budget misses replay.
++# Never choose a rule from a dataset, board size or hardware vendor.
++from transformer.experiments.checkpoint_contract import (
++    NN32_RETAIN_FORWARD, NN31_BOUNDED_CHECKPOINTS, attention_checkpoint_retain,
++)
++
++comptime OWNER_EMPTY = 0
++comptime OWNER_FORWARD_READY = 1
++comptime OWNER_GRADIENT_READY = 2
++comptime OWNER_BUSY = 3
++comptime OWNER_FAILED = 4
++comptime OWNER_CLOSED = 5
++comptime CHECKPOINT_REPLAY = 0
++comptime CHECKPOINT_RETAIN = 1
++
++
++@fieldwise_init
++struct AttentionForwardTicket(Copyable, Movable):
++    var session: Int
++    var owner: Int
++    var forward_generation: Int
++    var input_generation: Int
++    var weight_generation: Int
++    var config_generation: Int
++    var budget_generation: Int
++    var retained: Bool
++
++
++@fieldwise_init
++struct CheckpointLease(Copyable, Movable):
++    var number: Int
++    var owner: Int
++    var bytes: Int
++    var replay_operations: Int
++
++
++struct AttentionCheckpointBudget(Movable):
++    """NN31 budget for live retained forward stages, not total device memory.
++
++    `limit_bytes` covers all explicit DeviceBuffers of each retained
++    LlamaDeviceStages, including its retained GEMM workspace. Input snapshots,
++    weights, backward buffers, contexts and shared process caches must be
++    budgeted separately by the complete model. The transient current forward
++    is also separate: we count the allocated result before deciding to keep
++    it, so the policy never claims to prevent a forward allocation failure.
++
++    Calls arrive in model layer order. Eligible layers reserve bytes until
++    the bound is reached; later ones replay. `minimum_ops_per_byte` can make
++    low-recompute-cost layers replay even when room remains. All inputs are
++    byte/cost quantities with neighbor-shape meaning. No timings or board
++    constants are encoded. For a deliberate layer group, give every owner
++    the same group policy and retain the group's saved inputs independently.
++    """
++    var session: Int
++    var generation: Int
++    var limit_bytes: Int
++    var live_bytes: Int
++    var peak_bytes: Int
++    var minimum_ops_per_byte: Int
++    var next_owner: Int
++    var next_lease: Int
++    var leases: List[CheckpointLease]
++    var outstanding_owners: List[Int]
++
++    def __init__(out self, session: Int, limit_bytes: Int,
++                 minimum_ops_per_byte: Int = 0) raises:
++        if session <= 0 or limit_bytes < 0 or minimum_ops_per_byte < 0:
++            raise Error("NN31: positive unique session and nonnegative budget/cost required")
++        self.session = session
++        self.generation = 1
++        self.limit_bytes = limit_bytes
++        self.live_bytes = 0
++        self.peak_bytes = 0
++        self.minimum_ops_per_byte = minimum_ops_per_byte
++        self.next_owner = 1
++        self.next_lease = 1
++        self.leases = List[CheckpointLease]()
++        self.outstanding_owners = List[Int]()
++
++    def register_owner(mut self) -> Int:
++        var owner = self.next_owner
++        self.next_owner += 1
++        return owner
++
++    def begin_forward(mut self, owner: Int) raises:
++        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
++            if self.outstanding_owners[i] == owner:
++                raise Error("NN31: owner already has an outstanding forward")
++        self.outstanding_owners.append(owner)
++
++    def end_forward(mut self, owner: Int) raises:
++        for i in range(len(self.outstanding_owners)):  # small-loop(outstanding_owners: open forward owners): walks owner handles, not data
++            if self.outstanding_owners[i] == owner:
++                _ = self.outstanding_owners.pop(i)
++                return
++        raise Error("NN31: forward was already consumed or not registered")
++
++    def try_reserve(mut self, owner: Int, bytes: Int,
++                    replay_operations: Int, apply_cost_policy: Bool) raises -> Int:
++        if owner <= 0 or bytes <= 0 or replay_operations < 0:
++            raise Error("NN31: invalid retained-state reservation")
++        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
++            if self.leases[i].owner == owner:
++                raise Error("NN31: owner already holds a retained forward")
++        if bytes > self.limit_bytes - self.live_bytes:
++            return 0
++        if apply_cost_policy and self.minimum_ops_per_byte > 0:
++            # Division avoids multiplying a potentially large operation
++            # estimate by a byte count; this is conservative admission.
++            if replay_operations // bytes < self.minimum_ops_per_byte:
++                return 0
++        var number = self.next_lease
++        self.next_lease += 1
++        self.leases.append(CheckpointLease(number, owner, bytes, replay_operations))
++        self.live_bytes += bytes
++        self.peak_bytes = max(self.peak_bytes, self.live_bytes)
++        return number
++
++    def release(mut self, owner: Int, lease: Int) raises:
++        if lease == 0:
++            return
++        for i in range(len(self.leases)):  # small-loop(leases: retained-state leases): walks lease records, not data
++            if self.leases[i].number == lease:
++                if self.leases[i].owner != owner:
++                    raise Error("NN31: lease belongs to another owner")
++                var released = self.leases.pop(i)
++                self.live_bytes -= released.bytes
++                return
++        raise Error("NN31: unknown or already released lease")
++
++    def reset(mut self, limit_bytes: Int) raises:
++        if len(self.leases) != 0 or self.live_bytes != 0 or len(self.outstanding_owners) != 0:
++            raise Error("NN31: cannot reset budget while forward tickets are live")
++        if limit_bytes < 0:
++            raise Error("NN31: negative budget")
++        self.limit_bytes = limit_bytes
++        self.peak_bytes = 0
++        self.generation += 1
++
++
++def _forward_bytes(st: LlamaDeviceStages) -> Int:
++    """Actual retained explicit allocation lengths, after route-dependent growth.
++
++    These are distinct owned forward buffers in the default FP32 profile.
++    There are no backwards' aliased residual views here. Persistent shared
++    attention process caches are not owned by this stage and are excluded.
++    """
++    var cells = (
++        len(st.norm1_sumsq) + len(st.norm1_out) + len(st.q_proj)
++        + len(st.k_proj) + len(st.v_proj) + len(st.q_rope) + len(st.k_rope)
++        + len(st.k_cache) + len(st.v_cache) + len(st.scores) + len(st.masked)
++        + len(st.amax) + len(st.aexp) + len(st.denom) + len(st.weights)
++        + len(st.ctxv) + len(st.o_proj) + len(st.residual1)
++        + len(st.norm2_sumsq) + len(st.norm2_out) + len(st.gate_proj)
++        + len(st.up_proj) + len(st.silu_out) + len(st.gated)
++        + len(st.down_proj) + len(st.residual2) + len(st.qbh)
++        + len(st.kbh) + len(st.sbh) + len(st.qk_sumsq)
++        + len(st.gemm_workspace.buffer)
++    )
++    return 4 * cells
++
++
++def attention_replay_operation_estimate(b: Int, l: Int, dims: LlamaDims) -> Int:
++    """Shape-derived FP operation cost model, not a benchmark threshold.
++
++    Counts seven projection GEMMs and dense QK/PV multiply-add work. A
++    window/fused-mask route may do less than the dense bound, so the native
++    component uses full-causal input only and declares this a cost estimate.
++    Transcendentals/normalization are omitted rather than given fake prices.
++    """
++    var m = b * l
++    var dm = dims.d_model
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var it = dims.intermediate
++    var projections = 2 * m * (dm * (2 * qw + 2 * kw) + 3 * dm * it)
++    var attention = 4 * b * dims.n_heads * l * l * dims.head_dim
++    return projections + attention
++
++
++def _same_dims(a: LlamaDims, b: LlamaDims) -> Bool:
++    return (a.d_model == b.d_model and a.n_heads == b.n_heads
++            and a.n_kv == b.n_kv and a.head_dim == b.head_dim
++            and a.intermediate == b.intermediate)
++
++
++def _validate_profile(w: LlamaDeviceWeights, rope: LlamaRopeTable, l: Int) raises:
++    w.dims.validate()
++    if not w.opts.is_default() or w.int15:
++        raise Error("NN31/NN32: only the default FP32 transformer training profile is defined")
++    if rope.p_max < l or rope.rope_dim != w.dims.head_dim:
++        raise Error("NN31/NN32: rotary table does not cover the full prefill")
++    if bitcast[DType.uint32](rope.theta) != bitcast[DType.uint32](w.opts.rope_theta):
++        raise Error("NN31/NN32: rotary configuration differs from the owned weights")
++
++
++def _copy_parameter_piece(ctx: DeviceContext,
++                          mut dst: DeviceBuffer[DType.float32],
++                          mut src: DeviceBuffer[DType.float32], first: Int) raises:
++    var target = dst.create_sub_buffer[DType.float32](first, len(src))
++    step_count_d2d()
++    ctx.enqueue_copy(dst_buf=target, src_buf=src)
++    # A sub-buffer owner may be released only after its enqueued write.
++    step_count_sync()
++    ctx.synchronize()
++
++
++struct NeuralAttentionOwner(Movable):
++    """Native single-live-forward owner usable by a future Samba/LM session.
++
++    Construction transfers ownership of context/weights/RoPE. This internal
++    API does not export mutable weight or saved-stage views. Callers must
++    replace weights through replace_weights, not mutate public struct fields
++    behind the owner. A complete binding must enforce this ownership rule.
++    All boundary copies finish before return, making source/output lifetime
++    explicit. Later stream-aware integration can remove waits only with an
++    explicit native event/lifetime contract and supported Modular APIs.
++    """
++    var context: DeviceContext
++    var weights: LlamaDeviceWeights
++    var rope: LlamaRopeTable
++    var cache: LlamaKVCache
++    var forward: Optional[LlamaDeviceStages]
++    var backward: LlamaBackwardStages
++    var input: DeviceBuffer[DType.float32]
++    var cotangent: DeviceBuffer[DType.float32]
++    var dims: LlamaDims
++    var b: Int
++    var l: Int
++    var session: Int
++    var owner: Int
++    var budget_generation: Int
++    var forward_generation: Int
++    var input_generation: Int
++    var weight_generation: Int
++    var config_generation: Int
++    var lease: Int
++    var registered_forward: Bool
++    var state: Int
++    var last_decision: Int
++    var last_retained_bytes: Int
++    var retained_forwards: Int
++    var replayed_forwards: Int
++
++    def __init__(out self, var ctx: DeviceContext,
++                 var weights: LlamaDeviceWeights, var rope: LlamaRopeTable,
++                 b: Int, l: Int, mut budget: AttentionCheckpointBudget) raises:
++        if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++            raise Error("NN31/NN32 owner is an IDENTICAL-only component")
++        if b <= 0 or l <= 0:
++            raise Error("NN31/NN32: positive full-prefill dimensions required")
++        _validate_profile(weights, rope, l)
++        self.dims = weights.dims.copy()
++        self.b = b
++        self.l = l
++        self.session = budget.session
++        self.owner = budget.register_owner()
++        self.budget_generation = budget.generation
++        self.forward_generation = 0
++        self.input_generation = 0
++        self.weight_generation = 1
++        self.config_generation = 1
++        self.lease = 0
++        self.registered_forward = False
++        self.state = OWNER_EMPTY
++        self.last_decision = CHECKPOINT_REPLAY
++        self.last_retained_bytes = 0
++        self.retained_forwards = 0
++        self.replayed_forwards = 0
++        self.forward = None
++        self.cache = LlamaKVCache(ctx, b, self.dims, l)
++        self.backward = LlamaBackwardStages(ctx, b, l, l, self.dims, lean=True)
++        step_count_device_alloc()
++        self.input = ctx.enqueue_create_buffer[DType.float32](b * l * self.dims.d_model)
++        step_count_device_alloc()
++        self.cotangent = ctx.enqueue_create_buffer[DType.float32](b * l * self.dims.d_model)
++        step_count_sync()
++        ctx.synchronize()
++        self.weights = weights^
++        self.rope = rope^
++        self.context = ctx^
++
++    def _require_budget(self, budget: AttentionCheckpointBudget) raises:
++        if budget.session != self.session:
++            raise Error("NN31/NN32: owner belongs to another budget/session")
++        if budget.generation != self.budget_generation:
++            raise Error("NN31/NN32: budget generation changed; explicitly rebind an empty owner")
++
++    def _require_live(self) raises:
++        if self.state == OWNER_FAILED or self.state == OWNER_CLOSED or self.state == OWNER_BUSY:
++            raise Error("NN31/NN32: owner is failed, closed or already executing")
++
++    def _require_ticket(self, ticket: AttentionForwardTicket,
++                        budget: AttentionCheckpointBudget) raises:
++        self._require_budget(budget)
++        self._require_live()
++        if self.state != OWNER_FORWARD_READY:
++            raise Error("NN32: backward requires an unconsumed forward ticket")
++        if (ticket.session != self.session or ticket.owner != self.owner
++                or ticket.forward_generation != self.forward_generation
++                or ticket.input_generation != self.input_generation
++                or ticket.weight_generation != self.weight_generation
++                or ticket.config_generation != self.config_generation
++                or ticket.budget_generation != self.budget_generation
++                or ticket.retained != (self.last_decision == CHECKPOINT_RETAIN)):
++            raise Error("NN32: stale or foreign forward ticket")
++
++    def invalidate(mut self, mut budget: AttentionCheckpointBudget) raises:
++        """Synchronize before dropping state; all previous tickets become stale."""
++        self._require_budget(budget)
++        self._require_live()
++        step_count_sync()
++        self.context.synchronize()
++        budget.release(self.owner, self.lease)
++        self.lease = 0
++        if self.registered_forward:
++            budget.end_forward(self.owner)
++            self.registered_forward = False
++        self.forward = None
++        self.forward_generation += 1
++        self.last_retained_bytes = 0
++        self.state = OWNER_EMPTY
++
++    def rebind_budget(mut self, budget: AttentionCheckpointBudget) raises:
++        self._require_live()
++        if budget.session != self.session or self.state == OWNER_FORWARD_READY or self.lease != 0:
++            raise Error("NN31: rebind requires the same session and no live forward")
++        self.budget_generation = budget.generation
++
++    def replace_weights(mut self, var replacement: LlamaDeviceWeights,
++                        mut budget: AttentionCheckpointBudget) raises:
++        """Replacement must be built on this owner's context before transfer."""
++        _validate_profile(replacement, self.rope, self.l)
++        if not _same_dims(replacement.dims, self.dims):
++            raise Error("NN32: changed model dimensions require a new native owner")
++        self.invalidate(budget)
++        self.weights = replacement^
++        self.weight_generation += 1
++
++    def replace_rope(mut self, var replacement: LlamaRopeTable,
++                     mut budget: AttentionCheckpointBudget) raises:
++        _validate_profile(self.weights, replacement, self.l)
++        self.invalidate(budget)
++        self.rope = replacement^
++        self.config_generation += 1
++
++    def _run_forward(mut self, mut trace: IdentityTrace, prefix: String) raises:
++        self.forward = Optional[LlamaDeviceStages](
++            LlamaDeviceStages(self.context, self.b, self.l, self.l, self.dims, lean=True)
++        )
++        self.cache.s = 0
++        llama_decoder_layer_forward(
++            self.context, self.forward.value(), self.cache, self.rope,
++            self.weights, self.input, self.b, self.l, 0, trace, prefix,
++            forward_only=False,
++        )
++        step_count_sync()
++        self.context.synchronize()
++
++    def _fail(mut self, mut budget: AttentionCheckpointBudget) raises:
++        self.state = OWNER_FAILED
++        # Keep allocations alive if synchronization itself fails. An owner
++        # in FAILED state never accepts another numerical call.
++        step_count_sync()
++        self.context.synchronize()
++        budget.release(self.owner, self.lease)
++        self.lease = 0
++        if self.registered_forward:
++            budget.end_forward(self.owner)
++            self.registered_forward = False
++        self.forward = None
++        self.forward_generation += 1
++
++    def forward_into(mut self, source_ctx: DeviceContext,
++                     mut source: DeviceBuffer[DType.float32],
++                     mut output: DeviceBuffer[DType.float32],
++                     source_generation: Int, mut budget: AttentionCheckpointBudget,
++                     mut trace: IdentityTrace, prefix: String,
++                     deliberate_checkpoint: Bool = False) raises -> AttentionForwardTicket:
++        self._require_live()
++        self._require_budget(budget)
++        if self.state == OWNER_FORWARD_READY:
++            raise Error("NN32: consume or invalidate the previous forward before overwriting it")
++        var n = self.b * self.l * self.dims.d_model
++        if len(source) != n or len(output) != n or source_generation < 0:
++            raise Error("NN32: input/output shape or generation mismatch")
++        budget.begin_forward(self.owner)
++        self.registered_forward = True
++        self.state = OWNER_BUSY
++        self.forward_generation += 1
++        self.input_generation = source_generation
++        self.last_retained_bytes = 0
++        self.last_decision = CHECKPOINT_REPLAY
++        try:
++            # Snapshot actual input bytes; input-generation equality is not
++            # used to infer that externally mutable data remained unchanged.
++            step_count_sync()
++            source_ctx.synchronize()
++            step_count_d2d()
++            source.enqueue_copy_to(self.input)
++            step_count_sync()
++            source_ctx.synchronize()
++            step_count_sync()
++            self.context.synchronize()
++            self._run_forward(trace, prefix)
++            step_count_d2d()
++            self.forward.value().residual2.enqueue_copy_to(output)
++            step_count_sync()
++            self.context.synchronize()
++            step_count_sync()
++            source_ctx.synchronize()
++            comptime if NN32_RETAIN_FORWARD or NN31_BOUNDED_CHECKPOINTS:
++                if not deliberate_checkpoint:
++                    var bytes = _forward_bytes(self.forward.value())
++                    var cost = attention_replay_operation_estimate(self.b, self.l, self.dims)
++                    self.lease = budget.try_reserve(self.owner, bytes, cost, NN31_BOUNDED_CHECKPOINTS)
++                    if self.lease != 0:
++                        self.last_decision = CHECKPOINT_RETAIN
++                        self.last_retained_bytes = bytes
++                        self.retained_forwards += 1
++                    elif not NN31_BOUNDED_CHECKPOINTS:
++                        # NN32's isolated retention A must not silently run B.
++                        raise Error("NN32: retention arm lacks the declared forward-state budget")
++            if self.last_decision == CHECKPOINT_REPLAY:
++                # All consumers have completed before releasing the real
++                # forward buffers. This is a memory-lifetime change, not a flag.
++                self.forward = None
++            self.state = OWNER_FORWARD_READY
++            return AttentionForwardTicket(
++                self.session, self.owner, self.forward_generation,
++                self.input_generation, self.weight_generation,
++                self.config_generation, self.budget_generation,
++                self.last_decision == CHECKPOINT_RETAIN,
++            )
++        except error:
++            self._fail(budget)
++            raise error
++
++    def backward_into(mut self, ticket: AttentionForwardTicket,
++                      source_ctx: DeviceContext,
++                      mut cotangent: DeviceBuffer[DType.float32],
++                      mut d_input: DeviceBuffer[DType.float32],
++                      mut budget: AttentionCheckpointBudget,
++                      mut trace: IdentityTrace, prefix: String) raises:
++        self._require_ticket(ticket, budget)
++        var n = self.b * self.l * self.dims.d_model
++        if len(cotangent) != n or len(d_input) != n:
++            raise Error("NN32: cotangent/input-gradient shape mismatch")
++        # Consumed BEFORE enqueuing: failure cannot replay a partial backward.
++        self.state = OWNER_BUSY
++        try:
++            step_count_sync()
++            source_ctx.synchronize()
++            step_count_d2d()
++            cotangent.enqueue_copy_to(self.cotangent)
++            step_count_sync()
++            source_ctx.synchronize()
++            step_count_sync()
++            self.context.synchronize()
++            if not self.forward:
++                # Same input snapshot, parameter owner, position table and
++                # forward graph. No loss/RNG/optimizer work is repeated here.
++                var replay_trace = IdentityTrace.disabled()
++                self._run_forward(replay_trace, prefix + ".checkpoint_replay")
++                self.replayed_forwards += 1
++            llama_decoder_layer_backward_autograd(
++                self.context, self.backward, self.forward.value(), self.weights,
++                self.rope.cos, self.rope.sin, self.input, self.cotangent,
++                self.b, self.l, 0, trace, prefix,
++            )
++            step_count_sync()
++            self.context.synchronize()
++            step_count_d2d()
++            self.backward.d_x.enqueue_copy_to(d_input)
++            step_count_sync()
++            self.context.synchronize()
++            step_count_sync()
++            source_ctx.synchronize()
++            budget.release(self.owner, self.lease)
++            self.lease = 0
++            budget.end_forward(self.owner)
++            self.registered_forward = False
++            self.forward = None
++            self.state = OWNER_GRADIENT_READY
++        except error:
++            self._fail(budget)
++            raise error
++
++    def parameter_gradient_elements(self) -> Int:
++        return (len(self.backward.dw_norm1) + len(self.backward.dw_q)
++                + len(self.backward.dw_k) + len(self.backward.dw_v)
++                + len(self.backward.dw_o) + len(self.backward.dw_norm2)
++                + len(self.backward.dw_gate) + len(self.backward.dw_up)
++                + len(self.backward.dw_down))
++
++    def copy_parameter_gradients(mut self, mut output: DeviceBuffer[DType.float32]) raises:
++        """Owned-context output in norm1,q,k,v,o,norm2,gate,up,down order."""
++        self._require_live()
++        if self.state != OWNER_GRADIENT_READY or len(output) != self.parameter_gradient_elements():
++            raise Error("NN32: fresh gradients and exact canonical output length required")
++        var first = 0
++        _copy_parameter_piece(self.context, output, self.backward.dw_norm1, first)
++        first += len(self.backward.dw_norm1)
++        _copy_parameter_piece(self.context, output, self.backward.dw_q, first)
++        first += len(self.backward.dw_q)
++        _copy_parameter_piece(self.context, output, self.backward.dw_k, first)
++        first += len(self.backward.dw_k)
++        _copy_parameter_piece(self.context, output, self.backward.dw_v, first)
++        first += len(self.backward.dw_v)
++        _copy_parameter_piece(self.context, output, self.backward.dw_o, first)
++        first += len(self.backward.dw_o)
++        _copy_parameter_piece(self.context, output, self.backward.dw_norm2, first)
++        first += len(self.backward.dw_norm2)
++        _copy_parameter_piece(self.context, output, self.backward.dw_gate, first)
++        first += len(self.backward.dw_gate)
++        _copy_parameter_piece(self.context, output, self.backward.dw_up, first)
++        first += len(self.backward.dw_up)
++        _copy_parameter_piece(self.context, output, self.backward.dw_down, first)
++
++    def abort(mut self, mut budget: AttentionCheckpointBudget) raises:
++        """Retry cleanup after a failed call; never make that owner reusable."""
++        self._require_budget(budget)
++        step_count_sync()
++        self.context.synchronize()
++        budget.release(self.owner, self.lease)
++        self.lease = 0
++        if self.registered_forward:
++            budget.end_forward(self.owner)
++            self.registered_forward = False
++        self.forward = None
++        self.forward_generation += 1
++        self.state = OWNER_CLOSED
++
++    def close(mut self, mut budget: AttentionCheckpointBudget) raises:
++        self.invalidate(budget)
++        self.state = OWNER_CLOSED
++
++
++struct BorrowedAttentionTape(Movable):
++    """Actual public-session tape; borrows context/weights only during calls.
++
++    The binding owns the context and uploaded weight snapshot. It invalidates
++    this tape BEFORE any weight/config/session operation. No saved host or
++    Python pointers exist: input, rotary table, cache and stages are owned.
++    One epoch labels forward/input/weight/config generations; backward checks
++    each and consumes the ticket before enqueueing work. Failure is terminal.
++    """
++    var dims: LlamaDims
++    var b: Int
++    var l: Int
++    var window: Int
++    var forward_generation: Int
++    var input_generation: Int
++    var weight_generation: Int
++    var config_generation: Int
++    var live: Bool
++    var retained: Bool
++    var retained_bytes: Int
++    var input: DeviceBuffer[DType.float32]
++    var rope: LlamaRopeTable
++    var cache: LlamaKVCache
++    var stages: Optional[LlamaDeviceStages]
++
++    def __init__(out self, ctx: DeviceContext, mut w: LlamaDeviceWeights,
++                 var input: DeviceBuffer[DType.float32], b: Int, l: Int,
++                 window: Int, generation: Int) raises:
++        if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or b <= 0 or l <= 0 or window < 0:
++            raise Error("NN31/NN32 tape requires IDENTICAL and positive full-prefill shape")
++        if not w.opts.is_default() or w.int15:
++            raise Error("NN31/NN32 tape requires default FP32 transformer options")
++        if len(input) != b*l*w.dims.d_model or generation <= 0:
++            raise Error("NN31/NN32 tape input shape or generation mismatch")
++        self.dims = w.dims.copy()
++        self.b = b
++        self.l = l
++        self.window = window
++        self.forward_generation = generation
++        self.input_generation = generation
++        self.weight_generation = generation
++        self.config_generation = generation
++        self.live = True
++        self.retained = False
++        self.retained_bytes = 0
++        self.input = input^
++        self.rope = LlamaRopeTable(ctx,self.dims,w.opts,l)
++        self.cache = LlamaKVCache(ctx,b,self.dims,l,window,w.opts.max_positions)
++        self.stages = None
++        self.replay(ctx,w)
++
++    def replay(mut self, ctx: DeviceContext, mut w: LlamaDeviceWeights) raises:
++        self.cache.s = 0
++        self.cache.k.enqueue_fill(Float32(0.0))
++        self.cache.v.enqueue_fill(Float32(0.0))
++        self.stages = LlamaDeviceStages(ctx,self.b,self.l,self.l,self.dims,self.window,lean=True)
++        var trace = IdentityTrace.disabled()
++        llama_decoder_layer_forward(ctx,self.stages.value(),self.cache,self.rope,
++            w,self.input,self.b,self.l,0,trace,String("tape"),forward_only=False)
++        ctx.synchronize()
++
++    def seal(mut self, ctx: DeviceContext, budget: Int, minimum_ops_per_byte: Int) raises:
++        if budget < 0 or minimum_ops_per_byte < 0:
++            raise Error("NN31 tape budget and cost threshold must be nonnegative")
++        self.retained_bytes = _forward_bytes(self.stages.value())
++        self.retained = attention_checkpoint_retain(self.retained_bytes,budget,
++            attention_replay_operation_estimate(self.b,self.l,self.dims),minimum_ops_per_byte)
++        ctx.synchronize()
++        if not self.retained:
++            self.stages = None
++            ctx.synchronize()
++
++    def backward_into(mut self, ctx: DeviceContext, mut w: LlamaDeviceWeights,
++                      mut bst: LlamaBackwardStages, mut dy: DeviceBuffer[DType.float32],
++                      generation: Int, input_generation: Int,
++                      weight_generation: Int, config_generation: Int) raises:
++        if (not self.live or generation != self.forward_generation
++                or input_generation != self.input_generation
++                or weight_generation != self.weight_generation
++                or config_generation != self.config_generation):
++            raise Error("NN31/NN32 stale, foreign or already consumed forward tape")
++        self.live = False
++        if not self.stages:
++            self.replay(ctx,w)
++        var trace = IdentityTrace.disabled()
++        llama_decoder_layer_backward_autograd(ctx,bst,self.stages.value(),w,
++            self.rope.cos,self.rope.sin,self.input,dy,self.b,self.l,0,trace,String("tape.bwd"))
++        ctx.synchronize()
++        self.stages = None
++        ctx.synchronize()
+diff --git a/training/neural_identical_experiments.mojo b/training/neural_identical_experiments.mojo
+index 52e493167d..a7a12fa2fc 100644
+--- a/training/neural_identical_experiments.mojo
++++ b/training/neural_identical_experiments.mojo
+@@ -79,12 +79,9 @@ comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and (IDN_TRAIN_SCRATCH_ARM == 1 o
+ # NI34: the existing explicit config stays supported; this opt-in chooses it
+ # for default-constructed byte configs and enables compatible Samba callers.
+ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
+-# NI36/NI48: immutable native forward tapes, consumed exactly once. Arm 3 of
+-# MOJOLEARN_IDN_ACT_RETAIN now reaches only the Mamba-3 tape
+-# (mamba/impl/mamba_shell_impl.mojo reads the define itself).
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`IDN_SAMBA_FORWARD_TAPE`, the transformer half of arm 3.)
++# NI36/NI48: immutable native forward tapes, consumed exactly once.
++# Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
++comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3
+ 
+ # NI20 / MOJOLEARN_IDN_ATTN_SOFTMAX: both arms are gone and the define is refused
+ # (arm 1, the NN20 summary tree, deleted 2026-10-08, grid ge123e6f9, recoverable at
+diff --git a/transformer/host/attention_tape.mojo b/transformer/host/attention_tape.mojo
+new file mode 100644
+index 0000000000..6a08a12e33
+--- /dev/null
++++ b/transformer/host/attention_tape.mojo
+@@ -0,0 +1,106 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NN31/NN32 CPU tape: native immutable input/weight snapshots and real VJP.
++
++Host uses the same retention policy and arithmetic profile as device sessions.
++CPU storage differs, so a byte budget may select replay on only one column;
++retention/replay both invoke that column's same forward and backward graph.
++"""
++from transformer.checks.transformer_fixture import TransformerWeights, ScorePlant
++from transformer.checks.transformer_oracle import (
++    TransformerStages, TransformerKVCache, RopeTable, build_rope_table,
++    transformer_block_oracle,
++)
++from transformer.checks.transformer_backward_oracle import transformer_block_backward_oracle
++from transformer.experiments.checkpoint_contract import attention_checkpoint_retain
++
++
++def host_attention_stage_bytes(st: TransformerStages) -> Int:
++    return 4 * (len(st.input_x)+len(st.norm1_sumsq)+len(st.norm1_out)
++        +len(st.q_proj_out)+len(st.k_proj_out)+len(st.v_proj_out)
++        +len(st.rope_inv_freq)+len(st.rope_cos)+len(st.rope_sin)
++        +len(st.q_rope_out)+len(st.k_rope_out)+len(st.kv_k_cache)+len(st.kv_v_cache)
++        +len(st.attn_scores)+len(st.attn_masked)+len(st.attn_max)+len(st.attn_exp)
++        +len(st.attn_denom)+len(st.attn_weights)+len(st.attn_ctx)+len(st.o_proj_out)
++        +len(st.residual1_out)+len(st.norm2_sumsq)+len(st.norm2_out)+len(st.gate_proj_out)
++        +len(st.up_proj_out)+len(st.silu_out)+len(st.mlp_gated)
++        +len(st.down_proj_out)+len(st.residual2_out))
++
++
++struct HostAttentionTape(Movable):
++    var weights: TransformerWeights
++    var input: List[Float32]
++    var rope: RopeTable
++    var stages: Optional[TransformerStages]
++    var b: Int
++    var l: Int
++    var window: Int
++    var forward_generation: Int
++    var input_generation: Int
++    var weight_generation: Int
++    var config_generation: Int
++    var live: Bool
++    var retained: Bool
++    var retained_bytes: Int
++
++    def __init__(out self,var weights: TransformerWeights,var input: List[Float32],
++                 b: Int,l: Int,window: Int,generation: Int) raises:
++        if not weights.opts.is_default() or b <= 0 or l <= 0 or window < 0 or generation <= 0:
++            raise Error("transformer tape: default FP32 positive full-prefill shape required")
++        if len(input) != b*l*weights.dims.d_model:
++            raise Error("transformer tape: input shape mismatch")
++        self.rope = build_rope_table(weights.dims)
++        self.weights = weights^
++        self.input = input^
++        self.b = b
++        self.l = l
++        self.window = window
++        self.forward_generation = generation
++        self.input_generation = generation
++        self.weight_generation = generation
++        self.config_generation = generation
++        self.live = True
++        self.retained = False
++        self.retained_bytes = 0
++        self.stages = None
++        self.replay()
++
++    def replay(mut self) raises:
++        var cache = TransformerKVCache(self.b,self.weights.dims,self.l,self.window)
++        self.stages = transformer_block_oracle(self.weights,self.input,self.b,self.l,
++            cache,self.rope,ScorePlant.none())
++
++    def seal(mut self,budget: Int,minimum_ops_per_byte: Int) raises:
++        if budget < 0 or minimum_ops_per_byte < 0:
++            raise Error("transformer tape: negative activation budget/cost")
++        self.retained_bytes = host_attention_stage_bytes(self.stages.value())
++        var d = self.weights.dims.copy()
++        var m = self.b*self.l
++        var operations = 2*m*(d.d_model*(2*d.q_width()+2*d.kv_width())+3*d.d_model*d.intermediate)
++        operations += 4*self.b*d.n_heads*self.l*self.l*d.head_dim
++        self.retained = attention_checkpoint_retain(self.retained_bytes,budget,operations,minimum_ops_per_byte)
++        if not self.retained:
++            self.stages = None
++
++    def backward(mut self,dy: List[Float32],generation: Int) raises -> List[List[Float32]]:
++        if (not self.live or generation != self.forward_generation
++                or generation != self.input_generation or generation != self.weight_generation
++                or generation != self.config_generation):
++            raise Error("transformer tape: stale, foreign or already consumed ticket")
++        self.live = False
++        if not self.stages:
++            self.replay()
++        var st = transformer_block_backward_oracle(self.weights,self.stages.value(),dy,
++            self.b,self.l,0,self.rope,self.window)
++        var gradients = List[List[Float32]]()
++        gradients.append(st.d_x.copy())
++        gradients.append(st.dw_norm1.copy())
++        gradients.append(st.dw_norm2.copy())
++        gradients.append(st.dw_q.copy())
++        gradients.append(st.dw_k.copy())
++        gradients.append(st.dw_v.copy())
++        gradients.append(st.dw_o.copy())
++        gradients.append(st.dw_gate.copy())
++        gradients.append(st.dw_up.copy())
++        gradients.append(st.dw_down.copy())
++        self.stages = None
++        return gradients^
+diff --git a/transformer/host/native_block_dispatch.mojo b/transformer/host/native_block_dispatch.mojo
+index 43b7df1387..300ed90e28 100644
+--- a/transformer/host/native_block_dispatch.mojo
++++ b/transformer/host/native_block_dispatch.mojo
+@@ -6,21 +6,25 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
+ from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+ from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
+ from transformer.transformer_host_binding_impl import _run_forward, _backward_run, HostTransformerSession
++from transformer.host.session_tape_dispatch import transformer_host_session_tape_operation
+ 
+ 
+ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+     if len(f) != 0:
+         raise Error("Transformer host provider: unexpected floating scalars")
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (the session-ticket ops 36..40 and the invalidate-tape op 12.)
+-    if op == 13:
++    # Append-only budget-aware session ticket transport; existing ops retain
++    # their numerical owners, including the separate inference-host routes.
++    if op >= 36 and op < 41:
++        return transformer_host_session_tape_operation(op - 36, a, p)
++    if op == 12 or op == 13:
+         if len(p) != 1 or p[0] == 0 or len(a) != 0:
+-            raise Error("transformer session: invalid administration descriptor")
++            raise Error("transformer tape: invalid administration descriptor")
+         var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=p[0])
+-        if owner[].busy:
+-            raise Error("transformer session: session is busy or closed")
+-        owner[].closed = True
++        if owner[].busy or (op == 12 and owner[].closed):
++            raise Error("transformer tape: session is busy or closed")
++        owner[].invalidate_tape()
++        if op == 13:
++            owner[].closed = True
+         return 0
+     if op == 33:
+         if (len(a) != 13 and len(a) != 13 + BLOCK_OPTION_ADDRS) or (len(p) != 10 and len(p) != 10 + BLOCK_OPTION_PARAMS):
+@@ -66,7 +70,7 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
+ def transformer_host_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                           result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+     try:
+-        if op < 0 or op >= 36 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
++        if op < 0 or op >= 41 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+             raise Error("transformer host provider: invalid descriptor span or operation")
+         var a = native_descriptor_words(aa, na)
+         var p = native_descriptor_words(pp, np)
+diff --git a/transformer/host/session_tape_dispatch.mojo b/transformer/host/session_tape_dispatch.mojo
+new file mode 100644
+index 0000000000..23c510ecdb
+--- /dev/null
++++ b/transformer/host/session_tape_dispatch.mojo
+@@ -0,0 +1,78 @@
++# SPDX-License-Identifier: Apache-2.0
++# CPU counterpart of the existing budget-aware SESSION ticket route. These
++# append-only block operations preserve HostAttentionTape.seal/replay and the
++# original invalidate-on-failure behavior; no standalone-tape substitution.
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from transformer.transformer_host_binding_impl import (
++    HostTransformerSession, _session_forward_tape_run, _session_backward_tape_run,
++)
++
++
++def transformer_host_session_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
++    if op < 0 or op > 4 or len(words) < 1 or words[0] == 0:
++        raise Error("transformer host session tape: invalid native descriptor")
++    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=words[0])
++    if op == 0 or op == 1:
++        if len(a) != 0 or len(words) != 1:
++            raise Error("transformer host session tape: reservation requires only its owner")
++        if op == 0:
++            if owner[].busy:
++                raise Error("transformer tape: session is busy")
++            # Closed-ticket discard remains an admitted no-op. Forward and
++            # backward reject closed owners independently after reservation.
++            owner[].busy = True
++        else:
++            owner[].busy = False
++        return 0
++    if not owner[].busy:
++        raise Error("transformer host session tape: execution requires a reserved owner")
++    if op == 4:
++        if len(a) != 0 or len(words) != 3:
++            raise Error("transformer tape: owner and epoch required")
++        if words[1] != words[0]:
++            raise Error("transformer tape: foreign session")
++        if not owner[].closed and words[2] == owner[].generation:
++            owner[].invalidate_tape()
++        return 0
++    if owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if op == 2:
++        if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++            raise Error("transformer tape: IDENTICAL only")
++        if len(a) != 12 or len(words) != 11 or a[11] == 0:
++            raise Error("transformer tape: expected 11 buffers, a report and ten scalars")
++        var inputs = List[Int]()
++        for i in range(11):  # small-loop(original tape tensor address vector)
++            if a[i] == 0:
++                raise Error("transformer tape: null buffer address")
++            inputs.append(a[i])
++        var p = List[Int]()
++        for i in range(1, 11):  # small-loop(original shape/window/budget/cost words)
++            p.append(words[i])
++        if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
++            raise Error("transformer tape: invalid shape/window/activation budget/cost")
++        try:
++            _session_forward_tape_run(words[0], inputs, p)
++        except problem:
++            owner[].invalidate_tape()
++            raise problem
++        var report = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[11])
++        report[0] = words[0]
++        report[1] = owner[].generation
++        report[2] = Int(owner[].tape.value().retained)
++        report[3] = owner[].tape.value().retained_bytes
++        return 0
++    if len(a) != 11 or len(words) != 3:
++        raise Error("transformer tape backward: expected 11 addresses and owner/generation")
++    var generation = words[2]
++    if words[1] != words[0] or generation != owner[].generation or not owner[].tape:
++        raise Error("transformer tape: stale, foreign or already consumed ticket")
++    for address in a:  # small-loop(original tape gradient address vector)
++        if address == 0:
++            raise Error("transformer tape backward: null buffer address")
++    try:
++        _session_backward_tape_run(words[0], a, generation)
++    except problem:
++        owner[].invalidate_tape()
++        raise problem
++    return 0
+diff --git a/transformer/native_block_dispatch.mojo b/transformer/native_block_dispatch.mojo
+index af240cf9fd..1d992ee8f9 100644
+--- a/transformer/native_block_dispatch.mojo
++++ b/transformer/native_block_dispatch.mojo
+@@ -4,6 +4,8 @@
+ from std.ffi import _Global
+ from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
+ from transformer.native_decode_dispatch import transformer_decode_operation
++from transformer.native_tape_dispatch import transformer_tape_operation
++from transformer.session_tape_dispatch import transformer_session_tape_operation
+ from transformer.session_native_dispatch import transformer_session_forward_native
+ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
+ from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+@@ -16,11 +18,10 @@ from transformer.transformer_binding_impl import (
+ 
+ # 0 reserve, 1 release (caller GIL/lock held); 2 session fresh, 3 session
+ # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
++# Tape operations 6..10 reserve/release/forward/backward/close their own owner.
+ # one checked opaque owner handle to their integer vector. All spans borrowed.
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (standalone tape ops 6..10 and 14, session invalidate-tape op 12 and the
+-# session-ticket ops 36..40 are refused as unknown operations.)
++# Session-ticket ops36..40 reserve/release/forward/backward/discard the original
++# budget-aware session tape; <=35 and standalone tape ops6..10 are unchanged.
+ 
+ 
+ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
+@@ -28,20 +29,27 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
+         return transformer_lm_resident_operation(op, a, words, f)
+     if len(f) != 0:
+         raise Error("transformer block: unexpected floating scalars")
++    if op >= 36 and op < 41:
++        return transformer_session_tape_operation(op - 36, a, words)
+     if op >= 15 and op < 25:
+         return transformer_decode_operation(op - 15, a, words)
+-    if op == 13:
++    if op == 14:
++        return transformer_tape_operation(5, a, words)
++    if op == 12 or op == 13:
+         if len(words) != 1 or words[0] == 0 or len(a) != 0:
+             raise Error("transformer session administration: invalid native descriptor")
+         var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=words[0])
+-        if owner[].busy:
++        if owner[].busy or (op == 12 and owner[].closed):
+             raise Error("transformer: session is busy or closed")
+-        owner[].closed = True
+-        owner[].clear()
+-        owner[].ctx = None
++        if op == 12:
++            owner[].invalidate_tape()
++        else:
++            owner[].closed = True
++            owner[].clear()
++            owner[].ctx = None
+         return 0
+-    if (op >= 6 and op < 11) or op == 12 or op == 14:
+-        raise Error("transformer block native ABI: unknown operation")
++    if op >= 6 and op < 11:
++        return transformer_tape_operation(op - 6, a, words)
+     var p = List[Int]()
+     var session = 0
+     if op < 4 or op == 11 or op == 35:
+@@ -144,7 +152,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
+ def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+     try:
+-        if op < 0 or op >= 36 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
++        if op < 0 or op >= 41 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
+             raise Error("transformer block native ABI: unknown operation or scalar span")
+         if result == 0:
+             raise Error("transformer block native ABI: null result")
+diff --git a/transformer/native_tape_dispatch.mojo b/transformer/native_tape_dispatch.mojo
+new file mode 100644
+index 0000000000..f4db8b0124
+--- /dev/null
++++ b/transformer/native_tape_dispatch.mojo
+@@ -0,0 +1,78 @@
++# SPDX-License-Identifier: Apache-2.0
++# Immutable tape operations for the common descriptor transport. The provider
++# retains the exact boxed owner and reserves/releases under its admission GIL;
++# only the numerical call runs with that GIL released. No Python execution here.
++from transformer.transformer_binding_impl import (
++    TransformerForwardTape, _transformer_run_session, _transformer_saved_backward,
++)
++from transformer.block_options import BlockOptions
++from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
++
++
++def transformer_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
++    # 0 reserve, 1 release, 2 forward, 3 backward, 4 close.
++    if len(words) == 0 or words[0] == 0:
++        raise Error("transformer forward tape: null native owner")
++    var tape = MutPointer[TransformerForwardTape, MutUntrackedOrigin](unsafe_from_address=words[0])
++    if op == 0:
++        if tape[].busy:
++            raise Error("transformer forward tape: busy")
++        tape[].busy = True
++        return 0
++    if op == 1:
++        tape[].busy = False
++        return 0
++    if not tape[].busy:
++        raise Error("transformer forward tape: native operation requires a reserved owner")
++    if op == 5:
++        # Private operation-owned tape storage may start the next microbatch
++        # only after the preceding immutable snapshot was consumed/closed.
++        if len(a) != 0 or len(words) != 1 or not tape[].consumed:
++            raise Error("transformer private tape reset requires a consumed snapshot")
++        tape[] = TransformerForwardTape([])
++        tape[].busy = True
++        return 0
++    if op == 4:
++        tape[].close()
++        return 0
++    comptime if not IDN_SAMBA_FORWARD_TAPE:
++        raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
++    if tape[].consumed:
++        raise Error("transformer forward tape: busy, closed or already consumed")
++    if len(a) != 11 or len(words) != (9 if op == 2 else 1):
++        raise Error("transformer forward tape: invalid native descriptor arity")
++    for i in range(11):  # small-loop(eleven admitted tape buffer addresses)
++        if a[i] == 0:
++            raise Error("transformer forward tape: null address at slot " + String(i))
++    if op == 2:
++        if len(tape[].shape) != 0:
++            raise Error("transformer forward tape: forward snapshot already initialized")
++        var p = List[Int]()
++        for i in range(1, 9):  # small-loop(eight immutable shape scalars)
++            p.append(words[i])
++        tape[].shape = p.copy()
++        var expanded = List[Int]()
++        for i in range(10):  # small-loop(input and nine immutable weight addresses)
++            expanded.append(a[i])
++        expanded.append(0)
++        expanded.append(0)
++        expanded.append(a[10])
++        try:
++            _ = _transformer_run_session[True, True](tape[].session, expanded,
++                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
++        except problem:
++            tape[].close()
++            raise problem
++        return 0
++    if op != 3 or len(tape[].shape) != 8:
++        raise Error("transformer forward tape: invalid forward snapshot")
++    # A failing backward also consumes the immutable snapshot, exactly as the
++    # original public native entry. Release of busy remains the provider's job.
++    tape[].consumed = True
++    try:
++        _transformer_saved_backward(tape[], a)
++    except problem:
++        tape[].close()
++        raise problem
++    tape[].close()
++    return 0
+diff --git a/transformer/session_tape_dispatch.mojo b/transformer/session_tape_dispatch.mojo
+new file mode 100644
+index 0000000000..4b6a8893d1
+--- /dev/null
++++ b/transformer/session_tape_dispatch.mojo
+@@ -0,0 +1,83 @@
++# SPDX-License-Identifier: Apache-2.0
++# Budget-aware Transformer SESSION tickets, not the standalone retained tape.
++# Appended block-table operations 36..40 select these local operations 0..4.
++# Native provider reservation holds the same busy flag as the existing binding;
++# numerical work and failure cleanup call the original session implementations.
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from transformer.transformer_binding_impl import (
++    TransformerSession, _session_forward_tape_run, _session_backward_tape_run,
++)
++
++
++def transformer_session_tape_operation(op: Int, a: List[Int], words: List[Int]) raises -> Int:
++    if op < 0 or op > 4 or len(words) < 1 or words[0] == 0:
++        raise Error("transformer session tape: invalid native descriptor")
++    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=words[0])
++    if op == 0 or op == 1:
++        if len(a) != 0 or len(words) != 1:
++            raise Error("transformer session tape: reservation requires only its owner")
++        if op == 0:
++            if owner[].busy:
++                raise Error("transformer tape: session is busy")
++            # A closed session may still receive discard_tape, which has
++            # always been a no-op after validating its cookie. Execution
++            # operations independently reject closed owners below.
++            owner[].busy = True
++        else:
++            owner[].busy = False
++        return 0
++    if not owner[].busy:
++        raise Error("transformer session tape: execution requires a reserved owner")
++    if op == 4:
++        if len(a) != 0 or len(words) != 3:
++            raise Error("transformer tape: owner and epoch required")
++        if words[1] != words[0]:
++            raise Error("transformer tape: foreign session")
++        # An older ticket must not discard a more recent forward.
++        if not owner[].closed and words[2] == owner[].tape_generation:
++            owner[].invalidate_tape()
++        return 0
++    if owner[].closed:
++        raise Error("transformer tape: session is busy or closed")
++    if op == 2:
++        if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++            raise Error("transformer tape: IDENTICAL only")
++        # The final address is a provider-owned four-Int report buffer; it is
++        # not passed to the numerical helper or substituted for a tensor.
++        if len(a) != 12 or len(words) != 11 or a[11] == 0:
++            raise Error("transformer tape: expected 11 buffers, a report and ten scalars")
++        var inputs = List[Int]()
++        for i in range(11):  # small-loop(original tape tensor address vector)
++            if a[i] == 0:
++                raise Error("transformer tape: null buffer address")
++            inputs.append(a[i])
++        var p = List[Int]()
++        for i in range(1, 11):  # small-loop(original shape/window/budget/cost words)
++            p.append(words[i])
++        if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
++            raise Error("transformer tape: invalid shape/window/activation budget/cost")
++        try:
++            _session_forward_tape_run(words[0], inputs, p)
++        except problem:
++            owner[].clear()
++            raise problem
++        var report = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=a[11])
++        report[0] = words[0]
++        report[1] = owner[].tape_generation
++        report[2] = Int(owner[].tape.value().retained)
++        report[3] = owner[].tape.value().retained_bytes
++        return 0
++    if len(a) != 11 or len(words) != 3:
++        raise Error("transformer tape backward: expected 11 addresses and owner/epoch")
++    var generation = words[2]
++    if words[1] != words[0] or generation != owner[].tape_generation or not owner[].tape:
++        raise Error("transformer tape: stale, foreign or already consumed ticket")
++    for address in a:  # small-loop(original tape gradient address vector)
++        if address == 0:
++            raise Error("transformer tape backward: null buffer address")
++    try:
++        _session_backward_tape_run(words[0], a, generation)
++    except problem:
++        owner[].clear()
++        raise problem
++    return 0
+diff --git a/transformer/transformer_binding_impl.mojo b/transformer/transformer_binding_impl.mojo
+index 3b549fbe4b..9204a83489 100644
+--- a/transformer/transformer_binding_impl.mojo
++++ b/transformer/transformer_binding_impl.mojo
+@@ -44,6 +44,7 @@ from std.memory import stack_allocation
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
+ from core.neural_context import neural_ctx
+ # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+ comptime _NEURAL_CTX = "MojoNeuralTransformerContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTransformerContextFast"
+@@ -474,6 +475,32 @@ struct TransformerWorkspace(Movable):
+ 
+ 
+ 
++struct TransformerBackwardWorkspace(Movable):
++    """The retained half of `transformer_session_backward`: the backward
++    stages for one shape and the device copy of grad_output. The forward
++    half is the session's `TransformerWorkspace` (stages, cache, rope, x)
++    at `smax = L`."""
++    var key: List[Int]
++    var bst: LlamaBackwardStages
++    var d_out: DeviceBuffer[DType.float32]
++
++    def __init__(out self, ctx: DeviceContext, dims: LlamaDims, b: Int, l: Int,
++                 window: Int, lean: Bool) raises:
++        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
++                    dims.intermediate, window, Int(lean)]
++        self.bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
++        self.d_out = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
++
++    def matches(self, key: List[Int]) -> Bool:
++        if len(key) != len(self.key):
++            return False
++        for i in range(len(key)):  # small-loop(key: nine shape entries of the backward key): compares cache keys, not data
++            if key[i] != self.key[i]:
++                return False
++        return True
++
++
++from training.neural_attention_owner import BorrowedAttentionTape
+ from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+ 
+ 
+@@ -489,18 +516,30 @@ struct TransformerSession(Movable, Writable):
+     var workspace: Optional[TransformerWorkspace]
+     var planes: Optional[LlamaInt15Weights]
+     var planes_key: List[Int]
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (the retained float32 `weights` with their byte-compare counters and
+-    # the borrowed session `tape` with its generation served only the
+-    # forward tape API.)
++    var weights: Optional[LlamaDeviceWeights]
++    """lane/neural-net-experiment (2026-09-30): the block's float32 weights
++    RETAINED on the device across calls. A Python address is still not a
++    version: `weights_host` keeps the exact bytes that were uploaded, and
++    every call compares the caller's arrays against them bit for bit
++    (`_weights_same_bits`) before reusing the device copy. Changed bytes are
++    copied into the SAME device buffers (no reallocation) and revalidated by
++    the constructor's own `_validate_finite`; a different shape or options
++    record rebuilds. Default-record blocks only: an options block (`extended`)
++    keeps the per-call upload."""
++    var weights_key: List[Int]
++    var weights_host: List[Float32]
++    var weight_uploads: Int
++    var weight_recopies: Int
++    var weight_reuses: Int
+     var arm: Optional[AttnStepArm]
+     """Lane x4b: the block's forward, step and backward on the attention
+     step op (transformer/attn_step_session.mojo): its weights packed once
+     into the op's weight buffer (byte-compared with the caller's arrays on
+     every call), its cache in the op's state buffer, its L stages and the
+-    backward stages kept by the arm. `workspace` above serves only the
+-    fixed15_v1 forward (`_transformer_run_session_int15`)."""
++    backward stages kept by the arm. `workspace` and `weights` above serve
++    only the forward tape (`retain_tape`, lane X6 deletes it)."""
++    var tape: Optional[BorrowedAttentionTape]
++    var tape_generation: Int
+     var busy: Bool
+     var closed: Bool
+     var contexts: Int
+@@ -511,7 +550,15 @@ struct TransformerSession(Movable, Writable):
+         self.workspace = Optional[TransformerWorkspace]()
+         self.planes = Optional[LlamaInt15Weights]()
+         self.planes_key = List[Int]()
++        self.weights = Optional[LlamaDeviceWeights]()
++        self.weights_key = List[Int]()
++        self.weights_host = List[Float32]()
++        self.weight_uploads = 0
++        self.weight_recopies = 0
++        self.weight_reuses = 0
+         self.arm = Optional[AttnStepArm]()
++        self.tape = None
++        self.tape_generation = 1
+         self.busy = False
+         self.closed = False
+         self.contexts = 0
+@@ -526,9 +573,11 @@ struct TransformerSession(Movable, Writable):
+     def __deinit__(deinit self):
+         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
+         # destruction enqueues frees, which must drain before context death.
++        _ = self.tape^
+         _ = self.arm^
+         _ = self.workspace^
+         _ = self.planes^
++        _ = self.weights^
+         if self.ctx:
+             try:
+                 self.ctx.value().synchronize()
+@@ -536,26 +585,132 @@ struct TransformerSession(Movable, Writable):
+                 pass
+         _ = self.ctx^
+ 
++    def invalidate_tape(mut self) raises:
++        # Ordinary calls with no explicit tape retain their previous launch
++        # and synchronization schedule; only live tape owners need fences.
++        if self.tape:
++            if self.ctx:
++                self.ctx.value().synchronize()
++            self.tape = None
++            if self.ctx:
++                self.ctx.value().synchronize()
++        self.tape_generation += 1
++
+     def clear(mut self) raises:
++        self.invalidate_tape()
+         if self.ctx:
+             self.ctx.value().synchronize()
+         self.arm = None
+         self.workspace = None
+         self.planes = None
+         self.planes_key = List[Int]()
++        self.weights = None
++        self.weights_key = List[Int]()
++        self.weights_host = List[Float32]()
+         if self.ctx:
+             self.ctx.value().synchronize()
+ 
+ 
+ 
++def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
++    """The retained weights' identity: the shape and the options record."""
++    var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
++                          dims.intermediate]
++    var tail = opts.to_params()
++    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
++        key.append(tail[i])
++    return key^
++
++
++
++def _base_weight_lens(dims: LlamaDims) -> List[Int]:
++    """Element counts of the nine base weights in slot order 1..9."""
++    var dm = dims.d_model
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var it = dims.intermediate
++    var lens: List[Int] = [dm, dm, qw * dm, kw * dm, kw * dm, dm * qw,
++                           it * dm, it * dm, dm * it]
++    return lens^
++
++
++
++def _weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raises -> Bool:
++    """Whether the caller's nine base arrays hold exactly the bytes in
++    `host` (their concatenation in slot order): an integer compare of the
++    bit patterns, eight lanes at a time (`-0.0` and `+0.0` differ, NaN
++    payloads differ, as they must for a version check)."""
++    comptime W = 8
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        var p = _f32_ptr(a[s + 1])
++        var hp = host.unsafe_ptr()
++        var i = 0
++        var body = n - n % W
++        while i < body:
++            var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
++            var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](off + i))
++            if (x ^ y).reduce_or() != UInt32(0):
++                return False
++            i += W
++        while i < n:
++            if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(off + i)):
++                return False
++            i += 1
++        off += n
++    return True
++
++
++
++def _weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
++    """The nine base arrays' bytes, concatenated in slot order."""
++    var total = 0
++    for s in range(9):
++        total += lens[s]
++    var out = List[Float32](length=total, fill=Float32(0))
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        if n > 0:
++            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
++        off += n
++    return out^
++
++
++
++def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int], lens: List[Int]) raises:
++    """Changed caller bytes into the RETAINED device buffers, slot order,
++    one wait, then the constructor's own refusal of non-finite weights
++    (DEVIATION 1875's order and names)."""
++    ctx.enqueue_copy(dst_buf=w.norm1_w, src_ptr=_f32_ptr(a[1]))
++    ctx.enqueue_copy(dst_buf=w.norm2_w, src_ptr=_f32_ptr(a[2]))
++    ctx.enqueue_copy(dst_buf=w.w_q, src_ptr=_f32_ptr(a[3]))
++    ctx.enqueue_copy(dst_buf=w.w_k, src_ptr=_f32_ptr(a[4]))
++    ctx.enqueue_copy(dst_buf=w.w_v, src_ptr=_f32_ptr(a[5]))
++    ctx.enqueue_copy(dst_buf=w.w_o, src_ptr=_f32_ptr(a[6]))
++    ctx.enqueue_copy(dst_buf=w.w_gate, src_ptr=_f32_ptr(a[7]))
++    ctx.enqueue_copy(dst_buf=w.w_up, src_ptr=_f32_ptr(a[8]))
++    ctx.enqueue_copy(dst_buf=w.w_down, src_ptr=_f32_ptr(a[9]))
++    ctx.synchronize()
++    _ = lens
++    w._validate_finite(ctx)
++
++
++
+ struct _TransformerSessionEnv(Defaultable, Movable):
+-    """The session entries' environment switch, read once per process
++    """The session entries' environment switches, read once per process
+     (lane ne3-c-blocks-embedding, row N159: every session forward built three
+-    or four `String(getenv(...))` values). Set before the process starts; a
+-    change after the first session call is not seen."""
++    or four `String(getenv(...))` values). They are A/B and timing switches
++    set before the process starts; a change after the first session call is
++    not seen."""
++    var stage_reset: Bool
+     var retain_cap_bytes: Int
++    var retain_weights: Bool
++    var timing: Bool
+ 
+     def __init__(out self):
++        self.stage_reset = String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
+         var cap_mb = 512
+         var s = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_MB"))
+         if s != "":
+@@ -566,11 +721,21 @@ struct _TransformerSessionEnv(Defaultable, Movable):
+         if cap_mb < 0:
+             cap_mb = 0
+         self.retain_cap_bytes = cap_mb * 1024 * 1024
++        self.retain_weights = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) != "0"
++        self.timing = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+ 
+ 
+ # Process-wide (one environment per process); bump the name with the layout.
+ comptime _TRANSFORMER_SESSION_ENV = _Global[StorageType=_TransformerSessionEnv,
+-    name="MojolearnTransformerSessionEnvV2", init_fn=_TransformerSessionEnv.__init__]
++    name="MojolearnTransformerSessionEnvV1", init_fn=_TransformerSessionEnv.__init__]
++
++
++def _stage_reset_on() raises -> Bool:
++    """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
++    reused workspace gets before each call. Bit-safe only if every cell a
++    call reads it also wrote this call; the identity gate decides."""
++    return _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].stage_reset
++
+ 
+ 
+ def _session_retain_cap_bytes() raises -> Int:
+@@ -582,30 +747,173 @@ def _session_retain_cap_bytes() raises -> Int:
+ 
+ 
+ 
++def _session_weights(
++    mut session: TransformerSession, dims: LlamaDims,
++    a: List[Int], opts: BlockOptions, tail: List[Int],
++) raises:
++    """Leave `session.weights` holding this call's weights: the retained
++    device copy when the caller's bytes equal the ones uploaded, a recopy
++    into the retained buffers when they differ, a fresh upload otherwise.
++    Options blocks (a non-default record or any tail address) take the
++    per-call upload as before; nothing is retained for them."""
++    session.invalidate_tape()
++    ref ctx = session.ctx.value()
++    var extended = not opts.is_default()
++    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
++        if tail[i] != 0:
++            extended = True
++    # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
++    # block (the A/B against the byte compare; measured 0.3 ms per call on
++    # an L40S, where the upload it replaces was already cheap).
++    if not _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].retain_weights:
++        extended = True
++    if extended:
++        session.weights = None
++        session.weights_key = List[Int]()
++        session.weights_host = List[Float32]()
++        session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
++        session.weight_uploads += 1
++        return
++    var key = _weights_key(dims, opts)
++    var lens = _base_weight_lens(dims)
++    var same_key = False
++    if session.weights:
++        same_key = len(session.weights_key) == len(key)
++        if same_key:
++            for i in range(len(key)):  # small-loop(key: shape and option entries of the weights key): compares cache keys, not data
++                if key[i] != session.weights_key[i]:
++                    same_key = False
++    if same_key:
++        if _weights_same_bits(a, session.weights_host, lens):
++            session.weight_reuses += 1
++            return
++        # Bytes moved: copy them into the retained buffers. A refusal below
++        # leaves the session without weights (the next call uploads anew).
++        var fresh = _weights_host_copy(a, lens)
++        try:
++            ref retained = session.weights.value()
++            _weights_recopy(ctx, retained, a, lens)
++        except error:
++            session.weights = None
++            session.weights_key = List[Int]()
++            session.weights_host = List[Float32]()
++            raise error
++        session.weights_host = fresh^
++        session.weight_recopies += 1
++        return
++    session.weights = None
++    session.weights_key = List[Int]()
++    session.weights_host = List[Float32]()
++    var host = _weights_host_copy(a, lens)
++    session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
++    session.weights_key = key^
++    session.weights_host = host^
++    session.weight_uploads += 1
++
++
++
+ # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
+ # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
+-def _transformer_run_session[discard_cache: Bool = False](
++def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
+     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+     smax: Int, s0: Int, window: Int, opts: BlockOptions,
+ ) raises -> Int:
+     """`discard_cache` (lane/neural-net-experiment): the stateless prefill on
+     the session -- the caller passes no cache (slots 10 and 11 are 0), the
+-    op's cache is zero-filled on the device, nothing is uploaded or
+-    downloaded for it, and `s0` is 0. Every call runs on the attention step
+-    op (`_transformer_run_session_op`, lane x4b)."""
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (the `retain_tape` parameter and its workspace body, the forward tape's
+-    # alone, went with the tape API.)
+-    # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
++    retained cache buffers are zero-filled on the device (the bytes a fresh
++    `LlamaKVCache` holds), nothing is uploaded or downloaded for it, and
++    `s0` is 0. Same kernels, same launches, same order.
++
++    Lane x4b: every call that keeps no tape runs on the attention step op
++    (`_transformer_run_session_op`); the body below is the forward tape's
++    alone (`retain_tape`, `forward_with_tape`; lane X6 deletes it with the
++    tape API)."""
++    comptime if not retain_tape:
++        return _transformer_run_session_op[discard_cache](session, a, b, l, dm, nh, nkv, hd, it, smax, s0,
++                                                          window, opts)
++    var dims = LlamaDims(dm, nh, nkv, hd, it)
++    dims.validate()
++    opts.validate(hd)
++    if s0 < 0 or s0 > smax:
++        raise Error(String("transformer: cached_tokens must be in [0, ")
++            + String(smax) + "] (the cache capacity, max_tokens), got "
++            + String(s0) + "; the two sides of this boundary disagree about the state")
++    if window < 0:
++        raise Error("transformer: window must be >= 0 (0 = full causal)")
++    if not session.ctx:
++        session.ctx = neural_ctx[_NEURAL_CTX]()
++        session.contexts += 1
++    var ton = _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].timing
++    var tk = Int(perf_counter_ns())
++    var lean = _lean_for(hd, opts)
++    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
++    var reused = False
++    if session.workspace:
++        reused = session.workspace.value().matches(key)
++    if not reused:
++        session.ctx.value().synchronize()
++        session.workspace = None
++        session.ctx.value().synchronize()
++    # Reread the caller's weights on EVERY call; a Python address is not a
++    # version. The device copy is reused only when the bytes are the same
++    # (`_session_weights`), recopied in place when they moved.
++    _session_weights(session, dims, a, opts, _tail_of(a, 13))
++    ref ctx = session.ctx.value()
++    ref w = session.weights.value()
++    _btick(ton, tk, "surface.weights_up")
++    if not reused:
++        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
++        session.workspaces += 1
++    ref ws = session.workspace.value()
++    if reused and _stage_reset_on():
++        ws.stages.reset(ctx)
++    comptime if discard_cache:
++        if s0 != 0:
++            raise Error("transformer: a discarded cache starts at cached_tokens 0")
++        # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
++        # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
++        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
++        ws.kv.k.enqueue_fill(Float32(0.0))
++        ws.kv.v.enqueue_fill(Float32(0.0))
++    else:
++        # Host cache state is authoritative on EVERY call, including resets and
++        # same-address edits. Copy into retained allocations, never trust a pointer.
++        ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
++        ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
++    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
++    comptime if not AFN_ATTN_ARENA:
++        ctx.synchronize()
++    # MOJOLEARN_AFN_ATTN_ARENA: no wait here. The uploads and the forward's
++    # launches are in order on the one stream, and the caller's host arrays
++    # outlive the call (the download wait below drains everything).
++    ws.kv.s = s0
++    _btick(ton, tk, "surface.cache_stages_x_up")
+     # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
+-    return _transformer_run_session_op[discard_cache](session, a, b, l, dm, nh, nkv, hd, it, smax, s0,
+-                                                      window, opts)
++    var trace = IdentityTrace.disabled()
++    # forward_only: no backward reads this entry's stages.
++    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
++                                b, l, s0, trace, String("py"), forward_only=not retain_tape)
++    _btick(ton, tk, "surface.forward")
++    # One wait for the downloads (the fresh entry's pattern): every owner
++    # stays alive through it.
++    _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
++    comptime if not discard_cache:
++        _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
++        _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
++    ctx.synchronize()
++    _btick(ton, tk, "surface.outputs_down")
++    var result = ws.kv.s
++    # Bound retained device-buffer storage per model. Large legal calls still
++    # run, but release their workspace after completion rather than pinning it.
++    var retain = retain_tape or ws.retained_bytes() <= _session_retain_cap_bytes()
++    if not retain:
++        session.workspace = None
++        ctx.synchronize()
++    return result
+ 
+ 
+ 
+@@ -634,6 +942,7 @@ def _session_arm(
+     if not session.ctx:
+         session.ctx = neural_ctx[_NEURAL_CTX]()
+         session.contexts += 1
++    session.invalidate_tape()
+     if session.arm and attn_step_same_layout(session.arm.value().ints, ints):
+         return
+     session.arm = None
+@@ -692,12 +1001,72 @@ def _transformer_run_session_op[discard_cache: Bool](
+ 
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`TransformerForwardTape`, the standalone single-use forward owner, and
+-# `_transformer_saved_backward`, its backward over the saved workspace.)
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
++struct TransformerForwardTape(Movable, Writable):
++    """NI36/48 single-use owner of input, weight snapshots and saved stages.
++
++    The session is private to this tape: no future model call can overwrite
++    it, so pointer equality is never used as a content-generation guarantee.
++    It is retained through backward or close, including calls over the normal
++    inference cache-retention budget. Peak tape memory belongs to the caller.
++    """
++    var session: TransformerSession
++    var shape: List[Int]
++    var consumed: Bool
++    var busy: Bool
++
++    def __init__(out self, shape: List[Int]):
++        self.session = TransformerSession()
++        self.shape = shape.copy()
++        self.consumed = False
++        self.busy = False
++
++    def write_to(self, mut writer: Some[Writer]):
++        writer.write("TransformerForwardTape")
++
++    def write_repr_to(self, mut writer: Some[Writer]):
++        writer.write("TransformerForwardTape")
++
++    def close(mut self) raises:
++        self.consumed = True
++        self.session.clear()
++        self.session.ctx = None
++
++
++
++def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) raises:
++    ref p = tape.shape
++    var b = p[0]
++    var l = p[1]
++    var dm = p[2]
++    var dims = LlamaDims(dm, p[3], p[4], p[5], p[6])
++    ref session = tape.session
++    if not session.ctx or not session.workspace or not session.weights:
++        raise Error("transformer forward tape: saved owner is unavailable")
++    ref ctx = session.ctx.value()
++    ref ws = session.workspace.value()
++    ref w = session.weights.value()
++    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, p[7], transformer_lean_stages(p[5]))
++    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[0]))
++    ctx.synchronize()
++    var off = IdentityTrace.disabled()
++    # Reuse the real saved forward; no weight upload or forward recompute.
++    # The stage order and fan-in sums are owned by the autograd tape
++    # (autograd/rules_transformer.mojo).
++    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
++    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
++    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
++        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
++    _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
++    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
++    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
++    _download_addr[False](ctx, bw.bst.dw_q, dims.q_width() * dm, a[4])
++    _download_addr[False](ctx, bw.bst.dw_k, dims.kv_width() * dm, a[5])
++    _download_addr[False](ctx, bw.bst.dw_v, dims.kv_width() * dm, a[6])
++    _download_addr[False](ctx, bw.bst.dw_o, dm * dims.q_width(), a[7])
++    _download_addr[False](ctx, bw.bst.dw_gate, p[6] * dm, a[8])
++    _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
++    _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
++    ctx.synchronize()
+ 
+ 
+ 
+@@ -825,6 +1194,7 @@ def _transformer_run_session_int15(
+     """`_transformer_run_session` under the profile: the same stages, cache
+     handling and downloads, with the weights' seven projections as the
+     session's retained planes."""
++    session.invalidate_tape()
+     var dims = LlamaDims(dm, nh, nkv, hd, it)
+     dims.validate()
+     opts.validate(hd)
+@@ -2266,7 +2636,54 @@ def _transformer_backward_run(
+     _ = ctx^
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`_session_forward_tape_run` / `_session_backward_tape_run`, the budget-aware
+-# session tape over training/neural_attention_owner.mojo.)
++def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
++    """`transformer_session_forward_tape`'s device half, GIL-free: build or
++    reuse the session weights, run the forward that keeps the borrowed
++    attention tape, copy y out and seal the tape. `owner_addr` is the session handle's address."""
++    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
++    var dims = LlamaDims(p[2],p[3],p[4],p[5],p[6])
++    dims.validate()
++    if not owner[].ctx:
++        owner[].ctx = neural_ctx[_NEURAL_CTX]()
++        owner[].contexts += 1
++    var opts = BlockOptions()
++    _session_weights(owner[],dims,a,opts,List[Int]())
++    ref ctx = owner[].ctx.value()
++    ref w = owner[].weights.value()
++    var input = _upload_addr(ctx,a[0],p[0]*p[1]*p[2])
++    owner[].tape = BorrowedAttentionTape(ctx,w,input^,p[0],p[1],p[7],owner[].tape_generation)
++    ref tape = owner[].tape.value()
++    _download_addr(ctx,tape.stages.value().residual2,p[0]*p[1]*p[2],a[10])
++    tape.seal(ctx,p[8],p[9])
++
++
++def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
++    """`transformer_session_backward_tape`'s device half, GIL-free: replay
++    the sealed tape's backward and copy dx and the ten weight gradients out. `owner_addr` is the session handle's address."""
++    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
++    ref ctx = owner[].ctx.value()
++    ref tape = owner[].tape.value()
++    var dims = tape.dims.copy()
++    var dm = dims.d_model
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var it = dims.intermediate
++    var m = tape.b*tape.l
++    var dy = _upload_addr(ctx,a[0],m*dm)
++    var bst = LlamaBackwardStages(ctx,tape.b,tape.l,tape.l,dims,lean=True)
++    tape.backward_into(ctx,owner[].weights.value(),bst,dy,generation,
++        owner[].tape_generation,owner[].tape_generation,owner[].tape_generation)
++    _download_addr[False](ctx,bst.d_x,m*dm,a[1])
++    _download_addr[False](ctx,bst.dw_norm1,dm,a[2])
++    _download_addr[False](ctx,bst.dw_norm2,dm,a[3])
++    _download_addr[False](ctx,bst.dw_q,qw*dm,a[4])
++    _download_addr[False](ctx,bst.dw_k,kw*dm,a[5])
++    _download_addr[False](ctx,bst.dw_v,kw*dm,a[6])
++    _download_addr[False](ctx,bst.dw_o,dm*qw,a[7])
++    _download_addr[False](ctx,bst.dw_gate,it*dm,a[8])
++    _download_addr[False](ctx,bst.dw_up,it*dm,a[9])
++    _download_addr[False](ctx,bst.dw_down,dm*it,a[10])
++    ctx.synchronize()
++    owner[].tape = None
++    owner[].tape_generation += 1
++    ctx.synchronize()
+diff --git a/transformer/transformer_host_binding_impl.mojo b/transformer/transformer_host_binding_impl.mojo
+index 80cc1a32fc..199a36b436 100644
+--- a/transformer/transformer_host_binding_impl.mojo
++++ b/transformer/transformer_host_binding_impl.mojo
+@@ -64,6 +64,7 @@ from transformer.block_options import (
+     BLOCK_OPTION_PARAMS,
+     BlockOptions,
+ )
++from transformer.host.attention_tape import HostAttentionTape
+ from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+ 
+ 
+@@ -193,13 +194,14 @@ def _run_forward(
+ 
+ 
+ struct HostTransformerSession(Movable, Writable):
+-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-    # (the session's `tape` / `generation` and `invalidate_tape`.)
++    var tape: Optional[HostAttentionTape]
++    var generation: Int
+     var busy: Bool
+     var closed: Bool
+ 
+     def __init__(out self):
++        self.tape = None
++        self.generation = 1
+         self.busy = False
+         self.closed = False
+ 
+@@ -209,6 +211,10 @@ struct HostTransformerSession(Movable, Writable):
+     def write_repr_to(self,mut writer: Some[Writer]):
+         writer.write("HostTransformerSession")
+ 
++    def invalidate_tape(mut self):
++        self.tape = None
++        self.generation += 1
++
+ 
+ def _backward_run(
+     a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
+@@ -232,6 +238,33 @@ def _backward_run(
+         _write(a[11 + i], grads[i])
+ 
+ 
+-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+-# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+-# (`_session_forward_tape_run` / `_session_backward_tape_run` over HostAttentionTape.)
++def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
++    """`transformer_session_forward_tape`'s GIL-free half: build the host
++    weights, run the taped forward, write y and seal the tape. `owner_addr`
++    is the session handle's address."""
++    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
++    owner[].invalidate_tape()
++    var dm=p[2]
++    var qw=p[3]*p[5]
++    var kw=p[4]*p[5]
++    var it=p[6]
++    var w = transformer_host_weights(dm,p[3],p[4],p[5],it,p[1],
++        read_f32(a[1],dm),read_f32(a[2],dm),read_f32(a[3],qw*dm),
++        read_f32(a[4],kw*dm),read_f32(a[5],kw*dm),read_f32(a[6],dm*qw),
++        read_f32(a[7],it*dm),read_f32(a[8],it*dm),read_f32(a[9],dm*it))
++    var x=read_f32(a[0],p[0]*p[1]*dm)
++    owner[].tape = HostAttentionTape(w^,x^,p[0],p[1],p[7],owner[].generation)
++    _write(a[10],owner[].tape.value().stages.value().residual2_out)
++    owner[].tape.value().seal(p[8],p[9])
++
++
++def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
++    """`transformer_session_backward_tape`'s GIL-free half: replay the tape
++    and write the ten gradients. `owner_addr` is the session handle's address."""
++    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
++    ref tape = owner[].tape.value()
++    var dy=read_f32(a[0],tape.b*tape.l*tape.weights.dims.d_model)
++    var gradients=tape.backward(dy,generation)
++    for i in range(10):
++        _write(a[i+1],gradients[i])
++    owner[].invalidate_tape()

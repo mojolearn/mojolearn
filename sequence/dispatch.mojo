@@ -42,11 +42,11 @@ from sequence.ops import (
     OP_MLP_L2FOLD,
     OP_MLP_ROWPART,
     OP_MLP_PERM,
-    OP_MLP_EPOCH_LOSS,
     OP_MLP_LB_PART,
     OP_MLP_LB_FOLD,
     OP_MLP_LB_EPOCH_PART,
     OP_MLP_LB_EPOCH_FOLD,
+    OP_MLP_NONFINITE,
     OP_MLP_LB_FIRST,
     OP_MLP_LB_LAST,
     OP_SEQ_IOTA,
@@ -76,6 +76,7 @@ from sequence.ops import (
     OP_LN_BWD_X,
     OP_LN_BWD_W,
     OP_THETA,
+    OP_THETA_FORECAST,
     OP_CROSTON,
     OP_ETS,
     OP_GARCH,
@@ -84,6 +85,12 @@ from sequence.ops import (
     OP_PROPHET_PREDICT,
     OP_PROPHET_FG_PART,
     OP_PROPHET_FG_SUM,
+    OP_PROPHET_LB_YMAX,
+    OP_PROPHET_LB_INIT,
+    OP_PROPHET_LB_YDIV,
+    OP_PROPHET_LB_STEP,
+    OP_PROPHET_LB_ACTIVE,
+    OP_PROPHET_LB_OUT,
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
@@ -112,6 +119,7 @@ from sequence.ops import (
     op_gather_rows,
     op_mse,
     op_ce,
+    op_mlp_nonfinite,
     op_sum,
     op_opt,
     op_fill,
@@ -133,16 +141,17 @@ from sequence.mlp import (
     op_sumsq,
 )
 from autograd.kernels.mlp import op_divs
-from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
+from sequence.mlp import op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
 from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
-from sequence.theta import op_theta
+from sequence.theta import op_theta, op_theta_forecast
 from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
+from sequence.prophet import op_prophet_lb_ymax, op_prophet_lb_init, op_prophet_lb_ydiv, op_prophet_lb_step, op_prophet_lb_active, op_prophet_lb_out
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_fwd_scan
 from autograd.kernels.recurrent_scan import op_cell_bwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
@@ -184,11 +193,14 @@ from autograd.import_ops import OP_IMP_FIRST, OP_IMP_LAST, apply_import
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
 from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply_transformer_primitive
+# lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
+from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
 
 
 @always_inline
 def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_TFP_FIRST > OP_IMP_LAST and OP_TFP_FIRST > OP_RNV_LAST and OP_TFP_FIRST > OP_HO_LAST, "transformer graph opcode range overlaps existing family"
+    comptime assert OP_LOOP_FIRST > OP_AGF_LAST and OP_LOOP_LAST < OP_TFP_FIRST and OP_LOOP_LAST < OP_CAST_FIRST and (OP_LOOP_LAST < OP_AG_FIRST or OP_LOOP_FIRST > OP_AG_LAST) and (OP_LOOP_LAST < OP_MLP_LB_FIRST or OP_LOOP_FIRST > OP_MLP_LB_LAST), "program loop opcode range overlaps another family"
     # The autograd family (autograd/ops.mojo) is one contiguous range of
     # codes, one body each; no other operation code may fall inside it.
     comptime assert OP_AG_FIRST <= OP_AG_LAST, "autograd opcode range is empty"
@@ -353,7 +365,7 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
     ), "pass-6 gemm opcode collides with recurrent scan"
-    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2900..;
+    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2902..;
     # lane ag-moe-backward), disjoint from every autograd range and the scans.
     comptime assert OP_MOEB_FIRST <= OP_MOEB_LAST, "MoE backward opcode range is empty"
     comptime assert OP_MOEB_FIRST > OP_AG_LAST or OP_MOEB_LAST < OP_AG_FIRST, "MoE backward opcodes overlap the tape's"
@@ -529,6 +541,9 @@ def apply[OP: Int](t: Int, a: Args):
         apply_higher[OP](t, a)
     elif OP >= OP_TFP_FIRST and OP <= OP_TFP_LAST:
         apply_transformer_primitive[OP](t, a)
+    elif OP >= OP_LOOP_FIRST and OP <= OP_LOOP_LAST:
+        # lane fix-d3-executor-loops: the program loop's tick, commit, advance
+        apply_loop[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
@@ -612,8 +627,6 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_rowpart(t, a)
     elif OP == OP_MLP_PERM:
         op_mlp_perm(t, a)
-    elif OP == OP_MLP_EPOCH_LOSS:
-        op_mlp_epoch_loss(t, a)
     elif OP == OP_MLP_LB_PART:
         op_mlp_lb_part(t, a)
     elif OP == OP_MLP_LB_FOLD:
@@ -622,6 +635,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_lb_epoch_part(t, a)
     elif OP == OP_MLP_LB_EPOCH_FOLD:
         op_mlp_lb_epoch_fold(t, a)
+    elif OP == OP_MLP_NONFINITE:
+        op_mlp_nonfinite(t, a)
     elif OP == OP_SEQ_IOTA:
         op_seq_iota(t, a)
     elif OP == OP_PROPHET_PREP:
@@ -676,6 +691,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_ln_bwd_w(t, a)
     elif OP == OP_THETA:
         op_theta(t, a)
+    elif OP == OP_THETA_FORECAST:
+        op_theta_forecast(t, a)
     elif OP == OP_CROSTON:
         op_croston(t, a)
     elif OP == OP_ETS:
@@ -694,6 +711,18 @@ def apply[OP: Int](t: Int, a: Args):
         op_prophet_fg_part(t, a)
     elif OP == OP_PROPHET_FG_SUM:
         op_prophet_fg_sum(t, a)
+    elif OP == OP_PROPHET_LB_YMAX:
+        op_prophet_lb_ymax(t, a)
+    elif OP == OP_PROPHET_LB_INIT:
+        op_prophet_lb_init(t, a)
+    elif OP == OP_PROPHET_LB_YDIV:
+        op_prophet_lb_ydiv(t, a)
+    elif OP == OP_PROPHET_LB_STEP:
+        op_prophet_lb_step(t, a)
+    elif OP == OP_PROPHET_LB_ACTIVE:
+        op_prophet_lb_active(t, a)
+    elif OP == OP_PROPHET_LB_OUT:
+        op_prophet_lb_out(t, a)
     elif OP == OP_PROPHET_PREDICT:
         op_prophet_predict(t, a)
     elif OP == OP_MOE_ROUTE:

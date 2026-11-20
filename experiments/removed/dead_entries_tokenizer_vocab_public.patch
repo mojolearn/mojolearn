@@ -1,0 +1,158 @@
+diff --git b/bindings/_mojolearn_tokenizer_host.mojo a/bindings/_mojolearn_tokenizer_host.mojo
+index 4d2d9d4503..d2384f31dd 100644
+--- b/bindings/_mojolearn_tokenizer_host.mojo
++++ a/bindings/_mojolearn_tokenizer_host.mojo
+@@ -81,7 +81,7 @@ from bindings.native_error_class import error_without_class
+ from std.sys.compile import is_defined
+ 
+ from core.hostptr import i32_ptr
+-from bindings.native_json import native_json_parse, native_path
++from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
+ from bindings.causal_model_config import model_config_c
+ from bindings.causal_checkpoint import checkpoint_c
+ from bindings.causal_operation_owner import CausalExecutionEntries
+@@ -90,7 +90,8 @@ from bindings.neural_block_public import NativeBlockPlan
+ from bindings.transformer_public_native import TransformerPublicTapeOwner
+ from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
+ from bindings.tokenizer_public_native import (
+-    tokenizer_public_c, tokenizer_vocab_fingerprint,
++    tokenizer_public_c, tokenizer_vocab_encode, tokenizer_vocab_decode,
++    tokenizer_vocab_pretokenize, tokenizer_vocab_fingerprint,
+ )
+ from providers.python.transformer_decode_pyapi import TransformerDecodeHandle
+ from bindings.mamba_public_native import MambaDecodeHandle
+@@ -840,8 +841,15 @@ def _py_int_list(values: List[Int]) raises -> PythonObject:
+     return arr.tolist()
+ 
+ 
+-# TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller; Tokenizer runs tokenizer_public_call) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
++def vocab_encode_public_binding(
++    tokenizer: PythonObject, input_text: PythonObject, add_special: PythonObject,
++    allow_special: PythonObject, bytes_only: PythonObject,
++) raises -> PythonObject:
++    return tokenizer_vocab_encode(tokenizer, input_text, add_special, allow_special, bytes_only)
++
++
++def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, bytes_only: PythonObject, errors: PythonObject) raises -> PythonObject:
++    return tokenizer_vocab_decode(tokenizer, seq, bytes_only, errors)
+ 
+ 
+ def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+@@ -1135,6 +1143,38 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
+     return tokenizer
+ 
+ 
++def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, module: PythonObject,
++                                   patterns: PythonObject) raises -> PythonObject:
++    var text = native_path(path)
++    var filename = text
++    var directory = PythonObject(".")
++    if native_path_exists(text, True):
++        directory = py_call(text.rstrip, "/")
++        filename = directory + PythonObject("/tokenizer.json")
++        if not native_path_exists(filename):
++            if native_path_exists(directory + PythonObject("/tokenizer.model")):
++                raise Error("tokenizer: tokenizer.model without tokenizer.json is a SentencePiece family")
++            raise Error("FileNotFoundError: directory holds no tokenizer.json")
++    else:
++        var pieces = py_call(text.rsplit, "/", 1)
++        if len(pieces) == 2:
++            directory = pieces[0] if len(pieces[0]) != 0 else PythonObject("/")
++    if not native_path_exists(filename):
++        raise Error("FileNotFoundError: tokenizer.json does not exist")
++    var data = native_json_read(filename)
++    var cfg = PythonObject(None)
++    var config_path = directory + PythonObject("/tokenizer_config.json")
++    if native_path_exists(config_path):
++        cfg = native_json_read(config_path)
++    if not Bool(py=py_call(filename.startswith, "/")):
++        filename = native_loaded_module("os").getcwd() + PythonObject("/") + filename
++    return vocab_json_public_binding(cls, data, filename, cfg, module, patterns)
++
++
++def vocab_pattern_name_binding(regex: PythonObject, patterns: PythonObject) raises -> PythonObject:
++    return py_get(patterns, regex)
++
++
+ def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject) raises -> PythonObject:
+     var bi = native_loaded_module("builtins")
+     var raw = py_call(data.encode, "utf-8") if py_type(data) is bi.str else py_call(bi.memoryview, data).tobytes()
+@@ -1144,14 +1184,16 @@ def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject)
+     return _py_int_list(offsets)
+ 
+ 
++def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
++    return tokenizer_vocab_pretokenize(tokenizer, data)
++
++
+ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+     # Supported stdlib C binding API keeps public exception classes native.
+     # See std.python.bindings.raise_python_exception (Mojo 1.0).
+     try:
+         var args = PythonObject(from_borrowed=args_ptr)
+-        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (operations 3, 4, 5, 6, 8; dead native entries) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
+-        comptime count = 5 if operation == 0 or operation == 1 else (6 if operation == 2 else (1 if operation == 9 else 2))
++        comptime count = 5 if operation == 0 or operation == 1 or operation == 4 else (6 if operation == 2 else (4 if operation == 3 or operation == 5 else (1 if operation == 9 else 2)))
+         if len(args) != count:
+             raise Error("TypeError: tokenizer binding received incorrect argument count")
+         var result = PythonObject(None)
+@@ -1161,8 +1203,18 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
+             result = vocab_spelled_public_binding(args[0], args[1], args[2], args[3], args[4])
+         elif operation == 2:
+             result = vocab_json_public_binding(args[0], args[1], args[2], args[3], args[4], args[5])
++        elif operation == 3:
++            result = vocab_pretrained_public_binding(args[0], args[1], args[2], args[3])
++        elif operation == 4:
++            result = vocab_encode_public_binding(args[0], args[1], args[2], args[3], args[4])
++        elif operation == 5:
++            result = vocab_decode_public_binding(args[0], args[1], args[2], args[3])
++        elif operation == 6:
++            result = vocab_pretokenize_public_binding(args[0], args[1])
+         elif operation == 7:
+             result = vocab_pretokenize_pattern_binding(args[0], args[1])
++        elif operation == 8:
++            result = vocab_pattern_name_binding(args[0], args[1])
+         elif operation == 9:
+             result = native_json_parse(args[0])
+         return result.steal_data()
+@@ -1292,9 +1344,12 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
+         module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
+         module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
+         module.def_py_c_function(_vocab_public_c[2], "vocab_json_public")
+-        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
+-        # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
++        module.def_py_c_function(_vocab_public_c[3], "vocab_pretrained_public")
++        module.def_py_c_function(_vocab_public_c[4], "vocab_encode_public")
++        module.def_py_c_function(_vocab_public_c[5], "vocab_decode_public")
++        module.def_py_c_function(_vocab_public_c[6], "vocab_pretokenize_public")
+         module.def_py_c_function(_vocab_public_c[7], "vocab_pretokenize_pattern")
++        module.def_py_c_function(_vocab_public_c[8], "vocab_pattern_name")
+         module.def_py_c_function(_vocab_public_c[9], "native_json_parse")
+         module.def_py_c_function(model_config_c[0], "model_config_init")
+         module.def_py_c_function(model_config_c[1], "model_config_load")
+diff --git b/bindings/tokenizer_public_native.mojo a/bindings/tokenizer_public_native.mojo
+index a6996263ea..b5de695d6d 100644
+--- b/bindings/tokenizer_public_native.mojo
++++ a/bindings/tokenizer_public_native.mojo
+@@ -1191,8 +1191,8 @@ def tokenizer_vocab_decode(tokenizer: PythonObject, ids: PythonObject, bytes_onl
+     return _vocab_decode(tokenizer, ids, _bool(bytes_only, "bytes_only"), errors, _vocab_context())
+ 
+ 
+-# TOMBSTONE: tokenizer_vocab_pretokenize (orphan wrapper of the deleted vocab_pretokenize_public) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
++def tokenizer_vocab_pretokenize(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
++    return _vocab_pretokenize(tokenizer, data, _vocab_context())
+ 
+ 
+ def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
+@@ -1234,6 +1234,8 @@ def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
+     return result
+ 
+ 
++
++
+ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> PythonObject:
+     var bi = native_loaded_module("builtins")
+     if pre is None:

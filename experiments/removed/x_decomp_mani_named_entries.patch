@@ -1,0 +1,973 @@
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index 2dd4d28946..0d9b77af85 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -12,7 +12,7 @@ from std.python import PythonObject
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from providers.python.x_decomp_api_pyapi import (
+-    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
++    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
+ )
+ from x_decomp.device import DevExec
+ from x_decomp.pca_randomized_dev import DevRDev
+@@ -34,17 +34,24 @@ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project
+ # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
+ 
++from providers.python.x_decomp_mds_dev_pyapi import mds_fit_dev_py
++from providers.python.x_decomp_lle_iter_dev_pyapi import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
++from gemm.afn_apple_fast import AFN_GEMM_APPLE
+ from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
+ from providers.python.x_decomp_select_dev_pyapi import (
+-    dev_argmin_all_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
++    dev_argmin_all_py, dev_dsum_sq_py, dev_order_f_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
++)
++from providers.python.x_decomp_graph_device_pyapi import (
++    dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
+ )
+ # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+ from providers.python.x_decomp_resident_pyapi import (
+-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
++    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+ )
+ from x_decomp.resident import GRP_CLS2_ANY
+ from providers.python.x_decomp_resident_pyapi import grp_cls2_py
++from providers.python.x_decomp_lanczos_dev_pyapi import dev_eigh_tridiag_py, dev_lanczos_py
+ from x_decomp.resident import IDN_SVD_RESIDENT
+ from providers.python.x_decomp_resident_pyapi import dev_svd_py
+ from x_decomp.resident import IDN_LU_RESIDENT
+@@ -150,8 +157,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[rand_py[DevExec]]("x_decomp_rand")
+         m.def_function[lu_py[DevExec]]("x_decomp_lu")
+         m.def_function[lu_solve_py[DevExec]]("x_decomp_lu_solve")
+-        # TOMBSTONE: the manifold kit's named x_decomp entries (graph_*, dev_graph_*, barycenter_rows, lle_apply, lle_local, lle_iterate, lle_*_ordered, mds_fit, lanczos, dev_lanczos, eigh_tridiag, dev_eigh_tridiag, trisolve, dev_trisolve, dsum_sq, dev_dsum_sq, order_f, dev_order_f; now x_decomp table operations, x_decomp/descriptor_mani_schema.mojo) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
+-        # Restore: git apply experiments/removed/x_decomp_mani_named_entries.patch
++        m.def_function[trisolve_py[DevExec]]("x_decomp_trisolve")
+         # TOMBSTONE: x_decomp_knn_select (device copy) (dead native entry: no live caller; the host twin stays) deleted 2026-10-26 by 01f30742f; code recoverable at 485ba9cc1.
+         # Restore: git apply experiments/removed/x_decomp_knn_select.patch
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+@@ -159,6 +165,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[lle_local_py[DevExec]]("x_decomp_lle_local")
++        m.def_function[lle_apply_py[DevExec]]("x_decomp_lle_apply")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[orth_py[DevExec]]("x_decomp_orth")
+@@ -170,6 +178,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[lu_aux_py[DevExec]]("x_decomp_lu_aux")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[barycenter_rows_py[DevExec]]("x_decomp_barycenter_rows")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[absmax_sign_py[DevExec]]("x_decomp_absmax_sign")
+@@ -219,11 +228,18 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[lle_iterate_dev_py]("x_decomp_lle_iterate")
++        comptime if AFN_GEMM_APPLE:
++            m.def_function[lle_gemm_ordered_py]("x_decomp_lle_gemm_ordered")
++            m.def_function[lle_lu_ordered_py]("x_decomp_lle_lu_ordered")
++        m.def_function[mds_fit_dev_py]("x_decomp_mds_fit")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[move_py]("x_decomp_move")
++        m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
++        m.def_function[order_f_py]("x_decomp_order_f")
+         m.def_function[select_smallest_py]("x_decomp_select_smallest")
+         m.def_function[argmin_all_py]("x_decomp_argmin_all")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+@@ -236,8 +252,10 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[dev_reduce_py]("x_decomp_dev_reduce")
+         m.def_function[dev_order_small_py]("x_decomp_dev_order_small")
+         m.def_function[dev_pca_mle_rank_py]("x_decomp_dev_pca_mle_rank")
++        m.def_function[dev_order_f_py]("x_decomp_dev_order_f")
+         m.def_function[dev_argmin_all_py]("x_decomp_dev_argmin_all")
+         m.def_function[dev_select_smallest_py]("x_decomp_dev_select_smallest")
++        m.def_function[dev_dsum_sq_py]("x_decomp_dev_dsum_sq")
+         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
+         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
+         m.def_function[dev_free_py]("x_decomp_dev_free")
+@@ -249,9 +267,12 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+         # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+         # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
++        m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
++        m.def_function[dev_eigh_tridiag_py]("x_decomp_dev_eigh_tridiag")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[dev_rand_py]("x_decomp_dev_rand")
++        m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
+         # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT defaults, superseded: randomized_svd is one driver that reads M in place; their x_decomp_w4_flags entry had no other bit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+         # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
+         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
+@@ -296,6 +317,14 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
++        m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
++        m.def_function[dev_graph_knn_dense_py]("x_decomp_dev_graph_knn_dense")
++        m.def_function[dev_graph_radius_py]("x_decomp_dev_graph_radius")
++        m.def_function[dev_graph_radius_geo_py]("x_decomp_dev_graph_radius_geo")
++        m.def_function[dev_graph_lle_iw_py]("x_decomp_dev_graph_lle_iw")
++        m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
++        m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
++        m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
+         # lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
+         # switches (x_decomp/resident.mojo GRP_CLS2_*; DEVSCAN FAST + Apple default)
+         comptime if GRP_CLS2_ANY:
+diff --git a/bindings/_mojolearn_x_decomp_host.mojo b/bindings/_mojolearn_x_decomp_host.mojo
+index 555448742e..3d5925fb42 100644
+--- a/bindings/_mojolearn_x_decomp_host.mojo
++++ b/bindings/_mojolearn_x_decomp_host.mojo
+@@ -13,7 +13,7 @@ from std.python.bindings import PythonModuleBuilder
+ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from providers.python.x_decomp_api_pyapi import (
+-    colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py,  move_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
++    colsum_py, eigh_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, barycenter_rows_py, absmax_sign_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py,  move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, pca_mle_rank_host_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, ols_tsqr_r_py,
+ )
+ from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
+ from x_decomp.pca_randomized import NoRDev
+@@ -23,6 +23,12 @@ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial
+ from x_decomp.decomp_owner_host import HostDecomp
+ from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, rp_fit_py, rp_project_py
+ from providers.python.x_decomp_select_ops_pyapi import order_small_py, reduce_py
++from providers.python.x_decomp_mds_pyapi import mds_fit_py
++from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
++from providers.python.x_decomp_lanczos_host_pyapi import eigh_tridiag_py, lanczos_py
++from providers.python.x_decomp_graph_host_pyapi import (
++    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
++)
+ 
+ 
+ def x_decomp_host_numeric_mode_binding() raises -> PythonObject:
+@@ -122,13 +128,14 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         m.def_function[rand_py[HostExec]]("x_decomp_rand")
+         m.def_function[lu_py[HostExec]]("x_decomp_lu")
+         m.def_function[lu_solve_py[HostExec]]("x_decomp_lu_solve")
+-        # TOMBSTONE: the manifold kit's named x_decomp entries (graph_*, dev_graph_*, barycenter_rows, lle_apply, lle_local, lle_iterate, lle_*_ordered, mds_fit, lanczos, dev_lanczos, eigh_tridiag, dev_eigh_tridiag, trisolve, dev_trisolve, dsum_sq, dev_dsum_sq, order_f, dev_order_f; now x_decomp table operations, x_decomp/descriptor_mani_schema.mojo) deleted 2026-11-12 by lane entangled-mkit; code recoverable at e561a66d6b.
+-        # Restore: git apply experiments/removed/x_decomp_mani_named_entries.patch
++        m.def_function[trisolve_py[HostExec]]("x_decomp_trisolve")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[eigh_py[HostExec]]("x_decomp_eigh")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[lle_local_py[HostExec]]("x_decomp_lle_local")
++        m.def_function[lle_apply_py[HostExec]]("x_decomp_lle_apply")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[orth_py[HostExec]]("x_decomp_orth")
+@@ -140,6 +147,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         m.def_function[lu_aux_py[HostExec]]("x_decomp_lu_aux")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[barycenter_rows_py[HostExec]]("x_decomp_barycenter_rows")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[absmax_sign_py[HostExec]]("x_decomp_absmax_sign")
+@@ -184,6 +192,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++        m.def_function[lle_iterate_py[HostExec]]("x_decomp_lle_iterate")
++        m.def_function[mds_fit_py[HostExec]]("x_decomp_mds_fit")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+@@ -191,11 +201,23 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         m.def_function[move_py]("x_decomp_move")
+         m.def_function[reduce_py]("x_decomp_reduce")
+         m.def_function[order_small_py]("x_decomp_order_small")
++        m.def_function[lanczos_py]("x_decomp_lanczos")
++        m.def_function[eigh_tridiag_py]("x_decomp_eigh_tridiag")
++        m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
++        m.def_function[order_f_py]("x_decomp_order_f")
+         m.def_function[select_smallest_py]("x_decomp_select_smallest")
+         m.def_function[argmin_all_py]("x_decomp_argmin_all")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
++        m.def_function[graph_knn_py]("x_decomp_graph_knn")
++        m.def_function[graph_knn_dense_py]("x_decomp_graph_knn_dense")
++        m.def_function[graph_radius_py]("x_decomp_graph_radius")
++        m.def_function[graph_radius_geo_py]("x_decomp_graph_radius_geo")
++        m.def_function[graph_lle_iw_py]("x_decomp_graph_lle_iw")
++        m.def_function[graph_components_py]("x_decomp_graph_components")
++        m.def_function[graph_join_py]("x_decomp_graph_join")
++        m.def_function[graph_dijkstra_py]("x_decomp_graph_dijkstra")
+         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
+         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
+         var published_module = m.finalize()
+diff --git a/providers/python/x_decomp_api_pyapi.mojo b/providers/python/x_decomp_api_pyapi.mojo
+index 5d5147db6b..cc40e48bf3 100644
+--- a/providers/python/x_decomp_api_pyapi.mojo
++++ b/providers/python/x_decomp_api_pyapi.mojo
+@@ -11,12 +11,12 @@ from std.python._cpython import GILReleased
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_decomp.api import (
+-    eigh_run, ew_run, gemm_run, lu_solve_run, rand_run,
+-    sqdist_run, svd_run,
++    eigh_run, ew_run, gemm_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
++    sqdist_run, svd_run, trisolve_run,
+     absmax_sign_run, lars_rows_run, lasso_rows_run, lu_aux_run, omp_rows_run, r_signs_run,
+     rank_above_run, tsqr_r_run,
+-    argmin_all_run, geqrf_run, idn_flags_run,
+-    move_run, ols_tsqr_r_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
++    argmin_all_run, dsum_sq_run, geqrf_run, idn_flags_run,
++    move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
+     tsqr_q_run,
+ )
+ from x_decomp.cells import F32Ptr, I32Ptr
+@@ -146,6 +146,20 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
+     return PythonObject(n)
+ 
+ 
++def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
++    """p = [n, nrhs, trans]: `trisolve_serial` (x_decomp/cells.mojo)."""
++    var n = _n(p, 0)
++    var nrhs = _n(p, 1)
++    var trans = _n(p, 2)
++    var pl = _f(lu)
++    var pi = _f(idx)
++    var ps = _f(src)
++    var pd = _f(dst)
++    with GILReleased(Python()):
++        trisolve_run[E](pl, pi, ps, pd, n, nrhs, trans)
++    return PythonObject(n)
++
++
+ # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+ # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+ 
+@@ -174,6 +188,44 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
+     return PythonObject(n)
+ 
+ 
++def lle_apply_py[E: Exec](
++    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
++) raises -> PythonObject:
++    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
++    var nq = _n(p, 0)
++    var nf = _n(p, 1)
++    var nn = _n(p, 2)
++    var nc = _n(p, 3)
++    var pw = _f(wb)
++    var pi = _f(idx)
++    var pe = _f(emb)
++    var po = _f(dst)
++    with GILReleased(Python()):
++        lle_apply_run[E](pw, pi, pe, po, nq, nf, nn, nc)
++    return PythonObject(nq)
++
++
++def lle_local_py[E: Exec](
++    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
++) raises -> PythonObject:
++    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
++    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
++    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
++    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
++    var method = _n(p, 0)
++    var n = _n(p, 1)
++    var d = _n(p, 2)
++    var nn = _n(p, 3)
++    var nc = _n(p, 4)
++    var tol = Float32(Float64(py=f[0]))
++    var px = _f(x)
++    var pi = _f(idx)
++    var pb = _f(b)
++    with GILReleased(Python()):
++        lle_local_run[E](px, pi, pb, method, n, d, nn, nc, tol)
++    return PythonObject(n)
++
++
+ def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
+     var m = _n(p, 0)
+     var l = _n(p, 1)
+@@ -278,6 +330,26 @@ def omp_rows_py[E: Exec](
+     return PythonObject(n)
+ 
+ 
++def barycenter_rows_py[E: Exec](
++    x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
++    reg: PythonObject,
++) raises -> PythonObject:
++    # p = [n, ny, d, k]
++    var n = _n(p, 0)
++    var ny = _n(p, 1)
++    var d = _n(p, 2)
++    var k = _n(p, 3)
++    var r = Float32(Float64(py=reg))
++    var px = _f(x)
++    var py_ = _f(y)
++    var pn = _f(nbr)
++    var pw = _f(wt)
++    var pf = _f(flags)
++    with GILReleased(Python()):
++        E.barycenter_rows(px, py_, pn, pw, pf, n, ny, d, k, r)
++    return PythonObject(n)
++
++
+ def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+     var n = _n(p, 0)
+     var d = _n(p, 1)
+@@ -350,6 +422,8 @@ def ols_tsqr_r_py[E: Exec](
+     return PythonObject(n)
+ 
+ 
++
++
+ def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
+     """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
+     which is then released; p = [m, n, k], k == 0 releases it only."""
+@@ -391,6 +465,10 @@ def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: Py
+     return PythonObject(qc)
+ 
+ 
++
++
++
++
+ # ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
+ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+     """x_decomp/moves.mojo `move` on host buffers; p = [op, count, a1, a2, a3,
+@@ -413,6 +491,24 @@ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonOb
+     return PythonObject(count)
+ 
+ 
++def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
++    """The binary64 sum of the squares of m float32 values in the device
++    form's chunked order (`dsum_sq_host`): the host column."""
++    var n = Int(py=m)
++    var xa = Int(py=x)
++    var t = Float64(0)
++    with GILReleased(Python()):
++        t = dsum_sq_run(xa, n)
++    return PythonObject(t)
++
++
++def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
++    """The stable order of x (m float32 values) as exact floats; NaN refused."""
++    var n = Int(py=m)
++    order_f_run(Int(py=x), n, Int(py=dst))
++    return PythonObject(n)
++
++
+ def select_smallest_py(x: PythonObject, p: PythonObject, sel: PythonObject, mask: PythonObject) raises -> PythonObject:
+     """p = [m, h]: the h smallest of x by (value, index), ascending by index,
+     as exact floats, and the int32 membership of every row."""
+@@ -437,6 +533,8 @@ def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObje
+     return PythonObject(pca_mle_rank_host_run(Int(py=sp), d, n))
+ 
+ 
++
++
+ def numeric_mode_py() raises -> PythonObject:
+     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+ 
+diff --git a/providers/python/x_decomp_graph_device_pyapi.mojo b/providers/python/x_decomp_graph_device_pyapi.mojo
+new file mode 100644
+index 0000000000..b2076f98b3
+--- /dev/null
++++ b/providers/python/x_decomp_graph_device_pyapi.mojo
+@@ -0,0 +1,101 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/graph_device.mojo: the device graph doors
++(resident ids) the GPU binding registers. Each unpacks pool ids, floats and
++integers and calls one typed `*_run` entry in x_decomp/graph_device.mojo; no
++data work happens here."""
++from std.python import PythonObject
++
++from x_decomp.graph_device import (
++    dev_graph_components_run,
++    dev_graph_dijkstra_run,
++    dev_graph_join_run,
++    dev_graph_knn_dense_run,
++    dev_graph_knn_run,
++    dev_graph_lle_iw_run,
++    dev_graph_radius_geo_run,
++    dev_graph_radius_run,
++)
++from providers.python.x_decomp_resident_pyapi import _id, _n
++
++
++def dev_graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
++    """idx / dst (n x nn): the nn nearest columns of every row of the
++    resident D (n x m), `knn_select_row`. p = [n, m, nn, excl]."""
++    var n = _n(p, 0)
++    var m = _n(p, 1)
++    var nn = _n(p, 2)
++    var ex = Int(py=p[3])
++    var i_d = _id(d)
++    var i_idx = _id(idx)
++    var i_dst = _id(dst)
++    return PythonObject(dev_graph_knn_run(i_d, i_idx, i_dst, n, m, nn, ex))
++
++
++def dev_graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
++    var n = _n(p, 0)
++    var nn = _n(p, 1)
++    var i_idx = _id(idx)
++    var i_w = _id(w)
++    var i_wout = _id(wout)
++    return PythonObject(dev_graph_knn_dense_run(i_idx, i_w, i_wout, n, nn))
++
++
++def dev_graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
++    var n = _n(p, 0)
++    var i_d = _id(d)
++    var i_wout = _id(wout)
++    var f_r = Float64(py=r)
++    return PythonObject(dev_graph_radius_run(i_d, i_wout, f_r, n))
++
++
++def dev_graph_radius_geo_py(
++    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
++) raises -> PythonObject:
++    """Isomap's radius transform (`radius_geo_cell`), one thread a cell of
++    the nq x n result."""
++    var nq = _n(p, 0)
++    var n = _n(p, 1)
++    var i_dq = _id(dq)
++    var i_d = _id(d)
++    var i_g = _id(g)
++    var f_r = Float64(py=r)
++    return PythonObject(dev_graph_radius_geo_run(i_dq, i_d, i_g, f_r, nq, n))
++
++
++def dev_graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
++    var n = _n(p, 0)
++    var nn = _n(p, 1)
++    var i_idx = _id(idx)
++    var i_wb = _id(wb)
++    var i_wout = _id(wout)
++    return PythonObject(dev_graph_lle_iw_run(i_idx, i_wb, i_wout, n, nn))
++
++
++def dev_graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
++    """comp (n floats): every node's component, numbered by lowest node;
++    returns the number of components."""
++    var n = _n(p, 0)
++    var i_w = _id(w)
++    var i_comp = _id(comp)
++    return PythonObject(dev_graph_components_run(i_w, i_comp, n))
++
++
++def dev_graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
++    """`graph_join_py` on resident W (in place), D and comp; p = [n, C]."""
++    var n = _n(p, 0)
++    var C = _n(p, 1)
++    var i_w = _id(w)
++    var i_d = _id(d)
++    var i_comp = _id(comp)
++    return PythonObject(dev_graph_join_run(i_w, i_d, i_comp, n, C))
++
++
++def dev_graph_dijkstra_py(w: PythonObject, dist: PythonObject, p: PythonObject) raises -> PythonObject:
++    """dist (n x n, resident): the shortest paths of the resident W, the
++    arcs compressed on the device (count, scan, fill) and the rows of
++    `dijkstra_kernel`, DIJKSTRA_ROWS a launch."""
++    var n = _n(p, 0)
++    var i_w = _id(w)
++    var i_dist = _id(dist)
++    return PythonObject(dev_graph_dijkstra_run(i_w, i_dist, n))
+diff --git a/providers/python/x_decomp_graph_host_pyapi.mojo b/providers/python/x_decomp_graph_host_pyapi.mojo
+new file mode 100644
+index 0000000000..bbd3cd3fe4
+--- /dev/null
++++ b/providers/python/x_decomp_graph_host_pyapi.mojo
+@@ -0,0 +1,123 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/graph_host.mojo: the host graph doors the CPU
++binding registers. Each unpacks addresses and integers, releases the GIL and
++calls one typed entry in x_decomp/graph_host.mojo; no data work happens
++here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from x_decomp.cells import F32Ptr
++from x_decomp.graph_host import (
++    graph_dijkstra_run,
++    graph_join_run,
++    graph_knn_dense_run,
++    graph_knn_run,
++    graph_lle_iw_run,
++    graph_radius_geo_run,
++    graph_radius_run,
++    host_components,
++)
++
++
++def _f(o: PythonObject) raises -> F32Ptr:
++    return F32Ptr(unsafe_from_address=Int(py=o))
++
++
++def _ni(p: PythonObject, i: Int) raises -> Int:
++    var v = Int(py=p[i])
++    if v < 0 or v > 2147483647:
++        raise Error("x_decomp: graph dimension out of range")
++    return v
++
++
++def graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
++    # p = [n, m, nn, excl]
++    var n = _ni(p, 0)
++    var m = _ni(p, 1)
++    var nn = _ni(p, 2)
++    var ex = Int(py=p[3])
++    var pd = _f(d)
++    var pi = _f(idx)
++    var po = _f(dst)
++    with GILReleased(Python()):
++        graph_knn_run(pd, pi, po, n, m, nn, ex)
++    return PythonObject(n)
++
++
++def graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
++    # p = [n, nn]; out (n x n) is written whole
++    var n = _ni(p, 0)
++    var nn = _ni(p, 1)
++    var pi = _f(idx)
++    var pw = _f(w)
++    var po = _f(wout)
++    with GILReleased(Python()):
++        graph_knn_dense_run(pi, pw, po, n, nn)
++    return PythonObject(n)
++
++
++def graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
++    var n = _ni(p, 0)
++    var rr = Float64(py=r)
++    var pd = _f(d)
++    var po = _f(wout)
++    with GILReleased(Python()):
++        graph_radius_run(pd, po, n, rr)
++    return PythonObject(n)
++
++
++def graph_radius_geo_py(
++    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
++) raises -> PythonObject:
++    var nq = _ni(p, 0)
++    var n = _ni(p, 1)
++    var rr = Float64(py=r)
++    var pq = _f(dq)
++    var pd = _f(d)
++    var pg = _f(g)
++    with GILReleased(Python()):
++        graph_radius_geo_run(pq, pd, pg, nq, n, rr)
++    return PythonObject(nq)
++
++
++def graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
++    var n = _ni(p, 0)
++    var nn = _ni(p, 1)
++    var pi = _f(idx)
++    var pw = _f(wb)
++    var po = _f(wout)
++    with GILReleased(Python()):
++        graph_lle_iw_run(pi, pw, po, n, nn)
++    return PythonObject(n)
++
++
++def graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
++    var n = _ni(p, 0)
++    var pw = _f(w)
++    var pc = _f(comp)
++    var c = 0
++    with GILReleased(Python()):
++        c = host_components(pw, n, pc)
++    return PythonObject(c)
++
++
++def graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
++    # p = [n, C]; w (n x n) gains the joining edges in place
++    var n = _ni(p, 0)
++    var C = _ni(p, 1)
++    var pw = _f(w)
++    var pd = _f(d)
++    var pc = _f(comp)
++    with GILReleased(Python()):
++        graph_join_run(pw, pd, pc, n, C)
++    return PythonObject(C)
++
++
++def graph_dijkstra_py(w: PythonObject, dist: PythonObject, p: PythonObject) raises -> PythonObject:
++    var n = _ni(p, 0)
++    var pw = _f(w)
++    var pd = _f(dist)
++    with GILReleased(Python()):
++        graph_dijkstra_run(pw, pd, n)
++    return PythonObject(n)
+diff --git a/providers/python/x_decomp_lanczos_dev_pyapi.mojo b/providers/python/x_decomp_lanczos_dev_pyapi.mojo
+new file mode 100644
+index 0000000000..0e978f7e49
+--- /dev/null
++++ b/providers/python/x_decomp_lanczos_dev_pyapi.mojo
+@@ -0,0 +1,37 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/lanczos_dev.mojo: the device Lanczos door and
++the route flags the GPU binding registers. The door unpacks pool ids and
++integers and calls `dev_lanczos_run`; no data work happens here."""
++from std.python import PythonObject
++
++from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_eigh_tridiag_run, dev_lanczos_run
++from providers.python.x_decomp_resident_pyapi import _id, _n
++
++
++# TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
++# Restore: git apply experiments/removed/dead_entries_x_decomp.patch
++
++
++def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
++    """Lanczos steps j0 .. j1-1 (see x_decomp/lanczos_dev.mojo), enqueued.
++    a: n x n; q: the basis, rows 0 .. j0 hold q_0 .. q_j0 on entry, with
++    room for cap + 1 rows; ab: 2 cap floats. p = [n, j0, j1, cap]."""
++    var n = _n(p, 0)
++    var j0 = _n(p, 1)
++    var j1 = _n(p, 2)
++    var cap = _n(p, 3)
++    var ia = _id(a)
++    var iq = _id(q)
++    var iab = _id(ab)
++    var steps = dev_lanczos_run(ia, iq, iab, n, j0, j1, cap)
++    return PythonObject(steps)
++
++
++def dev_eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
++    """The Lanczos projected solve on pool ids (x_decomp/lanczos_dev.mojo
++    `dev_eigh_tridiag_run`): ab the 2 cap alpha / beta words, w (1 x j) and
++    z (j x j) outputs. p = [j, cap]. Waits (one status word)."""
++    var j = _n(p, 0)
++    var cap = _n(p, 1)
++    return PythonObject(dev_eigh_tridiag_run(_id(ab), _id(w), _id(z), j, cap))
+diff --git a/providers/python/x_decomp_lanczos_host_pyapi.mojo b/providers/python/x_decomp_lanczos_host_pyapi.mojo
+new file mode 100644
+index 0000000000..956440c3ed
+--- /dev/null
++++ b/providers/python/x_decomp_lanczos_host_pyapi.mojo
+@@ -0,0 +1,40 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/lanczos_host.mojo: the `lanczos_py` door the
++host binding registers as `x_decomp_lanczos`. It unpacks addresses and
++integers, releases the GIL and calls `lanczos_run`; no data work happens
++here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from x_decomp.cells import F32Ptr
++from x_decomp.lanczos_host import eigh_tridiag_host_run, lanczos_run
++
++
++def lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
++    """`x_decomp_dev_lanczos` on host addresses; p = [n, j0, j1, cap]."""
++    var n = Int(py=p[0])
++    var j0 = Int(py=p[1])
++    var j1 = Int(py=p[2])
++    var cap = Int(py=p[3])
++    var pa = F32Ptr(unsafe_from_address=Int(py=a))
++    var pq = F32Ptr(unsafe_from_address=Int(py=q))
++    var pab = F32Ptr(unsafe_from_address=Int(py=ab))
++    var steps = 0
++    with GILReleased(Python()):
++        steps = lanczos_run(pa, pq, pab, n, j0, j1, cap)
++    return PythonObject(steps)
++
++
++def eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
++    """`x_decomp_dev_eigh_tridiag` on host addresses (x_decomp/lanczos_host.mojo
++    `eigh_tridiag_host_run`); p = [j, cap]."""
++    var j = Int(py=p[0])
++    var cap = Int(py=p[1])
++    var pab = F32Ptr(unsafe_from_address=Int(py=ab))
++    var pw = F32Ptr(unsafe_from_address=Int(py=w))
++    var pz = F32Ptr(unsafe_from_address=Int(py=z))
++    var got = 0
++    with GILReleased(Python()):
++        got = eigh_tridiag_host_run(pab, pw, pz, j, cap)
++    return PythonObject(got)
+diff --git a/providers/python/x_decomp_lle_iter_dev_pyapi.mojo b/providers/python/x_decomp_lle_iter_dev_pyapi.mojo
+new file mode 100644
+index 0000000000..f883d60b1e
+--- /dev/null
++++ b/providers/python/x_decomp_lle_iter_dev_pyapi.mojo
+@@ -0,0 +1,59 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of LocallyLinearEmbedding's device iteration and ordered
++cells (x_decomp/lle_iter_dev.mojo): the doors `bindings/_mojolearn_x_decomp.mojo`
++registers. Each door unpacks addresses and integers, releases the GIL and
++calls one typed entry in x_decomp/lle_iter_dev.mojo; no data work happens here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from providers.python.x_decomp_api_pyapi import _f, _i, _n
++from x_decomp.lle_iter_dev import lle_gemm_ordered_run, lle_iterate_dev_run, lle_lu_ordered_run
++from providers.python.x_decomp_lle_iter_pyapi import _lle_args
++
++
++def lle_iterate_dev_py(
++    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
++    p: PythonObject, f: PythonObject,
++) raises -> PythonObject:
++    """`lle_iterate_py` on the resident kit."""
++    var a = _lle_args(p, f)
++    var pf = _f(f0)
++    var pl = _f(lu)
++    var ppm = _f(pm)
++    var pim = _f(im)
++    var pz = _f(z)
++    var px = _f(outs[0])
++    var py_ = _f(outs[1])
++    var ps = _f(outs[2])
++    var st = 0
++    var e = 0.0
++    with GILReleased(Python()):
++        st = lle_iterate_dev_run(pf, pl, ppm, pim, pz, px, py_, ps, a, e)
++    return Python.tuple(st, e)
++
++
++def lle_gemm_ordered_py(a: PythonObject, b: PythonObject, output: PythonObject, p: PythonObject) raises -> PythonObject:
++    """LLE's near-null construction/products through the existing ordered GPU cells."""
++    var m = _n(p, 0)
++    var kk = _n(p, 1)
++    var n = _n(p, 2)
++    var ta = _n(p, 3) != 0
++    var tb = _n(p, 4) != 0
++    var pa = _f(a)
++    var pb = _f(b)
++    var po = _f(output)
++    with GILReleased(Python()):
++        lle_gemm_ordered_run(pa, pb, po, m, kk, n, ta, tb)
++    return PythonObject(0)
++
++
++def lle_lu_ordered_py(a: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
++    """LLE's ill-conditioned spectral transform, scalar trailing updates on GPU."""
++    var n = _n(p, 0)
++    var pa = _f(a)
++    var pp = _i(piv)
++    var pi = _f(info)
++    with GILReleased(Python()):
++        lle_lu_ordered_run(pa, pp, pi, n)
++    return PythonObject(0)
+diff --git a/providers/python/x_decomp_lle_iter_pyapi.mojo b/providers/python/x_decomp_lle_iter_pyapi.mojo
+new file mode 100644
+index 0000000000..e236ada3df
+--- /dev/null
++++ b/providers/python/x_decomp_lle_iter_pyapi.mojo
+@@ -0,0 +1,40 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of LocallyLinearEmbedding's subspace iteration
++(x_decomp/lle_iter.mojo): the door `bindings/_mojolearn_x_decomp_host.mojo`
++registers (`lle_iterate_py[HostExec]`) and the argument unpacker the device
++door shares. Each door unpacks addresses and integers, releases the GIL and
++calls one typed entry in x_decomp/lle_iter.mojo; no data work happens here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from providers.python.x_decomp_api_pyapi import _f, _n
++from x_decomp.exec_trait import Exec
++from x_decomp.lle_iter import LleArgs, lle_iterate_run
++
++
++def _lle_args(p: PythonObject, f: PythonObject) raises -> LleArgs:
++    """p = [n, n1, nc, p, max_iter, seed]; f = [floor, sub_tol, stall_tol]."""
++    return LleArgs(_n(p, 0), _n(p, 1), _n(p, 2), _n(p, 3), Int(py=p[4]), Int(py=p[5]), Float64(py=f[0]),
++                   Float64(py=f[1]), Float64(py=f[2]))
++
++
++def lle_iterate_py[E: Exec](
++    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
++    p: PythonObject, f: PythonObject,
++) raises -> PythonObject:
++    """out = [X (n1 x p), Y (n1 x nc), S (p)] addresses. Returns (status, e)."""
++    var a = _lle_args(p, f)
++    var pf = _f(f0)
++    var pl = _f(lu)
++    var ppm = _f(pm)
++    var pim = _f(im)
++    var pz = _f(z)
++    var px = _f(outs[0])
++    var py_ = _f(outs[1])
++    var ps = _f(outs[2])
++    var st = 0
++    var e = 0.0
++    with GILReleased(Python()):
++        st = lle_iterate_run[E](pf, pl, ppm, pim, pz, px, py_, ps, a, e)
++    return Python.tuple(st, e)
+diff --git a/providers/python/x_decomp_mds_dev_pyapi.mojo b/providers/python/x_decomp_mds_dev_pyapi.mojo
+new file mode 100644
+index 0000000000..f1597228d5
+--- /dev/null
++++ b/providers/python/x_decomp_mds_dev_pyapi.mojo
+@@ -0,0 +1,32 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/mds_dev.mojo: the PythonObject <-> typed-value
++door that `bindings/_mojolearn_x_decomp.mojo` registers under the same name.
++It unpacks addresses and integers, releases the GIL and calls one typed
++entry in x_decomp/mds_dev.mojo; no data work happens here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from providers.python.x_decomp_api_pyapi import _f, _n
++from x_decomp.mds import mds_fit_check
++from x_decomp.mds_dev import mds_fit_dev_run
++from providers.python.x_decomp_mds_pyapi import _mds_args
++
++
++def mds_fit_dev_py(
++    dis: PythonObject, starts: PythonObject, y: PythonObject, p: PythonObject, f: PythonObject
++) raises -> PythonObject:
++    """`mds_fit_py` on the resident kit."""
++    var n = _n(p, 0)
++    var nc = _n(p, 1)
++    var ns = _n(p, 2)
++    mds_fit_check(n, nc, ns)
++    var a = _mds_args(p, f)
++    var pd = _f(dis)
++    var ps = _f(starts)
++    var py_ = _f(y)
++    var best_it = 0
++    var best_s = 0.0
++    with GILReleased(Python()):
++        best_it = mds_fit_dev_run(pd, ps, py_, n, nc, ns, a, best_s)
++    return Python.tuple(best_s, best_it)
+diff --git a/providers/python/x_decomp_mds_pyapi.mojo b/providers/python/x_decomp_mds_pyapi.mojo
+new file mode 100644
+index 0000000000..f09faaeb39
+--- /dev/null
++++ b/providers/python/x_decomp_mds_pyapi.mojo
+@@ -0,0 +1,37 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Python shell of x_decomp/mds.mojo: the PythonObject <-> typed-value
++door that `bindings/_mojolearn_x_decomp_host.mojo` registers under the same
++name. It unpacks addresses and integers, releases the GIL and calls one
++typed entry in x_decomp/mds.mojo; no data work happens here."""
++from std.python import Python, PythonObject
++from std.python._cpython import GILReleased
++
++from providers.python.x_decomp_api_pyapi import _f, _n
++from x_decomp.exec_trait import Exec
++from x_decomp.mds import MdsArgs, mds_fit_check, mds_fit_run
++
++
++def _mds_args(p: PythonObject, f: PythonObject) raises -> MdsArgs:
++    """p = [n, nc, n_starts, max_iter, metric, norm]; f = [eps]."""
++    return MdsArgs(Int(py=p[3]), Int(py=p[4]) != 0, Int(py=p[5]) != 0, Float64(py=f[0]))
++
++
++def mds_fit_py[E: Exec](
++    dis: PythonObject, starts: PythonObject, y: PythonObject, p: PythonObject, f: PythonObject
++) raises -> PythonObject:
++    """dis (n x n), starts (n_starts * n x nc), y (n x nc, out). Returns
++    (stress, n_iter)."""
++    var n = _n(p, 0)
++    var nc = _n(p, 1)
++    var ns = _n(p, 2)
++    mds_fit_check(n, nc, ns)
++    var a = _mds_args(p, f)
++    var pd = _f(dis)
++    var ps = _f(starts)
++    var py_ = _f(y)
++    var it = 0
++    var st = 0.0
++    with GILReleased(Python()):
++        it = mds_fit_run[E](pd, ps, py_, n, nc, ns, a, st)
++    return Python.tuple(st, it)
+diff --git a/providers/python/x_decomp_resident_pyapi.mojo b/providers/python/x_decomp_resident_pyapi.mojo
+index d0e61fa926..26cc24489a 100644
+--- a/providers/python/x_decomp_resident_pyapi.mojo
++++ b/providers/python/x_decomp_resident_pyapi.mojo
+@@ -15,6 +15,7 @@ from x_decomp.resident import (
+     dev_ew_run,
+     dev_gemm_run,
+     dev_rand_run,
++    dev_trisolve_run,
+     dev_colsum_run,
+     dev_rowsum_run,
+     dev_sqdist_run,
+@@ -131,6 +132,14 @@ def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
+     return PythonObject(dev_rand_run(_id(dst), count, seed, stream, kind))
+ 
+ 
++def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
++    """`trisolve_py` on device ids, enqueued (no sync)."""
++    var n = _n(p, 0)
++    var nrhs = _n(p, 1)
++    var trans = _n(p, 2)
++    return PythonObject(dev_trisolve_run(_id(lu), _id(idx), _id(src), _id(dst), n, nrhs, trans))
++
++
+ def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+     return PythonObject(dev_colsum_run(_id(a), _id(dst), _n(p, 0), _n(p, 1)))
+ 
+diff --git a/providers/python/x_decomp_select_dev_pyapi.mojo b/providers/python/x_decomp_select_dev_pyapi.mojo
+index 213dc450b2..43cbef9ac7 100644
+--- a/providers/python/x_decomp_select_dev_pyapi.mojo
++++ b/providers/python/x_decomp_select_dev_pyapi.mojo
+@@ -9,6 +9,8 @@ from std.python import PythonObject
+ from providers.python.x_decomp_resident_pyapi import _id, _n
+ from x_decomp.select_dev import (
+     dev_argmin_all_run,
++    dev_dsum_sq_run,
++    dev_order_f_run,
+     dev_order_small_run,
+     dev_pca_mle_rank_run,
+     dev_reduce_run,
+@@ -48,6 +50,24 @@ def dev_pca_mle_rank_py(sp: PythonObject, dst: PythonObject, p: PythonObject) ra
+     return PythonObject(dev_pca_mle_rank_run(i_sp, i_dst, d, n))
+ 
+ 
++def dev_order_f_py(a: PythonObject, skip: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
++    """dst (n exact floats, device) = the stable ascending order of the first
++    n values of the device matrix a by (value, index) (p = [n, neg,
++    has_skip]: neg orders -a, Python's `key=lambda i: (-x[i], i)`), the
++    positions where the device row `skip` is nonzero last; cnt (one word,
++    device) = how many are not skipped. The caller refuses NaN (one word,
++    the max) first: `order_f` / `topn_desc`'s order, the same positions.
++    Waits once before its sort storage is released."""
++    var n = _n(p, 0)
++    var neg = Int(py=p[1])
++    var has = Int(py=p[2])
++    var i_a = _id(a)
++    var i_skip = _id(skip)
++    var i_dst = _id(dst)
++    var i_cnt = _id(cnt)
++    return PythonObject(dev_order_f_run(i_a, i_skip, i_dst, i_cnt, n, neg, has))
++
++
+ def dev_argmin_all_py(a: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
+     """dst = every position (exact floats, ascending) of the device matrix
+     a's first n values equal to their minimum, then the rest; cnt (one
+@@ -72,3 +92,13 @@ def dev_select_smallest_py(a: PythonObject, sel: PythonObject, mask: PythonObjec
+     var i_mask = _id(mask)
+     return PythonObject(dev_select_smallest_run(i_a, i_sel, i_mask, n, h))
+ 
++
++def dev_dsum_sq_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
++    """dst (two float32 words, device: one binary64, low first) = the sum of
++    squares of a's first n values (p = [n >= 1]) in `dsum_sq_host`'s order:
++    chunks of DSUM_CHUNK, then the partials DSUM_CHUNK at a time. Enqueued
++    only (the caller's download waits)."""
++    var n = _n(p, 0)
++    var i_a = _id(a)
++    var i_dst = _id(dst)
++    return PythonObject(dev_dsum_sq_run(i_a, i_dst, n))

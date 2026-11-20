@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Root-only retained evidence for fixed-profile NVIDIA/AMD training resume.
 
-This tool only reads, hashes, copies, and compares files. It never builds,
-executes model code, launches subprocesses, measures performance, or provisions.
+This tool reads, hashes, copies, and compares files. Its one launch is the
+`launch` subcommand: a test controller that captures the resume driver's input
+and reserves its outputs as descriptors, then runs the native driver (which
+imports no Python) with those descriptors inherited. It never builds, executes
+model code itself, measures performance, or provisions.
 """
 import argparse
 import hashlib
@@ -13,6 +16,7 @@ import re
 import shutil
 import stat
 import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -128,6 +132,41 @@ class NativeFileCapture:
 
 def capture_native_paths(input_path, output_path):
     return NativeFileCapture(str(input_path), str(output_path))
+
+
+def launch(args):
+    """Run the native resume driver over descriptors this controller owns.
+
+    The incoming checkpoint is sealed in a memfd and the checkpoint and receipt
+    are O_EXCL-reserved before the driver starts; the driver receives their
+    numbers in MOJOLEARN_TRAIN_RESUME_{INPUT,OUTPUT,RECEIPT}_FD and touches
+    only /proc/self/fd/<n>. After a clean exit the reservations are fsynced and
+    checked unchanged (NativeFileCapture.finish).
+    """
+    command = list(args.driver)
+    if command and command[0] == '--':
+        command = command[1:]
+    require(command, 'launch needs the driver command after --')
+    input_path = os.environ.get('MOJOLEARN_TRAIN_RESUME_INPUT', '')
+    output_path = os.environ.get('MOJOLEARN_TRAIN_RESUME_OUTPUT', '')
+    require(output_path, 'MOJOLEARN_TRAIN_RESUME_OUTPUT is required')
+    files = capture_native_paths(input_path, output_path)
+    try:
+        env = dict(os.environ)
+        passed = []
+        for key, fd in (('INPUT', files.input_fd), ('OUTPUT', files.output_fd), ('RECEIPT', files.receipt_fd)):
+            if fd >= 0:
+                env['MOJOLEARN_TRAIN_RESUME_' + key + '_FD'] = str(fd)
+                passed.append(fd)
+            else:
+                env.pop('MOJOLEARN_TRAIN_RESUME_' + key + '_FD', None)
+        rc = subprocess.run(command, env=env, pass_fds=tuple(passed), check=False).returncode
+        if rc != 0:
+            return rc
+        files.finish()
+        return 0
+    finally:
+        files.close()
 
 
 def require(condition, message):
@@ -525,8 +564,12 @@ def main():
         cmp.add_argument('--' + name, type=Path, required=True)
     cmp.add_argument('--hip-missing-moments', type=Path,
                      help='retained AMD continuation with only NVIDIA step8 moments zeroed; absent means no full admission')
+    run = commands.add_parser('launch', help='run the native resume driver over sealed/reserved descriptors')
+    run.add_argument('driver', nargs=argparse.REMAINDER, help='-- <driver command>')
     args = parser.parse_args()
     try:
+        if args.command == 'launch':
+            return launch(args)
         if args.command == 'snapshot':
             snapshot(args)
         elif args.command == 'exit-record':

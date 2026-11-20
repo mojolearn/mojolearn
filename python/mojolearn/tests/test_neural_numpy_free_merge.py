@@ -18,7 +18,9 @@ def test_ring_order_and_linear_alias():
     view = checks.flat_view(raw, 'f')
     for i in range(24):
         view[i] = i
-    state = TransformerState(2, 2, 2, 3, raw, raw, 5, window=3)
+    # cached_tokens is in [0, max_tokens]; under a window it counts past W,
+    # so the ring case allows 8 positions while each buffer holds W = 3 slots.
+    state = TransformerState(2, 2, 2, 8, raw, raw, 5, window=3)
     expected = np.arange(24, dtype=np.float32).reshape(2, 2, 3, 2)[:, :, [2, 0, 1], :]
     result = state.keys()
     np.testing.assert_array_equal(result, expected)
@@ -65,8 +67,11 @@ def test_runtime_imports_and_fixture_without_numpy():
 import sys
 class BlockNumpy:
     def find_spec(self, fullname, path=None, target=None):
+        # NumPy absent, as on an install without it: the package's optional
+        # import-time connection (resample.py) catches ImportError; any other
+        # import fails the run, and the last line checks none succeeded.
         if fullname == 'numpy' or fullname.startswith('numpy.'):
-            raise AssertionError('runtime NumPy import: ' + fullname)
+            raise ModuleNotFoundError('runtime NumPy import: ' + fullname, name=fullname)
 sys.meta_path.insert(0, BlockNumpy())
 from mojolearn import _byte_lm_impl, _mamba_impl, _samba_impl, _training_impl, _transformer_impl, _verify
 from mojolearn import _buffer, _bufcheck
@@ -84,5 +89,6 @@ assert fnv(_verify._le_bytes(x)) == _verify.FIXTURE_X_FNV1A64
 assert fnv(_verify._le_bytes(c)) == _verify.FIXTURE_C_FNV1A64
 assert 'numpy' not in sys.modules
 '''
-    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]))
+    from mojolearn.tests._fresh_process import PACKAGE_PARENT  # the runtime this process imported, not the source tree
+    env = dict(os.environ, PYTHONPATH=PACKAGE_PARENT)
     subprocess.run([sys.executable, '-c', code], env=env, check=True, capture_output=True, text=True)

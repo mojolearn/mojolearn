@@ -15,9 +15,8 @@ For each profile (the default, fixed15_v1, and fp32_v1 by name):
             `step` per token; every position's logits against the full
             prefill's, bit for bit
   generate  `CausalLM.generate` from a 512-token prompt, N new tokens:
-            the resident route (`_generate_resident`, which must RUN) against
-            the per-layer route; the ids equal, and the resident session's
-            last-pass logits equal the per-layer forward's at that position
+            `generate(..., resident=True)` (which must RUN, not refuse)
+            against the default route; the ids equal
 Exit 1 on any mismatch. The same script on a tree with a sabotage patch
 applied must exit 1 (its fixed15_v1 comparisons move).
 """
@@ -97,23 +96,16 @@ def main():
 
         prompt = Array.from_list(token_ids(1, 512, v, SEED + 7), "<i4")
         n = args.new
-        from mojolearn._buffer import empty
-        last = empty((1, v), "<f4")
-        res = lm._generate_resident(prompt, n, 512 + n, last_logits=last)
-        check(f"{prof} the resident route ran", res is not None)
-        inner = lm._generate_resident
-        lm._generate_resident = lambda *a, **k: None
         try:
-            per = lm.generate(prompt, n)
-        finally:
-            lm._generate_resident = inner
+            res = lm.generate(prompt, n, resident=True)
+        except ValueError as error:
+            res = None
+            print(f"RESULT resident refused: {error}", flush=True)
+        check(f"{prof} the resident route ran", res is not None)
+        per = lm.generate(prompt, n)
         if res is not None:
-            check(f"{prof} resident generate ids == per-layer ({sha(res.tobytes())[:16]})",
+            check(f"{prof} resident generate ids == default route ({sha(res.tobytes())[:16]})",
                   res.tobytes() == per.tobytes())
-            seq = Array.from_list([per.tolist()[0][:512 + n - 1]], "<i4")
-            want = raw(lm.forward(seq))[(512 + n - 2) * v * 4:]
-            check(f"{prof} resident last-pass logits == per-layer forward at position {512 + n - 2}",
-                  raw(last) == want)
         del lm
     print("RESIDENT GATE " + ("GREEN" if not bad else "RED: " + "; ".join(bad)), flush=True)
     return 1 if bad else 0

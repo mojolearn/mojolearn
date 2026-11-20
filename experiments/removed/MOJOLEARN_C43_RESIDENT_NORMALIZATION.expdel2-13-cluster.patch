@@ -1,0 +1,166 @@
+diff --git a/spectral/impl/sparse/linalg/detail/laplacian.mojo b/spectral/impl/sparse/linalg/detail/laplacian.mojo
+index 0d52703592..614ae0e6ce 100644
+--- a/spectral/impl/sparse/linalg/detail/laplacian.mojo
++++ b/spectral/impl/sparse/linalg/detail/laplacian.mojo
+@@ -38,6 +38,7 @@ MEASURED: `check_spectral_launch_invariance` runs it at two block widths;
+ the hashed-weight fixture is what separates this fold from a split one.
+ ======================================================================
+ """
++from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ 
+@@ -103,6 +104,7 @@ struct DeviceCoo(Movable):
+     var cols: DeviceBuffer[DType.int32]
+     var vals: DeviceBuffer[DType.float32]
+     var indptr: DeviceBuffer[DType.int32]
++    var normalizer: Optional[DeviceBuffer[DType.float32]]
+ 
+     def __init__(
+         out self,
+@@ -119,6 +121,7 @@ struct DeviceCoo(Movable):
+         self.cols = cols^
+         self.vals = vals^
+         self.indptr = indptr^
++        self.normalizer = Optional[DeviceBuffer[DType.float32]]()
+ 
+ 
+ def degree_kernel(
+@@ -675,8 +678,14 @@ def laplacian_normalize_device(
+         grid_dim=((n + tpb - 1) // tpb, 1, 1),
+         block_dim=(tpb, 1, 1),
+     )
+-    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-05-base); code recoverable at 7c24f5181f.
+-    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
++    comptime if C43_RESIDENT_NORMALIZATION:
++        # Keep sqrt-degree once; consumers reproduce the two scaling
++        # multiplies at each value load and pin the diagonal to one.
++        var normalizer=ctx.enqueue_create_buffer[DType.float32](n)
++        ctx.enqueue_copy(dst_buf=normalizer,src_buf=diagonal_out)
++        lap.normalizer=Optional[DeviceBuffer[DType.float32]](normalizer^)
++        ctx.synchronize()
++        return lap^
+     ctx.enqueue_function[coo_scale_by_diagonal_symmetric_kernel](
+         lap.rows.unsafe_ptr(),
+         lap.cols.unsafe_ptr(),
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index eb39e0d350..736528fd0d 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -373,8 +373,101 @@ def id_spmv_lanes_kernel(
+         result.unsafe_store(r, part[base])
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-05-base); code recoverable at 7c24f5181f.
+-# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
++@always_inline
++def _c43_value(value: Float32,row: Int,col: Int,diag: MutPointer[Float32,MutAnyOrigin]) -> Float32:
++    if row==col:
++        return Float32(1)
++    var rs=ftz(Float32(1)/diag[row]) if diag[row]!=Float32(0) else Float32(0)
++    var cs=ftz(Float32(1)/diag[col]) if diag[col]!=Float32(0) else Float32(0)
++    return ftz(identical_mul(ftz(identical_mul(rs,value)),cs))
++
++
++def _c43_spmv_kernel(
++    result: MutPointer[Float32, MutAnyOrigin],
++    indptr: MutPointer[Int32, MutAnyOrigin],
++    cols: MutPointer[Int32, MutAnyOrigin],
++    vals: MutPointer[Float32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    normalizer: MutPointer[Float32,MutAnyOrigin],
++):
++    """`cusparseSpMV(A, v) -> u` (`:304-313`): one thread per row, the
++    row's entries in their canonical (ascending column) order, `acc =
++    ftz(identical_mul_add(val, x[col], acc))` from `+0.0`. THE FIXED-ORDER
++    CONTRACTION of the matvec: a pure function of the row's bits and of
++    nothing about the launch."""
++    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if r >= Int(n_in):
++        return
++    var lo = Int(indptr.unsafe_load(r))
++    var hi = Int(indptr.unsafe_load(r + 1))
++    var acc = Float32(0.0)
++    comptime if SAB_SPMV_ROTATE:
++        var cnt = hi - lo
++        if cnt > 0:
++            var start = lo + (Int(block_idx.x) % cnt)
++            for jj in range(cnt):
++                var j = lo + ((start - lo + jj) % cnt)
++                acc = ftz(
++                    identical_mul_add(
++                        _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
++                    )
++                )
++    else:
++        for j in range(lo, hi):
++            acc = ftz(
++                identical_mul_add(
++                    _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
++                )
++            )
++    result.unsafe_store(r, acc)
++
++
++def _c43_spmv_lanes_kernel(
++    result: MutPointer[Float32, MutAnyOrigin],
++    indptr: MutPointer[Int32, MutAnyOrigin],
++    cols: MutPointer[Int32, MutAnyOrigin],
++    vals: MutPointer[Float32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    normalizer: MutPointer[Float32,MutAnyOrigin],
++):
++    """`spmv_kernel` in the lane order of `spectral/spmv_order.mojo`: one
++    thread per lane of a row (SPMV_LANES lanes, ID_SPMV_ROWS rows a block),
++    each a strided `fma` chain over the row's ascending entries, then the
++    row's lane 0 folds the SPMV_LANES lane sums in the fixed pairwise tree.
++    A pure function of the row's bits: the block shape only schedules."""
++    var part = stack_allocation[
++        ID_SPMV_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
++    ]()
++    var t = Int(thread_idx.x)
++    var slot = t // SPMV_LANES
++    var lane = t % SPMV_LANES
++    var r = Int(block_idx.x) * ID_SPMV_ROWS + slot
++    var live = r < Int(n_in)
++    var acc = Float32(0.0)
++    if live:
++        var hi = Int(indptr.unsafe_load(r + 1))
++        var j = Int(indptr.unsafe_load(r)) + lane
++        comptime if SAB_SPMV_ROTATE:
++            j = Int(indptr.unsafe_load(r)) + ((lane + Int(block_idx.x)) % SPMV_LANES)
++        while j < hi:
++            acc = ftz(
++                identical_mul_add(
++                    _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
++                )
++            )
++            j += SPMV_LANES
++    part[t] = acc
++    barrier()
++    if live and lane == 0:
++        var base = slot * SPMV_LANES
++        var w = SPMV_LANES // 2
++        while w >= 1:
++            for l in range(w):
++                part[base + l] = ftz(part[base + l] + part[base + l + w])
++            w = w // 2
++        result.unsafe_store(r, part[base])
+ 
+ 
+ def spmv_enqueue(
+@@ -391,6 +484,12 @@ def spmv_enqueue(
+     `x_off`."""
+     var u = ub.unsafe_ptr()
+     var x = xb.unsafe_ptr().unsafe_offset(x_off)
++    if A.normalizer:
++        comptime if IDN_SPMV_LANES:
++            ctx.enqueue_function[_c43_spmv_lanes_kernel](u,A.indptr.unsafe_ptr(),A.cols.unsafe_ptr(),A.vals.unsafe_ptr(),x,Int32(n),A.normalizer.value().unsafe_ptr(),grid_dim=((n+ID_SPMV_ROWS-1)//ID_SPMV_ROWS,1,1),block_dim=(ID_SPMV_TPB,1,1))
++        else:
++            ctx.enqueue_function[_c43_spmv_kernel](u,A.indptr.unsafe_ptr(),A.cols.unsafe_ptr(),A.vals.unsafe_ptr(),x,Int32(n),A.normalizer.value().unsafe_ptr(),grid_dim=(_grid(n,tpb),1,1),block_dim=(tpb,1,1))
++        return
+     comptime if IDN_SPMV_LANES:
+         ctx.enqueue_function[id_spmv_lanes_kernel](
+             u, A.indptr.unsafe_ptr(), A.cols.unsafe_ptr(),

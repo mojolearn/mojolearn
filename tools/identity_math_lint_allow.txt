@@ -1,0 +1,137 @@
+# tools/identity_math_lint.py allow list: <path>:<function>:<op>  # <CLASS>: <reason>
+# CLASS: SAFE-FAST (reachable only in FAST), SAFE-EXACT (exact on every backend for its values, or feeds only an
+# integer/layout decision), SAFE-NOT-SHIPPED (in no product build), SAFE-ROW (reachable only under a relaxed row of
+# checks/mode_policy.mojo; the reason starts with the row: `# SAFE-ROW: vendor_math: ...`). Classified 2026-11-17 (lane fb13-identity-audit),
+# per-site evidence: ~/mojolearn-evidence/briefs-20261117/fb13/classified_bucket{0,1,2}.tsv. A new raw call is fixed
+# through checks/numerics.mojo, not added here, unless it is one of these classes with a cited reason.
+arima/impl/fast_arma_ls.mojo:_givens_row:sqrt  # SAFE-FAST: fast_arma_ls_kernel launched only under comptime X0_FAST_LS = NUMERIC_FAST and TARGET_HAS_APPLE_GPU (arima/impl/estimate_x0.mojo:100, :568)
+arima/impl/timeSeries/jones_transform.mojo:tanh_half:tanh  # SAFE-FAST: else arm of comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL in tanh_half (jones_transform.mojo:99); identical arm uses identical_exp
+arima/impl/timeSeries/jones_transform.mojo:two_atanh:atanh  # SAFE-FAST: else arm of comptime IDENTICAL branch in two_atanh (jones_transform.mojo:116); identical arm uses identical_log
+autograd/kernels/mamba1_scan.mojo:mamba_bwd_da_partial_kernel:exp2  # SAFE-NOT-SHIPPED: inside comptime if SAB_S5_EXP2 (mamba1_scan.mojo:1240); sabotage define default off (selective_scan_interface.mojo:216)
+autograd/kernels/mamba1_scan.mojo:selective_scan_bwd_scan_kernel:exp2  # SAFE-NOT-SHIPPED: inside comptime if SAB_S5_EXP2 (mamba1_scan.mojo:673); sabotage define default off (selective_scan_interface.mojo:216)
+autograd/kernels/mamba1_scan.mojo:selective_scan_checkpoint_kernel:exp2  # SAFE-NOT-SHIPPED: inside comptime if SAB_S5_EXP2 (mamba1_scan.mojo:465); SAB_S5_EXP2 = is_defined[MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2] (mamba/impl/ops/selective_scan_interface.mojo:216), verify sabotage arm only; else-arm is the pinned path
+bindings/mani_decomp_run.mojo:iso_reconstruction_error_run:sqrt  # SAFE-EXACT: host Float64 sqrt in iso_reconstruction_error_run (mani_decomp_run.mojo:512); IEEE correctly rounded on every host
+bindings/mani_decomp_run.mojo:lle_smallest_run:sqrt  # SAFE-EXACT: host Float64 sqrt(n) in lle_smallest_run (mani_decomp_run.mojo:562); IEEE correctly rounded
+bindings/mani_decomp_run.mojo:mani_lanczos_top:sqrt  # SAFE-EXACT: host Float64 sqrt in mani_lanczos_top (host driver on MRun); IEEE correctly rounded on x86 and ARM hosts, never in a GPU kernel
+bindings/metrics_exp_cluster_run.mojo:_generalized_average:sqrt  # SAFE-EXACT: host binary64 NMI/AMI epilogue _generalized_average (metrics_exp_cluster_run.mojo:7); IEEE sqrt correctly rounded
+bindings/normal_dist_helpers_run.mojo:normal_inv_cdf64:sqrt  # SAFE-EXACT: host Float64 sqrt in normal_inv_cdf64 (normal_dist_helpers_run.mojo:140); log already portable_log64; sqrt IEEE correctly rounded
+bindings/rp_native_door.mojo:rp_fit:sqrt  # SAFE-EXACT: host Float64 1/sqrt(d) for density='auto' in the RP door; IEEE correctly rounded
+bindings/samba_construct_native_pack.mojo:_samba_initialize_parameters:sqrt  # SAFE-EXACT: host Float64 sqrt(5) init bound (comment samba_construct_native_pack.mojo:80-82: correctly rounded hardware sqrt on both hosts); constant input
+bindings/trees_public_forest_door.mojo:_max_features_fraction:sqrt  # SAFE-EXACT: host Float64 sqrt(n_features) in _max_features_fraction (trees_public_forest_door.mojo:690); IEEE correctly rounded
+cluster/impl/detail/kmeans.mojo:init_scalable_kmeans_plus_plus:log  # SAFE-EXACT: host (after ctx.synchronize, kmeans.mojo:1114); only sets integer niter = min(8, ceil(log(psi))); psi is a widened Float32, and for float32 psi near e^k (k=1..7) |log(psi)-k| >= 1.7e-9, far beyond Float64 libm error, log(1)=0 exactly everywhere
+cluster/impl/detail/kmeans.mojo:kmeans_plus_plus:log  # SAFE-EXACT: host n_trials = 2 + Int(ceil(log(Float64(n_clusters)))): integer only; ln(k) is exact 0 at k=1 and for integer k in [2,2e6] is >=2.4e-7 from any integer, far beyond any libm error, so ceil cannot differ
+core/array_helpers_impl.mojo:row_stds_f64:sqrt  # SAFE-EXACT: host row_stds_f64 loop (array_helpers_impl.mojo:266); Float64 sqrt is IEEE correctly rounded on x86/arm hosts (and sqrt.rn.f64 / correctly rounded on NV/AMD if ever on device)
+core/classical_host_predict.mojo:host_whiten_scalar:sqrt  # SAFE-EXACT: host_whiten_scalar (classical_host_predict.mojo:563): Float64 sqrt of an integer on host, IEEE correctly rounded
+core/hotpath_impl_rows.mojo:normal_init_f32:sqrt  # SAFE-EXACT: host normal_init_f32 loop (hotpath_impl_rows.mojo:245); Float64 sqrt IEEE on host; log already through portable_log64
+core/hotpath_impl_rows.mojo:strat_group_plan_i32:sqrt  # SAFE-EXACT: host strat_group_plan_i32 (hotpath_impl_rows.mojo:409); Float64 sqrt IEEE on host; result is a sort key
+core/tree_math.mojo:tree_log:log  # SAFE-NOT-SHIPPED: non-float32 branch of tree_log; every product instantiation is Float32 (core/mojolearn_rf_run.mojo:97 DT=float32; ET regression_deviance_gain uses Float32, extratrees/.../objectives.mojo:430-448), so the Float64 log is never compiled; Float32 goes via identical_log (tree_math.mojo:26)
+decomposition/impl/linalg/detail/pca.mojo:order_truncate_spectrum:sqrt  # SAFE-EXACT: host Float64 singular value in order_truncate_spectrum (host List[Float64], pca.mojo:376); IEEE correctly rounded
+decomposition/impl/linalg/detail/pca.mojo:whiten_scalar:sqrt  # SAFE-EXACT: host Float64 sqrt(n-1) in whiten_scalar (pca.mojo:798), called host-side at pca.mojo:844; IEEE correctly rounded then narrowed
+ensemble/randomforest.mojo:compute_max_features_sqrt:sqrt  # SAFE-EXACT: host Float64 compute_max_features_sqrt, caller randomforest.mojo:527 (host); IEEE correctly rounded
+gaussian_process/host/gpc_steps.mojo:gpc_pi_star:sqrt  # SAFE-EXACT: host Float64 sqrt (IEEE correctly rounded on x86-64 and arm64); the host gp binding, never compiled for a GPU (fb13 lead review)
+gbdt/gpu_lib/gpu_profiler.mojo:print_info:sqrt  # SAFE-EXACT: host Float64 rmse only passed to print() in the profiler report (gpu_profiler.mojo:213-223); never feeds a returned value
+gbdt/lapack/linear_system.mojo:solve_linear_system_cholesky:sqrt  # SAFE-EXACT: host List[Float64] Cholesky in solve_linear_system_cholesky (linear_system.mojo:60); IEEE correctly rounded
+gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:compute_target_std_dev:sqrt  # SAFE-EXACT: host Float64 sqrt of host-read sums after synchronize; IEEE correctly rounded
+gbdt/methods/ordered_boosting.mojo:fit_ordered:sqrt  # SAFE-EXACT: host Float64 score_std sqrt of host-read h_sums; mult via portable ordered_model_length_mult; IEEE correctly rounded
+gbdt/methods/random_score_helper.mojo:compute_std_dev:sqrt  # SAFE-EXACT: host Float64 sqrt of the downloaded sum (IEEE correctly rounded on every host); not device code (fb13 lead review)
+gbdt/targets/kernel/pointwise_targets.mojo:routed_exp:exp  # SAFE-FAST: routed_exp: raw exp only after comptime IDENTICAL arm returns identical_exp (pointwise_targets.mojo:109)
+gbdt/targets/kernel/pointwise_targets.mojo:routed_log:log  # SAFE-FAST: routed_log: raw log only after comptime IDENTICAL arm returns identical_log (pointwise_targets.mojo:131)
+gemm/afn_apple_fast.mojo:_afn_epilogue:erf  # SAFE-FAST: same AFN_GEMM_APPLE gate (afn_apple_fast.mojo:105)
+gemm/afn_apple_fast.mojo:_afn_epilogue:exp  # SAFE-FAST: whole file compiled only under AFN_GEMM_APPLE = NUMERIC_FAST and Apple GPU column (afn_apple_fast.mojo:105-109)
+gemm/afn_apple_fast.mojo:_afn_store_swiglu_bwd:exp  # SAFE-FAST: same AFN_GEMM_APPLE gate (afn_apple_fast.mojo:105)
+glm/impl/qn/simple_mat/dense.mojo:nrm2:sqrt  # SAFE-EXACT: nrm2 runs on the host after _read_scalar (dense.mojo:256-267); Float32 host sqrt is IEEE correctly rounded (sqrtss/fsqrt); not in a kernel
+hierarchy/impl/cluster/detail/fast_boruvka.mojo:fb_nearest_other_kernel:sqrt  # SAFE-FAST: fast_euclidean_mst reached only under SL_FAST_BORUVKA = FAST and Apple GPU (hierarchy/.../single_linkage.mojo:53,109; hdbscan/.../single_linkage.mojo:189 use_fast)
+hierarchy/impl/cluster/detail/fast_boruvka.mojo:fbr_gather_edges_kernel:sqrt  # SAFE-FAST: same file, same gate SL_FAST_BORUVKA (single_linkage.mojo:53)
+hierarchy/impl/cluster/detail/fast_mma_boruvka.mojo:fb_mma_nearest_kernel:sqrt  # SAFE-FAST: FAST_MMA_BORUVKA_ENABLED = FAST and Apple GPU (fast_mma_boruvka.mojo:54,90); only imported by fast_boruvka.mojo
+holtwinters/impl/internal/hw_optim.mojo:_sqrt_seam:sqrt  # SAFE-NOT-SHIPPED: only under comptime SAB_STD_SQRT = is_defined[MOJOLEARN_HW_SABOTAGE_STD_SQRT] (hw_utils.mojo:69; hw_optim.mojo:276), a verify sabotage build; product uses identical_sqrt
+kde/impl/neighbors/kernel_density.mojo:_kde2_cell_update:exp  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:_kde2_cell_update:log  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:_kde_fused_cell_distance:exp  # SAFE-FAST: _kde_fused_cell_distance used only by kde_fused_logsumexp_kernel (:1265) <- _kde_fused_launch <- _kde_score_samples_fused, only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST` (:4257)
+kde/impl/neighbors/kernel_density.mojo:_kde_fused_cell_distance:log  # SAFE-FAST: _kde_fused_cell_distance used only by kde_fused_logsumexp_kernel (:1265) <- _kde_fused_launch <- _kde_score_samples_fused, only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST` (:4257)
+kde/impl/neighbors/kernel_density.mojo:_lgamma_half_fast:log  # SAFE-FAST: log_kernel_norm_fast/_log_vn_fast/_lgamma_half_fast/_log_sn_fast only called from log_kernel_norm after the identical comptime branch returns (kernel_density.mojo:774-776); identical uses log_kernel_norm_identical
+kde/impl/neighbors/kernel_density.mojo:_log_sn_fast:log  # SAFE-FAST: log_kernel_norm_fast/_log_vn_fast/_lgamma_half_fast/_log_sn_fast only called from log_kernel_norm after the identical comptime branch returns (kernel_density.mojo:774-776); identical uses log_kernel_norm_identical
+kde/impl/neighbors/kernel_density.mojo:_log_vn_fast:log  # SAFE-FAST: log_kernel_norm_fast/_log_vn_fast/_lgamma_half_fast/_log_sn_fast only called from log_kernel_norm after the identical comptime branch returns (kernel_density.mojo:774-776); identical uses log_kernel_norm_identical
+kde/impl/neighbors/kernel_density.mojo:kde2_dimtile_kernel:exp  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:kde2_dimtile_kernel:log  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:kde2_dimtile_kernel:sqrt  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:kde2_merge_kernel:exp  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:kde2_merge_kernel:log  # SAFE-FAST: kde2 dimtile/merge kernels launched only from _kde2_enqueue (:3152,:3348) <- kde2_score_samples_fast_apple (:3393) <- :4250 under FAST and comptime KDE2_DIMTILE (_KDE2_FAST_APPLE, :2705)
+kde/impl/neighbors/kernel_density.mojo:kde_fused_logsumexp_kernel:exp  # SAFE-FAST: kde_fused_logsumexp_kernel launched only at :1512 in _kde_fused_launch <- _kde_score_samples_fused/_kde2_launch_main_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_logsumexp_kernel:log  # SAFE-FAST: kde_fused_logsumexp_kernel launched only at :1512 in _kde_fused_launch <- _kde_score_samples_fused/_kde2_launch_main_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_logsumexp_kernel:sqrt  # SAFE-FAST: kde_fused_logsumexp_kernel launched only at :1512 in _kde_fused_launch <- _kde_score_samples_fused/_kde2_launch_main_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_slice_kernel:exp  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_slice_kernel:log  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_slice_kernel:sqrt  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_kernel:exp  # SAFE-FAST: kde_fused_wide_kernel launched only at :1495 in _kde_fused_launch; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_kernel:log  # SAFE-FAST: kde_fused_wide_kernel launched only at :1495 in _kde_fused_launch; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_kernel:sqrt  # SAFE-FAST: kde_fused_wide_kernel launched only at :1495 in _kde_fused_launch; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_slice_kernel:exp  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_slice_kernel:log  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_fused_wide_slice_kernel:sqrt  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_slice_merge_kernel:exp  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_slice_merge_kernel:log  # SAFE-FAST: fused slice kernels launched only from _kde_score_samples_fused_sliced (:4795,:4814,:4832) <- :1561 gated by kde_fast_slices_on (:4409, FAST and Apple only) inside _kde_score_samples_fused; only caller chain reaches kernel_density.mojo:4245 `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST`
+kde/impl/neighbors/kernel_density.mojo:kde_validate_data:sqrt  # SAFE-EXACT: host-only validation bound 2^63/sqrt(Float64(d)) in kde_validate_data[_ptr]; host IEEE sqrt, only decides raise/no-raise, never a returned value
+kde/impl/neighbors/kernel_density.mojo:kde_validate_data_ptr:sqrt  # SAFE-EXACT: host-only validation bound 2^63/sqrt(Float64(d)) in kde_validate_data[_ptr]; host IEEE sqrt, only decides raise/no-raise, never a returned value
+kde/impl/neighbors/kernel_density.mojo:log_kernel_norm_fast:log  # SAFE-FAST: log_kernel_norm_fast/_log_vn_fast/_lgamma_half_fast/_log_sn_fast only called from log_kernel_norm after the identical comptime branch returns (kernel_density.mojo:774-776); identical uses log_kernel_norm_identical
+kernel_methods/host/km_host_impl.mojo:kmh_sqrt_weights:sqrt  # SAFE-EXACT: host Float64 sqrt of each weight, rounded once to Float32 (IEEE on every host) (fb13 lead review)
+kernel_methods/km_binding_impl.mojo:km_sqrt_weights:sqrt  # SAFE-EXACT: host km_sqrt_weights loop: Float64 sqrt (IEEE on host) then cast to Float32
+mamba/host/gen/selective_scan_backward.mojo:mamba_bwd_da_partial_kernel:exp2  # SAFE-NOT-SHIPPED: only under the default-off verify sabotage define SAB_S5_EXP2 (fb13 lead review)
+mamba/host/gen/selective_scan_backward.mojo:selective_scan_bwd_scan_kernel:exp2  # SAFE-NOT-SHIPPED: only under the default-off verify sabotage define SAB_S5_EXP2 (fb13 lead review)
+mamba/host/gen/selective_scan_backward.mojo:selective_scan_checkpoint_kernel:exp2  # SAFE-NOT-SHIPPED: only under the default-off verify sabotage define SAB_S5_EXP2 (fb13 lead review)
+mamba/host/gen/selective_scan_interface.mojo:selective_scan_fwd_kernel:exp2  # SAFE-NOT-SHIPPED: only under the default-off verify sabotage define SAB_S5_EXP2 (fb13 lead review)
+mamba/impl/ops/selective_scan_interface.mojo:selective_scan_fwd_kernel:exp2  # SAFE-NOT-SHIPPED: only under SAB_S5_EXP2 = is_defined[MOJOLEARN_MAMBA_SABOTAGE_S5_EXP2] (selective_scan_interface.mojo:216, :393), sabotage build; product uses identical_exp
+metrics/impl/fowlkes_mallows.mojo:fowlkes_mallows_from_contingency:sqrt  # SAFE-EXACT: second sqrt on the same line, same reason
+metrics/impl/regression_errors.mojo:error_finalize_kernel:sqrt  # SAFE-FAST: else arm of comptime IDENTICAL (regression_errors.mojo:63) which uses portable_sqrtf
+metrics/impl/stats/detail/entropy.mojo:entropy_from_counts_traced:log  # SAFE-FAST: final else after comptime IDN_METRIC_EPI / elif NUMERIC_IDENTICAL (entropy.mojo:146, :158)
+metrics/impl/stats/detail/mutual_info_score.mojo:mutual_info_from_contingency_traced:log  # SAFE-FAST: second log on the same line, same reason
+mixture/ff_fast.mojo:gf_sqrt:sqrt  # SAFE-FAST: gf_sqrt used only by fused_precision_cholesky_ff_kernel launched under GMM_FAST_FF_COV (mixture/checks/mstep.mojo:2299), which requires GMM_FUSED_CHOL = FAST and Apple (mstep.mojo:961,1093)
+neighbors/impl/ball_cover/ball_cover.mojo:rbc_n_landmarks:sqrt  # SAFE-EXACT: host Float64 sqrt truncated to Int then corrected by the two integer while-loops (ball_cover.mojo:204-207): result is exactly floor(sqrt(m)) regardless of sqrt rounding
+neighbors/impl/detail/fast_mma_knn.mojo:fast_mma_merge_kernel:sqrt  # SAFE-FAST: FAST_MMA_KNN_ENABLED = NUMERIC_FAST and Apple GPU (fast_mma_knn.mojo:98, :152 refuses otherwise)
+neighbors/impl/detail/fast_topk_knn.mojo:fast_topk_merge_kernel:sqrt  # SAFE-FAST: FAST_TOPK_KNN_ENABLED = NUMERIC_FAST and Apple GPU (fast_topk_knn.mojo:62, :67)
+packaging/native_only/cases/smoke_preprocessing.mojo:main:sqrt  # SAFE-NOT-SHIPPED: test oracle (expected value) in a native_only smoke case run by tools/native_only_smoke.py (.github/workflows/native-only-smoke.yml:42); not in any binding
+packaging/native_only/cases/svm_core.mojo:_rbf_expected:exp  # SAFE-NOT-SHIPPED: second exp on the same line, same oracle
+preprocessing/standard.mojo:standard_finalize_kernel:sqrt  # SAFE-FAST: else arm of comptime IDENTICAL in standard_finalize_kernel (standard.mojo:106) which uses portable_sqrtf
+sequence/ops_impl.mojo:adafactor_core:sqrt  # SAFE-EXACT: host scalar setup in adafactor_core: sqrt(Float64(t)) of an integer step, Float64 IEEE on host
+sequence/xseq_neural_run.mojo:xseq_run_mlp_glorot:sqrt  # SAFE-EXACT: host Glorot bound, Float64 IEEE on host
+sequence/xseq_neural_run.mojo:xseq_run_rnn_bound:sqrt  # SAFE-EXACT: host init bound 1/sqrt(hidden), Float64 IEEE on host
+spectral/impl/sparse/solver/detail/lanczos.mojo:_host_sqrt:sqrt  # SAFE-NOT-SHIPPED: inside comptime if SAB_STD_SQRT (lanczos.mojo:520); SAB_STD_SQRT = is_defined[MOJOLEARN_SPECTRAL_SABOTAGE_STD_SQRT] (lanczos.mojo:218), sabotage only
+svm/impl/distance/kernel_matrices.mojo:rbf_fused_tile_kernel:exp  # SAFE-FAST: rbf_fused_tile_kernel launched via rbf_fused_tile only under comptime if NUMERIC_FAST and TARGET_HAS_APPLE_GPU (kernel_matrices.mojo:535-537); IDENTICAL uses idn_rbf_fused_tile
+svm/impl/distance/kernel_matrices.mojo:rbf_kernel_expanded_2d_kernel:exp  # SAFE-NOT-SHIPPED: inside comptime if SAB_STD_EXP (kernel_matrices.mojo:138); SAB_STD_EXP = is_defined[MOJOLEARN_SVM_SABOTAGE_STD_EXP] (kernel_matrices.mojo:75)
+svm/impl/distance/kernel_matrices.mojo:rbf_kernel_expanded_kernel:exp  # SAFE-FAST: mixed SAFE-FAST/SAFE-NOT-SHIPPED at lines 169,174; inside comptime if SAB_STD_EXP (kernel_matrices.mojo:168), sabotage only (:75)
+svm/impl/fast_update_f.mojo:fused_update_f_kernel:exp  # SAFE-FAST: fast_update_f called only under comptime if SVM_FUSED_UPDATE_F (smosolver.mojo:916) = NUMERIC_FAST and Apple GPU (smosolver.mojo:145); IDENTICAL has idn_update_f.mojo
+svm/impl/svc_impl.mojo:svc_fused_decision_kernel:exp  # SAFE-FAST: svc_fused_decision called only under comptime if NUMERIC_FAST and TARGET_HAS_APPLE_GPU (svc_impl.mojo:732-737)
+training/afn_optim.mojo:_afn_adam_apply:sqrt  # SAFE-FAST: same AFN_APPLE_FAST gate (afn_optim.mojo:101)
+training/afn_optim.mojo:afn_ce_row_kernel:exp  # SAFE-FAST: same AFN_APPLE_FAST gate (AFN_LOSS_FUSED, afn_optim.mojo:166)
+training/afn_optim.mojo:afn_ce_row_kernel:log  # SAFE-FAST: same AFN_LOSS_FUSED gate
+training/afn_optim.mojo:afn_clip_fold_kernel:sqrt  # SAFE-FAST: file reached only under AFN_APPLE_FAST = NUMERIC_FAST and Apple GPU (afn_optim.mojo:101) via AFN_* comptime guards
+transformer/impl/llama/afn_apple_fast.mojo:afn_flash_forward_kernel:exp  # SAFE-FAST: afn_flash_forward called only under comptime if AFN_ATTN_FLASH (modeling_llama.mojo:5757), FAST+Apple (afn_apple_fast.mojo:77,103)
+transformer/impl/llama/afn_apple_fast.mojo:afn_gemm_nt_kernel:exp  # SAFE-FAST: same kernel and gate as :1050
+transformer/impl/llama/afn_apple_fast.mojo:afn_gemm_nt_kernel:sqrt  # SAFE-FAST: afn_gemm_nt_kernel via _afn_gemm_launch (afn_apple_fast.mojo:1198-1299), reached only from AFN_ATTN_* gated block code (modeling_llama.mojo:6324 AFN_ATTN_ANY); FAST+Apple (afn_apple_fast.mojo:77)
+transformer/impl/llama/afn_apple_fast.mojo:afn_rms_norm_sg_kernel:sqrt  # SAFE-FAST: AFN_ATTN_ON = FAST and Apple and not COLUMN_CPU (afn_apple_fast.mojo:77); afn_rms_norm_sg called only under comptime AFN_ATTN_NORM_SG/FUSE_PRE (modeling_llama.mojo:5593,5815,5916)
+x_ann/tsne_init.mojo:tsne_init_y0:sqrt  # SAFE-EXACT: host Float64 std of the PCA init column (fsum + identical_mul64); IEEE correctly rounded
+x_cluster/common.mojo:greedy_kmeans_pp_indices:log  # SAFE-EXACT: host Int(log(Float64(k))) n_trials: ln k is 0 exactly at k=1 and irrational for k>1, far more than 1 ulp from an integer at any feasible k, so the floor cannot change
+x_cluster/minibatch.mojo:_mb_kpp_indices_slot:log  # SAFE-EXACT: same host Int(log(k)) n_trials pattern as x_cluster/common.mojo:78
+x_cluster/minibatch_ptr.mojo:_kpp_indices_slot:log  # SAFE-EXACT: same host Int(log(k)) n_trials pattern as x_cluster/common.mojo:78
+x_cnn/classifier_run.mojo:cnnclf_run_kaiming_bound:sqrt  # SAFE-EXACT: host init bound 1/sqrt(Float64(fan_in)), IEEE on host
+x_cnn/conv_run.mojo:conv_run_bound:sqrt  # SAFE-EXACT: host init bound 1/sqrt(Float64(fan)), IEEE on host
+x_cnn/graph_run.mojo:graph_run_fan_in_bound:sqrt  # SAFE-EXACT: host fan-in bound Float64, IEEE on host
+x_cnn/graph_run.mojo:graph_run_gcn_bound:sqrt  # SAFE-EXACT: host Glorot bound sqrt(6/(d+f)) Float64, IEEE on host
+x_decomp/dictl.mojo:minibatch_loop:sqrt  # SAFE-EXACT: host scalar from k.word(...) Float64 (dictl.mojo:216), IEEE on host; convergence test
+x_decomp/dictl_dev.mojo:minibatch_loop_dev:sqrt  # SAFE-EXACT: host scalar from downloaded hw.d Float64, IEEE on host
+x_decomp/fa_em.mojo:fa_em:sqrt  # SAFE-EXACT: host sqrt(Float64(n)) of an integer, IEEE
+x_decomp/fa_em_dev.mojo:fa_em_dev:sqrt  # SAFE-EXACT: host sqrt(Float64(n)) of an integer, IEEE
+x_decomp/fa_fast.mojo:fa_em_run:sqrt  # SAFE-EXACT: host launcher fa_em_run: 1/sqrt(Float64(n)) of an integer, IEEE, then cast to Float32
+x_decomp/ica_owner.mojo:ica_fit_run:sqrt  # SAFE-EXACT: host scalar sqrt(Float64(n)) passed to kit.ew OP_SCALE, IEEE
+x_decomp/ipca_owner.mojo:ipca_partial_step:sqrt  # SAFE-EXACT: host Float64 scalar sqrt(seen/total*n), IEEE on host
+x_decomp/kpca_owner.mojo:_lanczos_top:sqrt  # SAFE-EXACT: host Float64 scalar from kit.word(qq), IEEE on host
+x_decomp/lle_iter.mojo:lle_iterate:sqrt  # SAFE-EXACT: host Float64 scalar from k.word(total), IEEE on host; convergence error
+x_decomp/lle_iter_dev.mojo:lle_iterate_dev:sqrt  # SAFE-EXACT: host Float64 scalar from k.word(total), IEEE on host
+x_decomp/mds.mojo:mds_single:sqrt  # SAFE-EXACT: host Float64 stress (user-visible) sqrt, IEEE on host
+x_decomp/mds_dev.mojo:mds_single_dev:sqrt  # SAFE-EXACT: host Float64 stress from hd.d, IEEE on host
+x_decomp/nmf_owner.mojo:_err:sqrt  # SAFE-EXACT: host Float64 reconstruction error sqrt(2*res), IEEE on host
+x_decomp/nmf_owner.mojo:_init:sqrt  # SAFE-EXACT: host Float64 scalar sqrt(xmean/nc), IEEE on host
+x_decomp/nmf_owner.mojo:nmf_run:sqrt  # SAFE-EXACT: host Float64 start value, IEEE on host, then cast Float32
+x_decomp/rp_owner.mojo:rp_fit_run:sqrt  # SAFE-EXACT: host Float64 scale 1/sqrt(kc), IEEE on host
+x_neighbors/iter_device.mojo:nc_std_red_kernel:sqrt  # SAFE-FAST: else arm of comptime if XN_NC_IDN_CHUNKED (iter_device.mojo:3158) = NUMERIC_IDENTICAL (x_neighbors/items.mojo:59); IDENTICAL arm uses identical_sqrt
+xtrees/dart_units.mojo:_exp:exp  # SAFE-FAST: else arm of comptime if DART_PIN (dart_units.mojo:100) = NUMERIC_IDENTICAL (dart_units.mojo:35)
+xtrees/dart_units.mojo:_sigmoid:exp  # SAFE-FAST: else arm of comptime if DART_PIN (dart_units.mojo:118) = NUMERIC_IDENTICAL (dart_units.mojo:35)

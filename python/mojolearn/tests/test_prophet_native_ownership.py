@@ -6,6 +6,7 @@ import sys
 import pytest
 
 
+@pytest.mark.needs_identity_harness
 @pytest.mark.parametrize("fixture", ["base", "odd"])
 def test_full_prophet_fixture_repeated_forecast_keeps_input_owners(fixture):
     script = r'''

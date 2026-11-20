@@ -26,7 +26,7 @@
 #   shape       full (the board) | small (a smoke)
 #   reps        alternations (A B) >= 1
 #   defines     arm A's and arm B's MOJOLEARN_MOJO_BUILD_FLAGS, e.g.
-#               "" and "-D MOJOLEARN_AFN_GEMM_SIMDGROUP"
+#               "" and "-D MOJOLEARN_<DEFINE>"
 #
 # BASELINE MODE (the tier itself): the arm words `identical` and `fast`:
 #     afn_ab.sh <tag> <binding> <lane> <shape> <reps> identical fast

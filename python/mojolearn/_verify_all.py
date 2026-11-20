@@ -62,6 +62,10 @@ import time
 import traceback
 
 from . import _verify_reference as vref
+# The GPU side, the CPU side, their records and their comparison: the one
+# module the cross-check below and the check of a user's own estimator
+# (`verify --check`, _verify_check.py) both run.
+from . import _check_both as cb
 
 EXIT_VERIFIED = 0
 EXIT_MISMATCH = 1
@@ -103,8 +107,14 @@ def _emit(text, stream=None):
 
 
 def _load_by_path(name, path):
-    if name in sys.modules:
-        return sys.modules[name]
+    cached = sys.modules.get(name)
+    if cached is not None:
+        # The fixed module name is reused only for the same file: a call with
+        # another path (a different tree or install) loads that file instead
+        # of serving the first one's module.
+        loaded = getattr(cached, "__file__", None)
+        if loaded and os.path.realpath(loaded) == os.path.realpath(path):
+            return cached
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
@@ -126,9 +136,11 @@ def host_surface():
 # --------------------------------------------------------------------------
 
 def harness_path():
-    """(path, how): MOJOLEARN_IDENTITY_BREAK, the wheel copy, or the checkout."""
-    from . import _identity
-    return _identity.harness_path()
+    """(path, how): MOJOLEARN_IDENTITY_BREAK, the wheel copy, or the checkout,
+    as `mojolearn.runtime_report()["harness_source"]` names it. Raises
+    FileNotFoundError when this install carries none."""
+    from . import _verify
+    return _verify.harness_path()
 
 
 def load_harness(path=None):
@@ -570,17 +582,16 @@ def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=
 
 def _device_block(ml, harness):
     from . import _verify
-    from . import _backend
-    from . import _identity
-    commit, commit_source = _identity.commit_witness()
+    report = ml.runtime_report()
+    commit, commit_source = report["source_commit"]["commit"], report["source_commit"]["how"]
     if not commit:
         commit = _verify._git_commit(_pkg_dir())
         commit_source = "git checkout beside the package" if commit else "none (no witness in this install)"
-    vendor = _backend.vendor()
+    vendor = report["vendor"]
     return dict(
         mojolearn_version=getattr(ml, "__version__", "unknown"),
         commit=commit, commit_source=commit_source,
-        numeric_mode=_backend.numeric_mode(),
+        numeric_mode=report["numeric_mode"],
         vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
         device=_verify.describe_device(), cpu_model=harness.cpu_model(),
         requested_parallel_devices=list(harness._par_devices()),
@@ -1009,17 +1020,15 @@ def self_test(harness, ml, table, log=None):
         raise CannotRun("self-test: the one-ULP perturbation did not change the input at all, so "
                         "the perturbed arm would be identical to the clean one and prove nothing")
 
-    from ._cpu_reference import reference_training
     rows = []
-    with reference_training():
-        for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
-            parts = run_cell(harness, ml, lane, fixture, data, held, 1)
-            value, error = parts["train"]
-            from ._verify_worker import unhealthy
-            if unhealthy(parts):
-                raise CannotRun(f"self-test unhealthy device: {error or parts}")
-            rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
-            log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
+    for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
+        parts = run_cell(harness, ml, lane, fixture, data, held, 1)
+        value, error = parts["train"]
+        from ._verify_worker import unhealthy
+        if unhealthy(parts):
+            raise CannotRun(f"self-test unhealthy device: {error or parts}")
+        rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
+        log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
 
     judged = judge_rows([{k: v for k, v in r.items() if k != "arm"} for r in rows], table)
     for r, j in zip(rows, judged):
@@ -1089,7 +1098,23 @@ def _cmd_self_test(args, ml):
     from ._verify_public import run as public_checks
     result['public_api'] = public_checks(self_test=True,scope='neural' if getattr(args,'neural_training',False) else 'all')
     # UNTESTED: this vendor is not one the shipped endpoint reference validates (CPU-only).
-    result['passed'] = result['passed'] and result['public_api']['status'] in ('MATCH', 'UNTESTED')
+    public = result['public_api']
+    if public['status'] not in ('MATCH', 'UNTESTED'):
+        before = len(result['problems'])
+        # Every reason the public checks did not pass is printed with the
+        # verdict; a NOT TRUSTWORTHY with no problem line names nothing to fix.
+        for part in ('tape', 'endpoints'):
+            row = public.get(part) or {}
+            if row.get('status') in ('MATCH', 'UNTESTED', None):
+                continue
+            reasons = list(row.get('errors') or [])
+            reasons += [f"{e}: {msg}" for e, msg in sorted((row.get('failures') or {}).items())]
+            reasons += [f"pending: {e}" for e in row.get('pending') or []]
+            result['problems'].append(f"public {part} checks read {row.get('status')}: "
+                                      + ('; '.join(map(str, reasons)) or 'no reason given'))
+        if len(result['problems']) == before:
+            result['problems'].append(f"public API checks read {public['status']}")
+    result['passed'] = result['passed'] and public['status'] in ('MATCH', 'UNTESTED')
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-self-test.v1", **result), indent=1, sort_keys=True))
     else:
@@ -1165,8 +1190,9 @@ def cross_check_lanes(harness, scope="default"):
     return chosen, every, dict(per_family)
 
 
-def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
-    """A requested cell that never ran must prevent a successful exit."""
+def _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides=None):
+    """A requested cell that never ran must prevent a successful exit.
+    `sides` is what answered on each side (`_check_both.side_environment`)."""
     expected = {(lane, fx, part) for lane in lanes for fx in fixtures
                 for part in ("infer", "batch")}
     seen = {(r['lane'], r['fixture'], r['part']) for r in rows}
@@ -1179,13 +1205,14 @@ def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
                 requested_lanes=list(lanes), requested_fixtures=list(fixtures),
                 compared=len(rows), agree=agree, differ=differ,
                 skipped=skipped, missing=missing, complete=complete, cells=rows,
-                passed=(differ == 0 and complete) if rows else None)
+                passed=(differ == 0 and complete) if rows else None,
+                **({'sides': sides} if sides else {}))
 
 
 def _cross_check_batched(lanes, fixtures, cpu_threads, log):
     """Run the complete selection serially; retain failures and continue."""
-    from . import _backend
-    rows, skipped, jobs = [], {}, []
+    import mojolearn as ml
+    rows, skipped, jobs, sides = [], {}, [], None
     for fixture in fixtures:
         for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES):
             selected = lanes[start:start + CROSS_CHECK_BATCH_LANES]
@@ -1207,6 +1234,9 @@ def _cross_check_batched(lanes, fixtures, cpu_threads, log):
                     raise ValueError('child produced no cross-check report')
                 rows.extend(doc['cells'])
                 skipped.update(doc['skipped'])
+                # every batch is this machine and this install: the first
+                # batch's two sides describe them all
+                sides = sides or doc.get('sides')
                 if proc.returncode not in (EXIT_VERIFIED, EXIT_MISMATCH, EXIT_CANNOT_RUN):
                     raise ValueError(f'child exited {proc.returncode}')
                 if proc.returncode and doc.get('passed'):
@@ -1214,13 +1244,31 @@ def _cross_check_batched(lanes, fixtures, cpu_threads, log):
             except (ValueError, KeyError, TypeError) as exc:
                 for lane in selected:
                     skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
-    result = _cross_check_result(_backend.vendor(), lanes, fixtures, rows, skipped)
+    result = _cross_check_result(ml.vendor(), lanes, fixtures, rows, skipped, sides)
     result['batches'] = jobs
     if any(job['exit'] != EXIT_VERIFIED for job in jobs):
         result['complete'] = False
         if result['passed'] is not None:
             result['passed'] = False
     return result
+
+
+def _require_forest_host_binding(report):
+    """The host forest binding that answered must be this install's: the file
+    `MOJOLEARN_FOREST_HOST_BINARY` names, else one inside the report's
+    `host_dir` (its own file or the merged file serving it). Otherwise the
+    cross-check would compare a thing to itself."""
+    row = report["bindings"].get("mojolearn._host._mojolearn_forest_host")
+    if row is None or not row["loaded"] or row["path"] is None:
+        raise RuntimeError("the host forest binding that answered is not in mojolearn.runtime_report(); "
+                           "which binary answered cannot be established, so this would compare a thing to itself")
+    bound = os.path.realpath(row["path"])
+    override = os.environ.get("MOJOLEARN_FOREST_HOST_BINARY", "").strip()
+    expected = os.path.realpath(override) if override else None
+    inside = os.path.dirname(bound) == os.path.realpath(report["host_dir"])
+    if (expected is not None and bound != expected) or (expected is None and not inside):
+        raise RuntimeError(f"the host binding that answered is {bound}, not "
+                           f"{expected or report['host_dir']}; this would compare a thing to itself")
 
 
 def cross_check(harness, ml, lanes, fixtures, log=None):
@@ -1249,9 +1297,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     here.
     """
     import tempfile
-    from . import _backend
     log = log or (lambda s: None)
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     if vendor == "cpu":
         return dict(ran=False, vendor=vendor, lanes=[],
                     reason=("no GPU in this installation, so there is no second piece of hardware "
@@ -1259,8 +1306,8 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                             "cross-check did not run. `verify --all` still checks this machine "
                             "against the recorded columns, and `--self-test` still shows the "
                             "comparison can fail."))
-    from ._forest_host import host_model, binary_path
     rows, skipped = [], {}
+    ran = dict(gpu=None, cpu=None)      # the activity record of each side, summed over the cells
     for lane in lanes:
         for fx in fixtures:
             t0 = time.time()
@@ -1280,8 +1327,11 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 continue
             save, _load, suffix = sl
             try:
+                # Each answer is one `cb.run_side` and each pair one
+                # `cb.compare`: the same calls `verify --check` makes for a
+                # user's estimator. The digest stays the harness's `_h`.
                 gpu_est = harness._public_est(lane, fit.est)
-                pair = {"infer": [harness._h(*fit.probe(gpu_est)), None]}
+                pair = {"infer": [cb.run_side("gpu", lambda: fit.probe(gpu_est), digest=harness._h, ml=ml), None]}
                 # THE BATCH PART TOO, where the lane has one. Batch invariance is
                 # a DIFFERENT AXIS from cross-vendor identity: cross-vendor asks
                 # "same input, different hardware, same bits", batch invariance
@@ -1291,45 +1341,62 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 # place they can test both at once on their own machine. A lane
                 # that declares `n/a` for batch keeps its n/a; inventing a
                 # comparison there would be a check that cannot fail.
-                gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
-                if gerr is None and isinstance(gb, str) and not gb.startswith("n/a"):
-                    pair["batch"] = [gb, None]
-                elif gerr is None and isinstance(gb, str) and gb.startswith("n/a"):
-                    pair["batch"] = [gb, gb]        # declared absent on both sides
+                def gpu_batch():
+                    gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+                    if gerr is not None or not isinstance(gb, str):
+                        raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
+                    return gb
+                batch = cb.run_side("gpu", gpu_batch, ml=ml)
+                if batch[0]["digest"].startswith("n/a"):
+                    pair["batch"] = batch[0]["digest"]      # declared absent on both sides
                 else:
-                    raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
+                    pair["batch"] = [batch, None]
                 with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
-                    path = os.path.join(tmp, f"{lane}{suffix}")
-                    getattr(fit.est, save)(path)
-                    host = host_model(path)
+                    host, _path = cb.to_cpu(ml, fit.est, tmp, name=lane, form=(save, suffix))
                     # This is fixture input, not learned state. The batch
                     # probe needs the same held-out affinity on both devices.
                     if lane == 'spectral-precomputed':
                         host._identity_heldout_affinity = fit.est._identity_heldout_affinity
-                    bound = getattr(getattr(host, "_binding", None), "__file__", None)
-                    if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
-                            os.path.realpath(bound) != os.path.realpath(binary_path())):
-                        raise RuntimeError(f"the host binding that answered is {bound}, not "
-                                           f"{binary_path()}; this would compare a thing to itself")
-                    pair["infer"][1] = harness._h(*fit.probe(host))
-                    if "batch" in pair and pair["batch"][1] is None:
+                    if type(host).__name__ in ("HostGBDT", "HostForest"):
+                        _require_forest_host_binding(ml.runtime_report())
+                    pair["infer"][1] = cb.run_side("cpu", lambda: fit.probe(host), digest=harness._h, ml=ml)
+                    if isinstance(pair.get("batch"), list):
                         hfit = harness.Fit({})
                         hfit.est = host
                         hfit.probe = fit.probe
-                        hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
-                                                        harness.BATCH_ALONE, False)
-                        pair["batch"][1] = hb if herr is None else f"raised: {herr}"[:120]
+
+                        def cpu_batch():
+                            hb, herr = harness._probe_batch(hfit, lane, ml, held.copy(),
+                                                            harness.BATCH_ALONE, False)
+                            return hb if herr is None and isinstance(hb, str) else f"raised: {herr or hb}"[:120]
+                        pair["batch"][1] = cb.run_side("cpu", cpu_batch, ml=ml)
             except Exception as exc:
                 skipped[f'{lane}/{fx}'] = f"{type(exc).__name__}: {exc}"[:200]
                 continue
             secs = round(time.time() - t0, 3)
             verdicts = []
-            for part, (g, c) in sorted(pair.items()):
-                na = isinstance(g, str) and g.startswith("n/a")
-                same = (g == c)
-                rows.append(dict(lane=lane, fixture=fx, part=part, gpu=g, cpu=c,
-                                 agree=None if na else same, na=na, seconds=secs))
-                verdicts.append(f"{part}={'n/a' if na else ('agree' if same else 'DIFFER')}")
+            for part, both in sorted(pair.items()):
+                if isinstance(both, str):
+                    rows.append(dict(lane=lane, fixture=fx, part=part, gpu=both, cpu=both,
+                                     agree=None, na=True, seconds=secs))
+                    verdicts.append(f"{part}=n/a")
+                    continue
+                (g, g_arrays), (c, c_arrays) = both
+                judged = cb.compare(g, c, g_arrays, c_arrays)
+                # what the runtime counted while each side answered (the
+                # shared module's activity record), per cell and summed per side
+                row = dict(lane=lane, fixture=fx, part=part, gpu=g["digest"], cpu=c["digest"],
+                           agree=judged["match"], na=False, seconds=secs,
+                           sides=dict(gpu=dict(wall_s=g["wall_s"], outputs=g["outputs"],
+                                               activity=g.get("activity")),
+                                      cpu=dict(wall_s=c["wall_s"], outputs=c["outputs"],
+                                               activity=c.get("activity"))))
+                ran["gpu"] = cb.activity_merge(ran["gpu"], g.get("activity"))
+                ran["cpu"] = cb.activity_merge(ran["cpu"], c.get("activity"))
+                if not judged["match"]:
+                    row["first"] = judged["first"]
+                rows.append(row)
+                verdicts.append(f"{part}={'agree' if judged['match'] else 'DIFFER'}")
             # streamed per lane: it shows the run is alive, and it is itself
             # evidence that work happened. A verification that returns instantly
             # invites the suspicion this whole command exists to remove.
@@ -1339,7 +1406,11 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     # compared, so nothing differed and nothing agreed. Reporting a result
     # about hashes that were never computed is the same defect as VERIFIED over
     # a refused run (lane/verify-cross-check, 2026-09-16).
-    return _cross_check_result(vendor, lanes, fixtures, rows, skipped)
+    # What answered on each side, read after the cells ran (a binding loads at
+    # its first use), once for the run: the device and the binary set.
+    sides = ({side: dict(cb.side_environment(ml, side, cpu_model=harness.cpu_model), activity=ran[side])
+              for side in cb.SIDES} if rows else None)
+    return _cross_check_result(vendor, lanes, fixtures, rows, skipped, sides)
 
 
 def format_cross_check(r):
@@ -1359,12 +1430,16 @@ def format_cross_check(r):
         lines.append(f"Scope: {r['scope']}; {len(r['requested_lanes'])} of {r['intersection']} eligible lanes, "
                      f"{len(r['fixtures'])} of {r['available_fixtures']} fixtures.")
         lines.append("")
+    # The two sides and every compared value are printed by the shared check
+    # module, the same lines `verify --check` prints for a user's estimator.
+    if r.get("sides"):
+        lines.extend(cb.sides_lines(r["sides"]))
+        lines.append("")
     for c in r["cells"]:
-        if c.get("na"):
-            lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} n/a  {c['gpu']}")
-            continue
-        lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} "
-                     f"gpu={c['gpu']}  cpu={c['cpu']}  {'agree' if c['agree'] else 'DIFFER'}")
+        lines.append(cb.pair_line(f"{c['lane']:<26} {c['fixture']:<8} {c['part']:<6}",
+                                  c['gpu'], c.get('cpu'), c.get('agree'), na=c.get("na")))
+        if c.get('agree') is False and c.get('first'):
+            lines.append("      " + cb.verdict_line(dict(match=False, first=c['first'])))
     lines.append("")
     if r["skipped"]:
         lines.append(f"Not compared ({len(r['skipped'])}):")
@@ -1428,8 +1503,7 @@ def _cmd_cross_check(args, ml):
 
     log(f"# cross-check ({scope}): {len(chosen)} of {len(every)} intersection lanes x "
         f"{len(fixtures)} fixture(s)")
-    from . import _backend
-    if scope == 'all' and _backend.vendor() != 'cpu':
+    if scope == 'all' and ml.vendor() != 'cpu':
         result = _cross_check_batched(chosen, fixtures, getattr(args, 'cpu_threads', 1), log)
     else:
         result = cross_check(harness, ml, chosen, fixtures, log=log)
@@ -1462,15 +1536,6 @@ COMPARE_INPUT_FORMAT = "mojolearn.verify-all-report.v1"
 #: harness writes truncated lowercase sha256, so anything outside this shape
 #: is NOT a bit pattern and must never be compared as though it were one.
 _HASH_RE = re.compile(r"\A[0-9a-f]{8,64}\Z")
-
-#: Values that mean THE BOX DISAGREED WITH ITSELF. `vref.judge` reads all
-#: three as DIVERGENT. Two documents both carrying `MOVED` for a cell hold
-#: the same STRING, and equality on strings counted that as agreement: two
-#: machines "agreeing" that neither of them is deterministic, reported as a
-#: pass. That is the precise opposite of the claim being checked, so it gets
-#: its own verdict and its own non-zero exit.
-_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED", "RLPAIR_MOVED")
-
 
 def _value_kind(v):
     """Classify one cell value. The whole point is that only `hash` is a bit
@@ -1699,6 +1764,8 @@ COMMITMENT_COVERS = ("format", "cells", "device", "verification_contract",
 COMMITMENT_EXCLUDES = {
     "elapsed_s": "wall clock; nobody compares it and it would bind a party to a stopwatch",
     "lane_seconds": "wall clock, per lane; same reason",
+    "what_ran": ("the runtime's activity record per lane (launches, copies, host splits): how this "
+                 "machine did the work, which differs by device by design and no comparison reads"),
     REVEAL_KEY: "the nonce and the commitment itself; a hash cannot cover itself",
     # `CHALLENGE_KEY`, spelled out because it is defined below this line. The
     # challenge is derived FROM this commitment, so the response cannot exist
@@ -3357,16 +3424,14 @@ def _cmd_challenge(args, ml):
             f"building the challenge fixture raised {type(exc).__name__}: {exc}")
     started = time.time()
     rows = []
-    from ._cpu_reference import reference_training
     fixture_name = f"challenge:{challenge[:12]}"
-    with reference_training():
-        for lane in lanes:
-            t0 = time.time()
-            parts = run_cell(harness, ml, lane, fixture_name, data, held,
-                             max(1, int(getattr(args, "repeats", 1) or 1)))
-            for part, (value, error) in parts.items():
-                rows.append(dict(lane=lane, part=part, value=value, error=error))
-            log(f"  {lane:<34} {time.time() - t0:6.1f}s")
+    for lane in lanes:
+        t0 = time.time()
+        parts = run_cell(harness, ml, lane, fixture_name, data, held,
+                         max(1, int(getattr(args, "repeats", 1) or 1)))
+        for part, (value, error) in parts.items():
+            rows.append(dict(lane=lane, part=part, value=value, error=error))
+        log(f"  {lane:<34} {time.time() - t0:6.1f}s")
     doc[CHALLENGE_KEY] = dict(
         format=CHALLENGE_FORMAT, challenge=challenge, derived_from=derived_from,
         fixture=fixture_block, harness_sha256=harness_sha, lanes=lanes,
@@ -3567,6 +3632,10 @@ def _public_check_verdict(report, code, headline):
     return code,headline
 
 
+#: lanes whose "what ran" line the text report prints; --json holds every lane
+WHAT_RAN_LANES_SHOWN = 40
+
+
 def format_human(report):
     lines = []
     d = report["device"]
@@ -3652,6 +3721,19 @@ def format_human(report):
     if cross.get('ran'):
         lines.append(f"GPU/CPU inference: {cross['agree']} agreeing parts, {cross['differ']} differences; "
                      f"complete={cross.get('complete', False)}.")
+        # what answered on each side, by the shared check module's own lines
+        lines.extend(cb.sides_lines(cross.get('sides') or {}))
+    what = report.get('what_ran') or {}
+    if what.get('lanes'):
+        # what the runtime itself counted while each lane's cells ran, by the
+        # shared check module's own lines (the same `verify --check` prints)
+        lines.append(f"What ran on the {what['side'].upper()} side, per lane (counted by the runtime; "
+                     "every lane is in --json):")
+        shown = sorted(what['lanes'])[:WHAT_RAN_LANES_SHOWN]
+        for lane in shown:
+            lines.append(f"  {lane:<26} {cb.activity_line(what['side'], what['lanes'][lane])}")
+        if len(what['lanes']) > len(shown):
+            lines.append(f"  ... and {len(what['lanes']) - len(shown)} more lanes")
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
@@ -3737,8 +3819,7 @@ def cmd_verify_all(args):
     requested = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").strip().lower()
     try:
         import mojolearn as ml
-        from . import _backend
-        loaded = _backend.numeric_mode()
+        loaded = ml.numeric_mode()
     except Exception as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"importing mojolearn raised {type(exc).__name__}: {exc}")
     if loaded != "identical":
@@ -3774,7 +3855,7 @@ def cmd_verify_all(args):
     except CannotRun as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
 
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     vclass = vref.VENDOR_CLASS.get(vendor)
     if vclass is None:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"unknown vendor read-back {vendor!r}")
@@ -3931,12 +4012,24 @@ def cmd_verify_all(args):
                 cells_journal=journal_path, harness_sha256=contract.get("harness_sha256"),
                 lanes=lanes, fixtures=fixtures))
 
+    # WHAT RAN, per lane: the activity record the runtime filled while a
+    # worker ran the lane's cells (`_check_both.activity_begin` / `_end` in
+    # `_verify_worker.execute`), summed over the lane's fixtures. It is beside
+    # the cells, never in them: no cell value, verdict or commitment reads it.
+    lane_activity = {}
+
+    def ran_activity(lane, result):
+        if result.get("activity"):
+            lane_activity[lane] = cb.activity_merge(lane_activity.get(lane), result["activity"])
+
     def isolated(action, **kwargs):
         progress(action)
         result = worker.run(dict(action=action, harness=os.path.abspath(harness_file),
                                  table=os.path.abspath(table_file), **kwargs), timeout, log)
         for binding in result.get("bindings", []):
             worker_bindings[(binding["module"], binding["sha256"])] = binding
+        if action == "cell":
+            ran_activity(kwargs["lane"], result)
         return result["value"]
 
     preflight = dict(passed=None, ran=False,
@@ -4011,6 +4104,7 @@ def cmd_verify_all(args):
                 worker_bindings[(binding["module"], binding["sha256"])] = binding
             crash_streak = 0
             execution["batched_cells"] += 1
+            ran_activity(chunk[index][0], result)
             now = time.monotonic()
             record(*chunk[index], result["value"], now - last[0])
             last[0] = now
@@ -4158,6 +4252,7 @@ def cmd_verify_all(args):
         counts=counts, families=fams, cells=rows,
         lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds, execution=execution,
+        what_ran=dict(side="cpu" if vclass == "cpu" else "gpu", lanes=lane_activity),
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only, profile=profile,
                        cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
@@ -4362,8 +4457,8 @@ def _finish(args, code, headline, detail):
 # --------------------------------------------------------------------------
 
 def _checkout_root():
-    from . import _identity
-    return _identity._checkout_root()
+    from . import runtime_report
+    return runtime_report()["checkout_root"]
 
 
 def _cmd_emit_reference(args):
@@ -4439,9 +4534,8 @@ def _cmd_emit_models(args, ml):
     GPU install), and write the manifest only for models whose file bytes equal
     the table's model reference, so a shipped file is the file every
     recorded vendor wrote."""
-    from . import _backend
     out_dir = args.emit_models
-    vendor = _backend.vendor()
+    vendor = ml.vendor()
     if vref.VENDOR_CLASS.get(vendor) in (None, "cpu"):
         _emit(f"CANNOT RUN: --emit-models saves GPU-trained models; this install's vendor is {vendor!r}", sys.stderr)
         return EXIT_CANNOT_RUN

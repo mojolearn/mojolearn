@@ -7,7 +7,7 @@ refuses at the existing public API. Default OFF; no compilation, identity,
 quality or timing has been run. Standalone centered-LN backward is an optional
 component, not a claim of new public LayerNorm training support.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import (

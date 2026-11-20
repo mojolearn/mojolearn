@@ -41,7 +41,7 @@ def _transport():
 def native_pair(native):
     """(independent Python peer, owned native coordinator socket). Since the
     cross-vendor protocol moved into native code (e28c8bcf3, cc4c14732) the
-    coordinator reads only owned native sockets (bindings/native_transport.mojo
+    coordinator reads only owned native sockets (bindings/native_transport_door.mojo
     refuses a Python socket object); the peer stays an independent Python
     socket oracle."""
     server = native('listen', ('127.0.0.1', 0, 5.0))
@@ -107,17 +107,25 @@ def test_native_ready_signal_and_repeated_custom_exception_preserve_ownership():
     audit_native_call(owner.ready.set).assert_native()
     assert audit_native_call(owner.ready.wait, 0).assert_native()
     audit_native_call(owner.ready.clear).assert_native()
-    gc.collect()
-    references = sys.getrefcount(cv.CrossVendorMismatch)
-    for _ in range(128):
-        audited = audit_native_call(owner._refuse, 'independent ownership check')
-        assert type(audited.exception) is cv.CrossVendorMismatch
-        report = audited.report()
-        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
-            assert not report[key], report
-        del audited, report
-    gc.collect()
-    assert sys.getrefcount(cv.CrossVendorMismatch) == references
+    # A per-call leak moves the class's count by one per refusal; a single
+    # retained reference (the last raised instance, held once whatever the
+    # number of refusals: smokes 9685746f95 and d95f805cce both saw 10 == 9
+    # after eight audited refusals, with and without a plain refusal first)
+    # does not. So the count is taken after a first audited batch and must
+    # not move over a second batch of the same size.
+    def refuse_audited(times):
+        for _ in range(times):
+            audited = audit_native_call(owner._refuse, 'independent ownership check')
+            assert type(audited.exception) is cv.CrossVendorMismatch
+            report = audited.report()
+            for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+                assert not report[key], report
+            del audited, report
+        gc.collect()
+        return sys.getrefcount(cv.CrossVendorMismatch)
+
+    references = refuse_audited(8)
+    assert refuse_audited(8) == references
 
 
 def test_whole_native_accept_run_with_independent_process_peer():

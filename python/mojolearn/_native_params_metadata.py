@@ -19,38 +19,48 @@ def _resolver(context):
     return resolved
 
 
-def _schemas():
-    # glue: the fixed built-in getter identities and their schema kinds
-    from . import _mode, _expansion_decomp, _expansion_prep, preprocessing
-    from . import _gbdt_adapters, _forest_protocol, linear_model, model_selection, _training_impl
-    return {
-        _mode.ParamsMixin.get_params: ('signature', True),
-        _expansion_decomp._Base.get_params: ('declared', False),
-        _expansion_prep._PrepBase.get_params: ('declared', False),
-        preprocessing._ScalerProtocol.get_params: ('declared', False),
-        preprocessing.StandardScaler.get_params: ('native_declared', False),
-        preprocessing.MinMaxScaler.get_params: ('native_declared', False),
-        _expansion_prep.RobustScaler.get_params: ('native_declared', False),
-        _expansion_prep.MaxAbsScaler.get_params: ('native_declared', False),
-        _expansion_prep.LinearDiscriminantAnalysis.get_params: ('native_declared', False),
-        linear_model.LinearRegression.get_params: ('signature', False),
-        linear_model.Ridge.get_params: ('signature', False),
-        linear_model.LogisticRegression.get_params: ('signature', False),
-        _forest_protocol.ForestProtocol.get_params: ('forest', False),
-        _gbdt_adapters._GBDTAdapter.get_params: ('gbdt', False),
-        model_selection._Splitter.get_params: ('splitter', False),
-        model_selection._Repeated.get_params: ('repeated', False),
-        model_selection._BaseSearch.get_params: ('search', False),
-        _training_impl._Optimizer.get_params: ('optimizer', False),
-    }
+# The fixed built-in getter identities and their schema kinds, by the module
+# that defines them: (module, class, kind, recurse). A module's getters join
+# the schema table when its family loads (lane lazy-family-import, 2026-11-12);
+# a class's getter comes from its own ancestry, so its module is loaded then.
+_SCHEMA_SOURCES = (
+    ('_mode', 'ParamsMixin', 'signature', True),
+    ('_expansion_decomp', '_Base', 'declared', False),
+    ('_expansion_prep', '_PrepBase', 'declared', False),
+    ('preprocessing', '_ScalerProtocol', 'declared', False),
+    ('preprocessing', 'StandardScaler', 'native_declared', False),
+    ('preprocessing', 'MinMaxScaler', 'native_declared', False),
+    ('_expansion_prep', 'RobustScaler', 'native_declared', False),
+    ('_expansion_prep', 'MaxAbsScaler', 'native_declared', False),
+    ('_expansion_prep', 'LinearDiscriminantAnalysis', 'native_declared', False),
+    ('linear_model', 'LinearRegression', 'signature', False),
+    ('linear_model', 'Ridge', 'signature', False),
+    ('linear_model', 'LogisticRegression', 'signature', False),
+    ('_forest_protocol', 'ForestProtocol', 'forest', False),
+    ('_gbdt_adapters', '_GBDTAdapter', 'gbdt', False),
+    ('model_selection', '_Splitter', 'splitter', False),
+    ('model_selection', '_Repeated', 'repeated', False),
+    ('model_selection', '_BaseSearch', 'search', False),
+    ('_training_impl', '_Optimizer', 'optimizer', False),
+)
+
+
+def _schemas(schemas=None):
+    # glue: the fixed built-in getter identities of the loaded modules, added
+    # to `schemas` in place (a getter already present keeps its kind)
+    import sys
+    schemas = {} if schemas is None else schemas
+    for module_name, class_name, kind, recurse in _SCHEMA_SOURCES:  # glue: fixed schema table
+        module = sys.modules.get(__package__ + '.' + module_name)
+        if module is not None:
+            schemas.setdefault(getattr(module, class_name).get_params, (kind, recurse))
+    return schemas
 
 
 def connect_classes(context, package):
     # glue: fixed schemas are connected after all built-in class installers
     import sys
-    schemas = context.get('schemas')
-    if schemas is None:
-        schemas = context['schemas'] = _schemas()
+    schemas = context['schemas'] = _schemas(context.get('schemas'))
     classes = set()
     for name, module in tuple(sys.modules.items()):  # glue: loaded built-in class identities only
         if (name == package.__name__ or name.startswith(package.__name__ + '.')) and not name.startswith(package.__name__ + '.tests'):
@@ -81,7 +91,8 @@ def connect_classes(context, package):
 def _schema_plan(context, cls, kind, recurse):
     # glue: one class's fixed parameter schema, built when the class is connected
     import inspect
-    from . import _mode, _gbdt_adapters, model_selection, _training_impl
+    import sys
+    from . import _mode
     resolved = _resolver(context)
     initializer = resolved(cls, '__init__')
     if recurse and resolved(cls, '_get_param_names') is not resolved(_mode.ParamsMixin, '_get_param_names'):
@@ -91,10 +102,12 @@ def _schema_plan(context, cls, kind, recurse):
     elif kind == 'forest':
         names = tuple(resolved(cls, '_parameter_names'))
     elif kind == 'search':
+        model_selection = sys.modules[__package__ + '.model_selection']
         names = model_selection._NATIVE_CONTEXT['family_msel_search_layouts'][cls]['parameters']
     elif kind in ('splitter', 'repeated'):
         names = ()
     elif kind == 'optimizer':
+        _training_impl = sys.modules[__package__ + '._training_impl']
         names = (('accumulation_steps', 'dampening', 'lr', 'lr_schedule', 'maximize', 'momentum',
                   'nesterov', 'numeric_mode', 'params', 'resident', 'weight_decay')
                  if issubclass(cls, _training_impl.SGD) else
@@ -118,7 +131,7 @@ def _schema_plan(context, cls, kind, recurse):
                 fields_only=kind in ('native_declared', 'forest', 'search', 'optimizer') or (kind == 'signature' and not recurse),
                 missing_error=('KeyError' if kind in ('native_declared', 'search', 'optimizer') else
                                'TypeError' if kind == 'signature' else 'AttributeError'),
-                gbdt_init=_gbdt_adapters._GBDTAdapter.__init__ if kind == 'gbdt' else None)
+                gbdt_init=sys.modules[__package__ + '._gbdt_adapters']._GBDTAdapter.__init__ if kind == 'gbdt' else None)
 
 
 def connect_subclass(context, cls):

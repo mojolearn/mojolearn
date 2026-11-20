@@ -6,7 +6,7 @@
 #
 # The coordinator and the Apple worker run on this Mac. Each named vendor is
 # rented through its own guarded runner (nvidia: tools/gemm_remote_leg.sh on
-# RunPod; amd: tools/hotaisle_leg.sh), with tools/live_xvendor_body.sh as the
+# RunPod; amd: none since 2026-11-18, see the case below), with tools/live_xvendor_body.sh as the
 # body, which builds and then waits. When a box reports ready, this script
 # opens a reverse ssh tunnel (the box's 127.0.0.1:7777 -> this Mac's
 # coordinator) and writes the box's shard list. K = 4 logical shards:
@@ -43,10 +43,9 @@ for v in "$@"; do
                 --gpu "${MOJOLEARN_LIVE_NVIDIA_GPU:-NVIDIA H100 80GB HBM3}" --local-card "$CARD" \
                 > "$OUT/nvidia-leg.log" 2>&1 &
             NV_PID=$! ;;
-        amd) AMD=1
-            MOJOLEARN_GEMM_LEG_EXTRA=tools/live_xvendor_body.sh MOJOLEARN_GEMM_LEG_OUT="$OUT/amd" \
-                bash tools/hotaisle_leg.sh amd --rent --skip-gates > "$OUT/amd-leg.log" 2>&1 &
-            AMD_PID=$! ;;
+        amd) # its runner, tools/hotaisle_leg.sh, was removed 2026-11-18 (lane fx-dead-small;
+             # recoverable at 7c1aad6561); the AMD worker needs a DigitalOcean runner here first
+            echo "live_xvendor_leg: the amd worker's Hot Aisle runner was removed; no AMD runner is wired" >&2; exit 2 ;;
         *) echo "unknown vendor $v" >&2; exit 2 ;;
     esac
 done

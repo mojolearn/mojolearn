@@ -1,0 +1,578 @@
+# SPDX-License-Identifier: Apache-2.0
+# UNPACK shared by the classification, ranking and clustering metric doors
+# (bindings/metrics_exp_{cls,curve,rank,cluster}_door.mojo): the label input
+# step the Python made in `_metrics_impl` (`_classification_encoded`,
+# `_classification_labels`, `_selected_labels`, `_label_map`),
+# `_buffer.shape_of`, the shared refusals and the admitted score matrices.
+#
+# Lane metric-programs-2 (2026-11-12): split from metrics_exp_common.mojo.
+# TOMBSTONE: `MxProg` (a metric program holding its caller buffers and a
+# per-program Python opcode snapshot), `MxArena`, `mx_run`, `mx_f64_scores`
+# (unused) and `mx_zeros_i32` deleted 2026-11-12 by lane metric-programs-2:
+# the door program is bindings/metrics_program_door.mojo `MetricDoorProg`
+# (typed plan + pins), the arena reads are `MetricArenaOwner`'s, the PACK is
+# bindings/metrics_program_pack.mojo, the typed helpers are
+# bindings/metrics_exp_common_run.mojo; code recoverable at 4f5a5ae6d8.
+#
+# Labels: an integer or bool buffer (a mojolearn Array or an ndarray of one
+# dimension) is encoded by the host label encoder (core/label_cast.mojo,
+# the sorted classes and one int32 code per row, the encoder the Python
+# reached through `prepare_targets`); every other input (a list, str
+# labels, pandas, a buffer of another kind) is the label input step on
+# Python objects, done with builtins over the whole container (set, sorted,
+# map, dict): # cpu-route: Python object labels, the explicit label input step.
+# Both give the sorted distinct classes and the codes into them, which is
+# all the metrics read, so the programs below see the same words.
+from bindings.admitted_family_door import admit_family
+from bindings.metrics_exp_common_run import mx_nan, mx_isnan, mx_class_code
+from std.python import Python, PythonObject
+from providers.python.metrics_vector_input_pyapi_unpack import metric_vector_exact
+from providers.python.metrics_matrix_input_pyapi_pack import metric_score_matrix
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.native_buffer_owner_pack import native_buffer_view
+from bindings.classical_arrays_door import (
+    classical_address, classical_is_array, classical_dtype_str, classical_wrap_array, classical_cast_kind,
+    classical_c_order,
+)
+from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.classical_validate_unpack import classical_view
+from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.family_common_unpack import (
+    FAMILY_F32P,
+    FAMILY_F64P,
+    FAMILY_I32P,
+    FAMILY_I64P,
+    family_repr,
+    family_str,
+    family_isinstance,
+    family_shape_repr,
+)
+from bindings.family_common_pack import (
+    family_call,
+    family_call_kw,
+    family_array,
+)
+from bindings.metrics_reg_door import _reg_weights
+from bindings.metrics_native_support_door import (
+    metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
+)
+from bindings.metrics_native_inputs_door import metric_shape, metric_flatten
+from core.host_finite_scan import host_all_finite_f32
+from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
+from core.labels_score_encode import score_encode_cast
+from core.metrics_exp_impl import mexp_gather_i32
+from bindings.label_input_sources_unpack import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native_door import p3_integral_list, p3_text_codes, p3_text_classes, P3_TEXT_OK
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.py_balanced import py_item
+
+
+
+# ---------------------------------------------------------------- small Python helpers
+
+
+def mx_b() raises -> PythonObject:
+    return native_loaded_module("builtins")
+
+
+def mx_len(value: PythonObject) raises -> Int:
+    # p3-labels-metrics: exact list / tuple / dict / set / str through the C
+    # length slot; anything else keeps the builtins call.
+    var b = mx_b()
+    var cls = py_type(value)
+    if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.str:
+        return len(value)
+    return Int(py=py_call(b.len, value))
+
+
+def mx_attr(value: PythonObject, name: String) raises -> PythonObject:
+    """`getattr(value, name)` (names PythonObject spells as its own methods)."""
+    return py_call(mx_b().getattr, value, PythonObject(name))
+
+
+def mx_truthy(value: PythonObject) raises -> Bool:
+    return Bool(py=py_call(mx_b().bool, value))
+
+
+def mx_is_none(value: PythonObject) -> Bool:
+    return value is None
+
+
+def mx_eq(a: PythonObject, b: PythonObject) raises -> Bool:
+    """`bool(a == b)`."""
+    return Bool(py=py_call(mx_b().bool, py_call(native_loaded_module("operator").eq, a, b)))
+
+
+def mx_is_bool(value: PythonObject) raises -> Bool:
+    """`_labels.is_bool`: Python's bool or NumPy's bool_."""
+    return family_isinstance(value, mx_b().bool) or String(py_type(value).__name__) == "bool_"
+
+
+def mx_is_str(value: PythonObject) raises -> Bool:
+    return family_isinstance(value, mx_b().str)
+
+
+def mx_is_real(value: PythonObject, context: PythonObject) raises -> Bool:
+    return metric_is_real(value, context)
+
+
+def mx_is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
+    return metric_is_integral(value, context)
+
+
+def mx_float(value: PythonObject, context: PythonObject) raises -> Float64:
+    """`float(value)`."""
+    return metric_float(value, context)
+
+
+def mx_raise_obj(cls: PythonObject, argument: PythonObject) raises:
+    """Raise `cls(argument)` as the Python exception itself (a class the
+    door has no prefix for: ZeroDivisionError, KeyError, UserWarning-free
+    refusals), restored unchanged at the door."""
+    var exception = py_call(cls, argument)
+    ref cpy = Python().cpython()
+    cpy.lib.get_function[NoneType]("PyErr_SetObject")(cls._obj_ptr, exception._obj_ptr)
+    var failure = stash_python_error()
+    raise failure^
+
+
+def mx_zero_division(message: String) raises:
+    mx_raise_obj(mx_b().ZeroDivisionError, PythonObject(message))
+
+
+def mx_warn(message: String, category: PythonObject, stacklevel: Int, context: PythonObject) raises:
+    metric_warn(message, category, context, stacklevel)
+
+
+def mx_undefined(message: String, context: PythonObject) raises:
+    metric_undefined(message, context)
+
+
+def mx_sorted(values: PythonObject) raises -> PythonObject:
+    return py_call(mx_b().sorted, values)
+
+
+def mx_set(values: PythonObject) raises -> PythonObject:
+    return py_call(mx_b().set, values)
+
+
+def mx_list(values: PythonObject) raises -> PythonObject:
+    return py_call(mx_b().list, values)
+
+
+def mx_index(order: PythonObject) raises -> PythonObject:
+    """`{c: i for i, c in enumerate(order)}`."""
+    var b = mx_b()
+    return py_call(b.dict, py_call(b.zip, order, py_call(b.range, py_call(b.len, order))))
+
+
+def mx_union_sorted(a: PythonObject, c: PythonObject) raises -> PythonObject:
+    """`sorted(set(a) | set(c))`."""
+    return mx_sorted(py_call(mx_set(a).union, c))
+
+
+def mx_missing(present: PythonObject, classes: PythonObject) raises -> Bool:
+    """`bool(set(present) - set(classes))`."""
+    return mx_len(py_call(mx_set(present).difference, classes)) > 0
+
+
+def mx_label_order(chosen: PythonObject, present: PythonObject) raises -> PythonObject:
+    """`_label_order`: `chosen` then every present label not in it."""
+    var it = native_loaded_module("itertools")
+    var rest = mx_list(py_call(it.filterfalse, mx_attr(mx_set(chosen), "__contains__"), present))
+    return mx_list(chosen) + rest
+
+
+def mx_str_list(values: PythonObject) raises -> PythonObject:
+    """`[str(v) for v in values]`."""
+    return mx_list(py_call(mx_b().map, mx_b().str, values))
+
+
+# ---------------------------------------------------------------- labels
+
+
+struct MxLab(Copyable, Movable):
+    """One label vector: its kind ("integer" or "string"), the sorted
+    distinct classes (a Python list) and one int32 code per row into them."""
+    var kind: String
+    var classes: PythonObject
+    var codes: PythonObject
+    var n: Int
+
+    def __init__(out self, kind: String, classes: PythonObject, codes: PythonObject, n: Int):
+        self.kind = kind
+        self.classes = classes
+        self.codes = codes
+        self.n = n
+
+
+def mx_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_shape(obj, context)
+
+
+def mx_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
+    var shape = mx_shape_of(y, context)
+    if mx_len(shape) == 2 and Int(py=shape[1]) != 1:
+        raise Error("NotImplementedError: mojolearn " + caller + ": " + name
+                    + " is 2-D; multilabel-indicator targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), "
+                    + "only binary and multiclass 1-D labels")
+
+
+def _mx_flatten(y: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_flatten(y, context)
+
+
+def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
+                   context: PythonObject) raises -> Tuple[PythonObject, String]:
+    var b = mx_b()
+    if mx_len(mx_shape_of(values, context)) != 1:
+        raise Error(name + " must be one-dimensional single-label data")
+    var labels = _mx_flatten(values, context)
+    if not allow_empty and mx_len(labels) == 0:
+        raise Error(name + " must contain at least one label")
+    # The distinct exact types, one C-level `set(map(type, labels))`; the
+    # tests below run once per distinct type instead of once per label.
+    var types = mx_list(mx_set(py_call(b.map, b.type, labels)))
+    var n_types = mx_len(types)
+    var strings = True
+    var integers = True
+    var exact_int = True
+    for t in range(n_types):  # driver-loop: over the distinct exact label types (a handful)
+        var cls = types[t]
+        strings = strings and cls is b.str
+        integers = integers and metric_is_integral_type(cls, context)
+        exact_int = exact_int and cls is b.int
+    if strings:
+        return (labels, String("string"))
+    if integers and exact_int:
+        # `int(v)` of an exact Python int is v: the flattened list (fresh) is the converted one
+        return (labels, String("integer"))
+    if integers:
+        # p3-labels-metrics: one presized list filled by C conversions (exact
+        # ints kept, bools 0 / 1, NumPy integer scalars their exact int), not
+        # `metric_integer` and a Python append per label.
+        var nk = metrics_keys()
+        return (p3_integral_list(labels, py_get(context, nk[].k_bool_types)), String("integer"))
+    raise Error("TypeError: " + name + " must contain only strings or only integers; "
+                + "floating labels, missing labels and mixed types are unsupported")
+
+
+def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_native_classification_labels`: (classes, codes) of a 1-D integer or
+    bool buffer through the host label encoder, or None for anything the
+    Python label step reads (every other input)."""
+    var b = mx_b()
+    var source = values
+    var nk = metrics_keys()
+    if py_type(values) is b.list or py_type(values) is b.tuple:
+        # a flat list of exact Python ints as an int64 buffer (OverflowError
+        # for an int outside int64 keeps the list route)
+        var n = mx_len(values)
+        # p3-labels-metrics: the exact-int test reads each item's class by
+        # pointer through the container's C storage (it was a type set, then
+        # min and max over the Python ints); the int64 range is the array's
+        # own conversion check (OverflowError: the list route, as before).
+        if n == 0 or labels_list_scalar_kind(values) != LABELS_LIST_INT:
+            return PythonObject(None)
+        var store = PythonObject(None)
+        try:
+            store = py_call(py_item(context, nk[].k_array_type), PythonObject("q"), values)
+        except:
+            return PythonObject(None)
+        source = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8", "C", context)
+    elif not classical_is_array(values, context):
+        var nd_class = py_get(context, nk[].k_ndarray)
+        if nd_class is None or py_type(values) is not nd_class:
+            return PythonObject(None)
+    if Int(py=source.ndim) != 1:
+        return PythonObject(None)
+    var n = Int(py=source.size)
+    if n < 1:
+        return PythonObject(None)
+    var letter = String(source.dtype[1]) if classical_is_array(source, context) else String(source.dtype.kind)
+    if letter != "i" and letter != "u" and letter != "b":
+        return PythonObject(None)
+    if not classical_is_array(source, context) and not Bool(py=source.dtype.isnative):
+        return PythonObject(None)
+    var item = Int(py=source.itemsize)
+    var kind = classical_cast_kind(source, item, name, context)
+    var s0 = Int(py=source.strides[0])
+    var src = CastIn(Int(py=classical_address(source)), kind, item, n, 1, s0, item)
+    _ = source  # keep the Python object alive through the native call above
+    var lk = label_kind_of(kind, item, name)
+    var code_kind = 1 if kind == 1 else 0
+    var raw = py_call(py_item(context, nk[].k_array_type), PythonObject(mx_class_code(code_kind, item)),
+                      py_call(py_item(context, nk[].k_native_bytes_type), n * item))
+    var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
+    # fb-metrics: a contiguous signed label buffer within its value range
+    # takes the dense table (core/labels_score_encode.mojo), else the radix route.
+    var k = score_encode_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
+                                     Int(py=classical_address(codes)))
+    _ = source  # keep the Python object alive through the native call above
+    _ = codes  # keep the Python object alive through the native call above
+    _ = source^
+    if k < 0:
+        return PythonObject(None)
+    _ = codes  # keep the Python object alive through the native calls above
+    # The encoder fills only the first k slots of the n-slot class store: list
+    # those k (one k-item buffer copy, k ints), not all n then slice
+    # (pass2-prep-metrics; the n-int list was new since 0.8.55). `tolist`
+    # returns a fresh list, so no extra copy.
+    var head = raw[py_call(b.slice, PythonObject(0), PythonObject(k))]
+    var classes = py_call(head.tolist)
+    _ = codes  # keep the Python object alive through the native call above
+    return Python.tuple(classes, codes)
+
+
+def mx_encode(values: PythonObject, name: String, context: PythonObject) raises -> MxLab:
+    """`_classification_encoded(values, name)`: the classes and the codes."""
+    var b = mx_b()
+    if not family_isinstance(values, Python.tuple(b.str, b.bytes)) and mx_len(mx_shape_of(values, context)) == 1:
+        var fast = _mx_buffer_labels(values, name, context)
+        if fast is not None:
+            return MxLab("integer", fast[0], fast[1], Int(py=fast[1].size))
+    var listed = mx_list_labels(values, name, False, context)
+    var labels = listed[0]
+    if listed[1] == "integer":
+        # exact Python ints (pandas, uint64 or nested inputs flattened above):
+        # within int64 they take the host label encoder as one int64 buffer
+        var native = _mx_buffer_labels(labels, name, context)
+        if native is not None:
+            return MxLab("integer", native[0], native[1], Int(py=native[1].size))
+    if listed[1] == "string":
+        # p3-labels-metrics: exact str labels hashed by UTF-8 bytes to the k
+        # distinct values, only those sorted (code-point order, as
+        # `sorted(set(...))`), int32 codes written natively.
+        var fast_text = p3_text_codes(labels, False)
+        if fast_text.status == P3_TEXT_OK:
+            var m = len(fast_text.codes)
+            var fast_codes = family_array(Python.tuple(PythonObject(m)), "<i4", context)
+            var target = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(fast_codes)))
+            for i in range(m):  # driver-loop: native copy of the n codes
+                target[i] = fast_text.codes[i]
+            _ = fast_codes  # keep the Python object alive through the native writes above
+            return MxLab(listed[1], p3_text_classes(labels, fast_text.first), fast_codes, m)
+    var classes = mx_sorted(mx_set(labels))
+    var index = mx_index(classes)
+    var n = mx_len(labels)
+    var nk = metrics_keys()
+    var store = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), py_call(b.map, mx_attr(index, "__getitem__"), labels))
+    var codes = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i4", "C", context)
+    return MxLab(listed[1], classes, codes, n)
+
+
+def mx_selected(labels: PythonObject, kind: String, observed: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    """`_selected_labels(labels, kind, observed)`."""
+    if labels is None:
+        return mx_list(observed)
+    var listed = mx_list_labels(labels, "labels", False, context)
+    if listed[1] != kind:
+        raise Error("TypeError: labels must use the same type as the targets")
+    if mx_len(mx_set(listed[0])) != mx_len(listed[0]):
+        raise Error("labels must be unique")
+    return listed[0]
+
+
+def _mx_gather(lab: MxLab, table: PythonObject, strict: Bool, context: PythonObject) raises -> PythonObject:
+    """`table[codes[i]]` per row (`table` an `array.array("i")` over the
+    classes); `strict` raises the KeyError `index[v]` raised for a -1."""
+    var k = mx_len(lab.classes)
+    var out = family_array(Python.tuple(PythonObject(lab.n)), "<i4", context)
+    var first = mexp_gather_i32(FAMILY_I32P(unsafe_from_address=Int(py=py_call(table.buffer_info)[0])), k,
+                                FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab.codes))), lab.n,
+                                FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = out  # keep the Python object alive through the native call above
+    if strict and first >= 0:
+        var code = Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab.codes)))[first])
+        _ = out  # keep the Python object alive through the native call above
+        mx_raise_obj(mx_b().KeyError, lab.classes[code])
+    _ = out  # keep the Python object alive through the native calls above
+    return out
+
+
+def mx_codes(lab: MxLab, order: PythonObject, strict: Bool, context: PythonObject) raises -> PythonObject:
+    """`_codes(labels, order)`: each row's index in `order`, -1 for a label
+    outside it; `strict` raises the KeyError `index[v]` raised for one."""
+    var b = mx_b()
+    var index = mx_index(order)
+    var nk = metrics_keys()
+    var table = py_call(py_item(context, nk[].k_array_type), PythonObject("i"),
+                        py_call(b.map, index.get, lab.classes, py_call(native_loaded_module("itertools").repeat, PythonObject(-1))))
+    return _mx_gather(lab, table, strict, context)
+
+
+def mx_map_eq(lab: MxLab, pos: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_label_map(labels, lambda v: int(v == pos))`: the flag of each class, gathered per row."""
+    var b = mx_b()
+    var hits = py_call(b.map, native_loaded_module("operator").eq, lab.classes,
+                       py_call(native_loaded_module("itertools").repeat, pos))
+    var nk = metrics_keys()
+    var table = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), py_call(b.map, b.int, py_call(b.map, b.bool, hits)))
+    return _mx_gather(lab, table, False, context)
+
+
+# ---------------------------------------------------------------- shared validation
+
+
+struct MxPair(Movable):
+    """`_pair`'s (true, pred, kind, present, w)."""
+    var true: MxLab
+    var pred: MxLab
+    var kind: String
+    var present: PythonObject
+    var w: PythonObject
+
+    def __init__(out self, var true: MxLab, var pred: MxLab, kind: String, present: PythonObject, w: PythonObject):
+        self.true = true^
+        self.pred = pred^
+        self.kind = kind
+        self.present = present
+        self.w = w
+
+
+def mx_weights(sample_weight: PythonObject, n: Int, caller: String, context: PythonObject) raises -> PythonObject:
+    """`_weights`: None, or `_sample_weight_f32` (float32, checked)."""
+    return _reg_weights(sample_weight, n, caller, context)
+
+
+def mx_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject, caller: String,
+            context: PythonObject) raises -> MxPair:
+    mx_refuse_multilabel(y_true, "y_true", caller, context)
+    mx_refuse_multilabel(y_pred, "y_pred", caller, context)
+    var true = mx_encode(y_true, "y_true", context)
+    var pred = mx_encode(y_pred, "y_pred", context)
+    return mx_pair_encoded(true^, pred^, sample_weight, caller, context)
+
+
+def mx_pair_encoded(var true: MxLab, var pred: MxLab, sample_weight: PythonObject, caller: String,
+                    context: PythonObject) raises -> MxPair:
+    """`mx_pair` of two label vectors the caller already encoded with
+    `mx_encode` (p3-labels-metrics: classification_report encoded them for
+    its label set and used to encode both again). A successful `mx_encode`
+    is one-dimensional, so the multilabel refusal cannot apply; the checks
+    below run in mx_pair's order."""
+    if true.n != pred.n:
+        raise Error("mojolearn " + caller + ": y_true and y_pred lengths differ")
+    if true.kind != pred.kind:
+        raise Error("TypeError: mojolearn " + caller + ": y_true and y_pred must use the same label type")
+    if true.n > 2147483647:
+        raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
+    var w = mx_weights(sample_weight, true.n, caller, context)
+    var present = mx_union_sorted(true.classes, pred.classes)
+    var kind = true.kind
+    return MxPair(true^, pred^, kind, present, w)
+
+
+def mx_targets(y_true: PythonObject, caller: String, context: PythonObject) raises -> MxLab:
+    """`_targets`: the encoded y_true (its classes are `present`)."""
+    mx_refuse_multilabel(y_true, "y_true", caller, context)
+    return mx_encode(y_true, "y_true", context)
+
+
+def mx_pos_label(pos_label: PythonObject, kind: String, classes: PythonObject, caller: String,
+                 context: PythonObject) raises -> PythonObject:
+    """`_pos_label`."""
+    if pos_label is None:
+        var allowed = Python.tuple(Python.list(PythonObject(0)), Python.list(PythonObject(1)), Python.list(PythonObject(-1)),
+                                   Python.list(PythonObject(0), PythonObject(1)), Python.list(PythonObject(-1), PythonObject(1)))
+        if kind != "integer" or not py_contains(allowed, classes):
+            raise Error("y_true takes value in " + family_str(classes) + " and pos_label is not specified: either make "
+                        + "y_true take value in {0, 1} or {-1, 1} or pass pos_label explicitly.")
+        return PythonObject(1)
+    var listed = mx_list_labels(Python.list(pos_label), "pos_label", False, context)
+    if listed[1] != kind:
+        raise Error("pos_label must use the same type as y_true")
+    return listed[0][0]
+
+
+def mx_pos_label_ok(kind: String, classes: PythonObject) raises -> Bool:
+    """True when `_pos_label(None, ...)` answers (1) instead of refusing."""
+    var allowed = Python.tuple(Python.list(PythonObject(0)), Python.list(PythonObject(1)), Python.list(PythonObject(-1)),
+                               Python.list(PythonObject(0), PythonObject(1)), Python.list(PythonObject(-1), PythonObject(1)))
+    return kind == "integer" and py_contains(allowed, classes)
+
+
+struct MxMat(Copyable, Movable):
+    """A validated float32 C-ordered matrix: (rows, cols) and its rank."""
+    var a: PythonObject
+    var rows: Int
+    var cols: Int
+    var ndim: Int
+
+    def __init__(out self, a: PythonObject, rows: Int, cols: Int, ndim: Int):
+        self.a = a
+        self.rows = rows
+        self.cols = cols
+        self.ndim = ndim
+
+
+def mx_f32_view(source: PythonObject, name: String, context: PythonObject) raises -> Tuple[PythonObject, String]:
+    """`materialize_f32_lists(source, name)`: the admitted view (a list of
+    numbers cast to float32) and its typestr."""
+    var b = mx_b()
+    var view = classical_view(source, context, name)
+    var typestr = classical_dtype_str(view, context)
+    if (typestr == "<f8" or typestr == "<i8") and not classical_is_array(source, context):
+        var listed = py_type(source) is b.list or py_type(source) is b.tuple
+        var buffered = True
+        if not listed:
+            try:
+                _ = native_buffer_view(source)
+            except:
+                buffered = False
+        if listed or not buffered:
+            view = admit_family(view, -1, name, context, admitted=True, empty=True).array
+            typestr = "<f4"
+    return (view, typestr)
+
+
+def mx_shape_text(view: PythonObject, rows: Int, cols: Int, nd: Int) raises -> String:
+    if nd == 1:
+        return "(" + String(rows) + ",)"
+    if nd == 2:
+        return "(" + String(rows) + ", " + String(cols) + ")"
+    return family_shape_repr(view)
+
+
+def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: String,
+              context: PythonObject) raises -> MxMat:
+    """`_scores(y_score, n, caller, ndim=ndim, name=name)`; ndim < 0 = any."""
+    if metric_vector_exact(source, context):
+        var captured = metric_score_matrix(source, n, caller, ndim, name, context)
+        return MxMat(captured[0], Int(py=captured[1]), Int(py=captured[2]), Int(py=captured[3]))
+    var got = mx_f32_view(source, name, context)
+    var view = got[0]
+    if got[1] != "<f4":
+        raise Error("TypeError: mojolearn " + caller + ": " + name + " must have dtype float32; cast explicitly")
+    var nd = Int(py=view.ndim)
+    var rows = Int(py=view.shape[0]) if nd >= 1 else 0
+    var cols = Int(py=view.shape[1]) if nd >= 2 else 1
+    if nd == 2 and cols == 1 and ndim == 1:
+        nd = 1
+    if ndim >= 0 and nd != ndim:
+        raise Error("mojolearn " + caller + ": " + name + " must be " + String(ndim) + "-D, got shape "
+                    + mx_shape_text(view, rows, cols, nd))
+    if rows != n:
+        raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
+    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+    var a = admit_family(view, -1, name, context).array
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
+        raise Error("mojolearn " + caller + ": " + name + " must be finite")
+    _ = a  # keep the Python object alive through the native calls above
+    return MxMat(a, rows, cols, nd)
+
+
+def mx_zero_division_value(zero_division: PythonObject, context: PythonObject) raises -> Float64:
+    """`_zero_division_value`."""
+    if mx_is_str(zero_division):
+        if String(py=zero_division) == "warn":
+            return 0.0
+    elif not mx_is_bool(zero_division) and mx_is_real(zero_division, context):
+        var zero_one = Python.tuple(PythonObject(0), PythonObject(1))
+        if py_contains(zero_one, zero_division):
+            return mx_float(zero_division, context)
+        if mx_isnan(mx_float(zero_division, context)):
+            return mx_nan()
+    raise Error("zero_division must be 'warn', 0.0, 1.0 or np.nan")

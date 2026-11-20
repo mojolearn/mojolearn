@@ -83,7 +83,7 @@ from metrics.impl.stats.detail.contingency_matrix import (
     contingency_matrix,
     get_input_class_cardinality,
 )
-from metrics.impl.stats.detail.rand_index import rand_index_counts
+from metrics.impl.stats.detail.rand_index import rand_index_counts, rand_index_counts_contingency
 from metrics.impl.stats.detail.scores import count_correct
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -93,9 +93,10 @@ from checks.numerics import (
     identical_mul_add,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime N = 4099
 
 
@@ -300,7 +301,7 @@ def check_contingency_matrix_exact(ctx: DeviceContext) raises:
         var dmat = ctx.enqueue_create_buffer[DType.int32](k * k)
         contingency_matrix(ctx, dt, dp, N, dmat, mm[0], mm[1])
         var h = ctx.enqueue_create_host_buffer[DType.int32](k * k)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dmat)
+        download_host_into[DType.int32](ctx, dmat, h)
         ctx.synchronize()
         var want = _host_contingency(yt, yp, mm[0], k)
         var bad = 0
@@ -321,7 +322,6 @@ def check_contingency_matrix_exact(ctx: DeviceContext) raises:
                         + String(want[idx])
                     )
                 bad += 1
-        _ = h^
         if bad != 0:
             raise Error(
                 "contingency matrix k="
@@ -445,6 +445,21 @@ def check_rand_index_exact(ctx: DeviceContext) raises:
             + ", "
             + String(got[1])
             + ") host ("
+            + String(a)
+            + ", "
+            + String(b)
+            + ")"
+        )
+    # the contingency route (lane fx-board-modelsel-metrics): the same two
+    # integers from the device matrix over the labels' joint range [0, 4]
+    var via = rand_index_counts_contingency(ctx, dt, dp, N, Int32(0), Int32(4))
+    if via[0] != a or via[1] != b:
+        raise Error(
+            "rand counts: contingency route ("
+            + String(via[0])
+            + ", "
+            + String(via[1])
+            + ") pair loop ("
             + String(a)
             + ", "
             + String(b)

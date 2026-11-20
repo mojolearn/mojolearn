@@ -31,7 +31,7 @@ def test_bf16_default_and_explicit_off_respect_actual_source_gate(vendor, fast, 
         defines["MOJOLEARN_AFN_GEMM_BF16_MMA"] = override
     namespace = dict(GLOBAL_NUMERIC_MODE=int(not fast), NUMERIC_FAST=0,
                      TARGET_COLUMN=vendor, COLUMN_APPLE="apple",
-                     has_apple_gpu_accelerator=lambda: vendor in ("apple", "cpu"),
+                     TARGET_HAS_APPLE_GPU=vendor in ("apple", "cpu"),
                      is_defined=lambda name: name in defines,
                      get_defined_int=lambda name, default: defines.get(name, default))
     namespace["AFN_GEMM_APPLE"] = eval(expression("AFN_GEMM_APPLE"), {"__builtins__": {}}, namespace)

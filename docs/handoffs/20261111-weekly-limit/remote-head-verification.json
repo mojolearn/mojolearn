@@ -1,0 +1,140 @@
+[
+  {
+    "branch": "merge/small-tooling-20261111",
+    "head": "465268739989b40d582aca7de41f14fde2e4209d",
+    "remote_head": "465268739989b40d582aca7de41f14fde2e4209d",
+    "matches": true
+  },
+  {
+    "branch": "ref/43b5f7c320e0",
+    "head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+    "remote_head": "9d70418446aa876bfd10ea5e7c19d31199610939",
+    "matches": true
+  },
+  {
+    "branch": "lane/apple-emb9",
+    "head": "b9c8519e16347762d0b7f9d2ba36e86c0560522d",
+    "remote_head": "b9c8519e16347762d0b7f9d2ba36e86c0560522d",
+    "matches": true
+  },
+  {
+    "branch": "lane/boundary-mojo12-string-20261111",
+    "head": "11ded379b3cee833fc577eaba5b9865060a5bb73",
+    "remote_head": "11ded379b3cee833fc577eaba5b9865060a5bb73",
+    "matches": true
+  },
+  {
+    "branch": "preinteg/native-consolidated-20261111",
+    "head": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+    "remote_head": "33b043de8b94b06d79f750ba6ae4c34533cc594d",
+    "matches": true
+  },
+  {
+    "branch": "integ/python-boundary-next-20261110",
+    "head": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "remote_head": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "matches": true
+  },
+  {
+    "branch": "integ/python-boundary-repair-20261110",
+    "head": "ddc7339720a033ce16d5e3c5cccc066d431cbec8",
+    "remote_head": "ddc7339720a033ce16d5e3c5cccc066d431cbec8",
+    "matches": true
+  },
+  {
+    "branch": "integ/select2-20261105",
+    "head": "23a69302e94e17b08c22d42cbfdd0342346e4a72",
+    "remote_head": "23a69302e94e17b08c22d42cbfdd0342346e4a72",
+    "matches": true
+  },
+  {
+    "branch": "integ/tooling-20261105b",
+    "head": "f4d37b4c5b9b24af6e667b9b2285404f4471339d",
+    "remote_head": "f4d37b4c5b9b24af6e667b9b2285404f4471339d",
+    "matches": true
+  },
+  {
+    "branch": "integ/python-boundary-20261110",
+    "head": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "remote_head": "183c32da489eaa413715617bfe9caf1d8bbfb6a2",
+    "matches": true
+  },
+  {
+    "branch": "lane/lane-select-glue-attribution",
+    "head": "3eebfe3e4ee73faa417aaa4dc853075e91bb338e",
+    "remote_head": "3eebfe3e4ee73faa417aaa4dc853075e91bb338e",
+    "matches": true
+  },
+  {
+    "branch": "lane/lane-select-pandas-conservative-20261111",
+    "head": "591e66ba5865b5d532b831984c759a5def2a9be1",
+    "remote_head": "591e66ba5865b5d532b831984c759a5def2a9be1",
+    "matches": true
+  },
+  {
+    "branch": "main",
+    "head": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "remote_head": "c6dbe7ced4cc47c64e170b3e0fa30659f5f857d1",
+    "matches": true
+  },
+  {
+    "branch": "lane/mojo-finite-tests-20261110",
+    "head": "731b06a5cb26669d22fdb8c84ce51fa9dee7a388",
+    "remote_head": "731b06a5cb26669d22fdb8c84ce51fa9dee7a388",
+    "matches": true
+  },
+  {
+    "branch": "lane/mojo-gpr-score-tests-20261111",
+    "head": "ee2b7485990956dfaa5e81f411e114d011ba1f16",
+    "remote_head": "ee2b7485990956dfaa5e81f411e114d011ba1f16",
+    "matches": true
+  },
+  {
+    "branch": "lane/mojo-native-tests-20261110",
+    "head": "c8942f9ba6c274ccca3db4293a691069cdb9b5cb",
+    "remote_head": "c8942f9ba6c274ccca3db4293a691069cdb9b5cb",
+    "matches": true
+  },
+  {
+    "branch": "lane/native-entry-table-20261111",
+    "head": "5fa0da28531420bbcde0c1466763f38b5c0618b3",
+    "remote_head": "5fa0da28531420bbcde0c1466763f38b5c0618b3",
+    "matches": true
+  },
+  {
+    "branch": "lane/ne-bisect-hang",
+    "head": "a002c5dfbe238574054ea134d7aaa73d3251b5bd",
+    "remote_head": "a002c5dfbe238574054ea134d7aaa73d3251b5bd",
+    "matches": true
+  },
+  {
+    "branch": "lane/ne-fix-hang3",
+    "head": "23d145442e31e89796125dc07f5b1eefc1ce4759",
+    "remote_head": "23d145442e31e89796125dc07f5b1eefc1ce4759",
+    "matches": true
+  },
+  {
+    "branch": "lane/ne-fix-hang4",
+    "head": "fd39b43fc03c291a885ebb0b530d5f5bef3e5afd",
+    "remote_head": "fd39b43fc03c291a885ebb0b530d5f5bef3e5afd",
+    "matches": true
+  },
+  {
+    "branch": "lane/nvidia-one-wheel",
+    "head": "bd21a17d0a373fbeb490d0d22b3f190654086269",
+    "remote_head": "bd21a17d0a373fbeb490d0d22b3f190654086269",
+    "matches": true
+  },
+  {
+    "branch": "ref/fca4c4773eff",
+    "head": "f9ad06b001463e1812492e6eb1a092955973bd80",
+    "remote_head": "f9ad06b001463e1812492e6eb1a092955973bd80",
+    "matches": true
+  },
+  {
+    "branch": "lane/svm-native-20261111",
+    "head": "1291580daa5e41276cdf6ed05cab6be9fb03bd85",
+    "remote_head": "1291580daa5e41276cdf6ed05cab6be9fb03bd85",
+    "matches": true
+  }
+]

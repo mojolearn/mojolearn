@@ -87,7 +87,7 @@ The restatement is a prediction until measured. The CPU identity gate
 pca-full-whiten --require-columns 4`) is the measurement.
 """
 from checks.numerics import ftz, identical_div, identical_mul_add, identical_sqrt
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, svd_rotation_significant
 from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
@@ -282,11 +282,11 @@ def _svd_fold_partials(
     )
 
 
-def host_one_sided_jacobi_svd(
+def host_one_sided_jacobi_svd[skip_insignificant: Bool = False](
     mut r: List[Float32], n: Int, max_sweeps: Int, tol: Float32,
 ) -> OneSidedJacobiHostResult:
-    """`one_sided_jacobi_svd_kernel[wide_rotation=False]` replayed serially;
-    `r` is consumed (its columns end as `U * S`)."""
+    """`one_sided_jacobi_svd_kernel[wide_rotation=False, skip_insignificant]`
+    replayed serially; `r` is consumed (its columns end as `U * S`)."""
     var v = List[Float32](length=n * n, fill=Float32(0.0))
     for i in range(n):
         v[i * n + i] = Float32(1.0)
@@ -305,7 +305,13 @@ def host_one_sided_jacobi_svd(
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol * ftz(np_ * nq_))
-                if abs(apq) > thresh:
+                var rotate = abs(apq) > thresh
+                comptime if skip_insignificant:
+                    # the device kernel's switch (svd_full.mojo,
+                    # fix-svdvals-jacobi 2026-11-08): the same test on the
+                    # same pinned folds, so the host column keeps its bits
+                    rotate = rotate and svd_rotation_significant(app, aqq)
+                if rotate:
                     rots += 1
                     var cs = host_jacobi_rotation_cs(app, aqq, apq)
                     var c = cs[0]

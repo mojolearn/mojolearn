@@ -1,0 +1,68 @@
+{
+  "schema": "mojolearn.kmeans-variants-native-tests.v1",
+  "dependency": "query producer follows fit943d8e3f7e; full producer chain in handoff",
+  "status": "authored; uncompiled and unrun",
+  "contracts": {
+    "root": "checks/native_tests/kmeans_variants_contract.mojo",
+    "fixtures": 23,
+    "coverage": [
+      "legacy request layout",
+      "native result slot ownership and move/reuse",
+      "RNG halves above signed Int32 range",
+      "resident routing",
+      "malformed metadata/numerical/null-result refusal",
+      "auxiliary owned copies, empty/moved storage and invalid allocation/span refusal"
+    ]
+  },
+  "numerical": {
+    "root": "checks/native_tests/kmeans_variants_native_cpu.mojo",
+    "fixtures": 10,
+    "provider": "x_cluster.variants_host.kmeans_variants_host_v1",
+    "coverage": [
+      "weighted/unweighted MiniBatch fit fixed point",
+      "weighted/unweighted partial means/counts/inertia",
+      "second partial consumes prior counts and RNG",
+      "Bisect kmeans++ and random initialization",
+      "actual native Int32 tree prediction",
+      "nearest tie and squared distances",
+      "score objective",
+      "Euclidean transform"
+    ]
+  },
+  "parallel": "host_parallelize over independent fixture units; sequential partial updates within one unit consume prior state",
+  "unchanged_python_tests": "all existing Python tests retained; no deletion before replacement passes",
+  "limits": [
+    "No execution or performance claim.",
+    "Witness cases prove wire/layout only, numerical cases call actual CPU provider.",
+    "Bisect root center is the existing zero placeholder, not the dataset mean.",
+    "GPU numerical wrapper is authored but unbuilt/unrun; upstream concurrent-submit failure remains parked."
+  ],
+  "boundary": {
+    "file": "python/mojolearn/tests/test_kmeans_variants_native_boundary.py",
+    "definitions": 5,
+    "parameterized_cases": 7,
+    "coverage": [
+      "failed-first-partial publication",
+      "float refusal before native integer overflow",
+      "legacy serialized/rebound stream forms",
+      "tree identity/mutation/pickle/detached exporter lifetime",
+      "center rebinding invalidates previous resident view and preserves public dtype/shape"
+    ]
+  },
+  "resident_lease": {
+    "root": "checks/native_tests/kmeans_variants_lease.mojo",
+    "fixtures": 4,
+    "coverage": [
+      "single final release",
+      "active query survives cache retirement",
+      "two active leases",
+      "table pop/move retains active owner"
+    ]
+  },
+  "gpu_numerical": {
+    "root": "checks/native_tests/kmeans_variants_native_gpu.mojo",
+    "fixtures": 10,
+    "provider": "x_cluster.variants_device.kmeans_variants_device_v1",
+    "ordering": "ordered within shared device context; no concurrency qualification"
+  }
+}

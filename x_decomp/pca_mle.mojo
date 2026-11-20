@@ -35,7 +35,7 @@ each, in order on one context:
 
 TINY (the float32 smallest normal) keeps the floor the Python form had on
 its logs; v is floored at 1e-15 as scikit-learn does."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.soft_f64 import (

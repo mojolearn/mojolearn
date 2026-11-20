@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Layer-partitioned byte-LM training with ordered microbatch replay."""
-from .parallel_training import ParallelByteLanguageModelTrainer, _native_parallel_byte
+from .parallel_training import ParallelByteLanguageModelTrainer as _ParallelByteLanguageModelTrainer, _native_parallel_byte
 
 
-class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
+class PooledByteLanguageModelTrainer(_ParallelByteLanguageModelTrainer):
     """One byte LM whose layers and optimizer state span the selected GPUs.
 
     Decoder layers have one owner. Embedding/head live on devices[0]; each
@@ -16,7 +16,7 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
     def __init__(self, state, *, devices=(0,), logical_shards=1):
         # One native admission for every byte-LM schedule; this exact class,
         # admitted at import, selects the layer-owner session
-        # (bindings/parallel_byte_native.mojo).
+        # (bindings/parallel_byte_native_door.mojo).
         return _native_parallel_byte("init", (self, state, devices, logical_shards, False))
 
     def _open(self):

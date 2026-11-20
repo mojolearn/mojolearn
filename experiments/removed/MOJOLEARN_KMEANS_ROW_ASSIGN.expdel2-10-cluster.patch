@@ -1,0 +1,28 @@
+diff --git a/cluster/impl/detail/classical_assignment.mojo b/cluster/impl/detail/classical_assignment.mojo
+index e53d0323c5..b45ef1a5cc 100644
+--- a/cluster/impl/detail/classical_assignment.mojo
++++ b/cluster/impl/detail/classical_assignment.mojo
+@@ -6,11 +6,9 @@ ascending independent folds. Scratch is R accumulators, never n by k.
+ """
+ from max.gpu import block_idx, block_dim, thread_idx
+ from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+-# TOMBSTONE: MOJOLEARN_KMEANS_ROW_ASSIGN (unmeasured opt-in arm, owner expdel2-05-base; non-owner site) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 8929636547.
+-# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ROW_ASSIGN.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+-#: Rows per thread. The control is gone, so nothing launches these kernels;
+-#: min_cluster_distance_compute.mojo (another lane's file) still imports them.
+-comptime ASSIGN_ROWS = 2
++from experiments.classical_identical_ideas.graph_controls import KMEANS_ROW_ASSIGN_ROWS
++#: Rows per thread; 2 when the control is absent (the kernel is then not launched).
++comptime ASSIGN_ROWS = KMEANS_ROW_ASSIGN_ROWS if KMEANS_ROW_ASSIGN_ROWS > 0 else 2
+ 
+ def classical_assign_group(
+     group: Int, outi: MutPointer[UInt32,MutAnyOrigin], outd: MutPointer[Float32,MutAnyOrigin],
+@@ -18,7 +16,7 @@ def classical_assign_group(
+     xn: MutPointer[Float32,MutAnyOrigin], cn: MutPointer[Float32,MutAnyOrigin],
+     n: Int, k: Int, d: Int, rooted: Bool,
+ ):
+-    comptime assert ASSIGN_ROWS == 2 or ASSIGN_ROWS == 4, "ASSIGN_ROWS is 2 or 4"
++    comptime assert ASSIGN_ROWS == 2 or ASSIGN_ROWS == 4, "MOJOLEARN_KMEANS_ROW_ASSIGN takes 2 or 4"
+     var first = group * ASSIGN_ROWS
+     if first >= n:
+         return

@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.needs_identity_harness
 @pytest.mark.parametrize('threaded', [False, True])
 def test_host_ragged_tokens_match_independent_rows(threaded):
     import mojolearn as ml

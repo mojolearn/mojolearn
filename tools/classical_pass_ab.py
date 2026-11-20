@@ -2,7 +2,7 @@
 """Old path vs new path for the classical pass, one process per arm.
 
     python tools/classical_pass_ab.py case <name> <size> --out f.json   # one arm (env set by caller)
-    python tools/classical_pass_ab.py all --out dir [--ivf-off-so path]  # every case, both arms
+    python tools/classical_pass_ab.py all --out dir  # every case, both arms
 
 Each case builds its seeded input, times ours, and records a SHA-256 of every
 output. "digest" sizes run old AND new (the old paths are the slow serial
@@ -20,7 +20,7 @@ OLD_ENV = {
     "sgd-reg": None,  # MOJOLEARN_X_LINEAR_SGD_HOST removed
     "sgd-clf": None,  # MOJOLEARN_X_LINEAR_SGD_HOST removed
     "lars": None,     # MOJOLEARN_X_LINEAR_LARS_GRID_GRAM removed
-    "ivf": {},  # compile time: the old arm swaps in the -D MOJOLEARN_IVF_IDENTICAL_SCAN_OFF binding
+    "ivf": None,      # MOJOLEARN_IVF_IDENTICAL_SCAN_OFF deleted 2026-11-15
 }
 # (digest size, full size)
 SIZES = {"lu": (1024, 8192), "sgd-reg": (20_000, 1_000_000), "sgd-clf": (20_000, 1_000_000),
@@ -100,7 +100,7 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("case"); c.add_argument("name"); c.add_argument("size", type=int); c.add_argument("--out", required=True)
-    a = sub.add_parser("all"); a.add_argument("--out", required=True); a.add_argument("--ivf-off-so")
+    a = sub.add_parser("all"); a.add_argument("--out", required=True)
     a.add_argument("--only", default=",".join(SIZES))
     args = ap.parse_args()
     if args.cmd == "case":
@@ -110,21 +110,16 @@ def main():
         return
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     import mojolearn
-    ivf_so = Path(os.environ["CLASSICAL_IVF_SO"]) if os.environ.get("CLASSICAL_IVF_SO") else None
     summary = []
     for name in args.only.split(","):
         small, full = SIZES[name]
         for arm, size in (("old", small), ("new", small), ("new", full)):
             tag = "%s-%s-%d" % (name, arm, size)
-            env = dict(os.environ); swapped = None
+            env = dict(os.environ)
             if arm == "old":
                 if OLD_ENV[name] is None:
                     summary.append({"tag": tag, "status": "skipped: the old path no longer exists"}); continue
                 env.update(OLD_ENV[name])
-                if name == "ivf":
-                    if not args.ivf_off_so or ivf_so is None:
-                        summary.append({"tag": tag, "status": "skipped: no --ivf-off-so or CLASSICAL_IVF_SO"}); continue
-                    swapped = ivf_so.with_suffix(".so.new"); shutil.copy2(ivf_so, swapped); shutil.copy2(args.ivf_off_so, ivf_so)
             print("###", tag, flush=True)
             try:
                 p = subprocess.run([sys.executable, __file__, "case", name, str(size), "--out", str(out / (tag + ".json"))],
@@ -133,9 +128,6 @@ def main():
                 rec = json.loads((out / (tag + ".json")).read_text()) if p.returncode == 0 else {"status": "FAILED rc=%d" % p.returncode, "tail": p.stderr[-1500:]}
             except subprocess.TimeoutExpired:
                 rec = {"status": "TIMEOUT 5400 s"}
-            finally:
-                if swapped is not None:
-                    shutil.copy2(swapped, ivf_so); swapped.unlink()
             rec["tag"] = tag; summary.append(rec); print(json.dumps({k: rec.get(k) for k in ("tag", "ms", "digest", "status")}), flush=True)
         by = {r["tag"]: r for r in summary}
         o, nw = by.get("%s-old-%d" % (name, small), {}), by.get("%s-new-%d" % (name, small), {})

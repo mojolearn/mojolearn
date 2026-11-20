@@ -29,7 +29,8 @@ family and the ranking targets keep main's path.
   MOJOLEARN_SYM_EST_ALL       EST_STATS_FUSED + EST_ITERS_DEVICE (REUSE_PART
                               and SHRINK_FUSED are recorded DROPs). The FAST
                               + Apple default since 2026-10-04 (rab4-symest);
-                              rollback MOJOLEARN_SYM_EST_ALL_OFF.
+                              its rollback SYM_EST_ALL_OFF was deleted
+                              2026-11-15.
 
 Apple has no f64 on the device, so the device walker computes in f32 what
 the host walker computed in f64 (the Hessian plus lambda, the direction
@@ -39,14 +40,14 @@ does (their `functionValue` is a float).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import fma
-from std.memory import memcpy, stack_allocation
+from std.memory import unsafe_memcpy, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul_add
 from gbdt.apple_fast_classical import AFCL_T06
@@ -100,7 +101,7 @@ from gbdt.targets.kernel.pointwise_targets import (
 
 
 comptime _APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
@@ -112,10 +113,11 @@ comptime _APPLE_FAST = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab4-symest): gbdt-symmetric istella 14721.49 -> 14291.94 ms (-2.9%); auc
 #: 0.980132 -> 0.980155, logloss 0.186584 -> 0.186496 (both better). KEEP:
-#: the FAST + Apple default since then; rollback -D MOJOLEARN_SYM_EST_ALL_OFF
-#: (single defines then select flags again). rab7 per-define row:
+#: the FAST + Apple default since then. rab7 per-define row:
 #: EST_STATS_FUSED -2.5% (covered by this umbrella).
-comptime EST_ALL = _APPLE_FAST and not is_defined["MOJOLEARN_SYM_EST_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_SYM_EST_ALL_OFF (DELETE-OLD-PATH, EXP:1275 ACCEPT on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at ab7c8ba7f3.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_EST_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime EST_ALL = _APPLE_FAST
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed.
@@ -125,6 +127,9 @@ comptime EST_STATS_FUSED = _APPLE_FAST and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed. (no EXPERIMENTS row at the source; added here)
+# TOMBSTONE: MOJOLEARN_EST_ITERS_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob under the SYM_EST_ALL default, rule g) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 886f01f544.
+# Restore: git apply experiments/removed/MOJOLEARN_EST_ITERS_DEVICE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime EST_ITERS_DEVICE = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_ITERS_DEVICE"]() or EST_ALL
 )
@@ -139,6 +144,9 @@ comptime EST_APPLE_ANY = (
 )
 
 #: one block, one thread per leaf (looping past 256 leaves)
+# TOMBSTONE: MOJOLEARN_AFT_G07 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 9f30a1ac0e.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G07.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # G07: four Apple SIMD groups rather than eight reduce objective partials
 # and traverse every leaf. Shared partition-statistics/fused block contracts
 # remain untouched. Uncompiled/unverified/unmeasured; changed FAST rounding
@@ -155,6 +163,9 @@ comptime EST_MIN_LEAF_WEIGHT = Float32(1e-20)
 
 @always_inline
 def _afcl_leaf_stats_sm(sm: Int) -> Int:
+    # TOMBSTONE: MOJOLEARN_AFCL_T06 (DELETE-EXPERIMENT, never-run Apple FAST classical card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 7a4e69bdca.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFCL_T06.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     # Scheduling proxy only: halve the partial-grid budget, not the device's
     # reported hardware. Allocation and both statistic launchers use this.
     comptime if AFCL_T06:
@@ -592,7 +603,7 @@ def apple_fast_estimate_and_apply(
     var newton = estimation_method == LEAF_ESTIMATION_NEWTON
     var sm = est_sm
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var mse_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     if mse_blocks < 1:
         mse_blocks = 1
@@ -651,7 +662,7 @@ def apple_fast_estimate_and_apply(
         )
     stage_times.end(ctx, "est.stage_in")
 
-    @parameter
+    @__parameter
     def _reduce() raises:
         compute_partition_stats(
             ctx, n_leaves, 0, 2, n_rows,
@@ -660,7 +671,7 @@ def apple_fast_estimate_and_apply(
             sm_count=_afcl_leaf_stats_sm(sm), row_bound=max_leaf,
         )
 
-    @parameter
+    @__parameter
     def _walk(phase: Int, slot_in: Int, slot_out: Int) raises:
         ctx.enqueue_function[est_walk_kernel](
             s.d_part_stats.unsafe_ptr(), s.d_wsum_stats.unsafe_ptr(),
@@ -675,7 +686,7 @@ def apple_fast_estimate_and_apply(
             block_dim=(EST_WALK_BLOCK, 1, 1),
         )
 
-    @parameter
+    @__parameter
     def _try(t: Int) raises:
         # `MoveTo` + `ApproximateAt` fused (DEVIATION 2030's kernels): the
         # shift the previous walk launch wrote, applied by the thread that
@@ -691,7 +702,7 @@ def apple_fast_estimate_and_apply(
         _reduce()
         _walk(t, t % 2, (t + 1) % 2)
 
-    @parameter
+    @__parameter
     def _apply(slot: Int) raises:
         # `AppendModels`: the rescaled estimate onto the real cursor
         # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
@@ -759,7 +770,7 @@ def apple_fast_estimate_and_apply(
     leaf_values.clear()
     if n_leaves > 0:
         leaf_values.resize(unsafe_uninit_length=n_leaves)
-        memcpy(
+        unsafe_memcpy(
             dest=leaf_values.unsafe_ptr(),
             src=s.h_est.unsafe_ptr(),
             count=n_leaves,

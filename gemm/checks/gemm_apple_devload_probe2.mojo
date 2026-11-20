@@ -23,14 +23,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.ffi import external_call
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from std.sys import has_accelerator
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.checks.gemm_identical import _AMMA_M64, _AMMA_V2, _amma_load_t
-from gemm.checks.gemm_int15_check import _download, _upload
+from gemm.checks.gemm_int15_check_suite import _download, _upload
 
 
 @always_inline

@@ -138,6 +138,7 @@ from core.identity_trace import FNV_OFFSET, fnv1a64_bytes
 from glm.impl.ols import OLS_ALGO_EIG, ols_fit
 from glm.impl.linalg.detail.lstsq import OLS_ELEM_TPB
 from checks.numerics import numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime N_ROWS = 8192
@@ -183,7 +184,7 @@ def _hash_device(
     whole question here is whether two runs of one program produced the same
     bits."""
     var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
     var h = fnv1a64_bytes(
         FNV_OFFSET, host.unsafe_ptr().bitcast[UInt8](), count * 4
@@ -233,15 +234,15 @@ def _one_fit(
     ctx.synchronize()
     for i in range(N_ROWS * N_COLS + pad):
         big.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=w, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=cov_a, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=q, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=qs, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=s_vec, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ab, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=inv, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=a_alias, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=a_alias2, src_ptr=big.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, w, big)
+    upload_host_into[DType.float32](ctx, cov_a, big)
+    upload_host_into[DType.float32](ctx, q, big)
+    upload_host_into[DType.float32](ctx, qs, big)
+    upload_host_into[DType.float32](ctx, s_vec, big)
+    upload_host_into[DType.float32](ctx, ab, big)
+    upload_host_into[DType.float32](ctx, inv, big)
+    upload_host_into[DType.float32](ctx, a_alias, big)
+    upload_host_into[DType.float32](ctx, a_alias2, big)
     ctx.synchronize()
 
     # ONE STAGING BUFFER PER COPY. THIS INSTRUMENT CARRIED THE DEFECT IT WAS
@@ -258,10 +259,9 @@ def _one_fit(
         big.unsafe_ptr().unsafe_store(i, _hash_f32(i, 527))
     for i in range(N_ROWS):
         big_b.unsafe_ptr().unsafe_store(i, _hash_f32(i, 528))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=big.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=big_b.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, big)
+    upload_host_into[DType.float32](ctx, b, big_b)
     ctx.synchronize()
-    _ = big_b^
 
     ols_fit(
         ctx, a, b, w, cov_a, q, qs, s_vec, ab, inv, a_alias, a_alias2,
@@ -279,7 +279,7 @@ def _one_fit(
     out.append(_hash_device(ctx, w, N_COLS))
 
     var hw = ctx.enqueue_create_host_buffer[DType.float32](N_COLS)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     c0_out = hw.unsafe_ptr().unsafe_load(0)
 
@@ -294,8 +294,6 @@ def _one_fit(
     _ = inv
     _ = a_alias
     _ = a_alias2
-    _ = big^
-    _ = hw^
     return out^
 
 

@@ -6,7 +6,6 @@ its32x32 solve. GPU and host reject60sweeps; extra diagnostic120/180/240
 also reject. The local tolerance and Frobenius guard are unchanged.
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import host_eigh_rr, RR_EIGH_SWEEPS, rr_off_fold, rr_fro_kept
 from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use, rb_tol
@@ -14,10 +13,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    comptime requested = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]()
-    comptime disabled = is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    comptime assert IDN_EIGH_BLOCK == (requested and not disabled)
-    if rb_use(4096) != (requested and not disabled):
+    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 2d8c673dc0.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at d5f1bc4291.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime assert not IDN_EIGH_BLOCK
+    if rb_use(4096):
         raise Error("block route override precedence changed")
     var bits: List[UInt32] = [
         1073741824, 0, 0, 0, 0, 0, 0, 0,

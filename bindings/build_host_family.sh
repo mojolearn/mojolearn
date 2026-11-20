@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # THE ONE CPU-ONLY BUILDER for every host binding (the CPU training lane,
 # 2026-09-13; folded 2026-09-14 when the seventh family, trees, would have
 # been the seventh copy of one script; the byte LM, forest and estimators
@@ -19,7 +20,7 @@
 #   MOJOLEARN_NUMERIC_MODE          identical only (the default); anything else is refused
 #   MOJOLEARN_TARGET_COLUMN         cpu only (the default); anything else is refused
 #   MOJOLEARN_GPU_ARCHS             refused on Linux: a CPU build takes no GPU arch
-#   MOJOLEARN_COMPILE_JOBS          compile jobs, default 2
+#   MOJOLEARN_COMPILE_JOBS          compile jobs; unset: the host's cores on Linux, 2 elsewhere (bindings/compile_jobs.sh)
 #   MOJOLEARN_BUILD_EXTRA_DEFINES   trial defines, e.g. "-D MOJOLEARN_HOST_SABOTAGE=1"
 #                                   (the gate's negative control for the routed
 #                                   set; the byte LM's is
@@ -74,7 +75,7 @@ if [ "$host_system" = Darwin ]; then
 elif [ "$host_system" = Linux ]; then
     [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "$label: a CPU build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
     case "$(uname -m)" in
-        x86_64) set -- --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} ;;
+        x86_64) set -- --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave} ;;
         aarch64) set -- ;;
         *) echo "$label: unsupported Linux host architecture" >&2; exit 2 ;;
     esac
@@ -95,15 +96,11 @@ if [ -e "$host_destination" ] || [ -L "$host_destination" ]; then
     echo "$label: output already exists; choose a fresh output directory" >&2
     exit 2
 fi
-# The tokenizer's Unicode class table is generated, not tracked (2026-09-15):
-# tokenizer/impl/unicode_table_generated.mojo is written from Python's
-# unicodedata at the pinned version before the compile that imports it.
-if [ "$family" = tokenizer ]; then
-    sh tokenizer/tools/gen_unicode_table.sh
-fi
+# Shared native closures may import either pinned Unicode table.
+python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null
 host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
     "$entry_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
 ln "$host_tmpdir/_mojolearn_${family}_host.so" "$host_destination"

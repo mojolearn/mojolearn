@@ -187,29 +187,10 @@ def mutual_info_from_contingency_traced(
         _ = terms^
         _ = accs^
         return sf_to_f64(sf64_div(sf_fold_list(parts), sf64_from_i64(size)))
-    elif GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var acc = Float32(0.0)
-        var fsize = Float32(size)
-        for i in range(k):
-            for j in range(k):
-                var cij = c[i * k + j]
-                var ab = a[i] * b[j]
-                var seen = Float32(0.0)
-                if ab != Int64(0) and cij != Int32(0):
-                    var fc = Float32(cij)
-                    var l1 = ftz(identical_log(ftz(fsize * fc)))
-                    var l2 = ftz(identical_log(ftz(Float32(ab))))
-                    var diff = ftz(l1 - l2)
-                    seen = diff
-                    acc = ftz(identical_mul_add(fc, diff, acc))
-                if trace.enabled:
-                    terms.append(Float64(seen))
-                    accs.append(Float64(acc))
-        _record_mi_trail(trace, tag_prefix, terms, accs)
-        _ = terms^
-        _ = accs^
-        return Float64(ftz(acc / fsize))
     else:
+        # The Float32 `identical_log` fold that stood in an `elif` of the
+        # mode before this arm was unreachable (IDN_METRIC_EPI is the same
+        # test and comes first) and is gone; recoverable at 4569e73df6.
         var acc = Float64(0.0)
         var dsize = Float64(size)
         for i in range(k):

@@ -1,0 +1,28 @@
+diff --git a/x_prep/gram_blocked.mojo b/x_prep/gram_blocked.mojo
+index dc5c31c1cd..80f010af6e 100644
+--- a/x_prep/gram_blocked.mojo
++++ b/x_prep/gram_blocked.mojo
+@@ -31,8 +31,8 @@ the old chain. Products are rounded before their add (`mul`, DEVIATION 5401)
+ as before. All four columns run these units.
+ 
+ SWITCHES (IDENTICAL only):
+-  IDN_GRAM_BLOCKED, ON by default; MOJOLEARN_IDN_ALL_OFF restores
+-      matmul / qda_cov.
++  IDN_GRAM_BLOCKED, ON by default; -D MOJOLEARN_IDN_GRAM_BLOCKED_OFF (or
++      MOJOLEARN_IDN_ALL_OFF) restores matmul / qda_cov.
+   candidates, default OFF: -D MOJOLEARN_IDN_GRAM_ROWTILE (gb_part_row for the
+       LDA Gram), -D MOJOLEARN_IDN_GRAM_ROWS_512 / _8192 (rows per block; the
+       default is XB = 2048; a different block length is a different order).
+@@ -44,11 +44,9 @@ from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block
+ from x_prep.prims import add, sub, mul, div, mm_step
+ from x_prep.blocked import XB
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_GRAM_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2b7e58bca5.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime IDN_GRAM_BLOCKED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not (is_defined["MOJOLEARN_IDN_GRAM_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime IDN_GRAM_ROWTILE = IDN_GRAM_BLOCKED and is_defined["MOJOLEARN_IDN_GRAM_ROWTILE"]()
+ comptime IDN_GRAM_ROWS = (

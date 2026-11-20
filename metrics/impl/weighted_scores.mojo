@@ -29,7 +29,7 @@ The Python surface validates the weights (finite, non-negative, positive
 total) before any launch; a zero total never reaches a division here.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_div

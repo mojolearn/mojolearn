@@ -5,7 +5,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.forest_inference import forest_predict_gpu, FOREST_PACKED_NODES
+from core.forest_inference import forest_predict_gpu
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into, FOREST_ORDERED_RESIDENT
 
 
@@ -123,27 +123,29 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
                 raise Error("resident layout/direct GPU bit mismatch")
             if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](staged[i]):
                 raise Error("WP3 List/pointer boundary bit mismatch")
-    comptime if FOREST_PACKED_NODES:
-        # Sabotage actual packed device leaf data, then require prediction to
-        # change. This proves the candidate buffer is reached, not just built.
-        var leaf_count = 0
-        for child in left:
-            if child == -1:
-                leaf_count += 1
-        var poison = ctx.enqueue_create_host_buffer[DType.float32](leaf_count * outputs)
-        for i in range(leaf_count * outputs):
-            poison.unsafe_ptr().unsafe_store(i, Float32(10000))
-        model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
-        model.ctx.value().synchronize()
-        var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
-        if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
-            raise Error("packed leaf sabotage did not change prediction")
+    # TOMBSTONE: MOJOLEARN_FOREST_SEPARATE_NODES (opt-in arm, EXP:1504 DROP) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at cee5698695.
+    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SEPARATE_NODES.expdel2-02-base.patch; record in docs/TOMBSTONES.md.
+    # Sabotage actual packed device leaf data, then require prediction to
+    # change. This proves the candidate buffer is reached, not just built.
+    var leaf_count = 0
+    for child in left:
+        if child == -1:
+            leaf_count += 1
+    var poison = ctx.enqueue_create_host_buffer[DType.float32](leaf_count * outputs)
+    for i in range(leaf_count * outputs):
+        poison.unsafe_ptr().unsafe_store(i, Float32(10000))
+    model.ctx.value().enqueue_copy(dst_buf=model.leaves.value(), src_ptr=poison.unsafe_ptr())
+    model.ctx.value().synchronize()
+    _ = poison^  # past the drain: a queued copy reads it after its last named use
+    var changed = model.predict[RF_INPUT](x, 5, 2, outputs)
+    if bitcast[DType.uint32](changed[0]) == bitcast[DType.uint32](expected[0]):
+        raise Error("packed leaf sabotage did not change prediction")
     model.close()
     print("LAYOUT_PASS RF_INPUT", RF_INPUT, "outputs", outputs)
 
 
-def main() raises:
-    print("RESIDENT_LAYOUT_PACKED", FOREST_PACKED_NODES)
+def run_checks() raises:
+    print("RESIDENT_LAYOUT_PACKED", True)
     print("RESIDENT_ORDERED", FOREST_ORDERED_RESIDENT)
     var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
     for outputs in output_counts:
@@ -221,9 +223,22 @@ def main() raises:
         rejected = True
     if not rejected:
         raise Error("nonfinite borrowed input accepted")
+    # THE ONE-SYNCHRONIZE CONTRACT (fb11, 2026-11-17). Lanes a7c and
+    # forests-regression (2026-11-14) moved the input's finite test onto the
+    # device, enqueued with the traversal, and read its status word back
+    # with the output under ONE synchronize per predict
+    # (`_predict_into_buffers`); the host scan before the upload is gone.
+    # So a refused borrowed call may already have written the caller's
+    # output when it raises (`ResidentForest.predict_into` says so). The
+    # NVIDIA L40S run was the first device run of this assertion and it
+    # failed on exactly that. What is gated is the refusal above; the old
+    # "output untouched" property would cost a second synchronize on every
+    # predict and is not the product's contract. Recorded, not judged:
+    var written = 0
     for value in untouched:
         if value != -9:
-            raise Error("borrowed invalid input modified output before validation")
+            written += 1
+    print("BORROWED_REFUSAL RF_INPUT True raised, output cells written before the raise:", written)
     resident_release[True](h)
     rejected = False
     try:
@@ -277,3 +292,21 @@ def main() raises:
     _ = automatic^
     _ = ctx^
     print("RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("forest_inference_model", cpu=False, gpu=True, serial="", run=run_cases)

@@ -3,6 +3,6 @@ from sequence.exec_device import DeviceExec
 from autograd.checks.lossblock_cases import run_lossblock_cases
 
 
-def main() raises:
+def run_checks() raises:
     var ex = DeviceExec()
     run_lossblock_cases(ex)

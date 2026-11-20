@@ -1,0 +1,47 @@
+{
+  "family": "Spectral native resident ownership",
+  "status": "CPU6 ownership/GPU2 actual resident fixtures authored, uncompiled and unrun",
+  "dependencies": ["f0201aa23b", "764e2ad158", "c325e6e68f", "bcc32168f4", "07dd5500e4", "911dcc3964"],
+  "local_adoption_not_producer": "22185b2c8c copies only the exact frozen core/spectral_native_state.mojo blob from c325e6e68f",
+  "entries": {
+    "cpu": "checks/native_tests/spectral_state.mojo",
+    "gpu": "checks/native_tests/spectral_resident_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_state_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_resident_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 6,
+    "gpu": 2,
+    "pure": [
+      "Single Arc releases once.",
+      "Retiring cache preserves one active query; last query releases once.",
+      "Two copied queries preserve the handle until the last owner retires.",
+      "Native table removal preserves a copied query lease.",
+      "Provider release error is quiet and not retried.",
+      "Unwinding preserves the original query exception even when final release fails."
+    ],
+    "actual": [
+      "Original180x3 RNG11 fixture with36 queries x[::5]+Float32(0.05); clusters/components3, neighbors10, n_init10, solverseed1, tolerance1e-5.",
+      "Original120x120 precomputed fixture and two original affinity queries, including zero degree; clusters/components3, neighbors10, n_init10, solverseed3, tolerance1e-5."
+    ],
+    "actual_ownership": "Prepare owns its native input copies/device storage after all caller fit/state buffers leave scope. Retired cache Arc keeps active query alive. Resident labels equal original direct-route labels, repeated query reuses one registry entry, final Arc removes it, duplicate release is quiet and later use refuses by name."
+  },
+  "originals": [
+    "python/mojolearn/tests/test_cluster_resident_native.py:104::test_spectral_predict_resident",
+    "python/mojolearn/tests/test_spectral_predict.py:143::arm_precomputed"
+  ],
+  "parallel_plan": "Six pure ownership cases use host_parallelize and private live counters. Two actual GPU graphs execute in order on the one physical GPU; registry counts are observed only under that quiescent schedule. Existing kernels stay parallel. No shared-context concurrent-submit claim.",
+  "compile_flags": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+  "python_retained": "All Python tests remain. Public readonly/rebound Array behavior, cache watchers/provider replacement, upload telemetry/public factory behavior and fitted-object lifetime remain Python boundary seams.",
+  "source_evidence": "E/pca-native-tests/spectral-state-static.json",
+  "limits": [
+    "Pure callbacks only record ownership; they are not numerical providers.",
+    "Counter storage remains owned until all callback invocations finish; no fake pointer token is dereferenced.",
+    "Actual resident labels are compared; no unsupported direct/resident embedding bit-equality assertion was introduced.",
+    "No native compile/runtime, installed-boundary, cross-vendor identity or performance result is claimed."
+  ],
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0
+}

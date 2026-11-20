@@ -16,7 +16,7 @@ gets `0..k-1` and `-1`. Anyone comparing our output with scikit-learn's or
 cuML's got different numbers for the same clustering.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.adjgraph.algo import exclusive_scan

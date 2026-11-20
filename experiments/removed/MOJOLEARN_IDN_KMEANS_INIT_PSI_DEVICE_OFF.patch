@@ -1,0 +1,21 @@
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index efb99870b6..8b0ba26980 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -896,11 +896,13 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
+ #: scalar the reduction wrote, so the round drops its drain-and-read of psi
+ #: (one of the round's drains; the selected COUNT still comes back, because
+ #: it sizes the next allocation). Same Float32 psi, so the same flags.
++#: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3ee80555d0.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_KMEANS_INIT_PSI_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_KMEANS_INIT_PSI_DEVICE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
++)
+ 
+ 
+ def fold_new_candidates_kernel(

@@ -160,7 +160,6 @@ cross-checked against the loaded binaries; `NumericModeMixin.vendor_used()`
 reports it per estimator.
 """
 
-import contextlib
 import importlib
 import importlib.machinery
 import importlib.util
@@ -168,7 +167,6 @@ import json
 import os
 import re
 import sys
-import threading
 
 from . import _merged
 from . import _rocm_runtime, gpu_plugins, host_surface
@@ -419,16 +417,112 @@ def _identical_only_reason(name):
 _MODE_CODE = {"fast": 0, "identical": 1}
 _CODE_MODE = {v: k for k, v in _MODE_CODE.items()}
 
+# ===================================================================
+# THE NAME `fast` ON AN INSTALL WITHOUT A FAST SET (lane fx-fast-selector)
+# ===================================================================
+# `fast` is `identical` with named relaxations switched on (AGENTS.md part 2,
+# "`fast` is reopened"). Off Apple no relaxation is measured yet, so no fast
+# set is built: the release builds `identical` only. Until one exists, the
+# PROCESS DEFAULT named `fast` (MOJOLEARN_NUMERIC_MODE=fast, or
+# `set_numeric_mode("fast")`) is answered by the identical set there: the same
+# binaries, so the results are the identical set's and `fast` is never slower
+# than `identical`. `fast` promises no bits, so that answer is valid.
+#
+# The decision is made ONCE, at selection, and never per call: `_SELECTED` and
+# `_DEFAULT_MODE` hold the SET that runs ('identical'), which is the word every
+# compiled door reads, so no door, table or kernel sees a new word or branch.
+# `_DEFAULT_NAME` keeps the name the user chose, and only `numeric_mode()` and
+# `set_numeric_mode()` read it back. `runtime_report()` keeps reporting the
+# set that is loaded.
+#
+# What does NOT change: Apple (its `fast` set, or its refusal when none is
+# built); a non-Apple install that does carry fast binaries (the historical
+# 'fast identical' layout, kept for reproduction) still loads them.
+#
+# A PER-ESTIMATOR `numeric_mode='fast'` is answered in the compiled doors, not
+# here: each door admits the word and then calls core/mode_answer.mojo, which
+# replaces an admitted `fast` by `identical` where `_FAST_ANSWER` says so
+# (stored once at import by `_native_backend_public.connect`). The estimator's
+# attribute and `get_params()` keep reading 'fast'. `binding()`, `load_set()`
+# and the mode-keyed tables are untouched: their 'fast' entries still hold
+# this install's refusal, which a door that is not converted yet raises.
+#
+# THE FAST-ROWS SET (`core/package_profile.mojo`, MODE_FAST_ROWS). A fast set
+# off Apple is the identical build with the contract off
+# (`-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS` plus the row
+# defines). It is built as a measurement wheel's one set, in the identical
+# tier directory, and reports mode code 1, so everything above holds for it
+# unchanged: `_fast_set_present()` is False, the identical-named set (which
+# in that wheel IS the fast-rows set) answers the name `fast`, and the doors
+# answer a per-estimator `fast` the same way. Nothing in this file reads
+# whether the set is a fast-rows build; `python -m mojolearn verify` does
+# (the exported mode policy mask) and refuses to label it identical when a
+# row is on. `tier_dir("fast")` stays the legacy fast tier (Apple's fast set
+# and the historical 'fast identical' layout): a fast-rows binary there is
+# refused by `_check_tier_mode`, because its mode code is the identical one.
+
+#: The set that answers the NAME 'fast' when it is not its own set:
+#: 'identical' off Apple on an install with no fast binaries, else None.
+#: Written once by `fast_answer()`.
+_FAST_ANSWER = None
+_FAST_ANSWER_DECIDED = False
+
+#: The name the user chose for the process default when it differs from the
+#: set that runs (`_DEFAULT_MODE`): 'fast' while the identical set answers
+#: it, else None.
+_DEFAULT_NAME = None
+
+
+def _fast_set_present():
+    """Whether this install carries any binary of the fast tier."""
+    if _CPU_ONLY is not None:
+        return False
+    try:
+        directory = tier_dir("fast")
+    except (ImportError, AttributeError):
+        return False
+    # glue: import-time file presence over the fixed binding names
+    return any(_merged.binding_exists(directory, name) for name in _MODULES)
+
+
+def fast_answer(present=None):
+    """The set that answers the name 'fast' in place of a fast set, decided
+    once per process: 'identical' off Apple when no fast set is installed,
+    None where 'fast' names its own set (or is refused, as on Apple)."""
+    global _FAST_ANSWER, _FAST_ANSWER_DECIDED
+    if not _FAST_ANSWER_DECIDED:
+        if sys.platform == "darwin":
+            _FAST_ANSWER = None
+        elif _fast_set_present() if present is None else present:
+            _FAST_ANSWER = None
+        else:
+            _FAST_ANSWER = "identical"
+        _FAST_ANSWER_DECIDED = True
+    return _FAST_ANSWER
+
+
+def _answered(mode, present=None):
+    """The set to load for the process default named `mode`; records the
+    name when another set answers it."""
+    global _DEFAULT_NAME
+    if mode == "fast" and fast_answer(present) is not None:
+        _DEFAULT_NAME = mode
+        return _FAST_ANSWER
+    _DEFAULT_NAME = None
+    return mode
+
+
+def default_name():
+    """The name of the process default as the user chose it."""
+    return _DEFAULT_NAME or default_mode()
+
 
 # ===================================================================
 # THE VENDOR AXIS. See the module docstring, "THE VENDOR AXIS".
 # ===================================================================
 
-#: The accelerator APIs a set can be compiled for, in the order the box
-#: probe consults them. These are the DIRECTORY names under the package on
-#: Linux and the strings `<prefix>_vendor()` returns.
-_VENDORS = ("cuda", "hip", "metal")
-#: The two that can share one Linux wheel. `metal` is never a directory: the
+#: The accelerator APIs that can share one Linux wheel, as the DIRECTORY names under the package and the
+#: strings `<prefix>_vendor()` returns. `metal` is never a directory: the
 #: macOS wheel keeps the flat layout.
 _LINUX_VENDORS = ("cuda", "hip")
 
@@ -692,8 +786,6 @@ def _check_plugins(pkg, present):
             if vendor in present:
                 raise GpuPluginError(f"mojolearn: {vdir} carries sets but no {row['distribution']} "
                                      f"is installed beside this core; incomplete install; {fix}")
-            if vendor == "cuda" and _check_standalone_ptx(pkg):
-                present.append(vendor)
             continue
         if dist.version != _CORE_VERSION:
             raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and {gpu_plugins.CORE_DISTRIBUTION} "
@@ -725,38 +817,10 @@ def _check_plugins(pkg, present):
             _PLUGINS_FOUND[vendor]["bundled_ptx"] = bundle
 
 
-def _check_standalone_ptx(pkg):
-    """Admit the PTX distribution without requiring a native NVIDIA wheel."""
-    # The 0.8.60 PTX-only installed verifier failed before running any cell:
-    # discovery only recognized native vendor directories. The PTX wheel
-    # already carries its own versioned marker binding the manifest digest.
-    # Use that ownership contract; _ptx_base still checks every payload hash,
-    # the installed source, and the device's supported compute capability.
-    row = gpu_plugins.package(gpu_plugins.PTX_PROFILE)
-    dist = _find_distribution(row["distribution"], [_site_dir()])
-    if dist is None:
-        return False
-    fix = gpu_plugins.reinstall_command(_CORE_VERSION, row["distribution"])
-    if dist.version != _CORE_VERSION:
-        raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and "
-                             f"{gpu_plugins.CORE_DISTRIBUTION} {_CORE_VERSION} must be "
-                             f"the same version exactly; {fix}")
-    try:
-        raw_marker = json.loads(dist.read_text(gpu_plugins.PLUGIN_MARKER) or "{}")
-        bundle = raw_marker.get("bundled_ptx") if isinstance(raw_marker, dict) else None
-        expected = gpu_plugins.package_marker(gpu_plugins.PTX_PROFILE, _CORE_VERSION,
-                                              [gpu_plugins.PTX_ARCH], bundled_ptx=bundle)
-        _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER, expected)
-    except (ValueError, TypeError) as exc:
-        raise GpuPluginError(f"mojolearn: invalid {row['distribution']} PTX slot metadata: "
-                             f"{exc}; {fix}") from exc
-    if not _has_binaries(_ptx_directory(pkg)):
-        raise GpuPluginError(f"mojolearn: {row['distribution']} is missing its PTX set "
-                             f"{_ptx_directory(pkg)}; incomplete install; {fix}")
-    _PLUGINS_FOUND["cuda"] = dict(distribution=row["distribution"], version=dist.version,
-                                  location=_site_dir(), code_format="ptx",
-                                  payloads=[row["distribution"]], bundled_ptx=bundle)
-    return True
+# The standalone PTX distribution (mojolearn-nvidia-ptx, 0.8.39 to 0.8.65) is no
+# longer released: since 2026-11-05 mojolearn-nvidia carries cuda_ptx/sm_80 and
+# its marker binds the PTX manifest, which _ptx_base checks. A leftover old
+# mojolearn-nvidia-ptx .dist-info is not read here.
 
 
 _BASELINE_SELECTION = None
@@ -1356,6 +1420,9 @@ def _check_vendor(module, name, path):
     said = read_vendor(module)
     if said is None:
         return None
+    # The image's native entry-table key (python/mojolearn/_native_table_key.py).
+    from . import _native_table_key
+    _native_table_key.record(module, said)
     if said == "none":
         raise ImportError(
             f"mojolearn: {path} was compiled with NO accelerator target "
@@ -1425,22 +1492,6 @@ def requested_mode():
 #: The refusal `select()` would have raised, when it installed the CPU-only
 #: stubs instead; None on every install that loaded a GPU set.
 _CPU_ONLY = None
-
-
-def host_binding_path():
-    """Where the CPU inference binding lives on this install. THROUGH
-    `host_module_path`, like every other door onto a host binding: until
-    lane/host-path-resolution (2026-09-16) this built its own path from the
-    package directory and was one of four answers that did not follow
-    MOJOLEARN_HOST_DIR."""
-    return host_module_path("_mojolearn_byte_lm_host")
-
-
-def forest_host_binding_path():
-    """Where the CPU forest inference binding lives on this install (the
-    forest host lane, 2026-09-13, `_forest_host.py`). Through
-    `host_module_path`, as above."""
-    return host_module_path("_mojolearn_forest_host")
 
 
 def host_binding_built():
@@ -1561,19 +1612,38 @@ def load_door_host(basename):
     return module
 
 
+#: perf-host-grain (2026-11-06): `host_families_built` keyed on the host
+#: directory and the stamps of it and of the merged index. A miss on a `_HostBinding` used to
+#: list the directory and stat every merged member on every probe.
+_HOST_FAMILIES_CACHE = [None, None, ()]
+
+
 def host_families_built():
     """The basenames of every `_mojolearn_*_host.so` under mojolearn/host/,
     sorted. What `tools/identity_break.py` records as `host.families`, so a
     REFUSED cell on the CPU column is attributable to an unbuilt family
     rather than a bug."""
     d = host_dir()
+    try:
+        stamp = os.stat(d).st_mtime_ns
+    except OSError:
+        return []
+    try:
+        stamp = (stamp, os.stat(os.path.join(d, _merged.INDEX_NAME)).st_mtime_ns)
+    except OSError:
+        stamp = (stamp, None)
+    cache = _HOST_FAMILIES_CACHE
+    if cache[0] == d and cache[1] == stamp:
+        return list(cache[2])
     if not os.path.isdir(d):
         return []
     own = {f[:-3] for f in os.listdir(d)
            if f.startswith("_mojolearn_") and f.endswith("_host.so")}
     # and every member of a merged host file (`_merged.py`)
     own.update(n for n in _merged.merged_members(d) if n.endswith("_host"))
-    return sorted(own)
+    built = sorted(own)
+    cache[0], cache[1], cache[2] = d, stamp, tuple(built)
+    return built
 
 
 #: `_MODULES` name -> the basename of the host binding under mojolearn/host/
@@ -1710,9 +1780,7 @@ def host_families_built():
 #:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
 #:     2026-09-14): optimizer_step and ce_loss over
 #:     training/checks/optimizer_oracle.mojo and loss_oracle.mojo (the
-#:     normative answers of the optimizer and loss profiles) and
-#:     mlp_bias_activation, mlp_relu_backward and mlp_sum_rows over
-#:     training/host/mlp_oracle.mojo, so SmallMLPTrainer trains on the CPU;
+#:     normative answers of the optimizer and loss profiles);
 #:     and (lane/cpu-training-misc, 2026-09-15) clip_grad_norm over the same
 #:     optimizer oracle, and accumulate, accumulation_is_aligned and the
 #:     embedding, RMSNorm and linear forward and backward over
@@ -1765,6 +1833,13 @@ def _host_prefix(basename):
 _HOST_IMPORT_ALIAS_MODULES = set()
 
 
+#: basename -> (module, is_sabotage_build) for a host binding whose
+#: read-back passed. A loaded extension cannot change its compiled answers,
+#: so later calls return it after an identity check against sys.modules
+#: (the file-exists stat, the module path and the three read-backs ran once).
+_HOST_ADMITTED = {}
+
+
 def load_host_module(basename):
     """Load (once per process, under `mojolearn._host.<basename>`, the same
     name `_byte_lm_host.py` and `_forest_host.py` use so one file is never
@@ -1773,6 +1848,11 @@ def load_host_module(basename):
     (`<prefix>_numeric_mode() == 1`) and as the kernel matrix's CPU column
     (`<prefix>_column() == "cpu"`, the comptime assert's witness), and a
     sabotage build is refused unless MOJOLEARN_HOST_ALLOW_SABOTAGE=1."""
+    admitted = _HOST_ADMITTED.get(basename)
+    if (admitted is not None
+            and sys.modules.get(_HOST_MODULE_PREFIX + basename) is admitted[0]
+            and (not admitted[1] or os.environ.get(_HOST_ALLOW_SABOTAGE) == "1")):
+        return admitted[0]
     path = host_module_path(basename)
     if not os.path.exists(path):
         raise ImportError(
@@ -1817,7 +1897,8 @@ def load_host_module(basename):
             "column, not the CPU column; rebuild it with -D MOJOLEARN_COLUMN_CPU"
         )
     sabotage = getattr(module, prefix + "_sabotage", None)
-    if sabotage is not None and bool(sabotage()) and os.environ.get(_HOST_ALLOW_SABOTAGE) != "1":
+    sabotaged = sabotage is not None and bool(sabotage())
+    if sabotaged and os.environ.get(_HOST_ALLOW_SABOTAGE) != "1":
         raise ImportError(
             f"mojolearn: {path} is a SABOTAGE build and computes wrong answers "
             f"on purpose; it is refused outside the gate ({_HOST_ALLOW_SABOTAGE}=1)"
@@ -1826,6 +1907,10 @@ def load_host_module(basename):
         from ._host_import_aliases import connect
         connect(basename, module)
         _HOST_IMPORT_ALIAS_MODULES.add(module)
+    # The image's native entry-table key (python/mojolearn/_native_table_key.py).
+    from . import _native_table_key
+    _native_table_key.record(module, said)
+    _HOST_ADMITTED[basename] = (module, sabotaged)
     return module
 
 
@@ -1913,6 +1998,14 @@ class _HostBinding(type(sys)):
         self.__name = name
         self.__basename = basename
         self.__reason = reason
+        # perf-host-grain: the refusal text per missing entry, built once.
+        # Whether the entry exists is still asked of the module every time
+        # (one dictionary read); only the sentence is reused.
+        self.__misses = {}
+
+    def _host_loaded(self):
+        """Whether this facade's host binding is loaded (never loads it)."""
+        return (_HOST_MODULE_PREFIX + self.__basename) in sys.modules
 
     def __getattr__(self, item):
         if item.startswith("__"):
@@ -1924,9 +2017,11 @@ class _HostBinding(type(sys)):
         module = load_host_module(self.__basename)
         fn = getattr(module, item, None)
         if fn is None:
-            raise NoCpuEntry(
-                _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
-            )
+            message = self.__misses.get(item)
+            if message is None:
+                message = _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
+                self.__misses[item] = message
+            raise NoCpuEntry(message)
         # glue: connect the resolved entry once; later reads (including the
         # native ones inside an operation) find it in the module dictionary
         # and run no Python attribute hook.
@@ -1980,6 +2075,16 @@ def _select_cpu_only(pkg, mode, reason):
     return _SELECTED
 
 
+def exact_host_module(binding):
+    """The exact compiled module behind `binding`: on a CPU-only install the
+    host extension a `_HostBinding` facade forwards to, otherwise `binding`
+    itself. Import-time connection only (native provider admission takes an
+    exact module that owns its entries); never called per operation."""
+    if type(binding) is _HostBinding and _CPU_ONLY is not None:
+        return load_host_module(vars(binding)["_HostBinding__basename"])  # import-time: import connection of an explicitly selected CPU-only binding
+    return binding
+
+
 def _cpu_only_binding(name, requested):
     """`binding()` on a CPU-only install: the module `_select_cpu_only`
     installed under the canonical name, IDENTICAL only. A tier other than
@@ -2024,6 +2129,105 @@ def _bound_amd_memory_manager():
         os.environ.setdefault("MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE", str(1 << 30))
 
 
+#: name -> (path, check_vendor): the binaries `select()` chose for the
+#: canonical names, loaded on their first import by `_CanonicalFinder` (lane
+#: lazy-family-import, 2026-11-12). Before, `select()` loaded every one of
+#: them at package import, so `import mojolearn` initialized every unit.
+_CANONICAL_PATHS = {}
+
+
+class _CanonicalLoader(importlib.machinery.ExtensionFileLoader):
+    """One selected binding under its canonical name, with the checks
+    `select()` used to run at import: the vendor read-back and, for a binding
+    that registers Mojo-owned Python types, the one-tier-per-process refusal."""
+
+    def __init__(self, fullname, path, check):
+        super().__init__(fullname, path)
+        self._check = check
+
+    def create_module(self, spec):
+        # The extension initializes (and registers its types) in
+        # create_module, so the one-tier refusal runs before it.
+        leaf = self.name.rpartition(".")[2]
+        if leaf in _TYPE_REGISTERING:
+            real = os.path.realpath(self.path)
+            for other in _MODE_CODE:  # glue: the two tier namespaces
+                loaded = sys.modules.get(f"mojolearn._sets.{other}.{leaf}")
+                path = vars(loaded).get("__file__") if loaded is not None else None
+                if path and os.path.realpath(path) != real:
+                    raise ImportError(
+                        f"mojolearn: {leaf} registers Mojo-owned Python types, so one "
+                        f"process can hold only one tier of it, and another tier is "
+                        f"already loaded ({path}). Use one numeric_mode per process "
+                        "for this binding.")
+        return super().create_module(spec)
+
+    def exec_module(self, module):
+        leaf = self.name.rpartition(".")[2]
+        _exec_binding(importlib.machinery.ExtensionFileLoader(self.name, self.path), module)
+        if self._check:
+            # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
+            _check_vendor(module, leaf, self.path)
+        # The process metadata connection reads only loaded units; tell it.
+        public = sys.modules.get(__name__.rsplit(".", 1)[0] + "._native_backend_public")
+        refresh = vars(public).get("refresh") if public is not None else None
+        if refresh is not None:
+            refresh()
+
+
+class _CanonicalFinder:
+    """First on sys.meta_path: serves `mojolearn.<binding>` from the file
+    `select()` chose, so a stale fast binary beside the package can never
+    answer under the identical name (DEVIATION 869)."""
+
+    def find_spec(self, fullname, path, target=None):
+        parent, _, leaf = fullname.rpartition(".")
+        if parent != __name__.rsplit(".", 1)[0]:
+            return None
+        chosen = _CANONICAL_PATHS.get(leaf)
+        if chosen is None:
+            return None
+        loader = _CanonicalLoader(fullname, chosen[0], chosen[1])
+        return importlib.util.spec_from_file_location(fullname, chosen[0], loader=loader)
+
+
+_CANONICAL_FINDER = _CanonicalFinder()
+
+
+def canonical_loaded(name):
+    """The canonical binding `name` if it is loaded, else None (never loads).
+    A CPU-only install puts a `_HostBinding` under every canonical name at
+    import; one whose host binding has not loaded yet is not loaded (reading
+    an entry through it would load it: `_native_backend_public.connect` loaded
+    `_mojolearn_gbdt_host` at `import mojolearn`, smoke 2026-11-15)."""
+    module = sys.modules.get(__name__.rsplit(".", 1)[0] + "." + name)
+    if isinstance(module, _HostBinding) and not module._host_loaded():
+        return None
+    return module
+
+
+def load_everything():
+    """Load every binding the selector and both tier sets used to load at
+    package import. `python -m mojolearn verify` and the worker processes call
+    this (through `_families.load_all`) so they run on the same loaded set as
+    before lazy family import."""
+    pkg = __name__.rsplit(".", 1)[0]
+    for name in tuple(_CANONICAL_PATHS):  # glue: the fixed selected binding inventory
+        importlib.import_module(pkg + "." + name)
+    for mode in _MODE_CODE:  # glue: the two tiers, as the metadata connection loaded them
+        try:
+            tier = load_set(mode)
+        except Exception:  # noqa: BLE001 - an absent tier stays absent, as before
+            continue
+        for name in tuple(vars(tier)["_deferred"]):  # glue: fixed member inventory
+            if name in _TYPE_REGISTERING:
+                continue  # never loaded eagerly, before or now
+            try:
+                getattr(tier, name)
+            except (ImportError, AttributeError, RuntimeError):
+                pass  # the member refuses by name on use, as its eager load did
+
+
 def select():
     """Install the requested binary set under the canonical module names.
     Called once from `mojolearn/__init__.py` before any submodule imports a
@@ -2031,6 +2235,8 @@ def select():
     global _SELECTED
     if _SELECTED is not None:
         return _SELECTED
+    if _CANONICAL_FINDER not in sys.meta_path:  # glue: the import finders
+        sys.meta_path.insert(0, _CANONICAL_FINDER)
     _bound_amd_memory_manager()
     mode = requested_mode()
     pkg_dir = _pkg_dir()
@@ -2043,6 +2249,12 @@ def select():
     # 2615 turns it into by-name stubs only when the CPU binding is built.
     try:
         ident_dir = tier_dir(mode)
+        # The name `fast` on a non-Apple install with no fast set: the
+        # identical set answers it (see `_FAST_ANSWER`). Decided here, once.
+        answered = _answered(mode)
+        if answered != mode:
+            mode = answered
+            ident_dir = tier_dir(mode)
     except GpuPluginError:
         # A GPU box without its plugin, or a mismatched plugin: never the
         # CPU-only set (see GpuPluginError).
@@ -2051,7 +2263,9 @@ def select():
         if not host_binding_built():
             raise
         _refuse_cpu_on_gpu_box(str(exc))
-        return _select_cpu_only(pkg, mode, str(exc))
+        # No GPU set at all, so no fast set: off Apple the CPU bindings
+        # (identical only) answer the name `fast` too.
+        return _select_cpu_only(pkg, _answered(mode, False), str(exc))
     if mode == "fast" and ident_dir == pkg_dir:
         # FAST USED TO RETURN HERE, INSTALLING NOTHING, and that made it the
         # ONLY tier that cannot survive a partial build. An upper tier gets a
@@ -2097,15 +2311,11 @@ def select():
             merged = _merged.merged_file(pkg_dir, name)
             if merged is not None:
                 # The release layout: no own file, the member is served by the
-                # directory's merged file (`_merged.py`). Loaded here under the
-                # canonical name, exactly as `from . import <name>` would load
-                # its own file; the vendor is read back lazily as above.
-                loader = importlib.machinery.ExtensionFileLoader(full, merged)
-                spec = importlib.util.spec_from_loader(full, loader, origin=merged)
-                module = importlib.util.module_from_spec(spec)
-                _exec_binding(loader, module)
-                sys.modules[full] = module
-                setattr(pkg, name, module)
+                # directory's merged file (`_merged.py`). Served under the
+                # canonical name on its first import (`_CanonicalFinder`),
+                # exactly as `from . import <name>` would load its own file;
+                # the vendor is read back lazily as above.
+                _CANONICAL_PATHS[name] = (merged, False)
                 continue
             module = _MissingUpperTier(
                 full, os.path.join(pkg_dir, name + ".so"),
@@ -2141,13 +2351,14 @@ def select():
             missing.append(name)
             module = _MissingUpperTier(full, path, _build_script(name), mode)
         else:
-            loader = importlib.machinery.ExtensionFileLoader(full, path)
-            spec = importlib.util.spec_from_loader(full, loader, origin=path)
-            module = importlib.util.module_from_spec(spec)
-            _exec_binding(loader, module)
-            # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN. Raises on
-            # a vendor mismatch; see the module docstring.
-            _check_vendor(module, name, path)
+            # LOADED ON FIRST IMPORT, NOT HERE (lane lazy-family-import,
+            # 2026-11-12). The path is fixed now, under the canonical name,
+            # ahead of every other finder (`_CanonicalFinder`), so the first
+            # `from . import <name>` loads exactly this file and reads its
+            # vendor back (`_check_vendor`, which raises on a mismatch) at
+            # that moment. A family that is never used never loads its unit.
+            _CANONICAL_PATHS[name] = (path, True)
+            continue
         sys.modules[full] = module
         setattr(pkg, name, module)
     if len(missing) == len(_MODULES):
@@ -2225,8 +2436,11 @@ class _ModeSet:
             pass
         path = self._deferred.pop(name, None)
         if path is not None:
-            self._modules[name] = _load_member(self.mode, name, path)
-            return self._modules[name]
+            module = _load_member(self.mode, name, path)
+            if name == "_mojolearn_gbdt":
+                _check_tier_mode(module, self.mode, path)
+            self._modules[name] = module
+            return module
         if not _offers(name, self.mode):
             raise ImportError(
                 f"mojolearn: {name} has no {self.mode!r} tier. "
@@ -2270,6 +2484,13 @@ def _load_member(mode, name, path):
     # Python types twice and aborts. Share only the same resolved file;
     # other tiers/vendors retain their separate loading and validation.
     canonical = sys.modules.get(f"mojolearn.{name}")
+    chosen = _CANONICAL_PATHS.get(name)
+    if (canonical is None and chosen is not None
+            and os.path.realpath(chosen[0]) == os.path.realpath(path)):
+        # The selected binary itself, not loaded yet: load it once, under its
+        # canonical name, and share it (a second initialization of the same
+        # file would register its Mojo-owned types twice and abort).
+        canonical = importlib.import_module(f"mojolearn.{name}")
     canonical_path = vars(canonical).get('__file__') if canonical is not None else None
     if canonical_path and os.path.realpath(canonical_path) == os.path.realpath(path):
         _check_vendor(canonical, name, path)
@@ -2292,24 +2513,6 @@ def _load_member(mode, name, path):
     _check_vendor(module, name, path)
     sys.modules[full] = module
     return module
-
-
-_HOST_HELPER = threading.local()
-
-
-@contextlib.contextmanager
-def host_helper_scope():
-    """For `_buffer._native` alone. The host-side byte helpers (cast,
-    transpose, finiteness) live in the IDENTICAL base binary in every tier and
-    launch no kernel, so resolving them is not an IDENTICAL request. Kept as
-    the marker of such a load; no tier refuses it (the PTX set serves every
-    tier since 2026-10-10)."""
-    previous = getattr(_HOST_HELPER, "active", False)
-    _HOST_HELPER.active = True
-    try:
-        yield
-    finally:
-        _HOST_HELPER.active = previous
 
 
 def load_set(mode):
@@ -2338,10 +2541,13 @@ def load_set(mode):
         if not os.path.exists(path):
             missing.append(name)
             continue
-        if name in _TYPE_REGISTERING:
-            deferred[name] = path
-            continue
-        modules[name] = _load_member(mode, name, path)
+        # EVERY MEMBER LOADS ON FIRST USE (lane lazy-family-import,
+        # 2026-11-12), not only the type-registering ones: `_ModeSet`
+        # loads, vendor-checks and (for gbdt) mode-checks one member when
+        # it is first asked for. The native binding resolver reads only
+        # members that an import-time connection resolved through
+        # `binding()` (providers/python/estimator_binding_pyapi_door.mojo).
+        deferred[name] = path
     if not modules and not deferred:
         raise ImportError(
             f"mojolearn: numeric_mode={mode!r} but no binary for that tier "
@@ -2349,19 +2555,22 @@ def load_set(mode):
             f"{'' if mode == 'fast' else 'MOJOLEARN_NUMERIC_MODE=' + mode + ' '}"
             "bash bindings/build*.sh"
         )
-    # READ THE TIER BACK OUT OF THE BINARY, never trust the directory. A .so
-    # in the wrong folder is the one failure this whole file exists to catch,
-    # and it is cheaper to catch here than in a results table.
-    gb = modules.get("_mojolearn_gbdt")
-    if gb is not None and hasattr(gb, "gbdt_numeric_mode"):
+    _SETS[mode] = _ModeSet(mode, modules, missing, deferred)
+    return _SETS[mode]
+
+
+def _check_tier_mode(gb, mode, path):
+    """READ THE TIER BACK OUT OF THE BINARY, never trust the directory. A .so
+    in the wrong folder is the one failure this whole file exists to catch,
+    and it is cheaper to catch here than in a results table. Run when the
+    tier's gbdt member loads (it used to run when the whole tier loaded)."""
+    if hasattr(gb, "gbdt_numeric_mode"):
         compiled = _CODE_MODE.get(gb.gbdt_numeric_mode(), "unknown")
         if compiled != mode:
             raise RuntimeError(
-                f"mojolearn: {tier_dir_}/_mojolearn_gbdt.so was compiled "
+                f"mojolearn: {path} (_mojolearn_gbdt) was compiled "
                 f"{compiled} but sits in the {mode} directory; rebuild it"
             )
-    _SETS[mode] = _ModeSet(mode, modules, missing, deferred)
-    return _SETS[mode]
 
 
 #: The tier used when a call names none. Starts at whatever the environment
@@ -2412,20 +2621,29 @@ def set_default_mode(mode):
     >>> import mojolearn
     >>> previous = mojolearn.set_numeric_mode("identical")
     """
-    global _DEFAULT_MODE
-    mode = (default_mode() if mode is None else mode).strip().lower()
+    global _DEFAULT_MODE, _DEFAULT_NAME
+    prev = default_name()
+    mode = (prev if mode is None else mode).strip().lower()
+    # The name `fast` where the identical set answers it (`_FAST_ANSWER`):
+    # the set is loaded and becomes the default; the name is kept for
+    # `numeric_mode()`.
+    name = None
+    if mode == "fast" and fast_answer() is not None:
+        name, mode = mode, _FAST_ANSWER
     load_set(mode)
-    prev = default_mode()
     _DEFAULT_MODE = mode
+    _DEFAULT_NAME = name
     return prev
 
 
 def binding(name, mode=None):
     """Resolve a binding and reject a readable compiled-mode mismatch at call time."""
     requested = default_mode() if mode is None else mode
-    if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
+    if not isinstance(requested, str):
         raise ValueError("numeric_mode must be fast, identical or None")
     requested = requested.strip().lower()
+    if requested not in _MODE_CODE:
+        raise ValueError("numeric_mode must be fast, identical or None")
     if not _offers(name, requested):
         raise ValueError(
             f"mojolearn: {name} has no {requested!r} tier. "
@@ -2439,12 +2657,26 @@ def binding(name, mode=None):
     # refuses by name) is the answer, and it is IDENTICAL only.
     if _CPU_ONLY is not None:
         return _cpu_only_binding(name, requested)
+    # load_set stays the one choke point that picks the set (it answers a
+    # cached set from _SETS itself); reading _SETS here directly bypassed a
+    # replaced load_set (test_binding_mode_guard). An already resolved member
+    # of a _ModeSet is read directly (no failed attribute lookup before
+    # _ModeSet.__getattr__); any other set object is read by attribute.
     selected = load_set(requested)
-    module = getattr(selected, name)
+    members = getattr(selected, "_modules", None)
+    module = members.get(name) if members is not None else None
+    if module is None:
+        module = getattr(selected, name)
     # A correctly built GBDT sibling does not establish RF/ET (or any other
     # extension) mode. Check the actual called module, including cached sets.
     getter_name = _vendor_fn(name).removesuffix("_vendor") + "_numeric_mode"
     getter = getattr(module, getter_name, None)
+    # The compiled mode of one loaded module is a compile-time constant: read
+    # it once per (set, module, getter) identity, not on every public call. A
+    # replaced module or getter is a new key and is read back again.
+    checked = _MODE_CHECKED.get(name)
+    if checked is not None and checked[0] is selected and checked[1] is module and checked[2] is getter:
+        return module
     if getter is not None:
         compiled = _CODE_MODE.get(getter(), "unknown")
         if compiled != selected.mode:
@@ -2452,7 +2684,13 @@ def binding(name, mode=None):
                 f"mojolearn: {name} was compiled for {compiled}, but this call "
                 f"requested {selected.mode}; rebuild the {selected.mode} binding"
             )
+    _MODE_CHECKED[name] = (selected, module, getter)
     return module
+
+
+#: binding(): the last (mode set, module, mode getter) whose compiled mode was
+#: read back and matched, per binding name.
+_MODE_CHECKED = {}
 
 
 
@@ -2636,7 +2874,9 @@ def numeric_mode():
                 f"but the selector loaded the {loaded} set -- a binary is in "
                 "the wrong directory; rebuild both sets"
             )
-    return loaded
+    # The check above reads the set that runs; the answer is the name the
+    # user chose for it (`_DEFAULT_NAME`, 'fast' answered by the identical set).
+    return _DEFAULT_NAME or loaded
 
 
 # 'metal', 'cuda' or 'hip': the accelerator API of the binaries this

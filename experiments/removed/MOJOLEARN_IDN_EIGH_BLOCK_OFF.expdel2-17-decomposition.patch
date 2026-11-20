@@ -1,0 +1,56 @@
+diff --git a/x_decomp/kit_device.mojo b/x_decomp/kit_device.mojo
+index 88d734801f..fb5d7396b2 100644
+--- a/x_decomp/kit_device.mojo
++++ b/x_decomp/kit_device.mojo
+@@ -67,6 +67,7 @@ from x_decomp.device import (
+     XD_FAST_SVD_ONE_BLOCK,
+     XD_EIGH_ONE_BLOCK_N,
+ )
++from x_decomp.rr_block import IDN_EIGH_BLOCK
+ from x_decomp.qr_bounded import QRB_CELLS
+ from x_decomp.kit import (
+     Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
+@@ -1201,27 +1202,25 @@ struct DKit(Movable):
+         route (`DevExec._eigh_batch_on`: the one-block batched Jacobi with a
+         batch of one) minus its wait, the same launches and words; an
+         unconverged solve raises at that sync, before any host decision
+-        reads a value computed from it. Above it it is `eigh`. Only for callers whose every
++        reads a value computed from it. Above it (and under the quarantined
++        IDN_EIGH_BLOCK build) it is `eigh`. Only for callers whose every
+         result is followed by a kit `sync` (MinCovDet's C-step: its log
+         determinant, and `_write_dev` at the end of the fit)."""
+         var n = A.r
+-        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (its use here: the quarantined block-eigh build took `eigh` at every n) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner another lane); code recoverable at 46b2b32aff.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-17-decomposition.patch.
+-        # TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (its use here: the same IDN_EIGH_BLOCK test; the alias is False without _ON) deleted 2026-11-15 by lane/expdel2-17-decomposition (owner another lane); code recoverable at 46b2b32aff.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.expdel2-17-decomposition.patch.
+-        if n >= 1 and n <= XD_EIGH_ONE_BLOCK_N:
+-            var wd = DMat(1, n)
+-            var vd = DMat(n, n)
+-            var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
+-            self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+-            var dw = self._sub(wd)
+-            var dv = self._sub(vd)
+-            var status = DevExec._eigh_batch_enq(self.ctx, da, 1, n, dw, dv)
+-            self.eig_status.append(status^)
+-            _ = da^
+-            _ = dw^
+-            _ = dv^
+-            return _Eig(wd^, vd^)
++        comptime if not IDN_EIGH_BLOCK:
++            if n >= 1 and n <= XD_EIGH_ONE_BLOCK_N:
++                var wd = DMat(1, n)
++                var vd = DMat(n, n)
++                var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
++                self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
++                var dw = self._sub(wd)
++                var dv = self._sub(vd)
++                var status = DevExec._eigh_batch_enq(self.ctx, da, 1, n, dw, dv)
++                self.eig_status.append(status^)
++                _ = da^
++                _ = dw^
++                _ = dv^
++                return _Eig(wd^, vd^)
+         return self.eigh(A)
+ 
+     def rev_vec(self, A: DMat) raises -> DMat:

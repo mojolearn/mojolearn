@@ -83,6 +83,7 @@ def _fill(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32],
         h.unsafe_ptr().unsafe_store(i, _val(i, salt))
     ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def _report(name: String, ms: Float64):

@@ -1,0 +1,15 @@
+diff --git a/ensemble/tree_identical_ideas.mojo b/ensemble/tree_identical_ideas.mojo
+index 3098b0efda..5578ab52ca 100644
+--- a/ensemble/tree_identical_ideas.mojo
++++ b/ensemble/tree_identical_ideas.mojo
+@@ -75,9 +75,7 @@ comptime T12_BYTES = 256*1024*1024
+ # TOMBSTONE: MOJOLEARN_TREES_T13 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T13.patch
+ comptime T13 = False
+-# TOMBSTONE: MOJOLEARN_TREES_T13_BYTES (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_T13_BYTES.patch
+-comptime T13_BYTES = 16*1024*1024
++comptime T13_BYTES = get_defined_int["MOJOLEARN_TREES_T13_BYTES", 16*1024*1024]()
+ # TOMBSTONE: MOJOLEARN_TREES_T14 (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+ # Restore: git apply experiments/removed/MOJOLEARN_TREES_T14.patch
+ # TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.

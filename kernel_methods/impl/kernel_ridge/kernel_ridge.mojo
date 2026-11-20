@@ -145,10 +145,10 @@ and `_safe_solve`, `:26-44`:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.time import perf_counter_ns
-from std.os import getenv
+from std.sys import is_defined
 
 from cholesky.checks.potrf import (
     chol_default_nb_hint,
@@ -161,6 +161,7 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from kernel_methods.checks.km_sabotage import (
     KMSAB_NONE,
@@ -169,6 +170,11 @@ from kernel_methods.checks.km_sabotage import (
     sabotage_ridge_diag_kernel,
 )
 from checks.numerics import ftz
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 #: SCHEDULING: one thread per diagonal entry.
 comptime KRR_RIDGE_TPB = 256
@@ -310,8 +316,16 @@ def kernel_ridge_solve(
     # `_safe_solve` -> `lapack.posv` -> cusolverDnpotrf. DEVIATION 1660 hands
     # this the `+0.0` jitter: the ridge is already in the matrix.
     # MOJOLEARN_STAGE_TIMES=1: factor and solve walls (drained), timing only.
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = Int(perf_counter_ns())
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    # The identity-trace route (km_check: `potrf_lower`'s per-panel records,
+    # `chol.panelNNN.*`, and `cho_solve`'s) and the multi-GPU owner set
+    # (the parallel kernel-method driver's plan, cholesky/multi_gpu.mojo:
+    # the trailing rows across owners). The same words as the ops.
     var run = potrf_lower(
         ctx,
         k,
@@ -338,6 +352,11 @@ def kernel_ridge_solve(
               + " cho_solve_ms=" + String((Int(perf_counter_ns()) - t1) // 1000000))
     trace.record_device(ctx, "krr.dual_coef", y, n * n_targets)
     return 0
+
+
+# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+# (kernel_ridge_ops_route and kernel_ridge_factor_solve_enqueue, the B arm's route test and enqueue-only posv)
 
 
 def kernel_ridge_workspace_floats(n: Int) -> Int:

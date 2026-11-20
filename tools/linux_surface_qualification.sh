@@ -27,7 +27,7 @@ export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2 MOJOLEAR
 # two-worker, one-BLAS-thread caps above. Qualification stays serial on two.
 BUILD_JOBS=1
 if [[ "$ACTION" = build ]]; then BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}; fi
-[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]{0,2}$ && "$BUILD_JOBS" -le 128 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..128' >&2; exit 2; }
 BUILD_CORES=$((2 * BUILD_JOBS))
 export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
 export MAKEFLAGS=-j2 MFLAGS=-j2 GNUMAKEFLAGS=

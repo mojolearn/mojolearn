@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device estimation stage against a float64 host simulation.
 
-    pixi run check-logloss-estimator
+    pixi run check-native-gpu logloss_estimator_check
 
 `BinOptimizedOracle` + `newton_like_walker_estimate` run the full Logloss
 leaves estimation on device -- shift-add MoveTo, fused der/der2 kernel,
@@ -192,7 +192,7 @@ def sim_estimate(
     return cur_point^
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -236,24 +236,24 @@ def main() raises:
 
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, targets[i])
-        ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_target, h_f)
         ctx.synchronize()
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, weights[i])
-        ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_weights, h_f)
         ctx.synchronize()
         for i in range(n):
             h_f.unsafe_ptr().unsafe_store(i, cursor0[i])
-        ctx.enqueue_copy(dst_buf=d_cursor, src_ptr=h_f.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, d_cursor, h_f)
         var off = 0
         for leaf in range(LEAVES):
             h_u.unsafe_ptr().unsafe_store(leaf, UInt32(off))
             off += leaf_sizes[leaf]
-        ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_u.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_p_off, h_u)
         ctx.synchronize()
         for leaf in range(LEAVES):
             h_u.unsafe_ptr().unsafe_store(leaf, UInt32(leaf_sizes[leaf]))
-        ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_u.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, d_p_sz, h_u)
         ctx.synchronize()
 
         var oracle = make_bin_optimized_oracle(
@@ -300,3 +300,22 @@ def main() raises:
         )
     print("logloss estimator check: device oracle+walker matches the "
           "float64 simulation in both weight modes; empty leaf pinned at 0")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("logloss_estimator_check", cpu=False, gpu=True, serial="", run=run_cases)

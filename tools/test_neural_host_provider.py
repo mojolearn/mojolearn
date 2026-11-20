@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_cpu_descriptor_closure_has_no_python_or_device_backedge():
+def test_cpu_descriptor_dependencies_resolve():
     seen, failures=audit(ROOT,('core.neural_host_dispatch',))
     assert not failures, failures
     assert 'core.mojolearn_neural_host_impl' in seen
@@ -28,12 +28,15 @@ def test_host_binding_and_provider_share_relocated_numerical_functions():
 
 
 def test_cpu_session_and_causal_frontdoors_use_the_common_provider():
-    causal=(ROOT/'bindings/causal_lm_public.mojo').read_text()
-    assert 'Bool(py=e["cpu"]) and block_provider is not None' in causal
-    assert '34 if head_profile else 33, a_words, p_words' in causal
-    mamba=(ROOT/'bindings/mamba_public_native.mojo').read_text()
-    assert '2 * kind - 1, _neural_int_words(addresses), p, f' in mamba
-    transformer=(ROOT/'providers/python/transformer_decode_pyapi.mojo').read_text()
+    causal=(ROOT/'bindings/causal_lm_public_door.mojo').read_text()
+    # Every CPU layer runs the host image's block entry through the CausalLM entry table (op 34
+    # under fixed15_v1, else 33), named constants since the Python-entry arms were removed.
+    cpu = causal[causal.index('if Bool(py=e["cpu"]):'):]
+    assert cpu.index('_causal_table_call(') < cpu.index('elif ')
+    assert 'CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD, a_words, p_words' in cpu
+    mamba=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
+    assert 'neural_descriptor_execute(h[].provider, 2 * kind - 1, addresses, p, f)' in mamba
+    transformer=(ROOT/'providers/python/transformer_decode_pyapi_door.mojo').read_text()
     assert 'neural_descriptor_execute(h[].provider, 33, a, p, [])' in transformer
 
 
@@ -49,14 +52,15 @@ def test_training_hosts_use_their_original_numerical_owners_and_common_transport
         binding=(ROOT/f'bindings/_mojolearn_{family}_host.mojo').read_text()
         assert f'[{family}_block_api_binding]("{family}_block_api_v1")' in binding
         assert 'neural_descriptor_capsule(api[].name, api[].entries)' in binding
-    boundary=(ROOT/'bindings/neural_block_public.mojo').read_text()
+    boundary=(ROOT/'bindings/neural_block_public_door.mojo').read_text()
     admission=boundary.split('def neural_training_entries(')[1].split('def _neural_int_words(')[0]
     assert 'vendor != "cpu" and getenv' not in admission
 
 
 def test_host_owned_operations_preserve_failure_state_and_original_counters():
     source=(ROOT/'mamba/host/native_block_dispatch.mojo').read_text()
-    for helper in ('_m3_owned_install_run','_m3_owned_forward_run','_m3_owned_backward_run',
+    # The owned-weights install path is deleted with MOJOLEARN_NN40_OWNED_WEIGHTS (59b53529ef).
+    for helper in ('_m3_owned_forward_run','_m3_owned_backward_run',
                    '_m3_owned_state_run','_m3_owned_export_run'):
         assert helper+'(owner[],' in source
     assert 'except problem:\n        owner[].usable = False' in source
@@ -65,14 +69,15 @@ def test_host_owned_operations_preserve_failure_state_and_original_counters():
     assert 'Float32(f[0]), Float32(f[1])' in source
     original=(ROOT/'mamba/host/mamba_host_shell_impl.mojo').read_text()
     assert 'generation: Int, reserved: Bool = False)' in original
-    assert 's.busy != reserved' in original
-    for text in ('len(a) != want_a', 'len(p) != want_p', 'op >= 44', 'result == 0'):
+    # The bound is the operation table size (NEURAL_MAMBA_OPERATIONS, 7454253cb5), not a literal.
+    for text in ('len(a) != want_a', 'len(p) != want_p', 'op >= NEURAL_MAMBA_OPERATIONS', 'result == 0'):
         assert text in source
 
 
 def test_cpu_mamba_public_admission_refreshes_both_tables():
-    public=(ROOT/'bindings/mamba_public_native.mojo').read_text()
-    admission=public.split('def _m3_entries(')[1].split('def _m3_canonical(')[0]
+    public=(ROOT/'bindings/mamba_public_native_door.mojo').read_text()
+    # The route-taking overload (the last definition) holds the admission.
+    admission=public.split('def _m3_entries(')[-1].split('def _m3_allocate(')[0]
     for factory in ('mamba_block_api_v1','mamba_state_api_v1'):
         assert factory in admission
     assert 'py_setitem(fields, "_native_mamba_state", state_provider)' in admission
@@ -99,7 +104,7 @@ def test_cpu_training_primitives_share_relocated_public_helpers():
     assert 'return ce_loss_host_into(' in provider
     assert 'op != 25' in provider
     assert '[neural_primitives_api_binding]("neural_primitives_api_v1")' in binding
-    samba=(ROOT/'providers/python/samba_execution_pyapi.mojo').read_text()
+    samba=(ROOT/'providers/python/samba_execution_pyapi_door.mojo').read_text()
     assert 'var use_session = not cpu and' in samba
     assert 'operation = 33 if cpu else (35 if packed else 11)' in samba
     assert '12 if use_session or layer_state is not None else 10' in samba

@@ -1,7 +1,0 @@
-COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-priority-pass/tools/bench_board_algos.py", "race", "--lane", "adafactor", "--dataset", "synthetic", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-adafactor-synthetic-old", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {"MOJOLEARN_SEQ_HOST_FOLD": "0"}
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"eps": [null, 0.001], "learning_rate": 0.001, "seed": "none (deterministic)", "weight_decay": 0.0}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/adafactor", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
-ALGOS-ROUND lane=adafactor dataset=synthetic arm=ours round=0 ms=7646.652 infer_ms=None digest=ff4a5ff93e72424e
-ALGOS-ROUND lane=adafactor dataset=synthetic arm=ours round=1 ms=6595.261 infer_ms=None digest=ff4a5ff93e72424e
-ALGOS-ROUND lane=adafactor dataset=synthetic arm=ours round=2 ms=6591.515 infer_ms=None digest=ff4a5ff93e72424e
-ALGOS-ROUND lane=adafactor dataset=synthetic arm=ours round=3 ms=6573.117 infer_ms=None digest=ff4a5ff93e72424e
-ALGOS lane=adafactor dataset=synthetic arm=ours status=ok median_ms=6591.514555737376 quality={}

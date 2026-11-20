@@ -63,7 +63,7 @@ def column_major(fixture: FixtureDataset) -> List[Float32]:
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     var shapes = all_shapes()

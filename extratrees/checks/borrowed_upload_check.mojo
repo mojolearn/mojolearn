@@ -14,7 +14,7 @@ from extratrees.estimator import (
 from extratrees.impl.decisiontree.batched_levelalgo.builder import upload_dataset
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     # Raw upload must preserve signed zero/subnormal bits as well as normal X.
     var raw = List[Float32]()

@@ -91,7 +91,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$MODELS" ] || [ ${#dirs[@]} -gt 0 ] || die "usage: admit_identity_columns.sh [--build-host] [--check-only] [--lanes a,b] <records dir...> | --models <dir>"
 
-if [ -n "${PYTHON:-}" ]; then
+# ADMIT_PYTHON (tools/release_identity_wheels.py admit_records, 2026-11-08): an interpreter with the RELEASE WHEEL
+# installed (the Apple column's venv). The verifier then runs from the installed package, which carries every
+# binding, instead of from this source tree: 0.8.66 run k refused the admission because `import mojolearn` at the
+# frozen commit needs the tokenizer host binding, which this script's two-binding host preflight never built.
+if [ -n "${ADMIT_PYTHON:-}" ]; then
+    PY=("$ADMIT_PYTHON")
+elif [ -n "${PYTHON:-}" ]; then
+
     read -r -a PY <<< "$PYTHON"
 elif command -v pixi > /dev/null 2>&1 && [ -f pixi.toml ]; then
     PY=(pixi run -e default python)
@@ -113,14 +120,32 @@ missing=()
 # Use the runtime's path-selection rules without bootstrapping the package.
 # This accepts compact release and nested development files only when the
 # actual indexed artifact exists, and preserves per-binding precedence.
+# ADMIT_WHEEL_PACKAGE (tools/release_identity_wheels.py admit_records, 2026-11-08): the installed release wheel's
+# package dir (the Apple column's venv). Its compiled artifacts (host/, identical/, .dylibs/: the merged bindings
+# and their index, the math library) are placed into this tree's python/mojolearn/, so the verifier runs from the
+# frozen SOURCE (emit-reference needs the checkout root) with the RELEASE's bindings, the exact bytes the gates
+# recorded. Nothing is compiled; the copies are never committed (only the NEXT paths are). 0.8.66 run k: the bare
+# tree's import needed the tokenizer host binding, which the two-binding host preflight never built.
+if [ -n "${ADMIT_WHEEL_PACKAGE:-}" ]; then
+    [ -f "$ADMIT_WHEEL_PACKAGE/__init__.py" ] || die "ADMIT_WHEEL_PACKAGE is not a mojolearn package dir: $ADMIT_WHEEL_PACKAGE"
+    for d in host identical .dylibs .libs cuda_native hip_native; do
+        [ -d "$ADMIT_WHEEL_PACKAGE/$d" ] || continue
+        rm -rf "$ROOT/python/mojolearn/$d" && cp -R "$ADMIT_WHEEL_PACKAGE/$d" "$ROOT/python/mojolearn/$d"
+        echo "placed $d from the installed wheel ($(find "$ROOT/python/mojolearn/$d" -type f | wc -l | tr -d " ") files)"
+    done
+    : > "$EVID/host-missing.txt"
+elif [ -n "${ADMIT_PYTHON:-}" ]; then
+    : > "$EVID/host-missing.txt"   # the installed wheel carries every host binding and the math library
+else
 "${PY[@]}" tools/identity_host_preflight.py --package python/mojolearn \
     --report "$EVID/host-bindings.json" "${HOST_FAMILIES[@]}" \
     > "$EVID/host-missing.txt" 2> "$EVID/host-preflight.log" \
     || die "host binding preflight failed; see $EVID/host-preflight.log"
+fi
 while IFS= read -r fam; do
     [ -z "$fam" ] || missing+=("$fam")
 done < "$EVID/host-missing.txt"
-if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
+if [ -z "${ADMIT_PYTHON:-}" ] && [ -z "${ADMIT_WHEEL_PACKAGE:-}" ] && { [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; }; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
         if [ ! -f "$MATH" ]; then
@@ -140,7 +165,7 @@ if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
     fi
 fi
 
-cli() {  # the verifier from source, host column, identical tier
+cli() {  # the verifier from source (its emit-reference needs the checkout root), host column, identical tier
     env MOJOLEARN_VENDOR=cpu MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python" \
         "${PY[@]}" -m mojolearn verify "$@"
 }

@@ -15,7 +15,7 @@ for s in "$E"/devpods/*/state.env; do
     (
         # shellcheck disable=SC1090
         . "$s"
-        case "${PROVIDER:-}" in runpod|hotaisle) ;; *) exit 0 ;; esac
+        case "${PROVIDER:-}" in runpod) ;; *) exit 0 ;; esac
         [ -n "${SSH_TARGET:-}" ] || exit 0
         # shellcheck disable=SC2086
         bash "$A" "$(basename "$(dirname "$s")")" $SSH_TARGET

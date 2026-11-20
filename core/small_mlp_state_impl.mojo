@@ -6,12 +6,12 @@ order weight1, bias1, weight2, bias2 at offsets 0, 128, 144, 192, 195), its
 AdamW moments, flags and step counter, its float32-rounded optimizer settings
 and its canonical data schedule live here, in Mojo memory. The Python door
 (`bindings/small_mlp_native.mojo`) converts arguments and calls the compiled
-training entries with addresses into these buffers; nothing here imports
+training program with addresses into these buffers; nothing here imports
 Python.
 """
-from std.ffi import _Global
-from std.math import isfinite
-from std.memory import memcpy
+from core.host_finite_scan import host_all_finite_f32
+from std.memory import unsafe_memcpy
+from core.shared_slot import SharedSlot
 
 comptime MLP_TOTAL = 195
 comptime MLP_MAX_STEP = 2147483647
@@ -81,21 +81,19 @@ struct MlpSlot(Copyable, Movable):
     var live: Bool
     var generation: Int
     var state: MlpState
-    # The Apple FAST device-resident session (-1: none). While it is open it
-    # is the truth for the parameters and moments; `resident_mode` names the
-    # numeric mode whose binding opened it and `resident_cap` its minibatch
-    # capacity.
-    var resident: Int
-    var resident_mode: String
-    var resident_cap: Int
+    # The trainer's captured program on the executor (-1: none;
+    # autograd/small_mlp_program.mojo). While it is open its session
+    # parameters and optimizer state are the truth for the weights and
+    # moments; `program_mode` names the numeric mode whose binding opened it.
+    var program: Int
+    var program_mode: String
 
     def __init__(out self):
         self.live = False
         self.generation = 0
         self.state = MlpState()
-        self.resident = -1
-        self.resident_mode = String()
-        self.resident_cap = 0
+        self.program = -1
+        self.program_mode = String()
 
 
 struct MlpStore(Defaultable, Movable):
@@ -107,7 +105,7 @@ struct MlpStore(Defaultable, Movable):
         self.next_generation = 1
 
 
-comptime MLP_STORE = _Global[StorageType=MlpStore, name="MojoSmallMlpTrainerStore", init_fn=MlpStore.__init__]
+comptime MLP_STORE = SharedSlot[MlpStore, "MojolearnSmallMlpTrainerStoreV1"]
 
 
 def mlp_store_create(var state: MlpState) raises -> Int:
@@ -127,9 +125,8 @@ def mlp_store_create(var state: MlpState) raises -> Int:
     store[].slots[index].live = True
     store[].slots[index].generation = generation
     store[].slots[index].state = state^
-    store[].slots[index].resident = -1
-    store[].slots[index].resident_mode = String()
-    store[].slots[index].resident_cap = 0
+    store[].slots[index].program = -1
+    store[].slots[index].program_mode = String()
     return generation * MLP_HANDLE_SPAN + index
 
 
@@ -152,49 +149,46 @@ def mlp_store_release(handle: Int) raises -> Bool:
         return False
     store[].slots[index].live = False
     store[].slots[index].state = MlpState()
-    store[].slots[index].resident = -1
-    store[].slots[index].resident_mode = String()
-    store[].slots[index].resident_cap = 0
+    store[].slots[index].program = -1
+    store[].slots[index].program_mode = String()
     return True
 
 
 def mlp_copy_tensor_out(state: MlpState, index: Int, dst_addr: Int):
     """Parameter tensor `index` into a row-major float32 buffer."""
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=state.params.unsafe_ptr() + mlp_offset(index), count=mlp_size(index))
+    unsafe_memcpy(dest=dst, src=state.params.unsafe_ptr() + mlp_offset(index), count=mlp_size(index))
 
 
 def mlp_copy_tensor_in(mut state: MlpState, index: Int, src_addr: Int):
     var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
-    memcpy(dest=state.params.unsafe_ptr() + mlp_offset(index), src=src, count=mlp_size(index))
+    unsafe_memcpy(dest=state.params.unsafe_ptr() + mlp_offset(index), src=src, count=mlp_size(index))
 
 
 def mlp_copy_f32(src_addr: Int, dst_addr: Int, n: Int):
     var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def mlp_copy_i32(src_addr: Int, dst_addr: Int, n: Int):
     var src = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    memcpy(dest=dst, src=src, count=n)
+    unsafe_memcpy(dest=dst, src=src, count=n)
 
 
 def mlp_require_finite(addr: Int, n: Int, label: String) raises:
     """ValueError naming `label` when any of `n` float32 values is not finite."""
-    var data = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)
-    for i in range(n):
-        if not isfinite(data[i]):
-            raise Error("SmallMLPTrainer " + label + " must be finite")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n):
+        raise Error("SmallMLPTrainer " + label + " must be finite")
 
 
 def mlp_require_result_finite(addr: Int, n: Int, label: String) raises:
     """RuntimeError: an operation's output is not finite."""
-    var data = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)
-    for i in range(n):
-        if not isfinite(data[i]):
-            raise Error("RuntimeError: SmallMLPTrainer " + label + " returned an invalid result")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n):
+        raise Error("RuntimeError: SmallMLPTrainer " + label + " returned an invalid result")
 
 
 def mlp_require_moments(state: MlpState) raises:

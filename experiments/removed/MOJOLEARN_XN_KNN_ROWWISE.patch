@@ -1,0 +1,15 @@
+diff --git b/x_neighbors/iter_device.mojo a/x_neighbors/iter_device.mojo
+index ac137d7cdb..ec3cab16fc 100644
+--- b/x_neighbors/iter_device.mojo
++++ a/x_neighbors/iter_device.mojo
+@@ -1095,9 +1095,7 @@ def op_knn_sq_tiled(
+     if d > KNN_TILE_MAX_D:
+         # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
+         # column's limit, or the row kernel (every shared page has a fits gate)
+-        # TOMBSTONE: MOJOLEARN_XN_KNN_ROWWISE (unmeasured opt-in arm: forced the row kernel above KNN_TILE_MAX_D) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 02e970ed32.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XN_KNN_ROWWISE.patch; record in docs/TOMBSTONES.md.
+-        comptime if not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
++        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
+             op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self, status)
+             return
+         # direct device copies in and out (no host-thread staging)

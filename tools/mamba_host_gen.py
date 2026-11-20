@@ -68,8 +68,8 @@ SOURCES = {
     "mamba/impl/modeling/modeling_mamba.mojo": "modeling_mamba",
     "mamba/impl/modules/ssd_minimal.mojo": "ssd_minimal",
     "mamba/impl/modules/mamba2.mojo": "mamba2",
-    # lane mamba-folds (2026-10-28): the v2 backward row folds
-    # (MOJOLEARN_IDN_MAMBA_BWD_FOLDS) shared by the Mamba-2 and Mamba-3 backward
+    # lane mamba-folds (2026-10-28): the v2 backward row folds (their define was
+    # deleted 2026-11-15) shared by the Mamba-2 and Mamba-3 backward
     "autograd/kernels/mamba_bwd_folds.mojo": "mamba_bwd_folds",
     "autograd/kernels/mamba2_proj.mojo": "mamba2_backward_checks",
     "autograd/kernels/mamba2.mojo": "mamba2_backward",
@@ -101,7 +101,7 @@ IMPORT_MAP = {
     "gemm.checks.gemm_identical": SHIM,
     "gemm.neural_dispatch": SHIM,
     "mamba.impl.ops.neural_gradient_profile": "mamba.impl.ops.neural_gradient_profile",
-    "std.gpu": None,
+    "max.gpu": None,
     "max.gpu.memory": None,
     "max.gpu.sync": None,
 }
@@ -142,29 +142,27 @@ for _src in (*HOST_OPT_FUNCTIONS, *HOST_OPT_STRUCTS, HOST_OPT_DEFINES):
 #: The shared-memory kernels those arms bypass are stubbed (rule 4 of the
 #: module docstring) and abort by name if ever reached.
 SUBSTITUTIONS = (
-    # NN36 uses GPU shared memory only. Its host column retains the exact
-    # cell exp/dot expression; generation and all checks are still pending.
-    ("mamba/impl/modules/ssd_minimal.mojo",
-     r'comptime NN36_SHARED_DECAY = [^\n]+',
-     "comptime NN36_SHARED_DECAY = False"),
+    # 2026-11-15 (expdel2 deletion program): the M3_* switch lines are now plain
+    # constants after their NAIVE defines were deleted; match the whole line.
+    # NN36_SHARED_DECAY and IDN_SSD_OCCUPANCY are False constants in
+    # ssd_minimal.mojo since their defines were deleted (expdel2-tooling): the
+    # source already takes the host arm, so their substitutions are gone.
+    # IDN_M1_STATE_WINDOW and its window arm were deleted by expdel2-28 (2026-11-15).
     # lane nv-occupancy (2026-10-28): MOJOLEARN_IDN_SSD_OCCUPANCY's coalesced
     # and shared-tile S10/S12/S18 arms are device-only; the host column keeps
-    # the cell kernels (the same chains, the same bits).
+    # the cell kernels (the same chains, the same bits). Restored 2026-11-15
+    # with the arm (lane restore-run-arms-neural).
     ("mamba/impl/modules/ssd_minimal.mojo",
      r"comptime IDN_SSD_OCCUPANCY = \([\s\S]*?\n\)",
      "comptime IDN_SSD_OCCUPANCY = False"),
-    ("mamba/impl/ops/selective_scan_interface.mojo",
-     r"comptime IDN_M1_STATE_WINDOW = \([\s\S]*?\n\)",
-     "comptime IDN_M1_STATE_WINDOW = False"),
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("autograd/kernels/mamba3.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, [A-Za-z0-9_]+\]\(\)", "False"),
-    ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_ANGLE_DT_SHARED = not is_defined\["MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE"\]\(\)',
-     "comptime M3_ANGLE_DT_SHARED = False"),
+    # M3_ANGLE_DT_SHARED and its shared kernel were deleted with
+    # MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE (2026-11-15); the suffix path is the only one.
     ("autograd/kernels/mamba_refusal.mojo",
-     r'comptime M3_DEVICE_REFUSAL = not is_defined\["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"\]\(\)',
+     r'comptime M3_DEVICE_REFUSAL = [^\n]+',
      "comptime M3_DEVICE_REFUSAL = False"),
     # CPU SPEED (lane neural-cpu, 2026-09-28): the S16 q/k/v backward launch
     # runs mamba/host/mamba3_s16_host.mojo, the kernel's per-cell arithmetic
@@ -172,16 +170,16 @@ SUBSTITUTIONS = (
     # lane/neural-apple2: the host takes the naive S16 launch below (its
     # host restatement), never the shared-memory d_v split.
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S16_V_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_V_NAIVE"\]\(\)',
+     r'comptime M3_S16_V_SHARED = [^\n]+',
      "comptime M3_S16_V_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S17_TAIL_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S17_TAIL_NAIVE"\]\(\)',
+     r'comptime M3_S17_TAIL_SHARED = [^\n]+',
      "comptime M3_S17_TAIL_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S16_QK_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_QK_NAIVE"\]\(\)',
+     r'comptime M3_S16_QK_SHARED = [^\n]+',
      "comptime M3_S16_QK_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
-     r'comptime M3_S17_OPERANDS_SHARED = \(\n    not is_defined\["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"\]\(\)\n    and M3_S17_TAIL_SHARED\n    and False\n\)',
+     r"comptime M3_S17_OPERANDS_SHARED = \([\s\S]*?\n\)",
      "comptime M3_S17_OPERANDS_SHARED = False"),
     ("autograd/kernels/mamba3.mojo",
      r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",
@@ -209,7 +207,7 @@ _CONTEXT_RULES = (
      r'from checks\.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL\n\n'
      r"#: This binding's ONE process-lifetime DeviceContext \(core/neural_context\.mojo,\n"
      r'#: lane/devctx-lifetime\): a context per call exhausts Metal command queues\.\n'
-     r'comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"\n\n', ''),
+     r'comptime _DEVCTX_SLOT = "MojolearnNeuralMambaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnNeuralMambaContextFastV3"\n\n', ''),
     (r'\bprocess_ctx\[_DEVCTX_SLOT\]\(\)', 'DeviceContext()'),
     (r'# Direct callers also reuse that context when none is supplied\.',
      '# Same kernels, same launches, same order: no bit moves.'),
@@ -427,10 +425,97 @@ def _rewrite_kernels(text, src):
     return "\n".join(lines), n_kernels
 
 
+#: Lane perf-small-fixes (2026-11-06): the per-index work of a launch, so a
+#: tiny launch runs on the calling thread instead of paying a pool dispatch
+#: (`device_shim.host_launch`, through `core/host_predict_threads.mojo::
+#: host_grain_cap`). A kernel's work per thread index is KNOWN only when its
+#: body, and the body of every module-local def it calls, has no loop: then
+#: each index costs about its line count in scalar operations (a statement
+#: is a load, an arithmetic step or a store or two), at least
+#: KERNEL_MIN_INDEX_WORK. A loop anywhere in that closure (`for`, `while`,
+#: `comptime for`), a call to a def outside the module, or a kernel the
+#: module does not define makes the work UNKNOWN (0), and the launch keeps
+#: the full task split it had. The estimate only picks how many host tasks
+#: share the grid; a kernel cell is a function of its index and arguments
+#: alone, so no bit depends on it.
+KERNEL_MIN_INDEX_WORK = 8
+#: The bare-name calls a loop-free kernel may make and stay KNOWN: the scalar
+#: types' constructors and the elementwise math the kernels use.
+_TRIVIAL_CALLS = frozenset(
+    "Int UInt Int8 Int16 Int32 Int64 UInt8 UInt16 UInt32 UInt64 Float16 BFloat16 Float32 Float64 Bool "
+    "SIMD Scalar DType rebind bitcast min max abs exp exp2 log log1p log2 sqrt rsqrt tanh sin cos erf "
+    "floor ceil round isnan isinf fma clamp select range len".split()
+)
+#: The fixed-cost scalar helpers of `checks/numerics.mojo` the kernels call
+#: (each body read: no loop, a polynomial or a pinned rounding at most),
+#: with their scalar operation cost.
+_SCALAR_HELPERS = {
+    "ftz": 2, "identical_mul": 2, "identical_mul_add": 2, "identical_div": 4,
+    "identical_exp": 24, "identical_silu": 24, "identical_sigmoid": 24, "identical_rsqrt": 24,
+    "identical_softplus": 32, "identical_tanh": 24, "identical_clamp": 8,
+    "portable_sinf": 32, "portable_cosf": 32,
+}
+_KEYWORDS = frozenset("if elif while for return and or not in is assert raise comptime var def".split())
+_CALL_RE = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*([\[(])")
+_LOOP_RE = re.compile(r"^\s*(?:comptime\s+)?(?:for|while)\b")
+
+
+def _top_level_defs(text):
+    """name -> body lines (signature excluded) of every top-level def."""
+    lines = text.split("\n")
+    defs = {}
+    for j, line in enumerate(lines):
+        if re.match(r"^def\s+\w+", line):
+            try:
+                name, _, sig_end, e = _def_extent(lines, j)
+            except (GenError, ValueError, IndexError):
+                continue
+            defs[name] = lines[sig_end + 1:e]
+    return defs
+
+
+def _index_work(name, defs, seen=None):
+    """Scalar operations per thread index of def `name`, 0 when unknown."""
+    seen = set() if seen is None else seen
+    if name in seen or name not in defs:
+        return 0
+    seen.add(name)
+    work = 0
+    in_doc = False
+    for line in defs[name]:
+        quotes = line.count('"""')
+        was_doc = in_doc
+        if quotes % 2 == 1:
+            in_doc = not in_doc
+        if was_doc or quotes:
+            continue
+        code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', line).split("#", 1)[0]
+        if not code.strip():
+            continue
+        if _LOOP_RE.match(code):
+            return 0
+        work += 1
+        for callee, opener in _CALL_RE.findall(code):
+            if callee in _TRIVIAL_CALLS or callee in _KEYWORDS:
+                continue
+            if callee in _SCALAR_HELPERS and callee not in defs:
+                work += _SCALAR_HELPERS[callee]
+                continue
+            if opener == "[" and callee not in defs:
+                # an index into a pointer or a list, not a call
+                continue
+            sub = _index_work(callee, defs, seen)
+            if sub <= 0:
+                return 0
+            work += sub
+    return max(work, KERNEL_MIN_INDEX_WORK)
+
+
 LAUNCH_RE = re.compile(r"([\w.\[\]]+)\.enqueue_function\[")
 
 
-def _rewrite_launches(text, src):
+def _rewrite_launches(text, src, defs=None):
+    defs = {} if defs is None else defs
     out = []
     i = 0
     n = 0
@@ -474,7 +559,9 @@ def _rewrite_launches(text, src):
         for nm, a in zip(names, pos):
             out.append(f"{indent}var {nm} = {a}\n")
         out.append(f"{indent}def _launch_{n}(gid_: Int) {{{caps}}}:\n{indent}    {kernel}({body})\n")
-        out.append(f"{indent}host_launch(_launch_{n}, launch_count({g}, {t}))")
+        base = re.match(r"[\w.]+", kernel)
+        work = _index_work(base.group(0).rsplit(".", 1)[-1], defs) if base else 0
+        out.append(f"{indent}host_launch(_launch_{n}, launch_count({g}, {t}), {work})")
         i = p1 + 1
         continue
     return "".join(out), n
@@ -492,7 +579,7 @@ def generate(src, *, validate=True):
     text = _rewrite_imports(text, src)
     text, stubbed = _stub_shared_kernels(text, src)
     text, n_kernels = _rewrite_kernels(text, src)
-    text, n_launches = _rewrite_launches(text, src)
+    text, n_launches = _rewrite_launches(text, src, _top_level_defs(text))
     in_doc = False
     for lineno, line in enumerate(text.split("\n"), 1):
         quotes = line.count('"""')

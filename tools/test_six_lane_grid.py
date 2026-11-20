@@ -55,11 +55,11 @@ class GuardTests(unittest.TestCase):
         self.assertFalse(self.g.problems(['MOJOLEARN_P=1']))
 
     def test_real_guard_file(self):
-        g = G.Guards(G.GUARDS.read_text())
+        g = G.Guards.of_files()
         self.assertGreater(g.assert_count, 50)
         self.assertEqual(g.problems([]), [])
         self.assertTrue(g.problems(['MOJOLEARN_IDN_NEURAL_NN01=1']))  # retired
-        self.assertTrue(g.problems(['MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3', 'MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=1']))
+        self.assertTrue(g.problems(['MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3']))  # deleted 2026-11-15: refused outright
         self.assertTrue(g.problems(['MOJOLEARN_NN34_AFFINE_PREFIX=1', 'MOJOLEARN_IDN_M1_STATE_WINDOW=1']))
 
 
@@ -176,7 +176,7 @@ class RealInputTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.plan, cls.matrix, cls.build = G.generate()
-        cls.guards = G.Guards(G.GUARDS.read_text())
+        cls.guards = G.Guards.of_files()
         controls, *_ = G.load_controls()
         for a, b, why in G.source_exclusions(controls):
             cls.guards.add_pair(a, b, why)

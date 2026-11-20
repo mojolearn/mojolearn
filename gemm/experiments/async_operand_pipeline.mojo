@@ -8,7 +8,7 @@ current FMA; no assembly or compiler-output edits are involved. Plain staged
 loads are a separate compile-time control. Tile reuse is deliberately kept
 separate from this initial supported-primitive experiment.
 """
-from std.gpu import block_idx,block_dim,thread_idx
+from max.gpu import block_idx,block_dim,thread_idx
 from std.memory import stack_allocation
 from std.sys.info import is_nvidia_gpu
 from max.gpu.memory import async_copy,async_copy_commit_group,async_copy_wait_all,AddressSpace

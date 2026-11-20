@@ -1,0 +1,11 @@
+# Rows for the run-to-run drift test (lane fb3-drift, 2026-11-17): AT_ROWS_FILE of tools/ops/attribution_job.sh.
+# Same form as tools/ops/attribution_rows.tsv. Six paper rows that were slower in the second timing of one wheel on
+# one boot, each bound by fresh pages or host-to-device copies, each short on both wheels (a race under 40 s):
+# first-call faults (pca taxi transform), the upload of a wide X (pca istella fit), wide inference inputs (ols and
+# the symmetric trees on istella), a large dense product (gemm) and a millisecond forward (mamba3).
+classical/pca/taxi/rows=full	infer/Xq	ours	name=pca-taxi-infer	timing=planned
+classical/pca/istella/rows=full	fit	ours	name=pca-istella-fit	timing=planned
+classical/ols/istella/rows=full	infer/Xq	ours	name=ols-istella-infer	timing=planned
+trees/gbdt-symmetric/istella/rows=full	infer/large	ours	name=symmetric-istella-infer	timing=planned
+neural/gemm/gaussian/shape=full	fit	ours	name=gemm	timing=planned
+neural/mamba3-forward/gaussian/shape=full	fit	ours	name=mamba3-forward	timing=planned

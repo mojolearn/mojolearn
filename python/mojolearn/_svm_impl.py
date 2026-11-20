@@ -49,8 +49,7 @@ build, which is the default, makes no cross-vendor claim at all.
 from . import _backend
 from . import _native_archive_bridge
 from . import _native_family_bridge
-from ._buffer import _native
-from ._labels import ClassLabels
+from ._buffer import _native, _NATIVE as _NATIVE_CACHE
 from ._mode import NumericModeMixin, available_if
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
@@ -59,13 +58,13 @@ _SVC_FORMAT = "mojolearn-svc-1"
 _SVR_FORMAT = "mojolearn-svr-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schemas registered at the end of this module;
 # host_archive_native.mojo builds the loaded model with the refusals and
 # messages of the Python loaders it replaced).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-# The compiled SVM family owner (bindings/svc_native.mojo), connected once at
+# The compiled SVM family owner (bindings/svc_native_unpack.mojo), connected once at
 # import: SVC's and SVR's fit, decision_function, predict, predict_proba,
 # predict_log_proba and score are one native call each, handed the
 # `_mojolearn_svm` binding `_bind` (or `_extension`) resolves.
@@ -1238,16 +1237,48 @@ _native_archive_bridge.register(
     ),
 )
 
-# The compiled SVM family owner (bindings/svc_native.mojo) reads these fixed
+# The compiled SVM family owner (bindings/svc_native_unpack.mojo) reads these fixed
 # tables: the base binding's host-helper resolver (`_buffer._native`, the
 # entries `gather_i64`, `threshold_labels_i64`, ... the Python called) and
 # the connected public class-label type the native fit publishes `classes_` as.
-_native_family_bridge.tables(family_svc_native=_native, family_svc_kernels=dict(_SVC_KERNELS),
-                             classifier_labels_class=ClassLabels,
-                             classifier_labels_namespace=dict(vars(ClassLabels)),
-                             classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
+def _svc_base_helpers():
+    # glue: once at import, the base helper table key the native SVM owner
+    # reads (lane calltable-base-helpers); a binary without one records the
+    # refusal, raised by the first call that needs it
+    from ._buffer import base_native_key
+    try:
+        return {"base_native_key": base_native_key()}
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        return {"base_native_key": type(error).__name__ + ": " + str(error)}
+
+
+def _svc_warm_helpers():
+    # glue: once at import, fill `_buffer._NATIVE` with the five base helpers the
+    # native SVM owner reads (bindings/svc_common_door.mojo `svc_base` callers:
+    # gather_i64, threshold_labels_i64, argmax_rows_f32/_f64, class_ratio_f64).
+    # Census d95f805cce: the first SVC.fit / predict of a process resolved them
+    # inside the call (host_helper_scope, binding, load_host_module: 12 frames).
+    # A helper that does not resolve is left to the first call that needs it,
+    # which resolves again and raises the resolver's own error.
+    for name in ("gather_i64", "threshold_labels_i64", "argmax_rows_f32", "argmax_rows_f64",
+                 "class_ratio_f64"):  # glue: fixed helper names, once at import
+        try:
+            _native(name)
+        except Exception:  # noqa: BLE001 - raised by the first call that needs it
+            pass
+
+
+_svc_warm_helpers()
+_native_family_bridge.tables(family_svc_native=_native, family_svc_native_cache=_NATIVE_CACHE,
+                             family_svc_base_helpers=_svc_base_helpers(),
+                             family_svc_kernels=dict(_SVC_KERNELS),
                              family_svc_refused=dict(_SVC_REFUSED_KERNELS),
                              family_svr_refused=dict(_SVR_REFUSED_KERNELS))
+
+# The shared native label step (bindings/classical_labels_door.mojo): SVC, NuSVC and
+# LinearSVC fit encode a numeric y from its buffer in one native call.
+from ._native_labels_bridge import label_context as _label_context  # noqa: E402
+_native_family_bridge.tables(**_label_context())
 
 # Import connection only; each native public operation admits the live registry.
 _native_family_bridge.connect_bindings("_mojolearn_svm")

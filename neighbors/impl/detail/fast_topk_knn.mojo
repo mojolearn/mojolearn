@@ -20,22 +20,25 @@ shared tile), as FAST's tiled arm computes them; FAST promises quality,
 not bits. Ties order by index, so the result is deterministic.
 
 Only for FAST builds on the Apple column (`fast_topk_knn_applies`); every
-other build keeps the dispatch it had. `-D MOJOLEARN_KNN_FAST_TOPK_OFF`
-turns it off.
+other build keeps the dispatch it had.
 """
 
-from std.gpu import block_idx, thread_idx
+from std.sys.compile import is_defined
+from max.gpu import block_idx, thread_idx
 from std.math import sqrt, inf
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.os import getenv
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 comptime FKT_QB = 256
 # AFCL-G02: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
@@ -44,18 +47,19 @@ comptime FKT_QB = 256
 # candidate coverage, per-slice top-k and the final merge remain complete.
 # Keep MOJOLEARN_KNN_FAST_MMA_OFF in BOTH arms to reach this scalar caller.
 comptime AFCL_G02 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G02"]()
 )
 comptime FKT_T = 128 if AFCL_G02 else 64
+# TOMBSTONE: MOJOLEARN_AFCL_G02 (never-run Apple FAST card) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 9e73d27c38.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G02.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime FKT_MAX_D = 32
 comptime FKT_MAX_K = 16
 
-comptime FAST_TOPK_KNN_ENABLED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KNN_FAST_TOPK_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KNN_FAST_TOPK_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 22513d08dc.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_TOPK_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_TOPK_KNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def fast_topk_knn_applies(n_features: Int, k: Int) -> Bool:
@@ -89,7 +93,9 @@ def _worse(da: Float32, ia: UInt32, db: Float32, ib: UInt32) -> Bool:
 # do not time identical routes or invent reach from the compile define alone.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
 # f14-full-dispatch-blockers.json. No dispatch/default change from this audit.
-comptime FKT_QPT = 4 if (FAST_TOPK_KNN_ENABLED and is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"]()) else 2
+# TOMBSTONE: MOJOLEARN_KNN_FAST_QUERY_GROUP4 (opt-in arm, unmeasured: F14 route never reached) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 9c8a5bb983.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_QUERY_GROUP4.patch; record in docs/TOMBSTONES.md.
+comptime FKT_QPT = 2
 """Queries per thread: each loaded index row is reused across them."""
 
 
@@ -253,7 +259,7 @@ def fast_topk_knn(
         slices = 64
     var slice_rows = (n_index + slices - 1) // slices
     slices = (n_index + slice_rows - 1) // slice_rows
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = 0
     if st_on:
         ctx.synchronize()

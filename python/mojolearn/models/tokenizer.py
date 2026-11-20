@@ -7,7 +7,7 @@ tokens, optional NFC normalization and BOS/EOS templates. Use `encode` and
 `decode` for text, or `encode_bytes` and `decode_bytes` for bytes. Vocabulary
 files are supplied by the caller.
 """
-import unicodedata
+import unicodedata as _unicodedata
 
 from ..tokenizer import _binding
 
@@ -31,16 +31,14 @@ _NAME_OF = {spelling: name for name, spellings in PATTERNS.items() for spelling 
 
 
 def pattern_name(regex):
-    """The name of a known pattern spelling, or None."""
+    """The name of a known pattern spelling, or None.
+
+    Any value that is not one of the spellings in ``PATTERNS`` (including a
+    non-``str``) returns None.
+
+    Example: ``pattern_name(PATTERNS["gpt2"][0])`` returns ``"gpt2"``.
+    """
     return _NATIVE.tokenizer_public_call('vocab_pattern', (regex,), _TOKENIZER_CONTEXT)
-
-
-def _text_bytes(data):
-    if isinstance(data, str):
-        return data.encode("utf-8")
-    if isinstance(data, (bytes, bytearray, memoryview)):
-        return bytes(data)
-    raise TypeError(f"mojolearn.models.Tokenizer: text must be str or bytes-like, got {type(data).__name__}")
 
 
 def pretokenize(data, pattern):
@@ -58,7 +56,7 @@ class Tokenizer:
     `merges` the `(left, right)` byte pairs, `pattern` a name in
     `PATTERNS`, `added` `{content: id}`."""
 
-    unicode_version = unicodedata.unidata_version
+    unicode_version = _unicodedata.unidata_version
 
     def __init__(self, tokens, merges, *, pattern, added=None, normalizer=None,
                  bos_ids=(), eos_ids=(), ignore_merges=False, source="<tokens>"):
@@ -99,7 +97,10 @@ class Tokenizer:
         as a list of bytes; the cut before any merge."""
         return _NATIVE.tokenizer_public_call('vocab_pretokenize', (self, data), _TOKENIZER_CONTEXT)
 
-    _bytes = staticmethod(_text_bytes)
+    # The text admission (str -> UTF-8, bytes-like -> bytes, else TypeError)
+    # is the native door's `_bytes` (bindings/tokenizer_public_native_door.mojo);
+    # the unused Python `_text_bytes` / `Tokenizer._bytes` twin is gone (lane
+    # py-lm-neural, 2026-11-14).
 
     def encode_bytes(self, data, *, allow_special=False):
         """The ids of a byte string. Added tokens are recognized only with
@@ -128,6 +129,6 @@ class Tokenizer:
 
 
 # Immutable import-time metadata; native execution owns all public operations.
-_TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, unicodedata.unidata_version,
-                      unicodedata.normalize)
+_TOKENIZER_CONTEXT = (Tokenizer, _NATIVE, _NAME_OF, _unicodedata.unidata_version,
+                      _unicodedata.normalize)
 _NATIVE.tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)

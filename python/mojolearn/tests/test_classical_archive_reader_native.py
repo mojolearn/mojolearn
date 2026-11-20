@@ -432,6 +432,7 @@ def test_public_load_error_refuses_file_name_dictionary_key_hooks(tmp_path, kind
             peer.close()
 
 
+@pytest.mark.slow  # searches for CPython's native repr recursion guard in a child (nesting to 2**18; 15 s)
 def test_public_load_error_bounds_deep_native_name_recursion(tmp_path):
     # CPython 3.14 guards native recursion by C stack, independently of the
     # Python recursion-limit setting. Discover an actual native repr refusal
@@ -542,7 +543,7 @@ finally:
     if name:setattr(builtins,name,original)
 if name:
     # A replaced connected builtin export is refused before any callback
-    # (bindings/native_loaded_module.mojo, contract of 31fc85981 and
+    # (bindings/native_loaded_module_door.mojo, contract of 31fc85981 and
     # test_native_cv_module_connections.py); the restored export then loads.
     assert type(audit.exception) is TypeError,audit.report()
     assert str(audit.exception)=="native module connection export changed: builtins."+name,str(audit.exception)
@@ -608,6 +609,34 @@ def test_public_load_error_preserves_path_graph_aliases_and_cycles(tmp_path, kin
             shared.clear()
         elif isinstance(name, (dict, list)):
             name.clear()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("scalar_first", [True, False])
+@pytest.mark.skipif(not hasattr(sys, "set_int_max_str_digits"), reason="interpreter has no native integer repr digit limit")
+def test_public_load_error_preserves_scalar_exception_before_or_after_file_cycle(tmp_path, kind, scalar_first):
+    # This is a C-API exception ownership seam: native graph tests cover the
+    # display order, while this checks restoration of the actual Python error.
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    old_limit = sys.get_int_max_str_digits()
+    large = 1 << 3000
+    name = [PurePosixPath("//a/./b"), large, value] if scalar_first else [PurePosixPath("//a/./b"), value, large]
+    raw.name = name
+    try:
+        sys.set_int_max_str_digits(640)
+        error_type = ValueError if scalar_first else RuntimeError
+        with pytest.raises(error_type) as expected:
+            repr(value)
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, error_type)
+        assert str(audit.exception) == str(expected.value)
+        assert raw.name is name
+    finally:
+        sys.set_int_max_str_digits(old_limit)
+        raw.name = "restored"
+        value.close()
+        name.clear()
 
 
 @pytest.mark.parametrize("kind", ["fileio", "buffered"])
@@ -731,12 +760,24 @@ receipt = dict(case=case, calls=1536, warmup=1024, fixed_allowance=16,
                samples=samples, native=True, consumed_state=True,
                bindings=binding_artifacts())
 print(json.dumps(receipt), flush=True)
-assert all(sample["delta"] >= -16 and sample["raw_delta"] >= -16
-           for sample in samples), receipt
+# A borrowed-singleton ownership defect repeats on every affected load, so it
+# loses references in every batch; one load path losing one reference per
+# call costs at least 512 per batch. Unrelated process-global retirement is
+# bounded and decays, so one batch past the fixed allowance beside a clean
+# batch is that drift. Fail on any per-call-sized loss or on a loss sustained
+# across all three batches.
+losses = [min(sample["delta"], sample["raw_delta"]) for sample in samples]
+assert min(losses) > -512 and not all(loss < -16 for loss in losses), dict(
+    case=case, losses=losses, samples=samples)
 '''
     result = subprocess.run([sys.executable, "-c", code, str(path), case],
                             text=True, capture_output=True, timeout=60)
-    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+    if result.returncode != 0:
+        # The receipt's binding list is long; report the child's own
+        # assertion (stderr) and the measured samples (head of stdout) in
+        # full instead of a truncated tuple repr.
+        pytest.fail("child exit %d\n--- stderr (tail) ---\n%s\n--- stdout (head) ---\n%s"
+                    % (result.returncode, result.stderr[-4000:], result.stdout[:2000]), pytrace=False)
     receipt = json.loads(result.stdout)
     # Retain measured deltas and the actual subprocess native artifacts in
     # pytest's captured output, including when the lifetime check succeeds.
@@ -744,5 +785,52 @@ assert all(sample["delta"] >= -16 and sample["raw_delta"] >= -16
     assert receipt["calls"] == 1536 and receipt["warmup"] == 1024
     assert receipt["native"] and receipt["consumed_state"]
     assert receipt["fixed_allowance"] == 16 and len(receipt["samples"]) == 3
-    assert all(sample["calls"] == 512 and sample["delta"] >= -16
-               and sample["raw_delta"] >= -16 for sample in receipt["samples"])
+    assert all(sample["calls"] == 512 for sample in receipt["samples"])
+    losses = [min(sample["delta"], sample["raw_delta"]) for sample in receipt["samples"]]
+    assert min(losses) > -512 and not all(loss < -16 for loss in losses), receipt["samples"]
+
+
+def _reference_counts(*values):
+    return tuple(sys.getrefcount(value) for value in values)
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_LZMA])
+@pytest.mark.parametrize("case", ["linear", "late_schema_error"])
+def test_public_load_repeated_archive_reads_balance_borrowed_references(case, compression):
+    # Interpreter-independent companion of the None check above: None is
+    # immortal on CPython 3.12+, so there that check cannot see a native
+    # over-release. The input bytes (a full BytesIO read returns this very
+    # object) and the loading classes (the native owner lookup borrows them
+    # from the class ancestry) are counted objects on every Python, so an
+    # unbalanced reference on the read or late-refusal path shows here on
+    # every vendor. Counts are taken at one call site after a collection,
+    # never compared across sites.
+    import gc
+    payload = _payload(compression, **({"format": "unknown-format"} if case == "late_schema_error" else {}))
+
+    def load_once():
+        stream = io.BytesIO(payload)
+        try:
+            if case == "late_schema_error":
+                try:
+                    HostLinearRegression.load(stream)
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("malformed model unexpectedly loaded")
+            else:
+                model = HostLinearRegression.load(stream)
+                assert model.n_features_in_ == 3
+                del model
+            assert not stream.closed
+        finally:
+            stream.close()
+
+    for _ in range(8):
+        load_once()
+    observed = []
+    for _ in range(33):
+        gc.collect()
+        observed.append(_reference_counts(payload, HostLinearRegression, LinearRegression))
+        load_once()
+    assert len(set(observed)) == 1, observed

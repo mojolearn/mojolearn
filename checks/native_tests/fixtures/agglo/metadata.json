@@ -1,0 +1,494 @@
+{
+  "profiles": [
+    {
+      "name": "grid18",
+      "origin": "test_transductive_predict.py::arm_agglomerative",
+      "rows": 18,
+      "features": 2,
+      "clusters": 2,
+      "linkage": "single",
+      "route": "solver",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 17,
+      "compute_distances": false,
+      "minimum_distinct_merge_cost_gap": null,
+      "single_row_queries": true,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 18,
+          "maximum_ties": 1
+        },
+        {
+          "name": "tie",
+          "rows": 1,
+          "maximum_ties": 2
+        },
+        {
+          "name": "near",
+          "rows": 2,
+          "maximum_ties": 1
+        }
+      ],
+      "files": [
+        {
+          "file": "grid18-source.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "grid18-cophenetic.f64",
+          "shape": [
+            18,
+            18
+          ],
+          "bytes": 2592,
+          "sha256": "87b8c47cb2a780284d63fb5e4755a9a9a3c5f55549d16da3e4097fc87a1dbdeb"
+        },
+        {
+          "file": "grid18-query-train.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "grid18-query-train-nearest.i32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "e3007bc51580e59c5315fd2aaeb39c859efbec5f9e88f98bb63abbe3216032ac"
+        },
+        {
+          "file": "grid18-query-tie.f32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "80b8fd6d60fa85fd14a38b5295cb92abd80dfec5ca406c9f969609a79d36809d"
+        },
+        {
+          "file": "grid18-query-tie-nearest.i32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "e7acdd7745f56a3b159f5a4f2a8fcb5ba72db33ed4afbc69c3b1fd6b12c48869"
+        },
+        {
+          "file": "grid18-query-near.f32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "c7828fd019b3a39d8d9069288e8cb036a96099a31189e5834b26b00a98c4f91a"
+        },
+        {
+          "file": "grid18-query-near-nearest.i32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "c014ed5173886417f72ab212d7786e9492e139545939ebe434fea9a870e0e5e7"
+        }
+      ]
+    },
+    {
+      "name": "duplicate36",
+      "origin": "test_transductive_predict.py::arm_agglomerative",
+      "rows": 36,
+      "features": 2,
+      "clusters": 2,
+      "linkage": "single",
+      "route": "solver",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 35,
+      "compute_distances": false,
+      "minimum_distinct_merge_cost_gap": null,
+      "single_row_queries": false,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 36,
+          "maximum_ties": 2
+        }
+      ],
+      "files": [
+        {
+          "file": "duplicate36-source.f32",
+          "shape": [
+            36,
+            2
+          ],
+          "bytes": 288,
+          "sha256": "3106600a5f20d043bb0969bd15accab98ed30b0f4b745e956cf392cbad0d2068"
+        },
+        {
+          "file": "duplicate36-cophenetic.f64",
+          "shape": [
+            36,
+            36
+          ],
+          "bytes": 10368,
+          "sha256": "24a078f8f6fd8d7d9c574665b904a849fee198109165c1f12a59c5bacf2845da"
+        },
+        {
+          "file": "duplicate36-query-train.f32",
+          "shape": [
+            36,
+            2
+          ],
+          "bytes": 288,
+          "sha256": "3106600a5f20d043bb0969bd15accab98ed30b0f4b745e956cf392cbad0d2068"
+        },
+        {
+          "file": "duplicate36-query-train-nearest.i32",
+          "shape": [
+            36,
+            2
+          ],
+          "bytes": 288,
+          "sha256": "1b96f1ce35681c0a4fb95f1cbc5236f70a796041f084f6997c565f18af1fd7aa"
+        }
+      ]
+    },
+    {
+      "name": "singletons17",
+      "origin": "test_transductive_predict.py::arm_agglomerative",
+      "rows": 18,
+      "features": 2,
+      "clusters": 17,
+      "linkage": "single",
+      "route": "solver",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 17,
+      "compute_distances": false,
+      "minimum_distinct_merge_cost_gap": null,
+      "single_row_queries": false,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 18,
+          "maximum_ties": 1
+        }
+      ],
+      "files": [
+        {
+          "file": "singletons17-source.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "singletons17-cophenetic.f64",
+          "shape": [
+            18,
+            18
+          ],
+          "bytes": 2592,
+          "sha256": "87b8c47cb2a780284d63fb5e4755a9a9a3c5f55549d16da3e4097fc87a1dbdeb"
+        },
+        {
+          "file": "singletons17-query-train.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "singletons17-query-train-nearest.i32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "e3007bc51580e59c5315fd2aaeb39c859efbec5f9e88f98bb63abbe3216032ac"
+        }
+      ]
+    },
+    {
+      "name": "parallel200",
+      "origin": "test_parallel_public_drivers.py::_graph; multi-device seam retained",
+      "rows": 200,
+      "features": 4,
+      "clusters": 3,
+      "linkage": "single",
+      "route": "solver",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 199,
+      "compute_distances": false,
+      "minimum_distinct_merge_cost_gap": null,
+      "single_row_queries": false,
+      "queries": [],
+      "files": [
+        {
+          "file": "parallel200-source.f32",
+          "shape": [
+            200,
+            4
+          ],
+          "bytes": 3200,
+          "sha256": "4cdf1b4cfdc1bfea73f3b4d3c2224fdabd464dc8395978a6d7c1e54d36d7052a"
+        },
+        {
+          "file": "parallel200-cophenetic.f64",
+          "shape": [
+            200,
+            200
+          ],
+          "bytes": 320000,
+          "sha256": "a24174be77b773139c3a018257bf3d0f832bf764bce8d387ce2cc9dbe4ae389c"
+        }
+      ]
+    },
+    {
+      "name": "ward180",
+      "origin": "test_x_cluster_twice.py::_CHILD; one numerical fit, no repeated-bits campaign",
+      "rows": 180,
+      "features": 3,
+      "clusters": 3,
+      "linkage": "ward",
+      "route": "tree",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 179,
+      "compute_distances": true,
+      "minimum_distinct_merge_cost_gap": 5.233267599097369e-05,
+      "single_row_queries": false,
+      "queries": [],
+      "files": [
+        {
+          "file": "ward180-source.f32",
+          "shape": [
+            180,
+            3
+          ],
+          "bytes": 2160,
+          "sha256": "3a7998bce85738790c530971d515251c1cbc85410c7d28c8f5c1ab169ac75868"
+        },
+        {
+          "file": "ward180-cophenetic.f64",
+          "shape": [
+            180,
+            180
+          ],
+          "bytes": 259200,
+          "sha256": "04b07ed9aa346fb03f8f1efa35ef99740a45fa46d6b7a51b5fc19ef66270b220"
+        }
+      ]
+    },
+    {
+      "name": "grid18_tree",
+      "origin": "test_transductive_predict.py::arm_agglomerative; additional compute_distances=True general-tree route",
+      "rows": 18,
+      "features": 2,
+      "clusters": 2,
+      "linkage": "single",
+      "route": "tree",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 17,
+      "compute_distances": true,
+      "minimum_distinct_merge_cost_gap": null,
+      "single_row_queries": false,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 18,
+          "maximum_ties": 1
+        },
+        {
+          "name": "tie",
+          "rows": 1,
+          "maximum_ties": 2
+        },
+        {
+          "name": "near",
+          "rows": 2,
+          "maximum_ties": 1
+        }
+      ],
+      "files": [
+        {
+          "file": "grid18_tree-source.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "grid18_tree-cophenetic.f64",
+          "shape": [
+            18,
+            18
+          ],
+          "bytes": 2592,
+          "sha256": "87b8c47cb2a780284d63fb5e4755a9a9a3c5f55549d16da3e4097fc87a1dbdeb"
+        },
+        {
+          "file": "grid18_tree-query-train.f32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "85b86853085e0154107030d3eff6fb86b4de9c41416bad843f3f497a9a43ef31"
+        },
+        {
+          "file": "grid18_tree-query-train-nearest.i32",
+          "shape": [
+            18,
+            2
+          ],
+          "bytes": 144,
+          "sha256": "e3007bc51580e59c5315fd2aaeb39c859efbec5f9e88f98bb63abbe3216032ac"
+        },
+        {
+          "file": "grid18_tree-query-tie.f32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "80b8fd6d60fa85fd14a38b5295cb92abd80dfec5ca406c9f969609a79d36809d"
+        },
+        {
+          "file": "grid18_tree-query-tie-nearest.i32",
+          "shape": [
+            1,
+            2
+          ],
+          "bytes": 8,
+          "sha256": "e7acdd7745f56a3b159f5a4f2a8fcb5ba72db33ed4afbc69c3b1fd6b12c48869"
+        },
+        {
+          "file": "grid18_tree-query-near.f32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "c7828fd019b3a39d8d9069288e8cb036a96099a31189e5834b26b00a98c4f91a"
+        },
+        {
+          "file": "grid18_tree-query-near-nearest.i32",
+          "shape": [
+            2,
+            2
+          ],
+          "bytes": 16,
+          "sha256": "c014ed5173886417f72ab212d7786e9492e139545939ebe434fea9a870e0e5e7"
+        }
+      ]
+    },
+    {
+      "name": "average6",
+      "origin": "additional analytic native route",
+      "rows": 6,
+      "features": 2,
+      "clusters": 2,
+      "linkage": "average",
+      "route": "tree",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 5,
+      "compute_distances": true,
+      "minimum_distinct_merge_cost_gap": 0.07821480855902918,
+      "single_row_queries": false,
+      "queries": [],
+      "files": [
+        {
+          "file": "average6-source.f32",
+          "shape": [
+            6,
+            2
+          ],
+          "bytes": 48,
+          "sha256": "8f3446adb99cf5328d9d25bb054f18e24fc1ce63af88aa5f9ff7d9b69057f071"
+        },
+        {
+          "file": "average6-cophenetic.f64",
+          "shape": [
+            6,
+            6
+          ],
+          "bytes": 288,
+          "sha256": "73c223f78223f393fcb28283bcac974aabe59c65474a2764c25fe2acd8a92189"
+        }
+      ]
+    },
+    {
+      "name": "complete6",
+      "origin": "additional analytic native route",
+      "rows": 6,
+      "features": 2,
+      "clusters": 2,
+      "linkage": "complete",
+      "route": "tree",
+      "solver_metric": 1,
+      "use_knn": false,
+      "tree_metric": -1,
+      "full_merges": 5,
+      "compute_distances": true,
+      "minimum_distinct_merge_cost_gap": 0.07821480855902918,
+      "single_row_queries": false,
+      "queries": [],
+      "files": [
+        {
+          "file": "complete6-source.f32",
+          "shape": [
+            6,
+            2
+          ],
+          "bytes": 48,
+          "sha256": "8f3446adb99cf5328d9d25bb054f18e24fc1ce63af88aa5f9ff7d9b69057f071"
+        },
+        {
+          "file": "complete6-cophenetic.f64",
+          "shape": [
+            6,
+            6
+          ],
+          "bytes": 288,
+          "sha256": "db85d2605b78840c8fc9d314312b2539f039e6309ec972923928feb930ac7c23"
+        }
+      ]
+    }
+  ],
+  "numpy": "2.5.2",
+  "workers": 10,
+  "generator_sha256": "d9f091be3a5fa90831ba2de58d7a0707e5ec905ec7a28824892973e5cb9fe293",
+  "oracle": "Float64 minimax closure for single linkage; Ward direct cluster centroid SSE; average/complete aggregate original point distances. No product/MST/Lance-Williams implementation or output references.",
+  "label_policy": "Compare cophenetic relations and labels as partitions; tied children orientation/order and label numbering may differ.",
+  "execution": "Independent reference preparation only; no Mojolearn import/fit/test/compile/timing or repeated-bits campaign."
+}

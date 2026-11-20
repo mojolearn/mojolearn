@@ -121,7 +121,7 @@ DEVIATIONS 1070-1074 (T1-T5, declared in `autograd/kernels/mamba1_proj.mojo`),
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp2
 from std.sys.compile import is_defined
 

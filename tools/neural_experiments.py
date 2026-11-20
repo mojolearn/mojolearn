@@ -17,7 +17,7 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
     python tools/neural_experiments.py --set nvidia          # the NVIDIA-shaped set
     python tools/neural_experiments.py --set amd
     python tools/neural_experiments.py --gemm-arms shipped,tuned128,half,quarter,kpack
-    python tools/neural_experiments.py --only speculative_attn,swiglu_fused
+    python tools/neural_experiments.py --only speculative_attn,no_layer_sync
     python tools/neural_experiments.py --json results.json
     python tools/neural_experiments.py ideas list             # versioned neural catalog
     python tools/neural_experiments.py ideas plan NI20 --arm A
@@ -44,18 +44,17 @@ LANES = ("transformer-forward", "mamba3-forward", "samba-forward",
 # off, speculative attention off, session fresh path on, shipped GEMM arm).
 EXPERIMENTS = {
     "baseline": {},
-    "no_retain_weights": {"MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": "0",
-                          "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0"},
+    # lane x6-tape-retire: MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS and
+    # MOJOLEARN_TRANSFORMER_STAGE_RESET went with the forward tape's
+    # workspace body (the block runs on the attention step op).
+    # lane r1-restore-measured-winners (2026-11-09): the x4 switches are back.
     "legacy_fresh_entry": {"MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"},
-    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1",
-                          "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
-    "no_stage_reset": {"MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
+    # lane fx-verdicts2 (2026-11-18): MOJOLEARN_MAMBA3_LEGACY_SETUP and
+    # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS(_OFF) lost A/B ab3 and are deleted.
+    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
-    "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
-    "mamba3_legacy": {"MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
-    "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
     # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
     # the default is `regs` since lane/neural-pass4 (`regs2` before); each
     # arm is the same chains in the same order
@@ -71,11 +70,11 @@ EXPERIMENTS = {
     # the optimizer's moments on the host and the per-call optimizer_step
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
-    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1", "MOJOLEARN_SWIGLU_FUSED": "1",
-               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0", "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
+    "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1",
+               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "priority": ["baseline", "mamba3_legacy", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+    "priority": ["baseline", "mamba3_no_retain_stages"],
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],
@@ -85,12 +84,12 @@ SETS = {
     # the resident optimizer moments on the training lanes (run with --lane
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
-    "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
-                "swiglu_fused", "no_layer_sync", "all_on"],
-    "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",
-               "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
-    "amd": ["baseline", "legacy_everything", "no_retain_weights", "no_stage_reset",
-            "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
+    "default": ["baseline", "no_retain_weights", "speculative_attn",
+                "no_layer_sync", "all_on"],
+    "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry",
+               "speculative_attn", "no_layer_sync", "all_on"],
+    "amd": ["baseline", "legacy_everything", "no_retain_weights",
+            "speculative_attn", "no_layer_sync", "all_on"],
 }
 
 

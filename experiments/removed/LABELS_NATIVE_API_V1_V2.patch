@@ -1,0 +1,86 @@
+diff --git b/bindings/_mojolearn.mojo a/bindings/_mojolearn.mojo
+index 2dd5566de7..6348848c42 100644
+--- b/bindings/_mojolearn.mojo
++++ a/bindings/_mojolearn.mojo
+@@ -1975,7 +1975,7 @@ def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: Pytho
+ 
+ 
+ # ===========================================================================
+-# labels_native_api_v3 (native-only execution; core/labels_native_api.mojo): the
++# labels_native_api_v2 (native-only execution; core/labels_native_api.mojo): the
+ # label path's base-binding steps over THIS binding's device helpers, on the
+ # kit_call descriptor ABI. Each operation calls the same entry the Python
+ # callable table called (same validation, same kernels, same order), so no
+@@ -1996,12 +1996,22 @@ struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
+ 
+ # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
+ # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
+-# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+-# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
++comptime LABELS_LEGACY_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v1"], ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
++comptime LABELS_V2_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v2"], ("MojolearnLabelsNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV3")]
+ comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV4")]
+ 
+ 
+->>>
++def labels_native_api_v1_binding() raises -> PythonObject:
++    # Existing consumers keep the GIL. Retain their factory/name while sharing
++    # the same native operations; new callers require v2 before releasing it.
++    var table = LABELS_LEGACY_NATIVE_TABLE.get_or_create_ptr()
++    return neural_descriptor_capsule(table[].name, table[].entries)
++
++
++def labels_native_api_v2_binding() raises -> PythonObject:
++    var table = LABELS_V2_NATIVE_TABLE.get_or_create_ptr()
++    return neural_descriptor_capsule(table[].name, table[].entries)
++
+ 
+ def labels_native_api_v3_binding() raises -> PythonObject:
+     var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
+@@ -2045,8 +2055,8 @@ def build__mojolearn() -> PythonObject:
+         var m = PythonModuleBuilder("_mojolearn")
+         m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
+         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+->>>
+-
++        m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
++        m.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
+         m.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
+         m.def_function[device_plan_enter_binding]("device_plan_enter")
+         m.def_function[device_plan_exit_binding]("device_plan_exit")
+diff --git b/bindings/_mojolearn_core_host.mojo a/bindings/_mojolearn_core_host.mojo
+index ff48f93854..42d46aed11 100644
+--- b/bindings/_mojolearn_core_host.mojo
++++ a/bindings/_mojolearn_core_host.mojo
+@@ -1121,8 +1121,7 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
+ # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
+ # (the per-binding build) and in the merged roots tools/merged_bindings.py
+ # writes from bindings/merged_groups.json (one shared file per directory set).
+-# TOMBSTONE: LABELS_NATIVE_API_V1_V2 (DELETED: no reader; the label doors admit labels_native_api_v3 only) deleted 2026-11-12 by round2-fixes-2; code recoverable at 8c8e62f56b.
+-# Restore: git apply experiments/removed/LABELS_NATIVE_API_V1_V2.patch
++comptime LABELS_HOST_NATIVE_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v2"], "MojolearnLabelsHostNativeV2"]
+ comptime LABELS_HOST_NATIVE_V3_API = SharedSlot[LabelsHostNativeAPI["mojolearn.labels.v3"], "MojolearnLabelsHostNativeV3"]
+ 
+ 
+@@ -1131,7 +1130,10 @@ def labels_native_api_v3_binding() raises -> PythonObject:
+     return neural_descriptor_capsule(api[].name, api[].entries)
+ 
+ 
+->>>
++def labels_native_api_v2_binding() raises -> PythonObject:
++    var api = LABELS_HOST_NATIVE_API.get_or_create_ptr()
++    return neural_descriptor_capsule(api[].name, api[].entries)
++
+ 
+ from core.spectral_preparation_api import SpectralPreparationAPI
+ from core.spectral_preparation_host import SpectralPreparationHost
+@@ -1151,8 +1153,7 @@ def build__mojolearn_core_host() -> PythonObject:
+     try:
+         var module = PythonModuleBuilder("_mojolearn_core_host")
+         module.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
+->>>
+-
++        module.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
+         module.def_function[labels_native_api_v3_binding]("labels_native_api_v3")
+         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")
+         module.def_function[core_host_vendor_binding]("core_host_vendor")

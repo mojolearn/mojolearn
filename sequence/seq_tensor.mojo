@@ -20,12 +20,13 @@ values: no bit moves. Storage is `std.ffi._Global`, one pool per numeric
 tier (as `_ResPool`); a freed handle's slot is reused. The Python entries
 (`seq_tensor_alloc_py` ...) are `providers/python/sequence_seq_tensor_pyapi.mojo`'s; this
 file takes typed handles and addresses only."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import sequence_ctx
 from sequence.ops import FP
+from core.shared_slot import SharedSlot
+from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 
 
 struct _SeqTensorPool(Defaultable, Movable):
@@ -39,8 +40,8 @@ struct _SeqTensorPool(Defaultable, Movable):
         self.n = List[Int]()
 
 
-comptime _SEQ_TENSOR_NAME = "MojoXSequenceTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceTensorsFast"
-comptime _SEQ_TENSORS = _Global[StorageType=_SeqTensorPool, name=_SEQ_TENSOR_NAME, init_fn=_SeqTensorPool.__init__]
+comptime _SEQ_TENSOR_NAME = "MojolearnXSequenceTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceTensorsFastV1"
+comptime _SEQ_TENSORS = SharedSlot[_SeqTensorPool, _SEQ_TENSOR_NAME]
 
 
 def _tensor(h: Int) raises -> Int:
@@ -84,8 +85,12 @@ def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
         pool[].bufs[h] = buf^
         pool[].n[h] = n
     # the fill is ordered before every later use on the one in-order
-    # context; the wait makes a failed allocation raise here
-    ctx.synchronize()
+    # context, so nothing here waits (lane fb15-sync-counts, 2026-11-18: the
+    # wait cost one cuStreamSynchronize per tensor: 3 per device LayerNorm
+    # forward (y, mean, rstd), 1 per `to_device`, whose upload waits anyway).
+    # An allocation failure raises from `enqueue_create_buffer` itself; a
+    # failed fill surfaces at the next wait on the context (every read of a
+    # resident tensor waits: download, copy, free).
     return h + 1
 
 
@@ -133,6 +138,12 @@ def seq_tensor_download(h: Int, a: Int, n: Int) raises -> Int:
     ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=a), src_buf=view)
     ctx.synchronize()
     _ = view^
+    # A resident tensor holds float32 cells a model computed, and this is
+    # where they leave the device: NAN_CANON_ON
+    # (default on; core/nan_canon.mojo) makes every NaN word the one
+    # canonical word, across the host's cores. Under _OFF, this is nothing.
+    comptime if NAN_CANON_ON:
+        _ = nan_canon_f32(FP(unsafe_from_address=a), n)
     return n
 
 

@@ -56,7 +56,10 @@ the one case where DBSCAN's labels are not a function of its input, so the
 mode that promises they are may not hand one back. Under `FAST` the
 reference behaviour is unchanged, cap and all.
 """
-from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
+# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (its alias use here: the frozen C33 chunk forcing the gate on; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4123dfc619.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.expdel2-11-cluster.patch.
+# TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (its alias use here: C33_CHUNK, read only under C33_FROZEN_CHUNKS; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4123dfc619.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.expdel2-11-cluster.patch.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -68,25 +71,13 @@ from checks.numerics import (
     numeric_mode_name,
 )
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
 
 comptime WEAK_CC_TPB = 256
-comptime WEAK_CC_FAST_BATCH = 4
-"""Label passes per flag readback under `MOJOLEARN_DBSCAN_FAST_CC_BATCH=1`."""
-
-
-def weak_cc_fast_batch_on() -> Bool:
-    comptime if not (
-        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
-        and is_defined["MOJOLEARN_DBSCAN_FAST_CC_BATCH"]()
-    ):
-        return False
-    else:
-        return True
+# TOMBSTONE: MOJOLEARN_DBSCAN_FAST_CC_BATCH (FAST Apple opt-in: label passes per flag readback; EXP:503 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4fc189058c.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch; record in docs/TOMBSTONES.md.
 comptime MAX_LABEL = Int32(2147483647)
 
 
@@ -99,19 +90,15 @@ comptime MAX_LABEL = Int32(2147483647)
 #: pass that found no change returns at its first load. The labels are the
 #: same fixed point and the pass count is the same count (the first zero
 #: cell is the pass that found nothing to do). `merge_labels` takes the same
-#: form on the same buffer.
-#: `-D MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF=1` restores one drain per pass.
-comptime IDN_DBSCAN_CC_GATED = C33_FROZEN_CHUNKS or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        # I14 measured gated+shortcut chunk16 versus ungated below; default retained.
-        is_defined["MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: form on the same buffer. Under FAST the per-pass readback loop
+#: (`_weak_cc_passes_per_sync`) stays the route.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF (old path: one drain per label pass under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 08bc685fd4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here, the same old paths) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 08bc685fd4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DBSCAN_CC_GATED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-#: Passes per flag read under `IDN_DBSCAN_CC_GATED`. CANDIDATE ARMS (default
-#: 8): `-D MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
+#: Passes per flag read under `IDN_DBSCAN_CC_GATED`.
 # I14 sourcecbcc8dcd33 (2026-10-06), weak_cc_batched component on disconnected
 # 17-vertex cliques, rows100000/131071, two logical convergence passes:
 # gated+shortcut chunk16 versus ungated baseline, NOT chunk16 versus default8.
@@ -121,36 +108,20 @@ comptime IDN_DBSCAN_CC_GATED = C33_FROZEN_CHUNKS or (
 # One same-process warmup/score; graph convergence component only, no full
 # DBSCAN/HDBSCAN or arbitrary-topology speed claim; accepted identity reused.
 # Evidence: overnight-ab-20261006/{amd,nvidia} normalized I14 receipts.
-comptime IDN_DBSCAN_CC_CHUNK = C33_CHUNK if C33_FROZEN_CHUNKS else (
-    # NEVER RUN — PENDING MEASUREMENT
-    4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
-    else (
-        # Chunk16 bundle measured above; isolated chunk-width comparison pending.
-        16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK16"]()
-        # NEVER RUN — PENDING MEASUREMENT
-        else (32 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"]() else 8)
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_CHUNK4 (candidate arm: 4 passes per flag read; never run) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at eb75dc63d3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK4.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_CHUNK16 (candidate arm: 16 passes per flag read; only the gated+shortcut bundle was timed, mixed) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at eb75dc63d3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_CHUNK32 (candidate arm: 32 passes per flag read; never run) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at eb75dc63d3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_CHUNK32.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_CC_CHUNK = 8
 
-#: CANDIDATE ARMS (default 1, the one-thread-per-row walk): under
-#: `IDN_DBSCAN_CC_GATED` each row of the edge pass is shared by `S` threads,
-#: thread `t` of a row walking its edges `start + t, start + t + S, ...`.
-#: A row of several thousand neighbours is otherwise one thread's serial
-#: walk. Every thread pushes the row's label as it read it and mins its own
-#: pulled minimum into the row's label, so a pass makes the same kind of
-#: moves and the fixed point is the same labels; only the pass count can
-#: differ. `-D MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1`, `..._SPLIT8=1`,
-#: `..._SPLIT16=1`.
-comptime IDN_DBSCAN_CC_SPLIT = (
-    # NEVER RUN — PENDING MEASUREMENT
-    4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT4"]()
-    else (
-        # NEVER RUN — PENDING MEASUREMENT
-        8 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT8"]()
-        # NEVER RUN — PENDING MEASUREMENT
-        else (16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"]() else 1)
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_SPLIT4 (candidate arm: 4 threads per row in the gated edge pass; never run) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c392832a0a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT4.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_SPLIT8 (candidate arm: 8 threads per row; never run) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c392832a0a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT8.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_SPLIT16 (candidate arm: 16 threads per row; never run) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c392832a0a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SPLIT16.patch; record in docs/TOMBSTONES.md.
 
 #: Cells the caller's flag buffers (device and host) must hold: the chunk's
 #: gate cells under `IDN_DBSCAN_CC_GATED`, the one `changed` cell otherwise.
@@ -169,15 +140,12 @@ comptime DBSCAN_CC_FLAG_CELLS = (
 #: ends only on an edge pass that changes nothing, and the jump runs only
 #: after an edge pass that did change something, so an edge pass always
 #: follows it. Needs `IDN_DBSCAN_CC_GATED`. The returned pass count (edge
-#: passes) gets smaller. `-D MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF=1` removes
-#: the jump.
-comptime IDN_DBSCAN_CC_SHORTCUT = (
-    IDN_DBSCAN_CC_GATED
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: passes) gets smaller.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF (old path: no pointer jump after a label pass; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 749db06dd7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 749db06dd7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DBSCAN_CC_SHORTCUT = IDN_DBSCAN_CC_GATED
 
 
 def weak_cc_init_kernel(
@@ -291,11 +259,8 @@ def weak_cc_label_gated_kernel(
     var n = Int(n_in)
     var batch_size = Int(batch_size_in)
     var start_vertex_id = Int(start_vertex_id_in)
-    # `IDN_DBSCAN_CC_SPLIT` threads share a row (1 by default: `tid` is the
-    # row and `lane` is 0, the reference walk).
-    var gtid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var tid = gtid // IDN_DBSCAN_CC_SPLIT
-    var lane = gtid % IDN_DBSCAN_CC_SPLIT
+    # One thread per row, the reference walk.
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var global_id = tid + start_vertex_id
     if tid >= batch_size or global_id >= n:
         return
@@ -307,10 +272,10 @@ def weak_cc_label_gated_kernel(
     var ci_mod = False
     var ci_allow_prop = core.unsafe_load(global_id) != 0
 
-    var j = start + lane
+    var j = start
     while j < end:
         var j_ind = Int(col_ind.unsafe_load(j))
-        j += IDN_DBSCAN_CC_SPLIT
+        j += 1
         var cj = labels.unsafe_load(j_ind)
         var cj_allow_prop = core.unsafe_load(j_ind) != 0
         if ci < cj and ci_allow_prop:
@@ -427,8 +392,7 @@ def weak_cc_batched(
                     Int32(batch_size),
                     Int32(n_rows),
                     grid_dim=(
-                        (batch_size * IDN_DBSCAN_CC_SPLIT + WEAK_CC_TPB - 1)
-                        // WEAK_CC_TPB,
+                        (batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB,
                         1,
                         1,
                     ),
@@ -496,41 +460,28 @@ def _weak_cc_passes_per_sync(
     the cap was reached without a pass that changed nothing."""
     var passes = 0
     var converged = False
-    # MOJOLEARN_DBSCAN_FAST_CC_BATCH=1 (lane/apple-fast-core, 2026-10-02,
-    # FAST + Apple only, default off): `WEAK_CC_FAST_BATCH` label passes
-    # are enqueued between two readbacks of the flag instead of one. Cause:
-    # the loop below drains the queue (`ctx.synchronize()`) after EVERY
-    # pass to read `changed`, so a propagation of P passes pays P host
-    # round trips; the fixed point is the same set of labels (a minimum
-    # over the same graph), reached with at most `WEAK_CC_FAST_BATCH - 1`
-    # extra no-op passes after it, and `passes` counts those too.
-    var per_sync = 1
-    if weak_cc_fast_batch_on():
-        per_sync = WEAK_CC_FAST_BATCH
+    # TOMBSTONE: MOJOLEARN_DBSCAN_FAST_CC_BATCH (FAST Apple opt-in, several label passes per readback; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4fc189058c.
+    # Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_FAST_CC_BATCH.patch; record in docs/TOMBSTONES.md.
     var it = 0
     while it < max_iterations:
-        var runs = per_sync
-        if runs > max_iterations - it:
-            runs = max_iterations - it
         h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
         ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
-        for _r in range(runs):
-            ctx.enqueue_function[weak_cc_label_kernel](
-                labels.unsafe_ptr(),
-                row_ind.unsafe_ptr(),
-                col_ind.unsafe_ptr(),
-                core.unsafe_ptr(),
-                d_changed.unsafe_ptr(),
-                Int32(start_vertex_id),
-                Int32(batch_size),
-                Int32(n_rows),
-                grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
-                block_dim=(WEAK_CC_TPB, 1, 1),
-            )
+        ctx.enqueue_function[weak_cc_label_kernel](
+            labels.unsafe_ptr(),
+            row_ind.unsafe_ptr(),
+            col_ind.unsafe_ptr(),
+            core.unsafe_ptr(),
+            d_changed.unsafe_ptr(),
+            Int32(start_vertex_id),
+            Int32(batch_size),
+            Int32(n_rows),
+            grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+            block_dim=(WEAK_CC_TPB, 1, 1),
+        )
         ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
         ctx.synchronize()
-        passes += runs
-        it += runs
+        passes += 1
+        it += 1
         if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
             converged = True
             break

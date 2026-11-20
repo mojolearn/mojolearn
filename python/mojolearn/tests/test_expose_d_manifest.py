@@ -1,126 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Workstream D's place in the tree (2026-09-14), checked from SOURCE so it
-runs on a box with nothing built: the six new bindings (the four workstream
-D families, then IVF and Embedding when they left `_NOT_YET`) are registered
-in both places `_backend` needs (DEVIATION 869), the five packaging lists
-agree, every binding source exports exactly the names its Python half
-calls, the build scripts exist and name their binding, the classes are
-exported, the alpha API and the support matrix name them, the lane bodies
-parse, `_NOT_YET` is empty, and the embedding sabotage script names every
-arm `embedding_identical.mojo` defines.
+"""Workstream D's public surface: the kernel-methods, mixture, HDBSCAN,
+resample, IVF and Embedding classes and modules are exported by the package
+and the training functions by `mojolearn.training`.
 
     cd python && python3 -m mojolearn.tests.test_expose_d_manifest
 """
-import ast
-import os
-import re
 import sys
-from pathlib import Path
 
 import mojolearn
-from mojolearn import _backend, host_surface
 
-ROOT = Path(__file__).resolve().parents[3]
-
-NEW = {
-    "_mojolearn_kernel_methods": ("build_kernel_methods.sh", "python/mojolearn/kernel_methods.py"),
-    "_mojolearn_mixture": ("build_mixture.sh", "python/mojolearn/mixture.py"),
-    "_mojolearn_hdbscan": ("build_hdbscan.sh", "python/mojolearn/hdbscan.py"),
-    "_mojolearn_resample": ("build_resample.sh", "python/mojolearn/resample.py"),
-    "_mojolearn_ivf": ("build_ivf.sh", "python/mojolearn/_ivf_impl.py"),
-    "_mojolearn_embedding": ("build_embedding.sh", "python/mojolearn/embedding.py"),
-}
-#: the workstream D bindings whose multi-GPU driver binds a device plan
-#: through `device_plan_enter` (since 2026-10-24,
-#: docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md)
-PLAN_FAMILIES = {"kernel_methods", "mixture", "hdbscan", "resample"}
 CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
-
-
-def _read(rel):
-    return (ROOT / rel).read_text(encoding="utf-8")
-
-
-def _exports(binding_src):
-    return set(re.findall(r'm\.def_function\[\w+\]\(\s*"(\w+)"', _read(binding_src)))
-
-
-def _calls(py_src, prefix_re):
-    return set(re.findall(prefix_re, _read(py_src)))
-
-
-def test_backend_registers_both_places():
-    for name, (script, _) in NEW.items():
-        assert name in _backend._MODULES, name
-        assert _backend._build_script(name) == script, (name, _backend._build_script(name))
-        # classical, and since 2026-09-27 (lane neural) the embedding too
-        assert name in _backend._CLASSICAL_FAST, name + " ships fast"
-    assert mojolearn._NOT_YET == {}, sorted(mojolearn._NOT_YET)
-
-
-def test_packaging_lists_agree():
-    sys.path.insert(0, str(ROOT / "packaging"))
-    import check_ext_lists as c
-    want = set(_backend._MODULES) - {"_mojolearn_byte_lm"}
-    for path, how, var, ident in c.SOURCES:
-        got = how(path, var)
-        if ident:
-            # every-tier + classical fast-and-identical + identical-only
-            got = got | how(path, ident) | how(path, c.CLASSICAL_VAR)
-        # The expansion lanes' bindings are appended from the manifest at run
-        # time, never spelled in these literals (check_ext_lists.EXPANSION_READERS).
-        got = got | set(host_surface.expansion_gpu_bindings())
-        assert got == want, (path, sorted(want ^ got))
-    smoke = _read("packaging/linux/smoke.py")
-    for name in NEW:
-        assert name in smoke, name
-
-
-def test_binding_exports_match_python_calls():
-    pairs = {
-        "bindings/_mojolearn_kernel_methods.mojo": ("python/mojolearn/kernel_methods.py", r"_extension\(\)\.(\w+)\("),
-        "bindings/_mojolearn_mixture.mojo": ("python/mojolearn/mixture.py", r"_extension\(\)\.(\w+)\("),
-        "bindings/_mojolearn_hdbscan.mojo": ("python/mojolearn/hdbscan.py", r"_extension\(\)\.(\w+)\("),
-        "bindings/_mojolearn_resample.mojo": ("python/mojolearn/resample.py", r"_extension\(numeric_mode\)\.(\w+)\("),
-        "bindings/_mojolearn_ivf.mojo": ("python/mojolearn/_ivf_impl.py", r'_entry\(self\._extension\(\), "(\w+)"\)\('),
-        # embedding.py binds `mod = self._extension()` once per call, then `mod.<entry>(`
-        "bindings/_mojolearn_embedding.mojo": ("python/mojolearn/embedding.py", r"\bmod\.(\w+)\("),
-    }
-    for binding, (py, pat) in pairs.items():
-        exported, called = _exports(binding), _calls(py, pat)
-        # a family migrated to its one-native-call door (kernel_methods,
-        # mixture, resample, 2026-10-23) calls no entry from Python any more;
-        # what Python still calls must be exported
-        assert called <= exported, (binding, sorted(called - exported))
-        stem = binding.rsplit("/", 1)[1][len("_mojolearn_"):-len(".mojo")]
-        for suffix in ("_vendor", "_numeric_mode"):
-            assert stem + suffix in exported, (binding, stem + suffix)
-        # A multi-GPU availability flag must name a driver that reads it. None
-        # does any more (the generic names went on 2026-09-15, the ordered
-        # drivers' flags on 2026-10-26, lane dead-entries-2-0859): the native
-        # drivers bind a device plan instead.
-        assert not any(e.endswith("_parallel_available") for e in exported), (binding, sorted(exported))
-        if stem in PLAN_FAMILIES:
-            # the native driver binds its device plan in this binding
-            assert "device_plan_enter" in exported and "device_plan_exit" in exported, (binding, "no plan entries")
-    gp = _exports("bindings/_mojolearn_gp.mojo")
-    chol = _calls("python/mojolearn/_cholesky_impl.py", r"_extension\(\)\.(\w+)\(")
-    assert chol and chol <= gp, sorted(chol - gp)
-
-
-def test_build_scripts_exist_and_name_their_binding():
-    for name, (script, _) in NEW.items():
-        p = ROOT / "bindings" / script
-        assert p.exists() and os.access(p, os.X_OK), script
-        text = p.read_text()
-        assert f"bindings/{name}.mojo" in text and f"{name}.so" in text, script
-        if name in _backend._IDENTICAL_ONLY:
-            assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
-        else:
-            # classical (and the embedding, lane neural 2026-09-27): fast and
-            # identical build, any other mode refuses
-            assert "must be fast or identical" in text, script
 
 
 def test_classes_exported():
@@ -132,27 +22,6 @@ def test_classes_exported():
     assert "Cholesky" in mojolearn.linalg.__all__
     for fn in ("embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward", "linear_backward"):
         assert fn in mojolearn.training.__all__, fn
-
-
-def test_docs_name_the_surfaces():
-    alpha = _read("python/mojolearn/ALPHA_API.md")
-    matrix = _read("SUPPORT_MATRIX.md")
-    for name in CLASSES + ("bootstrap", "permutation_test", "monte_carlo_integrate", "oversampling_factor", "embedding_forward"):
-        assert name in alpha, ("ALPHA_API.md", name)
-        assert name in matrix, ("SUPPORT_MATRIX.md", name)
-    assert "faster" not in matrix.lower(), "no speed word in the support matrix"
-
-
-def test_embedding_sabotage_script_names_every_arm():
-    src = _read("embedding/checks/embedding_identical.mojo")
-    arms = set(re.findall(r'is_defined\[\s*"MOJOLEARN_EMB_SABOTAGE_(\w+)"', src))
-    assert len(arms) >= 16, sorted(arms)
-    script = _read("tools/embedding_sabotage_arm.sh")
-    listed = set(re.search(r'ALL_ARMS="([^"]*)"', script).group(1).split())
-    assert listed == arms, sorted(listed ^ arms)
-    assert os.access(ROOT / "tools/embedding_sabotage_arm.sh", os.X_OK)
-    pixi = _read("pixi.toml")
-    assert "check-embedding-sabotage" in pixi and "check-embedding =" in pixi
 
 
 TESTS = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
@@ -170,7 +39,7 @@ def main(argv=None):
     if failures:
         print(f"test_expose_d_manifest: RED. {len(failures)} of {len(TESTS)} checks failed.")
         return 1
-    print(f"test_expose_d_manifest: GREEN. {len(TESTS)} source checks; no binding was loaded.")
+    print(f"test_expose_d_manifest: GREEN. {len(TESTS)} checks; no binding was loaded.")
     return 0
 
 

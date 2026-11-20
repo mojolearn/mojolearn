@@ -6,7 +6,7 @@ resident eigh / LU where the build registers `x_decomp_dev_eigh` /
 the GPU body the binding registers under that name (`ica_solve_dev_py`, ...)."""
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.decomp_owner_kit import DecompDev
-from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_run, dev_lu_run
+from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_desc_run, dev_eigh_run, dev_lu_run
 from x_decomp.ica_dev import ica_solve_dev_run
 from x_decomp.nmf import NmfArgs
 from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
@@ -14,17 +14,25 @@ from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
-from x_decomp.lanczos_dev import dev_lanczos_run
+from x_decomp.lanczos_dev import dev_eigh_tridiag_run, dev_lanczos_run
 from x_decomp.resident import (
-    GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_CLS2_LAZY, GRP_CLS2_NOSCAN, GRP_FAST_FUSED, GRP_FAST_SRP_STRAT,
-    dev_project_run, grp_fit_fused_run,
+    GRP_CLS2_ANY,
+    GRP_CLS2_DEVSCAN,
+    GRP_CLS2_LAZY,
+    GRP_FAST_FUSED,
+    GRP_FAST_SRP_STRAT,
+    dev_project_run,
+    grp_fit_fused_run,
 )
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
 from x_decomp.fa_fast import (
-    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, FA_TRANSFORM_FUSED, fa_em_run, fa_gram_run,
-    fa_transform_run,
+    FA_FAST_APPLE,
+    FA_GRAM_DF,
+    FA_ITER_DEVICE,
+    fa_em_run,
+    fa_gram_run,
 )
 
 
@@ -36,6 +44,10 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
         _ = dev_eigh_run(a, w, v, n, uplo)
+
+    @staticmethod
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        dev_eigh_desc_run(a, w, v, n)
 
     @staticmethod
     def has_lu() -> Bool:
@@ -82,12 +94,10 @@ struct DevDecomp(DecompDev):
         # `x_decomp_fa_defines` is registered only under FA_FAST_APPLE
         var f = 0
         comptime if FA_FAST_APPLE:
-            comptime if FA_GRAM_ONCE:
-                f |= 1
             comptime if FA_ITER_DEVICE:
                 f |= 2
-            comptime if FA_TRANSFORM_FUSED:
-                f |= 4
+            # TOMBSTONE: MOJOLEARN_FA_TRANSFORM_FUSED (NEUTRAL loser, rab7-fatransform istella +2.0%) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 7e904cf531 (bit 4 is 0).
+            # Restore: git apply experiments/removed/MOJOLEARN_FA_TRANSFORM_FUSED.patch; record in docs/TOMBSTONES.md.
             comptime if FA_GRAM_DF:
                 f |= 8
         return f
@@ -100,10 +110,6 @@ struct DevDecomp(DecompDev):
     def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
               d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
         return fa_em_run(g, psi_src, w_dst, psi_dst, ll_dst, d, nc, n, max_iter, tol)
-
-    @staticmethod
-    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
-        _ = fa_transform_run(x, mean, pm, dst, n, d, nc)
 
     @staticmethod
     def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
@@ -137,12 +143,18 @@ struct DevDecomp(DecompDev):
         raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
 
     @staticmethod
+    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+        _ = dev_eigh_tridiag_run(iab, iw, iz, j, cap)
+
+    @staticmethod
+    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+        raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
+
+    @staticmethod
     def grp_flags() -> Int:
         # `grp_cls2_py`'s bits; `x_decomp_grp_cls2` is registered only under GRP_CLS2_ANY
         var f = 0
         comptime if GRP_CLS2_ANY:
-            comptime if GRP_CLS2_NOSCAN:
-                f |= 1
             comptime if GRP_CLS2_DEVSCAN:
                 f |= 2
             comptime if GRP_CLS2_LAZY:

@@ -89,8 +89,7 @@ def turn_sync():
     the same `syncwarp` that was there before.
     """
 
-    @parameter
-    if TURN_SYNC_IS_LANE:
+    comptime if TURN_SYNC_IS_LANE:
         syncwarp()
     else:
         barrier()

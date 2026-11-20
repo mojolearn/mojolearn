@@ -146,6 +146,7 @@ from neighbors.impl.ball_cover.knn import (
     rbc_knn_query,
     rbc_knn_query_scaled,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime BK_SCAT_N = 384
@@ -514,8 +515,8 @@ def _knn_compare(
 
     var hi = ctx.enqueue_create_host_buffer[DType.int32](nq * k)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](nq * k)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=out_inds)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dists)
+    download_host_into[DType.int32](ctx, out_inds, hi)
+    download_host_into[DType.float32](ctx, out_dists, hd)
     ctx.synchronize()
 
     var bad_rows = 0
@@ -548,8 +549,7 @@ def _knn_compare(
             if got_i != oi[s]:
                 var accepted = False
 
-                @parameter
-                if not PIN_CROSS_VENDOR:
+                comptime if not PIN_CROSS_VENDOR:
                     if got_i >= Int32(0):
                         var alt = _host_cmp_dist(
                             hq, q, hx, Int(got_i), d, metric, metric_arg
@@ -583,8 +583,7 @@ def _knn_compare(
             if gap > worst_ulp:
                 worst_ulp = gap
 
-            @parameter
-            if PIN_CROSS_VENDOR:
+            comptime if PIN_CROSS_VENDOR:
                 if got_d != want_d:
                     row_bad = True
                     if must_match:
@@ -645,8 +644,6 @@ def _knn_compare(
     _ = out_dists^
     _ = dist_count^
     _ = query^
-    _ = hi^
-    _ = hd^
     return bad_rows
 
 
@@ -702,7 +699,7 @@ def _dist_total(
     )
 
     var hc = ctx.enqueue_create_host_buffer[DType.int32](nq)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
+    download_host_into[DType.int32](ctx, dist_count, hc)
     ctx.synchronize()
     var total = 0
     for i in range(nq):
@@ -712,7 +709,6 @@ def _dist_total(
     _ = out_dists^
     _ = dist_count^
     _ = query^
-    _ = hc^
     return total
 
 
@@ -1181,13 +1177,13 @@ def check_rbc_knn_radius_is_read() raises:
         )
 
     var hr = ctx.enqueue_create_host_buffer[DType.float32](idx.n_landmarks)
-    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=idx.r_radius)
+    download_host_into[DType.float32](ctx, idx.r_radius, hr)
     ctx.synchronize()
     for l in range(idx.n_landmarks):
         hr.unsafe_ptr().unsafe_store(
             l, hr.unsafe_ptr().unsafe_load(l) * Float32(0.3)
         )
-    ctx.enqueue_copy(dst_buf=idx.r_radius, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, idx.r_radius, hr)
     ctx.synchronize()
 
     var bad = _knn_compare(
@@ -1264,7 +1260,7 @@ def check_rbc_knn_prunes_work() raises:
         BK_SCAT_Q * BK_SCAT_D
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=query, src_ptr=sq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, query, sq)
     ctx.synchronize()
     rbc_knn_query(
         ctx,
@@ -1284,7 +1280,7 @@ def check_rbc_knn_prunes_work() raises:
         k,
     )
     var hc = ctx.enqueue_create_host_buffer[DType.int32](BK_SCAT_Q)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
+    download_host_into[DType.int32](ctx, dist_count, hc)
     ctx.synchronize()
     var total = 0
     for i in range(BK_SCAT_Q):
@@ -1328,7 +1324,6 @@ def check_rbc_knn_prunes_work() raises:
     _ = out_dists^
     _ = dist_count^
     _ = query^
-    _ = hc^
     _ = idx^
     _ = sx^
     _ = sq^
@@ -1453,8 +1448,8 @@ def _eps_row_sets(
         metric_arg,
     )
     var hja = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
-    ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=adj_ja)
+    download_host_into[DType.int32](ctx, adj_ia, hia)
+    download_host_into[DType.int32](ctx, adj_ja, hja)
     ctx.synchronize()
     hja_out.clear()
     for p in range(nnz):
@@ -1462,7 +1457,6 @@ def _eps_row_sets(
     _ = adj_ia^
     _ = adj_ja^
     _ = vd^
-    _ = hja^
     return nnz
 
 
@@ -1682,7 +1676,7 @@ def check_rbc_eps_metric_is_reached() raises:
         BK_SCAT_Q * BK_SCAT_D
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=query, src_ptr=sq.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, query, sq)
     ctx.synchronize()
     rbc_knn_query(
         ctx,
@@ -1704,7 +1698,7 @@ def check_rbc_eps_metric_is_reached() raises:
         Float32(2.0),
     )
     var hi = ctx.enqueue_create_host_buffer[DType.int32](BK_SCAT_Q * 8)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=out_inds)
+    download_host_into[DType.int32](ctx, out_inds, hi)
     ctx.synchronize()
 
     var differing = 0
@@ -1747,7 +1741,6 @@ def check_rbc_eps_metric_is_reached() raises:
     _ = out_dists^
     _ = dist_count^
     _ = query^
-    _ = hi^
     _ = idx^
     _ = sx^
     _ = sq^

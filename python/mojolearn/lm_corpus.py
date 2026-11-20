@@ -67,24 +67,18 @@ from . import tokenizer as _tokenizer
 __all__ = ["prepare", "TokenizedCorpus", "TokenBatches", "require_vocabulary",
            "tokenizer_for"]
 
-TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
-CORPUS_SCHEMA = "mojolearn.byte-lm.corpus.v1"
-VOCABULARY_SCHEMA = _tokenizer.VOCABULARY_SCHEMA
+_TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
+_CORPUS_SCHEMA = "mojolearn.byte-lm.corpus.v1"
+_VOCABULARY_SCHEMA = _tokenizer._VOCABULARY_SCHEMA
 #: GPT-2 / GPT-3 Small's vocabulary size is 50,257 ids: 50,256 ranks and
 #: `<|endoftext|>`. The default trains to that size.
-DEFAULT_VOCAB_SIZE = 50256
-DEFAULT_MIN_FREQUENCY = 2
+_DEFAULT_VOCAB_SIZE = 50256
+_DEFAULT_MIN_FREQUENCY = 2
 #: the vocabulary is trained on at most this many bytes from the start of the
 #: TRAIN range (see `prepare`)
-DEFAULT_VOCAB_SAMPLE_BYTES = 10_000_000
-DEFAULT_DOCUMENT_BYTES = 1 << 20
-DEFAULT_BATCH_DOCUMENTS = 16
-_SCHEDULE = "train-range-modulo.v1"
-
-
-def default_cache_dir():
-    """The default cache directory: ``$MOJOLEARN_LM_CACHE``, else ``~/.cache/mojolearn/lm``."""
-    return _NATIVE.lm_corpus_public_call("default_cache_dir", ())
+_DEFAULT_VOCAB_SAMPLE_BYTES = 10_000_000
+_DEFAULT_DOCUMENT_BYTES = 1 << 20
+_DEFAULT_BATCH_DOCUMENTS = 16
 
 
 # ---------------------------------------------------------------- the corpus
@@ -154,9 +148,9 @@ class TokenizedCorpus:
 # caller's own token map (see the module docstring) and nothing is
 # trained. Both are cached; a rerun with the same corpus and vocabulary
 # reuses the id array after re-hashing it.
-def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=DEFAULT_VOCAB_SIZE,
-            min_frequency=DEFAULT_MIN_FREQUENCY, vocab_sample_bytes=DEFAULT_VOCAB_SAMPLE_BYTES,
-            document_bytes=DEFAULT_DOCUMENT_BYTES, batch_documents=DEFAULT_BATCH_DOCUMENTS, progress=None):
+def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=_DEFAULT_VOCAB_SIZE,
+            min_frequency=_DEFAULT_MIN_FREQUENCY, vocab_sample_bytes=_DEFAULT_VOCAB_SAMPLE_BYTES,
+            document_bytes=_DEFAULT_DOCUMENT_BYTES, batch_documents=_DEFAULT_BATCH_DOCUMENTS, progress=None):
     """Tokenize a corpus file once and return a :class:`TokenizedCorpus`.
 
     If a ``manifest.json`` with schema ``mojolearn.byte-lm.corpus.v1`` sits
@@ -177,7 +171,8 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=DEFAULT_VOCAB_SIZE
         ``"bytes"`` raises ValueError (byte-level training needs no
         vocabulary).
     cache_dir : str, path-like or None, default None
-        Cache location; None uses :func:`default_cache_dir`.
+        Cache location; None uses ``$MOJOLEARN_LM_CACHE``, or
+        ``~/.cache/mojolearn/lm`` when it is unset.
     vocab_size : int, default 50256
         Ranks to train (GPT-2's vocabulary size, without ``<|endoftext|>``).
     min_frequency : int, default 2
@@ -377,8 +372,8 @@ class _TokenBatchIterator:
 # constructor, filesystem operation, tokenizer helper or scheduling loop.
 import mmap as _corpus_mmap
 from ._array import Array as _CorpusArray
-from ._native_loaded_modules import connect_module as _corpus_connect_module
-_corpus_connect_module("mmap", _corpus_mmap, ("mmap",))
+# The "mmap" module connection is made once in _native_loaded_modules, so the
+# checkpoint reader (models.safetensors) can connect the mmap exporter too.
 _NATIVE = _tokenizer._TOKENIZER_NATIVE
 _NATIVE.lm_corpus_public_call("connect", (
     TokenizedCorpus, TokenBatches, _TokenBatchIterator, _CorpusArray, _corpus_mmap.mmap,

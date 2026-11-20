@@ -236,14 +236,16 @@ def test_pandas_import_after_mojolearn_keeps_opaque_get_params_leaf():
 
 
 def test_installed_subset_and_unported_paths_are_both_explicit():
-    from mojolearn import BaggingRegressor, Ridge
+    from mojolearn import BaggingRegressor, Ridge, SkewedChi2Sampler
     from mojolearn import _mode
     context = owner._CONTEXT
-    for cls in (KMeans, Cholesky):
+    # BaggingRegressor has since been connected; SkewedChi2Sampler is a
+    # public owner still pending (unconnected learned property).
+    for cls in (KMeans, Cholesky, BaggingRegressor):
         assert cls in context['plans']
         assert vars(cls)['__getattribute__'] is context['descriptor']
-    assert BaggingRegressor in context['pending']
-    assert vars(BaggingRegressor)['__getattribute__'] is vars(_mode.PublicOutputsMixin)['__getattribute__']
+    assert SkewedChi2Sampler in context['pending']
+    assert vars(SkewedChi2Sampler)['__getattribute__'] is vars(_mode.PublicOutputsMixin)['__getattribute__']
     # An existing native attribute owner retains its own descriptor/context.
     assert next(vars(base)['__getattribute__'] for base in Ridge.__mro__ if '__getattribute__' in vars(base)) is not context['descriptor']
     assert Ridge not in context['plans']
@@ -278,7 +280,7 @@ def test_external_storage_view_survives_model_and_array_lifetime(order, dtype, r
 def test_array_row_offset_and_empty_storage_views():
     np = pytest.importorskip('numpy')
     value = Array.from_buffer(np.array([[1, 2], [3, 4]], dtype='f4'))
-    row = value._row_view(1, (2,), 2)
+    row = list(value)[1]  # row 1: the native zero-copy row view (iteration)
     model = object.__new__(KMeans)
     fields = object.__getattribute__(model, '__dict__')
     fields['payload_'] = row

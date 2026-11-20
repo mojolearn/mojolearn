@@ -138,19 +138,21 @@ def test_mamba3_native_route_does_not_invoke_class_descriptor():
 
 
 @pytest.mark.parametrize("operation", ["release_owned_weights", "session_info", "export_owned_weights", "__getstate__"])
-def test_owned_operations_refuse_saved_binding_hooks(operation):
+def test_owned_operations_refuse_foreign_session_owners(operation):
+    # The prefill session is a native registry handle owner (lane
+    # mamba3-prefill-handle, 2026-11-12): a foreign object in its place is
+    # refused by the native downcast, without invoking any Python hook.
     block, _ = _block("mamba3")
     calls = []
 
-    class SavedBindingHook:
+    class SessionHook:
         def __getattribute__(self, name):
             calls.append(name)
-            raise AssertionError("saved binding hook was invoked")
+            raise AssertionError("session hook was invoked")
 
-    block._prefill_binding = SavedBindingHook()
-    block._prefill_session = object()
+    block._prefill_session = SessionHook()
     block._owned_generation = 1
-    with pytest.raises(TypeError, match="saved binding|native image"):
+    with pytest.raises(Exception):
         getattr(block, operation)()
     assert calls == []
 

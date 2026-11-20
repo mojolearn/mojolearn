@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-NATIVE = ROOT / "bindings/tokenizer_public_native.mojo"
+NATIVE = ROOT / "bindings/tokenizer_public_native_door.mojo"
 
 
 class TokenizerPublicSource(unittest.TestCase):
@@ -52,7 +52,9 @@ class TokenizerPublicSource(unittest.TestCase):
                       "vocab_encode_ids(owner[]", "vocab_decode_ids(owner[]",
                       "render_ranks(vocab)", "render_tokenizer_json(vocab,"):
             self.assertIn(owner, source)
-        self.assertIn('getenv("MOJOLEARN_BPE_TRAINER_SABOTAGE", "")', source)
+        # The sabotage arm is the build define (lane envgate-neural-lm, 2026-11-15).
+        self.assertIn('var reverse = BPE_TRAINER_SABOTAGE', source)
+        self.assertNotIn('getenv(', source)
         self.assertIn('context[5][1]', source)  # retained optional native fast route
 
     def test_admission_precedes_buffer_acquisition_and_instance_storage(self):
@@ -68,7 +70,9 @@ class TokenizerPublicSource(unittest.TestCase):
 
     def test_finished_outputs_and_unicode_exception_ownership_are_native(self):
         source = NATIVE.read_text()
-        for expected in ("PyBytes_FromStringAndSize", "PyUnicode_AsUTF8String", "stash_python_error()",
+        # Text is read through the typed CPython table's PyUnicode_AsUTF8AndSize (strict UTF-8,
+        # no codec lookup), which replaced the PyUnicode_AsUTF8String bytes round trip.
+        for expected in ("PyBytes_FromStringAndSize", ".PyUnicode_AsUTF8AndSize(", "stash_python_error()",
                          "optimizer_python_error(error)", "_trained_finish(", "with open(String(path), \"w\")"):
             self.assertIn(expected, source)
         connect = source.split("def _connect_error_handlers(", 1)[1].split("\n\ndef ", 1)[0]
@@ -83,20 +87,28 @@ class TokenizerPublicSource(unittest.TestCase):
         self.assertIn("lookup.__self__ is not codecs", connect)
         self.assertIn("state[].error_lookup = lookup", connect)
         decode = source.split("def tokenizer_decode_utf8(", 1)[1].split("\n\ndef ", 1)[0]
-        self.assertLess(decode.index("py_type(raw) is not bi.bytes"), decode.index("raw.decode"))
-        self.assertLess(decode.index("entry is not expected"), decode.index("raw.decode"))
-        self.assertNotIn("_native(entry)", decode)
-        self.assertNotIn("codecs.lookup_error", decode)
-        self.assertIn("var lookup = state[].error_lookup", decode)
-        self.assertIn("py_call(lookup, errors)", decode)
-        self.assertIn('Python.tuple("utf-8", errors)', decode)
+        # e132d551f0 moved the handler check into TokenizerUtf8Policy and the
+        # decode into CPython's native UTF-8 codec; the same order is kept:
+        # exact bytes, then the connected handler identity, then decoding.
+        self.assertLess(decode.index("py_type(raw) is not bi.bytes"), decode.index("TokenizerUtf8Policy(errors)"))
+        self.assertLess(decode.index("TokenizerUtf8Policy(errors)"), decode.index("policy.decode("))
+        policy = source.split("struct TokenizerUtf8Policy(", 1)[1].split("\n\ndef ", 1)[0]
+        self.assertIn("var handlers = state[].error_handlers", policy)
+        self.assertIn("state[].error_lookup is None", policy)
+        self.assertIn("self.expected = py_get(handlers, errors)", policy)
+        self.assertLess(policy.index("entry is not self.expected"), policy.index('.PyUnicode_DecodeUTF8('))
+        self.assertLess(policy.index('.PyCodec_LookupError('), policy.index("entry is not self.expected"))
+        for body in (decode, policy):
+            self.assertNotIn("_native(entry)", body)
+            self.assertNotIn("codecs.lookup_error", body)
+            self.assertNotIn("raw.decode", body)
         dispatch = source.split("def tokenizer_public_call(", 1)[1]
         self.assertEqual(dispatch.count("_connect_error_handlers()"), 2)
 
     def test_legacy_generation_consumers_have_a_connected_native_entry(self):
         source = NATIVE.read_text()
-        for entry in ("tokenizer_vocab_encode", "tokenizer_vocab_decode",
-                      "tokenizer_vocab_pretokenize", "tokenizer_vocab_fingerprint"):
+        # tokenizer_vocab_pretokenize was an orphan deleted by 00a4418230 (K0 dead code).
+        for entry in ("tokenizer_vocab_encode", "tokenizer_vocab_decode", "tokenizer_vocab_fingerprint"):
             self.assertIn("def " + entry + "(", source)
         fingerprint = source.split("def tokenizer_vocab_fingerprint(", 1)[1].split("def _vocab_config_pattern(", 1)[0]
         self.assertIn("_owner(tokenizer, context[0])", fingerprint)
@@ -106,9 +118,7 @@ class TokenizerPublicSource(unittest.TestCase):
         self.assertIn('tokenizer_public_call("connect_vocab", (), _TOKENIZER_CONTEXT)', connection)
 
     def test_corpus_helpers_have_complete_native_boundaries(self):
-        expected = {"_identity_from_tokens_text", "_identity_of_ranks_file", "_identity_of_handle",
-                    "_native_trainer", "_train_native", "_read_trained", "_train_corpus",
-                    "_gather_rows", "_encode_corpus"}
+        expected = {"_gather_rows"}
         tree = ast.parse((ROOT / "python/mojolearn/tokenizer.py").read_text())
         found = set()
         for method in ast.walk(tree):
@@ -129,9 +139,9 @@ class TokenizerPublicSource(unittest.TestCase):
         source = NATIVE.read_text()
         corpus = source.split("def tokenizer_bpe_identity_file(", 1)[1].split("def tokenizer_public_call(", 1)[0]
         for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
-                         "tokens_gather_rows_into(src, dst,", 'native_array_zeros("i", total)',
+                         "tokens_gather_rows_into(src, dst,", 'native_array_unfilled("i", total)',
                          'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
-                         '"mojolearn.bpe-trainer.v1"', 'PyUnicode_AsASCIIString'):
+                         '"mojolearn.bpe-trainer.v1"'):
             self.assertIn(retained, corpus)
         for forbidden in ("hashlib", 'Python.import_module', 'py_call(module.', 'py_call(native_loaded_module("array").array',
                           "tokenizer._m", "vocabulary.render", "source.__buffer__"):

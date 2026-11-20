@@ -13,7 +13,7 @@ from checks.kernel_matrix import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime disabled = is_defined["MOJOLEARN_2042_FAST_NO_LOOKBACK"]()
     comptime opted_in = is_defined["MOJOLEARN_IDENTICAL_SINGLE_PASS_PARTITION"]()
     if reorder_single_pass_for[COLUMN_NVIDIA, False]() != (not disabled):
@@ -28,3 +28,20 @@ def main() raises:
         or reorder_single_pass_for[COLUMN_AMD_RDNA, False]()):
         raise Error("unsupported vendor routed to lookback")
     print("PARTITION ROUTES GREEN; opt_in", opted_in, "disabled", disabled)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
+from checks.native_tests.runner import Check, Column, Report
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gbdt_partition_route_check", cpu=True, gpu=False, serial="", run=run_cases)

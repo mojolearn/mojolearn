@@ -1,0 +1,26 @@
+diff --git a/xtrees/shap_device.mojo b/xtrees/shap_device.mojo
+index c087c0fd8e..aa3423fe3a 100644
+--- a/xtrees/shap_device.mojo
++++ b/xtrees/shap_device.mojo
+@@ -92,10 +92,9 @@ comptime SHAP_TREE_TAB = SHAP_TABLE
+ # repeat1.0757/1.4591/1.6713. All quality equal, paired reach2 each; one warmup
+ # plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
+ # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
+-# TOMBSTONE: MOJOLEARN_SHAP_FAST_ROW_PAIR (measured loser: F13 SHAP M3 2026-10-06 B/A 1.07-1.74, kept OFF) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at a57eda3a34.
+-# Restore: git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch; record in docs/TOMBSTONES.md.
++comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+ # P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
+-comptime SHAP_ROW_TILE = 4 if AFT_P07 else 1
++comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
+ struct ShapPairAudit(Defaultable, Movable):
+     var calls: Int
+     def __init__(out self):
+@@ -549,6 +548,8 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
+         var rc = min(rows, n - r0)
+         var tu = n_trees * rc
+         var row_units = n_trees * ((rc + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE)
++        comptime if SHAP_FAST_ROW_PAIR:
++            SHAP_PAIR_STATE.get_or_create_ptr()[].calls += 1
+         var ran = False
+         comptime if SHAP_TABLE:
+             if tt:

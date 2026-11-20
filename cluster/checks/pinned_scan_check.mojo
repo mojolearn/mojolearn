@@ -22,7 +22,7 @@ magnitudes and requires, bit for bit:
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, WARP_SIZE
+from max.gpu import thread_idx, WARP_SIZE
 from std.memory import bitcast
 
 from core.pinned_reduce import pinned_block_prefix_sum, warp32_block_prefix_sum
@@ -30,6 +30,7 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from cluster.checks.plus_plus import PLUS_PLUS_TPB
 from cluster.host.kmeans_oracle import host_block_prefix_sum
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime TPB = PLUS_PLUS_TPB
 
@@ -120,11 +121,11 @@ def main() raises:
         var v = u * Float32(1.0 + Float32(i % 7) * 977.0)
         vals.append(v)
         ha.unsafe_ptr().unsafe_store(i, v)
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.enqueue_function[scan_probe_kernel](
         out.unsafe_ptr(), a.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(TPB, 1, 1)
     )
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    download_host_into[DType.float32](ctx, out, hout)
     ctx.synchronize()
     var got = List[List[Float32]]()
     for k in range(6):

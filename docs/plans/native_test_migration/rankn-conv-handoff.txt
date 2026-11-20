@@ -1,0 +1,49 @@
+Mojolearn native rank-N convolution/pool checks, 2026-11-10
+
+Two fixtures per executor
+  Convolution/pool graph: X(2,3,9,11), W(4,3,3,3), bias(1,4), padded stride1
+  and unpadded stride2 convolutions, max-pool2/stride2 and avg-pool3/stride2.
+  Independent Float64 scalar cross-correlation and window oracles check
+  all outputs with original tolerances. Max selection is exact against
+  the actual y1 words after its independent convolution check, as before.
+  Backward retains the original shape/finiteness checks for X/W/bias.
+  Central differences: X(1,2,5,6), W(3,2,3,3), weighted-sum loss and the
+  original three W probes (0,0,0,0), (1,1,2,1), (2,0,1,2). Independent
+  Float64 cross-correlation losses at W +/- 1e-3 produce expected derivatives.
+  Product runs once; six perturbed test-oracle arms run in parallel.
+  Original tolerance remains 1e-2 * max(1, abs(expected derivative)).
+  Native finite deterministic inputs replace NumPy RNG arrays. G retains
+  Float64 oracle values and a Float32 native input conversion as before.
+
+Parallelism and native architecture
+  Two independent CPU sessions use host_parallelize. Oracle output cells,
+  data conversion chunks and finite-difference arms also use that pool.
+  GPU fixtures submit in order because DeviceExec shares a context/pool;
+  existing kernels are unchanged. No concurrency/scaling claim.
+  All model inputs, states, gradients and oracle values are Mojo types;
+  no Python calls/imports, bindings, callbacks or product math expectations.
+
+Python numerical migration finished for test_ops_rankn.py
+  Removes remaining NumPy convolution/pool/finite-difference oracles and
+  unused hashlib/digest/emit/repeated-run helpers. Public conv/pool output
+  and gradient packing remains, including values read after session close.
+  Keeps a weight-only gradient buffer case with a literal routing sentinel.
+  All public shapes, dtype, split tuple, axes/defaults and named refusals
+  remain Python interoperability tests. No numerical oracle is duplicated
+  in Python for the migrated rank-N groups.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-rankn-conv-cpu
+  bash tools/compile_slot.sh pixi run check-native-rankn-conv-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_conv_cpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-conv-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_conv_gpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-conv-gpu"
+  Uses earlier rankn_math and rankn_graph native helpers.
+  Apply normal NVIDIA/AMD target flags. Retained binding: _mojolearn_x_sequence.
+  Python boundary selection: test_ops_rankn.py (now wholly boundary coverage).
+
+Status
+  Source parsed/reviewed/diff checked only. CPU/GPU compile/run owed to root.
+  No product/kernel/default changes, box jobs, identity or timing. A/B: none.
+  Lane adopted root's nonzero list/keyword fix, BF16/ops pointer-borrow fixes,
+  OOB Int32-fill fix and shell-loop guard deletion without reinstalling hooks.

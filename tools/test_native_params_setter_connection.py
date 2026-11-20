@@ -7,6 +7,8 @@ from types import ModuleType
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 CONNECTOR = ROOT / 'python/mojolearn/_native_params_setter.py'
 
 
@@ -66,16 +68,26 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
     for name in ('_LinearClassifierMixin', '_LinearRegressorMixin'):
         cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
         assert ast.unparse(cls.bases[0]) == 'NativeParamsSetter'
+    # Remaining families keep the full rebuild type(self)(**values); since
+    # 4fe4a53c9d it runs natively (_generic_reset) behind one set_params call.
     mode = (ROOT / 'python/mojolearn/_mode.py').read_text()
-    assert 'replacement = type(self)(**values)' in mode  # remaining families stay visible, unchanged
+    assert 'return _GENERIC_PARAMS(self, params, _GENERIC_PARAMS_CONTEXT)' in mode
+    reset = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
+    generic = reset.split('def _generic_reset(', 1)[1].split('\ndef ', 1)[0]
+    assert 'return _generic_reset(model, params, context, depth)' in reset
+    assert 'cpy.PyObject_Call(cls._obj_ptr, empty._obj_ptr, values._obj_ptr)' in generic
+    assert generic.index('_merge(model, params, values, context, depth)') < generic.index('cpy.PyObject_Call(')
 
 
 def test_owned_fitted_state_covers_all_linear_owner_writes():
-    owner = (ROOT / 'bindings/x_linear_native.mojo').read_text()
-    writes = set(re.findall(r'py_setitem\(fields, "([^"]+)"', owner))
+    owner = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
+    # The owner writes through its held name keys (bindings/py_keys.mojo):
+    # `nk[].k_<name>` is the key of the field `<name>`.
+    writes = set(re.findall(r'py_setitem\(fields, nk\[\]\.k_(\w+)', owner))
+    assert writes
     assert writes <= set(constants()['_FITTED_FIELDS'])
     assert not [line for line in owner.splitlines() if 'py_setitem(fields,' in line
-                and not re.search(r'py_setitem\(fields, "', line)]
+                and not re.search(r'py_setitem\(fields, nk\[\]\.k_\w+', line)]
 
 
 def test_connection_never_constructs_or_calls_estimators():
@@ -131,7 +143,7 @@ def test_public_setter_is_one_binding_call_and_registration_has_correct_indent()
 
 
 def test_setter_preserves_references_and_never_invokes_python_estimator_protocols():
-    source = (ROOT / 'bindings/params_setter_native.mojo').read_text()
+    source = plain('bindings/params_setter_native_door.mojo', (ROOT / 'bindings/params_setter_native_door.mojo').read_text())
     for forbidden in ('Python.import_module', 'msel_clone_parameter', '.get_params(', '.set_params(', '.__init__(', 'fields.clear'):
         assert forbidden not in source
     assert 'py_setitem(fresh, parameters[i], values[parameters[i]])' in source
@@ -145,7 +157,7 @@ def test_setter_preserves_references_and_never_invokes_python_estimator_protocol
 
 
 def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     calls = ('_connect_public_attributes(', '_connect_native_cv(',
              '_connect_params_setter(', '_connect_params_metadata_classes(')
     positions = [source.index(call) for call in calls]
@@ -153,8 +165,34 @@ def test_native_slots_setter_and_getter_connection_order_preserves_snapshots():
 
 
 def test_reset_marker_preserves_legacy_user_fields_but_new_fit_wins():
-    source = (ROOT / 'bindings/mode_metadata_native.mojo').read_text()
+    source = plain('bindings/mode_metadata_native_door.mojo', (ROOT / 'bindings/mode_metadata_native_door.mojo').read_text())
     start = source.index('def _fitted(')
     end = source.index('\ndef _class_fields', start)
     body = source[start:end]
     assert body.index('"_mojolearn_fitted"') < body.index('"_mojolearn_params_reset"') < body.index('name.endswith("_")')
+
+
+def test_registered_native_inits_mirror_their_constructor_bodies():
+    # _mode._connect_native_init registrations (census d95f805cce): the generic
+    # set_params rebuild calls the native constructor with these argument
+    # tuples instead of the Python __init__ body, so each must be that body's
+    # argument tuple, in order (None for a literal None argument).
+    seen = 0
+    for path in ('python/mojolearn/ensemble.py', 'python/mojolearn/_expansion_trees.py'):
+        tree = ast.parse((ROOT / path).read_text())
+        names = {node.targets[0].id: node.value for node in tree.body
+                 if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+        classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+        for node in tree.body:
+            call = node.value if isinstance(node, ast.Expr) else None
+            if not (isinstance(call, ast.Call) and getattr(call.func, 'id', '') == '_connect_native_init'):
+                continue
+            cls, _, operation, registered, _ = call.args
+            registered = ast.literal_eval(names[registered.id] if isinstance(registered, ast.Name) else registered)
+            init = next(item for item in classes[cls.id].body
+                        if isinstance(item, ast.FunctionDef) and item.name == '__init__')
+            body = next(n for n in ast.walk(init) if isinstance(n, ast.Call) and getattr(n.func, 'id', '') == '_TREES')
+            assert ast.unparse(body.args[1]) == ast.unparse(operation), cls.id
+            assert tuple(None if isinstance(e, ast.Constant) else e.id for e in body.args[2].elts) == registered, cls.id
+            seen += 1
+    assert seen == 7

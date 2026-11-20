@@ -44,7 +44,7 @@ free, and it is a consequence of the missing lane sync rather than of the
 algorithm.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 

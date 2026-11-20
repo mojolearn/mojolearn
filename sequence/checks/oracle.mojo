@@ -35,7 +35,6 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5515 LayerNorm statistics: the 32-slot fold (slot j sums columns
        j, j + 32, ... ascending, then the pairwise tree), the mean,
        then the centred squares the same way                       alt: one ascending chain
-       (under -D MOJOLEARN_IDN_LN_ROW_WARP_OFF: one ascending chain, alt: mean descending)
   5516 SES recursion (Croston): alpha x + (1 - alpha) f, one fma    alt: f + alpha (x - f)
   5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
   5518 ETS decomposition moving average: taps ascending, 0.5 x
@@ -68,7 +67,10 @@ from checks.numerics import (
 )
 from checks.fixture_rng import splitmix64_next
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
+
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM, its non-split weight gradient as one fold (no cell of its own in A/B rounds 2 and 3; autograd/rules_recurrent.mojo) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -189,20 +191,56 @@ def _o_wgrad_block(K: Int) -> Int:
     """Restated (sequence/recurrent.mojo `wgrad_block`): K itself when the
     blocked order is off, else the smallest power of two R >= 512 with
     R R >= K."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path: one ascending BPTT weight-gradient fold in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 105cf60fa6.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return K
-    # NN43: independently restated fixed absolute leaf profile; this is
-    # source only, no oracle/check was executed for the candidate.
-    comptime if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 2:
-        var leaf = 128
-        while (K + leaf - 1) // leaf > (1 << 22):
-            leaf *= 2
-        return leaf
-    # NI51 arm (IDN_SEQ_WGRAD=1): blocks grow from 256 rows, as recurrent.mojo.
-    var r = 256 if get_defined_int["MOJOLEARN_IDN_SEQ_WGRAD", 0]() == 1 else 512
+    # TOMBSTONE: MOJOLEARN_IDN_SEQ_WGRAD (unmeasured opt-in arms 1 (NI51 256-row blocks) and 2 (NN43 leaf profile) of the IDENTICAL BPTT weight-gradient block) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at d09d3a3b71.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD.patch; record in docs/TOMBSTONES.md.
+    var r = 512
     while r * r < K:
         r *= 2
     return r
+
+
+def _o_split_shape(M: Int, N: Int, K: Int) -> Bool:
+    """Restated (sequence/gemm_split.mojo `gemm_split_shape`): whether an
+    M x N x K product of the sequence GEMM folds its K terms in blocks."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return False
+    if M <= 0 or N <= 0 or K <= 64:
+        return False
+    var cells = M * N
+    if M < 8 or N < 8:
+        return cells < 32768
+    if M < 64 or N < 64:
+        return cells < 16384
+    return ((M + 63) // 64) * ((N + 63) // 64) < 8
+
+
+def _o_split_block(K: Int) -> Int:
+    """Restated (sequence/gemm_split.mojo `gemm_split_block`): the smallest
+    power of two R >= 64 with 256 R >= K."""
+    var r = 64
+    while r * 256 < K:
+        r *= 2
+    return r
+
+
+def _o_bptt_block(M: Int, N: Int, K: Int) -> Int:
+    """Rows per block of the M x N weight gradient over K = T B rows (K:
+    one fold). Default: `_o_wgrad_block(K)` above 512 rows; at or below it
+    the trainer launches the sequence GEMM, whose own rule splits some
+    shapes. Each block folded from +0.0, k ascending; the
+    partials added ascending from +0.0."""
+    var split = _o_split_shape(M, N, K)
+    var kb = _o_split_block(K) if split else K
+    var blocked = _o_wgrad_block(K)
+    if blocked < K:
+        kb = blocked
+    return kb
 
 
 def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: Int, alt: Bool) -> List[Float32]:
@@ -214,7 +252,7 @@ def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: 
     during the reverse sweep folds them)."""
     var out = List[Float32](capacity=GH * D)
     var K = T * B
-    var KB = _o_wgrad_block(K)
+    var KB = _o_bptt_block(GH, D, K)
     if not alt and KB < K:
         for g in range(GH):
             for d in range(D):
@@ -242,9 +280,8 @@ def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: 
 
 # ---------------------------------------------------------------- 5505
 def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float32, alt: Bool) -> List[Float32]:
-    """[grad (B C), loss (B)] of softmax cross entropy, the max first."""
+    """grad (B C) of softmax cross entropy, the max first (op_ce stores no row loss since lane m1-followups-misc)."""
     var grad = List[Float32]()
-    var loss = List[Float32]()
     for b in range(B):
         var base = b * C
         var mx = _z(logits[base])
@@ -255,16 +292,12 @@ def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float3
         for cc in range(C):
             var c = C - 1 - cc if alt else cc
             s = _a(s, _z(identical_exp(_s(logits[base + c], mx))))
-        var ls = _z(identical_log(s))
         var y = labels[b]
-        loss.append(_s(ls, _s(logits[base + y], mx)))
         for c in range(C):
             var p = _d(_z(identical_exp(_s(logits[base + c], mx))), s)
             if c == y:
                 p = _s(p, Float32(1.0))
             grad.append(_m(p, scale))
-    for i in range(len(loss)):
-        grad.append(loss[i])
     return grad^
 
 
@@ -703,8 +736,12 @@ def o_moe_route(x: List[Float32], Wg: List[Float32], T: Int, D: Int, E: Int, k: 
 # ---------------------------------------------------------------- 5515
 def _o_ln_row_warp() -> Bool:
     """Restated (sequence/layernorm.mojo `LN_ROW_WARP`): the row folds are the
-    32-slot fold under IDENTICAL unless a row-warp or all-off define is set."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_LN_ROW_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+    32-slot fold under IDENTICAL unless the all-off define is set."""
+    # TOMBSTONE: MOJOLEARN_IDN_LN_ROW_WARP_OFF (old path beside the IDENTICAL LayerNorm 32-slot row fold, EXP:1945 PROMOTED) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 730ca5e639.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LN_ROW_WARP_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         return False
     return True
 

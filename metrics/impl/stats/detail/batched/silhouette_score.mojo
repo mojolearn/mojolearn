@@ -69,7 +69,7 @@ for it to size; it is recorded in NOT_IMPLEMENTED.tsv as honored-as-scheduling.
 REFUSED BY NAME.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -88,22 +88,16 @@ from metrics.impl.stats.detail.scores import sum_chunks_kernel
 from metrics.impl.stats.detail.silhouette_score import count_labels, sil_op
 from metrics.impl.stats.detail.histogram import HIST_TPB, gmem_hist_kernel
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
 
 #: lane fix-c1-cluster (2026-10-04), IDENTICAL, ON by default: `countLabels`
 #: is enqueued (memset + `gmem_hist_kernel`, the kernel `histogram` launches)
 #: without `histogram`'s trailing host wait, and the wait between the row
 #: kernel and the score sum goes too; the stream orders all of it and the one
 #: wait left is the mean's readback. Integer counts, the same kernels on the
-#: same bytes: no bit moves. -D MOJOLEARN_IDN_SIL_NO_WAIT_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores both waits.
-comptime IDN_SIL_NO_WAIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_SIL_NO_WAIT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: same bytes: no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_SIL_NO_WAIT_OFF, MOJOLEARN_IDN_ALL_OFF (old paths, no A/B recorded; umbrella EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at d8a165cb14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SIL_NO_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: `ML::distance::DistanceType` (cuml/common/distance_type.hpp): the one

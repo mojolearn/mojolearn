@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared NN54/NN57 arithmetic; host-only imports for CPU-only installations."""
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 
 # L11 (2026-10-07): the CE token-total fold is ONE switch with arms,
@@ -10,16 +10,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch) The
 # arm runs on the GPU (training/checks/loss.mojo identical_ce_forward_into)
 # and on the host column (training/byte_lm_host_kernels.mojo) together.
-comptime IDN_CE_TOKEN_FOLD_ARM = get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD", 0]()
-comptime NN54_LOSS_PROFILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_CE_TOKEN_FOLD_ARM == 1
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD (arm 1, the NN54 128-row leaf tree; record read: EXP:2009 noise) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 19d2549589.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# (Sweep 2026-11-15: IDN_CE_TOKEN_FOLD_ARM = 0, NN54_LOSS_PROFILE = False and the checked nn_reduce_host removed with
+# their readers' dead arms in training/byte_lm_host_kernels.mojo, training/checks/loss.mojo, training/checks/loss_oracle.mojo.)
 comptime NN57_NORM_PROFILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN57_NORM_PROFILE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime _FP = MutPointer[Float32, MutAnyOrigin]
 
@@ -40,19 +39,6 @@ def nn_reduce_leaf[LEAF: Int, SQUARE: Bool](x: _FP, n: Int, leaf: Int) -> Float3
 @always_inline
 def nn_reduce_pair(left: Float32, right: Float32) -> Float32:
     return ftz(ftz(left) + ftz(right))
-
-
-def nn_reduce_host[LEAF: Int, SQUARE: Bool](x: _FP, n: Int) raises -> Float32:
-    """The same leaf/pair functions on the host; a version oracle, not a test."""
-    comptime if SQUARE:
-        comptime if not NN57_NORM_PROFILE:
-            raise Error("NN57 norm profile is not enabled")
-    else:
-        comptime if not NN54_LOSS_PROFILE:
-            raise Error("NN54 loss profile is not enabled")
-    if n < 0 or n > 2147483647:
-        raise Error("neural reduction count exceeds native index range")
-    return nn_reduce_host_admitted[LEAF, SQUARE](x, n)
 
 
 def nn_reduce_host_admitted[LEAF: Int, SQUARE: Bool](x: _FP, n: Int) -> Float32:

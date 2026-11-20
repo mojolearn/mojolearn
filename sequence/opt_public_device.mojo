@@ -5,16 +5,21 @@
 
 Here the route is chosen: device parameters (resident sequence tensors)
 step where they live; otherwise the state stays resident on the device
-once a handle is open, or when `MOJOLEARN_OPTIMIZER_RESIDENT` is not "0"
-(the default); otherwise the per-call step runs on a `DeviceExec`. The
-resident handle is opened here, the host copies of the state are uploaded
+(the per-call step on a `DeviceExec` remains only for a binding without the
+resident Adafactor entries). The resident handle is opened here, the host copies of the state are uploaded
 before a step when they are the newest (a reader may have written them)
 and downloaded for a state read, and host gradients for device parameters
 are uploaded into temporary resident tensors and freed after the step.
 Every step is the existing entry of sequence/opt_resident.mojo or
 sequence/ops_impl.mojo on the same values in the same order: no bit
 moves. No Python here."""
-from std.os import getenv
+# A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+# nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal):
+# the per-call optimizer step was arm/base 1.129 geomean over 5 cells
+# (samba-train-step 45.5 -> 89.6 ms 1.97, the rest 0.95-1.00), so the state is
+# always resident on the device for a single-device optimizer.
+# TOMBSTONE: MOJOLEARN_OPTIMIZER_RESIDENT_OFF (LOSER: per-call optimizer step, arm/base geomean 1.129 over 5 cells, samba-train-step 1.97, NV L40S ab3 2026-11-18) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+# Restore: git apply experiments/removed/MOJOLEARN_OPTIMIZER_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
 
 from sequence.exec_device import DeviceExec
 from sequence.opt_public import (
@@ -32,11 +37,9 @@ from sequence.opt_public import (
     W_USED,
     adafactor_step_host,
     begin_step,
-    elementwise_step_host,
     export_copy,
     import_copy,
     lamb_offsets_of,
-    lamb_step_host,
     set_word,
     word,
     words_ptr,
@@ -56,12 +59,6 @@ from sequence.opt_resident import (
     opt_resident_step_dev,
 )
 from sequence.seq_tensor import seq_tensor_alloc, seq_tensor_free, seq_tensor_upload
-
-
-def _resident_env() -> Bool:
-    """`MOJOLEARN_OPTIMIZER_RESIDENT=0` keeps the per-call entries (the
-    before arm of the resident A/B)."""
-    return getenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1") != "0"
 
 
 def _handles_ptr(addr: Int) raises -> IP64:
@@ -123,9 +120,6 @@ def seq_optimizer_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
         raise Error("sequence optimizer: a step requires kind, flags, 3 state addresses and the scalars")
     var kind = a.rest_i[0]
     var flags = a.rest_i[1]
-    if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
-        var ex = DeviceExec()
-        return elementwise_step_host(ex, w, a, kind, flags, fp)
     var n = a.total()
     if n != word(w, W_N):
         raise Error("sequence optimizer: the params were resized under the optimizer")
@@ -182,9 +176,6 @@ def seq_lamb_step_device(words: Int, handles: Int, addrs: List[Int], ip: List[In
     weight_decay, max_grad_norm]. Returns n."""
     var w = words_ptr(words)
     var a = SeqStep(addrs, ip)
-    if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
-        var ex = DeviceExec()
-        return lamb_step_host(ex, w, a, fp)
     if len(a.rest_a) != 3:
         raise Error("LAMB: a step requires 2 state addresses and the scalars")
     var n = a.total()
@@ -253,9 +244,6 @@ def seq_adafactor_step_device(words: Int, handles: Int, addrs: List[Int], ip: Li
         var ex = DeviceExec()
         return adafactor_step_host(ex, w, a, fp)
     else:
-        if not (a.dev or word(w, W_HANDLE) >= 0 or _resident_env()):
-            var ex = DeviceExec()
-            return adafactor_step_host(ex, w, a, fp)
         if len(a.rest_a) != 2 * a.J or len(a.rest_i) != 2 * a.J:
             raise Error("Adafactor: a step requires two state addresses and (R, C) per tensor")
         var hp = _handles_ptr(handles)

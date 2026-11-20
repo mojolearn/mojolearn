@@ -3,6 +3,8 @@ import array
 import builtins
 from unittest.mock import patch
 
+import pytest
+
 from mojolearn._spectral_impl import _coo_triples
 
 
@@ -14,6 +16,8 @@ def test_dense_and_sparse_protocol_without_scipy_or_numpy():
             raise AssertionError('Unexpected runtime dependency: ' + name)
         return real_import(name, *args, **kwargs)
 
+    called = []
+
     class COO:
         shape = (2, 2)
         row = array.array('i', [0, 1])
@@ -21,11 +25,17 @@ def test_dense_and_sparse_protocol_without_scipy_or_numpy():
         data = array.array('f', [2, 3])
 
         def tocoo(self):
+            called.append(True)
             return self
 
     with patch('builtins.__import__', guarded):
         dense = _coo_triples([[0., 2.], [3., 0.]])
-        sparse = _coo_triples(COO())
-    assert dense[3] == sparse[3] == 2
-    for a, b in zip(dense[:3], sparse[:3]):
-        assert a.tolist() == b.tolist()
+        # A duck-typed sparse object is not SciPy storage: its tocoo() is
+        # never called; the dense admission refuses it.
+        with pytest.raises((TypeError, ValueError)):
+            _coo_triples(COO())
+    assert called == []
+    assert dense[3] == 2
+    assert dense[0].tolist() == [0, 1]
+    assert dense[1].tolist() == [1, 0]
+    assert dense[2].tolist() == [2.0, 3.0]

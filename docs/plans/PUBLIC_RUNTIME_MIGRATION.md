@@ -1,3 +1,7 @@
+> Current direction (2026-11-10): the source-count compliance gate was retired.
+> Inventories and historical debt records remain review aids, not merge gates or runtime proof.
+> See `PYTHON_AT_THE_BOUNDARY.md` for the typed boundary implementation.
+
 # Public runtime migration
 
 Andrew, 2026-10-21. This plan defines the contract for every public method, how we measure it, where the
@@ -106,18 +110,13 @@ These commands run the tool:
     python3 tools/public_runtime_inventory.py --summary             # per-family numbers
     python3 tools/public_runtime_inventory.py --out inventory.tsv   # every method
     python3 tools/public_runtime_inventory.py --explain mojolearn.KMeans.fit   # the walk, function by function
-    python3 tools/public_runtime_inventory.py --check               # what CI runs
-    python3 tools/public_runtime_inventory.py --baseline            # after a migration lands
+    python3 tools/public_runtime_inventory.py --check               # zero prohibited/unresolved endpoints
 
-`.github/workflows/public-runtime.yml` runs `--check` on every push that touches `python/mojolearn/`
-and on manual dispatch. It uses a free runner and needs only python3. The check fails when:
-
-- the number of non-native methods grows past `tools/hooks/public_runtime_baseline.tsv`;
-- the number of python methods grows;
-- any method's verdict gets worse (native -> orchestrated -> python).
-
-When a migration lands, refresh the baseline in the same commit with `--baseline`. The baseline only
-shrinks.
+Since 2026-11-09 every public endpoint is followed THROUGH its native door into the Mojo it reaches
+(`tools/mojo_door_sites.py`) and gets a door level: native, glue-heavy or python-on-path. The CI gate on those
+levels (`.github/workflows/public-runtime.yml`, `--door-check` against `tools/hooks/public_runtime_door_baseline.tsv`)
+was deleted on 2026-11-15 under AGENTS.md "The Python source guards are retired": a source count never proved a
+Python-free operation. The inventory is a reading tool; native execution and device behavior establish compliance.
 
 The tool has limits:
 

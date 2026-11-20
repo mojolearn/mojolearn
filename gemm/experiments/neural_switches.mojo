@@ -1,66 +1,29 @@
 # SPDX-License-Identifier: Apache-2.0
 """One-switch-per-idea neural GEMM controls (lane neural-gemm-attn-dedupe, 2026-10-07).
 
-Imports only std and checks.numerics, so the low-level IDENTICAL GEMM
+Imports nothing, so the low-level IDENTICAL GEMM
 (gemm/checks/gemm_identical.mojo) can read the same switch without importing
 the neural experiment modules.
 
-`-D MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=<arm>`: the mutually exclusive neural
-GEMM schedules, formerly seven defines (NN01/02/08/09/10/11/15) plus NI02. An
-absent define is the incumbent IDENTICAL GEMM. Arms:
-   1  geometry       NN01: an existing gemm_identical step geometry, chosen
-                      by -D MOJOLEARN_IDN_NEURAL_GEMM_ARM (needs
-                      MOJOLEARN_GEMM_ARM_TRIAL)
-   2  stream         NN02: bounded partial-plane groups, neural callers only
-   (3 stream_all, NI02, bounded partial planes for EVERY GEMM caller, was
-      deleted by lane/grid-act-3 2026-10-08: grid ge123e6f9 gemm 2.07x NV /
-      1.78x AMD, lm-train-step 1.11x / 1.07x slower; recoverable at main
-      bc10b8b56. The guards refuse 3.)
-   4  stream_exact   NN02 + NN11: stream with exact fold-state slots
-   (8 async, NN08, was deleted by lane/grid-prune 2026-10-07: OVN N03 measured
-      the NVIDIA async pipeline 2.2x and 4.2x slower than its synchronous
-      control; recoverable at main ab554bb4a. The guards refuse 8.)
-   9  pages          NN09: staging depth/pad/swizzle (STAGE_* parameters)
-  10  cost           NN10: cost-based plan (needs IDN_NEURAL_FILL_BLOCKS)
-  11  fold_exact     NN11: standalone exact-capacity fold storage
-  15  threadmap      NN15: staged output-thread mapping
-  24  pages_threadmap NN09 + NN15 together
+The neural GEMM schedule is the incumbent IDENTICAL GEMM.
 
-`-D MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES=<mask>` (default 7 = every
-role): which neural caller classes take the selected schedule; the others
-keep the incumbent route in the same build. Bits: 1 projection (forward and
-dInput of every layer that is not the LM head), 2 head (LM head forward and
-dInput), 4 weight-grad (every dWeight/dBias product). The role is a
-call-site tag (`identical_gemm_into[ROLE=...]`), never a matrix size, so one
-mask covers every model width.
+Neural caller classes (`identical_gemm_into[ROLE=...]`): 1 projection,
+2 head, 4 weight-grad; every role takes the one schedule.
 
 The legal-arm asserts live in core/six_lane_experiment_guards.mojo, which
 every binding evaluates through GLOBAL_NUMERIC_MODE.
 """
-from std.sys.compile import is_defined, get_defined_int
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 
-comptime _ALLOWED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-comptime SCHED_INCUMBENT = 0
-comptime SCHED_GEOMETRY = 1
-comptime SCHED_STREAM = 2
-comptime SCHED_STREAM_EXACT = 4
-comptime SCHED_PAGES = 9
-comptime SCHED_COST = 10
-comptime SCHED_FOLD_EXACT = 11
-comptime SCHED_THREADMAP = 15
-comptime SCHED_PAGES_THREADMAP = 24
-
-comptime NEURAL_GEMM_SCHEDULE_RAW = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE", 0]()
-comptime NEURAL_GEMM_SCHEDULE = NEURAL_GEMM_SCHEDULE_RAW if _ALLOWED else SCHED_INCUMBENT
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (arms 1 2 4 9 10 11 15 24: no A/B won; EXP:1746 DROP) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 9813509a01.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: NEURAL_GEMM_SCHEDULE, the SCHED_* arm names, ROLE_ALL and NEURAL_GEMM_ROLES removed with the
+# schedule modules gemm/neural_dispatch.mojo read them for.)
 
 comptime ROLE_PROJECTION = 1
 comptime ROLE_HEAD = 2
 comptime ROLE_WGRAD = 4
-comptime ROLE_ALL = 7
-comptime NEURAL_GEMM_ROLES = get_defined_int["MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES", 7]()
+# TOMBSTONE: MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES (role mask knob, no A/B; 7 kept) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 7737754a09.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE_ROLES.patch; record in docs/TOMBSTONES.md.
 

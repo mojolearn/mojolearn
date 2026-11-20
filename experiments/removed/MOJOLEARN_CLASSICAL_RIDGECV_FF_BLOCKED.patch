@@ -1,0 +1,32 @@
+diff --git b/experiments/classical_identical_ideas/linear_controls.mojo a/experiments/classical_identical_ideas/linear_controls.mojo
+index 94ed605d1e..138f608e21 100644
+--- b/experiments/classical_identical_ideas/linear_controls.mojo
++++ a/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -1,10 +1,12 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""C13-C28 classical IDENTICAL controls, folded to constants.
++"""C13-C28 classical IDENTICAL opt-in controls.
+ 
+-Every opt-in arm and `_OFF` rollback this file read was deleted 2026-11-15 (lane expdel2-06-base,
+-docs/TOMBSTONES.md): each name below is the constant of its kept default, still imported by the
+-code that used to branch on it. Numerical profiles are shared by the host and all three device columns.
++Unless scoped evidence below says otherwise, switches remain NOT COMPILED —
++NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++Absence preserves the incumbent; measurements do not imply default promotion.
++Numerical profiles are shared by the host and all three device columns.
+ """
++from std.sys.compile import is_defined, get_defined_int
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+ comptime CLASSICAL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+@@ -88,9 +90,7 @@ comptime C14_GROUP_RHS = False
+ # together). Cost reasoning: the work n * (d+1)^2 / 2 float-float adds is
+ # unchanged; the thread count goes from (d+1)^2 / 2 to n / FOLD_BLOCK times
+ # that, with each block's threads reading the same row tile. No shape rule.
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 49c61a4093.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.patch; record in docs/TOMBSTONES.md.
+-comptime RIDGECV_FF_BLOCKED = False
++comptime RIDGECV_FF_BLOCKED = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED"]()
+ # lane/classical-cv-folds (2026-10-07); PROMOTED to the IDENTICAL default
+ # 2026-10-08 (lane/grid-act-2, grid run ge123e6f9: NVIDIA L40S sm_89 + AMD
+ # MI325X gfx942, full board data, one run per arm; r2 and rmse identical A vs

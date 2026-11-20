@@ -1,2 +1,0 @@
-COMMAND ["bash", "bindings/build_byte_lm.sh"] ENV {}
-byte LM: output already exists; choose a fresh output directory

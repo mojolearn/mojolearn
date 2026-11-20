@@ -95,6 +95,34 @@ def repo(tmp_path):
     return root
 
 
+def fake_revision_closure(root, revision, script, args, environ, plat=None):
+    """Stand-in for bincache.revision_closure (which walks the real merged-group plan): the
+    group's closure digest is a function of bindings/native.mojo at REVISION and the group."""
+    text = git(root, 'show', f'{revision}:bindings/native.mojo')
+    stem = args[2]
+    tier = 'host' if args[0] == 'host' else 'identical'
+    return dict(source=dict(scope='closure', digest=hashlib.sha256((text + stem).encode()).hexdigest(), files=3),
+                inputs=dict(digest=hashlib.sha256(b'bindings/merged_build.sh').hexdigest(),
+                            files=['bindings/merged_build.sh']),
+                merged=[dict(dir=tier, stem=stem, flags_class='host' if tier == 'host' else 'default',
+                             members=GROUPS[(tier, stem)], root_sha256='a' * 64)],
+                readers=({'MOJOLEARN_COMPILE_JOBS', 'MOJOLEARN_NUMERIC_MODE', 'MOJOLEARN_PACKAGE_BYTE_LM',
+                          'MOJOLEARN_TARGET_COLUMN'}, []))
+
+
+def side_commit(root, rel, text):
+    """A commit on top of HEAD that changes REL, without moving HEAD (an earlier or other revision)."""
+    import os
+    import tempfile
+    env = dict(os.environ, GIT_INDEX_FILE=tempfile.mktemp(dir=str(root.parent)))
+    run = lambda *a, **k: subprocess.run(['git', '-C', str(root), *a], env=env, check=True, capture_output=True,
+                                         text=True, **k).stdout.strip()
+    blob = run('hash-object', '-w', '--stdin', input=text)
+    run('read-tree', 'HEAD')
+    run('update-index', '--add', '--cacheinfo', f'100644,{blob},{rel}')
+    return run('commit-tree', run('write-tree'), '-p', 'HEAD', '-m', 'side')
+
+
 def adapter_sources(root):
     rels = ['adapters/native/c_api.mojo', 'adapters/torch/registration.cpp', 'packaging/adapters/build.sh',
             'packaging/adapters/pins.json', 'x_linear/ops.mojo', 'core/host_predict_threads.mojo']
@@ -144,26 +172,60 @@ def build(tmp_path, repo):
                     local=dict(inputs=dict(digest=mrb._inputs_digest(tree, inputs), files=inputs),
                                outputs=[f'python/mojolearn/{tier}/{stem}.so'], shell='sh', host_toolchain=APPLE))
 
+    def fields_v2(tier, stem, at=None):
+        """A closure-v2 key (tools/bincache.py KEY_RULE) of the group at revision AT (default the wheel's)."""
+        want = fake_revision_closure(repo, at or revision, mrb.SCRIPT, [mrb.KINDS[tier], '--group', stem], {})
+        environment = {'MOJOLEARN_COMPILE_JOBS': '1', 'MOJOLEARN_NUMERIC_MODE': 'identical',
+                       'MOJOLEARN_PACKAGE_BYTE_LM': '1'}
+        if tier == 'host':
+            environment['MOJOLEARN_TARGET_COLUMN'] = 'cpu'
+        return dict(schema=bincache.SCHEMA, key_rule=bincache.KEY_RULE, script=mrb.SCRIPT,
+                    args=[mrb.KINDS[tier], '--group', stem], source=want['source'], inputs=want['inputs'],
+                    merged=want['merged'], toolchain=toolchain, numeric_mode='identical', gpu_archs='',
+                    target_column='', build_env=environment, image='local', os=dict(id='darwin'),
+                    repo_path=str(repo),
+                    local=dict(outputs=[f'python/mojolearn/{tier}/{stem}.so'], shell='sh', host_toolchain=APPLE))
+
     adapter_files = {'libmojolearn_adapter.so': b'adapter', 'mojolearn_torch.so': b'torch', 'mojolearn_ops.mojoc': b'ops'}
 
-    def write(outcome='miss+built-cached', fields=None, wheel_bytes=None, jobs='1'):
+    def write(outcome='miss+built-cached', fields=None, wheel_bytes=None, jobs='1', v2=False, origin=None,
+              placement=True, named=True):
+        """OUTCOME: one build-log outcome for every group, or {stem: outcome}. A `hit` group's
+        archive names its original compile (ORIGIN, default the wheel's revision) unless NAMED
+        is False, and the cache's placements.jsonl echoes it unless PLACEMENT is False."""
         if out.exists():
             import shutil
             shutil.rmtree(out)
         cache = out / 'cache'
-        rows, log = [], ['== building %d merged files, 4 at a time' % len(GROUPS)]
+        rows, log, placed = [], ['== building %d merged files, 4 at a time' % len(GROUPS)], []
         for (tier, stem) in GROUPS:
-            f = (fields or {}).get(stem) or fields_for(tier, stem)
+            how = outcome.get(stem, 'miss+built-cached') if isinstance(outcome, dict) else outcome
+            f = (fields or {}).get(stem) or (fields_v2(tier, stem) if v2 else fields_for(tier, stem))
             key = bincache.key_of(f)
             rel = f['local']['outputs'][0]
             stage = out / 'stage'
             put(stage / rel, ('raw ' + stem).encode())
             cache.mkdir(parents=True, exist_ok=True)
-            bincache.pack(str(cache / (key + '.tar.gz')), key, f, stage, [rel], {})
+            compiled_by = dict(source_commit=origin or revision, built='2026-11-07T09:12:00Z', build_seconds=512.5,
+                               builder=dict(host='fixture-mac', leg='local'))
+            extra = compiled_by if (how != 'hit' or named) else {}
+            bincache.pack(str(cache / (key + '.tar.gz')), key, f, stage, [rel], extra)
             put(cache / 'provenance/keys' / (key + '.json'), f)
-            rows.append(f'2026-10-31T18:00:00Z\tbindings/merged_build.sh\t{outcome}\t{key}\t1.0\t{rel}={sha(stage / rel)}')
-            log.append(f'BINCACHE {outcome} bindings/merged_build.sh key={key[:16]} seconds=1.0')
+            files = f'{rel}={sha(stage / rel)}'
+            rows.append(f'2026-10-31T18:00:00Z\tbindings/merged_build.sh\t{how}\t{key}\t1.0\t{files}')
+            if how == 'hit':
+                log.append(f'BINCACHE seeded bindings/merged_build.sh key={key[:16]} from /fixture/bincache-mac')
+                if placement:
+                    placed.append(json.dumps(dict(
+                        script='bindings/merged_build.sh', outcome='hit', key=key,
+                        files=[dict(path=rel, sha256=sha(stage / rel))],
+                        archive_source_commit=extra.get('source_commit', ''), archive_built=extra.get('built', ''),
+                        archive_build_seconds=extra.get('build_seconds'), archive_builder=extra.get('builder', {})),
+                        sort_keys=True))
+            log.append(f'BINCACHE {how} bindings/merged_build.sh key={key[:16]} seconds=1.0')
         put(cache / 'provenance/provenance.tsv', '\n'.join(rows) + '\n')
+        if placed:
+            put(cache / 'provenance/placements.jsonl', '\n'.join(placed) + '\n')
         put(out / 'macos-build.log', '\n'.join(log) + '\nshrink_wheel: done\n')
         wheel = out / f'mojolearn-{VERSION}-py3-none-macosx_26_0_arm64.whl'
         wheel.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +279,7 @@ def build(tmp_path, repo):
                          sub.ADAPTER_COVERAGE, list(srcs) + list(builders)))
         return dict(rows_)
 
-    return dict(write=write, originals=originals, fields_for=fields_for, revision=revision)
+    return dict(write=write, originals=originals, fields_for=fields_for, fields_v2=fields_v2, revision=revision)
 
 
 def ledger_for(path, wanted):
@@ -265,7 +327,7 @@ def test_the_report_reverifies_from_the_retained_bytes(tmp_path, repo, build, mo
 
 
 @pytest.mark.parametrize('case, match', [
-    ('hit', 'was not compiled and cached in this build'),
+    ('hit', "a placed group's compile key is not closure-v2"),
     ('shipped', 'shipped bytes are not the compiled bytes after packaging'),
     ('source', 'compiled source does not reproduce'),
     ('merged', 'merged group plan differs'),
@@ -333,3 +395,95 @@ def test_adapters_with_other_compile_jobs_are_refused(tmp_path, repo, build, mon
 def test_supports_only_the_mac_contract():
     assert not mrb.supports_requirement(dict(kind='compile', inputs=dict(binding=dict(target='linux-64'))))
     assert not mrb.supports_requirement(dict(kind='source', inputs={}))
+
+
+# ---------------------------------------------------------------- closure-v2 keys and placed groups (2026-11-07)
+
+
+@pytest.fixture
+def v2(monkeypatch):
+    monkeypatch.setattr(bincache, 'revision_closure', fake_revision_closure)
+
+
+def test_closure_v2_groups_compiled_in_this_build_are_admitted(tmp_path, repo, build, monkeypatch, v2):
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    review = prepare(repo, tmp_path, wanted, build['write'](v2=True))
+    assert review['admitted'] == sorted(wanted) and not review['refused']
+    facts = json.loads((tmp_path / 'review/report.json').read_text())['facts']
+    assert facts['compiles'] == dict(built=sorted(s for _, s in GROUPS), placed=[])
+    assert facts['groups']['_mojolearn_native']['compile']['outcome'] == 'built'
+
+
+def test_placed_groups_are_admitted_with_their_original_compile(tmp_path, repo, build, monkeypatch, v2):
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    producer = build['write'](v2=True, outcome='hit')
+    review = prepare(repo, tmp_path, wanted, producer)
+    assert review['admitted'] == sorted(wanted) and not review['refused']
+    report = json.loads((tmp_path / 'review/report.json').read_text())
+    facts = report['facts']
+    assert facts['compiles'] == dict(built=[], placed=sorted(s for _, s in GROUPS))
+    assert facts['groups']['_mojolearn_native_host']['compile'] == dict(
+        outcome='placed', source_commit=build['revision'], compiled_at='2026-11-07T09:12:00Z', build_seconds=512.5,
+        builder=dict(host='fixture-mac', leg='local'))
+    assert any(e['path'].endswith('placements.jsonl') for e in facts['evidence'])
+    assert mrb.ADAPTERS[mrb.NAME].verify(report) == facts
+    result = admission.admit(tmp_path / 'ledger.json', repo, tmp_path / 'review/report.json')
+    assert set(result['actions'].values()) == {'reuse'}
+
+
+def test_one_build_may_compile_some_groups_and_place_others(tmp_path, repo, build, monkeypatch, v2):
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    review = prepare(repo, tmp_path, wanted, build['write'](v2=True, outcome={'_mojolearn_native': 'hit'}))
+    assert review['admitted'] == sorted(wanted)
+    facts = json.loads((tmp_path / 'review/report.json').read_text())['facts']
+    assert facts['compiles'] == dict(built=['_mojolearn_native_host'], placed=['_mojolearn_native'])
+
+
+def test_a_group_compiled_at_another_revision_with_the_same_closure_is_placed(tmp_path, repo, build, monkeypatch, v2):
+    earlier = side_commit(repo, 'docs/unrelated.md', 'not in any closure\n')
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    review = prepare(repo, tmp_path, wanted, build['write'](v2=True, outcome='hit', origin=earlier))
+    assert review['admitted'] == sorted(wanted)
+    facts = json.loads((tmp_path / 'review/report.json').read_text())['facts']
+    assert {g['compile']['source_commit'] for g in facts['groups'].values()} == {earlier}
+
+
+@pytest.mark.parametrize('case, match', [
+    ('no-placement-record', 'bincache placement record is missing'),
+    ('archive-names-no-compile', 'does not name its original compile'),
+    ('stale-key', 'compiled source does not reproduce from the tested revision'),
+    ('origin-elsewhere', "key does not reproduce at the revision it names"),
+    ('merged-key', 'compiled source does not reproduce from the tested revision'),
+])
+def test_a_placed_group_without_its_compile_admits_nothing(tmp_path, repo, build, monkeypatch, v2, case, match):
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    if case == 'no-placement-record':
+        producer = build['write'](v2=True, outcome='hit', placement=False)
+    elif case == 'archive-names-no-compile':
+        producer = build['write'](v2=True, outcome='hit', named=False)
+    elif case == 'stale-key':
+        older = side_commit(repo, 'bindings/native.mojo', 'fn native(): return\n')
+        producer = build['write'](v2=True, outcome='hit', origin=older, fields={
+            '_mojolearn_native': build['fields_v2']('identical', '_mojolearn_native', at=older)})
+    elif case == 'origin-elsewhere':
+        other = side_commit(repo, 'bindings/native.mojo', 'fn native(): return\n')
+        producer = build['write'](v2=True, outcome='hit', origin=other)
+    else:
+        f = build['fields_v2']('identical', '_mojolearn_native')
+        f['build_env']['MOJOLEARN_MERGED_KEY'] = '1' * 64
+        producer = build['write'](v2=True, outcome='hit', fields={'_mojolearn_native': f})
+    with pytest.raises(ValueError, match=match):
+        prepare(repo, tmp_path, wanted, producer)
+
+
+def test_the_build_log_admits_only_compiled_or_placed_groups(tmp_path, repo, build, monkeypatch, v2):
+    wanted = build['originals']()
+    use(monkeypatch, wanted)
+    producer = build['write'](v2=True, outcome='bypass-destination-exists+built-not-cached:conflict')
+    with pytest.raises(ValueError, match='neither compiled and cached in this build nor placed'):
+        prepare(repo, tmp_path, wanted, producer)

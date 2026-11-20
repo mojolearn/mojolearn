@@ -1,0 +1,2907 @@
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index c935502190..8dc6262218 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -16,7 +16,6 @@ from providers.python.x_decomp_api_pyapi import (
+ from x_decomp.device import DevExec
+ from x_decomp.pca_randomized_dev import DevRDev
+ from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+-from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
+ from x_decomp.ipca_owner_dev import DevIpcaDev
+ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+ from x_decomp.decomp_owner_dev import DevDecomp
+@@ -73,14 +72,15 @@ from providers.python.x_decomp_resident_pyapi import dev_eigh_py
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
+ # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
++from providers.python.x_decomp_w4_fast_pyapi import w4_flags_py
+ from x_decomp.qfix import LU_QFIX
+ from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
+ # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
+ # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
+-from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES
++from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES, RSVD_FAST_DEVSCAN
+ from providers.python.x_decomp_s_linalg_fast_pyapi import (
+-    dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, s_flags_py,
++    dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, dev_upload_scan_py, s_flags_py,
+ )
+ 
+ 
+@@ -154,9 +154,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
+         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
+         m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
+-        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo;
+-        # bindings/linalg_decomp_native.mojo calls it)
+-        m.def_function[randomized_svd_py[DevExec, DevRDev, True]]("x_decomp_randomized_svd")
+         # IncrementalPCA fit / partial_fit / transform + inverse_transform, one driver each
+         # (x_decomp/ipca_owner.mojo; bindings/ipca_native.mojo calls them)
+         m.def_function[ipca_fit_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_fit")
+@@ -241,17 +238,19 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[dev_rand_py]("x_decomp_dev_rand")
+         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
+-        # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT defaults, superseded: randomized_svd is one driver that reads M in place; their x_decomp_w4_flags entry had no other bit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-        # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++        # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
++        # (bit 2 RSVD_FAST_DIRECT_IN / RSVD_IDN_DIRECT_IN)
++        m.def_function[w4_flags_py]("x_decomp_w4_flags")
+         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
+         # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
+         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
+         comptime if LU_QFIX:
+             m.def_function[lu_resid_py]("x_decomp_lu_resid")
+-        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 2 DECOMP_FAST_ORTH_WS,
+-        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks); bit 1
+-        # RSVD_FAST_DEVSCAN and its x_decomp_dev_upload_scan were deleted 2026-11-08
++        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
++        # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
+         m.def_function[s_flags_py]("x_decomp_s_flags")
++        comptime if RSVD_FAST_DEVSCAN:
++            m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
+         comptime if DECOMP_FAST_ORTH_WS:
+             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
+         # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)
+diff --git a/bindings/_mojolearn_x_decomp_host.mojo b/bindings/_mojolearn_x_decomp_host.mojo
+index e14e731fe9..a389ce308d 100644
+--- a/bindings/_mojolearn_x_decomp_host.mojo
++++ b/bindings/_mojolearn_x_decomp_host.mojo
+@@ -17,7 +17,6 @@ from providers.python.x_decomp_api_pyapi import (
+ from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
+ from x_decomp.pca_randomized import NoRDev
+ from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
+-from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
+ from x_decomp.ipca_owner import NoIpcaDev
+ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
+ from x_decomp.decomp_owner_host import HostDecomp
+@@ -115,8 +114,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         # TruncatedSVD(algorithm='randomized').fit, one driver (x_decomp/tsvd_owner.mojo);
+         # the TSVD_QFIX route is FAST GPU only (qfix_flags is 0 here)
+         m.def_function[tsvd_randomized_py[HostExec, NoRDev, False]]("x_decomp_tsvd_randomized")
+-        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo)
+-        m.def_function[randomized_svd_py[HostExec, NoRDev, False]]("x_decomp_randomized_svd")
+         # IncrementalPCA, one driver per operation (x_decomp/ipca_owner.mojo)
+         m.def_function[ipca_fit_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_fit")
+         m.def_function[ipca_partial_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_partial")
+diff --git a/bindings/decomp_inputs.mojo b/bindings/decomp_inputs.mojo
+index cd58b0985d..21865ff0f6 100644
+--- a/bindings/decomp_inputs.mojo
++++ b/bindings/decomp_inputs.mojo
+@@ -1,56 +1,52 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# The decomposition owners' X admission (PCA, TruncatedSVD, IncrementalPCA,
+-# KernelPCA, FactorAnalysis, FastICA, NMF, LatentDirichletAllocation, the
+-# random projections): the one admission path (bindings/admitted_input.mojo,
+-# admit_x) with scikit-learn's refusals naming the estimator, after an exact
+-# SciPy sparse container is densified from its storage, as the Python shells
+-# densified it before converting. No cast or scan of its own.
+-from std.python import PythonObject
++# The decomposition owners' input conversion (bindings/tsvd_native.mojo,
++# bindings/ipca_native.mojo): X as C-order float32 with scikit-learn's input
++# refusals, an exact SciPy sparse container densified from its storage, as
++# the Python shells densified it before converting. Metadata reads and the
++# shared typed CastIn conversion only.
++from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+-from bindings.py_balanced import py_get, py_type
+-from bindings.classical_arrays import classical_address
+-from bindings.admitted_input import AdmittedX, admit_x, admit_x_unrecorded
++from bindings.py_balanced import py_call
++from bindings.classical_arrays import classical_kind, classical_is_f32
++from bindings.admitted_input import admit_x
++from bindings.classical_validate import classical_view, _cast_x, RESHAPE_HINT
+ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+-
+-# TOMBSTONE: decomp_copied (a second classical_view / memoryview of X to rediscover the input_copied_ flag the admission already knows) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. The flag is decomp_input_copied below.
+-
+-
+-def decomp_admit(source: PythonObject, est: String, context: PythonObject) raises -> AdmittedX:
+-    """X as C-order float32 (the caller's buffer when it already is one,
+-    `borrowed`); refusals name `est`. A SciPy sparse X is densified first
+-    and admitted with the plain rank/empty/finite wording."""
+-    var format = host_sparse_format(source)
+-    if format.byte_length() > 0:
+-        var dense = host_sparse_dense(source, format, context)
+-        var array = admit_x(dense, 2, "X", context)
+-        var address = Int(py=classical_address(array))
+-        var borrowed = address == Int(py=classical_address(dense))
+-        var x = AdmittedX(array, source, address, Int(py=array.shape[0]), Int(py=array.shape[1]), 2, borrowed)
+-        _ = dense^
+-        return x^
+-    return admit_x_unrecorded(source, est, context)
++from bindings.pca_exact import pca_copied
+ 
+ 
+ def decomp_input(source: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
+     """X as C-order float32 (the caller's buffer when it already is one);
+     refusals name `est`."""
+-    var x = decomp_admit(source, est, context)
+-    return x.array
++    var format = host_sparse_format(source)
++    if format.byte_length() > 0:
++        var dense = host_sparse_dense(source, format, context)
++        return admit_x(dense, 2, "X", context)
++    var view = classical_view(source, context, "X")
++    var kind = classical_kind(view, context)
++    if kind == "c":
++        raise Error("Complex data not supported: " + est + " got a complex X.")
++    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
++        var nd = Int(py=view.ndim)
++        # The shape's repr names a refusal only; it is built on those paths
++        # alone (it went through builtins.repr on every call; p3 rank 410).
++        if nd < 2:
++            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
++                        + String(py_call(native_loaded_module("builtins").repr, view.shape)) + "). " + RESHAPE_HINT)
++        if nd == 2 and Int(py=view.shape[0]) == 0:
++            raise Error("Found array with 0 sample(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
++                        + ") while a minimum of 1 is required by " + est + ".")
++        if nd == 2 and Int(py=view.shape[1]) == 0:
++            raise Error("Found array with 0 feature(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
++                        + ") while a minimum of 1 is required by " + est + ".")
++    var x = _cast_x(view, est, context)
++    _ = view^
++    return x
+ 
+ 
+-def decomp_input_copied(x: AdmittedX, context: PythonObject) raises -> Bool:
+-    """The public `input_copied_` flag of an admitted X: False only when the
+-    kernels read the caller's own ndarray, Array or native buffer in place.
+-    Sequences, pandas and Torch inputs count as copied (they are
+-    materialized); a densified sparse X counts as the dense array its storage
+-    holds (copied unless that is already float32)."""
+-    var b = native_loaded_module("builtins")
+-    if host_sparse_format(x.source).byte_length() > 0:
+-        return not x.borrowed
+-    var t = py_type(x.source)
+-    # NumPy's keys are in the context only once NumPy is loaded
+-    var ndarray = py_get(context, "ndarray")
+-    var direct = ((ndarray is not None and t is ndarray) or t is context["array_class"] or t is b.memoryview or t is context["array_type"]
+-                  or t is b.bytearray)
+-    return not direct or not x.borrowed
++def decomp_copied(source: PythonObject, context: PythonObject) raises -> Bool:
++    """Whether X had to be copied to C-order float32 (a densified sparse X
++    counts as the dense array its storage holds)."""
++    var format = host_sparse_format(source)
++    if format.byte_length() > 0:
++        return not classical_is_f32(host_sparse_dense(source, format, context), context)
++    return pca_copied(source, context)
+diff --git a/bindings/decomp_kit_native.mojo b/bindings/decomp_kit_native.mojo
+index 4be8a0d00e..6566fc2a4d 100644
+--- a/bindings/decomp_kit_native.mojo
++++ b/bindings/decomp_kit_native.mojo
+@@ -1358,8 +1358,38 @@ struct DecompKit(Movable):
+         var params = Python.tuple(XD_TAKE_COLS, rows * w, w, cols, 0, 0, 0, rows * cols, rows * w, w)
+         return self._move(a, idx, rows, w, params, rows * w > 0 and self.use(a, idx))
+ 
+-    # TOMBSTONE: DecompKit.orth, order_small and grown (used only by the per-step randomized_svd, now x_decomp/randomized_svd_owner.mojo) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++    # ---- orthonormal bases and small orders (randomized_svd)
++    def orth(mut self, a: Int) raises -> Int:
++        # `_Kit.orth`: a copy of A with its columns orthonormalized.
++        var rows = self.matrices[a].rows
++        var cols = self.matrices[a].cols
++        if rows * cols and self.use(a):
++            var q = self.device_output(rows, cols)
++            var da = self.device(a)
++            var name = String("x_decomp_dev_orth_ws") if (self.flags("x_decomp_s_flags") & 2) != 0 else String("x_decomp_dev_orth")
++            _ = py_call(self.entries[name], da, self.matrices[q].device, Python.list(rows, cols))
++            return q
++        var q = self.copy_host(a)
++        _ = py_call(self.entries["x_decomp_orth"], self.address(q), Python.list(rows, cols))
++        _ = q  # keep the Python object alive through the native call above
++        self.wrote_host(q)
++        return q
++
++    def order_small(mut self, a: Int) raises -> Int:
++        # `_Kit.order_small`: the stable ascending order as n x 1 exact floats.
++        var n = self.size(a)
++        if n and self.use(a):
++            var out = self.device_output(n, 1)
++            var da = self.device(a)
++            _ = py_call(self.entries["x_decomp_dev_order_small"], da, self.matrices[out].device, Python.list(n))
++            return out
++        var out = self.zeros(n, 1)
++        if n:
++            var aa = self.address(a)
++            _ = py_call(self.entries["x_decomp_order_small"], aa, self.address(out), Python.list(n))
++            _ = out  # keep the Python object alive through the native call above
++        return out
++
+     def count_gt(mut self, a: Int, s: Float64) raises -> Int:
+         # `_Kit.count_gt`: how many values of A are > s.
+         if not self.size(a):
+@@ -1367,6 +1397,18 @@ struct DecompKit(Movable):
+         var flags = self.ew(XD_GTS, a, scalar=s)
+         return Int(self.total_word(flags))
+ 
++    def grown(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
++        # `_M(A.s + zeros, rows, cols)`: A's words then zeros, as a host matrix.
++        var out = self.zeros(rows, cols)
++        var n = self.size(a)
++        if n:
++            var source = self.host(a)
++            memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
++                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
++            _ = source  # keep the Python object alive through the native call above
++            _ = source^
++        return out
++
+     # ---- the tall SVD of `_linalg_impl._svd_tall` (lstsq)
+     def orth_diag(mut self, a: Int) raises -> Tuple[Int, Int]:
+         # `_Kit.orth_diag`: (orth(A), the passes' R-diagonal products 1 x c).
+diff --git a/bindings/linalg_decomp_native.mojo b/bindings/linalg_decomp_native.mojo
+index 8b64651324..42fef987dd 100644
+--- a/bindings/linalg_decomp_native.mojo
++++ b/bindings/linalg_decomp_native.mojo
+@@ -1,9 +1,8 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # The native owner of python/mojolearn/_expansion_decomp.py's dense linear
+ # algebra functions: randomized_svd, solve, lstsq, lu_factor and lu_solve are
+-# each one call into linalg_decomp_c. randomized_svd is one compiled driver
+-# (x_decomp/randomized_svd_owner.mojo); the others run the steps the Python
+-# functions ran (solve's gesv entry or
++# each one call into linalg_decomp_c. The owner runs the steps the Python functions ran
++# (`_rsvd_direct_input`, `_rsvd_core`, `_flip_u`; solve's gesv entry or
+ # lu_factor + lu_solve with their resident, refinement and host routes)
+ # through bindings/decomp_kit_native.mojo: the same x_decomp entries with the
+ # same words in the same order, so the bits are unchanged.
+@@ -28,55 +27,155 @@ from bindings.decomp_kit_native import (
+ )
+ 
+ 
+-# TOMBSTONE: randomized_svd's per-step DecompKit sequence (`_rsvd_direct_input`, `_rsvd_core`, `_flip_u` in the process-default kit; about 40 py_calls into x_decomp per call) and `_same_mode` deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. Now one driver,
+-# x_decomp/randomized_svd_owner.mojo (`x_decomp_randomized_svd`).
++def _same_mode(a: PythonObject, b: PythonObject) raises -> Bool:
++    # Whether two numeric modes name the same binding.
++    var x = String(py=py_call(py_call(a.strip).lower))
++    var y = String(py=py_call(py_call(b.strip).lower))
++    return x == y
++
++
++def _flip_u(mut kit: DecompKit, u: Int, vt: Int, context: PythonObject, mode: PythonObject) raises -> Tuple[Int, Int]:
++    # `_flip_u`: svd_flip on U's columns, in the process-default mode's kit.
++    var default = context["backend_fields"]["_DEFAULT_MODE"]
++    if _same_mode(decomp_mode(mode, context), default):
++        var sg = kit.absmax_signs(u, True)
++        var u2 = kit.ew(XD_MUL, u, sg)
++        var sgt = kit.transpose(sg)
++        return (u2, kit.ew(XD_MUL, vt, sgt))
++    # Another binding: the matrices move to it and back by host words.
++    var other = DecompKit(decomp_entries(default, context), context["output_context"])
++    try:
++        var ou = other.input(kit.host(u), kit.nrows(u), kit.ncols(u))
++        var ov = other.input(kit.host(vt), kit.nrows(vt), kit.ncols(vt))
++        var sg = other.absmax_signs(ou, True)
++        var u2 = other.ew(XD_MUL, ou, sg)
++        var sgt = other.transpose(sg)
++        var v2 = other.ew(XD_MUL, ov, sgt)
++        var back_u = kit.input(other.host(u2), other.nrows(u2), other.ncols(u2))
++        var back_v = kit.input(other.host(v2), other.nrows(v2), other.ncols(v2))
++        return (back_u, back_v)
++    finally:
++        other.close()
+ 
+ 
+ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     # args: (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
+     # transpose, flip_sign, random_state, numeric_mode)
+-    # ONE compiled call (x_decomp/randomized_svd_owner.mojo): the sketch, the
+-    # power iterations, the small SVD and svd_flip run in the selected
+-    # mode's binding on resident matrices; M is admitted once here (the one
+-    # admission path: borrowed when C float32, else one parallel cast) and
+-    # uploaded once by the driver.
+     var b = native_loaded_module("builtins")
+-    var entries = decomp_entries(args[8], context)
+-    var transpose_arg = args[5]
+-    var auto_transpose = Bool(py=py_call(b.isinstance, transpose_arg, b.str)) and String(py=transpose_arg) == "auto"
+-    var array = decomp_input(args[0], "M", context)
+-    var rows = Int(py=array.shape[0])
+-    var cols = Int(py=array.shape[1])
+-    var normalizer = args[4]
+-    var known = False
+-    if Bool(py=py_call(b.isinstance, normalizer, b.str)):
+-        var name = String(py=normalizer)
+-        known = name == "auto" or name == "QR" or name == "LU" or name == "none"
+-    if not known:
+-        raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
+-    var kc = decomp_int(args[1])
+-    var oversamples = decomp_int(args[2])
+-    var n_iter = args[3]
+-    var auto_iterations = Bool(py=py_call(b.isinstance, n_iter, b.str)) and String(py=n_iter) == "auto"
+-    var iterations = 0 if auto_iterations else decomp_int(n_iter)
+-    var transpose = (rows < cols) if auto_transpose else Bool(py=transpose_arg)
+-    if not (1 <= kc and kc <= min(rows, cols)):
+-        raise Error("n_components must be in [1, min(n_samples, n_features)]")
+-    var seed = decomp_seed_word(decomp_seed(args[7]))
+-    if py_get(entries, "x_decomp_randomized_svd") is None:
+-        raise Error("NotImplementedError: mojolearn randomized_svd: this build of _mojolearn_x_decomp does not export "
+-                    + "x_decomp_randomized_svd; rebuild it with bindings/build_x_decomp.sh")
+-    var output = context["output_context"]
+-    var u = classical_typed(Python.tuple(rows, kc), "<f4", output)
+-    var s = classical_typed(Python.tuple(kc), "<f4", output)
+-    var vt = classical_typed(Python.tuple(kc, cols), "<f4", output)
+-    _ = py_call(entries["x_decomp_randomized_svd"], classical_address(array), classical_address(u),
+-                classical_address(s), classical_address(vt),
+-                Python.list(rows, cols, kc, oversamples, iterations, Int(auto_iterations), Int(transpose),
+-                            Int(Bool(py=args[6])), seed))
+-    _ = array  # keep the Python object alive through the native call above
+-    return Python.tuple(u, s, vt)
++    var mode = args[8]
++    var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
++    try:
++        var transpose_arg = args[5]
++        var auto_transpose = Bool(py=py_call(b.isinstance, transpose_arg, b.str)) and String(py=transpose_arg) == "auto"
++        var sparse = host_sparse_format(args[0]).byte_length() > 0
++        var array = decomp_input(args[0], "M", context)
++        var rows = Int(py=array.shape[0])
++        var cols = Int(py=array.shape[1])
++        var a = kit.input(array, rows, cols)
++        # `_rsvd_direct_input` (w4 bit 2): a dense M goes up once from the
++        # caller's buffer (RSVD_FAST_DEVSCAN: with the finiteness scan on the
++        # device copy); a wide or explicitly transposed M keeps the host route.
++        if (kit.flags("x_decomp_w4_flags") & 2) != 0 and not sparse and kit.resident:
++            var host_transposes = (transpose_arg is PythonObject(True)) or (auto_transpose and rows < cols)
++            if not host_transposes:
++                if (kit.flags("x_decomp_s_flags") & 1) != 0:
++                    var direct = kit.device_output(rows, cols)
++                    var found = Int(py=py_call(kit.entries["x_decomp_dev_upload_scan"], kit.matrices[direct].device,
++                                               classical_address(array), rows * cols))
++                    _ = array  # keep the Python object alive through the native call above
++                    if found >= 0:
++                        raise Error("M: input must be finite; NaN/inf are unsupported")
++                    _ = array  # keep the Python object alive through the native calls above
++                    a = direct
++                else:
++                    _ = kit.device(a)
++        # `_rsvd_core`
++        var normalizer = args[4]
++        var known = False
++        if Bool(py=py_call(b.isinstance, normalizer, b.str)):
++            var name = String(py=normalizer)
++            known = name == "auto" or name == "QR" or name == "LU" or name == "none"
++        if not known:
++            raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
++        var n = kit.nrows(a)
++        var d = kit.ncols(a)
++        var kc = decomp_int(args[1])
++        var nr = kc + decomp_int(args[2])
++        var iterations: Int
++        var n_iter = args[3]
++        if Bool(py=py_call(b.isinstance, n_iter, b.str)) and String(py=n_iter) == "auto":
++            iterations = 7 if Float64(kc) < 0.1 * Float64(min(n, d)) else 4
++        else:
++            iterations = decomp_int(n_iter)
++        var transpose = (n < d) if auto_transpose else Bool(py=transpose_arg)
++        if transpose:
++            a = kit.transpose(a)
++            var t = n
++            n = d
++            d = t
++        if not (1 <= kc and kc <= min(n, d)):
++            raise Error("n_components must be in [1, min(n_samples, n_features)]")
++        nr = min(nr, min(d, n))
++        var q = kit.rand(d, nr, decomp_seed_word(decomp_seed(args[7])), 30, 1)
++        for _ in range(iterations):  # driver-loop: over the fixed randomized-SVD power iterations
++            var aq = kit.mm(a, q)
++            q = kit.orth(aq)
++            var atq = kit.mm(a, q, ta=True)
++            q = kit.orth(atq)
++        var last = kit.mm(a, q)
++        q = kit.orth(last)
++        # The small SVD runs on the live columns of Q only (DEVIATION 5318).
++        var absq = kit.ew(XD_ABS, q)
++        var cs = kit.colsum(absq)
++        var abscs = kit.ew(XD_ABS, cs)
++        var nlive = kit.count_gt(abscs, 0.0)
++        if nlive == 0:
++            raise Error("randomized_svd: M is numerically zero")
++        var full = kit.ncols(q)
++        if nlive < full:
++            var abscs2 = kit.ew(XD_ABS, cs)
++            var live = kit.ew(XD_GTS, abscs2, scalar=0.0)
++            var negated = kit.ew(XD_SCALE, live, scalar=-1.0)
++            var dead = kit.ew(XD_ADDS, negated, scalar=1.0)
++            var order = kit.order_small(dead)
++            q = kit.take_cols_m(q, order, nlive)
++        var bm = kit.mm(q, a, ta=True)
++        var usv = kit.thin_svd(bm, min(kit.nrows(bm), kit.ncols(bm)), True)
++        var uh = usv[0]
++        var s = usv[1]
++        var vt = usv[2]
++        if kit.ncols(s) < full:
++            s = kit.grown(s, 1, full)
++            vt = kit.grown(vt, full, kit.ncols(vt))
++            var uht = kit.transpose(uh)
++            var grown = kit.grown(uht, full, kit.ncols(uht))
++            uh = kit.transpose(grown)
++        var u = kit.mm(q, uh)
++        if Bool(py=args[6]):
++            if not transpose:
++                var flipped = _flip_u(kit, u, vt, context, mode)
++                u = flipped[0]
++                vt = flipped[1]
++            else:
++                var vtt = kit.transpose(vt)
++                var ut = kit.transpose(u)
++                var flipped = _flip_u(kit, vtt, ut, context, mode)
++                u = kit.transpose(flipped[1])
++                vt = kit.transpose(flipped[0])
++        var out_u: Int
++        var out_s = kit.cols_of(s, 0, kc)
++        var out_vt: Int
++        if transpose:
++            var head = kit.rows_of(vt, 0, kc)
++            out_u = kit.transpose(head)
++            var left = kit.cols_of(u, 0, kc)
++            out_vt = kit.transpose(left)
++        else:
++            out_u = kit.cols_of(u, 0, kc)
++            out_vt = kit.rows_of(vt, 0, kc)
++        return Python.tuple(kit.publish(out_u), kit.out_shape(out_s, Python.tuple(kc)), kit.publish(out_vt))
++    finally:
++        kit.close()
+ 
+ 
+ def _is_vector(b: PythonObject) raises -> Bool:
+diff --git a/bindings/linalg_ops_buffers.mojo b/bindings/linalg_ops_buffers.mojo
+index fe49c321e9..52a313630e 100644
+--- a/bindings/linalg_ops_buffers.mojo
++++ b/bindings/linalg_ops_buffers.mojo
+@@ -17,8 +17,6 @@ from bindings.py_balanced import py_call, py_setattr, py_type
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.classical_validate import classical_view, RESHAPE_HINT
+ from bindings.native_buffer_owner import native_storage_allocate
+-from bindings.native_array_storage import native_array_zeros
+-from core.admitted_convert import admitted_convert
+ from bindings.classical_pandas import classical_admit_value
+ from bindings.classical_arrays import classical_is_array
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+@@ -193,12 +191,8 @@ def lin_array(shape: List[Int], typestr: String, context: PythonObject) raises -
+     var count = 1
+     for i in range(len(shape)):  # driver-loop: over shape words
+         count *= shape[i]
+-    # One fill pass (array.array repetition of a one-word zero seed): the
+-    # store was a zeroed bytes object copied into the array, two passes over
+-    # every output byte (audit, lane a3). Array stores have no uninitialised
+-    # constructor, so the zeros stay.
+-    _ = lin_width(typestr)  # its refusal for a dtype no Array holds
+-    var store = native_array_zeros(_store_code(typestr), count)
++    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
++                        py_call(context["native_bytes_type"], count * lin_width(typestr)))
+     return classical_wrap_array(store, lin_tuple(shape), typestr, "C", context)
+ 
+ 
+@@ -242,28 +236,112 @@ def _lin_target(typestr: String, mut item: Int) raises -> Int:
+     return CAST_KIND_UNSIGNED
+ 
+ 
+-# The conversion itself (Array.astype's per-element rules, the bounds and the
+-# typed loads and stores) is core/admitted_convert.mojo, split across the
+-# host's cores (lane a3-admit-decomp-prep-metrics, audit R10).
++def _lin_ctype(typestr: String) -> String:
++    """The C type `array.array` names in its range refusal."""
++    if typestr == "<i1":
++        return "signed char"
++    if typestr == "<i4":
++        return "signed integer"
++    if typestr == "<u2":
++        return "unsigned short"
++    if typestr == "<u1":
++        return "unsigned byte integer"
++    if typestr == "<u4":
++        return "unsigned int"
++    return "signed long long"
++
++
++def _lin_bounds(typestr: String, mut low: Int, mut high: Int):
++    if typestr == "<i1":
++        low = -128
++        high = 127
++    elif typestr == "<u1":
++        low = 0
++        high = 255
++    elif typestr == "<u2":
++        low = 0
++        high = 65535
++    elif typestr == "<i4":
++        low = -(1 << 31)
++        high = (1 << 31) - 1
++    elif typestr == "<u4":
++        low = 0
++        high = (1 << 32) - 1
++    else:
++        low = Int.MIN
++        high = Int.MAX
++
++
++def _lin_raw(base: Int, off: Int, item: Int) -> UInt64:
++    """The item at byte `off` from `base`, zero-extended (little-endian)."""
++    var p = LIN_BP(unsafe_from_address=base + off)
++    var raw = UInt64(0)
++    for j in range(item):  # small-loop(bytes of one item): at most 8
++        raw |= UInt64(p[j]) << UInt64(8 * j)
++    return raw
++
++
++def _lin_store(dst: Int, t: Int, item: Int, raw: UInt64):
++    var p = LIN_BP(unsafe_from_address=dst + t * item)
++    for j in range(item):  # small-loop(bytes of one item): at most 8
++        p[j] = UInt8((raw >> UInt64(8 * j)) & UInt64(0xFF))
++
++
++def _lin_float(raw: UInt64, item: Int) -> Float64:
++    if item == 2:
++        return bitcast[DType.float32](f16_to_f32_bits(raw)).cast[DType.float64]()
++    if item == 4:
++        return bitcast[DType.float32](UInt32(raw)).cast[DType.float64]()
++    return bitcast[DType.float64](raw)
++
++
++def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String, low: Int, high: Int) raises -> Int:
++    """One item as an exact integer for an integer target, refused as
++    Array.astype refuses (a NaN, an infinity, a value outside the target).
++    `low`/`high` are `_lin_bounds(typestr)`, read once per conversion by the
++    caller; the C type name is built only for a refusal (both were rebuilt
++    for every element)."""
++    var value: Int
++    if kind == CAST_KIND_BOOL:
++        value = 1 if raw != 0 else 0
++    elif kind == CAST_KIND_SIGNED:
++        var bits = raw
++        if item < 8 and (raw >> UInt64(8 * item - 1)) & UInt64(1) != 0:
++            bits = raw | (~UInt64(0) << UInt64(8 * item))
++        value = Int(bitcast[DType.int64](bits))
++    elif kind == CAST_KIND_UNSIGNED:
++        if raw > UInt64(Int.MAX):
++            raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
++        value = Int(raw)
++    else:
++        var x = _lin_float(raw, item)
++        if x != x:
++            raise Error("cannot convert float NaN to integer")
++        if isinf(x):
++            raise Error("OverflowError: cannot convert float infinity to integer")
++        if x >= 9223372036854775808.0 or x < -9223372036854775808.0:
++            raise Error("OverflowError: mojolearn: value does not fit " + typestr)
++        value = Int(x)  # truncation toward zero
++    if value > high:
++        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
++    if value < low:
++        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is less than minimum")
++    return value
+ 
+ 
+ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
+     """Every element of the viewed buffer, in C order, into the C-order
+-    `typestr` store at `dst`: a copy of each contiguous run for the same
+-    dtype, else one conversion per element by Array.astype's rules. The
+-    elements are split into contiguous C-order ranges across the host's
+-    cores (each element writes only its own cell, so no word depends on the
+-    split); a refusal is the one the first failing element in C order
+-    raises, as the serial walk raised it."""
++    `typestr` store at `dst`: a byte copy for the same dtype, else one
++    conversion per element by Array.astype's rules."""
+     var item = 0
+     var kind = _lin_kind(v, item)
+     if kind < 0:
+         raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
+     var titem = 0
+     var tkind = _lin_target(typestr, titem)
++    var same = kind == tkind and item == titem
+     var nd = len(v.shape)
+-    var strides = List[Int](length=max(nd, 1), fill=0)
+-    var shape = List[Int](length=max(nd, 1), fill=1)
++    var strides = List[Int](length=nd, fill=0)
+     if v.has_strides:
+         for k in range(nd):  # driver-loop: over stride words
+             strides[k] = v.strides[k]
+@@ -272,9 +350,63 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
+         for k in range(nd - 1, -1, -1):  # driver-loop: over stride words
+             strides[k] = step
+             step *= v.shape[k]
+-    for k in range(nd):  # driver-loop: over shape words
+-        shape[k] = v.shape[k]
+-    admitted_convert(v.addr, shape, strides, v.count(), item, kind, titem, tkind, typestr, dst)
++    var count = v.count()
++    if same and nd >= 1 and count > 0 and strides[nd - 1] == item:
++        # Same dtype, unit-stride last axis (a row slice, a transposed outer
++        # axis): one memcpy per contiguous run instead of one byte-assembled
++        # load and store per element (p3 rank 99). Same bytes.
++        var run = v.shape[nd - 1]
++        var runs = count // run
++        var ridx = List[Int](length=nd, fill=0)
++        var roff = 0
++        for r in range(runs):  # cpu-route: host input layout copy, one contiguous run at a time
++            memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
++                   src=LIN_BP(unsafe_from_address=v.addr + roff), count=run * item)
++            var k = nd - 2
++            while k >= 0:  # driver-loop: over the outer axes of one run step
++                ridx[k] += 1
++                roff += strides[k]
++                if ridx[k] < v.shape[k]:
++                    break
++                roff -= strides[k] * v.shape[k]
++                ridx[k] = 0
++                k -= 1
++        return
++    var idx = List[Int](length=nd, fill=0)
++    var off = 0
++    var low = 0
++    var high = 0
++    _lin_bounds(typestr, low, high)
++    var wide_low = 0
++    var wide_high = 0
++    _lin_bounds("<i8", wide_low, wide_high)
++    # cpu-route: the host input conversion `_buffer.as_*_c` made (the base
++    # binding's cast_elements / layout copy), before the kernel call
++    for t in range(count):  # cpu-route: host input conversion, element by element
++        var raw = _lin_raw(v.addr, off, item)
++        if same:
++            _lin_store(dst, t, titem, raw)
++        elif tkind == CAST_KIND_FLOAT and titem == 4:
++            _lin_store(dst, t, 4, UInt64(cast_f32_bits(raw, kind, item)))
++        elif tkind == CAST_KIND_FLOAT and titem == 8:
++            var x = Float64(0.0)
++            if kind == CAST_KIND_FLOAT:
++                x = _lin_float(raw, item)
++            else:
++                x = Float64(_lin_integer(raw, kind, item, "<i8", wide_low, wide_high))
++            _lin_store(dst, t, 8, bitcast[DType.uint64](x))
++        else:
++            var value = _lin_integer(raw, kind, item, typestr, low, high)
++            _lin_store(dst, t, titem, UInt64(bitcast[DType.uint64](Int64(value))))
++        var k = nd - 1
++        while k >= 0:  # driver-loop: over the axes of one index step
++            idx[k] += 1
++            off += strides[k]
++            if idx[k] < v.shape[k]:
++                break
++            off -= strides[k] * v.shape[k]
++            idx[k] = 0
++            k -= 1
+ 
+ 
+ def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
+diff --git a/bindings/mcls_common.mojo b/bindings/mcls_common.mojo
+index 0d76e409e0..b80b8b2ebb 100644
+--- a/bindings/mcls_common.mojo
++++ b/bindings/mcls_common.mojo
+@@ -39,7 +39,7 @@ from bindings.family_common import (
+     family_call, family_call_kw, family_array, family_cast_view, family_as_f32,
+ )
+ from core.host_finite_scan import host_all_finite_f32
+-from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
++from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+ from core.cast_in import CastIn, CAST_KIND_SIGNED
+ from core.label_cast import host_unique_inverse_cast
+ from core.metrics_exp_impl import mexp_gather_i32
+@@ -383,7 +383,7 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
+     # One zeroed int64 store (it was a bytes object copied into an array).
+     var store = native_array_zeros(String("q"), count)
+     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
+-    if not admitted_ids_i64(Int(py=classical_address(view)), stride, 0, count, 1, item, kind == 1, False, dst):
++    if not mcls_read_i64(Int(py=classical_address(view)), stride, count, item, kind == 1, dst):
+         return PythonObject(None)
+     _ = view^
+     return Python.tuple(store, PythonObject(count))
+@@ -629,7 +629,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
+         store = packed[0]
+         count = Int(py=packed[1])
+     var out = family_array(Python.tuple(count), "<i4", context)
+-    if not admitted_narrow_i32(FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count,
++    if not mcls_narrow_i32(FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count,
+                            FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out)))):
+         raise Error("mojolearn metrics: " + name + " does not fit in int32; the implemented "
+                     + "kernels are the int32 instantiation (the int64 overload of "
+diff --git a/bindings/neighbors_ann_native.mojo b/bindings/neighbors_ann_native.mojo
+index 0c78e58ba7..9e40ef8d5e 100644
+--- a/bindings/neighbors_ann_native.mojo
++++ b/bindings/neighbors_ann_native.mojo
+@@ -23,9 +23,7 @@ from bindings.family_common import (
+     FAMILY_I32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
+     family_as_f32, family_f32_snapshot, family_field, family_type_name,
+ )
+-from core.admitted_ids import admitted_ids_i32
+-# TOMBSTONE: ann_candidates_i32 / _ann_item (core/neighbors_ann_impl.mojo, a two-pass serial byte walk, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++from core.neighbors_ann_impl import ann_candidates_i32
+ from bindings.parallel_public_result import parallel_public_result
+ from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
+ from bindings.mode_metadata_native import _fields
+@@ -698,7 +696,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     # id beyond int32 is refused here, then the ids are narrowed to int32.
+     var c32 = _ann_empty(m * k0, "<i4", context)
+     if m * k0 > 0:
+-        var fits = admitted_ids_i32(c.source.addr, c.source.s0, c.source.s1, m, k0,
++        var fits = ann_candidates_i32(c.source.addr, c.source.s0, c.source.s1, m, k0,
+                                       c.source.itemsize, c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order,
+                                       FAMILY_I32P(unsafe_from_address=Int(py=classical_address(c32))))
+         _ = c
+diff --git a/bindings/pca_exact.mojo b/bindings/pca_exact.mojo
+index ea2cadd985..01606e2d22 100644
+--- a/bindings/pca_exact.mojo
++++ b/bindings/pca_exact.mojo
+@@ -1,16 +1,32 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# PCA helpers shared by the native PCA owner (bindings/pca_fit_native.mojo,
+-# bindings/pca_query_native.mojo) and the decomposition doors: the
+-# input_copied_ rule, the whitening entry check, the compiled-entry refusal
+-# and the too-small refusal text.
++# Native orchestration of PCA's existing exact covariance/full solvers. No
++# replacement decomposition or Python helper is called. Fitted buffers stay
++# mutable at the Python ABI; native shape descriptors are rebuilt on admission
++# so replacing a supported public array preserves its documented semantics.
++from std.memory import memcpy, bitcast
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+-from bindings.py_balanced import py_call, py_get, py_type
++from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
++from bindings.py_typed_call import py_call_typed
++from bindings.classical_arrays import classical_array, classical_word
++from bindings.admitted_input import admit_x
+ from bindings.sequential_inputs import sequential_input
+-from bindings.classical_arrays import classical_dtype_is
++from bindings.sequential_arrays import sequential_array, sequential_address
++from bindings.sequential_description import sequential_fields
++from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
++from bindings.classical_arrays import classical_kind, classical_dtype_is
++from bindings.classical_validate import classical_view, classical_check_width, _cast_x, RESHAPE_HINT
+ 
+-# TOMBSTONE: pca_exact_fit, pca_input, pca_keep_fit, pca_prefix, pca_solver_checks and PCADimensions (the pre-owner PCA exact door; zero callers since bindings/pca_fit_native.mojo owns fit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++
++struct PCADimensions(Copyable, Movable):
++    var rows: Int
++    var features: Int
++    var components: Int
++
++    def __init__(out self, rows: Int, features: Int, components: Int):
++        self.rows = rows
++        self.features = features
++        self.components = components
+ 
+ 
+ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
+@@ -41,6 +57,45 @@ def pca_whiten_entries(entries: PythonObject) raises:
+         raise Error("NotImplementedError: PCA whiten=True requires the compiled whitened transform pair")
+ 
+ 
++def pca_prefix(value: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
++    var result = classical_array(rows, cols, context)
++    var count = rows * (cols if cols else 1)
++    var source = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
++    var dest = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
++    _ = result  # keep the Python object alive through the native call above
++    memcpy(dest=dest, src=source, count=count * 4)
++    _ = result  # keep the Python object alive through the native call above
++    return result
++
++
++def pca_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
++    """X as C-order float32 with scikit-learn's input refusals (complex,
++    rank, empty, non-finite; bindings/classical_validate.mojo), in the
++    wording the public PCA has always raised. An exact SciPy sparse
++    container is densified from its storage (bindings/host_sparse_native.mojo),
++    as the public PCA always densified a sparse input."""
++    var format = host_sparse_format(source)
++    if format.byte_length() > 0:
++        var dense = host_sparse_dense(source, format, context)
++        return admit_x(dense, 2, "X", context)
++    var view = classical_view(source, context, "X")
++    var kind = classical_kind(view, context)
++    if kind == "c":
++        raise Error("Complex data not supported: PCA got a complex X.")
++    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
++        var nd = Int(py=view.ndim)
++        var shape = String(py_call(native_loaded_module("builtins").repr, view.shape))
++        if nd < 2:
++            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
++        if nd == 2 and Int(py=view.shape[0]) == 0:
++            raise Error("Found array with 0 sample(s) (shape=" + shape + ") while a minimum of 1 is required by PCA.")
++        if nd == 2 and Int(py=view.shape[1]) == 0:
++            raise Error("Found array with 0 feature(s) (shape=" + shape + ") while a minimum of 1 is required by PCA.")
++    var x = _cast_x(view, "PCA", context)
++    _ = view^
++    return x
++
++
+ def pca_refusal(var error: Error) -> Error:
+     """A compiled PCA entry's refusal. A builtin class prefix is kept; a
+     plain refusal of the data or the fitted state (non-finite values, a
+@@ -63,3 +118,137 @@ def pca_too_small(rows: Int, cols: Int) -> String:
+                 + ")) while a minimum of 2 is required by PCA.")
+     return ("Found array with " + String(cols) + " feature(s) (shape=(" + String(rows) + ", " + String(cols)
+             + ")) while a minimum of 2 is required by PCA.")
++
++
++def pca_solver_checks(fields: PythonObject, entries: PythonObject) raises -> String:
++    """The solver name and tol refusals, before any input is read."""
++    var b = native_loaded_module("builtins")
++    var value = fields["svd_solver"]
++    var solver = String("")
++    if py_type(value) is b.str:
++        solver = String(value)
++    if (solver != "auto" and solver != "covariance_eigh" and solver != "jacobi" and solver != "full"
++            and solver != "randomized"):
++        raise Error("NotImplementedError: mojolearn PCA: svd_solver=" + String(py_call(b.repr, value))
++                    + " is not implemented; this class runs ('auto', 'covariance_eigh', 'jacobi', 'full', "
++                    + "'randomized'). 'arpack' is scikit-learn's implicitly restarted Lanczos, a third "
++                    + "algorithm; accepting the name and running an exact arm would be a silent substitution, "
++                    + "which is why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
++    if Float64(py=py_call(b.float, fields["tol"])) != 0:
++        raise Error("NotImplementedError: mojolearn PCA: tol is ARPACK's convergence tolerance and "
++                    + "svd_solver='arpack' is not implemented; leave tol=0.0")
++    if Bool(py=fields["whiten"]):
++        pca_whiten_entries(entries)
++    return solver
++
++
++def pca_keep_fit(fields: PythonObject, source: PythonObject, components: PythonObject, mean: PythonObject,
++                 variance: PythonObject, ratio: PythonObject, singular: PythonObject, noise: PythonObject,
++                 keep: Int, cols: Int, rows: Int, context: PythonObject) raises:
++    # Commit a complete state only after the one fit call returned.
++    var b = native_loaded_module("builtins")
++    py_setitem(fields, "input_copied_", pca_copied(source, context))
++    py_setitem(fields, "components_", components)
++    py_setitem(fields, "mean_", mean)
++    py_setitem(fields, "explained_variance_", variance)
++    py_setitem(fields, "explained_variance_ratio_", ratio)
++    py_setitem(fields, "singular_values_", singular)
++    py_setitem(fields, "noise_variance_", py_call(b.float, noise))
++    py_setitem(fields, "n_components_", keep)
++    py_setitem(fields, "n_features_in_", cols)
++    py_setitem(fields, "n_samples_", rows)
++    py_setitem(fields, "_mojolearn_fitted", True)
++
++
++def pca_exact_fit(model: PythonObject, args: PythonObject, solver: String, project: Bool,
++                  entries: PythonObject, context: PythonObject) raises -> PythonObject:
++    """`PCA.fit` / `fit_transform` for the exact solvers: ONE compiled call
++    (`pca_fit_owned`, decomposition/impl/pca_owner.mojo) fits, picks the kept
++    count (every component, the variance fraction or Minka's MLE), takes the
++    dropped tail's noise variance and, with `project`, writes X's projection
++    from the same resident data. The same entry, arguments and order the
++    Python shell used, so the bits are unchanged. Returns the model, or the
++    projection when `project`."""
++    var b = native_loaded_module("builtins")
++    var fields = sequential_fields(model)
++    var x = pca_input(args[0], context)
++    var rows = Int(py=x.shape[0])
++    var cols = Int(py=x.shape[1])
++    # One feature takes the covariance arm (its 1 x 1 covariance without a
++    # rotation); at one column the R-SVD and the covariance eigenvalue are
++    # the same number, and the R-SVD kernels keep their two-column floor.
++    var dense = solver == "full" and cols >= 2
++    if dense and py_get(entries, "pca_fit_full") is None:
++        raise Error("NotImplementedError: mojolearn PCA: svd_solver='full' needs the dense arm and this build of "
++                    + "_mojolearn_estimators does not export it; rebuild it with bindings/build_estimators.sh")
++    if rows < 2:
++        raise Error(pca_too_small(rows, cols))
++    if dense and rows < cols and Int(py=entries["estimators_numeric_mode"]()) != 1:
++        # DEVIATION 593: IDENTICAL takes the transposed QR route for a wide
++        # matrix; the other mode keeps its refusal.
++        raise Error("NotImplementedError: mojolearn PCA: svd_solver='full' needs at least as many samples as "
++                    + "features and got " + String(rows) + " x " + String(cols) + ". The dense route is an R-SVD, "
++                    + "which needs a tall matrix; svd_solver='covariance_eigh' handles this shape "
++                    + "(decomposition/NOT_IMPLEMENTED.tsv, DEVIATION 593)")
++    var requested = fields["n_components"]
++    var keep_mode = 0
++    var frac = Float64(0)
++    var nc = min(rows, cols)
++    if py_type(requested) is b.str and String(requested) == "mle":
++        if rows < cols:
++            raise Error("n_components='mle' is only supported if n_samples >= n_features")
++        keep_mode = 2
++    elif py_type(requested) is not b.bool and Bool(py=py_call(b.isinstance, requested, b.float)):
++        frac = Float64(py=requested)
++        if not (frac > 0 and frac < 1):
++            raise Error("mojolearn PCA: a float n_components must be in (0, 1)")
++        keep_mode = 1
++    else:
++        if requested is not None:
++            nc = Int(py=py_call(b.int, requested))
++        if nc < 1 or nc > cols:
++            raise Error("mojolearn n_components must be in [1, " + String(cols) + "], got " + String(nc))
++    if dense and nc > min(rows, cols):
++        raise Error("full SVD n_components cannot exceed min(n_samples, n_features)")
++    if py_get(entries, "pca_fit_owned") is None:
++        raise Error("NotImplementedError: mojolearn PCA: this build of _mojolearn_estimators does not export "
++                    + "pca_fit_owned; rebuild it with bindings/build_estimators.sh")
++    var components = classical_array(nc, cols, context)
++    var mean = classical_array(cols, 0, context)
++    var variance = classical_array(nc, 0, context)
++    var ratio = classical_array(nc, 0, context)
++    var singular = classical_array(nc, 0, context)
++    var z = classical_array(rows, nc, context) if project else PythonObject(None)
++    var fitted = py_call_typed(entries["pca_fit_owned"], sequential_address(x), sequential_address(components),
++        sequential_address(mean), sequential_address(variance), sequential_address(ratio),
++        sequential_address(singular), sequential_address(z) if project else PythonObject(0),
++        Python.list(rows, cols, nc, Int(dense), keep_mode, Int(Bool(py=fields["whiten"])), frac))
++    _ = components  # keep the Python object alive through the native call above
++    _ = x  # keep the Python object alive through the native call above
++    _ = ratio  # keep the Python object alive through the native call above
++    _ = variance  # keep the Python object alive through the native call above
++    _ = mean  # keep the Python object alive through the native call above
++    _ = z  # keep the Python object alive through the native call above
++    _ = singular  # keep the Python object alive through the native call above
++    var keep = Int(py=fitted[0])
++    _ = z  # keep the Python object alive through the native call above
++    _ = singular  # keep the Python object alive through the native call above
++    _ = ratio  # keep the Python object alive through the native call above
++    _ = variance  # keep the Python object alive through the native call above
++    _ = mean  # keep the Python object alive through the native call above
++    _ = components  # keep the Python object alive through the native call above
++    _ = x  # keep the Python object alive through the native call above
++    if keep != nc:
++        # The kernel writes the kept components (and the projection) as the
++        # prefix of each output.
++        components = pca_prefix(components, keep, cols, context)
++        variance = pca_prefix(variance, keep, 0, context)
++        ratio = pca_prefix(ratio, keep, 0, context)
++        singular = pca_prefix(singular, keep, 0, context)
++        if project:
++            z = pca_prefix(z, rows, keep, context)
++    pca_keep_fit(fields, args[0], components, mean, variance, ratio, singular, fitted[1], keep, cols, rows, context)
++    _ = z  # keep the Python object alive through the native call above
++    _ = x  # keep the Python object alive through the native call above
++    _ = x^
++    return z if project else model
+diff --git a/bindings/pca_fit_native.mojo b/bindings/pca_fit_native.mojo
+index 7853c97941..a4d631600d 100644
+--- a/bindings/pca_fit_native.mojo
++++ b/bindings/pca_fit_native.mojo
+@@ -10,7 +10,7 @@ from bindings.sequential_arrays import sequential_array, sequential_address
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
+ from providers.python.classical_family_admission_pyapi import classical_family_admit
+-from bindings.decomp_inputs import decomp_admit
++from providers.python.pca_input_pyapi import pca_input_snapshot
+ from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
+ from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
+ 
+@@ -64,18 +64,16 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
+         extra_setting = pca_fit_scalar_capture(fields["n_oversamples"], settings, context)
+         power_setting = pca_fit_scalar_capture(fields["iterated_power"], settings, context)
+     var source = args[0]
+-    # The one admission path: borrowed when X already is C float32, else one
+-    # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
+-    var x = decomp_admit(source, "PCA", context)
+-    var rows = x.rows
+-    var cols = x.cols
++    var x = pca_input_snapshot(source, context)
++    var rows = x.shape[0]
++    var cols = x.shape[1]
+     var b = native_loaded_module("builtins")
+     var source_type = py_type(source)
+     # The former pca_copied reports native C-f32 ndarray/Array/buffer inputs
+     # as uncopied; sequences, sparse, pandas and Torch are materialized. The
+     # conversion bit is captured by the same descriptor used for execution.
+     var direct = source_type is context["ndarray"] or source_type is context["array_class"] or source_type is b.memoryview or source_type is context["array_type"] or source_type is b.bytearray
+-    var copied = not direct or not x.borrowed
++    var copied = not direct or x.copied
+     var randomized = solver == "randomized"
+     var dense = solver == "full" and cols >= 2
+     if dense and py_get(entries, "pca_fit_full") is None:
+@@ -158,13 +156,13 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
+     var keep = count
+     if randomized:
+         try:
+-            noise = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
++            noise = py_call_typed(entries["pca_fit_randomized"], x.source.addr, components.address,
+                 mean.address, variance.address, ratio.address, singular.address, projection_address,
+                 Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed))
+         except error:
+             raise pca_refusal(error^)
+     else:
+-        var fitted = py_call_typed(entries["pca_fit_owned"], x.address, components.address,
++        var fitted = py_call_typed(entries["pca_fit_owned"], x.source.addr, components.address,
+             mean.address, variance.address, ratio.address, singular.address, projection_address,
+             Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction))
+         keep = Int(py=fitted[0])
+diff --git a/bindings/pca_query_native.mojo b/bindings/pca_query_native.mojo
+index da93645cfa..16a39efb37 100644
+--- a/bindings/pca_query_native.mojo
++++ b/bindings/pca_query_native.mojo
+@@ -8,8 +8,7 @@ from bindings.classical_validate import classical_check_width
+ from bindings.sequential_arrays import sequential_array, sequential_address
+ from bindings.pca_exact import pca_whiten_entries, pca_refusal
+ from providers.python.pca_model_pyapi import pca_query_admitted
+-from providers.python.pca_input_pyapi import pca_state_snapshot
+-from bindings.decomp_inputs import decomp_admit
++from providers.python.pca_input_pyapi import pca_input_snapshot, pca_state_snapshot
+ 
+ 
+ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
+@@ -27,12 +26,12 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
+     var count = Int(py=fields["n_components_"])
+     if features < 1 or count < 0:
+         raise Error("PCA fitted dimensions are invalid")
+-    var x = decomp_admit(source, "PCA", context)
+-    var rows = x.rows
+-    if x.cols != (count if inverse else features):
++    var x = pca_input_snapshot(source, context)
++    var rows = x.shape[0]
++    if x.shape[1] != (count if inverse else features):
+         if inverse:
+             raise Error("mojolearn PCA component count differs from fit")
+-        classical_check_width(x.cols, features, "PCA")
++        classical_check_width(x.shape[1], features, "PCA")
+     var whiten = Bool(py=fields["whiten"])
+     # The whitening path refuses non-finite (and negative) fitted state on
+     # every call, as 0.8.55 did: one native scan of the four fitted buffers,
+@@ -55,20 +54,20 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
+         # only governs output shape. All owners and addresses are now frozen.
+         try:
+             if inverse:
+-                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.address, components.source.addr,
++                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.source.addr, components.source.addr,
+                     singular.source.addr, mean.source.addr, output_address, Python.list(rows, features, count, fit_rows))
+             else:
+-                _ = py_call_typed(entries["pca_whiten_transform"], x.address, mean.source.addr,
++                _ = py_call_typed(entries["pca_whiten_transform"], x.source.addr, mean.source.addr,
+                     components.source.addr, singular.source.addr, output_address, Python.list(rows, features, count, fit_rows))
+         except error:
+             raise pca_refusal(error^)
+         _ = singular^
+         _ = variance^
+     elif inverse:
+-        _ = py_call_typed(entries["inverse_transform"], x.address, components.source.addr,
++        _ = py_call_typed(entries["inverse_transform"], x.source.addr, components.source.addr,
+             mean.source.addr, output_address, Python.list(rows, features, count, 1))
+     else:
+-        _ = py_call_typed(entries["pca_transform"], x.address, mean.source.addr,
++        _ = py_call_typed(entries["pca_transform"], x.source.addr, mean.source.addr,
+             components.source.addr, output_address, Python.list(rows, features, count))
+     _ = x^
+     _ = components^
+diff --git a/bindings/tsvd_native.mojo b/bindings/tsvd_native.mojo
+index 9a579ae1be..6a992bbe19 100644
+--- a/bindings/tsvd_native.mojo
++++ b/bindings/tsvd_native.mojo
+@@ -23,9 +23,10 @@ from bindings.native_error_class import error_without_class
+ from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
+ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_attributes import classical_connect_numpy
+-from bindings.classical_arrays import classical_address, classical_typed
++from bindings.classical_arrays import classical_address, classical_typed, classical_is_f32
+ from bindings.admitted_input import admit_x
+-from bindings.decomp_inputs import decomp_input, decomp_admit, decomp_input_copied
++from bindings.decomp_inputs import decomp_input, decomp_copied
++from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+ from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+ from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
+ from bindings.entries_verified import entries_verified, entries_mark_verified
+@@ -301,13 +302,20 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
+                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
+                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
+     var host = _host_only(model)
+-    # A SciPy sparse X (TruncatedSVD's main input) is densified once, and the
+-    # input_copied_ flag is read off the admission (no second view of X).
+-    var admitted = decomp_admit(source, "TruncatedSVD", context)
+-    py_setitem(fields, "input_copied_", PythonObject(decomp_input_copied(admitted, context)))
+-    var x = admitted.array
+-    var rows = admitted.rows
+-    var cols = admitted.cols
++    # A SciPy sparse X (TruncatedSVD's main input) is densified once: the
++    # conversion and the input_copied_ flag used to densify it twice. Same
++    # arrays and flag as decomp_input / decomp_copied.
++    var x = PythonObject(None)
++    var sparse = host_sparse_format(source)
++    if sparse.byte_length() > 0:
++        var dense = host_sparse_dense(source, sparse, context)
++        x = admit_x(dense, 2, "X", context)
++        py_setitem(fields, "input_copied_", PythonObject(not classical_is_f32(dense, context)))
++    else:
++        x = decomp_input(source, "TruncatedSVD", context)
++        py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
++    var rows = Int(py=x.shape[0])
++    var cols = Int(py=x.shape[1])
+     if rows < 2 or cols < 2:
+         raise Error(_too_small(rows, cols))
+     var nc = _components(fields, rows, cols)
+diff --git a/core/admitted_convert.mojo b/core/admitted_convert.mojo
+deleted file mode 100644
+index 04de1b11a8..0000000000
+--- a/core/admitted_convert.mojo
++++ /dev/null
+@@ -1,249 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The one host conversion of an admitted strided buffer into a C-order store
+-of any Array dtype (no Python import): Array.astype's rules (float to float32
+-round to nearest even, integers range checked, float to integer truncated
+-toward zero). The native linalg / metrics admission
+-(bindings/linalg_ops_buffers.mojo `lin_convert`) reads it.
+-
+-    admitted_convert(src, shape, strides, count, item, kind, titem, tkind,
+-                     typestr, dst)
+-        every element of the view at byte address `src` (shape / byte
+-        strides, `count` elements, items of `item` bytes of CastIn kind
+-        `kind`) in C order into the `typestr` store at `dst` (items of
+-        `titem` bytes of kind `tkind`); a same-dtype view with a unit-stride
+-        last axis is copied one contiguous run at a time
+-
+-The elements (or runs) are split into contiguous C-order ranges across the
+-host's cores (core/host_predict_threads.mojo, with its grain floor). Each
+-element writes only its own cell, so no word depends on the split; a refusal
+-is the one the first failing element in C order raises, as the serial walk
+-raised it (each task records its first failing element; the lowest is
+-converted again on the calling thread to raise). Moved here from the binding
+-(lane a3-admit-decomp-prep-metrics, audit R10: it was a serial element walk).
+-"""
+-from std.math import isinf
+-from std.memory import bitcast, memcpy
+-from core.admitted_input import admitted_raw_word
+-from core.cast_in import cast_f32_bits, f16_to_f32_bits, CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-
+-comptime LIN_IP = MutPointer[Int, MutUntrackedOrigin]
+-comptime LIN_BP = MutPointer[UInt8, MutUntrackedOrigin]
+-
+-
+-def _lin_ctype(typestr: String) -> String:
+-    """The C type `array.array` names in its range refusal."""
+-    if typestr == "<i1":
+-        return "signed char"
+-    if typestr == "<i4":
+-        return "signed integer"
+-    if typestr == "<u2":
+-        return "unsigned short"
+-    if typestr == "<u1":
+-        return "unsigned byte integer"
+-    if typestr == "<u4":
+-        return "unsigned int"
+-    return "signed long long"
+-
+-
+-def _lin_bounds(typestr: String, mut low: Int, mut high: Int):
+-    if typestr == "<i1":
+-        low = -128
+-        high = 127
+-    elif typestr == "<u1":
+-        low = 0
+-        high = 255
+-    elif typestr == "<u2":
+-        low = 0
+-        high = 65535
+-    elif typestr == "<i4":
+-        low = -(1 << 31)
+-        high = (1 << 31) - 1
+-    elif typestr == "<u4":
+-        low = 0
+-        high = (1 << 32) - 1
+-    else:
+-        low = Int.MIN
+-        high = Int.MAX
+-
+-
+-@always_inline
+-def _lin_raw(base: Int, off: Int, item: Int) -> UInt64:
+-    """The item at byte `off` from `base`, zero-extended (little-endian): one
+-    typed load (`admitted_raw_word`)."""
+-    return admitted_raw_word(base + off, item)
+-
+-
+-@always_inline
+-def _lin_store(dst: Int, t: Int, item: Int, raw: UInt64):
+-    """Cell `t` of the store at `dst` (items of `item` bytes): one typed
+-    store of the low `item` bytes of `raw`."""
+-    var address = dst + t * item
+-    if item == 4:
+-        MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store[alignment=1](0, UInt32(raw))
+-    elif item == 8:
+-        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store[alignment=1](0, raw)
+-    elif item == 2:
+-        MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store[alignment=1](0, UInt16(raw))
+-    else:
+-        var p = LIN_BP(unsafe_from_address=address)
+-        for j in range(item):  # small-loop(bytes of one item): at most 8
+-            p[j] = UInt8((raw >> UInt64(8 * j)) & UInt64(0xFF))
+-
+-
+-def _lin_float(raw: UInt64, item: Int) -> Float64:
+-    if item == 2:
+-        return bitcast[DType.float32](f16_to_f32_bits(raw)).cast[DType.float64]()
+-    if item == 4:
+-        return bitcast[DType.float32](UInt32(raw)).cast[DType.float64]()
+-    return bitcast[DType.float64](raw)
+-
+-
+-def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String, low: Int, high: Int) raises -> Int:
+-    """One item as an exact integer for an integer target, refused as
+-    Array.astype refuses (a NaN, an infinity, a value outside the target).
+-    `low`/`high` are `_lin_bounds(typestr)`, read once per conversion by the
+-    caller; the C type name is built only for a refusal (both were rebuilt
+-    for every element)."""
+-    var value: Int
+-    if kind == CAST_KIND_BOOL:
+-        value = 1 if raw != 0 else 0
+-    elif kind == CAST_KIND_SIGNED:
+-        var bits = raw
+-        if item < 8 and (raw >> UInt64(8 * item - 1)) & UInt64(1) != 0:
+-            bits = raw | (~UInt64(0) << UInt64(8 * item))
+-        value = Int(bitcast[DType.int64](bits))
+-    elif kind == CAST_KIND_UNSIGNED:
+-        if raw > UInt64(Int.MAX):
+-            raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
+-        value = Int(raw)
+-    else:
+-        var x = _lin_float(raw, item)
+-        if x != x:
+-            raise Error("cannot convert float NaN to integer")
+-        if isinf(x):
+-            raise Error("OverflowError: cannot convert float infinity to integer")
+-        if x >= 9223372036854775808.0 or x < -9223372036854775808.0:
+-            raise Error("OverflowError: mojolearn: value does not fit " + typestr)
+-        value = Int(x)  # truncation toward zero
+-    if value > high:
+-        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is greater than maximum")
+-    if value < low:
+-        raise Error("OverflowError: mojolearn: value does not fit " + typestr + ": " + _lin_ctype(typestr) + " is less than minimum")
+-    return value
+-
+-
+-@always_inline
+-def _lin_offset(linear: Int, shape: LIN_IP, strides: LIN_IP, rank: Int) -> Int:
+-    """The byte offset of C-order element `linear` of the strided view."""
+-    var remainder = linear
+-    var offset = 0
+-    for k in range(rank):  # small-loop(the view's rank)
+-        var axis = rank - 1 - k
+-        var extent = shape.unsafe_load(axis)
+-        offset += (remainder % extent) * strides.unsafe_load(axis)
+-        remainder //= extent
+-    return offset
+-
+-
+-def _lin_one(raw: UInt64, kind: Int, item: Int, tkind: Int, titem: Int, same: Bool, typestr: String,
+-             low: Int, high: Int, wide_low: Int, wide_high: Int, dst: Int, t: Int) raises:
+-    """Element `t` (its raw item) converted into the C-order store at `dst`
+-    by Array.astype's rules; raises Array.astype's refusal."""
+-    if same:
+-        _lin_store(dst, t, titem, raw)
+-    elif tkind == CAST_KIND_FLOAT and titem == 4:
+-        _lin_store(dst, t, 4, UInt64(cast_f32_bits(raw, kind, item)))
+-    elif tkind == CAST_KIND_FLOAT and titem == 8:
+-        var x = Float64(0.0)
+-        if kind == CAST_KIND_FLOAT:
+-            x = _lin_float(raw, item)
+-        else:
+-            x = Float64(_lin_integer(raw, kind, item, "<i8", wide_low, wide_high))
+-        _lin_store(dst, t, 8, bitcast[DType.uint64](x))
+-    else:
+-        var value = _lin_integer(raw, kind, item, typestr, low, high)
+-        _lin_store(dst, t, titem, UInt64(bitcast[DType.uint64](Int64(value))))
+-
+-
+-def admitted_convert(
+-    src: Int, shape_in: List[Int], strides_in: List[Int], count: Int, item: Int, kind: Int, titem: Int, tkind: Int,
+-    typestr: String, dst: Int,
+-) raises:
+-    """See the module note. `shape_in` / `strides_in` hold at least one
+-    axis (a rank-0 view is one axis of 1)."""
+-    # parallel: host input layout copy / conversion over element ranges across host cores (was serial, audit R10)
+-    var same = kind == tkind and item == titem
+-    var nd = len(shape_in)
+-    var shape = shape_in.copy()
+-    var strides = strides_in.copy()
+-    if count <= 0:
+-        return
+-    var rank = max(nd, 1)
+-    var shape_ptr = rebind[LIN_IP](shape.unsafe_ptr())
+-    var stride_ptr = rebind[LIN_IP](strides.unsafe_ptr())
+-    if same and nd >= 1 and strides[nd - 1] == item:
+-        # Same dtype, unit-stride last axis (a row slice, a transposed outer
+-        # axis): one memcpy per contiguous run (p3 rank 99), runs split
+-        # across the host's cores. Same bytes.
+-        var run = shape[nd - 1]
+-        var runs = count // run
+-        var run_tasks = host_predict_task_count_work(runs, count * item)
+-        var run_chunk = host_predict_chunk(runs, run_tasks)
+-
+-        def _runs(t: Int) {imm src, imm dst, imm run, imm runs, imm item, imm run_chunk, imm shape_ptr, imm stride_ptr, imm rank}:
+-            var lo = t * run_chunk
+-            var hi = min(lo + run_chunk, runs)
+-            for r in range(lo, hi):  # admitted input: this task's contiguous runs
+-                memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
+-                       src=LIN_BP(unsafe_from_address=src + _lin_offset(r * run, shape_ptr, stride_ptr, rank)),
+-                       count=run * item)
+-
+-        if run_tasks <= 1:
+-            _runs(0)
+-        else:
+-            host_parallelize(_runs, run_tasks)
+-        _ = shape^
+-        _ = strides^
+-        return
+-    var low = 0
+-    var high = 0
+-    _lin_bounds(typestr, low, high)
+-    var wide_low = 0
+-    var wide_high = 0
+-    _lin_bounds("<i8", wide_low, wide_high)
+-    var tasks = host_predict_task_count_work(count, count * max(item, 1))
+-    var chunk = host_predict_chunk(count, tasks)
+-    # The first refused element of each task (count when none).
+-    var failed = List[Int](length=tasks, fill=count)
+-    var failed_ptr = rebind[LIN_IP](failed.unsafe_ptr())
+-
+-    def _elements(t: Int) {imm src, imm dst, imm kind, imm item, imm tkind, imm titem, imm same, imm low, imm high, imm wide_low, imm wide_high, imm count, imm chunk, imm failed_ptr, imm shape_ptr, imm stride_ptr, imm rank}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, count)
+-        for e in range(lo, hi):  # admitted input: this task's elements, converted one by one
+-            var raw = _lin_raw(src, _lin_offset(e, shape_ptr, stride_ptr, rank), item)
+-            try:
+-                # The target's name only spells a refusal, which is raised
+-                # again below with it; the bounds are the target's own.
+-                _lin_one(raw, kind, item, tkind, titem, same, String(), low, high, wide_low, wide_high, dst, e)
+-            except:
+-                failed_ptr.unsafe_store(t, e)
+-                return
+-
+-    if tasks <= 1:
+-        _elements(0)
+-    else:
+-        host_parallelize(_elements, tasks)
+-    var first = count
+-    for t in range(tasks):  # driver-loop: over the conversion tasks' first refusals (at most one per core)
+-        first = min(first, failed[t])
+-    if first < count:
+-        # Raise the refusal of the first failing element in C order.
+-        var raw = _lin_raw(src, _lin_offset(first, shape_ptr, stride_ptr, rank), item)
+-        _lin_one(raw, kind, item, tkind, titem, same, typestr, low, high, wide_low, wide_high, dst, first)
+-    _ = failed^
+-    _ = shape^
+-    _ = strides^
+diff --git a/core/admitted_ids.mojo b/core/admitted_ids.mojo
+deleted file mode 100644
+index 5d43bfdfe2..0000000000
+--- a/core/admitted_ids.mojo
++++ /dev/null
+@@ -1,194 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The one host read of admitted integer ids and labels (no Python import).
+-
+-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3, lane A3
+-(a3-admit-decomp-prep-metrics, 2026-11-08): `admit_ids`. Every public door
+-that turns a caller's integer labels or ids (classification metric labels,
+-approximate-neighbor candidate ids) into int64 or int32 words reads these;
+-no door keeps its own byte-assembled walk.
+-
+-    admitted_ids_i64(addr, s0, s1, rows, cols, item, signed, swap, dst) -> Bool
+-        the rows x cols integer view at byte address `addr` (byte strides
+-        s0, s1; items of `item` bytes, sign-extended when `signed`, byte
+-        reversed when `swap`) as C-order int64; False when an unsigned
+-        64-bit id does not fit int64 (`_buffer.as_i64_c` refuses it)
+-    admitted_ids_i32(addr, s0, s1, rows, cols, item, signed, swap, dst) -> Bool
+-        the same view narrowed to C-order int32 in the same pass; False when
+-        any id lies outside int32 (the `c.min() < -(1 << 31) or c.max() >=
+-        (1 << 31)` refusal and `_as_i32_1d`'s range rule)
+-    admitted_narrow_i32(src, count, dst) -> Bool
+-        `count` int64 words narrowed to int32; False when one lies outside
+-
+-Rows are independent (each writes only its own cells and its task's flag),
+-so they are split into contiguous row tasks over the host's cores
+-(core/host_predict_threads.mojo, with its grain floor: a small input runs on
+-the calling thread). Each item is one typed load (`admitted_raw_word`), not
+-a byte assembly. The verdict is the AND of the tasks' verdicts, so neither
+-the split nor the read order changes a word or a refusal.
+-
+-A destination may be uninitialised; on a False verdict its words are
+-unspecified and the caller refuses and discards it (every caller does).
+-
+-Moved here (no value change): `mcls_read_i64` and `mcls_narrow_i32`
+-(core/mcls_impl.mojo) and `ann_candidates_i32` / `_ann_item`
+-(core/neighbors_ann_impl.mojo), which were serial byte walks; the ANN check
+-and its narrowing copy were two passes and are one now.
+-"""
+-from std.memory import bitcast
+-from core.admitted_input import admitted_raw_word
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-
+-comptime _AID_I64P = MutPointer[Int64, MutUntrackedOrigin]
+-comptime _AID_I32P = MutPointer[Int32, MutUntrackedOrigin]
+-comptime _AID_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+-comptime _AID_I32_MIN = Int64(-2147483648)
+-comptime _AID_I32_MAX = Int64(2147483647)
+-
+-
+-@always_inline
+-def _aid_raw(address: Int, item: Int, swap: Bool) -> UInt64:
+-    """The item of `item` bytes at `address`, zero-extended: one typed load
+-    in native (little-endian) order, the reversed bytes when `swap`."""
+-    if not swap:
+-        return admitted_raw_word(address, item)
+-    var bytes = _AID_U8P(unsafe_from_address=address)
+-    var raw = UInt64(0)
+-    for k in range(item):  # small-loop(bytes of one item): at most 8, a non-native exporter only
+-        raw |= UInt64(bytes[item - 1 - k]) << UInt64(k * 8)
+-    return raw
+-
+-
+-@always_inline
+-def _aid_signed(raw: UInt64, item: Int) -> Int64:
+-    """`raw` (an item of `item` bytes) sign-extended to int64."""
+-    var word = raw
+-    if item < 8:
+-        var top = UInt64(1) << UInt64(item * 8 - 1)
+-        if (word & top) != 0:
+-            word |= ~((top << 1) - 1)
+-    return bitcast[DType.int64](word)
+-
+-
+-def _aid_flags_all(flags: List[UInt8], tasks: Int) -> Bool:
+-    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+-        if flags[t] == UInt8(0):
+-            return False
+-    return True
+-
+-
+-def admitted_ids_i64(
+-    addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, signed: Bool, swap: Bool, dst: _AID_I64P,
+-) -> Bool:
+-    """The rows x cols integer view as C-order int64 words in `dst`; False
+-    when an unsigned 64-bit id does not fit int64."""
+-    # parallel: id read over row tasks across host cores (was a serial byte walk)
+-    if rows <= 0 or cols <= 0:
+-        return True
+-    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[_AID_U8P](flags.unsafe_ptr())
+-
+-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm signed, imm swap, imm dst, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        var fits = True
+-        for r in range(lo, hi):  # admitted ids: this task's rows
+-            for c in range(cols):  # admitted ids: the ids of one row
+-                var raw = _aid_raw(addr + r * s0 + c * s1, item, swap)
+-                var value: Int64
+-                if signed:
+-                    value = _aid_signed(raw, item)
+-                else:
+-                    if item == 8 and raw > UInt64(9223372036854775807):
+-                        fits = False
+-                    value = bitcast[DType.int64](raw)
+-                dst.unsafe_store(r * cols + c, value)
+-        if not fits:
+-            flag_ptr.unsafe_store(t, UInt8(0))
+-
+-    if tasks <= 1:
+-        _rows(0)
+-    else:
+-        host_parallelize(_rows, tasks)
+-    var verdict = _aid_flags_all(flags, tasks)
+-    _ = flags^
+-    return verdict
+-
+-
+-def admitted_ids_i32(
+-    addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, signed: Bool, swap: Bool, dst: _AID_I32P,
+-) -> Bool:
+-    """The rows x cols integer view narrowed to C-order int32 words in
+-    `dst`; False when any id lies outside int32."""
+-    # parallel: id read and int32 range rule over row tasks across host cores (was two serial byte walks)
+-    if rows <= 0 or cols <= 0:
+-        return True
+-    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[_AID_U8P](flags.unsafe_ptr())
+-
+-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm signed, imm swap, imm dst, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        var fits = True
+-        for r in range(lo, hi):  # admitted ids: this task's rows
+-            for c in range(cols):  # admitted ids: the ids of one row
+-                var raw = _aid_raw(addr + r * s0 + c * s1, item, swap)
+-                var value = Int64(0)
+-                if signed:
+-                    value = _aid_signed(raw, item)
+-                    if value < _AID_I32_MIN or value > _AID_I32_MAX:
+-                        fits = False
+-                        value = 0
+-                elif raw > UInt64(2147483647):
+-                    fits = False
+-                else:
+-                    value = bitcast[DType.int64](raw)
+-                dst.unsafe_store(r * cols + c, Int32(value))
+-        if not fits:
+-            flag_ptr.unsafe_store(t, UInt8(0))
+-
+-    if tasks <= 1:
+-        _rows(0)
+-    else:
+-        host_parallelize(_rows, tasks)
+-    var verdict = _aid_flags_all(flags, tasks)
+-    _ = flags^
+-    return verdict
+-
+-
+-def admitted_narrow_i32(src: _AID_I64P, count: Int, dst: _AID_I32P) -> Bool:
+-    """`count` int64 words narrowed to int32 (`a.astype("<i4")` after the
+-    int32 range rule); False when one lies outside int32."""
+-    # parallel: int32 range rule over contiguous tasks across host cores (was a serial walk)
+-    if count <= 0:
+-        return True
+-    var tasks = host_predict_task_count_work(count, count)
+-    var chunk = host_predict_chunk(count, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[_AID_U8P](flags.unsafe_ptr())
+-
+-    def _span(t: Int) {imm src, imm count, imm dst, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, count)
+-        var fits = True
+-        for i in range(lo, hi):  # admitted ids: this task's words
+-            var v = src.unsafe_load(i)
+-            if v < _AID_I32_MIN or v > _AID_I32_MAX:
+-                fits = False
+-                v = 0
+-            dst.unsafe_store(i, Int32(v))
+-        if not fits:
+-            flag_ptr.unsafe_store(t, UInt8(0))
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
+-    var verdict = _aid_flags_all(flags, tasks)
+-    _ = flags^
+-    return verdict
+diff --git a/core/experiment_guards_decomposition.mojo b/core/experiment_guards_decomposition.mojo
+index 2a0618c489..905ba1b832 100644
+--- a/core/experiment_guards_decomposition.mojo
++++ b/core/experiment_guards_decomposition.mojo
+@@ -63,9 +63,6 @@ def _check_configuration() -> Bool:
+     comptime assert not is_defined["MOJOLEARN_MCD_ORDERED_COV"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_ORDERED_COV, MinCovDet / EllipticEnvelope's split-K covariance with ordered Neumaier fold (x_decomp/mcd_bmma.mojo), was NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3% (Verdicts batch 4), quality HOLD (mcd-ordered-direct-q-r3); its reach probe, test seam and x_decomp_dev_mcd_cov went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
+     # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
+     comptime assert not (is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF"]() or is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF_OFF"]()), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_EIGH_FAST_PANEL_DF, the double-float trailing matrix of the FAST panel tridiagonalization (x_decomp/eigh_tridiag.mojo), was DROPPED-slower: rab3-eighdf 693.09 -> 1107.60 ms (+59.8%), max_eigenvalue_error 4.27e-7 -> 1.71e-7 (Verdicts batch 4); its _OFF went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
+-    # Lane a3-admit-decomp-prep-metrics (2026-11-08): randomized_svd's route switches, superseded by its one driver (x_decomp/randomized_svd_owner.mojo). Code at f7d10d2b09.
+-    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch
+-    comptime assert not (is_defined["MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF"]() or is_defined["MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"]() or is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()), "removed 2026-11-08 (lane a3-admit-decomp-prep-metrics): MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (randomized_svd's input straight to the device; KEPT defaults, M3 istella 517.3 -> 501.3 ms) and MOJOLEARN_RSVD_FAST_DEVSCAN (its finiteness scan on the device copy; KEPT, rab15 istella 490.1 -> 435.1 ms with ORTH_WS) were superseded: randomized_svd is one driver that reads M in place and uploads it once, and its admission scans in parallel on the host; no route is left to roll back to; code at f7d10d2b09; see docs/TOMBSTONES.md"
+     return True
+ 
+ 
+diff --git a/core/family_cast_impl.mojo b/core/family_cast_impl.mojo
+index 8444ea5605..1d8e3e3c3d 100644
+--- a/core/family_cast_impl.mojo
++++ b/core/family_cast_impl.mojo
+@@ -4,9 +4,6 @@
+ refusal reads, the maximum, and a constant label fill. The casts and the
+ finiteness scan that lived here are the one admission path
+ (core/admitted_input.mojo, core/host_finite_scan.mojo)."""
+-from std.memory import bitcast
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+ 
+ 
+ # TOMBSTONE: family_raw_word (moved into the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+@@ -21,70 +18,14 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
+ # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Now core/admitted_input.mojo `admitted_cast_f32`.
+ 
+ 
+-comptime _FCI_F32P = MutPointer[Float32, MutUntrackedOrigin]
+-
+-
+-def _family_extreme_f32[maximum: Bool](src: _FCI_F32P, count: Int) -> Float32:
+-    """The serial walk's minimum (or maximum) of `count` >= 1 float32 words,
+-    split into contiguous tasks across the host's cores. The serial rule
+-    starts at src[0] and never lets a NaN win; task 0 keeps that rule word
+-    for word (a NaN src[0] stays the answer), every later task reduces its
+-    non-NaN words (a NaN task result is skipped), and the tasks combine in
+-    order with the serial comparison, so the answer is the serial one."""
+-    # parallel: one reduction over contiguous tasks across host cores (audit R12, was serial)
+-    var tasks = host_predict_task_count_work(count, count)
+-    if tasks <= 1:
+-        var v = src[0]
+-        for i in range(1, count):  # admitted input: one reduction on the calling thread (below the grain floor)
+-            var x = src[i]
+-            comptime if maximum:
+-                if x > v:
+-                    v = x
+-            else:
+-                if x < v:
+-                    v = x
+-        return v
+-    var chunk = host_predict_chunk(count, tasks)
+-    var parts = List[Float32](length=tasks, fill=Float32(0))
+-    var parts_ptr = rebind[_FCI_F32P](parts.unsafe_ptr())
+-
+-    def _span(t: Int) {imm src, imm count, imm chunk, imm parts_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, count)
+-        if lo >= hi:
+-            # An empty trailing task (the ceiling split): a NaN, skipped below.
+-            parts_ptr.unsafe_store(t, bitcast[DType.float32](UInt32(0x7FC00000)))
+-            return
+-        var v = src.unsafe_load(lo)
+-        for i in range(lo + 1, hi):  # admitted input: this task's words
+-            var x = src.unsafe_load(i)
+-            var take: Bool
+-            comptime if maximum:
+-                take = x > v
+-            else:
+-                take = x < v
+-            if take or (t > 0 and v != v):
+-                v = x
+-        parts_ptr.unsafe_store(t, v)
+-
+-    host_parallelize(_span, tasks)
+-    var v = parts[0]
+-    for t in range(1, tasks):  # driver-loop: over the reduction tasks' results (at most one per core)
+-        var x = parts[t]
+-        comptime if maximum:
+-            if x > v:
+-                v = x
+-        else:
+-            if x < v:
+-                v = x
+-    _ = parts^
+-    return v
+-
+-
+-def family_min_f32(src: _FCI_F32P, count: Int) -> Float32:
++def family_min_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:
+     """The minimum of `count` float32 words (count >= 1); a NaN never wins,
+     as `Array.min` after a NaN-free cast."""
+-    return _family_extreme_f32[False](src, count)
++    var lo = src[0]
++    for i in range(1, count):  # native input marshaling: one reduction over the checked input
++        if src[i] < lo:
++            lo = src[i]
++    return lo
+ 
+ 
+ # TOMBSTONE: family_cast_rows_f64 (moved into the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+@@ -95,9 +36,13 @@ def family_min_f32(src: _FCI_F32P, count: Int) -> Float32:
+ # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Now core/host_finite_scan.mojo `host_all_finite_f32`.
+ 
+ 
+-def family_max_f32(src: _FCI_F32P, count: Int) -> Float32:
++def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:
+     """The maximum of `count` float32 words (count >= 1)."""
+-    return _family_extreme_f32[True](src, count)
++    var hi = src[0]
++    for i in range(1, count):  # native input marshaling: one reduction over the checked input
++        if src[i] > hi:
++            hi = src[i]
++    return hi
+ 
+ 
+ def family_fill_i32(out_buf: MutPointer[Int32, MutUntrackedOrigin], n: Int, value: Int32):
+diff --git a/core/mcls_impl.mojo b/core/mcls_impl.mojo
+index fb5aac1fd4..a390ae40a9 100644
+--- a/core/mcls_impl.mojo
++++ b/core/mcls_impl.mojo
+@@ -1,13 +1,43 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Typed input marshaling of the classification metrics owner
+-(bindings/metrics_cls_native.mojo, lane mcb2-mcls): the label range `lab.min()` / `lab.max()` the entropy entry takes,
++(bindings/metrics_cls_native.mojo, lane mcb2-mcls): the integer label reads
++`_buffer.as_i64_c` and `Array.astype("<i4")` made for `_metrics_impl._as_i32_1d`
++(exact widening of a signed, unsigned or bool buffer, then the int32 range
++rule), the label range `lab.min()` / `lab.max()` the entropy entry takes,
+ and the copies of a kernel's leading outputs (`precision[:size + 1].copy()`).
+ No arithmetic on metric values happens here: the kernels compute."""
+ 
+ 
+-# TOMBSTONE: mcls_read_i64 and mcls_narrow_i32 (serial byte-walk label reads, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. They are
+-# `admitted_ids_i64` and `admitted_narrow_i32` (core/admitted_ids.mojo).
++def mcls_read_i64(addr: Int, stride: Int, count: Int, item: Int, signed: Bool,
++                  dst: MutPointer[Int64, MutUntrackedOrigin]) -> Bool:
++    """`dst[i]` = integer element i of a strided buffer (little-endian
++    items of `item` bytes, sign-extended when `signed`). False when an
++    unsigned 64-bit value does not fit in int64 (as_i64_c refuses it)."""
++    for i in range(count):  # native input marshaling: integer label items, read exactly
++        var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + i * stride)
++        var raw = UInt64(0)
++        for k in range(item):  # native input marshaling: the bytes of one item
++            raw |= UInt64(bytes[k]) << UInt64(k * 8)
++        if signed and item < 8:
++            var top = UInt64(1) << UInt64(item * 8 - 1)
++            if (raw & top) != 0:
++                raw |= ~((top << 1) - 1)
++        if not signed and item == 8 and raw > UInt64(9223372036854775807):
++            return False
++        dst[i] = Int64(raw)
++    return True
++
++
++def mcls_narrow_i32(src: MutPointer[Int64, MutUntrackedOrigin], count: Int,
++                    dst: MutPointer[Int32, MutUntrackedOrigin]) -> Bool:
++    """`a.astype("<i4")` after `_as_i32_1d`'s range check: False (nothing
++    written past the first refusal) when a label is outside int32."""
++    for i in range(count):  # native input marshaling: the int32 range rule over the labels
++        var v = src[i]
++        if v < Int64(-2147483648) or v > Int64(2147483647):
++            return False
++        dst[i] = Int32(v)
++    return True
+ 
+ 
+ def mcls_min_i32(src: MutPointer[Int32, MutUntrackedOrigin], count: Int) -> Int:
+diff --git a/core/neighbors_ann_impl.mojo b/core/neighbors_ann_impl.mojo
+new file mode 100644
+index 0000000000..5e2bb84737
+--- /dev/null
++++ b/core/neighbors_ann_impl.mojo
+@@ -0,0 +1,47 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Typed input marshaling of the approximate-index owner
++(bindings/neighbors_ann_native.mojo, lane native-neighbors-20261024): the
++candidate-id step `refine` made with NumPy before the kernel ran, the int32
++range refusal (`c.min() < -(1 << 31) or c.max() >= (1 << 31)`) and the
++narrowing copy `np.ascontiguousarray(c, dtype=np.int32)`. Integer ids are
++read exactly; no arithmetic on distances happens here."""
++from std.memory import bitcast
++
++
++def _ann_item(addr: Int, item: Int, signed: Bool, swap: Bool) -> Tuple[Int64, Bool]:
++    """Integer element at `addr` (`item` bytes, little-endian, or reversed
++    when `swap`; sign-extended when `signed`) and whether it fits int32."""
++    var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
++    var raw = UInt64(0)
++    for k in range(item):  # native input marshaling: the bytes of one item
++        var byte = bytes[item - 1 - k] if swap else bytes[k]
++        raw |= UInt64(byte) << UInt64(k * 8)
++    if not signed:
++        return (Int64(0) if raw > UInt64(2147483647) else bitcast[DType.int64](raw),
++                raw <= UInt64(2147483647))
++    if item < 8:
++        var top = UInt64(1) << UInt64(item * 8 - 1)
++        if (raw & top) != 0:
++            raw |= ~((top << 1) - 1)
++    var value = bitcast[DType.int64](raw)
++    return (value, value >= Int64(-2147483648) and value <= Int64(2147483647))
++
++
++def ann_candidates_i32(
++    src: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, signed: Bool, swap: Bool,
++    dst: MutPointer[Int32, MutUntrackedOrigin],
++) -> Bool:
++    """The (rows, cols) integer id matrix at `src` (byte strides s0, s1)
++    narrowed into the C-order int32 `dst`. False, with nothing written,
++    when any id lies outside int32 (the whole matrix is checked first, as
++    the min/max refusal ran before the copy)."""
++    for r in range(rows):  # native input marshaling: candidate rows, the range refusal
++        for c in range(cols):  # native input marshaling: candidate ids of one row
++            var got = _ann_item(src + r * s0 + c * s1, item, signed, swap)
++            if not got[1]:
++                return False
++    for r in range(rows):  # native input marshaling: candidate rows, the narrowing copy
++        for c in range(cols):  # native input marshaling: candidate ids of one row
++            var got = _ann_item(src + r * s0 + c * s1, item, signed, swap)
++            dst[r * cols + c] = Int32(got[0])
++    return True
+diff --git a/core/prep_boundary_impl.mojo b/core/prep_boundary_impl.mojo
+index 9d73adf5c9..fcedbae6ab 100644
+--- a/core/prep_boundary_impl.mojo
++++ b/core/prep_boundary_impl.mojo
+@@ -1,50 +1,20 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Public preprocessing validation and row-buffer preparation. No model math.
+ from core.cast_in import CastIn, cast_w64_bits
+-from std.memory import bitcast, memcpy
+-from core.admitted_input import admitted_raw_word
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
++from std.memory import bitcast
+ from core.classical_pandas_impl import pd_raw_at, _pd_double
+-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_all_finite_f32_strided
+-
+-
+-comptime _PREP_IP = MutPointer[Int, MutUntrackedOrigin]
+-comptime _PREP_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+-
+-
+-def _prep_any_flag(flags: List[UInt8], tasks: Int) -> Bool:
+-    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+-        if flags[t] != UInt8(0):
+-            return True
+-    return False
+-
+-
+-
+-
+-@always_inline
+-def _prep_word_offset(linear: Int, shape: _PREP_IP, strides: _PREP_IP, rank: Int) -> Int:
+-    """The byte offset of C-order element `linear` of a strided N-d view."""
+-    var remainder = linear
+-    var offset = 0
+-    for k in range(rank):  # small-loop(the array's rank metadata)
+-        var axis = rank - 1 - k
+-        var extent = shape.unsafe_load(axis)
+-        offset += (remainder % extent) * strides.unsafe_load(axis)
+-        remainder //= extent
+-    return offset
++from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
+ 
+ 
+ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
+                       count: Int, native: Bool, dtype: Int) -> Bool:
+-    """True when no float32 (dtype 11) or float64 (dtype 12) word of the
+-    strided view is a NaN or an infinity; True for any other dtype
+-    (_sk_validate scans Float32/Float64 only, before any narrowing to f32).
+-    The verdict is the exponent-bits test on the original words, an AND over
+-    tasks, so the split cannot change it."""
++    # _sk_validate scans Float32/Float64 only, before any narrowing to f32.
+     if dtype != 11 and dtype != 12:
+         return True
+     var width = source.itemsize
++    # parallel: a native-order C-contiguous block is one SIMD finiteness scan
++    # across host cores (0.8.66 regression C1 class, serial byte-wise walk).
++    # The verdict is the same Bool over the same words; only the walk differs.
+     if native and (width == 4 or width == 8):
+         var contiguous = True
+         var expected = width
+@@ -57,188 +27,72 @@ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
+             if width == 4:
+                 return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
+             return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
+-        if width == 4 and len(shape) == 2:
+-            return host_all_finite_f32_strided(source.addr, strides[0], strides[1], shape[0], shape[1])
+-    # parallel: the strided / non-native finiteness test over contiguous
+-    # element ranges across host cores (it was a serial byte walk)
+-    if count <= 0:
+-        return True
++    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
+     var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
+-    var tasks = host_predict_task_count_work(count, count * len(shape))
+-    var chunk = host_predict_chunk(count, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+-    var base = source.addr
+-    var rank = len(shape)
+-    var shape_ptr = shape.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+-    var strides_ptr = strides.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+-
+-    def _span(t: Int) {imm base, imm width, imm native, imm mask, imm count, imm chunk, imm flag_ptr, imm shape_ptr, imm strides_ptr, imm rank}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, count)
+-        var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base)
+-        for linear in range(lo, hi):  # admitted input: this task's elements, finiteness on original float words
+-            var offset = _prep_word_offset(linear, shape_ptr, strides_ptr, rank)
+-            var bits = UInt64(0)
+-            if native:
+-                bits = admitted_raw_word(base + offset, width)
+-            else:
+-                for byte in range(width):  # small-loop(bytes of one non-native float word): 4 or 8
+-                    bits |= UInt64(pointer[offset + width - 1 - byte]) << UInt64(8 * byte)
+-            if bits & mask == mask:
+-                flag_ptr.unsafe_store(t, UInt8(0))
+-                return
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
+-    var finite = True
+-    for t in range(tasks):  # driver-loop: over the scan tasks' flags (at most one per core)
+-        if flags[t] == UInt8(0):
+-            finite = False
+-    _ = flags^
+-    return finite
++    for linear in range(count):  # native input marshaling: public finiteness check on original float words
++        var remainder = linear
++        var offset = 0
++        for k in range(len(shape)):  # native input marshaling: captured rank metadata
++            var axis = len(shape) - 1 - k
++            offset += (remainder % shape[axis]) * strides[axis]
++            remainder //= shape[axis]
++        var bits = UInt64(0)
++        for byte in range(width):  # native input marshaling: supported four/eight-byte float words
++            var index = byte if native else width - 1 - byte
++            bits |= UInt64(pointer[offset + index]) << UInt64(8 * byte)
++        if bits & mask == mask:
++            return False
++    return True
+ 
+ 
+ def prep_gather_rows(source: CastIn, indices: Int, rows: Int, output: Int) raises:
+-    """The selected rows of the source matrix, raw bytes in C order, at
+-    `output` (`rows` x source.cols items). Every index is checked before any
+-    row is written; no numeric conversion."""
+-    # parallel: index check, then one copy per selected row (a memcpy when the
+-    # row is contiguous), row tasks across host cores (it was a serial byte walk)
+-    if rows <= 0:
+-        return
+     var index = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=indices)
+-    var limit = source.rows
+-    var item = source.itemsize
+-    var cols = source.cols
+-    var tasks = host_predict_task_count_work(rows, rows * max(cols * item, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+-
+-    def _check(t: Int) {imm index, imm limit, imm rows, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        for r in range(lo, hi):  # admitted input: this task's selected row indices
+-            var selected = Int(index.unsafe_load(r))
+-            if selected < 0 or selected >= limit:
+-                flag_ptr.unsafe_store(t, UInt8(0))
+-                return
+-
+-    if tasks <= 1:
+-        _check(0)
+-    else:
+-        host_parallelize(_check, tasks)
+-    for t in range(tasks):  # driver-loop: over the check tasks' flags (at most one per core)
+-        if flags[t] == UInt8(0):
++    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
++    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=output)
++    for r in range(rows):  # native input marshaling: validate selected row indices before any output write
++        var selected = Int(index[r])
++        if selected < 0 or selected >= source.rows:
+             raise Error("gather_rows_bytes: row index out of bounds")
+-    _ = flags^
+-    var base = source.addr
+-    var s0 = source.s0
+-    var s1 = source.s1
+-    var row_bytes = cols * item
+-
+-    def _copy(t: Int) {imm index, imm base, imm s0, imm s1, imm item, imm cols, imm row_bytes, imm output, imm rows, imm chunk}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=output)
+-        for r in range(lo, hi):  # admitted input: this task's selected rows
+-            var start = base + Int(index.unsafe_load(r)) * s0
+-            if s1 == item or cols == 1:
+-                memcpy(dest=dst.unsafe_offset(r * row_bytes),
+-                       src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start), count=row_bytes)
+-            else:
+-                for c in range(cols):  # admitted input: strided items of one selected row
+-                    memcpy(dest=dst.unsafe_offset(r * row_bytes + c * item),
+-                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start + c * s1), count=item)
+-
+-    if tasks <= 1:
+-        _copy(0)
+-    else:
+-        host_parallelize(_copy, tasks)
++    for r in range(rows):  # native input marshaling: copy selected rows without numeric conversion
++        var selected = Int(index[r])
++        for c in range(source.cols):  # native input marshaling: captured source columns
++            for byte in range(source.itemsize):  # native input marshaling: raw primitive-buffer bytes
++                dst[(r * source.cols + c) * source.itemsize + byte] = src[selected * source.s0 + c * source.s1 + byte]
+ 
+ 
+ def prep_mask_any(source: CastIn, count: Int) -> Bool:
+-    """Whether any byte of the strided one-byte nullable mask is set."""
+-    # parallel: mask test over contiguous tasks across host cores (audit R11, was serial)
+-    if count <= 0:
+-        return False
+-    var tasks = host_predict_task_count_work(count, count)
+-    var chunk = host_predict_chunk(count, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+-    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+-
+-    def _span(t: Int) {imm source, imm count, imm chunk, imm flag_ptr}:
+-        var pointer = _PREP_U8P(unsafe_from_address=source.addr)
+-        for i in range(t * chunk, min(t * chunk + chunk, count)):  # admitted input: this task's mask bytes
+-            if pointer[i * source.s0] != 0:
+-                flag_ptr.unsafe_store(t, UInt8(1))
+-                return
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
+-    var found = _prep_any_flag(flags, tasks)
+-    _ = flags^
+-    return found
++    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
++    for i in range(count):  # native input marshaling: captured one-byte nullable mask
++        if pointer[i * source.s0] != 0:
++            return True
++    return False
+ 
+ 
+ def prep_category_flags(codes: CastIn, count: Int, codes_native: Bool,
+                         categories: CastIn, category_count: Int,
+                         category_native: Bool, dtype: Int) raises -> Tuple[Bool, Bool]:
+-    """(any code is missing (-1), every taken float category is finite) over
+-    the categorical codes; refuses a code outside its category storage."""
+-    # parallel: categorical codes over contiguous tasks across host cores (audit R11, was serial)
+-    if count <= 0:
+-        return (False, True)
+-    var tasks = host_predict_task_count_work(count, count * max(codes.itemsize, 1))
+-    var chunk = host_predict_chunk(count, tasks)
+-    # Three flags per task: [3t] a missing code, [3t + 1] a non-finite
+-    # category, [3t + 2] a code outside the category storage.
+-    var flags = List[UInt8](length=3 * tasks, fill=UInt8(0))
+-    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+-
+-    def _span(t: Int) {imm codes, imm codes_native, imm categories, imm category_count, imm category_native, imm dtype, imm count, imm chunk, imm flag_ptr}:
+-        var pointer = _PREP_U8P(unsafe_from_address=codes.addr)
+-        var values = _PREP_U8P(unsafe_from_address=categories.addr)
+-        for i in range(t * chunk, min(t * chunk + chunk, count)):  # admitted input: this task's categorical codes
+-            var bits = UInt64(0)
+-            for byte in range(codes.itemsize):  # small-loop(bytes of one signed index): at most 8
+-                var offset = byte if codes_native else codes.itemsize - 1 - byte
+-                bits |= UInt64(pointer[i * codes.s0 + offset]) << UInt64(8 * byte)
+-            var index = Int(bitcast[DType.int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
+-            if index == -1:
+-                flag_ptr.unsafe_store(3 * t, UInt8(1))
+-                continue
+-            if index < 0 or index >= category_count:
+-                flag_ptr.unsafe_store(3 * t + 2, UInt8(1))
+-                return
+-            if dtype == 11 or dtype == 12:
+-                var raw = UInt64(0)
+-                for byte in range(categories.itemsize):  # small-loop(bytes of one float category word): 4 or 8
+-                    var offset = byte if category_native else categories.itemsize - 1 - byte
+-                    raw |= UInt64(values[index * categories.s0 + offset]) << UInt64(8 * byte)
+-                var mask = UInt64(0x7F800000) if dtype == 11 else UInt64(0x7FF0000000000000)
+-                if raw & mask == mask:
+-                    flag_ptr.unsafe_store(3 * t + 1, UInt8(1))
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
++    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=codes.addr)
++    var values = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=categories.addr)
+     var missing = False
+     var finite = True
+-    var outside = False
+-    for t in range(tasks):  # driver-loop: over the code tasks' flags (at most one per core)
+-        missing = missing or flags[3 * t] != UInt8(0)
+-        finite = finite and flags[3 * t + 1] == UInt8(0)
+-        outside = outside or flags[3 * t + 2] != UInt8(0)
+-    _ = flags^
+-    if outside:
+-        raise Error("TypeError: pandas categorical code exceeds its category storage")
++    for i in range(count):  # native input marshaling: categorical label codes, no Python take/reshape
++        var bits = UInt64(0)
++        for byte in range(codes.itemsize):  # native input marshaling: admitted signed index widths
++            var offset = byte if codes_native else codes.itemsize - 1 - byte
++            bits |= UInt64(pointer[i * codes.s0 + offset]) << UInt64(8 * byte)
++        var index = Int(bitcast[DType.int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
++        if index == -1:
++            missing = True
++            continue
++        if index < 0 or index >= category_count:
++            raise Error("TypeError: pandas categorical code exceeds its category storage")
++        if dtype == 11 or dtype == 12:
++            var raw = UInt64(0)
++            for byte in range(categories.itemsize):  # native input marshaling: original float category words
++                var offset = byte if category_native else categories.itemsize - 1 - byte
++                raw |= UInt64(values[index * categories.s0 + offset]) << UInt64(8 * byte)
++            var mask = UInt64(0x7F800000) if dtype == 11 else UInt64(0x7FF0000000000000)
++            finite = finite and (raw & mask != mask)
+     return (missing, finite)
+ 
+ 
+@@ -269,59 +123,23 @@ def _prep_store_word(address: Int, row: Int, width: Int, word: UInt64):
+ 
+ def prep_mask_export(source: CastIn, mask: CastIn, rows: Int, native: Bool,
+                      output: CastIn, number: Int):
+-    """The nullable column exported row by row (its missing word where the
+-    mask is set), before public validation."""
+-    # parallel: export rows over contiguous tasks across host cores (audit R11, was serial)
+-    if rows <= 0:
+-        return
+-    var tasks = host_predict_task_count_work(rows, rows * max(source.itemsize, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-
+-    def _span(t: Int) {imm source, imm mask, imm rows, imm native, imm output, imm number, imm chunk}:
+-        var flags = _PREP_U8P(unsafe_from_address=mask.addr)
+-        for row in range(t * chunk, min(t * chunk + chunk, rows)):  # admitted input: this task's exported rows
+-            var word = _prep_missing_word(output.itemsize)
+-            if flags[row * mask.s0] == 0:
+-                word = _prep_export_word(pd_raw_at(source.addr, row * source.s0, source.itemsize, native), source, number)
+-            _prep_store_word(output.addr, row, output.itemsize, word)
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
++    var flags = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=mask.addr)
++    for row in range(rows):  # native input marshaling: nullable export before public validation
++        var word = _prep_missing_word(output.itemsize)
++        if flags[row * mask.s0] == 0:
++            word = _prep_export_word(pd_raw_at(source.addr, row * source.s0, source.itemsize, native), source, number)
++        _prep_store_word(output.addr, row, output.itemsize, word)
+ 
+ 
+ def prep_category_export(codes: CastIn, rows: Int, codes_native: Bool,
+                          labels: CastIn, label_count: Int, labels_native: Bool,
+                          output: CastIn, number: Int) raises:
+-    """The categorical column exported row by row (a native take of its
+-    labels, the missing word for code -1); refuses a code outside its label
+-    storage."""
+-    # parallel: export rows over contiguous tasks across host cores (audit R11, was serial)
+-    if rows <= 0:
+-        return
+-    var tasks = host_predict_task_count_work(rows, rows * max(codes.itemsize, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+-    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+-
+-    def _span(t: Int) {imm codes, imm rows, imm codes_native, imm labels, imm label_count, imm labels_native, imm output, imm number, imm chunk, imm flag_ptr}:
+-        for row in range(t * chunk, min(t * chunk + chunk, rows)):  # admitted input: this task's exported rows
+-            var raw = pd_raw_at(codes.addr, row * codes.s0, codes.itemsize, codes_native)
+-            var index = Int(bitcast[DType.int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
+-            if index < -1 or index >= label_count:
+-                flag_ptr.unsafe_store(t, UInt8(1))
+-                return
+-            var word = _prep_missing_word(output.itemsize)
+-            if index >= 0:
+-                word = _prep_export_word(pd_raw_at(labels.addr, index * labels.s0, labels.itemsize, labels_native), labels, number)
+-            _prep_store_word(output.addr, row, output.itemsize, word)
+-
+-    if tasks <= 1:
+-        _span(0)
+-    else:
+-        host_parallelize(_span, tasks)
+-    var outside = _prep_any_flag(flags, tasks)
+-    _ = flags^
+-    if outside:
+-        raise Error("TypeError: pandas categorical code exceeds its category storage")
++    for row in range(rows):  # native input marshaling: native categorical take, preserving export width
++        var raw = pd_raw_at(codes.addr, row * codes.s0, codes.itemsize, codes_native)
++        var index = Int(bitcast[DType.int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
++        if index < -1 or index >= label_count:
++            raise Error("TypeError: pandas categorical code exceeds its category storage")
++        var word = _prep_missing_word(output.itemsize)
++        if index >= 0:
++            word = _prep_export_word(pd_raw_at(labels.addr, index * labels.s0, labels.itemsize, labels_native), labels, number)
++        _prep_store_word(output.addr, row, output.itemsize, word)
+diff --git a/gemm/host_transport.mojo b/gemm/host_transport.mojo
+index 2e59dd2c71..f35973793f 100644
+--- a/gemm/host_transport.mojo
++++ b/gemm/host_transport.mojo
+@@ -55,21 +55,15 @@ struct _GemmPool(Defaultable, Movable):
+     var busy: Int64
+     var f32: List[Optional[DeviceBuffer[DType.float32]]]
+     var u16: List[Optional[DeviceBuffer[DType.uint16]]]
+-    var i8: List[Optional[DeviceBuffer[DType.int8]]]
+-    var i32: List[Optional[DeviceBuffer[DType.int32]]]
+     var stage: Optional[HostBuffer[DType.float32]]
+ 
+     def __init__(out self):
+         self.busy = 0
+         self.f32 = List[Optional[DeviceBuffer[DType.float32]]]()
+         self.u16 = List[Optional[DeviceBuffer[DType.uint16]]]()
+-        self.i8 = List[Optional[DeviceBuffer[DType.int8]]]()
+-        self.i32 = List[Optional[DeviceBuffer[DType.int32]]]()
+         for _ in range(N_ROLES):
+             self.f32.append(Optional[DeviceBuffer[DType.float32]]())
+             self.u16.append(Optional[DeviceBuffer[DType.uint16]]())
+-            self.i8.append(Optional[DeviceBuffer[DType.int8]]())
+-            self.i32.append(Optional[DeviceBuffer[DType.int32]]())
+         self.stage = Optional[HostBuffer[DType.float32]]()
+ 
+ 
+@@ -146,29 +140,6 @@ struct GemmHostLease(Movable):
+             p[].u16[role] = ctx.enqueue_create_buffer[DType.uint16](want)
+         return p[].u16[role].value().create_sub_buffer[DType.uint16](0, want)
+ 
+-    def i8(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
+-        """int8 codes (gemm_int8's operands; lane a3, 2026-11-08: they were
+-        fresh allocations per call while the f32/bf16 surfaces pooled theirs)."""
+-        var want = n if n > 0 else 1
+-        if not self.held:
+-            return ctx.enqueue_create_buffer[DType.int8](want)
+-        var p = GEMM_POOL.get_or_create_ptr()
+-        if not p[].i8[role] or len(p[].i8[role].value()) < want:
+-            ctx.synchronize()
+-            p[].i8[role] = ctx.enqueue_create_buffer[DType.int8](want)
+-        return p[].i8[role].value().create_sub_buffer[DType.int8](0, want)
+-
+-    def i32(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+-        """int32 words (gemm_int8's per-row exponents)."""
+-        var want = n if n > 0 else 1
+-        if not self.held:
+-            return ctx.enqueue_create_buffer[DType.int32](want)
+-        var p = GEMM_POOL.get_or_create_ptr()
+-        if not p[].i32[role] or len(p[].i32[role].value()) < want:
+-            ctx.synchronize()
+-            p[].i32[role] = ctx.enqueue_create_buffer[DType.int32](want)
+-        return p[].i32[role].value().create_sub_buffer[DType.int32](0, want)
+-
+     def stage(self, ctx: DeviceContext) raises -> Int:
+         """The address of two halves of GEMM_STAGE_FLOATS pinned floats, or 0
+         when the pool is not held."""
+diff --git a/gemm/linalg_native.mojo b/gemm/linalg_native.mojo
+index fc4462c9b1..7c89d6f62f 100644
+--- a/gemm/linalg_native.mojo
++++ b/gemm/linalg_native.mojo
+@@ -28,7 +28,6 @@ from gemm.host_transport import (
+     ROLE_A,
+     ROLE_B,
+     ROLE_C,
+-    ROLE_WS,
+     ROLE_X,
+     gemm_down_f32,
+     gemm_up_f32,
+@@ -277,27 +276,18 @@ def gemm_int8_native(
+     var tk = Int(perf_counter_ns())
+     var ctx = process_ctx[_DEVCTX_SLOT]()
+     _lowbit_tick(ctx, ton, tk, "context")
+-    # Pooled buffers (gemm/host_transport.mojo GemmHostLease, as the f32 and
+-    # bf16 surfaces; MOJOLEARN_GEMM_POOL=0 gives fresh ones) and the staged
+-    # download, whose own wait retires the kernel: the bare synchronize()
+-    # between the kernel and the download read nothing and is gone (audit
+-    # row 26, lane a3). Copies and waits only; the same kernel.
+-    var lease = GemmHostLease()
+-    var dqa = lease.i8(ctx, ROLE_A, m * k)
+-    var dqb = lease.i8(ctx, ROLE_B, n * k)
+-    var dea = lease.i32(ctx, ROLE_A, m)
+-    var deb = lease.i32(ctx, ROLE_B, n)
+-    ctx.enqueue_copy(dst_buf=dqa, src_ptr=i8_ptr(qa_address))
+-    ctx.enqueue_copy(dst_buf=dqb, src_ptr=i8_ptr(qb_address))
+-    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+-    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+-    var dc = lease.f32(ctx, ROLE_C, m * n)
++    var dqa = _dev_i8(ctx, qa_address, m * k)
++    var dea = _dev_i32(ctx, ea_address, m)
++    var dqb = _dev_i8(ctx, qb_address, n * k)
++    var deb = _dev_i32(ctx, eb_address, n)
++    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+     _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
+     identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
++    ctx.synchronize()
+     _lowbit_tick(ctx, ton, tk, "kernel")
+-    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
++    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
++    ctx.synchronize()
+     _lowbit_tick(ctx, ton, tk, "download")
+-    lease.release()
+     _ = dqa^
+     _ = dea^
+     _ = dqb^
+@@ -369,8 +359,7 @@ def dequantize_int8_native(
+     var de = _dev_i32(ctx, e_address, rows)
+     var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
+     dequantize_rows_int8_device(ctx, dy, dq, de, rows, cols)
+-    # The copy is ordered after the kernel on the same queue; the wait below
+-    # retires both (a bare synchronize() between them read nothing; lane a3).
++    ctx.synchronize()
+     ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
+     ctx.synchronize()
+     _ = dq^
+@@ -404,25 +393,17 @@ def gemm_int15_native(addrs: List[Int], params: List[Int]) raises -> Int:
+     if k > INT15_MAX_K:
+         raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
+     var ctx = process_ctx[_DEVCTX_SLOT]()
+-    # Pooled buffers and the staged download, as gemm_int8 (lane a3); the
+-    # download's wait retires the kernel, so no bare synchronize() before it.
+-    var lease = GemmHostLease()
+-    var dah = lease.i8(ctx, ROLE_A, m * k)
+-    var dal = lease.i8(ctx, ROLE_X, m * k)
+-    var dbh = lease.i8(ctx, ROLE_B, n * k)
+-    var dbl = lease.i8(ctx, ROLE_WS, n * k)
+-    var dea = lease.i32(ctx, ROLE_A, m)
+-    var deb = lease.i32(ctx, ROLE_B, n)
+-    ctx.enqueue_copy(dst_buf=dah, src_ptr=i8_ptr(ah_address))
+-    ctx.enqueue_copy(dst_buf=dal, src_ptr=i8_ptr(al_address))
+-    ctx.enqueue_copy(dst_buf=dbh, src_ptr=i8_ptr(bh_address))
+-    ctx.enqueue_copy(dst_buf=dbl, src_ptr=i8_ptr(bl_address))
+-    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+-    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+-    var dc = lease.f32(ctx, ROLE_C, m * n)
++    var dah = _dev_i8(ctx, ah_address, m * k)
++    var dal = _dev_i8(ctx, al_address, m * k)
++    var dea = _dev_i32(ctx, ea_address, m)
++    var dbh = _dev_i8(ctx, bh_address, n * k)
++    var dbl = _dev_i8(ctx, bl_address, n * k)
++    var deb = _dev_i32(ctx, eb_address, n)
++    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+     identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+-    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+-    lease.release()
++    ctx.synchronize()
++    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
++    ctx.synchronize()
+     _ = dah^
+     _ = dal^
+     _ = dea^
+diff --git a/providers/python/metrics_vector_input_pyapi.mojo b/providers/python/metrics_vector_input_pyapi.mojo
+index b675652260..d3ea6409e3 100644
+--- a/providers/python/metrics_vector_input_pyapi.mojo
++++ b/providers/python/metrics_vector_input_pyapi.mojo
+@@ -7,7 +7,7 @@ from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_new, l
+ from bindings.optimizer_public_door import base_format
+ from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
+ from core.host_finite_scan import host_all_finite_f32
+-from core.admitted_ids import admitted_ids_i32
++from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+ 
+ 
+ def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bool:
+@@ -45,14 +45,17 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject)
+     if (not signed and not unsigned) or (view.itemsize != 1 and view.itemsize != 2 and view.itemsize != 4 and view.itemsize != 8):
+         raise Error("mojolearn metrics: " + name + " must be an integer label array, got "
+                     + (view.dtype if view.is_array else view.fmt) + "; the ported kernels take int32 labels")
+-    # admit_ids: one parallel read narrowed to int32 in the same pass (it was
+-    # a serial int64 read into a zero-filled store, then a serial narrowing).
++    var words = lin_new([count], "<i8", context)
++    if not mcls_read_i64(view.addr, view.strides[0], count, view.itemsize, signed,
++                         FAMILY_I64P(unsafe_from_address=words.addr)):
++        _metric_i32_range(name)
+     var output = lin_new([count], "<i4", context)
+-    if not admitted_ids_i32(view.addr, view.strides[0], 0, count, 1, view.itemsize, signed, False,
+-                            FAMILY_I32P(unsafe_from_address=output.addr)):
++    if not mcls_narrow_i32(FAMILY_I64P(unsafe_from_address=words.addr), count,
++                           FAMILY_I32P(unsafe_from_address=output.addr)):
+         _metric_i32_range(name)
+     var result = output.keep
+     _ = input^
++    _ = words^
+     _ = output^
+     return result
+ 
+diff --git a/providers/python/pca_input_pyapi.mojo b/providers/python/pca_input_pyapi.mojo
+index a6e4293597..f2b36c4c83 100644
+--- a/providers/python/pca_input_pyapi.mojo
++++ b/providers/python/pca_input_pyapi.mojo
+@@ -1,16 +1,94 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# PCA fitted-state admission: one buffer metadata snapshot per fitted array,
+-# no cast or contiguity repair. X is admitted by decomp_admit.
++# PCA query admission owns the original error order and one buffer metadata
++# snapshot. Unsupported descriptors are never passed to numerical routines.
+ from std.python import Python, PythonObject
+-from bindings.py_balanced import py_contains
+-from bindings.classical_validate import classical_view
++from bindings.py_balanced import py_call, py_contains
++from bindings.classical_validate import classical_view, RESHAPE_HINT
++from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
++from bindings.native_loaded_module import native_loaded_module
++from bindings.native_buffer_owner import native_buffer_view
++from bindings.sequential_arrays import sequential_array, sequential_address
+ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
++from core.cast_in import cast_in_kind
++from core.admitted_input import admitted_cast_f32
++from core.host_finite_scan import host_all_finite_f32
+ from core.pca_exact_impl import pca_check_state
+ 
+ 
+-# TOMBSTONE: pca_input_snapshot (PCA's own X admission: a zero-filled cast destination and its own cast/scan call; its refusals were admit_x's wording with est PCA) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. PCA reads
+-# bindings/decomp_inputs.mojo decomp_admit (admit_x_unrecorded).
++def _shown(captured: ArrayMetadata) raises -> String:
++    # The shape spelling is built only on a refusal, never on success.
++    return String(py_call(native_loaded_module("builtins").repr, captured.python_shape()))
++
++
++def pca_input_snapshot(source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
++    var format = host_sparse_format(source)
++    var sparse = format.byte_length() > 0
++    var value = host_sparse_dense(source, format, context) if sparse else source
++    var view = classical_view(value, context, "X")
++    var shape = array_shape_once(view, context)
++    # Even unsupported native dtype/rank metadata is captured once. This
++    # opt-in allows PCA's existing complex/rank/type refusals to run in their
++    # established order before a CastIn is admitted for execution.
++    var captured = array_metadata_once(view, shape^, "X", context,
++                                      allow_non_native=True, allow_unsupported=True)
++    var nd = len(captured.shape)
++    var code = captured.dtype_number
++    var numeric = (0 <= code and code <= 13) or code == 23
++    if sparse:
++        # The former sparse branch returned classical_host_f32 directly,
++        # retaining its simpler rank/empty/finite messages.
++        if nd != 2:
++            raise Error("X must be 2-D")
++        if captured.shape[0] < 1 or captured.shape[1] < 1:
++            raise Error("X is empty")
++    else:
++        if code == 14 or code == 15 or code == 16:
++            raise Error("Complex data not supported: PCA got a complex X.")
++        if numeric:
++            if nd < 2:
++                raise Error("Expected 2D array, got " + (String("scalar") if nd == 0 else String("1D"))
++                            + " array instead (shape=" + _shown(captured) + "). " + String(RESHAPE_HINT))
++            if nd == 2 and captured.shape[0] == 0:
++                raise Error("Found array with 0 sample(s) (shape=" + _shown(captured) + ") while a minimum of 1 is required by PCA.")
++            if nd == 2 and captured.shape[1] == 0:
++                raise Error("Found array with 0 feature(s) (shape=" + _shown(captured) + ") while a minimum of 1 is required by PCA.")
++        if nd != 2:
++            raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _shown(captured))
++        if not numeric:
++            # Only the failing path asks the admitted native exporter for
++            # its PEP3118 spelling; it never executes or converts its values.
++            var buffer = native_buffer_view(view)
++            var spelling = String(py_call(native_loaded_module("builtins").repr, buffer.format))
++            raise Error("TypeError: mojolearn: X has buffer format " + spelling + ", which is not a numeric array")
++    if captured.shape[0] < 1 or captured.shape[1] < 1:
++        # Preserve classical_host_f32's final guard for a mutable Array's
++        # invalid negative dimensions as well as the sparse empty case.
++        raise Error("X is empty")
++    if not captured.native_byte_order:
++        raise Error("TypeError: X must be in native byte order")
++    if not captured.castable:
++        # Recreate the original CastIn refusal from captured scalar metadata,
++        # never rereading dtype or executing the placeholder descriptor.
++        _ = cast_in_kind(code, captured.source.itemsize, "X")
++        raise Error("PCA requires an executable native matrix descriptor")
++    var owners = Python.tuple(source, value, captured.owner)
++    # One pass casts and scans a converted X (N353); a C float32 X is
++    # scanned once.
++    var finite = True
++    if not captured.f32_c():
++        var result = sequential_array(captured.python_shape(), context["float32"], context)
++        var address = Int(py=sequential_address(result))
++        var input = captured.source
++        finite = admitted_cast_f32(input.addr, input.s0, input.s1, input.rows, input.cols,
++                                         input.itemsize, input.kind,
++                                         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address))
++        captured.replace_f32(result, address)
++    else:
++        finite = host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=captured.source.addr), captured.count)
++    captured.owner = Python.tuple(owners, captured.owner)
++    if not finite:
++        raise Error("Input X contains NaN or infinity" + (String("") if sparse else String(" (PCA).")))
++    return captured^
+ 
+ 
+ def pca_state_snapshot(fields: PythonObject, name: String, expected: List[Int],
+diff --git a/providers/python/x_decomp_rsvd_owner_pyapi.mojo b/providers/python/x_decomp_rsvd_owner_pyapi.mojo
+deleted file mode 100644
+index 836236ea4e..0000000000
+--- a/providers/python/x_decomp_rsvd_owner_pyapi.mojo
++++ /dev/null
+@@ -1,54 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The door of the public randomized_svd (x_decomp/randomized_svd_owner.mojo):
+-it unpacks addresses and integers, releases the GIL and calls one typed
+-driver; no data work happens here. bindings/linalg_decomp_native.mojo is
+-its only caller."""
+-from std.python import Python, PythonObject
+-from std.python._cpython import GILReleased
+-
+-from x_decomp.cells import F32Ptr
+-from x_decomp.exec_trait import Exec
+-from x_decomp.pca_randomized import RDev
+-from x_decomp.randomized_svd_owner import randomized_svd_run
+-
+-
+-def _ptr(address: PythonObject) raises -> F32Ptr:
+-    var a = Int(py=address)
+-    if a == 0:
+-        raise Error("x_decomp: null float32 buffer address")
+-    return F32Ptr(unsafe_from_address=a)
+-
+-
+-def _dim(p: PythonObject, i: Int) raises -> Int:
+-    var v = Int(py=p[i])
+-    if v < 0 or v > 2147483647:
+-        raise Error("x_decomp: dimension out of range")
+-    return v
+-
+-
+-def randomized_svd_py[E: Exec, D: RDev, RES: Bool](
+-    x: PythonObject, u: PythonObject, s: PythonObject, vt: PythonObject, p: PythonObject,
+-) raises -> PythonObject:
+-    """randomized_svd's (U, S, Vt). p = [rows, cols, n_components,
+-    n_oversamples, n_iter, auto (1: n_iter='auto'), transpose (1: the
+-    sketch runs on M^T), flip_sign, the Philox seed mod 2^32]."""
+-    if len(p) != 9:
+-        raise Error("x_decomp_randomized_svd: params must contain rows, cols, components, oversamples, iterations, auto, transpose, flip_sign, seed")
+-    var rows = _dim(p, 0)
+-    var cols = _dim(p, 1)
+-    var nc = _dim(p, 2)
+-    var oversamples = Int(py=p[3])
+-    var iterations = Int(py=p[4])
+-    var auto = Int(py=p[5]) != 0
+-    var transpose = Int(py=p[6]) != 0
+-    var flip = Int(py=p[7]) != 0
+-    var seed = Int(py=p[8])
+-    var px = _ptr(x)
+-    var pu = _ptr(u)
+-    var ps = _ptr(s)
+-    var pv = _ptr(vt)
+-    with GILReleased(Python()):
+-        randomized_svd_run[E, D, RES](px, pu, ps, pv, rows, cols, nc, oversamples, iterations, auto, transpose,
+-                                      flip, seed)
+-    return PythonObject(nc)
+diff --git a/providers/python/x_decomp_s_linalg_fast_pyapi.mojo b/providers/python/x_decomp_s_linalg_fast_pyapi.mojo
+index a2477a3a13..ab0acd0b34 100644
+--- a/providers/python/x_decomp_s_linalg_fast_pyapi.mojo
++++ b/providers/python/x_decomp_s_linalg_fast_pyapi.mojo
+@@ -14,13 +14,14 @@ from x_decomp.s_linalg_fast import (
+     dev_lu_factor_run,
+     dev_lu_solve_run,
+     dev_orth_ws_run,
++    dev_upload_scan_run,
+     s_flags_run,
+ )
+ 
+ 
+ def s_flags_py() raises -> PythonObject:
+-    """Bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8
+-    IDN_LU_RESIDENT_PAIR (0 when none; bit 1 was RSVD_FAST_DEVSCAN)."""
++    """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
++    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
+     return PythonObject(s_flags_run())
+ 
+ 
+@@ -70,8 +71,17 @@ def dev_lu_solve_py(
+     return PythonObject(cells)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its door dev_upload_scan_py, x_decomp_dev_upload_scan) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++def dev_upload_scan_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
++    """`dev_upload_py` (host floats into the device matrix `id`), then the
++    first flat index of a NaN or infinity among those n device floats, or -1
++    (one device read; waits)."""
++    var cnt = Int(py=n)
++    var src = F32Ptr(unsafe_from_address=Int(py=addr))
++    var i = _id(id)
++    var r = -1
++    with GILReleased(Python()):
++        r = dev_upload_scan_run(i, src, cnt)
++    return PythonObject(r)
+ 
+ 
+ def dev_orth_ws_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+diff --git a/providers/python/x_decomp_w4_fast_pyapi.mojo b/providers/python/x_decomp_w4_fast_pyapi.mojo
+index f82f6c0685..be7d1214d0 100644
+--- a/providers/python/x_decomp_w4_fast_pyapi.mojo
++++ b/providers/python/x_decomp_w4_fast_pyapi.mojo
+@@ -1,9 +1,22 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """The Python shell of the w4 candidates (x_decomp/w4_fast.mojo): the doors
+-the GPU binding registered. No door remains; the records below stay."""
+-# TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN / MOJOLEARN_IDN_RSVD_DIRECT_IN (their flag door w4_flags_py, x_decomp_w4_flags) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++the GPU binding registers. Each door reads compile-time flags or unpacks ids
++and integers, releases the GIL and calls one typed entry in
++x_decomp/w4_fast.mojo; no data work happens here."""
++from std.python import Python, PythonObject
++
++from x_decomp.w4_fast import RSVD_FAST_DIRECT_IN, RSVD_IDN_DIRECT_IN
++
++
++def w4_flags_py() raises -> PythonObject:
++    """Which w4 candidates this build compiled in (bit 2 RSVD_FAST_DIRECT_IN or
++    RSVD_IDN_DIRECT_IN; bit 1, LLE_FAST_DEV_LU, was deleted 2026-11-08; bit 4,
++    LLE_FAST_NULL_CANON, was deleted 2026-10-09)."""
++    var f = 0
++    comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
++        f |= 2
++    return PythonObject(f)
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+diff --git a/python/mojolearn/_expansion_decomp.py b/python/mojolearn/_expansion_decomp.py
+index 97de6d0aee..24098f3783 100644
+--- a/python/mojolearn/_expansion_decomp.py
++++ b/python/mojolearn/_expansion_decomp.py
+@@ -525,15 +525,25 @@ class _Kit:
+             self._res_ok = r
+         return r
+ 
+-    # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN / MOJOLEARN_IDN_RSVD_DIRECT_IN (the w4_flags reader of x_decomp_w4_flags, no caller) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++    def w4_flags(self):
++        """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
++        (`x_decomp_w4_flags`: bit 2 RSVD_FAST_DIRECT_IN on FAST + Apple or
++        RSVD_IDN_DIRECT_IN on IDENTICAL, lane fg-pca R1; bit 1, LLE_FAST_DEV_LU,
++        was deleted 2026-11-08; 0 on a binding without the entry)."""
++        f = self.__dict__.get("_w4_flags")
++        if f is None:
++            try:
++                f = int(getattr(self._raw(), "x_decomp_w4_flags")())
++            except Exception:
++                f = 0
++            self._w4_flags = f
++        return f
+ 
+     def s_flags(self):
+         """lane/apple-fast-s-linalg: the binding's compiled speed candidates
+-        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 2
+-        DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR;
+-        bit 1, RSVD_FAST_DEVSCAN, was deleted 2026-11-08; 0 on a binding
+-        without the entry)."""
++        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 1
++        RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS; 0 on a binding without
++        the entry)."""
+         f = self.__dict__.get("_s_flags")
+         if f is None:
+             try:
+diff --git a/python/mojolearn/_native_decomp_kit_bridge.py b/python/mojolearn/_native_decomp_kit_bridge.py
+index 8df5486e3d..d263eba1e7 100644
+--- a/python/mojolearn/_native_decomp_kit_bridge.py
++++ b/python/mojolearn/_native_decomp_kit_bridge.py
+@@ -14,8 +14,8 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
+              "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
+              "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
+              "als_fit", "topn_desc", "gather",
+-             "s_flags", "qfix_flags", "idn_flags", "orth", "dev_orth",
+-             "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "randomized_svd", "dev_lu_factor", "dev_lu_solve",
++             "w4_flags", "s_flags", "qfix_flags", "idn_flags", "dev_upload_scan", "orth", "dev_orth",
++             "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "dev_lu_factor", "dev_lu_solve",
+              "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr")
+ 
+ 
+diff --git a/x_decomp/pca_randomized.mojo b/x_decomp/pca_randomized.mojo
+index 54e777fc09..dc90c3beac 100644
+--- a/x_decomp/pca_randomized.mojo
++++ b/x_decomp/pca_randomized.mojo
+@@ -687,18 +687,7 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
+ ) raises -> Tuple[Int, Int, Int]:
+     """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
+     'auto', flip_sign=False, seed)`: (U, S, Vt)."""
+-    return pca_randomized_core(kit, original, components, oversamples, iterations, seed,
+-                               kit.r(original) < kit.c(original))
+-
+-
+-def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
+-    mut kit: RKit[E, D, RES], original: Int, components: Int, oversamples: Int, iterations: Int, seed: Int,
+-    transposed: Bool,
+-) raises -> Tuple[Int, Int, Int]:
+-    """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
+-    transpose, flip_sign=False, seed)` with the orientation given: the
+-    sketch runs on A^T when `transposed` (the public randomized_svd's
+-    transpose=True, or 'auto' on a wide A). (U, S, Vt) of A either way."""
++    var transposed = kit.r(original) < kit.c(original)
+     var a = kit.transpose(original) if transposed else original
+     var rows = kit.r(a)
+     var cols = kit.c(a)
+diff --git a/x_decomp/randomized_svd_owner.mojo b/x_decomp/randomized_svd_owner.mojo
+deleted file mode 100644
+index 64e3768bd8..0000000000
+--- a/x_decomp/randomized_svd_owner.mojo
++++ /dev/null
+@@ -1,67 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The public `randomized_svd` as ONE native operation (lane
+-a3-admit-decomp-prep-metrics, 2026-11-08).
+-
+-It was sequenced by bindings/linalg_decomp_native.mojo through the binding
+-decomp kit (`DecompKit`): one Python-level call into an x_decomp entry per
+-step (the sketch draw, every product, orthonormalization, fold, move and
+-the small SVD), about 40 calls for 4 power iterations. The same steps now
+-run on the randomized PCA kit (`RKit`, x_decomp/pca_randomized.mojo) that
+-PCA(svd_solver='randomized') and TruncatedSVD(algorithm='randomized')
+-already run on, through `pca_randomized_core` (`_rsvd_core`: the Philox
+-test matrix of stream 30, the power iterations, the orth rank guard on the
+-live columns, the small thin SVD and its paddings), then scikit-learn's
+-`svd_flip(u_based_decision=True)` on the returned factors.
+-
+-Bits: one kit for every caller. The sign flip runs in the selected mode's
+-binding (it ran in the process-default mode's kit before; a +-1 multiply
+-and an argmax, so only the binding that runs them changed), and every step
+-follows RKit's residency (on a GPU binding every non-empty step is
+-resident). Same bits on NVIDIA, AMD and Apple within this version; the host
+-column runs the same steps on the executor."""
+-from x_decomp.cells import F32Ptr
+-from x_decomp.exec_trait import Exec
+-from x_decomp.pca_randomized import RDev, RKit, pca_randomized_core
+-
+-comptime _OP_MUL = 2
+-
+-
+-def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
+-    x: F32Ptr, u_out: F32Ptr, s_out: F32Ptr, vt_out: F32Ptr, rows: Int, cols: Int, components: Int,
+-    oversamples: Int, iterations: Int, auto_iterations: Bool, transpose: Bool, flip_sign: Bool, seed: Int,
+-) raises:
+-    """`randomized_svd(M, components, ...)` of the rows x cols float32 M at
+-    `x` (read in place, never written): U (rows x components), S
+-    (components) and Vt (components x cols) written. `transpose`: the sketch
+-    runs on M^T (the caller resolved 'auto'). `auto_iterations`: n_iter='auto'
+-    (scikit-learn's size-ratio rule)."""
+-    if not (1 <= components and components <= min(rows, cols)):
+-        raise Error("n_components must be in [1, min(n_samples, n_features)]")
+-    var power = iterations
+-    if auto_iterations:
+-        # n_iter='auto' by the problem's size ratio (not a dimension threshold)
+-        power = 7 if Float64(components) < 0.1 * Float64(min(rows, cols)) else 4
+-    var kit = RKit[E, D, RES]()
+-    try:
+-        var original = kit.add(Int(x), -1, rows, cols)
+-        var decomposed = pca_randomized_core(kit, original, components, oversamples, power, seed, transpose)
+-        var u = decomposed[0]
+-        var s = decomposed[1]
+-        var vt = decomposed[2]
+-        if flip_sign:
+-            # svd_flip(u_based_decision=True): each column of U signed so its
+-            # largest-|.| entry is positive; Vt's rows follow. A column's sign
+-            # reads that column only, so flipping the kept factors equals
+-            # flipping before the slice.
+-            var signs = kit.absmax_signs(u, True)
+-            u = kit.ew(_OP_MUL, u, signs)
+-            var signst = kit.transpose(signs)
+-            vt = kit.ew(_OP_MUL, vt, signst)
+-        kit.copy_out(u, u_out, rows * components)
+-        kit.copy_out(s, s_out, components)
+-        kit.copy_out(vt, vt_out, components * cols)
+-        kit.close()
+-    except error:
+-        kit.close()
+-        raise error^
+diff --git a/x_decomp/s_linalg_fast.mojo b/x_decomp/s_linalg_fast.mojo
+index 20e690f7d5..a8e5b067b2 100644
+--- a/x_decomp/s_linalg_fast.mojo
++++ b/x_decomp/s_linalg_fast.mojo
+@@ -5,7 +5,7 @@ the kit's device routes. Python reads which are compiled through
+ `x_decomp_s_flags()`. All three are the FAST + Apple default since
+ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
+ 
+-  bit 1  (RSVD_FAST_DEVSCAN, deleted 2026-11-08; the bit stays 0)
++  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
+   bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
+   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
+   bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`)
+@@ -28,12 +28,22 @@ from x_decomp.device import (
+ from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
+ from x_decomp.resident import X_DECOMP_POOL, _ptr
+ 
+-# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (KEPT FAST + Apple default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. It moved randomized_svd's
+-# finiteness refusal from the serial host scan to the device copy (rab15: istella
+-# 490.1 -> 435.1 ms with ORTH_WS). randomized_svd is now one driver
+-# (x_decomp/randomized_svd_owner.mojo) whose input admission runs the parallel
+-# host scan of the one admission path, so the serial scan it beat is gone.
++#: What: `randomized_svd`'s direct input (RSVD_FAST_DIRECT_IN, the FAST +
++#: Apple default) refuses NaN/inf with the base binding's `all_finite_f32`, a
++#: single-thread host loop with an early-exit branch over every value
++#: (bindings/_mojolearn.mojo `all_finite_f32_binding`): 220 million floats
++#: (880 MB) at the board's istella 1M x 220, on the host, inside the fit.
++#: This uploads M into its pooled device matrix first and scans THAT buffer
++#: on the device (`core/device_scan.mojo device_first_nonfinite`, one read,
++#: one int per block back), raising the same ValueError (Python) when a
++#: value is not finite. Same words reach the device; no arithmetic changes.
++#: Expect: randomized-svd istella 501 -> ~430-460 ms (the host scan is
++#: ~1 cycle a float), taxi a few ms.
++#: RSVD_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
++#: 2026-10-05, rab15-rsvdbundle, with DECOMP_FAST_ORTH_WS): randomized-svd
++#: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
++#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.
++comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()
+ 
+ #: What: `Kit.orth` on a device matrix (`x_decomp_dev_orth`, resident.mojo
+ #: `dev_orth_py` -> device.mojo `orth_on_device_diag`) copies A into the
+@@ -109,10 +119,11 @@ comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
+ 
+ 
+ def s_flags_run() -> Int:
+-    """Bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8
+-    IDN_LU_RESIDENT_PAIR (0 when none; bit 1, RSVD_FAST_DEVSCAN, was deleted
+-    2026-11-08)."""
++    """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
++    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
+     var f = 0
++    comptime if RSVD_FAST_DEVSCAN:
++        f |= 1
+     comptime if DECOMP_FAST_ORTH_WS:
+         f |= 2
+     comptime if LU_FAST_RESIDENT:
+@@ -212,8 +223,19 @@ def dev_lu_solve_run(
+     return cells
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its upload-and-scan entry dev_upload_scan_run) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
++def dev_upload_scan_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
++    """`dev_upload_scan_py`'s typed body: cnt host floats into pool matrix
++    i, then the first non-finite index or -1."""
++    var p = X_DECOMP_POOL.get_or_create_ptr()
++    _ = _ptr(i, cnt)
++    var r = -1
++    if cnt <= 0:
++        return r
++    var ctx = xd_ctx()
++    _up_into(ctx, p[].bufs[i], src, cnt)
++    r = device_first_nonfinite(ctx, p[].bufs[i], cnt)
++    ctx.synchronize()
++    return r
+ 
+ 
+ def orth_ws_on_device(
+diff --git a/x_decomp/w4_fast.mojo b/x_decomp/w4_fast.mojo
+index 1194df5b12..1b61cbbd78 100644
+--- a/x_decomp/w4_fast.mojo
++++ b/x_decomp/w4_fast.mojo
+@@ -1,15 +1,27 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates. No live
+-code remains (every candidate was deleted; the records below stay).
++"""lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates.
+ 
+ (LLE_FAST_DEV_LU, the device LU of LocallyLinearEmbedding's shift-invert factor, was
+ deleted 2026-11-08: HOLD-quality; see the TOMBSTONE below.)
+ 
+-(RSVD_FAST_DIRECT_IN and RSVD_IDN_DIRECT_IN, randomized_svd's direct input, and
+-their x_decomp_w4_flags entry were deleted 2026-11-08: superseded; see below.)
++RSVD_FAST_DIRECT_IN (FAST + Apple default; `-D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`
++rolls back): randomized_svd's
++input goes up from the caller's own buffer into a pooled device matrix
++(`_M._on_device` + `x_decomp_dev_upload`, the random projections' and
++KernelPCA's resident pattern) instead of `_M.from_input`'s copy into a fresh
++`array.array` (880 MB of fresh host pages at the board's 1,000,000 x 220)
++that the first product then uploads. The host finiteness refusal
++(`_host_all_finite`) is unchanged. Same words reach the device: no bit moves.
++
++It is read through `x_decomp_w4_flags()` (bit 2 RSVD_FAST_DIRECT_IN; bit 1,
++LLE_FAST_DEV_LU, was deleted 2026-11-08), registered on every GPU build so a
++quality capture can prove which arm is installed.
+ """
+ 
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+ 
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (HOLD-quality: lle trustworthiness_k15 istella 0.8851 -> 0.8615, taxi 0.8662 ->
+ # 0.8410 vs FAST main) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+@@ -17,11 +29,36 @@ their x_decomp_w4_flags entry were deleted 2026-11-08: superseded; see below.)
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
+ # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN (KEPT FAST + Apple default, superseded) and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT IDENTICAL default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. Both sent randomized_svd's input
+-# from the caller's buffer to the device instead of a host copy (M3 e9d72edb5: istella
+-# 517.3 -> 501.3 ms). randomized_svd is now one driver (x_decomp/randomized_svd_owner.mojo)
+-# that always reads M in place and uploads it once, so there is no other route to select.
++#: FAST Apple default, measured source e9d72edb5 (2026-10-04).
++#: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
++#: 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error
++#: equal (istella 2.3594584442703e-4 -> 2.3594584442301e-4, taxi
++#: 0.0271967625509 -> 0.0271967625509). ACCEPT.
++#: `-D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF` restores `_M.from_input`'s host copy.
++comptime RSVD_FAST_DIRECT_IN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and not is_defined["MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF"]()
++)
++
++#: R1, lane fg-pca (2026-10-09), IDENTICAL default on every GPU column;
++#: rollback `-D MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF`. The same route as
++#: RSVD_FAST_DIRECT_IN above (bit 2, `_rsvd_direct_input`): randomized_svd's
++#: input goes from the caller's own buffer straight into a pooled device
++#: matrix (`x_decomp_dev_upload`), instead of `_M.from_input`'s copy of all
++#: n*d floats into a fresh host `array.array` (880 MB of fresh host pages and
++#: a full memcpy at 1M x 220, each extra n*d*4 bytes of host traffic at any
++#: shape) that the first product then uploads. The host finiteness refusal
++#: (`_host_all_finite`) runs first, as before; sparse, wide (host-transposed)
++#: and host-binding inputs keep `_M.from_input`. Cost: -1 host copy of X per
++#: call. Bits: none (a copy is not arithmetic; the same words reach the
++#: device, and `_RES_MIN` = 1 already sent every product to the device).
++comptime RSVD_IDN_DIRECT_IN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"]()
++)
++
++
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by ed9ba6e7a1; code
+ # recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch

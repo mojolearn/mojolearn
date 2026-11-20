@@ -1,6 +1,0 @@
-main adam  resident moments: median 22.404 ms (first 15.127 ms) ratio 1.62x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 
-main sgd  resident moments: median 21.723 ms (first 20.441 ms) ratio 1.80x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 
-main adamw  resident moments: median 21.164 ms (first 14.904 ms) ratio 2.37x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 
-branch adam  resident moments: median 21.616 ms (first 14.252 ms) ratio 1.61x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 
-branch sgd  resident moments: median 35.244 ms (first 31.525 ms) ratio 1.35x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 
-branch adamw  resident moments: median 22.005 ms (first 18.251 ms) ratio 2.23x OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal) 

@@ -33,13 +33,12 @@ composition and launch geometry are unchanged.
 FAST on Apple only; nothing here is launched or instantiated in any other
 build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
-from experiments.classical_identical_ideas.stats_controls import C59_TRIAL_STATE
 from max.gpu.host import DeviceBuffer, DeviceContext
-from arima.impl.fast_eval_df import (PRODUCT_DF_ON,product_df_eligible,ProductDfScratch,
-    product_parts_kernel,product_finish_kernel,product_tail_kernel,product_df_hit)
-from std.gpu import block_dim, block_idx, thread_idx
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by eff59d1b88; code
+# recoverable at f59d913b0b (arima/impl/fast_eval_df.mojo, the compensated likelihood + finite-difference tail).
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isinf
-from std.sys.compile import is_defined
 
 from arima.impl.batched_kalman import (
     KALMAN_TPB,
@@ -63,20 +62,13 @@ comptime EW_TPB = 128
 # 14498.225 -> 13569.230 ms and 24231.028 -> 22705.348 ms (one run/arm).
 # Forecast RMSE/digests unchanged; gap26-arima-quality-fixed checks 44
 # selected-order, parameter, likelihood and forecast arrays unchanged.
-# MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF restores the separate launches.
 # See docs/apple-fast/EXPERIMENTS.md; IDENTICAL/other vendors unchanged.
 # IDENTICAL on every vendor since lane/fam-timeseries (2026-10-04), with the
 # held workspace: one tail launch per evaluation instead of four, the same
 # finite differences and FTZ sites (`ew_finish_kernel`).
-# -D MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF=1 restores the separate launches
-# under IDENTICAL.
-comptime ARIMA_FUSED_EVAL_TAIL = (
-    KALMAN_FAST_EVAL_WS and not is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF"]()
-    and not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF (old path; promoted on Apple M3 only, NVIDIA/AMD A/B owed) and MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF.patch and experiments/removed/MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ARIMA_FUSED_EVAL_TAIL = KALMAN_FAST_EVAL_WS
 
 
 def ew_finish_kernel(
@@ -233,7 +225,6 @@ struct FastEvalWS(Movable):
     var p_ext: ARIMAParams
     var t_params: ARIMAParams
     var ws: KalmanWorkspace
-    var compensated: Optional[ProductDfScratch]
 
     def __init__(
         out self,
@@ -249,11 +240,10 @@ struct FastEvalWS(Movable):
         var M1 = N + 1
         var eb = M1 * nb
         var nb_y = nb * n_obs
-        # C59 owns one immutable copy instead of N+1 replicated observations.
-        # Each trial still has private Kalman/filter/optimizer state.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        self.observation_batch = nb if C59_TRIAL_STATE else 0
-        var copies = 1 if C59_TRIAL_STATE else M1
+        # TOMBSTONE: MOJOLEARN_C59_TRIAL_STATE (opt-in arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 145be10898.
+        # Restore: git apply experiments/removed/MOJOLEARN_C59_TRIAL_STATE.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+        self.observation_batch = 0
+        var copies = M1
         var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, copies*nb_y))
         for m in range(copies):
             ctx.enqueue_copy(
@@ -276,10 +266,6 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
-        self.compensated = Optional[ProductDfScratch]()
-        comptime if PRODUCT_DF_ON:
-            if product_df_eligible(order,n_obs):
-                self.compensated = ProductDfScratch(ctx,eb,n_obs)
 
     def __init__(
         out self,
@@ -323,10 +309,6 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
-        self.compensated = Optional[ProductDfScratch]()
-        comptime if PRODUCT_DF_ON:
-            if product_df_eligible(order,n_obs):
-                self.compensated = ProductDfScratch(ctx,eb,n_obs)
 
     def loglike_at(mut self, ctx: DeviceContext, order: ARIMAOrder, h: Float32,
                    mut d_x: DeviceBuffer[DType.float32],
@@ -347,16 +329,7 @@ struct FastEvalWS(Movable):
         # TOMBSTONE: MOJOLEARN_ARIMA_FAST_CSS_SEARCH (DROPPED-quality) deleted 2026-10-09 on lane/owed-deletions-D1 (the CSS
         # branch here); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch.
         fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, KALMAN_TPB,
-                         1 if self.n_exog > 0 else 0, Bool(self.compensated), self.observation_batch)
-        comptime if PRODUCT_DF_ON:
-            if self.compensated:
-                ref sc=self.compensated.value()
-                ctx.enqueue_function[product_parts_kernel](self.ws.vs,self.ws.Fs,sc.parts,
-                    Int32(self.n_obs),Int32(self.eb),grid_dim=(self.eb*((self.n_obs+255)//256),1,1),block_dim=(256,1,1))
-                ctx.enqueue_function[product_finish_kernel](sc.parts,sc.words,self.ws.loglike,
-                    self.ws.info_init,self.ws.info_loop,Int32(self.n_obs),Int32(self.eb),
-                    grid_dim=(self.eb,1,1),block_dim=(256,1,1))
-                product_df_hit(0)
+                         1 if self.n_exog > 0 else 0, self.observation_batch)
 
     def attach_exog(mut self, d_exog: DeviceBuffer[DType.float32], n_exog: Int) raises:
         """The fit's differenced regressors (`nb * n_exog * n_obs` floats),
@@ -427,14 +400,6 @@ struct FastEvalWS(Movable):
         var N = self.N
         var nb_x = nb * N
         var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
-        comptime if PRODUCT_DF_ON:
-            if self.compensated:
-                ref sc=self.compensated.value()
-                ctx.enqueue_function[product_tail_kernel](d_f,d_g,d_grad,d_x_pert,d_x,sc.words,
-                    self.ws.info_init,self.ws.info_loop,d_bad,Int32(nb),Int32(N),h,scale,
-                    grid_dim=(grid,1,1),block_dim=(LBFGS_TPB,1,1))
-                product_df_hit(1)
-                return
         # Shared by single-order and grouped-order fits: both arms retain
         # current main's accepted fused tail, independently of ORDER_BATCH.
         comptime if ARIMA_FUSED_EVAL_TAIL:

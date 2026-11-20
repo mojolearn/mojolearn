@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Typed SmallMLPTrainer buffer checks moved from bindings/parallel_mlp_native.mojo."""
-from std.math import isfinite
+"""Typed SmallMLPTrainer buffer checks moved from bindings/parallel_mlp_native_door.mojo."""
+from core.host_finite_scan import host_all_finite_f32
 
 
 def mlp_check_finite(data: Pointer[Float32, ImmUntrackedOrigin], size: Int, label: String) raises:
-    for i in range(size):
-        if not isfinite(data[i]):
-            raise Error("RuntimeError: SmallMLPTrainer nonfinite " + label)
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(rebind[MutPointer[Float32, MutUntrackedOrigin]](data), size):
+        raise Error("RuntimeError: SmallMLPTrainer nonfinite " + label)
 
 
 def mlp_check_optimizer_state(

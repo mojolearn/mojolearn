@@ -7,7 +7,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.samba_count_impl import samba_target_count
 from core.host_helpers_impl import all_finite_f32
 from core.hostptr import f32_ptr, i32_ptr
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 struct NativeSambaLayer(Movable):
@@ -177,7 +177,6 @@ struct NativeSambaModel(Movable):
     var state_pending: List[Int]
     var normalized: List[Float32]
     var last_hidden: List[Float32]
-    var forward_complete: Bool
     var dropout: Bool
     var dropout_words: List[Int]
     var dropout_scalars: List[Float64]
@@ -200,7 +199,6 @@ struct NativeSambaModel(Movable):
         self.state_pending = List[Int]()
         self.normalized = List[Float32]()
         self.last_hidden = List[Float32]()
-        self.forward_complete = False
         self.dropout = False
         self.dropout_words = List[Int]()
         self.dropout_scalars = List[Float64]()
@@ -217,6 +215,7 @@ struct NativeSambaModel(Movable):
             var words = self.dropout_words.copy()
             words[5] = 2
             _ = self.primitive.call(6, [Int(dropped.unsafe_ptr()), Int(hidden.unsafe_ptr())], words, self.dropout_scalars)
+            _ = len(hidden)  # named after the call that reads it through its address (Mojo frees a List at its last named use; the reassignment below is not a use, so the dropout read freed storage: "non-finite dropout input at 0")
             hidden = dropped^
         for i in range(len(self.layers)):  # driver-loop: native ordered mixed-layer descriptors
             var state_index = self.layers[i].state_index
@@ -238,14 +237,8 @@ struct NativeSambaModel(Movable):
         _ = self.primitive.call(2, [Int(self.normalized.unsafe_ptr()), Int(self.last_hidden.unsafe_ptr()), self.norm],
             [self.rows, self.width], [self.norm_eps])
 
-    def forward(mut self, ids: Int) raises -> List[Float32]:
-        self.forward_hidden(ids, False)
-        var logits = List[Float32](length=self.rows * self.vocab, fill=0)
-        _ = self.primitive.call(4, [Int(logits.unsafe_ptr()), Int(self.normalized.unsafe_ptr()), self.head],
-            [self.rows, self.vocab, self.width], [])
-        self.forward_complete = True
-        return logits^
-
+    # TOMBSTONE: SAMBA_THREE_TIER_FORWARD NativeSambaModel.forward (the provider forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
     def close_tapes(mut self) raises:
         for i in range(len(self.layers)):  # driver-loop: release only live native forward snapshots
@@ -269,6 +262,7 @@ struct NativeSambaModel(Movable):
                 _ = self.primitive.call(11, [Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), Int(denominator.unsafe_ptr()),
                     Int(dnormalized.unsafe_ptr()), Int(self.head_gradient.unsafe_ptr()), Int(self.normalized.unsafe_ptr()),
                     self.head, targets], [self.rows, self.vocab, self.width], [])
+                _ = denominator^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             elif fused:
                 _ = self.primitive.call(7, [Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), Int(dnormalized.unsafe_ptr()),
                     Int(self.head_gradient.unsafe_ptr()), Int(self.normalized.unsafe_ptr()), self.head, targets],
@@ -282,27 +276,35 @@ struct NativeSambaModel(Movable):
                     Int(logits.unsafe_ptr()), targets], [self.rows, self.vocab, -100, 1, items, 1], [0.0])
                 _ = self.primitive.call(5, [Int(dnormalized.unsafe_ptr()), Int(self.head_gradient.unsafe_ptr()), Int(dlogits.unsafe_ptr()),
                     Int(self.normalized.unsafe_ptr()), self.head], [self.rows, self.vocab, self.width], [])
+                _ = logits^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+                _ = dlogits^
             _ = self.primitive.call(3, [Int(dh.unsafe_ptr()), Int(self.norm_gradient.unsafe_ptr()), Int(dnormalized.unsafe_ptr()),
                 Int(self.last_hidden.unsafe_ptr()), self.norm], [self.rows, self.width], [self.norm_eps])
+            _ = dnormalized^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+            _ = row_loss^
             for reverse in range(len(self.layers)):  # driver-loop: complete native reverse layer/tape walk
                 var i = len(self.layers) - reverse - 1
                 var next = self.layers[i].backward(Int(dh.unsafe_ptr()), elements)
+                _ = len(dh)  # named after the call that reads it through its address (Mojo frees a List at its last named use; the reassignment below is not a use, so the layer read a freed dy: "grad_output must be finite", or a zeroed dy when its own dx reused the block)
                 dh = next^
             if self.dropout:
                 var dropped = List[Float32](length=elements, fill=0)
                 var words = self.dropout_words.copy()
                 words[5] = 3
                 _ = self.primitive.call(6, [Int(dropped.unsafe_ptr()), Int(dh.unsafe_ptr())], words, self.dropout_scalars)
+                _ = len(dh)  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
                 dh = dropped^
             self.embedding_gradient = List[Float32](length=self.vocab * self.width, fill=0)
             _ = self.primitive.call(1, [Int(self.embedding_gradient.unsafe_ptr()), Int(dh.unsafe_ptr()), ids],
                 [self.rows, self.vocab, self.width], [])
+            _ = dh^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             if tied:
                 var n = self.vocab * self.width
-                var pair = List[Float32](length=2 * n, fill=0)
-                memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
-                memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
+                var pair = List[Float32](unsafe_uninit_length=2 * n)
+                unsafe_memcpy(dest=pair.unsafe_ptr(), src=self.embedding_gradient.unsafe_ptr(), count=n)
+                unsafe_memcpy(dest=pair.unsafe_ptr() + n, src=self.head_gradient.unsafe_ptr(), count=n)
                 _ = self.primitive.call(9, [Int(self.embedding_gradient.unsafe_ptr()), Int(pair.unsafe_ptr())], [n, 2, -1], [])
+                _ = pair^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
             self.close_tapes()
             return Float64(loss[0])
         except problem:
@@ -329,21 +331,25 @@ struct NativeSambaModel(Movable):
         for k in range(accumulation):  # driver-loop: whole native microbatch/tape/gradient traversal
             if self.dropout:
                 self.dropout_words[1] = base_offset + k * self.rows * self.width
-            var xpart = List[Int32](length=self.rows, fill=0)
-            var ypart = List[Int32](length=self.rows, fill=0)
-            memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
-            memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
+            var xpart = List[Int32](unsafe_uninit_length=self.rows)
+            var ypart = List[Int32](unsafe_uninit_length=self.rows)
+            unsafe_memcpy(dest=xpart.unsafe_ptr(), src=i32_ptr(ids) + k * self.rows, count=self.rows)
+            unsafe_memcpy(dest=ypart.unsafe_ptr(), src=i32_ptr(targets) + k * self.rows, count=self.rows)
             losses[k] = Float32(self.gradients(Int(xpart.unsafe_ptr()), Int(ypart.unsafe_ptr()),
                 total_count, False, tied, fused, chunked))
+            _ = xpart^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
+            _ = ypart^
             if registry_failure.byte_length() != 0:
                 raise Error(registry_failure)
             for j in range(len(kinds)):  # driver-loop: native ordered gradient-registry copies
-                memcpy(dest=stacked.unsafe_ptr() + k * n + offsets[j],
+                unsafe_memcpy(dest=stacked.unsafe_ptr() + k * n + offsets[j],
                     src=f32_ptr(self.gradient_address(kinds[j], layers[j], slots[j])), count=offsets[j + 1] - offsets[j])
         if accumulation == 1:
-            memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=f32_ptr(output), src=stacked.unsafe_ptr(), count=n)
             return Float64(losses[0])
         _ = self.primitive.call(9, [output, Int(stacked.unsafe_ptr())], [n, accumulation, self.rows * accumulation], [])
+        _ = stacked^  # named after the call that writes or reads it through its address (Mojo frees a List at its last named use)
         var total = List[Float32](length=1, fill=0)
         _ = self.primitive.call(9, [Int(total.unsafe_ptr()), Int(losses.unsafe_ptr())], [1, accumulation, -1], [])
+        _ = losses^
         return Float64(total[0])

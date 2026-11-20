@@ -2,16 +2,23 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Typed host entries of `bindings/_mojolearn_x_linear_host.mojo`.
 
-The binding unpacks PythonObject arguments and calls one function here; the
+The binding unpacks Python object arguments and calls one function here; the
 input checks, target preparation, fit dispatch and decision loops live here
 with no Python import, moved word for word (lane thin-core, 2026-10-21: a
 pure move, no bit change)."""
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS, ENETCV_FOLD_BLOCKS
+from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
 from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
+from core.host_parallel import host_parallelize
+from core.host_finite_scan import host_all_finite_f32
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_SGD_PROBA, rows_one
+from std.memory import bitcast
 from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
+from x_linear.dispatch import ALGO_BAYES
+from x_linear.bayes import BAYES_EIGH_REFUSAL
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids, lcv_caller_folds
 from x_linear.isotonic_host import isotonic_fit_host
@@ -26,10 +33,10 @@ def _fp(addr: Int) raises -> FP:
 
 def _finite(p: FP, count: Int, name: String) raises:
     """The input check both columns run before a fit: NaN or infinity is refused by name."""
-    for i in range(count):
-        var v = p.unsafe_load(i)
-        if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+    # parallel: the one host finite scan (was a serial `v == v and |v| <= FLT_MAX`
+    # walk: the same verdict as the exponent-bits test, NaN and both infinities)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(p)), count):
+        raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
 
 
 def x_linear_fit_host(
@@ -51,9 +58,8 @@ def x_linear_fit_host(
     comptime if ENETCV_FOLD_BLOCKS:
         if a == 9 and n_ip >= 4:
             n_fw += fb_host_words(d, Int(ipl[3]))
-    comptime if C13_LOGCV_WEIGHTS:
-        if a == ALGO_LOGCV:
-            n_fw += Int(ipl[4]) + 1
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
     var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
     var bufs = team_rows(a, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
@@ -61,10 +67,6 @@ def x_linear_fit_host(
     var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
     var x = _fp(x_addr)
     var y = _fp(y_addr)
-    comptime if C13_LOGCV_WEIGHTS:
-        # the opt-in C13 weight sums assume disjoint folds (x_linear/cv_roles.mojo)
-        if a == ALGO_LOGCV and n > 0 and dims[3] > n and y[n] < Float32(0):
-            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
     var out = _fp(out_addr)
     _finite(x, dims[2], "X")
     _finite(y, dims[3], "y")
@@ -119,10 +121,15 @@ def x_linear_fit_host(
             IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
             out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
         )
+    # BayesianRidge's unconverged eigendecomposition (x_linear/bayes_host.mojo
+    # `bayes_ridge_fit` sets iw[0]): refused as on every device column
+    var bayes_refused = a == ALGO_BAYES and Int(iw[0]) != 0
     _ = fw^
     _ = iw^
     _ = tw^
     _ = ycopy^
+    if bayes_refused:
+        raise Error(BAYES_EIGH_REFUSAL)
     return n_out
 
 
@@ -138,6 +145,92 @@ def x_linear_decision_host(
     for t in range(n * k):
         out.unsafe_store(t, decision_one(x, t // k, d, wb, t % k, link))
     return n * k
+
+
+def x_linear_decision_rows_host(
+    x_addr: Int, wb_addr: Int, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, out_addr: Int,
+) raises -> Int:
+    """The GPU binding's `x_linear_decision_rows` on the host: the
+    `decision_one` cells, then `py2mojo_rows`' `rows_one` per row (mode
+    ROWS_SGD_PROBA or ROWS_LRCV_PROBA, float32 out n x max(k, 2)), rows
+    split across host tasks (no reduction crosses rows, so the split moves
+    no bit). Returns n."""
+    # ne2-g-linear (N362): the host column of decision_rows_device.
+    if n < 0 or d < 0 or k <= 0:
+        raise Error("x_linear: positive dimensions required")
+    if rows_mode != ROWS_SGD_PROBA and rows_mode != ROWS_LRCV_PROBA:
+        raise Error("x_linear_decision_rows: rows mode must be SGD_PROBA or LRCV_PROBA")
+    if n == 0:
+        return 0
+    var x = _fp(x_addr)
+    var wb = _fp(wb_addr)
+    var out = _fp(out_addr)
+    var s = List[Float32](length=max(n * k, 1), fill=Float32(0))
+    var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u64 = List[UInt64](length=1, fill=UInt64(0))
+    var u64p = u64.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u8 = List[UInt8](length=1, fill=UInt8(0))
+    var u8p = u8.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var t = max(1, min(host_predict_task_count(n), n))
+    var chunk = host_predict_chunk(n, t)
+
+    def _rows(c: Int) {imm x, imm wb, imm out, imm sp, imm u64p, imm u8p, imm chunk, imm n, imm d, imm k, imm link, imm rows_mode}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            for j in range(k):
+                sp.unsafe_store(i * k + j, decision_one(x, i, d, wb, j, link))
+            rows_one(rows_mode, sp, u64p, k, i, out, u64p, sp, UInt64(0), u8p)
+
+    if t == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, t)
+    _ = s^
+    _ = u64^
+    _ = u8^
+    return n
+
+
+def x_linear_decision_huber_out_host(
+    x_addr: Int, wb_addr: Int, n: Int, d: Int, link: Int, y_addr: Int, thr: Float64, flags_addr: Int,
+) raises -> Int:
+    """The GPU binding's `x_linear_decision_huber_out` on the host: each
+    row's `decision_one` prediction, then `rows_one` ROWS_HUBER_OUT on it,
+    rows split across host tasks. Returns n."""
+    # ne2-g-linear (N302): the host column of decision_huber_out_device.
+    if n < 0 or d < 0:
+        raise Error("x_linear: positive dimensions required")
+    if n == 0:
+        return 0
+    if flags_addr == 0:
+        raise Error("x_linear: null flag buffer address")
+    var x = _fp(x_addr)
+    var wb = _fp(wb_addr)
+    var y = _fp(y_addr)
+    var flags = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=flags_addr)
+    var p = List[Float32](length=n, fill=Float32(0))
+    var pp = p.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var u64 = List[UInt64](length=1, fill=UInt64(0))
+    var u64p = u64.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var scal = bitcast[DType.uint64](thr)
+    var t = max(1, min(host_predict_task_count(n), n))
+    var chunk = host_predict_chunk(n, t)
+
+    def _rows(c: Int) {imm x, imm wb, imm y, imm flags, imm pp, imm u64p, imm scal, imm chunk, imm n, imm d, imm link}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            pp.unsafe_store(i, decision_one(x, i, d, wb, 0, link))
+            rows_one(ROWS_HUBER_OUT, y, u64p, 1, i, pp, u64p, pp, scal, flags)
+
+    if t == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, t)
+    _ = p^
+    _ = u64^
+    return n
 
 
 def x_linear_decision_codes_host(

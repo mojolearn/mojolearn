@@ -32,20 +32,11 @@ from pathlib import Path
 
 from . import _backend
 from . import _numeric_profile
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
-from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig
 from . import _ragged
 
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
-_IDENTICAL_CODE = 1
-
-
-def _parameters_sha256(parameters):
-    """SHA-256 of float32 parameters' little-endian bytes, by the Mojo SHA-256
-    (core/sha256.mojo) behind the CPU tokenizer binding's `sha256_hex`."""
-    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(le_bytes(parameters, 'f')))
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
@@ -63,116 +54,12 @@ def _load():
     return _backend.load_door_host(_EXTENSION)
 
 
-def _native_shape(shape):
-    if not isinstance(shape, ByteLanguageModelConfig):
-        raise TypeError('shape must be a ByteLanguageModelConfig')
-    # The config owns the ABI, including its optional chunked-head selector.
-    # Both inference and trainer adapters must pass the same complete shape.
-    return list(shape.native_shape)
+# The shape, thread-count and parameter-dict admission (`_native_shape`,
+# `_thread_count`, `_flatten_parameters`) run in the native host trainer door; their
+# dead Python twins are gone (lane py-lm-neural, 2026-11-14).
 
-
-_MAX_THREADS = 1024
 #: torch's `ignore_index`, which the loss oracle skips as a target.
 _IGNORE_INDEX = -100
-
-
-def _refuse_ids(tokens, vocab, batch, width, target_column):
-    """ValueError unless every id is a byte value in [0, vocab). When
-    `target_column` is set, that column of each row feeds only the loss as a
-    target and may also hold `_IGNORE_INDEX`, exactly what the native loss
-    admits; every other position is a model input."""
-    # Native min/max (reduce_stat) admits the common case in one pass; the
-    # Python scan below runs only to name the first offending id (and to
-    # admit `_IGNORE_INDEX` in the target column).
-    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
-        return
-    flat = flat_view(tokens, 'i')
-    for r in range(batch):
-        base = r * width
-        for c in range(width):
-            v = flat[base + c]
-            if 0 <= v < vocab:
-                continue
-            if target_column is not None and c == target_column and v == _IGNORE_INDEX:
-                continue
-            raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
-
-
-def _logits_ids(ids, shape):
-    """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
-    `batch >= 1`, `1 <= length <= shape.length` and every id a byte value,
-    refused with ValueError otherwise. Shared with the trainer's GPU logits
-    (DEVIATION 2658) so both surfaces admit the same ids."""
-    tokens, copied = as_i32_c(ids, ndim=2, name='ids')
-    batch, length = tokens.shape
-    if batch <= 0 or not 0 < length <= shape.length:
-        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
-    _refuse_ids(tokens, shape.vocab_size, batch, length, None)
-    return tokens, copied
-
-
-def _greedy_next_bytes(logits):
-    """The greedy next byte after each row of float32 logits
-    `[batch, length, vocab]`, read at the last position; ties go to the
-    lowest byte value. Shared with the trainer's GPU logits (DEVIATION
-    2658), so equal logits bytes pick equal bytes."""
-    batch, length, vocab = logits.shape
-    flat = flat_view(logits, 'f')
-    if batch and vocab and hasattr(logits, '_addr'):
-        # The same scan in the base binding's `argmax_rows_f32` (DEVIATION
-        # 2500: strict `>` from index 0, so ties keep the lowest byte and a
-        # NaN never replaces); `_labels.argmax_rows` falls back to the loop
-        # below's rule when the helper is missing.
-        from ._labels import argmax_rows
-        last = b''.join(bytes(flat[((b * length) + length - 1) * vocab:((b * length) + length) * vocab])
-                        for b in range(batch))
-        rows = frombytes(last, '<f4', (batch, vocab))
-        return [int(i) for i in flat_view(argmax_rows(rows), 'q')]
-    result = []
-    for b in range(batch):
-        base = ((b * length) + length - 1) * vocab
-        best = 0
-        for v in range(1, vocab):
-            if flat[base + v] > flat[base + best]:
-                best = v
-        result.append(best)
-    return result
-
-
-def _thread_count(value):
-    """None is one thread per physical core, sent to the binding as 0."""
-    if value is None:
-        return 0
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError('threads must be an int or None')
-    if not 1 <= value <= _MAX_THREADS:
-        raise ValueError(f'threads must be in [1, {_MAX_THREADS}]')
-    return value
-
-
-def _flatten_parameters(params, shape):
-    """The registry dict (names from `shape.parameter_names`, values float32
-    or packed) to the flat float32 vector the binding takes, and the one
-    format the packed tensors share. NumPy-free: the materialized tensors
-    are `mojolearn.Array`s and the copy goes through the flat buffer views."""
-    from . import lowbit as _lowbit
-    from ._buffer import empty as _empty
-    from ._bufcheck import flat_view as _flat
-    names = shape.parameter_names
-    missing = [n for n in names if n not in params]
-    extra = [n for n in params if n not in names]
-    if missing or extra:
-        raise ValueError(f"mojolearn.LanguageModelInference: parameter dict mismatch; missing {missing!r}, unknown {extra!r}")
-    fmt = _lowbit.format_of(params)
-    flat = _empty((shape.n_total,), '<f4')
-    dst = _flat(flat, 'f')
-    offsets = shape.offsets
-    for j, (name, shp) in enumerate(zip(names, shape.parameter_shapes)):
-        a, _ = as_f32_c(_lowbit.materialize_one(params[name], name), ndim=None, name=name)
-        if tuple(a.shape) != tuple(shp):
-            raise ValueError(f"mojolearn.LanguageModelInference: {name} has shape {tuple(a.shape)}, want {tuple(shp)}")
-        dst[offsets[j]:offsets[j + 1]] = _flat(a, 'f')
-    return flat, fmt
 
 
 # Forward-only byte LM on the CPU. The parameters are copied at
@@ -371,16 +258,6 @@ class LanguageModelHostTrainer:
         return _HOST_TRAIN(self, "construct", (parameters, m, v, shape, completed_steps,
                                                lr, betas, eps, weight_decay), _HOST_TRAIN_CONTEXT)
 
-    def _moment(self, given, name, n):
-        if given is None:
-            return zeros((n,), '<f4')
-        array, _ = as_f32_c(given, ndim=1, name=name)
-        if array.size != n:
-            raise ValueError(f'{name} must hold {n} float32 values')
-        if not all_finite(array):
-            raise ValueError(f'{name} must be finite')
-        return frombytes(le_bytes(array, 'f'), '<f4', (n,))
-
     @classmethod
     def from_state(cls, parameters, m, v, *, completed_steps=0, **kwargs):
         """A trainer resuming a recorded step's starting state, which is how
@@ -432,14 +309,16 @@ class LanguageModelHostTrainer:
         return _HOST_TRAIN(self, "train_step", (ids,), _HOST_TRAIN_CONTEXT)
 
     def loss(self, ids):
-        """`train_step`'s loss as a float. The bits are the comparable value;
-        this is for reading."""
+        """The mean next-byte loss of one batch at the current parameters,
+        as a float: what `train_step` on the same ids would report, without
+        the update. The parameters, the moments and the step count do not
+        move."""
         return _HOST_TRAIN(self, "loss", (ids,), _HOST_TRAIN_CONTEXT)
 
 
 def _connect_host_trainer():
     # glue: import-time connection of the native `train_step` owner
-    # (bindings/byte_lm_host_trainer_native.mojo); the compiled step it runs
+    # (bindings/byte_lm_host_trainer_native_door.mojo); the compiled step it runs
     # is the trainer's own binding entry, retained at construction
     from .tokenizer import _binding
     from . import lowbit, _linalg_impl

@@ -1,0 +1,30 @@
+diff --git a/x_prep/pt_center.mojo b/x_prep/pt_center.mojo
+index e33bf432aa..126702405f 100644
+--- a/x_prep/pt_center.mojo
++++ b/x_prep/pt_center.mojo
+@@ -5,11 +5,12 @@ v(x) = (g_lambda(x)-g_lambda(anchor))/t(anchor)**a. Standardizing v
+ is identical in exact arithmetic to standardizing g; the likelihood score
+ uses log(t(x)/t(anchor)), so its Jacobian correction cancels the scale.
+ """
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log1p, ftz
+ from x_prep.prims import expf, logf
+ 
+-# PT_SCORE_STABLE: FAST+Apple DEFAULT.
++# PT_SCORE_STABLE: FAST+Apple DEFAULT (rollback -D MOJOLEARN_PT_SCORE_STABLE_OFF).
+ # Repair of bc112b172/gap26-pt-score-quality (nearconstant score inputs
+ # rounded before compensation, fixed bracket missed lambda 52/-63, saturated
+ # standardization): affine-equivalent centered log/power coordinates
+@@ -17,9 +18,8 @@ from x_prep.prims import expf, logf
+ # 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms; w2-pt-centered2-quality
+ # PASS vs the f64 centered-MLE reference, tolerances unchanged.
+ # See docs/apple-fast/PT_SCORE_STABLE.md.
+-# TOMBSTONE: MOJOLEARN_PT_SCORE_STABLE_OFF (old path, EXP:1890 default kept) deleted 2026-11-15 by lane/expdel2-36-neural-series-linear; code recoverable at 145be10898.
+-# Restore: git apply experiments/removed/MOJOLEARN_PT_SCORE_STABLE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime PT_SCORE_STABLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++comptime PT_SCORE_STABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_PT_SCORE_STABLE_OFF"]())
+ 
+ 
+ @always_inline

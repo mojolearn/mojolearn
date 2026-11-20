@@ -44,7 +44,7 @@ def check_copy_histograms() raises:
         x ^= x >> 17
         x ^= x << 5
         h.unsafe_ptr().unsafe_store(i, Float32(Int(x % UInt32(100000))))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, h)
 
     # Copy 1 -> 5 and 3 -> 6. Non-contiguous, out of order, and leaving
     # leaves 0, 2, 4 and 7 alone.
@@ -66,8 +66,8 @@ def check_copy_histograms() raises:
     for i in range(n_pairs):
         hl.unsafe_ptr().unsafe_store(i, UInt32(src_ids[i]))
         hr.unsafe_ptr().unsafe_store(i, UInt32(dst_ids[i]))
-    ctx.enqueue_copy(dst_buf=left, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=right, src_ptr=hr.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, left, hl)
+    upload_host_into[DType.uint32](ctx, right, hr)
     ctx.synchronize()
 
     ctx.enqueue_function[copy_histograms_kernel](
@@ -79,7 +79,7 @@ def check_copy_histograms() raises:
     ctx.synchronize()
 
     var out = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
 
     var copied_wrong = 0
@@ -124,9 +124,28 @@ def check_copy_histograms() raises:
     print("  parent histogram lands in the right slot, nothing else moves")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "copy_histograms in isolation". The check builds its own
     # `DeviceContext` internally, so there is nothing to set up here.
     print("copy_histograms in isolation:")
     check_copy_histograms()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("copy_histograms_check", cpu=False, gpu=True, serial="", run=run_cases)

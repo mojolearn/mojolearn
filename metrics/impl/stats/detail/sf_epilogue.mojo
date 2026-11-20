@@ -3,7 +3,7 @@
 """LANE fam2-prep-metrics (2026-10-04): the device kernels and entries of the
 label metrics' binary64 epilogue. The arithmetic, the fold order and the
 switch (IDN_METRIC_EPI) are sf_epilogue_core.mojo's; read its header."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -218,16 +218,23 @@ def mi_epilogue_device(
     return sf_to_f64(bits)
 
 
-def ari_epilogue_device(
-    ctx: DeviceContext, mut cm: DeviceBuffer[DType.int32], k: Int, size: Int
-) raises -> Float64:
-    """The adjusted Rand index of the device contingency matrix `cm`."""
-    var a = ctx.enqueue_create_buffer[DType.int64](k)
-    var b = ctx.enqueue_create_buffer[DType.int64](k)
-    var rs = ctx.enqueue_create_buffer[DType.int64](k)
-    var nch = ceildiv(k, EPI_CH)
-    var tri = ctx.enqueue_create_buffer[DType.int64](3 * fold_words(nch))
-    var out = ctx.enqueue_create_buffer[DType.uint64](1)
+def _pair_sum_launches(
+    ctx: DeviceContext,
+    mut cm: DeviceBuffer[DType.int32],
+    mut a: DeviceBuffer[DType.int64],
+    mut b: DeviceBuffer[DType.int64],
+    mut rs: DeviceBuffer[DType.int64],
+    mut tri: DeviceBuffer[DType.int64],
+    mut dst: DeviceBuffer[DType.uint64],
+    k: Int,
+    nch: Int,
+    size: Int,
+) raises -> Int:
+    """The launches both pair-count readers share: the row / column sums of
+    the k x k contingency matrix `cm`, the chunk triples and the integer fold
+    over them. Returns the triple index (in `tri`) of the final sums
+    `(sum nCTwo(c_ij), sum nCTwo(a_i), sum nCTwo(b_j))`; `dst[0]` holds
+    `ari_value` of them. Nothing is waited on here."""
     ctx.enqueue_function[cm_sums_kernel](
         a.unsafe_ptr(), b.unsafe_ptr(), rs.unsafe_ptr(), cm.unsafe_ptr(), Int32(k),
         grid_dim=(ceildiv(2 * k, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
@@ -242,10 +249,11 @@ def ari_epilogue_device(
     if n <= 0:
         # lane/review-fixes: an empty fold would never reach one sum
         raise Error("sf_epilogue: the fold needs at least one partial")
+    # driver-loop: over the levels of the integer fold
     while True:
         var nd = ceildiv(n, EPI_CH)
         ctx.enqueue_function[ari_level_kernel](
-            out.unsafe_ptr(), tri.unsafe_ptr(), Int32(src_off), Int32(n), Int32(dst_off), Int32(nd), Int32(size),
+            dst.unsafe_ptr(), tri.unsafe_ptr(), Int32(src_off), Int32(n), Int32(dst_off), Int32(nd), Int32(size),
             grid_dim=(ceildiv(nd, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
         )
         src_off = dst_off
@@ -253,10 +261,55 @@ def ari_epilogue_device(
         n = nd
         if n == 1:
             break
-    var bits = _read_word(ctx, out, 0)
+    return src_off
+
+
+def ari_epilogue_device(
+    ctx: DeviceContext, mut cm: DeviceBuffer[DType.int32], k: Int, size: Int
+) raises -> Float64:
+    """The adjusted Rand index of the device contingency matrix `cm`."""
+    var a = ctx.enqueue_create_buffer[DType.int64](k)
+    var b = ctx.enqueue_create_buffer[DType.int64](k)
+    var rs = ctx.enqueue_create_buffer[DType.int64](k)
+    var nch = ceildiv(k, EPI_CH)
+    var tri = ctx.enqueue_create_buffer[DType.int64](3 * fold_words(nch))
+    var dst = ctx.enqueue_create_buffer[DType.uint64](1)
+    _ = _pair_sum_launches(ctx, cm, a, b, rs, tri, dst, k, nch, size)
+    var bits = _read_word(ctx, dst, 0)
     _ = a^
     _ = b^
     _ = rs^
     _ = tri^
-    _ = out^
+    _ = dst^
     return sf_to_f64(bits)
+
+
+def pair_sums_device(
+    ctx: DeviceContext, mut cm: DeviceBuffer[DType.int32], k: Int, size: Int
+) raises -> Tuple[Int64, Int64, Int64]:
+    """`(sum_ij nCTwo(c_ij), sum_i nCTwo(a_i), sum_j nCTwo(b_j))` of the
+    device contingency matrix `cm` (a = row sums, b = column sums): the
+    three exact integers every pair-counting label metric is made of. The
+    matrix stays on the device; three words come back. Used by the Rand
+    index (metrics/impl/stats/detail/rand_index.mojo)."""
+    var a = ctx.enqueue_create_buffer[DType.int64](k)
+    var b = ctx.enqueue_create_buffer[DType.int64](k)
+    var rs = ctx.enqueue_create_buffer[DType.int64](k)
+    var nch = ceildiv(k, EPI_CH)
+    var tri = ctx.enqueue_create_buffer[DType.int64](3 * fold_words(nch))
+    var dst = ctx.enqueue_create_buffer[DType.uint64](1)
+    var at = _pair_sum_launches(ctx, cm, a, b, rs, tri, dst, k, nch, size)
+    var h = ctx.enqueue_create_host_buffer[DType.int64](3)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=tri.create_sub_buffer[DType.int64](3 * at, 3))
+    # the host reads `h` next: the one wait of this reader
+    ctx.synchronize()
+    var n2 = h.unsafe_ptr().unsafe_load(0)
+    var a2 = h.unsafe_ptr().unsafe_load(1)
+    var b2 = h.unsafe_ptr().unsafe_load(2)
+    _ = h^
+    _ = a^
+    _ = b^
+    _ = rs^
+    _ = tri^
+    _ = dst^
+    return (n2, a2, b2)

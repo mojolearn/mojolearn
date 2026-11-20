@@ -1,0 +1,32 @@
+diff --git a/autograd/cnn_block_op.mojo b/autograd/cnn_block_op.mojo
+index 2b16c56e52..aaeb6c3664 100644
+--- a/autograd/cnn_block_op.mojo
++++ b/autograd/cnn_block_op.mojo
+@@ -45,7 +45,12 @@ The host column runs the same blocks through the x_cnn host twins
+ (autograd/cnn_block_host.mojo, reached through `Exec.cnn_op_host`, so no
+ GPU module imports host threads); those split their element and GEMM work
+ across cores.
++
++A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
++(OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;
++RUN OWED on NVIDIA and AMD (board rows algos/cnn-clf fit and predict).
+ """
++from std.sys.compile import is_defined
+ from sequence.ops import FP
+ from x_cnn.ops import FP as XFP, IP as XIP, NN14_BOUNDED_IM2COL, neural_tape_budget_bytes
+ from x_cnn.shape_words import (
+@@ -61,11 +66,9 @@ comptime OPS_CNN_LINEAR = 91
+ comptime CNN_CONV_BLOCK_TAG = 117
+ comptime CNN_LINEAR_TAG = 118
+ 
+-#: The CNN program captures the tuned ops.
+-# TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at aefeacb577.
+-# Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.patch; record in docs/TOMBSTONES.md.
+-# CNN_FUSED_OPS stays a constant for sequence/model_device_dispatch.mojo and sequence/cnn_classifier_program.mojo.
+-comptime CNN_FUSED_OPS = True
++#: Default: the CNN program captures the tuned ops. The define is the B arm
++#: (tonight's generic tape chain) of the A/B.
++comptime CNN_FUSED_OPS = not is_defined["MOJOLEARN_CNN_GENERIC_OPS"]()
+ 
+ #: Host-arm operation words (`Exec.cnn_op_host`).
+ comptime CNN_HOST_BLOCK_FORWARD = 0

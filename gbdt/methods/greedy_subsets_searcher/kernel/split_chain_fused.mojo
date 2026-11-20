@@ -1,7 +1,6 @@
 """The non-symmetric split chain in four launches (FAST Apple default).
 
-Depthwise only; off with `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` (lane
-apple-fast-depthwise). The chain
+Depthwise only (lane apple-fast-depthwise). The chain
 `greedy_search_helper_depthwise.mojo` runs per level on the row-index-only
 schedule (DEVIATION 1902) is eight launches:
 
@@ -36,9 +35,10 @@ schedule change against the FAST path it replaces.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.apple_fast_tree_experiments import AFT_N05
-from std.gpu.intrinsics import ldg
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import bitcast
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -88,9 +88,9 @@ def fused_flags_count_kernel[GUARD: Bool = False](
         var i = chunk * FUSED_CHAIN_BLOCK + tid
         var v = Int32(0)
         if i < size:
-            var load_index = Int(ldg(row_index + (offset + i)))
+            var load_index = Int((row_index + (offset + i)).unsafe_load[invariant=True]())
             var feature_val = (
-                ldg(compressed_index + (f_offset + load_index)) & mask
+                (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
             )
             var goes_right = (
                 feature_val == value
@@ -264,7 +264,7 @@ def fused_place_scatter_kernel[GUARD: Bool = False](
             else:
                 dst = n_zeros + ones_before + rank_one
             temp_index.unsafe_store(
-                offset + dst, ldg(row_index + (offset + i))
+                offset + dst, (row_index + (offset + i)).unsafe_load[invariant=True]()
             )
         barrier()
         chunk += Int(grid_dim.x)
@@ -290,12 +290,15 @@ def fused_copy_back_kernel[GUARD: Bool = False](
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while i < size:
-        row_index.unsafe_store(offset + i, ldg(temp_index + (offset + i)))
+        row_index.unsafe_store(offset + i, (temp_index + (offset + i)).unsafe_load[invariant=True]())
         i += stride
 
 
 # ---- DW_NO_LEVEL_SYNC (FAST, Apple; default) -----------------------------
 #: `dw_select_splits_kernel`'s block (one thread per scored leaf).
+# TOMBSTONE: MOJOLEARN_AFT_N05 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at f2d53d03bd.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N05.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # N05: four simdgroups select/pack leaf split descriptors per block,
 # amortizing threadgroup scheduling across more independent leaves. The
 # strict gain test and prefix rank defining creation order stay unchanged.

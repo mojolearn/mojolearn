@@ -1,0 +1,15 @@
+diff --git a/gbdt/trees_hist_switches.mojo b/gbdt/trees_hist_switches.mojo
+index 4e4ce3e17f..974e020023 100644
+--- a/gbdt/trees_hist_switches.mojo
++++ b/gbdt/trees_hist_switches.mojo
+@@ -27,9 +27,7 @@ comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # Idea 1: grad+hess of one point in ONE 64-bit shared atomic (NVIDIA/AMD;
+ # Apple has no 64-bit atomics and keeps the two Int32 atomics). Range proof
+ # in `hist_2_one_byte_8bit.h8_add_point`.
+-# TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at e312bd1c25.
+-# Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.patch
+-comptime HIST_PACKED_GH = False
++comptime HIST_PACKED_GH = _IDN and is_defined["MOJOLEARN_TREES_HIST_PACKED_GH"]()
+ 
+ # Idea 2: wave-aggregated atomics. When every lane of a hardware wave holds
+ # the same (feature, bin) cell, the wave sums its addends with one shuffle

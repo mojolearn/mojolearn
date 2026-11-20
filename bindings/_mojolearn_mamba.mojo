@@ -133,10 +133,10 @@ rc 134), an open defect. Build:
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from core.hostptr import f32_ptr, read_f32, copy_f32
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.time import perf_counter_ns
-from std.sys.compile import is_defined, get_defined_int
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
@@ -226,8 +226,6 @@ from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
-from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
-from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
 from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
 from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
@@ -237,9 +235,11 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_operation
-from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
-from mamba.native_workspace_dispatch import NATIVE_MAMBA2_WORKSPACE_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from mamba.impl.mamba_block_program import mamba_block_call_abi
+from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API, mamba_block_operation
+from core.mamba3_prefill_session import Mamba3PrefillHandle
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from providers.python.causal_session_handles_pyapi_unpack import causal_session_handles_type
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -250,33 +250,29 @@ from mamba.impl.mamba_shell_impl import (
     _m3_write_f32,
     _m3_upload_addr,
     _m3_download_addr,
-    _mamba1_run,
-    _mamba1_run_arena,
     _mamba1_backward_run,
     Mamba1DecodeSession,
     _m1_require_session_open,
     _m1_session_open_run,
     _m1_session_step_run,
+    _m1_session_decode_run,
     _m1_session_export_run,
     _m1_session_load_run,
-    _mamba2_run,
-    _mamba2_run_arena,
     Mamba2DecodeSession,
     _m2_require_session_open,
     _m2_session_open_run,
     _m2_session_step_run,
+    _m2_session_decode_run,
     _m2_session_export_run,
     _m2_session_load_run,
     _m3_load_weights,
-    _mamba3_run,
     _mamba3_run_owned,
-    _mamba3_run_arena,
     Mamba3DecodeSession,
     _m3_require_session_open,
     _m3_session_copy_in,
     _m3_session_open_run,
-    IDN_M3_DECODE_WINDOW_REUSE,
     _m3_session_step_run,
+    _m3_session_decode_run,
     _m3_session_export_run,
     NN40_OWNED_WEIGHTS,
     Mamba3PrefillSession,
@@ -299,6 +295,8 @@ from mamba.impl.mamba_shell_impl import (
     _mamba2_backward_run,
     _mamba3_backward_run,
 )
+from mamba.neural_entry_device import publish_neural_mamba_device
+from mamba.causal_entry_device import publish_causal_mamba_device
 
 
 
@@ -341,7 +339,7 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba1 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(23):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(23):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1 backward: null buffer address at slot " + String(i))
@@ -376,14 +374,8 @@ def mamba_block_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-def mamba2_workspace_api_binding() raises -> PythonObject:
-    var api = NATIVE_MAMBA2_WORKSPACE_API.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
-
-
-def mamba_prefill_native_handle_binding(session: PythonObject) raises -> PythonObject:
-    # Exact native type admission; no extension layout or Python hook access.
-    return PythonObject(Int(session.downcast_value_ptr[Mamba3PrefillSession]()))
+# TOMBSTONE: mamba2_workspace_api_v1 (the Mamba-2 public-step workspace descriptor) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
+# Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
@@ -398,7 +390,7 @@ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(count):  # small-loop(count: buffer addresses of one block call): reads the pointer list, not data
+    for i in range(count):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(count: buffer addresses of one block call): reads the pointer list, not data
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -519,7 +511,7 @@ def mamba1_session_open_binding(
         raise Error("mamba1 session: already open; close it first")
     var a = List[Int]()
     a.append(0)
-    for i in range(count):  # small-loop(count: session buffer addresses): reads the pointer list, not data
+    for i in range(count):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(count: session buffer addresses): reads the pointer list, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1_session_open: null buffer address at slot " + String(i))
@@ -560,6 +552,34 @@ def mamba1_session_step_binding(
     try:
         with GILReleased(Python()):
             _m1_session_step_run(owner[], px, py)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
+def mamba1_session_decode_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """N decode tokens on an open session in one call (decode plan D2):
+    `addrs` = [x, y_out], both B * N * d_model float32 in (B, N, d_model)
+    order; `params` = [N]. Bytes equal N `mamba1_session_step` calls. A
+    failed call marks the session lost."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 2 or len(params) != 1:
+        raise Error("mamba1_session_decode: expected 2 addresses and 1 scalar")
+    var px = Int(py=addrs[0])
+    var py = Int(py=addrs[1])
+    var n = Int(py=params[0])
+    if px == 0 or py == 0:
+        raise Error("mamba1_session_decode: null buffer address")
+    _m1_require_session_open(owner[])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m1_session_decode_run(owner[], px, py, n)
     except error:
         owner[].busy = False
         owner[].usable = False
@@ -640,7 +660,7 @@ def _mamba2_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(16):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(16):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -763,7 +783,7 @@ def mamba2_session_open_binding(session: PythonObject, addrs: PythonObject,
     if owner[].busy or owner[].is_open():
         raise Error("mamba2_session_open: session is busy or already open")
     var a = List[Int]()
-    for i in range(13):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(13):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0:
             raise Error("mamba2_session_open: null buffer address")
@@ -771,9 +791,15 @@ def mamba2_session_open_binding(session: PythonObject, addrs: PythonObject,
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111:
+        # they were converted inside the released block before).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Float32(Float64(py=params[3]))
+        var p4 = Float32(Float64(py=params[4]))
         with GILReleased(Python()):
-            _m2_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                Int(py=params[2]), Float32(Float64(py=params[3])), Float32(Float64(py=params[4])))
+            _m2_session_open_run(owner[], a, p0, p1, p2, p3, p4)
     except error:
         owner[].busy = False
         owner[].release()
@@ -804,12 +830,37 @@ def mamba2_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     return PythonObject(q)
 
 
+def mamba2_session_decode_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """N decode tokens in one call (decode plan D2): `addrs` = [x, y, h_last],
+    x and y (B, N, d_model) float32, h_last the last token's report;
+    `params` = [N]. Returns the carried buf_len."""
+    var owner = session.downcast_value_ptr[Mamba2DecodeSession]()
+    if len(addrs) != 3 or len(params) != 1:
+        raise Error("mamba2_session_decode: expected x, y, h_last addresses and N")
+    var px = Int(py=addrs[0]); var py = Int(py=addrs[1]); var ph = Int(py=addrs[2])
+    var n = Int(py=params[0])
+    if px == 0 or py == 0 or ph == 0:
+        raise Error("mamba2_session_decode: null buffer address")
+    _m2_require_session_open(owner[])
+    owner[].busy = True
+    var q = 0
+    try:
+        with GILReleased(Python()):
+            q = _m2_session_decode_run(owner[], px, py, ph, n)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(q)
+
+
 def mamba2_session_export_state_binding(session: PythonObject, addrs: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[Mamba2DecodeSession]()
     if len(addrs) != 4:
         raise Error("mamba2_session_export_state: expected 4 addresses")
     var a = List[Int]()
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(4):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba2_session_export_state: null buffer address")
         a.append(p)
@@ -830,7 +881,7 @@ def mamba2_session_load_state_binding(session: PythonObject, addrs: PythonObject
     if len(addrs) != 4 or len(params) != 1:
         raise Error("mamba2_session_load_state: expected 4 addresses and buf_len")
     var a = List[Int]()
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(4):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba2_session_load_state: null buffer address")
         a.append(p)
@@ -849,115 +900,6 @@ def mamba2_session_close_binding(session: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-def _mamba3_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
-    if len(addrs) != 25:
-        raise Error(
-            what
-            + ": addrs must contain 25 addresses (x, block norm.weight,"
-            " in_proj.weight, dt_bias, B_norm.weight, C_norm.weight,"
-            " B_bias, C_bias, D, out_proj.weight, theta, h, buffer_qrot,"
-            " buffer_krot, buffer_v, buffer_dt, buffer_sig, buffer_adt,"
-            " pending_k, pending_v, y_out, h_last_out, k_last_out,"
-            " v_last_out, theta_last_out), got "
-            + String(len(addrs))
-        )
-    var a = List[Int]()
-    for i in range(25):  # small-loop(addrs: fixed-length buffer address list)
-        a.append(Int(py=addrs[i]))
-    return a^
-
-
-def mamba3_forward_binding(
-    addrs: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """One Mamba-3 (SISO) block call: prefill from the state the caller
-    hands in -- fresh (all zeros, buf_len 0, pending 0), resumed (a
-    carried ten-piece state: chunked-prefill continuation), or a
-    reference Input_States continuation (pending 1 on a FRESH state; the
-    lane's own set_input_states refuses anything else by name). Returns
-    the post-call `buf_len`.
-
-    `addrs` is the TWENTY-FIVE buffer addresses, in this exact order
-    (mirrored in `python/mojolearn/_mamba_impl.py`; H = d_inner/64 =
-    d_model/32 heads, N = 128, P = 64, R = 32, Q = 64, d_in_proj =
-    2*d_inner + 256 + 3*H + 32):
-
-        0  x                 B * L * d_model float32, read
-        1  norm.weight       d_model, read (the BLOCK norm; the fixture
-                              calls it block_norm.weight)
-        2  in_proj.weight    d_in_proj * d_model, read (column order
-                              z | x | B | C | dd_dt | dd_A | trap |
-                              angle, mamba3.py:106-107)
-        3  dt_bias           H, read
-        4  B_norm.weight     N, read (the S21 B RMSNorm, eps 1e-5)
-        5  C_norm.weight     N, read (the S21 C RMSNorm)
-        6  B_bias            H * N, read (per-head, AFTER the norm)
-        7  C_bias            H * N, read
-        8  D                 H, read
-        9  out_proj.weight   d_model * d_inner, read
-       10  theta             B * H * R, READ AND WRITTEN (state: the
-                              serial rotary angles, always in [0, 2pi))
-       11  h                 B * H * P * N, READ AND WRITTEN (state: the
-                              SEALED chunk-boundary h, DEVIATION 832)
-       12  buffer_qrot       B * Q * H * N, READ AND WRITTEN (state:
-                              rotated-UNSCALED q rows of the last
-                              working chunk)
-       13  buffer_krot       B * Q * H * N, READ AND WRITTEN (state)
-       14  buffer_v          B * Q * H * P, READ AND WRITTEN (state: raw
-                              v = the x split, there is NO conv)
-       15  buffer_dt         B * Q * H, READ AND WRITTEN (state)
-       16  buffer_sig        B * Q * H, READ AND WRITTEN (state:
-                              sigma(trap))
-       17  buffer_adt        B * Q * H, READ AND WRITTEN (state)
-       18  pending_k         B * H * N, READ AND WRITTEN (the
-                              Input_States pair, live only under
-                              pending = 1; round-trips otherwise)
-       19  pending_v         B * H * P, READ AND WRITTEN
-       20  y_out             B * L * d_model, WRITTEN (the block output,
-                              residual add included)
-       21  h_last_out        B * H * P * N, WRITTEN (REPORT stage)
-       22  k_last_out        B * H * N, WRITTEN (REPORT stage)
-       23  v_last_out        B * H * P, WRITTEN (REPORT stage)
-       24  theta_last_out    B * H * R, WRITTEN (REPORT stage)
-
-    `params` is, in this exact order:
-
-        0  B
-        1  L
-        2  d_model     must be a multiple of 32; refused otherwise BY
-                        NAME in Mojo (Mamba3Dims.of)
-        3  buf_len     valid rows of the last-working-chunk buffer, in
-                        [0, 64] INCLUSIVE (DEVIATION 794); 0 for a
-                        fresh sequence ONLY
-        4  pending     0 or 1; 1 marks theta/h/pending_k/pending_v as
-                        a reference Input_States continuation, consumed
-                        by this call (DEVIATION 794)
-
-    There is NO dt clamp parameter: mamba3 S6 is bias -> softplus and
-    nothing else (contract section 0; do not import mamba2's dt_lo /
-    dt_hi here). Profile constants (d_state 128, headdim 64, ngroups 1,
-    rope_fraction 0.5 = 32 angles, A_floor 1e-4, CHUNK_SIZE 64 -- PART
-    OF THE ARITHMETIC, DEVIATIONS 827/783) are NOT parameters; changing
-    one is a v2."""
-    var a = _mamba3_addrs(addrs, String("mamba3_forward"))
-    if len(params) != 5:
-        raise Error(
-            "mamba3_forward: params must contain 5 values (B, L, d_model,"
-            " buf_len, pending), got "
-            + String(len(params))
-        )
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    var q0 = Int(py=params[3])
-    var pend = Int(py=params[4])
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = mamba_state_operation(4, a, [b, l, dm, q0, pend], [])
-    return PythonObject(out_len)
-
-
 def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Fresh zero-state prefill whose resumption state has no caller owner.
 
@@ -968,11 +910,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
     if len(addrs) != 15 or len(params) != 3:
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(0)
-    for i in range(10, 15):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10, 15):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         a.append(Int(py=addrs[i]))
     var b = Int(py=params[0])
     var l = Int(py=params[1])
@@ -981,184 +923,59 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: B and L must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba3_run[True](a, b, l, dm, 0, 0)
+        out_len = mamba_block_call_abi(3, a, b, l, dm, 0, 0, Float32(0), Float32(0), True)
     return PythonObject(out_len)
 
 
-def mamba3_decode_step_binding(
-    addrs: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """One decode token: `Mamba3.step`'s semantics, the profile's
-    spelling -- PREFILL RESUMPTION at L = 1 (DEVIATION 831), through the
-    same `mamba3_block_forward` the forward entry calls, with NO
-    arithmetic of its own (`mamba3_step`'s rule; the reference per-token
-    recurrence rounds differently and is the required-RED
-    STEP_UPSTREAM_RECURRENCE arm, never a mode).
-
-    `addrs`: the same TWENTY-FIVE as `mamba3_forward` with L = 1 shapes
-    (x and y_out are B * d_model). `params`: 0 B, 1 d_model, 2 buf_len,
-    3 pending. Returns the post-call buf_len."""
-    var a = _mamba3_addrs(addrs, String("mamba3_decode_step"))
-    if len(params) != 4:
-        raise Error(
-            "mamba3_decode_step: params must contain 4 values (B,"
-            " d_model, buf_len, pending), got "
-            + String(len(params))
-        )
-    var b = Int(py=params[0])
-    var dm = Int(py=params[1])
-    var q0 = Int(py=params[2])
-    var pend = Int(py=params[3])
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = mamba_state_operation(5, a, [b, dm, q0, pend], [])
-    return PythonObject(out_len)
-
-
-def mamba3_state_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`mamba3_forward` (step 0) or `mamba3_decode_step` (step 1) on the
-    installed owned snapshot of prefill `session` (lane migrate-neural-2):
-    the weights are read on the device, never from the caller's arrays.
-    `addrs` is the same twenty-five as `mamba3_forward` (the nine weight
-    slots are not read; 0 is accepted); `params` = [B, L, d_model, buf_len,
-    pending, generation, step] (L = 1 for a step). Returns the post-call
-    buf_len."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    var a = _mamba3_addrs(addrs, String("mamba3_state_owned"))
-    if len(params) != 7:
-        raise Error("mamba3_state_owned: params must contain 7 values (B, L, d_model, buf_len, pending, generation, step)")
-    if owner[].busy or not owner[].usable or not owner[].owned_weights:
-        raise Error("mamba3 owned forward: session is not ready")
-    if Int(py=params[5]) != owner[].weight_generation:
-        raise Error("mamba3 owned forward: stale weight generation")
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    var q0 = Int(py=params[3])
-    var pend = Int(py=params[4])
-    var step = Int(py=params[6])
-    if step != 0 and step != 1:
-        raise Error("mamba3_state_owned: step must be 0 or 1")
-    if step == 1 and l != 1:
-        raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
-    owner[].busy = True
-    var out_len = 0
+def _m3_b_arm(session: PythonObject, op: Int, addrs: PythonObject, params: List[Int]) raises -> PythonObject:
+    """B arm of `-D MOJOLEARN_NEURAL_TABLE_ROUTE_OFF` (bindings/neural_block_public.mojo):
+    the pre-table Python entry around the same session operation of
+    `mamba/native_block_dispatch.mojo` on the block's session handle owner
+    (core/mamba3_prefill_session.mojo; lane mamba3-prefill-handle). The
+    reserve and release run with the GIL held, the operation with it released.
+    Same words, same bodies: the A/B times the boundary only."""
+    var word = session.downcast_value_ptr[Mamba3PrefillHandle]()[].word()
+    var a = List[Int]()
+    for i in range(len(addrs)):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
+        a.append(Int(py=addrs[i]))
+    var words: List[Int] = [word]
+    words.extend(params.copy())
+    var slot: List[Int] = [word]
+    _ = mamba_block_operation(0, List[Int](), slot, List[Float64]())
+    var result = 0
     try:
         with GILReleased(Python()):
-            out_len = _mamba3_run_owned(owner[], a, b, l, dm, q0, pend)
+            result = mamba_block_operation(op, a, words, List[Float64]())
     except error:
-        owner[].busy = False
+        _ = mamba_block_operation(1, List[Int](), slot, List[Float64]())
         raise error
-    owner[].busy = False
-    return PythonObject(out_len)
+    _ = mamba_block_operation(1, List[Int](), slot, List[Float64]())
+    return PythonObject(result)
+
+
+def _m3_b_arm_words(params: PythonObject) raises -> List[Int]:
+    var p = List[Int]()
+    for i in range(len(params)):  # driver-loop: over scalar arguments (fixed count, not data); small-loop(params: fixed-length scalar list)
+        p.append(Int(py=params[i]))
+    return p^
 
 
 def mamba3_owned_weights_enabled_binding() raises -> PythonObject:
+    # Kept: the protected verify (python/mojolearn/_verify_api_neural.py) reads it.
     return PythonObject(NN40_OWNED_WEIGHTS)
 
 
 def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs: PythonObject, d_model: PythonObject) raises -> PythonObject:
-    """Copy nine tensors into an immutable session-owned generation.
-    Complete all uploads before replacing the previous snapshot. External
-    arrays may mutate afterwards: owned calls no longer consult them."""
-    comptime if not NN40_OWNED_WEIGHTS:
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if owner[].busy or not owner[].usable:
-        raise Error("mamba3 owned weights: session is busy or unusable")
+    """B arm only: owned snapshot install (op 15) on the session handle owner."""
     if len(addrs) != 9:
         raise Error("mamba3 owned weights: expected nine weight addresses")
-    var native_d_model = Int(py=d_model)
-    var dims = Mamba3Dims.of(native_d_model)
-    var a = List[Int]()
-    a.append(0)
-    for i in range(9):  # small-loop(addrs: fixed-length buffer address list)
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("mamba3 owned weights: null weight address")
-        a.append(address)
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_install_weights_run(owner[], a, dims, native_d_model)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(owner[].weight_generation)
-
-
-def mamba3_prefill_session_forward_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """[x,y,h_last,k_last,v_last,theta_last], [B,L,d_model,generation].
-    A null report follows the existing reports-optional contract."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if len(addrs) != 6 or len(params) != 4:
-        raise Error("mamba3 owned forward: expected six addresses and four scalars")
-    if owner[].busy or not owner[].usable or not owner[].owned_weights:
-        raise Error("mamba3 owned forward: session is not ready")
-    var generation = Int(py=params[3])
-    if generation != owner[].weight_generation:
-        raise Error("mamba3 owned forward: stale weight generation")
-    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
-    if b <= 0 or l <= 0 or dm != owner[].dm:
-        raise Error("mamba3 owned forward: invalid shape or configuration")
-    var a = List[Int](length=25, fill=0)
-    a[0] = Int(py=addrs[0])
-    a[20] = Int(py=addrs[1])
-    if a[0] == 0 or a[20] == 0:
-        raise Error("mamba3 owned forward: null input/output")
-    for i in range(4):  # small-loop(addrs: fixed-length buffer address list)
-        a[21 + i] = Int(py=addrs[2 + i])
-        comptime if not IDN_MAMBA3_REPORTS_ON_REQUEST:
-            if a[21 + i] == 0:
-                raise Error("mamba3 owned forward: report address required")
-    owner[].busy = True
-    var out_len = 0
-    try:
-        with GILReleased(Python()):
-            out_len = _m3_prefill_run(owner[], a, b, l, dm, True)
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    return PythonObject(out_len)
+    return _m3_b_arm(session, 15, addrs, [Int(py=d_model)])
 
 
 def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """[x,dy,dx,nine dWeights], [B,L,d_model,generation]. Explicit stale
-    generation refusal prevents differentiating a different snapshot."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if len(addrs) != 12 or len(params) != 4:
-        raise Error("mamba3 owned backward: expected twelve addresses and four scalars")
-    if owner[].busy or not owner[].usable or not owner[].owned_weights:
-        raise Error("mamba3 owned backward: session is not ready")
-    if Int(py=params[3]) != owner[].weight_generation:
-        raise Error("mamba3 owned backward: stale weight generation")
-    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
-    if b <= 0 or l <= 0 or dm != owner[].dm:
-        raise Error("mamba3 owned backward: invalid shape or configuration")
-    var a = List[Int](length=21, fill=0)
-    a[0] = Int(py=addrs[0])
-    for i in range(1, 12):  # small-loop(addrs: fixed-length buffer address list)
-        a[9 + i] = Int(py=addrs[i])
-        if a[9 + i] == 0:
-            raise Error("mamba3 owned backward: null buffer address")
-    if a[0] == 0:
-        raise Error("mamba3 owned backward: null input")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_prefill_backward_run(owner[], a, b, l, dm, True)
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    return PythonObject(None)
+    """B arm only: owned backward (op 9) on the session handle owner."""
+    return _m3_b_arm(session, 9, addrs, _m3_b_arm_words(params))
+
 
 
 def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
@@ -1176,7 +993,7 @@ def mamba3_forward_tape_binding(addrs: PythonObject, params: PythonObject) raise
     if b < 1 or l < 1 or dm < 1:
         raise Error("mamba3 forward tape: positive B, L and d_model required")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0: raise Error("mamba3 forward tape: null input or weight")
         a.append(address)
@@ -1211,7 +1028,7 @@ def mamba3_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises
     if len(addrs) != 11:
         raise Error("mamba3 backward tape: expected 11 addresses")
     var a = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(11):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0: raise Error("mamba3 backward tape: null gradient buffer")
         a.append(address)
@@ -1242,127 +1059,11 @@ def mamba3_close_tape_binding(tape: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-def mamba3_prefill_session_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=Mamba3PrefillSession())
-
-
-def mamba3_prefill_session_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if owner[].busy: raise Error("mamba3 prefill session: busy")
-    owner[].usable = False
-    owner[].release()
-    return PythonObject(0)
-
-
-def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonObject,
-                                           params: PythonObject) raises -> PythonObject:
-    """`mamba3_forward_fresh` on a session: the same 15 pointers (x, nine
-    weights, y, and the four public reports) and 3 parameters (B, L,
-    d_model); the weights retained across calls."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if len(addrs) != 15 or len(params) != 3:
-        raise Error("mamba3_prefill_session_forward: expected 15 addresses and 3 parameters (B, L, d_model)")
-    if owner[].busy: raise Error("mamba3 prefill session: busy")
-    if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
-    var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
-        var p = Int(py=addrs[i])
-        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
-        a.append(p)
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
-        a.append(0)
-    for i in range(10, 15):  # small-loop(addrs: fixed-length buffer address list)
-        var p = Int(py=addrs[i])
-        if p == 0:
-            # lane/fam2-lm: a null REPORT address (11..14) means "do not
-            # download this report"; y (10) is always required.
-            var report_optional = False
-            comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
-                report_optional = i >= 11
-            if not report_optional:
-                raise Error("mamba3_prefill_session_forward: null buffer address")
-        a.append(p)
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    if b < 1 or l < 1:
-        raise Error("mamba3_prefill_session_forward: B and L must be positive")
-    owner[].busy = True
-    var out_len = 0
-    try:
-        with GILReleased(Python()):
-            out_len = _m3_prefill_run(owner[], a, b, l, dm)
-    except error:
-        owner[].busy = False
-        owner[].usable = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    return PythonObject(out_len)
-
-
 def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: PythonObject,
                                             params: PythonObject) raises -> PythonObject:
-    """`mamba3_backward` on a session: the same 21 pointers and 3
-    parameters (B, L, d_model); the weights and the last forward's stages
-    retained across calls (see `_m3_prefill_backward_run`)."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if len(addrs) != 21 or len(params) != 3:
-        raise Error("mamba3_prefill_session_backward: expected 21 addresses and 3 scalars")
-    if owner[].busy: raise Error("mamba3 prefill session: busy")
-    if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    if b <= 0 or l <= 0 or dm <= 0:
-        raise Error("mamba3_prefill_session_backward: B, L and d_model must be positive")
-    var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
-        a.append(address)
-    # The entry's own refusal of a non-finite grad_output now runs on the
-    # device, first thing in `_m3_prefill_backward_run` (cpu2-l11-neural);
-    # that refusal touched nothing, so the session stays usable.
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_prefill_backward_run(owner[], a, b, l, dm)
-    except error:
-        owner[].busy = False
-        if String(error).startswith(_M3_BWD_NONFINITE_DY):
-            raise error
-        owner[].usable = False
-        owner[].release()
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
+    """B arm only: session backward (op 7) on the session handle owner."""
+    return _m3_b_arm(session, 7, addrs, _m3_b_arm_words(params))
 
-
-def mamba3_prefill_session_reports_optional_binding() raises -> PythonObject:
-    """True where `mamba3_prefill_session_forward` admits a null report
-    address (IDN_MAMBA3_REPORTS_ON_REQUEST); the Python block asks before
-    it passes one."""
-    comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
-        return PythonObject(True)
-    else:
-        return PythonObject(False)
-
-
-def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonObject:
-    """[weight_uploads, weight_recopies, weight_reuses, backward_reuses,
-    backward_recomputes, stages_held] as ints: the A/B evidence for the
-    byte compares (how often the weights and the forward were reused)."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    var out = Python.list()
-    _ = py_call(out.append, PythonObject(owner[].weight_uploads))
-    _ = py_call(out.append, PythonObject(owner[].weight_recopies))
-    _ = py_call(out.append, PythonObject(owner[].weight_reuses))
-    _ = py_call(out.append, PythonObject(owner[].backward_reuses))
-    _ = py_call(out.append, PythonObject(owner[].backward_recomputes))
-    _ = py_call(out.append, PythonObject(1 if owner[].stages_valid else 0))
-    return out
 
 
 def mamba3_session_create_binding() raises -> PythonObject:
@@ -1378,16 +1079,20 @@ def mamba3_session_open_binding(session: PythonObject, addrs: PythonObject,
         raise Error("mamba3_session_open: B and d_model must be positive")
     if owner[].busy or owner[].is_open(): raise Error("mamba3 session: busy or open")
     var a = List[Int]()
-    for i in range(19):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(19):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_open: null buffer address")
         a.append(p)
     owner[].busy = True
     owner[].usable = False
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
+        var p2 = Int(py=params[2])
+        var p3 = Int(py=params[3])
         with GILReleased(Python()):
-            _m3_session_open_run(owner[], a, Int(py=params[0]), Int(py=params[1]),
-                                 Int(py=params[2]), Int(py=params[3]))
+            _m3_session_open_run(owner[], a, p0, p1, p2, p3)
     except error:
         owner[].busy = False; owner[].release(); raise error
     owner[].busy = False
@@ -1399,7 +1104,7 @@ def mamba3_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 6: raise Error("mamba3_session_step: expected 6 addresses")
     var a = List[Int]()
-    for i in range(6):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(6):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_step: null buffer address")
         a.append(p)
@@ -1414,11 +1119,34 @@ def mamba3_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     return PythonObject(q)
 
 
+def mamba3_session_decode_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """N decode tokens in one call (decode plan D2): `addrs` = [x, y, h_last,
+    k_last, v_last, theta_last], x and y (B, N, d_model) float32, the reports
+    the last token's; `params` = [N]. Returns the carried buf_len."""
+    var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
+    if len(addrs) != 6 or len(params) != 1: raise Error("mamba3_session_decode: expected 6 addresses and N")
+    var a = List[Int]()
+    for i in range(6):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
+        var p = Int(py=addrs[i])
+        if p == 0: raise Error("mamba3_session_decode: null buffer address")
+        a.append(p)
+    var n = Int(py=params[0])
+    _m3_require_session_open(owner[])
+    owner[].busy = True
+    var q = 0
+    try:
+        with GILReleased(Python()): q = _m3_session_decode_run(owner[], a, n)
+    except error:
+        owner[].busy = False; owner[].usable = False; raise error
+    owner[].busy = False
+    return PythonObject(q)
+
+
 def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 10: raise Error("mamba3_session_export_state: expected 10 addresses")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_export_state: null buffer address")
         a.append(p)
@@ -1432,7 +1160,7 @@ def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObje
     owner[].busy = False
     var result = Python.list()
     _ = py_call(result.append, PythonObject(q))
-    _ = py_call(result.append, PythonObject(1 if owner[].state.value().pending else 0))
+    _ = py_call(result.append, PythonObject(1 if owner[].pending else 0))
     return result
 
 
@@ -1442,15 +1170,18 @@ def mamba3_session_load_state_binding(session: PythonObject, addrs: PythonObject
     if len(addrs) != 10 or len(params) != 2:
         raise Error("mamba3_session_load_state: expected 10 addresses and 2 scalars")
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(10):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var p = Int(py=addrs[i])
         if p == 0: raise Error("mamba3_session_load_state: null buffer address")
         a.append(p)
     _m3_require_session_open(owner[])
     owner[].busy = True
     try:
+        # The Python params are read with the GIL held (lane perf-audit-20261111).
+        var p0 = Int(py=params[0])
+        var p1 = Int(py=params[1])
         with GILReleased(Python()):
-            _m3_session_copy_in(owner[], a, Int(py=params[0]), Int(py=params[1]))
+            _m3_session_copy_in(owner[], a, p0, p1)
     except error:
         owner[].busy = False; owner[].usable = False; raise error
     owner[].busy = False
@@ -1473,7 +1204,7 @@ def mamba2_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba2 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(21):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba2 backward: null buffer address at slot " + String(i))
@@ -1496,7 +1227,7 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("mamba3 backward: B, L and d_model must be positive")
     var a = List[Int]()
-    for i in range(21):  # small-loop(addrs: fixed-length buffer address list)
+    for i in range(21):  # driver-loop: over buffer-address arguments (fixed count, not data); small-loop(addrs: fixed-length buffer address list)
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba3 backward: null buffer address at slot " + String(i))
@@ -1510,6 +1241,7 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_mamba() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
@@ -1537,15 +1269,19 @@ def build__mojolearn_mamba() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba")
+        # Neural-blocks entry table (core/neural_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_neural_mamba_device()
+        # CausalLM entry table (core/causal_lm_entry_table.mojo); the Python
+        # entries remain for their other callers and the boundary tests.
+        publish_causal_mamba_device()
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
         m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
-        m.def_function[mamba2_workspace_api_binding]("mamba2_workspace_api_v1")
         m.def_function[mamba3_tape_create_native_binding]("mamba3_tape_create_native_v1")
         m.def_function[mamba3_tape_handle_native_binding]("mamba3_tape_handle_native_v1")
-        m.def_function[mamba_prefill_native_handle_binding]("mamba_prefill_native_handle_v1")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
@@ -1555,6 +1291,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_decode_native_handle_binding]("mamba1_decode_native_handle_v1")
         m.def_function[mamba1_session_open_binding]("mamba1_session_open")
         m.def_function[mamba1_session_step_binding]("mamba1_session_step")
+        m.def_function[mamba1_session_decode_binding]("mamba1_session_decode")
         m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
         m.def_function[mamba1_session_load_state_binding]("mamba1_session_load_state")
         # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
@@ -1568,6 +1305,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba2_decode_native_handle_binding]("mamba2_decode_native_handle_v1")
         m.def_function[mamba2_session_open_binding]("mamba2_session_open")
         m.def_function[mamba2_session_step_binding]("mamba2_session_step")
+        m.def_function[mamba2_session_decode_binding]("mamba2_session_decode")
         m.def_function[mamba2_session_export_state_binding]("mamba2_session_export_state")
         m.def_function[mamba2_session_load_state_binding]("mamba2_session_load_state")
         m.def_function[mamba2_session_close_binding]("mamba2_session_close")
@@ -1577,60 +1315,38 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_forward_tape_binding]("mamba3_forward_tape")
         m.def_function[mamba3_backward_tape_binding]("mamba3_backward_tape")
         m.def_function[mamba3_close_tape_binding]("mamba3_close_tape")
-        m.def_function[mamba3_forward_binding]("mamba3_forward")
-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
+        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL (old path: no fresh-prefill entries; no A/B recorded for it) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 7d80876e08.
+        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL.patch
+        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL:
             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
             # lane/neural-net-experiment: the fresh prefill on a session.
-            _ = m.add_type[Mamba3PrefillSession]("_Mamba3PrefillSession")
-            m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
-            m.def_function[mamba3_prefill_session_export_weights_binding]("mamba3_prefill_session_export_weights")
+            # The prefill session is a native registry handle of this image
+            # (core/mamba3_prefill_session.mojo, lane mamba3-prefill-handle):
+            # create/close/forward/forward_owned/info/export/reports_optional,
+            # mamba3_state_owned, mamba_prefill_native_handle_v1 and the
+            # _Mamba3PrefillSession type are gone. Kept: the owned-weights
+            # answer the protected verify reads, and the three B-arm entries of
+            # MOJOLEARN_NEURAL_TABLE_ROUTE_OFF, which take the handle owner.
             m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
             m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
-            m.def_function[mamba3_prefill_session_forward_owned_binding]("mamba3_prefill_session_forward_owned")
-            m.def_function[mamba3_state_owned_binding]("mamba3_state_owned")
             m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
-            m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
-            m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
-            m.def_function[mamba3_prefill_session_info_binding]("mamba3_prefill_session_info")
-            m.def_function[mamba3_prefill_session_reports_optional_binding](
-                "mamba3_prefill_session_reports_optional"
-            )
-        m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")
         m.def_function[mamba3_decode_native_handle_binding]("mamba3_decode_native_handle_v1")
         m.def_function[mamba3_session_open_binding]("mamba3_session_open")
         m.def_function[mamba3_session_step_binding]("mamba3_session_step")
+        m.def_function[mamba3_session_decode_binding]("mamba3_session_decode")
         m.def_function[mamba3_session_export_state_binding]("mamba3_session_export_state")
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
+        # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
+        # The CausalLM handle owner (core/causal_session_handles.mojo): one Python
+        # type per interpreter (the transformer and Mamba bindings both attach it).
+        # The decode program is reached through the CausalLM session table, so
+        # the former `causal_lm_program_read_v1` Python entry and its
+        # `_CausalProgramOwner` type are gone (lane causal-lm-sessions-native).
+        causal_session_handles_type(m)
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mamba: ", e))
-
-
-def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: PythonObject, generation: PythonObject) raises -> PythonObject:
-    """Download the installed immutable generation, never borrowed arrays."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if owner[].busy or not owner[].usable or not owner[].owned_weights or not owner[].w or Int(py=generation) != owner[].weight_generation:
-        raise Error("mamba3 owned export: missing, busy, unusable or stale generation")
-    if len(addrs) != 9:
-        raise Error("mamba3 owned export: expected nine writable buffers")
-    var a = List[Int]()
-    for i in range(9):  # small-loop(addrs: fixed-length buffer address list)
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("mamba3 owned export: null output address")
-        a.append(address)
-    var dm = owner[].dm
-    var dims = Mamba3Dims.of(dm)
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _m3_export_weights_run(owner[], a, dm, dims)
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return generation

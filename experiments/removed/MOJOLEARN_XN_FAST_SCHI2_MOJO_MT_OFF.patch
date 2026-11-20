@@ -1,0 +1,25 @@
+diff --git a/x_neighbors/kfeat_dev.mojo b/x_neighbors/kfeat_dev.mojo
+index b2c3ddb9d3..85d94ebcb1 100644
+--- a/x_neighbors/kfeat_dev.mojo
++++ b/x_neighbors/kfeat_dev.mojo
+@@ -27,7 +27,8 @@ with its sign bit set), wherever it sits; main's sequential minimum can
+ hide a negative behind an earlier NaN (min(list) keeps the NaN). Every
+ NaN-free input answers as main.
+ 
+-SCHI2_MOJO_MT, DEFAULT in FAST + Apple (bit 2). M3, one run per arm: skewed-chi2
++SCHI2_MOJO_MT, DEFAULT in FAST + Apple (bit 2; rollback
++`-D MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`). M3, one run per arm: skewed-chi2
+ istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS
+ (byte-identical outputs and refusals). SkewedChi2Sampler.fit's draws
+ (main: `_LegacyRandomState`, numpy's legacy MT19937 stream, drawn by a
+@@ -67,9 +68,7 @@ comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_
+ # TOMBSTONE: MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 327ba1435e.
+ # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE
+-# TOMBSTONE: MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 0d5b3201e0.
+-# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE
++comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"]()
+ # SCHI2_LAZYW: DEFAULT (rollback _OFF; needs SCHI2_MOJO_MT, i.e. not its _OFF):
+ # skewed-chi2 taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, w2-w3kf-xn-q PASS
+ # (M3, ea6b2035e). See `kfeat_schi2_draw`.

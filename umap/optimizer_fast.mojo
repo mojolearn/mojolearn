@@ -3,21 +3,24 @@
 """Sparse conflict-free Jacobi GPU optimizer for UMAP's NUMERIC_FAST lane."""
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
-from std.math import isfinite
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_dim, block_idx, thread_idx
+from std.math import isfinite
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from umap.optimizer_identical_device import umap_dense_graph_to_device
 
 
+# TOMBSTONE: MOJOLEARN_AFCL_G10 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at ceeb99c2a0.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G10.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # AFCL-G10: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Two SIMD groups per block make heavy CSR head rows less likely to delay
 # unrelated rows in the same block. Each head still owns its complete edge
 # sequence and counter-derived negatives against the same epoch snapshot.
 # Epoch count, sample count, seed and convergence settings are untouched.
 comptime AFCL_G10 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G10"]()
 )
 comptime FAST_OPT_TPB = 64 if AFCL_G10 else 128
@@ -208,12 +211,9 @@ def optimize_layout_fast(
 #: (the per-component kernel above walks the edges, their pow and their
 #: negative samples once PER component). Every component's sum takes the
 #: same terms in the same order, so the layout is the same bytes.
-#: `-D MOJOLEARN_UMAP_FUSED_EPOCH_OFF` keeps the per-component kernel.
-comptime UMAP_FUSED_EPOCH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_UMAP_FUSED_EPOCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_UMAP_FUSED_EPOCH_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 507a0aa5ac.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_FUSED_EPOCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime UMAP_FUSED_EPOCH = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def umap_jacobi_epoch_fused_kernel[C: Int](

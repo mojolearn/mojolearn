@@ -6,38 +6,16 @@ Owned by the `decomp` expansion lane. `mojolearn/__init__.py` imports this
 module and makes every name in `__all__` public as `mojolearn.<name>`; a name
 that is already public is refused at import.
 
-HOW THE ARITHMETIC IS SPLIT. Every floating-point operation on data runs in
-Mojo, in the cells of `x_decomp/cells.mojo`, through `_mojolearn_x_decomp`
-(the GPU binding: one thread per output) or, on a CPU-only install, its host
-binding (the same cells in a host loop). This file holds CONTROL FLOW and
-DATA MOVEMENT only: slicing, stacking, transposing, sign flips (exact) and
-comparisons of float32 values the binding returned. Scalars handed to a cell
-are Python floats rounded once to float32 at the binding boundary, and are
-computed here only with IEEE +, -, *, / and sqrt, which CPython performs
-correctly rounded on every platform. So the CPU column and every GPU column
-run the same arithmetic in the same order, and the result is the same bits.
+Every public operation here is one call into its compiled native owner
+(bindings/*_native.mojo), which admits the inputs, runs the x_decomp cells
+through the image's native table and packs the result. This file holds the
+estimator classes, their parameters and docstrings, and the import-time
+connection of those owners.
 """
-import array
-import heapq as _heapq
-import ctypes
-from . import _portable_math as math
-import sys
-
-from . import _backend, _native_family_bridge, _native_runtime_manifold_bridge
-from . import _portable_math as _pm
-from ._array import Array
-from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
-from ._buffer import addr as _addr, empty as _empty
+from . import _native_family_bridge, _native_runtime_manifold_bridge
 from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
-from ._mode import RegressorScoreMixin
 
-
-def _min_samples(n, d, who, minimum=2):
-    """scikit-learn's check_array(ensure_min_samples=...) refusal and wording."""
-    if n < minimum:
-        raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of "
-                         f"{minimum} is required by {who}.")
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -49,26 +27,17 @@ __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection
 
 _BINDING = "_mojolearn_x_decomp"
 
-# x_decomp/cells.mojo op codes
-_OP = dict(
-    muz=36, lgamma=37,
-    add=0, sub=1, mul=2, div=3, axpy=4, maxs=5, mu=6, sqrt=7, sq=8, exp=9, logs=10, tanh=11,
-    onemsq=12, abs=13, scale=14, fma=15, recip=16, soft=17, submul=18, mins=19, copyb=20,
-    sqdiff=21, adds=22, gts=23, digamma=24, expg=25, expgp=26, cube=27, cubep=28, max=30,
-    min=31, sign=33, le=34, select=35, p2scale=38,
-)
+
+# TOMBSTONE: the Python decomp kit (`_M`, `_Kit`, the host buffer pool, `_vstack`/`_hstack`,
+# `_dev_gather`, `_host_kit`, `_OP`, `_f32`, `_is_sparse`, `_mode`, `_norm`, `_tsqr_lstsq_core`)
+# deleted 2026-11-11 by lane pyout-decomp-linalg: no product caller remained (every public
+# operation is one call into its native owner; the native twins are bindings/decomp_kit_native_door.mojo,
+# mani_kit.mojo and linalg_ops_kit.mojo). Code recoverable at 6f82d0255d.
 
 
-def _f32(x):
-    """x rounded once to float32, as the binding would round it."""
-    return array.array("f", [x])[0]
-
-
-def _is_sparse(X):
-    """A scipy.sparse matrix or array, by duck type (no scipy import)."""
-    return hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format")
-
-
+# A device-resident matrix id of the GPU binding: lu_factor's resident pair
+# (`_LUPair._dev`) holds its A, LU and piv as these, assembled natively by
+# bindings/linalg_decomp_native_unpack.mojo, and frees them through the binding.
 class _DevBuf:
     """A device-resident matrix of the GPU binding (x_decomp/resident.mojo):
     a pooled buffer id, returned to the pool when this object dies."""
@@ -83,1314 +52,6 @@ class _DevBuf:
             self.b.x_decomp_dev_free(self.id)
         except Exception:     # interpreter shutdown: the pool dies with the process
             pass
-
-
-# THE BUFFER POOL (lane decomp-cpu, 2026-09-28). Every cell call writes a
-# fresh output matrix, and a large fresh `array.array` is fresh pages from the
-# OS: on a 10M-element elementwise op the page faults cost more than the
-# threaded cell itself. A large store whose last holder (an `_M`) is dropped
-# goes back here instead, and `_M.zeros` of the same length takes it and
-# zeroes it (one memset). Data movement only: a pooled store is handed out
-# only when nothing else references it (its reference count says so), and
-# it is zeroed exactly as a fresh one is. Bounded: stores of at least
-# _POOL_MIN elements, at most _POOL_PER_SIZE per length, _POOL_CAP bytes held.
-_POOL = {}
-_POOL_HELD = [0]
-_POOL_MIN = 1 << 18
-_POOL_PER_SIZE = 8
-_POOL_CAP = 512 << 20
-
-
-def _pool_take(n):
-    got = _POOL.get(n)
-    if not got:
-        return None
-    s = got.pop()
-    _POOL_HELD[0] -= 4 * n
-    ctypes.memset(s.buffer_info()[0], 0, 4 * n)
-    return s
-
-
-def _pool_give(s):
-    n = len(s)
-    if n < _POOL_MIN or _POOL_HELD[0] + 4 * n > _POOL_CAP:
-        return
-    got = _POOL.setdefault(n, [])
-    if len(got) < _POOL_PER_SIZE:
-        got.append(s)
-        _POOL_HELD[0] += 4 * n
-
-
-def _holders(s):
-    return sys.getrefcount(s)
-
-
-class _Probe:
-    """Measures, once, what `_holders(self.s)` reads inside `__del__` when
-    the dying object is the store's only holder (the count differs between
-    Python versions, so it is measured, never assumed)."""
-    __slots__ = ("s",)
-    seen = []
-
-    def __del__(self):
-        _Probe.seen.append(_holders(self.s))
-
-
-_p = _Probe()
-_p.s = array.array("f")
-del _p
-_SOLE_HOLDER = _Probe.seen[0] if _Probe.seen else -1
-
-
-
-def _host_all_finite(a):
-    """True/False from the base binding's `all_finite_f32`, or None when this
-    install has no such helper (the caller then runs the cell form)."""
-    try:
-        from ._buffer import all_finite
-        return bool(all_finite(a))
-    except (ImportError, AttributeError, OSError, TypeError):
-        return None
-
-
-class _M:
-    """A row-major float32 matrix held in an `array.array('f')`, or on the
-    device (lane decomp-apple): a GPU kit's elementwise, product, fold and
-    distance results stay in a device buffer (`_d`) until Python reads `s`
-    (or `addr`), which downloads them once and makes the host store the
-    matrix again. A host matrix handed to those entries is uploaded once
-    and MOVES to the device (its value is the one at upload)."""
-    __slots__ = ("_s", "r", "c", "_d")
-
-    def __init__(self, s, r, c):
-        if len(s) != r * c:
-            raise ValueError("x_decomp: matrix store does not match its shape")
-        self._s, self.r, self.c, self._d = s, r, c, None
-
-    @classmethod
-    def _on_device(cls, d, r, c):
-        m = cls.__new__(cls)
-        m._s, m.r, m.c, m._d = None, r, c, d
-        return m
-
-    @property
-    def s(self):
-        if self._s is None:
-            d = self._d
-            n = self.r * self.c
-            a = _pool_take(n) if n >= _POOL_MIN else None
-            if a is None:
-                a = array.array("f", [0.0]) * n
-            if len(a):
-                d.b.x_decomp_dev_download(d.id, a.buffer_info()[0], len(a))
-            self._s = a
-        self._d = None        # the host store may now change
-        return self._s
-
-    @s.setter
-    def s(self, v):
-        self._s, self._d = v, None
-
-    def __getstate__(self):
-        return (self.s, self.r, self.c)
-
-    def __setstate__(self, st):
-        self._s, self.r, self.c = st
-        self._d = None
-
-    def __del__(self):
-        try:        # the host store only (a device-resident matrix frees its buffer through _DevBuf)
-            if self._s is not None and len(self._s) >= _POOL_MIN and _holders(self._s) == _SOLE_HOLDER:
-                _pool_give(self._s)
-        except Exception:
-            pass
-
-    @classmethod
-    def zeros(cls, r, c):
-        s = _pool_take(r * c) if r * c >= _POOL_MIN else None
-        return cls(s if s is not None else array.array("f", [0.0]) * (r * c), r, c)
-
-    @classmethod
-    def of(cls, values, r, c):
-        return cls(array.array("f", values), r, c)
-
-    @classmethod
-    def shape_of_input(cls, X, name="X"):
-        """(rows, cols) of an input `from_input` would accept, with the same
-        refusals (shape, dtype, finiteness), and no store built; the cell
-        form of the finiteness check runs where the base binding lacks the
-        host helper."""
-        if _is_sparse(X):
-            X = X.toarray()
-        a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-            raise ValueError(f"{name}: a nonempty two-dimensional input is required")
-        fin = _host_all_finite(a)
-        if fin is False:
-            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-        if fin is None:
-            cls.from_input(a, name)
-        return a.shape[0], a.shape[1]
-
-    @classmethod
-    def from_input(cls, X, name="X"):
-        if _is_sparse(X):
-            X = X.toarray()          # a scipy.sparse matrix/array: densified (exact)
-        a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-            raise ValueError(f"{name}: a nonempty two-dimensional input is required")
-        s = array.array("f")
-        mv = getattr(a, "_mv", None)
-        # one copy: the Array's own buffer straight into the store (its
-        # tobytes() was a second full copy of every input)
-        # (a 2-D float memoryview is not bytes-like to array.frombytes: cast
-        # it to a flat byte view first, as _array.Array does; same bytes)
-        s.frombytes(mv.cast("B") if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
-        # The finiteness refusal on the host when the base binding has its
-        # helper (lane neural-pass27, 2026-10-01): the cell form below
-        # uploaded the whole input to the device and freed it again just to
-        # sum x * 0 (880 MB and ~250 ms a call at the board's 1M x 220 on
-        # the M4); the predicate is the same, no recorded bit depends on it.
-        fin = _host_all_finite(a)
-        if fin is False:
-            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-        m = cls(s, a.shape[0], a.shape[1])
-        if fin is None:
-            m._check_finite(name)
-        return m
-
-    def _check_finite(self, name):
-        """NaN/inf refused, through the cells: every x * 0 summed is 0 for a
-        finite input and NaN if any value is NaN or infinite."""
-        if not len(self.s):
-            return
-        k = _Kit(_backend.default_mode())
-        t = k.total(k.ew("scale", self, s=0.0)).s[0]
-        if t != t:
-            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-
-    @property
-    def addr(self):
-        return self.s.buffer_info()[0] if len(self.s) else _M._one.s.buffer_info()[0]
-
-    def copy(self):
-        return _M(array.array("f", self.s), self.r, self.c)
-
-    def out(self, shape=None):
-        """A public float32 Array (C order) of this matrix."""
-        return frombytes(self.s.tobytes(), "<f4", shape or (self.r, self.c))
-
-    def at(self, i, j=0):
-        return self.s[i * self.c + j]
-
-    def row(self, i):
-        return self.s[i * self.c:(i + 1) * self.c]
-
-    def rows(self, a, b):
-        if self._d is not None and 0 <= a < b <= self.r and _res_moves(self, (b - a) * self.c):
-            # lane fam2-decomp: rows a .. b - 1 gathered on the device
-            # (TAKE_ROWS, the row numbers as exact floats); lane
-            # cpu2-l8-decomp: at every size and in every mode
-            return _dev_gather(self, _MV_TAKE_ROWS, range(a, b))
-        return _M(self.s[a * self.c:b * self.c], b - a, self.c)
-
-    def take_rows(self, idx):
-        k = _host_kit()
-        if self.r >= _F32_INDEX_MAX:
-            raise ValueError("x_decomp: take_rows exceeds the float32 row-index bound (2^24 rows)")
-        if not isinstance(idx, _M):
-            a = array.array("f", idx)
-            idx = _M(a, len(a), 1)
-        I = idx
-        m = I.r * I.c
-        if m * self.c and k._res():
-            # lane cpu3-python: the kit's device TAKE_ROWS move on a GPU
-            # binding (the operand goes up once if it is a host matrix)
-            return k.take_rows(self, I)
-        out = _M.zeros(m, self.c)
-        if m * self.c:
-            k.b.x_decomp_move(self.addr, I.addr, out.addr,  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-                              [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
-        return out
-
-    def cols(self, a, b):
-        return self.take_cols(range(a, b))
-
-    def take_cols(self, idx):
-        """Data movement by strided slices: one C-level copy per column."""
-        idx = list(idx)
-        w = len(idx)
-        in_range = all(0 <= j < self.c for j in idx)  # glue: range check of the caller's column-index argument
-        if self._d is not None and in_range and w and _res_moves(self, self.r * w):
-            # lane fam2-decomp: the columns gathered on the device (TAKE_COLS);
-            # lane cpu2-l8-decomp: at every size and in every mode
-            return _dev_gather(self, _MV_TAKE_COLS, idx)
-        out = array.array("f", [0.0]) * (self.r * w)
-        for t, j in enumerate(idx):  # glue: one C-level slice copy per selected column on the host matrix (idx-sized: selected column indices)
-            out[t::w] = self.s[j::self.c]
-        return _M(out, self.r, w)
-
-    @property
-    def T(self):
-        d = self._d
-        n = self.r * self.c
-        if d is None and n and self.r != 1 and self.c != 1 and n < _I32_MAX:
-            # lane cpu3-python: a host matrix on a GPU binding goes up once
-            # (it moves) and is transposed there; the move has no index operand
-            k = _host_kit()
-            if k._res():
-                k._did(self)
-                d = self._d
-        if d is not None and (self.r == 1 or self.c == 1):
-            # lane cpu2-l8-decomp: a vector's transpose is the same words, a
-            # view of the same device buffer (as the host form shares its store)
-            return _M._on_device(d, self.c, self.r)
-        if d is not None and n < _I32_MAX:
-            # lane fam2-decomp: transposed on the device (the TRANSPOSE move's
-            # index functions; the index operand is unused, so the source's
-            # own id stands in for it)
-            out = _M._on_device(_DevBuf(d.b, n), self.c, self.r)
-            d.b.x_decomp_dev_move(d.id, d.id, out._d.id, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
-            return out
-        if self.r == 1 or self.c == 1:
-            return _M(self.s, self.c, self.r)
-        k = _host_kit()
-        out = _M.zeros(self.c, self.r)
-        n = self.r * self.c
-        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return out
-
-    def reshape(self, r, c):
-        if self._d is not None and r * c == self.r * self.c:
-            return _M._on_device(self._d, r, c)     # lane cpu2-l8-decomp: a view, no download
-        return _M(self.s, r, c)
-
-    def list(self):
-        return list(self.s)
-
-
-_M._one = _M(array.array("f", [0.0]), 1, 1)
-_DEV_ONE = {}
-#: the fewest values for which a host-only kit call goes resident (_Kit._use)
-#: (cgr-decomp: the MOJOLEARN_XD_RES_MIN override is deleted).
-#: 1 (always) measured fastest on m4pro-a once the pool was O(1) and capped
-#: (1790588268075: MiniBatchDictionaryLearning 0.66 s at 1 against 1.56 s at
-#: 1024 and 1.76 s at 16384; MinCovDet 48.4 / 55.0 / 51.1 s; FastICA 0.089 /
-#: 0.129 / 0.124 s)
-import os as _os
-_RES_MIN = 1
-
-
-def _dev_one(kit):
-    """The unused broadcast operand (_M._one, a 0) on the device, one per
-    binding, never moved off the host `_M._one`."""
-    raw = kit._raw()
-    d = _DEV_ONE.get(id(raw))
-    if d is None or d.b is not raw:
-        d = _DevBuf(raw, 1)
-        z = array.array("f", [0.0])
-        kit.b.x_decomp_dev_upload(d.id, z.buffer_info()[0], 1)
-        _DEV_ONE[id(raw)] = d
-    return d.id
-
-
-_M._dev_one = staticmethod(_dev_one)
-
-
-#: lane apple-fast-py2mojo-decomp (2026-10-03): x_decomp/moves.mojo `move`
-#: ops and the float32 row-index bound (indices travel as exact floats).
-_MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
-_MV_TAKE_COLS = 4
-_F32_INDEX_MAX = 1 << 24
-_I32_MAX = (1 << 31) - 1    # the move entries' int32 counts
-
-
-def _res_moves(M, count):
-    """Whether a move of the device matrix M with `count` result values runs
-    on the device (shape facts only). Lane cpu2-l8-decomp (re-audit L8, the
-    `_M.take_cols` row): every size and every mode; the IDENTICAL-only
-    binding bit and the small-result floor are gone, so a resident matrix
-    is never downloaded whole to slice a part of it."""
-    return count > 0 and M.r < _F32_INDEX_MAX and M.c < _F32_INDEX_MAX
-
-
-def _dev_gather(M, op, idx):
-    """Rows (TAKE_ROWS) or columns (TAKE_COLS) `idx` of the device matrix M
-    as a device matrix: the indices go up once as exact floats (range
-    checked by the caller), one thread a moved value."""
-    raw = M._d.b
-    ia = array.array("f", idx)
-    w = len(ia)
-    di = _DevBuf(raw, w)
-    raw.x_decomp_dev_upload(di.id, ia.buffer_info()[0], w)
-    n = M.r * M.c
-    if op == _MV_TAKE_ROWS:
-        count = w * M.c
-        out = _M._on_device(_DevBuf(raw, count), w, M.c)
-        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, M.c, 0, 0, 1, 0, n, count, w])
-    else:
-        count = M.r * w
-        out = _M._on_device(_DevBuf(raw, count), M.r, w)
-        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, w, M.c, 0, 0, 0, n, count, w])
-    return out
-
-
-def _host_kit():
-    """The default-mode kit (for the `_M` host moves, which use only its
-    host-address entries). The Python data path and its A/B define are gone
-    (Python = glue only, Oct 3 2026): every move is x_decomp/moves.mojo."""
-    return _Kit(_backend.default_mode())
-
-
-def _any_negative(M):
-    """Whether any value is < 0, through the cells (x < 0 counted as ones)."""
-    if not len(M.s):
-        return False
-    k = _Kit(_backend.default_mode())
-    return k.total(k.ew("gts", k.ew("scale", M, s=-1.0), s=0.0)).s[0] > 0
-
-
-def _vstack(*ms):
-    s = array.array("f")
-    for m in ms:  # glue: one C-level copy per argument matrix
-        s.extend(m.s)
-    return _M(s, sum(m.r for m in ms), ms[0].c)  # glue: row count of argument matrices
-
-
-def _hstack(*ms):
-    r = ms[0].r
-    w = sum(m.c for m in ms)  # glue: column count of argument matrices
-    k = _host_kit()
-    out = _M.zeros(r, w)
-    off = 0
-    for m in ms:  # glue: one Mojo move per argument matrix
-        if m.r * m.c:
-            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-                              [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
-        off += m.c
-    return out
-
-
-def _kit_vendor(kit):
-    """The vendor the kit's binding was compiled for ("metal", "cuda", "hip",
-    ...), "" when the binding cannot say; asked once per kit."""
-    v = kit.__dict__.get("_vendor")
-    if v is None:
-        try:
-            v = str(kit._raw().x_decomp_vendor())
-        except Exception:
-            v = ""
-        kit._vendor = v
-    return v
-
-
-class _Kit:
-    """The binding's cells, called on `_M` matrices."""
-
-    def __init__(self, mode, binding=None):
-        self.mode = mode
-        self.b = _backend.binding("_mojolearn_x_decomp", mode) if binding is None else binding
-
-    def enable_lle_precision(self):
-        """LLE's near-null solve needs ordered products and accurate LU updates.
-
-        The optional entries exist only in Apple FAST bindings; all arithmetic
-        remains on the GPU. Older bindings and other modes keep their entries.
-        """
-        if self.mode != "fast" or _kit_vendor(self) != "metal":
-            return
-        try:
-            mm = getattr(self.b, "x_decomp_lle_gemm_ordered")
-            lu = getattr(self.b, "x_decomp_lle_lu_ordered")
-        except (AttributeError, ImportError):
-            return
-        self._lle_mm, self._lle_lu = mm, lu
-
-    # ---- device-resident path (GPU binding only; x_decomp/resident.mojo)
-    def _raw(self):
-        try:        # through bench/decomp_speed.py's profiler proxy (never the binding's own __getattr__)
-            return object.__getattribute__(self.b, "_b")
-        except AttributeError:
-            return self.b
-
-    def _res(self):
-        """Whether this binding has the resident entries (the GPU binding; a
-        missing name on the host binding's proxy raises ImportError)."""
-        r = self.__dict__.get("_res_ok")
-        if r is None:
-            try:
-                getattr(self._raw(), "x_decomp_dev_ew")
-                r = True
-            except Exception:
-                r = False
-            self._res_ok = r
-        return r
-
-    def w4_flags(self):
-        """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
-        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
-        RSVD_FAST_DIRECT_IN on FAST + Apple or RSVD_IDN_DIRECT_IN on
-        IDENTICAL, lane fg-pca R1; 0 on a binding without the entry)."""
-        f = self.__dict__.get("_w4_flags")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_w4_flags")())
-            except Exception:
-                f = 0
-            self._w4_flags = f
-        return f
-
-    def s_flags(self):
-        """lane/apple-fast-s-linalg: the binding's compiled speed candidates
-        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 1
-        RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS; 0 on a binding without
-        the entry)."""
-        f = self.__dict__.get("_s_flags")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_s_flags")())
-            except Exception:
-                f = 0
-            self._s_flags = f
-        return f
-
-    def qfix_flags(self):
-        """lane/apple-fast-q-linalg: the binding's FAST quality repairs
-        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 2 TSVD_QFIX, bit 4
-        LU_QFIX (bit 1, SVD_QFIX, deleted 2026-10-09); each off with its -D MOJOLEARN_*_QOLD; 0 on
-        an IDENTICAL or host binding, which keep the old routes)."""
-        f = self.__dict__.get("_qfix_flags")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_qfix_flags")())
-            except Exception:
-                f = 0
-            self._qfix_flags = f
-        return f
-
-    def lu_resid(self, A, X, B):
-        """B - A X (n x nrhs), the sum folded in float-float on the device
-        (x_decomp/qfix.mojo `lu_resid_ff_kernel`) and rounded once."""
-        R = _M.zeros(B.r, B.c)
-        self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
-        return R
-
-    def lu_dev_aux(self, A, clamp=False):
-        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
-        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
-        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
-        n x 1, stats as four floats), lu / pm / im device-resident."""
-        n = A.r
-        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
-        diag, st = self._dout(1, n), self._dout(1, 4)
-        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
-                                   [n, int(bool(clamp))])
-        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
-
-    def _use(self, *ms):
-        """The resident path for this call: the GPU binding, and an operand
-        already on the device or one of at least _RES_MIN values. A small
-        host-only call keeps the synchronous host-address path (a device
-        result Python reads at once would pay an upload, a launch and a
-        download where one call did)."""
-        if not self._res():
-            return False
-        big = False
-        for m in ms:  # glue: walks the matrix arguments of one call
-            if m is None:
-                continue
-            if m._d is not None:
-                return True
-            if m.r * m.c >= _RES_MIN:
-                big = True
-        return big
-
-    def _opt_dev(self, name):
-        """Whether this binding exports the optional resident entry `name`
-        (lane fam-decomp: entries compiled only into an IDENTICAL GPU build
-        whose _OFF define is not set); asked once per kit and name."""
-        got = self.__dict__.setdefault("_opt_fns", {})
-        r = got.get(name)
-        if r is None:
-            r = False
-            if self._res():
-                try:
-                    getattr(self._raw(), name)
-                    r = True
-                except Exception:
-                    r = False
-            got[name] = r
-        return r
-
-    def _did(self, M):
-        """M's device id on this binding, uploading a host matrix (it moves)."""
-        raw = self._raw()
-        d = M._d
-        if d is not None and d.b is raw:
-            return d.id
-        a = M.s
-        d = _DevBuf(raw, len(a))
-        if len(a):
-            self.b.x_decomp_dev_upload(d.id, a.buffer_info()[0], len(a))
-        M._s, M._d = None, d
-        return d.id
-
-    def _dout(self, r, c):
-        return _M._on_device(_DevBuf(self._raw(), r * c), r, c)
-
-    # ---- elementwise
-    def ew(self, op, A, B=None, C=None, s=0.0):
-        def mode_of(X):
-            if X is None:
-                return _M._one, 3
-            if X.r == A.r and X.c == A.c:
-                return X, 0
-            if X.r == 1 and X.c == A.c:
-                return X, 1
-            if X.c == 1 and X.r == A.r:
-                return X, 2
-            if X.r == 1 and X.c == 1:
-                return X, 3
-            raise ValueError(f"x_decomp: cannot broadcast {X.r}x{X.c} against {A.r}x{A.c}")
-        Bm, bm = mode_of(B)
-        Cm, cm = mode_of(C)
-        if A.r * A.c and self._use(A, B, C):
-            out = self._dout(A.r, A.c)
-            one = _M._dev_one(self) if (Bm is _M._one or Cm is _M._one) else None
-            ib = one if Bm is _M._one else self._did(Bm)
-            ic = one if Cm is _M._one else self._did(Cm)
-            self.b.x_decomp_dev_ew(self._did(A), ib, ic, out._d.id,
-                                   [_OP[op], A.r * A.c, A.c, Bm.r * Bm.c, bm, Cm.r * Cm.c, cm], float(s))
-            return out
-        out = _M.zeros(A.r, A.c)
-        if A.r * A.c:
-            self.b.x_decomp_ew(A.addr, Bm.addr, Cm.addr, out.addr,
-                               [_OP[op], A.r * A.c, A.c, len(Bm.s), bm, len(Cm.s), cm], float(s))
-        return out
-
-    def const(self, v, r=1, c=1):
-        return _M.of([v] * (r * c), r, c)
-
-    def diag_mask(self, n):
-        """The n x n identity as a device matrix (1 on the diagonal, 0 off
-        it), made on the device by ONE `copyb` launch: the n * n buffer read
-        as rows of n + 1, whose first column is exactly the diagonal, takes
-        e = [1, 0, ..., 0] (length n + 1) as a row-vector broadcast. None on
-        a binding without the resident entries."""
-        if n < 1 or not self._res():
-            return None
-        out = self._dout(n, n)
-        e = _M.of([1.0] + [0.0] * n, 1, n + 1)
-        one = _M._dev_one(self)
-        did = out._d.id
-        self.b.x_decomp_dev_ew(did, self._did(e), one, did,
-                               [_OP["copyb"], n * n, n + 1, n + 1, 1, 1, 3], 0.0)
-        return out
-
-    # ---- reductions and products
-    def mm(self, A, B, ta=False, tb=False):
-        m, k = (A.c, A.r) if ta else (A.r, A.c)
-        k2, n = (B.c, B.r) if tb else (B.r, B.c)
-        if k != k2:
-            raise ValueError(f"x_decomp: gemm inner dimensions {k} and {k2} differ")
-        precise = getattr(self, "_lle_mm", None)
-        if precise is not None:
-            out = _M.zeros(m, n)
-            precise(A.addr, B.addr, out.addr, [m, k, n, int(ta), int(tb)])
-            return out
-        if m * n and m * k and k * n and self._use(A, B):
-            out = self._dout(m, n)
-            self.b.x_decomp_dev_gemm(self._did(A), self._did(B), out._d.id, [m, k, n, int(ta), int(tb)])
-            return out
-        out = _M.zeros(m, n)
-        if m * n:
-            self.b.x_decomp_gemm(A.addr, B.addr, out.addr, [m, k, n, int(ta), int(tb)])
-        return out
-
-    def vstack_dev(self, ms):
-        """`_vstack` on the device: each matrix's rows placed after the
-        previous ones by the PLACE_COLS move (a3 = the row offset times the
-        width), copies only, so the same values as the host stack."""
-        c = ms[0].c
-        R = sum(m.r for m in ms)  # glue: row count of argument matrices
-        out = self._dout(R, c)
-        one = _M._dev_one(self)
-        off = 0
-        for m in ms:  # glue: one Mojo move per argument matrix
-            cnt = m.r * m.c
-            if cnt:
-                self.b.x_decomp_dev_move(self._did(m), one, out._d.id,
-                                         [_MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, R * c, 1])
-            off += m.r
-        return out
-
-    def colsum(self, A):
-        if A.r * A.c and self._use(A):
-            out = self._dout(1, A.c)
-            self.b.x_decomp_dev_colsum(self._did(A), out._d.id, [A.r, A.c])
-            return out
-        out = _M.zeros(1, A.c)
-        self.b.x_decomp_colsum(A.addr, out.addr, [A.r, A.c])
-        return out
-
-    def rowsum(self, A):
-        if A.r * A.c and self._use(A):
-            out = self._dout(A.r, 1)
-            self.b.x_decomp_dev_rowsum(self._did(A), out._d.id, [A.r, A.c])
-            return out
-        out = _M.zeros(A.r, 1)
-        self.b.x_decomp_rowsum(A.addr, out.addr, [A.r, A.c])
-        return out
-
-    def total(self, A):
-        """The sum of every entry (1 x 1): rows ascending, then the row sums ascending."""
-        return self.colsum(self.rowsum(A))
-
-    def sqdist(self, A, B):
-        if A.r * B.r and A.c and self._use(A, B):
-            out = self._dout(A.r, B.r)
-            self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c])
-            return out
-        out = _M.zeros(A.r, B.r)
-        self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c])
-        return out
-
-    def pdist(self, A, B, kind, pw=2.0):
-        """A non-Euclidean distance matrix (x_decomp/cells.mojo pdist_cell,
-        DEVIATION 5319): kind 1 manhattan, 2 chebyshev, 3 minkowski pw,
-        4 cosine."""
-        if A.r * B.r and A.c and self._use(A, B):
-            out = self._dout(A.r, B.r)
-            self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c, int(kind), float(pw)])
-            return out
-        out = _M.zeros(A.r, B.r)
-        self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
-        return out
-
-    def _idn_flags(self):
-        """The binding's `x_decomp_idn_flags` (0 when it has none); asked once
-        per kit."""
-        f = self.__dict__.get("_idn_bits")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_idn_flags")())
-            except Exception:
-                f = 0
-            self._idn_bits = f
-        return f
-
-    def rand(self, r, c, seed, stream, kind):
-        if r * c >= 1024 and self._res():   # a small draw is read at once: one call
-            # lane fam-decomp: drawn into a device matrix by the same kernel,
-            # downloaded only if Python reads it (lane cpu2-l8-decomp: in
-            # every mode, no longer behind the IDENTICAL-only binding bit)
-            out = self._dout(r, c)
-            self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
-            return out
-        out = _M.zeros(r, c)
-        if r * c:
-            self.b.x_decomp_rand(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
-        return out
-
-    # ---- small dense linear algebra
-    def eigh(self, A, uplo=0):
-        """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n):
-        the round-robin Jacobi at every size. uplo 1 / 2 reads only the
-        lower / upper triangle (numpy's UPLO, mirrored by the binding on the
-        device), 0 the whole matrix."""
-        n = A.r
-        w, v = _M.zeros(1, n), _M.zeros(n, n)
-        if n >= 1 and A.c == n and A._d is not None and A._d.b is self._raw() and self._opt_dev("x_decomp_dev_eigh"):
-            # lane fam-decomp: an operand already on the device is solved on
-            # a device copy (an IDENTICAL GPU build without
-            # -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF); a host operand keeps the
-            # host-address call (one upload either way)
-            self.b.x_decomp_dev_eigh(A._d.id, w.addr, v.addr, [n, int(uplo)])
-            return w, v
-        self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
-        return w, v
-
-    def lu(self, A):
-        n = A.r
-        piv = array.array("i", [0] * n)
-        info = _M.zeros(1, 1)
-        precise = getattr(self, "_lle_lu", None)
-        if precise is not None:
-            lu = A.copy()
-            precise(lu.addr, piv.buffer_info()[0], info.addr, [n])
-            return lu, piv, int(info.s[0])
-        if n >= 1 and A.c == n and self._opt_dev("x_decomp_dev_lu") and self._use(A):
-            # lane fam-decomp: the factor made in a device matrix from a
-            # device copy of A (an IDENTICAL GPU build without
-            # -D MOJOLEARN_IDN_LU_RESIDENT_OFF); pivots and info come down
-            lu = self._dout(n, n)
-            self.b.x_decomp_dev_lu(self._did(A), lu._d.id, piv.buffer_info()[0], info.addr, [n])
-            return lu, piv, int(info.s[0])
-        lu = A.copy()
-        self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
-        return lu, piv, int(info.s[0])
-
-    def trisolve(self, lu, idx, B, trans=0):
-        """The right-looking triangular solves on an LU factor (x_decomp/
-        cells.mojo `trisolve_serial`): trans 0, U^-1 L^-1 B[idx] (F0^-1 B
-        with idx the pivots' row order); trans 1, (L^-T U^-T B)[idx]
-        (F0^-T B with idx that order's inverse). idx is an n x 1 matrix of
-        row numbers."""
-        n, w = lu.r, B.c
-        if n * w and self._use(lu, B):
-            out = self._dout(n, w)
-            self.b.x_decomp_dev_trisolve(self._did(lu), self._did(idx), self._did(B), out._d.id, [n, w, int(trans)])
-            return out
-        out = _M.zeros(n, w)
-        if n * w:
-            self.b.x_decomp_trisolve(lu.addr, idx.addr, B.addr, out.addr, [n, w, int(trans)])
-        return out
-
-    # ---- data movement and orders (lane apple-fast-py2mojo-decomp, x_decomp/moves.mojo)
-
-    def take_rows(self, A, idx, m=None, ist=1, ioff=0, radd=0):
-        """Rows Int(idx[a * ist + ioff]) + radd of A for a < m (idx an _M of
-        exact float row numbers; m defaults to all of idx): one thread per
-        copied value on the device, the checked host loop otherwise."""
-        if m is None:
-            m = idx.r * idx.c
-        count = m * A.c
-        p = [_MV_TAKE_ROWS, count, A.c, radd, 0, ist, ioff, A.r * A.c, count, idx.r * idx.c]
-        if count and self._use(A, idx):
-            out = self._dout(m, A.c)
-            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
-            return out
-        out = _M.zeros(m, A.c)
-        if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return out
-
-    def copy(self, A):
-        """An exact copy of A, on the device when A is there (the PLACE_COLS
-        move of all of A into a matrix of its own shape)."""
-        n = A.r * A.c
-        if n and A._d is not None and self._use(A):
-            out = self._dout(A.r, A.c)
-            self.b.x_decomp_dev_move(self._did(A), _M._dev_one(self), out._d.id,
-                                     [_MV_PLACE_COLS, n, A.c, A.c, 0, 0, 0, n, n, 1])
-            return out
-        return A.copy()
-
-    def fill0(self, A, start, stride, count):
-        """A[start + t * stride] = 0 for t < count, in place."""
-        if not count:
-            return A
-        p = [_MV_FILL0, count, start, stride, 0, 0, 0, A.r * A.c, A.r * A.c, 1]
-        if self._use(A):
-            did = self._did(A)
-            self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
-            return A
-        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return A
-
-    # ---- lane cpu2-l8-decomp (2026-10-04, re-audit L8): scalar decisions
-    # and small moves without a download of the operand. Each has one host
-    # form (host-address entries of both bindings) and one device form (the
-    # resident entries) with the same words: select reductions and moves
-    # are exact, and the elementwise steps are the kit's own cells.
-    _SEL_MAXABS, _SEL_MAX, _SEL_MIN = 0, 1, 2
-
-    def reduce(self, A, op):
-        """max |A| (op 0), max A (1) or min A (2) as a 1 x 1 matrix
-        (x_decomp/select_ops.mojo; a NaN anywhere gives NaN)."""
-        n = A.r * A.c
-        if not n:
-            raise ValueError("x_decomp: reduce of an empty matrix")
-        if self._use(A):
-            out = self._dout(1, 1)
-            self.b.x_decomp_dev_reduce(self._did(A), out._d.id, [n, int(op)])
-            return out
-        out = _M.zeros(1, 1)
-        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])  # cpu-route: host matrix (_M buffer) read once by x_decomp_reduce on a CPU-only install
-        return out
-
-    def word(self, A, i=0):
-        """A's value at flat position i as a float: one word down (the
-        element gathered first when A is on the device)."""
-        if A._d is not None and A.r * A.c > 1:
-            return float(self.strided(A, 1, 1, i).s[0])
-        return float(A.s[i])
-
-    def strided(self, A, count, stride, off=0):
-        """A's values at off + t * stride (t < count) as a 1 x count matrix:
-        the TAKE_COLS move with one column index, off (off < stride, or
-        count 1). Exact copies."""
-        if count == 1:
-            stride = off + 1
-        idx = _M.of([float(off)], 1, 1)
-        n = A.r * A.c
-        p = [_MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
-        if count and self._use(A):
-            out = self._dout(1, count)
-            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
-            return out
-        out = _M.zeros(1, count)
-        if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return out
-
-    def place_strided(self, D, V, stride, off=0):
-        """D[off + t * stride] = V[t] for every t of V, in place (the
-        PLACE_COLS move with width 1). Returns D."""
-        cnt = V.r * V.c
-        if not cnt:
-            return D
-        p = [_MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, D.r * D.c, 1]
-        if self._use(D, V):
-            self.b.x_decomp_dev_move(self._did(V), _M._dev_one(self), self._did(D), p)
-            return D
-        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return D
-
-    def place_rows(self, D, V, row):
-        """V (r x D.c) into rows row .. row + r - 1 of D, in place."""
-        return self.place_strided(D, V.reshape(1, V.r * V.c), 1, row * D.c) if V.r * V.c else D
-
-    def diag(self, A):
-        """The diagonal of square A as 1 x n."""
-        return self.strided(A, A.r, A.r + 1, 0)
-
-    def diag_add(self, A, v):
-        """A copy of square A with v (1 x 1, or 1 x n) added to its
-        diagonal: one add per diagonal value, the rest copied."""
-        return self.place_strided(self.copy(A), self.ew("add", self.diag(A), v), A.r + 1, 0)
-
-    def order_small(self, A):
-        """The stable ascending order of A's values (ties to the lower
-        index, NaN last) as an n x 1 matrix of exact floats, on the device
-        for a resident kit (x_decomp/select_*.mojo; n <= 65536)."""
-        n = A.r * A.c
-        if n and self._use(A):
-            out = self._dout(n, 1)
-            self.b.x_decomp_dev_order_small(self._did(A), out._d.id, [n])
-            return out
-        out = _M.zeros(n, 1)
-        if n:
-            self.b.x_decomp_order_small(A.addr, out.addr, [n])  # cpu-route: host vector (_M buffer) read once by x_decomp_order_small on a CPU-only install
-        return out
-
-    def take_cols_m(self, A, idx, w):
-        """Columns idx[0 .. w) of A (idx an _M of exact floats, which may
-        live on the device)."""
-        p = [_MV_TAKE_COLS, A.r * w, w, A.c, 0, 0, 0, A.r * A.c, A.r * w, w]
-        if A.r * w and self._use(A, idx):
-            out = self._dout(A.r, w)
-            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
-            return out
-        out = _M.zeros(A.r, w)
-        if A.r * w:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
-        return out
-
-    def count_gt(self, A, s):
-        """How many values of A are > s (an exact count; one word down)."""
-        if not A.r * A.c:
-            return 0
-        return int(self.total(self.ew("gts", A, s=float(s))).s[0])
-
-    def vstack(self, ms):
-        """`_vstack` on the device for a resident kit (copies only)."""
-        if self._res() and sum(m.r * m.c for m in ms):  # glue: value count of argument matrices
-            return self.vstack_dev(ms)
-        return _vstack(*ms)
-
-    def hstack(self, ms):
-        """`_hstack` with the device PLACE_COLS moves for a resident kit."""
-        r = ms[0].r
-        w = sum(m.c for m in ms)  # glue: column count of argument matrices
-        if not (self._res() and r * w):
-            return _hstack(*ms)
-        out = self._dout(r, w)
-        one = _M._dev_one(self)
-        off = 0
-        for m in ms:  # glue: one Mojo move per argument matrix
-            if m.r * m.c:
-                self.b.x_decomp_dev_move(self._did(m), one, out._d.id,
-                                         [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
-            off += m.c
-        return out
-
-    def absmax_signs(self, A, by_col):
-        """Per column (by_col, 1 x c) or row (r x 1) of A: -1 where its
-        largest-|.| entry (ties to the lower index) is negative, else +1
-        (`absmax_sign_cell`, DEVIATION 5317, then one select cell)."""
-        cnt = A.c if by_col else A.r
-        if cnt and A.r * A.c and self._use(A):
-            out = self._dout(1, cnt)
-            self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
-        else:
-            out = _M.zeros(1, cnt)
-            if cnt and A.r * A.c:
-                self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
-        return self.neg_signs(out if by_col else out.reshape(cnt, 1))
-
-    def neg_signs(self, V):
-        """-1 where V < 0, else +1 (NaN: +1), elementwise: select(-V > 0)."""
-        return self.ew("select", self.ew("scale", V, s=-1.0), _M.of([-1.0], 1, 1), _M.of([1.0], 1, 1), s=0.0)
-
-    def _refuse_nan(self, A):
-        """A device operand's NaN refusal (the host forms' `f32_key`): its max
-        is NaN when any value is, one word down."""
-        v = self.word(self.reduce(A, self._SEL_MAX))
-        if v != v:
-            raise ValueError("x_decomp: a NaN has no order (refused)")
-
-    def _order_dev(self, A, neg=0, skip=None):
-        """(order, count) of `x_decomp_dev_order_f` on a resident kit: the
-        n x 1 device order and the number of positions not skipped."""
-        n = A.r * A.c
-        if n >= _F32_INDEX_MAX:
-            raise ValueError("x_decomp: order_f exceeds the float32 index bound")
-        self._refuse_nan(A)
-        out = self._dout(n, 1)
-        cnt = self._dout(1, 1)
-        sid = self._did(skip) if skip is not None else self._did(A)
-        self.b.x_decomp_dev_order_f(self._did(A), sid, out._d.id, cnt._d.id,
-                                    [n, int(neg), 1 if skip is not None else 0])
-        return out, cnt
-
-    def order(self, A):
-        """The stable ascending order of A's values (ties to the lower index)
-        as an n x 1 _M of exact floats; NaN refused. Lane cpu3-python: a
-        radix sort on the device for a resident kit."""
-        n = A.r * A.c
-        if n and self._use(A):
-            return self._order_dev(A)[0]
-        out = _M.zeros(n, 1)
-        if n:
-            self.b.x_decomp_order_f(A.addr, n, out.addr)  # cpu-route: host vector (_M buffer) read once by x_decomp_order_f on a CPU-only install
-        return out
-
-    def select_smallest(self, A, h):
-        """(sel, mask): the h smallest values' positions by (value, index),
-        ascending by position (h x 1 exact floats), and the int32 membership
-        of every position."""
-        n = A.r * A.c
-        if n and self._use(A):
-            # lane cpu3-python: two stable radix sorts on the device; the
-            # membership is an n x 1 device matrix of 0 / 1
-            if n >= _F32_INDEX_MAX or h < 0 or h > n:
-                raise ValueError("x_decomp: select_smallest out of range")
-            self._refuse_nan(A)
-            sel, mask = self._dout(h, 1), self._dout(n, 1)
-            self.b.x_decomp_dev_select_smallest(self._did(A), sel._d.id, mask._d.id, [n, h])
-            return sel, mask
-        sel = _M.zeros(h, 1)
-        mask = array.array("i", [0]) * n
-        if n:
-            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])  # cpu-route: host vector (_M buffer) read once by x_decomp_select_smallest on a CPU-only install
-        return sel, mask
-
-    def argmin_all(self, A):
-        """Every position (exact floats, c x 1) whose value equals the minimum."""
-        n = A.r * A.c
-        if n and self._use(A):
-            # lane cpu3-python: the min, an equality key and a stable sort on
-            # the device; the count is one word down
-            if n >= _F32_INDEX_MAX:
-                raise ValueError("x_decomp: argmin_all exceeds the float32 index bound")
-            out, cnt = self._dout(n, 1), self._dout(1, 1)
-            self.b.x_decomp_dev_argmin_all(self._did(A), out._d.id, cnt._d.id, [n])
-            c = int(self.word(cnt))
-            return out.rows(0, c) if c else _M.zeros(0, 1)
-        buf = _M.zeros(max(n, 1), 1)
-        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0  # cpu-route: host vector (_M buffer) read once by x_decomp_argmin_all on a CPU-only install
-        return _M(buf.s[:c], c, 1)
-
-    def lu_solve(self, lu, piv, B, trans=0):
-        out = B.copy()
-        p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
-        self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, p)
-        return out
-
-    def svd(self, A):
-        """(S 1 x n DESCENDING, Vt n x n) of a tall A (m >= n): Householder QR
-        then the one-sided Jacobi SVD of R (decomposition/'s full-PCA route),
-        values sorted descending with ties to the lower index."""
-        m, n = A.r, A.c
-        s, v = _M.zeros(1, n), _M.zeros(n, n)
-        if m >= n >= 1 and self._opt_dev("x_decomp_dev_svd") and self._use(A):
-            # lane fam-decomp: the solve on a device copy of the resident
-            # operand (an IDENTICAL GPU build without
-            # -D MOJOLEARN_IDN_SVD_RESIDENT_OFF); A stays on the device
-            self.b.x_decomp_dev_svd(self._did(A), s.addr, v.addr, [m, n])
-        else:
-            self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
-        # descending by value, ties to the lower index: the stable ascending
-        # order of -s (an exact negation), and the gathers, in Mojo
-        o = self.order(self.ew("scale", s, s=-1.0))
-        return self.take_rows(s.T, o).T, self.take_rows(v.T, o)
-
-    def orth(self, A):
-        """A copy of A with its columns orthonormalized: two passes of the
-        Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
-        if A.r * A.c and self._use(A):
-            Q = self._dout(A.r, A.c)
-            # DECOMP_FAST_ORTH_WS (FAST + Apple default, rollback _OFF): the same passes
-            # with pooled device work buffers (x_decomp/s_linalg_fast.mojo)
-            fn = self.b.x_decomp_dev_orth_ws if self.s_flags() & 2 else self.b.x_decomp_dev_orth
-            fn(self._did(A), Q._d.id, [A.r, A.c])
-            return Q
-        Q = A.copy()
-        self.b.x_decomp_orth(Q.addr, [A.r, A.c])
-        return Q
-
-    def orth_diag(self, A):
-        """`orth`, and the two passes' R-diagonal products (a 1 x A.c
-        matrix): the sign of entry j orients Q's column j along A's, 0 marks
-        a dependent column (`orth_diag_cell`, lane neural-pass17)."""
-        diag = _M.zeros(1, A.c)
-        if A.r * A.c and self._use(A):
-            Q = self._dout(A.r, A.c)
-            self.b.x_decomp_dev_orth_diag(self._did(A), Q._d.id, diag.addr, [A.r, A.c])
-            return Q, diag
-        Q = A.copy()
-        self.b.x_decomp_orth_diag(Q.addr, diag.addr, [A.r, A.c])
-        return Q, diag
-
-    def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
-        """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
-        W (n x k) the warm start, updated in place."""
-        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q, W):
-            # lane fam-decomp: the Gram, Q and the codes stay on the device
-            # (an IDENTICAL GPU build without -D MOJOLEARN_IDN_CODE_RESIDENT_OFF)
-            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), self._did(W),
-                                          [0, Q.r, Q.c, int(max_iter), int(positive)], [float(alpha), float(tol)])
-            return W
-        its = _M.zeros(Q.r, 1)
-        self.b.x_decomp_lasso_rows(G.addr, Q.addr, W.addr, its.addr, [Q.r, Q.c, int(max_iter), int(positive)],
-                                   [float(alpha), float(tol)])
-        return W
-
-    def lle_apply(self, Wb, idm, E):
-        """out (nq x nc) = sum_a Wb[i, a] E[idm[i, a]] (LLE transform)."""
-        nq, nn, nc = Wb.r, Wb.c, E.c
-        out = _M.zeros(nq, nc)
-        if nq * nc:
-            self.b.x_decomp_lle_apply(Wb.addr, idm.addr, E.addr, out.addr, [nq, E.r, nn, nc])
-        return out
-
-    def lle_local(self, M, idm, method, nn, nc, tol):
-        """LocallyLinearEmbedding's stacked factor B (x_decomp/lle_local.mojo):
-        method 0 LTSA (n nn x n), 1 Hessian (n (nn - 1 - nc) x n), 2 modified
-        (n nn x n); every per-sample step (the local Gram, its eigh, the
-        assembly) a cell on the device, the local eigensolves batched."""
-        n, d = M.r, M.c
-        rows = n * (nn - 1 - nc) if method == 1 else n * nn
-        B = _M.zeros(rows, n)
-        self.b.x_decomp_lle_local(M.addr, idm.addr, B.addr, [int(method), n, d, int(nn), int(nc)], [float(tol)])
-        return B
-
-    def lu_aux(self, lu, piv, clamp=False):
-        """An LU factor's companions, computed by the binding (on the device
-        where there is one; x_decomp/cells.mojo `lu_aux_*`): (stats = [max
-        |u_ii|, zero pivots, negative pivots, swaps], diag 1 x n, pm n x 1
-        the swaps' row order, im n x 1 its inverse). clamp floors the pivots
-        under eps * max |u_ii| in `lu` itself."""
-        n = lu.r
-        pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
-        if n >= 1 and lu._d is not None and lu._d.b is self._raw() and self._opt_dev("x_decomp_dev_lu"):
-            # lane fam-decomp: read (and clamped) where the factor lives
-            self.b.x_decomp_dev_lu_aux(lu._d.id, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
-                                       [n, int(bool(clamp))])
-            return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
-        self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
-                               [n, int(bool(clamp))])
-        return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
-
-    def lars_rows(self, G, Q, m, nnz):
-        """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
-        n x k coefficients, m the samples of each row's problem."""
-        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
-            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
-            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
-                                          [1, Q.r, Q.c, int(m), int(nnz)], [0.0, 0.0])
-            return W
-        W = _M.zeros(Q.r, Q.c)
-        na = _M.zeros(Q.r, 1)
-        if Q.r * Q.c:
-            self.b.x_decomp_lars_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(m), int(nnz)])
-        return W
-
-    def omp_rows(self, G, Q, nnz):
-        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
-            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
-            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
-                                          [2, Q.r, Q.c, int(nnz), 0], [0.0, 0.0])
-            return W
-        W = _M.zeros(Q.r, Q.c)
-        na = _M.zeros(Q.r, 1)
-        self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])
-        return W
-
-    def dijkstra(self, W):
-        """All-pairs shortest paths on a dense undirected graph (0 = no edge),
-        one source per thread; -1 marks an unreachable pair. The GPU binding
-        keeps W and the result resident and compresses the arcs on the
-        device (x_decomp/graph_device.mojo)."""
-        n = W.r
-        if self._res():
-            dist = self._dout(n, n)
-            self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
-            return dist
-        dist = _M.zeros(n, n)
-        self.b.x_decomp_graph_dijkstra(W.addr, dist.addr, [n])
-        return dist
-
-    # ---- neighbor graphs (x_decomp/graph_cells.mojo, lane hr2-graph-embed):
-    # resident on the GPU binding, the same cells on the host binding
-    def graph_knn(self, D, nn, exclude_self):
-        """(idx, dst), n x nn each: the nn smallest of every row of D, ties
-        to the lower column, `exclude_self` dropping column i; idx holds the
-        column numbers as exact floats."""
-        n, m = D.r, D.c
-        p = [n, m, nn, int(bool(exclude_self))]
-        if self._res():
-            idx, dst = self._dout(n, nn), self._dout(n, nn)
-            if n * nn:
-                self.b.x_decomp_dev_graph_knn(self._did(D), idx._d.id, dst._d.id, p)
-            return idx, dst
-        idx, dst = _M.zeros(n, nn), _M.zeros(n, nn)
-        if n * nn:
-            self.b.x_decomp_graph_knn(D.addr, idx.addr, dst.addr, p)
-        return idx, dst
-
-    def graph_knn_dense(self, idx, w, n):
-        """The dense n x n graph W[i, idx[i, a]] = w[i, a] (1e-10 for 0)."""
-        nn = idx.c
-        if self._res():
-            out = self._dout(n, n)
-            self.b.x_decomp_dev_graph_knn_dense(self._did(idx), self._did(w), out._d.id, [n, nn])
-            return out
-        out = _M.zeros(n, n)
-        self.b.x_decomp_graph_knn_dense(idx.addr, w.addr, out.addr, [n, nn])
-        return out
-
-    def graph_radius(self, D, r):
-        """W[i, j] = D[i, j] (1e-10 for 0) where j != i and D[i, j] <= r."""
-        n = D.r
-        if self._res():
-            out = self._dout(n, n)
-            self.b.x_decomp_dev_graph_radius(self._did(D), out._d.id, [n], float(r))
-            return out
-        out = _M.zeros(n, n)
-        self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
-        return out
-
-    def graph_radius_geo(self, Dq, D, r):
-        """Isomap's radius transform: G[i, c] = min over j (ascending) with
-        Dq[i, j] <= r of D[j, c] + Dq[i, j] (x_decomp/graph_cells.mojo
-        `radius_geo_cell`; 0 for a row with no such j)."""
-        nq, n = Dq.r, Dq.c
-        if self._res():
-            out = self._dout(nq, n)
-            if nq * n:
-                self.b.x_decomp_dev_graph_radius_geo(self._did(Dq), self._did(D), out._d.id, [nq, n], float(r))
-            return out
-        out = _M.zeros(nq, n)
-        if nq * n:
-            self.b.x_decomp_graph_radius_geo(Dq.addr, D.addr, out.addr, [nq, n], float(r))
-        return out
-
-    def graph_lle_iw(self, idx, wb, n):
-        """LLE's dense I - W from the kNN lists and barycenter weights."""
-        nn = idx.c
-        if self._res():
-            out = self._dout(n, n)
-            self.b.x_decomp_dev_graph_lle_iw(self._did(idx), self._did(wb), out._d.id, [n, nn])
-            return out
-        out = _M.zeros(n, n)
-        self.b.x_decomp_graph_lle_iw(idx.addr, wb.addr, out.addr, [n, nn])
-        return out
-
-    def graph_components(self, W):
-        """(comp n x 1, C): the weak components of W (nonzero either way),
-        numbered by their lowest node."""
-        n = W.r
-        if self._res():
-            comp = self._dout(n, 1)
-            c = self.b.x_decomp_dev_graph_components(self._did(W), comp._d.id, [n])
-            return comp, int(c)
-        comp = _M.zeros(n, 1)
-        c = self.b.x_decomp_graph_components(W.addr, comp.addr, [n])
-        return comp, int(c)
-
-    def graph_join(self, W, D, comp, C):
-        """sklearn `_fix_connected_components`, W changed in place."""
-        n = W.r
-        if self._res():
-            self.b.x_decomp_dev_graph_join(self._did(W), self._did(D), self._did(comp), [n, C])
-            return W
-        self.b.x_decomp_graph_join(W.addr, D.addr, comp.addr, [n, C])
-        return W
-
-    def barycenter(self, X, Y, nbr, reg):
-        """sklearn barycenter_weights: (n x k) weights of each row of X on
-        its k neighbors in Y (`nbr`: an n x k _M of exact float indices)."""
-        n, k, idx = X.r, nbr.c, nbr
-        W, flags = _M.zeros(n, k), _M.zeros(n, 1)
-        self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
-        return W
-
-    def geqrf(self, A):
-        """(h, tau): LAPACK geqrf's factored form of A (m x n, any shape): R on
-        and above the diagonal, the reflectors' tails below it, tau
-        (1 x min(m, n)) their scalars (x_decomp/qr_sliced.mojo's order,
-        DEVIATION 5320)."""
-        h = A.copy()
-        kk = min(A.r, A.c)
-        tau = _M.zeros(1, kk)
-        self.b.x_decomp_geqrf(h.addr, tau.addr, [A.r, A.c])
-        return h, tau
-
-    def orgqr(self, h, tau, qc):
-        """The first qc columns of Q = H_0 ... H_{k-1} (m x qc) from geqrf's
-        (h, tau), in x_decomp/qr_sliced.mojo's order."""
-        Q = _M.zeros(h.r, qc)
-        self.b.x_decomp_orgqr(h.addr, tau.addr, Q.addr, [h.r, h.c, tau.c, qc])
-        return Q
-
-    def pad_zero_row(self, X):
-        """[X; 0]: X ((r) x c) over one zero row. A device X stays on the
-        device (lane fix-d1-decomp, `x_decomp_idn_flags` bit 8,
-        IDN_LLE_PAD_DEV: a PLACE_COLS move and a FILL0 move, copies only);
-        else the host stack."""
-        r, c = X.r, X.c
-        if c and X._d is not None and self._use(X):     # lane cpu2-l8-decomp: every mode
-            tot = (r + 1) * c
-            out = self._dout(r + 1, c)
-            one = _M._dev_one(self)
-            cnt = r * c
-            if cnt:
-                self.b.x_decomp_dev_move(self._did(X), one, out._d.id,
-                                         [_MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1])
-            did = out._d.id
-            self.b.x_decomp_dev_move(did, one, did, [_MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
-            return out
-        return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
-
-    # ---- composites (cells only)
-    def colmean(self, A):
-        return self.ew("scale", self.colsum(A), s=1.0 / A.r)
-
-    def center(self, A, mean):
-        return self.ew("sub", A, mean)
-
-
-def _mode(numeric_mode):
-    return _backend.default_mode() if numeric_mode is None else numeric_mode
-
-
-def _svd_flip_v(Vt):
-    """sklearn `svd_flip(u_based_decision=False)`: each row of Vt signed so its
-    largest-|.| entry (first on a tie) is positive. Exact sign flips."""
-    k = _Kit(_backend.default_mode())
-    return k.ew("mul", Vt, k.absmax_signs(Vt, False))
 
 
 class _Base(SklearnTagsMixin):
@@ -1426,26 +87,9 @@ class _Base(SklearnTagsMixin):
         """
         return _DECLARED_PARAMS_SET(self, params, _DECLARED_PARAMS_CONTEXT)
 
-    # Only a class with a `transform` has `fit_transform` (scikit-learn's
-    # TransformerMixin): a classifier or detector on this base has neither.
-    @available_if(lambda self: hasattr(self, "transform"))
-    def fit_transform(self, X, y=None):
-        """Fit to X, then return ``transform(X)``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : ignored
-
-        Returns
-        -------
-        ndarray of shape (n_samples, n_components), float32
-        """
-        return self.fit(X, y).transform(X)
-
-    def _kit(self):
-        return _Kit(self.numeric_mode_)
+    # The base `fit_transform` composition is deleted (lane py-tail-2, 2026-11-15): every package
+    # class on this base with a `transform` defines its own (one native call); the private
+    # intermediate `_SparseCoding` is never instantiated.
 
     def _check(self, attr="components_"):
         if not hasattr(self, attr):
@@ -1454,7 +98,7 @@ class _Base(SklearnTagsMixin):
 
 # ================================================================ IncrementalPCA
 # Every public IncrementalPCA operation is one call into the compiled owner
-# (bindings/ipca_native.mojo, drivers x_decomp/ipca_owner.mojo).
+# (bindings/ipca_native_door.mojo, drivers x_decomp/ipca_owner.mojo).
 # Reference: scikit-learn `decomposition/_incremental_pca.py`, `partial_fit`;
 # the running mean and variance are `utils/extmath.py::_incremental_mean_and_var`.
 # Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
@@ -1514,7 +158,7 @@ class IncrementalPCA(_Base):
     (1000, 3)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
@@ -1645,16 +289,12 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     """
     # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
     # not the platform pow / log (a host's last bit can move the floor), in
-    # the compiled owner (bindings/jl_native.mojo)
+    # the compiled owner (bindings/jl_native_pack.mojo)
     return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
-def _seed_of(random_state):
-    if random_state is None:
-        return 0
-    if isinstance(random_state, bool) or not isinstance(random_state, int):
-        raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
-    return random_state
+# TOMBSTONE: _seed_of (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 class _RandomProjection(_Base):
@@ -1663,12 +303,12 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
 
     # The fitted matrix lives in the native owner's `_rp_components` field
-    # (bindings/rp_native.mojo); reading, assigning and pickling it are each
+    # (bindings/rp_native_door.mojo); reading, assigning and pickling it are each
     # one native call.
     @property
     def components_(self):
@@ -1877,42 +517,7 @@ class SparseRandomProjection(_RandomProjection):
         self.numeric_mode = numeric_mode
 
 
-# ================================================================ thin SVD
-def _thin_svd(k, X, nc, u_based=True):
-    """(U n x nc, S 1 x nc, Vt nc x d) of X through the QR + one-sided Jacobi
-    SVD of X (or of X^T when X is wide), singular values descending, then sklearn's
-    `svd_flip` (u_based: the largest-|.| entry of each COLUMN of U positive;
-    else of each ROW of Vt). U (or Vt) is recovered as X V / S (X^T U / S);
-    a zero singular value gives a zero vector."""
-    n, d = X.r, X.c
-    if d <= n:
-        S, Vt = k.svd(X)
-        S, Vt = S.cols(0, nc), Vt.rows(0, nc)
-        U = k.ew("div", k.mm(X, Vt, tb=True), S)
-    else:
-        S, Ut = k.svd(X.T)
-        S, Ut = S.cols(0, nc), Ut.rows(0, nc)
-        U = Ut.T
-        Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
-    # the signs as a +-1 vector on the device (lane cpu2-l8-decomp): exact
-    # multiplies, no flag list on the host
-    if u_based:
-        sg = k.absmax_signs(U, True)
-        U, Vt = k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
-    else:
-        sg = k.absmax_signs(Vt, False)
-        U, Vt = k.ew("mul", U, sg.T), k.ew("mul", Vt, sg)
-    return U, S, Vt
-
-
-def _norm(k, v):
-    return k.ew("sqrt", k.total(k.ew("sq", v))).s[0]
-
-
 # ================================================================ NMF
-_F32_EPS = 1.1920928955078125e-07
-
-
 # Reference: scikit-learn `decomposition/_nmf.py`: `_initialize_nmf`,
 # `_fit_multiplicative_update` with `_multiplicative_update_w/_h` for
 # beta_loss='frobenius', and `_fit_coordinate_descent` with
@@ -1995,7 +600,7 @@ class NMF(_Base):
     >>> H = model.components_
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -2151,7 +756,7 @@ class FastICA(_Base):
     >>> S = mojolearn.FastICA(n_components=3, random_state=0).fit_transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
@@ -2224,28 +829,8 @@ class FastICA(_Base):
 
 
 # ================================================================ FactorAnalysis
-_LOG_2PI = 1.8378770664093453
-
-
-def _dsum_sq(k, M):
-    """The binary64 sum of the squares of M's float32 values (each square
-    exact), DSUM_CHUNK values per partial then the partials folded the same
-    way: on the device in software binary64 for a resident kit (lane
-    cpu3-python), the same words on the host binding (`dsum_sq_host`)."""
-    n = M.r * M.c
-    if not n:
-        return 0.0
-    if k._use(M):
-        out = k._dout(1, 2)
-        k.b.x_decomp_dev_dsum_sq(k._did(M), out._d.id, [n])
-        w = array.array("d")
-        w.frombytes(out.s.tobytes())   # glue: the binary64 result's two words, as bytes
-        return w[0]
-    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host matrix (_M buffer) read once by x_decomp_dsum_sq on a CPU-only install
-
-
 # Every public FactorAnalysis operation is one call into the compiled owner
-# (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
+# (bindings/fa_native_unpack.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
 # `transform`, `get_covariance`, `get_precision`, `score_samples`,
 # `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
@@ -2311,7 +896,7 @@ class FactorAnalysis(_Base):
     >>> Z = fa.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
@@ -2350,20 +935,8 @@ class FactorAnalysis(_Base):
         """
         return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
-    def fit_transform(self, X, y=None):
-        """Fit to X, then return ``transform(X)``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : ignored
-
-        Returns
-        -------
-        ndarray of shape (n_samples, n_components), float32
-        """
-        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
+    # The same one native call as _RandomProjection.fit_transform.
+    fit_transform = _RandomProjection.fit_transform
 
     def get_covariance(self):
         """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
@@ -2421,32 +994,6 @@ class FactorAnalysis(_Base):
 _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
 
 
-def _pca_mle_rank(spectrum, n_samples, mode):
-    """scikit-learn `_pca.py::_infer_dimension` / `_assess_dimension`
-    (Minka's MLE of the PCA rank) over the full explained-variance spectrum,
-    in software binary64 on the device on every vendor (x_decomp/pca_mle.mojo,
-    lane cpu3-python): the spectrum goes up once as binary64 words, the rank
-    comes back as one word. The host binding (CPU-only installs, the host
-    column) runs the same phases on the host. The argmax takes the first
-    maximum, as numpy."""
-    k = _Kit(mode)
-    d = len(spectrum)
-    if d < 2:
-        return 0
-    words = array.array("f")
-    words.frombytes(array.array("d", spectrum).tobytes())   # glue: the binary64 words, as bytes
-    if k._res():
-        raw = k._raw()
-        sp = _DevBuf(raw, 2 * d)
-        raw.x_decomp_dev_upload(sp.id, words.buffer_info()[0], 2 * d)
-        out = _DevBuf(raw, 1)
-        raw.x_decomp_dev_pca_mle_rank(sp.id, out.id, [d, int(n_samples)])
-        got = array.array("f", [0.0])
-        raw.x_decomp_dev_download(out.id, got.buffer_info()[0], 1)
-        return int(got[0])
-    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # cpu-route: array('d') eigenvalue words read once by x_decomp_pca_mle_rank on a CPU-only install
-
-
 # ================================================================ LU
 # LAPACK getrf semantics. Partial pivoting on the largest |a[i, k]|, ties
 # broken by the lowest row index. A zero pivot is kept (getrf's info > 0).
@@ -2498,9 +1045,8 @@ class _LUPair(tuple):
     step of iterative refinement, x += LU^-1 (B - A x), the residual in
     float-float on the device. #: audit 2026-10-04: lu-solve / lu-factor
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
-    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
-    quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
-    # bindings/linalg_decomp_native.mojo (`_lu_pair`) assembles the pair
+    8.23e-07. KEPT for quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
+    # bindings/linalg_decomp_native_unpack.mojo (`_lu_pair`) assembles the pair
     # lu_factor returns from its slots: `_qfix_a` an (n, n) float32 Array,
     # `_dev` the three `_DevBuf`s and the lu / piv arrays, or None.
 
@@ -2589,20 +1135,12 @@ def solve(a, b, *, numeric_mode=None):
     return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
 
 
-# ================================================================ lstsq / randomized SVD
-def _orthonormal_cols(k, A):
-    """An orthonormal basis of A's columns (m x l, m >= l): two passes of the
-    Householder QR's R (decomposition/'s TSQR) and Q = A R^-1 one row per
-    thread (x_decomp/cells.mojo `trsm_row`)."""
-    return k.orth(A)
+# TOMBSTONE: _orthonormal_cols (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-def _flip_u(U, Vt):
-    """sklearn svd_flip(u_based_decision=True): each column of U signed so its
-    largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
-    k = _Kit(_backend.default_mode())
-    sg = k.absmax_signs(U, True)
-    return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
+# TOMBSTONE: _flip_u (orphan helper: the native linalg door flips the signs) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # Halko et al.; RAFT `linalg/rsvd.cuh` is the same scheme. The Gaussian
@@ -2671,112 +1209,8 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
                                                     transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
 
 
-def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
-               random_state):
-    n, d = A.r, A.c
-    if power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
-        raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-    nr = n_components + n_oversamples
-    if n_iter == "auto":
-        n_iter = 7 if n_components < 0.1 * min(n, d) else 4
-    if transpose == "auto":
-        transpose = n < d
-    if transpose:
-        A = A.T
-        n, d = d, n
-    if not 1 <= n_components <= min(n, d):
-        raise ValueError("n_components must be in [1, min(n_samples, n_features)]")
-    nr = min(nr, d, n)
-    Q = k.rand(d, nr, _seed_of(random_state), 30, 1)
-    for _ in range(int(n_iter)):  # glue: drives the fixed randomized-SVD power iterations on the device (n_iter-sized: power iterations)
-        Q = _orthonormal_cols(k, k.mm(A, Q))
-        Q = _orthonormal_cols(k, k.mm(A, Q, ta=True))
-    Q = _orthonormal_cols(k, k.mm(A, Q))
-    # The orth rank guard (DEVIATION 5318) leaves a numerically dependent
-    # column of the range exactly 0. Q^T M then has a zero row, and the
-    # one-sided Jacobi SVD of a rank-deficient matrix rotates the rounding
-    # noise of the column it drives to zero forever, so the small SVD runs on
-    # the live columns only; the components past the numerical rank are 0
-    # (singular value 0, zero vectors), as the zero Q column already says.
-    # lane cpu2-l8-decomp: the live count is one word and the live columns
-    # are compacted where Q lives (the stable order of the 0 (live) / 1
-    # (dead) keys puts them first, in column order)
-    cs = k.colsum(k.ew("abs", Q))
-    nlive = k.count_gt(k.ew("abs", cs), 0.0)
-    if not nlive:
-        raise ValueError("randomized_svd: M is numerically zero")
-    full = Q.c
-    if nlive < full:
-        dead = k.ew("adds", k.ew("scale", k.ew("gts", k.ew("abs", cs), s=0.0), s=-1.0), s=1.0)
-        Q = k.take_cols_m(Q, k.order_small(dead), nlive)
-    B = k.mm(Q, A, ta=True)
-    Uh, S, Vt = _thin_svd(k, B, min(B.r, B.c), u_based=True)
-    if S.c < full:
-        pad = full - S.c
-        S = _M(S.s + array.array("f", [0.0]) * pad, 1, full)
-        Vt = _M(Vt.s + array.array("f", [0.0]) * (pad * Vt.c), full, Vt.c)
-        Uh = Uh.T
-        Uh = _M(Uh.s + array.array("f", [0.0]) * (pad * Uh.c), full, Uh.c).T
-    U = k.mm(Q, Uh)
-    if flip_sign:
-        if not transpose:
-            U, Vt = _flip_u(U, Vt)
-        else:
-            U, Vt = _flip_u(Vt.T, U.T)
-            U, Vt = Vt.T, U.T
-    kc = n_components
-    if transpose:
-        return Vt.rows(0, kc).T, S.cols(0, kc), U.cols(0, kc).T
-    return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
-
-
-def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
-    """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
-    min ||A X - B|| through the blocked TSQR of [A | B] (lane
-    neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
-    with C = Q^T B, so no pass over the rows after the factorization and no
-    Gram matrix. The minimum-norm solution is the SVD of the small R
-    (`_svd_tall`: S descending, U_R orthonormal): X = V diag(1/s) U_R^T C,
-    singular values at or below rcond * s_max dropped, as before; the
-    residuals (rank == nn < m only) are the squared column norms of R22,
-    which is ||b - a x||^2 at the least-squares solution.
-
-    `equilibrate` (LinearRegression, lane apple-fast-tsqr): before the SVD
-    every column j of R is multiplied by the exact power of two s_j that
-    DEVIATION 2620 picks for the Gram diagonal ||R e_j||^2 = ||A e_j||^2
-    (op p2scale, x_decomp/cells.mojo), so the rcond cutoff sees the design
-    in balanced units as the normal equations route did, and X is
-    multiplied by s after. A power of two scales without rounding, so
-    R S is what the TSQR of A S gives; every step stays on the binding's
-    cells (the same words on every column).
-
-    `Ra` (lane idn-dense-linalg): R_aug already factored by the caller
-    (`linear_model._ols_tsqr_centered`'s one entry); a_arr and b_arr are
-    then not read."""
-    from ._linalg_impl import _svd_tall
-    n = nn + nrhs
-    if Ra is None:
-        Ra = _M.zeros(n, n)
-        # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
-        k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
-                            [int(m), int(nn), int(nrhs), 0])
-    top = Ra.rows(0, nn)
-    R, C = top.cols(0, nn), top.cols(nn, n)
-    sc = None
-    if equilibrate:
-        sc = k.ew("p2scale", k.colsum(k.ew("sq", R)))
-        R = k.ew("mul", R, sc)
-    Ur, S, Vt = _svd_tall(k, R, False)
-    cut = _f32(k.word(S, 0) * rcond)
-    rank = k.count_gt(S, cut)       # lane cpu2-l8-decomp: two words, not S
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
-    if sc is not None:
-        X = k.ew("mul", X, sc.T)
-    res = None
-    if rank == nn and m > nn:
-        res = k.colsum(k.ew("sq", Ra.rows(nn, n).cols(nn, n)))
-    return X, res, rank, S
+# TOMBSTONE: _rsvd_core (dead Python power-iteration loop: randomized_svd routes to the native linalg door) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
@@ -2827,13 +1261,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
 
 
-# ================================================================ PLS / CCA
-def _dot(k, a, b):
-    """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
-    return k.mm(a, b, ta=True)
-
-
-class _PLS(RegressorScoreMixin, _Base):
+class _PLS(_Base):
     """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
     `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
@@ -2849,7 +1277,7 @@ class _PLS(RegressorScoreMixin, _Base):
     _pmode = "A"
 
     # fit, fit_transform, transform, inverse_transform and predict are one
-    # call each into the native PLS owner (bindings/pls_native.mojo), which
+    # call each into the native PLS owner (bindings/pls_native_door.mojo), which
     # reads `_deflation` / `_pmode` from the class.
     def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
         self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
@@ -3194,7 +1622,7 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
 
 class _SparseCoding(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     def transform(self, X):
@@ -3482,11 +1910,26 @@ class MiniBatchDictionaryLearning(_SparseCoding):
 
 class _BaseSparsePCA(_Base):
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
+    # fit is one call into the same owner, for both subclasses.
+    def fit(self, X, y=None):
+        """Fit the sparse components.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        self
+        """
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
+
     # fit, fit_transform, transform and inverse_transform are one call each
-    # into the native dictionary-learning owner (bindings/dict_learning_native.mojo),
+    # into the native dictionary-learning owner (bindings/dict_learning_native_unpack.mojo),
     # which tells SparsePCA and MiniBatchSparsePCA apart by class.
     def fit_transform(self, X, y=None):
         """Fit the sparse components, then return ``transform(X)``.
@@ -3605,20 +2048,6 @@ class SparsePCA(_BaseSparsePCA):
         self.U_init, self.V_init, self.verbose, self.random_state = U_init, V_init, verbose, random_state
         self.numeric_mode = numeric_mode
 
-    def fit(self, X, y=None):
-        """Fit the sparse components.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-        y : ignored
-
-        Returns
-        -------
-        self
-        """
-        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
-
 
 # MiniBatchDictionaryLearning on the centered X^T, the components its
 # lasso_lars transform of X^T. callback is not forwarded (never called).
@@ -3687,20 +2116,6 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         self.callback, self.batch_size, self.verbose, self.shuffle = callback, batch_size, verbose, shuffle
         self.n_jobs, self.method, self.random_state, self.tol = n_jobs, method, random_state, tol
         self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
-
-    def fit(self, X, y=None):
-        """Fit the sparse components.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-        y : ignored
-
-        Returns
-        -------
-        self
-        """
-        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # ================================================================ LatentDirichletAllocation
@@ -3792,7 +2207,7 @@ class LatentDirichletAllocation(_Base):
     >>> doc_topics = lda.transform(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     # scikit-learn tags, read by `_mode.sklearn_tags`
@@ -3913,117 +2328,11 @@ _PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity":
 
 # The manifold estimators' metric rule (`_metric_spec`), distances, kNN
 # matrices, kernel centering and top eigenpairs run in their compiled owner
-# (bindings/mani_decomp_native.mojo); `_PD_KIND` is its table.
+# (bindings/mani_decomp_native_door.mojo); `_PD_KIND` is its table.
 
 
-#: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
-#: under sklearn's own ARPACK policy for eigen_solver='auto' (KernelPCA /
-#: Isomap: n > 200 and fewer than 10 components), FAST mode only. ON by
-#: default ON APPLE since lane/decomp-apple3 (opt-in elsewhere,
-#: MOJOLEARN_XD_LANCZOS=1, where it has no quality check): its paired check
-#: (bench/decomp_fast_quality.py) ran on a GPU with a FAST binding (m4-a
-#: 1790626766529, 600 rows, 2 datasets x 2 seeds, Isomap and ClassicalMDS:
-#: 8/8 PASS, every eigenvalue and eigenvector error UNDER the exact dense
-#: solve's against the float64 reference, fits 0.03 to 0.17 s against 1.8 to
-#: 4.1 s). MOJOLEARN_XD_LANCZOS=0 keeps the exact dense solve.
-#: (The route's n > 200 and n_components < 10 policy is in bindings/mani_decomp_native.mojo.)
-#: Ritz residual bound, relative to the largest |Ritz value|, and the basis cap
-#: past which the route gives up and runs the exact dense solve instead.
-_LANCZOS_TOL = 1e-7
-_LANCZOS_MAX_M = 600
-
-
-def _kdot(k, a, b):
-    return float(k.mm(a, b, ta=True).s[0])
-
-
-def _lanczos_batch(run, ab, n, j, m, cap, alphas, betas):
-    """Steps j .. m-1 (`run`), then their alphas and betas appended up to
-    the first stop (`_lanczos_top`'s breakdown test). Returns (j, stop)."""
-    run(j, m)
-    for jj in range(j, m):  # glue: per-step scalars, at most _LANCZOS_MAX_M
-        a, b = float(ab[jj]), float(ab[cap + jj])
-        alphas.append(a)
-        betas.append(b)
-        if b <= 1e-30 * max(1.0, abs(a)) or jj + 1 == n:  # glue: two scalars
-            return jj + 1, True
-    return m, False
-
-
-#: the Lanczos basis cap in floats ((cap + 1) * n): past it the exact dense solve runs
-_LANCZOS_DEV_MAX_FLOATS = 1 << 26
-
-
-def _lanczos_top(k, A, nc):
-    """The nc largest eigenpairs of symmetric A by Lanczos with full
-    reorthogonalization (classical Gram-Schmidt, twice). The basis starts at
-    max(2 nc + 1, 20) vectors (ARPACK's ncv) and doubles until every wanted
-    Ritz pair's residual estimate beta_m |y_m| is at most _LANCZOS_TOL times
-    the largest |Ritz value|. Returns None when that has not happened by
-    _LANCZOS_MAX_M vectors (the caller then runs the exact solve), so the
-    route never returns a less converged answer than it promises. The start
-    vector is a seeded uniform draw centred at 0 (a constant vector is
-    orthogonal to a centred kernel's spectrum).
-
-    Lane cpu2-l8-decomp (re-audit L8, `_lanczos_top`): the steps run in Mojo
-    in every mode, the basis in ONE matrix that never leaves where the kit
-    keeps it: on a GPU kit `x_decomp_dev_lanczos` (x_decomp/lanczos_dev.mojo,
-    enqueued, the alphas and betas read once a batch), on the host column
-    `x_decomp_lanczos` (x_decomp/lanczos_host.mojo, the same steps and
-    words). The Python step that downloaded q and re-uploaded the basis twice
-    a step is deleted, and the Ritz test reads two words (max |theta| and
-    max |beta y|, reduced where they live)."""
-    n = A.r
-    cap = min(n, _LANCZOS_MAX_M)
-    if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
-        return None
-    q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
-    q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
-    ab = array.array("f", [0.0]) * (2 * cap)
-    if k._res():
-        Qd = k._dout(cap + 1, n)
-        k.place_rows(Qd, q.reshape(1, n), 0)
-        ABd = k._dout(1, 2 * cap)
-        aid = k._did(A)
-
-        def run(j0, j1):
-            k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j0, j1, cap])
-            k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
-    else:
-        Qd = _M.zeros(cap + 1, n)
-        k.place_rows(Qd, q.reshape(1, n), 0)
-
-        def run(j0, j1):
-            k.b.x_decomp_lanczos(A.addr, Qd.addr, ab.buffer_info()[0], [n, j0, j1, cap])
-    alphas, betas = [], []
-    m = min(n, max(2 * nc + 1, 20))
-    j = 0
-    stop = False
-    while True:
-        if j < m and not stop:
-            j, stop = _lanczos_batch(run, ab, n, j, m, cap, alphas, betas)
-        # the tridiagonal T from the per-step scalars the batch read (m-sized
-        # scalar control, at most _LANCZOS_MAX_M squared words)
-        T = [0.0] * (j * j)
-        for i in range(j):  # glue: the batch's own alphas and betas into T
-            T[i * j + i] = alphas[i]
-            if i + 1 < j:
-                T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
-        th, Y = k.eigh(_M.of(T, j, j))
-        top = list(range(j - 1, max(j - 1 - nc, -1), -1))
-        if len(top) < nc:
-            return None
-        big = k.word(k.reduce(th.take_cols(top), k._SEL_MAXABS)) or 1.0
-        res = k.word(k.reduce(k.ew("scale", Y.rows(j - 1, j).take_cols(top), s=betas[j - 1]), k._SEL_MAXABS))
-        if stop or res <= _LANCZOS_TOL * big:
-            break
-        if m >= cap:
-            return None
-        m = min(n, 2 * m, _LANCZOS_MAX_M)
-    Yt = Y.take_cols(top)
-    QM = _M._on_device(Qd._d, j, n) if Qd._d is not None else _M(Qd.s[:j * n], j, n)
-    V = k.mm(QM, Yt, ta=True)
-    return th.take_cols(top), V
+# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native_door.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # Reference: scikit-learn `manifold/_isomap.py` with
@@ -4372,7 +2681,7 @@ class MDS(_Base):
         return _NATIVE(self, "family_mani_mds_fit",
                        (None, None, X, init, y), _NATIVE_CONTEXT)
 # LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
-# policy run in the compiled owner (bindings/mani_decomp_native.mojo).
+# policy run in the compiled owner (bindings/mani_decomp_native_door.mojo).
 
 
 # Reference: scikit-learn `manifold/_locally_linear.py`:
@@ -4511,12 +2820,10 @@ class LocallyLinearEmbedding(_Base):
 
 # The compiled family owner, connected once at import: every public method
 # of Isomap, ClassicalMDS, MDS and LocallyLinearEmbedding is one native call
-# (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
-# buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
-# the metric kinds.
+# (bindings/mani_decomp_native_door.mojo). Its table: the metric kinds (the native
+# kit, bindings/mani_kit_door.mojo, never reads the Python _M / _DevBuf classes).
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
-_native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
-                             family_mani_pd_kind=dict(_PD_KIND))
+_native_family_bridge.tables(family_mani_pd_kind=dict(_PD_KIND))
 
 
 # ================================================================ robust covariance
@@ -4575,7 +2882,7 @@ class MinCovDet(_Base):
     >>> d = mcd.mahalanobis(X)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
@@ -4586,7 +2893,7 @@ class MinCovDet(_Base):
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
     # Every operation is one call into the native MinCovDet owner
-    # (bindings/mcd_native.mojo). A covariance estimator has no transform,
+    # (bindings/mcd_native_door.mojo). A covariance estimator has no transform,
     # so it has no fit_transform either (scikit-learn's TransformerMixin).
     @available_if(lambda self: hasattr(self, "transform"))
     def fit_transform(self, X, y=None):
@@ -4866,7 +3173,7 @@ class AlternatingLeastSquares(_Base):
     >>> ids, scores = als.recommend(0, R, N=5)
     """
     # One native call per public method; its owner runs the whole lifecycle
-    # (bindings/decomp_public_lifecycle.mojo), so `_mode` installs no wrappers.
+    # (bindings/decomp_public_lifecycle_unpack.mojo), so `_mode` installs no wrappers.
     _mojolearn_native_public = True
 
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
@@ -4879,7 +3186,7 @@ class AlternatingLeastSquares(_Base):
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
     # fit, recommend and similar_items are one call each into the native
-    # AlternatingLeastSquares owner (bindings/als_native.mojo).
+    # AlternatingLeastSquares owner (bindings/als_native_door.mojo).
 
     def fit(self, user_items, show_progress=False):
         """Fit user and item factors.
@@ -5076,41 +3383,8 @@ class SparseCoder(_SparseCoding):
         return _DL_CALL(self, "coder_fit_transform", (X,), _DL_CONTEXT)
 
 
-# ================================================================ randomized arms of PCA / TruncatedSVD
-def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iteration_normalizer, random_state,
-                          numeric_mode, binding=None):
-    """The randomized arm of `decomposition.PCA` (sklearn `_pca.py::_fit_truncated`,
-    center=True) and `decomposition.TruncatedSVD` (`_truncated_svd.py`,
-    center=False): `randomized_svd` (flip_sign=False) on the (centered) data,
-    then `svd_flip(u_based_decision=False)`. Returns a dict of float32
-    Arrays and the float noise variance."""
-    k = _Kit(_mode(numeric_mode), binding)
-    M = _M.from_input(X)
-    n, d = M.r, M.c
-    mean = k.colmean(M)
-    A = k.ew("sub", M, mean) if center else M
-    Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
-                            random_state)
-    # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
-    sg = k.absmax_signs(Vm, False)
-    Vm, Um = k.ew("mul", Vm, sg), k.ew("mul", Um, sg.T)
-    out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
-    if center:
-        ev = k.ew("scale", k.ew("sq", Sm), s=1.0 / (n - 1))
-        tot = k.ew("scale", k.total(k.ew("sq", A)), s=1.0 / (n - 1))
-        out["explained_variance"] = ev.out((nc,))
-        out["explained_variance_ratio"] = k.ew("div", ev, tot).out((nc,))
-        r = min(n, d)
-        out["noise_variance"] = (k.ew("scale", k.ew("sub", tot, k.total(ev)), s=1.0 / (r - nc)).s[0]
-                                 if nc < r else 0.0)
-    else:
-        Xt = k.ew("mul", Um, Sm)
-        mt = k.colmean(Xt)
-        ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, mt)), s=1.0 / n)
-        full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, mean)), s=1.0 / n))
-        out["explained_variance"] = ev.out((nc,))
-        out["explained_variance_ratio"] = k.ew("div", ev, full).out((nc,))
-    return out
+# TOMBSTONE: _randomized_decompose (dead Python randomized PCA / TruncatedSVD arm: the owners in x_decomp/pca_randomized.mojo and x_decomp/tsvd_owner.mojo run it) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # The compiled IncrementalPCA owner, connected once at import.
@@ -5121,14 +3395,14 @@ from . import _native_jl_bridge  # noqa: E402
 _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 
 
-# The native dictionary-learning owner (bindings/dict_learning_native.mojo):
+# The native dictionary-learning owner (bindings/dict_learning_native_unpack.mojo):
 # DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA,
 # MiniBatchSparsePCA and sparse_encode, one call per public operation.
 from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
 _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
 
 
-# The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
+# The native PLS owner (bindings/pls_native_door.mojo): PLSRegression, PLSCanonical, CCA.
 # `score` runs R^2 through the native metrics owner (family_mcls_r2) inside
 # the same call. Import connects the metrics tables; the native PLS owner
 # selects and checks the current binding after entering compiled code.
@@ -5139,15 +3413,15 @@ _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_
                                               pls_metric_owner=_native_family_bridge.connect())
 
 
-# The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
+# The native MinCovDet owner (bindings/mcd_native_door.mojo): MinCovDet, EllipticEnvelope.
 _MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelope_class=EllipticEnvelope)
 
 
-# The native AlternatingLeastSquares owner (bindings/als_native.mojo).
+# The native AlternatingLeastSquares owner (bindings/als_native_door.mojo).
 _ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
 
 
-# The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
+# The native linear-algebra owner (bindings/linalg_decomp_native_unpack.mojo):
 # randomized_svd, solve, lstsq, lu_factor and lu_solve. lu_factor returns an
 # `_LUPair` whose device buffers are `_DevBuf`s.
 _LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call", lu_pair_class=_LUPair,
@@ -5155,7 +3429,7 @@ _LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call",
 
 
 # The compiled owner of the decomposition estimators whose public operations
-# are one native call each (bindings/decomp_native.mojo): FastICA, ...
+# are one native call each (bindings/decomp_native_door.mojo): FastICA, ...
 from . import _native_decomp_bridge  # noqa: E402
 _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,

@@ -4,13 +4,13 @@
 column).
 
 The Python door stays in `bindings/_mojolearn_estimators_host.mojo`: it
-unpacks PythonObject arguments, releases the GIL, calls one function here
+unpacks Python object arguments, releases the GIL, calls one function here
 and converts the result back. The validation, the oracle calls and every
 copy of a result into the caller's buffers live here with no Python import,
 word for word as they were in the binding (lane thin-core, 2026-10-21: a
 pure move, no bit change).
 """
-from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_list
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.numerics import ftz
@@ -230,17 +230,20 @@ def pca_fit_owned_host_run(
 def pca_randomized_owned_host_run(
     x_address: Int, cp: _F32P, mp: _F32P, ep: _F32P, rp: _F32P, sp: _F32P,
     nr: Int, nf: Int, nc: Int, oversamples: Int, iterations: Int, auto_iterations: Bool, seed: Int,
-    op: _F32P, project: Bool, whiten: Bool,
+    op: _F32P, project: Bool, whiten: Bool, finite_word: Int = 0,
 ) raises -> Float64:
     """`PCA(svd_solver='randomized').fit` / `fit_transform` on the host: the
     decomp lane's randomized driver on the host executor, then with
-    `project` X's projection at `op`. Returns the noise variance."""
+    `project` X's projection at `op`. Returns the noise variance.
+    `finite_word` (lane a8d): as `pca_randomized_fit_run`'s."""
     var noise = pca_randomized_fit_run[HostExec, NoRDev, False](
         F32Ptr(unsafe_from_address=x_address), F32Ptr(unsafe_from_address=Int(cp)),
         F32Ptr(unsafe_from_address=Int(mp)), F32Ptr(unsafe_from_address=Int(ep)),
         F32Ptr(unsafe_from_address=Int(rp)), F32Ptr(unsafe_from_address=Int(sp)),
-        nr, nf, nc, oversamples, iterations, auto_iterations, seed,
+        nr, nf, nc, oversamples, iterations, auto_iterations, seed, finite_word,
     )
+    if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+        return 0.0
     if project:
         pca_project_host_run(x_address, mp, cp, sp, op, nr, nf, nc, whiten)
     return noise
@@ -391,16 +394,16 @@ def dbscan_fit_host_run(
 def _whiten_finite(values: List[Float32], what: String) raises:
     """`_pca_whiten_finite` of the GPU binding, over the copy this side
     reads, with the GPU binding's sentence."""
-    for i in range(len(values)):
-        if not isfinite(values[i]):
-            raise Error("PCA whitening requires finite inputs and outputs")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("PCA whitening requires finite inputs and outputs")
 
 
 def _whiten_finite_ptr(values: HostF32Ptr, count: Int, what: String) raises:
     """The same finite refusal over caller-owned memory, without a copy."""
-    for i in range(count):
-        if not isfinite(values.unsafe_load(i)):
-            raise Error("PCA whitening requires finite inputs and outputs")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_f32(values, count):
+        raise Error("PCA whitening requires finite inputs and outputs")
 
 
 def pca_whiten_check_host(
@@ -461,15 +464,15 @@ def pca_whiten_host_run(
 
 
 def _pp_minmax_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def _pp_standard_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
 
 
 def standard_transform_host_run(

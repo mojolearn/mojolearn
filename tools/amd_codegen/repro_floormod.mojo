@@ -1,8 +1,8 @@
 # Minimal reproducer candidate: no mojolearn code. Emits gfx942 LLVM IR
 # (unoptimized, optimized) and asm of small kernels using Int floor modulus.
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
-from std.gpu import thread_idx, block_idx
+from max.gpu.host import get_gpu_target
+from max.gpu import thread_idx, block_idx
 
 def k1(o: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin], n: Int, f: Int):
     var acc = Float32(0)

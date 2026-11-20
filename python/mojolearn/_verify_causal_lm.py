@@ -14,7 +14,7 @@ import platform
 import subprocess
 import re
 
-from . import Array, _backend
+from . import Array, numeric_mode, runtime_report, vendor
 from .models import CausalLM
 from . import _causal_lm_fixtures as fixtures
 
@@ -123,7 +123,7 @@ def capture_case(root, architecture, tied, weight_format, device, layer_devices=
 
 
 def capture(device='cpu', formats=('float32',), *, layer_devices=None):
-    if _backend.numeric_mode() != 'identical':
+    if numeric_mode() != 'identical':
         raise ValueError('loaded-model proof requires numeric_mode=identical')
     if layer_devices is not None and device != 'gpu':
         raise ValueError('layer_devices requires device=gpu')
@@ -131,7 +131,7 @@ def capture(device='cpu', formats=('float32',), *, layer_devices=None):
     if not formats or len(set(formats)) != len(formats) or set(formats) - {'float32', 'bfloat16', 'int8'}:
         raise ValueError('formats must be distinct supported formats')
     result = {'formats': list(formats), 'repeats': 2,
-              'platform': platform.platform(), 'backend': _backend.vendor(), 'layer_devices': layer_devices,
+              'platform': platform.platform(), 'backend': vendor(), 'layer_devices': layer_devices,
               'profile': PROFILE, 'device': device, 'status': 'CAPTURED_UNQUALIFIED',
               'native_fault': 'OWED', 'physical_execution': 'OWED', 'cases': []}
     with tempfile.TemporaryDirectory() as root:
@@ -147,10 +147,12 @@ def capture(device='cpu', formats=('float32',), *, layer_devices=None):
                           and Path(mod.__file__).is_file()}
     if device == 'cpu':
         name = '_mojolearn_neural_host'
-        binding = _backend.load_host_module(name)
-        path = Path(_backend.host_module_path(name))
-        result['bindings'][name] = hashlib.sha256(path.read_bytes()).hexdigest()
-        result['native_fault'] = bool(binding.neural_host_sabotage())
+        # The host binding the CPU cases ran on, read back after they ran.
+        row = runtime_report()['bindings'].get('mojolearn._host.' + name)
+        if row is None or row['identity'] is None or row['sabotage'] is None:
+            raise RuntimeError(f'{name} is not loaded or reports no sabotage read-back after the CPU cases')
+        result['bindings'][name] = row['identity']
+        result['native_fault'] = row['sabotage']
     result['source_sha256'] = hashlib.sha256(b''.join(path.read_bytes() for path in
         (Path(__file__), Path(fixtures.__file__), Path(__file__).parent / 'models' / 'causal_lm.py',
          Path(__file__).parent / 'models' / 'parallel_causal_lm.py'))).hexdigest()

@@ -3,7 +3,7 @@
 # params, archive branches) and all its transitive native callees.
 # This exported forwarding root is compile evidence only; no runtime is claimed.
 from std.python._cpython import PyObjectPtr
-from bindings.pca_native import pca_c
+from bindings.pca_native_door import pca_c
 
 
 @export

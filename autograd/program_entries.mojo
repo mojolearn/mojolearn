@@ -199,6 +199,13 @@ def program_fit_parameters[E: Exec & Movable & Deinitable, KIND: Int](
                 params.append(other.params[k])
     if explicit:
         params = selected.copy()
+    else:
+        # lane x1: carried state is never a default training parameter
+        var weights = List[Int]()
+        for k in range(len(params)):  # driver-loop: over the default parameters, dropping carried state
+            if not s[].is_state(params[k]):
+                weights.append(params[k])
+        params = weights^
     return params^
 
 
@@ -206,10 +213,13 @@ def program_fit_native[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, pid: Int, var owners: List[ProgramInput], var target_owners: List[ProgramInput],
     kind: Int, delta: Float32, opt: Int, params: List[Int], count: Int, batch: Int, shuffle: Bool,
     seed_word: UInt64, curve: FP, condition_id: Int, otherwise_id: Int,
-) raises -> Tuple[Int, Int]:
+    tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
+) raises -> Tuple[Int, Int, Int]:
     """Train program `pid` over the converted inputs (and targets, unless
-    kind is 0, loss='output'); the loss curve goes to `curve`. Returns the
-    branch counts of a conditional program."""
+    kind is 0, loss='output'); the loss curve goes to `curve`. With
+    `n_iter_no_change` > 0 training stops early by scikit-learn SGD's rule
+    (`tol`). Returns the branch counts of a conditional program and the
+    epochs run."""
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
     for k in range(len(owners)):  # driver-loop: over borrowed input descriptors
@@ -221,7 +231,7 @@ def program_fit_native[E: Exec & Movable & Deinitable, KIND: Int](
     var s = ops_session[E, KIND](sid)
     var branches = train_program_control(s[], pid, srcs, shapes, target, kind, delta,
                                         opt, params, count, batch, shuffle, seed_word, curve,
-                                        condition_id, otherwise_id)
+                                        condition_id, otherwise_id, tol, n_iter_no_change)
     _ = owners^
     _ = target_owners^
     return branches

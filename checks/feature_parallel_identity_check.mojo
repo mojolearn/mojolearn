@@ -174,7 +174,7 @@ from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 comptime MAX_DEPTH = 4
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
     # ONE compression block, then THREE with a 50-key tail. See the module
@@ -215,7 +215,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
             col.append(b)
             hb.unsafe_ptr().unsafe_store(r, UInt8(b))
         host_bins.append(col^)
-        ctx.enqueue_copy(dst_buf=bins8, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins8, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS),
             cf.mask,
@@ -248,7 +248,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     # ---- arm A: the DOC-PARALLEL searcher (rung 1) -----------------------
     var a_w = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var a_g = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=a_w, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a_w, hs)
     ctx.enqueue_copy(
         dst_buf=a_g, src_ptr=hs.unsafe_ptr().unsafe_offset(N_ROWS)
     )
@@ -263,11 +263,12 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     # ---- arm B: the FEATURE-PARALLEL searcher (rung 2) -------------------
     var b_w = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var b_g = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=b_w, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, b_w, hs)
     ctx.enqueue_copy(
         dst_buf=b_g, src_ptr=hs.unsafe_ptr().unsafe_offset(N_ROWS)
     )
     ctx.synchronize()
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
     print(
         "arm B: TFeatureParallelObliviousTreeSearcher"
         " (WriteCompressedSplit -> UpdateBinFromCompressedBits ->"
@@ -333,7 +334,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     # word is the leaf id. Recompute it from `host_bins` and the split list
     # and compare all 4,000, not their histogram.
     var h_doc_bins = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=h_doc_bins, src_buf=fp_doc_bins)
+    download_buffer_into[DType.uint32](ctx, fp_doc_bins, h_doc_bins)
     ctx.synchronize()
 
     var wrong = 0
@@ -402,7 +403,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         var h_ident = ctx.enqueue_create_host_buffer[DType.uint32](N_ROWS)
         for r in range(N_ROWS):
             h_ident.unsafe_ptr().unsafe_store(r, UInt32(r))
-        ctx.enqueue_copy(dst_buf=ident, src_ptr=h_ident.unsafe_ptr())
+        upload_host_into[DType.uint32](ctx, ident, h_ident)
         ctx.synchronize()
 
         var off0 = UInt32(Int(cf0.offset) * N_ROWS)
@@ -416,8 +417,8 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         )
         var hn = ctx.enqueue_create_host_buffer[DType.uint64](packed)
         var hi = ctx.enqueue_create_host_buffer[DType.uint64](packed)
-        ctx.enqueue_copy(dst_buf=hn, src_buf=bits_null)
-        ctx.enqueue_copy(dst_buf=hi, src_buf=bits_idx)
+        download_host_into[DType.uint64](ctx, bits_null, hn)
+        download_host_into[DType.uint64](ctx, bits_idx, hi)
         ctx.synchronize()
 
         var bits_differ = 0
@@ -468,11 +469,12 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         hc.unsafe_ptr().unsafe_store(N_ROWS + r, Float32(g))
     var c_w = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var c_g = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=c_w, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, c_w, hc)
     ctx.enqueue_copy(
         dst_buf=c_g, src_ptr=hc.unsafe_ptr().unsafe_offset(N_ROWS)
     )
     ctx.synchronize()
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
     var ctl = fit_feature_parallel_oblivious_tree_structure(
         ctx, lay, N_ROWS, MAX_DEPTH, cindex, c_w^, c_g^, 10, Float32(1.0),
         SCORE_FUNCTION_COSINE,
@@ -510,3 +512,22 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
             len(fp_splits), "splits and", N_ROWS, "leaf ids",
         )
     return failures
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("feature_parallel_identity_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -28,7 +28,7 @@ def test_the_graph_map_is_a_superset_of_the_selectors_map_for_identity_paths():
     into a binding the lane loads, or one the lane's Python imports. A file
     here that the graph does not reach is a hand-kept edge or an import form
     the walk does not read, and both are defects (`--compare` names them)."""
-    derived, _ = graph.derive()
+    derived, why = graph.derive()
     narrow, _ = lane_select.lane_sources()
     assert set(derived) == set(narrow) and len(narrow) > 200
     bad = []
@@ -37,10 +37,37 @@ def test_the_graph_map_is_a_superset_of_the_selectors_map_for_identity_paths():
         if extra:
             bad.append(f"{lane}: {sorted(extra)[:4]}")
     assert not bad, "the selector attributes files no import path reaches:\n  " + "\n  ".join(bad[:8])
-    # and the bound is not trivially the whole tree
+    # And the bound is not trivially the whole tree. What made it trivial
+    # (2026-11-05, the registry read whole) was every lane loading every
+    # family binding, so that is what is held: the bindings EVERY lane loads
+    # are a minority of the built ones, and a Mojo file reaches every lane
+    # exactly when one of those bindings compiles it, never by the walk
+    # widening lane by lane.
+    #
+    # This replaces `every-lane files < half the identity files` (fx-import-
+    # graph-saturation, 2026-11-19). That count never had a margin: 1939 of
+    # 3893 on 28a780604c (bound 1946), 1956 of 3910 on b59aff2e57 (bound 1955).
+    # Between the two no existing file changed its lane count or its binding
+    # count; the 17 new `bindings/<family>_keys_unpack.mojo` tables are
+    # imported by doors the always-loaded host bindings already compiled, and
+    # 17 files tipped a ratio. The every-lane half is `_mojolearn`, its host
+    # route and the eleven `_mojolearn_runtime_*_host` owners
+    # `HOST_IMPORT_ALIASES` connects whenever the tokenizer host loads (on
+    # every install, since the 2026-11-07 host split): a fact of the build
+    # layout, which a file-count ratio measured by accident.
+    common = set.intersection(*[set(ev["bindings"]) for ev in why.values()])
+    built = graph.build_scripts()
+    assert 0 < len(common) < len(built) // 2, (
+        f"every lane loads {len(common)} of {len(built)} bindings; the bound says nothing: {sorted(common)[:6]}")
+    held = set()
+    for name in common:
+        held |= {rel for rel in (graph.binding_closure(name)[0] or ()) if rel.endswith(".mojo")}
     rev = graph.reverse(derived)
-    every = sum(1 for rel, lanes in rev.items() if _identity(rel) and len(lanes) == len(derived))
-    assert every < len([r for r in rev if _identity(r)]) // 2, "every file reaches every lane; the bound says nothing"
+    every = {rel for rel, lanes in rev.items() if rel.endswith(".mojo") and len(lanes) == len(derived)}
+    assert every == held, (
+        "a Mojo file reaches every lane that no binding every lane loads compiles (or the reverse): "
+        f"{sorted(every ^ held)[:6]}")
+    assert len(every) < len([r for r in rev if r.endswith(".mojo")]), "every Mojo file reaches every lane"
 
 
 def test_a_file_only_the_graph_reaches_is_attributed_by_the_graph_never_widened(monkeypatch):
@@ -80,9 +107,14 @@ def test_an_unmapped_file_is_refused_by_name_and_selects_nothing():
     lines = []
     assert lane_select.refuse_unattributed(sel, out=lines.append) is True
     assert any(line.startswith(f"UNATTRIBUTED PATH: {path}") for line in lines), lines
-    rc = subprocess.run([sys.executable, str(ROOT / "tools" / "lane_select.py"), "--lanes-for-paths", path],
-                        capture_output=True, text=True, cwd=str(ROOT))
-    assert rc.returncode == 3 and f"UNATTRIBUTED PATH: {path}" in rc.stdout, rc.stdout[-500:]
+    # The CLI, in this process (`main` is what `python3 tools/lane_select.py` runs): a subprocess re-derived
+    # the whole map, five minutes for one exit code.
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = lane_select.main(["--lanes-for-paths", path])
+    assert rc == 3 and f"UNATTRIBUTED PATH: {path}" in buf.getvalue(), buf.getvalue()[-500:]
 
 
 def test_the_mojo_closure_is_the_builds_walk(tmp_path):
@@ -137,7 +169,13 @@ def test_a_binding_table_read_as_code_routes_the_saved_model_classes():
     sel = lane_select.select(["bindings/_mojolearn_estimators_host.mojo"])
     assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
     sel = lane_select.select(["preprocessing/host/scaler_oracle.mojo"])
-    assert "standard-scaler" in sel["lanes"] and "kmeans" not in sel["lanes"], sel["lanes"][:8]
+    assert "standard-scaler" in sel["lanes"], sel["lanes"][:8]
+    # k-means does not run the scaler oracle. Since the native boundary migration it can still be selected,
+    # only as native-dispatch precision debt (tools/LANE_SELECTOR_PRECISION.md): then it must carry the
+    # unresolved-dispatch record that says so, never be selected silently.
+    if "kmeans" in sel["lanes"]:
+        assert any(row["lane"] == "kmeans" and "preprocessing/host/scaler_oracle.mojo" in row["paths"]
+                   for row in sel.get("precision_limitations", ())), "kmeans selected with no dispatch record"
 
 
 def test_check_stamps_agrees_with_a_stamp_the_build_wrote(tmp_path, monkeypatch):

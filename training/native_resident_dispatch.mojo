@@ -20,6 +20,15 @@ def native_resident_arity(op: Int, na: Int, np: Int, nf: Int) raises:
         valid = na == 0 and np == 1 and nf == 0
     elif op == 16:
         valid = na == 3 and np == 3 and nf == 0
+    # TOMBSTONE: SAMBA_THREE_TIER_FORWARD operation 16 (the resident forward; SambaStack.forward runs SambaStackProgram) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+    # RESTORED 2026-11-13 (lane restore-samba-resident-forward): operation 16 is
+    # again the default stateless SambaStack.forward (the measured winner,
+    # IDN_SAMBA_RESIDENT_STEP); SambaStackProgram is its B arm behind
+    # -D MOJOLEARN_SAMBA_PROGRAM_FORWARD (bindings/samba_inference_native_door.mojo).
+    # TOMBSTONE: MOJOLEARN_SAMBA_PROGRAM_FORWARD (the SambaStackProgram B arm, EXP:2399 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 2ea7c618fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.patch
+    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
     elif op == 17:
         valid = na == 7 and np == 8 and nf == 8
     elif op == 18:
@@ -79,7 +88,7 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
                 kinds.append(p[i])
             var session = SambaResidentSession(ctx, kinds, p[0], p[1], p[2], p[3], p[4], p[5], p[6] != 0, Float32(f[0]), p[7], f32_ptr(a[0]))
             var owner = alloc[SambaResidentSession](1)
-            owner.init_pointee_move(session^)
+            owner.unsafe_write(session^)
             return Int(owner)
         var handle = a[0] if op == 13 else p[0]
         if handle == 0:
@@ -90,7 +99,7 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
                 raise Error("Samba resident resource belongs to another registry")
             if owner[].busy:
                 raise Error("Samba resident session busy")
-            owner.destroy_pointee()
+            owner.unsafe_deinit_pointee()
             owner.free()
             return 0
         if op == 14:

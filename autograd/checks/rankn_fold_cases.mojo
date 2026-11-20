@@ -10,7 +10,7 @@
 # folds (R <= 64), multi-leaf folds and folds with a tree level (R > 4096).
 from std.memory import bitcast
 from std.math import nan
-from std.collections import InlineArray
+from std.collections import Array
 from autograd.tape import Tape, Tensor
 from autograd.ops import ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_COLS
 from autograd.rankn import ShapeN, RN_MAX_RANK
@@ -59,7 +59,7 @@ def _same(name: String, got: List[Float32], want: List[Float32]) raises -> UInt6
 
 
 def _shape3(a: Int, b: Int, c: Int) -> ShapeN:
-    var d = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var d = Array[Int, RN_MAX_RANK](fill=1)
     d[0] = a
     d[1] = b
     d[2] = c
@@ -261,13 +261,13 @@ def _max_case[E: Exec](mut ex: E, mut tape: Tape, sx: ShapeN, axes: List[Int], w
     a host scan in the reduced axes' row-major order with the same combine;
     the gradient is the upstream at the argmax and zero elsewhere."""
     var name = String("max/") + String(sx.d[0]) + "x" + String(sx.d[1]) + "x" + String(sx.d[2]) + "/" + String(len(axes)) + ("/nan" if with_nan else "")
-    var red = InlineArray[Bool, 3](fill=False)
+    var red = Array[Bool, 3](fill=False)
     for k in range(len(axes)):  # small-loop(check axes)
         red[axes[k]] = True
     var n = sx.count()
     var xv = _max_data(n, sx.d[1] + len(axes), with_nan)
-    var ko = InlineArray[Int, 3](fill=1)
-    var ro = InlineArray[Int, 3](fill=1)
+    var ko = Array[Int, 3](fill=1)
+    var ro = Array[Int, 3](fill=1)
     for k in range(3):  # small-loop(check axes)
         if red[k]:
             ro[k] = sx.d[k]
@@ -289,7 +289,7 @@ def _max_case[E: Exec](mut ex: E, mut tape: Tape, sx: ShapeN, axes: List[Int], w
     var d = UInt64(1469598103934665603)
     for o in range(O):  # small-loop(check oracle, host side)
         var ok = o
-        var c = InlineArray[Int, 3](fill=0)
+        var c = Array[Int, 3](fill=0)
         var k = 2
         while k >= 0:  # small-loop(check axes)
             c[k] = ok % ko[k]
@@ -300,7 +300,7 @@ def _max_case[E: Exec](mut ex: E, mut tape: Tape, sx: ShapeN, axes: List[Int], w
         var bx = 0
         for r in range(R):  # small-loop(check oracle, host side)
             var rr = r
-            var e = InlineArray[Int, 3](fill=0)
+            var e = Array[Int, 3](fill=0)
             var q = 2
             while q >= 0:  # small-loop(check axes)
                 e[q] = rr % ro[q]

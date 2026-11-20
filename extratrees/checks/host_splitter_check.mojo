@@ -1440,7 +1440,7 @@ def check_nan_refused() raises -> Int:
     return cells
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
     cells += check_hashed_classification()
     cells += check_hashed_regression()

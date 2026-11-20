@@ -83,9 +83,10 @@ from checks.numerics import (
     identical_sqrt,
     numeric_mode_name,
 )
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime RIDGE_ROWS = 4096
 comptime RIDGE_COLS = 8
 
@@ -150,19 +151,18 @@ def _device_fit(
     var w = ctx.enqueue_create_buffer[DType.float32](d)
     var ha = a_h.copy()
     var hb = b_h.copy()
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
+    upload_whole_into[DType.float32](ctx, a, ha)
+    upload_whole_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     ridge_fit(ctx, a, b, w, n, d, alpha, RIDGE_ALGO_EIG)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](d)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    download_host_into[DType.float32](ctx, w, hw)
     ctx.synchronize()
     var out = List[Float32]()
     for k in range(d):
         out.append(hw.unsafe_ptr().unsafe_load(k))
     _ = ha^
     _ = hb^
-    _ = hw^
     return out^
 
 
@@ -377,12 +377,11 @@ def _host_pinned_dot(
 
 def _read(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return out^
 
 

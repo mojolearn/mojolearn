@@ -6,9 +6,10 @@ small canonical sumsq vector returns to the first device for the original
 cross-tensor norm. Scaling uses the resulting original coefficient on every
 owner, with full host staging before publication. One tensor must fit an owner.
 """
-from std.os import getenv
 from std.sys import is_defined
+from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceContext, DeviceBuffer
+from core.device_plan import DevicePlan
 from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from training.estimator import identical_clip_grad_norm_host, _offsets_from_ptr
@@ -27,6 +28,10 @@ from gemm.contract import OP_NT
 
 
 comptime CLIP_POOL_FAULT = is_defined["MOJOLEARN_CLIP_POOL_FAULT"]()
+#: the owner the sabotage build fails (`-D MOJOLEARN_CLIP_FAIL_OWNER=<o>`,
+#: default -1: none). Was an environment read per tensor inside the fault
+#: build until 2026-11-15 (lane envgate-train-seq-mamba).
+comptime CLIP_FAIL_OWNER = get_defined_int["MOJOLEARN_CLIP_FAIL_OWNER", -1]()
 
 
 # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
@@ -63,12 +68,14 @@ struct OwnedClipTensor(Movable):
 
 def parallel_clip_grad_norm_host(
     ctx: DeviceContext,
+    plan: DevicePlan,
     grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
     offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
     info_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_tensors: Int, max_norm: Float32,
 ) raises -> Int:
-    var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT","1"))
+    # The optimizer device count from the binding entry's plan.
+    var devices = plan.count
     if devices == 1:
         return identical_clip_grad_norm_host(ctx,grad_ptr,offsets_ptr,info_ptr,n_tensors,max_norm)
     if devices < 1 or devices > 64:
@@ -118,7 +125,7 @@ def parallel_clip_grad_norm_host(
             grid_dim=(_grid_for(n),1,1),block_dim=(OPT_TPB,1,1))
         owner_ctx.synchronize()
         comptime if CLIP_POOL_FAULT:
-            if Int(getenv("MOJOLEARN_CLIP_FAIL_OWNER","-1")) == tensor.owner:
+            if CLIP_FAIL_OWNER == tensor.owner:
                 raise Error("parallel clip: injected post-scale owner failure; output unchanged")
         owner_ctx.enqueue_copy(dst_ptr=result.unsafe_ptr()+tensor.first,src_buf=tensor.gradient)
         owner_ctx.synchronize()

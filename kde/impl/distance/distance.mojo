@@ -56,10 +56,8 @@ row-major only (cuML hands KDE C-contiguous arrays, `kernel_density.py:
 norm workspace is allocated here.
 """
 
-from experiments.classical_identical_ideas.graph_controls import KDE_DIRECT_DISTANCE
-from core.classical_distance import direct_squared_distance
-from checks.numerics import ftz, identical_sqrt
-from std.gpu import block_idx, block_dim, thread_idx
+# TOMBSTONE: MOJOLEARN_KDE_DIRECT_DISTANCE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-05-base); code recoverable at 8ea09dd4a4.
+# Restore: git apply experiments/removed/MOJOLEARN_KDE_DIRECT_DISTANCE.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.expand_distances import expand_distances_kernel
@@ -87,14 +85,6 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_distance_kernel,
     validate_metric_arg,
 )
-
-
-def kde_direct_distance_kernel(outp: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
-                              y: MutPointer[Float32, MutAnyOrigin], m: Int32, n: Int32, d: Int32, root: Int32):
-    var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if t < Int(m)*Int(n):
-        var value = direct_squared_distance(x+(t//Int(n))*Int(d), y+(t%Int(n))*Int(d), Int(d))
-        outp[t] = ftz(identical_sqrt(value)) if root != 0 else value
 
 
 def pairwise_distance(
@@ -143,12 +133,6 @@ def pairwise_distance(
     var cells = m * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
 
-    comptime if KDE_DIRECT_DISTANCE:
-        if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
-            ctx.enqueue_function[kde_direct_distance_kernel](dist.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
-                Int32(m), Int32(n), Int32(k), Int32(1 if metric == DIST_L2_SQRT_UNEXPANDED else 0),
-                grid_dim=(grid,1,1), block_dim=(elem_tpb,1,1))
-            return
 
     if metric == DIST_LP_UNEXPANDED:
         # `lp_unexp.cuh:41`: `use_norms = false`. The two norm pointers are
@@ -269,7 +253,7 @@ def pairwise_distance(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # IDENTITY_PATHS row 24: the product and the epilogue as ONE kernel
         # with the feature axis in one thread; the k-NN lane's tile, called.
-        ctx.enqueue_function[pinned_distance_tile_direct_kernel[KDE_DIRECT_DISTANCE]](
+        ctx.enqueue_function[pinned_distance_tile_direct_kernel[False]](
             dist.unsafe_ptr(),
             x.unsafe_ptr(),
             y.unsafe_ptr(),

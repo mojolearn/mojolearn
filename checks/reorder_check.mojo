@@ -46,10 +46,10 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     var temp_vals = ctx.enqueue_create_buffer[DType.uint32](total)
     var out_flags = ctx.enqueue_create_buffer[DType.uint8](total)
     var out_vals = ctx.enqueue_create_buffer[DType.uint32](total)
-    ctx.enqueue_copy(dst_buf=temp_flags, src_ptr=h_flags.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=temp_vals, src_ptr=h_vals.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out_flags, src_ptr=h_flags.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out_vals, src_ptr=h_vals.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, temp_flags, h_flags)
+    upload_host_into[DType.uint32](ctx, temp_vals, h_vals)
+    upload_host_into[DType.uint8](ctx, out_flags, h_flags)
+    upload_host_into[DType.uint32](ctx, out_vals, h_vals)
 
     var n_blocks = (n + REORDER_BLOCK - 1) // REORDER_BLOCK
     var offsets = ctx.enqueue_create_buffer[DType.int32](n)
@@ -64,8 +64,8 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
 
     var got = ctx.enqueue_create_host_buffer[DType.uint32](total)
     var gotf = ctx.enqueue_create_host_buffer[DType.uint8](total)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=out_vals)
-    ctx.enqueue_copy(dst_ptr=gotf.unsafe_ptr(), src_buf=out_flags)
+    download_host_into[DType.uint32](ctx, out_vals, got)
+    download_host_into[DType.uint8](ctx, out_flags, gotf)
     ctx.synchronize()
 
     # host reference: zeros in order, then ones in order
@@ -115,10 +115,29 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     print("  ReorderOneBitImpl matches a host stable partition")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. BOTH arms `checks/probe_main.mojo` runs under "their
     # reorder path (SortWithoutCub)": the large multi-block one and the
     # 513-row one that straddles the block width at offset 0.
     print("their reorder path (SortWithoutCub):")
     check_reorder_one_bit(20000, 37)
     check_reorder_one_bit(513, 0)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("reorder_check", cpu=False, gpu=True, serial="", run=run_cases)

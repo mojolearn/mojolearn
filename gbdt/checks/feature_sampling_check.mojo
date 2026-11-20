@@ -9,6 +9,7 @@ from gbdt.prepared import prepare_numeric_dataset
 from gbdt.train import train, predict_floats
 from gbdt.models.model_text import model_text
 from checks.numerics import numeric_mode_name
+from checks.native_tests.kit import upload_host_into
 
 
 def projection(ctx: DeviceContext) raises:
@@ -35,7 +36,7 @@ def projection(ctx: DeviceContext) raises:
             var i = Int(cf.offset)*n+r
             h[i] = h[i] | (value << cf.shift)
     var source = ctx.enqueue_create_buffer[DType.uint32](n*original.columns)
-    ctx.enqueue_copy(dst_buf=source,src_buf=h)
+    upload_host_into[DType.uint32](ctx, source, h)
     var result = project_tree_columns(ctx,source,n,original,target)
     with result.map_to_host() as out:
         for f in range(len(folds)):

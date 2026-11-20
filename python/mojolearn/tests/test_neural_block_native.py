@@ -11,6 +11,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import CausalLM
 from mojolearn.models import causal_lm
 from mojolearn.tests.test_causal_model_native_loading import _poison
+from mojolearn.tests import _mamba_block_reference
 
 DEVICE = os.environ.get("MOJOLEARN_GENERATION_DEVICE", "cpu")
 
@@ -43,12 +44,12 @@ def test_native_block_construct_forward_step_ragged(tmp_path, monkeypatch, famil
         _poison(patch)
         audit_native_call(constructor, instance, weights, **kwargs).assert_native()
     # These retained drivers independently spell kernel arguments and layout.
-    expected = instance._call(x, None, step=False)
-    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: instance._call(xp, None, step=False),
+    expected = _mamba_block_reference.block_call(instance, x, None, step=False)
+    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: _mamba_block_reference.block_call(instance, xp, None, step=False),
                                              Array.from_buffer(x), None, [2, 4], "<f4", "test")
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(cls, "_call", lambda *a, **k: pytest.fail("legacy driver executed"))
+        patch.setattr(cls, "_call", lambda *a, **k: pytest.fail("legacy driver executed"), raising=False)
         actual = audit_native_call(instance.forward, x).assert_native()
         ragged = audit_native_call(instance.forward, x, lengths=[2, 4]).assert_native()
         state = audit_native_call(instance.allocate_state, 2, 8).assert_native() if family not in ("mamba", "mamba2") else audit_native_call(instance.allocate_state, 2).assert_native()

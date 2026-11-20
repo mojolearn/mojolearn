@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The experimental FeatureFreq surface through the real public fit (small inputs)."""
+"""The experimental FeatureFreq surface through the real public fit (small inputs).
+
+What stays here is the public door: the returned estimator and its fitted
+attributes, the refusals by name, and that `learning_rate` and
+`sample_weight` reach the fit. The fit entry's repeat, option and unit-weight
+numerics on the same literal inputs are the native check
+`gbdt_feature_freq_experimental`."""
 
 import numpy as np
 import pytest
@@ -22,7 +28,6 @@ def test_experimental_feature_freq_validates_and_forwards():
     est = fit(learning_rate=0.2)
     assert est.model_
     assert est.n_features_in_ == 3
-    assert fit(learning_rate=0.2).model_ == est.model_
     # the options reach the fit
     assert fit(learning_rate=0.5).model_ != est.model_
 
@@ -81,5 +86,4 @@ def test_experimental_feature_freq_forwards_weights():
         return ExperimentalTwoLevelFeatureFreq(sources=[0, 1]).fit(X, y, sample_weight=weights).model_
 
     unit = ExperimentalTwoLevelFeatureFreq(sources=[0, 1]).fit(X, y).model_
-    assert model(np.ones(4, np.float32)) == unit
     assert model(np.asarray([1, 2, 3, 4], dtype=np.float32)) != unit

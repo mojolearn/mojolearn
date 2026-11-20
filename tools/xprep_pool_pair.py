@@ -59,7 +59,8 @@ def main():
     assert manifest['source_sha'] == args.source and manifest['binding'] == 'x_prep'
     assert manifest['numeric_mode'] == 'fast'
     assert manifest['defines_A'] == ''
-    assert manifest['defines_B'] in ('-D MOJOLEARN_X_PREP_POOL_ARENA', '-D MOJOLEARN_X_PREP_POOL_ARENA_OFF')
+    # the rollback arm -D MOJOLEARN_X_PREP_POOL_ARENA_OFF was deleted 2026-11-15 (docs/TOMBSTONES.md)
+    assert manifest['defines_B'] == '-D MOJOLEARN_X_PREP_POOL_ARENA'
     define = manifest['defines_B'].removeprefix('-D ')
     default_on = define.endswith('_OFF')
     pool_expected = {'A': default_on, 'B': not default_on}

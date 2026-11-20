@@ -17,13 +17,14 @@ scan of the root flags.
 The scan: per-block Hillis-Steele scans of GS_TPB integers in threadgroup
 memory, the block totals scanned the same way (recursively), then added
 back. Integer sums: the same words in any order."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
 
+from core.device_zero import enqueue_fill_addr
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx, dijkstra_kernel, DIJKSTRA_ROWS
 from x_decomp.resident import pool_alloc, pool_free, _ptr
@@ -55,12 +56,6 @@ def _ip(p: F32Ptr) -> I32Ptr:
 
 
 # ---- kernels ---------------------------------------------------------------
-
-
-def xg_zero_kernel(w: F32Ptr, count: Int32):
-    var t = _t()
-    if t < Int(count):
-        w.unsafe_store(t, Float32(0))
 
 
 def xg_knn_kernel(
@@ -115,7 +110,7 @@ def xg_hook_kernel(w: F32Ptr, lab: I32Ptr, n: Int32, changed: I32Ptr):
                     var lo = a if a < b else b
                     var hi = b if a < b else a
                     if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        _ = Atomic[Int32].min(lab + Int(hi), lo)
                         changed.unsafe_store(0, Int32(1))
 
 
@@ -253,8 +248,7 @@ def xg_copy1_kernel(src: I32Ptr, dst: MutPointer[Int32, MutAnyOrigin]):
 
 
 def _zero(ctx: DeviceContext, p: F32Ptr, count: Int) raises:
-    if count > 0:
-        ctx.enqueue_function[xg_zero_kernel](p, Int32(count), grid_dim=_blocks(count), block_dim=TPB)
+    enqueue_fill_addr[DType.float32](ctx, Int(p), count, Float32(0))
 
 
 # ---- typed entries of the Python doors (the sibling shell; resident ids)

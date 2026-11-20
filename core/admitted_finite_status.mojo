@@ -1,0 +1,173 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The finite status word of an admitted input, tested where the kernel
+entry already holds its words (lane a5-admit-core-followup, 2026-11-08; plan
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 3;
+docs/plans/REGRESSIONS_0866_VS_0855.md row R1).
+
+`admit_x(..., defer_finite=True)` (bindings/admitted_input_unpack.mojo) borrows a
+float32 C-order X with NO host pass over it and returns `finite = False`:
+the finiteness test moves into the kernel entry that reads X anyway.
+
+  GPU entry   after the upload of X it makes in any case, enqueue
+              `enqueue_finite_status(ctx, d_x, n, d_status, slot)` (no new
+              synchronisation: one grid-stride kernel over the resident
+              words) and copy `d_status` back with the result it already
+              downloads. Word `slot` of the status buffer is 1 when any
+              word is NaN or infinite, else it stays at the 0 the entry
+              filled it with (`enqueue_fill`).
+  host entry  the CPU column tests X before it reads it, with
+              core/host_finite_scan.mojo `host_all_finite_f32` or its status
+              word form `host_finite_status(address, n)` (the parallel SIMD
+              scan; this module stays device-only: GPU code imports it, and
+              the host-route fence refuses host threads reached from GPU code).
+
+The entry returns the status word(s) to its door, which refuses through
+`admitted_finite_refuse` (scikit-learn's wording, unchanged). A door that
+does not pass `defer_finite=True` keeps the scan inside admit_x.
+
+The test is on BITS (`|bits| >= 0x7F800000`), never a float compare
+(Metal flushes compare operands), so a subnormal passes and NaN, +inf and
+-inf fail, on NVIDIA, AMD, Apple and the host alike. Each thread stores the
+constant 1 into its own input's word: no atomics, no order, no 64-bit word
+(Apple has no 64-bit atomic). Numerics: none; no output bit changes.
+"""
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.memory import bitcast, stack_allocation
+from std.sys.compile import is_defined
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
+
+comptime AFS_TPB = 256
+comptime AFS_REDUCE_BLOCKS = 1024
+#: The largest word count of one launch (the kernel's count is an Int32).
+comptime AFS_MAX_N = 2147483000
+#: Status word values.
+comptime AFS_FINITE: Int32 = 0
+comptime AFS_NONFINITE: Int32 = 1
+
+#: Experiment (lane fb12-kde-finite, 2026-11-17; default off, A/B owed):
+#: `enqueue_finite_word` writes a short span's verdict with ONE single-block
+#: launch that stores 0 or 1 unconditionally, so the per-call fill launch of
+#: the status word goes. Off: fill the word, then the grid-stride test (the
+#: form every caller had inline before this lane).
+comptime ADMIT_FAST_FINITE_VERDICT = is_defined["MOJOLEARN_ADMIT_FAST_FINITE_VERDICT"]()
+#: The longest span the single-block verdict takes. Cost reasoning, not a
+#: board shape: one block streams roughly one SM's share of bandwidth (tens of
+#: GB/s), so 65,536 words (256 KB) take a few microseconds, about the host and
+#: GPU cost of the one fill launch it removes; past that the grid-stride test
+#: over all SMs plus the fill is cheaper. Holds for every row count and width.
+comptime AFS_VERDICT_MAX_N = 65536
+comptime AFS_VERDICT_TPB = 1024
+
+comptime _AFS_F32 = MutPointer[Float32, MutAnyOrigin]
+comptime _AFS_I32 = MutPointer[Int32, MutAnyOrigin]
+
+
+def _afs_nonfinite_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int32, mark: Int32):
+    """status[slot] = mark when any float32 word of src[0:n] is NaN or
+    infinite (mark is AFS_NONFINITE, or a held query's call mark: see
+    `enqueue_finite_status`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var n = Int(n_)
+    var hit = False
+    while i < n:
+        if (bitcast[DType.uint32](src.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= UInt32(0x7F800000):
+            hit = True
+            break
+        i += stride
+    if hit:
+        status.unsafe_store(Int(slot_), mark)
+
+
+def enqueue_finite_status[wo: MutOrigin, so: MutOrigin, //](
+    ctx: DeviceContext, d_words: MutPointer[Float32, wo], n: Int, d_status: MutPointer[Int32, so], slot: Int,
+    mark: Int32 = AFS_NONFINITE,
+) raises:
+    """Enqueue the finite test of the `n` resident float32 words at device
+    pointer `d_words`; word `slot` of the device status buffer `d_status`
+    becomes `mark` (1 by default) when any of them is NaN or infinite. The
+    caller fills the status buffer with 0 first and reads it back with its
+    result: this adds no synchronisation. Spans past one launch's Int32
+    count go in `AFS_MAX_N`-word launches. Either pointer may carry its
+    buffer's origin (a `DeviceBuffer.unsafe_ptr()`); the kernel takes
+    untracked views.
+
+    `mark` (lane fix-svc-query-resident, 2026-11-14): a query buffer held
+    across calls (core/query_x_held.mojo) is filled once, at creation, and
+    each call passes its own nonzero mark; the word is flagged for THIS call
+    only when it equals this call's mark, so no per-call fill is needed. The
+    kernel never stores anything else: a store of 0 from one block could
+    land after another block's hit (no order across blocks)."""
+    var off = 0
+    while off < n:  # driver-loop: over Int32-sized launches of one span
+        var m = min(AFS_MAX_N, n - off)
+        var grid = max(1, min(AFS_REDUCE_BLOCKS, (m + AFS_TPB - 1) // AFS_TPB))
+        ctx.enqueue_function[_afs_nonfinite_kernel](
+            d_words.unsafe_origin_cast[MutAnyOrigin]() + off, Int32(m), d_status.unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
+            mark,
+            grid_dim=grid, block_dim=AFS_TPB,
+        )
+        off += m
+
+
+# TOMBSTONE: host_finite_status (the host status word, a wrapper of core/host_finite_scan host_all_finite_f32) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear: no caller, and its host-thread import made this device module unreachable from GPU code; the CPU column calls host_all_finite_f32 directly (bindings/_mojolearn_x_linear_host.mojo `_x_status`). Never reached main: recoverable at f59d913b0b.
+# host_finite_status (the CPU column's status word) moved to
+# core/host_finite_scan.mojo by lane a6: this module is imported by GPU
+# kernel entries, and a host scan in it made every such entry reach host
+# threads (the no-host-routes fence).
+# integ-w3: the merge keeps lane a6's move: host_finite_status lives in core/host_finite_scan.mojo
+# (caller bindings/_mojolearn_estimators_host.mojo); only the copy in this module is gone.
+
+
+def _afs_verdict_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int32):
+    """One block: status[slot] = 1 when any of src[0:n] is NaN or infinite,
+    else 0, stored by thread 0 after the block's barrier (no fill needed, no
+    order across blocks because there is one block)."""
+    var flag = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
+    var t = Int(thread_idx.x)
+    if t == 0:
+        flag[0] = AFS_FINITE
+    barrier()
+    var n = Int(n_)
+    var i = t
+    var hit = False
+    while i < n:
+        if (bitcast[DType.uint32](src.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= UInt32(0x7F800000):
+            hit = True
+            break
+        i += Int(block_dim.x)
+    if hit:
+        flag[0] = AFS_NONFINITE
+    barrier()
+    if t == 0:
+        status.unsafe_store(Int(slot_), flag[0])
+
+
+def enqueue_finite_word[wo: MutOrigin, //](
+    ctx: DeviceContext, d_words: MutPointer[Float32, wo], n: Int, mut d_status: DeviceBuffer[DType.int32], slot: Int,
+) raises:
+    """Word `slot` of `d_status` becomes the finite status of the `n`
+    resident float32 words at `d_words` (0 every word finite, 1 otherwise),
+    written fresh: the caller does NOT fill it, and reads it back with its
+    result as with `enqueue_finite_status`. Only this span writes the word.
+    `n` 0 leaves the word 0. Default: a fill of the one word, then
+    `enqueue_finite_status`. `MOJOLEARN_ADMIT_FAST_FINITE_VERDICT`: a span of
+    at most `AFS_VERDICT_MAX_N` words takes one single-block launch instead
+    of the two."""
+    comptime if ADMIT_FAST_FINITE_VERDICT:
+        if n <= AFS_VERDICT_MAX_N:
+            ctx.enqueue_function[_afs_verdict_kernel](
+                d_words.unsafe_origin_cast[MutAnyOrigin](), Int32(max(n, 0)),
+                d_status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
+                grid_dim=1, block_dim=AFS_VERDICT_TPB,
+            )
+            return
+    var word = d_status.create_sub_buffer[DType.int32](slot, 1)
+    enqueue_fill[DType.int32](ctx, word, AFS_FINITE)
+    if n > 0:
+        enqueue_finite_status(ctx, d_words, n, d_status.unsafe_ptr(), slot)
+    _ = word^

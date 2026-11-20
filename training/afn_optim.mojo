@@ -20,8 +20,8 @@ stdlib sqrt), so these kernels spell the plain operations directly; f32
 accumulation everywhere; fold orders are free (the FAST tier makes no bit
 claim), no approximation anywhere.
 
-Candidates (one define each, default OFF, `MOJOLEARN_AFN_OPTIM_ALL` turns
-on every one):
+Candidates (one define each, default OFF; the bundle that turned on every
+one, MOJOLEARN_AFN_OPTIM_ALL, was deleted 2026-11-15: NEUTRAL):
 
   (MOJOLEARN_AFN_OPT_FUSE_SCAN, the fused refusal scan, was deleted
       2026-10-09: DROPPED-noise; see the TOMBSTONE at the guards below.)
@@ -52,12 +52,11 @@ on every one):
       (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
       a host-built ones vector per call in main).
 """
-from std.ffi import _Global
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import exp, fma, log, max, sqrt
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -91,6 +90,7 @@ from training.checks.optimizer_contract import (
     opt_nonfinite_message,
     refuse_nonfinite_scalar,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -99,23 +99,22 @@ from training.checks.optimizer_contract import (
 
 #: FAST tier on an Apple host: the only build any candidate compiles into.
 comptime AFN_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
-#: AFN_OPTIM_ALL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): sgd 331.2 -> 329.2 ms, adam
-#: 336.3 -> 325.6, adamw 331.6 -> 326.4 (gain 1-3%); the output digest changes
-#: and the lane has no quality metric. HOLD (no quality evidence): stays off.
 #: AFN_OPT_FUSE_SCAN / AFN_OPT_VEC4 / AFN_OPT_RESIDENT_STATE OUTCOME (M3
 #: afc_ab_def, full board size, 1 run per arm, 2026-10-05, rab19): adam within
 #: +-2%, the output digest changes, no quality metric. DROPPED: each stays off
 #: (opt-in only).
-comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
+# TOMBSTONE: MOJOLEARN_AFN_OPTIM_ALL (NEUTRAL: M3 rab2-combo sgd/adam/adamw = TRAIN_OPT_FAST_PIPE_DOWN alone, the bundle
+# adds nothing and moves the digest; EXPERIMENTS.md 2026-10-05 reconcile) deleted 2026-11-15 by lane/expdel-04-neural;
+# code recoverable at 54b6a264fc. Each candidate keeps its own define.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPTIM_ALL.patch
 # TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
 # metric) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at b639a2bd2. Also retires its aliases
 # MOJOLEARN_AFN26_OPT_FUSE_SCAN and the AFN_OPTIM_ALL share. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
 # T06 AFN26 alias: not tested in this campaign; select clipping independently.
 comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
+    is_defined["MOJOLEARN_AFN_OPT_CLIP_FUSE"]()
     or is_defined["MOJOLEARN_AFN26_OPT_CLIP_FUSE"]()
 )
 # Same F20 task: multitensor trajectory B/A0.8528, losses equal and refusal
@@ -124,7 +123,7 @@ comptime AFN_OPT_CLIP_FUSE = AFN_APPLE_FAST and (
 # Evidence ab-20261006/repairs-f20-3e19f734e/F20/default.
 # T06 AFN26 alias: not tested in this campaign; historical evidence stands.
 comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
+    is_defined["MOJOLEARN_AFN_OPT_MULTITENSOR"]()
     or is_defined["MOJOLEARN_AFN26_OPT_MULTITENSOR"]()
 )
 # TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric)
@@ -133,9 +132,39 @@ comptime AFN_OPT_MULTITENSOR = AFN_APPLE_FAST and (
 # TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality
 # metric) deleted 2026-10-09 on lane/owed-deletions-D2 (with alias MOJOLEARN_AFN26_OPT_RESIDENT_STATE); code
 # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+# TOMBSTONE: MOJOLEARN_AFN_OPT_CLIP_FUSE (MERGED-UNMEASURED opt-in, EXP:647, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_CLIP_FUSE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_OPT_CLIP_FUSE (unmeasured alias of AFN_OPT_CLIP_FUSE) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_CLIP_FUSE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_OPT_MULTITENSOR (MERGED-UNMEASURED opt-in, EXP:649, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_MULTITENSOR.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_OPT_MULTITENSOR (unmeasured alias of AFN_OPT_MULTITENSOR) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_MULTITENSOR.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_LOSS_FUSED (MERGED-UNMEASURED opt-in, EXP:630, never measured) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LOSS_FUSED.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_LOSS_FUSED (unmeasured alias of AFN_LOSS_FUSED) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_FUSED.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_OPT_BLOCK128 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_BLOCK128.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_OPT_BLOCK512 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_OPT_BLOCK512.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_LOSS_BLOCK128 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK128.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN26_LOSS_BLOCK512 (unmeasured opt-in block width) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN26_LOSS_BLOCK512.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # T06 AFN26 alias: not tested in this campaign; loss is independent of optimizer.
 comptime AFN_LOSS_FUSED = AFN_APPLE_FAST and (
-    AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_LOSS_FUSED"]()
+    is_defined["MOJOLEARN_AFN_LOSS_FUSED"]()
     or is_defined["MOJOLEARN_AFN26_LOSS_FUSED"]()
 )
 #: Any optimizer candidate: `identical_optimizer_step` dispatches here.
@@ -235,13 +264,9 @@ struct _AfnScratch(Defaultable, Movable):
 #: one pool per tier's binding (lane idn-opt-resident: IDENTICAL's resident
 #: step and clip take their small scratch from it too, training/estimator.mojo)
 comptime _AFN_SCRATCH_NAME = (
-    "MojoAfnOptimScratchFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoAfnOptimScratchIdentical"
+    "MojolearnAfnOptimScratchFastV1" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnAfnOptimScratchIdenticalV1"
 )
-comptime AFN_SCRATCH = _Global[
-    StorageType=_AfnScratch,
-    name=_AFN_SCRATCH_NAME,
-    init_fn=_AfnScratch.__init__,
-]
+comptime AFN_SCRATCH = SharedSlot[_AfnScratch, _AFN_SCRATCH_NAME]
 
 #: Float32 slots (0, 1 and 10..12 were the FAST RESIDENT_STATE slots; numbers kept).
 comptime AFN_SF_DENOM = 2  # the resident host entry's eight buffers ...
@@ -603,6 +628,21 @@ def afn_sgd_multi_kernel[GATED: Bool, CLIP: Bool](
 # THE OPTIMIZER STEP (the device half, after main's refusal scan and clip
 # when their fused forms are off)
 # ===========================================================================
+# TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+# lane/owed-deletions-D2: the SCAN/FOUR refusal-scan arms of this kernel (was afn_scan4_kernel); code
+# recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
+# TOMBSTONE: MOJOLEARN_AFN_OPT_VEC4 (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+# lane/owed-deletions-D2: the W = 4 arm and its scalar tail; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_VEC4.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+# the pooled arm; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_RESIDENT_STATE.patch
+# TOMBSTONE: MOJOLEARN_AFN_OPT_FUSE_SCAN (DROPPED-noise, rab19 adam within +-2%) deleted 2026-10-09 on
+# lane/owed-deletions-D2: the fused refusal-scan arms; code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_OPT_FUSE_SCAN.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
+# TOMBSTONE: MOJOLEARN_AFN_OPT_RESIDENT_STATE (DROPPED-noise, rab19) deleted 2026-10-09 on lane/owed-deletions-D2:
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 
 
 def afn_optimizer_step(

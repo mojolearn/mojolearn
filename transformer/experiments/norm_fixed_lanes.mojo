@@ -38,15 +38,25 @@ coalesced. Thirty-two lanes, not 64 or a block, so a cell is one warp /
 simdgroup / half-wave on every vendor with no shared memory or barrier and
 the tree shape never depends on the row width.
 """
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 
+# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured; the one-thread row chain stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+# (Sweep 2026-11-15: IDN_NORM_FIXED_LANES = False and the cell helpers nfl_cell, nfl_cell_total, nfl_cell_dot removed with
+# every reader's dead arm in transformer/impl/llama/modeling_llama.mojo and autograd/kernels/transformer.mojo.)
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed): the switch, the cell helpers and every reader's
+# arm are back (reverse of fce9f4413c, f192693134, 0bbe4a511b, 6ce75b82de and the sweep 5d0bda260a). The IDN_ALL_OFF
+# term stays deleted. The S1 arm in transformer/experiments/attention_schedules.mojo (640121d63a) is not restored: that
+# file is deleted (f1316b4aa6) and its rms_sumsq_kernel ran only under the deleted NN25_RMS_SPLIT_SCALE arm.
 comptime IDN_NORM_FIXED_LANES = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: logical lanes of the fold (the tree has log2(NFL_LANES) = 5 levels)
 comptime NFL_LANES = 32
@@ -72,7 +82,7 @@ def nfl_cell(rows: Int) -> Tuple[Int, Int, Bool]:
 
 
 @always_inline
-def _tree(mut s: InlineArray[Float32, NFL_LANES]) -> Float32:
+def _tree(mut s: Array[Float32, NFL_LANES]) -> Float32:
     """The slots' pairwise tree, serially (sequence/fold32.mojo `tree32`)."""
     comptime for e in range(5):
         comptime off = NFL_LANES >> (e + 1)
@@ -88,7 +98,7 @@ def nfl_dot(
     """sum a[abase + j] b[bbase + j], j < width, as the fixed 32-lane fold:
     slot j % 32 runs `ftz(fma(ftz(a_j), ftz(b_j), acc))` ascending from +0.0,
     then the tree. One thread; the same bits as `nfl_cell_dot`."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)
@@ -101,7 +111,7 @@ def nfl_dot(
 
 def nfl_sum(x: MutPointer[Float32, MutAnyOrigin], base: Int, width: Int) -> Float32:
     """sum x[base + j] as the fixed fold (slot op `ftz(acc + ftz(x_j))`)."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)
@@ -116,7 +126,7 @@ def nfl_square(
 ) -> Float32:
     """sum (x[base + j] - mean)^2 as the fixed fold: slot op
     `d = ftz(ftz(x_j) - mean); acc = ftz(fma(d, d, acc))`."""
-    var p = InlineArray[Float32, NFL_LANES](fill=Float32(0.0))
+    var p = Array[Float32, NFL_LANES](fill=Float32(0.0))
     var k = 0
     while k < width:  # device-loop: the fold's 32-wide strides over one row
         var n = min(NFL_LANES, width - k)

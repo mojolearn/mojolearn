@@ -1,0 +1,24 @@
+diff --git a/core/forest_inference.mojo b/core/forest_inference.mojo
+index 02ca7bb655..72cec4a25a 100644
+--- a/core/forest_inference.mojo
++++ b/core/forest_inference.mojo
+@@ -292,16 +292,15 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
+ 
+ 
+ def vector_groves_for(outputs: Int) -> Bool:
+-    """Default vector traversal for 2–8 outputs.
++    """Default vector traversal for 2–8 outputs; force-scalar is diagnostic.
+ 
+     Same fixed32 output graph, qualified against scalar on Metal FAST and
+     CUDA IDENTICAL large resident fixtures. The public engine stays opt-in.
+     MOJOLEARN_FOREST_VECTOR_GROVES is no longer required; old builds passing
+     it retain the same route. Outputs1/>8 retain the bounded scalar fallback.
+     """
+-    # TOMBSTONE: MOJOLEARN_FOREST_SCALAR_GROVES (diagnostic force-scalar opt-in; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b177479fc7.
+-    # Restore: git apply experiments/removed/MOJOLEARN_FOREST_SCALAR_GROVES.patch; record in docs/TOMBSTONES.md.
+-    return outputs >= 2 and outputs <= 8
++    return (not is_defined["MOJOLEARN_FOREST_SCALAR_GROVES"]()
++            and outputs >= 2 and outputs <= 8)
+ 
+ 
+ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: Bool = False](

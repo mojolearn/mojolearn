@@ -1,0 +1,1 @@
+{"schema":"mojolearn.cpu-wheel-checks.v1","source_commit":"43b5f7c320e0942bdef8c212917b440d1ab1d513","wheel_sha256":"c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c","hard":["install","correctness"],"checks":{"install":0,"correctness":0,"runtime":0,"autograd":0,"adapters":0}}

@@ -2,7 +2,7 @@
 """DistributedIVFIndex against the plain index.
 
 `from_index` and `search` are one native call each
-(bindings/parallel_shard_native.mojo `ivf_from_index` / `ivf_search`): the
+(bindings/parallel_shard_native_door.mojo `ivf_from_index` / `ivf_search`): the
 native shard plan gives every device its contiguous stored rows, each worker
 process stores its shard, and every search merges the shards' partial
 results natively. On a CPU-only install each device index is one worker
@@ -28,11 +28,9 @@ def identical(monkeypatch):
 
 
 def fitted(metric, rows=33, features=3):
-    from mojolearn._cpu_reference import reference_training
     x = np.random.default_rng(rows + features).normal(size=(rows, features)).astype(np.float32)
     x[1] = x[0]
-    with reference_training():
-        return IVFIndex(4, 4, 5, kmeans_n_iters=3, metric=metric, numeric_mode='identical').fit(x), x
+    return IVFIndex(4, 4, 5, kmeans_n_iters=3, metric=metric, numeric_mode='identical').fit(x), x
 
 
 def _devices(count):
@@ -61,12 +59,13 @@ def test_disjoint_storage_matches_the_plain_index(identical, count, metric):
         model.search(x[:2])
 
 
-def test_failure_closes_stored_workers(identical, monkeypatch):
+def test_failure_closes_stored_workers(identical, monkeypatch, request):
     index, x = fitted('sqeuclidean')
     devices = _devices(2)
     model = pi.DistributedIVFIndex.from_index(index, devices=devices)
-    monkeypatch.setenv('MOJOLEARN_PAR_TRANSPORT_FAULT', 'drop_result')
-    monkeypatch.setenv('MOJOLEARN_HOST_ALLOW_SABOTAGE', '1')
+    # the transport negative control, armed natively (`shard_faults_arm`)
+    _native_parallel_shard('faults_arm', ('drop_result',))
+    request.addfinalizer(lambda: _native_parallel_shard('faults_arm', ('',)))
     _native_parallel_shard('faults_take', ())
     with pytest.raises(ValueError, match='incomplete'):
         model.search(x[:3])

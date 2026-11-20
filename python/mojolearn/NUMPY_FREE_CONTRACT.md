@@ -41,11 +41,7 @@ class Buf:                       # context manager around PyObject_GetBuffer/PyB
 def view(obj, *, writable=False) -> Buf        # raises TypeError("mojolearn: <name> does not support the buffer protocol")
 def addr(obj, *, name) -> int                  # writable buffer required (was _addr)
 def addr_ro(obj, *, name) -> int               # any buffer (was _addr_ro)
-def as_f32_c(obj, *, ndim, name) -> tuple[Array, bool]      # C-contiguous float32 Array + copied flag; converts from f64/i32/i64/lists; rejects other dtypes with the SAME messages _arrays.py used
-def as_f32_colmajor(obj, *, name) -> tuple[Array, bool]     # column-major float32 (DEVIATION 1887 argument holds: f64->f32 is one round-to-nearest-even)
-def as_i32_c(obj, *, ndim, name) -> tuple[Array, bool]
-def as_i64_c(obj, *, ndim, name) -> tuple[Array, bool]
-def as_f64_c(obj, *, ndim, name) -> tuple[Array, bool]
+# as_f32_c / as_f32_colmajor / as_i32_c / as_i64_c / as_f64_c: removed 2026-11-15 (lane py-tail-2); input admission and casts are native (bindings/admitted_family_door.mojo)
 def empty(shape, dtype) -> Array               # dtype in {'<f4','<f8','<i4','<i8','<u4','<f2','<u1'}
 def zeros(shape, dtype) -> Array
 def full(shape, value, dtype) -> Array
@@ -71,7 +67,9 @@ No arithmetic operators, no broadcasting, no fancy indexing. Every public estima
 
 ## `_serialize.py` (DEVIATION 2302)
 
-Same public functions and the SAME BYTES ON DISK: a hand-written NPY v1.0 codec
+Same public functions and the SAME BYTES ON DISK. Since 2026-11-15 (lane py-archive)
+each function is one call into the compiled archive codec (`bindings/archive_npz_door.mojo`
+over `core/native_archive_{read,npy,write}.mojo`), which writes the NPY v1.0 codec
 (magic `\x93NUMPY`, version 1.0, ASCII header dict with `descr`, `fortran_order`,
 `shape`, padded with spaces to a 64-byte-aligned total length ending in `\n`) inside
 the existing deterministic zip (pinned 1980-01-01 timestamps, sorted members,

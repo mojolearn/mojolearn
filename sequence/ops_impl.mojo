@@ -7,16 +7,19 @@ float parameters as `List[Float64]` (the door's `py_ints` / `py_f64s`), and
 returns the count the door hands back. `fptr`, `ival` and `fval` here read
 those lists with the door's null and range checks. No Python here."""
 from std.math import sqrt
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
+from sequence.perf3_seq_resident_words import seq_resident_words
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
-from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import OP_THETA_FORECAST
+from sequence.prophet_prep import prophet_features_on
+from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
-from sequence.mlp_fit import AUTOGRAD_PREDICT, MLPNet, mlp_fit, mlp_predict, mlp_predict_autograd
-from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
-from autograd.rules_recurrent import AutogradRnnStep
+from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
+from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit
+from autograd.rules_recurrent import AutogradRnnStep, rnn_predict
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_fit_begin, ag_profile_fit_end
@@ -25,33 +28,39 @@ from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.moe_reg import MOE_DEVGROUP
 from sequence.moe_group import moe_group_blocks
-from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
-from sequence.prophet import div as _pdiv
-from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
+from sequence.prophet import LB_MAX_TRIALS, prophet_lb_stride
+from sequence.ops import OP_PROPHET_LB_YMAX, OP_PROPHET_LB_INIT, OP_PROPHET_LB_YDIV, OP_PROPHET_LB_STEP, OP_PROPHET_LB_ACTIVE, OP_PROPHET_LB_OUT
 from sequence.adafactor import AF_NORM_BLOCK
 from std.os import getenv as _getenv_seq
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
 #: FAST + Apple only. Skipped fills, no bit moves:
 #:  MOJOLEARN_AF_FAST_NOFILL: Adafactor's P, G and variance buffers are bound
 #:    by their upload (`Exec.bind`), not zero filled first.
 #:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
-comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: AF_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
-#: A == B. KEEP: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_AF_FAST_NOFILL_OFF. No conflict with AF_FAST_RESIDENT (also a
-#: default): the resident step does not go through `adafactor_step_impl`'s
-#: per-call path, so with RESIDENT on the Adafactor class no longer reaches
-#: it; NOFILL covers the RESIDENT_OFF rollback.
-comptime AF_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"]()
+#: A == B. KEEP: the FAST + Apple default since then. No conflict with
+#: AF_FAST_RESIDENT (also a default): the resident step does not go through
+#: `adafactor_step_impl`'s per-call path, so with RESIDENT on the Adafactor
+#: class no longer reaches it; NOFILL covers the RESIDENT_OFF rollback.
+#: Every other build (IDENTICAL, FAST off Apple) keeps the alloc + upload form.
+# TOMBSTONE: MOJOLEARN_AF_FAST_NOFILL_OFF (superseded: AF_FAST_NOFILL won M3 rab10-afnofill 393.2 -> 380.1 ms, digest
+# identical) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 4ebe87a042.
+# Restore: git apply experiments/removed/MOJOLEARN_AF_FAST_NOFILL_OFF.patch
+comptime AF_NOFILL = _PY_APPLE_FAST
 #: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
-#: output digest identical A == B. KEEP: the FAST + Apple default since then;
-#: rollback -D MOJOLEARN_LN_FAST_NOFILL_OFF (the old -D name is harmless).
-comptime LN_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_LN_FAST_NOFILL_OFF"]()
+#: output digest identical A == B. KEEP: the FAST + Apple default since then
+#: (the old -D MOJOLEARN_LN_FAST_NOFILL name is harmless). Every other build
+#: keeps the alloc + upload form.
+# TOMBSTONE: MOJOLEARN_LN_FAST_NOFILL_OFF (superseded: LN_FAST_NOFILL won M3 afc_ab_def layernorm 48.2 -> 45.5 ms, digest
+# identical) deleted 2026-11-15 by lane/expdel-04-neural; code recoverable at 3004379441.
+# Restore: git apply experiments/removed/MOJOLEARN_LN_FAST_NOFILL_OFF.patch
+comptime LN_NOFILL = _PY_APPLE_FAST
 
 
 def fptr(addr: Int, what: String) raises -> FP:
@@ -150,10 +159,12 @@ def rnn_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 
 
 def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
-    """addrs = [X, params, out, seq (ignored unless want_seq)];
+    """addrs = [X, params, out, seq (ignored unless want_seq)], optionally
+    followed by the resident-block words (sequence/perf3_seq_resident_words.mojo);
     ip = [cell, D, H, L, O, task, N, T, chunk, want_seq]."""
-    if len(addrs) != 4 or len(ip) != 10:
+    if len(ip) != 10:
         raise Error("rnn_predict: requires 4 addresses and 10 integer parameters")
+    var resident = seq_resident_words(addrs, 4, "rnn_predict")
     var x_addr = addrs[0]
     var p_addr = addrs[1]
     var out_addr = addrs[2]
@@ -168,7 +179,7 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
         raise Error("rnn_predict: N, T and chunk must be >= 1 and N < 2^24")
     var seq = fptr(seq_addr, "seq") if want else fptr(out_addr, "out")
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
-                fptr(out_addr, "out"), seq, want, chunk)
+                fptr(out_addr, "out"), seq, want, chunk, resident)
     return N * net.O
 
 
@@ -579,17 +590,17 @@ def _var_fit_queued[E: Exec](
     b.i0 = R
     b.i1 = m
     ex.launch[OP_COLSCALE](b, m)
-    comptime if SEQ_FAST_VAR_COOP:
-        # MOJOLEARN_SEQ_FAST_VAR_COOP (sequence/ops.mojo): the two R-long
-        # normal-equation products as coop cells (Args.i11 = 1 asks
-        # DeviceExec.launch for coop_kernel[OP_GEMM]; the same chain). A K
-        # long enough for gemm's FAST split keeps the split.
-        if R < 32768:
-            _var_gemm_coop(ex, Z, Z, G, m, m, R, 1, m, m, 1, m)
-            _var_gemm_coop(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, K)
-        else:
-            gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
-            gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    # MOJOLEARN_SEQ_FAST_VAR_COOP (sequence/ops.mojo; holds wherever TSA2_VAR,
+    # the only build that reaches this function): the two R-long
+    # normal-equation products as coop cells (Args.i11 = 1 asks
+    # DeviceExec.launch for coop_kernel[OP_GEMM]; the same chain). A K
+    # long enough for gemm's FAST split keeps the split.
+    # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded: the coop default) deleted 2026-11-15 by
+    # lane/expdel-04-neural; code recoverable at 72b582962f.
+    # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
+    if R < 32768:
+        _var_gemm_coop(ex, Z, Z, G, m, m, R, 1, m, m, 1, m)
+        _var_gemm_coop(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, K)
     else:
         gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
         gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
@@ -628,9 +639,9 @@ def _var_fit_queued[E: Exec](
         var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
         ex.download_async(tp, Bm, span)
         ex.sync()
-        memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
-        memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
-        memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+        unsafe_memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
+        unsafe_memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+        unsafe_memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
         var code = Int(tp.unsafe_load(m * K + R * K + K * K))
         _ = tmp^
         return code
@@ -751,8 +762,9 @@ def mlp_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[F
 def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
     """addrs = [X (N, D), params, out (N, O)]; ip = [N, D, O, act, out_act,
     chunk, n_hidden, h_1, ..., h_n]."""
-    if len(addrs) != 3 or len(ip) < 7:
+    if len(ip) < 7:
         raise Error("mlp_predict: requires 3 addresses and >= 7 integer parameters")
+    var resident = seq_resident_words(addrs, 3, "mlp_predict")
     var N = ival(ip, 0)
     var D = ival(ip, 1)
     var O = ival(ip, 2)
@@ -764,12 +776,11 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     # the (N, 2) probability [1 - p, p] into `out`.
     var n_ip = 7 + len(net.sizes) - 2
     var proba2 = len(ip) == n_ip + 1 and ival(ip, n_ip) == 1 and O == 1
-    comptime if AUTOGRAD_PREDICT:
-        # -D MOJOLEARN_AUTOGRAD_PREDICT: the tape's forward in inference mode
-        mlp_predict_autograd(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
-                             chunk, proba2)
-    else:
-        mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+    # mlp_predict is the tape's forward in inference mode (the former mlp_predict_autograd).
+    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,
+                resident)
     if proba2:
         return N * 2
     return N * O
@@ -1261,6 +1272,42 @@ def theta_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Flo
     return B * h
 
 
+def theta_forecast_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
+    """`theta_impl`'s forecast from its own fitted info rows, no fit (lane
+    ne1-a-decomp-tsa, N031; sequence/theta.mojo op_theta_forecast).
+    addrs = [y (B, n), info (B, 8) in (theta's info output), forecast (B, h)
+    out]; ip = [B, n, h, season_length]. Returns B * h."""
+    if len(addrs) != 3 or len(ip) != 4:
+        raise Error("theta_forecast: requires 3 addresses and 4 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var m = ival(ip, 3)
+    if B < 1 or n <= 3 or h < 1 or m < 1:
+        raise Error("theta: B >= 1, n > 3 (the reference refuses tiny series), h >= 1, season_length >= 1")
+    # theta_impl's scratch row, so op_theta_forecast reads op_theta's layout
+    var stride = n + n + m + 5 * (n + h) + n + 64 + 12 + h
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var I = ex.alloc(B * 8)
+    ex.upload(I, fptr(addrs[1], "info"), B * 8)
+    var F = ex.alloc(B * h)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = F
+    a.p2 = I
+    a.p3 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = m
+    a.i6 = stride
+    ex.launch[OP_THETA_FORECAST](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[2], "forecast"), F, B * h)
+    return B * h
+
+
 def croston_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
     """addrs = [y (B, n), mean (B) out]; ip = [B, n, variant]
     (`sequence/croston.mojo`)."""
@@ -1478,141 +1525,18 @@ def _prophet_X[E: Exec](mut ex: E, frac_addr: Int, orders_addr: Int, h_addr: Int
 comptime PROPHET_FAST_MIN_N = 16384
 
 
-def _prophet_fg_dev[E: Exec](mut ex: E, pa: Args, C: Int, thd: FP, outd: FP, d: ProphetData,
-                             th: FP, g: FP) raises -> Float32:
-    """prophet_fg at host th into host g: the likelihood's C chunks and their
-    ordered sums on the device (op_prophet_fg_part / _sum), the priors here."""
-    var P = 3 + d.S + d.K
-    ex.upload(thd, th, P)
-    ex.launch[OP_PROPHET_FG_PART](pa, C)
-    var s = Args()
-    s.p6 = pa.p6
-    s.p7 = outd
-    s.i4 = C
-    s.i5 = P + 1
-    ex.launch[OP_PROPHET_FG_SUM](s, P + 1)
-    var sse = List[Float32](length=1, fill=Float32(0.0))
-    ex.download_async(g, outd, P)
-    ex.download_async(FP(unsafe_from_address=Int(sse.unsafe_ptr())), outd + P, 1)
-    ex.sync()
-    var r = _fg_prior(d, th, g, sse[0])
-    _ = sse^
-    return r
+#: FAST: evaluations enqueued between two reads of the running-series word.
+#: Cost reasoning: an L-BFGS iteration takes one evaluation when the unit step
+#: is accepted (the common case near the optimum) and a few during the early
+#: backtracking, so 8 evaluations cover several iterations per read; a
+#: stopped series costs three no-op launches per remaining evaluation of the
+#: chunk (at most 7), each a done-word test per thread. Independent of N, B
+#: and P.
+comptime PROPHET_LB_CHUNK = 8
 
 
-def lbfgs_prophet_host[E: Exec](mut ex: E, pa: Args, C: Int, thd: FP, outd: FP,
-                                d: ProphetData, th: FP, w: FP, max_iter: Int) raises -> Tuple[Float32, Int]:
-    """FAST (apple2): sequence/prophet.mojo::lbfgs_prophet line for line, on
-    the host, each objective the device's chunked likelihood
-    (`_prophet_fg_dev`). th and w are host memory."""
-    var P = 3 + d.S + d.K
-    var g = w
-    var dvec = g + P
-    var thn = dvec + P
-    var gn = thn + P
-    var q = gn + P
-    var sm = q + P
-    var ym = sm + MEM * P
-    var rho = ym + MEM * P
-    var al = rho + MEM
-    var f = _prophet_fg_dev(ex, pa, C, thd, outd, d, th, g)
-    var npairs = 0
-    var head = 0
-    var small = 0
-    var it = 0
-    while it < max_iter:
-        # two-loop recursion: q = g; newest to oldest, then oldest to newest
-        for i in range(P):
-            p_st(q, i, p_ld(g, i))
-        var idx = head
-        for _ in range(npairs):
-            idx = (idx - 1 + MEM) % MEM
-            var aa = p_mul(p_ld(rho, idx), _dot(sm + idx * P, q, P))
-            p_st(al, idx, aa)
-            for i in range(P):
-                p_st(q, i, p_sub(p_ld(q, i), p_mul(aa, p_ld(ym + idx * P, i))))
-        var gamma = Float32(1.0)
-        if npairs > 0:
-            var last = (head - 1 + MEM) % MEM
-            var yy = _dot(ym + last * P, ym + last * P, P)
-            if yy > Float32(0.0):
-                gamma = _pdiv(_dot(sm + last * P, ym + last * P, P), yy)
-        else:
-            var gg = ftz(identical_sqrt(_dot(g, g, P)))
-            if gg > Float32(1.0):
-                gamma = _pdiv(Float32(1.0), gg)
-        for i in range(P):
-            p_st(q, i, p_mul(gamma, p_ld(q, i)))
-        var start = (head - npairs + MEM) % MEM
-        idx = start
-        for _ in range(npairs):
-            var bb = p_mul(p_ld(rho, idx), _dot(ym + idx * P, q, P))
-            var coef = p_sub(p_ld(al, idx), bb)
-            for i in range(P):
-                p_st(q, i, p_fma3(coef, p_ld(sm + idx * P, i), p_ld(q, i)))
-            idx = (idx + 1) % MEM
-        for i in range(P):
-            p_st(dvec, i, -p_ld(q, i))
-        var gd = _dot(g, dvec, P)
-        if not (gd < Float32(0.0)):
-            for i in range(P):
-                p_st(dvec, i, -p_ld(g, i))
-            gd = -_dot(g, g, P)
-            npairs = 0
-        # backtracking Armijo
-        var step = Float32(1.0)
-        var fnew = Float32(0.0)
-        var ok = False
-        for _ in range(40):
-            for i in range(P):
-                p_st(thn, i, p_fma3(step, p_ld(dvec, i), p_ld(th, i)))
-            fnew = _prophet_fg_dev(ex, pa, C, thd, outd, d, thn, gn)
-            if fnew <= p_fma3(p_mul(Float32(1e-4), step), gd, f):
-                ok = True
-                break
-            step = p_mul(step, Float32(0.5))
-        it += 1
-        if not ok:
-            break
-        # the new pair, kept only with positive curvature (q and dvec are
-        # free here; the slot is written only when the pair is kept)
-        for i in range(P):
-            p_st(q, i, p_sub(p_ld(thn, i), p_ld(th, i)))
-            p_st(dvec, i, p_sub(p_ld(gn, i), p_ld(g, i)))
-        var sy = _dot(q, dvec, P)
-        if sy > Float32(1e-12):
-            var slot = head
-            for i in range(P):
-                p_st(sm + slot * P, i, p_ld(q, i))
-                p_st(ym + slot * P, i, p_ld(dvec, i))
-            p_st(rho, slot, _pdiv(Float32(1.0), sy))
-            head = (head + 1) % MEM
-            if npairs < MEM:
-                npairs += 1
-        var fscale = abs(f)
-        if abs(fnew) > fscale:
-            fscale = abs(fnew)
-        if fscale < Float32(1.0):
-            fscale = Float32(1.0)
-        var df = p_sub(f, fnew)
-        for i in range(P):
-            p_st(th, i, p_ld(thn, i))
-            p_st(g, i, p_ld(gn, i))
-        f = fnew
-        var gmax = Float32(0.0)
-        for i in range(P):
-            var v = abs(p_ld(g, i))
-            if v > gmax:
-                gmax = v
-        if gmax < Float32(1e-5):
-            break
-        if df <= p_mul(Float32(1e-7), fscale):
-            small += 1
-            if small >= 3:
-                break
-        else:
-            small = 0
-    return (f, it)
+# TOMBSTONE: _prophet_fg_dev + lbfgs_prophet_host (FAST Prophet's host L-BFGS driver: theta uploaded and gradient + sse downloaded with a sync per evaluation, one series at a time) deleted 2026-11-09 by b70c3eda7c; code recoverable at b70c3eda7c^.
+# Restore: git apply experiments/removed/PROPHET_FAST_HOST_LBFGS.patch
 
 
 def prophet_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
@@ -1646,68 +1570,83 @@ def prophet_fit_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: Li
         ex.upload(Sg, fptr(addrs[6], "prior scales"), K)
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if N >= PROPHET_FAST_MIN_N:
-            # FAST (apple2): one series at a time, its likelihood over point
-            # chunks on the device; L-BFGS and the priors on the host
+            # FAST (apple2): every series at once, its likelihood over point
+            # chunks and its L-BFGS on the device (sequence/prophet.mojo
+            # op_prophet_lb_*): nothing per evaluation crosses to the host,
+            # one word per PROPHET_LB_CHUNK evaluations does.
             var C = min(4096, (N + 255) // 256)
-            var parts = ex.alloc(C * (P + 1))
-            var thd = ex.alloc(P)
-            var outd = ex.alloc(P + 1)
-            var ysd = ex.alloc(N)
-            var hy = fptr(addrs[0], "y")
-            var hpar = fptr(addrs[7], "params")
-            var hinf = fptr(addrs[8], "info")
-            var dh = ProphetData(FP(unsafe_from_address=64), FP(unsafe_from_address=64),
-                                 fptr(addrs[5], "changepoints") if S > 0 else FP(unsafe_from_address=64),
-                                 fptr(addrs[6], "prior scales") if K > 0 else FP(unsafe_from_address=64),
-                                 N, K, S, fval(fp, 0), ival(ip, 6) != 0)
-            var ht = fptr(addrs[1], "t")
-            var ys = List[Float32](length=N, fill=Float32(0.0))
-            var ws = List[Float32](length=(6 + 2 * 5) * P + 2 * 5 + P, fill=Float32(0.0))
-            var pys = FP(unsafe_from_address=Int(ys.unsafe_ptr()))
-            var pw = FP(unsafe_from_address=Int(ws.unsafe_ptr()))
-            var th = pw + (6 + 2 * 5) * P + 2 * 5
+            var SW = prophet_lb_stride(P)
+            var parts = ex.alloc(B * C * (P + 1))
+            var W = ex.alloc(B * SW)
+            var live = ex.alloc(1)
             var pa = Args()
-            pa.p0 = ysd
+            pa.p0 = Y
             pa.p1 = T
             pa.p2 = X
             pa.p3 = C_
             pa.p4 = Sg
-            pa.p5 = thd
+            pa.p5 = W
             pa.p6 = parts
             pa.i0 = N
             pa.i1 = K
             pa.i2 = S
             pa.i3 = ival(ip, 6)
             pa.i4 = C
+            pa.i6 = SW
             pa.f0 = fval(fp, 0)
-            for b in range(B):
-                var y = hy + b * N
-                var scale = Float32(0.0)
-                for i in range(N):
-                    var v = abs(y[i])
-                    if v > scale:
-                        scale = v
-                if scale == Float32(0.0):
-                    scale = Float32(1.0)
-                for i in range(N):
-                    pys[i] = ftz(identical_div(y[i], scale))
-                ex.upload(ysd, pys, N)
-                var t0 = ht[0]
-                var t1 = ht[N - 1]
-                var k = ftz(identical_div(pys[N - 1] - pys[0], t1 - t0)) if t1 != t0 else Float32(0.0)
-                th[0] = k
-                th[1] = pys[0] - ftz(identical_mul(k, t0))
-                for j in range(S + 1 + K):
-                    th[2 + j] = Float32(0.0)
-                var r = lbfgs_prophet_host(ex, pa, C, thd, outd, dh, th, pw, ival(ip, 7))
-                for j in range(P):
-                    hpar[b * P + j] = th[j]
-                hinf[b * 4] = scale
-                hinf[b * 4 + 1] = r[0]
-                hinf[b * 4 + 2] = Float32(r[1])
-                hinf[b * 4 + 3] = Float32(0.0)
-            _ = ys^
-            _ = ws^
+            ex.launch[OP_PROPHET_LB_YMAX](pa, B * C)
+            ex.launch[OP_PROPHET_LB_INIT](pa, B)
+            ex.launch[OP_PROPHET_LB_YDIV](pa, B * N)
+            var sa = Args()
+            sa.p6 = parts
+            sa.p7 = W
+            sa.i4 = C
+            sa.i5 = P + 1
+            sa.i6 = SW
+            var la = Args()
+            la.p0 = W
+            la.p4 = Sg
+            la.i0 = N
+            la.i1 = K
+            la.i2 = S
+            la.i6 = SW
+            la.i7 = ival(ip, 7)
+            la.f0 = fval(fp, 0)
+            var aa = Args()
+            aa.p0 = W
+            aa.p1 = live
+            aa.i6 = SW
+            aa.i8 = B
+            # the start's evaluation, then at most LB_MAX_TRIALS per iteration
+            var budget = 1 + LB_MAX_TRIALS * max(ival(ip, 7), 0)
+            var running = List[Float32](length=1, fill=Float32(1.0))
+            var done = 0
+            while done < budget:  # driver-loop: over chunks of L-BFGS evaluations (one status word each)
+                var chunk = min(PROPHET_LB_CHUNK, budget - done)
+                for _ in range(chunk):  # driver-loop: over the evaluations of one chunk (launches only)
+                    ex.launch[OP_PROPHET_FG_PART](pa, B * C)
+                    ex.launch[OP_PROPHET_FG_SUM](sa, B * (P + 1))
+                    ex.launch[OP_PROPHET_LB_STEP](la, B)
+                done += chunk
+                ex.launch[OP_PROPHET_LB_ACTIVE](aa, 1)
+                ex.download_async(FP(unsafe_from_address=Int(running.unsafe_ptr())), live, 1)
+                ex.sync()
+                if running[0] == Float32(0.0):
+                    break
+            _ = running^
+            var Pf = ex.alloc(B * P)
+            var If = ex.alloc(B * 4)
+            var oa = Args()
+            oa.p0 = W
+            oa.p1 = Pf
+            oa.p2 = If
+            oa.i1 = K
+            oa.i2 = S
+            oa.i6 = SW
+            ex.launch[OP_PROPHET_LB_OUT](oa, B * P)
+            ex.sync()
+            ex.download(fptr(addrs[7], "params"), Pf, B * P)
+            ex.download(fptr(addrs[8], "info"), If, B * 4)
             return B
     var Pm = ex.alloc(B * P)
     var I = ex.alloc(B * 4)
@@ -1781,6 +1720,74 @@ def prophet_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) ra
     return B * M
 
 
+
+def prophet_predict_days_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int], fp: List[Float64]) raises -> Int:
+    """`prophet_features` then `prophet_predict` in one call, the scaled
+    times and the seasonal phases kept on the executor between them (lane
+    ne1-a-decomp-tsa, N032: no host feature matrix). addrs = [days (M)
+    float64, periods (ns) float64, params (B, P), info (B, 4), orders (ns),
+    holidays (M, nh), changepoints (S), yhat (B, M) out, trend (B, M) out];
+    ip = [B, M, ns, nh, K, S, multiplicative]; fp = [start, t_scale]. The
+    same launches over the same words as the two calls (the times and
+    phases the host copy would have carried back), so the same bits."""
+    if len(addrs) != 9 or len(ip) != 7 or len(fp) != 2:
+        raise Error("prophet_predict_days: requires 9 addresses, 7 integer and 2 float parameters")
+    var B = ival(ip, 0)
+    var M = ival(ip, 1)
+    var ns = ival(ip, 2)
+    var nh = ival(ip, 3)
+    var K = ival(ip, 4)
+    var S = ival(ip, 5)
+    var on = prophet_features_on(ex, addrs[0], addrs[1], M, ns, fp[0], fp[1])
+    if B < 1 or M < 1:
+        raise Error("prophet_predict: B, M >= 1")
+    var P = 3 + S + K
+    # `_prophet_X` with the phases already on the executor (`on[1]`, the
+    # (M, max(ns, 1)) block the host frac carried).
+    var X = ex.alloc(M * K)
+    var Od = ex.alloc(max(ns, 1))
+    var H = ex.alloc(M * max(nh, 1))
+    if ns > 0:
+        ex.upload(Od, fptr(addrs[4], "orders"), ns)
+    if nh > 0:
+        ex.upload(H, fptr(addrs[5], "holidays"), M * nh)
+    var fa = Args()
+    fa.p0 = on[1]
+    fa.p1 = Od
+    fa.p2 = H
+    fa.p3 = X
+    fa.i0 = ns
+    fa.i1 = nh
+    fa.i2 = K
+    if K > 0:
+        ex.launch[OP_PROPHET_FEATURES](fa, M)
+    var Pm = ex.alloc(B * P)
+    ex.upload(Pm, fptr(addrs[2], "params"), B * P)
+    var I = ex.alloc(B * 4)
+    ex.upload(I, fptr(addrs[3], "info"), B * 4)
+    var C = ex.alloc(max(S, 1))
+    if S > 0:
+        ex.upload(C, fptr(addrs[6], "changepoints"), S)
+    var Yh = ex.alloc(B * M)
+    var Tr = ex.alloc(B * M)
+    var a = Args()
+    a.p0 = Pm
+    a.p1 = I
+    a.p2 = on[0]
+    a.p3 = X
+    a.p4 = C
+    a.p5 = Yh
+    a.p6 = Tr
+    a.i0 = M
+    a.i1 = K
+    a.i2 = S
+    a.i3 = ival(ip, 6)
+    ex.launch[OP_PROPHET_PREDICT](a, B * M)
+    ex.sync()
+    ex.download(fptr(addrs[7], "yhat"), Yh, B * M)
+    ex.download(fptr(addrs[8], "trend"), Tr, B * M)
+    return B * M
+
 def fptr_of(xs: List[Float32]) -> FP:
     return FP(unsafe_from_address=Int(xs.unsafe_ptr()))
 
@@ -1808,58 +1815,9 @@ def moe_forward_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     return moe_forward_run_impl(ex, addrs, T, D, F, En, k, ival(ip, 5), Wg, Gu, Dn)
 
 
-def moe_backward_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
-    """The MoE block's forward and backward on the tape (autograd/route_ops.mojo).
-    addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
-    dy (T, D), dx (T, D) out, drouter (E, D) out, dgate_up (E, 2F, D) out,
-    ddown (E, D, F) out, y (T, D) out, logits (T, E) out, selected (T, k)
-    out as floats, weights (T, k) out]; ip = [T, D, F, E, k, renormalise]."""
-    if len(addrs) != 13 or len(ip) != 6:
-        raise Error("moe_backward: requires 13 addresses and 6 integer parameters")
-    var T = ival(ip, 0)
-    var D = ival(ip, 1)
-    var F = ival(ip, 2)
-    var En = ival(ip, 3)
-    var k = ival(ip, 4)
-    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-        raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
-    var Wg = ex.alloc(En * D)
-    ex.upload(Wg, fptr(addrs[1], "router"), En * D)
-    var Gu = ex.alloc(En * 2 * F * D)
-    ex.upload(Gu, fptr(addrs[2], "gate_up_proj"), En * 2 * F * D)
-    var Dn = ex.alloc(En * D * F)
-    ex.upload(Dn, fptr(addrs[3], "down_proj"), En * D * F)
-    return moe_backward_run_impl(ex, addrs, T, D, F, En, k, ival(ip, 5), Wg, Gu, Dn)
-
-
-def moe_backward_run_impl[E: Exec](
-    mut ex: E, addrs: List[Int], T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
-) raises -> Int:
-    """`moe_backward_impl` with the weights already on `ex`'s side (the
-    executor's upload, or the GPU binding's resident copies)."""
-    var X = ex.alloc(T * D)
-    ex.upload(X, fptr(addrs[0], "x"), T * D)
-    var DY = ex.alloc(T * D)
-    ex.upload(DY, fptr(addrs[4], "dy"), T * D)
-    var DX = ex.alloc(T * D)
-    var DWg = ex.alloc(En * D)
-    var DGu = ex.alloc(En * 2 * F * D)
-    var DDn = ex.alloc(En * D * F)
-    var Y = ex.alloc(T * D)
-    var L = ex.alloc(T * En)
-    var Sel = ex.alloc(T * k)
-    var W = ex.alloc(T * k)
-    moe_tape_train_step(ex, X, Wg, Gu, Dn, DY, DX, DWg, DGu, DDn, Y, L, Sel, W, T, D, F, En, k, renorm)
-    ex.download(fptr(addrs[5], "dx"), DX, T * D)
-    ex.download(fptr(addrs[6], "drouter"), DWg, En * D)
-    ex.download(fptr(addrs[7], "dgate_up"), DGu, En * 2 * F * D)
-    ex.download(fptr(addrs[8], "ddown"), DDn, En * D * F)
-    ex.download(fptr(addrs[9], "y"), Y, T * D)
-    ex.download(fptr(addrs[10], "logits"), L, T * En)
-    ex.download(fptr(addrs[11], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[12], "weights"), W, T * k)
-    return T * D
-
+# TOMBSTONE: moe_backward_impl / moe_backward_run_impl (superseded) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch
+# The public moe_backward is autograd/route_ops.mojo moe_backward_addrs (the tape step's one address entry).
 
 
 def _moe_devgroup_rest[E: Exec](

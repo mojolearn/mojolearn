@@ -1,5 +1,5 @@
 {
-  "title": "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP",
+  "title": "Mojolearn: Bitwise-Identical Machine Learning Across GPUs and CPUs",
   "upload_type": "software",
   "license": "Apache-2.0",
   "access_right": "open",
@@ -10,7 +10,7 @@
       "affiliation": "Latent Archon"
     }
   ],
-  "description": "<p>mojolearn supports bitwise-identical training and inference across more than 50 machine-learning algorithms.</p>",
+  "description": "<p>Mojolearn supports bitwise-identical training and inference across more than 50 machine-learning algorithms.</p>",
   "keywords": [
     "machine learning",
     "gpu",

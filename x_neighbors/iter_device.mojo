@@ -11,23 +11,37 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
-from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
-from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
-from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
 from x_neighbors.items import matmul_item
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from x_neighbors.svgp_ff import (
-    matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
-    svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
-    svgp_ff_nbm, svgp_ff_ws_size, matmul_tn_sym_ff_tile_item, svgp_sym_nb,
-    svgp_ff_col_solve_item, svgp_ff_col_fin_item, svgp_ff_mat,
+    matmul_tn_acc_ff_item,
+    svgp_ff_init_item,
+    svgp_ff_chol_item,
+    svgp_ff_chol_s_item,
+    svgp_ff_column_item,
+    svgp_ff_x_item,
+    svgp_ff_qmu_item,
+    svgp_ff_qsqrt_item,
+    svgp_ff_part_item,
+    svgp_ff_nbn,
+    svgp_ff_nbm,
+    svgp_ff_ws_size,
+    matmul_tn_sym_ff_tile_item,
+    svgp_sym_nb,
+    svgp_ff_col_solve_item,
+    svgp_ff_col_fin_item,
+    svgp_ff_mat,
 )
 from x_neighbors.svgp_ff import (
-    SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
+    SVGP_TREE,
+    SV8,
+    svgp_ff_tree_comb,
+    svgp_ff_tree_slot,
+    svgp_ff_bound,
+    svgp_ff_failed,
 )
 from x_linear.ff import FF
 from x_neighbors.svgp_b32_gate import (
@@ -38,17 +52,17 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_TN as _SVGP_OP_TN
 from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.atomic import Atomic
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from std.sys.compile import is_defined
 from x_neighbors.nan_cells_device import (
@@ -57,19 +71,23 @@ from x_neighbors.nan_cells_device import (
 )
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
-from x_neighbors.items import XN_IMPUTE_TIE_MEAN, knn_impute_tie_mean_item
-from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
+from x_neighbors.items import knn_impute_tie_mean_item, knn_impute_tie_mean_listed
+from x_neighbors.items import XN_TREE, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
-    absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, xn_finite_behind,
+    absdiff_sum_k0, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
+    p2m_sign_label_kernel,
 )
 from x_neighbors.items import K_RBF, U_IDENTITY
-from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
+from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_ell_spmm_enqueue, lp_rowcount_kernel
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
+from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_gate_open_word
 from core.device_zero import enqueue_fill
 from core.pinned_reduce import pinned_block_sum
 from core.scratch_pool import take_host_i32, give_host_i32
@@ -87,12 +105,11 @@ def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: In
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    comptime if XN_TREE_ON:
-        # lane apple-fast-purity: the partials folded by one block of XN_TREE
-        # threads (`xn_tree_fold`'s steps), not by one thread
-        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
-    else:
-        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    # lane apple-fast-purity: the partials folded by one block of XN_TREE
+    # threads (`xn_tree_fold`'s steps), not by one thread
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
 
 
 comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()
@@ -116,26 +133,22 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
         res.unsafe_store(0, sh[0])
 
 
-def _c33_stop(sum: FP, state: IP, threshold: Float32, iteration: Int32):
-    # First convergence wins, including which ping-pong buffer owns it.
-    if state[0] == 0 and sum[0] < threshold:
-        state[0] = 1
-        state[1] = iteration
-        state[2] = iteration % 2
-
-
-def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+# Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32):
+    """The dense graph product (`matmul_item`) while the bounded loop runs (gate[0] == 0)."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if state[0] == 0 and t < Int(n)*Int(c):
-        if raw_graph != 0:
-            classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
-        else:
-            matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
+    if gate[0] == 0 and t < Int(n)*Int(c):
+        matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
 
 
-def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+    """`lp_clamp_item` per row (variant 0) or `ls_clamp_item` per cell while
+    the bounded loop runs."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if state[0] != 0:
+    if gate[0] != 0:
         return
     if variant == 0:
         if t < Int(n):
@@ -144,16 +157,100 @@ def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int
         ls_clamp_item(t,nxt,ys,output,Int(n)*Int(c),alpha)
 
 
-def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
-    var t=_tid()
-    if t < Int(n):
-        classical_graph_degree(t,a,degree,Int(n),Int(variant))
+# The step keeps its device addresses untracked (a struct field cannot expose
+# AnyOrigin); enqueue_step hands the kernels MutAnyOrigin views of them.
+comptime _LpF = MutPointer[Float32, MutUntrackedOrigin]
+comptime _LpI = MutPointer[Int32, MutUntrackedOrigin]
 
 
-def _c43_graph_product(a: FP,degree: FP,x: FP,dst: FP,n: Int32,c: Int32,variant: Int32):
-    var t=_tid()
-    if t < Int(n)*Int(c):
-        classical_graph_product(t,a,degree,x,dst,Int(n),Int(c),Int(variant))
+struct _LpDenseStep(LoopStep, Movable):
+    """One iteration of `_LabelPropagationBase.fit` over the dense graph as a step of the bounded device loop: the stopping sum
+    (`absdiff_sum`'s blocked fold) and its criterion first, then the gated
+    product (the ELL SpMM op over G's nonzeros when sparse) and the gated
+    clamp into the buffer the old prev held. The ping-pong pair is chosen by
+    the iteration's parity, so a stop at iteration `it` leaves the last
+    distributions in a when (it - 1) is even."""
+    var graph: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var cnt: _LpI
+    var cols: _LpI
+    var vals: _LpF
+    var s: DeviceBuffer[DType.float32]
+    var flag: DeviceBuffer[DType.int32]
+    var n: Int
+    var c: Int
+    var maxk: Int
+    var use_sparse: Bool
+    var variant: Int
+    var alpha: Float32
+    var threshold: Float32
+
+    def __init__(
+        out self, graph: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
+        vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
+        use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
+    ):
+        self.graph = graph.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.a = a.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.b = b.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.nxt = nxt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.ys = ys.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.unl = unl.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.part = part.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cnt = cnt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cols = cols.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.vals = vals.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.s = s.copy()
+        self.flag = flag.copy()
+        self.n = n
+        self.c = c
+        self.maxk = maxk
+        self.use_sparse = use_sparse
+        self.variant = variant
+        self.alpha = alpha
+        self.threshold = threshold
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var nc = self.n * self.c
+        var graph: FP = self.graph.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var cnt: IP = self.cnt.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
+        var even = (it - 1) % 2 == 0
+        var cur = a if even else b
+        var prev = b if even else a
+        var sp: FP = self.s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        _absdiff_launch(ctx, cur, prev, sp, part, nc)
+        loop_criterion_below(ctx, registers, self.s, self.threshold, it)
+        loop_lap(ctx, timers, "stopping_sum")
+        var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        if self.use_sparse:
+            lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
+        else:
+            ctx.enqueue_function[lp_dense_product_gated](
+                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), grid_dim=_grid(nc), block_dim=BLOCK,
+            )
+        loop_lap(ctx, timers, "product")
+        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
+        # prev held; the next iteration's parity swaps the two names.
+        ctx.enqueue_function[lp_clamp_gated](
+            gate, nxt, ys, unl, prev, Int32(self.n), Int32(self.c), Int32(self.variant), self.alpha,
+            grid_dim=_grid(nc), block_dim=BLOCK,
+        )
+        loop_lap(ctx, timers, "clamp")
 
 
 def op_lp_iterate(
@@ -161,28 +258,28 @@ def op_lp_iterate(
     n: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int,
     alpha: Float32,
 ) raises:
-    """variant 0 propagation, 1 spreading; C43 adds 2 for raw affinity.
+    """variant 0 propagation, 1 spreading (variant % 2 is used).
     `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged.
 
-    Everything on the device (lane/cgr-kernel): the stopping sum is the
-    blocked `absdiff_sum` fold (`absdiff_sum_item`'s bits) with only the
-    scalar read back; G's nonzeros are found on the device, once, and the
-    product runs over them while the distributions are finite
-    (`lp_prod_kernel`, the dense product's bits). Before, the host scanned
-    G for its CSR and downloaded the distributions every iteration for the
-    stopping sum and the finiteness test (and `-D MOJOLEARN_XN_LP_BATCH`,
-    `_DENSE` and `_DEVICE_FOLD` chose other routes; they are gone)."""
+    Everything on the device: the stopping sum is the blocked `absdiff_sum`
+    fold (`absdiff_sum_item`'s bits), compared against the float32 ceiling of
+    tol on the device (the same decision as Python's float64 compare of the
+    float32 sum); G's nonzeros are found on the device, once, and the product
+    runs over them while the distributions are finite (the ELL SpMM op, the
+    dense product's bits). Lane n4-mds-labelprop-nmf-loops (2026-11-09): the
+    iterations run as the executor's bounded device loop, one register read
+    per LPK_BATCH iterations; before, the default path read the stopping sum
+    home every iteration and the frozen-chunk body
+    (`-D MOJOLEARN_C33_FROZEN_CHUNKS`) was a second, dense-only copy."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm: raw affinity graph with resident row normalization; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 35bdee28db.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     var clamp_variant = variant % 2
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
-    var d_degree = ctx.enqueue_create_buffer[DType.float32](max(n,1) if raw_graph else 1)
-    if raw_graph and n > 0:
-        ctx.enqueue_function[_c43_graph_degree](_p(d_g),_p(d_degree),Int32(n),Int32(clamp_variant),grid_dim=_grid(n),block_dim=BLOCK)
     var d_a = _buf(ctx, ld, nc, True)
     var d_b = _buf(ctx, 0, nc, False)
     ctx.enqueue_memset(d_b, Float32(0))
@@ -191,12 +288,6 @@ def op_lp_iterate(
     var d_unl = _buf_i(ctx, unlabeled, n, True)
     var d_s = _buf(ctx, 0, 1, False)
     var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(nc), 1))
-    var hs = List[Float32](length=1, fill=Float32(0))
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur_is_a = True
-    var n_iter = 0
-    var converged = False
     # G's nonzeros per row (sparse only when it pays: under an eighth
     # nonzero), counted and laid out on the device; two integers come back
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -208,12 +299,12 @@ def op_lp_iterate(
             d_g.unsafe_ptr(), Int64(n), d_cnt.unsafe_ptr(), d_stats.unsafe_ptr(),
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-    var hst = List[Int32](length=2, fill=Int32(0))
+    var hst = List[Int32](unsafe_uninit_length=2)
     ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=d_stats)
     ctx.synchronize()
     var nnz = Int(hst[0])
     var maxk = Int(hst[1])
-    var use_sparse = not raw_graph and nnz > 0 and nnz * 8 < n * n
+    var use_sparse = nnz > 0 and nnz * 8 < n * n
     var ell = n * maxk if use_sparse else 1
     var d_cols = ctx.enqueue_create_buffer[DType.int32](max(ell, 1))
     var d_vals = ctx.enqueue_create_buffer[DType.float32](max(ell, 1))
@@ -222,77 +313,29 @@ def op_lp_iterate(
             d_g.unsafe_ptr(), Int64(n), Int64(maxk), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-    comptime if C33_FROZEN_CHUNKS:
-        # Upward Float32 threshold gives exactly Float64(sum) < tol.
-        var threshold = Float32(tol)
-        if Float64(threshold) < tol:
-            threshold = bitcast[DType.float32](bitcast[DType.uint32](threshold) + UInt32(1))
-        var state = ctx.enqueue_create_buffer[DType.int32](3)
-        ctx.enqueue_memset(state,Int32(0))
-        var status = List[Int32](length=3,fill=Int32(0))
-        for chunk in range(0,max_iter,C33_CHUNK):
-            for it in range(chunk,min(chunk+C33_CHUNK,max_iter)):
-                n_iter = it
-                _absdiff_launch(ctx,cur,prev,_p(d_s),_p(d_part),nc)
-                ctx.enqueue_function[_c33_stop](_p(d_s),state.unsafe_ptr(),threshold,Int32(it),grid_dim=1,block_dim=1)
-                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),Int32(raw_graph),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
-                ctx.enqueue_function[_c33_clamp](state.unsafe_ptr(),_p(d_nxt),_p(d_ys),d_unl.unsafe_ptr(),prev,Int32(n),Int32(c),Int32(clamp_variant),alpha,grid_dim=_grid(nc),block_dim=BLOCK)
-                var tmp = cur
-                cur = prev
-                prev = tmp
-                cur_is_a = not cur_is_a
-            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(),src_buf=state)
-            ctx.synchronize()
-            if status[0] != 0:
-                converged = True
-                n_iter = Int(status[1])
-                cur_is_a = status[2] == 0
-                break
-        _ = state^
+    var step = _LpDenseStep(
+        _p(d_g), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
+        d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        d_cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, use_sparse,
+        clamp_variant, alpha, _lpki_tol_ceil(tol),
+    )
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers("label_propagation.dense")
+    var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+    timers.report()
+    var converged = outcome.converged
+    var n_iter: Int
+    var cur_is_a: Bool
+    if converged:
+        # the stop at 1-based iteration s: s - 1 steps taken, the current
+        # distributions where the parity left them
+        n_iter = outcome.stop_iteration - 1
+        cur_is_a = n_iter % 2 == 0
     else:
-        for it in range(max_iter):
-            n_iter = it
-            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
-            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-            ctx.synchronize()
-            if Float64(hs[0]) < tol:
-                converged = True
-                break
-            if raw_graph:
-                ctx.enqueue_function[_c43_graph_product](_p(d_g),_p(d_degree),cur,_p(d_nxt),Int32(n),Int32(c),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
-            elif use_sparse:
-                ctx.enqueue_memset(d_flag, Int32(0))
-                ctx.enqueue_function[lp_nonfinite_kernel](
-                    cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                ctx.enqueue_function[lp_prod_kernel](
-                    d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
-                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            else:
-                ctx.enqueue_function[matmul_kernel](
-                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
-            # old prev held, then the two names swap.
-            if clamp_variant == 0:
-                ctx.enqueue_function[lp_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, Int64(n), Int64(c),
-                    grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-                )
-            else:
-                ctx.enqueue_function[ls_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), prev, Int64(nc), alpha,
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            var t = cur
-            cur = prev
-            prev = t
-            cur_is_a = not cur_is_a
-    if not converged:
-        n_iter += 1
+        # every step ran (n_iter_ = max_iter; the loop over nothing reports 1)
+        n_iter = max_iter if max_iter > 0 else 1
+        cur_is_a = max_iter <= 0 or max_iter % 2 == 0
     if cur_is_a:
         _down(ctx, d_a, ld, nc)
     else:
@@ -301,7 +344,7 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = hs^
+    _ = step^
     _ = hst^
     _ = d_cnt^
     _ = d_stats^
@@ -309,7 +352,6 @@ def op_lp_iterate(
     _ = d_cols^
     _ = d_vals^
     _ = d_g^
-    _ = d_degree^
     _ = d_a^
     _ = d_b^
     _ = d_nxt^
@@ -379,7 +421,7 @@ def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
                 # a racing read only costs a spare round: the flag is set
                 # whenever this edge could still lower an entry
                 if lab.unsafe_load(Int(hi)) > lo:
-                    Atomic[DType.int32].min(lab + Int(hi), lo)
+                    Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, Int32(1))
 
 
@@ -448,7 +490,7 @@ def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP
                 var lo = a if a < b else b
                 var hi = b if a < b else a
                 if lab.unsafe_load(Int(hi)) > lo:
-                    _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                    _ = Atomic[Int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, rid)
 
 
@@ -533,11 +575,11 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
     var o_c = o_l + max(n, 1)
     var hb = take_host_i32(ctx, o_c + 1)
     var hp = hb.unsafe_ptr()
-    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+    unsafe_memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
     if nnz > 0:
-        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+        unsafe_memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
     if n > 0:
-        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+        unsafe_memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
     var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
     var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -593,7 +635,7 @@ def _cc_csr_batched(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_out)
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
     var ip = IP(unsafe_from_address=info)
     ip.unsafe_store(0, Int32(rounds))
     ip.unsafe_store(1, hp[o_c] + Int32(1))
@@ -627,7 +669,7 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
                     var lo = x if x < y else y
                     var hi = y if x < y else x
                     if lab.unsafe_load(Int(hi)) > lo:
-                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        _ = Atomic[Int32].min(lab + Int(hi), lo)
                         changed.unsafe_store(0, Int32(1))
 
 
@@ -670,7 +712,7 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
         ctx.synchronize()
-        memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
     IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
     _ = hb^
     _ = d_a^
@@ -749,6 +791,10 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
+    # An empty query has no output work. In particular, the row convolution
+    # cannot enqueue a zero-sized grid. Descriptor admission still runs first.
+    if n == 0:
+        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
@@ -771,9 +817,9 @@ def op_pcs_resident(
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var cur_is_a = True
     for p in range(1, degree):
+        # TOMBSTONE: MOJOLEARN_XN_PCS_CELL (unmeasured opt-in arm: forced the per-cell convolution) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 89867bbda4.
+        # Restore: git apply experiments/removed/MOJOLEARN_XN_PCS_CELL.patch; record in docs/TOMBSTONES.md.
         var row_kernel = nc <= PCS_ROW_MAX_NC
-        comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
-            row_kernel = False
         if row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
@@ -811,7 +857,7 @@ comptime KNN_TILE_MAX_D = 64
 #: KNNImputer's neighbor search (`knn_sq_tiled_kernel`, `knn_sq_tiled2_kernel`).
 #: Neither switch changes a bit, so the host column (`knn_sq_item`) is untouched.
 #:
-#: XN_KNN_LEAN (default ON; -D MOJOLEARN_IDN_XN_KNN_LEAN_OFF): one ftz per
+#: XN_KNN_LEAN (IDENTICAL): one ftz per
 #: pair-feature, not four. `knn_sq_item`'s step is
 #: acc = ftz(fma(df, df, acc)), df = ftz(ftz(x) - ftz(y)). The inputs are
 #: flushed once when they are staged (ftz is idempotent). The flush of df is
@@ -821,17 +867,22 @@ comptime KNN_TILE_MAX_D = 64
 #: flushed df = +-0 gives; a device that reads a subnormal operand as zero
 #: computes the same.
 #:
-#: XN_KNN_PRUNE (default ON; -D MOJOLEARN_IDN_XN_KNN_PRUNE_OFF): a pair's
+#: XN_KNN_PRUNE (IDENTICAL): a pair's
 #: chain stops once its partial sum is not below its row's current k-th
 #: distance. The chain never decreases (every term is >= 0), so the full
 #: value would fail the insertion's strict `<` too: the same lists. In the
 #: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
 #: out (the rows' k-th distances are published in threadgroup memory per y
 #: tile); in the row kernel the check runs every 8 features.
-#: Both off under MOJOLEARN_IDN_ALL_OFF.
-comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
-comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_XN_KNN_LEAN_OFF (old path: four ftz per pair-feature in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 50df4c2ba5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_LEAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KNN_LEAN = _XN_KNN_IDN
+# TOMBSTONE: MOJOLEARN_IDN_XN_KNN_PRUNE_OFF (old path: every pair's chain run to the end in the IDENTICAL fused k-NN; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2511f69d69.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XN_KNN_PRUNE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KNN_PRUNE = _XN_KNN_IDN
 
 
 @always_inline
@@ -919,8 +970,8 @@ def knn_sq_tiled_kernel(
 # order to the item's strict-< insertion. The same values in the same order,
 # so the same lists. The one-thread-per-row kernel this replaces for d above
 # KNN_TILE_MAX_D read every y row from device memory in every thread
-# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
-# `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
+# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4);
+# it stays only where the tile's threadgroup page does not fit.
 comptime KNN2_TX = 64
 comptime KNN2_TY = 64
 comptime KNN2_FC = 16
@@ -963,11 +1014,11 @@ def knn_sq_tiled2_kernel(
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
-        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        var acc = Array[Float32, KNN2_R * KNN2_R](fill=Float32(0))
         # XN_KNN_PRUNE: this thread's four rows' k-th distances for this y
         # tile (written before the barrier that ended the last tile), and
         # whether all 16 of its pairs are out
-        var wv = InlineArray[Float32, KNN2_R](fill=inf)
+        var wv = Array[Float32, KNN2_R](fill=inf)
         var dead = False
         comptime if XN_KNN_PRUNE:
             comptime for i in range(KNN2_R):
@@ -985,8 +1036,8 @@ def knn_sq_tiled2_kernel(
             barrier()
             if not dead:
                 for f in range(fc):
-                    var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                    var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    var xv = Array[Float32, KNN2_R](fill=Float32(0))
+                    var yv = Array[Float32, KNN2_R](fill=Float32(0))
                     comptime for i in range(KNN2_R):
                         xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
                         yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
@@ -1030,14 +1081,20 @@ def knn_sq_tiled2_kernel(
 
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+    status: Int = 0,
 ) raises:
     """The fused k-NN (`knn_sq`) with y staged per block; d above
-    KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
+    KNN_TILE_MAX_D takes the one-thread-per-row item kernel. `status` (lane
+    a8b-device-x-neighbors-rest; 0: not asked): the host int32 word that
+    receives the finite status of `x`, tested behind its upload
+    (`xn_finite_behind`)."""
     if d > KNN_TILE_MAX_D:
         # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
         # column's limit, or the row kernel (every shared page has a fits gate)
-        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
-            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+        # TOMBSTONE: MOJOLEARN_XN_KNN_ROWWISE (unmeasured opt-in arm: forced the row kernel above KNN_TILE_MAX_D) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 02e970ed32.
+        # Restore: git apply experiments/removed/MOJOLEARN_XN_KNN_ROWWISE.patch; record in docs/TOMBSTONES.md.
+        comptime if not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
+            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self, status)
             return
         # direct device copies in and out (no host-thread staging)
         var ctx2 = xn_ctx()
@@ -1045,6 +1102,7 @@ def op_knn_sq_tiled(
         var d_y2 = ctx2.enqueue_create_buffer[DType.float32](max(m * d, 1))
         if n * d > 0:
             ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+        var d_s2 = xn_finite_behind(ctx2, d_x2, n * d, status)
         if m * d > 0:
             ctx2.enqueue_copy(dst_buf=d_y2, src_ptr=FP(unsafe_from_address=y))
         var d_dist2 = ctx2.enqueue_create_buffer[DType.float32](max(n * k, 1))
@@ -1058,6 +1116,7 @@ def op_knn_sq_tiled(
             ctx2.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist2)
         _down_i(ctx2, d_idx2, idx, n * k)
         ctx2.synchronize()
+        _ = d_s2^
         _ = d_x2^
         _ = d_y2^
         _ = d_dist2^
@@ -1066,6 +1125,7 @@ def op_knn_sq_tiled(
         return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
+    var d_s = xn_finite_behind(ctx, d_x, n * d, status)
     var d_y = _buf(ctx, y, m * d, True)
     var d_dist = _buf(ctx, 0, n * k, False)
     var d_idx = _buf_i(ctx, 0, n * k, False)
@@ -1077,6 +1137,7 @@ def op_knn_sq_tiled(
     _down(ctx, d_dist, dist, n * k)
     _down_i(ctx, d_idx, idx, n * k)
     ctx.synchronize()
+    _ = d_s^
     _ = d_x^
     _ = d_y^
     _ = d_dist^
@@ -1185,9 +1246,9 @@ def op_knn_impute_tiled(
     var d_bd = _buf(ctx, 0, n * d * k, False)
     var d_bi = _buf_i(ctx, 0, n * d * k, False)
     var d_res = _buf(ctx, res, n * d, True)
+    # TOMBSTONE: MOJOLEARN_XN_IMPUTE_NO_SPLIT (unmeasured opt-in arm: forced the tiled KNNImputer kernel) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 2d1d60acad.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_NO_SPLIT.patch; record in docs/TOMBSTONES.md.
     var split = k <= IMPS_KMAX
-    comptime if is_defined["MOJOLEARN_XN_IMPUTE_NO_SPLIT"]():
-        split = False
     if split:
         ctx.enqueue_function[knn_impute_split_kernel](
             d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
@@ -1200,15 +1261,21 @@ def op_knn_impute_tiled(
             d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    # The tie-mean launch records no out_min on this route (listed 0). A one-word stand-in,
+    # never read: the same buffer cannot be passed twice to one launch (mutable aliasing is
+    # refused). Declared here so it outlives the queued launch (named again after the wait).
+    var d_nomin = _buf(ctx, 0, 1, False)
+    if weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_nomin.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(0),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
+    _ = d_nomin^
     _ = d_cells^
     _ = d_x^
     _ = d_fx^
@@ -1218,8 +1285,8 @@ def op_knn_impute_tiled(
     _ = ctx^
 
 
-# KNNImputer's tie mean: the rule, its history and the define are at
-# `XN_IMPUTE_TIE_MEAN` in x_neighbors/items.mojo (every mode and vendor and
+# KNNImputer's tie mean: the rule and its history are at
+# `knn_impute_tie_mean_item` in x_neighbors/items.mojo (every mode and vendor and
 # the host column since lane quality-fix-identical, 2026-10-15). This kernel
 # runs `knn_impute_tie_mean_item`'s statements with the fit rows staged per
 # block (d <= IMP_MAX_D); `knn_impute_tie_mean_cells_kernel` runs the item
@@ -1227,21 +1294,26 @@ def op_knn_impute_tiled(
 
 
 def knn_impute_tie_mean_cells_kernel(
-    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
-    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64, listed_: Int64,
 ):
     """`knn_impute_tie_mean_item` for each missing cell of the compact list,
-    one thread per cell (the row pass's d above IMP_MAX_D)."""
+    one thread per cell (the row pass's d above IMP_MAX_D). `listed_` != 0
+    (the row pass, which records `out_min`): a cell with no donor outside
+    its list at D_k takes `knn_impute_tie_mean_listed` (the same words from
+    the k listed donors) and skips the m x d rescan."""
     var q = Int(block_idx.x) * IMP_TPB + Int(thread_idx.x)
     if q >= Int(nc_):
         return
-    knn_impute_tie_mean_item(Int(cells.unsafe_load(q)), x, fx, best_d, best_i, res,
-                             Int(m_), Int(d_), Int(k_))
+    var t = Int(cells.unsafe_load(q))
+    if Int(listed_) != 0 and knn_impute_tie_mean_listed(t, fx, best_d, best_i, out_min, res, Int(d_), Int(k_)):
+        return
+    knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, Int(m_), Int(d_), Int(k_))
 
 
 def knn_impute_tie_mean_kernel(
-    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
-    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64, listed_: Int64,
 ):
     """Rewrites the imputed value of each missing cell whose scan found k
     donors as the tie mean (above). Fewer than k donors: every donor is
@@ -1263,6 +1335,10 @@ def knn_impute_tie_mean_kernel(
         r = t // d
         c = t - r * d
         if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+            live = False
+        elif Int(listed_) != 0 and knn_impute_tie_mean_listed(t, fx, best_d, best_i, out_min, res, d, k):
+            # no donor outside the list at D_k: done from the list (the
+            # thread still stages its share of the fit rows below)
             live = False
         else:
             dk = best_d.unsafe_load(t * k + k - 1)
@@ -1401,7 +1477,7 @@ def knn_impute_split_kernel(
         var bd = best_d + t * k
         var bi = best_i + t * k
         var total = 0
-        var head = InlineArray[Int, IMPS_SPLIT](fill=0)
+        var head = Array[Int, IMPS_SPLIT](fill=0)
         for u in range(IMPS_SPLIT):
             total += Int(pn[tid + u])
         for s in range(k):
@@ -1455,7 +1531,6 @@ def knn_impute_split_kernel(
 # best_i scratch, as in knn_sq_tiled2_kernel). Tile sizes come from the
 # threadgroup page (IMR_SMEM_BYTES under every column's limit; the fits gate
 # keeps the cell kernels where it does not fit).
-# -D MOJOLEARN_XN_IMPUTE_ROWDIST_OFF restores the per-cell kernels.
 # ============================================================================
 comptime IMR_G = 64
 comptime IMR_JT = 64
@@ -1465,8 +1540,9 @@ comptime IMR_TPB = 256
 comptime IMR_R = 4
 comptime IMR_XS = IMR_FC + 1  # padded rows (bank spread)
 comptime IMR_SMEM_BYTES = 4 * (IMR_G * IMR_XS + IMR_JT * IMR_XS + IMR_G * (IMR_JT + 1) + 4 * IMR_G)
-comptime IMR_ROWDIST = (not is_defined["MOJOLEARN_XN_IMPUTE_ROWDIST_OFF"]()
-                        and lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]())
+# TOMBSTONE: MOJOLEARN_XN_IMPUTE_ROWDIST_OFF (old path: the per-cell KNNImputer kernels where the row tile fits; EXP:1650 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5384f50cc6.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_IMPUTE_ROWDIST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IMR_ROWDIST = lib_smem_page_fits_for[TARGET_COLUMN, IMR_SMEM_BYTES]()
 
 
 def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int64, nc_: Int64):
@@ -1484,13 +1560,13 @@ def knn_impute_rows_head_kernel(cells: IP, rq: IP, rc: IP, counter: IP, d_: Int6
     var u = q + 1
     while u < nc and Int(cells.unsafe_load(u)) // d == r:
         u += 1
-    var slot = Int(Atomic[DType.int32].fetch_add(counter, Int32(1)))
+    var slot = Int(Atomic[Int32].fetch_add(counter, Int32(1)))
     rq.unsafe_store(slot, Int32(q))
     rc.unsafe_store(slot, Int32(u - q))
 
 
 def knn_impute_rows_kernel(
-    cells: IP, rq: IP, rc: IP, counter: IP, colmiss: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    cells: IP, rq: IP, rc: IP, counter: IP, colmiss: IP, x: FP, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP,
     m_: Int64, d_: Int64, k_: Int64, weights_: Int64,
 ):
     """Block per IMR_G slots of the row list: the rows' distance tiles to
@@ -1544,14 +1620,15 @@ def knn_impute_rows_kernel(
         for s in range(k):
             best_d.unsafe_store(t * k + s, inf)
             best_i.unsafe_store(t * k + s, Int32(-1))
+        out_min.unsafe_store(t, inf)
         e += IMR_TPB
     var ta = tid // 16
     var tb = tid - ta * 16
     var j0 = 0
     while j0 < m:
         var rows = min(IMR_JT, m - j0)
-        var acc = InlineArray[Float32, IMR_R * IMR_R](fill=Float32(0))
-        var pres = InlineArray[Int, IMR_R * IMR_R](fill=0)
+        var acc = Array[Float32, IMR_R * IMR_R](fill=Float32(0))
+        var pres = Array[Int, IMR_R * IMR_R](fill=0)
         var f0 = 0
         while f0 < d:
             var fc = min(IMR_FC, d - f0)
@@ -1569,8 +1646,8 @@ def knn_impute_rows_kernel(
                 q += IMR_TPB
             barrier()
             for f in range(fc):
-                var xv = InlineArray[Float32, IMR_R](fill=Float32(0))
-                var yv = InlineArray[Float32, IMR_R](fill=Float32(0))
+                var xv = Array[Float32, IMR_R](fill=Float32(0))
+                var yv = Array[Float32, IMR_R](fill=Float32(0))
                 comptime for i in range(IMR_R):
                     xv[i] = xs[(ta + 16 * i) * IMR_XS + f]
                     yv[i] = fs[(tb + 16 * i) * IMR_XS + f]
@@ -1611,6 +1688,12 @@ def knn_impute_rows_kernel(
             var bd = best_d + t * k
             var bi = best_i + t * k
             var worst = bd.unsafe_load(k - 1)
+            # fb-infer/D: the smallest distance of a donor left out of the
+            # list (rejected, or evicted from slot k - 1); the tie-mean pass
+            # skips its m x d rescan when it is above D_k
+            # (`knn_impute_tie_mean_listed`). A NaN distance (no shared
+            # feature) is never a donor and never compares below.
+            var omin = out_min.unsafe_load(t)
             for bb in range(rows):
                 var j = j0 + bb
                 var dv = fx.unsafe_load(j * d + c)
@@ -1618,7 +1701,11 @@ def knn_impute_rows_kernel(
                     continue
                 var v = dt[lo * (IMR_JT + 1) + bb]
                 if not (v < worst):
+                    if v < omin:
+                        omin = v
                     continue
+                if Int(bi.unsafe_load(k - 1)) >= 0 and worst < omin:
+                    omin = worst
                 var s = k - 1
                 while s > 0 and v < bd.unsafe_load(s - 1):
                     bd.unsafe_store(s, bd.unsafe_load(s - 1))
@@ -1627,6 +1714,7 @@ def knn_impute_rows_kernel(
                 bd.unsafe_store(s, v)
                 bi.unsafe_store(s, Int32(j))
                 worst = bd.unsafe_load(k - 1)
+            out_min.unsafe_store(t, omin)
             e += IMR_TPB
         barrier()
         j0 += rows
@@ -1665,6 +1753,9 @@ def _op_knn_impute_rows(
     var d_rq = _buf_i(ctx, 0, nc, False)
     var d_rc = _buf_i(ctx, 0, nc, False)
     var d_cnt = _buf_i(ctx, 0, 1, False)
+    # per cell: the smallest distance of a donor the scan left out (seeded
+    # +inf by the row kernel); the tie-mean pass reads it
+    var d_mo = _buf(ctx, 0, n * d, False)
     d_cm.enqueue_fill(Int32(0))
     d_cnt.enqueue_fill(Int32(0))
     if m > 0 and d > 0:
@@ -1681,23 +1772,24 @@ def _op_knn_impute_rows(
     var max_rows = min(n, nc)
     ctx.enqueue_function[knn_impute_rows_kernel](
         d_cells.unsafe_ptr(), d_rq.unsafe_ptr(), d_rc.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cm.unsafe_ptr(),
-        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(), d_res.unsafe_ptr(),
+        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(), d_mo.unsafe_ptr(), d_res.unsafe_ptr(),
         Int64(m), Int64(d), Int64(k), Int64(weights),
         grid_dim=(max_rows + IMR_G - 1) // IMR_G, block_dim=IMR_TPB,
     )
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0 and d <= IMP_MAX_D:
-            ctx.enqueue_function[knn_impute_tie_mean_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
-        elif weights == 0:
-            ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
-                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
-                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-            )
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0 and d <= IMP_MAX_D:
+        ctx.enqueue_function[knn_impute_tie_mean_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_mo.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(1),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
+    elif weights == 0:
+        ctx.enqueue_function[knn_impute_tie_mean_cells_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_mo.unsafe_ptr(), d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc), Int64(1),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -1710,6 +1802,7 @@ def _op_knn_impute_rows(
     _ = d_rq^
     _ = d_rc^
     _ = d_cnt^
+    _ = d_mo^
     _ = ctx^
 
 
@@ -1870,6 +1963,59 @@ def op_kernel_matmul(
     _ = ctx^
 
 
+def op_ocsvm_labels(
+    q: Int, y: Int, w: Int, lab: Int,
+    n: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+    scale: Float32, shift: Float32, mode: Int, thr: Float32,
+) raises:
+    """OneClassSVM.predict in one device session (row N382/N369 of the
+    native entry-point plan, lane ne3-g-svc-gp-neighbors): the
+    `op_kernel_matmul` tiles (c = 1) into a device score vector, then
+    `unary_kernel` (U_IDENTITY: scale * s + shift, the decision) and
+    `p2m_sign_label_kernel` (mode, thr) over the same vector, and one int32
+    label download. The launches, their order and their items are the
+    three ops the caller ran one by one (kernel_matmul, unary,
+    p2m_sign_label); only the two host round trips of the n scores are
+    gone, so the labels are the same bits."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_y = _buf(ctx, y, m * d, True)
+    var d_w = _buf(ctx, w, m, True)
+    var d_res = _buf(ctx, 0, n, False)
+    var d_dec = _buf(ctx, 0, n, False)
+    var d_lab = _buf_i(ctx, 0, n, False)
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var qp: FP = _p(d_q)
+    var rp: FP = _p(d_res)
+    var r0 = 0
+    while r0 < n:  # driver-loop: over row tiles of the query
+        var rows = min(tr, n - r0)
+        _launch_kernel(ctx, qp + r0 * d, _p(d_y), _p(d_k), rows, m, d, kind, degree, gamma, coef0)
+        _launch_matmul(ctx, _p(d_k), _p(d_w), rp + r0, rows, m, 1)
+        r0 += rows
+    _fused_sabotage(ctx, d_res, n)
+    if n > 0:
+        ctx.enqueue_function[unary_kernel](
+            rp, _p(d_dec), Int64(n), Int64(U_IDENTITY), scale, shift,
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+        ctx.enqueue_function[p2m_sign_label_kernel](
+            _p(d_dec), d_lab.unsafe_ptr(), Int64(n), Int64(mode), thr,
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+        _down_i(ctx, d_lab, lab, n)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_y^
+    _ = d_w^
+    _ = d_res^
+    _ = d_dec^
+    _ = d_lab^
+    _ = d_k^
+    _ = ctx^
+
+
 #: SVGP_FAST_RBFTILE, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp):
 #: SVGP's scaled rbf (Kuu, the Kfu tiles, Ksu in predict) as one tiled
 #: launch, 64 rows x 64 inducing points per 256-thread block, 16 features
@@ -1878,19 +2024,19 @@ def op_kernel_matmul(
 #: features ascending) and `unary_item`'s identity step. M3, one run per
 #: arm: istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q
 #: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
-#: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
-comptime SVGP_FAST_RBFTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
-)
+#: -0.10602). The per-cell kernel stays where neither tiled switch is on.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_RBFTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 9152d5f19c.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_RBFTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X6 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
 #: `identical_mul_add`, features ascending from +0 over exactly d) and
 #: `unary_item`'s identity step, so the words are the per-cell kernel's.
-#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores it.
-comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SVGP_RBFTILE_OFF (old path: the IDENTICAL per-cell SVGP RBF kernel; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 49c0fc2b9e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_RBFTILE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SVGP_RBFTILE = SVGP_FAST_RBFTILE or IDN_SVGP_RBFTILE
 comptime SVGP_RBF_T = 64
 comptime SVGP_RBF_TP = SVGP_RBF_T + 1
@@ -1956,41 +2102,17 @@ def svgp_rbf_tile_kernel(q: FP, z: FP, dst: FP, rows_: Int64, m_: Int64, d_: Int
                 dst.unsafe_store(i * m + j, ftz(identical_mul_add(variance, ftz(k), Float32(0))))
 
 
-# C54 predicts four independent inducing-point outputs per query thread.
-# The feature fold, exponential, and variance scale match the incumbent;
-# query feature loads are reused. Scratch is four scalar accumulators.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def _c54_svgp_predict_kernel(q: FP,z: FP,dst: FP,rows: Int32,m: Int32,d: Int32,gamma: Float32,variance: Float32):
-    var tile = _tid()
-    var per_row = (Int(m)+3)//4
-    var row = tile//per_row
-    var first = (tile%per_row)*4
-    if row >= Int(rows):
-        return
-    var sums = InlineArray[Float32,4](fill=Float32(0))
-    for feature in range(Int(d)):
-        var qv=q.unsafe_load(row*Int(d)+feature)
-        comptime for lane in range(4):
-            if first+lane < Int(m):
-                var delta=_sub(qv,z.unsafe_load((first+lane)*Int(d)+feature))
-                sums[lane]=ftz(identical_mul_add(delta,delta,sums[lane]))
-    comptime for lane in range(4):
-        if first+lane < Int(m):
-            var kval=ftz(identical_exp(ftz(identical_mul(-gamma,sums[lane]))))
-            dst.unsafe_store(row*Int(m)+first+lane,ftz(identical_mul_add(variance,ftz(kval),Float32(0))))
+# TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (unmeasured opt-in arm: four inducing-point outputs per SVGP predict thread; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5fbe95dbc9.
+# Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
 
 
 def _launch_scaled_rbf(
     ctx: DeviceContext, q: FP, z: FP, kbuf: FP, dst: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
-    prediction: Bool = False,
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
-    comptime if C54_PREDICT_TILES:
-        if prediction:
-            if rows*m > 0:
-                ctx.enqueue_function[_c54_svgp_predict_kernel](q,z,dst,Int32(rows),Int32(m),Int32(d),gamma,variance,grid_dim=_grid(rows*((m+3)//4)),block_dim=BLOCK)
-            return
+    # TOMBSTONE: MOJOLEARN_C54_PREDICT_TILES (unmeasured opt-in arm: four inducing-point outputs per SVGP predict thread; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 5fbe95dbc9.
+    # Restore: git apply experiments/removed/MOJOLEARN_C54_PREDICT_TILES.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
     comptime if SVGP_RBFTILE:
         if rows * m > 0:
             var nblk = ((rows + SVGP_RBF_T - 1) // SVGP_RBF_T) * ((m + SVGP_RBF_T - 1) // SVGP_RBF_T)
@@ -2052,22 +2174,27 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
-#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
-#: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
+#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical).
 #: lane/idn-gates (2026-10-04): SYMTILE and COLSPLIT are also the IDENTICAL
 #: default on every vendor (two_prod commutes bit for bit and every entry
-#: keeps its p-ascending fold; the four solves are the column item's own);
-#: -D MOJOLEARN_IDN_GATES_OFF (or either _OFF) restores the old IDENTICAL form.
-comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: keeps its p-ascending fold; the four solves are the column item's own).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path umbrella; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 02653ea11e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
-comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
-#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical); -D
-#: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF reverts.
-comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"]()
+#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical).
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 2391fda738.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_COLSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON
 
 
 def svgp_ff_col_solve_kernel(kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m_: Int64, n_: Int64, jitter: Float32):
@@ -2146,11 +2273,6 @@ def svgp_ff_part_kernel(y: FP, bvh: FP, bvl: FP, w: FP, m_: Int64, n_: Int64):
         svgp_ff_part_item(t, y, bvh, bvl, w, Int(m_), Int(n_))
 
 
-def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
-    if _tid() == 0:
-        svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
-
-
 comptime _SVGP_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, SVGP_TREE * 8 * 4]()
 
 
@@ -2185,13 +2307,13 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 
 
 # ---- lane apple-fast-w2-svgp (2026-10-04): FAST + Apple candidates for
-# SVGP's fit (and predict). BLKCHOL is default; BSPLIT stays opt-in.
+# SVGP's fit (and predict). BLKCHOL and BSPLIT are default.
 
 #: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
 #: M3, one run per arm (measured without RBFTILE; combined retime owed):
 #: taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q
-#: SVGP-FAST-PAIR PASS. MOJOLEARN_SVGP_FAST_BLKCHOL_OFF restores the
-#: one-column-per-launch factor.
+#: SVGP-FAST-PAIR PASS. The one-column-per-launch factor stays where
+#: neither panel switch is on.
 #: The three m x m float-float Cholesky factors
 #: (L_u, L_s, then Q) one panel of SVGP_CHOL_PB columns per launch instead of
 #: one column per launch (m = 512: 1,024 dependent launches -> 64). Each block
@@ -2201,19 +2323,19 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: entry is the same chain as `_chol_col`: the pivot A[c,c] - L[c,k]^2 and
 #: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
 #: The words only move with FAST's free contraction.
-comptime SVGP_FAST_BLKCHOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BLKCHOL_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 4b8e9ee649.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: X5 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
 #: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
 #: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
 #: so no contraction choice can move a word: the factor of the one-column
-#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` (or
-#: MOJOLEARN_IDN_ALL_OFF) restores one column per launch.
-comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: launches bit for bit.
+# TOMBSTONE: MOJOLEARN_IDN_SVGP_BLKCHOL_OFF (old path: the IDENTICAL one-column-per-launch SVGP Cholesky; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at e68da202a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVGP_BLKCHOL_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16
@@ -2357,12 +2479,11 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: Source lane/apple-fast-w2-svgp@146898d2c.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab19-svgpbsplit): svgp istella 224.6 -> 167.1 ms, taxi 211.3 -> 149.1 ms,
-#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE); rollback
-#: -D MOJOLEARN_SVGP_FAST_BSPLIT_OFF. See docs/apple-fast/EXPERIMENTS.md.
-comptime SVGP_FAST_BSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and SVGP_FAST_SYMTILE
-    and not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"]()
-)
+#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE). See
+#: docs/apple-fast/EXPERIMENTS.md.
+# TOMBSTONE: MOJOLEARN_SVGP_FAST_BSPLIT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 6d5bdfc57a.
+# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_BSPLIT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SVGP_FAST_BSPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and SVGP_FAST_SYMTILE
 comptime SVGP_BSPLIT_R = 4
 comptime SVGP_BSPLIT_RV = 32
 
@@ -2602,16 +2723,11 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_part_kernel](
             yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
-    comptime if SVGP_TREE_ON:
-        # lane apple-fast-purity: one block of SVGP_TREE threads folds the
-        # nbn + nbm block partials (svgp_ff_fin_item's tree order)
-        ctx.enqueue_function[svgp_ff_fin_tree_kernel](
-            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
-        )
-    else:
-        ctx.enqueue_function[svgp_ff_fin_kernel](
-            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
-        )
+    # lane apple-fast-purity: one block of SVGP_TREE threads folds the
+    # nbn + nbm block partials (svgp_ff_fin_item's tree order)
+    ctx.enqueue_function[svgp_ff_fin_tree_kernel](
+        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
+    )
     _down(ctx, d_alpha, alpha, m)
     _down(ctx, d_c, cmat, mm)
     _down(ctx, d_qmu, qmu, m)
@@ -2671,7 +2787,7 @@ def op_svgp_predict(
     var r0 = 0
     while r0 < n:
         var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance, True)
+        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
         _launch_matmul(ctx, _p(d_ks), _p(d_al), mp + r0, rows, m, 1)
         ctx.enqueue_function[svgp_var_kernel](
             _p(d_ks), _p(d_c), vp + r0, Int64(rows), Int64(m), kdiag,
@@ -2713,19 +2829,22 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
         var dr_i = _buf(ctx_i, 0, n * c, False)
         var d_fl = ctx_i.enqueue_create_buffer[DType.int32](4)
         ctx_i.enqueue_memset(d_fl, Int32(0))
+        # called outside a loop: the kernels' gate is one open (zeroed) word
+        var d_gate = step_gate_open_word(ctx_i)
         if m * c > 0:
             ctx_i.enqueue_function[lpki_nonfinite_kernel](
-                dx_i.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
+                dx_i.unsafe_ptr(), d_gate.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
                 grid_dim=_grid(m * c), block_dim=(BLOCK if m * c > 1 else 1),
             )
         if n * c > 0:
             ctx_i.enqueue_function[lpki_product_kernel](
-                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_fl.unsafe_ptr(),
-                Int64(n), Int64(m), Int64(k), Int64(c),
+                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_gate.unsafe_ptr(),
+                d_fl.unsafe_ptr(), Int64(n), Int64(m), Int64(k), Int64(c),
                 grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
             )
         _down(ctx_i, dr_i, res, n * c)
         ctx_i.synchronize()
+        _ = d_gate^
         _ = dc_i^
         _ = dv_i^
         _ = dx_i^
@@ -2899,7 +3018,7 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: 
 #: arithmetic in the `comptime if XN_NC_IDN_CHUNKED` arms below; the host
 #: column folds the same chunks.
 from x_neighbors.items import XN_NC_IDN_CHUNKED, XN_NC_CHUNK_ROWS
-comptime XN_NC_CHUNKED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or XN_NC_IDN_CHUNKED
+comptime XN_NC_CHUNKED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or XN_NC_IDN_CHUNKED
 comptime NCC_ROWS = XN_NC_CHUNK_ROWS
 
 
@@ -3049,11 +3168,14 @@ def nc_std_red_kernel(pss: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: 
             std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
 
 
-def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int,
+                status: Int = 0) raises:
     if (n_classes + 1) * NCS_TC > 8 * NCS_NT:
         raise Error("nc_stats: more classes than the staged kernel's chains (" + String(n_classes) + ")")
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
+    # lane a8b-device-x-neighbors-rest: X's finite status behind its upload
+    var d_s = xn_finite_behind(ctx, d_x, n * d, status)
     var d_lab = _buf_i(ctx, lab, n, True)
     var d_cent = _buf(ctx, cent, n_classes * d, False)
     var d_std = _buf(ctx, std, d, False)
@@ -3099,6 +3221,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     _down(ctx, d_std, std, d)
     _down(ctx, d_dsc, dsc, d)
     ctx.synchronize()
+    _ = d_s^
     _ = d_ps^
     _ = d_pc^
     _ = d_pss^
@@ -3111,7 +3234,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 
 # ---------------------------------------------------------------- lp_iterate_knn
 #: LP_FAST_RESIDENT (lane/apple-fast-neighbors2, 2026-10-02; FAST + Apple
-#: default, `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` off): LabelPropagation /
+#: default; every vendor and tier since 2026-11-09): LabelPropagation /
 #: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
 #: Cause: with kernel='knn' `_LabelPropagationBase.fit`
 #: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
@@ -3129,50 +3252,54 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 #: in float32 on the device. Expected: the per-iteration boundary crossings
 #: gone (LabelPropagation taxi runs its 1,000 steps).
 comptime LPK_TPB = 256
-comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
-comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-#: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
-#: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy
-#: .7016 same). `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` keeps the Python loop;
-#: the old `MOJOLEARN_LP_FAST_RESIDENT` env name is harmless (no longer
-#: read). The Python layer asks `x_neighbors_lp_fast_resident()`.
-comptime LP_FAST_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]()
-)
-
-
-#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
-#: the same loop resident in IDENTICAL. The Python loop paid three binding
-#: calls per iteration (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp:
-#: the distributions up and down three times, a host finiteness walk over
-#: them, `lp_knn_finite`, and a scalar readback every iteration). Here the
-#: graph goes up once and every launch is the op's own item:
+# TOMBSTONE: MOJOLEARN_C33_CHUNK_4 (unmeasured opt-in arm: four iterations per register read; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 1afc78b64a.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_CHUNK_4.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS (superseded arm, EXP:2323 DELETED; non-owner site) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 707a4b8732.
+# Restore: git apply experiments/removed/MOJOLEARN_C33_FROZEN_CHUNKS.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime LPK_BATCH = 16
+from checks.mode_policy import KERNEL_FORM_LEGACY_FAST as LPK_FAST_BUILD
+#: The resident loop is the only kNN-graph path on every vendor and tier
+#: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured
+#: default: FAST + Apple since the M3 A/B n2-lp-res-taxi (label-propagation
+#: taxi 6,793 -> 2,086 ms, -69%, accuracy .7016 same), IDENTICAL on every
+#: vendor since lane/fam2-neighbors (2026-10-04, no bit change). The
+#: rollbacks `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` and
+#: `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (and IDN_ALL_OFF's arm here) kept the
+#: binding's per-iteration loop alive, which allocated n x C per iteration;
+#: both are refused now (core/experiment_guards_cluster.mojo).
+# TOMBSTONE: MOJOLEARN_LP_FAST_RESIDENT_OFF (rollback of a measured winner) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_LP_RESIDENT_OFF (rollback of a measured default) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor: the loop
+#: resident in IDENTICAL, every launch the op's own item:
 #: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),
 #: the stopping test against the float32 ceiling of tol (the same decision
 #: as Python's float64 compare of a float32 sum), the finiteness scan on the
 #: device, `lp_knn_product_item`, `lp_clamp_item` / `ls_clamp_item`. The
 #: stop flag gates the later launches of the batch; LPK_BATCH iterations per
-#: drain. No bit changes: the host column keeps the Python loop over the
-#: same items. -D MOJOLEARN_IDN_LP_RESIDENT_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the Python loop.
-comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: drain. The host column runs the same items (x_neighbors/iter_host.mojo).
+comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
-def lp_fast_resident() -> Int:
-    """1 when this binary takes the resident kNN-graph loop by default
-    (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
-    comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
-        return 1
-    return 0
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
-def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
-    """`absdiff_part_item` per fold block; nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+# Lane n3b-sgd-on-program-fit (2026-11-09): both kNN-graph loops (IDENTICAL's item
+# loop and FAST's block-sum loop) run as the executor's bounded device loop
+# (autograd/program_loop_device.mojo), as the dense loop above does: every
+# kernel takes the loop's register block as its gate (word 0, the done word),
+# the stopping test is the criterion (it sets the stopping iteration and the
+# done word), and `bounded_device_loop` reads the block once per LPK_BATCH
+# iterations. The hand chunk loops and their own flag / step-count words are
+# gone: the steps taken are the loop's outcome (the stop at iteration s took
+# s - 1 steps). Same kernels, same order: no bit moves.
+# TOMBSTONE: lp-knn-hand-chunk-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch; record in docs/TOMBSTONES.md.
+def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, gate: IP, count_: Int64):
+    """`absdiff_part_item` per fold block; nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var count = Int(count_)
     var t = _tid()
@@ -3180,43 +3307,46 @@ def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
         absdiff_part_item(t, a, b, part, part, count)
 
 
-def lpki_check_kernel(a: FP, b: FP, sres: FP, part: FP, flag: IP, count_: Int64, tol_: Float32):
-    """ONE item: `absdiff_fin_item`, then the stopping test. Below tol the
-    stop flag (flag[0]) is set (the loop stops before this step), else the
-    step is counted (flag[1]) and the finiteness flag (flag[2]) is cleared
-    for this step's scan."""
-    if flag.unsafe_load(0) != 0:
+def lpki_check_kernel(a: FP, b: FP, sres: FP, part: FP, gate: IP, fin: IP, count_: Int64, tol_: Float32, it: Int32):
+    """ONE item, the loop's criterion: `absdiff_fin_item`, then the stopping
+    test. Below tol the loop stops at iteration `it` (before this step: the
+    stopping iteration and the done word), else the finiteness flag
+    (fin[0]) is cleared for this step's scan."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < 1:
         absdiff_fin_item(t, a, b, sres, part, Int(count_))
+        gate.unsafe_store(STEP_ITER, it)
         if sres.unsafe_load(0) < tol_:
-            flag.unsafe_store(0, Int32(1))
+            gate.unsafe_store(STEP_STOP_ITER, it)
+            gate.unsafe_store(STEP_DONE, Int32(1))
         else:
-            flag.unsafe_store(1, flag.unsafe_load(1) + Int32(1))
-            flag.unsafe_store(2, Int32(0))
+            fin.unsafe_store(0, Int32(0))
 
 
-def lpki_nonfinite_kernel(x: FP, flag: IP, count_: Int64):
-    """flag[2] = 1 when any x is Inf or NaN (`lp_knn_finite`'s test, every
-    element its own thread); nothing once the stop flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpki_nonfinite_kernel(x: FP, gate: IP, fin: IP, count_: Int64):
+    """fin[0] = 1 when any x is Inf or NaN (`lp_knn_finite`'s test, every
+    element its own thread); nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(count_):
         var bits = bitcast[DType.uint32](x.unsafe_load(t)) & UInt32(0x7F800000)
         if bits == UInt32(0x7F800000):
-            flag.unsafe_store(2, Int32(1))
+            fin.unsafe_store(0, Int32(1))
 
 
-def lpki_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, m_: Int64, k_: Int64, c_: Int64):
+def lpki_product_kernel(
+    cols: IP, vals: FP, x: FP, res: FP, gate: IP, fin: IP, n_: Int64, m_: Int64, k_: Int64, c_: Int64,
+):
     """`lp_knn_product_item` with the device's finiteness flag; nothing once
-    the stop flag is set."""
-    if flag.unsafe_load(0) != 0:
+    the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(n_) * Int(c_):
-        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), flag.unsafe_load(2) == 0)
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), fin.unsafe_load(0) == 0)
 
 
 def _lpki_tol_ceil(tol: Float64) -> Float32:
@@ -3230,96 +3360,9 @@ def _lpki_tol_ceil(tol: Float64) -> Float32:
     return t32
 
 
-def _op_lp_iterate_knn_idn(
-    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
-    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol: Float64, alpha: Float32,
-) raises:
-    """LP_IDN_RESIDENT: `_LabelPropagationBase.fit`'s Python loop over the
-    compact kNN graph, resident, every launch the op's own item."""
-    var nc = n * c
-    var nfb = xn_fold_blocks(nc)
-    var ctx = xn_ctx()
-    var d_cols = _buf_i(ctx, cols, n * k, True)
-    var d_vals = _buf(ctx, vals, n * k, True)
-    var d_a = _buf(ctx, ld, nc, True)
-    var d_b = _buf(ctx, 0, nc, False)
-    ctx.enqueue_memset(d_b, Float32(0))
-    var d_nxt = _buf(ctx, 0, nc, False)
-    var d_ys = _buf(ctx, ystatic, nc, True)
-    var d_unl = _buf_i(ctx, unlabeled, n, True)
-    var d_s = _buf(ctx, 0, 1, False)
-    var d_part = _buf(ctx, 0, nfb, False)
-    var h_fl = List[Int32](length=4, fill=Int32(0))
-    var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 4, True)
-    var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var tol32 = _lpki_tol_ceil(tol)
-    var done = 0
-    var converged = False
-    while done < max_iter and not converged and nc > 0:
-        var steps = min(LPK_BATCH, max_iter - done)
-        for _ in range(steps):
-            ctx.enqueue_function[lpki_absdiff_part_kernel](
-                cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
-                grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
-            )
-            ctx.enqueue_function[lpki_check_kernel](
-                cur, prev, d_s.unsafe_ptr(), d_part.unsafe_ptr(), flp, Int64(nc), tol32,
-                grid_dim=1, block_dim=1,
-            )
-            ctx.enqueue_function[lpki_nonfinite_kernel](
-                cur, flp, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            ctx.enqueue_function[lpki_product_kernel](
-                d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
-                Int64(n), Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
-            # the old prev held, then the two names swap (op_lp_iterate)
-            ctx.enqueue_function[lpk_clamp_kernel](
-                d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
-                Int64(n), Int64(c), Int64(variant), alpha,
-                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            var t = cur
-            cur = prev
-            prev = t
-        ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
-        ctx.synchronize()
-        converged = h_fl[0] != 0
-        done += steps
-    # steps taken: the loop's n_iter_ whether it converged (it) or ran out
-    var n_iter = Int(h_fl[1])
-    if nc == 0:
-        # the Python loop over nothing: the empty sum 0 against tol
-        converged = Float64(0) < tol
-        n_iter = 0 if (converged or max_iter <= 0) else max_iter
-    elif n_iter % 2 == 0:
-        _down(ctx, d_a, ld, nc)
-    else:
-        _down(ctx, d_b, ld, nc)
-    ctx.synchronize()
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = h_fl^
-    _ = d_fl^
-    _ = d_s^
-    _ = d_part^
-    _ = d_cols^
-    _ = d_vals^
-    _ = d_a^
-    _ = d_b^
-    _ = d_nxt^
-    _ = d_ys^
-    _ = d_unl^
-    _ = ctx^
-
-
-def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
-    """Block partials of sum |a - b|; nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, gate: IP, count_: Int64):
+    """Block partials of sum |a - b|; nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var tid = Int(thread_idx.x)
     var i = Int(block_idx.x) * LPK_TPB + tid
@@ -3331,10 +3374,10 @@ def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
         part.unsafe_store(Int(block_idx.x), s)
 
 
-def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float32):
-    """ONE block of LPK_TPB threads: the partials folded; below tol the flag
-    is set (the loop stops before this step), else the step is counted."""
-    if flag.unsafe_load(0) != 0:
+def lpk_check_kernel(part: FP, nparts_: Int64, gate: IP, tol_: Float32, it: Int32):
+    """ONE block of LPK_TPB threads, the loop's criterion: the partials
+    folded; below tol the loop stops at iteration `it` (before this step)."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var tid = Int(thread_idx.x)
     var acc = Float32(0)
@@ -3344,15 +3387,15 @@ def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float3
         i += LPK_TPB
     var s = pinned_block_sum[LPK_TPB](acc)
     if tid == 0:
+        gate.unsafe_store(STEP_ITER, it)
         if s < tol_:
-            flag.unsafe_store(0, 1)
-        else:
-            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
+            gate.unsafe_store(STEP_STOP_ITER, it)
+            gate.unsafe_store(STEP_DONE, Int32(1))
 
 
-def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, k_: Int64, c_: Int64):
-    """`lp_knn_product_item` (finite x); nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, gate: IP, n_: Int64, k_: Int64, c_: Int64):
+    """`lp_knn_product_item` (finite x); nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(n_) * Int(c_):
@@ -3360,11 +3403,11 @@ def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, 
 
 
 def lpk_clamp_kernel(
-    ld: FP, ystatic: FP, unlabeled: IP, res: FP, flag: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
+    ld: FP, ystatic: FP, unlabeled: IP, res: FP, gate: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
 ):
     """variant 0 `lp_clamp_item` per row, 1 `ls_clamp_item` per cell;
-    nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+    nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     var n = Int(n_)
@@ -3377,95 +3420,160 @@ def lpk_clamp_kernel(
             ls_clamp_item(t, ld, ystatic, res, n * c, alpha_)
 
 
+@fieldwise_init
+struct _LpKnnStep(LoopStep, Movable):
+    """One iteration of `_LabelPropagationBase.fit` over the compact kNN
+    graph as a step of the bounded device loop: the stopping sum and its
+    criterion first (IDENTICAL: the `absdiff_sum` items, the finiteness
+    scan; FAST: the block sums), then the gated product and the gated clamp
+    into the buffer the old prev held. The ping-pong pair is chosen by the
+    iteration's parity (as `_LpDenseStep`)."""
+    var cols: _LpI
+    var vals: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var s: _LpF
+    var fin: _LpI
+    var n: Int
+    var k: Int
+    var c: Int
+    var variant: Int
+    var alpha: Float32
+    var tol32: Float32
+    var nparts: Int
+    var idn: Bool
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var nc = self.n * self.c
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var s: FP = self.s.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var fin: IP = self.fin.unsafe_origin_cast[MutAnyOrigin]()
+        var even = (it - 1) % 2 == 0
+        var cur = a if even else b
+        var prev = b if even else a
+        var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        if self.idn:
+            var nfb = xn_fold_blocks(nc)
+            ctx.enqueue_function[lpki_absdiff_part_kernel](
+                cur, prev, part, gate, Int64(nc), grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_check_kernel](  # small-launch(one item): the loop's stopping criterion
+                cur, prev, s, part, gate, fin, Int64(nc), self.tol32, Int32(it),
+                grid_dim=1, block_dim=1,
+            )
+            loop_lap(ctx, timers, "stopping_sum")
+            ctx.enqueue_function[lpki_nonfinite_kernel](
+                cur, gate, fin, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_product_kernel](
+                cols, vals, cur, nxt, gate, fin,
+                Int64(self.n), Int64(self.n), Int64(self.k), Int64(self.c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+        else:
+            ctx.enqueue_function[lpk_absdiff_partial_kernel](
+                cur, prev, part, gate, Int64(nc), grid_dim=self.nparts, block_dim=LPK_TPB,
+            )
+            ctx.enqueue_function[lpk_check_kernel](
+                part, Int64(self.nparts), gate, self.tol32, Int32(it), grid_dim=1, block_dim=LPK_TPB,
+            )
+            loop_lap(ctx, timers, "stopping_sum")
+            ctx.enqueue_function[lpk_product_kernel](
+                cols, vals, cur, nxt, gate, Int64(self.n), Int64(self.k), Int64(self.c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+        loop_lap(ctx, timers, "product")
+        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
+        # prev held; the next iteration's parity swaps the two names
+        ctx.enqueue_function[lpk_clamp_kernel](
+            nxt, ys, unl, prev, gate, Int64(self.n), Int64(self.c), Int64(self.variant), self.alpha,
+            grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+        )
+        loop_lap(ctx, timers, "clamp")
+
+
 def op_lp_iterate_knn(
     cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
     n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
 ) raises:
     """The Python loop of `_LabelPropagationBase.fit` over the compact kNN
-    graph, resident (see LPK_TPB above). `ld` in: the initial distributions,
-    out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
-    float64 bits."""
-    comptime if not LPK_FAST_BUILD:
-        comptime if LP_IDN_RESIDENT:
-            _op_lp_iterate_knn_idn(
-                cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
-                bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
-            )
-        else:
-            raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT), or IDENTICAL without MOJOLEARN_IDN_LP_RESIDENT_OFF")
+    graph, resident (see LPK_TPB above), as the bounded device loop over
+    `_LpKnnStep`. `ld` in: the initial distributions, out: the last. info
+    (int32 x 2): n_iter_, converged. tol is Python's float64 bits.
+    IDENTICAL (LP_IDN_RESIDENT): every launch the op's own item, tol against
+    its float32 ceiling; FAST: the block sums, tol in float32."""
+    var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    var idn = not LPK_FAST_BUILD
+    var nc = n * c
+    var ctx = xn_ctx()
+    var d_cols = _buf_i(ctx, cols, n * k, True)
+    var d_vals = _buf(ctx, vals, n * k, True)
+    var d_a = _buf(ctx, ld, nc, True)
+    var d_b = _buf(ctx, 0, nc, False)
+    ctx.enqueue_memset(d_b, Float32(0))
+    var d_nxt = _buf(ctx, 0, nc, False)
+    var d_ys = _buf(ctx, ystatic, nc, True)
+    var d_unl = _buf_i(ctx, unlabeled, n, True)
+    var d_s = _buf(ctx, 0, 1, False)
+    var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
+    var d_part = _buf(ctx, 0, max(xn_fold_blocks(nc), 1) if idn else nparts, False)
+    # IDENTICAL's finiteness word (cleared by each step's criterion)
+    var d_fin = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_fin, Int32(0))
+    comptime U = MutUntrackedOrigin
+    var step = _LpKnnStep(
+        d_cols.unsafe_ptr().unsafe_origin_cast[U](), _p(d_vals).unsafe_origin_cast[U](), _p(d_a).unsafe_origin_cast[U](),
+        _p(d_b).unsafe_origin_cast[U](), _p(d_nxt).unsafe_origin_cast[U](), _p(d_ys).unsafe_origin_cast[U](),
+        d_unl.unsafe_ptr().unsafe_origin_cast[U](), _p(d_part).unsafe_origin_cast[U](), _p(d_s).unsafe_origin_cast[U](),
+        d_fin.unsafe_ptr().unsafe_origin_cast[U](), n, k, c, variant, alpha,
+        _lpki_tol_ceil(tol) if idn else Float32(tol), nparts, idn,
+    )
+    var converged = False
+    var n_iter = 0
+    if nc == 0 and idn:
+        # the Python loop over nothing: the empty sum 0 against tol
+        converged = Float64(0) < tol
+        n_iter = 0 if (converged or max_iter <= 0) else max_iter
     else:
-        var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-        var nc = n * c
-        var ctx = xn_ctx()
-        var d_cols = _buf_i(ctx, cols, n * k, True)
-        var d_vals = ctx.enqueue_create_buffer[DType.float32](n * k)
-        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=FP(unsafe_from_address=vals))
-        var d_a = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_copy(dst_buf=d_a, src_ptr=FP(unsafe_from_address=ld))
-        var d_b = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_memset(d_b, Float32(0))
-        var d_nxt = ctx.enqueue_create_buffer[DType.float32](nc)
-        var d_ys = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_copy(dst_buf=d_ys, src_ptr=FP(unsafe_from_address=ystatic))
-        var d_unl = _buf_i(ctx, unlabeled, n, True)
-        var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
-        var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
-        var h_fl = List[Int32](length=2, fill=Int32(0))
-        var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
-        var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var itp: IP = flp + 1
-        var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var tol32 = Float32(tol)
-        var done = 0
-        var converged = False
-        while done < max_iter and not converged:
-            var steps = min(LPK_BATCH, max_iter - done)
-            for _ in range(steps):
-                ctx.enqueue_function[lpk_absdiff_partial_kernel](
-                    cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
-                    grid_dim=nparts, block_dim=LPK_TPB,
-                )
-                ctx.enqueue_function[lpk_check_kernel](
-                    d_part.unsafe_ptr(), Int64(nparts), flp, itp, tol32,
-                    grid_dim=1, block_dim=LPK_TPB,
-                )
-                ctx.enqueue_function[lpk_product_kernel](
-                    d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
-                    Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
-                # the old prev held, then the two names swap (op_lp_iterate)
-                ctx.enqueue_function[lpk_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
-                    Int64(n), Int64(c), Int64(variant), alpha,
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                var t = cur
-                cur = prev
-                prev = t
-            ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
-            ctx.synchronize()
-            converged = h_fl[0] != 0
-            done += steps
-        # steps taken: the loop's n_iter_ whether it converged (it) or ran out
-        var n_iter = Int(h_fl[1])
+        var registers = LoopRegisters(ctx)
+        var timers = LoopTimers("label_propagation.knn")
+        var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+        timers.report()
+        converged = outcome.converged
+        # steps taken: the stop at 1-based iteration s took s - 1 steps;
+        # without a stop every iteration stepped
+        n_iter = outcome.stop_iteration - 1 if converged else max(max_iter, 0)
         if n_iter % 2 == 0:
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_a)
+            _down(ctx, d_a, ld, nc)
         else:
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_b)
+            _down(ctx, d_b, ld, nc)
         ctx.synchronize()
-        var inf = IP(unsafe_from_address=info)
-        inf.unsafe_store(0, Int32(n_iter))
-        inf.unsafe_store(1, Int32(1 if converged else 0))
-        _ = h_fl^
-        _ = d_fl^
-        _ = d_part^
-        _ = d_cols^
-        _ = d_vals^
-        _ = d_a^
-        _ = d_b^
-        _ = d_nxt^
-        _ = d_ys^
-        _ = d_unl^
-        _ = ctx^
+        _ = registers^
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(n_iter))
+    inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = d_fin^
+    _ = d_s^
+    _ = d_part^
+    _ = d_cols^
+    _ = d_vals^
+    _ = d_a^
+    _ = d_b^
+    _ = d_nxt^
+    _ = d_ys^
+    _ = d_unl^
+    _ = ctx^
+

@@ -1,0 +1,24 @@
+{
+  "source": "python/mojolearn/tests/test_krr_options.py::_data",
+  "numpy": "2.5.2",
+  "seed": 3,
+  "generator_sha256": "d17172e8e3703b383c3cfa15c5a1c935641b4e5d8340248f94fe2dec984b3098",
+  "files": [
+    {
+      "file": "x-96x5.f32",
+      "shape": [
+        96,
+        5
+      ],
+      "sha256": "62b8cc5bb3c88ae436e0f11f366cd7459c280dde55a7bfb9e3d8a92709c2d18f"
+    },
+    {
+      "file": "y-96.f32",
+      "shape": [
+        96
+      ],
+      "sha256": "c6a1ad430ae0f51d65edfbca95cbe2fb009fd1cc29fa2742dcd8663e6be3140a"
+    }
+  ],
+  "limits": "Input generation only; no Mojolearn execution, timing or identity evidence."
+}

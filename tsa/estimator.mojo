@@ -41,13 +41,14 @@ as certified across vendors.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from core.hostptr import copy_f32
+from core.transfer import transfer_upload_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTsaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnTsaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTsaContextFastV3"
 
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
@@ -62,22 +63,13 @@ from tsa.impl.stationarity import kpss_test
 def _upload_f32(
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """Copy `n` floats from the caller's memory onto the device.
-
-    The host staging buffer is kept live past the `synchronize` on purpose:
-    Mojo frees a buffer at its LAST USE, and `.unsafe_ptr()` is a use, so
-    without the trailing `_ = host^` the staging allocation can be gone
-    before the copy it feeds has run (mojo-buffer-freed-at-last-use).
+    """Copy `n` floats from the caller's memory onto the device (a buffer
+    of at least one cell). core/transfer.mojo (lane fx-dup-next, 2026-11-19):
+    the copy reads the caller's words in place and is drained before the
+    return. Gone: a pinned host buffer of the whole input per call and a
+    host pass into it.
     """
-    var count = n if n > 0 else 1
-    var buf = ctx.enqueue_create_buffer[DType.float32](count)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    copy_f32(ptr, host.unsafe_ptr(), max(0, n))
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    return transfer_upload_ptr[DType.float32](ctx, ptr, max(0, n), n if n > 0 else 1)
 
 
 def _refuse_empty_shape(batch_size: Int, n_obs: Int, who: String) raises:
@@ -129,8 +121,9 @@ def kpss_test_host(
             _ = ctx^
             return batch_size
     comptime if KPSS_ONE_WAIT:
-        # IDENTICAL on every vendor (lane/fam-timeseries; -D
-        # MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF off): one wait instead of four,
+        # TOMBSTONE: MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF (old path, no A/B recorded; non-owner site, owner expdel2-36-neural-series-linear) named here only; removed 2026-11-15 by lane/expdel2-37-series; code recoverable at 7b328fcfd6.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+        # IDENTICAL on every vendor (lane/fam-timeseries): one wait instead of four,
         # the primitive's kernels (select_d_fast.mojo::kpss_one_wait). False
         # is a refusal, raised by name by the sequence below.
         if kpss_one_wait(
@@ -193,10 +186,27 @@ def select_d_host(
                 d_ptr.unsafe_store(b, Int32(Int(res[b * KPSS_PACK_W + 3])))
             _ = ctx^
             return batch_size
-    var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
-    var chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
+    # The upload is queued, not waited on (lane fb15-sync-counts, 2026-11-18;
+    # `_upload_f32` waited here, a second wait per call): `select_d`'s rounds
+    # follow it on the same stream and end in their one wait. The host stage
+    # is kept alive past that wait; on a refusal the stream is drained before
+    # the stage is freed.
+    var count = batch_size * n_obs
+    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
+    var y = ctx.enqueue_create_buffer[DType.float32](count)
+    copy_f32(y_ptr, host.unsafe_ptr(), count)
+    ctx.enqueue_copy(dst_buf=y, src_ptr=host.unsafe_ptr())
+    var chosen = List[Int32]()
+    try:
+        chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
+    except error:
+        ctx.synchronize()
+        _ = host^
+        _ = y^
+        raise error^
     for b in range(batch_size):
         d_ptr.unsafe_store(b, chosen[b])
+    _ = host^
     _ = y^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^

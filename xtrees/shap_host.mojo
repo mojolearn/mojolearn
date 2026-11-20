@@ -6,7 +6,6 @@ order of xtrees/shap_device.mojo, so its bits are the GPU columns' bits.
 The unit loops are split over host tasks; every unit writes its own cells
 (the integer atomics of the cover and the meta words are order free), so the
 task count moves no bit. GPU installs never import this file."""
-from std.ffi import _Global
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from xtrees.shap import (
@@ -14,6 +13,7 @@ from xtrees.shap import (
     shap_parent_unit, shap_depth_unit, shap_cover_unit, shap_slot_unit, shap_ev_part_unit, shap_ev_fold_unit,
     shap_tree_unit, shap_fold_unit,
 )
+from core.shared_slot import SharedSlot
 
 comptime _BUF_FLOATS = 32 * 1024 * 1024
 
@@ -209,7 +209,7 @@ struct _HostShapCache(Defaultable, Movable):
         self.entries = Dict[Int, _CachedHostShap]()
         self.next_id = 1
 
-comptime _SHAP_HOST_CACHE = _Global[StorageType=_HostShapCache, name="MojoTreesT44HostCache", init_fn=_HostShapCache.__init__]
+comptime _SHAP_HOST_CACHE = SharedSlot[_HostShapCache, "MojolearnTreesT44HostCacheV1"]
 
 def shap_cache_create(forest: List[Int], tscale: Int, cover: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int) raises -> Int:
     var state = _SHAP_HOST_CACHE.get_or_create_ptr()

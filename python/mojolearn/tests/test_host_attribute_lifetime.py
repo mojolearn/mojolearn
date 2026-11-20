@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.needs_installed_package
 @pytest.mark.parametrize('route', ['generic', 'mixin'])
 def test_missing_attribute_keeps_owner_and_original_exception(tmp_path, route):
     code = r'''
@@ -82,7 +83,10 @@ def test_saved_host_public_predict_uses_connected_cpu_owner(tmp_path, name):
     explicit = np.asarray(ml.host_predict(archive, query))
     np.testing.assert_array_equal(actual, explicit)
     fields = object.__getattribute__(model, '__dict__')
-    held = fields.get('_resident_holder', {}).get('index')
+    # A dict holder (neighbors) names its resident index; AgglomerativeClustering's holder is the typed native
+    # `_AggloHolder` since c4a76ec7fa, whose owner is the connected module checked above.
+    holder = fields.get('_resident_holder')
+    held = holder.get('index') if type(holder) is dict else None
     if held is not None:
         assert held[2] is module, 'saved host prediction selected a non-CPU resident owner'
     # Repeated missing accesses used by the crosscheck must not corrupt the
@@ -128,17 +132,25 @@ def test_host_availability_does_not_admit_replaced_descriptor(tmp_path, monkeypa
     assert 'predict' not in inherited.get(host.HostAgglomerativeClustering, {})
 
 
+# The saved host models' predict reaches the CPU module through its native
+# descriptor factory (DBSCAN and Agglomerative: `dbscan_native_api_v1`,
+# bindings/dbscan_native_boundary_door.mojo; Spectral: `spectral_native_api_v1`,
+# bindings/spectral_native_boundary_unpack.mojo), read from the connected
+# module's live namespace on every call. The legacy argument-list exports
+# (`labeled_reference_predict`, `spectral_predict`) are no longer called, so
+# sabotaging them proved nothing.
 @pytest.mark.parametrize('name,entry_name', [
-    ('DBSCAN', 'labeled_reference_predict'),
-    ('AgglomerativeClustering', 'labeled_reference_predict'),
-    ('SpectralClustering', 'spectral_predict'),
+    ('DBSCAN', 'dbscan_native_api_v1'),
+    ('AgglomerativeClustering', 'dbscan_native_api_v1'),
+    ('SpectralClustering', 'spectral_native_api_v1'),
 ])
 def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, entry_name):
     """Native-only sabotage distinguishes executing CPU from GPU-vs-GPU equality.
 
-    Reconnect only this fixture's CPU export to a different compiled zero-arg
-    entry. Both prediction entries take two arguments. Its native arity refusal
-    must be observed by the public call; no Python callback computes or runs.
+    Reconnect only this fixture's CPU descriptor factory to a different
+    compiled entry of the same module (its numeric-mode reader, which returns
+    an int, not the ABI capsule). The public call must reach that CPU entry and
+    refuse the non-capsule natively; no Python callback computes or runs.
     """
     import mojolearn as ml
     from mojolearn._native_family_bridge import shared_context
@@ -150,31 +162,17 @@ def test_expected_cpu_execution_entry_is_reached(tmp_path, monkeypatch, name, en
     row = next(row for row in rows if row[0] is type(model))
     module = row[2]
     replacement = vars(module)[row[4]]
-    # Mojo's generated native arity guard currently raises plain Exception
-    # containing the TypeError label, rather than CPython TypeError. Retained
-    # installed evidence: release-green-20261029/attempt1/focused.log. Capture
-    # that exact native refusal and require the public path to propagate it.
-    with pytest.raises(Exception, match=r'^TypeError: .*takes 0 positional arguments but 2 were given') as expected:
-        replacement([], [])
-    assert type(expected.value) is Exception
+    assert type(replacement()) is int
     monkeypatch.setattr(module, entry_name, replacement)
     # This test deliberately reconnects the native export, so the expected
     # failure occurs at execution rather than the export-identity guard above.
     exports = tuple((key, replacement if key == entry_name else value) for key, value in row[3])
+    assert any(key == entry_name for key, _ in row[3])
     replacement_row = row[:3] + (exports, row[4])
     monkeypatch.setitem(context, 'family_host_binding_connections',
                         tuple(replacement_row if value is row else value for value in rows))
-    # DBSCAN and Spectral preserve the generated pending exception;
-    # Agglomerative translates its explicit label to CPython TypeError.
-    # Compare the exact arity diagnostic after that existing translation.
-    error_type = TypeError if name == 'AgglomerativeClustering' else Exception
-    with pytest.raises(error_type) as actual:
+    with pytest.raises(Exception, match='neural native ABI: invalid capsule or version'):
         model.predict(np.array([[1, 2]], dtype=np.float32))
-    assert type(actual.value) is error_type
-    expected_message = str(expected.value)
-    if error_type is TypeError:
-        expected_message = expected_message.removeprefix('TypeError: ')
-    assert actual.value.args == (expected_message,)
 
 
 def test_public_fit_save_host_load_and_prediction_roundtrip(tmp_path):

@@ -1,0 +1,23 @@
+diff --git a/sequence/model_outputs_device.mojo b/sequence/model_outputs_device.mojo
+index d1c924ad10..500ce77988 100644
+--- a/sequence/model_outputs_device.mojo
++++ b/sequence/model_outputs_device.mojo
+@@ -14,8 +14,7 @@ from sequence.neural_model_dispatch import NeuralModelRequest, MODEL_ARGMAX, MOD
+ # Same definitions as bindings/hotpath_device.mojo; these switches describe
+ # general dtype/size coverage, with no benchmark-specific dispatch.
+ comptime _OUTPUT_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not HOTPATH_SABOTAGE and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+-# TOMBSTONE: MOJOLEARN_IDN_HPDEV_REDUCE_OFF (unmeasured old path) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 5e88534639.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_REDUCE_OFF.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
++comptime _OUTPUT_REDUCE = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
+ comptime _OUTPUT_ELEM = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_ELEM_OFF"]()
+ comptime _OUTPUT_INIT = _OUTPUT_DEVICE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+ 
+@@ -35,7 +34,7 @@ def model_output_device(mut ex: DeviceExec, op: Int, r: NeuralModelRequest) rais
+             raise Error("argmax_rows_f32: more rows or columns than the device argmax holds")
+         device_argmax_rows(ex.ctx, a[0], False, n, p[1], a[1])
+         return 0
+-    comptime if _OUTPUT_DEVICE:
++    comptime if _OUTPUT_REDUCE:
+         if op == MODEL_MIN and n >= 1 and n <= HPD_MAX_N and a[0] != 0:
+             if a[1] == 0:
+                 raise Error("native model: null minimum output")

@@ -268,7 +268,6 @@ counts, and local counts are filled just before partitioning."
 """
 
 from std.atomic import Atomic, Ordering
-from std.sys.compile import is_defined
 from core.device_mutex import claim_device_mutex
 from std.bit import log2_floor
 from max.gpu.memory import AddressSpace
@@ -277,9 +276,9 @@ from max.gpu.memory import AddressSpace
 # bin-typed. Same direction here; `bins.mojo` imports nothing from this
 # file, so there is no cycle -- exactly their arrangement.
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
-from std.gpu import WARP_SIZE, block_dim, thread_idx
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, thread_idx
+from max.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import shuffle_idx
 from max.gpu.sync import barrier
 
 
@@ -759,8 +758,9 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `__threadfence()` at `:255`, as the shared claim: acquire-load
         # spin, weak relaxed claim, ACQUIRE FENCE. See DEVIATION 106 above
         # and `core/device_mutex.mojo` for why the fence is the repair.
-        comptime if not is_defined["MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX"]():
-            claim_device_mutex(mutex, Int32(0), Int32(1))
+        # TOMBSTONE: MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX (unmeasured arm) deleted 2026-11-15 by expdel2-39-trees; code recoverable at the deletion commit^.
+        # Restore: git apply experiments/removed/MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX.patch
+        claim_device_mutex(mutex, Int32(0), Int32(1))
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because
@@ -798,8 +798,7 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `:270-271` -- their `__threadfence(); atomicExch(mutex,
         # 0);` folded into one RELEASE store, which orders the
         # publish above before the handback.
-        comptime if not is_defined["MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX"]():
-            Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
+        Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
 
     @always_inline
     def eval_best_split_pinned[
@@ -952,7 +951,7 @@ def init_split_kernel[
     vendor primitive being stood in for and nothing is unfused by writing
     it out.
     """
-    from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+    from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)

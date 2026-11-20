@@ -1,0 +1,73 @@
+diff --git b/gbdt/gpu_data/sym_feat_switches.mojo a/gbdt/gpu_data/sym_feat_switches.mojo
+index 8b7ffc3e76..f524eb97c9 100644
+--- b/gbdt/gpu_data/sym_feat_switches.mojo
++++ a/gbdt/gpu_data/sym_feat_switches.mojo
+@@ -3,7 +3,8 @@ feature set outside histograms and leaf estimation (quantization, index
+ build, held-out arm, predict, bootstrap seeds). Every switch is compiled
+ ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
+ and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
+-main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
++main's code unchanged. `-D MOJOLEARN_SYM_FEAT_ALL` turns on every switch
++that composes. One module so `train.mojo`, `gls_borders_device.mojo`,
+ `doc_parallel_boosting.mojo`, `resident_model.mojo` and `bootstrap.mojo`
+ read the same flags without importing each other."""
+ from std.sys.compile import is_defined
+@@ -13,9 +14,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ comptime SYM_FEAT_FAST_APPLE = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ )
+-# TOMBSTONE: MOJOLEARN_SYM_FEAT_ALL (NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%) deleted 2026-11-15 by
+-# lane/expdel-05-trees; code recoverable at 54b6a264fc.
+-# Restore: git apply experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch
++#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
++#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
++#: source), never timed. Umbrella: all six.
++comptime SYM_FEAT_ALL = (
++    SYM_FEAT_FAST_APPLE and is_defined["MOJOLEARN_SYM_FEAT_ALL"]()
++)
+ 
+ #: `-D MOJOLEARN_GBDT_INDEX_PACK_DEVICE`: the compressed index is written by
+ #: ONE `pack_cindex_words_kernel` launch over every float feature (grid: row
+@@ -28,7 +32,7 @@ comptime SYM_FEAT_FAST_APPLE = (
+ #: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`,
+ #: as main's binarize kernel (subnormal borders on Metal).
+ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
+-    is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]()
++    is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]() or SYM_FEAT_ALL
+ )
+ #: `-D MOJOLEARN_GBDT_QUANT_DEVICE`: the float columns go host to device
+ #: ONCE, into one resident column-major matrix, before the border build;
+@@ -55,7 +59,7 @@ comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
+ #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+ #: source), never timed.
+ comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
+-    is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"]()
++    is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"]() or SYM_FEAT_ALL
+ )
+ #: `-D MOJOLEARN_GBDT_EVAL_FUSED`: the held-out arm's per-tree apply takes
+ #: ONE packed upload (split records and leaf values in one pinned buffer)
+@@ -66,7 +70,7 @@ comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
+ #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+ #: source), never timed.
+ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
+-    is_defined["MOJOLEARN_GBDT_EVAL_FUSED"]()
++    is_defined["MOJOLEARN_GBDT_EVAL_FUSED"]() or SYM_FEAT_ALL
+ )
+ #: `-D MOJOLEARN_GBDT_PREDICT_PACKED`: the resident predict quantizes with
+ #: ONE `pack_cindex_words_kernel` launch (not one per feature) and applies
+@@ -76,7 +80,7 @@ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
+ #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+ #: source), never timed.
+ comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
+-    is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]()
++    is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]() or SYM_FEAT_ALL
+ )
+ #: `-D MOJOLEARN_GBDT_BOOT_DEVICE`: the 65,536 bootstrap seeds are filled
+ #: by one launch (`bootstrap_seed_fill_kernel`, splitmix64 of
+@@ -86,5 +90,5 @@ comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
+ #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+ #: source), never timed.
+ comptime GBDT_BOOT_DEVICE = SYM_FEAT_FAST_APPLE and (
+-    is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]()
++    is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]() or SYM_FEAT_ALL
+ )

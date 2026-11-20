@@ -8,9 +8,14 @@ MOJOLEARN_TRAIN_RESUME_INPUT: a foreign head8 checkpoint, only for resume16.
 MOJOLEARN_TRAIN_EXPECT_VENDOR: cuda or hip, verified from the compiled binary.
 MOJOLEARN_TRAIN_SEED: existing decimal seed spelling; default SEED_BASE.
 The descriptor always plans 16 steps, including a checkpoint written at step 8.
+
+Launch it through `tools/training_cross_vendor_resume.py launch`: that test
+controller opens the incoming inode once, bounds its size, seals an immutable
+memfd, O_EXCL-reserves the checkpoint and receipt, and hands the driver the
+inherited descriptor numbers in MOJOLEARN_TRAIN_RESUME_{INPUT,OUTPUT,RECEIPT}_FD.
+The driver imports no Python; it reads and writes only /proc/self/fd/<n>.
 """
 from std.memory import bitcast
-from std.python import Python
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
@@ -31,7 +36,7 @@ from training.checks.checkpoint_check import (
 from training.checks.train_loop import (
     ARM_NONE, SEED_BASE, TRAIN_B, TRAIN_L, TRAIN_ROPE_POSITIONS,
     TRAIN_ROPE_THETA, TrainBuffers, TrainConfig, digest_of_lists, env_str,
-    env_u64, hex16, train_batch_ids, train_dims, train_offsets, train_step,
+    env_int, env_u64, hex16, train_batch_ids, train_dims, train_offsets, train_step,
     unpack_params,
 )
 
@@ -66,6 +71,14 @@ def _require_descriptor(ck: Checkpoint, cfg: TrainConfig, completed: Int) raises
     _require_finite(ck.v_state, "v_state")
 
 
+def _fd_sink(name: String) raises -> String:
+    """`/proc/self/fd/<n>` of a descriptor the launcher passed in `name`."""
+    var fd = env_int(name, -1)
+    if fd < 0:
+        raise Error("resume: " + name + " is unset; run through tools/training_cross_vendor_resume.py launch")
+    return String("/proc/self/fd/") + String(fd)
+
+
 def main() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("resume: only NUMERIC_IDENTICAL is allowed")
@@ -88,16 +101,13 @@ def main() raises:
         raise Error("resume: input is required exactly for resume16")
     var seed = env_u64("MOJOLEARN_TRAIN_SEED", SEED_BASE)
     var cfg = TrainConfig.for_arm(16, seed, ARM_NONE)
-    # The helper opens the incoming inode once and bounds its size BEFORE
-    # reading it, then seals an immutable memfd. Existing codec and hash reads
-    # use that same capture. Outputs are O_EXCL-reserved before GPU work and
-    # written only through owned descriptors, never re-opened caller paths.
-    var sysmod = Python.import_module("sys")
-    _ = sysmod.path.insert(0, ".")
-    var file_helper = Python.import_module("tools.training_cross_vendor_resume")
-    var files = file_helper.capture_native_paths(input_path, output)
-    var output_sink = String("/proc/self/fd/") + String(Int(py=files.output_fd))
-    var receipt_sink = String("/proc/self/fd/") + String(Int(py=files.receipt_fd))
+    # The launcher opened the incoming inode once and bounded its size BEFORE
+    # reading it, then sealed an immutable memfd. Existing codec and hash reads
+    # use that same capture. Outputs were O_EXCL-reserved before GPU work and
+    # are written only through the inherited descriptors, never re-opened
+    # caller paths; the launcher checks and fsyncs them after this exits.
+    var output_sink = _fd_sink("MOJOLEARN_TRAIN_RESUME_OUTPUT_FD")
+    var receipt_sink = _fd_sink("MOJOLEARN_TRAIN_RESUME_RECEIPT_FD")
     var first = 1
     var last = 16
     if action == "head8":
@@ -106,7 +116,7 @@ def main() raises:
     var input_hash = String("")
     if action == "resume16":
         # Verify codec hash/layout and every descriptor bit BEFORE device work.
-        var captured_input = String("/proc/self/fd/") + String(Int(py=files.input_fd))
+        var captured_input = _fd_sink("MOJOLEARN_TRAIN_RESUME_INPUT_FD")
         initial = load_checkpoint(captured_input, train_offsets(), train_names())
         _require_descriptor(initial, cfg, 8)
         var raw = read_file_bytes(captured_input)
@@ -157,7 +167,6 @@ def main() raises:
                  + "\",\"checkpoint_h_file\":\"" + hashes.h_file_hex()
                  + "\",\"checkpoint_bytes\":" + String(hashes.bytes)
                  + ",\"steps\":[" + records + "]}\n")
-    _ = files.finish()
     print("TRAINING RESUME COMPLETE " + action + " " + vendor + " " + hashes.h_all_hex())
     _ = final^
     _ = initial^
@@ -167,4 +176,3 @@ def main() raises:
     _ = w^
     _ = tb^
     _ = ctx^
-    _ = files^

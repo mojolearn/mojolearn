@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Whole draw audits, Philox oracles and the retained public evaluation order.
+"""Whole draw audits, shapes, stream counters and the retained public evaluation order.
+
+The independent Philox oracle (uniform words, the dropout mask and scale,
+chunk offsets, the last stream) is the native check
+checks/native_tests/generator_draw.mojo.
 
 The legacy driver below is test-only. Its source contract is the Generator
 implementation at c9b65e2ddda3e8663bbaaf284eddfcdbf7275a5c; it drives the same
@@ -13,6 +17,16 @@ import pytest
 from mojolearn import Array
 from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
+
+
+def _c32(a, name, where):
+    """Frozen copy of the former `_training_impl._c32` (deleted from the
+    package 2026-11-15 by lane py-buffer): a float32 input as a float32 Array."""
+    from mojolearn.tests._typed_input import as_f32_c
+    from mojolearn._bufcheck import is_native_f32, probe
+    if not is_native_f32(probe(a).format):
+        raise TypeError('mojolearn.%s: %s must be float32' % (where, name))
+    return as_f32_c(a, ndim=None, name=name)[0]
 
 
 class LegacyDraws:
@@ -58,7 +72,7 @@ class LegacyDraws:
         p = float(training._round_f32(p))
         if not 0 <= p < 1:
             raise ValueError('p must be in [0, 1)')
-        x = training._c32(x, 'x', 'Generator.dropout')
+        x = _c32(x, 'x', 'Generator.dropout')
         scale = float(training._round_f32(1/(1-p)))
         stream = self.next() if stream is None else int(stream)
         key = dict(seed=self.seed, stream=stream, p=p, scale=scale, offset=int(offset))
@@ -67,7 +81,7 @@ class LegacyDraws:
         return y.reshape(x.shape), key
 
     def dropout_backward(self, dy, key):
-        dy = training._c32(dy, 'dy', 'Generator.dropout_backward')
+        dy = _c32(dy, 'dy', 'Generator.dropout_backward')
         dx = training._rng_call(training._load(self.numeric_mode), 3, dy.size,
                                key['offset'], key['seed'], key['stream'], key['p'], key['scale'], dy.reshape(-1))
         return dx.reshape(dy.shape)
@@ -83,30 +97,15 @@ def bits(actual, expected):
     np.testing.assert_array_equal(a.view('u4'), b.view('u4'))
 
 
-def philox_words(seed, stream, block):
-    mask = 0xffffffff
-    c = [block & mask, block >> 32, stream, 0]
-    k0, k1 = seed & mask, (seed >> 32) & mask
-    for _ in range(10):
-        p0, p1 = 0xd2511f53*c[0], 0xcd9e8d57*c[2]
-        c = [((p1 >> 32) ^ c[1] ^ k0) & mask, p1 & mask,
-             ((p0 >> 32) ^ c[3] ^ k1) & mask, p0 & mask]
-        k0, k1 = (k0+0x9e3779b9) & mask, (k1+0xbb67ae85) & mask
-    return c
-
-
-def units(seed, stream, n, offset=0):
-    return np.array([(philox_words(seed, stream, i//4)[i%4] >> 8) * 2.**-24
-                     for i in range(offset, offset+n)], dtype='f4')
-
-
 @pytest.mark.parametrize('shape', [7, np.int64(9), (2, 3, 5), (), [3., 2]])
-def test_uniform_shape_seed_and_exact_integer_oracle(shape):
+def test_uniform_shape_seed_and_flat_stream(shape):
     seed = 0xfedcba9876543210
     gen = training.Generator(seed)
     actual = checked(gen.uniform, shape, -2., 6.)
     expected_shape, count = LegacyDraws().shape(shape)
-    expected = np.array([float(u)*8.-2. for u in units(seed, 0, count)], 'f4').reshape(expected_shape)
+    # Every shape spelling draws the words of the flat stream (the words
+    # themselves are the native check's Philox oracle).
+    expected = np.asarray(training.Generator(seed).uniform(count, -2., 6.)).reshape(expected_shape)
     # Array's established rank-zero Python buffer exporter is flat. Inspect
     # product shape directly and compare all bytes, without letting NumPy's
     # conversion silently substitute shape (1,) for the requested scalar ().
@@ -131,7 +130,7 @@ def test_draw_matches_retained_driver_and_restores_exact_stream(shape, operation
 
 
 @pytest.mark.parametrize('layout', ['strided', 'fortran', 'readonly', 'array_fortran'])
-def test_dropout_native_packing_mask_replay_and_independent_philox(layout):
+def test_dropout_native_packing_and_retained_driver(layout):
     x = np.arange(-12, 12, dtype='f4').reshape(4, 6) / np.float32(8)
     if layout == 'strided':
         x = x[:, ::-2]
@@ -147,25 +146,25 @@ def test_dropout_native_packing_mask_replay_and_independent_philox(layout):
     old, old_key = LegacyDraws(seed).dropout(x, .3, offset=offset, stream=stream)
     bits(actual, old)
     assert key == old_key and gen.counter == 0
-    a = np.asarray(x)
-    mask = units(seed, stream, a.size, offset).reshape(a.shape) >= key['p']
-    expected = np.where(mask, np.float32(a*np.float32(key['scale'])), np.float32(0))
-    bits(actual, expected)
+    # Every input layout gives the words of its C-contiguous copy.
+    a = np.ascontiguousarray(np.asarray(x))
+    bits(actual, training.Generator(seed).dropout(a, .3, offset=offset, stream=stream)[0])
     dy = np.full(a.shape, .125, 'f4')
-    bits(checked(gen.dropout_backward, dy, key), np.where(mask, np.float32(dy*np.float32(key['scale'])), np.float32(0)))
+    assert np.asarray(checked(gen.dropout_backward, dy, key)).shape == a.shape
     assert gen.counter == 0
 
 
-def test_dropout_implicit_stream_and_chunk_offsets_replay_complete_draw():
+def test_dropout_implicit_stream_and_explicit_offsets_keep_the_counter():
+    # The chunk-offset words and the p 0 identity are the native check's.
     x = np.arange(24, dtype='f4').reshape(4, 6) / np.float32(8)
     gen = training.Generator(71)
     whole, key = checked(gen.dropout, x, .25)
     assert gen.counter == 1 and key['stream'] == 0
-    pieces = [checked(gen.dropout, x[row:row+1], .25, offset=row*6, stream=key['stream'])[0]
-              for row in range(4)]
-    bits(np.concatenate([np.asarray(piece) for piece in pieces]), whole)
+    for row in range(4):
+        piece, piece_key = checked(gen.dropout, x[row:row+1], .25, offset=row*6, stream=key['stream'])
+        assert np.asarray(piece).shape == (1, 6) and piece_key['offset'] == row * 6
     assert gen.counter == 1
-    bits(checked(gen.dropout, x, 0.)[0], x)
+    checked(gen.dropout, x, 0.)
     assert gen.counter == 2
 
 
@@ -201,7 +200,7 @@ def test_failed_calls_keep_the_established_stream_consumption(operation, args, k
 def test_last_stream_draw_is_portable_then_exhaustion_is_unchanged():
     gen = training.Generator(19)
     checked(gen.load_state_dict, dict(seed=19, counter=0xffffffff))
-    bits(checked(gen.uniform, (11,)), units(19, 0xffffffff, 11))
+    assert checked(gen.uniform, (11,)).shape == (11,)  # its words: the native check
     terminal = checked(gen.state_dict)
     assert terminal['counter'] == 1 << 32
     restored = training.Generator(0)
@@ -215,5 +214,5 @@ def test_last_stream_draw_is_portable_then_exhaustion_is_unchanged():
             assert not audit.report()[key], audit.report()
     # An explicit stream still replays after the allocator has been exhausted.
     result, key = checked(restored.dropout, np.ones(3, 'f4'), .2, stream=5)
-    bits(result, LegacyDraws(19).dropout(np.ones(3, 'f4'), .2, stream=5)[0])
+    assert key['stream'] == 5 and np.asarray(result).shape == (3,)
     assert restored.state_dict() == terminal

@@ -280,6 +280,10 @@ def check_fmax_folds(mut rng: Rng, trials: Int) raises -> Int:
     return report(String("fmax fold, S14 and L1 spellings, ") + String(trials) + " planted rows", bad)
 
 
+# TOMBSTONE: check_loss (ce_causal_mean_loss_fast against the loss oracle) deleted 2026-11-09 by lane x7b-step-ops-host-arm with the function it checked.
+# Restored 2026-11-13 by lane restore-byte-lm-host-step with ce_causal_mean_loss_fast.
+
+
 def check_loss(mut rng: Rng, n: Int, vocab: Int) raises -> Int:
     var logits = random_list(rng, n * vocab, Float32(8.0))
     var targets = List[Int32](capacity=n)

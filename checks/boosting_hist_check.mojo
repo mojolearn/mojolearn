@@ -155,7 +155,7 @@ def check_boosting_histogram(
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var host_bin = List[List[Int]]()
@@ -178,7 +178,7 @@ def check_boosting_histogram(
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -217,7 +217,7 @@ def check_boosting_histogram(
             g_mag += -g
         else:
             g_mag += g
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     # `choose_scale`'s contract is a sum of MAGNITUDES that bounds every
     # partial the device forms, and one scale serves both planes, so the
@@ -241,7 +241,7 @@ def check_boosting_histogram(
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     # ---- the partitions --------------------------------------------------
     # TWO live partitions, so a partition OFFSET is exercised and not only a
@@ -278,10 +278,10 @@ def check_boosting_histogram(
     for i in range(n_live):
         h_off.unsafe_ptr().unsafe_store(i, UInt32(off[i]))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(siz[i]))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dense, src_ptr=h_dense.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
+    upload_host_into[DType.uint32](ctx, ids, h_ids)
+    upload_host_into[DType.uint32](ctx, dense, h_dense)
 
     var hist_cells = max_leaves * stat_count * n_bf
     var hist = ctx.enqueue_create_buffer[DType.float32](hist_cells)
@@ -389,7 +389,7 @@ def check_boosting_histogram(
     var ci_good = ctx.enqueue_create_host_buffer[DType.uint32](
         n_rows * lay.columns
     )
-    ctx.enqueue_copy(dst_ptr=ci_good.unsafe_ptr(), src_buf=cindex)
+    download_host_into[DType.uint32](ctx, cindex, ci_good)
     ctx.synchronize()
     var ci_bad = ctx.enqueue_create_host_buffer[DType.uint32](
         n_rows * lay.columns
@@ -401,7 +401,7 @@ def check_boosting_histogram(
             )
         else:
             ci_bad.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=ci_bad.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, ci_bad)
     ctx.synchronize()
 
     var broken = run_hist_arm(
@@ -542,7 +542,7 @@ def run_hist_arm(
 
     var cells = max_leaves * stat_count * hist_cells_per_leaf
     var out = ctx.enqueue_create_host_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     return out^
 
@@ -589,7 +589,7 @@ def compare_cells(
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU)".
     # Defaults only: 8192 rows x 16 half-byte features at 15 folds is the
@@ -598,3 +598,22 @@ def main() raises:
     # and check nothing this file exists for.
     print("half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU):")
     check_boosting_histogram()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("boosting_hist_check", cpu=False, gpu=True, serial="", run=run_cases)

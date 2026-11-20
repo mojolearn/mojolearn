@@ -130,9 +130,10 @@ from hierarchy.impl.cluster.detail.mst import build_sorted_mst
 from hierarchy.impl.linkage import single_linkage
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 
 def _mode_name() -> String:
@@ -184,9 +185,8 @@ def _upload(
     for i in range(pad):
         host.unsafe_ptr().unsafe_store(m * d + i, poison)
     var dev = ctx.enqueue_create_buffer[DType.float32](m * d + pad)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -194,12 +194,11 @@ def _copy_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) rais
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
+    download_host_into[DType.float32](ctx, v, h)
     ctx.synchronize()
     var out = List[Float32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = v^
     return out^
 
@@ -208,12 +207,11 @@ def _copy_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.synchronize()
     var v = buf.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
+    download_host_into[DType.int32](ctx, v, h)
     ctx.synchronize()
     var out = List[Int32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = v^
     return out^
 
@@ -1086,9 +1084,8 @@ def _upload_list(ctx: DeviceContext, vals: List[Float32]) raises -> DeviceBuffer
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, vals[i])
     var dev = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 

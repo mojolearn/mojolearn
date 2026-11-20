@@ -1,0 +1,784 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 0d78980ecb..e3a214bb05 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -2173,8 +2173,177 @@ def _route_a_epi[EPI: Int](
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) pack kernel, one-product launcher and switch deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
++# lane fx-gemm-dx-concat (2026-11-19, `-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`,
++# default OFF, OPEN: no A/B yet). BITS CHANGE under the arm, on every column
++# and in the host oracle together (transformer/checks/
++# transformer_backward_oracle.mojo reads the same define).
++#
++# The q/k/v fan-in at d(norm1.out) (S29-32) as ONE product over the
++# concatenated contraction axis instead of three products and
++# `bwd_add3_kernel`:
++#
++#   K  = qw + kw + kw                       (q_width, kv_width, kv_width)
++#   dP = [dQ | dK | dV]   [M, K]   dP[i, p] = dQ[i, p]            p < qw
++#                                             dK[i, p - qw]       qw <= p < qw + kw
++#                                             dV[i, p - qw - kw]  otherwise
++#   Wc = [Wq; Wk; Wv]     [K, dm]  Wc[p, j] = the same three ranges of rows
++#   d(norm1.out)[i, j] = GEMM_contract(dP, Wc)[i, j] at contraction length K:
++#       (L, P) = contract_partition(K)
++#       s_t = chain over p in [t L, min((t + 1) L, K)) ascending, seeded +0.0:
++#             acc = ftz(fma(ftz(dP[i, p]), ftz(Wc[p, j]), acc))
++#       cell = ftz(T(s_0 .. s_{P-1})), T the contract's adjacent-pair
++#              balanced tree, every node ftz(x + y)
++#   in the forward-use order q, k, v (the order `bwd_add3_kernel` pinned).
++#   It REPLACES ftz(ftz(ftz(ftz(t_q) + ftz(t_k))) + ftz(t_v)) with t_x the
++#   contract product of member x at its own width. No join remains: the
++#   three members are one chain-and-tree, so there is no seed and no
++#   three-term order left to pin beyond the order of p.
++#
++# The call row is `gemm_backward_a_call(OP_NT, M, K, dm)`: the `dA` of a
++# forward `[M, dm] . [K, dm]^T`, exactly the row the three members take one
++# by one, so the route, the plan and the side flag are the routing door's.
++#
++# dP and Wc are bit copies made by ONE launch of
++# `bwd_dx_concat_pack_kernel` into two stage scratch buffers. Launches for
++# the fan-in dX: pack 1 + one product, against three products + add3.
++#
++# `MOJOLEARN_TRANSFORMER_SABOTAGE_B_FANIN_ORDER_QKV_REVERSED` is REFUSED with
++# this arm (`bwd_dx_concat3`): its seam, `bwd_add3_kernel`, is not launched,
++# so the arm would be reported as "did not bite". `B_FANIN_ZERO_SEED` still
++# reaches the two-term joins and is left alone.
++comptime BWD_GEMM_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
++
++
++def bwd_dx_concat_pack_kernel(
++    dcat: MutPointer[Float32, MutAnyOrigin],
++    wcat: MutPointer[Float32, MutAnyOrigin],
++    da: MutPointer[Float32, MutAnyOrigin],
++    db: MutPointer[Float32, MutAnyOrigin],
++    dc: MutPointer[Float32, MutAnyOrigin],
++    wa: MutPointer[Float32, MutAnyOrigin],
++    wb: MutPointer[Float32, MutAnyOrigin],
++    wc: MutPointer[Float32, MutAnyOrigin],
++    m_in: Int32,
++    dm_in: Int32,
++    na_in: Int32,
++    nb_in: Int32,
++    nc_in: Int32,
++):
++    """The operands of the concatenated fan-in product, as BIT COPIES.
++
++    `dcat [M, K]` = `[da | db | dc]` (member gradients `[M, na]`, `[M, nb]`,
++    `[M, nc]`), `wcat [K, dm]` = `[wa; wb; wc]` (member weights `[n, dm]`),
++    `K = na + nb + nc`. No arithmetic and no flush: the product flushes at
++    its own loads, as it does for the members today.
++
++    One thread per `(r, c)` with `c < max(na, nb, nc)` and
++    `r < max(M, dm)`. For the gradients it is (row r, member column c); for
++    the weights it is (member row c, column r). Every copy is a guarded load
++    and store on a pointer that is fixed at the call, never a source chosen
++    by a branch: no pointer is selected (the Metal trap), and each cell of
++    both outputs is written by exactly one thread."""
++    var m = Int(m_in)
++    var dm = Int(dm_in)
++    var na = Int(na_in)
++    var nb = Int(nb_in)
++    var nc = Int(nc_in)
++    var nmax = na
++    if nb > nmax:
++        nmax = nb
++    if nc > nmax:
++        nmax = nc
++    var rows = m
++    if dm > rows:
++        rows = dm
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= rows * nmax:
++        return
++    var r = i // nmax
++    var c = i - r * nmax
++    var nt = na + nb + nc
++    if r < m:
++        if c < na:
++            dcat.unsafe_store(r * nt + c, da.unsafe_load(r * na + c))
++        if c < nb:
++            dcat.unsafe_store(r * nt + na + c, db.unsafe_load(r * nb + c))
++        if c < nc:
++            dcat.unsafe_store(r * nt + na + nb + c, dc.unsafe_load(r * nc + c))
++    if r < dm:
++        if c < na:
++            wcat.unsafe_store(c * dm + r, wa.unsafe_load(c * dm + r))
++        if c < nb:
++            wcat.unsafe_store((na + c) * dm + r, wb.unsafe_load(c * dm + r))
++        if c < nc:
++            wcat.unsafe_store((na + nb + c) * dm + r, wc.unsafe_load(c * dm + r))
++
++
++def bwd_dx_concat3[LIST: Bool = False](
++    ctx: DeviceContext,
++    mut workspace: GemmWorkspace,
++    mut out_buf: DeviceBuffer[DType.float32],
++    mut dcat: DeviceBuffer[DType.float32],
++    mut wcat: DeviceBuffer[DType.float32],
++    mut da: DeviceBuffer[DType.float32],
++    mut db: DeviceBuffer[DType.float32],
++    mut dc: DeviceBuffer[DType.float32],
++    mut wa: DeviceBuffer[DType.float32],
++    mut wb: DeviceBuffer[DType.float32],
++    mut wc: DeviceBuffer[DType.float32],
++    m: Int,
++    na: Int,
++    nb: Int,
++    nc: Int,
++    dm: Int,
++) raises:
++    """The three-member fan-in `dX` as one product (the arm's header above):
++    one pack launch, then `_route_a` at the forward shape `(m, na+nb+nc, dm)`
++    into `out_buf [m, dm]`. `dcat` and `wcat` are the stage owner's scratch
++    (at least `m * K` and `K * dm` floats) and, like every operand here,
++    stay alive until the caller's completion wait. `LIST` as `_route_a`'s:
++    the product is queued on the work list and the caller runs it; the pack
++    launch is already on the queue ahead of it."""
++    comptime assert not (BWD_GEMM_DX_CONCAT and SAB_B_FANIN_ORDER_QKV_REVERSED), "MOJOLEARN_GEMM_FAST_DX_CONCAT with MOJOLEARN_TRANSFORMER_SABOTAGE_B_FANIN_ORDER_QKV_REVERSED: the arm computes d(norm1.out) as one product over [dQ | dK | dV] and never launches bwd_add3_kernel, the only seam that sabotage moves, so the sabotage would be reported as inert. Build one or the other."
++    var nt = na + nb + nc
++    if m <= 0 or dm <= 0 or na <= 0 or nb <= 0 or nc <= 0:
++        raise Error("llama backward: the concatenated fan-in needs positive sizes")
++    if len(dcat) < m * nt or len(wcat) < nt * dm:
++        raise Error(
++            String("llama backward: the concatenated fan-in scratch holds ")
++            + String(len(dcat))
++            + " and "
++            + String(len(wcat))
++            + " floats and [M, K] and [K, d_model] want "
++            + String(m * nt)
++            + " and "
++            + String(nt * dm)
++        )
++    var nmax = na
++    if nb > nmax:
++        nmax = nb
++    if nc > nmax:
++        nmax = nc
++    var rows = m
++    if dm > rows:
++        rows = dm
++    step_count_launch()
++    ctx.enqueue_function[bwd_dx_concat_pack_kernel](
++        dcat.unsafe_ptr(),
++        wcat.unsafe_ptr(),
++        da.unsafe_ptr(),
++        db.unsafe_ptr(),
++        dc.unsafe_ptr(),
++        wa.unsafe_ptr(),
++        wb.unsafe_ptr(),
++        wc.unsafe_ptr(),
++        Int32(m),
++        Int32(dm),
++        Int32(na),
++        Int32(nb),
++        Int32(nc),
++        grid_dim=(_grid(rows * nmax), 1, 1),
++        block_dim=(BWD_TPB, 1, 1),
++    )
++    _route_a[LIST](ctx, workspace, out_buf, dcat, wcat, OP_NT, m, nt, dm)
+ 
+ 
+ # ===========================================================================
+@@ -2272,6 +2441,20 @@ struct LlamaBackwardStages(Movable):
+     """lane fx-gemm-epi (BWD_GEMM_EPI only): within the q, k, v fan-in, k's
+     dX is already joined into d(norm1.out) by its GEMM's store, so v joins
+     there too; False means k is in `tmp1` and `bwd_add3_kernel` runs."""
++    # lane fx-gemm-dx-concat (BWD_GEMM_DX_CONCAT only; one element and unused
++    # otherwise): the concatenated fan-in product's operands, written by
++    # `bwd_dx_concat_pack_kernel` at the v member, and what the q and k
++    # members left for it (the addresses of their dC and weight, their
++    # widths, and how many members have reported: 0, 1 = q, 2 = q and k).
++    var dx_cat_d: DeviceBuffer[DType.float32]  # [M, q_width + 2 kv_width]
++    var dx_cat_w: DeviceBuffer[DType.float32]  # [q_width + 2 kv_width, d_model]
++    var dx_cat_dq: Int
++    var dx_cat_wq: Int
++    var dx_cat_nq: Int
++    var dx_cat_dk: Int
++    var dx_cat_wk: Int
++    var dx_cat_nk: Int
++    var dx_cat_have: Int
+     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
+ 
+     def __init__(
+@@ -2377,6 +2560,22 @@ struct LlamaBackwardStages(Movable):
+         self.attn_backward_status = -1
+         self.attn_bwd_fused_off = False
+         self.fanin_joined = False
++        # lane fx-gemm-dx-concat: allocated at size only under the arm.
++        # Without it they are one-element views of `tmp0` (the form
++        # `d_o_proj_out` takes above): no allocation, no fill, no launch.
++        comptime if BWD_GEMM_DX_CONCAT:
++            self.dx_cat_d = _zeros[False](ctx, m * (qw + 2 * kw))
++            self.dx_cat_w = _zeros[False](ctx, (qw + 2 * kw) * dm)
++        else:
++            self.dx_cat_d = self.tmp0.create_sub_buffer[DType.float32](0, 1)
++            self.dx_cat_w = self.tmp0.create_sub_buffer[DType.float32](0, 1)
++        self.dx_cat_dq = 0
++        self.dx_cat_wq = 0
++        self.dx_cat_nq = 0
++        self.dx_cat_dk = 0
++        self.dx_cat_wk = 0
++        self.dx_cat_nk = 0
++        self.dx_cat_have = 0
+         self.head_c = _zeros[False](ctx, head_c_n)
+ 
+         # All fill targets are fields of self and remain alive through this
+diff --git a/autograd/rules_transformer.mojo b/autograd/rules_transformer.mojo
+index e7e27114f5..4f7eeacdc0 100644
+--- a/autograd/rules_transformer.mojo
++++ b/autograd/rules_transformer.mojo
+@@ -143,6 +143,7 @@ from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (
+ from autograd.kernels.transformer import (
+     BWD_FUSE_GATED_SILU,
+     BWD_FUSE_NORM2_RESIDUAL,
++    BWD_GEMM_DX_CONCAT,
+     BWD_GEMM_EPI,
+     BWD_TPB,
+     IDN_BWD_ENTRY_ALIAS,
+@@ -157,6 +158,7 @@ from autograd.kernels.transformer import (
+     bwd_add2_kernel,
+     bwd_add3_kernel,
+     bwd_attention_dispatch,
++    bwd_dx_concat3,
+     bwd_kv_slice2_kernel,
+     bwd_mul2_kernel,
+     bwd_mul2_silu_backward_kernel,
+@@ -202,6 +204,8 @@ comptime TF_DX_TMP0_ADD2 = 3
+ comptime TF_DX_TMP2_ADD3 = 4
+ # lane fx-gemm-epi (BWD_GEMM_EPI only): never recorded; _linear's local mark
+ # that _dx_fanin_epi already wrote this member's dX.
++# lane fx-gemm-dx-concat (BWD_GEMM_DX_CONCAT only) uses the same mark for a
++# q, k or v member that _dx_fanin_cat handled.
+ comptime TF_DX_JOINED = 5
+ 
+ # Args slot i9 (TF_CARD_SLOT) of a TF_LINEAR or TF_ROPE node: which identity
+@@ -472,8 +476,59 @@ struct TransformerRules(BackwardRules):
+         else:
+             raise Error("transformer linear: unknown dX destination")
+ 
+-    # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) _dx_fanin_cat (the q, k, v members as one product) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+-    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
++    def _dx_fanin_cat(
++        self, mode: Int, upstream: FP, weight: FP, total: FP, m: Int, n: Int, k: Int,
++    ) raises:
++        # lane fx-gemm-dx-concat (-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1, default
++        # off; BITS CHANGE, formula in autograd/kernels/transformer.mojo above
++        # BWD_GEMM_DX_CONCAT): S32 as ONE product,
++        #   d(norm1.out) = GEMM_contract([dQ | dK | dV], [Wq; Wk; Wv])
++        # over K = qw + kw + kw walked ascending in that order, in place of
++        # three products and (q + k) + v. The q and the k member launch no dX:
++        # each leaves the address of its dC (the tape's storage, bst.d_*_proj_out
++        # in llama_decoder_layer_record) and of its weight, and its width, in
++        # the stages. The v member, the one that completes the fan-in, runs
++        # one pack launch and the product into `total` (every member's
++        # gradients[0]: writes_total). Nothing reads d(norm1.out) between the
++        # members (the EPI and work-list arms rely on the same fact).
++        # With the work-list arm the product is queued behind the three weight
++        # gradients _route_b queued and the v member runs the list: one list
++        # of four (the pack launch is already on the queue ahead of it).
++        # Call site: once per q, k, v TF_LINEAR node of a backward.
++        ref bst = self.bst[]
++        if mode == TF_DX_TMP0:
++            bst.dx_cat_dq = Int(upstream)
++            bst.dx_cat_wq = Int(weight)
++            bst.dx_cat_nq = n
++            bst.dx_cat_have = 1
++        elif mode == TF_DX_TMP1:
++            if bst.dx_cat_have != 1:
++                raise Error("transformer linear: the k member of the q, k, v fan-in ran before q (concatenated dX)")
++            bst.dx_cat_dk = Int(upstream)
++            bst.dx_cat_wk = Int(weight)
++            bst.dx_cat_nk = n
++            bst.dx_cat_have = 2
++        elif mode == TF_DX_TMP2_ADD3:
++            if bst.dx_cat_have != 2:
++                raise Error("transformer linear: the v member of the q, k, v fan-in ran before q and k (concatenated dX)")
++            bst.dx_cat_have = 0
++            var nq = bst.dx_cat_nq
++            var nk = bst.dx_cat_nk
++            var d = _view(self.ctx, total, m * k)
++            var dq = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_dq), m * nq)
++            var dk = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_dk), m * nk)
++            var dv = _view(self.ctx, upstream, m * n)
++            var wq = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_wq), nq * k)
++            var wk = _view(self.ctx, FP(unsafe_from_address=bst.dx_cat_wk), nk * k)
++            var wv = _view(self.ctx, weight, n * k)
++            bwd_dx_concat3[NEURAL_GEMM_WORKLIST](
++                self.ctx, bst.gemm_workspace, d, bst.dx_cat_d, bst.dx_cat_w,
++                dq, dk, dv, wq, wk, wv, m, nq, nk, n, k,
++            )
++            comptime if NEURAL_GEMM_WORKLIST:
++                bst.gemm_workspace.list_run(self.ctx)
++        else:
++            raise Error("transformer linear: unknown dX destination")
+ 
+     def _linear(
+         self, saved: Args, upstream: FP, inputs: List[FP], gradients: List[FP],
+@@ -503,9 +558,17 @@ struct TransformerRules(BackwardRules):
+         # not use the TMP modes under this arm. Call site: once per TF_LINEAR node of a backward.
+         _route_b[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
+         var mode = saved.i0
++        comptime if BWD_GEMM_DX_CONCAT:
++            # lane fx-gemm-dx-concat: the q, k, v members under the arm (q is the only TMP0, v the only
++            # TMP2_ADD3, k the TMP1 that is not up). It goes first and wins over the epilogue arm for this
++            # fan-in: one product leaves no join for a store to fuse. gate and up are not touched.
++            if mode == TF_DX_TMP0 or mode == TF_DX_TMP2_ADD3 or (mode == TF_DX_TMP1 and saved.i9 != TF_CARD_UP):
++                self._dx_fanin_cat(mode, upstream, inputs[1], gradients[0], m, n, k)
++                mode = TF_DX_JOINED
+         comptime if BWD_GEMM_EPI:
+             # lane fx-gemm-epi: the fan-in members under the arm
+-            if mode != TF_DX_PLAIN:
++            # (`and mode != TF_DX_JOINED`: lane fx-gemm-dx-concat; never JOINED here without its define)
++            if mode != TF_DX_PLAIN and mode != TF_DX_JOINED:
+                 self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
+                 comptime if NEURAL_GEMM_WORKLIST:
+                     # lane/fx-gemm-worklist with the epilogue arm: the dX above took its own launch (an
+diff --git a/checks/native_tests/transformer_backward_packed.mojo b/checks/native_tests/transformer_backward_packed.mojo
+index 51eb8aac1f..33a041d5b1 100644
+--- a/checks/native_tests/transformer_backward_packed.mojo
++++ b/checks/native_tests/transformer_backward_packed.mojo
+@@ -5,21 +5,23 @@ the packed GEMM plan: device words against host words.
+ `transformer/checks/transformer_backward_check.mojo` compares the 37 stages
+ at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile, so on
+ an arm build it exercises only the paths where the work-list arm
+-(`-D MOJOLEARN_GEMM_FAST_WORKLIST`) and the store epilogue arm
+-(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINE. This check runs one layer at
++(`-D MOJOLEARN_GEMM_FAST_WORKLIST`), the store epilogue arm
++(`-D MOJOLEARN_GEMM_FAST_EPI=1`) and the concatenated fan-in arm
++(`-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`) DECLINE. This check runs one layer at
+ 2,048 tokens and widths in the hundreds, where the weight gradients and the
+ input gradients of the projections take the packed body, so the pooled
+-launch and the fused store are what computes the compared words. The host
+-side is the oracle every host caller runs
+-(`transformer_block_backward_oracle`); WORKLIST and EPI claim unchanged
+-bits, so the oracle is the default one for them. (The concatenated fan-in
+-arm MOJOLEARN_GEMM_FAST_DX_CONCAT was deleted 2026-11-19, docs/TOMBSTONES.md.)
++launch, the fused store and the one-product fan-in are what computes the
++compared words. The host side is the oracle every host caller runs
++(`transformer_block_backward_oracle`), which follows DX_CONCAT under the same
++define; WORKLIST and EPI claim unchanged bits, so the oracle is the default
++one for them.
+ 
+ Cases (each: one host forward and backward, two device runs):
+   0 q, k and v of one width (n_kv_heads = n_heads): the q, k, v fan-in is six
+-    listed products under WORKLIST.
++    listed products under WORKLIST and one product behind three listed weight
++    gradients under DX_CONCAT + WORKLIST.
+   1 grouped-query attention (n_kv_heads = n_heads / 2): members of unequal
+-    width in one list.
++    width in one list and in one concatenated contraction.
+ Device run A is the production form (no trace, nothing materialized: the
+ products stay pending on the list until the member that completes a fan-in)
+ and compares what a training step reads: the nine weight gradients and d(x).
+@@ -29,7 +31,8 @@ d(norm2.out) (gate + up) and d(norm1.out) (q, k, v).
+ NOT VACUOUS: the shape is chosen at run time, the first candidate for which
+ the build's own plan functions (`gemm_worklist_mode`,
+ `gemm_workspace_epi_takes`) say the arm's path is taken for the gate/up
+-fan-in and the q/k/v weight gradients. On an arm build with no such candidate the case FAILS as a fixture
++fan-in, the q/k/v weight gradients and, under DX_CONCAT, the concatenated
++product. On an arm build with no such candidate the case FAILS as a fixture
+ error that lists every product's answer: it never passes on the declined
+ path. A default build has nothing to decline and runs the first candidate
+ whose products take the 128 x 128 plan (else the first).
+@@ -39,7 +42,9 @@ product's operands, table row or first-block offset (any dW or dX word); a
+ grouped product folded from another product's node region; a fused store
+ that joins in the wrong operand order or joins twice (d(norm2.out),
+ d(norm1.out), and everything downstream to d(x)); a list never run for the
+-last fan-in member (run A's weight gradients stay unwritten); any host/device difference in leaves or
++last fan-in member (run A's weight gradients stay unwritten); a concatenated
++contraction walked in another member order or with a member's width
++misplaced (case 1's d(norm1.out)); any host/device difference in leaves or
+ fold tree at these contraction lengths.
+ 
+ Every host-device transfer of this file goes through the kit.
+@@ -82,9 +87,7 @@ from transformer.impl.llama.modeling_llama import (
+     LlamaRopeTable,
+     llama_decoder_layer_forward_planted,
+ )
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S: lm-train-step 1.00, samba-train-step 0.99) its decline tests here deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+-from autograd.kernels.transformer import BWD_GEMM_EPI, LlamaBackwardStages
++from autograd.kernels.transformer import BWD_GEMM_DX_CONCAT, BWD_GEMM_EPI, LlamaBackwardStages
+ from autograd.rules_transformer import llama_decoder_layer_backward
+ 
+ from checks.native_tests.kit import download, same_words, upload
+@@ -167,14 +170,19 @@ def _arm_reach(m: Int, dims: TransformerDims) raises -> String:
+             miss += " [work list: dW gate/up (" + String(inter) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
+         if gemm_worklist_mode(qw, dm, m) == GEMM_WORKLIST_NONE:
+             miss += " [work list: dW q (" + String(qw) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
++        comptime if BWD_GEMM_DX_CONCAT:
++            var cat = qw + kw + kw
++            if gemm_worklist_mode(m, dm, cat) == GEMM_WORKLIST_NONE:
++                miss += " [work list: concatenated dX (" + String(m) + ", " + String(dm) + ", " + String(cat) + ") keeps its own launch]"
+         comptime if not BWD_GEMM_EPI:
+             if gemm_worklist_mode(m, dm, inter) == GEMM_WORKLIST_NONE:
+                 miss += " [work list: dX gate/up (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") keeps its own launch]"
+     comptime if BWD_GEMM_EPI and GEMM_EPI_FUSES:
+         if not gemm_workspace_epi_takes(m, dm, inter):
+             miss += " [epilogue: dX gate (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") declines]"
+-        if not gemm_workspace_epi_takes(m, dm, kw):
+-            miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
++        comptime if not BWD_GEMM_DX_CONCAT:
++            if not gemm_workspace_epi_takes(m, dm, kw):
++                miss += " [epilogue: dX k, v (" + String(m) + ", " + String(dm) + ", " + String(kw) + ") declines]"
+     return miss
+ 
+ 
+diff --git a/pixi.toml b/pixi.toml
+index dbc5fcbf47..b62ba29369 100644
+--- a/pixi.toml
++++ b/pixi.toml
+@@ -53,6 +53,8 @@ check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo
+ check-ops-lm-head-v2-scalar = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_gpu.mojo ops_lm_head_v2"
+ check-ops-lm-head-v2-scalar-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_cpu.mojo ops_lm_head_v2"
+ check-transformer-backward-packed-worklist-epi = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -D MOJOLEARN_GEMM_FAST_EPI=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
++check-transformer-backward-packed-dx-concat-worklist = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
++check-transformer-backward-packed-dx-concat-worklist-epi = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -D MOJOLEARN_GEMM_FAST_EPI=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
+ check-llama-refuse-row-scan-watermark-off = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+ check-llama-refuse-row-scan-stride-cap = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+ check-llama-refuse-row-scan-watermark-off-stride-cap = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF=1 -D MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+diff --git a/transformer/checks/transformer_backward_check.mojo b/transformer/checks/transformer_backward_check.mojo
+index b8117fffea..00a86e8fa5 100644
+--- a/transformer/checks/transformer_backward_check.mojo
++++ b/transformer/checks/transformer_backward_check.mojo
+@@ -348,11 +348,14 @@ from transformer.checks.transformer_oracle import (
+     transformer_block_oracle,
+ )
+ from transformer.checks.transformer_backward_oracle import (
++    BWD_HOST_DX_CONCAT,
+     BWD_NEG_HALF,
+     BWD_TWO,
+     TRANSFORMER_BACKWARD_STAGE_COUNT,
++    _gemm_bwd_a,
+     backward_oracle_dump,
+     backward_stage_tag,
++    qkv_fanin_concat_host,
+     softmax_backward_into,
+     transformer_block_backward_oracle,
+ )
+@@ -371,6 +374,7 @@ from transformer.impl.llama.modeling_llama import (
+ )
+ from autograd.kernels.transformer import (
+     BWD_ANY_SABOTAGE,
++    BWD_GEMM_DX_CONCAT,
+     LlamaBackwardStages,
+     llama_backward_sabotage_name,
+ )
+@@ -1844,8 +1848,120 @@ def clause_a_case(
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) check clause (clause_dx_concat) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
++# ===========================================================================
++# ARM MOJOLEARN_GEMM_FAST_DX_CONCAT (lane fx-gemm-dx-concat): the q/k/v
++# fan-in as one product. Device words against host words, under the arm.
++# ===========================================================================
++
++
++def clause_dx_concat(ctx: DeviceContext, cases: List[Int]) raises:
++    """The arm's own clause, over clause (a)'s cases. Under the define the
++    host oracle already follows the arm, so clause (a) is the 37-stage
++    device-against-host comparison; this adds what clause (a) cannot say:
++
++      1. LOCAL: the device's `bwd.d_norm1_out` equals, bit for bit, the
++         arm's formula (`qkv_fanin_concat_host`: one gemm v1 product over
++         `[dQ | dK | dV] . [Wq; Wk; Wv]`) evaluated on the host from the
++         DEVICE's own `d_q_proj_out`, `d_k_proj_out`, `d_v_proj_out` words.
++         That isolates the pack launch and the product from every stage
++         upstream of them.
++      2. END TO END: the device's `bwd.d_norm1_out` equals the oracle's.
++      3. NOT VACUOUS: the arm's words differ from the default order's
++         (`(q + k) + v` over three products, computed here from the same
++         device words) on at least one cell across the cases. Zero would
++         mean these fixtures cannot tell the arm from the default, and the
++         clause raises VACUOUS, not PASS.
++
++    Without the define it prints NOT RUN and returns."""
++    comptime if BWD_GEMM_DX_CONCAT and BWD_HOST_DX_CONCAT:
++        var iq = stage_index_of("bwd.d_q_proj_out")
++        var ik = stage_index_of("bwd.d_k_proj_out")
++        var iv = stage_index_of("bwd.d_v_proj_out")
++        var it = stage_index_of("bwd.d_norm1_out")
++        var cells = 0
++        var bad_local = 0
++        var bad_oracle = 0
++        var differs = 0
++        var first_bad = String("")
++        for ci in range(len(cases)):
++            var c = fixture_case(cases[ci])
++            var dims = fixture_dims(c)
++            var w = fixture_weights(c)
++            var x = fixture_x(c)
++            var d_out = bwd_d_out(c, dims, DOUT_PLANT_NONE)
++            var m = c.b * c.l
++            var dm = dims.d_model
++            var qw = dims.q_width()
++            var kw = dims.kv_width()
++            var host = run_host_backward(c, dims, w, x, d_out, c.b, c.l)
++            var off = IdentityTrace.disabled()
++            var dev = run_device_backward(
++                ctx, c, dims, w, x, d_out, c.b, c.l, off, "dxcat" + String(cases[ci])
++            )
++            var want = qkv_fanin_concat_host(
++                dev[iq], dev[ik], dev[iv], w.w_q, w.w_k, w.w_v, m, qw, kw, kw, dm
++            )
++            var t_q = _gemm_bwd_a(dev[iq], w.w_q, OP_NT, m, qw, dm)
++            var t_k = _gemm_bwd_a(dev[ik], w.w_k, OP_NT, m, kw, dm)
++            var t_v = _gemm_bwd_a(dev[iv], w.w_v, OP_NT, m, kw, dm)
++            if len(want) != m * dm or len(dev[it]) != m * dm or len(host[it]) != m * dm:
++                raise Error(
++                    String("transformer_backward_check: ARM DX_CONCAT, case ")
++                    + String(c.name)
++                    + ": bwd.d_norm1_out is not [M, d_model] on one side"
++                )
++            var case_bad = 0
++            for i in range(m * dm):
++                var got = bitcast[DType.uint32](dev[it][i])
++                if got != bitcast[DType.uint32](want[i]):
++                    bad_local += 1
++                    case_bad += 1
++                if got != bitcast[DType.uint32](host[it][i]):
++                    bad_oracle += 1
++                    case_bad += 1
++                var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
++                var old = ftz(ftz(acc) + ftz(t_v[i]))
++                if bitcast[DType.uint32](old) != bitcast[DType.uint32](want[i]):
++                    differs += 1
++            cells += m * dm
++            if case_bad != 0 and first_bad == "":
++                first_bad = String(c.name)
++        if bad_local != 0 or bad_oracle != 0:
++            raise Error(
++                String("transformer_backward_check: ARM DX_CONCAT FAILED. Of ")
++                + String(cells)
++                + " cells of bwd.d_norm1_out, "
++                + String(bad_local)
++                + " differ from the one-product formula on the device's own"
++                + " dQ, dK, dV words and "
++                + String(bad_oracle)
++                + " differ from the oracle, first in case "
++                + first_bad
++            )
++        if differs == 0:
++            raise Error(
++                String("transformer_backward_check: ARM DX_CONCAT IS VACUOUS.")
++                + " On all "
++                + String(cells)
++                + " cells the one-product order and (q + k) + v give the same"
++                + " words, so these cases cannot tell the arm from the default."
++            )
++        print(
++            "arm dx-concat: PASS, "
++            + String(len(cases))
++            + " cases, "
++            + String(cells)
++            + " cells of bwd.d_norm1_out bit-identical to the one-product"
++            + " formula on the device's own operands and to the oracle; "
++            + String(differs)
++            + " cells differ from the default (q + k) + v order, so the arm"
++            + " is what ran"
++        )
++    else:
++        print(
++            "arm dx-concat: NOT RUN (build with"
++            " -D MOJOLEARN_GEMM_FAST_DX_CONCAT=1)"
++        )
+ 
+ 
+ # ===========================================================================
+@@ -4173,6 +4289,10 @@ def main() raises:
+                 + " card tags"
+             )
+ 
++        # lane fx-gemm-dx-concat: under its define, device against host
++        # words at the fan-in the arm rewrites (NOT RUN otherwise).
++        clause_dx_concat(ctx, cases)
++
+         if env_on("MOJOLEARN_TFB_CHECK_CLAUSE_B"):
+             clause_b(ctx, 0)
+         else:
+diff --git a/transformer/checks/transformer_backward_oracle.mojo b/transformer/checks/transformer_backward_oracle.mojo
+index ea0b891a3c..5c76af4f6f 100644
+--- a/transformer/checks/transformer_backward_oracle.mojo
++++ b/transformer/checks/transformer_backward_oracle.mojo
+@@ -138,6 +138,7 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
+ from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+ from std.math import min
+ from std.memory import bitcast
++from std.sys.compile import is_defined
+ 
+ from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
+ from std.time import perf_counter_ns
+@@ -263,8 +264,131 @@ def _gemm_bwd_b(
+     return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) the host oracle's one-product form (qkv_fanin_concat_host) deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
++# lane fx-gemm-dx-concat (2026-11-19, `-D MOJOLEARN_GEMM_FAST_DX_CONCAT=1`,
++# default OFF, OPEN: no A/B yet). BITS CHANGE under the define, here and in
++# the device rules together (autograd/kernels/transformer.mojo
++# BWD_GEMM_DX_CONCAT, autograd/rules_transformer.mojo _dx_fanin_cat): the
++# three-term fan-in at `d(norm1.out)` is ONE gemm v1 product over the
++# concatenated contraction axis, and stage 29-32 below calls
++# `qkv_fanin_concat_host` in place of three products and `(q + k) + v`.
++comptime BWD_HOST_DX_CONCAT = is_defined["MOJOLEARN_GEMM_FAST_DX_CONCAT"]()
++
++
++def _qkv_concat_cols_into(
++    dq: List[Float32],
++    dk: List[Float32],
++    dv: List[Float32],
++    m: Int,
++    nq: Int,
++    nk: Int,
++    nv: Int,
++    mut output: List[Float32],
++):
++    """`output [m, nq + nk + nv]` = `[dq | dk | dv]`, bit copies, rows over
++    host tasks (a row reads its own three member rows and nothing else).
++    Sized once and every cell written (the form `rope_backward_into` uses)."""
++    var nt = nq + nk + nv
++    output = host_f32_uninit(m * nt)
++    var tasks = host_row_tasks(m, nt)
++    var chunk = (m + tasks - 1) // tasks
++    def _rows(task: Int) {imm dq, imm dk, imm dv, mut output, imm m, imm nq, imm nk, imm nv, imm nt, imm chunk}:
++        for r in range(task * chunk, min((task + 1) * chunk, m)):
++            var base = r * nt
++            for c in range(nq):
++                output[base + c] = dq[r * nq + c]
++            for c in range(nk):
++                output[base + nq + c] = dk[r * nk + c]
++            for c in range(nv):
++                output[base + nq + nk + c] = dv[r * nv + c]
++    if tasks <= 1:
++        _rows(0)
++    else:
++        host_parallelize(_rows, tasks)
++
++
++def _qkv_concat_rows_into(
++    wq: List[Float32],
++    wk: List[Float32],
++    wv: List[Float32],
++    nq: Int,
++    nk: Int,
++    nv: Int,
++    dm: Int,
++    mut output: List[Float32],
++):
++    """`output [nq + nk + nv, dm]` = `[wq; wk; wv]`, bit copies, rows over
++    host tasks."""
++    var nt = nq + nk + nv
++    output = host_f32_uninit(nt * dm)
++    var tasks = host_row_tasks(nt, dm)
++    var chunk = (nt + tasks - 1) // tasks
++    def _rows(task: Int) {imm wq, imm wk, imm wv, mut output, imm nq, imm nk, imm nt, imm dm, imm chunk}:
++        for p in range(task * chunk, min((task + 1) * chunk, nt)):
++            var base = p * dm
++            if p < nq:
++                for j in range(dm):
++                    output[base + j] = wq[p * dm + j]
++            elif p < nq + nk:
++                for j in range(dm):
++                    output[base + j] = wk[(p - nq) * dm + j]
++            else:
++                for j in range(dm):
++                    output[base + j] = wv[(p - nq - nk) * dm + j]
++    if tasks <= 1:
++        _rows(0)
++    else:
++        host_parallelize(_rows, tasks)
++
++
++def qkv_fanin_concat_host(
++    dq: List[Float32],
++    dk: List[Float32],
++    dv: List[Float32],
++    wq: List[Float32],
++    wk: List[Float32],
++    wv: List[Float32],
++    m: Int,
++    nq: Int,
++    nk: Int,
++    nv: Int,
++    dm: Int,
++) raises -> List[Float32]:
++    """`d(norm1.out) [m, dm]` as ONE routed product (the arm's order):
++
++        K  = nq + nk + nv
++        dP = [dq | dk | dv]   [m, K]    (member gradients `[m, n]`, by column)
++        Wc = [wq; wk; wv]     [K, dm]   (member weights `[n, dm]`, by row)
++        out[i, j] = gemm v1 (dP, Wc)[i, j] at contraction length K:
++            (L, P) = contract_partition(K)
++            s_t  = chain over p in [t L, min((t + 1) L, K)) ascending,
++                   seeded +0.0: acc = ftz(fma(ftz(dP[i, p]), ftz(Wc[p, j]), acc))
++            cell = ftz(T(s_0 .. s_{P-1})), the contract's balanced tree
++
++    in the forward-use order q, k, v. The call row is
++    `gemm_backward_a_call(OP_NT, m, K, dm)`, the row each member takes alone.
++    The two concatenations are bit copies (no flush: the product flushes at
++    its loads). It replaces `ftz(ftz(ftz(t_q + t_k)) + ftz(t_v))`; there is
++    no join, so no seed and no three-term association left to pin.
++
++    Compiled in every build (the device check calls it on device words);
++    the oracle reaches it only under the define. Parallel: the copies run
++    rows over host tasks, the product is `gemm_host_rows`' own tiling."""
++    var nt = nq + nk + nv
++    if m <= 0 or dm <= 0 or nq <= 0 or nk <= 0 or nv <= 0:
++        raise Error("transformer backward: the concatenated fan-in needs positive sizes")
++    if (
++        len(dq) != m * nq or len(dk) != m * nk or len(dv) != m * nv
++        or len(wq) != nq * dm or len(wk) != nk * dm or len(wv) != nv * dm
++    ):
++        raise Error("transformer backward: a member of the concatenated fan-in has the wrong length")
++    var dcat = List[Float32]()
++    var wcat = List[Float32]()
++    _qkv_concat_cols_into(dq, dk, dv, m, nq, nk, nv, dcat)
++    _qkv_concat_rows_into(wq, wk, wv, nq, nk, nv, dm, wcat)
++    var out = _gemm_bwd_a(dcat, wcat, OP_NT, m, nt, dm)
++    _ = dcat^
++    _ = wcat^
++    return out^
+ 
+ 
+ def _ones(n: Int) -> List[Float32]:
+@@ -1862,16 +1986,24 @@ def transformer_block_backward_oracle(
+     st.dw_q = _gemm_bwd_b(st.d_q_proj_out, fwd.norm1_out, OP_NT, m, qw, dm)
+     st.dw_k = _gemm_bwd_b(st.d_k_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
+     st.dw_v = _gemm_bwd_b(st.d_v_proj_out, fwd.norm1_out, OP_NT, m, kw, dm)
+-    var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
+-    var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+-    var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+-    st.d_norm1_out = host_f32_uninit(m * dm)
+-    for i in range(m * dm):
+-        var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
+-        st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
+-    _ = t_q^
+-    _ = t_k^
+-    _ = t_v^
++    comptime if BWD_HOST_DX_CONCAT:
++        # lane fx-gemm-dx-concat (arm, default off; BITS CHANGE): ONE product
++        # over [dQ | dK | dV] . [Wq; Wk; Wv], as the device rules run it.
++        st.d_norm1_out = qkv_fanin_concat_host(
++            st.d_q_proj_out, st.d_k_proj_out, st.d_v_proj_out,
++            w.w_q, w.w_k, w.w_v, m, qw, kw, kw, dm,
++        )
++    else:
++        var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
++        var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
++        var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
++        st.d_norm1_out = host_f32_uninit(m * dm)
++        for i in range(m * dm):
++            var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
++            st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
++        _ = t_q^
++        _ = t_k^
++        _ = t_v^
+     host_tick(hton, htk, "bwd.qkv_proj")
+ 
+     # =====================================================================

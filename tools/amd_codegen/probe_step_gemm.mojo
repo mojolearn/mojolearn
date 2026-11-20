@@ -9,7 +9,7 @@
 #   pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD \
 #       --target-accelerator gfx942 -I . tools/amd_codegen/probe_step_gemm.mojo -o <bin>
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
+from max.gpu.host import get_gpu_target
 from gemm.checks.gemm_identical import *
 from gemm.checks.gemm_identical import TARGET_COLUMN, lib_smem_pages_for, GEMM_DETECT_SEAM
 

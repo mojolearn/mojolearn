@@ -33,7 +33,6 @@ between calls; the binding may not, and DEVIATION 874 at that entry says
 what that costs.
 """
 
-from std.ffi import _Global
 from std.math import fma
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
@@ -42,10 +41,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSvmContextOther"
+comptime _DEVCTX_SLOT = "MojolearnSvmContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnSvmContextOtherV3"
 
 
 from core.identity_trace import IdentityTrace
+from core.device_plan import DevicePlan, plan_for_single
+from isolation_forest.multi_gpu import fit_params_dispatch
 from isolation_forest.impl.isolation_forest import (
     IDN_IF_EPILOGUE_DEVICE,
     IDN_IF_QUERY_DEVICE,
@@ -53,13 +54,15 @@ from isolation_forest.impl.isolation_forest import (
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
-    fit as if_fit,
     predict as if_predict,
     predict_into as if_predict_into,
     score_samples as if_score_samples,
     score_samples_into as if_score_samples_into,
+    score_samples_into_f64 as if_score_samples_into_f64,
+    IDN_IF_SCORES_F64,
     contamination_offset as if_contamination_offset,
 )
+from core.shared_slot import SharedSlot
 
 
 def percentile_linear_host(values: List[Float32], q: Float64) -> Float64:
@@ -157,6 +160,7 @@ struct IsolationForestEstimator(Movable):
     def fit(
         mut self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
         src_addr: Int = 0,
+        plan: DevicePlan = plan_for_single(),
     ) raises:
         """`IsolationForest.fit(X)` (`:572-787`). DEVIATION 2638: a nonzero
         `src_addr` lends the ROW-major X by address (the CPython binding's
@@ -234,8 +238,10 @@ struct IsolationForestEstimator(Movable):
                     + String(n_rows * n_cols)
                 )
             x_addr = Int(x_rowmajor.unsafe_ptr())
-        if_fit(ctx, self.model, List[Float32](), n_rows, n_cols, params, trace,
-               self.knobs, x_addr)
+        # The device plan is the binding entry's (read once there); one
+        # device runs the single-device fit unchanged.
+        fit_params_dispatch(plan, ctx, self.model, List[Float32](), n_rows,
+                            n_cols, params, trace, self.knobs, x_addr)
         self.fitted = True
 
         if use_quantile:
@@ -383,6 +389,7 @@ struct IFRunOutputs(Copyable, Movable):
 
 
 def iforest_run_host(
+    plan: DevicePlan,
     train: List[Float32],
     n_train: Int,
     n_features: Int,
@@ -462,7 +469,7 @@ def iforest_run_host(
     # DEVIATION 2638: `train_addr` lends the ROW-major training block.
     # Lane fam-forests: `query_addr` (nonzero only under
     # `IDN_IF_QUERY_DEVICE`) lends the ROW-major query block the same way.
-    est.fit(ctx, train, n_train, n_features, src_addr=train_addr)
+    est.fit(ctx, train, n_train, n_features, src_addr=train_addr, plan=plan)
 
     var out = IFRunOutputs()
     out.offset_ = est.offset_
@@ -527,7 +534,7 @@ def iforest_run_host(
 #: refits on its next scoring call).
 comptime IF_RESIDENT_CAP = 8
 
-comptime _IF_RESIDENT_SLOT = "MojoIForestResidentIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoIForestResidentOther"
+comptime _IF_RESIDENT_SLOT = "MojolearnIForestResidentIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnIForestResidentOtherV1"
 
 
 @fieldwise_init
@@ -610,9 +617,7 @@ struct _IFResidentStore(Defaultable, Movable):
         self.nonce = 0
 
 
-comptime IF_RESIDENT_STORE = _Global[
-    StorageType=_IFResidentStore, name=_IF_RESIDENT_SLOT, init_fn=_IFResidentStore.__init__
-]
+comptime IF_RESIDENT_STORE = SharedSlot[_IFResidentStore, _IF_RESIDENT_SLOT]
 
 
 def if_resident_new_token() raises -> Int:
@@ -678,6 +683,7 @@ def if_resident_release(token: Int) raises:
 
 
 def iforest_run_resident(
+    plan: DevicePlan,
     mut held: List[IFResidentEntry],
     key: IFResidentKey,
     new_token: Int,
@@ -687,6 +693,7 @@ def iforest_run_resident(
     want: Int,
     out_f32_addr: Int,
     out_i32_addr: Int,
+    wide_scores: Bool,
 ) raises -> IFRunOutputs:
     """`iforest_run_host` with the forest resident. `held` is what
     `if_resident_take` returned: one entry scores without fitting; empty
@@ -697,7 +704,9 @@ def iforest_run_resident(
     The result is written at `out_f32_addr` (`want` 0 and 1, `n_query`
     float32) or `out_i32_addr` (`want` 2, `n_query` int32); the returned
     lists are empty. `query_addr` nonzero lends the ROW-major query block
-    (`IDN_IF_QUERY_DEVICE`), else `query` holds it."""
+    (`IDN_IF_QUERY_DEVICE`), else `query` holds it. `wide_scores`
+    (IDN_IF_SCORES_F64, want 0 and 1 only) writes `n_query` float64 at
+    `out_f32_addr` instead: the same float32 values widened on the device."""
     if key.n_train <= 0:
         raise Error("iforest_run_host: n_rows must be at least one")
     if key.n_features <= 0:
@@ -722,6 +731,21 @@ def iforest_run_resident(
     elif out_f32_addr == 0:
         raise Error("iforest_run_resident: the score output address is null")
 
+    if_resident_fit_if_empty(plan, held, key, new_token)
+    return if_resident_score(
+        held, key.n_features, query, query_addr, n_query, want, out_f32_addr, out_i32_addr, wide_scores,
+    )
+
+
+def if_resident_fit_if_empty(
+    plan: DevicePlan, mut held: List[IFResidentEntry], key: IFResidentKey, new_token: Int,
+) raises:
+    """The fit half of `iforest_run_resident` (moved word for word, lane
+    fix-iforest-save-device-forest): `held` empty fits a fresh forest from
+    `key.train_addr` and leaves it, under `new_token`, in `held`; one entry
+    is left as it is."""
+    if key.train_addr == 0:
+        raise Error("iforest_run_resident: the training matrix address is null")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     if len(held) == 0:
         var est = IsolationForestEstimator(ctx)
@@ -738,15 +762,33 @@ def iforest_run_resident(
         est.contamination_auto = key.contamination_auto
         est.contamination = key.contamination
         est.warm_start = False
-        est.fit(ctx, List[Float32](), key.n_train, key.n_features, src_addr=key.train_addr)
+        est.fit(ctx, List[Float32](), key.n_train, key.n_features,
+                src_addr=key.train_addr, plan=plan)
         held.append(IFResidentEntry(new_token, key, ctx, est^))
+    _ = ctx^
 
+
+def if_resident_score(
+    held: List[IFResidentEntry],
+    n_features: Int,
+    query: List[Float32],
+    query_addr: Int,
+    n_query: Int,
+    want: Int,
+    out_f32_addr: Int,
+    out_i32_addr: Int,
+    wide_scores: Bool,
+) raises -> IFRunOutputs:
+    """The scoring half of `iforest_run_resident` (moved word for word, lane
+    fix-iforest-save-device-forest) over the one entry in `held`: a fitted
+    forest or one imported from a saved model (`isolation_forest/
+    forest_io.mojo`); the same kernels either way."""
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = IFRunOutputs()
     out.offset_ = held[0].est.offset_
     out.max_samples_ = held[0].est.max_samples_
     out.n_features_in_ = held[0].est.n_features_in_
     out.token = held[0].token
-    var n_features = key.n_features
     # The scoring epilogue runs on the device and lands in the caller's
     # buffer (fam2-forests' `IDN_IF_EPILOGUE_DEVICE`; the only route on
     # every tier since cpu4-forest: the host epilogue arm is gone).
@@ -757,6 +799,15 @@ def iforest_run_resident(
             ctx, held[0].est.model, query, n_query, n_features,
             Float32(-held[0].est.offset_), held[0].est.knobs, query_addr, out_i32_addr,
         )
+    elif wide_scores:
+        comptime if IDN_IF_SCORES_F64:
+            if_score_samples_into_f64(
+                ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,
+                query_addr, out_f32_addr, want == IF_WANT_DECISION_FUNCTION,
+                Float32(held[0].est.offset_),
+            )
+        else:
+            raise Error("iforest_run_resident: this binary writes float32 scores only")
     else:
         if_score_samples_into(
             ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,

@@ -33,13 +33,11 @@ upper-half lookups test a per-level stamp.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -61,15 +59,12 @@ comptime U32P = MutPointer[UInt32, MutAnyOrigin]
 #: radix sorts of the 64-bit key's halves (low, then high; `core/
 #: fast_radix_sort.mojo`) instead of `_sort_rank_kernel`'s all-pairs count
 #: (nnz^2 compares). The keys are distinct, so the sorted position IS the
-#: counted rank: same permutation. `-D MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF=1`
-#: restores the count.
-comptime IDN_DENDRO_RADIX_SORT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: counted rank: same permutation. FAST keeps the count.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF (old path: the all-pairs rank count under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 98ec4fc711.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 98ec4fc711.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DENDRO_RADIX_SORT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every vendor: the per-level hook loop
 #: replaced by ONE lock-free union launch (`hdbscan/impl/cluster/detail/
@@ -79,14 +74,12 @@ comptime IDN_DENDRO_RADIX_SORT = (
 #: union's root is each component's smallest label, the root the converged
 #: hook loop ends at, so `par`, and with it the three outputs, are the same
 #: integers. Callers switch on this (`single_linkage.mojo` here and in
-#: hdbscan). `-D MOJOLEARN_IDN_DENDRO_UNION_OFF=1` restores the hook loop.
-comptime IDN_DENDRO_UNION = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DENDRO_UNION_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: hdbscan). FAST keeps the hook loop.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_UNION_OFF (old path: the per-level hook loop under IDENTICAL; EXP:1715 owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3922ce7ff9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_UNION_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3922ce7ff9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DENDRO_UNION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL (the route when IDN_DENDRO_UNION is
 #: off): the dendrogram's hook + jump loop
@@ -95,20 +88,14 @@ comptime IDN_DENDRO_UNION = (
 #: joins two roots, so the hook writes nothing and the jump finds every root
 #: in place), and the flag is cleared before the chunk's LAST pair only, so
 #: it answers the same question the per-pair read did. Same parents, same
-#: dendrogram. The chunk is `-D MOJOLEARN_IDN_DENDRO_HOOK_CHUNK=<n>`
-#: (default 4; time 2 and 8 against it);
-#: `-D MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF=1` restores the per-pair read.
-comptime IDN_DENDRO_HOOK_CHUNK = (
-    get_defined_int["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK", 4]()
-    if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not (
-            is_defined["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF"]()
-            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        )
-    )
-    else 1
-)
+#: dendrogram. The chunk is 4 under IDENTICAL, 1 (the per-pair read) otherwise.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_HOOK_CHUNK (candidate arm: other chunk widths than 4; never timed) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 388f048dbb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF (old path: the per-pair flag read under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 388f048dbb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 388f048dbb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_DENDRO_HOOK_CHUNK = 4 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 1
 
 
 @always_inline
@@ -451,7 +438,6 @@ def build_dendrogram_device(
         while more:
             # fam2-cluster, IDN_DENDRO_HOOK_CHUNK: the flag is cleared
             # before the chunk's last pair, so it reports that pair alone.
-            comptime assert IDN_DENDRO_HOOK_CHUNK >= 1, "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK must be >= 1"
             for q in range(IDN_DENDRO_HOOK_CHUNK):
                 if q == IDN_DENDRO_HOOK_CHUNK - 1:
                     ctx.enqueue_memset(flag, Int32(0))

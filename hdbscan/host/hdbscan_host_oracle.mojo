@@ -62,6 +62,7 @@ from core.host_parallel import host_parallelize
 
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
 from core.host_predict_threads import (
+    HostF32Ptr,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -126,6 +127,8 @@ comptime HDBH_PAIRWISE_MAX_ROWS = 46340
 comptime HDBH_FLOAT32_MAX = Float32(3.4028234663852886e38)
 comptime HDBH_KEY_SENTINEL: Int32 = 0x7FFFFFFF
 
+comptime HdbhI32Ptr = MutPointer[Int32, MutUntrackedOrigin]
+
 comptime HDBH_GRAPH_AUTO = 0
 comptime HDBH_GRAPH_DENSE = 1
 comptime HDBH_GRAPH_SPARSE = 2
@@ -174,6 +177,12 @@ comptime HDBH_PREDICT_SABOTAGE = (
 arms it ALONE, so a fit stays correct and only the query pass moves."""
 
 
+def hdbh_i32_ptr(x: List[Int32]) -> HdbhI32Ptr:
+    """A List's storage as `HdbhI32Ptr` (`host_list_ptr`'s rebind for
+    int32). The List must outlive every read through the result."""
+    return rebind[HdbhI32Ptr](x.unsafe_ptr())
+
+
 def hdbh_approximate_predict(
     x: List[Float32],
     m: Int,
@@ -189,12 +198,40 @@ def hdbh_approximate_predict(
     nq: Int,
     min_samples: Int,
 ) raises -> HdbscanHostPredict:
+    """`hdbh_approximate_predict_ptr` over Lists the caller owns."""
+    return hdbh_approximate_predict_ptr(
+        x, m, n, host_list_ptr(input_core), hdbh_i32_ptr(labels),
+        host_list_ptr(tree_lambdas), n_leaves, host_list_ptr(deaths),
+        hdbh_i32_ptr(selected_clusters), hdbh_i32_ptr(index_into_children),
+        queries, nq, min_samples,
+    )
+
+
+def hdbh_approximate_predict_ptr(
+    x: List[Float32],
+    m: Int,
+    n: Int,
+    input_core: HostF32Ptr,
+    labels: HdbhI32Ptr,
+    tree_lambdas: HostF32Ptr,
+    n_leaves: Int,
+    deaths: HostF32Ptr,
+    selected_clusters: HdbhI32Ptr,
+    index_into_children: HdbhI32Ptr,
+    queries: List[Float32],
+    nq: Int,
+    min_samples: Int,
+) raises -> HdbscanHostPredict:
     """`hdbscan/impl/detail/predict.mojo::approximate_predict` (cuML
     `predict.cuh:220-262`) on the host, restated beside each device line:
     the k-NN at `(min_samples - 1) * 2` through `host_knn_search`, slot
     `min_samples - 1` for the query core distance, the strict `>` scan for
     the nearest mutual reachability neighbor (DEVIATION 1615), `1 / d`, and
     the label and probability rule of `cluster_probability_kernel`."""
+    # Lane perf-small-fixes (2026-11-06): the fitted arrays are read in
+    # place through the caller's buffers (no owned copy per call). `x` and
+    # `queries` stay Lists because `core/knn_host_predict.mojo::
+    # host_knn_search` takes Lists (a pointer form there is owed).
     if nq < 1:
         raise Error(
             "hdbscan.approximate_predict: points_to_predict has no rows;"
@@ -283,19 +320,21 @@ def hdbh_soft_normalize(mut v: List[Float32], base: Int, n: Int):
 
 def hdbh_soft_pass(
     mode: Int,
-    rows: List[Float32],
+    rows: HostF32Ptr,
     n_rows: Int,
     n: Int,
-    x: List[Float32],
-    parents: List[Int32],
-    lambdas: List[Float32],
+    x: HostF32Ptr,
+    parents: HdbhI32Ptr,
+    lambdas: HostF32Ptr,
     pd: PredictionData,
     min_mr_inds: List[Int32],
     prediction_lambdas: List[Float32],
     row0: Int,
 ) raises -> List[Float32]:
     """`hdbscan/impl/detail/soft_clustering.mojo::_soft_pass` on the host,
-    each kernel restated beside its device line."""
+    each kernel restated beside its device line. `rows` (n_rows x n), `x`
+    (the training rows), `parents` and `lambdas` are read in place through
+    the caller's buffers (lane perf-small-fixes: no per-call row copy)."""
     var ns = pd.n_selected_clusters
     var nx = pd.n_exemplars
     var nl = Int(pd.n_leaves)
@@ -450,16 +489,20 @@ def _hdbh_soft_pd(
     m: Int,
     n_edges: Int,
     n_clusters: Int,
-    deaths: List[Float32],
-    selected_clusters: List[Int32],
-    index_into_children: List[Int32],
-    exemplar_idx: List[Int32],
-    exemplar_label_offsets: List[Int32],
+    var deaths: List[Float32],
+    var selected_clusters: List[Int32],
+    var index_into_children: List[Int32],
+    var exemplar_idx: List[Int32],
+    var exemplar_label_offsets: List[Int32],
 ) -> PredictionData:
+    """The prediction data, taking the caller's Lists (lane
+    perf-small-fixes: moved in, not copied a second time)."""
+    var n_selected = len(selected_clusters)
+    var n_exemplars = len(exemplar_idx)
     return PredictionData(
-        m, n_edges, n_clusters, len(selected_clusters), len(exemplar_idx),
-        deaths.copy(), exemplar_idx.copy(), exemplar_label_offsets.copy(),
-        selected_clusters.copy(), index_into_children.copy(),
+        m, n_edges, n_clusters, n_selected, n_exemplars,
+        deaths^, exemplar_idx^, exemplar_label_offsets^,
+        selected_clusters^, index_into_children^,
     )
 
 
@@ -467,17 +510,17 @@ def hdbh_membership_vector(
     x: List[Float32],
     m: Int,
     n: Int,
-    input_core: List[Float32],
-    labels: List[Int32],
+    input_core: HostF32Ptr,
+    labels: HdbhI32Ptr,
     parents: List[Int32],
     tree_lambdas: List[Float32],
     n_edges: Int,
     n_clusters: Int,
-    deaths: List[Float32],
-    selected_clusters: List[Int32],
-    index_into_children: List[Int32],
-    exemplar_idx: List[Int32],
-    exemplar_label_offsets: List[Int32],
+    var deaths: List[Float32],
+    var selected_clusters: List[Int32],
+    var index_into_children: List[Int32],
+    var exemplar_idx: List[Int32],
+    var exemplar_label_offsets: List[Int32],
     queries: List[Float32],
     nq: Int,
     min_samples: Int,
@@ -485,7 +528,8 @@ def hdbh_membership_vector(
     """`soft_clustering.mojo::membership_vector` (cuML
     `soft_clustering.cuh:501-627`) on the host: the refusals in its order,
     `hdbh_approximate_predict` for the nearest neighbor and its lambda,
-    then `hdbh_soft_pass`."""
+    then `hdbh_soft_pass`. `input_core` and `labels` are read in place;
+    the five prediction-data Lists are moved into the PredictionData."""
     if nq < 1:
         raise Error(
             "hdbscan.membership_vector: points_to_predict has no rows;"
@@ -493,41 +537,45 @@ def hdbh_membership_vector(
         )
     refuse_nonfinite_queries(queries, nq, n)
     var pd = _hdbh_soft_pd(
-        m, n_edges, n_clusters, deaths, selected_clusters, index_into_children,
-        exemplar_idx, exemplar_label_offsets,
+        m, n_edges, n_clusters, deaths^, selected_clusters^,
+        index_into_children^, exemplar_idx^, exemplar_label_offsets^,
     )
     refuse_soft_clustering_inputs(
         parents, tree_lambdas, pd, m, "hdbscan.membership_vector"
     )
-    var near = hdbh_approximate_predict(
-        x, m, n, input_core, labels, tree_lambdas, m, deaths,
-        selected_clusters, index_into_children, queries, nq, min_samples,
+    var near = hdbh_approximate_predict_ptr(
+        x, m, n, input_core, labels, host_list_ptr(tree_lambdas), m,
+        host_list_ptr(pd.deaths), hdbh_i32_ptr(pd.selected_clusters),
+        hdbh_i32_ptr(pd.index_into_children), queries, nq, min_samples,
     )
     return hdbh_soft_pass(
-        HDBH_SOFT_PREDICT, queries, nq, n, x, parents, tree_lambdas, pd,
+        HDBH_SOFT_PREDICT, host_list_ptr(queries), nq, n, host_list_ptr(x),
+        hdbh_i32_ptr(parents), host_list_ptr(tree_lambdas), pd,
         near.min_mr_inds, near.prediction_lambdas, 0,
     )
 
 
 def hdbh_all_points_membership_vectors(
-    x: List[Float32],
+    x: HostF32Ptr,
     m: Int,
     n: Int,
     parents: List[Int32],
     tree_lambdas: List[Float32],
     n_edges: Int,
     n_clusters: Int,
-    deaths: List[Float32],
-    selected_clusters: List[Int32],
-    index_into_children: List[Int32],
-    exemplar_idx: List[Int32],
-    exemplar_label_offsets: List[Int32],
+    var deaths: List[Float32],
+    var selected_clusters: List[Int32],
+    var index_into_children: List[Int32],
+    var exemplar_idx: List[Int32],
+    var exemplar_label_offsets: List[Int32],
     row0: Int,
     count: Int,
 ) raises -> List[Float32]:
     """`soft_clustering.mojo::all_points_membership_vectors` (cuML
     `soft_clustering.cuh:385-482`) on the host, training rows `row0 ..
-    row0 + count - 1`."""
+    row0 + count - 1`. `x` (m x n) is read in place through the caller's
+    buffer and the rows are its `[row0, row0 + count)` slice (lane
+    perf-small-fixes: the per-element row copy is gone)."""
     if count < 1 or row0 < 0 or row0 + count > m:
         raise Error(
             "hdbscan.all_points_membership_vectors: rows " + String(row0)
@@ -535,17 +583,15 @@ def hdbh_all_points_membership_vectors(
             + " training rows; refused by name"
         )
     var pd = _hdbh_soft_pd(
-        m, n_edges, n_clusters, deaths, selected_clusters, index_into_children,
-        exemplar_idx, exemplar_label_offsets,
+        m, n_edges, n_clusters, deaths^, selected_clusters^,
+        index_into_children^, exemplar_idx^, exemplar_label_offsets^,
     )
     refuse_soft_clustering_inputs(
         parents, tree_lambdas, pd, m, "hdbscan.all_points_membership_vectors"
     )
-    var rows = List[Float32](capacity=count * n)
-    for i in range(count * n):
-        rows.append(x[row0 * n + i])
     return hdbh_soft_pass(
-        HDBH_SOFT_ALL_POINTS, rows, count, n, x, parents, tree_lambdas, pd,
+        HDBH_SOFT_ALL_POINTS, x + row0 * n, count, n, x,
+        hdbh_i32_ptr(parents), host_list_ptr(tree_lambdas), pd,
         List[Int32](), List[Float32](), row0,
     )
 

@@ -1,0 +1,1514 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The Python-facing entry points of the trees lane (the shell; the typed
+helpers they call are in `xtrees/api_kernels.mojo`), shared by the GPU binding
+(`bindings/_mojolearn_x_trees.mojo`) and the host binding
+(`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
+Every buffer is a caller-owned address; `params` is a Python list of ints and
+floats. Nothing is retained."""
+from bindings.py_lists import py_list_i64
+from std.python import PythonObject
+from std.python.bindings import PythonModuleBuilder
+from xtrees.label_weights_native import LABEL_WEIGHTS_API
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr
+from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from std.python import Python
+from std.memory import bitcast
+from std.math import ceil
+from xtrees.folds_device import device_folds, leaf_numbering
+from xtrees.glue_device import (
+    binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
+    rows_any_unset_device,
+    positive_codes_device, spread_leaves_device, code_counts_device, class_rows_device, code_counts_host,
+    class_rows_host,
+)
+from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
+from xtrees.oob import (
+    E64_MAX_ROWS, count_equal_device, count_equal_host, count_rows_device, count_rows_host, oob_r2_device, oob_r2_host,
+)
+from xtrees import agnostic_device as agn_dev
+from xtrees import agnostic_host as agn_host
+from core.forest_auxiliary_device import forest_auxiliary_device
+from core.forest_auxiliary_units import forest_auxiliary_host
+from xtrees.ops_device import (
+    apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
+    unseen_rows_device, weighted_sample_device,
+)
+from xtrees import ops_device_elem as elem_dev
+from xtrees import ops_device_boost as boost_dev
+from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+from xtrees.api_kernels import (
+    class_priors, dart_rescale, dart_thresholds, host_folds, kshap_schedule, scatter_rows_check,
+)
+
+# The device/host choice and the moved glue bodies (lane calltable-trees):
+# this file keeps only their Python unpack.
+from xtrees.glue_abi import XtOwned
+from xtrees.xtrees_api_run import _count, _kshap_check
+from xtrees.glue_runs import (
+    XTREES_DEVICE_OPS, accumulate_run, accumulate_cols_run, accumulate_onehot_run, accumulate_rows_run,
+    apply_run, argmax_rows_run, bag_rows_run, binary_proba_run, class_counts_run, class_priors_run,
+    complement_pairs_run, count_equal_run, count_rows_run, dart_rescale_run, dart_thresholds_run,
+    device_folds_run, exact_sum_run, fill_class_major_f64_run, gather_f32_run, gather_i32_run,
+    indicator_codes_run, iota_i32_run, isotonic_fit_run, isotonic_predict_strided_run, leaf_numbering_run,
+    log64_run, margin2_run, normalize_rows_run, onehot_leaves_run, oob_r2_run, platt_apply_strided_run,
+    platt_fit_run, positive_codes_run, put_f32_run, r2_step_run, remap_cols_run, rows_any_unset_run,
+    samme_step_run, sample_indices_run, scale_run, scale_to_f32_run, scatter_run, softmax_rows_run,
+    stack_w64_run, accumulate_cols_many_run, ovr_assemble_run, calibrated_proba_run, transpose_f32_run,
+    transpose_f64_run, uniform_run, unseen_rows_run, weighted_median_run, weighted_sample_run,
+)
+from xtrees.calibrated_apply import (
+    CalPair, OvrColumn, calibrated_proba_device, calibrated_proba_host, ovr_assemble_device, ovr_assemble_host,
+)
+from xtrees.ops import (
+    sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
+    accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
+    check_weights_f32, mul_f32,
+    samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
+    onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
+    isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
+    bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
+    rows_any_unset,
+    spread_leaves, tree_shape, margin2, normalized_weights, iota_i32, fill_class_major_f64,
+)
+
+
+def _need(params: PythonObject, n: Int, who: String) raises:
+    if len(params) != n:
+        raise Error(who + ": params must hold " + String(n) + " values, got " + String(len(params)))
+
+
+def _i(params: PythonObject, k: Int) raises -> Int:
+    return Int(py=params[k])
+
+
+def _f(params: PythonObject, k: Int) raises -> Float64:
+    return Float64(py=params[k])
+
+
+def _xt_owned(var addrs: List[Int], params: PythonObject) raises -> XtOwned:
+    """The positional Python parameter list of a glue entry as the native
+    glue ABI's two views (xtrees/glue_abi.mojo). A value with no integer (or
+    float) conversion is flagged, and refused only where the run reads that
+    view, as the former per-read `Int(py=)` / `Float64(py=)` did."""
+    var count = len(params)
+    var ints = List[Int](capacity=count)
+    var floats = List[Float64](capacity=count)
+    var bad = List[UInt8](capacity=count)
+    for k in range(count):  # driver-loop: over fixed call structure, small-loop(positional parameters of one glue call): Python unpack
+        var flag = UInt8(0)
+        # perf-audit-3: the item is read once (one sequence read per
+        # parameter, not one per view).
+        var item = params[k]
+        try:
+            ints.append(Int(py=item))
+        except:
+            ints.append(0)
+            flag |= 1
+        try:
+            floats.append(Float64(py=item))
+        except:
+            floats.append(0.0)
+            flag |= 2
+        bad.append(flag)
+    var owned = XtOwned(addrs^, ints^, floats^)
+    owned.bad = bad^
+    return owned^
+
+
+# T44/C51 retained snapshot ABI, shared by GPU and host registrations: the
+# entries stay registered and report the cache as absent.
+# TOMBSTONE: MOJOLEARN_TREES_T44_METADATA_CACHE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at adde5aacdd.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T44_METADATA_CACHE.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+comptime _TREE_SHAP_CACHE = False
+
+
+def tree_shap_cache_enabled_binding() raises -> PythonObject:
+    return PythonObject(_TREE_SHAP_CACHE)
+
+
+def tree_shap_cache_create_args(forest: PythonObject, params: PythonObject) raises -> List[Int]:
+    """Checked arguments of `x_trees_tree_shap_cache_create`: the five forest
+    addresses, then d, trees, k, nodes. Each binding entry file registers the
+    cache functions itself (the GPU binding over `xtrees/shap_device.mojo`,
+    the host binding over `xtrees/shap_host.mojo`), so the GPU binding's
+    import graph never reaches the host runner's threads."""
+    raise Error("TreeSHAP cache requires the opt-in T44 binding")
+
+
+def tree_shap_cache_values_args(params: PythonObject) raises -> List[Int]:
+    """Checked arguments of `x_trees_tree_shap_cache_values`: n, slots, width."""
+    _need(params, 3, "x_trees_tree_shap_cache_values")
+    var n = _count(_i(params, 0), "x_trees_tree_shap_cache_values")
+    var slots = _count(_i(params, 1), "x_trees_tree_shap_cache_values")
+    var width = _i(params, 2)
+    if width < 8 or width > 256 or (width & (width - 1)) != 0:
+        raise Error("TreeSHAP cache path width must be 8, 16, ..., 256")
+    var out = List[Int]()
+    out.append(n)
+    out.append(slots)
+    out.append(width)
+    return out^
+
+
+def forest_auxiliary_binding(forest: PythonObject, x: PythonObject, leaf: PythonObject,
+                              prefix: PythonObject, prediction: PythonObject,
+                              params: PythonObject) raises -> PythonObject:
+    """T39: leaf IDs and/or mean prefixes and/or ordered final raw scores.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Both arms expose the same API; only A shares the traversals. Address zero
+    means unrequested output, avoiding mandatory staged-output allocation.
+    """
+    _need(params, 5, "x_trees_forest_auxiliary")
+    if len(forest) != 5:
+        raise Error("forest auxiliary requires five model addresses")
+    var addresses = List[Int]()
+    for i in range(5):  # driver-loop: over fixed call structure, small-loop(the five forest address words)
+        addresses.append(Int(py=forest[i]))
+    var n = _count(_i(params, 0), "x_trees_forest_auxiliary")
+    var d = _i(params, 1)
+    var trees = _i(params, 2)
+    var outputs = _i(params, 3)
+    if d < 1 or trees < 1 or outputs < 1:
+        raise Error("forest auxiliary requires positive dimensions")
+    # Kernel shape scalars are Int32; pointer offsets/element byte counts are
+    # signed Int64. These are representation limits, not workload thresholds.
+    if n > 2147483647 or d > 2147483647 or trees > 2147483647 or outputs > 2147483647:
+        raise Error("forest auxiliary dimensions exceed Int32")
+    if n > 0 and (d > 2305843009213693951 // n or
+                  trees > 2305843009213693951 // n // outputs):
+        raise Error("forest auxiliary requested buffers exceed addressable bytes")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            forest_auxiliary_device(addresses, Int(py=x), Int(py=leaf), Int(py=prefix),
+                                    Int(py=prediction), n, d, trees, outputs, _i(params, 4) != 0)
+        else:
+            forest_auxiliary_host(addresses, Int(py=x), Int(py=leaf), Int(py=prefix),
+                                  Int(py=prediction), n, d, trees, outputs, _i(params, 4) != 0)
+    return PythonObject(n)
+
+
+def sample_indices_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::sample_indices_run, also reached
+    # natively through the trees entry table (XT_SAMPLE_INDICES).
+    var owned = _xt_owned([Int(py=out_addr)], params)
+    var result = sample_indices_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def weighted_sample_binding(w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::weighted_sample_run, also reached
+    # natively through the trees entry table (XT_WEIGHTED_SAMPLE).
+    var owned = _xt_owned([Int(py=w_addr), Int(py=out_addr)], params)
+    var result = weighted_sample_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def gather_f32_binding(src: PythonObject, rows: PythonObject, cols: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::gather_f32_run, also reached
+    # natively through the trees entry table (XT_GATHER_F32).
+    var owned = _xt_owned([Int(py=src), Int(py=rows), Int(py=cols), Int(py=dst)], params)
+    var result = gather_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def gather_i32_binding(src: PythonObject, rows: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::gather_i32_run, also reached
+    # natively through the trees entry table (XT_GATHER_I32).
+    var owned = _xt_owned([Int(py=src), Int(py=rows), Int(py=dst)], params)
+    var result = gather_i32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def accumulate_binding(acc: PythonObject, x: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE).
+    var owned = _xt_owned([Int(py=acc), Int(py=x)], params)
+    var result = accumulate_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_cols_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_COLS).
+    var owned = _xt_owned([Int(py=acc), Int(py=x), Int(py=cols)], params)
+    var result = accumulate_cols_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def accumulate_cols_many_binding(acc: PythonObject, members: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_cols_many_run
+    # (XT_ACCUMULATE_COLS_MANY): members = [(x_j, cols_j, ks_j, weight_j), ...].
+    _need(params, 2, "x_trees_accumulate_cols_many")
+    var owned = _xt_owned([Int(py=acc)], params)
+    for j in range(len(members)):  # driver-loop: over fixed call structure, small-loop(one descriptor per ensemble member): Python unpack
+        var entry = members[j]
+        if len(entry) != 4:
+            raise Error("x_trees_accumulate_cols_many: each member needs (x, cols, ks, weight)")
+        owned.addrs.append(Int(py=entry[0]))
+        owned.addrs.append(Int(py=entry[1]))
+        var ks = Int(py=entry[2])
+        owned.ints.append(ks)
+        owned.floats.append(Float64(ks))
+        owned.bad.append(UInt8(0))
+        owned.ints.append(0)
+        owned.floats.append(Float64(py=entry[3]))
+        owned.bad.append(UInt8(1))
+    var result = accumulate_cols_many_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def accumulate_rows_binding(acc: PythonObject, x: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_rows_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_ROWS).
+    var owned = _xt_owned([Int(py=acc), Int(py=x), Int(py=rows)], params)
+    var result = accumulate_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def accumulate_onehot_binding(acc: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::accumulate_onehot_run, also reached
+    # natively through the trees entry table (XT_ACCUMULATE_ONEHOT).
+    var owned = _xt_owned([Int(py=acc), Int(py=codes)], params)
+    var result = accumulate_onehot_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def argmax_rows_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::argmax_rows_run, also reached
+    # natively through the trees entry table (XT_ARGMAX_ROWS).
+    var owned = _xt_owned([Int(py=x), Int(py=res)], params)
+    var result = argmax_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def argmax_rows_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    _need(params, 2, "x_trees_argmax_rows_f32")
+    var n = _count(_i(params, 0), "x_trees_argmax_rows_f32")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.argmax_rows_f32_device(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+        else:
+            argmax_rows_f32(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def scale_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::scale_run, also reached
+    # natively through the trees entry table (XT_SCALE).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = scale_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::scale_to_f32_run, also reached
+    # natively through the trees entry table (XT_SCALE_TO_F32).
+    var owned = _xt_owned([Int(py=x), Int(py=res)], params)
+    var result = scale_to_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The exact sum of a float32 buffer as `EXACT_SUM_LIMBS` integer places
+    (`xtrees.ops.exact_sum_f32`), or None when it holds a NaN or an infinity;
+    params = [n]."""
+    _need(params, 1, "x_trees_exact_sum_f32")
+    var n = _count(_i(params, 0), "x_trees_exact_sum_f32")
+    var limbs = List[Int64](length=EXACT_SUM_LIMBS, fill=0)
+    var ok: Bool
+    comptime if XTREES_DEVICE_OPS:
+        ok = elem_dev.exact_sum_f32_device(f32_ptr(Int(py=x)), n, limbs)
+    else:
+        ok = exact_sum_f32(f32_ptr(Int(py=x)), n, limbs)
+    if not ok:
+        return PythonObject(None)
+    return py_list_i64(limbs)
+
+
+def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::margin2_run, also reached
+    # natively through the trees entry table (XT_MARGIN2).
+    var owned = _xt_owned([Int(py=acc), Int(py=dst)], params)
+    var result = margin2_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::put_f32_run, also reached
+    # natively through the trees entry table (XT_PUT_F32).
+    var owned = _xt_owned([Int(py=dst), Int(py=src)], params)
+    var result = put_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def softmax_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::softmax_rows_run, also reached
+    # natively through the trees entry table (XT_SOFTMAX_ROWS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = softmax_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def samme_step_binding(w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::samme_step_run, also reached
+    # natively through the trees entry table (XT_SAMME_STEP).
+    var owned = _xt_owned([Int(py=w), Int(py=pred), Int(py=y), Int(py=stats)], params)
+    var result = samme_step_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def r2_step_binding(w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::r2_step_run, also reached
+    # natively through the trees entry table (XT_R2_STEP).
+    var owned = _xt_owned([Int(py=w), Int(py=pred), Int(py=y), Int(py=stats)], params)
+    var result = r2_step_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def weighted_median_binding(preds: PythonObject, weights: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::weighted_median_run, also reached
+    # natively through the trees entry table (XT_WEIGHTED_MEDIAN).
+    var owned = _xt_owned([Int(py=preds), Int(py=weights), Int(py=res)], params)
+    var result = weighted_median_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def apply_binding(offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject, x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::apply_run, also reached
+    # natively through the trees entry table (XT_APPLY).
+    var owned = _xt_owned([Int(py=offsets), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=x), Int(py=res)], params)
+    var result = apply_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def gradients_binding(
+    score: PythonObject, y: PythonObject, g: PythonObject, h: PythonObject, target: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, kind (0 l2, 1 binary logloss, 2 multiclass softmax)] or,
+    with kind 2, [n, 2, k] with every buffer class-major (k * n)."""
+    if len(params) != 2 and len(params) != 3:
+        raise Error("x_trees_gradients: params must hold 2 values (3 for multiclass), got " + String(len(params)))
+    var n = _count(_i(params, 0), "x_trees_gradients")
+    var kind = _i(params, 1)
+    if kind != 0 and kind != 1 and kind != 2:
+        raise Error("x_trees_gradients: kind must be 0 (l2), 1 (binary) or 2 (multiclass)")
+    var k = 1
+    if kind == 2:
+        _need(params, 3, "x_trees_gradients")
+        k = _i(params, 2)
+        if k < 2:
+            raise Error("x_trees_gradients: multiclass needs k >= 2")
+    elif len(params) != 2:
+        raise Error("x_trees_gradients: only multiclass takes k")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.gradients_device(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)),
+                                       f64_ptr(Int(py=h)), f32_ptr(Int(py=target)), k)
+        else:
+            gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
+                      f32_ptr(Int(py=target)), k)
+    return PythonObject(n)
+
+
+def leaf_newton_binding(
+    nodes: PythonObject, g: PythonObject, h: PythonObject, values: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, n_nodes, reg_lambda] or [n, n_nodes, reg_lambda, lambda_l1, max_delta_step]."""
+    if len(params) != 3 and len(params) != 5:
+        raise Error("x_trees_leaf_newton: params must hold 3 or 5 values, got " + String(len(params)))
+    var n = _count(_i(params, 0), "x_trees_leaf_newton")
+    var n_nodes = _i(params, 1)
+    if n_nodes < 1:
+        raise Error("x_trees_leaf_newton: need n_nodes >= 1")
+    var l1: Float64 = 0.0
+    var mds: Float64 = 0.0
+    if len(params) == 5:
+        l1 = _f(params, 3)
+        mds = _f(params, 4)
+    comptime if XTREES_DEVICE_OPS:
+        var np = i32_ptr(Int(py=nodes))
+        boost_dev.leaf_newton_device(np, np, False, n, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes,
+                                     _f(params, 2), l1, mds, f32_ptr(Int(py=values)))
+    else:
+        leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
+                    f32_ptr(Int(py=values)), l1, mds)
+    return PythonObject(n_nodes)
+
+
+def leaf_newton_rows_binding(
+    nodes: PythonObject, rows: PythonObject, g: PythonObject, h: PythonObject, values: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """leaf_newton over rows[0 .. m) only (the bagged rows), nodes / g / h
+    indexed by the full row; params = [n, m, n_nodes, reg_lambda, lambda_l1, max_delta_step]."""
+    _need(params, 6, "x_trees_leaf_newton_rows")
+    var n = _count(_i(params, 0), "x_trees_leaf_newton_rows")
+    var m = _count(_i(params, 1), "x_trees_leaf_newton_rows")
+    var n_nodes = _i(params, 2)
+    if n_nodes < 1:
+        raise Error("x_trees_leaf_newton_rows: need n_nodes >= 1")
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.leaf_newton_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), True, m, f64_ptr(Int(py=g)),
+                                     f64_ptr(Int(py=h)), n, n_nodes, _f(params, 3), _f(params, 4), _f(params, 5),
+                                     f32_ptr(Int(py=values)))
+        return PythonObject(n_nodes)
+    leaf_newton_rows(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), m, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n,
+                     n_nodes, _f(params, 3), _f(params, 4), _f(params, 5), f32_ptr(Int(py=values)))
+    return PythonObject(n_nodes)
+
+
+def tree_score_add_binding(nodes: PythonObject, values: PythonObject, acc: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, weight]."""
+    _need(params, 2, "x_trees_tree_score_add")
+    var n = _count(_i(params, 0), "x_trees_tree_score_add")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.tree_score_add_device(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1),
+                                           f64_ptr(Int(py=acc)))
+        else:
+            tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1), f64_ptr(Int(py=acc)))
+    return PythonObject(n)
+
+
+def uniform_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::uniform_run, also reached
+    # natively through the trees entry table (XT_UNIFORM).
+    var owned = _xt_owned([Int(py=res)], params)
+    var result = uniform_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def onehot_leaves_binding(nodes: PythonObject, tree_base: PythonObject, node_col: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::onehot_leaves_run, also reached
+    # natively through the trees entry table (XT_ONEHOT_LEAVES).
+    var owned = _xt_owned([Int(py=nodes), Int(py=tree_base), Int(py=node_col), Int(py=res)], params)
+    var result = onehot_leaves_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::transpose_f32_run, also reached
+    # natively through the trees entry table (XT_TRANSPOSE_F32).
+    var owned = _xt_owned([Int(py=src), Int(py=dst)], params)
+    var result = transpose_f32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def transpose_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::transpose_f64_run, also reached
+    # natively through the trees entry table (XT_TRANSPOSE_F64).
+    var owned = _xt_owned([Int(py=src), Int(py=dst)], params)
+    var result = transpose_f64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def bag_rows_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::bag_rows_run, also reached
+    # natively through the trees entry table (XT_BAG_ROWS).
+    var owned = _xt_owned([Int(py=res)], params)
+    var result = bag_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def unseen_rows_binding(rows: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::unseen_rows_run, also reached
+    # natively through the trees entry table (XT_UNSEEN_ROWS).
+    var owned = _xt_owned([Int(py=rows), Int(py=res)], params)
+    var result = unseen_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def check_weights_f32_binding(w: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]; returns check_weights_f32's status (0 ok, 1 bad entry, 2 no positive)."""
+    _need(params, 1, "x_trees_check_weights_f32")
+    var n = _count(_i(params, 0), "x_trees_check_weights_f32")
+    if n == 0:
+        return PythonObject(2)
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(elem_dev.check_weights_f32_device(f32_ptr(Int(py=w)), n))
+    else:
+        return PythonObject(check_weights_f32(f32_ptr(Int(py=w)), n))
+
+
+def mul_f32_binding(a: PythonObject, b: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst = a * b elementwise in float32; params = [n]."""
+    _need(params, 1, "x_trees_mul_f32")
+    var n = _count(_i(params, 0), "x_trees_mul_f32")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.mul_f32_device(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
+        else:
+            mul_f32(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
+def log64_binding(x: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::log64_run (XT_LOG64).
+    var res: List[Float64] = [0.0]
+    var owned = XtOwned([Int(res.unsafe_ptr())], [0], [Float64(py=x)])
+    _ = log64_run(owned.view())
+    _ = owned
+    var value = res[0]
+    _ = res
+    return PythonObject(value)
+
+
+def logit_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """In place x = log(x / (1 - x)); params = [n]."""
+    _need(params, 1, "x_trees_logit")
+    var n = _count(_i(params, 0), "x_trees_logit")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.logit_device(f64_ptr(Int(py=x)), n)
+        else:
+            logit(f64_ptr(Int(py=x)), n)
+    return PythonObject(n)
+
+
+def normalize_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::normalize_rows_run, also reached
+    # natively through the trees entry table (XT_NORMALIZE_ROWS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = normalize_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def scatter_binding(dst: PythonObject, src: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::scatter_run, also reached
+    # natively through the trees entry table (XT_SCATTER).
+    var owned = _xt_owned([Int(py=dst), Int(py=src), Int(py=rows)], params)
+    var result = scatter_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def platt_fit_binding(f: PythonObject, y: PythonObject, ab: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::platt_fit_run, also reached
+    # natively through the trees entry table (XT_PLATT_FIT).
+    var owned = _xt_owned([Int(py=f), Int(py=y), Int(py=ab)], params)
+    var result = platt_fit_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, A, B]."""
+    _need(params, 3, "x_trees_platt_apply")
+    var n = _count(_i(params, 0), "x_trees_platt_apply")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)), 1, n, _f(params, 1), _f(params, 2),
+                                                 f64_ptr(Int(py=res)), 1)
+        else:
+            platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def isotonic_fit_binding(x: PythonObject, y: PythonObject, kx: PythonObject, ky: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::isotonic_fit_run, also reached
+    # natively through the trees entry table (XT_ISOTONIC_FIT).
+    var owned = _xt_owned([Int(py=x), Int(py=y), Int(py=kx), Int(py=ky)], params)
+    var result = isotonic_fit_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def isotonic_predict_binding(
+    kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [m, n]."""
+    _need(params, 2, "x_trees_isotonic_predict")
+    var m = _i(params, 0)
+    if m < 1:
+        raise Error("x_trees_isotonic_predict: no knots")
+    var n = _count(_i(params, 1), "x_trees_isotonic_predict")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), 1,
+                                                      n, f64_ptr(Int(py=res)), 1)
+        else:
+            isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+# lane py-misc-prep: CalibratedClassifierCV's per-class epilogue without
+# Python lists. A column of the (n, c) score block is read at a stride and
+# offset, and each calibrator writes straight into its column of the (n, k)
+# probability block; the per-element operations are `platt_apply`'s and
+# `isotonic_predict`'s (they now call these with stride 1).
+
+
+def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::platt_apply_strided_run, also reached
+    # natively through the trees entry table (XT_PLATT_APPLY_STRIDED).
+    var owned = _xt_owned([Int(py=f), Int(py=res)], params)
+    var result = platt_apply_strided_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def isotonic_predict_strided_binding(kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::isotonic_predict_strided_run, also reached
+    # natively through the trees entry table (XT_ISOTONIC_PREDICT_STRIDED).
+    var owned = _xt_owned([Int(py=kx), Int(py=ky), Int(py=t), Int(py=res)], params)
+    var result = isotonic_predict_strided_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::complement_pairs_run, also reached
+    # natively through the trees entry table (XT_COMPLEMENT_PAIRS).
+    var owned = _xt_owned([Int(py=x)], params)
+    var result = complement_pairs_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def calibrated_proba_binding(acc: PythonObject, pairs: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::calibrated_proba_run
+    # (XT_CALIBRATED_PROBA): pairs = (blk, bc, at, cols, ks, calibrators),
+    # calibrators = (kind, a, b, kx, ky, m).
+    _need(params, 2, "x_trees_calibrated_proba")
+    var owned = _xt_owned([Int(py=acc)], params)
+    owned.ints.append(len(pairs))
+    owned.floats.append(Float64(len(pairs)))
+    owned.bad.append(UInt8(0))
+    for p in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs: Python unpack
+        var row = pairs[p]
+        var cals = row[5]
+        owned.addrs.append(Int(py=row[0]))
+        owned.addrs.append(Int(py=row[3]))
+        var words: List[Int] = [Int(py=row[1]), Int(py=row[2]), Int(py=row[4]), len(cals)]
+        for w in range(4):  # driver-loop: over fixed call structure, small-loop(the four integer words of a pair)
+            owned.ints.append(words[w])
+            owned.floats.append(Float64(words[w]))
+            owned.bad.append(UInt8(0))
+        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each): Python unpack
+            var cal = cals[j]
+            owned.addrs.append(Int(py=cal[3]))
+            owned.addrs.append(Int(py=cal[4]))
+            var kind = Int(py=cal[0])
+            owned.ints.append(kind)
+            owned.floats.append(Float64(kind))
+            owned.bad.append(UInt8(0))
+            owned.ints.append(0)
+            owned.floats.append(Float64(py=cal[1]))
+            owned.bad.append(UInt8(1))
+            owned.ints.append(0)
+            owned.floats.append(Float64(py=cal[2]))
+            owned.bad.append(UInt8(1))
+            var m = Int(py=cal[5])
+            owned.ints.append(m)
+            owned.floats.append(Float64(m))
+            owned.bad.append(UInt8(0))
+    var result = calibrated_proba_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def ovr_assemble_binding(out_buf: PythonObject, columns: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::ovr_assemble_run
+    # (XT_OVR_ASSEMBLE): columns = one (blk, bc, at) per class.
+    _need(params, 3, "x_trees_ovr_assemble")
+    var owned = _xt_owned([Int(py=out_buf)], params)
+    for j in range(len(columns)):  # driver-loop: over the members (one column each): Python unpack
+        var col = columns[j]
+        owned.addrs.append(Int(py=col[0]))
+        var bc = Int(py=col[1])
+        var at = Int(py=col[2])
+        owned.ints.append(bc)
+        owned.floats.append(Float64(bc))
+        owned.bad.append(UInt8(0))
+        owned.ints.append(at)
+        owned.floats.append(Float64(at))
+        owned.bad.append(UInt8(0))
+    var result = ovr_assemble_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def indicator_codes_binding(codes: PythonObject, out_i: PythonObject, out_f: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::indicator_codes_run, also reached
+    # natively through the trees entry table (XT_INDICATOR_CODES).
+    var owned = _xt_owned([Int(py=codes), Int(py=out_i), Int(py=out_f)], params)
+    var result = indicator_codes_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::stack_w64_run (XT_STACK_W64):
+    # addresses = [dst, column 0, column 1, ...].
+    var addrs: List[Int] = [Int(py=dst)]
+    for j in range(len(cols)):  # driver-loop: over fixed call structure, small-loop(one address word per column): Python unpack
+        addrs.append(Int(py=cols[j]))
+    var owned = _xt_owned(addrs^, params)
+    var result = stack_w64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def rows_any_unset_binding(eq: PythonObject, out_i: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::rows_any_unset_run, also reached
+    # natively through the trees entry table (XT_ROWS_ANY_UNSET).
+    var owned = _xt_owned([Int(py=eq), Int(py=out_i)], params)
+    var result = rows_any_unset_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def binary_proba_binding(p: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::binary_proba_run, also reached
+    # natively through the trees entry table (XT_BINARY_PROBA).
+    var owned = _xt_owned([Int(py=p), Int(py=res)], params)
+    var result = binary_proba_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def exact_sum_binding(x: PythonObject, res: PythonObject, flags: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::exact_sum_run, also reached
+    # natively through the trees entry table (XT_EXACT_SUM).
+    var owned = _xt_owned([Int(py=x), Int(py=res), Int(py=flags)], params)
+    var result = exact_sum_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def count_rows_binding(counts: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::count_rows_run, also reached
+    # natively through the trees entry table (XT_COUNT_ROWS).
+    var owned = _xt_owned([Int(py=counts), Int(py=rows)], params)
+    var result = count_rows_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def count_equal_binding(a: PythonObject, b: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::count_equal_run, also reached
+    # natively through the trees entry table (XT_COUNT_EQUAL).
+    var owned = _xt_owned([Int(py=a), Int(py=b)], params)
+    var result = count_equal_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def oob_r2_binding(bufs: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::oob_r2_run (XT_OOB_R2).
+    if len(bufs) != 6:
+        raise Error("x_trees_oob_r2: bufs must hold 6 addresses")
+    var addrs = List[Int]()
+    for j in range(6):  # driver-loop: over fixed call structure, small-loop(the six buffer address words): Python unpack
+        addrs.append(Int(py=bufs[j]))
+    var owned = _xt_owned(addrs^, params)
+    var result = oob_r2_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def class_counts_binding(y: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::class_counts_run, also reached
+    # natively through the trees entry table (XT_CLASS_COUNTS).
+    var owned = _xt_owned([Int(py=y), Int(py=counts)], params)
+    var result = class_counts_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def code_counts_binding(codes: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: counts (int32, k) = the rows of each int32 class code
+    (the forests' class_weight='balanced' counts; cpu2-l5-trees: on the
+    device in a GPU build, `glue_device.code_counts_host` on the host column)."""
+    _need(params, 2, "x_trees_code_counts")
+    var n = _count(_i(params, 0), "x_trees_code_counts")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_code_counts: needs k >= 1")
+    var ca = Int(py=codes)
+    var cp = i32_ptr(ca) if ca != 0 else i32_ptr(Int(py=counts))
+    comptime if XTREES_DEVICE_OPS:
+        code_counts_device(cp, n, k, i32_ptr(Int(py=counts)))
+    else:
+        code_counts_host(cp, n, k, i32_ptr(Int(py=counts)))
+    return PythonObject(k)
+
+
+def class_rows_binding(codes: PythonObject, values: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: dst (float32, n) = values (float32, k) at each row's
+    int32 class code (the forests' per-row class weights; cpu2-l5-trees)."""
+    _need(params, 2, "x_trees_class_rows")
+    var n = _count(_i(params, 0), "x_trees_class_rows")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_class_rows: needs k >= 1")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            class_rows_device(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+        else:
+            class_rows_host(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
+def remap_cols_binding(colid: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::remap_cols_run, also reached
+    # natively through the trees entry table (XT_REMAP_COLS).
+    var owned = _xt_owned([Int(py=colid), Int(py=cols)], params)
+    var result = remap_cols_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def positive_codes_binding(x: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::positive_codes_run, also reached
+    # natively through the trees entry table (XT_POSITIVE_CODES).
+    var owned = _xt_owned([Int(py=x), Int(py=codes)], params)
+    var result = positive_codes_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def spread_leaves_binding(vals: PythonObject, offs: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes, n_trees, k]: dst (float32, n_nodes x k) row g =
+    vals[g] in column (tree of g) mod k, zeros elsewhere (TreeExplainer's
+    multiclass DART forest)."""
+    _need(params, 3, "x_trees_spread_leaves")
+    var nn = _count(_i(params, 0), "x_trees_spread_leaves")
+    var t = _count(_i(params, 1), "x_trees_spread_leaves")
+    var k = _i(params, 2)
+    if k < 1 or t < 1:
+        raise Error("x_trees_spread_leaves: needs trees and k >= 1")
+    if nn > 0:
+        comptime if XTREES_DEVICE_OPS:
+            spread_leaves_device(f32_ptr(Int(py=vals)), i32_ptr(Int(py=offs)), t, nn, k, f32_ptr(Int(py=dst)))
+        else:
+            spread_leaves(f32_ptr(Int(py=vals)), i32_ptr(Int(py=offs)), t, nn, k, f32_ptr(Int(py=dst)))
+    return PythonObject(nn)
+
+
+def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::leaf_numbering_run, also reached
+    # natively through the trees entry table (XT_LEAF_NUMBERING).
+    var owned = _xt_owned([Int(py=left), Int(py=node_col)], params)
+    var result = leaf_numbering_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+#: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
+#: nodes in this binding (xtrees/ops.mojo `tree_shape`) instead of a Python
+#: loop over `tolist()` rows. Integers; every build and both tiers.
+# TOMBSTONE: MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF (unmeasured old path: the Python tree walk) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 3f0e029eb4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF.patch; record in docs/TOMBSTONES.md.
+
+
+def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes]: res (int32 2) = [depth, leaf count] of the tree
+    whose `left` (int32 n_nodes, tree-relative) starts at the address."""
+    _need(params, 1, "x_trees_tree_shape")
+    var nn = _count(_i(params, 0), "x_trees_tree_shape")
+    if nn == 0:
+        raise Error("x_trees_tree_shape: empty tree")
+    tree_shape(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=res)))
+    return PythonObject(nn)
+
+
+#: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
+#: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
+#: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
+#: columns and stacking, and binary (1 - p, p) rows in this binding on both
+#: tiers. `-D MOJOLEARN_PY2MOJO_trees_OFF` sets 0: the Python row loops of
+#: main before the lane (the A/B arm A).
+comptime XTREES_PY2MOJO = not is_defined["MOJOLEARN_PY2MOJO_trees_OFF"]()
+
+
+def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, c, j]: dst = src[:, j] of a row-major float64 (n, c) block."""
+    _need(params, 3, "x_trees_column_f64")
+    var n = _count(_i(params, 0), "x_trees_column_f64")
+    var c = _i(params, 1)
+    var j = _i(params, 2)
+    if c < 1 or j < 0 or j >= c:
+        raise Error("x_trees_column_f64: column out of range")
+    if n > 0:
+        column_f64(f64_ptr(Int(py=src)), n, c, j, f64_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
+#: lane/apple-fast-trees-ensembles (2026-10-02): the build-time FAST switches
+#: of python/mojolearn/_expansion_trees.py as a bit set, filled only in the
+#: FAST + Apple build; 0 in every other build, so IDENTICAL and the other
+#: vendors never see a switch. Default ON in FAST + Apple since the M3 A/B
+#: (lane/apple-fast-trees-ensembles 09a978f4c, n=1, quality identical in every
+#: pair): native splits istella stacking-clf -5.1%, stacking-reg -2.9%,
+#: calibrated -9.6%, ovr -2.2%, multioutput-clf -5.9%; ada session taxi
+#: adaboost-clf -9.0%, adaboost-reg -42%; session share on top adaboost-clf
+#: -22%. `-D MOJOLEARN_TE_<NAME>_OFF` turns one off; the old `-D
+#: MOJOLEARN_TE_<NAME>` is harmless. The AdaBoost data session itself is no
+#: longer a switch (lane m1-followups-misc: every build opens it; bits 2 and
+#: 128 are always 0), only SHARE is.
+comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_TE_NATIVE_SPLITS_OFF (old path of the FAST Apple default, EXP:124 KEPT ed49f2b11; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 6037d8cab6.
+# Restore: git apply experiments/removed/MOJOLEARN_TE_NATIVE_SPLITS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF (escape from the AdaBoost data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_SHARE_OFF (old path of the FAST Apple default, EXP:123 KEPT ed49f2b11; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 1eebdbdc8f.
+# Restore: git apply experiments/removed/MOJOLEARN_TE_ADA_SESSION_SHARE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime _XT_ADA_SESSION_SHARE = _XT_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_IDN_ADA_SESSION_OFF (`_XT_IDN_ADA_SESSION`, bit 128: the IDENTICAL escape from the AdaBoost data
+# session; the session moved no bit) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
+#: fam2-forests (2026-10-04), an IDENTICAL GPU build's switch (bit 64, every
+#: vendor; never the host column): Kernel and Permutation SHAP over one of
+#: this library's flat forests evaluate the model on the device
+#: (xtrees/agnostic_device.mojo MOJOLEARN_IDN_SHAP_DEVICE_MODEL). Moves no
+#: bit. `-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF` clears it.
+comptime _XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
+# recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048, always 0 now); the
+# model-route exports below compile under bit 64 alone.
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
+comptime XTREES_FAST_SWITCHES = (
+    (1 if _XT_NATIVE_SPLITS else 0)
+    + (4 if _XT_ADA_SESSION_SHARE else 0)
+    + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
+    + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
+    + (32 if agn_dev.PSHAP_DELTA else 0)
+    + (64 if _XT_AGN_DEVICE_MODEL else 0)
+)
+
+
+def fast_switches_binding() raises -> PythonObject:
+    """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2 the
+    deleted MOJOLEARN_TE_ADA_SESSION (always 0), bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
+    MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
+    IDENTICAL build's switch; both in xtrees/agnostic_device.mojo), bit 32
+    MOJOLEARN_PSHAP_DELTA (FAST + Apple; xtrees/agnostic_device.mojo), bit 64
+    MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch), bit
+    128 the deleted `_XT_IDN_ADA_SESSION` (always 0), bit 256 the deleted
+    MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 the deleted MOJOLEARN_PSHAP_FAST_OVERLAP (always 0)
+    (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
+    bits 1024 and 2048 the deleted MOJOLEARN_KSHAP_FAST_DEVICE_MODEL and
+    MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (always 0)."""
+    return PythonObject(XTREES_FAST_SWITCHES)
+
+
+def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::device_folds_run, also reached
+    # natively through the trees entry table (XT_DEVICE_FOLDS).
+    var owned = _xt_owned([Int(py=codes), Int(py=rows), Int(py=counts)], params)
+    var result = device_folds_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
+    _need(params, n, who)
+    var out = List[Int]()
+    for i in range(n):  # driver-loop: over fixed call structure, small-loop(params words)
+        out.append(_i(params, i))
+    return out^
+
+
+def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [m, nb, k]; res float64 m x k (on the device in a GPU build,
+    xtrees/agnostic_device.mojo; the same words)."""
+    _need(params, 3, "x_trees_block_mean")
+    var m = _count(_i(params, 0), "x_trees_block_mean")
+    var nb = _i(params, 1)
+    if nb < 1:
+        raise Error("x_trees_block_mean: nb must be >= 1")
+    if m > 0:
+        comptime if XTREES_DEVICE_OPS:
+            agn_dev.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
+        else:
+            agn_host.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
+    return PythonObject(m)
+
+
+def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
+    out[i] = w[i] / sum(w) in float64 from float32 w, the sum in
+    xtrees/fold_order.mojo's chunk + pairwise-tree order on every column
+    (`ops.normalized_weights` / `ops_device_elem.normalized_weights_device`).
+    Returns 0, 1 when an entry is not finite or is negative, 2 when the
+    total is not positive (out then unspecified). params = [n]."""
+    _need(params, 1, "x_trees_normalized_weights")
+    var n = _count(_i(params, 0), "x_trees_normalized_weights")
+    if n == 0:
+        return PythonObject(2)
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(elem_dev.normalized_weights_device(f32_ptr(Int(py=w)), n, f64_ptr(Int(py=dst))))
+    else:
+        return PythonObject(normalized_weights(f32_ptr(Int(py=w)), n, f64_ptr(Int(py=dst))))
+
+
+def iota_i32_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::iota_i32_run, also reached
+    # natively through the trees entry table (XT_IOTA_I32).
+    var owned = _xt_owned([Int(py=out_addr)], params)
+    var result = iota_i32_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def fill_class_major_f64_binding(inits_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::fill_class_major_f64_run, also reached
+    # natively through the trees entry table (XT_FILL_CLASS_MAJOR_F64).
+    var owned = _xt_owned([Int(py=inits_addr), Int(py=out_addr)], params)
+    var result = fill_class_major_f64_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
+    over subset SIZES; lane cgr4-py-compute moved it out of Python): params
+    = [M, nsamples] with M > 1; tables = (size_off Int64 M // 2 + 1, size_w
+    float64 max(1, M // 2), cdf float64 max(1, M // 2)); out = Int64 6:
+    [m, nfixed, nfull, npaired, L, wrand_bits] (`dst`). The sums run in index
+    order (one fixed fold, the same on every column)."""
+    _need(params, 2, "x_trees_kshap_schedule")
+    var M = _i(params, 0)
+    var nsamples = _count(_i(params, 1), "x_trees_kshap_schedule")
+    if M < 2:
+        raise Error("x_trees_kshap_schedule: needs M > 1")
+    var off = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=tables[0]))
+    var sw = f64_ptr(Int(py=tables[1]))
+    var cdf = f64_ptr(Int(py=tables[2]))
+    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst))
+    var nfull = kshap_schedule(M, nsamples, off, sw, cdf, res)
+    return PythonObject(nfull)
+
+
+def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
+                        params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's synthetic rows of a chunk (lane cgr2-metrics-shap):
+    x Float32 R x d, bg Float32 nb x d, tables = (size_off Int64 nfull+1,
+    size_w float64 nfull, cdf float64 L), syn Float32 (R m nb) x d; params =
+    [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits]."""
+    var p = _agn_ints(params, 11, "x_trees_kshap_synth")
+    _kshap_check(p, "x_trees_kshap_synth")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
+                            Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    else:
+        agn_host.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
+                             Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    return PythonObject(p[0])
+
+
+def agn_pool_release_binding() raises -> PythonObject:
+    """Lane idn-all: frees the IDENTICAL explainers' pooled synthetic device
+    buffer (xtrees/agnostic_device.mojo `pool_release`); the Python
+    explainers call it when `shap_values` ends. Nothing to free on the host
+    column or a build without MOJOLEARN_AGN_IDN_SYN_POOL."""
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pool_release()
+    return PythonObject(0)
+
+
+def kshap_solve_binding(yout: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                        phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's values of a chunk: out Float32 (R m nb) x k (the
+    model on the synthetic rows), fx Float32 R x k (the model on the rows),
+    fnull float64 k (linked), phi float64 R x d x k; params = [R, nb, d,
+    nfixed, m, nfull, L, npaired, row0, seed, wrand_bits, k, link]."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve")
+    _kshap_check(p, "x_trees_kshap_solve")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve: needs outputs")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                            Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                            p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        agn_host.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                             Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                             p[9], p[8], UInt64(p[10]), p[12] != 0)
+    return PythonObject(p[0])
+
+
+def kshap_means_binding(yout: PythonObject, ey: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_BATCH: a chunk's linked background means, ey
+    float64 R x m x k; params = [R, nb, m, k, link]. Refused in a build
+    without the define (x_trees_fast_switches bit 8 is 0 there)."""
+    var p = _agn_ints(params, 5, "x_trees_kshap_means")
+    if p[0] < 0 or p[1] < 1 or p[2] < 0 or p[3] < 1:
+        raise Error("x_trees_kshap_means: bad counts")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_means(Int(py=yout), Int(py=ey), p[0], p[1], p[3], p[2], p[4] != 0)
+    else:
+        raise Error("x_trees_kshap_means: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return PythonObject(p[0])
+
+
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
+# on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
+
+
+def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                           phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_BATCH: `x_trees_kshap_solve` from the rows'
+    means (`x_trees_kshap_means`); params as x_trees_kshap_solve's (nb is
+    unused)."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve_ey")
+    _kshap_check(p, "x_trees_kshap_solve_ey")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_ey: needs outputs")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_solve_ey(Int(py=ey), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                               Int(py=tables[2]), Int(py=phi), p[0], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                               p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_ey: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return PythonObject(p[0])
+
+
+def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, params: PythonObject) raises -> PythonObject:
+    """PermutationExplainer's synthetic rows of a chunk: syn Float32
+    (R np (2d + 1) nb) x d; params = [R, nb, d, np, row0, seed]."""
+    var p = _agn_ints(params, 6, "x_trees_pshap_synth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_synth: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
+    return PythonObject(p[0])
+
+
+def pshap_values_binding(yout: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """PermutationExplainer's values of a chunk: out Float32 (R np (2d + 1)
+    nb) x k, phi float64 R x d x k; params = [R, nb, d, np, row0, seed, k]."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_values")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    return PythonObject(p[0])
+
+
+def agn_model_load_binding(forest: PythonObject, bg: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained flat forest and
+    the background for one `shap_values` call. forest = (offsets Int32
+    trees + 1, feature ids Int32 nodes, thresholds Float32 nodes, left
+    children Int32 nodes, leaves Float32 nodes x k), the snapshot the
+    forest's own predict validated; bg Float32 nb x d; params = [trees,
+    nodes, k, d, nb, rf_input]. Refused in a build without the define
+    (x_trees_fast_switches bit 64 is 0 there)."""
+    var p = _agn_ints(params, 6, "x_trees_agn_model_load")
+    if len(forest) != 5:
+        raise Error("x_trees_agn_model_load: forest must hold 5 arrays")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.model_load(Int(py=forest[0]), Int(py=forest[1]), Int(py=forest[2]), Int(py=forest[3]),
+                           Int(py=forest[4]), Int(py=bg), p[0], p[1], p[2], p[3], p[4], p[5] != 0)
+    else:
+        raise Error("x_trees_agn_model_load: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
+def agn_model_release_binding() raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: frees the device forest and
+    background (`x_trees_agn_model_load`); the Python explainers call it
+    when `shap_values` ends. Nothing to free in a build without the define."""
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.model_release()
+    return PythonObject(0)
+
+
+def kshap_solve_model_binding(x: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                              phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: KernelExplainer's values of a chunk
+    over the loaded forest, `x_trees_kshap_synth` + the model +
+    `x_trees_kshap_solve` without leaving the device: x Float32 R x d (the
+    chunk's rows), fx Float32 R x k, fnull float64 k (linked), phi float64
+    R x d x k; params as x_trees_kshap_solve's = [R, nb, d, nfixed, m,
+    nfull, L, npaired, row0, seed, wrand_bits, k, link] (nb must be the
+    loaded background's)."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve_model")
+    _kshap_check(p, "x_trees_kshap_solve_model")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_model: needs outputs")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.kshap_solve_model(Int(py=x), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                                  Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7],
+                                  p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
+def pshap_linear_ok_binding() raises -> PythonObject:
+    """1 when this build carries MOJOLEARN_IDN_PSHAP_RESIDENT on a device
+    binding (xtrees/agnostic_device.mojo), else 0 (the host column and every
+    other build keep the model callback)."""
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def pshap_values_linear_binding(x: PythonObject, bg: PythonObject, wb: PythonObject, phi: PythonObject,
+                                params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_PSHAP_RESIDENT (lane/neighbors-small-ports): a chunk of
+    PermutationExplainer values over one of this library's linear
+    regressors, the synthetic rows and the model on the device: x Float32
+    R x d, bg Float32 nb x d, wb Float32 k x (d + 1), phi float64 R x d x k;
+    params = [R, nb, d, np, row0, seed, k, link]."""
+    var p = _agn_ints(params, 8, "x_trees_pshap_values_linear")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1 or p[7] < 0 or p[7] > 2:
+        raise Error("x_trees_pshap_values_linear: bad counts")
+    comptime if XTREES_DEVICE_OPS and agn_dev.PSHAP_IDN_RESIDENT:
+        agn_dev.pshap_values_linear(Int(py=x), Int(py=bg), Int(py=wb), Int(py=phi), p[0], p[1], p[2], p[6], p[3],
+                                    p[5], p[4], p[7])
+    else:
+        raise Error("x_trees_pshap_values_linear: built without MOJOLEARN_IDN_PSHAP_RESIDENT")
+    return PythonObject(p[0])
+
+
+def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: PermutationExplainer's values of a
+    chunk over the loaded forest, `x_trees_pshap_synth` + the model +
+    `x_trees_pshap_values` without leaving the device: x Float32 R x d,
+    phi float64 R x d x k; params as x_trees_pshap_values' = [R, nb, d, np,
+    row0, seed, k] (nb must be the loaded background's)."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_values_model")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values_model: bad counts")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.pshap_values_model(Int(py=x), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_values_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
+def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_PSHAP_DELTA: the chunk's varying synthetic rows only (in
+    full order) into syn (Float32, room for (R np (2d + 1) nb) x d), their
+    count into tot (Int64 1); params as x_trees_pshap_synth's. Refused when the FAST Apple default is inactive or _OFF is set
+    (x_trees_fast_switches bit 32 is 0 there)."""
+    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_dsynth: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dsynth(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_dsynth: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return PythonObject(p[0])
+
+
+# TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
+# on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
+# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
+
+
+def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
+                          tot: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_PSHAP_DELTA: phi float64 R x d x k from out Float32 (rows
+    x k, the model on x_trees_pshap_dsynth's rows); tot Int64 1 scratch;
+    params = [R, nb, d, np, row0, seed, k]."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_dvalues")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_dvalues: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dvalues(Int(py=x), Int(py=bg), Int(py=yout), Int(py=phi), Int(py=tot), p[0], p[1], p[2],
+                              p[6], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_dvalues: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return PythonObject(p[0])
+
+
+# ---- lane py-runtime-b: DART's per-tree bookkeeping and the class priors
+# (the arithmetic is in xtrees/api_kernels.mojo; these doors unpack and box),
+# moved out of Python (`_expansion_trees._boost` / `_boost_loop_device`).
+# t-, k- and t*k-sized binary64 scalar words on the host: the same IEEE
+# operations in the same order as the Python they replace, so the same bits
+# on every column (the device round reads the thresholds and float32
+# coefficients these write).
+
+
+def class_priors_binding(counts: PythonObject, priors: PythonObject, params: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::class_priors_run, also reached
+    # natively through the trees entry table (XT_CLASS_PRIORS).
+    var owned = _xt_owned([Int(py=counts), Int(py=priors)], params)
+    var result = class_priors_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def dart_thresholds_binding(weights: PythonObject, coefs: PythonObject, coef32: PythonObject, thr: PythonObject,
+                            state: PythonObject, params: PythonObject, rate: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::dart_thresholds_run
+    # (XT_DART_THRESHOLDS): the rate is the fifth positional parameter.
+    var owned = _xt_owned([Int(py=weights), Int(py=coefs), Int(py=coef32), Int(py=thr), Int(py=state)], params)
+    if len(owned.ints) != 4:
+        raise Error("x_trees_dart_thresholds: params must hold 4 values, got " + String(len(owned.ints)))
+    owned.ints.append(0)
+    owned.floats.append(Float64(py=rate))
+    owned.bad.append(UInt8(1))
+    var result = dart_thresholds_run(owned.view())
+    _ = owned
+    return PythonObject(result)
+
+
+def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: PythonObject, state: PythonObject,
+                         params: PythonObject, lr: PythonObject) raises -> PythonObject:
+    # Unpack only; the body is xtrees/glue_runs.mojo::dart_rescale_run
+    # (XT_DART_RESCALE): lr is the fifth positional parameter; the fifth
+    # address receives [k_d, shrink, factor] as float64 words.
+    var res: List[Float64] = [0.0, 0.0, 0.0]
+    var owned = _xt_owned([Int(py=weights), Int(py=coefs), Int(py=flags), Int(py=state), Int(res.unsafe_ptr())],
+                          params)
+    if len(owned.ints) != 4:
+        raise Error("x_trees_dart_rescale: params must hold 4 values, got " + String(len(owned.ints)))
+    owned.ints.append(0)
+    owned.floats.append(Float64(py=lr))
+    owned.bad.append(UInt8(1))
+    var nd = dart_rescale_run(owned.view())
+    _ = owned
+    var out = Python.list()
+    out.append(PythonObject(nd))
+    out.append(PythonObject(res[1]))
+    out.append(PythonObject(res[2]))
+    _ = res
+    return out
+
+
+def label_weights_native_api_v1_binding() raises -> PythonObject:
+    var api = LABEL_WEIGHTS_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def register(mut m: PythonModuleBuilder) raises:
+    """The shared export list; both bindings call this."""
+    m.def_function[label_weights_native_api_v1_binding]("label_weights_native_api_v1")
+    m.def_function[tree_shap_cache_enabled_binding]("x_trees_tree_shap_cache_enabled")
+    m.def_function[forest_auxiliary_binding]("x_trees_forest_auxiliary")
+    m.def_function[sample_indices_binding]("x_trees_sample_indices")
+    m.def_function[weighted_sample_binding]("x_trees_weighted_sample")
+    m.def_function[transpose_f64_binding]("x_trees_transpose_f64")
+    m.def_function[bag_rows_binding]("x_trees_bag_rows")
+    m.def_function[unseen_rows_binding]("x_trees_unseen_rows")
+    m.def_function[gather_f32_binding]("x_trees_gather_f32")
+    m.def_function[gather_i32_binding]("x_trees_gather_i32")
+    m.def_function[accumulate_binding]("x_trees_accumulate")
+    m.def_function[accumulate_onehot_binding]("x_trees_accumulate_onehot")
+    m.def_function[accumulate_cols_binding]("x_trees_accumulate_cols")
+    m.def_function[accumulate_cols_many_binding]("x_trees_accumulate_cols_many")
+    m.def_function[accumulate_rows_binding]("x_trees_accumulate_rows")
+    m.def_function[argmax_rows_binding]("x_trees_argmax_rows")
+    m.def_function[argmax_rows_f32_binding]("x_trees_argmax_rows_f32")
+    m.def_function[scale_binding]("x_trees_scale")
+    m.def_function[softmax_rows_binding]("x_trees_softmax_rows")
+    m.def_function[scale_to_f32_binding]("x_trees_scale_to_f32")
+    m.def_function[put_f32_binding]("x_trees_put_f32")
+    m.def_function[exact_sum_f32_binding]("x_trees_exact_sum_f32")
+    m.def_function[margin2_binding]("x_trees_margin2")
+    m.def_function[samme_step_binding]("x_trees_samme_step")
+    m.def_function[r2_step_binding]("x_trees_r2_step")
+    m.def_function[weighted_median_binding]("x_trees_weighted_median")
+    m.def_function[apply_binding]("x_trees_apply")
+    m.def_function[gradients_binding]("x_trees_gradients")
+    m.def_function[leaf_newton_binding]("x_trees_leaf_newton")
+    m.def_function[leaf_newton_rows_binding]("x_trees_leaf_newton_rows")
+    m.def_function[tree_score_add_binding]("x_trees_tree_score_add")
+    m.def_function[uniform_binding]("x_trees_uniform")
+    m.def_function[onehot_leaves_binding]("x_trees_onehot_leaves")
+    m.def_function[transpose_f32_binding]("x_trees_transpose_f32")
+    m.def_function[check_weights_f32_binding]("x_trees_check_weights_f32")
+    m.def_function[mul_f32_binding]("x_trees_mul_f32")
+    m.def_function[log64_binding]("x_trees_log64")
+    m.def_function[normalize_rows_binding]("x_trees_normalize_rows")
+    m.def_function[logit_binding]("x_trees_logit")
+    m.def_function[scatter_binding]("x_trees_scatter")
+    m.def_function[platt_fit_binding]("x_trees_platt_fit")
+    m.def_function[platt_apply_binding]("x_trees_platt_apply")
+    m.def_function[isotonic_fit_binding]("x_trees_isotonic_fit")
+    m.def_function[isotonic_predict_binding]("x_trees_isotonic_predict")
+    m.def_function[platt_apply_strided_binding]("x_trees_platt_apply_strided")
+    m.def_function[isotonic_predict_strided_binding]("x_trees_isotonic_predict_strided")
+    m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
+    m.def_function[calibrated_proba_binding]("x_trees_calibrated_proba")
+    m.def_function[ovr_assemble_binding]("x_trees_ovr_assemble")
+    m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
+    m.def_function[column_f64_binding]("x_trees_column_f64")
+    m.def_function[fast_switches_binding]("x_trees_fast_switches")
+    m.def_function[device_folds_binding]("x_trees_device_folds")
+    m.def_function[stack_w64_binding]("x_trees_stack_w64")
+    m.def_function[rows_any_unset_binding]("x_trees_rows_any_unset")
+    m.def_function[binary_proba_binding]("x_trees_binary_proba")
+    m.def_function[exact_sum_binding]("x_trees_exact_sum")
+    m.def_function[count_rows_binding]("x_trees_count_rows")
+    m.def_function[count_equal_binding]("x_trees_count_equal")
+    m.def_function[oob_r2_binding]("x_trees_oob_r2")
+    m.def_function[class_counts_binding]("x_trees_class_counts")
+    m.def_function[class_priors_binding]("x_trees_class_priors")
+    m.def_function[dart_thresholds_binding]("x_trees_dart_thresholds")
+    m.def_function[dart_rescale_binding]("x_trees_dart_rescale")
+    m.def_function[code_counts_binding]("x_trees_code_counts")
+    m.def_function[class_rows_binding]("x_trees_class_rows")
+    m.def_function[remap_cols_binding]("x_trees_remap_cols")
+    m.def_function[positive_codes_binding]("x_trees_positive_codes")
+    m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
+    m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, umbrella) deleted 2026-11-15 by lane/expdel2-37-series; this read folded by lane/expdel2-sweep.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-sweep.patch; record in docs/TOMBSTONES.md.
+    m.def_function[tree_shape_binding]("x_trees_tree_shape")
+    m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
+    m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
+    m.def_function[iota_i32_binding]("x_trees_iota_i32")
+    m.def_function[fill_class_major_f64_binding]("x_trees_fill_class_major_f64")
+    m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
+    m.def_function[agn_pool_release_binding]("x_trees_agn_pool_release")
+    m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
+    m.def_function[kshap_means_binding]("x_trees_kshap_means")
+    m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
+    m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
+    m.def_function[pshap_values_binding]("x_trees_pshap_values")
+    m.def_function[agn_model_load_binding]("x_trees_agn_model_load")
+    m.def_function[agn_model_release_binding]("x_trees_agn_model_release")
+    m.def_function[kshap_solve_model_binding]("x_trees_kshap_solve_model")
+    m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
+    m.def_function[pshap_linear_ok_binding]("x_trees_pshap_linear_ok")
+    m.def_function[pshap_values_linear_binding]("x_trees_pshap_values_linear")
+    m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
+    m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")

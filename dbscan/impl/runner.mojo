@@ -97,10 +97,10 @@ now IMPLEMENTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
 one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.time import perf_counter_ns
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_dim, block_idx, thread_idx
+from std.time import perf_counter_ns
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -128,8 +128,15 @@ from dbscan.impl.vertexdeg.algo import (
     weighted_vertex_deg_dense,
 )
 from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_COSINE,
+    DBSCAN_METRIC_L1,
     DBSCAN_METRIC_L2,
     dbscan_metric_name,
+)
+from dbscan.impl.brute_edge_free import (
+    DBSCAN_BRUTE_EDGE_FREE,
+    brute_edge_free_applies,
+    dbscan_brute_edge_free_fit,
 )
 from dbscan.impl.label.classlabels import make_monotonic
 from dbscan.impl.sparse.detail.csr import (
@@ -141,8 +148,9 @@ from neighbors.impl.ball_cover.ball_cover import (
     rbc_build_index,
     rbc_n_landmarks,
 )
+from core.device_plan import DevicePlan
 from dbscan.impl.multi_gpu import (
-    vertex_deg_dispatch, rbc_eps_nn_query_count,
+    dbscan_device_plan, vertex_deg_dispatch, rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
 from neighbors.impl.ball_cover.scan import (
@@ -221,24 +229,23 @@ from neighbors.impl.ball_cover.registers import (
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns keeps
 #: the counts too (it was Apple only), so a fit the edge cap splits into
 #: several batches does not re-run the count pass in loop 2. Same counts, so
-#: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+#: the same CSR.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 1994e86138.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_DBSCAN_KEEP_COUNTS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not has_apple_gpu_accelerator()
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    and not TARGET_HAS_APPLE_GPU
 )
+# TOMBSTONE: MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at e713eb2d5c.
+# Restore: git apply experiments/removed/MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime DBSCAN_RBC_KEEP_COUNTS = (
     (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
-        )
-        or IDN_DBSCAN_KEEP_COUNTS
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+        and TARGET_HAS_APPLE_GPU
     )
-    and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+    or IDN_DBSCAN_KEEP_COUNTS
 )
 
 #: fam-cluster (2026-10-04), IDENTICAL: on the ball-cover arm loop 1 no
@@ -246,15 +253,12 @@ comptime DBSCAN_RBC_KEEP_COUNTS = (
 #: by the exact 64-bit count (`adjlen_here = nnz1`), and the per-batch
 #: maximum degree feeds only `rbc_dbscan_take_one_pass`, which returns False
 #: unconditionally. Three drains and one launch per batch; no value any
-#: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
-#: restores them.
-comptime IDN_DBSCAN_RBC_DEAD_READS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: kernel reads changes.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 7a7bdb9b23.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DBSCAN_RBC_DEAD_READS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
 #: decides on the device which batches hold a labelled non-core row. One
@@ -263,14 +267,12 @@ comptime IDN_DBSCAN_RBC_DEAD_READS = (
 #: row) and walking them on the host. Same predicate on the same values, so
 #: the same batches take the pass.
 #: cpu3-neighbors (2026-10-04): the device decision is now the only route in
-#: every mode; the host walk and this define's off arm are gone from the fit.
-comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: every mode; the host walk and this define's off arm are gone from the fit,
+#: and the unread IDN_DBSCAN_BORDER_NEEDS_DEVICE constant with them.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF (old path, no A/B row; the constant was read by nothing) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at cb13fe2afb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
@@ -388,7 +390,7 @@ def border_needs_kernel(
     n_points_in: Int32,
 ):
     """`needs[cell] = 1` when rows `start .. start + n_points` hold a
-    non-core row with a label (`IDN_DBSCAN_BORDER_NEEDS_DEVICE`). Every
+    non-core row with a label (the device border decision). Every
     writer stores the same 1, so the cell does not depend on thread order.
     """
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -431,6 +433,65 @@ def border_pull_kernel(
 
 
 def dbscan_fit(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut adj: DeviceBuffer[DType.uint8],
+    mut vd: DeviceBuffer[DType.int32],
+    mut core: DeviceBuffer[DType.uint8],
+    mut ex_scan: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.int32],
+    mut labels_temp: DeviceBuffer[DType.int32],
+    mut work_buffer: DeviceBuffer[DType.int32],
+    mut block_sums: DeviceBuffer[DType.int32],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    mut wght_sum: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    eps: Float64,
+    min_pts: Int,
+    batch_size: Int = 0,
+    max_iterations: Int = 200,
+    eps_nn_method: Int = EPS_NN_RBC,
+    phase_timing: Bool = False,
+    metric: Int = DBSCAN_METRIC_L2,
+    has_weights: Bool = False,
+    edge_cap: Int = Int(MAX_LABEL),
+    n_batches_out_addr: Int = 0,
+    edge_free: Bool = True,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return dbscan_fit(
+        dbscan_device_plan(),
+        ctx,
+        x,
+        adj,
+        vd,
+        core,
+        ex_scan,
+        labels,
+        labels_temp,
+        work_buffer,
+        block_sums,
+        sample_weight,
+        wght_sum,
+        n_rows,
+        n_features,
+        eps,
+        min_pts,
+        batch_size,
+        max_iterations,
+        eps_nn_method,
+        phase_timing,
+        metric,
+        has_weights,
+        edge_cap,
+        n_batches_out_addr,
+        edge_free,
+    )
+
+
+def dbscan_fit(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut adj: DeviceBuffer[DType.uint8],
@@ -626,6 +687,47 @@ their code branches on is this Bool.
             + " weighted " + String(has_weights)
         )
 
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE was promoted to the default on 2026-11-20 (lane fx-verdicts5, A/B round 3:
+    # dbscan/impl/brute_edge_free.mojo); the old opt-in name is refused here, in the bindings that compile this
+    # runner (not in a family guard module: lane owed-deletions, 2026-11-16). The route is IDENTICAL only
+    # (IDN_DBSCAN_EDGE_FREE); a fast build never reaches it.
+    comptime assert not is_defined["MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, labels and digests equal, dbscan taxi 0.338, taxi 250000 rows 0.519, istella 0.991): the brute DBSCAN edge-free route (dbscan/impl/brute_edge_free.mojo) is the default; drop the define, or build the byte-adjacency route with -D MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF"
+    # MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE (dbscan/impl/brute_edge_free.mojo):
+    # a brute fit of more than one batch takes the bit-matrix + union-find
+    # route (no byte adjacency, no CSR, no per-batch label or merge pass);
+    # same labels. `dbscan.mojo` reads the same test and then allocates no
+    # byte adjacency. Under _OFF: never reached.
+    comptime if DBSCAN_BRUTE_EDGE_FREE:
+        if edge_free and brute_edge_free_applies(
+            not sparse_rbc_mode, metric, has_weights, n_rows, batch, min_pts
+        ):
+            var n_ranges: Int
+            if metric == DBSCAN_METRIC_L1:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_L1](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            elif metric == DBSCAN_METRIC_COSINE:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_COSINE](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            else:
+                n_ranges = dbscan_brute_edge_free_fit[DBSCAN_METRIC_L2](
+                    ctx, x, core, labels, n_rows, n_features, eps, min_pts,
+                    phase_timing,
+                )
+            if n_batches_out_addr != 0:
+                MutPointer[Int, MutUntrackedOrigin](
+                    unsafe_from_address=n_batches_out_addr
+                ).unsafe_store(0, n_ranges)
+            _dbscan_finish(
+                ctx, labels, core, work_buffer, block_sums, n_rows,
+                n_features, eps, min_pts, n_ranges, metric, has_weights,
+                phase_timing,
+            )
+            return 0
+
     # `runner.cuh:231-241`: build the index ONCE, before the batch loop, not
     # per batch. `rbc_build_index` is `cuvs::neighbors::ball_cover::build`.
     var n_landmarks = rbc_n_landmarks(n_rows) if sparse_rbc_mode else 1
@@ -781,7 +883,7 @@ their code branches on is this Bool.
                 )
             else:
                 nnz1 = rbc_eps_nn_query_count(
-                    ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    dplan, ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                     ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
                 )
             # WHY cuML REQUIRES int64 ON THIS PATH, AND WHAT OURS DOES INSTEAD.
@@ -876,7 +978,7 @@ their code branches on is this Bool.
                     start_vertex_id * n_features, n_points * n_features
                 )
                 rbc_eps_nn_query_fill(
-                    ctx, rbc_xr, qbw, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                    dplan, ctx, rbc_xr, qbw, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                     ex_scan, ja1, n_points, n_features, n_landmarks,
                     eps_radius,
                 )
@@ -888,7 +990,7 @@ their code branches on is this Bool.
                 _ = ja1^
         else:
             vertex_deg_dispatch(
-                ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
+                dplan, ctx, adj, vd, x, start_vertex_id, n_points, n_rows,
                 n_features, eps, metric,
             )
             ctx.synchronize()
@@ -1047,7 +1149,7 @@ their code branches on is this Bool.
         else:
             var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
             rbc_eps_nn_query_fill(
-                ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                dplan, ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                 ex_scan, col_ind, np0, n_features, n_landmarks, eps_radius,
             )
         ctx.synchronize()
@@ -1115,7 +1217,7 @@ their code branches on is this Bool.
                     # buffer, and nothing after this point reads it -- the
                     # core mask came from loop 1.
                     var actual = rbc_eps_nn_query_max_k(
-                        ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, vd, rbc_tmp,
                         rbc_mk_scratch, n_points2, n_features,
                         n_landmarks, eps_radius, maxklen[b2],
@@ -1169,7 +1271,7 @@ their code branches on is this Bool.
                         )
                     else:
                         var _nnz2 = rbc_eps_nn_query_count(
-                            ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            dplan, ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                             rbc_rad, ex_scan, vd, n_points2, n_features,
                             n_landmarks, eps_radius,
                         )
@@ -1178,7 +1280,7 @@ their code branches on is this Bool.
                         start2 * n_features, n_points2 * n_features
                     )
                     rbc_eps_nn_query_fill(
-                        ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qb3, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, n_points2, n_features,
                         n_landmarks, eps_radius,
                     )
@@ -1197,7 +1299,7 @@ their code branches on is this Bool.
                 # `wght_sum` would write the same numbers and be read by
                 # nothing.
                 vertex_deg_dispatch(
-                    ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
+                    dplan, ctx, adj, vd, x, start2, n_points2, n_rows, n_features,
                     eps, metric,
                 )
                 ctx.synchronize()
@@ -1339,20 +1441,20 @@ their code branches on is this Bool.
                         rbc_exclusive_scan_launch(ctx, ex_scan, vd, np_b)
                     else:
                         var _nnzb = rbc_eps_nn_query_count(
-                            ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            dplan, ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                             rbc_rad, ex_scan, vd, np_b, n_features,
                             n_landmarks, eps_radius,
                         )
                     ctx.synchronize()
                     rbc_eps_nn_query_fill(
-                        ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        dplan, ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
                         rbc_rad, ex_scan, col_ind, np_b, n_features,
                         n_landmarks, eps_radius,
                     )
                     ctx.synchronize()
                 else:
                     vertex_deg_dispatch(
-                        ctx, adj, vd, x, start_b, np_b, n_rows, n_features,
+                        dplan, ctx, adj, vd, x, start_b, np_b, n_rows, n_features,
                         eps, metric,
                     )
                     ctx.synchronize()

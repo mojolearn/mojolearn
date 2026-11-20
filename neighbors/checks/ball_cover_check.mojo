@@ -55,6 +55,7 @@ from neighbors.impl.ball_cover.ball_cover import (
     rbc_eps_nn_query_max_k,
     rbc_n_landmarks,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime BC_ROWS = 1200
@@ -237,9 +238,9 @@ def _run_one_eps(
     var hia = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
     var hja = ctx.enqueue_create_host_buffer[DType.int32](nnz)
     var hvd = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
-    ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
-    ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=adj_ja)
-    ctx.enqueue_copy(dst_ptr=hvd.unsafe_ptr(), src_buf=vd)
+    download_host_into[DType.int32](ctx, adj_ia, hia)
+    download_host_into[DType.int32](ctx, adj_ja, hja)
+    download_host_into[DType.int32](ctx, vd, hvd)
     ctx.synchronize()
 
     if Int(hia.unsafe_ptr().unsafe_load(n)) != nnz:
@@ -338,8 +339,7 @@ def _run_one_eps(
             ):
                 descents += 1
 
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         if descents != 0:
             raise Error(
                 label + ": DEVIATION 551 left " + String(descents)
@@ -376,8 +376,7 @@ def _run_one_eps(
     var digest = _csr_digest(hia.unsafe_ptr(), hja.unsafe_ptr(), n, nnz)
     var mode_name = String("FAST")
 
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         mode_name = String("IDENTICAL")
     print(
         "RBC-DIGEST mode=" + mode_name + " label=" + label + " n=" + String(n)
@@ -420,7 +419,7 @@ def check_ball_cover() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -435,11 +434,11 @@ def check_ball_cover() raises:
     var hdists = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hrad = ctx.enqueue_create_host_buffer[DType.float32](n_landmarks)
     var hxr = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-    ctx.enqueue_copy(dst_ptr=hptr.unsafe_ptr(), src_buf=r_indptr)
-    ctx.enqueue_copy(dst_ptr=hcols.unsafe_ptr(), src_buf=r_1nn_cols)
-    ctx.enqueue_copy(dst_ptr=hdists.unsafe_ptr(), src_buf=r_1nn_dists)
-    ctx.enqueue_copy(dst_ptr=hrad.unsafe_ptr(), src_buf=r_radius)
-    ctx.enqueue_copy(dst_ptr=hxr.unsafe_ptr(), src_buf=x_reordered)
+    download_host_into[DType.int32](ctx, r_indptr, hptr)
+    download_host_into[DType.int32](ctx, r_1nn_cols, hcols)
+    download_host_into[DType.float32](ctx, r_1nn_dists, hdists)
+    download_host_into[DType.float32](ctx, r_radius, hrad)
+    download_host_into[DType.float32](ctx, x_reordered, hxr)
     ctx.synchronize()
 
     if Int(hptr.unsafe_ptr().unsafe_load(n_landmarks)) != n:
@@ -597,7 +596,7 @@ def check_ball_cover_dense_and_max_k() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -616,8 +615,8 @@ def check_ball_cover_dense_and_max_k() raises:
     )
     var hadj = ctx.enqueue_create_host_buffer[DType.uint8](n * n)
     var hvd = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
-    ctx.enqueue_copy(dst_ptr=hadj.unsafe_ptr(), src_buf=adj)
-    ctx.enqueue_copy(dst_ptr=hvd.unsafe_ptr(), src_buf=vd)
+    download_host_into[DType.uint8](ctx, adj, hadj)
+    download_host_into[DType.int32](ctx, vd, hvd)
     ctx.synchronize()
 
     for i in range(n):
@@ -656,8 +655,8 @@ def check_ball_cover_dense_and_max_k() raises:
 
     var hia = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
     var hja = ctx.enqueue_create_host_buffer[DType.int32](max_ja)
-    ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
-    ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=adj_ja)
+    download_host_into[DType.int32](ctx, adj_ia, hia)
+    download_host_into[DType.int32](ctx, adj_ja, hja)
     ctx.synchronize()
 
     var seen = List[Int32]()
@@ -757,7 +756,7 @@ def check_ball_cover_reach_by_sabotage() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -774,13 +773,13 @@ def check_ball_cover_reach_by_sabotage() raises:
     )
 
     var hrad = ctx.enqueue_create_host_buffer[DType.float32](n_landmarks)
-    ctx.enqueue_copy(dst_ptr=hrad.unsafe_ptr(), src_buf=r_radius)
+    download_host_into[DType.float32](ctx, r_radius, hrad)
     ctx.synchronize()
     for k in range(n_landmarks):
         hrad.unsafe_ptr().unsafe_store(
             k, hrad.unsafe_ptr().unsafe_load(k) * Float32(0.3)
         )
-    ctx.enqueue_copy(dst_buf=r_radius, src_ptr=hrad.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, r_radius, hrad)
     ctx.synchronize()
 
     var broken = _run_one_eps(
@@ -863,7 +862,7 @@ def check_ball_cover_order_is_load_bearing() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -881,8 +880,8 @@ def check_ball_cover_order_is_load_bearing() raises:
 
     var hptr = ctx.enqueue_create_host_buffer[DType.int32](n_landmarks + 1)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hptr.unsafe_ptr(), src_buf=r_indptr)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=r_1nn_dists)
+    download_host_into[DType.int32](ctx, r_indptr, hptr)
+    download_host_into[DType.float32](ctx, r_1nn_dists, hd)
     ctx.synchronize()
     for k in range(n_landmarks):
         var s = Int(hptr.unsafe_ptr().unsafe_load(k))
@@ -895,7 +894,7 @@ def check_ball_cover_order_is_load_bearing() raises:
             hd.unsafe_ptr().unsafe_store(b, t)
             a += 1
             b -= 1
-    ctx.enqueue_copy(dst_buf=r_1nn_dists, src_ptr=hd.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, r_1nn_dists, hd)
     ctx.synchronize()
 
     var broken = _run_one_eps(
@@ -976,7 +975,7 @@ def check_ball_cover_at_scale() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -999,8 +998,8 @@ def check_ball_cover_at_scale() raises:
     )
     var hia = ctx.enqueue_create_host_buffer[DType.int32](n + 1)
     var hja = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
-    ctx.enqueue_copy(dst_ptr=hja.unsafe_ptr(), src_buf=adj_ja)
+    download_host_into[DType.int32](ctx, adj_ia, hia)
+    download_host_into[DType.int32](ctx, adj_ja, hja)
     ctx.synchronize()
 
     var seen = List[Int32]()
@@ -1145,7 +1144,7 @@ def check_ball_cover_max_k_wiring() raises:
     for i in range(n):
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     rbc_build_index(
@@ -1181,7 +1180,7 @@ def check_ball_cover_max_k_wiring() raises:
         batch_nnz[bi] = nnz
         # `thrust::reduce(vd, vd + n_points, 0, maximum{})`, `runner.cuh:289`.
         var hvd = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
-        ctx.enqueue_copy(dst_ptr=hvd.unsafe_ptr(), src_buf=vd)
+        download_host_into[DType.int32](ctx, vd, hvd)
         ctx.synchronize()
         var mk0 = 0
         for i in range(np):
@@ -1251,7 +1250,7 @@ def check_ball_cover_max_k_wiring() raises:
 
         if b == 0:
             # No neighborhood pass: read what is RESIDENT.
-            ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
+            download_host_into[DType.int32](ctx, adj_ia, hia)
             ctx.enqueue_copy(
                 dst_ptr=hja.unsafe_ptr(),
                 src_buf=col_ind.create_sub_buffer[DType.int32](0, nnz),
@@ -1274,7 +1273,7 @@ def check_ball_cover_max_k_wiring() raises:
                     + String(actual) + "; their assert at algo.cuh:135 is"
                     " an EQUALITY and it just failed"
                 )
-            ctx.enqueue_copy(dst_ptr=hia.unsafe_ptr(), src_buf=adj_ia)
+            download_host_into[DType.int32](ctx, adj_ia, hia)
             ctx.enqueue_copy(
                 dst_ptr=hja.unsafe_ptr(),
                 src_buf=col_ind.create_sub_buffer[DType.int32](0, nnz),
@@ -1303,8 +1302,8 @@ def check_ball_cover_max_k_wiring() raises:
         )
         var ria = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
         var rjah = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-        ctx.enqueue_copy(dst_ptr=ria.unsafe_ptr(), src_buf=adj_ia)
-        ctx.enqueue_copy(dst_ptr=rjah.unsafe_ptr(), src_buf=rja)
+        download_host_into[DType.int32](ctx, adj_ia, ria)
+        download_host_into[DType.int32](ctx, rja, rjah)
         ctx.synchronize()
 
         for i in range(np + 1):
@@ -1354,8 +1353,7 @@ def check_ball_cover_max_k_wiring() raises:
     # where no cross-vendor promise is made. Inverting the expectation is the
     # same move `packaging/linux/smoke.py` makes for `gemm-pinned`: a designed
     # refusal that SUCCEEDS is the failure.
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         var refused = False
         try:
             _ = rbc_eps_nn_query_max_k(
@@ -1396,7 +1394,7 @@ def check_ball_cover_max_k_wiring() raises:
             " supposed to keep going past the bound"
         )
     var shia = ctx.enqueue_create_host_buffer[DType.int32](batch + 1)
-    ctx.enqueue_copy(dst_ptr=shia.unsafe_ptr(), src_buf=adj_ia)
+    download_host_into[DType.int32](ctx, adj_ia, shia)
     ctx.synchronize()
     var clamped = 0
     for i in range(snp):
@@ -1438,7 +1436,6 @@ def check_ball_cover_max_k_wiring() raises:
     # leaves the freed page mapped, which is why Apple never saw it; ROCm
     # unmaps and returns zero pages, which is what produced the false row-63
     # 'MISSED point 42' on the MI325X. See the note in `_run_one_eps`.
-    _ = hx^
 
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     # Mojo frees at LAST USE, so without this the buffer releases above run

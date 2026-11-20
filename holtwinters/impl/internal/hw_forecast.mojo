@@ -10,7 +10,7 @@ is `fma(trend, i + 1, level) + season` (additive) or `fma(...) * season`
 (multiplicative); `i + 1` is exact in float32.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from holtwinters.impl.internal.hw_utils import SAB_NO_FTZ

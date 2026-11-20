@@ -1,0 +1,30 @@
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index a57075574c..b0f92de056 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -1009,11 +1009,10 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
+ # floor). 32 steps an epoch: enough updates for the n_iter_no_change window
+ # (5 epochs = 160 steps) to see the loss settle, while a batch still
+ # averages >= 1 row and the launch count of a small fit stays below
+-# scikit-learn's per-sample n steps. New bits for every fit with
++# scikit-learn's per-sample n steps. `-D MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF`
++# restores the fixed `cap` (the A/B arm B). New bits for every fit with
+ # n < SGD_AUTO_STEPS * cap on the host column and every device together.
+-# TOMBSTONE: MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF (unmeasured old path, EXP:16 PENDING) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5d8783f621.
+-# Restore: git apply experiments/removed/MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime SGD_ADAPTIVE_BATCH = True
++comptime SGD_ADAPTIVE_BATCH = not is_defined["MOJOLEARN_SGD_ADAPTIVE_BATCH_OFF"]()
+ # lane sgd-quality (2026-10-17): the step floor is 256 steps an epoch (was 32).
+ # Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
+ # rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
+@@ -1050,7 +1049,9 @@ def sgd_batch(ipb: Int, k: Int, n: Int) -> Int:
+         return ipb
+     if ipb < -1 and k != 1:
+         var cap = -ipb
+-        return max(1, min(cap, n // SGD_AUTO_STEPS))
++        comptime if SGD_ADAPTIVE_BATCH:
++            return max(1, min(cap, n // SGD_AUTO_STEPS))
++        return cap
+     if ipb < 0 and k == 1:
+         comptime if SGD_OC_IDN_MB_DEFAULT:
+             return MB_BATCH_DEFAULT

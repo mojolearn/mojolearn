@@ -5,7 +5,7 @@ returned field/index. Kernel outputs ordered integer contributions that can
 also be emitted directly by an update kernel while values are live.
 Opt-in OOP Adam now emits status while words are live and the full
 byte-LM step validates it before completion, preserving existing rollback."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -58,6 +58,7 @@ def check(ctx: DeviceContext, count: Int, bad: Int) raises:
         ctx.synchronize()
         parts = merged^
         current = next_count
+    _ = host^  # past the drain: a queued copy reads it after its last named use
     var result = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=parts.create_sub_buffer[DType.int32](0,1))
     ctx.synchronize()
@@ -74,6 +75,9 @@ def check_live_reach(ctx: DeviceContext) raises:
         var config = ByteConfig()
         for step in range(2):
             _ = byte_train_step_resident(ctx,tr,_ids(config,step))
+        # TOMBSTONE: MOJOLEARN_TRAIN_LIVE_STATUS (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c38a3b0613.
+        # Restore: git apply experiments/removed/MOJOLEARN_TRAIN_LIVE_STATUS.patch
+        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
         var expected = 0
         # NEVER RUN — PENDING MEASUREMENT
         comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():

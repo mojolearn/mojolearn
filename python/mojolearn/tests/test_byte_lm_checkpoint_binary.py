@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The streamed binary byte-LM checkpoint: round trip, bit exactness, refusals.
 
-Host only. No model, GPU kernel, build or benchmark runs here; the native
-binding is the same mock the rest of the byte-LM wrapper tests use, and no
-test in this file completes a training step. What is asserted is that the
-FILE carries the state, which is a storage claim and not a learning,
-performance or cross-vendor identity claim.
+These run against the installed compiled byte-LM binding (the native owner
+admits no Python stand-in). One test completes a training step so the
+moments and the step cursor are nonzero. What is asserted is that the FILE
+carries the state, which is a storage claim and not a learning, performance
+or cross-vendor identity claim.
 
 THE POINT OF THE SHAPE IN `large()`. Its flat count is over the 87,381
 parameters at which the JSON/hex envelope's 2 MiB bound stops, so the two
@@ -22,8 +22,19 @@ from mojolearn import SmallByteLanguageModelTrainer
 from mojolearn import _byte_lm_checkpoint as storage
 from mojolearn._byte_lm_config import ByteLanguageModelConfig
 
-# `host` is a fixture; pytest resolves it by name in this module's namespace.
-from mojolearn.tests.test_byte_lm_surface import host, ids, initial, trainer  # noqa: F401
+import numpy as np
+
+
+def initial():
+    return np.zeros(34944, dtype=np.float32)
+
+
+def ids():
+    return (np.arange(66, dtype=np.int32) % 256).reshape(2, 33)
+
+
+def trainer():
+    return SmallByteLanguageModelTrainer(initial(), data_schedule=SCHEDULE)
 
 SCHEDULE = {'corpus_sha256': '1' * 64, 'token_schedule_sha256': '2' * 64,
             'batch_offsets': [0, 32], 'planned_steps': 4}
@@ -61,7 +72,7 @@ def metadata(state):
             if key not in ('parameters', 'm', 'v', 'flags')}
 
 
-def test_round_trip_is_byte_for_byte_at_a_shape_the_json_envelope_refuses(host, tmp_path):
+def test_round_trip_is_byte_for_byte_at_a_shape_the_json_envelope_refuses(tmp_path):
     model, shape = large_trainer()
     assert shape.n_total * 24 > 2 * 1024 * 1024, 'the shape must exceed the JSON bound'
     with pytest.raises(ValueError, match='2 MiB'):
@@ -81,9 +92,12 @@ def test_round_trip_is_byte_for_byte_at_a_shape_the_json_envelope_refuses(host, 
     assert metadata(after) == metadata(before)
 
 
-def test_the_moments_and_the_step_cursor_cross_the_file_not_just_the_parameters(host, tmp_path):
+def test_the_moments_and_the_step_cursor_cross_the_file_not_just_the_parameters(tmp_path):
     """A restore that dropped `m`/`v` would still match on `parameters`."""
-    model = trainer()
+    # Nonzero parameters: at all-zero parameters the real step's gradient is
+    # zero, and so are both moments.
+    values = (np.random.default_rng(5).standard_normal(34944) * .02).astype(np.float32)
+    model = SmallByteLanguageModelTrainer(values, data_schedule=SCHEDULE)
     model.train_step(ids())
     state = model.state_dict()
     assert state['completed_steps'] == 1
@@ -100,7 +114,7 @@ def test_the_moments_and_the_step_cursor_cross_the_file_not_just_the_parameters(
     assert after['completed_steps'] == after['next_batch_index'] == 1
 
 
-def test_hostile_float_bit_patterns_survive_the_file(host, tmp_path):
+def test_hostile_float_bit_patterns_survive_the_file(tmp_path):
     """Decimal text would lose these; raw little-endian bytes do not."""
     from mojolearn import _buffer
     from mojolearn._bufcheck import flat_view
@@ -130,7 +144,7 @@ def test_hostile_float_bit_patterns_survive_the_file(host, tmp_path):
         0x3F7FFFFF, 0xBF800000, 0x007FFFFF, 0x33D6BF95)
 
 
-def test_two_saves_of_one_state_are_identical_files(host, tmp_path):
+def test_two_saves_of_one_state_are_identical_files(tmp_path):
     model = trainer()
     first, second = tmp_path / 'a.bin', tmp_path / 'b.bin'
     assert model.export_checkpoint_binary(first) == model.export_checkpoint_binary(second)
@@ -143,14 +157,14 @@ def written(tmp_path, name='state.bin'):
     return path, path.read_bytes()
 
 
-def test_refuses_a_foreign_magic(host, tmp_path):
+def test_refuses_a_foreign_magic(tmp_path):
     path, raw = written(tmp_path)
     path.write_bytes(b'MOJOLEARN-SAMBA\x02\n' + raw[len(storage.MAGIC):])
     with pytest.raises(ValueError, match='magic'):
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_refuses_a_tampered_header(host, tmp_path):
+def test_refuses_a_tampered_header(tmp_path):
     path, raw = written(tmp_path)
     start = len(storage.MAGIC) + 8
     length = struct.unpack('<Q', raw[len(storage.MAGIC):start])[0]
@@ -162,7 +176,7 @@ def test_refuses_a_tampered_header(host, tmp_path):
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_refuses_a_flipped_payload_byte(host, tmp_path):
+def test_refuses_a_flipped_payload_byte(tmp_path):
     path, raw = written(tmp_path)
     index = len(raw) - 40
     path.write_bytes(raw[:index] + bytes([raw[index] ^ 0x01]) + raw[index + 1:])
@@ -170,7 +184,7 @@ def test_refuses_a_flipped_payload_byte(host, tmp_path):
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_refuses_truncation_and_trailing_bytes(host, tmp_path):
+def test_refuses_truncation_and_trailing_bytes(tmp_path):
     path, raw = written(tmp_path)
     path.write_bytes(raw[:-4])
     with pytest.raises(ValueError, match='truncated or trailing'):
@@ -180,7 +194,7 @@ def test_refuses_truncation_and_trailing_bytes(host, tmp_path):
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_an_array_length_comes_from_the_registry_not_from_the_file(host, tmp_path):
+def test_an_array_length_comes_from_the_registry_not_from_the_file(tmp_path):
     """A descriptor claiming a huge array must be refused BEFORE allocation."""
     path, raw = written(tmp_path)
     start = len(storage.MAGIC) + 8
@@ -195,7 +209,7 @@ def test_an_array_length_comes_from_the_registry_not_from_the_file(host, tmp_pat
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_refuses_a_header_length_past_the_bound(host, tmp_path):
+def test_refuses_a_header_length_past_the_bound(tmp_path):
     path, raw = written(tmp_path)
     path.write_bytes(raw[:len(storage.MAGIC)] + struct.pack('<Q', storage.HEADER_LIMIT + 1)
                      + raw[len(storage.MAGIC) + 8:])
@@ -203,7 +217,7 @@ def test_refuses_a_header_length_past_the_bound(host, tmp_path):
         SmallByteLanguageModelTrainer.from_checkpoint_binary(path)
 
 
-def test_refuses_a_state_whose_registry_does_not_match_its_shape(host, tmp_path):
+def test_refuses_a_state_whose_registry_does_not_match_its_shape(tmp_path):
     """The regex pins the CODEC's spelling. `_validate_state` refuses the same
     field with 'Byte-LM state profile/registry/mode mismatch', so matching the
     shared half would pass with this check deleted -- which is what the

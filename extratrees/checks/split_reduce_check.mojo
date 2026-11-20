@@ -87,13 +87,9 @@ THE ARMS
 """
 
 from std.math import ceildiv
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys import has_accelerator
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 
@@ -121,6 +117,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.split import (
     SPLIT_SAB_NO_QUESVAL_ARM,
     SPLIT_SAB_NONE,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime F = DType.float32
@@ -601,11 +598,11 @@ struct RunOut(Copyable, Movable):
 
 
 def vendor() -> String:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return "Apple"
-    elif has_nvidia_gpu_accelerator():
+    elif TARGET_HAS_NVIDIA_GPU:
         return "NVIDIA"
-    elif has_amd_gpu_accelerator():
+    elif TARGET_HAS_AMD_GPU:
         return "AMD"
     else:
         return "unknown vendor"
@@ -679,16 +676,16 @@ def run_arm[
         # DEVIATION 463: the per-node rank salt the kernel reduces under.
         h_ts.unsafe_ptr().unsafe_store(i, node_salt(i))
 
-    ctx.enqueue_copy(dst_buf=c_q, src_ptr=h_q.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_c, src_ptr=h_c.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_m, src_ptr=h_m.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_l, src_ptr=h_l.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_nu, src_ptr=h_nu.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_de, src_ptr=h_de.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c_v, src_ptr=h_v.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_nb, src_ptr=h_nb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_nc, src_ptr=h_nc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ts, src_ptr=h_ts.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, c_q, h_q)
+    upload_host_into[DType.int32](ctx, c_c, h_c)
+    upload_host_into[DType.float32](ctx, c_m, h_m)
+    upload_host_into[DType.int32](ctx, c_l, h_l)
+    upload_host_into[DType.int64](ctx, c_nu, h_nu)
+    upload_host_into[DType.int64](ctx, c_de, h_de)
+    upload_host_into[DType.int32](ctx, c_v, h_v)
+    upload_host_into[DType.int32](ctx, d_nb, h_nb)
+    upload_host_into[DType.int32](ctx, d_nc, h_nc)
+    upload_host_into[DType.uint32](ctx, d_ts, h_ts)
     ctx.enqueue_memset(d_mx, Int32(0))
     ctx.synchronize()
 
@@ -742,15 +739,15 @@ def run_arm[
     var o_v = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
     var o_mg = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
     var o_nw = ctx.enqueue_create_host_buffer[DType.int32](n_nodes)
-    ctx.enqueue_copy(dst_buf=o_q, src_buf=d_q)
-    ctx.enqueue_copy(dst_buf=o_c, src_buf=d_c)
-    ctx.enqueue_copy(dst_buf=o_m, src_buf=d_m)
-    ctx.enqueue_copy(dst_buf=o_l, src_buf=d_l)
-    ctx.enqueue_copy(dst_buf=o_nu, src_buf=d_nu)
-    ctx.enqueue_copy(dst_buf=o_de, src_buf=d_de)
-    ctx.enqueue_copy(dst_buf=o_v, src_buf=d_v)
-    ctx.enqueue_copy(dst_buf=o_mg, src_buf=d_mg)
-    ctx.enqueue_copy(dst_buf=o_nw, src_buf=d_nw)
+    download_host_into[DType.float32](ctx, d_q, o_q)
+    download_host_into[DType.int32](ctx, d_c, o_c)
+    download_host_into[DType.float32](ctx, d_m, o_m)
+    download_host_into[DType.int32](ctx, d_l, o_l)
+    download_host_into[DType.int64](ctx, d_nu, o_nu)
+    download_host_into[DType.int64](ctx, d_de, o_de)
+    download_host_into[DType.int32](ctx, d_v, o_v)
+    download_host_into[DType.int32](ctx, d_mg, o_mg)
+    download_host_into[DType.int32](ctx, d_nw, o_nw)
     ctx.synchronize()
 
     # Mojo frees a buffer at its LAST USE, and the salt buffers' last natural
@@ -758,7 +755,6 @@ def run_arm[
     # both past the drain so the queued reads cannot outlive them, exactly as
     # `regression_score_check` holds `d_tree_ids`/`h_tree_ids`.
     _ = d_ts^
-    _ = h_ts^
 
     var r_q = List[Float32]()
     var r_c = List[Int32]()
@@ -799,7 +795,7 @@ def flatten(
     return out^
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "this check must run on a GPU"
     var failures = 0
 

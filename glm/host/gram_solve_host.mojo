@@ -37,8 +37,8 @@ comptime _AP = MutPointer[Float32, MutAnyOrigin]
 
 
 def host_linear_gram_fit(
-    x: List[Float32],
-    y: List[Float32],
+    x_address: Int,
+    y_address: Int,
     n_rows: Int,
     n_features: Int,
     alpha: Float32,
@@ -48,14 +48,18 @@ def host_linear_gram_fit(
     ymean_ptr: MutPointer[Float64, MutUntrackedOrigin],
 ) raises -> Int:
     """`linear_gram_fit_host`'s words on the host: 0 and coef (and, with
-    `center`, mu and the y mean) written, or 1 with nothing written."""
+    `center`, mu and the y mean) written, or 1 with nothing written. X
+    (n_rows x n_features float32, row-major) and y (n_rows float32) are read
+    in place at their addresses and never written."""
+    # ne2-g-linear (N406): was two owned List copies of X and y made by the
+    # binding before this call; every read below is the same word.
     if n_features <= 0 or n_rows <= 0:
         raise Error("linear_gram_fit: n_rows and n_features must be positive")
     if alpha < Float32(0.0):
         raise Error("linear_gram_fit: alpha must be non-negative")
     var d = n_features
-    var xp = _AP(unsafe_from_address=Int(x.unsafe_ptr()))
-    var yp = _AP(unsafe_from_address=Int(y.unsafe_ptr()))
+    var xp = _AP(unsafe_from_address=x_address)
+    var yp = _AP(unsafe_from_address=y_address)
     var means = List[Float32](length=d, fill=Float32(0.0))
     var ymean32 = Float32(0.0)
     # the binary64 mean bits (X then y), zero when not centering: lane
@@ -64,8 +68,8 @@ def host_linear_gram_fit(
     if center:
         var sums = List[UInt64](length=d + 1, fill=UInt64(0))
         var sp = Int(sums.unsafe_ptr())
-        col_sums_on_cpu(Int(x.unsafe_ptr()), sp, n_rows, d)
-        col_sums_on_cpu(Int(y.unsafe_ptr()), sp + 8 * d, n_rows, 1)
+        col_sums_on_cpu(x_address, sp, n_rows, d)
+        col_sums_on_cpu(y_address, sp + 8 * d, n_rows, 1)
         for j in range(d + 1):  # small-loop(d + 1: feature count): the means' narrowing, the fit's outputs
             var mean = bitcast[DType.float64](sums[j]) / Float64(n_rows)
             m64[j] = bitcast[DType.uint64](mean)
@@ -120,7 +124,7 @@ def host_linear_gram_fit(
             # lane fg-linear L3: the device's float-float second chance for
             # a rejected Ridge Gram, the same cells in the same order
             if alpha > Float32(0.0):
-                return _host_gff_fit(x, y, m64, n_rows, d, alpha, coef_ptr)
+                return _host_gff_fit(x_address, y_address, m64, n_rows, d, alpha, coef_ptr)
         return 1
     # forward L z = b (column steps, rows below in order), then L^T w = z:
     # the device kernels' statements, z and w in their own vectors
@@ -143,8 +147,8 @@ def host_linear_gram_fit(
 
 
 def _host_gff_fit(
-    x: List[Float32],
-    y: List[Float32],
+    x_address: Int,
+    y_address: Int,
     m64: List[UInt64],
     n_rows: Int,
     d: Int,
@@ -164,8 +168,8 @@ def _host_gff_fit(
         ml[j] = f.lo
     var ph = List[Float32](length=GFF_LEAVES * t, fill=Float32(0.0))
     var pl = List[Float32](length=GFF_LEAVES * t, fill=Float32(0.0))
-    var xp = _AP(unsafe_from_address=Int(x.unsafe_ptr()))
-    var yp = _AP(unsafe_from_address=Int(y.unsafe_ptr()))
+    var xp = _AP(unsafe_from_address=x_address)
+    var yp = _AP(unsafe_from_address=y_address)
     var mhp = _AP(unsafe_from_address=Int(mh.unsafe_ptr()))
     var mlp = _AP(unsafe_from_address=Int(ml.unsafe_ptr()))
     var php = _AP(unsafe_from_address=Int(ph.unsafe_ptr()))

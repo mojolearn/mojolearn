@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cloud-only complete neighborhood arrays, including CSR column ordering."""
-from std.os import getenv, setenv
+from std.os import getenv
+from core.device_plan import device_plan_check_count, DEVICE_PLAN_DBSCAN
 from max.gpu.host import DeviceContext, DeviceBuffer
 from metrics.checks.device_io import upload_f32
 from neighbors.impl.ball_cover.ball_cover import rbc_build_index, rbc_n_landmarks
@@ -8,6 +9,7 @@ from dbscan.impl.multi_gpu import (
     vertex_deg_dispatch, rbc_eps_nn_query_count,
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
+from checks.native_tests.kit import download_host_into
 
 
 def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
@@ -16,8 +18,8 @@ def equal[dt: DType](ctx: DeviceContext, mut a: DeviceBuffer[dt],
     var y = ctx.enqueue_create_host_buffer[dt](n)
     var av = a.create_sub_buffer[dt](0, n)
     var bv = b.create_sub_buffer[dt](0, n)
-    ctx.enqueue_copy(dst_ptr=x.unsafe_ptr(), src_buf=av)
-    ctx.enqueue_copy(dst_ptr=y.unsafe_ptr(), src_buf=bv)
+    download_host_into[dt](ctx, av, x)
+    download_host_into[dt](ctx, bv, y)
     ctx.synchronize()
     for i in range(n):
         if x.unsafe_ptr()[i] != y.unsafe_ptr()[i]:
@@ -63,33 +65,33 @@ def check(rows: Int, d: Int, eps: Float32) raises:
     rbc_build_index(ctx, x, r, xr, ids, slots, slot_dist, nearest, nearest_dist,
                     ip, cols, dist, radius, counts, n, d, landmarks)
     for metric in range(2):
-        _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1", True)
+        device_plan_check_count(1, DEVICE_PLAN_DBSCAN)
         vertex_deg_dispatch(ctx, adj1, vd1, x, 2, rows, n, d, Float64(eps), metric)
-        _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "2", True)
+        device_plan_check_count(2, DEVICE_PLAN_DBSCAN)
         vertex_deg_dispatch(ctx, adj2, vd2, x, 2, rows, n, d, Float64(eps), metric)
         equal(ctx, adj1, adj2, rows*n, "dense adjacency")
         equal(ctx, vd1, vd2, rows+1, "dense degrees")
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1", True)
+    device_plan_check_count(1, DEVICE_PLAN_DBSCAN)
     var edges1 = rbc_eps_nn_query_count(ctx, xr, q, r, ip, cols, dist, radius,
                                        ia1, vd1, rows, d, landmarks, eps)
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "2", True)
+    device_plan_check_count(2, DEVICE_PLAN_DBSCAN)
     var edges2 = rbc_eps_nn_query_count(ctx, xr, q, r, ip, cols, dist, radius,
                                        ia2, vd2, rows, d, landmarks, eps)
     if edges1 != edges2:
         raise Error("RBC edge counts differ")
     equal(ctx, ia1, ia2, rows+1, "RBC count offsets")
     equal(ctx, vd1, vd2, rows+1, "RBC count degrees")
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1", True)
+    device_plan_check_count(1, DEVICE_PLAN_DBSCAN)
     rbc_eps_nn_query_fill(ctx, xr, q, r, ip, cols, dist, radius,
                          ia1, ja1, rows, d, landmarks, eps)
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "2", True)
+    device_plan_check_count(2, DEVICE_PLAN_DBSCAN)
     rbc_eps_nn_query_fill(ctx, xr, q, r, ip, cols, dist, radius,
                          ia2, ja2, rows, d, landmarks, eps)
     equal(ctx, ja1, ja2, edges1, "RBC fill columns")
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1", True)
+    device_plan_check_count(1, DEVICE_PLAN_DBSCAN)
     var longest1 = rbc_eps_nn_query_max_k(ctx, xr, q, r, ip, cols, dist, radius,
         ia1, ja1, vd1, tmp1, scratch1, rows, d, landmarks, eps, n)
-    _ = setenv("MOJOLEARN_DBSCAN_DEVICE_COUNT", "2", True)
+    device_plan_check_count(2, DEVICE_PLAN_DBSCAN)
     var longest2 = rbc_eps_nn_query_max_k(ctx, xr, q, r, ip, cols, dist, radius,
         ia2, ja2, vd2, tmp2, scratch2, rows, d, landmarks, eps, n)
     if longest1 != longest2:

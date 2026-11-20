@@ -3,7 +3,7 @@
 """BisectingKMeans, FAST on Apple: X uploaded from the caller's array and
 centered on the device (lane/apple-fast-gap-clus3, 2026-10-03). Switch:
 `BISECT_FAST_ZEROCOPY` below, default on in FAST on
-Apple (`-D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` turns it off); taken by bindings/_mojolearn_x_cluster.mojo for
+Apple; taken by bindings/_mojolearn_x_cluster.mojo for
 ENTRY_BISECT. IDENTICAL compiles none of this.
 
 Cause (x_cluster/bisect.mojo `bisect_fit`, board shape Istella 1M x 220
@@ -29,9 +29,8 @@ only; anything else returns False and the binding takes the copying path.
 FAST promises quality, not bits: the means are float32 chunk sums (the host
 folds float64), so the centered words, and the inertia's order, differ.
 """
-from std.gpu import block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div
@@ -43,12 +42,12 @@ from x_cluster.device_ops import DeviceOps
 from x_cluster.out import ClusterOut
 from x_cluster.post_bodies import FM_VAL
 
+# TOMBSTONE: MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at a8d747b743.
+# Restore: git apply experiments/removed/MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF.patch; record in docs/TOMBSTONES.md.
 comptime BISECT_FAST_ZEROCOPY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )  # FAST + Apple default since the M3 A/B clus3-bisect-zc-istella (n=1):
-# bisecting-kmeans istella 2033 -> 848 ms (-58.3%), silhouette .1183 identical;
-# -D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF turns it off (the old -D name is harmless)
+# bisecting-kmeans istella 2033 -> 848 ms (-58.3%), silhouette .1183 identical
 
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 comptime UPtr32 = MutPointer[UInt32, MutAnyOrigin]
@@ -175,7 +174,7 @@ def bisect_entry_ptr(
         if k < 1 or k > n:
             raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
         # X from the caller's pointer into a pooled buffer, centered in place
-        var xbuf = pool_take["MojoXClusterClus3BisectX"](ops.ctx, nx)
+        var xbuf = pool_take["MojolearnXClusterClus3BisectXV2"](ops.ctx, nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
@@ -310,7 +309,7 @@ def bisect_entry_ptr(
         # Removing X shifts every later float-buffer slot. Keep it in the
         # slot table until the final center readbacks have used their saved
         # indices; those reads also drain all launches that reference X.
-        pool_give["MojoXClusterClus3BisectX"](ops.f.pop(xs))
+        pool_give["MojolearnXClusterClus3BisectXV2"](ops.f.pop(xs))
         var nodes = List[Int32](capacity=3 * nn)
         for t in range(nn):  # small-loop(nn: tree nodes): 2k - 1 nodes of tree metadata
             nodes.append(Int32(tree.left[t]))

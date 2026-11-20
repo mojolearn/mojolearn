@@ -62,7 +62,7 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -185,7 +185,7 @@ def main() raises:
     var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](
         lay.total_indices
     )
-    ctx.enqueue_copy(dst_buf=h_bins, src_buf=d_bins)
+    download_buffer_into[DType.uint32](ctx, d_bins, h_bins)
     ctx.synchronize()
     var bad5 = 0
     for d in range(lay.total_indices):
@@ -243,8 +243,8 @@ def main() raises:
     var h7 = ctx.enqueue_create_host_buffer[DType.float32](n7)
     for r in range(n7):
         h7.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=w7, src_ptr=h7.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=t7, src_ptr=h7.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, w7, h7)
+    upload_host_into[DType.float32](ctx, t7, h7)
     ctx.synchronize()
     var src7 = TL2Target(w7^, t7^, n7)
     comptime G7_DEPTH = 4
@@ -278,7 +278,7 @@ def main() raises:
         bad7 += 1
     write_fold_based_initial_bins(ctx, g7, subs.bins)
     var hb7 = ctx.enqueue_create_host_buffer[DType.uint32](n7)
-    ctx.enqueue_copy(dst_buf=hb7, src_buf=subs.bins)
+    download_buffer_into[DType.uint32](ctx, subs.bins, hb7)
     ctx.synchronize()
     var tally = List[Int]()
     for _ in range(len(g7.parts)):
@@ -314,3 +314,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("fold task layout: G1-G7 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("fold_tasks_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -17,12 +17,8 @@ Apple and the host column together.
 
 The order is the only one of those launches, in every mode (lane
 debt-block-per-n, 2026-10-21, retired `-D MOJOLEARN_IDN_XTY_TILED_OFF`).
-Candidate arms for the tile size (default 256 rows):
-`-D MOJOLEARN_IDN_XTY_TILE_64`, `-D MOJOLEARN_IDN_XTY_TILE_1024`. Pass the
-same define to the host build.
+The tile is 256 rows.
 """
-
-from std.sys.compile import is_defined
 
 from checks.kernel_matrix import (
     K_LIB_COLUMN_STATS,
@@ -45,10 +41,11 @@ from checks.numerics import (
 #: oracles' `comptime if`.
 comptime IDN_XTY_TILED = True
 
-comptime XTY_TILE_ROWS = (
-    64 if is_defined["MOJOLEARN_IDN_XTY_TILE_64"]()
-    else (1024 if is_defined["MOJOLEARN_IDN_XTY_TILE_1024"]() else 256)
-)
+# TOMBSTONE: MOJOLEARN_IDN_XTY_TILE_64 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 792ad25b28.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILE_64.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_XTY_TILE_1024 (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 444a21c6a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILE_1024.patch; record in docs/TOMBSTONES.md.
+comptime XTY_TILE_ROWS = 256
 
 #: `core/column_stats.mojo::STATS_TPB`, restated because that file imports
 #: the GPU (the same read `decomposition/host/pca_oracle.mojo` makes).

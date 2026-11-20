@@ -78,9 +78,7 @@ def test_mojolearn_metrics_is_importable_as_a_submodule():
 def _svc_or_skip(x, y, **kw):
     from mojolearn._svm_impl import SVC
     try:
-        from mojolearn._cpu_reference import reference_training
-        with reference_training():
-            return SVC(**kw).fit(x, y)
+        return SVC(**kw).fit(x, y)
     except (ImportError, NotImplementedError, OSError) as exc:
         pytest.skip(f"no SVM binding that fits on this install: {exc}")
 
@@ -122,9 +120,15 @@ _CLONE_CASES = {
 }
 
 
+def _clone(est):
+    """The native clone cross_val_score and the searches use
+    (bindings/msel_estimator_native_door.mojo `msel_native_clone`)."""
+    from mojolearn import model_selection as ms
+    return ms._NATIVE(est, "family_msel_estimator_clone", (), ms._NATIVE_CONTEXT)
+
+
 @pytest.mark.parametrize("name", sorted(_CLONE_CASES))
 def test_get_params_and_clone(name):
-    from mojolearn.model_selection import _clone
     kw = _CLONE_CASES[name]
     est = getattr(mojolearn, name)(**kw)
     params = est.get_params(deep=False)
@@ -141,7 +145,6 @@ def test_get_params_and_clone(name):
 @pytest.mark.parametrize("name", ("SVC", "SVR"))
 @pytest.mark.parametrize("gamma", ("auto", "scale", "AUTO", "SCALE"))
 def test_clone_named_gamma(name, gamma):
-    from mojolearn.model_selection import _clone
     est = getattr(mojolearn, name)(gamma=gamma)
     twin = _clone(est)
     # The constructor stores the parameter exactly as given, as scikit-learn
@@ -163,7 +166,9 @@ def test_set_params_rebuilds_through_the_constructor():
 
 
 def test_estimator_type_picks_stratified_default_folds():
-    from mojolearn.model_selection import _classifier
+    def _classifier(est):
+        # the estimator type the native default folds read
+        return getattr(est, "_estimator_type", None) == "classifier"
     for name in ("LogisticRegression", "LinearSVC", "SVC", "KNeighborsClassifier",
                  "GaussianProcessClassifier"):
         assert _classifier(getattr(mojolearn, name)()), name
@@ -180,9 +185,7 @@ def test_cross_val_score_takes_mojolearn_ridge():
     x = rng.normal(size=(60, 3)).astype(np.float32)
     y = (x @ np.array([1.0, -2.0, 0.5], np.float32) + 0.1).astype(np.float32)
     try:
-        from mojolearn._cpu_reference import reference_training
-        with reference_training():
-            scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1e-3), x, y, cv=3)
+        scores = mojolearn.cross_val_score(mojolearn.Ridge(alpha=1e-3), x, y, cv=3)
     except (ImportError, OSError) as exc:
         pytest.skip(f"no linear-model binding on this install: {exc}")
     assert len(scores) == 3 and min(scores) > 0.99

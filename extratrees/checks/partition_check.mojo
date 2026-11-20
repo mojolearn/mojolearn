@@ -211,7 +211,7 @@ def left_set_for(
     return marks^
 
 
-def main() raises:
+def run_checks() raises:
     var total = 0
     var cases = 0
 

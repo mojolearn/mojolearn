@@ -42,7 +42,6 @@ from extratrees.checks.pcg_rng import (
     wmul_64bit,
 )
 from std.memory import bitcast
-from std.sys import exit
 
 comptime ORACLE = "extratrees/tools/rng_oracle/pcg_reference.txt"
 
@@ -143,7 +142,7 @@ struct Tally(Copyable, Movable):
                 print("  FAIL", section, where, "ours", got, "theirs", want)
 
 
-def main() raises:
+def run_checks() raises:
     print("PCG / fnv1a32 vs RAFT+cuML own arithmetic (" + ORACLE + "):")
     var f = open(ORACLE, "r")
     var text = f.read()
@@ -333,5 +332,5 @@ def main() raises:
 
     print("  checked", t.checked, "cells,", t.failed, "failed")
     if t.failed != 0:
-        exit(1)
+        raise Error("pcg_rng_check: failed")
     print("  PASS")

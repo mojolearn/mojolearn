@@ -5,11 +5,9 @@
 # require separate transitive admission: the current provider endpoint manages
 # the CPython GIL per call. Its migration is not established by this module's
 # import closure or a native-only fixture's unresolved-symbol inventory.
-from std.memory import memset_zero
-from core.generation_policy_impl import GenerationSamplingScratch
+from std.memory import unsafe_memset_zero
 from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
-from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
 
 
 def _generation_zero_workspace(mut storage: List[Float32], count: Int) -> Int:
@@ -20,7 +18,7 @@ def _generation_zero_workspace(mut storage: List[Float32], count: Int) -> Int:
     if len(storage) != count:
         storage = List[Float32](length=count, fill=0)
     elif count > 0:
-        memset_zero(storage.unsafe_ptr(), count)
+        unsafe_memset_zero(storage.unsafe_ptr(), count)
     return Int(storage.unsafe_ptr())
 
 
@@ -140,6 +138,22 @@ struct NativeGenerationModel(Movable):
         return logits^
 
     def forward_into(mut self, ids: Int, length: Int, mut logits: List[Float32]) raises:
+        self._forward(ids, length, logits, 0)
+
+    def forward_to(mut self, ids: Int, length: Int, address: Int, count: Int) raises:
+        # Row N199: the head projection writes straight into the caller's
+        # result storage (an Array allocated before the forward), so the
+        # B*L*V logits are neither held in a List nor copied again. The same
+        # primitive calls run in the same order on the same inputs; only the
+        # destination address of the last one changes (no numeric change).
+        if address == 0:
+            raise Error("CausalLM: native generation engine output address is missing")
+        if length >= 0 and count != self.batch * length * self.vocab:
+            raise Error("CausalLM: native generation engine output extent differs from batch * length * vocab")
+        var unused = List[Float32]()
+        self._forward(ids, length, unused, address)
+
+    def _forward(mut self, ids: Int, length: Int, mut logits: List[Float32], address: Int) raises:
         # These checks precede execution/failure invalidation, matching _state.
         if length < 0 or self.position < 0:
             raise Error("CausalLM: negative sequence position")
@@ -210,7 +224,13 @@ struct NativeGenerationModel(Movable):
                 self.primitive_call(2, [normalized, hidden, self.norm],
                                     [rows, self.width], [self.norm_eps])
                 hidden = normalized
-            var output = _generation_zero_workspace(logits, rows * self.vocab)
+            var output: Int
+            if address != 0:
+                # Same zero-fill as the workspace path before the head writes.
+                unsafe_memset_zero(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), rows * self.vocab)
+                output = address
+            else:
+                output = _generation_zero_workspace(logits, rows * self.vocab)
             self.primitive_call(4, [output, hidden, self.head],
                                 [rows, self.vocab, self.width], [])
             self.position += length
@@ -220,48 +240,6 @@ struct NativeGenerationModel(Movable):
             raise problem
 
 
-struct NativeGenerationProgress(Movable):
-    var current: List[Int32]
-    var next: List[Int32]
-    var logits: List[Float32]
-    var sampling: GenerationSamplingScratch
-    var length: Int
-    var produced: Int
-    var wrote: Int
-    var tokens: List[Int32]
-
-    def __init__(out self, address: Int, batch: Int, length: Int, produced: Int, capacity: Int):
-        self.current = List[Int32]()
-        self.next = List[Int32]()
-        self.logits = List[Float32]()
-        self.sampling = GenerationSamplingScratch()
-        var input = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-        for i in range(batch * length):  # driver-loop: copy admitted current-token storage once
-            self.current.append(input[i])
-        self.length = length
-        self.produced = produced
-        self.wrote = 0
-        self.tokens = List[Int32](capacity=batch * capacity)
-
-
-def native_generation_read(
-    mut model: NativeGenerationModel, mut progress: NativeGenerationProgress,
-    count: Int, maximum: Int, mut finished: List[Bool], mut lengths: List[Int], eos: List[Int],
-    pad: Int, greedy: Bool, temperature: Float32, top_k: Int, top_p: Float64, seed: UInt64,
-) raises:
-    # The entire token/layer loop owns native state. Sampling is the exact
-    # existing native policy; partial counters remain in progress on failure.
-    while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
-        model.forward_into(Int(progress.current.unsafe_ptr()), progress.length, progress.logits)
-        progress.next.resize(model.batch, 0)
-        causal_lm_pick_step(
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(progress.logits.unsafe_ptr())),
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(progress.next.unsafe_ptr())),
-            model.batch, progress.length, model.vocab, finished, lengths, eos, pad, greedy,
-            temperature, top_k, top_p, seed, progress.produced, progress.tokens, progress.sampling)
-        # Failed selection leaves current intact for partial-progress publication.
-        # Both owners survive every pointer use; next is private until success.
-        swap(progress.current, progress.next)
-        progress.length = 1
-        progress.produced += 1
-        progress.wrote += 1
+# TOMBSTONE: NativeGenerationProgress / native_generation_read (REFACTORED: the engine's token x layer loop; CausalLM reads run as the decode program, transformer/causal_lm_program.mojo) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# The engine keeps CausalLM.forward's one-pass layer walk (NativeGenerationModel.forward_to).
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.

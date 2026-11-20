@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "dependency": "b2b211b86c",
+  "status": "Source reviewed only; uncompiled and unrun",
+  "suite": "checks/native_tests/pca_query_state_suite.mojo",
+  "entry": "checks/native_tests/pca_query_state.mojo",
+  "fixtures": 24,
+  "coverage": [
+    {
+      "cases": [
+        0,
+        1
+      ],
+      "purpose": "Distinct fit_rows/features/count/connection positions and both whitening settings"
+    },
+    {
+      "cases": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "purpose": "Each copied state field mutates independently, original state unchanged"
+    },
+    {
+      "cases": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "purpose": "All valid/invalid key pairs; invalid state never admits a cache match"
+    },
+    {
+      "cases": [
+        11,
+        12
+      ],
+      "purpose": "Empty valid/invalid identities, including invalid nonreflexivity"
+    },
+    {
+      "cases": [
+        13,
+        14,
+        15,
+        16
+      ],
+      "purpose": "Absent zero is a real slot; order, duplicate multiplicity and absence position matter"
+    },
+    {
+      "cases": [
+        17,
+        18,
+        19
+      ],
+      "purpose": "Each changed admitted key position invalidates a match"
+    },
+    {
+      "cases": [
+        20
+      ],
+      "purpose": "Signed and full-width native identity words; differing high address bits remain distinct"
+    },
+    {
+      "cases": [
+        21,
+        22,
+        23
+      ],
+      "purpose": "Copied mutable key storage is independent, survives source destruction, and separately allocated equivalent keys match"
+    }
+  ],
+  "parallelism": "24 independent fixtures through host_parallelize; fixed metadata slots only",
+  "retained_boundary": "Python reference pins, provider/namespace admission, cache invalidation and public attribute interoperability remain pilot-owned in test_pca_native_boundary.py",
+  "removed": "Nothing identified: these new typed state types replace boundary state; numerical and repeated-bit removals are recorded in the prior execution chunk.",
+  "runtime_kernel_changes": false,
+  "repeat_identity_checks": false,
+  "command": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/pca_query_state.mojo"
+}

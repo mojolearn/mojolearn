@@ -11,9 +11,26 @@
 # reference owned by the returned PythonObject. Nothing here adds or removes a
 # reference to compensate for the standard library; when Modular ships the
 # balanced operations, call sites can go back to the ordinary syntax.
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.py_balanced_run import _EXACT_DICT_TYPE
+
+
+def _is_exact_dict(value: PythonObject) raises -> Bool:
+    # Exact dict only: a subclass may override get(), so it keeps the call.
+    ref cpy = Python().cpython()
+    var g = _EXACT_DICT_TYPE.get_or_create_ptr()
+    if g[].address == 0:
+        var sample = Python.dict()
+        var dict_type = cpy.PyObject_Type(sample._obj_ptr)
+        g[].address = Int(dict_type)
+        cpy.Py_DecRef(dict_type)
+    var cls = cpy.PyObject_Type(value._obj_ptr)
+    var same = Int(cls) == g[].address
+    cpy.Py_DecRef(cls)
+    return same
 
 
 def py_call(callable: PythonObject, *args: PythonObject, var **kwargs: PythonObject) raises -> PythonObject:
@@ -60,13 +77,35 @@ def py_setattr(owner: PythonObject, var name: String, value: PythonObject) raise
         raise cpy.unsafe_get_error()
 
 
+def py_item(container: PythonObject, key: PythonObject) raises -> PythonObject:
+    """`container[key]` through `PyObject_GetItem`: exact subscript semantics
+    (a missing key raises the container's own KeyError or IndexError). Use
+    this instead of the std subscript when the result is returned directly
+    and the key is a borrowed argument (AGENTS.md, tail-call fix 2026-11-12)."""
+    var got = cpython_table()[].PyObject_GetItem(container._obj_ptr, key._obj_ptr)
+    if not got:
+        raise Python().cpython().unsafe_get_error()
+    return PythonObject(from_owned=got)
+
+
 def py_get(mapping: PythonObject, key: PythonObject) raises -> PythonObject:
     """`mapping.get(key)`."""
-    return py_call(mapping.get, key)
+    return py_get(mapping, key, PythonObject(None))
 
 
 def py_get(mapping: PythonObject, key: PythonObject, default: PythonObject) raises -> PythonObject:
     """`mapping.get(key, default)`."""
+    if _is_exact_dict(mapping):
+        # dict.get's own C lookup: no bound method, argument tuple or call
+        # per read. Same key hashing/equality and the same errors (an
+        # unhashable key raises TypeError).
+        ref cpy = Python().cpython()
+        var found = cpy.PyDict_GetItemWithError(mapping._obj_ptr, key._obj_ptr)
+        if not found:
+            if cpy.PyErr_Occurred():
+                raise cpy.unsafe_get_error()
+            return default
+        return PythonObject(from_borrowed=found)
     return py_call(mapping.get, key, default)
 
 
@@ -82,4 +121,21 @@ def py_contains(container: PythonObject, key: PythonObject) raises -> Bool:
 def py_fields(value: PythonObject) raises -> PythonObject:
     """`object.__getattribute__(value, "__dict__")`: the instance dictionary
     through object's native lookup, without class or instance hooks."""
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    var cls = cpy.PyObject_Type(value._obj_ptr)
+    var flags = t[].PyType_GetFlags(cls)
+    cpy.Py_DecRef(cls)
+    # Py_TPFLAGS_TYPE_SUBCLASS (1 << 31): a class's __dict__ is its
+    # mappingproxy (type's data descriptor), not the raw namespace; keep
+    # object.__getattribute__ for classes.
+    if (flags & UInt64(1 << 31)) == 0:
+        # An instance: object.__getattribute__(value, "__dict__") resolves
+        # the class's `__dict__` getset, whose getter is this same generic
+        # dictionary read (one C call instead of two attribute lookups and a
+        # Python call).
+        var raw = t[].PyObject_GenericGetDict(value._obj_ptr, PyObjectPtr())
+        if not raw:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=raw)
     return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")

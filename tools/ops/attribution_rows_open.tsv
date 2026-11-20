@@ -1,0 +1,33 @@
+# Rows whose cause reading could not settle (2026-11-17); pass with AT_ROWS_FILE=tools/ops/attribution_rows_open.tsv.
+# Same format as tools/ops/attribution_rows.tsv.
+# lane fb3-named (2026-11-17): the rows whose cause reading could not settle; each line's question is in
+# ~/mojolearn-evidence/briefs-20261117/fb3-named-RESULT.md. Read per row: CUDA API ms against host ms outside the
+# CUDA API, pinned and device allocations per call, H2D/D2H bytes, launches and syncs, on both wheels.
+algos/train-test-split/istella/rows=full	fit	ours	timing=planned
+algos/train-test-split/taxi/rows=full	fit	ours	name=train-test-split-taxi	timing=planned
+algos/cross-entropy/synthetic/rows=full	fit	ours	timing=planned
+algos/mlp-reg/istella/rows=full	fit	ours	timing=planned
+algos/mlp-clf/istella/rows=full	fit	ours	timing=planned
+algos/kernel-shap/taxi/rows=full	fit	ours	timing=planned
+algos/kernel-shap/istella/rows=full	fit	ours	name=kernel-shap-istella	timing=planned
+algos/calibrated/istella/rows=full	fit	ours	timing=planned
+algos/calibrated/istella/rows=full	infer/Xq	ours	name=calibrated-infer	timing=planned
+algos/multioutput-reg/taxi/rows=full	fit	ours	timing=planned
+algos/pagerank/taxi/rows=full	fit	ours	timing=planned
+algos/knn-imputer/istella/rows=full	fit	ours	timing=planned
+algos/iterative-imputer/taxi/rows=full	infer/Xq	ours	name=iterative-imputer-infer	timing=planned
+algos/select-d/taxi-hourly/rows=full	fit	ours	timing=planned
+algos/gcn/taxi/rows=full	fit	ours	timing=planned
+algos/graphsage/taxi/rows=full	fit	ours	timing=planned
+neural/mamba1-decode/gaussian/shape=full	fit	ours	timing=planned
+neural/mamba2-decode/gaussian/shape=full	fit	ours	timing=planned
+trees/gbdt-symmetric-1000/istella/rows=full	infer/test	ours	timing=planned
+# lane fb4-ten (2026-11-17): questions per row in ~/mojolearn-evidence/briefs-20261117/fb4-ten-RESULT.md. Every
+# full-board delta against 0.8.55 crossed the host reboot (candidate 2026-11-16 18:17..22:36 UTC, 0.8.55 after
+# 02:35 UTC), so these rows need both wheels back to back before any of them is a verdict.
+algos/knn-imputer/taxi/rows=full	fit	ours	name=knn-imputer-taxi	timing=planned
+algos/pagerank/istella/rows=full	fit	ours	name=pagerank-istella	timing=planned
+algos/select-d/synthetic/rows=full	fit	ours	name=select-d-synthetic	timing=planned
+algos/multioutput-reg/istella/rows=full	fit	ours	name=multioutput-reg-istella	timing=planned
+trees/gbdt-symmetric-1000/istella/rows=full	infer/large	ours	name=gbdt-symmetric-large	timing=planned
+neural/samba-train-step/bytes/shape=full	fit	ours	timing=planned

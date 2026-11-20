@@ -1,0 +1,301 @@
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index d3ee0429d2..cdfd9f1327 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -87,6 +87,7 @@ from x_linear.cls1_fast import (
+     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
+ )
+ from x_linear.dispatch import ALGO_LOGCV
++from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
+ from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
+ from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
+ from x_linear.quantile_grid import quantile_fit_grid
+@@ -5465,8 +5466,11 @@ def fit_device(
+         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+     comptime if XLIN_IDN_DEV_FINITE:
+         xlin_finite_device(ctx, dx, n_x, y, n_y)
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
++    comptime if C13_LOGCV_WEIGHTS:
++        # the opt-in C13 weight sums assume disjoint folds; a non-partition cv
++        # marks every fold word -(n + 1) (x_linear/cv_roles.mojo)
++        if algo == ALGO_LOGCV and n > 0 and n_y > n and y[n] < Float32(0):
++            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
+     if algo == ALGO_LOGCV and n > 0:
+         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo),
+         # unless an explicit cv's fold ids came in y (ip[6] = 1)
+diff --git a/x_linear/logcv.mojo b/x_linear/logcv.mojo
+index 389587ef93..fb81753748 100644
+--- a/x_linear/logcv.mojo
++++ b/x_linear/logcv.mojo
+@@ -22,6 +22,7 @@ The caller passes zeros for the fold ids; the host binding fills them
+ (`logcv_fold_ids`) and the device binding builds them on the grid
+ (x_linear/logcv_grid.mojo) from the same table.
+ """
++from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
+     axpy_acc, row_dots,
+@@ -38,7 +39,8 @@ weights and the raw weights (y: labels n | fold words n | fit weights n |
+ raw weights n | roles F*n; Python sends unit weights when there are none,
+ so such a fit always has sample_weight set). A held-out row is a split's
+ test row; a training row its training row; any other row is skipped by
+-both."""
++both. C13_LOGCV_WEIGHTS (an opt-in define) sums the other folds' weights,
++which holds for a partition only."""
+ from x_linear.vfold import vwsq
+ from max.gpu import WARP_SIZE
+ from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix, fold_parts, fold_blocks, FOLD_BLOCK
+@@ -180,6 +182,27 @@ def logcv_rows(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
+     return t.bcast_int(cnt, 5)
+ 
+ 
++@always_inline
++
++def lcv_disjoint_weight(y: FP, n: Int, fold: Int, weighted: Bool) -> Float32:
++    """C13 weighted LogCV preparation: immutable fold sum, rows ascending.
++    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
++    """
++    var total = Float32(0)
++    for i in range(n):
++        if Int(ld(y, n + i)) == fold:
++            total = fa(total, ld(y, 2 * n + i) if weighted else Float32(1))
++    return total
++
++
++def lcv_retained_weight(cache: FP, folds: Int, held: Int) -> Float32:
++    var total = Float32(0)
++    for f in range(folds):
++        if f != held:
++            total = fa(total, ld(cache, f))
++    return total
++
++
+ def _logcv_part(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: Bool, fold: Int, ix: IP, cnt: Int,
+                 bk: Int, t: Team) -> Float32:
+     return logcv_part_rows(o, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t.row(0))
+@@ -213,9 +236,7 @@ def logcv_part_rows(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw:
+         if fold >= 0:
+             return fold_fa_ix(lt, ix + lo, cb)
+         return fold_fa(lt, lo, 1, cb)
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+-    if not sw:
++    if not sw or C13_LOGCV_WEIGHTS:
+         return Float32(0)
+     if fold >= 0:
+         return fold_fa_ix(y, ix + lo, cb, 2 * n)
+@@ -356,6 +377,8 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp:
+                 acc = fa(acc, _logcv_part(p, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
+                 if sw:
+                     wrows = fa(wrows, _logcv_part(p + 1, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
++        comptime if C13_LOGCV_WEIGHTS:
++            wrows = ld(fp, 1) if sw else Float32(0)
+         out = logcv_finish(g, goff, th, toff, kp, d, sw, c, cnt, acc, wrows)
+     return t.bcast(out)
+ 
+diff --git a/x_linear/logcv_grid.mojo b/x_linear/logcv_grid.mojo
+index ada0b73361..ea3da9d4b0 100644
+--- a/x_linear/logcv_grid.mojo
++++ b/x_linear/logcv_grid.mojo
+@@ -24,7 +24,8 @@ The StratifiedKFold ids are built on the grid from the labels
+ per fold one count, and the result once. The host column runs `logcv_fit`:
+ the same statements on the same rows in the same order: the same words.
+ """
+-from x_linear.logcv import lcv_caller_folds, LCV_ROLES_AFTER
++from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
++from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight, lcv_caller_folds, LCV_ROLES_AFTER
+ from x_linear.cv_roles import cv_train, cv_test
+ from max.gpu import block_idx, block_dim, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+@@ -279,21 +280,28 @@ def lcv_score_fin_kernel(sp: FP, nb: Int32, res: FP, wf: IP, woff: Int32, nonce:
+     witness_end(wf, woff, nonce)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+ def lcv_finish_kernel(th: FP, g: FP, f: FP, outs: FP, cs: FP, kp: Int32, d: Int32, sw: Int32, cnt: Int32,
++                      fold_weights: FP, nf: Int32, held: Int32,
+                       parts: FP, wf: IP, woff: Int32, nonce: Int32):
+     """One block: `logcv_finish_t` on the folded sums; f[0] by the lead."""
+     var t = team_at(Int(thread_idx.x), Int(block_dim.x), parts, 0, 0, 0)
+     var swb = sw != 0
+     var fv = logcv_finish_t(t, g, 0, th, 0, Int(kp), Int(d), swb, ld(cs, 0), Int(cnt), ld(outs, 0),
+-                            ld(outs, 1) if swb else Float32(0), parts)
++                            (lcv_retained_weight(fold_weights, Int(nf), Int(held)) if C13_LOGCV_WEIGHTS else ld(outs, 1)) if swb else Float32(0), parts)
+     if t.lead():
+         st(f, 0, fv)
+     witness_end(wf, woff, nonce)
+ 
+ 
+ 
++def classical_lcv_weight_kernel(y: FP, n: Int32, nf: Int32, sw: Int32, cache: FP,
++                                 wf: IP, woff: Int32, nonce: Int32):
++    var f = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
++    if f < Int(nf):
++        st(cache, f, lcv_disjoint_weight(y, Int(n), f, sw != 0))
++    witness_end(wf, woff, nonce)
++
++
+ def lcv_theta_kernel(lw: FP, p: Int32, c: Int32):
+     """theta[0] = theta[c] (c = 1), or zeros (c < 0): a thread an entry."""
+     var j = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
+@@ -362,6 +370,8 @@ struct LcvObjective(LbObjective):
+     var outs: DeviceBuffer[DType.float32]
+     var parts: DeviceBuffer[DType.float32]
+     var cs: DeviceBuffer[DType.float32]
++    var fold_weights: DeviceBuffer[DType.float32]
++    var nf: Int
+     var ix: DeviceBuffer[DType.int32]
+     var n: Int
+     var d: Int
+@@ -381,6 +391,8 @@ struct LcvObjective(LbObjective):
+         self.outs = ctx.enqueue_create_buffer[DType.float32](2)
+         self.parts = ctx.enqueue_create_buffer[DType.float32](vscratch(kp * d) + 16)
+         self.cs = ctx.enqueue_create_buffer[DType.float32](2)
++        self.fold_weights = ctx.enqueue_create_buffer[DType.float32](max(nf, 1) if C13_LOGCV_WEIGHTS else 1)
++        self.nf = nf
+         self.ix = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+         if n_x > 0:
+             ctx.enqueue_copy(dst_buf=self.x, src_ptr=x)
+@@ -432,6 +444,7 @@ struct LcvObjective(LbObjective):
+         )
+         ctx.enqueue_function[lcv_finish_kernel](  # small-launch(kp: classes): one block strides the K-prime by d+1 gradient cells and one vfold sum
+             th, g, f, self.outs.unsafe_ptr(), self.cs.unsafe_ptr(), Int32(kp), Int32(d), sw, Int32(cnt),
++            self.fold_weights.unsafe_ptr(), Int32(self.nf), Int32(self.fold),
+             self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
+         )
+ 
+@@ -539,6 +552,18 @@ def logcv_fit_grid(
+         lcv_fold_ids_device(c.copy(), FP(unsafe_from_address=Int(obj.y.unsafe_ptr())), n, max(kp, 2), nf)
+     c.synchronize()
+     _ = hc^
++    comptime if C13_LOGCV_WEIGHTS:
++        var prep = Witness(c, _blocks(nf))
++        var attempt = 0
++        while True:
++            var nonce = prep.begin()
++            c.enqueue_function[classical_lcv_weight_kernel](obj.y.unsafe_ptr(), Int32(n), Int32(nf), Int32(1 if sw else 0),
++                obj.fold_weights.unsafe_ptr(), prep.p(), Int32(0), nonce, grid_dim=_blocks(nf), block_dim=LCV_TPB)
++            if prep.ok(c, _blocks(nf), "LogisticRegressionCV disjoint weight cache"):
++                break
++            attempt += 1
++            if attempt >= WITNESS_TRIES:
++                prep.fail()
+     var lp = FP(unsafe_from_address=Int(lw.unsafe_ptr()))
+     var bt = _blocks(p)
+     for f in range(nf):
+diff --git a/x_linear/logcv_host.mojo b/x_linear/logcv_host.mojo
+index 04e394e8cf..ad96b000a9 100644
+--- a/x_linear/logcv_host.mojo
++++ b/x_linear/logcv_host.mojo
+@@ -12,8 +12,10 @@ precedent). The device binding runs this fit on its grid driver
+ (x_linear/device.mojo `fit_device`, `logcv_fit_grid` in x_linear/logcv_grid.mojo); the statements here are unchanged,
+ so the host column's bits are unchanged.
+ """
++from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
+ from x_linear.tops import FOLD_BLOCK
+ from x_linear.ops_host import par_rows
++from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight
+ from x_linear.ops import fd, i2f, sti
+ from x_linear.ops import FP, IP, axpy_acc, fa, fexp, fill, flog, fm, fmax, fs, ld, ldi, row_dots, st
+ from x_linear.lbfgs import Objective, lbfgs
+@@ -115,11 +117,11 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
+                 st(pg, o, Float32(0))
+             acc = fa(acc, pacc)
+             pacc = Float32(0)
+-            if sw:
++            if sw and not C13_LOGCV_WEIGHTS:
+                 wrows = fa(wrows, pw)
+                 pw = Float32(0)
+         rows += 1
+-        if sw:
++        if sw and not C13_LOGCV_WEIGHTS:
+             pw = fa(pw, ld(y, 2 * n + i))
+         pacc = fa(pacc, ld(sl, i))
+         for k in range(kp):
+@@ -131,9 +133,11 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
+         for o in range(p):
+             st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+         acc = fa(acc, pacc)
+-        if sw:
++        if sw and not C13_LOGCV_WEIGHTS:
+             wrows = fa(wrows, pw)
+     _ = pl^
++    comptime if C13_LOGCV_WEIGHTS:
++        wrows = ld(fp, 1) if sw else Float32(0)
+     return logcv_finish(g, goff, th, toff, kp, d, sw, c, rows, acc, wrows)
+ 
+ 
+@@ -198,9 +202,7 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
+     var p = kp * stride
+     var th = 0
+     var cslot = p
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+-    var extra = 1
++    var extra = nf + 2 if C13_LOGCV_WEIGHTS else 1
+     var work = p + extra + n * (kp + 1)
+     var sc = kp * d + kp + 2
+     if t.lead():
+@@ -209,9 +211,15 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
+         sti(iw, 3, ldi(ip, 5))
+     var cptr = fw + cslot
+     var hitr = t.row(0)
++    comptime if C13_LOGCV_WEIGHTS:
++        for f in range(t.tid, nf, t.nt):
++            st(cptr, 2 + f, lcv_disjoint_weight(y, n, f, ldi(ip, 5) != 0))
++        t.sync()
+     for f in range(nf):
+         var cnt = rows(t, y, n, f, kp)
+         if t.lead():
++            comptime if C13_LOGCV_WEIGHTS:
++                st(cptr, 1, lcv_retained_weight(cptr + 2, nf, f))
+             sti(iw, 2, f)
+             sti(iw, 4, cnt)
+             fill(fw, th, p, Float32(0))
+@@ -238,6 +246,8 @@ def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, s
+             if ci == 0 or m > bs:  # DEVIATION 5005: the first best C
+                 best = ci
+                 bs = m
++        comptime if C13_LOGCV_WEIGHTS:
++            st(cptr, 1, lcv_retained_weight(cptr + 2, nf, -1))
+         sti(iw, 2, -1)
+         st(fw, cslot, ld(fp, 1 + best))
+         fill(fw, th, p, Float32(0))
+diff --git a/x_linear/x_linear_host_impl.mojo b/x_linear/x_linear_host_impl.mojo
+index 09add02729..f3491fa08f 100644
+--- a/x_linear/x_linear_host_impl.mojo
++++ b/x_linear/x_linear_host_impl.mojo
+@@ -6,7 +6,7 @@ The binding unpacks Python object arguments and calls one function here; the
+ input checks, target preparation, fit dispatch and decision loops live here
+ with no Python import, moved word for word (lane thin-core, 2026-10-21: a
+ pure move, no bit change)."""
+-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
++from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS, ENETCV_FOLD_BLOCKS
+ from x_linear.enetcv_blocks import fb_host_words
+ from x_linear.ops import FP, IP
+ from core.host_parallel import host_parallelize
+@@ -57,8 +57,9 @@ def x_linear_fit_host(
+     comptime if ENETCV_FOLD_BLOCKS:
+         if a == 9 and n_ip >= 4:
+             n_fw += fb_host_words(d, Int(ipl[3]))
+-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
++    comptime if C13_LOGCV_WEIGHTS:
++        if a == ALGO_LOGCV:
++            n_fw += Int(ipl[4]) + 1
+     var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
+     var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
+     var bufs = team_rows(a, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
+@@ -66,6 +67,10 @@ def x_linear_fit_host(
+     var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
+     var x = _fp(x_addr)
+     var y = _fp(y_addr)
++    comptime if C13_LOGCV_WEIGHTS:
++        # the opt-in C13 weight sums assume disjoint folds (x_linear/cv_roles.mojo)
++        if a == ALGO_LOGCV and n > 0 and dims[3] > n and y[n] < Float32(0):
++            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
+     var out = _fp(out_addr)
+     _finite(x, dims[2], "X")
+     _finite(y, dims[3], "y")

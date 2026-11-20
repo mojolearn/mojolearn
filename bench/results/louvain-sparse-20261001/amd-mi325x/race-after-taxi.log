@@ -1,6 +1,0 @@
-BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/louvain", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
-ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=0 ms=566.296 infer_ms=None digest=3599bb95ca20a3e0
-ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=1 ms=569.532 infer_ms=None digest=3599bb95ca20a3e0
-ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=2 ms=567.592 infer_ms=None digest=3599bb95ca20a3e0
-ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=3 ms=559.905 infer_ms=None digest=3599bb95ca20a3e0
-ALGOS lane=louvain dataset=taxi arm=ours status=ok median_ms=567.5919560017064 quality={"modularity": 0.9411717592847725, "n_communities": 58}

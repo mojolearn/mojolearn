@@ -31,8 +31,9 @@ still moves the row index and the flag plane one element per thread.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
@@ -43,6 +44,9 @@ from checks.numerics import ftz
 from gbdt.apple_fast_tree_experiments import AFT_N03, AFT_N04, AFT_N06
 
 # ---- MOJOLEARN_GBDT_DW2_PART_VEC4 ------------------------------------------
+# TOMBSTONE: MOJOLEARN_AFT_N03 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at e6d002c73c.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N03.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # N03: eight simdgroups instead of sixteen per partition block, keeping
 # four consecutive rows per lane. Chunk allocation/scan/scatter use this
 # same geometry, so stable order and the complete partition are retained.
@@ -117,7 +121,7 @@ def dw2_flags_count_kernel[GUARD: Bool = False](
             var f4 = SIMD[DType.uint8, 4](0)
             comptime for e in range(4):
                 var feature_val = (
-                    ldg(compressed_index + (f_offset + Int(idx4[e]))) & mask
+                    (compressed_index + (f_offset + Int(idx4[e]))).unsafe_load[invariant=True]() & mask
                 )
                 var goes_right = (
                     feature_val == value
@@ -133,7 +137,7 @@ def dw2_flags_count_kernel[GUARD: Bool = False](
                 if j >= offset and j < end:
                     var load_index = Int(row_index.unsafe_load(j))
                     var feature_val = (
-                        ldg(compressed_index + (f_offset + load_index)) & mask
+                        (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
                     )
                     var goes_right = (
                         feature_val == value
@@ -356,6 +360,9 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
     var n_groups = (end - a0 + DW2_PART_VEC - 1) // DW2_PART_VEC
     var gi = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
+    # TOMBSTONE: MOJOLEARN_AFT_N06 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 42ccfefe05.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_N06.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     # N06: two independent vector groups per worker iteration reuse the
     # leaf descriptor and grid stride. This is row-index cursor movement,
     # not prediction-value application. No timing/quality evidence.
@@ -379,6 +386,9 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
 # ---- MOJOLEARN_GBDT_DW2_SCAN_SMEM ------------------------------------------
 #: Features per block. 16 x 255 folds fits the page with room for the
 #: alignment head and tail.
+# TOMBSTONE: MOJOLEARN_AFT_N04 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 85f432a43b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_N04.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # N04: eight features and an 8 KiB slab (plus alignment slack) instead
 # of sixteen/16 KiB. More independent leaf/stat tiles may reside together;
 # each feature still performs the complete ordered bin prefix. Source only:

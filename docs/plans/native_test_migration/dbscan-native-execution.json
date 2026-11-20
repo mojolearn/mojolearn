@@ -1,0 +1,389 @@
+{
+  "family": "DBSCAN",
+  "execution": "Partial: root compiled and passed CPU103 (wire45 +options41 +actual17) at bda409162a and Apple GPU20 (actual17 +ownership3) at4583aac78f. CPU state28 is still compilation-blocked after both original and explicit scoped-borrow attempts; it has not executed. Neither failed full CPU bundle is reported as passing.",
+  "dependencies": [
+    "6b3832cfc7",
+    "a446091b7a",
+    "db68d9d7db",
+    "5205c33160"
+  ],
+  "cpu_numerical_fixtures": 17,
+  "gpu_numerical_fixtures": 17,
+  "gpu_ownership_fixtures": 3,
+  "all_new_counts": {
+    "cpu": 131,
+    "gpu": 20,
+    "cpu_breakdown": "state28 +wire45 +options41 +actual17",
+    "gpu_breakdown": "actual17 +ownership3"
+  },
+  "profiles": [
+    {
+      "name": "grid_brute",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 10,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        },
+        {
+          "name": "at_eps",
+          "rows": 2
+        },
+        {
+          "name": "past_eps",
+          "rows": 1
+        },
+        {
+          "name": "far",
+          "rows": 2
+        },
+        {
+          "name": "reverse",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": true
+    },
+    {
+      "name": "grid_rbc",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 10,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "grid_wide",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 3.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 18,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "tie",
+          "rows": 1
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "grid_duplicates",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 40,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 36,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 40
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "grid_manhattan",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "manhattan",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 10,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "boundary",
+          "rows": 3
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "grid_ones",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 2,
+      "core_count": 10,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "train",
+          "rows": 20
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "grid_empty",
+      "origin": "test_transductive_predict.py::arm_dbscan",
+      "rows": 20,
+      "features": 2,
+      "eps": 0.1,
+      "min_samples": 50,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 0,
+      "core_count": 0,
+      "ambiguous_border_rows": 0,
+      "queries": [
+        {
+          "name": "first_three",
+          "rows": 3
+        }
+      ],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "host512",
+      "origin": "test_cpu_training_e.py::test_host_fits_run_and_repeat_on_a_cpu_only_install (fit workload only; no repeated-bits campaign)",
+      "rows": 512,
+      "features": 5,
+      "eps": 0.9,
+      "min_samples": 5,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 5,
+      "core_count": 130,
+      "ambiguous_border_rows": 4,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "parallel400",
+      "origin": "test_parallel_public_drivers.py::_dbscan (single native mathematical fit; external multi-device seam retained)",
+      "rows": 400,
+      "features": 4,
+      "eps": 0.9,
+      "min_samples": 5,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 1,
+      "core_count": 257,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "weighted2_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 2,
+      "core_count": 8,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "weighted15_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 1,
+      "core_count": 6,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "duplicated_brute",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 9,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 9,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "weighted2_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 2,
+      "core_count": 8,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "weighted15_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 8,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 1,
+      "core_count": 6,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "duplicated_rbc",
+      "origin": "dbscan/checks/dbscan_check.mojo::check_dbscan_duplicate_equals_weight_two; original8/9 rows, eps1/min3",
+      "rows": 9,
+      "features": 2,
+      "eps": 1.0,
+      "min_samples": 3,
+      "method": "rbc",
+      "metric": "euclidean",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 9,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "negative_inhibit",
+      "origin": "Additional analytic admitted-negative-weight case: coincident sum2<3 stays noise; far three unit weights sum3 are core",
+      "rows": 6,
+      "features": 2,
+      "eps": 0.75,
+      "min_samples": 3,
+      "method": "brute",
+      "metric": "euclidean",
+      "weighted": true,
+      "clusters": 1,
+      "core_count": 3,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    },
+    {
+      "name": "precomputed_grid",
+      "origin": "Additional precomputed form of the original20x2 grid; no prediction feature added",
+      "rows": 20,
+      "features": 20,
+      "eps": 1.0,
+      "min_samples": 4,
+      "method": "brute",
+      "metric": "precomputed",
+      "weighted": false,
+      "clusters": 2,
+      "core_count": 10,
+      "ambiguous_border_rows": 0,
+      "queries": [],
+      "single_row_queries_from_train": false
+    }
+  ],
+  "oracle": {
+    "metadata": "checks/native_tests/fixtures/dbscan/metadata.json",
+    "method": "Independent Float64 radius graph; mathematical weighted neighborhood core criterion; queue-connected core components; all valid border memberships; nearest core with lowest original-index tie.",
+    "label_policy": "Native labels may be renumbered. Core component anchors must map injectively; border assignments must belong to a radius-adjacent core component; noise/core flags exact.",
+    "numeric_tolerance": "Exact integer labels/core mask under cluster permutation; exact copied Float32 components. Independent Float64 radius graph over original Float32 inputs; random nonzero radius gaps recorded in metadata. No expected outputs from product execution.",
+    "threshold_edges": "Original exact eps, nextafter Float32 past eps, L1 border-only rejection, lowest original-index tie, duplicate rows, empty core, uniform/noninteger/negative weights.",
+    "original_native_weighted_check": "dbscan/checks/dbscan_check.mojo retained; no rerun of its older identity campaign",
+    "original_host_pass_count": "host512 preserves its existing passes >=1 assertion; labels >=-1 strengthened by independent partition/noise oracle"
+  },
+  "ownership": "Three ordered real provider graphs: host refs/keys/labels poisoned after prepare; retained query uses original upload; two simultaneous native leases retain buffer contents after registry removal; missing lookup refused; separately minted replacement retains its own labels after old release. No overlapping GPU submission.",
+  "parallel": "CPU17 fits across host cores; original20 one-row queries across CPU cores. GPU17 fits/query graphs and ownership3 ordered on one physical GPU/shared context; existing numerical kernels and oracle cells remain parallel. Separate MAX/Metal concurrent-submit failure remains unresolved.",
+  "python_removed": 0,
+  "python_cleanup_status": "Pending patch only. Original Python numerical coverage retained while state28 compilation is unresolved.",
+  "reviewed_python": [
+    "test_transductive_predict.py::arm_dbscan",
+    "test_cpu_training_e.py::test_host_fits_run_and_repeat_on_a_cpu_only_install (nested run DBSCAN512x5 portion)",
+    "test_parallel_public_drivers.py::_dbscan (DBSCAN400x4 and multi-device controller)",
+    "test_cluster_input_refusals.py DBSCAN64x3 finite admission",
+    "new pilot-owned test_dbscan_native_boundary.py"
+  ],
+  "retained_python_seams": [
+    "prediction_data flag and refusal",
+    "public components/core-index arrays and dtype/shape packing",
+    "float64 query admission",
+    "empty-core public branch and output packing",
+    "save/load and retained owner lifetime",
+    "prefit/wrong width/empty query/nonfinite/refused object protocols",
+    "multi-device controller"
+  ],
+  "product_changes": false,
+  "kernel_changes": false,
+  "defines": [
+    "MOJOLEARN_NUMERIC_IDENTICAL=1",
+    "MOJOLEARN_COLUMN_CPU=1 for CPU only"
+  ],
+  "evidence": "E/pca-native-tests/dbscan-native-static.json",
+  "accepted_runtime_evidence": "E/native-wave15-accepted-results.json",
+  "validation_limits": [
+    "Partial test evidence, not full DBSCAN suite pass",
+    "Local CPU and Apple Metal GPU only",
+    "Installed public Python boundary cases unrun",
+    "No performance or cross-vendor identity claim",
+    "Ordered GPU tests do not clear upstream concurrent shared-context submission failure",
+    "No product or tuned kernel changes in borrow-scope repair"
+  ]
+}

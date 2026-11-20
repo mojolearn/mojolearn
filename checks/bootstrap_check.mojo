@@ -61,7 +61,7 @@ def _ones_stats(
     var h = ctx.enqueue_create_host_buffer[DType.float32](2 * BS_ROWS)
     for i in range(2 * BS_ROWS):
         h.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, h)
     ctx.synchronize()
     return stats^
 
@@ -70,7 +70,7 @@ def _read(
     ctx: DeviceContext, mut b: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=b)
+    download_host_into[DType.float32](ctx, b, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
@@ -98,8 +98,8 @@ def _fit_losses(
     for r in range(FIT_ROWS):
         ht.unsafe_ptr().unsafe_store(r, y[r])
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
     var model = TAdditiveModel()
     return fit(
@@ -122,9 +122,9 @@ def check_bootstrap() raises:
     var h1 = ctx.enqueue_create_host_buffer[DType.uint64](BOOTSTRAP_SEED_COUNT)
     var h2 = ctx.enqueue_create_host_buffer[DType.uint64](BOOTSTRAP_SEED_COUNT)
     var h3 = ctx.enqueue_create_host_buffer[DType.uint64](BOOTSTRAP_SEED_COUNT)
-    ctx.enqueue_copy(dst_ptr=h1.unsafe_ptr(), src_buf=s1)
-    ctx.enqueue_copy(dst_ptr=h2.unsafe_ptr(), src_buf=s2)
-    ctx.enqueue_copy(dst_ptr=h3.unsafe_ptr(), src_buf=s3)
+    download_host_into[DType.uint64](ctx, s1, h1)
+    download_host_into[DType.uint64](ctx, s2, h2)
+    download_host_into[DType.uint64](ctx, s3, h3)
     ctx.synchronize()
     var same = 0
     var diff8 = 0
@@ -141,7 +141,14 @@ def check_bootstrap() raises:
           diff8, "of", BOOTSTRAP_SEED_COUNT)
 
     # ---- 2 + 3: distribution and the two-plane multiply -------------------
-    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+    # 2 * blocks partials (fb11, 2026-11-17): the kernel stores each block's
+    # (|w|, |g|) at mags[2 * block], 256 blocks at BS_ROWS rows. A buffer of
+    # 2 was overrun by 510 floats; on the L40S the overrun landed in the
+    # stats buffer allocated next to it ("the two planes took different
+    # draws at row 0"). The product sizes it by bootstrap_grid_blocks.
+    var mags = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(BS_ROWS)
+    )
     ctx.enqueue_memset(mags, Float32(0.0))
     var stats = _ones_stats(ctx)
     launch_bootstrap(
@@ -295,7 +302,14 @@ def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     (`gpu_data/bootstrap.h:100-102`).
     """
     var seeds = create_bootstrap_seeds(ctx, UInt64(11))
-    var mags = ctx.enqueue_create_buffer[DType.float32](2)
+    # 2 * blocks partials (fb11, 2026-11-17): the kernel stores each block's
+    # (|w|, |g|) at mags[2 * block], 256 blocks at BS_ROWS rows. A buffer of
+    # 2 was overrun by 510 floats; on the L40S the overrun landed in the
+    # stats buffer allocated next to it ("the two planes took different
+    # draws at row 0"). The product sizes it by bootstrap_grid_blocks.
+    var mags = ctx.enqueue_create_buffer[DType.float32](
+        2 * bootstrap_grid_blocks(BS_ROWS)
+    )
 
     # -- Bernoulli, the two exact identities -----------------------------
     for rate_i in range(2):
@@ -430,7 +444,7 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
                 k * rows + i, Float32(1 + k * 7919 + i * 13)
             )
     var stats = ctx.enqueue_create_buffer[DType.float32](planes * rows)
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, h)
     ctx.synchronize()
 
     var seeds = create_bootstrap_seeds(ctx, UInt64(11))
@@ -463,7 +477,7 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
     # BERNOULLI at rate 0.0: `u < 0.0` is false for every draw, so every
     # row is zeroed -- ON EVERY PLANE. Under the two-plane bug, planes 2,3
     # and 4 came back untouched, which is exactly what this counts.
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, h)
     ctx.synchronize()
     var seeds2 = create_bootstrap_seeds(ctx, UInt64(11))
     launch_bootstrap(
@@ -498,7 +512,6 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
                 + " un-bootstrapped values -- the draw did not reach it"
             )
             fails += 1
-    _ = h^
     if fails != 0:
         raise Error(
             String(fails)
@@ -508,7 +521,7 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
     print("  multiclass bootstrap: every plane takes the draw")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     # `check_bootstrap` builds the `DeviceContext` and hands it to
     # `check_bernoulli_and_poisson` itself, so this must NOT build one.
@@ -516,3 +529,22 @@ def main() raises:
     print("MULTICLASS PLANES (the bug the two-plane kernel hid):")
     var ctx = DeviceContext()
     check_bootstrap_multiclass(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("bootstrap_check", cpu=False, gpu=True, serial="", run=run_cases)

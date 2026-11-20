@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Prophet team fit with the WHOLE block on every step (Apple FAST,
-default; off: `-D MOJOLEARN_PROPHET_COOP_OFF`; lane apple-fast-prophetspeed).
+default; its `-D MOJOLEARN_PROPHET_COOP_OFF` rollback was deleted 2026-11-15; lane apple-fast-prophetspeed).
 
 `prophet_fit_team` (sequence/fit_team.mojo) keeps op_prophet_fit's bits:
 each of the P + 1 likelihood accumulators is one thread's ascending chain
@@ -29,9 +29,8 @@ Here, one block of PROPHET_COOP_TPB threads per series:
 Same model, priors, start, line search and stopping rules as lbfgs_steps;
 the folds' orders differ, so the bits differ: FAST only, Apple only. The
 fit is sliced over launches as prophet_fit_team (macOS long-launch rule)."""
-from std.gpu.primitives.warp import shuffle_xor
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.primitives.warp import shuffle_xor
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_sqrt
 from sequence.fit_team import PT_DONE, TEAM_REC, SeqTeam, _ldi, _spend, _sti
@@ -41,7 +40,7 @@ from sequence.prophet import COOP_NT, COOP_PW, MEM, PROPHET_COOP_IDN
 #: the switch: FAST on Apple by default since the M3 A/B (lane
 #: apple-fast-prophetspeed 805207038, n=1: prophet synthetic 431 -> 45 ms,
 #: taxi-hourly 360 -> 43 ms; forecast_rmse 1.015 -> 1.015, 32.03 -> 32.04).
-#: -D MOJOLEARN_PROPHET_COOP_OFF turns it off; the old -D MOJOLEARN_PROPHET_COOP
+#: -D MOJOLEARN_PROPHET_COOP_OFF (deleted 2026-11-15) turned it off; the old -D MOJOLEARN_PROPHET_COOP
 #: is harmless. IDENTICAL and every other vendor keep prophet_fit_team.
 #: lane/fam2-timeseries (2026-10-04): IDENTICAL ON EVERY VENDOR too
 #: (PROPHET_COOP_IDN, sequence/prophet.mojo). The fold orders here are a
@@ -50,12 +49,12 @@ from sequence.prophet import COOP_NT, COOP_PW, MEM, PROPHET_COOP_IDN
 #: groups' partials ascending), so NVIDIA, AMD (a 64-lane wavefront holds two
 #: groups; offsets of at most 16 stay inside one) and Apple fold the same
 #: way, and the host column replays that order (`_coop_fg`, `_dot_coop`).
-#: -D MOJOLEARN_IDN_PROPHET_COOP_OFF=1 restores prophet_fit_team's chain.
+# TOMBSTONE: MOJOLEARN_PROPHET_COOP_OFF (old path; FAST+Apple default, EXP:537 KEPT on Apple M3 only; NVIDIA/AMD A/B owed) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_PROPHET_COOP_OFF.patch
 comptime PROPHET_COOP = (
     (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_PROPHET_COOP_OFF"]()
+        and TARGET_HAS_APPLE_GPU
     )
     or PROPHET_COOP_IDN
 )

@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultinomialNB / ComplementNB on a CSR count matrix (lane apple-fast-nb,
-pass 2, 2026-10-02). FAST + Apple ONLY, ON by default (-D
-MOJOLEARN_NB_TEXT_CSR_OFF reverts; M3 A/B: multinomial-nb text 186.9 ->
-35.4 ms (-81%), accuracy .9831 logloss .5595 identical; M2 nb-mnb-csr-text-x
-221.7 -> 47.7 ms): the
-IDENTICAL binding, the other vendors and a FAST build with the _OFF define do
+pass 2, 2026-10-02). FAST + Apple ONLY, always on there (M3 A/B:
+multinomial-nb text 186.9 -> 35.4 ms (-81%), accuracy .9831 logloss .5595
+identical; M2 nb-mnb-csr-text-x 221.7 -> 47.7 ms): the other vendors do
 not export `x_prep_nb_csr_fit` / `x_prep_nb_csr_jll`, and the Python layer
 (`_expansion_prep._DiscreteNB`) keeps main's dense program.
 
@@ -31,11 +29,11 @@ The (class, feature) table and the class counts come back to the host
 `class_log_prior`) runs on them unchanged, so feature_log_prob_ matches the
 dense fit within float32 (the atomic fold order is new).
 """
-from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.atomic import Atomic
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -44,14 +42,13 @@ from x_prep.common import FP, IP
 from x_prep.prims import add, mul
 from x_prep.device import x_prep_ctx
 
-#: The switch: FAST and Apple, unless -D MOJOLEARN_NB_TEXT_CSR_OFF (default ON
-#: since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms, same accuracy / logloss).
-comptime NB_TEXT_CSR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"]()
-)
+#: FAST and Apple (default since the M3 A/B, multinomial-nb text 186.9 -> 35.4 ms,
+#: same accuracy / logloss).
+# TOMBSTONE: MOJOLEARN_NB_TEXT_CSR_OFF (old path; promoted on Apple FAST only, M3 + M2 A/B; NVIDIA and AMD never had the arm, no A/B owed there) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at a6a4828242.
+# Restore: git apply experiments/removed/MOJOLEARN_NB_TEXT_CSR_OFF.patch; record in docs/TOMBSTONES.md.
+comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: lane idn-int-prep (2026-10-04): the CSR text path in IDENTICAL on every
-#: vendor, ON by default (-D MOJOLEARN_IDN_NB_CSR_OFF: no export, the dense
-#: program). The fit counts in 64-bit integers held as two UInt32 words per
+#: vendor, always on there. The fit counts in 64-bit integers held as two UInt32 words per
 #: (class, feature) (`nb_csr_count_int_kernel`, lane gap-shap-nb 2026-10-08:
 #: Metal has no 64-bit atomic add, so the low word takes a UInt32 atomic add
 #: and a wrap carries 1 into the high word; the final pair is the exact sum
@@ -69,7 +66,11 @@ comptime NB_TEXT_CSR = (
 #: (`nb_csr_jll_chk_kernel`) is `matmul_unit`'s ascending chain without the
 #: zero terms (a zero term adds nothing to a chain that starts at +0), under
 #: the same column-order flag.
-comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_NB_CSR_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2aca6c096a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
 #: negative value is refused whatever else the input holds, as the dense fit)
 comptime CSR_FLAG_FALLBACK = 1
@@ -78,8 +79,11 @@ comptime CSR_FLAG_NEG = 2
 # AFCL-P04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # Half the metadata and row-search span per block; every nonzero remains in
 # exactly one row group. More groups can offset skew, but increase scheduling.
-comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P04"]()
+comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P04"]()
 comptime CSR_ROWS = 32 if AFCL_P04 else 64
+# TOMBSTONE: MOJOLEARN_AFCL_P04 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P04.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 comptime CSR_TPB = 256
 
 

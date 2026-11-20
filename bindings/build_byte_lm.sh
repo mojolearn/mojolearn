@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # Root-only guarded build. No smoke/model/test launch.
 # Invoke through the corresponding NVIDIA/AMD/macOS serial guard.
 # MOJOLEARN_NUMERIC_MODE=identical (default) or fast; Linux needs one GPU target.
@@ -47,7 +48,7 @@ esac
 # Fixed compiler concurrency; this script never starts a second worker/build.
 set -- --target-accelerator "$MOJOLEARN_GPU_ARCHS"
 case "$(uname -m)" in
-    x86_64) set -- "$@" --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} ;;
+    x86_64) set -- "$@" --target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave} ;;
     aarch64) ;;
     *) echo 'byte LM: unsupported Linux host architecture' >&2; exit 2 ;;
 esac
@@ -73,22 +74,18 @@ if [ -e "$byte_lm_destination" ] || [ -L "$byte_lm_destination" ]; then
 fi
 byte_lm_tmpdir=$(mktemp -d "$byte_lm_outdir/.byte-lm-build.XXXXXX")
 trap 'rm -rf "$byte_lm_tmpdir"' EXIT HUP INT TERM
-case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
-    estash) ;;
-    recompute) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=1" ;;
-    packed) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=2" ;;
-    alias-y) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_IDN_ATTN_STASH=3" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, alias-y, or recompute' >&2; exit 2 ;;
-esac
+# MOJOLEARN_ATTENTION_MEMORY_PROFILE is gone: it only selected -D MOJOLEARN_IDN_ATTN_STASH,
+# deleted 2026-11-15 (docs/TOMBSTONES.md); estash is the one profile.
 # MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
 # appended verbatim, word-split, for trial builds (for example
 # -D MOJOLEARN_BYTE_LM_FAULT_INJECT=1 for the session gate's native faults),
 # the same hook bindings/build.sh carries. Production builds leave it empty.
-# Compiler concurrency: two workers by default, as before; a shared box
-# sets MOJOLEARN_COMPILE_JOBS=1. `mojo build` refuses a repeated -j, so
-# the value has to be substituted here rather than appended.
+# Compiler concurrency: MOJOLEARN_COMPILE_JOBS, else the host's cores on
+# Linux and 2 elsewhere (bindings/compile_jobs.sh); the laptop gets 1 from
+# tools/compile_slot.sh. `mojo build` refuses a repeated -j, so the value
+# has to be substituted here rather than appended.
 # compiles the entry bindings/entry/entry__mojolearn_byte_lm.mojo, which imports the module body bindings/_mojolearn_byte_lm.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $byte_lm_mode_define -I . -I bindings \
     bindings/entry/entry__mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
 ln "$byte_lm_tmpdir/_mojolearn_byte_lm.so" "$byte_lm_destination"

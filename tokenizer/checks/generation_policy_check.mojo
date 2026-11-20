@@ -3,7 +3,7 @@ from std.testing import assert_equal
 from core.generation_policy_impl import generation_pick
 
 
-def main() raises:
+def run_checks() raises:
     # Independent integer-only SplitMix64 oracle, retained as literal ids;
     # equal logits make the categorical masses exactly 1/4.
     var uniform: List[Float32] = [0, 0, 0, 0]

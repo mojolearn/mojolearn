@@ -28,14 +28,17 @@ def qualify():
         with tempfile.TemporaryDirectory(prefix='ml-neural-descriptor-') as folder:
             cfg, tensors = family_fixture(family, False)
             _write_checkpoint(folder, cfg, tensors)
-            models = []
-            for switch in ('0', '1'):
-                os.environ['MOJOLEARN_NEURAL_NATIVE_DISPATCH'] = switch
-                models.append(CausalLM.load(folder, device='gpu', numeric_profile='fp32_v1'))
+            # Native dispatch is the build default (lane flag-native-dispatch-gate,
+            # 2026-11-15: the MOJOLEARN_NEURAL_NATIVE_DISPATCH environment arm is
+            # gone; its by-name CPython arm is the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF
+            # build). Two independently loaded default models: every output,
+            # state counter and generated token must agree bit for bit, and
+            # both must hold the native tables.
+            models = [CausalLM.load(folder, device='gpu', numeric_profile='fp32_v1') for _ in range(2)]
             baseline, candidate = models
             assert candidate._native_vendor == 'metal', candidate._native_vendor
             assert baseline._native_numeric_mode == candidate._native_numeric_mode == 1
-            assert 'native_primitives' not in baseline._native_entries
+            assert 'native_primitives' in baseline._native_entries
             assert 'native_primitives' in candidate._native_entries
             ids = np.array([[1, 4, 7]], dtype='i4')
             states = [model.allocate_state(1, 48) for model in models]
@@ -78,15 +81,13 @@ def qualify():
                 raise RuntimeError('poisoned legacy primitive dispatch')
             for model in models:
                 model._native_entries['embedding_forward'] = poison
-            try:
-                baseline.forward(ids, baseline.allocate_state(1, 12))
-            except Exception as problem:
-                assert 'poisoned legacy primitive dispatch' in str(problem)
-            else:
-                raise AssertionError('legacy primitive negative control did not fire')
-            n = len(calls)
-            candidate.forward(ids, candidate.allocate_state(1, 12))
-            assert len(calls) == n
+            # The default build never reaches the by-name entry: neither model
+            # may call the poisoned legacy primitive (the B arm's positive
+            # control needs its own -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build).
+            for model in models:
+                model.forward(ids, model.allocate_state(1, 12))
+            assert not calls, 'default build called the by-name legacy primitive entry'
+
             try:
                 candidate.forward(np.array([[candidate.vocab_size]], dtype='i4'), candidate.allocate_state(1, 12))
             except Exception:

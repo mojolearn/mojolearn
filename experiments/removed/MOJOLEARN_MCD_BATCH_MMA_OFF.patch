@@ -1,0 +1,240 @@
+diff --git a/x_decomp/mcd_fast.mojo b/x_decomp/mcd_fast.mojo
+index 08fbd10a92..2c9b441935 100644
+--- a/x_decomp/mcd_fast.mojo
++++ b/x_decomp/mcd_fast.mojo
+@@ -105,9 +105,11 @@ from x_decomp.jacobi2 import dev_barrier
+ # 70092.1 -> 3627.9 ms; capped EE 5613.6 -> 956.8 ms. Quality: gap26-mcd-mma-
+ # {small,ee-small,full,ee-full} all MCDQ-PAIR-PASS against the original 1%
+ # fitted-state / .99 support gates (small: covariance rel 4.4e-8, masks exact).
+-# TOMBSTONE: MOJOLEARN_MCD_BATCH_MMA_OFF (old path: main's per-candidate route; EXP:2281; the scalar mf_dist / mf_cov_part / mf_cov kernels went with it) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 715cd1cdfd.
+-# Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime MCD_BATCH_MMA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and DECOMP_FAST_GEMM_MMA
++# MOJOLEARN_MCD_BATCH_MMA_OFF restores main's per-candidate path.
++comptime MCD_BATCH_MMA = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and DECOMP_FAST_GEMM_MMA and not is_defined["MOJOLEARN_MCD_BATCH_MMA_OFF"]()
++)
+ 
+ # HOLD-quality applies to the explicit legacy COMPAT-only arm, not to the
+ # separately accepted default MCD_BATCH_MMA route also sharing this gate.
+@@ -357,6 +359,62 @@ def mf_mean_kernel(part: F32Ptr, loc: F32Ptr, nc: Int32, tiles: Int32, d: Int32,
+             loc.unsafe_store(t, mul(acc, hinv))
+ 
+ 
++def mf_cov_part_kernel(
++    x: F32Ptr, rows: I32Ptr, ident: Int32, per: Int32, mask: I32Ptr, loc: F32Ptr, pj: I32Ptr, pk: I32Ptr,
++    part: F32Ptr, nc: Int32, r: Int32, tiles: Int32, d: Int32, npair: Int32, active: I32Ptr,
++):
++    """part[(c, tile, q)] = the masked sum over the tile of (x_j - loc_j)
++    (x_k - loc_k) for pair q = (j, k), j <= k: `emp_cov`'s centered Gram."""
++    var t = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
++    var np = Int(npair)
++    var nt = Int(tiles)
++    if t < Int(nc) * nt * np:
++        var q = t % np
++        var ct = t // np
++        var tile = ct % nt
++        var c = ct // nt
++        if active.unsafe_load(c) != 0:
++            var dd = Int(d)
++            var rr = Int(r)
++            var g = c // Int(per)
++            var j = Int(pj.unsafe_load(q))
++            var k = Int(pk.unsafe_load(q))
++            var mj = loc.unsafe_load(c * dd + j)
++            var mk = loc.unsafe_load(c * dd + k)
++            var lo = tile * MF_TILE
++            var hi = min(lo + MF_TILE, rr)
++            var acc = Float32(0)
++            for i in range(lo, hi):
++                if mask.unsafe_load(c * rr + i) != 0:
++                    var row = _row_of(rows, ident, g, rr, i) * dd
++                    var a = sub(x.unsafe_load(row + j), mj)
++                    var b = sub(x.unsafe_load(row + k), mk)
++                    acc = add(acc, mul(a, b))
++            part.unsafe_store(t, acc)
++
++
++def mf_cov_kernel(
++    part: F32Ptr, cov: F32Ptr, pj: I32Ptr, pk: I32Ptr, nc: Int32, tiles: Int32, d: Int32, npair: Int32,
++    hinv: Float32, active: I32Ptr,
++):
++    var t = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
++    var np = Int(npair)
++    if t < Int(nc) * np:
++        var c = t // np
++        var q = t - c * np
++        if active.unsafe_load(c) != 0:
++            var nt = Int(tiles)
++            var dd = Int(d)
++            var acc = Float32(0)
++            for tile in range(nt):
++                acc = add(acc, part.unsafe_load((c * nt + tile) * np + q))
++            var v = mul(acc, hinv)
++            var j = Int(pj.unsafe_load(q))
++            var k = Int(pk.unsafe_load(q))
++            cov.unsafe_store(c * dd * dd + j * dd + k, v)
++            cov.unsafe_store(c * dd * dd + k * dd + j, v)
++
++
+ @always_inline
+ def _logdet_kern(a: F32Ptr, o: Int, dd: Int) -> Float32:
+     """`fast_logdet` on the d x d block at a[o:]: partial-pivot LU in place
+@@ -619,6 +677,43 @@ def mf_pinvh_kernel(cov: F32Ptr, a: F32Ptr, v: F32Ptr, p: F32Ptr, nc: Int32, d:
+                 p.unsafe_store(o + i * dd + j, acc)
+ 
+ 
++def mf_dist_kernel(
++    x: F32Ptr, rows: I32Ptr, ident: Int32, per: Int32, loc0: F32Ptr, loc1: F32Ptr, par: Int32, fin: I32Ptr,
++    use_fin: Int32, p: F32Ptr, dist: F32Ptr, nc: Int32, r: Int32, d: Int32, active: I32Ptr, err: I32Ptr,
++):
++    """dist[c, i] = `mahal`: xc = x_row - loc; (xc P) . xc, k then j
++    ascending. The mean is this parity's, or the candidate's chosen parity
++    (`use_fin`, the final distances); an inactive candidate is skipped
++    unless `use_fin`."""
++    var t = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
++    var rr = Int(r)
++    if t < Int(nc) * rr:
++        var c = t // rr
++        var i = t - c * rr
++        if use_fin != 0 or active.unsafe_load(c) != 0:
++            var dd = Int(d)
++            var g = c // Int(per)
++            var row = _row_of(rows, ident, g, rr, i) * dd
++            var pr = Int(fin.unsafe_load(c)) if use_fin != 0 else Int(par)
++            var xc = Array[Float32, MF_DMAX](fill=Float32(0))
++            for k in range(dd):
++                var m = loc1.unsafe_load(c * dd + k) if pr == 1 else loc0.unsafe_load(c * dd + k)
++                xc[k] = sub(x.unsafe_load(row + k), m)
++            var o = c * dd * dd
++            var acc = Float32(0)
++            for j in range(dd):
++                var tj = Float32(0)
++                for k in range(dd):
++                    comptime if MCD_BATCH_COMPAT:
++                        tj = ftz(identical_mul_add(ftz(xc[k]), ftz(p.unsafe_load(o + k * dd + j)), tj))
++                    else:
++                        tj = add(tj, mul(xc[k], p.unsafe_load(o + k * dd + j)))
++                acc = add(acc, mul(tj, xc[j]))
++            if acc != acc:
++                err.unsafe_store(0, Int32(1))
++            dist.unsafe_store(t, acc)
++
++
+ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32Ptr):
+     """One block per candidate: the h rows with the smallest (image, index)
+     keys of its r distances (`smallest_sorted`'s set) as a 0/1 mask. An
+@@ -873,12 +968,12 @@ struct MfPhase(Movable):
+         # walk the phase in chunks (a memory bound, not a shape rule)
+         self.mchunk = mf_mma_chunk(nc, r, d)
+         var cxr = max(self.mchunk * r * d, 1)
+-        self.mm_x = ctx.enqueue_create_buffer[DType.float32](cxr)
+-        self.mm_y = ctx.enqueue_create_buffer[DType.float32](cxr)
+-        self.mm_out = ctx.enqueue_create_buffer[DType.float32](cdd)
+-        self.mm_v = ctx.enqueue_create_buffer[DType.float32](cdd)
+-        self.mm_vw = ctx.enqueue_create_buffer[DType.float32](cdd)
+-        self.mm_ran = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
++        self.mm_x = ctx.enqueue_create_buffer[DType.float32](cxr if MCD_BATCH_MMA else 1)
++        self.mm_y = ctx.enqueue_create_buffer[DType.float32](cxr if MCD_BATCH_MMA else 1)
++        self.mm_out = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
++        self.mm_v = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
++        self.mm_vw = ctx.enqueue_create_buffer[DType.float32](cdd if MCD_BATCH_MMA else 1)
++        self.mm_ran = ctx.enqueue_create_buffer[DType.int32](max(nc, 1) if MCD_BATCH_MMA else 1)
+         self.selected = ctx.enqueue_create_buffer[DType.int32](cr if MCD_BATCH_COMPAT else 1)
+         self.mask0 = ctx.enqueue_create_buffer[DType.int32](cr)
+         self.mask1 = ctx.enqueue_create_buffer[DType.int32](cr)
+@@ -1118,15 +1213,21 @@ def _run_phase(
+         # P0 = pinvh(cov0), dist = mahal(X, loc0, P0), sel = the h smallest
+         comptime if MCD_BATCH_COMPAT:
+             _compat_pinvh(ctx, ph, _f(ph.cov1), d, err)
+-            # TOMBSTONE: MOJOLEARN_MCD_BATCH_MMA_OFF (old path: main's per-candidate scalar launches; EXP:2281 record; this route runs only under MCD_BATCH_MMA, so its non-MMA branches here were unreachable) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 715cd1cdfd.
+-            # Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+-            _mma_precision(ctx, ph, d)
++            comptime if MCD_BATCH_MMA:
++                _mma_precision(ctx, ph, d)
+         else:
+             ctx.enqueue_function[mf_pinvh_kernel](
+                 _f(ph.cov1), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d), _i(ph.active), _i(ph.needp),
+                 grid_dim=_blocks(nc), block_dim=MF_TPB,
+             )
+-        _mma_distance(ctx, ph, dx, rows, d, 1, False, err)
++        comptime if MCD_BATCH_MMA:
++            _mma_distance(ctx, ph, dx, rows, d, 1, False, err)
++        else:
++            ctx.enqueue_function[mf_dist_kernel](
++                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _f(ph.loc0), _f(ph.loc1), Int32(1), _i(ph.fin), Int32(0),
++                _f(ph.pm), _f(ph.dist), Int32(nc), Int32(r), Int32(d), _i(ph.active), _i(err),
++                grid_dim=_blocks(nc * r), block_dim=MF_TPB,
++            )
+     ctx.enqueue_function[mf_select_kernel](
+         _f(ph.dist), _i(ph.mask0), Int32(r), Int32(ph.h), _i(ph.active), grid_dim=nc, block_dim=MF_SELECT_TPB,
+     )
+@@ -1156,7 +1257,26 @@ def _run_phase(
+             _f(ph.part), _f(ph.loc1) if par == 1 else _f(ph.loc0), Int32(nc), Int32(ph.tiles), Int32(d), hinv,
+             moment_gate, grid_dim=_blocks(nc * d), block_dim=MF_TPB,
+         )
+-        _mma_covariance(ctx, ph, dx, rows, d, par, hinv)
++        comptime if MCD_BATCH_MMA:
++            _mma_covariance(ctx, ph, dx, rows, d, par, hinv)
++        else:
++            comptime if MCD_BATCH_COMPAT:
++                ctx.enqueue_function[mc_moment_kernel](
++                    _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.selected),
++                    _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part),
++                    Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(1), moment_gate,
++                    grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
++                )
++            else:
++                ctx.enqueue_function[mf_cov_part_kernel](
++                    _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0),
++                    _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part), Int32(nc), Int32(r), Int32(ph.tiles),
++                    Int32(d), Int32(npair), moment_gate, grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
++                )
++            ctx.enqueue_function[mf_cov_kernel](
++                _f(ph.part), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(pj), _i(pk), Int32(nc), Int32(ph.tiles), Int32(d),
++                Int32(npair), hinv, moment_gate, grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
++            )
+         _lap(ctx, prof, 1, tp)
+         _det(ctx, ph, d, s, err)
+         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
+@@ -1176,7 +1296,8 @@ def _run_phase(
+         # the -inf start's pinvh (needp) runs even when no candidate is active
+         comptime if MCD_BATCH_COMPAT:
+             _compat_pinvh(ctx, ph, _f(ph.cov1) if par == 1 else _f(ph.cov0), d, err)
+-            _mma_precision(ctx, ph, d)
++            comptime if MCD_BATCH_MMA:
++                _mma_precision(ctx, ph, d)
+         else:
+             ctx.enqueue_function[mf_pinvh_kernel](
+                 _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
+@@ -1185,14 +1306,28 @@ def _run_phase(
+         _lap(ctx, prof, 3, tp)
+         if Int(hany[0]) == 0:
+             break
+-        _mma_distance(ctx, ph, dx, rows, d, par, False, err)
++        comptime if MCD_BATCH_MMA:
++            _mma_distance(ctx, ph, dx, rows, d, par, False, err)
++        else:
++            ctx.enqueue_function[mf_dist_kernel](
++                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _f(ph.loc0), _f(ph.loc1), Int32(par), _i(ph.fin), Int32(0),
++                _f(ph.pm), _f(ph.dist), Int32(nc), Int32(r), Int32(d), _i(ph.active), _i(err),
++                grid_dim=_blocks(nc * r), block_dim=MF_TPB,
++            )
+         ctx.enqueue_function[mf_select_kernel](
+             _f(ph.dist), _i(ph.mask0) if par == 1 else _i(ph.mask1), Int32(r), Int32(ph.h), _i(ph.active),
+             grid_dim=nc, block_dim=MF_SELECT_TPB,
+         )
+         _lap(ctx, prof, 4, tp)
+     if want_dist:
+-        _mma_distance(ctx, ph, dx, rows, d, 0, True, err)
++        comptime if MCD_BATCH_MMA:
++            _mma_distance(ctx, ph, dx, rows, d, 0, True, err)
++        else:
++            ctx.enqueue_function[mf_dist_kernel](
++                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _f(ph.loc0), _f(ph.loc1), Int32(0), _i(ph.fin), Int32(1),
++                _f(ph.pm), _f(ph.dist), Int32(nc), Int32(r), Int32(d), _i(ph.active), _i(err),
++                grid_dim=_blocks(nc * r), block_dim=MF_TPB,
++            )
+     _lap(ctx, prof, 5, tp)
+     comptime if MCD_PROFILE:
+         print("MCDPROF phase nc=", nc, " r=", r, " h=", ph.h, " d=", d, " init=", has_init, " want_dist=", want_dist,

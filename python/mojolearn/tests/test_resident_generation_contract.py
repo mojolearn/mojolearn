@@ -16,6 +16,7 @@ from mojolearn import Array
 from mojolearn.models import Tokenizer
 from mojolearn.models.causal_lm import _NATIVE
 from mojolearn.tests.test_generation_native import load_fixture
+from mojolearn.tests._build_arms import built_with, two_build_compare
 
 
 pytestmark = pytest.mark.skipif(
@@ -24,39 +25,42 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(autouse=True)
-def resident_route(monkeypatch):
-    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
-    monkeypatch.delenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", raising=False)
+# The resident route is the build default since lane envgate-neural-lm
+# (2026-11-15); the former autouse fixture set it in the environment.
+RESIDENT_ARMS_OFF = ("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF", "MOJOLEARN_TRANSFORMER_LEGACY_SETUP")
 
 
 def resident_model(path, *, uniform=False):
+    present = [d for d in RESIDENT_ARMS_OFF if built_with(d)]
+    if present:
+        pytest.skip("resident-route check; this wheel has " + " ".join("-D " + d for d in present))
     model = load_fixture(path, "llama", uniform=uniform)
     entries = model._native_entries
     assert model.kind == "transformer"
     assert model._head_int15 is None and model._norm is not None
-    assert entries["resident_read_v1"] is True
+    assert entries["program_read"] is not None
     assert entries["native_block_operations"] is not None
     assert entries.get("parallel_call") is None
-    for name in ("causal_lm_session_forward", "causal_lm_session_run",
-                 "transformer_decode_session_load_state",
-                 "transformer_decode_session_export_state"):
-        assert name in entries, name
+    # The resident sessions are native registry handles reached through the
+    # CausalLM session table; admission records only that the table is there.
+    assert entries["resident"] is True
     # Loaded blocks carry their compiled arithmetic-profile tag. Keep that
     # metadata intact: successful public tests below must prove actual resident
     # selection through the retained cache, not bypass admission in the fixture.
     return model
 
 
-def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path, monkeypatch):
-    model = resident_model(tmp_path)
+def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path):
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
-    with monkeypatch.context() as patch:
-        # Use the supported legacy-route switch. The constructed native entry
-        # registry is immutable; altering its capability flag must be refused.
-        patch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "0")
-        patch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0")
-        expected = np.asarray(model.stream(prompt, 5).read(5)).copy()
+    if built_with("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF"):
+        # The legacy-route wheel (-D MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD_OFF
+        # -D MOJOLEARN_GENERATION_NATIVE_ENGINE_OFF; the former in-process
+        # environment switches) records the words the resident wheel compares.
+        legacy = load_fixture(tmp_path, "llama")
+        two_build_compare("resident_greedy_read", np.asarray(legacy.stream(prompt, 5).read(5)).tolist())
+        return
+    model = resident_model(tmp_path)
+    expected = np.asarray(model.stream(prompt, 5).read(5)).copy()
     whole = model.stream(prompt, 5)
     actual = np.asarray(whole.read(5)).copy()
     split = model.stream(prompt, 5)
@@ -69,6 +73,7 @@ def test_resident_greedy_read_matches_legacy_forward_and_chunking(tmp_path, monk
     assert whole.info() == dict(done=True, generated_tokens=5, lengths=[5, 5], usable=True)
     assert model._resident_sessions is not None
     assert model._resident_busy is False
+    two_build_compare("resident_greedy_read", expected.tolist())
 
 
 @pytest.mark.parametrize("eos", [0, [0, 7]])
@@ -138,9 +143,10 @@ def test_resident_failure_publishes_completed_steps_and_releases_cache(tmp_path)
     assert np.asarray(model.stream(prompt, 2).read(2)).tolist() == [[0, 0]]
 
 
-@pytest.mark.parametrize("reuse", ["0", "1"])
-def test_sampling_upload_reuse_preserves_integer_oracle_and_eos(tmp_path, monkeypatch, reuse):
-    monkeypatch.setenv("MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE", reuse)
+def test_sampling_upload_reuse_preserves_integer_oracle_and_eos(tmp_path):
+    # Both arms hold the same integer oracle: the default wheel (reuse off) and
+    # the -D MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE wheel (the former
+    # in-process =1 parameter) each run this test.
     model = resident_model(tmp_path, uniform=True)
     stream = model.stream(np.array([[33], [34]], dtype="i4"), 8,
                           greedy=False, seed=0, top_k=4, eos_token_id=3, pad_token_id=9)

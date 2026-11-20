@@ -2,8 +2,7 @@
 # Native lifetime table and typed entries for model/tensor/pipeline
 # partitioned captured graphs. The Python door (partition_pyapi.mojo)
 # converts arrays and options and builds results.
-from std.ffi import _Global
-from std.memory import alloc, memcpy
+from std.memory import alloc, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, _OpsStore
@@ -18,14 +17,15 @@ from autograd.optim import optimizer_slots
 from core.cast_in import CastIn
 from training.checkpoint import read_checkpoint_unchecked, save_checkpoint
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
-comptime _PARTITION_NAME = "MojoPartitionedGraphsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoPartitionedGraphsFast"
-comptime _PARTITIONS = _Global[StorageType=_OpsStore, name=_PARTITION_NAME, init_fn=_OpsStore.__init__]
+comptime _PARTITION_NAME = "MojolearnPartitionedGraphsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnPartitionedGraphsFastV1"
+comptime _PARTITIONS = SharedSlot[_OpsStore, _PARTITION_NAME]
 
 
 def register_partition[E: Exec & Movable & Deinitable, KIND: Int](var d: PartitionedProgram[E]) raises -> Int:
     var p = alloc[PartitionedProgram[E]](1)
-    p.init_pointee_move(d^)
+    p.unsafe_write(d^)
     var s = _PARTITIONS.get_or_create_ptr()
     var id = s[].next_id
     s[].next_id += 1
@@ -57,8 +57,15 @@ def partition_open_native[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("partitioned programs require identical mode")
     var s = ops_session[E, KIND](sid)
     var p = s[].program(pid)
-    var oi = s[]._opt_index(optimizer)
-    var o = s[].opts[oi]
+    var o = s[].optimizer_settings(optimizer)
+    # Lane fx-ops-session-blocks (2026-11-19): this program's checkpoint
+    # carries sgd, adam and adamw (kinds 0-2) and no clip settings, and its
+    # workers step tensors on several devices, where the norm over a step's
+    # tensors has no single-queue fold. Refused here, never dropped.
+    if o.cfg.kind < 0 or o.cfg.kind > 2:
+        raise Error("ValueError: partitioned programs train with sgd, adam or adamw")
+    if o.cfg.clip > Float32(0) or o.cfg.clip_value > Float32(0):
+        raise Error("ValueError: partitioned programs do not support clip_grad_norm or clip_grad_value")
     var ip: List[Int] = [o.cfg.kind, 1 if o.cfg.nesterov else 0, o.sched, o.sched_step]
     var fp: List[Float32] = [o.cfg.lr, o.cfg.momentum, o.cfg.beta1, o.cfg.beta2, o.cfg.eps, o.cfg.weight_decay, o.gamma]
     var values = List[GraphBytes]()
@@ -75,7 +82,7 @@ def partition_open_native[E: Exec & Movable & Deinitable, KIND: Int](
         if not found:
             raise Error("partitioned program: trainable handle is not in capture")
     for j in range(len(p.params)):  # driver-loop: canonical source parameter bytes
-        var integer = s[].int_words[s[]._slot(p.params[j])]
+        var integer = s[].is_integer(p.params[j])
         if len(parameters) == 0:
             trainable[j] = not integer
         if trainable[j] and integer:
@@ -96,31 +103,29 @@ def partition_open_native[E: Exec & Movable & Deinitable, KIND: Int](
         if not d.plan.trainable[j]:
             continue
         var original = d.plan.origins[j]
-        var si = -1
-        for k in range(len(s[].opt_states)):  # driver-loop: optimizer state lookup
-            if s[].opt_states[k].opt == oi and s[].opt_states[k].param == p.params[original]:
-                si = k
-        var t = s[].opt_states[si].t if si >= 0 else 0
+        var si = s[].optimizer_state_index(optimizer, p.params[original])
+        var t = s[].optimizer_state_record(si).t if si >= 0 else 0
         if clocks >= 0 and t != clocks:
             raise Error("partitioned program: selected parameters have different optimizer clocks")
         clocks = t
         if si < 0:
             continue
+        var st = s[].optimizer_state_record(si)
         for which in range(2):  # small-loop(2: first and second optimizer moment): byte migration
             if (which == 0 and not slots[0]) or (which == 1 and not slots[1]):
                 continue
             var sh = p.param_shapes[original]
             var words = List[Float32](length=sh.count(), fill=Float32(0))
-            var ptr = s[].opt_states[si].s1 if which == 0 else s[].opt_states[si].s2
+            var ptr = st.s1 if which == 0 else st.s2
             s[].ex.download(FP(unsafe_from_address=Int(words.unsafe_ptr())), ptr, sh.count())
             var state = GraphBytes(sh, words^)
             if d.plan.column_width[j] > 0:
                 state = column_bytes(state, d.plan.column_first[j], d.plan.column_width[j])
             var dst = FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) if which == 0 else FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr()))
-            memcpy(dest=dst + ck.offsets[j], src=state.words.unsafe_ptr(), count=state.shape.count())
-        ck.ext_floats[scalar + 3 * j] = s[].opt_states[si].pw1
-        ck.ext_floats[scalar + 3 * j + 1] = s[].opt_states[si].pw2
-        ck.ext_floats[scalar + 3 * j + 2] = s[].opt_states[si].mu_prod
+            unsafe_memcpy(dest=dst + ck.offsets[j], src=state.words.unsafe_ptr(), count=state.shape.count())
+        ck.ext_floats[scalar + 3 * j] = st.pw1
+        ck.ext_floats[scalar + 3 * j + 1] = st.pw2
+        ck.ext_floats[scalar + 3 * j + 2] = st.mu_prod
     ck.t = max(clocks, 0)
     ck.ext_ints[4] = Int64(o.epoch)
     ck.ext_ints[5] = Int64(ck.t)
@@ -155,7 +160,7 @@ def partition_run_native[E: Exec & Movable & Deinitable, KIND: Int](
     var inputs = List[GraphBytes]()
     for k in range(len(srcs)):  # driver-loop: native dtype conversion and byte staging
         var integer = d[].plan.program.in_kinds[k] != 0
-        inputs.append(stage_input_bytes(d[].workers[0].session.ex, srcs[k], shapes[k], integer))
+        inputs.append(stage_input_bytes(d[].workers[0].executor.session.ex, srcs[k], shapes[k], integer))
     return d[].run(inputs)
 
 
@@ -200,7 +205,7 @@ def partition_state_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int) r
                 ptr = FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr()))
             elif which == 2:
                 ptr = FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr()))
-            memcpy(dest=a.data.unsafe_ptr(), src=ptr + ck.offsets[j], count=sh.count())
+            unsafe_memcpy(dest=a.data.unsafe_ptr(), src=ptr + ck.offsets[j], count=sh.count())
             arrays.append(a^)
         out.arrays.append(arrays^)
     out.epoch = d[].epoch
@@ -276,8 +281,8 @@ def partition_close_native[E: Exec & Movable & Deinitable, KIND: Int](id: Int) r
     try:
         p[].close()
     except err:
-        p.destroy_pointee()
+        p.unsafe_deinit_pointee()
         p.free()
         raise err
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()

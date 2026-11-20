@@ -40,12 +40,14 @@
   E5  `M > 1` for both, against their `M == 1` results.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 
 from gbdt.methods.kernel.pointwise_hist2_half_byte_template import (
     PW_HB_BLOCK,
+    PW_HB_FIXED,
 )
+from gbdt.methods.pointwise_kernels import launch_pw_fold_int_slots
 from gbdt.methods.kernel.pointwise_hist2_binary import (
     compute_split_properties_b_kernel,
 )
@@ -80,12 +82,14 @@ def _launch_hb[
     # cpu3-gbdt-a); held past the launch
     var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
     enqueue_fill(ctx, scale_word, Float32(1.0))
+    # a launch lists every kernel parameter: no dither ids on this route
+    var no_dither_hb: Optional[MutPointer[UInt32, MutAnyOrigin]] = None
     ctx.enqueue_function[
         compute_split_properties_half_byte_kernel[full, m]
     ](
         p_off, p_ffi, p_folds, Int32(f_count), p_ci, p_tgt, p_wt, p_idx,
         p_part, p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(),
-        Int32(0), grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
+        no_dither_hb, grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
     _ = scale_word^
 
@@ -112,15 +116,62 @@ def _launch_b[
     # cpu3-gbdt-a); held past the launch
     var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
     enqueue_fill(ctx, scale_word, Float32(1.0))
+    # a launch lists every kernel parameter: no dither ids on this route
+    var no_dither: Optional[MutPointer[UInt32, MutAnyOrigin]] = None
     ctx.enqueue_function[compute_split_properties_b_kernel[full, m]](
         p_off, p_ffi, Int32(f_count), p_ci, p_tgt, p_wt, p_idx, p_part,
-        p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(), Int32(0),
+        p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(),
+        no_dither,
         grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
     _ = scale_word^
 
 
-def main() raises:
+def _m_target(
+    ctx: DeviceContext, n_cells: Int, m: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """E5's write target at multiplier `m` (fb11, 2026-11-17). Under the
+    fixed-point accumulator (`PW_HB_FIXED`, every non-FAST build) an `m > 1`
+    block files its raw Int32 counts in its OWN slot,
+    `pw_private_doc_slot` = `at + (block % m) * stride` with `stride` the
+    whole window (`2 * total` at gridDim.y = gridDim.z = 1), and the
+    launcher folds the slots (`launch_pw_fold_int_slots`). Handing the
+    kernel the bare `n_cells` histogram there read slot 0's integer bits as
+    floats and wrote slots 1..m-1 past the buffer (the first L40S run:
+    196 cells wrong). FAST keeps the atomicAdd onto the histogram itself."""
+    var n = n_cells
+    comptime if PW_HB_FIXED:
+        n = n_cells * m
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_memset(buf, Float32(0.0))
+    return buf^
+
+
+def _m_fold(
+    ctx: DeviceContext,
+    mut slots: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
+    n_cells: Int,
+    m: Int,
+) raises:
+    """The product's fold of `_m_target`'s slots into the histogram
+    (`launch_pw_fold_int_slots`, full pass, scale 1.0, as the launches
+    here); under FAST the target IS the histogram and is copied."""
+    ctx.enqueue_memset(dst, Float32(0.0))
+    comptime if PW_HB_FIXED:
+        var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+        enqueue_fill(ctx, scale_word, Float32(1.0))
+        launch_pw_fold_int_slots(
+            ctx, slots, dst.unsafe_ptr(), True, n_cells, m,
+            scale_word.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        )
+        ctx.synchronize()
+        _ = scale_word^
+    else:
+        ctx.enqueue_copy(dst_buf=dst, src_buf=slots)
+
+
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -146,16 +197,16 @@ def main() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     var part_off = 6
     var part_n = 2800
     var parts_h: List[UInt32] = [UInt32(part_off), UInt32(part_n)]
     var d_part = ctx.enqueue_create_buffer[DType.uint32](2)
-    ctx.enqueue_copy(dst_buf=d_part, src_ptr=parts_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_part, parts_h)
 
     # ================================================================ E1
     var hb_ffi = List[UInt32]()
@@ -171,9 +222,9 @@ def main() raises:
     var d_hoff = ctx.enqueue_create_buffer[DType.uint32](8)
     var d_hffi = ctx.enqueue_create_buffer[DType.uint32](8)
     var d_hfolds = ctx.enqueue_create_buffer[DType.uint32](8)
-    ctx.enqueue_copy(dst_buf=d_hoff, src_ptr=hb_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hffi, src_ptr=hb_ffi.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_hfolds, src_ptr=hb_folds.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_hoff, hb_off)
+    upload_whole_into[DType.uint32](ctx, d_hffi, hb_ffi)
+    upload_whole_into[DType.uint32](ctx, d_hfolds, hb_folds)
 
     var n_hb = hb_total * 2
     var d_hs = ctx.enqueue_create_buffer[DType.float32](n_hb)
@@ -197,7 +248,7 @@ def main() raises:
         d_wt.unsafe_ptr(), d_idx.unsafe_ptr(), d_part.unsafe_ptr(),
         d_hs.unsafe_ptr(), hb_total, 1,
     )
-    ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
+    download_host_into[DType.float32](ctx, d_hs, h_hs)
     ctx.synchronize()
 
     var bad1 = 0
@@ -251,8 +302,8 @@ def main() raises:
         b_off.append(0)
     var d_boff = ctx.enqueue_create_buffer[DType.uint32](32)
     var d_bffi = ctx.enqueue_create_buffer[DType.uint32](32)
-    ctx.enqueue_copy(dst_buf=d_boff, src_ptr=b_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_bffi, src_ptr=b_ffi.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_boff, b_off)
+    upload_whole_into[DType.uint32](ctx, d_bffi, b_ffi)
 
     var n_b = 32 * 2
     var d_bs = ctx.enqueue_create_buffer[DType.float32](n_b)
@@ -277,7 +328,7 @@ def main() raises:
         d_idx.unsafe_ptr(), d_part.unsafe_ptr(), d_bs.unsafe_ptr(),
         32, 1,
     )
-    ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
+    download_host_into[DType.float32](ctx, d_bs, h_bs)
     ctx.synchronize()
 
     var bad3 = 0
@@ -333,15 +384,17 @@ def main() raises:
         )
 
     # ================================================================ E5
-    ctx.enqueue_memset(d_hs, Float32(0.0))
+    var t_hs = _m_target(ctx, n_hb, 4)
     _launch_hb[True, 4](
         ctx, d_hoff.unsafe_ptr(), d_hffi.unsafe_ptr(),
         d_hfolds.unsafe_ptr(), 8, d_ci.unsafe_ptr(), d_tgt.unsafe_ptr(),
         d_wt.unsafe_ptr(), d_idx.unsafe_ptr(), d_part.unsafe_ptr(),
-        d_hs.unsafe_ptr(), hb_total, 4,
+        t_hs.unsafe_ptr(), hb_total, 4,
     )
-    ctx.enqueue_copy(dst_buf=h_hs, src_buf=d_hs)
+    _m_fold(ctx, t_hs, d_hs, n_hb, 4)
+    download_host_into[DType.float32](ctx, d_hs, h_hs)
     ctx.synchronize()
+    _ = t_hs^  # held past the fold and the copy
     var bad5 = 0
     for k in range(n_hb):
         var d = h_hs[k] - want_hb[k]
@@ -349,15 +402,17 @@ def main() raises:
             d = -d
         if d > Float32(0.01):
             bad5 += 1
-    ctx.enqueue_memset(d_bs, Float32(0.0))
+    var t_bs = _m_target(ctx, n_b, 4)
     _launch_b[True, 4](
         ctx, d_boff.unsafe_ptr(), d_bffi.unsafe_ptr(), 32,
         d_ci.unsafe_ptr(), d_tgt.unsafe_ptr(), d_wt.unsafe_ptr(),
-        d_idx.unsafe_ptr(), d_part.unsafe_ptr(), d_bs.unsafe_ptr(),
+        d_idx.unsafe_ptr(), d_part.unsafe_ptr(), t_bs.unsafe_ptr(),
         32, 4,
     )
-    ctx.enqueue_copy(dst_buf=h_bs, src_buf=d_bs)
+    _m_fold(ctx, t_bs, d_bs, n_b, 4)
+    download_host_into[DType.float32](ctx, d_bs, h_bs)
     ctx.synchronize()
+    _ = t_bs^  # held past the fold and the copy
     for k in range(n_b):
         var d = h_bs[k] - want_b[k]
         if d < 0:
@@ -396,3 +451,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("pointwise small-bin drivers: E1-E5 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_small_bin_driver_check", cpu=False, gpu=True, serial="", run=run_cases)

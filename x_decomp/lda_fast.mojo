@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LatentDirichletAllocation's E-step and sufficient statistics in ONE launch
-(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, default on (off with
--D MOJOLEARN_LDA_FUSED_SS_OFF): the IDENTICAL binding, the other vendors and a
-FAST build with the _OFF define do not export `x_decomp_dev_lda_estep_ss`, and
+(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, default on (the _OFF
+rollback was deleted 2026-11-15): the IDENTICAL binding and the other vendors
+do not export `x_decomp_dev_lda_estep_ss`, and
 `_expansion_decomp.LatentDirichletAllocation._e_step` keeps main's chain
 (`lda_block_kernel`, then norm_phi = Et exp_dir (n x v), X / norm_phi and
 the (k x n)(n x v) gemm).
@@ -25,13 +25,12 @@ change in topic order), so Dt and Et are the same bits; the statistics take
 a new (fixed, run-to-run identical) fold order under FAST.
 
 Caps: k <= LFS_K_CAP topics, v <= LFS_V_CAP words (the dense per-document
-norm_phi row lives in threadgroup memory; LFS_V_CAP is derived from the page
-budget, `lfs_v_cap_rule`). Past them the entry returns 0 and
+norm_phi row lives in threadgroup memory; LFS_V_CAP is what the threadgroup
+page holds). Past them the entry returns 0 and
 Python keeps main's chain.
 """
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
@@ -43,12 +42,9 @@ from x_decomp.resident import _ptr, pool_alloc, pool_free
 
 #: The switch: FAST + Apple default ON since the M3 A/B (nb-lda-fused-zones:
 #: LDA taxi-zones 2,721 -> 1,509 ms, -44.5%, perplexity 45.22 same).
-#: -D MOJOLEARN_LDA_FUSED_SS_OFF turns it off; the old -D MOJOLEARN_LDA_FUSED_SS
-#: is harmless (no longer read).
-comptime LDA_FUSED_SS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_LDA_FUSED_SS_OFF (old path: main's chain; EXP:416 KEPT a7b8b9513 on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at d203a04705.
+# Restore: git apply experiments/removed/MOJOLEARN_LDA_FUSED_SS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LDA_FUSED_SS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: Lanes per document (one SIMD group).
 comptime LFS_TPD = 32
 #: Documents per block.
@@ -60,38 +56,8 @@ comptime LFS_TPB = LFS_TPD * LFS_DPB
 #: the document's LFS_TPD-wide SIMD group, so k is bounded by the SIMD width,
 #: not by the board.
 comptime LFS_K_CAP = LFS_TPD
-#: lane/no-bench-tuning-2 (2026-10-04): the vocabulary cap was 320, set just
-#: above the taxi-zones vocabulary (~265). It is now derived from the
-#: threadgroup page: `lfs_page_bytes(v)` is the kernel's shared allocations
-#: (idx + sw: LFS_DPB x v words of 4 + 4 bytes; ds, es, dif: 3 x LFS_DPB x
-#: LFS_K_CAP floats; cnt, misc, done), and the cap is the largest multiple of
-#: LFS_TPD whose page fits LFS_PAGE_BUDGET = half of Apple's 32 KB, so two
-#: blocks stay resident per core as they did at 320 (12.4 KB). That gives 416
-#: words (15.4 KB). Any v past it keeps main's chain (a capacity limit).
-#: `-D MOJOLEARN_LDA_V_CAP_RULE_OFF=1` restores 320.
-comptime LFS_APPLE_TG_BYTES = 32768
-comptime LFS_PAGE_BUDGET = LFS_APPLE_TG_BYTES // 2
-
-
-def lfs_page_bytes(v: Int) -> Int:
-    """The fused kernel's threadgroup page at a vocabulary cap `v`."""
-    return (
-        LFS_DPB * v * 8
-        + 3 * LFS_DPB * LFS_K_CAP * 4
-        + LFS_DPB * (LFS_TPD + 1) * 4
-        + LFS_DPB * 2 * 4
-        + LFS_DPB * 4
-    )
-
-
-def lfs_v_cap_rule() -> Int:
-    """The largest multiple of LFS_TPD whose page fits LFS_PAGE_BUDGET."""
-    var v = LFS_TPD
-    while lfs_page_bytes(v + LFS_TPD) <= LFS_PAGE_BUDGET:
-        v += LFS_TPD
-    return v
-
-
+# TOMBSTONE: MOJOLEARN_LDA_V_CAP_HALF_PAGE (opt-in arm: the half-page cap rule, 416 words, lfs_page_bytes / lfs_v_cap_rule; no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at cea962efe5.
+# Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_HALF_PAGE.patch; record in docs/TOMBSTONES.md.
 #: Apple threadgroup memory limit (32 KB; Metal refuses larger pipelines).
 comptime LFS_SMEM_BYTES = 32768
 #: Threadgroup bytes of lfs_kernel that do not scale with v: ds/es/dif
@@ -104,16 +70,13 @@ comptime LFS_SMEM_FIXED = LFS_DPB * (3 * LFS_K_CAP * 4 + (LFS_TPD + 1) * 4 + 2 *
 #: vocabulary (at most 300). Removed as benchmark-tuned on 2026-10-04; the
 #: larger cap is UNMEASURED (more threadgroup memory per block).
 #: Merge 2026-10-05: both sides removed the taxi-tuned 320. main's full-page
-#: cap is the default; the IDENTICAL-side half-page rule above (two blocks
-#: resident per core, 416) is `-D MOJOLEARN_LDA_V_CAP_HALF_PAGE`; either
-#: side's rollback (`MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V` or
-#: `MOJOLEARN_LDA_V_CAP_RULE_OFF`) restores 320.
-comptime LFS_V_CAP = 320 if (
-    is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]() or is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]()
-) else (
-    lfs_v_cap_rule() if is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"]()
-    else (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
-)
+#: cap is the default (the half-page arm and the 320 rollbacks were deleted
+#: 2026-11-15, docs/TOMBSTONES.md).
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V (old path: the taxi-tuned 320 cap and one kernel at it; EXP:1343 ACCEPT on FAST + Apple, the one vendor FAST runs on, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 6bed172f77.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_LDA_V_CAP_RULE_OFF (old path: the taxi-tuned 320 cap, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 9507b8ad74.
+# Restore: git apply experiments/removed/MOJOLEARN_LDA_V_CAP_RULE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LFS_V_CAP = (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
 #: The threadgroup row a launch reserves is sized from the runtime v, not from
 #: LFS_V_CAP (lane apple-fast-general-speed, 2026-10-04). M3 A/B with one
 #: kernel sized at the 928 cap: LDA taxi-zones (v = 259) A 3,119 ms vs
@@ -329,21 +292,18 @@ def launch_lda_fused_ss(
 ) raises:
     """The two launches: part holds groups * k * v floats of scratch. The
     fused kernel is the smallest occupancy tier whose row holds v."""
-    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]():
-        _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    if v <= _lfs_tier_v(8):
+        _launch_fused[_lfs_tier_v(8)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(6):
+        _launch_fused[_lfs_tier_v(6)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(4):
+        _launch_fused[_lfs_tier_v(4)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(3):
+        _launch_fused[_lfs_tier_v(3)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    elif v <= _lfs_tier_v(2):
+        _launch_fused[_lfs_tier_v(2)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
     else:
-        if v <= _lfs_tier_v(8):
-            _launch_fused[_lfs_tier_v(8)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(6):
-            _launch_fused[_lfs_tier_v(6)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(4):
-            _launch_fused[_lfs_tier_v(4)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(3):
-            _launch_fused[_lfs_tier_v(3)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        elif v <= _lfs_tier_v(2):
-            _launch_fused[_lfs_tier_v(2)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
-        else:
-            _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
     ctx.enqueue_function[lda_ss_fold_kernel](
         part, ew, ss, Int32(k * v), Int32(groups), grid_dim=_blocks(k * v), block_dim=TPB,
     )

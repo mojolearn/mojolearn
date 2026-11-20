@@ -74,7 +74,12 @@ def _connect_imported_module(loaded):
     import sys
     from . import _mode
     from ._native_params_metadata import connect_classes
+    # p3-cnn-sequence-tsa: a module is connected once; the next lazy name of
+    # the same module skips the package rescans below
+    if loaded.__name__ in _CONNECTED_MODULES:
+        return
     if _mode._PARAMS_METADATA_CONTEXT['ready']:
+        _CONNECTED_MODULES.add(loaded.__name__)
         from ._native_mode_reconstruction import connect_lazy
         from ._native_full_reset_params import _CONTEXT as reset_context, NativeFullResetParams
         connect_lazy(loaded, reset_context, NativeFullResetParams.set_params)
@@ -83,6 +88,9 @@ def _connect_imported_module(loaded):
         connect_classes(_mode._PARAMS_METADATA_CONTEXT, sys.modules[__package__])
         from ._native_family_layouts import connect as connect_family_layouts
         connect_family_layouts(sys.modules[__package__])
+
+
+_CONNECTED_MODULES = set()
 
 
 def __getattr__(name):

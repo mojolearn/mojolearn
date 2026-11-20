@@ -18,8 +18,10 @@ O(n * CMAX).
 """
 from x_prep.common import FP, IP, p, ld, st, sti
 from x_prep.prims import add, sub, mul, div
-from x_prep.target import te_value, te_enc_lt_fold, te_enc_blt_fold
-from x_prep.idn_fold import IDN_TE_ENC_TREE, IDN_TE_BLOCKED
+from x_prep.target import te_value, te_enc_lt_fold
+from x_prep.idn_fold import IDN_TE_ENC_TREE
+# TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD.patch
 
 
 @always_inline
@@ -51,8 +53,7 @@ def te_enc_host_group(g: Int, f: FP, q: IP):
     var ymean = ld(f, p(q, 8) + 2 * (fi * T + tt))
     var yvar = ld(f, p(q, 8) + 2 * (fi * T + tt) + 1)
     var smooth = ld(f, p(q, 9))
-    comptime if IDN_TE_ENC_TREE or IDN_TE_BLOCKED:
-        # lane classical-te-gmm: the blocked order takes the same bucket (`te_enc_blt_fold`)
+    comptime if IDN_TE_ENC_TREE:
         te_enc_host_group_lt(fj, fi, j, tt, ncat, ymean, yvar, smooth, f, q)
         return
     var s = List[Float32](length=ncat, fill=Float32(0))
@@ -117,13 +118,8 @@ def te_enc_host_group_lt(fj: Int, fi: Int, j: Int, tt: Int, ncat: Int, ymean: Fl
         var cnt = 0
         var mean = Float32(0)
         var ssd = Float32(0)
-        comptime if IDN_TE_BLOCKED:
-            # the blocked order (x_prep/idn_fold.mojo `BLT`): the same positions, the device's blocks
-            te_enc_blt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s,
-                            cnt, mean, ssd)
-        else:
-            te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s,
-                           cnt, mean, ssd)
+        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s,
+                       cnt, mean, ssd)
         st(f, p(q, 10) + (fj * cmax + cat) * T + tt, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
     # rows backs rp: keep it alive past the last fold
     _ = rows^

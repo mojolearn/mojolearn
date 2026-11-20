@@ -17,7 +17,7 @@ flushed as staging flushes them. Lines:
 Pass: at v=2, mfma_vs_fma=0, mul_vs_ftz=0, pkmul_vs_ftz=0 and
 subnormal_mfma_results > 0 (the words do reach the flush).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.math import fma

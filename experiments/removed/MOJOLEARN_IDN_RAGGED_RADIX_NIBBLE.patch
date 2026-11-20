@@ -1,0 +1,80 @@
+diff --git b/experiments/performance_ideas/I19/check.mojo a/experiments/performance_ideas/I19/check.mojo
+index 9b4686a1c9..2c2aeb85ff 100644
+--- b/experiments/performance_ideas/I19/check.mojo
++++ a/experiments/performance_ideas/I19/check.mojo
+@@ -4,6 +4,8 @@ all-equal and high-bit keys, stable original-position carry, alternating
+ live lengths and untouched capacity tails. Contract is unsigned UInt32
+ keys; floating NaN/signed-zero preprocessing remains each caller's policy."""
+ from max.gpu.host import DeviceContext
++from std.sys.compile import is_defined
++from core.stable_radix_digits import stable_nibble_pairs_u32
+ from experiments.performance_ideas.I19.float_check import check_float_ragged
+ from experiments.performance_ideas.I19.quantile_check import check_quantile_caller
+ from experiments.performance_ideas.I19.categories_check import check_categories
+@@ -29,16 +31,26 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
+         ctx.enqueue_copy(dst_buf=dv,src_ptr=values.unsafe_ptr())
+         # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+         # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+-        # TOMBSTONE: MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 36a2cc0af1.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch
+-        stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
++        # NEVER RUN — PENDING MEASUREMENT
++        comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
++            if arm==1:
++                stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++            else:
++                stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
++        else:
++            stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
+         # Reuse the same workspace without a host roundtrip; idempotence
+         # must hold, including value carry within every equal-key run.
+         # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+         # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+-        # TOMBSTONE: MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 36a2cc0af1.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch
+-        stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
++        # NEVER RUN — PENDING MEASUREMENT
++        comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
++            if arm==1:
++                stable_nibble_pairs_u32[256](ctx,n,bits,dk,dv,tk,tv,counts,bsum)
++            else:
++                stable_radix_sort_pairs_u32(ctx,n,32,dk,dv,tk,tv,counts,bsum)
++        else:
++            stable_radix_sort_pairs_u32(ctx,n,32 if arm==0 else bits,dk,dv,tk,tv,counts,bsum)
+         var hk = ctx.enqueue_create_host_buffer[DType.uint32](n+17)
+         var hv = ctx.enqueue_create_host_buffer[DType.uint32](n+17)
+         ctx.enqueue_copy(dst_ptr=hk.unsafe_ptr(),src_buf=dk)
+diff --git b/experiments/performance_ideas/I19/ragged_float.mojo a/experiments/performance_ideas/I19/ragged_float.mojo
+index fff5e09417..23896ade51 100644
+--- b/experiments/performance_ideas/I19/ragged_float.mojo
++++ a/experiments/performance_ideas/I19/ragged_float.mojo
+@@ -13,6 +13,7 @@ from max.gpu.host import DeviceBuffer,DeviceContext
+ from checks.numerics import ftz
+ from x_prep.common import canon,word_order
+ from x_prep.dradix import radix_key,radix_word
++from core.stable_radix_digits import stable_nibble_pairs_u32
+ from core.stable_radix_sort import stable_radix_sort_pairs_u32,stable_radix_counts_len,stable_radix_bsum_len
+ 
+ def _keys(src: MutPointer[Float32,MutAnyOrigin],keys: MutPointer[UInt32,MutAnyOrigin],positions: MutPointer[UInt32,MutAnyOrigin],base: Int32,n_in: Int32,categories: Int32):
+@@ -82,8 +83,6 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
+     # raw attempts: amd/live/repairs. Default radix admission remains OFF.
+     # TOMBSTONE: MOJOLEARN_IDN_RADIX_TILE128 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 51ec4db2c0.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RADIX_TILE128.patch
+-    # TOMBSTONE: MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at 36a2cc0af1.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE.patch
+     comptime if not is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
+         if largest>4096:
+             raise Error("ragged float sort: rank control restricted to bounded small rows")
+@@ -95,7 +94,11 @@ def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.flo
+         # Bounded caller timings above retain this experiment as opt-in.
+         comptime if is_defined["MOJOLEARN_IDN_RAGGED_FLOAT_RADIX"]():
+             ctx.enqueue_function[_keys](src.unsafe_ptr(),keys.unsafe_ptr(),positions.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
+-            stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
++            # NEVER RUN — PENDING MEASUREMENT
++            comptime if is_defined["MOJOLEARN_IDN_RAGGED_RADIX_NIBBLE"]():
++                stable_nibble_pairs_u32[256](ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
++            else:
++                stable_radix_sort_pairs_u32(ctx,Int(n),32,keys,positions,temp_keys,temp_positions,counts,bsum)
+             ctx.enqueue_function[_words](keys.unsafe_ptr(),positions.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))
+         else:
+             ctx.enqueue_function[_rank_control](src.unsafe_ptr(),dst.unsafe_ptr(),permutation.unsafe_ptr(),base,n,Int32(1 if categories else 0),grid_dim=((Int(n)+127)//128,1,1),block_dim=(128,1,1))

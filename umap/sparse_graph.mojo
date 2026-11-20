@@ -27,8 +27,8 @@ Errors keep the host builder's first-error order: one Int32 key per
 failure, folded by `Atomic.min` (an order-free integer min), decoded once.
 """
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
@@ -349,7 +349,7 @@ def _ug_scan(
 
 
 def _ug_get_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
@@ -359,7 +359,7 @@ def _ug_get_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) ra
 
 
 def _ug_get_u32(ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int) raises -> List[UInt32]:
-    var out = List[UInt32](length=n, fill=UInt32(0))
+    var out = List[UInt32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.uint32](0, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
@@ -369,7 +369,7 @@ def _ug_get_u32(ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int) rai
 
 
 def _ug_get_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], at: Int, n: Int) raises -> List[Int32]:
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(n, 0))
     if n > 0:
         var view = buf.create_sub_buffer[DType.int32](at, n)
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
@@ -784,10 +784,10 @@ def _ug_csr_up(ctx: DeviceContext, graph: SparseFuzzySimplicialGraph) raises -> 
     var h_col = ctx.enqueue_create_host_buffer[DType.uint32](cap)
     var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
     ctx.synchronize()
-    memcpy(dest=h_off.unsafe_ptr(), src=graph.offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    unsafe_memcpy(dest=h_off.unsafe_ptr(), src=graph.offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
     if nnz > 0:
-        memcpy(dest=h_col.unsafe_ptr(), src=graph.indices.unsafe_ptr(), count=nnz)
-        memcpy(dest=h_val.unsafe_ptr(), src=graph.values.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_col.unsafe_ptr(), src=graph.indices.unsafe_ptr(), count=nnz)
+        unsafe_memcpy(dest=h_val.unsafe_ptr(), src=graph.values.unsafe_ptr(), count=nnz)
     var off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
     var off = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var col = ctx.enqueue_create_buffer[DType.uint32](cap)
@@ -919,7 +919,7 @@ def categorical_intersection(
     var src = _ug_csr_up(ctx, graph)
     var h_t = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
-    memcpy(dest=h_t.unsafe_ptr(), src=target.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=h_t.unsafe_ptr(), src=target.unsafe_ptr(), count=n)
     var d_t = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
     var rg = _ug_blocks(n)

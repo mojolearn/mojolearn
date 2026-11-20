@@ -38,13 +38,12 @@ MEASURED: `check_spectral_launch_invariance` runs it at two block widths;
 the hashed-weight fixture is what separates this fold from a split one.
 ======================================================================
 """
-from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -89,7 +88,7 @@ comptime LAPLACIAN_TPB = 256
 #: lane cpu2-l9-neighbors (2026-10-04): every mode (FAST too, the same
 #: bits) and no _OFF arm (owner rule: the host preparation is not a GPU
 #: route), so `MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF` is retired.
-comptime IDN_SPECTRAL_LAP_DEVICE = True
+# (Sweep 2026-11-15: comptime IDN_SPECTRAL_LAP_DEVICE removed; always True, nothing read it.)
 
 
 struct DeviceCoo(Movable):
@@ -104,7 +103,6 @@ struct DeviceCoo(Movable):
     var cols: DeviceBuffer[DType.int32]
     var vals: DeviceBuffer[DType.float32]
     var indptr: DeviceBuffer[DType.int32]
-    var normalizer: Optional[DeviceBuffer[DType.float32]]
 
     def __init__(
         out self,
@@ -121,7 +119,6 @@ struct DeviceCoo(Movable):
         self.cols = cols^
         self.vals = vals^
         self.indptr = indptr^
-        self.normalizer = Optional[DeviceBuffer[DType.float32]]()
 
 
 def degree_kernel(
@@ -678,14 +675,8 @@ def laplacian_normalize_device(
         grid_dim=((n + tpb - 1) // tpb, 1, 1),
         block_dim=(tpb, 1, 1),
     )
-    comptime if C43_RESIDENT_NORMALIZATION:
-        # Keep sqrt-degree once; consumers reproduce the two scaling
-        # multiplies at each value load and pin the diagonal to one.
-        var normalizer=ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.enqueue_copy(dst_buf=normalizer,src_buf=diagonal_out)
-        lap.normalizer=Optional[DeviceBuffer[DType.float32]](normalizer^)
-        ctx.synchronize()
-        return lap^
+    # TOMBSTONE: MOJOLEARN_C43_RESIDENT_NORMALIZATION (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-05-base); code recoverable at 7c24f5181f.
+    # Restore: git apply experiments/removed/MOJOLEARN_C43_RESIDENT_NORMALIZATION.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_function[coo_scale_by_diagonal_symmetric_kernel](
         lap.rows.unsafe_ptr(),
         lap.cols.unsafe_ptr(),

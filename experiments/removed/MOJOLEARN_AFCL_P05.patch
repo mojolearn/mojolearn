@@ -1,0 +1,23 @@
+diff --git a/x_prep/fastprep2.mojo b/x_prep/fastprep2.mojo
+index c7a28cfad5..f1bc682ea1 100644
+--- a/x_prep/fastprep2.mojo
++++ b/x_prep/fastprep2.mojo
+@@ -117,13 +117,14 @@ comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_G
+ # TOMBSTONE: MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 3827e5294b.
+ # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_FAST_TE_ENC_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime TGR = 256
+-# TOMBSTONE: MOJOLEARN_AFCL_P05 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 1d5f37812c.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P05.patch
+-# AFCL-P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
++# AFCL-P05/P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
++# P05 uses four Apple SIMD groups per category/fold rather than eight to
++# reduce shared scratch and barriers at the cost of longer lane sums.
+ # P06 doubles convergence-reduction lanes to shorten each lane's row walk;
+ # it keeps the existing runtime II_CONV prerequisite equal in both arms.
++comptime AFCL_P05 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P05"]()
+ comptime AFCL_P06 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P06"]()
+-comptime TE_TGR = TGR
++comptime TE_TGR = 128 if AFCL_P05 else TGR
+ comptime II_CONV_TGR = 512 if AFCL_P06 else TGR
+ comptime OP_QUANTILE = 2
+ comptime OP_TE_GLOBAL = 20

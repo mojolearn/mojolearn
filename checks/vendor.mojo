@@ -47,17 +47,13 @@ that runs `packaging/linux/build_sets.sh` is the measurement, and its
 manifest records what every binary answered.
 """
 
-from std.sys.info import (
-    has_amd_gpu_accelerator,
-    has_apple_gpu_accelerator,
-    has_nvidia_gpu_accelerator,
-)
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 #: `metal`, `cuda`, `hip` or `none`. Resolved by the compiler, folded into
 #: the binary, read back by `python/mojolearn/_backend.py`.
 comptime COMPILED_VENDOR: StaticString = (
-    "hip" if has_amd_gpu_accelerator() else
-    "cuda" if has_nvidia_gpu_accelerator() else
-    "metal" if has_apple_gpu_accelerator() else
+    "hip" if TARGET_HAS_AMD_GPU else
+    "cuda" if TARGET_HAS_NVIDIA_GPU else
+    "metal" if TARGET_HAS_APPLE_GPU else
     "none"
 )

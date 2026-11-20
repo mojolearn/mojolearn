@@ -2,12 +2,13 @@
 # Logical host owner for model selection. Release builds merge this builder
 # with the other host builders; development builds give it an independent
 # source/cache boundary. No native exposed type is registered here.
+from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.runtime_model_selection_entry import (
+from bindings.runtime_model_selection_entry_pack import (
     runtime_model_selection_c, RUNTIME_MODEL_SELECTION_SABOTAGE,
 )
 
@@ -35,6 +36,7 @@ def runtime_model_selection_host_sabotage_binding() raises -> PythonObject:
 
 
 def build__mojolearn_runtime_model_selection_host() -> PythonObject:
+    comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_model_selection_host")
         module.def_py_c_function(runtime_model_selection_c, "model_selection_native_call")

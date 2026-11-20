@@ -32,7 +32,7 @@ def run[O: ClusterOps](mut ops: O, m: List[Float32], rows: Int, cols: Int, k: In
     return ops.get(so, rows)
 
 
-def main() raises:
+def run_checks() raises:
     var d = 4
     var a = seam_fixture(40, d, 5)
     var m = oracle_sqdist(a, 40, a, 40, d)

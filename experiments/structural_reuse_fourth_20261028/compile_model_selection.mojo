@@ -1,11 +1,11 @@
 # Focused compilation of parameter-grid admission/expansion and candidate routes.
 # Never executed. Full model-selection dispatcher/kernel campaigns are excluded.
 from std.python import PythonObject
-from bindings.msel_search import (
+from bindings.msel_search_door import (
     msel_grid_dicts, msel_grid_list, msel_grid_len, msel_sampler_check,
     msel_sampler_list, msel_sampler_len, msel_candidates,
 )
-from bindings.model_selection_native import msel_operation
+from bindings.model_selection_native_door import msel_operation
 
 @export
 def compile_grid_admit(grid: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -41,8 +41,8 @@ def compile_candidates(model: PythonObject, context: PythonObject) raises -> Pyt
 from std.os import abort
 from std.python.bindings import PythonModuleBuilder
 from bindings.msel_cv import msel_cross_validate
-from bindings.msel_search import msel_learning_curve
-from bindings.msel_scorer_native import msel_scorer_call
+from bindings.msel_search_door import msel_learning_curve
+from bindings.msel_scorer_native_door import msel_scorer_call
 
 
 def cross_validate(args: PythonObject, context: PythonObject) raises -> PythonObject:

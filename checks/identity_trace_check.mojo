@@ -144,11 +144,11 @@ def run_pipeline(
     var d_score = ctx.enqueue_create_buffer[DType.float32](grid_x * 2)
     var d_bin = ctx.enqueue_create_buffer[DType.uint32](grid_x * 2)
 
-    ctx.enqueue_copy(dst_buf=d_hist, src_ptr=h_hist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ps, src_ptr=h_ps.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_skip, src_ptr=h_skip.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_fid, src_ptr=h_fid.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_fw, src_ptr=h_fw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_hist, h_hist)
+    upload_host_into[DType.float32](ctx, d_ps, h_ps)
+    upload_host_into[DType.uint8](ctx, d_skip, h_skip)
+    upload_host_into[DType.uint32](ctx, d_fid, h_fid)
+    upload_host_into[DType.float32](ctx, d_fw, h_fw)
     ctx.synchronize()
 
     # STAGE 1, the inputs. Checkpointing the input as well as the output is
@@ -186,8 +186,8 @@ def run_pipeline(
     # WINNER, so the host reduce runs first and the trace records that.
     var h_s = ctx.enqueue_create_host_buffer[DType.float32](grid_x * 2)
     var h_b = ctx.enqueue_create_host_buffer[DType.uint32](grid_x * 2)
-    ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_score)
-    ctx.enqueue_copy(dst_ptr=h_b.unsafe_ptr(), src_buf=d_bin)
+    download_host_into[DType.float32](ctx, d_score, h_s)
+    download_host_into[DType.uint32](ctx, d_bin, h_b)
     ctx.synchronize()
 
     var best_gain = List[Float32]()
@@ -431,6 +431,25 @@ def check_identity_trace(ctx: DeviceContext) raises:
     print("identity trace check: PASS")
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     check_identity_trace(ctx)
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("identity_trace_check", cpu=False, gpu=True, serial="", run=run_cases)

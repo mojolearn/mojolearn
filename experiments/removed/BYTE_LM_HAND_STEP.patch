@@ -1,0 +1,2483 @@
+diff --git a/autograd/rules_lm.mojo b/autograd/rules_lm.mojo
+new file mode 100644
+index 0000000000..7b2e87a9dc
+--- /dev/null
++++ b/autograd/rules_lm.mojo
+@@ -0,0 +1,577 @@
++# SPDX-License-Identifier: Apache-2.0
++# Language-model trainer backward on the tape (the byte LM's only backward
++# path). docs/plans/AUTOGRAD_API.md section (c) item 4.
++#
++# ---------------------------------------------------------------- launch inventory
++# The hand path, training/byte_lm.mojo::byte_gradient_device after the
++# forward (_byte_forward_loss), for one step of an n-layer byte LM
++# (IDENTICAL, trace off), in launch order. "tb." is ByteBuffers, "bst[k]" /
++# "fwd[k]" layer k's LlamaBackwardStages / LlamaDeviceStages.
++#
++#   loss    v1 head: identical_ce_backward_into (L14-L16) -> tb.ce_dlogits
++#           (skipped under AFN_LM_HEAD_FUSE: the forward's fused row kernel
++#           already wrote dlogits)
++#           chunked v2 head: chunked_lm_head_v2_gemm_backward_into, per vocab
++#           chunk a GEMM and the dhidden / dweight kernels -> tb.d_h, tb.dw_lm
++#           (loss, head dA and head dB in one fused kernel set)
++#   head    v1 only: identical_gemm_backward_a_into[ROLE_HEAD] tb.d_h <-
++#           ce_dlogits . lm_w; identical_gemm_backward_b_into tb.dw_lm <-
++#           ce_dlogits, fwd[n-1].residual2 (OP_NT, tb.head_bwd_ws)
++#   layers  for k = n-1 .. 0: llama_decoder_layer_backward_device (deleted) (bst[k],
++#           fwd[k], d_out = tb.d_h (k = n-1) or bst[k+1].d_x, x = tb.x (k = 0)
++#           or fwd[k-1].residual2): per layer the refusal scan R of d_out,
++#           27 + A launches (rules_transformer.mojo's inventory; + 1 bit
++#           copy without IDN_BWD_ENTRY_ALIAS) -> bst[k].d_x and the nine dw;
++#           a host wait per layer when _byte_layer_sync() is on
++#   embed   identical_embedding_backward[_prerefused]_into (E0-E4) or the
++#           NN50 owned runs (match / rebuild, then backward_into): the
++#           fixed-order scatter-add of bst[0].d_x into tb.dw_emb
++#   pack    _pack_block per layer (none under BYTE_LM_BLOCK_VIEWS) and the
++#           two copies of dw_emb and dw_lm into tb.grad
++#
++# Glue (moved to the tape): the order of the stages, the chaining of the
++# layers (which buffer is d_out of layer k, which is x), the head and
++# embedding backward assembly, and every residual join; the joins inside a
++# layer are the transformer rules' (writes_total, the hand kernels). Fused
++# kernels (kept, one rule each, launched with the hand path's arguments on
++# the hand path's buffers): the CE backward, the head GEMM pair, the chunked
++# head+loss backward, the embedding scatter-add, and each layer's seven
++# TransformerRules.
++#
++# ---------------------------------------------------------------- the tape graph
++#   emb_w (variable_into dw_emb)
++#     -> LM_EMBEDDING     x = emb_w[ids]       grad storage bst[0].d_x
++#     -> layer 0 .. n-1   llama_decoder_layer_record; layer k's output
++#                         (residual2) gradient storage is bst[k+1].d_x, the
++#                         top layer's tb.d_h: the storage the hand path hands
++#                         each layer as d_out, read in place
++#   lm_w (variable_into dw_lm)
++#     -> LM_HEAD          logits = h lm_w^T    grad storage tb.ce_dlogits
++#     -> LM_CE            the mean CE loss     grad storage = the seed
++#   (chunked v2: one LM_HEAD_CE_CHUNKED node [h, lm_w] -> loss)
++#   seed: element 0 of tb.ce_ones (1.0, never written), recorded as the
++#   loss's gradient storage, so the tape copies nothing into the root.
++#
++# ACCUMULATION ORDER. No tensor of this graph outside a decoder layer has
++# two consumers: the embedding output feeds only layer 0, each layer's
++# output only the next layer (or the head), the logits only the loss, and
++# the embedding and head weights are not tied. So every gradient outside
++# the layers is ONE contribution, written in place by its rule (no fill, no
++# scratch, no OP_AG_ACCUMULATE). The two consumers of a layer input (norm1
++# and the residual1 add) are joined inside the layer as the hand path does:
++# d_x = norm1_dx + d_residual1 (S36's bwd_add2_kernel, or the
++# _AFN_NORM1_RESID fusion), by the norm1 rule (writes_total); the residual
++# rule writes nothing. Inside a layer the order is the transformer lane's:
++# d(norm2.out) = gate + up (S9), d(norm1.out) = (q + k) + v (S32),
++# d_residual1 = norm2_dx + d(residual2) (S10-13). The embedding gradient is
++# the embedding kernel's own fixed-order fold over positions. So the tape
++# adds in no order of its own: the expected result is the hand path's bits.
++#
++# ---------------------------------------------------------------- launch count
++# Tape: the hand launches above, one for one, in the same order, with the
++# same arguments (the CE backward, head dA, head dB, then the layers top
++# down, each with its refusal scan, then the embedding). Differences: no
++# S0-1 bit copy per layer when IDN_BWD_ENTRY_ALIAS is off (the tape reads
++# d_out in place; the copy was the identity), no per-layer host wait (the
++# refusal scans still wait as in the hand path), and one wait at the end
++# (ex.sync(), before the tape's views go away). The tape itself launches
++# nothing: zeroed_destination is False and writes_total covers the joins.
++#
++# Refused (they keep the hand path, via byte_lm_tape_eligible): a layer with
++# non-default block options.
++from std.sys.compile import is_defined
++from max.gpu.host import DeviceBuffer, DeviceContext
++
++from autograd.tape import Tape, Tensor, BackwardRules
++from sequence.exec_trait import Exec
++from sequence.exec_device import DeviceExec
++from sequence.ops import FP, Args
++from core.device_scan import device_first_nonfinite
++from autograd.refuse_scan import DeferredNonfiniteScan
++from gemm.contract import OP_NT
++from gemm.experiments.neural_switches import ROLE_HEAD
++from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
++from autograd.kernels.embedding import (
++    identical_embedding_backward_into,
++    identical_embedding_backward_prerefused_into,
++)
++from embedding.checks.embedding_oracle import EmbConfig
++from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
++from autograd.kernels.lm import identical_ce_backward_into
++from training.checks.loss_contract import CeConfig
++from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
++from transformer.impl.llama.modeling_llama import (
++    LlamaDeviceStages,
++    LlamaDeviceWeights,
++    llama_key_span,
++)
++from autograd.kernels.transformer import LlamaBackwardStages
++from autograd.rules_transformer import (
++    TF_RMS_NORM_INPUT,
++    TF_RESIDUAL,
++    TransformerRules,
++    llama_decoder_layer_record,
++)
++
++# The language-model backward runs on the tape, the only path (promoted 2026-10-19). One run per arm, tools/bench_board_neural.py
++# lm-train-step, ours, full shape: NVIDIA L40S 34.611 -> 35.351 ms (1.02), AMD MI325X 42.939 -> 42.953 ms (1.00); average 1.01;
++# same loss_first_step 9.0155868. Every gradient and updated parameter equalled the hand walk word for word on Metal, NVIDIA
++# and AMD (44/44); training/checks/lm_tape_backward_check.mojo now compares against those stored digests.
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
++
++
++def _check_removed_defines() -> Bool:
++    """Refusals for retired byte LM backward defines (lane del-lm, docs/TOMBSTONES.md). They live here, next to the code they named, not
++    in core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed (a full
++    rebuild and identity re-record for one refusal)."""
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LM_OFF"](), "removed 2026-10-19 (lane/del-lm, a54a5fb2e): AUTOGRAD_LM_OFF restored the hand byte LM backward walk; the tape replaced it (lm-train-step NV 34.611 -> 35.351 ms 1.02, AMD 42.939 -> 42.953 ms 1.00, avg 1.01; 44/44 words equal on Metal, NVIDIA, AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch"
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LM"](), "removed 2026-10-19 (lane/del-lm, a54a5fb2e): AUTOGRAD_LM was the opt-in spelling of the byte LM tape backward, now the only path. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch"
++    return True
++
++
++comptime LM_REMOVED_DEFINES_OK = _check_removed_defines()
++
++# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: each
++# layer's refusal scan of its d_out (_refuse_nonfinite) queues its verdict
++# on the device (autograd/refuse_scan.mojo DeferredNonfiniteScan) at the
++# same queue position, reading the same words, and the step reads every
++# verdict at its one closing wait: n_layers drains a step become one. The
++# first refused layer in backward order raises the same error as before
++# (checked before any other error the backward raised, so a NaN still
++# reports as the refusal); the step's gradients are written by then.
++# Accepted steps: no kernel or order moves, the same bits.
++# -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps one wait per layer (arm A).
++comptime LM_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
++
++# Tags 64-71 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63).
++comptime LM_EMBEDDING = 64
++comptime LM_HEAD = 65
++comptime LM_CE = 66
++comptime LM_HEAD_CE_CHUNKED = 67
++
++comptime _F32Ref = MutPointer[DeviceBuffer[DType.float32], MutUntrackedOrigin]
++comptime _I32Ref = MutPointer[DeviceBuffer[DType.int32], MutUntrackedOrigin]
++comptime _BstRef = MutPointer[LlamaBackwardStages, MutUntrackedOrigin]
++comptime _FwdRef = MutPointer[LlamaDeviceStages, MutUntrackedOrigin]
++comptime _RunsRef = MutPointer[List[OwnedEmbeddingRuns], MutUntrackedOrigin]
++comptime _ScansRef = MutPointer[List[DeferredNonfiniteScan], MutUntrackedOrigin]
++comptime _LayersRef = MutPointer[List[Int], MutUntrackedOrigin]
++
++
++@always_inline
++def _fp(mut buf: DeviceBuffer[DType.float32]) -> FP:
++    return FP(unsafe_from_address=Int(buf.unsafe_ptr()))
++
++
++@always_inline
++def _view(ctx: DeviceContext, p: FP, n: Int) -> DeviceBuffer[DType.float32]:
++    """A non-owning view of n floats at p."""
++    return DeviceBuffer[DType.float32](ctx, p.unsafe_origin_cast[MutAnyOrigin](), n if n > 0 else 1, owning=False)
++
++
++@always_inline
++def _f32(mut buf: DeviceBuffer[DType.float32]) -> _F32Ref:
++    return _F32Ref(unsafe_from_address=Int(MutPointer(to=buf)))
++
++
++@always_inline
++def _i32(mut buf: DeviceBuffer[DType.int32]) -> _I32Ref:
++    return _I32Ref(unsafe_from_address=Int(MutPointer(to=buf)))
++
++
++def _same(p: FP, mut buf: DeviceBuffer[DType.float32], what: String) raises:
++    # The rules launch on the trainer's own buffers; the tape must hand them
++    # exactly those (the driver records them so). Anything else is a driver bug.
++    if Int(p) != Int(buf.unsafe_ptr()):
++        raise Error(String("byte LM backward (autograd): ") + what + " is not the trainer's buffer")
++
++
++struct LmRules(BackwardRules):
++    """Backward adapters for the byte LM's fused native ops (embedding,
++    head, loss) and, by layer index, each decoder layer's TransformerRules.
++
++    Holds pointers to the trainer's buffers and stages; all must outlive
++    the backward."""
++
++    var ctx: DeviceContext
++    var bsts: List[_BstRef]
++    var fwds: List[_FwdRef]
++    var eps: List[Float32]
++    var cos_tab: FP
++    var sin_tab: FP
++    var b: Int
++    var l: Int
++    var dm: Int
++    var vocab: Int
++    var seed: FP
++    var chunked: Bool
++    var dlogits_ready: Bool
++    var emb_prerefused: Bool
++    var emb_plan: Int
++    var x: _F32Ref
++    var emb_w: _F32Ref
++    var dw_emb: _F32Ref
++    var lm_w: _F32Ref
++    var dw_lm: _F32Ref
++    var d_h: _F32Ref
++    var logits: _F32Ref
++    var ce_dlogits: _F32Ref
++    var ce_weights: _F32Ref
++    var ce_expo: _F32Ref
++    var ce_denom: _F32Ref
++    var ce_logp: _F32Ref
++    var ce_max: _F32Ref
++    var head_ws: _F32Ref
++    var head_bwd_ws: _F32Ref
++    var targets: _I32Ref
++    var ids: _I32Ref
++    var emb_counts: _I32Ref
++    var emb_run_begin: _I32Ref
++    var emb_perm: _I32Ref
++    var emb_runs: _RunsRef
++    # idea J: the deferred refusal scans and their layers, in backward
++    # order (the trainer owns both lists; null when LM_REFUSE_DEFER is off)
++    var scans: _ScansRef
++    var scan_layers: _LayersRef
++
++    def __init__(
++        out self, ctx: DeviceContext, var bsts: List[_BstRef], var fwds: List[_FwdRef], var eps: List[Float32],
++        cos_tab: FP, sin_tab: FP, b: Int, l: Int, dm: Int, vocab: Int, seed: FP,
++        chunked: Bool, dlogits_ready: Bool, emb_prerefused: Bool, emb_plan: Int,
++        x: _F32Ref, emb_w: _F32Ref, dw_emb: _F32Ref, lm_w: _F32Ref, dw_lm: _F32Ref, d_h: _F32Ref,
++        logits: _F32Ref, ce_dlogits: _F32Ref, ce_weights: _F32Ref, ce_expo: _F32Ref, ce_denom: _F32Ref,
++        ce_logp: _F32Ref, ce_max: _F32Ref, head_ws: _F32Ref, head_bwd_ws: _F32Ref,
++        targets: _I32Ref, ids: _I32Ref, emb_counts: _I32Ref, emb_run_begin: _I32Ref, emb_perm: _I32Ref,
++        emb_runs: _RunsRef, scans: _ScansRef, scan_layers: _LayersRef,
++    ):
++        self.ctx = ctx.copy()
++        self.bsts = bsts^
++        self.fwds = fwds^
++        self.eps = eps^
++        self.cos_tab = cos_tab
++        self.sin_tab = sin_tab
++        self.b = b
++        self.l = l
++        self.dm = dm
++        self.vocab = vocab
++        self.seed = seed
++        self.chunked = chunked
++        self.dlogits_ready = dlogits_ready
++        self.emb_prerefused = emb_prerefused
++        self.emb_plan = emb_plan
++        self.x = x
++        self.emb_w = emb_w
++        self.dw_emb = dw_emb
++        self.lm_w = lm_w
++        self.dw_lm = dw_lm
++        self.d_h = d_h
++        self.logits = logits
++        self.ce_dlogits = ce_dlogits
++        self.ce_weights = ce_weights
++        self.ce_expo = ce_expo
++        self.ce_denom = ce_denom
++        self.ce_logp = ce_logp
++        self.ce_max = ce_max
++        self.head_ws = head_ws
++        self.head_bwd_ws = head_bwd_ws
++        self.targets = targets
++        self.ids = ids
++        self.emb_counts = emb_counts
++        self.emb_run_begin = emb_run_begin
++        self.emb_perm = emb_perm
++        self.emb_runs = emb_runs
++        self.scans = scans
++        self.scan_layers = scan_layers
++
++    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        # Never: every kernel overwrites every element of the destination it
++        # is handed (the hand path reuses dw_emb, dw_lm, d_h, ce_dlogits and
++        # the stage buffers across steps with no fill), and the transformer
++        # rules say the same of theirs.
++        return False
++
++    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        if tag >= TF_RMS_NORM_INPUT and tag <= TF_RESIDUAL:
++            var tf = TransformerRules(
++                self.ctx, self.bsts[0], self.fwds[0], self.cos_tab, self.sin_tab, self.eps[0], self.b, self.l, 0,
++            )
++            return tf.writes_total(tag, saved, edge)
++        # embedding, head, loss: each input has one consumer, the plain
++        # first-contribution write in place (accumulation order, header)
++        return False
++
++    def supports(self, tag: Int) -> Bool:
++        return (tag >= TF_RMS_NORM_INPUT and tag <= TF_RESIDUAL) or (tag >= LM_EMBEDDING and tag <= LM_HEAD_CE_CHUNKED)
++
++    def apply[E: Exec](
++        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
++        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
++    ) raises:
++        # Every launch goes on self.ctx, the context `ex` wraps.
++        if tag >= TF_RMS_NORM_INPUT and tag <= TF_RESIDUAL:
++            var layer = saved.i11
++            if layer < 0 or layer >= len(self.bsts):
++                raise Error("byte LM backward (autograd): node carries no valid layer index")
++            if tag == TF_RESIDUAL and saved.i10 == 1:
++                # the layer's output: the hand path's entry refusal of d_out
++                self._refuse_nonfinite(upstream, rows[1] * cols[1], layer)
++            var tf = TransformerRules(
++                self.ctx, self.bsts[layer], self.fwds[layer], self.cos_tab, self.sin_tab,
++                self.eps[layer], self.b, self.l, 0,
++            )
++            tf.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
++        elif tag == LM_EMBEDDING:
++            self._embedding(upstream, gradients)
++        elif tag == LM_HEAD:
++            self._head(upstream, gradients)
++        elif tag == LM_CE:
++            self._ce(upstream, gradients)
++        elif tag == LM_HEAD_CE_CHUNKED:
++            self._head_ce_chunked(upstream, gradients)
++        else:
++            raise Error("unknown language-model backward rule")
++
++    def _refuse_nonfinite(self, upstream: FP, n: Int, layer: Int) raises:
++        # the deleted hand layer walk's first device read: the
++        # incoming gradient is refused by bits before any of its stages.
++        var d = _view(self.ctx, upstream, n)
++        comptime if LM_REFUSE_DEFER:
++            # the verdict is read at the step's closing wait (byte_backward_autograd)
++            self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
++            self.scan_layers[].append(layer)
++            return
++        var bad = device_first_nonfinite(self.ctx, d, n)
++        if bad >= 0:
++            raise Error(
++                String("llama backward: NaN or infinity in d_residual2 of block ") + String(layer)
++                + " at flat index " + String(bad) + " REFUSED"
++            )
++
++    def _embedding(self, upstream: FP, gradients: List[FP]) raises:
++        # byte_gradient_device's embedding backward, verbatim: dw_emb from
++        # block 0's d_x, the trainer's id buffers and plan.
++        ref bst0 = self.bsts[0][]
++        _same(upstream, bst0.d_x, "the embedding output gradient")
++        _same(gradients[0], self.dw_emb[], "the embedding weight gradient")
++        var m = self.b * self.l
++        var emb = EmbConfig.llama(self.vocab, self.dm)
++        comptime if NN50_OWNED_RUNS:
++            ref runs = self.emb_runs[]
++            var reuse = False
++            if len(runs) == 1:
++                reuse = runs[0].matches(self.ctx, self.ids[], m, emb)
++            if not reuse:
++                if len(runs) == 1:
++                    _ = runs.pop()
++                runs.append(OwnedEmbeddingRuns(self.ctx, self.ids[], m, emb))
++            runs[0].backward_into(self.ctx, self.dw_emb[], bst0.d_x, emb)
++        else:
++            if self.emb_prerefused:
++                identical_embedding_backward_prerefused_into(
++                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
++                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
++                )
++            else:
++                identical_embedding_backward_into(
++                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
++                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
++                )
++
++    def _head(self, upstream: FP, gradients: List[FP]) raises:
++        # forward logits [M, V] = h [M, DM] . lm_w [V, DM]^T (OP_NT): the hand
++        # path's dA (ROLE_HEAD) then dB, on its workspace
++        ref top = self.fwds[len(self.fwds) - 1][]
++        _same(upstream, self.ce_dlogits[], "the logits gradient")
++        _same(gradients[0], self.d_h[], "the head input gradient")
++        _same(gradients[1], self.dw_lm[], "the head weight gradient")
++        var m = self.b * self.l
++        identical_gemm_backward_a_into[ROLE_HEAD](
++            self.ctx, self.d_h[], self.ce_dlogits[], self.lm_w[], self.head_bwd_ws[], m, self.vocab, self.dm, OP_NT,
++        )
++        identical_gemm_backward_b_into(
++            self.ctx, self.dw_lm[], self.ce_dlogits[], top.residual2, self.head_bwd_ws[], m, self.vocab, self.dm, OP_NT,
++        )
++
++    def _ce(self, upstream: FP, gradients: List[FP]) raises:
++        # The mean loss's VJP at the unit seed: the hand kernel folds 1/M
++        # itself, so the rule reads no upstream and refuses any other seed.
++        if Int(upstream) != Int(self.seed):
++            raise Error("byte LM backward (autograd): the loss rule takes only the unit seed")
++        _same(gradients[0], self.ce_dlogits[], "the logits gradient")
++        if self.dlogits_ready:
++            return  # AFN_LM_HEAD_FUSE: the forward's row kernel wrote dlogits
++        var m = self.b * self.l
++        identical_ce_backward_into(
++            self.ctx, self.ce_weights[], self.ce_dlogits[], self.ce_expo[], self.ce_denom[],
++            self.ce_logp[], self.targets[], m, m, CeConfig.causal_lm(self.vocab),
++        )
++
++    def _head_ce_chunked(self, upstream: FP, gradients: List[FP]) raises:
++        # The chunked v2 head: loss, dA and dB in the hand path's one call
++        if Int(upstream) != Int(self.seed):
++            raise Error("byte LM backward (autograd): the loss rule takes only the unit seed")
++        ref top = self.fwds[len(self.fwds) - 1][]
++        _same(gradients[0], self.d_h[], "the head input gradient")
++        _same(gradients[1], self.dw_lm[], "the head weight gradient")
++        var m = self.b * self.l
++        chunked_lm_head_v2_gemm_backward_into(
++            self.ctx, self.d_h[], self.dw_lm[], self.logits[], self.head_ws[], top.residual2,
++            self.lm_w[], self.targets[], self.ce_max[], self.ce_denom[], m, self.vocab, self.dm,
++        )
++
++
++def byte_lm_tape_eligible(ws: List[LlamaDeviceWeights]) -> Bool:
++    """Whether every layer is one the tape records (default block options)."""
++    if len(ws) < 1:
++        return False
++    for k in range(len(ws)):  # driver-loop: over decoder layers
++        if not ws[k].opts.is_default():
++            return False
++    return True
++
++
++def byte_backward_autograd(
++    ctx: DeviceContext,
++    mut bsts: List[LlamaBackwardStages],
++    mut fwds: List[LlamaDeviceStages],
++    mut ws: List[LlamaDeviceWeights],
++    mut cos_tab: DeviceBuffer[DType.float32],
++    mut sin_tab: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    mut emb_w: DeviceBuffer[DType.float32],
++    mut dw_emb: DeviceBuffer[DType.float32],
++    mut lm_w: DeviceBuffer[DType.float32],
++    mut dw_lm: DeviceBuffer[DType.float32],
++    mut d_h: DeviceBuffer[DType.float32],
++    mut logits: DeviceBuffer[DType.float32],
++    mut ce_dlogits: DeviceBuffer[DType.float32],
++    mut ce_loss: DeviceBuffer[DType.float32],
++    mut ce_ones: DeviceBuffer[DType.float32],
++    mut ce_weights: DeviceBuffer[DType.float32],
++    mut ce_expo: DeviceBuffer[DType.float32],
++    mut ce_denom: DeviceBuffer[DType.float32],
++    mut ce_logp: DeviceBuffer[DType.float32],
++    mut ce_max: DeviceBuffer[DType.float32],
++    mut head_ws: DeviceBuffer[DType.float32],
++    mut head_bwd_ws: DeviceBuffer[DType.float32],
++    mut targets: DeviceBuffer[DType.int32],
++    mut ids: DeviceBuffer[DType.int32],
++    mut emb_counts: DeviceBuffer[DType.int32],
++    mut emb_run_begin: DeviceBuffer[DType.int32],
++    mut emb_perm: DeviceBuffer[DType.int32],
++    mut emb_runs: List[OwnedEmbeddingRuns],
++    b: Int,
++    l: Int,
++    vocab: Int,
++    chunked: Bool,
++    dlogits_ready: Bool,
++    emb_prerefused: Bool,
++    emb_plan: Int,
++) raises:
++    """The byte LM's whole backward on one tape: embedding gather, every
++    decoder layer, the LM head and the mean cross-entropy, recorded over
++    the forward that already ran, then one backward.
++
++    Writes exactly what the hand walk writes: d_h, dw_lm (and ce_dlogits),
++    every layer's `bsts[k]` gradients (d_x and the nine weight gradients)
++    and dw_emb, with the same kernels on the same buffers. The caller packs
++    them into its flat gradient as before.
++
++    A NaN or infinity in a layer's incoming gradient raises an error; the
++    step's gradients may already have been written when it does."""
++    comptime assert LM_REMOVED_DEFINES_OK, "retired byte LM backward define"
++    var n_layers = len(fwds)
++    if n_layers < 1 or len(bsts) != n_layers or len(ws) != n_layers:
++        raise Error("byte LM backward (autograd): one forward stage, backward stage and weight set per layer")
++    if not byte_lm_tape_eligible(ws):
++        raise Error("byte LM backward (autograd): only default Llama blocks are recorded")
++    if b <= 0 or l <= 0:
++        raise Error("byte LM backward (autograd): B and L must be positive")
++    var dims = fwds[0].dims.copy()
++    dims.validate()
++    var dm = dims.d_model
++    var m = b * l
++    for k in range(n_layers):  # driver-loop: over decoder layers
++        # the hand path's per-layer refusals that need no device read
++        if bsts[k].b != b or bsts[k].l != l:
++            raise Error("llama backward: the stage buffers do not match (B, L)")
++        var s = llama_key_span(0, l, fwds[k].window)
++        if s > bsts[k].s_max:
++            raise Error(String("llama backward: pos0 + L = ") + String(s) + " exceeds the allocated s_max " + String(bsts[k].s_max))
++    if len(d_h) != m * dm or len(x) < m * dm:
++        raise Error("byte LM backward (autograd): d_h and the block input must hold [B, L, d_model]")
++    if len(ce_ones) < 1:
++        raise Error("byte LM backward (autograd): the unit seed needs one element of ce_ones")
++
++    var ex = DeviceExec(ctx)
++    var tape = Tape()
++    # ---- embedding: x = emb_w[ids], its gradient block 0's d_x
++    var g_emb = tape.variable_into(ex, _fp(emb_w), _fp(dw_emb), vocab, dm)
++    var h = tape.custom_into(ex, [g_emb], _fp(x), _fp(bsts[0].d_x), m, dm, LM_EMBEDDING, Args())
++    # ---- the layers; layer k's output gradient is the storage the hand
++    # path passes layer k as d_out: bst[k+1].d_x, the top layer's d_h
++    for k in range(n_layers):  # driver-loop: over decoder layers
++        var din = _fp(d_h) if k == n_layers - 1 else _fp(bsts[k + 1].d_x)
++        h = llama_decoder_layer_record(tape, ex, h, bsts[k], fwds[k], ws[k], din, b, l, k)
++    # ---- head and loss; the loss's gradient is the unit seed (ce_ones[0])
++    var g_lm = tape.variable_into(ex, _fp(lm_w), _fp(dw_lm), vocab, dm)
++    var one = _fp(ce_ones)
++    var loss: Tensor
++    if chunked:
++        loss = tape.custom_into(ex, [h, g_lm], _fp(ce_loss), one, 1, 1, LM_HEAD_CE_CHUNKED, Args())
++    else:
++        var lg = tape.custom_into(ex, [h, g_lm], _fp(logits), _fp(ce_dlogits), m, vocab, LM_HEAD, Args())
++        loss = tape.custom_into(ex, [lg], _fp(ce_loss), one, 1, 1, LM_CE, Args())
++    var seed = tape.variable(ex, one, 1, 1, False)
++
++    var scans = List[DeferredNonfiniteScan]()
++    var scan_layers = List[Int]()
++    var bst_refs = List[_BstRef]()
++    var fwd_refs = List[_FwdRef]()
++    var eps = List[Float32]()
++    for k in range(n_layers):  # driver-loop: over decoder layers
++        bst_refs.append(_BstRef(unsafe_from_address=Int(MutPointer(to=bsts[k]))))
++        fwd_refs.append(_FwdRef(unsafe_from_address=Int(MutPointer(to=fwds[k]))))
++        eps.append(ws[k].eps)
++    var rules = LmRules(
++        ctx, bst_refs^, fwd_refs^, eps^, _fp(cos_tab), _fp(sin_tab), b, l, dm, vocab, one,
++        chunked, dlogits_ready, emb_prerefused, emb_plan,
++        _f32(x), _f32(emb_w), _f32(dw_emb), _f32(lm_w), _f32(dw_lm), _f32(d_h),
++        _f32(logits), _f32(ce_dlogits), _f32(ce_weights), _f32(ce_expo), _f32(ce_denom),
++        _f32(ce_logp), _f32(ce_max), _f32(head_ws), _f32(head_bwd_ws),
++        _i32(targets), _i32(ids), _i32(emb_counts), _i32(emb_run_begin), _i32(emb_perm),
++        _RunsRef(unsafe_from_address=Int(MutPointer(to=emb_runs))),
++        _ScansRef(unsafe_from_address=Int(MutPointer(to=scans))),
++        _LayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers))),
++    )
++    comptime if LM_REFUSE_DEFER:
++        # idea J: a NaN reaching a later rule may make it raise first; the
++        # refusal is the error the hand path gives, so it is checked first.
++        var raised = False
++        var msg = String()
++        try:
++            tape.backward_with_rules(ex, loss, seed, rules)
++        except e:
++            raised = True
++            msg = String(e)
++        if not raised:
++            tape.release(ex)
++        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
++            scans[i].enqueue_readback(ctx)
++        # Drain the queue before the stages and views go back to the caller.
++        ex.sync()
++        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
++            var bad = scans[i].result_after_sync()
++            if bad >= 0:
++                raise Error(
++                    String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
++                    + " at flat index " + String(bad) + " REFUSED"
++                )
++        if raised:
++            raise Error(msg)
++    else:
++        tape.backward_with_rules(ex, loss, seed, rules)
++        tape.release(ex)
++        # Drain the queue before the stages and views go back to the caller.
++        ex.sync()
+diff --git a/bindings/byte_lm_trainer_native.mojo b/bindings/byte_lm_trainer_native.mojo
+index bc1a08e570..9688bf644a 100644
+--- a/bindings/byte_lm_trainer_native.mojo
++++ b/bindings/byte_lm_trainer_native.mojo
+@@ -526,10 +526,7 @@ def _after_failure(mut mods: NativeModules, fields: PythonObject) raises:
+         _mark_lost(fields)
+ 
+ 
+-def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool, n_steps: Int = 1, steps_call: Bool = False) raises -> PythonObject:
+-    """One native call: `n_steps` training steps (`tokens` the (n_steps,
+-    batch, length + 1) stack; one Program.fit on the device column) or one
+-    evaluation. `steps_call`: the result also carries the step `losses`."""
++def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
+     var b = _b(mods)
+     var lost = fields["_lost_at"]
+     if lost is not None:
+@@ -548,12 +545,10 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
+         py_setitem(fields, "_session_entries_binding", binding)
+     var state = fields["_state"]
+     var completed = Int(py=state["completed_steps"])
+-    if train and completed + n_steps > _MAX_STEP:
++    if train and completed >= _MAX_STEP:
+         raise Error("ValueError: Byte-LM native call step counter is exhausted")
+     var provider = _provider(fields, binding)
+     mods.released()
+-    if n_steps > 1 and provider is None:
+-        raise Error("ImportError: Byte-LM binding lacks the native trainer table (train_steps); rebuild bindings/build_byte_lm.sh")
+     if fields["_native_session"] is None:
+         py_setitem(fields, "_native_session", neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create")) if provider is not None else py_call(_entry(binding, "byte_lm_session_create")))
+         mods.released()
+@@ -562,7 +557,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
+         py_setitem(fields, "_grad_step", -1)
+     var session = fields["_native_session"]
+     var full = train and String(py=fields["_step_result"]) == "full"
+-    var out_loss = _f32(n_steps, context)
++    var out_loss = _f32(1, context)
+     var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
+     var grads = _gradient_outputs(mods, shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
+     # The operation's buffer descriptors as native words (plan row N104): no
+@@ -586,9 +581,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
+     var returned = PythonObject(None)
+     try:
+         if provider is not None:
+-            # batch slot (p[14]) = the call's step count (operation 1)
+-            returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train,
+-                                                          n_steps))
++            returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train))
+             mods.released()
+         else:
+             var addresses = Python.list()
+@@ -601,24 +594,17 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
+         _ = out_loss  # keep the Python object alive through the native call above
+     except error:
+         mods.released()
+-        if n_steps > 1 and provider is not None and out_flags is not None:
+-            # a column that commits step by step (the host column) may
+-            # stand past `completed`; the device column commits none
+-            _steps_reconcile(mods, fields, binding, provider, out_flags, completed, n_steps)
+-        else:
+-            _after_failure(mods, fields)
++        _after_failure(mods, fields)
+         raise error^
+     _adopt_open(mods, fields)
+-    var expected = completed + (n_steps if train else 0)
++    var expected = completed + Int(train)
+     if py_type(returned) is not b.int or Int(py=returned) != expected:
+         _mark_lost(fields)
+         raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
+     if not train:
+         return _loss(out_loss)
+     var result = b.dict()
+-    py_setitem(result, "loss", PythonObject(Float64(_F32P(unsafe_from_address=Int(py=classical_address(out_loss)))[n_steps - 1])))
+-    if steps_call:
+-        py_setitem(result, "losses", out_loss)
++    py_setitem(result, "loss", _loss(out_loss))
+     py_setitem(result, "step", expected)
+     py_setitem(result, "completed_steps", expected)
+     py_setitem(result, "next_batch_index", expected)
+@@ -1155,14 +1141,17 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
+ 
+ # ---------------------------------------------------------------- the multi-step entry
+ #
+-# Plan section 2C (rows N107, N109, N101, N104; 2026-11-07) and lane
+-# x7-byte-lm-on-executor (2026-11-09): `train_steps(ids)` takes n_steps
+-# batches in one call. The lock, the state admission, the shape, the ids
+-# and the binding are admitted ONCE, then ONE native call (operation 1 with
+-# the step count) runs every step: on the device column one Program.fit
+-# over the batches (training/byte_lm_program.mojo).
+-# TOMBSTONE: the binding's `while k < n_steps` step driver (the opening step, 'full' results and the stateless route one call each, the rest through operation 12) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
++# Plan section 2C (rows N107, N109, N101, N104; 2026-11-07): `train_steps(ids)`
++# takes n_steps batches in one call. The lock, the state admission, the shape,
++# the ids and the binding are admitted ONCE; the first step opens the session
++# through the per-step entry when it is not open yet, and every remaining step
++# runs inside ONE native call (provider operation 12, `byte_owner_steps` on the
++# device and `ByteHostSession.steps` on the host column), which uses the shape,
++# optimizer and flags the session admitted at open. Each step takes the same
++# kernel path as `train_step`, so the losses and the state equal n_steps single
++# steps bit for bit; no fold order changes.
++
++comptime _BYTE_LM_OP_STEPS = 12
+ 
+ 
+ def _ids_steps(mut mods: NativeModules, source: PythonObject, shape: _Shape,
+@@ -1248,22 +1237,65 @@ def _steps_reconcile(mut mods: NativeModules, fields: PythonObject, binding: Pyt
+ 
+ def _run_steps(mut mods: NativeModules, fields: PythonObject, stack: PythonObject, n_steps: Int, shape: _Shape,
+                binding: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`train_steps`: on a resident trainer ONE native call (operation 1 with
+-    the step count: the session opens from the host state when it is not
+-    open, the steps run as one Program.fit on the device column, a 'full'
+-    result exports the last step's gradient). The stateless route
+-    (`resident=False`) is one whole-state native call per step by design
+-    (the state crosses the boundary every step), so it keeps one call per
+-    batch."""
+-    if _is_resident(fields, binding, context):
+-        return _run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)
++    var b = _b(mods)
+     var losses = _f32(n_steps, context)
+-    var loss_out = _F32P(unsafe_from_address=Int(py=classical_address(losses)))
++    var losses_address = Int(py=classical_address(losses))
++    var loss_out = _F32P(unsafe_from_address=losses_address)
++    var resident = _is_resident(fields, binding, context)
++    var provider = _provider(fields, binding) if resident else PythonObject(None)
++    mods.released()
++    var lean = String(py=fields["_step_result"]) != "full"
+     var last = PythonObject(None)
+-    for k in range(n_steps):  # driver-loop: over the stateless route's steps (each one whole-state native call)
++    var k = 0
++    while k < n_steps:  # driver-loop: over the steps the multi-step operation cannot take (the opening step, 'full' results, a binding without the provider table, the stateless route)
++        if (resident and lean and provider is not None and Bool(py=fields["_session_open"])
++                and fields["_lost_at"] is None):
++            break
+         var batch = _ids_batch(stack, k, shape, context)
+-        last = _run_stateless(mods, fields, batch, shape, binding, context, True)
++        last = _run_resident(mods, fields, batch, shape, binding, context, True) if resident else _run_stateless(
++            mods, fields, batch, shape, binding, context, True)
+         loss_out[k] = Float32(Float64(py=last["loss"]))
++        k += 1
++    if k < n_steps:
++        var remaining = n_steps - k
++        var completed = Int(py=fields["_state"]["completed_steps"])
++        if completed + remaining > _MAX_STEP:
++            raise Error("ValueError: Byte-LM native call step counter is exhausted")
++        var n_tensors = shape.n_tensors()
++        var out_flags = _i32(n_tensors, context)
++        var cells = shape.batch() * (shape.length() + 1)
++        var a = List[Int]()
++        a.append(_session_handle(fields, binding, provider))
++        a.append(Int(py=classical_address(stack)) + k * cells * 4)
++        a.append(losses_address + k * 4)
++        a.append(Int(py=classical_address(out_flags)))
++        var plan: List[Int] = [remaining, completed]
++        py_setitem(fields, "_grad_step", -1)
++        var returned = 0
++        try:
++            returned = neural_descriptor_execute(provider, _BYTE_LM_OP_STEPS, a, plan, List[Float64]())
++            mods.released()
++        except error:
++            mods.released()
++            _steps_reconcile(mods, fields, binding, provider, out_flags, completed, remaining)
++            raise error^
++        _ = stack  # keep the Python object alive through the native call above
++        _ = out_flags  # keep the Python object alive through the native call above
++        var expected = completed + remaining
++        if returned != expected:
++            _mark_lost(fields)
++            raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
++        var committed = fields["_state"]
++        py_setitem(committed, "flags", out_flags)
++        py_setitem(committed, "completed_steps", expected)
++        py_setitem(committed, "next_batch_index", expected)
++        py_setitem(fields, "_grad_step", expected)
++        last = b.dict()
++        py_setitem(last, "loss", PythonObject(Float64(loss_out[n_steps - 1])))
++        py_setitem(last, "step", expected)
++        py_setitem(last, "completed_steps", expected)
++        py_setitem(last, "next_batch_index", expected)
++        py_setitem(last, "flags", _copy_i32(out_flags, n_tensors, context))
+     py_setitem(last, "losses", losses)
+     _ = losses  # keep the Python object alive through the native writes above
+     return last
+diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
+index fb1f512943..69efb51a3a 100644
+--- a/training/byte_lm.mojo
++++ b/training/byte_lm.mojo
+@@ -19,6 +19,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+ # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+ from core.step_phase import (
++    StepPhaseClock,
+     step_count_device_alloc,
+     step_count_h2d,
+     step_count_host_alloc,
+@@ -30,12 +31,17 @@ from core.step_phase import (
+ # DEVIATION 2649 also on a shipped build whose column default carries an
+ # update bit (`STEP_GLUE_SHIPPED_UPDATE`, NVIDIA only).
+ from core.step_glue import (
++    STEP_GLUE_NOSHADOW,
++    STEP_GLUE_OPTSKIP,
+     STEP_GLUE_SHIPPED_UPDATE,
+     STEP_GLUE_TRIAL,
++    STEP_GLUE_UPDATE_BITS,
++    step_glue_arm_from_env,
+     step_glue_blocks,
+ )
+ from core.device_scan import DeviceScanScratch, device_first_token_oob
+ from core.neural_context import neural_ctx
++from core.identity_trace import IdentityTrace
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from training.neural_identical_experiments import (
+     IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
+@@ -44,7 +50,7 @@ from training.neural_identical_experiments import (
+ from checks.vendor import COMPILED_VENDOR
+ from training.byte_lm_afn import (
+     AFN_LM_HEAD_FUSE, AFN_LM_NOSYNC, AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE,
+-    afn_upload_ids,
++    afn_ce_fused, afn_reset, afn_status_view, afn_step_finish, afn_upload_ids,
+ )
+ from training.checkpoint import Checkpoint
+ from training.byte_lm_config import ByteConfig
+@@ -53,35 +59,50 @@ from training.checks.train_loop import (
+ )
+ from training.byte_lm_block_copy import byte_block_copy
+ from gemm.neural_dispatch import (
+-    ANY_SABOTAGE as GEMM_SABOTAGE,
++    ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
+     identical_gemm_workspace_max_floats,
+ )
++from gemm.experiments.neural_switches import ROLE_HEAD
+ from gemm.neural_backward import (
+     ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
+     identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
+ )
+ from gemm.contract import OP_NT, OP_NN
+-from embedding.checks.embedding_identical import ANY_EMB_SABOTAGE
+-from autograd.kernels.embedding import emb_run_scratch_ints
++from embedding.checks.embedding_identical import (
++    ANY_EMB_SABOTAGE,
++    EMB_AUTO_SORT_MIN_CELLS,
++    identical_embedding_forward_into,
++    identical_embedding_forward_prerefused_into,
++)
++from autograd.kernels.embedding import (
++    emb_run_scratch_ints,
++    identical_embedding_backward_into,
++    identical_embedding_backward_prerefused_into,
++)
+ from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+ from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
+-from embedding.checks.embedding_oracle import EmbConfig
++from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
++from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
+ from training.checks.loss import (
+     ANY_LOSS_SABOTAGE,
++    identical_ce_forward_into,
+     identical_ce_ones_floats,
+     identical_ce_workspace_max_floats,
+ )
+-from training.checks.loss_contract import REDUCTION_MEAN
++from autograd.kernels.lm import identical_ce_backward_into
++from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
+ from training.chunked_lm_head_v2 import (
+     LM_HEAD_V2_CHUNK,
++    chunked_lm_head_v2_gemm_forward_into,
+     chunked_lm_head_v2_gemm_workspace_floats,
+ )
++from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
+ from training.checks.optimizer import (
+-    ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS,
++    ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
+     identical_optimizer_workspace_floats,
+-    # DEVIATIONS 2646 and 2647: the pieces the glue update launcher launches.
+-    OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel,
+-    device_step_scalars,
++    # DEVIATIONS 2646 and 2647: the pieces the glue update path launches.
++    OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel, adam_update_oop_status_kernel,
++    device_step_scalars, opt_refuse_device_inputs,
+ )
+ # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
+@@ -92,21 +113,17 @@ from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_T
+ from autograd.kernels.transformer import (
+     BWD_ANY_SABOTAGE, LlamaBackwardStages,
+ )
+-# Lane x7: every step, gradient, update and evaluation runs on the
+-# trainer's captured program (embedding, OPS_ATTN_STEP per layer, head,
+-# cross-entropy; Program.fit for the steps).
+-from sequence.ops import FP
+-from training.byte_lm_program import (
+-    ByteLmProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
+-    byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply, byte_losses_finite,
+-)
++# The step's backward (loss, head, every layer, embedding) runs on one
++# autograd tape (autograd/rules_lm.mojo).
++from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
+ from transformer.impl.llama.fused_attention import (
+     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
+ )
+-from training.byte_lm_one_wait import ByteOneWait
++from training.byte_lm_one_wait import ByteOneWait, one_wait_require_tokens, one_wait_step_finish
+ from transformer.impl.llama.modeling_llama import (
+     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
+-    LlamaRopeTable, LlamaKVCache,
++    LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
++    residual_next_norm_fusion_enabled,
+     timing_on, timing_tick,
+ )
+ 
+@@ -1019,11 +1036,6 @@ struct ByteTrainer(Movable):
+     var one_wait: Optional[ByteOneWait]
+     """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
+     one-wait step; None on a build without the define."""
+-    var program: Optional[ByteLmProgram]
+-    """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
+-    opened by the first step, gradient or evaluation."""
+-    var program_synced: Bool
+-    """Whether the program's tensors hold the committed flat state."""
+ 
+     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
+                  initial_m: List[Float32], initial_v: List[Float32],
+@@ -1050,8 +1062,6 @@ struct ByteTrainer(Movable):
+         self.embedding_runs = List[OwnedEmbeddingRuns]()
+         self.live_status_steps = 0
+         self.one_wait = Optional[ByteOneWait]()
+-        self.program = Optional[ByteLmProgram]()
+-        self.program_synced = False
+         # lane/neural-pass43: the session's buffers carved from arena chunks
+         # (core/device_arena.mojo) between here and `arena_end` below.
+         self.arena_id = arena_begin()
+@@ -1064,9 +1074,11 @@ struct ByteTrainer(Movable):
+         self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
+         for layer in range(config.n_layers):
+             self.weights.append(_block_weights(ctx, initial_params, layer, config))
+-        # Lane x7: no per-layer training stages here any more (the program's
+-        # attention steps keep their own); `forward` / `backward` stay empty
+-        # for the stage report (byte_attention_eager_cells reads none).
++            # The trace-disabled trainer uses the existing fused attention path.
++            # Allocate its quadratic stages lazily; eager/diagnostic fallback
++            # still grows them through ensure_*_attention_capacity.
++            self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
++            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+         arena_end(self.arena_id)
+         step_count_sync()
+         ctx.synchronize()
+@@ -1387,36 +1399,6 @@ def byte_train_step_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
+     return ByteLeanResult(loss, trainer.completed_steps, trainer.buffers.buf_initialized.copy())
+ 
+ 
+-def byte_train_steps_resident(ctx: DeviceContext, mut trainer: ByteTrainer, stack: Int, k: Int,
+-                              losses: Int) raises -> ByteLeanResult:
+-    """`k` steps on device-resident state as ONE Program.fit (lane x7):
+-    `stack` holds the k admitted batches one after the other (host int32,
+-    batch rows of length + 1 each), `losses` receives the k step losses. A
+-    refused call commits none of its steps (rolled back before it
+-    propagates); the result's loss is the last step's."""
+-    _require_profile()
+-    byte_validate_optimizer(trainer.optimizer)
+-    if not trainer.healthy:
+-        raise Error("byte LM: session lost; restore a retained export")
+-    if k < 1 or trainer.completed_steps < 0 or trainer.completed_steps + k > 999999:
+-        raise Error("byte LM: step bound reached")
+-    trainer.healthy = False
+-    trainer.shadow_valid = False
+-    trainer.grad_step = -1
+-    var failed = False
+-    var message = String("")
+-    try:
+-        byte_steps_device(ctx, trainer, stack, k, losses)
+-    except error:
+-        failed = True
+-        message = String(error)
+-    if failed:
+-        _byte_recover(ctx, trainer, message)
+-    trainer.healthy = True
+-    var last = FP(unsafe_from_address=losses)[k - 1]
+-    return ByteLeanResult(last, trainer.completed_steps, trainer.buffers.buf_initialized.copy())
+-
+-
+ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
+     """Restore `param`, `m_state`, `v_state` and the flags from the shadow
+     taken at this step's shadow point (design 4.2 item 4): three D2D
+@@ -1444,8 +1426,6 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
+     tr.buffers.buf_initialized = tr.buffers.flags_before.copy()
+     tr.completed_steps = tr.shadow_step
+     tr.grad_step = -1
+-    # the program's tensors no longer hold the committed state
+-    tr.program_synced = False
+     try:
+         tr.validate_device_state(ctx, tr.completed_steps)
+     except lost:
+@@ -1454,96 +1434,384 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
+     return True
+ 
+ 
+-# ---------------------------------------------------------------- the step on the executor
+-# Lane x7-byte-lm-on-executor (2026-11-09; plan EXECUTOR_CONSOLIDATION_AND_CLEANUP row X7):
+-# every step, gradient, update and evaluation of the trainer runs on the
+-# trainer's captured program (training/byte_lm_program.mojo): the forward is
+-# the embedding, one OPS_ATTN_STEP per decoder layer and the head on the
+-# executor, the backward the tape's with the transformer stage rule for the
+-# blocks, the update the session optimizer's AdamW, and `train_steps` ONE
+-# Program.fit over its batches. The flat `ByteBuffers` stay the committed
+-# state (export, logits and rollback read them); a call's result is copied
+-# into them after the shadow point and re-scanned there, so a refused call
+-# leaves them as they were.
+-# TOMBSTONE: the byte LM's hand step (the per-layer forward `_byte_forward_loss` / `_byte_layer_forward_deferred` with its eight llama_decoder_layer_forward sites, the tape backward wrapper `_byte_backward_tape` over autograd/rules_lm.mojo byte_backward_autograd, the IDN_TRAIN_ONE_WAIT and AFN_LM_NOSYNC step variants, the step-glue update arms `_byte_glue_update` / `_byte_live_status_*`, the eager-scratch release helpers and the certified optimizer step of the trainer) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HAND_STEP").
+-# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+-
+-
+-def _byte_program_ready(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+-    """The trainer's program, opened on its first use and loaded from the
+-    committed flat buffers whenever they were written outside it (open,
+-    rollback, a refused call)."""
++def _byte_layer_forward_deferred(ctx: DeviceContext, mut tr: ByteTrainer, layer: Int,
++                                 mut trace: IdentityTrace, defer_addr: Int) raises:
++    """IDN_TRAIN_ONE_WAIT: one decoder layer of `_byte_forward_loss`, the
++    same call with the same arguments, its stages armed with the trainer's
++    deferred window for the call and disarmed after it. No completion wait
++    after the layer. A raise inside the call puts the stages back in their
++    slot before it propagates, so the replayed synchronous step finds the
++    trainer's layer list whole."""
++    var config = tr.config.copy()
++    var M = config.batch * config.length
++    var stages = tr.forward.pop(layer)
++    tr.prefill_cache.s = 0
++    var prefix = String("byte.block") + String(layer) + ".forward"
++    var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
++        M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
++    )
++    var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
++        M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
++        tr.weights[layer + 1].opts.norm_bias,
++    )
++    stages.defer_addr = defer_addr
++    try:
++        if layer == 0:
++            if fuse_next:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready,
++                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++            else:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++        else:
++            if fuse_next:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready,
++                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++            else:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++    except error:
++        stages.defer_addr = 0
++        tr.forward.insert(layer, stages^)
++        raise error^
++    stages.defer_addr = 0
++    comptime if BYTE_LM_RELEASE_EAGER:
++        tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
++    tr.forward.insert(layer, stages^)
++
++
++def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
++                       ids: List[Int32], mut trace: IdentityTrace) raises -> Float32:
++    """Shared forward only. Authoritative params/m/v/flags/t are read-only.
++
++    `deferred` (afn-lm NOSYNC, FAST + Apple only; False everywhere else):
++    the ids go up from `ids` itself with no staging and no wait, and the
++    loss stays on the device (returns 0; the step's one wait reads it).
++    The caller keeps `ids` alive past that wait."""
++    var config = tr.config.copy()
++    var M = config.batch * config.length
++    var ton = timing_on()
++    var tk = Int(perf_counter_ns())
++    # cpu3-seq: no host split or staging loop on any path. The rows of `ids`
++    # go straight into the device input/target buffers (two DMA copies per
++    # row, the same bytes the old host split produced), then the token-range
++    # refusal runs on the device (`byte_require_tokens_device`, the message
++    # `byte_validate_tokens` raised) before the embedding gather reads them;
++    # its wait also completes the uploads, so `ids` may be released after.
++    # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
++    # it replaces was data-sized CPU work on the GPU route).
++    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
++    # IDN_TRAIN_ONE_WAIT: the same two range scans answered in ONE wait,
++    # still in front of the gather.
++    var tokens_checked = False
++    comptime if IDN_TRAIN_ONE_WAIT and deferred:
++        if tr.one_wait:
++            one_wait_require_tokens(ctx, tr.one_wait.value(), tr.buffers.ids, tr.buffers.targets,
++                M, config.vocab_size)
++            tokens_checked = True
++    if not tokens_checked:
++        byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
++    timing_tick(ctx, ton, tk, "step.upload_inputs")
++    timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
++    for layer in range(config.n_layers):
++        _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
++    _bind_emb_head(ctx, tr.buffers, config)
++    # No wait: the embedding forward below is the next thing queued on this
++    # same in-order context and reads no host memory.
++    # A host round trip costs about a dozen kernel launches on Metal.
++    # Device-to-device: every parameter byte copied once (blocks, emb, head).
++    timing_tick(ctx, ton, tk, "step.unpack_weights")
++    var head_param_cells = 2 * config.vocab_size * config.d_model
++    var unpack_cells = 0 if BYTE_LM_BLOCK_VIEWS else config.n_total() - head_param_cells
++    if not BYTE_LM_EMB_HEAD_VIEWS:
++        unpack_cells += head_param_cells
++    timing_bytes(ton, "step.unpack_weights_bytes", unpack_cells * 4)
++    var emb = EmbConfig.llama(config.vocab_size, config.d_model)
++    var ce = CeConfig.causal_lm(config.vocab_size)
++    comptime if NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS:
++        # byte_require_tokens_device above completed the range admission on
++        # these owned IDs. No mutation occurs between that check and gather.
++        # Source draft only: all-vendor identity/full-step qualification pending.
++        emb_refuse_shape(emb, M)
++        identical_embedding_forward_prerefused_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
++    else:
++        identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
++    # No wait: the block forward loop below queues onto this same in-order context.
++    # A host round trip costs about a dozen kernel launches on Metal.
++    timing_tick(ctx, ton, tk, "step.embedding_forward")
++    # IDN_TRAIN_ONE_WAIT: inside the one-wait step each layer call's
++    # refusal goes into the trainer's deferred window and the per-layer
++    # completion wait is dropped (the release below enqueues its frees).
++    var layer_wait = True
++    var defer_addr = 0
++    comptime if IDN_TRAIN_ONE_WAIT and deferred:
++        if tr.one_wait:
++            layer_wait = False
++            defer_addr = Int(MutPointer(to=tr.one_wait.value().window).unsafe_origin_cast[MutAnyOrigin]())
++    for layer in range(config.n_layers):
++        comptime if IDN_TRAIN_ONE_WAIT and deferred:
++            if defer_addr != 0:
++                _byte_layer_forward_deferred(ctx, tr, layer, trace, defer_addr)
++                continue
++        # Move the current stages out while borrowing the preceding residual.
++        # No extra activation copy; restore canonical layer order after the call.
++        var stages = tr.forward.pop(layer)
++        # After the pop, the NEXT block's stages are at index `layer`, not `layer + 1`.
++        # The reference modeling_llama.py:402-412 visits independent decoder layers.
++        # Training always starts a full prefill: s=0 makes kv_append_kernel
++        # read only fresh K/V. Reuse storage, never another layer's history.
++        # Backward reads the per-layer stages.k_cache/v_cache, not this scratch.
++        tr.prefill_cache.s = 0
++        var prefix = String("byte.block") + String(layer) + ".forward"
++        var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
++            M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
++        )
++        var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
++            M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
++            tr.weights[layer + 1].opts.norm_bias,
++        )
++        if layer == 0:
++            if fuse_next:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready,
++                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++            else:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++        else:
++            if fuse_next:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready,
++                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
++                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
++                    retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++            else:
++                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
++                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
++                    norm1_ready=norm1_ready, retain_kv_cache=not IDN_TRAIN_NO_DECODE_CACHE)
++        if layer_wait and _byte_layer_sync():
++            step_count_sync()
++            ctx.synchronize()
++        comptime if BYTE_LM_RELEASE_EAGER:
++            tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
++        tr.forward.insert(layer, stages^)
++    # The blocks print their own `block.*` / `attn.*` lines; this envelope
++    # is the whole forward loop including the per-layer waits and the
++    # stage pop/insert bookkeeping, so the block sum can be checked.
++    timing_tick(ctx, ton, tk, "envelope.blocks_forward")
++    # DEVIATION 2630: the head GEMM's call-kind line (core/step_phase.mojo),
++    # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1.
++    var pg = StepPhaseClock(ctx)
++    if config.chunked_lm_head_v2:
++        chunked_lm_head_v2_gemm_forward_into(
++            ctx, tr.buffers.ce_loss, tr.buffers.ce_max, tr.buffers.ce_denom,
++            tr.buffers.ce_row, tr.buffers.logits, tr.buffers.head_ws,
++            tr.forward[config.n_layers - 1].residual2,
++            tr.buffers.lm_w, tr.buffers.targets, M, config.vocab_size,
++            config.d_model,
++        )
++    else:
++        identical_gemm_into[ROLE=ROLE_HEAD](ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
++            tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
++    # No wait: the cross entropy forward below queues onto this same in-order context.
++    # A host round trip costs about a dozen kernel launches on Metal.
++    pg.tick(ctx, "gemm.head_fwd")
++    timing_tick(ctx, ton, tk, "step.head_forward")
++    # `identical_ce_forward_into` prints `step.ce_refuse_download` (its
++    # first statement: the full logits download and host scan) and then
++    # `step.ce_forward` (L1-L13, waited on under the switch only), both from
++    # its own clock; this clock is re-read after the call's wait.
++    comptime if AFN_LM_HEAD_FUSE:
++        # afn-lm HEAD_FUSE (FAST + Apple only): softmax, CE, mean loss and
++        # dlogits in one row kernel; the CE backward below is skipped.
++        if not config.chunked_lm_head_v2:
++            var afn_status = afn_status_view(tr.scan)
++            afn_ce_fused(ctx, tr.buffers.ce_loss, tr.buffers.ce_dlogits,
++                tr.buffers.logits, tr.buffers.targets, afn_status, M,
++                config.vocab_size)
++    if not config.chunked_lm_head_v2 and not AFN_LM_HEAD_FUSE:
++        identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
++            tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
++            tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
++            tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
++            tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
++            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce, targets_prerefused=NN51_RESIDENT_TOKEN_VALIDATION)
++    # No wait: `download_f32` below waits for the loss itself.
++    # A host round trip costs about a dozen kernel launches on Metal.
++    comptime if (AFN_LM_NOSYNC or IDN_TRAIN_ONE_WAIT) and deferred:
++        # IDN_TRAIN_ONE_WAIT: the loss stays on the device; the step's one
++        # wait reads it with its finite check.
++        _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
++        return Float32(0.0)
++    if ton:
++        tk = Int(perf_counter_ns())
++    _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
++    var losses = download_f32(ctx, tr.buffers.ce_loss, 1)
++    _require_finite(losses, "loss")
++    timing_tick(ctx, ton, tk, "step.loss_download")
++    timing_bytes(ton, "step.loss_download_bytes", 4)
++    return losses[0]
++
++
++def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
++                      ids: List[Int32], resident: Bool = False) raises -> Float32:
++    """Single-device composition; the numerical operation order is unchanged.
++
++    `resident` (the resident step only): admits the IDN_TRAIN_ONE_WAIT step,
++    whose failure path rolls back and replays; the stateless capture keeps
++    the synchronous step."""
++    comptime if AFN_LM_NOSYNC:
++        return _afn_byte_step_nosync(ctx, tr, ids)
++    comptime if IDN_TRAIN_ONE_WAIT and not BYTE_LM_FAULT_INJECT:
++        if resident and not tr.buffers.optimizer_pooled:
++            return _byte_step_one_wait(ctx, tr, ids)
++    var loss = byte_gradient_device(ctx, tr, ids)
++    byte_update_device(ctx, tr)
++    return loss
++
++
++def _byte_step_one_wait(ctx: DeviceContext, mut tr: ByteTrainer,
++                        ids: List[Int32]) raises -> Float32:
++    """IDN_TRAIN_ONE_WAIT (lane decode-resident, 2026-10-28): the resident
++    step with its deferred checks (training/byte_lm_one_wait.mojo). The same
++    forward, backward, shadow point and update as the synchronous step, in
++    the same order on the same buffers; the token range is one wait, the
++    layer refusals go into the trainer's window, the per-layer waits are
++    dropped, and the loss, gradient and state checks are one status launch
++    read with the window and the loss at the step's last wait.
++
++    Clean: the synchronous step's bytes, returned. Not clean, or any raise
++    inside: the update is rolled back from the shadow it took (when it got
++    that far; `byte_rollback` re-scans the restored state) and the step is
++    replayed synchronously, which raises today's message, or succeeds, as
++    today. The replay starts from the state the step started from, so every
++    message, flag and bit it leaves is the synchronous step's."""
++    if not tr.one_wait:
++        tr.one_wait = ByteOneWait(ctx)
++    var n = tr.config.n_total()
++    tr.one_wait.value().window.begin()
++    var clean = False
++    var loss = Float32(0.0)
++    try:
++        _ = byte_gradient_device[True](ctx, tr, ids)
++        byte_update_device[True](ctx, tr)
++        var r = one_wait_step_finish(ctx, tr.one_wait.value(), tr.buffers.ce_loss, tr.buffers.grad,
++            tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
++        clean = r[0]
++        loss = r[1]
++    except:
++        # Drain what the deferred step enqueued before anything is restored.
++        step_count_sync()
++        ctx.synchronize()
++        clean = False
++    if clean:
++        return loss
++    if tr.shadow_valid:
++        _ = byte_rollback(ctx, tr)
++    # The entry state `byte_train_step_resident` set for this step.
++    tr.healthy = False
++    tr.shadow_valid = False
++    tr.grad_step = -1
++    var sync_loss = byte_gradient_device(ctx, tr, ids)
++    byte_update_device(ctx, tr)
++    return sync_loss
++
++
++def _afn_byte_step_nosync(ctx: DeviceContext, mut tr: ByteTrainer,
++                          ids: List[Int32]) raises -> Float32:
++    """afn-lm NOSYNC (FAST + Apple only): the resident step with ONE host
++    wait. The gradient half runs deferred (no staged upload, no loss
++    download); the update is the shipped shadow copy and the shipped Adam
++    kernel with the shipped scalars, minus the entry scans and the wait;
++    every check of the synchronous step (loss, gradients, then
++    parameters, moments and v >= 0 after the update) is one status launch
++    read back with the loss at the one wait. A failing check raises AFTER
++    the shadow point, so `_byte_recover` rolls the update back: the state
++    a failure leaves is the synchronous step's. `ids` is borrowed for the
++    whole call, past the wait, so its upload never reads freed memory."""
+     if tr.buffers.optimizer_pooled:
+         raise Error("byte LM: pooled optimizer requires its group update")
+-    if not tr.program:
+-        tr.program = byte_program_open(ctx, tr.config, tr.optimizer)
+-        tr.program_synced = False
+-    if not tr.program_synced:
+-        byte_program_load(tr.program.value(), tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state,
+-                          tr.completed_steps)
+-        tr.program_synced = True
+-
+-
+-def _byte_shadow_point(ctx: DeviceContext, mut tr: ByteTrainer) raises:
+-    """THE SHADOW POINT (design 4.2 item 2): the committed param, m, v and
+-    flags are shadowed before a call's result overwrites them."""
+-    var n = tr.config.n_total()
++    if tr.optimizer.kind == OPT_SGD or tr.optimizer.max_norm > Float32(0.0):
++        raise Error("byte LM: NOSYNC update takes Adam or AdamW without clipping")
++    var config = tr.config.copy()
++    var n = config.n_total()
++    var next_step = tr.completed_steps + 1
++    if next_step >= 1000000:
++        raise Error("byte LM: completed step must be in [0,1000000)")
++    var ton = timing_on()
++    var tk = Int(perf_counter_ns())
++    var status = afn_status_view(tr.scan)
++    afn_reset(ctx, status, tr.buffers.ce_loss, True, False)
++    _ = byte_gradient_device[True](ctx, tr, ids)
++    _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
+     _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
+     _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
+     _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+     tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+     tr.shadow_step = tr.completed_steps
+     tr.shadow_valid = True
+-
+-
+-def _byte_commit(ctx: DeviceContext, mut tr: ByteTrainer, k: Int) raises:
+-    """After a finished program call of `k` steps: the shadow point, the
+-    program's parameters, moments and last pre-update gradient into the flat
+-    buffers, every momentum flag set (AdamW wrote every tensor's moments),
+-    then the after-scans (finite param, m, v and v >= 0) at the new step.
+-    A raise here is rolled back from the shadow by the caller."""
+-    var next_step = tr.completed_steps + k
+-    if next_step < 0 or next_step >= 1000000:
+-        raise Error("byte LM: completed step must be in [0,1000000)")
+-    _byte_shadow_point(ctx, tr)
+-    byte_program_store(tr.program.value(), tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state,
+-                       tr.buffers.grad)
+-    for j in range(len(tr.buffers.buf_initialized)):  # small-loop(n_tensors: momentum flags, one per parameter tensor): flags, no data
+-        tr.buffers.buf_initialized[j] = True
++    _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
++    ref cfg = tr.optimizer
++    var sc = device_step_scalars(cfg, next_step)
++    var is_adamw = Int32(1 if cfg.kind == OPT_ADAMW else 0)
++    step_count_launch()
++    ctx.enqueue_function[adam_update_kernel](
++        tr.buffers.param.unsafe_ptr(),
++        tr.buffers.grad.unsafe_ptr(),
++        tr.buffers.m_state.unsafe_ptr(),
++        tr.buffers.v_state.unsafe_ptr(),
++        tr.buffers.denom_out.unsafe_ptr(),
++        tr.buffers.q_out.unsafe_ptr(),
++        Int32(n),
++        is_adamw,
++        cfg.beta1,
++        cfg.beta2,
++        cfg.eps,
++        cfg.weight_decay,
++        sc.c1,
++        sc.c2,
++        sc.step_size,
++        sc.rt_bc2,
++        sc.decay_mul,
++        cfg.lr,
++        sc.bc1,
++        sc.bc2,
++        grid_dim=(_opt_grid_for(n), 1, 1),
++        block_dim=(OPT_TPB, 1, 1),
++    )
+     _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
+     _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
+-    tr.validate_device_state(ctx, next_step)
++    var loss = afn_step_finish(ctx, tr.scan, tr.buffers.ce_loss, tr.buffers.grad,
++        tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
++    timing_tick(ctx, ton, tk, "step.afn_nosync_step")
++    _ = status^
++    _ = ids
+     tr.completed_steps = next_step
+     tr.grad_step = next_step
+-
+-
+-def byte_steps_device(ctx: DeviceContext, mut tr: ByteTrainer, stack: Int, k: Int, losses: Int) raises:
+-    """`k` training steps as ONE Program.fit on the trainer's program.
+-    `stack`: host address of k * batch rows of length + 1 int32 token ids
+-    (the step batches in order, already admitted); `losses`: host address
+-    of k float32 step losses. A non-finite loss, or a state that fails the
+-    after-scans, refuses the whole call: nothing of it is committed (the
+-    caller rolls back from the shadow when the commit had started)."""
+-    _byte_program_ready(ctx, tr)
+-    tr.program_synced = False
+-    tr.grad_step = -1
+-    byte_program_fit(tr.program.value(), stack, k, losses)
+-    var bad = byte_losses_finite(losses, k)
+-    if bad >= 0:
+-        raise Error("byte LM: nonfinite loss at " + String(bad))
+-    _byte_commit(ctx, tr, k)
+-    tr.program_synced = True
+-
+-
+-def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
+-                      ids: List[Int32], resident: Bool = False) raises -> Float32:
+-    """One step on the trainer's program (`byte_steps_device` with k = 1);
+-    `resident` is kept for the callers' signature (both paths are the
+-    same step)."""
+-    _ = resident
+-    var loss = List[Float32](length=1, fill=Float32(0))
+-    byte_steps_device(ctx, tr, Int(ids.unsafe_ptr()), 1, Int(loss.unsafe_ptr()))
+-    return loss[0]
++    return loss
+ 
+ 
+ def _byte_layer_sync() -> Bool:
+@@ -1566,51 +1834,238 @@ def _byte_layer_sync() -> Bool:
+     return v != "0"
+ 
+ 
++def _byte_release_forward_scratch(ctx: DeviceContext,
++                                  mut fwd: LlamaDeviceStages) raises -> Int:
++    """After forward completion/trace: backward reads weights, not these
++    score/mask/gather buffers. Keep weights and aexp valid until backward.
++    This bounds the eager forward peak when several layers prefer eager."""
++    var released = 0
++    if len(fwd.scores) > 1:
++        released += len(fwd.scores) - 1
++        step_count_device_alloc()
++        fwd.scores = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(fwd.masked) > 1:
++        released += len(fwd.masked) - 1
++        step_count_device_alloc()
++        fwd.masked = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(fwd.sbh) > 1:
++        released += len(fwd.sbh) - 1
++        step_count_device_alloc()
++        fwd.sbh = ctx.enqueue_create_buffer[DType.float32](1)
++    return released
++
++
++def _byte_release_eager(ctx: DeviceContext, mut fwd: LlamaDeviceStages,
++                        mut bwd: LlamaBackwardStages) raises -> Int:
++    """Called only AFTER the layer backward completion fence. These nine
++    arrays are dead until the next eager call's ensure-capacity writes them.
++    Keep aexp (the independent forward exp stash) and every dw/dx tensor.
++    Return released cells, excluding the replacement one-cell placeholders.
++    This is buffer lifetime only, with no kernel or arithmetic changes."""
++    var released = 0
++    if len(fwd.scores) > 1:
++        released += len(fwd.scores) - 1
++        step_count_device_alloc()
++        fwd.scores = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(fwd.masked) > 1:
++        released += len(fwd.masked) - 1
++        step_count_device_alloc()
++        fwd.masked = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(fwd.weights) > 1:
++        released += len(fwd.weights) - 1
++        step_count_device_alloc()
++        fwd.weights = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(fwd.sbh) > 1:
++        released += len(fwd.sbh) - 1
++        step_count_device_alloc()
++        fwd.sbh = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(bwd.d_attn_weights) > 1:
++        released += len(bwd.d_attn_weights) - 1
++        step_count_device_alloc()
++        bwd.d_attn_weights = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(bwd.d_attn_masked) > 1:
++        released += len(bwd.d_attn_masked) - 1
++        step_count_device_alloc()
++        bwd.d_attn_masked = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(bwd.d_attn_scores) > 1:
++        released += len(bwd.d_attn_scores) - 1
++        step_count_device_alloc()
++        bwd.d_attn_scores = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(bwd.d_qk_cell) > 1:
++        released += len(bwd.d_qk_cell) - 1
++        step_count_device_alloc()
++        bwd.d_qk_cell = ctx.enqueue_create_buffer[DType.float32](1)
++    if len(bwd.head_c) > 1:
++        released += len(bwd.head_c) - 1
++        step_count_device_alloc()
++        bwd.head_c = ctx.enqueue_create_buffer[DType.float32](1)
++    if released > 0:
++        fwd.attn_materialized = False
++        fwd.attn_estash_cells = 0
++    return released
++
++
++def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
++    """byte_gradient_device's backward half (CE, head, the layers, the
++    embedding, the pack) with the stage order and the layer chaining owned
++    by the autograd tape (autograd/rules_lm.mojo)."""
++    var config = tr.config.copy()
++    var M = config.batch * config.length
++    var ton = timing_on()
++    var tk = Int(perf_counter_ns())
++    comptime if BYTE_LM_BLOCK_VIEWS:
++        # The weight gradients land in the current flat `grad` owner.
++        for layer in range(config.n_layers):
++            _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
++    # PLAN_SCAN performs 2 * vocab * positions integer probes before the
++    # identical row fold; PLAN_SORT is a total-key sort over the positions
++    # alone and builds the same ascending-position runs (contract 6 clause (d):
++    # bit-identical on every vendor and the host column, so the pick moves no
++    # bit). The scan cost grows with V * M, so the pick keys on V * M with the
++    # embedding lane's own EMB_AUTO_SORT_MIN_CELLS (2^26), not on a token
++    # count. Needs neighbor-shape validation (V 256 and 50,257; M 4,096 to
++    # 65,536).
++    var emb_plan = (
++        PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
++        else PLAN_SCAN
++    )
++    byte_backward_autograd(
++        ctx, tr.backward, tr.forward, tr.weights, tr.rope.cos, tr.rope.sin,
++        tr.buffers.x, tr.buffers.emb_w, tr.buffers.dw_emb, tr.buffers.lm_w, tr.buffers.dw_lm,
++        tr.buffers.d_h, tr.buffers.logits, tr.buffers.ce_dlogits, tr.buffers.ce_loss,
++        tr.buffers.ce_ones, tr.buffers.ce_weights, tr.buffers.ce_expo, tr.buffers.ce_denom,
++        tr.buffers.ce_logp, tr.buffers.ce_max, tr.buffers.head_ws, tr.buffers.head_bwd_ws,
++        tr.buffers.targets, tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
++        tr.buffers.emb_perm, tr.embedding_runs, config.batch, config.length, config.vocab_size,
++        config.chunked_lm_head_v2, AFN_LM_HEAD_FUSE and not config.chunked_lm_head_v2,
++        NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS, emb_plan,
++    )
++    # The tape's backward has drained the queue (its one wait): the
++    # per-layer policy and release steps, after every layer.
++    for layer in range(config.n_layers):  # driver-loop: over decoder layers
++        comptime if BYTE_LM_STICKY_EAGER:
++            if tr.forward[layer].attn_forward_status == FUSED_CORNER or tr.backward[layer].attn_backward_status == FUSED_CORNER:
++                tr.forward[layer].attn_prefer_eager = True
++        comptime if BYTE_LM_RELEASE_EAGER:
++            tr.released_eager_cells += _byte_release_eager(ctx, tr.forward[layer], tr.backward[layer])
++    timing_tick(ctx, ton, tk, "envelope.backward_tape")
++    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
++        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
++    comptime if not BYTE_LM_EMB_HEAD_GRAD_VIEWS:
++        # MOJOLEARN_IDN_PARAM_GRAD_VIEWS: the backward already wrote both
++        # ranges of `grad` through the views, so these copies go.
++        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
++        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
++    timing_tick(ctx, ton, tk, "step.pack_grads")
++    var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
++    comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
++        packed_cells = 0
++    timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
++
++
+ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
+                          ids: List[Int32]) raises -> Float32:
+-    """Internal gradient half (ParallelByteLM's shard step). Caller owns
+-    admission and transaction recovery.
++    """Internal gradient half. Caller owns admission and transaction recovery.
+ 
+-    The training forward of the trainer's program on `ids` and the tape
+-    backward (the transformer stage rule for the blocks), with no update:
+-    the pre-update gradient lands in the flat `buffers.grad`. `deferred` is
+-    kept for the callers' signature."""
++    The forward and loss, then the backward half on the autograd tape
++    (`_byte_backward_tape`)."""
+     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
+     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
+     tr.released_eager_cells = 0
+-    if tr.buffers.optimizer_pooled:
+-        # A pooled shard's update is the pool's group update on the flat
+-        # buffers (training/byte_lm_optimizer_pool.mojo): the program takes
+-        # the committed parameters at every gradient call.
+-        if not tr.program:
+-            tr.program = byte_program_open(ctx, tr.config, tr.optimizer)
+-        byte_program_load_params(tr.program.value(), tr.buffers.param)
+-        tr.program_synced = False
+-    else:
+-        _byte_program_ready(ctx, tr)
+-    var loss = byte_program_gradient(tr.program.value(), Int(ids.unsafe_ptr()))
+-    var losses: List[Float32] = [loss]
+-    _require_finite(losses, "loss")
+-    byte_program_grad_out(tr.program.value(), tr.buffers.grad)
++    var trace = IdentityTrace.disabled()
++    var loss = _byte_forward_loss[deferred](ctx, tr, ids, trace)
++    # Every byte LM layer is built with the default block options
++    # (_block_weights / _block_weights_dev), which is what the tape records.
++    if not byte_lm_tape_eligible(tr.weights):
++        raise Error("byte LM: every decoder layer must use the default block options")
++    _byte_backward_tape(ctx, tr)
++    _ = trace
+     return loss
+ 
+ 
+ def byte_update_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer) raises:
+-    """Internal update half: the device scan of the flat `buffers.grad`, one
+-    AdamW step of the program's tensors from it (the update Program.fit
+-    takes), then the shadow point, the copy into the flat buffers and the
+-    after-scans (`_byte_commit`). `deferred` is kept for the callers'
+-    signature."""
++    """Internal update half, including gradient scan, shadow and validation.
++
++    `deferred` (IDN_TRAIN_ONE_WAIT only; False everywhere else): the
++    gradient scan and the post-update state scans are left to the one-wait
++    step's status launch (`one_wait_step_finish`), which checks the same
++    predicates over the same buffers at its one wait; the shadow point and
++    the update are the shipped ones."""
+     if tr.buffers.optimizer_pooled:
+         raise Error("byte LM: pooled optimizer requires its group update")
+-    var n = tr.config.n_total()
+-    _byte_program_ready(ctx, tr)
++    var config = tr.config.copy()
++    var ton = timing_on()
++    var tk = Int(perf_counter_ns())
++    var n = config.n_total()
+     _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
+-    _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
+-    tr.program_synced = False
+-    byte_program_apply(tr.program.value(), tr.buffers.grad)
+-    _byte_commit(ctx, tr, 1)
+-    tr.program_synced = True
++    # The pre-update gradient scan, on the device (was `_require_finite`
++    # over a downloaded mirror): same message, same first index.
++    comptime if not (IDN_TRAIN_ONE_WAIT and deferred):
++        _require_device_finite(ctx, tr.scan, tr.buffers.grad, n, "gradients")
++    timing_tick(ctx, ton, tk, "step.validate_grads_scan")
++    timing_bytes(ton, "step.validate_grads_scan_bytes", n * 4)
++    # Host arithmetic on a field nothing below writes before the update, so
++    # computing it here (it was computed after the shadow copy) is the same
++    # value on both paths.
++    var next_step = tr.completed_steps + 1
++    # DEVIATIONS 2646 and 2647: a trial build under an arm carrying
++    # `optskip` or `noshadow`, or (DEVIATION 2649) a shipped build whose
++    # column default carries one, takes `_byte_glue_update` INSTEAD of the
++    # shadow copy and `identical_optimizer_step`. On every other build
++    # `glue_update` is the constant False and the block below is the shipped
++    # path, unchanged.
++    var glue_update = False
++    var live_validated = False
++    # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (NN56 grouped OOP Adam, arm 1; LOSER: lm-train-step bytes NV 35.51 -> 36.18 ms (1.019), AMD 42.76 -> 44.61 ms (1.043), avg 1.03, NV v0067/v0068, AMD r1011.owed.gadam.ab) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
++    # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
++    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
++        var glue_arm = step_glue_arm_from_env()
++        if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
++            glue_update = True
++            live_validated = _byte_glue_update(ctx, tr, next_step, glue_arm)
++    if not glue_update:
++        # THE SHADOW POINT (design 4.2 item 2): everything before this line
++        # left param/m/v untouched; the update kernel below writes them in
++        # place, so their bytes and the flags are shadowed here first.
++        _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
++        _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
++        _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
++        # No wait: `identical_optimizer_step` below queues onto this same in-order context.
++        # A host round trip costs about a dozen kernel launches on Metal.
++        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
++        tr.shadow_step = tr.completed_steps
++        tr.shadow_valid = True
++        timing_tick(ctx, ton, tk, "step.shadow_copy")
++        timing_bytes(ton, "step.shadow_copy_bytes", 3 * n * 4)
++        _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
++        # `identical_optimizer_step` prints `step.opt_refuse_scan` (its first
++        # statement: param, grad, m, v scanned on the device) and
++        # `step.optimizer` (clip, scalars, update; it waits before it
++        # returns), both from its own clock; this clock is re-read after it.
++        identical_optimizer_step(ctx, tr.buffers.param, tr.buffers.grad,
++            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.denom_out,
++            tr.buffers.q_out, tr.buffers.sumsq, tr.buffers.norms,
++            tr.buffers.total_cell, tr.buffers.out2, tr.buffers.opt_ws,
++            tr.buffers.sab_partials, tr.buffers.buf_initialized, tr.buffers.offsets,
++            tr.optimizer, next_step)
++    if ton:
++        tk = Int(perf_counter_ns())
++    _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
++    _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
++    # validate_after as device scans (design 2.3): finite param, m, v and
++    # `v >= 0`, by name, with no download.
++    comptime if IDN_TRAIN_ONE_WAIT and deferred:
++        # The host half of `validate_device_state` (no wait): the scans are
++        # the status launch's.
++        if next_step < 0 or next_step >= 1000000:
++            raise Error("byte LM: completed step must be in [0,1000000)")
++    else:
++        if not live_validated:
++            tr.validate_device_state(ctx, next_step)
++    timing_tick(ctx, ton, tk, "step.validate_after_scan")
++    timing_bytes(ton, "step.validate_after_scan_bytes", 16 if live_validated else 4 * n * 4)
++    tr.completed_steps = next_step
++    tr.grad_step = next_step
+ 
+ 
+ def byte_glue_update_launch(
+@@ -1735,6 +2190,132 @@ def byte_glue_update_launch(
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch (training/neural_ab_optimizer.mojo comes back with it); record in docs/TOMBSTONES.md.
+ 
+ 
++def _byte_live_status_launch(ctx: DeviceContext,mut tr: ByteTrainer,mut status: DeviceBuffer[DType.int32],next_step: Int) raises:
++    var n=tr.config.n_total()
++    var cfg=tr.optimizer.copy()
++    var sc=device_step_scalars(cfg,next_step)
++    status.enqueue_fill(Int32(n))
++    step_count_launch()
++    ctx.enqueue_function[adam_update_oop_status_kernel](
++        status.unsafe_ptr(),tr.buffers.shadow_p.unsafe_ptr(),tr.buffers.shadow_m.unsafe_ptr(),tr.buffers.shadow_v.unsafe_ptr(),tr.buffers.param.unsafe_ptr(),tr.buffers.grad.unsafe_ptr(),tr.buffers.m_state.unsafe_ptr(),tr.buffers.v_state.unsafe_ptr(),Int32(n),Int32(1) if cfg.kind==OPT_ADAMW else Int32(0),cfg.beta1,cfg.beta2,cfg.eps,cfg.weight_decay,sc.c1,sc.c2,sc.step_size,sc.rt_bc2,sc.decay_mul,
++        grid_dim=(step_glue_blocks(n,OPT_TPB),1,1),block_dim=(OPT_TPB,1,1),
++    )
++    # Handles are swapped by _byte_glue_update before status refusal so the
++    # existing rollback always sees the new state and its pre-update shadow.
++
++
++def _byte_live_status_finish(ctx: DeviceContext,mut status: DeviceBuffer[DType.int32],n: Int,completed: Int) raises:
++    if completed<0 or completed>=1000000:
++        raise Error("byte LM: completed step must be in [0,1000000)")
++    var host=ctx.enqueue_create_host_buffer[DType.int32](4)
++    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(),src_buf=status)
++    step_count_sync()
++    ctx.synchronize()
++    var names: List[String]=["parameters","first moments","second moments"]
++    for field in range(3):
++        if host[field]<Int32(n):
++            raise Error("byte LM: nonfinite "+names[field]+" at "+String(host[field]))
++    if host[3]<Int32(n):
++        raise Error("byte LM: negative second moment")
++
++def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, arm: Int) raises -> Bool:
++    """DEVIATIONS 2646 and 2647: the shadow point and the update of
++    `_byte_step_device` under a glue arm carrying `optskip` and/or
++    `noshadow` (brief sections 4.2, 4.3, 5.2, 5.3). Reached from a trial
++    build, and since DEVIATION 2649 from a shipped build whose column
++    default carries an update bit (NVIDIA today, no other column). Ends with the new state
++    in `param`, `m_state`, `v_state`, the pre-update state in `shadow_*`,
++    `flags_before` and `shadow_step` set and `shadow_valid` True, exactly
++    the invariant the shipped shadow copy plus `identical_optimizer_step`
++    leave, so `validate_after`, `_byte_recover` and `byte_rollback` run
++    unchanged after it.
++
++    Without `noshadow`: the shipped shadow copy, then (unless `optskip`) the
++    shipped entry scans, then the shipped in-place kernel. With `noshadow`:
++    (unless `optskip`) the entry scans with `shadow_valid` still False, then
++    the out-of-place kernel into `shadow_*`, the wait, three handle swaps,
++    and only then `shadow_valid = True`, so a raise before the swaps leaves
++    the state untouched and takes `_byte_recover`'s no-shadow branch.
++
++    The fault-injection build is refused at compile time: its `opt_refuse`
++    site writes `m_state` between the shadow copy and the optimizer, which
++    is the one write the `optskip` argument excludes (brief section 5.2)."""
++    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
++        comptime assert not BYTE_LM_FAULT_INJECT, (
++            "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
++            " not combined: the G4 fault sites assume the shipped update order"
++            ". Since"
++            " DEVIATION 2649 this refusal also covers a shipped build whose"
++            " column default carries an update bit, which is the build the"
++            " fault-inject harness would otherwise reach unguarded."
++        )
++    var n = tr.config.n_total()
++    var ton = timing_on()
++    var tk = Int(perf_counter_ns())
++    var out_of_place = (arm & STEP_GLUE_NOSHADOW) != 0
++    if not out_of_place:
++        # The shipped shadow point, as `_byte_step_device` spells it.
++        _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
++        _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
++        _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
++        step_count_sync()
++        ctx.synchronize()
++        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
++        tr.shadow_step = tr.completed_steps
++        tr.shadow_valid = True
++        timing_tick(ctx, ton, tk, "step.shadow_copy")
++        timing_bytes(ton, "step.shadow_copy_bytes", 3 * n * 4)
++    if (arm & STEP_GLUE_OPTSKIP) == 0:
++        opt_refuse_device_inputs(ctx, tr.buffers.param, tr.buffers.grad,
++            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.offsets, tr.optimizer)
++        timing_tick(ctx, ton, tk, "step.opt_refuse_scan")
++    if out_of_place:
++        tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
++        tr.shadow_step = tr.completed_steps
++    var use_live_status = False
++    # I10 sourcecbcc8dcd3303 (2026-10-06) L40S scoped WIN: live/base0.960,
++    # 1.601/1.667ms for one resident byte-training step (34944parameters,
++    # B2,L32,d_model32,two blocks). Driver selects noshadow/OOP Adam without
++    # fault injection, admitting this distinct status path. One same-process
++    # warmup/score; accepted identity reused, no additional validation.
++    # Matching MI325X3.066/3.087ms gives live/base0.993 (near-neutral small gain).
++    # Both paired receipts share frozen source, per-vendor machine and case;
++    # full application qualification remains pending. This single synthetic
++    # step does not justify promotion: live status stays default OFF.
++    # Evidence: experiments/performance_ideas/measurements/20261006/index.json,
++    # I10 AMD/NVIDIA; retained per-arm binary hashes and raw capture paths.
++    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++                and is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]()
++                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()):
++        # This mechanism changes scheduling only on the existing admitted
++        # OOP Adam path. Fault builds keep the required post-fault scan;
++        # the path already refuses fault injection before it changes state.
++        use_live_status = out_of_place and not BYTE_LM_FAULT_INJECT
++    var live = List[DeviceBuffer[DType.int32]]()
++    if use_live_status:
++        live.append(ctx.enqueue_create_buffer[DType.int32](4))
++        _byte_live_status_launch(ctx,tr,live[0],next_step)
++    else:
++        byte_glue_update_launch(ctx, tr.buffers.param, tr.buffers.grad,
++            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.shadow_p,
++            tr.buffers.shadow_m, tr.buffers.shadow_v, tr.buffers.denom_out,
++            tr.buffers.q_out, n, tr.optimizer, next_step, out_of_place)
++    if out_of_place:
++        # The new state is in `shadow_*` and the pre-update state is still in
++        # `param`, `m_state`, `v_state`; swap the handles so every later
++        # reader sees what the shipped path leaves (brief section 4.3).
++        swap(tr.buffers.param, tr.buffers.shadow_p)
++        swap(tr.buffers.m_state, tr.buffers.shadow_m)
++        swap(tr.buffers.v_state, tr.buffers.shadow_v)
++        tr.shadow_valid = True
++    if use_live_status:
++        _byte_live_status_finish(ctx,live[0],n,next_step)
++        tr.live_status_steps += 1
++    timing_tick(ctx, ton, tk, "step.optimizer")
++    _ = live^
++    return use_live_status
++
++
+ def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
+                     steps_planned: Int, config: ByteConfig = ByteConfig()) raises -> Checkpoint:
+     """Encode the successful post-step state using the unchanged v1 codec.
+@@ -1780,8 +2361,9 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
+     """Forward-only mean next-byte loss. No backward or optimizer invocation.
+ 
+     Authoritative parameters/moments/flags/completed_steps are unchanged.
+-    The program's forward runs on the committed state (the training
+-    forward, recorded, with no backward)."""
++    Scratch, weight views and the temporary health guard may change. Root must
++    retain independent before/after state evidence when qualifying this promise.
++    """
+     _require_profile()
+     var config = trainer.config.copy()
+     byte_validate_tokens(token_ids, config)
+@@ -1794,10 +2376,11 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
+     byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps, config)
+     _byte_admit_tokens(ctx, trainer, token_ids)
+     trainer.healthy = False
+-    _byte_program_ready(ctx, trainer)
+-    var loss = byte_program_eval(trainer.program.value(), Int(token_ids.unsafe_ptr()))
+-    var losses: List[Float32] = [loss]
+-    _require_finite(losses, "loss")
++    var trace = IdentityTrace.disabled()
++    var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
++    step_count_sync()
++    ctx.synchronize()
++    _ = trace
+     trainer.healthy = True
+     return loss
+ 
+@@ -1805,11 +2388,13 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
+ def byte_eval_loss_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
+                             token_ids: List[Int32]) raises -> Float32:
+     """`byte_eval_loss` without the 3n download and host validation
+-    (DEVIATION 2514, design 2.3: the state was validated when last written
+-    and no write path exists between calls). The program's forward writes
+-    no parameter, moment or flag. A raise here leaves the state untouched;
+-    the trainer is re-scanned once to prove the context answers before it
+-    is marked healthy again."""
++    (DEVIATION 2514, design 2.3, same argument as the resident step: the
++    state was validated when last written and no write path exists between
++    calls). `_byte_forward_loss` has no write path to param/m/v (gate G1
++    exports before and after an evaluation to show it). The CE refusal
++    still scans the logits and the loss is still checked finite. A raise
++    here leaves the state untouched; the trainer is re-scanned once to
++    prove the context answers before it is marked healthy again."""
+     _require_profile()
+     var config = trainer.config.copy()
+     byte_validate_tokens(token_ids, config)
+@@ -1818,17 +2403,18 @@ def byte_eval_loss_resident(ctx: DeviceContext, mut trainer: ByteTrainer,
+         raise Error("byte LM: session lost; restore a retained export")
+     trainer.healthy = False
+     trainer.shadow_valid = False
++    var trace = IdentityTrace.disabled()
+     var loss = Float32(0)
+     var failed = False
+     var message = String("")
+     try:
+-        _byte_program_ready(ctx, trainer)
+-        loss = byte_program_eval(trainer.program.value(), Int(token_ids.unsafe_ptr()))
+-        var losses: List[Float32] = [loss]
+-        _require_finite(losses, "loss")
++        loss = _byte_forward_loss(ctx, trainer, token_ids, trace)
++        step_count_sync()
++        ctx.synchronize()
+     except error:
+         failed = True
+         message = String(error)
++    _ = trace
+     if failed:
+         _byte_recover(ctx, trainer, message)
+     trainer.healthy = True
+diff --git a/training/byte_lm_host_trainer_dispatch.mojo b/training/byte_lm_host_trainer_dispatch.mojo
+index f067e6088c..a993203480 100644
+--- a/training/byte_lm_host_trainer_dispatch.mojo
++++ b/training/byte_lm_host_trainer_dispatch.mojo
+@@ -30,12 +30,7 @@ def host_trainer_recover(mut owner: ByteHostSession, completed: Int):
+ 
+ 
+ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
+-                      opt: List[Float64], completed: Int, train: Bool, n_steps: Int = 1) raises -> Int:
+-    """Operation 1: `n_steps` training steps (a[0] the (n_steps, batch,
+-    length + 1) id stack, a[5] n_steps losses; lane x7: the binding's one
+-    call for `train_steps`) or one evaluation."""
+-    if n_steps < 1 or (n_steps > 1 and not train):
+-        raise Error("byte LM trainer: an evaluation takes one batch; a training call at least one")
++                      opt: List[Float64], completed: Int, train: Bool) raises -> Int:
+     if len(a) < 8:
+         raise Error("byte LM trainer: expected at least 8 addresses")
+     var full = a[7] != 0
+@@ -43,11 +38,11 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
+         raise Error("byte LM trainer: an evaluation returns no gradient")
+     if len(a) != (8 + cfg.n_tensors() if full else 8):
+         raise Error("byte LM trainer: expected one named gradient output per parameter tensor")
+-    if train and completed + n_steps > 999999:
++    if train and completed >= 999999:
+         raise Error("byte LM: completed step outside admitted bound")
+     if not train and a[6] != 0:
+         raise Error("byte LM trainer: an evaluation requires a null flags output")
+-    host_tokens(a[0], n_steps * cfg.batch * (cfg.length + 1), cfg.vocab_size)
++    host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+     if not owner.opened:
+         if a[2] == 0 and a[3] == 0 and a[4] == 0:
+             raise Error("byte LM: session is not open")
+@@ -55,11 +50,8 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
+     try:
+         var step = 0
+         if train:
+-            if n_steps > 1:
+-                step = owner.steps([a[0], a[5], a[6]], n_steps, completed)
+-            else:
+-                step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
+-            if step != completed + n_steps:
++            step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
++            if step != completed + 1:
+                 raise Error("byte LM: successful result has wrong completed step")
+             if full:
+                 _ = owner.export_gradients(a[7], cfg)
+@@ -155,10 +147,17 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
+         for i in range(4, count):  # driver-loop: over CPU attention-stage metadata (no device stash)
+             out[i] = 0
+         return count
+-    # TOMBSTONE: operation 12 (the multi-step entry) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]); code recoverable at the deletion commit's parent.
+-    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+     if op == BYTE_HOST_TRAINER_STEPS:
+-        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
++        if len(a) != 4 or len(p) != 2 or len(f) != 0 or p[1] < 0 or p[1] >= 1000000:
++            raise Error("byte LM native ABI: invalid multi-step descriptor")
++        try:
++            return owner[].steps([a[1], a[2], a[3]], p[0], p[1])
++        except error:
++            # `step` replaces the state only on success: the session stands
++            # at the last committed step, which recovery keeps.
++            var standing = owner[].completed
++            host_trainer_recover(owner[], standing)
++            raise error
+     if len(p) != 17 or len(f) != 8 or (p[9] != 0 and p[9] != 1):
+         raise Error("byte LM native ABI: invalid configuration descriptor")
+     var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
+@@ -189,10 +188,7 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
+     if op == 8:
+         return host_trainer_run(addresses, cfg, opt, p[11], p[10] == 1)
+     if op == 1:
+-        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+-        if p[14] < 0 or p[14] > 999999:
+-            raise Error("byte LM native ABI: invalid step count")
+-        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1, max(1, p[14]))
++        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1)
+     if op == 10:
+         if len(addresses) != 1 and len(addresses) != 1 + cfg.n_tensors():
+             raise Error("byte LM trainer: expected the flat gradient and optional named outputs")
+diff --git a/training/byte_lm_native_dispatch.mojo b/training/byte_lm_native_dispatch.mojo
+index cf71bff185..a045aa126d 100644
+--- a/training/byte_lm_native_dispatch.mojo
++++ b/training/byte_lm_native_dispatch.mojo
+@@ -8,7 +8,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
+ from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+ from training.byte_lm_binding_impl import ByteLMSession
+ from training.byte_lm_native_status import byte_lm_status
+-from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
++from training.byte_lm_session_ops import byte_owner_step, byte_owner_steps, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
+ from training.byte_lm_binding_impl import _validate_slot_table
+ from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
+ from training.byte_lm_config import ByteConfig
+@@ -62,10 +62,13 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
+         out[2] = Int(owner[].usable)
+         out[3] = Int(Bool(owner[].trainer))
+         return 4
+-    # TOMBSTONE: operation 12 (BYTE_LM_OPERATION_STEPS, byte_owner_steps) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]) and runs them as one Program.fit; code recoverable at the deletion commit's parent.
+-    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+     if op == BYTE_LM_OPERATION_STEPS:
+-        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
++        if len(a) != 4 or len(p) != 2 or len(f) != 0:
++            raise Error("byte LM native ABI: invalid multi-step descriptor")
++        if p[1] < 0 or p[1] >= 1000000:
++            raise Error("byte LM: completed step outside admitted bound")
++        var step_addresses: List[Int] = [a[1], a[2], a[3]]
++        return byte_owner_steps(owner[], step_addresses, p[0], p[1])
+     if len(p) != 17 or len(f) != 8:
+         raise Error("byte LM native ABI: invalid configuration descriptor")
+     if p[9] != 0 and p[9] != 1:
+@@ -120,10 +123,7 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
+             byte_scatter_named(admitted[8], named, shape)
+         return result
+     if op == 1:
+-        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+-        if p[14] < 0 or p[14] > 999999:
+-            raise Error("byte LM native ABI: invalid step count")
+-        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))
++        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1)
+     if op == 2 or op == 6:
+         var batch = p[14]
+         var length = p[15]
+diff --git a/training/byte_lm_session_ops.mojo b/training/byte_lm_session_ops.mojo
+index 5afffeceb4..507424718a 100644
+--- a/training/byte_lm_session_ops.mojo
++++ b/training/byte_lm_session_ops.mojo
+@@ -28,7 +28,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from training.checks.optimizer_contract import OptimizerConfig
+ from training.byte_lm_config import ByteConfig
+ from training.byte_lm import (
+-    ByteTrainer, byte_train_step_resident, byte_train_steps_resident, byte_eval_loss_resident, byte_rollback,
++    ByteTrainer, byte_train_step_resident, byte_eval_loss_resident, byte_rollback,
+     byte_validate_state, byte_validate_tokens,
+ )
+ from training.byte_lm_logits import (
+@@ -455,66 +455,24 @@ def byte_owner_recover(mut session: ByteLMSession, committed: Int):
+     byte_owner_mark(session, committed)
+ 
+ 
+-def byte_session_steps_run(mut session: ByteLMSession, stack: List[Int32], n_steps: Int,
+-                           loss_addr: Int, flags_addr: Int, completed: Int,
+-                           cfg: OptimizerConfig, cfg_shape: ByteConfig) raises -> Int:
+-    """`n_steps` device-owned steps on an open session as ONE Program.fit
+-    (lane x7), after their batches were read and admitted (`stack`: the
+-    batches one after the other) and the caller's scalars were admitted
+-    (`_admit_session_scalars`). Out: the n_steps losses at `loss_addr`
+-    and the flags at `flags_addr`. Returns completed + n_steps. A refused
+-    call is rolled back on the device by the trainer before it propagates
+-    (none of its steps is committed); a lost context marks the session
+-    unusable."""
+-    var owner = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
+-    var n_tensors = cfg_shape.n_tensors()
+-    var result_step = completed
+-    var out_flags = List[Bool]()
+-    var counts0 = step_counts_now()
+-    owner[].busy = True
+-    try:
+-        ref ctx = owner[].ctx.value()
+-        var result = byte_train_steps_resident(ctx, owner[].trainer.value(), Int(stack.unsafe_ptr()), n_steps,
+-                                               loss_addr)
+-        result_step = result.completed_steps
+-        out_flags = result.flags.copy()
+-        if result_step != completed + n_steps:
+-            raise Error("byte LM: successful result has wrong completed step")
+-        if len(out_flags) != n_tensors:
+-            raise Error("byte LM: wrong flags length")
+-        step_count_sync()
+-        ctx.synchronize()
+-        step_counts_report(counts0)
+-    except error:
+-        owner[].busy = False
+-        _mark_if_lost(owner[])
+-        raise error
+-    owner[].busy = False
+-    _write_flags(flags_addr, out_flags)
+-    return result_step
+-
+-
+ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
+-                    cfg: OptimizerConfig, cfg_shape: ByteConfig, train: Bool, n_steps: Int = 1) raises -> Int:
+-    """`n_steps` training steps (`train`) or one evaluation of the trainer:
+-    the whole of `train_step`, `train_steps` or `evaluate` on a resident
+-    session, in ONE native call (lane x7: the multi-step call is this one,
+-    one Program.fit over its batches).
+-
+-    addr = [in_ids_i32 (n_steps * batch * (length + 1): the step batches
+-    one after the other), in_flags_i32 (the committed flags), in_param,
+-    in_m, in_v (the host state, admitted and uploaded when the session is
+-    not open; all three 0 when it is), out_loss_f32 (n_steps), out_flags_i32
+-    (training; 0 for an evaluation), out_grad_f32 (n_total; 0 unless the
+-    call returns the last step's gradient), then, after a nonzero out_grad,
++                    cfg: OptimizerConfig, cfg_shape: ByteConfig, train: Bool) raises -> Int:
++    """One training step (`train`) or evaluation of the trainer, the whole
++    of `train_step` / `evaluate` on a resident session.
++
++    addr = [in_ids_i32 (batch * (length + 1)), in_flags_i32 (the committed
++    flags), in_param, in_m, in_v (the host state, admitted and uploaded when
++    the session is not open; all three 0 when it is), out_loss_f32,
++    out_flags_i32 (training; 0 for an evaluation), out_grad_f32 (n_total; 0
++    unless the step returns its gradient), then, after a nonzero out_grad,
+     one output per parameter tensor for the gradient by name].
+ 
+-    Every batch is admitted first, before any device work; then the session
+-    is opened from the host state when it is not open; then the steps or
+-    the evaluation run; then a returned gradient is exported and split by
++    The ids are admitted first, before any device work; then the session is
++    opened from the host state when it is not open; then the step or the
++    evaluation runs; then a returned gradient is exported and split by
+     name. Any failure after the session opened rolls the device back to
+-    `completed` (`byte_owner_recover`) before it propagates: a refused call
+-    commits none of its steps. Returns the completed step after the call.
++    `completed` (`byte_owner_recover`) before it propagates. Returns the
++    completed step after the call.
+     """
+     var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
+     var n = cfg_shape.n_total()
+@@ -522,27 +480,25 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
+     var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
+     if len(addr) < 8:
+         raise Error("byte LM trainer: expected at least 8 addresses")
+-    if n_steps < 1 or (n_steps > 1 and not train):
+-        raise Error("byte LM trainer: an evaluation takes one batch; a training call at least one")
+     var full = addr[7] != 0
+     if full and not train:
+         raise Error("byte LM trainer: an evaluation returns no gradient")
+     if len(addr) != (8 + n_tensors if full else 8):
+         raise Error("byte LM trainer: expected one named gradient output per parameter tensor")
+-    if train and completed + n_steps > 999999:
++    if train and completed >= 999999:
+         raise Error("byte LM: completed step outside admitted bound")
+     if not train and addr[6] != 0:
+         raise Error("byte LM trainer: an evaluation requires a null flags output")
+     var admit = addr[2] != 0 or addr[3] != 0 or addr[4] != 0
+     var slots: List[Int] = [addr[0], addr[1]]
+-    var cells: List[Int] = [n_steps * n_ids, n_tensors]
++    var cells: List[Int] = [n_ids, n_tensors]
+     if admit:
+         for i in range(2, 5):  # small-loop(state: three host state address slots)
+             slots.append(addr[i])
+             cells.append(n)
+     var n_inputs = len(slots)
+     slots.append(addr[5])
+-    cells.append(n_steps)
++    cells.append(1)
+     if train:
+         slots.append(addr[6])
+         cells.append(n_tensors)
+@@ -554,10 +510,9 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
+             named.append(addr[8 + j])
+         _named_cells(cfg_shape, slots, cells, named)
+     _validate_slot_table(slots, cells, n_inputs)
+-    var stack = _read_ids(addr[0], n_steps * n_ids)
+-    for k in range(n_steps):  # driver-loop: over the call's step batches (token admission)
+-        byte_validate_tokens(_read_ids(addr[0] + k * n_ids * 4, n_ids), cfg_shape)
++    var ids = _read_ids(addr[0], n_ids)
+     var flags = _read_flags(addr[1], n_tensors)
++    byte_validate_tokens(ids, cfg_shape)
+     if not s[].trainer:
+         if not admit:
+             raise Error("byte LM: session is not open")
+@@ -567,24 +522,74 @@ def byte_owner_step(mut session: ByteLMSession, addr: List[Int], completed: Int,
+     var step = completed
+     try:
+         if train:
+-            if s[].trainer.value().completed_steps != completed:
+-                raise Error("byte LM: resident completed-step mismatch")
+-            _admit_session_scalars(s[], completed, cfg, flags, cfg_shape)
+-            step = byte_session_steps_run(s[], stack, n_steps, addr[5], addr[6], completed, cfg, cfg_shape)
++            step = byte_session_step_run(s[], ids, flags, addr[5], addr[6], completed, cfg, cfg_shape)
+             if full:
+                 _ = byte_session_export_gradients(s[], addr[7], cfg_shape)
+                 byte_scatter_named(addr[7], named, cfg_shape)
+         else:
+-            step = byte_session_eval_run(s[], stack, flags, addr[5], completed, cfg, cfg_shape)
++            step = byte_session_eval_run(s[], ids, flags, addr[5], completed, cfg, cfg_shape)
+     except error:
+         byte_owner_recover(s[], completed)
+         raise error
+-    _ = stack^
+     return step
+ 
+ 
+-# TOMBSTONE: byte_owner_steps (the multi-step provider operation 12, a per-step loop over byte_session_step_run) deleted 2026-11-09 by lane x7-byte-lm-on-executor (byte_owner_step takes n_steps: one Program.fit); code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
++def byte_owner_steps(mut session: ByteLMSession, addr: List[Int], n_steps: Int,
++                     completed: Int) raises -> Int:
++    """`n_steps` training steps in one call on an OPEN session, from the
++    model shape, optimizer and momentum flags the session admitted when it
++    opened: no shape or optimizer words cross per step (plan section 2C,
++    rows N107 and N109).
++
++    addr = [in_ids_i32 (n_steps * batch * (length + 1): the step batches
++    one after the other, each row-major [batch, length + 1]),
++    out_loss_f32 (n_steps: one loss per step), out_flags_i32 (n_tensors:
++    the flags after the last committed step)]. Every batch is admitted
++    before any device work. The steps run in order through the same
++    per-step path as `byte_owner_step` (`byte_session_step_run`), so step k
++    here produces the bits of the k-th of k single steps; no fold order
++    changes. A failure in step k rolls the device back to `completed + k`
++    (`byte_owner_recover`) and propagates; the k earlier steps stay
++    committed with their losses and flags written, and the session's
++    status (operation 5) reports `completed + k`. Returns
++    `completed + n_steps`."""
++    var s = MutPointer(to=session).unsafe_origin_cast[MutAnyOrigin]()
++    if len(addr) != 3:
++        raise Error("byte LM trainer: the multi-step entry expects 3 addresses")
++    if n_steps < 1:
++        raise Error("byte LM trainer: the multi-step entry requires n_steps >= 1")
++    _require_open(s[])
++    var cfg_shape = s[].trainer.value().config.copy()
++    var cfg = s[].trainer.value().optimizer.copy()
++    if s[].trainer.value().completed_steps != completed:
++        raise Error("byte LM: resident completed-step mismatch")
++    if completed + n_steps > 999999:
++        raise Error("byte LM: completed step outside admitted bound")
++    var n_tensors = cfg_shape.n_tensors()
++    var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
++    var slots: List[Int] = [addr[0], addr[1], addr[2]]
++    var cells: List[Int] = [n_steps * n_ids, n_steps, n_tensors]
++    _validate_slot_table(slots, cells, 1)
++    # Admit every batch before the first device step (the per-step entry's
++    # order: ids first, then device work).
++    var batches = List[List[Int32]]()
++    for k in range(n_steps):  # driver-loop: over the training steps of one call
++        var ids = _read_ids(addr[0] + k * n_ids * 4, n_ids)
++        byte_validate_tokens(ids, cfg_shape)
++        batches.append(ids^)
++    var flags = s[].trainer.value().buffers.buf_initialized.copy()
++    # The flags output starts as the committed flags, so a failure in the
++    # first step leaves the committed answer there.
++    _write_flags(addr[2], flags)
++    var step = completed
++    for k in range(n_steps):  # driver-loop: over the training steps of one call
++        try:
++            step = byte_session_step_run(s[], batches[k], flags, addr[1] + k * 4, addr[2], step, cfg, cfg_shape)
++        except error:
++            byte_owner_recover(s[], completed + k)
++            raise error
++        flags = s[].trainer.value().buffers.buf_initialized.copy()
++    return step
+ 
+ 
+ def byte_owner_export_state(mut session: ByteLMSession, addr: List[Int], completed: Int,
+diff --git a/training/checks/lm_tape_backward_check.mojo b/training/checks/lm_tape_backward_check.mojo
+new file mode 100644
+index 0000000000..68941949fd
+--- /dev/null
++++ b/training/checks/lm_tape_backward_check.mojo
+@@ -0,0 +1,171 @@
++# SPDX-License-Identifier: Apache-2.0
++"""The byte LM's tape backward (autograd/rules_lm.mojo) against stored digests and the host oracle, word for word.
++
++For each config (2 layers, d_model 64, vocab 256, B 2, L 32; the v1 head and
++the chunked v2 head), runs one train step (forward, backward, certified
++optimizer update) on a fresh trainer and requires
++  1. the loss bits, every parameter gradient digest and the updated parameter
++     digest to equal the stored digests (lm_tape_backward_digests.tsv, recorded
++     when the tape equalled the old hand walk word for word on Metal, NVIDIA and
++     AMD), and
++  2. the loss, every gradient word and every updated parameter word to equal
++     the host oracle step (training/byte_lm_host_backward.mojo
++     byte_host_train_step, the host column's composition of the oracles).
++Prints one FNV-1a digest per tensor so columns can be compared across vendors.
++
++    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/lm_tape_backward_check.mojo
++
++Run from the repository root; MOJOLEARN_LM_TAPE_DIGESTS overrides the digest
++file's path.
++"""
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
++# (The hand-vs-tape arm of this check went with the hand walk; the stored digests are that arm's agreed answer.)
++from std.memory import bitcast
++from std.os import getenv
++from max.gpu.host import DeviceContext
++
++from training.byte_lm import ByteTrainer, byte_gradient_device, byte_names, byte_update_device
++from training.byte_lm_config import ByteConfig
++from training.byte_lm_host_backward import byte_host_train_step
++from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
++from training.checks.train_loop import download_f32
++
++comptime DIGESTS_PATH = "training/checks/lm_tape_backward_digests.tsv"
++
++
++def digest(values: List[Float32], lo: Int, hi: Int) -> UInt64:
++    var hash = UInt64(1469598103934665603)
++    for i in range(lo, hi):
++        hash = (hash ^ UInt64(bitcast[DType.uint32](values[i]))) * UInt64(1099511628211)
++    return hash
++
++
++def params(config: ByteConfig) raises -> List[Float32]:
++    # norm weights near 1, everything else small and deterministic
++    var out = List[Float32]()
++    var offsets = config.offsets()
++    for j in range(config.n_tensors()):
++        var norm = j > 0 and j < config.n_tensors() - 1 and ((j - 1) % 9 == 0 or (j - 1) % 9 == 5)
++        for i in range(offsets[j], offsets[j + 1]):
++            var x = Float32((i * 17 + j * 13) % 101 - 50) / Float32(5000.0)
++            out.append(x + Float32(1.0) if norm else x)
++    return out^
++
++
++def ids(config: ByteConfig) -> List[Int32]:
++    var out = List[Int32]()
++    for i in range(config.batch * (config.length + 1)):
++        out.append(Int32((i * 127 + 11) % config.vocab_size))
++    return out^
++
++
++def optimizer() -> OptimizerConfig:
++    return OptimizerConfig(OPT_ADAMW, Float32(1e-3), Float32(0.9),
++        Float32(0.999), Float32(1e-8), Float32(0.0), Float32(0.0),
++        Float32(0.0), False, Float32(0.0))
++
++
++def step(ctx: DeviceContext, config: ByteConfig) raises -> Tuple[Float32, List[Float32], List[Float32]]:
++    """One device step on a fresh trainer: (loss, gradient, updated parameters)."""
++    var p = params(config)
++    var z = List[Float32](length=len(p), fill=Float32(0.0))
++    var flags = List[Bool](length=config.n_tensors(), fill=False)
++    var tr = ByteTrainer(ctx, p, z, z.copy(), flags, 0, optimizer(), config)
++    # _byte_step_device's composition
++    var loss = byte_gradient_device(ctx, tr, ids(config))
++    byte_update_device(ctx, tr)
++    var grad = download_f32(ctx, tr.buffers.grad, config.n_total())
++    var after = download_f32(ctx, tr.buffers.param, config.n_total())
++    return (loss, grad^, after^)
++
++
++def load_digests() raises -> Dict[String, String]:
++    """`"<case>\\t<name>" -> "<words>\\t<digest>"` from the stored digest file."""
++    var path = String(getenv("MOJOLEARN_LM_TAPE_DIGESTS"))
++    if path.byte_length() == 0:
++        path = String(DIGESTS_PATH)
++    var text: String
++    with open(path, "r") as f:
++        text = f.read()
++    var out = Dict[String, String]()
++    for line_slice in text.split("\n"):
++        var line = String(line_slice)
++        if line.byte_length() == 0 or line.startswith("#") or line.startswith("case\t"):
++            continue
++        var parts = List[String]()
++        for tok in line.split("\t"):
++            parts.append(String(tok))
++        if len(parts) != 4:
++            raise Error("lm tape digests: malformed row '" + line + "'")
++        out[parts[0] + "\t" + parts[1]] = parts[2] + "\t" + parts[3]
++    return out^
++
++
++def check_stored(stored: Dict[String, String], tag: String, name: String, words: Int, got: String) raises -> Int:
++    var key = tag + "\t" + name
++    if key not in stored:
++        print("LM_TAPE", tag, name, words, "tape", got, "MISSING from the stored digests")
++        return 1
++    var want = String(stored[key])
++    var have = String(words) + "\t" + got
++    var ok = want == have
++    print("LM_TAPE", tag, name, words, "tape", got, "stored", want.replace("\t", " "), "SAME" if ok else "DIFFER")
++    return 0 if ok else 1
++
++
++def compare_oracle(tag: String, name: String, oracle: List[Float32], tape: List[Float32], lo: Int, hi: Int) -> Int:
++    var diff = 0
++    var first = -1
++    for i in range(lo, hi):
++        if bitcast[DType.uint32](oracle[i]) != bitcast[DType.uint32](tape[i]):
++            diff += 1
++            if first < 0:
++                first = i - lo
++    print("LM_ORACLE", tag, name, hi - lo, "host", digest(oracle, lo, hi), "tape", digest(tape, lo, hi),
++          "SAME" if diff == 0 else "DIFFER words=" + String(diff) + " first=" + String(first))
++    return 0 if diff == 0 else 1
++
++
++def run_case(ctx: DeviceContext, stored: Dict[String, String], tag: String, config: ByteConfig) raises -> Int:
++    var tape = step(ctx, config)
++    var bad = 0
++    var offsets = config.offsets()
++    var names = byte_names(config)
++    var n = config.n_total()
++    if len(tape[1]) != n or len(tape[2]) != n:
++        raise Error(tag + ": gradient or parameter length differs from n_total")
++    # 1. the stored digests
++    var lt = bitcast[DType.uint32](tape[0])
++    bad += check_stored(stored, tag, "loss", 1, String(lt))
++    for j in range(config.n_tensors()):  # over registry tensors
++        bad += check_stored(stored, tag, String("grad.") + names[j], offsets[j + 1] - offsets[j],
++                            String(digest(tape[1], offsets[j], offsets[j + 1])))
++    bad += check_stored(stored, tag, "params_after", n, String(digest(tape[2], 0, n)))
++    # 2. the host oracle step from the same parameters, zero moments, step 0
++    var p = params(config)
++    var m0 = List[Float32](length=n, fill=Float32(0.0))
++    var v0 = List[Float32](length=n, fill=Float32(0.0))
++    var host = byte_host_train_step(p^, m0^, v0^, ids(config), config, optimizer(), 0)
++    var lh = bitcast[DType.uint32](host.loss)
++    print("LM_ORACLE", tag, "loss host", lh, "tape", lt, "SAME" if lh == lt else "DIFFER")
++    if lh != lt:
++        bad += 1
++    if len(host.grad) != n or len(host.param) != n:
++        raise Error(tag + ": host oracle gradient or parameter length differs from n_total")
++    for j in range(config.n_tensors()):  # over registry tensors
++        bad += compare_oracle(tag, String("grad.") + names[j], host.grad, tape[1], offsets[j], offsets[j + 1])
++    bad += compare_oracle(tag, "params_after", host.param, tape[2], 0, n)
++    return bad
++
++
++def main() raises:
++    var ctx = DeviceContext()
++    var stored = load_digests()
++    var bad = 0
++    # batch, length, d_model, n_heads, n_kv, head_dim, intermediate, n_layers, vocab, chunked v2
++    bad += run_case(ctx, stored, "v1", ByteConfig(2, 32, 64, 8, 4, 8, 128, 2, 256, False))
++    bad += run_case(ctx, stored, "chunked_v2", ByteConfig(2, 32, 64, 8, 4, 8, 128, 2, 256, True))
++    if bad != 0:
++        raise Error("LM_TAPE_BACKWARD_FAIL " + String(bad) + " differing loss / gradient / parameter tensors")
++    print("LM_TAPE_BACKWARD_PASS every digest equals the stored digests and every word equals the host oracle")
+diff --git a/training/checks/lm_tape_backward_digests.tsv b/training/checks/lm_tape_backward_digests.tsv
+new file mode 100644
+index 0000000000..6ef6f5b93a
+--- /dev/null
++++ b/training/checks/lm_tape_backward_digests.tsv
+@@ -0,0 +1,47 @@
++# The byte LM tape step's digests at the lm_tape_backward_check.mojo fixture (FNV-1a over the float32 words; loss = its uint32 bits).
++# Recorded from that check's runs, identical on Metal (compile-21), NVIDIA L40S and AMD MI325X (p6-01), tape == hand 44/44.
++case	name	words	digest
++v1	loss	1	1085369304
++v1	grad.embed	16384	5562955793640804344
++v1	grad.block0.norm1_w	64	9228294160942768604
++v1	grad.block0.w_q	4096	18390830697100822773
++v1	grad.block0.w_k	2048	6738375208822723682
++v1	grad.block0.w_v	2048	14487281824226805911
++v1	grad.block0.w_o	4096	11984270506532927135
++v1	grad.block0.norm2_w	64	17114721180324616572
++v1	grad.block0.w_gate	8192	11320703199042344897
++v1	grad.block0.w_up	8192	10744022324599081824
++v1	grad.block0.w_down	8192	3862422880479534912
++v1	grad.block1.norm1_w	64	1418887144425849052
++v1	grad.block1.w_q	4096	12332705973724870196
++v1	grad.block1.w_k	2048	2413971849881842163
++v1	grad.block1.w_v	2048	18265026144984723842
++v1	grad.block1.w_o	4096	12856276107278813667
++v1	grad.block1.norm2_w	64	2065671595195817646
++v1	grad.block1.w_gate	8192	14330929568193981539
++v1	grad.block1.w_up	8192	8781788335516102861
++v1	grad.block1.w_down	8192	16713770624906951179
++v1	grad.lm_head	16384	1137575185129107150
++v1	params_after	106752	6614463532828634214
++chunked_v2	loss	1	1085369304
++chunked_v2	grad.embed	16384	7592973429969777424
++chunked_v2	grad.block0.norm1_w	64	14823588064804743287
++chunked_v2	grad.block0.w_q	4096	5777036684457786589
++chunked_v2	grad.block0.w_k	2048	3191906412843305409
++chunked_v2	grad.block0.w_v	2048	13551650675525117720
++chunked_v2	grad.block0.w_o	4096	13306982673262896309
++chunked_v2	grad.block0.norm2_w	64	546881208809160867
++chunked_v2	grad.block0.w_gate	8192	12645894137210866596
++chunked_v2	grad.block0.w_up	8192	5190084588979957617
++chunked_v2	grad.block0.w_down	8192	2168821413876372747
++chunked_v2	grad.block1.norm1_w	64	3819827859572180284
++chunked_v2	grad.block1.w_q	4096	6582989466904454465
++chunked_v2	grad.block1.w_k	2048	10296112135959303146
++chunked_v2	grad.block1.w_v	2048	9868243576934724766
++chunked_v2	grad.block1.w_o	4096	1699520745962491344
++chunked_v2	grad.block1.norm2_w	64	869441239759833022
++chunked_v2	grad.block1.w_gate	8192	10404267504253840552
++chunked_v2	grad.block1.w_up	8192	3026297535526578409
++chunked_v2	grad.block1.w_down	8192	1327159121035773747
++chunked_v2	grad.lm_head	16384	10693902425905378987
++chunked_v2	params_after	106752	8759336185958287388

@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default, rollback `-D MOJOLEARN_LU_FAST_MMA_OFF`),
+"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default),
 the blocked LU with delayed trailing updates on the Apple matrix unit (FAST
-on Apple only; needs LU_FAST_STEP1, so `-D MOJOLEARN_LU_FAST_STEP1_OFF`
-turns it off too).
+on Apple only; needs LU_FAST_STEP1).
 
 Main's blocked route (`launch_lu`, panel width LU_PANEL_NB = 32) updates the
 WHOLE trailing square after every 32-column panel with `lu_trail_rb_kernel`
@@ -51,16 +50,13 @@ different f32 rounding of the same sums); pivots can differ only on a
 near-tie. IDENTICAL and every other vendor compile main's route unchanged.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for
 from checks.numerics import ftz, identical_mul_add
-from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
 from x_decomp.cells import F32Ptr, I32Ptr, lu_swap_elem
 from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -68,23 +64,18 @@ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 #: DEFAULT in FAST + Apple (lane/apple-fast-w2-linalg). M3, one run per arm:
 #: lu-factor synthetic 971.7 -> 849.3 ms, lu-solve synthetic 971.9 -> 852.1 ms;
 #: w2-lumma-quality PASS (factor/solve residual gates, info equal, finite).
-#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE. `-D MOJOLEARN_LU_FAST_MMA_OFF`
-#: restores main's per-32-column scalar trailing updates.
-comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
+#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE.
+# TOMBSTONE: MOJOLEARN_LU_FAST_MMA_OFF (old path: main's per-32-column scalar trailing updates beside the FAST Apple default; EXP:1401 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 53eb025cc0.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE
 #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
-comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
+# TOMBSTONE: MOJOLEARN_LU_FAST_MMA_NB (width knob: other outer-block widths, no A/B recorded; 256 kept) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at d5d5200eb1.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_FAST_MMA_NB.patch; record in docs/TOMBSTONES.md.
+comptime LFM_NB = 256
 comptime LFM_PANEL = 32
-# Shared direct fragments retain the caller strided subtract epilogue. No
-# additional buffer or pass; eligibility is kernel limits, never board size.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
-# M3 F02/default measured 2026-10-06: n=257,319,513 factor A_over_B
-# 0.624,0.936,0.958; solve 0.708,0.812,1.005. One excluded warmup +
-# one scored public call, current compiled A/B artifacts reused. Candidate
-# mostly regresses; retain OFF. Identity/compile not retested. Caller
-# 67d0efb29, both builds 05b4dd48a; raw timings/hashes/metrics retained at
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default.
-# Single-sample component evidence; not a universal full-workload decision.
-comptime LFM_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"]()
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
+# at f59d913b0b (F02: the trailing subtract through scoped_kernel's SUBTRACT epilogue, with its shared_sub_record counter).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 
 comptime _M64 = SIMD[DType.float32, 64]
 comptime LFM_SGM = 2
@@ -141,7 +132,7 @@ def lfm_gemm_sub_kernel(
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var acc = Array[_M64, NF](fill=_M64(0))
     # A_eff[i, p] = a[(r0 + i) * n + p0 + p]: outer = row (stride n), step stride 1.
     # B_eff[p, j] = a[(p0 + p) * n + c0 + j]: outer = column (stride 1), step stride n.
     var windows = (k + KB - 1) // KB
@@ -156,8 +147,8 @@ def lfm_gemm_sub_kernel(
             ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + k1, min(KB, k - k1), tid, False)
             rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + k1, min(KB, k - k1), tid, True)
         comptime for p8 in range(KB // 8):
-            var af = InlineArray[_M64, FM](fill=_M64(0))
-            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            var af = Array[_M64, FM](fill=_M64(0))
+            var bf = Array[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
                 af[fm] = _afn_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):
@@ -202,14 +193,6 @@ def lfm_swaps_trsm_kernel(
 
 def _lfm_gemm_sub(ctx: DeviceContext, a: F32Ptr, n: Int, r0: Int, c0: Int, p0: Int, m: Int, nc: Int, k: Int) raises:
     if m <= 0 or nc <= 0 or k <= 0:
-        return
-    comptime if LFM_SHARED_SUB:
-        shared_sub_record(False)
-        ctx.enqueue_function[scoped_kernel[64, 64, False, True]](
-            a.unsafe_offset(r0 * n + c0), a.unsafe_offset(r0 * n + p0), a.unsafe_offset(p0 * n + c0),
-            Int32(m), Int32(nc), Int32(k), Int32(n), Int32(1), Int32(n), Int32(1), Int32(k), Int32(n),
-            grid_dim=(((m + 63) // 64) * ((nc + 63) // 64), 1, 1), block_dim=(128, 1, 1),
-        )
         return
     var tiles = ((m + LFM_BM - 1) // LFM_BM) * ((nc + LFM_BN - 1) // LFM_BN)
     ctx.enqueue_function[lfm_gemm_sub_kernel](

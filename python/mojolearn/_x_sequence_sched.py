@@ -26,20 +26,9 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
 from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
-from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_native, _lr_status
+from ._training_impl import _LrTable
 
 
-#: `LrSpec` kind codes (sequence/lr_table.mojo)
-_KIND_ONECYCLE = 10
-_KIND_POW = 20
-
-
-def _q(x, name):
-    """`x` as a float, refused by name when it is not finite."""
-    x = float(x)
-    if x != x or x in (float("inf"), float("-inf")):
-        raise ValueError(f"{name} must be finite")
-    return x
 
 
 # ------------------------------------------------------------------ schedules
@@ -49,13 +38,8 @@ def _q(x, name):
 # table with its float32 decision and exact route, the gamma^e enclosures of
 # StepLR / ExponentialLR), the same values as before.
 class _Sched(_LrTable):
-    #: the sequence schedules' refusal messages (bindings/lr_table_helpers.mojo)
+    #: the sequence schedules' refusal messages (bindings/lr_table_helpers_door.mojo)
     _LR_STYLE = 1
-
-    def _lr_refuse(self, st, t):
-        if st == _LR_ONE_BASED:
-            raise ValueError("schedule step t is ONE-BASED")
-        _lr_status(st)
 
     def lrs(self, n):
         """lr_at(1) .. lr_at(n) as a list, from one native call."""
@@ -216,16 +200,6 @@ class OneCycleLR(_Sched):
     def _lr_spec(self):
         return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)
 
-    def _lr_refuse(self, st, t):
-        if st == _LR_BEYOND:
-            raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
-        _Sched._lr_refuse(self, st, t)
-
-    def _lr_at_slow(self, t):
-        """The exact route of one step (sequence/lr_exact.mojo
-        `onecycle_exact`), one native call: the table's reference."""
-        ip, fp = self._lr_spec()
-        return _lr_native("lr_schedule_at")([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp, t, self._LR_STYLE)  # glue: the kind word with the exact-only flag
 
 # Import-time registration of built-in schedule identities, never a runtime hook.
 from . import _training_impl as _schedule_training

@@ -234,6 +234,7 @@ from resample.checks.index_map import (
     permutation_key_lt,
 )
 from svm.impl.svm_parameter import KernelParams
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # ===========================================================================
@@ -246,7 +247,7 @@ def _mode_name() -> String:
     return numeric_mode_name()
 
 
-comptime _IDENTICAL_MODE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _IDENTICAL_MODE
 
 
 def _identical() -> Bool:
@@ -373,9 +374,8 @@ def _up(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, buf, host)
     ctx.synchronize()
-    _ = host^
     return buf^
 
 
@@ -383,12 +383,11 @@ def _down(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    download_host_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     return out^
 
 

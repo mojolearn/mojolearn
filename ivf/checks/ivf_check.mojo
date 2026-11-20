@@ -178,9 +178,10 @@ from neighbors.estimator import knn_search
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from neighbors.impl.matrix.detail.select_radix import SELECT_BLOCK
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_TILED
+from checks.native_tests.kit import download_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 comptime N_ROWS = 320
 """Larger than SELECT_BLOCK so k257 reaches selection after candidate-count
@@ -1352,12 +1353,11 @@ def _device_assignment(
     predict(ctx, dx, dn, dc, dl, dmin, kp, n_rows, dim)
     ctx.synchronize()
     var host = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=dl)
+    download_host_into[DType.uint32](ctx, dl, host)
     ctx.synchronize()
     var out = List[UInt32]()
     for r in range(n_rows):
         out.append(host.unsafe_ptr().unsafe_load(r))
-    _ = host^
     _ = dx^
     _ = dc^
     _ = dl^

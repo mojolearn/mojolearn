@@ -263,11 +263,19 @@ class MergedPlan(unittest.TestCase):
         self.assertEqual(doc["jobs_per_set"], rgb.MERGED_JOBS_PER_SET)
         self.assertGreaterEqual(doc["jobs_per_set"], doc["shards"] + 1)
         rows = doc["matrix"]["include"]
-        self.assertEqual(len(rows), 14)
+        # sm_89: the two host groups (recorded 6.0 + 6.5 GiB) share one runner (pack_units); gfx942 has no
+        # recorded peaks, so every unit keeps its own job
+        self.assertEqual(len(rows), 13)
+        packed = [r for r in rows if r["n"] > 1]
+        self.assertEqual([(r["arch"], r["only"].split()) for r in packed], [("sm_89", sorted(HOST))])
+        self.assertEqual(packed[0]["peak_gib"], sum(rgb.UNIT_PEAK_GIB[("host", e.split(":")[2], "cuda")] for e in HOST))
+        self.assertEqual(packed[0]["swap_gib"], rgb.swap_gib(packed[0]["peak_gib"]))
         for arch, vendor in (("sm_89", "cuda"), ("gfx942", "hip")):
-            mine = [r for r in rows if r["arch"] == arch]
-            self.assertTrue(all(r["n"] == 1 for r in mine))
-            self.assertEqual(sorted(r["only"] for r in mine), sorted(FAST + HOST + IDENTICAL))
+            mine = [r for r in rows if r["arch"] == arch and r["n"] == 1]
+            self.assertEqual(sorted(e for r in rows if r["arch"] == arch for e in r["only"].split()),
+                             sorted(FAST + HOST + IDENTICAL))
+            self.assertEqual(len({r["shard"] for r in rows if r["arch"] == arch}),
+                             len([r for r in rows if r["arch"] == arch]))
             for r in mine:
                 tier, _script, group = r["only"].split(":")
                 self.assertEqual(r["peak_gib"], rgb.UNIT_PEAK_GIB[(tier, group, vendor)])
@@ -275,15 +283,39 @@ class MergedPlan(unittest.TestCase):
                 self.assertEqual(r["unit"], tier + "-merged_build-" + group)
                 # every group fits a free runner without heavy swap
                 self.assertLessEqual(r["swap_gib"], 2)
-        self.assertEqual(doc["assemble_swap_gib"], max(r["swap_gib"] for r in rows))
+        # the assemble job compiles one unit at a time: its swap is the largest single unit's, packed units included
+        self.assertEqual(doc["assemble_swap_gib"],
+                         max(rgb.swap_gib(rgb.unit_peak_gib(e, r["vendor"], True)) for r in rows
+                             for e in r["only"].split()))
         # the heaviest group goes onto shard 0
         self.assertTrue(rows[0]["only"].startswith("identical:merged_build.sh:"))
+
+    def test_pack_units_fits_the_recorded_peaks_and_keeps_indices(self):
+        def r(i, group, tier="host"):
+            entry = f"{tier}:merged_build.sh:{group}"
+            return dict(arch="sm_89", vendor="cuda", set_index=0, shard=i, only=entry, n=1, weight=1,
+                        peak_gib=rgb.unit_peak_gib(entry, "cuda", True), swap_gib=0, unit=rgb.unit_slug(entry))
+        rows = [r(0, "_mojolearn_native", "identical"), r(1, "_mojolearn_native_series_host"),
+                r(2, "_mojolearn_native_x_host"), r(3, "_mojolearn_native_catalog_host"),
+                r(4, "_mojolearn_native_unrecorded_host")]
+        out = rgb.pack_units(rows)
+        groups = [sorted(x["only"].split()) for x in out]
+        # 12.5 GiB fits nothing beside it; x_host 9.0 takes the largest that fits (catalog 6.0: 15.0); series 5.5
+        # is left alone; a unit with no record keeps its own job
+        self.assertIn(["identical:merged_build.sh:_mojolearn_native"], groups)
+        self.assertIn(sorted(["host:merged_build.sh:_mojolearn_native_x_host",
+                              "host:merged_build.sh:_mojolearn_native_catalog_host"]), groups)
+        self.assertIn(["host:merged_build.sh:_mojolearn_native_series_host"], groups)
+        self.assertIn(["host:merged_build.sh:_mojolearn_native_unrecorded_host"], groups)
+        self.assertEqual(sorted(x["shard"] for x in out), [0, 1, 2, 4])
+        self.assertEqual(rgb.pack_units(rows, per_job=1), rows)
 
     def test_the_release_modes_choose_the_tiers(self):
         rc, doc = self.run_plan(merged_source(), "--modes", "identical")
         self.assertEqual(rc, 0)
         self.assertEqual(doc["modes"], ["identical"])
-        self.assertEqual(sorted(r["only"] for r in doc["matrix"]["include"] if r["arch"] == "sm_89"),
+        # a packed row names its units space-separated (pack_units)
+        self.assertEqual(sorted(e for r in doc["matrix"]["include"] if r["arch"] == "sm_89" for e in r["only"].split()),
                          sorted(HOST + IDENTICAL))
 
     def test_a_compile_no_free_runner_can_hold_is_refused_with_one_sentence(self):
@@ -306,9 +338,13 @@ class MergedPlan(unittest.TestCase):
                           (("host", "hip"), 16.0)):
             self.assertGreaterEqual(rgb.WHOLE_DIR_PEAK_GIB[key], peak)
             self.assertLessEqual(rgb.swap_gib(rgb.WHOLE_DIR_PEAK_GIB[key]), rgb.SWAP_MAX_GIB)
-            # an unlisted group plans at its directory's whole-set peak
+            # an unlisted group (a stem a split added) plans at the largest measured row of its tier and
+            # vendor; a tier with no measured row at its directory's whole-set peak
+            measured = [v for (t, _g, vv), v in rgb.UNIT_PEAK_GIB.items() if (t, vv) == key]
             self.assertEqual(rgb.unit_peak_gib(key[0] + ":merged_build.sh:_mojolearn_unlisted", key[1], True),
-                             rgb.WHOLE_DIR_PEAK_GIB[key])
+                             max(measured) if measured else rgb.WHOLE_DIR_PEAK_GIB[key])
+        self.assertEqual(rgb.unit_peak_gib("adapters:merged_build.sh:_mojolearn_unlisted", "cuda", True),
+                         max(rgb.WHOLE_DIR_PEAK_GIB.values()))
 
     def test_every_real_group_has_a_planning_peak_that_fits_a_runner(self):
         # the per-group rows name exactly this checkout's groups, and none needs more than light swap
@@ -316,10 +352,13 @@ class MergedPlan(unittest.TestCase):
         import merged_bindings as mb
         for tier in ("identical", "fast", "host"):
             stems = {stem for stem, _cls, _m in mb.plan(tier, "linux", True)}
-            self.assertEqual({g for t, g, _v in rgb.UNIT_PEAK_GIB if t == tier}, stems)
+            # every row names a group of this checkout (no stale rows); a group a split added has no row
+            # until its first build and plans at its tier's largest measured row (unit_peak_gib)
+            self.assertLessEqual({g for t, g, _v in rgb.UNIT_PEAK_GIB if t == tier}, stems)
             for vendor in ("cuda", "hip"):
                 for stem in stems:
-                    self.assertLessEqual(rgb.swap_gib(rgb.UNIT_PEAK_GIB[(tier, stem, vendor)]), 2)
+                    peak = rgb.unit_peak_gib(tier + ":merged_build.sh:" + stem, vendor, True)
+                    self.assertLessEqual(rgb.swap_gib(peak), 2)
         # The 216d04c7c host run peaked at 13.24 GiB. Its rounded planning
         # peak plus headroom now reserves the same two GiB of light swap.
         self.assertGreaterEqual(rgb.UNIT_PEAK_GIB[("host", "_mojolearn_native_host", "cuda")], 13.24)
@@ -356,14 +395,31 @@ class MergedPlan(unittest.TestCase):
         # every member of the real manifest is in exactly one group
         self.assertEqual(sum(ps["members"].values()), sum(1 for e, _ in ps["per_binding"]))
         doc = rgb.build_plan(ROOT, ["sm_89", "sm_80", "gfx942"], 6, ("identical",))
-        self.assertEqual(len(doc["matrix"]["include"]), 3 * len(want))
-        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + 3 * (len(want) + 1))
+        rows = doc["matrix"]["include"]
+        for arch in ("sm_89", "sm_80", "gfx942"):
+            # every unit is in exactly one job; the NVIDIA sets pack units side by side (pack_units)
+            self.assertEqual(sorted(e for r in rows if r["arch"] == arch for e in r["only"].split()), want)
+        self.assertLess(len([r for r in rows if r["arch"] == "sm_89"]), len(want))
+        self.assertEqual(len([r for r in rows if r["arch"] == "gfx942"]), len(want))
+        self.assertEqual(doc["estimate"]["total"]["jobs"], 1 + len(rows) + 3)
 
     def test_layout_reads_the_commit_without_a_checkout(self):
         head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         self.assertEqual(rgb.commit_merged(head), rgb.source_merged(ROOT))
         self.assertFalse(rgb.commit_merged("0" * 40))   # no such tree: per-binding
         self.assertFalse(rgb.commit_merged(head, {"MOJOLEARN_MERGED_BINDINGS": "0"}))
+
+
+class RedBuildsReportEarly(unittest.TestCase):
+    """lane fx-build-tools, 2026-11-18: the first failed shard cancels the others and no assemble follows it."""
+
+    def test_shards_fail_fast_and_assemble_needs_their_success(self):
+        text = (ROOT / ".github/workflows" / rgb.WORKFLOW).read_text()
+        shard = text[text.index("\n  shard:\n"):text.index("\n  assemble:\n")]
+        assemble = text[text.index("\n  assemble:\n"):text.index("\n  host:\n")]
+        self.assertIn("fail-fast: true", shard)
+        self.assertNotIn("fail-fast: false", shard)
+        self.assertIn("(needs.shard.result == 'success' || needs.shard.result == 'skipped')", assemble)
 
 
 class JobMap(unittest.TestCase):
@@ -538,7 +594,7 @@ class Run(unittest.TestCase):
         os.environ.update(self.env)
         self.gh, rgb.GH = rgb.GH, str(gh)
         self.tooling = rgb.tooling_ref
-        rgb.tooling_ref = lambda ref: ("lane/x", "h" * 40)
+        rgb.tooling_ref = lambda ref, recorded="": ("lane/x", "h" * 40)
         os.environ["STUB_HEAD"] = "h" * 40
 
     def tearDown(self):
@@ -583,7 +639,7 @@ class Run(unittest.TestCase):
                 (dest / "retained.tar.gz").write_bytes(b"retained archive fixture")
                 return ""
             return original(*args)
-        def download(run, name, out, failed):
+        def download(run, name, out, failed, conclusion=None):
             self.assertEqual(name, "plan")
             out.mkdir(parents=True)
             (out / "plan.json").write_text(json.dumps(dict(compile_only=True, compile_groups="device",
@@ -672,7 +728,9 @@ class StatusReadRecovery(unittest.TestCase):
         self.assertTrue(all(call.args[:3] == ("run", "view", "123") for call in gh.call_args_list))
 
     def test_persistent_or_nontransient_errors_still_fail(self):
-        for message, count in (("error connecting to api.github.com", 3), ("HTTP 403 forbidden", 1)):
+        # a network error is retried until the next wait would pass the run's deadline (1 min here); a 404 is not
+        # retried. HTTP 403/429 quota refusals are retried (tools/test_release_candidate_controller.py).
+        for message, count in (("error connecting to api.github.com", 2), ("HTTP 404 not found", 1)):
             with self.subTest(message=message), \
                     unittest.mock.patch.object(rgb, "gh", side_effect=RuntimeError(message)) as gh, \
                     unittest.mock.patch.object(rgb.time, "sleep"), \
@@ -680,6 +738,94 @@ class StatusReadRecovery(unittest.TestCase):
                 rgb.wait_run(123, 1, 60)
             self.assertEqual(gh.call_count, count)
 
+
+
+class HostGroupsOneOwner(unittest.TestCase):
+    """Finding 3 of the 0.8.66 release state: every leg compiled the
+    vendor-neutral host groups under ONE key and the last promote won. Only
+    HOST_GROUPS_OWNER's host-group archives reach the binding cache."""
+
+    HOST = dict(schema=bincache.SCHEMA, script="bindings/merged_build.sh",
+                args=["host", "--group", "_mojolearn_native_series_host"], build_env={},
+                merged=[dict(dir="host", stem="_mojolearn_native_series_host")])
+    GPU = dict(schema=bincache.SCHEMA, script="bindings/merged_build.sh",
+               args=["gpu", "--group", "_mojolearn_native_identical"], build_env={},
+               merged=[dict(dir="identical", stem="_mojolearn_native_identical")])
+
+    def leg_out(self, td):
+        gha = Path(td) / "GHA" / "bincache"
+        (gha / "keys").mkdir(parents=True)
+        rows, hot = [], []
+        for slot, fields in (("000", self.HOST), ("001", self.GPU)):
+            key = bincache.key_of(fields)
+            (gha / "keys" / (key + ".json")).write_text(json.dumps(fields))
+            rows.append("leg1\t%s\t%s/none/img/%s.tar.gz\t%s\tsabotage=0" % (slot, bincache.OBJECT_PREFIX, key, key))
+            hot.append("%s\t%s" % (key, hashlib.sha256(b"x").hexdigest()))
+        (gha / "uploads.tsv").write_text("\n".join(rows) + "\n")
+        (gha / "hot_sha256.tsv").write_text("\n".join(hot) + "\n")
+        return bincache.key_of(self.HOST), bincache.key_of(self.GPU)
+
+    def promote(self, arch):
+        staged = {}
+
+        def fake_get(url, dest, tries=4):
+            Path(dest).write_bytes(b"x")
+            return 200
+
+        def fake_run(cmd, **kw):
+            staged["rows"] = (Path(cmd[-1]) / "uploads.tsv").read_text()
+            return subprocess.CompletedProcess(cmd, 0, "  promoted x\nBINCACHE PROMOTED 1 refused_or_failed=0 "
+                                               "already_same=0 conflicts=0\n", "")
+
+        with tempfile.TemporaryDirectory() as td:
+            host_key, gpu_key = self.leg_out(td)
+            with unittest.mock.patch.object(bincache, "http_get", fake_get), \
+                    unittest.mock.patch.object(bincache, "presign", lambda *a, **k: "https://example.invalid/x"), \
+                    unittest.mock.patch.object(rgb.subprocess, "run", fake_run):
+                line = rgb.promote(td, {"R2_BUCKET": "b"}, arch)
+            log = (Path(td) / "GHA" / "promote.log").read_text()
+        return line, staged["rows"], log, host_key, gpu_key
+
+    def test_the_owner_is_sm_89(self):
+        self.assertEqual(rgb.HOST_GROUPS_OWNER, "sm_89")
+        self.assertEqual(rgb.host_groups_role("sm_89"), "owner")
+        for arch in ("sm_80", "gfx942", "sm_90a"):
+            self.assertEqual(rgb.host_groups_role(arch), "fetch")
+
+    def test_a_non_owner_leg_promotes_its_device_archives_but_not_the_host_groups(self):
+        line, rows, log, host_key, gpu_key = self.promote("gfx942")
+        self.assertIn(gpu_key, rows)
+        self.assertNotIn(host_key, rows)
+        self.assertIn("1 host-group uploads left to the sm_89 leg", line)
+        self.assertIn("not promoted (host groups belong to the sm_89 leg)", log)
+
+    def test_the_owner_leg_promotes_both(self):
+        line, rows, log, host_key, gpu_key = self.promote("sm_89")
+        self.assertIn(gpu_key, rows)
+        self.assertIn(host_key, rows)
+        self.assertNotIn("left to the", line)
+        self.assertTrue(line.startswith("BINCACHE PROMOTED 1"), line)
+
+    def test_a_conflict_line_reaches_the_leg_summary(self):
+        def fake_run(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, 4, "  BINCACHE CONFLICT key=abc at d holds different bytes\n"
+                                               "BINCACHE PROMOTED 0 refused_or_failed=0 already_same=0 conflicts=1\n", "")
+        with tempfile.TemporaryDirectory() as td:
+            self.leg_out(td)
+            with unittest.mock.patch.object(bincache, "http_get", lambda u, d, tries=4: Path(d).write_bytes(b"x") and 200), \
+                    unittest.mock.patch.object(bincache, "presign", lambda *a, **k: "https://example.invalid/x"), \
+                    unittest.mock.patch.object(rgb.subprocess, "run", fake_run):
+                line = rgb.promote(td, {"R2_BUCKET": "b"}, "sm_89")
+        self.assertTrue(line.startswith("BINCACHE PROMOTED 0"), line)
+        self.assertIn("BINCACHE CONFLICT key=abc", line)
+
+    def test_the_plan_names_each_sets_role(self):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            doc = rgb.build_plan(merged_source(), ["sm_80"], 6)
+        self.assertEqual(doc["host_groups"], dict(owner="sm_89", roles={"sm_80": "fetch"}))
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds, modes=None: None):
+            doc = rgb.build_plan(merged_source(), ["sm_89", "host"], 6)
+        self.assertEqual(doc["host_groups"]["roles"], {"sm_89": "owner"})
 
 if __name__ == "__main__":
     unittest.main()

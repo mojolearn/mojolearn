@@ -1,0 +1,108 @@
+{
+ "columns": {
+  "amd": {
+   "chunks": [
+    {
+     "device": 0,
+     "lanes": 86,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w0/amd-mi325x.lanes-6b7ab37f.identical.json",
+       "name": "amd-mi325x.lanes-6b7ab37f"
+      }
+     ],
+     "worker": 0
+    },
+    {
+     "device": 0,
+     "lanes": 86,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w1/amd-mi325x.lanes-0a406dd7.identical.json",
+       "name": "amd-mi325x.lanes-0a406dd7"
+      }
+     ],
+     "worker": 1
+    },
+    {
+     "device": 0,
+     "lanes": 86,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w2/amd-mi325x.lanes-d40188e1.identical.json",
+       "name": "amd-mi325x.lanes-d40188e1"
+      }
+     ],
+     "worker": 2
+    },
+    {
+     "device": 0,
+     "lanes": 85,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w3/amd-mi325x.lanes-a6a6507c.identical.json",
+       "name": "amd-mi325x.lanes-a6a6507c"
+      }
+     ],
+     "worker": 3
+    },
+    {
+     "device": 0,
+     "lanes": 85,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w4/amd-mi325x.lanes-908648d2.identical.json",
+       "name": "amd-mi325x.lanes-908648d2"
+      }
+     ],
+     "worker": 4
+    },
+    {
+     "device": 0,
+     "lanes": 85,
+     "rc": 0,
+     "records": [
+      {
+       "admissible": true,
+       "harness_rc": 0,
+       "json": "/root/results-release-gate/0.8.66/amd/9feb99a3181f7fe126eb-release-light-v1/rel-0.8.66-gate-amd-20261108T173417Z/out/identity/amd-mi325x/w5/amd-mi325x.lanes-2b53c4e8.identical.json",
+       "name": "amd-mi325x.lanes-2b53c4e8"
+      }
+     ],
+     "worker": 5
+    }
+   ],
+   "label": "amd-mi325x",
+   "owed": 513,
+   "rc": 0,
+   "reused": 0
+  }
+ },
+ "failures": [],
+ "gpu_free_gib": 191.40839385986328,
+ "gpus": 1,
+ "nproc": 20,
+ "ok": true,
+ "schema": "mojolearn.identity-wheels.v1",
+ "shard": "0/1",
+ "wheels": [
+  "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c",
+  "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl 1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+ ],
+ "workers_per_device": 6
+}

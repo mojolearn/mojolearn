@@ -17,9 +17,13 @@ import zipfile
 
 import release_evidence as evidence
 import release_requirements as requirements
+import release_requirements_storage as storage
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "mojolearn.release-ledger-admission.v1"
+# The v2 ledger is a small index plus immutable objects (release_requirements_storage); the bundle carries
+# every object the index reaches, by content address, beside ``ledger.json``.
+LEDGER_OBJECT = re.compile(r"ledger\.objects/([0-9a-f]{2})/([0-9a-f]{64})\.json")
 PREFIX = "release-readiness/v1/"
 POLICY_FILES = ("tools/release_publish_admission.py", "tools/release_evidence.py", "tools/release_requirements.py",
                 "tools/release_requirements.json", "tools/release_requirement_receipts.py",
@@ -74,6 +78,41 @@ def source_revision(root, source):
     return actual
 
 
+#: tools/release.py --identity-on-wheels: the data-only repack receipts (tools/wheel_table_repack.py) of the wheels
+#: whose admitted reference table was repacked after qualification, colon separated
+REPACK_ENV = "MOJOLEARN_REPACK_RECEIPTS"
+
+
+def repacked_from(path, found, qualified_hashes, receipts=None):
+    """(receipt sha256, input sha256) when PATH (sha256 FOUND) is a data-only repack of a qualified wheel: a receipt
+    names FOUND as its output and a qualified hash as its input, the input file is still those bytes, and every
+    member but the reference table and RECORD (the native members included) is byte-identical in the two wheels.
+    None when no receipt names it. A receipt that names it but does not hold is refused, never ignored."""
+    import wheel_table_repack as W
+    paths = receipts if receipts is not None else [p for p in os.environ.get(REPACK_ENV, "").split(":") if p]
+    for receipt_path in paths:
+        doc = json.loads(Path(receipt_path).read_text())
+        if doc.get("schema") != W.SCHEMA or (doc.get("output") or {}).get("sha256") != found:
+            continue
+        if Path(doc["output"]["file"]).name != Path(path).name:
+            raise ValueError("repack receipt names another file: " + Path(receipt_path).name)
+        source = Path((doc.get("input") or {}).get("path") or "/nonexistent")
+        if doc["input"].get("sha256") not in qualified_hashes:
+            raise ValueError("repack receipt input is not a qualified artifact: " + Path(path).name)
+        if not source.is_file() or sha256(source) != doc["input"]["sha256"]:
+            raise ValueError("repack receipt input bytes are gone or changed: " + str(source))
+        before, after = W.members(source), W.members(path)
+        record = [n for n in before if n.endswith(".dist-info/RECORD")]
+        moved = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n)
+                       and n != W.TABLE_MEMBER and n not in record)
+        if moved or set(before) != set(after):
+            raise ValueError("repacked wheel changed more than the reference table: " + ", ".join(moved[:5]))
+        if any(after.get(n) != d for n, d in (doc.get("native_members") or {}).items()):
+            raise ValueError("repacked wheel native members differ from the receipt")
+        return sha256(receipt_path), doc["input"]["sha256"]
+    return None
+
+
 def wheel_identity(path, version, source, configuration):
     """Bind published bytes to qualified artifacts; audit file-free metadata separately."""
     path = Path(path)
@@ -116,13 +155,22 @@ def wheel_identity(path, version, source, configuration):
     qualified = [mapping for key, mapping in configuration.items()
                  if key.startswith("artifacts:") and isinstance(mapping, dict)
                  and (mapping.get(name) == found or mapping.get(path.name) == found)]
+    repack = None
     if not is_meta and not qualified:
+        hashes = {v for key, mapping in configuration.items() if key.startswith("artifacts:") and isinstance(mapping, dict)
+                  for v in mapping.values()}
+        repack = repacked_from(path, found, hashes)
+    if not is_meta and not qualified and not repack:
         raise ValueError("published wheel hash is absent from the qualified artifact inputs: " + path.name)
     if is_meta and not all(isinstance(configuration.get("artifacts:" + vendor), dict)
                            for vendor in ("nvidia", "amd")):
         raise ValueError("metadata wheel requires the qualified NVIDIA and AMD artifact sets")
-    return dict(file=path.name, distribution=name, version=version, sha256=found, source_revision=source,
-                scope="file-free pinned dependencies" if is_meta else "qualified artifact bytes")
+    out = dict(file=path.name, distribution=name, version=version, sha256=found, source_revision=source,
+               scope="file-free pinned dependencies" if is_meta else "qualified artifact bytes")
+    if repack:
+        out.update(scope="qualified artifact bytes with the admitted reference table repacked",
+                   repack_receipt_sha256=repack[0], qualified_sha256=repack[1])
+    return out
 
 
 def verify_ledger(ledger_path, root, source, *, log_dir=None):
@@ -162,12 +210,29 @@ def _tar_bytes(archive, name, data):
     archive.addfile(info, io.BytesIO(data))
 
 
-def create_bundle(ledger_path, root, source, wheels, output):
+def create_bundle(ledger_path, root, source, wheels, output, *, dependency_cache=None):
+    """Admit the ledger at the freeze and pack it with its evidence.
+
+    The frozen dependency analyses it needs run first, all at once (release_requirement_dependencies.prefetch:
+    every core, or the box named by MOJOLEARN_ADMISSION_WORKER), into ``dependency_cache``: a directory keyed
+    by analyzer, revision and request, so the packages of one release share every analysis (default: this
+    bundle's own ``dependency-logs``). The admission itself then runs once, sequentially, from that cache."""
+    import release_requirement_dependencies as dependencies
     ledger_path, root, output = Path(ledger_path), Path(root), Path(output)
+    logs = Path(dependency_cache) if dependency_cache else output.parent / "dependency-logs"
     before = ledger_path.read_bytes()
-    reads = {}
-    with evidence.evidence_context(collect=reads):
-        doc, manifest = verify_ledger(ledger_path, root, source, log_dir=output.parent / "dependency-logs")
+    collected = {}
+
+    def admit():
+        # Each pass collects its own reads; only the pass that returns (all analyses cached) counts.
+        reads = {}
+        with evidence.evidence_context(collect=reads):
+            result = verify_ledger(ledger_path, root, source, log_dir=logs)
+        collected["reads"] = reads
+        return result
+
+    doc, manifest = dependencies.prefetch(admit)
+    reads = collected["reads"]
     if ledger_path.read_bytes() != before:
         raise ValueError("canonical ledger changed during admission; retry metadata admission only")
     artifacts = [wheel_identity(path, doc["version"], source, manifest["configuration"]) for path in wheels]
@@ -175,13 +240,21 @@ def create_bundle(ledger_path, root, source, wheels, output):
         raise ValueError("admission needs distinct actual wheel files")
     if not reads:
         raise ValueError("canonical pre gate retained no actual producer evidence")
+    ledger_objects = storage.object_files(ledger_path)
     admission = dict(schema=SCHEMA, source_revision=source, version=doc["version"], artifacts=artifacts,
                      ledger_sha256=hashlib.sha256(before).hexdigest(), evidence=reads, policy=policy(root),
                      manifest_requirements_digest=digest(manifest["requirements"]))
+    if ledger_objects:
+        admission["ledger_objects"] = [sha for sha, _ in ledger_objects]
     output.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(output, "w:gz") as archive:
         _tar_bytes(archive, "admission.json", json.dumps(admission, sort_keys=True).encode())
         _tar_bytes(archive, "ledger.json", before)
+        for sha, path in ledger_objects:
+            data = path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != sha:
+                raise ValueError("ledger object changed during admission: " + sha)
+            _tar_bytes(archive, f"ledger.objects/{sha[:2]}/{sha}.json", data)
         stored = set()
         for original, expected in sorted(reads.items()):
             if sha256(original) != expected:
@@ -206,7 +279,8 @@ def open_bundle(path, expected_sha):
             seen = set()
             for member in archive:
                 name = member.name
-                valid = name in ("admission.json", "ledger.json") or re.fullmatch(r"objects/[0-9a-f]{64}", name)
+                valid = (name in ("admission.json", "ledger.json") or re.fullmatch(r"objects/[0-9a-f]{64}", name)
+                         or LEDGER_OBJECT.fullmatch(name))
                 if not valid or name in seen or not member.isfile() or member.issym() or member.islnk():
                     raise ValueError("unsafe, duplicate or unsupported admission archive member")
                 seen.add(name)
@@ -229,7 +303,16 @@ def open_bundle(path, expected_sha):
                 raise ValueError("invalid original evidence path/object identity")
             if not (root / "objects" / value).is_file() or sha256(root / "objects" / value) != value:
                 raise ValueError("admission evidence object is missing or corrupt")
-        if seen != {"admission.json", "ledger.json", *("objects/" + value for value in mapping.values())}:
+        ledger_objects = admission.get("ledger_objects", [])
+        if not isinstance(ledger_objects, list) or any(not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)
+                                                       for sha in ledger_objects):
+            raise ValueError("invalid ledger object identities")
+        for sha in ledger_objects:
+            stored = root / "ledger.objects" / sha[:2] / (sha + ".json")
+            if not stored.is_file() or sha256(stored) != sha:
+                raise ValueError("admission ledger object is missing or corrupt")
+        if seen != {"admission.json", "ledger.json", *("objects/" + value for value in mapping.values()),
+                    *(f"ledger.objects/{sha[:2]}/{sha}.json" for sha in ledger_objects)}:
             raise ValueError("unreferenced admission archive members")
         yield root, admission
 
@@ -318,12 +401,15 @@ def main(argv=None):
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--bundle-sha256")
     parser.add_argument("--upload", action="store_true")
+    parser.add_argument("--dependency-cache", type=Path,
+                        help="shared frozen dependency analysis cache (default: <output dir>/dependency-logs)")
     args = parser.parse_args(argv)
     wheels = args.wheel + (sorted(args.wheel_dir.glob("*.whl")) if args.wheel_dir else [])
     if args.command == "bundle":
         if args.ledger is None or args.output is None:
             parser.error("bundle requires --ledger and --output")
-        result = create_bundle(args.ledger, args.root, args.source, wheels, args.output)
+        result = create_bundle(args.ledger, args.root, args.source, wheels, args.output,
+                               dependency_cache=args.dependency_cache)
         if args.upload:
             upload_bundle(args.output, result["key"])
         print(json.dumps(result, sort_keys=True))

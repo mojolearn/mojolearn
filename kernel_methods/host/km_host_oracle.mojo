@@ -209,23 +209,22 @@ def kmh_validate_kernel(
         )
 
 
-#: fam2-kernel-gp (2026-10-04): the host column of
-#: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_RBF_CELL` (a candidate
-#: arm, OFF by default), the same defines and the same feature bound.
-comptime KMH_RBF_CELL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KM_RBF_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e42489093.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL_D16.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KM_RBF_CELL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0ade8f67d9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_RBF_CELL.patch; record in docs/TOMBSTONES.md.
 
 #: fix-kg1-kernel (audit B11): the host column of
 #: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
-#: default), the same defines and the same feature bound.
-comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime KMH_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+#: default), the same gate and the same feature bound.
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 16e283c44f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_KM_DOT_CELL_D16 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at b1d14459cf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KM_DOT_CELL_D16.patch; record in docs/TOMBSTONES.md.
+comptime KMH_DOT_CELL_MAX_D = 64
 
 
 def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
@@ -324,36 +323,6 @@ def kmh_kernel_matrix(
     if kernel == KMH_KERNEL_COSINE:
         # cosine_rows_kernel on both operands, then the pinned GEMM
         return gemm_oracle(_kmh_cosine_rows(a, m, k), _kmh_cosine_rows(b, n, k), OP_NT, m, n, k)
-    comptime if KMH_RBF_CELL:
-        if kernel == KMH_KERNEL_RBF and k <= KMH_RBF_CELL_MAX_D:
-            # `km_rbf_cell_kernel`, cell by cell, the same lines
-            var outc = List[Float32](length=m * n, fill=Float32(0.0))
-            var opc = host_list_ptr(outc)
-            var neg_gamma = -Float32(gamma)
-            var tasks_c = host_predict_task_count(m)
-            if m * n * k < 32768:
-                tasks_c = 1
-            var chunk_c = host_predict_chunk(m, tasks_c)
-
-            def _cell_rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm neg_gamma, imm chunk_c, imm opc}:
-                var lo = task * chunk_c
-                var hi = min(lo + chunk_c, m)
-                for i in range(lo, hi):
-                    for j in range(n):
-                        var acc = Float32(0.0)
-                        for c in range(k):
-                            var d = ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))
-                            acc = ftz(identical_mul_add(d, d, acc))
-                        opc.unsafe_store(
-                            i * n + j,
-                            ftz(identical_exp(ftz(identical_mul(neg_gamma, acc)))),
-                        )
-
-            if tasks_c == 1:
-                _cell_rows(0)
-            else:
-                host_parallelize(_cell_rows, tasks_c)
-            return outc^
     comptime if KMH_DOT_CELL:
         if (
             kernel == KMH_KERNEL_POLYNOMIAL or kernel == KMH_KERNEL_SIGMOID
@@ -569,17 +538,17 @@ struct KmhNystroem(Movable):
 
 
 #: fam-kernel-gp (2026-10-04): the host column of
-#: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same two defines.
-comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same gate.
+# TOMBSTONE: MOJOLEARN_IDN_NYS_RR_EIGH_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 0e594fa5e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_RR_EIGH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: fam-kernel-gp (2026-10-04): the host column of
-#: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same two defines and
+#: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same gate and
 #: the same feature bound (`kernel_methods/rbf_fused.mojo::RBF_FUSED_MAX_D`).
-comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_RBF_FUSED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at f2f200fc1b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_RBF_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime KMH_RBF_FUSED_MAX_D = 64
 
 

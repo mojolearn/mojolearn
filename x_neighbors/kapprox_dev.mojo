@@ -2,16 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-kapprox: the KernelPCA resident switch (GPU binding).
 
-FAST + Apple default for the validated RBF top-k route; rollback with
-`-D MOJOLEARN_KPCA_RESIDENT_OFF`. Any other vendor or numeric mode
+FAST + Apple default for the validated RBF top-k route. Any other vendor or numeric mode
 answers 0, and the Python layer asks the binding's constant before taking
 that path, so IDENTICAL runs main's code. The chi2 samplers' device ops
 (`-D MOJOLEARN_KAPPROX_DEVICE`) and SparseRandomProjection's one-launch draw
 (`-D MOJOLEARN_SPARSE_RP_DEVICE`) were DROPPED-quality; their code is on
 lane/apple-fast-kapprox @ 10d5a7970.
 """
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
@@ -22,13 +20,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: PASS: eigenvalue relative differences < 9.88e-7, subspace angles < 3.79e-6.
 #: First read 0.1 ms in both arms; only internal kernel storage is resident.
 #: Python limits the default to the measured RBF / auto top-k route.
-#: FAST + Apple only; MOJOLEARN_KPCA_RESIDENT_OFF restores the old route.
-#: See docs/apple-fast/EXPERIMENTS.md (KPCA_RESIDENT).
-comptime XN_KPCA_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KPCA_RESIDENT_OFF"]()
-)
+#: FAST + Apple only. See docs/apple-fast/EXPERIMENTS.md (KPCA_RESIDENT).
+# TOMBSTONE: MOJOLEARN_KPCA_RESIDENT_OFF (old path; the resident route is the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 8c0f2452a2.
+# Restore: git apply experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XN_KPCA_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 def kpca_resident() -> Int:

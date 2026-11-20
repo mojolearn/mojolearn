@@ -7,11 +7,11 @@ uses one threshold drawn from the node-local feature range, following sklearn's
 RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
-from ensemble.tree_identical_ideas import T14, T14_EXACT
-from ensemble.tree_moments import moment_pair, moment_finish, et_leaf_moment_host
+# TOMBSTONE: MOJOLEARN_TREES_T14_EXACT (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c3a84428df.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T14_EXACT.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
 from checks.soft_f64 import sf64_from_f32
 from std.sys.compile import is_defined
-from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_AMD_GPU, TARGET_HAS_APPLE_GPU, TARGET_HAS_NVIDIA_GPU
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -61,24 +61,24 @@ def _search_rows_per_thread() -> Int:
     feature); `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` is the arm that must move and
     was seen to (15 of 15 ExtraTrees cells) at 64, and seen NOT to at 1.
     """
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_256"]():
-        return 256
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_128"]():
-        return 128
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_64"]():
-        return 64
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_32"]():
-        return 32
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_16"]():
-        return 16
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_8"]():
-        return 8
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_4"]():
-        return 4
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
-        return 2
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
-        return 1
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_256 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6641db4b18.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_256.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_128 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f0fbe787cf.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_128.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_64 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 7a3591d159.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_64.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_32 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at b1119892ab.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_32.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_16 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c9254754a9.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_16.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_8 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 58dd5e245b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_8.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_4 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6bf147a71e.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_4.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_2 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 1e4bce29cc.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_2.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_ET_SEARCH_RPT_1 (DELETE-ARM, opt-in force knob, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at d1cfc6ff2b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_SEARCH_RPT_1.patch; record in docs/TOMBSTONES.md.
     # APPLE: 16, FAST since 2026-09-25 and IDENTICAL since 2026-09-28. Apple
     # M4, 1M rows, 100 trees, alternating processes, same model hash in every
     # arm (2026-09-25, FAST): taxi 1 -> 16 0.766, 16 -> 8 0.978, 16 -> 32
@@ -89,7 +89,7 @@ def _search_rows_per_thread() -> Int:
     # range fold, draws keyed by (seed, tree, node, feature)), which is why
     # NVIDIA and AMD run IDENTICAL at 64. `_1=1` restores one row per thread
     # on Apple for an A/B.
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return 16
     # NVIDIA AND AMD: 64, both modes (lane trees speed pass, 2026-09-28).
     # 1M rows, 100 trees depth 12, IDENTICAL, one process per arm, the same
@@ -101,7 +101,7 @@ def _search_rows_per_thread() -> Int:
     # the root search is 7.8k blocks per feature at one row per thread; the
     # per-block reduce + publish, not the rows, was the cost the 4090
     # measurement above could not see at 16 features.
-    comptime if has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator():
+    comptime if TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU:
         return 64
     return 1
 
@@ -269,9 +269,9 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
 # ============================================================================
 
 from std.atomic import Atomic, Ordering
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, inf
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import min as block_min
@@ -288,11 +288,10 @@ from checks.numerics import (
 @always_inline
 def _search_barrier():
     """The explicit barrier after each block reduction of the range and score
-    passes. `-D MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER=1` is a MEASUREMENT ARM that
-    drops it, to price the barrier per block on one vendor; it is never set by
-    a build script and never a default (Metal needs the barrier)."""
-    comptime if not is_defined["MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER"]():
-        barrier()
+    passes (Metal needs it)."""
+    # TOMBSTONE: MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER (DELETE-ARM, measurement arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at c989276b4b.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER.patch; record in docs/TOMBSTONES.md.
+    barrier()
 
 
 comptime SINGLE_WRITER_PLAIN_PUBLISH = is_defined[
@@ -317,11 +316,14 @@ arm that must move: the plain path adds one to every count it publishes."""
 
 comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
 
+# TOMBSTONE: MOJOLEARN_ET_RELAXED_PUBLISH (DELETE-ARM, opt-in for other columns, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 05759052d0.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_RELAXED_PUBLISH.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_ET_SEQCST_PUBLISH (DELETE-ARM, seq_cst opt-out beside the measured relaxed default, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 7da85bac98.
+# Restore: git apply experiments/removed/MOJOLEARN_ET_SEQCST_PUBLISH.patch; record in docs/TOMBSTONES.md.
 comptime RELAXED_PUBLISH = (
-    has_nvidia_gpu_accelerator()
-    or has_amd_gpu_accelerator()
-    or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
-) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
+    TARGET_HAS_NVIDIA_GPU
+    or TARGET_HAS_AMD_GPU
+)
 """DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
 atomics are RELAXED on an NVIDIA build, and on an AMD build since
 2026-09-28 (lane trees, speed pass): Hot Aisle MI300X, 1M rows, 100 trees
@@ -362,9 +364,7 @@ relaxed. `-D MOJOLEARN_ET_SAB_RELAXED_PUBLISH=1` is the arm that must move:
 the relaxed `_publish_add` adds one to every count it publishes.
 
 NVIDIA AND AMD by default (AMD's Mojo default is seq_cst too).
-`-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts any other column in;
-`-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for the
-A/B. Apple's default is already relaxed."""
+Apple's default is already relaxed."""
 
 comptime SAB_RELAXED_PUBLISH = is_defined["MOJOLEARN_ET_SAB_RELAXED_PUBLISH"]()
 
@@ -414,8 +414,8 @@ def _publish_min_max(
         Atomic.max(maxkey.unsafe_offset(idx), kmax)
 
 
-comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
-"""The repo-wide numeric mode (`checks/numerics.mojo`)."""
+from checks.numerics import GLOBAL_NUMERIC_MODE as BUILD_MODE
+# The repo-wide numeric mode (`checks/numerics.mojo`).
 
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     WorkloadInfo,
@@ -615,31 +615,22 @@ def node_feature_range_kernel[
     if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
         kmin = range_key(Float32(0.0))
         kmax = range_key(Float32(0.0))
-    comptime if is_defined["MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH"]():
-        # MEASUREMENT ARM, WRONG ON PURPOSE: plain read-modify-writes where the
-        # shipped publish is four atomics, to price the atomics per block. It
-        # loses updates under contention and must never reach a shipped build.
-        if kmin < out_minkey[unsafe_offset=slot]:
-            out_minkey[unsafe_offset=slot] = kmin
-        if kmax > out_maxkey[unsafe_offset=slot]:
-            out_maxkey[unsafe_offset=slot] = kmax
-        out_n_missing[unsafe_offset=slot] += blk_missing
-        out_n_merges[unsafe_offset=slot] += Int32(1)
-    else:
-        # DEVIATION 3021: one block means one writer for this cell.
-        var single = num_blocks == 1
-        comptime if SINGLE_WRITER_PLAIN_PUBLISH:
-            if single:
-                if kmin < out_minkey[unsafe_offset=slot]:
-                    out_minkey[unsafe_offset=slot] = kmin
-                if kmax > out_maxkey[unsafe_offset=slot]:
-                    out_maxkey[unsafe_offset=slot] = kmax
-            else:
-                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+    # TOMBSTONE: MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH (DELETE-ARM, wrong-on-purpose measurement arm, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 03694cfdb9.
+    # Restore: git apply experiments/removed/MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH.patch; record in docs/TOMBSTONES.md.
+    # DEVIATION 3021: one block means one writer for this cell.
+    var single = num_blocks == 1
+    comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+        if single:
+            if kmin < out_minkey[unsafe_offset=slot]:
+                out_minkey[unsafe_offset=slot] = kmin
+            if kmax > out_maxkey[unsafe_offset=slot]:
+                out_maxkey[unsafe_offset=slot] = kmax
         else:
             _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
-        _publish_add(out_n_missing, slot, blk_missing, single)
-        _publish_add(out_n_merges, slot, Int32(1), single)
+    else:
+        _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+    _publish_add(out_n_missing, slot, blk_missing, single)
+    _publish_add(out_n_merges, slot, Int32(1), single)
 
 
 @always_inline
@@ -718,6 +709,9 @@ def et_snap_code(
     return Int(lo) - 1
 
 
+# TOMBSTONE: MOJOLEARN_AFT_F09 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at fdd11ef4d7.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_F09.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFT F09: gather two row addresses before scanning the feature tile, then
 # reuse each feature descriptor for both independent rows. Preserve FT (and
 # especially the accepted 8-code tile); this does NOT retry the slower
@@ -726,7 +720,7 @@ def et_snap_code(
 # experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
 comptime AFT_ET_RANGE_ROW_TILE = 2 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFT_F09"]()
 ) else 1
 
@@ -1732,7 +1726,7 @@ def shared_class_counts_for[MAX_ACC: Int, CLASSIFICATION: Bool]() -> Bool:
     if not CLASSIFICATION or is_defined["MOJOLEARN_ET_NO_SHARED_CLASS_COUNTS"]():
         return False
     return is_defined["MOJOLEARN_ET_SHARED_CLASS_COUNTS"]() or (
-        has_apple_gpu_accelerator() and MAX_ACC >= 8
+        TARGET_HAS_APPLE_GPU and MAX_ACC >= 8
     )
 
 
@@ -2991,10 +2985,6 @@ def leaf_values_host(
             continue
         var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
         var count = Int(instance_ranges[unsafe_offset=node_id].count)
-        comptime if T14 and not T14_EXACT:
-            if not is_classification:
-                out[node_id*num_outputs] = et_leaf_moment_host(row_ids,labels_q,begin,count,inv_scale)
-                continue
         var acc = List[Int32](length=num_outputs, fill=Int32(0))
         var seen = 0
         for i in range(begin, begin + count):
@@ -3073,40 +3063,6 @@ def _leaf_body[
     var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
     var count = Int(instance_ranges[unsafe_offset=node_id].count)
 
-    comptime if T14 and not T14_EXACT and not CLASSIFICATION and not WEIGHTED:
-        # V1: exact row-ID keyed partials, shared portable binary64 pair tree.
-        # Same logical 128 slots as host regardless of TPB/warp width.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var partials = stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-        var moments = stack_allocation[128,UInt64,address_space=AddressSpace.SHARED]()
-        var lane = tid
-        while lane < 128:
-            partials[unsafe_offset=lane] = Int32(0)
-            lane += TPB
-        barrier()
-        var pos = begin+tid
-        while pos < begin+count:
-            var row = Int(row_ids[unsafe_offset=pos])
-            _ = Atomic.fetch_add(partials.unsafe_offset(row%128),labels_q[unsafe_offset=row])
-            pos += TPB
-        barrier()
-        lane = tid
-        while lane < 128:
-            moments[unsafe_offset=lane] = sf64_from_f32(ftz(Float32(partials[unsafe_offset=lane])*inv_scale))
-            lane += TPB
-        barrier()
-        var distance = 64
-        while distance > 0:
-            lane = tid
-            while lane < distance:
-                moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
-                lane += TPB
-            barrier()
-            distance //= 2
-        if tid == 0:
-            out_leaves[unsafe_offset=node_id*k] = moment_finish(moments[unsafe_offset=0],Float32(count))
-            out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED
-        return
 
     var priv = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
     for c in range(MAX_OUT):

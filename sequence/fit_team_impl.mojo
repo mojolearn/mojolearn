@@ -18,8 +18,7 @@ then the fit raises. NVIDIA and AMD run the fit in one launch with no check
 (witness_end compiles to nothing there).
 `-D MOJOLEARN_WITNESS_SABOTAGE=1` makes every Apple GARCH / Prophet fit
 raise (the test that the check is wired)."""
-from experiments.classical_identical_ideas.stats_controls import C58_TEAM_MIB
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec
@@ -47,12 +46,13 @@ from sequence.ops_impl import (
 
 #: device words a group of series may hold in shared and private rows; a
 #: larger batch runs as several groups over the same buffers
-# C58 independent classical-series grouping: cap live optimizer/rollback state
-# at C58_TEAM_MIB (int sweep 64|256, absent = incumbent 256 MiB). Grouping follows actual state bytes,
-# including Apple rollback copies, rather than series count or dataset shape.
-# Same kernels, same series-local trial order; all groups complete before return.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime SEQ_TEAM_BYTES = C58_TEAM_MIB << 20
+# Live optimizer/rollback state is capped at 256 MiB. Grouping follows actual
+# state bytes, including Apple rollback copies, rather than series count or
+# dataset shape. Same kernels, same series-local trial order; all groups
+# complete before return.
+# TOMBSTONE: MOJOLEARN_C58_TEAM_MIB (unmeasured int sweep; the incumbent 256 MiB stays) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at ac48a6d766.
+# Restore: git apply experiments/removed/MOJOLEARN_C58_TEAM_MIB.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
+comptime SEQ_TEAM_BYTES = 256 << 20
 #: Apple: the lead-thread steps one launch may take over all of its series
 #: (a bound on the command buffer's length, not on any value)
 comptime SEQ_TEAM_APPLE_STEPS = 1 << 27
@@ -61,7 +61,7 @@ comptime SEQ_TEAM_APPLE_STEPS = 1 << 27
 def _team_budget(g: Int, steps_per_iter: Int) -> Int:
     """Optimizer iterations per launch: unbounded (< 0) on NVIDIA and AMD; on
     Apple at most SEQ_TEAM_APPLE_STEPS lead steps over the group."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(1, SEQ_TEAM_APPLE_STEPS // max(1, g * steps_per_iter))
     else:
         return -1
@@ -109,7 +109,7 @@ def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: 
 def _saves(mut ex: DeviceExec, nsh: Int, npv: Int, sh: FP, pv: FP) raises -> Tuple[FP, FP]:
     """The slice-start copies of a group's shared and private rows: Apple
     only (elsewhere the fit is one launch and the rows stand in)."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return (ex._alloc(nsh, False), ex._alloc(npv, False))
     else:
         return (sh, pv)
@@ -125,7 +125,7 @@ def _zero(mut ex: DeviceExec, p: FP, n: Int) raises:
 def _group(B: Int, shared: Int, priv: Int) -> Int:
     """Series per group: as many as SEQ_TEAM_BYTES holds, at least one."""
     var per = (shared + SEQ_TEAM_TPB * priv) * 4
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         per *= 2  # the slice-start copies (_saves)
     return min(B, max(1, SEQ_TEAM_BYTES // per))
 

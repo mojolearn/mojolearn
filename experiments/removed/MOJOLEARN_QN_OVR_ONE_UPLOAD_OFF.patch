@@ -1,0 +1,85 @@
+diff --git a/glm/estimator.mojo b/glm/estimator.mojo
+index dfeca4fa3b..21cf9bfe8e 100644
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -543,10 +543,12 @@ def qn_fit_host(
+ #: whole design and a host-built 0/1 target). `qn_fit_ovr_host` uploads X and
+ #: the int32 class codes once, builds every 0/1 target on the device and
+ #: hands each class's solver a device copy of X. Same fits, same bits.
+-# TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 021105e119.
+-# Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+-# QN_OVR_ONE_UPLOAD stays as the constant its importers read.
+-comptime QN_OVR_ONE_UPLOAD = True
++#: `-D MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF` (or the master
++#: `MOJOLEARN_IDN_ALL_OFF`) leaves the entry unregistered and the Python
++#: layer keeps one `qn_fit` call per class.
++comptime QN_OVR_ONE_UPLOAD = not (
++    is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def _ovr_target_kernel(
+diff --git a/glm/linear_svc_native_device.mojo b/glm/linear_svc_native_device.mojo
+index ec1098ff21..6b3527ceeb 100644
+--- a/glm/linear_svc_native_device.mojo
++++ b/glm/linear_svc_native_device.mojo
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Same one-upload GPU OVR solver."""
++"""Same one-upload GPU OVR solver and existing opt-out per-class route."""
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from core.hostptr import f32_ptr, i32_ptr
+ from core.neural_context import process_ctx
+@@ -7,10 +7,10 @@ from core.shared_slot import SharedSlot
+ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+ from core.linear_svc_native_api import (
+     LINEAR_SVC_NATIVE_ABI, LinearSvcFitRequest, LinearSvcFitState,
+-    LinearSvcOvrKernels, linear_svc_dispatch,
++    LinearSvcOvrKernels, linear_svc_fit_separate, linear_svc_dispatch,
+ )
+ from glm.logistic_native_device import QnDeviceKernels
+-from glm.estimator import qn_fit_ovr_host
++from glm.estimator import QN_OVR_ONE_UPLOAD, qn_fit_ovr_host
+ 
+ comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
+ 
+@@ -18,22 +18,23 @@ comptime _CONTEXT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MO
+ struct LinearSvcDeviceKernels(LinearSvcOvrKernels):
+     @staticmethod
+     def fit(r: LinearSvcFitRequest, mut state: LinearSvcFitState) raises:
+-        # TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear (the per-class route here); code recoverable at 021105e119.
+-        # Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+-        var xp = f32_ptr(r.source)
+-        var cp = i32_ptr(r.codes)
+-        var wp = f32_ptr(Int(state.coefficients.unsafe_ptr()))
+-        var ip = f32_ptr(Int(state.info.unsafe_ptr()))
+-        var sw = f32_ptr(r.weights) if r.weights != 0 else wp
+-        var o = r.options.copy()
+-        var ctx = process_ctx[_CONTEXT]()
+-        qn_fit_ovr_host(ctx, xp, cp, wp, ip, o.rows, o.features, o.first_class,
+-            o.fits, o.l1, o.l2, o.gradient_tolerance, o.change_tolerance,
+-            o.max_iter, o.linesearch_max_iter, o.memory, o.intercept,
+-            o.normalized, o.loss, r.weights != 0, sw)
+-        ctx.synchronize()
+-        for fit in range(o.fits):  # metadata: original Float32 OVR iteration result per fit
+-            state.max_iterations = max(state.max_iterations, Int(state.info[3 * fit + 2]))
++        comptime if QN_OVR_ONE_UPLOAD:
++            var xp = f32_ptr(r.source)
++            var cp = i32_ptr(r.codes)
++            var wp = f32_ptr(Int(state.coefficients.unsafe_ptr()))
++            var ip = f32_ptr(Int(state.info.unsafe_ptr()))
++            var sw = f32_ptr(r.weights) if r.weights != 0 else wp
++            var o = r.options.copy()
++            var ctx = process_ctx[_CONTEXT]()
++            qn_fit_ovr_host(ctx, xp, cp, wp, ip, o.rows, o.features, o.first_class,
++                o.fits, o.l1, o.l2, o.gradient_tolerance, o.change_tolerance,
++                o.max_iter, o.linesearch_max_iter, o.memory, o.intercept,
++                o.normalized, o.loss, r.weights != 0, sw)
++            ctx.synchronize()
++            for fit in range(o.fits):  # metadata: original Float32 OVR iteration result per fit
++                state.max_iterations = max(state.max_iterations, Int(state.info[3 * fit + 2]))
++        else:
++            linear_svc_fit_separate[QnDeviceKernels](r, state)
+ 
+ 
+ def linear_svc_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

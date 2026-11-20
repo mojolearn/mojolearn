@@ -406,7 +406,7 @@ def order_string(ids: List[Int32]) -> String:
     return s + "]"
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert has_accelerator(), "the device arms need a GPU"
     var ctx = DeviceContext()
     var cells = 0

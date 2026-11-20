@@ -79,6 +79,7 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     bin_split_type_name,
 )
+from checks.native_tests.kit import upload_host_into
 
 
 struct Oracle(Movable):
@@ -677,7 +678,7 @@ def tree_structure_diff(
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows * lay.columns)
     for i in range(n_rows * lay.columns):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -702,7 +703,7 @@ def tree_structure_diff(
             else:
                 bin_value = binarize(o.x[f][r], o.borders[f])
             hb.unsafe_ptr().unsafe_store(r, UInt8(bin_value))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(n_rows), cindex.unsafe_ptr(),
@@ -718,8 +719,8 @@ def tree_structure_diff(
     for r in range(n_rows):
         ht.unsafe_ptr().unsafe_store(r, o.y[r])
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var model = TAdditiveModel()

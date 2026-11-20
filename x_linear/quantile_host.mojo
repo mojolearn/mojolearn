@@ -65,7 +65,6 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
-    var rel_bal = ld(fp, 4) != Float32(0)
     var sw = ldi(ip, 2) != 0
     var m = d + 1 if fi else d
     var o = q_layout(n, d, m)
@@ -217,7 +216,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             lo = hi
         rhs_ready = True
         var tl = q_tail(fw, n + d, d, m, beta, rhs, z, v, dq, abn, rn, prim, un, ynorm, rho,
-                        alpha, eps_abs, eps_rel, rel_bal, it)
+                        alpha, eps_abs, eps_rel, it)
         if tl[0] == 1:
             converged = True
             break
@@ -227,6 +226,8 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             for i in range(n):
                 st(fw, u + i, fm(ld(fw, u + i), inv))
             rhs_ready = False
+    _ = gs^  # read and written through their addresses above (Mojo frees a List at its last named use)
+    _ = ps^
     copy(res, 0, fw, z, d)
     st(res, d, ld(fw, beta + d) if fi else Float32(0))
     st(res, d + 1, i2f(iters))

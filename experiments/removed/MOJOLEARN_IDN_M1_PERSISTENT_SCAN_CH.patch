@@ -1,0 +1,34 @@
+diff --git a/mamba/impl/ops/m1_persistent_scan.mojo b/mamba/impl/ops/m1_persistent_scan.mojo
+index e5ef98d51f..641be08b85 100644
+--- a/mamba/impl/ops/m1_persistent_scan.mojo
++++ b/mamba/impl/ops/m1_persistent_scan.mojo
+@@ -35,7 +35,7 @@ which thread holds which value and when the barrier falls. The host column is
+ untouched (it computes the same graph).
+ 
+ PARAMETERS (execution plan only, no bit moves; sweep per vendor):
+-  channels per block: 4 (the CH sweep was deleted 2026-11-15)
++  MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH      channels per block, legal 2|4|8 (default 4)
+   MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS  tokens per staged chunk, legal 16|32|64 (default 32)
+ Shared memory is `TOK * CH * DSTATE * 4` bytes (8 KiB at the defaults, 32 KiB
+ at the largest legal pair), within every column's 32 KiB floor. No rule reads
+@@ -52,9 +52,7 @@ from checks.numerics import (
+     identical_mul_add,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH (unmeasured opt-in sweep 2|8 of the channels per block; the default 4 stays) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at b7061d02fc.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH.patch
+-comptime M1_PSCAN_CH = 4
++comptime M1_PSCAN_CH = get_defined_int["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH", 4]()
+ comptime M1_PSCAN_TOK = get_defined_int["MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS", 32]()
+ 
+ 
+@@ -152,6 +150,9 @@ def m1_persistent_scan[DSTATE: Int](
+     mut dskip: DeviceBuffer[DType.float32], batch: Int, seqlen: Int, dim: Int,
+ ) raises:
+     """ASYNCHRONOUS; the caller synchronizes (selective_scan_fn does)."""
++    comptime assert M1_PSCAN_CH == 2 or M1_PSCAN_CH == 4 or M1_PSCAN_CH == 8, (
++        "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_CH: legal set 2|4|8"
++    )
+     comptime assert M1_PSCAN_TOK == 16 or M1_PSCAN_TOK == 32 or M1_PSCAN_TOK == 64, (
+         "MOJOLEARN_IDN_M1_PERSISTENT_SCAN_TOKENS: legal set 16|32|64"
+     )

@@ -1,0 +1,2577 @@
+diff --git a/checks/executor_n7_ops_compile.mojo b/checks/executor_n7_ops_compile.mojo
+index 398b377140..e280e83968 100644
+--- a/checks/executor_n7_ops_compile.mojo
++++ b/checks/executor_n7_ops_compile.mojo
+@@ -8,8 +8,15 @@
+ # the status words; it is not a verifier.
+ from max.gpu.host import DeviceContext
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++from cholesky.chol_ops import (
++    chol_op_begin,
++    chol_op_cho_solve,
++    chol_op_factor,
++    chol_op_info_joins_loop,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++    chol_op_zero_on_fail,
++)
+ from core.compact_ops import CompactScratch, compact_op_f32, compact_op_i32, compact_op_indices
+ from core.compact_ops_host import compact_indices_host
+ from core.device_zero import enqueue_fill
+@@ -27,9 +34,20 @@ def main() raises:
+     var gate = step_gate_open_word(ctx)
+     var regs = LoopRegisters(ctx)
+     regs.reset(ctx)
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    # (cholesky/chol_ops.mojo and its section here: every chol_op_* instantiated on a 4 x 4 problem)
++    # Cholesky
++    var a = ctx.enqueue_create_buffer[DType.float32](n * n)
++    enqueue_fill(ctx, a, Float32(0.0))
++    var b = ctx.enqueue_create_buffer[DType.float32](n)
++    enqueue_fill(ctx, b, Float32(1.0))
++    var info = ctx.enqueue_create_buffer[DType.int32](1)
++    var ld_ws = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++    var ld = ctx.enqueue_create_buffer[DType.float32](1)
++    chol_op_begin(ctx, gate, info)
++    chol_op_factor(ctx, a, info, n)
++    chol_op_info_joins_loop(ctx, regs.words, info, 1)
++    chol_op_cho_solve(ctx, a, b, info, n, 1)
++    chol_op_logdet(ctx, a, info, ld_ws, ld, n)
++    chol_op_zero_on_fail(ctx, info, b, n)
+     # eigh
+     var m = ctx.enqueue_create_buffer[DType.float32](n * n)
+     enqueue_fill(ctx, m, Float32(1.0))
+diff --git a/cholesky/checks/potrf.mojo b/cholesky/checks/potrf.mojo
+index 09814f25ba..3ddcc3e6e5 100644
+--- a/cholesky/checks/potrf.mojo
++++ b/cholesky/checks/potrf.mojo
+@@ -1531,9 +1531,19 @@ def logdet_kernel(
+     _logdet_tree_body(parts, out_scalar, nb_in)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (logdet_guarded_kernel, the ops' gated logdet tree)
++def logdet_guarded_kernel(
++    info: MutPointer[Int32, MutAnyOrigin],
++    parts: MutPointer[Float32, MutAnyOrigin],
++    out_scalar: MutPointer[Float32, MutAnyOrigin],
++    nb_in: Int32,
++):
++    """`logdet_kernel` when the factor succeeded (`info[0] == 0`); nothing
++    otherwise, so a failed factor or a closed executor gate leaves
++    `out_scalar` as it was (cholesky/chol_ops.mojo). The whole block
++    returns before any barrier."""
++    if info[0] != Int32(0):
++        return
++    _logdet_tree_body(parts, out_scalar, nb_in)
+ 
+ 
+ @always_inline
+@@ -1596,9 +1606,25 @@ def enqueue_logdet(
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (enqueue_logdet_guarded, the ops' gated logdet)
++def enqueue_logdet_guarded(
++    ctx: DeviceContext,
++    info: MutPointer[Int32, MutAnyOrigin],
++    diag: MutPointer[Float32, MutAnyOrigin],
++    parts: MutPointer[Float32, MutAnyOrigin],
++    out_scalar: MutPointer[Float32, MutAnyOrigin],
++    n: Int,
++) raises:
++    """`enqueue_logdet` whose tree stores `out_scalar` only when
++    `info[0] == 0` (the partials are scratch). Same words."""
++    var nb = logdet_blocks(n)
++    ctx.enqueue_function[logdet_part_kernel](
++        diag, parts, Int32(n),
++        grid_dim=((nb + LOGDET_TPB - 1) // LOGDET_TPB, 1, 1),
++        block_dim=(LOGDET_TPB, 1, 1),
++    )
++    ctx.enqueue_function[logdet_guarded_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
++        info, parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
++    )
+ 
+ 
+ # ===========================================================================
+diff --git a/cholesky/checks/trsm.mojo b/cholesky/checks/trsm.mojo
+index 7276cd517e..62d7e6d340 100644
+--- a/cholesky/checks/trsm.mojo
++++ b/cholesky/checks/trsm.mojo
+@@ -317,9 +317,20 @@ def trsm_lower_sweep_kernel(
+     _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (trsm_lower_sweep_guarded_kernel, the ops' gated solve)
++def trsm_lower_sweep_guarded_kernel(
++    info: MutPointer[Int32, MutAnyOrigin],
++    l: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    nrhs_in: Int32,
++    ld_in: Int32,
++):
++    """`trsm_lower_sweep_kernel` when `info[0] == 0`; the whole block returns before any
++    barrier otherwise (a failed factor or a closed executor gate,
++    cholesky/chol_ops.mojo). Same words."""
++    if info[0] != Int32(0):
++        return
++    _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+ #: lane/neighbors-apple (2026-09-28): `trsm_lower_sweep_kernel` with RB
+@@ -429,9 +440,20 @@ def trsm_lower_multi_rhs_kernel(
+     _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (trsm_lower_multi_rhs_guarded_kernel, the ops' gated solve)
++def trsm_lower_multi_rhs_guarded_kernel(
++    info: MutPointer[Int32, MutAnyOrigin],
++    l: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    nrhs_in: Int32,
++    ld_in: Int32,
++):
++    """`trsm_lower_multi_rhs_kernel` when `info[0] == 0`; the whole block returns before any
++    barrier otherwise (a failed factor or a closed executor gate,
++    cholesky/chol_ops.mojo). Same words."""
++    if info[0] != Int32(0):
++        return
++    _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+ #: lane neighbors-apple2 (2026-09-28): `trsm_lower_multi_rhs_kernel` at 256
+@@ -625,9 +647,20 @@ def trsm_upper_ring_kernel(
+     _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (trsm_upper_ring_guarded_kernel, the ops' gated back solve)
++def trsm_upper_ring_guarded_kernel(
++    info: MutPointer[Int32, MutAnyOrigin],
++    l: MutPointer[Float32, MutAnyOrigin],
++    b: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++    nrhs_in: Int32,
++    ld_in: Int32,
++):
++    """`trsm_upper_ring_kernel` when `info[0] == 0`; the whole block returns before any
++    barrier otherwise (a failed factor or a closed executor gate,
++    cholesky/chol_ops.mojo). Same words."""
++    if info[0] != Int32(0):
++        return
++    _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
+ 
+ 
+ def trsm_upper_staged_kernel(
+diff --git a/cholesky/chol_ops.mojo b/cholesky/chol_ops.mojo
+new file mode 100644
+index 0000000000..9438b6d3cd
+--- /dev/null
++++ b/cholesky/chol_ops.mojo
+@@ -0,0 +1,299 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Cholesky, the triangular solves and the log-determinant as executor step
++ops (lane n7-device-linalg-ops, 2026-11-08; docs/plans/EXECUTOR_N7_OPS.md).
++
++Every op only ENQUEUES: no host read, no drain. The factor's LAPACK `info`
++stays in a device Int32 word, CHOL_DEFER_INFO on every vendor: each launch
++of the factor, the solves and the log-determinant returns at once when the
++word is nonzero, and the family either reads the word at its own sync point
++(KRR: once per fit) or makes it join the loop's predicate
++(`chol_op_info_joins_loop`: a failed factor stops the loop at that
++iteration, before any later kernel of the body consumes the factor).
++
++The info word, per iteration:
++  0                  the factor ran and succeeded (L is in `a`)
++  k > 0              the leading minor of order k is not positive definite
++                     (LAPACK's info); `a` holds the factor frozen at the
++                     failing panel, which nothing may consume
++  CHOL_OP_GATED (-1) the loop was already done: nothing ran, nothing was
++                     written (`chol_op_begin` sets it from the gate)
++
++The factor (`chol_op_factor`) is `potrf_lower`'s arithmetic at the pinned
++width CHOL_NB_PINNED on every column, in one read-free schedule per column:
++  * NVIDIA, AMD, and Apple FAST: the strip schedule
++    (`chol_strips_enqueue`, cholesky/checks/potrf_strip.mojo);
++  * Apple IDENTICAL: the left-looking matrix-unit schedule
++    (`chol_left_enqueue_deferred`, CHOL_APPLE_LEFT);
++  * n < CHOL_NB_PINNED: the one guarded panel factor;
++then the guarded upper-triangle zeros. Each schedule computes the profile's
++cells in the profile's order (the strip and left-looking banners in
++potrf.mojo), so every column gets the host twin's words
++(`cholesky/host/chol_oracle.mojo::chol_host_factor_lower`). Apple FAST took
++the vendor-GEMM panel route in `potrf_lower`; the op runs the strip
++schedule there (one route; FAST needs no particular bits). RUN OWED: the
++M3 A/B of the two on the FAST board's cholesky / gaussian-process rows.
++
++The solves are the default kernels of `trsm_lower` / `trsm_upper`
++(multi-RHS sweep from CHOL_MR_RB right-hand sides, the column sweep below
++it, the back-substitution ring), guarded; every one is
++`trsm_lower_kernel` / `trsm_upper_kernel`'s chain term for term, so the
++host twins are `chol_host_trsm_lower` / `chol_host_trsm_upper`. Apple FAST's
++blocked `fast_cho_solve` is not an op route (one route; RUN OWED with the
++factor's A/B). The log-determinant is `enqueue_logdet`'s fold
++(cholesky/logdet_fold.mojo) with a guarded store; host twin:
++`CholHostFactor.logdet`.
++"""
++from std.sys.compile import is_defined
++from max.gpu.host import DeviceBuffer, DeviceContext
++from max.gpu import block_idx, thread_idx
++
++from cholesky.checks.potrf import (
++    CHOL_APPLE_LEFT,
++    CHOL_ELEM_TPB,
++    CHOL_NB_PINNED,
++    CHOL_PANEL_TPB,
++    chol_left_enqueue_deferred,
++    chol_strips_enqueue,
++    enqueue_logdet_guarded,
++    panel_factor_guarded_kernel,
++    zero_upper_guarded_kernel,
++)
++from cholesky.checks.potrf_strip import CHOL_STRIP_FITS, CS_NB
++from cholesky.checks.trsm import (
++    CHOL_BACK_NT,
++    CHOL_MR_NT,
++    CHOL_MR_RB,
++    CHOL_SWEEP_NT,
++    trsm_lower_multi_rhs_guarded_kernel,
++    trsm_lower_sweep_guarded_kernel,
++    trsm_upper_ring_guarded_kernel,
++)
++from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
++from cholesky.logdet_fold import logdet_blocks
++from core.step_gate import StepI32, step_fail_joins_loop
++
++#: The info word of an op whose loop was already done (nothing ran).
++comptime CHOL_OP_GATED = Int32(-1)
++
++#: The one-factor fits' route (lane fable-perf-classical-0855, 2026-11-13).
++#: `-D MOJOLEARN_IDN_CHOL_OPS_FIT` runs KernelRidge's,
++#: GaussianProcessRegressor's and GaussianProcessClassifier's factor + solve
++#: on these ops (lane n8-gp-krr-smo,
++#: 2026-11-09: read-free, one drain per fit); absent, the fits keep the
++#: measured 0.8.66 route (`potrf_lower` with its one info read, then
++#: `cho_solve`), the same kernels in the same order plus that one drain.
++#: The ops went in without an NVIDIA + AMD measurement; the first one
++#: (candidate 4c2340386abc vs 0.8.66 on the same MI325X, 2026-11-13,
++#: ~/mojolearn-evidence/measure-candidate/amd-owed-4c2340386abc) is AMD
++#: kernel-ridge istella 1642 -> 2050 ms (1.25x), taxi 1651 -> 2001 (1.21x),
++#: gpr taxi 167 -> 197 (1.18x), istella 182 -> 207 (1.14x), gpc taxi
++#: 959 -> 1160 (1.21x), istella 1442 -> 1728 (1.20x); NVIDIA L40S
++#: kernel-ridge 533 -> 530 (same). The sources of every launch are the
++#: same between the two routes except the solves' guarded twins
++#: (trsm_*_guarded_kernel) and the toolchain (Mojo 1.0 -> 1.2.0), so the
++#: A/B of this define on AMD is what settles it (AGENTS.md "A measured
++#: winner is never deleted on reasoning"). Lane
++#: restore-classical-measured-routes (2026-11-13) put every other caller of
++#: these ops on the same switch: the GPC Laplace Newton loop
++#: (gaussian_process/gpc_newton.mojo: by default 0.8.66's host loop,
++#: `gpc_newton_host_loop`), and the GP estimator's fit, lml+gradient and
++#: sample_y (gaussian_process/estimator.mojo) and hyperparameter optimizer
++#: (gaussian_process/gp_optim.mojo: by default 0.8.66's per-evaluation
++#: loop, `_gpr_optimize_host_runs`). Lane fix-chol-ops-remaining-callers
++#: (2026-11-13) put the last callers on it too: the GMM precision Cholesky
++#: chain (mixture/checks/mstep.mojo `gmm_precision_cholesky`, and
++#: `gmm_precision_enqueue` wherever no one-launch factor applies:
++#: `gmm_precision_reads_host`) and x_decomp's `DevExec.chol_inv` /
++#: `DMcd.chol` (x_decomp/device.mojo, x_decomp/kit_device.mojo: MinCovDet's
++#: Cholesky C-step), by default 0.8.66's potrf_lower + chol_logdet +
++#: trsm_lower again (restored from 49e8c5b633^). The owed A/B is row
++#: chol-ops-fit in bench/results/paper_compare/owed-pre0867.json.
++# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
++# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
++# RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
++comptime CHOL_OPS_FIT = is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"]()
++
++comptime _F32 = MutPointer[Float32, MutAnyOrigin]
++
++
++def chol_op_begin_kernel(gate: StepI32, info: StepI32):
++    """One thread: the iteration's info word, 0 while the loop runs and
++    CHOL_OP_GATED once it is done."""
++    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
++        return
++    if gate.unsafe_load(0) != Int32(0):
++        info.unsafe_store(0, CHOL_OP_GATED)
++    else:
++        info.unsafe_store(0, Int32(0))
++
++
++def chol_op_begin(ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], mut info: DeviceBuffer[DType.int32]) raises:
++    """Reset `info` for this iteration from the gate (word 0 of `gate`: the
++    loop's done word, or `step_gate_open_word` outside a loop). Enqueue it
++    before `chol_op_factor` every iteration."""
++    ctx.enqueue_function[chol_op_begin_kernel](  # small-launch(one word): the factor's info word from the loop gate
++        gate.unsafe_ptr(), info.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
++    )
++
++
++def chol_op_factor(
++    ctx: DeviceContext,
++    mut a: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    n: Int,
++) raises:
++    """`A = L L^T` in place (lower, row major, n x n; the strict upper
++    triangle becomes +0.0 on success), enqueued and read-free. `info` must
++    have been set by `chol_op_begin` (or zeroed) on this stream. Any ridge
++    is the caller's, added before (`add_jitter`); the matrix is not
++    validated here (the family validates its input once, at admission)."""
++    if n <= 0:
++        raise Error("chol_op_factor: n must be positive, got " + String(n))
++    if len(a) < n * n:
++        raise Error("chol_op_factor: the matrix buffer holds " + String(len(a)) + " floats, n = " + String(n) + " needs " + String(n * n))
++    if n < CS_NB:
++        # one panel (potrf_lower at nb = n): the guarded unblocked factor
++        ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: below one panel): factors the whole n x n block, columns serial, rows across the block
++            a.unsafe_ptr(), info.unsafe_ptr(), Int32(n), Int32(0), Int32(n),
++            grid_dim=(1, 1, 1), block_dim=(CHOL_PANEL_TPB, 1, 1),
++        )
++    else:
++        comptime if CHOL_APPLE_LEFT:
++            _ = chol_left_enqueue_deferred(ctx, a, info, n, CHOL_NB_PINNED)
++        else:
++            comptime if not CHOL_STRIP_FITS:
++                raise Error("chol_op_factor: the strip schedule's shared pages do not fit this column")
++            chol_strips_enqueue(ctx, a, info, n)
++    ctx.enqueue_function[zero_upper_guarded_kernel](
++        a.unsafe_ptr(), info.unsafe_ptr(), Int32(n),
++        grid_dim=((n * n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
++    )
++
++
++def _chol_op_check_solve(l: DeviceBuffer[DType.float32], b: DeviceBuffer[DType.float32], n: Int, nrhs: Int, what: String) raises:
++    if n <= 0 or nrhs <= 0:
++        raise Error(what + ": n and nrhs must both be positive, got n=" + String(n) + " nrhs=" + String(nrhs))
++    if len(l) < n * n or len(b) < n * nrhs:
++        raise Error(what + ": a buffer is shorter than its shape (n=" + String(n) + ", nrhs=" + String(nrhs) + ")")
++
++
++def chol_op_solve_lower(
++    ctx: DeviceContext,
++    mut l: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    n: Int,
++    nrhs: Int,
++) raises:
++    """`L X = B` in place over `b` (n x nrhs row major), skipped when
++    `info[0] != 0`."""
++    _chol_op_check_solve(l, b, n, nrhs, "chol_op_solve_lower")
++    if nrhs >= CHOL_MR_RB:
++        ctx.enqueue_function[trsm_lower_multi_rhs_guarded_kernel](
++            info.unsafe_ptr(), l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(n),
++            grid_dim=((nrhs + CHOL_MR_RB - 1) // CHOL_MR_RB, 1, 1), block_dim=(CHOL_MR_NT, 1, 1),
++        )
++    else:
++        ctx.enqueue_function[trsm_lower_sweep_guarded_kernel](
++            info.unsafe_ptr(), l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(n),
++            grid_dim=(nrhs, 1, 1), block_dim=(CHOL_SWEEP_NT, 1, 1),
++        )
++
++
++def chol_op_solve_upper(
++    ctx: DeviceContext,
++    mut l: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    n: Int,
++    nrhs: Int,
++) raises:
++    """`L^T X = B` in place over `b` (the same lower factor), skipped when
++    `info[0] != 0`."""
++    _chol_op_check_solve(l, b, n, nrhs, "chol_op_solve_upper")
++    ctx.enqueue_function[trsm_upper_ring_guarded_kernel](
++        info.unsafe_ptr(), l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(n),
++        grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
++    )
++
++
++def chol_op_cho_solve(
++    ctx: DeviceContext,
++    mut l: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    n: Int,
++    nrhs: Int,
++) raises:
++    """`A X = B` given `A = L L^T` (potrs, lower): the forward then the back
++    substitution, in place over `b`; skipped when `info[0] != 0`."""
++    chol_op_solve_lower(ctx, l, b, info, n, nrhs)
++    chol_op_solve_upper(ctx, l, b, info, n, nrhs)
++
++
++def chol_op_logdet_scratch_floats(n: Int) -> Int:
++    """Floats `chol_op_logdet` needs in `scratch`: the diagonal, then the
++    fold's partials (two levels)."""
++    return n + 2 * logdet_blocks(n)
++
++
++def chol_op_logdet(
++    ctx: DeviceContext,
++    mut l: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    mut scratch: DeviceBuffer[DType.float32],
++    mut out: DeviceBuffer[DType.float32],
++    n: Int,
++) raises:
++    """`out[0] = log det A = 2 sum log L_ii` (cholesky/logdet_fold.mojo's
++    order), stored only when `info[0] == 0`. `scratch` holds
++    `chol_op_logdet_scratch_floats(n)` floats."""
++    if len(scratch) < chol_op_logdet_scratch_floats(n) or len(out) < 1:
++        raise Error("chol_op_logdet: the scratch holds " + String(len(scratch)) + " floats, n = " + String(n) + " needs " + String(chol_op_logdet_scratch_floats(n)))
++    var sp = _F32(unsafe_from_address=Int(scratch.unsafe_ptr()))
++    ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
++        sp, l.unsafe_ptr(), Int32(n), Int32(n),
++        grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
++    )
++    var ip = StepI32(unsafe_from_address=Int(info.unsafe_ptr()))
++    var op = _F32(unsafe_from_address=Int(out.unsafe_ptr()))
++    enqueue_logdet_guarded(ctx, ip, sp, sp + n, op, n)
++
++
++def chol_op_info_joins_loop(
++    ctx: DeviceContext, mut words: DeviceBuffer[DType.int32], mut info: DeviceBuffer[DType.int32], it: Int,
++) raises:
++    """A failed factor (info > 0) stops the loop at iteration `it`; the
++    code lands in the register block's STEP_FAIL word
++    (`LoopRegisters.failure()`). Enqueue it right after `chol_op_factor`."""
++    step_fail_joins_loop(ctx, words, info, it)
++
++
++def chol_op_zero_on_fail_kernel(info: StepI32, buf: _F32, count: Int32):
++    """`buf[0, count) = +0.0` when the factor failed or was gated
++    (`info[0] != 0`); nothing otherwise."""
++    var t = Int(block_idx.x) * CHOL_ELEM_TPB + Int(thread_idx.x)
++    if t >= Int(count):
++        return
++    if info.unsafe_load(0) != Int32(0):
++        buf.unsafe_store(t, Float32(0.0))
++
++
++def chol_op_zero_on_fail(
++    ctx: DeviceContext, mut info: DeviceBuffer[DType.int32], mut buf: DeviceBuffer[DType.float32], count: Int,
++) raises:
++    """Zero `buf[0, count)` on the device when `info[0] != 0` (a failed
++    factor's solution is handed back as zeros beside its nonzero info, the
++    families' contract) without reading `info` on the host (lane
++    n8-gp-krr-smo)."""
++    if count <= 0:
++        return
++    if len(buf) < count:
++        raise Error("chol_op_zero_on_fail: the buffer holds " + String(len(buf)) + " floats, count = " + String(count))
++    var ip = StepI32(unsafe_from_address=Int(info.unsafe_ptr()))
++    var bp = _F32(unsafe_from_address=Int(buf.unsafe_ptr()))
++    ctx.enqueue_function[chol_op_zero_on_fail_kernel](
++        ip, bp, Int32(count),
++        grid_dim=((count + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
++    )
+diff --git a/core/experiment_guards_kernel.mojo b/core/experiment_guards_kernel.mojo
+index 72faa8d80d..fa46521f8e 100644
+--- a/core/experiment_guards_kernel.mojo
++++ b/core/experiment_guards_kernel.mojo
+@@ -57,8 +57,7 @@ def _check_configuration() -> Bool:
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
+     comptime assert not is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPR_PTR_OFF (Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path)) was old path, no A/B recorded; the resident pointer default kept; the default is the only path; code recoverable at b2a4adf292; see docs/TOMBSTONES.md"
+     # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch
+-    comptime assert not is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"](), "removed 2026-11-17 (lane/fb12-loser-arms): IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops for KernelRidge / GPR / GPC / GP optimizer / GMM / MinCovDet fits; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch"
++    # MOJOLEARN_IDN_CHOL_OPS_FIT: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
+     # Lane expdel2-19-kernel (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+     # MOJOLEARN_AFCL_L11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+     # MOJOLEARN_AFCL_G13: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
+diff --git a/gaussian_process/estimator.mojo b/gaussian_process/estimator.mojo
+index 0aebcdecf1..d42c3913ed 100644
+--- a/gaussian_process/estimator.mojo
++++ b/gaussian_process/estimator.mojo
+@@ -122,6 +122,13 @@ from cholesky.checks.potrf import (
+     potrf_lower,
+ )
+ from cholesky.checks.trsm import cho_solve
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT,
++    chol_op_cho_solve,
++    chol_op_factor,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++)
+ from core.device_zero import enqueue_fill
+ from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
+ from gaussian_process.gpc_items import gpc_fold_blocks, gpr_ydot_fin, gpr_ydot_part_item
+@@ -746,24 +753,58 @@ def gpr_fit_host(
+     var dev_logdet = Float32(0.0)
+     var factor_l = List[Float32]()
+     var ctrace = IdentityTrace()
+-    # The factor and its log-determinant on the measured 0.8.66 route (lane
+-    # restore-classical-measured-routes, 2026-11-13): `potrf_lower` with its
+-    # info read, then `chol_logdet`.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+-    ctx.synchronize()
+-    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+-    trace.record_device(ctx, "gp.ridged", dk, n * n)
+-    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+-    info = run.info
+-    nb_ran = run.nb
+-    if info == 0:
+-        dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
+-    factor_l = _download(ctx, dk, n * n)
+-    _ = ws^
+-    _ = dwork^
++    # `info` gates the ops' solve below: allocated on the ops route only
++    # (CHOL_OPS_FIT; one word). The default route reads potrf_lower's own
++    # info, so no word is allocated there (lane fix-gmm-chol-leftovers:
++    # the word used to be allocated on both routes and never read on the
++    # default one).
++    var dinfo = Optional[DeviceBuffer[DType.int32]]()
++    # The factor and its log-determinant. Under -D MOJOLEARN_IDN_CHOL_OPS_FIT
++    # the executor's Cholesky ops (lane n8-gp-krr-smo, cholesky/chol_ops.mojo):
++    # enqueued read-free, `info` and log|K| home with the factor's own
++    # download; a failed factor is the one frozen at its failing panel,
++    # beside its info. By default the measured 0.8.66 route (lane
++    # restore-classical-measured-routes, 2026-11-13): `potrf_lower` with
++    # its info read, then `chol_logdet`. The same kernels in the same
++    # order; the ops route measured AMD gpr 1.14-1.18x slower than 0.8.66
++    # on the resident fit (cholesky/chol_ops.mojo CHOL_OPS_FIT).
++    comptime if CHOL_OPS_FIT:
++        dinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
++        var di = dinfo.value().create_sub_buffer[DType.int32](0, 1)
++        enqueue_fill(ctx, di, Int32(0))
++        var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++        var dldet = ctx.enqueue_create_buffer[DType.float32](1)
++        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++        var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
++        add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
++        trace.record_device(ctx, "gp.ridged", dk, n * n)
++        chol_op_factor(ctx, dk, di, n)
++        chol_op_logdet(ctx, dk, di, dldscr, dldet, n)
++        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=di)
++        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
++        factor_l = _download(ctx, dk, n * n)
++        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++        if info == 0:
++            dev_logdet = hld.unsafe_ptr().unsafe_load(0)
++        _ = di^
++        _ = dldscr^
++        _ = dldet^
++        _ = hinfo^
++        _ = hld^
++    else:
++        var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
++        var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
++        ctx.synchronize()
++        add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
++        trace.record_device(ctx, "gp.ridged", dk, n * n)
++        var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
++        info = run.info
++        nb_ran = run.nb
++        if info == 0:
++            dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
++        factor_l = _download(ctx, dk, n * n)
++        _ = ws^
++        _ = dwork^
+     trace.record_list_f32("gp.factor", factor_l)
+ 
+     var dual = List[Float32]()
+@@ -773,9 +814,12 @@ def gpr_fit_host(
+     if info == 0:
+         var dy = _upload(ctx, y)
+         var ddual = _upload(ctx, y)
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-        cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
++        comptime if CHOL_OPS_FIT:
++            var dis = dinfo.value().create_sub_buffer[DType.int32](0, 1)
++            chol_op_cho_solve(ctx, dk, ddual, dis, n, 1)
++            _ = dis^
++        else:
++            cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+         dual = _download(ctx, ddual, n)
+         trace.record_list_f32("gp.dual_coef", dual)
+         if sabotage == GP_SAB_LOGDET_RECOMPUTED:
+@@ -803,6 +847,7 @@ def gpr_fit_host(
+     _ = dls^
+     _ = dk^
+     _ = dstack^
++    _ = dinfo^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+ 
+@@ -1043,7 +1088,10 @@ def _gpr_lml_grad_potrf(
+     (the default; lane restore-classical-measured-routes, 2026-11-13,
+     copied from 7ec10acd29^): `potrf_lower` with its info read,
+     `chol_logdet`, `cho_solve` for alpha_ and for K_inv, `y^T alpha_` read
+-    home, and the gradient fold. `dk`
++    home, and the gradient fold. The ops route (-D
++    MOJOLEARN_IDN_CHOL_OPS_FIT) enqueues the same kernels read-free; it
++    measured AMD 1.14-1.25x slower on the KernelRidge / GPR / GPC fits
++    (cholesky/chol_ops.mojo CHOL_OPS_FIT), so it is the A/B's B arm. `dk`
+     holds K where the kernel launch left it, `dgrad` its dK_p."""
+     var cells = n * n
+     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+@@ -1150,10 +1198,97 @@ def gpr_lml_grad_host(
+     # calls in the fit's order on K where the launch left it; before, K, L
+     # and K_inv each crossed to the host and back
+     chol_validate_jitter(alpha)
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    # the measured 0.8.66 route (`_gpr_lml_grad_potrf`)
+-    return _gpr_lml_grad_potrf(ctx, dk, dgrad, y, n, n_free, alpha)
++    comptime if not CHOL_OPS_FIT:
++        # the measured 0.8.66 route (`_gpr_lml_grad_potrf`); the code below
++        # is the B arm of the CHOL_OPS_FIT A/B
++        return _gpr_lml_grad_potrf(ctx, dk, dgrad, y, n, n_free, alpha)
++    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT: the executor's Cholesky ops (lane
++    # n8-gp-krr-smo, cholesky/chol_ops.mojo): every launch enqueued read-free, `info` gating the solves and the
++    # log-determinant on the device, and ONE read at the end (info,
++    # log|K|, y^T alpha_ and the gradient). Before: a drain inside the
++    # factor for `info`, one for the log-determinant, one for y^T alpha_,
++    # one for the gradient.
++    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++    enqueue_fill(ctx, dinfo, Int32(0))
++    var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++    var dldet = ctx.enqueue_create_buffer[DType.float32](1)
++    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
++    chol_op_factor(ctx, dk, dinfo, n)
++    chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
++    var dy = _upload(ctx, y)
++    var ddual = _upload(ctx, y)
++    chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
++    # `_gpr_ydot_device`'s two launches, the scalar left on the device
++    var nbf = gpc_fold_blocks(n)
++    var dypart = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
++    var dyd = ctx.enqueue_create_buffer[DType.float32](1)
++    if nbf > 0:
++        ctx.enqueue_function[gpr_ydot_part_kernel](
++            _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
++            grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
++        )
++    ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
++    var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
++    enqueue_fill(ctx, dkinv, Float32(0.0))
++    ctx.enqueue_function[gp_eye_kernel](
++        _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
++    )
++    chol_op_cho_solve(ctx, dk, dkinv, dinfo, n, n)
++    # the gradient fold on the device, dK_p where the launch left it
++    # (gaussian_process/gp_grad_items.mojo, the host column's items;
++    # cpu-gpu-cleanup c-gp-kernel: every dK_p was downloaded and folded on
++    # the host)
++    var grad = List[Float32](length=n_free, fill=Float32(0.0))
++    var nb = gp_grad_blocks(n)
++    var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
++    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_free, 1))
++    if n_free > 0:
++        ctx.enqueue_function[gp_grad_part_kernel](
++            _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(n_free * nb), _gp(dpart),
++            grid_dim=(n_free * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
++        )
++        ctx.enqueue_function[gp_grad_fin_kernel](
++            _gp(dpart), Int32(nb), Int32(n_free), gp_grad_half(), _gp(dout),
++            grid_dim=(n_free + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
++        )
++        ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
++    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++    var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
++    var hyd = ctx.enqueue_create_host_buffer[DType.float32](1)
++    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
++    ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
++    ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
++    ctx.synchronize()
++    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++    var lml = Float32(0.0)
++    if info == 0:
++        lml = gp_log_marginal_likelihood_value(
++            hyd.unsafe_ptr().unsafe_load(0), hld.unsafe_ptr().unsafe_load(0), n
++        )
++    else:
++        # a failed factor: no likelihood and a zero gradient beside its info
++        grad = List[Float32](length=n_free, fill=Float32(0.0))
++    _ = hinfo^
++    _ = hld^
++    _ = hyd^
++    _ = dx^
++    _ = dls^
++    _ = dk^
++    _ = dstack^
++    _ = dinfo^
++    _ = dldscr^
++    _ = dldet^
++    _ = dy^
++    _ = ddual^
++    _ = dypart^
++    _ = dyd^
++    _ = dkinv^
++    _ = dpart^
++    _ = dout^
++    _ = dgrad^
++    # DEVIATION 1946: the context dies LAST, after every value built on it.
++    _ = ctx^
++    return GPLmlGrad(lml, grad^, info)
+ 
+ 
+ def gpr_log_marginal_likelihood(model: GPRegressor) raises -> Float32:
+@@ -1703,20 +1838,36 @@ def gpr_sample_y_host(
+     )
+     var jit = chol_jitter_pinned()
+     chol_validate_jitter(jit)
+-    # The measured 0.8.66 route (lane restore-classical-measured-routes):
+-    # `potrf_lower` with its info read, refused by name before the draws.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
+-    var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
+-    ctx.synchronize()
+-    var ctrace = IdentityTrace()
+-    add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
+-    var run = potrf_lower(
+-        ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
+-    )
+-    gp_sample_y_check_factor(run.info, n_star)
+-    _ = cws^
++    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT the executor's Cholesky op (lane
++    # n8-gp-krr-smo): `info` stays on the device and comes home with the
++    # draws; a failed factor raises there, by name, before anything is
++    # returned. By default the measured 0.8.66 route (lane
++    # restore-classical-measured-routes): `potrf_lower` with its info read,
++    # refused by name before the draws (cholesky/chol_ops.mojo CHOL_OPS_FIT).
++    # The info word and its host copy exist on the ops route only (lane
++    # fix-gmm-chol-leftovers: they used to be allocated on both routes and
++    # never read on the default one, which reads potrf_lower's own info).
++    var cinfo = Optional[DeviceBuffer[DType.int32]]()
++    var hcinfo = Optional[HostBuffer[DType.int32]]()
++    comptime if CHOL_OPS_FIT:
++        cinfo = Optional(ctx.enqueue_create_buffer[DType.int32](1))
++        hcinfo = Optional(ctx.enqueue_create_host_buffer[DType.int32](1))
++        var ci = cinfo.value().create_sub_buffer[DType.int32](0, 1)
++        enqueue_fill(ctx, ci, Int32(0))
++        add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
++        chol_op_factor(ctx, dcov, ci, n_star)
++        _ = ci^
++    else:
++        var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
++        var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
++        ctx.synchronize()
++        var ctrace = IdentityTrace()
++        add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
++        var run = potrf_lower(
++            ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
++        )
++        gp_sample_y_check_factor(run.info, n_star)
++        _ = cws^
+     var key = gp_sample_y_key(seed)
+     var nz = n_star * n_samples
+     var dz = ctx.enqueue_create_buffer[DType.float32](nz)
+@@ -1741,7 +1892,13 @@ def gpr_sample_y_host(
+     if unnorm:
+         # every draw un-normalized as the mean, on the device
+         _gp_unnorm(ctx, dyo, dyo, nz, y_std, y_mean, GP_UNNORM_MEAN)
++    comptime if CHOL_OPS_FIT:
++        ctx.enqueue_copy(dst_ptr=hcinfo.value().unsafe_ptr(), src_buf=cinfo.value())
+     var out = _download(ctx, dyo, nz)
++    comptime if CHOL_OPS_FIT:
++        gp_sample_y_check_factor(Int(hcinfo.value().unsafe_ptr().unsafe_load(0)), n_star)
++    _ = hcinfo^
++    _ = cinfo^
+     _ = dx^
+     _ = dxs^
+     _ = dls^
+diff --git a/gaussian_process/gp_optim.mojo b/gaussian_process/gp_optim.mojo
+index 20436183c7..dfd6d99c29 100644
+--- a/gaussian_process/gp_optim.mojo
++++ b/gaussian_process/gp_optim.mojo
+@@ -4,10 +4,10 @@
+ 2026-10-03): DEVIATION 2881's projected L-BFGS (`gp_optim_items.mojo`) with
+ its state resident in device buffers, evaluating the likelihood and its
+ gradient in place (`gpr_lml_grad_host`'s kernels, in its order) at the
+-parameter table the optimizer writes from theta. One call runs every start
+-on the measured 0.8.66 loop (`potrf_lower` with its info read, the stop word
+-read per evaluation; lane restore-classical-measured-routes). Before, the
+-state machine was
++parameter table the optimizer writes from theta. One call runs every start;
++the only word that comes home is the run sequencer's done word, once per
++GP_OPT_EVAL_CHECK evaluations (lane n8-gp-krr-smo: the Cholesky's `info`
++stays on the device, cholesky/chol_ops.mojo). Before, the state machine was
+ Python (`_gp_optimizer.py`) and every evaluation rebuilt the kernel on the
+ host, uploaded X and y, and downloaded the likelihood and the gradient.
+ 
+@@ -37,6 +37,14 @@ from cholesky.checks.potrf import (
+ from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
+ from cholesky.logdet_fold import logdet_blocks
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT,
++    chol_op_begin,
++    chol_op_cho_solve,
++    chol_op_factor,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++)
+ from core.device_zero import enqueue_fill
+ from core.identity_trace import IdentityTrace
+ from gaussian_process.checks.kernels import (
+@@ -90,9 +98,12 @@ from gaussian_process.gp_optim_items import (
+     GP_OPT_MAX_LS,
+     GP_OPT_SI_BEST,
+     GP_OPT_SI_LEN,
++    GP_OPT_SEQ_DONE,
++    GP_OPT_SEQ_LEN,
+     GP_OPT_SI_STOP,
+     GP_OPT_TPB,
+     GP_STOP_RUNNING,
++    gp_opt_advance_item,
+     gp_opt_final_item,
+     gp_opt_init_item,
+     gp_opt_run_end_item,
+@@ -104,6 +115,14 @@ from gaussian_process.gp_optim_items import (
+ comptime _P = MutPointer[Float32, MutAnyOrigin]
+ comptime _I = MutPointer[Int32, MutAnyOrigin]
+ 
++#: Evaluations enqueued between two reads of the done word. An evaluation
++#: costs a Cholesky (n^3 / 3) and an n-RHS solve; past the last stop at most
++#: GP_OPT_EVAL_CHECK - 1 evaluations run their kernel build and gradient
++#: products with the factor and solves gated off. Eight keeps that waste
++#: below one evaluation's factor at every n while cutting the drains per fit
++#: eightfold (a size-free rule: the same at every shape).
++comptime GP_OPT_EVAL_CHECK = 8
++
+ 
+ @fieldwise_init
+ struct GPOptResult(Movable):
+@@ -150,23 +169,40 @@ def gp_opt_init_kernel(
+     gp_opt_init_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, bnd, dpar, dls, Int(run), s0, s1)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by lane/fb12-loser-arms: gp_opt_step_kernel and gp_opt_advance_kernel, the device run sequencer's kernels; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++def gp_opt_step_kernel(
++    st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, ldet: _P, n: Int32, lml: _P, graw: _P,
++    t: Int32, info: _I,
++):
++    """The optimizer's step after an evaluation. `info` is the factor's
++    device word (cholesky/chol_ops.mojo), read here instead of on the host.
++    Thread 0 first combines the likelihood's three scalar terms
++    (`gp_log_marginal_likelihood_value(y^T alpha_, log|K| at ldet[0], n)`,
++    the fit's own) into `lml`; thread 0 is also the only reader of it in the
++    step. Once the run's stop word is set the step changes nothing, so the
++    evaluations enqueued past a run's stop (up to the next done-word read)
++    leave the optimizer's state as the stopping step left it; every thread
++    reads the word before the item's first barrier."""
++    if si.unsafe_load(GP_OPT_SI_STOP) != Int32(GP_STOP_RUNNING):
++        return
++    var code = Int(info.unsafe_load(0))
++    if Int(thread_idx.x) == 0 and code == 0:
++        lml.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), ldet.unsafe_load(0), Int(n)))
++    gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, code)
+ 
+ 
+ # TOMBSTONE: gp_opt_run_end_kernel and the per-evaluation host loop of gpr_optimize_device (superseded by the device run sequencer) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+ # Restore: git apply experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch
+ # RESTORED 2026-11-13 (lane restore-classical-measured-routes): the
+ # per-evaluation host loop and its two kernels are the default again (the
+-# measured 0.8.66 route); the device run sequencer (-D
+-# MOJOLEARN_IDN_CHOL_OPS_FIT) was deleted 2026-11-17.
++# measured 0.8.66 route); the device run sequencer runs only under
++# -D MOJOLEARN_IDN_CHOL_OPS_FIT (cholesky/chol_ops.mojo CHOL_OPS_FIT).
+ 
+ 
+ def gp_opt_step_host_kernel(
+     st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, work: _P, n: Int32, lml: _P, graw: _P,
+     t: Int32, info: Int32,
+ ):
+-    """0.8.66's `gp_opt_step_kernel`: the optimizer's
++    """0.8.66's `gp_opt_step_kernel` (the default route): the optimizer's
+     step after an evaluation, `info` read home by `potrf_lower`. Thread 0
+     first combines the likelihood's three scalar terms
+     (`gp_log_marginal_likelihood_value(y^T alpha_, log|K| at work[n], n)`,
+@@ -181,6 +217,17 @@ def gp_opt_run_end_kernel(st: _P, si: _I, rec: _P, t: Int32, run: Int32):
+     gp_opt_run_end_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, rec, Int(run))
+ 
+ 
++def gp_opt_advance_kernel(
++    st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I, t: Int32, n_runs: Int32,
++    s0: UInt32, s1: UInt32,
++):
++    """`gp_opt_advance_item`: a stopped run's record and the next run's
++    start (or the done word), on the device."""
++    gp_opt_advance_item(
++        Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, bnd, dpar, dls, rec, seq, Int(n_runs), s0, s1,
++    )
++
++
+ def gp_opt_final_kernel(st: _P, tmap: _I, dpar: _P, dls: _P, res: _P, t: Int32):
+     gp_opt_final_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, tmap, dpar, dls, res)
+ 
+@@ -356,9 +403,129 @@ def gp_kernel_matrix_grad_dev(
+     _ = xs2^
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (_gpr_optimize_ops_runs, the device run sequencer over the Cholesky ops)
++def _gpr_optimize_ops_runs(
++    ctx: DeviceContext,
++    mut dx: DeviceBuffer[DType.float32],
++    mut dy: DeviceBuffer[DType.float32],
++    mut dpar: DeviceBuffer[DType.float32],
++    mut dls: DeviceBuffer[DType.float32],
++    mut dbnd: DeviceBuffer[DType.float32],
++    mut dtmap: DeviceBuffer[DType.int32],
++    mut dk: DeviceBuffer[DType.float32],
++    mut dstack: DeviceBuffer[DType.float32],
++    mut dgrad: DeviceBuffer[DType.float32],
++    mut dxs: DeviceBuffer[DType.float32],
++    mut ddual: DeviceBuffer[DType.float32],
++    mut dkinv: DeviceBuffer[DType.float32],
++    mut dgpart: DeviceBuffer[DType.float32],
++    mut dgraw: DeviceBuffer[DType.float32],
++    mut dypart: DeviceBuffer[DType.float32],
++    mut dyd: DeviceBuffer[DType.float32],
++    mut dlml: DeviceBuffer[DType.float32],
++    mut dst: DeviceBuffer[DType.float32],
++    mut dsi: DeviceBuffer[DType.int32],
++    mut drec: DeviceBuffer[DType.float32],
++    n: Int,
++    n_features: Int,
++    nt: Int,
++    nb: Int,
++    nbf: Int,
++    n_runs: Int,
++    kernel: GPKernelSpec,
++    free: List[Int32],
++    alpha: Float32,
++    seed_lo: UInt32,
++    seed_hi: UInt32,
++) raises:
++    """Every run of `gpr_optimize_device` on the device run sequencer over
++    the executor's Cholesky ops (-D MOJOLEARN_IDN_CHOL_OPS_FIT, the B arm).
++    On return the optimizer state `dst` / `dsi` and the records `drec` are
++    final; the caller enqueues the winner."""
++    # the factor's info word, the log-determinant's scratch and its scalar
++    # (cholesky/chol_ops.mojo: enqueued and read-free on every vendor)
++    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++    var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++    var dldet = ctx.enqueue_create_buffer[DType.float32](1)
++    # the run sequencer (gp_opt_advance_item): done word, current run
++    var dseq = ctx.enqueue_create_buffer[DType.int32](GP_OPT_SEQ_LEN)
++    enqueue_fill(ctx, dseq, Int32(0))
++    var hdone = ctx.enqueue_create_host_buffer[DType.int32](1)
++    var done_word = dseq.create_sub_buffer[DType.int32](GP_OPT_SEQ_DONE, 1)
++    ctx.synchronize()
++
++    # Every run on the device (lane n8-gp-krr-smo, 2026-11-09). Before, the
++    # host read the factor's info once per panel and the stop word once per
++    # evaluation (evals x (2 + ceil(n/nb)) drains per fit). Now each
++    # evaluation is enqueued read-free: the Cholesky's info stays in `dinfo`
++    # and gates the factor's later launches, the solves and the
++    # log-determinant (CHOL_DEFER_INFO on every vendor); the step reads it on
++    # the device; `gp_opt_advance_kernel` closes a stopped run and starts
++    # the next. The host reads the done word once per GP_OPT_EVAL_CHECK
++    # evaluations. Evaluations enqueued past the last stop find the factor
++    # gated (`chol_op_begin` on the done word: nothing factored or solved)
++    # and the step and the sequencer inert, so the optimizer's state, the
++    # records and the result are the per-evaluation loop's.
++    var eval_cap = n_runs * (GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2)
++    ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
++        _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
++        Int32(nt), Int32(0), seed_lo, seed_hi,
++        grid_dim=1, block_dim=GP_OPT_TPB,
++    )
++    var evals = 0
++    while True:  # driver-loop: over done-word reads, one per GP_OPT_EVAL_CHECK evaluations, bounded by eval_cap
++        if evals >= eval_cap:
++            raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
++        for _e in range(GP_OPT_EVAL_CHECK):  # driver-loop: over the evaluations enqueued between two done-word reads
++            evals += 1
++            # the likelihood and its gradient at the parameter table, in place
++            gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free, dxs)
++            add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
++            chol_op_begin(ctx, dseq, dinfo)
++            chol_op_factor(ctx, dk, dinfo, n)
++            chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
++            ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
++            chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
++            if nbf > 0:
++                ctx.enqueue_function[gpr_ydot_part_kernel](
++                    _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
++                    grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
++                )
++            ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
++            enqueue_fill(ctx, dkinv, Float32(0.0))
++            ctx.enqueue_function[gp_eye_kernel](
++                _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
++            )
++            chol_op_cho_solve(ctx, dk, dkinv, dinfo, n, n)
++            ctx.enqueue_function[gp_grad_part_kernel](
++                _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(nt * nb), _gp(dgpart),
++                grid_dim=(nt * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
++            )
++            ctx.enqueue_function[gp_grad_fin_kernel](
++                _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
++                grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
++            )
++            ctx.enqueue_function[gp_opt_step_kernel](  # small-launch(nt: hyperparameters): one block strides the theta-sized optimizer stages; n is a constant of the likelihood
++                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dldet), Int32(n),
++                _gp(dlml), _gp(dgraw), Int32(nt), _gi(dinfo),
++                grid_dim=1, block_dim=GP_OPT_TPB,
++            )
++            ctx.enqueue_function[gp_opt_advance_kernel](  # small-launch(nt: hyperparameters): one block closes a stopped run and starts the next over the theta entries only
++                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls), _gp(drec), _gi(dseq),
++                Int32(nt), Int32(n_runs), seed_lo, seed_hi,
++                grid_dim=1, block_dim=GP_OPT_TPB,
++            )
++        # the one word home per chunk: the done word
++        ctx.enqueue_copy(dst_ptr=hdone.unsafe_ptr(), src_buf=done_word)
++        ctx.synchronize()
++        if Int(hdone.unsafe_ptr().unsafe_load(0)) != 0:
++            break
++    ctx.synchronize()
++    _ = hdone^
++    _ = done_word^
++    _ = dinfo^
++    _ = dldscr^
++    _ = dldet^
++    _ = dseq^
+ 
+ 
+ def _gpr_optimize_host_runs(
+@@ -550,16 +717,25 @@ def gpr_optimize_device(
+     ctx.synchronize()
+     _ = htmap^
+ 
+-    # ROUTE (lane restore-classical-measured-routes, 2026-11-13): the
+-    # measured 0.8.66 loop: `potrf_lower` with its info read per panel, the
+-    # stop word read per evaluation, the host enqueuing each run's start and
+-    # end.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    _gpr_optimize_host_runs(
+-        ctx, dx, dy, dpar, dls, dbnd, dtmap, dk, dstack, dgrad, dxs, ddual, dkinv, dgpart, dgraw, dypart,
+-        dyd, dlml, dst, dsi, drec, n, n_features, nt, nb, nbf, n_runs, kernel, free, alpha, seed_lo, seed_hi,
+-    )
++    # ROUTE (lane restore-classical-measured-routes, 2026-11-13). By default
++    # the measured 0.8.66 loop below the `else`: `potrf_lower` with its info
++    # read per panel, the stop word read per evaluation, the host enqueuing
++    # each run's start and end. Under -D MOJOLEARN_IDN_CHOL_OPS_FIT the
++    # device run sequencer over the executor's Cholesky ops (4da49ab7a0,
++    # 2026-11-09, unmeasured; the same ops measured AMD 1.14-1.25x slower
++    # than 0.8.66 on the KernelRidge / GPR / GPC fits, cholesky/chol_ops.mojo
++    # CHOL_OPS_FIT). The same items and kernels in the same order: the same
++    # words on both routes.
++    comptime if CHOL_OPS_FIT:
++        _gpr_optimize_ops_runs(
++            ctx, dx, dy, dpar, dls, dbnd, dtmap, dk, dstack, dgrad, dxs, ddual, dkinv, dgpart, dgraw, dypart,
++            dyd, dlml, dst, dsi, drec, n, n_features, nt, nb, nbf, n_runs, kernel, free, alpha, seed_lo, seed_hi,
++        )
++    else:
++        _gpr_optimize_host_runs(
++            ctx, dx, dy, dpar, dls, dbnd, dtmap, dk, dstack, dgrad, dxs, ddual, dkinv, dgpart, dgraw, dypart,
++            dyd, dlml, dst, dsi, drec, n, n_features, nt, nb, nbf, n_runs, kernel, free, alpha, seed_lo, seed_hi,
++        )
+     ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
+         _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
+     )
+diff --git a/gaussian_process/gp_optim_items.mojo b/gaussian_process/gp_optim_items.mojo
+index 5bbf0804ae..9ac0673163 100644
+--- a/gaussian_process/gp_optim_items.mojo
++++ b/gaussian_process/gp_optim_items.mojo
+@@ -738,8 +738,41 @@ def gp_opt_run_end_item(tid: Int, nt: Int, t: Int, st: _P, si: _I, rec: _P, run:
+             p += nt
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by lane/fb12-loser-arms: gp_opt_advance_item and the GP_OPT_SEQ_* words, the device run sequencer's; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++#: the run sequencer's words (lane n8-gp-krr-smo): `seq[GP_OPT_SEQ_DONE]`
++#: is nonzero once the last run has stopped (the gate of every evaluation
++#: launch), `seq[GP_OPT_SEQ_RUN]` the run being optimized
++comptime GP_OPT_SEQ_DONE = 0
++comptime GP_OPT_SEQ_RUN = 1
++comptime GP_OPT_SEQ_LEN = 2
++
++
++def gp_opt_advance_item(
++    tid: Int, nt: Int, t: Int, st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I,
++    n_runs: Int, seed_lo: UInt32, seed_hi: UInt32,
++):
++    """The run sequencer, after every evaluation's step (lane n8-gp-krr-smo,
++    2026-11-09): while the optimizer runs it changes nothing; once the
++    current run's stop word is set it records the run (`gp_opt_run_end_item`)
++    and starts the next one (`gp_opt_init_item`), or sets the done word after
++    the last run. The host enqueued the run boundaries before (one stop-word
++    read per evaluation); on the device the whole fit is enqueued in chunks
++    and the host reads the done word once per chunk. The same items in the
++    same order, so the same words."""
++    # every thread reads both words before the first barrier; only thread 0
++    # writes them, after a barrier
++    if seq.unsafe_load(GP_OPT_SEQ_DONE) != Int32(0):
++        return
++    if si.unsafe_load(GP_OPT_SI_STOP) == Int32(GP_STOP_RUNNING):
++        return
++    var run = Int(seq.unsafe_load(GP_OPT_SEQ_RUN))
++    gp_opt_run_end_item(tid, nt, t, st, si, rec, run)
++    _osync()
++    if run + 1 < n_runs:
++        gp_opt_init_item(tid, nt, t, st, si, tmap, bnd, dpar, dls, run + 1, seed_lo, seed_hi)
++        if tid == 0:
++            seq.unsafe_store(GP_OPT_SEQ_RUN, Int32(run + 1))
++    elif tid == 0:
++        seq.unsafe_store(GP_OPT_SEQ_DONE, Int32(1))
+ 
+ 
+ def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls: _P, res: _P):
+diff --git a/gaussian_process/gpc_newton.mojo b/gaussian_process/gpc_newton.mojo
+index a4a4bb7f75..d5001de44d 100644
+--- a/gaussian_process/gpc_newton.mojo
++++ b/gaussian_process/gpc_newton.mojo
+@@ -1,23 +1,52 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The Laplace Newton loop of Gaussian process classification.
+-
+-ROUTE (lane restore-classical-measured-routes, 2026-11-13).
+-`gpc_newton_device_batch` runs each class through `gpc_newton_host_loop`,
+-0.8.66's measured loop (`potrf_lower` + `cho_solve`, one stop-test read per
+-iteration). The executor's bounded device loop on the Cholesky ops (lane
+-n8-gp-krr-smo, -D MOJOLEARN_IDN_CHOL_OPS_FIT) was the B arm of its A/B: the
+-same speed on the L40S (ba08dac006), deleted 2026-11-17 (docs/TOMBSTONES.md).
++"""The Laplace Newton loop of Gaussian process classification as a step of
++the executor's bounded device loop (lane n8-gp-krr-smo, 2026-11-09;
++docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, row "GP
++regressor / GPC Laplace").
++
++ROUTE (lane restore-classical-measured-routes, 2026-11-13). The bounded
++device loop below runs only under `-D MOJOLEARN_IDN_CHOL_OPS_FIT`, the B
++arm of its owed NVIDIA + AMD A/B (it measured AMD gpc 1.20x slower than
++0.8.66). By default `gpc_newton_device_batch` runs each class through
++`gpc_newton_host_loop`, 0.8.66's measured loop (`potrf_lower` + `cho_solve`,
++one stop-test read per iteration). Same words on both routes.
+ 
+ ONE LOOP. The binary fit (`classifier.mojo::gpc_fit_binary_host`) and the
+ one-vs-rest fit (`gpc_ovr.mojo::gpc_fit_all_device`) each kept their own
+ copy of the same loop; both now call `gpc_newton_device` here.
++
++WHAT MOVED. Each iteration read three things home: the Cholesky's `info`
++(inside `potrf_lower`), log|B| (`chol_logdet`, unless
++GPC_IDN_NEWTON_LOGDET), and the likelihood with the NaN guard's index for
++the stop test. Now the iteration is `GPCNewtonStep.enqueue_step`: the same
++item kernels in the same order, each gated on the loop's done word; the
++factor, log-determinant and solve are the executor's Cholesky ops
++(cholesky/chol_ops.mojo) whose `info` joins the loop's predicate; the NaN
++guard and DEVIATION 2830's stop test are one criterion kernel
++(`gpc_newton_criterion_kernel`) that also keeps the likelihood the fit
++returns on the device. `bounded_device_loop` reads the register block once
++per GPC_NEWTON_CHECK iterations; one more read after the loop brings the
++likelihood home.
++
++BITS. The same items, the same block sizes (256, the classifier's
++GPC_STEP_TPB and GPC_B_TPB), the same identical GEMVs, and the ops' factor,
++solve and log-determinant fold are `potrf_lower`'s / `cho_solve`'s /
++`enqueue_logdet`'s words (docs/plans/EXECUTOR_N7_OPS.md). The `+0.0` ridge
++launch (`add_jitter`) the loop ran on B is gone: B's diagonal is already
++`ftz(1 + cell)`, which is never -0.0, and `ftz(d + 0.0) == d` for every
++other float32, so it changed no bit. Iterations enqueued past the stop leave
++f, pi, W_sr and the factor as the stopping iteration left them: every
++kernel that writes them is gated, and the two GEMVs re-form f and K b from
++frozen inputs (the same words).
+ """
+ 
+ from std.atomic import Atomic
+ from max.gpu import block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+ 
++from autograd.program_loop import LOOP_WORDS, LoopTimers
++from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop
+ from cholesky.checks.potrf import (
+     CHOL_ELEM_TPB,
+     CHOL_NB_PINNED,
+@@ -33,8 +62,18 @@ from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+ from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
+ from cholesky.logdet_fold import logdet_blocks
+ from core.identity_trace import IdentityTrace
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT,
++    chol_op_begin,
++    chol_op_cho_solve,
++    chol_op_factor,
++    chol_op_info_joins_loop,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++)
+ from checks.numerics import ftz, identical_mul
+ from core.device_zero import enqueue_fill
++from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
+ from gaussian_process.gpc_common import gpc_neg_inf32, gpc_stop
+ from gaussian_process.gpc_items import (
+     gpc_a_item,
+@@ -54,6 +93,14 @@ comptime _GI = MutPointer[Int32, MutAnyOrigin]
+ #: SCHEDULING: one thread per row (or per cell of B), the classifier's
+ #: GPC_STEP_TPB and GPC_B_TPB.
+ comptime GPC_NEWTON_TPB = 256
++#: Newton iterations enqueued between two reads of the register block. An
++#: iteration past the stop costs two GEMVs and a few one-word launches (the
++#: factor and the solve are gated off), so eight bounds the waste below one
++#: iteration's factor at every n. A size-free rule.
++comptime GPC_NEWTON_CHECK = 8
++#: The failure code of a NaN right-hand side (DEVIATION 1638). A Cholesky
++#: failure's code is its `info`, 1 .. n, and n never reaches this value.
++comptime GPC_NEWTON_FAIL_NAN = Int32(0x7FFF0000)
+ 
+ 
+ @always_inline
+@@ -76,11 +123,225 @@ def _ip(buf: DeviceBuffer[DType.int32]) -> _GI:
+     return _GI(unsafe_from_address=Int(buf.unsafe_ptr()))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (the bounded device loop: GPCNewtonStep, its gated kernels, the criterion and join kernels, GPCNewtonBatch)
++@always_inline
++def _open(gate: _GI) -> Bool:
++    return gate.unsafe_load(STEP_DONE) == Int32(0)
++
++
++def gpc_newton_w_kernel(gate: _GI, f: _GP, pi: _GP, w: _GP, wsr: _GP, n: Int32):
++    """`gpc_weight_item` per row while the loop runs."""
++    var i = _tid()
++    if i < Int(n) and _open(gate):
++        gpc_weight_item(i, f, pi, w, wsr)
++
++
++def gpc_newton_b_kernel(gate: _GI, b: _GP, k: _GP, wsr: _GP, n_in: Int32):
++    """B = I + W_sr K W_sr per cell (`gpc_b_matrix`'s arithmetic: the
++    weights multiplied first, each product `identical_mul` and flushed, the
++    diagonal's `1 + cell`) while the loop runs."""
++    var n = Int(n_in)
++    var e = Int(block_idx.x) * GPC_NEWTON_TPB + Int(thread_idx.x)
++    if e >= n * n or not _open(gate):
++        return
++    var i = e // n
++    var j = e - i * n
++    var ww = ftz(identical_mul(ftz(wsr.unsafe_load(i)), ftz(wsr.unsafe_load(j))))
++    var cell = ftz(identical_mul(ww, ftz(k.unsafe_load(e))))
++    if i == j:
++        cell = ftz(Float32(1.0) + cell)
++    b.unsafe_store(e, cell)
++
++
++def gpc_newton_rhs_kernel(gate: _GI, w: _GP, f: _GP, y: _GP, pi: _GP, dst: _GP, n: Int32):
++    var i = _tid()
++    if i < Int(n) and _open(gate):
++        gpc_rhs_item(i, w, f, y, pi, dst)
++
++
++def gpc_newton_nan_reset_kernel(gate: _GI, nan_at: _GI, n: Int32):
++    """One thread: the NaN guard's index back to `n` (none) while the loop
++    runs."""
++    if _tid() == 0 and _open(gate):
++        nan_at.unsafe_store(0, n)
++
++
++def gpc_newton_scale_nan_kernel(gate: _GI, wsr: _GP, v: _GP, dst: _GP, nan_at: _GI, n: Int32):
++    """`gpc_scale`, and the lowest index whose value is NaN (DEVIATION 1638's
++    refusal of a NaN right-hand side) by an atomic min, while the loop runs."""
++    var i = _tid()
++    if i < Int(n) and _open(gate):
++        gpc_scale_item(i, wsr, v, dst)
++        var c = dst.unsafe_load(i)
++        if c != c:
++            _ = Atomic[Int32].min(nan_at, Int32(i))
++
++
++def gpc_newton_a_kernel(gate: _GI, b: _GP, wsr: _GP, x: _GP, dst: _GP, n: Int32):
++    var i = _tid()
++    if i < Int(n) and _open(gate):
++        gpc_a_item(i, b, wsr, x, dst)
++
++
++def gpc_newton_lml_part_kernel(gate: _GI, a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, nb: Int32):
++    var blk = _tid()
++    if blk < Int(nb) and _open(gate):
++        gpc_lml_part_item(blk, a, f, y, Int(n), pdot, pt2)
++
++
++def gpc_newton_lml_fin_kernel(gate: _GI, pdot: _GP, pt2: _GP, nb: Int32, logdet: _GP, dst: _GP):
++    """The likelihood with log|B| read from the device scalar the
++    log-determinant op wrote."""
++    if _tid() == 0 and _open(gate):
++        dst.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet.unsafe_load(0)))
++
++
++def gpc_newton_criterion_kernel(words: _GI, lml: _GP, kept: _GP, nan_at: _GI, n: Int32, it: Int32):
++    """One thread, after iteration `it` (1-based). While the loop runs: the
++    iteration register; a NaN right-hand side stops the loop with
++    GPC_NEWTON_FAIL_NAN; DEVIATION 2830's test (`gpc_stop(lml, kept)`)
++    stops it with `kept` unchanged; otherwise `kept = lml`. The fit returns
++    `kept` (scikit-learn's `log_marginal_likelihood` before the stopping
++    iteration)."""
++    if _tid() != 0:
++        return
++    if words.unsafe_load(STEP_DONE) != Int32(0):
++        return
++    words.unsafe_store(STEP_ITER, it)
++    if nan_at.unsafe_load(0) < n:
++        words.unsafe_store(STEP_FAIL, GPC_NEWTON_FAIL_NAN)
++        words.unsafe_store(STEP_STOP_ITER, it)
++        words.unsafe_store(STEP_DONE, Int32(1))
++        return
++    var l = lml.unsafe_load(0)
++    if gpc_stop(l, kept.unsafe_load(0)):
++        words.unsafe_store(STEP_STOP_ITER, it)
++        words.unsafe_store(STEP_DONE, Int32(1))
++        return
++    kept.unsafe_store(0, l)
++
++
++struct GPCNewtonStep(Copyable, LoopStep, Movable):
++    """One Laplace Newton iteration (`_gpc.py:_posterior_mode`) as a step of
++    `bounded_device_loop`. The fields are handle copies of the fit's
++    buffers (`DeviceBuffer.copy()` shares the memory)."""
++    var dk: DeviceBuffer[DType.float32]
++    var dy: DeviceBuffer[DType.float32]
++    var db: DeviceBuffer[DType.float32]
++    var dgw: DeviceBuffer[DType.float32]
++    var dpi: DeviceBuffer[DType.float32]
++    var dwsr: DeviceBuffer[DType.float32]
++    var df: DeviceBuffer[DType.float32]
++    var dw: DeviceBuffer[DType.float32]
++    var dbv: DeviceBuffer[DType.float32]
++    var dkb: DeviceBuffer[DType.float32]
++    var dc: DeviceBuffer[DType.float32]
++    var da: DeviceBuffer[DType.float32]
++    var dpd: DeviceBuffer[DType.float32]
++    var dpt: DeviceBuffer[DType.float32]
++    var dlml: DeviceBuffer[DType.float32]
++    var dkept: DeviceBuffer[DType.float32]
++    var dnan: DeviceBuffer[DType.int32]
++    var dinfo: DeviceBuffer[DType.int32]
++    var dldscr: DeviceBuffer[DType.float32]
++    var dldet: DeviceBuffer[DType.float32]
++    var n: Int
++    var nbf: Int
++
++    def __init__(
++        out self,
++        ctx: DeviceContext,
++        dk: DeviceBuffer[DType.float32],
++        dy: DeviceBuffer[DType.float32],
++        db: DeviceBuffer[DType.float32],
++        dgw: DeviceBuffer[DType.float32],
++        dpi: DeviceBuffer[DType.float32],
++        dwsr: DeviceBuffer[DType.float32],
++        n: Int,
++    ) raises:
++        self.dk = dk.copy()
++        self.dy = dy.copy()
++        self.db = db.copy()
++        self.dgw = dgw.copy()
++        self.dpi = dpi.copy()
++        self.dwsr = dwsr.copy()
++        self.n = n
++        self.nbf = gpc_fold_blocks(n)
++        self.df = ctx.enqueue_create_buffer[DType.float32](n)
++        self.dw = ctx.enqueue_create_buffer[DType.float32](n)
++        self.dbv = ctx.enqueue_create_buffer[DType.float32](n)
++        self.dkb = ctx.enqueue_create_buffer[DType.float32](n)
++        self.dc = ctx.enqueue_create_buffer[DType.float32](n)
++        self.da = ctx.enqueue_create_buffer[DType.float32](n)
++        self.dpd = ctx.enqueue_create_buffer[DType.float32](max(self.nbf, 1))
++        self.dpt = ctx.enqueue_create_buffer[DType.float32](max(self.nbf, 1))
++        self.dlml = ctx.enqueue_create_buffer[DType.float32](1)
++        self.dkept = ctx.enqueue_create_buffer[DType.float32](1)
++        self.dnan = ctx.enqueue_create_buffer[DType.int32](1)
++        self.dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++        self.dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++        self.dldet = ctx.enqueue_create_buffer[DType.float32](1)
++        enqueue_fill(ctx, self.df, Float32(0.0))
++        enqueue_fill(ctx, self.dkept, gpc_neg_inf32())
++        enqueue_fill(ctx, self.dnan, Int32(n))
++
++    def enqueue_step(
++        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
++    ) raises:
++        self.enqueue_gated(ctx, registers.words, it)
++
++    def enqueue_gated(mut self, ctx: DeviceContext, mut words: DeviceBuffer[DType.int32], it: Int) raises:
++        """Iteration `it` gated on the register block `words` (the loop's
++        own, or one class's block inside `GPCNewtonBatch`)."""
++        var n = self.n
++        var g = _ip(words)
++        ctx.enqueue_function[gpc_newton_w_kernel](
++            g, _fp(self.df), _fp(self.dpi), _fp(self.dw), _fp(self.dwsr), Int32(n),
++            grid_dim=_blocks(n), block_dim=GPC_NEWTON_TPB,
++        )
++        ctx.enqueue_function[gpc_newton_b_kernel](
++            g, _fp(self.db), _fp(self.dk), _fp(self.dwsr), Int32(n),
++            grid_dim=_blocks(n * n), block_dim=GPC_NEWTON_TPB,
++        )
++        chol_op_begin(ctx, words, self.dinfo)
++        chol_op_factor(ctx, self.db, self.dinfo, n)
++        chol_op_info_joins_loop(ctx, words, self.dinfo, it)
++        chol_op_logdet(ctx, self.db, self.dinfo, self.dldscr, self.dldet, n)
++        ctx.enqueue_function[gpc_newton_rhs_kernel](
++            g, _fp(self.dw), _fp(self.df), _fp(self.dy), _fp(self.dpi), _fp(self.dbv), Int32(n),
++            grid_dim=_blocks(n), block_dim=GPC_NEWTON_TPB,
++        )
++        # K b from frozen inputs once the loop is done: the same words
++        identical_gemm_into(ctx, self.dkb, self.dk, self.dbv, self.dgw, n, 1, n, OP_TN)
++        ctx.enqueue_function[gpc_newton_nan_reset_kernel](  # small-launch(n: the sentinel value stored, not a bound): one thread stores one word, the NaN guard's index
++            g, _ip(self.dnan), Int32(n), grid_dim=1, block_dim=1,
++        )
++        ctx.enqueue_function[gpc_newton_scale_nan_kernel](
++            g, _fp(self.dwsr), _fp(self.dkb), _fp(self.dc), _ip(self.dnan), Int32(n),
++            grid_dim=_blocks(n), block_dim=GPC_NEWTON_TPB,
++        )
++        chol_op_cho_solve(ctx, self.db, self.dc, self.dinfo, n, 1)
++        ctx.enqueue_function[gpc_newton_a_kernel](
++            g, _fp(self.dbv), _fp(self.dwsr), _fp(self.dc), _fp(self.da), Int32(n),
++            grid_dim=_blocks(n), block_dim=GPC_NEWTON_TPB,
++        )
++        # f = K a, from a frozen `a` once the loop is done: the same words
++        identical_gemm_into(ctx, self.df, self.dk, self.da, self.dgw, n, 1, n, OP_TN)
++        if self.nbf > 0:
++            ctx.enqueue_function[gpc_newton_lml_part_kernel](
++                g, _fp(self.da), _fp(self.df), _fp(self.dy), Int32(n), _fp(self.dpd), _fp(self.dpt), Int32(self.nbf),
++                grid_dim=_blocks(self.nbf), block_dim=GPC_NEWTON_TPB,
++            )
++        ctx.enqueue_function[gpc_newton_lml_fin_kernel](  # small-launch(nbf: fold blocks of the likelihood): one thread combines the partials into one scalar
++            g, _fp(self.dpd), _fp(self.dpt), Int32(self.nbf), _fp(self.dldet), _fp(self.dlml),
++            grid_dim=1, block_dim=1,
++        )
++        ctx.enqueue_function[gpc_newton_criterion_kernel](  # small-launch(n: the sentinel compared, not a bound): one thread runs the loop criterion over three words
++            g, _fp(self.dlml), _fp(self.dkept), _ip(self.dnan), Int32(n), Int32(it),
++            grid_dim=1, block_dim=1,
++        )
+ 
+ 
++@fieldwise_init
+ struct GPCNewtonRun(ImplicitlyCopyable, Movable):
+     """What the Newton loop leaves besides the resident factor, pi and W_sr:
+     the likelihood kept (DEVIATION 2830), the iterations and the Cholesky
+@@ -91,20 +352,90 @@ struct GPCNewtonRun(ImplicitlyCopyable, Movable):
+     var nb: Int
+ 
+ 
++def gpc_newton_join_kernel(outer: _GI, blocks: MutPointer[Int64, MutAnyOrigin], k: Int32, it: Int32):
++    """One thread, after iteration `it` of every class: the batch loop's
++    register block is done (stopping at `it`) once every class's block is
++    done (converged or failed). Once done, it changes nothing."""
++    if _tid() != 0:
++        return
++    if outer.unsafe_load(STEP_DONE) != Int32(0):
++        return
++    outer.unsafe_store(STEP_ITER, it)
++    for c in range(Int(k)):
++        var w = _GI(unsafe_from_address=Int(blocks.unsafe_load(c)))
++        if w.unsafe_load(STEP_DONE) == Int32(0):
++            return
++    outer.unsafe_store(STEP_STOP_ITER, it)
++    outer.unsafe_store(STEP_DONE, Int32(1))
++
++
++struct GPCNewtonBatch(LoopStep, Movable):
++    """Several binary Laplace fits (one-vs-rest classes) as ONE step of
++    `bounded_device_loop` (lane m3-linalg-and-housekeeping, 2026-11-09).
++    Each class keeps its own register block, so it stops (or fails) on its
++    own iteration exactly as alone; the batch's block is done once every
++    class's is. Every class's kernels are the single fit's, in the single
++    fit's order, on the same stream: the same words. What changes is the
++    host side: one read of the register blocks per GPC_NEWTON_CHECK
++    iterations for all classes, where the classes ran one loop (and its
++    reads) after another."""
++    var steps: List[GPCNewtonStep]
++    var words: List[DeviceBuffer[DType.int32]]
++    var blocks: DeviceBuffer[DType.int64]
++    var k: Int
++
++    def __init__(out self, ctx: DeviceContext, var steps: List[GPCNewtonStep]) raises:
++        var k = len(steps)
++        var words = List[DeviceBuffer[DType.int32]](capacity=k)
++        var addrs = List[Int64](length=k, fill=Int64(0))
++        for c in range(k):  # driver-loop: over the batch's classes (model structure)
++            var w = ctx.enqueue_create_buffer[DType.int32](LOOP_WORDS)
++            ctx.enqueue_memset(w, Int32(0))
++            addrs[c] = Int64(Int(w.unsafe_ptr()))
++            words.append(w^)
++        var blocks = ctx.enqueue_create_buffer[DType.int64](max(k, 1))
++        ctx.enqueue_copy(
++            dst_buf=blocks, src_ptr=MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(addrs.unsafe_ptr()))
++        )
++        ctx.synchronize()
++        _ = addrs^
++        self.k = k
++        self.steps = steps^
++        self.words = words^
++        self.blocks = blocks^
++
++    def enqueue_step(
++        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
++    ) raises:
++        for c in range(self.k):  # driver-loop: over the batch's classes (model structure)
++            var w = self.words[c].copy()  # a handle copy: the same device words
++            self.steps[c].enqueue_gated(ctx, w, it)
++        ctx.enqueue_function[gpc_newton_join_kernel](  # small-launch(k: classes): one thread joins the classes' done words
++            _ip(registers.words), MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(self.blocks.unsafe_ptr())),
++            Int32(self.k), Int32(it), grid_dim=1, block_dim=1,
++        )
++
++
+ # ---------------------------------------------------------------------------
+ # The measured 0.8.66 Newton loop (the default; lane
+ # restore-classical-measured-routes, 2026-11-13).
+ #
+-# The bounded device loop (-D MOJOLEARN_IDN_CHOL_OPS_FIT, deleted 2026-11-17)
+-# went in (24c4eed3a5, e28e5af236, 2026-11-09) without an NVIDIA + AMD
+-# measurement; AMD measured it 1.20x slower (MI325X, 2026-11-13) and the
+-# L40S A/B the same speed (ba08dac006). Each class runs 0.8.66's loop
++# The bounded device loop above runs only under -D MOJOLEARN_IDN_CHOL_OPS_FIT
++# (cholesky/chol_ops.mojo CHOL_OPS_FIT): it went in (24c4eed3a5, e28e5af236,
++# 2026-11-09) without an NVIDIA + AMD measurement, and the first one
++# (candidate 4c2340386abc vs 0.8.66, same MI325X, docs/apple-fast/
++# EXPERIMENTS.md:578) is AMD gpc taxi 959 -> 1160 ms, istella 1442 -> 1728 ms
++# (1.20x slower). By default each class runs 0.8.66's loop
+ # (`gpc_ovr.mojo::gpc_newton_device` at 24c4eed3a5^, copied): `potrf_lower`
+ # with its info read, log|B| left on the device (`enqueue_logdet`, the
+ # 0.8.66 IDENTICAL default GPC_IDN_NEWTON_LOGDET), `cho_solve`, and one read
+ # of the likelihood and the NaN index per iteration for the stop test. The
+ # kernels below are 0.8.66's ungated Newton kernels (classifier.mojo /
+-# gpc_ovr.mojo at 24c4eed3a5^).
++# gpc_ovr.mojo at 24c4eed3a5^), the same items and block sizes as the gated
++# ones: both routes give the same words (the ops' factor, solve and fold are
++# `potrf_lower`'s / `cho_solve`'s / `enqueue_logdet`'s words). The A/B of
++# CHOL_OPS_FIT on NVIDIA and AMD decides (owed row chol-ops-fit,
++# bench/results/paper_compare/owed-pre0867.json).
+ # ---------------------------------------------------------------------------
+ 
+ 
+@@ -338,7 +669,7 @@ def gpc_newton_device_batch(
+     max_iter_predict: Int,
+ ) raises -> List[GPCNewtonRun]:
+     """The Laplace Newton loop of every class in `dys` against ONE resident
+-    K (`dk`, n x n), one class after another (`gpc_newton_host_loop`). Class c
++    K (`dk`, n x n) in one bounded device loop (`GPCNewtonBatch`). Class c
+     leaves its last factor in `dbs[c]` and its pi and W_sr in `dpis[c]`,
+     `dwsrs[c]`; the GEMV workspace `dgw` is shared (one stream: the classes'
+     GEMVs run one after another). Raises by name for the lowest class whose
+@@ -353,34 +684,82 @@ def gpc_newton_device_batch(
+         for _c in range(k):  # driver-loop: over the classes (model structure)
+             runs.append(GPCNewtonRun(gpc_neg_inf32(), 0, 0))
+         return runs^
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    # The measured 0.8.66 route (see `gpc_newton_host_loop`): each
+-    # class's loop after the previous one, sharing one Cholesky
+-    # workspace as 0.8.66's one-vs-rest fit did.
+-    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+-    # the loop's vectors, once per batch (every class has this n)
+-    var hscratch = GPCHostLoopScratch(ctx, n)
+-    var dkh = dk.copy()  # a handle copy: the same device memory
+-    var dgwh = dgw.copy()
++    comptime if not CHOL_OPS_FIT:
++        # The measured 0.8.66 route (see `gpc_newton_host_loop`): each
++        # class's loop after the previous one, sharing one Cholesky
++        # workspace as 0.8.66's one-vs-rest fit did.
++        var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
++        var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
++        var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
++        # the loop's vectors, once per batch (every class has this n)
++        var hscratch = GPCHostLoopScratch(ctx, n)
++        var dkh = dk.copy()  # a handle copy: the same device memory
++        var dgwh = dgw.copy()
++        for c in range(k):  # driver-loop: over the classes (model structure)
++            var dy = dys[c].copy()
++            var db = dbs[c].copy()
++            var dpi = dpis[c].copy()
++            var dwsr = dwsrs[c].copy()
++            runs.append(
++                gpc_newton_host_loop(ctx, hscratch, dkh, dy, db, ws, dwork, dgwh, dpi, dwsr, n, max_iter_predict)
++            )
++        ctx.synchronize()
++        _ = ws^
++        _ = dwork^
++        _ = hscratch^
++        _ = dkh^
++        _ = dgwh^
++        return runs^
++    var steps = List[GPCNewtonStep](capacity=k)
+     for c in range(k):  # driver-loop: over the classes (model structure)
+-        var dy = dys[c].copy()
+-        var db = dbs[c].copy()
+-        var dpi = dpis[c].copy()
+-        var dwsr = dwsrs[c].copy()
+-        runs.append(
+-            gpc_newton_host_loop(ctx, hscratch, dkh, dy, db, ws, dwork, dgwh, dpi, dwsr, n, max_iter_predict)
+-        )
++        steps.append(GPCNewtonStep(ctx, dk, dys[c], dbs[c], dgw, dpis[c], dwsrs[c], n))
++    var batch = GPCNewtonBatch(ctx, steps^)
++    var registers = LoopRegisters(ctx)
++    var timers = LoopTimers("gpc.newton")
++    _ = bounded_device_loop(ctx, batch, registers, 1, max_iter_predict, GPC_NEWTON_CHECK, timers)
++    timers.report()
++    # one read: every class's block, likelihood kept and NaN index
++    var hw = ctx.enqueue_create_host_buffer[DType.int32](k * LOOP_WORDS)
++    var hkept = ctx.enqueue_create_host_buffer[DType.float32](k)
++    var hnan = ctx.enqueue_create_host_buffer[DType.int32](k)
++    for c in range(k):  # driver-loop: over the classes (model structure)
++        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr() + c * LOOP_WORDS, src_buf=batch.words[c])
++        ctx.enqueue_copy(dst_ptr=hkept.unsafe_ptr() + c, src_buf=batch.steps[c].dkept)
++        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr() + c, src_buf=batch.steps[c].dnan)
+     ctx.synchronize()
+-    _ = ws^
+-    _ = dwork^
+-    _ = hscratch^
+-    _ = dkh^
+-    _ = dgwh^
++    for c in range(k):  # driver-loop: over the classes (model structure)
++        var w = hw.unsafe_ptr() + c * LOOP_WORDS
++        var code = Int(w.unsafe_load(STEP_FAIL))
++        var done = Int(w.unsafe_load(STEP_DONE)) != 0
++        var stop = Int(w.unsafe_load(STEP_STOP_ITER))
++        if code == Int(GPC_NEWTON_FAIL_NAN):
++            raise Error(
++                "cholesky_solve_host: the right-hand side contains NaN at"
++                " flat index "
++                + String(Int(hnan.unsafe_ptr().unsafe_load(c)))
++                + "; refused by name (DEVIATION 1638)"
++            )
++        if code != 0:
++            raise Error(
++                "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
++                " at Newton iteration "
++                + String(stop)
++                + " (info="
++                + String(code)
++                + "). B's eigenvalues are at least 1 for any finite kernel"
++                " matrix, so this means a non-finite latent value"
++            )
++        var n_iter = stop if done else max(max_iter_predict, 0)
++        var nb = chol_nb_for(n, CHOL_NB_PINNED) if n_iter > 0 else 0
++        runs.append(GPCNewtonRun(hkept.unsafe_ptr().unsafe_load(c), n_iter, nb))
++    _ = hw^
++    _ = hkept^
++    _ = hnan^
++    _ = batch^
++    _ = registers^
+     return runs^
+ 
++
+ def gpc_newton_device(
+     ctx: DeviceContext,
+     mut dk: DeviceBuffer[DType.float32],
+diff --git a/gaussian_process/gpr_resident.mojo b/gaussian_process/gpr_resident.mojo
+index 63ea8cacc1..8fdd822ee2 100644
+--- a/gaussian_process/gpr_resident.mojo
++++ b/gaussian_process/gpr_resident.mojo
+@@ -47,6 +47,14 @@ from cholesky.checks.potrf import (
+     enqueue_logdet,
+     potrf_lower,
+ )
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT,
++    chol_op_cho_solve,
++    chol_op_factor,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++    chol_op_zero_on_fail,
++)
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve, trsm_lower
+ from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
+ from cholesky.logdet_fold import logdet_blocks
+@@ -176,53 +184,94 @@ def gpr_fit_ptr_device(
+     var info = 0
+     var nb_ran = nb_pin
+     add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+-    # The factor, the log-determinant and the solve on the measured 0.8.66
+-    # route (`potrf_lower` with its one info read, then the branch on the
+-    # host; lane fable-perf-classical-0855).
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+-    var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+-    # the factor home, before the solve (which only reads it)
+-    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
+-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+-    var diag = dwork.create_sub_buffer[DType.float32](0, n)
+-    var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
+-    if run.info == 0:
+-        # `chol_logdet`'s two launches, the scalar left on the device
+-        ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
+-            diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
+-            grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+-        )
+-        enqueue_logdet(ctx, _fp(diag), _fp(dlparts), _fp(scalar), n)
++    # The factor, the log-determinant and the solve: under
++    # -D MOJOLEARN_IDN_CHOL_OPS_FIT as the executor's Cholesky ops (lane
++    # n8-gp-krr-smo, cholesky/chol_ops.mojo: `info` stays in a device word
++    # that gates every later launch and comes home once, with the outputs);
++    # by default the measured 0.8.66 route (`potrf_lower` with its one
++    # info read, then the branch on the host): the same kernels in the same
++    # order. The ops route measured AMD gpr 1.14-1.18x slower than 0.8.66
++    # on the same box (cholesky/chol_ops.mojo CHOL_OPS_FIT, lane
++    # fable-perf-classical-0855); the define is its A/B arm.
++    comptime if CHOL_OPS_FIT:
++        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++        enqueue_fill(ctx, dinfo, Int32(0))
++        chol_op_factor(ctx, dk, dinfo, n)
++        # the factor home, before the solve (which only reads it); a failed
++        # factor is the one frozen at its failing panel, beside its nonzero info
++        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
++        var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++        var dldet = ctx.enqueue_create_buffer[DType.float32](1)
++        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++        chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
+         ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
+-        cho_solve(ctx, dk, ddual, n, 1, trace, CHOL_SOLVE_TPB)
+-        # `_gpr_ydot_device`'s two launches
++        chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
++        # `_gpr_ydot_device`'s two launches (read only when info == 0)
+         if nbf > 0:
+             ctx.enqueue_function[gpr_ydot_part_kernel](
+                 _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
+                 grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+             )
+         ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
+-        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=scalar)
++        # a failed fit hands back a zero dual beside its nonzero info
++        chol_op_zero_on_fail(ctx, dinfo, ddual, n)
++        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
++        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
+         ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
++        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
++        ctx.synchronize()
++        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++        if info == 0:
++            logdet = hld.unsafe_ptr().unsafe_load(0)
++            ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
++            lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
++        _ = hinfo^
++        _ = dinfo^
++        _ = dldscr^
++        _ = dldet^
+     else:
+-        # a failed fit hands back a zero dual beside its nonzero info
+-        enqueue_fill(ctx, ddual, Float32(0.0))
+-    ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
+-    ctx.synchronize()
+-    info = run.info
+-    nb_ran = run.nb
+-    if info == 0:
+-        logdet = hld.unsafe_ptr().unsafe_load(0)
+-        ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
+-        lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
+-    _ = diag^
+-    _ = scalar^
+-    _ = ws^
+-    _ = dwork^
+-    _ = dlparts^
++        var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
++        var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
++        var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
++        # the factor home, before the solve (which only reads it)
++        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
++        var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
++        var diag = dwork.create_sub_buffer[DType.float32](0, n)
++        var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
++        if run.info == 0:
++            # `chol_logdet`'s two launches, the scalar left on the device
++            ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
++                diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
++                grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
++            )
++            enqueue_logdet(ctx, _fp(diag), _fp(dlparts), _fp(scalar), n)
++            ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
++            cho_solve(ctx, dk, ddual, n, 1, trace, CHOL_SOLVE_TPB)
++            # `_gpr_ydot_device`'s two launches
++            if nbf > 0:
++                ctx.enqueue_function[gpr_ydot_part_kernel](
++                    _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
++                    grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
++                )
++            ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
++            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=scalar)
++            ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
++        else:
++            # a failed fit hands back a zero dual beside its nonzero info
++            enqueue_fill(ctx, ddual, Float32(0.0))
++        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
++        ctx.synchronize()
++        info = run.info
++        nb_ran = run.nb
++        if info == 0:
++            logdet = hld.unsafe_ptr().unsafe_load(0)
++            ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
++            lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
++        _ = diag^
++        _ = scalar^
++        _ = ws^
++        _ = dwork^
++        _ = dlparts^
+     # info, nb, logdet, ydotalpha, lml; each float32 widens to float64 exactly.
+     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalars_addr)
+     sp.unsafe_store(0, Float64(info))
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+index 52ce1def9c..8d6b23ee46 100644
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -125,6 +125,8 @@ from kernel_methods.impl.distance.kernel_matrices import KM_EPILOGUE_TPB
+ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
+     KRR_RIDGE_TPB,
+     add_ridge_diag,
++    kernel_ridge_factor_solve_enqueue,
++    kernel_ridge_ops_route,
+     kernel_ridge_solve,
+     kernel_ridge_workspace_floats,
+ )
+@@ -989,20 +991,29 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+         )
+         trace.record_device(ctx, "krr.weighted", dk, cells)
+ 
+-    # `kernel_ridge_solve`'s `potrf_lower` (one drain inside the factor for
+-    # `info`, then the download's): the measured 0.8.66 route (lane
+-    # fable-perf-classical-0855).
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    # (with it went the info word, its fill, its copy home and the check
+-    # after the drain that the B arm's read-free factor needed on every fit)
+-    var info0 = kernel_ridge_solve(
+-        ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
+-        CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
+-    )
+-    if info0 != 0:
+-        ctx.synchronize()
+-        raise Error(_krr_not_pd_message(info0, kp.kernel, n_samples))
++    # Under -D MOJOLEARN_IDN_CHOL_OPS_FIT the ridge, the factor and the
++    # solve are enqueued read-free (lane n8-gp-krr-smo, the executor's
++    # Cholesky ops); `info` comes home with the dual coefficients and a
++    # failed factor raises after that one drain. The default, the
++    # identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
++    # `potrf_lower` (one drain inside the factor for `info`, then the
++    # download's): the measured 0.8.66 route (cholesky/chol_ops.mojo
++    # CHOL_OPS_FIT, lane fable-perf-classical-0855).
++    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++    if not kernel_ridge_ops_route(trace):
++        var info0 = kernel_ridge_solve(
++            ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
++            CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
++        )
++        if info0 != 0:
++            ctx.synchronize()
++            raise Error(_krr_not_pd_message(info0, kp.kernel, n_samples))
++        enqueue_fill(ctx, dinfo, Int32(0))
++    else:
++        add_ridge_diag(ctx, dk, n_samples, alpha, KRR_RIDGE_TPB, KMSAB_NONE)
++        kernel_ridge_factor_solve_enqueue(ctx, dk, dy, dinfo, n_samples, n_targets)
++    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+     if weighted:
+         _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+     _download_into(ctx, dy, dual_out, n_samples * n_targets)
+@@ -1010,6 +1021,11 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+         # A fold's X_fit_: the device copy of the gathered rows, home once.
+         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xfit_addr), src_buf=qx.x)
+     ctx.synchronize()
++    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++    _ = hinfo^
++    _ = dinfo^
++    if info != 0:
++        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
+     _ = dsw^
+     _ = qx^
+     _ = dy^
+diff --git a/kernel_methods/impl/kernel_ridge/kernel_ridge.mojo b/kernel_methods/impl/kernel_ridge/kernel_ridge.mojo
+index 4a0f80b22c..2d7f8b73f0 100644
+--- a/kernel_methods/impl/kernel_ridge/kernel_ridge.mojo
++++ b/kernel_methods/impl/kernel_ridge/kernel_ridge.mojo
+@@ -161,6 +161,8 @@ from cholesky.checks.potrf import (
+     potrf_lower,
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
++from cholesky.chol_ops import CHOL_OPS_FIT, chol_op_cho_solve, chol_op_factor
++from cholesky.multi_gpu import chol_device_count
+ from core.device_zero import enqueue_fill
+ from core.identity_trace import IdentityTrace
+ from kernel_methods.checks.km_sabotage import (
+@@ -320,8 +322,22 @@ def kernel_ridge_solve(
+     var t0 = Int(perf_counter_ns())
+     # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
++    if kernel_ridge_ops_route(trace):
++        # The executor's Cholesky ops (lane n8-gp-krr-smo): the factor and
++        # the solve enqueued read-free, the solve skipped on the device when
++        # the factor fails (so `y` keeps the targets), `info` read once here.
++        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++        kernel_ridge_factor_solve_enqueue(ctx, k, y, dinfo, n, n_targets)
++        var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
++        ctx.synchronize()
++        var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
++        if st_on:
++            print("KRR_SOLVE_STAGES n=" + String(n) + " factor_solve_ms=" + String((Int(perf_counter_ns()) - t0) // 1000000))
++        _ = hinfo^
++        _ = dinfo^
++        return info
+     # The identity-trace route (km_check: `potrf_lower`'s per-panel records,
+     # `chol.panelNNN.*`, and `cho_solve`'s) and the multi-GPU owner set
+     # (the parallel kernel-method driver's plan, cholesky/multi_gpu.mojo:
+@@ -354,9 +370,38 @@ def kernel_ridge_solve(
+     return 0
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-# (kernel_ridge_ops_route and kernel_ridge_factor_solve_enqueue, the B arm's route test and enqueue-only posv)
++def kernel_ridge_ops_route(trace: IdentityTrace) raises -> Bool:
++    """True when the factor and the solve run as the executor's Cholesky ops
++    (`-D MOJOLEARN_IDN_CHOL_OPS_FIT`, one device, no identity trace); False
++    by default, on the trace route and under a multi-GPU Cholesky plan,
++    which keep `potrf_lower` / `cho_solve` (cholesky/chol_ops.mojo
++    CHOL_OPS_FIT: the ops route measured AMD kernel-ridge 1.21-1.25x slower
++    than 0.8.66, NVIDIA the same; the define is its A/B arm)."""
++    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
++    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
++    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
++    comptime if not CHOL_OPS_FIT:
++        return False
++    return not trace.enabled and chol_device_count() == 1
++
++
++def kernel_ridge_factor_solve_enqueue(
++    ctx: DeviceContext,
++    mut k: DeviceBuffer[DType.float32],
++    mut y: DeviceBuffer[DType.float32],
++    mut info: DeviceBuffer[DType.int32],
++    n: Int,
++    n_targets: Int,
++) raises:
++    """`posv` on the ridged `k` (n x n) and `y` (n x n_targets) as the
++    executor's Cholesky ops (cholesky/chol_ops.mojo), ENQUEUED and read-free:
++    `k` becomes `L`, `y` the dual coefficients, `info[0]` LAPACK's info on
++    the device. A failed factor leaves `y` holding the targets (the solve
++    is skipped on the device, DEVIATION 1662). The caller reads `info` at
++    its own sync, beside the outputs."""
++    enqueue_fill(ctx, info, Int32(0))
++    chol_op_factor(ctx, k, info, n)
++    chol_op_cho_solve(ctx, k, y, info, n, n_targets)
+ 
+ 
+ def kernel_ridge_workspace_floats(n: Int) -> Int:
+diff --git a/mixture/checks/gmm_check.mojo b/mixture/checks/gmm_check.mojo
+index 2bc73870a9..8c7d6b9009 100644
+--- a/mixture/checks/gmm_check.mojo
++++ b/mixture/checks/gmm_check.mojo
+@@ -56,6 +56,7 @@ from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_NB_PINNED, chol_workspace_floats
++from cholesky.chol_ops import CHOL_OPS_FIT
+ from core.identity_trace import (
+     IdentityTrace,
+     first_divergence,
+@@ -2580,10 +2581,10 @@ def check_chain_workspace_is_leased() raises:
+             raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " dwork does not end at the workspace")
+         # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-        if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
+-            raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
++        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
++        comptime if not CHOL_OPS_FIT:
++            if gmm_chol_ws_floats(dl) < chol_workspace_floats(dl, CHOL_NB_PINNED):
++                raise Error("check_chain_workspace_is_leased: d=" + String(dl) + " workspace shorter than potrf_lower's")
+ 
+     var d = 300
+     var ncomp = 2
+diff --git a/mixture/checks/mstep.mojo b/mixture/checks/mstep.mojo
+index 5e4436ed8d..2e567f49dc 100644
+--- a/mixture/checks/mstep.mojo
++++ b/mixture/checks/mstep.mojo
+@@ -117,6 +117,14 @@ from cholesky.checks.potrf import (
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+ from core.device_zero import enqueue_fill
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT,
++    chol_op_begin,
++    chol_op_factor,
++    chol_op_logdet,
++    chol_op_logdet_scratch_floats,
++    chol_op_solve_lower,
++)
+ from core.identity_trace import IdentityTrace
+ from mixture.step_keep import GMM_KEEP_NK_LEVELS, GMM_KEEP_PAIR_DIFF, GMM_KEEP_PAIR_SCALED, GMM_KEEP_RESP_T, gmm_keep_buffer
+ from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
+@@ -1785,10 +1793,13 @@ def gmm_chol_ws_offset(d: Int) -> Int:
+ def gmm_chol_ws_floats(d: Int) -> Int:
+     """Floats of the factor's own workspace region in `dwork`: by default
+     `potrf_lower`'s workspace at the pinned width
+-    (`chol_workspace_floats(d, CHOL_NB_PINNED)`)."""
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    return max(chol_workspace_floats(d, CHOL_NB_PINNED), 1)
++    (`chol_workspace_floats(d, CHOL_NB_PINNED)`); under
++    -D MOJOLEARN_IDN_CHOL_OPS_FIT the logdet op's scratch plus its one
++    output float."""
++    comptime if CHOL_OPS_FIT:
++        return max(chol_op_logdet_scratch_floats(d), 1) + 1
++    else:
++        return max(chol_workspace_floats(d, CHOL_NB_PINNED), 1)
+ 
+ 
+ def gmm_chol_dwork_floats(d: Int) -> Int:
+@@ -1827,19 +1838,27 @@ def _gmm_chain_factor(
+     ctx: DeviceContext,
+     mut work: DeviceBuffer[DType.float32],
+     mut cws: DeviceBuffer[DType.float32],
++    mut dinfo: DeviceBuffer[DType.int32],
++    mut hinfo: HostBuffer[DType.int32],
+     mut quiet: IdentityTrace,
+     d: Int,
+     chol_elem_tpb: Int,
+ ) raises -> Int:
+     """The working block's factor and its LAPACK info, home: the chain
+-    decides on it: 0.8.66's `potrf_lower` (its info read per panel,
+-    workspace `cws`)."""
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-    var run = potrf_lower(
+-        ctx, work, cws, d, quiet, CHOL_NB_PINNED, CHOL_PANEL_TPB, chol_elem_tpb,
+-    )
+-    return run.info
++    decides on it. By default 0.8.66's `potrf_lower` (its info read per
++    panel, workspace `cws`); under -D MOJOLEARN_IDN_CHOL_OPS_FIT the
++    executor's `chol_op_factor` (info zeroed first, one read)."""
++    comptime if CHOL_OPS_FIT:
++        enqueue_fill(ctx, dinfo, Int32(0))
++        chol_op_factor(ctx, work, dinfo, d)
++        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
++        ctx.synchronize()
++        return Int(hinfo.unsafe_ptr().unsafe_load(0))
++    else:
++        var run = potrf_lower(
++            ctx, work, cws, d, quiet, CHOL_NB_PINNED, CHOL_PANEL_TPB, chol_elem_tpb,
++        )
++        return run.info
+ 
+ 
+ def gmm_precision_cholesky(
+@@ -1880,6 +1899,8 @@ def gmm_precision_cholesky(
+       4. `chol_logdet(L_k)` -> `2 sum log L_jj`, and
+          `log_det_chol[k] = -0.5 *` that (DEVIATION 1726);
+       5. `trsm_lower(L_k, I)` -> `L_k^{-1}`;
++      (under -D MOJOLEARN_IDN_CHOL_OPS_FIT, the B arm: `chol_op_factor`,
++      `chol_op_logdet` and `chol_op_solve_lower` with the same reads home)
+       6. transpose -> `P_k = (L_k^{-1})^T`, scikit-learn's `.T` at `:370`.
+ 
+     **THE CHOLESKY LANE'S OWN CARD STAGES ARE NOT EMITTED, AND THAT IS
+@@ -1928,17 +1949,26 @@ def gmm_precision_cholesky(
+     # and `trsm_lower`, each with a disabled trace. Lane
+     # m3-linalg-and-housekeeping (49e8c5b633, 2026-11-09) had put the
+     # executor's Cholesky ops (cholesky/chol_ops.mojo) here without an
+-    # NVIDIA + AMD measurement; as the B arm (-D MOJOLEARN_IDN_CHOL_OPS_FIT)
+-    # they measured the same speed on the L40S and were deleted 2026-11-17.
++    # NVIDIA + AMD measurement; they are the B arm under
++    # -D MOJOLEARN_IDN_CHOL_OPS_FIT (owed row chol-ops-fit). The ops claim
++    # potrf_lower's arithmetic at the pinned width (the same words); the
++    # A/B checks it.
+     var quiet = IdentityTrace.disabled()
+     # The factor's workspace is a region of the caller's `dwork`, sized once
+     # per fit (gmm_chol_dwork_floats; lane fix-gmm-chol-leftovers): no
+-    # per-call allocation of potrf_lower's workspace.
++    # per-call allocation of potrf_lower's workspace. Under
++    # -D MOJOLEARN_IDN_CHOL_OPS_FIT the same region holds the logdet op's
++    # scratch and its output float.
+     var ws_off = gmm_chol_ws_offset(d)
+     var ws_len = gmm_chol_ws_floats(d)
+     var cws = dwork.create_sub_buffer[DType.float32](ws_off, ws_len)
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm: its info word, host words and logdet views, allocated on every call) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++    # (dscr and dld are read only on the ops route, where ws_len >= 2 and
++    # they are disjoint; on the default route they are unused views)
++    var dscr = dwork.create_sub_buffer[DType.float32](ws_off, max(ws_len - 1, 1))
++    var dld = dwork.create_sub_buffer[DType.float32](ws_off + ws_len - 1, 1)
++    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
++    var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
+ 
+     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
+ 
+@@ -1958,7 +1988,7 @@ def gmm_precision_cholesky(
+         add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
+ 
+         # (3) the factorization, and the only failure this lane has
+-        var info = _gmm_chain_factor(ctx, work, cws, quiet, d, chol_elem_tpb)
++        var info = _gmm_chain_factor(ctx, work, cws, dinfo, hinfo, quiet, d, chol_elem_tpb)
+         if info != 0:
+             if sabotage == GMM_SAB_COLLAPSE_RESET:
+                 # ARM. See `cov_reset_identity_kernel`. The component's
+@@ -1976,7 +2006,7 @@ def gmm_precision_cholesky(
+                 ctx.enqueue_copy(dst_buf=work, src_buf=src2)
+                 ctx.synchronize()
+                 add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
+-                info = _gmm_chain_factor(ctx, work, cws, quiet, d, chol_elem_tpb)
++                info = _gmm_chain_factor(ctx, work, cws, dinfo, hinfo, quiet, d, chol_elem_tpb)
+                 _ = src2^
+                 if info != 0:
+                     # The identity matrix failed to factor, which is
+@@ -1997,9 +2027,13 @@ def gmm_precision_cholesky(
+ 
+         # (4) log|Sigma_k| through the ONE pinned fold, halved and negated.
+         var ld: Float32
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-        ld = chol_logdet(ctx, work, scal, d, quiet, chol_elem_tpb)
++        comptime if CHOL_OPS_FIT:
++            chol_op_logdet(ctx, work, dinfo, dscr, dld, d)
++            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
++            ctx.synchronize()
++            ld = hld.unsafe_ptr().unsafe_load(0)
++        else:
++            ld = chol_logdet(ctx, work, scal, d, quiet, chol_elem_tpb)
+         logdet_host.append(ftz(identical_mul(Float32(-0.5), ld)))
+ 
+         # the factor, kept for the card and for the VENDOR_MATMUL arm
+@@ -2016,11 +2050,12 @@ def gmm_precision_cholesky(
+             grid_dim=(grid_dd, 1, 1),
+             block_dim=(elem_tpb, 1, 1),
+         )
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-        trsm_lower(
+-            ctx, work, identity, d, d, quiet, "gmm.precision.trsm", CHOL_SOLVE_TPB
+-        )
++        comptime if CHOL_OPS_FIT:
++            chol_op_solve_lower(ctx, work, identity, dinfo, d, d)
++        else:
++            trsm_lower(
++                ctx, work, identity, d, d, quiet, "gmm.precision.trsm", CHOL_SOLVE_TPB
++            )
+         var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
+         ctx.enqueue_copy(dst_buf=linv_k, src_buf=identity)
+ 
+@@ -2068,6 +2103,11 @@ def gmm_precision_cholesky(
+     _ = scal^
+     _ = work^
+     _ = cws^
++    _ = dinfo^
++    _ = hinfo^
++    _ = dscr^
++    _ = dld^
++    _ = hld^
+     return GmmMStepRun(0, -1)
+ 
+ 
+@@ -2084,9 +2124,11 @@ def gmm_precision_cholesky(
+ # loop at its iteration with no host read. The routes are the kernels the
+ # old host-read driver called, in its order of preference: the IDENTICAL
+ # one-launch order (`IDN_GMM_FUSED_CHOL`, d <= GMM_IDN_CHOL_MAX_D), FAST
+-# Apple's fused and big kernels, and otherwise 0.8.66's host-read
+-# per-component chain (`gmm_precision_cholesky`: `potrf_lower`,
+-# `chol_logdet` and `trsm_lower` read `info` and the log determinant home).
++# Apple's fused and big kernels, and otherwise the per-component chain on
++# the executor's Cholesky ops (`cholesky/chol_ops.mojo`: potrf_lower's
++# launches at the pinned width, the default trsm kernels and the logdet
++# fold, each guarded on the component's info word) where `potrf_lower`,
++# `chol_logdet` and `trsm_lower` read `info` and the log determinant home.
+ 
+ 
+ def gmm_first_fail_kernel(
+@@ -2134,24 +2176,33 @@ def gmm_logdet_halve_kernel(
+ 
+ struct GmmCholScratch(Movable):
+     """The precision Cholesky's device words and scratch, allocated once per
+-    fit: one info word per component, the status pair, and when the fit's
+-    route is the host-read chain (`gmm_precision_reads_host`) that chain's
+-    `dwork` (`gmm_chol_dwork_floats`), else one float. The working d x d
+-    block, identity, logdet scratch and raw log determinants of the
+-    executor-ops chain went with it:
+-    TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm) deleted 2026-11-17 by
+-    lane/fb12-loser-arms; code recoverable at 2203db7094."""
++    fit: one info word per component, the status pair, and for the
++    per-component chain a working d x d block, the identity it solves
++    against, the logdet fold's scratch and the raw log determinants; and
++    when the fit's route is the host-read chain (`gmm_precision_reads_host`)
++    that chain's `dwork` (`gmm_chol_dwork_floats`), else one float."""
+     var info: DeviceBuffer[DType.int32]
+     var status: DeviceBuffer[DType.int32]
++    var work: DeviceBuffer[DType.float32]
++    var identity: DeviceBuffer[DType.float32]
++    var ld_scratch: DeviceBuffer[DType.float32]
++    var ld_raw: DeviceBuffer[DType.float32]
+     var host_status: HostBuffer[DType.int32]
+     var chain_dwork: DeviceBuffer[DType.float32]
+ 
+     def __init__(out self, ctx: DeviceContext, d: Int, ncomp: Int) raises:
++        var dd = d * d
+         self.chain_dwork = ctx.enqueue_create_buffer[DType.float32](
+             gmm_chol_dwork_floats(d) if gmm_precision_reads_host(d) else 1
+         )
+         self.info = ctx.enqueue_create_buffer[DType.int32](max(ncomp, 1))
+         self.status = ctx.enqueue_create_buffer[DType.int32](2)
++        self.work = ctx.enqueue_create_buffer[DType.float32](max(dd, 1))
++        self.identity = ctx.enqueue_create_buffer[DType.float32](max(dd, 1))
++        self.ld_scratch = ctx.enqueue_create_buffer[DType.float32](
++            max(chol_op_logdet_scratch_floats(d), 1)
++        )
++        self.ld_raw = ctx.enqueue_create_buffer[DType.float32](max(ncomp, 1))
+         self.host_status = ctx.enqueue_create_host_buffer[DType.int32](2)
+         ctx.enqueue_memset(self.status, Int32(0))
+ 
+@@ -2187,12 +2238,12 @@ def gmm_precision_reads_host(d: Int) -> Bool:
+     """Whether the fit's precision Cholesky at this d is the host-read chain
+     (`gmm_precision_cholesky`, 0.8.66's per-component `potrf_lower` route):
+     no one-launch factor of `gmm_precision_enqueue` applies (the same tests
+-    in the same order). The EM loop
++    in the same order) and -D MOJOLEARN_IDN_CHOL_OPS_FIT is off. The EM loop
+     then reads its register block every iteration (check_every = 1), as for
+     the sabotage arms, so no iteration runs past a stop. Lane
+     fix-chol-ops-remaining-callers (2026-11-13)."""
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++    comptime if CHOL_OPS_FIT:
++        return False
+     comptime if IDN_GMM_FUSED_CHOL:
+         if gmm_idn_chol_applies(d):
+             return False
+@@ -2275,23 +2326,71 @@ def gmm_precision_enqueue(
+                 grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+             )
+             fused = True
+-    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++    comptime if not CHOL_OPS_FIT:
++        if not fused:
++            # Lane fix-chol-ops-remaining-callers (2026-11-13): no one-launch
++            # factor applies, so by default the fit runs 0.8.66's
++            # per-component chain (`gmm_precision_cholesky`: potrf_lower,
++            # chol_logdet, trsm_lower, the host reading each pivot) and puts
++            # its verdict in the status pair; it records its own trace
++            # stages. The loop reads every iteration on this route
++            # (`gmm_precision_reads_host`). The enqueue-only chain on the
++            # executor's Cholesky ops below is the B arm under
++            # -D MOJOLEARN_IDN_CHOL_OPS_FIT (owed row chol-ops-fit).
++            var run = gmm_precision_cholesky(
++                ctx, cov, chol_l, linv, prec, log_det_chol, scratch.chain_dwork,
++                d, ncomp, trace, tag, elem_tpb, chol_elem_tpb, GMM_SAB_NONE,
++                cov_lo_addr,
++            )
++            gmm_status_put(ctx, scratch, run)
++            return
+     if not fused:
+-        # Lane fix-chol-ops-remaining-callers (2026-11-13): no one-launch
+-        # factor applies, so by default the fit runs 0.8.66's
+-        # per-component chain (`gmm_precision_cholesky`: potrf_lower,
+-        # chol_logdet, trsm_lower, the host reading each pivot) and puts
+-        # its verdict in the status pair; it records its own trace
+-        # stages. The loop reads every iteration on this route
+-        # (`gmm_precision_reads_host`).
+-        var run = gmm_precision_cholesky(
+-            ctx, cov, chol_l, linv, prec, log_det_chol, scratch.chain_dwork,
+-            d, ncomp, trace, tag, elem_tpb, chol_elem_tpb, GMM_SAB_NONE,
+-            cov_lo_addr,
++        var grid_dd = (dd + elem_tpb - 1) // elem_tpb
++        for kc in range(ncomp):  # driver-loop: over mixture components (model structure), enqueue only
++            # (1) the working copy, (2) the profile's diagonal flush with no
++            # ridge (DEVIATION 1737), (3) the factor, its info in word kc
++            var src = cov.create_sub_buffer[DType.float32](kc * dd, dd)
++            ctx.enqueue_copy(dst_buf=scratch.work, src_buf=src)
++            add_jitter(ctx, scratch.work, d, GMM_CHOL_JITTER, chol_elem_tpb)
++            var info_k = scratch.info.create_sub_buffer[DType.int32](kc, 1)
++            chol_op_begin(ctx, gate, info_k)
++            chol_op_factor(ctx, scratch.work, info_k, d)
++            # (4) log|Sigma_k| through the pinned fold (halved below)
++            var ld_k = scratch.ld_raw.create_sub_buffer[DType.float32](kc, 1)
++            chol_op_logdet(ctx, scratch.work, info_k, scratch.ld_scratch, ld_k, d)
++            var ldst = chol_l.create_sub_buffer[DType.float32](kc * dd, dd)
++            ctx.enqueue_copy(dst_buf=ldst, src_buf=scratch.work)
++            # (5) L^{-1} by forward substitution against the identity
++            ctx.enqueue_function[set_identity_kernel](
++                scratch.identity.unsafe_ptr(),
++                Int32(d),
++                grid_dim=(grid_dd, 1, 1),
++                block_dim=(elem_tpb, 1, 1),
++            )
++            chol_op_solve_lower(ctx, scratch.work, scratch.identity, info_k, d, d)
++            var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
++            ctx.enqueue_copy(dst_buf=linv_k, src_buf=scratch.identity)
++            # (6) P_k = (L_k^{-1})^T
++            var prec_k = prec.create_sub_buffer[DType.float32](kc * dd, dd)
++            ctx.enqueue_function[transpose_square_kernel](
++                linv_k.unsafe_ptr(),
++                prec_k.unsafe_ptr(),
++                Int32(d),
++                grid_dim=(grid_dd, 1, 1),
++                block_dim=(elem_tpb, 1, 1),
++            )
++            _ = src^
++            _ = info_k^
++            _ = ld_k^
++            _ = ldst^
++            _ = linv_k^
++            _ = prec_k^
++        ctx.enqueue_function[gmm_logdet_halve_kernel](
++            scratch.ld_raw.unsafe_ptr(), scratch.info.unsafe_ptr(),
++            log_det_chol.unsafe_ptr(), Int32(ncomp),
++            grid_dim=((ncomp + elem_tpb - 1) // elem_tpb, 1, 1),
++            block_dim=(elem_tpb, 1, 1),
+         )
+-        gmm_status_put(ctx, scratch, run)
+-        return
+     ctx.enqueue_function[gmm_first_fail_kernel](  # small-launch(one word pair): the step's verdict from the component pivots
+         gate.unsafe_ptr(), scratch.info.unsafe_ptr(), scratch.status.unsafe_ptr(),
+         Int32(ncomp), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 586f73a8b5..30b5f42895 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -163,6 +163,9 @@ from cholesky.checks.potrf import (
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+ from core.identity_trace import IdentityTrace
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT, chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower,
++)
+ from x_decomp.jacobi_par import (
+     PJ_TPB,
+     eigh_par_cs_kernel,
+@@ -2735,38 +2738,80 @@ struct DevExec(Exec):
+         `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
+         against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
+         runs the same calls on its pooled matrices."""
+-        # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
+-        # (potrf_lower with its info read per panel, the chol_logdet wait,
+-        # trsm_lower against I), restored from 49e8c5b633^.
++        # Lane fix-chol-ops-remaining-callers (2026-11-13): by default the
++        # 0.8.66 route above (potrf_lower with its info read per panel, the
++        # chol_logdet wait, trsm_lower against I), restored from
++        # 49e8c5b633^. Lane m3-linalg-and-housekeeping (49e8c5b633,
++        # 2026-11-09) moved it onto the executor's Cholesky ops (read-free,
++        # ONE read of info + log det) without an NVIDIA + AMD measurement;
++        # the ops route is the B arm under -D MOJOLEARN_IDN_CHOL_OPS_FIT
++        # (cholesky/chol_ops.mojo CHOL_OPS_FIT; the ops measured AMD
++        # KRR/GPR/GPC 1.14-1.25x slower than this route on 2026-11-13). Owed
++        # row chol-ops-fit (bench/results/paper_compare/owed-pre0867.json).
++        # Bits: each route keeps its own words; the ops claim potrf_lower's
++        # arithmetic at the pinned width, so the A/B also checks the words.
+         # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (opt-in B arm, EXP:581 RUN OWED; AMD 1.14-1.25x slower 2026-11-13) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 860e94a3f4.
+         # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.patch; record in docs/TOMBSTONES.md.
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
++        # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+         var ctx = xd_ctx()
+         var da = _up(ctx, a, n * n)
+-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
+-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+-        var trace = IdentityTrace()
+-        add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+-        var run = potrf_lower(ctx, da, ws, n, trace)
+-        st.unsafe_store(0, Float32(run.info))
+-        st.unsafe_store(1, Float32(0.0))
+-        if run.info == 0:
+-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
++        comptime if CHOL_OPS_FIT:
++            var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++            var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++            var dld = ctx.enqueue_create_buffer[DType.float32](1)
+             var db = ctx.enqueue_create_buffer[DType.float32](n * n)
++            var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
++            var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
++            enqueue_fill(ctx, dinfo, Int32(0))
++            enqueue_fill(ctx, dld, Float32(0.0))
++            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
++            chol_op_factor(ctx, da, dinfo, n)
++            chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
+             ctx.enqueue_function[pj_identity_kernel](
+                 db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+             )
+-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+-            _down(ctx, db, li, n * n)
++            chol_op_solve_lower(ctx, da, db, dinfo, n, n)
++            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
++            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
+             ctx.synchronize()
++            var info = Int(hst.unsafe_ptr().unsafe_load(0))
++            st.unsafe_store(0, Float32(info))
++            st.unsafe_store(1, hld.unsafe_ptr().unsafe_load(0) if info == 0 else Float32(0.0))
++            if info == 0:
++                _down(ctx, db, li, n * n)
++                ctx.synchronize()
+             _ = db^
+-            _ = dwork^
+-        ctx.synchronize()
+-        _ = ws^
+-        _ = da^
+-        _ = ctx^
++            _ = dscr^
++            _ = dld^
++            _ = dinfo^
++            _ = hst^
++            _ = hld^
++            _ = da^
++            _ = ctx^
++        else:
++            var nb = chol_nb_for(n, CHOL_NB_PINNED)
++            var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
++            var trace = IdentityTrace()
++            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
++            var run = potrf_lower(ctx, da, ws, n, trace)
++            st.unsafe_store(0, Float32(run.info))
++            st.unsafe_store(1, Float32(0.0))
++            if run.info == 0:
++                var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
++                st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
++                var db = ctx.enqueue_create_buffer[DType.float32](n * n)
++                ctx.enqueue_function[pj_identity_kernel](
++                    db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
++                )
++                trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
++                _down(ctx, db, li, n * n)
++                ctx.synchronize()
++                _ = db^
++                _ = dwork^
++            ctx.synchronize()
++            _ = ws^
++            _ = da^
++            _ = ctx^
+ 
+     @staticmethod
+     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
+diff --git a/x_decomp/kit_device.mojo b/x_decomp/kit_device.mojo
+index 1d8f01ba05..b291e79fe9 100644
+--- a/x_decomp/kit_device.mojo
++++ b/x_decomp/kit_device.mojo
+@@ -82,6 +82,9 @@ from cholesky.checks.potrf import (
+ )
+ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+ from core.identity_trace import IdentityTrace
++from cholesky.chol_ops import (
++    CHOL_OPS_FIT, chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower,
++)
+ from x_decomp.jacobi_par import pj_identity_kernel
+ from x_decomp.mcd import IDN_MCD_CHOL
+ from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
+@@ -1366,39 +1369,74 @@ struct DMcd:
+         panel against the Jacobi's 2 (p - 1) a sweep. A factorization that
+         stops (not positive definite) gives log det -inf and no L^{-1}."""
+         # Lane fix-chol-ops-remaining-callers (2026-11-13): the 0.8.66 route
+-        # (restored from 49e8c5b633^), as in DevExec.chol_inv.
++        # by default (restored from 49e8c5b633^); the executor's Cholesky
++        # ops (one read of info + log det) are the B arm under
++        # -D MOJOLEARN_IDN_CHOL_OPS_FIT, as in DevExec.chol_inv
++        # (x_decomp/device.mojo; owed row chol-ops-fit).
+         var n = A.r
+         var L = self.k.copy(A)
+         var da = self.k._sub(L)
+-        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
+-        var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
+-        var trace = IdentityTrace()
+-        add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
+-        var run = potrf_lower(self.k.ctx, da, ws, n, trace)
+-        if run.info != 0:
+-            self.k.ctx.synchronize()
++        comptime if CHOL_OPS_FIT:
++            var ctx = self.k.ctx.copy()
++            var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
++            var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
++            var dld = ctx.enqueue_create_buffer[DType.float32](1)
++            var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
++            var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
++            enqueue_fill(ctx, dinfo, Int32(0))
++            add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
++            chol_op_factor(ctx, da, dinfo, n)
++            chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
++            var li = DMat(n, n)
++            ctx.enqueue_function[pj_identity_kernel](
++                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
++            )
++            var db = self.k._sub(li)
++            chol_op_solve_lower(ctx, da, db, dinfo, n, n)
++            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
++            ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
++            ctx.synchronize()
++            var info = Int(hst.unsafe_ptr().unsafe_load(0))
++            var ld = hld.unsafe_ptr().unsafe_load(0)
++            _ = dscr^
++            _ = dld^
++            _ = dinfo^
++            _ = hst^
++            _ = hld^
++            _ = db^
++            _ = da^
++            _ = L^
++            if info != 0:
++                return DChol(_neg_inf(), DMat(0, 0))
++            return DChol(Float64(ld), li^)
++        else:
++            var nb = chol_nb_for(n, CHOL_NB_PINNED)
++            var ws = self.k.ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
++            var trace = IdentityTrace()
++            add_jitter(self.k.ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
++            var run = potrf_lower(self.k.ctx, da, ws, n, trace)
++            if run.info != 0:
++                self.k.ctx.synchronize()
++                _ = ws^
++                _ = da^
++                _ = L^
++                return DChol(_neg_inf(), DMat(0, 0))
++            var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
++            var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
++            var li = DMat(n, n)
++            self.k.ctx.enqueue_function[pj_identity_kernel](
++                li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
++            )
++            var db = self.k._sub(li)
++            trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
++            # ws and dwork are idle after chol_logdet's wait; L returns to the
++            # pool, whose later users are ordered after trsm on this stream
+             _ = ws^
++            _ = dwork^
++            _ = db^
+             _ = da^
+             _ = L^
+-            return DChol(_neg_inf(), DMat(0, 0))
+-        var dwork = self.k.ctx.enqueue_create_buffer[DType.float32](n + 1)
+-        var ld = chol_logdet(self.k.ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+-        var li = DMat(n, n)
+-        self.k.ctx.enqueue_function[pj_identity_kernel](
+-            li.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+-        )
+-        var db = self.k._sub(li)
+-        trsm_lower(self.k.ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+-        # ws and dwork are idle after chol_logdet's wait; L returns to the
+-        # pool, whose later users are ordered after trsm on this stream
+-        _ = ws^
+-        _ = dwork^
+-        _ = db^
+-        _ = da^
+-        _ = L^
+-        return DChol(Float64(ld), li^)
++            return DChol(Float64(ld), li^)
+ 
+     def mahal_chol(self, X: DMat, loc: DMat, Li: DMat) raises -> DMat:
+         """rowsum((Xc L^{-T})^2): the distances under P = L^{-T} L^{-1}."""

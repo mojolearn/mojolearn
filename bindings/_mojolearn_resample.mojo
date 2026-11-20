@@ -18,44 +18,37 @@ and mirrored in `python/mojolearn/resample.py`. Every result struct crosses
 as its arrays and scalars; the scalars widen float32 to float64 exactly.
 """
 
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.experiment_guards_series import SERIES_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
-from core.resample_impl import resample_store_indices
+from core.hostptr import i32_ptr, read_f32
+
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.vendor import COMPILED_VENDOR
-from resample.checks.statistics import MC_DIMS, MC_F_CONST, MC_F_PRODUCT, MC_F_SUM
+from resample.checks.statistics import MC_DIMS
+from resample.mojolearn_resample_run import (
+    _f32_ptr,
+    _f64_ptr,
+    _bootstrap_run,
+    _bootstrap_unpaired_run,
+    _permutation_run,
+    _permutation_samples_run,
+    _mc_run,
+)
 from resample.estimator import (
-    BootstrapResult,
-    MonteCarloResult,
-    PermutationResult,
-    bootstrap_host,
-    bootstrap_unpaired_host,
-    mc_closed_form_for,
-    monte_carlo_integrate_host,
-    permutation_samples_host,
-    permutation_test_host,
-    resample_indices_host,
     resample_indices_replace_into,
-    RESAMPLE_IDX_DIRECT,
+    resample_indices_permute_into,
     RESAMPLE_GPU_GATHER,
     resample_gather_gpu, resample_permutation_gather_gpu,
     resample_fast_defines,
     GATHER_NARROW_MAX_BYTES,
     resample_gather_narrow,
 )
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
-    return f64_ptr(addr)
 
 
 def resample_numeric_mode_binding() raises -> PythonObject:
@@ -84,45 +77,6 @@ def resample_vendor_binding() raises -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
-
-
-def _bootstrap_run(
-    x: List[Float32],
-    n: Int,
-    d: Int,
-    statistic: Int,
-    n_resamples: Int,
-    seed: UInt64,
-    method: Int,
-    confidence_level: Float32,
-    alternative: Int,
-    q_or_prop: Float32,
-    r_first: Int,
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    sdp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    var r = bootstrap_host(
-        x,
-        n,
-        d,
-        statistic,
-        n_resamples,
-        seed,
-        method,
-        confidence_level,
-        alternative,
-        q_or_prop,
-        r_first,
-    )
-    copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
-    copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
-    sp.unsafe_store(0, Float64(r.point_estimate))
-    sp.unsafe_store(1, Float64(r.standard_error))
-    sp.unsafe_store(2, Float64(r.interval.low))
-    sp.unsafe_store(3, Float64(r.interval.high))
-    sp.unsafe_store(4, Float64(r.order_low))
-    sp.unsafe_store(5, Float64(r.order_high))
 
 
 def bootstrap_binding(
@@ -184,10 +138,9 @@ def bootstrap_binding(
     var alternative = Int(py=params[7])
     var q_or_prop = Float32(Float64(py=params[8]))
     var r_first = Int(py=params[9])
-    var x = read_f32(Int(xp), max(0, n * d))
     with GILReleased(Python()):
         _bootstrap_run(
-            x,
+            xp,
             n,
             d,
             statistic,
@@ -244,43 +197,14 @@ def bootstrap_unpaired_binding(
     var confidence_level = Float32(Float64(py=params[5]))
     var alternative = Int(py=params[6])
     var r_first = Int(py=params[7])
-    var x = read_f32(Int(_f32_ptr(Int(py=addrs[0]))), max(0, n_x))
-    var y = read_f32(Int(_f32_ptr(Int(py=addrs[1]))), max(0, n_y))
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
     with GILReleased(Python()):
-        var r = bootstrap_unpaired_host(
-            x, n_x, y, n_y, n_resamples, seed, method, confidence_level,
-            alternative, r_first,
+        _bootstrap_unpaired_run(
+            xp, n_x, yp, n_y, n_resamples, seed, method, confidence_level,
+            alternative, r_first, dp, sdp, sp,
         )
-        copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
-        copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
-        sp.unsafe_store(0, Float64(r.point_estimate))
-        sp.unsafe_store(1, Float64(r.standard_error))
-        sp.unsafe_store(2, Float64(r.interval.low))
-        sp.unsafe_store(3, Float64(r.interval.high))
-        sp.unsafe_store(4, Float64(r.order_low))
-        sp.unsafe_store(5, Float64(r.order_high))
     return PythonObject(0)
-
-
-def _permutation_run(
-    x: List[Float32],
-    y: List[Float32],
-    statistic: Int,
-    n_resamples: Int,
-    seed: UInt64,
-    alternative: Int,
-    r_first: Int,
-    np_: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    var r = permutation_test_host(
-        x, y, statistic, n_resamples, seed, alternative, r_first
-    )
-    copy_f32(r.null_distribution.unsafe_ptr(), np_, n_resamples)
-    sp.unsafe_store(0, Float64(r.observed))
-    sp.unsafe_store(1, Float64(r.pvalue.p))
-    sp.unsafe_store(2, Float64(r.pvalue.count_less))
-    sp.unsafe_store(3, Float64(r.pvalue.count_greater))
 
 
 def permutation_test_binding(
@@ -327,13 +251,20 @@ def permutation_test_binding(
     var seed = UInt64(Int(py=params[4]))
     var alternative = Int(py=params[5])
     var r_first = Int(py=params[6])
-    var x = read_f32(Int(py=addrs[0]), max(0, n_x))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_y))
+    if n_x <= 0 or n_y <= 0:
+        raise Error(
+            "permutation_test: both samples must be non-empty; got n_x="
+            + String(n_x)
+            + " n_y="
+            + String(n_y)
+        )
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
     var np_ = _f32_ptr(Int(py=addrs[2]))
     var sp = _f64_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
         _permutation_run(
-            x, y, statistic, n_resamples, seed, alternative, r_first, np_, sp
+            xp, n_x, yp, n_y, statistic, n_resamples, seed, alternative, r_first, np_, sp
         )
     return PythonObject(0)
 
@@ -367,19 +298,15 @@ def permutation_samples_binding(
     var alternative = Int(py=params[4])
     var r_first = Int(py=params[5])
     var xp = _f32_ptr(Int(py=addrs[0]))
-    var x = read_f32(Int(xp), max(0, n))
-    var y = List[Float32]()
-    if n_y > 0:
-        var yp = _f32_ptr(Int(py=addrs[1]))
-        y = read_f32(Int(yp), n_y)
+    # one sample (n_y == 0): y is unread and its address may be anything
+    var yp = _f32_ptr(Int(py=addrs[1])) if n_y > 0 else xp
     with GILReleased(Python()):
-        var r = permutation_samples_host(x, y, n_y > 0, n_resamples, seed, alternative, r_first)
-        copy_f32(r.null_distribution.unsafe_ptr(), np_, n_resamples)
-        sp.unsafe_store(0, Float64(r.observed))
-        sp.unsafe_store(1, Float64(r.pvalue.p))
-        sp.unsafe_store(2, Float64(r.pvalue.count_less))
-        sp.unsafe_store(3, Float64(r.pvalue.count_greater))
+        _permutation_samples_run(xp, n, yp, n_y, n_resamples, seed, alternative, r_first, np_, sp)
     return PythonObject(0)
+
+
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 080e0e6f72.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def resample_indices_binding(
@@ -395,14 +322,15 @@ def resample_indices_binding(
     var count = Int(py=params[1])
     var replace = Int(py=params[2]) != 0
     var seed = UInt64(Int(py=params[3]))
-    comptime if RESAMPLE_IDX_DIRECT:
-        if replace:
-            with GILReleased(Python()):
-                resample_indices_replace_into(n, count, seed, op)
-            return PythonObject(0)
+    # lane ne2-b-rounds (N053): both arms write the caller's int32 buffer
+    # directly on every tier (`*_into`: one device-to-host copy for replace,
+    # the keys once into a host buffer and the order straight into `op` for
+    # replace=False). The same integers as `resample_indices_host`.
     with GILReleased(Python()):
-        var idx = resample_indices_host(n, count, replace, seed)
-        resample_store_indices(op, idx, count)
+        if replace:
+            resample_indices_replace_into(n, count, seed, op)
+        else:
+            resample_indices_permute_into(n, count, seed, op)
     return PythonObject(0)
 
 
@@ -466,60 +394,6 @@ def resample_gather_narrow_binding(addrs: PythonObject, params: PythonObject) ra
     return PythonObject(done)
 
 
-def _mc_run(
-    f_id: Int,
-    lower: List[Float32],
-    upper: List[Float32],
-    n_samples: Int,
-    seed: UInt64,
-    i_first: Int,
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    """The runtime id becomes the comptime parameter HERE and nowhere
-    else; an id outside the three arms is refused by name."""
-    var integral = Float32(0.0)
-    var mean = Float32(0.0)
-    var volume = Float32(0.0)
-    var closed = Float32(0.0)
-    if f_id == MC_F_CONST:
-        var r = monte_carlo_integrate_host[MC_F_CONST](
-            lower, upper, n_samples, seed, i_first
-        )
-        integral = r.integral
-        mean = r.mean
-        volume = r.volume
-        closed = mc_closed_form_for[MC_F_CONST](lower, upper)
-    elif f_id == MC_F_SUM:
-        var r = monte_carlo_integrate_host[MC_F_SUM](
-            lower, upper, n_samples, seed, i_first
-        )
-        integral = r.integral
-        mean = r.mean
-        volume = r.volume
-        closed = mc_closed_form_for[MC_F_SUM](lower, upper)
-    elif f_id == MC_F_PRODUCT:
-        var r = monte_carlo_integrate_host[MC_F_PRODUCT](
-            lower, upper, n_samples, seed, i_first
-        )
-        integral = r.integral
-        mean = r.mean
-        volume = r.volume
-        closed = mc_closed_form_for[MC_F_PRODUCT](lower, upper)
-    else:
-        raise Error(
-            "monte_carlo_integrate: integrand id "
-            + String(f_id)
-            + " is not one of the three compiled arms (0 const, 1 sum,"
-            " 2 product); the integrand is a comptime parameter of"
-            " monte_carlo_integrate_host and a new one is one arm plus one"
-            " closed form (resample/checks/statistics.mojo)"
-        )
-    sp.unsafe_store(0, Float64(integral))
-    sp.unsafe_store(1, Float64(mean))
-    sp.unsafe_store(2, Float64(volume))
-    sp.unsafe_store(3, Float64(closed))
-
-
 def monte_carlo_integrate_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -570,6 +444,7 @@ def monte_carlo_integrate_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_resample() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.

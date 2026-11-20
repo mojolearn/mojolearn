@@ -1,232 +1,56 @@
 {
- "schema": "mojolearn.grid-controls/1",
- "lane": "fg-tsne-dbscan",
- "branch": "lane/fg-tsne-dbscan",
- "head": "566f78ab1",
- "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
- "controls": {
-  "tsne_knn_tile_select": {
-   "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_ann/knn_device.mojo:354",
-    "x_ann/knn_device.mojo:knn_enqueue"
-   ],
-   "binding": [
-    "_mojolearn_x_ann"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "T1. IDENTICAL, NVIDIA+AMD. Block-wide mark/rank/merge top-k per 64x64 distance tile instead of the serial owner insertion; every d takes the 64x64 tile. Same (dist, idx) lists for finite/inf distances. Also the CAGRA build's exact graph. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF) restores the serial owner insertion."
-  },
-  "tsne_rep_tile": {
-   "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_TSNE_REP_TILE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_ann/tsne_device.mojo:480"
-   ],
-   "binding": [
-    "_mojolearn_x_ann"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-09 (lane/postmerge-act-4; post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "T2. IDENTICAL, NVIDIA+AMD, needs TS_SPLIT and TS_LANE_FOLD. 256-candidate tiles, one row per thread (16 threads x 4 lanes a row), same 64-lane fold order, same Z tree. Bits none. PROMOTED: both on istella NV 0.86x / AMD 0.62x (avg 0.74x), taxi NV 1.17x / AMD 0.55x (avg 0.86x; vendor split, NV taxi slower). Digests unchanged. The off arm (MOJOLEARN_IDN_TSNE_REP_TILE_OFF) restores the split repulsion kernel."
-  },
-  "dbscan_eps_tile": {
-   "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "neighbors/impl/ball_cover/registers.mojo:977"
-   ],
-   "binding": [
-    "_mojolearn_estimators",
-    "_mojolearn_estimators_host",
-    "_mojolearn"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default with dbscan_adj_bitmap; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "D1. IDENTICAL, NVIDIA+AMD, Euclidean, not with KNN_DIRECT_DISTANCE (compiled out there). 64x64 register-tiled eps count/fill with the same three per-pair tests (landmark bound, RBC_LANES chunk-walk reach, eps_dist_sq chain); fill rows canonicalized (DEVIATION 551). Every ball-cover eps query (DBSCAN, neighbors radius). PROMOTED 2026-10-10: dbscan istella EPS_TILE alone NV 0.42x / AMD 0.34x (v1042 / a1182), with ADJ_BITMAP NV 0.20x / AMD 0.20x (v1043 / a1183); hash 7494ce8e, n_clusters 40131 and noise_fraction unchanged. dbscan taxi timed out in every arm and the default on both vendors. The off arm restores the warp-per-query count and fill (and turns D2 off)."
-  },
-  "dbscan_adj_bitmap": {
-   "define": "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "neighbors/impl/ball_cover/registers.mojo:983",
-    "dbscan/impl/runner.mojo:711"
-   ],
-   "binding": [
-    "_mojolearn_estimators",
-    "_mojolearn_estimators_host"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default (needs dbscan_eps_tile on); the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "D2, needs D1 (the on arm sets both). Count pass writes word-major bit words; loop 1 keeps each range's bit-scanned CSR (kept total <= edge_cap edges); loop 2, batch 0 and the border pass copy it. Ranges capped at 25% of free memory over n/8 + 8*landmarks bytes a row (more batches at large n). PROMOTED 2026-10-10: dbscan istella with EPS_TILE NV 0.20x / AMD 0.20x (v1043 / a1183) against EPS_TILE alone 0.42x / 0.34x; hash 7494ce8e unchanged. The off arm keeps D1 and restores its second distance pass."
-  },
-  "hdb_mst_seed_knn": {
-   "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:611",
-    "hdbscan/impl/cluster/detail/single_linkage.mojo",
-    "hdbscan/impl/detail/reachability.mojo"
-   ],
-   "binding": [
-    "_mojolearn_hdbscan",
-    "_mojolearn_hdbscan_host"
-   ],
-   "bits_change": false,
-   "status": "promoted 2026-10-10 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): IDENTICAL default; the old on-define is refused in core/six_lane_experiment_guards.mojo",
-   "note": "H2. IDENTICAL, NVIDIA+AMD, sparse arm, alpha <= 1, no trace/sabotage, not with GRAPH/KNN_DIRECT_DISTANCE. k-NN one wider; round-1 point resolved when its cheapest list weight < the list's last distance (exact cells, per-entry distance bit check). PROMOTED 2026-10-10 (v1048 / a1188): hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x; hashes unchanged (533cb305, 19b22783). The off arm restores the min_samples-wide k-NN and the all-points round 1."
-  },
-  "hdb_round_one_sync_off": {
-   "define": "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:701"
-   ],
-   "binding": [
-    "_mojolearn_hdbscan",
-    "_mojolearn_hdbscan_host"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): the two-drain round loop stays the IDENTICAL default",
-   "note": "H3, default ON (waste removal). The round's ADDED readback rides on the next round's phase-A count read (cumulative ADDED): 3 -> 2 drains per Boruvka round. The off arm restores three reads. CONFIRMED 2026-10-10 (neutral, v1046 / a1186): the _OFF arm is hdbscan istella NV 0.98x / AMD 0.97x, taxi NV 0.98x / AMD 0.98x; hashes unchanged (533cb305, 19b22783). Within noise either way; kept as the default (fewer drains, integer plumbing only)."
-  },
-  "hdb_out_memcpy_off": {
-   "define": "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "bindings/_mojolearn_hdbscan.mojo:55"
-   ],
-   "binding": [
-    "_mojolearn_hdbscan"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023, amd MI325X a1163; ratio = arm / fg2.default-ivf-cluster on the same vendor)): the output memcpy stays the default",
-   "note": "H5, default ON (waste removal). Fit outputs copied into the caller's arrays by memcpy instead of element loops. Same bytes. CONFIRMED 2026-10-10 (neutral, v1047 / a1187): the _OFF arm is hdbscan istella NV 0.97x / AMD 0.98x, taxi NV 0.96x / AMD 1.00x; hashes unchanged (533cb305, 19b22783). Within noise either way; kept as the default."
-  }
- },
- "algorithms": {
-  "algos:tsne": {
-   "binding": "_mojolearn_x_ann",
-   "route": "_expansion_ann.py TSNE.fit -> x_ann_tsne_fit -> tsne_device.tsne_fit_device -> knn_enqueue (T1) -> perplexity -> symmetrize -> _ts_iter/_enq_repulse_split (T2)",
-   "controls": [
-    "tsne_knn_tile_select",
-    "tsne_rep_tile"
-   ],
-   "interaction_groups": [
-    [
-     "tsne_knn_tile_select"
-    ],
-    [
-     "tsne_rep_tile"
-    ]
-   ]
-  },
-  "algos:cagra": {
-   "binding": "_mojolearn_x_ann",
-   "route": "cagra_device.cagra_knn_enqueue -> knn_enqueue (T1)",
-   "controls": [
-    "tsne_knn_tile_select"
-   ],
-   "interaction_groups": [
-    [
-     "tsne_knn_tile_select"
-    ]
-   ]
-  },
-  "classical:dbscan": {
-   "binding": "_mojolearn_estimators (host twin _mojolearn_estimators_host)",
-   "route": "density.py:371 -> dbscan_fit_core -> dbscan/impl/runner.mojo dbscan_fit -> rbc_eps_pass_count/fill (D1) | count_bitmap/fill_bitmap (D2) -> weak_cc_batched (D5)",
-   "controls": [
-    "dbscan_eps_tile",
-    "dbscan_adj_bitmap"
-   ],
-   "interaction_groups": [
-    [
-     "dbscan_eps_tile",
-     "dbscan_adj_bitmap"
-    ]
-   ]
-  },
-  "classical:hdbscan": {
-   "binding": "_mojolearn_hdbscan",
-   "route": "build_mr_linkage -> compute_core_dists (H2 width) -> sparse_mr_mst_device (H2 seed, H3 reads) -> dendrogram -> condense/extract -> binding outputs (H5)",
-   "controls": [
-    "hdb_mst_seed_knn",
-    "hdb_round_one_sync_off",
-    "hdb_out_memcpy_off"
-   ],
-   "interaction_groups": [
-    [
-     "hdb_mst_seed_knn",
-     "hdb_round_one_sync_off"
-    ],
-    [
-     "hdb_out_memcpy_off"
-    ]
-   ]
-  }
- },
- "removed": [
-  {
-   "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
-   "control": "dbscan_batch_sample",
-   "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1044, amd MI325X a1163 -> a1184; ratio = arm / fg2.default-ivf-cluster): measured on top of EPS_TILE, dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone NV 0.42x / AMD 0.34x: no gain (noise); hash 7494ce8e unchanged; taxi timed out in every arm and the default. D4 sampled-degree range plan (dbscan/impl/runner.mojo IDN_DBSCAN_BATCH_SAMPLE, DS_SAMPLE, ds_gather_rows_kernel) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch)."
-  },
-  {
-   "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
-   "control": "dbscan_cc_hook",
-   "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1045, amd MI325X a1163 -> a1185; ratio = arm / fg2.default-ivf-cluster): dbscan istella NV 1.00x / AMD 0.96x: noise; hash 7494ce8e unchanged; taxi timed out in every arm and the default. D5 weak_cc hook and compress (dbscan/impl/sparse/detail/csr.mojo IDN_DBSCAN_CC_HOOK, _cc_find, _cc_union, weak_cc_hook_kernel, weak_cc_compress_kernel, weak_cc_border_kernel, _weak_cc_hook) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch)."
-  }
- ]
+  "schema": "mojolearn.grid-controls/1",
+  "lane": "fg-tsne-dbscan",
+  "branch": "lane/fg-tsne-dbscan",
+  "head": "566f78ab1",
+  "head_note": "code only, uncompiled (lanes never compile); T3 (FFT), D3 (denseball) skipped this round; H4 already on main as IDN_DENDRO_UNION",
+  "controls": {},
+  "algorithms": {},
+  "removed": [
+    {
+      "define": "MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE",
+      "control": "dbscan_batch_sample",
+      "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1044, amd MI325X a1163 -> a1184; ratio = arm / fg2.default-ivf-cluster): measured on top of EPS_TILE, dbscan istella NV 0.42x / AMD 0.35x against EPS_TILE alone NV 0.42x / AMD 0.34x: no gain (noise); hash 7494ce8e unchanged; taxi timed out in every arm and the default. D4 sampled-degree range plan (dbscan/impl/runner.mojo IDN_DBSCAN_BATCH_SAMPLE, DS_SAMPLE, ds_gather_rows_kernel) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_BATCH_SAMPLE.patch)."
+    },
+    {
+      "define": "MOJOLEARN_IDN_DBSCAN_CC_HOOK",
+      "control": "dbscan_cc_hook",
+      "reason": "DELETED 2026-10-10 (lane postmerge-act-7): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023 -> v1045, amd MI325X a1163 -> a1185; ratio = arm / fg2.default-ivf-cluster): dbscan istella NV 1.00x / AMD 0.96x: noise; hash 7494ce8e unchanged; taxi timed out in every arm and the default. D5 weak_cc hook and compress (dbscan/impl/sparse/detail/csr.mojo IDN_DBSCAN_CC_HOOK, _cc_find, _cc_union, weak_cc_hook_kernel, weak_cc_compress_kernel, weak_cc_border_kernel, _weak_cc_hook) deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main ca8ea1f8d (experiments/removed/MOJOLEARN_IDN_DBSCAN_CC_HOOK.patch)."
+    },
+    {
+      "define": "MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF",
+      "control": "dbscan_eps_tile",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-08-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the PROMOTED IDENTICAL default (EXPERIMENTS.md row 1971) is gone; the tiled arm is the only route on IDENTICAL NVIDIA/AMD (no bit change); define refused in core/experiment_guards_cluster.mojo; code recoverable at 4225a08bd5."
+    },
+    {
+      "define": "MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF",
+      "control": "dbscan_adj_bitmap",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-08-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): the _OFF rollback of the PROMOTED IDENTICAL default (EXPERIMENTS.md row 1971) is gone; the tiled arm is the only route on IDENTICAL NVIDIA/AMD (no bit change); define refused in core/experiment_guards_cluster.mojo; code recoverable at 6c9e7778e6."
+    },
+    {
+      "define": "MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF",
+      "control": "hdb_mst_seed_knn",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-11-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path beside the default (V2); the default arm is the only one. Code recoverable at 3e2ad2e67b."
+    },
+    {
+      "define": "MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF",
+      "control": "hdb_round_one_sync_off",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-11-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path beside the default (V2); the default arm is the only one. Code recoverable at c6e7fbabc8."
+    },
+    {
+      "define": "MOJOLEARN_IDN_HDB_OUT_MEMCPY_OFF",
+      "control": "hdb_out_memcpy_off",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-11-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): old path beside the default (V2); the default arm is the only one. Code recoverable at 89d0ad23b5."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSNE_REP_TILE_OFF",
+      "control": "tsne_rep_tile",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-14-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 98ec52101e; patch experiments/removed/MOJOLEARN_IDN_TSNE_REP_TILE_OFF.patch): old path beside the default; the default is kept, no bit change. Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
+    },
+    {
+      "define": "MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF",
+      "control": "tsne_knn_tile_select",
+      "reason": "DELETED 2026-11-15 (lane/expdel2-13-cluster, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; recoverable at 7e06e9c43e; patch experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch): old path of the promoted IDENTICAL default (EXP:1822 PROMOTED, post-merge A/B nv n0608 -> v0979..v0981, amd a1067 -> a1104..a1106). Refused in core/experiment_guards_cluster.mojo; docs/TOMBSTONES.md."
+    }
+  ]
 }

@@ -98,12 +98,12 @@ _ARIMA_FORMAT = "mojolearn-arima-1"
 _ARIMA_FORMAT_EXOG = "mojolearn-arima-2"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered after the class; host_archive_native.mojo
 # `host_archive_arima` builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-# The compiled owner of `fit` and `predict` (bindings/tsa_arima_native.mojo,
+# The compiled owner of `fit` and `predict` (bindings/tsa_arima_native_door.mojo,
 # through `tsa_native_call`), connected once at import.
 from . import _native_tsa_bridge  # noqa: E402
 _TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
@@ -444,7 +444,7 @@ class ARIMA(NumericModeMixin):
 
     # Every public method is one tsa_native_call whose owner does the whole
     # lifecycle (numeric_mode in arima_initialize, fit bookkeeping and the
-    # NotFittedError of predict in bindings/tsa_public_native.mojo), so no
+    # NotFittedError of predict in bindings/tsa_public_native_door.mojo), so no
     # `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
 
@@ -500,7 +500,7 @@ class ARIMA(NumericModeMixin):
             not raised on.
         """
         # `_series_major`, `_exog_array`, the fit and `_adopt_fit` in one
-        # native call (bindings/tsa_arima_native.mojo)
+        # native call (bindings/tsa_arima_native_door.mojo)
         return _TSA(self, "arima_fit", (y, exog), _TSA_CONTEXT)
 
 

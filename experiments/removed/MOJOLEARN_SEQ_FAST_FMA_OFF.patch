@@ -1,0 +1,24 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index ab3555790d..4c1ab2066c 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -54,11 +54,14 @@ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+ #: forecast_rmse 49.28 -> 49.02. It reaches every x_sequence lane that calls
+ #: `fma3` (theta, nm, ets, ets_team, croston, garch, stl, prophet, vecar,
+ #: mlp, moe, layernorm, adafactor, coop, fit_team), FAST + Apple only.
+-#: The old -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its
+-#: pinned contraction.
+-# TOMBSTONE: MOJOLEARN_SEQ_FAST_FMA_OFF (old path; EXP:542 KEPT on the M3 only, no NVIDIA/AMD A/B: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 2f67dc66d0.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch
+-comptime SEQ_FAST_FMA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: -D MOJOLEARN_SEQ_FAST_FMA_OFF restores the unfused form; the old
++#: -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its pinned
++#: contraction.
++comptime SEQ_FAST_FMA = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"]()
++)
+ 
+ #: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
+ #: host binding only): the GEMM reduction runs k DESCENDING, so every trained

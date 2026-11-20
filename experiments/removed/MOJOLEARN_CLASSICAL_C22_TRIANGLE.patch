@@ -1,0 +1,15 @@
+diff --git b/experiments/classical_identical_ideas/linear_controls.mojo a/experiments/classical_identical_ideas/linear_controls.mojo
+index 5b6b299416..57cbb3ea81 100644
+--- b/experiments/classical_identical_ideas/linear_controls.mojo
++++ a/experiments/classical_identical_ideas/linear_controls.mojo
+@@ -198,9 +198,7 @@ comptime C20_PAIR_LOAD = False
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_C21_EXTREMA (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 9aca9aa819.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch; record in docs/TOMBSTONES.md.
+ comptime C21_EXTREMA = False
+-# TOMBSTONE: MOJOLEARN_CLASSICAL_C22_TRIANGLE (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-06-base; code recoverable at 45379ff055.
+-# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C22_TRIANGLE.patch; record in docs/TOMBSTONES.md.
+-comptime C22_TRIANGLE = False
++comptime C22_TRIANGLE = CLASSICAL_IDN and is_defined["MOJOLEARN_CLASSICAL_C22_TRIANGLE"]()
+ # lane classical-decomp (2026-10-07): the old C23_CENTERED_PANELS define is
+ # split per algorithm family. Its PCA use (the ONE_PASS arm of
+ # MOJOLEARN_CLASSICAL_PCA_COV, =23) was deleted 2026-10-08 (below); its MCD use is C23_MCD. Both run

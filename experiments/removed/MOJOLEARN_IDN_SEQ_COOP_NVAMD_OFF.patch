@@ -1,0 +1,20 @@
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index b1697dd34b..05d7ecfe63 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -92,12 +92,11 @@ from core.shared_slot import SharedSlot
+ #: cooperative fold is the one-thread op's chain (same fmas, same values,
+ #: same order; only the loads are spread over the warp), so no bit moves on
+ #: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
+-#: wavefront. MOJOLEARN_IDN_ALL_OFF restores Apple only.
+-# TOMBSTONE: MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (unmeasured old path: Apple-only coop folds in IDENTICAL) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 14eb8b482b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF.patch; record in docs/TOMBSTONES.md.
++#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
++#: restores Apple only.
+ comptime SEQ_COOP_NVAMD = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ comptime SEQ_COOP = TARGET_HAS_APPLE_GPU or SEQ_COOP_NVAMD
+ #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the

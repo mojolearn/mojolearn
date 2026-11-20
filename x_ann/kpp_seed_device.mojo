@@ -22,7 +22,7 @@ Per seed two launches:
 FAST only: Float32 sums in a blocked order instead of the host's Float64 running
 sum, so a pick can differ from the host's where the two sums round apart. The
 paired quality check is the recall at k (bench/speed/ann_fast_quality.py)."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -254,5 +254,13 @@ def kpp_seed_device(
             grid_dim=1, block_dim=KPP_TPB,
         )
     ctx.synchronize()
+    # lastuse-audit (2026-11-16): the MutAnyOrigin pointers keep these alive
+    # only while the pointers are live (std/origin UnsafeAnyOrigin); their
+    # last use is the last enqueue, and the queued kernels read the buffers
+    # until the synchronize. Named here so none is released under a launch.
+    _ = nearest^
+    _ = partials^
+    _ = d_units^
+    _ = d_idxs^
     _ = units^
     _ = idxs^

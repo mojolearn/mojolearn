@@ -107,6 +107,7 @@ rung 3.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.device_plan import DevicePlan, plan_for_single
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
@@ -287,6 +288,8 @@ def fit_feature_parallel_oblivious_tree_structure(
     score_std_dev: Float32 = Float32(0.0),
     seed: UInt64 = 0,
     one_hot: List[Bool] = List[Bool](),
+    # The caller's device plan (one device unless a binding entry read one).
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> Tuple[List[TBinarySplit], DeviceBuffer[DType.uint32]]:
     """`TFeatureParallelObliviousTreeSearcher::Fit` (`:46-306`), the
     `SetTarget` arm at one device.
@@ -356,7 +359,7 @@ def fit_feature_parallel_oblivious_tree_structure(
     #  TreeConfig, foldCount, true);` (`:90-95`), with
     # `foldCount = subsets.FoldCount` (`:83`) == 1.
     var calcer = ScoresCalcerOnCompressedDataSet(
-        ctx, blocks, layout, n_rows, max_depth, global_ids
+        device_plan, ctx, blocks, layout, n_rows, max_depth, global_ids
     )
 
     var structure = List[TBinarySplit]()

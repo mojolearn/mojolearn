@@ -110,6 +110,9 @@ def main() raises:
             )
     ctx.enqueue_copy(dst_buf=km_c, src_ptr=hkc.unsafe_ptr())
     ctx.synchronize()
+    _ = hkc^  # past the drain: a queued copy reads it after its last named use
+    _ = hkw^  # past the drain: a queued copy reads it after its last named use
+    _ = hkx^  # past the drain: a queued copy reads it after its last named use
     var km_sum_scale = Float32(choose_scale(worst))
     var km_wt_scale = Float32(choose_scale(Float64(km_rows)))
     var km_p = KMeansParams.default()
@@ -158,6 +161,8 @@ def main() raises:
             )
     ctx.enqueue_copy(dst_buf=kn_q, src_ptr=hkq.unsafe_ptr())
     ctx.synchronize()
+    _ = hki^  # past the drain: a queued copy reads it after its last named use
+    _ = hkq^  # past the drain: a queued copy reads it after its last named use
 
     # ================= PCA setup ========================================
     var pc_x = ctx.enqueue_create_buffer[DType.float32](pca_rows * pca_cols)
@@ -176,6 +181,7 @@ def main() raises:
             )
     ctx.enqueue_copy(dst_buf=pc_x, src_ptr=hpx.unsafe_ptr())
     ctx.synchronize()
+    _ = hpx^  # past the drain: a queued copy reads it after its last named use
 
     # ================= DBSCAN setup =====================================
     # DBSCAN's workspace is allocated inside `dbscan_fit_impl`, sized from the
@@ -194,6 +200,7 @@ def main() raises:
             )
     ctx.enqueue_copy(dst_buf=db_x, src_ptr=hdx.unsafe_ptr())
     ctx.synchronize()
+    _ = hdx^  # past the drain: a queued copy reads it after its last named use
 
     # ================= OLS setup ========================================
     var ol_a = ctx.enqueue_create_buffer[DType.float32](ols_rows * ols_cols)
@@ -222,6 +229,8 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=ol_a, src_ptr=hoa.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=ol_b, src_ptr=hob.unsafe_ptr())
     ctx.synchronize()
+    _ = hoa^  # past the drain: a queued copy reads it after its last named use
+    _ = hob^  # past the drain: a queued copy reads it after its last named use
 
     # ================= the interleaved loop =============================
     for _r in range(REPEATS):

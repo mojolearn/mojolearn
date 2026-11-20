@@ -70,7 +70,7 @@ from cuML's gain as `(node_rows / tree_rows) * gain`, which is sklearn's
 Both are gated by `extratrees/checks/bestfirst_check.mojo`.
 
 X IS COPIED TWICE PER FIT: once on the host to column-major float32 (the
-builder's layout, the same as cuML's; `_buffer.as_f32_colmajor`, zero-copy for a
+builder's layout, the same as cuML's; the native input admission, zero-copy for a
 float32 F-order input) and once across the boundary into Mojo. On large
 matrices that is the dominant cost of the CALL and is named here so nobody
 times it as the fit.
@@ -88,24 +88,19 @@ float64 `Array` for numeric labels and a Python list for str labels.
 Nothing in this module imports NumPy.
 """
 
-import numbers
-
 from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels, is_bool
-from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._forest_protocol import ForestArchive as _ForestArchive, ForestClassifierPredict as _ForestClassifierPredict, ForestProtocol as _ForestProtocol, forest_estimator as _forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
 
-# The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
-# writes the schema registered after `_ExtraTreesBase`;
-# bindings/host_archive_native.mojo `host_archive_public_forest` builds the
-# loaded model).
-_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# `save` and `load` are _forest_protocol.ForestArchive's, one native call each
+# (bindings/archive_schema_native_door.mojo writes the schema registered after
+# `_ExtraTreesBase`; bindings/host_archive_native_door.mojo `host_archive_public_forest`
+# builds the loaded model).
 # The compiled tree-ensemble owner: `fit`, `predict` and `predict_proba` are
-# one native call each (bindings/trees_public_forest.mojo).
+# one native call each (bindings/trees_public_forest_door.mojo).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 # estimator.mojo's max_features sentinels, same values in the same words.
@@ -149,101 +144,21 @@ _UNSUPPORTED_CRITERIA = {
 }
 
 
-_NONFINITE_REFUSAL = "X contains NaN or infinity; the forest has no missing-value arm"
+# The constructor checks (`_validate_device`, the n_jobs/verbose refusals, the
+# criterion) and the stored `_cfg` are the native owner's `_et_derive`, and
+# the bootstrap count is its `_et_bootstrap_rows` (bindings/
+# trees_public_forest_door.mojo), run at fit on the stored parameters; lane
+# py-trees (2026-11-14) deleted their Python copies here.
 
 
-def _refuse_forest_knobs(n_jobs, verbose):
-    if n_jobs is not None:
-        raise NotImplementedError(
-            "n_jobs is not implemented: there is no CPU thread pool here -- the"
-            " fit runs one host thread driving the GPU (device='gpu')."
-            " Refused by name rather than"
-            " accepted and ignored."
-        )
-    if verbose:
-        raise NotImplementedError(
-            "verbose is not implemented: nothing in the Mojo layer logs per-tree"
-            " progress. Refused by name rather than accepted and ignored."
-        )
-
-
-def _max_features_slots(max_features):
-    """sklearn's max_features forms into (spec, fraction)."""
-    if max_features is None:
-        return _MF_ALL, 0.0
-    if isinstance(max_features, str):
-        if max_features == "sqrt":
-            return _MF_SQRT, 0.0
-        if max_features == "log2":
-            return _MF_LOG2, 0.0
-        raise ValueError(
-            f"max_features={max_features!r} is not a recognised form; sklearn"
-            " accepts 'sqrt', 'log2', None, a float fraction or an int count"
-        )
-    if isinstance(max_features, numbers.Integral) and not is_bool(
-        max_features
-    ):
-        return int(max_features), 0.0
-    return 0, float(max_features)
-
-
-def _n_samples_bootstrap(n_rows, max_samples):
-    """sklearn's `_get_n_samples_bootstrap` (`ensemble/_bootstrap.py:10-62`,
-    unweighted branch), as the COUNT slot 18 carries: None -> 0 (meaning
-    n_rows), int -> itself, float f -> max(int(f * n_rows), 1). The value
-    check is sklearn's `_parameter_constraints` (`_forest.py:198-202`)."""
-    if max_samples is None:
-        return 0
-    if is_bool(max_samples):
-        raise ValueError("max_samples must be None, an int >= 1 or a float")
-    if isinstance(max_samples, numbers.Integral):
-        if max_samples < 1:
-            raise ValueError(
-                f"max_samples={max_samples} must be >= 1 when an int"
-            )
-        return int(max_samples)
-    f = float(max_samples)
-    if not f > 0.0:
-        raise ValueError(f"max_samples={max_samples} must be > 0 when a float")
-    return max(int(f * n_rows), 1)
-
-
-def _validate_device(device):
-    if not isinstance(device, str) or device != "gpu":
-        raise ValueError(
-            f"Extra Trees training is GPU-only; device must be 'gpu', got {device!r}"
-        )
-
-
-class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
+class _ExtraTreesBase(_ForestProtocol, _NumericModeMixin):
     _BINDING = "_mojolearn_trees"
-    def __init__(self, device):
-        _validate_device(device)
-        self.device = device
-
-    def save(self, path):
-        """Write the fitted forest to `path` as an npz file.
-
-        The file holds the prediction arrays exactly as fitted, with exact
-        dtypes; floats never pass through decimal text. A model saved with the
-        'parallel_groves' inference engine also records its engine and
-        numeric mode. The file bytes depend only on the model, so equal models
-        give equal file hashes on any machine.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
-
-    @classmethod
-    def load(cls, path):
-        """Load a forest saved by `save`.
-
-        The loaded model predicts; it does not refit. Loading a file saved by
-        a different estimator class raises `ValueError`.
-        """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+    save = _ForestArchive.save
+    load = vars(_ForestArchive)["load"]
 
 
 #: The saved formats `load` reads, and the save schema of both extra-trees
-#: classes (bindings/archive_schema_native.mojo): the members, dtypes and
+#: classes (bindings/archive_schema_native_door.mojo): the members, dtypes and
 #: refusals the 0.8.55 Python `save` wrote.
 _MODEL_FORMATS = (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1")
 _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
@@ -264,7 +179,7 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
 ))
 
 
-@forest_estimator("classifier")
+@_forest_estimator("classifier")
 # Maintainer note (moved from the docstring): `predict_proba` is
 # `forest_vote`'s average of per-tree leaf distributions (cuML
 # `randomforest.cuh:229-242`); `predict` is its argmax through `classes_`.
@@ -361,6 +276,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     >>> model = mojolearn.ExtraTreesClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    predict = _ForestClassifierPredict.predict
 
     def __init__(
         self,
@@ -387,35 +303,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         device="gpu",
         inference_engine="auto",
     ):
-        super().__init__(device)
-        _refuse_forest_knobs(n_jobs, verbose)
-        if criterion not in _CLASSIFIER_CRITERIA:
-            reason = _UNSUPPORTED_CRITERIA.get(criterion)
-            raise NotImplementedError(
-                f"criterion={criterion!r} is not implemented"
-                + (f" ({reason[1]})" if reason else "")
-                + "; 'gini', 'entropy' and its alias 'log_loss' are."
-            )
-        self.criterion = criterion
-        self._criterion_code = _CLASSIFIER_CRITERIA[criterion]
-        self._cfg = dict(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes,
-            min_impurity_decrease=min_impurity_decrease,
-            bootstrap=bootstrap,
-            oob_score=oob_score,
-            random_state=random_state,
-            warm_start=warm_start,
-            class_weight=class_weight,
-            ccp_alpha=ccp_alpha,
-            max_samples=max_samples,
-            monotonic_cst=monotonic_cst,
-        )
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the forest.
@@ -452,30 +342,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         """
         return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
-    def _predict_with_proba(self, X):
-        """Return labels and probabilities from one exact vote matrix.
-
-        ``predict`` consumes the float32 vote while ``predict_proba`` exactly
-        widens it to float64.  Keeping both views avoids a second complete
-        forest traversal in identity/evidence tooling without changing
-        either public result.
-        """
-        proba = self.predict_proba(X)
-        return decode_labels(self.classes_, argmax_rows(proba)), proba
-
-    def predict(self, X):
-        """Predicted class labels: the argmax of `predict_proba`, first
-        maximum winning, mapped through `classes_`.
-
-        Returns
-        -------
-        Array or list of shape (n_samples,)
-            An int64 or float64 `Array` for numeric labels, a Python list for
-            string labels.
-        """
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
-
-@forest_estimator("regressor")
+@_forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of
 # fixed-point quantized labels (deviation 135).
 class ExtraTreesRegressor(_ExtraTreesBase):
@@ -594,40 +461,9 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         device="gpu",
         inference_engine="auto",
     ):
-        super().__init__(device)
-        _refuse_forest_knobs(n_jobs, verbose)
-        if criterion not in _REGRESSOR_CRITERIA:
-            reason = _UNSUPPORTED_CRITERIA.get(criterion)
-            raise NotImplementedError(
-                f"criterion={criterion!r} is not implemented"
-                + (f" ({reason[1]})" if reason else "")
-                + "; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are."
-            )
-        self.criterion = criterion
-        self._criterion_code = _REGRESSOR_CRITERIA[criterion]
-        self._cfg = dict(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
-            min_weight_fraction_leaf=min_weight_fraction_leaf,
-            max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes,
-            min_impurity_decrease=min_impurity_decrease,
-            bootstrap=bootstrap,
-            oob_score=oob_score,
-            random_state=random_state,
-            warm_start=warm_start,
-            class_weight=None,
-            ccp_alpha=ccp_alpha,
-            max_samples=max_samples,
-            monotonic_cst=monotonic_cst,
-        )
-        # sklearn's regressor default: all features. A float 1.0 means the
-        # fraction form; estimator.mojo nudges the ratio to the middle of
-        # its truncation bucket either way.
-        if max_features == 1.0 and not isinstance(max_features, int):
-            self._cfg["max_features"] = None
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None):
         """Fit the forest.

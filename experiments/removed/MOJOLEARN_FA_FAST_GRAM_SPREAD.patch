@@ -1,0 +1,55 @@
+diff --git a/x_decomp/fa_fast.mojo b/x_decomp/fa_fast.mojo
+index 52b684c3c7..5dbbfed730 100644
+--- a/x_decomp/fa_fast.mojo
++++ b/x_decomp/fa_fast.mojo
+@@ -223,9 +223,29 @@ def fa_gram_tiles(d: Int) -> Int:
+     return (d + FG_TILE - 1) // FG_TILE
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_FA_FAST_GRAM_SPREAD (never measured, deleted) deleted 2026-11-09 by a831c2008d; code recoverable
+-# at f59d913b0b (fa_gram_rows: rows per Gram partial shrunk with n, FG_MIN_PARTS / FG_MIN_ROWS). Every Gram pass uses FG_ROWS.
+-# Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch
++#: (FAST + Apple, default OFF, lane apple-slow-paths 2026-10-17; A/B owed)
++#: rows per Gram partial shrink with n so the tile pass has at least
++#: FG_MIN_PARTS threadgroups per tile pair: at the fixed FG_ROWS a small n
++#: (n <= 2 FG_ROWS) ran the whole pass on 1-3 threadgroups of a 19-80 core
++#: GPU, each walking 8192 rows of double-float adds in series. The row count
++#: is ceil(n / FG_MIN_PARTS) rounded up to a slab, at least FG_MIN_ROWS
++#: (16 slabs: the fold's nz partial reads stay below n / FG_MIN_ROWS) and at
++#: most FG_ROWS (large n keeps the old partials). FG_MIN_PARTS = 64 covers
++#: the threadgroup slots of the Apple GPUs we run (a hardware count, not a
++#: dataset shape). Moves FAST bits (the fold order over partials) only.
++comptime FA_GRAM_SPREAD = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_FAST_GRAM_SPREAD"]()
++comptime FG_MIN_PARTS = 64
++comptime FG_MIN_ROWS = 16 * FG_SLAB
++
++
++def fa_gram_rows(nrows: Int) -> Int:
++    """Rows per partial (see FA_GRAM_SPREAD); FG_ROWS without it."""
++    comptime if FA_GRAM_SPREAD:
++        var want = (nrows + FG_MIN_PARTS - 1) // FG_MIN_PARTS
++        want = ((want + FG_SLAB - 1) // FG_SLAB) * FG_SLAB
++        return min(FG_ROWS, max(FG_MIN_ROWS, want))
++    else:
++        return FG_ROWS
+ 
+ 
+ def fa_gram_parts(nrows: Int, rows: Int) -> Int:
+@@ -236,7 +256,7 @@ def fa_gram_parts(nrows: Int, rows: Int) -> Int:
+ def fa_gram_tile_kernel(x: F32Ptr, mean: F32Ptr, part: F32Ptr, n_in: Int32, d_in: Int32, nt_in: Int32, rows_in: Int32):
+     """Block (pair, z): pair = block_idx.x names an upper-triangle tile
+     (ti <= tj) of the nt x nt tile grid, z = block_idx.y the partial over rows
+-    [z rows, min(n, (z + 1) rows)), rows = FG_ROWS. Slabs of FG_SLAB rows of the tile's
++    [z rows, min(n, (z + 1) rows)), rows = `fa_gram_rows(n)`. Slabs of FG_SLAB rows of the tile's
+     two column ranges, centered at the mean as they are loaded (columns past
+     d and rows past the range load 0), go to threadgroup memory; thread
+     (tr, tc) accumulates its 4 x 4 cells over the slab. part[z d d + i d + j]
+@@ -580,7 +600,7 @@ def fa_gram_run(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises ->
+     if d > FA_MAX_D:
+         raise Error("x_decomp fa_gram: more than " + String(FA_MAX_D) + " features")
+     var nt = fa_gram_tiles(d)
+-    var rows = FG_ROWS
++    var rows = fa_gram_rows(n)
+     var nz = fa_gram_parts(n, rows)
+     var px = _ptr(x, n * d)
+     var pm = _ptr(mean, d)

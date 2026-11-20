@@ -4,83 +4,55 @@
 an implementation: RAFT receives device pointers and never uploads anything."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.transfer import (
+    TRANSFER_TIER_IDENTICAL,
+    transfer_download_f32_list,
+    transfer_download_list,
+    transfer_upload_list,
+)
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnMetricsIoTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnMetricsIoTransferStagesFastV1"
 
 
 def upload_f32(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the private copy of the list per call is gone.
     var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-    var h = values.copy()
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^
-    return buf^
+    return transfer_upload_list[DType.float32](ctx, values, n, n if n > 0 else 1)
 
 
 def upload_i32(
     ctx: DeviceContext, values: List[Int32]
 ) raises -> DeviceBuffer[DType.int32]:
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the private copy of the list per call is gone.
     var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
-    var h = values.copy()
-    if n > 0:
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^
-    return buf^
+    return transfer_upload_list[DType.int32](ctx, values, n, n if n > 0 else 1)
 
 
 def download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words. Gone: a pinned buffer per call and
+    # one append per word.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.int32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Int32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo: one copy into the list's own words (no pinned
+    # buffer per call, no append per word).
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 def download_u32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int
 ) raises -> List[UInt32]:
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.uint32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[UInt32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo: one copy into the list's own words (no pinned
+    # buffer per call, no append per word).
+    return transfer_download_list[DType.uint32](ctx, buf, n)

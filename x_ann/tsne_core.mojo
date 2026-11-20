@@ -38,7 +38,6 @@ from checks.numerics import (
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
-from std.sys.compile import is_defined
 
 #: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor and the host
 #: column: THE REPULSION FOLDS IN TS_LANES LANES. Row i's three sums (z,
@@ -55,12 +54,12 @@ from std.sys.compile import is_defined
 #: (`x_ann/host/tsne_host.mojo` `_repulse_lane`). Sixty-four shorter chains
 #: per sum, so the rounding error is no larger than the single chain's.
 #: Bits change (the embedding and kl_divergence_) on all four columns
-#: together. `ts_repulse_cell` below keeps the single chain (FAST and the
-#: _OFF arm). -D MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the single chain everywhere.
-comptime TS_LANE_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: together. `ts_repulse_cell` below keeps the single chain (FAST).
+# TOMBSTONE: MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 43f806d837.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-14-cluster (non-owner; owner expdel2-37-series); code recoverable at 5648a4a2e2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-14-cluster.patch; record in docs/TOMBSTONES.md.
+comptime TS_LANE_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime TS_LANES = 64
 
 
@@ -436,8 +435,8 @@ def ts_sum_cell(row_z: F32P, n: Int, z: F32P):
     merges right to left), so one thread needs O(log n) words; the device's
     parallel level-by-level form (`x_ann/tsne_device.mojo::
     repulse_split_kernel`) forms the same nodes, so every column agrees."""
-    var sv = InlineArray[Float32, TS_Z_STACK](fill=Float32(0.0))
-    var sl = InlineArray[Int, TS_Z_STACK](fill=0)
+    var sv = Array[Float32, TS_Z_STACK](fill=Float32(0.0))
+    var sl = Array[Int, TS_Z_STACK](fill=0)
     var top = 0
     for i in range(n):
         var v = row_z.unsafe_load(i)

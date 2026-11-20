@@ -9,19 +9,17 @@ DEVIATION 2560/2561: `enqueue_fill` (the gbdt fill helper) writes the
 same bytes as `ctx.enqueue_memset` AND as a host oracle that stores the
 value n times, for float32/int32/uint32/uint8, values including -0.0, a
 NaN payload and a denormal, on poisoned buffers, at lengths that reach the
-byte tail and the grid-stride path past the block cap. Rule 8, one named
-check per side of the switch:
+byte tail and the grid-stride path past the block cap:
 
-    pixi run check-device-zero          # kernel arm (default)
-    pixi run check-device-zero-memset   # -D MOJOLEARN_2560_MEMSET_FILL=1
+    pixi run check-device-zero
 """
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from std.sys.info import size_of
 from core.device_zero import enqueue_zero_bytes, enqueue_fill
 
-comptime MEMSET_ARM = is_defined["MOJOLEARN_2560_MEMSET_FILL"]()
+# TOMBSTONE: MOJOLEARN_2560_MEMSET_FILL (the memset arm of this check) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 337c096a5b.
+# Restore: git apply experiments/removed/MOJOLEARN_2560_MEMSET_FILL.patch; record in docs/TOMBSTONES.md.
 
 
 def check_span(ctx: DeviceContext, total: Int, offset: Int, nbytes: Int) raises -> Bool:
@@ -109,10 +107,7 @@ def main() raises:
     n_cases += 1
     print("device_zero_check spans:", n_cases)
 
-    comptime if MEMSET_ARM:
-        print("device_zero_check fill arm: memset (DEVIATION 2560 opt-out)")
-    else:
-        print("device_zero_check fill arm: kernel (DEVIATION 2512/2561)")
+    print("device_zero_check fill arm: kernel (DEVIATION 2512/2561)")
     # 524,289 and 3,000,001 elements pass the 2048 x 256 thread cap on both
     # the fill kernel and the 16-byte zero kernel (grid-stride arm).
     var ns = [1, 3, 4, 5, 15, 16, 17, 4096, 4101, 524289, 3000001]

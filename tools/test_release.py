@@ -176,9 +176,9 @@ class LegTests(unittest.TestCase):
 
 
 class AmdRouteTests(unittest.TestCase):
-    """The AMD build leg's provider: DigitalOcean, or Hot Aisle when DigitalOcean
-    has a GPU droplet live (2026-09-25). No network: the probe is a stand-in,
-    and do_gpu_busy is pointed at a local HTTP server."""
+    """The AMD build leg's provider: DigitalOcean by default, cpu-box by name.
+    The Hot Aisle route, its droplet probe and the walk to it were removed
+    2026-11-18 (lane fx-dead-small)."""
 
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -190,116 +190,135 @@ class AmdRouteTests(unittest.TestCase):
             os.environ["MOJOLEARN_AMD_PROVIDER"] = self._env
         self._t.cleanup()
 
-    def ctx(self, busy=None, **kw):
+    def ctx(self, **kw):
         c = Ctx()
         c.args = args(**kw)
         c.rel = self.tmp
-        c.probed = 0
-        if busy is not None:
-            def probe():
-                c.probed += 1
-                return busy, "stand-in: " + ("a GPU droplet live" if busy else "none live")
-            c.amd_do_probe = probe
         return c
 
     def amd(self, c):
         (hip,) = [l for l in release.gpu_legs(c) if l.name == "hip-gfx942"]
         return hip
 
-    def test_auto_takes_digitalocean_when_it_is_free(self):
-        c = self.ctx(busy=False)
+    def test_auto_takes_digitalocean(self):
+        c = self.ctx(amd_expect_from="/nv/leg")
         hip = self.amd(c)
         self.assertEqual(hip.command[:2], ["bash", "tools/do_release061_leg.sh"])
+        self.assertEqual(hip.command[-2:], ["--expect-from", "/nv/leg"])
         self.assertEqual(hip.env["MOJOLEARN_RELEASE_UBUNTU22"], "1")
-        self.assertEqual(hip.provider, "do")
-
-    def test_auto_takes_hotaisle_when_digitalocean_has_a_gpu_droplet_live(self):
-        c = self.ctx(busy=True, amd_expect_from="/nv/leg")
-        hip = self.amd(c)
-        self.assertEqual(hip.command, ["bash", "tools/hotaisle_release_leg.sh", COMMIT, "--rent", "--expect-from", "/nv/leg"])
-        self.assertEqual(hip.env, {"MOJOLEARN_RELEASE_RESULTS_ROOT": str(self.tmp / "legs")})
-        # the same tree the packer and linux-wait read, whichever provider built it
         self.assertEqual(hip.release_build, self.tmp / "legs" / "hip-gfx942" / "release-build")
-        self.assertEqual(hip.provider, "hotaisle")
-        self.assertIn("  AMD build leg: hotaisle (auto: stand-in: a GPU droplet live)", c.lines)
-        self.amd(c)
-        self.assertEqual(c.probed, 1, "the route is decided once per run")
+        self.assertEqual(hip.provider, "do")
+        self.assertIn("  AMD build leg: do (auto)", c.lines)
 
     def test_pinned_by_flag_or_environment(self):
-        c = self.ctx(busy=False, amd_build_provider="hotaisle")
-        self.assertEqual(self.amd(c).command[1], "tools/hotaisle_release_leg.sh")
-        self.assertEqual(c.probed, 0)
-        os.environ["MOJOLEARN_AMD_PROVIDER"] = "hotaisle"
+        c = self.ctx(amd_build_provider="do")
+        self.assertEqual(self.amd(c).command[1], "tools/do_release061_leg.sh")
+        os.environ["MOJOLEARN_AMD_PROVIDER"] = "cpu-box"
         try:
-            c = self.ctx(busy=False)
-            self.assertEqual(self.amd(c).command[1], "tools/hotaisle_release_leg.sh")
-            c = self.ctx(busy=True, amd_build_provider="do")
-            self.assertEqual(self.amd(c).command[1], "tools/do_release061_leg.sh")
+            c = self.ctx()
+            self.assertEqual(self.amd(c).command[1], "tools/release_linux_build.sh")
+            os.environ["MOJOLEARN_AMD_PROVIDER"] = "hotaisle"
+            with self.assertRaises(release.StepFailed):
+                self.amd(self.ctx())
         finally:
             del os.environ["MOJOLEARN_AMD_PROVIDER"]
 
-    def test_do_gpu_busy_reads_the_droplet_listing(self):
-        import http.server
-        import threading
-        state = {"droplets": []}
 
-        class H(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *a):
-                pass
+class StepTableTests(unittest.TestCase):
+    """The step graph around the readiness analysis (lane post-readiness-off-mac, 2026-11-07)."""
 
-            def do_GET(self):
-                ok = self.headers.get("Authorization") == "Bearer dop_v1_fake"
-                body = json.dumps({"droplets": state["droplets"]} if ok else {"id": "unauthorized"}).encode()
-                self.send_response(200 if ok else 401)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
-        threading.Thread(target=srv.serve_forever, daemon=True).start()
-        api = "http://127.0.0.1:%d/v2" % srv.server_address[1]
-        tok = self.tmp / "tok"
-        tok.write_text("dop_v1_fake\n")
-        try:
-            self.assertEqual(release.do_gpu_busy(str(tok), api), (False, "no DigitalOcean GPU droplet live"))
-            state["droplets"] = [{"id": 1, "name": "web", "size_slug": "s-1vcpu-1gb"},
-                                 {"id": 603, "name": "gpt3-t3", "size_slug": "gpu-mi325x1-256gb"}]
-            busy, why = release.do_gpu_busy(str(tok), api)
-            self.assertTrue(busy)
-            self.assertIn("603:gpt3-t3:gpu-mi325x1-256gb", why)
-            self.assertNotIn("web", why)
-            tok.write_text("wrong\n")
-            self.assertTrue(release.do_gpu_busy(str(tok), api)[0])
-            self.assertEqual(release.do_gpu_busy(str(self.tmp / "none"), api)[0], True)
-        finally:
-            srv.shutdown()
-            srv.server_close()
+    def test_readiness_needs_only_the_freeze_and_gates_both_builds(self):
+        self.assertIn("readiness", release.Release.STEPS)
+        self.assertEqual(release.NEEDS["readiness"], ["freeze-commit"])
+        self.assertEqual(release.PIPELINE_OF["readiness"], "common")
+        # no resource: it runs beside cross-compile (GitHub), and before the Mac build by NEEDS
+        self.assertIsNone(release.RESOURCE["readiness"])
+        self.assertNotIn("readiness", release.NEEDS["cross-compile"])
+        # cross-compile runs beside the Linux builds on github (lane post-cross-compile-redundant); linux-wait needs it
+        self.assertEqual(release.NEEDS["linux-builds"], ["reuse-plan", "readiness"])
+        self.assertIn("cross-compile", release.NEEDS["linux-wait"])
+        self.assertEqual(release.NEEDS["macos-build"], ["reuse-plan", "readiness"])
+        steps = release.Release.STEPS
+        self.assertLess(steps.index("freeze-commit"), steps.index("readiness"))
+        self.assertLess(steps.index("readiness"), steps.index("linux-builds"))
+        self.assertLess(steps.index("readiness"), steps.index("macos-build"))
+        self.assertIn("readiness", release.Release.PLAN_STEP_KINDS)
 
-    def test_linux_wait_walks_a_live_droplet_refusal_to_hotaisle(self):
-        c = self.ctx(busy=False)
-        hip = self.amd(c)
-        hip.workdir.mkdir(parents=True, exist_ok=True)
-        hip.exit_file.write_text("2\n")
-        hip.log.write_text("[amd/rel061] REFUSING: GPU droplet(s) already live, destroy or adopt them first: 603:x:gpu-mi325x1-256gb\n")
-        spawned = []
-        r = release.Release(args(state_dir=str(self.tmp / "state")),
-                            runner=lambda cmd, env, log, detach=False: spawned.append((cmd, env)) or 999999)
-        r.state["commit"] = COMMIT
-        r.say = lambda msg: None
-        r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
-        # Route-walk fixture only; actual producer admission has its own tests.
-        r.begin_compile_requirements = lambda leg: {}
-        saved = release.linux_legs
-        release.linux_legs = lambda ctx: [hip]
-        try:
-            with self.assertRaises(release.StepFailed):   # the relaunched leg is not finished here
-                r.step_linux_wait()
-        finally:
-            release.linux_legs = saved
-        self.assertEqual(len(spawned), 1, spawned)
-        self.assertIn("tools/hotaisle_release_leg.sh", spawned[0][0][2])
-        self.assertEqual(spawned[0][1]["MOJOLEARN_RELEASE_RESULTS_ROOT"], str(hip.workdir))
-        self.assertEqual(hip.provider, "hotaisle")
-        self.assertEqual(len(list(hip.workdir.glob("hip-gfx942.log.failed-*"))), 1)
+    def test_linux_pack_takes_a_mac_slot_not_the_mac_token(self):
+        # the token is exclusive: with it, linux-pack waited behind the whole macOS pipeline
+        self.assertIsNone(release.RESOURCE["linux-pack"])
+        self.assertEqual(release.RESOURCE["macos-build"], "mac")
+        source = pathlib.Path(release.__file__).read_text()
+        body = source.split("    def step_linux_pack(self):", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn('"mac_slot.py"), "run", "--"] + args', body)
+
+    def test_readiness_runs_the_analysis_through_prefetch_on_every_core(self):
+        import release_requirement_dependencies as dependencies
+        from types import SimpleNamespace
+        seen = {}
+
+        def prefetch(compute, *, jobs, worker, say, ran):
+            seen.update(jobs=jobs, worker=worker, compute=compute)
+            ran.append(dict(token="t", seconds=1.0, ok=True))
+            return dict(requirements={"a": {}, "b": {}})
+        from unittest import mock
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("MOJOLEARN_ADMISSION_JOBS", "MOJOLEARN_ADMISSION_WORKER")}
+        ctx = SimpleNamespace(dry=False, say=lambda line: None, readiness_manifest=lambda: None,
+                              prefetch_ledger_rounds=lambda after: seen.update(ledger=after) or dict(summary="ok"))
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(dependencies, "prefetch", prefetch):
+            result, data = release.Release.step_readiness(ctx)
+        self.assertEqual(seen["jobs"], os.cpu_count() or 1)
+        self.assertEqual(seen["worker"], "local")
+        self.assertIs(seen["compute"], ctx.readiness_manifest)
+        self.assertIn("2 requirement unit(s)", result)
+        self.assertEqual(data["snapshots"], 1)
+        self.assertEqual(data["snapshot_jobs"], os.cpu_count() or 1)
+        # the ledger's rounds at the freeze too (linux-builds reads the ledger before it dispatches)
+        self.assertEqual(seen["ledger"], "readiness")
+
+    def test_the_steps_that_make_ledger_rounds_knowable_prefetch_them_before_done(self):
+        # linux-pack and macos-build produce the candidate wheels the gates' ledger reads depend on (before
+        # gate-boxes rents); identity-admit moves the identity reference commit (before the publish preflight)
+        # identity-admit is not one: no step after it consults the ledger (publication_gate, post-ledger-once)
+        self.assertEqual(release.Release.LEDGER_PREFETCH_AFTER, ("linux-pack", "macos-build"))
+        self.assertIn("linux-pack", release.NEEDS["gate-boxes"])
+        for gate in ("gate-nvidia", "gate-amd"):
+            self.assertIn("gate-boxes", release.NEEDS[gate])
+        for step in release.Release.LEDGER_PREFETCH_AFTER:
+            self.assertTrue(hasattr(release.Release, "step_" + step.replace("-", "_")), step)
+
+    def test_run_step_prefetches_after_its_own_producing_step_only(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as directory:
+            r = release.Release(args(state_dir=str(pathlib.Path(directory) / "state")),
+                                runner=lambda cmd, env, log, detach=False: 0)
+            r.state["commit"] = COMMIT
+            r.say = lambda msg: None
+            asked = []
+            r.prefetch_ledger_rounds = lambda after: asked.append(after) or dict(summary="ok")
+            # the release's own step (its body stubbed at the class): prefetched before it is marked done
+            with mock.patch.object(release.Release, "step_linux_pack", lambda self: "packed"), \
+                    mock.patch.object(release.Release, "have_linux_pack", lambda self, rec: None, create=True):
+                self.assertEqual(r.run_step("linux-pack"), "done")
+            self.assertEqual(asked, ["linux-pack"])
+            self.assertEqual(r.recorded("linux-pack")["ledger_prefetch"], dict(summary="ok"))
+            # a step replaced on the instance (the staged pipeline tests) prefetches nothing
+            r.step_macos_build = lambda: "built"
+            with mock.patch.object(release.Release, "have_macos_build", lambda self, rec: None):
+                self.assertEqual(r.run_step("macos-build"), "done")
+            # a skipped producing step prefetches nothing
+            with mock.patch.object(release.Release, "step_identity_admit", lambda self: "skipped (no option)"):
+                self.assertEqual(r.run_step("identity-admit"), "done")
+            self.assertEqual(asked, ["linux-pack"])
+
+    def test_dry_readiness_runs_nothing(self):
+        from types import SimpleNamespace
+
+        def never():
+            raise AssertionError("a dry run never runs the analysis")
+        ctx = SimpleNamespace(dry=True, say=lambda line: None, readiness_manifest=never)
+        self.assertIn("would run the frozen dependency analysis", release.Release.step_readiness(ctx))
 
 
 class ReceiptTests(unittest.TestCase):
@@ -318,6 +337,16 @@ class ReceiptTests(unittest.TestCase):
 
 
 class RunTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # One evidence root for the class: the dry runs' reuse plan caches the commit's tree facts under it
+        # (release_reuse.facts_for_commit), so the source closure scan of the commit runs once, not per dry run.
+        cls._evidence = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._evidence.cleanup()
+
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
         self.state = pathlib.Path(self._t.name) / "state"
@@ -358,16 +387,52 @@ class RunTests(unittest.TestCase):
     def dry_run(self, *extra):
         # The identity cache lives under the evidence root; the dry run must
         # write nothing under the state directory.
-        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._evidence.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")   # no DigitalOcean probe from a test
         out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
                               "--state-dir", str(self.state), *extra],
                              capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
+        # published-smoke-<vendor> is selected only by an explicit --published-smoke VENDOR (release.py go):
+        # unrequested, it is not planned at all; every other step is.
         for step in release.Release.STEPS:
-            self.assertIn("-- " + step, out.stdout)
+            if step in release.PUBLISHED_SMOKE_STEPS:
+                self.assertNotIn("-- " + step + "\n", out.stdout)
+            else:
+                self.assertIn("-- " + step, out.stdout)
         self.assertFalse(self.state.exists())
+        # THE READINESS ANALYSIS GOES FIRST (lane post-readiness-off-mac, 2026-11-07): the step runs, and is
+        # reported done, before linux-builds or macos-build starts, so neither waits on it beside the Mac build.
+        planned = out.stdout.index("would run the frozen dependency analysis")
+        self.assertLess(out.stdout.index("-- readiness"), planned)
+        self.assertLess(planned, out.stdout.index("-- linux-builds"))
+        self.assertLess(planned, out.stdout.index("-- macos-build"))
         return out
+
+    def dry_run_raw(self, *extra):
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._evidence.name) / "evidence"),
+                   MOJOLEARN_AMD_PROVIDER="do")
+        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
+                              "--state-dir", str(self.state), *extra],
+                             capture_output=True, text=True, timeout=600, env=env)
+        self.assertEqual(out.returncode, 0, out.stderr[-2000:])
+        return out.stdout
+
+    def test_dry_run_of_the_default_path_runs_no_reuse_machinery(self):
+        # EVERY RELEASE RUNS EVERYTHING ONCE (Andrew 2026-11-07): on the wheels without --reuse-unchanged no
+        # dependency workers run and no step evaluates the ledger, identity-admit and after included.
+        out = self.dry_run_raw("--identity-on-wheels")
+        self.assertIn("-- readiness", out)
+        self.assertIn(release.Release.LEDGER_OFF, out)
+        self.assertNotIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.DRY_READINESS, out)
+        self.assertNotIn("ledger evidence", out)
+        self.assertIn("-- identity-admit", out)
+
+    def test_dry_run_with_the_reuse_flag_still_plans_the_analysis(self):
+        out = self.dry_run_raw("--identity-on-wheels", "--reuse-unchanged")
+        self.assertIn("would run the frozen dependency analysis", out)
+        self.assertNotIn(release.Release.LEDGER_OFF, out)
 
     def test_dry_run_without_gpu_smoke_skips_every_gpu_column(self):
         # Andrew 2026-10-13 (8109d122d): identity and behavior are checked before merge;

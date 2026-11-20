@@ -141,13 +141,13 @@ the caller keeps it alive past `ctx.synchronize()`.
 
 from mamba.host.device_shim import host_launch, launch_count
 from std.math import exp2
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from mamba.host.gen.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from mamba.host.gen.device_optimizations import identical_selective_scan_window
+
 from mamba.host.gen.device_optimizations import m1_persistent_scan
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
 #: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
@@ -259,23 +259,21 @@ comptime ANY_SABOTAGE = (
 # core/six_lane_experiment_guards.mojo), whose crosses were refused or inert.
 # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m1_scan=persistent vs today's defaults, one run per arm): mamba1-forward gaussian
 # NV L40S 5.563 -> 3.550 ms (v1242), AMD MI325X 9.934 -> 3.204 ms (a1350); avg ratio 0.454 (state_window=2: 0.468);
-# hash 602f9ec5 on both vendors. Default arm is now 3 (persistent); -D MOJOLEARN_IDN_M1_SCAN=0 restores the old scan.
-comptime M1_SCAN = get_defined_int["MOJOLEARN_IDN_M1_SCAN", 3]()
+# hash 602f9ec5 on both vendors. Arm 3 (persistent) is the only alternative scan left.
+# TOMBSTONE: MOJOLEARN_IDN_M1_SCAN (the Mamba-1 scan arm switch, EXP:2071; arm 3 persistent is the promoted default, arms 0 (old scan) and 2 (NI38 state_window) go; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at fcaa656130.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+comptime M1_SCAN = 3
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix Mamba-1 scan; LOSER: mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93), AMD 3.14 -> 8.38 ms (2.67), avg 2.30, vs arm 3 persistent) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch (neural_scan_profile.mojo, neural_mamba_scan.mojo and the host/gen twins come back with it); record in docs/TOMBSTONES.md.
-comptime M1_SCAN_STATE_WINDOW = 2
 comptime M1_SCAN_PERSISTENT = 3
-# NI38 S subarm, independent of the unfinished V affine composition. Native
-# host keeps the original serial graph, as do checkpoint/backward consumers.
-# Off unless explicitly selected; no current default or sabotage path changes.
-comptime IDN_M1_STATE_WINDOW = False
 # lane/neural-fusions (L13): the persistent chunked scan, one launch, bits
 # unchanged (m1_persistent_scan.mojo). Exclusive with the NI38 window arm.
 # The native host keeps the shipped serial kernel (the same graph).
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_M1_PERSISTENT_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and M1_SCAN == M1_SCAN_PERSISTENT
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not ANY_SABOTAGE
 )
@@ -601,15 +599,7 @@ def selective_scan_fn(
         # core/six_lane_experiment_guards.mojo, which 81 bindings import).
         comptime assert not is_defined["MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN"](), "removed: MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN REJECTED 2026-10-28 (breaks decode==prefill at 64-token chunk boundaries; never on main, lane/mamba-folds@db803a1337); see docs/TOMBSTONES.md"
         comptime if IDN_M1_PERSISTENT_SCAN:
-            comptime assert not IDN_M1_STATE_WINDOW, (
-                "MOJOLEARN_IDN_M1_SCAN persistent and state_window are two"
-                " plans for one scan; choose one"
-            )
             m1_persistent_scan[MAX_DSTATE](
-                ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
-            )
-        elif IDN_M1_STATE_WINDOW:
-            identical_selective_scan_window[MAX_DSTATE](
                 ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
             )
         elif AFN_MAMBA1_CHUNKSCAN:
@@ -633,7 +623,7 @@ def selective_scan_fn(
             var _l1_a11 = Int32(dim)
             def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10, imm _l1_a11}:
                 kern(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10, _l1_a11)
-            host_launch(_launch_1, launch_count((grid, 1, 1), (block_size, 1, 1)))
+            host_launch(_launch_1, launch_count((grid, 1, 1), (block_size, 1, 1)), 0)
         ctx.synchronize()
 
     # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.output.

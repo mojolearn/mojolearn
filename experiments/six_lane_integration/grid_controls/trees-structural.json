@@ -5,29 +5,6 @@
  "head": "75dd2db9a",
  "mode": "identical",
  "controls": {
-  "ORD_STD_GRIDFOLD": {
-   "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:123",
-    "gbdt/methods/ordered_boosting.mojo:675",
-    "gbdt/methods/ordered_boosting.mojo:2756",
-    "gbdt/host/gbdt_oracle_ordered.mojo:1471",
-    "gbdt/host/gbdt_oracle_ordered.mojo:1848",
-    "gbdt/host/gbdt_oracle_ordered.mojo:1878"
-   ],
-   "binding": "_mojolearn_gbdt,_mojolearn_gbdt_host",
-   "bits_change": true,
-   "status": "promoted:ge123e6f9",
-   "note": "Ordered score-noise and scale-magnitude sums over a fixed 16,384-lane grid (256 blocks x 64, halving tree per block, then the unchanged 256-wide combine) instead of 256 serial lane chains (8x32). Reached on the fused arm only (random_strength != 0 and no bootstrap: the board's ordered config). New fold order on every vendor; the host column gbdt_oracle_ordered follows it under the same define. Ignores MOJOLEARN_ORD_STD_SPLIT when on. Feeds T24's combine+scale kernel unchanged (crossed). Default ON in IDENTICAL; `_OFF` is the 256 serial lane chains (device and host column together). Grid run ge123e6f9 (NVIDIA L40S + AMD MI325X, full board data, one scored run per arm); PROMOTED to the IDENTICAL default by lane/grid-flips-1 2026-10-08 (Andrew 13:00Z); numbers at the declaration and in docs/apple-fast/EXPERIMENTS.md."
-  },
   "LG_LEVEL_ROUNDS": {
    "define": "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
    "kind": "switch",
@@ -39,68 +16,20 @@
    },
    "default": "off",
    "source": [
-    "gbdt/trees_identical_switches.mojo:101",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1890",
-    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:3364"
+    "gbdt/trees_identical_switches.mojo:169",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:1954",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:3442"
    ],
    "binding": "_mojolearn_gbdt",
    "bits_change": false,
-   "status": "new",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_T17_BATCH"
-   ],
-   "note": "IDENTICAL Lossguide exact batch: when max_leaves >= 2^max_depth (parameter test) the round width is the free slots, so one round splits a full depth level (about max_depth+1 rounds a tree instead of log2(max_leaves)+max_leaves/32). Bit-neutral: the best-first replay (_lg_exact_plan) still fixes leaf choice and numbering; same argument as LG_EXACT_ID at any width. Overrides T17_BATCH's width whenever its condition holds (always on board shapes), so the two are declared exclusive; C47_GBDT's memory cap still applies after it (crossed)."
-  },
-  "CTR_SORTFREE_SUMS": {
-   "define": "MOJOLEARN_TREES_CTR_SORTFREE_SUMS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "gbdt/trees_identical_switches.mojo:106",
-    "gbdt/methods/leaves_estimation/bin_keyed_stats.mojo:172",
-    "gbdt/methods/doc_parallel_boosting.mojo:3676",
-    "gbdt/methods/doc_parallel_boosting.mojo:2124",
-    "gbdt/methods/doc_parallel_boosting.mojo:2242",
-    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:754",
-    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:2360"
-   ],
-   "binding": "_mojolearn_gbdt",
-   "bits_change": true,
-   "status": "new",
-   "exclusive_with": [
-    "MOJOLEARN_TREES_T18"
-   ],
-   "note": "Non-symmetric multi-permutation (CTR) leaf estimation without the per-permutation radix sort, gathers and partition scatter: rows stay in original order, per-row leaf ids from the model walk, exact Int32-atomic leaf counts, per-leaf der/der2/weight sums by a FIXED-ORDER FLOAT fold (2048-row chunks ascending, then a 256-lane halving tree; not integer atomics, the walker needs float sums). Reached only on the IDN_CTR_PERM_BATCH batched walk (default on; MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF disables it). Bits change NVIDIA = AMD; no host column (the CPU binding refuses CTR columns outside SymmetricTree). T18's inherited learn partition is unused under it (all 4 permutations sort-free): exclusive. NOT reached by gbdt-ordered: ordered_boosting's per-task partitions are a device counting sort (_PermPartition.enqueue_sort) on a separate route with its own host column; not converted in this lane."
+   "status": "owed",
+   "note": "IDENTICAL Lossguide exact batch: when max_leaves >= 2^max_depth (parameter test) the round width is the free slots, so one round splits a full depth level (about max_depth+1 rounds a tree instead of log2(max_leaves)+max_leaves/32). Bit-neutral: the best-first replay (_lg_exact_plan) still fixes leaf choice and numbering; same argument as LG_EXACT_ID at any width. Overrides the exact batch width (LG_EXACT_BATCH_WIDTH; T17_BATCH's define is deleted) whenever its condition holds; the LG_EXACT_ID memory gate still applies after it. RESTORED 2026-11-15 (lane/restore-run-arms-trees, docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md): deleted unmeasured by expdel2, restored as an opt-in arm; A/B owed on NVIDIA L40S (bench/results/paper_compare/owed-pre0867.json)."
   }
  },
  "algorithms": {
-  "trees:gbdt-ordered": {
-   "binding": "_mojolearn_gbdt",
-   "route": "fit: fit_ordered tree loop -> score noise + scale sums (ORD_STD_GRIDFOLD: _ord_std_gridfold_kernel -> _ord_std_combine[_scale] (T24)); host column gbdt_oracle_ordered follows",
-   "controls": [
-    "ORD_STD_GRIDFOLD",
-    "T24"
-   ],
-   "interaction_groups": [
-    [
-     "ORD_STD_GRIDFOLD",
-     "T24"
-    ]
-   ],
-   "not_reached": [
-    "CTR_SORTFREE_SUMS",
-    "LG_LEVEL_ROUNDS"
-   ]
-  },
   "trees:gbdt-lossguide": {
    "binding": "_mojolearn_gbdt",
-   "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over T17_BATCH)",
+   "route": "fit: fit_non_symmetric_tree lossguide exact batch round width (LG_LEVEL_ROUNDS over LG_EXACT_BATCH_WIDTH)",
    "controls": [
     "LG_LEVEL_ROUNDS"
    ],
@@ -108,29 +37,45 @@
   },
   "trees:gbdt-categorical": {
    "binding": "_mojolearn_gbdt",
-   "route": "fit: Lossguide search (LG_LEVEL_ROUNDS round width) -> per-tree CTR permutation leaf estimation, batched walk (CTR_SORTFREE_SUMS: bins -> counts -> bin-keyed oracle sums -> per-row apply)",
+   "route": "fit: Lossguide search (LG_LEVEL_ROUNDS round width) -> per-tree CTR permutation leaf estimation",
    "controls": [
-    "LG_LEVEL_ROUNDS",
-    "CTR_SORTFREE_SUMS",
-    "T18"
+    "LG_LEVEL_ROUNDS"
    ],
    "interaction_groups": [],
-   "note": "gbdt-categorical is grow_policy Lossguide with Logloss (tools/speed_gbdt_arm.py TASK_LANES), so LG_LEVEL_ROUNDS reaches it; the search rounds and the leaf estimation are separate stages (independent)."
+   "note": "gbdt-categorical is grow_policy Lossguide with Logloss (tools/speed_gbdt_arm.py TASK_LANES), so LG_LEVEL_ROUNDS reaches it."
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_IDN_GBDT_STEP_OLD",
+   "control": "GBDT_STEP_OLD",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-02-base, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): the A/B on gbdt-lossguide was owed and never ran (EXPERIMENTS.md PENDING row); the old 1 << max_depth Lossguide pool arm is gone, the leaf-capacity pool stays the default (no bit change); define refused in core/experiment_guards_base.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF",
+   "control": "ORD_STD_GRIDFOLD",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): EXP:1637 PROMOTED -- record read: the default is the recorded winner or the kept path (V2 rule e). Under \"An unmeasured arm is deleted\" the old path goes, the default stays (no bit change); code at 56ec6a17df; patch experiments/removed/MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_CTR_SORTFREE_SUMS",
+   "control": "CTR_SORTFREE_SUMS",
+   "reason": "DELETED 2026-11-15 (lane/expdel2-45-trees, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md): no record -- no A/B recorded for the opt-in arm (V2 rule a). Under \"An unmeasured arm is deleted\" the opt-in arm goes, the default stays (no bit change); code at a3d500c032; patch experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.patch"
+  },
+  {
+   "define": "MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF",
+   "control": "BLOCK_SCRATCH_FILL_OFF",
+   "reason": "DELETED 2026-11-18 (lane/fb15-ab-verdicts; A/B ab1, NVIDIA L40S host 37f71a6102af, wheel d652a4b0a1, one run per arm): the B arm (whole-buffer histogram scratch zero) was 1.38-1.40x slower on gbdt-lossguide istella fit (13.92 -> 19.24 s; 14.28 -> 20.02 s), others within 3% except two gbdt-symmetric istella infer cells the define cannot reach; digests equal. The block-span zero stays the default; define refused in core/experiment_guards_trees.mojo; code recoverable at c989eb9222; patch experiments/removed/MOJOLEARN_TREES_BLOCK_SCRATCH_FILL_OFF.patch"
+  }
+ ],
  "stage0_build": {
   "note": "lanes do not compile (rule change 2026-10-07); the orchestrator builds each binding with IDENTICAL + column define, once all-off and once all-on",
   "bindings": [
    "_mojolearn_gbdt",
    "_mojolearn_gbdt_host"
   ],
-  "all_off": [
-   "MOJOLEARN_TREES_ORD_STD_GRIDFOLD_OFF"
-  ],
+  "all_off": [],
   "all_on": [
-   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS",
-   "MOJOLEARN_TREES_CTR_SORTFREE_SUMS"
+   "MOJOLEARN_TREES_LG_LEVEL_ROUNDS"
   ]
  }
 }

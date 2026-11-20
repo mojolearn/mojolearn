@@ -245,6 +245,10 @@ def transformer_host_forward(
     return out^
 
 
+# TOMBSTONE: MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: causal-lm-generate 0.90 from one pair with 3-8 percent drift, causal-lm-generate-smollm2 1.00, transformer-decode 0.98, samba-decode 1.02) HOST_KV_STRIDE_CAP (the host block moving stride-max_tokens caches whole in both directions) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_KV_STRIDE_CAP.patch
+
+
 def transformer_host_backward(
     w: TransformerWeights,
     x: List[Float32],

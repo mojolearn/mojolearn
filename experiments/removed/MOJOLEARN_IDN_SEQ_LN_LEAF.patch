@@ -1,0 +1,36 @@
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index fc6572096b..e021e7e4c3 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -9,7 +9,7 @@ reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
+ g = dy w."""
+ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST, ftz, identical_div, identical_rsqrt
+-from std.sys.compile import is_defined
++from std.sys.compile import is_defined, get_defined_int
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from sequence.fold32 import FOLD_L, tree32
+ from max.gpu.primitives.warp import shuffle_xor
+@@ -70,11 +70,18 @@ comptime LN_FOLD_BLOCK = (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_d
+ 
+ def ln_fold_rows(M: Int) -> Int:
+     """Rows per block: the smallest power of two R >= 64 with R * R >= M."""
+-    # TOMBSTONE: MOJOLEARN_IDN_SEQ_LN_LEAF (unmeasured opt-in leaf 32, validation never run) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_LN_LEAF.patch
+-    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) reads deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 07dabb1b82.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
++    # NI51 independent V arm: more independent parameter-gradient leaves;
++    # sqrt(M) growth still bounds scratch. Shared HostExec/DeviceExec operation
++    # source; only neural LayerNorm changes. Default OFF, validation NOT RUN.
++    # L11 (2026-10-07): a leaf parameter, -D MOJOLEARN_IDN_SEQ_LN_LEAF=64|32
++    # (default 64; legal set asserted in core/six_lane_experiment_guards).
+     var r = 64
++    comptime if (
++        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and LN_FOLD_BLOCK
++        and get_defined_int["MOJOLEARN_IDN_SEQ_LN_LEAF", 64]() == 32
++        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    ):
++        r = 32
+     while r * r < M:
+         r *= 2
+     return r

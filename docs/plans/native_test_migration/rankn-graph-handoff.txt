@@ -1,0 +1,46 @@
+Mojolearn native rank-N attention/layout graphs, 2026-11-10
+
+Two fixtures per executor
+  Attention: Q(2,3,5,4), K(2,3,7,4), W(4,6); scores Q*K^T, softmax of
+  scaled scores, attention*K*W and backward of mean(output). Independent
+  Float64 scalar loops check scores, probabilities-derived outputs and the
+  W gradient using the same tolerances as the old NumPy/einsum reference.
+  Q/K gradients are checked for finiteness as before; no stronger analytic
+  Q/K-gradient coverage is claimed. All output/native shape checks remain.
+  Layout: three (3,k,5) parts with k=2,1,4; concat, split by sizes, split
+  into one section, take indices [6,0,6,3] and backward of the original
+  quadratic/weighted/scaled loss. Independent scalar coordinates check
+  every value, every part gradient and duplicate-index scatter accumulation.
+  Take uses upload_ids and a typed integer tensor handle, avoiding the
+  NumPy dtype-number descriptor path in the native algorithm check.
+  Native finite deterministic fixtures replace NumPy RNG arrays; shapes,
+  operators, repeated indices, derivative formulas and tolerances remain.
+
+Parallelism and boundaries
+  Independent CPU graph sessions run on host_parallelize. Attention oracle
+  queries (30) and W-gradient cells (24) also run independently on that pool.
+  GPU fixtures submit in order to respect DeviceExec's shared context/pool;
+  existing parallel kernels and host oracle tasks provide the work.
+  No Python objects, callbacks, imports, new loader, hashes or timing.
+  Python keeps public output/gradient shapes and dtypes, the split tuple
+  contract, raw ndarray take-index admission, and a gradient route sentinel.
+  Removed attention einsum/softmax and layout/scatter numerical oracles and
+  double-run/digest calls. Only convolution/pooling and finite-difference
+  gradient numerical checks remain in test_ops_rankn.py pending migration.
+
+Orchestrator commands (source reviewed only)
+  bash tools/compile_slot.sh pixi run check-native-rankn-graph-cpu
+  bash tools/compile_slot.sh pixi run check-native-rankn-graph-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_graph_cpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-graph-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_graph_gpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-graph-gpu"
+  Uses the earlier rankn_math native upload/gradient/check helpers.
+  Apply standard NVIDIA/AMD target flags for those compile legs.
+  Retained Python binding: _mojolearn_x_sequence.
+  Python boundary selection: test_ops_rankn.py -k 'attention_graph_packs or layout_methods_pack'.
+
+Status
+  CPU/GPU compile/run are RUN OWED to root. No box/identity/timing queued.
+  Product/kernel/defaults unchanged. A/B define: none (test-only).
+  Root reports OOB ten fixtures passed on CPU and GPU after its Int32 fill
+  test syntax fix; all earlier accepted native batches remain passing.

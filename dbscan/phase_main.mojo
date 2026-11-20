@@ -112,6 +112,7 @@ def main() raises:
             h.unsafe_ptr().unsafe_store(i * d + f, Float32(_u01(i, f, 4) * 4.0))
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
     for _r in range(reps):
         var t0 = perf_counter_ns()

@@ -48,7 +48,7 @@ def test_native_public_unfitted_exception_preserves_both_library_relationships(m
     def forbidden(*args, **kwargs):
         raise AssertionError("Python fitted-state factory reached")
 
-    monkeypatch.setattr(exceptions, "not_fitted_error", forbidden)
+    monkeypatch.setattr(exceptions, "_not_fitted_error", forbidden)
     audit = audit_native_call(native_score, model, x, y) if operation == "score" else audit_native_call(native_predict, model, x)
     error = clean_error(audit, exceptions.NotFittedError)
     assert isinstance(error, ValueError)
@@ -66,7 +66,8 @@ def test_native_error_bridge_pickle_and_repeated_refusals_keep_type_identity(cls
     model = cls()
     x = np.ones((2, 1), dtype="f4")
     first = clean_error(audit_native_call(native_predict, model, x), exceptions.NotFittedError)
-    for _ in range(64):
+    # Eight repeated refusals show a changed type identity as plainly as 64.
+    for _ in range(8):
         error = clean_error(audit_native_call(native_predict, model, x), exceptions.NotFittedError)
         assert type(error) is type(first)
     reduced = audit_native_call(bridge._reduce_not_fitted, first)

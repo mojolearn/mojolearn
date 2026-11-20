@@ -2,7 +2,7 @@
 # six_lane_grid_decide.sh <run-dir-nvidia> <run-dir-amd> [--out DIR] [--dry-run]
 #
 # After tools/six_lane_grid_run.sh finished on both boxes and both run directories are in one place: IDENTICAL is
-# decided by NVIDIA and AMD together (CLAUDE.md), so floors, verdicts, identity and the per-switch decisions need
+# decided by NVIDIA and AMD together (AGENTS.md), so floors, verdicts, identity and the per-switch decisions need
 # both vendors' receipts. Steps (each writes into --out, default <parent of run-dir-nvidia>/grid-decide):
 #   1 floors     six_lane_timing.py floors --from-pairs   (incumbent arm B repeated across cells; no A/A pass)
 #   2 verdicts   six_lane_timing.py verdicts              (FASTER/SLOWER only beyond both vendors' floors, same direction)

@@ -10,6 +10,16 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _schema_rows(tree):
+    # The fixed getter table: `_SCHEMA_SOURCES`, one (module, class, kind, recurse) row per built-in getter; a
+    # module's rows join the schema when it loads (26f25577dd; formerly one dict literal returned by `_schemas()`).
+    rows = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == '_SCHEMA_SOURCES' for t in n.targets))
+    assert rows and all(len(row) == 4 for row in rows), '_SCHEMA_SOURCES must be (module, class, kind, recurse) rows'
+    assert len({row[:2] for row in rows}) == len(rows), 'one schema row per getter owner'
+    return rows
+
+
 class NativeParamsConnection(unittest.TestCase):
     def test_getter_is_one_connected_native_call(self):
         tree = ast.parse((ROOT / 'python/mojolearn/_mode.py').read_text())
@@ -23,9 +33,17 @@ class NativeParamsConnection(unittest.TestCase):
 
     def test_every_declared_builtin_getter_has_an_explicit_schema(self):
         tree = ast.parse((ROOT / 'python/mojolearn/_native_params_metadata.py').read_text())
-        schema = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                      and any(isinstance(t, ast.Name) and t.id == 'schemas' for t in n.targets))
-        covered = {ast.unparse(key) for key in schema.keys}
+        def owner(module_name, class_name):
+            # da9b5989b6: LinearRegression/Ridge bind `get_params = _ClassicalLinear.get_params`; the getter
+            # identity (what the schema table keys on) is the defining function's
+            module = ast.parse((ROOT / 'python/mojolearn' / (module_name + '.py')).read_text())
+            cls = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == class_name)
+            for node in cls.body:
+                if (isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'get_params' for t in node.targets)
+                        and isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name)):
+                    return owner(module_name, node.value.value.id)
+            return module_name + '.' + class_name + '.get_params'
+        covered = {owner(m, c) for m, c, _, _ in _schema_rows(tree)}
         actual = set()
         for path in (ROOT / 'python/mojolearn').glob('*.py'):
             module = ast.parse(path.read_text())
@@ -41,13 +59,11 @@ class NativeParamsConnection(unittest.TestCase):
         # product module import, native operation, or constructor is executed.
         text = (ROOT / 'python/mojolearn/_native_params_metadata.py').read_text()
         tree = ast.parse(text)
-        schema = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                      and any(isinstance(t, ast.Name) and t.id == 'schemas' for t in n.targets))
+        rows = _schema_rows(tree)
         package = ModuleType('_params_connection_fixture')
         package.__path__ = []
         modules = {package.__name__: package}
-        for key in schema.keys:
-            module_name, class_name, _ = ast.unparse(key).split('.')
+        for module_name, class_name, _, _ in rows:
             if not hasattr(package, module_name):
                 module = ModuleType(package.__name__ + '.' + module_name)
                 setattr(package, module_name, module)
@@ -95,7 +111,7 @@ class NativeParamsConnection(unittest.TestCase):
         self.assertTrue(context['ready'])
 
     def test_native_owner_uses_reference_assignment_and_recursion_guard(self):
-        source = (ROOT / 'bindings/params_metadata_native.mojo').read_text()
+        source = (ROOT / 'bindings/params_metadata_native_door.mojo').read_text()
         self.assertIn('"Py_EnterRecursiveCall"', source)
         self.assertIn('"Py_LeaveRecursiveCall"', source)
         self.assertIn('py_setitem(out, name, value)', source)

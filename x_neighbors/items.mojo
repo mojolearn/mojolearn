@@ -35,7 +35,7 @@ from checks.numerics import (
 )
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
+from core.row_cells import softmax_row_from_max_f32, sqdist_diff_cell
 from std.sys.info import is_gpu
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
@@ -52,11 +52,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: (x_neighbors/iter_device.mojo `nc_means_part_kernel` ...) with the pinned
 #: arithmetic. Bits change (centroids, the pooled std, the dataset centroid)
 #: when n > XN_NC_CHUNK_ROWS, on all four columns together.
-#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: whole-column chains.
-comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: FAST off Apple keeps the whole-column chains.
+# TOMBSTONE: MOJOLEARN_IDN_NC_CHUNKED_OFF (old path: IDENTICAL whole-column NearestCentroid chains; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 8749ebe25e.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NC_CHUNKED_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 6837570bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-15-cluster.patch; record in docs/TOMBSTONES.md.
+comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime XN_NC_CHUNK_ROWS = 16384
 
 
@@ -77,11 +78,8 @@ def sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     features folded in ascending order through the pinned fma."""
     var i = t // m
     var j = t - i * m
-    var acc = Float32(0)
-    for f in range(d):
-        var df = _sub(x.unsafe_load(i * d + f), y.unsafe_load(j * d + f))
-        acc = ftz(identical_mul_add(df, df, acc))
-    res.unsafe_store(t, acc)
+    # core/row_cells.mojo: the one by-difference body (the same statements)
+    res.unsafe_store(t, sqdist_diff_cell(x, y, i, j, d))
 
 
 # DEVIATION 5206 (row 120)
@@ -471,7 +469,10 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
     var pc = IP(unsafe_from_address=Int(pcl.unsafe_ptr()))
     for b in range(nb):
         ocsvm_rho_part_item(b, g, alpha, cv, pf, pc, n)
-    var info = InlineArray[Float32, 1](fill=Float32(0))
+    # Native List, not Array: an Array local whose address escapes only as an Int is
+    # neither initialised for nor read back from the callee in an optimized Mojo 1.2
+    # build (reproduced on the Mac, smoke-triage C01 pattern).
+    var info = List[Float32](length=1, fill=Float32(0))
     var ip = FP(unsafe_from_address=Int(info.unsafe_ptr()))
     var stride = 1
     while True:
@@ -635,12 +636,12 @@ def _fold_parts(part: FP, nb: Int) -> Float32:
 
 #: lane apple-fast-purity (2026-10-03): the absolute-difference sum's
 #: partials fold in a fixed tree, so the device folds them with one block of
-#: XN_TREE threads instead of one thread (`-D MOJOLEARN_PURITY_4_OFF`: the
-#: ascending chain). Slot s folds partials s, s + XN_TREE, ... from zero,
+#: XN_TREE threads instead of one thread. Slot s folds partials s, s + XN_TREE, ... from zero,
 #: ascending; then halving: slot s += slot s + h for h = XN_TREE / 2 .. 1.
 #: The host column runs the same steps, so every column has the same word.
 comptime XN_TREE = 256
-comptime XN_TREE_ON = not is_defined["MOJOLEARN_PURITY_4_OFF"]()
+# TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+# Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -658,7 +659,7 @@ def xn_tree_slot(part: FP, s: Int, nb: Int) -> Float32:
 def xn_tree_fold(part: FP, nb: Int) -> Float32:
     """The tree fold on one thread (the host column; the device's
     `xn_tree_fold_kernel` runs the same steps across a block)."""
-    var sl = InlineArray[Float32, XN_TREE](fill=Float32(0))
+    var sl = Array[Float32, XN_TREE](fill=Float32(0))
     for s in range(XN_TREE):
         sl[s] = xn_tree_slot(part, s, nb)
     var h = XN_TREE // 2
@@ -976,13 +977,9 @@ def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
         var v = x.unsafe_load(t * c + j)
         if v > mx:
             mx = v
-    var acc = Float32(0)
-    for j in range(c):
-        var e = ftz(identical_exp(_sub(x.unsafe_load(t * c + j), mx)))
-        res.unsafe_store(t * c + j, e)
-        acc = _add(acc, e)
-    for j in range(c):
-        res.unsafe_store(t * c + j, ftz(identical_div(res.unsafe_load(t * c + j), acc)))
+    # core/row_cells.mojo: the one body of the exponentials, their ascending
+    # sum and the division (the same flushes as the statements that stood here)
+    softmax_row_from_max_f32(x, res, t * c, c, mx)
 
 
 # DEVIATION 5209 (row 123)
@@ -1173,31 +1170,25 @@ def absdiff_part_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
 
 
 def absdiff_fin_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
-    """Stage 2 of 2, ONE item: the partials folded (the XN_TREE order;
-    ascending under -D MOJOLEARN_PURITY_4_OFF)."""
-    comptime if XN_TREE_ON:
-        res.unsafe_store(0, xn_tree_fold(part, xn_fold_blocks(count)))
-    else:
-        res.unsafe_store(0, _fold_parts(part, xn_fold_blocks(count)))
+    """Stage 2 of 2, ONE item: the partials folded (the XN_TREE order)."""
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    res.unsafe_store(0, xn_tree_fold(part, xn_fold_blocks(count)))
 
 
 def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
     """sum |a - b| over every element, ONE host item in the blocked order of
     `absdiff_part_item` + `absdiff_fin_item` (the resident label-propagation
     loops' convergence test, the same bits as the `absdiff_sum` op)."""
-    comptime if XN_TREE_ON:
-        var nb = xn_fold_blocks(count)
-        var parts = List[Float32](length=max(nb, 1), fill=Float32(0))
-        var pp = FP(unsafe_from_address=Int(parts.unsafe_ptr()))
-        for blk in range(nb):
-            pp.unsafe_store(blk, _absdiff_block(a, b, blk, count))
-        res.unsafe_store(0, xn_tree_fold(pp, nb))
-        _ = parts^
-    else:
-        var acc = Float32(0)
-        for blk in range(xn_fold_blocks(count)):
-            acc = _add(acc, _absdiff_block(a, b, blk, count))
-        res.unsafe_store(0, acc)
+    # TOMBSTONE: MOJOLEARN_PURITY_4_OFF (old path: the ascending one-thread fold of the absolute-difference partials; no A/B row) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 91c9ed48ff.
+    # Restore: git apply experiments/removed/MOJOLEARN_PURITY_4_OFF.patch; record in docs/TOMBSTONES.md.
+    var nb = xn_fold_blocks(count)
+    var parts = List[Float32](length=max(nb, 1), fill=Float32(0))
+    var pp = FP(unsafe_from_address=Int(parts.unsafe_ptr()))
+    for blk in range(nb):
+        pp.unsafe_store(blk, _absdiff_block(a, b, blk, count))
+    res.unsafe_store(0, xn_tree_fold(pp, nb))
+    _ = parts^
 
 
 # DEVIATION 5209 (row 123)
@@ -1314,9 +1305,8 @@ def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
 # `knn_impute_tie_mean_cells_kernel` in iter_device.mojo run these same
 # statements). Distance weights keep the scan's result. Bits change for
 # uniform KNNImputer cells with a tie at D_k, on every column together.
-# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (A arm) restores the lower-index
-# rule in every mode.
-comptime XN_IMPUTE_TIE_MEAN = not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]()
+# TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+# Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -1362,6 +1352,54 @@ def knn_impute_tie_mean_item(
     if c_eq > 0 and c_lt < k:
         var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
         res.unsafe_store(t, ftz(identical_div(_add(sum_lt, fill), Float32(k))))
+
+
+@always_inline
+def knn_impute_tie_mean_listed(t: Int, fx: FP, best_d: FP, best_i: IP, out_min: FP, res: FP, d: Int, k: Int) -> Bool:
+    """`knn_impute_tie_mean_item` from the cell's k listed donors alone, when
+    the scan proved no donor OUTSIDE the list sits at the k-th distance D_k
+    (fb-infer/D, 2026-11-17). `out_min[t]` is the smallest finite distance
+    of every donor the scan rejected or evicted (+inf when none). Rejected and
+    evicted donors are all at distance >= D_k, so `out_min[t] > D_k` means the
+    donors at distance <= D_k are exactly the listed ones: the item's c_lt,
+    c_eq and both sums, folded in ascending donor index (the listed indices
+    visited in ascending order), are the item's own words. Returns True when
+    the cell is done (here, or nothing to do: fewer than k donors), False
+    when a tie outside the list needs the item's full m x d rescan. Same
+    bits as the item; O(k^2) instead of O(m d) per cell."""
+    if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+        return True
+    var dk = best_d.unsafe_load(t * k + k - 1)
+    if not (out_min.unsafe_load(t) > dk):
+        return False
+    var c = t - (t // d) * d
+    var sum_lt = Float32(0)
+    var sum_eq = Float32(0)
+    var c_lt = 0
+    var c_eq = 0
+    var last = -1
+    for _ in range(k):
+        # the smallest listed donor index above `last` (indices are distinct)
+        var pick = -1
+        var at = 0
+        for s in range(k):
+            var j = Int(best_i.unsafe_load(t * k + s))
+            if j > last and (pick < 0 or j < pick):
+                pick = j
+                at = s
+        last = pick
+        var dist = best_d.unsafe_load(t * k + at)
+        var dv = fx.unsafe_load(pick * d + c)
+        if dist < dk:
+            sum_lt = _add(sum_lt, dv)
+            c_lt += 1
+        elif dist == dk:
+            sum_eq = _add(sum_eq, dv)
+            c_eq += 1
+    if c_eq > 0 and c_lt < k:
+        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+        res.unsafe_store(t, ftz(identical_div(_add(sum_lt, fill), Float32(k))))
+    return True
 
 
 @always_inline
@@ -1460,9 +1498,10 @@ def knn_impute_item(
         bd.unsafe_store(s, dist)
         bi.unsafe_store(s, Int32(j))
     knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
-    comptime if XN_IMPUTE_TIE_MEAN:
-        if weights == 0:
-            knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
+    # TOMBSTONE: MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF (old path: the lower-index tie rule of KNNImputer; EXP:2125 A/B owed, never run) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at ac1f01c0f3.
+    # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF.patch; record in docs/TOMBSTONES.md.
+    if weights == 0:
+        knn_impute_tie_mean_item(t, x, fx, best_d, best_i, res, m, d, k)
 
 
 def knn_impute_cell_item(

@@ -60,9 +60,12 @@ a captured program records the ids as a value (an input of kind
 PROGRAM_IN_IDS, uploaded through the same cast at each run) instead of an
 address. The eager words are the caller-array form's: the same int32 words
 reach the same Tape.embedding and rankn_take kernels."""
-from std.ffi import _Global
+from std.memory import bitcast
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from sequence.ops import (
+    FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX, OPT_NADAM, OPT_RMSPROP,
+    OPT_ADAGRAD,
+)
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
 from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
@@ -75,12 +78,21 @@ from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.program import (
-    OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
+    OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE,
+    PROGRAM_PARAM_STATE_WORDS, program_refuses_node, same_shape, shape_text,
 )
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_inference_metadata import PreparedInferenceReplay
 from std.time import perf_counter_ns
-from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
+from autograd.optim import (
+    OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr, optimizer_clips,
+    clip_norm_accumulate, step_lr_clipped,
+)
+from autograd.optimizer_requests import OpsOptimizerExtras, ops_optimizer_extras_default
+from autograd.optimizer_requests import (
+    OPS_OPT_INTS, OPS_OPT_FLOATS, OpsOptimizerRequest, OpsOptimizerStateValue, OpsOptimizerRestoreRequest,
+    ops_optimizer_request, ops_optimizer_restore_request,
+)
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
 # core's shape metadata and views, the fold / bmm / layout / conv lanes'
@@ -106,6 +118,42 @@ from autograd.import_ops import (
 from autograd.import_api import (
     ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad, imp_cumsum, imp_gather_nd,
 )
+# Block step ops (lane x1-executor-state-and-step-ops): session codes 81..84,
+# the resident decode sessions' step bodies over session tensors.
+from sequence.exec_device import DeviceExec
+from autograd.block_step_ops import (
+    OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
+    ATTN_STEP_TAG, attn_step_train_run, step_train_tag, mamba_step_train_run,
+    block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
+    block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, attn_append_restore,
+)
+from autograd.rules_step_ops import StepOpRules
+from autograd.rules_recurrent import OPS_RNN_SCAN, rnn_scan_op
+# Generation ops (lane x45c): the language model's token pick and the decode
+# loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
+from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
+from autograd.small_mlp_op import (
+    OPS_SMALL_MLP, SMALL_MLP_TAG, small_mlp_check, small_mlp_workspace_floats, small_mlp_forward_device,
+)
+# CNNClassifier's tuned conv block and head (lane r1-restore-measured-winners):
+# session codes 90, 91 (autograd/cnn_block_op.mojo).
+from autograd.cnn_block_op import (
+    OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_CONV_BLOCK_TAG, CNN_LINEAR_TAG, CNN_HOST_BLOCK_FORWARD,
+    CNN_HOST_LINEAR_FORWARD, cnn_block_words, cnn_block_out_dims, cnn_block_saved_sizes, cnn_block_keep,
+    cnn_block_forward_device, cnn_linear_forward_device,
+)
+# Lane r1-restore-measured-winners (2026-11-09): the byte LM trainer's
+# embedding backward as an op (autograd/lm_embedding_op.mojo), code 93.
+from autograd.lm_embedding_op import OPS_LM_EMBEDDING, LM_EMBEDDING_TAG, lm_embedding_scratch_words
+from autograd.embedding_ops import (
+    AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words, embedding_refuse_ids, embedding_forward_into,
+    embedding_perm_words,
+)
+from autograd.generation_ops import (
+    OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
+    lm_alive_run, LM_PICK_SAMPLE,
+)
+from core.shared_slot import SharedSlot
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -217,6 +265,15 @@ comptime OPS_CUMSUM = 75         # [axis, exclusive (0, 1), reverse (0, 1)]
 comptime OPS_INDEX = 76          # tensors (x, index 0, index 1, ...); [axis of index 0, axis of index 1, ...]
 comptime OPS_IMP_FIRST = OPS_ERF
 comptime OPS_IMP_LAST = OPS_INDEX
+# 81..84: the block step ops, autograd/block_step_ops.mojo (OPS_M1_STEP,
+# OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP), dispatched by their own table.
+
+# What a session-owned buffer holds (OpsSession.buffer_kind, by address): an
+# upload, carried float state, or carried int32-word state
+# (`declare_state`). Block step ops write state buffers in place.
+comptime OPS_BUFFER_UPLOAD = 1
+comptime OPS_BUFFER_STATE = 2
+comptime OPS_BUFFER_STATE_WORDS = 3
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -224,8 +281,6 @@ comptime OPS_METRIC_LOG_LOSS = 2
 comptime OPS_METRIC_ROC_AUC = 3
 
 # The packed optimizer options of `optimizer`.
-comptime OPS_OPT_INTS = 4    # kind, nesterov, schedule, step size
-comptime OPS_OPT_FLOATS = 7  # lr, momentum, beta1, beta2, eps, weight_decay, gamma
 
 comptime _SLOT_BITS = 24
 comptime _SLOT_MASK = (1 << _SLOT_BITS) - 1
@@ -332,6 +387,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var program_trace: ProgramTrace
     #: Reusable operand capacity for synchronous native operation dispatch.
     var op_tensors: List[Tensor]
+    #: lane x1: OPS_BUFFER_* of every live session-owned buffer, by address
+    #: (a replay's parameter leaves name the same storage, so state is a
+    #: property of the buffer, not of a handle)
+    var buffer_kind: Dict[Int, Int]
+    #: lane x1: the resident block structs of this session's step ops
+    var steps: BlockStepScratch
+    #: lane x45c: append-only state, by address: a full-causal KV cache
+    #: (window 0) -> the address of the position word that addresses it.
+    #: A write past the committed position lands in slots no committed
+    #: position reads, so a bounded loop shadows only the position word
+    #: (autograd/program_control.mojo), never the cache itself.
+    var append_state: Dict[Int, Int]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -360,6 +427,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.prog_tape.no_grad()
         self.program_trace = ProgramTrace()
         self.op_tensors = List[Tensor]()
+        self.buffer_kind = Dict[Int, Int]()
+        self.steps = BlockStepScratch()
+        self.append_state = Dict[Int, Int]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -399,6 +469,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.wants_grad.append(wants_grad)
             self.index_rows.append(index_rows)
             self.int_words.append(False)
+        if owned != 0:
+            self.buffer_kind[owned] = OPS_BUFFER_UPLOAD
         return (self.generation[slot] << _SLOT_BITS) | (slot + 1)
 
     def _retire(mut self, slot: Int):
@@ -409,6 +481,17 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.live[slot] = False
         self.generation[slot] += 1
         if self.owned[slot] != 0:
+            if self.owned[slot] in self.buffer_kind:
+                try:
+                    _ = self.buffer_kind.pop(self.owned[slot])
+                except:
+                    pass
+            if self.owned[slot] in self.append_state:
+                try:
+                    _ = self.append_state.pop(self.owned[slot])
+                except:
+                    pass
+            self.steps_forget(self.owned[slot])
             self.retired.append(self.owned[slot])
             self.owned[slot] = 0
         self.free_slots.append(slot)
@@ -516,7 +599,259 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if src.count() != self.rows[slot] * self.cols[slot]:
             raise Error("ops: load_weights: the source holds " + String(src.count())
                         + " values, the tensor " + String(self.rows[slot] * self.cols[slot]))
-        upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+        if self.int_words[slot]:
+            # an int32-word tensor (ids, integer state) keeps int32 words
+            upload_cast_i32(self.ex, FP(unsafe_from_address=self.owned[slot]), src, "ops: load_weights")
+        else:
+            upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+        # a block step op's resident struct over this buffer is stale now
+        self.steps_forget(self.owned[slot])
+
+    def declare_state(mut self, h: Int) raises:
+        """Make uploaded tensor h carried state: block step ops (and any
+        `*_into` writer) update it in place, and a captured program records
+        it as a state parameter. A tensor of int32 words (`upload_ids`)
+        becomes integer state (a KV position, a buffer length, token ids).
+        Nothing differentiates state, so it takes no gradient."""
+        var slot = self._slot(h)
+        if self.owned[slot] == 0:
+            raise Error("ValueError: ops: state takes a tensor made with tensor() or ids(); handle "
+                        + String(h) + " is a computed tensor")
+        if self.wants_grad[slot]:
+            raise Error("ValueError: ops: state tensors take no gradient (requires_grad=False)")
+        self.buffer_kind[self.owned[slot]] = OPS_BUFFER_STATE_WORDS if self.int_words[slot] else OPS_BUFFER_STATE
+        self.steps_forget(self.owned[slot])
+
+    def is_state(self, h: Int) raises -> Bool:
+        """Whether tensor h is carried state (`declare_state`)."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0 or addr not in self.buffer_kind:
+            return False
+        try:
+            return self.buffer_kind[addr] != OPS_BUFFER_UPLOAD
+        except:
+            return False
+
+    def declare_append(mut self, kv: Int, words: Int) raises:
+        """Lane x45c: state tensor `kv` is written only at the position the
+        int32 state word tensor `words` holds, and read only below it (a
+        full-causal attention cache): a bounded loop then restores the
+        position word alone when iterations ran past its stop."""
+        if not self.is_state(kv) or not self.is_state(words):
+            raise Error("ValueError: ops: declare_append takes two state tensors")
+        var ws = self._slot(words)
+        if not self.int_words[ws]:
+            raise Error("ValueError: ops: declare_append: the position must be an int32 state word tensor")
+        self.append_state[self.owned[self._slot(kv)]] = self.owned[ws]
+
+    def append_words_of(self, addr: Int) -> Int:
+        """The position word address of append-only state at `addr`, 0 for
+        any other buffer."""
+        if addr not in self.append_state:
+            return 0
+        try:
+            return self.append_state[addr]
+        except:
+            return 0
+
+    def _buffer_kind_of(self, addr: Int) -> Int:
+        """OPS_BUFFER_* of the session-owned buffer at addr, 0 for tape storage."""
+        if addr not in self.buffer_kind:
+            return 0
+        try:
+            return self.buffer_kind[addr]
+        except:
+            return 0
+
+    def steps_address(mut self) -> Int:
+        """Address of this session's resident step entries (lane x7): the
+        backward rules of a program that trains through a step op read
+        them (autograd/rules_step_ops.mojo StepOpRules). Stable for the
+        session's life (sessions are heap-allocated, never moved)."""
+        return Int(MutPointer(to=self.steps))
+
+    def steps_forget(mut self, addr: Int):
+        """The buffer at `addr` was written from outside a step or freed:
+        the step ops' entries over it go (the device table's here, the host
+        arm's in the executor, lane x7b)."""
+        self.steps.forget(addr)
+        self.ex.step_forget(addr)
+
+    def steps_append_restore(mut self, kvs: List[Int], words: List[Int]) raises:
+        """Lane fx-kv-inplace: a bounded loop ran bodies past its stop over
+        the append-only state buffers at `kvs` (`declare_append`; their
+        position words at `words`, restored by the loop's gate): take each
+        cache back to its restored word, so the state does not depend on the
+        loop's chunk (the device table's `attn_append_restore`, the host
+        arm's `Exec.step_append_restore`). Called before `steps_forget`
+        drops the entries, which hold how far the extra bodies wrote."""
+        comptime if Self.E.IS_DEVICE:
+            attn_append_restore(rebind[DeviceExec](self.ex), self.steps, kvs, words)
+        else:
+            self.ex.step_append_restore(kvs, words)
+
+    def steps_weights_changed(mut self, addr: Int):
+        """The weights at `addr` were rewritten in place (both arms)."""
+        self.steps.weights_changed(addr)
+        self.ex.step_weights_changed(addr)
+
+    def steps_clear(mut self):
+        self.steps.clear()
+        self.ex.step_clear()
+
+    def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                     words: List[Int]) raises -> Int:
+        """`upload_block_grad` without a gradient: what every model program
+        packs its blocks with."""
+        return self.upload_block_grad(code, ints, part, srcs, words, False)
+
+    def upload_block_grad(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                          words: List[Int], requires_grad: Bool) raises -> Int:
+        """One session tensor holding `part` of a block for step op `code`
+        (autograd/block_step_ops.mojo): BLOCK_PART_WEIGHTS packs the
+        weights `srcs` (one array per piece, `block_weight_sizes` order, an
+        absent optional piece an empty descriptor of zero values) into one
+        (1, n) upload; BLOCK_PART_STATE packs the float state pieces the
+        same way and declares the tensor state; BLOCK_PART_WORDS makes the
+        (1, k) int32-word state from `words`. Each piece is cast into its
+        slot on the executor (upload_cast); the gaps between slots are zero.
+        `requires_grad` (lane fx-ops-session-blocks, 2026-11-18: weights
+        only, a recording session only) makes the packed weights a trainable
+        leaf: a recorded step op (`_block_step`) is a custom node over
+        [x, weights], so `backward` leaves the block's weight gradients in
+        this tensor's gradient at the same `block_offsets` slots (the gaps
+        zero) and `step` updates the packed weights in place."""
+        if requires_grad:
+            if part != BLOCK_PART_WEIGHTS:
+                raise Error("ValueError: ops: upload_block: only a block's weights take a gradient")
+            if not self.tape.is_recording():
+                raise Error("ops: requires_grad needs a recording session (Session(record=True))")
+        if part == BLOCK_PART_WORDS:
+            var k = block_int_words(code)
+            if k < 1 or len(words) != k:
+                raise Error("ValueError: ops: upload_block: this block carries " + String(k) + " state words")
+            var host = List[Float32](length=k, fill=Float32(0))
+            for i in range(k):  # small-loop(k: at most two state words): word encode, no data
+                var w = words[i]
+                if w < -(1 << 31) or w >= (1 << 31):
+                    raise Error("ValueError: ops: upload_block: a state word does not fit in 32 bits")
+                host[i] = bitcast[DType.float32](Int32(w))
+            var wbuf = self.ex.alloc(k)
+            self.ex.upload(wbuf, FP(unsafe_from_address=Int(host.unsafe_ptr())), k)
+            _ = len(host)  # keep-alive past the staging copy
+            var wt = self.tape.variable(self.ex, wbuf, 1, k, False)
+            var wh = self._add(wt, Int(wbuf), False, 0)
+            var wslot = self._slot(wh)
+            self.int_words[wslot] = True
+            self.buffer_kind[Int(wbuf)] = OPS_BUFFER_STATE_WORDS
+            return wh
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: upload_block: part must be weights, state or words")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(srcs) != len(sizes):
+            raise Error("ValueError: ops: upload_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(srcs)))
+        var offs = block_offsets(sizes, block_guard(code))
+        var total = offs[len(offs) - 1]
+        var buf = self.ex.alloc(total)
+        try:
+            for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+                if sizes[i] == 0:
+                    if srcs[i].count() != 0:
+                        raise Error("ValueError: ops: upload_block: piece " + String(i)
+                                    + " is absent under these options and must be empty")
+                    continue
+                srcs[i].check("ops: upload_block")
+                if srcs[i].count() != sizes[i]:
+                    raise Error("ValueError: ops: upload_block: piece " + String(i) + " holds "
+                                + String(srcs[i].count()) + " values, the block " + String(sizes[i]))
+                upload_cast(self.ex, buf + offs[i], srcs[i])
+        except err:
+            self.ex.free(buf)
+            raise err
+        var t = self.tape.variable(self.ex, buf, 1, total, requires_grad)
+        var h = self._add(t, Int(buf), requires_grad, 0)
+        if part == BLOCK_PART_STATE:
+            self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
+        return h
+
+    def load_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                   words: List[Int]) raises:
+        """Overwrite `part` of block tensor h (made with `upload_block` for the
+        same code and ints) IN PLACE, piece by piece (lane x5-mamba-on-executor):
+        a source of zero values leaves its piece as it is. The resident step
+        struct over the buffer is kept where it stays valid: new float state
+        is read in place (nothing to drop), new state words update the
+        entry's host integers (`BlockStepScratch.set_words`), new weights
+        re-arm the block's refusal of non-finite weights."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0:
+            raise Error("ValueError: ops: load_block writes a tensor made with upload_block")
+        var buf = FP(unsafe_from_address=addr)
+        var have = self.rows[slot] * self.cols[slot]
+        if part == BLOCK_PART_WORDS:
+            var k = block_int_words(code)
+            if k < 1 or len(words) != k or have != k:
+                raise Error("ValueError: ops: load_block: this block carries " + String(k) + " state words")
+            var host = List[Float32](length=k, fill=Float32(0))
+            for i in range(k):  # small-loop(k: at most two state words): word encode, no data
+                var w = words[i]
+                if w < -(1 << 31) or w >= (1 << 31):
+                    raise Error("ValueError: ops: load_block: a state word does not fit in 32 bits")
+                host[i] = bitcast[DType.float32](Int32(w))
+            self.steps.set_words(addr, words)
+            self.ex.upload(buf, FP(unsafe_from_address=Int(host.unsafe_ptr())), k)
+            _ = len(host)  # keep-alive past the staging copy
+            return
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: load_block: part must be weights, state or words")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(srcs) != len(sizes):
+            raise Error("ValueError: ops: load_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(srcs)))
+        var offs = block_offsets(sizes, block_guard(code))
+        if offs[len(offs) - 1] != have:
+            raise Error("ValueError: ops: load_block: the tensor does not hold this block's layout")
+        for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+            if sizes[i] == 0 or srcs[i].count() == 0:
+                continue
+            srcs[i].check("ops: load_block")
+            if srcs[i].count() != sizes[i]:
+                raise Error("ValueError: ops: load_block: piece " + String(i) + " holds "
+                            + String(srcs[i].count()) + " values, the block " + String(sizes[i]))
+            upload_cast(self.ex, buf + offs[i], srcs[i])
+        if part == BLOCK_PART_WEIGHTS:
+            self.steps_weights_changed(addr)
+        else:
+            # lane fx-llama-refuse-watermark: loaded state floats were not
+            # scanned by any step; an attention entry over them scans its
+            # whole cache at the next run (a no-op without the arm's define)
+            self.steps.attn_cache_written(addr)
+
+    def download_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, dsts: List[Int]) raises:
+        """`part` (weights or float state) of block tensor h into the caller's
+        host arrays, one float32 array per piece in `block_*_sizes` order (a
+        0 address skips that piece), behind one wait."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0:
+            raise Error("ValueError: ops: download_block reads a tensor made with upload_block")
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: download_block: part must be weights or state")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(dsts) != len(sizes):
+            raise Error("ValueError: ops: download_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(dsts)))
+        var offs = block_offsets(sizes, block_guard(code))
+        var buf = FP(unsafe_from_address=addr)
+        for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+            if sizes[i] == 0 or dsts[i] == 0:
+                continue
+            self.ex.download_async(FP(unsafe_from_address=dsts[i]), buf + offs[i], sizes[i])
+        self.ex.sync()
+        self.steps.release_parked()
 
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
@@ -525,6 +860,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, src, count)
+        # lane x45c: the stream drained; step ops' parked stages can go
+        self.steps.release_parked()
 
     def scalar(mut self, h: Int) raises -> Float32:
         """The one value of a (1, 1) tensor, read back to the caller."""
@@ -535,6 +872,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var out = List[Float32](length=1, fill=Float32(0))
         self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), src, 1)
+        self.steps.release_parked()
         return out[0]
 
     def free(mut self, h: Int) raises:
@@ -569,6 +907,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def close(mut self) raises:
         """Return every buffer to the executor and wait for its queue."""
+        # the resident block structs view session buffers: drop them first
+        # (lane x45c: after the queue drained, with the parked run stages;
+        # integ-w4: then both arms' entries through the x7b hook)
+        if self.steps.parked() > 0:
+            self.ex.sync()
+            self.steps.release_parked()
+        self.steps_clear()
+        self.buffer_kind.clear()
         self.tape.release(self.ex)
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if self.live[slot] and self.owned[slot] != 0:
@@ -602,11 +948,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
-        # ImportRules: RankNRules (NeuralRules plus the rank-N lanes' custom
-        # tags, autograd/rankn_api.mojo) plus the import family's tags
-        # (autograd/import_api.mojo); a graph without those nodes runs as
-        # with NeuralRules
-        self.tape.backward_scalar_with_rules(self.ex, t, ImportRules(), accumulate)
+        # StepOpRules: ImportRules (RankNRules, NeuralRules plus the rank-N
+        # lanes' custom tags, autograd/rankn_api.mojo, and the import
+        # family's tags, autograd/import_api.mojo) plus the block step ops'
+        # recorded-run tags (lane x56d: a session that records a step op
+        # differentiates it here, not only Program.fit); a graph without
+        # those nodes runs as with NeuralRules
+        self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
         """The gradient of tensor `h` from the last backward into the caller's memory."""
@@ -817,24 +1165,54 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
         """A new optimizer; returns its id (>= 1).
 
-        ints = [kind (OPT_SGD, OPT_ADAM or OPT_ADAMW), nesterov, schedule
+        ints = [kind (OPT_SGD, OPT_ADAM, OPT_ADAMW, OPT_LION, OPT_ADAMAX or
+        OPT_NADAM), nesterov, schedule
         (autograd/model.mojo SCHED_*), step size]; fs = [lr, momentum,
-        beta1, beta2, eps, weight_decay, gamma]. The configuration is packed
-        as Sequential.compile packs it (sgd: f1 momentum, f2 0; adam and
-        adamw: f1 beta1, f2 beta2; f7 0), so the update's arguments are
-        model_fit's words."""
-        if len(ints) != OPS_OPT_INTS or len(fs) != OPS_OPT_FLOATS:
-            raise Error("ops: optimizer takes 4 integers and 7 floats")
-        var kind = ints[0]
-        if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
-            raise Error("ops: the optimizer must be sgd, adam or adamw")
-        var lr = fs[0]
-        var momentum = fs[1]
-        var beta1 = fs[2]
-        var beta2 = fs[3]
-        var eps = fs[4]
-        var wd = fs[5]
-        var gamma = fs[6]
+        beta1, beta2, eps, weight_decay, gamma] and optionally an eighth,
+        SGD's dampening (torch.optim.SGD; 0 when absent). The configuration
+        is packed as Sequential.compile packs it (sgd: f1 momentum, f2 0,
+        f7 dampening; adam and adamw: f1 beta1, f2 beta2; f7 0), so the
+        update's arguments are model_fit's words. Lion, Adamax and NAdam
+        pack as adam does (f1 beta1, f2 beta2); NAdam's f7 is torch's
+        default momentum_decay 0.004 with coupled weight decay."""
+        return self.optimizer(ops_optimizer_request(ints, fs))
+
+    def optimizer(mut self, request: OpsOptimizerRequest) raises -> Int:
+        """Create an optimizer from one typed native configuration snapshot."""
+        return self.optimizer_with(request, ops_optimizer_extras_default())
+
+    def optimizer_with(mut self, request: OpsOptimizerRequest, extras: OpsOptimizerExtras) raises -> Int:
+        """`optimizer` with the settings the request does not carry
+        (autograd/optimizer_requests.mojo OpsOptimizerExtras): RMSprop
+        (`request.momentum` is its momentum) and Adagrad, and the gradient
+        clips applied inside `step`."""
+        var kind = request.kind
+        # Lane fx-ops-session-blocks (2026-11-18): Lion, Adamax and NAdam are
+        # OP_OPT kinds (sequence/ops.mojo op_opt) whose whole configuration
+        # is this request's fields; `step_lr`, `optimizer_slots` and the
+        # state records below already serve every kind.
+        if (kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW and kind != OPT_LION
+                and kind != OPT_ADAMAX and kind != OPT_NADAM and kind != OPT_RMSPROP and kind != OPT_ADAGRAD):
+            raise Error("ops: the optimizer must be sgd, adam, adamw, rmsprop, adagrad, lion, adamax or nadam")
+        if not (extras.alpha >= Float32(0) and extras.alpha < Float32(1)):
+            raise Error("ops: alpha must be in [0, 1)")
+        if not (extras.lr_decay >= Float32(0)):
+            raise Error("ops: lr_decay must be >= 0")
+        if not (extras.initial_accumulator_value >= Float32(0)):
+            raise Error("ops: initial_accumulator_value must be >= 0")
+        if not (extras.clip_grad_norm >= Float32(0)) or not (extras.clip_grad_value >= Float32(0)):
+            raise Error("ops: clip_grad_norm and clip_grad_value must be positive (or absent)")
+        if extras.centered and kind != OPT_RMSPROP:
+            raise Error("ops: centered applies to rmsprop")
+        var lr = request.lr
+        var momentum = request.momentum
+        var beta1 = request.beta1
+        var beta2 = request.beta2
+        var eps = request.eps
+        var wd = request.weight_decay
+        var gamma = request.gamma
+        # lane x8-cnn-on-executor: CNNClassifier's SGD dampening on the session optimizer
+        var dampening = request.dampening
         if not (lr > Float32(0)):
             raise Error("ops: the learning rate must be positive")
         if not (momentum >= Float32(0) and momentum < Float32(1)):
@@ -845,21 +1223,46 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: eps must be positive")
         if not (wd >= Float32(0)):
             raise Error("ops: weight_decay must be >= 0")
-        var nesterov = ints[1] != 0
+        var nesterov = request.nesterov
         if nesterov and (kind != OPT_SGD or not (momentum > Float32(0))):
             raise Error("ops: Nesterov momentum needs sgd with momentum > 0")
-        var sched = ints[2]
+        if not (dampening >= Float32(0) and dampening <= Float32(1)):
+            raise Error("ops: dampening must be in [0, 1]")
+        if dampening != Float32(0) and (kind != OPT_SGD or nesterov):
+            raise Error("ops: dampening applies to sgd without Nesterov momentum")
+        var sched = request.schedule
         if sched < SCHED_CONSTANT or sched > SCHED_EXPONENTIAL:
             raise Error("ops: unknown learning-rate schedule code " + String(sched))
         if sched != SCHED_CONSTANT and not (gamma > Float32(0)):
             raise Error("ops: the schedule's gamma must be positive")
-        if sched == SCHED_STEP and ints[3] < 1:
+        if sched == SCHED_STEP and request.step_size < 1:
             raise Error("ops: the step schedule's step size must be at least 1")
         var f1 = momentum if kind == OPT_SGD else beta1
         var f2 = Float32(0) if kind == OPT_SGD else beta2
         var flags = 1 if nesterov else 0
-        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, Float32(0), lr)
-        var sched_step = ints[3] if sched == SCHED_STEP else 1
+        if kind == OPT_RMSPROP:
+            # optimizer_config_packed: f2 alpha, f7 momentum, flag bit centered
+            f1 = Float32(0)
+            f2 = extras.alpha
+            flags = 1 if extras.centered else 0
+        elif kind == OPT_ADAGRAD:
+            # f1 lr_decay; the accumulator's start is the state's fill
+            f1 = extras.lr_decay
+        # f7: SGD's dampening; NAdam's momentum_decay, torch's default
+        # (0.004 as a Float32 word, optimizer_config's own default); nothing
+        # else reads it.
+        var f7 = Float32(0.004) if kind == OPT_NADAM else dampening
+        if kind == OPT_RMSPROP:
+            f7 = momentum
+        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, f7, lr)
+        cfg.init_acc = extras.initial_accumulator_value if kind == OPT_ADAGRAD else Float32(0)
+        # The clips of `step`: the norm over all the step's tensors (the
+        # state's partials are sized by cfg.clip) and the elementwise bound.
+        if extras.clip_grad_norm > Float32(0):
+            cfg.clip = extras.clip_grad_norm
+            cfg.clip_global = True
+        cfg.clip_value = extras.clip_grad_value
+        var sched_step = request.step_size if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
         # Failed control-checkpoint restore pops opts before its caller retires
         # partial parameter states. Keep that index addressable during cleanup,
@@ -900,7 +1303,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if h in self.opt_state_indices[oi]:
             return self.opt_state_indices[oi][h]
         var cfg = self.opts[oi].cfg
-        var st = OptimizerState(self.ex, cfg, n)
+        var st = OptimizerState(self.ex, cfg, n, cfg.init_acc)
         self.opt_states.append(_OpsOptState(
             oi, h, st.s1, st.s2, st.s3, st.parts, st.cell, st.n, st.block, st.nparts, 0,
             st.pw1, st.pw2, st.mu_prod,
@@ -973,6 +1376,33 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             grads.append(self.tape.gradient(self.tensors[slot]))
         var cfg = self.opts[oi].cfg
         var lr = self.learning_rate(o)
+        if optimizer_clips(cfg):
+            # Lane fx-ops-session-blocks: clip_grad_norm over ALL the listed
+            # tensors (autograd/optim.mojo, the fold above op_ago_norm_acc:
+            # two launches a tensor, the total and the coefficient in the
+            # first tensor's cell, no read-back) and clip_grad_value, then
+            # one update launch a tensor.
+            var sis = List[Int](capacity=len(slots))
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                sis.append(self._state_of(oi, hs[i], self.rows[slots[i]] * self.cols[slots[i]]))
+            var cell = self.opt_states[sis[0]].cell
+            if cfg.clip_global:
+                for i in range(len(slots)):  # driver-loop: over the step's parameters (the norm's fold order)
+                    var sv = self._state_view(sis[i])
+                    clip_norm_accumulate(self.ex, cfg, sv, grads[i], self.rows[slots[i]] * self.cols[slots[i]],
+                                         cell, i == 0, i == len(slots) - 1)
+            for i in range(len(slots)):  # driver-loop: over the step's parameters
+                var cslot = slots[i]
+                var ct = self.opt_states[sis[i]].t + 1
+                var cst = self._state_view(sis[i])
+                step_lr_clipped(self.ex, cfg, cst, FP(unsafe_from_address=self.owned[cslot]), grads[i],
+                                self.rows[cslot] * self.cols[cslot], ct, lr, cell)
+                self.steps_forget(self.owned[cslot])  # the weights moved: a step op re-checks them
+                self.opt_states[sis[i]].t = ct
+                self.opt_states[sis[i]].pw1 = cst.pw1
+                self.opt_states[sis[i]].pw2 = cst.pw2
+                self.opt_states[sis[i]].mu_prod = cst.mu_prod
+            return
         for i in range(len(slots)):  # driver-loop: over the step's parameters
             var slot = slots[i]
             var n = self.rows[slot] * self.cols[slot]
@@ -980,6 +1410,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var t = self.opt_states[si].t + 1
             var st = self._state_view(si)
             step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, lr)
+            self.steps_forget(self.owned[slot])  # the weights moved: a step op re-checks them
             self.opt_states[si].t = t
             self.opt_states[si].pw1 = st.pw1
             self.opt_states[si].pw2 = st.pw2
@@ -998,6 +1429,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self._constant(dst, r, c, 0)
 
     def optimizer_state(mut self, o: Int, h: Int) raises -> Tuple[Int, Float32, Float32, Float32, Int, Int, Int]:
+        """Existing native tuple API, packed from the canonical typed snapshot."""
+        var state = self.optimizer_state_value(o, h)
+        return (state.step, state.beta1_power, state.beta2_power, state.mu_product,
+                state.first, state.second, state.third)
+
+    def optimizer_state_value(mut self, o: Int, h: Int) raises -> OpsOptimizerStateValue:
         """(step count, beta1^t, beta2^t, NAdam's mu product, then one
         handle per state buffer: a copy of each buffer the kind uses, valid
         until reset, and 0 for one it does not use). A parameter never
@@ -1016,16 +1453,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             h2 = self._snapshot(r.s2, slot)
         if used[2]:
             h3 = self._snapshot(r.s3, slot)
-        return (r.t, r.pw1, r.pw2, r.mu_prod, h1, h2, h3)
+        return OpsOptimizerStateValue(self.opts[oi].cfg.kind, r.t, r.pw1, r.pw2, r.mu_prod, h1, h2, h3)
 
     def load_optimizer_state(mut self, o: Int, h: Int, ints: List[Int], fs: List[Float32]) raises:
         """Set (optimizer o, parameter h)'s state: ints = [step count, then
         one tensor handle per state buffer (0 for a buffer the kind does
         not use)], fs = [beta1^t, beta2^t, NAdam's mu product], the words
         `optimizer_state` returns. Each buffer is copied on the executor."""
-        if len(ints) != 4 or len(fs) != 3:
-            raise Error("ops: load_optimizer_state takes 4 integers and 3 floats")
-        if ints[0] < 0:
+        self.load_optimizer_state(o, h, ops_optimizer_restore_request(ints, fs))
+
+    def load_optimizer_state(mut self, o: Int, h: Int, state: OpsOptimizerRestoreRequest) raises:
+        """Restore typed scalar state and borrowed tensor handles on the executor."""
+        if state.step < 0:
             raise Error("ops: the optimizer state's step count must be >= 0")
         var oi = self._opt_index(o)
         var slot = self._param_slot(h, "load_optimizer_state")
@@ -1044,7 +1483,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         # every handle checked before any copy
         var srcs = List[FP]()
         for k in range(3):  # driver-loop: over the three state buffers
-            var hk = ints[1 + k]
+            var hk = state.first if k == 0 else (state.second if k == 1 else state.third)
             if not used[k]:
                 if hk != 0:
                     raise Error("ops: this optimizer keeps no state buffer " + String(k + 1))
@@ -1063,10 +1502,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 a.p0 = srcs[k]
                 a.p1 = dsts[k]
                 self.ex.launch[OP_COPY](a, n)
-        self.opt_states[si].t = ints[0]
-        self.opt_states[si].pw1 = fs[0]
-        self.opt_states[si].pw2 = fs[1]
-        self.opt_states[si].mu_prod = fs[2]
+        self.opt_states[si].t = state.step
+        self.opt_states[si].pw1 = state.beta1_power
+        self.opt_states[si].pw2 = state.beta2_power
+        self.opt_states[si].mu_prod = state.mu_product
 
     # ------------------------------------------------------------ operations
     def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int, integer_words: Bool = False) raises -> Int:
@@ -1123,6 +1562,35 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var ni = len(ints)
         var nf = len(fs)
         var t: Tensor
+        if is_block_step(code):
+            # Lane x1: the step-op table (autograd/block_step_ops.mojo), one
+            # branch for all its codes.
+            return self._block_step(code, hs, ints, fs, x)
+        if is_generation_op(code):
+            # Lane x45c: the token pick and the decode condition, one branch.
+            return self._generation_op(code, hs, ints, fs, x)
+        if code == OPS_LM_HEAD_V2:
+            # Lane m2-neural-leftovers: the chunked LM head (loss without
+            # the logits), one custom node (autograd/lm_head_v2_op.mojo).
+            return self._lm_head_v2(hs, ints, fs, x)
+        if code == OPS_SMALL_MLP:
+            # Lane r1-restore-measured-winners: the small MLP's tuned forward
+            # and hand backward, one custom node (autograd/small_mlp_op.mojo).
+            return self._small_mlp(hs, ints, fs, x)
+        if code == OPS_CNN_CONV_BLOCK:
+            # Lane r1-restore-measured-winners: CNNClassifier's hand-tuned
+            # conv block, one custom node (autograd/cnn_block_op.mojo).
+            return self._cnn_conv_block(hs, ints, fs, x)
+        if code == OPS_CNN_LINEAR:
+            return self._cnn_linear(hs, ints, fs, x)
+        if code == OPS_RNN_SCAN:
+            # Lane fx-ops-session-blocks: one recurrent layer over a sequence,
+            # the recurrent trainer's own records (autograd/rules_recurrent.mojo).
+            return self._rnn_scan(hs, ints, fs, x)
+        if code == OPS_LM_EMBEDDING:
+            # Lane r1-restore-measured-winners: the byte LM trainer's tuned
+            # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
+            return self._lm_embedding(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1469,6 +1937,459 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return result
 
     # ------------------------------------------------------------ the import family
+    def _block_step(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Block step op `code`: operands [x, weights, state, (words)]
+        checked here (x float; weights an upload of floats; state and words
+        declared state of the right kind), then the table's run on the
+        device (lane x7b: the host arm on a host session), the result a new tensor of x's shape. The state is written
+        in place. In a recording session (lanes x7, x56d) every step op is the zero-state prefill with its stages
+        kept, recorded as one custom node over [x, weights] (StepOpRules differentiates it)."""
+        var info = block_step_check(code, len(x), ints, fs)
+        _ = info
+        var recording = self.tape.is_recording()
+        var bufs = List[FP](capacity=len(x))
+        var counts = List[Int](capacity=len(x))
+        for i in range(len(x)):  # small-loop(x: the op's three or four operands): operand checks, no data
+            var slot = self._slot(hs[i])
+            var buf = self.tape.value_of(self.ex, x[i])
+            var kind = self._buffer_kind_of(Int(buf))
+            if i == 0:
+                if self.int_words[slot]:
+                    raise Error("ValueError: ops: " + String(info.name) + ": x must hold floating-point values")
+            elif i == 1:
+                if kind == 0 or self.int_words[slot]:
+                    raise Error("ValueError: ops: " + String(info.name)
+                                + ": the weights must be one floating-point tensor made with upload_block (or tensor())")
+            elif i == 2:
+                if kind != OPS_BUFFER_STATE:
+                    raise Error("ValueError: ops: " + String(info.name)
+                                + ": the state must be a floating-point tensor declared state")
+            elif kind != OPS_BUFFER_STATE_WORDS:
+                raise Error("ValueError: ops: " + String(info.name)
+                            + ": the state words must be an integer tensor declared state")
+            bufs.append(buf)
+            counts.append(self.shapes[slot].count())
+        var sh = self.shapes[self._slot(hs[0])]
+        var out = self.tape.reserve(self.ex, sh.count())
+        if recording:
+            # Lane x7: a recorded attention step (Program.fit's replay) is
+            # the zero-state prefill with its stages kept, recorded as one
+            # custom node over [x, weights]; its VJP is StepOpRules'
+            # (autograd/rules_step_ops.mojo), keyed by the operands' storage.
+            # Lane x56d: the Mamba steps the same way (tags 109-111).
+            comptime if Self.E.IS_DEVICE:
+                if code == OPS_ATTN_STEP:
+                    _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
+                else:
+                    _ = mamba_step_train_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs,
+                                             out)
+            else:
+                # lane x7b: the executor's host arm, the same zero-state
+                # prefill over the host block body with its stages kept
+                # (autograd/block_step_host.mojo, through Exec.step_run).
+                self.ex.step_run(code, bufs, counts, ints, fs, out, True)
+            var saved = Args()
+            saved.p0 = bufs[1]
+            saved.p1 = bufs[2]
+            # Mamba-1 carries no words tensor: p2 keeps Args' placeholder (a
+            # Pointer is non-nullable, so no address-0 FP)
+            if len(bufs) > 3:
+                saved.p2 = bufs[3]
+            var rx = List[Tensor]()
+            rx.append(x[0])
+            rx.append(x[1])
+            var rt = self.tape.custom_nd(self.ex, rx, out, sh, step_train_tag(code), saved)
+            return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+        comptime if Self.E.IS_DEVICE:
+            block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
+        else:
+            self.ex.step_run(code, bufs, counts, ints, fs, out, False)
+        var t: Tensor
+        if sh.ndim == 2:
+            t = self.tape.variable(self.ex, out, sh.d[0], sh.d[1], False)
+        else:
+            t = self.tape.variable_nd(self.ex, out, sh, False)
+        return self._add(t, 0, False, 0)
+
+    def _lm_head_v2(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LM_HEAD_V2: [hidden (rows x width, any rank), weight (vocab,
+        width), codes (rows class values)] -> the (1, 1) mean loss. Recorded:
+        one custom node over [hidden, weight] (LM_HEAD_V2_TAG, VJP in
+        StepOpRules); the row statistics are tape storage until the reset."""
+        _need("lm_head_v2", len(x), 3, 0, len(ints), 0, len(fs))
+        var hslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var cslot = self._slot(hs[2])
+        if self.int_words[hslot] or self.int_words[wslot] or self.int_words[cslot]:
+            raise Error("ValueError: ops: lm_head_v2 takes floating-point hidden, weight and class-value codes")
+        var wshape = self.shapes[wslot]
+        if wshape.ndim != 2:
+            raise Error("ValueError: ops: lm_head_v2: the weight must be (vocab, width)")
+        var vocab = wshape.d[0]
+        var width = wshape.d[1]
+        var count = self.shapes[hslot].count()
+        if width < 1 or count % width != 0:
+            raise Error("ValueError: ops: lm_head_v2: the hidden rows must have the weight's width")
+        var rows = count // width
+        if self.shapes[cslot].count() != rows:
+            raise Error("ValueError: ops: lm_head_v2 takes one class code per hidden row")
+        lm_head_v2_check(rows, vocab, width)
+        var hp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var cp = self.tape.value_of(self.ex, x[2])
+        var targets = self.tape.reserve(self.ex, rows)
+        var maxima = self.tape.reserve(self.ex, rows)
+        var denom = self.tape.reserve(self.ex, rows)
+        var row_loss = self.tape.reserve(self.ex, rows)
+        var loss = self.tape.reserve(self.ex, 1)
+        comptime if Self.E.IS_DEVICE:
+            lm_head_v2_forward_device(rebind[DeviceExec](self.ex), hp, wp, cp, targets, maxima, denom, row_loss,
+                                      loss, rows, vocab, width)
+        else:
+            # the host arm (autograd/lm_head_v2_host.mojo) through the executor
+            var hb: List[FP] = [hp, wp, cp, targets, maxima, denom, row_loss, loss]
+            self.ex.lm_head_v2_host(False, hb, rows, vocab, width)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, loss, 1, 1, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = targets
+        saved.p1 = maxima
+        saved.p2 = denom
+        saved.i0 = rows
+        saved.i1 = vocab
+        saved.i2 = width
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _small_mlp(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_SMALL_MLP: [x (rows x in, any rank), w1 (hid, in), b1 (hid
+        values), w2 (out, hid), b2 (out values)] -> the (rows, out) logits of
+        linear(relu(linear(x, w1^T, b1)), w2^T, b2). Recorded: one custom
+        node over the five operands (SMALL_MLP_TAG, VJP in StepOpRules); act,
+        the backward scratch and the workspace are tape storage until the
+        reset."""
+        _need("small_mlp", len(x), 5, 0, len(ints), 0, len(fs))
+        var slots = List[Int]()
+        for i in range(5):  # small-loop(five operands): handle lookup, no data
+            var sl = self._slot(hs[i])
+            if self.int_words[sl]:
+                raise Error("ValueError: ops: small_mlp takes floating-point operands")
+            slots.append(sl)
+        var s1 = self.shapes[slots[1]]
+        var s3 = self.shapes[slots[3]]
+        if s1.ndim != 2 or s3.ndim != 2:
+            raise Error("ValueError: ops: small_mlp: the weights must be (hidden, inputs) and (outputs, hidden)")
+        var hid = s1.d[0]
+        var n_in = s1.d[1]
+        var n_out = s3.d[0]
+        if s3.d[1] != hid:
+            raise Error("ValueError: ops: small_mlp: the second weight must take the hidden width")
+        if self.shapes[slots[2]].count() != hid or self.shapes[slots[4]].count() != n_out:
+            raise Error("ValueError: ops: small_mlp: each bias must hold one value per output of its layer")
+        var count = self.shapes[slots[0]].count()
+        if n_in < 1 or count % n_in != 0:
+            raise Error("ValueError: ops: small_mlp: the input rows must have the first weight's width")
+        var rows = count // n_in
+        small_mlp_check(rows, n_in, hid, n_out)
+        var recording = self.tape.is_recording()
+        var ws_n = small_mlp_workspace_floats(rows, n_in, hid, n_out, recording)
+        var vals = List[FP]()
+        for i in range(5):  # small-loop(five operands): value pointers, no data
+            vals.append(self.tape.value_of(self.ex, x[i]))
+        var pre1 = self.tape.reserve(self.ex, rows * hid)
+        var act = self.tape.reserve(self.ex, rows * hid)
+        var pre2 = self.tape.reserve(self.ex, rows * n_out)
+        var logits = self.tape.reserve(self.ex, rows * n_out)
+        var ws = self.tape.reserve(self.ex, ws_n)
+        var fb: List[FP] = [vals[0], vals[1], vals[2], vals[3], vals[4], pre1, act, pre2, logits, ws]
+        var fd: List[Int] = [rows, n_in, hid, n_out, ws_n]
+        comptime if Self.E.IS_DEVICE:
+            small_mlp_forward_device(rebind[DeviceExec](self.ex), fb, fd)
+        else:
+            # the host arm (autograd/small_mlp_host.mojo) through the executor
+            self.ex.small_mlp_host(False, fb, fd)
+        if not recording:
+            var t = self.tape.variable(self.ex, logits, rows, n_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = act
+        saved.p1 = self.tape.reserve(self.ex, rows * hid)
+        saved.p2 = self.tape.reserve(self.ex, rows * hid)
+        saved.p3 = ws
+        saved.i0 = rows
+        saved.i1 = n_in
+        saved.i2 = hid
+        saved.i3 = n_out
+        saved.i4 = ws_n
+        saved.i5 = 1 if self.tape.requires_grad(x[0]) else 0
+        var rx = List[Tensor]()
+        for i in range(5):  # small-loop(five operands): the node's parents
+            rx.append(x[i])
+        var rt = self.tape.custom(self.ex, rx, logits, rows, n_out, SMALL_MLP_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_conv_block(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_CONV_BLOCK: [x (N, C, H, W), w (OC, C, k, k), b (1, OC)],
+        ints [pad, pool (0 / 1), pool size] -> maxpool(relu(conv(x) + b))
+        (stride 1), or relu(conv(x) + b) without the pool. Recorded: one
+        custom node over [x, w, b] (CNN_CONV_BLOCK_TAG, VJP in StepOpRules);
+        the pool winners and the saved im2col / conv output are tape storage
+        until the reset (autograd/cnn_block_op.mojo)."""
+        _need("cnn_conv_block", len(x), 3, 3, len(ints), 0, len(fs))
+        var xslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[xslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_conv_block takes floating-point inputs")
+        var xs = self.shapes[xslot]
+        var ws = self.shapes[wslot]
+        if xs.ndim != 4 or ws.ndim != 4:
+            raise Error("ValueError: ops: cnn_conv_block takes (N, C, H, W) images and an (OC, C, k, k) weight")
+        var n = xs.d[0]
+        var c = xs.d[1]
+        var oc = ws.d[0]
+        var ks = ws.d[2]
+        if ws.d[1] != c or ws.d[3] != ks:
+            raise Error("ValueError: ops: cnn_conv_block: the weight must be (OC, C, k, k) over the images' channels")
+        if self.shapes[bslot].count() != oc:
+            raise Error("ValueError: ops: cnn_conv_block takes one bias per output channel")
+        var pad = ints[0]
+        var pool = ints[1] != 0
+        var ps = ints[2]
+        if pad < 0 or (ints[1] != 0 and ints[1] != 1) or (pool and ps < 1):
+            raise Error("ValueError: ops: cnn_conv_block takes ints [pad >= 0, pool 0 or 1, pool size >= 1]")
+        var wd = cnn_block_words(n, c, xs.d[2], xs.d[3], oc, ks, pad, pool, ps)
+        var cprm = wd[0].copy()
+        var pprm = wd[1].copy()
+        var od = cnn_block_out_dims(cprm, pprm, pool)
+        var count = n * oc * od[0] * od[1]
+        var xp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, count)
+        # the pool winners (int32 words in float storage of the same width)
+        var idx = self.tape.reserve(self.ex, count if pool else 1)
+        var recording = self.tape.is_recording()
+        var keep = recording and cnn_block_keep(cprm, Self.E.IS_DEVICE)
+        var sz = cnn_block_saved_sizes(cprm, Self.E.IS_DEVICE)
+        # FP is non-nullable: without the saves, cols / yconv hold dst as a
+        # placeholder that nothing reads (i10 = 0 says so), and the device
+        # entry is handed address 0 ("not saved"), as before.
+        var cols = dst
+        var yconv = dst
+        if keep:
+            cols = self.tape.reserve(self.ex, sz[0])
+            yconv = self.tape.reserve(self.ex, sz[1])
+        comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
+            cnn_block_forward_device(
+                xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0
+            )
+        else:
+            # the host arm (autograd/cnn_block_host.mojo) through the executor
+            var hcols = cols
+            var hy = yconv
+            var hb: List[FP] = [xp, wp, bp, dst, idx, hcols, hy]
+            var hw: List[Int] = [1 if pool else 0, 1 if keep else 0]
+            self.ex.cnn_op_host(CNN_HOST_BLOCK_FORWARD, hb, cprm, pprm, hw)
+        var od_list: List[Int] = [n, oc, od[0], od[1]]
+        var osh = rn_shape(od_list, "ops: cnn_conv_block")
+        if not recording:
+            var t = self.tape.variable_nd(self.ex, dst, osh, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = idx
+        saved.p1 = cols
+        saved.p2 = yconv
+        saved.i0 = n
+        saved.i1 = c
+        saved.i2 = xs.d[2]
+        saved.i3 = xs.d[3]
+        saved.i4 = oc
+        saved.i5 = ks
+        saved.i6 = pad
+        saved.i7 = 1 if pool else 0
+        saved.i8 = ps
+        saved.i9 = 1 if self.tape.requires_grad(x[0]) else 0
+        saved.i10 = 1 if keep else 0
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom_nd(self.ex, rx, dst, osh, CNN_CONV_BLOCK_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_linear(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_LINEAR: [h (n, d_in), w (d_out, d_in), b (1, d_out)] ->
+        h w^T + b: CNNClassifier's head on the CNN's pinned GEMM plan
+        (autograd/cnn_block_op.mojo). Recorded: one custom node over
+        [h, w, b] (CNN_LINEAR_TAG, VJP in StepOpRules)."""
+        _need("cnn_linear", len(x), 3, 0, len(ints), 0, len(fs))
+        var hslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[hslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_linear takes floating-point inputs")
+        var wsh = self.shapes[wslot]
+        if wsh.ndim != 2:
+            raise Error("ValueError: ops: cnn_linear: the weight must be (outputs, inputs)")
+        var d_out = wsh.d[0]
+        var d_in = wsh.d[1]
+        var count = self.shapes[hslot].count()
+        if d_in < 1 or count % d_in != 0:
+            raise Error("ValueError: ops: cnn_linear: the input rows must have the weight's width")
+        if self.shapes[bslot].count() != d_out:
+            raise Error("ValueError: ops: cnn_linear takes one bias per output")
+        var n = count // d_in
+        var hp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, n * d_out)
+        comptime if Self.E.IS_DEVICE:
+            if self.steps.cnn_other_queue:
+                self.ex.sync()  # a public session: its queue is not the x_cnn entries' (BlockStepScratch)
+            cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
+        else:
+            var hb: List[FP] = [hp, wp, bp, dst]
+            var hw: List[Int] = [n, d_in, d_out]
+            self.ex.cnn_op_host(CNN_HOST_LINEAR_FORWARD, hb, List[Int32](), List[Int32](), hw)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, dst, n, d_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.i0 = n
+        saved.i1 = d_in
+        saved.i2 = d_out
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _rnn_scan(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_RNN_SCAN: [x (steps * batch rows of inputs, time-major),
+        weight_ih (G H, inputs), weight_hh (G H, H), bias_ih (G H values),
+        bias_hh (G H values)], ints [cell, steps, batch] -> h_1..h_T as a
+        (steps * batch, H) tensor, from a zero initial state. The trainer's
+        layer (`rnn_scan_op`); recorded as its two custom nodes, which
+        StepOpRules hands to RecurrentRules."""
+        _need("rnn_scan", len(x), 5, 3, len(ints), 0, len(fs))
+        for i in range(5):  # small-loop(five operands): operand kinds, no data
+            if self.int_words[self._slot(hs[i])]:
+                raise Error("ValueError: ops: a recurrent layer takes floating-point tensors")
+        var rt = rnn_scan_op(self.tape, self.ex, x[0], x[1], x[2], x[3], x[4], ints[0], ints[1], ints[2])
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LM_EMBEDDING: [table (vocab, width), ids (n int32 words)],
+        ints [padding_idx] -> the (n, width) rows. OPS_EMBEDDING's refusals,
+        forward and words; recorded as one custom node over [table]
+        (LM_EMBEDDING_TAG, VJP in StepOpRules: the trainer's embedding
+        backward on a device session, the executor's on the host). The VJP's
+        run scratch is tape storage until the reset."""
+        _need("lm_embedding", len(x), 2, 1, len(ints), 0, len(fs))
+        var tslot = self._slot(hs[0])
+        var islot = self._slot(hs[1])
+        if self.int_words[tslot] or not self.int_words[islot]:
+            raise Error("ValueError: ops: lm_embedding takes a floating-point table and int32 ids")
+        var tshape = self.shapes[tslot]
+        if tshape.ndim != 2:
+            raise Error("ValueError: ops: lm_embedding: the table must be (vocab, width)")
+        var vocab = tshape.d[0]
+        var width = tshape.d[1]
+        var n = self.shapes[islot].count()
+        var pad = ints[0]
+        embedding_refuse_shape(n, vocab, width, pad)
+        var tp = self.tape.value_of(self.ex, x[0])
+        var ip = self.tape.value_of(self.ex, x[1])
+        var cw = embedding_check_words(n)
+        var scratch_a = self.tape.reserve(self.ex, cw)
+        var scratch_b = self.tape.reserve(self.ex, cw)
+        embedding_refuse_ids(self.ex, ip, n, vocab, scratch_a, scratch_b)
+        var y = self.tape.reserve(self.ex, n * width)
+        embedding_forward_into(self.ex, tp, ip, y, n, width)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, y, n, width, False)
+            return self._add(t, 0, False, 0)
+        # Run scratch for either arm: the device's counts | run_begin | perm,
+        # the host's run_begin | perm | keys (autograd/embedding_ops.mojo).
+        var words = lm_embedding_scratch_words(vocab, n)
+        var host_words = vocab + 1 + 2 * embedding_perm_words(AG_EMB_PLAN_SORT, n)
+        if host_words > words:
+            words = host_words
+        var saved = Args()
+        saved.p0 = ip
+        saved.p1 = self.tape.reserve(self.ex, words)
+        saved.i0 = n
+        saved.i1 = vocab
+        saved.i2 = width
+        saved.i3 = pad
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        var rt = self.tape.custom(self.ex, rx, y, n, width, LM_EMBEDDING_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Generation op `code` (autograd/generation_ops.mojo): operand 0 the
+        logits (pick, floating point) or the ids (alive), operand 1 the rows
+        int32 state words, written in place by the pick."""
+        generation_op_check(code, len(x), ints, fs)
+        var name = String(generation_op_name(code))
+        if self.tape.is_recording():
+            raise Error("ValueError: ops: " + name + " runs in an inference session (Session(record=False))")
+        var rslot = self._slot(hs[1])
+        var rp = self.tape.value_of(self.ex, x[1])
+        if self._buffer_kind_of(Int(rp)) != OPS_BUFFER_STATE_WORDS:
+            raise Error("ValueError: ops: " + name + ": the rows must be an integer tensor declared state")
+        var n_rows = self.shapes[rslot].count()
+        var b = ints[0]
+        var t: Tensor
+        var int_result = False
+        comptime if Self.E.IS_DEVICE:
+            if code == OPS_LM_PICK:
+                var lslot = self._slot(hs[0])
+                if self.int_words[lslot]:
+                    raise Error("ValueError: ops: lm_pick: the logits must hold floating-point values")
+                var lp = self.tape.value_of(self.ex, x[0])
+                var out = self.tape.reserve(self.ex, b)
+                var n_scratch = b * ints[1] if ints[3] == LM_PICK_SAMPLE else 1
+                var order = self.tape.reserve(self.ex, n_scratch)
+                var merge = self.tape.reserve(self.ex, n_scratch)
+                var weights = self.tape.reserve(self.ex, n_scratch)
+                lm_pick_run(rebind[DeviceExec](self.ex), lp, self.shapes[lslot].count(), rp, n_rows, ints, fs,
+                            out, order, merge, weights)
+                t = self.tape.variable(self.ex, out, b, 1, False)
+                int_result = True
+            else:
+                var out = self.tape.reserve(self.ex, 1)
+                lm_alive_run(rebind[DeviceExec](self.ex), rp, n_rows, b, out)
+                t = self.tape.variable(self.ex, out, 1, 1, False)
+        else:
+            # lane x56d: the executor's host arm (autograd/generation_host.mojo
+            # through Exec.gen_pick / gen_alive), the same rule over host storage
+            if code == OPS_LM_PICK:
+                var lslot = self._slot(hs[0])
+                if self.int_words[lslot]:
+                    raise Error("ValueError: ops: lm_pick: the logits must hold floating-point values")
+                var lp = self.tape.value_of(self.ex, x[0])
+                var out = self.tape.reserve(self.ex, b)
+                self.ex.gen_pick(lp, self.shapes[lslot].count(), rp, n_rows, ints, fs, out)
+                t = self.tape.variable(self.ex, out, b, 1, False)
+                int_result = True
+            else:
+                var out = self.tape.reserve(self.ex, 1)
+                self.ex.gen_alive(rp, n_rows, b, out)
+                t = self.tape.variable(self.ex, out, 1, 1, False)
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = int_result
+        return h
+
     def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
         """Session codes OPS_ERF .. OPS_PAD (lane ag-import-kernels): the
         argument checks, then one call of autograd/import_api.mojo."""
@@ -1817,6 +2738,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 return -(j + 1)
         p.params.append(h)
         p.param_shapes.append(self.shapes[slot])
+        # lane x1: carried state is a state parameter (record version 3)
+        var kind = self._buffer_kind_of(self.owned[slot])
+        while len(p.param_kinds) < len(p.params) - 1:  # driver-loop: over parameter kinds owed by earlier weights
+            p.param_kinds.append(PROGRAM_PARAM_WEIGHT)
+        p.param_kinds.append(PROGRAM_PARAM_STATE if kind == OPS_BUFFER_STATE else (
+            PROGRAM_PARAM_STATE_WORDS if kind == OPS_BUFFER_STATE_WORDS else PROGRAM_PARAM_WEIGHT))
         return -len(p.params)
 
     def capture(mut self, inputs: List[Int], outputs: List[Int]) raises -> Int:
@@ -1931,6 +2858,58 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var slot = (temps[i] & _SLOT_MASK) - 1
             if slot >= 0 and slot < len(self.live) and self.live[slot]:
                 self._retire(slot)
+
+    # ------------------------------------------------------------ executor surface
+    # Thin public doors for autograd/program_executor.mojo (the per-device
+    # ProgramExecutor used by distributed and partitioned programs). Each one
+    # forwards to the private helper above unchanged: same launches, same order.
+    def drop_temps(mut self, temps: List[Int]):
+        """Retire the live handles in `temps` (a replay's temporaries)."""
+        self._drop_temps(temps)
+
+    def buffer(self, h: Int) raises -> FP:
+        """The session-owned executor buffer of uploaded tensor h (null for
+        a computed tensor)."""
+        return FP(unsafe_from_address=self.owned[self._slot(h)])
+
+    def is_integer(self, h: Int) raises -> Bool:
+        """Whether tensor h's storage holds int32 words (ids)."""
+        return self.int_words[self._slot(h)]
+
+    def leaf_nd(mut self, buf: FP, shape: ShapeN, requires_grad: Bool, integer_words: Bool) raises -> Int:
+        """A temporary handle of a leaf over the caller's `buf` on the
+        current tape (always recorded with `variable_nd`)."""
+        var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
+        var h = self._add(t, 0, requires_grad, 0)
+        self.int_words[self._slot(h)] = integer_words
+        return h
+
+    def run_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """`op` without the inference log."""
+        return self._op_run(code, hs, ints, fs)
+
+    def has_gradient(self, h: Int) raises -> Bool:
+        """Whether the last backward wrote a gradient for tensor h."""
+        return self.tape._nodes[self.tensor(h)._index].grad_ready
+
+    def optimizer_settings(self, o: Int) raises -> _OpsOptimizer:
+        """A copy of optimizer o's configuration and schedule."""
+        return self.opts[self._opt_index(o)]
+
+    def optimizer_state_index(self, o: Int, h: Int) raises -> Int:
+        """The index of (optimizer o, parameter handle h)'s retained state, or
+        -1 when it was never stepped. Allocates nothing."""
+        var oi = self._opt_index(o)
+        var si = -1
+        for k in range(len(self.opt_states)):  # driver-loop: over retained optimizer states
+            if self.opt_states[k].opt == oi and self.opt_states[k].param == h:
+                si = k
+        return si
+
+    def optimizer_state_record(self, i: Int) -> _OpsOptState:
+        """A copy of retained optimizer state i (its buffers stay owned by
+        the session)."""
+        return self.opt_states[i]
 
     def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         var start = 0
@@ -2133,8 +3112,8 @@ struct _OpsStore(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime _OPS_NAME = "MojoAutogradOpsSessionsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoAutogradOpsSessionsFast"
-comptime _OPS_SESSIONS = _Global[StorageType=_OpsStore, name=_OPS_NAME, init_fn=_OpsStore.__init__]
+comptime _OPS_NAME = "MojolearnAutogradOpsSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnAutogradOpsSessionsFastV1"
+comptime _OPS_SESSIONS = SharedSlot[_OpsStore, _OPS_NAME]
 
 
 def ops_session_registry_token() raises -> Int:
@@ -2146,7 +3125,7 @@ def ops_session_registry_token() raises -> Int:
 def ops_session_open[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: Bool) raises -> Int:
     """A new session on `ex`; returns its id (>= 1)."""
     var p = alloc[OpsSession[E]](1)
-    p.init_pointee_move(OpsSession[E](ex^, record))
+    p.unsafe_write(OpsSession[E](ex^, record))
     var s = _OPS_SESSIONS.get_or_create_ptr()
     var sid = s[].next_id
     s[].next_id += 1
@@ -2184,8 +3163,8 @@ def ops_session_close[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raise
     try:
         p[].close()
     except e:
-        p.destroy_pointee()
+        p.unsafe_deinit_pointee()
         p.free()
         raise e
-    p.destroy_pointee()
+    p.unsafe_deinit_pointee()
     p.free()

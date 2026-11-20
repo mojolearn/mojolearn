@@ -34,11 +34,12 @@ only as a stable 1-bit partition, so that is what is written.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -85,8 +86,8 @@ def split_and_make_sequence_kernel(
     # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is its Mojo
     # spelling. Their ONE struct load is two scalar loads here, for the
     # Metal reason recorded below.
-    var size = Int(ldg(part_size + leaf_id))
-    var offset = Int(ldg(part_offset + leaf_id))
+    var size = Int((part_size + leaf_id).unsafe_load[invariant=True]())
+    var offset = Int((part_offset + leaf_id).unsafe_load[invariant=True]())
 
     var i = Int(block_idx.x) * SPLIT_BLOCK_SIZE * SPLIT_UNROLL + Int(
         thread_idx.x
@@ -128,19 +129,18 @@ def split_and_make_sequence_kernel(
     var stride = SPLIT_UNROLL * SPLIT_BLOCK_SIZE * Int(grid_dim.x)
 
     while i < size:
-        @parameter
-        for k in range(SPLIT_UNROLL):
+        comptime for k in range(SPLIT_UNROLL):
             var at = i + k * SPLIT_BLOCK_SIZE
             if at < size:
                 # `loadIndex[k] = loadIndices ? __ldg(loadIndices + i +
                 #  k * BlockSize) : i + k * BlockSize` (`split_points.cu:511`).
                 # The implementation always carries the array; the root seeds it with
                 # the identity.
-                var load_index = Int(ldg(load_indices + (offset + at)))
+                var load_index = Int((load_indices + (offset + at)).unsafe_load[invariant=True]())
                 # `featureVal[k] = __ldg(compressedIndex + loadIndex[k]) &
                 #  mask` (`split_points.cu:518`).
                 var feature_val = (
-                    ldg(compressed_index + (f_offset + load_index)) & mask
+                    (compressed_index + (f_offset + load_index)).unsafe_load[invariant=True]() & mask
                 )
                 # The sequence, written before the flag, exactly as they do.
                 indices.unsafe_store(offset + at, UInt32(at))
@@ -212,10 +212,10 @@ def update_partitions_after_split_kernel(
         # their kernel (`:355-362`) and stay plain here.
         var flag0 = 1
         if i < part_sz:
-            flag0 = Int(ldg(sorted_flags + (offset + i)))
+            flag0 = Int((sorted_flags + (offset + i)).unsafe_load[invariant=True]())
         var flag1 = 0
         if i != 0:
-            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
+            flag1 = Int((sorted_flags + (offset + i - 1)).unsafe_load[invariant=True]())
 
         if flag0 != flag1:
             # The border. Left keeps the offset and shrinks to `i`; right
@@ -307,10 +307,10 @@ def update_partitions_and_plan_kernel(
     while i <= part_sz:
         var flag0 = 1
         if i < part_sz:
-            flag0 = Int(ldg(sorted_flags + (offset + i)))
+            flag0 = Int((sorted_flags + (offset + i)).unsafe_load[invariant=True]())
         var flag1 = 0
         if i != 0:
-            flag1 = Int(ldg(sorted_flags + (offset + i - 1)))
+            flag1 = Int((sorted_flags + (offset + i - 1)).unsafe_load[invariant=True]())
 
         if flag0 != flag1:
             part_size.unsafe_store(left_leaf, UInt32(i))
@@ -378,7 +378,7 @@ def split_points_grid_x(n_leaf_slots: Int, sm_count: Int) -> Int:
     ======================================================
 
     `TArchProps::SMCount()` is
-    `ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)`, the same
+    `device_multiprocessor_count(ctx)`, the same
     attribute `replication_for`'s caller already reads.
     """
     var per_sm = 2 if n_leaf_slots > 4 else 4
@@ -449,7 +449,7 @@ def copy_in_leaves_kernel(
             # the deviation block on `gather_inplace_kernel`.
             dst.unsafe_store(
                 offset + i + k * line_size,
-                ldg(src + (offset + i + (stat_base + k) * line_size)),
+                (src + (offset + i + (stat_base + k) * line_size)).unsafe_load[invariant=True](),
             )
         i += stride
 
@@ -477,7 +477,7 @@ def copy_index_in_leaves_kernel(
 
     while i < size:
         # `__ldg(src + i + k * lineSize)` at one column (`split_points.cu:42`).
-        dst.unsafe_store(offset + i, ldg(src + (offset + i)))
+        dst.unsafe_store(offset + i, (src + (offset + i)).unsafe_load[invariant=True]())
         i += stride
 
 
@@ -535,11 +535,11 @@ def gather_in_leaves_kernel(
     while i < size:
         # `const ui32 loadIdx = __ldg(map + i)` (`split_points.cu:198`) and
         # `__ldg(src + loadIdx + k * lineSize)` (`:202`).
-        var load_idx = Int(ldg(gather_map + (offset + i)))
+        var load_idx = Int((gather_map + (offset + i)).unsafe_load[invariant=True]())
         for k in range(num_stats):
             dst.unsafe_store(
                 offset + i + (stat_base + k) * line_size,
-                ldg(src + (offset + load_idx + k * line_size)),
+                (src + (offset + load_idx + k * line_size)).unsafe_load[invariant=True](),
             )
         i += stride
 
@@ -574,8 +574,8 @@ def gather_index_in_leaves_kernel(
     while i < size:
         # `__ldg(map + i)` (`split_points.cu:198`) and `__ldg(src + loadIdx)`
         # (`:202`) at one column.
-        var load_idx = Int(ldg(gather_map + (offset + i)))
-        dst.unsafe_store(offset + i, ldg(src + (offset + load_idx)))
+        var load_idx = Int((gather_map + (offset + i)).unsafe_load[invariant=True]())
+        dst.unsafe_store(offset + i, (src + (offset + load_idx)).unsafe_load[invariant=True]())
         i += stride
 
 
@@ -714,8 +714,8 @@ def gather_inplace_kernel(
     # compiler, and our partitions are two arrays regardless. `leaf[blockIdx.y]`
     # (`:64`) is PLAIN in their file and stays plain here.
     var leaf_id = Int(leaves.unsafe_load(Int(block_idx.y)))
-    var offset = Int(ldg(part_offset + leaf_id))
-    var size = Int(ldg(part_size + leaf_id))
+    var offset = Int((part_offset + leaf_id).unsafe_load[invariant=True]())
+    var size = Int((part_size + leaf_id).unsafe_load[invariant=True]())
 
     var tid = Int(thread_idx.x)
 
@@ -732,8 +732,8 @@ def gather_inplace_kernel(
         if i < size:
             # `const ui32 loadIdx = __ldg(map + i)` and
             # `tmp[i] = __ldg(data + loadIdx)` (`split_points.cu:80-81`).
-            var load_idx = Int(ldg(gather_map + (offset + i)))
-            tmp[i] = ldg(data + (base + load_idx))
+            var load_idx = Int((gather_map + (offset + i)).unsafe_load[invariant=True]())
+            tmp[i] = (data + (base + load_idx)).unsafe_load[invariant=True]()
 
     # `__syncthreads()` (`split_points.cu:85`). A THREADGROUP barrier, not
     # `syncwarp`: `tmp` is written by every thread of the block and read back
@@ -864,7 +864,7 @@ def launch_reorder_in_leaves(
     # once per level. Their `TArchProps::SMCount()` is a cached static.
     var sm = sm_count
     if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        sm = device_multiprocessor_count(ctx)
     var grid_x = split_points_grid_x(n_leaf_slots, sm)
 
     var launches = 0

@@ -27,8 +27,8 @@ INCREMENTAL DECODING IS PUBLIC HERE SINCE lane/stateful-cpu-decoding
 (2026-09-16) and it is not a second model. A carried state, a `step` and a
 cache allocation were refused by name until then because the binding
 exported the fresh entries alone; it now exports the state-carrying ones as
-well, and each class reaches its GPU parent's own `_call`, so prefill and
-decode are ONE spelling. `tools/step_vs_full_check.py` measures on the CPU
+well, and each class reaches its GPU parent's native forward and step, so
+prefill and decode are ONE spelling. `tools/step_vs_full_check.py` measures on the CPU
 column that decoding a sequence one token at a time with a carried state is
 BITWISE the same sequence run as one fresh-state forward pass, position by
 position, and fires with the first differing position and both values when
@@ -49,14 +49,10 @@ imports and raises BY NAME when touched.
 from . import _backend
 from . import _native_samba_bridge
 from . import _native_neural_bridge
-from . import _ragged
 from . import lowbit as _lowbit
 from ._mlp_impl import _NATIVE as _MLP_NATIVE
-from ._transformer_impl import TransformerBlock
-from ._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block, _f32_strict
-from ._arrays import _addr, _addr_ro
-from ._bufcheck import le_bytes, probe
-from ._buffer import as_i32_c, frombytes
+from ._transformer_impl import TransformerBlock as _TransformerBlock
+from ._mamba_impl import Mamba1Block as _Mamba1Block, Mamba2Block as _Mamba2Block, Mamba3Block as _Mamba3Block
 
 _EXTENSION = "_mojolearn_neural_host"
 
@@ -167,10 +163,10 @@ _MLP_NATIVE("inference_connect", (_connect_mlp_inference(),))
 
 
 # Nothing is overridden except the binding (lane/stateful-cpu-decoding): the host binding
-# exports transformer_forward and transformer_decode_step, so the parent's _call is the
+# exports transformer_forward and transformer_decode_step, so the parent's native forward is the
 # arithmetic (decode = prefill entry at L = 1 with the cache carried);
 # tools/step_vs_full_check.py measures step-vs-full bitwise agreement on this column.
-class TransformerBlockInference(TransformerBlock):
+class TransformerBlockInference(_TransformerBlock):
     """Forward-only `TransformerBlock` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `TransformerBlock` (the nine named
@@ -213,8 +209,8 @@ class _RecurrentBlockInference:
     and refused `step`, `allocate_state` and a carried state, and the
     refusals were honest -- the binding exported no state-carrying entry.
     It now exports `mamba{1,2,3}_forward` and `mamba{1,2,3}_decode_step`
-    with the block classes' own contracts, so the parent's `_call` is the
-    arithmetic. The three block oracles run prefill and decode through ONE
+    with the block classes' own contracts, so the parent's native forward
+    and step are the arithmetic. The three block oracles run prefill and decode through ONE
     call site (a decode step is the same oracle at l = 1 carrying the
     state), and `tools/step_vs_full_check.py` measures on this column that
     a step-by-step decode is bitwise the one-shot prefill at every
@@ -228,9 +224,9 @@ class _RecurrentBlockInference:
 
 
 # Shared base _RecurrentBlockInference: only the binding and backward are overridden; the
-# binding exports mamba{1,2,3}_forward / mamba{1,2,3}_decode_step, so the parent's _call is
-# the arithmetic; tools/step_vs_full_check.py checks step-by-step decode against prefill.
-class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
+# binding exports mamba{1,2,3}_forward / mamba{1,2,3}_decode_step, so the parent's native
+# forward is the arithmetic; tools/step_vs_full_check.py checks step-by-step decode against prefill.
+class Mamba1BlockInference(_RecurrentBlockInference, _Mamba1Block):
     """Forward-only `Mamba1Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba1Block` (its ten named weights) and
@@ -243,7 +239,7 @@ class Mamba1BlockInference(_RecurrentBlockInference, Mamba1Block):
     """
 
 
-class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
+class Mamba2BlockInference(_RecurrentBlockInference, _Mamba2Block):
     """Forward-only `Mamba2Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba2Block` (its nine named weights and `dt_limit`, default ``(0.0, inf)``) and
@@ -256,7 +252,7 @@ class Mamba2BlockInference(_RecurrentBlockInference, Mamba2Block):
     """
 
 
-class Mamba3BlockInference(_RecurrentBlockInference, Mamba3Block):
+class Mamba3BlockInference(_RecurrentBlockInference, _Mamba3Block):
     """Forward-only `Mamba3Block` on the CPU, from weights trained on a GPU.
 
     Takes the same constructor arguments as `Mamba3Block` (its nine named weights) and
@@ -338,13 +334,6 @@ class SambaInference:
         """An independent copy of every weight, keyed by registry name."""
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "inference_parameters", (self,), _native_samba_bridge.CONTEXT)
-
-    @staticmethod
-    def _ids(x):
-        pb = probe(x)
-        if len(pb.shape) != 2:
-            raise ValueError("mojolearn.SambaInference: inputs must be (B, L) integer ids")
-        return as_i32_c(x, ndim=2, name="inputs")[0]
 
     def forward(self, inputs, state=None, *, lengths=None):
         """Logits for token ids; also available as `logits` and by calling the model.

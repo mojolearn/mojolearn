@@ -13,9 +13,8 @@ caller raises Python's RuntimeError with the last subspace change)."""
 from std.math import inf, sqrt
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.fa_em import svd_desc
 from x_decomp.kit import (
-    Kit, Mat, OP_ABS, OP_ADDS, OP_MUL, OP_RECIP, OP_SELECT, OP_SQ, OP_SUB, mat_const, mat_from, mat_rows,
+    Kit, Mat, OP_ABS, OP_ADDS, OP_MUL, OP_RECIP, OP_SELECT, OP_SQ, OP_SUB, mat_const, mat_from, mat_rows, svd_order,
 )
 from x_decomp.select_ops import SEL_MAX, sel_fold
 
@@ -98,7 +97,7 @@ def lle_iterate[E: Exec](
         E.svd(B.p(), B.r, B.c, s.p(), v.p())
         var Vt = Mat(0, 0)
         S = Mat(0, 0)
-        svd_desc(s, v, S, Vt)
+        svd_order(s, v, S, Vt)
         X = k.mm(X, Vt, False, True)
         Y = take_want(X, p, a.nc)
         var sw = take_want(S, p, a.nc)

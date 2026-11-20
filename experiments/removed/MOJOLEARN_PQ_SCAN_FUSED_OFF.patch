@@ -1,0 +1,19 @@
+diff --git a/x_ann/vsearch_fast.mojo b/x_ann/vsearch_fast.mojo
+index cd0cb1f8d6..e9f94c3959 100644
+--- a/x_ann/vsearch_fast.mojo
++++ b/x_ann/vsearch_fast.mojo
+@@ -54,12 +54,10 @@ comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE
+ #: a register top-k per thread and joins the lists in threadgroup memory; no
+ #: candidate-distance buffer, no select launches. k <= SEL_KM. Same words.
+ #: DEFAULT (FAST + Apple) since 2026-10-04, VSEARCH_ALL A/B above (ad265a028,
+-#: 9/9 faster, recall identical).
++#: 9/9 faster, recall identical); rollback `-D MOJOLEARN_PQ_SCAN_FUSED_OFF`.
+ #: Limits are the kernel's: k <= SEL_KM (register top-k), the table tile and
+ #: the residual in threadgroup memory; no dimension window.
+-# TOMBSTONE: MOJOLEARN_PQ_SCAN_FUSED_OFF (old path; EXP:352 KEPT the fused scan as the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5ed565aaf7.
+-# Restore: git apply experiments/removed/MOJOLEARN_PQ_SCAN_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE
++comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCAN_FUSED_OFF"]()
+ 
+ # TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).

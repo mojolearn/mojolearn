@@ -4,26 +4,7 @@
  "branch": "lane/lm-attn-nohost",
  "head": "150df49d9",
  "controls": {},
- "algorithms": {
-  "neural:transformer-forward": {
-   "binding": "_mojolearn_transformer",
-   "route": "transformer session forward -> _transformer_run_session -> llama_decoder_layer_forward -> fused attention forward",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "neural:lm-forward": {
-   "binding": "_mojolearn_byte_lm",
-   "route": "byte_lm forward (forward_only) -> modeling_llama attention estash gate",
-   "controls": [],
-   "interaction_groups": []
-  },
-  "neural:lm-train-step": {
-   "binding": "_mojolearn_byte_lm",
-   "route": "byte_lm train step: no arming, no forward_only; expected neutral (control)",
-   "controls": [],
-   "interaction_groups": []
-  }
- },
+ "algorithms": {},
  "removed": [
   {
    "define": "MOJOLEARN_IDN_ATTN_DEFER_REGIME",

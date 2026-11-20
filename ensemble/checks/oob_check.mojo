@@ -56,6 +56,7 @@ from ensemble.randomforest import (
     RowSampler,
     fit_forest,
 )
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 comptime DT = DType.float32
 comptime CLS_LT = DType.int32
@@ -115,7 +116,7 @@ def arm_a_mask_per_cell(ctx: DeviceContext) raises -> Int:
         s.sample(ctx, Int32(t))
 
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    ctx.enqueue_copy(dst_buf=hm, src_buf=s.bootstrap_masks)
+    download_buffer_into[DType.uint8](ctx, s.bootstrap_masks, hm)
     ctx.synchronize()
 
     # The independent tally: a second sampler, no masks at all.
@@ -123,7 +124,7 @@ def arm_a_mask_per_cell(ctx: DeviceContext) raises -> Int:
     for t in range(n_trees):
         ref_s.sample(ctx, Int32(t))
         var hr = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        ctx.enqueue_copy(dst_buf=hr, src_buf=ref_s.selected_rows_[0])
+        download_buffer_into[DType.int32](ctx, ref_s.selected_rows_[0], hr)
         ctx.synchronize()
         var want = List[Bool]()
         for _ in range(n_rows):
@@ -180,7 +181,7 @@ def arm_b_counts_identity(ctx: DeviceContext) raises -> Int:
     for t in range(n_trees):
         s.sample(ctx, Int32(t))
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    ctx.enqueue_copy(dst_buf=hm, src_buf=s.bootstrap_masks)
+    download_buffer_into[DType.uint8](ctx, s.bootstrap_masks, hm)
     ctx.synchronize()
 
     var never_oob = 0
@@ -249,12 +250,12 @@ def _fit_cls[
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, x[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[CLS_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, y[i])
     var dy = ctx.enqueue_create_buffer[CLS_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[CLS_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var f = fit_forest[ClsObj, sab](
@@ -274,7 +275,6 @@ def _fit_cls[
     _ = dy^
     _ = dsw^
     _ = hx^
-    _ = hy^
     return f^
 
 
@@ -335,12 +335,12 @@ def arm_c_analytic_scores(ctx: DeviceContext) raises -> Int:
     for i in range(n_rows * n_cols):
         hx.unsafe_ptr().unsafe_store(i, xr[i])
     var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DT](ctx, dx, hx)
     var hy = ctx.enqueue_create_host_buffer[REG_LT](n_rows)
     for i in range(n_rows):
         hy.unsafe_ptr().unsafe_store(i, yr[i])
     var dy = ctx.enqueue_create_buffer[REG_LT](n_rows)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+    upload_host_into[REG_LT](ctx, dy, hy)
     var dsw = ctx.enqueue_create_buffer[DT](1)
     ctx.synchronize()
     var pr = _params(8, True, MSE)
@@ -367,8 +367,6 @@ def arm_c_analytic_scores(ctx: DeviceContext) raises -> Int:
     _ = dx^
     _ = dy^
     _ = dsw^
-    _ = hx^
-    _ = hy^
     if wrong == 0:
         print("  arm C OK: exactly 1.0 for both, and the right field filled")
     return wrong
@@ -464,7 +462,7 @@ def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
         var host = ctx.enqueue_create_host_buffer[DType.int32](n)
         for tree in range(3):
             sampler.sample(ctx, Int32(tree))
-            ctx.enqueue_copy(dst_buf=host, src_buf=sampler.selected_rows_[0])
+            download_buffer_into[DType.int32](ctx, sampler.selected_rows_[0], host)
             ctx.synchronize()
             for i in range(n):
                 if host.unsafe_ptr().unsafe_load(i) != Int32(i):
@@ -499,7 +497,7 @@ def arm_f_boundary_reuse(ctx: DeviceContext) raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     print("oob_check: out-of-bag masks and scoring")
     var ctx = DeviceContext()
     var fails = 0

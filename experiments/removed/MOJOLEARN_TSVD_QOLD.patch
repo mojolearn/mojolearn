@@ -1,0 +1,24 @@
+diff --git a/x_decomp/qfix.mojo b/x_decomp/qfix.mojo
+index db888888fc..d89219a56e 100644
+--- a/x_decomp/qfix.mojo
++++ b/x_decomp/qfix.mojo
+@@ -22,7 +22,7 @@ Python reads which are on through `x_decomp_qfix_flags()`:
+          max_rel_singular_value_error and reconstruction unchanged), taxi
+          48.54 -> 54.96 ms (+13.2%), istella +0.3%. REVERT: the old route is
+          the default again.
+-  bit 2  TSVD_QFIX
++  bit 2  TSVD_QFIX  (`-D MOJOLEARN_TSVD_QOLD`)
+          TruncatedSVD 'covariance_eigh' / 'jacobi' on a tall matrix (n <= 512
+          columns): the components are the top right singular vectors of the
+          TSQR R (the one-sided Jacobi of R), not the eigenvectors of the
+@@ -63,9 +63,7 @@ from x_decomp.device import _down, _p, _up, xd_ctx
+ # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
+ # Tried: svd's TSQR route keeping every direction above 2^-40 s_0 (was 2^-20) with a Householder QR of U_R; svd taxi 48.54 -> 54.96 ms (+13.2%), istella +0.3%, no quality gain (rab5-svd).
+ # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_TSVD_QOLD (old path: the float32 Gram eigenvectors; EXP:1287 QUALITY-FIX KEPT as the FAST default) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 9914fb0c3e.
+-# Restore: git apply experiments/removed/MOJOLEARN_TSVD_QOLD.patch; record in docs/TOMBSTONES.md.
+-comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSVD_QOLD"]()
+ comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_LU_QOLD"]()
+ 
+ #: threads per residual block (one block per row and QF_RT right-hand sides)

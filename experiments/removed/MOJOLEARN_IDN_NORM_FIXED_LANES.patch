@@ -1,0 +1,272 @@
+diff --git a/transformer/experiments/attention_schedules.mojo b/transformer/experiments/attention_schedules.mojo
+index 4ed5432a72..7cd7cb0a78 100644
+--- a/transformer/experiments/attention_schedules.mojo
++++ b/transformer/experiments/attention_schedules.mojo
+@@ -5,32 +5,28 @@ NN22 (eager dK/dV pairing) and NN23 (row-dot dS) were deleted on 2026-10-07:
+ only transformer/checks read them, never a public binding route.
+ 
+ No compilation, identity, quality or timing evidence exists for these drafts.
+-Every switch was deleted 2026-11-15 (unmeasured); the kernels stay for their importers.
++Every switch requires IDENTICAL and is disabled by MOJOLEARN_IDN_ALL_OFF.
+ All numeric loops run in Mojo; no vendor or benchmark dimension dispatch.
+ """
+ from transformer.experiments.norm_profile import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
++from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+ from max.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined, get_defined_int
+ from checks.numerics import (
+     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div,
+     identical_mul, identical_mul_add, identical_rsqrt, identical_silu,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+-comptime NN_AB_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime NN_AB_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ # TOMBSTONE: MOJOLEARN_NN22_EAGER_DKDV_PAIR (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+ # Restore: git apply experiments/removed/MOJOLEARN_NN22_EAGER_DKDV_PAIR.patch; record in docs/TOMBSTONES.md.
+ # Each flag below is OFF: full transformer/LM/Samba train-step NVIDIA+AMD
+ # ratios, host/three-GPU words, task quality and sample counts are pending.
+ # NN25 = arms 2 and 4 of MOJOLEARN_IDN_NORM (norm_profile_contract.mojo).
+-# TOMBSTONE: MOJOLEARN_IDN_NORM (arms 2 and 4, NN25; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.expdel2-32-neural.patch
+-comptime NN25_RMS_SPLIT_SCALE = False
+-# TOMBSTONE: MOJOLEARN_NN29_RING_PAIR (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_NN29_RING_PAIR.patch
+-comptime NN29_RING_PAIR = False
++comptime NN25_RMS_SPLIT_SCALE = NN_AB_ENABLED and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 2 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)
++comptime NN29_RING_PAIR = NN_AB_ENABLED and is_defined["MOJOLEARN_NN29_RING_PAIR"]()
+ 
+ 
+ def rms_sumsq_kernel(
+@@ -43,11 +39,14 @@ def rms_sumsq_kernel(
+     if row >= Int(m_in):
+         return
+     var acc = Float32(0.0)
+-    # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (the fixed 32-lane S1 arm, EXP:2246 pending) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+-    for j in range(dm):
+-        var v = ftz(x.unsafe_load(row * dm + j))
+-        acc = ftz(identical_mul_add(v, v, acc))
++    comptime if IDN_NORM_FIXED_LANES:
++        # MOJOLEARN_IDN_NORM_FIXED_LANES: S1 is the fixed 32-lane fold
++        # (one thread here; the same bits as the cell kernels)
++        acc = nfl_dot(x, x, row * dm, row * dm, dm)
++    else:
++        for j in range(dm):
++            var v = ftz(x.unsafe_load(row * dm + j))
++            acc = ftz(identical_mul_add(v, v, acc))
+     sumsq.unsafe_store(row, acc)
+ 
+ 
+@@ -136,9 +135,7 @@ def kv_ring_pair_kernel(
+ #   2  k_cache   NI23: rotate K while writing the prefill cache
+ #                (training/neural_identical_experiments.mojo)
+ # Same products and adds as the incumbent: no bit change.
+-# TOMBSTONE: MOJOLEARN_IDN_ROPE (arm 1, NN27, opt-in, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ROPE.patch
+-comptime NN27_QK_ROPE_PAIR = False
++comptime NN27_QK_ROPE_PAIR = NN_AB_ENABLED and get_defined_int["MOJOLEARN_IDN_ROPE", 0]() == 1
+ 
+ 
+ def qk_rope_pair_kernel(
+@@ -193,9 +190,7 @@ def qk_rope_pair_kernel(
+         var kb = ftz(identical_mul(kr, s))
+         k_out.unsafe_store(ki, ftz(ftz(ka) + ftz(kb)))
+ 
+-# TOMBSTONE: MOJOLEARN_NN21_SCALE_MASK (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 326b0d6e3d.
+-# Restore: git apply experiments/removed/MOJOLEARN_NN21_SCALE_MASK.patch
+-comptime NN21_SCALE_MASK = False
++comptime NN21_SCALE_MASK = NN_AB_ENABLED and is_defined["MOJOLEARN_NN21_SCALE_MASK"]()
+ # TOMBSTONE: MOJOLEARN_NN23_ROWDOT_DS (unmeasured) deleted 2026-10-07 by a1488ca2d; code recoverable at a1488ca2d^.
+ # Restore: git apply experiments/removed/MOJOLEARN_NN23_ROWDOT_DS.patch; record in docs/TOMBSTONES.md.
+ 
+diff --git a/training/host/samba_ops_oracle.mojo b/training/host/samba_ops_oracle.mojo
+index f9a4e161b6..2e7d612430 100644
+--- a/training/host/samba_ops_oracle.mojo
++++ b/training/host/samba_ops_oracle.mojo
+@@ -64,8 +64,7 @@ ordered-shard reduction reaches no GEMM. Its independent oracle must catch
+ the changed native result, including the cancellation fixture ending at three.
+ """
+ from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+-# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
++from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+ from core.host_lanes import all_finite
+ from std.math import isfinite
+ from std.sys.info import num_physical_cores
+@@ -186,6 +185,9 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
+                 acc = ftz(identical_mul_add(xj, xj, acc))
+             comptime if NN24_NORM_LANES8:
+                 acc = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
++            comptime if IDN_NORM_FIXED_LANES:
++                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
++                acc = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
+             sp.unsafe_store(t, acc)
+ 
+     if tasks == 1:
+@@ -292,6 +294,9 @@ def host_samba_rms_norm_backward(
+                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
+             comptime if NN24_NORM_LANES8:
+                 c = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
++            comptime if IDN_NORM_FIXED_LANES:
++                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
++                c = nfl_dot(rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
+             c = ftz(c)
+             var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
+             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+diff --git a/transformer/checks/transformer_backward_oracle.mojo b/transformer/checks/transformer_backward_oracle.mojo
+index 0d05fcd628..479e6ed960 100644
+--- a/transformer/checks/transformer_backward_oracle.mojo
++++ b/transformer/checks/transformer_backward_oracle.mojo
+@@ -132,8 +132,7 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
+ from transformer.experiments.norm_profile_contract import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
++from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
+ from std.math import min
+ from std.memory import bitcast
+ 
+@@ -743,6 +742,11 @@ def rms_norm_backward_into(
+                 c = norm_profile_dot[NN24_LANES](
+                     rebind[MutPointer[Float32, MutAnyOrigin]](dh.unsafe_ptr()),
+                     rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()), 0, t * dm, dm)
++            comptime if IDN_NORM_FIXED_LANES:
++                # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold
++                c = nfl_dot(
++                    rebind[MutPointer[Float32, MutAnyOrigin]](dh.unsafe_ptr()),
++                    rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()), 0, t * dm, dm)
+             c = ftz(c)
+             dot[t] = c
+ 
+diff --git a/transformer/checks/transformer_oracle.mojo b/transformer/checks/transformer_oracle.mojo
+index b5a5b4c9a2..118746a36e 100644
+--- a/transformer/checks/transformer_oracle.mojo
++++ b/transformer/checks/transformer_oracle.mojo
+@@ -105,8 +105,7 @@ not our own code twice.
+ from transformer.experiments.norm_profile_contract import (
+     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
++from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot, nfl_square, nfl_sum
+ from core.host_lanes import all_finite
+ from std.math import max, min
+ # idea 10 (lane/attn-fold, 2026-10-28): the v2 key-axis fold, default OFF.
+@@ -1205,6 +1204,10 @@ def rms_norm_into(
+             comptime if NN24_NORM_LANES8:
+                 var xp = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
+                 acc = norm_profile_dot[NN24_LANES](xp, xp, t * dm, t * dm, dm)
++            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
++            comptime if IDN_NORM_FIXED_LANES:
++                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
++                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
+             sp.unsafe_store(t, acc)
+             var mean = ftz(identical_div(acc, Float32(dm)))
+             var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+@@ -1285,6 +1288,8 @@ def norm_into(
+                     acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
+                 comptime if NN24_NORM_LANES8:
+                     acc = _sum[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm)
++                comptime if IDN_NORM_FIXED_LANES:
++                    acc = nfl_sum(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm)
+                 var mean = ftz(identical_div(acc, Float32(dm)))
+                 var acc2 = Float32(0.0)
+                 for j in range(dm):
+@@ -1292,6 +1297,8 @@ def norm_into(
+                     acc2 = ftz(identical_mul_add(dev, dev, acc2))
+                 comptime if NN24_NORM_LANES8:
+                     acc2 = _square[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm, mean)
++                comptime if IDN_NORM_FIXED_LANES:
++                    acc2 = nfl_square(rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr()), t * dm, dm, mean)
+                 sp.unsafe_store(t, acc2)
+                 var variance = ftz(identical_div(acc2, Float32(dm)))
+                 var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
+@@ -1322,6 +1329,10 @@ def norm_into(
+             comptime if NN24_NORM_LANES8:
+                 var xp = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
+                 acc = norm_profile_dot[NN24_LANES](xp, xp, t * dm, t * dm, dm)
++            # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane fold (norm_fixed_lanes.mojo)
++            comptime if IDN_NORM_FIXED_LANES:
++                var xq = rebind[MutPointer[Float32, MutAnyOrigin]](src.unsafe_ptr())
++                acc = nfl_dot(xq, xq, t * dm, t * dm, dm)
+             sp.unsafe_store(t, acc)
+             var mean = ftz(identical_div(acc, Float32(dm)))
+             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+diff --git a/transformer/experiments/profile.mojo b/transformer/experiments/profile.mojo
+index 8e448c08af..31c5a98fb0 100644
+--- a/transformer/experiments/profile.mojo
++++ b/transformer/experiments/profile.mojo
+@@ -2,8 +2,7 @@
+ """Native version label shared by host/GPU sessions and checkpoint owners."""
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8
+-# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured) oracle arms deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at fce9f4413c.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
++from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES
+ from gemm.experiments.neural_profile import NEURAL_LEAF, NEURAL_CHAINS, NEURAL_PROFILE_CHANGED
+ 
+ 
+@@ -14,10 +13,14 @@ def transformer_arithmetic_profile() -> String:
+     # ".attn-summary32-tree-v1" (NN20, MOJOLEARN_IDN_ATTN_SOFTMAX=1) deleted 2026-10-08 as a grid ge123e6f9 loser
+     # (1.6-43x slower NV/AMD); recoverable at main bc10b8b56.
+     name += ".attn-v1"
+-    name += ".norm-lanes8-v1" if NN24_NORM_LANES8 else ".norm-v1"
++    # MOJOLEARN_IDN_NORM_FIXED_LANES: the fixed 32-lane row fold (norm_fixed_lanes.mojo)
++    if IDN_NORM_FIXED_LANES:
++        name += ".norm-lanes32-v1"
++    else:
++        name += ".norm-lanes8-v1" if NN24_NORM_LANES8 else ".norm-v1"
+     name += ".gemm-leaf" + String(NEURAL_LEAF) + "-chains" + String(NEURAL_CHAINS)
+     return name
+ 
+ 
+ def transformer_arithmetic_profile_changed() -> Bool:
+-    return NEURAL_PROFILE_CHANGED or NN24_NORM_LANES8
++    return NEURAL_PROFILE_CHANGED or NN24_NORM_LANES8 or IDN_NORM_FIXED_LANES
+diff --git a/transformer/experiments/norm_fixed_lanes.mojo b/transformer/experiments/norm_fixed_lanes.mojo
+index 606000a23d..18dbc7b154 100644
+--- a/transformer/experiments/norm_fixed_lanes.mojo
++++ b/transformer/experiments/norm_fixed_lanes.mojo
+@@ -1,8 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """MOJOLEARN_IDN_NORM_FIXED_LANES (lane norm-folds, 2026-10-28; idea 12 of
+-the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only; the switch was deleted 2026-11-15 (unmeasured), the fold
+-helpers stay for their importers until they fold the False constant.
++the Oct 28 neural report, roadmap C4b / D10). IDENTICAL only, default OFF.
+ 
+ BITS CHANGE across versions (allowed: every column moves together in one
+ commit). The transformer/LM RMSNorm row statistic (contract S1, `sum x_j^2`),
+@@ -41,18 +40,19 @@ the tree shape never depends on the row width.
+ """
+ from max.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.primitives.warp import shuffle_xor
+-from checks.numerics import ftz, identical_mul_add
+-
+-# TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in fixed 32-lane norm fold, EXP:2246 pending, never measured; the one-thread row chain stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella term; owner another lane) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at c48e5cad76.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
+-comptime IDN_NORM_FIXED_LANES = False
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
++
++comptime IDN_NORM_FIXED_LANES = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and is_defined["MOJOLEARN_IDN_NORM_FIXED_LANES"]()
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: logical lanes of the fold (the tree has log2(NFL_LANES) = 5 levels)
+ comptime NFL_LANES = 32
+ #: threads a row-statistic kernel launches per token row: one 32-lane cell
+ #: under the define, the one-thread row owner otherwise (arm B unchanged)
+-comptime NORM_ROW_LANES = 1
++comptime NORM_ROW_LANES = NFL_LANES if IDN_NORM_FIXED_LANES else 1
+ 
+ 
+ @always_inline

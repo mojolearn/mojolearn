@@ -1,0 +1,46 @@
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 5b291c82a5..ee0d7c17f0 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -230,10 +230,11 @@ comptime FUSED_THREADS = 256
+ 
+ comptime NEG_ZERO_BITS: UInt32 = 0x80000000
+ 
+-# TOMBSTONE: MOJOLEARN_ATTN_NO_BWD_CORNER (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-34-neural; code recoverable at a7bd96b41b.
+-# Restore: git apply experiments/removed/MOJOLEARN_ATTN_NO_BWD_CORNER.patch
+-comptime ATTN_NO_BWD_CORNER = False
+-"""Always False: the backward launchers refuse on a corner."""
++comptime ATTN_NO_BWD_CORNER = is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"]()
++"""DEVIATION 3112, A MEASUREMENT ARM AND NEVER A SHIPPED BUILD: the backward
++launchers stop refusing on a corner. See the comment at their `return
++FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
++arm; on its own it proves nothing and could be silently wrong."""
+ 
+ comptime ATTN_BWD_KV_CORNER_GUARD = ATTN_EXACT_TAIL_GUARD
+ """Exact dk/dv corner predicate, shared by the qualified replay and old
+@@ -11204,7 +11205,11 @@ def fused_backward_launch_ran_report(
+     _ = corner^
+     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
+     if hit:
+-        return FUSED_CORNER
++        # Experimental bypass, default OFF. Model-state equality alone
++        # does not establish intermediate signed-zero identity. Native
++        # repair/preservation gates establish why exact replay is needed.
++        comptime if not ATTN_NO_BWD_CORNER:
++            return FUSED_CORNER
+     return FUSED_RAN
+ 
+ 
+@@ -11607,7 +11612,11 @@ def fused_backward_launch_estash_report(
+             _ = corner^
+             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
+             if hit:
+-                return FUSED_CORNER
++                # Experimental bypass, default OFF. Model-state equality alone
++                # does not establish intermediate signed-zero identity. Native
++                # repair/preservation gates establish why exact replay is needed.
++                comptime if not ATTN_NO_BWD_CORNER:
++                    return FUSED_CORNER
+             return FUSED_RAN
+     return fused_backward_launch_ran_report(
+         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,

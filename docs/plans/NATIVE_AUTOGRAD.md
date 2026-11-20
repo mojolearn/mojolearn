@@ -57,10 +57,12 @@ storage and marks the node inferred. `_record` never launches a value
 kernel, so a recorded and a non-recorded forward give the same bits by
 construction. `backward`, `backward_from` and `gradient()` refuse an
 inferred tensor; inside a later recorded graph it is a constant.
-`sequence/mlp_fit.mojo` `mlp_predict_autograd` predicts through
-`mlp_forward_autograd` on an inference tape, chunked like `mlp_predict`;
-`mlp_predict_py` uses it under `-D MOJOLEARN_AUTOGRAD_PREDICT` (default off,
-A/B owed). `autograd/checks/infer_cpu.mojo` and `infer_gpu.mojo` check the
+`sequence/mlp_fit.mojo` `mlp_predict` predicts through
+`mlp_forward_autograd` on an inference tape, in chunks, and
+`autograd/rules_recurrent.mojo` `rnn_predict` through `rnn_forward_autograd`
+the same way: the only predict paths since 2026-11-08 (lane
+x3-mlp-rnn-predict-on-tape; the hand forwards and `-D
+MOJOLEARN_AUTOGRAD_PREDICT` are deleted, docs/TOMBSTONES.md). `autograd/checks/infer_cpu.mojo` and `infer_gpu.mojo` check the
 recorded/inference bit match on seven small models, the absence of graph
 edges and gradient slots, chunked prediction against the full-batch
 forward, and the refusals.

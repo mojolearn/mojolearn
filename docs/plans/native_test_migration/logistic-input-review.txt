@@ -1,0 +1,40 @@
+Logistic native-test input/oracle preparation (2026-11-10; checkpoint ec10fb7687)
+
+Reviewed four Python families: multiclass surface6 definitions, native binary
+predict2, host logistic27, native CV/logistic6. The inventory records actual
+boundaries and eligible numerical parts, not a name-based migration count.
+
+Preserve original workloads and inputs
+  The original _fixture function was extracted by Python AST and invoked only
+  as a fixture-data generator, without importing Mojolearn or executing fit,
+  prediction or tests. Exact inputs for600x4/64x4/200x4,seed0 are recorded as
+  17,280 bytes under checks/native_tests/fixtures/. Their manifest records the
+  source commit/function, NumPy version, dimensions, encoding and byte digests.
+  These are INPUTS, never expected model outputs or identity reference hashes.
+  The existing Python fixture remains available for boundary cases; no simpler
+  distribution or reduced workload replaces its normal-noise planted classes.
+  Generation script/log retained in ~/mojolearn-evidence/integ-finish-20261110/
+  generate_logistic_fixture_inputs.py and logistic-input-generation.log.
+
+Native helper ready
+  checks/native_tests/logistic_numeric_fixtures.mojo reads standard fixture
+  files using native file IO, parallel-decodes words into owned guarded buffers,
+  and provides independent Float64 sigmoid/softmax, strict binary threshold,
+  lowest-index maximum, probability bounds/row sums and planted accuracy.
+  Original1e-12 probability/sum bounds and accuracy>0.9 remain. No Python
+  imports/callbacks, same-function fit oracle, output-bit reference or kernel
+  changes. Read fixtures from repository working directory as existing tasks do.
+
+Follow-up
+  The preparation checkpoint itself removed no Python tests. The subsequent
+  logistic-numeric-handoff.txt records four direct CPU/GPU fixtures using the
+  frozen typed producer71c1b26f53 and the exact numerical assertions moved from
+  Python. Public packaging, writable state and callback boundaries remain.
+  Native suite compilation/runtime and retained Python boundary tests are owed
+  to root; the preparation did not execute product code or tests.
+
+Recorded accepted prior work
+  Updated summary.json with root accepted-results evidence for ARIMA, Prophet,
+  optimizer descriptor/device/owner CPU and Apple GPU native executables.
+  These are local native runs, not installed-wheel tests or cross-vendor identity.
+  Root retains raw failures and distinguishes later accepted repaired sources.

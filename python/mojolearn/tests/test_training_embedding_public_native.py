@@ -222,7 +222,10 @@ def test_public_embedding_refuses_replaced_native_entries(monkeypatch, entry):
     else: monkeypatch.setitem(T._OPT_CONTEXT['bindings']['identical'], entry, hook)
     operation = 'embedding_backward' if entry == 'embedding_backward' else 'embedding_forward'
     source, ids = np.ones((4, 3), dtype='f4'), np.array([2, 0, 2, 1], dtype='i8')
-    if entry == 'array_type': ids = [2, 0, 2, 1]
+    # An exact int list is read natively without the array constructor
+    # (bindings/training_embedding_native_door.mojo embedding_int_list); a list with
+    # a float leaf still builds its index storage through it.
+    if entry == 'array_type': ids = [2.0, 0, 2, 1]
     args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
     assert_refused(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), TypeError)
     assert not calls
@@ -234,7 +237,7 @@ def test_public_embedding_does_not_reenter_python_preparation(monkeypatch, opera
     def hook(*args, **kwargs): calls.append(args); raise AssertionError('old preparation entered')
     source, ids = np.ones((4, 3), dtype='f4'), [2, 0, 2, 1]
     expected = reference(operation, source, ids)
-    for name in ('_c32', '_load', 'as_i32_c'):
+    for name in ('_load',):
         monkeypatch.setattr(T, name, hook)
     args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
     assert_output(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), expected)

@@ -115,8 +115,8 @@ the normative `(d, q)` addressing).
 CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
+from max.gpu.primitives.warp import shuffle_xor
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
@@ -130,14 +130,22 @@ from core.step_phase import (
 )
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+# lane fx-leftovers-product (2026-11-19): the activation followers' value
+# bodies, for the store epilogue kinds GEMM_EPI_BIAS_ACT and GEMM_EPI_ACT_BWD.
+# sequence/act_values.mojo imports sequence/ops.mojo and checks/numerics.mojo
+# only (no gemm import: no cycle).
+from sequence.act_values import act_value, act_bwd_value
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into, afn_gemm_fp32_ragged_k_ptr_into
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.time import perf_counter_ns
 
 from gemm.contract import (
@@ -152,7 +160,15 @@ from gemm.contract import (
     fold_level_width,
     fold_node_total,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_mul_add_simd
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    identical_mul_add_simd,
+    nv_flush_by_one_kernel,
+)
+from checks.nv_fma_rn import nv_fma_rn_kernel
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
@@ -190,6 +206,7 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -207,6 +224,8 @@ from linalg.gemv import gemv_gpu
 #
 #: The leaf boundary reads the LAUNCH instead of `k`: `L` is scaled by the
 #: block size. Contract section 6's first sentence, violated.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its terms here: every IDENTICAL switch off at once; EXP:2438 old path) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5cde955daf.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-25-neural.patch.
 comptime SAB_LEAF_READS_LAUNCH = is_defined[
     "MOJOLEARN_GEMM_SABOTAGE_LEAF_READS_LAUNCH"
 ]()
@@ -286,7 +305,7 @@ comptime GEMM_FOLD_SLOTS = 16
 
 # NI01/NI02/NI06 source-only arms, all default OFF. No compilation,
 # identity, quality or timing evidence was collected for this source.
-comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime _NI_GEMM_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime NI01_GEOMETRIC_WORKSPACE = _NI_GEMM_ENABLED and is_defined["MOJOLEARN_NI01_GEMM_GEOMETRIC_WORKSPACE"]()
 # Tried 2026-10-08 (NI02, MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE=3 stream_all: bounded 16-leaf partial windows for every
 # GEMM caller, run ge123e6f9): NV/AMD gemm gaussian 2.07x/1.78x, lm-train-step 1.11x/1.07x SLOWER (quality not
@@ -1021,8 +1040,8 @@ def identical_gemm_leaf_kernel(
         var p = bounds[0]
         var pe = bounds[1]
         while p + LEAF_PREFETCH <= pe:
-            var av = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
-            var bv = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
+            var av = Array[Float32, LEAF_PREFETCH](fill=Float32(0))
+            var bv = Array[Float32, LEAF_PREFETCH](fill=Float32(0))
             comptime for u in range(LEAF_PREFETCH):
                 av[u] = a.unsafe_load(a_row + (p + u) * a_sp)
                 bv[u] = b.unsafe_load((p + u) * b_sp + b_col)
@@ -1356,12 +1375,10 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:
-        var rounded = llvm_intrinsic[
-            "llvm.nvvm.fma.rn.f", Float32, has_side_effect=False
-        ](a, b, acc)
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_kernel(a, b, acc)
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(rounded)
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
     # Apple (lane/apple-seam-repair): the native FMA flushes before rounding;
@@ -1498,7 +1515,7 @@ def _admit_warp_min(v: UInt32) -> UInt32:
 def _admit_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """The contract step on an ADMITTED window: `fma.rn`, the first of
     `_tuned_step`'s two instructions; its flush is proven the identity."""
-    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+    return nv_fma_rn_kernel(a, b, acc)
 
 
 @always_inline
@@ -1805,9 +1822,9 @@ def _fold_flush[HW: Bool](x: Float32) -> Float32:
     spelling is six. Every other column, and every caller that does not ask,
     keeps the software `ftz`, so no bit can move anywhere."""
     comptime if HW and TUNED_HW_FTZ_FMA:
-        return llvm_intrinsic[
-            "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
-        ](x, Float32(1.0))
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(x)
     return ftz(x)
 
 
@@ -3224,7 +3241,7 @@ def _mfma_run(
 
 
 comptime IDN_GEMM_MFMA_REUSE_WS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]()
 )
 """lane/fam-lm (2026-10-04), default ON under IDENTICAL; reached only where
 `lib_gemm_mfma_for` is on (the AMD column). The matrix-core GROUP launch
@@ -3240,7 +3257,7 @@ workspace is smaller takes `_mfma_run` unchanged.
 
 
 comptime IDN_GEMM_MFMA_NO_LONE_GROUP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]()
 )
 """lane/nr-gemm (2026-10-04), default ON under IDENTICAL; reached only where
 `lib_gemm_mfma_for` is on (the AMD column). The leaf split's rule answers a
@@ -3259,7 +3276,7 @@ which the non-group store applies itself. Same bits.
 
 comptime IDN_GEMM_AMD_BAND_MFMA = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     # A01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]()
 )
 """lane/nr-gemm (2026-10-04, review rank 1 "A4 fix"), default ON under
 IDENTICAL; reached only on the AMD column with `lib_gemm_mfma_for` on. The
@@ -3364,12 +3381,12 @@ def _mfma_run_ws(
 # and the wave count are scheduling: no product, leaf or fold moves.
 
 #: `-D MOJOLEARN_IDN_GEMM_MFMA16_OFF` keeps the scalar stepped-down and split
-#: plans on the AMD column; also off under `MOJOLEARN_IDN_ALL_OFF`.
+#: plans on the AMD column.
 # A01 experiment: NEVER RUN — PENDING MEASUREMENT; incumbent defaults retained.
 # A01 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # Incumbent MFMA16 default retained; this card only compares explicit rollback arms.
 comptime IDN_GEMM_MFMA16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA16_OFF"]()
 )
 
 
@@ -3814,7 +3831,7 @@ def _mfma16_try(
 
 comptime IDN_AMD_MFMA_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
     "MOJOLEARN_IDN_AMD_MFMA_KPACK"
-]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 
 #: Waves a packed block holds: a 64 x (32 GEMM_AMD_KPACK_NW) tile; two waves
 #: share each staged A page.
@@ -4184,10 +4201,10 @@ def _mfma_kpack_try(
 
 #: lane/nr-gemm (2026-10-04, review A2), default ON under IDENTICAL on the
 #: NVIDIA column (kernel body row 1). `-D MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF`
-#: keeps the scalar stepped-down plans; also off under `MOJOLEARN_IDN_ALL_OFF`.
+#: keeps the scalar stepped-down plans.
 comptime IDN_GEMM_NV_STEP_KPACK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     # N01 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    is_defined["MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF"]()
 )
 
 
@@ -4314,8 +4331,8 @@ struct _SplitCells(Defaultable, Movable):
         self.cells = -1
 
 
-comptime _SPLIT_CELLS_NAME = "MojoGemmSplitCellsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmSplitCellsFast"
-comptime GEMM_SPLIT_CELLS = _Global[StorageType=_SplitCells, name=_SPLIT_CELLS_NAME, init_fn=_SplitCells.__init__]
+comptime _SPLIT_CELLS_NAME = "MojolearnGemmSplitCellsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmSplitCellsFastV1"
+comptime GEMM_SPLIT_CELLS = SharedSlot[_SplitCells, _SPLIT_CELLS_NAME]
 
 
 def gemm_split_cells_cap() -> Int:
@@ -4351,7 +4368,8 @@ def gemm_split_cells_cap() -> Int:
 #: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
 #: every digest and loss equal. So the AMD column's default is 1024 (the
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
-#: keeps its tile). NVIDIA uses 192 (lane/neural-pass62, below); Apple keeps
+#: keeps its tile). NVIDIA uses 192 on the L40S (lane/neural-pass62, below),
+#: scaled by the device's SM count (`gemm_nv_block_floor`); Apple keeps
 #: 0 (off).
 comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
     1024 if TARGET_COLUMN == COLUMN_AMD else
@@ -4412,8 +4430,8 @@ struct _TileMinK(Defaultable, Movable):
         self.k = -1
 
 
-comptime _TILE_MIN_K_NAME = "MojoGemmTileMinKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinKFast"
-comptime GEMM_TILE_MIN_K = _Global[StorageType=_TileMinK, name=_TILE_MIN_K_NAME, init_fn=_TileMinK.__init__]
+comptime _TILE_MIN_K_NAME = "MojolearnGemmTileMinKIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileMinKFastV1"
+comptime GEMM_TILE_MIN_K = SharedSlot[_TileMinK, _TILE_MIN_K_NAME]
 
 
 def gemm_tile_min_k() -> Int:
@@ -4441,8 +4459,8 @@ struct _TileMinBlocks(Defaultable, Movable):
         self.blocks = -1
 
 
-comptime _TILE_MIN_NAME = "MojoGemmTileMinBlocksIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinBlocksFast"
-comptime GEMM_TILE_MIN_BLOCKS = _Global[StorageType=_TileMinBlocks, name=_TILE_MIN_NAME, init_fn=_TileMinBlocks.__init__]
+comptime _TILE_MIN_NAME = "MojolearnGemmTileMinBlocksIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileMinBlocksFastV1"
+comptime GEMM_TILE_MIN_BLOCKS = SharedSlot[_TileMinBlocks, _TILE_MIN_NAME]
 
 
 struct _TileShortK(Defaultable, Movable):
@@ -4452,8 +4470,8 @@ struct _TileShortK(Defaultable, Movable):
         self.k = -1
 
 
-comptime _TILE_SHORT_K_NAME = "MojoGemmTileShortKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileShortKFast"
-comptime GEMM_TILE_SHORT_K = _Global[StorageType=_TileShortK, name=_TILE_SHORT_K_NAME, init_fn=_TileShortK.__init__]
+comptime _TILE_SHORT_K_NAME = "MojolearnGemmTileShortKIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileShortKFastV1"
+comptime GEMM_TILE_SHORT_K = SharedSlot[_TileShortK, _TILE_SHORT_K_NAME]
 
 
 def gemm_tile_short_k() -> Int:
@@ -4475,9 +4493,58 @@ def gemm_tile_short_k() -> Int:
         return GEMM_TILE_SHORT_K_DEFAULT
 
 
+#: THE NVIDIA BLOCK FLOOR FROM THE DEVICE (fx-leftovers-product, 2026-11-19;
+#: review-generality "product unknown"). The floor trades tile width for SM
+#: fill, so the right value scales with the SM count (the grid note above
+#: `IDN_GEMM_TILE_MIN_BLOCKS`). It was the constant 192 on every NVIDIA part,
+#: measured on one, the L40S (lane/neural-pass62): 192 blocks on its 142 SMs
+#: is 192 / 142 = 1.35 blocks an SM. (A comment in gemm/neural_dispatch.mojo
+#: called that "two blocks an SM"; 2 x 142 is 284, the arithmetic was wrong.)
+#: The floor is now that measured ratio times the device's reported SM count,
+#: rounded up to a whole 64 blocks:
+#:     floor(sms) = roundup64(ceil(sms * 192 / 142))
+#: The 64-block step is chosen so the measured part keeps its measured value
+#: exactly (142 SMs -> 192) and so does every part within a third of it:
+#: 95 to 142 SMs give 192 (A100 108, RTX 4090 128, H100 132), 143 to 189
+#: give 256, 48 to 94 give 128. No route changes on the L40S or on sm_80's
+#: A100. Parts outside 95-142 SMs get a floor nobody has timed (as 192 was
+#: untimed there): re-time owed on a part of another SM count.
+#: ONE READ, HELD: the count is read once per process, inside the one-time
+#: fill of the floor's slot below (a default-device `DeviceContext` attribute
+#: read), never per call; where it cannot be read the floor stays 192. The
+#: env override and the build define still win. An execution plan only: every
+#: tuned plan computes the same leaves and folds, so no bit depends on it.
+comptime GEMM_NV_FLOOR_REF_SMS = 142
+comptime GEMM_NV_FLOOR_REF_BLOCKS = 192
+
+
+def gemm_nv_block_floor(sms: Int) -> Int:
+    """The NVIDIA column's block floor for a device of `sms` multiprocessors
+    (the rule above); the column default when the count is unknown."""
+    if sms <= 0:
+        return GEMM_TILE_MIN_BLOCKS_DEFAULT
+    var scaled = (sms * GEMM_NV_FLOOR_REF_BLOCKS + GEMM_NV_FLOOR_REF_SMS - 1) // GEMM_NV_FLOOR_REF_SMS
+    return ((scaled + 63) // 64) * 64
+
+
+def _gemm_device_sms() -> Int:
+    """The default device's reported multiprocessor count, -1 when it cannot
+    be read. Called once per process (the floor's one-time fill)."""
+    try:
+        var ctx = DeviceContext()
+        var sms = -1
+        sms = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        _ = ctx
+        return sms
+    except:
+        return -1
+
+
 def gemm_tile_min_blocks() -> Int:
     """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
-    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT.
+    when set (read once per process), else the column's floor: on NVIDIA
+    `gemm_nv_block_floor` of the device's SM count (read once, in the same
+    one-time fill), elsewhere GEMM_TILE_MIN_BLOCKS_DEFAULT.
     `-D MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS` wins over both when defined."""
     comptime if IDN_GEMM_TILE_MIN_BLOCKS >= 0:
         comptime assert (
@@ -4492,6 +4559,9 @@ def gemm_tile_min_blocks() -> Int:
             var blocks = GEMM_TILE_MIN_BLOCKS_DEFAULT
             if v != "":
                 blocks = Int(v)
+            else:
+                comptime if TARGET_COLUMN == COLUMN_NVIDIA:
+                    blocks = gemm_nv_block_floor(_gemm_device_sms())
             if blocks < 0:
                 blocks = 0
             p[].blocks = blocks
@@ -4787,7 +4857,7 @@ def _gemm_tile_step_down_rules(m: Int, n: Int, k: Int, plan: Int) -> Int:
 #: keeps today's pick instead of changing the schedule.
 comptime IDN_GEMM_FILL_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
     "MOJOLEARN_IDN_GEMM_FILL_TILES"
-]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+]()
 comptime GEMM_FILL_WARPS_PER_SCHEDULER = 2
 comptime GEMM_FILL_SCHEDULERS_PER_SM = 4
 
@@ -4801,8 +4871,8 @@ struct _FillDevice(Defaultable, Movable):
         self.warp = 0
 
 
-comptime _FILL_DEVICE_NAME = "MojoGemmFillDeviceIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmFillDeviceFast"
-comptime GEMM_FILL_DEVICE = _Global[StorageType=_FillDevice, name=_FILL_DEVICE_NAME, init_fn=_FillDevice.__init__]
+comptime _FILL_DEVICE_NAME = "MojolearnGemmFillDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmFillDeviceFastV1"
+comptime GEMM_FILL_DEVICE = SharedSlot[_FillDevice, _FILL_DEVICE_NAME]
 
 
 def gemm_fill_note_device(ctx: DeviceContext):
@@ -5368,7 +5438,7 @@ def identical_gemm_apple_mma_kernel[
     var wmin = stack_allocation[NPG * 2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var fl = stack_allocation[FS * NC, Scalar[DType.float32]]()
     var occ = 0
-    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var acc = Array[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier window of this leaf was admitted
     var wpl = leaf // KB
     if p_count == 1:
@@ -5433,8 +5503,8 @@ def identical_gemm_apple_mma_kernel[
             exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
-                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
-                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                var af = Array[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = Array[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
                     af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):
@@ -7116,7 +7186,7 @@ comptime GEMM_KSPLIT_KS = 16
 # ZERO timed samples. This checks GEMM only, not full models or combined
 # defines. Apple checks identity; these scheduling changes target NVIDIA/AMD.
 # Evidence: experiments/identical_speed/results/20261005/light-identity/.
-comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # PROMOTED 2026-10-08 (lane/grid-act-2): slack 8 is the IDENTICAL default.
 # IDENTICAL grid run ge123e6f9 (NVIDIA L40S sm_89 + AMD MI325X gfx942, full
 # board data, one scored run per arm, noise floor from incumbent repeats),
@@ -7134,8 +7204,7 @@ comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not
 # long-k call with few output tiles issues about 8 blocks per SM instead of 4,
 # which hides more load latency per SM at the cost of more `m n G` workspace
 # (still under SPLITK_MAX_WORKSPACE_FLOATS, `gemm_step_ksplit_finest_leaves`)
-# and a longer second-level fold. Off IDENTICAL (and under
-# MOJOLEARN_IDN_ALL_OFF) the slack stays 4.
+# and a longer second-level fold. Off IDENTICAL the slack stays 4.
 comptime GEMM_KSPLIT_BRIEF_SLACK = 4
 """The slack the long-k brief's section 4 hand counts were written at."""
 comptime GEMM_KSPLIT_SLACK = (
@@ -8786,6 +8855,63 @@ def _kpack_gather[
     return out
 
 
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_LOADAHEAD and MOJOLEARN_GEMM_FAST_LOADAHEAD_STEPS (the look-ahead depth of the packed
+# kernel's accumulate: the operands of G consecutive window steps read by one load each before their FMAs; same bits).
+# Depth 2, A/B round 1 (NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc): gemm 4096^3 63.64 -> 61.54
+# ms (0.97), lm-train-step 1.00, lm-forward 21.27 -> 22.59 (1.06): NOISE. Depth 4, A/B round 2 (same box and wheel, job
+# nvc-ab-20261119T154232Z-0642a5, base and arm in one job, digests equal): gemm 4096^3 62.30 -> 62.24 (1.00),
+# lm-train-step 36.70 -> 37.66 (1.03), lm-forward 21.35 -> 29.85 (1.40; the row's three bases 21.35-21.96), matmul
+# 512 x 4096 x 4096 8.18 -> 9.69 (1.18), 3000 x 700 x 900 2.86 -> 3.46 (1.21): LOSS (36 more live operand words a
+# thread at depth 4 where the body already spills). Neither depth wins: deleted 2026-11-19 by lane/fx-verdicts4;
+# code recoverable at 8f3f639b13.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch; record in docs/TOMBSTONES.md.
+
+# THE STORE EPILOGUE (`-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed: row gemm-seq-packed-epi-mlp). A
+# product whose output is only ever read by a follower launch over the same cells stores the follower's result,
+# so the follower launch is not issued. The kinds below are the followers' expressions, with `cell` the product's
+# stored cell (`ftz(root)`, contract 5g).
+# SAME BITS, by construction: the follower read the product back from memory
+# (the stored `ftz(root)` word) and flushed it again; here the same word is
+# flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
+# even, on the same two words in the same operand order, then the same flush.
+# NO CONTRACTION IS POSSIBLE on any column: both addends are results of `ftz`
+# (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
+# NaN select, AMD a class test and a select, Apple a compare and a select, the
+# host the integer spelling), never of a bare product, so neither LLVM's
+# fp-contract nor ptxas has a multiply to fuse into this add.
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) kinds 1 and 2 (GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C: the join to the destination word) and gemm_epi_cell; the numbers 1 and 2 are not reused deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+comptime GEMM_EPI_NONE = 0
+# lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
+# `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
+# `epi_p` and one Int32 `epi_i`; the single-product kernel keeps its arguments and passes the
+# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory. Launcher: gemm/neural_dispatch.mojo
+# `identical_gemm_leaf_ptr_epi_into`; entry and rule: sequence/gemm_packed_route.mojo `seq_gemm_packed_epi_kind` /
+# `seq_gemm_packed_epi_launch`; call site: sequence/exec_device.mojo; check: autograd/checks/gemm_cases.mojo.
+#   GEMM_EPI_PLUS_BIAS    ftz(ftz(cell) + ftz(epi_p[j]))   `add_bias_kernel`
+#                         (transformer/impl/llama/modeling_llama.mojo): `ftz(ftz(y) + ftz(bias[col]))`, y the
+#                         stored product word, col = the cell's column; same operand order, same flushes.
+comptime GEMM_EPI_PTR_FIRST = 3
+comptime GEMM_EPI_PLUS_BIAS = 3
+# lane fx-leftovers-product (2026-11-19): the sequence followers of a product (sequence/mlp.mojo `gemm_epi_tail`),
+# each kind the follower's own function called on the cell (sequence/act_values.mojo), so there is ONE spelling:
+#   GEMM_EPI_BIAS_ACT     ftz(act_value(ftz(ftz(cell) + ftz(epi_p[j])), epi_i))
+#                         `op_bias` then `op_act`: `st(C, add(ld(C), ld(b[j])))` stores ftz(ftz(c) + ftz(b[j])) (the
+#                         outer `st` flush is idempotent on `add`'s result); `op_act` reloads that word (`ld` flushes
+#                         a flushed word), applies `act_value`'s branch for the activation code `epi_i` and stores it
+#                         through `st`'s flush. Same operands, same order, same flushes. An activation code with no
+#                         branch (identity, softmax) leaves the word, as `op_act` does.
+#   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
+#                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
+#                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
+# SAME BITS as the follower launch by the argument above: the follower read the stored `ftz(root)`
+# word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
+# (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
+# takes kind 3.
+comptime GEMM_EPI_BIAS_ACT = 4
+comptime GEMM_EPI_ACT_BWD = 5
+
+
 @always_inline
 def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     """DEVIATION 2705: the per-step seam of `identical_gemm_kpack_kernel`.
@@ -8800,14 +8926,20 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
 
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
-def identical_gemm_kpack_kernel[
+# The body of `identical_gemm_kpack_kernel`, unchanged, as an inlined helper so the single-product kernel and the
+# second-buffer epilogue kernel (`identical_gemm_kpack_epi_ptr_kernel`, below `_kpack_launch`) run ONE body
+# (AGENTS.md part 6: a launched kernel is never called from another kernel). The only two edits to the body are
+# its last two arguments: `raw_in` is the tile block index (`block_idx.x` of a single-product launch) and `q_in`
+# the leaf group (`block_idx.y` there); the single-product kernel passes exactly those.
+@always_inline
+def _kpack_kernel_body[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
     ALIGN: Int = 4,
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
+    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -8823,6 +8955,10 @@ def identical_gemm_kpack_kernel[
     b_sj_in: Int32,
     gleaves_in: Int32,
     groups_in: Int32,
+    raw_in: Int32,
+    q_in: Int32,
+    epi_p: MutPointer[Float32, MutAnyOrigin],
+    epi_i: Int32,
 ):
     """DEVIATION 2599: the shipped per-window body over a PACKED page.
 
@@ -9009,12 +9145,12 @@ def identical_gemm_kpack_kernel[
     var tiles_i = (m + BM - 1) // BM
     var tiles_j = (n + BN - 1) // BN
     var n_tiles = tiles_i * tiles_j
-    var raw = Int(block_idx.x)
+    var raw = Int(raw_in)
     if raw >= n_tiles:
         return
     var q = 0
     comptime if GROUP:
-        q = Int(block_idx.y)
+        q = Int(q_in)
         if q >= groups or p_count <= 0 or gleaves < 1:
             # The launcher never sends `k == 0` to the group launch.
             return
@@ -9216,6 +9352,8 @@ def identical_gemm_kpack_kernel[
                         acc[u6 * CPT + v8] = _kpack_step[DIAG](
                             ra1[u6], rb1[v8], acc[u6 * CPT + v8]
                         )
+          # TOMBSTONE: MOJOLEARN_GEMM_FAST_LOADAHEAD (the grouped-load branch of the admitted and exact windows; NOISE at depth 2, LOSS at depth 4) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+          # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch; record in docs/TOMBSTONES.md.
           else:
            var fastw = False
            comptime if ADMIT:
@@ -9312,6 +9450,12 @@ def identical_gemm_kpack_kernel[
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
         outv = acc
+    # `EPI != 0` (all-leaves mode only) stores the follower's result, ONE store per cell: the detect seam's exact
+    # cell (FASTK) is chosen BEFORE the epilogue is applied, not written over the store afterwards.
+    comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
+        "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
+        " store of the clean body (no group nodes, no sabotage, no DIAG)"
+    )
     comptime for u4 in range(NR):
         comptime for v7 in range(NCOL):
             var gi = i0 + accrow + u4 * TR
@@ -9332,8 +9476,21 @@ def identical_gemm_kpack_kernel[
                         comptime if u4 == 0 and v7 == 0:
                             if tid == 0:
                                 cell = _gemm_step_arm_sabotage(cell)
+                    comptime if EPI != GEMM_EPI_NONE:
+                        comptime if FASTK:
+                            if _detect_recompute(sub_seen):
+                                cell = _rtf_cell(a, b, gi, gj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj)
+                        comptime if EPI == GEMM_EPI_PLUS_BIAS:
+                            # `add_bias_kernel`'s expression on the stored word (lane/fx-gemm-worklist).
+                            cell = ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj)))
+                        elif EPI == GEMM_EPI_BIAS_ACT:
+                            # `op_bias` then `op_act` on the stored word (lane fx-leftovers-product).
+                            cell = ftz(act_value(ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj))), Int(epi_i)))
+                        elif EPI == GEMM_EPI_ACT_BWD:
+                            # `op_act_bwd` on the stored word and the forward activation of the same cell.
+                            cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
                     dst.unsafe_store(gi * n + gj, cell)
-    comptime if FASTK:
+    comptime if FASTK and EPI == GEMM_EPI_NONE:
         # lane/amd-step-time: a step result of my cells was subnormal; every
         # cell (or group node) this thread owns is recomputed exactly.
         if _detect_recompute(sub_seen):
@@ -9421,6 +9578,95 @@ def _kpack_launch[
         grid_dim=(g[0], gy, 1),
         block_dim=(NTH, 1, 1),
     )
+
+
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
+def identical_gemm_kpack_kernel[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
+    PAD: Int = 0,
+    ALIGN: Int = 4,
+    DIAG: Int = 0,
+    HWFOLD: Bool = False,
+    GATHER: Bool = False,
+](
+    dst: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    gleaves_in: Int32,
+    groups_in: Int32,
+):
+    """DEVIATION 2599: one product on the packed body (`_kpack_kernel_body`,
+    whose docstring is the kernel's). Block `block_idx.x` owns a tile; in
+    group mode `block_idx.y` is the leaf group. Same name, same arguments
+    and same launches as before the body moved into the helper.
+
+    The comptime list is the body's without its last parameter (the store
+    epilogue kind, 0 here): every positional instantiation written against
+    the kernel before the split (13 parameters) names the same kernel. An
+    epilogue kind needs `identical_gemm_kpack_epi_ptr_kernel`."""
+    var q_in = Int32(0)
+    comptime if GROUP:
+        q_in = Int32(Int(block_idx.y))
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, GEMM_EPI_NONE](
+        dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
+        gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in, dst, Int32(0),
+    )
+
+
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
+def identical_gemm_kpack_epi_ptr_kernel[
+    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int,
+    PAD: Int = 0,
+    ALIGN: Int = 4,
+    HWFOLD: Bool = False,
+    GATHER: Bool = False,
+    EPI: Int = 0,
+](
+    dst: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    epi_p: MutPointer[Float32, MutAnyOrigin],
+    epi_i: Int32,
+):
+    """lane/fx-gemm-worklist (coordinator follow-up for lane fx-gemm-epi):
+    the all-leaves packed product whose store epilogue reads a SECOND
+    buffer. The single-product kernel's argument block without the two group
+    arguments, plus `epi_p` (the epilogue's operand: the bias row for
+    `GEMM_EPI_PLUS_BIAS` and `GEMM_EPI_BIAS_ACT`, the forward activations
+    for `GEMM_EPI_ACT_BWD`) and `epi_i` (the activation code of the two
+    activation kinds; unused by the bias alone). A kernel of its own so that
+    no existing launch gains an argument. Arm only
+    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); launched by
+    `gemm/neural_dispatch.mojo` `identical_gemm_leaf_ptr_epi_into`."""
+    comptime assert EPI >= GEMM_EPI_PTR_FIRST, (
+        "identical_gemm_kpack_epi_ptr_kernel: for the epilogue kinds that read a second buffer"
+    )
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, False, False, PAD, ALIGN, 0, HWFOLD, GATHER, EPI](
+        dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
+        Int32(0), Int32(0), Int32(Int(block_idx.x)), Int32(0), epi_p, epi_i,
+    )
+
+
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) the work list: GEMM_FAST_WORKLIST, the GEMM_WORKLIST_* constants, gemm_worklist_mode, identical_gemm_kpack_list_kernel, _kpack_list_launch, _kpack_list_fold_launch, _worklist_spans_overlap and GemmWorklist deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
 
 
 def _kpack_run[
@@ -10449,24 +10695,12 @@ def _fast_vendor_gemm(
             var vy = TileTensor(b, row_major(k, 1))
             gemv_gpu(vz, vx, vy, ctx)
             return True
-        if try_scoped_gemm[False, 1](
-            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            m, n, k, k, 1, 1, k, 1, k,
-        ):
-            return True
         var tc = TileTensor(c, row_major(m, n))
         var ta = TileTensor(a, row_major(m, k))
         var tb = TileTensor(b, row_major(n, k))
         matmul[transpose_b=True, target="gpu"](tc, ta, tb, ctx)
         return True
     if op == OP_NN:
-        if try_scoped_gemm[False, 1](
-            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            m, n, k, k, 1, n, 1, 1, k,
-        ):
-            return True
         var tc2 = TileTensor(c, row_major(m, n))
         var ta2 = TileTensor(a, row_major(m, k))
         var tb2 = TileTensor(b, row_major(k, n))

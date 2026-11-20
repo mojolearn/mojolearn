@@ -129,8 +129,16 @@ def test_binary_top_k_scorer_consumes_positive_class_probability(named_scorer_mo
     scorer = ms.get_scorer('top_k_accuracy')
     # Test setup chooses a nontrivial top-one result instead of the default
     # top-two score, which is always one for two classes.
-    vars(scorer)['_kwargs']['k'] = 1
-    got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    # get_scorer returns the process-wide table entry: restore its options so
+    # later tests on this worker see the default scorer.
+    options = vars(scorer)['_kwargs']
+    before = dict(options)
+    options['k'] = 1
+    try:
+        got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    finally:
+        options.clear()
+        options.update(before)
     probability = np.asarray(model.predict_proba(x))[:, 1].astype('f4')
     expected = metrics.top_k_accuracy_score(y, probability, k=1)
     assert np.float64(got).view('u8') == np.float64(expected).view('u8')

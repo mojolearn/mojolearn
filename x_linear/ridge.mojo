@@ -15,9 +15,6 @@ Reference: scikit-learn `sklearn/linear_model/_ridge.py`:
 Theirs takes an SVD/eigendecomposition of X; here each alpha is one
 Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
-from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, RIDGECV_FF_BLOCKED
-from x_linear.ridge_ff_blocks import rff_stats_host
-from x_linear.ops import chol_solve_group
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
     axpy_acc, add_acc, axpy_centered, seq_rows,
@@ -25,7 +22,6 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_f32, ff_ld, ff_st, ff_cholesky, ff_chol_solve, ff_col_mean, ff_cross
-from std.sys.compile import is_defined
 from x_linear.tops import upper_cell, t_centered_gram, t_sum, fold_fa, fold_sq, chain_fmad, chain_cfmad, t_cholesky, fold_fa_blocked, FOLD_BLOCK
 
 
@@ -71,18 +67,16 @@ def _loo_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, ym: Int, xm: Int, rhs: Int, 
 # host and every device. The float32 path stays the default; the fit falls
 # back when its Cholesky fails or a pivot keeps less than 2^-12 of its
 # diagonal (more than 12 bits cancelled). A matrix float-float cannot
-# factor either is refused (status 2). `-D MOJOLEARN_RIDGE_FF_ALWAYS=1`
-# takes float-float for every fit (the A/B arm for its cost).
+# factor either is refused (status 2).
+# TOMBSTONE: MOJOLEARN_RIDGE_FF_ALWAYS (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 67fe970eba.
+# Restore: git apply experiments/removed/MOJOLEARN_RIDGE_FF_ALWAYS.patch; record in docs/TOMBSTONES.md.
 comptime BIG_ERR = Float32(3.0e38)
 comptime RIDGE_FF_GATE = Float32(0.000244140625)  # 2^-12
-comptime RIDGE_FF_ALWAYS = is_defined["MOJOLEARN_RIDGE_FF_ALWAYS"]()
 
 
 def chol_trusted(ok: Bool, l: FP, g: FP, d: Int, alpha: Float32) -> Bool:
     """Whether a float32 factor l of G + alpha I (G at g) may be used: it
     factored and no pivot kept less than RIDGE_FF_GATE of its diagonal."""
-    comptime if RIDGE_FF_ALWAYS:
-        return False
     if not ok:
         return False
     for j in range(d):
@@ -193,16 +187,8 @@ def _ridge_solve_best(fp: FP, res: FP, fw: FP, d: Int, t_n: Int, fi: Bool, best:
         st(res, t_n * d + t_n + 2 + a_n, Float32(1))
         return False
     st(res, t_n * d + t_n + 2 + a_n, Float32(0))
-    comptime if C14_GROUP_RHS:
-        copy(res, 0, fw, xty, t_n * d)
-        for first in range(0, t_n, 4):
-            chol_solve_group(fw, mm, d, res, first, min(4, t_n - first))
-        for tt in range(t_n):
-            var acc = Float32(0)
-            for j in range(d):
-                acc = fmad(ld(fw, xm + j), ld(res, tt * d + j), acc)
-            st(res, t_n * d + tt, fs(ld(fw, ym + tt), acc) if fi else Float32(0))
-        return True
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C14_GROUP_RHS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 469f436a42.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     for tt in range(t_n):
         copy(fw, rhs, fw, xty + tt * d, d)
         chol_solve(fw, mm, d, fw, rhs)
@@ -292,20 +278,6 @@ def t_ridge_solve_best(t: Team, fp: FP, res: FP, fw: FP, d: Int, t_n: Int, fi: B
         st(res, t_n * d + t_n + 2 + a_n, Float32(0) if trusted == 1 else Float32(1))
     if t.bcast_int(trusted, 1) == 0:
         return False
-    comptime if C14_GROUP_RHS:
-        for tt in range(t.tid, t_n, t.nt):
-            copy(res, tt * d, fw, xty + tt * d, d)
-        t.sync()
-        for group in range(t.tid, (t_n + 3) // 4, t.nt):
-            var first = group * 4
-            chol_solve_group(fw, mm, d, res, first, min(4, t_n - first))
-            for tt in range(first, min(first + 4, t_n)):
-                var acc = Float32(0)
-                for j in range(d):
-                    acc = fmad(ld(fw, j), ld(res, tt * d + j), acc)
-                st(res, t_n * d + tt, fs(ld(fw, ym + tt), acc) if fi else Float32(0))
-        t.sync()
-        return True
     for tt in range(t.tid, t_n, t.nt):
         var z = scr + tt * d
         copy(z, 0, fw, xty + tt * d, d)
@@ -343,14 +315,10 @@ def _ridge_ff_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
         for u in range(lo, hi):
             ridge_ff_unit(nm + u, x, y, n, d, t_n, fi, sw, wo, sh, sl)
 
-    # RIDGECV_FF_BLOCKED (lane/classical-cv-folds): the statistics as the
-    # device's block partials folded blocks ascending
-    # (x_linear/ridge_ff_blocks.mojo); the solve's words are the team's
-    comptime if RIDGECV_FF_BLOCKED:
-        rff_stats_host(x, y, n, d, t_n, fi, sw, wo, 0, 0, sh, sl)
-    else:
-        seq_rows(means, nm, 1)
-        seq_rows(cells, units - nm, 1)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5ff76a71a1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    seq_rows(means, nm, 1)
+    seq_rows(cells, units - nm, 1)
     var ok = ridge_ff_solve(d, t_n, fi, alpha, sh, sl, bh, bl, res, fh, fl)
     st(res, t_n * d + t_n + 2 + a_n, Float32(0) if ok else Float32(2))
     _ = hb^

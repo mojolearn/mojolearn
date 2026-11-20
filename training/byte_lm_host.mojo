@@ -11,7 +11,11 @@ device kernels:
     each block  transformer_block_oracle       llama_decoder_layer_forward
                 (fresh cache, prefill at 0)    (prefill_cache.s = 0)
     head        gemm_oracle(OP_NT)             identical_gemm_into(..., OP_NT)
-    loss        ce_forward_oracle(causal_lm)   identical_ce_forward_into
+
+The training loss is not here (lane x7b-step-ops-host-arm, 2026-11-09): it is
+the trainer's captured program on a host session, the GPU columns'
+algorithm (training/byte_lm_host_execution.mojo `byte_host_loss_native`).
+This file is the logits and next-byte forward.
 
 There is no final norm between the last block and the head, because the
 device forward has none. The parameter registry is
@@ -37,11 +41,14 @@ leaf, so the reversal changes the fold and nothing else. It is the gate's
 negative control: a build with it defined must fail the loss comparison, or
 the comparison is not reaching the arithmetic. The threaded path reverses the
 fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
+The default training loss (`byte_host_loss`, restored 2026-11-13) runs the
+same head (gemm_oracle or gemm_nt_rows), so the reversal reaches it too.
+(The program-step arm, -D MOJOLEARN_BYTE_LM_PROGRAM_STEP, where the same define
+scaled every training logit, was deleted 2026-11-15.)
 """
 
 from std.math import max, min
-from std.os import getenv
-from std.sys.compile import is_defined, get_defined_int
+from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores, simd_width_of
 
 from std.memory import bitcast, unsafe_memcpy
@@ -56,7 +63,6 @@ from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
-from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 from training.byte_lm_host_kernels import (
@@ -247,8 +253,6 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
 #               also split a single row's head product across threads; on
 #               the M4 at [1, 32] that measured slower, 0.70 against 0.57
 #               ms, and it was removed.)
-#   loss        `ce_causal_mean_loss_fast` on the calling thread, the loss
-#               oracle's seams with its folds through `gemm_nt_rows`.
 #
 # No task starts another parallel region. Owners that tasks read through a
 # pointer are transferred only AFTER the join (the step-33 race class,
@@ -290,12 +294,21 @@ def byte_host_worker_count(threads: Int) raises -> Int:
 # (packing the head's keys and values itself) and the rest of the block for
 # those tokens (o_proj, residual, norm2, gate, up, SiLU, down, residual).
 # The head GEMM splits its token rows the same way. Taken when the batch
-# is smaller than the worker count, unless MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=0.
+# is smaller than the worker count, unless -D MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF.
 # ===========================================================================
 
 
+comptime BYTE_LM_HOST_TOKEN_SPLIT = not is_defined["MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF"]()
+"""The token split above, on by default (unchanged). A build constant since
+lane envgate-neural-lm (2026-11-15): it was a getenv per host forward call
+(`MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=0` turned it off). B arm `-D
+MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT_OFF` (RUN OWED, CPU host binding, no board
+row: bench/results/paper_compare/owed-pre0867.json
+"byte-lm-host-token-split-off"; docs/apple-fast/EXPERIMENTS.md)."""
+
+
 def byte_host_token_split_enabled() -> Bool:
-    return String(getenv("MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT")) != "0"
+    return BYTE_LM_HOST_TOKEN_SPLIT
 
 
 def _chunks(n: Int, workers: Int) -> Int:
@@ -824,14 +837,9 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
                               length: Int, config: ByteConfig, threads: Int = 0) raises -> List[Float32]:
     """`byte_host_logits` through the DEVIATION 2640 kernels on at most
     `threads` threads (0: one per physical core); same arguments, same bits."""
-    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
-        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
-        # The legacy packed host block materializes the v1 attention/norm
-        # graph. A v2 build uses the shared host block contract, including
-        # its profile-specific tapes, rather than reusing that v1 graph.
-        return byte_host_logits(params, inputs, batch, length, config)
+    # TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4: the legacy packed host block, opt-in, no A/B recorded) deleted
+    # 2026-11-15 by lane/expdel2-31-neural with the MOJOLEARN_IDN_ALL_OFF term beside it; code recoverable at dc698300f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.patch
     _validate_logits_inputs(params, inputs, batch, length, config)
     return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))
 
@@ -847,20 +855,9 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     Skipping those independent output cells changes no fold and no bit in the
     surviving row.
     """
-    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-        and (get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 1 or get_defined_int["MOJOLEARN_IDN_NORM", 0]() == 4)):
-        # (the MOJOLEARN_IDN_ATTN_SOFTMAX=1 summary-tree clause was deleted 2026-10-08, grid ge123e6f9 loser; main bc10b8b56)
-        var logits = byte_host_logits(params, inputs, batch, length, config)
-        var chosen = List[Int32](length=batch, fill=Int32(0))
-        for row in range(batch):
-            var base = ((row + 1) * length - 1) * config.vocab_size
-            var best = 0
-            for token in range(1, config.vocab_size):
-                if logits[base + token] > logits[base + best]:
-                    best = token
-            chosen[row] = Int32(best)
-        return chosen^
+    # TOMBSTONE: MOJOLEARN_IDN_NORM (arms 1 and 4: the legacy packed host block, opt-in, no A/B recorded) deleted
+    # 2026-11-15 by lane/expdel2-31-neural with the MOJOLEARN_IDN_ALL_OFF term beside it; code recoverable at dc698300f4.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM.patch
     _validate_logits_inputs(params, inputs, batch, length, config)
     var vocab = config.vocab_size
     var layers = config.n_layers
@@ -942,6 +939,13 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
         if failed[c] != 0:
             raise Error("byte LM host: threaded next-byte chunk " + String(c) + " raised")
     return out^
+
+
+# TOMBSTONE: byte_host_loss (the host column's training loss: the composed oracle forward, its chunked-head and threaded arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm; the loss is the trainer's program on a host session (training/byte_lm_host_execution.mojo byte_host_loss_native). Code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
+# Restored 2026-11-13 by lane restore-byte-lm-host-step: the CPU column's default training loss (the
+# composed forward, beside the GPU columns' hand step); the program-loss B arm
+# -D MOJOLEARN_BYTE_LM_PROGRAM_STEP was deleted 2026-11-15 (lane/expdel2-31-neural). Body unchanged from 5fff22515a.
 
 
 def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,

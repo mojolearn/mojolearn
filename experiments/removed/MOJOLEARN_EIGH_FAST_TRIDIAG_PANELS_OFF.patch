@@ -1,0 +1,29 @@
+diff --git a/x_decomp/eigh_tridiag.mojo b/x_decomp/eigh_tridiag.mojo
+index 6ebf288efe..e7dcff0a21 100644
+--- a/x_decomp/eigh_tridiag.mojo
++++ b/x_decomp/eigh_tridiag.mojo
+@@ -41,6 +41,7 @@ out-of-range T, or a nonfinite vector norm sets info[2]; the caller then runs
+ main's round-robin Jacobi on the untouched input. One readback decides.
+ """
+ from std.math import fma
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import stack_allocation
+@@ -104,10 +105,12 @@ from x_decomp.eigh_tridiag_cells import (
+ #: Gram fallback orthogonality FAIL unchanged. Opponent-quality HOLD remains.
+ #: The handoff explicitly permits main-relative acceptance, not a fake strict PASS.
+ #: M3 w2-eigh-panels-t-20261004: 43765.6 -> 700.3 ms (one run/arm).
+-#: Same synchronized output storage as the Jacobi.
+-# TOMBSTONE: MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF (unmeasured old path beside the FAST Apple default, EXP:931 M3 43765.6 -> 700.3 ms) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 15bbecfc2b.
+-# Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime EIGH_FAST_TRIDIAG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++#: Default/OFF builds required before merge; same synchronized output storage.
++#: OFF restores prior Jacobi, including all existing fallback behavior.
++comptime EIGH_FAST_TRIDIAG = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
++)
+ #: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):
+ #: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. Default on
+ #: since 2026-10-11 (see below); `_OFF` reverts. What makes it identical:

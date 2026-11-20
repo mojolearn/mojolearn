@@ -40,7 +40,7 @@ No dataset, real or otherwise, is used. Fixtures are analytic and hashed.
 No timing is taken; this lane does not measure time.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import ceildiv
 from std.sys.info import size_of
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -54,6 +54,7 @@ from core.scan_by_key import (
     launch_inclusive_scan_by_key,
     upload_device_functor,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ def run_block_reduce(ctx: DeviceContext) raises:
         # Hashed and SIGNED, so a dropped warp cannot cancel out.
         h_vals[i] = Int64(mix(i) % 2001 - 1000)
     var d_vals = ctx.enqueue_create_buffer[DType.int64](RED_N)
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+    upload_host_into[DType.int64](ctx, d_vals, h_vals)
 
     # Independent host tally, per block.
     var want = List[Int64]()
@@ -156,7 +157,7 @@ def run_block_reduce(ctx: DeviceContext) raises:
         grid_dim=RED_BLOCKS,
         block_dim=RED_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.int64](ctx, d_out, h_out)
     ctx.synchronize()
     # Freed-at-enqueue UAF guard (perf-lane find, 2026-08-22): `h_vals`'s
     # last use was the enqueue, and `d_vals` died at its `.unsafe_ptr()`
@@ -188,7 +189,7 @@ def run_block_reduce(ctx: DeviceContext) raises:
         grid_dim=RED_BLOCKS,
         block_dim=RED_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.int64](ctx, d_out, h_out)
     ctx.synchronize()
     var moved = 0
     for b in range(RED_BLOCKS):
@@ -215,8 +216,8 @@ def run_block_reduce(ctx: DeviceContext) raises:
 
     var d_node = ctx.enqueue_create_buffer[DType.int32](RED_BLOCKS)
     var d_left = ctx.enqueue_create_buffer[DType.uint8](RED_N)
-    ctx.enqueue_copy(dst_buf=d_node, src_ptr=h_node.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_node, h_node)
+    upload_host_into[DType.uint8](ctx, d_left, h_left)
 
     var want_n = List[Int32]()
     for _ in range(N_NODES):
@@ -242,7 +243,7 @@ def run_block_reduce(ctx: DeviceContext) raises:
         grid_dim=RED_BLOCKS,
         block_dim=RED_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=h_nleft.unsafe_ptr(), src_buf=d_nleft)
+    download_host_into[DType.int32](ctx, d_nleft, h_nleft)
     ctx.synchronize()
     # Freed-at-enqueue UAF guard: keep-alives AFTER the sync (`d_node`
     # is the device form -- dead at its `.unsafe_ptr()` in the kernel
@@ -320,7 +321,7 @@ def pdf_load_and_run[
     var hp = h_hist.unsafe_ptr().unsafe_bitcast[TestBin]()
     for i in range(PDF_BINS):
         hp[unsafe_offset=i] = bin_at(i)
-    ctx.enqueue_copy(dst_buf=d_hist, src_ptr=h_hist.unsafe_ptr())
+    upload_host_into[DType.uint8](ctx, d_hist, h_hist)
     comptime k = pdf_to_cdf_kernel[sab]
     ctx.enqueue_function[k](
         d_hist.unsafe_ptr().unsafe_bitcast[TestBin](),
@@ -329,8 +330,8 @@ def pdf_load_and_run[
         grid_dim=1,
         block_dim=PDF_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=h_hist.unsafe_ptr(), src_buf=d_hist)
-    ctx.enqueue_copy(dst_ptr=h_total.unsafe_ptr(), src_buf=d_total)
+    download_host_into[DType.uint8](ctx, d_hist, h_hist)
+    download_host_into[DType.uint8](ctx, d_total, h_total)
     ctx.synchronize()
     var bad = 0
     for i in range(PDF_BINS):
@@ -573,7 +574,7 @@ def scan_run[
         bufs.block_agg,
         bufs.block_head,
     )
-    ctx.enqueue_copy(dst_ptr=h_part.unsafe_ptr(), src_buf=bufs.partition)
+    download_host_into[DType.int32](ctx, bufs.partition, h_part)
     ctx.synchronize()
 
 
@@ -709,13 +710,13 @@ def run_scan_by_key(ctx: DeviceContext) raises:
     for i in range(SCAN_N):
         h_fill[i] = SENTINEL
 
-    ctx.enqueue_copy(dst_buf=d_keys, src_ptr=h_keys.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_start, src_ptr=h_start.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_pos, src_ptr=h_pos.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_cnt, src_ptr=h_cnt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_gl, src_ptr=h_gl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_rows, src_ptr=h_rows.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, d_keys, h_keys)
+    upload_host_into[DType.int32](ctx, d_start, h_start)
+    upload_host_into[DType.int32](ctx, d_pos, h_pos)
+    upload_host_into[DType.int32](ctx, d_cnt, h_cnt)
+    upload_host_into[DType.int32](ctx, d_left, h_left)
+    upload_host_into[DType.uint8](ctx, d_gl, h_gl)
+    upload_host_into[DType.int32](ctx, d_rows, h_rows)
 
     var n_blocks = ceildiv(SCAN_N, SCAN_TPB)
     var d_states = ctx.enqueue_create_buffer[DType.uint8](

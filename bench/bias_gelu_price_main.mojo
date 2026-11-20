@@ -29,6 +29,7 @@ def fill(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32]) raises:
         h.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](word))
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     ctx.synchronize()
+    _ = h^  # past the drain: a queued copy reads it after its last named use
 
 
 def baseline(
@@ -112,6 +113,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=s0, src_buf=pristine)
     ctx.enqueue_copy(dst_buf=s1, src_buf=pristine)
     ctx.synchronize()
+    _ = bh^  # past the drain: a queued copy reads it after its last named use
     baseline(ctx, o0, s0, bias)
     fused(ctx, o1, s1, bias)
     ctx.synchronize()

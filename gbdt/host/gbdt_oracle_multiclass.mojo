@@ -75,6 +75,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
 )
+from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
@@ -1052,18 +1053,14 @@ def gbdt_multi_host_fit(
             row_index, offsets, sizes, n_rows, params.l2_leaf_reg,
         )
         # `add_model_value_kernel`: `[leaf * dim + d]` into `[d * n + row]`
-        for leaf in range(n_live):
-            for d in range(dim):
-                var raw = estimated[leaf * dim + d]
-                for k in range(sizes[leaf]):
-                    var at = d * n_rows + row_index[offsets[leaf] + k]
-                    cursor[at] = identical_mul_add(raw, lr, cursor[at])
+        var scaled = rescaled_leaves(estimated, lr)
+        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live, dim, n_rows)
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
         for i in range(len(estimated)):
-            model_leaves.append(estimated[i] * lr)
+            model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
         if len(losses) < params.n_estimators:

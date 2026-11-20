@@ -59,7 +59,7 @@ EVERYTHING HERE IS RUN OWED; no kernel has compiled or run. Commands live
 in `mamba/checks/mamba2_check.mojo`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -112,6 +112,10 @@ from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
 #: the residual folded into out_proj; other arm = main's spelling unchanged.
+# TOMBSTONE: MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE (with _SPLITK and AFN_EPI_ALL: neural MERGED-UNMEASURED FAST+Apple matrix-unit
+# in_proj/out_proj route; AFN_MAMBA_PROJ_ROUTE folded False) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 21b1e860c2.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from mamba.impl.modules.afn_proj_gemm import (
     AFN_MAMBA_PROJ_ROUTE,
     afn_proj_gemm_into,
@@ -472,6 +476,49 @@ struct Mamba2DeviceStages(Movable):
         self.out_proj = mamba_zeros(ctx, m * dm)
         self.residual_out = mamba_zeros(ctx, m * dm)
 
+    def rezero(mut self) raises:
+        """Lane fix-mamba12-forward-exec (IDN_MAMBA12_FORWARD_COPIES_OLD off):
+        the held stages made ready for the next forward on the buffers
+        already held (no allocation, no wait). Not for a guarded (poison)
+        build, whose fills cover a body view.
+
+        Lane fix-wave2-leftovers (audit NOTE block_step_ops.mojo:1028): a
+        stage is refilled only where some route of `mamba2_block_forward`
+        (held sets are L > 1 only, so the l == 1 step arm never runs on
+        them) leaves it partly or wholly unwritten. Written whole by every
+        route, so the zeros were overwritten before any read (same bits):
+          norm_sumsq [M], norm_out [M,dm]: mamba_rms_norm (rows / tree);
+          in_proj [M,dip]: afn_proj_gemm_into or mamba_proj_gemm;
+          a_out [H]: a_from_a_log over nh;
+          conv_out, silu_out [M,CD]: every conv arm (plain, cell, nn35 pair)
+            stores both per (b, token, c); conv_win [B,CD,4]: the window
+            kernel over b*cd*4;
+          xbc_work [B,T,CD], dtraw_work, dt_work [B,T,H]: the assemble and
+            dt kernels over b*t_work*(cd | nh), prefix q0 rows included;
+          skip_out [M,H,P]: m2_skip_kernel over m*nh*p;
+          gnorm_gate, gnorm_out [M,di], gnorm_sumsq [M]: both gate-norm
+            orders (mamba_rms_norm + m2_gate_kernel over m*di);
+          residual_out [M,dm]: residual_add_kernel, or the fused out_proj
+            seeded by a whole copy of x.
+        KEPT: the twelve SSD working and chunk buffers (ssd_forward takes
+        trace.enabled and skips trace-only intermediates when it is off, and
+        chunk-shaped buffers are padded to nc * Q >= T), and out_proj under
+        AFN_MAMBA_PROJ_ROUTE (the fused launch never writes it)."""
+        self.xd_work.enqueue_fill(Float32(0.0))
+        self.da_work.enqueue_fill(Float32(0.0))
+        self.dacs.enqueue_fill(Float32(0.0))
+        self.seg_l.enqueue_fill(Float32(0.0))
+        self.cb_g.enqueue_fill(Float32(0.0))
+        self.ydiag_work.enqueue_fill(Float32(0.0))
+        self.decay.enqueue_fill(Float32(0.0))
+        self.cstate.enqueue_fill(Float32(0.0))
+        self.pass_states.enqueue_fill(Float32(0.0))
+        self.yoff_work.enqueue_fill(Float32(0.0))
+        self.y_work.enqueue_fill(Float32(0.0))
+        self.h_last.enqueue_fill(Float32(0.0))
+        comptime if AFN_MAMBA_PROJ_ROUTE:
+            self.out_proj.enqueue_fill(Float32(0.0))
+
     def __init__(
         out self,
         ctx: DeviceContext,
@@ -583,70 +630,8 @@ def m2_conv_kernel(
         )
 
 
-# NN35: two adjacent tokens share their convolution input window and
-# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
-# it saves D_CONV-1 loads per pair without changing either tap chain.
-# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
-comptime NN35_CONV_PAIR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-
-
-def nn35_m2_pair_kernel(
-    conv_out: MutPointer[Float32, MutAnyOrigin],
-    silu_out: MutPointer[Float32, MutAnyOrigin],
-    in_proj: MutPointer[Float32, MutAnyOrigin],
-    conv_w: MutPointer[Float32, MutAnyOrigin],
-    conv_b: MutPointer[Float32, MutAnyOrigin],
-    win: MutPointer[Float32, MutAnyOrigin],
-    b_in: Int32, l_in: Int32, di_in: Int32,
-    cd_in: Int32,
-    dip_in: Int32,
-):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var di = Int(di_in)
-    var cd = Int(cd_in)
-    var dip = Int(dip_in)
-    var nt = (l + 1) // 2
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * nt * cd:
-        return
-    var d = cell % cd
-    var ti = cell // cd
-    var bb = ti // nt
-    var li = (ti % nt) * 2
-    var inputs = stack_allocation[M2_D_CONV + 1, Float32]()
-    var weights = stack_allocation[M2_D_CONV, Float32]()
-    var valid = min(2, l - li)
-    # Only valid outputs' taps are loaded; no read past the odd tail.
-    for k in range(M2_D_CONV + valid - 1):
-        var pos = li - (M2_D_CONV - 1) + k
-        var v: Float32
-        if pos >= 0:
-            v = in_proj.unsafe_load((bb * l + pos) * (dip) + di + d)
-        else:
-            v = win.unsafe_load((bb * cd + d) * M2_D_CONV + M2_D_CONV + pos)
-        inputs[k] = ftz(v)
-    for k in range(M2_D_CONV):
-        weights[k] = ftz(conv_w.unsafe_load(d * M2_D_CONV + k))
-    var bias = ftz(conv_b.unsafe_load(d))
-    for j in range(valid):
-        var acc = bias
-        comptime if SAB_S6_BIAS_LAST:
-            acc = Float32(0.0)
-        for kk in range(M2_D_CONV):
-            var k = kk
-            comptime if SAB_S6_TAPS_REVERSED:
-                k = M2_D_CONV - 1 - kk
-            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
-        comptime if SAB_S6_BIAS_LAST:
-            acc = ftz(acc + bias)
-        var out_i = (bb * l + li + j) * cd + d
-        conv_out.unsafe_store(out_i, acc)
-        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+# TOMBSTONE: MOJOLEARN_NN35_CONV_PAIR (unmeasured opt-in arm: two tokens per conv thread) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at d54d3d8b00.
+# Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.expdel2-27-neural.patch
 
 
 def m2_conv_cell_kernel(
@@ -1266,23 +1251,7 @@ def mamba2_block_forward(
     )
 
     # ---- S6/S7: conv + SiLU over xBC; window updated out of place.
-    comptime if NN35_CONV_PAIR:
-        ctx.enqueue_function[nn35_m2_pair_kernel](
-            stages.conv_out.unsafe_ptr(),
-            stages.silu_out.unsafe_ptr(),
-            stages.in_proj.unsafe_ptr(),
-            w.conv_w.unsafe_ptr(),
-            w.conv_b.unsafe_ptr(),
-            state.conv_win.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(di),
-            Int32(cd),
-            Int32(dip),
-            grid_dim=(_grid(b * ((l + 1) // 2) * cd), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
-    elif IDN_MAMBA_CONV_CELL:
+    comptime if IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[m2_conv_cell_kernel](
             stages.conv_out.unsafe_ptr(),
             stages.silu_out.unsafe_ptr(),

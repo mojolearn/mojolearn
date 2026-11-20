@@ -1,0 +1,27 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+index 98bffc7ff3..a5d05030c9 100644
+--- a/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo
+@@ -1229,7 +1229,9 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
+ #: THE IDENTICAL DEFAULT since lane ml-gbdt (2026-10-04, roadmap T1): on for
+ #: every vendor and the host column together, so the four columns still
+ #: agree. Bits: none move against one leaf per iteration (the argument
+-#: above). The old opt-in `-D MOJOLEARN_GBDT_LG_EXACT_ID` stays harmless.
++#: above). `-D MOJOLEARN_GBDT_LG_EXACT_ID_OFF` (or the master `-D
++#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm and restores one leaf per
++#: iteration; the old opt-in `-D MOJOLEARN_GBDT_LG_EXACT_ID` stays harmless.
+ #: Memory gate (`LG_EXACT_ID_MAX_CELLS`, in the fit): the capacity doubles
+ #: to min(2 * max_leaves, 1 << max_depth) leaf slots; a fit whose doubled
+ #: slots would not fit the pool's leaf histograms, or whose histogram cells
+@@ -1248,10 +1250,9 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
+ # warmup/score, synthetic public caller component, accepted identity reused.
+ # Existing defaults retained; no full-board or new cross-vendor qualification.
+ # Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I17.
+-# TOMBSTONE: MOJOLEARN_GBDT_LG_EXACT_ID_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at ad8530ee49.
+-# Restore: git apply experiments/removed/MOJOLEARN_GBDT_LG_EXACT_ID_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime LG_EXACT_ID = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_GBDT_LG_EXACT_ID_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ #: LG_EXACT_ID memory gate: the most histogram cells (leaf slots x stat

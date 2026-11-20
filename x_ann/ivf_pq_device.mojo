@@ -4,8 +4,8 @@
 
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
-from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import stack_allocation, memcpy
+from max.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation, unsafe_memcpy
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -20,7 +20,7 @@ from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
 from x_ann.pq_kmeans_device import pq_codebooks_device
 from x_ann.ivf_pq_core import PQK_CODES_MAX, PQK_LEN_MAX
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit_rows
@@ -29,8 +29,8 @@ from ivf.estimator import ivf_flat_build_host, ivf_flat_build_resident_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_trainset_rows
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
-from std.sys.compile import is_defined
-from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
+from x_ann.io import upload_f32_ptr, upload_i32_ptr, download_f32_into, download_i32_into
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
@@ -42,7 +42,13 @@ from x_ann.ivf_pq_core import (
 
 comptime TPB = 128
 
-comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PQ_FAST_TRAINSET_OFF"]()
+#: A caller's host array (kept alive by the caller for the whole call).
+comptime HF32 = MutPointer[Float32, MutUntrackedOrigin]
+comptime HI32 = MutPointer[Int32, MutUntrackedOrigin]
+
+# TOMBSTONE: MOJOLEARN_PQ_FAST_TRAINSET_OFF (old path, no A/B recorded beside the fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 1657e37f94.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_FAST_TRAINSET_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST (lane ann-apple, 2026-09-28): each subspace codebook trains on at
 most `PQ_FAST_ROWS_PER_CODE` rows per code, a seeded uniform sample of the
 residuals (FAISS's `max_points_per_centroid` rule; the coarse quantizer
@@ -51,12 +57,13 @@ row is still encoded against the trained codebooks. IDENTICAL trains on every
 row. Quality: bench/speed/ann_fast_quality.py."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
-comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 """FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
 subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
 stride sample of its training rows, its own stream per subspace) and
 cluster/'s k-means starts from those seeds (`INIT_ARRAY`), so it runs its
 Lloyd iterations without its own seeding rounds."""
+# (Sweep 2026-11-15: comptime PQ_FAST_SEED (always False: ANN3_PQ_SEED) and its kpp_seed branch removed.)
 
 
 def _tid() -> Int:
@@ -128,7 +135,7 @@ def assign_staged_kernel(
     barrier()
     if i >= Int(n):
         return
-    var rv = InlineArray[Float32, ASSIGN_LEN_MAX](fill=Float32(0.0))
+    var rv = Array[Float32, ASSIGN_LEN_MAX](fill=Float32(0.0))
     var off = i * Int(rot_dim) + j * pl
     for u in range(pl):
         rv[u] = ftz(r.unsafe_load(off + u))
@@ -151,15 +158,16 @@ def _enqueue_assign(
     ctx: DeviceContext, n: Int, r: F32P, cb: F32P, pq_dim: Int, rot_dim: Int, pq_len: Int, n_codes: Int,
     codes: I32P,
 ) raises:
-    """The encode launch: the staged kernel when the subspace codebook fits
-    (`-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` keeps the one-thread-per-cell kernel)."""
-    comptime if not is_defined["MOJOLEARN_PQ_ASSIGN_UNSTAGED"]():
-        if n_codes * pq_len <= ASSIGN_CB_MAX and pq_len <= ASSIGN_LEN_MAX:
-            ctx.enqueue_function[assign_staged_kernel](
-                Int32(n), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
-                grid_dim=((n + TPB - 1) // TPB, pq_dim), block_dim=TPB,
-            )
-            return
+    """The encode launch: the staged kernel when the subspace codebook fits,
+    the one-thread-per-cell kernel otherwise."""
+    # TOMBSTONE: MOJOLEARN_PQ_ASSIGN_UNSTAGED (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 5243764241.
+    # Restore: git apply experiments/removed/MOJOLEARN_PQ_ASSIGN_UNSTAGED.patch; record in docs/TOMBSTONES.md.
+    if n_codes * pq_len <= ASSIGN_CB_MAX and pq_len <= ASSIGN_LEN_MAX:
+        ctx.enqueue_function[assign_staged_kernel](
+            Int32(n), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
+            grid_dim=((n + TPB - 1) // TPB, pq_dim), block_dim=TPB,
+        )
+        return
     ctx.enqueue_function[assign_kernel](
         Int32(n * pq_dim), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
         grid_dim=_grid(n * pq_dim), block_dim=TPB,
@@ -205,8 +213,8 @@ def _coarse(
     list_indices = List[Int32](length=n, fill=Int32(0))
     labels = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
-        memcpy(dest=labels.unsafe_ptr(), src=flat.labels.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=labels.unsafe_ptr(), src=flat.labels.unsafe_ptr().bitcast[Int32](), count=n)
     _ = flat^
     _ = ctx^
     cst.host("convert")
@@ -287,7 +295,7 @@ def _codebooks(
                     sub, n_train, pq_len, n_codes,
                     UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
                 )
-                memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
+                unsafe_memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
                 init_kind = INIT_ARRAY
                 cbs.host("seed")
         _ = kmeans_fit_rows(
@@ -309,7 +317,7 @@ def _codebooks(
 def _coarse_resident(
     ctx: DeviceContext, x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int,
     seed: Int, mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut coarse_dev: IvfFlatBuildDevice,
+    mut coarse_dev: IvfFlatBuildDevice, train_rows_per_list: Int = 0,
 ) raises:
     """lane fg-ivf A3 (`IVF_PQ_ONE_UPLOAD`): `_coarse` through IVF-Flat's
     RESIDENT build with `keep_rows`: the same parameters and statements
@@ -318,11 +326,12 @@ def _coarse_resident(
     rows (`coarse_dev.dx`), the centres (`coarse_dev.dcenters`) and the final
     assignment (`coarse_dev.dlabels`) LEFT ON THE DEVICE for the residuals.
     `x` may be empty when the build reads the rows from `x_addr`
-    (`IVF_BUILD_FROM_POINTER`)."""
+    (`IVF_BUILD_FROM_POINTER`). `train_rows_per_list`: `_coarse`'s."""
     var cst = AnnStages("ivf_coarse")
     coarse_dev.keep_rows = True
     var flat = ivf_flat_build_resident_host(
-        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), coarse_dev
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), coarse_dev,
+        train_rows_per_list,
     )
     ctx.synchronize()
     cst.host("flat_build_resident")
@@ -330,9 +339,64 @@ def _coarse_resident(
     swap(offsets, flat.list_offsets)
     list_indices = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+        unsafe_memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
     _ = flat^
     cst.host("convert")
+
+
+def _coarse_rows(
+    ctx: DeviceContext, x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int,
+    seed: Int, train_rows_per_list: Int, mut centers: List[Float32], mut offsets: List[Int32],
+    mut list_indices: List[Int32], mut coarse_dev: IvfFlatBuildDevice,
+    mut dx: DeviceBuffer[DType.float32], mut dc: DeviceBuffer[DType.float32], mut dl: DeviceBuffer[DType.int32],
+) raises -> Bool:
+    """The coarse step of the IVF-SQ and IVF-RaBitQ builds with what the
+    encode reads LEFT ON THE DEVICE (lane fx-ann-fit-nocopy, 2026-11-20):
+    the rows in `dx`, the centres in `dc`, and the final assignment in
+    `coarse_dev.dlabels` (returns True; uint32 words below n_lists < 2^31,
+    the same words as int32) or in `dl` (returns False).
+
+    Under `IVF_PQ_ONE_UPLOAD` this is IVF-PQ's coarse step
+    (`_coarse_resident`): the rows go up once, read from `x_addr` when `x`
+    is empty (`IVF_BUILD_FROM_POINTER`). Before, both builds ran `_coarse`
+    over a list copy of the rows, then uploaded the rows a second time and
+    sent the centres and the n labels back up from host lists. The same
+    build statements on the same rows: no bit moves. Without the switch
+    (FAST): `_coarse` over the list and the three uploads, as before."""
+    var one_upload = False
+    comptime if IVF_PQ_ONE_UPLOAD:
+        one_upload = True
+    if one_upload:
+        _coarse_resident(
+            ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, coarse_dev,
+            train_rows_per_list,
+        )
+        swap(dx, coarse_dev.dx)
+        swap(dc, coarse_dev.dcenters)
+    else:
+        if len(x) != n * dim:
+            # the bindings copy the rows in whenever this arm is compiled
+            raise Error("x_ann build: the rows must be passed as a list with IVF_PQ_ONE_UPLOAD off")
+        var labels = List[Int32]()
+        _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels, train_rows_per_list)
+        dx = upload_f32(ctx, x)
+        dc = upload_f32(ctx, centers)
+        dl = upload_i32(ctx, labels)
+        _ = labels^
+    return one_upload
+
+
+def _coarse_out(
+    centers: List[Float32], offsets: List[Int32], list_indices: List[Int32], n: Int, dim: Int, n_lists: Int,
+    centers_p: HF32, offsets_p: HI32, indices_p: HI32,
+) raises:
+    """The coarse step's three host lists into the caller's arrays: one
+    memcpy each (n_lists x dim, n_lists + 1 and n words)."""
+    if len(centers) != n_lists * dim or len(offsets) != n_lists + 1 or len(list_indices) != n:
+        raise Error("x_ann build: the coarse lists disagree with n, dim and n_lists")
+    unsafe_memcpy(dest=centers_p, src=centers.unsafe_ptr(), count=n_lists * dim)
+    unsafe_memcpy(dest=offsets_p, src=offsets.unsafe_ptr(), count=n_lists + 1)
+    unsafe_memcpy(dest=indices_p, src=list_indices.unsafe_ptr(), count=n)
 
 
 struct IvfPqDevice(Movable):
@@ -356,10 +420,12 @@ def ivf_pq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int = 0, x_addr: Int = 0,
 ) raises -> IvfPqIndex:
-    """`codes_addr` (lane ann-apple3, read under `ANN3_DIRECT_OUT` only): the
-    address of the caller's n x pq_dim int32 array; the codes are downloaded
-    straight into it and the returned index's `codes` is EMPTY. 0: the codes
-    come back in the index, as before. `x_addr` (lane fg-ivf A3): the
+    """`codes_addr`: the address of the caller's n x pq_dim int32 array; the
+    codes are downloaded straight into it and the returned index's `codes`
+    is EMPTY (lane fx-ann-fit-nocopy, 2026-11-20: through the pooled pinned
+    stages, `download_i32_into`; under the opt-in `ANN3_DIRECT_OUT`, lane
+    ann-apple3, one raw copy into the pageable array). 0: the codes come
+    back in the index (the checks). `x_addr` (lane fg-ivf A3): the
     caller's n x dim float32 rows, read in place by the coarse build when `x`
     is empty (`IVF_PQ_ONE_UPLOAD` with `IVF_BUILD_FROM_POINTER`)."""
     var ctx = x_ann_ctx()
@@ -441,8 +507,7 @@ def _ivf_pq_build_impl[resident: Bool](
         _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
     st.host("residual")
-    # FAST on Apple, default (off: `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF`; lane/apple-
-    # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
+    # FAST on Apple, default (lane/apple-fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
     # every subspace from one batched device Lloyd loop over the residuals
     # already in `dr`, on the same sample size as `_codebooks` (a stride
     # sample). Cause: `_codebooks` downloads the n x rot_dim residuals,
@@ -491,12 +556,14 @@ def _ivf_pq_build_impl[resident: Bool](
         swap(out_dev.dcenters, dc)
         st.host("encode_resident")
     else:
-        var direct = False
-        comptime if ANN3_DIRECT_OUT:
-            direct = codes_addr != 0
-        if direct:
-            ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
-            ctx.synchronize()
+        if codes_addr != 0:
+            # lane fx-ann-fit-nocopy (2026-11-20): into the caller's array.
+            # Gone: a result list the size of the codes and the copy out of it.
+            comptime if ANN3_DIRECT_OUT:
+                ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+                ctx.synchronize()
+            else:
+                download_i32_into(ctx, dcodes, n * pq_dim, HI32(unsafe_from_address=codes_addr))
         else:
             codes = download_i32(ctx, dcodes, n * pq_dim)
         st.host("encode")
@@ -515,6 +582,7 @@ def ivf_pq_search_device(
     codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -525,11 +593,17 @@ def ivf_pq_search_device(
     var dcb = upload_f32(ctx, codebooks)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_pq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
-        pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dc), _dp(dc), False,
+        pq_dim, pq_bits,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = dcb^
     _ = dcodes^
@@ -542,9 +616,10 @@ def ivf_pq_search_device(
 def ivf_pq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcb: F32P, dcodes: I32P, dmask: I32P,
     offsets: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """The search over an index already on the device (`ivf_pq_search_device`
     uploads it first; `x_ann/resident.mojo` holds it): the queries up, the
@@ -553,7 +628,13 @@ def ivf_pq_search_on(
     the all-ones filter, which is its own list-order copy."""
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -571,6 +652,7 @@ def ivf_pq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 #: rows per partial of the SQ range (lane ann-apple)
@@ -690,11 +772,53 @@ def sq_encode_rows_kernel(n: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32], codes_addr: Int = 0,
+    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
     train_rows_per_list: Int = 0,
 ) raises:
-    """`codes_addr`: `ivf_pq_build_device`'s, for the n x dim int32 codes
-    (`codes` is then left EMPTY).
+    """The list form (the checks'): `ivf_sq_build_device_ptr` over the rows
+    in `x`, the results in six new lists."""
+    pq_validate(n, dim, n_lists, 1, 1, 1)
+    if len(x) != n * dim:
+        raise Error("ivf_sq_build_device: the row list is not n x dim")
+    var c = List[Float32](unsafe_uninit_length=n_lists * dim)
+    var off = List[Int32](unsafe_uninit_length=n_lists + 1)
+    var li = List[Int32](unsafe_uninit_length=n)
+    var vm = List[Float32](unsafe_uninit_length=dim)
+    var de = List[Float32](unsafe_uninit_length=dim)
+    var co = List[Int32](unsafe_uninit_length=n * dim)
+    ivf_sq_build_device_ptr(
+        x, 0, n, dim, n_lists, kmeans_n_iters, seed,
+        HF32(unsafe_from_address=Int(c.unsafe_ptr())), HI32(unsafe_from_address=Int(off.unsafe_ptr())),
+        HI32(unsafe_from_address=Int(li.unsafe_ptr())), HF32(unsafe_from_address=Int(vm.unsafe_ptr())),
+        HF32(unsafe_from_address=Int(de.unsafe_ptr())), HI32(unsafe_from_address=Int(co.unsafe_ptr())),
+        train_rows_per_list,
+    )
+    # the rows are named here, after the drains inside the call above
+    _ = len(x)
+    centers = c^
+    offsets = off^
+    list_indices = li^
+    vmin = vm^
+    delta = de^
+    codes = co^
+
+
+def ivf_sq_build_device_ptr(
+    x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    centers_p: HF32, offsets_p: HI32, indices_p: HI32, vmin_p: HF32, delta_p: HF32, codes_p: HI32,
+    train_rows_per_list: Int,
+) raises:
+    """The IVF-SQ build on the CALLER's arrays (lane fx-ann-fit-nocopy,
+    2026-11-20). The rows are read from `x_addr` when `x` is empty
+    (`_coarse_rows`) and uploaded once; the centres (n_lists x dim), the
+    offsets (n_lists + 1), the carried ids (n), the range (dim and dim) and
+    the n x dim int32 codes are written where the caller wants them. Before,
+    the binding copied the rows into a list, the build uploaded them twice,
+    and the codes came down into a list and were copied out of it: for
+    400,000 x 220 rows three 352 MB host arrays touched for the first time
+    inside the call (half its wall as system time). The same words from the
+    same kernels; the caller keeps every array alive for the whole call
+    (each copy is drained before the return).
 
     `train_rows_per_list` (release-0845; IVFSQIndex max_train_points_per_cluster,
     cuVS ivf_sq's): 0 trains the coarse k-means on the IVF rule's rows and the
@@ -703,19 +827,31 @@ def ivf_sq_build_device(
     trains both on its training subset (ivf_sq_build.cuh:457-525). Every row
     is still assigned and encoded."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
-    var labels = List[Int32]()
     var st = AnnStages("ivf_sq_build")
-    _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels, train_rows_per_list)
-    st.host("coarse")
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dc = upload_f32(ctx, centers)
-    var dl = upload_i32(ctx, labels)
+    var centers = List[Float32]()
+    var offsets = List[Int32]()
+    var list_indices = List[Int32]()
+    var coarse_dev = IvfFlatBuildDevice(ctx)
+    var dx = ctx.enqueue_create_buffer[DType.float32](1)
+    var dc = ctx.enqueue_create_buffer[DType.float32](1)
+    var dl = ctx.enqueue_create_buffer[DType.int32](1)
+    var device_labels = _coarse_rows(
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, train_rows_per_list, centers, offsets,
+        list_indices, coarse_dev, dx, dc, dl,
+    )
+    st.host("coarse")
+    _coarse_out(centers, offsets, list_indices, n, dim, n_lists, centers_p, offsets_p, indices_p)
     var dr = ctx.enqueue_create_buffer[DType.float32](n * dim)
     var dvmin = ctx.enqueue_create_buffer[DType.float32](dim)
     var ddelta = ctx.enqueue_create_buffer[DType.float32](dim)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * dim)
-    _enqueue_residual(ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
+    if device_labels:
+        _enqueue_residual(
+            ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(coarse_dev.dlabels).bitcast[Int32](), _dp(dr)
+        )
+    else:
+        _enqueue_residual(ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     st.mark(ctx, "upload_residuals")
     if train_rows_per_list > 0:
         _sq_range_enqueue(
@@ -734,18 +870,20 @@ def ivf_sq_build_device(
                                                ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
                                                block_dim=TPB)
     ctx.synchronize()
-    vmin = download_f32(ctx, dvmin, dim)
-    delta = download_f32(ctx, ddelta, dim)
-    var direct = False
+    download_f32_into(ctx, dvmin, dim, vmin_p)
+    download_f32_into(ctx, ddelta, dim, delta_p)
+    # The codes go into the caller's array through the pooled pinned stages
+    # (`download_i32_into`). The opt-in `ANN3_DIRECT_OUT` (lane ann-apple3,
+    # Apple FAST, paused and unmeasured) keeps its one raw copy into the
+    # pageable array as the arm.
     comptime if ANN3_DIRECT_OUT:
-        direct = codes_addr != 0
-    if direct:
-        codes = List[Int32]()
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=Int(codes_p)), src_buf=dcodes)
         ctx.synchronize()
     else:
-        codes = download_i32(ctx, dcodes, n * dim)
+        download_i32_into(ctx, dcodes, n * dim, codes_p)
     st.host("encode")
+    # the rows are named here, after the drains above
+    _ = len(x)
     _ = dcodes^
     _ = ddelta^
     _ = dvmin^
@@ -753,6 +891,7 @@ def ivf_sq_build_device(
     _ = dl^
     _ = dc^
     _ = dx^
+    _ = coarse_dev^
     _ = ctx^
 
 
@@ -761,6 +900,7 @@ def ivf_sq_search_device(
     delta: List[Float32], codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -772,11 +912,17 @@ def ivf_sq_search_device(
     var ddelta = upload_f32(ctx, delta)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_sq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
-        n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dc), _dp(dc), False,
+        n_lists, dim,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = ddelta^
     _ = dvmin^
@@ -790,12 +936,19 @@ def ivf_sq_search_device(
 def ivf_sq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dvmin: F32P, ddelta: F32P, dcodes: I32P,
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -811,6 +964,7 @@ def ivf_sq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32,
@@ -827,25 +981,67 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
 
 def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False, status_addr: Int = 0,
 ) raises:
+    """The list form (the checks'): `refine_device_ptr` on the lists' own
+    words, the results in two new lists."""
+    if len(x) < n * d or len(queries) < m * d or len(cand) < m * k0:
+        raise Error("refine: an input list is shorter than its shape")
+    var rd = List[Float32](unsafe_uninit_length=m * k)
+    var ri = List[Int32](unsafe_uninit_length=m * k)
+    refine_device_ptr(
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n, d,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())), m,
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(cand.unsafe_ptr())), k0, k,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(rd.unsafe_ptr())),
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ri.unsafe_ptr())),
+        root, status_addr,
+    )
+    # the inputs are named here, after the drains inside the call above
+    _ = len(x)
+    _ = len(queries)
+    _ = len(cand)
+    out_d = rd^
+    out_i = ri^
+
+
+def refine_device_ptr(
+    xp: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int,
+    candp: MutPointer[Int32, MutUntrackedOrigin], k0: Int, k: Int,
+    out_dp: MutPointer[Float32, MutUntrackedOrigin], out_ip: MutPointer[Int32, MutUntrackedOrigin],
+    root: Bool, status_addr: Int,
+) raises:
+    """`refine` on the CALLER's arrays (lane fx-board-modelsel-metrics,
+    2026-11-19): the dataset (n x d), the queries (m x d) and the candidate
+    ids (m x k0) are uploaded from where they are, and the m x k distances
+    and ids are written where the caller wants them. Before, the binding
+    copied all three inputs into new lists first (the whole dataset: 880 MB
+    of first-touch pages for 1,000,000 x 220, two thirds of the call's wall
+    as system time) and the results into lists and out again. The same
+    words go to the same kernel; the caller keeps every array alive for the
+    whole call (each copy is drained before the return)."""
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dq = upload_f32(ctx, queries)
-    var dcand = upload_i32(ctx, cand)
+    var dx = upload_f32_ptr(ctx, xp, n * d)
+    var dq = upload_f32_ptr(ctx, qp, m * d)
+    # Lane a8b-device-x-neighbors-rest: the dataset's and the queries'
+    # finite status behind their uploads, read back by the downloads below.
+    var dst = enqueue_query_status(ctx, dx, n * d, dq, m * d, status_addr)
+    var dcand = upload_i32_ptr(ctx, candp, m * k0)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
                                         dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
                                         Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
-    out_d = download_f32(ctx, dd, m * k)
-    out_i = download_i32(ctx, di, m * k)
+    download_f32_into(ctx, dd, m * k, out_dp)
+    download_i32_into(ctx, di, m * k, out_ip)
     _ = di^
     _ = dd^
     _ = dcand^
     _ = dq^
     _ = dx^
+    _ = dst^
     _ = ctx^
 
 
@@ -863,32 +1059,87 @@ def ivf_rabitq_build_device(
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
     mut codes: List[Int32], mut norms: List[Float32], mut ips: List[Float32],
 ) raises:
+    """The list form (the checks'): `ivf_rabitq_build_device_ptr` over the
+    rows in `x`, the results in six new lists."""
+    pq_validate(n, dim, n_lists, 1, 1, 1)
+    if len(x) != n * dim:
+        raise Error("ivf_rabitq_build_device: the row list is not n x dim")
+    var words = (rq_pow2(dim) + 31) // 32
+    var c = List[Float32](unsafe_uninit_length=n_lists * dim)
+    var off = List[Int32](unsafe_uninit_length=n_lists + 1)
+    var li = List[Int32](unsafe_uninit_length=n)
+    var co = List[Int32](unsafe_uninit_length=n * words)
+    var no = List[Float32](unsafe_uninit_length=n)
+    var ip = List[Float32](unsafe_uninit_length=n)
+    ivf_rabitq_build_device_ptr(
+        x, 0, n, dim, n_lists, kmeans_n_iters, seed,
+        HF32(unsafe_from_address=Int(c.unsafe_ptr())), HI32(unsafe_from_address=Int(off.unsafe_ptr())),
+        HI32(unsafe_from_address=Int(li.unsafe_ptr())), HI32(unsafe_from_address=Int(co.unsafe_ptr())),
+        HF32(unsafe_from_address=Int(no.unsafe_ptr())), HF32(unsafe_from_address=Int(ip.unsafe_ptr())),
+    )
+    # the rows are named here, after the drains inside the call above
+    _ = len(x)
+    centers = c^
+    offsets = off^
+    list_indices = li^
+    codes = co^
+    norms = no^
+    ips = ip^
+
+
+def ivf_rabitq_build_device_ptr(
+    x: List[Float32], x_addr: Int, n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    centers_p: HF32, offsets_p: HI32, indices_p: HI32, codes_p: HI32, norms_p: HF32, ips_p: HF32,
+) raises:
+    """The IVF-RaBitQ build on the CALLER's arrays (lane fx-ann-fit-nocopy,
+    2026-11-20; `ivf_sq_build_device_ptr`'s form): the rows up once, read
+    from `x_addr` when `x` is empty (`_coarse_rows`); the centres, offsets
+    and ids, the n x words int32 codes and the n norms and n factors written
+    where the caller wants them. Gone: the list copy of the rows, their
+    second upload, the centres' and labels' way back up, and three result
+    lists with a copy out of each. The same words from the same kernel."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
-    var labels = List[Int32]()
     var st = AnnStages("ivf_rabitq_build")
-    _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
-    st.host("coarse")
     var ctx = x_ann_ctx()
-    var dx = upload_f32(ctx, x)
-    var dc = upload_f32(ctx, centers)
-    var dl = upload_i32(ctx, labels)
+    var centers = List[Float32]()
+    var offsets = List[Int32]()
+    var list_indices = List[Int32]()
+    var coarse_dev = IvfFlatBuildDevice(ctx)
+    var dx = ctx.enqueue_create_buffer[DType.float32](1)
+    var dc = ctx.enqueue_create_buffer[DType.float32](1)
+    var dl = ctx.enqueue_create_buffer[DType.int32](1)
+    var device_labels = _coarse_rows(
+        ctx, x, x_addr, n, dim, n_lists, kmeans_n_iters, seed, 0, centers, offsets, list_indices, coarse_dev,
+        dx, dc, dl,
+    )
+    st.host("coarse")
+    _coarse_out(centers, offsets, list_indices, n, dim, n_lists, centers_p, offsets_p, indices_p)
     var dws = ctx.enqueue_create_buffer[DType.float32](n * D)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * words)
     var dnorm = ctx.enqueue_create_buffer[DType.float32](n)
     var dip = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_function[rq_encode_kernel](
-        Int32(n), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim), Int32(D), Int32(seed), scale,
-        dws.unsafe_ptr(), Int32(words), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(),
-        grid_dim=_grid(n), block_dim=TPB,
-    )
+    if device_labels:
+        ctx.enqueue_function[rq_encode_kernel](
+            Int32(n), _dp(dx), _dp(dc), _dp(coarse_dev.dlabels).bitcast[Int32](), Int32(dim), Int32(D),
+            Int32(seed), scale, _dp(dws), Int32(words), _dp(dcodes), _dp(dnorm), _dp(dip),
+            grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[rq_encode_kernel](
+            Int32(n), _dp(dx), _dp(dc), _dp(dl), Int32(dim), Int32(D), Int32(seed), scale,
+            _dp(dws), Int32(words), _dp(dcodes), _dp(dnorm), _dp(dip),
+            grid_dim=_grid(n), block_dim=TPB,
+        )
     ctx.synchronize()
-    codes = download_i32(ctx, dcodes, n * words)
-    norms = download_f32(ctx, dnorm, n)
-    ips = download_f32(ctx, dip, n)
+    download_i32_into(ctx, dcodes, n * words, codes_p)
+    download_f32_into(ctx, dnorm, n, norms_p)
+    download_f32_into(ctx, dip, n, ips_p)
     st.host("encode")
+    # the rows are named here, after the drains above
+    _ = len(x)
     _ = dip^
     _ = dnorm^
     _ = dcodes^
@@ -896,6 +1147,7 @@ def ivf_rabitq_build_device(
     _ = dl^
     _ = dc^
     _ = dx^
+    _ = coarse_dev^
     _ = ctx^
 
 
@@ -904,6 +1156,7 @@ def ivf_rabitq_search_device(
     norms: List[Float32], ips: List[Float32], mask: List[Int32], n_lists: Int, dim: Int, seed: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -915,11 +1168,17 @@ def ivf_rabitq_search_device(
     var dip = upload_f32(ctx, ips)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
+    if len(queries) < m * dim:
+        raise Error("x_ann search: the query list is shorter than m x dim")
     ivf_rabitq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
-        n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dnorm), _dp(dip), False,
+        n_lists, dim, seed,
+        MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(queries.unsafe_ptr())),
+        m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dnorm), _dp(dip), False, status_addr,
     )
+    # the query list is named here, after the drains inside the call above
+    _ = len(queries)
     _ = dmask^
     _ = dip^
     _ = dnorm^
@@ -933,15 +1192,22 @@ def ivf_rabitq_search_device(
 def ivf_rabitq_search_on(
     ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcodes: I32P, dnorm: F32P, dip: F32P,
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int, seed: Int,
-    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    qp: MutPointer[Float32, MutUntrackedOrigin], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """`ivf_pq_search_on`'s RaBitQ twin: the index already on the device."""
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
-    var dq = upload_f32(ctx, queries)
+    # The queries are read where the caller holds them (`qp`, m x dim words
+    # kept alive by the caller for the whole call; lane fx-board-1p2,
+    # 2026-11-20): the resident search copied them into a new list first.
+    var dq = upload_f32_ptr(ctx, qp, m * dim)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -957,6 +1223,7 @@ def ivf_rabitq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 def pq_encode_device(

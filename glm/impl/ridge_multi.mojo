@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultiOutputRegressor(Ridge): every target in ONE ridge program (lane
-apple-fast-meta, -D MOJOLEARN_MULTIOUT_RIDGE). FAST + Apple ONLY: the
-estimators binding registers `ridge_fit_multi` and `ridge_predict_multi`
-under MULTIOUT_RIDGE and nothing else references this file.
+apple-fast-meta). FAST + Apple ONLY: the
+estimators binding publishes its runs (core/linear_multi_device.mojo) in the
+ridge multi table (core/linear_entry_table_multi.mojo) under MULTIOUT_RIDGE.
 
 The reference route (python/mojolearn/_expansion_trees.py
 MultiOutputRegressor) clones Ridge per target: X goes up per target, its
@@ -15,9 +15,8 @@ reference solve's last two ops, glm/impl/ridge.mojo). Y arrives row-major
 kernels, one thread per row. predict is one kernel, one thread per row,
 every target's dot product and intercept, written row-major (n x m).
 """
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.xtdz_coalesced import column_mean_launch, xty_launch
@@ -25,6 +24,7 @@ from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
 from glm.impl.linalg.detail.svd import svd_eig_traced
 from glm.impl.ridge import RIDGE_SMALL_THRESH
+from core.estimators_impl import ridge_multi_icpt_kernel
 from glm.impl.matrix.math import (
     MATRIX_ELEM_TPB,
     add_scalar_kernel,
@@ -34,14 +34,12 @@ from glm.impl.matrix.math import (
     set_small_values_zero_kernel,
 )
 
-#: the switch: FAST + Apple, on by default since the M3 A/B (lane/apple-fast-meta
+#: the route: FAST + Apple, the default since the M3 A/B (lane/apple-fast-meta
 #: 18b4150df, taxi MultiOutputRegressor(Ridge) 163.0 -> 53.2 ms, r2 .604241 ->
-#: .604240); -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off, the old
-#: -D MOJOLEARN_MULTIOUT_RIDGE is harmless
-comptime MULTIOUT_RIDGE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"]()
-)
+#: .604240; EXP:244 KEPT 24ed76679).
+# TOMBSTONE: MOJOLEARN_MULTIOUT_RIDGE_OFF (old path of the FAST Apple default, EXP:244; promoted on Apple M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 7866bd9303.
+# Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime MULTIOUT_RIDGE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime _ROW_TPB = 256
 
 
@@ -102,11 +100,22 @@ def ridge_fit_multi_host(
     n_targets: Int,
     alpha: Float32,
     center_y: Bool,
+    want_icpt: Bool,
+    xmean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    icpt_ptr: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
     """coef (n_targets x n_cols, row-major) of ridge on the (centered, by
     the caller) design X for every column of Y (n_rows x n_targets,
     row-major); ymean (n_targets) the column means of Y, subtracted from
-    each target before the solve when `center_y`."""
+    each target before the solve when `center_y`. With `want_icpt`,
+    icpt[j] = ymean[j] - xmean . coef[j, :] (`ridge_multi_icpt_kernel`)
+    from the coefficients and means still on the device; `xmean_ptr`
+    (n_cols) and `icpt_ptr` (n_targets) are read only then."""
+    # ne2-g-linear (N408): the intercepts were a second device call that
+    # uploaded xmean, coef and ymean again after this function downloaded
+    # them. The kernel now reads the device words this function made (each
+    # target's `w` copied device to device, and `mu`), which are the words it
+    # downloads, so the intercepts keep their bits.
     if n_cols <= 1:
         raise Error("ridge_fit_multi: number of columns cannot be less than two")
     if n_rows <= 1:
@@ -159,6 +168,7 @@ def ridge_fit_multi_host(
     var utb = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var w = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
+    var wall = ctx.enqueue_create_buffer[DType.float32](n_targets * n_cols if want_icpt else 1)
     ctx.synchronize()
     for j in range(n_targets):
         ctx.enqueue_function[_ridge_ycol_kernel](
@@ -168,6 +178,9 @@ def ridge_fit_multi_host(
         )
         xty_launch(ctx, utb, u, yc, n_rows, n_cols)
         gemv_n(ctx, w, v, utb, n_cols, n_cols)
+        if want_icpt:
+            var row = wall.create_sub_buffer[DType.float32](j * n_cols, n_cols)
+            ctx.enqueue_copy(dst_buf=row, src_buf=w)
         ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
         ctx.synchronize()
         for c in range(n_cols):
@@ -177,6 +190,20 @@ def ridge_fit_multi_host(
     ctx.synchronize()
     for j in range(n_targets):
         ymean_ptr.unsafe_store(j, hmu.unsafe_ptr().unsafe_load(j))
+    if want_icpt:
+        var d_xm = ctx.enqueue_create_buffer[DType.float32](n_cols)
+        var d_ic = ctx.enqueue_create_buffer[DType.float32](n_targets)
+        ctx.enqueue_copy(dst_buf=d_xm, src_ptr=xmean_ptr)
+        ctx.enqueue_function[ridge_multi_icpt_kernel](
+            d_xm.unsafe_ptr(), wall.unsafe_ptr(), mu.unsafe_ptr(),
+            d_ic.unsafe_ptr(), Int64(n_cols), Int64(n_targets),
+            grid_dim=(n_targets + 255) // 256, block_dim=256,
+        )
+        ctx.enqueue_copy(dst_ptr=icpt_ptr, src_buf=d_ic)
+        ctx.synchronize()
+        _ = d_xm^
+        _ = d_ic^
+    _ = wall^
     _ = hw^
     _ = hmu^
     _ = yc^

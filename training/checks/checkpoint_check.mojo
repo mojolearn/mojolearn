@@ -161,6 +161,7 @@ from training.checks.train_loop import (
     train_step,
     unpack_params,
 )
+from checks.native_tests.kit import upload_host_into
 
 
 # ===========================================================================
@@ -975,16 +976,13 @@ def _upload_into(
     for i in range(n):
         h.unsafe_ptr().unsafe_store(i, values[i])
     if n == len(dst):
-        ctx.enqueue_copy(dst_buf=dst, src_ptr=h.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, dst, h)
     else:
         var view = dst.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_buf=view, src_ptr=h.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, view, h)
         ctx.synchronize()
         _ = view
     ctx.synchronize()
-    # `[[mojo-buffer-freed-at-last-use]]`: the host staging buffer must
-    # outlive the copy that is reading from it.
-    _ = h
 
 
 def device_weights(ctx: DeviceContext, seed: UInt64) raises -> LlamaDeviceWeights:

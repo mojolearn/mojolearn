@@ -228,7 +228,7 @@ repository has lost a night to that.
 from std.memory import bitcast
 from std.os import getenv
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
@@ -318,6 +318,7 @@ from embedding.checks.embedding_oracle import (
     pack_emb_key,
     refuse_nonfinite,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # ===========================================================================
@@ -460,9 +461,8 @@ def _upload_f32(
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -480,9 +480,8 @@ def _upload_i32(
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.int32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -501,15 +500,14 @@ def _download_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        download_host_into[DType.float32](ctx, buf, host)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        download_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
     var out = List[Float32](capacity=n)
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
     return out^
 
 
@@ -521,15 +519,14 @@ def _download_i32(
     var host = ctx.enqueue_create_host_buffer[DType.int32](n)
     ctx.synchronize()
     if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        download_host_into[DType.int32](ctx, buf, host)
     else:
         var view = buf.create_sub_buffer[DType.int32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        download_host_into[DType.int32](ctx, view, host)
     ctx.synchronize()
     var out = List[Int32](capacity=n)
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
     return out^
 
 

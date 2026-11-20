@@ -1,0 +1,1291 @@
+{
+ "absent_optional": [
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/self-test-macos.json",
+   "path": "self-test-macos.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/self-test-linux.json",
+   "path": "self-test-linux.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/self-test-nvidia.json",
+   "path": "self-test-nvidia.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/self-test-amd.json",
+   "path": "self-test-amd.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/self-test-linux-meta.json",
+   "path": "self-test-linux-meta.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/light-smoke-macos.json",
+   "path": "light-smoke-macos.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/light-smoke-linux.json",
+   "path": "light-smoke-linux.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/light-smoke-nvidia.json",
+   "path": "light-smoke-nvidia.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/light-smoke-amd.json",
+   "path": "light-smoke-amd.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/light-smoke-linux-meta.json",
+   "path": "light-smoke-linux-meta.json",
+   "producer": "macos-smoke"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/gate-smoke.json",
+   "path": "gates/nvidia/gate-smoke.json",
+   "producer": "gate-nvidia"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/gate-smoke.json",
+   "path": "gates/amd/gate-smoke.json",
+   "producer": "gate-amd"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/measuresmoke/measuresmoke.json",
+   "path": "gates/nvidia/measuresmoke.json",
+   "producer": "gate-nvidia"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/measuresmoke/measuresmoke.json",
+   "path": "gates/amd/measuresmoke.json",
+   "producer": "gate-amd"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/autograd-smoke.json",
+   "path": "gates/nvidia/autograd-smoke.json",
+   "producer": "gate-nvidia"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/autograd-smoke.json",
+   "path": "gates/amd/autograd-smoke.json",
+   "producer": "gate-amd"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/adapter-smoke/adapter-smoke.json",
+   "path": "gates/nvidia/adapter-smoke.json",
+   "producer": "gate-nvidia"
+  },
+  {
+   "looked_for": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/adapter-smoke/adapter-smoke.json",
+   "path": "gates/amd/adapter-smoke.json",
+   "producer": "gate-amd"
+  }
+ ],
+ "caps": {
+  "file_bytes": 2097152,
+  "total_bytes": 6291456
+ },
+ "items": [
+  {
+   "against": [],
+   "bytes": 2215,
+   "path": "README.md",
+   "producer": "record",
+   "required": true,
+   "sha256": "0357d9814a9531b1e7dac70383fcd8196d9831e8d2c016b4c19c237ca3d205eb",
+   "source": "tools/release_evidence_set.py"
+  },
+  {
+   "against": [],
+   "bytes": 26389,
+   "path": "SUMMARY.md",
+   "producer": "record",
+   "required": true,
+   "sha256": "f44c20a9aa1b9e18fa64b44a77d1dfadf1a55087fda78c6fc2ae34528c03a6ca",
+   "source": "tools/release_evidence_set.py"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 613,
+   "path": "alpha-manifest-macos.json",
+   "producer": "publish-macos",
+   "redactions": 0,
+   "required": true,
+   "sha256": "987008375c273f9bd1809ccd579997d9d6a6b0af109a9abb01f037f5fcca5044",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/alpha-manifest-macos.json",
+   "source_sha256": "987008375c273f9bd1809ccd579997d9d6a6b0af109a9abb01f037f5fcca5044"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 622,
+   "path": "alpha-manifest-linux.json",
+   "producer": "publish-linux",
+   "redactions": 0,
+   "required": true,
+   "sha256": "5622432fd5b177970c0e41cea9d4ec9f07b9323ce551bc02cfa2bd8a9e025c48",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/alpha-manifest-linux.json",
+   "source_sha256": "5622432fd5b177970c0e41cea9d4ec9f07b9323ce551bc02cfa2bd8a9e025c48"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 624,
+   "path": "alpha-manifest-nvidia.json",
+   "producer": "publish-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "67617f3e43022a7ea8c5a620e63c28108bfc144f89c4586d185e682ace617aac",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/alpha-manifest-nvidia.json",
+   "source_sha256": "67617f3e43022a7ea8c5a620e63c28108bfc144f89c4586d185e682ace617aac"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    }
+   ],
+   "bytes": 621,
+   "path": "alpha-manifest-amd.json",
+   "producer": "publish-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "f10d55ab8e7438a245a092c7469186cf27814e3d0f0b792b922fd18a8a0a73e2",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/alpha-manifest-amd.json",
+   "source_sha256": "f10d55ab8e7438a245a092c7469186cf27814e3d0f0b792b922fd18a8a0a73e2"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    }
+   ],
+   "bytes": 617,
+   "path": "alpha-manifest-linux-meta.json",
+   "producer": "publish-linux-meta",
+   "redactions": 0,
+   "required": true,
+   "sha256": "228b619598e1c38cb70fd7b3f1d84b0a28a008dcbd6937432543dd1ea307d24e",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/alpha-manifest-linux-meta.json",
+   "source_sha256": "228b619598e1c38cb70fd7b3f1d84b0a28a008dcbd6937432543dd1ea307d24e"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 971,
+   "path": "file-admission-macos.json",
+   "producer": "publish-macos",
+   "redactions": 0,
+   "required": true,
+   "sha256": "8d81579902f6ba69117cb100033ea95a34a4fb355a09671e2a153ebb4d7ee782",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/file-admission-macos.json",
+   "source_sha256": "8d81579902f6ba69117cb100033ea95a34a4fb355a09671e2a153ebb4d7ee782"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 993,
+   "path": "file-admission-linux.json",
+   "producer": "publish-linux",
+   "redactions": 0,
+   "required": true,
+   "sha256": "67fe94e4e1c491cff62fdb973a449a2cf45c5bf777e4ab5f7a0f81997638aa12",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/file-admission-linux.json",
+   "source_sha256": "67fe94e4e1c491cff62fdb973a449a2cf45c5bf777e4ab5f7a0f81997638aa12"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 997,
+   "path": "file-admission-nvidia.json",
+   "producer": "publish-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "2861464d3ee98ed6a633a461aca9f367815dfc15c1c78f90c2db1ad695563264",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/file-admission-nvidia.json",
+   "source_sha256": "2861464d3ee98ed6a633a461aca9f367815dfc15c1c78f90c2db1ad695563264"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    }
+   ],
+   "bytes": 991,
+   "path": "file-admission-amd.json",
+   "producer": "publish-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "0f54a06b41c76b9376ade975a07928b009507442d3c68bb332fe0272383ba757",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/file-admission-amd.json",
+   "source_sha256": "0f54a06b41c76b9376ade975a07928b009507442d3c68bb332fe0272383ba757"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    }
+   ],
+   "bytes": 983,
+   "path": "file-admission-linux-meta.json",
+   "producer": "publish-linux-meta",
+   "redactions": 0,
+   "required": true,
+   "sha256": "0dd9a4b0472f820d3e0cca824063d867a6c722da4cdd40761465b82e0c353438",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/file-admission-linux-meta.json",
+   "source_sha256": "0dd9a4b0472f820d3e0cca824063d867a6c722da4cdd40761465b82e0c353438"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 1792,
+   "path": "release-provenance.json",
+   "producer": "record",
+   "redactions": 0,
+   "required": true,
+   "sha256": "152886a7617cd26429f86960ba3360525ebe50fff1ede803a431a2bff37bae3c",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/release-provenance.json",
+   "source_sha256": "152886a7617cd26429f86960ba3360525ebe50fff1ede803a431a2bff37bae3c"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 659017,
+   "path": "binding-identities.json",
+   "producer": "record",
+   "redactions": 0,
+   "required": true,
+   "sha256": "bfe185de881264fae663537b8eb0813b74d017a44672dd6a325c120051d0436f",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/binding-identities.json",
+   "source_sha256": "bfe185de881264fae663537b8eb0813b74d017a44672dd6a325c120051d0436f"
+  },
+  {
+   "against": [],
+   "bytes": 12582,
+   "path": "ptx-proof/ptx-proof.json",
+   "producer": "linux-builds",
+   "redactions": 0,
+   "required": false,
+   "sha256": "ebb3dac79ad6589a5bfb2d278cbaf94819bb4c5e526bc3f2d1a312d9db6a94cb",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/ptx-proof/ptx-proof.json",
+   "source_sha256": "ebb3dac79ad6589a5bfb2d278cbaf94819bb4c5e526bc3f2d1a312d9db6a94cb"
+  },
+  {
+   "against": [],
+   "bytes": 166699,
+   "path": "ptx-proof/PTX_BASELINE.json.gz",
+   "producer": "linux-builds",
+   "redactions": 0,
+   "required": false,
+   "sha256": "b31e4beefe6179b9e83ce2726c4fbccd02f7b11ff9dc0f2ec5821deca60c5309",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/ptx-proof/PTX_BASELINE.json.gz",
+   "source_sha256": "b31e4beefe6179b9e83ce2726c4fbccd02f7b11ff9dc0f2ec5821deca60c5309"
+  },
+  {
+   "against": [],
+   "bytes": 212022,
+   "path": "ptx-proof/build-provenance.json.gz",
+   "producer": "linux-builds",
+   "redactions": 0,
+   "required": false,
+   "sha256": "6f93d57b2ef626a2d6b7ddadd47e62e857c499cd4097dfe21dc4fd492be44877",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/ptx-proof/build-provenance.json.gz",
+   "source_sha256": "6f93d57b2ef626a2d6b7ddadd47e62e857c499cd4097dfe21dc4fd492be44877"
+  },
+  {
+   "against": [],
+   "bytes": 4549,
+   "path": "ptx-proof/manifest.json.gz",
+   "producer": "linux-builds",
+   "redactions": 0,
+   "required": false,
+   "sha256": "d168d016ce861d1ba5371a36d710621c7b5b1eb40b1a22b77dea8771d51ccc3e",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/record-staged/ptx-proof/manifest.json.gz",
+   "source_sha256": "d168d016ce861d1ba5371a36d710621c7b5b1eb40b1a22b77dea8771d51ccc3e"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 10453,
+   "path": "steps.json",
+   "producer": "record",
+   "redactions": 0,
+   "required": true,
+   "sha256": "10da79129ce85b0eef9facbf9c5bdd09b1581cca2d21c54f26064af0d62baea3",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 4155,
+   "path": "identity/at-freeze.json",
+   "producer": "identity-at-freeze",
+   "redactions": 0,
+   "required": true,
+   "sha256": "436d6624bf3361dc4ce783913837c4ebe2784989b037325263865cfa52b74710",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-at-freeze/report.json",
+   "source_sha256": "436d6624bf3361dc4ce783913837c4ebe2784989b037325263865cfa52b74710"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 5804,
+   "path": "identity/table-summary.json",
+   "producer": "identity-admit",
+   "redactions": 0,
+   "required": true,
+   "sha256": "947f65e4758a5b0d2ae741f6476042a59bd485ea74d4fbb2190c1edc126af9bb",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 16484,
+   "path": "identity/admitted.json",
+   "producer": "identity-admit",
+   "redactions": 0,
+   "required": true,
+   "sha256": "61a54056260677029e42fc6bde08385c3a09f058a3bc23232ba4e990de639b1c",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 1566,
+   "path": "identity/nvidia-identity-wheels.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "018e8a9e3db63b5f713603eedb03a5f4e340c16d431d669432a156e0ac99f355",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/identity/identity-wheels.json",
+   "source_sha256": "018e8a9e3db63b5f713603eedb03a5f4e340c16d431d669432a156e0ac99f355"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 3063,
+   "path": "identity/amd-identity-wheels.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "59d5f9a3927d415eaa316a43c1efdfe3cb2898e9eb9ff375b0459331b1e64161",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/identity/identity-wheels.json",
+   "source_sha256": "59d5f9a3927d415eaa316a43c1efdfe3cb2898e9eb9ff375b0459331b1e64161"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 1552,
+   "path": "identity/apple-identity-wheels.json",
+   "producer": "gate-apple",
+   "redactions": 0,
+   "required": true,
+   "sha256": "fbd648be28a62bbdab57c2e34cb43513e14183de29e6187ea8cba3abb3cf3af4",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/apple/identity-wheels.json",
+   "source_sha256": "fbd648be28a62bbdab57c2e34cb43513e14183de29e6187ea8cba3abb3cf3af4"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 3507,
+   "path": "identity/cpu-identity-wheels.json",
+   "producer": "identity-cpu",
+   "redactions": 0,
+   "required": true,
+   "sha256": "a84f354ff6e34c66ab8290b7f80c0828f1fe0036116dbb145e7befcb50d8f04c",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 50382,
+   "path": "gates/nvidia/runtime-report.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "2f72351cdeca32674a8c5637a7e7108565d18e9d655d8de23b82f8ac5deb9255",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/runtime-nvidia/runtime-report.json",
+   "source_sha256": "2f72351cdeca32674a8c5637a7e7108565d18e9d655d8de23b82f8ac5deb9255"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 40007,
+   "path": "gates/amd/runtime-report.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "a7e2f1d5e50f220c84f709e3b3725e1d1474bf4dd290a73bee77e83946d121f7",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/runtime-amd/runtime-report.json",
+   "source_sha256": "a7e2f1d5e50f220c84f709e3b3725e1d1474bf4dd290a73bee77e83946d121f7"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 664238,
+   "path": "gates/nvidia/check-units.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "55b46eb78d039edc1188be27d978da568743e02453a559b46aa63ad21bb914b9",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/units/check-units.json",
+   "source_sha256": "55b46eb78d039edc1188be27d978da568743e02453a559b46aa63ad21bb914b9"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 653983,
+   "path": "gates/amd/check-units.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "933444bd10c13d3ea4c043cc8a6516806e1e9fdc4ef172b72e1331c9a225769d",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/units/check-units.json",
+   "source_sha256": "933444bd10c13d3ea4c043cc8a6516806e1e9fdc4ef172b72e1331c9a225769d"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 9825,
+   "path": "gates/nvidia/shardcheck.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "eaf5285b187c4dec87590b5bb42d30ebc3d8d38e6e1bfcf5ab8c307b8cd249e3",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/shardcheck/shardcheck.json",
+   "source_sha256": "eaf5285b187c4dec87590b5bb42d30ebc3d8d38e6e1bfcf5ab8c307b8cd249e3"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 9719,
+   "path": "gates/amd/shardcheck.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "08dba4979937dd9653095991b07c876d36f3d4f06037e8ae5e8f83033e1ff628",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/shardcheck/shardcheck.json",
+   "source_sha256": "08dba4979937dd9653095991b07c876d36f3d4f06037e8ae5e8f83033e1ff628"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 491,
+   "path": "gates/nvidia/job-status.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": false,
+   "sha256": "28b2730760d88525e0f097c775e054352916c21c99a5346b3eac9b4b8f382864",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1/job/status.json",
+   "source_sha256": "28b2730760d88525e0f097c775e054352916c21c99a5346b3eac9b4b8f382864"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 480,
+   "path": "gates/amd/job-status.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": false,
+   "sha256": "00eebb20cbe9371cf7907a5aadb6a324adaade5159dc1140479819b16fb9a067",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1/job/status.json",
+   "source_sha256": "00eebb20cbe9371cf7907a5aadb6a324adaade5159dc1140479819b16fb9a067"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 6238,
+   "path": "gates/nvidia/box-facts.json",
+   "producer": "gate-nvidia",
+   "redactions": 0,
+   "required": false,
+   "sha256": "3df1d7b576a453867cde57ddd955b273d9359b7bc4a3779b0f9fca757cf2e743",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 2144,
+   "path": "gates/amd/box-facts.json",
+   "producer": "gate-amd",
+   "redactions": 0,
+   "required": false,
+   "sha256": "2751dd6ef55b5e2145daecbebfaa89075fee4f7233f8a18d14a07376ee0fea03",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 4880,
+   "path": "gates/apple/adapter-smoke.json",
+   "producer": "gate-apple",
+   "redactions": 0,
+   "required": true,
+   "sha256": "68960eec51e39e02522847cff04ace825f1b6d2651fa08523ebb54f9b59b1fed",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/adapters/adapter-smoke.json",
+   "source_sha256": "68960eec51e39e02522847cff04ace825f1b6d2651fa08523ebb54f9b59b1fed"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 39675,
+   "path": "gates/apple/runtime-report.json",
+   "producer": "gate-apple",
+   "redactions": 0,
+   "required": false,
+   "sha256": "cb2064cc9bf320966298de67dfca4949324aabb002e680d8806b649a5cb931f5",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple/runtime-apple/runtime-report.json",
+   "source_sha256": "cb2064cc9bf320966298de67dfca4949324aabb002e680d8806b649a5cb931f5"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 294,
+   "path": "gates/cpu/checks.json",
+   "producer": "identity-cpu",
+   "redactions": 0,
+   "required": true,
+   "sha256": "735d989a4930e5d0ae5c0266e8f454aa1a7ae011a8b2be51b47aac885b4436c3",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-wheels/cpu/artifacts/cpu-wheel-checks/checks.json",
+   "source_sha256": "735d989a4930e5d0ae5c0266e8f454aa1a7ae011a8b2be51b47aac885b4436c3"
+  },
+  {
+   "against": [],
+   "bytes": 505,
+   "path": "checks/rehearsal.json",
+   "producer": "rehearsal",
+   "redactions": 0,
+   "required": true,
+   "sha256": "b8e0c6b9901ab64e8b73eb0a454d17032a0320b64eeba6d010df00d506e75aea",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [],
+   "bytes": 348,
+   "path": "compile/cross-compile.json",
+   "producer": "cross-compile",
+   "redactions": 0,
+   "required": true,
+   "sha256": "451f64b7d5965f41dbf3462849adb982f0b1929d698d070ec3ea7eac6cb37d48",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [],
+   "bytes": 64684,
+   "path": "compile/bindings.json",
+   "producer": "reuse-plan",
+   "redactions": 0,
+   "required": true,
+   "sha256": "d2b96e8240598f840eb5e6178b4db9e89666b78615f3c9621f507f04c28a0b97",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 31268,
+   "path": "publish/testpypi-rehearsal.json",
+   "producer": "testpypi-rehearsal",
+   "redactions": 0,
+   "required": true,
+   "sha256": "c88dad6e49d3632a4b2e2e23b4927202135c6118f4c2d68670d238a19eeb111e",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal/rehearsal.json",
+   "source_sha256": "c88dad6e49d3632a4b2e2e23b4927202135c6118f4c2d68670d238a19eeb111e"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    }
+   ],
+   "bytes": 5171,
+   "path": "publish/published-apple.json",
+   "producer": "published-apple",
+   "redactions": 0,
+   "required": true,
+   "sha256": "7ee3ffed0d70acb161e40de4372212650bc3f559c7ebd20c552c14a8e9abbd95",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/published-apple/published-report.json",
+   "source_sha256": "7ee3ffed0d70acb161e40de4372212650bc3f559c7ebd20c552c14a8e9abbd95"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 7951,
+   "path": "publish/published-nvidia.json",
+   "producer": "published-nvidia",
+   "redactions": 0,
+   "required": true,
+   "sha256": "b4453141351297c0252edc24d884baa48aaba036741ababb54a338fdce189624",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/published-nvidia/published-report.json",
+   "source_sha256": "b4453141351297c0252edc24d884baa48aaba036741ababb54a338fdce189624"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    }
+   ],
+   "bytes": 8372,
+   "path": "publish/published-amd.json",
+   "producer": "published-amd",
+   "redactions": 0,
+   "required": true,
+   "sha256": "7098329b813094a11759b7075c0f0fa913463ab2b513cc35d23dbde026f479c6",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/published-amd/published-report.json",
+   "source_sha256": "7098329b813094a11759b7075c0f0fa913463ab2b513cc35d23dbde026f479c6"
+  },
+  {
+   "against": [
+    {
+     "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "amd",
+     "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+    },
+    {
+     "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux",
+     "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "linux-meta",
+     "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+    },
+    {
+     "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+     "platform": "macos",
+     "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+    },
+    {
+     "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+     "platform": "nvidia",
+     "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+    }
+   ],
+   "bytes": 784,
+   "path": "publish/finish-line.json",
+   "producer": "finish-line",
+   "redactions": 0,
+   "required": true,
+   "sha256": "9d79ecffe9932a8196779ed3274ec7444389ec2ac42edc11100d96bfc2e16147",
+   "source": "derived",
+   "source_sha256": null
+  },
+  {
+   "against": [],
+   "bytes": 53282,
+   "path": "soft-failures.json",
+   "producer": "record",
+   "redactions": 0,
+   "required": false,
+   "sha256": "560a9df71d2ac9f462644eca458c52122cae42d469c0ec4929d3b3a6ebfc09f6",
+   "source": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/soft-failures.json",
+   "source_sha256": "560a9df71d2ac9f462644eca458c52122cae42d469c0ec4929d3b3a6ebfc09f6"
+  }
+ ],
+ "references": [
+  {
+   "bytes": 26432789,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/linux/final/mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed",
+   "what": "wheel amd"
+  },
+  {
+   "bytes": 44583919,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/linux/final/mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c",
+   "what": "wheel linux"
+  },
+  {
+   "bytes": 239434,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/linux/final/mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54",
+   "what": "wheel linux-meta"
+  },
+  {
+   "bytes": 75951568,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/macos/mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+   "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1",
+   "what": "wheel macos"
+  },
+  {
+   "bytes": 67275742,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/linux/final/mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725",
+   "what": "wheel nvidia"
+  },
+  {
+   "bytes": 4773235,
+   "ref": "9d70418446aa876bfd10ea5e7c19d31199610939:python/mojolearn/verify_reference/table.json",
+   "sha256": "8efc5b051f9382e2b2b147184af6be1a7d5a671990d635a20ad425cf515d3fe5",
+   "what": "identity table"
+  },
+  {
+   "bytes": 621341,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/reuse/plan.json",
+   "sha256": "d0be3040a54df2be0d0dc2da0eaacc34f30bae1e64fb96de8a69d1967ffd4fae",
+   "what": "reuse plan"
+  },
+  {
+   "bytes": 12219,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/legs/cuda-sm_80.provenance.json",
+   "sha256": "b728ecc8d55830d5c012ba96f89504aee675571fa6902660dafac0946c7f1eed",
+   "what": "leg provenance cuda-sm_80"
+  },
+  {
+   "bytes": 12219,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/legs/cuda-sm_89.provenance.json",
+   "sha256": "db45562370fc6e5a65d89597eb25d2096b158f05262cd6a0b764023be012f4db",
+   "what": "leg provenance cuda-sm_89"
+  },
+  {
+   "bytes": 12220,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/legs/hip-gfx942.provenance.json",
+   "sha256": "9a020405f343d90d936e3a21d547d42204debdfae966bd32538dcb6098f4a0b2",
+   "what": "leg provenance hip-gfx942"
+  },
+  {
+   "bytes": 497,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/rehearsal.log",
+   "sha256": "f44ee45c69a4dfcfb08cdbdc1fc282d7b230e63f6ff6be8a5a42e366ed6425fe",
+   "what": "log rehearsal.log"
+  },
+  {
+   "bytes": 2746,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-at-freeze.log",
+   "sha256": "9b68c585163de8e456215c64f9713af3ecef3002c5dbe308fe3550d747c67b62",
+   "what": "log identity-at-freeze.log"
+  },
+  {
+   "bytes": 10559,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/identity-admit.log",
+   "sha256": "be6e8e8e43ebbfa3e56e212f61d3f2763512a2564a08a91f1d22dd86a637e929",
+   "what": "log identity-admit.log"
+  },
+  {
+   "bytes": 5098390,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/cross-compile.log",
+   "sha256": "61aedbc1294a71fc1d0a64eaabb7a691df882b38ef3fb6d7ec07ee2dc37bfaee",
+   "what": "log cross-compile.log"
+  },
+  {
+   "bytes": 12085,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/linux-pack.log",
+   "sha256": "66a2961290a5c827144411ce60869f725f4d7ab228763a65bf5d9414357842f7",
+   "what": "log linux-pack.log"
+  },
+  {
+   "bytes": 13789196,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/macos-build.log",
+   "sha256": "6a7806ab494fb33ca4061b9f3eb8571ee7aa2311aa9ec3167bbc7f90f596a378",
+   "what": "log macos-build.log"
+  },
+  {
+   "bytes": 302,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-apple.log",
+   "sha256": "4cf31f202d2113bac29669bf89c1c7e90dc634e9eaf8607d995b6200dc65ebfd",
+   "what": "log gate-apple.log"
+  },
+  {
+   "bytes": 138556615,
+   "files": 5257,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-amd/9feb99a3181f7fe126eb-release-light-v1",
+   "tree_sha256": "7734b01b59497ed4445556da61e4718e2144933a699938e26461508bb8083fbc",
+   "what": "gate report tree amd"
+  },
+  {
+   "bytes": 144862870,
+   "files": 4703,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/gate-nvidia/c92469d260a8b3a5f70d-release-light-v1",
+   "tree_sha256": "cb54c7d27fa84fa4baf2aa1a2beb800a22c2581a15e96b9fddac9bbb1d9df57a",
+   "what": "gate report tree nvidia"
+  },
+  {
+   "bytes": 696310721,
+   "files": 2682,
+   "path": "~/mojolearn-evidence/release/0.8.66/43b5f7c320e0/testpypi-rehearsal",
+   "tree_sha256": "29781729eb1e4a06129926f541e48ec014c088c5cdd74465265227a13f35a3a1",
+   "what": "TestPyPI rehearsal tree"
+  },
+  {
+   "fetch": "python3 tools/box_persist.py fetch --tag rel-0.8.66-gate-amd-20261108T173417Z-20261108T173434Z-1a2945",
+   "r2_key_root": "measurements/box-jobs",
+   "r2_tag": "rel-0.8.66-gate-amd-20261108T173417Z-20261108T173434Z-1a2945",
+   "what": "box job results in R2"
+  },
+  {
+   "fetch": "python3 tools/box_persist.py fetch --tag nvc-release-gate-20261108T173550Z-d9e995",
+   "r2_key_root": "measurements/box-jobs",
+   "r2_tag": "nvc-release-gate-20261108T173550Z-d9e995",
+   "what": "box job results in R2"
+  },
+  {
+   "fetch": "python3 tools/box_persist.py fetch --tag rel-0.8.66-measuresmoke-amd-20261108T175812Z-20261108T175823Z-a1d273",
+   "r2_key_root": "measurements/box-jobs",
+   "r2_tag": "rel-0.8.66-measuresmoke-amd-20261108T175812Z-20261108T175823Z-a1d273",
+   "what": "box job results in R2"
+  },
+  {
+   "fetch": "python3 tools/box_persist.py fetch --tag nvc-release-gate-20261108T185908Z-f15c6d",
+   "r2_key_root": "measurements/box-jobs",
+   "r2_tag": "nvc-release-gate-20261108T185908Z-f15c6d",
+   "what": "box job results in R2"
+  }
+ ],
+ "release": {
+  "date": "2026-11-05",
+  "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+  "tag": "v0.8.66",
+  "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85",
+  "version": "0.8.66",
+  "written_at": "2026-11-08T20:56:47Z"
+ },
+ "schema": "mojolearn.release-evidence.v1",
+ "tools": {
+  "git": "git version 2.50.1 (Apple Git-155)",
+  "machine": "arm64",
+  "python": "3.14.6",
+  "release_evidence_py_sha256": "453d39527280c737003314417c24408896112f8ffddf5a2b01ddc1c05d47ead2",
+  "release_py_sha256": "149619b81e4a0887dd99200aa05fb282fff8e8da8df97498106a8f90f5316a36",
+  "system": "Darwin",
+  "tooling_commit": "12a5af7d89844e557c9d10f7783b854a745a6f85"
+ },
+ "wheels": [
+  {
+   "file": "mojolearn_amd-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "platform": "amd",
+   "published": true,
+   "sha256": "1cd7b953b9afcb5868137a5a23c6aa4f461929f888327164ec2612670b9ca9ed"
+  },
+  {
+   "file": "mojolearn_core-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "platform": "linux",
+   "published": true,
+   "sha256": "c8775ebcd0cc8095806b33b6cc57667dd310147a701e4629fded608384f6c12c"
+  },
+  {
+   "file": "mojolearn-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "platform": "linux-meta",
+   "published": true,
+   "sha256": "8bdfdf1afce524cda26d9caa775adf674549fe31a786d719fb404e9a7e9e3d54"
+  },
+  {
+   "file": "mojolearn-0.8.66-py3-none-macosx_26_0_arm64.whl",
+   "platform": "macos",
+   "published": true,
+   "sha256": "72ae6ae0007c6a0fe2adf59ddd9a8be44ce055f27c795df593e9f9067d524ac1"
+  },
+  {
+   "file": "mojolearn_nvidia-0.8.66-py3-none-manylinux_2_35_x86_64.whl",
+   "platform": "nvidia",
+   "published": true,
+   "sha256": "9f18a484053facae329e3f606cef3f5c42966e98d6c1bcbc4850c34e4379e725"
+  }
+ ]
+}

@@ -7,10 +7,11 @@ reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
 from std.math import fma, sqrt
 
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 from x_cluster.bodies import IDN_BGMM_NK_LEVELS, SplitMix64
 from mixture.nk_order import gmm_nk_fold_levels
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
+from x_linear.ff import FF, ff_add, ff_div, ff_mul, ff_neg, ff_sqrt, ff_sub
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -335,17 +336,23 @@ def oracle_agglo(
     3 single); `adj_in` empty (every pair) or an n x n CONNECTED edge mask.
     Each step scans EVERY live pair i < j in row-major order and takes the
     first strictly lowest (last_on_tie: the last of the lowest). The update
-    as scikit-learn / scipy define it, in Float64 from the Float32 matrix,
-    rounded once to Float32; ward (a - b) as ((na+nk) dak + (nb+nk) dbk -
-    nk dab) / (na+nb+nk) (scipy_spelling: scipy's `_ward`, each term times
-    the reciprocal t = 1 / (na+nb+nk), which rounds differently); average
+    as scikit-learn / scipy define it, in Float32 on every column (the
+    product since 11a15b7512, 2026-10-02: the merge loop runs on the device,
+    which has no binary64 on Apple; restated here 2026-11-19, the Float64
+    form this oracle held until then was never the device's and the first
+    GPU run of agglo_check showed it, 4 ward cells): every product, sum and
+    quotient its own Float32 rounding, flushed; the sizes are cluster counts,
+    exact in Float32. ward (a - b) as ((na+nk) dak + (nb+nk) dbk - nk dab) /
+    (na+nb+nk), the three products summed left to right, minus last, one
+    quotient (scipy_spelling: scipy's `_ward`, each term times the
+    reciprocal t = 1 / (na+nb+nk), which rounds differently); average
     (na dak + nb dbk) / (na + nb) (scipy_spelling: na/(na+nb) dak +
     nb/(na+nb) dbk)."""
     var d = dist.copy()
     var constrained = len(adj_in) > 0
     var adj = adj_in.copy()
     var live = List[Bool](length=n, fill=True)
-    var size = List[Float64](length=n, fill=Float64(1))
+    var size = List[Float32](length=n, fill=Float32(1))
     var node = List[Int](capacity=n)
     for i in range(n):
         node.append(i)
@@ -375,21 +382,24 @@ def oracle_agglo(
                 continue
             var ha = not constrained or adj[ba * n + k]
             var hb = not constrained or adj[bb * n + k]
-            var dak = Float64(d[ba * n + k])
-            var dbk = Float64(d[bb * n + k])
+            var dak = ftz(d[ba * n + k])
+            var dbk = ftz(d[bb * n + k])
             var nk = size[k]
             var v: Float32
             if linkage == 0:
-                var w: Float64
+                var w: Float32
                 if scipy_spelling:
-                    var t = Float64(1) / (na + nb + nk)
-                    w = (na + nk) * t * dak + (nb + nk) * t * dbk - nk * t * Float64(dab)
+                    var t = ftz(identical_div(Float32(1), ftz(ftz(na + nb) + nk)))
+                    var q1 = ftz(identical_mul(ftz(identical_mul(ftz(na + nk), t)), dak))
+                    var q2 = ftz(identical_mul(ftz(identical_mul(ftz(nb + nk), t)), dbk))
+                    var q3 = ftz(identical_mul(ftz(identical_mul(nk, t)), ftz(dab)))
+                    w = ftz(ftz(q1 + q2) - q3)
                 else:
-                    var p1 = identical_mul64(na + nk, dak)
-                    var p2 = identical_mul64(nb + nk, dbk)
-                    var p3 = identical_mul64(nk, Float64(dab))
-                    w = ((p1 + p2) - p3) / ((na + nb) + nk)
-                v = ftz(Float32(w)) if w > Float64(0) else Float32(0)
+                    var p1 = ftz(identical_mul(ftz(na + nk), dak))
+                    var p2 = ftz(identical_mul(ftz(nb + nk), dbk))
+                    var p3 = ftz(identical_mul(nk, ftz(dab)))
+                    w = ftz(identical_div(ftz(ftz(p1 + p2) - p3), ftz(ftz(na + nb) + nk)))
+                v = w if w > Float32(0) else Float32(0)
             elif not (ha or hb):
                 continue
             elif not hb:
@@ -401,9 +411,14 @@ def oracle_agglo(
             elif linkage == 3:
                 v = min(d[ba * n + k], d[bb * n + k])
             elif scipy_spelling:
-                v = ftz(Float32(na / (na + nb) * dak + nb / (na + nb) * dbk))
+                var sab = ftz(na + nb)
+                var r1 = ftz(identical_mul(ftz(identical_div(na, sab)), dak))
+                var r2 = ftz(identical_mul(ftz(identical_div(nb, sab)), dbk))
+                v = ftz(r1 + r2)
             else:
-                v = ftz(Float32((identical_mul64(na, dak) + identical_mul64(nb, dbk)) / (na + nb)))
+                var s1 = ftz(identical_mul(na, dak))
+                var s2 = ftz(identical_mul(nb, dbk))
+                v = ftz(identical_div(ftz(s1 + s2), ftz(na + nb)))
             d[ba * n + k] = v
             d[k * n + ba] = v
             if constrained and (ha or hb):
@@ -415,27 +430,42 @@ def oracle_agglo(
 
 
 # ---------------------------------------------------------------- DEVIATION 5119
-def oracle_jacobi_svd(
-    a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64],
-    reversed_fold: Bool = False,
-) raises:
-    """`x_cluster/spectral_assign.mojo::jacobi_svd` restated for a full-rank
-    a: one-sided Jacobi on the columns, pairs (p < q) in row order, the three
-    column sums folded rows ascending (descending with `reversed_fold`, the
-    alternative the fixture must separate), every product pinned, zeta =
-    (beta - alpha) / (2 gamma), t = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)),
-    c = 1 / sqrt(1 + t^2), s = c t; stop after a sweep that rotates nothing."""
-    var w = a.copy()
-    v = List[Float64](length=m * m, fill=0)
-    for i in range(m):
-        v[i * m + i] = 1
+# TOMBSTONE: the binary64 `oracle_jacobi_svd` (of x_cluster/spectral_assign.mojo's binary64 `jacobi_svd`) deleted
+# 2026-11-09 by lane m3-linalg-and-housekeeping with its subject (cluster_qr moved to float-float); code recoverable at
+# 0ce88411d3. Restore: git apply experiments/removed/CLUSTER_QR_BINARY64_HOST.patch
 
-    def col(w: List[Float64], m: Int, p: Int, q: Int, rev: Bool) -> Float64:
-        var s = Float64(0)
+
+def oracle_df64_svd(
+    a: List[FF], m: Int, mut u: List[FF], mut sv: List[FF], mut v: List[FF], reversed_fold: Bool = False
+) raises:
+    """x_cluster/spectral_df64.mojo's float-float one-sided Jacobi SVD
+    (`_sd_svd_host`, `sdk_step_kernel`) restated for a full-rank a (m x m,
+    row major): pairs (p < q) in row order, the three column sums folded
+    rows ascending (descending with `reversed_fold`, the alternative the
+    fixture must separate), a rotation skipped when gamma's hi word is 0 or
+    |gamma| <= 2^-44 sqrt(alpha beta), zeta = (beta - alpha) / (2 gamma), t
+    = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)), c = 1 / sqrt(1 + t^2), s =
+    c t; stop after a sweep that rotates nothing (cap 80). u = w / ||w||."""
+    var w = a.copy()
+    var zero = FF(Float32(0), Float32(0))
+    var one = FF(Float32(1), Float32(0))
+    var two = FF(Float32(2), Float32(0))
+    v = List[FF](length=m * m, fill=zero)
+    for i in range(m):
+        v[i * m + i] = one
+
+    def col(w: List[FF], m: Int, p: Int, q: Int, rev: Bool) -> FF:
+        var s = FF(Float32(0), Float32(0))
         for rr in range(m):
             var r = m - 1 - rr if rev else rr
-            s += identical_mul64(w[r * m + p], w[r * m + q])
+            s = ff_add(s, ff_mul(w[r * m + p], w[r * m + q]))
         return s
+
+    def less(a: FF, b: FF) -> Bool:
+        return a.hi < b.hi or (a.hi == b.hi and a.lo < b.lo)
+
+    def absf(x: FF) -> FF:
+        return ff_neg(x) if x.hi < Float32(0) else x
 
     for _sweep in range(80):
         var rotated = False
@@ -444,35 +474,39 @@ def oracle_jacobi_svd(
                 var alpha = col(w, m, p, p, reversed_fold)
                 var beta = col(w, m, q, q, reversed_fold)
                 var gamma = col(w, m, p, q, reversed_fold)
-                if gamma == 0 or abs(gamma) <= Float64(2.220446049250313e-16) * sqrt(identical_mul64(alpha, beta)):
+                var ab = ff_mul(alpha, beta)
+                var root = ff_sqrt(ab) if ab.hi > Float32(0) else FF(Float32(0), Float32(0))
+                var bound = ff_mul(FF(Float32(5.684341886080802e-14), Float32(0)), root)
+                if gamma.hi == Float32(0) or not less(bound, absf(gamma)):
                     continue
                 rotated = True
-                var zeta = (beta - alpha) / (2 * gamma)
-                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
-                if zeta < 0:
-                    t = -t
-                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
-                var s = identical_mul64(c, t)
+                var zeta = ff_div(ff_sub(beta, alpha), ff_mul(two, gamma))
+                var t = ff_div(one, ff_add(absf(zeta), ff_sqrt(ff_add(one, ff_mul(zeta, zeta)))))
+                if zeta.hi < Float32(0):
+                    t = ff_neg(t)
+                var c = ff_div(one, ff_sqrt(ff_add(one, ff_mul(t, t))))
+                var s = ff_mul(c, t)
                 for r in range(m):
                     var wp = w[r * m + p]
                     var wq = w[r * m + q]
-                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
-                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
+                    w[r * m + p] = ff_sub(ff_mul(c, wp), ff_mul(s, wq))
+                    w[r * m + q] = ff_add(ff_mul(s, wp), ff_mul(c, wq))
                     var vp = v[r * m + p]
                     var vq = v[r * m + q]
-                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
-                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
+                    v[r * m + p] = ff_sub(ff_mul(c, vp), ff_mul(s, vq))
+                    v[r * m + q] = ff_add(ff_mul(s, vp), ff_mul(c, vq))
         if not rotated:
             break
-    sv = List[Float64](length=m, fill=0)
-    u = List[Float64](length=m * m, fill=0)
+    sv = List[FF](length=m, fill=zero)
+    u = List[FF](length=m * m, fill=zero)
     for j in range(m):
-        var nj = sqrt(col(w, m, j, j, reversed_fold))
-        if nj == 0:
-            raise Error("oracle_jacobi_svd: the fixture must be full rank")
+        var nn = col(w, m, j, j, reversed_fold)
+        if not (nn.hi > Float32(0)):
+            raise Error("oracle_df64_svd: the fixture must be full rank")
+        var nj = ff_sqrt(nn)
         sv[j] = nj
         for r in range(m):
-            u[r * m + j] = w[r * m + j] / nj
+            u[r * m + j] = ff_div(w[r * m + j], nj)
 
 
 def oracle_ap_noise(s_in: List[Float32], seed: UInt64) -> List[Float32]:

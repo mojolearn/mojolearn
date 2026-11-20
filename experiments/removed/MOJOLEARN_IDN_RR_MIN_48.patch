@@ -1,0 +1,17 @@
+diff --git a/x_prep/host/rr_eigh_host.mojo b/x_prep/host/rr_eigh_host.mojo
+index 45fd3f063f..76df5d6076 100644
+--- a/x_prep/host/rr_eigh_host.mojo
++++ b/x_prep/host/rr_eigh_host.mojo
+@@ -62,9 +62,9 @@ comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_8.patch
+ # TOMBSTONE: MOJOLEARN_IDN_RR_MIN_16 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 52d1c6b87e.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_16.patch
+-# TOMBSTONE: MOJOLEARN_IDN_RR_MIN_48 (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 9086d9b3d1.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_MIN_48.patch
+-comptime IDN_RR_MIN_N = 96 if is_defined["MOJOLEARN_IDN_RR_MIN_96"]() else 24
++comptime IDN_RR_MIN_N = (
++    48 if is_defined["MOJOLEARN_IDN_RR_MIN_48"]() else (96 if is_defined["MOJOLEARN_IDN_RR_MIN_96"]() else 24)
++)
+ #: x_prep/rr_eigh.mojo RRE_SWEEPS: the sweep budget (the device enqueues it whole)
+ comptime IDN_RR_SWEEPS = 32
+ #: x_prep/device.mojo EIGH_CYCLIC_Q

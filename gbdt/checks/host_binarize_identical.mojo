@@ -6,7 +6,7 @@ from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.host.gbdt_oracle import GbdtHostGrid, _binarize_columns
 
 
-def main() raises:
+def run_checks() raises:
     var folds: List[Int] = [1, 2, 3, 4, 7, 15, 31, 63, 128, 255]
     var features = len(folds)
     var rows = 4096

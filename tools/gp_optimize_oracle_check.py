@@ -363,13 +363,11 @@ def fit_lane(ml, kind, restarts, random_state, X, y, start=None):
     `start` replaces the kernel's own hyperparameters, which is how the far
     sweep asks where the optimizer lands from a point it did not choose.
     """
-    from mojolearn._cpu_reference import reference_training
     kernel = build_kernel(ml, kind) if start is None else build_kernel_at(ml, kind, start)
     kw = dict(kernel=kernel, optimizer="fmin_l_bfgs_b")
     if restarts:
         kw.update(n_restarts_optimizer=restarts, random_state=random_state)
-    with reference_training():
-        return kernel, ml.GaussianProcessRegressor(**kw).fit(X, y)
+    return kernel, ml.GaussianProcessRegressor(**kw).fit(X, y)
 
 
 def lane_data(identity_break, fixture):
@@ -392,7 +390,7 @@ def run_fixture(rep, ml, lane, fixture, X, y, rng, arms, strict):
     grad_here = np.asarray(grad_here, dtype=np.float64)
     tag = f"{lane}/{fixture}"
     print(f"  ---   {tag}: theta={np.array2string(theta, precision=6)} "
-          f"lml={best:.6f} runs={model._optimizer_runs}", file=rep.out)
+          f"lml={best:.6f} runs={model.optimizer_runs_}", file=rep.out)
 
     if "REFERENCE" in arms:
         arm_reference(rep, tag, theta, X, y, kind, best, grad_here)
@@ -430,7 +428,7 @@ def arm_stationary(rep, tag, model, kernel, theta, bounds, grad_here, X, y, kind
     differences of the float64 reference, so a gradient that is wrong in the
     same way at the start and at the answer cannot satisfy both.
     """
-    stops = [run[2] for run in model._optimizer_runs]
+    stops = [run[2] for run in model.optimizer_runs_]
     start = np.asarray(kernel.theta, dtype=np.float64)
     _l0, g0 = model.log_marginal_likelihood(list(start), eval_gradient=True)
     pg_start = projected_gradient(start, -np.asarray(g0, dtype=np.float64), bounds)
@@ -549,7 +547,7 @@ def arm_optimal(rep, tag, model, theta, bounds, grad_here, best, X, y, kind, rng
 
 def arm_contract(rep, tag, ml, lane, spec, X, y, model, theta, bounds, best):
     """The contracts a caller is entitled to, re-measured from outside."""
-    runs = model._optimizer_runs
+    runs = model.optimizer_runs_
     rep.same("CONTRACT", f"{tag}: one run per start ({1 + spec['restarts']} expected)",
              len(runs), 1 + spec["restarts"])
     rep.same("CONTRACT", f"{tag}: the reported likelihood is the best run's",
@@ -575,11 +573,11 @@ def arm_contract(rep, tag, ml, lane, spec, X, y, model, theta, bounds, best):
         # defect a recorded hash cannot see, because the hash is stable either
         # way.
         _k3, other = fit_lane(ml, spec["kind"], spec["restarts"], 2 ** 40 + 7, X, y)
-        moved = [r[:3] for r in other._optimizer_runs][1:] != [r[:3] for r in runs][1:] \
+        moved = [r[:3] for r in other.optimizer_runs_][1:] != [r[:3] for r in runs][1:] \
             or list(other.kernel_.theta) != list(theta)
         rep.holds("CONTRACT", f"{tag}: a different random_state moves the restarts", moved,
                   f"\n          runs(state=7)        ={runs}"
-                  f"\n          runs(state=2**40 + 7)={other._optimizer_runs}")
+                  f"\n          runs(state=2**40 + 7)={other.optimizer_runs_}")
         rep.holds("CONTRACT", f"{tag}: the first run starts from the kernel's own theta",
                   runs[0][1] >= 1, f"\n          runs={runs}")
         lmls = [run[3] for run in runs]
@@ -594,7 +592,7 @@ def arm_contract(rep, tag, ml, lane, spec, X, y, model, theta, bounds, best):
         # restarts, where a restart does win, and holds the selection to it.
         poor = [POOR_START] * (1 + POOR_LENGTH_SCALES[spec["kind"]] + 1)
         _kp, from_poor = fit_lane(ml, spec["kind"], 4, 11, X, y, start=poor)
-        poor_runs = from_poor._optimizer_runs
+        poor_runs = from_poor.optimizer_runs_
         poor_lmls = [run[3] for run in poor_runs]
         winner = min(i for i, v in enumerate(poor_lmls) if v == max(poor_lmls))
         rep.holds("CONTRACT", f"{tag}: from a poor start a RESTART wins, so the "

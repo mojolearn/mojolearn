@@ -6,8 +6,8 @@ strides smaller than 32 cannot cross the aligned logical-group boundary.
 The control uses a whole physical wave for one logical group (unused lanes
 carry zero), and tests empty/tail members with distinct adjacent-group tags.
 """
-from std.gpu import block_idx,block_dim,thread_idx,WARP_SIZE
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx,block_dim,thread_idx,WARP_SIZE
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceContext
 
 

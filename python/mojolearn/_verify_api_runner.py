@@ -54,7 +54,7 @@ def sources():
 
 
 def capture(path=None, endpoints=None, *, artifacts=None):
-    from . import _backend,__version__,_verify
+    from . import __version__,_verify,runtime_report
     routes=registry();expected={r['endpoint'] for r in TARGETS}
     selected=expected if endpoints is None else set(endpoints)
     if not selected or selected-expected:raise ValueError('unknown or empty endpoint selection')
@@ -72,8 +72,9 @@ def capture(path=None, endpoints=None, *, artifacts=None):
                 name={'estimators':'estimator','optimizers':'optimizer','neural':'neural','training':'training',
                       'programs':'program','models':'model','misc':'misc'}[family]+'_checks'
                 getattr(module,name)(recorder,public,methods)
-        report=dict(format='mojolearn.api-endpoints.v1',version=__version__,vendor=_backend.vendor(),
-            numeric_mode=_backend.default_mode(),expected=sorted(selected),endpoints=recorder.rows,
+        _runtime=runtime_report()
+        report=dict(format='mojolearn.api-endpoints.v1',version=__version__,vendor=_runtime['vendor'],
+            numeric_mode=_runtime['default_mode'],expected=sorted(selected),endpoints=recorder.rows,
             pending=sorted(selected-recorder.rows.keys()),sources=sources(),
             families={e:routes[e][0] for e in selected if e in routes},bindings=_verify.binding_artifacts() if artifacts is None else artifacts)
         recorder.path.write_text(json.dumps(report,sort_keys=True,indent=1)+'\n')

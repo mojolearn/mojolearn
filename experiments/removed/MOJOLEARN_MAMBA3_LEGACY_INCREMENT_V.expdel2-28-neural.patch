@@ -1,0 +1,15 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 7fb11f8e34..7056c63d97 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -2038,9 +2038,7 @@ def m3_siso_forward(
+                     Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                     grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
+                 )
+-        # TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V (unmeasured old path: the scalar state increment where shared V fits; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 641484de4f.
+-        # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
+-        elif lib_smem_page_fits_for[TARGET_COLUMN, 512]():
++        elif not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
+             ctx.enqueue_function[m3_state_increment_shared_v_kernel](
+                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                 v_work.unsafe_ptr(), qk_s.unsafe_ptr(),

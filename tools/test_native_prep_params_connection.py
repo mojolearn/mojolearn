@@ -17,8 +17,11 @@ def test_public_prep_getter_is_one_existing_native_call():
     body = getter().body[1:]
     assert len(body) == 1 and isinstance(body[0], ast.Return)
     assert ast.unparse(body[0].value) == '_PARAMS_METADATA(self, False, _PARAMS_METADATA_CONTEXT)'
-    schema = (ROOT / 'python/mojolearn/_native_params_metadata.py').read_text()
-    assert "_expansion_prep._PrepBase.get_params: ('declared', False)" in schema
+    # The schema is the _SCHEMA_SOURCES data table (lane lazy-family-import, 2026-11-12), read as data.
+    schema = ast.parse((ROOT / 'python/mojolearn/_native_params_metadata.py').read_text())
+    sources = next(ast.literal_eval(node.value) for node in schema.body if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == '_SCHEMA_SOURCES' for t in node.targets))
+    assert ('_expansion_prep', '_PrepBase', 'declared', False) in sources
 
 
 def test_all_inherited_public_getters_have_runtime_probes():

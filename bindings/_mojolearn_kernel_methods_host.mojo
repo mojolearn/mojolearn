@@ -36,13 +36,13 @@ The sabotage arm (`kernel_methods_host_sabotage`) is
 kernel matrix, factorization, normalization and feature map this binary
 serves differs.
 """
+from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
-from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -50,28 +50,19 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
-from kernel_methods.host.km_host_impl import (
-    kmh_kernel_ridge_fit_run,
-    kmh_kernel_ridge_predict_into,
-    kmh_nystroem_fit_run,
-    kmh_nystroem_transform_into,
-    kmh_rbf_sampler_fit_into,
-    kmh_rbf_sampler_transform_into,
-    kmh_sqrt_weights,
-)
-from kernel_methods.host.km_host_oracle import (
-    kmh_kernel_ridge_fit,
-    kmh_kernel_ridge_predict,
-    kmh_nystroem_fit,
-    kmh_nystroem_transform,
-    kmh_rbf_sampler_fit,
-    kmh_rbf_sampler_transform,
+from kernel_methods.host.km_host_impl import kmh_rbf_sampler_fit_into
+from kernel_methods.host.kernel_methods_host_run import (
+    kernel_ridge_fit_host_run,
+    kernel_ridge_predict_host_run,
+    nystroem_fit_host_run,
+    nystroem_transform_host_run,
+    rbf_sampler_transform_host_run,
 )
 
 
-from providers.python.svm_host_scale_gamma_host_pyapi import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from providers.python.svm_host_scale_gamma_host_pyapi_pack import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 from kernel_methods.descriptor_host import KERNEL_METHOD_HOST_API
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 
 
 def kernel_methods_api_v1_binding() raises -> PythonObject:
@@ -147,20 +138,18 @@ def kernel_ridge_fit_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var alpha = Float32(Float64(py=params[7]))
-    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var y = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var sw = List[Float32]()
-    if len(addrs) == 5:
-        # the per-row factors sqrt(sample_weight): the binary64 square root
-        # of each weight rounded once to float32 (formerly Python's loop)
-        sw = kmh_sqrt_weights(f64_ptr(Int(py=addrs[4])), n)
+    # The host copies are taken with the GIL released (N375): the addresses
+    # are read first, every copy and the weight roots run in the block.
+    var x_address = Int(py=addrs[0])
+    var y_address = Int(py=addrs[1])
+    var weighted = len(addrs) == 5
+    var w_address = Int(py=addrs[4]) if weighted else 0
     var info = 0
     with GILReleased(Python()):
-        info = kmh_kernel_ridge_fit_run(
-            x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp, sw
+        info = kernel_ridge_fit_host_run(
+            x_address, y_address, weighted, w_address,
+            n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp,
         )
-    _ = x^
-    _ = y^
     return PythonObject(info)
 
 
@@ -191,16 +180,15 @@ def kernel_ridge_predict_binding(
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
-    var x_fit = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
-    var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
+    var fit_address = Int(py=addrs[0])
+    var dual_address = Int(py=addrs[1])
+    var new_address = Int(py=addrs[2])
     with GILReleased(Python()):
-        kmh_kernel_ridge_predict_into(
-            x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q, op
+        # the host copies without the GIL (N375)
+        kernel_ridge_predict_host_run(
+            fit_address, dual_address, new_address,
+            n, d, t, kernel, degree, gamma, coef0, q, op,
         )
-    _ = x_fit^
-    _ = dual^
-    _ = x_new^
     return PythonObject(0)
 
 
@@ -243,13 +231,13 @@ def nystroem_fit_binding(
     var coef0 = Float64(py=params[5])
     var q = Int(py=params[6])
     var seed = UInt64(Int(py=params[7]))
-    var x = read_f32(Int(py=addrs[0]), max(0, n * d))
+    var x_address = Int(py=addrs[0])
     var sweeps = 0
     with GILReleased(Python()):
-        sweeps = kmh_nystroem_fit_run(
-            x, n, d, kernel, degree, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
+        # the host copy of X without the GIL (N375)
+        sweeps = nystroem_fit_host_run(
+            x_address, n, d, kernel, degree, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
         )
-    _ = x^
     return PythonObject(sweeps)
 
 
@@ -280,17 +268,16 @@ def nystroem_transform_binding(
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
-    var components = read_f32(Int(py=addrs[0]), max(0, q * d))
-    var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var c_address = Int(py=addrs[0])
+    var n_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[5])
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
-        kmh_nystroem_transform_into(
-            components, normalization, q, d, kernel, degree, gamma, coef0, x, m, op
+        # the host copies without the GIL (N375)
+        nystroem_transform_host_run(
+            c_address, n_address, x_address,
+            q, d, kernel, degree, gamma, coef0, m, op,
         )
-    _ = components^
-    _ = normalization^
-    _ = x^
     return PythonObject(0)
 
 
@@ -351,15 +338,15 @@ def rbf_sampler_transform_binding(
     var q = Int(py=params[1])
     var scale = Float32(Float64(py=params[5]))
     var m = Int(py=params[6])
-    var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
-    var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var w_address = Int(py=addrs[0])
+    var o_address = Int(py=addrs[1])
+    var x_address = Int(py=addrs[2])
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
-        kmh_rbf_sampler_transform_into(weights, offset, d, q, scale, x, m, op)
-    _ = weights^
-    _ = offset^
-    _ = x^
+        # the host copies without the GIL (N375)
+        rbf_sampler_transform_host_run(
+            w_address, o_address, x_address, d, q, scale, m, op
+        )
     return PythonObject(0)
 
 
@@ -367,6 +354,7 @@ def rbf_sampler_transform_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_kernel_methods_host() -> PythonObject:
+    comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_kernel_methods_host")
         module.def_function[kernel_methods_api_v1_binding]("kernel_methods_api_v1")

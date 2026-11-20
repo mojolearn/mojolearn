@@ -1,0 +1,18 @@
+diff --git a/x_ann/switches.mojo b/x_ann/switches.mojo
+index d7bcfe4f9b..b47e7e75d0 100644
+--- a/x_ann/switches.mojo
++++ b/x_ann/switches.mojo
+@@ -165,11 +165,10 @@ comptime IDN_PQ_DEVICE_CODEBOOKS = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+ #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): ivf-pq istella 0.458 (NV 0.456, AMD 0.460),
+ #: ivf-refine 0.463 (NV 0.465, AMD 0.461); BITS CHANGE (NV==AMD, host twin follows), recall_at_10
+ #: 0.8021 -> 0.8088 (ivf-pq), 0.9946 -> 0.9960 (ivf-refine); runs v0131/a1713 vs A v0128/a1710. -D
+-#: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF restored the old path.
+-# TOMBSTONE: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF (old path; EXP:2065 KEEP, promoted 2026-10-11 NV+AMD) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 532b33e7ba.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF.patch; record in docs/TOMBSTONES.md.
++#: MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF restores the old path.
+ comptime IDN_PQ_TRAINSET_STRIDED = (
+     GLOBAL_NUMERIC_MODE != NUMERIC_FAST
++    and not is_defined["MOJOLEARN_IDN_PQ_TRAINSET_STRIDED_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+ comptime IDN_PQ_TRAIN_ROWS_PER_CODE = 256

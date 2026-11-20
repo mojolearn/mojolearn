@@ -6,11 +6,21 @@
   5810  k-NN membership and order: (squared distance, index)
   5811  the perplexity bisection: 100 float32 steps, sums ascending
   5812  P's normalization: the total summed over CSR edges ascending
-  5813  the repulsion: sum over j ascending; Z over rows ascending
+  5813  the repulsion: row i's sums in 64 lanes (lane j mod 64 folds its own
+        j ascending from +0, the lane sums added in lane order from +0);
+        Z over rows by the pairwise tree (neighbours added level by level,
+        an odd last node carried up)
   5814  the attraction: over each row's CSR edges ascending
   5815  the gains update: `update * grad < 0` STRICT (0 at the first step)
 
-`rev` flags compute the unpinned spelling only to show a fixture separates."""
+`rev` flags compute the unpinned spelling only to show a fixture separates.
+
+5813 restated 2026-11-19 (lane fx-gpu-checks-xfam): the product's Z has been
+the pairwise tree since 2026-10-02 (x_ann/tsne_core.mojo `ts_sum_cell`) and
+its repulsion the 64-lane fold since 2026-10-04 (TS_LANE_FOLD), on every
+column; this oracle kept the two ascending chains and the first GPU run of
+tsne_check (build 0c68d6cd27) showed it. `to_fit(chain=True)` keeps the single
+chain over j as the unpinned spelling."""
 
 from core.device_fold import host_sum_f32_fixed
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul_add
@@ -52,6 +62,24 @@ def to_sum(v: List[Float32], lo: Int, hi: Int, rev: Bool = False) -> Float32:
         var t = hi - 1 - (s - lo) if rev else s
         acc = ftz(acc + v[t])
     return acc
+
+
+def to_tree(v: List[Float32], n: Int) -> Float32:
+    """5813's Z: v[0 : n] summed level by level, node q = ftz(c[2q] +
+    c[2q + 1]), an odd last node carried up unchanged; ftz(root)."""
+    if n <= 0:
+        return Float32(0.0)
+    var c = List[Float32](capacity=n)
+    for t in range(n):
+        c.append(v[t])
+    while len(c) > 1:
+        var up = List[Float32](capacity=(len(c) + 1) // 2)
+        for q in range(len(c) // 2):
+            up.append(ftz(c[2 * q] + c[2 * q + 1]))
+        if len(c) % 2 == 1:
+            up.append(c[len(c) - 1])
+        c = up^
+    return ftz(c[0])
 
 
 def to_perplexity(nd: List[Float32], n: Int, nn: Int, log_perp: Float32) -> List[Float32]:
@@ -139,7 +167,7 @@ def to_q(y: List[Float32], i: Int, j: Int) -> Float32:
 
 
 def to_fit(x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
-           lr: Float32, max_iter: Int, exploration: Int, mut kl_out: Float32) -> List[Float32]:
+           lr: Float32, max_iter: Int, exploration: Int, mut kl_out: Float32, chain: Bool = False) -> List[Float32]:
     var k = Int(identical_mul(Float32(3.0), perplexity)) + 1
     var nn = k if k < n - 1 else n - 1
     var nd = List[Float32]()
@@ -156,24 +184,27 @@ def to_fit(x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Floa
     var z = Float32(0.0)
     var rep = List[Float32](length=2 * n, fill=Float32(0.0))
     for it in range(max_iter + 1):
-        # 5813: row partial sums, then Z over rows
+        # 5813: each row's sums in 64 lanes (one lane under `chain`, the
+        # unpinned single chain over j), then Z over rows by the tree
+        var n_lanes = 1 if chain else 64
         var rowz = List[Float32](length=n, fill=Float32(0.0))
         for i in range(n):
-            var r0 = Float32(0.0)
-            var r1 = Float32(0.0)
-            var zz = Float32(0.0)
+            var lz = List[Float32](length=n_lanes, fill=Float32(0.0))
+            var l0 = List[Float32](length=n_lanes, fill=Float32(0.0))
+            var l1 = List[Float32](length=n_lanes, fill=Float32(0.0))
             for j in range(n):
                 if j == i:
                     continue
+                var s = j % n_lanes
                 var q = to_q(y, i, j)
-                zz = ftz(zz + q)
+                lz[s] = ftz(lz[s] + q)
                 var qq = ftz(identical_mul(q, q))
-                r0 = ftz(r0 + ftz(identical_mul(qq, ftz(ftz(y[2 * i]) - ftz(y[2 * j])))))
-                r1 = ftz(r1 + ftz(identical_mul(qq, ftz(ftz(y[2 * i + 1]) - ftz(y[2 * j + 1])))))
-            rowz[i] = zz
-            rep[2 * i] = r0
-            rep[2 * i + 1] = r1
-        z = to_sum(rowz, 0, n)
+                l0[s] = ftz(l0[s] + ftz(identical_mul(qq, ftz(ftz(y[2 * i]) - ftz(y[2 * j])))))
+                l1[s] = ftz(l1[s] + ftz(identical_mul(qq, ftz(ftz(y[2 * i + 1]) - ftz(y[2 * j + 1])))))
+            rowz[i] = to_sum(lz, 0, n_lanes)
+            rep[2 * i] = to_sum(l0, 0, n_lanes)
+            rep[2 * i + 1] = to_sum(l1, 0, n_lanes)
+        z = to_tree(rowz, n)
         if it == max_iter:
             break
         var ex = exaggeration if it < exploration else Float32(1.0)

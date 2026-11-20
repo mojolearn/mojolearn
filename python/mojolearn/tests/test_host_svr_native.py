@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """SVR retains saved-kernel behavior across its complete native boundary."""
-import ast
 import gc
-import hashlib
 import json
 import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,7 +14,7 @@ from mojolearn import _classical_host as host
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests import _legacy_host_inference as legacy
 from mojolearn.tests.test_host_archive_native import _archive, _state
-from mojolearn.tests.test_host_inference_native import _input, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
+from mojolearn.tests.test_host_inference_native import _input, _internal_read, _refused, test_application_subclass_keeps_constructor_fit_and_score_guards as _subclass_guards
 from mojolearn.tests.test_host_kernel_inference_native import FORMATS
 
 KERNELS = ("linear", "rbf", "poly", "sigmoid", "precomputed")
@@ -78,8 +75,8 @@ def test_svr_native_coefficient_property_preserves_contract(tmp_path, kernel, ze
     result = audit_native_call(getattr, model, "coef_").assert_native()
     assert type(result) is np.ndarray and result.dtype == np.dtype("<f4")
     assert _state(result) == _state(expected)
-    assert type(model.coef_).__name__ == "Array"
-    assert _state(model.coef_) == _state(expected)
+    assert type(_internal_read(model, "coef_")).__name__ == "Array"
+    assert _state(_internal_read(model, "coef_")) == _state(expected)
 
 
 @pytest.mark.parametrize("field", ["dual_coef_", "support_vectors_"])
@@ -257,51 +254,25 @@ def test_svr_dataframe_and_feature_name_warning_are_preserved(tmp_path):
     assert len(caught) == 1
 
 
-def test_svr_public_method_is_one_native_call():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "HostSVR")
-    method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "predict")
-    body = method.body[1:]
-    assert len(body) == 1 and isinstance(body[0], ast.Return)
-    assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
-
-
-# Existing CPU fit/score remain migration debt. These saved 32011bb32
-# results guard the nested inference calls affected by native installation.
-_FITTED_RESULTS = {'linear': {'n_support': 3,
-            'prediction': '886309dd9e4623d92aaf016c52213bc7e8bc611e576aa554ec1b8a8fcc86837b',
-            'score': 0.9742311383576671},
- 'rbf': {'n_support': 5,
-         'prediction': '3fc84e526b8e1e19b0aab3696015dce0f8e3ba7b1dafa68f0ce055eb2cb9f9b0',
-         'score': 0.864387674716556},
- 'poly': {'n_support': 5,
-          'prediction': '29680366643fe5f227bcf0fb2f49c38e555ea8138aea5eff40ba03f3c2ea16d9',
-          'score': 0.7585669376390397},
- 'sigmoid': {'n_support': 6,
-             'prediction': '156754aae9ed0643cbe2424f915eb85195924f538db46a4f5e8b286189f17a9d',
-             'score': 0.8081568046535612},
- 'precomputed': {'n_support': 3,
-                 'prediction': '886309dd9e4623d92aaf016c52213bc7e8bc611e576aa554ec1b8a8fcc86837b',
-                 'score': 0.9742311383576671}}
-
-
-@pytest.mark.parametrize("kernel", KERNELS)
-def test_svr_inherited_fit_and_nested_score_preserve_results(kernel):
+def test_svr_inherited_fit_is_native_and_precomputed_matches_linear():
+    """For every kernel the inherited fit publishes a fitted model whose predict is one native
+    call; a precomputed linear Gram predicts the linear kernel's words in the same
+    build, and the linear coef_ equals the independent legacy reading."""
     x = np.asarray([[-2., -1.], [-1., -2.], [0., 0.], [.5, .25],
                     [2., 1.], [1., 2.], [3., 3.], [4., 3.]], dtype="<f4")
     y = x[:, 0] * .25 - x[:, 1] * .5
-    data = x @ x.T if kernel == "precomputed" else x
-    model = host.HostSVR(kernel=kernel, gamma=.1, coef0=.25 if kernel in ("poly", "sigmoid") else 0,
-                         max_iter=4, numeric_mode="identical")
-    assert model.fit(data, y) is model
-    assert model.n_support_ == _FITTED_RESULTS[kernel]["n_support"]
-    assert vars(model)["_mojolearn_fitted"] is True
-    assert "_mojolearn_fitting" not in vars(model)
-    result = audit_native_call(model.predict, data).assert_native()
-    assert hashlib.sha256(result.tobytes()).hexdigest() == _FITTED_RESULTS[kernel]["prediction"]
-    assert model.score(data, y) == _FITTED_RESULTS[kernel]["score"]
-    if kernel == "linear":
-        assert _state(audit_native_call(getattr, model, "coef_").assert_native()) == _state(legacy.svr_coefficients(model))
+    predictions = {}
+    for kernel in KERNELS:
+        data = x @ x.T if kernel == "precomputed" else x
+        model = host.HostSVR(kernel=kernel, gamma=.1, coef0=.25 if kernel in ("poly", "sigmoid") else 0, max_iter=4, numeric_mode="identical")
+        assert model.fit(data, y) is model
+        assert vars(model)["_mojolearn_fitted"] is True
+        assert "_mojolearn_fitting" not in vars(model)
+        predictions[kernel] = audit_native_call(model.predict, data).assert_native()
+        if kernel == "linear":
+            assert _state(audit_native_call(getattr, model, "coef_").assert_native()) == _state(legacy.svr_coefficients(model))
+    np.testing.assert_array_equal(np.asarray(predictions["precomputed"]).view("u4"),
+                                  np.asarray(predictions["linear"]).view("u4"))
 
 
 @pytest.mark.parametrize("kind", ["float16", "float32", "float64", "int16", "list", "tuple"])

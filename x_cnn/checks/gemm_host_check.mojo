@@ -77,7 +77,7 @@ def _unflushed_cell(a: List[Float32], b: List[Float32], op: Int, i: Int, j: Int,
     return acc
 
 
-def main() raises:
+def run_checks() raises:
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         print("gemm_host_check: IDENTICAL builds only (tools/with_identical_mode.sh); nothing checked")
         return

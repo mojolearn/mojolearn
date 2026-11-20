@@ -12,11 +12,11 @@ handle; the GPU binding's `moe_forward` with that handle reads them in place
 words). The Python layer owns the handle: it puts a new copy when a weight
 array is replaced and frees the old one (`_x_sequence_moe.MoEBlock`).
 Copies only: no bit moves."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP
 from sequence.exec_device import sequence_ctx
+from core.shared_slot import SharedSlot
 
 
 struct _MoeWeights(Defaultable, Movable):
@@ -35,8 +35,8 @@ struct _MoeWeights(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime _NAME = "MojoXSequenceMoeWeightsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceMoeWeightsFast"
-comptime MOE_WEIGHTS = _Global[StorageType=_MoeWeights, name=_NAME, init_fn=_MoeWeights.__init__]
+comptime _NAME = "MojolearnXSequenceMoeWeightsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceMoeWeightsFastV1"
+comptime MOE_WEIGHTS = SharedSlot[_MoeWeights, _NAME]
 
 
 def _up(ctx: DeviceContext, src: FP, n: Int) raises -> DeviceBuffer[DType.float32]:

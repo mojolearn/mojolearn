@@ -5,8 +5,6 @@ Constructors and parser calls below are independent legacy test oracles.
 Only the public load operation is audited; unchanged prediction methods are
 called separately to verify that native reconstruction retains their state.
 """
-import ast
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -73,6 +71,9 @@ def test_public_router_fixture_matrix_covers_every_registered_archive_entry():
     covered = {(fmt, name) for name, (fmt, _) in CASES.items()}
     covered.update({("mojolearn-linear-1", "LinearRegression"), ("mojolearn-linear-1", "Ridge"),
                     ("mojolearn-scaler-1", "StandardScaler"), ("mojolearn-arima-2", "ARIMA")})
+    # 9b2c7b2324 registered the saved-forest format; its public round trip is
+    # test_iforest_save_forest.py::test_host_column_loads_scores_and_resaves_a_saved_forest.
+    covered.add(("mojolearn-iforest-2", "IsolationForest"))
     covered.update((fmt + suffix, name) for fmt, family in forest._FORMATS.items()
                    for name, info in forest._ESTIMATORS.items() if family == info[0]
                    for suffix in ("", forest._GROVES_SUFFIX))
@@ -195,12 +196,3 @@ def test_gbdt_bad_archives_fail_inside_native_boundary(tmp_path, changes):
     assert not any(report[k] for k in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
 
-def test_public_archive_entries_are_each_one_native_binding_call():
-    for module, owner, name in ((forest, None, "host_model"), (classical, None, "host_model"),
-                                (forest, "HostForest", "from_file"), (gbdt, "HostGBDT", "from_file")):
-        tree = ast.parse(Path(module.__file__).read_text())
-        parent = tree if owner is None else next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == owner)
-        method = next(n for n in parent.body if isinstance(n, ast.FunctionDef) and n.name == name)
-        assert len(method.body) == 2
-        assert isinstance(method.body[-1], ast.Return)
-        assert sum(isinstance(n, ast.Call) for n in ast.walk(method.body[-1])) == 1

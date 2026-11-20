@@ -207,12 +207,12 @@ def test_split_descriptor_moves_where_the_fold_hash_cannot(splits):
 
 def test_split_descriptor_is_reproducible_and_refuses_to_guess_the_splitter():
     from mojolearn import GaussianNB
-    from mojolearn.model_selection import SPLIT_DESCRIPTOR_SCHEMA, split_descriptor
+    from mojolearn.model_selection import _SPLIT_DESCRIPTOR_SCHEMA, split_descriptor
 
     X, labels = _ordered_fixture()
     first = _native(split_descriptor, X, labels, estimator=GaussianNB(), cv=4)
     assert first == _native(split_descriptor, X, labels, estimator=GaussianNB(), cv=4)
-    assert first['schema'] == SPLIT_DESCRIPTOR_SCHEMA
+    assert first['schema'] == _SPLIT_DESCRIPTOR_SCHEMA
     # Stratified folds and KFold folds are different splits; describing one as
     # the other would be a descriptor of a run that never happened, which is
     # why the estimator is refused rather than defaulted below.

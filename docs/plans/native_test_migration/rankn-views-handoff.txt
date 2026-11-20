@@ -1,0 +1,50 @@
+Mojolearn native rank-N views/reductions/gradient tests, 2026-11-10
+
+Scope and assertions per executor
+  checks/native_tests/rankn_views_cases.mojo: 17 direct OpsSession fixtures.
+  Eight views preserve all 105 values and exact shape: reshape with inferred
+  extent, flatten, unsqueeze, squeeze, permute, explicit/default transpose,
+  and reshape after permutation. Independent scalar coordinate formulas
+  compute every expected output index, with no product indexing helpers.
+  Eight axis reductions: three sums, two means, three maxima over the same
+  4 x 6 x 5 shape, axis sets, negative-axis/default/explicit keepdims forms,
+  and planted ties as the former Python tests. Float64 scalar accumulation
+  is the independent oracle; maxima are exact, sum/mean tolerances retain
+  the previous 1e-5 relative and absolute bounds.
+  One recording-session fixture: NaN wins, ties send gradients to the first
+  maximum, every gradient element checked. Calls backward/gradient_into
+  directly with owned Mojo buffers. No Python objects/imports/callbacks.
+  View and max-gradient inputs are unchanged; reduction inputs use native
+  deterministic finite values in place of NumPy's normal RNG, with the same
+  shape and planted tied maxima. No old hashes or repeat-run identity checks.
+
+Parallel plan
+  CPU: 17 independent sessions through existing host_parallelize.
+  GPU: existing parallel kernels, ordered fixture submission because
+  DeviceExec shares sequence_ctx() and pool ownership. This known limitation
+  is explicit, not claimed as parallel-session/scaling evidence.
+
+Python changes and remaining work
+  Replaced full NumPy view/reduction/gradient numerical oracles with thin
+  public shape/dtype/gradient-buffer packing checks and route sentinels.
+  Removed the redundant double-run/digest call for views and reductions.
+  Public refusals and matrix shape/admission checks remain.
+  Broadcast, batched matmul, concat/split/take, softmax, conv/pool and finite-
+  difference gradient numerical checks remain pending; their existing
+  legacy helper is unchanged. This file is explicitly partially migrated.
+
+Orchestrator commands (source-reviewed; no lane compile/run)
+  bash tools/compile_slot.sh pixi run check-native-rankn-views-cpu
+  bash tools/compile_slot.sh pixi run check-native-rankn-views-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_views_cpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-views-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/rankn_views_gpu.mojo -o "$HOME/mojolearn-evidence/native-rankn-views-gpu"
+  Use standard NVIDIA/AMD target flags for those compile legs.
+  Retained Python boundary binding: _mojolearn_x_sequence.
+  python3 -m pytest mojolearn/tests/test_ops_rankn.py -k 'pack_expected or pack_native'
+  Save complete logs and keep compile/runtime outcomes distinct.
+
+Status
+  CPU/GPU compile and run are RUN OWED to orchestrator. No box job or ID run.
+  No product/kernel/arithmetic/default changes; no performance or bits claim.
+  A/B define: none (test-only). Earlier test batch source remains frozen.

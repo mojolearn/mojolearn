@@ -21,7 +21,7 @@ the 0.8.34 value) and history (older sources). The race's fast_page status gets 
 one Q tag. Ratios are recomputed (tools/bench_board.add_ratios). A (lane, dataset) with no race
 becomes a board["extra_races"] race (family from the input, default "algos") with no opponent.
 
-Quality gate (CLAUDE.md: FAST passes only if quality does not go down). Before a row is applied,
+Quality gate (AGENTS.md: FAST passes only if quality does not go down). Before a row is applied,
 its new quality is compared (tools/af_quality.py, rel_tol 1e-3, abs_tol 1e-6) against the
 current FAST quality (the before quality when there is none) and against the best opponent's
 quality. A row WORSE than either is REFUSED and the reason printed; the other rows still

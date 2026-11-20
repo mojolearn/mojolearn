@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """fit_arima's native partition and merge reproduce the plain fit's saved model.
 
-fit_arima is one native call (bindings/parallel_forecast_native.mojo
+fit_arima is one native call (bindings/parallel_forecast_native_door.mojo
 `fit_arima`): whole series in `series_per_shard` ranges, each fitted by the
 plain native fit in a worker process, every fitted array placed at its
 series offset. Every series is fitted alone, so the merged model must save

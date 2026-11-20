@@ -100,8 +100,9 @@ from gemm.contract import (
 )
 from gemm.checks.gemm_oracle import fold_balanced_tree, gemm_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: The value written into `C` before every launch. A cell still holding it
 #: afterwards was NEVER WRITTEN, and nothing downstream of it is a comparison
@@ -532,9 +533,9 @@ def _run_device(
         hB.unsafe_ptr().unsafe_store(i, hb[i])
     for i in range(mn):
         hC.unsafe_ptr().unsafe_store(i, POISON)
-    ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dc, src_ptr=hC.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, da, hA)
+    upload_host_into[DType.float32](ctx, db, hB)
+    upload_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     if plan == RUN_SHIPPED_AT_ROW_ON:
         identical_gemm_shipped_at_row_into[False](
@@ -545,7 +546,7 @@ def _run_device(
     else:
         identical_gemm_with_plan(ctx, dc, da, db, dw, m, n, k, op, plan)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hC.unsafe_ptr(), src_buf=dc)
+    download_host_into[DType.float32](ctx, dc, hC)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(mn):
@@ -567,9 +568,6 @@ def _run_device(
     _ = db
     _ = dc
     _ = dw
-    _ = hA
-    _ = hB
-    _ = hC
     return out^
 
 
@@ -921,6 +919,32 @@ def check_device_matches_oracle() raises:
         _oracle_case(ctx, OP_NT, 2, 2, 130900, String("k130900.P1023.odd"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 2, 2, 131073, String("k131073.P1017.past.crossover"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 1, 1, 4000000, String("k4M.P1024.cap"), False, cases, fails)
+        # lane fx-gemm-leaf512 (2026-11-19): the same comparison on both
+        # sides of 512 and at non-multiples of it. Under v1 these are more
+        # P cases (L = 128); under -D MOJOLEARN_GEMM_FAST_LEAF512 (L = 512)
+        # they are the profile's own edges: 511 and 512 one chain with no
+        # fold, 513 two leaves with a one-element tail, 1500 = 512 + 512 +
+        # 476 (P = 3, odd, ragged: the carry), 2049 (P = 5, carries twice,
+        # tail 1), 2600 (P = 6), 4096 (P = 8, exact). The label carries no P:
+        # the line prints L and P from contract_partition.
+        print("  -- synthetic: below, at and above 512, and non-multiples of it --")
+        _oracle_case(ctx, OP_NT, 4, 4, 511, String("k511"), False, cases, fails)
+        _oracle_case(ctx, OP_TN, 4, 4, 512, String("k512"), False, cases, fails)
+        _oracle_case(ctx, OP_NN, 4, 4, 513, String("k513.tail1"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 5, 7, 1500, String("5x7.k1500.ragged"), False, cases, fails)
+        _oracle_case(ctx, OP_TN, 17, 33, 2049, String("17x33.k2049.tail1"), False, cases, fails)
+        _oracle_case(ctx, OP_NN, 33, 17, 2600, String("33x17.k2600.ragged"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 4, 4, 4096, String("k4096.exact"), False, cases, fails)
+        # a product wide enough for the tuned and packed plans at one leaf
+        # under L = 512 (no fold, no workspace) and four leaves under v1
+        _oracle_case(ctx, OP_NT, 256, 256, 500, String("256x256.k500"), False, cases, fails)
+        _oracle_case(ctx, OP_NT, 256, 256, 1500, String("256x256.k1500.ragged"), False, cases, fails)
+        _oracle_all_plans_case(
+            ctx, OP_NT, 17, 33, 1500, String("allplans.17x33x1500.ragged"), cases, fails
+        )
+        _minus_zero_case(ctx, 5, 7, 1500, String("minuszero.k1500.carry"), cases, fails)
+        _minus_zero_case(ctx, 5, 7, 2600, String("minuszero.k2600"), cases, fails)
+        _minus_zero_case(ctx, 5, 7, 512, String("minuszero.k512"), cases, fails)
         print("  -- synthetic: ragged m and n that no tile divides --")
         _oracle_case(ctx, OP_NT, 5, 7, 300, String("5x7.P3"), False, cases, fails)
         _oracle_case(ctx, OP_NT, 17, 33, 300, String("17x33.P3"), False, cases, fails)
@@ -1142,6 +1166,10 @@ def check_device_is_launch_invariant() raises:
     )
 
 
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) check_device_worklist_is_launch_invariant (four products as one work list against their own launches) and its two helpers deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
+
+
 # ===========================================================================
 # GATE 3: BATCH INVARIANCE
 # ===========================================================================
@@ -1336,9 +1364,9 @@ def _batch_loop_arm(
         ctx.synchronize()
         for i in range(mq * nq):
             hc.unsafe_ptr().unsafe_store(i, POISON)
-        ctx.enqueue_copy(dst_buf=da, src_ptr=hA.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=db, src_ptr=hB.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dc, src_ptr=hc.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, da, hA)
+        upload_host_into[DType.float32](ctx, db, hB)
+        upload_host_into[DType.float32](ctx, dc, hc)
         das.append(da^)
         dbs.append(db^)
         dcs.append(dc^)
@@ -1431,8 +1459,6 @@ def _batch_loop_arm(
     if total_bad != 0:
         fails += 1
     _ = dw
-    _ = hA
-    _ = hB
     _ = das
     _ = dbs
     _ = dcs

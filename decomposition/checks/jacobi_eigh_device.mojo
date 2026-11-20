@@ -19,8 +19,8 @@ from checks.numerics import (
 
 from std.bit import log2_floor
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -88,7 +88,7 @@ comptime JACOBI_TPB = lib_block_size_for[K_LIB_JACOBI_EIGH, TARGET_COLUMN]()
 #: spelling that does not move FAST's bits. FAST therefore launches at
 #: `JACOBI_TPB` exactly as before, and this deviation is IDENTICAL-only.
 comptime JACOBI_ROT_TPB = (
-    256 if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or (has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_JACOBI_FAST_NARROW"]())) else JACOBI_TPB
+    256 if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or (TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_JACOBI_FAST_NARROW"]())) else JACOBI_TPB
 )
 """lane/neighbors-apple (2026-09-28): FAST on Apple takes the 256-wide
 launch too (Nystroem.fit 4,000 rows / 300 components ran 3.06 s under FAST
@@ -169,7 +169,7 @@ def _fold_lead_lanes_and_broadcast[
             red[tid] = value
         barrier()
         if tid < P:
-            var v = InlineArray[Float32, G](fill=Float32(0.0))
+            var v = Array[Float32, G](fill=Float32(0.0))
             comptime for j in range(G):
                 v[j] = red[tid + j * P]
             comptime for k in range(log2_floor(G)):
@@ -178,7 +178,7 @@ def _fold_lead_lanes_and_broadcast[
                     v[j] = v[j] + v[j + S]
             red[tid] = v[0]
         barrier()
-        var w = InlineArray[Float32, P](fill=Float32(0.0))
+        var w = Array[Float32, P](fill=Float32(0.0))
         comptime for t in range(P):
             w[t] = red[t]
         comptime for k in range(log2_floor(P)):

@@ -1,0 +1,15 @@
+diff --git a/gbdt/gpu_data/apple_fast_trees_experiments.mojo b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+index 0fca93a9a4..b2492e0cf4 100644
+--- a/gbdt/gpu_data/apple_fast_trees_experiments.mojo
++++ b/gbdt/gpu_data/apple_fast_trees_experiments.mojo
+@@ -20,9 +20,7 @@ comptime AFT_G_APPLE_FAST = (
+ comptime AFT_G01 = False
+ # G02: occupancy and per-partition row budget choose document replication.
+ # No performance/quality evidence; retain every row and the multiplier cap.
+-# TOMBSTONE: MOJOLEARN_AFT_G02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 957d58e74f.
+-# Restore: git apply experiments/removed/MOJOLEARN_AFT_G02.patch; record in docs/TOMBSTONES.md.
+-comptime AFT_G02 = False
++comptime AFT_G02 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G02"]()
+ # G03: one leader folds winners per block and broadcasts through shared memory.
+ # No performance/quality evidence; preserve original record order and tie rules.
+ comptime AFT_G03 = AFT_G_APPLE_FAST and is_defined["MOJOLEARN_AFT_G03"]()

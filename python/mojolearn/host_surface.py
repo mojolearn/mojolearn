@@ -48,9 +48,8 @@ objection was size, and size was measured rather than guessed: the sixteen add
 7.66 MB uncompressed and 2.19 MB compressed to a wheel whose weight is GPU
 bindings (312 MB uncompressed on Linux, 91 files). `ships_in_wheel=False` now
 means a deliberate, stated exclusion, and nothing carries one. CPU training became public on 2026-09-20 for estimators
-with a supported CPU training binding. `_cpu_reference.py` retains
-`reference_training()` as a compatibility context; it no longer enables or
-forbids training. Each family declares its compiled CPU capabilities below. The two wheel builders and the packer read
+with a supported CPU training binding; nothing enables or forbids it (the
+no-op `_cpu_reference` compatibility module was deleted 2026-11-15). Each family declares its compiled CPU capabilities below. The two wheel builders and the packer read
 `--wheel-families` and `--wheel-bindings` below instead of naming the byte
 LM's binding by hand, and packaging/check_ext_lists.py fails when any of
 them carries a host list of its own.
@@ -86,11 +85,11 @@ place the reason belongs.
 and `python3 -m mojolearn.host_surface ...` says the same thing on a box
 where the package imports.
 """
-import argparse
-import ast
-import json
-import os
-import sys
+import argparse as _argparse
+import ast as _ast
+import json as _json
+import os as _os
+import sys as _sys
 
 # ------------------------------------------------ the algorithm expansion
 #: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics).
@@ -133,26 +132,26 @@ def expansion_host_family(lane):
 
 
 def expansion_fragment_path(lane):
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), f"_surface_{lane}.py")
+    return _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), f"_surface_{lane}.py")
 
 
 def _read_expansion_fragment(lane):
     """One lane's fragment as a dict of EXPANSION_KEYS, refused unless it is
     literal data binding only its own names."""
     path = expansion_fragment_path(lane)
-    if not os.path.isfile(path):
+    if not _os.path.isfile(path):
         raise RuntimeError(f"host_surface: the {lane} lane's fragment {path} is missing; "
                            "every expansion lane ships one, empty until the lane declares something")
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
-    tree = ast.parse(text, filename=path)
+    tree = _ast.parse(text, filename=path)
     out = {"GPU_BINDINGS": (), "FAMILIES": (), "TRAINING_LANE_NAMES": {}, "PUBLIC_PENDING_LANES": {}}
     bound = set()
     for k, node in enumerate(tree.body):
-        if k == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+        if k == 0 and isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Constant):
             continue  # the docstring
-        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name) and node.targets[0].id in EXPANSION_KEYS):
+        if not (isinstance(node, _ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], _ast.Name) and node.targets[0].id in EXPANSION_KEYS):
             raise RuntimeError(f"host_surface: {path}:{getattr(node, 'lineno', '?')}: a fragment binds only "
                                f"{', '.join(EXPANSION_KEYS)}, each once, as literal data")
         if node.targets[0].id in bound:
@@ -162,13 +161,13 @@ def _read_expansion_fragment(lane):
         bound.add(node.targets[0].id)
         # `dict(key=value, ...)` is the manifest's own spelling of a family;
         # nothing else is callable in a fragment.
-        for sub in ast.walk(node.value):
-            if isinstance(sub, ast.Call) and not (isinstance(sub.func, ast.Name) and sub.func.id == "dict"):
+        for sub in _ast.walk(node.value):
+            if isinstance(sub, _ast.Call) and not (isinstance(sub.func, _ast.Name) and sub.func.id == "dict"):
                 raise RuntimeError(f"host_surface: {path}:{sub.lineno}: only dict(...) may be called in a fragment")
-            if isinstance(sub, ast.Name) and sub.id != "dict":
+            if isinstance(sub, _ast.Name) and sub.id != "dict":
                 raise RuntimeError(f"host_surface: {path}:{sub.lineno}: a fragment names nothing but literals "
                                    f"({sub.id!r})")
-        out[node.targets[0].id] = eval(compile(ast.Expression(node.value), path, "eval"),  # noqa: S307
+        out[node.targets[0].id] = eval(compile(_ast.Expression(node.value), path, "eval"),  # noqa: S307
                                        {"__builtins__": {"dict": dict}})
     gpu, family = expansion_gpu_binding(lane), expansion_host_family(lane)
     if not isinstance(out["GPU_BINDINGS"], tuple) or set(out["GPU_BINDINGS"]) - {gpu}:
@@ -501,8 +500,8 @@ TRAINING_LANE_NAMES = {
     "minmax-scaler": "the min-max scaler",
     "scaler-fit-transform": "the standard and min-max scalers' fit_transform",
     # The logistic lane, same batch: glm/host/qn_oracle.mojo, the L-BFGS
-    # arm of the quasi-Newton solver, exported as qn_fit from the
-    # estimators host binding.
+    # arm of the quasi-Newton solver, reached through the estimators host
+    # binding's QN table.
     "logistic": "logistic regression",
     # Workstream E batch 3 (2026-09-14): the random forests train through
     # ensemble/host/rf_oracle.mojo, the device trainer restated on the host,
@@ -574,7 +573,7 @@ TRAINING_LANE_NAMES = {
     # the driver's own Python and merged there in class order, and each shard
     # is this family's host `gpc_fit`/`gpc_predict` -- the same arithmetic the
     # two lanes above hash -- so `gpc_class_fit` and `gpc_class_predict`
-    # joined `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` and these two take a CPU column.
+    # joined `the native shard drivers' CPU route (bindings/parallel_shard_native_door.mojo)` and these two take a CPU column.
     # `PUBLIC_INAPPLICABLE_PREFIXES` keeps every `par-*` lane out of the public
     # reference set, so being covered here does not make them public.
     # lane/cpu-routes-gpu-only-four (2026-09-20): the other FOUR of that
@@ -591,7 +590,6 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
-    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -922,6 +920,7 @@ TRAINING_LANE_NAMES = {
     "public-set-params": "native constructor, parameter reset and refit across estimator families",
     "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
+    "samba-decode-session": "the resident Samba stack decode session",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
     # (DEVIATION 6200, training/maximize.mojo) through the same host binding;
@@ -1027,7 +1026,7 @@ TRAINING_LANE_NAMES = {
     # transform_scaler (four column shards), fit_arima and
     # fit_exponential_smoothing (two series per shard) run each shard as a
     # host fit in its own worker process and merge in shard order through
-    # the drivers' unchanged code (the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)); the
+    # the drivers' unchanged code (the native shard drivers' CPU route (bindings/parallel_shard_native_door.mojo)); the
     # cooperative drivers refuse by name. On the M4's CPU column (one core)
     # every train, infer and batch cell of the three lanes read IDENTICAL x4
     # against the 166-lane record before the gate ran, and the sabotage set
@@ -1039,7 +1038,7 @@ TRAINING_LANE_NAMES = {
     # the driver's own ordered memcopy; nothing is split inside a binding
     # (the worker runs the bare `state.predict`, and arima/ and holtwinters/
     # name no device count and no multi_gpu module), so
-    # `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` admits it at any device count and the
+    # `the native shard drivers' CPU route (bindings/parallel_shard_native_door.mojo)` admits it at any device count and the
     # shard's own predict and forecast are this family's and the tsa
     # family's host bindings. Before that all four entries refused by name
     # on every CPU install and had no lane at all.
@@ -1064,7 +1063,8 @@ TRAINING_LANE_NAMES = {
     # knn_classify_neighbors and knn_regress_neighbors.
     # Wave 2, the forest driver: fit_forest cuts 16 trees into four global
     # tree ID ranges in Python; each range is the rf or trees host
-    # binding's shard fit (rf_classifier_fit_shard, et_regressor_fit_shard),
+    # binding's shard fit (rf_classifier_fit_shard; the et shard fits were
+    # deleted 2026-11-12, no caller),
     # the GPU bindings' tree_start offset restated on the host, and the
     # trees concatenate in ID order.
     # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
@@ -1098,9 +1098,9 @@ TRAINING_LANE_NAMES = {
     # lane/laneless-public-classes (2026-09-19): DistributedIVFIndex, the
     # disjoint-shard driver over a built index. Its workers call the ivf
     # binding's `ivf_flat_partial_search` and `ivf_finalize_distances`,
-    # which the host bindings now register from bindings/ivf_host_search.mojo
+    # which the host bindings now register from bindings/ivf_host_search_door.mojo
     # over `host_ivf_search`'s partial_storage arms, and which
-    # `the native shard drivers' CPU route (bindings/parallel_shard_native.mojo)` admits, so the driver's Python
+    # `the native shard drivers' CPU route (bindings/parallel_shard_native_door.mojo)` admits, so the driver's Python
     # partition, its local-id maps and its global merge run unchanged on a
     # CPU. Being covered means it HAS a CPU route, not that a CPU column
     # runs it: it is a multi-device driver, so tools/lane_applicability.py
@@ -1252,43 +1252,185 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 # Native functions/types connected once by load_host_module, before public API
 # modules retain their entries. Aliases never choose an operation in Python.
 HOST_IMPORT_ALIASES = {
-    "_mojolearn_tokenizer_host": ({
-        "binding": "_mojolearn_runtime_classical_host",
-        "marker": "tokenizer_host_runtime_classical_abi",
-        "abi": 1,
-        "functions": (
-            'classical_native_call',
-            'classical_attribute_call',
-            'classical_attribute_descriptor',
-            'host_archive_finalize_call',
-            'host_svr_attribute_call',
-            'host_svc_attribute_call',
-            'pca_native_call',
-            'standard_scaler_fit_native',
-            'standard_scaler_native_call',
-            'minmax_scaler_native_call',
-            'maxabs_scaler_native_call',
-            'prep_stateless_native_call',
-            'qn_native_call',
-            'logistic_native_call',
-            'decomp_native_call',
-            'linalg_decomp_native_call',
-            'als_native_call',
-            'mcd_native_call',
-            'pls_native_call',
-            'dict_learning_native_call',
-            'jl_native_call',
-            'ipca_native_call',
-            'tsvd_native_call',
-            'prep_classify_native_call',
-            'prep_encode_native_call',
-            'x_linear_native_call',
-            'str_labels_native_call',
-            'robust_scaler_native_call',
-            'standard_scaler_attribute_call',
-        ),
-        "types": ("_TreesResident",),
-    },),
+    # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): one spec per
+    # owner binding, connected in this order; the classical owner comes first
+    # because it registers the Python types the later owners' entries allocate.
+    # ABI 2: a tokenizer host that still registers the moved entries itself is
+    # refused with the complete-layout message.
+    "_mojolearn_tokenizer_host": (
+        {
+            "binding": "_mojolearn_runtime_classical_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'classical_native_call',
+                'linear_entry_connection_v1',
+                'classical_attribute_call',
+                'classical_attribute_descriptor',
+                'host_archive_finalize_call',
+            ),
+            "types": ("_TreesResident", "_TreesResidentDeath"),
+        },
+        {
+            "binding": "_mojolearn_runtime_trees_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'trees_native_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_family_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'family_native_call',
+                'host_svr_attribute_call',
+                'host_svc_attribute_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_prep_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'standard_scaler_fit_native',
+                'standard_scaler_native_call',
+                'minmax_scaler_native_call',
+                'maxabs_scaler_native_call',
+                'prep_stateless_native_call',
+                'prep_classify_native_call',
+                'prep_encode_native_call',
+                'str_labels_native_call',
+                'labels_native_call',
+                'robust_scaler_native_call',
+                'standard_scaler_attribute_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_decomp_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'pca_native_call',
+                'decomp_native_call',
+                'linalg_decomp_native_call',
+                'als_native_call',
+                'mcd_native_call',
+                'pls_native_call',
+                'dict_learning_native_call',
+                'jl_native_call',
+                'ipca_native_call',
+                'tsvd_native_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_linear_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'qn_native_call',
+                'logistic_native_call',
+                'x_linear_native_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_catalog_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'catalog_public_call',
+                'lm_corpus_public_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_xseq_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'xseq_native_call',
+                'xcnn_native_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_byte_trainer_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'byte_lm_host_trainer_call',
+                'byte_lm_trainer_call',
+                'byte_lm_pooled_finalize_call',
+                'parallel_byte_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_parallel_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'parallel_shard_call',
+                'neighbor_query_call',
+                'neighbor_query_attribute_call',
+                'parallel_forecast_call',
+                'tsa_native_call',
+                'parallel_neural_call',
+                'parallel_mlp_call',
+                'small_mlp_call',
+                'small_mlp_finalize',
+                'parallel_causal_call',
+            ),
+            "types": (),
+        },
+        {
+            "binding": "_mojolearn_runtime_neural_host",
+            "marker": "tokenizer_host_runtime_classical_abi",
+            "abi": 2,
+            "functions": (
+                'transformer_public_call',
+                'transformer_decode_native_call',
+                'mamba_native_call',
+                'samba_config_call',
+                'samba_native_call',
+                'neural_block_init',
+                'neural_block_set_params',
+                'neural_block_getstate',
+                'neural_block_setstate',
+                'neural_block_allocate',
+                'neural_block_forward',
+                'neural_block_backward',
+                'neural_block_inference_backward',
+                'causal_model_init',
+                'causal_model_load',
+                'causal_model_read_weights',
+                'causal_lm_allocate',
+                'causal_lm_reset',
+                'causal_lm_forward',
+                'causal_lm_stream',
+                'causal_lm_read',
+                'causal_lm_info',
+                'causal_lm_generate',
+                'causal_lm_text_stream',
+                'causal_lm_generate_text',
+                'causal_lm_resident',
+                'causal_lm_snapshot',
+                'causal_lm_resume',
+                'causal_lm_parameters',
+                'causal_lm_blocks',
+                'causal_state_init',
+                'causal_lm_repr',
+                'causal_state_repr',
+            ),
+            "types": (),
+        },
+    ),
 }
 
 #: Families the CPU identity gate's sabotage host set builds with defines of
@@ -1468,6 +1610,9 @@ FAMILIES = (
         host_modules=(
             "training/byte_lm_host.mojo",
             "training/byte_lm_host_backward.mojo",
+            # TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+            # Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+            "autograd/block_step_host.mojo",
             "training/byte_lm_host_kernels.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
@@ -1485,16 +1630,15 @@ FAMILIES = (
             "byte_lm_host_next",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "byte_lm_host_arithmetic_suffix",
-            "byte_lm_trainer_api_v1", "byte_lm_native_session_handle_v1",
             "byte_lm_session_create", "byte_lm_session_close", "byte_lm_session_info",
             "byte_lm_numeric_mode", "byte_lm_vendor", "byte_lm_profile", "byte_lm_arithmetic_suffix",
-            "byte_lm_config_profile", "sha256_hex", "byte_lm_file_sha256",
-            "byte_lm_run", "byte_lm_run_configured", "byte_lm_trainer_run", "byte_lm_logits",
-            "byte_lm_trainer_step", "byte_lm_trainer_logits", "byte_lm_trainer_next_bytes",
-            "byte_lm_trainer_export_state", "byte_lm_trainer_export_gradients",
-            "byte_lm_session_open", "byte_lm_session_step", "byte_lm_session_eval",
-            "byte_lm_session_rollback", "byte_lm_session_export_state", "byte_lm_session_export_gradients",
-            "byte_lm_session_logits", "byte_lm_session_next_bytes",
+            "byte_lm_config_profile",
+            # byte_lm_run: dead native entry deleted 2026-11-18 (lane fx-dead-small, docs/TOMBSTONES.md).
+            "byte_lm_run_configured", "byte_lm_logits",
+            "byte_lm_trainer_step",
+            "byte_lm_session_open", "byte_lm_session_step",
+            "byte_lm_session_rollback", "byte_lm_session_export_state",
+            "byte_lm_session_logits",
         ),
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1653,14 +1797,11 @@ FAMILIES = (
             "native_codec_call", "native_process_call", "native_transport_call",
             "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
-            "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
+            "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "tokenizer_host_runtime_classical_abi", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
-            "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
-            "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
-            "tokens_gather_rows",
             # vocabulary identity digest (core/sha256.mojo)
             "sha256_hex",
             # registered 2026-10-20 (f872423a4, a4b0106ee, 12fa2ed0f): the
@@ -1673,8 +1814,23 @@ FAMILIES = (
             # parallel forecasting's owner and the GPU byte-LM trainer step
             "embedding_layer_lifetime", "parallel_forecast_call", "byte_lm_trainer_call",
             # lane native-parallel-driver-20261024: the Python-sharded
-            # multi-GPU drivers' owner (bindings/parallel_shard_native.mojo)
+            # multi-GPU drivers' owner (bindings/parallel_shard_native_door.mojo)
             "parallel_shard_call",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "backend_public_native_call", "byte_lm_pooled_finalize_call", "catalog_public_call", "lm_corpus_public_call", "numeric_profile_native_call", "operation_lock_connect", "public_attribute_generic_slot_native_call", "sequence_tensor_finalize", "small_mlp_finalize", "tokenizer_public_call", "transformer_decode_native_call", "transformer_public_call",
+            # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): native
+            # refusals under the names whose owners are now their own host
+            # bindings (HOST_IMPORT_ALIASES replaces them at import); the
+            # indexed neural and causal registrations were exports before too,
+            # spelled `neural_block_c[i]` / `causal_public_c[i]`.
+            "trees_native_call", "family_native_call",
+            "neural_block_init", "neural_block_set_params", "neural_block_getstate", "neural_block_setstate",
+            "neural_block_allocate", "neural_block_forward", "neural_block_backward", "neural_block_inference_backward",
+            "causal_model_init", "causal_model_load", "causal_model_read_weights",
+            "causal_lm_allocate", "causal_lm_reset", "causal_lm_forward", "causal_lm_stream", "causal_lm_read",
+            "causal_lm_info", "causal_lm_generate", "causal_lm_text_stream", "causal_lm_generate_text",
+            "causal_lm_resident", "causal_lm_snapshot", "causal_lm_resume", "causal_lm_parameters",
+            "causal_lm_blocks", "causal_state_init", "causal_lm_repr", "causal_state_repr",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1747,15 +1903,17 @@ FAMILIES = (
         exports=(
             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-            "transformer_forward", "transformer_decode_step", "transformer_forward_int15",
+            "transformer_forward", "transformer_decode_step", "transformer_decode_steps", "transformer_forward_int15",
             "mamba1_forward", "mamba1_decode_step",
             "mamba2_forward", "mamba2_decode_step",
-            "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",
+            "mamba3_forward_fresh",
             "embedding_forward", "rms_norm_forward", "linear_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "neural_arithmetic_profile",
             # checkpoint integrity digest (core/sha256.mojo)
             "sha256_hex",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "mamba_block_api_v1", "mamba_state_api_v1", "neural_primitives_api_v1", "transformer_block_api_v1",
         ),
         gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
@@ -1803,57 +1961,64 @@ FAMILIES = (
         ),
         display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
-            "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
-            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
+            "core/knn_host_predict.mojo", "bindings/host_helpers_pack.mojo",
+            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers_door.mojo",
             "core/dense_coo.mojo", "core/msel_host.mojo",
         ),
         exports=(
+            "labels_native_api_v3",
             # Native C-entry registrations are part of the exported ABI too.
-            "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
+            "lr_schedule_at",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
+            "mojolearn_mode_policy_mask",
+            # lane fx-verify-trace: the activity record's switch and read-back
+            # (verification tooling; core/activity_record.mojo)
+            "activity_begin", "activity_end",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
+            "kmeans_native_api_v1",
             "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
-            "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
+            "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "argmax_last_rows_f32",
+            "argmax_rows_f64",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
-            # of bindings/hotpath_helpers.mojo that stand in for per-row Python
+            # of bindings/hotpath_helpers_door.mojo that stand in for per-row Python
             # (the ORDER RULE's label encoder, DEVIATION 2500, runs inside
             # prepare_targets).
             "cast_elements", "reduce_stat", "equal_elements",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
+            # lane ne1-b-door (N051): every fold's partition as one split plan
+            "select_folds_i64",
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
             # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
-            "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
+            "knn_affinity_f32",
             # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
             # fold-row gather, prediction scatter, proba column and forest
-            # offset merge (bindings/msel_host.mojo, the host column)
-            "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
-            "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
-            "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
+            # offset merge (bindings/msel_host_pack.mojo, the host column)
+            "msel_put", "msel_free", "msel_live",
+            # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
+            "msel_take_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
             # lane migrate-shared-labels: the shared argument-and-label entry
             "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
             "ic_running_min_f64", "ic_running_min_f32",
-            "fold_pair_f32", "threshold_labels_i64",
+            "threshold_labels_i64",
             "bincount_i64",
             "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
             "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32",
-            "first_seen_i32", "strat_fold_assign_i32",
-            "strat_alloc_i64",
-            "group_fold_assign_i32",
-            "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
-            "ragged_rows_bytes", "nsum_f64", "row_means_f64",
-            "truncnorm_draws", "fsum_f64", "row_stds_f64",
+            "strat_fold_assign_i32",
+            "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
+            "ragged_rows_bytes", "row_means_f64",
+            "truncnorm_draws", "fsum_f64",
             "lr_schedule_exact",
             "class_ratio_f64",
-            "shard_topk_merge_f32",
+            # fold_pair_f32, msel_rebase_offsets_i32, shard_topk_merge_f32: no
+            # Python door since lane calltable-parallel-archive (2026-11-11);
+            # the parallel owners read this image's parallel base table.
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1924,6 +2089,8 @@ FAMILIES = (
             "qr_r", "eigh", "svdvals",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "linalg_numerical_profile", "from_f16",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "linalg_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2004,10 +2171,13 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "linear_svc_native_api_v1", "logistic_native_api_v1",
             "estimators_host_numeric_mode", "estimators_host_vendor",
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
-            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            "pca_native_api_v1", "tsvd_native_api_v1", "kde_native_api_v1", "dbscan_native_api_v1",
+            "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit",
             # lane hr-small-passes (2026-10-02): the linear models' centering
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
@@ -2016,6 +2186,11 @@ FAMILIES = (
             "dbscan_fit_core", "labeled_reference_predict",
             "dbscan_core_arrays",
             "ols_predict", "tsvd_transform", "pca_transform",
+            # perf lanes: the wide-matrix OLS predict and the fused
+            # QN probability epilogue (one native call per predict_proba)
+            "ols_predict_wide", "linear_predict_native_api_v1", "linear_fit_native_api_v1", "qn_proba",
+            # ne2-g-linear: the general-route OLS/Ridge preparation in one call
+            "lm_ols_prep",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
             # inverse_transform refused on a CPU-only install; the
@@ -2102,6 +2277,9 @@ FAMILIES = (
             "metrics_numeric_mode", "accuracy_score", "adjusted_rand_score",
             "entropy", "mutual_info_score", "homogeneity_score",
             "completeness_score", "v_measure_score", "r2_score", "silhouette",
+            # manifest sync (ne-fix-tests-b, 2026-11-07): registered in the binding source
+            "homogeneity_completeness_v_measure",
+            "spectral_native_api_v1",
             "spectral_fit_predict_dataset", "spectral_fit_predict_graph",
             # lane/spectral-predict (2026-09-15): the fit entries that keep
             # the prediction data and SpectralClustering.predict (DEVIATION
@@ -2144,6 +2322,7 @@ FAMILIES = (
         display="the standard and min-max scalers",
         host_modules=("preprocessing/host/scaler_oracle.mojo",),
         exports=(
+            "scaler_native_api_v1",
             "preprocessing_host_numeric_mode", "preprocessing_host_vendor",
             "preprocessing_host_column", "preprocessing_host_sabotage",
             "preprocessing_numeric_mode", "preprocessing_vendor",
@@ -2169,8 +2348,8 @@ FAMILIES = (
         classes=("ExponentialSmoothing", "kpss_test", "select_d"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
-                      "bindings/kpss_host_test.mojo"),
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "tsa_host_numeric_mode", "tsa_host_vendor", "tsa_host_column",
             "tsa_host_sabotage", "holtwinters_fit",
@@ -2184,7 +2363,7 @@ FAMILIES = (
             "so the holtwinters, kpss and select-d lanes can be "
             "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
             "shipped forecast binding, which registers kpss_test from the same shared module "
-            "(bindings/kpss_host_test.mojo), so the two binaries cannot drift."
+            "(bindings/kpss_host_test_unpack.mojo), so the two binaries cannot drift."
         ),
         ships_in_wheel=True,
     ),
@@ -2207,6 +2386,8 @@ FAMILIES = (
             "solver_host_numeric_mode", "solver_host_vendor", "solver_host_column",
             "solver_host_sabotage", "solver_vendor", "cd_fit", "cd_predict",
             "linkage_fit",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "hierarchy_solver_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2238,6 +2419,8 @@ FAMILIES = (
             "isolation_forest/impl/rng/xorwow.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "svr_native_api_v1",
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
@@ -2245,6 +2428,12 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
             "svc_dual_gemv",
+            # lane perf-trees-misc (2026-11-05): the resident host forest
+            "iforest_resident", "iforest_resident_release",
+            # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in
+            "iforest_forest_export", "iforest_forest_run",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "svm_binary_api_v1",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2273,19 +2462,12 @@ FAMILIES = (
             "trees_host_numeric_mode", "trees_host_vendor", "trees_host_column",
             "trees_host_sabotage", "trees_vendor", "trees_numeric_mode",
             "et_classifier_fit", "et_classifier_fit_export",
-            "et_classifier_fit_rowmajor_export",
             "et_regressor_fit", "et_regressor_fit_export",
-            "et_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
-            "et_classifier_fit_shard", "et_regressor_fit_shard",
             # the weighted fits (sample_weight; lanes sk-kernels / sk-final)
-            "et_classifier_fit_weighted", "et_classifier_fit_weighted_export",
-            "et_classifier_fit_weighted_rowmajor_export",
-            "et_regressor_fit_weighted", "et_regressor_fit_weighted_export",
-            "et_regressor_fit_weighted_rowmajor_export",
-            "et_classifier_fit_weighted_shard", "et_regressor_fit_weighted_shard",
             "et_predict", "forest_prepare_gpu", "forest_predict_resident_reuse_gpu",
             "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2323,21 +2505,18 @@ FAMILIES = (
             "rf_host_numeric_mode", "rf_host_vendor", "rf_host_column",
             "rf_host_sabotage", "rf_vendor", "rf_numeric_mode",
             "rf_classifier_fit_export",
-            "rf_classifier_fit_rowmajor_export",
             "rf_regressor_fit_export",
-            "rf_regressor_fit_rowmajor_export",
             "forest_export", "forest_export_legacy", "forest_export_release",
             "rf_predict_proba", "rf_predict_reg",
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_regressor_fit_weighted_export",
-            "rf_classifier_fit_shard", "rf_regressor_fit_shard",
+            "rf_classifier_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+            "forest_strict_prepare", "forest_strict_predict", "forest_strict_release",
             "rf_data_session_open", "rf_data_session_close",
             "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
-            "rf_regressor_fit_dart_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2393,12 +2572,11 @@ FAMILIES = (
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
-            "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
+            "gp_host_sabotage", "gp_vendor", "gp_numeric_mode", "gp_native_api_v1",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_theta_params", "gpr_predict_cov",
             "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "gpc_ovr_combine",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2445,6 +2623,8 @@ FAMILIES = (
             "nystroem_transform", "rbf_sampler_fit", "rbf_sampler_transform",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "kernel_methods_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2481,9 +2661,11 @@ FAMILIES = (
         exports=(
             "mixture_host_numeric_mode", "mixture_host_vendor",
             "mixture_host_column", "mixture_host_sabotage",
-            "mixture_vendor", "mixture_numeric_mode", "gmm_fit",
-            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic", "gmm_sample",
+            "mixture_vendor", "mixture_numeric_mode", "gmm_sample",
+            # the typed transport the mixture door calls for fit and scoring
+            # (lane thin-unpack-mixture-cluster; the Python gmm_fit and
+            # scoring entries were deleted by lane/round2-fixes)
+            "mixture_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2496,9 +2678,9 @@ FAMILIES = (
     ),
     dict(
         # The neighbors and density inference lane (2026-09-15): the
-        # INFERENCE-ONLY mixture binding a wheel ships. It registers the four
-        # scoring entries (bindings/mixture_host_scoring.mojo, the same
-        # functions the reference binding above registers) and no fit, so
+        # INFERENCE-ONLY mixture binding a wheel ships. It registers the typed
+        # scoring transport (mixture/host/gmm_native_infer_host.mojo, the
+        # reference binding's scoring body) and gmm_sample, and no fit, so
         # gmmh_fit and the starts are not compiled in; the neural family's
         # pattern. `routes` stays None (the reference binding keeps the
         # route); a saved model is served through `mojolearn.host_model`,
@@ -2515,7 +2697,8 @@ FAMILIES = (
         classes=("GaussianMixture",),
         display="the Gaussian mixture's scores, probabilities, labels and samples",
         host_modules=(
-            "bindings/mixture_host_scoring.mojo",
+            "bindings/mixture_host_scoring_pack.mojo",
+            "mixture/host/gmm_native_infer_host.mojo",
             "mixture/host/gmm_host_oracle.mojo",
             "mixture/checks/sample.mojo",
             "gemm/host/gemm_oracle.mojo",
@@ -2523,14 +2706,14 @@ FAMILIES = (
         exports=(
             "mixture_infer_host_numeric_mode", "mixture_infer_host_vendor",
             "mixture_infer_host_column", "mixture_infer_host_sabotage",
-            "mixture_vendor", "mixture_numeric_mode",
-            "gmm_score_samples", "gmm_predict_proba", "gmm_predict",
-            "gmm_score_bic_aic", "gmm_sample",
+            "mixture_vendor", "mixture_numeric_mode", "gmm_sample",
+            # the typed transport the mixture door scores a saved model through
+            "mixture_native_api_v1",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(
             "Ships: inference-only binding. The mixture family's fit stays a source reference build; "
-            "the scoring and sampling entries are shared through bindings/mixture_host_scoring.mojo "
+            "the scoring and sampling entries are shared through bindings/mixture_host_scoring_pack.mojo "
             "and carry no fit symbol."
         ),
         ships_in_wheel=True,
@@ -2561,10 +2744,11 @@ FAMILIES = (
             "hdbscan/impl/condensed_hierarchy.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "hdbscan_fit_native_api_v1", "hdbscan_query_native_api_v1",
             "hdbscan_host_numeric_mode", "hdbscan_host_vendor",
             "hdbscan_host_column", "hdbscan_host_sabotage",
             "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_fit",
-            "hdbscan_generate_prediction_data", "hdbscan_approximate_predict",
             "hdbscan_membership_vector",
             "hdbscan_all_points_membership_vectors",
         ),
@@ -2580,7 +2764,7 @@ FAMILIES = (
     dict(
         # The neighbors and density inference lane (2026-09-15): the
         # INFERENCE-ONLY gp binding a wheel ships, gpr_predict from a saved
-        # model (bindings/gp_host_predict.mojo, the function the reference
+        # model (bindings/gp_host_predict_pack.mojo, the function the reference
         # binding registers) and no fit, log marginal likelihood or Cholesky
         # door. normalize_y's scale-back is host Python. Loaded like
         # mixture_infer.
@@ -2596,7 +2780,7 @@ FAMILIES = (
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
         display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
         host_modules=(
-            "bindings/gp_host_predict.mojo",
+            "bindings/gp_host_predict_pack.mojo",
             "gaussian_process/host/gp_host_entries.mojo",
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
@@ -2605,9 +2789,8 @@ FAMILIES = (
         exports=(
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
-            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_native_api_v1",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "gpc_ovr_combine",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(
@@ -2620,7 +2803,7 @@ FAMILIES = (
         # The neighbors and density inference lane (2026-09-15): the
         # INFERENCE-ONLY hdbscan binding a wheel ships, approximate_predict,
         # membership_vector and all_points_membership_vectors from a saved
-        # model (bindings/hdbscan_host_predict.mojo, the same functions the
+        # model (bindings/hdbscan_host_predict_pack.mojo, the same functions the
         # reference binding registers) and no fit, prediction data
         # generation or tree building. Loaded like mixture_infer.
         family="hdbscan_infer",
@@ -2637,13 +2820,15 @@ FAMILIES = (
         ),
         display="HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors",
         host_modules=(
-            "bindings/hdbscan_host_predict.mojo",
+            "bindings/hdbscan_host_predict_pack.mojo",
             "hdbscan/host/hdbscan_host_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "hdbscan_query_native_api_v1",
             "hdbscan_infer_host_numeric_mode", "hdbscan_infer_host_vendor",
             "hdbscan_infer_host_column", "hdbscan_infer_host_sabotage",
-            "hdbscan_vendor", "hdbscan_numeric_mode", "hdbscan_approximate_predict",
+            "hdbscan_vendor", "hdbscan_numeric_mode",
             "hdbscan_membership_vector", "hdbscan_all_points_membership_vectors",
         ),
         gate="tools/classical_host_gate.py",
@@ -2746,6 +2931,7 @@ FAMILIES = (
         exports=(
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
+            "gbdt_mode_policy_mask",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
             "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
@@ -2791,11 +2977,14 @@ FAMILIES = (
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
                         "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane fix-d1-decode-sessions (2026-11-08): SambaStack.decode_session;
+                        # on the host its steps are the per-call SambaStack.step
+                        "samba-decode-session",
                         # lane verify-coverage-20261024: residual_dropout and its backward,
                         # vendor_used and the numeric helpers the 2026-10-23 audit found
                         # no lane for (tools/identity_lanes/public_gap_methods.py)
                         "public-residual-dropout", "public-numeric-metadata",
-                        # the unfused MLP gradient route (MOJOLEARN_MLP_FUSED=0)
+                        # ParallelNeuralTrainer's per-layer MLP gradient route
                         "neural-trainer-unfused"),
         inference_lanes=(),
         forest_kinds=(),
@@ -2819,26 +3008,27 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "optimizer_native_api_v1",
             # Native C-entry registrations are part of the exported ABI too.
-            "optimizer_door_accumulate", "optimizer_door_clip", "optimizer_door_io",
-            "optimizer_door_load_state", "optimizer_door_state", "optimizer_door_state_set",
-            "optimizer_door_step", "optimizer_door_zero",
             "optimizer_resident_open", "optimizer_resident_close",
             "optimizer_resident_upload", "optimizer_resident_download",
             "training_host_numeric_mode", "training_host_vendor",
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",
-            "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
+            "ce_loss",
             "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
             "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "neural_arithmetic_profile", "neural_gemm", "mlp_sessions", "mlp_sessions_rows",
+            "neural_arithmetic_profile", "mlp_sessions", "mlp_sessions_rows",
             "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
             "training_experiment_profile",
             # checkpoint integrity digest (core/sha256.mojo)
             "sha256_hex",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "neural_primitives_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2916,7 +3106,7 @@ FAMILIES = (
                         # on the session's own copies of the weights and state
                         "mamba1-decode-session",
                         # lane verify-coverage-owed (2026-10-21): the Mamba-2 and
-                        # Mamba-3 sessions (bindings/mamba_public_native.mojo); on the
+                        # Mamba-3 sessions (bindings/mamba_public_native_door.mojo); on the
                         # host their steps are this binding's `<kind>_decode_step`
                         "mamba2-decode-session", "mamba3-decode-session"),
         inference_lanes=(),
@@ -2945,15 +3135,17 @@ FAMILIES = (
             "mamba_host_sabotage", "mamba_vendor", "mamba_numeric_mode",
             "mamba1_forward", "mamba1_backward", "mamba1_decode_step",
             "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
-            "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
+            "mamba3_forward_fresh",
             "mamba3_backward",
-            # the carried-state forward on the owned snapshot (lane migrate-neural-2)
-            "mamba3_state_owned",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "mamba1_profile", "mamba3_owned_weights_enabled", "mamba3_prefill_session_create",
-            "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",
-            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_forward_owned", "mamba3_prefill_session_backward_owned",
-            "mamba3_prefill_session_export_weights", "mamba3_forward_tape_enabled",
+            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source.
+            # The owned prefill session is a native registry handle (lane
+            # mamba3-prefill-handle, 2026-11-12); only the verify's owned-weights
+            # answer and the two B-arm entries remain.
+            "mamba1_profile", "mamba3_owned_weights_enabled",
+            "mamba3_prefill_session_install_weights", "mamba3_prefill_session_backward_owned",
+            "mamba3_forward_tape_enabled",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "mamba_block_api_v1", "mamba_state_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
@@ -3018,7 +3210,7 @@ FAMILIES = (
         classes=("Embedding",),
         display="the Embedding layer",
         host_modules=(
-            "embedding/host/embedding_host.mojo",
+            "embedding/host/embedding_host.mojo", "embedding/host/embedding_host_words_run.mojo",
             "embedding/checks/embedding_oracle.mojo",
         ),
         exports=(
@@ -3040,7 +3232,7 @@ FAMILIES = (
         # lookup in a saved embedding table, with no backward in the binary.
         # The reference embedding family above carries the backward fold and
         # stays out of the wheels; this binding registers embedding_forward
-        # from the same source (bindings/embedding_host_forward.mojo) and
+        # from the same source (bindings/embedding_host_forward_door.mojo) and
         # ships. It serves `_mojolearn_embedding` on a CPU-only install when
         # the reference binding is not built.
         family="embedding_infer",
@@ -3055,8 +3247,8 @@ FAMILIES = (
         classes=("Embedding",),
         display="Embedding lookup in a saved table",
         host_modules=(
-            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward.mojo",
-            "embedding/checks/embedding_oracle.mojo",
+            "embedding/host/embedding_host.mojo", "bindings/embedding_host_forward_door.mojo",
+            "embedding/host/embedding_host_words_run.mojo", "embedding/checks/embedding_oracle.mojo",
         ),
         exports=(
             "embedding_infer_host_numeric_mode", "embedding_infer_host_vendor",
@@ -3103,9 +3295,9 @@ FAMILIES = (
             "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
-            "ivf_merge_shards",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "ivf_shard_plan",
+            # ivf_merge_shards, ivf_shard_plan: no Python door since lane
+            # calltable-parallel-archive (2026-11-11); this image publishes them
+            # in its parallel IVF table.
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3120,7 +3312,7 @@ FAMILIES = (
         # search over a saved, GPU-built IVF-Flat index, with no build in the
         # binary. The reference ivf family above carries the k-means
         # quantizer fit and stays out of the wheels; this binding registers
-        # ivf_flat_search from the same source (bindings/ivf_host_search.mojo)
+        # ivf_flat_search from the same source (bindings/ivf_host_search_door.mojo)
         # and ships. It serves `_mojolearn_ivf` on a CPU-only install when the
         # reference binding is not built.
         family="ivf_search",
@@ -3135,8 +3327,8 @@ FAMILIES = (
         classes=("IVFIndex",),
         display="IVF-Flat search over a saved index and extending it",
         host_modules=(
-            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
-            "bindings/ivf_index_arrays.mojo", "ivf/index_arrays_impl.mojo",
+            "ivf/host/ivf_host.mojo", "bindings/ivf_host_search_door.mojo",
+            "bindings/ivf_index_arrays_unpack.mojo", "ivf/index_arrays_impl.mojo",
             "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
         ),
         exports=(
@@ -3145,7 +3337,8 @@ FAMILIES = (
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
             "ivf_flat_partial_search", "ivf_finalize_distances",
             "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
-            "ivf_merge_shards",
+            # ivf_merge_shards: no Python door since lane calltable-parallel-archive
+            # (2026-11-11); `_mojolearn_ivf_host` publishes it natively.
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
@@ -3159,13 +3352,13 @@ FAMILIES = (
         # for saved ARIMA models, with no fit in the binary. The reference
         # arima family above carries the whole fit and stays out of the
         # wheels; this binding registers arima_predict and arima_forecast
-        # from the same source (bindings/arima_host_predict.mojo) and ships.
+        # from the same source (bindings/arima_host_predict_pack.mojo) and ships.
         # `routes` is None because `_mojolearn_arima` routes to the reference
         # binding when it is built; `serves` names the route this binding
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
         # an installed CPU-only wheel. lane/inference-holtwinters (2026-09-15)
         # adds saved Holt-Winters models the same way: holtwinters_forecast
-        # and holtwinters_predict from bindings/holtwinters_host_predict.mojo,
+        # and holtwinters_predict from bindings/holtwinters_host_predict_door.mojo,
         # the source the reference tsa binding registers them from, and the
         # `_mojolearn_tsa` route when that binding is not built.
         family="forecast",
@@ -3182,9 +3375,9 @@ FAMILIES = (
         display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
-        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict.mojo",
-                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
-                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test.mojo"),
+        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict_pack.mojo",
+                      "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_door.mojo",
+                      "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
@@ -3200,7 +3393,7 @@ FAMILIES = (
             "lane/expose-inference-surface (2026-09-16) it also carries kpss_test, which trains no "
             "model at all: it computes a statistic from the caller's own series, so it belongs on "
             "the shipped side, and registering it here puts it there without shipping the tsa "
-            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test.mojo, "
+            "family's holtwinters_fit. Both bindings register it from bindings/kpss_host_test_unpack.mojo, "
             "so they answer through one source."
         ),
         ships_in_wheel=True,
@@ -3220,10 +3413,7 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state",
-                        # lane verify-coverage-20261024: forward_with_tape,
-                        # backward_from_tape and the tape's close
-                        "transformer-forward-tape"),
+                        "transformer-decode-load-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3240,11 +3430,11 @@ FAMILIES = (
             "transformer_host_column", "transformer_host_sabotage",
             "transformer_vendor", "transformer_numeric_mode",
             "transformer_forward", "transformer_forward_fresh",
-            "transformer_decode_step", "transformer_backward",
+            "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
-            "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
-            "transformer_session_forward_tape", "transformer_session_backward_tape",
+            "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile",
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "transformer_block_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
@@ -3267,43 +3457,303 @@ FAMILIES = (
         forest_kinds=(),
         classes=(),
         display="native classical orchestration and resident tree ownership",
-        host_modules=("bindings/classical_native.mojo", "bindings/trees_lifetime.mojo",
-                      "bindings/host_svr_native.mojo", "bindings/host_svc_native.mojo"),
+        host_modules=("bindings/classical_native_pack.mojo", "bindings/trees_lifetime_door.mojo",
+                      "bindings/classical_door_routes.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            'linear_entry_connection_v1',
             'classical_native_call',
             'classical_attribute_call',
             'classical_attribute_descriptor',
             'host_archive_finalize_call',
-            'host_svr_attribute_call',
-            'host_svc_attribute_call',
-            'pca_native_call',
-            'standard_scaler_fit_native',
-            'standard_scaler_native_call',
-            'minmax_scaler_native_call',
-            'maxabs_scaler_native_call',
-            'prep_stateless_native_call',
-            'qn_native_call',
-            'logistic_native_call',
-            'decomp_native_call',
-            'linalg_decomp_native_call',
-            'als_native_call',
-            'mcd_native_call',
-            'pls_native_call',
-            'dict_learning_native_call',
-            'jl_native_call',
-            'ipca_native_call',
-            'tsvd_native_call',
-            'prep_classify_native_call',
-            'prep_encode_native_call',
-            'x_linear_native_call',
-            'str_labels_native_call',
-            'robust_scaler_native_call',
-            'standard_scaler_attribute_call',
             "runtime_classical_host_numeric_mode", "runtime_classical_host_vendor",
             "runtime_classical_host_column", "runtime_classical_host_sabotage",
         ),
-        gate="python/mojolearn/tests/test_runtime_classical_partition.py",
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
         wheel_note="Ships: existing classical native entries and their single resident tree owner.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_trees",
+        binding="_mojolearn_runtime_trees_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the classical tree, density, saved-model inference and host archive operations",
+        host_modules=("bindings/classical_trees_door.mojo",
+                      "bindings/trees_public_native_door.mojo",
+                      "bindings/host_inference_native_unpack.mojo",),
+        exports=(
+            "trees_native_call",
+            "runtime_trees_host_numeric_mode", "runtime_trees_host_vendor", "runtime_trees_host_column", "runtime_trees_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_family",
+        binding="_mojolearn_runtime_family_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the classical estimator families' public operations and the host SVM attributes",
+        host_modules=("bindings/classical_family_door.mojo",
+                      "bindings/family_native_door.mojo",
+                      "bindings/host_svr_native_door.mojo",
+                      "bindings/host_svc_native_door.mojo",),
+        exports=(
+            "family_native_call",
+            "host_svr_attribute_call",
+            "host_svc_attribute_call",
+            "runtime_family_host_numeric_mode", "runtime_family_host_vendor", "runtime_family_host_column", "runtime_family_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_prep",
+        binding="_mojolearn_runtime_prep_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="native scalers, preprocessing transforms, encoders and labels",
+        host_modules=("bindings/scaler_lifecycle_native_door.mojo",
+                      "bindings/prep_owner_native_door.mojo",
+                      "bindings/labels_native_entry_pack.mojo",),
+        exports=(
+            "standard_scaler_fit_native",
+            "standard_scaler_native_call",
+            "minmax_scaler_native_call",
+            "maxabs_scaler_native_call",
+            "prep_stateless_native_call",
+            "prep_classify_native_call",
+            "prep_encode_native_call",
+            "str_labels_native_call",
+            "labels_native_call",
+            "robust_scaler_native_call",
+            "standard_scaler_attribute_call",
+            "runtime_prep_host_numeric_mode", "runtime_prep_host_vendor", "runtime_prep_host_column", "runtime_prep_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_decomp",
+        binding="_mojolearn_runtime_decomp_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="native PCA and the decomposition estimators",
+        host_modules=("bindings/pca_native_door.mojo",
+                      "bindings/decomp_native_door.mojo",
+                      "bindings/tsvd_native_door.mojo",),
+        exports=(
+            "pca_native_call",
+            "decomp_native_call",
+            "linalg_decomp_native_call",
+            "als_native_call",
+            "mcd_native_call",
+            "pls_native_call",
+            "dict_learning_native_call",
+            "jl_native_call",
+            "ipca_native_call",
+            "tsvd_native_call",
+            "runtime_decomp_host_numeric_mode", "runtime_decomp_host_vendor", "runtime_decomp_host_column", "runtime_decomp_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_linear",
+        binding="_mojolearn_runtime_linear_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="native quasi-Newton, logistic regression and linear expansion estimators",
+        host_modules=("bindings/qn_native_door.mojo",
+                      "bindings/logistic_native_door.mojo",
+                      "bindings/x_linear_native_door.mojo",),
+        exports=(
+            "qn_native_call",
+            "logistic_native_call",
+            "x_linear_native_call",
+            "runtime_linear_host_numeric_mode", "runtime_linear_host_vendor", "runtime_linear_host_column", "runtime_linear_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_catalog",
+        binding="_mojolearn_runtime_catalog_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the model catalog and language-model corpora",
+        host_modules=("bindings/model_catalog_native_door.mojo",
+                      "bindings/lm_corpus_public_native_door.mojo",),
+        exports=(
+            "catalog_public_call",
+            "lm_corpus_public_call",
+            "runtime_catalog_host_numeric_mode", "runtime_catalog_host_vendor", "runtime_catalog_host_column", "runtime_catalog_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_xseq",
+        binding="_mojolearn_runtime_xseq_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the sequence and convolution expansion estimators",
+        host_modules=("bindings/xseq_native_pack.mojo",
+                      "bindings/xcnn_native_pack.mojo",),
+        exports=(
+            "xseq_native_call",
+            "xcnn_native_call",
+            "runtime_xseq_host_numeric_mode", "runtime_xseq_host_vendor", "runtime_xseq_host_column", "runtime_xseq_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_byte_trainer",
+        binding="_mojolearn_runtime_byte_trainer_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the byte language model trainers",
+        host_modules=("bindings/byte_lm_host_trainer_native_door.mojo",
+                      "bindings/byte_lm_trainer_native_door.mojo",
+                      "bindings/parallel_byte_native_door.mojo",),
+        exports=(
+            "byte_lm_host_trainer_call",
+            "byte_lm_trainer_call",
+            "byte_lm_pooled_finalize_call",
+            "parallel_byte_call",
+            "runtime_byte_trainer_host_numeric_mode", "runtime_byte_trainer_host_vendor", "runtime_byte_trainer_host_column", "runtime_byte_trainer_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_parallel",
+        binding="_mojolearn_runtime_parallel_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the multi-device drivers, neighbor queries, forecasting and the small MLP",
+        host_modules=("bindings/parallel_shard_native_door.mojo",
+                      "bindings/neighbor_query_native_door.mojo",
+                      "bindings/parallel_forecast_native_door.mojo",
+                      "bindings/tsa_public_native_door.mojo",
+                      "bindings/small_mlp_native_door.mojo",),
+        exports=(
+            "parallel_shard_call",
+            "neighbor_query_call",
+            "neighbor_query_attribute_call",
+            "parallel_forecast_call",
+            "tsa_native_call",
+            "parallel_neural_call",
+            "parallel_mlp_call",
+            "small_mlp_call",
+            "small_mlp_finalize",
+            "parallel_causal_call",
+            "runtime_parallel_host_numeric_mode", "runtime_parallel_host_vendor", "runtime_parallel_host_column", "runtime_parallel_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
+        ships_in_wheel=True,
+    ),
+    dict(
+        # 2026-11-07 host split (docs/build/HOT_GROUPS.md section 6): its own
+        # merged group; reached through HOST_IMPORT_ALIASES.
+        family="runtime_neural",
+        binding="_mojolearn_runtime_neural_host",
+        routes=None,
+        loaded_by="python/mojolearn/_host_import_aliases.py",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=(),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=(),
+        display="the public transformer, Mamba, Samba, neural block and causal language model entries",
+        host_modules=("bindings/transformer_public_native_door.mojo",
+                      "bindings/neural_block_public_door.mojo",
+                      "bindings/causal_lm_public_door.mojo",
+                      "bindings/mamba_public_native_door.mojo",),
+        exports=(
+            "transformer_public_call",
+            "transformer_decode_native_call",
+            "mamba_native_call",
+            "samba_config_call",
+            "samba_native_call",
+            "runtime_neural_host_numeric_mode", "runtime_neural_host_vendor", "runtime_neural_host_column", "runtime_neural_host_sabotage",
+        ),
+        gate="python/mojolearn/tests/test_runtime_classical_partition.py::test_public_classical_fit_predict_and_archive_use_native_entries",
+        wheel_note="Ships: existing native entries, split out of one host binding so each group compiles alone.",
         ships_in_wheel=True,
     ),
     dict(
@@ -3317,7 +3767,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("Sequential",),
         display="native Sequential orchestration",
-        host_modules=("bindings/sequential_native.mojo", "bindings/sequential_execution.mojo"),
+        host_modules=("bindings/sequential_native_pack.mojo", "bindings/sequential_execution_pack.mojo"),
         exports=("sequential_native_call", "runtime_sequential_host_numeric_mode",
                  "runtime_sequential_host_vendor", "runtime_sequential_host_column",
                  "runtime_sequential_host_sabotage"),
@@ -3336,7 +3786,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("UMAP", "TSNE", "Isomap", "ClassicalMDS", "MDS", "LocallyLinearEmbedding"),
         display="native manifold orchestration",
-        host_modules=("bindings/runtime_manifold_entry.mojo", "bindings/manifold_native.mojo"),
+        host_modules=("bindings/runtime_manifold_entry_pack.mojo", "bindings/manifold_native_pack.mojo"),
         exports=("manifold_native_call", "runtime_manifold_host_numeric_mode",
                  "runtime_manifold_host_vendor", "runtime_manifold_host_column",
                  "runtime_manifold_host_sabotage"),
@@ -3355,7 +3805,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("model_selection.KFold", "model_selection.LeavePOut", "model_selection.GridSearchCV"),
         display="native splitters, cross-validation and model selection",
-        host_modules=("bindings/runtime_model_selection_entry.mojo", "bindings/model_selection_native.mojo"),
+        host_modules=("bindings/runtime_model_selection_entry_pack.mojo", "bindings/model_selection_native_door.mojo"),
         exports=("model_selection_native_call", "runtime_model_selection_host_numeric_mode",
                  "runtime_model_selection_host_vendor", "runtime_model_selection_host_column",
                  "runtime_model_selection_host_sabotage"),
@@ -3463,7 +3913,16 @@ PUBLIC_INAPPLICABLE_PREFIXES = ("par-",)
 #: why this machine cannot state it, and the command that can. The answer is
 #: never "you are missing a feature"; it is "this claim is about two devices
 #: and you have one", which is a fact about the claim, not about the install.
+# The prefix stays after the 2026-10-31 retirement so that a par-* lane name
+# (a record taken before it, a caller's --lanes) reads NOT APPLICABLE with
+# this sentence; without the sentence `inapplicable_prefix_reason` raises for
+# every such lane and tools/lane_accounting.py refuses the table.
 PUBLIC_INAPPLICABLE_PREFIX_REASONS = {
+    # The shipped table keeps the retired par-* cells as history (TOMBSTONE
+    # MOJOLEARN_PAR_VERIFY above); this sentence is what a user reads for them.
+    "par-": ("multi-GPU verification is retired: these lanes compared a two-device run with one "
+             "device, and `verify` no longer runs them; their cells in the reference table are "
+             "kept as history only"),
 }
 
 #: THE STATUS EVERY HARNESS LANE GETS IN `lane_exposure()`, and the whole
@@ -3524,9 +3983,8 @@ PUBLIC_PENDING_CPU_INAPPLICABLE_REASONS = ("no cpu route",)
 #: this harness makes, so comparing would report DIVERGENT for something that
 #: has nothing to do with the user's machine -- the worst failure this tool
 #: has, because it looks exactly like the identity claim being false. The
-#: lane is not executed and reads NOT RUN, which gates. No lane carries this
-#: reason today; the vocabulary is kept because a fixture change recreates it
-#: on the day it is declared resolved, which has already happened once.
+#: lane is not executed and reads NOT RUN, which gates. A fixture change
+#: creates it and the next release record clears it.
 PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 
 #: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
@@ -3921,15 +4379,16 @@ PUBLIC_PENDING_LANES = {
     "gbdt-pair-logit-pointwise": "unwatched",
     "gbdt-yeti-rank-pointwise": "unwatched",
     # New configuration-specific lane. The existing gbdt-query-rmse lane
-    # remains the greedy-searcher reference and is unchanged.
-    "gbdt-query-rmse-pointwise": "no reference",
+    # remains the greedy-searcher reference and is unchanged. Its "no reference"
+    # (2026-10-28) is gone: the 2026-11-05 records admitted it on every column
+    # (table.json records 358-362), so the verifier compares it like its siblings.
+    "gbdt-query-rmse-pointwise": "unwatched",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
     # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",
-    "transformer-forward-tape": "unwatched",
     "scaler-fit-transform": "unwatched",
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
@@ -3941,6 +4400,7 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
+    "samba-decode-session": "no reference",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
     "public-residual-dropout": "unwatched",
@@ -3956,6 +4416,51 @@ PUBLIC_PENDING_LANES = {
     # training binding has no device array pool.
     "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "unwatched",
+    # STALE UNTIL THE NEXT RELEASE RECORD (2026-11-07). The 2026-11-05 fixture
+    # shrink (tools/identity_break.py LANE_REVISIONS and NON_SIZE_REVISIONS)
+    # moved these lanes' fixtures after the shipped table was admitted, so the
+    # table's cells describe the old bytes. Each lane leaves this dict when
+    # the release record regenerates the table at the new revision.
+    "arima-exog-seasonal": "stale reference",
+    "arima-seasonal-c": "stale reference",
+    "bootstrap": "stale reference",
+    "dbscan-weighted": "stale reference",
+    "gbdt-adapter-clf": "stale reference",
+    "gbdt-binary-columns": "stale reference",
+    "gbdt-catboost-defaults": "stale reference",
+    "gbdt-class-weights": "stale reference",
+    "gbdt-multiclass": "stale reference",
+    "gbdt-multiclass-defaults": "stale reference",
+    "gbdt-multiclass-offgrid": "stale reference",
+    "gbdt-onevsall": "stale reference",
+    "gbdt-ordered": "stale reference",
+    "gbdt-ordered-bayesian-noise": "stale reference",
+    "gbdt-pointwise-l2-bayesian-eval": "stale reference",
+    "gbdt-stochastic-arms": "stale reference",
+    "gbdt-symmetric": "stale reference",
+    "gbdt-symmetric-eval": "stale reference",
+    "gbdt-yeti-rank": "stale reference",
+    "kmeans-random": "stale reference",
+    "kmeans-sqrt": "stale reference",
+    "rf-reg-gamma-ig": "stale reference",
+    "saved-model-host-infer": "stale reference",
+    "sequence-ets": "stale reference",
+    "trees-calibrated": "stale reference",
+    "trees-stacking-clf": "stale reference",
+    "trees-voting-clf": "stale reference",
+    "x-cluster-hdbscan-epsilon": "stale reference",
+    "x-decomp-eigh-wide-factor-analysis": "stale reference",
+    "x-decomp-eigh-wide-fastica": "stale reference",
+    "x-decomp-eigh-wide-linalg": "stale reference",
+    "x-decomp-eigh-wide-mincovdet": "stale reference",
+    "x-decomp-eigh-wide-rotation": "stale reference",
+    "x-decomp-manifold": "stale reference",
+    "x-decomp-umap-options": "stale reference",
+    "x-prep-da-solvers": "stale reference",
+    "x-prep-nb-weights": "stale reference",
+    "x-prep-priors": "stale reference",
+    "x-prep-rfe": "stale reference",
+    "x-prep-score-edges": "stale reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped
@@ -4163,17 +4668,6 @@ def comparable_lanes(lanes, device_class="cpu"):
     CPU install, asked over the harness's real lane list."""
     exposure = lane_exposure(lanes, device_class)
     return [lane for lane in lanes if exposure[lane]["comparable"]]
-
-
-def lane_exposure_counts(lanes, device_class="cpu"):
-    """`{status: n}` over `lane_exposure(lanes)`, every status present even at
-    zero, so a reader sees the category that is empty rather than inferring
-    it from an absent key."""
-    exposure = lane_exposure(lanes, device_class)
-    counts = {s: 0 for s in LANE_STATUSES}
-    for row in exposure.values():
-        counts[row["status"]] += 1
-    return counts
 
 
 #: Public reference lanes of a shipped host family with no GPU path to cover,
@@ -4601,7 +5095,7 @@ def as_dict():
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="the CPU surface manifest; one flag per list")
+    p = _argparse.ArgumentParser(description="the CPU surface manifest; one flag per list")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--families", action="store_true", help="every host family")
     g.add_argument("--routed-families", action="store_true", help="families routed by _backend._HOST_MODULES")
@@ -4666,7 +5160,7 @@ def main(argv=None):
             print(f"{name}: {why}")
         return 0
     if args.json:
-        print(json.dumps(as_dict(), indent=2, sort_keys=True))
+        print(_json.dumps(as_dict(), indent=2, sort_keys=True))
         return 0
     if args.markdown:
         print(markdown_table())
@@ -4713,4 +5207,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _sys.exit(main())

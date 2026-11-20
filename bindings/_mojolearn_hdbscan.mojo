@@ -20,40 +20,33 @@ THE GIL is released around the device call, and nothing inside the
 `GILReleased` block touches a `PythonObject`.
 """
 
-from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
+from core.experiment_guards_cluster import CLUSTER_GUARDS_OK
+from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from std.os import abort
-from std.memory import memcpy
 from std.sys.compile import is_defined
-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import read_f32, read_i32
 from std.python import Python, PythonObject
+from core.hdbscan_query_api import hdbscan_soft_shape_refusal as _soft_shape_refusal
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from max.gpu.host import DeviceContext
-from core.neural_context import process_ctx
-from hdbscan.impl.hdbscan_door_impl import HDB_DEVCTX_SLOT, hdbscan_fit_door_run, prediction_data_door_run
-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from hdbscan.native_query_device import HDBSCAN_QUERY_DEVICE_API
+from hdbscan.native_query_device_doors import _hdbscan_predict_run
+from hdbscan.mojolearn_hdbscan_run import (
+    _f32_ptr,
+    _i32_ptr,
+    hdbscan_membership_batches_run,
+    hdbscan_all_points_batches_run,
+)
+from hdbscan.native_fit_device import HDBSCAN_FIT_DEVICE_API
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
+from hdbscan.impl.hdbscan_door_impl import hdbscan_fit_door_run, prediction_data_door_run
 
-comptime _DEVCTX_SLOT = HDB_DEVCTX_SLOT
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from hdbscan.estimator import (
-    hdbscan_all_points_membership_vectors_host,
-    hdbscan_approximate_predict_host,
-    hdbscan_membership_vector_host,
-    hdbscan_fit_host_output,
-)
-from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def hdbscan_numeric_mode_binding() raises -> PythonObject:
@@ -68,6 +61,16 @@ def hdbscan_vendor_binding() raises -> PythonObject:
 
 # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
+
+
+def hdbscan_query_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_QUERY_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def hdbscan_fit_native_api_v1_binding() raises -> PythonObject:
+    var api = HDBSCAN_FIT_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def hdbscan_fit_binding(
@@ -247,34 +250,6 @@ def hdbscan_generate_prediction_data_binding(
     return PythonObject(n_ex)
 
 
-def _hdbscan_predict_run(
-    x: List[Float32],
-    m: Int,
-    d: Int,
-    core: List[Float32],
-    labels: List[Int32],
-    lambdas: List[Float32],
-    n_edges: Int,
-    n_clusters: Int,
-    deaths: List[Float32],
-    selected: List[Int32],
-    iic: List[Int32],
-    q: List[Float32],
-    nq: Int,
-    min_samples: Int,
-    lo: MutPointer[Int32, MutUntrackedOrigin],
-    po: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_approximate_predict_host(
-        ctx, x, m, d, core, labels, lambdas, n_edges, n_clusters, deaths,
-        selected, iic, q, nq, min_samples, lo, po,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-
-
 def hdbscan_approximate_predict_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -333,40 +308,6 @@ def hdbscan_approximate_predict_binding(
     return PythonObject(nq)
 
 
-def _soft_shape_refusal(where: String, vals: List[Int]) raises:
-    """Every count the soft clustering calls take must be positive (m at
-    least 2), else a refusal naming them."""
-    var ok = vals[0] >= 2
-    for i in range(1, len(vals)):  # small-loop(vals: a handful of shape counts): shape refusal, not data
-        if vals[i] < 1:
-            ok = False
-    if not ok:
-        var s = String(where) + ": shape refused by name ("
-        for i in range(len(vals)):  # small-loop(vals: a handful of shape counts): refusal message, not data
-            if i > 0:
-                s += ", "
-            s += String(vals[i])
-        raise Error(s + ")")
-
-
-def _hdbscan_membership_run(
-    x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32],
-    parents: List[Int32], lambdas: List[Float32], n_edges: Int,
-    n_clusters: Int, deaths: List[Float32], selected: List[Int32],
-    iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32],
-    q: List[Float32], nq: Int, min_samples: Int,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_membership_vector_host(
-        ctx, x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-        deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out_ptr,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-
-
 def hdbscan_membership_vector_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -389,11 +330,11 @@ def hdbscan_membership_vector_binding(
             "hdbscan_membership_vector: addrs must contain 12 addresses, got "
             + String(len(addrs))
         )
-    if len(params) != 8:
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_membership_vector: params must contain 8 values (m, d,"
             " n_edges, n_clusters, n_selected, n_exemplars, nq, min_samples),"
-            " got " + String(len(params))
+            " plus an optional query batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
@@ -417,31 +358,22 @@ def hdbscan_membership_vector_binding(
     var iic = read_i32(Int(py=addrs[7]), n_edges + 1)
     var ex_idx = read_i32(Int(py=addrs[8]), n_ex)
     var offsets = read_i32(Int(py=addrs[9]), n_selected + 1)
-    var q = read_f32(Int(py=addrs[10]), nq * d)
-    var out = _f32_ptr(Int(py=addrs[11]))
+    # p3-neighbors-cluster: with the optional 9th word the public batching
+    # runs here, inside one call: the fitted state above is read once and
+    # each batch takes only its query slice and output rows (the driver made
+    # one call per batch, each copying the whole training state again).
+    var batch = Int(py=params[8]) if len(params) == 9 else nq
+    if batch < 1:
+        raise Error("hdbscan_membership_vector: batch size must be positive; refused by name")
+    var q_addr = Int(py=addrs[10])
+    var out_addr = Int(py=addrs[11])
     with GILReleased(Python()):
-        _hdbscan_membership_run(
+        hdbscan_membership_batches_run(
             x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-            deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out,
+            deaths, selected, iic, ex_idx, offsets, nq, min_samples, batch,
+            n_selected, q_addr, out_addr,
         )
     return PythonObject(nq)
-
-
-def _hdbscan_all_points_run(
-    x: List[Float32], m: Int, d: Int, parents: List[Int32],
-    lambdas: List[Float32], n_edges: Int, n_clusters: Int,
-    deaths: List[Float32], selected: List[Int32], iic: List[Int32],
-    ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int,
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    hdbscan_all_points_membership_vectors_host(
-        ctx, x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-        iic, ex_idx, offsets, row0, count, out_ptr,
-    )
-    ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
 
 def hdbscan_all_points_membership_vectors_binding(
@@ -465,11 +397,11 @@ def hdbscan_all_points_membership_vectors_binding(
             "hdbscan_all_points_membership_vectors: addrs must contain 9"
             " addresses, got " + String(len(addrs))
         )
-    if len(params) != 8:
+    if len(params) != 8 and len(params) != 9:
         raise Error(
             "hdbscan_all_points_membership_vectors: params must contain 8"
             " values (m, d, n_edges, n_clusters, n_selected, n_exemplars,"
-            " row0, count), got " + String(len(params))
+            " row0, count), plus an optional row batch size, got " + String(len(params))
         )
     var m = Int(py=params[0])
     var d = Int(py=params[1])
@@ -497,11 +429,16 @@ def hdbscan_all_points_membership_vectors_binding(
     var iic = read_i32(Int(py=addrs[5]), n_edges + 1)
     var ex_idx = read_i32(Int(py=addrs[6]), n_ex)
     var offsets = read_i32(Int(py=addrs[7]), n_selected + 1)
-    var out = _f32_ptr(Int(py=addrs[8]))
+    # p3-neighbors-cluster: the optional 9th word batches the rows here,
+    # inside one call (the fitted state above is read once).
+    var batch = Int(py=params[8]) if len(params) == 9 else count
+    if batch < 1:
+        raise Error("hdbscan_all_points_membership_vectors: batch size must be positive; refused by name")
+    var out_addr = Int(py=addrs[8])
     with GILReleased(Python()):
-        _hdbscan_all_points_run(
+        hdbscan_all_points_batches_run(
             x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-            iic, ex_idx, offsets, row0, count, out,
+            iic, ex_idx, offsets, row0, count, batch, n_selected, out_addr,
         )
     return PythonObject(count)
 
@@ -510,6 +447,7 @@ def hdbscan_all_points_membership_vectors_binding(
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_hdbscan() -> PythonObject:
+    comptime assert CLUSTER_GUARDS_OK, "invalid integrated experiment configuration (cluster guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_hdbscan")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
@@ -520,8 +458,8 @@ def build__mojolearn_hdbscan() -> PythonObject:
         m.def_function[hdbscan_vendor_binding]("hdbscan_vendor")
         m.def_function[hdbscan_numeric_mode_binding]("hdbscan_numeric_mode")
         m.def_function[hdbscan_fit_binding]("hdbscan_fit")
-        m.def_function[hdbscan_generate_prediction_data_binding]("hdbscan_generate_prediction_data")
-        m.def_function[hdbscan_approximate_predict_binding]("hdbscan_approximate_predict")
+        m.def_function[hdbscan_fit_native_api_v1_binding]("hdbscan_fit_native_api_v1")
+        m.def_function[hdbscan_query_native_api_v1_binding]("hdbscan_query_native_api_v1")
         m.def_function[hdbscan_membership_vector_binding]("hdbscan_membership_vector")
         m.def_function[hdbscan_all_points_membership_vectors_binding]("hdbscan_all_points_membership_vectors")
         return m.finalize()

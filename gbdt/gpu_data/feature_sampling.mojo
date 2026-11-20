@@ -18,7 +18,7 @@ speed claim. Default fraction 1 bypasses this module's per-tree work entirely.
 """
 from std.math import fma
 from std.math import isfinite
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout, build_layout
@@ -114,8 +114,9 @@ struct FeatureProjectionWorkspace(Movable):
     ) raises -> DeviceBuffer[DType.uint32]:
         if selected.columns > self.column_capacity or len(selected.features) != self.feature_capacity:
             raise Error("feature projection workspace capacity mismatch")
-        if selected.columns == 0:
-            return source.copy()
+        # A sample that drew only constant columns still has one column
+        # (`build_layout`): it is projected like any other and comes out as
+        # `rows` zero words, the kernel's `packed` with no descriptor.
         # The previous tree may still have queued work reading this output.
         ctx.synchronize()
         # Capacity is the maximum selected width seen so far. Growth can

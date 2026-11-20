@@ -10,7 +10,7 @@ tree at 800k rows, which the reference does not do -- its index never leaves the
 device.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 #: `const ui32 blockSize = 512` (`fill.cu:51`).

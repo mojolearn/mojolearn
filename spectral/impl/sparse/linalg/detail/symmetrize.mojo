@@ -30,13 +30,12 @@ entry, on values that for the kNN graph are exactly `0`, `0.5` or `1`.
 always, the same numbers.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -53,28 +52,22 @@ comptime SYMMETRIZE_TPB = 128
 #: search returns the LOWEST position among equal columns, the entry the
 #: ascending scan stops at, so the output is the same. Rows longer than
 #: FS_MAX_ROW or n >= 2^20 keep the scan.
-#: `-D MOJOLEARN_SYMMETRIZE_FAST_OFF` keeps the scan.
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
 #: the sorted lookup too (it was Apple only). The same entry is found, so
-#: the output is the scan's. `-D MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF=1`
-#: keeps the scan there.
+#: the output is the scan's.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 8dca77d7b5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_SYMMETRIZE_SORTED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_SYMMETRIZE_FAST_OFF (old path, no A/B recorded beside the Apple fast default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 3fb0ad4eef.
+# Restore: git apply experiments/removed/MOJOLEARN_SYMMETRIZE_FAST_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SYMMETRIZE_FAST = (
-    (
-        (
-            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-            and has_apple_gpu_accelerator()
-        )
-        or IDN_SYMMETRIZE_SORTED
-    )
-    and not is_defined["MOJOLEARN_SYMMETRIZE_FAST_OFF"]()
+    TARGET_HAS_APPLE_GPU
+    or IDN_SYMMETRIZE_SORTED
 )
 comptime FS_MAX_ROW = 4096
 comptime FS_TPB = 1024

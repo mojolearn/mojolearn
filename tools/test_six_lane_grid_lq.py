@@ -626,13 +626,12 @@ NEURAL_BOARD = dict(races={('neural', 'mamba1-forward', 'gaussian'), ('neural', 
                            ('neural', 'lm-train-step', 'bytes'), ('classical', 'kmeans', 'taxi')},
                     neural_data={'mamba1-forward': 'gaussian', 'mlp-train-step': 'gaussian', 'lm-train-step': 'bytes'},
                     tree_task={}, tree_lanes=[], board_datasets=['taxi', 'istella'])
-GEMM_ENV = 'MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.ni08-leaf256'
 
 
 def write_neural_plan(d):
     """A plan whose neural workloads carry no dataset (the board decides it), one per lane, plus a classical one."""
-    rows = [('G.neural:mamba1-forward.m1=on', 'neural:mamba1-forward', 'P010', ['MOJOLEARN_IDN_M1_SCAN=3'], ['_mojolearn_mamba']),
-            ('G.neural:mlp-train-step.leaf=all256', 'neural:mlp-train-step', 'P011', ['MOJOLEARN_IDN_GEMM_LEAF=3'], ['_mojolearn_training']),
+    rows = [('G.neural:mamba1-forward.m1=on', 'neural:mamba1-forward', 'P010', ['MOJOLEARN_M1=3'], ['_mojolearn_mamba']),
+            ('G.neural:mlp-train-step.leaf=on', 'neural:mlp-train-step', 'P011', ['MOJOLEARN_LEAF=3'], ['_mojolearn_training']),
             ('G.classical:kmeans.f=on', 'classical:kmeans', 'P012', ['MOJOLEARN_F=1'], ['_mojolearn_x_linear'])]
     configs, packs, algos = [], [], {}
     for cid, algo, pack, defines, binds in rows:
@@ -819,18 +818,15 @@ class NeuralWorkloadTests(unittest.TestCase):
         self.assertIn('--pip sklearn=scikit-learn==1.7.2,torch=torch', m1)  # the Mamba conductor imports torch
         self.assertIn('BUILDS=build,build_mamba', m1)
         self.assertTrue(m1.endswith('PREBUILT=/root/grid-prebuilt'))
-        self.assertNotIn(GEMM_ENV, m1)
         mlp = [l for l in lines if ' gtestr1n.P011.bb ' in l][0]
         self.assertIn('--race neural:mlp-train-step:gaussian', mlp)
         self.assertIn('BUILDS=build,build_linalg,build_training', mlp)  # SmallMLPTrainer requires the linalg binding
-        self.assertIn(' ' + GEMM_ENV + ' ', mlp)  # the all256 leaf binary refuses without its expected profile
         self.assertNotIn('--pip', mlp)
         b = [l for l in lines if '.C00' in l]
         self.assertEqual(len(b), 6)  # two incumbent groups (binding sets mamba / training+linalg) x 3 repeats
         self.assertTrue(any('build_linalg' in l and '--race neural:mlp-train-step:gaussian' in l for l in b))
-        self.assertTrue(all(GEMM_ENV not in l and 'MOJOLEARN_BUILD_DEFINES' not in l for l in b))
+        self.assertTrue(all('MOJOLEARN_BUILD_DEFINES' not in l for l in b))
         self.assertTrue(all(l.split()[5].startswith('gtestr1n.') for l in lines))  # new tags: the fed ledger skips none
-        self.assertEqual(G.define_envs(['MOJOLEARN_IDN_GEMM_LEAF=3', 'MOJOLEARN_IDN_ALL_OFF']), [])
         self.assertTrue(G.workload_selected('neural:gemm', ['neural:gemm']))
         self.assertFalse(G.workload_selected('expanded:cnn-clf@dataset=synthetic', ['neural:']))
 

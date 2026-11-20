@@ -10,10 +10,9 @@ fa   : FactorAnalysis 20000 x 64 (seeded synthetic, 8 factors) in both modes,
 gbdt : GradientBoostingClassifier and GradientBoostingRegressor defaults
        (Ordered below 50k rows; Logloss walks 10 Newton iterations) on a
        seeded 569 x 30 pool, n_estimators=N; prints sha256 of the model text
-       and of the predictions. Timing-free: run it on a build of each arm
-       (default, -D MOJOLEARN_GBDT_WALK_DEV_STEP_OFF,
-       -D MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF) and on each vendor; every line
-       must be equal (same bits).
+       and of the predictions. Timing-free: run it on the default build on
+       each vendor; every line must be equal (same bits). (The old-path arms
+       GBDT_WALK_DEV_STEP_OFF and GBDT_ORD_TREE_BUFS_OFF were deleted 2026-11-15.)
 """
 import argparse
 import hashlib

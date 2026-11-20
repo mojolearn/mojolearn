@@ -2,7 +2,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from bindings.small_mlp_native import small_mlp_c, small_mlp_finalize_c
+from bindings.small_mlp_native_door import small_mlp_c, small_mlp_finalize_c
 
 @export
 def PyInit__mojolearn_small_mlp_public_compile() abi("C") -> PythonObject:

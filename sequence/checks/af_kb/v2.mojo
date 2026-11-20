@@ -8,7 +8,7 @@ launch each on a fresh 7-filled buffer; p0 = 256 ones.
     sh sequence/checks/af_kb/run_all.sh   (one program per variant: a Metal
     compiler crash on one kernel names that kernel alone)
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_div, identical_sqrt

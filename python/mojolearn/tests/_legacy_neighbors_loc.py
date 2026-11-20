@@ -1,192 +1,78 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The former Python paths of LocalOutlierFactor, NearestCentroid and
-KNNImputer (python/mojolearn/_expansion_neighbors.py before lane
+"""The remaining former Python paths of NearestCentroid and KNNImputer
+(python/mojolearn/_expansion_neighbors.py before lane
 native-neighbors-20261024 made each public method one native call), frozen
 as subclasses so the tests compare the native door with them bit for bit.
 Test-only oracle; never imported by the package."""
 import os
 
-from mojolearn import _portable_math as math
-from mojolearn._array import Array
-from mojolearn._buffer import addr, addr_ro, empty, zeros
-from mojolearn._lazy_out import _empty_out
-from mojolearn._mode import available_if
-from mojolearn._expansion_neighbors import (
-    LocalOutlierFactor, NearestCentroid, KNNImputer, _f32, _i32, _f32_scalar, _p2m_sort_rows,
-    _class_array, _argmax_labels, _accuracy, _U_IDENTITY, _UNCOMPACT_IMPUTE, _OLD_ITEMS,
-)
+import math as _stdmath  # test oracle: isclose (deleted from _portable_math by 3db84bb031)
+from mojolearn import Array, NearestCentroid, KNNImputer  # oracle subject: the public classes these frozen bodies subclass (their `_op` / `_bind` drive the x_neighbors kernels)
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, empty_out as _empty_out, portable_math as math
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
+
+# Local copies of the product's python/mojolearn/_expansion_neighbors.py A/B flags (import-time values).
+_UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+_OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 
 
-class LegacyLocalOutlierFactor(LocalOutlierFactor):
-    def _check_params(self):
-        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
-            raise NotImplementedError(
-                f"LocalOutlierFactor: metric={self.metric!r} (p={self.p!r}) is not implemented; "
-                "euclidean (or minkowski with p=2) only")
-        if self.metric_params:
-            raise NotImplementedError("LocalOutlierFactor: metric_params is not implemented")
-        if self.contamination != "auto" and not (0.0 < float(self.contamination) <= 0.5):
-            raise ValueError("contamination must be 'auto' or in (0, 0.5]")
-        if int(self.n_neighbors) < 1:
-            raise ValueError("n_neighbors must be >= 1")
+def _take_cols(self, X, cols):
+    # oracle copy of the model helper deleted by ec78e70324 (product has no caller; recoverable at 8579360a2e)
+    cols = _i32(cols, "cols")
+    out = _empty_out((X.shape[0], len(cols)), "<f4")
+    self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
+    return out
 
-    def fit(self, X, y=None):
-        """Fit the model on the training data.
 
-        Parameters
-        ----------
-        X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
-            Training data; at least 2 samples. Sparse input is densified.
-        y : None
-            Ignored.
+def _f32_scalar(v):
+    """A Python double rounded once to float32, as a Python float (copy of `_expansion_neighbors._f32_scalar`)."""
+    return Array.from_list([float(v)], "<f4").tolist()[0]
 
-        Returns
-        -------
-        self : LocalOutlierFactor
-            The fitted estimator.
-        """
-        self._check_params()
-        X = _f32(X)
-        n, d = X.shape
-        if n < 2:
-            # scikit-learn's check_array wording (ensure_min_samples=2)
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
-        k = min(int(self.n_neighbors), n - 1)
-        dist, idx = self._knn(X, X, k, True)
-        lrd = _empty_out((n,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (dist, 0), (lrd, 1)], (k, n, n))
-        score = _empty_out((n,), "<f4")
-        self._op("lof_score", [(idx, 0), (lrd, 0), (lrd, 0), (score, 1)], (k, n, n))
-        self._fit_X, self._fit_dist, self._lrd = X, dist, lrd
-        self.n_neighbors_ = k
-        self.n_features_in_ = d
-        self.n_samples_fit_ = n
-        self.negative_outlier_factor_ = score
-        if self.contamination == "auto":
-            self.offset_ = -1.5
-        else:
-            q = 100.0 * float(self.contamination)
-            self.offset_ = _f32_scalar(self._sorted_percentile(score, q))
-        return self
 
-    def _sorted_percentile(self, score, q):
-        """numpy.percentile (method 'linear') of score with the sort on the device (`p2m_row_sort`
-        over one row: ascending by value, ties by position, as `sorted`);
-        only the two order statistics it reads come back to Python."""
-        n = score.shape[0]
-        srt = _p2m_sort_rows(self, _i32([0, n], "indptr"), zeros((n,), "<i4"), score)[1]
-        pos = (q / 100.0) * (n - 1)
-        lo = math.floor(pos)
-        hi = min(lo + 1, n - 1)
-        t = pos - lo
-        a, b = srt[lo], srt[hi]
-        diff = b - a
-        return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
+def _accuracy(y_true, y_pred, sample_weight=None):
+    """sklearn's accuracy_score: the (weighted) fraction of exact label
+    matches (`_expansion_metrics.accuracy_fraction`: grouped sums in the
+    x_metrics binding, no per-row Python)."""
+    from mojolearn._expansion_metrics import accuracy_fraction  # oracle subject: the native x_metrics accuracy op over labels of any kind; the public accuracy_score refuses str labels under normalize=True
+    return accuracy_fraction(y_true, y_pred, sample_weight)
 
-    @available_if(lambda self: not self.novelty)
-    def fit_predict(self, X, y=None):
-        """Fit the model and label the training samples.
 
-        Available only with ``novelty=False``; otherwise raises
-        ``AttributeError``.
+# Frozen copies of the former package helpers (python/mojolearn/_expansion_neighbors.py
+# before lane py-neighbors, 2026-11-14, deleted them: every public method is one
+# native call and decodes its labels in bindings/neighbors_local_native_door.mojo
+# `_class_array` / bindings/neighbors_semi_native_door.mojo `_semi_class_array`).
+def _argmax_labels(est, classes, M):
+    """The class of every row's first maximum: the argmax on the device
+    (`row_argmax`), the labels by `_class_array`."""
+    n, C = M.shape
+    codes = empty((n,), "<i4")
+    if n > 0:
+        est._op("row_argmax", [(M, 0), (codes, 1)], (n, C))
+    return _class_array(classes, codes)
 
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-        y : None
-            Ignored.
 
-        Returns
-        -------
-        labels : Array of shape (n_samples,), int64
-            -1 for outliers, 1 for inliers.
-        """
-        if self.novelty:
-            raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
-        self.fit(X)
-        off = self.offset_
-        score = self.negative_outlier_factor_
-        lab = empty((score.size,), "<i4")
-        if score.size:
-            self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
-        return lab.astype("<i8")
-
-    def _novelty(self, what):
-        if not self.novelty:
-            raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
-
-    @available_if(lambda self: self.novelty)
-    def score_samples(self, X):
-        """Negative local outlier factor of new samples.
-
-        Available only with ``novelty=True``; otherwise raises
-        ``AttributeError``. Lower scores are more abnormal.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        scores : Array of shape (n_queries,), float64
-        """
-        self._novelty("score_samples")
-        Q = _f32(X)
-        k, nf = self.n_neighbors_, self.n_samples_fit_
-        dist, idx = self._knn(Q, self._fit_X, k, False)
-        nq = Q.shape[0]
-        lrd = _empty_out((nq,), "<f4")
-        self._op("lof_lrd", [(dist, 0), (idx, 0), (self._fit_dist, 0), (lrd, 1)], (k, nq, nf))
-        score = _empty_out((nq,), "<f4")
-        self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
-        return score
-
-    @available_if(lambda self: self.novelty)
-    def decision_function(self, X):
-        """Shifted outlier score of new samples: ``score_samples(X) - offset_``.
-
-        Available only with ``novelty=True``. Negative values are outliers.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        scores : Array of shape (n_queries,), float64
-        """
-        self._novelty("decision_function")
-        return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
-
-    @available_if(lambda self: self.novelty)
-    def predict(self, X):
-        """Label new samples as inliers or outliers.
-
-        Available only with ``novelty=True``; otherwise raises
-        ``AttributeError``.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_queries, n_features)
-            New samples.
-
-        Returns
-        -------
-        labels : Array of shape (n_queries,), int64
-            -1 for outliers, 1 for inliers.
-        """
-        self._novelty("predict")
-        dec = self.decision_function(X)
-        lab = empty((dec.size,), "<i4")
-        if dec.size:
-            self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
-        return lab.astype("<i8")
+def _class_array(classes, codes):
+    """classes[codes] for int32 codes (an Array): int or bool classes an
+    int64 Array, real classes a float64 Array (the native gather of
+    `decode_labels`), other labels a list (`decode_labels`)."""
+    from mojolearn.tests._legacy_host_inference import decode_labels
+    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
+    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
+    return decode_labels(classes, codes)
 
 
 class LegacyNearestCentroid(NearestCentroid):
+    def _l1dist(self, A, B):
+        # Oracle-side copy of the product helper fb5-cleanup deleted (the public
+        # manhattan predict is one native call and no longer uses it).
+        n, d = A.shape
+        m = B.shape[0]
+        out = _empty_out((n, m), "<f4")
+        self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
+        return out
+
     def fit(self, X, y):
         """Fit the class centroids.
 
@@ -215,7 +101,7 @@ class LegacyNearestCentroid(NearestCentroid):
         # the native encoder's int32 codes, the class counts from the device
         # (`p2m_class_counts`, an atomic add per row; lane pyglue-numeric:
         # a Python counting loop on every column but FAST + Apple)
-        from mojolearn._labels import encode_labels
+        from mojolearn._labels import encode_labels  # oracle subject: the native ORDER RULE encoder (classical_encode_labels: buffers, Series, lists, '<U' and object labels, its refusals); no exact copy, no public route
         classes, lab = encode_labels(y)
         if lab.size != n:
             raise ValueError("X and y have different numbers of rows")
@@ -229,11 +115,9 @@ class LegacyNearestCentroid(NearestCentroid):
         if self.priors == "empirical":
             # count / n per class in the base binding (lane py-runtime-b;
             # the same binary64 words as the Python quotient)
-            from mojolearn._buffer import _native
-            pa = empty((C,), "<f8")
-            ca = Array.from_list(counts, "<i8")
-            _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
-            prior = pa.tolist()  # glue: k class priors for the checks below
+            # the base binding's `class_ratio_f64` (mode 1: count / n) is the correctly rounded binary64
+            # quotient of two exact integers, which Python's true division also is
+            prior = [c / n for c in counts]  # glue: k class priors for the checks below
         elif self.priors == "uniform":
             prior = [1.0 / C] * C
         else:
@@ -243,7 +127,7 @@ class LegacyNearestCentroid(NearestCentroid):
             if any(p < 0 for p in prior):  # glue: user priors argument checks
                 raise ValueError("priors must be non-negative")
             tot = math.fsum(prior)  # glue: the native fsum (core fsum_f64) of the user priors argument
-            if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
+            if not _stdmath.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
         self.class_prior_ = Array.from_list(prior, "<f8")
         if self.metric == "euclidean":
@@ -314,7 +198,7 @@ class LegacyNearestCentroid(NearestCentroid):
 
     def _uniform(self):
         C = len(self.classes_)
-        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
+        return all(_stdmath.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
 
     def predict(self, X):
         """Predict the class of each sample.
@@ -523,7 +407,7 @@ class LegacyKNNImputer(KNNImputer):
                 self._op("p2m_zero_cols", [(out, 0), (flags, 0), (z, 1)], (n, d))
                 out = z
         elif len(keep) != d:
-            out = self._take_cols(out, keep)
+            out = _take_cols(self, out, keep)
         if self.add_indicator and self._miss_cols and n:
             c = out.shape[1]
             q = len(self._miss_cols)

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CategoricalNB's count table in ONE launch over (row, feature) (lane
-apple-fast-nb, 2026-10-02). FAST + Apple ONLY, behind -D MOJOLEARN_NB_CAT_ATOMIC:
-the IDENTICAL binding, the other vendors and a FAST build without the define
-compile x_prep/device.mojo's unit path unchanged (`cat_hpart_unit` and
+apple-fast-nb, 2026-10-02). The IDENTICAL default on every vendor (the FAST +
+Apple opt-in arm was deleted 2026-11-15); FAST builds compile
+x_prep/device.mojo's unit path unchanged (`cat_hpart_unit` and
 `cat_hfold_unit`, x_prep/blocked.mojo).
 
 `cat_hpart_unit` is one thread per (2048-row block, feature) folding its
@@ -18,31 +18,39 @@ Integer counts are order-free, so the table is exact and the same on every
 run. The weighted form (sample_weight, a float fold) keeps the unit path:
 the dispatcher only intercepts W < 0.
 """
-from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import NUMERIC_FAST
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from std.atomic import Atomic
+from max.gpu import block_dim, block_idx, thread_idx
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st
 
 # AFCL-P03: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
 # More smaller blocks may reduce scheduling pressure from contended category
 # atomics. No count, category or weight semantics change. Both A/B arms must
 # enable MOJOLEARN_NB_CAT_ATOMIC; this switch only changes its launch geometry.
-comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P03"]()
+comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_AFCL_P03"]()
+# TOMBSTONE: MOJOLEARN_AFCL_P03 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5f02f5b9e3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_P03.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: lane idn-int-prep (2026-10-04): IDENTICAL on every vendor, ON by default.
 #: The table is an integer count: the atomic adds give the units' words at any
 #: row count (`cat_hfold_unit` also sums integers and converts once), and the
-#: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
-#: the unit path on the device.
-comptime IDN_NB_CAT_ATOMIC = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+#: host column keeps the units.
+# TOMBSTONE: MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7cf272e256.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+comptime IDN_NB_CAT_ATOMIC = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
 comptime NB_CAT_ATOMIC = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()
 ) or IDN_NB_CAT_ATOMIC
+# TOMBSTONE: MOJOLEARN_NB_CAT_ATOMIC (FAST+Apple opt-in arm, EXP:289 OPEN, no A/B recorded) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 4a5487a7a7.
+# Restore: git apply experiments/removed/MOJOLEARN_NB_CAT_ATOMIC.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 def cat_hist_atomic_kernel(f: FP, q: IP, total: Int32):

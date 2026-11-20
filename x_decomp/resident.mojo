@@ -15,19 +15,19 @@ POOL: a freed buffer is kept and handed to the next request that fits
 DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
-from std.ffi import _Global
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.admitted_finite_status import enqueue_finite_word
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
+from core.admitted_finite_status import enqueue_finite_word
 
-from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, launch_gemm_mma_batched, note_cov_route
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel, min_partials_kernel
 from x_decomp.moves import MOVE_FILL0, MOVE_LAST, MOVE_TAKE_ROWS
@@ -72,7 +72,9 @@ from x_decomp.device import (
     _p,
 )
 from x_decomp.qr_bounded import QRB_CELLS
+from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -103,6 +105,8 @@ struct _Pool(Defaultable, Movable):
     var released: List[Int]
     var free_floats: Int
     var free_count: Int
+    var metadata_lock: List[Int64]
+    var trimming: Bool
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
@@ -114,9 +118,11 @@ struct _Pool(Defaultable, Movable):
         self.released = List[Int]()
         self.free_floats = 0
         self.free_count = 0
+        self.metadata_lock = List[Int64](length=1, fill=0)
+        self.trimming = False
 
 
-comptime X_DECOMP_POOL = _Global[StorageType=_Pool, name="MojoXDecompPool", init_fn=_Pool.__init__]
+comptime X_DECOMP_POOL = SharedSlot[_Pool, "MojolearnXDecompPoolV2", 2]
 
 
 def pool_alloc(n: Int) raises -> Int:
@@ -125,79 +131,206 @@ def pool_alloc(n: Int) raises -> Int:
     if c >= POOL_CLASSES:
         raise Error("x_decomp: a device matrix past the pool's largest size class")
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if len(p[].free_by_class[c]) > 0:
-        var id = p[].free_by_class[c].pop()
-        p[].live[id] = True
-        p[].free_floats -= 1 << c
-        p[].free_count -= 1
-        return id
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if len(p[].free_by_class[c]) > 0:
+            var id = p[].free_by_class[c].pop()
+            p[].live[id] = True
+            p[].free_floats -= 1 << c
+            p[].free_count -= 1
+            return id
+    finally:
+        shared_slot_unlock(lock)
+    # Device allocation does not hold the metadata lock. Other fits can
+    # continue using and returning their live buffers while it completes.
     var ctx = xd_ctx()
     var buf = ctx.enqueue_create_buffer[DType.float32](1 << c)
-    if len(p[].released) > 0:
-        var id = p[].released.pop()
-        p[].bufs[id] = buf^
-        p[].cls[id] = c
-        p[].live[id] = True
-        return id
-    p[].bufs.append(buf^)
-    p[].cls.append(c)
-    p[].live.append(True)
-    return len(p[].cls) - 1
+    var displaced = buf
+    var result = -1
+    shared_slot_lock(lock)
+    try:
+        if len(p[].released) > 0:
+            var id = p[].released.pop()
+            displaced = p[].bufs[id]
+            p[].bufs[id] = buf^
+            p[].cls[id] = c
+            p[].live[id] = True
+            result = id
+        else:
+            p[].bufs.append(buf^)
+            p[].cls.append(c)
+            p[].live.append(True)
+            result = len(p[].cls) - 1
+    finally:
+        shared_slot_unlock(lock)
+    _ = displaced^  # the last reference to a replaced tiny buffer dies outside the lock
+    return result
+
+
+def _pool_trim() raises:
+    """Detach idle buffers under the lock; drain and destroy them outside it."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    while True:  # driver-loop: idle batches returned while this trim drains
+        var complete = False
+        var repeat = False
+        try:
+            var ctx = xd_ctx()
+            ctx.synchronize()
+            var tiny = ctx.enqueue_create_buffer[DType.float32](1)
+            var retired = List[DeviceBuffer[DType.float32]]()
+            shared_slot_lock(lock)
+            try:
+                for k in range(POOL_CLASSES):  # driver-loop: existing pool size classes
+                    while len(p[].free_by_class[k]) > 0:
+                        var f = p[].free_by_class[k].pop()
+                        # Retain the allocation before replacing its metadata
+                        # slot; no device-buffer destruction runs under the lock.
+                        retired.append(p[].bufs[f])
+                        p[].bufs[f] = tiny
+                        p[].cls[f] = -1
+                        p[].released.append(f)
+                p[].free_floats = 0
+                p[].free_count = 0
+            finally:
+                shared_slot_unlock(lock)
+            ctx.synchronize()
+            _ = retired^
+            _ = tiny^
+            complete = True
+        finally:
+            shared_slot_lock(lock)
+            # A concurrent return may cross the cap during the drain. This
+            # trimmer owns that follow-up batch; no overflow is left waiting
+            # for an unrelated later call. On an error allow a later retry.
+            repeat = complete and (p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT)
+            p[].trimming = repeat
+            shared_slot_unlock(lock)
+        if not repeat:
+            return
 
 
 def pool_free(id: Int) raises:
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
-        raise Error("x_decomp: freeing a device matrix that is not live")
-    var c = p[].cls[id]
-    p[].live[id] = False
-    p[].free_by_class[c].append(id)
-    p[].free_floats += 1 << c
-    p[].free_count += 1
-    if p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT:
-        # release every free buffer: its id holds a copy of one tiny buffer
-        var ctx = xd_ctx()
-        ctx.synchronize()
-        var tiny = ctx.enqueue_create_buffer[DType.float32](1)
-        for k in range(POOL_CLASSES):
-            while len(p[].free_by_class[k]) > 0:
-                var f = p[].free_by_class[k].pop()
-                p[].bufs[f] = tiny
-                p[].cls[f] = -1
-                p[].released.append(f)
-        p[].free_floats = 0
-        p[].free_count = 0
-        ctx.synchronize()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var trim = False
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: freeing a device matrix that is not live")
+        var c = p[].cls[id]
+        p[].live[id] = False
+        p[].free_by_class[c].append(id)
+        p[].free_floats += 1 << c
+        p[].free_count += 1
+        if (p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT) and not p[].trimming:
+            p[].trimming = True
+            trim = True
+    finally:
+        shared_slot_unlock(lock)
+    if trim:
+        _pool_trim()
+
+
+def pool_live_count() raises -> Int:
+    """The pool ids in use (allocated and not freed): a test-only readout of
+    the resident fitted state the decomposition owners hold (lane
+    ne1-a-decomp-resident)."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        var live = 0
+        for i in range(len(p[].live)):  # driver-loop: over the pool's ids (test readout)
+            if p[].live[i]:
+                live += 1
+        return live
+    finally:
+        shared_slot_unlock(lock)
+
+
+def pool_buffer(id: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """An owned buffer reference, independent of pool List reallocations.
+
+    The caller owns its live ID until its last enqueue. Copies pin storage;
+    they do not grant use of an ID after pool_free or prevent its reuse.
+    """
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: a device matrix id that is not live")
+        if (1 << p[].cls[id]) < n:
+            raise Error("x_decomp: a device matrix smaller than the call reads")
+        return p[].bufs[id]
+    finally:
+        shared_slot_unlock(lock)
 
 
 def _ptr(id: Int, n: Int) raises -> F32Ptr:
+    # A live ID retains its allocation in the pool until its owner frees it.
+    # List movement never moves device storage, and trimming visits only idle
+    # IDs. Validate/read under the lock; kernels execute after it is released.
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
-        raise Error("x_decomp: a device matrix id that is not live")
-    if (1 << p[].cls[id]) < n:
-        raise Error("x_decomp: a device matrix smaller than the call reads")
-    return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    var lock = p[].metadata_lock.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    shared_slot_lock(lock)
+    try:
+        if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
+            raise Error("x_decomp: a device matrix id that is not live")
+        if (1 << p[].cls[id]) < n:
+            raise Error("x_decomp: a device matrix smaller than the call reads")
+        return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+    finally:
+        shared_slot_unlock(lock)
 
 
 # ---- Typed entries behind the GPU binding's doors (the shell is x_decomp/resident_py*.mojo)
 def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     """Host floats into the device matrix; waits (the host store may change
     after this returns)."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
+    var buffer = pool_buffer(i, cnt)
     var ctx = xd_ctx()
-    _up_into(ctx, p[].bufs[i], src, cnt)
+    _up_into(ctx, buffer, src, cnt)
     ctx.synchronize()
+    _ = buffer^
     return cnt
+
+
+def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+    """`dev_upload_run` with the finite test of the uploaded words on the
+    device (core/admitted_finite_status.mojo, NaN or infinity on bits), read
+    back at the upload's own synchronisation: 0 when every word is finite,
+    1 otherwise. No host scan of `src`; the words are copied, never
+    converted, so no bit changes. The ONE upload-finite body, reached only
+    through the kernel-call op XD_DEV_UPLOAD_FINITE (lane a8d's op; lane
+    a8c's duplicate named entry x_decomp_dev_upload_finite was folded into
+    it at integration, integ/pre-0867-w5). Callers: the manifold kit's
+    resident upload and DecompKit.input_tested (PLS with a deferred X)."""
+    var buffer = pool_buffer(i, cnt)
+    var dp = F32Ptr(unsafe_from_address=Int(buffer.unsafe_ptr()))
+    var ctx = xd_ctx()
+    _up_into(ctx, buffer, src, cnt)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_finite_word(ctx, dp, cnt, status, 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var flagged = Int(word.unsafe_ptr()[0])
+    _ = word^
+    _ = status^
+    _ = buffer^
+    return flagged
 
 
 def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
     """The device matrix into host floats, after every launch before it."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
+    var buffer = pool_buffer(i, cnt)
     var ctx = xd_ctx()
-    _down(ctx, p[].bufs[i], dst, cnt)
+    _down(ctx, buffer, dst, cnt)
     ctx.synchronize()
+    _ = buffer^
     return cnt
 
 
@@ -215,42 +348,9 @@ def dev_ew_run(
     return count
 
 
-struct _CovGate(Defaultable, Movable):
-    """One persistent typed gate on xd_ctx; never released between enqueues."""
-    var bufs: List[DeviceBuffer[DType.int32]]
-
-    def __init__(out self):
-        self.bufs = List[DeviceBuffer[DType.int32]]()
-
-
-comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
-
-
-def dev_mcd_cov_run(a: Int, c: Int, rows: Int, d: Int) raises -> Int:
-    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
-    comptime if not MCD_ORDERED_COV:
-        raise Error("ordered MCD covariance is disabled")
-    if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
-        raise Error("ordered covariance invalid shape or Int32 bound exceeded")
-    note_cov_route(False, rows, d)
-    var words = ordered_cov_scratch(1, rows, d)
-    var ctx = xd_ctx()
-    var state = MCD_COV_GATE.get_or_create_ptr()
-    if len(state[].bufs) == 0:
-        var initial_gate = ctx.enqueue_create_buffer[DType.int32](1)
-        ctx.enqueue_memset(initial_gate, Int32(1))
-        state[].bufs.append(initial_gate^)
-    # The global owner retains this typed allocation past every enqueue and
-    # subsequent download/synchronize. No null pointer, cast, or local-only
-    # allocation whose destruction could add an implicit synchronization.
-    var gate = state[].bufs[0]
-    var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
-    var sid = pool_alloc(words)
-    launch_mcd_cov_ordered(ctx, _ptr(a, rows*d), _ptr(c, d*d),
-        _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
-    # Resident pool reuse is ordered on the same context, as dev_gemm_run.
-    pool_free(sid)
-    return d*d
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (dev_mcd_cov_run and its persistent gate, the x_decomp_dev_mcd_cov body) deleted
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
 def dev_gemm_run(a: Int, b: Int, c: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
@@ -274,14 +374,15 @@ def dev_project_run(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) r
         raise Error("x_decomp: projection exceeds the Int32 index bound")
     comptime if not PROJECT_TILED:
         return -1
-    var pf = _ptr(flag, 1)
+    var flags = pool_buffer(flag, 1)
+    var pf = F32Ptr(unsafe_from_address=Int(flags.unsafe_ptr()))
     var pa = _ptr(a, m * k)
     var pb = _ptr(b, k * n)
     var pc = _ptr(c, m * n)
     var ctx = xd_ctx()
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
-    enqueue_fill(ctx, pool[].bufs[flag], Float32(0))
+    enqueue_fill(ctx, flags, Float32(0))
     launch_project(ctx, pa, pb, pc, pf, m, k, n)
+    _ = flags^
     return m * n
 
 
@@ -350,14 +451,15 @@ def dev_orth_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """dst = the orthonormalized columns of a (DevExec.orth's passes on the
     device copy; a is unchanged)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     var ctx = xd_ctx()
     if cells > 0:
-        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
-        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        var sub = target.create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=source.create_sub_buffer[DType.float32](0, cells))
         orth_on_device(ctx, sub, m, l)
+    _ = source^
+    _ = target^
     return cells
 
 
@@ -365,20 +467,21 @@ def dev_orth_diag_run(ia: Int, io: Int, pd: F32Ptr, m: Int, l: Int) raises -> In
     """`dev_orth_run`, and the host floats at `pd` (l) = the product of the
     two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
     var cells = m * l
-    _ = _ptr(ia, cells)
-    _ = _ptr(io, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(io, cells)
     var ctx = xd_ctx()
     var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
     enqueue_fill(ctx, dd, Float32(1.0))
     if cells > 0:
-        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
-        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        var sub = target.create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=source.create_sub_buffer[DType.float32](0, cells))
         orth_on_device_diag(ctx, sub, m, l, dd, True)
     if l > 0:
         ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
     ctx.synchronize()
     _ = dd^
+    _ = source^
+    _ = target^
     return cells
 
 
@@ -434,12 +537,13 @@ def dev_lda_bound_run(
 #: crossed four times and X H^T twice per half sweep through the host-address
 #: entry); only the permutation (k ints) goes up and the folded violation
 #: (one float, the kit's `total`) comes down. The same kernel on the same
-#: values: the same words. -D MOJOLEARN_IDN_CD_RESIDENT_OFF (or
-#: -D MOJOLEARN_IDN_ALL_OFF) leaves the entry out and Python keeps the
+#: values: the same words. A FAST build leaves the entry out and Python keeps the
 #: host-address call.
-comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_CD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_CD_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at ee37c009aa.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CD_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
@@ -454,11 +558,12 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 #: of F^ X every step; randomized_svd and linalg.svd likewise) is not
 #: downloaded and uploaded again around the solve; only s (n) and V (n x n)
 #: come down. The same launches on the same values: the same words.
-#: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address call.
-comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SVD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_SVD_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at d4f807923d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
@@ -470,14 +575,14 @@ def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: svd exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
     _ = da^
     ctx.synchronize()
+    _ = source^
     return n
 
 
@@ -493,11 +598,12 @@ def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
 #: clamps it where it lives; only the pivots (n ints), info, the row orders
 #: (2 n), the diagonal (n) and the four stats come down. The same launches
 #: on the same values: the same words.
-#: -D MOJOLEARN_IDN_LU_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
-#: entries out and Python keeps the host-address calls.
-comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LU_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entries out and Python keeps the host-address calls.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_LU_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 5621d30bd9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_LU_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
@@ -509,14 +615,14 @@ def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: lu exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pl = _ptr(il, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
+    var target = pool_buffer(il, cells)
+    var pl = F32Ptr(unsafe_from_address=Int(target.unsafe_ptr()))
     var ctx = xd_ctx()
     if ia != il:
         ctx.enqueue_copy(
-            dst_buf=pool[].bufs[il].create_sub_buffer[DType.float32](0, cells),
-            src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells),
+            dst_buf=target.create_sub_buffer[DType.float32](0, cells),
+            src_buf=source.create_sub_buffer[DType.float32](0, cells),
         )
     var dp = ctx.enqueue_create_buffer[DType.int32](n)
     var di = ctx.enqueue_create_buffer[DType.float32](1)
@@ -530,6 +636,8 @@ def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
     _ = di^
     _ = ds^
     _ = dact^
+    _ = source^
+    _ = target^
     return n
 
 
@@ -555,25 +663,27 @@ def dev_lu_aux_run(
 #: elementwise result of the whole n x d input) is not downloaded and
 #: uploaded again for its QR; only R (d x d) comes down. The same launch on
 #: the same values: the same words. Needs IDN_QR_R_DIRECT (its helper).
-#: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
-#: entry out and Python keeps the host-address call.
-comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at e25d523eff.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT
 # lane fix-d1-decomp (2026-10-04, audit F8): the resident QR held X twice
 # (the operand and the device copy the factorization destroys). When the
 # caller gives the operand up (p[2] != 0: FactorAnalysis's centered X, never
 # read after its R), the QR runs in place on the operand's own pooled buffer
 # and no second m x n buffer is made. The same launch on the same values:
-# the same words. -D MOJOLEARN_IDN_QR_R_INPLACE_OFF (or -D
-# MOJOLEARN_IDN_ALL_OFF) keeps the copy whatever the caller says.
-comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT and not (
-    is_defined["MOJOLEARN_IDN_QR_R_INPLACE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# the same words.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_QR_R_INPLACE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at c735434b00.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_QR_R_INPLACE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT
 
 
 def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
     """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
-    address. p = [m, n] or [m, n, consume]. Without consume (or under
-    IDN_QR_R_INPLACE_OFF) a is left as it is: the QR destroys a device copy.
+    address. p = [m, n] or [m, n, consume]. Without consume (or outside
+    IDN_QR_R_INPLACE) a is left as it is: the QR destroys a device copy.
     With consume != 0 and IDN_QR_R_INPLACE the QR destroys a itself (the
     caller must not read a again). Returns 1 when a was consumed, else 0.
     Waits."""
@@ -583,21 +693,22 @@ def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> I
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: qr_r exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     comptime if IDN_QR_R_INPLACE:
         if consume:
-            var dv = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
+            var dv = source.create_sub_buffer[DType.float32](0, cells)
             DevExec._qr_r_on(ctx, dv, m, n, pr)
             _ = dv^
             ctx.synchronize()
+            _ = source^
             return 1
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._qr_r_on(ctx, da, m, n, pr)
     _ = da^
     ctx.synchronize()
+    _ = source^
     return 0
 
 
@@ -610,11 +721,12 @@ def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> I
 #: iteration). Here the same kernel (`lasso_rows_kernel`, `lars_rows_kernel`,
 #: `omp_rows_kernel`: DevExec's launches) reads them where they are and
 #: writes the codes into a device matrix. The same words.
-#: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address calls.
-comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_CODE_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address calls.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_CODE_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at bf0328cef9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_CODE_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_code_rows_run(
@@ -633,7 +745,8 @@ def dev_code_rows_run(
     var cells = n * k
     var pg = _ptr(ig, k * k)
     var pq = _ptr(iq, cells)
-    var pw = _ptr(iw, cells)
+    var weights = pool_buffer(iw, cells)
+    var pw = F32Ptr(unsafe_from_address=Int(weights.unsafe_ptr()))
     var alpha = Float32(alpha_in)
     var tol = Float32(tol_in)
     var per = cells
@@ -641,7 +754,6 @@ def dev_code_rows_run(
         per = n * (k * k + LARS_ROW_EXTRA * k)
     elif kind == 2:
         per = n * (k * k + 3 * k)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     # the scratch at its exact size (DevExec's; a pooled buffer rounds n (k^2 +
     # 7 k) floats up to a power of two)
@@ -654,7 +766,7 @@ def dev_code_rows_run(
         )
     else:
         # the host-address entries start from a zeroed w
-        var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
+        var wsub = weights.create_sub_buffer[DType.float32](0, cells)
         enqueue_fill(ctx, wsub, Float32(0.0))
         if kind == 1:
             ctx.enqueue_function[lars_rows_kernel](
@@ -667,6 +779,7 @@ def dev_code_rows_run(
             )
     # the scratch dies here: wait for the launch that uses it
     ctx.synchronize()
+    _ = weights^
     _ = dn^
     _ = ds^
     return n
@@ -679,11 +792,12 @@ def dev_code_rows_run(
 #: distances, a covariance product) is not downloaded and uploaded again
 #: for its solve; w (n) and V (n x n) come down as before. The same launches
 #: on the same values: the same words.
-#: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
-#: the entry out and Python keeps the host-address call.
-comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_EIGH_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: A FAST build leaves the entry out and Python keeps the host-address call.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_RESIDENT_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 2eb3f33e29.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> Int:
@@ -697,14 +811,104 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: eigh exceeds the Int32 index bound")
-    _ = _ptr(ia, cells)
-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var source = pool_buffer(ia, cells)
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
     DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
     _ = da^
+    _ = source^
+    return n
+
+
+comptime _EIGH_REV_TPB = 256
+
+
+def eigh_rev_kernel(w_asc: F32Ptr, v_asc: F32Ptr, w_out: F32Ptr, v_out: F32Ptr, n_in: Int32):
+    """Cell t of the descending answer (copies): v_out[i, j] = v_asc[i,
+    n - 1 - j], and for t < n w_out[t] = w_asc[n - 1 - t]
+    (`A.take_cols(range(c - 1, -1, -1))` of both)."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= n * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    v_out.unsafe_store(t, v_asc.unsafe_load(i * n + (n - 1 - j)))
+    if t < n:
+        w_out.unsafe_store(t, w_asc.unsafe_load(n - 1 - t))
+
+
+def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
+    """The n x n device matrix a (left as it is) into the device matrices w
+    (1 x n, eigenvalues DESCENDING) and v (n x n, the matching vectors in
+    columns): `DevExec.eigh_into` on a device copy, then `eigh_rev_kernel`
+    (the column reversal the owners' host `_reversed_columns` copied), w and
+    V resident (lane n9-decomp-eigh-families: IncrementalPCA, FastICA's
+    whitening and FactorAnalysis's owner; was w and V home, reversed,
+    uploaded again). Lane perf-decomp-eigh (2026-11-13): `eigh_into` (the
+    0.8.66 route, multi-block Jacobi) replaces `eigh_enq`'s one-block
+    Jacobi; an unconverged solve raises inside it."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    var source = pool_buffer(ia, cells)
+    var pw = _ptr(iw, n)
+    var pv = _ptr(iv, cells)
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dv = ctx.enqueue_create_buffer[DType.float32](cells)
+    DevExec.eigh_into(ctx, da, dw, dv, n)
+    ctx.enqueue_function[eigh_rev_kernel](
+        F32Ptr(unsafe_from_address=Int(dw.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dv.unsafe_ptr())),
+        pw, pv, Int32(n), grid_dim=(cells + _EIGH_REV_TPB - 1) // _EIGH_REV_TPB, block_dim=_EIGH_REV_TPB,
+    )
     ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = source^
+
+
+def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+    device matrices w (n) and v (n x n, vectors in columns): the executor op
+    `DevExec.eigh_into` (`DevExec.eigh`'s route and words) on a device copy;
+    w and V stay on the device (lane n9-decomp-eigh-families, 2026-11-09:
+    the resident kits' eigh no longer brings w and V down to upload them
+    again). An unconverged solve raises. Lane perf-decomp-eigh
+    (2026-11-13): was `eigh_enq` (one-block Jacobi fallback)."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    if uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    var source = pool_buffer(ia, cells)
+    var weights = pool_buffer(iw, n)
+    var vectors = pool_buffer(iv, cells)
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=source.create_sub_buffer[DType.float32](0, cells))
+    if uplo != 0:
+        ctx.enqueue_function[sym_from_triangle_kernel](
+            da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=(cells + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
+        )
+    var dw = weights.create_sub_buffer[DType.float32](0, n)
+    var dv = vectors.create_sub_buffer[DType.float32](0, cells)
+    DevExec.eigh_into(ctx, da, dw, dv, n)
+    ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = source^
+    _ = weights^
+    _ = vectors^
     return n
 
 
@@ -726,8 +930,7 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
 #       first read, not in fit (the fit then ends with no synchronize).
 # The matrix (and so every output word) is main's under every switch.
 # DEVSCAN is the FAST + Apple default since the M3 A/B (n=1, quality
-# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms;
-# -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
+# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms. NOSCAN and LAZY
 # stay opt-in (they move the NaN/inf refusal from fit to transform; pending
 # Andrew's decision); NOSCAN, when defined, replaces the device scan.
 #: M3 A/B 2026-10-04 (afc_ab_def, full board size, 1 run per arm, main a16fada80), gaussian-rp taxi,
@@ -735,24 +938,33 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
 #: Still opt-in: both gains come from not doing in fit what sklearn does in fit (NOSCAN skips the
 #: NaN/inf refusal, LAZY defers components_ out of the timed fit). Default needs Andrew's API decision.
 
-comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
+comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN (unmeasured Apple FAST opt-in arm, EXP:466 PARKED) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 081ec2e9c2.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime GRP_CLS2_NOSCAN removed; its flag-bit readers folded (bit 1 stays 0).)
 #: lane/idn-gates (2026-10-04): DEVSCAN alone is also the IDENTICAL default
 #: on every vendor (the refusal is a predicate: no output word depends on
-#: where it runs); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF) restores the host
-#: walk in IDENTICAL. NOSCAN, LAZY and FUSED stay FAST + Apple.
-comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: where it runs). NOSCAN, LAZY and FUSED stay FAST + Apple.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old path; EXP:2479 DELETED) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 17dc13843a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as _CLS2_IDN
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF (old path beside the FAST + Apple default, EXP:467 KEEP) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 772bf55066.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime GRP_CLS2_DEVSCAN = (
-    (_CLS2_FAST_APPLE or _CLS2_IDN)
-    and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
-    and not GRP_CLS2_NOSCAN
+    _CLS2_FAST_APPLE or _CLS2_IDN
 )
+# TOMBSTONE: MOJOLEARN_XD_FAST_CLS2_GRP_LAZY (unmeasured Apple FAST opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 17fa14cc92.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_CLS2_GRP_LAZY.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime GRP_CLS2_LAZY removed; its flag-bit readers folded (bit 4 stays 0).)
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off.
 comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
 #: the M3 A/Bs kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}
 #: (gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%,
-#: istella -8.5%; distortion identical; `-D MOJOLEARN_XD_FAST_GRP_FUSED_OFF`
-#: reverts): the
+#: istella -8.5%; distortion identical; its `_OFF` rollback was deleted
+#: 2026-11-15): the
 #: random projections' whole fit in ONE binding call and ONE synchronize
 #: (`grp_fit_fused_py`): X up into the pooled scan buffer, the nonfinite
 #: partials into a pooled device buffer, the matrix drawn AND scaled by one
@@ -762,10 +974,11 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 #: download), allocates the partials and a pinned host buffer per fit and
 #: launches rand and scale separately. Refusal stays in fit; bit 8 of
 #: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
-comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
+# TOMBSTONE: MOJOLEARN_XD_FAST_GRP_FUSED_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 436f8d47d1.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN
 #: lane apple-fast-w2-kfeat (2026-10-04), DEFAULT in FAST + Apple (needs
-#: GRP_FAST_FUSED; rollback `-D MOJOLEARN_XD_FAST_SRP_STRAT_OFF`, main's
-#: Bernoulli pattern). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
+#: GRP_FAST_FUSED). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
 #: distortion 0.946 -> 0.571, board seed 7 1.883 -> 0.475 (sklearn 0.474);
 #: taxi mean 0.346 -> 0.233, seed 7 0.147 -> 0.264 (sklearn 0.381); M3
 #: speed istella 15.7 -> 15.9 ms (neutral). SparseRandomProjection's nonzero PATTERN is drawn column
@@ -786,8 +999,10 @@ comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN and not is_defin
 #: variance term for every input and leaves the off-diagonal terms' law
 #: alone. The 'auto' n_components and compute_inverse_components routes
 #: (not fused) keep main's draw.
-comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FAST_SRP_STRAT_OFF"]()
-comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
+# TOMBSTONE: MOJOLEARN_XD_FAST_SRP_STRAT_OFF (old path beside the FAST + Apple default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at f45bdace85.
+# Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_SRP_STRAT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED
+comptime GRP_CLS2_ANY = GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
 # grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.
@@ -869,7 +1084,7 @@ struct _GrpStage(Defaultable, Movable):
         self.host = Optional[HostBuffer[DType.int32]]()
 
 
-comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
+comptime GRP_STAGE = SharedSlot[_GrpStage, "MojolearnXDecompGrpFusedStageV1"]
 
 
 def grp_fit_fused_run(
@@ -899,7 +1114,7 @@ def grp_fit_fused_run(
         st[].part = ctx.enqueue_create_buffer[DType.int32](513)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-    var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+    var buf = pool_take["MojolearnXDecompCls2ScanV2"](ctx, max(cnt, 1))
     if cnt > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
         ctx.enqueue_function[nonfinite_partial_kernel](
@@ -932,54 +1147,22 @@ def grp_fit_fused_run(
     ctx.synchronize()
     if cnt > 0:
         best = st[].host.value().unsafe_ptr()[0]
-    pool_give["MojoXDecompCls2Scan"](buf^)
+    pool_give["MojolearnXDecompCls2ScanV2"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 
 def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """The first `count` floats of pooled matrix id as a sub-buffer."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
+    var buffer = pool_buffer(id, count)
+    var view = buffer.create_sub_buffer[DType.float32](0, count)
+    _ = buffer^
+    return view^
 
 
 # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
-# Test-only direct batched covariance seam, identical API on both arms.
-# Inactive outputs retain sentinel, partial storage is poisoned before B.
-def mcd_cov_probe_run(px: F32Ptr, pg: I32Ptr, pout: F32Ptr, nc: Int, rows: Int, d: Int) raises -> Int:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
-        raise Error("covariance probe requires FAST Apple")
-    if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
-        raise Error("invalid ordered covariance probe shape")
-    var ctx = xd_ctx()
-    var dx = ctx.enqueue_create_buffer[DType.float32](nc*rows*d)
-    var dg = ctx.enqueue_create_buffer[DType.int32](nc)
-    var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
-    var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=px)
-    ctx.enqueue_copy(dst_buf=dg, src_ptr=pg)
-    ctx.enqueue_memset(dc, Float32(-123.5))
-    ctx.enqueue_memset(scratch, Float32(7654321))
-    # Explicit mutable borrows of owned buffers for the legacy launcher API.
-    # No integer-address reconstruction or const-removing pointer cast. Keep
-    # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
-    var xp = dx.unsafe_ptr[MutAnyOrigin]()
-    var cp = dc.unsafe_ptr[MutAnyOrigin]()
-    var sp = scratch.unsafe_ptr[MutAnyOrigin]()
-    var gp = dg.unsafe_ptr[MutAnyOrigin]()
-    comptime if MCD_ORDERED_COV:
-        note_cov_route(True, rows, d)
-        launch_mcd_cov_ordered(ctx, xp, cp, sp,
-            rows, d, nc, rows*d, d*d, gp, False)
-    else:
-        launch_gemm_mma_batched(ctx, xp, xp, cp,
-            d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
-    ctx.enqueue_copy(dst_ptr=pout, src_buf=dc)
-    ctx.synchronize()
-    _ = dx^
-    _ = dg^
-    _ = dc^
-    _ = scratch^
-    return 1 if MCD_ORDERED_COV else 0
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (mcd_cov_probe_run, the x_decomp_mcd_cov_probe test seam of its quality tool) deleted
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

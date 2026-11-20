@@ -33,18 +33,14 @@ from checks.numerics import (
 )
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from std.math import fma as _std_fma
 from std.memory import bitcast
+from core.row_cells import softmax_row_from_max_f32
 
-# NN42: unmeasured, default OFF. Only neural recurrent callers mark i5.
-# The input projection is rounded by GEMM, biased with op_bias's add, then
-# stored before the gate reads it. The same body runs on host and every GPU.
-comptime NN42_INPUT_BIAS_FUSED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN42_INPUT_BIAS_FUSED"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_NN42_INPUT_BIAS_FUSED (unmeasured opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c906dcaf57.
+# Restore: git apply experiments/removed/MOJOLEARN_NN42_INPUT_BIAS_FUSED.patch
+# (Sweep 2026-11-15: NN42_INPUT_BIAS_FUSED = False removed; autograd/rules_recurrent.mojo keeps the bias in GX.)
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -58,14 +54,11 @@ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 #: forecast_rmse 49.28 -> 49.02. It reaches every x_sequence lane that calls
 #: `fma3` (theta, nm, ets, ets_team, croston, garch, stl, prophet, vecar,
 #: mlp, moe, layernorm, adafactor, coop, fit_team), FAST + Apple only.
-#: -D MOJOLEARN_SEQ_FAST_FMA_OFF restores the unfused form; the old
-#: -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its pinned
-#: contraction.
-comptime SEQ_FAST_FMA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"]()
-)
+#: The old -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its
+#: pinned contraction.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_FMA_OFF (old path; EXP:542 KEPT on the M3 only, no NVIDIA/AMD A/B: FAST is Apple only) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 2f67dc66d0.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_FMA_OFF.patch
+comptime SEQ_FAST_FMA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 #: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
@@ -74,14 +67,14 @@ comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: nr-small D9 (2026-10-04): softmax / cross-entropy rows compute each exp
 #: once and park it in the output row (the same flushed word the second exp
 #: produced, so the same bits on every column and the host).
-#: -D MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
-comptime SEQ_SOFTMAX_ONE_EXP = not (
-    is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 38b93382d0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at 38b93382d0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
 
 #: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
 #: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
-#: VAR 7.6 -> 5.0 ms); `-D <NAME>_OFF` restores main's path; the old
+#: VAR 7.6 -> 5.0 ms); the `_OFF` rollbacks are deleted; the old
 #: `-D MOJOLEARN_TSA2_VAR` / `-D MOJOLEARN_TSA2_STL` are now harmless.
 #: IDENTICAL compiles the code above and below unchanged.
 #: TSA2_VAR: VAR's fit queues every launch behind one upload
@@ -90,9 +83,13 @@ comptime SEQ_SOFTMAX_ONE_EXP = not (
 #: TSA2_STL: STL's LOESS passes as one thread per output
 #: point over every series (sequence/stl_grid.mojo), the inner iterations
 #: queued, one wait per fit (providers/python/sequence_pyapi.mojo::stl_py).
-comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
-comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_TSA2_VAR_OFF (old path; promoted on the M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at b23d7039b8.
+# Restore: git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch
+comptime TSA2_VAR = _TSA2_FAST_APPLE
+# TOMBSTONE: MOJOLEARN_TSA2_STL_OFF (old path; promoted on the M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at eb3180868d.
+# Restore: git apply experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch
+comptime TSA2_STL = _TSA2_FAST_APPLE
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_SPEC (DROPPED-noise) deleted 2026-10-03 by dfbdc7943; code recoverable at dfbdc7943^.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch; record in docs/TOMBSTONES.md.
 #: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
@@ -100,9 +97,11 @@ comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"
 #: SEQ_FAST_VAR_ONECOPY: params, resid, sigma_u and the status word lie in
 #: one span of the workspace, so one device-to-host copy replaces four.
 #: Default since the M3 A/B (n=1, quality identical; var taxi-hourly
-#: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
-#: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
-comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
+#: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); the old
+#: -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF (old path; EXP:558 DROPPED-noise record, the one copy is the kept path) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at c860d9566d.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF.patch
+comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR
 #: MOJOLEARN_SEQ_FAST_VAR_COOP (FAST + Apple default, rollback _OFF): VAR's
 #: R-long one-thread folds (providers/python/sequence_pyapi.mojo `_var_fit_queued`: the
 #: column scale's two passes over R rows, Z^T Z and Z^T Ys, the sigma_u
@@ -114,9 +113,13 @@ comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_
 #: for it with Args.i11 = 1 (op_gemm reads i0..i8 only); no other GEMM moves.
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
 #: rab13-varcoop): var synthetic 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms,
-#: forecast_rmse identical. KEEP: the FAST + Apple default; rollback
-#: -D MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.
-comptime SEQ_FAST_VAR_COOP = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_COOP_OFF"]()
+#: forecast_rmse identical. KEEP: the FAST + Apple default, so it holds
+#: wherever TSA2_VAR does.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_COOP_OFF (superseded: SEQ_FAST_VAR_COOP KEEP, M3 rab13-varcoop var synthetic
+# 4.96 -> 2.73 ms, taxi-hourly 5.01 -> 3.55 ms, forecast_rmse identical) deleted 2026-11-15 by lane/expdel-04-neural;
+# code recoverable at 72b582962f.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_COOP_OFF.patch
+comptime SEQ_FAST_VAR_COOP = TSA2_VAR
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
@@ -205,13 +208,22 @@ comptime OP_STL_FINISH = 79
 #: probability layouts on the executor, not in host NumPy.
 comptime OP_ONE_HOT = 80
 comptime OP_PROBA2 = 81
+#: lane n5-prophet-adaboost-loops (2026-11-09): FAST Prophet's long-series
+#: L-BFGS on the device (sequence/prophet.mojo op_prophet_lb_*), every series
+#: of the batch at once; the driver reads one word per chunk of evaluations.
+comptime OP_PROPHET_LB_YMAX = 82
+comptime OP_PROPHET_LB_INIT = 83
+comptime OP_PROPHET_LB_YDIV = 84
+comptime OP_PROPHET_LB_STEP = 85
+comptime OP_PROPHET_LB_ACTIVE = 86
+comptime OP_PROPHET_LB_OUT = 87
 # nr-small (2026-10-04), sequence/mlp.mojo: the MLP fit's blocked L2 and
 # batch-loss folds, the device epoch order and the device epoch loss
 comptime OP_MLP_L2PART = 90
 comptime OP_MLP_L2FOLD = 91
 comptime OP_MLP_ROWPART = 92
 comptime OP_MLP_PERM = 93
-comptime OP_MLP_EPOCH_LOSS = 94
+# (Sweep 2026-11-15: OP_MLP_EPOCH_LOSS (94) removed: no caller emits it since lane/expdel2-29-neural.)
 # lane ag-pass3-lossblock (2026-10-19), sequence/mlp.mojo MLP_LOSSBLOCK: the
 # MLP fit's per-batch loss block (seed, row-loss and L2 block partials in one
 # launch, one fold) and the blocked epoch loss; a range of its own (1600..),
@@ -220,14 +232,20 @@ comptime OP_MLP_LB_PART = 1600
 comptime OP_MLP_LB_FOLD = 1601
 comptime OP_MLP_LB_EPOCH_PART = 1602
 comptime OP_MLP_LB_EPOCH_FOLD = 1603
+#: lane m1-followups-misc: the small MLP program's device non-finite refusal
+#: (autograd/small_mlp_program.mojo): p1[i0] = 1 when p0[t] is NaN or infinite.
+comptime OP_MLP_NONFINITE = 1604
 comptime OP_MLP_LB_FIRST = OP_MLP_LB_PART
-comptime OP_MLP_LB_LAST = OP_MLP_LB_EPOCH_FOLD
+comptime OP_MLP_LB_LAST = OP_MLP_NONFINITE
 #: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
 #: epoch order of the RNN fit, built on the executor.
 comptime OP_SEQ_IOTA = 95
 #: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
 #: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
 comptime OP_PROPHET_PREP = 96
+#: lane ne1-a-decomp-tsa (N031): op_theta's forecast-only tail from its own
+#: fitted info row (sequence/theta.mojo op_theta_forecast).
+comptime OP_THETA_FORECAST = 99
 #: TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): OP_AF_VFUSE = 97 and OP_AF_VFIN = 98
 #: was NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged. Deleted; codes 97/98 stay unused; recoverable at main 0a7b206f1.
 
@@ -375,7 +393,7 @@ def sub(a: Float32, b: Float32) -> Float32:
 
 comptime SUMSQ_STAGE = 64
 #: lane ag-pass5-gemm (PASS5_IDEAS idea 1 Part B, default on NVIDIA and
-#: AMD): `gemm_dot` stages GEMM_STAGE_V2_WIDE = 64 terms a round instead of
+#: AMD, since deleted): `gemm_dot` staged 64 terms a round instead of
 #: 16 (K = 512: 32 -> 8 load rounds; the recurrent cells' K = H = 64: 4 -> 1
 #: a gate), then the remainder in guarded rounds of 16 (no dependent
 #: one-load-a-term tail). A register-budget rule, never a shape: 64 + 64
@@ -385,17 +403,15 @@ comptime SUMSQ_STAGE = 64
 #: peer's). SAME BITS: the fold is the same chain, acc = fma3(A(k), B(k),
 #: acc), k ascending from acc0, on the same `ld`-flushed words; only how
 #: many loads are in flight before the fmas changes.
-#: -D MOJOLEARN_IDN_GEMM_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores 16 and
-#: the serial tail (the A/B arm).
 # DEFAULT OFF since 2026-10-19 (orchestrator): on AMD MI325X the 64-wide stage cost the HIGGS MLP 30% (fused arm 0.361 ->
 # 0.250 s with it off, same bits 8f410a4ae2d620af) and spilled the one-thread recurrent cells 2.7x before 3c5f15500; NVIDIA
-# never measured it (the L40S pod lost its runtime during the A/B). It stays available as -D MOJOLEARN_IDN_GEMM_STAGE64 for
-# the owed NVIDIA A/B; MOJOLEARN_IDN_GEMM_STAGE_OFF / IDN_ALL_OFF still force it off.
-comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IDN_GEMM_STAGE64"]() and not (
-    is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# never measured it (the L40S pod lost its runtime during the A/B).
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE64 (opt-in arm; AMD loser, NVIDIA never measured) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE64.patch
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_STAGE_OFF (force-off of the deleted arm, EXP:2164 PENDING) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 6a66db5157.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_STAGE_OFF.patch
+# (Sweep 2026-11-15: the unread GEMM_STAGE_V2 = False constant removed.)
 comptime GEMM_STAGE = 16
-comptime GEMM_STAGE_V2_WIDE = 64
 #: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the
 #: recurrent trainers ran 2.7x slower on the AMD MI325X after GEMM_STAGE_V2
 #: landed (426dc4b2c, after d85d180f7): lstm 0.1206 -> 0.329, gru 0.102 ->
@@ -406,10 +422,10 @@ comptime GEMM_STAGE_V2_WIDE = 64
 #: backward cell (K = G H) and the recurrent weight gradients' split-K stage 0
 #: (OP_GEMM_SPLITK, K = a 512-row block). 64 + 64 staged floats on top of
 #: that state are where idea 3 (d) expected spills. So those three bodies take
-#: the 16-wide staging (the pre-V2 code, word for word) by default; -D
-#: MOJOLEARN_SEQ_REC_STAGE64 gives them V2's width (the A/B arm). A register
-#: rule on the body, never a shape; same bits either way (one fold chain).
-comptime SEQ_REC_GEMM_STAGE_V2 = GEMM_STAGE_V2 and is_defined["MOJOLEARN_SEQ_REC_STAGE64"]()
+#: the 16-wide staging (the pre-V2 code, word for word).
+# TOMBSTONE: MOJOLEARN_SEQ_REC_STAGE64 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at d5aeff2e08.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_REC_STAGE64.patch
+# The 64-wide branch of gemm_dot (its `wide` parameter) went with it: no caller set it.
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
@@ -466,7 +482,7 @@ def tanh_(x: Float32) -> Float32:
 
 # ------------------------------------------------------------------ bodies
 @always_inline
-def gemm_dot[wide: Bool = GEMM_STAGE_V2](
+def gemm_dot(
     pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int, acc0: Float32
 ) -> Float32:
     """THE GEMM REDUCTION: acc0 + sum_k pa[abase + k sak] pb[k sbk + bbase],
@@ -484,43 +500,18 @@ def gemm_dot[wide: Bool = GEMM_STAGE_V2](
         # that many loads in flight instead of waiting out each one); the
         # fold is the same chain of fmas in the same order.
         var k = 0
-        comptime if wide:
-            # GEMM_STAGE_V2_WIDE terms a round, then guarded rounds of
-            # GEMM_STAGE for the remainder: a term k >= K is neither loaded
-            # nor folded, so the chain is the plain loop's, k ascending
-            while k + GEMM_STAGE_V2_WIDE <= K:
-                var wa = SIMD[DType.float32, GEMM_STAGE_V2_WIDE]()
-                var wb = SIMD[DType.float32, GEMM_STAGE_V2_WIDE]()
-                comptime for i in range(GEMM_STAGE_V2_WIDE):
-                    wa[i] = ld(pa, abase + (k + i) * sak)
-                    wb[i] = ld(pb, (k + i) * sbk + bbase)
-                comptime for i in range(GEMM_STAGE_V2_WIDE):
-                    acc = fma3(wa[i], wb[i], acc)
-                k += GEMM_STAGE_V2_WIDE
-            while k < K:
-                var va = SIMD[DType.float32, GEMM_STAGE]()
-                var vb = SIMD[DType.float32, GEMM_STAGE]()
-                comptime for i in range(GEMM_STAGE):
-                    if k + i < K:
-                        va[i] = ld(pa, abase + (k + i) * sak)
-                        vb[i] = ld(pb, (k + i) * sbk + bbase)
-                comptime for i in range(GEMM_STAGE):
-                    if k + i < K:
-                        acc = fma3(va[i], vb[i], acc)
-                k += GEMM_STAGE
-        else:
-            while k + GEMM_STAGE <= K:
-                var va = SIMD[DType.float32, GEMM_STAGE]()
-                var vb = SIMD[DType.float32, GEMM_STAGE]()
-                comptime for i in range(GEMM_STAGE):
-                    va[i] = ld(pa, abase + (k + i) * sak)
-                    vb[i] = ld(pb, (k + i) * sbk + bbase)
-                comptime for i in range(GEMM_STAGE):
-                    acc = fma3(va[i], vb[i], acc)
-                k += GEMM_STAGE
-            while k < K:
-                acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
-                k += 1
+        while k + GEMM_STAGE <= K:
+            var va = SIMD[DType.float32, GEMM_STAGE]()
+            var vb = SIMD[DType.float32, GEMM_STAGE]()
+            comptime for i in range(GEMM_STAGE):
+                va[i] = ld(pa, abase + (k + i) * sak)
+                vb[i] = ld(pb, (k + i) * sbk + bbase)
+            comptime for i in range(GEMM_STAGE):
+                acc = fma3(va[i], vb[i], acc)
+            k += GEMM_STAGE
+        while k < K:
+            acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+            k += 1
     return acc
 
 
@@ -558,7 +549,7 @@ def op_gemm_splitk(t: Int, a: Args):
         var n = mn - m * N
         var k0 = s * a.i10
         var kc = min(a.i2, k0 + a.i10) - k0
-        st(a.p3, t, gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
+        st(a.p3, t, gemm_dot(a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
         return
     var m = t // N
     var n = t - m * N
@@ -727,10 +718,7 @@ def op_cell_fwd_h(t: Int, a: Args):
     var u = t - b * H
     for g in range(gates_of(a.i0)):
         var n = g * H + u
-        comptime if NN42_INPUT_BIAS_FUSED:
-            if a.i5 != 0:
-                st(a.p0, b * GH + n, add(ld(a.p0, b * GH + n), ld(a.p9, n)))
-        var acc = gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
+        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
         st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
     op_cell_fwd(t, a)
 
@@ -743,15 +731,24 @@ def op_cell_bwd_h(t: Int, a: Args):
     same terms in the same order (`gemm_dot`, k ascending, from the direct
     part the later step stored), stores the sum where the GEMM did, then runs
     `op_cell_bwd` verbatim. Args as `op_cell_bwd`, plus p11 W_hh, i3 = 1 when
-    a later step exists (0 at s = T - 1, where dh is the zero fill), i4 the
-    offset of dGH_{s+1} from p9 (B*G*H)."""
+    a later step exists (0 at s = T - 1, where dh and dc are zero), i4 the
+    offset of dGH_{s+1} from p9 (B*G*H).
+    Lane fx-rnn-cnn-fit (2026-11-19): at i3 = 0 the element stores the zeros
+    of its own dh[t] and dc[t] before the cell reads them. They were two
+    OP_FILL launches over the same B*H words before every layer's backward
+    chain (autograd/rules_recurrent.mojo _layer_bwd); element t reads and
+    writes only index t of both buffers, so the cell reads the same +0.0
+    words: the same bits. The scan's first step repeats its own zero stores."""
     if a.i3 != 0:
         var H = a.i2
         var GH = gates_of(a.i0) * H
         var b = t // H
         var u = t - b * H
-        var acc = gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
+        var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
         st(a.p5, t, acc)
+    else:
+        st(a.p5, t, Float32(0.0))
+        st(a.p7, t, Float32(0.0))
     op_cell_bwd(t, a)
 
 
@@ -788,15 +785,26 @@ def op_gather_rows(t: Int, a: Args):
 
 
 def op_mse(t: Int, a: Args):
-    """grad = (yhat - y) * f0, sq = (yhat - y)^2."""
+    """grad = (yhat - y) * f0 (the squared-error seed; the loss value is
+    autograd/losses.mojo loss_value_into's). Lane m1-followups-misc deleted
+    its unread p3 store of (yhat - y)^2."""
     var d = sub(ld(a.p0, t), ld(a.p1, t))
     st(a.p2, t, mul(d, a.f0))
-    st(a.p3, t, mul(d, d))
+
+
+def op_mlp_nonfinite(t: Int, a: Args):
+    """p1[i0] = 1.0 when p0[t] is NaN or infinite (p1[i0] filled with 0
+    first). Every writer stores the same word, so the flag does not depend
+    on the order the threads run in."""
+    var v = a.p0.unsafe_load(t)
+    if v != v or v - v != v - v:
+        a.p1.unsafe_store(a.i0, Float32(1))
 
 
 def op_ce(t: Int, a: Args):
     """Softmax cross-entropy of row t: p0 logits [B, C], p1 labels [B] (as
-    float), p2 grad [B, C] = (softmax - onehot) * f0, p3 row loss [B].
+    float), p2 grad [B, C] = (softmax - onehot) * f0 (lane m1-followups-misc
+    deleted the unread p3 row-loss store; the loss value is loss_value_into's).
     The max is subtracted first, so no exp overflows and the log reads a sum
     >= 1; the max is the value, so a tie does not matter."""
     var C = a.i1
@@ -808,27 +816,13 @@ def op_ce(t: Int, a: Args):
             m = v
     var y = Int(a.p1.unsafe_load(t))
     var s = Float32(0.0)
-    comptime if SEQ_SOFTMAX_ONE_EXP:
-        # each exp once: parked in the grad row, read back for the division
-        var zy = ld(a.p0, base + y)
-        for c in range(C):
-            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
-            st(a.p2, base + c, e)
-            s = add(s, e)
-        var ls = ftz(identical_log(s))
-        st(a.p3, t, sub(ls, sub(zy, m)))
-        for c in range(C):
-            var p = ftz(identical_div(ld(a.p2, base + c), s))
-            if c == y:
-                p = sub(p, Float32(1.0))
-            st(a.p2, base + c, mul(p, a.f0))
-        return
+    # each exp once: parked in the grad row, read back for the division
     for c in range(C):
-        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
-    var ls = ftz(identical_log(s))
-    st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
+        var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+        st(a.p2, base + c, e)
+        s = add(s, e)
     for c in range(C):
-        var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
+        var p = ftz(identical_div(ld(a.p2, base + c), s))
         if c == y:
             p = sub(p, Float32(1.0))
         st(a.p2, base + c, mul(p, a.f0))
@@ -1062,18 +1056,8 @@ def op_softmax(t: Int, a: Args):
         var v = ld(a.p0, base + c)
         if v > m:
             m = v
-    var s = Float32(0.0)
-    comptime if SEQ_SOFTMAX_ONE_EXP:
-        # each exp once: parked in the output row (p1 may be p0: element c
-        # is read before it is written), read back for the division
-        for c in range(C):
-            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
-            st(a.p1, base + c, e)
-            s = add(s, e)
-        for c in range(C):
-            st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
-        return
-    for c in range(C):
-        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
-    for c in range(C):
-        st(a.p1, base + c, ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s)))
+    # core/row_cells.mojo, the one body: each exp once, parked in the
+    # output row (p1 may be p0: element c is read before it is written),
+    # read back for the division. The same flushes as the statements that
+    # stood here.
+    softmax_row_from_max_f32(a.p0, a.p1, base, C, m)

@@ -3,7 +3,7 @@
 """LOGLOSS LEAF VALUES AGAINST CATBOOST'S OWN, TEN NEWTON ITERATIONS AND ONE.
 
     pixi run -e bench logloss-leaf-oracle-gen   # bench/oracle_logloss_leaves.txt
-    pixi run check-logloss-leaf-oracle          # this file
+    pixi run check-native-gpu logloss_leaf_oracle_check          # this file
 
 THE GAP THIS CLOSES
 -------------------
@@ -700,7 +700,7 @@ def report_leaves(label: String, d: LeafDiff, trees: Int) raises:
     print(line2)
 
 
-def main() raises:
+def run_checks() raises:
     var fx = load(String(ORACLE))
     print(
         "LOGLOSS LEAF DIFFERENTIAL against CatBoost", fx.version,
@@ -938,3 +938,21 @@ def main() raises:
         " recorded known cells, by PLACEMENT, with both permutation"
         " controls and the cross-arm control failing as they must"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("logloss_leaf_oracle_check", cpu=False, gpu=True, serial="", run=run_cases)

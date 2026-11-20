@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`train(cat_features=...)`: the categorical path through the real surface.
 
-    pixi run check-ctr-train
+    pixi run check-native-gpu ctr_train_check
 
 `checks/ctr_check.mojo` gates the CTR ARITHMETIC. This gates the WIRING,
 which is a different failure: `CONTRIBUTING.md` (Evidence must be able to fail) -- a implemented file
@@ -474,7 +474,7 @@ def check_ctr_train() raises:
     # categorical feature -- three Borders priors and one FeatureFreq --
     # which is CatBoost's own GPU `simple_ctr` default. The values, the
     # ordering and the permutation are gated by
-    # `pixi run check-ctr-device`; what is asserted here is only that
+    # `pixi run check-native-gpu ctr_device_check`; what is asserted here is only that
     # `train()` takes the configuration at all.
     var borders_params = List[TCatFeatureParams]()
     borders_params.append(TCatFeatureParams.default())
@@ -516,5 +516,23 @@ def check_ctr_train() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     check_ctr_train()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ctr_train_check", cpu=False, gpu=True, serial="", run=run_cases)

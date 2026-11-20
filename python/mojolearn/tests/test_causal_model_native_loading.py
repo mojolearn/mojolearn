@@ -50,13 +50,16 @@ def _poison(patch):
     for route in causal_lm._NATIVE_CONTEXT["block_classes"].values():
         for cls in route.values():
             patch.setattr(cls, "__init__", _forbidden)
-    for name in ("_route", "_block_classes", "_block_kwargs", "_float_weight"):
-        patch.setattr(causal_lm, name, _forbidden)
+    # `_route`, `_block_classes` and `_float_weight` were deleted from
+    # models/causal_lm.py by 0e718fef73 (their native owners are
+    # bindings/causal_lm_public_door.mojo); nothing is left there to poison.
+    for name in ("_route", "_block_classes", "_float_weight"):
+        assert not hasattr(causal_lm, name), name
     for name in ("binding", "load_host_module", "default_mode", "vendor"):
         patch.setattr(_backend, name, _forbidden)
     for name in ("quantize_int8", "dequantize_int8", "quantize_int15", "to_bf16", "from_bf16"):
         patch.setattr(_linalg_impl, name, _forbidden)
-    for name in ("empty", "as_f32_c", "addr", "addr_ro", "all_finite"):
+    for name in ("empty", "addr", "addr_ro", "all_finite"):
         patch.setattr(_buffer, name, _forbidden)
     patch.setattr(json, "loads", _forbidden)
     patch.setattr(np, "empty", _forbidden)
@@ -155,7 +158,10 @@ def test_direct_native_constructor_preserves_weights_and_fixed15(tmp_path, monke
         _poison(patch)
         audit_native_call(CausalLM.__init__, model, plan, weights, device=DEVICE,
                           numeric_profile=profile).assert_native()
-    assert model._embed is source and model._head is source
+    # The constructor copies the caller's array (no aliasing of a buffer the
+    # caller may still write); the stored weights keep the exact bytes.
+    assert model._embed is not source and model._head is not source
+    assert model._embed.tobytes() == source.tobytes() and model._head.tobytes() == source.tobytes()
     if profile == "fixed15_v1":
         assert tuple(v.tobytes() for v in model._head_int15) == tuple(v.tobytes() for v in (hi, lo, exponents))
     else:

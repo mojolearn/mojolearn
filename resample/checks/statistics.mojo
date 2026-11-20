@@ -136,8 +136,9 @@ gates BOTH sides of it by construction rather than by luck of the fixture.
 =================================================================
 """
 
+from std.sys.compile import is_defined
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import floor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -962,6 +963,9 @@ def perm_observed_fold_kernel[stat: Int](
 
 
 comptime PERM_SELECT_BUCKETS = 256
+
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY (LOSS, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal: permutation-test istella 285.3 -> 306.7 ms, 1.075; taxi 285.1 -> 313.9, 1.101) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_EARLY.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline

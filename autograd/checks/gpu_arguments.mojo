@@ -41,7 +41,7 @@ def probe[E: Exec](mut ex: E) raises:
         raise Error("native autograd argument probe failed")
 
 
-def main() raises:
+def run_checks() raises:
     comptime if is_defined["MOJOLEARN_AUTOGRAD_PROBE_CPU"]():
         var ex = HostExec()
         probe(ex)

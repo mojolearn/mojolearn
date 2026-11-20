@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5117 (the Lance-Williams update: Float64 from the Float32 matrix, ward's three pinned products summed left to right, minus last, one quotient; average's two pinned products, one quotient) and 5118 (the merge order: the lowest live pair, the lowest i then j on a tie).
+"""Seams DEVIATION 5117 (the Lance-Williams update in Float32 on every column: ward's three pinned products summed left to right, minus last, one quotient; average's two pinned products, one quotient) and 5118 (the merge order: the lowest live pair, the lowest i then j on a tie).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_cluster/checks/agglo_check.mojo
 
@@ -78,7 +78,7 @@ def run[O: ClusterOps](
     return dist^
 
 
-def main() raises:
+def run_checks() raises:
     var n = 40
     var d = 5
     var cut = 17

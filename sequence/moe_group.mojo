@@ -16,10 +16,8 @@ products write `h[pair]`, `s[pair]`; `moe_combine_kernel` sums the picks in
 pick order), so the words do not. The products' grids are the upper bound
 (T k / TILE_P + E) x tiles; a block past its expert's pairs writes nothing.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # NN44: deterministic ascending-pair grouping; OFF and unmeasured. Each
 # expert scans the pairs once, replacing contended atomic scatter cursors.
@@ -40,11 +38,11 @@ comptime MOE_GROUP_TPB = 256
 # cheap expert comparisons for atomics, so whole-workload benefit is unproven.
 # Host item execution is unaffected because it consumes original pair IDs.
 # This S subarm does not claim a MoE backward/training path that does not exist.
-comptime MOE_STABLE_PACK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_MOE_STABLE_PACK"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MOE_STABLE_PACK (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at d1f44888a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_STABLE_PACK.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 DELETED) read deleted here 2026-11-15 by lane/expdel2-29-neural; code recoverable at d1f44888a3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-29-neural.patch
+# (Sweep 2026-11-15: MOE_STABLE_PACK = False and moe_group_stable_all_kernel removed with the two arms in sequence/exec_device.mojo.)
 
 
 def moe_group_blocks(n_pairs: Int, n_experts: Int, n_tiles: Int) -> Int:
@@ -97,14 +95,3 @@ def moe_group_scatter_all_kernel(sel: FP, cnt: FP, poff: FP, order: FP, n_pairs:
         order.unsafe_store(Int(poff.unsafe_load(e)) + Int(slot), Float32(i))
 
 
-def moe_group_stable_all_kernel(sel: FP, poff: FP, order: FP, n_pairs: Int32, n_experts: Int32):
-    """One expert per task. Integer membership only; pair outputs and
-    weighted combine remain in their original token/pick positions."""
-    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if e >= Int(n_experts):
-        return
-    var dst = Int(poff.unsafe_load(e))
-    for pair in range(Int(n_pairs)):
-        if Int(sel.unsafe_load(pair)) == e:
-            order.unsafe_store(dst, Float32(pair))
-            dst += 1

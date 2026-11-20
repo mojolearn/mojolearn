@@ -43,7 +43,7 @@ absent as in `lstsq.mojo`.
 """
 
 from core.device_zero import enqueue_fill
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
@@ -161,7 +161,7 @@ def svd_eig_scratch_traced(
     # `cov` and leaves S on its diagonal; `eigDC` ABORTS on a non-zero
     # `dev_info` (`raft/linalg/detail/eig.cuh:149-151`) and so does this.
     comptime if IDN_JACOBI_ROUND_ROBIN:
-        # lane fg-linear L1 (default ON 2026-10-09, -D MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF for the cyclic block;
+        # lane fg-linear L1 (IDENTICAL default since 2026-10-09; the MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted, the cyclic block is FAST only;
         # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
         # round-robin rounds, every rotation of a round in parallel, the same
         # layout out (cov diagonal = eigenvalues, v_raw columns = vectors,

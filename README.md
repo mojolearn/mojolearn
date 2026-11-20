@@ -132,8 +132,7 @@ Both platforms also support CPU training and inference.
 This release ships native NVIDIA kernels for the sm_89 architecture (Ada:
 L40S, L40, L4, RTX 4090) and AMD kernels for gfx942 (MI300X, MI325X). A PTX
 build for every NVIDIA GPU with compute capability 8.0 or newer (A100,
-H100/H200, Blackwell, ...) is built and recorded in the reference table, but
-not shipped while the NVIDIA wheel with it exceeds PyPI's 100 MiB limit; other
+H100/H200, Blackwell, ...) ships in the same `mojolearn-nvidia` package; other
 architectures need a source build. See [NVIDIA PTX](docs/NVIDIA_PTX_IDENTITY.md).
 
 mojolearn never substitutes the CPU for a GPU it cannot serve.
@@ -264,11 +263,10 @@ license; see [NOTICE](NOTICE).
 
 ## Citation
 
-To cite mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Learning
+To cite Mojolearn, cite the paper: Andrew Hendel, *Bitwise-Identical Machine Learning
 Across GPUs and CPUs*, 2026, [10.5281/zenodo.23829035](https://doi.org/10.5281/zenodo.23829035)
-([CITATION.cff](CITATION.cff)). To refer to the exact code of a release, use its
-software DOI; the concept DOI [10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632)
-resolves to the newest release.
+([CITATION.cff](CITATION.cff)). To refer to the software, use the concept DOI
+[10.5281/zenodo.22068632](https://doi.org/10.5281/zenodo.22068632), which resolves to the newest release.
 
 The paper's measurements were taken on the 0.8.9 and 0.8.10 releases (September 2026;
 evidence archive [10.5281/zenodo.22864165](https://doi.org/10.5281/zenodo.22864165)).

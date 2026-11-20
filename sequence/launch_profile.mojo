@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A LAUNCH PROFILE for the autograd tape (lane ag-pass2-kernels, 2026-10-19).
 
-MOJOLEARN_AG_PROFILE=1 makes every `DeviceExec` / `HostExec` built while it
-is set count its launches per operation code (and the elements launched);
-=2 also times each launch on the host clock between an `ex.sync()` before
+A build with `-D MOJOLEARN_AG_PROFILE=1` makes every `DeviceExec` / `HostExec`
+count its launches per operation code (and the elements launched);
+`=2` also times each launch on the host clock between an `ex.sync()` before
 and after it. The GEMM codes also get one row per (code, route, M, N, K)
 (lane ag-pass5-gemm), and level 2 times one more synchronize on the drained
 queue after every launch: the drain line, the profile's own sync cost. The syncs serialise the queue, so level-2 times are a
@@ -13,14 +13,16 @@ The tape marks the pending launches with the node kind that issued them
 (autograd/tape.mojo `_record`, the backward entries), so the table also
 has rows per (phase, node kind).
 
-The level is read once per executor and once per tape (an environment read
-at construction, API glue, no data). Off (the default), a launch costs one
-Int test. The table is process-wide (`std.ffi._Global`) so a report can be
+The level is the build constant LAUNCH_PROFILE_LEVEL (lane
+envgate-train-seq-mamba, 2026-11-15; before, an environment read at every
+executor and tape construction, i.e. per fit/predict call). Off (the default
+build), a launch costs one Int test. The table is process-wide (`std.ffi._Global`) so a report can be
 read after a fit whose tape and executor are gone (autograd/profile.mojo
 `ag_profile_report`). Every loop here walks profile rows (distinct codes
 and kinds, a few dozen), never data."""
-from std.ffi import _Global
 from std.os import getenv
+from std.sys.defines import get_defined_int
+from core.shared_slot import SharedSlot
 
 comptime PROFILE_FORWARD = 0
 comptime PROFILE_BACKWARD = 1
@@ -30,14 +32,15 @@ comptime PROFILE_OTHER = 2
 comptime PROFILE_KIND_ALL = -1
 
 
+#: 0 (off), 1 (count) or 2 (count and time): `-D MOJOLEARN_AG_PROFILE=<n>`.
+comptime LAUNCH_PROFILE_LEVEL = get_defined_int["MOJOLEARN_AG_PROFILE", 0]()
+
+
+@always_inline
 def launch_profile_level() -> Int:
-    """0 (off), 1 (count) or 2 (count and time) from MOJOLEARN_AG_PROFILE."""
-    var v = String(getenv("MOJOLEARN_AG_PROFILE"))
-    if v == "1":
-        return 1
-    if v == "2":
-        return 2
-    return 0
+    """0 (off), 1 (count) or 2 (count and time): the build constant
+    LAUNCH_PROFILE_LEVEL."""
+    return LAUNCH_PROFILE_LEVEL
 
 
 struct LaunchProfile(Copyable, Defaultable, Movable):
@@ -148,7 +151,7 @@ struct LaunchProfile(Copyable, Defaultable, Movable):
         self.pending_ns = 0
 
 
-comptime X_LAUNCH_PROFILE = _Global[StorageType=LaunchProfile, name="MojolearnLaunchProfileV1", init_fn=LaunchProfile.__init__]
+comptime X_LAUNCH_PROFILE = SharedSlot[LaunchProfile, "MojolearnLaunchProfileV2"]
 
 
 def launch_profile_record(op: Int, n: Int, ns: Int, level: Int) raises:
@@ -175,7 +178,12 @@ def launch_profile_wall_us() -> Int:
     run without the profile (whole microseconds), or -1 when unset or
     unreadable. The report then prints the per-launch drain the profile
     adds, (profile ns - wall ns) / launches, and the wall-equivalent rows
-    (row ms - drain x launches)."""
+    (row ms - drain x launches). Read only in a `-D MOJOLEARN_AG_PROFILE`
+    build, once per report (a value the profiling controller measures in the
+    same process, so it cannot be a build define); the default build never
+    reads it."""
+    comptime if LAUNCH_PROFILE_LEVEL == 0:
+        return -1
     var v = String(getenv("MOJOLEARN_AG_PROFILE_WALL_US"))
     if v.byte_length() == 0:
         return -1

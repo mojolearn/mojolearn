@@ -66,7 +66,7 @@ def _cmp(name: String, a: List[Float32], b: List[Float32], op: Int, m: Int, n: I
         print("  " + name + ": " + String(len(want)) + " cells equal")
 
 
-def main() raises:
+def run_checks() raises:
     _one("NN one leaf, tail", OP_NN, 1000, 19, 28, False)
     _one("NN one leaf, no tail", OP_NN, 777, 16, 64, False)
     _one("NN ragged leaves", OP_NN, 40, 21, 1000, True)

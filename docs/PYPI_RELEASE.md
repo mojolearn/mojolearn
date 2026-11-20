@@ -54,7 +54,8 @@ Update the same `X.Y.Z` in:
 
 - `python/pyproject.toml`
 - `python/mojolearn/_version.py`
-- `CITATION.cff`, including `date-released`
+
+`CITATION.cff` carries no version or date and is not edited for a release.
 
 Update `CHANGELOG.md`, commit the exact release state, and run the release
 preflight:

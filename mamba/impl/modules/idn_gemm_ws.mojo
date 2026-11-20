@@ -21,11 +21,9 @@ the per-context workspace lives for the process. Growth waits first, so a
 queued GEMM never loses the workspace it is using. Different device contexts
 use distinct buffers keyed by core/ctx_key.mojo.
 
-`-D MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
-restores `identical_gemm[False]` at every site. FAST builds always take
+FAST builds always take
 `identical_gemm[False]`, as before.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -36,28 +34,20 @@ from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
+from core.shared_slot import SharedSlot
 
 comptime IDN_MAMBA_GEMM_WS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not (
-        is_defined["MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
+    # TOMBSTONE: MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF (unmeasured old path beside the retained-workspace default) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 23341493ec.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch
+    # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (the IDENTICAL old-path umbrella; resident defaults kept, EXP:2438) deleted 2026-11-15 by lane/expdel2-27-neural (non-owner); code recoverable at 67448f09b2.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-27-neural.patch
 )
 
 
-# NN40 workspace-only sub-arm, OFF/unmeasured. Grow-ahead reserves 25%
-# headroom capped at 16 MiB; this size-independent allocation policy can
-# avoid repeated waits/reallocations across increasing prefill lengths.
-# Context ownership and the pre-replacement wait stay unchanged. It makes
-# NO claim about cached weights, generation invalidation or packed weights.
-comptime NN40_WS_HEADROOM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_WS_HEADROOM"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-
-
-def nn40_workspace_capacity(required: Int) -> Int:
-    comptime if NN40_WS_HEADROOM:
-        return required + min(max(required // 4, 1), 1 << 22)
-    return required
+# TOMBSTONE: MOJOLEARN_NN40_WS_HEADROOM (unmeasured opt-in arm: 25% workspace grow-ahead headroom) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 340d379a3c.
+# Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
 
 
 struct _MambaGemmWs(Defaultable, Movable):
@@ -71,8 +61,7 @@ struct _MambaGemmWs(Defaultable, Movable):
         self.bufs = List[DeviceBuffer[DType.float32]]()
 
 
-comptime _MAMBA_GEMM_WS = _Global[StorageType=_MambaGemmWs,
-    name="MojolearnMambaGemmWsV1", init_fn=_MambaGemmWs.__init__]
+comptime _MAMBA_GEMM_WS = SharedSlot[_MambaGemmWs, "MojolearnMambaGemmWsV2"]
 
 
 def mamba_proj_gemm(
@@ -94,7 +83,7 @@ def mamba_proj_gemm(
         var si = ctx_cache_slot(g[].ids, ctx)
         if si < 0:
             step_count_device_alloc()
-            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required)))
+            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
             g[].ids.append(ctx_cache_key(ctx))
             si = len(g[].ids) - 1
         elif len(g[].bufs[si]) < required:
@@ -102,7 +91,7 @@ def mamba_proj_gemm(
             step_count_sync()
             ctx.synchronize()
             step_count_device_alloc()
-            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required))
+            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
         var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
         identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
     else:

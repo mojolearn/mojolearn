@@ -1,0 +1,9 @@
+commit=84da9f145c6dddc2d7e5db4a55d794562019ddf4
+label=cpu
+backend=cpu
+scope=all shard= lanes_override= lane_selection=auto-reuse
+repeats=1 cpu_threads=3
+host=Linux 6.8.0-138-generic x86_64 7667f0dd79f8
+date=2026-11-05T12:39:48Z
+dirty_tracked=docs/verification/latest/auto/identity-nvidia-rtx-sm_89.json 
+record_sha256=3f09e208f5179f671c7a34c46c9911d16b343353c16efa3b9faadc1b1faf7c7f

@@ -1,0 +1,11 @@
+# Native labeled-reference registry ownership
+
+DBSCAN and AgglomerativeClustering share `core/labeled_reference_resident.mojo`. Their existing prediction entries release the GIL. The registry previously published/popped an unprotected `Dict` and retained a dictionary-entry borrow through device work. A concurrent prepare could rehash that dictionary, and a release could destroy the borrowed entry.
+
+The repair adds one metadata lock and bumps the SharedSlot layout/name to V2. Preparation performs its original validation, allocation and upload before locking only to mint/publish the handle. Release pops into an owning optional under the lock, then performs existing teardown outside it. `labeled_reference_lease` copies owning native context and buffer handles plus scalar dimensions under the lock; prediction uses that lease, never a dictionary borrow, through its final download. Device buffer copies share storage; no tensor bytes are copied. There is no shared query workspace and no whole-operation lock.
+
+The prediction body from feature/metric validation through its final output-buffer cleanup is unchanged. The same context, cosine preparation, chunk selection, kernels, launches, synchronizations, transfers and destructor order remain. No new numerical loop, threshold, route or switch is introduced. A registry release cannot invalidate a lease already acquired; a new lookup after release retains its existing unknown-handle refusal. Lock release occurs in `finally` on publication/lookup/removal errors.
+
+Affected consumers: the estimator image's legacy labeled-reference prepare/release/resident-query entries, DBSCAN's forthcoming typed descriptor, and the existing AgglomerativeClustering reference path. The Agglomerative public path and API remain unchanged. This repairs registry ownership; it does not fix or work around the separately reproduced Modular shared-context submission crash.
+
+Source evidence: `~/mojolearn-evidence/python-mojo-migration-20261110/dbscan-native-owner/` retains the complete original, patch and source invariant report. No compilation, runtime tests, timing, identity or box actions were run by this lane. The orchestrator owns the following combined batch, after frozen `aa92247b1b`.

@@ -117,10 +117,11 @@ FAMILIES = (
             "x_metrics/epilogue.mojo",
         ),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "metrics_program_native_api_v1",
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
             "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_numeric_mode", "x_metrics_vendor",
             # lane metrics-apple3 (2026-09-28): integer label plumbing
-            "x_metrics_first_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -152,7 +153,9 @@ TRAINING_LANE_NAMES = {
 }
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification-report": "unwatched",
-    "x-metrics-permutation-test-score": "unwatched",
+    # LANE_REVISIONS moved it to perms-4-20261105-1 (4 permutations per call, 2026-11-05);
+    # the shipped table describes the former fixture until the next record.
+    "x-metrics-permutation-test-score": "stale reference",
     "public-scorer-factories": "unwatched",
     "public-validation-learning-curves": "unwatched",
     "public-randomized-search": "unwatched",

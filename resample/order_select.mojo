@@ -18,13 +18,11 @@ three lines) and theta are the words of the sort path on every vendor; the
 host column is untouched.
 
 Shared page: tpb Int32 (at most 1 KB at tpb = 256). No atomics.
-`-D MOJOLEARN_IDN_BOOT_SELECT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
-materialize + sort path. The trimmed mean keeps the sort (its pinned fold
+The trimmed mean keeps the sort (its pinned fold
 reads every kept rank in order).
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -41,9 +39,9 @@ from resample.checks.statistics import (
 comptime _SI32 = UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 comptime _SU32 = UnsafePointer[UInt32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 
-comptime IDN_BOOT_SELECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_BOOT_SELECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_BOOT_SELECT_OFF, MOJOLEARN_IDN_ALL_OFF (old paths, no A/B recorded; umbrella EXP:2438) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at d8a165cb14.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BOOT_SELECT_OFF.patch and experiments/removed/MOJOLEARN_IDN_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_BOOT_SELECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 @always_inline

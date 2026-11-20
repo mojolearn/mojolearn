@@ -1,0 +1,30 @@
+diff --git b/x_cluster/optics.mojo a/x_cluster/optics.mojo
+index 439800c449..7a528652a4 100644
+--- b/x_cluster/optics.mojo
++++ a/x_cluster/optics.mojo
+@@ -30,8 +30,11 @@ from x_cluster.ops import ClusterOps
+ 
+ # TOMBSTONE: MOJOLEARN_OPTICS_SIMD (unmeasured FAST opt-in arm: the ordering loop's row walks as host vectors, `_order_simd`) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at c699edc9ce.
+ # Restore: git apply experiments/removed/MOJOLEARN_OPTICS_SIMD.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_XC_ALLOC (unmeasured FAST opt-in arm: a distance slot not zeroed before its kernel fills it) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 545ad31a18.
+-# Restore: git apply experiments/removed/MOJOLEARN_XC_ALLOC.patch; record in docs/TOMBSTONES.md.
++# Lane cluster-apple3, FAST only, OPT-IN while unproven.
++# `-D MOJOLEARN_XC_ALLOC=1`: a slot a distance kernel fills completely is
++# not zeroed first (`ops.alloc`; OPTICS, MeanShift, AffinityPropagation,
++# agglomerative).
++comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_XC_ALLOC"]()
+ # The opt-in host distance rows (`-D MOJOLEARN_OPTICS_HOSTROWS`) were removed
+ # (hr-optin-flags): the loop reads the device's n x n distances.
+ # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+@@ -49,8 +52,9 @@ comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTIC
+ 
+ def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
+     """The slot of an n-value matrix a distance kernel is about to fill."""
+-    # TOMBSTONE: MOJOLEARN_XC_ALLOC (unmeasured FAST opt-in arm: a distance slot not zeroed before its kernel fills it) deleted 2026-11-15 by lane/expdel2-15-cluster; code recoverable at 545ad31a18.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XC_ALLOC.patch; record in docs/TOMBSTONES.md.
++    comptime if XC_ALLOC:
++        if ops.fast_device():
++            return ops.alloc(n)
+     return ops.zeros(n)
+ 
+ 

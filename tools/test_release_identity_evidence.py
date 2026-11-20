@@ -636,3 +636,20 @@ def test_host_scope_cannot_qualify_a_gpu_unit(tmp_path, monkeypatch):
     monkeypatch.setattr(E, 'unit_scope', lambda w: synthetic_scope(w, ('cpu',), 'cpu-host-route-only'))
     with pytest.raises(ValueError, match='inapplicable'):
         E.required_classes(wanted)
+
+
+def test_a_retained_record_needs_its_sidecar(tmp_path):
+    directory = tmp_path / "retained"
+    j = record("amd", ["ols"])
+    directory.mkdir()
+    path = directory / f"{LABELS['amd']}.identical.json"
+    path.write_text(json.dumps(j))
+    ref = E.reference(path)
+    assert E.provenance_errors(path, ref, j)[0].startswith("record provenance unavailable")
+    (directory / f"{LABELS['amd']}.provenance.txt").write_text(
+        f"commit={j['commit']}\nrepeats=1 cpu_threads=3\ndirty_tracked=none\nrecord_sha256={ref['sha256']}\n")
+    assert E.provenance_errors(path, ref, j) == []
+    assert E.provenance_reference(path, ref, j)["path"].endswith(".provenance.txt")
+    (directory / f"{LABELS['amd']}.provenance.txt").write_text(
+        f"commit={j['commit']}\nrepeats=1\ndirty_tracked=tools/x.py\nrecord_sha256={ref['sha256']}\n")
+    assert E.provenance_errors(path, ref, j) == ["record provenance (commit, clean tree, repeats, record hash) differs"]

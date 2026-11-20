@@ -49,7 +49,9 @@ almost by construction. This implementation keeps the same gate and
 than silently never firing.
 """
 
-from std.math import exp
+from std.memory import bitcast
+
+from checks.soft_f64 import sf64_exp
 
 comptime OD_NONE = 0
 comptime OD_INC_TO_DEC = 1
@@ -205,7 +207,14 @@ struct OverfittingDetector(Copyable, Movable):
             var p = self.expected_inc / denom
             if p < OD_EPS:
                 p = OD_EPS
-            self.current_p_value = exp(-OD_LAMBDA_SCALE / p)
+            # lane t1-tree-builder-ops: `portable_exp64` (checks/soft_f64
+            # `sf64_exp`) instead of the host libm `exp`, so this detector
+            # and its device twin `od_op_step` decide the same stop on every
+            # column; every other operation here is a correctly rounded
+            # binary64 add, sub, mul, div or compare, the same on both.
+            self.current_p_value = bitcast[DType.float64](
+                sf64_exp(bitcast[DType.uint64](-OD_LAMBDA_SCALE / p))
+            )
         else:
             self.current_p_value = 1.0
 

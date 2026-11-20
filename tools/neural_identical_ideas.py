@@ -26,10 +26,9 @@ LANES = {
 }
 IDENTITY_COLUMNS = ["nvidia", "amd", "apple", "host"]
 SELECTABLE = {"wired_candidate_unverified", "existing_candidate_unverified"}
-EXCLUSIVE_CONTROLS = (
-    {"MOJOLEARN_NI10_BUDGETED_CNN_TAPE", "MOJOLEARN_NI10_RECOMPUTE_CNN_TAPE"},
-    {"MOJOLEARN_NI59_DROPOUT_CHANNEL", "MOJOLEARN_NI60_DROPOUT_APPLY4"},
-)
+# The two exclusive pairs (NI10 budgeted/recompute CNN tape, NI59/NI60 dropout) were deleted
+# 2026-11-15 (docs/TOMBSTONES.md); the guard modules refuse them outright.
+EXCLUSIVE_CONTROLS = ()
 
 
 def read_catalog(root: Path = ROOT) -> list[dict]:
@@ -100,8 +99,6 @@ def merge_defines(items: list[str]) -> list[str]:
         if name in definitions and definitions[name] != value:
             raise ValueError(f"Conflicting values for define {name}")
         definitions[name] = value
-    if "MOJOLEARN_IDN_ALL_OFF" in definitions:
-        raise ValueError("ALL_OFF is not an isolated experiment arm; select explicit reference controls")
     for name in definitions:
         if name + "_OFF" in definitions:
             raise ValueError(f"Both {name} and its explicit OFF control were selected")

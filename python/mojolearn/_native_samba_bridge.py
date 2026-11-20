@@ -3,7 +3,7 @@
 RUNTIME = None
 CONTEXT = None
 
-def _connect_admission(config_cls, model_cls, state_cls, training, neural):
+def _connect_admission(config_cls, model_cls, state_cls, training, neural, session_cls=None):
     # Package connection only: retain C descriptors and exact native classes.
     # NumPy remains optional and may be imported by a caller after mojolearn.
     import array
@@ -23,7 +23,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         "vocab", "d_model", "layers", "n_heads", "n_kv_heads", "head_dim", "intermediate",
         "tie_embeddings", "norm_eps", "dropout", "params", "_m", "_v", "buf_initialized", "t",
         "lr", "betas", "eps", "weight_decay", "accumulation_steps", "lr_schedule", "maximize",
-        "_host_fresh", "_pristine", "_p_dev", "_g_dev", "_resident_wanted", "seed", "counter",
+        "_resident_wanted", "seed", "counter",
         "peak_lr", "min_lr", "warmup_steps", "total_steps", "_wopt", "_int15", "nheads", "d_inner",
         "d_in_proj", "window", "_opts_tail", "_extended", "numeric_profile", "_native_kind", "_native_route",
         "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "_dt_limit",
@@ -40,6 +40,10 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
                training.AdamW, training.Generator, training.ConstantLR,
                training.WarmupLinearLR, training.WarmupCosineLR,
                nc["bf16_class"], nc["int8_class"], nc["model_class"], nc["config_context"]["plan_class"]]
+    if session_cls is not None:
+        # SambaDecodeSession: admitted as a record; none of its own fields is
+        # in `fields`, so a step walks no model or state behind it.
+        classes.append(session_cls)
     classes.extend(nc["generation_classes"][2].values())
     for group in nc["block_classes"].values():  # glue: fixed ABI owner classes at package connection
         classes.extend(group.values())
@@ -82,7 +86,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         "schedule_types": (training.ConstantLR, training.WarmupLinearLR, training.WarmupCosineLR),
     }
 
-def connect(config_cls, model_cls, training, neural, state_cls):
+def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None):
     # ABI connection at package import only; no operation invokes this function.
     from types import BuiltinFunctionType, SimpleNamespace
     from . import _backend, _buffer
@@ -102,14 +106,12 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         "training_vendor", "training_numeric_mode", "training_experiment_profile", "neural_primitives_api_v1",
         "embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward",
         "linear_forward", "linear_backward", "ce_loss", "accumulate", "neural_rng",
-        "optimizer_step", "optimizer_resident_download", "optimizer_resident_upload",
-        "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_step",
-        "optimizer_resident_step_io", "optimizer_maximize_dev", "accumulation_is_aligned",
-        "samba_resident_enabled", "samba_resident_open", "samba_resident_forward", "samba_resident_step",
-        "samba_resident_accumulated_step", "samba_resident_native_handle_v1",
+        "optimizer_native_api_v1", "accumulation_is_aligned",
+        "optimizer_resident_step_io", "optimizer_maximize_dev",
+        "samba_resident_enabled",
         "optimizer_parallel_available", "accumulate_parallel_available", "clip_parallel_available",
         "samba_head_loss", "training_chunked_lm_head_enabled", "chunked_lm_head_v2_train",
-        "samba_afn_norm_head_forward", "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
+        "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
     )
     for name in names:  # glue: connect existing compiled symbols at package import
         try:
@@ -149,7 +151,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
             generator_bindings[key] = symbols
     from . import _portable_math
     try:
-        # cpu-route: connect the existing portable binary64 scalar sqrt ABI;
+        # import-time: connect the existing portable binary64 scalar sqrt ABI;
         # native initializer preparation calls this C function directly.
         generator_sqrt = _portable_math._load().mojolearn_sqrt
         generator_sqrt_type = type(generator_sqrt)
@@ -159,15 +161,21 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         generator_sqrt, generator_sqrt_type = str(exc), None
     return {
         **core,
-        "admission": _connect_admission(config_cls, model_cls, state_cls, training, neural),
+        "admission": _connect_admission(config_cls, model_cls, state_cls, training, neural, session_cls),
         "generator_bindings": generator_bindings, "generator_backend": _backend,
         "generator_index": _operator.index,
         "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(canonical=binding, **entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "state_class": state_cls, "mamba3_state_class": Mamba3State,
+        "decode_session_class": session_cls,
         "optimizer_class": training.AdamW,
+        "optimizer_step_io": "optimizer_resident_step_io" in entries,
+        "optimizer_maximize_device": "optimizer_maximize_dev" in entries,
         "generator_class": training.Generator, "exact_schedule": exact_schedule,
+        # A restored schedule is built by the optimizer owner's native
+        # `schedule_setstate` (dictionary fill, admission, one block bind).
+        "schedule_native": training._OPT_NATIVE, "schedule_context": training._OPT_CONTEXT,
         "schedule_classes": {"constant": training.ConstantLR,
                              "linear": training.WarmupLinearLR,
                              "cosine": training.WarmupCosineLR},

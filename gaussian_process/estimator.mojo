@@ -83,26 +83,26 @@ is the one-shot form, which is what the gates and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
+from std.sys.compile import is_defined
 from core.hostptr import copy_f32
+from core.transfer import transfer_download_f32_list, transfer_download_list, transfer_upload_list
 from std.memory import bitcast
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
-from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojoGpContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoGpContextOther"
+comptime _FAMILY_CTX = "MojolearnGpContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGpContextOtherV3"
 
 
+# TOMBSTONE: MOJOLEARN_FAMILY_CTX_PER_CALL (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 26b4b3147a.
+# Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch; record in docs/TOMBSTONES.md.
 def _family_ctx() raises -> DeviceContext:
-    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
-    restores a new context per entry (the A/B arm)."""
-    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
-        return DeviceContext()
+    """The binding's process-lifetime context."""
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.estimator import (
@@ -152,7 +152,7 @@ from gaussian_process.checks.kernels import (
 from gaussian_process.checks.kernel_gradient import gp_kernel_matrix_grad
 from gaussian_process.host.gp_theta import gp_grad_half
 from gaussian_process.gp_grad_items import gp_free_count, gp_grad_blocks, gp_grad_part_item, gp_grad_fin_item
-from std.gpu import block_idx as _gb_idx, thread_idx as _gt_idx
+from max.gpu import block_idx as _gb_idx, thread_idx as _gt_idx
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -510,61 +510,51 @@ def _trace_for(trace_path: String, truncate: Bool) raises -> IdentityTrace:
     return IdentityTrace.to_path(trace_path, "", truncate)
 
 
+@always_inline
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
-    var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
-    return buf^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list; the pinned staging buffer and its host copy per
+    # call are gone. One wait, as before.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
 
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF` restores the appends): `_download`
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default: `_download`
 #: fills a list of the final length 8 floats a step. The fit reads the n x n
 #: factor back through it (GPR and GPC), which was n^2 appends into a growing
 #: list on one host thread. The same words: no bit moves.
-comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, no A/B recorded beside the defaults) deleted 2026-11-15 by lane/expdel2-19-kernel (non-owner; owner expdel2-37-series) in this file; code recoverable at d55d80a7d4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-19-kernel.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 2fd4a6c6c1.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _GP_XFER_POOL = "MojolearnGPTransferStagesIdenticalV1" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGPTransferStagesOtherV1"
 
-#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
-#: (`-D MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF` restores the upload):
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default:
 #: `gpr_predict_host` uploads the n_train x n_train factor only when
 #: `return_std` asks for the variance; the mean reads K_trans and the dual
 #: alone. No kernel reads the factor on the mean-only path: no bit moves.
-comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 6969d83ccb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF.patch; record in docs/TOMBSTONES.md.
+comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL
 
 
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
+    comptime if GP_IDN_BULK_DOWNLOAD:
+        # core/transfer.mojo (lane fx-dup-next, 2026-11-19): the copy engine
+        # writes the list's own words; from DOWNLOAD_STAGE_MIN floats (the
+        # fit's n x n factor from n = 1024) through the two pooled pinned
+        # stages. Gone: a pinned host buffer of the whole result per call and
+        # a second pass over it on one host thread. The same words in the
+        # same cells.
+        return transfer_download_f32_list[_GP_XFER_POOL](ctx, buf, n)
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    comptime if GP_IDN_BULK_DOWNLOAD:
-        # fam-kernel-gp: 8 floats a step into a list of the final length
-        # (`copy_f32`'s own loop), not n appends into a growing one. A copy:
-        # the same words in the same cells.
-        var packed = List[Float32](unsafe_uninit_length=n)
-        var pdst = packed.unsafe_ptr()
-        var psrc = h.unsafe_ptr()
-        var pi = 0
-        var pbody = n - n % 8
-        while pi < pbody:
-            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
-            pi += 8
-        while pi < n:
-            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
-            pi += 1
-        _ = h^
-        return packed^
     comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
         # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
         # final length, not n appends into a growing one. A copy.
@@ -576,6 +566,9 @@ def _download(
         )
         _ = h^
         return bulk^
+    # TOMBSTONE: MOJOLEARN_GP_BULK_DOWNLOAD (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 476e96f77a.
+    # Restore: git apply experiments/removed/MOJOLEARN_GP_BULK_DOWNLOAD.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
@@ -586,14 +579,10 @@ def _download(
 def _download_i32(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): one copy into
+    # the list's own words. Gone: a pinned buffer per call and one append per
+    # word into a growing list.
+    return transfer_download_list[DType.int32](ctx, buf, n)
 
 
 # ===========================================================================
@@ -739,26 +728,40 @@ def gpr_fit_host(
     chol_validate_jitter(alpha)
     var n = n_train
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+    var nb_ran = nb_pin
+    var info = 0
+    var dev_logdet = Float32(0.0)
+    var factor_l = List[Float32]()
+    var ctrace = IdentityTrace()
+    # The factor and its log-determinant on the measured 0.8.66 route (lane
+    # restore-classical-measured-routes, 2026-11-13): `potrf_lower` with its
+    # info read, then `chol_logdet`.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
     var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
     var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
     ctx.synchronize()
-    var ctrace = IdentityTrace()
     add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
     trace.record_device(ctx, "gp.ridged", dk, n * n)
     var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-    var dev_logdet = Float32(0.0)
-    if run.info == 0:
+    info = run.info
+    nb_ran = run.nb
+    if info == 0:
         dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
-    var factor_l = _download(ctx, dk, n * n)
+    factor_l = _download(ctx, dk, n * n)
+    _ = ws^
+    _ = dwork^
     trace.record_list_f32("gp.factor", factor_l)
 
     var dual = List[Float32]()
     var logdet = Float32(0.0)
     var ydotalpha = Float32(0.0)
     var lml = Float32(0.0)
-    if run.info == 0:
+    if info == 0:
         var dy = _upload(ctx, y)
         var ddual = _upload(ctx, y)
+        # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
         cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
         dual = _download(ctx, ddual, n)
         trace.record_list_f32("gp.dual_coef", dual)
@@ -787,8 +790,6 @@ def gpr_fit_host(
     _ = dls^
     _ = dk^
     _ = dstack^
-    _ = ws^
-    _ = dwork^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
 
@@ -804,8 +805,8 @@ def gpr_fit_host(
         logdet,
         ydotalpha,
         lml,
-        run.info,
-        run.nb,
+        info,
+        nb_ran,
     )
 
 
@@ -1016,6 +1017,77 @@ def _gpr_ydot_device(
     return v
 
 
+def _gpr_lml_grad_potrf(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dgrad: DeviceBuffer[DType.float32],
+    y: List[Float32],
+    n: Int,
+    n_free: Int,
+    alpha: Float32,
+) raises -> GPLmlGrad:
+    """`gpr_lml_grad_host`'s Cholesky tail on the measured 0.8.66 route
+    (the default; lane restore-classical-measured-routes, 2026-11-13,
+    copied from 7ec10acd29^): `potrf_lower` with its info read,
+    `chol_logdet`, `cho_solve` for alpha_ and for K_inv, `y^T alpha_` read
+    home, and the gradient fold. `dk`
+    holds K where the kernel launch left it, `dgrad` its dK_p."""
+    var cells = n * n
+    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    ctx.synchronize()
+    var ctrace = IdentityTrace()
+    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    if run.info != 0:
+        _ = ws^
+        _ = dwork^
+        return GPLmlGrad(
+            Float32(0.0),
+            List[Float32](length=n_free, fill=Float32(0.0)),
+            run.info,
+        )
+    var logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
+    var dy = _upload(ctx, y)
+    var ddual = _upload(ctx, y)
+    cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+    var ydotalpha = _gpr_ydot_device(ctx, dy, ddual, n)
+    var lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n)
+    var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
+    enqueue_fill(ctx, dkinv, Float32(0.0))
+    ctx.enqueue_function[gp_eye_kernel](
+        _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
+    )
+    cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
+    # the gradient fold on the device, dK_p where the launch left it
+    # (gaussian_process/gp_grad_items.mojo, the host column's items)
+    var grad = List[Float32](length=n_free, fill=Float32(0.0))
+    if n_free > 0:
+        var nb = gp_grad_blocks(n)
+        var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
+        var dout = ctx.enqueue_create_buffer[DType.float32](n_free)
+        ctx.enqueue_function[gp_grad_part_kernel](
+            _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(n_free * nb), _gp(dpart),
+            grid_dim=(n_free * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+        )
+        ctx.enqueue_function[gp_grad_fin_kernel](
+            _gp(dpart), Int32(nb), Int32(n_free), gp_grad_half(), _gp(dout),
+            grid_dim=(n_free + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
+        ctx.synchronize()
+        _ = dpart^
+        _ = dout^
+    ctx.synchronize()
+    _ = ws^
+    _ = dwork^
+    _ = dy^
+    _ = ddual^
+    _ = dkinv^
+    return GPLmlGrad(lml, grad^, 0)
+
+
 def gpr_lml_grad_host(
     x: List[Float32],
     n_train: Int,
@@ -1065,74 +1137,10 @@ def gpr_lml_grad_host(
     # calls in the fit's order on K where the launch left it; before, K, L
     # and K_inv each crossed to the host and back
     chol_validate_jitter(alpha)
-    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-    ctx.synchronize()
-    var ctrace = IdentityTrace()
-    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-    if run.info != 0:
-        _ = dx^
-        _ = dls^
-        _ = dk^
-        _ = dstack^
-        _ = ws^
-        _ = dwork^
-        _ = dgrad^
-        _ = ctx^
-        return GPLmlGrad(
-            Float32(0.0),
-            List[Float32](length=n_free, fill=Float32(0.0)),
-            run.info,
-        )
-    var logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
-    var dy = _upload(ctx, y)
-    var ddual = _upload(ctx, y)
-    cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
-    var ydotalpha = _gpr_ydot_device(ctx, dy, ddual, n)
-    var lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n)
-    var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
-    enqueue_fill(ctx, dkinv, Float32(0.0))
-    ctx.enqueue_function[gp_eye_kernel](
-        _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
-    )
-    cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
-    # the gradient fold on the device, dK_p where the launch left it
-    # (gaussian_process/gp_grad_items.mojo, the host column's items;
-    # cpu-gpu-cleanup c-gp-kernel: every dK_p was downloaded and folded on
-    # the host)
-    var grad = List[Float32](length=n_free, fill=Float32(0.0))
-    if n_free > 0:
-        var nb = gp_grad_blocks(n)
-        var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
-        var dout = ctx.enqueue_create_buffer[DType.float32](n_free)
-        ctx.enqueue_function[gp_grad_part_kernel](
-            _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(n_free * nb), _gp(dpart),
-            grid_dim=(n_free * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-        )
-        ctx.enqueue_function[gp_grad_fin_kernel](
-            _gp(dpart), Int32(nb), Int32(n_free), gp_grad_half(), _gp(dout),
-            grid_dim=(n_free + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
-        ctx.synchronize()
-        _ = dpart^
-        _ = dout^
-    ctx.synchronize()
-    _ = dx^
-    _ = dls^
-    _ = dk^
-    _ = dstack^
-    _ = ws^
-    _ = dwork^
-    _ = dy^
-    _ = ddual^
-    _ = dkinv^
-    _ = dgrad^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-    return GPLmlGrad(lml, grad^, 0)
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+    # the measured 0.8.66 route (`_gpr_lml_grad_potrf`)
+    return _gpr_lml_grad_potrf(ctx, dk, dgrad, y, n, n_free, alpha)
 
 
 def gpr_log_marginal_likelihood(model: GPRegressor) raises -> Float32:
@@ -1682,13 +1690,20 @@ def gpr_sample_y_host(
     )
     var jit = chol_jitter_pinned()
     chol_validate_jitter(jit)
+    # The measured 0.8.66 route (lane restore-classical-measured-routes):
+    # `potrf_lower` with its info read, refused by name before the draws.
+    # TOMBSTONE: MOJOLEARN_IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
     var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
     var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
     ctx.synchronize()
     var ctrace = IdentityTrace()
     add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
-    var run = potrf_lower(ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    var run = potrf_lower(
+        ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
+    )
     gp_sample_y_check_factor(run.info, n_star)
+    _ = cws^
     var key = gp_sample_y_key(seed)
     var nz = n_star * n_samples
     var dz = ctx.enqueue_create_buffer[DType.float32](nz)
@@ -1729,7 +1744,6 @@ def gpr_sample_y_host(
     _ = dkss^
     _ = dstack2^
     _ = dcov^
-    _ = cws^
     _ = dz^
     _ = dlz^
     _ = dws3^

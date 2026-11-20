@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only exact Transformer decode door; never invoke with unvalidated pointers.
 from std.python._cpython import PyObjectPtr
-from providers.python.transformer_decode_pyapi import transformer_decode_native_c
+from providers.python.transformer_decode_pyapi_door import transformer_decode_native_c
 
 
 @export

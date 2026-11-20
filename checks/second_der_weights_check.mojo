@@ -126,9 +126,9 @@ def _s1(ctx: DeviceContext) raises -> Int:
     var d_t = ctx.enqueue_create_buffer[DType.float32](N)
     var d_w = ctx.enqueue_create_buffer[DType.float32](N)
     var d_p = ctx.enqueue_create_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_p, src_ptr=h_p.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_t, h_t)
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_p, h_p)
     ctx.synchronize()
 
     var blocks = (N + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
@@ -154,7 +154,7 @@ def _s1(ctx: DeviceContext) raises -> Int:
                 Float32(0.0), Float32(0.5), stats, fv, Int32(0),
                 mags, Int32(0), blocks,
             )
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=stats)
+        download_host_into[DType.float32](ctx, stats, h_s)
         ctx.synchronize()
 
         var bad0 = 0
@@ -225,10 +225,6 @@ def _s1(ctx: DeviceContext) raises -> Int:
             )
             failures += 1
 
-    _ = h_t^
-    _ = h_w^
-    _ = h_p^
-    _ = h_s^
     return failures
 
 
@@ -320,7 +316,7 @@ def _s2_s3_s4(ctx: DeviceContext) raises -> Int:
             col.append(b)
             hb.unsafe_ptr().unsafe_store(r, UInt8(b))
         host_bins.append(col^)
-        ctx.enqueue_copy(dst_buf=bins8, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins8, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS),
             cf.mask,
@@ -358,9 +354,9 @@ def _s2_s3_s4(ctx: DeviceContext) raises -> Int:
     var d_ty = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_reg = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_ty, src_ptr=h_ty.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_reg, src_ptr=h_reg.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=h_wt.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_ty, h_ty)
+    upload_host_into[DType.float32](ctx, d_reg, h_reg)
+    upload_host_into[DType.float32](ctx, d_wt, h_wt)
     ctx.synchronize()
 
     for arm in range(2):
@@ -430,14 +426,10 @@ def _s2_s3_s4(ctx: DeviceContext) raises -> Int:
             )
             failures += 1
 
-    _ = h_ty^
-    _ = h_wt^
-    _ = h_reg^
-    _ = hb^
     return failures
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
     print("S1: per-cell stat planes against the host expectation")
@@ -451,3 +443,22 @@ def main() raises:
         " NewtonCosine/NewtonL2, the raw weight under Cosine/L2, on both"
         " kernels and both searchers; RMSE negative control bit-identical"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("second_der_weights_check", cpu=False, gpu=True, serial="", run=run_cases)

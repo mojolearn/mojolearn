@@ -6,7 +6,9 @@ import mojolearn as ml
 
 @pytest.mark.parametrize("features,components", [(3, 17), (7, 29)])
 def test_identical_skewed_chi2_snapshot_fit_and_transform(monkeypatch, features, components):
-    monkeypatch.setenv("MOJOLEARN_CLASSICAL_NATIVE_DISPATCH", "1")
+    # Identical x_neighbors calls admit the native snapshot in every build;
+    # the former MOJOLEARN_CLASSICAL_NATIVE_DISPATCH environment gate is a build
+    # define now (providers/python/classical_native_dispatch.mojo).
     x = np.arange(11 * features, dtype="f4").reshape(11, features) / 13
     first = ml.SkewedChi2Sampler(skewedness=0.5, n_components=components, random_state=5)
     second = ml.SkewedChi2Sampler(skewedness=0.5, n_components=components, random_state=5)

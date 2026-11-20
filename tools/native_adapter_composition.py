@@ -24,7 +24,7 @@ def command_flags(command):
     require(command[:4] == ['pixi', 'run', 'mojo', 'build'], 'unknown build command')
     args = command[4:]
     flags = []
-    pairs = {'-j', '-o', '--emit', '--target-cpu', '--target-accelerator', '-D', '-I'}
+    pairs = {'-j', '-o', '--emit', '--target-cpu', '--target-features', '--target-accelerator', '-D', '-I'}
     while args:
         item = args.pop(0)
         if item in pairs:

@@ -5,7 +5,7 @@ implementation of the same stated algorithm, FILE BYTE FOR FILE BYTE.
 
     pixi run check-bpe-trainer
 
-The task first runs `python/mojolearn/_bpe_trainer.py`, which writes, per
+The task first runs `python/mojolearn/tests/_bpe_trainer.py`, which writes, per
 fixture, the corpus it trained on and the two artifacts it produced:
 
     build/bpe_trainer/<name>.corpus
@@ -189,7 +189,7 @@ def round_trip(
 def main() raises:
     print(
         "trainer_check: the Mojo BPE vocabulary trainer against"
-        " python/mojolearn/_bpe_trainer.py, byte for byte"
+        " python/mojolearn/tests/_bpe_trainer.py, byte for byte"
     )
     comptime if BPE_TRAINER_SABOTAGE:
         print(

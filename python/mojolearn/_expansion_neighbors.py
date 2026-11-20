@@ -24,81 +24,42 @@ is exact. Where a scalar is derived in Python (a percentile, gamma from a
 variance) it is IEEE double arithmetic on float32 inputs, rounded once to
 float32, which is the same on every box.
 """
-from . import _portable_math as math
 import os
 import struct
 
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
+from ._buffer import addr, addr_ro, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
-from ._mode import RegressorScoreMixin
 from . import _native_family_bridge
 from ._native_robust_bridge import native_method as _native_local_method
 
-# The compiled family owner (bindings/neighbors_native.mojo), connected once
+# The compiled family owner (bindings/neighbors_native_unpack.mojo), connected once
 # at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
 # are one native call each, handed the binding `_bind` resolves.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+# Lane ne1-h-labels: operations pass as integer codes from the one native
+# table (bindings/native_operation_codes.mojo), read once at import.
+from ._native_ops import codes as _operation_codes  # noqa: E402
+_OP = _operation_codes()
 
-def _connect_pcs_rng():
-    # glue: fixed native RNG getter/lock identities, connected once at import.
-    # NumPy's documented BitGenerator capsule is used; no RandomState/private
-    # layout is read. See providers/python/pcs_rng_pyapi.mojo for pinned sources.
-    from types import GetSetDescriptorType, MethodDescriptorType
-    import _thread
-    try:
-        from numpy.random import mtrand, BitGenerator, MT19937, PCG64, PCG64DXSM, Philox, SFC64
-    except ImportError:
-        _native_family_bridge.tables(family_pcs_rng=None)
-        return
-    from ._native_loaded_modules import connect_module
-    connect_module('numpy.random.mtrand', mtrand, ('RandomState',))
-    # _rand deliberately remains live across supported NumPy global-state APIs.
-    state_getter = vars(mtrand.RandomState)['_bit_generator']
-    capsule_getter = vars(BitGenerator)['capsule']
-    lock_getter = vars(BitGenerator)['lock']
-    lock_type = _thread.LockType
-    acquire, release = vars(lock_type)['acquire'], vars(lock_type)['release']
-    if any(type(value) is not GetSetDescriptorType for value in (state_getter, capsule_getter, lock_getter)):  # glue: fixed native descriptor admission
-        raise TypeError('PCS RNG requires native NumPy state/capsule/lock getters')
-    if any(type(value) is not MethodDescriptorType for value in (acquire, release)):  # glue: fixed native lock descriptor admission
-        raise TypeError('PCS RNG requires ordinary native lock methods')
-    _native_family_bridge.tables(family_pcs_rng=dict(
-        mtrand=mtrand, randomstate=mtrand.RandomState, bitgenerator=BitGenerator,
-        bitgenerators=(MT19937, PCG64, PCG64DXSM, Philox, SFC64),
-        state_getter=state_getter, state_get=state_getter.__get__,
-        capsule_getter=capsule_getter, capsule_get=capsule_getter.__get__,
-        lock_getter=lock_getter, lock_get=lock_getter.__get__, lock_type=lock_type,
-        acquire=acquire, release=release))
-
-
-_connect_pcs_rng()
+# PolynomialCountSketch's NumPy RandomState metadata (random_state=None or a
+# RandomState) is connected natively at the first such call
+# (providers/python/pcs_rng_pyapi_pack.mojo _pcs_connect); importing the package
+# never loads NumPy (NUMPY_FREE_CONTRACT.md).
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
            "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
-#: x_neighbors/iter_device.mojo XN_PRECOMPUTED_KIND: `kpca_transform` reads q as the kernel
-_XN_PRECOMPUTED_KIND = 100
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
             "cosine": 5, "chi2": 6, "additive_chi2": 7}
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
 
 
-def _dense(X):
-    """A scipy.sparse matrix densified (an exact copy: the implicit entries are
-    zeros), anything else unchanged. Every x_neighbors primitive is dense, so a
-    sparse input takes the same path, with the same bits, as its dense twin."""
-    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "tocsr"):
-        return X.toarray()
-    return X
-
-
-def _f32(X, name="X"):
-    a, _ = as_f32_c(_dense(X), ndim=2, name=name)
-    return a
+# TOMBSTONE: _expansion_neighbors._dense / _f32 (no caller; the neighbors doors admit X natively)
+# deleted 2026-11-15 by lane py-buffer; code recoverable at 8579360a2e.
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
@@ -109,14 +70,8 @@ def _accuracy(y_true, y_pred, sample_weight=None):
     return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
-def _f32_1d(x, name):
-    a, _ = as_f32_c(x, ndim=1, name=name)
-    return a
-
-
-def _i32(x, name):
-    a, _ = as_i32_c(x, ndim=1, name=name)
-    return a
+# TOMBSTONE: _expansion_neighbors._f32_1d / _i32 (no caller) deleted 2026-11-15 by lane
+# py-buffer; code recoverable at 8579360a2e.
 
 
 def _f32_scalar(v):
@@ -124,68 +79,6 @@ def _f32_scalar(v):
     return Array.from_list([float(v)], "<f4").tolist()[0]
 
 
-def _kpca_resident(est):
-    """lane/apple-fast-kapprox: whether KernelPCA.fit builds, centers and
-    solves its kernel matrix on x_decomp's resident kit with one upload of X
-    (FAST + Apple, rollback `-D MOJOLEARN_KPCA_RESIDENT_OFF`), read back from the
-    x_neighbors binding's compile-time constant (no env read)."""
-    fn = getattr(est._bind(), "x_neighbors_kpca_resident", None)
-    return fn is not None and int(fn()) != 0
-
-
-#: the kernels the resident route builds from the kit's sqdist / gemm and
-#: elementwise launches (any other kernel takes main's path)
-_KPCA_RESIDENT_KERNELS = ("rbf", "linear", "poly", "sigmoid")
-
-
-def _kpca_resident_center(kit, X, n, kernel, gamma, coef0, degree):
-    """lane/apple-fast-kapprox: X (an Array) uploaded once from its own
-    buffer; the kernel matrix, sklearn's KernelCenterer (K - rows - cols +
-    all) and the two fit vectors on the device. Returns (Kc, cols, all_)
-    as resident `_M` matrices, or None when this kit has no resident path
-    (the caller then runs main's code)."""
-    from ._expansion_decomp import _M, _DevBuf
-    if not kit._res():
-        return None
-    d = X.shape[1]
-    Xm = _M._on_device(_DevBuf(kit._raw(), X.size), n, d)
-    kit.b.x_decomp_dev_upload(Xm._d.id, addr_ro(X, name="X"), X.size)
-    if kernel == "rbf":
-        K = kit.ew("exp", kit.ew("scale", kit.sqdist(Xm, Xm), s=-gamma))
-    else:
-        K = kit.mm(Xm, Xm, tb=True)
-        if kernel == "poly":
-            K = kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0)
-            K = kit.ew("sq" if degree == 2 else "cube", K)
-        elif kernel == "sigmoid":
-            K = kit.ew("tanh", kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0))
-    cols = kit.ew("scale", kit.colsum(K), s=1.0 / n)          # K_fit_rows_ (1 x n)
-    all_ = kit.ew("scale", kit.rowsum(cols), s=1.0 / n)       # K_fit_all_ (1 x 1)
-    colv = _M._on_device(cols._d, n, 1)                        # the same buffer as a column
-    Kc = kit.ew("add", kit.ew("sub", kit.ew("sub", K, cols), colv), all_)
-    return Kc, cols, all_
-
-
-def _argmax_labels(est, classes, M):
-    """The class of every row's first maximum: the argmax on the device
-    (`row_argmax`), the labels by `_class_array`."""
-    n, C = M.shape
-    codes = empty((n,), "<i4")
-    if n > 0:
-        est._op("row_argmax", [(M, 0), (codes, 1)], (n, C))
-    return _class_array(classes, codes)
-
-
-def _class_array(classes, codes):
-    """classes[codes] for int32 codes (an Array): int or bool classes an
-    int64 Array, real classes a float64 Array (the native gather of
-    `decode_labels`), other labels a list (`decode_labels`)."""
-    from ._labels import decode_labels
-    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
-        return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
-    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
-        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
-    return decode_labels(classes, codes)
 
 
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
@@ -198,27 +91,24 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 # The A/B arms above as the LocalOutlierFactor / NearestCentroid / KNNImputer
-# owner reads them (bindings/neighbors_local_native.mojo): the import-time values.
+# owner reads them (bindings/neighbors_local_native_door.mojo): the import-time values.
 _native_family_bridge.tables(family_xn_loc_flags={"unfused_knn": _UNFUSED_KNN,
                                                   "uncompact_impute": _UNCOMPACT_IMPUTE,
                                                   "old_items": _OLD_ITEMS})
 # The shared native label, weight and score steps those owners read
-# (bindings/classical_labels.mojo: encode/decode, accuracy, the base helpers).
+# (bindings/classical_labels_door.mojo: encode/decode, accuracy, the base helpers).
 from ._native_labels_bridge import label_context as _label_context  # noqa: E402
 _native_family_bridge.tables(**_label_context())
 # TOMBSTONE: MOJOLEARN_XN_FAST_TILED_RBF (DROPPED-noise) deleted 2026-10-03 by f103d7381; code recoverable at f103d7381^.
 # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch; record in docs/TOMBSTONES.md.
-#: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
-#: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
-#: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
-#: no env read).
+# LabelPropagation / LabelSpreading's kNN-graph loop is one resident op
+# (`lp_iterate_knn`) on every binary.
 
 
 def _kfeat_flags(est):
     """lane apple-fast-w2-kfeat: the chi2 samplers' FAST + Apple fit entries
-    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default,
-    each off under its _OFF define: bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT,
-    bit 4 SCHI2_LAZYW);
+    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default:
+    bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW);
     0 on the FAST tier without them, on IDENTICAL and on the host column."""
     if not est._fast_tier():
         return 0
@@ -226,21 +116,8 @@ def _kfeat_flags(est):
     return int(fn()) if fn is not None else 0
 
 
-def _classical_graph_normalization(est):
-    """C43 binary capability, IDENTICAL only and default OFF.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    flag = getattr(est._bind(), "x_neighbors_classical_graph_normalization", None)
-    return flag is not None and bool(flag())
-
-
-def _lp_fast_resident(est):
-    """Whether the bound binary takes the resident kNN-graph loop
-    (x_neighbors/iter_device.mojo LP_FAST_RESIDENT: FAST + Apple, off with
-    `-D MOJOLEARN_LP_FAST_RESIDENT_OFF`). 0 on IDENTICAL and the host column."""
-    fn = getattr(est._bind(), "x_neighbors_lp_fast_resident", None)
-    return fn is not None and int(fn()) != 0
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
 def _p2m_relabel(est, lab, name=None):
@@ -276,12 +153,6 @@ class _XNeighbors(NumericModeMixin):
         self._op("sqdist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
         return out
 
-    def _l1dist(self, A, B):
-        n, d = A.shape
-        m = B.shape[0]
-        out = _empty_out((n, m), "<f4")
-        self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
-        return out
 
     def _fast_tier(self):
         """True on the FAST tier (the lane/apple-fast-neighbors2 switches
@@ -318,37 +189,8 @@ class _XNeighbors(NumericModeMixin):
         self._op("knn_select", [(D, 0), (dist, 1), (idx, 1)], (n, m, k, 1 if exclude_self else 0))
         return dist, idx
 
-    def _rowsum(self, A):
-        out = _empty_out((A.shape[0],), "<f4")
-        self._op("rowsum", [(A, 0), (out, 1)], A.shape)
-        return out
-
-    def _colsum(self, A):
-        out = _empty_out((A.shape[1],), "<f4")
-        self._op("colsum", [(A, 0), (out, 1)], A.shape)
-        return out
-
-    def _scale_div(self, X, s):
-        out = empty(X.shape, "<f4")
-        self._op("scale_div", [(X, 0), (out, 1)], (X.size,), (s,))
-        return out
-
-    def _take_rows(self, X, rows):
-        rows = _i32(rows, "rows")
-        out = _empty_out((len(rows), X.shape[1]), "<f4")
-        self._op("take_rows", [(X, 0), (rows, 0), (out, 1)], (len(rows), X.shape[1], X.shape[0]))
-        return out
-
-    def _take_cols(self, X, cols):
-        cols = _i32(cols, "cols")
-        out = _empty_out((X.shape[0], len(cols)), "<f4")
-        self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
-        return out
-
-    def _variance(self, X):
-        out = _empty_out((1,), "<f4")
-        self._op("variance", [(X, 0), (out, 1)], (X.size,))
-        return out.tolist()[0]
+    # TOMBSTONE: _take_rows / _take_cols (no caller) deleted 2026-11-15 by lane py-buffer;
+    # code recoverable at 8579360a2e.
 
     def _knn_sq(self, Q, R, k, exclude_self):
         """(squared distances, indices) of the k nearest rows of R to each row
@@ -370,26 +212,6 @@ class _XNeighbors(NumericModeMixin):
         index)."""
         sq, idx = self._knn_sq(Q, R, k, exclude_self)
         return self._unary(sq, _U_SQRT), idx
-
-
-def _p2m_sort_rows(est, indptr, cols, dists, name=None):
-    """(cols, dists) of a CSR's rows each sorted ascending by distance, ties
-    in position order (Python's stable `sorted`), on the device
-    (`xn_p2m_row_sort`, a segmented bitonic sort). int32 / float32 Arrays."""
-    nq = indptr.shape[0] - 1
-    nnz = dists.shape[0]
-    p = 1
-    while p < nnz:
-        p *= 2
-    lg = p.bit_length() - 1
-    n_steps = lg * (lg + 1) // 2
-    oc = empty((nnz,), "<i4")
-    od = empty((nnz,), "<f4")
-    getattr(est._bind(name), "xn_p2m_row_sort")(
-        [addr_ro(indptr, name="xn_p2m_row_sort input"), addr_ro(cols, name="xn_p2m_row_sort input"),
-         addr_ro(dists, name="xn_p2m_row_sort input"), addr(oc, name="xn_p2m_row_sort output"),
-         addr(od, name="xn_p2m_row_sort output")], [nq, nnz, p, n_steps], [])
-    return oc, od
 
 
 # ====================================================================== LOF
@@ -492,7 +314,7 @@ class LocalOutlierFactor(_XNeighbors):
         self : LocalOutlierFactor
             The fitted estimator.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @available_if(lambda self: not self.novelty)
     @_native_local_method
@@ -514,11 +336,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             -1 for outliers, 1 for inliers.
         """
-        return _NATIVE(self, "family_xn_loc_lof_fit_predict", (None, X, y), _NATIVE_CONTEXT)
-
-    def _novelty(self, what):
-        if not self.novelty:
-            raise AttributeError(f"{what} is not available when novelty=False; use fit_predict")
+        return _NATIVE(self, _OP.family_xn_loc_lof_fit_predict, (None, X, y), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     @_native_local_method
@@ -537,7 +355,7 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_xn_loc_lof_score_samples", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_score_samples, (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     @_native_local_method
@@ -555,7 +373,7 @@ class LocalOutlierFactor(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_xn_loc_lof_decision_function", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_decision_function, (None, X), _NATIVE_CONTEXT)
 
     @available_if(lambda self: self.novelty)
     @_native_local_method
@@ -575,7 +393,7 @@ class LocalOutlierFactor(_XNeighbors):
         labels : Array of shape (n_queries,), int64
             -1 for outliers, 1 for inliers.
         """
-        return _NATIVE(self, "family_xn_loc_lof_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_lof_predict, (None, X), _NATIVE_CONTEXT)
 
 
 # ====================================================================== NearestCentroid
@@ -669,7 +487,7 @@ class NearestCentroid(_XNeighbors):
             If there are fewer than two classes, the priors are invalid, or
             every feature has zero variance.
         """
-        return _NATIVE(self, "family_xn_loc_nc_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def predict(self, X):
@@ -688,7 +506,7 @@ class NearestCentroid(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             Predicted class labels.
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def decision_function(self, X):
@@ -708,20 +526,7 @@ class NearestCentroid(_XNeighbors):
             For two classes, shape (n_queries,): the second class's score
             minus the first's, positive for ``classes_[1]``.
         """
-        return _NATIVE(self, "family_xn_loc_nc_decision_function", (None, X), _NATIVE_CONTEXT)
-
-    def _decision_matrix(self, X):
-        """The (n_queries, n_classes) discriminant scores."""
-        if self.metric != "euclidean":
-            raise AttributeError("decision_function is available for metric='euclidean' only")
-        Q = _f32(X)
-        C = len(self.classes_)
-        prior = Array.from_list(self.class_prior_.tolist(), "<f4")
-        std = self.within_class_std_dev_
-        out = _empty_out((Q.shape[0], C), "<f4")
-        self._op("nc_decision", [(Q, 0), (self.centroids_, 0), (std, 0), (prior, 0), (out, 1)],
-                 (Q.shape[0], Q.shape[1], C))
-        return out
+        return _NATIVE(self, _OP.family_xn_loc_nc_decision_function, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def predict_proba(self, X):
@@ -739,7 +544,7 @@ class NearestCentroid(_XNeighbors):
         proba : Array of shape (n_queries, n_classes)
             Probabilities, columns in the order of ``classes_``.
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict_proba, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def predict_log_proba(self, X):
@@ -756,7 +561,7 @@ class NearestCentroid(_XNeighbors):
         -------
         log_proba : Array of shape (n_queries, n_classes), float32
         """
-        return _NATIVE(self, "family_xn_loc_nc_predict_log_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_predict_log_proba, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def score(self, X, y, sample_weight=None):
@@ -776,7 +581,7 @@ class NearestCentroid(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _NATIVE(self, "family_xn_loc_nc_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_nc_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 # ====================================================================== OneClassSVM
@@ -854,7 +659,7 @@ class OneClassSVM(_XNeighbors):
     >>> labels = model.predict(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "outlier_detector"
@@ -893,7 +698,7 @@ class OneClassSVM(_XNeighbors):
         self : OneClassSVM
             The fitted estimator.
         """
-        return _NATIVE(self, "family_svc_ocsvm_fit", (None, X, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_fit, (None, X, sample_weight), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Raw scoring function of the samples (not shifted by ``offset_``).
@@ -908,7 +713,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_svc_ocsvm_score_samples", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_score_samples, (None, X), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Signed distance to the boundary: ``score_samples(X) - offset_``.
@@ -924,7 +729,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return _NATIVE(self, "family_svc_ocsvm_decision", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_decision, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Label samples as inliers (1) or outliers (-1).
@@ -938,7 +743,7 @@ class OneClassSVM(_XNeighbors):
         -------
         labels : Array of shape (n_queries,), int64
         """
-        return _NATIVE(self, "family_svc_ocsvm_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_predict, (None, X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit on X and label X: ``fit(X).predict(X)``.
@@ -955,25 +760,13 @@ class OneClassSVM(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             1 for inliers, -1 for outliers.
         """
-        return _NATIVE(self, "family_svc_ocsvm_fit_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_svc_ocsvm_fit_predict, (None, X), _NATIVE_CONTEXT)
 
 
 # OneClassSVM's public methods are one call into the compiled SVM family
-# owner (bindings/svc_ocsvm_native.mojo); it reads this module's x_neighbors
+# owner (bindings/svc_ocsvm_native_door.mojo); it reads this module's x_neighbors
 # kernel codes and the MOJOLEARN_XN_OLD_ITEMS arm.
 _native_family_bridge.tables(family_svc_xn_kernels=dict(_KERNELS), family_svc_xn_old_items=_OLD_ITEMS)
-
-
-# ====================================================================== KernelPCA
-def _kpca_clamp_count(kit, w):
-    """KernelPCA's eigenvalue tail on the kit's cells (lane
-    cpu2-l9-neighbors): `w` (1 x c, descending) clamped at zero (`maxs`,
-    `x if x > 0 else 0`), and the count of positive clamped values (`gts`
-    flags folded by `total`; 0/1 sums are exact in float32 below 2^24).
-    Returns (clamped 1 x c matrix, count); only the count word is read."""
-    wc = kit.ew("maxs", w, s=0.0)
-    npos = int(kit.total(kit.ew("gts", wc, s=0.0)).s[0])
-    return wc, npos
 
 
 # Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
@@ -1022,10 +815,6 @@ class KernelPCA(_XNeighbors):
         Independent term of the ``'poly'`` and ``'sigmoid'`` kernels.
     kernel_params : dict or None, default None
         Not supported; a non-empty value raises ``NotImplementedError``.
-    alpha : float, default 1.0
-        Accepted for scikit-learn compatibility; unused (no inverse transform).
-    fit_inverse_transform : bool, default False
-        Not supported; True raises ``NotImplementedError`` in ``fit``.
     eigen_solver : str, default 'auto'
         ``'auto'`` may use the iterative solver described above; any other
         value uses the dense solver.
@@ -1054,7 +843,7 @@ class KernelPCA(_XNeighbors):
     >>> Z = mojolearn.KernelPCA(n_components=2, kernel="rbf").fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
@@ -1078,11 +867,6 @@ class KernelPCA(_XNeighbors):
         self.copy_X = copy_X
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
-
-    def _k(self, A, B):
-        if self.kernel == "precomputed":
-            return A
-        return self._kernel(A, B, self.kernel, self._gamma, self.coef0, self.degree)
 
     def fit(self, X, y=None):
         """Fit the model on the training data.
@@ -1120,12 +904,6 @@ class KernelPCA(_XNeighbors):
         """
         return _KPCA_CALL(self, "fit_transform", (X,), _KPCA_CONTEXT)
 
-    def _alpha_scale(self, divide):
-        V = self.eigenvectors_
-        out = empty(V.shape, "<f4")
-        self._op("kpca_alpha_scale", [(V, 0), (self.eigenvalues_, 0), (out, 1)], (V.shape[0], V.shape[1], divide))
-        return out
-
     def transform(self, X):
         """Project new samples onto the fitted components.
 
@@ -1143,8 +921,9 @@ class KernelPCA(_XNeighbors):
         return _KPCA_CALL(self, "transform", (X,), _KPCA_CONTEXT)
 
     def inverse_transform(self, X):
-        """Not supported: always raises ``NotImplementedError``."""
-        raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
+        # Not implemented; listed in docs-site/api_exclude.txt (omitted from the docs).
+        raise NotImplementedError("KernelPCA: inverse_transform() is not implemented (it needs the learned "
+                                  "pre-image map of fit_inverse_transform=True, which is not implemented)")
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``kernelpca0``, ``kernelpca1``, ...
@@ -1158,39 +937,10 @@ class KernelPCA(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_kpca", (input_features,), _NATIVE_CONTEXT)
-
-
-# ====================================================================== RandomState
-def _seed_word(seed):
-    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
-    None (numpy's global RandomState) or a caller's numpy RandomState gives
-    ONE draw, a word in [0, 2^31), and that word seeds the device
-    counter-based generator exactly as an int random_state would. The
-    O(d * n_components) table is then drawn on the device. Not
-    scikit-learn's numbers for those two inputs (theirs are not reproducible
-    for None either); the distribution is the same. Anything else is
-    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
-    _OFF arms drew from.)"""
-    if isinstance(seed, int) and not isinstance(seed, bool):
-        return seed
-    if seed is None:
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_neighbors')
-        seed = np.random.mtrand._rand
-    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
-        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
-    return int(seed.randint(0, 1 << 31, size=1)[0])
+        return _NATIVE(self, _OP.family_xn_names_kpca, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== PolynomialCountSketch
-# Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
-# 1.9.0): `indexHash_` (`randint(0, n_components, (degree, n_features))`)
-# and `bitHash_` (`choice([-1, 1], (degree, n_features))`); here drawn by the
-# device counter-based generator (x_neighbors/kfeat_rng.mojo, see
-# `_seed_word`), the same distribution, not their legacy RandomState words.
-# The transform is the count sketches' circular convolution, computed
-# directly instead of through an FFT (DEVIATION 5203).
 class PolynomialCountSketch(_XNeighbors):
     """Polynomial kernel approximation by tensor sketch.
 
@@ -1267,7 +1017,7 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_pcs_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def transform(self, X):
@@ -1283,7 +1033,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_transform, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def fit_transform(self, X, y=None):
@@ -1300,7 +1050,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_pcs_fit_transform", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_fit_transform, (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
@@ -1314,7 +1064,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_pcs_feature_names", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_pcs_feature_names, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== AdditiveChi2Sampler
@@ -1354,7 +1104,7 @@ class AdditiveChi2Sampler(_XNeighbors):
     >>> Z = mojolearn.AdditiveChi2Sampler(sample_steps=2).fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`: stateless, non-negative input
     _sklearn_input_tags = {"positive_only": True}
@@ -1380,7 +1130,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         self : AdditiveChi2Sampler
             The fitted transformer.
         """
-        return _NATIVE(self, "family_xn_semi_achi2_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_fit, (None, X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1395,7 +1145,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
             float32; sparse (CSR) when X is sparse.
         """
-        return _NATIVE(self, "family_xn_semi_achi2_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_transform, (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1411,7 +1161,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         X_new : Array or scipy.sparse.csr_matrix of shape (n_samples, n_features * (2 * sample_steps - 1))
         """
-        return _NATIVE(self, "family_xn_semi_achi2_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_achi2_fit_transform, (None, X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -1429,7 +1179,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_achi2", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_achi2, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== SkewedChi2Sampler
@@ -1481,7 +1231,7 @@ class SkewedChi2Sampler(_XNeighbors):
     >>> Z = mojolearn.SkewedChi2Sampler(n_components=64, random_state=0).fit_transform(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None):
@@ -1511,20 +1261,20 @@ class SkewedChi2Sampler(_XNeighbors):
             If X has no features, ``n_components`` is below 1, or
             ``random_state`` is not an int, a numpy RandomState or None.
         """
-        return _NATIVE(self, "family_xn_semi_schi2_fit", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_fit, (None, X), _NATIVE_CONTEXT)
 
     @property
     def random_weights_(self):
         """Random projection weights, shape (n_features, n_components)."""
         # SCHI2_LAZYW: made from z on the first read (one native call:
-        # bindings/neighbors_semi_native.mojo `schi2_public_weights`, main's
+        # bindings/neighbors_semi_native_door.mojo `schi2_public_weights`, main's
         # kernel and words) when no transform has made it yet. Stored under
         # `_random_weights` (an older pickle's plain attribute still reads).
-        return _NATIVE(self, "family_xn_schi2_weights", (), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_schi2_weights, (), _NATIVE_CONTEXT)
 
     @random_weights_.setter
     def random_weights_(self, value):
-        _NATIVE(self, "family_xn_schi2_set_weights", (value,), _NATIVE_CONTEXT)
+        _NATIVE(self, _OP.family_xn_schi2_set_weights, (value,), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Apply the approximate feature map to X.
@@ -1539,7 +1289,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_semi_schi2_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_transform, (None, X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1555,7 +1305,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return _NATIVE(self, "family_xn_semi_schi2_fit_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_schi2_fit_transform, (None, X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``skewedchi2sampler0``, ``skewedchi2sampler1``, ...
@@ -1569,7 +1319,7 @@ class SkewedChi2Sampler(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_schi2", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_schi2, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== LabelPropagation
@@ -1582,7 +1332,7 @@ class SkewedChi2Sampler(_XNeighbors):
 class _LabelPropagationBase(_XNeighbors):
     """Shared implementation of LabelPropagation and LabelSpreading."""
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "classifier"
@@ -1604,7 +1354,7 @@ class _LabelPropagationBase(_XNeighbors):
         self
             The fitted estimator.
         """
-        return _NATIVE(self, "family_xn_semi_lp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities of new samples from the fitted label distributions.
@@ -1619,7 +1369,7 @@ class _LabelPropagationBase(_XNeighbors):
         proba : Array of shape (n_queries, n_classes), float32
             Columns in the order of ``classes_``.
         """
-        return _NATIVE(self, "family_xn_semi_lp_predict_proba", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_predict_proba, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict the class of new samples.
@@ -1634,7 +1384,7 @@ class _LabelPropagationBase(_XNeighbors):
         labels : Array or list of shape (n_queries,)
             The most probable class of each sample.
         """
-        return _NATIVE(self, "family_xn_semi_lp_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_predict, (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Mean accuracy of :meth:`predict` on the given data.
@@ -1653,7 +1403,7 @@ class _LabelPropagationBase(_XNeighbors):
         score : float
             (Weighted) fraction of correct predictions.
         """
-        return _NATIVE(self, "family_xn_semi_lp_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 
 class LabelPropagation(_LabelPropagationBase):
@@ -1820,10 +1570,10 @@ class LabelSpreading(_LabelPropagationBase):
         ValueError
             If ``alpha`` is not in (0, 1).
         """
-        return _NATIVE(self, "family_xn_semi_lp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_semi_lp_fit, (None, X, y), _NATIVE_CONTEXT)
 
 
-# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native.mojo)
+# The label propagation / chi2 sampler doors (bindings/neighbors_semi_native_door.mojo)
 # read the import-time k-NN A/B arm from the shared context.
 _native_family_bridge.tables(family_xn_semi_unfused_knn=_UNFUSED_KNN)
 
@@ -1897,42 +1647,6 @@ class KNNImputer(_XNeighbors):
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
 
-    def _check(self):
-        mv = self.missing_values
-        import numbers
-        if mv is None or isinstance(mv, (str, bool)) or not isinstance(mv, numbers.Real):
-            raise NotImplementedError("KNNImputer: missing_values must be a number or NaN (float input)")
-        if self.metric != "nan_euclidean":
-            raise NotImplementedError("KNNImputer: metric must be 'nan_euclidean'")
-        if self.weights not in ("uniform", "distance"):
-            raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
-
-    def _nan_cells(self, X, colmiss_only=0):
-        """(cells, colmiss, count): the flat indices of the NaN cells of X
-        ascending (an int32 Array of n * d slots, the first `count` used), the
-        NaN count per column as a list, and the count (xn_nan_cells).
-        colmiss_only=1 (fit): a build with MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY
-        may skip the cell list; the counts are the same integers."""
-        n, d = X.shape
-        # FAST Apple default MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU (_OFF rollback): a binary
-        # whose fit-time op ignores the cell list gets a one-slot one (no
-        # n * d allocation)
-        lean = colmiss_only and int(getattr(self._bind(), "x_neighbors_nc_fit_lean", lambda: 0)())
-        cells = empty((1 if lean else max(n * d, 1),), "<i4")
-        colmiss = empty((max(d, 1),), "<i4")
-        info = empty((1,), "<i4")
-        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d, colmiss_only))
-        return cells, colmiss.tolist(), int(info.tolist()[0])
-
-    def _masked(self, X):
-        X = _f32(X)
-        mv = self.missing_values
-        if mv == mv and X.size:           # a number: its cells become NaN
-            out = empty(X.shape, "<f4")
-            self._op("p2m_mask_value", [(X, 0), (out, 1)], (X.size,), (_f32_scalar(mv),))
-            X = out
-        return X
-
     @_native_local_method
     def fit(self, X, y=None):
         """Store the training data used as donors.
@@ -1941,6 +1655,8 @@ class KNNImputer(_XNeighbors):
         ----------
         X : array-like or scipy.sparse matrix of shape (n_samples, n_features)
             Training data, with missing values marked by ``missing_values``.
+            A float32 C-order array is kept by reference, not copied: after
+            changing it in place, call `fit` again.
         y : None
             Ignored.
 
@@ -1949,7 +1665,7 @@ class KNNImputer(_XNeighbors):
         self : KNNImputer
             The fitted imputer.
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     @_native_local_method
     def transform(self, X):
@@ -1968,7 +1684,7 @@ class KNNImputer(_XNeighbors):
             ``fit`` (unless ``keep_empty_features``), followed by the indicator
             columns when ``add_indicator`` is True.
         """
-        return _NATIVE(self, "family_xn_loc_imp_transform", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_transform, (None, X), _NATIVE_CONTEXT)
 
     @_native_local_method
     def fit_transform(self, X, y=None):
@@ -1985,7 +1701,7 @@ class KNNImputer(_XNeighbors):
         -------
         X_imputed : Array of shape (n_samples, n_features_out), float32
         """
-        return _NATIVE(self, "family_xn_loc_imp_fit_transform", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_loc_imp_fit_transform, (None, X, y), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names.
@@ -2003,7 +1719,7 @@ class KNNImputer(_XNeighbors):
         -------
         names : list of str
         """
-        return _NATIVE(self, "family_xn_names_imputer", (input_features,), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_names_imputer, (input_features,), _NATIVE_CONTEXT)
 
 
 # ====================================================================== PageRank
@@ -2064,7 +1780,7 @@ class PageRank(_XNeighbors):
     >>> scores = mojolearn.PageRank(alpha=0.85).fit(A).pagerank_
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
@@ -2100,7 +1816,7 @@ class PageRank(_XNeighbors):
         RuntimeError
             If the iteration does not converge within ``max_iter`` steps.
         """
-        return _NATIVE(self, "family_xn_graph_pagerank_fit", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_pagerank_fit, (None, A), _NATIVE_CONTEXT)
 
 
 # ====================================================================== connected components
@@ -2144,7 +1860,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     >>> A = (np.random.default_rng(0).random((500, 500)) < 0.002).astype(np.float32)
     >>> n_components, labels = mojolearn.connected_components(A, directed=False)
     """
-    return _NATIVE(None, "family_xn_graph_connected_components",
+    return _NATIVE(None, _OP.family_xn_graph_connected_components,
                    (numeric_mode, A, directed, connection, return_labels), _NATIVE_CONTEXT)
 
 
@@ -2207,7 +1923,7 @@ class Louvain(_XNeighbors):
     >>> labels = mojolearn.Louvain().fit_predict(A)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
     def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None):
@@ -2239,7 +1955,7 @@ class Louvain(_XNeighbors):
             If ``max_level`` is not a positive integer or None, the matrix is not
             symmetric, or the graph has no edges.
         """
-        return _NATIVE(self, "family_xn_graph_louvain_fit", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_louvain_fit, (None, A), _NATIVE_CONTEXT)
 
     def fit_predict(self, A, y=None):
         """Detect communities and return ``labels_``.
@@ -2256,7 +1972,7 @@ class Louvain(_XNeighbors):
         labels : Array of shape (n,), int32
             Community of each node.
         """
-        return _NATIVE(self, "family_xn_graph_louvain_fit_predict", (None, A), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_louvain_fit_predict, (None, A), _NATIVE_CONTEXT)
 
 # ====================================================================== SVGP
 # Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
@@ -2267,7 +1983,7 @@ class Louvain(_XNeighbors):
 # as staged items (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column
 # per launch, one triangular solve per right-hand side); the fit is the
 # float-float resident chain `xn_svgp_fit_ff` (x_neighbors/svgp_ff.mojo).
-class SVGP(RegressorScoreMixin, _XNeighbors):
+class SVGP(_XNeighbors):
     """Sparse variational Gaussian process regression with inducing points.
 
     A Gaussian process regressor with a Gaussian likelihood, a
@@ -2323,7 +2039,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
     >>> mean, var = model.predict_y(X)
     """
     # One-call native public methods: the family owner runs the whole lifecycle
-    # (providers/python/family_public_lifecycle_pyapi.mojo); no _mode wrappers.
+    # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
@@ -2369,7 +2085,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
             system is not positive definite (raise ``jitter`` or
             ``noise_variance``).
         """
-        return _NATIVE(self, "family_xn_graph_svgp_fit", (None, X, y), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_fit, (None, X, y), _NATIVE_CONTEXT)
 
     def predict_f(self, X):
         """Mean and variance of the latent function at X.
@@ -2384,7 +2100,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict_f", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict_f, (None, X), _NATIVE_CONTEXT)
 
     def predict_y(self, X):
         """Mean and variance of the observations at X (latent variance plus
@@ -2400,7 +2116,7 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         var : Array of shape (n_queries,), float32
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict_y", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict_y, (None, X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predictive mean at X (the mean of :meth:`predict_f`).
@@ -2412,9 +2128,11 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
 
         Returns
         -------
-        mean : Array of shape (n_queries,), float32
+        mean : ndarray of shape (n_queries,)
+            float64 when NumPy is installed (scikit-learn's regressor dtype),
+            otherwise a float32 Array.
         """
-        return _NATIVE(self, "family_xn_graph_svgp_predict", (None, X), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_predict, (None, X), _NATIVE_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
@@ -2433,15 +2151,14 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _NATIVE(self, "family_xn_graph_svgp_score", (None, X, y, sample_weight), _NATIVE_CONTEXT)
+        return _NATIVE(self, _OP.family_xn_graph_svgp_score, (None, X, y, sample_weight), _NATIVE_CONTEXT)
 
 # The compiled owner of KernelPCA's fit, fit_transform and transform
-# (bindings/kpca_native.mojo through the decomposition owner door).
+# (bindings/kpca_native_door.mojo through the decomposition owner door).
 from . import _native_decomp_bridge  # noqa: E402
 _KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
     {"KernelPCA": KernelPCA}, neighbors=True,
-    metadata={"kpca_kernels": dict(_KERNELS), "kpca_precomputed_kind": _XN_PRECOMPUTED_KIND,
-              "kpca_old_items": _OLD_ITEMS})
+    metadata={"kpca_kernels": dict(_KERNELS), "kpca_old_items": _OLD_ITEMS})
 
 # Import connection; selected public operations admit the live native binding.
 _native_family_bridge.connect_bindings("_mojolearn_x_neighbors", "_mojolearn_metrics")

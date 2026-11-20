@@ -1,0 +1,28 @@
+{
+ "checks": {
+  "docs-facts": {
+   "seconds": 0,
+   "verdict": "PASS"
+  },
+  "ext-lists": {
+   "seconds": 0,
+   "verdict": "PASS"
+  },
+  "ext-lists-host": {
+   "seconds": 0,
+   "verdict": "PASS"
+  },
+  "platform-math": {
+   "seconds": 3,
+   "verdict": "PASS"
+  },
+  "wheel-audit-tests": {
+   "seconds": 6,
+   "verdict": "PASS"
+  }
+ },
+ "schema": "mojolearn.release-rehearsal-checks.v1",
+ "source_commit": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+ "verdict": "REHEARSAL PASSED",
+ "version": "0.8.66"
+}

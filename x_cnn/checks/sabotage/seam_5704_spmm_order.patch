@@ -1,9 +1,9 @@
 diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
-index 64c9b4267..29eddb298 100644
+index e351e95164..187ce00800 100644
 --- a/x_cnn/ops.mojo
 +++ b/x_cnn/ops.mojo
-@@ -1133,7 +1133,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
-         dst.unsafe_store(i, d)
+@@ -1383,7 +1383,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
+         dst.unsafe_store(i, graph_reduce_tree64(r, f, n, F, mode, vals, h, q))
          return
      var acc = Float32(0)
 -    for e in range(lo, hi):

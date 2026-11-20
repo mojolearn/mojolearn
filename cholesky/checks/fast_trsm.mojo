@@ -18,14 +18,14 @@ in-kernel ordering of device writes. Same `L X = B` / `L^T X = B` in place
 over `B` (`n x nrhs` row-major), FAST arithmetic.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_idx, sum as warp_sum
-from std.gpu import lane_id
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_idx, sum as warp_sum
+from max.gpu import lane_id
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from layout import TileTensor
+from layout import Coord, TileTensor, coord_to_index_list
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from std.utils.index import IndexList
@@ -33,6 +33,12 @@ from std.sys.compile import is_defined
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
+# at f59d913b0b (F02: the lower-triangle subtract through scoped_kernel's SUBTRACT + LOWER epilogue; one-sample M3 fit B/A
+# 0.95, no verdict row). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners (Apple FAST work is paused, not deleted; the one sample on
+# record is a 0.95x fit): the define, its route below and its reach counter, verbatim from f59d913b0b. Default OFF as
+# before; A/B: -D MOJOLEARN_CHOL_FAST_SHARED_SUB (scoped subtract) vs none (the vendor GEMM epilogue).
 # F02/cholesky M3 2026-10-06 repaired admitted shape2309 reached shared
 # subtract; fit B/A0.9514, solve0.9839, quality equal. Fallback controls301/
 # 1027 gave fit0.1728/1.0274, solve0.7310/1.0019 and do not establish route gain.
@@ -267,7 +273,7 @@ def fast_trsm_panel_kernel(
         return
     var lane = Int(lane_id())
     var r = j0 + nb + gw
-    var y = InlineArray[Float32, FTP_REGS](fill=0.0)
+    var y = Array[Float32, FTP_REGS](fill=0.0)
     for c in range(nb):
         var jc = j0 + c
         var p = Float32(0)
@@ -319,11 +325,15 @@ def fast_gemm_nt_sub_lower(
         )
         return
 
-    @parameter
+    @__parameter
     @always_inline
     def epi[
         dtype: DType, width: SIMDLength, *, alignment: Int = 1
-    ](idx: IndexList[2], val: SIMD[dtype, width]) capturing -> None:
+    ](coord: Coord, val: SIMD[dtype, width]) capturing -> None:
+        # Mojo 1.2.0: matmul hands the epilogue a rank-2 `Coord` (row, column)
+        # instead of an `IndexList[2]`; convert it back, the arithmetic is unchanged.
+        comptime assert coord.rank == 2, "the matmul epilogue contract is rank 2"
+        var idx = rebind[IndexList[2]](coord_to_index_list(coord))
         var i = off + idx[0]
         comptime for w in range(Int(width)):
             var j = off + idx[1] + w

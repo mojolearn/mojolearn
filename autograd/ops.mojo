@@ -51,11 +51,11 @@
 # OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials and
 # OP_AGF_LEVEL's in-place fold of its own group of partials.
 from sequence.ops import Args, FP, ld, st, add, sub, mul
+from core.row_cells import softmax_row_from_max_f32
 from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
     identical_tanh,
 )
-from std.sys.compile import is_defined
 
 # Sequence codes 120/121 are recurrent scan kernels, intercepted before the
 # generic dispatcher. Codes OP_AG_FIRST..OP_AG_LAST are this family, on both
@@ -115,8 +115,10 @@ def agk_colsum_args(a: Args) -> Args:
 # ag_fold_block(rows) = 64 rows is one block: the fold is then the column
 # sum's chain term for term and keeps the one launch, so its bits are the
 # old bits; longer batches get new bits on every column and the host
-# together. -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF restores the column sum.
-comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF"]()
+# together.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF (the column-sum old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_PASS2_FOLD alias; code recoverable at 094332d07e.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF.patch
 
 # BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
 # 2): a fused linear node with a bias, a divisor and both a weight and a bias
@@ -131,8 +133,10 @@ comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF
 # every column and the host together. Other linear nodes keep pass 2's db.
 # The column sum is one chain over the batch rows a column, run by a thread
 # that also folds its own K = rows GEMM chain in the same tile, so the tile
-# keeps the GEMM's shape of parallelism. -D MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.
-comptime AUTOGRAD_PASS3_DB = not is_defined["MOJOLEARN_AUTOGRAD_PASS3_DB_OFF"]()
+# keeps the GEMM's shape of parallelism.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PASS3_DB_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_PASS3_DB alias; code recoverable at 0399c92e07.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.patch
 
 # Lane ag-pass6-fold (2026-10-19, PASS6_IDEAS ideas D(2), F(2), H(1)): tape-
 # side changes, identical (no word moves), each default on with an _OFF arm.
@@ -142,19 +146,23 @@ comptime AUTOGRAD_PASS3_DB = not is_defined["MOJOLEARN_AUTOGRAD_PASS3_DB_OFF"]()
 #     launches above 64 terms (1 at most 64), backward 2 -> 1. The terms are
 #     ftz(loss_term(ld p, ld y)), the word a stored term reads back as; the
 #     VJP's upstream factor mul(ld(g, 0), factor) is REDUCE_VJP's stored
-#     word, kept in a register. -D MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.
+#     word, kept in a register. The only route (MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF deleted, TOMBSTONE below).
 #   AUTOGRAD_TRANSPOSE_VIEW (F(2)): tape.transpose records the node without
 #     its copy; matmul reads the parent's buffer through GEMM strides (the
 #     same words in the same k order); any other reader materializes the
 #     copy once, when it first reads the value (Tape._use / materialize).
-#     -D MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.
+#     The only route: MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF is deleted (TOMBSTONE below).
 #   AUTOGRAD_CURVE_WORD (H(1)): model_fit's per-batch curve word (the loss
 #     times the batch rows) is stored by the loss's own fold launch
 #     (mul(loss, B) on the loss's stored word, as tape.scale computes it)
 #     instead of a scale launch and a copy launch: 2 launches a batch fewer.
-#     -D MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.
-comptime AUTOGRAD_TRANSPOSE_VIEW = not is_defined["MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF"]()
-comptime AUTOGRAD_CURVE_WORD = not is_defined["MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF"]()
+#     The only route: MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF is deleted (TOMBSTONE below).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_TRANSPOSE_VIEW alias; code recoverable at 5b147f4046.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.patch
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_CURVE_WORD alias; code recoverable at fdb70ce42d.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.patch
 
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a
 # runtime integer (a.i1 / a.i0) inside their operation's body.
@@ -207,7 +215,7 @@ comptime AXIS_COLS = 1
 # an element t), on Metal, NVIDIA and AMD alike; HostExec runs the same
 # bodies in an ascending loop, so every column takes one path.
 #
-# GEOMETRY BEFORE (v1, -D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF; lane ag-pass3-fold
+# GEOMETRY BEFORE (v1, deleted 2026-11-15 with MOJOLEARN_AUTOGRAD_FOLD_V2_OFF; lane ag-pass3-fold
 # read it from the code 2026-10-19). Block length R = ag_fold_block(n): the
 # smallest power of two >= 64 with R * R >= n, n the folded extent.
 #   AXIS_ROWS (rows x cols, one output a column): PART ceil(rows / R) * cols
@@ -265,14 +273,14 @@ comptime AXIS_COLS = 1
 #     4096 x 4096 all:  262144 x 64; 4096 x 64; 64 x 64; 1 x 64     (new)
 #     any extent <= 64: one launch, outputs x extent        (same bits)
 # ---------------------------------------------------------------------------
-# A/B define (lane ag-pass3-fold, default on = v2): -D
-# MOJOLEARN_AUTOGRAD_FOLD_V2_OFF restores v1 (the sqrt block rule, two
-# launches, one load a term) for the orchestrator's digest comparison.
-comptime AUTOGRAD_FOLD_V2 = not is_defined["MOJOLEARN_AUTOGRAD_FOLD_V2_OFF"]()
-# AUTOGRAD_LOSS_REDUCED (lane ag-pass6-fold, described with the tape flags
-# above) needs v2's leaf (ag_part_finish): a FOLD_V2_OFF build keeps
-# loss_terms + mean / sum.
-comptime AUTOGRAD_LOSS_REDUCED = AUTOGRAD_FOLD_V2 and not is_defined["MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (v1: the sqrt block rule, two launches, one load a term; old path,
+# no A/B recorded) deleted 2026-11-15 by lane/expdel2-24-neural with _agk_bin_vjp_part_v1, _ag_reduce_part_v1 and
+# _ag_reduce_fold_v1; code recoverable at 01ab3e0d37.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.patch
+# (Sweep 2026-11-15: the AUTOGRAD_FOLD_V2 = True constant removed; nothing imports it.)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural with the AUTOGRAD_LOSS_REDUCED alias; code recoverable at 56d165c105.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch
 # v2's leaf block length and tree fan-in. A fixed 64 (v1's smallest block):
 # from size reasoning, not a shape: long enough that a leaf thread's chain
 # amortises its launch slot, short enough that 8-wide load groups cover a
@@ -543,45 +551,8 @@ def _agk_bin_vjp_part_v2(t: Int, a: Args):
 @always_inline
 def op_agk_bin_vjp_part(t: Int, a: Args):
     """Partial sums of the blocked fold of a broadcast operand's binary VJP
-    (see _agk_bin_vjp_part_v1; v2 by default, AUTOGRAD_FOLD_V2)."""
-    comptime if AUTOGRAD_FOLD_V2:
-        _agk_bin_vjp_part_v2(t, a)
-    else:
-        _agk_bin_vjp_part_v1(t, a)
-
-
-@always_inline
-def _agk_bin_vjp_part_v1(t: Int, a: Args):
-    """Partial sums of the blocked fold of a broadcast operand's binary VJP:
-    op_ag_reduce_part over the matrix op_ag_bin_vjp would write, with each
-    term computed in place (ftz, as the stored word reads back) instead of
-    loaded. op_ag_bin_vjp's slots (p0..p3, i1..i8, i10; the folded source
-    is the i2 x i3 output), plus p4 partials, i0 axis, i9 block length B
-    (ag_fold_block of the folded extent). Thread mapping and partial layout
-    are op_ag_reduce_part's; the second launch is OP_AG_REDUCE_FOLD."""
-    var rows = a.i2
-    var cols = a.i3
-    var B = a.i9
-    var s = Float32(0)
-    if a.i0 == AXIS_ALL:
-        var lo = t * B
-        var hi = min(lo + B, rows * cols)
-        for k in range(lo, hi):
-            s = add(s, ftz(_bin_vjp_at(k, a)))
-    elif a.i0 == AXIS_ROWS:
-        var c = t % cols
-        var lo = (t // cols) * B
-        var hi = min(lo + B, rows)
-        for r in range(lo, hi):
-            s = add(s, ftz(_bin_vjp_at(r * cols + c, a)))
-    else:
-        var nb = (cols + B - 1) // B
-        var r = t // nb
-        var lo = (t % nb) * B
-        var hi = min(lo + B, cols)
-        for k in range(lo, hi):
-            s = add(s, ftz(_bin_vjp_at(r * cols + k, a)))
-    st(a.p4, t, s)
+    (v2, the only geometry)."""
+    _agk_bin_vjp_part_v2(t, a)
 
 
 @always_inline
@@ -708,47 +679,8 @@ def ag_leaf_span(t: Int, rows: Int, cols: Int, axis: Int, B: Int) -> Tuple[Int, 
 
 @always_inline
 def op_ag_reduce_part(t: Int, a: Args):
-    """The blocked fold's first launch (v2 by default, AUTOGRAD_FOLD_V2;
-    _ag_reduce_part_v1 under MOJOLEARN_AUTOGRAD_FOLD_V2_OFF)."""
-    comptime if AUTOGRAD_FOLD_V2:
-        _ag_reduce_part_v2(t, a)
-    else:
-        _ag_reduce_part_v1(t, a)
-
-
-@always_inline
-def _ag_reduce_part_v1(t: Int, a: Args):
-    """Partial sums of a blocked fold. p0 source (i1 rows x i2 cols), p1
-    partials, i0 axis, i3 block length B (ag_fold_block of the folded
-    extent). Each partial is its block's terms added ascending from +0.0.
-      AXIS_ALL:  thread t = block t of the i1*i2 elements; p1[t].
-      AXIS_ROWS: thread t = (block t // i2, column t % i2), folding rows;
-                 p1[t] (block-major).
-      AXIS_COLS: thread t = (row t // nb, block t % nb), folding columns;
-                 p1[t] (row-major), nb = ceil(i2 / B)."""
-    var rows = a.i1
-    var cols = a.i2
-    var B = a.i3
-    var s = Float32(0)
-    if a.i0 == AXIS_ALL:
-        var lo = t * B
-        var hi = min(lo + B, rows * cols)
-        for k in range(lo, hi):
-            s = add(s, ld(a.p0, k))
-    elif a.i0 == AXIS_ROWS:
-        var c = t % cols
-        var lo = (t // cols) * B
-        var hi = min(lo + B, rows)
-        for r in range(lo, hi):
-            s = add(s, ld(a.p0, r * cols + c))
-    else:
-        var nb = (cols + B - 1) // B
-        var r = t // nb
-        var lo = (t % nb) * B
-        var hi = min(lo + B, cols)
-        for k in range(lo, hi):
-            s = add(s, ld(a.p0, r * cols + k))
-    st(a.p1, t, s)
+    """The blocked fold's first launch (v2, the only geometry)."""
+    _ag_reduce_part_v2(t, a)
 
 
 @always_inline
@@ -835,39 +767,8 @@ def apply_autograd_fold[OP: Int](t: Int, a: Args):
 
 @always_inline
 def op_ag_reduce_fold(t: Int, a: Args):
-    """The blocked fold's last launch (v2 by default, AUTOGRAD_FOLD_V2;
-    _ag_reduce_fold_v1 under MOJOLEARN_AUTOGRAD_FOLD_V2_OFF)."""
-    comptime if AUTOGRAD_FOLD_V2:
-        _ag_reduce_fold_v2(t, a)
-    else:
-        _ag_reduce_fold_v1(t, a)
-
-
-@always_inline
-def _ag_reduce_fold_v1(t: Int, a: Args):
-    """Second launch of the blocked fold: p1[t] = (the partials of output t,
-    p0, added ascending from +0.0) * f0, or / f0 when i4 = 1. i0 axis, i1
-    rows, i2 cols, i3 B as in op_ag_reduce_part. AXIS_ALL: one output; AXIS_ROWS: thread t =
-    column t; AXIS_COLS: thread t = row t."""
-    var rows = a.i1
-    var cols = a.i2
-    var B = a.i3
-    var s = Float32(0)
-    if a.i0 == AXIS_ALL:
-        var nb = (rows * cols + B - 1) // B
-        for k in range(nb):
-            s = add(s, ld(a.p0, k))
-    elif a.i0 == AXIS_ROWS:
-        var nb = (rows + B - 1) // B
-        for k in range(nb):
-            s = add(s, ld(a.p0, k * cols + t))
-    else:
-        var nb = (cols + B - 1) // B
-        for k in range(nb):
-            s = add(s, ld(a.p0, t * nb + k))
-    # i4 = 1: the fused linear node's bias gradient divided by its divisor,
-    # as op_colsum_div divides its column sum (AUTOGRAD_PASS2_FOLD)
-    _fold_finish(t, a, s)
+    """The blocked fold's last launch (v2, the only geometry)."""
+    _ag_reduce_fold_v2(t, a)
 
 
 @always_inline
@@ -898,12 +799,8 @@ def op_ag_softmax_fwd(t: Int, a: Args):
         # each exponential once (lane ag-pass2-kernels): parked in the
         # output row, read back for the division (this thread's own words;
         # p1 never overlaps p0). The same words as computing it twice.
-        for k in range(cols):
-            var e = ftz(identical_exp(sub(ld(a.p0, base + k), maximum)))
-            total = add(total, e)
-            st(a.p1, base + k, e)
-        for k in range(cols):
-            st(a.p1, base + k, div(ld(a.p1, base + k), total))
+        # core/row_cells.mojo, the one body of these statements.
+        softmax_row_from_max_f32(a.p0, a.p1, base, cols, maximum)
     else:
         for k in range(cols):
             total = add(total, ftz(identical_exp(sub(ld(a.p0, base + k), maximum))))

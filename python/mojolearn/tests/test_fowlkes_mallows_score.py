@@ -9,19 +9,16 @@ binding those tests are skipped and say so. The surface, manifest and
 oracle checks read the source and always run.
 """
 
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from mojolearn import host_surface, metrics
 
-ROOT = Path(__file__).resolve().parents[3]
-
-
 def _binding_or_skip():
     try:
-        metrics._get_binding()
+        # the public call runs in the default numeric_mode, identical
+        metrics._get_binding("identical")
     except Exception as exc:  # the refusal names the missing binding
         pytest.skip(f"no metrics binding on this install: {exc}")
 
@@ -37,16 +34,6 @@ def test_manifest_covers_the_lane_and_the_export():
     assert "metrics-fowlkes-mallows" in fam["training_lanes"]
     assert "fowlkes_mallows_score" in fam["exports"]
     assert "metrics.fowlkes_mallows_score" in fam["classes"]
-
-
-def test_both_bindings_register_it_and_the_oracle_carries_sabotage():
-    for rel in ("bindings/_mojolearn_metrics.mojo", "bindings/_mojolearn_metrics_host.mojo"):
-        assert '("fowlkes_mallows_score")' in (ROOT / rel).read_text()
-    oracle = (ROOT / "metrics/host/metrics_oracle.mojo").read_text()
-    body = oracle.split("def host_fowlkes_mallows(", 1)[1].split("\ndef ", 1)[0]
-    assert "comptime if METRICS_ORACLE_HOST_SABOTAGE:" in body
-    imports = [line for line in oracle.splitlines() if line.startswith(("from ", "import "))]
-    assert not [line for line in imports if "gpu" in line or "DeviceContext" in line], imports
 
 
 def test_sparse_is_refused_by_name():

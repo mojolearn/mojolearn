@@ -52,11 +52,12 @@ leg (the cheapest box) builds it. A Python-only release therefore rents
 nothing for builds; its NVIDIA and AMD release columns still run from the
 packed wheel as before.
 
-The previous release is the newest bench/results/release_verification/
-<date>_pypi_<v>/ record (its alpha manifests name the published wheels and
-their sha256, its light-smoke receipts the source commit); its identities
-come from binding-identities.json in that record when the release wrote one,
-otherwise from `git archive` of its commit.
+The previous release is the release evidence set at bench/results/release_evidence/
+(tools/release_evidence_set.py; each release replaces it, so it holds the newest
+published release): its alpha manifests name the published wheels and their
+sha256, its light-smoke receipts the source commit; its identities come from
+binding-identities.json in the set when the release wrote one, otherwise from
+`git archive` of its commit.
 
 A PUBLISHED CANDIDATE (2026-10-15): a freeze tools/release.py published to
 TestPyPI (or PyPI) under <evidence>/release/<version>/<commit12>/ records every
@@ -65,6 +66,18 @@ publish manifests (candidate_builds). make_plan plans against the PyPI record
 and every newer candidate and keeps the source that reuses the most; its
 bytes come from the candidate's own build directory, else its TestPyPI
 wheels, verified the same way. Each REUSE row names its build (reuse_from).
+
+AN OWED A/B ARM REUSES ITS BASE BUILD (lane arm-build-reuse, 2026-11-16). A measurement build with defines (the B
+arm, tools/release.py candidate --owed-arm) plans against the BASE build: the measurement build of the same commit
+and targets with no defines (base_build, the A set), never against PyPI, whose release is a different commit and so
+reuses nothing (2026-11-15: every arm planned 0 REUSE / 211 BUILD and dispatched every shard of both sets). Every
+binding's identity equals the base's (same commit, same facts), so every row is REUSE until apply_defines moves
+the rows whose source closure names a define to BUILD (a guard module that only refuses the define reads it too).
+unit_plan lifts that to the shard units of the GitHub build (a merged group builds when one member builds; a unit
+whose members cannot be read builds); the legs skip the REUSE units (release_github_build.py run --skip-units)
+and the assemble job takes their archives from the binding cache, whose content key is the base build's because
+tools/bincache.py scope_build_defines drops a define no file of the closure names; the pack then places the base
+wheel's bytes for REUSE rows (assemble_linux), an NVIDIA rebuild having to reproduce them.
 """
 import argparse
 import datetime as dt
@@ -94,9 +107,9 @@ SCHEMA = "mojolearn.binding-identity.v2"
 #: whole-file sha256. A record in it is upgraded only by reproducing it
 #: exactly from the release's own commit (previous_identities).
 SCHEMA_V1 = "mojolearn.binding-identity.v1"
-#: v3 includes declared Python build helpers in the filtered source archive.
-#: Recompute old facts rather than reusing a cached missing-helper result.
-FACTS_SCHEMA = "mojolearn.release-tree-facts.v3"
+#: v4 includes the archive Unicode generator and its separate input digest.
+#: Recompute old facts rather than reusing a cached missing-generator result.
+FACTS_SCHEMA = "mojolearn.release-tree-facts.v4"
 #: The builder view of the runtime closure: every list kept whole.
 RUNTIME_VIEW = ""
 PLAN_SCHEMA = "mojolearn.release-reuse-plan.v1"
@@ -132,17 +145,61 @@ PTX_WITNESSES = {"proof": "build/build-provenance.json",
                  "stage": "build/sets/cuda/sm_80/manifest.json"}
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
-LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
+#: Every Linux set a release builds; LINUX_SETS is this unless a measurement build scoped it (scope_linux_sets).
+ALL_LINUX_SETS = LINUX_SETS
+#: The vendor wheel each vendor's sets pack into (python/mojolearn/gpu_plugins.py PLUGINS).
+SET_WHEELS = {"cuda": "nvidia", "hip": "amd"}
+
+
+def scope_linux_sets(targets):
+    """THE MEASUREMENT BUILD'S TARGETS (tools/release.py candidate --targets; AGENTS.md part 8: measure on the
+    NVIDIA L40S only). Rebinds LINUX_SETS for this process to the sets of TARGETS (a comma list of arches, in
+    ALL_LINUX_SETS order), so the plan, the legs, the assembly and the pack see only those sets and no wheel of
+    another vendor is packed. Empty TARGETS keeps every set. Returns the scoped tuple.
+
+    A vendor is built whole or not at all: the nvidia wheel refuses to import, on an sm_89 device too, without its
+    PTX slot (python/mojolearn/_backend.py "is missing its PTX set" / "PTX slot metadata"), so sm_89,sm_80 is the
+    smallest NVIDIA set. The host-owner leg (HOST_LEG) is always in: it builds the core's host bindings.
+    A release never calls this (Release refuses a scoped LINUX_SETS without a candidate version)."""
+    global LINUX_SETS
+    arches = [t.strip() for t in (targets or "").split(",") if t.strip()]
+    if not arches:
+        LINUX_SETS = ALL_LINUX_SETS
+        return LINUX_SETS
+    by_arch = {arch: (vendor, arch) for vendor, arch in ALL_LINUX_SETS}
+    unknown = [a for a in arches if a not in by_arch]
+    if unknown or len(set(arches)) != len(arches):
+        raise SystemExit(f"--targets is a comma list of {', '.join(by_arch)}, each once; not {targets!r}")
+    chosen = {by_arch[a] for a in arches}
+    for vendor in {v for v, _ in chosen}:
+        whole = {s for s in ALL_LINUX_SETS if s[0] == vendor}
+        if not whole <= chosen:
+            raise SystemExit(
+                f"--targets {targets}: the {SET_WHEELS[vendor]} wheel needs every {vendor} set "
+                f"({','.join(a for _, a in sorted(whole))}); it refuses to import without its PTX slot "
+                f"(python/mojolearn/_backend.py), so the smallest NVIDIA set is sm_89,sm_80")
+    if HOST_LEG not in chosen:
+        raise SystemExit(f"--targets {targets}: the host-owner set {HOST_LEG[1]} builds the core's host bindings "
+                         "and must be in")
+    LINUX_SETS = tuple(s for s in ALL_LINUX_SETS if s in chosen)
+    return LINUX_SETS
+
+
+def scoped_wheels():
+    """The vendor wheels ('nvidia', 'amd') the current LINUX_SETS pack."""
+    return [w for v, w in SET_WHEELS.items() if any(s[0] == v for s in LINUX_SETS)]
+LINUX_BUILDERS = ("packaging/native_library_sources.py", "packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                   "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
                   "packaging/linux/binding_timeout.sh", "packaging/linux/ptx_contract.py",
                   "packaging/linux/cubin_contract.py", "tools/release_modes.py")
-MACOS_BUILDERS = ("packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
+MACOS_BUILDERS = ("packaging/native_library_sources.py", "packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
                   "python/setup.py", "tools/release_modes.py")
 PORTABLE_MATH = "packaging/portable_math"
+# Absent only in historical source trees; current staging imports this helper.
+OPTIONAL_BUILD_HELPERS = ("packaging/native_library_sources.py",)
 GENERATORS = "tokenizer/tools"
 NVIDIA_IMAGE_RE = re.compile(r'LEG_IMAGE_NVIDIA="\$\{MOJOLEARN_GEMM_LEG_IMAGE_NVIDIA:-([^}]+)\}"')
 AMD_IMAGE_RE = re.compile(r"^IMAGE=(\S+)", re.M)
-RECORD_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_pypi_(\d+)$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -457,7 +514,8 @@ def linux_phase_builders(tree, identities):
     if any(Path(name).name.encode() in compile_bytes for name in CUDA_PHASE_HELPERS):
         raise ValueError('CUDA helper now executes outside its post-compilation boundary')
     data = {name: (compile_bytes if name == rel else (tree / name).read_bytes())
-            for name in LINUX_BUILDERS if name not in CUDA_PHASE_HELPERS}
+            for name in LINUX_BUILDERS if name not in CUDA_PHASE_HELPERS
+            and (name not in OPTIONAL_BUILD_HELPERS or (tree / name).is_file())}
     def view(members):
         return {name: builder_view(name, content, members) for name, content in data.items()}
     return dict(schema='mojolearn.linux.builder-phases.v1',
@@ -554,7 +612,8 @@ def wanted(name):
     return (name.endswith((".mojo", ".mojopkg")) or name.startswith(("bindings/", "tokenizer/", "packaging/"))
             or (name.startswith("tools/") and name.endswith(".sh"))
             or name in LINUX_BUILDERS + MACOS_BUILDERS
-            or name in ("pixi.toml", "pixi.lock", "python/setup.py"))
+            or name in ("pixi.toml", "pixi.lock", "python/setup.py",
+                        "tools/gen_archive_unicode.py", "tools/generated_sources.py"))
 
 
 def extract_tree(commit, dest, root=ROOT):
@@ -585,8 +644,15 @@ def toolchain(tree, plat):
     if not lock.is_file():
         return None
     text = lock.read_text(errors="replace")
+    # Only the `default` environment's packages: since MAX 26.7 the lock pins one
+    # `max-<v>-3.<py>release` per Python version across environments, and the
+    # build box installs the default environment only (2026-11-12: every Linux
+    # leg of the first 1.2.0 measurement build failed the pin check on the
+    # 3.13 package of the other environment).
+    env = re.search(r"^  default:\n(.*?)(?=^  [A-Za-z0-9_-]+:\n|^[A-Za-z]|\Z)", text, re.S | re.M)
+    scope = env.group(1) if env else text
     pkgs = sorted(set(re.findall(
-        r"conda\.modular\.com/max/%s/((?:mojo|mojo-compiler|max|max-core)-[^/\s]+)\.conda" % re.escape(plat), text)))
+        r"conda\.modular\.com/max/%s/((?:mojo|mojo-compiler|max|max-core)-[^/\s]+)\.conda" % re.escape(plat), scope)))
     return dict(platform=plat, packages=pkgs, pixi_lock_sha256=sha256(lock))
 
 
@@ -608,10 +674,11 @@ def image_pins(tree):
 
 def dir_digest(tree, rel):
     base = Path(tree) / rel
-    if not base.is_dir():
+    if not base.exists():
         return None
     h = hashlib.sha256()
-    for p in sorted(base.rglob("*")):
+    paths = [base] if base.is_file() else sorted(base.rglob("*"))
+    for p in paths:
         if p.is_file():
             h.update(p.relative_to(tree).as_posix().encode() + b"\0" + sha256(p).encode() + b"\n")
     return h.hexdigest()
@@ -622,12 +689,20 @@ def tree_facts(tree):
     tree = Path(tree)
     closures = {}
     scripts = sorted({b.script for t in (LINUX, MACOS) for b in bindings(t)})
-    for script in scripts:
-        path = tree / "bindings" / script
-        if not path.is_file():
-            closures[script] = None
-            continue
-        info, rels = bincache.source_digest(tree, str(path), [])
+    # One source closure per build script, each independent (about 10 s apiece, 89 scripts: 15 minutes serial on
+    # the Mac, the dry-run tests' timeouts): one process per script across the cores (MOJOLEARN_REUSE_WORKERS caps
+    # it; a closure walk holds well under 200 MB).
+    present = [s for s in scripts if (tree / "bindings" / s).is_file()]
+    closures.update({s: None for s in scripts if s not in present})
+    workers = max(1, min(len(present), int(os.environ.get("MOJOLEARN_REUSE_WORKERS") or os.cpu_count() or 1)))
+    if workers == 1:
+        results = [bincache.source_digest(tree, str(tree / "bindings" / s), []) for s in present]
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(bincache.source_digest, [tree] * len(present),
+                                    [str(tree / "bindings" / s) for s in present], [[]] * len(present)))
+    for script, (info, rels) in zip(present, results):
         closures[script] = dict(info, sources=sorted(rels))
     files, views = {}, {}
     names = sorted({b.name for t in (LINUX, MACOS) for b in bindings(t)})
@@ -642,7 +717,9 @@ def tree_facts(tree):
         views[rel][RUNTIME_VIEW] = builder_view(rel, data, None)
     return dict(closures=closures, builders=files, builder_views=views, image=image_pins(tree),
                 toolchain={LINUX: toolchain(tree, LINUX), MACOS: toolchain(tree, MACOS)},
-                generators=dir_digest(tree, GENERATORS), portable_math=dir_digest(tree, PORTABLE_MATH))
+                generators=dir_digest(tree, GENERATORS), portable_math=dir_digest(tree, PORTABLE_MATH),
+                generated_inputs={"core/archive_unicode_names_generated.mojo":
+                                  dir_digest(tree, "tools/gen_archive_unicode.py")})
 
 
 def facts_for_commit(commit, cache_dir, root=ROOT):
@@ -661,11 +738,29 @@ def facts_for_commit(commit, cache_dir, root=ROOT):
     with tempfile.TemporaryDirectory(prefix="mojolearn-tree-") as d:
         extract_tree(commit, d, root)
         facts = tree_facts(d)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(schema=FACTS_SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
-    tmp.replace(cache)
+    atomic_write_text(cache, json.dumps(dict(schema=FACTS_SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
     return facts
+
+
+def atomic_write_text(path, text):
+    """Write TEXT to PATH through a temp file of this process and thread only, then one atomic rename. Ten
+    `release.py candidate` controllers of one commit all wrote `identities/<sha40>.tmp` and renamed it; the
+    losers' renames raised FileNotFoundError in reuse-plan (2026-11-12 22:50 ET, sgd1). The facts of one commit
+    are the same bytes whoever writes them, so the last rename wins harmlessly and no lock is needed."""
+    import tempfile
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".tmp-%d-" % os.getpid(), dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def darwin_toolchain():
@@ -682,7 +777,8 @@ def builder_digests(facts, rels, view):
     None for a builder the tree does not have or a view it has no entry for
     (unreadable() then builds)."""
     views = facts.get("builder_views") or {}
-    return {rel: (views.get(rel) or {}).get(view) for rel in rels}
+    return {rel: (views.get(rel) or {}).get(view) for rel in rels
+            if rel not in OPTIONAL_BUILD_HELPERS or facts.get("builders", {}).get(rel) is not None}
 
 
 def identity(b, facts, host_toolchain=None, schema=SCHEMA):
@@ -695,7 +791,8 @@ def identity(b, facts, host_toolchain=None, schema=SCHEMA):
         return None
     builders = LINUX_BUILDERS if b.target == LINUX else MACOS_BUILDERS
     if schema == SCHEMA_V1:
-        builder_ids = {rel: facts["builders"].get(rel) for rel in builders}
+        builder_ids = {rel: facts["builders"].get(rel) for rel in builders
+                       if rel not in OPTIONAL_BUILD_HELPERS or facts["builders"].get(rel) is not None}
     else:
         builder_ids = builder_digests(facts, builders, b.name)
     ident = dict(schema=schema, target=b.target, vendor=b.vendor, arch=b.arch, tier=b.tier, name=b.name,
@@ -703,6 +800,11 @@ def identity(b, facts, host_toolchain=None, schema=SCHEMA):
                  generators=facts["generators"] if any(s.startswith("tokenizer/") for s in closure["sources"]) else None,
                  toolchain=facts["toolchain"][b.target], flags=b.flags(),
                  builders=builder_ids)
+    if ("core/native_archive_unicode_names.mojo" in closure["sources"]
+            or "core/archive_unicode_names_generated.mojo" in closure["sources"]):
+        ident["generated_inputs"] = {
+            "core/archive_unicode_names_generated.mojo":
+            facts.get("generated_inputs", {}).get("core/archive_unicode_names_generated.mojo")}
     if schema != SCHEMA_V1:
         ident["builder_rule"] = BUILDER_RULE
     if b.target == LINUX:
@@ -724,7 +826,8 @@ def runtime_identity(facts, schema=SCHEMA):
     ident = dict(schema=schema, target=LINUX, what="runtime", toolchain=facts["toolchain"][LINUX],
                  image=dict(facts["image"]), portable_math=facts["portable_math"])
     if schema == SCHEMA_V1:
-        ident["builders"] = {rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS}
+        ident["builders"] = {rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS
+                             if rel not in OPTIONAL_BUILD_HELPERS or facts["builders"].get(rel) is not None}
     else:
         ident["builders"] = builder_digests(facts, LINUX_BUILDERS, RUNTIME_VIEW)
         ident["builder_rule"] = BUILDER_RULE
@@ -769,33 +872,25 @@ def compare(cur, prev):
 
 # ---------------------------------------------------------------- the previous release
 def previous_release(root=ROOT):
-    """The newest published release record: version, commit, wheels."""
-    base = Path(root) / "bench" / "results" / "release_verification"
-    best = None
-    for d in sorted(base.iterdir()) if base.is_dir() else []:
-        m = RECORD_RE.match(d.name)
-        if not m or not (d / "alpha-manifest-linux.json").is_file():
-            continue
-        try:
-            linux = json.loads((d / "alpha-manifest-linux.json").read_text())
-        except (OSError, ValueError):
-            continue
-        version = linux.get("version")
-        if not version:
-            continue
-        vt = tuple(int(x) for x in re.findall(r"\d+", version))
-        if best is None or vt > best[0]:
-            best = (vt, d, linux)
-    if best is None:
+    """The newest published release record: version, commit, wheels (the release evidence set)."""
+    import release_evidence_set
+    d = release_evidence_set.current_dir(root)
+    if d is None or not (d / "alpha-manifest-linux.json").is_file():
         return None
-    _, d, linux = best
+    try:
+        linux = json.loads((d / "alpha-manifest-linux.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if not linux.get("version"):
+        return None
     rec = dict(version=linux["version"], record_dir=str(d), source_commit=(linux.get("light_smoke", {}).get("source_commit")
                                                   or linux.get("qualification_reuse", {}).get("source_commit")))
     # "nvidia" and "amd": the split Linux plugins (python/mojolearn/gpu_plugins.py),
     # recorded beside the core's alpha-manifest-linux.json by a split release
     import runpy
     registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
-    for platform in ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]())):
+    # "nvidia-ptx": the PTX wheel releases up to 0.8.65 published (read only; 2026-11-05 folded it into nvidia)
+    for platform in ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()), "nvidia-ptx"):
         try:
             doc = json.loads((d / f"alpha-manifest-{platform}.json").read_text())
         except (OSError, ValueError):
@@ -837,7 +932,8 @@ def version_tuple(v):
 def _platforms():
     import runpy
     registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
-    return ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()))
+    # "nvidia-ptx": read only, from candidates up to 0.8.65 that published the PTX wheel (2026-11-05)
+    return ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]()), "nvidia-ptx")
 
 
 def candidate_builds(evidence_root, platforms=None):
@@ -1146,16 +1242,28 @@ def materialize_ptx_leg(proof, whl, dest):
     device file and index the proof names, the runtime closure the stage
     manifest lists and any adapters the proof names, each verified against the
     proof or the wheel's payload. A tree retained under the evidence root is
-    returned as it is. Returns the release-build directory."""
+    returned as it is while every device file its proof names is on disk; a
+    PRUNED tree (lane fb9-arm-builds, 2026-11-17: tools/release_candidate.py
+    prune_set keeps a measurement build's .json records, the witnesses among
+    them, and deletes its leg trees' .so files, so a B arm that rebuilds only
+    the host leg found mojolearn/cuda/sm_80/identical/_mojolearn_native.so
+    missing) is materialized like a record-only proof, from its retained raw
+    witnesses and the wheel. Returns the release-build directory."""
     if proof.get("release_build"):
-        return Path(proof["release_build"])
+        rb = Path(proof["release_build"])
+        named = (_read_json(rb / PTX_WITNESSES["proof"]) or {}).get("extensions") or {}
+        sets = rb / "build" / "sets"
+        if named and all((sets / Path(*Path(n).parts[1:])).is_file() for n in named):
+            return rb
     import gzip
     dest = Path(dest)
     if dest.exists():
         shutil.rmtree(dest)
     for key, rel in PTX_WITNESSES.items():
         w = proof["witnesses"][key]
-        data = gzip.decompress(Path(w["file"]).read_bytes())
+        raw = Path(w["file"]).read_bytes()
+        # a record's witnesses are gzip (record_ptx_proof); a retained leg tree's are the files themselves
+        data = gzip.decompress(raw) if str(w["file"]).endswith(".gz") else raw
         if hashlib.sha256(data).hexdigest() != w["sha256"]:
             raise SystemExit(f"release_reuse: the retained PTX {key} witness changed")
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -1194,8 +1302,229 @@ def materialize_ptx_leg(proof, whl, dest):
 
 
 # ---------------------------------------------------------------- the plan
+def _grep_files(commit, args, root):
+    p = subprocess.run(["git", "-C", str(root), "grep", "-l"] + args + [commit, "--"], capture_output=True, text=True)
+    if p.returncode not in (0, 1):
+        raise SystemExit("release_reuse: git grep for the candidate defines failed: " + p.stderr.strip()[:300])
+    prefix = commit + ":"
+    return {line[len(prefix):] for line in p.stdout.splitlines() if line.startswith(prefix)}
+
+
+def define_readers(commit, names, root=ROOT):
+    """The files of COMMIT that read any of the define NAMES. A `.mojo` file reads a define when the QUOTED name
+    ("NAME") stands on a line that is not a `#` comment line: that covers `is_defined["NAME"]`,
+    `get_defined_int["NAME", default]` and the forms that put the name on its own line after `is_defined[`
+    (the Mamba kernels do). A bare mention in a comment or a TOMBSTONE line compiles to the same bytes with or
+    without `-D NAME`, so it is not a reader (lane owed-deletions, 2026-11-16: the guard modules' "refusal removed
+    ... restored" comment lines made 14 and 19 binding scripts rebuild where 5 and 4 read the code). The rule errs
+    towards BUILD: a quoted name in a docstring or a message counts as a read. Every other file (build scripts,
+    JSON, docs) is matched by the whole word. The rule is bincache.reads_define, the one the cache key uses
+    (bincache.scope_build_defines), so a unit planned REUSE is keyed define-free and hits the base's archive."""
+    if not names:
+        return set()
+    words = []
+    for n in names:
+        words += ["-e", n]
+    named = _grep_files(commit, ["-w", "-F"] + words, root)
+    reads = set()
+    if any(f.endswith(".mojo") for f in named):
+        quoted = []
+        for n in names:
+            quoted += ["-e", '"' + n + '"']
+        p = subprocess.run(["git", "-C", str(root), "grep", "-n", "-F"] + quoted + [commit, "--", "*.mojo"],
+                           capture_output=True, text=True)
+        for line in p.stdout.splitlines():
+            parts = line.split(":", 3)          # <commit>:<path>:<lineno>:<text>
+            if len(parts) == 4 and any(bincache.mojo_line_reads_define(parts[3], n) for n in names):
+                reads.add(parts[1])
+    return {f for f in named if not f.endswith(".mojo")} | (reads & named)
+
+
+def apply_defines(rows, current, facts, readers, names, timed=None):
+    """CANDIDATE DEFINES (tools/release.py candidate --defines): every Linux row decided REUSE whose closure
+    (its script and the Mojo sources it reaches, the identity's own closure) names a define is BUILT, because
+    the published bytes were compiled without it. Rows that read none keep their decision: their bytes are
+    the define-free ones by construction (tools/bincache.py scope_build_defines builds them the same way).
+
+    TIMED SETS (`timed`, a set of (vendor, arch); tools/release.py candidate --timed-on, lane fx-build-tools
+    2026-11-18): a B arm timed on some sets only (the NVIDIA L40S loads the native sm_89 set and never the PTX
+    slot sm_80, python/mojolearn/_backend.py "THE PTX SLOT") moves only the device rows of those sets; the device
+    rows of every other set stay REUSE and ship the base's bytes, compiled without the define, so no leg runs
+    for them (49 of the 112 d652a4b0a1 arm legs were sm_80 builds no A/B executed). Host rows always move: the
+    host owner's host bindings ship in every set. The row's reason says it, and the plan records `timed_sets`.
+    Returns the rows it moved."""
+    moved = []
+    for r, (b, _) in zip(rows, current):
+        if r["target"] != LINUX or r["decision"] != "REUSE":
+            continue
+        closure = facts["closures"].get(b.script) or {}
+        hits = sorted(({"bindings/" + b.script} | set(closure.get("sources", []))) & readers)
+        if not hits:
+            continue
+        why = "candidate defines %s: read by %s" % (",".join(names), ", ".join(hits[:4]))
+        if timed is not None and r["tier"] != "host" and (r["vendor"], r["arch"]) not in timed:
+            r.update(reason="untimed set: the base's bytes, compiled without the define (" + why + ")")
+            continue
+        r.update(decision="BUILD", reuse_from=None, reason=why)
+        moved.append(r)
+    return moved
+
+
+def launch_legs(rows, rt_decision, arm=False):
+    """(legs, why) of a plan: the "<vendor>-<arch>" legs to launch, in LINUX_SETS order, and each one's reason.
+    A set's leg runs when one of its device rows BUILDs; host rows or a runtime BUILD with no such leg run the host
+    owner's leg (HOST_LEG, the cheapest). In a B ARM (a plan with a base, ARM) host rows BUILD beside other sets'
+    legs also run the host owner's leg: the arm assembles every set from its base and its own legs, and a set's
+    merged host file serving a BUILD row must be its own leg's. Without a base the PTX leg builds the host bindings
+    and the host composition carries them to every set (unchanged)."""
+    legs, why = [], {}
+    for vendor, arch in LINUX_SETS:
+        need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
+                and (r["vendor"], r["arch"]) == (vendor, arch) and r["decision"] == "BUILD"]
+        if need:
+            legs.append(f"{vendor}-{arch}")
+            why[f"{vendor}-{arch}"] = f"{len(need)} binding(s) to build"
+    host_build = [r for r in rows if r["target"] == LINUX and r["tier"] == "host" and r["decision"] == "BUILD"]
+    if not legs and (host_build or rt_decision == "BUILD"):
+        name = "%s-%s" % HOST_LEG
+        legs.append(name)
+        why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
+            " need a build box and no set does: the cheapest leg builds them"
+    elif arm and host_build and HOST_LEG in LINUX_SETS and "%s-%s" % HOST_LEG not in legs:
+        # Host rows BUILD and only other sets' legs run (a B arm timed on some sets whose PTX set was refused: its
+        # sm_80 leg runs, the timed sm_89 set reads the define in host bindings only). The host owner's set is
+        # assembled from its own leg (place_merged: a merged host file serving a binding to BUILD must be the
+        # set's leg's), so its leg runs. 2026-11-19 arm fx-lc-test-reuse: legs cuda-sm_80 only, refused at assemble
+        # ("cuda/sm_89 _mojolearn_native_orchestration_host.so serves ... to BUILD and no leg built it").
+        name = "%s-%s" % HOST_LEG
+        legs = [f"{v}-{a}" for v, a in LINUX_SETS if f"{v}-{a}" in legs or (v, a) == HOST_LEG]
+        why[name] = "%d host binding(s) to build: the host owner's set is assembled from its own leg" % len(host_build)
+    return legs, why
+
+
+def timed_sets(arches):
+    """The (vendor, arch) sets of a comma list of ARCHES (tools/release.py candidate --timed-on), or None for
+    empty (every set is timed: the default)."""
+    names = [a.strip() for a in (arches or "").split(",") if a.strip()] if isinstance(arches, str) else list(arches or [])
+    if not names:
+        return None
+    by_arch = {arch: (vendor, arch) for vendor, arch in ALL_LINUX_SETS}
+    unknown = [a for a in names if a not in by_arch]
+    if unknown:
+        raise SystemExit(f"--timed-on is a comma list of {', '.join(by_arch)}; not {','.join(unknown)}")
+    return {by_arch[a] for a in names}
+
+
+def base_build(work, commit, targets, dry=False):
+    """The BASE of a B arm: the measurement build at WORK (<work root>/<version without label>) of COMMIT with no
+    defines, as a reuse source record (the shape of candidate_builds): its wheels from linux/final/candidate.json
+    (sha256 verified again by published_wheel), its identities from its reuse/plan.json, its legs (the PTX proof)
+    under its build dir. None when there is no such build, or it built other targets or other defines. Under DRY a
+    base still building (its state.json names COMMIT) is returned as `pending`: planned from this commit's own
+    identities, which the finished base will carry, so the dry run shows the arm's split before the A set lands;
+    a real run never takes a pending base."""
+    work = Path(work)
+    state = _read_json(work / "state.json") or {}
+    cand = state.get("candidate") or {}
+    if state.get("commit") != commit or cand.get("defines"):
+        return None
+    had = cand.get("targets") or [s for _, s in ALL_LINUX_SETS]
+    if [t for t in targets if t not in had]:
+        return None
+    d = work / commit[:12]
+    doc = _read_json(d / "linux" / "final" / "candidate.json") or {}
+    plan = _read_json(d / "reuse" / "plan.json") or {}
+    rec = dict(version=cand.get("version") or work.name, source_commit=commit, build_dir=str(d), record_dir=None,
+               channel="base", base=True)
+    for platform in ("linux", *SET_WHEELS.values()):
+        info = (doc.get("wheels") or {}).get(platform)
+        rec[platform] = dict(wheel=info["file"], sha256=info["sha256"]) if info else None
+    rec["macos"] = None
+    complete = (doc.get("source_commit") == commit and not doc.get("defines") and rec["linux"]
+                and plan.get("schema") == PLAN_SCHEMA and plan.get("commit") == commit)
+    if complete:
+        rec["identities"] = str(d / "reuse" / "plan.json")
+        return rec
+    if not dry:
+        return None
+    rec.update(identities=None, pending=True, linux=dict(wheel="<pending>", sha256=None))
+    for platform in SET_WHEELS.values():
+        rec[platform] = dict(wheel="<pending>", sha256=None)
+    return rec
+
+
+def unit_entry(tier, group=None, name=None):
+    """The shard entry of release_github_build.plan_set that compiles a row: "<tier>:merged_build.sh:<group>" in
+    the merged layout, else the binding's own "<numeric mode>:<script>" (host scripts build under identical)."""
+    if group is not None:
+        return f"{tier}:merged_build.sh:{group}"
+    script = "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"
+    return ("identical" if tier == "host" else tier) + ":" + script
+
+
+def commit_groups(commit, tiers, root=ROOT):
+    """{tier: {group: [members]}} of COMMIT's merged layout on Linux (its own tools/merged_bindings.py plan, as
+    release_github_build.source_groups runs it on the box), or None for a per-binding commit. Read from `git
+    archive` of bindings/ and that tool, never from a working tree."""
+    import release_github_build
+    import tempfile
+    if not release_github_build.commit_merged(commit, root=root):
+        return None
+    with tempfile.TemporaryDirectory(prefix="mojolearn-groups-") as d:
+        p = subprocess.Popen(["git", "-C", str(root), "archive", "--format=tar", commit, "--", "bindings",
+                              "tools/merged_bindings.py"], stdout=subprocess.PIPE)
+        with tarfile.open(fileobj=p.stdout, mode="r|") as tf:
+            tf.extractall(d, filter="data")
+        if p.wait() != 0:
+            raise SystemExit(f"release_reuse: git archive of {commit[:12]}'s merged layout failed")
+        return {tier: release_github_build.source_groups(d, tier) for tier in tiers}
+
+
+def unit_plan(plan, groups):
+    """The plan's Linux rows lifted to the shard units each launched leg compiles: {"vendor/arch": [{unit,
+    decision, members, reason}]}. A unit is BUILD when any row it compiles is BUILD (a merged file is one `mojo
+    build`), or when a member it names has no row in the plan (its closure cannot be established here); REUSE
+    otherwise. Host units are listed under every set (each leg's tree holds the host groups)."""
+    rows = [r for r in plan["rows"] if r["target"] == LINUX]
+    host = {r["name"]: r for r in rows if r["tier"] == "host"}
+    out = {}
+    for vendor, arch in LINUX_SETS:
+        dev = {(r["tier"], r["name"]): r for r in rows if r["tier"] != "host" and (r["vendor"], r["arch"]) == (vendor, arch)}
+        units = []
+        if groups is None:
+            members = [(unit_entry(t, name=n), [r]) for (t, n), r in dev.items()]
+            members += [(unit_entry("host", name=n), [r]) for n, r in host.items()]
+            for entry, rs in members:
+                units.append(dict(unit=entry, members=[rs[0]["name"]], decision=rs[0]["decision"],
+                                  reason=rs[0]["reason"] if rs[0]["decision"] == "BUILD" else ""))
+        else:
+            for tier, gs in sorted(groups.items()):
+                for group, names in sorted(gs.items()):
+                    rs = [host.get(n) if tier == "host" else dev.get((tier, n)) for n in names]
+                    unknown = [n for n, r in zip(names, rs) if r is None]
+                    build = [r for r in rs if r is not None and r["decision"] != "REUSE"]
+                    if unknown:
+                        why = "members without a plan row (closure not established): " + ", ".join(unknown[:4])
+                    elif build:
+                        why = "; ".join(f"{r['name']}: {r['reason']}" for r in build[:3]) + (
+                            f"; and {len(build) - 3} more" if len(build) > 3 else "")
+                    else:
+                        why = ""
+                    units.append(dict(unit=unit_entry(tier, group), members=list(names),
+                                      decision="BUILD" if (unknown or build) else "REUSE", reason=why))
+        out[f"{vendor}/{arch}"] = units
+    return out
+
+
+def skip_units(plan, vendor, arch):
+    """The shard entries a leg of (vendor, arch) does not compile in shard jobs: the plan's REUSE units of a
+    base-reusing plan (empty for any other plan, so a release dispatches exactly as before)."""
+    units = (plan.get("units") or {}).get(f"{vendor}/{arch}") or []
+    return [u["unit"] for u in units if u["decision"] == "REUSE"]
+
+
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None, modes=None):
+              evidence_root=None, candidates=None, modes=None, defines="", base=None, timed=None):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -1207,7 +1536,10 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     each planned against; the plan takes the one that reuses the most
     bindings (runtime closure included), ties going to the newer build. With
     no candidate the plan is exactly the PyPI one. Every REUSE row names its
-    build in `reuse_from`; `considered` lists every source weighed."""
+    build in `reuse_from`; `considered` lists every source weighed.
+
+    `timed` (arches, a B arm with a `base` only; apply_defines TIMED SETS): the
+    define's device rows build only in those sets; the others ship the base's."""
     modes = release_modes() if modes is None else parse_modes(modes)
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
@@ -1233,13 +1565,14 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         host_toolchain = darwin_toolchain()
     current = [(b, identity(b, facts, host_toolchain)) for target in (LINUX, MACOS) for b in bindings(target, modes)]
     rt = runtime_identity(facts)
-    sources = reuse_sources(prev, candidates, commit) or [None]
+    # a B arm's base (the A set of this commit) is its only source: nothing else is this commit
+    sources = [base] if base else (reuse_sources(prev, candidates, commit) or [None])
     plans = []
     for src in sources:
         try:
             plans.append(_decide(commit, root, cache_dir, facts, current, rt, src, evidence_root))
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
-            if src is prev:
+            if src is prev or src is base:
                 raise
             # an unreadable candidate record is passed over, never fatal: the PyPI record still plans
             plans.append(dict(source=src, unusable="%s: %s" % (type(exc).__name__, exc)))
@@ -1253,6 +1586,15 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     rows, runtime, prev, prev_source = best["rows"], best["runtime"], best["source"], best["prev_source"]
     rt_decision = runtime["decision"]
     ptx_proof = best.get("ptx_proof")
+    names = [e.split("=", 1)[0] for e in (defines or "").split(",") if e]
+    if names:
+        moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names,
+                              timed=timed_sets(timed) if base else None)
+        if ptx_proof and any((r["vendor"], r["arch"]) == PTX_SET for r in moved):
+            # the published PTX set was compiled without the defines: it cannot be taken whole. Its leg runs
+            # and proves its own set (_settle_ptx), so its other rows stay REUSE like any set's: refusing
+            # every PTX row rebuilt all 33 sm_80 bindings for a define four of them read (lane arm-build-reuse)
+            ptx_proof = None
     # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
     # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
     # (a device binding of its set builds, or it is the cheapest leg for a host
@@ -1266,23 +1608,18 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         _refuse_ptx(rows, "the published set is taken with the host owner's host bindings and no %s-%s leg runs "
                     "at this freeze" % HOST_LEG)
         ptx_proof = None
-    legs, why = [], {}
-    for vendor, arch in LINUX_SETS:
-        need = [r for r in rows if r["target"] == LINUX and not r["tier"] == "host"
-                and (r["vendor"], r["arch"]) == (vendor, arch) and r["decision"] == "BUILD"]
-        if need:
-            legs.append(f"{vendor}-{arch}")
-            why[f"{vendor}-{arch}"] = f"{len(need)} binding(s) to build"
-    host_build = [r for r in rows if r["target"] == LINUX and r["tier"] == "host" and r["decision"] == "BUILD"]
-    if not legs and (host_build or rt_decision == "BUILD"):
-        name = "%s-%s" % HOST_LEG
-        legs.append(name)
-        why[name] = ("%d host binding(s)" % len(host_build) if host_build else "the runtime closure") + \
-            " need a build box and no set does: the cheapest leg builds them"
-    return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    legs, why = launch_legs(rows, rt_decision, arm=bool(base))
+    plan = dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
-                builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes))
+                builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes),
+                **({"candidate_defines": defines} if defines else {}),
+                **({"timed_sets": sorted(a for _, a in timed_sets(timed))} if defines and base and timed_sets(timed)
+                   else {}))
+    if base:
+        # the shard units of the launched legs (unit_plan); only a base-reusing plan skips any
+        plan["units"] = unit_plan(plan, commit_groups(commit, list(modes) + ["host"], root))
+    return plan
 
 
 def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=None):
@@ -1290,8 +1627,13 @@ def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=Non
     (None: no published record), and its score (REUSE rows + runtime)."""
     if prev:
         prev_rows, prev_runtime, prev_source = previous_identities(prev, cache_dir, root)
-        changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
-            if prev.get("source_commit") else set()
+        # changed_files only names the moved sources in a BUILD reason; a previous source commit missing
+        # from this clone (a shallow CI checkout) leaves that detail out and decides nothing differently
+        try:
+            changed_files = set(git("diff", "--name-only", prev["source_commit"], commit, root=root).split()) \
+                if prev.get("source_commit") else set()
+        except subprocess.CalledProcessError:
+            changed_files = set()
     else:
         prev_rows, prev_runtime, prev_source, changed_files = {}, None, "no published release record", set()
     origin = dict(version=prev.get("version"), channel=prev.get("channel") or "pypi",
@@ -1369,6 +1711,9 @@ def _settle_ptx(rows, rt_decision, prev, evidence_root, origin):
     ptx = _ptx_device_rows(rows)
     if not ptx or any(r["decision"] != "REUSE" for r in ptx):
         return None
+    if prev and prev.get("pending"):
+        # a dry run against a base still building: its sm_80 leg will hold the proof (base_build)
+        return dict(source="the pending base build %s (its sm_80 leg)" % prev.get("version"), pending=True)
     if rt_decision != "REUSE":
         _refuse_ptx(rows, "the runtime closure changes, so the published set's original stage inventory does not hold")
         return None
@@ -1468,7 +1813,37 @@ def render(plan, full=False):
     elif reuses:
         out.append("   REUSE: %d bindings from %s %s (--full lists them)" % (
             len(reuses), prev.get("version"), prev.get("channel") or "pypi"))
+    out += render_units(plan)
     return "\n".join(out)
+
+
+def unit_counts(plan):
+    """{"vendor/arch": (BUILD units, REUSE units)} of a base-reusing plan, counted over the launched legs' sets
+    and over the sets whose leg does not run (all REUSE)."""
+    return {s: (sum(u["decision"] == "BUILD" for u in us), sum(u["decision"] == "REUSE" for u in us))
+            for s, us in (plan.get("units") or {}).items()}
+
+
+def render_units(plan):
+    if not plan.get("units"):
+        return []
+    prev = plan.get("previous") or {}
+    out = ["   SHARD UNITS against the base build %s%s (REUSE: no shard job; the assemble job takes the base's "
+           "archive from the binding cache):" % (prev.get("version"), " (pending)" if prev.get("pending") else "")]
+    total = sum(len(us) for us in plan["units"].values())
+    built = 0
+    for s, us in plan["units"].items():
+        leg = s.replace("/", "-") in plan["legs"]
+        b = [u for u in us if u["decision"] == "BUILD"]
+        built += len(b) if leg else 0
+        out.append("     %-12s BUILD %2d  REUSE %2d  %s" % (s, len(b), len(us) - len(b),
+                                                         "leg runs" if leg else "no leg: the base's set"))
+        for u in b if leg else []:
+            out.append("       BUILD %-52s %s" % (u["unit"], u["reason"][:200]))
+    if total and built == sum(len(us) for s, us in plan["units"].items() if s.replace("/", "-") in plan["legs"]) \
+            and plan["legs"]:
+        out.append("     FULL BUILD: every unit of every launched leg reads %s" % plan.get("candidate_defines"))
+    return out
 
 
 # ---------------------------------------------------------------- published bytes
@@ -1532,6 +1907,29 @@ def linux_payload(whl):
         if len(names) != 1:
             raise SystemExit(f"release_reuse: {whl} carries no LINUX_PAYLOAD.json")
         return json.loads(z.read(names[0]))
+
+
+def payload_runtime_mismatches(whl):
+    """The runtime members of WHL whose bytes differ from its own LINUX_PAYLOAD runtime_sha256 (or are missing),
+    as 'member: got X, payload Y' lines. The pack step refuses a final wheel with any: a B arm reuses the runtime
+    closure from its base wheel against exactly these records (extract_member), so a base that disagrees with
+    itself is refused at the base's pack instead of at every arm's assemble. A member the wheel does not carry is
+    skipped (a split plugin's payload lists the shared closure that ships in the core wheel)."""
+    with zipfile.ZipFile(whl) as z:
+        names = [n for n in z.namelist() if n.endswith(".dist-info/LINUX_PAYLOAD.json")]
+        if len(names) != 1:
+            return []           # no payload, nothing a B arm could reuse against (linux_payload refuses it there)
+        payload = json.loads(z.read(names[0]))
+    out = []
+    with zipfile.ZipFile(whl) as z:
+        members = set(z.namelist())
+        for member, want in sorted((payload.get("runtime_sha256") or {}).items()):
+            if member not in members:
+                continue
+            got = hashlib.sha256(z.read(member)).hexdigest()
+            if got != want:
+                out.append(f"{member}: got {got[:12]}, payload {want[:12]}")
+    return out
 
 
 def extract_member(z, member, dest, want_sha=None):

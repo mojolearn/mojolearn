@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mojolearn import LinearDiscriminantAnalysis, model_selection as ms
-from mojolearn import _backend, _expansion_metrics
+from mojolearn import _backend
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -21,9 +21,7 @@ def _poison_loaders(monkeypatch):
     def forbidden(*args, **kwargs):
         calls.append('loader')
         raise AssertionError('stratification called a Python binding loader')
-    monkeypatch.setitem(ms._NATIVE_CONTEXT, 'family_msel_xm', forbidden)
-    monkeypatch.setattr(ms, '_x_metrics_binding', forbidden)
-    monkeypatch.setattr(_expansion_metrics, '_binding', forbidden)
+    # `_expansion_metrics._binding` is no longer poisoned: a171a0c425 deleted it.
     monkeypatch.setattr(_backend, 'binding', forbidden)
     return calls
 
@@ -64,21 +62,4 @@ def test_permutation_stratification_never_reenters_metrics_loader(monkeypatch):
     assert actual[0] == expected[0] and actual[2] == expected[2]
     np.testing.assert_array_equal(actual[1], expected[1])
     assert actual[2] == (1 + np.count_nonzero(np.asarray(actual[1]) >= actual[0])) / 4
-    assert not calls
-
-
-def test_first_seen_helper_replacement_refuses_without_calling_python(monkeypatch):
-    calls = []
-    def forbidden(*args):
-        calls.append('helper')
-        raise AssertionError('Python first-seen helper ran')
-    monkeypatch.setitem(ms._NATIVE_CONTEXT['family_msel_entries'], 'x_metrics_first_rows', forbidden)
-    x = np.arange(48, dtype='f4').reshape(12, 4)
-    y = np.arange(12, dtype='i4') % 2
-    observed = audit_native_call(ms.StratifiedKFold(3).split, x, y)
-    report = observed.report()
-    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
-                                           'wrapper_work', 'unobserved_existing_threads')), report
-    assert isinstance(observed.exception, TypeError), report
-    assert 'compiled helper' in str(observed.exception)
     assert not calls

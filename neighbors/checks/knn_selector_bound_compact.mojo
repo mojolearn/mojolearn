@@ -73,7 +73,7 @@ index and a moved distance.
 flagged launch (through the small-k kernel's own SABOTAGE instantiation),
 so a row that took the fallback is seen to have taken it.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

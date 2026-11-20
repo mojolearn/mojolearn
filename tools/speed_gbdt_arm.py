@@ -285,10 +285,21 @@ def emit_warmup(lane, arm, shape, ms):
     sys.stdout.flush()
 
 
-def emit_round(lane, arm, shape, index, ms, digest):
-    print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=%s"
-          % (lane, arm, shape, index, ms, digest or "-"))
+def emit_round(lane, arm, shape, index, ms, digest, calls=None):
+    """`calls` (SMALL ROWS, 2026-11-15): the scored run's calls record (tools/bench_board_small_rows.spread);
+    more than one call appends `calls= min_ms= max_ms=` after the hash, and `ms` is their median."""
+    print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=%s%s"
+          % (lane, arm, shape, index, ms, digest or "-", _small_rows().line_suffix(calls)))
     sys.stdout.flush()
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py (small rows: the median of consecutive calls in the one scored run)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_small_rows
+    return bench_board_small_rows
 
 
 def emit_acc(lane, arm, metric, value):
@@ -467,6 +478,27 @@ def _smoke_staging():
         sys.path.insert(0, here)
     import smoke_inproc
     return smoke_inproc if smoke_inproc.in_process() else None
+
+
+def _smoke_input(npz_path):
+    """The file a loader opens: `npz_path`, or, in the release measurement smoke's synthetic mode
+    (MOJOLEARN_BOARD_INPUTS=synthetic, set by bench_board.py --smoke --inputs synthetic), a synthetic file in this
+    file's own schema at the loader-side smoke size, generated on the box now (tools/smoke_inputs.py synthetic_path:
+    SMOKE_TRAIN_ROWS head rows + SMOKE_TEST_ROWS tail rows, the tail marked by its `smoke_tail` array). A timed run
+    never sets the variable and returns `npz_path` without importing anything. Returns (path, synthetic)."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") != "synthetic":
+        return npz_path, False
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import smoke_inputs
+    return smoke_inputs.synthetic_path(npz_path), True
+
+
+def _smoke_test_rows(cached, keep=None):
+    """A synthetic file's test-tail rows after the loader's row filter `keep` (tools/smoke_inputs.py tail_rows)."""
+    import smoke_inputs
+    return smoke_inputs.tail_rows(cached, keep)
 
 
 def _open_npz(path):
@@ -752,7 +784,7 @@ def load_higgs(size, rows_cap=None):
     """
     folder = os.path.join(data_root(), "higgs")
     gz_path = os.path.join(folder, "HIGGS.csv.gz")
-    npz_path = os.path.join(folder, "higgs_speed.npz")
+    npz_path, synthetic = _smoke_input(os.path.join(folder, "higgs_speed.npz"))
     # A CACHE ENTRY THAT EXISTS IS NOT A CACHE ENTRY THAT LOADS.
     #
     # `os.path.exists` stood here and it sent a ZERO-BYTE stub down the
@@ -801,7 +833,7 @@ def load_higgs(size, rows_cap=None):
         y = np.ascontiguousarray(np.concatenate(ys))
         del xs, ys
         np.savez(npz_path, x=x, y=y)
-    n_test = 500000
+    n_test = _smoke_test_rows(cached) if synthetic else 500000
     n_train = x.shape[0] - n_test
     if size == "smoke":
         rows_cap = min(rows_cap or 50000, 50000)
@@ -885,7 +917,8 @@ def load_istella(size, rows_cap=None, regression=False, multiclass=False):
     THE DOWNLOAD IS 472 MB and is a SEPARATE, EXPLICITLY NAMED STEP
     (`--download istella`); the decode is minutes and is done there too."""
     folder = os.path.join(data_root(), "istella")
-    npz_path = os.path.join(folder, "istella_speed.npz")
+    # the synthetic file holds the train and test arrays at their full-file names (x_train ... r_test)
+    npz_path, _ = _smoke_input(os.path.join(folder, "istella_speed.npz"))
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
@@ -955,8 +988,8 @@ def load_istella_rank(rows_cap=None):
     cuts at the last query boundary at or below the cap. Grades stay 0..4,
     the target of every ranking loss here."""
     folder = os.path.join(data_root(), "istella")
-    speed = _open_npz(os.path.join(folder, "istella_speed.npz"))
-    rank = _open_npz(os.path.join(folder, "istella_rank.npz"))
+    speed = _open_npz(_smoke_input(os.path.join(folder, "istella_speed.npz"))[0])
+    rank = _open_npz(_smoke_input(os.path.join(folder, "istella_rank.npz"))[0])
     x_tr, r_tr = speed["x_train"], speed["r_train"]
     qid_tr = rank["qid_train"]
     if qid_tr.shape[0] != r_tr.shape[0]:
@@ -1117,7 +1150,7 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
     NAMED STEP (`--download taxi`, needs pyarrow); timed runs load the
     NumPy cache only."""
     folder = os.path.join(data_root(), "taxi")
-    npz_path = os.path.join(folder, "taxi_speed.npz")
+    npz_path, synthetic = _smoke_input(os.path.join(folder, "taxi_speed.npz"))
     cached = None
     if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
         try:
@@ -1144,6 +1177,10 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
         tip = np.concatenate([p[2] for p in parts])
         card = np.concatenate([p[3] for p in parts])
         np.savez(npz_path, x=x, fare=fare, tip=tip, card=card)
+    # the synthetic file's test tail, counted after this task's own row filter (card trips for the tip tasks)
+    n_test = TAXI_N_TEST
+    if synthetic:
+        n_test = _smoke_test_rows(cached, None if regression else card)
     if regression:
         y = fare
         name = "taxireg"
@@ -1157,7 +1194,6 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
         x, fare, tip = x[card], fare[card], tip[card]
         y = (tip >= 0.2 * fare).astype(np.float32)
         name = "taxicat" if categorical else "taxi"
-    n_test = TAXI_N_TEST
     n_train = x.shape[0] - n_test
     if size == "smoke":
         rows_cap = min(rows_cap or 50000, 50000)
@@ -2561,6 +2597,9 @@ def _blocking(name):
 BORDER_SAMPLE_ROWS = 200000
 #: the input_binning record both arms of an XGBoost pairing read back (tools/board_pairing.py)
 PREBIN_RECORD = "pre-binned input on both arms (GreedyLogSum, %d borders)"
+#: FAIRNESS FIX (2026-10-30): the record's training row count, the rows LightGBM's bin sample must cover
+#: (bench_board_params._semantic_lgbm_lossguide reads it back from the record)
+PREBIN_ROWS = "%d training rows"
 
 
 def prebinned_data(lane, data, cfg):
@@ -2603,10 +2642,12 @@ def prebinned_data(lane, data, cfg):
         pb.__dict__.pop(k, None)
     pb.X_train, pb.X_test = blk["x_train"], blk["x_test"]
     pb.bins_sha256 = blk["sha256"]
-    pb.input_binning = "%s; bins sha256 %s" % (PREBIN_RECORD % n_borders, blk["sha256"])
+    pb.input_binning = "%s; %s; bins sha256 %s" % (PREBIN_RECORD % n_borders,
+                                                   PREBIN_ROWS % int(np.asarray(blk["x_train"]).shape[0]),
+                                                   blk["sha256"])
     data._prebinned = pb
     emit_note(lane, ["*"], "input_binning", float(blk["widest"]),
-              "%s for the XGBoost pairing (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
+              "%s for the pre-binned pairings (XGBoost; LightGBM on gbdt-lossguide) (CatBoost %s Pool.quantize, %d-row border sample, seed %d; "
               "at most %d bins per feature; the CatBoost pairings take the raw rows)"
               % (pb.input_binning, blk["catboost_version"], BORDER_SAMPLE_ROWS, int(cfg["seed"]), blk["widest"]))
     return pb
@@ -3169,7 +3210,23 @@ def lightgbm_arms(lane, cfg, data, devices):
             "ROW-SAMPLING: LightGBM's rf boosting refuses bagging_fraction 1.0, so each tree would "
             "sample 63.2%% of rows without replacement where ours %s; another sample is another "
             "forest" % ("draws n rows with replacement" if lane == "rf" else "uses every row"))
-    raise RuntimeError(
+    # FAIRNESS FIX (2026-10-30): gbdt-lossguide races LightGBM (best-first leaf-wise growth is its only
+    # grower, the lane's Lossguide), paired with `ours-gain0` on the same pre-binned input
+    # (tools/board_pairing.py). The child rule: ours' min_samples_leaf 1 is "a non-empty child". LightGBM's
+    # min_data_in_leaf is checked on a count ESTIMATED from the hessian, RoundInt(hess * num_data /
+    # sum_hessian) (src/treelearner/feature_histogram.hpp:529-544; CUDA cuda_best_split_finder.cu:151,
+    # 219-225, LightGBM v4.7.0), so at 1 it refuses a non-empty child whose hessian share is under half a
+    # row's mean (a confidently-wrong row cannot be isolated): another rule, which changed the model in a
+    # CPU probe (~/mojolearn-evidence/lgbm-lossguide-mapping/probe/mincount.log). So LightGBM races
+    # min_child_samples 0 (the estimate never refuses) with min_child_weight 1e-12: an empty child holds
+    # hessian 0 (+kEpsilon 1e-15) and is refused, every non-empty child is admitted unless its rows' total
+    # logloss hessian is under 1e-12. LightGBM keeps min_data_in_leaf 0 only beside a hessian floor above
+    # kEpsilon (src/io/config.cpp:464-468), and at min_child_weight exactly 0 it aborts ("Check failed:
+    # (best_split_info.left_count) > (0)", reproduced on full taxi with LightGBM 4.7.0). Both values are
+    # declared (bench_board_params.EXCEPTIONS, value-conditional) and noted. Every other boosted lane keeps
+    # the refusal below.
+    if lane != "gbdt-lossguide":
+        raise RuntimeError(
         "MIN-CHILD: LightGBM 4.7.0 aborts at the lane's min_child_samples 1 and min_child_weight 0, "
         "and its defaults 20 and 1e-3 are another stopping rule than every other arm's; %s"
         % ("it also has no oblivious grower for this loss" if cfg.get("lightgbm_leafwise")
@@ -3274,16 +3331,32 @@ def lightgbm_arms(lane, cfg, data, devices):
         # Ultra board 2026-09-29, both cells REFUSED). So every boosted
         # LightGBM arm keeps LightGBM's defaults, and a non-task lane says so
         # in a mismatch line (the task lanes carry it in TASK_LANES).
-        p.update(min_child_samples=20, min_child_weight=1e-3)
-        if not cfg.get("task"):
+        if lane == "gbdt-lossguide":
+            # FAIRNESS FIX (2026-10-30), see the refusal comment above. The LightGBM-only knobs that
+            # change the work are set explicitly (read back and mapped value by value in
+            # bench_board_params._semantic_lgbm_lossguide): no random thresholds, no leaf-output clip,
+            # no path smoothing, full-precision gradients. The bin knobs (min_data_in_bin 1 and a bin
+            # sample of every training row) make every pre-binned id its own bin; they are set below,
+            # where the block is known.
+            p.update(min_child_samples=0, min_child_weight=1e-12, extra_trees=False, max_delta_step=0.0,
+                     path_smooth=0.0, use_quantized_grad=False)
+            emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
+                      "LightGBM min_child_samples 0 and min_child_weight 1e-12 (the other arms' 1 and 0): "
+                      "its min_data_in_leaf counts rows estimated from the hessian, so 0 drops that "
+                      "estimate and the 1e-12 floor refuses exactly the empty child (at a floor of 0 "
+                      "LightGBM aborts a tree); a non-empty child is admitted, as on every arm")
+        else:
+            p.update(min_child_samples=20, min_child_weight=1e-3)
+        if not cfg.get("task") and lane != "gbdt-lossguide":
             emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
                       "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its "
                       "defaults: at 0 (the other arms' value) LightGBM 4.7.0 aborts the "
                       "first tree (Check failed: best_split_info.left_count > 0)")
-        emit_note(lane, ["lightgbm-*"], "mismatch", 2.0,
-                  "LightGBM min_data_in_bin 3 (its default; ours, CatBoost and XGBoost have "
-                  "no minimum bin count) and a 200,000-row bin sample (ours "
-                  "border_build_max_samples 200000, CatBoost's 200000, XGBoost sketches every row)")
+        if lane != "gbdt-lossguide":
+            emit_note(lane, ["lightgbm-*"], "mismatch", 2.0,
+                      "LightGBM min_data_in_bin 3 (its default; ours, CatBoost and XGBoost have "
+                      "no minimum bin count) and a 200,000-row bin sample (ours "
+                      "border_build_max_samples 200000, CatBoost's 200000, XGBoost sketches every row)")
     # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
     # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
     # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
@@ -3315,6 +3388,26 @@ def lightgbm_arms(lane, cfg, data, devices):
     # reader of sample weights, is off on Logloss (boost_from_average False). CPU and CUDA run
     # this one data path. A fit that still ends with a single leaf is refused by name, so a model
     # that learned nothing is never scored as a quality cell.
+    # FAIRNESS FIX (2026-10-30): the gbdt-lossguide LightGBM arm fits and is scored on the pre-binned block
+    # of its own arm `ours-gain0` (tools/board_pairing.py, prebinned_data: once per dataset, outside every
+    # clock), as XGBoost does. Every feature holds at most 255 distinct bin ids. LightGBM's bin finder gives
+    # each distinct sampled value its own bin when there are at most max_bin of them and min_data_in_bin is
+    # 1 (src/io/bin.cpp:80-100 GreedyFindBin, the zero bin :164-200), and it samples
+    # min(subsample_for_bin, rows) rows, all of them at subsample_for_bin >= rows (src/c_api.cpp:987,
+    # include/LightGBM/utils/random.h:70-78 Sample(N, N)). So subsample_for_bin is the block's training row
+    # count: every bin id is its own bin, the split candidates of ours at border_build_max_samples 0.
+    if lane == "gbdt-lossguide" and (p.get("min_child_samples") != 0 or p.get("min_child_weight") != 1e-12):
+        # an override (MOJOLEARN_SPEED_LGBM_PARAMS) back to LightGBM's estimated-count child rule would read
+        # back "min_samples_leaf 1" equal to ours' by name while refusing other children: refused by name
+        raise RuntimeError(
+            "MIN-CHILD-ESTIMATE: LightGBM's min_data_in_leaf counts rows estimated from the hessian; only "
+            "min_child_samples 0 with min_child_weight 1e-12 is ours' non-empty-child rule (got %r and %r)"
+            % (p.get("min_child_samples"), p.get("min_child_weight")))
+    block = None
+    if board_pairing.prebinned_arm(lane, "lightgbm-cuda"):
+        block = prebinned_data(lane, data, cfg)
+        p.update(min_data_in_bin=1, subsample_for_bin=int(np.asarray(block.X_train).shape[0]))
+
     pos_weights = None
     if p.get("scale_pos_weight") is not None and data.task == "binary":
         y_bin = np.asarray(data.y_train)
@@ -3359,14 +3452,17 @@ def lightgbm_arms(lane, cfg, data, devices):
         # `opencl` is LightGBM's OpenCL learner (device_type 'gpu', a
         # USE_GPU=ON build), the GPU build that can run on an AMD box.
         device_type = {"cpu": "cpu", "opencl": "gpu"}.get(dev, "cuda")
-        out.append(Arm(
+        arm = Arm(
             "lightgbm-" + {"cpu": "cpu", "opencl": "opencl"}.get(dev, "cuda"),
             (lambda dt: (lambda: make(dt)))(device_type),
             _lgb_fit,
             _score_sklearn_like,
             sync=_cuda_sync,
             library="lightgbm",
-        ))
+        )
+        if block is not None and board_pairing.prebinned_arm(lane, arm.name):
+            attach_input(arm, block)
+        out.append(arm)
     return out
 
 
@@ -4566,12 +4662,18 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
     spent = {a.name: 0.0 for a in arms}
     last_model = {}
     operation_scores = {}
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's FIRST SCORED fit time decides
+    # how many consecutive fits its one scored run makes (20 under 10 ms, else 1); opponents always make one.
+    # The warm-up does not decide (it carries start-up and kernel compilation, and the AFT queue skips it).
+    small = _small_rows()
 
     for arm in arms:
         emit_header(lane, arm.name, dev, n_rounds, size)
 
     # The AFT full queue supplies its excluded warmup as a separate capture.
     # Historical callers retain the in-process warmup by default.
+    # An attribution run of an inference row (tools/ops/attribution_job.sh) does not time the fit: no fit warmup.
+    skip_warmup = skip_warmup or small.fit_warmup_skipped()
     live = list(arms) if skip_warmup else []
     for arm in (() if skip_warmup else arms):
         if time.time() > deadline:
@@ -4659,7 +4761,32 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
                         break
             except Exception:                      # noqa: BLE001
                 digest = None
-            emit_round(lane, arm.name, data.tag, r, ms, digest)
+            # SMALL ROWS: the rest of the scored run's fits, after the first fit's outputs were scored and
+            # hashed (same bits every fit); the accuracy below reads the last model, the same bits again
+            n_calls = small.calls_for(ms, arm.library == "mojolearn", "fit")
+            calls = [ms]
+            small.range_open(n_calls, "fit")           # attribution profile runs only (no-op otherwise)
+            try:
+                for _ in range(1, n_calls):
+                    if operation_prepare is not None:
+                        operation_prepare(arm, data)
+                    t0 = time.perf_counter()
+                    model = arm.make()
+                    arm.fit(model, arm.data or data)
+                    arm.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                    last_model[arm.name] = model
+            except Exception as exc:               # noqa: BLE001
+                small.range_close()
+                emit_refused(lane, arm.name, "%s at round %d call %d: %s"
+                             % (exc.__class__.__name__, r, len(calls) + 1,
+                                " ".join(str(exc).split())))
+                live.remove(arm)
+                continue
+            small.range_close()
+            spent[arm.name] += sum(calls[1:]) / 1000.0
+            rec = small.spread(calls)
+            emit_round(lane, arm.name, data.tag, r, rec["ms"], digest, rec)
 
     # Accuracy, once per arm, from the last model each arm produced. Outside
     # every timer, and after the whole table, so a scoring failure cannot

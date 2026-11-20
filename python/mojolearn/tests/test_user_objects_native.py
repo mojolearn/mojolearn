@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The native user-object reader (bindings/user_objects_native.mojo) against
+"""The native user-object reader (bindings/user_objects_native_door.mojo) against
 the Python each operation replaced."""
 import numbers
 

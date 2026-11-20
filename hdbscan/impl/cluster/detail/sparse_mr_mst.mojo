@@ -45,15 +45,13 @@ reported by its point and refused by name (DEVIATION 1607's rule).
 from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from checks.numerics import identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_scale, mr_max3
-from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES, C62_SAME_COMPONENT_SKIP
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
@@ -178,13 +176,13 @@ def sparse_mr_search_kernel(
 # ascending from 0.0, then `mr_edge_weight`; the per-point minimum is over
 # the total order (key, j), so the merge order of threads, slices and
 # launches cannot move it. `smr_fold_slices_kernel` folds the slices on the
-# device and only n_todo pairs come back. No launch bound off Apple. -D
-# MOJOLEARN_SMR_TILED_OFF=1 restores the per-pair kernel and the bound.
+# device and only n_todo pairs come back. No launch bound off Apple.
+# TOMBSTONE: MOJOLEARN_SMR_TILED_OFF (old path: the per-pair search and its launch bound on NVIDIA and AMD; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 4cadcc3fbd.
+# Restore: git apply experiments/removed/MOJOLEARN_SMR_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SMR_TILED = (
-    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not is_defined["MOJOLEARN_SMR_TILED_OFF"]()
+    TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD
 ) or HDB_SMR_TILED
-#: lane af-hdbscan2 (2026-10-03), FAST on Apple only, -D MOJOLEARN_HDB_SMR_TILED:
+#: lane af-hdbscan2 (2026-10-03), FAST on Apple only (HDB_SMR_TILED, the default):
 #: the tiled kernel above runs on Apple too, under a launch bound of
 #: SMR_APPLE_TILED_MACS multiply-adds (16x the per-pair kernel's: the tiled
 #: kernel issues 16 FMAs per 8 threadgroup reads, so a launch of this size is
@@ -278,32 +276,14 @@ def sparse_mr_search_tiled_kernel(
         var t = t0 + tid
         ti_s[unsafe_offset=tid] = todo[t] if t < n_todo else Int32(-1)
     barrier()
-    # C61 (default OFF): the block's one component when every listed point
-    # shares it (else -2); a j tile whose every point is in that component
-    # holds only cells the epilogue below excludes (`cj != ci[r]`), so the
-    # whole tile is skipped. Same cells written, same (key, j) minimum.
-    var uc_s = stack_allocation[
-        2, Scalar[DType.int32], address_space = AddressSpace.SHARED
-    ]()
-    comptime if C62_SAME_COMPONENT_SKIP:
-        if tid == 0:
-            var uc = Int32(-1)
-            for q in range(SMR_TI):
-                var i = Int(ti_s[unsafe_offset=q])
-                if i >= 0:
-                    var c = comp[i]
-                    if uc == Int32(-1):
-                        uc = c
-                    elif c != uc:
-                        uc = Int32(-2)
-            uc_s[unsafe_offset=0] = uc if uc >= 0 else Int32(-2)
-        barrier()
-    var ci = InlineArray[Int32, SMR_RI](fill=Int32(-1))
-    var ni = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-    var cri = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-    var bk = InlineArray[Int32, SMR_RI](fill=WEIGHT_KEY_SENTINEL)
-    var bj = InlineArray[Int32, SMR_RI](fill=SMR_NONE_J)
-    var bad = InlineArray[Bool, SMR_RI](fill=False)
+    # TOMBSTONE: MOJOLEARN_C62_SAME_COMPONENT_SKIP (its alias use here: the same-component tile skip and its shared cells; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at da8ebbce46.
+    # Restore: git apply experiments/removed/MOJOLEARN_C62_SAME_COMPONENT_SKIP.expdel2-11-cluster.patch.
+    var ci = Array[Int32, SMR_RI](fill=Int32(-1))
+    var ni = Array[Float32, SMR_RI](fill=Float32(0.0))
+    var cri = Array[Float32, SMR_RI](fill=Float32(0.0))
+    var bk = Array[Int32, SMR_RI](fill=WEIGHT_KEY_SENTINEL)
+    var bj = Array[Int32, SMR_RI](fill=SMR_NONE_J)
+    var bad = Array[Bool, SMR_RI](fill=False)
     comptime for r in range(SMR_RI):
         var i = Int(ti_s[unsafe_offset = ty + r * SMR_TY])
         if i >= 0:
@@ -320,23 +300,7 @@ def sparse_mr_search_tiled_kernel(
                 crj_s[unsafe_offset=tid] = core[j]
             else:
                 cj_s[unsafe_offset=tid] = Int32(-1)
-        comptime if C62_SAME_COMPONENT_SKIP:
-            # uc_s[unsafe_offset=1]: 1 when some j < jb of this tile leaves the block's
-            # component. Reset, barrier, mark, barrier, then a block-uniform
-            # read; the trailing barrier on a skip keeps the next reset
-            # behind every read.
-            if tid == 0:
-                uc_s[unsafe_offset=1] = Int32(0)
-            barrier()
-            if tid < SMR_TJ and jt + tid < jb:
-                if cj_s[unsafe_offset=tid] != uc_s[unsafe_offset=0]:
-                    uc_s[unsafe_offset=1] = Int32(1)
-            barrier()
-            if uc_s[unsafe_offset=0] >= 0 and uc_s[unsafe_offset=1] == Int32(0):
-                barrier()
-                jt += SMR_TJ
-                continue
-        var acc = InlineArray[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
+        var acc = Array[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
         var k0 = 0
         while k0 < d:
             comptime for q in range(SMR_KC * SMR_TI // SMR_TILED_TPB):
@@ -364,8 +328,8 @@ def sparse_mr_search_tiled_kernel(
             if kmax > SMR_KC:
                 kmax = SMR_KC
             for kk in range(kmax):
-                var av = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
-                var bv = InlineArray[Float32, SMR_RJ](fill=Float32(0.0))
+                var av = Array[Float32, SMR_RI](fill=Float32(0.0))
+                var bv = Array[Float32, SMR_RJ](fill=Float32(0.0))
                 comptime for r in range(SMR_RI):
                     av[r] = a_s[unsafe_offset = kk * SMR_TI + ty + r * SMR_TY]
                 comptime for c in range(SMR_RJ):
@@ -579,9 +543,8 @@ def smr_init_kernel(
 
 #: fg-tsne-dbscan H2 (IDENTICAL, NVIDIA and AMD, lane fg-tsne-dbscan
 #: 2026-10-09), MOJOLEARN_IDN_HDB_MST_SEED_KNN: the IDENTICAL DEFAULT since
-#: 2026-10-10 (lane/postmerge-act-7; `-D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF`
-#: restores the k = min_samples k-NN and the all-points round 1; the old
-#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2
+#: 2026-10-10 (lane/postmerge-act-7; the old on-define is refused in
+#: core/experiment_guards_cluster.mojo). fg2
 #: board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S default v1023
 #: -> v1048, MI325X a1163 -> a1188; ratio = arm / fg2 default on the same
 #: vendor): hdbscan istella NV 0.68x / AMD 0.72x, taxi NV 0.82x / AMD 0.83x;
@@ -607,12 +570,13 @@ def smr_init_kernel(
 #: non-finite (the search then refuses it by name), or when v* >= d_kk. The
 #: same MST: bits none. Cost: m x kk x d multiply-adds (the list) against the
 #: listed share of round 1's m x m x d. Off with a trace, sabotage, a direct-
-#: distance build or alpha > 1. -D MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.
+#: distance build or alpha > 1.
+# TOMBSTONE: MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF (old path: k = min_samples k-NN and the all-points round 1; the seed is the measured default, EXP:2064) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 3e2ad2e67b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_HDB_MST_SEED_KNN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not KNN_DIRECT_DISTANCE
-    and not is_defined["MOJOLEARN_IDN_HDB_MST_SEED_KNN_OFF"]()
 )
 
 
@@ -701,15 +665,13 @@ def smr_round_reset_kernel(
 #: parallelism) is sized from the list length, and a device-side bound would
 #: launch phase B at the whole-list shape. 3 -> 2 drains per round (+1 before
 #: the first round, as before). Integer plumbing only; bits none.
-#: `-D MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF` (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the three reads.
+# TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF (old path: three status reads per round on NVIDIA/AMD IDENTICAL; EXP:1714 owed, no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c6e7fbabc8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at c6e7fbabc8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
 comptime IDN_HDB_ROUND_ONE_SYNC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_HDB_ROUND_ONE_SYNC_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 
 # TOMBSTONE: MOJOLEARN_IDN_HDB_ROUND_LEAN (NOISE: hdbscan istella 0.997, taxi 1.008, v0133/a1715 vs A v0132/a1714) deleted 2026-10-11 by 826f3d57e; code recoverable at 826f3d57e^.
@@ -924,43 +886,8 @@ def smr_merge_kernel(
         pj[i] = jj
 
 
-def _c34_component_edge(comp: _I32P,pk: _I32P,pj: _I32P,state: _I32P,ckey: _I32P,clo: _I32P,chi: _I32P,m: Int32):
-    # One component owns a canonical triple reduction. 128 lanes and 1536
-    # shared bytes are scheduling choices; weight/endpoints define the key.
-    var component=Int(block_idx.x)
-    var lane=Int(thread_idx.x)
-    var ks=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var ls=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var hs=stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
-    var key=WEIGHT_KEY_SENTINEL
-    var lo=Int32.MAX
-    var hi=Int32.MAX
-    for row in range(lane,Int(m),128):
-        if Int(comp[row])==component and state[row]!=SMR_DROPPED and pj[row]>=0:
-            var lk=min(Int32(row),pj[row])
-            var hk=max(Int32(row),pj[row])
-            if pk[row]<key or (pk[row]==key and (lk<lo or (lk==lo and hk<hi))):
-                key=pk[row]
-                lo=lk
-                hi=hk
-    ks[lane]=key
-    ls[lane]=lo
-    hs[lane]=hi
-    barrier()
-    var width=64
-    while width>0:
-        if lane<width:
-            var other=lane+width
-            if ks[other]<ks[lane] or (ks[other]==ks[lane] and (ls[other]<ls[lane] or (ls[other]==ls[lane] and hs[other]<hs[lane]))):
-                ks[lane]=ks[other]
-                ls[lane]=ls[other]
-                hs[lane]=hs[other]
-        barrier()
-        width//=2
-    if lane==0:
-        ckey[component]=ks[0]
-        clo[component]=ls[0]
-        chi[component]=hs[0]
+# TOMBSTONE: MOJOLEARN_C34_PARALLEL_EDGES (its alias use here: _c34_component_edge, one block per component; owner lane expdel2-05-base) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at fc4d559503.
+# Restore: git apply experiments/removed/MOJOLEARN_C34_PARALLEL_EDGES.expdel2-11-cluster.patch.
 
 
 def smr_cmin_key_kernel(
@@ -1096,15 +1023,12 @@ def smr_edge_rank_kernel(
 #: fast_radix_sort.mojo`) instead of `smr_edge_rank_kernel`'s all-pairs
 #: count, which is m^2 triple compares (10^12 at a million points). The
 #: triples are distinct, so the stable lexicographic order IS the rank the
-#: count produces: same permutation, same MST arrays.
-#: `-D MOJOLEARN_IDN_SMR_RADIX_RANK_OFF=1` restores the count.
-comptime IDN_SMR_RADIX_RANK = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_SMR_RADIX_RANK_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: count produces: same permutation, same MST arrays. FAST keeps the count.
+# TOMBSTONE: MOJOLEARN_IDN_SMR_RADIX_RANK_OFF (old path: the all-pairs rank count under IDENTICAL; no A/B recorded) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at a5d64c0368.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SMR_RADIX_RANK_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same old path) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at a5d64c0368.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-11-cluster.patch.
+comptime IDN_SMR_RADIX_RANK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _U32P = MutPointer[UInt32, MutAnyOrigin]
 
 
@@ -1533,25 +1457,22 @@ def sparse_mr_mst_device(
             n_b, m, d, inv_alpha, sabotage, launch_macs,
         )
         # Each component's cheapest edge under (key, lo, hi).
-        comptime if C34_PARALLEL_EDGES:
-            ctx.enqueue_function[_c34_component_edge](comp_d.unsafe_ptr(),pk_d.unsafe_ptr(),pj_d.unsafe_ptr(),state_d.unsafe_ptr(),ckey_d.unsafe_ptr(),clo_d.unsafe_ptr(),chi_d.unsafe_ptr(),Int32(m),grid_dim=(m,1,1),block_dim=128)
-        else:
-            ctx.enqueue_function[smr_cmin_key_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
-                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
-            ctx.enqueue_function[smr_cmin_lo_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-                Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
-            ctx.enqueue_function[smr_cmin_hi_kernel](
-                comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
-                state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
-                chi_d.unsafe_ptr(), Int32(m),
-                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-            )
+        ctx.enqueue_function[smr_cmin_key_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_lo_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_hi_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            chi_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
         ctx.enqueue_function[smr_winner_kernel](
             comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
             state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
@@ -1721,9 +1642,9 @@ def sparse_mr_mst(
     )
     # cpu3-neighbors: the three edge arrays are copied straight into the
     # returned lists (no staging buffers, no host copy walk).
-    var lo = List[Int32](length=m - 1, fill=Int32(0))
-    var hi = List[Int32](length=m - 1, fill=Int32(0))
-    var w = List[Float32](length=m - 1, fill=Float32(0.0))
+    var lo = List[Int32](unsafe_uninit_length=m - 1)
+    var hi = List[Int32](unsafe_uninit_length=m - 1)
+    var w = List[Float32](unsafe_uninit_length=m - 1)
     ctx.enqueue_copy(dst_ptr=lo.unsafe_ptr(), src_buf=rows)
     ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=cols)
     ctx.enqueue_copy(dst_ptr=w.unsafe_ptr(), src_buf=wts)

@@ -116,38 +116,23 @@ The host sort below is unchanged and still does its own job: it fixes the
 ORDER of the set, which is a different property from WHICH set.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.sync import barrier
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from core.device_fold import device_sum_i32
-from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
-from std.sys.compile import is_defined
+from core.device_plan import DevicePlan
+from neighbors.impl.multi_gpu import knn_device_count, neighbors_device_plan, parallel_knn_rows
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.math import fma, sqrt
+from std.math import sqrt
+from core.admitted_finite_status import enqueue_finite_word
+from core.device_zero import enqueue_fill
+from core.device_query_x import QueryFold
+from core.msel_device_x import msel_device_x_f32
 
-comptime KNN_FAST_REFINE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
-)
-"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
-the same day: opt-in `-D MOJOLEARN_KNN_FAST_REFINE` (the old
-`-D MOJOLEARN_KNN_REFINE_QOLD` is harmless). OUTCOME (M3 afc_ab_def, full
-board size, 1 run per arm, tag rab5-knnref): knn recall_at_k identical
-(istella 0.982434, taxi 0.999773), istella 365.0 -> 378.4 ms (+3.7%), taxi
--1.5%: no gain. What it did: Euclidean / sqeuclidean
-`knn_search_resident` (what `NearestNeighbors.kneighbors` runs on a GPU)
-selects a pool of `min(n_index, 4 k, KNN_REFINE_POOL_MAX)` candidates by
-the expanded float32 distance |q|^2 + |x|^2 - 2 q.x, then re-ranks the pool
-on the device by the DIFFERENCE form sum (q - x)^2 (error-free product and
-two-sum compensation, about float32 relative accuracy whatever the norms)
-and keeps the k best by (distance, index). Not used under IDENTICAL."""
-#: Board quality audit 2026-10-04 (~/mojolearn-evidence/board-quality-audit-2026-10-04.md):
-#: knn istella recall_at_k FAST 0.982434 (IDENTICAL 0.97625, torch-gpu float32 0.97997)
-#: vs scikit-learn 1.0 (it upcasts float32 to float64). Cause: the expanded form
-#: cancels on Istella's large-norm rows (kmeans inertia 6e17), so float32 rounding
-#: of |q|^2 + |x|^2 swamps the gaps between the 64th and 65th neighbours.
-comptime KNN_REFINE_POOL_MAX: Int = 1024
+# TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE (NEUTRAL / REVERTED: rab5-knnref istella +3.7%, taxi -1.5%, recall identical) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 1fadfcc7b3.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_REFINE.patch; record in docs/TOMBSTONES.md.
 
 from neighbors.impl.knn.knn import (
     knn_class_proba,
@@ -160,7 +145,6 @@ from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
     KNN_RESIDENT_CACHE,
-    KNN_SCRATCH_POOL,
     KnnIndexCachePointer,
     knn_pool_view,
     knn_pool_host_dist,
@@ -272,15 +256,17 @@ from neighbors.impl.ball_cover.ball_cover import (
 
 
 # Measured NVIDIA IDENTICAL query batching; row arithmetic is unchanged.
-# Other columns retain 256 unless explicitly opting into qualification.
+# Other columns retain 256.
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, knn_query_tile_for, knn_nvidia_schedule_column
 # K1 (lane fg-knn-nb): the AMD column takes NVIDIA's scope too
 # (`knn_nvidia_schedule_column`; AMD's legacy 256 arm was removed
 # 2026-10-10, docs/TOMBSTONES.md). Query tiling never moves a bit.
+# TOMBSTONE: MOJOLEARN_KNN_LEGACY_QUERY_TILE (old 256 tile path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 31c68bae2d.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_LEGACY_QUERY_TILE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512 (opt-in 512 tile on the other columns, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 2535c4cc75.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512.patch; record in docs/TOMBSTONES.md.
 comptime QUERY_TILE_512_CANDIDATE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_KNN_LEGACY_QUERY_TILE"]()
-    and (knn_nvidia_schedule_column(TARGET_COLUMN) or is_defined["MOJOLEARN_KNN_IDENTICAL_QUERY_TILE_512"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and knn_nvidia_schedule_column(TARGET_COLUMN)
 )
 # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
 # replaces the 512 candidate where it is set; 0 keeps the historical rule.
@@ -450,10 +436,51 @@ def knn_search_traced(
     metric_arg: Float32 = Float32(2.0),
     negate_products: Bool = False,
 ) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_search_traced(
+        neighbors_device_plan(),
+        ctx,
+        trace,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        out_dist_ptr,
+        out_idx_ptr,
+        return_sqrt,
+        requested_query_tile,
+        knn_method,
+        metric,
+        metric_arg,
+        negate_products,
+    )
+
+
+def knn_search_traced(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
+) raises -> Int:
     """Host-output search; device-result retention is internal to classification."""
     var retained = List[DeviceBuffer[DType.uint32]]()
     return _knn_search_traced_retaining(
-        ctx, trace, retained, False, index_ptr, n_index, queries_ptr,
+        dplan, ctx, trace, retained, False, index_ptr, n_index, queries_ptr,
         n_queries, n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
         negate_products,
@@ -461,6 +488,7 @@ def knn_search_traced(
 
 
 def _knn_search_plan(
+    dplan: DevicePlan,
     index_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_index: Int,
     queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -472,10 +500,14 @@ def _knn_search_plan(
     knn_method: Int,
     metric: Int,
     metric_arg: Float32,
+    queries_on_device: Bool = False,
 ) raises -> Tuple[Int, Int, Int, Int]:
     """The refusals and the plan of `_knn_search_traced_retaining`, in its
     order, before any allocation: `(resolved metric, devices, query tile,
-    buf_len)`. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
+    buf_len)`. `queries_on_device` (lane a8b-device-x-neighbors-rest): the
+    queries are a model-selection fold gathered on the device, so there are
+    no host query words (`queries_ptr` is not read; the cosine metric, whose
+    zero-row refusal reads them, is refused). Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
     refuses and plans exactly as `knn_search` does; the statements are the
     ones that stood at the top of that function."""
     if n_index <= 0:
@@ -523,6 +555,11 @@ def _knn_search_plan(
                 + " is all zeros; cosine distance divides by ||x|| and is"
                 " undefined at the origin (DEVIATION 553)"
             )
+        if queries_on_device:
+            raise Error(
+                "knn_search: metric='cosine' needs the host query rows for its"
+                " zero-row refusal; device-resident fold queries are not taken"
+            )
         var zq = cosine_zero_norm_row_ptr(queries_ptr, n_queries, n_features)
         if zq >= 0:
             raise Error(
@@ -532,7 +569,7 @@ def _knn_search_plan(
                 " undefined at the origin (DEVIATION 553)"
             )
 
-    var devices = knn_device_count(n_queries, knn_method)
+    var devices = knn_device_count(dplan, n_queries, knn_method)
     var query_tile = plan_query_tile(n_index, n_queries, requested_query_tile)
 
     # `scaling_main.mojo`'s sizing. `buf_len` must clear `k` or the fallback
@@ -543,6 +580,51 @@ def _knn_search_plan(
 
 
 def _knn_search_traced_retaining(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut retained_indices: List[DeviceBuffer[DType.uint32]],
+    keep_device_indices: Bool,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return _knn_search_traced_retaining(
+        neighbors_device_plan(),
+        ctx,
+        trace,
+        retained_indices,
+        keep_device_indices,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        out_dist_ptr,
+        out_idx_ptr,
+        return_sqrt,
+        requested_query_tile,
+        knn_method,
+        metric,
+        metric_arg,
+        negate_products,
+    )
+
+
+def _knn_search_traced_retaining(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut trace: IdentityTrace,
     mut retained_indices: List[DeviceBuffer[DType.uint32]],
@@ -590,7 +672,7 @@ def _knn_search_traced_retaining(
     this repository has paid for repeatedly.
     """
     var plan = _knn_search_plan(
-        index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
+        dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
     )
     var mtr = plan[0]
@@ -604,7 +686,7 @@ def _knn_search_traced_retaining(
     return _knn_search_on_device_index(
         ctx, trace, retained_indices, keep_device_indices, index, n_index,
         queries_ptr, n_queries, n_features, k, out_dist_ptr, out_idx_ptr,
-        return_sqrt, query_tile, knn_method, mtr, metric_arg, devices, buf_len,
+        return_sqrt, query_tile, knn_method, mtr, metric_arg, devices, buf_len, dplan,
         None, negate_products,
     )
 
@@ -627,6 +709,52 @@ def knn_search_resident(
     metric_arg: Float32 = Float32(2.0),
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
+    status_addr: Int = 0,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_search_resident(
+        neighbors_device_plan(),
+        ctx,
+        index,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        out_dist_ptr,
+        out_idx_ptr,
+        return_sqrt,
+        requested_query_tile,
+        knn_method,
+        metric,
+        metric_arg,
+        cache,
+        negate_products,
+        status_addr,
+    )
+
+
+def knn_search_resident(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    cache: KnnIndexCachePointer = None,
+    negate_products: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -643,28 +771,39 @@ def knn_search_resident(
     """
     var trace = IdentityTrace()
     var plan = _knn_search_plan(
-        index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
+        dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
     )
-    comptime if KNN_FAST_REFINE:
-        # FAST quality fix (lane apple-fast-q-misc): pool then exact re-rank;
-        # opt-in `-D MOJOLEARN_KNN_FAST_REFINE`; default: the expanded-form top-k below.
-        if _knn_refine_applies(plan[0], negate_products, k, n_index):
-            return _knn_search_resident_refined(
-                ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,
-                out_dist_ptr, out_idx_ptr, return_sqrt, requested_query_tile, knn_method,
-                metric, metric_arg, cache,
-            )
+    # TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE (pool + exact re-rank, NEUTRAL) deleted 2026-11-15; see the marker at the top of this file.
     var retained = List[DeviceBuffer[DType.uint32]]()
     return _knn_search_on_device_index(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
-        knn_method, plan[0], metric_arg, plan[1], plan[3], cache,
-        negate_products,
+        knn_method, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
+        negate_products, status_addr,
     )
 
 
 def knn_self_search_device_indices(
+    ctx: DeviceContext,
+    data_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    n_features: Int,
+    k: Int,
+) raises -> DeviceBuffer[DType.uint32]:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_self_search_device_indices(
+        neighbors_device_plan(),
+        ctx,
+        data_ptr,
+        n,
+        n_features,
+        k,
+    )
+
+
+def knn_self_search_device_indices(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     data_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
@@ -677,7 +816,7 @@ def knn_self_search_device_indices(
     neighbor SET only (the FAST spectral graph). The refusals, the plan and
     the search are `knn_search`'s, so the set is the one it returns."""
     var plan = _knn_search_plan(
-        data_ptr, n, data_ptr, n, n_features, k, True, DEFAULT_QUERY_TILE,
+        dplan, data_ptr, n, data_ptr, n, n_features, k, True, DEFAULT_QUERY_TILE,
         KNN_METHOD_AUTO, METRIC_FROM_IS_SQRT, Float32(2.0),
     )
     var mtr = plan[0]
@@ -703,7 +842,7 @@ def knn_self_search_device_indices(
     if devices > 1:
         _ = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
             out_dist, out_idx, n, n, n_features, k, query_tile, buf_len,
-            True, KNN_METHOD_AUTO, mtr, Float32(2.0), devices)
+            True, KNN_METHOD_AUTO, mtr, Float32(2.0), devices, dplan)
     else:
         brute_force_knn_impl(
             ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
@@ -735,6 +874,33 @@ def knn_self_search_resident(
     mut out_idx: DeviceBuffer[DType.uint32],
     return_sqrt: Bool = True,
 ) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_self_search_resident(
+        neighbors_device_plan(),
+        ctx,
+        trace,
+        data,
+        n,
+        n_features,
+        k,
+        out_dist,
+        out_idx,
+        return_sqrt,
+    )
+
+
+def knn_self_search_resident(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut data: DeviceBuffer[DType.float32],
+    n: Int,
+    n_features: Int,
+    k: Int,
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    return_sqrt: Bool = True,
+) raises -> Int:
     """`knn_search_traced(data, data, ...)` with the data ALREADY ON THE
     DEVICE and the result LEFT THERE (lane cgr3-hdbscan-mst, 2026-10-03):
     `data` holds `n x n_features` row-major float32 (it may be longer),
@@ -756,7 +922,7 @@ def knn_self_search_resident(
         )
     var mtr = resolve_metric(METRIC_FROM_IS_SQRT, return_sqrt)
     validate_metric_arg(mtr, Float32(2.0))
-    var devices = knn_device_count(n, KNN_METHOD_AUTO)
+    var devices = knn_device_count(dplan, n, KNN_METHOD_AUTO)
     var query_tile = plan_query_tile(n, n, DEFAULT_QUERY_TILE)
     var buf_len = tiled_radix_scratch_len(n, k)
     var nd = n * n_features
@@ -790,7 +956,7 @@ def knn_self_search_resident(
     if devices > 1:
         query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
             out_dist, out_idx, n, n, n_features, k, query_tile, buf_len,
-            return_sqrt, KNN_METHOD_AUTO, mtr, Float32(2.0), devices)
+            return_sqrt, KNN_METHOD_AUTO, mtr, Float32(2.0), devices, dplan)
     else:
         brute_force_knn_impl(
             ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
@@ -989,179 +1155,55 @@ def _knn_negate_device(ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.floa
 
 
 
-# ---- KNN_FAST_REFINE (FAST quality fix, lane apple-fast-q-misc) -------------
+# TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE's re-rank kernels (_knn_refine_sq, knn_refine_score_kernel,
+# knn_refine_store_kernel, _knn_refine_pool, _knn_refine_applies) deleted 2026-11-15; see the marker at the top of this file.
 
 
-@always_inline
-def _knn_refine_sq(qp: _KFP, xp: _KFP, d: Int) -> Float32:  # device-helper: one query-candidate distance per kernel thread
-    """sum_j (q_j - x_j)^2 in float32 with an error-free product
-    (`fma(df, df, -p)`) and Knuth's two-sum into a running compensation: the
-    difference form has no cancellation, so the result is accurate to about
-    one float32 rounding of each difference whatever |q| and |x| are."""
-    var s = Float32(0.0)
-    var c = Float32(0.0)
-    for j in range(d):
-        var df = qp.unsafe_load(j) - xp.unsafe_load(j)
-        var p = df * df
-        var pe = fma(df, df, -p)
-        var t = s + p
-        var bb = t - s
-        c += ((s - (t - bb)) + (p - bb)) + pe
-        s = t
-    var r = s + c
-    return r if r > Float32(0.0) else Float32(0.0)
-
-
-def knn_refine_score_kernel(
-    px: _KFP, pq: _KFP, pc: _KUP, keys: _KKP, state: _KIP,
-    n_q: Int32, d_: Int32, pool_: Int32, pad_: Int32,
-):
-    """One thread per (query, pool slot): the slot's candidate scored by
-    `_knn_refine_sq` into the row's (distance, index) key; slots past the
-    pool are padded with the largest key. Slot 0 marks the row for
-    `knn_order_sort_kernel` (state 1)."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var pad = Int(pad_)
-    if t >= Int(n_q) * pad:
-        return
-    var i = t // pad
-    var slot = t - i * pad
-    if slot == 0:
-        state.unsafe_store(i, Int32(1))
-    var pool = Int(pool_)
-    if slot >= pool:
-        keys.unsafe_store(t, UInt64(0xFFFFFFFFFFFFFFFF))
-        return
-    var d = Int(d_)
-    var cid = pc.unsafe_load(i * pool + slot)
-    var dist = _knn_refine_sq(pq + i * d, px + Int(cid) * d, d)
-    keys.unsafe_store(t, _knn_order_key(dist, cid))
-
-
-def knn_refine_store_kernel(
-    keys: _KKP, pd: _KFP, pi: _KUP, n_q: Int32, k_: Int32, pad_: Int32, root: Int32,
-):
-    """One thread per (query, rank < k): the sorted key back to (distance,
-    index), the distance square-rooted when the caller asked for euclidean."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var k = Int(k_)
-    if t >= Int(n_q) * k:
-        return
-    var i = t // k
-    var kk = keys.unsafe_load(i * Int(pad_) + (t - i * k))
-    var tw = UInt32(kk >> 32)
-    var ub = tw ^ UInt32(0x80000000) if (tw >> 31) == 1 else tw ^ UInt32(0xFFFFFFFF)
-    var dv = bitcast[DType.float32](ub)
-    if root != Int32(0):
-        dv = sqrt(dv)
-    pd.unsafe_store(t, dv)
-    pi.unsafe_store(t, UInt32(kk & 0xFFFFFFFF))
-
-
-@always_inline
-def _knn_refine_pool(k: Int, n_index: Int) -> Int:
-    """The candidate pool the expanded search selects before the re-rank."""
-    return min(n_index, min(KNN_REFINE_POOL_MAX, 4 * k))
-
-
-@always_inline
-def _knn_refine_applies(mtr: Int, negate_products: Bool, k: Int, n_index: Int) -> Bool:
-    """L2 (expanded) metrics only, and only when the pool is wider than k."""
-    if mtr != DIST_L2_EXPANDED and mtr != DIST_L2_SQRT_EXPANDED:
-        return False
-    if negate_products:
-        return False
-    return _knn_refine_pool(k, n_index) > k
-
-
-def _knn_search_resident_refined(
-    ctx: DeviceContext,
-    mut index: DeviceBuffer[DType.float32],
-    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_index: Int,
-    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_queries: Int,
-    n_features: Int,
-    k: Int,
-    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
-    return_sqrt: Bool,
-    requested_query_tile: Int,
-    knn_method: Int,
-    metric: Int,
-    metric_arg: Float32,
-    cache: KnnIndexCachePointer,
-) raises -> Int:
-    """`KNN_FAST_REFINE`: the resident search at the pool width (its refusals,
-    plan and selection; the pool's ids stay on the device), then the exact
-    re-rank on the device: score every pool slot, bitonic-sort each row's
-    (distance, index) keys (`knn_order_sort_kernel`), keep the first k.
-    Host work is the readback copy only."""
-    var pool = _knn_refine_pool(k, n_index)
-    var plan = _knn_search_plan(
-        index_ptr, n_index, queries_ptr, n_queries, n_features, pool, return_sqrt,
-        requested_query_tile, knn_method, metric, metric_arg,
-    )
-    var trace = IdentityTrace()
-    var retained = List[DeviceBuffer[DType.uint32]]()
-    var cand_d = List[Float32](length=n_queries * pool, fill=Float32(0.0))
-    var cand_i = List[UInt32](length=n_queries * pool, fill=UInt32(0))
-    var used = _knn_search_on_device_index(
-        ctx, trace, retained, True, index, n_index, queries_ptr, n_queries,
-        n_features, pool,
-        cand_d.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-        cand_i.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-        return_sqrt, plan[2], knn_method, plan[0], metric_arg, plan[1], plan[3],
-        cache, False,
-    )
-    _ = cand_d^
-    _ = cand_i^
-    if len(retained) != 1:
-        raise Error("knn refine: the pool search kept " + String(len(retained)) + " index buffers, expected 1")
-    var pad = 1
-    while pad < pool:
-        pad *= 2
-    var queries = ctx.enqueue_create_buffer[DType.float32](n_queries * n_features)
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    var keys = ctx.enqueue_create_buffer[DType.uint64](n_queries * pad)
-    var state = ctx.enqueue_create_buffer[DType.int32](n_queries)
-    var od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    var oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
-    var px = index.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pq = queries.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pc = retained[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pk = keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var ps = state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pd = od.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pi = oi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    ctx.enqueue_function[knn_refine_score_kernel](
-        px, pq, pc, pk, ps, Int32(n_queries), Int32(n_features), Int32(pool), Int32(pad),
-        grid_dim=(n_queries * pad + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
-    )
-    ctx.enqueue_function[knn_order_sort_kernel](pk, ps, Int32(pad), grid_dim=n_queries, block_dim=_KO_TPB)
-    ctx.enqueue_function[knn_refine_store_kernel](
-        pk, pd, pi, Int32(n_queries), Int32(k), Int32(pad), Int32(1) if plan[0] == DIST_L2_SQRT_EXPANDED else Int32(0),
-        grid_dim=(n_queries * k + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
-    )
-    var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
-    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
-    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=oi)
+def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.float32], n: Int) raises -> Int32:
+    """The finite status word of the `n` float32 words just uploaded into
+    `words` (core/admitted_finite_status.mojo contract: 0 when every word is
+    finite, 1 otherwise). Enqueues the test behind the upload, then makes the
+    ONE synchronisation the caller makes after its upload in any case (lane
+    a7b-device-x-neighbors: the k-NN doors admit a borrowed X with no host
+    scan and refuse through `admitted_finite_refuse` on this word)."""
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_finite_word(ctx, words.unsafe_ptr(), n, status, 0)
+    # perf-neighbors (2026-11-13): the one status word comes back straight
+    # into native host memory, as x_linear's `_decision_status` returns its
+    # word on every vendor, not through a pinned host buffer allocated and
+    # freed per call (a k-NN fit + predict made two of them, a radius query
+    # one). The copy completes inside the synchronize below.
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_address = Int(word.unsafe_ptr())
+    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=word_address), src_buf=status)
     ctx.synchronize()
-    var hdp = hd.unsafe_ptr()
-    var hip = hi.unsafe_ptr()
-    for e in range(n_queries * k):
-        out_dist_ptr.unsafe_store(e, hdp.unsafe_load(e))
-        out_idx_ptr.unsafe_store(e, hip.unsafe_load(e))
-    _ = hd^
-    _ = hi^
-    _ = od^
-    _ = oi^
-    _ = keys^
-    _ = state^
-    _ = queries^
-    _ = retained^
-    return used
+    var result = word[0]
+    _ = word^
+    _ = status^
+    return result
+
+
+# TOMBSTONE: knn_upload_finite_status's two-buffer overload (an index and its queries in one status word) deleted 2026-11-09 by lane a8b-device-x-neighbors-rest: its one caller, radius_neighbors_count, tests only the queries now (the index is tested once at fit / archive load). Never reached a release; recoverable at 0ce88411d3.
+
+
+def _knn_status_flagged(status_addr: Int, fold: Bool) -> Bool:
+    """True when the entry's status word (and, for fold queries, the
+    index-range word after it) is set: the door refuses, no vote runs."""
+    if status_addr == 0:
+        return False
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
+    if words[0] != 0:
+        return True
+    return fold and words[1] != 0
+
+
+def knn_put_status(status_addr: Int, word: Int32):
+    """Store a status word at the caller's host address (0: not asked)."""
+    if status_addr != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, word)
+
+
+# TOMBSTONE: MOJOLEARN_KNN_FAST_REFINE's _knn_search_resident_refined deleted 2026-11-15; see the marker at the top of this file.
 
 
 def _knn_search_on_device_index(
@@ -1184,10 +1226,31 @@ def _knn_search_on_device_index(
     metric_arg: Float32,
     devices: Int,
     buf_len: Int,
+    dplan: DevicePlan,
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
+    status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
-    """`cache` (DEVIATION 3061) is a resident index's derived buffers, None
+    """`status_addr` (lane a7b-device-x-neighbors), when not 0, is a host
+    int32 word that receives the finite status of the uploaded queries
+    (`knn_upload_finite_status`), tested behind the upload in the
+    synchronisation that follows it; on a non-finite query the search stops
+    there (outputs unwritten) and the door refuses.
+
+    `fold_base` / `fold_base_rows` / `fold_index` (lane
+    a8b-device-x-neighbors-rest; -1: none): the queries are a
+    model-selection fold, the rows `fold_index` (int64) of the resident
+    float32 base `fold_base` in model selection's store. They are gathered
+    on the device straight into the query buffer (core/msel_device_x.mojo
+    `msel_device_x_f32`, the finite and range tests in the same pass) and
+    never uploaded; `queries_ptr` is not read. `ctx` must be the fold
+    store's context (the gather refuses any other). `status_addr` then
+    names TWO int32 words: the finite word and the index-range word.
+
+    `cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
     (built on first use by the call below) and the tiled arm reads the
     cached transposed layout and admission metadata.
@@ -1198,14 +1261,14 @@ def _knn_search_on_device_index(
     `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
     2026-09-17 (DEVIATION 2921) so a resident index enters here; every
     statement below is where it was."""
-    # K4 (KNN_SCRATCH_POOL, `-D MOJOLEARN_KNN_SCRATCH_POOL_OFF=1` restores
-    # the per-call allocations; see knn_brute_force.mojo): a single-device
+    # K4 (the scratch pool; see knn_brute_force.mojo): a single-device
     # search over a resident index takes exact-length views of the handle's
     # pooled scratch instead of allocating it per call.
+    # TOMBSTONE: MOJOLEARN_KNN_SCRATCH_POOL_OFF (per-call allocation rollback of the CONFIRMED pool) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 465cb20ca0.
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch; record in docs/TOMBSTONES.md.
     var pooled = False
-    comptime if KNN_SCRATCH_POOL:
-        if cache and devices <= 1:
-            pooled = knn_pool_acquire(cache.value())
+    if cache and devices <= 1:
+        pooled = knn_pool_acquire(cache.value())
     var n_dist_cells = tiled_distance_tile_cells(query_tile, n_index, n_features, k, mtr)
     var queries: DeviceBuffer[DType.float32]
     var index_norm: DeviceBuffer[DType.float32]
@@ -1264,8 +1327,43 @@ def _knn_search_on_device_index(
     var ns_sort = 0
     comptime if KNN_PHASE_TIMERS:
         t_phase = perf_counter_ns()
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    ctx.synchronize()
+    var fold = QueryFold(fold_base, fold_base_rows, fold_index)
+    if fold.active():
+        # A model-selection fold (lane a8b-device-x-neighbors-rest): the
+        # query rows are gathered out of the resident base on the device,
+        # tested in the same pass; the two words come back in the one
+        # synchronisation the upload made before.
+        if status_addr == 0:
+            raise Error("knn_search: fold queries need the status words' address")
+        var fold_status = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill[DType.int32](ctx, fold_status, Int32(0))
+        msel_device_x_f32(ctx, fold.base_id, fold.base_rows, n_features, fold.index_id, n_queries, queries,
+                          fold_status.unsafe_ptr(), 0)
+        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_ptr=words.unsafe_ptr(), src_buf=fold_status)
+        ctx.synchronize()
+        var finite_word = words.unsafe_ptr()[0]
+        var range_word = words.unsafe_ptr()[1]
+        _ = words^
+        _ = fold_status^
+        knn_put_status(status_addr, finite_word)
+        knn_put_status(status_addr + 4, range_word)
+        if finite_word != 0 or range_word != 0:
+            if pooled:
+                knn_pool_release(cache.value())
+            return query_tile
+    else:
+        ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+        if status_addr != 0:
+            # The finite test rides behind the upload, in its synchronisation.
+            var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
+            knn_put_status(status_addr, word)
+            if word != 0:
+                if pooled:
+                    knn_pool_release(cache.value())
+                return query_tile
+        else:
+            ctx.synchronize()
     comptime if KNN_PHASE_TIMERS:
         ns_upload = perf_counter_ns() - t_phase
         t_phase = perf_counter_ns()
@@ -1334,7 +1432,7 @@ def _knn_search_on_device_index(
     if devices > 1:
         query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
             out_dist, out_idx, n_queries, n_index, n_features, k, query_tile, buf_len,
-            return_sqrt, knn_method, mtr, metric_arg, devices)
+            return_sqrt, knn_method, mtr, metric_arg, devices, dplan)
     else:
         brute_force_knn_impl(
             ctx,
@@ -1541,6 +1639,51 @@ def knn_classifier_predict(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
 ) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_classifier_predict(
+        neighbors_device_plan(),
+        ctx,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        y_ptr,
+        n_outputs,
+        n_classes,
+        out_labels_ptr,
+        out_proba_ptr,
+        out_uniq_ptr,
+        want_proba,
+        requested_query_tile,
+        metric,
+        metric_arg,
+        weights,
+    )
+
+
+def knn_classifier_predict(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_outputs: Int,
+    n_classes: List[Int],
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    want_proba: Bool,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+) raises -> Int:
     """Search, then vote (`want_proba=False`: `predict`) or tally
     (`want_proba=True`: `predict_proba`). Returns the query tile that ran.
 
@@ -1606,6 +1749,7 @@ def knn_classifier_predict(
     # by name; nothing here re-derives those refusals.
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_traced_retaining(
+        dplan,
         ctx,
         trace,
         retained_indices,
@@ -1655,6 +1799,69 @@ def knn_classifier_predict_resident(
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
     vote_cache: KnnVoteCachePointer = None,
+    status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_classifier_predict_resident(
+        neighbors_device_plan(),
+        ctx,
+        index,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        y_ptr,
+        n_outputs,
+        n_classes,
+        out_labels_ptr,
+        out_proba_ptr,
+        out_uniq_ptr,
+        want_proba,
+        requested_query_tile,
+        metric,
+        metric_arg,
+        weights,
+        cache,
+        vote_cache,
+        status_addr,
+        fold_base,
+        fold_base_rows,
+        fold_index,
+    )
+
+
+def knn_classifier_predict_resident(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_outputs: Int,
+    n_classes: List[Int],
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    want_proba: Bool,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+    cache: KnnIndexCachePointer = None,
+    vote_cache: KnnVoteCachePointer = None,
+    status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -1690,15 +1897,20 @@ def knn_classifier_predict_resident(
             + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
         )
     var plan = _knn_search_plan(
-        index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+        dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
-        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], cache,
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
+        False, status_addr, fold_base, fold_base_rows, fold_index,
     )
+    if _knn_status_flagged(status_addr, fold_index >= 0):
+        # A non-finite query (lane a7b) or a fold row out of range: the door
+        # refuses; no vote.
+        return used_tile
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
         out_proba_ptr, out_uniq_ptr, want_proba, weighted, vote_cache)
@@ -1724,6 +1936,59 @@ def knn_regressor_predict_resident(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
+    status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
+) raises -> Int:
+    """Reads the device plan once and runs the planned overload below."""
+    return knn_regressor_predict_resident(
+        neighbors_device_plan(),
+        ctx,
+        index,
+        index_ptr,
+        n_index,
+        queries_ptr,
+        n_queries,
+        n_features,
+        k,
+        y_ptr,
+        n_outputs,
+        out_ptr,
+        requested_query_tile,
+        metric,
+        metric_arg,
+        weights,
+        cache,
+        status_addr,
+        fold_base,
+        fold_base_rows,
+        fold_index,
+    )
+
+
+def knn_regressor_predict_resident(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+    cache: KnnIndexCachePointer = None,
+    status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
@@ -1746,15 +2011,20 @@ def knn_regressor_predict_resident(
             + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
         )
     var plan = _knn_search_plan(
-        index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+        dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
-        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], cache,
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
+        False, status_addr, fold_base, fold_base_rows, fold_index,
     )
+    if _knn_status_flagged(status_addr, fold_index >= 0):
+        # A non-finite query (lane a7b) or a fold row out of range: the door
+        # refuses; no vote.
+        return used_tile
     _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
                         n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)
     _ = h_dist^
@@ -2196,8 +2466,16 @@ def radius_neighbors_count(
     out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
     metric: Int = RBC_METRIC_DEFAULT,
     metric_arg: Float32 = Float32(2.0),
+    status_addr: Int = 0,
 ) raises -> Int:
     """Pass one: how many neighbours, and where each query's row begins.
+
+    `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
+    that receives the finite status of the uploaded queries, tested behind
+    their upload in its synchronisation; on a non-finite word the pass stops
+    there (returns 0, `out_indptr_ptr` unwritten) and the door refuses. The
+    index is not tested here: it was tested once, at fit or at archive load
+    (lane a8b-device-x-neighbors-rest).
 
     Writes `n_queries + 1` int32 into `out_indptr_ptr`, the CSR row starts,
     and returns the total edge count. The caller sizes its index and distance
@@ -2229,7 +2507,13 @@ def radius_neighbors_count(
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    ctx.synchronize()
+    if status_addr != 0:
+        var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
+        knn_put_status(status_addr, word)
+        if word != 0:
+            return 0
+    else:
+        ctx.synchronize()
 
     var nnz = _rbc_index_and_count(
         ctx,

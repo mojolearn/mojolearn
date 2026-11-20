@@ -2,10 +2,10 @@
 """Save, load and resume for Sequential and the operation session
 (autograd/model_checkpoint.mojo through training/checkpoint.mojo's container).
 
-(a) Training 4 epochs straight equals training 2, saving, loading and
-training 2 more, word for word: the parameters, the optimizer buffers and
-the loss curve (Adam with a step schedule and shuffling, Nesterov momentum on
-a classifier, AdamW with layer norm, early stopping).
+(a) The word-for-word continuation, checkpoint bytes, early-stopping resume,
+export predictions and session state round trips are the native check
+checks/native_tests/training_autograd_save_resume.mojo; the damaged and
+foreign file refusals and the export's public surface stay here.
 (b) A checkpoint written on the CPU host column resumes on the GPU column
 (and the reverse) to the same digests, and an inference export gives the
 same predictions on either column: the cross-vendor resume claim. On a
@@ -17,7 +17,6 @@ MOJOLEARN_TEST_INSTALLED=1 requires non-editable installed wheels. Run pytest
 with python -I and --import-mode=importlib against this file; the harness may
 live in the checkout while the package under test comes from site-packages.
 """
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -70,16 +69,6 @@ def _data():
     return X, yr, y3
 
 
-def _h(a):
-    return hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()[:16]
-
-
-def _words(m):
-    """Every resumable word of a fitted model."""
-    return dict(params=_h(m.params_), m=_h(m._opt_m), v=_h(m._opt_v),
-                curve=_h(np.asarray(m.loss_curve_, dtype=np.float32)), n_iter=m.n_iter_)
-
-
 _CASES = {
     "adam_step_schedule": lambda: (ml.Sequential().linear(8).tanh().linear(1)
                                    .compile(loss="mse", optimizer="adam", lr=0.02, schedule="step",
@@ -96,69 +85,17 @@ _CASES = {
 }
 
 
-@pytest.mark.parametrize("case", sorted(_CASES))
-def test_straight_equals_save_load_continue(case, tmp_path):
-    X, yr, y3 = _data()
-    model, target, kw = _CASES[case]()
-    y = yr if target == "yr" else y3
-    straight = model.fit(X, y, epochs=4, seed=7, **kw)
-    ref = _words(straight)
-
-    first, _, _ = _CASES[case]()
-    first.fit(X, y, epochs=2, seed=7, **kw)
-    path = tmp_path / f"{case}.ckpt"
-    first.save_checkpoint(path)
-    again = ml.Sequential.from_checkpoint(path)
-    again.fit(X, y, epochs=2, resume=True)
-    assert _words(again) == ref
-
-    # the same continuation without the file
-    inmem, _, _ = _CASES[case]()
-    inmem.fit(X, y, epochs=2, seed=7, **kw)
-    inmem.fit(X, y, epochs=2, resume=True)
-    assert _words(inmem) == ref
-    np.testing.assert_array_equal(again.predict(X), straight.predict(X))
-
-
-def test_checkpoint_bytes_are_the_same_for_the_same_state(tmp_path):
-    X, yr, _ = _data()
-    paths = []
-    for i in range(2):
-        m, _, kw = _CASES["adam_step_schedule"]()
-        m.fit(X, yr, epochs=2, seed=3, **kw)
-        paths.append(tmp_path / f"run{i}.ckpt")
-        m.save_checkpoint(paths[-1])
-    assert paths[0].read_bytes() == paths[1].read_bytes()
-    # load then save again: the same file
-    back = tmp_path / "back.ckpt"
-    ml.Sequential.from_checkpoint(paths[0]).save_checkpoint(back)
-    assert back.read_bytes() == paths[0].read_bytes()
-
-
-def test_early_stopping_state_resumes(tmp_path):
-    X, yr, _ = _data()
-
-    def build():
-        return (ml.Sequential().linear(4).relu().linear(1)
-                .compile(loss="mse", optimizer="adam", lr=0.05, tol=10.0, n_iter_no_change=2))
-
-    straight = build().fit(X, yr, epochs=6, seed=1)
-    part = build().fit(X, yr, epochs=1, seed=1)
-    part.save_checkpoint(tmp_path / "es.ckpt")
-    rest = ml.Sequential.from_checkpoint(tmp_path / "es.ckpt").fit(X, yr, epochs=5, resume=True)
-    assert rest.n_iter_ == straight.n_iter_
-    assert _h(rest.params_) == _h(straight.params_)
-
-
-def test_export_predicts_the_same(tmp_path):
+def test_export_refuses_training_state(tmp_path):
+    # The export's predictions are the native check training_autograd_save_resume;
+    # this keeps the public surface: the classes' dtype, the refusals and a
+    # fresh fit of a served model.
     X, _, y3 = _data()
-    c, _, kw = _CASES["nesterov_classifier"]()
-    c.fit(X, y3, epochs=3, seed=0, **kw)
+    c = (ml.Sequential().linear(8).relu().linear(3)
+         .compile(loss="cross_entropy", optimizer="momentum", lr=0.05, nesterov=True))
+    c.fit(X, y3, epochs=3, seed=0, batch_size=25)
     path = tmp_path / "clf.ckpt"
     c.export(path)
     served = ml.Sequential.load(path)
-    np.testing.assert_array_equal(served.predict(X), c.predict(X))
-    np.testing.assert_array_equal(served.predict_proba(X), c.predict_proba(X))
     assert served.classes_.dtype == c.classes_.dtype
     with pytest.raises(ValueError):
         served.fit(X, y3, epochs=1, resume=True)
@@ -191,78 +128,6 @@ def test_refuses_damaged_and_foreign_files(tmp_path):
 
 
 # ---------------------------------------------------------------- operation session
-def _has_ops_state():
-    try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_session_call")
-    except Exception:
-        return False
-
-
-@pytest.mark.skipif(not _has_ops_state(), reason="the sequence binding has no ops_session_call entry")
-def test_session_parameters_and_counters_round_trip(tmp_path):
-    from mojolearn import ops
-    rng = np.random.default_rng(0)
-    w0 = rng.standard_normal((4, 3), dtype=np.float32)
-    b0 = rng.standard_normal((1, 3), dtype=np.float32)
-    path = tmp_path / "session.ckpt"
-    with ops.Session(record=True) as s:
-        w = s.tensor(w0, requires_grad=True)
-        b = s.tensor(b0, requires_grad=True)
-        s.save_state(path, [w, b], seed=2 ** 40 + 5, epoch=3, step=17)
-    with ops.Session(record=True) as s:
-        st = s.load_state(path)
-        assert (st["seed"], st["epoch"], st["step"]) == (2 ** 40 + 5, 3, 17)
-        w, b = st["params"]
-        np.testing.assert_array_equal(s.numpy(w), w0)
-        np.testing.assert_array_equal(s.numpy(b), b0)
-        # trainable after loading
-        x = s.tensor(rng.standard_normal((5, 4), dtype=np.float32))
-        loss = s.mean(s.linear(x, w, b))
-        s.backward(loss)
-        assert s.grad(w).shape == (4, 3)
-
-
-def _session_has_optimizer():
-    from mojolearn import ops
-    return hasattr(ops.Session, "optimizer") and hasattr(ops.Session, "step")
-
-
-@pytest.mark.skipif(not (_has_ops_state() and _session_has_optimizer()),
-                    reason="Session has no optimizer / step (lane ag-session-optim)")
-def test_session_optimizer_resume_word_for_word(tmp_path):
-    from mojolearn import ops
-    rng = np.random.default_rng(1)
-    X = rng.standard_normal((32, 4), dtype=np.float32)
-    Y = rng.standard_normal((32, 2), dtype=np.float32)
-    W0 = rng.standard_normal((4, 2), dtype=np.float32)
-
-    def train(s, w, opt, steps):
-        x = s.tensor(X)
-        y = s.tensor(Y)
-        for _ in range(steps):  # the user's training loop
-            s.reset()
-            s.backward(s.mse(s.matmul(x, w), y))
-            s.step(opt, [w])
-
-    with ops.Session(record=True) as s:
-        w = s.tensor(W0, requires_grad=True)
-        opt = s.optimizer("adam", lr=0.01)
-        train(s, w, opt, 6)
-        straight = s.numpy(w)
-    path = tmp_path / "opt.ckpt"
-    with ops.Session(record=True) as s:
-        w = s.tensor(W0, requires_grad=True)
-        opt = s.optimizer("adam", lr=0.01)
-        train(s, w, opt, 3)
-        s.save_state(path, [w], optimizer=opt, step=3)
-    with ops.Session(record=True) as s:
-        opt = s.optimizer("adam", lr=0.01)
-        st = s.load_state(path, optimizer=opt)
-        (w,) = st["params"]
-        train(s, w, opt, 3)
-        np.testing.assert_array_equal(s.numpy(w), straight)
-
-
 # ---------------------------------------------------------------- across columns
 _CHILD = textwrap.dedent('''
     import hashlib, json, runpy, sys
@@ -294,14 +159,14 @@ _CHILD = textwrap.dedent('''
 
     if mode == "save":
         straight = build().fit(X, y3, epochs=4, batch_size=25, seed=11)
-        print("DIGEST straight", h(straight.params_), h(straight._opt_m), h(straight._opt_v))
+        print("DIGEST straight", h(straight.params_), h(straight.optimizer_m_), h(straight.optimizer_v_))
         part = build().fit(X, y3, epochs=2, batch_size=25, seed=11)
         part.save_checkpoint(path + ".train")
         part.export(path + ".export")
         print("DIGEST predict", h(part.predict_proba(X)), h(part.predict(X)))
     else:
         back = ml.Sequential.from_checkpoint(path + ".train").fit(X, y3, epochs=2, resume=True)
-        print("DIGEST straight", h(back.params_), h(back._opt_m), h(back._opt_v))
+        print("DIGEST straight", h(back.params_), h(back.optimizer_m_), h(back.optimizer_v_))
         served = ml.Sequential.load(path + ".export")
         print("DIGEST predict", h(served.predict_proba(X)), h(served.predict(X)))
     print("COLUMN", ml.vendor())

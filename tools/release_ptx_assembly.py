@@ -116,9 +116,11 @@ def validate_compilation(compilation, source_root=None):
         require(manifest.get('schema') == bincache.SCHEMA and manifest.get('key') == key
                 and manifest.get('fields') == fields and manifest.get('source_commit') == revision,
                 'archive manifest/key/original source differs')
+        v2 = fields.get('key_rule') == bincache.KEY_RULE
         require(fields.get('schema') == bincache.SCHEMA and fields.get('script') == 'bindings/merged_build.sh'
-                and fields.get('args') == ['gpu','--group',filename[:-3]]
-                and fields.get('source') == recipes['source'] and fields.get('toolchain') == toolchain
+                and fields.get('args')[:3] == ['gpu','--group',filename[:-3]]
+                and (v2 or fields.get('args') == ['gpu','--group',filename[:-3]])
+                and (v2 or fields.get('source') == recipes['source']) and fields.get('toolchain') == toolchain
                 and fields.get('numeric_mode') == 'identical' and fields.get('gpu_archs') == 'sm_80'
                 and fields.get('target_column') == 'nvidia' and fields.get('device_arch') == 'none'
                 and 'variant' not in fields, 'wrong source, compiler, target, flags or shard command')
@@ -126,9 +128,17 @@ def validate_compilation(compilation, source_root=None):
             MOJOLEARN_BUILD_TIERS='identical', MOJOLEARN_COMPILE_JOBS='2', MOJOLEARN_CUDA_CODE_FORMAT='ptx',
             MOJOLEARN_GPU_ARCHS='sm_80', MOJOLEARN_LINUX_CPU='x86-64-v3', MOJOLEARN_MERGED_KEY=recipes['merged'],
             MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_PACKAGE_BYTE_LM='1', MOJOLEARN_TARGET_COLUMN='nvidia')
-        require(fields.get('build_env') == wanted_env, 'unexpected original compile environment')
         rel='python/mojolearn/identical/'+filename
-        require(fields.get('declared') == dict(inputs=recipes['declared'],outputs=[rel],shell='bash'), 'declared compiler inputs/outputs differ')
+        if v2:
+            # closure-v2 (tools/bincache.py): this group's own closure, inputs,
+            # membership and the variables its inputs read, at the original revision.
+            wanted_env.pop('MOJOLEARN_MERGED_KEY')
+            require(bincache.merged_fields_reproduce(fields, source_root or Path(__file__).resolve().parent.parent,
+                                                     revision, wanted_env, [rel]),
+                    'original closure-v2 source, inputs or environment differ')
+        else:
+            require(fields.get('build_env') == wanted_env, 'unexpected original compile environment')
+            require(fields.get('declared') == dict(inputs=recipes['declared'],outputs=[rel],shell='bash'), 'declared compiler inputs/outputs differ')
         require(fields.get('repo_path') == '/root/mojolearn' and fields.get('os', {}).get('machine') == 'x86_64', 'unsupported original host platform')
         require(manifest.get('installed_toolchain') == toolchain['packages'], 'actual original installed compiler packages differ')
         files=manifest.get('files', [])

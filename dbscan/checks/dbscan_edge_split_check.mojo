@@ -44,6 +44,7 @@ from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
 from dbscan.impl.sparse.detail.csr import MAX_LABEL
 from neighbors.impl.ball_cover.scan import rbc_exact_edge_total_host
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime ES_BLOBS = 6
@@ -122,7 +123,7 @@ def _fit(
         edge_free=edge_free,
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+    download_host_into[DType.int32](ctx, labels, h)
     ctx.synchronize()
     var out = List[Int32](capacity=n)
     for i in range(n):
@@ -190,7 +191,7 @@ def check_split_moves_no_label(ctx: DeviceContext) raises:
     for i in range(n):
         for f in range(ES_D):
             hx.unsafe_ptr().unsafe_store(i * ES_D + f, _coord(i, f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
     ctx.synchronize()
 
     var base = _fit(ctx, x, 0, EPS_NN_RBC, Int(MAX_LABEL))

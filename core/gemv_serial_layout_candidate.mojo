@@ -21,7 +21,7 @@ Prepared XT must satisfy XT[p*M+i] == X[i*K+p] bit for bit.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,

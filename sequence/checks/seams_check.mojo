@@ -36,7 +36,9 @@ from sequence.stl import stl_rwts
 from sequence.nm import Objective, nelder_mead
 from sequence.recurrent import Net, Work
 from autograd.tape import Tape, Tensor
-from autograd.rules_recurrent import RNN_INPUT_BIAS_IN_GX, rnn_backward_autograd, rnn_head, rnn_layer, rnn_linear
+from autograd.rules_recurrent import (
+    RNN_INPUT_BIAS_IN_GX, RNN_STEP_GEMM, rnn_backward_autograd, rnn_head, rnn_layer, rnn_linear,
+)
 from sequence.checks.oracle import (
     o_gemm, o_gemm_split, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle, o_mlp_perm,
     o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
@@ -381,6 +383,45 @@ def main() raises:
     _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
            o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr, fails)
     _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]), fails)
+    # The recurrent products on the lane's GEMM (autograd/rules_recurrent.mojo: the forward step, RNN_STEP_GEMM, and
+    # the LSTM cell's backward step, RNN_BPTT_LSTM_GEMM, both defaults; the weight gradients keep the blocked order),
+    # at shapes over the step rule's floor (B G H H >= 2^20 multiply-adds a step), T 9, B 64, K = T B = 576:
+    #   lstm H 72 and gru H 96: forward (64, G H 288, K = H) is a split-K shape (the bits-change class against the
+    #     fused launch), and so is the lstm's backward step (64, H, K 288); the gru's backward is the fused launch;
+    #   lstm H 64: forward (64, 256, K 64) keeps the one chain (the same-bits class), its backward step (64, 64, 256)
+    #     splits.
+    # dW_ih of layer 0 against the oracle's fold on the device and the host; dgx of layer 0 (the whole backward
+    # chain's words, behind every per-step product) device against host. Run on every build since 2026-11-19
+    # (lane fx-verdicts4: the forward step is the default); RNN_STEP_GEMM is False in a fast build only.
+    comptime if not RNN_STEP_GEMM:
+        print("5504 step_gemm cases: forward step on the fused launch (fast mode)")
+    var Tg = 9; var Bg = 64
+    var xg = _mixed(Tg * Bg * 3, 56)
+    var dyg = _signed(Bg * 2, 57, 1.0)
+    var net_l = Net(CELL_LSTM, 3, 72, 1, 2)
+    var p_l = _signed(net_l.n_params(), 55, 0.05)
+    var gd_l = _bptt(dx, net_l, p_l, xg, dyg, Tg, Bg)
+    var gh_l = _bptt(hx, net_l, p_l, xg, dyg, Tg, Bg)
+    var ghn_l = net_l.G() * net_l.H
+    _check("5504_bptt_step_gemm_lstm", o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, False),
+           o_bptt_dw(gh_l[1], xg, Tg, Bg, ghn_l, 3, True), gd_l[0], gh_l[0], tr, fails)
+    _same("5504_bptt_step_gemm_lstm dgx", "device vs host", _diff(gd_l[1], gh_l[1]), fails)
+    var net_g = Net(CELL_GRU, 3, 96, 1, 2)
+    var p_g = _signed(net_g.n_params(), 58, 0.05)
+    var gd_g = _bptt(dx, net_g, p_g, xg, dyg, Tg, Bg)
+    var gh_g = _bptt(hx, net_g, p_g, xg, dyg, Tg, Bg)
+    var ghn_g = net_g.G() * net_g.H
+    _check("5504_bptt_step_gemm_gru", o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, False),
+           o_bptt_dw(gh_g[1], xg, Tg, Bg, ghn_g, 3, True), gd_g[0], gh_g[0], tr, fails)
+    _same("5504_bptt_step_gemm_gru dgx", "device vs host", _diff(gd_g[1], gh_g[1]), fails)
+    var net_c = Net(CELL_LSTM, 3, 64, 1, 2)
+    var p_c = _signed(net_c.n_params(), 59, 0.05)
+    var gd_c = _bptt(dx, net_c, p_c, xg, dyg, Tg, Bg)
+    var gh_c = _bptt(hx, net_c, p_c, xg, dyg, Tg, Bg)
+    var ghn_c = net_c.G() * net_c.H
+    _check("5504_bptt_step_gemm_chain", o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, False),
+           o_bptt_dw(gh_c[1], xg, Tg, Bg, ghn_c, 3, True), gd_c[0], gh_c[0], tr, fails)
+    _same("5504_bptt_step_gemm_chain dgx", "device vs host", _diff(gd_c[1], gh_c[1]), fails)
 
     # ---- 5505 softmax cross entropy, B 3, C 40.
     var B6 = 3; var C6 = 40
@@ -393,7 +434,7 @@ def main() raises:
     var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
                                    List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
     _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
-           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr, fails)
+           ce.dev[2].copy(), ce.host[2].copy(), tr, fails)
 
     # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
     var n7 = 64

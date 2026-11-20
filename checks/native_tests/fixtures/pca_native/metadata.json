@@ -1,0 +1,153 @@
+{
+  "source_commit": "e53128fe7f9206abe748dbe32052a81ed864ef3c",
+  "source_files": [
+    "test_pca_exact_native_owner.py",
+    "test_pca_full_surface.py"
+  ],
+  "numpy": "2.5.3",
+  "seed": 9021,
+  "generator_sha256": "afe1a5956d61446c9de72b040fa4e5278d376da268bdb3c52ead7738e6b88804",
+  "files": [
+    {
+      "file": "exact-21x4.f32",
+      "shape": [
+        21,
+        4
+      ],
+      "sha256": "d182e14f133b07d119b179e44b7b112b51c70d75f978c3fe523d93d047ef1051"
+    },
+    {
+      "file": "exact-21x4-mean.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "6783214dec496fb29de1527223a72cf811e648dd74d24c42138e12d152be0e63"
+    },
+    {
+      "file": "exact-21x4-singular.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "b90a1af17d82b4b219fab35ef76ff22c7e183e5b9f96af6c7e2c06740bd5eed2"
+    },
+    {
+      "file": "exact-21x4-variance.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "7e374ee015745570322ec4e80d4f96ccc09e6758748587e0b885b3d516cae3b1"
+    },
+    {
+      "file": "exact-21x4-ratio.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "af0caa3c4ec7a2418cf3462f37d1594afba1d1df0cfbafce7ded6fddce9135c5"
+    },
+    {
+      "file": "exact-21x4-vectors.f64",
+      "shape": [
+        4,
+        4
+      ],
+      "sha256": "4199badb728ff711f7b4b2f12c25c93e5beafda8207951c18bbb37c8ede7a510"
+    },
+    {
+      "file": "full-8x3.f32",
+      "shape": [
+        8,
+        3
+      ],
+      "sha256": "440d8539efd034c9ffa164be05e1eb0747d9ac5ac85bbb0fe320d9952022ce41"
+    },
+    {
+      "file": "full-8x3-mean.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "ea3cc50d8874c50058266d993b17409ecc3a42017dfa77f83cc915d0d83083b2"
+    },
+    {
+      "file": "full-8x3-singular.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "66ac44daa764faa5a5eb0c6cf53202062b021f78946236566e5f30b2fef72eb9"
+    },
+    {
+      "file": "full-8x3-variance.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "68af44bcab4b695b107d969ccd36a0a5e0d9135827100fd7b723130f69147d9e"
+    },
+    {
+      "file": "full-8x3-ratio.f64",
+      "shape": [
+        3
+      ],
+      "sha256": "82743152b6be4fc592a52be995d24376a7a39283c8be936b2ddfc1e7f8bd6066"
+    },
+    {
+      "file": "full-8x3-vectors.f64",
+      "shape": [
+        3,
+        3
+      ],
+      "sha256": "04be1a0a0579709adac6c0f60568473ebc40059f1e0812ffe9d10d0966b9b6a3"
+    },
+    {
+      "file": "wide-4x7.f32",
+      "shape": [
+        4,
+        7
+      ],
+      "sha256": "e345a8d10f4077f3ec1b62d34b73b74eb3c651cddb1932349ca331d858fd7c87"
+    },
+    {
+      "file": "wide-4x7-mean.f64",
+      "shape": [
+        7
+      ],
+      "sha256": "5bcb9492d47b3fc5de181bbf569b0159b657022c8b31a34728676d440bf9235f"
+    },
+    {
+      "file": "wide-4x7-singular.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "8b24c6937c9d9ad74238b03e39b81dc9f9ec227f3eaec9f9abdbc296868583df"
+    },
+    {
+      "file": "wide-4x7-variance.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "064b67963013ef3267acc21fe947123142067a0d32a0a951c08362da7de8e90d"
+    },
+    {
+      "file": "wide-4x7-ratio.f64",
+      "shape": [
+        4
+      ],
+      "sha256": "5fb81ea280bebcd0dc03eda4bce0aeded5fd6f5fd8f7c60d2934707f91d0d2ae"
+    },
+    {
+      "file": "wide-4x7-vectors.f64",
+      "shape": [
+        4,
+        7
+      ],
+      "sha256": "0ce1b32e5b64b2aae1e17c73c1df85f6e83c2a2bbfcffe744d831fa196163412"
+    },
+    {
+      "file": "rank-20x5.f32",
+      "shape": [
+        20,
+        5
+      ],
+      "sha256": "c6e0f19b14f4714d17ba8139d6699c0ed904a33bcaf10a69bec50fa21f8d97f4"
+    }
+  ],
+  "limits": "Independent fixture generation only; no Mojolearn execution or correctness/timing/identity claim."
+}

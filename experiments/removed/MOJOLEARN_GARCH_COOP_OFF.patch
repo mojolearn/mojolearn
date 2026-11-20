@@ -1,0 +1,28 @@
+diff --git a/sequence/fit_team.mojo b/sequence/fit_team.mojo
+index f5b2372394..4a15ecf636 100644
+--- a/sequence/fit_team.mojo
++++ b/sequence/fit_team.mojo
+@@ -128,14 +128,18 @@ comptime GT_DONE = 6
+ #: Default on FAST + Apple since the M3 A/B (lane/apple-fast-garchspeed
+ #: 5bc97d9d7, n=1): garch synthetic 383 -> 15.1 ms, taxi-hourly 582 -> 31.0
+ #: ms; mean_llf -1938.2249 -> -1938.2239 and -1132.955 -> -1131.911 (equal
+-#: or better). The old -D MOJOLEARN_GARCH_COOP is harmless.
++#: or better). -D MOJOLEARN_GARCH_COOP_OFF restores the lead's recursion;
++#: the old -D MOJOLEARN_GARCH_COOP is harmless.
+ #: IDENTICAL (lane fix-t1-seq): GARCH_COOP_IDN (sequence/garch.mojo) turns
+ #: the same chunked likelihood on for NVIDIA, AMD and Apple, and the host
+ #: column replays it (garch.mojo garch_nll_chunks, GARCH_CHUNKS =
+-#: SEQ_TEAM_TPB chunks). FAST off Apple is unchanged.
+-# TOMBSTONE: MOJOLEARN_GARCH_COOP_OFF (old path; EXP:564 SUPERSEDED, the chunked likelihood is the kept path) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at 92fec7163d.
+-# Restore: git apply experiments/removed/MOJOLEARN_GARCH_COOP_OFF.patch
+-comptime GARCH_COOP = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or GARCH_COOP_IDN
++#: SEQ_TEAM_TPB chunks); -D MOJOLEARN_IDN_GARCH_COOP_OFF restores the lead's
++#: recursion there. FAST off Apple is unchanged.
++comptime GARCH_COOP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
++) or GARCH_COOP_IDN
+ 
+ 
+ def garch_team_priv(h: Int, m: Int) -> Int:

@@ -16,6 +16,8 @@ from sklearn.model_selection import train_test_split  # noqa: E402
 from sklearn.metrics import accuracy_score, r2_score  # noqa: E402
 
 import mojolearn as ml  # noqa: E402
+from mojolearn._buffer import addr, addr_ro, empty, memory_at  # noqa: E402
+from mojolearn.tests._typed_input import as_i32_c
 
 
 def _clf(n_classes=3, seed=0):
@@ -197,12 +199,58 @@ def test_voting():
     assert a >= r - 0.05, (a, r)
 
 
+class _FoldRows(list):
+    """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
+    the one buffer the device filled, kept alive here."""
+    __slots__ = ("_owner",)
+
+
+# The device fold law (sklearn's unshuffled StratifiedKFold / KFold) the
+# meta-estimator owner launches (bindings/trees_public_meta_door.mojo
+# `_native_folds`): the test's own reader of `x_trees_device_folds`, moved
+# out of the product module by lane python-package-audit (2026-11-11).
+def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
+    """`_trees_splits` for an int cv with the fold assignment and the fold
+    row lists made on the device (xtrees/folds_device.mojo through
+    `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
+    sklearn's unshuffled StratifiedKFold / KFold law; the host column runs
+    the same law in Mojo (lane cgr4-py-compute), every tier
+    (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
+    Array in [0, n_classes) (stratified) or None (KFold). The lists are
+    zero-copy int32 views into one downloaded buffer: fold i's rows outside
+    it, ascending, then inside it, ascending."""
+    b = est._bind()
+    counts = empty((n_splits + 1,), "<i4")
+    rows = empty((n_splits * n,), "<i4")
+    if codes is not None:
+        c32 = as_i32_c(codes, ndim=1, name="codes")[0]
+        k = int(n_classes)
+    else:
+        c32, k = counts, 0
+    status = int(b.x_trees_device_folds(addr_ro(c32, name="codes"), addr(rows, name="rows"),
+                                        addr(counts, name="counts"), [n, n_splits, k]))
+    if status == 1:
+        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
+    if status != 0:
+        raise ValueError("y codes outside [0, n_classes)")
+    cnt = [int(v) for v in counts.tolist()[:n_splits]]  # glue: fold sizes and offsets over n_splits folds
+    used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1  # glue: fold sizes and offsets over n_splits folds
+    out = _FoldRows()
+    out._owner = rows
+    for i in range(used):  # glue: fold sizes and offsets over n_splits folds
+        base = rows._addr + 4 * i * n
+        tr = memory_at(base, 4 * (n - cnt[i]), writable=False).cast("i")
+        te = memory_at(base + 4 * (n - cnt[i]), 4 * cnt[i], writable=False).cast("i")
+        out.append((tr, te))
+    return out
+
+
 def test_stacking_folds_match_sklearn():
     """The int-cv folds (`x_trees_device_folds`: the device kernel, or its
     host twin on a CPU-only install) are sklearn's unshuffled folds."""
     from sklearn.model_selection import StratifiedKFold, KFold
-    from mojolearn._expansion_trees import _trees_native_folds, _trees_x_bind
-    from mojolearn._buffer import as_i32_c
+    from mojolearn._expansion_trees import _trees_x_bind
+    from mojolearn.tests._typed_input import as_i32_c
 
     class _Est:
         def _bind(self):
@@ -404,14 +452,18 @@ def test_bagging_oob_score():
 
 
 def test_cv_splitter_objects():
-    from sklearn.model_selection import KFold, StratifiedKFold
+    # The meta-estimators admit mojolearn's native splitters and lists of
+    # index pairs; a Python splitter's split() would be a callback inside the
+    # native fit (bindings/trees_public_meta_door.mojo _cv_value).
+    from mojolearn.model_selection import KFold, StratifiedKFold
     Xa, Xb, ya, yb = _clf()
     est = [("dt", ml.DecisionTreeClassifier(max_depth=4))]
     a = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(Xa, ya)
     b = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3),
                               cv=StratifiedKFold(3)).fit(Xa, ya)
     np.testing.assert_array_equal(np.asarray(a.transform(Xb)), np.asarray(b.transform(Xb)))
-    pairs = list(KFold(4, shuffle=True, random_state=0).split(Xa))
+    pairs = [(np.asarray(tr).tolist(), np.asarray(te).tolist())
+             for tr, te in KFold(4, shuffle=True, random_state=0).split(Xa)]
     c = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=pairs).fit(Xa, ya)
     assert len(c.calibrated_classifiers_) == 4
     d = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=KFold(3, shuffle=True, random_state=1),

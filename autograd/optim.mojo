@@ -9,11 +9,15 @@
 # trainer uses), with the moment buffers owned by the executor, a
 # global-norm gradient clip and host learning-rate schedules.
 #
-# Why it does not import sequence.recurrent: rnn_fit calls this module under
-# -D MOJOLEARN_AUTOGRAD_OPTIM, so sequence.recurrent imports it; this module
+# Why it does not import sequence.recurrent: rnn_fit and mlp_fit update through
+# this module under -D MOJOLEARN_AUTOGRAD_OPTIM (promoted 2026-11-08 by lane
+# x3-mlp-rnn-predict-on-tape with no measurement; the hand opt_step / OP_OPT
+# launch is the default again since 2026-11-09, lane
+# r2-restore-unmeasured-defaults, and this is the A/B arm), so
+# sequence.recurrent imports it; this module
 # imports only sequence.ops, sequence.exec_trait, checks.numerics,
-# autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for the A/B's
-# arm A; once the define is promoted they become this module's functions.
+# autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for their
+# other callers (autograd/model.mojo, sequence/opt_resident.mojo, sequence/ops_impl.mojo).
 #
 # Identity: the update is ONE OP_OPT launch over the flat parameter vector
 # (the same element body every sequence trainer already runs) with the
@@ -52,7 +56,6 @@ from std.memory import bitcast
 from autograd.ops import ag_fold_block
 from autograd.composed_ops import OP_AGC_OPT_FINISH, AGC_FINISH_TENSORS, agc_set_bound
 from checks.numerics import ftz, identical_cos, identical_div, identical_mul, identical_pow64, identical_sqrt
-from std.sys.compile import is_defined
 
 # Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 5), default on: a
 # trainer that finishes its raw gradients with OP_L2GRAD (weights: (g +
@@ -63,18 +66,24 @@ from std.sys.compile import is_defined
 # on the same words, stored, then op_opt on the stored word; the gradient
 # vector ends holding the finished words, as before). Launches: 2 a
 # parameter tensor pair fewer each step (the composed tape MLP: 4 a batch
-# for one hidden layer). -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF keeps the
-# separate finish launches (arm A).
-comptime AUTOGRAD_OPT_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF"]()
+# for one hidden layer).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF (separate finish launches, arm A; old path, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 8535432c53.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch
+# (Sweep 2026-11-15: the AUTOGRAD_OPT_FUSE = True constant removed; nothing imports it.)
 
 # Operation codes of this family, a range of their own clear of the tape's
 # 1000..1010 (autograd/ops.mojo); sequence/dispatch.mojo routes the range
 # and asserts it overlaps no other family.
 comptime OP_AGO_SUMSQ_PART = 1110
-comptime OP_AGO_CLIP_COEF = 1111
-comptime OP_AGO_CLIP_SCALE = 1112
+# (Sweep 2026-11-15: OP_AGO_CLIP_COEF (1111) and OP_AGO_CLIP_SCALE (1112), never emitted since the clip fused into
+# OP_AGH_OPT_CLIP, removed with op_ago_clip_coef / op_ago_clip_scale; the family range is the one op.)
+# Lane fx-ops-session-blocks (2026-11-19): the global-norm clip's running
+# total across the tensors of one step (op_ago_norm_acc below). 1111 was this
+# family's own code until the 2026-11-15 sweep, so it overlaps no family.
+comptime OP_AGO_NORM_ACC = 1111
 comptime OP_AGO_FIRST = OP_AGO_SUMSQ_PART
-comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
+comptime OP_AGO_LAST = OP_AGO_NORM_ACC
 
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea H(2)), default on: the
 # clip's coefficient and scale run inside the update launch. After the
@@ -85,15 +94,20 @@ comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
 # cell, as CLIP_COEF did. Bits: identical by construction (the same
 # operations on the same words in the same order; each thread redoes the
 # nparts ~ sqrt(n) adds). Launches: 2 fewer a step with a clip (CLIP_COEF
-# and CLIP_SCALE). -D MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF keeps the three
-# clip launches before OP_OPT (arm A).
-comptime AUTOGRAD_OPT_CLIP_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF"]()
+# and CLIP_SCALE).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF (the three clip launches before OP_OPT, arm A; old path, no A/B
+# recorded) deleted 2026-11-15 by lane/expdel2-24-neural with clip_grad_norm and the AUTOGRAD_OPT_CLIP_FUSE alias;
+# code recoverable at e770fd25b9.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch
 
 # The pass-6 host lane's family (2400..; sequence/dispatch.mojo routes the
 # range and asserts it overlaps no other family).
 comptime OP_AGH_OPT_CLIP = 2400
+# Lane fx-ops-session-blocks (2026-11-19): the update of one tensor of a step
+# that clips across its tensors (op_agh_opt_scaled below).
+comptime OP_AGH_OPT_SCALED = 2401
 comptime OP_AGH_FIRST = OP_AGH_OPT_CLIP
-comptime OP_AGH_LAST = OP_AGH_OPT_CLIP
+comptime OP_AGH_LAST = OP_AGH_OPT_SCALED
 
 # torch.nn.utils.clip_grad_norm_: coef = max_norm / (total_norm + 1e-6)
 # (the certified LM clip's clip_eps, training/checks/optimizer_contract.mojo).
@@ -118,30 +132,6 @@ def op_ago_sumsq_part(t: Int, a: Args):
         var g = ld(a.p0, k)
         s = fma3(g, g, s)
     st(a.p1, t, s)
-
-
-@always_inline
-def op_ago_clip_coef(t: Int, a: Args):
-    """One thread. p0 partials (i0 of them), p1 cell [total_norm, coef];
-    f0 max_norm. The partials are added ascending from +0.0; total_norm =
-    sqrt(sum); coef = min(1, max_norm / (total_norm + 1e-6))."""
-    var s = Float32(0)
-    for k in range(a.i0):
-        s = add(s, ld(a.p0, k))
-    var norm = ftz(identical_sqrt(s))
-    var coef = ftz(identical_div(a.f0, add(norm, CLIP_EPS)))
-    if not (coef < Float32(1.0)):
-        coef = Float32(1.0)
-    st(a.p1, 0, norm)
-    st(a.p1, 1, coef)
-
-
-@always_inline
-def op_ago_clip_scale(t: Int, a: Args):
-    """p0 gradient, p1 cell [total_norm, coef]. g_t <- coef g_t, every
-    element (no skip at coef = 1: the multiply's flushes are part of the
-    result, as in the certified clip)."""
-    st(a.p0, t, mul(ld(a.p1, 1), ld(a.p0, t)))
 
 
 @always_inline
@@ -173,20 +163,83 @@ def op_agh_opt_clip(t: Int, a: Args):
     op_opt(t, a)
 
 
+# ------------------------------------------------------------------ the clip across a step's tensors
+# torch.nn.utils.clip_grad_norm_ over SEVERAL parameter tensors (lane
+# fx-ops-session-blocks, 2026-11-19). The fold, the same on every vendor and
+# the host column (it extends this module's one-tensor clip fold, the
+# optimizer contract's blocked fold, across the step's tensors in the order
+# the step lists them):
+#
+#   part[i][b] = sum over k in block b of tensor i, k ascending from +0.0,
+#                of g_k^2, one fused multiply-add per term (op_ago_sumsq_part;
+#                block length ag_fold_block(n_i))
+#   s[i]       = sum over b ascending from +0.0 of part[i][b]
+#   total      = (((+0.0 + s[0]) + s[1]) + ...) + s[P-1]
+#   norm       = ftz(identical_sqrt(total))
+#   coef       = min(1, ftz(identical_div(max_norm, norm + CLIP_EPS)))
+#   g_k        = coef * g_k   (identical mul), then clip_grad_value's clamp
+#                to [-v, v] when set, then op_opt on the stored word
+#
+# One tensor gives the one-tensor clip's words (+0.0 + s[0] = s[0]).
+@always_inline
+def op_ago_norm_acc(t: Int, a: Args):
+    """One thread. p0 one tensor's sum-of-squares partials (i0 of them), p1
+    the step's cell [running total, coef]; i1 bit 0: the step's first tensor
+    (the running total starts at +0.0), bit 1: its last (the cell becomes
+    [total_norm, coef]); f0 max_norm."""
+    if t == 0:
+        var s = Float32(0)
+        for k in range(a.i0):
+            s = add(s, ld(a.p0, k))
+        var before = Float32(0)
+        if (a.i1 & 1) == 0:
+            before = ld(a.p1, 0)
+        var total = add(before, s)
+        if (a.i1 & 2) != 0:
+            var norm = ftz(identical_sqrt(total))
+            var coef = ftz(identical_div(a.f0, add(norm, CLIP_EPS)))
+            if not (coef < Float32(1.0)):
+                coef = Float32(1.0)
+            st(a.p1, 0, norm)
+            st(a.p1, 1, coef)
+        else:
+            st(a.p1, 0, total)
+
+
+@always_inline
+def op_agh_opt_scaled(t: Int, a: Args):
+    """One tensor's update in a step that clips across its tensors: op_opt's
+    slots plus p6 the step's cell [total_norm, coef]; i3 bit 0: scale the
+    gradient by the cell's coef (clip_grad_norm), bit 1: then clamp it to
+    [-v, v] (clip_grad_value; a NaN stays a NaN, as torch.clamp), v = the
+    bit pattern in i4. The clipped word is stored, then op_opt reads it."""
+    var g = ld(a.p1, t)
+    if (a.i3 & 1) != 0:
+        g = mul(ld(a.p6, 1), g)
+    if (a.i3 & 2) != 0:
+        var v = bitcast[DType.float32](UInt32(a.i4))
+        if g > v:
+            g = v
+        elif g < -v:
+            g = -v
+    st(a.p1, t, g)
+    op_opt(t, a)
+
+
 @always_inline
 def apply_optim_fused[OP: Int](t: Int, a: Args):
     comptime if OP == OP_AGH_OPT_CLIP:
         op_agh_opt_clip(t, a)
+    elif OP == OP_AGH_OPT_SCALED:
+        op_agh_opt_scaled(t, a)
 
 
 @always_inline
 def apply_optim[OP: Int](t: Int, a: Args):
     comptime if OP == OP_AGO_SUMSQ_PART:
         op_ago_sumsq_part(t, a)
-    elif OP == OP_AGO_CLIP_COEF:
-        op_ago_clip_coef(t, a)
-    elif OP == OP_AGO_CLIP_SCALE:
-        op_ago_clip_scale(t, a)
+    elif OP == OP_AGO_NORM_ACC:
+        op_ago_norm_acc(t, a)
 
 
 # ------------------------------------------------------------------ configuration
@@ -202,7 +255,12 @@ struct OptimizerConfig(ImplicitlyCopyable, Movable):
     step. clip: the global gradient-norm bound, <= 0 for no clip.
     dampening: SGD's. alpha: RMSprop's smoothing constant. lr_decay:
     Adagrad's. centered: RMSprop's. decoupled: NAdam's decoupled decay.
-    momentum_decay: NAdam's."""
+    momentum_decay: NAdam's. clip_global: `clip` is the bound of the norm
+    over ALL the tensors of one step (torch's clip_grad_norm_), computed by
+    the step's caller (`clip_norm_accumulate`, `step_lr_clipped`); False:
+    `clip` bounds this one tensor's norm inside `step_lr`. clip_value: the
+    elementwise bound of clip_grad_value_, <= 0 for none. init_acc:
+    Adagrad's initial accumulator value (the second state buffer's fill)."""
 
     var kind: Int
     var lr: Float32
@@ -219,6 +277,9 @@ struct OptimizerConfig(ImplicitlyCopyable, Movable):
     var centered: Bool
     var decoupled: Bool
     var momentum_decay: Float32
+    var clip_global: Bool
+    var clip_value: Float32
+    var init_acc: Float32
 
     def flags(self) -> Int:
         """OP_OPT's i2: bit 0 is Nesterov (SGD kinds), centered (RMSprop) or
@@ -269,7 +330,15 @@ def optimizer_config(kind: Int, lr: Float32) -> OptimizerConfig:
     return OptimizerConfig(
         kind, lr, Float32(0.0), Float32(0.9), Float32(0.999), Float32(1.0e-8), Float32(0.0),
         False, Float32(0.0), Float32(0.0), Float32(0.99), Float32(0.0), False, False, Float32(0.004),
+        False, Float32(0.0), Float32(0.0),
     )
+
+
+def optimizer_clips(cfg: OptimizerConfig) -> Bool:
+    """Whether a step with this configuration clips across its tensors
+    (clip_grad_norm with `clip_global`, or clip_grad_value): its caller
+    then steps with `clip_norm_accumulate` and `step_lr_clipped`."""
+    return cfg.clip_global or cfg.clip_value > Float32(0.0)
 
 
 def optimizer_config_packed(
@@ -492,31 +561,6 @@ def optimizer_scalars(
 
 
 # ------------------------------------------------------------------ the step
-def clip_grad_norm[E: Exec](mut ex: E, max_norm: Float32, mut state: OptimizerState, grads: FP, n: Int) raises:
-    """grads *= min(1, max_norm / (||grads|| + 1e-6)) over the flat vector:
-    a two-launch blocked fold for the norm (state.cell[0]) and the
-    coefficient (state.cell[1]), then one elementwise scale. Nothing is
-    read back to the host."""
-    if n != state.n:
-        raise Error("autograd optim: the clip's vector length differs from the state's")
-    var p = Args()
-    p.p0 = grads
-    p.p1 = state.parts
-    p.i0 = n
-    p.i1 = state.block
-    ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
-    var c = Args()
-    c.p0 = state.parts
-    c.p1 = state.cell
-    c.i0 = state.nparts
-    c.f0 = max_norm
-    ex.launch[OP_AGO_CLIP_COEF](c, 1)
-    var s = Args()
-    s.p0 = grads
-    s.p1 = state.cell
-    ex.launch[OP_AGO_CLIP_SCALE](s, n)
-
-
 def step_lr[E: Exec](
     mut ex: E, cfg: OptimizerConfig, mut state: OptimizerState, params: FP, grads: FP, n: Int, t: Int, lr: Float32,
 ) raises:
@@ -525,18 +569,19 @@ def step_lr[E: Exec](
     calls it every step in order (the running bias-correction products)."""
     if n != state.n:
         raise Error("autograd optim: the parameter count differs from the state's")
-    var fuse_clip = AUTOGRAD_OPT_CLIP_FUSE and cfg.clip > Float32(0.0)
-    if cfg.clip > Float32(0.0):
-        if fuse_clip:
-            # the partials only; the coefficient and scale run in the update
-            var p = Args()
-            p.p0 = grads
-            p.p1 = state.parts
-            p.i0 = n
-            p.i1 = state.block
-            ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
-        else:
-            clip_grad_norm(ex, cfg.clip, state, grads, n)
+    if optimizer_clips(cfg):
+        # a step loop that was not taught the clip across tensors must not
+        # run it as a per-tensor clip or drop it
+        raise Error("ValueError: this training path does not support clip_grad_norm or clip_grad_value")
+    var fuse_clip = cfg.clip > Float32(0.0)
+    if fuse_clip:
+        # the partials only; the coefficient and scale run in the update
+        var p = Args()
+        p.p0 = grads
+        p.p1 = state.parts
+        p.i0 = n
+        p.i1 = state.block
+        ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
     var a = Args()
     a.p0 = params
     a.p1 = grads
@@ -563,6 +608,66 @@ def step_lr[E: Exec](
         ex.launch[OP_AGH_OPT_CLIP](a, n)
         return
     ex.launch[OP_OPT](a, n)
+
+
+def clip_norm_accumulate[E: Exec](
+    mut ex: E, cfg: OptimizerConfig, state: OptimizerState, grads: FP, n: Int, cell: FP, first: Bool, last: Bool,
+) raises:
+    """One tensor's share of the norm over a step's tensors (the fold above
+    `op_ago_norm_acc`): its block partials into `state.parts`, then the
+    running total in the step's `cell`; the last tensor's call leaves
+    [total_norm, coef] there. Called for every tensor of the step, in the
+    step's order, before any `step_lr_clipped`. Two launches, no read-back."""
+    if n != state.n:
+        raise Error("autograd optim: the parameter count differs from the state's")
+    var p = Args()
+    p.p0 = grads
+    p.p1 = state.parts
+    p.i0 = n
+    p.i1 = state.block
+    ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
+    var q = Args()
+    q.p0 = state.parts
+    q.p1 = cell
+    q.i0 = state.nparts
+    q.i1 = (1 if first else 0) + (2 if last else 0)
+    q.f0 = cfg.clip
+    ex.launch[OP_AGO_NORM_ACC](q, 1)
+
+
+def step_lr_clipped[E: Exec](
+    mut ex: E, cfg: OptimizerConfig, mut state: OptimizerState, params: FP, grads: FP, n: Int, t: Int, lr: Float32,
+    cell: FP,
+) raises:
+    """`step_lr` for one tensor of a step that clips across its tensors
+    (`optimizer_clips`): the gradient scaled by the step's coefficient in
+    `cell` (when `clip_global`), clamped (when `clip_value` > 0), then the
+    update, in ONE launch (op_agh_opt_scaled). op_opt's arguments are
+    step_lr's, word for word."""
+    if n != state.n:
+        raise Error("autograd optim: the parameter count differs from the state's")
+    var a = Args()
+    a.p0 = params
+    a.p1 = grads
+    a.p2 = state.s1
+    a.p3 = state.s2
+    a.p4 = state.s3
+    a.i0 = cfg.kind
+    a.i1 = t
+    a.i2 = cfg.flags()
+    a.f0 = lr
+    a.f1 = cfg.f1()
+    a.f2 = cfg.f2()
+    a.f3 = cfg.eps
+    a.f4 = cfg.weight_decay
+    var sc = optimizer_scalars(cfg, state, t, lr)
+    a.f5 = sc[0]
+    a.f6 = sc[1]
+    a.f7 = sc[2]
+    a.p6 = cell
+    a.i3 = (1 if cfg.clip_global else 0) + (2 if cfg.clip_value > Float32(0.0) else 0)
+    a.i4 = Int(bitcast[DType.uint32](cfg.clip_value))
+    ex.launch[OP_AGH_OPT_SCALED](a, n)
 
 
 def step[E: Exec](

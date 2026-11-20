@@ -1,0 +1,1255 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index 49a6d0a849..c33f7d7ecc 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -1992,7 +1992,7 @@ def bwd_kv_slice2_kernel(
+ # ===========================================================================
+ 
+ 
+-def _route_a(
++def _route_a[LIST: Bool = False](
+     ctx: DeviceContext,
+     mut workspace: GemmWorkspace,
+     mut out_buf: DeviceBuffer[DType.float32],
+@@ -2015,8 +2015,23 @@ def _route_a(
+     than one that is not, because the next profile may not be all-`OP_NT`.
+ 
+     The stage owner retains `workspace` until the caller's completion wait.
+-    Workspace sizing follows the actual backward GEMM shape."""
++    Workspace sizing follows the actual backward GEMM shape.
++
++    `LIST = True` (lane/fx-gemm-worklist, reached only under the arm
++    MOJOLEARN_GEMM_FAST_WORKLIST): the same product through
++    `workspace.list_add`; the caller owns `list_run`. `_route_b` likewise."""
+     var call = gemm_backward_a_call(op, m, n, k)
++    comptime if LIST:
++        # lane/fx-gemm-worklist: the same product, queued on the workspace's work list (the caller runs the list).
++        if call[4] == BWD_DC_LEFT:
++            workspace.list_add(
++                ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
++            )
++            return
++        workspace.list_add(
++            ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
++        )
++        return
+     if call[4] == BWD_DC_LEFT:
+         workspace.run(
+             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
+@@ -2027,7 +2042,7 @@ def _route_a(
+     )
+ 
+ 
+-def _route_b(
++def _route_b[LIST: Bool = False](
+     ctx: DeviceContext,
+     mut workspace: GemmWorkspace,
+     mut out_buf: DeviceBuffer[DType.float32],
+@@ -2056,6 +2071,17 @@ def _route_b(
+     comptime if _AFN_WGRAD:
+         if _afn_wgrad(ctx, out_buf, dc, other, call):
+             return
++    comptime if LIST:
++        # lane/fx-gemm-worklist: the same product, queued on the workspace's work list (the caller runs the list).
++        if call[4] == BWD_DC_LEFT:
++            workspace.list_add(
++                ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
++            )
++            return
++        workspace.list_add(
++            ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
++        )
++        return
+     if call[4] == BWD_DC_LEFT:
+         workspace.run(
+             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
+diff --git a/autograd/rules_transformer.mojo b/autograd/rules_transformer.mojo
+index 91baf5f7ab..e7e27114f5 100644
+--- a/autograd/rules_transformer.mojo
++++ b/autograd/rules_transformer.mojo
+@@ -139,6 +139,7 @@ from transformer.impl.llama.modeling_llama import (
+     llama_key_lo,
+     llama_key_span,
+ )
++from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (arm, default off)
+ from autograd.kernels.transformer import (
+     BWD_FUSE_GATED_SILU,
+     BWD_FUSE_NORM2_RESIDUAL,
+@@ -490,27 +491,50 @@ struct TransformerRules(BackwardRules):
+         var x = _view(self.ctx, inputs[0], m * k)
+         var w = _view(self.ctx, inputs[1], n * k)
+         var dw = _view(self.ctx, gradients[1], n * k)
+-        _route_b(self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
++        # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off: the six calls below are the
++        # immediate launches they were). Under the arm dW and dX of this node are queued on the workspace's work
++        # list: both read dC, neither reads the other. A node that completes its input's gradient (PLAIN, ADD2,
++        # ADD3) runs the list before anything reads it; a fan-in member that only fills tmp0 or tmp1 leaves its
++        # two products pending for the member that completes the fan-in, so gate,up go out as four products and
++        # q,k,v as six. Nothing between the members reads tmp0, tmp1 or the weight gradients, and the adds below
++        # already rely on every earlier member having run. The tape launches nothing after a member's apply (each
++        # fan-in weight is a leaf with this one consumer, so its gradient is written in place and never
++        # accumulated; rules_lm.mojo header): a driver that ties a fan-in member's weight to another node must
++        # not use the TMP modes under this arm. Call site: once per TF_LINEAR node of a backward.
++        _route_b[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dw, dc, x, OP_NT, m, n, k)
+         var mode = saved.i0
+         comptime if BWD_GEMM_EPI:
+             # lane fx-gemm-epi: the fan-in members under the arm
+             if mode != TF_DX_PLAIN:
+                 self._dx_fanin_epi(mode, saved.i9, dc, w, gradients[0], m, n, k)
++                comptime if NEURAL_GEMM_WORKLIST:
++                    # lane/fx-gemm-worklist with the epilogue arm: the dX above took its own launch (an
++                    # epilogue product is never listed); the weight gradients queued by _route_b go out as
++                    # one list with the member that completes its fan-in. Without this no branch below
++                    # runs the list for a joined member and the last layer's would never launch.
++                    if mode == TF_DX_TMP0_ADD2 or mode == TF_DX_TMP2_ADD3:
++                        bst.gemm_workspace.list_run(self.ctx)
+                 mode = TF_DX_JOINED
+         if mode == TF_DX_PLAIN:
+             var dx = _view(self.ctx, gradients[0], m * k)
+-            _route_a(self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
++            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, dx, dc, w, OP_NT, m, n, k)
++            comptime if NEURAL_GEMM_WORKLIST:
++                bst.gemm_workspace.list_run(self.ctx)
+         elif mode == TF_DX_TMP0:
+-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
++            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
+         elif mode == TF_DX_TMP1:
+-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
++            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp1, dc, w, OP_NT, m, n, k)
+         elif mode == TF_DX_TMP0_ADD2:
+             # S9: d(norm2.out) = tmp0 (gate) + tmp1 (up)
+-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
++            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp0, dc, w, OP_NT, m, n, k)
++            comptime if NEURAL_GEMM_WORKLIST:
++                bst.gemm_workspace.list_run(self.ctx)
+             self._add2(gradients[0], _fp(bst.tmp0), _fp(bst.tmp1), m * k)
+         elif mode == TF_DX_TMP2_ADD3:
+             # S32: d(norm1.out) = (tmp0 (q) + tmp1 (k)) + tmp2 (v)
+-            _route_a(self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
++            _route_a[NEURAL_GEMM_WORKLIST](self.ctx, bst.gemm_workspace, bst.tmp2, dc, w, OP_NT, m, n, k)
++            comptime if NEURAL_GEMM_WORKLIST:
++                bst.gemm_workspace.list_run(self.ctx)
+             var d = _view(self.ctx, gradients[0], m * k)
+             step_count_launch()
+             self.ctx.enqueue_function[bwd_add3_kernel](
+@@ -523,6 +547,10 @@ struct TransformerRules(BackwardRules):
+             pass
+         else:
+             raise Error("transformer linear: unknown dX destination")
++        comptime if NEURAL_GEMM_WORKLIST:
++            # A traced call reads this node's outputs in the cards below: nothing stays pending.
++            if self.trace_addr != 0:
++                bst.gemm_workspace.list_run(self.ctx)
+         # cards, in the hand walk's order (TF_CARD_* above)
+         var card = saved.i9
+         if card == TF_CARD_DOWN:
+diff --git a/checks/native_tests/transformer_backward_packed.mojo b/checks/native_tests/transformer_backward_packed.mojo
+index 5de0c4e8a8..51eb8aac1f 100644
+--- a/checks/native_tests/transformer_backward_packed.mojo
++++ b/checks/native_tests/transformer_backward_packed.mojo
+@@ -4,37 +4,43 @@ the packed GEMM plan: device words against host words.
+ 
+ `transformer/checks/transformer_backward_check.mojo` compares the 37 stages
+ at fixtures of d_model 32 to 48, far below the 128 x 128 packed tile, so on
+-an arm build it exercises only the paths where the store epilogue arm
+-(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINES. This check runs one layer at
++an arm build it exercises only the paths where the work-list arm
++(`-D MOJOLEARN_GEMM_FAST_WORKLIST`) and the store epilogue arm
++(`-D MOJOLEARN_GEMM_FAST_EPI=1`) DECLINE. This check runs one layer at
+ 2,048 tokens and widths in the hundreds, where the weight gradients and the
+-input gradients of the projections take the packed body, so the packed
+-launches and the fused store are what computes the compared words. The host
++input gradients of the projections take the packed body, so the pooled
++launch and the fused store are what computes the compared words. The host
+ side is the oracle every host caller runs
+-(`transformer_block_backward_oracle`); EPI claims unchanged bits, so the
+-oracle is the default one for it. (The concatenated fan-in arm
+-MOJOLEARN_GEMM_FAST_DX_CONCAT and the work-list arm
+-MOJOLEARN_GEMM_FAST_WORKLIST were deleted 2026-11-19, docs/TOMBSTONES.md.)
++(`transformer_block_backward_oracle`); WORKLIST and EPI claim unchanged
++bits, so the oracle is the default one for them. (The concatenated fan-in
++arm MOJOLEARN_GEMM_FAST_DX_CONCAT was deleted 2026-11-19, docs/TOMBSTONES.md.)
+ 
+ Cases (each: one host forward and backward, two device runs):
+-  0 q, k and v of one width (n_kv_heads = n_heads).
+-  1 grouped-query attention (n_kv_heads = n_heads / 2): fan-in members of
+-    unequal width.
+-Device run A is the production form (no trace, nothing materialized) and
+-compares what a training step reads: the nine weight gradients and d(x).
++  0 q, k and v of one width (n_kv_heads = n_heads): the q, k, v fan-in is six
++    listed products under WORKLIST.
++  1 grouped-query attention (n_kv_heads = n_heads / 2): members of unequal
++    width in one list.
++Device run A is the production form (no trace, nothing materialized: the
++products stay pending on the list until the member that completes a fan-in)
++and compares what a training step reads: the nine weight gradients and d(x).
+ Device run B materializes the stages and also compares the two fan-in joins,
+ d(norm2.out) (gate + up) and d(norm1.out) (q, k, v).
+ 
+ NOT VACUOUS: the shape is chosen at run time, the first candidate for which
+-the build's own plan function (`gemm_workspace_epi_takes`) says the arm's
+-path is taken for the gate/up and k, v fan-in members. On an arm build with no such candidate the case FAILS as a fixture
++the build's own plan functions (`gemm_worklist_mode`,
++`gemm_workspace_epi_takes`) say the arm's path is taken for the gate/up
++fan-in and the q/k/v weight gradients. On an arm build with no such candidate the case FAILS as a fixture
+ error that lists every product's answer: it never passes on the declined
+ path. A default build has nothing to decline and runs the first candidate
+ whose products take the 128 x 128 plan (else the first).
+ 
+-What a sabotage changes here: a fused store that joins in the wrong operand
+-order or joins twice (d(norm2.out), d(norm1.out), and everything downstream
+-to d(x)); any host/device difference in leaves or fold tree at these
+-contraction lengths.
++What a sabotage changes here: a list launch that hands a block the wrong
++product's operands, table row or first-block offset (any dW or dX word); a
++grouped product folded from another product's node region; a fused store
++that joins in the wrong operand order or joins twice (d(norm2.out),
++d(norm1.out), and everything downstream to d(x)); a list never run for the
++last fan-in member (run A's weight gradients stay unwritten); any host/device difference in leaves or
++fold tree at these contraction lengths.
+ 
+ Every host-device transfer of this file goes through the kit.
+ """
+@@ -42,11 +48,13 @@ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.identity_trace import IdentityTrace
+ from gemm.checks.gemm_identical import (
++    GEMM_WORKLIST_NONE,
+     PLAN_TUNED_128_8X8,
+     choose_gemm_plan,
++    gemm_worklist_mode,
+ )
+ from gemm.checks.gemm_epilogue import GEMM_EPI_FUSES
+-from gemm.neural_dispatch import gemm_workspace_epi_takes
++from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST, gemm_workspace_epi_takes
+ from transformer.checks.transformer_fixture import (
+     RMS_EPS,
+     ROPE_THETA,
+@@ -76,8 +84,6 @@ from transformer.impl.llama.modeling_llama import (
+ )
+ # TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S: lm-train-step 1.00, samba-train-step 0.99) its decline tests here deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+ # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) its not-vacuous shape test (gemm_worklist_mode per product) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
+ from autograd.kernels.transformer import BWD_GEMM_EPI, LlamaBackwardStages
+ from autograd.rules_transformer import llama_decoder_layer_backward
+ 
+@@ -89,9 +95,9 @@ comptime TBP_CASES = 2
+ comptime TBP_CANDIDATES = 4
+ comptime TBP_L = 256
+ #: Whether this build compiles an arm whose path a shape can decline (the
+-#: fused store is NVIDIA's packed body only; elsewhere the define compiles to
+-#: the default launches and there is nothing to decline).
+-comptime _ARM_GUARDED = BWD_GEMM_EPI and GEMM_EPI_FUSES
++#: work list and the fused store are NVIDIA's packed body only; elsewhere the
++#: defines compile to the default launches and there is nothing to decline).
++comptime _ARM_GUARDED = NEURAL_GEMM_WORKLIST or (BWD_GEMM_EPI and GEMM_EPI_FUSES)
+ 
+ # Tensor ids of this file's fixture (transformer_fixture's are 1 to 11, the
+ # backward check's d_out is 21).
+@@ -156,6 +162,14 @@ def _arm_reach(m: Int, dims: TransformerDims) raises -> String:
+     var qw = dims.q_width()
+     var kw = dims.kv_width()
+     var miss = String("")
++    comptime if NEURAL_GEMM_WORKLIST:
++        if gemm_worklist_mode(inter, dm, m) == GEMM_WORKLIST_NONE:
++            miss += " [work list: dW gate/up (" + String(inter) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
++        if gemm_worklist_mode(qw, dm, m) == GEMM_WORKLIST_NONE:
++            miss += " [work list: dW q (" + String(qw) + ", " + String(dm) + ", " + String(m) + ") keeps its own launch]"
++        comptime if not BWD_GEMM_EPI:
++            if gemm_worklist_mode(m, dm, inter) == GEMM_WORKLIST_NONE:
++                miss += " [work list: dX gate/up (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") keeps its own launch]"
+     comptime if BWD_GEMM_EPI and GEMM_EPI_FUSES:
+         if not gemm_workspace_epi_takes(m, dm, inter):
+             miss += " [epilogue: dX gate (" + String(m) + ", " + String(dm) + ", " + String(inter) + ") declines]"
+diff --git a/gemm/checks/gemm_device_check.mojo b/gemm/checks/gemm_device_check.mojo
+index 5c66cec847..70a9e7aa78 100644
+--- a/gemm/checks/gemm_device_check.mojo
++++ b/gemm/checks/gemm_device_check.mojo
+@@ -61,6 +61,10 @@ from bench.gemm_shapes import (
+ from bench.gemm_shapes import OP_NN as TBL_OP_NN
+ from bench.gemm_shapes import OP_NT as TBL_OP_NT
+ from bench.gemm_shapes import OP_TN as TBL_OP_TN
++# lane/fx-gemm-worklist: the work-list arm's check (check_device_worklist_is_launch_invariant).
++from gemm.checks.gemm_identical import (
++    GEMM_FAST_WORKLIST, GEMM_WORKLIST_ALL, GEMM_WORKLIST_GROUP, GemmWorklist, gemm_worklist_mode,
++)
+ from gemm.checks.gemm_identical import (
+     GEMM_FOLD_LEVELS,
+     GEMM_FOLD_SLOTS,
+@@ -1166,8 +1170,147 @@ def check_device_is_launch_invariant() raises:
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) check_device_worklist_is_launch_invariant (four products as one work list against their own launches) and its two helpers deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
++def _worklist_case(i: Int) -> Tuple[Int, Int, Int, Int]:
++    """`(op, m, n, k)` of the work-list check's product `i`: four unequal
++    products in three orientations, none a multiple of the packed tile in
++    both directions. 0 and 1 are small outputs with a short contraction (the
++    leaf-group launch where the group rule takes them); 2 and 3 are outputs
++    wide enough to fill the device alone (all leaves in one launch)."""
++    if i == 0:
++        return (OP_NT, 2048, 384, 384)
++    if i == 1:
++        return (OP_NN, 1536, 320, 320)
++    if i == 2:
++        return (OP_NT, 2100, 1100, 200)
++    return (OP_TN, 1900, 1300, 130)
++
++
++def _worklist_device(ctx: DeviceContext, h: List[Float32], count: Int, poison: Bool) raises -> DeviceBuffer[DType.float32]:
++    """A device buffer of `count` floats holding `h` (or POISON in every
++    cell), uploaded and drained."""
++    var d = ctx.enqueue_create_buffer[DType.float32](count)
++    var hb = ctx.enqueue_create_host_buffer[DType.float32](count)
++    ctx.synchronize()
++    for i in range(count):
++        if poison:
++            hb.unsafe_ptr().unsafe_store(i, POISON)
++        else:
++            hb.unsafe_ptr().unsafe_store(i, h[i])
++    upload_host_into[DType.float32](ctx, d, hb)
++    return d^
++
++
++def check_device_worklist_is_launch_invariant() raises:
++    """lane/fx-gemm-worklist, arm `-D MOJOLEARN_GEMM_FAST_WORKLIST=1`: four
++    unequal products launched as ONE work list store the words their four
++    single launches store. The single launches go through the shipped
++    dispatcher (`identical_gemm_into`), the list through `GemmWorklist`
++    exactly as `GemmWorkspace.list_run` drives it. One operand set carries
++    subnormals (the packed body's window admission and exact recompute).
++
++    The check also requires the fixture to reach both list kernels with at
++    least two products each (group mode and all leaves): a list that takes
++    fewer is a fixture that no longer tests the arm, and RAISES as that.
++    Without the arm on this column nothing is compared and the line says so.
++    """
++    comptime if not GEMM_FAST_WORKLIST:
++        print(
++            "check_device_worklist_is_launch_invariant ["
++            + _mode_name()
++            + "]: NOT RUN (the work-list arm is not compiled on this build or column:"
++            " list entries are the single launches)"
++        )
++        return
++    print("check_device_worklist_is_launch_invariant [" + _mode_name() + "]: 4 products, one work list")
++    var fails = 0
++    with DeviceContext() as ctx:
++        var singles = List[List[Float32]]()
++        var das = List[DeviceBuffer[DType.float32]]()
++        var dbs = List[DeviceBuffer[DType.float32]]()
++        var dcs = List[DeviceBuffer[DType.float32]]()
++        var n_all = 0
++        var n_group = 0
++        for i in range(4):
++            var cs = _worklist_case(i)
++            var op = cs[0]
++            var m = cs[1]
++            var n = cs[2]
++            var k = cs[3]
++            var ha = _fill(_a_elems(op, m, n, k), 131 + i, i == 3)
++            var hb = _fill(_b_elems(op, m, n, k), 147 + i, False)
++            var label = String("worklist product ") + String(i)
++            singles.append(_run_device(ctx, ha, hb, op, m, n, k, -1, label))
++            das.append(_worklist_device(ctx, ha, len(ha), False))
++            dbs.append(_worklist_device(ctx, hb, len(hb), False))
++            dcs.append(_worklist_device(ctx, ha, m * n, True))
++            var mode = gemm_worklist_mode(m, n, k)
++            if mode == GEMM_WORKLIST_ALL:
++                n_all += 1
++            elif mode == GEMM_WORKLIST_GROUP:
++                n_group += 1
++            print(
++                "  product " + String(i) + "  op=" + op_name(op) + "  " + String(m) + "x" + String(n) + "x" + String(k)
++                + "  list mode=" + String(mode) + " (1 all leaves, 2 leaf groups, 0 own launch)"
++            )
++        if n_all < 2 or n_group < 2:
++            raise Error(
++                "check_device_worklist_is_launch_invariant: FIXTURE, not arithmetic: the four products reach the"
++                " all-leaves list " + String(n_all) + " times and the group list " + String(n_group)
++                + " times; each needs two. Pick shapes the shipped dispatch runs on the packed body in each mode"
++                " (_worklist_case)."
++            )
++        var wl = GemmWorklist()
++        wl.begin()
++        for i in range(4):
++            var cs2 = _worklist_case(i)
++            var taken = wl.add(
++                ctx,
++                dcs[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                das[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                dbs[i].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                cs2[1], cs2[2], cs2[3], cs2[0],
++            )
++            if not taken:
++                raise Error("check_device_worklist_is_launch_invariant: product " + String(i) + " was not queued")
++        var need = wl.node_floats()
++        if need < 1:
++            need = 1
++        var nodes = ctx.enqueue_create_buffer[DType.float32](need)
++        wl.launch(ctx, nodes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
++        ctx.synchronize()
++        for i in range(4):
++            var cs3 = _worklist_case(i)
++            var mn = cs3[1] * cs3[2]
++            var hc = ctx.enqueue_create_host_buffer[DType.float32](mn)
++            download_host_into[DType.float32](ctx, dcs[i], hc)
++            var bad = 0
++            var first = -1
++            for c in range(mn):
++                if _bits(hc.unsafe_ptr().unsafe_load(c)) != _bits(singles[i][c]):
++                    bad += 1
++                    if first < 0:
++                        first = c
++            if bad == 0:
++                print("      OK   product " + String(i) + ": " + String(mn) + " cells equal to its single launch")
++            else:
++                fails += 1
++                print(
++                    "      FAIL product " + String(i) + ": " + String(bad) + " of " + String(mn)
++                    + " cells differ from its single launch. First at (" + String(first // cs3[2]) + ", "
++                    + String(first % cs3[2]) + "): list = " + _show(hc.unsafe_ptr().unsafe_load(first))
++                    + "   single = " + _show(singles[i][first])
++                )
++        # Named after the wait: the list owns the device table and its pinned
++        # copy, which the queued upload and launch read.
++        _ = wl.node_floats()
++        _ = nodes
++        _ = len(das) + len(dbs) + len(dcs)
++    if fails != 0:
++        raise Error(
++            "check_device_worklist_is_launch_invariant [" + _mode_name() + "]: " + String(fails)
++            + " of 4 products stored DIFFERENT BITS in a work-list launch than in their own launch (lines above)"
++        )
++    print("check_device_worklist_is_launch_invariant [" + _mode_name() + "] OK: 4 products, every cell equal")
+ 
+ 
+ # ===========================================================================
+@@ -1842,6 +1985,11 @@ def main() raises:
+         _gate(String("check_device_is_launch_invariant"), ran, failed, String(""))
+     except e:
+         _gate(String("check_device_is_launch_invariant"), ran, failed, String(e))
++    try:
++        check_device_worklist_is_launch_invariant()
++        _gate(String("check_device_worklist_is_launch_invariant"), ran, failed, String(""))
++    except e:
++        _gate(String("check_device_worklist_is_launch_invariant"), ran, failed, String(e))
+     try:
+         check_device_is_batch_invariant()
+         _gate(String("check_device_is_batch_invariant"), ran, failed, String(""))
+diff --git a/gemm/checks/gemm_identical.mojo b/gemm/checks/gemm_identical.mojo
+index 53fc108536..93787ecc17 100644
+--- a/gemm/checks/gemm_identical.mojo
++++ b/gemm/checks/gemm_identical.mojo
+@@ -121,6 +121,7 @@ from std.utils import StaticTuple
+ from std.memory import bitcast, stack_allocation
+ from std.os import getenv
+ from max.gpu.host import DeviceAttribute, DeviceBuffer, DeviceContext
++from max.gpu.host import HostBuffer  # lane/fx-gemm-worklist: the work-list table's pinned copy
+ # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
+ # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+ from core.step_phase import (
+@@ -8934,7 +8935,7 @@ comptime GEMM_EPI_C_PLUS_CELL = 1
+ comptime GEMM_EPI_CELL_PLUS_C = 2
+ # lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
+ # `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
+-# `epi_p` and one Int32 `epi_i`; the single-product kernel keeps its arguments and passes the
++# `epi_p` and one Int32 `epi_i`; the single-product kernel and the list kernel keep their arguments and pass the
+ # body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory. Launcher: gemm/neural_dispatch.mojo
+ # `identical_gemm_leaf_ptr_epi_into`; entry and rule: sequence/gemm_packed_route.mojo `seq_gemm_packed_epi_kind` /
+ # `seq_gemm_packed_epi_launch`; call site: sequence/exec_device.mojo; check: autograd/checks/gemm_cases.mojo.
+@@ -8989,10 +8990,10 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
+-# The body of `identical_gemm_kpack_kernel`, unchanged, as an inlined helper so the single-product kernel and the
+-# second-buffer epilogue kernel (`identical_gemm_kpack_epi_ptr_kernel`, below `_kpack_launch`) run ONE body
+-# (AGENTS.md part 6: a launched kernel is never called from another kernel). The only two edits to the body are
+-# its last two arguments: `raw_in` is the tile block index (`block_idx.x` of a single-product launch) and `q_in`
++# lane/fx-gemm-worklist (2026-11-19): the body of `identical_gemm_kpack_kernel`, unchanged, as an inlined helper so
++# the single-product kernel and the work-list kernel (`identical_gemm_kpack_list_kernel`, below `_kpack_launch`) run
++# ONE body (AGENTS.md part 6: a launched kernel is never called from another kernel). The only two edits to the body
++# are its last two arguments: `raw_in` is the tile block index (`block_idx.x` of a single-product launch) and `q_in`
+ # the leaf group (`block_idx.y` there); the single-product kernel passes exactly those.
+ @always_inline
+ def _kpack_kernel_body[
+@@ -9801,8 +9802,584 @@ def identical_gemm_kpack_epi_ptr_kernel[
+     )
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) the work list: GEMM_FAST_WORKLIST, the GEMM_WORKLIST_* constants, gemm_worklist_mode, identical_gemm_kpack_list_kernel, _kpack_list_launch, _kpack_list_fold_launch, _worklist_spans_overlap and GemmWorklist deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
++# ===========================================================================
++# THE WORK LIST (lane/fx-gemm-worklist, 2026-11-19; arm, default OFF)
++# ===========================================================================
++# `-D MOJOLEARN_GEMM_FAST_WORKLIST=1`: independent products whose inputs are
++# ready at the same point share ONE launch of the packed body. NEVER RUN:
++# PENDING MEASUREMENT (docs/apple-fast/EXPERIMENTS.md, row GEMM_FAST_WORKLIST).
++#
++# What a list launch is. Every product keeps the blocks its own launch issues
++# today: `tiles` blocks (all leaves) or `tiles x groups` blocks (leaf groups),
++# at the same block size, on the same output tile, with the same leaf and
++# group arguments. The list launch's grid is the concatenation of those block
++# runs along x; a device table row per product holds its eleven scalar
++# arguments, its first block and its tile count, and the block finds its row by
++# a comptime-bounded scan of the first-block column. The block's index inside
++# its product's run is then exactly the `(block_idx.x, block_idx.y)` the body
++# would have read in a single launch: `tile = local mod tiles`, `group = local
++# div tiles`.
++#
++# Same bits, and why. The body is `_kpack_kernel_body`, the one the single
++# launch runs, instantiated with the same geometry parameters; it reads its
++# shape, strides, leaf, leaf count and operand pointers from its arguments
++# only, and no value of one block reaches another block (shared pages and
++# registers are per block). A block of product `e` therefore runs the same
++# instructions on the same operands in the same order as block `(tile,
++# group)` of `e`'s own launch and stores the same words at the same
++# addresses. The only parameter that can differ from a product's own launch
++# is `FS`, the extent of the local fold stack, which bounds unused storage
++# above the highest reachable tree level and cannot change the fold DAG
++# (`_kpack_hg_run_with_ws`). Group nodes go to disjoint regions of the
++# caller's workspace and each grouped product keeps its own fold launch, the
++# kernels `_ksplit_fold_launch` picks. The check that would catch a slip:
++# `check_device_worklist_is_launch_invariant` (gemm/checks/gemm_device_check.mojo),
++# four unequal products, two per mode, against four single launches.
++#
++# Which products. Only those whose own launch today is the packed body at the
++# shipped geometry (`gemm_worklist_mode`); every other product runs its own
++# launch unchanged, in the caller. Columns whose shipped body is not this one
++# (AMD's matrix-core plans, Apple's matrix plan) compile the arm to the
++# per-product launches: the arm moves no bit on any column.
++#
++# Refusals stay per product: `GemmWorklist.add` calls the same helpers the
++# product's own launch calls (`gemm_operand_strides`, `_ksplit_resolve_leaves`),
++# so the same error with the same wording is raised for that product. The one
++# new refusal is the list's own: a product whose output overlaps another
++# listed product's operands or output is not independent and is refused.
++# MOJOLEARN_GEMM_FAST_WORKLIST, A/B round 1 2026-11-19 (lane fx-verdicts3; NVIDIA L40S host bd9c355c19c0, wheel 0c68d6cd27 and its B set, base and arm
++# back to back in one pod job, tag nvc-ab-20261119T125554Z-6f7afc, one scored run per arm; digests and quality equal).
++# Base -> arm ms: lm-train-step 36.22 -> 36.39 (1.00; the row it was written for), lm-forward 23.25 -> 21.54 (0.93; the
++# same row's base in another pair of the job 21.27, so the arm sits on the base), transformer-decode 1117.6 -> 1121.9
++# (1.00, the control). VERDICT: NOISE, a loser by its own owed row. NOT promoted. DELETION OWED: the list reaches the
++# default path's structure (the single-product kernel as a wrapper of the shared body, GemmWorkspace.list_*, the LIST
++# parameter of _route_a / _route_b, the llama forward's q,k,v and gate,up lists), so it is one compile-checked change,
++# not done blind by the verdict lane (~/mojolearn-evidence/briefs-20261118/fx-verdicts3-RESULT.md lists the sites).
++comptime GEMM_FAST_WORKLIST = (
++    is_defined["MOJOLEARN_GEMM_FAST_WORKLIST"]()
++    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and TARGET_COLUMN == COLUMN_NVIDIA
++    and GEMM_BODY_KPACK_HG
++    and GEMM_REUSE_GROUP_WS
++    and not GEMM_IDENTICAL_MFMA
++    and not GEMM_IDENTICAL_LEAF_SPLIT
++    and not GEMM_ARM_TRIAL
++)
++#: Products one list launch holds: the kernel takes this many pointer triples
++#: (the six weight and input gradients of q, k, v fit; a longer list is
++#: launched in runs of this many).
++comptime GEMM_WORKLIST_MAX = 8
++#: Table row: m, n, k, leaf, P, the four operand strides, leaves per group,
++#: groups, first block, tiles.
++comptime GEMM_WORKLIST_ROW = 13
++comptime GEMM_WORKLIST_COL_FIRST = 11
++comptime GEMM_WORKLIST_COL_TILES = 12
++#: An unused row's first block: above every block index, so the scan skips it.
++comptime GEMM_WORKLIST_NO_ROW = 0x7FFFFFFF
++#: Device tables a `GemmWorklist` keeps, one per distinct set of shapes. A
++#: transformer step has about six such sets (q,k,v forward; gate,up; their
++#: gradient lists); a seventeenth distinct set reuses the oldest slot.
++comptime GEMM_WORKLIST_SLOTS = 16
++comptime GEMM_WORKLIST_NONE = 0
++comptime GEMM_WORKLIST_ALL = 1
++comptime GEMM_WORKLIST_GROUP = 2
++#: Host record per pending product: mode, the row's thirteen values (first
++#: block unset), fold-stack class, node offset in the workspace.
++comptime GEMM_WORKLIST_ITEM = 16
++
++
++def gemm_worklist_mode(m: Int, n: Int, k: Int) -> Int:
++    """Which packed launch the shipped dispatch runs for this product where
++    the work-list arm is compiled: `GEMM_WORKLIST_GROUP` (leaf groups into a
++    node workspace, then the fold), `GEMM_WORKLIST_ALL` (all leaves, one
++    launch into `C`), or `GEMM_WORKLIST_NONE` (another plan or body: the
++    product keeps its own launch). These are `_shipped_body_kpack_hg`'s and
++    `_kpack_hg_run_with_ws`'s own tests on the column the arm compiles for,
++    read from the same functions, so the list can only take a product onto
++    the body and the mode its single launch uses. Execution plan only."""
++    comptime if not GEMM_FAST_WORKLIST:
++        return GEMM_WORKLIST_NONE
++    if m <= 0 or n <= 0:
++        return GEMM_WORKLIST_NONE
++    if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
++        if gemm_default_ksplit_leaves(m, n, k) > 0 and contract_partition(k)[1] > 0:
++            return GEMM_WORKLIST_GROUP
++        return GEMM_WORKLIST_ALL
++    # A stepped-down call the shipped dispatch runs on the packed body at the
++    # SAME tile (all leaves, no workspace); its narrower-tile case is another
++    # kernel instantiation and keeps its own launch.
++    comptime if GEMM_BODY_KPACK_HG and IDN_GEMM_NV_STEP_KPACK:
++        if gemm_nv_step_kpack_rows(m, n, k) == GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC):
++            return GEMM_WORKLIST_ALL
++    return GEMM_WORKLIST_NONE
++
++
++@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
++def identical_gemm_kpack_list_kernel[
++    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool,
++    PAD: Int = 0,
++    ALIGN: Int = 4,
++    HWFOLD: Bool = False,
++    GATHER: Bool = False,
++](
++    tab: MutPointer[Int32, MutAnyOrigin],
++    d0: MutPointer[Float32, MutAnyOrigin],
++    a0: MutPointer[Float32, MutAnyOrigin],
++    b0: MutPointer[Float32, MutAnyOrigin],
++    d1: MutPointer[Float32, MutAnyOrigin],
++    a1: MutPointer[Float32, MutAnyOrigin],
++    b1: MutPointer[Float32, MutAnyOrigin],
++    d2: MutPointer[Float32, MutAnyOrigin],
++    a2: MutPointer[Float32, MutAnyOrigin],
++    b2: MutPointer[Float32, MutAnyOrigin],
++    d3: MutPointer[Float32, MutAnyOrigin],
++    a3: MutPointer[Float32, MutAnyOrigin],
++    b3: MutPointer[Float32, MutAnyOrigin],
++    d4: MutPointer[Float32, MutAnyOrigin],
++    a4: MutPointer[Float32, MutAnyOrigin],
++    b4: MutPointer[Float32, MutAnyOrigin],
++    d5: MutPointer[Float32, MutAnyOrigin],
++    a5: MutPointer[Float32, MutAnyOrigin],
++    b5: MutPointer[Float32, MutAnyOrigin],
++    d6: MutPointer[Float32, MutAnyOrigin],
++    a6: MutPointer[Float32, MutAnyOrigin],
++    b6: MutPointer[Float32, MutAnyOrigin],
++    d7: MutPointer[Float32, MutAnyOrigin],
++    a7: MutPointer[Float32, MutAnyOrigin],
++    b7: MutPointer[Float32, MutAnyOrigin],
++):
++    """The packed body over a TABLE of independent products (the work list
++    above). `tab` holds `GEMM_WORKLIST_MAX` rows of `GEMM_WORKLIST_ROW`
++    Int32; row `e`'s pointers are `(d_e, a_e, b_e)`: `d_e` is `C` in
++    all-leaves mode and the product's node region in group mode. Rows are in
++    ascending first block; an unused row's first block is
++    `GEMM_WORKLIST_NO_ROW` and its pointers repeat row 0's (never read).
++
++    Every value read here before the body starts is block-uniform (it
++    depends on `block_idx.x` and the table only), so the body's rule that
++    every thread of a block reaches every barrier holds as in a single
++    launch. Arm only: instantiated from `_kpack_list_launch`."""
++    comptime assert GEMM_WORKLIST_MAX == 8, (
++        "identical_gemm_kpack_list_kernel: the pointer arguments are written out for eight rows"
++    )
++    var blk = Int(block_idx.x)
++    # The last row whose first block is at or below this block: seven compares.
++    var e = 0
++    comptime for s in range(1, GEMM_WORKLIST_MAX):
++        if blk >= Int(tab.unsafe_load(s * GEMM_WORKLIST_ROW + GEMM_WORKLIST_COL_FIRST)):
++            e = s
++    var dst = d0
++    var a = a0
++    var b = b0
++    if e == 1:
++        dst = d1
++        a = a1
++        b = b1
++    elif e == 2:
++        dst = d2
++        a = a2
++        b = b2
++    elif e == 3:
++        dst = d3
++        a = a3
++        b = b3
++    elif e == 4:
++        dst = d4
++        a = a4
++        b = b4
++    elif e == 5:
++        dst = d5
++        a = a5
++        b = b5
++    elif e == 6:
++        dst = d6
++        a = a6
++        b = b6
++    elif e == 7:
++        dst = d7
++        a = a7
++        b = b7
++    var row = e * GEMM_WORKLIST_ROW
++    var local = blk - Int(tab.unsafe_load(row + GEMM_WORKLIST_COL_FIRST))
++    var tile = local
++    var group = 0
++    comptime if GROUP:
++        # Unsigned: `local >= 0` and `tiles >= 1` (the host writes both).
++        var tiles = Int(tab.unsafe_load(row + GEMM_WORKLIST_COL_TILES))
++        group = Int(UInt(local) // UInt(tiles))
++        tile = local - group * tiles
++    # EPI 0: a product that needs a store epilogue is never listed (it takes its own launch).
++    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, False, PAD, ALIGN, 0, HWFOLD, GATHER, 0](
++        dst, a, b,
++        tab.unsafe_load(row + 0), tab.unsafe_load(row + 1), tab.unsafe_load(row + 2),
++        tab.unsafe_load(row + 3), tab.unsafe_load(row + 4),
++        tab.unsafe_load(row + 5), tab.unsafe_load(row + 6), tab.unsafe_load(row + 7), tab.unsafe_load(row + 8),
++        tab.unsafe_load(row + 9), tab.unsafe_load(row + 10),
++        Int32(tile), Int32(group), dst, Int32(0),
++    )
++
++
++def _kpack_list_launch[
++    FS: Int, GROUP: Bool
++](
++    ctx: DeviceContext,
++    tab: MutPointer[Int32, MutAnyOrigin],
++    p: List[Int],
++    blocks: Int,
++) raises:
++    """One work-list launch at the shipped packed geometry (the parameters
++    `_kpack_hg_run_with_ws` passes `_kpack_launch`), `PAGES` computed as
++    `_kpack_launch` computes it. `p` holds `3 GEMM_WORKLIST_MAX` device addresses,
++    `(d, a, b)` per row; `blocks` is the sum of the rows' block runs. No
++    wait: the caller keeps the table, the operands and the workspace alive
++    past its own synchronize."""
++    comptime NTH = TUNED_TPB
++    comptime TR = NTH // TUNED_TC
++    comptime BM = GEMM_KPACK_RPT * TR
++    comptime BN = GEMM_KPACK_CPT * TUNED_TC
++    comptime PAGE_BYTES = (BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
++    comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
++        TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
++    ]()
++    comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
++        "_kpack_list_launch: one packed page of this geometry exceeds the column's"
++        " shared limit"
++    )
++    comptime kern = identical_gemm_kpack_list_kernel[
++        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES, GROUP,
++        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, True, True
++    ]
++    ctx.enqueue_function[kern](
++        tab,
++        # Device ADDRESSES made pointers at the launch (the form of core/generation_policy_impl.mojo:62 and
++        # autograd/program_device_execution.mojo:26): a struct field may not hold an AnyOrigin pointer, so the
++        # list keeps addresses. Host side only, and only on the column the arm compiles for; no kernel turns
++        # an integer into a pointer.
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[0]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[1]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[2]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[3]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[4]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[5]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[6]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[7]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[8]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[9]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[10]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[11]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[12]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[13]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[14]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[15]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[16]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[17]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[18]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[19]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[20]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[21]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[22]),
++        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=p[23]),
++        grid_dim=(blocks, 1, 1),
++        block_dim=(NTH, 1, 1),
++    )
++
++
++def _kpack_list_fold_launch(
++    ctx: DeviceContext,
++    c: MutPointer[Float32, MutAnyOrigin],
++    nodes: MutPointer[Float32, MutAnyOrigin],
++    m: Int,
++    n: Int,
++    groups: Int,
++) raises:
++    """`_ksplit_fold_launch` for one grouped product of a work list: the same
++    two kernels on the same rule with the same arguments, reading the
++    product's node region of the workspace by pointer (the region starts at
++    an offset, which a `DeviceBuffer` argument cannot say). Keep the two in
++    step: a change to `_ksplit_fold_launch`'s rule is a change here."""
++    if m * n <= SPLIT_BLOCK_FOLD_MAX_CELLS:
++        step_count_launch()
++        ctx.enqueue_function[identical_gemm_fold_kernel[True]](
++            c,
++            nodes,
++            Int32(m * n),
++            Int32(groups),
++            Int32(groups),
++            grid_dim=(m * n, 1, 1),
++            block_dim=(SPLITK_FOLD_TPB, 1, 1),
++        )
++        return
++    step_count_launch()
++    ctx.enqueue_function[identical_gemm_fold_stack_kernel](
++        c,
++        nodes,
++        Int32(m * n),
++        Int32(groups),
++        grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1),
++        block_dim=(FLAT_TPB, 1, 1),
++    )
++
++
++def _worklist_spans_overlap(p0: Int, n0: Int, p1: Int, n1: Int) -> Bool:
++    """Two float spans (address, count) share a byte."""
++    if n0 <= 0 or n1 <= 0:
++        return False
++    return p0 < p1 + 4 * n1 and p1 < p0 + 4 * n0
++
++
++struct GemmWorklist(Movable):
++    """The pending products of one work-list launch and the device tables
++    that describe them (the work list above). Host state only between
++    `begin` and `launch`; the tables are written once per distinct set of
++    shapes and reused, so a steady-state launch uploads nothing. Owned by a
++    `GemmWorkspace` (gemm/neural_dispatch.mojo), which supplies the node
++    workspace. Every loop here is a driver loop over at most
++    `GEMM_WORKLIST_MAX` products or `GEMM_WORKLIST_SLOTS` tables."""
++    var count: Int
++    var nodes: Int
++    var item: List[Int]
++    var span: List[Int]
++    var row: List[Int]
++    var lp: List[Int]
++    var tabs: List[DeviceBuffer[DType.int32]]
++    var hosts: List[HostBuffer[DType.int32]]
++    var next_slot: Int
++
++    def __init__(out self):
++        self.count = 0
++        self.nodes = 0
++        self.item = List[Int]()
++        self.span = List[Int]()
++        self.row = List[Int]()
++        self.lp = List[Int]()
++        self.tabs = List[DeviceBuffer[DType.int32]]()
++        self.hosts = List[HostBuffer[DType.int32]]()
++        self.next_slot = 0
++
++    def begin(mut self):
++        """Drop every pending product (the lists keep their storage)."""
++        self.count = 0
++        self.nodes = 0
++        self.item.clear()
++        self.span.clear()
++
++    def full(self) -> Bool:
++        return self.count >= GEMM_WORKLIST_MAX
++
++    def node_floats(self) -> Int:
++        """Workspace floats the pending grouped products' nodes need."""
++        return self.nodes
++
++    def add(
++        mut self,
++        ctx: DeviceContext,
++        c: MutPointer[Float32, MutAnyOrigin],
++        a: MutPointer[Float32, MutAnyOrigin],
++        b: MutPointer[Float32, MutAnyOrigin],
++        m: Int,
++        n: Int,
++        k: Int,
++        op: Int,
++    ) raises -> Bool:
++        """Queue `C[m x n] = op(A) . op(B)` for the next `launch`. False, and
++        nothing queued, when the product's own launch is not the packed body
++        (`gemm_worklist_mode`): the caller then runs that launch itself.
++        RAISES what the product's own launch raises (same helpers, same
++        wording), and the list's own refusal when the product is not
++        independent of one already queued. The caller keeps `c`, `a` and `b`
++        alive past the synchronize that follows `launch`."""
++        comptime if not GEMM_FAST_WORKLIST:
++            return False
++        comptime if IDN_GEMM_FILL_TILES:
++            # As `identical_gemm_shipped_into`: before the first `choose_gemm_plan`.
++            gemm_fill_note_device(ctx)
++        var mode = gemm_worklist_mode(m, n, k)
++        if mode == GEMM_WORKLIST_NONE:
++            return False
++        if self.count >= GEMM_WORKLIST_MAX:
++            raise Error("GEMM work list: more than " + String(GEMM_WORKLIST_MAX) + " products pending (launch first)")
++        var part = contract_partition(k)
++        var st = gemm_operand_strides(op, m, n, k)
++        var gl_rule = gemm_default_ksplit_leaves(m, n, k)
++        var gl = 0
++        var groups = 0
++        if mode == GEMM_WORKLIST_GROUP:
++            var rg = _ksplit_resolve_leaves(gl_rule, part[1])
++            gl = rg[0]
++            groups = rg[1]
++        # The fold-stack class `_shipped_body_kpack_hg` picks for this product.
++        var fs = GEMM_KPACK_FS
++        comptime if not is_defined["MOJOLEARN_LEGACY_SHAPE_NV_FS4"]() and not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
++            if gemm_kpack_fold_slots_for(part[1], gl_rule) == 4:
++                fs = 4
++        if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
++            # The stepped-down call's own launch uses the profile-wide stack.
++            fs = GEMM_KPACK_FS
++        # Independence: an output that another listed product reads or writes.
++        var pc = Int(c)
++        var pa = Int(a)
++        var pb = Int(b)
++        var nc = m * n
++        var na = m * k
++        var nb = n * k
++        for j in range(self.count):
++            var sb = j * 6
++            if (
++                _worklist_spans_overlap(pc, nc, self.span[sb], self.span[sb + 1])
++                or _worklist_spans_overlap(pc, nc, self.span[sb + 2], self.span[sb + 3])
++                or _worklist_spans_overlap(pc, nc, self.span[sb + 4], self.span[sb + 5])
++                or _worklist_spans_overlap(pa, na, self.span[sb], self.span[sb + 1])
++                or _worklist_spans_overlap(pb, nb, self.span[sb], self.span[sb + 1])
++            ):
++                raise Error(
++                    "GEMM work list: product " + String(self.count) + " and product " + String(j)
++                    + " are not independent (an output overlaps the other's output or operands)"
++                )
++        comptime TR = TUNED_TPB // TUNED_TC
++        var tiles = _tile_grid(m, n, GEMM_KPACK_RPT * TR, GEMM_KPACK_CPT * TUNED_TC, False)[0]
++        self.item.append(mode)
++        self.item.append(m)
++        self.item.append(n)
++        self.item.append(k)
++        self.item.append(part[0])
++        self.item.append(part[1])
++        self.item.append(st[0])
++        self.item.append(st[1])
++        self.item.append(st[2])
++        self.item.append(st[3])
++        self.item.append(gl)
++        self.item.append(groups)
++        self.item.append(0)
++        self.item.append(tiles)
++        self.item.append(fs)
++        self.item.append(self.nodes)
++        self.span.append(pc)
++        self.span.append(nc)
++        self.span.append(pa)
++        self.span.append(na)
++        self.span.append(pb)
++        self.span.append(nb)
++        self.nodes += m * n * groups
++        self.count += 1
++        return True
++
++    def _table(mut self, ctx: DeviceContext) raises -> Int:
++        """The slot whose device table holds `self.row`: an existing one when
++        its pinned copy has the same words (no upload), else a new or the
++        oldest slot, written and uploaded in stream order. A reused slot is
++        rewritten only after a wait, because a queued copy or launch may
++        still read it."""
++        comptime WORDS = GEMM_WORKLIST_MAX * GEMM_WORKLIST_ROW
++        for s in range(len(self.hosts)):
++            var same = True
++            var hp = self.hosts[s].unsafe_ptr()
++            for w in range(WORDS):
++                if Int(hp.unsafe_load(w)) != self.row[w]:
++                    same = False
++                    break
++            if same:
++                return s
++        var slot = len(self.hosts)
++        if slot < GEMM_WORKLIST_SLOTS:
++            step_count_device_alloc()
++            self.tabs.append(ctx.enqueue_create_buffer[DType.int32](WORDS))
++            self.hosts.append(ctx.enqueue_create_host_buffer[DType.int32](WORDS))
++        else:
++            slot = self.next_slot
++            self.next_slot = (self.next_slot + 1) % GEMM_WORKLIST_SLOTS
++            step_count_sync()
++            ctx.synchronize()
++        var wp = self.hosts[slot].unsafe_ptr()
++        for w in range(WORDS):
++            wp.unsafe_store(w, Int32(self.row[w]))
++        ctx.enqueue_copy(dst_buf=self.tabs[slot], src_ptr=self.hosts[slot].unsafe_ptr())
++        return slot
++
++    def _launch_mode(
++        mut self, ctx: DeviceContext, ws: MutPointer[Float32, MutAnyOrigin], mode: Int
++    ) raises:
++        """One list launch for the pending products of `mode`, then, in group
++        mode, each product's own fold."""
++        # Under the arm's own comptime test: the list kernel is instantiated
++        # only on the column whose shipped body it shares.
++        comptime if GEMM_FAST_WORKLIST:
++            self.row.clear()
++            self.lp.clear()
++            var rows = 0
++            var blocks = 0
++            var fs4 = True
++            for e in range(self.count):
++                var ib = e * GEMM_WORKLIST_ITEM
++                if self.item[ib] != mode:
++                    continue
++                var run = self.item[ib + 13]
++                if mode == GEMM_WORKLIST_GROUP:
++                    run = run * self.item[ib + 11]
++                    self.lp.append(Int(ws) + 4 * self.item[ib + 15])
++                else:
++                    self.lp.append(self.span[6 * e])
++                self.lp.append(self.span[6 * e + 2])
++                self.lp.append(self.span[6 * e + 4])
++                for w in range(GEMM_WORKLIST_ROW):
++                    if w == GEMM_WORKLIST_COL_FIRST:
++                        self.row.append(blocks)
++                    else:
++                        self.row.append(self.item[ib + 1 + w])
++                if self.item[ib + 14] != 4:
++                    fs4 = False
++                blocks += run
++                rows += 1
++            if rows == 0:
++                return
++            if blocks >= GEMM_WORKLIST_NO_ROW:
++                raise Error("GEMM work list: the list's block count does not fit the launch grid")
++            for pad in range(rows, GEMM_WORKLIST_MAX):
++                for w in range(GEMM_WORKLIST_ROW):
++                    if w == GEMM_WORKLIST_COL_FIRST:
++                        self.row.append(GEMM_WORKLIST_NO_ROW)
++                    elif w == GEMM_WORKLIST_COL_TILES:
++                        self.row.append(1)
++                    else:
++                        self.row.append(0)
++                var pad_d = self.lp[0]
++                var pad_a = self.lp[1]
++                var pad_b = self.lp[2]
++                self.lp.append(pad_d)
++                self.lp.append(pad_a)
++                self.lp.append(pad_b)
++            var slot = self._table(ctx)
++            var tab = self.tabs[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++            if mode == GEMM_WORKLIST_GROUP:
++                if fs4:
++                    _kpack_list_launch[4, True](ctx, tab, self.lp, blocks)
++                else:
++                    _kpack_list_launch[GEMM_KPACK_FS, True](ctx, tab, self.lp, blocks)
++                comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
++                    for e in range(self.count):
++                        var fb = e * GEMM_WORKLIST_ITEM
++                        if self.item[fb] != mode:
++                            continue
++                        _kpack_list_fold_launch(
++                            ctx, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=self.span[6 * e]),
++                            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ws) + 4 * self.item[fb + 15]),
++                            self.item[fb + 1], self.item[fb + 2], self.item[fb + 11],
++                        )
++            else:
++                if fs4:
++                    _kpack_list_launch[4, False](ctx, tab, self.lp, blocks)
++                else:
++                    _kpack_list_launch[GEMM_KPACK_FS, False](ctx, tab, self.lp, blocks)
++
++    def launch(mut self, ctx: DeviceContext, ws: MutPointer[Float32, MutAnyOrigin]) raises:
++        """Launch every pending product and clear the list: at most one list
++        launch per mode, plus one fold per grouped product. `ws` is a
++        workspace of at least `node_floats()` floats that overlaps no
++        operand. ASYNCHRONOUS, as `identical_gemm_into`."""
++        comptime if GEMM_FAST_WORKLIST:
++            if self.count > 0:
++                self._launch_mode(ctx, ws, GEMM_WORKLIST_ALL)
++                self._launch_mode(ctx, ws, GEMM_WORKLIST_GROUP)
++        self.begin()
+ 
+ 
+ def _kpack_run[
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index 0356bc3933..8011576a98 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -24,6 +24,8 @@ from gemm.checks.gemm_identical import (
+     # re-exported: training/checks/loss_check.mojo, training/byte_lm.mojo and the training checks import these from here
+     identical_gemm_with_plan,PLAN_FLAT,ANY_SABOTAGE,
+ )
++# lane/fx-gemm-worklist: the work-list arm (-D MOJOLEARN_GEMM_FAST_WORKLIST=1, default off).
++from gemm.checks.gemm_identical import GEMM_FAST_WORKLIST,GemmWorklist
+ from gemm.experiments.neural_profile import (
+     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
+ )
+@@ -71,8 +73,10 @@ from gemm.checks.gemm_identical import (
+ # NN05 (the fused pair kernel arm) deleted 2026-10-08 (lane grid-act-4, grid
+ # ge123e6f9, 2.2-3.9x slower); see the tombstone at _neural_pair_kernel's old site.
+ comptime NEURAL_GEMM_EXPERIMENT_ENABLED = NEURAL_PROFILE_CHANGED
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) NEURAL_GEMM_WORKLIST and GemmWorkspace.worklist / list_begin / list_add / list_run deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_WORKLIST.patch
++#: The work-list arm as the model call sites see it: on only where the kernel file compiles it (its column and
++#: body tests) and the neural profile is the incumbent (a changed profile runs another kernel per product).
++#: False compiles `GemmWorkspace.list_add` to `run` and the other two list calls to nothing.
++comptime NEURAL_GEMM_WORKLIST = GEMM_FAST_WORKLIST and not NEURAL_GEMM_EXPERIMENT_ENABLED
+ # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STREAM_GROUP (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_STREAM_GROUP.patch
+ # TOMBSTONE: MOJOLEARN_IDN_NEURAL_STAGE_DEPTH (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-26-neural; code recoverable at 5fc464dce4.
+@@ -271,7 +275,7 @@ def identical_gemm_leaf_ptr_into[RPT: Int,FS: Int](
+ 
+     MIRRORS `gemm_identical._kpack_launch` (the page count, the page-fits assert, the grid) because that
+     launcher takes `DeviceBuffer`s and the sequence executor holds raw pointers: a view per operand per call
+-    would be three constructions on a hot path. A change to the kernel's argument block
++    would be three constructions on a hot path. A change to the kernel's argument block (lane fx-gemm-worklist)
+     must be made here too. `RPT, FS` = `(GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE)` or
+     `(GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL)`: the two kernels the NVIDIA build already carries, so
+     the arm adds no kernel there."""
+@@ -452,10 +456,13 @@ def gemm_workspace_run_epi[EPI: Int](ctx: DeviceContext,mut workspace: GemmWorks
+ struct GemmWorkspace(Movable):
+     """One in-order model context; no mutable global plan or operand cache."""
+     var buffer: DeviceBuffer[DType.float32]
++    # lane/fx-gemm-worklist: the pending work list and its device tables (empty unless the arm is compiled).
++    var worklist: GemmWorklist
+ 
+     def __init__(out self,ctx: DeviceContext) raises:
+         step_count_device_alloc()
+         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
++        self.worklist = GemmWorklist()
+ 
+     def _ensure(mut self,ctx: DeviceContext,required: Int) raises:
+         if required>len(self.buffer):
+@@ -476,6 +483,56 @@ struct GemmWorkspace(Movable):
+         self._ensure(ctx,required)
+         identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
+ 
++    # ---- THE WORK LIST (lane/fx-gemm-worklist; arm MOJOLEARN_GEMM_FAST_WORKLIST, default off) ----
++    # list_begin(); list_add(...) once per product; list_run(ctx). The products of one list must be INDEPENDENT:
++    # none reads or writes another's output (their inputs are all ready before the first list_add). With the arm
++    # off list_add IS run, in the caller's order, and the other two calls compile to nothing. With it on, every
++    # product whose own launch is the packed body shares one launch per mode with the others (gemm_identical.mojo,
++    # "THE WORK LIST": same blocks, same body, same words); any other product runs its own launch inside list_add.
++    # Lifetime: list_add records device addresses. The caller keeps every c, a and b alive past the synchronize that
++    # follows list_run (name them after list_run, or hold them in a struct the caller keeps), as for run.
++
++    def list_begin(mut self):
++        """Start a work list, dropping any product still pending."""
++        comptime if NEURAL_GEMM_WORKLIST:
++            self.worklist.begin()
++
++    def list_add[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](mut self,ctx: DeviceContext,
++        mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
++        mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
++        """`run`'s product, queued for `list_run`. A refusal is this product's own, raised here with the wording
++        its single launch uses; the products queued before it are launched first, as they would have been."""
++        # lane fx-fast-matrix-units (arm only): a product the matrix unit takes is its own launch, never a list entry
++        # (the list's shared launch is the FP32 packed body). List products are independent, so its place is free.
++        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
++            if matrix_units_takes(m,n,k):
++                self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
++                return
++        comptime if not NEURAL_GEMM_WORKLIST:
++            self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
++            return
++        if self.worklist.full():
++            self.list_run(ctx)
++        var taken = False
++        try:
++            taken = self.worklist.add(ctx,c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,k,op)
++        except error:
++            self.list_run(ctx)
++            raise error
++        if not taken:
++            self.run[allow_vendor,ROLE](ctx,c,a,b,m,n,k,op)
++
++    def list_run(mut self,ctx: DeviceContext) raises:
++        """Launch the pending products (asynchronous, as `run`) and clear the list."""
++        comptime if NEURAL_GEMM_WORKLIST:
++            var need = self.worklist.node_floats()
++            if need>0:
++                self._ensure(ctx,need)
++            var nodes = self.buffer.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++            self.worklist.launch(ctx,nodes)
++
+     def close(mut self,ctx: DeviceContext) raises:
+         ctx.synchronize()
+         self.buffer = ctx.enqueue_create_buffer[DType.float32](1)
+diff --git a/pixi.toml b/pixi.toml
+index 2921ff692a..3d61b410fe 100644
+--- a/pixi.toml
++++ b/pixi.toml
+@@ -52,6 +52,7 @@ check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo
+ # 2026-11-19). Each is the default build's check by name: the host words, the oracle and the device follow the define.
+ check-ops-lm-head-v2-scalar = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_gpu.mojo ops_lm_head_v2"
+ check-ops-lm-head-v2-scalar-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_LMHEAD_FAST_GEMM_PANEL_OFF=1 -I . checks/native_tests/run_cpu.mojo ops_lm_head_v2"
++check-transformer-backward-packed-worklist-epi = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_FAST_WORKLIST=1 -D MOJOLEARN_GEMM_FAST_EPI=1 -I . checks/native_tests/run_gpu.mojo transformer_backward_packed"
+ check-nan-canon-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON=1 -I . checks/native_tests/run_cpu.mojo nan_canon"
+ check-nan-canon-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON=1 -I . checks/native_tests/run_gpu.mojo nan_canon"
+ check-llama-refuse-row-scan-watermark-off = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LLAMA_FAST_REFUSE_WATERMARK_OFF=1 -I . checks/native_tests/run_gpu.mojo llama_refuse_row_scan"
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 723b1184db..778a0d7a9e 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -331,6 +331,7 @@ from core.identity_trace import IdentityTrace
+ from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+ from core.device_arena import arena_active, arena_take
+ from gemm.neural_dispatch import GemmWorkspace
++from gemm.neural_dispatch import NEURAL_GEMM_WORKLIST  # lane/fx-gemm-worklist (arm, default off)
+ from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
+ # lane/lowbit-blocks (2026-09-29): the block's products under
+ # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
+@@ -5438,6 +5439,22 @@ def llama_attention_forward(
+             neural_projection_triplet(ctx, stages.q_proj, stages.k_proj,
+                 stages.v_proj, stages.norm1_out, w.w_q, w.w_k, w.w_v,
+                 m, qw, kw, dm)
++    comptime if NEURAL_GEMM_WORKLIST and not BLOCK_ANY_SABOTAGE:
++        # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off): q, k and v read norm1_out and
++        # write three separate stages, so they are independent and go out as one work list here; the three
++        # per-product calls below are skipped. Each keeps the blocks, body and words of its own launch
++        # (gemm_identical.mojo, "THE WORK LIST"). Plain FP32 only, as the triplet above. Call site: once per
++        # layer forward; before: three llama_proj calls at this point and after each of q's and k's epilogues.
++        if not grouped_projections and not Bool(w.int15):
++            stages.gemm_workspace.list_begin()
++            stages.gemm_workspace.list_add[False](
++                ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt())
++            stages.gemm_workspace.list_add[False](
++                ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt())
++            stages.gemm_workspace.list_add[False](
++                ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt())
++            stages.gemm_workspace.list_run(ctx)
++            grouped_projections = True
+     if not grouped_projections:
+         llama_proj(
+             ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_Q,
+@@ -5781,7 +5798,20 @@ def llama_mlp_forward(
+     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
+ 
+     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
+-    if gated:
++    # lane/fx-gemm-worklist (arm MOJOLEARN_GEMM_FAST_WORKLIST, default off): gate and up read norm2_out and write
++    # two separate stages: one work list here, and the two per-product calls below are skipped. Call site: once
++    # per layer forward; before: one llama_proj here and one after the gate epilogue.
++    var gateup_listed = False
++    comptime if NEURAL_GEMM_WORKLIST and not BLOCK_ANY_SABOTAGE:
++        if gated and not Bool(w.int15):
++            stages.gemm_workspace.list_begin()
++            stages.gemm_workspace.list_add[False](
++                ctx, stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm, _gemm_op_nt())
++            stages.gemm_workspace.list_add[False](
++                ctx, stages.up_proj, stages.norm2_out, w.w_up, m, it, dm, _gemm_op_nt())
++            stages.gemm_workspace.list_run(ctx)
++            gateup_listed = True
++    if gated and not gateup_listed:
+         llama_proj(
+             ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+             stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+@@ -5822,10 +5852,11 @@ def llama_mlp_forward(
+         var no_gate = List[Float32]()
+         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
+     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
+-    llama_proj(
+-        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+-        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+-    )
++    if not gateup_listed:
++        llama_proj(
++            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
++            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
++        )
+     if bias_gelu_fused and not gated:
+         step_count_launch()
+         ctx.enqueue_function[bias_gelu_kernel](

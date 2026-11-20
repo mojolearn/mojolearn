@@ -40,10 +40,13 @@ integer math end to end, no float formatting, per
 """
 
 from max.gpu.host import DeviceContext
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
 
-comptime STAGE_TIMES_ENV = "MOJOLEARN_STAGE_TIMES"
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 def _ms_string(ns: Int) -> String:
@@ -74,8 +77,8 @@ struct StageTimes(Movable):
     caught."""
 
     def __init__(out self):
-        """Reads the environment ONCE. Disabled is the shipping state."""
-        self.enabled = getenv(STAGE_TIMES_ENV) == "1"
+        """Disabled is the shipping state (no `-D MOJOLEARN_STAGE_TIMES`)."""
+        self.enabled = STAGE_TIMES_ON
         self.tags = List[String]()
         self.ns = List[Int]()
         self.t0 = 0

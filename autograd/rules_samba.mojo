@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # The Samba whole-stack train-step backward on ONE tape
-# (TAPE_EVERYWHERE_PLAN.md path 2; the record loop is
+# (the tape plan's path 2, now docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md; the record loop is
 # training/samba_resident.mojo::_backward_tape, which imports this module;
 # this module never imports samba_resident).
 #
@@ -81,7 +81,6 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from autograd.tape import BackwardRules
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
-from core.device_scan import device_first_nonfinite
 from autograd.refuse_scan import DeferredNonfiniteScan
 from gemm.contract import OP_NT
 from gemm.experiments.neural_switches import ROLE_HEAD
@@ -91,7 +90,6 @@ from embedding.checks.embedding_oracle import EmbConfig
 from transformer.impl.llama.modeling_llama import LlamaDeviceStages, LlamaDeviceWeights
 from autograd.kernels.transformer import LlamaBackwardStages, bwd_rms_norm
 from autograd.rules_transformer import (
-    AUTOGRAD_REFUSE_DEFER,
     TF_RMS_NORM_INPUT,
     TF_RESIDUAL,
     TransformerRules,
@@ -324,14 +322,9 @@ struct SambaRules(BackwardRules):
         # llama_decoder_layer_backward_autograd's first device read: the
         # incoming gradient is refused by bits before any of its stages.
         var d = _view(self.ctx, upstream, n)
-        comptime if AUTOGRAD_REFUSE_DEFER:
-            # the verdict is read at the step's closing wait (the driver)
-            self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
-            self.scan_layers[].append(layer)
-            return
-        var bad = device_first_nonfinite(self.ctx, d, n)
-        if bad >= 0:
-            raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
+        # the verdict is read at the step's closing wait (the driver)
+        self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
+        self.scan_layers[].append(layer)
 
     def _embedding(self, upstream: FP, gradients: List[FP]) raises:
         # the hand path's embedding backward: the fixed-order scatter-add of

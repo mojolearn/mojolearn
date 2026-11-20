@@ -1,0 +1,45 @@
+Mojolearn native low-bit weight conversion checks, 2026-11-10
+
+Three fixtures per host/device implementation
+  The pack/unpack Python test's 40x32 and 32x24 weight shapes retain uniform
+  [-0.125, 0.125) input distribution with a native deterministic generator.
+  The original _special_rows helper was unused; its seven rows now execute:
+  signed zeros, flushed subnormals beside normal values, halves/negatives,
+  tiny/large/plain rows and the 65504/2^-15 boundary row.
+  BF16 conversion/materialization uses the existing independent integer
+  quotient/remainder oracle. INT8 codes/exponents and materialization use
+  independent Float64 ties-even/power-of-two expectations. Exact comparisons
+  remain; no tolerances/hashes changed. Requantized INT8 bytes must be stable.
+  CPU source words are preserved. Owners remain alive through all pointer use.
+
+Parallelism and dependencies
+  Reuse already accepted bf16_conversion_cases and int8_linalg_cases oracles.
+  Three independent CPU fixtures and oracle/preparation rows use the existing
+  host pool. GPU submits fixture graphs in order in one context; existing
+  parallel kernels and host row checks remain. No multi-context scaling claim.
+  No product edits, Python runtime imports/callbacks, new loader or guard.
+
+Python removal and retained boundaries
+  Removes four NumPy arithmetic conversion oracle helpers and their duplicate
+  checks from test_lowbit_weights.py, plus the unused Python special-row helper.
+  All six public test definitions remain; the pack/unpack test is renamed to
+  describe its remaining container/repacking/host-ABI coverage.
+  Retains exact packed bytes on repacking, unchanged one-dimensional tensors,
+  Mojolearn Array types/addresses, no-materialization interception and optional
+  raw-address host ABI comparison. Transformer/Mamba1/MLP packed-vs-materialized
+  input routing, public state allocation/forward/step and weight_format remain.
+  Their Python dictionaries/containers are public input/output contracts; no
+  claim is made that their production implementations have finished migration.
+  Relevant bindings: linalg host/device, transformer, mamba and training.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-lowbit-weights-cpu
+  bash tools/compile_slot.sh pixi run check-native-lowbit-weights-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/lowbit_weights_cpu.mojo -o "$HOME/mojolearn-evidence/native-lowbit-weights-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/lowbit_weights_gpu.mojo -o "$HOME/mojolearn-evidence/native-lowbit-weights-gpu"
+  Apply normal target flags; retained boundary selection test_lowbit_weights.py.
+
+Status
+  Python AST parsed and source/diff reviewed only; CPU/GPU compile/run owed.
+  No product/default/bit policy changes, boxes, timing or identity. A/B: none.

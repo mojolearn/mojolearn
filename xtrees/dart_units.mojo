@@ -31,17 +31,16 @@ from checks.numerics import (
 )
 from checks.soft_f64 import sf64_add, sf64_mul, sf64_from_f32
 from xtrees.ops import draw
-from gbdt.trees_identical_switches import T30
 
 comptime DART_PIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: The IDENTICAL route's gate, default ON on every column (device kernels in
 #: xtrees/dart_device.mojo, host twin in xtrees/dart_host.mojo).
-#: `-D MOJOLEARN_IDN_DART_DEVICE_OFF` or `-D MOJOLEARN_IDN_ALL_OFF` restores
-#: main's `_boost_loop` everywhere (the entries are then not registered).
-comptime IDN_DART_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_DART_DEVICE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_DART_DEVICE_OFF (old path; IDN_DART_DEVICE default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 4a48287b38.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_DART_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_DART_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: rows per leaf-sum chunk: one unit per (node, chunk) scans the chunk's
 #: leaf indices in row order.
@@ -154,10 +153,7 @@ def dart_row_unit(
             if flags[it] != Int32(0):
                 var j = it * kk + c
                 var value: Float32
-                comptime if T30:
-                    value = cached[j * nn + i]
-                else:
-                    value = values[j * node_cap + Int(nodes[j * nn + i])]
+                value = values[j * node_cap + Int(nodes[j * nn + i])]
                 s = _mul_add(coef[j], value, s)
         dsum[c * nn + i] = s
         score[c * nn + i] = _sub(score[c * nn + i], s)
@@ -309,9 +305,6 @@ def dart_add_unit(
     and the new tree at its shrinkage, in that order."""
     var ci = class_off + e
     var value = values[voff + Int(nodes[row_off + e])]
-    comptime if T30:
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        cached[row_off + e] = value
     score[ci] = _mul_add(shrink, value, _mul_add(factor, dsum[ci], score[ci]))
 
 

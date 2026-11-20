@@ -119,10 +119,8 @@ INDIRECT = {
 #: Public names the board does not time, each with its reason (fnmatch patterns over the canonical name).
 #: Andrew 2026-10-22: every exposed API is measured "if appropriate"; these are the ones where it is not.
 NOT_MEASURED = (
-    # Owner 2026-10-24: adapters are front-ends to the same kernels, qualified
-    # by installed adapter smokes rather than duplicate arithmetic lanes.
-    ("mojolearn.adapters._torch_compile._Compiled",
-     "whole-model adapter; covered by installed adapter smoke, not a separate estimator race"),
+    # (The adapters._torch_compile._Compiled row went with the retired
+    # graph-capture backend, 2ce2b0d7b9; the inventory no longer lists it.)
     # multi-GPU: excluded from the board by the standing rule (Andrew 2026-09-29, COVERAGE.md)
     ("mojolearn.Parallel*", "multi-GPU, excluded from the single-GPU board (Andrew 2026-09-29, COVERAGE.md)"),
     ("mojolearn.Pooled*", "multi-GPU model pool, excluded from the single-GPU board (COVERAGE.md)"),
@@ -130,11 +128,11 @@ NOT_MEASURED = (
     ("mojolearn.parallel_*", "multi-GPU (explicit devices / worker processes), excluded from the single-GPU "
                              "board (COVERAGE.md)"),
     ("mojolearn.models.Parallel*", "multi-GPU model, excluded from the single-GPU board (COVERAGE.md)"),
-    # CPU host bindings: the CPU is never timed (CLAUDE.md "Never time a CPU or host route")
-    ("mojolearn.*Inference", "CPU host binding (inference); the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.LanguageModelHostTrainer", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.Host*", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.host_*", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
+    # CPU host bindings: the CPU is never timed (AGENTS.md "Measurement and fairness": our CPU is never raced or timed)
+    ("mojolearn.*Inference", "CPU host binding (inference); the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.LanguageModelHostTrainer", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.Host*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.host_*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
     # no peer library implements it
     ("mojolearn.resample.monte_carlo_integrate", "no pinned library has a plain seeded Monte Carlo integrator "
                                                  "(scipy.integrate.qmc_quad is quasi-Monte Carlo); "
@@ -146,10 +144,14 @@ NOT_MEASURED = (
     ("mojolearn.model_selection.get_scorer", "returns a scorer object; its compute is the metric lanes'"),
     ("mojolearn.model_selection.get_scorer_names", "returns names; no compute"),
     ("mojolearn.model_selection.make_scorer", "returns a scorer object; its compute is the metric lanes'"),
+    ("mojolearn.model_selection.default_folds", "returns fold row indices; no model compute"),
     ("mojolearn.model_selection.split_descriptor", "returns a split description; no compute"),
     ("mojolearn.training.accumulation_is_aligned", "a boolean check of two sizes; no compute"),
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),
     ("mojolearn.training.vendor_used", "getter; no compute"),
+    ("mojolearn.runtime_report", "getter: reports vendor, modes, arch and loaded bindings (3eeb4874a3); no compute"),
+    ("mojolearn.check", "verification tool: runs a fitted estimator's own method on the GPU and the CPU and "
+                        "compares the bytes; its compute is the estimator lanes'"),
     ("mojolearn.ensemble.catboost_auto_learning_rate", "a scalar formula of the row count; no array compute"),
     ("mojolearn.models.plan_for", "returns an import plan record; no compute"),
     ("mojolearn.import_model", "one-time model import (parse and weight load, disk-bound); the imported "

@@ -40,7 +40,7 @@ def run_case(
     _ = dev^
 
 
-def main() raises:
+def run_checks() raises:
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not M3_DEVICE_REFUSAL:
         raise Error("mamba3_refusal_check requires the IDENTICAL device refusal")
     var ctx = DeviceContext()

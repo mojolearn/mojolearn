@@ -19,6 +19,11 @@ AUTOGRAD_TIMEOUT_SECONDS = 30
 CORRECTNESS_JOBS = ("locate-installed", "dependencies", "installed", "expanded-api",
                     "loaded-lm-cpu", "loaded-lm-gpu", "loaded-lm-cpu-gpu-compare",
                     "coverage", "models", "extended", "self-test")
+#: release.py --identity-on-wheels (Andrew 2026-11-05): the identity-lane jobs are dropped from the gate because
+#: the one column record of the same installed wheels ran their lanes (qualify_verifier_wheel --no-identity-lanes)
+IDENTITY_LANE_JOBS = ("models", "extended", "self-test")
+IDENTITY_RECORDED_ONCE = "recorded-once"
+CORRECTNESS_JOBS_RECORDED_ONCE = tuple(j for j in CORRECTNESS_JOBS if j not in IDENTITY_LANE_JOBS)
 
 
 def profile(document):
@@ -44,8 +49,10 @@ def correctness_errors(document, source_commit, version, vendor=None):
     if vendor and document.get("installed", {}).get("vendor") != {"nvidia": "cuda", "amd": "hip"}.get(vendor):
         errors.append("installed correctness ran another vendor backend")
     jobs = document.get("jobs", [])
-    if not isinstance(jobs, list) or [row.get("name") for row in jobs] != list(CORRECTNESS_JOBS):
-        return errors + ["installed correctness must complete all 11 named jobs"]
+    once = document.get("identity_lanes") == IDENTITY_RECORDED_ONCE
+    expected = CORRECTNESS_JOBS_RECORDED_ONCE if once else CORRECTNESS_JOBS
+    if not isinstance(jobs, list) or [row.get("name") for row in jobs] != list(expected):
+        return errors + ["installed correctness must complete all %d named jobs" % len(expected)]
     for row in jobs:
         # The extended verifier explicitly reports OWED properties with exit5.
         # The producer admits its checked cells and retains those unqualified

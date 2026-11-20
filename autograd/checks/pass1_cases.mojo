@@ -17,7 +17,9 @@
 # Every comparison prints its digest.
 from std.memory import bitcast
 from autograd import Tape, Tensor
-from autograd.model import parse_model, model_forward, MODEL_UNFUSED
+from autograd.model import parse_model, model_forward
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MODEL_UNFUSED (unmeasured opt-in arm) use deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is autograd/model.mojo); code recoverable at 6524e3b41e.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MODEL_UNFUSED.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.checks.support import check_values
@@ -193,11 +195,10 @@ def run_pass1_cases[E: Exec](mut ex: E) raises:
     check_bits("pass1/softmax_cross_entropy_vs_rows_mean", fused, rows_mean)
     check_values("pass1/softmax_cross_entropy_vs_dense", fused, dense)
     cases += 2
-    comptime if not MODEL_UNFUSED:
-        var model = _model(ex, tape, False)
-        var composed = _model(ex, tape, True)
-        check_values("pass1/sequential_fused_vs_composed", model, composed)
-        cases += 1
+    var model = _model(ex, tape, False)
+    var composed = _model(ex, tape, True)
+    check_values("pass1/sequential_fused_vs_composed", model, composed)
+    cases += 1
     _core_paths(ex, tape, False)
     _core_paths(ex, tape, True)
     cases += 2

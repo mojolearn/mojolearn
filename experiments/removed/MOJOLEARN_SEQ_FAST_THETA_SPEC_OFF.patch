@@ -1,0 +1,30 @@
+diff --git b/sequence/theta_spec.mojo a/sequence/theta_spec.mojo
+index dc42e34b57..943d050594 100644
+--- b/sequence/theta_spec.mojo
++++ a/sequence/theta_spec.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Theta on one simdgroup per series with the Nelder-Mead candidates
+ evaluated side by side (lane/apple-fast-gap-tsa,
+-FAST + Apple, on THETA_REG; always on there;
++FAST + Apple, on THETA_REG; default on, -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF off;
+ docs/apple-fast/notes/gap-tsa.md).
+ 
+ `op_theta` runs one thread per series (64 threads on the board's taxi-hourly
+@@ -38,13 +38,10 @@ from sequence.theta import (
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+ 
+ #: the switch (FAST + Apple with THETA_REG). Default since the M3 A/B (n=1,
+-#: quality identical; theta taxi-hourly 218 -> 20.3 ms); the old
++#: quality identical; theta taxi-hourly 218 -> 20.3 ms);
++#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
+ #: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
+-# TOMBSTONE: MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF (superseded: SEQ_FAST_THETA_SPEC KEPT 6c0ba4379, M3
+-# gaptsa-thetaspec-theta-taxi-hourly 218 -> 20.3 ms, quality identical) deleted 2026-11-15 by lane/expdel-04-neural;
+-# code recoverable at c5925a0e35.
+-# Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF.patch
+-comptime THETA_SPEC_FAST = THETA_REG_FAST
++comptime THETA_SPEC_FAST = THETA_REG_FAST and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
+ #: IDENTICAL twin (lane seq-nm-spec 2026-10-11, idea E1), PROMOTED to the IDENTICAL default 2026-10-11
+ #: (lane/w2-decide-neural; A/B on main c8ef6c66d, one run per arm,
+ #: same bits NV==AMD: theta 0.178/0.118, optimized-theta 0.152/0.100,

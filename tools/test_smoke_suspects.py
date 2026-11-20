@@ -5,11 +5,20 @@ import smoke_suspects as S
 
 
 def test_changed_files_map_to_families_or_everything():
-    why, fams, _ = S.families_for_changes(["tools/bench_board_neural.py", "docs/x.md", "tools/test_bench_board.py"])
-    # algos imports the neural driver (its layer lanes reuse it), so both families re-run
-    assert why is None and "neural" in fams and "classical" not in fams
+    why, fams, skipped = S.families_for_changes(["tools/bench_board_neural.py", "docs/x.md", "tools/test_bench_board.py"])
+    # algos imports the neural driver (its layer lanes reuse it), so both families re-run. Every other family
+    # reaches it too, through lazy imports (bench_board_evidence -> bench_board_probe -> bincache ->
+    # apple_retained_groups -> ... -> autograd_smoke -> bench_board_neural); the graph counts lazy imports on
+    # purpose, so whichever families reach a changed module re-run, never fewer.
+    graph = S.import_graph()
+    reaching = {fam for fam, roots in S.FAMILY_ROOTS.items() if "tools/bench_board_neural.py" in S._reach(graph, roots)}
+    assert why is None and {"neural", "algos"} <= set(fams) and set(fams) == reaching
+    assert set(skipped) == {"docs/x.md", "tools/test_bench_board.py"}
+    # a module only one family's driver reaches selects that family alone
     why, fams, _ = S.families_for_changes(["bench/speed/forest_speed_arm.py"])
-    assert why is None and "trees" in fams
+    assert why is None and set(fams) == {"trees"}
+    why, fams, _ = S.families_for_changes(["tools/bench_board_extra.py"])
+    assert why is None and set(fams) == {"algos"}
     for shared in ("tools/bench_board_params.py", "tools/race_fairness.py", "tools/smoke_worker.py",
                    "tools/bench_board.py", "python/mojolearn/ensemble.py", "bindings/x.mojo"):
         assert S.families_for_changes([shared])[0], shared

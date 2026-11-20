@@ -104,8 +104,8 @@ def _make_target(
         h_t.unsafe_ptr().unsafe_store(d, _target(d, salt))
     var d_w = ctx.enqueue_create_buffer[DType.float32](N_DOCS)
     var d_t = ctx.enqueue_create_buffer[DType.float32](N_DOCS)
-    ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_w, h_w)
+    upload_host_into[DType.float32](ctx, d_t, h_t)
     ctx.synchronize()
     _ = h_w[0]
     _ = h_t[0]
@@ -118,7 +118,7 @@ def _read_u32(
     count: Int,
 ) raises -> List[UInt32]:
     var h = ctx.enqueue_create_host_buffer[DType.uint32](count)
-    ctx.enqueue_copy(dst_buf=h, src_buf=buf)
+    download_buffer_into[DType.uint32](ctx, buf, h)
     ctx.synchronize()
     var out = List[UInt32]()
     for i in range(count):
@@ -132,7 +132,7 @@ def _read_f32(
     count: Int,
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](count)
-    ctx.enqueue_copy(dst_buf=h, src_buf=buf)
+    download_buffer_into[DType.float32](ctx, buf, h)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(count):
@@ -171,7 +171,7 @@ def check_subsets_reset() raises:
             N_DOCS + d, UInt32(_val_b(d) << 8)
         )
     var d_cindex = ctx.enqueue_create_buffer[DType.uint32](2 * N_DOCS)
-    ctx.enqueue_copy(dst_buf=d_cindex, src_ptr=h_cindex.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, d_cindex, h_cindex)
     ctx.synchronize()
     _ = h_cindex[0]
 
@@ -367,7 +367,26 @@ def check_hist_helper_reset() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     check_subsets_reset()
     check_hist_helper_reset()
     print("pointwise pool resets: P1-P2 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_pool_check", cpu=False, gpu=True, serial="", run=run_cases)

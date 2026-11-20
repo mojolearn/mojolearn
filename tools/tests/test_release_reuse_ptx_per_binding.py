@@ -403,6 +403,27 @@ class PublishedPtxSetTests(unittest.TestCase):
         self.assertTrue(pr.validate_admission(manifest, staged, reuse["legs"]))
         self.assertEqual((staged / "host/_mojolearn_native_host.so").read_bytes(), b"NEW host bytes")
 
+    def test_a_pruned_leg_tree_is_materialized_from_its_raw_witnesses_and_the_wheel(self):
+        """A measurement build's prune keeps the leg tree's .json witnesses and deletes its .so files: the B arm
+        that takes the published PTX set rebuilds the device files from the wheel (lane fb9-arm-builds)."""
+        whl = self.wheel()
+        rb = Path(self.origin["release_build"])
+        proof = dict(source="leg tree x", built_from=ptx_fixtures.OLD, release_build=str(rb),
+                     proof_sha256=self.origin["proof_sha256"],
+                     witnesses={k: dict(file=str(rb / rel), sha256=rr.sha256(rb / rel))
+                                for k, rel in rr.PTX_WITNESSES.items()})
+        self.assertEqual(rr.materialize_ptx_leg(proof, whl, self.root / "unused"), rb)   # whole: taken as it is
+        for p in rb.rglob("*"):
+            if p.is_file() and not p.name.endswith(".json"):
+                p.unlink()
+        out = rr.materialize_ptx_leg(proof, whl, self.root / "materialized" / "release-build")
+        self.assertNotEqual(out, rb)
+        self.assertEqual(rr.sha256(out / rr.PTX_WITNESSES["proof"]), self.origin["proof_sha256"])
+        named = json.loads((out / rr.PTX_WITNESSES["proof"]).read_text())["extensions"]
+        self.assertTrue(named)
+        for name, digest in named.items():
+            self.assertEqual(rr.sha256(out / "build/sets" / Path(*Path(name).parts[1:])), digest)
+
     def test_a_wheel_without_the_proofs_bytes_is_refused(self):
         whl = self.wheel()
         rec = self.root / "record"

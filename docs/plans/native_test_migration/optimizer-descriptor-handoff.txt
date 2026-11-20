@@ -1,0 +1,74 @@
+Mojolearn native optimizer descriptor contracts, 2026-11-10
+
+Frozen production dependencies
+  8042ccfae3: typed descriptor requests/results, native CPU/GPU C entries.
+  121813cf98: public activation. 764dc24928: operation 10/free unpublished
+  device tensor; operation count 11. Producer confirmed interfaces frozen.
+  Tests import training.optimizer_native_api.OptimizerNativeDriver and the
+  actual training.host.optimizer_native.optimizer_host_v1 /
+  training.optimizer_native_gpu.optimizer_gpu_v1 C entries. No mock dispatch,
+  direct-kernel substitution, Python objects, callbacks or runtime imports.
+
+Coverage: 25 CPU + 25 GPU fixtures, not yet compiled or run by this lane
+  18 malformed raw C calls: wrong address-span count for each of all 11
+  operations; unknown negative/upper operation; missing result storage;
+  missing address/integer span; null typed request; unexpected float span.
+  Heap-owned custom error sink copies the full ephemeral message. Every
+  failure must call sink once, retain exact complete text, and preserve the
+  result sentinel. No invalid typed request is dereferenced by a test.
+  Reusable native output scratch: error -> success clears previous bytes and
+  result; full wrapper exception text equals the raw sink contract; HOST and
+  MODE return correct metadata from actual entries.
+  STEP: caller-owned 4-cell SGD parameters/moments, independent exact dyadic
+  first-step equations, returned scalar/flag/counter fields and init metadata;
+  borrowed gradients/registry and all output bounds remain valid.
+  CLIP: independent 3-4-5 norm, clamp-to-one/no-change, then real clipping
+  against 2.5/(5+f32(1e-6)); bounded f32-rounding error only. No product oracle.
+  ACCUMULATE: two borrowed native microbatches, independent exact sum, exact
+  count, unchanged inputs and bounded scatter output.
+  OPEN/UPLOAD/DOWNLOAD/CLOSE: zero state; copied moments survive source
+  mutation; wrong count refuses without writes; partial moment upload skips
+  the other moment; close/stale download/double-close; reopened zero state.
+  Zero-sized OPEN refusal crosses real descriptor without opening a pool slot.
+  CPU extra: IO query says unavailable; unsupported IO and FREE_DEVICE retain
+  complete native refusal text and leave caller buffers unchanged.
+  GPU extra: IO QUERY/PARAMS_UP/PARAMS_DOWN/GRADS_UP/GRADS_DOWN/PARAM_DEVICE;
+  native device copy survives a later optimizer-state overwrite; FREE_DEVICE
+  releases the independent unpublished allocation; stale download/double free
+  refuse and preserve destination. All live handles close on fixture failure.
+
+Parallel plan
+  CPU25 fixtures use host_parallelize, private request/output/error storage.
+  One fixture owns mutable pool lifecycle; all other steps use resident=0
+  caller-owned moments. GPU25 submissions ordered for existing shared neural
+  context/pools; kernels parallel. This does not claim concurrent GPU-session
+  safety. No rented machine, busy-core or performance result claimed.
+
+Python and inventory
+  No Python tests removed: these contracts are NEW coverage for the extracted
+  producer API. test_optimizer_native_lifecycle.py retains actual PyCapsule,
+  Python callback refusal and public finalizer behavior. Array ownership tests
+  retain real ndarray/memoryview pins, replaced constructors and destruction;
+  step-errors retains actual Python exception categories/admission/publication
+  atomicity. Native descriptors cannot substitute for those Python seams.
+  Existing optimizer math migrations remain frozen. Maximize verifier driver
+  migration remains explicitly owed; no identity execution or registration change.
+
+Root compile/run commands (normal default identical configuration)
+  bash tools/compile_slot.sh pixi run check-native-optimizer-descriptor-cpu
+  bash tools/compile_slot.sh pixi run check-native-optimizer-descriptor-gpu
+  Compile-only with existing settings:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_descriptor_cpu.mojo -o "$HOME/mojolearn-evidence/optimizer-descriptor-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/optimizer_descriptor_gpu.mojo -o "$HOME/mojolearn-evidence/optimizer-descriptor-gpu"
+  Run exact binaries separately; expected 25 per target. GPU IO deliberately
+  refuses to report success if default resident-parameter support is disabled.
+  A disabled-switch qualification needs its own refusal expectations, not a
+  silent skip or weakened default fixture. Affected installed public family:
+  _mojolearn_training / _mojolearn_training_host; retain Python boundary tests.
+
+Status and removals
+  Source review, TOML/JSON parse and git diff only; no lane compile/run.
+  No product/kernel change, tolerance change to existing tests, loader/build
+  mechanism, switch, box, timing, identity or release. Nothing removed because
+  these direct typed API contracts did not previously have test coverage and
+  the existing Python tests require actual Python objects. RUN OWED at root.

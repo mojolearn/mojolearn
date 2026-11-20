@@ -25,8 +25,7 @@ single operations.
 Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from glm.impl.qn.glm_base import GLMWithData, QN_FAST_LS_BATCH, QNF_LS_K
@@ -45,7 +44,6 @@ from glm.impl.qn.qn_util import (
 )
 from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, copy_vec, dot, dot_kernel, read_scalars
 from core.column_stats import STATS_TPB
-from experiments.classical_identical_ideas.linear_controls import C17_LS_TRIALS
 from checks.numerics import ftz, identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
 
 
@@ -152,7 +150,7 @@ def ls_backtrack(
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
-    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default; -D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF reverts),
+    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default),
     # Armijo only (the Wolfe arms need a gradient dot per candidate)
     comptime if QN_FAST_LS_BATCH:
         if param.linesearch == LBFGS_LS_BT_ARMIJO and f.ls_batch_applies():
@@ -160,17 +158,8 @@ def ls_backtrack(
                 ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
                 stage, fresh, gradp, dg_ready,
             )
-    # I12 speculative exact trials, sourcecbcc8dcd33 (2026-10-06):
-    # candidate/base at rows/features100000/32 and131071/17, logistic fit:
-    # NVIDIA10.023369->7.590443ms (0.757x WIN),3.239601->7.315078ms
-    # (2.258x LOSS); AMD4.386173->12.212702ms (2.784x LOSS),
-    # 3.790993->8.790008ms (2.319x LOSS). Keep candidate OFF.
-    # One same-process warmup/score; synthetic public caller components,
-    # not full-board qualification. Accepted identity/compilation reused.
-    # Evidence: overnight-ab-20261006/{amd,nvidia} normalized I12 receipts.
-    comptime if GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL and (C17_LS_TRIALS or is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]()):
-        if param.linesearch==LBFGS_LS_BT_ARMIJO and param.max_linesearch>0 and n>0 and n<=(16*1024*1024-96)//32:
-            return ls_backtrack_exact_trials(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
+    # TOMBSTONE: MOJOLEARN_IDN_QN_EXACT_TRIALS (opt-in arm, no A/B recorded; I12 loser) deleted 2026-11-15 by lane/expdel2-20-linear, with the MOJOLEARN_CLASSICAL_C17_LS_TRIALS reads here (non-owner, owner expdel2-06-base); code recoverable at fb9523bf09.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_QN_EXACT_TRIALS.patch (and MOJOLEARN_CLASSICAL_C17_LS_TRIALS.expdel2-20-linear.patch); record in docs/TOMBSTONES.md.
     return ls_backtrack_sequential(ctx,param,f,fx,x,grad,step,drt,xp,n,scalar,ls_iters,stage,fresh,gradp,dg_ready)
 
 
@@ -217,110 +206,6 @@ def ls_backtrack_sequential(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWithD
         if step > param.max_step:
             return LS_INVALID_STEP_MAX
         step *= width
-    return LS_MAX_ITERS_REACHED
-
-
-def ls_backtrack_exact_trials(ctx: DeviceContext,param: LBFGSParam,mut f: GLMWithData,
-    mut fx: Float32,mut x: DeviceBuffer[DType.float32],mut grad: DeviceBuffer[DType.float32],
-    mut step: Float32,mut drt: DeviceBuffer[DType.float32],mut xp: DeviceBuffer[DType.float32],
-    n: Int,mut scalar: DeviceBuffer[DType.float32],mut ls_iters: Int,
-    mut stage: HostBuffer[DType.float32],mut fresh: Bool,mut gradp: DeviceBuffer[DType.float32],
-    dg_ready: Bool) raises -> Int:
-    """Bounded independent full trial-vector evaluations, one scalar drain.
-    Each w_c = xp + step_c*drt uses the original axpy and full evaluator;
-    unlike FAST's linearized-score batch, no objective spelling changes.
-    Physical work may exceed the logical first-acceptable evaluations and
-    is recorded separately. Every rejection and min/max test is walked in
-    the original order; all later trial words are discarded on acceptance.
-    """
-    var count = min(2 if C17_LS_TRIALS else 4,param.max_linesearch)
-    var before = f.n_evals
-    ls_iters=0
-    var initial = fx
-    _dg_init_enqueue(ctx,grad,drt,n,scalar,stage,dg_ready)
-    var trial_x = List[DeviceBuffer[DType.float32]]()
-    var trial_g = List[DeviceBuffer[DType.float32]]()
-    var steps = List[Float32]()
-    var results = ctx.enqueue_create_buffer[DType.float32](count*3)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](count*3)
-    var next = step
-    for c in range(4):  # four admitted independent trial descriptors
-        if c>=count:
-            continue
-        trial_x.append(ctx.enqueue_create_buffer[DType.float32](n))
-        trial_g.append(ctx.enqueue_create_buffer[DType.float32](n))
-        steps.append(next)
-        axpy(ctx,trial_x[c],next,drt,xp,n)
-        _ = f.evaluate_pen(ctx,trial_x[c],trial_g[c],0,False)
-        var source = f.slots.create_sub_buffer[DType.float32](0,3)
-        var target = results.create_sub_buffer[DType.float32](c*3,3)
-        ctx.enqueue_copy(dst_buf=target,src_buf=source)
-        _ = source^; _ = target^
-        next*=param.ls_dec
-    ctx.enqueue_copy(dst_buf=host,src_buf=results)
-    ctx.synchronize()
-    f.speculative_evals+=count
-    fresh=True
-    var dg = stage[0]
-    if dg>Float32(0):
-        f.n_evals=before+1
-        _undo_candidate(ctx,f,x,xp,grad,gradp)
-        _ = trial_x^; _ = trial_g^; _ = results^
-        return LS_INVALID_DIR
-    var test = param.ftol*dg
-    var selected = count-1
-    var ret = LS_MAX_ITERS_REACHED
-    var decided = False
-    ls_iters=0
-    for c in range(4):  # four admitted independent trial descriptors
-        if c>=count:
-            continue
-        step=steps[c]
-        fx=host[c*3] if f.l2==Float32(0) else ftz(host[c*3]+host[c*3+1])
-        ls_iters+=1
-        selected=c
-        if not (fx>identical_mul_add(step,test,initial)):
-            ret=LS_SUCCESS
-            decided=True
-            break
-        if step<param.min_step:
-            ret=LS_INVALID_STEP_MIN
-            decided=True
-            break
-        if step>param.max_step:
-            ret=LS_INVALID_STEP_MAX
-            decided=True
-            break
-    # Observable logical evaluation count and accepted gradient-norm cache
-    # match the sequential solver. The separate diagnostic counts all work.
-    f.n_evals=before+ls_iters
-    copy_vec(ctx,x,trial_x[selected])
-    copy_vec(ctx,grad,trial_g[selected])
-    f.gnorm_raw=host[selected*3+2]
-    f.gnorm_at=Int(grad.unsafe_ptr())
-    for slot in range(3):
-        f.stage[slot]=host[selected*3+slot]
-    var selected_slots=results.create_sub_buffer[DType.float32](selected*3,3)
-    var active_slots=f.slots.create_sub_buffer[DType.float32](0,3)
-    ctx.enqueue_copy(dst_buf=active_slots,src_buf=selected_slots)
-    _ = selected_slots^; _ = active_slots^
-    ctx.synchronize()  # selected words copied before temporary buffers die
-    _ = trial_x^; _ = trial_g^; _ = results^
-    if decided:
-        return ret
-    step*=param.ls_dec
-    var width=Float32(0)
-    for remaining in range(param.max_linesearch-ls_iters):
-        axpy(ctx,x,step,drt,xp,n)
-        fx=f.evaluate(ctx,x,grad)
-        ls_iters+=1
-        if ls_success(ctx,param,initial,dg,fx,test,step,grad,drt,n,width,scalar):
-            return LS_SUCCESS
-        if step<param.min_step:
-            return LS_INVALID_STEP_MIN
-        if step>param.max_step:
-            return LS_INVALID_STEP_MAX
-        step*=width
     return LS_MAX_ITERS_REACHED
 
 

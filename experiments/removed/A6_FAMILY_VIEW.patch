@@ -1,0 +1,445 @@
+diff --git a/bindings/admitted_family.mojo b/bindings/admitted_family.mojo
+index 9381d858bb..070b980485 100644
+--- a/bindings/admitted_family.mojo
++++ b/bindings/admitted_family.mojo
+@@ -127,17 +127,6 @@ def admitted_array(shape: PythonObject, typestr: String, context: PythonObject)
+     return array
+ 
+ 
+-def admit_family_refuse_empty(name: String, shape: List[Int]) raises:
+-    """`_buffer._as_typed`'s refusal of an input with no words, in its
+-    wording (the shape as Python prints it)."""
+-    var what = String("sample(s)")
+-    if len(shape) == 2 and shape[0] != 0:
+-        what = "feature(s)"
+-    var text = family_repr(_shape_tuple(shape))
+-    raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+-                + " (shape=" + text + ") while a minimum of 1 is required.")
+-
+-
+ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+                        dense: Bool = False, admitted: Bool = False, empty: Bool = False) raises -> ArrayMetadata:
+     """The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
+@@ -167,7 +156,12 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
+         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+                     + "-D shape " + family_repr(_shape_tuple(shape)) + hint)
+     if count == 0 and not empty:
+-        admit_family_refuse_empty(name, shape)
++        var what = String("sample(s)")
++        if nd == 2 and shape[0] != 0:
++            what = "feature(s)"
++        var text = family_repr(_shape_tuple(shape))
++        raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
++                    + " (shape=" + text + ") while a minimum of 1 is required.")
+     if nd > 2:
+         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+     var snapshot = array_metadata_once(view, shape^, name, context)
+diff --git a/bindings/cfb_agglo.mojo b/bindings/cfb_agglo.mojo
+index 3040672d72..fadfb12914 100644
+--- a/bindings/cfb_agglo.mojo
++++ b/bindings/cfb_agglo.mojo
+@@ -14,7 +14,7 @@ from core.host_finite_scan import host_all_finite_f32
+ from core.cfb_impl import cfb_any_positive_i32
+ from bindings.family_common import (
+     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_field,
+-    family_is_str,
++    family_is_str, family_view,
+ )
+ from bindings.mode_metadata_native import _fields
+ from bindings.metrics_native_support import metric_warn
+diff --git a/bindings/cfb_spectral.mojo b/bindings/cfb_spectral.mojo
+index 2fc003e818..882f5e431c 100644
+--- a/bindings/cfb_spectral.mojo
++++ b/bindings/cfb_spectral.mojo
+@@ -13,13 +13,13 @@
+ from std.math import isinf
+ from std.python import Python, PythonObject
+ from providers.python.host_estimator_binding_pyapi import host_estimator_binding
+-from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
+-from bindings.admitted_input import admit_typed
++from bindings.admitted_family import admit_family, admit_family_f64
+ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
+-from bindings.classical_arrays import classical_address
++from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
+ from core.host_finite_scan import host_all_finite_f32
++from core.cfb_impl import cfb_f64_to_i32
+ from bindings.family_common import (
+-    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array,
++    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call, family_array, family_view,
+     family_field, family_is_str, family_min,
+ )
+ from bindings.cluster_native import _reference_queries, _xc_array
+@@ -93,12 +93,20 @@ def _square(shape: PythonObject) raises -> Bool:
+ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+     """`_buffer.as_i32_c(source, ndim=1, name=name)`: the rank and emptiness
+     refusals, then the vector itself when it is already C-order int32, else
+-    one int32 conversion by Array.astype's rules (truncation toward zero, a
+-    value outside int32 refused), split across the host's cores."""
+-    # TOMBSTONE: the family_view + float64 widen + serial cfb_f64_to_i32 cast (core/cfb_impl.mojo) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+-    # Restore: experiments/removed/A6_FAMILY_VIEW.patch. The multi-dtype
+-    # admission (bindings/admitted_input.mojo admit_typed) casts once in parallel.
+-    return admit_typed(source, "<i4", 1, name, context).keep
++    one int32 copy."""
++    var view = family_view(source, 1, name, context)
++    if classical_dtype_str(view, context) == "<i4" and classical_c_order(view, context):
++        return view
++    var wide = admit_family_f64(view, name, context)
++    var n = Int(py=wide.size)
++    var out = family_array(Python.tuple(n), "<i4", context)
++    cfb_f64_to_i32(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide))),
++                   FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))), n)
++    _ = wide  # keep the Python object alive through the native call above
++    _ = out  # keep the Python object alive through the native call above
++    _ = wide^
++    _ = view^
++    return out
+ 
+ 
+ def _tocoo(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+@@ -165,10 +173,9 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
+         raise Error("mojolearn " + who + ": with affinity='precomputed', X "
+                     + "must be a square affinity matrix or a sparse matrix with "
+                     + "`tocoo()`, got shape " + family_repr(shape))
+-    # The metadata step of the one admission path (rank and emptiness
+-    # refusals), then the float64 widen of the same view (family_view deleted).
+-    var snapshot = admit_family_input(source, 2, "X", context)
+-    var dense = admit_family_f64(snapshot.keep, "X", context)
++    var view = family_view(source, 2, "X", context)
++    var dense = admit_family_f64(view, "X", context)
++    _ = view^
+     var n = _int(shape[0])
+     var size = Int(py=dense.size)
+     var nnz = 0
+diff --git a/bindings/cluster_fit_a_native.mojo b/bindings/cluster_fit_a_native.mojo
+index f3e3647438..797c37364a 100644
+--- a/bindings/cluster_fit_a_native.mojo
++++ b/bindings/cluster_fit_a_native.mojo
+@@ -27,7 +27,7 @@ from bindings.classical_arrays import classical_address
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.family_common import (
+     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
+-    family_type_name, family_call, family_array, family_nonfinite, family_shape_repr,
++    family_type_name, family_call, family_array, family_view, family_nonfinite, family_shape_repr,
+ )
+ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
+ from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
+@@ -721,12 +721,13 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
+                  context: PythonObject) raises:
+     """`HDBSCAN.fit(X)`."""
+     var b = native_loaded_module("builtins")
+-    # The one admission path: the rank and emptiness refusals, then the
+-    # borrow or the cast (family_view deleted).
+-    var admitted = admit_family(source, 2, "X", context)
+-    var x = admitted.array
++    var view = family_view(source, 2, "X", context)
++    var x = admit_family(view, -1, "X", context, admitted=True, empty=True).array
+     # `as_f32_c`'s `copied`: the cast made new storage.
+-    var copied = not admitted.borrowed
++    var copied = Int(py=classical_address(x)) != Int(py=classical_address(view))
++    _ = x  # keep the Python object alive through the native call above
++    _ = view  # keep the Python object alive through the native call above
++    _ = view^
+     var n = Int(py=x.shape[0])
+     var d = Int(py=x.shape[1])
+     if n < 2:
+diff --git a/bindings/family_common.mojo b/bindings/family_common.mojo
+index e3c58d877c..aec3c16764 100644
+--- a/bindings/family_common.mojo
++++ b/bindings/family_common.mojo
+@@ -15,6 +15,7 @@ from std.python._cpython import PyObjectPtr
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains
+ from bindings.classical_arrays import classical_address, classical_wrap_array, _store_code
+ from core.family_cast_impl import family_min_f32
++from bindings.classical_validate import classical_view, RESHAPE_HINT
+ from bindings.optimizer_public_words import stash_python_error
+ from bindings.native_class_admission import static_builtin_type
+ 
+@@ -158,10 +159,25 @@ def family_shape_repr(view: PythonObject) raises -> String:
+     return family_repr(py_call(b.tuple, view.shape))
+ 
+ 
+-# TOMBSTONE: family_view (the rank / emptiness refusals on a view before a second admission) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+-# Restore: experiments/removed/A6_FAMILY_VIEW.patch. Its callers read
+-# admit_family / admit_family_input (+ admit_family_cast) or admit_typed, which
+-# refuse with the same wording on the one metadata capture.
++def family_view(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
++    """The admitted input with `_buffer._as_typed`'s rank and emptiness
++    refusals, in its wording; `ndim` < 0 accepts any rank."""
++    var view = classical_view(source, context, name)
++    var nd = Int(py=view.ndim)
++    if ndim >= 0 and nd != ndim:
++        var hint = String("")
++        if ndim == 2 and nd < 2:
++            hint = ". " + String(RESHAPE_HINT)
++        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
++                    + "-D shape " + family_shape_repr(view) + hint)
++    if Int(py=view.size) == 0:
++        var what = String("sample(s)")
++        if nd == 2 and Int(py=view.shape[0]) != 0:
++            what = "feature(s)"
++        var shape = family_shape_repr(view)
++        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
++                    + " (shape=" + shape + ") while a minimum of 1 is required.")
++    return view
+ 
+ 
+ # TOMBSTONE: family_f32, family_cast_f32, family_input_snapshot, family_snapshot_f32, family_f32_snapshot, family_as_f32, family_as_f32_dense, family_cast_view, family_cast_view_f64, family_owned, family_owned_snapshot, family_sample_weight, family_sample_weight_snapshot, _family_weight_scalar, _family_weight_buffer (family admission helpers, moved onto the one admission path) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+diff --git a/bindings/kmeans_native.mojo b/bindings/kmeans_native.mojo
+index 723bd04bcd..8316612d6a 100644
+--- a/bindings/kmeans_native.mojo
++++ b/bindings/kmeans_native.mojo
+@@ -16,7 +16,7 @@
+ from std.ffi import _Global
+ from std.memory import memcpy
+ from std.python import Python, PythonObject
+-from bindings.admitted_family import admit_family, admit_family_weights, admit_family_input, admit_family_cast
++from bindings.admitted_family import admit_family, admit_family_weights
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+ from bindings.classical_arrays import classical_address
+@@ -24,7 +24,7 @@ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+ from bindings.family_common import (
+     FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
+-    family_call, family_call_kw, family_entry, family_array, family_nonfinite, family_field,
++    family_call, family_call_kw, family_entry, family_array, family_view, family_nonfinite, family_field,
+ )
+ from bindings.classical_arrays import classical_is_f32, classical_c_order
+ from core.host_finite_scan import host_all_finite_f32
+@@ -285,17 +285,13 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+     if init_code == _INIT_ARRAY:
+         if init_centroids is None:
+             raise Error("mojolearn: init='array' needs init_centroids")
+-        # The one admission path in its two steps: the rank and emptiness
+-        # refusals on the metadata, the shape refusal, then the cast (or the
+-        # borrow) with the finiteness verdict (family_view deleted).
+-        var snapshot = admit_family_input(init_centroids, 2, "init_centroids", context)
+-        if snapshot.shape[0] != k or snapshot.shape[1] != d:
++        var view = family_view(init_centroids, 2, "init_centroids", context)
++        if Int(py=view.shape[0]) != k or Int(py=view.shape[1]) != d:
+             raise Error("mojolearn: init_centroids must be (" + family_str(k_obj) + ", " + String(d)
+-                        + "), got " + family_repr(snapshot.python_shape()))
++                        + "), got " + family_repr(py_call(b.tuple, view.shape)))
+         var c0 = PythonObject(None)
+         try:
+-            admit_family_cast(snapshot, "init_centroids", context, True)
+-            c0 = snapshot.keep
++            c0 = admit_family(view, -1, "init_centroids", context, finite=True, admitted=True).array
+         except error:
+             if family_nonfinite(error, "init_centroids"):
+                 raise _kmeans_nonfinite("init_centroids", "fit")
+@@ -307,7 +303,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+         _ = centers  # keep the Python object alive through the native call above
+         _ = c0  # keep the Python object alive through the native call above
+         _ = c0^
+-        _ = snapshot^
++        _ = view^
+     # int32 cluster ids: the kernel writes uint32 ids below 2**31, the same
+     # bytes, into the array the model keeps (DEVIATION 2672).
+     var labels = family_array(Python.tuple(n), "<i4", context)
+diff --git a/bindings/mani_tsne_native.mojo b/bindings/mani_tsne_native.mojo
+index 47bb8853ad..2afd034112 100644
+--- a/bindings/mani_tsne_native.mojo
++++ b/bindings/mani_tsne_native.mojo
+@@ -22,7 +22,7 @@ from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, s
+ from core.host_finite_scan import host_all_finite_f32
+ from bindings.family_common import (
+     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+-    family_field, family_shape_repr, FAMILY_F32P,
++    family_field, family_view, family_shape_repr, FAMILY_F32P,
+ )
+ 
+ comptime _TSNE_EXPLORATION_MAX_ITER = 250
+diff --git a/bindings/metrics_exp_common.mojo b/bindings/metrics_exp_common.mojo
+index 392819066b..7d58486156 100644
+--- a/bindings/metrics_exp_common.mojo
++++ b/bindings/metrics_exp_common.mojo
+@@ -37,7 +37,7 @@ from bindings.arena_prog_native import _metrics_run_plan
+ from bindings.optimizer_public_words import stash_python_error
+ from bindings.family_common import (
+     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+-    family_call_kw, family_array, family_shape_repr,
++    family_call_kw, family_array, family_shape_repr, family_view,
+ )
+ from bindings.metrics_reg_native import _reg_weights
+ from bindings.metrics_native_support import (
+@@ -710,8 +710,8 @@ def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: Str
+                     + mx_shape_text(view, rows, cols, nd))
+     if rows != n:
+         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
+-    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+-    var a = admit_family(view, -1, name, context).array
++    var checked = family_view(view, -1, name, context)
++    var a = admit_family(checked, -1, name, context, admitted=True, empty=True).array
+     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
+         raise Error("mojolearn " + caller + ": " + name + " must be finite")
+     _ = a  # keep the Python object alive through the native calls above
+diff --git a/bindings/metrics_exp_curve.mojo b/bindings/metrics_exp_curve.mojo
+index 319a109752..9ac27cbc8b 100644
+--- a/bindings/metrics_exp_curve.mojo
++++ b/bindings/metrics_exp_curve.mojo
+@@ -16,7 +16,7 @@ from bindings.admitted_family import admit_family_f64
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setitem
+ from bindings.family_common import (
+-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str,
++    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str, family_view,
+ )
+ from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
+ from bindings.classical_validate import classical_view
+diff --git a/bindings/metrics_exp_rank.mojo b/bindings/metrics_exp_rank.mojo
+index 4c1462a989..06fae36d94 100644
+--- a/bindings/metrics_exp_rank.mojo
++++ b/bindings/metrics_exp_rank.mojo
+@@ -13,7 +13,7 @@
+ from std.python import Python, PythonObject
+ from bindings.admitted_family import admit_family
+ from bindings.py_balanced import py_call, py_contains
+-from bindings.family_common import FAMILY_F32P, family_array, family_str
++from bindings.family_common import FAMILY_F32P, family_array, family_str, family_view
+ from bindings.classical_arrays import classical_address
+ from core.host_finite_scan import host_all_finite_f32
+ from bindings.metrics_exp_common import (
+@@ -128,8 +128,8 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
+         codes = mx_codes(true, classes, True, context)
+     if rows != n:
+         raise Error("y_true and y_proba have different numbers of rows")
+-    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+-    var a = admit_family(view, -1, "y_proba", context).array
++    var checked = family_view(view, -1, "y_proba", context)
++    var a = admit_family(checked, -1, "y_proba", context, admitted=True, empty=True).array
+     return _Proba(codes, a, n, k, binary)
+ 
+ 
+@@ -251,8 +251,8 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
+     var nd = Int(py=view.ndim)
+     if nd != 2:
+         raise Error("mojolearn " + caller + ": y_true must be a 2-D (n_samples, n_labels) array")
+-    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+-    var y = admit_family(view, 2, "y_true", context).array
++    var checked = family_view(view, 2, "y_true", context)
++    var y = admit_family(checked, -1, "y_true", context, admitted=True, empty=True).array
+     var n = Int(py=view.shape[0])
+     var c = Int(py=view.shape[1])
+     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y))), n * c):
+diff --git a/bindings/mixture_native.mojo b/bindings/mixture_native.mojo
+index c70177b5b8..bb46f802b7 100644
+--- a/bindings/mixture_native.mojo
++++ b/bindings/mixture_native.mojo
+@@ -17,8 +17,7 @@
+ # inputs, same order: the bits do not move.
+ from std.memory import memcpy
+ from std.python import Python, PythonObject
+-from bindings.admitted_family import admit_family, admit_family_refuse_empty
+-from bindings.admitted_input import classical_view
++from bindings.admitted_family import admit_family
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
+@@ -28,7 +27,7 @@ from bindings.classical_arrays import (
+ )
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.family_common import (
+-    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_nonfinite,
++    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_view, family_nonfinite,
+     family_is_int, family_is_real, family_is_str, family_type_name,
+ )
+ from core.admitted_input import admitted_cast_f32
+@@ -153,18 +152,7 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
+         # The input itself, as the view admission below returns it (its own
+         # storage: `kept` stays as it is).
+         return source
+-    # The one admission path: a rank 0-2 input goes through admit_family
+-    # (its rank and emptiness refusals and its parallel cast); a higher rank
+-    # (a stack of initial matrices) gets the same emptiness refusal and the
+-    # slab casts below (family_view deleted).
+-    var view = classical_view(source, context, name)
+-    var shape = List[Int]()
+-    var count = 1
+-    for axis in range(Int(py=view.ndim)):  # small-loop(rank: the axes of one array)
+-        shape.append(Int(py=view.shape[axis]))
+-        count *= shape[axis]
+-    if count == 0:
+-        admit_family_refuse_empty(name, shape)
++    var view = family_view(source, -1, name, context)
+     var result = _any_f32_view(view, name, context)
+     if kept:
+         var cls = py_type(source)
+diff --git a/bindings/parallel_shard_native.mojo b/bindings/parallel_shard_native.mojo
+index a1437ac272..c72de078ed 100644
+--- a/bindings/parallel_shard_native.mojo
++++ b/bindings/parallel_shard_native.mojo
+@@ -28,7 +28,7 @@ from std.memory import memcpy
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+ from std.python.bindings import ExceptionType, raise_python_exception
+-from bindings.admitted_family import admit_family, admit_family_meta, admit_family_input, admit_family_cast
++from bindings.admitted_family import admit_family, admit_family_meta
+ from bindings.native_error_class import error_without_class
+ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+ from bindings.py_attr import py_attr
+@@ -38,7 +38,7 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
+ from bindings.scaler_lifecycle_native import _public_result
+ from bindings.parallel_public_result import parallel_public_result
+ from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
+-from bindings.family_common import family_call
++from bindings.family_common import family_call, family_view
+ from bindings.native_process_pool import (
+     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
+     process_pool_close,
+@@ -176,22 +176,16 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
+     """`_ScalerProtocol._input(X)`'s refusals (float32, nonempty 2-D, the
+     Int32 bound), then the C-contiguous float32 Array. The finiteness scan
+     is the plain owners' (each shard's fit or transform)."""
+-    # The one admission path in its two steps: the metadata (read once, with
+-    # the rank and emptiness refusals), the Scaler's own refusals on it, then
+-    # the borrow or the cast of the same capture (family_view and the second
+-    # admission of `source` deleted). A rank above 2 is now refused by the
+-    # metadata step ("must be at most 2-D") before the dtype test.
+-    var snapshot = admit_family_input(source, -1, "input", context)
++    var view = family_view(source, -1, "input", context)
+     var b = shard_b()
+     var listed = py_type(source) is b.list or py_type(source) is b.tuple
+-    if not listed and snapshot.dtype_name != "<f4":
++    if not listed and shard_dtype(view) != "<f4":
+         raise Error("TypeError: Scaler input must have dtype float32")
+-    if len(snapshot.shape) != 2 or snapshot.shape[0] == 0 or snapshot.shape[1] == 0:
++    if Int(py=view.ndim) != 2 or Int(py=view.shape[0]) == 0 or Int(py=view.shape[1]) == 0:
+         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
+-    if snapshot.shape[0] * snapshot.shape[1] > 2147483647:
++    if Int(py=view.shape[0]) * Int(py=view.shape[1]) > 2147483647:
+         raise Error("ValueError: Scaler exceeds the native Int32 indexing bound")
+-    admit_family_cast(snapshot, "input", context)
+-    return snapshot.keep
++    return admit_family(source, 2, "input", context).array
+ 
+ 
+ def _columns(data: PythonObject, lo: Int, hi: Int, context: PythonObject) raises -> PythonObject:
+diff --git a/bindings/svc_common.mojo b/bindings/svc_common.mojo
+index d8aad96918..0919d141cf 100644
+--- a/bindings/svc_common.mojo
++++ b/bindings/svc_common.mojo
+@@ -31,7 +31,7 @@ from bindings.label_admission_native import classifier_label_list
+ from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
+ from bindings.family_common import (
+     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
+-    family_array, family_shape_repr,
++    family_array, family_view, family_shape_repr,
+ )
+ from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
+ from core.host_finite_scan import host_all_finite_f32
+diff --git a/core/cfb_impl.mojo b/core/cfb_impl.mojo
+index e782df550f..9a6276794f 100644
+--- a/core/cfb_impl.mojo
++++ b/core/cfb_impl.mojo
+@@ -12,5 +12,8 @@ def cfb_any_positive_i32(src: MutPointer[Int32, MutUntrackedOrigin], count: Int)
+     return False
+ 
+ 
+-# TOMBSTONE: cfb_f64_to_i32 (a serial COO index cast) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+-# Restore: experiments/removed/A6_FAMILY_VIEW.patch. bindings/admitted_input.mojo admit_typed casts the index vectors in parallel.
++def cfb_f64_to_i32(src: MutPointer[Float64, MutUntrackedOrigin], dst: MutPointer[Int32, MutUntrackedOrigin], count: Int):
++    """`Array.astype("<i4")` of integer-valued words read as float64 (a COO
++    index vector): truncation toward zero, as the int32 cast truncates."""
++    for i in range(count):  # native input marshaling: one cast of a COO index vector
++        dst[i] = Int32(Int(src[i]))

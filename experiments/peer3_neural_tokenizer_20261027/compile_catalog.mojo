@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only catalog metadata and exported-graph import/execution closure.
 from std.python._cpython import PyObjectPtr
-from bindings.model_catalog_native import catalog_public_c
+from bindings.model_catalog_native_door import catalog_public_c
 
 
 @export

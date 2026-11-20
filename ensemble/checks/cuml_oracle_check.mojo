@@ -56,7 +56,7 @@ WHERE EXACT EQUALITY IS AND IS NOT CLAIMED:
 from std.math import abs as fabs
 from std.sys.info import size_of
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     BinScales,
@@ -71,6 +71,7 @@ from ensemble.decisiontree.batched_levelalgo.split import Split
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     lower_bound,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 comptime ORACLE = "ensemble/bench/cuml_oracle.txt"
 comptime DT = DType.float32
@@ -174,7 +175,7 @@ def _gain_split_kernel(
     out_f[unsafe_offset=1] = sp.best_metric_val
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("cuml_oracle_check: against cuML's OWN code, per cell")
     print("  ", ORACLE, "-- their headers included verbatim at the pin")
@@ -322,12 +323,12 @@ def main() raises:
             var hp = h_h.unsafe_ptr().unsafe_bitcast[ClassificationBin]()
             for i in range(nclasses * n_bins):
                 hp[unsafe_offset=i] = hist[i]
-            ctx.enqueue_copy(dst_buf=d_h, src_ptr=h_h.unsafe_ptr())
+            upload_host_into[DType.uint8](ctx, d_h, h_h)
             var d_q = ctx.enqueue_create_buffer[DType.float32](n_bins)
             var h_q = ctx.enqueue_create_host_buffer[DType.float32](n_bins)
             for b in range(n_bins):
                 h_q.unsafe_ptr().unsafe_store(b, quant[b])
-            ctx.enqueue_copy(dst_buf=d_q, src_ptr=h_q.unsafe_ptr())
+            upload_host_into[DType.float32](ctx, d_q, h_q)
             var d_oi = ctx.enqueue_create_buffer[DType.int32](4)
             var d_of = ctx.enqueue_create_buffer[DType.float32](2)
             ctx.synchronize()
@@ -346,8 +347,8 @@ def main() raises:
             )
             var h_oi = ctx.enqueue_create_host_buffer[DType.int32](4)
             var h_of = ctx.enqueue_create_host_buffer[DType.float32](2)
-            ctx.enqueue_copy(dst_buf=h_oi, src_buf=d_oi)
-            ctx.enqueue_copy(dst_buf=h_of, src_buf=d_of)
+            download_host_into[DType.int32](ctx, d_oi, h_oi)
+            download_host_into[DType.float32](ctx, d_of, h_of)
             ctx.synchronize()
             var got_colid = h_oi.unsafe_ptr().unsafe_load(0)
             var got_ss = h_oi.unsafe_ptr().unsafe_load(1)
@@ -358,11 +359,8 @@ def main() raises:
             _ = d_h^
             _ = h_h^
             _ = d_q^
-            _ = h_q^
             _ = d_oi^
             _ = d_of^
-            _ = h_oi^
-            _ = h_of^
 
             # DEVIATION 1946: the context dies LAST, after every value built on it.
             # Mojo frees at LAST USE, so without this the buffer releases above run

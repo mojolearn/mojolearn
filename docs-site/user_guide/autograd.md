@@ -6,7 +6,7 @@ order. Two public entry points give you the same engine. `Sequential` assembles 
 layer by layer and trains it with one call. `mojolearn.ops.Session` hands you the operations
 themselves, so you can compose your own inference or training algorithm without writing a kernel.
 
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Anything you build
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Anything you build
 from these operations inherits that: for the same inputs and seeds, your model's parameters and
 predictions are the same on every vendor.
 
@@ -261,7 +261,7 @@ for a in (grad_k, grad_kb, grad_w, attention, grad_q):
 print("digest", digest.hexdigest()[:16])
 ```
 
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs: run this script on
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs: run this script on
 each and the printed digests are the same.
 
 `Sequential` takes the same shapes. Give it the shape of one sample with `input_shape`, or let `fit`
@@ -590,7 +590,7 @@ exporting and importing a new artifact.
 
 ## Verify a model on another GPU
 
-In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. You can check this
+In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. You can check this
 for your own model. `Program.save`, `Sequential.save_checkpoint` and `Sequential.export` write a report
 beside the model file, `<file>.verify.json`. The report holds the model's outputs on a fixed set of
 seeded inputs, by digest. Copy both files to the other machine and run `python -m mojolearn verify-model`

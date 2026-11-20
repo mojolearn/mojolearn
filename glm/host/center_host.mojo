@@ -16,7 +16,7 @@ def col_sums_on_cpu(x: Int, dst: Int, rows: Int, cols: Int) raises:
     var xp = _F32P(unsafe_from_address=x)
     var op = _U64P(unsafe_from_address=dst)
     for c in range(cols):
-        var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+        var acc = Array[Int64, CS_WORDS](fill=Int64(0))
         for r in range(rows):
             exact_add(acc, xp.unsafe_load(r * cols + c))
         op.unsafe_store(c, exact_finish(acc))

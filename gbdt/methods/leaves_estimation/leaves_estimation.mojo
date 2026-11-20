@@ -63,8 +63,7 @@ shift on the host after the walker; the host oracle
 (`gbdt/host/gbdt_oracle_losses.mojo`) restates it.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.sys.compile import is_defined
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.soft_f64 import (
@@ -99,15 +98,11 @@ from checks.soft_f64 import (
 #: an unweighted fit (already on the device); on a weighted fit the host
 #: uploads its keep/zero decision per leaf (one float per leaf, from the
 #: weight sums the oracle's constructor already read).
-#: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
-comptime IDN_EST_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 0ed18e01e0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_EST_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 #: lane fix-g1-gbdt (audit G1 / F7 "GBDT multiclass leaf solve"; IDENTICAL,
@@ -132,15 +127,9 @@ comptime IDN_EST_ONE_STEP_DEVICE = (
 #: (`gbdt/host/gbdt_oracle_multiclass.mojo::_estimate_multi`) is untouched.
 #: The task drains ONCE. Classes above `MC_ONE_STEP_MAX_CLASSES` (the
 #: per-thread system is a local array) keep the host walker.
-#: `-D MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
-comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 764c283909.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GBDT_MC_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: lane fix-g1-gbdt (audit G1, the original handoff's "symmetric-fit drain
 #: merge"; IDENTICAL, every vendor; default ON): on the SYMMETRIC estimation
@@ -154,15 +143,10 @@ comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
 #: search returns, before the next estimation reuses the staging). Two
 #: drains per tree become one. Schedule only: the same kernels on the same
 #: queue in the same order, so no bit moves anywhere and the host column is
-#: untouched. `-D MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF` (or the master
-#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the drain per task.
-comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: untouched.
+# TOMBSTONE: MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 71b261799b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: the widest class count `multiclass_one_step_kernel` solves (its
 #: per-thread system is `MC_ONE_STEP_MAX_CLASSES^2` doubles of local memory)
@@ -437,8 +421,8 @@ def multiclass_one_step_kernel(
         if sf64_lt(weight, min_leaf_weight_bits):
             keep = False
 
-    var sol = InlineArray[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
-    var sigma = InlineArray[
+    var sol = Array[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
+    var sigma = Array[
         UInt64, MC_ONE_STEP_MAX_CLASSES * MC_ONE_STEP_MAX_CLASSES
     ](fill=UInt64(0))
 

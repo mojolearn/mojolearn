@@ -53,30 +53,35 @@ quality and GPU identity remain unqualified; the default stays disabled.
 BITS: a different solver, so different words from the rotation solver at
 n >= RB_MIN_N, on NVIDIA, AMD, Apple and the host column together (the gate
 below is one comptime constant every one of them imports; the cells here
-are the only arithmetic). -D MOJOLEARN_IDN_EIGH_BLOCK_ON explicitly enables
-the experimental candidate; -D MOJOLEARN_IDN_EIGH_BLOCK_OFF (or
--D MOJOLEARN_IDN_ALL_OFF) restores the rotation solver at every size.
-
-CANDIDATE ARMS (default off, each moves the words on all four columns):
-  -D MOJOLEARN_IDN_EIGH_BLOCK_B8      RB_B = 8  (pivots 16 x 16)
-  -D MOJOLEARN_IDN_EIGH_BLOCK_B32     RB_B = 32 (pivots 64 x 64)
-  -D MOJOLEARN_IDN_EIGH_BLOCK_MIN128  the block form from n = 128 (default 512)
+are the only arithmetic). Its -D MOJOLEARN_IDN_EIGH_BLOCK_ON
+switch was deleted 2026-11-15 (docs/TOMBSTONES.md): IDN_EIGH_BLOCK is False and
+the rotation solver runs at every size.
 """
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_mul, identical_mul_add
 from std.memory import bitcast
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second
 
-comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]() and not (is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-37-series); code recoverable at 7fa6378a2a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at aa77115e1b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_OFF.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition (non-owner; owner expdel2-16-decomposition); code recoverable at 9ee63b6d65.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.expdel2-18-decomposition.patch; record in docs/TOMBSTONES.md.
+comptime IDN_EIGH_BLOCK = False
 
-comptime _RB_B_WIDE = 32 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B32"]() else 16
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_B32 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 27a4e29363.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B32.patch; record in docs/TOMBSTONES.md.
 #: columns a block
-comptime RB_B = 8 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B8"]() else _RB_B_WIDE
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_B8 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 42411265d7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_B8.patch; record in docs/TOMBSTONES.md.
+comptime RB_B = 16
 #: order of a pivot problem
 comptime RB_W = 2 * RB_B
 #: the block form's least n
-comptime RB_MIN_N = 128 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_MIN128"]() else 512
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_MIN128 (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-18-decomposition; code recoverable at 452f97fd66.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_MIN128.patch; record in docs/TOMBSTONES.md.
+comptime RB_MIN_N = 512
 
 
 @always_inline

@@ -6,31 +6,39 @@ is refused by name and never replaced; an arithmetic that failed quality is
 not offered; a checkpoint carries its profile, and a state with none is
 fp32_v1. Lanes lane/lowbit-flag and lane/lowbit-default, 2026-09-29.
 
-The selector tests load the module BY PATH, so they need no binding and no
-GPU. The model tests import the package and skip by name when it cannot
-build a model on this box.
+The selector runs in the compiled numeric profile owner, so the selector
+tests use the package's module with its registries, warning record and
+process defaults isolated per test. The model tests skip by name when the
+package cannot build a model on this box.
 """
-import importlib.util
+import copy
 import os
-import pathlib
 import warnings
 
 import pytest
 
-_HERE = pathlib.Path(__file__).resolve().parent
-_SRC = _HERE.parent / "_numeric_profile.py"
-
 
 def _fresh(monkeypatch, env=None):
-    """A private copy of the module, so a test's process default never
-    leaks into another test or into the package."""
+    """The package's selector with private registries and process defaults,
+    so a test's default never leaks into another test or into the package.
+    Calling it again in one test starts over from the shipped registries'
+    copy then in place and re-reads the environment."""
     if env is None:
         monkeypatch.delenv("MOJOLEARN_NUMERIC_PROFILE", raising=False)
     else:
         monkeypatch.setenv("MOJOLEARN_NUMERIC_PROFILE", env)
-    spec = importlib.util.spec_from_file_location("_numeric_profile_under_test", _SRC)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
+    try:
+        from mojolearn import _numeric_profile as mod
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"the package does not import on this box: {e}")
+    for name in ("PROFILES", "REJECTED", "MEASURED"):
+        monkeypatch.setattr(mod, name, copy.deepcopy(getattr(mod, name)))
+    monkeypatch.setattr(mod, "_warned", set())
+    # The defaults dictionary is shared with the native providers: clear it
+    # in place (restored after the test), never replace it.
+    for use in list(mod._defaults):
+        monkeypatch.delitem(mod._defaults, use)
     return mod
 
 
@@ -349,24 +357,30 @@ def test_a_profile_measured_slower_here_warns_once_and_still_resolves(monkeypatc
         "metal": {"over": (0.5, 0.7), "box": "a Mac", "what": "w", "source": "s"},
         "hip": {"over": (0.9, 1.3), "box": "straddles", "what": "w", "source": "s"},
     }
-    monkeypatch.setattr(g, "_this_vendor", lambda: "cuda")
+    # resolve still returns the name on whatever vendor runs this test; the
+    # once-per-vendor warning is read through the same native warning step
+    # resolve calls, with the vendor named.
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")
         assert g.resolve(name) == name
         assert g.resolve(None, family="transformer") == name
+    g._warned.clear()
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        assert g._warn_if_slow_here(name, "cuda") is not None
+        assert g._warn_if_slow_here(name, "cuda") is None
     slow = [w for w in seen if issubclass(w.category, g.NumericProfileSpeedWarning)]
     assert len(slow) == 1 and "2 to 4" in str(slow[0].message) and "a box" in str(slow[0].message)
     assert "fp32_v1" in str(slow[0].message)
     # quicker here, or a range that reaches below 1, or not measured here: silent
-    for vendor in ("metal", "hip", None, "no-such-vendor"):
-        monkeypatch.setattr(g, "_this_vendor", lambda v=vendor: v)
+    for vendor in ("metal", "hip", "no-such-vendor"):
         with warnings.catch_warnings(record=True) as seen:
             warnings.simplefilter("always")
-            assert g.resolve(name) == name
+            assert g._warn_if_slow_here(name, vendor) is None
         assert not [w for w in seen if issubclass(w.category, g.NumericProfileSpeedWarning)], vendor
     # fp32_v1 never warns, and neither does a family the default does not reach
-    monkeypatch.setattr(g, "_this_vendor", lambda: "cuda")
     g._warned.clear()
+    g.MEASURED["fp32_v1"] = {"cuda": {"over": (2.0, 4.0), "box": "b", "what": "w", "source": "s"}}
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")
         assert g.resolve("fp32_v1") == "fp32_v1"
@@ -377,10 +391,13 @@ def test_a_profile_measured_slower_here_warns_once_and_still_resolves(monkeypatc
 def test_the_shipped_apple_row_warns_on_apple(monkeypatch):
     g = _fresh(monkeypatch)
     g.set_default_profile("fixed15_v1")
-    monkeypatch.setattr(g, "_this_vendor", lambda: "metal")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert g.resolve(None, family="transformer") == "fixed15_v1"
+    g._warned.clear()
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")
-        assert g.resolve(None, family="transformer") == "fixed15_v1"
+        g._warn_if_slow_here("fixed15_v1", "metal")
     slow = [w for w in seen if issubclass(w.category, g.NumericProfileSpeedWarning)]
     assert len(slow) == 1 and "numeric_profile='fp32_v1'" in str(slow[0].message)
 
@@ -464,7 +481,9 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     g._defaults["training"] = "fixed15_v1"
     try:
         with pytest.raises(NotImplementedError) as e:
-            T._Optimizer([], "AdamW")
+            # the private T._Optimizer base initializer was deleted (c88a1beef1); the public
+            # constructor's native admission resolves the training profile first
+            T.AdamW([])
         assert "fixed15_v1" in str(e.value) and "refused for training" in str(e.value)
     finally:
         g._defaults["training"] = "fp32_v1"

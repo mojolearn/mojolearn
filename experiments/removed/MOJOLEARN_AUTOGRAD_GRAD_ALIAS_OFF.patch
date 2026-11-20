@@ -1,0 +1,77 @@
+diff --git a/autograd/tape.mojo b/autograd/tape.mojo
+index 95405bebb6..b2cf35ff50 100644
+--- a/autograd/tape.mojo
++++ b/autograd/tape.mojo
+@@ -71,9 +71,8 @@ comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it wa
+ # a later backward never writes the caller's old seed. gradient() of a
+ # borrowing node is the buffer it borrowed (for the root, the seed's
+ # storage). Launches: the composed MLP's seed copy and one copy VJP a layer.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF (the copies, arm A; old path, no A/B recorded) deleted 2026-11-15 by
+-# lane/expdel2-24-neural with the AUTOGRAD_GRAD_ALIAS alias; code recoverable at 4b7b69e04f.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF.patch
++# -D MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF keeps the copies (arm A).
++comptime AUTOGRAD_GRAD_ALIAS = not is_defined["MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF"]()
+ 
+ # Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 4), default on: ONE
+ # LAUNCH FOR A LINEAR (OR MATMUL) NODE'S BACKWARD GEMMS. When both its
+@@ -627,7 +626,7 @@ struct Tape(Movable):
+             # AUTOGRAD_GRAD_ALIAS: a node's own buffer, the one its next
+             # backward writes; a borrowed range is its owner's (checked as
+             # that node) or the caller's old seed (written by no backward)
+-            var g = Int(node.own_grad)
++            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+             if node.requires_grad and _ranges_overlap(a, n, g, count):
+                 if not (shared >= 0 and self._alias_root(i) == shared and g == a and count == n):
+                     raise Error(what + " overlaps the gradient storage of a recorded tensor")
+@@ -649,7 +648,7 @@ struct Tape(Movable):
+             # the buffer this backward writes (AUTOGRAD_GRAD_ALIAS: the
+             # node's own; a range borrowed by an earlier backward is
+             # returned before anything is written)
+-            var g = Int(node.own_grad)
++            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+             if not _ranges_overlap(a, count, g, node.rows * node.cols):
+                 continue
+             if i == root and g == a:
+@@ -2215,7 +2214,7 @@ struct Tape(Movable):
+         else:
+             # AUTOGRAD_GRAD_ALIAS: the root's own buffer, never one it
+             # borrowed in an earlier backward (a caller's seed)
+-            seed = n.own_grad
++            seed = n.own_grad if AUTOGRAD_GRAD_ALIAS else n.grad
+         _fill(ex, seed, 1, 1)
+         try:
+             self._backward(ex, output, seed, rules, accumulate)
+@@ -2543,10 +2542,11 @@ struct Tape(Movable):
+         self._recorded_live = False
+         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+             self._nodes[i].grad_preact = False
+-            # every node back on its own buffer: a buffer borrowed by an
+-            # earlier backward (a reshape's, an add's, a caller's seed)
+-            # is never written by this one
+-            self._nodes[i].grad = self._nodes[i].own_grad
++            comptime if AUTOGRAD_GRAD_ALIAS:
++                # every node back on its own buffer: a buffer borrowed by an
++                # earlier backward (a reshape's, an add's, a caller's seed)
++                # is never written by this one
++                self._nodes[i].grad = self._nodes[i].own_grad
+             var n = self._nodes[i]
+             if not n.requires_grad:
+                 continue
+@@ -2567,7 +2567,7 @@ struct Tape(Movable):
+         elif touched[root]:
+             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
+         elif Int(self._nodes[root].grad) != Int(seed):
+-            if self._borrows(self._nodes[root]):
++            if AUTOGRAD_GRAD_ALIAS and self._borrows(self._nodes[root]):
+                 # the root borrows the seed: no copy (the seed is read in
+                 # place; nothing in this backward writes the root's gradient)
+                 self._nodes[root].grad = seed
+@@ -2630,7 +2630,7 @@ struct Tape(Movable):
+                         # writes its own gradient, unlike LINEAR's act' in
+                         # place). No launch.
+                         self._nodes[parent].grad = n.grad
+-                    elif (_passes_upstream(n, edge, p) and consumers[parent] == 1
++                    elif (AUTOGRAD_GRAD_ALIAS and _passes_upstream(n, edge, p) and consumers[parent] == 1
+                             and not n.caller_grad and self._borrows(p)):
+                         # a same-shape add's operand (or a subtraction's
+                         # left one) consumed only here takes the add's

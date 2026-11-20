@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Target-specific ownership only; both doors share the same whole-model engine.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_DEVICE
 from autograd.program_import_request import program_import_request
@@ -8,11 +7,32 @@ from autograd.program_host_request import program_host_request
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
-from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
+from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
+from autograd.cnn_block_op import CNN_FUSED_OPS
+from x_cnn.device import cnn_ctx
+
+from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
+from core.shared_slot import SharedSlot
+
+
+def _cnn_exec() raises -> DeviceExec:
+    """The CNN sessions' executor. With the tuned ops (CNN_FUSED_OPS, the
+    default; autograd/cnn_block_op.mojo) it wraps the x_cnn context, so the
+    session's launches and the x_cnn entries the ops call share one in-order
+    queue; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps the shared sequence context."""
+    # TOMBSTONE: MOJOLEARN_CNN_GENERIC_OPS (opt-in arm) named here; deleted 2026-11-15 by lane/expdel2-23-neural (owner); this
+    # docstring note removed by lane/expdel2-29-neural, code recoverable at cdff18f6c8.
+    # Restore: git apply experiments/removed/MOJOLEARN_CNN_GENERIC_OPS.expdel2-29-neural.patch
+    # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
+    comptime if CNN_FUSED_OPS:
+        return DeviceExec(cnn_ctx())
+    return DeviceExec()
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -61,6 +81,25 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             ops_session_close[DeviceExec, OPS_DEVICE](addresses[0])
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
             return 0
+        if op == CNN_FIT or op == CNN_PREDICT or op == CNN_OPEN:
+            # lane x8-cnn-on-executor: CNNClassifier as one captured program
+            # (Program.fit) on a fresh executor; lane x8b: predict replays the
+            # forward on the resident registry session CNN_OPEN made (the
+            # binding opens it with the GIL held, as SESSION_OPEN)
+            var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
+            var written = 0
+            if op == CNN_FIT:
+                written = cnn_fit_program[DeviceExec](_cnn_exec(), cnn.addresses, cnn.options, cnn.floats)
+            elif op == CNN_OPEN:
+                if nf != 0:
+                    raise Error("native CNN: the resident open takes no scalar descriptors")
+                written = cnn_open_program[DeviceExec, OPS_DEVICE](_cnn_exec(), cnn.addresses, cnn.options)
+            else:
+                if nf != 0:
+                    raise Error("native CNN: predict takes no scalar descriptors")
+                written = cnn_predict_program[DeviceExec, OPS_DEVICE](cnn.addresses, cnn.options)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = written
+            return 0
         var ex = DeviceExec()
         var value = 0
         if op >= RNN_FIT:
@@ -73,7 +112,23 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             elif op >= MODEL_ARGMAX:
                 value = model_output_device(ex, op, auxiliary)
             else:
-                value = neural_model_execute(ex, op, auxiliary)
+                # perf3-seq-neural: a predict that names its fitted block
+                # reads the block's resident device copy (uploaded on the
+                # model's first predict) instead of uploading it per call.
+                # The slot stays pinned from the lookup until the launches
+                # that read its address are queued (and here run), so no
+                # other thread frees it in between (ne1-a-cluster-spectral).
+                var pinned = 0
+                if op == RNN_PREDICT:
+                    pinned = seq_resident_resolve(ex, auxiliary.addresses, 4)
+                elif op == MLP_PREDICT:
+                    pinned = seq_resident_resolve(ex, auxiliary.addresses, 3)
+                try:
+                    value = neural_model_execute(ex, op, auxiliary)
+                except launch_error:
+                    seq_resident_unpin(pinned)
+                    raise launch_error^
+                seq_resident_unpin(pinned)
         else:
             var request = NativeModelRequest(op, aa, na, pp, np, ff, nf)
             if op == MODEL_FIT_LABELS:
@@ -100,5 +155,4 @@ struct NativeModelAPI(Defaultable, Movable):
         self.entries.append(model_native_v1)
 
 
-comptime NATIVE_MODEL_API = _Global[StorageType=NativeModelAPI,
-    name="MojoWholeModelDeviceNativeAPIv1", init_fn=NativeModelAPI.__init__]
+comptime NATIVE_MODEL_API = SharedSlot[NativeModelAPI, ("MojolearnWholeModelDeviceNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelDeviceNativeAPIFastV3")]

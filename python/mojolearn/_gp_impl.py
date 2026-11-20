@@ -72,13 +72,11 @@ exposure is a correctness claim, not a
 speed claim.
 """
 
-from . import _portable_math as math
-from . import _backend, _native_archive_bridge, _native_family_bridge
+from . import _native_archive_bridge, _native_family_bridge
 
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _shape_of
 from .preprocessing import StandardScaler, _STANDARD_CONTEXT
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -98,51 +96,8 @@ _K_SUM = 4
 _K_PROD = 5
 
 
-def _as_length_scale(length_scale, what):
-    """A list of floats from a scalar or a sequence. CONVERSION ONLY, no
-    judgement: positivity, finiteness and the isotropic-or-ARD length rule
-    are `gp_kernel_rbf` / `gp_kernel_matern` / `gp_validate_kernel`'s
-    refusals (kernels.mojo), and a copy of them here would make the named
-    Mojo refusal unreachable from Python and therefore untestable."""
-    if not _shape_of(length_scale):
-        return [float(length_scale)]
-    ls = [float(v) for v in _flatten(length_scale)]  # glue: converts the length-scale argument
-    if len(ls) == 0:
-        raise ValueError(
-            f"mojolearn {what}: length_scale is an empty sequence; pass a "
-            "scalar (isotropic) or n_features values (ARD)"
-        )
-    return ls
-
-
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
 _DEFAULT_BOUNDS = (1e-5, 1e5)
-
-
-def _as_bounds(bounds, n, what):
-    """"fixed" or a list of `n` `(lo, hi)` float pairs. A single pair applies
-    to every entry of an ARD length scale, scikit-learn's rule. Each bound
-    must be finite and positive with `lo <= hi` (theta is its log;
-    DEVIATION 2880)."""
-    if isinstance(bounds, str):
-        if bounds != "fixed":
-            raise ValueError(f"mojolearn {what}: bounds must be a (low, high) pair or 'fixed', got {bounds!r}")
-        return "fixed"
-    shape = _shape_of(bounds)
-    if shape == (2,):
-        pairs = [tuple(float(v) for v in _flatten(bounds))] * n  # glue: converts the bounds argument
-    elif shape == (n, 2):
-        flat = [float(v) for v in _flatten(bounds)]  # glue: converts the bounds argument
-        pairs = list(zip(flat[0::2], flat[1::2]))
-    else:
-        raise ValueError(
-            f"mojolearn {what}: bounds must be 'fixed', a (low, high) pair, or {n} pairs; got shape {shape}")
-    for lo, hi in pairs:  # glue: validates each hyperparameter bound pair
-        if not (math.isfinite(lo) and math.isfinite(hi) and 0.0 < lo <= hi):
-            raise ValueError(
-                f"mojolearn {what}: every bound must be finite and positive with low <= high, got "
-                f"({lo!r}, {hi!r}); theta is the natural log of a hyperparameter (DEVIATION 2880)")
-    return pairs
 
 
 # Maintainer notes: the four classes build a postfix node list (`a b +` /
@@ -182,25 +137,9 @@ class Kernel:
         else `(values, bounds)` for the leaf's free entries."""
         raise NotImplementedError
 
-    def _replace(self, values):
-        """A copy with the free entries replaced by `values` (consumed from
-        the front of the list, which is mutated)."""
-        raise NotImplementedError
-
-    def _free_flags(self):
-        return [0 if h is None else 1 for h in self._hyper()]  # glue: one flag per postfix node
 
     def _free_values(self):
         return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)
-
-    def _free_bounds(self):
-        return [b for h in self._hyper() if h is not None for b in h[1]]  # glue: collects bounds of free kernel hyperparameters (n_dims entries)
-
-    def _with_free_values(self, values, theta=None):
-        out = self._replace(list(values))
-        if theta is not None:
-            out._theta_fit = [float(t) for t in theta]  # glue: copies the fitted theta, kernel hyperparameters (n_dims entries)
-        return out
 
     @property
     def n_dims(self):
@@ -257,10 +196,6 @@ class ConstantKernel(Kernel):
         b = self.constant_value_bounds
         return [None if b == "fixed" else ([self.constant_value], b)]
 
-    def _replace(self, values):
-        v = values.pop(0) if self.constant_value_bounds != "fixed" else self.constant_value
-        return ConstantKernel(v, self.constant_value_bounds)
-
     def _name(self):
         return f"ConstantKernel({self.constant_value!r})"
 
@@ -298,10 +233,6 @@ class WhiteKernel(Kernel):
     def _hyper(self):
         b = self.noise_level_bounds
         return [None if b == "fixed" else ([self.noise_level], b)]
-
-    def _replace(self, values):
-        v = values.pop(0) if self.noise_level_bounds != "fixed" else self.noise_level
-        return WhiteKernel(v, self.noise_level_bounds)
 
     def _name(self):
         return f"WhiteKernel({self.noise_level!r})"
@@ -341,12 +272,6 @@ class RBF(Kernel):
     def _hyper(self):
         b = self.length_scale_bounds
         return [None if b == "fixed" else (list(self.length_scale), b)]
-
-    def _replace(self, values):
-        ls = list(self.length_scale)
-        if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
-        return RBF(ls, self.length_scale_bounds)
 
     def _name(self):
         return f"RBF({self.length_scale!r})"
@@ -392,12 +317,6 @@ class Matern(Kernel):
         b = self.length_scale_bounds
         return [None if b == "fixed" else (list(self.length_scale), b)]
 
-    def _replace(self, values):
-        ls = list(self.length_scale)
-        if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
-        return Matern(ls, self.length_scale_bounds, nu=self.nu)
-
     def _name(self):
         return f"Matern({self.length_scale!r}, nu={self.nu!r})"
 
@@ -411,9 +330,6 @@ class _Combined(Kernel):
 
     def _hyper(self):
         return self.a._hyper() + self.b._hyper() + [None]
-
-    def _replace(self, values):
-        return _Combined(self.a._replace(values), self.b._replace(values), self.op, self.sym)
 
     def _name(self):
         return f"({self.a._name()} {self.sym} {self.b._name()})"
@@ -435,9 +351,6 @@ class _SavedKernel(Kernel):
         # A saved kernel carries no bounds: every hyperparameter is fixed.
         return [None for _ in self.__nodes]  # glue: one None per postfix node
 
-    def _replace(self, values):
-        return _SavedKernel(self.__nodes)
-
     def _name(self):
         return f"_SavedKernel({len(self.__nodes)} nodes)"
 
@@ -455,12 +368,12 @@ _GP_FORMAT = "mojolearn-gp-1"
 
 # The compiled saved-model owner, connected once at import:
 # GaussianProcessRegressor's `save` and `load` are one native call each
-# (bindings/archive_schema_native.mojo writes the schema registered below
+# (bindings/archive_schema_native_door.mojo writes the schema registered below
 # the class; host_archive_native.mojo builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled owner of the public methods, connected once at import:
 # GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
-# and score are one native call each (bindings/gp_regressor_native.mojo).
+# and score are one native call each (bindings/gp_regressor_native_door.mojo).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.connect_bindings("_mojolearn_gp")
 
@@ -468,7 +381,7 @@ _native_family_bridge.connect_bindings("_mojolearn_gp")
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
 #: ("pair", left, right, op field) or ("nodes", the saved node list). The
 #: compiled save reads a fitted kernel through it
-#: (bindings/archive_schema_native.mojo "kernel").
+#: (bindings/archive_schema_native_door.mojo "kernel").
 _KERNEL_NODES = {
     ConstantKernel: ("leaf", _K_CONST, "constant_value", None),
     WhiteKernel: ("leaf", _K_WHITE, "noise_level", None),
@@ -609,6 +522,12 @@ class GaussianProcessRegressor(NumericModeMixin):
     log_marginal_likelihood_value_ : float
         Log marginal likelihood of the fitted kernel. Meaningful only when
         ``info_ == 0``.
+    optimizer_runs_ : list of tuple
+        One ``(iterations, evaluations, stop, log_marginal_likelihood)``
+        tuple per optimizer run, the start from ``kernel.theta`` first and
+        then each restart. ``stop`` names why the run ended (``'pgtol'``,
+        ``'ftol'``, ``'max-iter'``, ...). Empty when ``optimizer=None`` or
+        the kernel has no free hyperparameter.
     info_ : int
         LAPACK's Cholesky code. 0 means ``L_`` is a valid factor; ``k > 0``
         means the leading minor of order ``k`` was not positive definite.
@@ -675,26 +594,6 @@ class GaussianProcessRegressor(NumericModeMixin):
 
     # -- the binding, and the tier it really is -----------------------------
 
-    def _extension(self):
-        """The `_mojolearn_gp` binding for THIS estimator's tier, with the
-        binary's own compile-time answer cross-checked against it --
-        `_arima_impl.py`'s pattern, for its reason: a wrong-arm measurement
-        that is correctly labelled by accident is the failure the
-        three-tier design exists to prevent."""
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "gp_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    "mojolearn GaussianProcessRegressor: numeric_mode="
-                    f"{want!r} was requested but {mod.__name__} reports "
-                    f"compile-time mode code {got}; the binary and the "
-                    "directory it sits in disagree, rebuild it with "
-                    "bash bindings/build_gp.sh"
-                )
-        return mod
 
     # -- fit ----------------------------------------------------------------
 
@@ -918,7 +817,7 @@ _native_archive_bridge.register(GaussianProcessRegressor, _GP_FORMAT, (
 ), host_archive_gp_saved_kernel=_SavedKernel)
 
 
-# The fixed tables the native owner reads (bindings/gp_common_native.mojo):
+# The fixed tables the native owner reads (bindings/gp_common_native_unpack.mojo):
 # the kernel classes' node layouts and bound fields, the default kernel's
 # classes, the optimizer's stop words, the mode codes, the seed bound and
 # StandardScaler with its connected context (normalize_y).

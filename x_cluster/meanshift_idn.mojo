@@ -25,11 +25,10 @@ a done seed's blocks return at once. Shared pages are gated by
 fit) the caller runs the one-thread `_meanshift_kernel`, whose body is the
 same blocked fold.
 """
-from experiments.classical_identical_ideas.graph_controls import C40_SEED_TILES, C40_ACTIVE_SEEDS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -51,30 +50,16 @@ comptime MSI_FITS = lib_smem_page_fits_for[TARGET_COLUMN, MSI_PART_BYTES]() and 
 comptime MSI_ON = IDN_MEANSHIFT_GRID and MSI_FITS
 
 
-# Stable active descriptors preserve seed IDs and per-seed stopping state.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def _c40_active_kernel(done: IPtr, ns: Int32, active: IPtr):
-    if thread_idx.x == 0:
-        var count = 0
-        for seed in range(Int(ns)):
-            if done[seed] == 0:
-                active[count+1] = Int32(seed)
-                count += 1
-        active[0] = Int32(count)
-
-
+# TOMBSTONE: MOJOLEARN_C40_ACTIVE_SEEDS (unmeasured arm) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner lane/expdel2-05-base); code recoverable at e6ad00b2d6.
+# Restore: git apply experiments/removed/MOJOLEARN_C40_ACTIVE_SEEDS.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
 def _msi_part_kernel(
-    x: FPtr, n: Int32, d: Int32, bw: Float32, centers: FPtr, done: IPtr, nch: Int32, part: FPtr, cntp: IPtr, active: IPtr,
+    x: FPtr, n: Int32, d: Int32, bw: Float32, centers: FPtr, done: IPtr, nch: Int32, part: FPtr, cntp: IPtr,
 ):
     var b = Int(block_idx.x)
     var NC = Int(nch)
     var s = b // NC
     var c = b - s * NC
     var tid = Int(thread_idx.x)
-    comptime if C40_ACTIVE_SEEDS:
-        if s >= Int(active[0]):
-            return
-        s = Int(active[s+1])
     if done[s] != Int32(0):
         return
     var N = Int(n)
@@ -116,55 +101,8 @@ def _msi_part_kernel(
         cntp[s * NC + c] = within
 
 
-def _c40_seed_pair_kernel(
-    x: FPtr, n: Int32, d: Int32, bw: Float32, centers: FPtr, done: IPtr,
-    nch: Int32, part: FPtr, cntp: IPtr, ns: Int32, active: IPtr,
-):
-    # Two independent seeds share input-row loads. Shared storage is
-    # (1024 + 2*MSI_T) float32 words; larger rows keep the existing path.
-    var chunk = Int(block_idx.x) % Int(nch)
-    var first = (Int(block_idx.x) // Int(nch))*2
-    var seed_ids = InlineArray[Int,2](fill=Int(ns))
-    comptime for lane in range(2):
-        comptime if C40_ACTIVE_SEEDS:
-            if first+lane < Int(active[0]):
-                seed_ids[lane] = Int(active[first+lane+1])
-        else:
-            seed_ids[lane] = first+lane
-    var tid = Int(thread_idx.x)
-    var D = Int(d)
-    var cen = stack_allocation[1024, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var flag = stack_allocation[2*MSI_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    comptime for seed in range(2):
-        if seed_ids[seed] < Int(ns) and done[seed_ids[seed]] == 0:
-            for f in range(tid,D,MSI_TPB):
-                cen[seed*512+f] = centers[(seed_ids[seed])*D+f]
-    barrier()
-    var count = min(MSI_T,Int(n)-chunk*MSI_T)
-    for r in range(tid,count,MSI_TPB):
-        var acc = InlineArray[Float32,2](fill=Float32(0))
-        for f in range(D):
-            var value = ftz(x[(chunk*MSI_T+r)*D+f])
-            comptime for seed in range(2):
-                if seed_ids[seed] < Int(ns) and done[seed_ids[seed]] == 0:
-                    var delta = ftz(ftz(cen[seed*512+f])-value)
-                    acc[seed] = ftz(acc[seed]+ftz(identical_mul(delta,delta)))
-        comptime for seed in range(2):
-            flag[seed*MSI_T+r] = Int32(1) if seed_ids[seed] < Int(ns) and done[seed_ids[seed]] == 0 and identical_sqrt(acc[seed]) <= bw else Int32(0)
-    barrier()
-    comptime for seed in range(2):
-        if seed_ids[seed] < Int(ns) and done[seed_ids[seed]] == 0:
-            for f in range(tid,D,MSI_TPB):
-                var value = Float32(0)
-                for r in range(count):
-                    if flag[seed*MSI_T+r] != 0:
-                        value = ftz(value+ftz(x[(chunk*MSI_T+r)*D+f]))
-                part[((seed_ids[seed])*Int(nch)+chunk)*D+f] = value
-            if tid == 0:
-                var cnt = Int32(0)
-                for r in range(count):
-                    cnt += flag[seed*MSI_T+r]
-                cntp[(seed_ids[seed])*Int(nch)+chunk] = cnt
+# TOMBSTONE: MOJOLEARN_C40_SEED_TILES (unmeasured arm) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner lane/expdel2-05-base); code recoverable at 08023e3195.
+# Restore: git apply experiments/removed/MOJOLEARN_C40_SEED_TILES.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
 
 
 def _msi_finish_kernel(
@@ -236,8 +174,6 @@ def meanshift_idn_grid(
         var nch = (n + MSI_T - 1) // MSI_T
         var part = ctx.enqueue_create_buffer[DType.float32](ns * nch * d)
         var cntb = ctx.enqueue_create_buffer[DType.int32](ns * nch)
-        var active = ctx.enqueue_create_buffer[DType.int32](ns+1 if C40_ACTIVE_SEEDS else 1)
-        var ap = active.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var done = ctx.enqueue_create_buffer[DType.int32](ns)
         ctx.enqueue_memset(done, Int32(0))
         # `iters` counts the completed shifts and must start at zero
@@ -253,18 +189,10 @@ def meanshift_idn_grid(
             for _g in range(MSI_GROUP):
                 if it > max_iter:
                     break
-                comptime if C40_ACTIVE_SEEDS:
-                    ctx.enqueue_function[_c40_active_kernel](dp,Int32(ns),ap,grid_dim=1,block_dim=1)
-                if C40_SEED_TILES and d <= 512:
-                    ctx.enqueue_function[_c40_seed_pair_kernel](
-                        x,Int32(n),Int32(d),bw,centers,dp,Int32(nch),pp,cp,Int32(ns),ap,
-                        grid_dim=((ns+1)//2)*nch,block_dim=MSI_TPB,
-                    )
-                else:
-                    ctx.enqueue_function[_msi_part_kernel](
-                        x, Int32(n), Int32(d), bw, centers, dp, Int32(nch), pp, cp, ap,
-                        grid_dim=ns * nch, block_dim=MSI_TPB,
-                    )
+                ctx.enqueue_function[_msi_part_kernel](
+                    x, Int32(n), Int32(d), bw, centers, dp, Int32(nch), pp, cp,
+                    grid_dim=ns * nch, block_dim=MSI_TPB,
+                )
                 ctx.enqueue_function[_msi_finish_kernel](
                     Int32(d), Int32(nch), pp, cp, centers, dp, intensity, iters, stop, Int32(max_iter),
                     grid_dim=ns, block_dim=MSI_TPB,
@@ -281,7 +209,6 @@ def meanshift_idn_grid(
         _ = part^
         _ = cntb^
         _ = done^
-        _ = active^
         _ = pend^
         _ = hd^
         return True

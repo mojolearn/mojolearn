@@ -76,14 +76,14 @@ def main():
               'original_quality': {'path': str(old_quality_path), 'sha256': prov['old_quality_sha256']},
               'opponents': 'store only; never executed', 'reconciled_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
     counts = {}
-    for arm in ('on', 'off'):
+    for arm in ('on',):
         original = {s['id']: s for s in old['arms'][arm]}
         if set(original) != set(required):
             p.error('original gate inventory incomplete: ' + arm)
         steps = []
         for gate_id in required:
             prior = original[gate_id]
-            applicable = arm in gates[gate_id].get('arms', ['on', 'off'])
+            applicable = arm in gates[gate_id].get('arms', ['on'])
             row = {'id': gate_id, 'original': {k: prior.get(k) for k in ('status', 'rc')}}
             if prior.get('status') == 'NOT_APPLICABLE':
                 row['status'] = 'NOT_APPLICABLE' if not applicable else 'FAIL'

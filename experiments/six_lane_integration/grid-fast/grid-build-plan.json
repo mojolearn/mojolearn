@@ -4,11 +4,11 @@
   {
    "arm": "A",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-arima",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-arima",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "100594a18d5352a66d4b",
+   "key": "4a5da17d45294a839cd8",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_arima.sh",
@@ -20,11 +20,11 @@
   {
    "arm": "B",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-arima",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-arima",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "bf234c8bcbb7dfb432e0",
+   "key": "9fb21ae62d1f76ddd362",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_arima.sh",
@@ -36,11 +36,11 @@
   {
    "arm": "A",
    "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-base",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-base",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "74de7b45fb71fde3efc0",
+   "key": "93e4525d25d979344697",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build.sh",
@@ -52,11 +52,11 @@
   {
    "arm": "B",
    "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-base",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-base",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "a6713f3b84513229b2c3",
+   "key": "696c30b9ffb23e5e1262",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build.sh",
@@ -68,11 +68,11 @@
   {
    "arm": "A",
    "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-estimators",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-estimators",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "78377114ff78d22ec03a",
+   "key": "1b07d011448329f721a2",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_estimators.sh",
@@ -84,11 +84,11 @@
   {
    "arm": "B",
    "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-estimators",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-estimators",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "0a69927b772f9f6aacf0",
+   "key": "1892ef2b7b825892734a",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_estimators.sh",
@@ -100,11 +100,11 @@
   {
    "arm": "A",
    "binding": "bindings/gp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-gp",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-gp",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "72b1b093b359cd3431c3",
+   "key": "368a5109e54f81a9746e",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_gp.sh",
@@ -116,11 +116,11 @@
   {
    "arm": "B",
    "binding": "bindings/gp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-gp",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-gp",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "4fd96c12fd59caccfa95",
+   "key": "ee85ed511eb779260a95",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_gp.sh",
@@ -132,11 +132,11 @@
   {
    "arm": "A",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-hdbscan",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-hdbscan",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "9ddb7f7c03883c6b54f0",
+   "key": "bfc21955c8c6ab128e66",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_hdbscan.sh",
@@ -148,11 +148,11 @@
   {
    "arm": "B",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-hdbscan",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-hdbscan",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "604925a400c895286dcc",
+   "key": "8320704ea2354e831737",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_hdbscan.sh",
@@ -164,11 +164,11 @@
   {
    "arm": "A",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-ivf",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-ivf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "9e9b81d4896e29d6af35",
+   "key": "767947f723e56e5e06fc",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_ivf.sh",
@@ -180,11 +180,11 @@
   {
    "arm": "B",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-ivf",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-ivf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "0e87327c7044e17e0740",
+   "key": "d08d08fcbb007695d14e",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_ivf.sh",
@@ -196,11 +196,11 @@
   {
    "arm": "A",
    "binding": "bindings/kernel_methods.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-kernel_methods",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-kernel_methods",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "73cacf2518c667521c1b",
+   "key": "1a229a619f5a7395f23c",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_kernel_methods.sh",
@@ -212,11 +212,11 @@
   {
    "arm": "B",
    "binding": "bindings/kernel_methods.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-kernel_methods",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-kernel_methods",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "6c923b943509c9999268",
+   "key": "87b544d83c8b5fc50dc2",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_kernel_methods.sh",
@@ -228,11 +228,11 @@
   {
    "arm": "A",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-metrics",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-metrics",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "ae26b857f9183b352b7b",
+   "key": "f783fb4d38ced4dff60f",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_metrics.sh",
@@ -244,11 +244,11 @@
   {
    "arm": "B",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-metrics",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-metrics",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "1282e5c4e69cd9eb8a0d",
+   "key": "3ace07966a0ca209548b",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_metrics.sh",
@@ -260,11 +260,11 @@
   {
    "arm": "A",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-mixture",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-mixture",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "f25fe857ce2970c35d24",
+   "key": "11a26cc14d47b9f9111e",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_mixture.sh",
@@ -276,11 +276,11 @@
   {
    "arm": "B",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-mixture",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-mixture",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "3da5fd13fa4bf00c38e3",
+   "key": "ad2996900eb63e36498b",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_mixture.sh",
@@ -292,11 +292,11 @@
   {
    "arm": "A",
    "binding": "bindings/resample.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-resample",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-resample",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "0481b64269b91673909f",
+   "key": "47fcbd40e4b3c7cf402b",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_resample.sh",
@@ -308,11 +308,11 @@
   {
    "arm": "B",
    "binding": "bindings/resample.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-resample",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-resample",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "dc274bfd422688c7ca9e",
+   "key": "68c84eb985ce9a2890a1",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_resample.sh",
@@ -324,11 +324,11 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-rf",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-rf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "5a26e770b20e2828b8e3",
+   "key": "bfd95379af50819b27b2",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_rf.sh",
@@ -340,11 +340,11 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-rf",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-rf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "cdffda280aa842037415",
+   "key": "f9a07e69a30823b16073",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_rf.sh",
@@ -356,11 +356,11 @@
   {
    "arm": "A",
    "binding": "bindings/solver.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-solver",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-solver",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "1c8e16b45f9f4799a935",
+   "key": "20504c97d921b283f994",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_solver.sh",
@@ -372,11 +372,11 @@
   {
    "arm": "B",
    "binding": "bindings/solver.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-solver",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-solver",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "b4b1854f394446a6d3f5",
+   "key": "50de368243257a66e534",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_solver.sh",
@@ -388,11 +388,11 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-svm",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-svm",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "0ac1d62ec00c06eaf890",
+   "key": "fea3e51b01feeabfe52f",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_svm.sh",
@@ -404,11 +404,11 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-svm",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-svm",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "731897aaed6fedf5e2cf",
+   "key": "5cb0fe746db0f67fbabe",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_svm.sh",
@@ -420,11 +420,11 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-trees",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "a34b1dbd2aeb43878bc7",
+   "key": "f7bab25aaf97a12a4f5b",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_trees.sh",
@@ -436,11 +436,11 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-trees",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "17eb557f19eab94acba6",
+   "key": "97cd24ecb94cb782b325",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_trees.sh",
@@ -452,11 +452,11 @@
   {
    "arm": "A",
    "binding": "bindings/tsa.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-tsa",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-tsa",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "47647c94155adaf479b6",
+   "key": "ab4e1275ecf3a707a205",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_tsa.sh",
@@ -468,11 +468,11 @@
   {
    "arm": "B",
    "binding": "bindings/tsa.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-tsa",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-tsa",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "1a1d5dcae76a75c3a89c",
+   "key": "8f08a83565ef07c6ce3c",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_tsa.sh",
@@ -484,11 +484,11 @@
   {
    "arm": "A",
    "binding": "bindings/x_cluster.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_cluster",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_cluster",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "1c51940b073042815309",
+   "key": "066f496c1e9f1e2cdeaf",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_cluster.sh",
@@ -500,11 +500,11 @@
   {
    "arm": "B",
    "binding": "bindings/x_cluster.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_cluster",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_cluster",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "3f6d34430625b69595ad",
+   "key": "eda886aecfe81ffb14ac",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_cluster.sh",
@@ -516,11 +516,11 @@
   {
    "arm": "A",
    "binding": "bindings/x_decomp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_decomp",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_decomp",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "95ad9eb09383383bb0ff",
+   "key": "95d1899fc5dbdd58abd3",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_decomp.sh",
@@ -532,11 +532,11 @@
   {
    "arm": "B",
    "binding": "bindings/x_decomp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_decomp",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_decomp",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "dd14c3483af473d0dd49",
+   "key": "ba98c3d7e5698180e391",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_decomp.sh",
@@ -548,11 +548,11 @@
   {
    "arm": "A",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_linear",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_linear",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "2e464e5f9824b70cafdf",
+   "key": "dbecf4f07937c09bf437",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_linear.sh",
@@ -564,11 +564,11 @@
   {
    "arm": "B",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_linear",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_linear",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "64f3c72fed6275417c22",
+   "key": "468eb9e5f6db25fabb89",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_linear.sh",
@@ -580,11 +580,11 @@
   {
    "arm": "A",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_prep",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_prep",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "99683fdc744b8bc6800c",
+   "key": "59159d7330dd2bca5123",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_prep.sh",
@@ -596,11 +596,11 @@
   {
    "arm": "B",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_prep",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_prep",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "df8740b3de424d689661",
+   "key": "108180d63ea85af87ff5",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_prep.sh",
@@ -612,11 +612,11 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_trees",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "c549a483e4e4afe45908",
+   "key": "dc086ff331a17f7a4543",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_trees.sh",
@@ -628,11 +628,11 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-main-x_trees",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "585d633e8db54ffa15d6",
+   "key": "8e8ed566199063557367",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_x_trees.sh",
@@ -644,11 +644,11 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-gbdt",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-gbdt",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "bab97a70f480de22e4ab",
+   "key": "9762992efb59dfaf1c36",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_gbdt.sh",
@@ -660,11 +660,11 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-gbdt",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-gbdt",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "c387be47394562917e17",
+   "key": "2962c74a622f38286725",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_gbdt.sh",
@@ -676,11 +676,11 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-rf",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-rf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "538aff557d11921e230b",
+   "key": "cfe8f76d4bc4b17eb1b9",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_rf.sh",
@@ -692,11 +692,11 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-rf",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-rf",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "38015b7c1d1c660f167f",
+   "key": "8b2a6d294717fd625d9f",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_rf.sh",
@@ -708,11 +708,11 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-svm",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-svm",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "39481f2843e20c093488",
+   "key": "8626716ec6ae38b41a90",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_svm.sh",
@@ -724,11 +724,11 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-svm",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-svm",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "76b77371b14338dab04b",
+   "key": "abfd3e9e03d82b67ceb1",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_svm.sh",
@@ -740,11 +740,11 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-trees",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "aadfc218a9f18a6f280a",
+   "key": "1a74cb2b0b56b848bf07",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_trees.sh",
@@ -756,11 +756,11 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-main-trees",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-trees",
    "configurations": [],
    "defines": [],
    "environment": {},
-   "key": "d04c9a37fff3a9d4c6b1",
+   "key": "19bb2dd423647033f21d",
    "mode": "fast",
    "role": "main",
    "script": "bindings/build_trees.sh",
@@ -772,14 +772,14 @@
   {
    "arm": "A",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F001",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F001",
    "configurations": [
     "G.algos:autoarima.AFCL_P12=on",
     "G.classical2:arima.AFCL_P12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "e26f7e5c3bbee0211503",
+   "key": "8ee763ae2c0540b8a7c9",
    "mode": "fast",
    "pack": "F001",
    "role": "pack",
@@ -792,7 +792,7 @@
   {
    "arm": "B",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F001",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F001",
    "configurations": [
     "G.algos:autoarima.AFCL_P12=on",
     "G.classical2:arima.AFCL_P12=on"
@@ -801,7 +801,7 @@
     "MOJOLEARN_AFCL_P12=1"
    ],
    "environment": {},
-   "key": "b7d7fe0f75d19518229e",
+   "key": "a3d5a45ca1f1b2290bba",
    "mode": "fast",
    "pack": "F001",
    "role": "pack",
@@ -814,55 +814,15 @@
   {
    "arm": "A",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F002",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "f601e00913da38e79fcf",
-   "mode": "fast",
-   "pack": "F002",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F002",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_CONST_BOTH=1"
-   ],
-   "environment": {},
-   "key": "7b00cfc0d6301fa47c19",
-   "mode": "fast",
-   "pack": "F002",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F003",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F002",
    "configurations": [
     "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "68fcf07f7b2325009964",
+   "key": "d94d169c22cb7ee2c255",
    "mode": "fast",
-   "pack": "F003",
+   "pack": "F002",
    "role": "pack",
    "script": "bindings/build_arima.sh",
    "status": "NOT_COMPILED",
@@ -873,7 +833,7 @@
   {
    "arm": "B",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F003",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F002",
    "configurations": [
     "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on"
    ],
@@ -881,7 +841,26 @@
     "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
    ],
    "environment": {},
-   "key": "a0e057e3ee470dafe0b8",
+   "key": "fa2522dbf000f53aecd7",
+   "mode": "fast",
+   "pack": "F002",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F003",
+   "configurations": [
+    "G.algos:autoarima.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "925c53a05863b6e99d90",
    "mode": "fast",
    "pack": "F003",
    "role": "pack",
@@ -892,246 +871,20 @@
    "vendor": "apple"
   },
   {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F004",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "48385311a71a497e315c",
-   "mode": "fast",
-   "pack": "F004",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
    "arm": "B",
    "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F004",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_KPSS_D=1"
-   ],
-   "environment": {},
-   "key": "414fb4ab2d910435b677",
-   "mode": "fast",
-   "pack": "F004",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F005",
-   "configurations": [
-    "G.algos:autoarima.all_on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "1c7744c3133cd5a08dc5",
-   "mode": "fast",
-   "pack": "F005",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F005",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F003",
    "configurations": [
     "G.algos:autoarima.all_on"
    ],
    "defines": [
     "MOJOLEARN_AFCL_P12=1",
-    "MOJOLEARN_ARIMA_FAST_CONST_BOTH=1",
-    "MOJOLEARN_ARIMA_FAST_KPSS_D=1",
     "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
    ],
    "environment": {},
-   "key": "e2ceaaff2e5cee1a450a",
+   "key": "6372b5de07674425e96e",
    "mode": "fast",
-   "pack": "F005",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F006",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "ca065191e5d2d4cd4ff3",
-   "mode": "fast",
-   "pack": "F006",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F006",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_KPSS_D=1",
-    "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
-   ],
-   "environment": {},
-   "key": "ca6e73a0650ddd52ff6f",
-   "mode": "fast",
-   "pack": "F006",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F007",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "a971215efd1d30d99a82",
-   "mode": "fast",
-   "pack": "F007",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F007",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_CONST_BOTH=1",
-    "MOJOLEARN_ARIMA_FAST_KPSS_D=1"
-   ],
-   "environment": {},
-   "key": "a5b5770bf58ecece6ec6",
-   "mode": "fast",
-   "pack": "F007",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F008",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_ROOT_CHECK=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "ad567c9d023a98174093",
-   "mode": "fast",
-   "pack": "F008",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F008",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_ROOT_CHECK=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_CONST_BOTH=1",
-    "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
-   ],
-   "environment": {},
-   "key": "efbca1994011c2f10e1d",
-   "mode": "fast",
-   "pack": "F008",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F009",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_ROOT_CHECK=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "585c2f18ed5baf4370fc",
-   "mode": "fast",
-   "pack": "F009",
-   "role": "pack",
-   "script": "bindings/build_arima.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/arima.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F009",
-   "configurations": [
-    "G.algos:autoarima.ARIMA_FAST_CONST_BOTH=on+ARIMA_FAST_ROOT_CHECK=on+ARIMA_FAST_KPSS_D=on"
-   ],
-   "defines": [
-    "MOJOLEARN_ARIMA_FAST_CONST_BOTH=1",
-    "MOJOLEARN_ARIMA_FAST_KPSS_D=1",
-    "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
-   ],
-   "environment": {},
-   "key": "003d77383fbda1b83b88",
-   "mode": "fast",
-   "pack": "F009",
+   "pack": "F003",
    "role": "pack",
    "script": "bindings/build_arima.sh",
    "status": "NOT_COMPILED",
@@ -1142,7 +895,7 @@
   {
    "arm": "A",
    "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F010",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F004",
    "configurations": [
     "G.classical2:knn-clf.AFCL_G01=on",
     "G.classical2:knn-reg.AFCL_G01=on",
@@ -1151,9 +904,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "8770bc62ffc2d95f03d4",
+   "key": "f37b890ff3ca14639ab9",
    "mode": "fast",
-   "pack": "F010",
+   "pack": "F004",
    "role": "pack",
    "script": "bindings/build.sh",
    "status": "NOT_COMPILED",
@@ -1164,7 +917,7 @@
   {
    "arm": "B",
    "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F010",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F004",
    "configurations": [
     "G.classical2:knn-clf.AFCL_G01=on",
     "G.classical2:knn-reg.AFCL_G01=on",
@@ -1176,141 +929,9 @@
     "MOJOLEARN_AFCL_G05=1"
    ],
    "environment": {},
-   "key": "8664f2539ec33c3fde60",
+   "key": "b773f2f2903d079cd36c",
    "mode": "fast",
-   "pack": "F010",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F011",
-   "configurations": [
-    "G.classical:kmeans.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "e067ce400652785137a1",
-   "mode": "fast",
-   "pack": "F011",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F011",
-   "configurations": [
-    "G.classical:kmeans.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "dc86d5fa2007dc85870f",
-   "mode": "fast",
-   "pack": "F011",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F012",
-   "configurations": [
-    "G.classical:kmeans.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "078f1b4c565fd5783b6a",
-   "mode": "fast",
-   "pack": "F012",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F012",
-   "configurations": [
-    "G.classical:kmeans.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G05=1",
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "a2e2cb6c31d1b709a887",
-   "mode": "fast",
-   "pack": "F012",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F013",
-   "configurations": [
-    "G.classical2:knn-clf.AFCL_G02=on",
-    "G.classical2:knn-reg.AFCL_G02=on"
-   ],
-   "defines": [
-    "MOJOLEARN_KNN_FAST_MMA_OFF=1"
-   ],
-   "environment": {},
-   "key": "ffb21c7bce2e99e6ae52",
-   "mode": "fast",
-   "pack": "F013",
-   "role": "pack",
-   "script": "bindings/build.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/_mojolearn.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F013",
-   "configurations": [
-    "G.classical2:knn-clf.AFCL_G02=on",
-    "G.classical2:knn-reg.AFCL_G02=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G02=1",
-    "MOJOLEARN_KNN_FAST_MMA_OFF=1"
-   ],
-   "environment": {},
-   "key": "f64f13d9ffbabcf37b9d",
-   "mode": "fast",
-   "pack": "F013",
+   "pack": "F004",
    "role": "pack",
    "script": "bindings/build.sh",
    "status": "NOT_COMPILED",
@@ -1321,16 +942,16 @@
   {
    "arm": "A",
    "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F014",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F005",
    "configurations": [
     "G.classical:dbscan.AFCL_G03=on",
     "G.classical:kde.AFCL_G13=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "93f4dc5c2100f4229f4c",
+   "key": "7d66dc685f95884f6207",
    "mode": "fast",
-   "pack": "F014",
+   "pack": "F005",
    "role": "pack",
    "script": "bindings/build_estimators.sh",
    "status": "NOT_COMPILED",
@@ -1341,7 +962,7 @@
   {
    "arm": "B",
    "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F014",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F005",
    "configurations": [
     "G.classical:dbscan.AFCL_G03=on",
     "G.classical:kde.AFCL_G13=on"
@@ -1351,182 +972,9 @@
     "MOJOLEARN_AFCL_G13=1"
    ],
    "environment": {},
-   "key": "daaa9c7235a9c54d4b79",
+   "key": "850a56c596754353525e",
    "mode": "fast",
-   "pack": "F014",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F015",
-   "configurations": [
-    "G.classical:dbscan.DBSCAN_FAST_CC_BATCH=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "a65d9b76e832bb65a4c1",
-   "mode": "fast",
-   "pack": "F015",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F015",
-   "configurations": [
-    "G.classical:dbscan.DBSCAN_FAST_CC_BATCH=on"
-   ],
-   "defines": [
-    "MOJOLEARN_DBSCAN_FAST_CC_BATCH=1"
-   ],
-   "environment": {},
-   "key": "6a71e6c93613d912547e",
-   "mode": "fast",
-   "pack": "F015",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F016",
-   "configurations": [
-    "G.classical:dbscan.all_on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "f64cb470a1c9e6e78fa7",
-   "mode": "fast",
-   "pack": "F016",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F016",
-   "configurations": [
-    "G.classical:dbscan.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G03=1",
-    "MOJOLEARN_DBSCAN_FAST_CC_BATCH=1"
-   ],
-   "environment": {},
-   "key": "84dd15fef956cec0fb43",
-   "mode": "fast",
-   "pack": "F016",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F017",
-   "configurations": [
-    "G.algos:pca.AFCL_L07=on"
-   ],
-   "defines": [
-    "MOJOLEARN_PCA_FAST_COMPENSATED_COV=1"
-   ],
-   "environment": {},
-   "key": "9e1e31f40b0acf162f6f",
-   "mode": "fast",
-   "pack": "F017",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F017",
-   "configurations": [
-    "G.algos:pca.AFCL_L07=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_L07=1",
-    "MOJOLEARN_PCA_FAST_COMPENSATED_COV=1"
-   ],
-   "environment": {},
-   "key": "0c36ace3dff0f81a9b62",
-   "mode": "fast",
-   "pack": "F017",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F018",
-   "configurations": [
-    "G.algos:qn-reg.AFCL_L05=on",
-    "G.classical2:linearsvc.AFCL_L05=on",
-    "G.classical2:linearsvr.AFCL_L05=on",
-    "G.classical2:logreg.AFCL_L05=on"
-   ],
-   "defines": [
-    "MOJOLEARN_QN_FAST_COALESCED_OFF=1"
-   ],
-   "environment": {},
-   "key": "11966548d400a873e80a",
-   "mode": "fast",
-   "pack": "F018",
-   "role": "pack",
-   "script": "bindings/build_estimators.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/estimators.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F018",
-   "configurations": [
-    "G.algos:qn-reg.AFCL_L05=on",
-    "G.classical2:linearsvc.AFCL_L05=on",
-    "G.classical2:linearsvr.AFCL_L05=on",
-    "G.classical2:logreg.AFCL_L05=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_L05=1",
-    "MOJOLEARN_QN_FAST_COALESCED_OFF=1"
-   ],
-   "environment": {},
-   "key": "1bb48bbec212db64a024",
-   "mode": "fast",
-   "pack": "F018",
+   "pack": "F005",
    "role": "pack",
    "script": "bindings/build_estimators.sh",
    "status": "NOT_COMPILED",
@@ -1537,16 +985,16 @@
   {
    "arm": "A",
    "binding": "bindings/gp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F019",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F006",
    "configurations": [
     "G.classical2:gpc.AFCL_L11=on",
     "G.classical2:gpr.AFCL_L11=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "88ba7f934bb2b567e87c",
+   "key": "63e1b64f502a474a5089",
    "mode": "fast",
-   "pack": "F019",
+   "pack": "F006",
    "role": "pack",
    "script": "bindings/build_gp.sh",
    "status": "NOT_COMPILED",
@@ -1557,7 +1005,7 @@
   {
    "arm": "B",
    "binding": "bindings/gp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F019",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F006",
    "configurations": [
     "G.classical2:gpc.AFCL_L11=on",
     "G.classical2:gpr.AFCL_L11=on"
@@ -1566,9 +1014,9 @@
     "MOJOLEARN_AFCL_L11=1"
    ],
    "environment": {},
-   "key": "5bd697fa8cb33bde02e8",
+   "key": "e27cd0335118ffce1485",
    "mode": "fast",
-   "pack": "F019",
+   "pack": "F006",
    "role": "pack",
    "script": "bindings/build_gp.sh",
    "status": "NOT_COMPILED",
@@ -1579,15 +1027,15 @@
   {
    "arm": "A",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F020",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F007",
    "configurations": [
     "G.classical:hdbscan.AFCL_G01=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "81c9c80abcb192710109",
+   "key": "8c05a618421158e91391",
    "mode": "fast",
-   "pack": "F020",
+   "pack": "F007",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1598,7 +1046,7 @@
   {
    "arm": "B",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F020",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F007",
    "configurations": [
     "G.classical:hdbscan.AFCL_G01=on"
    ],
@@ -1606,9 +1054,9 @@
     "MOJOLEARN_AFCL_G01=1"
    ],
    "environment": {},
-   "key": "20f05386cc32f8d6b863",
+   "key": "3508560d6de92a1a2801",
    "mode": "fast",
-   "pack": "F020",
+   "pack": "F007",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1619,15 +1067,15 @@
   {
    "arm": "A",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F021",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F008",
    "configurations": [
     "G.classical:hdbscan.AFCL_G14=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "d904823d0a45b905df6d",
+   "key": "3cf3b3963e31bea8765c",
    "mode": "fast",
-   "pack": "F021",
+   "pack": "F008",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1638,7 +1086,7 @@
   {
    "arm": "B",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F021",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F008",
    "configurations": [
     "G.classical:hdbscan.AFCL_G14=on"
    ],
@@ -1646,9 +1094,9 @@
     "MOJOLEARN_AFCL_G14=1"
    ],
    "environment": {},
-   "key": "59a26adef3b8c40961ee",
+   "key": "1ca1c230000ee4d393f1",
    "mode": "fast",
-   "pack": "F021",
+   "pack": "F008",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1659,60 +1107,15 @@
   {
    "arm": "A",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F022",
-   "configurations": [
-    "G.classical:hdbscan.AFCL_G04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_HDB_CORE_TILE=1"
-   ],
-   "environment": {},
-   "key": "a3fe78a175a69804f9dc",
-   "mode": "fast",
-   "pack": "F022",
-   "role": "pack",
-   "script": "bindings/build_hdbscan.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F022",
-   "configurations": [
-    "G.classical:hdbscan.AFCL_G04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G04=1",
-    "MOJOLEARN_HDB_CORE_TILE=1"
-   ],
-   "environment": {},
-   "key": "77d477d025fcdaa60527",
-   "mode": "fast",
-   "pack": "F022",
-   "role": "pack",
-   "script": "bindings/build_hdbscan.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F023",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F009",
    "configurations": [
     "G.classical:hdbscan.all_on"
    ],
-   "defines": [
-    "MOJOLEARN_HDB_CORE_TILE=1"
-   ],
+   "defines": [],
    "environment": {},
-   "key": "bedc53d645af66ad0331",
+   "key": "f40edb53f6bfe8982488",
    "mode": "fast",
-   "pack": "F023",
+   "pack": "F009",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1723,20 +1126,18 @@
   {
    "arm": "B",
    "binding": "bindings/hdbscan.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F023",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F009",
    "configurations": [
     "G.classical:hdbscan.all_on"
    ],
    "defines": [
     "MOJOLEARN_AFCL_G01=1",
-    "MOJOLEARN_AFCL_G04=1",
-    "MOJOLEARN_AFCL_G14=1",
-    "MOJOLEARN_HDB_CORE_TILE=1"
+    "MOJOLEARN_AFCL_G14=1"
    ],
    "environment": {},
-   "key": "28fa5133627f699b1843",
+   "key": "c309dd1594123e113675",
    "mode": "fast",
-   "pack": "F023",
+   "pack": "F009",
    "role": "pack",
    "script": "bindings/build_hdbscan.sh",
    "status": "NOT_COMPILED",
@@ -1747,15 +1148,15 @@
   {
    "arm": "A",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F024",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F010",
    "configurations": [
     "G.algos:ivf.AFCL_G05=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "0850e43d416d0369eec6",
+   "key": "00b970823bf91e5a09bf",
    "mode": "fast",
-   "pack": "F024",
+   "pack": "F010",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1766,7 +1167,7 @@
   {
    "arm": "B",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F024",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F010",
    "configurations": [
     "G.algos:ivf.AFCL_G05=on"
    ],
@@ -1774,9 +1175,9 @@
     "MOJOLEARN_AFCL_G05=1"
    ],
    "environment": {},
-   "key": "c16f3a94b6b1dab48dd3",
+   "key": "39e6060a1993d7ba4008",
    "mode": "fast",
-   "pack": "F024",
+   "pack": "F010",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1787,15 +1188,15 @@
   {
    "arm": "A",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F025",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F011",
    "configurations": [
     "G.algos:ivf.AFCL_G09=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "eebd4f0858fb95e5a760",
+   "key": "774bdb660c63a644229c",
    "mode": "fast",
-   "pack": "F025",
+   "pack": "F011",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1806,7 +1207,7 @@
   {
    "arm": "B",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F025",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F011",
    "configurations": [
     "G.algos:ivf.AFCL_G09=on"
    ],
@@ -1814,9 +1215,9 @@
     "MOJOLEARN_AFCL_G09=1"
    ],
    "environment": {},
-   "key": "8f6fc3f7de9a94fd2cda",
+   "key": "c72ebecb09bab64997f1",
    "mode": "fast",
-   "pack": "F025",
+   "pack": "F011",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1827,60 +1228,15 @@
   {
    "arm": "A",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F026",
-   "configurations": [
-    "G.algos:ivf.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "17b4067ec6dab82740dd",
-   "mode": "fast",
-   "pack": "F026",
-   "role": "pack",
-   "script": "bindings/build_ivf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F026",
-   "configurations": [
-    "G.algos:ivf.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "f589ce940373cfd1cbef",
-   "mode": "fast",
-   "pack": "F026",
-   "role": "pack",
-   "script": "bindings/build_ivf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F027",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F012",
    "configurations": [
     "G.algos:ivf.all_on"
    ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
+   "defines": [],
    "environment": {},
-   "key": "c97ee527e9012dde879a",
+   "key": "845aaac8016c154772c8",
    "mode": "fast",
-   "pack": "F027",
+   "pack": "F012",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1891,20 +1247,18 @@
   {
    "arm": "B",
    "binding": "bindings/ivf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F027",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F012",
    "configurations": [
     "G.algos:ivf.all_on"
    ],
    "defines": [
     "MOJOLEARN_AFCL_G05=1",
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_AFCL_G09=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
+    "MOJOLEARN_AFCL_G09=1"
    ],
    "environment": {},
-   "key": "e8ff926991ccfa9f89ef",
+   "key": "7235193a71b490e61b15",
    "mode": "fast",
-   "pack": "F027",
+   "pack": "F012",
    "role": "pack",
    "script": "bindings/build_ivf.sh",
    "status": "NOT_COMPILED",
@@ -1915,15 +1269,15 @@
   {
    "arm": "A",
    "binding": "bindings/kernel_methods.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F028",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F013",
    "configurations": [
     "G.algos:rbf-sampler.AFCL_L12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "823df4ba6fe896a5947b",
+   "key": "b9ced780f6ccec85dd56",
    "mode": "fast",
-   "pack": "F028",
+   "pack": "F013",
    "role": "pack",
    "script": "bindings/build_kernel_methods.sh",
    "status": "NOT_COMPILED",
@@ -1934,7 +1288,7 @@
   {
    "arm": "B",
    "binding": "bindings/kernel_methods.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F028",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F013",
    "configurations": [
     "G.algos:rbf-sampler.AFCL_L12=on"
    ],
@@ -1942,9 +1296,9 @@
     "MOJOLEARN_AFCL_L12=1"
    ],
    "environment": {},
-   "key": "e3569c5c946011063d88",
+   "key": "ca37e570786b5a572c0d",
    "mode": "fast",
-   "pack": "F028",
+   "pack": "F013",
    "role": "pack",
    "script": "bindings/build_kernel_methods.sh",
    "status": "NOT_COMPILED",
@@ -1955,7 +1309,7 @@
   {
    "arm": "A",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F029",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F014",
    "configurations": [
     "G.classical2:spectral.AFCL_G01=on",
     "G.classical2:spectral-embedding.AFCL_G01=on",
@@ -1963,9 +1317,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "abb7dbb7d76e727960ae",
+   "key": "bf4857d6f572888ab205",
    "mode": "fast",
-   "pack": "F029",
+   "pack": "F014",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -1976,7 +1330,7 @@
   {
    "arm": "B",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F029",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F014",
    "configurations": [
     "G.classical2:spectral.AFCL_G01=on",
     "G.classical2:spectral-embedding.AFCL_G01=on",
@@ -1986,9 +1340,9 @@
     "MOJOLEARN_AFCL_G01=1"
    ],
    "environment": {},
-   "key": "310de1a2d06dd773f6c2",
+   "key": "80e5cd0c752c7be48c6d",
    "mode": "fast",
-   "pack": "F029",
+   "pack": "F014",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -1999,16 +1353,16 @@
   {
    "arm": "A",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F030",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F015",
    "configurations": [
     "G.classical2:spectral.AFCL_G05=on",
     "G.classical2:umap.AFCL_G10=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "80ac5a5ba437613b9353",
+   "key": "2d8ed540051331c2fb8d",
    "mode": "fast",
-   "pack": "F030",
+   "pack": "F015",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2019,7 +1373,7 @@
   {
    "arm": "B",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F030",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F015",
    "configurations": [
     "G.classical2:spectral.AFCL_G05=on",
     "G.classical2:umap.AFCL_G10=on"
@@ -2029,9 +1383,9 @@
     "MOJOLEARN_AFCL_G10=1"
    ],
    "environment": {},
-   "key": "3808052f993bf9bb380d",
+   "key": "f3f11a87316743ec6647",
    "mode": "fast",
-   "pack": "F030",
+   "pack": "F015",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2042,16 +1396,16 @@
   {
    "arm": "A",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F031",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F016",
    "configurations": [
     "G.classical2:spectral.AFCL_G11=on",
     "G.classical2:spectral-embedding.AFCL_G11=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "fef83a3f15a8cede6fd6",
+   "key": "e1a497eac2140087693d",
    "mode": "fast",
-   "pack": "F031",
+   "pack": "F016",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2062,7 +1416,7 @@
   {
    "arm": "B",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F031",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F016",
    "configurations": [
     "G.classical2:spectral.AFCL_G11=on",
     "G.classical2:spectral-embedding.AFCL_G11=on"
@@ -2071,9 +1425,9 @@
     "MOJOLEARN_AFCL_G11=1"
    ],
    "environment": {},
-   "key": "69f583405d7c7e6ca179",
+   "key": "bb23acd41e385bcee0dc",
    "mode": "fast",
-   "pack": "F031",
+   "pack": "F016",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2084,16 +1438,17 @@
   {
    "arm": "A",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F032",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F017",
    "configurations": [
+    "G.classical2:spectral.all_on",
     "G.classical2:spectral-embedding.all_on",
     "G.classical2:umap.all_on"
    ],
    "defines": [],
    "environment": {},
-   "key": "47212fea5714faacc718",
+   "key": "2c22d53d284057ec85c1",
    "mode": "fast",
-   "pack": "F032",
+   "pack": "F017",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2104,109 +1459,22 @@
   {
    "arm": "B",
    "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F032",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F017",
    "configurations": [
+    "G.classical2:spectral.all_on",
     "G.classical2:spectral-embedding.all_on",
     "G.classical2:umap.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G01=1",
-    "MOJOLEARN_AFCL_G10=1",
-    "MOJOLEARN_AFCL_G11=1"
-   ],
-   "environment": {},
-   "key": "d8e031415f6a785d1320",
-   "mode": "fast",
-   "pack": "F032",
-   "role": "pack",
-   "script": "bindings/build_metrics.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F033",
-   "configurations": [
-    "G.classical2:spectral.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "a288c57ca8b74fc7e336",
-   "mode": "fast",
-   "pack": "F033",
-   "role": "pack",
-   "script": "bindings/build_metrics.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F033",
-   "configurations": [
-    "G.classical2:spectral.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "64703a5d007f0afe238d",
-   "mode": "fast",
-   "pack": "F033",
-   "role": "pack",
-   "script": "bindings/build_metrics.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F034",
-   "configurations": [
-    "G.classical2:spectral.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "0da8afeee99153a8cf79",
-   "mode": "fast",
-   "pack": "F034",
-   "role": "pack",
-   "script": "bindings/build_metrics.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/metrics.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F034",
-   "configurations": [
-    "G.classical2:spectral.all_on"
    ],
    "defines": [
     "MOJOLEARN_AFCL_G01=1",
     "MOJOLEARN_AFCL_G05=1",
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_AFCL_G11=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
+    "MOJOLEARN_AFCL_G10=1",
+    "MOJOLEARN_AFCL_G11=1"
    ],
    "environment": {},
-   "key": "781ddf3b34de93062c7b",
+   "key": "0c111086aef6d9f3e216",
    "mode": "fast",
-   "pack": "F034",
+   "pack": "F017",
    "role": "pack",
    "script": "bindings/build_metrics.sh",
    "status": "NOT_COMPILED",
@@ -2217,15 +1485,15 @@
   {
    "arm": "A",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F035",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F018",
    "configurations": [
     "G.classical2:gmm.AFCL_G05=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "026c81e8202ef6fb8971",
+   "key": "032c9246d605cfbd6e31",
    "mode": "fast",
-   "pack": "F035",
+   "pack": "F018",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2236,7 +1504,7 @@
   {
    "arm": "B",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F035",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F018",
    "configurations": [
     "G.classical2:gmm.AFCL_G05=on"
    ],
@@ -2244,9 +1512,9 @@
     "MOJOLEARN_AFCL_G05=1"
    ],
    "environment": {},
-   "key": "aa10a4bbbc12c1c86003",
+   "key": "1afc51568daa5b0fdac7",
    "mode": "fast",
-   "pack": "F035",
+   "pack": "F018",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2257,15 +1525,15 @@
   {
    "arm": "A",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F036",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F019",
    "configurations": [
     "G.classical2:gmm.AFCL_G08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "03503a5f9ea5cbea58d3",
+   "key": "14a85d762013464114f8",
    "mode": "fast",
-   "pack": "F036",
+   "pack": "F019",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2276,7 +1544,7 @@
   {
    "arm": "B",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F036",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F019",
    "configurations": [
     "G.classical2:gmm.AFCL_G08=on"
    ],
@@ -2284,9 +1552,9 @@
     "MOJOLEARN_AFCL_G08=1"
    ],
    "environment": {},
-   "key": "05df47db7edf7dff3ab8",
+   "key": "fdd5271b5c8ff9be85df",
    "mode": "fast",
-   "pack": "F036",
+   "pack": "F019",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2297,60 +1565,15 @@
   {
    "arm": "A",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F037",
-   "configurations": [
-    "G.classical2:gmm.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "3282cf640ab3bdfcfde2",
-   "mode": "fast",
-   "pack": "F037",
-   "role": "pack",
-   "script": "bindings/build_mixture.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F037",
-   "configurations": [
-    "G.classical2:gmm.AFCL_G06=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
-   "environment": {},
-   "key": "0528fdcb58a30e3b84fa",
-   "mode": "fast",
-   "pack": "F037",
-   "role": "pack",
-   "script": "bindings/build_mixture.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F038",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F020",
    "configurations": [
     "G.classical2:gmm.all_on"
    ],
-   "defines": [
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
-   ],
+   "defines": [],
    "environment": {},
-   "key": "541173a7fc483e1c7d4d",
+   "key": "92669fb806c06112014c",
    "mode": "fast",
-   "pack": "F038",
+   "pack": "F020",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2361,20 +1584,18 @@
   {
    "arm": "B",
    "binding": "bindings/mixture.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F038",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F020",
    "configurations": [
     "G.classical2:gmm.all_on"
    ],
    "defines": [
     "MOJOLEARN_AFCL_G05=1",
-    "MOJOLEARN_AFCL_G06=1",
-    "MOJOLEARN_AFCL_G08=1",
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1"
+    "MOJOLEARN_AFCL_G08=1"
    ],
    "environment": {},
-   "key": "8fbd60eabfe1043f2acb",
+   "key": "538ecc3922fd2c429be1",
    "mode": "fast",
-   "pack": "F038",
+   "pack": "F020",
    "role": "pack",
    "script": "bindings/build_mixture.sh",
    "status": "NOT_COMPILED",
@@ -2385,7 +1606,7 @@
   {
    "arm": "A",
    "binding": "bindings/resample.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F039",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F021",
    "configurations": [
     "G.algos:resample.AFCL_P10=on"
    ],
@@ -2395,9 +1616,9 @@
     "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1"
    ],
    "environment": {},
-   "key": "6fb611a9a60666ccce7d",
+   "key": "008d851f1ef7f4cba005",
    "mode": "fast",
-   "pack": "F039",
+   "pack": "F021",
    "role": "pack",
    "script": "bindings/build_resample.sh",
    "status": "NOT_COMPILED",
@@ -2408,7 +1629,7 @@
   {
    "arm": "B",
    "binding": "bindings/resample.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F039",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F021",
    "configurations": [
     "G.algos:resample.AFCL_P10=on"
    ],
@@ -2419,9 +1640,9 @@
     "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1"
    ],
    "environment": {},
-   "key": "9db3459e77b2d3d0efd8",
+   "key": "4b30c9ca20dbe9483a93",
    "mode": "fast",
-   "pack": "F039",
+   "pack": "F021",
    "role": "pack",
    "script": "bindings/build_resample.sh",
    "status": "NOT_COMPILED",
@@ -2432,7 +1653,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F040",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F022",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F01=on",
     "G.algos:adaboost-reg.AFT_F01=on",
@@ -2445,9 +1666,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "a622cd4cb49a6f55858e",
+   "key": "42e9e7013df70282b8fc",
    "mode": "fast",
-   "pack": "F040",
+   "pack": "F022",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2458,7 +1679,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F040",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F022",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F01=on",
     "G.algos:adaboost-reg.AFT_F01=on",
@@ -2473,9 +1694,9 @@
     "MOJOLEARN_AFT_F01=1"
    ],
    "environment": {},
-   "key": "080ca26e9687facc75b3",
+   "key": "256e3cfd28c15f3621c2",
    "mode": "fast",
-   "pack": "F040",
+   "pack": "F022",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2486,7 +1707,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F041",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F023",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F02=on",
     "G.algos:adaboost-reg.AFT_F02=on",
@@ -2499,9 +1720,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "d284aca6c63b97bdb3f9",
+   "key": "adadbe2d0c7b73968b7a",
    "mode": "fast",
-   "pack": "F041",
+   "pack": "F023",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2512,7 +1733,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F041",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F023",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F02=on",
     "G.algos:adaboost-reg.AFT_F02=on",
@@ -2527,9 +1748,9 @@
     "MOJOLEARN_AFT_F02=1"
    ],
    "environment": {},
-   "key": "b316a8189641e53f34db",
+   "key": "82342eace54ea2158c70",
    "mode": "fast",
-   "pack": "F041",
+   "pack": "F023",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2540,7 +1761,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F042",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F024",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F03=on",
     "G.algos:adaboost-reg.AFT_F03=on",
@@ -2553,9 +1774,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "e23068c38a150da0b472",
+   "key": "373b616512e57410db8b",
    "mode": "fast",
-   "pack": "F042",
+   "pack": "F024",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2566,7 +1787,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F042",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F024",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F03=on",
     "G.algos:adaboost-reg.AFT_F03=on",
@@ -2581,9 +1802,9 @@
     "MOJOLEARN_AFT_F03=1"
    ],
    "environment": {},
-   "key": "167875cf891ce1e0cd97",
+   "key": "9d59736d92398afb71b3",
    "mode": "fast",
-   "pack": "F042",
+   "pack": "F024",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2594,7 +1815,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F043",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F025",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F04=on",
     "G.algos:adaboost-reg.AFT_F04=on",
@@ -2607,9 +1828,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "a5944060d19fc66ee297",
+   "key": "cf461db8bf8248376560",
    "mode": "fast",
-   "pack": "F043",
+   "pack": "F025",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2620,7 +1841,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F043",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F025",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F04=on",
     "G.algos:adaboost-reg.AFT_F04=on",
@@ -2635,9 +1856,9 @@
     "MOJOLEARN_AFT_F04=1"
    ],
    "environment": {},
-   "key": "b4b68b56cfc62c55f692",
+   "key": "95ccedad750236ba7218",
    "mode": "fast",
-   "pack": "F043",
+   "pack": "F025",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2648,7 +1869,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F044",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F026",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F05=on",
     "G.algos:adaboost-reg.AFT_F05=on",
@@ -2661,9 +1882,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "6d1e9188ec18ffc6a5ee",
+   "key": "ad87b86d91d815be7237",
    "mode": "fast",
-   "pack": "F044",
+   "pack": "F026",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2674,7 +1895,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F044",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F026",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F05=on",
     "G.algos:adaboost-reg.AFT_F05=on",
@@ -2689,9 +1910,9 @@
     "MOJOLEARN_AFT_F05=1"
    ],
    "environment": {},
-   "key": "ca63e14c316c565f10e9",
+   "key": "a457ca48e9f32fb2d02d",
    "mode": "fast",
-   "pack": "F044",
+   "pack": "F026",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2702,7 +1923,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F045",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F027",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P02=on",
     "G.algos:adaboost-reg.AFT_P02=on",
@@ -2713,9 +1934,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "445e038e631866464e67",
+   "key": "0a892600cd175548de25",
    "mode": "fast",
-   "pack": "F045",
+   "pack": "F027",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2726,7 +1947,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F045",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F027",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P02=on",
     "G.algos:adaboost-reg.AFT_P02=on",
@@ -2739,9 +1960,9 @@
     "MOJOLEARN_AFT_P02=1"
    ],
    "environment": {},
-   "key": "a79e1ab64c893030f463",
+   "key": "c181e5191dc8ea2dbe9b",
    "mode": "fast",
-   "pack": "F045",
+   "pack": "F027",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2752,7 +1973,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F046",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F028",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P04=on",
     "G.algos:adaboost-reg.AFT_P04=on",
@@ -2763,9 +1984,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "4927d7ce98fb67c39b87",
+   "key": "67d166be4a8c635ed45a",
    "mode": "fast",
-   "pack": "F046",
+   "pack": "F028",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2776,7 +1997,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F046",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F028",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P04=on",
     "G.algos:adaboost-reg.AFT_P04=on",
@@ -2789,9 +2010,9 @@
     "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "f7ad46473e38e649f5e2",
+   "key": "d02a1c31c3f25968ef37",
    "mode": "fast",
-   "pack": "F046",
+   "pack": "F028",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2802,7 +2023,67 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F047",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F029",
+   "configurations": [
+    "G.algos:adaboost-clf.all_on",
+    "G.algos:adaboost-reg.all_on",
+    "G.algos:bagging-clf.all_on",
+    "G.algos:bagging-reg.all_on",
+    "G.algos:dart.all_on",
+    "G.algos:dart-reg.all_on",
+    "G.algos:decision-tree-clf.all_on",
+    "G.algos:decision-tree-reg.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "eda6abc861331654c8d4",
+   "mode": "fast",
+   "pack": "F029",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F029",
+   "configurations": [
+    "G.algos:adaboost-clf.all_on",
+    "G.algos:adaboost-reg.all_on",
+    "G.algos:bagging-clf.all_on",
+    "G.algos:bagging-reg.all_on",
+    "G.algos:dart.all_on",
+    "G.algos:dart-reg.all_on",
+    "G.algos:decision-tree-clf.all_on",
+    "G.algos:decision-tree-reg.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1",
+    "MOJOLEARN_AFT_F03=1",
+    "MOJOLEARN_AFT_F04=1",
+    "MOJOLEARN_AFT_F05=1",
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "0959d8b73a8fb4fc7b51",
+   "mode": "fast",
+   "pack": "F029",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F030",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F01=on+AFT_F02=on",
     "G.algos:adaboost-reg.AFT_F01=on+AFT_F02=on",
@@ -2815,9 +2096,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "51f10c2b8b45b7ed34ae",
+   "key": "11a522fbef8ecb95bee5",
    "mode": "fast",
-   "pack": "F047",
+   "pack": "F030",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2828,7 +2109,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F047",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F030",
    "configurations": [
     "G.algos:adaboost-clf.AFT_F01=on+AFT_F02=on",
     "G.algos:adaboost-reg.AFT_F01=on+AFT_F02=on",
@@ -2844,9 +2125,9 @@
     "MOJOLEARN_AFT_F02=1"
    ],
    "environment": {},
-   "key": "c48ce9028573e40339bd",
+   "key": "61ec661f3fb8921a661b",
    "mode": "fast",
-   "pack": "F047",
+   "pack": "F030",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2857,7 +2138,7 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F048",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F031",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P02=on+AFT_P04=on",
     "G.algos:adaboost-reg.AFT_P02=on+AFT_P04=on",
@@ -2868,9 +2149,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "a2a01bc4ee6b5b2b4cdb",
+   "key": "dcc1abc4125637b5f0c0",
    "mode": "fast",
-   "pack": "F048",
+   "pack": "F031",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -2881,7 +2162,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F048",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F031",
    "configurations": [
     "G.algos:adaboost-clf.AFT_P02=on+AFT_P04=on",
     "G.algos:adaboost-reg.AFT_P02=on+AFT_P04=on",
@@ -2895,438 +2176,9 @@
     "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "19ecb5089fcc337c648c",
+   "key": "c36f29a4f8bd816f316a",
    "mode": "fast",
-   "pack": "F048",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F049",
-   "configurations": [
-    "G.algos:dart.all_on",
-    "G.algos:dart-reg.all_on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "2b923dfb4da151c7005e",
-   "mode": "fast",
-   "pack": "F049",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F049",
-   "configurations": [
-    "G.algos:dart.all_on",
-    "G.algos:dart-reg.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F01=1",
-    "MOJOLEARN_AFT_F02=1",
-    "MOJOLEARN_AFT_F03=1",
-    "MOJOLEARN_AFT_F04=1",
-    "MOJOLEARN_AFT_F05=1"
-   ],
-   "environment": {},
-   "key": "dfcf0a5a73bf08fc2b37",
-   "mode": "fast",
-   "pack": "F049",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F050",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on",
-    "G.algos:adaboost-reg.AFT_P01=on",
-    "G.algos:bagging-clf.AFT_P01=on",
-    "G.algos:bagging-reg.AFT_P01=on",
-    "G.algos:decision-tree-clf.AFT_P01=on",
-    "G.algos:decision-tree-reg.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "2381124362935eecbafe",
-   "mode": "fast",
-   "pack": "F050",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F050",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on",
-    "G.algos:adaboost-reg.AFT_P01=on",
-    "G.algos:bagging-clf.AFT_P01=on",
-    "G.algos:bagging-reg.AFT_P01=on",
-    "G.algos:decision-tree-clf.AFT_P01=on",
-    "G.algos:decision-tree-reg.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "a442fd1a9911da5568b1",
-   "mode": "fast",
-   "pack": "F050",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F051",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P03=on",
-    "G.algos:adaboost-reg.AFT_P03=on",
-    "G.algos:bagging-clf.AFT_P03=on",
-    "G.algos:bagging-reg.AFT_P03=on",
-    "G.algos:decision-tree-clf.AFT_P03=on",
-    "G.algos:decision-tree-reg.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "98d1152a3e2af68f98f0",
-   "mode": "fast",
-   "pack": "F051",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F051",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P03=on",
-    "G.algos:adaboost-reg.AFT_P03=on",
-    "G.algos:bagging-clf.AFT_P03=on",
-    "G.algos:bagging-reg.AFT_P03=on",
-    "G.algos:decision-tree-clf.AFT_P03=on",
-    "G.algos:decision-tree-reg.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "c9e18010a11bc388603b",
-   "mode": "fast",
-   "pack": "F051",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F052",
-   "configurations": [
-    "G.algos:adaboost-clf.all_on",
-    "G.algos:adaboost-reg.all_on",
-    "G.algos:bagging-clf.all_on",
-    "G.algos:bagging-reg.all_on",
-    "G.algos:decision-tree-clf.all_on",
-    "G.algos:decision-tree-reg.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "3def7ff034d4034748d3",
-   "mode": "fast",
-   "pack": "F052",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F052",
-   "configurations": [
-    "G.algos:adaboost-clf.all_on",
-    "G.algos:adaboost-reg.all_on",
-    "G.algos:bagging-clf.all_on",
-    "G.algos:bagging-reg.all_on",
-    "G.algos:decision-tree-clf.all_on",
-    "G.algos:decision-tree-reg.all_on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F01=1",
-    "MOJOLEARN_AFT_F02=1",
-    "MOJOLEARN_AFT_F03=1",
-    "MOJOLEARN_AFT_F04=1",
-    "MOJOLEARN_AFT_F05=1",
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "f4db03195f6df19a25ea",
-   "mode": "fast",
-   "pack": "F052",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F053",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P03=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "ebf0513dfe0b5ffb28c5",
-   "mode": "fast",
-   "pack": "F053",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F053",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P03=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "5b631b526f75af14f7f1",
-   "mode": "fast",
-   "pack": "F053",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F054",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "4739345ff9cd2a33af73",
-   "mode": "fast",
-   "pack": "F054",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F054",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "244ca290db3d5cb8da71",
-   "mode": "fast",
-   "pack": "F054",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F055",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P03=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P03=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "554a6c88a9fc26348571",
-   "mode": "fast",
-   "pack": "F055",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F055",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P03=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P03=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P03=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "7e7c8c84045e1d4d79e4",
-   "mode": "fast",
-   "pack": "F055",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F056",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "c57933f6b385e62a2fd4",
-   "mode": "fast",
-   "pack": "F056",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F056",
-   "configurations": [
-    "G.algos:adaboost-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:adaboost-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:bagging-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-clf.AFT_P01=on+AFT_P03=on+AFT_P04=on",
-    "G.algos:decision-tree-reg.AFT_P01=on+AFT_P03=on+AFT_P04=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "bf5ee20865c4bd0427a0",
-   "mode": "fast",
-   "pack": "F056",
+   "pack": "F031",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -3337,15 +2189,15 @@
   {
    "arm": "A",
    "binding": "bindings/solver.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F057",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F032",
    "configurations": [
     "G.classical2:agglomerative.AFCL_G14=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "c8866af28647f26c7fcd",
+   "key": "581d63f8bcf0f9905a22",
    "mode": "fast",
-   "pack": "F057",
+   "pack": "F032",
    "role": "pack",
    "script": "bindings/build_solver.sh",
    "status": "NOT_COMPILED",
@@ -3356,7 +2208,7 @@
   {
    "arm": "B",
    "binding": "bindings/solver.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F057",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F032",
    "configurations": [
     "G.classical2:agglomerative.AFCL_G14=on"
    ],
@@ -3364,9 +2216,9 @@
     "MOJOLEARN_AFCL_G14=1"
    ],
    "environment": {},
-   "key": "eda576bdde11cefc092b",
+   "key": "1105fe8acb39142aed96",
    "mode": "fast",
-   "pack": "F057",
+   "pack": "F032",
    "role": "pack",
    "script": "bindings/build_solver.sh",
    "status": "NOT_COMPILED",
@@ -3377,7 +2229,7 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F058",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F033",
    "configurations": [
     "G.algos:ocsvm.AFCL_L06=on",
     "G.classical2:svr.AFCL_L06=on",
@@ -3385,9 +2237,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "112b06c9ae1ef74ca2ce",
+   "key": "84462a24ac9bf7b8a67e",
    "mode": "fast",
-   "pack": "F058",
+   "pack": "F033",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -3398,7 +2250,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F058",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F033",
    "configurations": [
     "G.algos:ocsvm.AFCL_L06=on",
     "G.classical2:svr.AFCL_L06=on",
@@ -3408,9 +2260,9 @@
     "MOJOLEARN_AFCL_L06=1"
    ],
    "environment": {},
-   "key": "3de6eb6a5dfd49eb6a0c",
+   "key": "2101e06b952c4ad2a689",
    "mode": "fast",
-   "pack": "F058",
+   "pack": "F033",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -3421,15 +2273,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F059",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F034",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "729d7d0e89b320a8f297",
+   "key": "efb7c6c4a04c0c577073",
    "mode": "fast",
-   "pack": "F059",
+   "pack": "F034",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3440,7 +2292,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F059",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F034",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on"
    ],
@@ -3448,9 +2300,9 @@
     "MOJOLEARN_AFT_F06=1"
    ],
    "environment": {},
-   "key": "4f871eaaa3f3260749c4",
+   "key": "2f26ed9b51ab3ca9a4b6",
    "mode": "fast",
-   "pack": "F059",
+   "pack": "F034",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3461,15 +2313,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F060",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F035",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F07=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "32490342bc7176976059",
+   "key": "2e684d1a7715cfa6334a",
    "mode": "fast",
-   "pack": "F060",
+   "pack": "F035",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3480,7 +2332,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F060",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F035",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F07=on"
    ],
@@ -3488,9 +2340,9 @@
     "MOJOLEARN_AFT_F07=1"
    ],
    "environment": {},
-   "key": "eb6a213acc8cd85ca08c",
+   "key": "d314f0e0418991ccb320",
    "mode": "fast",
-   "pack": "F060",
+   "pack": "F035",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3501,15 +2353,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F061",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F036",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "e3dcacc24feb8dce7ad1",
+   "key": "7b083a02287d90872bdc",
    "mode": "fast",
-   "pack": "F061",
+   "pack": "F036",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3520,7 +2372,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F061",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F036",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F08=on"
    ],
@@ -3528,9 +2380,9 @@
     "MOJOLEARN_AFT_F08=1"
    ],
    "environment": {},
-   "key": "5a4868d6fa8cecdc3f9b",
+   "key": "b91ebddf2ce5ad46f202",
    "mode": "fast",
-   "pack": "F061",
+   "pack": "F036",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3541,15 +2393,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F062",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F037",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F09=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "e0ee7bd0d50fd66e8c1f",
+   "key": "074c063502d4395f77cf",
    "mode": "fast",
-   "pack": "F062",
+   "pack": "F037",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3560,7 +2412,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F062",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F037",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F09=on"
    ],
@@ -3568,9 +2420,9 @@
     "MOJOLEARN_AFT_F09=1"
    ],
    "environment": {},
-   "key": "8d6fd7e519019aa66d32",
+   "key": "978128b25b6562c77a4e",
    "mode": "fast",
-   "pack": "F062",
+   "pack": "F037",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3581,15 +2433,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F063",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F038",
    "configurations": [
     "G.algos:random-trees-embedding.AFCL_T09=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "c4a05fa3b3bd8aac5314",
+   "key": "513b114571e5fe8e7239",
    "mode": "fast",
-   "pack": "F063",
+   "pack": "F038",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3600,7 +2452,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F063",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F038",
    "configurations": [
     "G.algos:random-trees-embedding.AFCL_T09=on"
    ],
@@ -3608,9 +2460,9 @@
     "MOJOLEARN_AFCL_T09=1"
    ],
    "environment": {},
-   "key": "7af43f36705e3c805d7a",
+   "key": "71e5856530b5658f50f3",
    "mode": "fast",
-   "pack": "F063",
+   "pack": "F038",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3621,15 +2473,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F064",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F039",
    "configurations": [
     "G.algos:random-trees-embedding.all_on"
    ],
    "defines": [],
    "environment": {},
-   "key": "5193abdb6ff2474e9a42",
+   "key": "3e165f15462bad51b08d",
    "mode": "fast",
-   "pack": "F064",
+   "pack": "F039",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3640,7 +2492,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F064",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F039",
    "configurations": [
     "G.algos:random-trees-embedding.all_on"
    ],
@@ -3652,9 +2504,9 @@
     "MOJOLEARN_AFT_F09=1"
    ],
    "environment": {},
-   "key": "540fdc7119d1da68c9fc",
+   "key": "0ebf476aa57fcba04f57",
    "mode": "fast",
-   "pack": "F064",
+   "pack": "F039",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3665,15 +2517,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F065",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F040",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F07=on+AFT_F08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "84de591bcff81ea7fdcf",
+   "key": "8a903a988bc395af2b98",
    "mode": "fast",
-   "pack": "F065",
+   "pack": "F040",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3684,7 +2536,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F065",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F040",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F07=on+AFT_F08=on"
    ],
@@ -3693,9 +2545,9 @@
     "MOJOLEARN_AFT_F08=1"
    ],
    "environment": {},
-   "key": "2b1ea80ca211a2df6a5b",
+   "key": "de6e71c4693a28579149",
    "mode": "fast",
-   "pack": "F065",
+   "pack": "F040",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3706,15 +2558,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F066",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F041",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "410ad3bc80194508f85c",
+   "key": "7a2e07f499d7715c5573",
    "mode": "fast",
-   "pack": "F066",
+   "pack": "F041",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3725,7 +2577,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F066",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F041",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F08=on"
    ],
@@ -3734,9 +2586,9 @@
     "MOJOLEARN_AFT_F08=1"
    ],
    "environment": {},
-   "key": "daed9f969b636f13e209",
+   "key": "de1a3b8bfaf433213c8d",
    "mode": "fast",
-   "pack": "F066",
+   "pack": "F041",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3747,15 +2599,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F067",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F042",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "4af0854beb3b32e4928e",
+   "key": "fb4293ad8738d58f63cb",
    "mode": "fast",
-   "pack": "F067",
+   "pack": "F042",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3766,7 +2618,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F067",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F042",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on"
    ],
@@ -3775,9 +2627,9 @@
     "MOJOLEARN_AFT_F07=1"
    ],
    "environment": {},
-   "key": "1e92d8684e1e86b0a910",
+   "key": "3fb32f37a4212b2b5c9f",
    "mode": "fast",
-   "pack": "F067",
+   "pack": "F042",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3788,15 +2640,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F068",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F043",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on+AFT_F08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "4398669d371f6c52bb93",
+   "key": "8bffe8e60f36d728a3cb",
    "mode": "fast",
-   "pack": "F068",
+   "pack": "F043",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3807,7 +2659,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F068",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F043",
    "configurations": [
     "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on+AFT_F08=on"
    ],
@@ -3817,9 +2669,9 @@
     "MOJOLEARN_AFT_F08=1"
    ],
    "environment": {},
-   "key": "0f4fb16f50cb4f77df3a",
+   "key": "bcf8c77aa7e9eaf9a50d",
    "mode": "fast",
-   "pack": "F068",
+   "pack": "F043",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -3830,7 +2682,7 @@
   {
    "arm": "A",
    "binding": "bindings/tsa.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F069",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F044",
    "configurations": [
     "G.algos:autoarima.AFCL_P11=on",
     "G.algos:kpss.AFCL_P11=on",
@@ -3839,9 +2691,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "4a1b4f6859aed645e166",
+   "key": "dba5355193c1945ceb22",
    "mode": "fast",
-   "pack": "F069",
+   "pack": "F044",
    "role": "pack",
    "script": "bindings/build_tsa.sh",
    "status": "NOT_COMPILED",
@@ -3852,7 +2704,7 @@
   {
    "arm": "B",
    "binding": "bindings/tsa.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F069",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F044",
    "configurations": [
     "G.algos:autoarima.AFCL_P11=on",
     "G.algos:kpss.AFCL_P11=on",
@@ -3864,9 +2716,9 @@
     "MOJOLEARN_AFCL_P14=1"
    ],
    "environment": {},
-   "key": "a3633f08ff041cf282f2",
+   "key": "e4378a862ec2eb17e2f9",
    "mode": "fast",
-   "pack": "F069",
+   "pack": "F044",
    "role": "pack",
    "script": "bindings/build_tsa.sh",
    "status": "NOT_COMPILED",
@@ -3877,16 +2729,16 @@
   {
    "arm": "A",
    "binding": "bindings/x_cluster.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F070",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F045",
    "configurations": [
     "G.algos:meanshift.AFCL_G12=on",
     "G.algos:minibatch-kmeans.AFCL_G07=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "28098b28607071397d2b",
+   "key": "1832807bc05a71a57849",
    "mode": "fast",
-   "pack": "F070",
+   "pack": "F045",
    "role": "pack",
    "script": "bindings/build_x_cluster.sh",
    "status": "NOT_COMPILED",
@@ -3897,7 +2749,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_cluster.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F070",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F045",
    "configurations": [
     "G.algos:meanshift.AFCL_G12=on",
     "G.algos:minibatch-kmeans.AFCL_G07=on"
@@ -3907,9 +2759,9 @@
     "MOJOLEARN_AFCL_G12=1"
    ],
    "environment": {},
-   "key": "94ba762ebb037abaacdb",
+   "key": "7ca196aa1aad8ace02ff",
    "mode": "fast",
-   "pack": "F070",
+   "pack": "F045",
    "role": "pack",
    "script": "bindings/build_x_cluster.sh",
    "status": "NOT_COMPILED",
@@ -3920,7 +2772,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_decomp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F071",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F046",
    "configurations": [
     "G.algos:elliptic-envelope.AFCL_L13=on",
     "G.algos:min-cov-det.AFCL_L13=on",
@@ -3929,9 +2781,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "68cf1571cc05fdd94be9",
+   "key": "cb3802089f6396a4e01a",
    "mode": "fast",
-   "pack": "F071",
+   "pack": "F046",
    "role": "pack",
    "script": "bindings/build_x_decomp.sh",
    "status": "NOT_COMPILED",
@@ -3942,7 +2794,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_decomp.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F071",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F046",
    "configurations": [
     "G.algos:elliptic-envelope.AFCL_L13=on",
     "G.algos:min-cov-det.AFCL_L13=on",
@@ -3955,9 +2807,9 @@
     "MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1"
    ],
    "environment": {},
-   "key": "1e2496dd859ec42af160",
+   "key": "5bdea4714ec283dd5bbf",
    "mode": "fast",
-   "pack": "F071",
+   "pack": "F046",
    "role": "pack",
    "script": "bindings/build_x_decomp.sh",
    "status": "NOT_COMPILED",
@@ -3968,7 +2820,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F072",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F047",
    "configurations": [
     "G.algos:ard.AFCL_L01=on",
     "G.algos:bayesian-ridge.AFCL_L01=on",
@@ -3986,9 +2838,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "444dfb0c30035ed325c6",
+   "key": "ae16207491b43b569928",
    "mode": "fast",
-   "pack": "F072",
+   "pack": "F047",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -3999,7 +2851,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F072",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F047",
    "configurations": [
     "G.algos:ard.AFCL_L01=on",
     "G.algos:bayesian-ridge.AFCL_L01=on",
@@ -4021,9 +2873,9 @@
     "MOJOLEARN_AFCL_L14=1"
    ],
    "environment": {},
-   "key": "9471e5200c5a378e7833",
+   "key": "988dfe29aa9494550999",
    "mode": "fast",
-   "pack": "F072",
+   "pack": "F047",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4034,7 +2886,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F073",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F048",
    "configurations": [
     "G.algos:ard.AFCL_L02=on",
     "G.algos:bayesian-ridge.AFCL_L02=on",
@@ -4047,9 +2899,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "6f6d9fdc3420880b80fd",
+   "key": "b8473f1305967181e508",
    "mode": "fast",
-   "pack": "F073",
+   "pack": "F048",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4060,7 +2912,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F073",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F048",
    "configurations": [
     "G.algos:ard.AFCL_L02=on",
     "G.algos:bayesian-ridge.AFCL_L02=on",
@@ -4076,9 +2928,9 @@
     "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT=1"
    ],
    "environment": {},
-   "key": "c182e63e1d8154afdb7d",
+   "key": "cd504601d71d81e1bc1f",
    "mode": "fast",
-   "pack": "F073",
+   "pack": "F048",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4089,7 +2941,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F074",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F049",
    "configurations": [
     "G.algos:ard.all_on",
     "G.algos:bayesian-ridge.all_on",
@@ -4102,9 +2954,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "4e6c060fa12dcdd7ce8d",
+   "key": "a614d452751cd5aa4516",
    "mode": "fast",
-   "pack": "F074",
+   "pack": "F049",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4115,7 +2967,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F074",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F049",
    "configurations": [
     "G.algos:ard.all_on",
     "G.algos:bayesian-ridge.all_on",
@@ -4133,9 +2985,9 @@
     "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT=1"
    ],
    "environment": {},
-   "key": "d13fa96061da5e41791d",
+   "key": "c020a0aa683251e0a0a3",
    "mode": "fast",
-   "pack": "F074",
+   "pack": "F049",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4146,7 +2998,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F075",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F050",
    "configurations": [
     "G.algos:enet-cv.AFCL_L03=on",
     "G.algos:lasso-cv.AFCL_L03=on"
@@ -4155,9 +3007,9 @@
    "environment": {
     "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1"
    },
-   "key": "e65a1cb7e64f2019a586",
+   "key": "83e536b371478bed1147",
    "mode": "fast",
-   "pack": "F075",
+   "pack": "F050",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4168,7 +3020,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_linear.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F075",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F050",
    "configurations": [
     "G.algos:enet-cv.AFCL_L03=on",
     "G.algos:lasso-cv.AFCL_L03=on"
@@ -4179,9 +3031,9 @@
    "environment": {
     "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1"
    },
-   "key": "47b77bb77087ea742d69",
+   "key": "330cf8b1d6e39661ca6f",
    "mode": "fast",
-   "pack": "F075",
+   "pack": "F050",
    "role": "pack",
    "script": "bindings/build_x_linear.sh",
    "status": "NOT_COMPILED",
@@ -4192,7 +3044,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F076",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F051",
    "configurations": [
     "G.algos:categorical-nb.NB_CAT_ATOMIC=on",
     "G.algos:complement-nb.AFCL_P04=on",
@@ -4205,7 +3057,7 @@
     "G.algos:qda.AFCL_L01=on",
     "G.algos:select-f-classif.AFCL_P07=on",
     "G.algos:select-f-regression.AFCL_P07=on",
-    "G.algos:select-mutual-info-reg.MI_REG_RANKMAJOR=on",
+    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on",
     "G.algos:select-r-regression.AFCL_P07=on",
     "G.algos:simple-imputer.AFCL_P01=on",
     "G.algos:standard-scaler.AFCL_P01=on",
@@ -4213,9 +3065,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "07a33f4b43cc350c90ac",
+   "key": "bd9f38094c2ce1337b25",
    "mode": "fast",
-   "pack": "F076",
+   "pack": "F051",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4226,7 +3078,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F076",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F051",
    "configurations": [
     "G.algos:categorical-nb.NB_CAT_ATOMIC=on",
     "G.algos:complement-nb.AFCL_P04=on",
@@ -4239,7 +3091,7 @@
     "G.algos:qda.AFCL_L01=on",
     "G.algos:select-f-classif.AFCL_P07=on",
     "G.algos:select-f-regression.AFCL_P07=on",
-    "G.algos:select-mutual-info-reg.MI_REG_RANKMAJOR=on",
+    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on",
     "G.algos:select-r-regression.AFCL_P07=on",
     "G.algos:simple-imputer.AFCL_P01=on",
     "G.algos:standard-scaler.AFCL_P01=on",
@@ -4253,62 +3105,13 @@
     "MOJOLEARN_AFCL_P05=1",
     "MOJOLEARN_AFCL_P07=1",
     "MOJOLEARN_AFCL_P13=1",
-    "MOJOLEARN_MI_REG_RANKMAJOR=1",
-    "MOJOLEARN_NB_CAT_ATOMIC=1"
-   ],
-   "environment": {},
-   "key": "92b009bda1c2f6bffb79",
-   "mode": "fast",
-   "pack": "F076",
-   "role": "pack",
-   "script": "bindings/build_x_prep.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F077",
-   "configurations": [
-    "G.algos:categorical-nb.all_on",
-    "G.algos:lda-clf.AFCL_L02=on",
-    "G.algos:qda.AFCL_L02=on",
-    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "b198412960767c0880f4",
-   "mode": "fast",
-   "pack": "F077",
-   "role": "pack",
-   "script": "bindings/build_x_prep.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "afc_def",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F077",
-   "configurations": [
-    "G.algos:categorical-nb.all_on",
-    "G.algos:lda-clf.AFCL_L02=on",
-    "G.algos:qda.AFCL_L02=on",
-    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFCL_L02=1",
-    "MOJOLEARN_AFCL_P03=1",
     "MOJOLEARN_MI_REG_SORTCOUNT=1",
     "MOJOLEARN_NB_CAT_ATOMIC=1"
    ],
    "environment": {},
-   "key": "e32b1acfefaff030c5d2",
+   "key": "eaf42f203d5ee6f9e1e6",
    "mode": "fast",
-   "pack": "F077",
+   "pack": "F051",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4319,17 +3122,17 @@
   {
    "arm": "A",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F078",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F052",
    "configurations": [
-    "G.algos:lda-clf.all_on",
-    "G.algos:qda.all_on",
-    "G.algos:select-mutual-info-reg.all_on"
+    "G.algos:categorical-nb.all_on",
+    "G.algos:lda-clf.AFCL_L02=on",
+    "G.algos:qda.AFCL_L02=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "f5ccdc93954293f5cf9f",
+   "key": "a736b5a36f42495709bc",
    "mode": "fast",
-   "pack": "F078",
+   "pack": "F052",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4340,22 +3143,21 @@
   {
    "arm": "B",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F078",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F052",
    "configurations": [
-    "G.algos:lda-clf.all_on",
-    "G.algos:qda.all_on",
-    "G.algos:select-mutual-info-reg.all_on"
+    "G.algos:categorical-nb.all_on",
+    "G.algos:lda-clf.AFCL_L02=on",
+    "G.algos:qda.AFCL_L02=on"
    ],
    "defines": [
-    "MOJOLEARN_AFCL_L01=1",
     "MOJOLEARN_AFCL_L02=1",
-    "MOJOLEARN_MI_REG_RANKMAJOR=1",
-    "MOJOLEARN_MI_REG_SORTCOUNT=1"
+    "MOJOLEARN_AFCL_P03=1",
+    "MOJOLEARN_NB_CAT_ATOMIC=1"
    ],
    "environment": {},
-   "key": "1f8cbbbce9fbd1081f3a",
+   "key": "3dd1d21e9fb90068eb0f",
    "mode": "fast",
-   "pack": "F078",
+   "pack": "F052",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4366,7 +3168,50 @@
   {
    "arm": "A",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F079",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F053",
+   "configurations": [
+    "G.algos:lda-clf.all_on",
+    "G.algos:qda.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a5725957c2e31a70c325",
+   "mode": "fast",
+   "pack": "F053",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F053",
+   "configurations": [
+    "G.algos:lda-clf.all_on",
+    "G.algos:qda.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L01=1",
+    "MOJOLEARN_AFCL_L02=1"
+   ],
+   "environment": {},
+   "key": "e1d6e07a7eb7d4bb854b",
+   "mode": "fast",
+   "pack": "F053",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F054",
    "configurations": [
     "G.algos:iterative-imputer.AFCL_P06=on"
    ],
@@ -4374,9 +3219,9 @@
    "environment": {
     "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
    },
-   "key": "553c3feb0829de34fe40",
+   "key": "e120d62308be078527d1",
    "mode": "fast",
-   "pack": "F079",
+   "pack": "F054",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4387,7 +3232,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F079",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F054",
    "configurations": [
     "G.algos:iterative-imputer.AFCL_P06=on"
    ],
@@ -4397,9 +3242,9 @@
    "environment": {
     "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
    },
-   "key": "a1053cacd4f6fcfeb9ce",
+   "key": "8ff89e43f771f97b8942",
    "mode": "fast",
-   "pack": "F079",
+   "pack": "F054",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4410,7 +3255,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F080",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F055",
    "configurations": [
     "G.algos:categorical-nb.AFCL_P03=on"
    ],
@@ -4418,9 +3263,9 @@
     "MOJOLEARN_NB_CAT_ATOMIC=1"
    ],
    "environment": {},
-   "key": "d5aaa24f07c4a2e396d3",
+   "key": "1ed375cc6d1b262046b7",
    "mode": "fast",
-   "pack": "F080",
+   "pack": "F055",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4431,7 +3276,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_prep.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F080",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F055",
    "configurations": [
     "G.algos:categorical-nb.AFCL_P03=on"
    ],
@@ -4440,9 +3285,9 @@
     "MOJOLEARN_NB_CAT_ATOMIC=1"
    ],
    "environment": {},
-   "key": "562bd06ef3375e408659",
+   "key": "36a6e7daae499c0b4ee4",
    "mode": "fast",
-   "pack": "F080",
+   "pack": "F055",
    "role": "pack",
    "script": "bindings/build_x_prep.sh",
    "status": "NOT_COMPILED",
@@ -4453,7 +3298,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F081",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F056",
    "configurations": [
     "G.algos:dart.AFT_P11=on",
     "G.algos:dart-reg.AFT_P11=on",
@@ -4461,9 +3306,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "00bf157cd66bbaf76d90",
+   "key": "bb2b3da477a28dc17565",
    "mode": "fast",
-   "pack": "F081",
+   "pack": "F056",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4474,7 +3319,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F081",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F056",
    "configurations": [
     "G.algos:dart.AFT_P11=on",
     "G.algos:dart-reg.AFT_P11=on",
@@ -4485,9 +3330,9 @@
     "MOJOLEARN_AFT_P11=1"
    ],
    "environment": {},
-   "key": "c2238d2e6653b1b61ae2",
+   "key": "71e3ac7a658883245ac6",
    "mode": "fast",
-   "pack": "F081",
+   "pack": "F056",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4498,7 +3343,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F082",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F057",
    "configurations": [
     "G.algos:dart.AFT_P12=on",
     "G.algos:dart-reg.AFT_P12=on",
@@ -4506,9 +3351,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "e60fdd837041c1ab2810",
+   "key": "2e1a42327687b50bebaf",
    "mode": "fast",
-   "pack": "F082",
+   "pack": "F057",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4519,7 +3364,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F082",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F057",
    "configurations": [
     "G.algos:dart.AFT_P12=on",
     "G.algos:dart-reg.AFT_P12=on",
@@ -4530,9 +3375,9 @@
     "MOJOLEARN_AFT_P12=1"
    ],
    "environment": {},
-   "key": "c0bb06db473b87ba97dc",
+   "key": "c470f18e94c43e1e6cf3",
    "mode": "fast",
-   "pack": "F082",
+   "pack": "F057",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4543,7 +3388,7 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F083",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F058",
    "configurations": [
     "G.algos:dart.AFT_P11=on+AFT_P12=on",
     "G.algos:dart-reg.AFT_P11=on+AFT_P12=on",
@@ -4551,9 +3396,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "4631c22f8172d2bca39b",
+   "key": "4d3108bfc50e2115cf97",
    "mode": "fast",
-   "pack": "F083",
+   "pack": "F058",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4564,7 +3409,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F083",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F058",
    "configurations": [
     "G.algos:dart.AFT_P11=on+AFT_P12=on",
     "G.algos:dart-reg.AFT_P11=on+AFT_P12=on",
@@ -4576,9 +3421,9 @@
     "MOJOLEARN_AFT_P12=1"
    ],
    "environment": {},
-   "key": "638d577bed33919112e5",
+   "key": "301496555cb27e6f054d",
    "mode": "fast",
-   "pack": "F083",
+   "pack": "F058",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4589,15 +3434,15 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F084",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F059",
    "configurations": [
     "G.algos:tree-shap.AFT_P10=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "5e2d2f893ba62a96015c",
+   "key": "72cc80f15e69d0d3bf79",
    "mode": "fast",
-   "pack": "F084",
+   "pack": "F059",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4608,7 +3453,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F084",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F059",
    "configurations": [
     "G.algos:tree-shap.AFT_P10=on"
    ],
@@ -4616,9 +3461,9 @@
     "MOJOLEARN_AFT_P10=1"
    ],
    "environment": {},
-   "key": "854a8acf25f5f041effb",
+   "key": "df1d58c0d48efad57dcf",
    "mode": "fast",
-   "pack": "F084",
+   "pack": "F059",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4629,15 +3474,15 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F085",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F060",
    "configurations": [
     "G.algos:tree-shap.AFCL_T11=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "d968588749cf19566f2f",
+   "key": "307837c195c0e3954457",
    "mode": "fast",
-   "pack": "F085",
+   "pack": "F060",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4648,7 +3493,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F085",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F060",
    "configurations": [
     "G.algos:tree-shap.AFCL_T11=on"
    ],
@@ -4656,9 +3501,9 @@
     "MOJOLEARN_AFCL_T11=1"
    ],
    "environment": {},
-   "key": "b58dc86c514d39d9220d",
+   "key": "0147d05a22796fad6b94",
    "mode": "fast",
-   "pack": "F085",
+   "pack": "F060",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4669,15 +3514,15 @@
   {
    "arm": "A",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F086",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F061",
    "configurations": [
     "G.algos:tree-shap.all_on"
    ],
    "defines": [],
    "environment": {},
-   "key": "0d409385ed717ef8acdf",
+   "key": "6cb7b6bb3ca86df96676",
    "mode": "fast",
-   "pack": "F086",
+   "pack": "F061",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4688,7 +3533,7 @@
   {
    "arm": "B",
    "binding": "bindings/x_trees.mojo",
-   "build_dir": "$HOME/afc-def/gf4de9e3-F086",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F061",
    "configurations": [
     "G.algos:tree-shap.all_on"
    ],
@@ -4700,9 +3545,9 @@
     "MOJOLEARN_AFT_P10=1"
    ],
    "environment": {},
-   "key": "4f8f1839503c40332c9f",
+   "key": "835f24b0557df9d77a24",
    "mode": "fast",
-   "pack": "F086",
+   "pack": "F061",
    "role": "pack",
    "script": "bindings/build_x_trees.sh",
    "status": "NOT_COMPILED",
@@ -4713,7 +3558,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F087",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F062",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G05=on",
     "G.trees:gbdt-depthwise.AFT_G05=on",
@@ -4727,9 +3572,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "8847216b98d12fe2b7dd",
+   "key": "78d22ab60d1d6bc63d15",
    "mode": "fast",
-   "pack": "F087",
+   "pack": "F062",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4740,7 +3585,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F087",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F062",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G05=on",
     "G.trees:gbdt-depthwise.AFT_G05=on",
@@ -4756,9 +3601,9 @@
     "MOJOLEARN_AFT_G05=1"
    ],
    "environment": {},
-   "key": "3bbfcecc21dbbd5d6db2",
+   "key": "20d21370c828022c579a",
    "mode": "fast",
-   "pack": "F087",
+   "pack": "F062",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4769,7 +3614,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F088",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F063",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G08=on",
     "G.trees:gbdt-depthwise.AFT_G08=on",
@@ -4781,9 +3626,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "6592545a9df1e03c1d3c",
+   "key": "515596a0e03577194ce8",
    "mode": "fast",
-   "pack": "F088",
+   "pack": "F063",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4794,7 +3639,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F088",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F063",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G08=on",
     "G.trees:gbdt-depthwise.AFT_G08=on",
@@ -4809,9 +3654,9 @@
     "MOJOLEARN_AFT_G08=1"
    ],
    "environment": {},
-   "key": "811e9a1fb4856a4a8c97",
+   "key": "254671d3153ed1698091",
    "mode": "fast",
-   "pack": "F088",
+   "pack": "F063",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4822,7 +3667,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F089",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F064",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G09=on",
     "G.trees:gbdt-depthwise.AFT_G07=on",
@@ -4833,9 +3678,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "1dcccf08088ab1216da9",
+   "key": "1ec7f594389de4875beb",
    "mode": "fast",
-   "pack": "F089",
+   "pack": "F064",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4846,7 +3691,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F089",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F064",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G09=on",
     "G.trees:gbdt-depthwise.AFT_G07=on",
@@ -4863,9 +3708,9 @@
     "MOJOLEARN_AFT_N09=1"
    ],
    "environment": {},
-   "key": "61f272ae526f3bbd32f7",
+   "key": "9ec6b2c1097559b4a639",
    "mode": "fast",
-   "pack": "F089",
+   "pack": "F064",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4876,7 +3721,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F090",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F065",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G10=on",
     "G.trees:gbdt-depthwise.AFT_N03=on",
@@ -4888,9 +3733,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "41a1291785152580dfbf",
+   "key": "3650bc3f8bf1b47c1a11",
    "mode": "fast",
-   "pack": "F090",
+   "pack": "F065",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4901,7 +3746,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F090",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F065",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G10=on",
     "G.trees:gbdt-depthwise.AFT_N03=on",
@@ -4919,9 +3764,9 @@
     "MOJOLEARN_AFT_N10=1"
    ],
    "environment": {},
-   "key": "272c32af1b30cf706d84",
+   "key": "f1f12d9bcd4cfc612f90",
    "mode": "fast",
-   "pack": "F090",
+   "pack": "F065",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4932,7 +3777,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F091",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F066",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N01=on",
     "G.trees:gbdt-depthwise.AFT_N06=on",
@@ -4945,9 +3790,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "54da5f7e20d0744a9679",
+   "key": "e7e3b6d4674b13d933b8",
    "mode": "fast",
-   "pack": "F091",
+   "pack": "F066",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4958,7 +3803,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F091",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F066",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N01=on",
     "G.trees:gbdt-depthwise.AFT_N06=on",
@@ -4978,9 +3823,9 @@
     "MOJOLEARN_AFT_N11=1"
    ],
    "environment": {},
-   "key": "7a38aad4aba7c6310935",
+   "key": "21de6d7ba0f7c0bf950d",
    "mode": "fast",
-   "pack": "F091",
+   "pack": "F066",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -4991,7 +3836,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F092",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F067",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N02=on",
     "G.trees:gbdt-depthwise.AFT_N02=on",
@@ -5001,9 +3846,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "34801cc020e5016f86ab",
+   "key": "e435fe22334d6ccf1f36",
    "mode": "fast",
-   "pack": "F092",
+   "pack": "F067",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5014,7 +3859,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F092",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F067",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N02=on",
     "G.trees:gbdt-depthwise.AFT_N02=on",
@@ -5028,9 +3873,9 @@
     "MOJOLEARN_AFT_N12=1"
    ],
    "environment": {},
-   "key": "9da79f829adb41ff2aec",
+   "key": "03634c749e8246479637",
    "mode": "fast",
-   "pack": "F092",
+   "pack": "F067",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5041,7 +3886,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F093",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F068",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N04=on",
     "G.trees:gbdt-depthwise.AFT_N04=on",
@@ -5050,9 +3895,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "35f2af31ed84effe6790",
+   "key": "1106ce2f9b07d5c0c7d7",
    "mode": "fast",
-   "pack": "F093",
+   "pack": "F068",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5063,7 +3908,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F093",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F068",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_N04=on",
     "G.trees:gbdt-depthwise.AFT_N04=on",
@@ -5075,9 +3920,9 @@
     "MOJOLEARN_AFT_N04=1"
    ],
    "environment": {},
-   "key": "b782a10a196040e10bf0",
+   "key": "c7bfc74fd6ac5c84080a",
    "mode": "fast",
-   "pack": "F093",
+   "pack": "F068",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5088,7 +3933,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F094",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F069",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P06=on",
     "G.trees:gbdt-depthwise.AFT_P06=on",
@@ -5102,9 +3947,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "bcd166322a1c36cb633a",
+   "key": "b3cee5113bc0528c5e6b",
    "mode": "fast",
-   "pack": "F094",
+   "pack": "F069",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5115,7 +3960,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F094",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F069",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P06=on",
     "G.trees:gbdt-depthwise.AFT_P06=on",
@@ -5131,9 +3976,9 @@
     "MOJOLEARN_AFT_P06=1"
    ],
    "environment": {},
-   "key": "699397c7820d322b13d9",
+   "key": "102c2921dc4a0232fff7",
    "mode": "fast",
-   "pack": "F094",
+   "pack": "F069",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5144,7 +3989,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F095",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F070",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T03=on",
     "G.trees:gbdt-depthwise.AFCL_T03=on",
@@ -5155,9 +4000,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "508ae3558a1e396040d8",
+   "key": "f3ec427ca624a9e94b3b",
    "mode": "fast",
-   "pack": "F095",
+   "pack": "F070",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5168,7 +4013,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F095",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F070",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T03=on",
     "G.trees:gbdt-depthwise.AFCL_T03=on",
@@ -5181,9 +4026,9 @@
     "MOJOLEARN_AFCL_T03=1"
    ],
    "environment": {},
-   "key": "7fda4bd9abc1a14239dc",
+   "key": "5718019b216a83ec7a21",
    "mode": "fast",
-   "pack": "F095",
+   "pack": "F070",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5194,7 +4039,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F096",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F071",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T07=on",
     "G.trees:gbdt-depthwise.AFCL_T07=on",
@@ -5205,9 +4050,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "0b9a4569767388a3ed83",
+   "key": "f9fede16e48193b738a0",
    "mode": "fast",
-   "pack": "F096",
+   "pack": "F071",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5218,7 +4063,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F096",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F071",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T07=on",
     "G.trees:gbdt-depthwise.AFCL_T07=on",
@@ -5231,9 +4076,9 @@
     "MOJOLEARN_AFCL_T07=1"
    ],
    "environment": {},
-   "key": "be25bcbaba83863a879c",
+   "key": "7d8075fa490ff3bd9ae5",
    "mode": "fast",
-   "pack": "F096",
+   "pack": "F071",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5244,7 +4089,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F097",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F072",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T12=on",
     "G.trees:gbdt-depthwise.AFCL_T01=on",
@@ -5255,9 +4100,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "ad0f5762128f081857db",
+   "key": "bdf66c3b74c4a119de94",
    "mode": "fast",
-   "pack": "F097",
+   "pack": "F072",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5268,7 +4113,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F097",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F072",
    "configurations": [
     "G.trees:gbdt-categorical.AFCL_T12=on",
     "G.trees:gbdt-depthwise.AFCL_T01=on",
@@ -5283,9 +4128,9 @@
     "MOJOLEARN_AFCL_T12=1"
    ],
    "environment": {},
-   "key": "b002c76ad922e744614b",
+   "key": "6a76a23ac647d86c2ef1",
    "mode": "fast",
-   "pack": "F097",
+   "pack": "F072",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5296,7 +4141,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F098",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F073",
    "configurations": [
     "G.trees:gbdt-depthwise.AFCL_T02=on",
     "G.trees:gbdt-lossguide.AFCL_T02=on",
@@ -5304,9 +4149,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "3793657b76ab7b62dc4e",
+   "key": "3cdecb84853de0da0661",
    "mode": "fast",
-   "pack": "F098",
+   "pack": "F073",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5317,7 +4162,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F098",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F073",
    "configurations": [
     "G.trees:gbdt-depthwise.AFCL_T02=on",
     "G.trees:gbdt-lossguide.AFCL_T02=on",
@@ -5329,9 +4174,9 @@
     "MOJOLEARN_AFT_G12=1"
    ],
    "environment": {},
-   "key": "16c67a81dc148d9f88c7",
+   "key": "f0587da73e7e4c92f261",
    "mode": "fast",
-   "pack": "F098",
+   "pack": "F073",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5342,7 +4187,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F099",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F074",
    "configurations": [
     "G.trees:gbdt-depthwise.AFCL_T06=on",
     "G.trees:gbdt-lossguide.AFCL_T06=on",
@@ -5350,9 +4195,9 @@
    ],
    "defines": [],
    "environment": {},
-   "key": "fd9c8d45559e55a4d611",
+   "key": "1c23f8735dafc16003a3",
    "mode": "fast",
-   "pack": "F099",
+   "pack": "F074",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5363,7 +4208,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F099",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F074",
    "configurations": [
     "G.trees:gbdt-depthwise.AFCL_T06=on",
     "G.trees:gbdt-lossguide.AFCL_T06=on",
@@ -5373,9 +4218,9 @@
     "MOJOLEARN_AFCL_T06=1"
    ],
    "environment": {},
-   "key": "1ad92edc25f33b18fb61",
+   "key": "d4b5ca0379ce2eea0a0f",
    "mode": "fast",
-   "pack": "F099",
+   "pack": "F074",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5386,16 +4231,16 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F100",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F075",
    "configurations": [
     "G.trees:gbdt-lossguide.AFT_G07=on+AFT_G08=on",
     "G.trees:gbdt-symmetric-1000.AFT_G07=on+AFT_G08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "fb47dc2294baeb5d5dec",
+   "key": "a45a51b02452e69f3629",
    "mode": "fast",
-   "pack": "F100",
+   "pack": "F075",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5406,7 +4251,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F100",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F075",
    "configurations": [
     "G.trees:gbdt-lossguide.AFT_G07=on+AFT_G08=on",
     "G.trees:gbdt-symmetric-1000.AFT_G07=on+AFT_G08=on"
@@ -5416,9 +4261,9 @@
     "MOJOLEARN_AFT_G08=1"
    ],
    "environment": {},
-   "key": "3d76b4d9d30e963417c9",
+   "key": "3a39be7b7460001cf4bf",
    "mode": "fast",
-   "pack": "F100",
+   "pack": "F075",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5429,16 +4274,16 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F101",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F076",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G01=on",
     "G.trees:gbdt-symmetric-1000.AFT_G01=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "d5341e065c75900c0478",
+   "key": "fbf4c7878ab276c8748e",
    "mode": "fast",
-   "pack": "F101",
+   "pack": "F076",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5449,7 +4294,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F101",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F076",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G01=on",
     "G.trees:gbdt-symmetric-1000.AFT_G01=on"
@@ -5458,9 +4303,9 @@
     "MOJOLEARN_AFT_G01=1"
    ],
    "environment": {},
-   "key": "4f4deac258e160fae4c6",
+   "key": "87e8a531c2f9f846d059",
    "mode": "fast",
-   "pack": "F101",
+   "pack": "F076",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5471,16 +4316,16 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F102",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F077",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G02=on",
     "G.trees:gbdt-symmetric-1000.AFT_G02=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "75fd4f98200137c5e2c9",
+   "key": "d29356fb4603e561f41c",
    "mode": "fast",
-   "pack": "F102",
+   "pack": "F077",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5491,7 +4336,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F102",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F077",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G02=on",
     "G.trees:gbdt-symmetric-1000.AFT_G02=on"
@@ -5500,9 +4345,9 @@
     "MOJOLEARN_AFT_G02=1"
    ],
    "environment": {},
-   "key": "3cab8c8a49f8457d148d",
+   "key": "f5d17b1508408bfa2553",
    "mode": "fast",
-   "pack": "F102",
+   "pack": "F077",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5513,16 +4358,16 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F103",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F078",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G07=on",
     "G.trees:gbdt-symmetric-1000.AFT_G07=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "3a5100d823d59047b450",
+   "key": "13fd6ab05bddebc7b983",
    "mode": "fast",
-   "pack": "F103",
+   "pack": "F078",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5533,7 +4378,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F103",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F078",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G07=on",
     "G.trees:gbdt-symmetric-1000.AFT_G07=on"
@@ -5542,9 +4387,9 @@
     "MOJOLEARN_AFT_G07=1"
    ],
    "environment": {},
-   "key": "6498c9095337bae6d42b",
+   "key": "6c3c07939bcf2f188589",
    "mode": "fast",
-   "pack": "F103",
+   "pack": "F078",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5555,16 +4400,16 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F104",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F079",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G08=on",
     "G.trees:gbdt-symmetric-1000.AFT_G08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "6578713bc875822f5af3",
+   "key": "34c48f86c018e37d2f06",
    "mode": "fast",
-   "pack": "F104",
+   "pack": "F079",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5575,7 +4420,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F104",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F079",
    "configurations": [
     "G.trees:gbdt-symmetric.AFT_G08=on",
     "G.trees:gbdt-symmetric-1000.AFT_G08=on"
@@ -5584,9 +4429,9 @@
     "MOJOLEARN_AFT_G08=1"
    ],
    "environment": {},
-   "key": "ac18508911b816602989",
+   "key": "b3d00fc34c15d805a7be",
    "mode": "fast",
-   "pack": "F104",
+   "pack": "F079",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5597,7 +4442,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F105",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F080",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G06=on",
     "G.trees:gbdt-depthwise.AFT_G06=on",
@@ -5613,9 +4458,9 @@
     "MOJOLEARN_GBDT_INDEX_PACK_DEVICE=1"
    ],
    "environment": {},
-   "key": "fb750e627bdeaf3018fa",
+   "key": "8f069fc3869fe95565e1",
    "mode": "fast",
-   "pack": "F105",
+   "pack": "F080",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5626,7 +4471,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F105",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F080",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_G06=on",
     "G.trees:gbdt-depthwise.AFT_G06=on",
@@ -5643,9 +4488,9 @@
     "MOJOLEARN_GBDT_INDEX_PACK_DEVICE=1"
    ],
    "environment": {},
-   "key": "e28deed8538344458cb3",
+   "key": "8d1fc62668ad035790d3",
    "mode": "fast",
-   "pack": "F105",
+   "pack": "F080",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5656,7 +4501,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F106",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F081",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P05=on",
     "G.trees:gbdt-depthwise.AFT_P05=on",
@@ -5672,9 +4517,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "bc5bf54d3d271aa94f7f",
+   "key": "53af39e4716b550be920",
    "mode": "fast",
-   "pack": "F106",
+   "pack": "F081",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5685,7 +4530,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F106",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F081",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P05=on",
     "G.trees:gbdt-depthwise.AFT_P05=on",
@@ -5702,9 +4547,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "a926aeb2193abef0c568",
+   "key": "ddf43eb9698434787386",
    "mode": "fast",
-   "pack": "F106",
+   "pack": "F081",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5715,7 +4560,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F107",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F082",
    "configurations": [
     "G.trees:gbdt-categorical.all_on",
     "G.trees:gbdt-depthwise.all_on",
@@ -5731,9 +4576,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "108aa5a0eb65981e1251",
+   "key": "93d67351f79743d3a19f",
    "mode": "fast",
-   "pack": "F107",
+   "pack": "F082",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5744,7 +4589,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F107",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F082",
    "configurations": [
     "G.trees:gbdt-categorical.all_on",
     "G.trees:gbdt-depthwise.all_on",
@@ -5791,9 +4636,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "e2516aa640274a5fe35d",
+   "key": "d3ced9e2032f9b3fdb3f",
    "mode": "fast",
-   "pack": "F107",
+   "pack": "F082",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5804,7 +4649,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F108",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F083",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P05=on+AFT_P06=on",
     "G.trees:gbdt-multiclass.AFT_P05=on+AFT_P06=on",
@@ -5815,9 +4660,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "864d65a5e884ff45a024",
+   "key": "ca48b1f9f04143ac0c44",
    "mode": "fast",
-   "pack": "F108",
+   "pack": "F083",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5828,7 +4673,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F108",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F083",
    "configurations": [
     "G.trees:gbdt-categorical.AFT_P05=on+AFT_P06=on",
     "G.trees:gbdt-multiclass.AFT_P05=on+AFT_P06=on",
@@ -5841,9 +4686,9 @@
     "MOJOLEARN_GBDT_PREDICT_PACKED=1"
    ],
    "environment": {},
-   "key": "c364f7c75ebff02960c6",
+   "key": "b2283adedf5336711807",
    "mode": "fast",
-   "pack": "F108",
+   "pack": "F083",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5854,7 +4699,7 @@
   {
    "arm": "A",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F109",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F084",
    "configurations": [
     "G.trees:gbdt-ordered.AFCL_T05=on",
     "G.trees:gbdt-symmetric.AFCL_T05=on",
@@ -5864,9 +4709,9 @@
     "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
    ],
    "environment": {},
-   "key": "faaac61a3c614551f090",
+   "key": "4f27ece776ae4cb135e7",
    "mode": "fast",
-   "pack": "F109",
+   "pack": "F084",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5877,7 +4722,7 @@
   {
    "arm": "B",
    "binding": "bindings/gbdt.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F109",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F084",
    "configurations": [
     "G.trees:gbdt-ordered.AFCL_T05=on",
     "G.trees:gbdt-symmetric.AFCL_T05=on",
@@ -5888,9 +4733,9 @@
     "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
    ],
    "environment": {},
-   "key": "59b8d739d4f31a633ee6",
+   "key": "c3bdb64f0c036c76a2d6",
    "mode": "fast",
-   "pack": "F109",
+   "pack": "F084",
    "role": "pack",
    "script": "bindings/build_gbdt.sh",
    "status": "NOT_COMPILED",
@@ -5901,15 +4746,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F110",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F085",
    "configurations": [
     "G.trees:rf.AFT_F01=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "b4a6ffb05b7ff4229880",
+   "key": "cc1e37101847bf4191e2",
    "mode": "fast",
-   "pack": "F110",
+   "pack": "F085",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -5920,7 +4765,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F110",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F085",
    "configurations": [
     "G.trees:rf.AFT_F01=on"
    ],
@@ -5928,9 +4773,9 @@
     "MOJOLEARN_AFT_F01=1"
    ],
    "environment": {},
-   "key": "0f498dcf4568f2b02a21",
+   "key": "7aaa5e57b51e649ae1b3",
    "mode": "fast",
-   "pack": "F110",
+   "pack": "F085",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -5941,15 +4786,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F111",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F086",
    "configurations": [
     "G.trees:rf.AFT_F02=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "87a92c4ef79fae28f1e7",
+   "key": "e45a1c2e0f1b00ac07bf",
    "mode": "fast",
-   "pack": "F111",
+   "pack": "F086",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -5960,7 +4805,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F111",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F086",
    "configurations": [
     "G.trees:rf.AFT_F02=on"
    ],
@@ -5968,9 +4813,9 @@
     "MOJOLEARN_AFT_F02=1"
    ],
    "environment": {},
-   "key": "98ab7bd8b92f887bfcda",
+   "key": "0cfabc1e83facbedf944",
    "mode": "fast",
-   "pack": "F111",
+   "pack": "F086",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -5981,15 +4826,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F112",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F087",
    "configurations": [
     "G.trees:rf.AFT_F03=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "0263c76d3a749117e9bd",
+   "key": "03c0e3f1c27760cb60ba",
    "mode": "fast",
-   "pack": "F112",
+   "pack": "F087",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6000,7 +4845,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F112",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F087",
    "configurations": [
     "G.trees:rf.AFT_F03=on"
    ],
@@ -6008,9 +4853,9 @@
     "MOJOLEARN_AFT_F03=1"
    ],
    "environment": {},
-   "key": "e86593cd0e630ac9b789",
+   "key": "a1783f1f37932da2af9e",
    "mode": "fast",
-   "pack": "F112",
+   "pack": "F087",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6021,15 +4866,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F113",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F088",
    "configurations": [
     "G.trees:rf.AFT_F04=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "52f8acdb5ec77cc2bfda",
+   "key": "827cd3ae19358cc139a1",
    "mode": "fast",
-   "pack": "F113",
+   "pack": "F088",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6040,7 +4885,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F113",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F088",
    "configurations": [
     "G.trees:rf.AFT_F04=on"
    ],
@@ -6048,9 +4893,9 @@
     "MOJOLEARN_AFT_F04=1"
    ],
    "environment": {},
-   "key": "c7a089c8e8cfd33ef4f5",
+   "key": "71f27bc135e5c091e950",
    "mode": "fast",
-   "pack": "F113",
+   "pack": "F088",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6061,15 +4906,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F114",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F089",
    "configurations": [
     "G.trees:rf.AFT_F05=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "1a8d5a4f8afbd842c777",
+   "key": "a8d10388337dcac9dd3b",
    "mode": "fast",
-   "pack": "F114",
+   "pack": "F089",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6080,7 +4925,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F114",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F089",
    "configurations": [
     "G.trees:rf.AFT_F05=on"
    ],
@@ -6088,9 +4933,9 @@
     "MOJOLEARN_AFT_F05=1"
    ],
    "environment": {},
-   "key": "b5ffeec5070ee40dbd04",
+   "key": "0898890e035650bdbbdf",
    "mode": "fast",
-   "pack": "F114",
+   "pack": "F089",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6101,15 +4946,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F115",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F090",
    "configurations": [
     "G.trees:rf.AFT_P02=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "b21b0bd2469a9189af87",
+   "key": "045cf04f8c760350865a",
    "mode": "fast",
-   "pack": "F115",
+   "pack": "F090",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6120,7 +4965,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F115",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F090",
    "configurations": [
     "G.trees:rf.AFT_P02=on"
    ],
@@ -6128,9 +4973,9 @@
     "MOJOLEARN_AFT_P02=1"
    ],
    "environment": {},
-   "key": "870f81dd7720baead23d",
+   "key": "a6c19a125aeecda615df",
    "mode": "fast",
-   "pack": "F115",
+   "pack": "F090",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6141,15 +4986,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F116",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F091",
    "configurations": [
     "G.trees:rf.AFT_P04=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "153e1a1922ed1fcda9a7",
+   "key": "900e588414a9efc53f1d",
    "mode": "fast",
-   "pack": "F116",
+   "pack": "F091",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6160,7 +5005,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F116",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F091",
    "configurations": [
     "G.trees:rf.AFT_P04=on"
    ],
@@ -6168,9 +5013,9 @@
     "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "cb884b2ccb05dee6b0d1",
+   "key": "2e6c7eef8fff5c4b75e5",
    "mode": "fast",
-   "pack": "F116",
+   "pack": "F091",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6181,15 +5026,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F117",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F092",
    "configurations": [
     "G.trees:rf.AFCL_T08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "043aceba540a6fb35d1e",
+   "key": "6dbeb870e44330d1865a",
    "mode": "fast",
-   "pack": "F117",
+   "pack": "F092",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6200,7 +5045,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F117",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F092",
    "configurations": [
     "G.trees:rf.AFCL_T08=on"
    ],
@@ -6208,9 +5053,9 @@
     "MOJOLEARN_AFCL_T08=1"
    ],
    "environment": {},
-   "key": "934dbbe8071e22bf70d0",
+   "key": "3a0ebdae14611f5dc1ff",
    "mode": "fast",
-   "pack": "F117",
+   "pack": "F092",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6221,144 +5066,15 @@
   {
    "arm": "A",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F118",
-   "configurations": [
-    "G.trees:rf.AFT_F01=on+AFT_F02=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "5b0e92f9150468112d4a",
-   "mode": "fast",
-   "pack": "F118",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F118",
-   "configurations": [
-    "G.trees:rf.AFT_F01=on+AFT_F02=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F01=1",
-    "MOJOLEARN_AFT_F02=1"
-   ],
-   "environment": {},
-   "key": "066a3773c55d5d3074eb",
-   "mode": "fast",
-   "pack": "F118",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F119",
-   "configurations": [
-    "G.trees:rf.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "fe11afa849de527dc6d7",
-   "mode": "fast",
-   "pack": "F119",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F119",
-   "configurations": [
-    "G.trees:rf.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "3e77e0dcce5c9615115a",
-   "mode": "fast",
-   "pack": "F119",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F120",
-   "configurations": [
-    "G.trees:rf.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "c42a975eb1331a047610",
-   "mode": "fast",
-   "pack": "F120",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F120",
-   "configurations": [
-    "G.trees:rf.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "998f58efb7ba89fb0013",
-   "mode": "fast",
-   "pack": "F120",
-   "role": "pack",
-   "script": "bindings/build_rf.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F121",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F093",
    "configurations": [
     "G.trees:rf.all_on"
    ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
+   "defines": [],
    "environment": {},
-   "key": "0a3fef5de33b5ccea5bf",
+   "key": "3e9e3b96a5084a0d5102",
    "mode": "fast",
-   "pack": "F121",
+   "pack": "F093",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6369,7 +5085,7 @@
   {
    "arm": "B",
    "binding": "bindings/rf.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F121",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F093",
    "configurations": [
     "G.trees:rf.all_on"
    ],
@@ -6380,15 +5096,95 @@
     "MOJOLEARN_AFT_F03=1",
     "MOJOLEARN_AFT_F04=1",
     "MOJOLEARN_AFT_F05=1",
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "e59394def3c84cfd7c94",
+   "key": "9c1487401b2c5e0cec57",
    "mode": "fast",
-   "pack": "F121",
+   "pack": "F093",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F094",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a38162799eb7a23ee6ac",
+   "mode": "fast",
+   "pack": "F094",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F094",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1"
+   ],
+   "environment": {},
+   "key": "e7d27ff0ec105ab331d8",
+   "mode": "fast",
+   "pack": "F094",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F095",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1d4708ae15d9fc0b01eb",
+   "mode": "fast",
+   "pack": "F095",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F095",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "f9c070aa04476a4e3253",
+   "mode": "fast",
+   "pack": "F095",
    "role": "pack",
    "script": "bindings/build_rf.sh",
    "status": "NOT_COMPILED",
@@ -6399,15 +5195,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F122",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F096",
    "configurations": [
     "G.trees:iforest.AFT_F10=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "24acf84d18a4400a8dd7",
+   "key": "3ff9cd610ea394b25956",
    "mode": "fast",
-   "pack": "F122",
+   "pack": "F096",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6418,7 +5214,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F122",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F096",
    "configurations": [
     "G.trees:iforest.AFT_F10=on"
    ],
@@ -6426,9 +5222,9 @@
     "MOJOLEARN_AFT_F10=1"
    ],
    "environment": {},
-   "key": "bb57cd02c2bc31887bab",
+   "key": "0ece50c5cfebb3b986b2",
    "mode": "fast",
-   "pack": "F122",
+   "pack": "F096",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6439,15 +5235,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F123",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F097",
    "configurations": [
     "G.trees:iforest.AFT_F11=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "129a1deadb779af7c9ca",
+   "key": "8d4393e56fbbac0ded12",
    "mode": "fast",
-   "pack": "F123",
+   "pack": "F097",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6458,7 +5254,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F123",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F097",
    "configurations": [
     "G.trees:iforest.AFT_F11=on"
    ],
@@ -6466,9 +5262,9 @@
     "MOJOLEARN_AFT_F11=1"
    ],
    "environment": {},
-   "key": "71f8a98d6c977ed7c9e9",
+   "key": "fb3ae65de767fd4f33a9",
    "mode": "fast",
-   "pack": "F123",
+   "pack": "F097",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6479,15 +5275,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F124",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F098",
    "configurations": [
     "G.trees:iforest.AFT_F12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "33a3f3dd1f9831b5284e",
+   "key": "d06a120f07830edca040",
    "mode": "fast",
-   "pack": "F124",
+   "pack": "F098",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6498,7 +5294,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F124",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F098",
    "configurations": [
     "G.trees:iforest.AFT_F12=on"
    ],
@@ -6506,9 +5302,9 @@
     "MOJOLEARN_AFT_F12=1"
    ],
    "environment": {},
-   "key": "70ef8479e0d20239cc95",
+   "key": "828dc7cf2d0479d48f88",
    "mode": "fast",
-   "pack": "F124",
+   "pack": "F098",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6519,15 +5315,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F125",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F099",
    "configurations": [
     "G.trees:iforest.AFCL_T10=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "f7c89235225ee3bca184",
+   "key": "81701a414e044bbfa7d4",
    "mode": "fast",
-   "pack": "F125",
+   "pack": "F099",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6538,7 +5334,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F125",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F099",
    "configurations": [
     "G.trees:iforest.AFCL_T10=on"
    ],
@@ -6546,9 +5342,9 @@
     "MOJOLEARN_AFCL_T10=1"
    ],
    "environment": {},
-   "key": "19ea569cbf5d270203d4",
+   "key": "2d7950ef232ce1bef21c",
    "mode": "fast",
-   "pack": "F125",
+   "pack": "F099",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6559,15 +5355,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F126",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F100",
    "configurations": [
     "G.trees:iforest.all_on"
    ],
    "defines": [],
    "environment": {},
-   "key": "770114e1b71b5348baa2",
+   "key": "1c80ab30fbc63741aa32",
    "mode": "fast",
-   "pack": "F126",
+   "pack": "F100",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6578,7 +5374,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F126",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F100",
    "configurations": [
     "G.trees:iforest.all_on"
    ],
@@ -6589,9 +5385,9 @@
     "MOJOLEARN_AFT_F12=1"
    ],
    "environment": {},
-   "key": "0e71f62eadf4195d08cc",
+   "key": "f4e520158d3b3a58b003",
    "mode": "fast",
-   "pack": "F126",
+   "pack": "F100",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6602,15 +5398,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F127",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F101",
    "configurations": [
     "G.trees:iforest.AFT_F11=on+AFT_F12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "0760dce7afb1969eea0e",
+   "key": "2896cfcc064686537964",
    "mode": "fast",
-   "pack": "F127",
+   "pack": "F101",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6621,7 +5417,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F127",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F101",
    "configurations": [
     "G.trees:iforest.AFT_F11=on+AFT_F12=on"
    ],
@@ -6630,9 +5426,9 @@
     "MOJOLEARN_AFT_F12=1"
    ],
    "environment": {},
-   "key": "90c6ad2341aa638b9aeb",
+   "key": "a4ba0a849633631d86d6",
    "mode": "fast",
-   "pack": "F127",
+   "pack": "F101",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6643,15 +5439,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F128",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F102",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F11=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "738d5c0e5e199fd9c1b2",
+   "key": "073ef49fc056b03e6680",
    "mode": "fast",
-   "pack": "F128",
+   "pack": "F102",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6662,7 +5458,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F128",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F102",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F11=on"
    ],
@@ -6671,9 +5467,9 @@
     "MOJOLEARN_AFT_F11=1"
    ],
    "environment": {},
-   "key": "59d084151d6b28475025",
+   "key": "c49c74fff9b51dd8ac87",
    "mode": "fast",
-   "pack": "F128",
+   "pack": "F102",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6684,15 +5480,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F129",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F103",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "993a771e9adc7297ac43",
+   "key": "072e1310b629db09780b",
    "mode": "fast",
-   "pack": "F129",
+   "pack": "F103",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6703,7 +5499,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F129",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F103",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F12=on"
    ],
@@ -6712,9 +5508,9 @@
     "MOJOLEARN_AFT_F12=1"
    ],
    "environment": {},
-   "key": "fc02be8814c93ab4fd6b",
+   "key": "571a80afd885adc9fa28",
    "mode": "fast",
-   "pack": "F129",
+   "pack": "F103",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6725,15 +5521,15 @@
   {
    "arm": "A",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F130",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F104",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F11=on+AFT_F12=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "68b0a2da65816ff815a8",
+   "key": "a228569e641c83ee2c6f",
    "mode": "fast",
-   "pack": "F130",
+   "pack": "F104",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6744,7 +5540,7 @@
   {
    "arm": "B",
    "binding": "bindings/svm.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F130",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F104",
    "configurations": [
     "G.trees:iforest.AFT_F10=on+AFT_F11=on+AFT_F12=on"
    ],
@@ -6754,9 +5550,9 @@
     "MOJOLEARN_AFT_F12=1"
    ],
    "environment": {},
-   "key": "3f87d8d8113f186bbf34",
+   "key": "edffe5194d658381e5a7",
    "mode": "fast",
-   "pack": "F130",
+   "pack": "F104",
    "role": "pack",
    "script": "bindings/build_svm.sh",
    "status": "NOT_COMPILED",
@@ -6767,15 +5563,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F131",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F105",
    "configurations": [
     "G.trees:et.AFT_F06=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "eecf76aa8d8f5c85a127",
+   "key": "de85c73f03b72f404129",
    "mode": "fast",
-   "pack": "F131",
+   "pack": "F105",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6786,7 +5582,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F131",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F105",
    "configurations": [
     "G.trees:et.AFT_F06=on"
    ],
@@ -6794,9 +5590,9 @@
     "MOJOLEARN_AFT_F06=1"
    ],
    "environment": {},
-   "key": "1c21c1246d1ed0506f5e",
+   "key": "ead89eaafc4fef3a64f9",
    "mode": "fast",
-   "pack": "F131",
+   "pack": "F105",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6807,15 +5603,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F132",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F106",
    "configurations": [
     "G.trees:et.AFT_F07=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "5ecb60d8e33bbd5288e4",
+   "key": "d5de7eb59e7a8707625f",
    "mode": "fast",
-   "pack": "F132",
+   "pack": "F106",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6826,7 +5622,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F132",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F106",
    "configurations": [
     "G.trees:et.AFT_F07=on"
    ],
@@ -6834,9 +5630,9 @@
     "MOJOLEARN_AFT_F07=1"
    ],
    "environment": {},
-   "key": "1c4e110801328b4f2a0d",
+   "key": "28590bcf65d7e11966dd",
    "mode": "fast",
-   "pack": "F132",
+   "pack": "F106",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6847,15 +5643,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F133",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F107",
    "configurations": [
     "G.trees:et.AFT_F08=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "9250ee4f715c8d81b605",
+   "key": "6aadc64ff43af5eb724a",
    "mode": "fast",
-   "pack": "F133",
+   "pack": "F107",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6866,7 +5662,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F133",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F107",
    "configurations": [
     "G.trees:et.AFT_F08=on"
    ],
@@ -6874,9 +5670,9 @@
     "MOJOLEARN_AFT_F08=1"
    ],
    "environment": {},
-   "key": "1bb01ba77c3b85a39238",
+   "key": "92baaa1f3028d890c5d4",
    "mode": "fast",
-   "pack": "F133",
+   "pack": "F107",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6887,15 +5683,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F134",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F108",
    "configurations": [
     "G.trees:et.AFT_F09=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "e1353ba25ae6a1ba5ebf",
+   "key": "5fa12cb1b97677f3345b",
    "mode": "fast",
-   "pack": "F134",
+   "pack": "F108",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6906,7 +5702,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F134",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F108",
    "configurations": [
     "G.trees:et.AFT_F09=on"
    ],
@@ -6914,9 +5710,9 @@
     "MOJOLEARN_AFT_F09=1"
    ],
    "environment": {},
-   "key": "1e8f5d31b4bdcf44cdf4",
+   "key": "e88384dd040e55494b2d",
    "mode": "fast",
-   "pack": "F134",
+   "pack": "F108",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6927,15 +5723,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F135",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F109",
    "configurations": [
     "G.trees:et.AFT_P02=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "99bde52ef9ce2993e894",
+   "key": "68de53e3e7cdcbf99053",
    "mode": "fast",
-   "pack": "F135",
+   "pack": "F109",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6946,7 +5742,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F135",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F109",
    "configurations": [
     "G.trees:et.AFT_P02=on"
    ],
@@ -6954,9 +5750,9 @@
     "MOJOLEARN_AFT_P02=1"
    ],
    "environment": {},
-   "key": "4e77f292bc276bd24a6a",
+   "key": "4638a368882fd4121c19",
    "mode": "fast",
-   "pack": "F135",
+   "pack": "F109",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6967,15 +5763,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F136",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F110",
    "configurations": [
     "G.trees:et.AFT_P04=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "b4c1f1451b2d59fc4db5",
+   "key": "4eff5e63630a4ccc303f",
    "mode": "fast",
-   "pack": "F136",
+   "pack": "F110",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -6986,7 +5782,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F136",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F110",
    "configurations": [
     "G.trees:et.AFT_P04=on"
    ],
@@ -6994,9 +5790,9 @@
     "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "20f975bbc105ebbc57b4",
+   "key": "7bf55ad227b3455409c9",
    "mode": "fast",
-   "pack": "F136",
+   "pack": "F110",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -7007,15 +5803,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F137",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F111",
    "configurations": [
     "G.trees:et.AFCL_T09=on"
    ],
    "defines": [],
    "environment": {},
-   "key": "293ec5cb913ffdde06fa",
+   "key": "0b9030bdb48a292cc73c",
    "mode": "fast",
-   "pack": "F137",
+   "pack": "F111",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -7026,7 +5822,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F137",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F111",
    "configurations": [
     "G.trees:et.AFCL_T09=on"
    ],
@@ -7034,9 +5830,9 @@
     "MOJOLEARN_AFCL_T09=1"
    ],
    "environment": {},
-   "key": "a5b460ac3b36562a5cef",
+   "key": "32501b9eb0704466c00c",
    "mode": "fast",
-   "pack": "F137",
+   "pack": "F111",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -7047,268 +5843,15 @@
   {
    "arm": "A",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F138",
-   "configurations": [
-    "G.trees:et.AFT_F07=on+AFT_F08=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "21d9c1e464b4dc3d25a7",
-   "mode": "fast",
-   "pack": "F138",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F138",
-   "configurations": [
-    "G.trees:et.AFT_F07=on+AFT_F08=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F07=1",
-    "MOJOLEARN_AFT_F08=1"
-   ],
-   "environment": {},
-   "key": "d25ca93947a9ebaea5bd",
-   "mode": "fast",
-   "pack": "F138",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F139",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F08=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "019e49f803216908b833",
-   "mode": "fast",
-   "pack": "F139",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F139",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F08=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F06=1",
-    "MOJOLEARN_AFT_F08=1"
-   ],
-   "environment": {},
-   "key": "1459d247f20c287fd573",
-   "mode": "fast",
-   "pack": "F139",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F140",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F07=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "4f29a5b4688a42852a76",
-   "mode": "fast",
-   "pack": "F140",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F140",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F07=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F06=1",
-    "MOJOLEARN_AFT_F07=1"
-   ],
-   "environment": {},
-   "key": "8fda2251a7c88d10778d",
-   "mode": "fast",
-   "pack": "F140",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F141",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
-   ],
-   "defines": [],
-   "environment": {},
-   "key": "c83796088ec9f8061801",
-   "mode": "fast",
-   "pack": "F141",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F141",
-   "configurations": [
-    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_F06=1",
-    "MOJOLEARN_AFT_F07=1",
-    "MOJOLEARN_AFT_F08=1"
-   ],
-   "environment": {},
-   "key": "f30e723a6b5e62b9e09a",
-   "mode": "fast",
-   "pack": "F141",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F142",
-   "configurations": [
-    "G.trees:et.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "da297979c2ff4757905f",
-   "mode": "fast",
-   "pack": "F142",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F142",
-   "configurations": [
-    "G.trees:et.AFT_P01=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "d69f6fe9bdb990d394b5",
-   "mode": "fast",
-   "pack": "F142",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F143",
-   "configurations": [
-    "G.trees:et.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "b77d65bf850775cd491e",
-   "mode": "fast",
-   "pack": "F143",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "B",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F143",
-   "configurations": [
-    "G.trees:et.AFT_P03=on"
-   ],
-   "defines": [
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
-   "environment": {},
-   "key": "410aa521b473541a57c4",
-   "mode": "fast",
-   "pack": "F143",
-   "role": "pack",
-   "script": "bindings/build_trees.sh",
-   "status": "NOT_COMPILED",
-   "target": "metal (M3 Ultra), FAST",
-   "tool": "aft",
-   "vendor": "apple"
-  },
-  {
-   "arm": "A",
-   "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F144",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F112",
    "configurations": [
     "G.trees:et.all_on"
    ],
-   "defines": [
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
-   ],
+   "defines": [],
    "environment": {},
-   "key": "34243ad718b6f368632e",
+   "key": "aae2e1955e00143975a5",
    "mode": "fast",
-   "pack": "F144",
+   "pack": "F112",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",
@@ -7319,7 +5862,7 @@
   {
    "arm": "B",
    "binding": "bindings/trees.mojo",
-   "build_dir": "$HOME/aft-ab/gf4de9e3-F144",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F112",
    "configurations": [
     "G.trees:et.all_on"
    ],
@@ -7329,15 +5872,219 @@
     "MOJOLEARN_AFT_F07=1",
     "MOJOLEARN_AFT_F08=1",
     "MOJOLEARN_AFT_F09=1",
-    "MOJOLEARN_AFT_P01=1",
-    "MOJOLEARN_AFT_P03=1",
-    "MOJOLEARN_AFT_P04=1",
-    "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1"
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
    ],
    "environment": {},
-   "key": "6c12438290c0f89c2ba2",
+   "key": "d2de00647bbbdc6f00e0",
    "mode": "fast",
-   "pack": "F144",
+   "pack": "F112",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F113",
+   "configurations": [
+    "G.trees:et.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "cab66363f3a9223f38ab",
+   "mode": "fast",
+   "pack": "F113",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F113",
+   "configurations": [
+    "G.trees:et.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "e00ed660cbbe913b0727",
+   "mode": "fast",
+   "pack": "F113",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F114",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "32a7d9361a332e98b758",
+   "mode": "fast",
+   "pack": "F114",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F114",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "f6a69f52c8b0382cea51",
+   "mode": "fast",
+   "pack": "F114",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F115",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "c5826b29472ba4475ae6",
+   "mode": "fast",
+   "pack": "F115",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F115",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1"
+   ],
+   "environment": {},
+   "key": "9ff5b40333b7b8210a4a",
+   "mode": "fast",
+   "pack": "F115",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F116",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "be6e7f3b662d01f8a43d",
+   "mode": "fast",
+   "pack": "F116",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F116",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "9eed5928764bd5ce2661",
+   "mode": "fast",
+   "pack": "F116",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F117",
+   "configurations": [
+    "G.trees:et.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "0a6ac87a3c5b60ee6b19",
+   "mode": "fast",
+   "pack": "F117",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F117",
+   "configurations": [
+    "G.trees:et.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "a171ff16cee003078dfd",
+   "mode": "fast",
+   "pack": "F117",
    "role": "pack",
    "script": "bindings/build_trees.sh",
    "status": "NOT_COMPILED",

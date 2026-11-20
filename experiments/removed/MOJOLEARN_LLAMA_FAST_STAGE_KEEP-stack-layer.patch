@@ -1,0 +1,52 @@
+diff --git a/autograd/block_step_ops.mojo b/autograd/block_step_ops.mojo
+index eac9a77f70..1f91436781 100644
+--- a/autograd/block_step_ops.mojo
++++ b/autograd/block_step_ops.mojo
+@@ -1715,15 +1715,13 @@ struct AttnPrefill(Movable):
+ 
+     def prepare(mut self, ctx: DeviceContext, b: Int, l: Int, smax: Int, dims: LlamaDims, window: Int,
+                 lean: Bool, keep_bytes: Bool = False) raises:
+-        """`keep_bytes` (lane fx-transformer-forward; promoted 2026-11-19 for
+-        the stateless forward, `attn_step_fresh_prefill`): the caller's
+-        promise that the run it prepares is forward-only, so reused stages of
+-        the same shape get their host flags back
+-        (`LlamaDeviceStages.reset_flags`) and keep their bytes; the forward
+-        writes each stage whole before reading it (modeling_llama
+-        `LLAMA_FAST_STAGE_KEEP`). False, or a build with
+-        -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF: the constructor's zeros again
+-        (`reset`: thirty fills and a wait)."""
++        """`keep_bytes` (lane fx-transformer-forward, read only on a build with
++        -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP): the caller's promise that the run
++        it prepares is forward-only, so reused stages of the same shape get
++        their host flags back (`LlamaDeviceStages.reset_flags`) and keep
++        their bytes; the forward writes each stage whole before reading it
++        (modeling_llama `LLAMA_FAST_STAGE_KEEP`). Default build, or False:
++        the constructor's zeros again (`reset`: thirty fills and a wait)."""
+         var reused = False
+         self.ahead_used = False
+         if self.stages:
+@@ -1980,9 +1978,9 @@ def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], c
+         # `_session_forward_run`: L-shaped stages, the caller's (kept) or
+         # this run's own.
+         var dims = _attn_dims(ints)
+-        # TOMBSTONE: MOJOLEARN_LLAMA_FAST_STAGE_KEEP, this site's use (`forward_only` passed as `keep_bytes`: a forward with the caller's caches and an inference-only stack layer kept their stage bytes; LOSS, A/B round 2 NVIDIA L40S: samba-forward 4.609 -> 4.751 ms, 1.03, bases 4.609-4.635) deleted 2026-11-19 by lane/fx-verdicts4; code recoverable at 8f3f639b13.
+-        # Restore: git apply experiments/removed/MOJOLEARN_LLAMA_FAST_STAGE_KEEP-stack-layer.patch; record in docs/TOMBSTONES.md.
+-        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
++        # `forward_only`: no backward reads this run's stages, so a build with
++        # MOJOLEARN_LLAMA_FAST_STAGE_KEEP keeps their bytes (`prepare`).
++        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, forward_only)
+         _d2d(ctx, pre.dx.value(), x, n)
+         var n1r = norm1_ready and pre.ahead_used
+         pre.ahead_used = False
+@@ -2219,9 +2217,8 @@ def attn_step_fresh_prefill(
+         var dims = _attn_dims(ints)
+         # The L-shaped stages (0.8.66: the session workspace's), reset to the
+         # constructor's zeros when reused, as `_stage_reset_on()` did by default.
+-        # This run is forward-only (below), so `prepare` keeps the stage bytes
+-        # (LLAMA_FAST_STAGE_KEEP, the default since 2026-11-19; `reset` under
+-        # -D MOJOLEARN_LLAMA_FAST_STAGE_KEEP_OFF).
++        # This run is forward-only (below): a build with
++        # MOJOLEARN_LLAMA_FAST_STAGE_KEEP keeps the stage bytes (`prepare`).
+         pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean, True)
+         # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
+         # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.

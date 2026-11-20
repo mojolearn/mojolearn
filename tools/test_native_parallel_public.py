@@ -10,6 +10,8 @@ import types
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boundary_keys_plain import plain  # noqa: E402
 PACKAGE = ROOT / 'python/mojolearn'
 
 
@@ -82,6 +84,8 @@ def connected(monkeypatch):
     backend._DEFAULT_MODE = 'identical'
     backend.default_mode = lambda: backend._DEFAULT_MODE
     backend._HostBinding = type('HostBinding', (types.ModuleType,), {})
+    # the connector resolves a CPU-only facade to its compiled module once at import (_backend.exact_host_module)
+    backend.exact_host_module = lambda module: module
     def binding(name, mode):
         module = types.ModuleType(name + ':' + mode)
         module.compiled_entry = len
@@ -202,14 +206,15 @@ def test_bindings_are_the_exact_compiled_modules(connected):
         for mode, module in modes.items():
             assert type(module) is types.ModuleType
             assert module.__name__ == name + ':' + mode
-    source = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/neural_descriptor_pyapi_door.mojo').read_text()
     assert 'native provider requires an exact compiled module' in source
     assert '_neural_descriptor_function_owner(entry) != module._obj_ptr' in source
     assert len(meta['plans']) == 27
 
 
 def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
-    source = (ROOT / 'bindings/parallel_public_native.mojo').read_text()
+    # The door reads held keys (bindings/parallel_keys_unpack.mojo); its by-name form is plain().
+    source = plain('bindings/parallel_public_native_door.mojo', (ROOT / 'bindings/parallel_public_native_door.mojo').read_text())
     for unsafe in ('Python.import_module', 'copy.copy', 'threading', '._finalizer', 'model.fit(', 'model.predict(', '._bind(', 'public_method_result'):
         assert unsafe not in source
     assert source.index('py_type(value) is not b.tuple') < source.index('py_call(b.tuple, value)')
@@ -219,6 +224,6 @@ def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
     assert 'finally:\n        _ = py_call(lock.release)' in source
     assert 'py_setitem(saved, "_resident_holder", Python.dict())' in source
     assert 'parallel_public_result(result,' in source
-    result = (ROOT / 'bindings/parallel_public_result.mojo').read_text()
+    result = (ROOT / 'bindings/parallel_public_result_door.mojo').read_text()
     assert 'String(value.dtype.kind) == "f"' in result
     assert '_outside(context, 1)' in result

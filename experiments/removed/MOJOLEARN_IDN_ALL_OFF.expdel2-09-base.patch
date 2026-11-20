@@ -1,0 +1,154 @@
+diff --git a/x_prep/blocked.mojo b/x_prep/blocked.mojo
+index 34b2f55896..d2e85467b4 100644
+--- a/x_prep/blocked.mojo
++++ b/x_prep/blocked.mojo
+@@ -40,9 +40,9 @@ comptime XB = 2048
+ #: ascending from zero), so the words are csb_part's.
+ # TOMBSTONE: MOJOLEARN_IDN_NB_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2909d00ab4.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_NB_ONEPASS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_NB_ONEPASS = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: classes csb1_part keeps in registers (more: the partial table itself)
+ comptime CSB1_REG = 8
+ 
+@@ -60,7 +60,7 @@ comptime CSB1_REG = 8
+ #: -D MOJOLEARN_IDN_STATS_BLOCKED_OFF restores the serial stages.
+ comptime IDN_STATS_BLOCKED = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-    and not is_defined["MOJOLEARN_IDN_STATS_BLOCKED_OFF"]()
++    and not (is_defined["MOJOLEARN_IDN_STATS_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+ 
+ #: lane fam-prep-metrics (2026-10-04), IDENTICAL on every vendor and the host
+@@ -72,7 +72,7 @@ comptime IDN_STATS_BLOCKED = (
+ #: no bit moves against the blocked order.
+ # TOMBSTONE: MOJOLEARN_IDN_CLASS_ONEPASS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at a7d5d989b5.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_CLASS_ONEPASS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_CLASS_ONEPASS = IDN_NB_ONEPASS
++comptime IDN_CLASS_ONEPASS = IDN_NB_ONEPASS and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ 
+ 
+ @always_inline
+@@ -680,7 +680,10 @@ def cat_hfold_unit(t: Int, f: FP, q: IP):
+ #: stored order (a duplicate column sums, -0.0 becomes +0.0, NaN stays).
+ # TOMBSTONE: MOJOLEARN_IDN_NB_CSR_DENSE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 93d56e9d87.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_DENSE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_NB_CSR_DENSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_NB_CSR_DENSE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def csr_dense_unit(t: Int, f: FP, q: IP):
+diff --git a/x_prep/fastnb_csr.mojo b/x_prep/fastnb_csr.mojo
+index 5d188dbbc1..1ca5c29a86 100644
+--- a/x_prep/fastnb_csr.mojo
++++ b/x_prep/fastnb_csr.mojo
+@@ -32,6 +32,7 @@ dense fit within float32 (the atomic fold order is new).
+ from std.atomic import Atomic
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import stack_allocation
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -67,9 +68,7 @@ comptime NB_TEXT_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_
+ #: the same column-order flag.
+ # TOMBSTONE: MOJOLEARN_IDN_NB_CSR_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2aca6c096a.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CSR_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
+ #: negative value is refused whatever else the input holds, as the dense fit)
+ comptime CSR_FLAG_FALLBACK = 1
+diff --git a/x_prep/gram_blocked.mojo b/x_prep/gram_blocked.mojo
+index f49be442ae..f620b58e25 100644
+--- a/x_prep/gram_blocked.mojo
++++ b/x_prep/gram_blocked.mojo
+@@ -33,10 +33,12 @@ the old chain. Products are rounded before their add (`mul`, DEVIATION 5401)
+ as before. All four columns run these units.
+ 
+ SWITCHES (IDENTICAL only):
+-  IDN_GRAM_BLOCKED, always on.
++  IDN_GRAM_BLOCKED, ON by default; MOJOLEARN_IDN_ALL_OFF restores
++      matmul / qda_cov.
+   rows per block: XB = 2048 (a different block length is a different order).
+ The Python layer reads them from `x_prep_idn_fam2` and stages accordingly.
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block
+ from x_prep.prims import add, sub, mul, div, mm_step
+@@ -44,9 +46,10 @@ from x_prep.blocked import XB
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_GRAM_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 2b7e58bca5.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_GRAM_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_GRAM_BLOCKED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_GRAM_ROWTILE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at eb6ccbf3bc.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAM_ROWTILE.patch; record in docs/TOMBSTONES.md.
+ # The alias stays False for x_prep/fam2.mojo (its importer, in no V2 lane); the integrator drops it with gb_part_row_unit.
+diff --git a/x_prep/pt_blocked.mojo b/x_prep/pt_blocked.mojo
+index dfa8011a64..e0d15a98a5 100644
+--- a/x_prep/pt_blocked.mojo
++++ b/x_prep/pt_blocked.mojo
+@@ -37,6 +37,7 @@ one-pass tiles FAST tried (x_prep/fastpt.mojo).
+ The switch is bit 8 of `x_prep_idn_fam`; python/mojolearn/_expansion_prep.py
+ stages these ops only when it is set.
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_prep.common import FP, IP, p, ld, raw, sti, ldi, is_nan
+ from x_prep.prims import add, sub, mul, div, logf
+@@ -45,9 +46,10 @@ from x_prep.blocked import _span
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_PT_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at b358d19039.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_PT_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_PT_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_PT_BLOCKED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ @always_inline
+diff --git a/x_prep/select_blocked.mojo b/x_prep/select_blocked.mojo
+index 3d04f0bf3b..6b0563301f 100644
+--- a/x_prep/select_blocked.mojo
++++ b/x_prep/select_blocked.mojo
+@@ -20,6 +20,7 @@ unit's. A blocked sum is never less accurate than the row-order one.
+ The switch is bit 4 of `x_prep_idn_fam`; python/mojolearn/_expansion_prep.py
+ stages these ops only when it is set.
+ """
++from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_prep.common import FP, IP, p, ld, st, canonical_nan
+ from x_prep.prims import add, sub, mul, div
+@@ -28,9 +29,10 @@ from x_prep.blocked import _span
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_SELECT_BLOCKED_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base; code recoverable at 27b4b5a66a.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_BLOCKED_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-09-base (non-owner; owner expdel2-37-series); code recoverable at df8ecc7030.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-09-base.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SELECT_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_SELECT_BLOCKED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ # ---------------------------------------------------------------- f_classif

@@ -20,6 +20,12 @@ import sys
 import tempfile
 import time
 
+# Lazy family import (lane lazy-family-import): a worker runs on the loaded
+# set the package had before it, every family and unit, as its parent may hand
+# it any of them.
+from . import _families as _verify_families
+_verify_families.load_all()
+
 
 class WorkerFailure(RuntimeError):
     pass
@@ -309,44 +315,54 @@ _HARNESSES = {}
 def execute(request):
     from . import _verify_all as verifier
     from . import _verify_reference as reference
-    from . import _backend
-    from ._cpu_reference import reference_training
     import mojolearn as ml
-    if _backend.numeric_mode() != "identical":
+    if ml.numeric_mode() != "identical":
         raise WorkerFailure("worker did not load identical numeric mode")
     path = request["harness"]
     if path not in _HARNESSES:
         _HARNESSES[path] = verifier.load_harness(path)
     harness = _HARNESSES[path]
     action = request["action"]
-    with reference_training():
-        if action == "cell":
-            fixture = request["fixture"]
-            data, held = harness.fixture(fixture), harness.heldout(fixture)
-            actual = dict(X=harness._h(data[0]), y_clf=harness._h(data[1]), y_reg=harness._h(data[2]),
-                          held=harness._h(held))
-            if actual != request["fixture_hashes"]:
-                raise WorkerFailure("worker fixture bytes differ from the controller")
+    activity = None
+    if action == "cell":
+        from . import _check_both as check_both
+        fixture = request["fixture"]
+        data, held = harness.fixture(fixture), harness.heldout(fixture)
+        actual = dict(X=harness._h(data[0]), y_clf=harness._h(data[1]), y_reg=harness._h(data[2]),
+                      held=harness._h(held))
+        if actual != request["fixture_hashes"]:
+            raise WorkerFailure("worker fixture bytes differ from the controller")
+        # The runtime's activity record around the cell: what this device
+        # did to produce the cell's hashes. It rides beside the value and no
+        # hash, state or verdict reads it; an install without the record
+        # (begin answers False) runs the cell exactly as before.
+        counting = check_both.activity_begin(ml)
+        try:
             value = verifier.run_cell(harness, ml, request["lane"], fixture, data, held,
                                       request["repeats"], extra_parts=request["extra_parts"])
-        elif action == "self-test":
-            value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
-        elif action == "models":
-            value = verifier.run_models(harness, ml, reference.load_table(request["table"]),
-                                        repeats=request["repeats"], host_only=request["host_only"])
-        elif action == "smoke":
-            fixture = request["fixture"]
-            value = verifier.run_smoke(harness, ml, [request["lane"]], fixture,
-                                       harness.fixture(fixture), harness.heldout(fixture))
-        else:
-            raise WorkerFailure(f"unknown worker action {action!r}")
+        finally:
+            activity = check_both.activity_end(ml) if counting else None
+    elif action == "self-test":
+        value = verifier.self_test(harness, ml, reference.load_table(request["table"]))
+    elif action == "models":
+        value = verifier.run_models(harness, ml, reference.load_table(request["table"]),
+                                    repeats=request["repeats"], host_only=request["host_only"])
+    elif action == "smoke":
+        fixture = request["fixture"]
+        value = verifier.run_smoke(harness, ml, [request["lane"]], fixture,
+                                   harness.fixture(fixture), harness.heldout(fixture))
+    else:
+        raise WorkerFailure(f"unknown worker action {action!r}")
     from . import _verify
     bindings = [dict(module=b["module"], sha256=b["sha256"], size=b["size"],
                      file=b["file"], path_source=b["path_source"])
                 for b in _verify.binding_artifacts()]
     # The shared inventory includes actual loaded host aliases and raises on
     # unresolved native bytes; a completed worker cannot return empty evidence.
-    return dict(value=value, bindings=bindings)
+    result = dict(value=value, bindings=bindings)
+    if activity is not None:
+        result["activity"] = activity
+    return result
 
 
 def _redirect(path):

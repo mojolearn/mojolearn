@@ -28,7 +28,7 @@ Causal Y_diag skips the k windows that are structurally zero for its row
 tile (k0 >= i0 + 64), so a row tile r multiplies (r + 1) * 2 windows.
 """
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -167,7 +167,7 @@ def afn_m2_mma_kernel[
     var bt = stack_allocation[
         BN * BST, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
-    var acc = InlineArray[_M64, FN](fill=_M64(0))
+    var acc = Array[_M64, FN](fill=_M64(0))
 
     for k0 in range(0, k_total, KB):
         # ---- stage A^T: at[p][i] = A[i0 + i][k0 + p], flushed.

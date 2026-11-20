@@ -34,11 +34,10 @@ THE SWITCHES (default OFF; docs/apple-fast/ab/bpe.md):
     MOJOLEARN_BPE_ALL            every switch above
 """
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -47,8 +46,29 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.neural_context import process_ctx
 from tokenizer.impl.ranks import RankTable
 from tokenizer.train.bpe_train import PieceGroups
+from core.shared_slot import SharedSlot
 
-comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# TOMBSTONE: MOJOLEARN_BPE_ALL (unmeasured bundle, EXP:660 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_ALL.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_BPE_TRAIN_DEVICE (unmeasured opt-in arm, EXP:666 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_TRAIN_DEVICE.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_BPE_ENCODE_DEVICE (unmeasured opt-in arm, EXP:662 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_ENCODE_DEVICE.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_BPE_MERGE_BATCH (unmeasured opt-in arm, EXP:665 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_MERGE_BATCH.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_BPE_GROUP_FILTER (unmeasured opt-in arm, EXP:663 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_GROUP_FILTER.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# TOMBSTONE: MOJOLEARN_BPE_LIVEBUF (unmeasured opt-in arm, EXP:664 OPEN) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_BPE_LIVEBUF.patch
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
+# (Sweep 2026-11-15: BpeMerges and the always-refusing bpe_train_merges_device / bpe_encode_batch_device removed with
+# the dead device arms of tokenizer/fast/bpe_fast_impl.mojo; the BPE_* flags stay for bpe_fast_flags.)
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime _ALL = is_defined["MOJOLEARN_BPE_ALL"]()
 comptime BPE_LIVEBUF = _FAST_APPLE and (_ALL or is_defined["MOJOLEARN_BPE_LIVEBUF"]())
 comptime BPE_MERGE_BATCH = _FAST_APPLE and (_ALL or is_defined["MOJOLEARN_BPE_MERGE_BATCH"]())
@@ -172,7 +192,7 @@ def _bit_has(lo: UInt32, hi: UInt32, t: Int32) -> Bool:
 
 @always_inline
 def _match(
-    sa: InlineArray[Int32, BPE_K], sb: InlineArray[Int32, BPE_K], nsel: Int, x: Int32, y: Int32
+    sa: Array[Int32, BPE_K], sb: Array[Int32, BPE_K], nsel: Int, x: Int32, y: Int32
 ) -> Int:
     """Which selected pair `(x, y)` is, or -1. Selected pairs share no token, so at most one."""
     for j in range(BPE_K):
@@ -228,8 +248,8 @@ def bpe_topk_part_kernel(keys: I32P, vals: I32P, occ: I32P, st: I32P, pc: I32P, 
     comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
     var sc = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sk = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var lc = InlineArray[Int32, BPE_K](fill=Int32(0))
-    var lk = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+    var lc = Array[Int32, BPE_K](fill=Int32(0))
+    var lk = Array[Int32, BPE_K](fill=KEY_NONE)
     var live = min(Int(st[S_NOCC]), Int(occ_cap))
     if st[S_DONE] != Int32(0):
         live = 0
@@ -254,8 +274,8 @@ def bpe_topk_part_kernel(keys: I32P, vals: I32P, occ: I32P, st: I32P, pc: I32P, 
     var half = BPE_RT // 2
     while half > 0:
         if tid < half:
-            var oc = InlineArray[Int32, BPE_K](fill=Int32(0))
-            var ok = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+            var oc = Array[Int32, BPE_K](fill=Int32(0))
+            var ok = Array[Int32, BPE_K](fill=KEY_NONE)
             var x = 0
             var y = 0
             var da = tid * BPE_K
@@ -294,8 +314,8 @@ def bpe_select_kernel(pc: I32P, pk: I32P, st: I32P, sel: I32P, mrg: I32P, vocab:
     var half = BPE_RB // 2
     while half > 0:
         if tid < half:
-            var oc = InlineArray[Int32, BPE_K](fill=Int32(0))
-            var ok = InlineArray[Int32, BPE_K](fill=KEY_NONE)
+            var oc = Array[Int32, BPE_K](fill=Int32(0))
+            var ok = Array[Int32, BPE_K](fill=KEY_NONE)
             var x = 0
             var y = 0
             var da = tid * BPE_K
@@ -383,8 +403,8 @@ def bpe_apply_kernel(
     var glen_g = Int(glen[g])
     if glen_g < 2:
         return
-    var sa = InlineArray[Int32, BPE_K](fill=Int32(-1))
-    var sb = InlineArray[Int32, BPE_K](fill=Int32(-1))
+    var sa = Array[Int32, BPE_K](fill=Int32(-1))
+    var sb = Array[Int32, BPE_K](fill=Int32(-1))
     for j in range(BPE_K):
         if j < nsel:
             sa[j] = sel[2 * j]
@@ -636,7 +656,7 @@ def bpe_encode_counts_kernel(dp: I32P, pfx: I32P, counts: I64P, ndocs: Int64):
 def bpe_ctx() raises -> DeviceContext:
     """ONE process-lifetime DeviceContext for this binding (buffers must not outlive their context,
     and a context per call exhausts Metal's queues)."""
-    return process_ctx["MojoTokenizerFastContext"]()
+    return process_ctx["MojolearnTokenizerFastContextV3"]()
 
 
 @fieldwise_init
@@ -774,8 +794,8 @@ struct BpeMem(Defaultable, Movable):
             )
 
 
-comptime BPE_TRAIN_POOL = _Global[StorageType=BpeMem, name="MojoTokenizerFastTrainPool", init_fn=BpeMem.__init__]
-comptime BPE_ENCODE_POOL = _Global[StorageType=BpeMem, name="MojoTokenizerFastEncodePool", init_fn=BpeMem.__init__]
+comptime BPE_TRAIN_POOL = SharedSlot[BpeMem, "MojolearnTokenizerFastTrainPoolV1"]
+comptime BPE_ENCODE_POOL = SharedSlot[BpeMem, "MojolearnTokenizerFastEncodePoolV1"]
 
 
 def _fill(ctx: DeviceContext, p: I32P, words: Int, v: Int32) raises:

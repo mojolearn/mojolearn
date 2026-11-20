@@ -4,7 +4,7 @@ SVR, rbf and linear (lane/inference-svm, 2026-09-15).
 
 The refusal and format tests need no binding. The round-trip tests fit
 through the bindings this process routes (a GPU set, or the reference host
-set under `reference_training()` on a CPU-only install), save, load through
+set on a CPU-only install), save, load through
 `mojolearn.host_model` and require the host answer to be the same bytes as
 the fitted model's; they skip when the svm host binding is not built.
 Cross-vendor identity is tools/classical_host_gate.py's and
@@ -18,7 +18,6 @@ import pytest
 
 import mojolearn
 from mojolearn import _backend, _classical_host, _serialize
-from mojolearn._cpu_reference import reference_training
 
 
 def _rows(n=256, d=6, seed=5):
@@ -61,8 +60,7 @@ def test_host_model_reproduces_the_fitted_model(name, make, target, probe):
     if not _host_built():
         pytest.skip("mojolearn/host/_mojolearn_svm_host.so is not built")
     X, yc, yr = _rows()
-    with reference_training():
-        est = make().fit(X[:192], yc[:192] if target == "c" else yr[:192])
+    est = make().fit(X[:192], yc[:192] if target == "c" else yr[:192])
     Xh = X[192:]
     want = [np.asarray(a).tobytes() for a in probe(est, Xh)]
     with tempfile.TemporaryDirectory() as tmp:

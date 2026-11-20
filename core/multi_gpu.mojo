@@ -4,11 +4,10 @@
 These operations perform no floating-point arithmetic. Device contexts own
 their allocations; callers retain both contexts through every copy and join.
 """
-from core.device_plan import device_plan_device
+from core.device_plan import DevicePlan, device_plan_device, device_plan_gbdt_one_device
 from max.gpu.host import DeviceContext, DeviceBuffer
-from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
-from std.sys.info import has_amd_gpu_accelerator
+from max.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_AMD_GPU
 
 
 def gbdt_shard_device_id(rank: Int) raises -> Int:
@@ -26,14 +25,23 @@ def gbdt_shard_device_id(rank: Int) raises -> Int:
     measurement: peer copies between two physical devices, and their
     staging on AMD, are not reached. No build, workflow or gate sets it.
     """
-    try:
-        if String(getenv("MOJOLEARN_GBDT_SHARD_ONE_DEVICE")) == "1":
-            return device_plan_device(0)
-    except:
-        pass
+    # Read once per process (core/device_plan.mojo
+    # `device_plan_gbdt_one_device`); before: a getenv per shard.
+    if device_plan_gbdt_one_device():
+        return device_plan_device(0)
     # The calling thread's device plan maps the rank to its physical device
     # (core/device_plan.mojo); without a plan the rank is the device.
     return device_plan_device(rank)
+
+
+def gbdt_shard_device_id(plan: DevicePlan, rank: Int) raises -> Int:
+    """`gbdt_shard_device_id(rank)` against a `DevicePlan` value read at the
+    family entry instead of the thread plan: `plan.device(0)` for every rank
+    under `MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1` (the diagnostic above), else
+    `plan.device(rank)`. Same answers as the thread-plan form."""
+    if device_plan_gbdt_one_device():
+        return plan.device(0)
+    return plan.device(rank)
 
 
 def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceContext,
@@ -54,7 +62,7 @@ def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceConte
     """
     if len(source) < cells or len(target) < cells:
         raise Error("transfer_bytes: a buffer is shorter than the copy")
-    comptime if has_amd_gpu_accelerator():
+    comptime if TARGET_HAS_AMD_GPU:
         if cross_device:
             var host = source_ctx.enqueue_create_host_buffer[dt](cells)
             # A whole buffer is copied as itself, so a caller's sub-buffer is

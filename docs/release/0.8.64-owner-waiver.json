@@ -1,0 +1,24 @@
+{
+  "prefixes": [
+    "identity-apple",
+    "identity-cpu",
+    "identity-nvidia",
+    "identity-amd",
+    "compile-cpu",
+    "compile-nvidia",
+    "compile-amd",
+    "runtime-cpu",
+    "runtime-apple",
+    "runtime-nvidia",
+    "runtime-amd",
+    "runtime-source",
+    "coverage-source",
+    "adapters-apple",
+    "adapters-nvidia",
+    "adapters-amd",
+    "published-nvidia",
+    "published-amd"
+  ],
+  "approved_by": "Andrew Hendel",
+  "reason": "0.8.64 one-time ledger bypass (Andrew, 2026-11-02: 'we could maybe do a bypass one time for the tooling change ... i want a long term solution not a bandaid'). The work IS verified: NVIDIA gate PASS (nvc-release-gate-20261102T061047Z-864f9c, adopted by candidate wheel sha256), AMD gate PASS (rel-0.8.64-gate-amd-20261102T183246Z, 24/24 autograd, verified runner overlay), Apple gate + macOS smoke PASS, rehearsal PASS, Linux legs reused byte-for-byte. The requirements ledger cannot read that evidence yet: release.py retained_producers wires only macos-release-build and apple-gate-adapters; gate-adapters, linux-release-leg, coverage-source and installed-runtime admissions are not wired, and the 2026-11-02-0836 identity table admission fails on an uncommitted provenance sidecar. 0.8.63 published past the same ledger with 10,539 waived rows. OWED (lane, not a waiver next time): wire every retained producer into retained_producers, commit the identity provenance sidecars, cache ledger admission by evidence sha256 so a step never re-admits unchanged evidence. Post-publication rows published-nvidia/amd (tools/release_published_install.py on a rented box) waived under the same one-time bypass: the boxes were released after the green gates, and Andrew (2026-11-02) refused a post-publish re-verification of the same bytes; finish-line resolved and byte-checked the Linux wheels from the index on this Mac; published-apple is produced locally."
+}

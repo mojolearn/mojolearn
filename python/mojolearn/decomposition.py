@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge, _serialize
-from ._array import Array
-from ._mode import NumericModeMixin
+from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge
+from ._mode import NumericModeMixin as _NumericModeMixin
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes the fitted arrays as fitted, raw bytes and exact dtypes,
@@ -14,38 +13,10 @@ _PCA_FORMAT = "mojolearn-pca-1"
 _TSVD_FORMAT = "mojolearn-tsvd-1"
 
 # The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
+# `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-
-def _saved_mode(est):
-    """The tier `transform` would run on now, persisted as GradientBoosting
-    persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
-    if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "identical"
-    ):
-        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-    return mode.strip().lower()
-
-
-def _restore_mode(obj, arrays):
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    obj.numeric_mode = mode
-
-
-def _check_saved_by(arrays, path, cls):
-    """The file's `estimator` must be `cls` or a base of it, so the host
-    subclasses of `_classical_host.py` load the plain class's file."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
 
 
 # Maintainer notes (moved from the docstring).
@@ -83,7 +54,7 @@ def _check_saved_by(arrays, path, cls):
 # division (cuML's threshold), keeping the sample-count scale. The whitened
 # pair is an additive binding export: an older extension needs a rebuild.
 # Options measured row by row by tools/e2u_matrix_fit.py.
-class PCA(NumericModeMixin):
+class PCA(_NumericModeMixin):
     """Principal component analysis.
 
     Centers the data and projects it onto its leading principal axes. Input
@@ -193,7 +164,7 @@ class PCA(NumericModeMixin):
     _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
 
     #: Every public operation below is one call into the compiled PCA owner
-    #: (bindings/pca_native.mojo), connected once at import. It validates the
+    #: (bindings/pca_native_door.mojo), connected once at import. It validates the
     #: arguments and inputs, chooses the solver and numeric-mode binding, runs
     #: the one compiled fit (projecting inside it for fit_transform) and
     #: stores the fitted attributes; NumericModeMixin leaves these unwrapped.
@@ -356,7 +327,7 @@ class PCA(NumericModeMixin):
 # explained_variance_ and _ratio_ are scikit-learn's (and tsvd.cuh's)
 # transformed-data definition, computed in this class's binding
 # (`tsvd_explained`). Options measured row by row by tools/e2u_matrix_fit.py.
-class TruncatedSVD(NumericModeMixin):
+class TruncatedSVD(_NumericModeMixin):
     """Dimensionality reduction by truncated singular value decomposition.
 
     Unlike :class:`PCA`, the data is not centered, so this works on raw term
@@ -421,7 +392,7 @@ class TruncatedSVD(NumericModeMixin):
     _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
     #: Every public operation is one call into the native owner
-    #: (bindings/tsvd_native.mojo tsvd_c), which runs the whole lifecycle
+    #: (bindings/tsvd_native_door.mojo tsvd_c), which runs the whole lifecycle
     #: (fitted check, X and width checks, fit bookkeeping, NumPy results);
     #: the `_mode` class-creation wrappers leave this class unwrapped.
     _mojolearn_native_public = True
@@ -594,10 +565,10 @@ __getattr__ = _lazy_exports("decomposition")
 
 # The compiled PCA owner, connected once at import: every public PCA
 # operation (fit, fit_transform, transform, inverse_transform) is one call
-# into it (bindings/pca_native.mojo).
+# into it (bindings/pca_native_door.mojo).
 _PCA_ENTRY, _PCA_CONTEXT = _native_pca_bridge.connect_public(PCA)
 
 # The compiled TruncatedSVD owner, connected once at import: fit,
 # fit_transform, transform and inverse_transform are one call each into it
-# (bindings/tsvd_native.mojo).
+# (bindings/tsvd_native_door.mojo).
 _TSVD_ENTRY, _TSVD_CONTEXT = _native_tsvd_bridge.connect_public(TruncatedSVD)

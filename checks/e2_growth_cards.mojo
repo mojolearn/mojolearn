@@ -112,6 +112,7 @@ from checks.multiclass_train_check import (
     learnable_labels as ova_learnable_labels,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.native_tests.kit import upload_host_into
 
 
 comptime TRACE_ENV = "MOJOLEARN_IDENTITY_TRACE"
@@ -281,7 +282,7 @@ def card_feature_parallel(ctx: DeviceContext, path: String) raises -> Int:
             col.append(b)
             hb.unsafe_ptr().unsafe_store(r, UInt8(b))
         host_bins.append(col^)
-        ctx.enqueue_copy(dst_buf=bins8, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins8, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * FP_N_ROWS),
             cf.mask,
@@ -296,7 +297,6 @@ def card_feature_parallel(ctx: DeviceContext, path: String) raises -> Int:
     # `[[mojo-buffer-freed-at-last-use]]`: both are live across the
     # launches above; the keep-alive goes after the last synchronize.
     _ = bins8^
-    _ = hb^
 
     var hs = ctx.enqueue_create_host_buffer[DType.float32](2 * FP_N_ROWS)
     for r in range(FP_N_ROWS):
@@ -312,7 +312,7 @@ def card_feature_parallel(ctx: DeviceContext, path: String) raises -> Int:
         hs.unsafe_ptr().unsafe_store(FP_N_ROWS + r, Float32(g))
     var w = ctx.enqueue_create_buffer[DType.float32](FP_N_ROWS)
     var gbuf = ctx.enqueue_create_buffer[DType.float32](FP_N_ROWS)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, w, hs)
     ctx.enqueue_copy(
         dst_buf=gbuf, src_ptr=hs.unsafe_ptr().unsafe_offset(FP_N_ROWS)
     )

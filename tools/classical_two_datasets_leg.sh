@@ -24,9 +24,9 @@
 #   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/classical-two-datasets-$(date -u +%Y-%m-%d_%H%M%S)-amd-leg1 \
 #   bash tools/do_extra_leg.sh amd --minutes 60 --skip-gates
 #
-# AMD (Hot Aisle MI300X, DEVIATION 2572): tools/classical_hotaisle_leg.sh is the
-# tools/hotaisle_leg.sh body; it calls this file once per phase group (setup,
-# smoke, prep, leg 1, leg 2) under one deadline. Evidence:
+# AMD (Hot Aisle MI300X, DEVIATION 2572): the Hot Aisle wrapper body that called
+# this file once per phase group was removed 2026-11-18 with the Hot Aisle
+# runner (lane fx-dead-small; recoverable at 7c1aad6561). Evidence:
 # bench/results/classical_hotaisle_2026-09-11/.
 #
 # The DigitalOcean runner passes no environment to a body, so the lane list is this file's

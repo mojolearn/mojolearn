@@ -1,0 +1,45 @@
+diff --git a/core/ctx_key.mojo b/core/ctx_key.mojo
+index fb9a18bd36..e065390e98 100644
+--- a/core/ctx_key.mojo
++++ b/core/ctx_key.mojo
+@@ -5,19 +5,21 @@ buffer created on one `DeviceContext` to a launch on another: the two-GPU
+ drivers (`DeviceContext(device_id=rank)`) run two contexts in one process.
+ `ctx_cache_key(ctx)` is the key such a cache indexes its entries by: the
+ context itself (its runtime handle's address; lane/review-fixes, it was
+-the device id).
++the device id). Default ON; `-D MOJOLEARN_IDN_CACHE_CTX_KEY_OFF` (or
++`-D MOJOLEARN_IDN_ALL_OFF`) returns 0 for every context, the one-context
++form the first-pass caches had.
+ 
+ `ctx_cache_slot(ids, ctx)` finds the key in a cache's `ids` list and returns
+ its index, or -1 when the context has no entry yet (the cache then appends
+ its buffers and the key, in that order, so a raise in an allocation leaves
+ no key without buffers).
+ """
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceContext
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_CACHE_CTX_KEY_OFF (old path: key 0 for every context, the one-context first-pass caches; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at afc5c11e5b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (its term here, the same key-0 old path) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at afc5c11e5b.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-03-base.patch.
++comptime IDN_CACHE_CTX_KEY = not (
++    is_defined["MOJOLEARN_IDN_CACHE_CTX_KEY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def ctx_cache_key(ctx: DeviceContext) raises -> Int:
+@@ -30,8 +32,11 @@ def ctx_cache_key(ctx: DeviceContext) raises -> Int:
+     reused while a cache holds an entry under it."""
+     # TOMBSTONE: MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID (opt-in device-id key instead of the context handle; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b789195239.
+     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID.patch; record in docs/TOMBSTONES.md.
+-    # _handle is Optional[pointer] in Mojo 1.0 (box-run-2 compile fix).
+-    return Int(ctx._handle.value())
++    comptime if IDN_CACHE_CTX_KEY:
++        # _handle is Optional[pointer] in Mojo 1.0 (box-run-2 compile fix).
++        return Int(ctx._handle.value())
++    else:
++        return 0
+ 
+ 
+ def ctx_cache_slot(ids: List[Int], ctx: DeviceContext) raises -> Int:

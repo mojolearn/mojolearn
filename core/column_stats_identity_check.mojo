@@ -43,7 +43,7 @@ second shape for the same property would be a second thing to get wrong.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import bitcast
 
@@ -62,9 +62,10 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: The fold check runs at EXACTLY one row per thread, so nothing is summed
 #: before the fold gets it and the fold's SHAPE is the only thing under
@@ -333,8 +334,8 @@ def check_column_stats_fold_shape() raises:
             hx.unsafe_ptr().unsafe_store(
                 r * c + j, _spread_full(r, j) * _magnitude(r + 3 * j)
             )
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
     ctx.synchronize()
 
     ctx.enqueue_function[column_mean_kernel](
@@ -355,8 +356,8 @@ def check_column_stats_fold_shape() raises:
         block_dim=(STATS_TPB, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=mu)
-    ctx.enqueue_copy(dst_ptr=hxty.unsafe_ptr(), src_buf=xty)
+    download_host_into[DType.float32](ctx, mu, hmu)
+    download_host_into[DType.float32](ctx, xty, hxty)
     ctx.synchronize()
     # KEEP A USE PAST THE SYNC. A `DeviceBuffer` is freed at its LAST use
     # (`[[mojo-buffer-freed-at-last-use]]`), and `.unsafe_ptr()` above is
@@ -618,8 +619,8 @@ def check_xty_contraction_pin() raises:
         hy.unsafe_ptr().unsafe_store(r, _spread_half(r, 4242))
         for j in range(c):
             hx.unsafe_ptr().unsafe_store(r * c + j, _spread_half(r, j))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
     ctx.synchronize()
 
     ctx.enqueue_function[xty_kernel](
@@ -642,9 +643,9 @@ def check_xty_contraction_pin() raises:
         block_dim=(STATS_TPB, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hxty.unsafe_ptr(), src_buf=xty)
-    ctx.enqueue_copy(dst_ptr=hfma.unsafe_ptr(), src_buf=ofma)
-    ctx.enqueue_copy(dst_ptr=hnaive.unsafe_ptr(), src_buf=onaive)
+    download_host_into[DType.float32](ctx, xty, hxty)
+    download_host_into[DType.float32](ctx, ofma, hfma)
+    download_host_into[DType.float32](ctx, onaive, hnaive)
     ctx.synchronize()
     _ = x^
     _ = y^
@@ -791,7 +792,7 @@ def check_transpose_grid_stride() raises:
     for r in range(n_rows):
         for c in range(n_cols):
             hsrc.unsafe_ptr().unsafe_store(r * n_cols + c, _spread_full(r, c))
-    ctx.enqueue_copy(dst_buf=src, src_ptr=hsrc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, src, hsrc)
     ctx.synchronize()
 
     var heights = List[Int]()
@@ -813,7 +814,7 @@ def check_transpose_grid_stride() raises:
         # happens to match an all-zero expectation.
         for i in range(n_rows * n_cols):
             hdst.unsafe_ptr().unsafe_store(i, Float32(-7777.0))
-        ctx.enqueue_copy(dst_buf=dst, src_ptr=hdst.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, dst, hdst)
         ctx.synchronize()
 
         ctx.enqueue_function[transpose_kernel](
@@ -825,7 +826,7 @@ def check_transpose_grid_stride() raises:
             block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
         )
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hdst.unsafe_ptr(), src_buf=dst)
+        download_host_into[DType.float32](ctx, dst, hdst)
         ctx.synchronize()
 
         var bad = 0
@@ -870,9 +871,7 @@ def check_transpose_grid_stride() raises:
                 " cells bit-exact",
             )
         _ = dst^
-        _ = hdst^
     _ = src^
-    _ = hsrc^
 
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     # Mojo frees at LAST USE, so without this the buffer releases above run

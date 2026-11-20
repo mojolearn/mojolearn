@@ -6,7 +6,7 @@ from gemm.contract import contract_leaf_size
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
@@ -18,8 +18,7 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
-from std.sys.compile import is_defined
-from std.ffi import _Global
+from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -30,7 +29,10 @@ from gemm.afn_apple_fast import (
     afn_strides,
     afn_zero_kernel,
 )
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from gemm.contract import OP_TN
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): PCA_FAST_GRAM_MMA, the FAST +
@@ -38,7 +40,8 @@ from gemm.contract import OP_TN
 #: gl2p-pca-grammma-istella-r; M2 quality-only check gl2p-pca-quality on a
 #: seeded 200,000 x 220 matrix: explained_variance_ max relative difference
 #: 3.4e-06, largest component subspace angle 1.8e-06 rad).
-#: -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF restores the IDENTICAL Gram (the A/B arm).
+#: (Its -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF rollback, the A/B arm, was deleted
+#: 2026-11-15; docs/TOMBSTONES.md.)
 #: Past the split-K Gram's capacity (d > 128: Istella's 220 features) the
 #: FAST covariance ran `gemm_tn_identical_v1`, the IDENTICAL profile's
 #: one-chain-per-cell Gram, plus a second centering pass to restore the
@@ -47,7 +50,9 @@ from gemm.contract import OP_TN
 #: row ranges summed with f32 atomics into a zeroed output), then the
 #: 1 / (n - 1) scale. The device copy is the fit's own (`pca_fit_host`
 #: uploads it), so the restore pass is skipped. FAST + Apple only.
-comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FAST_GRAM_MMA_OFF"]()
+# TOMBSTONE: MOJOLEARN_PCA_FAST_GRAM_MMA_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at d6f96dfe59.
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_GRAM_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE
 #: blocks the split Gram aims for (tiles x splits), about 8 per M3 Ultra core
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
@@ -78,7 +83,6 @@ from core.gram_splitk import (
     gram_splitk_scratch_covers,
 )
 from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
-from gemm.tn_centered import gemm_tn_centered_identical
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
@@ -95,109 +99,9 @@ from decomposition.checks.jacobi_eigh_device import (
 )
 
 
-# Default-off FAST experiment: compensate only centered covariance products.
-# One writer per covariance cell; no atomic/split-policy race, host arithmetic,
-# or input shift/restore pass. Performance admission belongs to full PCA fit.
-# MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
-# Scored FAST quality: 12/12 metrics within the existing bands; PASS.
-# F11/compensated-pca M3 2026-10-06: 12 retained public-caller timings;
-# B/A range 0.8987..2.1360, mixed/regressing; FAST candidate stays OFF.
-# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
-# Scored quality metrics and per-arm build/hash provenance retained at
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/compensated-pca.
-# No combined-switch or full-board default claim from these component cases.
-# Full Istella PCA operation, M3 FAST, source ec3c8c850 (2026-10-06):
-# F11/compensated-pca A=716.473 ms, B=1955.869 ms, B/A=2.72986.
-# All 2,043,304 training rows and 500,000 query rows; preparation, fit,
-# transform, inverse and consumed outputs included. One excluded warmup and
-# one scored sample per arm; reconstruction gate passed, model/output hashes
-# retained. Full taxi also measured all 5,250,086 training/500,000 query rows:
-# A=107.864 ms, B=1777.204 ms, B/A=16.47638; reconstruction gate passed.
-# These full-workload regressions keep the switch OFF. Downstream LLE and
-# interactions remain pending; no campaign-wide claim.
-# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
-# pca-full-summary.json (full receipts linked by the measurement board).
-comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
-
-# AFCL-L07: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
-# Requires the compensated covariance route in BOTH arms. Each partial
-# centers before multiplying and uses compensation; the finish compensates
-# the partial fold too. 2048-row nominal chunks expose row parallelism.
-# Partial scratch is bounded by 16 MiB or one covariance matrix, whichever
-# is larger; fewer chunks handle wider matrices without a shape-specific gate.
-comptime AFCL_L07 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFCL_L07"]()
-comptime AFCL_PCA_PART_WORDS = 4 * 1024 * 1024
-
-
-def pca_compensated_cov_part_kernel(
-    x: F32Ptr, mu: F32Ptr, part: F32Ptr, rows_in: Int32,
-    cols_in: Int32, chunk_rows_in: Int32,
-):
-    var rows = Int(rows_in)
-    var cols = Int(cols_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cols * cols:
-        return
-    var ch = Int(block_idx.y)
-    var lo = ch * Int(chunk_rows_in)
-    var hi = min(rows, lo + Int(chunk_rows_in))
-    var i = cell // cols
-    var j = cell % cols
-    var mi = mu[i]
-    var mj = mu[j]
-    var total = Float32(0)
-    var correction = Float32(0)
-    for r in range(lo, hi):
-        var product = (x[r * cols + i] - mi) * (x[r * cols + j] - mj)
-        var adjusted = product - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    part[ch * cols * cols + cell] = total
-
-
-def pca_compensated_cov_finish_kernel(
-    part: F32Ptr, cov: F32Ptr, rows_in: Int32, cells_in: Int32, chunks_in: Int32,
-):
-    var cells = Int(cells_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cells:
-        return
-    var total = Float32(0)
-    var correction = Float32(0)
-    for ch in range(Int(chunks_in)):
-        var adjusted = part[ch * cells + cell] - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    cov[cell] = total / Float32(Int(rows_in) - 1)
-
-struct PcaCovAudit(Defaultable, Movable):
-    var calls: Int
-    def __init__(out self):
-        self.calls = 0
-comptime PCA_COV_STATE = _Global[StorageType=PcaCovAudit, name="PcaCompensatedCovAudit", init_fn=PcaCovAudit.__init__]
-
-def pca_compensated_cov_count() raises -> Int:
-    return PCA_COV_STATE.get_or_create_ptr()[].calls
-
-def pca_compensated_cov_kernel(x: F32Ptr, mu: F32Ptr, cov: F32Ptr, rows_in: Int32, cols_in: Int32):
-    var rows = Int(rows_in)
-    var cols = Int(cols_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cols * cols:
-        return
-    var i = cell // cols
-    var j = cell % cols
-    var total = Float32(0)
-    var correction = Float32(0)
-    for r in range(rows):
-        var product = (x[r * cols + i] - mu[i]) * (x[r * cols + j] - mu[j])
-        var adjusted = product - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    cov[cell] = total / Float32(rows - 1)
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code recoverable
+# at f59d913b0b (the compensated covariance kernels, the pca_compensated_cov_count reach counter and the AFCL-L07 chunked
+# form MOJOLEARN_AFCL_L07 that needed it in both arms). Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 
 
 @fieldwise_init
@@ -233,38 +137,6 @@ def compute_covariance(
     var cells = n_rows * n_cols
     # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
-    comptime if PCA_COMPENSATED_COV:
-        PCA_COV_STATE.get_or_create_ptr()[].calls += 1
-        comptime if AFCL_L07:
-            var cov_cells = n_cols * n_cols
-            var max_chunks = max(1, AFCL_PCA_PART_WORDS // max(cov_cells, 1))
-            var chunks = min(max(1, (n_rows + 2047) // 2048), max_chunks)
-            var chunk_rows = (n_rows + chunks - 1) // chunks
-            var part = ctx.enqueue_create_buffer[DType.float32](chunks * cov_cells)
-            ctx.enqueue_function[pca_compensated_cov_part_kernel](
-                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(n_rows), Int32(n_cols), Int32(chunk_rows),
-                grid_dim=((cov_cells + 255) // 256, chunks, 1), block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_function[pca_compensated_cov_finish_kernel](
-                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(n_rows), Int32(cov_cells), Int32(chunks),
-                grid_dim=((cov_cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-            )
-            ctx.synchronize()
-            _ = part^
-            return
-        ctx.enqueue_function[pca_compensated_cov_kernel](
-            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n_rows), Int32(n_cols),
-            grid_dim=((n_cols * n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-        )
-        ctx.synchronize()
-        return
     comptime if PCA_FAST_GRAM_MMA:
         if not gram_splitk_applies(n_cols, n_cols, n_rows):
             ctx.enqueue_function[shift_columns_kernel](
@@ -289,19 +161,10 @@ def compute_covariance(
             var per = (n_rows + splits - 1) // splits
             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
             splits = (n_rows + per - 1) // per
-            # Opt-in scoped G1 fit remains HOLD (2026-10-04), source201fe736,
-            # scoped-pca-fit-istella-q-v1: singular/noise oracle errors worsen
-            # under zero allowance. Report serialization incomplete; no PASS
-            # or timing admission. Existing accepted AFN default is fallback.
-            # PCA transform/inverse evidence uses another route/contract;
-            # see docs/apple-fast/GEMM_INLINE_OUTCOMES.md before any retry.
-            if not try_scoped_gemm[True, 2](
-                ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
-            ):
-                afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                    ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
-                    n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
-                )
+            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+            )
             ctx.enqueue_function[scale_in_place_kernel](
                 cov.unsafe_ptr(),
                 Int32(n_cols * n_cols),
@@ -322,27 +185,25 @@ def compute_covariance(
             ctx.synchronize()
             return
     var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
-    var centered_v1 = False
     if fused:
         gram_centered_splitk_into(
             ctx, cov, x, mu, x_alias, n_cols, n_rows
         )
     else:
-        comptime if PCA_GRAM_TN_CENTERED:
-            # P3 (MOJOLEARN_IDN_GEMM_TN_CENTERED): the v1 split-plan Gram
-            # centers at its tile load, X read-only (gemm/tn_centered.mojo);
-            # False when the shipped dispatch would not run a split plan
-            centered_v1 = gemm_tn_centered_identical(ctx, cov, x, mu, x_alias2, n_cols, n_rows)
-        if not centered_v1:
-            ctx.enqueue_function[shift_columns_kernel](
-                x.unsafe_ptr(),
-                mu.unsafe_ptr(),
-                Int32(n_rows),
-                Int32(n_cols),
-                Float32(-1.0),
-                grid_dim=((cells + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_TN_CENTERED (unmeasured opt-in arm P3, grid fg-pca hold) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 4b13787b83.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch; record in docs/TOMBSTONES.md.
+        ctx.enqueue_function[shift_columns_kernel](
+            x.unsafe_ptr(),
+            mu.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Float32(-1.0),
+            grid_dim=((cells + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+        if not decomp_gram_units_into(ctx, cov, x, n_cols, n_rows):
             gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
     ctx.enqueue_function[scale_in_place_kernel](
         cov.unsafe_ptr(),
@@ -351,7 +212,7 @@ def compute_covariance(
         grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    if restore_input and not fused and not centered_v1:
+    if restore_input and not fused:
         ctx.enqueue_function[shift_columns_kernel](
             x.unsafe_ptr(),
             mu.unsafe_ptr(),
@@ -383,27 +244,12 @@ def pca_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
         raise Error("n_components cannot exceed n_cols")
 
 
-#: P3, lane fg-pca (2026-10-09), DEFAULT OFF (it replaces the Gram kernel
-#: of the wide route): `-D MOJOLEARN_IDN_GEMM_TN_CENTERED`. Past the split-K
-#: Gram's width the IDENTICAL covariance centered X in place (n*d read +
-#: n*d write), ran the v1 OP_TN Gram on the copy, then restored it (another
-#: read + write, gone with P2). Here the v1 SPLIT plan's arithmetic runs on
-#: operands centered at the tile load (gemm/tn_centered.mojo
-#: `gemm_tn_centered_identical`): X is read for the mean and for the Gram and
-#: never written. Cost: -2 n*d words of traffic per fit (-4 without P2) at
-#: any width past the split-K Gram. Bits: none (the staged word is
-#: `shift_columns_kernel`'s, the per-cell chain, leaf partition and fold are
-#: the split plan's); any shape the shipped dispatch serves with another plan
-#: keeps the incumbent. The host column (`centered_gram_v1_cell`) already
-#: computes the centered words: no host change.
-comptime PCA_GRAM_TN_CENTERED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_GEMM_TN_CENTERED"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_GEMM_TN_CENTERED (unmeasured opt-in arm P3, grid fg-pca hold) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 4b13787b83.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_TN_CENTERED.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: gemm/tn_centered.mojo, its last importer gone, deleted; restore it from 7c6df8f9f7 with the patch.)
 
 
-#: P2, lane fg-pca (2026-10-09), IDENTICAL default; rollback
-#: `-D MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF`. `pca_fit_host` uploads X into a
+#: P2, lane fg-pca (2026-10-09), IDENTICAL default. `pca_fit_host` uploads X into a
 #: device buffer that is the fit's own and nothing reads after the Gram, so
 #: (a) the restore pass (`shift_columns_kernel` +mu: one n*d read and one
 #: n*d write, 2 x 1.8 GB at 2M x 220) is dead and is skipped, and (b) the two
@@ -418,10 +264,9 @@ comptime PCA_GRAM_TN_CENTERED = (
 #: Bits: none (the words the Gram and the eigensolver read are unchanged;
 #: the restored copy was never read). IDENTICAL only: the FAST NVIDIA/AMD
 #: route (`gemm_tn_via_transpose`) reads both alias buffers at full size.
-comptime PCA_LEAN_SCRATCH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF (unmeasured old path, EXP:1689 owed) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at e1c7b2b99a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PCA_LEAN_SCRATCH_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PCA_LEAN_SCRATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def pca_cov_scratch_floats(n_rows: Int, n_cols: Int) raises -> Tuple[Int, Int]:
@@ -928,15 +773,18 @@ def pca_transform(
         grid_dim=((cells + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
-    gemm_nt(
-        ctx,
-        output,
-        x,
-        components,
-        n_rows,
-        n_components,
-        n_cols,
-    )
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_project_units_into(ctx, output, x, components, n_rows, n_components, n_cols):
+        gemm_nt(
+            ctx,
+            output,
+            x,
+            components,
+            n_rows,
+            n_components,
+            n_cols,
+        )
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),
         mu.unsafe_ptr(),

@@ -2,6 +2,14 @@
 # Language-model trainer backward on the tape (the byte LM's only backward
 # path). docs/plans/AUTOGRAD_API.md section (c) item 4.
 #
+# RESTORED 2026-11-13 (lane restore-byte-lm-hand-step) from 5b5490960d with the
+# byte LM's hand step, the default step again (AGENTS.md "A measured winner is
+# never deleted on reasoning"); lane x7 had deleted it on 2026-11-09. Body
+# unchanged. The program step's modules (training/byte_lm_program.mojo,
+# training/byte_lm_host_program.mojo) are gone:
+# TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_PROGRAM_STEP.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
+#
 # ---------------------------------------------------------------- launch inventory
 # The hand path, training/byte_lm.mojo::byte_gradient_device after the
 # forward (_byte_forward_loss), for one step of an n-layer byte LM
@@ -86,7 +94,6 @@ from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
-from core.device_scan import device_first_nonfinite
 from autograd.refuse_scan import DeferredNonfiniteScan
 from gemm.contract import OP_NT
 from gemm.experiments.neural_switches import ROLE_HEAD
@@ -96,7 +103,13 @@ from autograd.kernels.embedding import (
     identical_embedding_backward_prerefused_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
-from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+# TOMBSTONE: MOJOLEARN_NN50_OWNED_RUNS (owned embedding runs, opt-in arm, no A/B recorded) folded to False here
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 7251df6425.
+# Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.expdel2-24-neural.patch
+# (Sweep 2026-11-15: the unread emb_runs plumbing (LmRules.emb_runs, _RunsRef, byte_backward_autograd's emb_runs
+# parameter, ByteTrainer.embedding_runs) removed and autograd/kernels/embedding_runs.mojo deleted; its markers:)
+# TOMBSTONE: MOJOLEARN_NN50_OWNED_RUNS (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 4f9d2d5288.
+# Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch; record in docs/TOMBSTONES.md.
 from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
 from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
@@ -141,8 +154,9 @@ comptime LM_REMOVED_DEFINES_OK = _check_removed_defines()
 # (checked before any other error the backward raised, so a NaN still
 # reports as the refusal); the step's gradients are written by then.
 # Accepted steps: no kernel or order moves, the same bits.
-# -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps one wait per layer (arm A).
-comptime LM_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF (one wait per layer, arm A; old path, no A/B recorded) deleted
+# 2026-11-15 by lane/expdel2-24-neural with the LM_REFUSE_DEFER alias; code recoverable at 2266129859.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF.patch
 
 # Tags 64-71 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63).
 comptime LM_EMBEDDING = 64
@@ -154,7 +168,6 @@ comptime _F32Ref = MutPointer[DeviceBuffer[DType.float32], MutUntrackedOrigin]
 comptime _I32Ref = MutPointer[DeviceBuffer[DType.int32], MutUntrackedOrigin]
 comptime _BstRef = MutPointer[LlamaBackwardStages, MutUntrackedOrigin]
 comptime _FwdRef = MutPointer[LlamaDeviceStages, MutUntrackedOrigin]
-comptime _RunsRef = MutPointer[List[OwnedEmbeddingRuns], MutUntrackedOrigin]
 comptime _ScansRef = MutPointer[List[DeferredNonfiniteScan], MutUntrackedOrigin]
 comptime _LayersRef = MutPointer[List[Int], MutUntrackedOrigin]
 
@@ -229,7 +242,6 @@ struct LmRules(BackwardRules):
     var emb_counts: _I32Ref
     var emb_run_begin: _I32Ref
     var emb_perm: _I32Ref
-    var emb_runs: _RunsRef
     # idea J: the deferred refusal scans and their layers, in backward
     # order (the trainer owns both lists; null when LM_REFUSE_DEFER is off)
     var scans: _ScansRef
@@ -243,7 +255,7 @@ struct LmRules(BackwardRules):
         logits: _F32Ref, ce_dlogits: _F32Ref, ce_weights: _F32Ref, ce_expo: _F32Ref, ce_denom: _F32Ref,
         ce_logp: _F32Ref, ce_max: _F32Ref, head_ws: _F32Ref, head_bwd_ws: _F32Ref,
         targets: _I32Ref, ids: _I32Ref, emb_counts: _I32Ref, emb_run_begin: _I32Ref, emb_perm: _I32Ref,
-        emb_runs: _RunsRef, scans: _ScansRef, scan_layers: _LayersRef,
+        scans: _ScansRef, scan_layers: _LayersRef,
     ):
         self.ctx = ctx.copy()
         self.bsts = bsts^
@@ -280,7 +292,6 @@ struct LmRules(BackwardRules):
         self.emb_counts = emb_counts
         self.emb_run_begin = emb_run_begin
         self.emb_perm = emb_perm
-        self.emb_runs = emb_runs
         self.scans = scans
         self.scan_layers = scan_layers
 
@@ -336,17 +347,9 @@ struct LmRules(BackwardRules):
         # the deleted hand layer walk's first device read: the
         # incoming gradient is refused by bits before any of its stages.
         var d = _view(self.ctx, upstream, n)
-        comptime if LM_REFUSE_DEFER:
-            # the verdict is read at the step's closing wait (byte_backward_autograd)
-            self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
-            self.scan_layers[].append(layer)
-            return
-        var bad = device_first_nonfinite(self.ctx, d, n)
-        if bad >= 0:
-            raise Error(
-                String("llama backward: NaN or infinity in d_residual2 of block ") + String(layer)
-                + " at flat index " + String(bad) + " REFUSED"
-            )
+        # the verdict is read at the step's closing wait (byte_backward_autograd)
+        self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
+        self.scan_layers[].append(layer)
 
     def _embedding(self, upstream: FP, gradients: List[FP]) raises:
         # byte_gradient_device's embedding backward, verbatim: dw_emb from
@@ -356,27 +359,16 @@ struct LmRules(BackwardRules):
         _same(gradients[0], self.dw_emb[], "the embedding weight gradient")
         var m = self.b * self.l
         var emb = EmbConfig.llama(self.vocab, self.dm)
-        comptime if NN50_OWNED_RUNS:
-            ref runs = self.emb_runs[]
-            var reuse = False
-            if len(runs) == 1:
-                reuse = runs[0].matches(self.ctx, self.ids[], m, emb)
-            if not reuse:
-                if len(runs) == 1:
-                    _ = runs.pop()
-                runs.append(OwnedEmbeddingRuns(self.ctx, self.ids[], m, emb))
-            runs[0].backward_into(self.ctx, self.dw_emb[], bst0.d_x, emb)
+        if self.emb_prerefused:
+            identical_embedding_backward_prerefused_into(
+                self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
+                self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
+            )
         else:
-            if self.emb_prerefused:
-                identical_embedding_backward_prerefused_into(
-                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
-                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
-                )
-            else:
-                identical_embedding_backward_into(
-                    self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
-                    self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
-                )
+            identical_embedding_backward_into(
+                self.ctx, self.dw_emb[], bst0.d_x, self.ids[], self.emb_counts[],
+                self.emb_run_begin[], self.emb_perm[], m, emb, self.emb_plan,
+            )
 
     def _head(self, upstream: FP, gradients: List[FP]) raises:
         # forward logits [M, V] = h [M, DM] . lm_w [V, DM]^T (OP_NT): the hand
@@ -460,7 +452,6 @@ def byte_backward_autograd(
     mut emb_counts: DeviceBuffer[DType.int32],
     mut emb_run_begin: DeviceBuffer[DType.int32],
     mut emb_perm: DeviceBuffer[DType.int32],
-    mut emb_runs: List[OwnedEmbeddingRuns],
     b: Int,
     l: Int,
     vocab: Int,
@@ -541,37 +532,30 @@ def byte_backward_autograd(
         _f32(logits), _f32(ce_dlogits), _f32(ce_weights), _f32(ce_expo), _f32(ce_denom),
         _f32(ce_logp), _f32(ce_max), _f32(head_ws), _f32(head_bwd_ws),
         _i32(targets), _i32(ids), _i32(emb_counts), _i32(emb_run_begin), _i32(emb_perm),
-        _RunsRef(unsafe_from_address=Int(MutPointer(to=emb_runs))),
         _ScansRef(unsafe_from_address=Int(MutPointer(to=scans))),
         _LayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers))),
     )
-    comptime if LM_REFUSE_DEFER:
-        # idea J: a NaN reaching a later rule may make it raise first; the
-        # refusal is the error the hand path gives, so it is checked first.
-        var raised = False
-        var msg = String()
-        try:
-            tape.backward_with_rules(ex, loss, seed, rules)
-        except e:
-            raised = True
-            msg = String(e)
-        if not raised:
-            tape.release(ex)
-        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
-            scans[i].enqueue_readback(ctx)
-        # Drain the queue before the stages and views go back to the caller.
-        ex.sync()
-        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
-            var bad = scans[i].result_after_sync()
-            if bad >= 0:
-                raise Error(
-                    String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
-                    + " at flat index " + String(bad) + " REFUSED"
-                )
-        if raised:
-            raise Error(msg)
-    else:
+    # idea J: a NaN reaching a later rule may make it raise first; the
+    # refusal is the error the hand path gives, so it is checked first.
+    var raised = False
+    var msg = String()
+    try:
         tape.backward_with_rules(ex, loss, seed, rules)
+    except e:
+        raised = True
+        msg = String(e)
+    if not raised:
         tape.release(ex)
-        # Drain the queue before the stages and views go back to the caller.
-        ex.sync()
+    for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+        scans[i].enqueue_readback(ctx)
+    # Drain the queue before the stages and views go back to the caller.
+    ex.sync()
+    for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+        var bad = scans[i].result_after_sync()
+        if bad >= 0:
+            raise Error(
+                String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
+                + " at flat index " + String(bad) + " REFUSED"
+            )
+    if raised:
+        raise Error(msg)

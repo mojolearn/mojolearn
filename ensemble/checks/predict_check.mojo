@@ -743,7 +743,7 @@ def arm_label_maps() raises -> Int:
     return wrong
 
 
-def main() raises:
+def run_checks() raises:
     var failures: Int = 0
 
     # ---------------- Fixture A: balanced, 2 columns -------------------

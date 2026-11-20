@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Public density constructors retain independent state and native boundaries."""
-import ast
 import gc
 import inspect
 import json
@@ -8,7 +7,6 @@ import os
 import subprocess
 import sys
 import weakref
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -117,18 +115,6 @@ def test_density_constructor_public_signature_keeps_keyword_defaults(family):
     for name, parameter in signature.parameters.items():
         assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
         assert parameter.default == expected[name]
-
-
-@pytest.mark.parametrize("family", CLASSES)
-def test_density_constructor_public_method_is_one_native_call(family):
-    tree = ast.parse(Path(host.__file__).read_text())
-    node = next(item for item in tree.body if isinstance(item, ast.ClassDef) and item.name == CLASSES[family].__name__)
-    method = next(item for item in node.body if isinstance(item, ast.FunctionDef) and item.name == "__init__")
-    body = method.body[1:] if isinstance(method.body[0], ast.Expr) and isinstance(method.body[0].value, ast.Constant) else method.body
-    assert len(body) == 1 and isinstance(body[0], ast.Return)
-    call = body[0].value
-    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "_native_classical"
-    assert call.args[1].value == "host_density_initialize"
 
 
 @pytest.mark.parametrize("family", CLASSES)

@@ -749,7 +749,10 @@ def prep(args):
         if d not in DATASETS:
             raise SystemExit("unknown dataset %r; choose from %s" % (d, DATASETS))
     os.makedirs(args.data, exist_ok=True)
-    harness = _module("speed_gbdt_arm")
+    # --inputs verify-fixtures (the release measurement smoke only): every block from the identity verification's
+    # fixture `base` through the one helper (tools/smoke_inputs.py prep_sources), never from the dataset files
+    harness, knn_src = _module("smoke_inputs").prep_sources(getattr(args, "inputs", None) or "datasets",
+                                                            _module("speed_gbdt_arm"), None)
     blocks = sorted({BLOCK_OF[l] for l in lanes})
     # --max-rows: the SMOKE shape (a harness bug costs minutes, not a lease).
     # Every block is capped; a smoke block is never a timing row.
@@ -874,7 +877,7 @@ def prep(args):
                             "tol": SVC_TOL})
             _write_block(args.data, "svc-" + ds, {"X": Xf, "y": y, "Xq": Xq, "yq": yq}, rec)
         if "knn" in blocks:
-            knn_ds = _module("knn_datasets")
+            knn_ds = knn_src or _module("knn_datasets")
             blk = knn_ds.real_block(ds, n_index=knn_index, n_queries=knn_queries)
             index, bad_i = clean_sentinel(blk["index"])
             queries, bad_q = clean_sentinel(blk["queries"])
@@ -960,6 +963,16 @@ def _sibling(name):
     return mod
 
 
+_ROUTE_MODULE = []
+
+
+def _route_suffix(route):
+    """` route=<word>` from tools/classical_route.py (loaded once per process)."""
+    if not _ROUTE_MODULE:
+        _ROUTE_MODULE.append(_sibling("classical_route"))
+    return _ROUTE_MODULE[0].route_suffix(route)
+
+
 #: the block arrays each lane's scorer reads (quality() and infer_quality() below)
 SCORER_ARRAYS = {"kmeans": ("X",), "pca": ("X",), "ols": ("Xq", "yq"), "knn": ("index", "queries"),
                  "hdbscan": ("X",), "svc": ("Xq", "yq")}
@@ -993,6 +1006,15 @@ def scorer_preflight(RSP, lane, ds, block, rec):
                                  ("accuracy_eval", "r2_eval", "rmse_eval"))
         pf.check("scorer self-test", labels)
     return pf.done()
+
+
+def _small_rows():
+    """tools/bench_board_small_rows.py (small rows: the median of consecutive calls in the one scored run)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_small_rows
+    return bench_board_small_rows
 
 
 def _probe():
@@ -2672,6 +2694,11 @@ def worker(args):
     mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     inf = None
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED call's time decides
+    # how many consecutive calls the one scored run makes (20 under 10 ms, else 1), for the fit and the
+    # inference; the warmup does not decide (it carries start-up and kernel compilation)
+    small = _small_rows()
+    ours_arm = (runner.info or {}).get("library") == "mojolearn"
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -2698,6 +2725,21 @@ def worker(args):
                 outputs = runner.outputs()
                 runner.sync()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
+                # (the hash and the receipt are the first call's; same bits every call). Opponents and rows at
+                # or above 10 ms make one call.
+                n_calls = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
+                calls = [ms]
+                small.range_open(n_calls, "fit")       # attribution profile runs only (no-op otherwise)
+                for _ in range(1, n_calls):
+                    t0 = time.perf_counter()
+                    runner.call()
+                    runner.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
+                calls_rec = small.spread(calls) if r > 0 else None
+                if calls_rec is not None:
+                    ms = calls_rec["ms"]
                 m = mem.stop()
                 digest = _digest(outputs)
                 from bench_board_state import scored_receipt
@@ -2707,13 +2749,18 @@ def worker(args):
                 upload_sep = None
                 if (runner.info or {}).get("library") == "mojolearn":
                     upload_sep = _ours_upload_probe(runner)
+                # the route the scored call took, read after every clock of
+                # the round (tools/classical_route.py; None for opponents)
+                from classical_route import classical_route
+                route = classical_route(runner)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
-                 "upload_separate": upload_sep,
+                 "scored_calls": calls_rec,
+                 "upload_separate": upload_sep, "classical_route": route,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -2730,15 +2777,33 @@ def worker(args):
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                n_calls = small.calls_for(ms, ours_arm, "infer") if r > 0 else 1
+                # SMALL ROWS: the hash is the first call's output, taken before the rest of the calls (one call:
+                # after the memory probe, as before)
+                digest = _digest(inf.outputs()) if n_calls > 1 else None
+                calls = [ms]
+                small.range_open(n_calls, "infer")     # attribution profile runs only (no-op otherwise)
+                for _ in range(1, n_calls):
+                    t0 = time.perf_counter()
+                    inf.call()
+                    inf.sync()
+                    calls.append((time.perf_counter() - t0) * 1000.0)
+                small.range_close()
+                infer_calls_rec = small.spread(calls) if r > 0 else None
+                if infer_calls_rec is not None:
+                    ms = infer_calls_rec["ms"]
                 m = mem.stop()
-                digest = _digest(inf.outputs())
+                if digest is None:
+                    digest = _digest(inf.outputs())
+                from classical_route import classical_route
+                infer_route = classical_route(runner)   # after the clock (tools/classical_route.py)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "infer_error", "stage": "infer %d" % r, "error": repr(exc)})
                 continue
-            say({"event": "infer", "round": r, "ms": ms, "digest": digest,
-                 "call": inf.desc, "info": inf.info, "mem": m})
+            say({"event": "infer", "round": r, "ms": ms, "digest": digest, "scored_calls": infer_calls_rec,
+                 "call": inf.desc, "info": inf.info, "mem": m, "classical_route": infer_route})
         elif parts[0] == "infer_save":
             try:
                 path = parts[1]
@@ -2890,7 +2955,21 @@ def start_worker(arm, cmd, env, log_path, cwd, params_only=False):
             sys.path.insert(0, HERE)
         import smoke_inproc
         return smoke_inproc.start_worker(arm, cmd, env, log_path, cwd, params_only, Worker)
+    # NUMA placement (lane fx-harness, 2026-11-18; tools/numa_place.py): every race worker starts bound to the GPU's
+    # node, cores and memory, when that node holds every core of the allocation; the placement is in its environment
+    # and its cell (worker_numa). Node-1 workers on c6dd9ebea3e3 lost 13-27 s to first-touch faults; node-0 did not.
+    cmd, _placement = _numa().wrap(cmd, env)
     return Worker(arm, cmd, env, log_path, cwd)
+
+
+_NUMA = []
+
+
+def _numa():
+    """tools/numa_place.py, loaded once by path (tools/ is not a package)."""
+    if not _NUMA:
+        _NUMA.append(_sibling("numa_place"))
+    return _NUMA[0]
 
 
 def _worker_env(arm, root):
@@ -3228,9 +3307,15 @@ def infer_phase(args, lane, ds, arms, workers, result):
                 rec["info"] = msg.get("info")
             else:
                 rec["ms"].append(msg["ms"])
+                if msg.get("scored_calls") is not None:   # SMALL ROWS (2026-11-15)
+                    rec.setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
             rec["digests"].append(msg["digest"])
-            print("CTD-INFER-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                rec.setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
+            print("CTD-INFER-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg["digest"],
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _route_suffix(msg.get("classical_route"))), flush=True)
             time.sleep(args.pause)
     return infer
 
@@ -3241,6 +3326,8 @@ def infer_summary(lane, ds, infer, rounds):
         a["median_ms"] = median(a["ms"]) if ok else None
         a["min_ms"] = min(a["ms"]) if ok else None
         a["max_ms"] = max(a["ms"]) if ok else None
+        if ok:   # SMALL ROWS: the spread of every scored call when the run made more than one
+            a.update(_small_rows().cell_fields(a.get("scored_calls")))
         a["digest_stable"] = (len(set(a["digests"][1:])) == 1) if ok else None
         print("CTD-INFER lane=%s dataset=%s arm=%s call=%s rows=%s status=%s median_ms=%s "
               "digest_stable=%s quality=%s"
@@ -3369,6 +3456,9 @@ def race(args):
                 result["arms"][arm]["warmup_ms"] = msg["ms"]
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    result["arms"][arm].setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
             result["arms"][arm]["digests"].append(msg["digest"])
             if msg.get("operation") is not None:
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
@@ -3377,9 +3467,13 @@ def race(args):
             if msg.get("upload_separate") is not None:
                 result["arms"][arm].setdefault("upload_separate", []).append(
                     dict(msg["upload_separate"], round=r, warmup=r == 0))
+            if msg.get("classical_route") is not None:   # the route beside the time, read outside the clock
+                result["arms"][arm].setdefault("classical_routes", []).append(dict(msg["classical_route"], round=r))
             result["arms"][arm]["mem"].append(msg.get("mem"))
-            print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
+            print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg["digest"],
+                     _small_rows().line_suffix(msg.get("scored_calls")),
+                     _route_suffix(msg.get("classical_route"))), flush=True)
             time.sleep(args.pause)
     infer = None
     if getattr(args, "infer", False) and lane in INFER_LANES:
@@ -3435,6 +3529,8 @@ def race(args):
         a["median_ms"] = median(a["ms"]) if ok else None
         a["min_ms"] = min(a["ms"]) if ok else None
         a["max_ms"] = max(a["ms"]) if ok else None
+        if ok:   # SMALL ROWS: the spread of every scored call when the run made more than one
+            a.update(_small_rows().cell_fields(a.get("scored_calls")))
         a["digest_stable"] = (len(set(a["digests"][1:])) == 1) if ok else None
         dev = (a.get("info") or {}).get("device", "?")
         qual = result.get("quality", {}).get(arm, {})
@@ -3544,6 +3640,9 @@ def build_parser():
     p.add_argument("--datasets", default=",".join(DATASETS))
     p.add_argument("--max-rows", type=int, default=0,
                    help="SMOKE shape: cap every block near this many rows (0 = the lane shapes)")
+    p.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                   help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                        "(tools/smoke_inputs.py); never a timed run")
     w = sub.add_parser("worker")
     w.add_argument("--arm", required=True)
     w.add_argument("--lane", required=True, choices=LANES)

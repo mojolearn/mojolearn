@@ -24,26 +24,24 @@
 #   32 KB); the pad column keeps the column-wise reads on distinct banks.
 #   AXIS_ROWS keeps seq_kernel: its leaves already run down a column with
 #   neighbouring threads on neighbouring columns (coalesced, 92%).
-#   -D MOJOLEARN_IDN_FOLD_STAGED_OFF (or MOJOLEARN_IDN_ALL_OFF).
+#   (MOJOLEARN_IDN_FOLD_STAGED_OFF deleted 2026-11-15.)
 # E FOUR ELEMENTS A THREAD (AG_ELEM_VEC4). The binary, unary, reduce-VJP,
 #   accumulate and dropout bodies on ag_vec4_kernel (autograd/ops.mojo
 #   "FOUR ELEMENTS A THREAD"). Route rule: every pointer slot 16-byte
 #   aligned (the tape's buffers are whole allocations; a sub-buffer at an
 #   odd offset keeps seq_kernel) and n >= 4 x TPB elements (a cost rule:
 #   below one block of four-element threads the launch floor is the cost and
-#   a quarter of the threads would idle a block). -D MOJOLEARN_IDN_ELEM_VEC4_OFF.
+#   a quarter of the threads would idle a block).
 # F(1) TRANSPOSE TILE (AG_TRANSPOSE_TILE). OP_AG_TRANSPOSE wrote lane-
 #   contiguous words read at stride cols (opbench 65536x4096 7032 / 5214 us
 #   = 35% / 7% of bandwidth). Here a block of 256 threads moves a 32 x 32
 #   tile: coalesced loads into threadgroup memory (33-float rows), barrier,
 #   coalesced stores of the transposed tile. Each destination word is
 #   the scalar body's: raw forward movement, st(ld(word)) for VJP.
-#   -D MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.
 # None of the three keys on a shape beyond the stated cost and alignment
 # rules; every rule covers neighbouring shapes alike.
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -53,7 +51,7 @@ from sequence.ops import Args, FP, ld, st, add
 from autograd.ops import (
     OP_AG_FIRST, OP_AG_LAST, OP_AG_REDUCE_PART, OP_AG_TRANSPOSE, OP_AG_BIN_FWD, OP_AG_BIN_VJP,
     OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_REDUCE_VJP, OP_AG_ACCUMULATE, OP_AGK_BIN_VJP_PART,
-    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, AUTOGRAD_FOLD_V2, ag_leaf_span, ag_part_finish, _bin_vjp_at,
+    AXIS_ROWS, AG_FOLD_LEAF, AG_VEC, ag_leaf_span, ag_part_finish, _bin_vjp_at,
     apply_autograd, apply_autograd_vec4,
 )
 from autograd.data_ops import (
@@ -61,19 +59,19 @@ from autograd.data_ops import (
 )
 from autograd.fold_ops import OP_AGS_LOSS_PART, ags_loss_term
 
-comptime _IDN_ALL_OFF = is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime AG_FOLD_STAGED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and AUTOGRAD_FOLD_V2
-    and not (is_defined["MOJOLEARN_IDN_FOLD_STAGED_OFF"]() or _IDN_ALL_OFF)
-)
-comptime AG_ELEM_VEC4 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_ELEM_VEC4_OFF"]() or _IDN_ALL_OFF)
-)
-comptime AG_TRANSPOSE_TILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_TRANSPOSE_TILE_OFF"]() or _IDN_ALL_OFF)
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_FOLD_STAGED_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 479d223bd3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_FOLD_STAGED_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_FOLD_V2_OFF (old path, no A/B recorded) use deleted 2026-11-15 by lane/expdel2-23-neural (non-owner); code recoverable at afaee1c189.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_FOLD_V2_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_ELEM_VEC4_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b57fa1c4dd.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ELEM_VEC4_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AG_ELEM_VEC4 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_TRANSPOSE_TILE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 34a89b9e44.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AG_TRANSPOSE_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 # the staged leaves: one leaf a thread, a block of AG_FOLD_LEAF threads
 comptime AGS_TPB = AG_FOLD_LEAF

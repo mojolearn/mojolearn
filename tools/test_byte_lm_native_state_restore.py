@@ -14,10 +14,10 @@ def test_state_restore_has_one_native_frontdoor():
 
 
 def test_validation_precedes_session_mutation_and_uses_shared_admission():
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     restore = source.split('def byte_lm_load_state(')[1].split('def byte_lm_train_step(')[0]
     assert restore.index('_validated_state(') < restore.index('_forget(') < restore.index('"_state", replacement')
-    assert 'neural_descriptor_execute(provider, 4,' in restore
+    assert '_session_call(session, 4,' in restore
     admission = source.split('def _validated_state(')[1].split('def byte_lm_load_state(')[0]
     assert admission.index('classical_admit_value(source, context)') < admission.index('_shape_of(source)')
     assert 'training_f32_owned' in admission and 'training_i32_owned' in admission
@@ -30,8 +30,8 @@ def test_buffer_copy_and_state_value_checks_are_native():
         source = (ROOT / name).read_text()
         for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
             assert forbidden not in source
-    boundary = (ROOT / 'providers/python/training_buffer_pyapi.mojo').read_text()
-    strict = boundary.split('def training_words32_owned(')[1].split('def training_f32_cast_owned(')[0]
+    boundary = (ROOT / 'providers/python/training_buffer_pyapi_door.mojo').read_text()
+    strict = boundary.split('def training_words32_owned(')[1].split('# TOMBSTONE: training_f32_cast_owned')[0]
     assert strict.count('var shape = value.shape') == 1
     assert strict.count('var strides = value.strides') == 1
     assert 'training_copy_words32(' in boundary
@@ -46,20 +46,20 @@ def test_binary_checkpoint_public_methods_have_one_native_frontdoor():
         body = method.body[1:]
         assert len(body) == 1 and isinstance(body[0], ast.Return)
         assert body[0].value.func.id == '_LM_TRAINER'
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     checkpoint = source.split('def byte_lm_checkpoint(')[1].split('def byte_lm_train_step(')[0]
     assert 'byte_checkpoint_load(args[0], io_error)' in checkpoint
     assert 'byte_checkpoint_save(args[0], state, io_error)' in checkpoint
-    assert checkpoint.index('_validated_state(source, context)') < checkpoint.index('native_storage_allocate(trainer)')
-    assert 'return io_error.restore()' in source
-    assert '_initialize_state_fields(restored, state,' in checkpoint
+    assert checkpoint.index('_validated_state(mods, source, context)') < checkpoint.index('native_storage_allocate(trainer)')
+    assert 'return io_error^.restore()' in source
+    assert '_initialize_state_fields(mods, restored, state,' in checkpoint
     assert 'py_call(trainer' not in checkpoint
 
 
 def test_attention_report_uses_one_native_status_snapshot():
-    source = (ROOT / 'bindings/byte_lm_trainer_native.mojo').read_text()
+    source = (ROOT / 'bindings/byte_lm_trainer_native_door.mojo').read_text()
     report = source.split('def _attention_stage_report(')[1].split('def byte_lm_consume(')[0]
-    assert 'neural_descriptor_execute(provider, 11,' in report
+    assert '_session_call(fields["_native_session"], 11,' in report
     assert 'var info = List[Int]()' in report
     owner = (ROOT / 'training/byte_lm_native_status.mojo').read_text()
     assert owner.count('byte_attention_eager_cells(owner.trainer.value())') == 1
@@ -74,7 +74,7 @@ def test_attention_report_uses_one_native_status_snapshot():
 
 
 def test_json_checkpoint_retains_bounded_format_and_native_codec():
-    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi.mojo').read_text()
+    source = (ROOT / 'providers/python/byte_lm_json_checkpoint_pyapi_door.mojo').read_text()
     assert 'BYTE_JSON_LIMIT = 2097152' in source
     assert 'native_json_parse_unique(encoded)' in source
     assert 'sha256_hexdigest(_canonical(payload))' in source

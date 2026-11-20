@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 sklearn = pytest.importorskip("sklearn")
+import sklearn
 from sklearn import metrics as reference
 from sklearn.metrics import cluster as reference_cluster
 
@@ -99,7 +100,7 @@ FLOAT_SCORE = sorted(n for n, a in CASES.items() if a[1].dtype == np.float32)
 
 
 def _reference(name):
-    return getattr(reference, name, None) or getattr(reference_cluster, name)
+    return getattr(reference, name, None) or getattr(reference_cluster, name, None)
 
 
 def _close(ours, theirs):
@@ -123,7 +124,11 @@ def test_metric_matches_reference_on_public_path(name):
     args, kw = CASES[name], KWARGS.get(name, {})
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        _close(fn(*args, **kw), _reference(name)(*args, **kw))
+        ours = fn(*args, **kw)
+        theirs = _reference(name)
+        if theirs is None:  # d2_brier_score is newer than scikit-learn 1.7, the newest on Python 3.10
+            pytest.skip(f"scikit-learn {sklearn.__version__} has no {name} to compare with")
+        _close(ours, theirs(*args, **kw))
 
 
 @pytest.mark.parametrize("name", sorted(CASES))

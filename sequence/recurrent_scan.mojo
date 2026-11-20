@@ -26,9 +26,8 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
 The host executor runs the scan ops as the per-step launches they replace
 (row by row, step by step): the same cells in the same order.
 """
-from std.gpu import block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from max.gpu import block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import team_barrier
@@ -96,11 +95,13 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # see cell_fwd_scan_kernel); whether that is enough is unproven. Until the check
 # passes on Metal, an Apple build routes every recurrent layer to the per-step
 # chain, which gives the same bits (Apple's digests must still equal NVIDIA and
-# AMD's, and the chain's do). -D MOJOLEARN_SEQ_RNN_SCAN_APPLE puts Apple on
-# the scan for that check and its A/B. has_apple_gpu_accelerator is a
+# AMD's, and the chain's do). The -D MOJOLEARN_SEQ_RNN_SCAN_APPLE arm that put
+# Apple on the scan for that check was deleted 2026-11-15. has_apple_gpu_accelerator is a
 # property of the build host: an Apple build's host column takes the chain too,
 # with the same bits.
-comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
+# TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN_APPLE (opt-in arm putting Apple on the scan; EXP:2165, Metal scan unqualified) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_APPLE.patch
+comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not TARGET_HAS_APPLE_GPU
 # THE ROUTE (orchestrator decision 2026-10-19, nv-04/NV_PASS5 + AMD pass 5):
 # a cost rule on the cell's gate count G, the same for HandStep and
 # AutogradRnnStep (both call scan_routes). The scan saves T + 1 launches and 2
@@ -116,19 +117,20 @@ comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_def
 #   lstm (G 4): NV 0.88, AMD 1.15, average 1.015             -> chain (tie)
 # SCAN_MAX_GATES is the one-line default: the scan for cells with
 # G <= SCAN_MAX_GATES (0 = the chain everywhere, 4 = the scan everywhere).
-# The A/B arms: -D MOJOLEARN_SEQ_RNN_SCAN forces the scan for every cell,
-# -D MOJOLEARN_SEQ_RNN_SCAN_OFF forces the chain for every cell. Apple stays
-# on the chain (SEQ_RNN_SCAN_ON_THIS_TARGET above) unless
-# MOJOLEARN_SEQ_RNN_SCAN_APPLE. Not a shape rule: G is the cell's structure,
+# The force-scan / force-chain A/B arms (-D MOJOLEARN_SEQ_RNN_SCAN, _OFF) were
+# deleted 2026-11-15. Apple stays on the chain (SEQ_RNN_SCAN_ON_THIS_TARGET above). Not a shape rule: G is the cell's structure,
 # not a board dimension, and the same bits come out on either route.
 comptime SCAN_MAX_GATES = 1
-comptime SEQ_RNN_SCAN_ALL = is_defined["MOJOLEARN_SEQ_RNN_SCAN"]()
+# TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN (force-scan A/B arm; EXP:2166 TIE, the gate-count rule stays) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN.patch
+# TOMBSTONE: MOJOLEARN_SEQ_RNN_SCAN_OFF (force-chain A/B arm; EXP:2166, the gate-count rule stays) deleted 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438) read folded here (non-owner) 2026-11-15 by lane/expdel2-30-neural; code recoverable at e39daf79ad.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-30-neural.patch
 comptime SEQ_RNN_SCAN_IDN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and SEQ_RNN_SCAN_ON_THIS_TARGET
-    and (SEQ_RNN_SCAN_ALL or SCAN_MAX_GATES > 0)
-    and not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and SCAN_MAX_GATES > 0
 )
 comptime SEQ_LSTM_SCAN_IDN = SEQ_RNN_SCAN_IDN
 # NI49's row-serial arm (MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: one GPU thread
@@ -165,13 +167,10 @@ def scan_applies(H: Int, G: Int) -> Bool:
 
 def scan_routes(H: Int, G: Int) -> Bool:
     """Whether a layer of G gates and H units takes the scan (when
-    SEQ_LSTM_SCAN compiles it in): inside the kernels' shape bound and, unless
-    -D MOJOLEARN_SEQ_RNN_SCAN forces every cell, G <= SCAN_MAX_GATES (the
-    cost rule above). Every trainer route asks this one function."""
+    SEQ_LSTM_SCAN compiles it in): inside the kernels' shape bound and
+    G <= SCAN_MAX_GATES (the cost rule above). Every trainer route asks this one function."""
     if not scan_applies(H, G):
         return False
-    comptime if SEQ_RNN_SCAN_ALL:
-        return True
     return G <= SCAN_MAX_GATES
 
 

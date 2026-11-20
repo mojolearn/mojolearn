@@ -11,8 +11,10 @@ No intra-chunk, B/C, A/dt, or projection gradient is claimed here.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -36,9 +38,11 @@ from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
 
 
-# NN39: shared pure Mojo profile imported by both device and checked-in
-# generated host source. Future regeneration preserves the same import.
-from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, IDN_M2_GRAD_FOLD_ARM, nn39_gradient_tree
+# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 and 2) uses deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, the read is mamba/impl/ops/neural_gradient_profile.mojo); code recoverable at d788d4c3f4.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_M2_GRAD_FOLD (unmeasured opt-in arms 1 (NN39 tile tree) and 2 (NI44 128-row leaves) of the Mamba-2 gradient fold) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 92dbaa2ecb.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_GRAD_FOLD.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: mamba/impl/ops/neural_gradient_profile.mojo deleted: IDN_M2_GRAD_FOLD_ARM, NN39_M2_GRAD_TREE and nn39_gradient_tree had no importer.)
 
 comptime M2_SSD_BWD_TPB = 128
 
@@ -46,8 +50,7 @@ comptime M2_SSD_BWD_TPB = 128
 # lane nr-mamba (2026-10-04), roadmap B6. IDENTICAL only; every column
 # (NVIDIA, AMD, Apple and the generated host column) runs this same source.
 #
-# IDN_M2_BWD_CELL (default ON; `-D MOJOLEARN_IDN_M2_BWD_CELL_OFF` or
-# `-D MOJOLEARN_IDN_ALL_OFF` restores main): the conv backward's per-cell
+# IDN_M2_BWD_CELL (IDENTICAL; FAST keeps main's kernels): the conv backward's per-cell
 # parts (d_conv, d_in) and the S9/S10 per-cell parts (d_dt, d_dtraw) run one
 # thread per cell, where main ran one thread per channel (conv, over B x L)
 # or per head (nh threads in all, over B x T). Each cell is the same chain,
@@ -64,25 +67,13 @@ comptime M2_SSD_BWD_TPB = 128
 # upstream reads them (the optimizer state follows them). The tile height
 # is a constant, not a shape rule.
 # ---------------------------------------------------------------------------
-comptime IDN_M2_BWD_CELL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_M2_BWD_CELL_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at a6c819032b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
 ]()
-# NI44 V subarm: halve each logical gradient leaf to expose twice the
-# independent token work before the same ascending tile merge. 128 is a fixed
-# reduction granularity, not a benchmark shape; all host/GPU columns change
-# the graph together. Existing allocation uses m2_fold_tiles, including tails.
-# Default OFF. No gradient/trajectory quality or performance claim is made.
-comptime IDN_M2_GRAD_LEAF128 = (
-    IDN_M2_BWD_FOLD_TILED
-    and IDN_M2_GRAD_FOLD_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
+comptime M2_BWD_FOLD_ROWS = 256
 
 
 def m2_fold_rows_per_tile(rows: Int) -> Int:
@@ -1198,11 +1189,8 @@ def m2_fold_tiles_kernel(
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    comptime if NN39_M2_GRAD_TREE:
-        acc = nn39_gradient_tree(part, tiles, cols, c)
-    else:
-        for tile in range(1, tiles):
-            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    for tile in range(1, tiles):
+        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:

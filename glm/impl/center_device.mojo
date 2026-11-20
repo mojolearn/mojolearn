@@ -11,8 +11,7 @@ column into nine exact Int64 digits (`cs_partial_kernel`); block c folds
 column c's partials (`cs_fold_kernel`, a threadgroup tree per digit: an
 integer sum, so any order is the same total) and its thread 0 rounds the
 total once to float64 bits. Center and scale: one thread per cell."""
-from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -56,7 +55,7 @@ def cs_partial_kernel(x: F32P, part: I64P, rows_: Int64, cols_: Int64, rb_: Int6
     var blk = tid // cols
     var r0 = blk * rb
     var r1 = min(r0 + rb, rows)
-    var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+    var acc = Array[Int64, CS_WORDS](fill=Int64(0))
     for r in range(r0, r1):
         exact_add(acc, x.unsafe_load(r * cols + c))
     var o = tid * CS_WORDS
@@ -97,7 +96,7 @@ def cs_fold_kernel(part: I64P, dst: U64P, nrb_: Int64, cols_: Int64):
             tot[L] = sh[0]
         barrier()
     if t == 0:
-        var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+        var acc = Array[Int64, CS_WORDS](fill=Int64(0))
         for L in range(CS_WORDS):
             acc[L] = tot[L]
         dst.unsafe_store(c, exact_finish(acc))
@@ -276,48 +275,15 @@ def col_means_buf(
     )
 
 
-# C02 pairs exact X/y streams in one launch and invocation-owned partial.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def cs_pair_partial_kernel(x: F32P, y: F32P, part: I64P, rows_: Int64, cols_: Int64, rb_: Int64):
-    var rows = Int(rows_)
-    var cols = Int(cols_)
-    var rb = Int(rb_)
-    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var nrb = (rows + rb - 1) // rb
-    if tid >= nrb * (cols + 1):
-        return
-    var c = tid % (cols + 1)
-    var lo = (tid // (cols + 1)) * rb
-    var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
-    for r in range(lo, min(lo + rb, rows)):
-        var v = y.unsafe_load(r) if c == cols else x.unsafe_load(r * cols + c)
-        exact_add(acc, v)
-    comptime for L in range(CS_WORDS):
-        part.unsafe_store(tid * CS_WORDS + L, acc[L])
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 0e69fe9c69.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-08-base.patch; record in docs/TOMBSTONES.md.
 
 
 def col_sums_pair_buf(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
                       mut y: DeviceBuffer[DType.float32], mut sx: DeviceBuffer[DType.uint64],
                       mut sy: DeviceBuffer[DType.uint64], rows: Int, cols: Int) raises:
-    comptime if not C02_LINEAR_PAIR:
-        col_sums_buf(ctx, x, sx, rows, cols)
-        col_sums_buf(ctx, y, sy, rows, 1)
-        return
-    comptime assert CS_SMEM_FITS, "paired column sums require the incumbent shared page"
-    if rows <= 0 or cols <= 0:
-        raise Error("col_sums: rows and cols must be positive")
-    var rb = cs_rows_per_block(rows)
-    var nrb = (rows + rb - 1) // rb
-    var tasks = nrb * (cols + 1)
-    var part = ctx.enqueue_create_buffer[DType.int64](tasks * CS_WORDS)
-    ctx.enqueue_function[cs_pair_partial_kernel](x.unsafe_ptr(), y.unsafe_ptr(), part.unsafe_ptr(),
-        Int64(rows), Int64(cols), Int64(rb), grid_dim=(tasks + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-    ctx.enqueue_function[cs_fold_kernel](part.unsafe_ptr(), sx.unsafe_ptr(), Int64(nrb), Int64(cols + 1),
-        grid_dim=cols, block_dim=CS_TPB)
-    ctx.enqueue_function[cs_fold_kernel](part.unsafe_ptr() + cols * CS_WORDS, sy.unsafe_ptr(),
-        Int64(nrb), Int64(cols + 1), grid_dim=1, block_dim=CS_TPB)
-    ctx.synchronize()
-    _ = part^
+    col_sums_buf(ctx, x, sx, rows, cols)
+    col_sums_buf(ctx, y, sy, rows, 1)
 
 
 def col_sums_pair_device(ctx: DeviceContext, x: Int, y: Int, sx: Int, sy: Int, rows: Int, cols: Int) raises:

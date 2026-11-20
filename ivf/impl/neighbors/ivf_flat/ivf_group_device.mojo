@@ -26,7 +26,7 @@ after sorting them) moves no bit.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -34,6 +34,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.device_fold import device_exclusive_scan_total_from
+from core.device_zero import enqueue_fill_n
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 
 comptime _TPB = 256
@@ -100,12 +101,6 @@ def _pair_keys_kernel(probe: _U32P, n_in: Int32, keys: _U32P, vals: _U32P):
         vals[i] = UInt32(i)
 
 
-def _zero_kernel(buf: _I32P, n_in: Int32):
-    var i = Int(block_idx.x) * _TPB + Int(thread_idx.x)
-    if i < Int(n_in):
-        buf[i] = Int32(0)
-
-
 def _list_hist_kernel(probe: _U32P, n_in: Int32, gcount: _I32P):
     var i = Int(block_idx.x) * _TPB + Int(thread_idx.x)
     if i < Int(n_in):
@@ -156,9 +151,7 @@ def ivf_probe_counts_device(
     """The candidate count of every query, on the device."""
     var kept = ctx.enqueue_create_buffer[DType.int32](max(n_lists, 1))
     if filtered:
-        ctx.enqueue_function[_zero_kernel](
-            kept.unsafe_ptr(), Int32(n_lists), grid_dim=_grid(n_lists), block_dim=_TPB,
-        )
+        enqueue_fill_n(ctx, kept, n_lists, Int32(0))
         if n_slots > 0:
             ctx.enqueue_function[_kept_per_list_kernel](
                 off.unsafe_ptr(), ind.unsafe_ptr(), keep.unsafe_ptr(), Int32(n_lists),
@@ -236,9 +229,7 @@ def ivf_group_pairs_device(
         vals.unsafe_ptr(), Int32(n), Int32(n_probes), gq.unsafe_ptr(), gp.unsafe_ptr(),
         grid_dim=_grid(n), block_dim=_TPB,
     )
-    ctx.enqueue_function[_zero_kernel](
-        gcount.unsafe_ptr(), Int32(n_lists + 1), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
-    )
+    enqueue_fill_n(ctx, gcount, n_lists + 1, Int32(0))
     ctx.enqueue_function[_list_hist_kernel](
         probe.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
     )
@@ -332,9 +323,7 @@ def ivf_list_layout_device(
         return (offsets^, list_indices^, list_data^, max_label)
     var gcount = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
     var goff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
-    ctx.enqueue_function[_zero_kernel](
-        gcount.unsafe_ptr(), Int32(n_lists + 1), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
-    )
+    enqueue_fill_n(ctx, gcount, n_lists + 1, Int32(0))
     ctx.enqueue_function[_list_hist_kernel](
         labels.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
     )
@@ -440,9 +429,7 @@ def ivf_list_layout_device_resident(
         _ = cnt^
         return IvfDeviceLayout(offsets^, list_indices^, max_label, goff^, vals^, dd^)
     var gcount = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
-    ctx.enqueue_function[_zero_kernel](
-        gcount.unsafe_ptr(), Int32(n_lists + 1), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
-    )
+    enqueue_fill_n(ctx, gcount, n_lists + 1, Int32(0))
     ctx.enqueue_function[_list_hist_kernel](
         labels.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
     )

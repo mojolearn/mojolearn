@@ -33,30 +33,30 @@ FAMILIES = (
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
         display="the decomposition and linear algebra expansion",
-        host_modules=("x_decomp/host.mojo", "x_decomp/select_ops.mojo", "x_decomp/nmf.mojo", "x_decomp/ica.mojo", "x_decomp/fa_em.mojo", "x_decomp/rotation.mojo", "x_decomp/chi2.mojo", "x_decomp/als.mojo", "x_decomp/mds.mojo", "x_decomp/lle_iter.mojo", "x_decomp/pls.mojo", "x_decomp/lda_fit.mojo", "x_decomp/dictl.mojo", "x_decomp/lanczos_host.mojo", "x_decomp/mds_iso.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
+        host_modules=("x_decomp/host.mojo", "x_decomp/select_ops.mojo", "x_decomp/nmf.mojo", "x_decomp/ica.mojo", "x_decomp/fa_em.mojo", "x_decomp/rotation.mojo", "x_decomp/chi2.mojo", "x_decomp/als.mojo", "x_decomp/mds.mojo", "x_decomp/lle_iter.mojo", "x_decomp/pls.mojo", "x_decomp/lda_fit.mojo", "x_decomp/dictl.mojo", "x_decomp/lanczos_host.mojo", "x_decomp/mds_iso.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_lu_gesv", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_barycenter_rows", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q",
-            # lane py-decomp-nbrs (2026-09-28): fast_mcd, LDA online and the MDS / Isomap moves
-            "x_decomp_mcd", "x_decomp_gather",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_ols_tsqr_r", "x_decomp_idn_flags", "x_decomp_eigh", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_absmax_sign", "x_decomp_geqrf", "x_decomp_orgqr",
             # lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the module's data path
-            "x_decomp_move", "x_decomp_dsum_sq", "x_decomp_order_f", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_pca_mle_rank", "x_decomp_topn_desc",
-            # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
-            "x_decomp_graph_knn", "x_decomp_graph_knn_dense", "x_decomp_graph_radius", "x_decomp_graph_lle_iw",
-            "x_decomp_graph_components", "x_decomp_graph_join", "x_decomp_graph_dijkstra",
-            # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order, the Lanczos steps
-            "x_decomp_reduce", "x_decomp_order_small", "x_decomp_lanczos",
-            # lane py-runtime-b (2026-10-05): the solver drivers in Mojo
-            "x_decomp_chi2_quantile", "x_decomp_consistency_factor", "x_decomp_als_fit", "x_decomp_mds_fit", "x_decomp_lle_iterate", "x_decomp_pls_fit", "x_decomp_dict_learning", "x_decomp_dict_minibatch",
+            # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order
+            "x_decomp_order_small",
             "x_decomp_numeric_mode", "x_decomp_vendor",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "x_decomp_trisolve", "x_decomp_r_signs",
-            "x_decomp_rank_above", "x_decomp_graph_radius_geo",
+            # lane entangled-mkit (2026-11-12): the Isomap / LLE graph builds (lane hr2-graph-embed),
+            # the Lanczos steps and T solve, the MDS / LLE solver drivers (lane py-runtime-b),
+            # barycenter_rows, lle_apply, lle_local, trisolve, dsum_sq and order_f are x_decomp
+            # table operations (x_decomp/descriptor_mani_schema.mojo): no Python export.
             # lane mca2-decomp-a (2026-10-22): TruncatedSVD(algorithm='randomized').fit, one driver
             "x_decomp_tsvd_randomized", "x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
             "x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
-            "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig", "x_decomp_rp_fit", "x_decomp_rp_project",
+            "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_rp_fit", "x_decomp_rp_project",
+            # manifest sync (ne-fix-tests-b, 2026-11-07): the native API version marker
+            "x_decomp_native_api_v1", "tsvd_decomp_native_api_v1", "nmf_native_api_v1", "ipca_native_api_v1", "kpca_decomp_native_api_v1",
+            # lane n9 (2026-11-09, the Lanczos T solve). The m3 public randomized_svd driver and the
+            # solver doors above (lu_gesv, mcd, gather, topn_desc, chi2_quantile, consistency_factor,
+            # als_fit, pls_fit, dict_learning, dict_minibatch) are x_decomp table operations since
+            # lane pyout-decomp-linalg (2026-11-11): no Python export.
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the decomp expansion lane's CPU route (lane/algos-decomp).",

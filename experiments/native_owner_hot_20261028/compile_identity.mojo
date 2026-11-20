@@ -1,5 +1,5 @@
-from bindings.native_identity_key import NativeIdentityKey
-from bindings.native_loaded_module import NativeModules
+from bindings.native_identity_key_door import NativeIdentityKey
+from bindings.native_loaded_module_door import NativeModules
 from std.python import PythonObject
 
 def main() raises:

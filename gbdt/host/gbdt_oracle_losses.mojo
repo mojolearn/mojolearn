@@ -83,6 +83,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_pow,
 )
+from gbdt.methods.cursor_rescale import apply_scaled_leaves_host, rescaled_leaves
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -1210,16 +1211,14 @@ def gbdt_losses_host_fit(
             # the unweighted mean over all `n_live` leaves, the double sum in
             # the kernel's order (lane cpu4-gbdt; was an ascending chain).
             _zero_average_host(estimated)
-        for leaf in range(n_live):
-            for k in range(sizes[leaf]):
-                var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
+        var scaled = rescaled_leaves(estimated, lr)
+        apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live)
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
         for i in range(len(estimated)):
-            model_leaves.append(estimated[i] * lr)
+            model_leaves.append(scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
         if len(losses) < params.n_estimators:

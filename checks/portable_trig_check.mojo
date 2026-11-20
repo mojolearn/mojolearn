@@ -11,7 +11,7 @@ THE FIRST THING THIS FILE OWES IS NOT ABOUT SIN. `portable_cosf` is
 certified and other lanes depend on its bits; DEVIATION 820 moved its body
 into a shared core. So `check_cos_bits_did_not_move` runs FIRST, and the
 authoritative proof is not in this file at all -- it is
-`pixi run check-portable-sqrtcos`, whose printed `sqrtcos device hash`
+`pixi run check-native-gpu portable_sqrtcos_check`, whose printed `sqrtcos device hash`
 must still read 12295913102197186379. RUN THAT BEFORE TRUSTING ANY NUMBER
 BELOW IT. What this file adds is a second, independent witness over the
 same cos inputs (`trig cos-fixture hash`), which is a NEW number and not
@@ -110,7 +110,7 @@ SABOTAGE ARMS, and what each must do:
         arm 2 failure the specification predicts.
 
 Run:
-    pixi run check-portable-trig
+    pixi run check-native-gpu portable_trig_check
     pixi run mojo run -D MOJOLEARN_TRIG_SABOTAGE_NO_SECOND_FLIP=1 \\
         -I . checks/portable_trig_check.mojo
 and the same for the other three names. A misspelled define is silently
@@ -120,7 +120,7 @@ before believing a clean result.
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import floor, sin
 from std.memory import bitcast
 from std.sys import argv
@@ -529,7 +529,7 @@ def check_cos_bits_did_not_move() raises:
 
     Printed: `trig cos-fixture hash`, cos over the sqrtcos gate's own cos
     inputs. The AUTHORITATIVE proof is still
-    `pixi run check-portable-sqrtcos` printing 12295913102197186379."""
+    `pixi run check-native-gpu portable_sqrtcos_check` printing 12295913102197186379."""
     for i in range(NPLANT):
         var x = _trig_x(i)
         var b = _bits(x)
@@ -573,7 +573,7 @@ def check_cos_bits_did_not_move() raises:
     print("check_cos_bits_did_not_move: cos == the shared core on every")
     print("  planted and swept lane; the no-flush clause holds")
     print("  trig cos-fixture hash =", h)
-    print("  (NOT the sqrtcos hash. Run `pixi run check-portable-sqrtcos`")
+    print("  (NOT the sqrtcos hash. Run `pixi run check-native-gpu portable_sqrtcos_check`")
     print("   and confirm `sqrtcos device hash` is still 12295913102197186379.)")
 
 
@@ -1034,7 +1034,7 @@ def check_sabotage_arms(
             print("    the cross-column split needs Metal.")
 
 
-def main() raises:
+def run_checks() raises:
     for a in argv():
         if a == "sabotage":
             print("NOTE: this gate takes its reach arms as `-D` defines, not")
@@ -1119,8 +1119,8 @@ def main() raises:
     # ---- arm 2 + arm 3: the device ------------------------------------
     var d_x = ctx.enqueue_create_buffer[DType.float32](N)
     var d_one = ctx.enqueue_create_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_buf=d_x, src_ptr=h_x.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_one, src_ptr=h_one.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_x, h_x)
+    upload_host_into[DType.float32](ctx, d_one, h_one)
     var o_sin = ctx.enqueue_create_buffer[DType.float32](N)
     var o_cos = ctx.enqueue_create_buffer[DType.float32](N)
     var o_sin_sab = ctx.enqueue_create_buffer[DType.float32](N)
@@ -1144,12 +1144,12 @@ def main() raises:
     var r_cos_sab = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_vendor = ctx.enqueue_create_host_buffer[DType.float32](N)
     var r_probe = ctx.enqueue_create_host_buffer[DType.float32](N)
-    ctx.enqueue_copy(dst_ptr=r_sin.unsafe_ptr(), src_buf=o_sin)
-    ctx.enqueue_copy(dst_ptr=r_cos.unsafe_ptr(), src_buf=o_cos)
-    ctx.enqueue_copy(dst_ptr=r_sin_sab.unsafe_ptr(), src_buf=o_sin_sab)
-    ctx.enqueue_copy(dst_ptr=r_cos_sab.unsafe_ptr(), src_buf=o_cos_sab)
-    ctx.enqueue_copy(dst_ptr=r_vendor.unsafe_ptr(), src_buf=o_vendor)
-    ctx.enqueue_copy(dst_ptr=r_probe.unsafe_ptr(), src_buf=o_probe)
+    download_host_into[DType.float32](ctx, o_sin, r_sin)
+    download_host_into[DType.float32](ctx, o_cos, r_cos)
+    download_host_into[DType.float32](ctx, o_sin_sab, r_sin_sab)
+    download_host_into[DType.float32](ctx, o_cos_sab, r_cos_sab)
+    download_host_into[DType.float32](ctx, o_vendor, r_vendor)
+    download_host_into[DType.float32](ctx, o_probe, r_probe)
     ctx.synchronize()
 
     var qs = r_sin.unsafe_ptr()
@@ -1261,3 +1261,22 @@ def main() raises:
     _ = r_cos_sab.unsafe_ptr()
     _ = r_vendor.unsafe_ptr()
     _ = r_probe.unsafe_ptr()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("portable_trig_check", cpu=False, gpu=True, serial="", run=run_cases)

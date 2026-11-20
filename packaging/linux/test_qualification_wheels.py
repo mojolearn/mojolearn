@@ -195,6 +195,7 @@ class QualificationWheels(unittest.TestCase):
                 numeric_mode="identical", sha256=hashlib.sha256(raw_ptx).hexdigest(),
                 ptx_modules=[dict(target="sm_80", sha256="a" * 64)])])
         manifest_bytes = json.dumps(manifest).encode()
+        # a retained install from a release up to 0.8.65: the PTX set in its own distribution
         installed_dist(self.site, "mojolearn-nvidia-ptx", {
             "mojolearn/cuda_ptx/sm_80/identical/_mojolearn.so": raw_ptx,
             "mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json": manifest_bytes})
@@ -203,7 +204,8 @@ class QualificationWheels(unittest.TestCase):
         self.assertEqual(report["ptx"]["source_commit"], old_source)
         for item in report["wheels"]:
             with zipfile.ZipFile(item["path"]) as wheel:
-                if item["profile"] == "nvidia-ptx":
+                # repacked into the one NVIDIA wheel (2026-11-05)
+                if item["profile"] == "nvidia":
                     self.assertEqual(wheel.read("mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json"), manifest_bytes)
                 elif item["profile"] is None:
                     self.assertEqual(wheel.read("mojolearn/identity_columns/COMMIT"), (self.commit + "\n").encode())

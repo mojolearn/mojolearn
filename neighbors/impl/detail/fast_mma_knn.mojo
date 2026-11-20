@@ -30,8 +30,6 @@ row `(q & 4) + ((lane / 2) % 4)`, columns `(q & 2) * 2 + (lane % 2) * 2 + {0,1}`
 with `q = lane / 4`.
 
 Only for FAST builds on the Apple column; see `fast_mma_knn_applies`.
-`-D MOJOLEARN_KNN_FAST_MMA_OFF` turns it off (the scalar fused arm, then the
-tiled arm, take over).
 
 WHAT MADE IT FAST (M4, 10,000 queries x 1,000,000 x 16, k = 5; measured
 2026-09-25). The matrix unit alone did NOT help (2.2 s against the scalar
@@ -42,32 +40,39 @@ step's passing candidates, it fell to 0.50 s; prefetching the next shared
 tile into registers while the current one is multiplied took it to 0.22 s.
 """
 
+from std.sys.compile import is_defined
 from std.ffi import external_call
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from std.math import sqrt
 from std.bit import count_trailing_zeros
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.apple_air import simdgroup_load_legacy_air
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from std.os import getenv
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 # AFCL-G01: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
 # Four complete Apple SIMD groups halve the query rows owned by a block,
 # exposing more independent blocks while retaining each group's matrix and
 # top-k work. This occupancy tradeoff applies to every eligible shape.
 comptime AFCL_G01 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_G01"]()
 )
 comptime MQ_SG = 4 if AFCL_G01 else 8
+# TOMBSTONE: MOJOLEARN_AFCL_G01 (never-run Apple FAST card) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 76c3debd2e.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_G01.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 """Simdgroups per block."""
 comptime MQ_TPB = MQ_SG * 32
 comptime MQ_T = 128
@@ -88,11 +93,9 @@ infinities away)."""
 comptime MQ_PAD = Float32(3.3e38)
 """Norm of a padding row: above `MQ_BIG`, so never admitted."""
 
-comptime FAST_MMA_KNN_ENABLED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_KNN_FAST_MMA_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 2beee3664f.
+# Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime FAST_MMA_KNN_ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 # TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_SLICES2 (DROPPED-slower) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
 # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_CLS1_PRESEED.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_KNN_FAST_CLS1_PRESEED (DROPPED-noise) deleted 2026-10-03 by 9decae29f; code recoverable at 9decae29f^.
@@ -108,10 +111,18 @@ comptime MQ_DC = 32
 """Feature chunk of the chunked arm's shared tile."""
 
 
+#: The chunked arm (more than MQ_MAX_D features), Apple fast builds only
+#: (FAST_MMA_KNN_ENABLED): on by default; `-D MOJOLEARN_KNN_FAST_MMA_BIGD_OFF`
+#: turns it off (the A/B arm: the scalar and tiled arms then). Before (lane
+#: envgate-classical-deviceplan): the run-time MOJOLEARN_KNN_FAST_MMA_BIGD=0,
+#: a getenv per query. Apple fast is paused: the arm is kept, not timed.
+comptime KNN_FAST_MMA_BIGD_ON = not is_defined["MOJOLEARN_KNN_FAST_MMA_BIGD_OFF"]()
+
+
+@always_inline
 def _bigd_on() -> Bool:
-    """`MOJOLEARN_KNN_FAST_MMA_BIGD=0` turns the chunked arm (more than
-    MQ_MAX_D features) off: the A/B arm, the scalar and tiled arms then."""
-    return getenv("MOJOLEARN_KNN_FAST_MMA_BIGD") != "0"
+    """`KNN_FAST_MMA_BIGD_ON`, a build constant."""
+    return KNN_FAST_MMA_BIGD_ON
 
 
 def _k64_on() -> Bool:
@@ -126,13 +137,11 @@ def _k64_on() -> Bool:
     for `K <= 32`).
 
     DEFAULT ON (FAST + Apple) since the M3 A/B core-knn-k64-istella: knn
-    1,581 -> 352 ms, recall .9766 same. -D MOJOLEARN_KNN_FAST_MMA_K64_OFF
-    turns it off; the old -D MOJOLEARN_KNN_FAST_MMA_K64 name is accepted and
-    changes nothing."""
-    comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"]()
-    ):
+    1,581 -> 352 ms, recall .9766 same. The old -D MOJOLEARN_KNN_FAST_MMA_K64
+    name is accepted and changes nothing."""
+    # TOMBSTONE: MOJOLEARN_KNN_FAST_MMA_K64_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-06-base-cluster-kernel; code recoverable at 66ff49e5d5.
+    # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_MMA_K64_OFF.patch; record in docs/TOMBSTONES.md.
+    comptime if not (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU):
         return False
     else:
         return True
@@ -221,7 +230,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
 
     # Query fragments: element (frow, fcol + e) of block (a, kk) is
     # query q0 + 8a + frow, feature 8kk + fcol + e (zero padded).
-    var qf = InlineArray[_M64, A * KS](fill=_M64(0))
+    var qf = Array[_M64, A * KS](fill=_M64(0))
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
         comptime for kk in range(KS):
@@ -278,7 +287,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
                 v = index[unsafe_offset = (nb + r) * d + c]
             pf[u] = v
         for cb in range(MQ_T // RB):
-            var xf = InlineArray[_M64, B * KS](fill=_M64(0))
+            var xf = Array[_M64, B * KS](fill=_M64(0))
             comptime for b in range(B):
                 comptime for kk in range(KS):
                     xf[b * KS + kk] = _sg_load_t(
@@ -461,7 +470,7 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
     var base = lo
     while base < hi:
         var rows = min(MQ_T, hi - base)
-        var acc = InlineArray[_M64, A * NB](fill=_M64(0))
+        var acc = Array[_M64, A * NB](fill=_M64(0))
         var c0 = 0
         while c0 < d:
             barrier()
@@ -476,7 +485,7 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
             if c0 == 0 and tid < MQ_T:
                 tnorm[tid] = inorm[unsafe_offset = base + tid] if tid < rows else MQ_PAD
             barrier()
-            var qf = InlineArray[_M64, A * KC](fill=_M64(0))
+            var qf = Array[_M64, A * KC](fill=_M64(0))
             comptime for a in range(A):
                 var q = q0 + 8 * a + frow
                 comptime for kk in range(KC):
@@ -700,7 +709,7 @@ def fast_mma_knn(
     var slice_rows = (n_index + slices - 1) // slices
     slice_rows = ((slice_rows + MQ_T - 1) // MQ_T) * MQ_T
     slices = (n_index + slice_rows - 1) // slice_rows
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var t0 = 0
     if st_on:
         ctx.synchronize()

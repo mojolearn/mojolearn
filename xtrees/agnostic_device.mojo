@@ -8,11 +8,10 @@ between the two calls of each explainer (`*_synth`, then `*_solve` /
 same draws instead of keeping them, so nothing waits on the host between
 the calls but the model. The host column (xtrees/agnostic_host.mojo) runs
 the same units in the same stage order: the same words."""
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.ffi import _Global
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
 from x_linear.ops import fa as lin_fa, fexp as lin_fexp, ld as lin_ld, row_dot as lin_row_dot
@@ -24,11 +23,11 @@ from xtrees.agnostic import (
     pshap_dsynth_unit, pshap_dmap_unit, bg_mean_mapped_unit,
 )
 from std.memory import bitcast
+from core.shared_slot import SharedSlot
 
 comptime AGN_TPB = 128
-#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default
-#: (IDENTICAL and the other columns are unchanged; -D
-#: MOJOLEARN_KSHAP_FAST_BATCH_OFF restores the per-chunk path):
+#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple path
+#: (IDENTICAL and the other columns take the per-chunk path):
 #: MOJOLEARN_KSHAP_FAST_BATCH  the explainers' synthetic matrix lives in one
 #:   pooled device buffer (no per-chunk 100-400 MB allocation), the Python
 #:   glue reuses one host buffer for it across chunks (no fresh pages per
@@ -38,10 +37,14 @@ comptime AGN_TPB = 128
 #:   Bit-inert (the same units in the same order per row). M3 A/B
 #:   kap2-kshap-batch-istella: kernel-shap istella 27,011 -> 15,325 ms
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
-comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_BATCH_OFF (old path; KSHAP_FAST_BATCH KEPT: kap2-kshap-batch-istella 27,011 -> 15,325 ms,
+# kap2-pshap-batch-istella 34,198 -> 28,236 ms, M3) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
+# 073a9cc375. The per-chunk path stays: it is every other build's path.
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_BATCH_OFF.patch
+comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE
 #: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
-#: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):
+#: Apple:
 #: MOJOLEARN_AGN_IDN_SYN_POOL  the explainers' synthetic matrix is built in
 #:   the one pooled device buffer (no 100-400 MB device allocation per
 #:   chunk; Permutation SHAP on a 220-feature table is one chunk a row) and
@@ -49,13 +52,14 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_
 #:   per chunk), the FAST + Apple MOJOLEARN_KSHAP_FAST_BATCH buffer handling.
 #:   Bit-inert: the same units write the same words to the same offsets; the
 #:   host column builds the matrix in the caller's buffer either way.
-comptime AGN_IDN_SYN_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+# TOMBSTONE: MOJOLEARN_AGN_IDN_SYN_POOL_OFF (old path; AGN_IDN_SYN_POOL default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at f0bdc4bfd9.
+# Restore: git apply experiments/removed/MOJOLEARN_AGN_IDN_SYN_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AGN_IDN_SYN_POOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #: lane fam2-forests (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
-#: Apple (-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF restores the model callback;
-#: also off under MOJOLEARN_IDN_ALL_OFF):
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+#: Apple:
 #: MOJOLEARN_IDN_SHAP_DEVICE_MODEL  Kernel and Permutation SHAP over one of
 #:   this library's flat forests (RandomForest*, ExtraTrees*, DecisionTree*
 #:   predicting through the strict increasing-tree kernel) evaluate the
@@ -69,36 +73,12 @@ comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 #:   Bit-inert: `agn_model_unit` is the forest's IDENTICAL predict
 #:   arithmetic over the same compared values. The host column and every
 #:   other model keep the callback.
-comptime AGN_IDN_DEVICE_MODEL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
-#: lane apple-fast-round2 (2026-10-07), FAST experiments, default off, one
-#: define per explainer so the A/B grid can separate them:
-#: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL  KernelExplainer on the FAST tier takes
-#:   the device-model route above (`model_load` + `kshap_solve_model`) for
-#:   this library's flat forests instead of KSHAP_FAST_BATCH's synthetic
-#:   matrix download + the model's own predict per chunk.
-#: MOJOLEARN_PSHAP_FAST_DEVICE_MODEL  the same for PermutationExplainer
-#:   (`pshap_values_model`), ahead of PSHAP_DELTA's compacted download.
-#: Cost reasoning: a FAST chunk downloads R m nb d float32 synthetic words
-#: (m coalitions x nb background rows x d features per explained row; for
-#: thousands of coalitions, a hundred background rows and a few hundred
-#: features that is ~10^8 bytes per row), the model re-uploads them and the
-#: outputs come back. Shared Metal memory read from the CPU streams at well
-#: under PCIe rates, and KSHAP_FAST_OVERLAP (hiding the download) lost, so
-#: removing the copy is the lever: the forest walk reads x or a background
-#: row per node and no synthetic matrix exists. The model on the CPU inside
-#: a GPU explain is also host-route debt this removes. Quality: the same
-#: model and the same coalitions; the device walk is the strict
-#: increasing-tree sum, which may differ from a FAST forest's own predict
-#: fold order (FAST has no bits requirement; rel_error vs exact must hold).
-#: Never touches the IDENTICAL build (GLOBAL_NUMERIC_MODE gate).
-comptime KSHAP_FAST_DEVICE_MODEL = _AGN_FAST_APPLE and is_defined["MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"]()
-comptime PSHAP_FAST_DEVICE_MODEL = _AGN_FAST_APPLE and is_defined["MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"]()
-#: Any build that compiles the device-model route (IDENTICAL default, or a
-#: FAST experiment above).
-comptime AGN_ANY_DEVICE_MODEL = AGN_IDN_DEVICE_MODEL or KSHAP_FAST_DEVICE_MODEL or PSHAP_FAST_DEVICE_MODEL
+# TOMBSTONE: MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF (old path; AGN_IDN_DEVICE_MODEL default kept, no A/B recorded for the old path) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at c41fff16e3.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime AGN_IDN_DEVICE_MODEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
+# recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 #: lane/neighbors-small-ports (2026-10-11, idea D5), IDENTICAL, DEFAULT OFF
 #: (OPEN): `-D MOJOLEARN_IDN_PSHAP_RESIDENT`. PermutationExplainer over one of
 #: this library's linear regressors (predict = link(X W^T + b), x_linear
@@ -120,20 +100,21 @@ comptime AGN_ANY_DEVICE_MODEL = AGN_IDN_DEVICE_MODEL or KSHAP_FAST_DEVICE_MODEL 
 #: PROMOTED to the IDENTICAL default 2026-10-11 (lane/w2-decide-algos, same-box A/B on main c8ef6c66d,
 #: one run per arm, NV L40S / AMD MI325X, digests NV==AMD): permutation-shap istella 0.097 (NV 3873 ->
 #: 258 ms), taxi 0.022 (NV 66 -> 0.68 ms; AMD 0.128/0.033); kernel-shap 1.02 untouched; same bits; runs
-#: v0109/a1691 vs A v0108/a1690. -D MOJOLEARN_IDN_PSHAP_RESIDENT_OFF restores the old path.
-comptime PSHAP_IDN_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_PSHAP_RESIDENT_OFF"]()
-)
-#: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
+#: v0109/a1691 vs A v0108/a1690.
+# TOMBSTONE: MOJOLEARN_IDN_PSHAP_RESIDENT_OFF (old path; PSHAP_IDN_RESIDENT default kept, EXP:2051 KEEP (promoted 2026-10-11, NV 0.097 / AMD 0.128)) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 5002a250c9.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PSHAP_RESIDENT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PSHAP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: Default FAST + Apple.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).
 #: w2-pdelta-quality: linear/tanh/two-output phi byte-identical, identical
 #: additivity errors; model rows 2,713,500 -> 2,215,900. Measured source
 #: 20bbdc37256bd00ef09fc97970f79f6967fa4f2a, no arithmetic changes here.
 #: Device counts/compaction/mapping, same background mean/marginal order;
 #: callback retains the existing chunked, row-independent model contract.
-comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA_OFF"]()
-#: SHAP_PERM_CACHE (FAST + Apple DEFAULT, on top of PSHAP_DELTA; rollback
-#: `-D MOJOLEARN_SHAP_PERM_CACHE_OFF`). M3 afc_ab_def, full board size, 1 run
+# TOMBSTONE: MOJOLEARN_PSHAP_DELTA_OFF (old path; PSHAP_DELTA FAST+Apple default kept (M3 28,222.8 -> 14,788.6 ms), EXP:1595 OPEN) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 7f82ef0243.
+# Restore: git apply experiments/removed/MOJOLEARN_PSHAP_DELTA_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PSHAP_DELTA = _AGN_FAST_APPLE
+#: SHAP_PERM_CACHE (FAST + Apple DEFAULT, on top of PSHAP_DELTA). M3 afc_ab_def, full board size, 1 run
 #: per arm, 2026-10-04 (ab1 d51f4b4bf): permutation-shap taxi 102.77 -> 85.42
 #: ms, istella 15229.5 -> 14991.0 ms; rel_error_vs_exact identical.
 #: `pshap_dsynth` keeps its
@@ -153,7 +134,9 @@ comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA
 #: (and pooled the synthetic buffer under KSHAP_FAST_BATCH), so the same
 #: idea, caching the per-chunk device state, is re-aimed at the work
 #: PSHAP_DELTA still does twice per chunk.
-comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_CACHE_OFF"]()
+# TOMBSTONE: MOJOLEARN_SHAP_PERM_CACHE_OFF (old path; SHAP_PERM_CACHE FAST+Apple default kept, EXP:1403 READY-AB) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 7669424c25.
+# Restore: git apply experiments/removed/MOJOLEARN_SHAP_PERM_CACHE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SHAP_PERM_CACHE = PSHAP_DELTA
 #: TOMBSTONE: MOJOLEARN_KSHAP_FAST_OVERLAP (DROPPED-noise: kernel-shap istella neutral, verdicts batch 6) deleted 2026-10-09
 #: on lane/owed-deletions-D1 (next chunk's synthetic rows + download overlapped with the model); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
@@ -161,7 +144,7 @@ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_C
 #: on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
 comptime AGN_MAX_BLOCKS = 65535 * 16
-comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
+comptime _CTX = "MojolearnXTreesAgnosticIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesAgnosticFastV1"
 
 
 def _ctx() raises -> DeviceContext:
@@ -386,10 +369,10 @@ struct _AgnPool(Defaultable, Movable):
 
 
 comptime _AGN_POOL_NAME = (
-    "MojoXTreesAgnosticSynPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXTreesAgnosticSynPoolFast"
+    "MojolearnXTreesAgnosticSynPoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnXTreesAgnosticSynPoolFastV1"
 )
-comptime AGN_POOL = _Global[StorageType=_AgnPool, name=_AGN_POOL_NAME, init_fn=_AgnPool.__init__]
+comptime AGN_POOL = SharedSlot[_AgnPool, _AGN_POOL_NAME]
 
 
 def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
@@ -793,10 +776,10 @@ struct _AgnModel(Defaultable, Movable):
 
 
 comptime _AGN_MODEL_NAME = (
-    "MojoXTreesAgnosticModelIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXTreesAgnosticModelFast"
+    "MojolearnXTreesAgnosticModelIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnXTreesAgnosticModelFastV1"
 )
-comptime AGN_MODEL = _Global[StorageType=_AgnModel, name=_AGN_MODEL_NAME, init_fn=_AgnModel.__init__]
+comptime AGN_MODEL = SharedSlot[_AgnModel, _AGN_MODEL_NAME]
 
 
 def model_release() raises:
@@ -1113,7 +1096,7 @@ struct _DeltaSlot(Defaultable, Movable):
         self.key = List[Int]()
 
 
-comptime AGN_DELTA_SLOT = _Global[StorageType=_DeltaSlot, name="MojoXTreesAgnosticDeltaFast", init_fn=_DeltaSlot.__init__]
+comptime AGN_DELTA_SLOT = SharedSlot[_DeltaSlot, "MojolearnXTreesAgnosticDeltaFastV1"]
 
 
 def _delta_key(x: Int, bg: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int, row0: Int) -> List[Int]:

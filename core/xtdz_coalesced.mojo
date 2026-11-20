@@ -24,13 +24,11 @@ chain's value. Same chains, same fold, same bits.
 `-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` turns this off with the unroll; the
 caller then launches the one-block-per-cell kernel.
 """
-from experiments.classical_identical_ideas.shared_controls import C01_MEAN
-from core.blocked_moments import bm_column_mean
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -295,17 +293,8 @@ def column_mean_launch(
     PCA_FAST_COLMEAN and TruncatedSVD's TSVD_FAST_COLVAR) are gone from this
     launch. BITS: unchanged under IDENTICAL defaults; FAST moves to the tile
     order (FAST needs no same bits)."""
-    # C01_MEAN (lane classical-decomp, 2026-10-07; default OFF): leaf column
-    # sums, one block per leaf, and the binary-counter fold over leaves
-    # (core/blocked_moments.mojo; host column core/blocked_moments_host.mojo).
-    # It SYNCHRONIZES before releasing its workspace. NOT MEASURED.
-    comptime if C01_MEAN:
-        if n_rows >= 1 and n_cols >= 1:
-            bm_column_mean(
-                ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
-            )
-            return
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at eeba85eb55.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-05-base.patch; record in docs/TOMBSTONES.md.
     var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     xty_tiled(
         ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),

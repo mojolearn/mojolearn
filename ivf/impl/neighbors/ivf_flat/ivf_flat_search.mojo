@@ -74,7 +74,6 @@ than approximately. Read `ivf/checks/list_layout.mojo`'s header before
 changing anything about that order.
 """
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
-from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -84,12 +83,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
-from ivf.impl.neighbors.ivf_flat.ivf_balanced_tasks import ivf_balanced_scan
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
-    IIVF_MAX_DIM,
-    IIVF_QPB,
-    identical_ivf_scan_kernel,
-    identical_ivf_scan_staged_kernel,
     identical_ivf_scan_grouped_kernel,
     identical_ivf_merge_kernel,
     GQPB,
@@ -100,9 +94,6 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_QPB,
     fast_ivf_scan_kernel,
 )
-from std.sys.compile import is_defined
-from std.ffi import _Global
-from std.os import getenv
 from x_ann.io import upload_i32
 from core.device_fold import device_count_less_i32
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
@@ -117,11 +108,9 @@ from ivf.impl.neighbors.ivf_flat.ivf_query_device import (
     ivf_query_batches,
 )
 from x_ann.io import download_i32
-from std.gpu import WARP_SIZE
-from std.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
+from max.gpu import WARP_SIZE
+from max.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
 from checks.numerics import ftz as _ivf_ftz, identical_sqrt as _ivf_identical_sqrt
-from std.sys.info import has_apple_gpu_accelerator
-from x_ann.switches import ANN3_PREPARE
 from ivf.checks.list_layout import (
     ListLayout,
     filter_candidate_slots,
@@ -190,26 +179,23 @@ width reaches no fold and no accumulator; `check_launch_invariance` moves
 it anyway, because "reaches no fold" is an argument and the check is a
 measurement."""
 
-comptime IVF_IDENTICAL_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"]()
-)
-comptime IVF_IDENTICAL_SCAN_ANY_DIM = (
-    IVF_IDENTICAL_SCAN
-    and not is_defined["MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-"""lane/no-dim-idn (2026-10-04): the IDENTICAL batched scans take every
-dimension. The old `dim <= 256` gate was the size of the shared query stage
-(IIVF_MAX_DIM), and it sat just above the board's widest row (istella, 220);
-wider data fell to the per-query path, one launch per query. The identical
-kernels now read a query wider than the stage straight from global memory,
-value for value (`ftz` of the same element, the same ascending
-`identical_mul_add` chain), so the distances, the top-k and the bits are the
-per-query path's (`ivf_query_device.mojo`, the same chain) and the host
-column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` (and
-`MOJOLEARN_IDN_ALL_OFF`) restore the cap (A/B arm B). The FAST kernel keeps
-FIVF_MAX_DIM (FAST is out of this lane's scope)."""
+# TOMBSTONE: MOJOLEARN_IVF_IDENTICAL_SCAN_OFF (old per-query path under IDENTICAL, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at c4611d659f.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDENTICAL_SCAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDENTICAL_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 8c3413769b.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF.patch; record in docs/TOMBSTONES.md.
+# IVF_IDENTICAL_SCAN_ANY_DIM (now IVF_IDENTICAL_SCAN itself): lane/no-dim-idn (2026-10-04): the IDENTICAL batched scans take every
+# dimension. The old `dim <= 256` gate was the size of the shared query stage
+# (IIVF_MAX_DIM), and it sat just above the board's widest row (istella, 220);
+# wider data fell to the per-query path, one launch per query. The identical
+# kernels now read a query wider than the stage straight from global memory,
+# value for value (`ftz` of the same element, the same ascending
+# `identical_mul_add` chain), so the distances, the top-k and the bits are the
+# per-query path's (`ivf_query_device.mojo`, the same chain) and the host
+# column's. The FAST kernel keeps FIVF_MAX_DIM (FAST is out of this lane's
+# scope).
 # lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
 # vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
 # round trip per query: 526 s on an L40S and 265 s on an MI325X for
@@ -217,8 +203,7 @@ FIVF_MAX_DIM (FAST is out of this lane's scope)."""
 # running this kernel (bench_board 0.8.25). The kernel is written on
 # WARP_SIZE (its launch below and its lane merge follow it), and its
 # arithmetic is the pinned path's term for term; the identity gate on each
-# vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
-# restores the per-query path.
+# vendor is the check, as it was on Apple.
 #
 # IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
 # for every query in one launch (`identical_ivf_scan.mojo`), the pinned
@@ -229,11 +214,12 @@ FIVF_MAX_DIM (FAST is out of this lane's scope)."""
 #: the L2SqrtExpanded root over the n_queries x k selected distances runs in
 #: a kernel before the download (`ivf_sqrt_kernel`, `postprocess_distances`'
 #: statement per cell: the same words). Before, the host walked the
-#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF (or
-#: MOJOLEARN_IDN_ALL_OFF) restores the host walk.
-comptime IVF_IDN_DEVICE_SQRT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: downloaded list. FAST keeps the host walk.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at f81bc0a348.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF (old host root walk under IDENTICAL, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 0faa031c3c.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_IDN_DEVICE_SQRT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def ivf_sqrt_kernel(dist: MutPointer[Float32, MutAnyOrigin], n_: Int32):
@@ -250,28 +236,14 @@ def _ivf_sqrt_device(ctx: DeviceContext, mut d_od: DeviceBuffer[DType.float32], 
         )
 
 
-comptime IVF_FAST_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and not is_defined["MOJOLEARN_IVF_FAST_SCAN_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IVF_FAST_SCAN_OFF (old per-query path beside the FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 4f59e7202c.
+# Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_SCAN_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IVF_FAST_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """FAST on Apple: steps 3-5 for every query in one launch
 (`fast_ivf_scan.mojo`) instead of a host round trip per query."""
-# F14 keeps IVF's chosen centroids/probes and filter semantics. The separate
-# Apple FAST flag changes only compact list-task buffering and arithmetic;
-# it needs approximate recall and actual caller quality qualification.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
-comptime IVF_APPLE_FAST_BALANCED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"]()
-
-struct _BalancedAudit(Defaultable, Movable):
-    var hits: Int
-
-    def __init__(out self):
-        self.hits=0
-
-comptime _BALANCED_AUDIT=_Global[StorageType=_BalancedAudit,name="MojoIvfBalancedAudit",init_fn=_BalancedAudit.__init__]
-
-def ivf_fast_balanced_hits() raises -> Int:
-    return _BALANCED_AUDIT.get_or_create_ptr()[].hits
+# TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by 0c3399062b; code
+# recoverable at f59d913b0b (F14: the Apple FAST arm into ivf_balanced_scan, its MOJOLEARN_IVF_FAST_BALANCED_AUDIT counter
+# and the ivf_fast_balanced_hits export). Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
 
 
 
@@ -302,25 +274,17 @@ def _sort_probes_host(
         sort_slots_by_distance_then_index(probe_dist, probe_ids, q * n_probes, n_probes)
 
 
-def _ivf_scan_grouped() -> Bool:
-    """The identical scan grouped by list (identical_ivf_scan_grouped_kernel
-    + identical_ivf_merge_kernel, lane neural-pass42): default on;
-    MOJOLEARN_IVF_SCAN_GROUPED=0 keeps the per-query kernels. Same bits."""
-    return String(getenv("MOJOLEARN_IVF_SCAN_GROUPED")) != "0"
-
-
-def _ivf_scan_staged() -> Bool:
-    """The identical scan with its candidate rows staged through threadgroup
-    memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the
-    default on NVIDIA and AMD, where the plain kernel's lanes each walk
-    their own row (WARP_SIZE scattered rows per load); the plain kernel on
-    Apple, where the staged kernel's barriers cost more than they save
-    (M4, 200,000 x 220, 256 lists, 2,000 queries: 3.4 -> 12.2 s). The same
-    bits either way; MOJOLEARN_IVF_SCAN_STAGED=0/1 forces either."""
-    var v = String(getenv("MOJOLEARN_IVF_SCAN_STAGED"))
-    comptime if has_apple_gpu_accelerator():
-        return v == "1"
-    return v != "0"
+#: The identical scan is grouped by list (identical_ivf_scan_grouped_kernel +
+#: identical_ivf_merge_kernel, lane neural-pass42) on every column, filtered
+#: or not. A/B ab3 (NVIDIA L40S, wheel d652a4b0a1, 2026-11-18, job
+#: nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests and quality equal
+#: on all 6 cells): the per-query kernels (the staged one on NVIDIA) were
+#: arm/base 1.050 geomean (ivf istella fit 303 -> 374 ms 1.24, ivf taxi fit
+#: 1.08, ivf-filter 0.99-1.01). With the per-query path gone, its staged /
+#: plain choice (MOJOLEARN_IVF_SCAN_STAGED, _STAGED_OFF; lane neural-pass35)
+#: and both per-query kernels went with it.
+#: TOMBSTONE: MOJOLEARN_IVF_SCAN_GROUPED_OFF (LOSER: per-query identical scan, arm/base geomean 1.050 over 6 cells, NV L40S ab3 2026-11-18; with it MOJOLEARN_IVF_SCAN_STAGED and MOJOLEARN_IVF_SCAN_STAGED_OFF, which chose between the per-query kernels only) deleted 2026-11-18 by lane/fx-verdicts2; code recoverable at 85c36e324f.
+#: Restore: git apply experiments/removed/MOJOLEARN_IVF_SCAN_GROUPED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def _expanded_distances(
@@ -582,24 +546,15 @@ struct IvfFlatDevice(Movable):
         ctx.synchronize()
         _ = h_off^
         _ = h_ind^
-        # lane ann-apple3, behind `ANN3_PREPARE`: the host layout (a copy of
-        # the index's three lists, the n_rows x dim vectors among them) is
-        # read by the per-query path only, so it is made by `ensure_layout`
-        # when a search first takes that path. The one-launch scans never
-        # read it. Without the switch it is copied here, as before.
-        comptime if ANN3_PREPARE:
-            self.layout = ListLayout(
-                n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
-            )
-        else:
-            self.layout = ListLayout(
-                n_lists,
-                index.n_rows,
-                index.dim,
-                index.list_offsets.copy(),
-                index.list_indices.copy(),
-                index.list_data.copy(),
-            )
+        # lane ann-apple3: the host layout (a copy of the index's three
+        # lists, the n_rows x dim vectors among them) is read by the
+        # per-query path only, so it is made by `ensure_layout` when a search
+        # first takes that path. The one-launch scans never read it.
+        # TOMBSTONE: MOJOLEARN_ANN3_PREPARE_OFF (old path, no A/B row) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at 7451a36f17.
+        # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.expdel2-12-cluster.patch; record in docs/TOMBSTONES.md.
+        self.layout = ListLayout(
+            n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
+        )
         self.list_sizes = List[Int32]()
         for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): list-count plan for the probe launches, no row data
             self.list_sizes.append(Int32(index.list_size(l)))
@@ -880,21 +835,15 @@ def ivf_flat_search_prepared(
         # a filtered search fell to the per-query path, whose FAST distances
         # (the expanded norm form) differ by ulps from the batched scan's
         # direct sum of squares, and `check_filter_matches_oracle` failed.
-        var batched_filter_ok = True
-        comptime if IVF_IDENTICAL_SCAN:
-            batched_filter_ok = _ivf_scan_grouped()
         use_batched = (
             not trace.enabled
             and not partial_storage
-            and (not filtered or batched_filter_ok)
             and k <= 32
         )
-        # IDENTICAL: every dimension under main's IVF_IDENTICAL_SCAN_ANY_DIM
-        # (lane/no-dim-idn), else its own kernels' tile (IIVF_MAX_DIM); FAST
-        # takes up to FIVF_MAX_DIM (lane apple-fast-no-narrow-2)
-        comptime if IVF_IDENTICAL_SCAN:
-            use_batched = use_batched and (IVF_IDENTICAL_SCAN_ANY_DIM or dim <= IIVF_MAX_DIM)
-        else:
+        # IDENTICAL: every dimension (IVF_IDENTICAL_SCAN_ANY_DIM,
+        # lane/no-dim-idn); FAST takes up to FIVF_MAX_DIM (lane
+        # apple-fast-no-narrow-2)
+        comptime if not IVF_IDENTICAL_SCAN:
             use_batched = use_batched and dim <= FIVF_MAX_DIM
     # the trace records each query's probes sorted (checks only); no search
     # path reads the probes on the host
@@ -937,7 +886,7 @@ def ivf_flat_search_prepared(
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
-                        comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED or C35_PACKED_LISTS:
+                        comptime if IVF_IDENTICAL_SCAN:
                             # I16 2026-10-06 AMD MI325X scoped LOSER, source 5b467815b:
                             # balanced / flat ratios 3.253-16.510; staged / flat 1.381-2.200.
                             # 100000 rows, 128 queries, features7/33/65, 64 lists/probes,
@@ -952,66 +901,43 @@ def ivf_flat_search_prepared(
                             # balanced candidate/baseline1.20x-4.17x time. One warmup/score;
                             # IDENTICAL opt-in remains off. Evidence: overnight-ab-20261006/
                             # nvidia/default-repair-normalized-measurements.json.
-                            if C35_PACKED_LISTS or IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
-                                comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
-                                    _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
-                                ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)
-                            elif _ivf_scan_grouped():
-                                # lane neural-pass42: the (query, probe) pairs grouped by
-                                # list, ascending (q, p) within a list, the blocks GQPB
-                                # pairs of one list each; lane cgr4-download-loop: the
-                                # grouping runs on the device (ivf_group_device.mojo)
-                                var grp = ivf_group_pairs_device(
-                                    ctx, dprobe_idx, n_queries, n_probes, n_lists, GQPB
-                                )
-                                var n_blocks = grp.n_blocks
-                                var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
-                                var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
-                                if n_blocks > 0:
-                                    ctx.enqueue_function[identical_ivf_scan_grouped_kernel[KM]](
-                                        dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                        dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                        dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                        grp.goff.unsafe_ptr(), grp.gq.unsafe_ptr(), grp.gp.unsafe_ptr(),
-                                        grp.bl.unsafe_ptr(), grp.bs.unsafe_ptr(),
-                                        d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
-                                        d_keep.unsafe_ptr(), Int32(keep_len),
-                                        Int32(dim), Int32(n_probes), Int32(k),
-                                        grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
-                                    )
-                                ctx.enqueue_function[identical_ivf_merge_kernel[KM]](
-                                    d_pd.unsafe_ptr(), d_pi.unsafe_ptr(), d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(n_probes), Int32(k),
-                                    grid_dim=(n_queries + 255) // 256, block_dim=256,
-                                )
-                                ctx.synchronize()
-                                _ = grp^
-                                _ = d_pd^
-                                _ = d_pi^
-                            elif not filtered and _ivf_scan_staged():
-                                ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
+                            # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+                            # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
+                            # (the IDENTICAL opt-in and its run-time MOJOLEARN_IVF_BALANCED_TASKS_OFF getenv; measured
+                            # slower on both vendors, I16 above)
+                            # TOMBSTONE: MOJOLEARN_C35_PACKED_LISTS (unmeasured arm) folded here 2026-11-15 by lane/expdel2-12-cluster; code recoverable at a2aabdcd81.
+                            # Restore: git apply experiments/removed/MOJOLEARN_C35_PACKED_LISTS.expdel2-12-cluster.patch (ivf_balanced_scan and its file, ivf_balanced_tasks.mojo, had no other caller and are deleted); record in docs/TOMBSTONES.md.
+                            # lane neural-pass42: the (query, probe) pairs grouped by
+                            # list, ascending (q, p) within a list, the blocks GQPB
+                            # pairs of one list each; lane cgr4-download-loop: the
+                            # grouping runs on the device (ivf_group_device.mojo)
+                            var grp = ivf_group_pairs_device(
+                                ctx, dprobe_idx, n_queries, n_probes, n_lists, GQPB
+                            )
+                            var n_blocks = grp.n_blocks
+                            var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
+                            var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
+                            if n_blocks > 0:
+                                ctx.enqueue_function[identical_ivf_scan_grouped_kernel[KM]](
                                     dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
                                     dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
                                     dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                    dprobe_idx.unsafe_ptr(),
-                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(dim), Int32(n_probes),
-                                    Int32(k),
-                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                    grp.goff.unsafe_ptr(), grp.gq.unsafe_ptr(), grp.gp.unsafe_ptr(),
+                                    grp.bl.unsafe_ptr(), grp.bs.unsafe_ptr(),
+                                    d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
+                                    d_keep.unsafe_ptr(), Int32(keep_len),
+                                    Int32(dim), Int32(n_probes), Int32(k),
+                                    grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
                                 )
-                            else:
-                                ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
-                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                    dprobe_idx.unsafe_ptr(),
-                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                    Int32(n_queries), Int32(dim), Int32(n_probes),
-                                    Int32(k),
-                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                    block_dim=IIVF_QPB * WARP_SIZE,
-                                )
+                            ctx.enqueue_function[identical_ivf_merge_kernel[KM]](
+                                d_pd.unsafe_ptr(), d_pi.unsafe_ptr(), d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                Int32(n_queries), Int32(n_probes), Int32(k),
+                                grid_dim=(n_queries + 255) // 256, block_dim=256,
+                            )
+                            ctx.synchronize()
+                            _ = grp^
+                            _ = d_pd^
+                            _ = d_pi^
                         else:
                             if dim <= FIVF_DIM_TILE:
                                 ctx.enqueue_function[fast_ivf_scan_kernel[KM]](

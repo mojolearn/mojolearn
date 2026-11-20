@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "dependencies": {
+    "native_api": "7928f536d0",
+    "public_owner": "14ad3ca7ab",
+    "scalar_boundary": "0c24c4ca90 + 26dd5ed3b4",
+    "shared_fixture_helpers": "7de9a631bf + 1c3b676dbb",
+    "resident_pool_repair": "15ed627362",
+    "device_context_stage": "4c76f65dd5 + 469ea0c8e0",
+    "generic_pool": "c07626c77d"
+  },
+  "status": "Source reviewed only; new fit suites uncompiled/unrun",
+  "fixtures": {
+    "cpu": 10,
+    "gpu": 13
+  },
+  "providers": {
+    "host_estimator": "tsvd_host_native_v1",
+    "host_decomposition": "tsvd_decomp_native_v1[HostExec, NoRDev, False]",
+    "gpu_estimator": "tsvd_device_native_v1",
+    "gpu_decomposition": "tsvd_decomp_native_v1[DevExec, DevRDev, True]",
+    "gpu_fold": "tsvd_fold_native_v1"
+  },
+  "common_cases": [
+    {
+      "id": 0,
+      "case": "Decomposition provider mode/vendor/capability/Q-fix metadata"
+    },
+    {
+      "id": 1,
+      "case": "Original seed7 512x5, count2, Gram fit; independent SVD/subspace; unused variance outputs unchanged; fitted query equation"
+    },
+    {
+      "id": 2,
+      "case": "Original 512x5 fused fit plus independent singular/subspace/variance/ratio and consumed query"
+    },
+    {
+      "id": 3,
+      "case": "Original 512x5 explained-only route with planted component columns0,2; NumPy population variance/ratio and query"
+    },
+    {
+      "id": 4,
+      "case": "Original pilot 6x3 literal, count2, randomized oversamples10/iterations5/seed7; independent fit and query"
+    },
+    {
+      "id": 5,
+      "case": "Original 512x5 TSQR components followed by estimator explained tail on GPU; exact existing unsupported-TSQR refusal on CPU"
+    },
+    {
+      "id": 6,
+      "case": "6x3 randomized fit with NaN reports finite status, input ownership and output guards"
+    },
+    {
+      "id": 7,
+      "case": "6x3 fused fit with infinity reports finite status, input ownership and output guards"
+    },
+    {
+      "id": 8,
+      "case": "6x3 randomized count0 native refusal with owned live buffers"
+    },
+    {
+      "id": 9,
+      "case": "Original pilot 6x3 fused fit plus independent singular/subspace/variance/ratio and consumed query"
+    }
+  ],
+  "gpu_fold_cases": [
+    "Original6x3 reverse-index resident fit, independent oracle and host source/index mutation after synchronous upload",
+    "Resident NaN finite status distinct from range status",
+    "Resident out-of-range index status distinct from finite status"
+  ],
+  "oracle": {
+    "metadata": "checks/native_tests/fixtures/tsvd_fit/metadata.json",
+    "files": 14,
+    "generation": "NumPy2.5.3 only; no Mojolearn import or execution",
+    "inputs": "Original host test512x5 seed7 and pilot boundary6x3 literal; no dimensions reduced",
+    "settings": "Count2. Original randomized public defaults oversamples10 and iterations5, seed7. Test mode identical. No tuning/default changes.",
+    "new_fit_tolerances": {
+      "singular": "rtol1e-3/atol1e-4",
+      "variance_ratio": "rtol1e-3/atol1e-5",
+      "leading_projector": "rtol2e-3/atol2e-4"
+    },
+    "retained_query_tolerance": "rtol2e-4/atol2e-4 from original boundary test. No existing expected bound weakened."
+  },
+  "ownership": "Guarded four fit outputs and query output; raw-address input/output owners pinned after native calls in finally, including refusal paths. Inputs unchanged, queries do not mutate components. Fold handles freed in finally.",
+  "parallelism": "CPU independent fixture graphs, input decode and oracle cells use host_parallelize. GPU fixture graphs submit in order over shared contexts/stores while existing kernels and oracle cells retain parallelism. Reference variants and all14 file writes use a host-sized pool.",
+  "python_split": {
+    "path": "python/mojolearn/tests/test_tsvd_native_boundary.py",
+    "removed": "One pure finite-score assertion inside descriptor/callback test; same6x3 numerical/finite behavior covered directly by native Gram/fused/randomized fit/query cases",
+    "retained": "All18 current Python definitions including scalar refusal additions, returned-array shapes, descriptor callback audit, fit/fit_transform comparison, weakref ownership, rebinding and serialization seams",
+    "authorization": "Pilot delegated this single line; finite lane coordinated appended scalar additions.",
+    "definitions_removed": 0,
+    "python_definitions_retained": 18
+  },
+  "commands": {
+    "cpu": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/tsvd_fit_cpu.mojo",
+    "gpu": "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/native_tests/tsvd_fit_gpu.mojo"
+  },
+  "limits": [
+    "No lane compile/runtime test/box action",
+    "No old green suite repeated",
+    "No timing, performance or cross-vendor identity claim",
+    "Bounded direct fit correctness, not exhaustive whole-estimator qualification",
+    "TSQR existing native route explicitly exercised; no experimental define/default promoted"
+  ]
+}

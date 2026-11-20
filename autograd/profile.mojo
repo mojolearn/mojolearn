@@ -255,6 +255,9 @@ def ag_route_name(route: Int) -> String:
         return "splitk_part"
     if route == 11:
         return "splitk_fold"
+    if route == 13:
+        # sequence/gemm_packed_route.mojo GR_PROF_PACKED (the default route on the NVIDIA and AMD columns)
+        return "packed"
     return "route_" + String(route)
 
 

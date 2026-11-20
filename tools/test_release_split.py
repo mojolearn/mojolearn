@@ -57,7 +57,7 @@ class Switch(SplitBase):
 
     def test_the_split_pipelines(self):
         r = self.release()
-        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "nvidia-ptx", "amd", "meta-linux"])
+        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd", "meta-linux"])
         for p in r.PIPELINES.values():
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
@@ -65,12 +65,17 @@ class Switch(SplitBase):
         # (it requires the core and both vendors)
         # Andrew 2026-10-10: identity runs ONCE; linux-joint-diff is deleted
         # e1f7f8e24: every publish also needs both candidate gates (before any publication)
-        gates = {"gate-nvidia", "gate-amd"}
+        # 2026-11-06: and every publish needs the TestPyPI rehearsal of its bytes (release.REHEARSAL_STEP)
+        gates = {"gate-nvidia", "gate-amd", release.REHEARSAL_STEP}
+        self.assertEqual(set(r.NEEDS[release.REHEARSAL_STEP]), {"gate-nvidia", "gate-amd"})
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-pack"} | gates)
-        self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"})
-        self.assertEqual(set(r.NEEDS["publish-nvidia-ptx"]), {"gpu-column-nvidia", "publish-core-linux"} | gates)
+        # Andrew 2026-11-05: every publish also waits for every identity-lane step (release.DEVICE_LANE_STEPS)
+        self.assertEqual(set(r.AFTER["publish-core-linux"]), {"gpu-column-nvidia", "gpu-column-amd"}
+                         | set(release.DEVICE_LANE_STEPS))
+        # one NVIDIA wheel carries native sm_89 and PTX sm_80 (2026-11-05): no publish-nvidia-ptx
+        self.assertNotIn("publish-nvidia-ptx", r.NEEDS)
         self.assertEqual(set(r.NEEDS["publish-nvidia"]),
-                         {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "publish-nvidia-ptx"} | gates)
+                         {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "publish-core-linux"} | gates)
         self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "publish-core-linux"} | gates)
         self.assertEqual(set(r.NEEDS["publish-meta-linux"]), {"publish-core-linux", "publish-nvidia", "publish-amd"} | gates)
         self.assertEqual(r.PIPELINES["meta-linux"]["platform"], "linux-meta")
@@ -79,12 +84,13 @@ class Switch(SplitBase):
     def test_the_split_packages_and_what_pip_resolves(self):
         self.assertEqual(release.SPLIT_PACKAGES, {
             "linux": ("mojolearn-core", "mojolearn_core"), "nvidia": ("mojolearn-nvidia", "mojolearn_nvidia"),
-            "amd": ("mojolearn-amd", "mojolearn_amd"), "nvidia-ptx": ("mojolearn-nvidia-ptx", "mojolearn_nvidia_ptx"),
+            "amd": ("mojolearn-amd", "mojolearn_amd"),
             "linux-meta": ("mojolearn", "mojolearn")})
-        self.assertEqual(set(release.PLUGIN_PACKAGES), {"nvidia", "amd", "nvidia-ptx"})
+        self.assertEqual(set(release.PLUGIN_PACKAGES), {"nvidia", "amd"})
+        self.assertEqual(release.LEGACY_SPLIT_PACKAGES, ("nvidia-ptx",))
         self.assertEqual(release.LINUX_RESOLVES["linux"], ("linux",))
         self.assertEqual(set(release.LINUX_RESOLVES["linux-meta"]), set(release.SPLIT_PACKAGES))
-        self.assertEqual(set(release.LINUX_RESOLVES["nvidia"]), {"linux", "nvidia", "nvidia-ptx"})
+        self.assertEqual(set(release.LINUX_RESOLVES["nvidia"]), {"linux", "nvidia"})
         self.assertEqual(set(release.LINUX_RESOLVES["amd"]), {"linux", "amd"})
         self.assertNotIn("nvidia-ptx", release.LINUX_RESOLVES)
 
@@ -117,14 +123,14 @@ class Gates(SplitBase):
     def published(self, r):
         return sorted(r.published_platforms())
 
-    def test_everything_passing_publishes_the_five_packages_and_macos(self):
+    def test_everything_passing_publishes_the_four_linux_packages_and_macos(self):
         r, order = self.staged()
         self.assertEqual(r.go(), 0)
-        self.assertEqual(self.published(r), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["amd", "linux", "linux-meta", "macos", "nvidia"])
+        self.assertNotIn("publish-nvidia-ptx", order)
         # the core first: each vendor requires mojolearn-core at <v>
-        self.assertLess(order.index("publish-core-linux"), order.index("publish-nvidia-ptx"))
+        self.assertLess(order.index("publish-core-linux"), order.index("publish-nvidia"))
         self.assertLess(order.index("publish-core-linux"), order.index("publish-amd"))
-        self.assertLess(order.index("publish-nvidia-ptx"), order.index("publish-nvidia"))
         # the Linux mojolearn last: pip resolves mojolearn==<v> only once the
         # core and both vendors at <v> are on the index
         for step in ("publish-core-linux", "publish-nvidia", "publish-amd"):
@@ -134,7 +140,7 @@ class Gates(SplitBase):
         r, order = self.staged(fail={"gpu-column-amd"})
         self.assertEqual(r.go(), 1)
         # the core requires no vendor: it and NVIDIA still publish
-        self.assertEqual(self.published(r), ["linux", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["linux", "macos", "nvidia"])
         self.assertNotIn("publish-amd", order)
         self.assertNotIn("publish-meta-linux", order)
         self.assertIn("amd: FAILED at gpu-column-amd", "\n".join(r.lines))
@@ -143,51 +149,60 @@ class Gates(SplitBase):
         r, order = self.staged(fail={"gpu-column-nvidia"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["amd", "linux", "macos"])
-        for step in ("publish-nvidia-ptx", "publish-nvidia", "publish-meta-linux"):
+        for step in ("publish-nvidia", "publish-meta-linux"):
             self.assertNotIn(step, order)
 
     def test_failed_hopper_holds_its_vendor_and_the_linux_mojolearn(self):
         r, order = self.staged(fail={"gpu-column-nvidia-hopper"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["amd", "linux", "macos"])
         for step in ("publish-nvidia", "publish-meta-linux"):
             self.assertNotIn(step, order)
 
     def test_a_failed_nvidia_publish_holds_the_linux_mojolearn(self):
         r, order = self.staged(fail={"publish-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["amd", "linux", "macos"])
         self.assertNotIn("publish-meta-linux", order)
 
     def test_a_failed_amd_publish_holds_the_linux_mojolearn(self):
         r, order = self.staged(fail={"publish-amd"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["linux", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["linux", "macos", "nvidia"])
         self.assertNotIn("publish-meta-linux", order)
 
     def test_a_failed_core_publish_holds_every_linux_package(self):
         r, order = self.staged(fail={"publish-core-linux"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["macos"])
-        for step in ("publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
+        for step in ("publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertNotIn(step, order)
-
-    def test_failed_ptx_publish_holds_nvidia_and_the_linux_mojolearn(self):
-        r, order = self.staged(fail={"publish-nvidia-ptx"})
-        self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "linux", "macos"])
-        self.assertNotIn("publish-nvidia", order)
-        self.assertNotIn("publish-meta-linux", order)
 
     def test_a_failed_linux_mojolearn_publish_leaves_the_rest_published(self):
         r, order = self.staged(fail={"publish-meta-linux"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia"])
+
+def _docker_up():
+    """Whether `docker info` answers: step_linux_pack's preflight calls it for real before packing."""
+    if not shutil.which("docker"):
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
 
 class Pack(SplitBase):
     """linux-pack: pack (the real packer over fake sets), audit
     each wheel core first, strip each, split_audit the final set."""
 
+    # The pack's docker preflight runs the real `docker info` (tools/release.py step_linux_pack). GitHub's
+    # ubuntu runners have a docker daemon and run this test; the RunPod CPU box has no docker
+    # (FileNotFoundError, box job nvc-cpuchk-20261120T174232Z-018cbd), where it skips with this reason and
+    # tools/run_tool_tests.sh lists the skip in ENV.txt. The refusal itself is tested without docker below.
+    @unittest.skipUnless(_docker_up(), "environment: no running docker daemon (`docker info` fails); the pack's "
+                         "docker preflight needs one")
     def test_five_wheels_packed_audited_stripped_and_audited_as_a_set(self):
         import test_split_wheels as tsw
         sets_root = self.tmp / "fake"
@@ -221,19 +236,45 @@ class Pack(SplitBase):
         self.assertIn("--profile", calls[0])
         self.assertEqual(calls[0][calls[0].index("--profile") + 1], "release-split")
         audits = [pathlib.Path(c[2]).name.split("-")[0] for c in calls if c[:2] == ["bash", "packaging/linux/audit.sh"]]
-        self.assertEqual(audits, ["mojolearn_core", "mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_ptx",
-                                  "mojolearn"], "the core first, the file-free Linux mojolearn last")
-        self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 5)
+        # the core first; the plugins and the file-free Linux mojolearn then audit at once off the Mac (lane
+        # fx-pack-offload: each reads only the core beside it), so their order is not fixed
+        self.assertEqual(audits[0], "mojolearn_core", "the core first")
+        self.assertEqual(sorted(audits[1:]), ["mojolearn", "mojolearn_amd", "mojolearn_nvidia"])
+        self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 4)
         self.assertTrue(finals["linux"].name.startswith("mojolearn_core-"), finals["linux"])
         self.assertTrue(finals["linux-meta"].name.startswith("mojolearn-"), finals["linux-meta"])
         report = json.loads((r.rel / "linux" / "final" / "split-audit.json").read_text())
         self.assertEqual(report["problems"], [])
         self.assertEqual(r.state["linux_layout"], "split")
         self.assertIn("mojolearn_amd-", result)
-        # A rerun takes the six finals as they are
+        # A rerun takes the finals as they are
         calls.clear()
         self.assertTrue(r.step_linux_pack().startswith("have "))
         self.assertEqual(calls, [])
+
+    def test_a_down_docker_is_refused_before_the_pack(self):
+        # no docker needed: `docker info` is answered as a down daemon answers it; the step refuses before it runs
+        # anything or moves the pack dir aside, so its resume is a restart of this one step
+        calls = []
+        r = self.release(commit=HEAD)
+        r.runner = lambda cmd, env, log, detach=False: calls.append(cmd) or 0
+        r.pack_inputs = lambda: ([], [], ["m.json"])
+        r.assembly_needed = lambda: False
+        r.source_checkout = lambda create=True: ROOT
+        real_run = subprocess.run
+
+        def run(cmd, *a, **kw):
+            if list(cmd)[:2] == ["docker", "info"]:
+                return subprocess.CompletedProcess(cmd, 1, "", "Cannot connect to the Docker daemon")
+            return real_run(cmd, *a, **kw)
+        dist = r.rel / "linux"
+        dist.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(release.subprocess, "run", side_effect=run):
+            with self.assertRaises(release.StepFailed) as got:
+                r.step_linux_pack()
+        self.assertIn("docker is not running", str(got.exception))
+        self.assertEqual(calls, [])
+        self.assertTrue(dist.is_dir(), "the pack dir is not moved aside")
 
 
 def fake_wheel(path, commit=None, data=b"x"):
@@ -274,13 +315,12 @@ class ColumnsAndPublish(SplitBase):
         self.meta = fake_wheel(final / "mojolearn-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"meta")
         cuda = fake_wheel(final / "mojolearn_nvidia-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"cuda")
         rocm = fake_wheel(final / "mojolearn_amd-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"rocm")
-        ptx = fake_wheel(final / "mojolearn_nvidia_ptx-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"ptx")
-        self.plugins = [cuda, rocm, ptx]
+        self.plugins = [cuda, rocm]  # the NVIDIA wheel carries its PTX set (2026-11-05)
         return core, cuda, rocm
 
     def receipt(self, out, core, plugins, vendor, arch=None):
         """A column receipt that installed `plugins` (one wheel or several)
-        beside the core; a real split column installs all five GPU distributions."""
+        beside the core; a real split column installs every GPU distribution."""
         plugins = plugins if isinstance(plugins, (list, tuple)) else [plugins]
         out.mkdir(parents=True, exist_ok=True)
         (out / "results.json").write_text(json.dumps(dict(
@@ -369,38 +409,8 @@ class ColumnsAndPublish(SplitBase):
                                      ("mojolearn_amd", "column-amd"), ("mojolearn", "--preverified")])
         self.assertIn("alpha-api-0.8.99-linux-meta-", calls[-1][3])
 
-    def test_finish_resolves_each_linux_install_to_its_package_set(self):
-        """pip install mojolearn installs everything; mojolearn-nvidia the core,
-        NVIDIA and its PTX package; mojolearn-amd the core and AMD; each at the
-        published bytes (Release.finish_resolve, 2026-10-20)."""
-        r = self.release(publish="pypi")
-        self.finals(r)
-        finals = r.split_finals()
-        by_project = {project: k for k, (project, _) in release.SPLIT_PACKAGES.items()}
-        served = {}
-
-        def runner(cmd, env, log, detach=False):
-            cmd = [str(c) for c in cmd]
-            dest = pathlib.Path(cmd[cmd.index("-d") + 1])
-            dest.mkdir(parents=True, exist_ok=True)
-            project = cmd[-1].split("==")[0]
-            for k in served.get(project, release.LINUX_RESOLVES[by_project[project]]):
-                shutil.copy2(finals[k], dest / finals[k].name)
-            return 0
-        r.runner = runner
-        venv = self.tmp / "venv"
-        self.assertIn("resolves mojolearn-core, mojolearn-nvidia, mojolearn-nvidia-ptx", r.finish_resolve(venv, "nvidia"))
-        self.assertIn("resolves mojolearn-core, mojolearn-amd", r.finish_resolve(venv, "amd"))
-        self.assertIn("resolves mojolearn-core, mojolearn-nvidia, mojolearn-amd, mojolearn-nvidia-ptx, mojolearn",
-                      r.finish_resolve(venv, "linux-meta"))
-        # a resolution without a vendor, or with other bytes, is refused
-        served["mojolearn"] = ("linux-meta", "linux", "nvidia", "nvidia-ptx")
-        with self.assertRaisesRegex(release.StepFailed, "does not resolve exactly"):
-            r.finish_resolve(venv, "linux-meta")
-        served.clear()
-        finals["amd"] = fake_wheel(self.tmp / "other" / finals["amd"].name, data=b"other bytes")
-        with self.assertRaisesRegex(release.StepFailed, "mojolearn-amd==0.8.99 .* does not resolve exactly"):
-            r.finish_resolve(venv, "amd")
+    # test_finish_resolves_each_linux_install_to_its_package_set moved (2026-11-06) with the resolution itself to
+    # tools/test_release_testpypi_rehearsal.py: the package sets resolve on TestPyPI BEFORE the first publish.
 
     @mock.patch('release_requirement_receipts.validate_producer_receipt', return_value=[])
     @mock.patch('release_requirements.producer_admission_available', return_value=True)

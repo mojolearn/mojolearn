@@ -1,0 +1,15 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 58e0b7d7d7..e43863aed6 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -87,9 +87,7 @@ comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_A
+ # TOMBSTONE: MOJOLEARN_TSA2_VAR_OFF (old path; promoted on the M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at b23d7039b8.
+ # Restore: git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch
+ comptime TSA2_VAR = _TSA2_FAST_APPLE
+-# TOMBSTONE: MOJOLEARN_TSA2_STL_OFF (old path; promoted on the M3 only, FAST is Apple only so no NVIDIA/AMD A/B is owed) deleted 2026-11-15 by lane/expdel2-29-neural; code recoverable at eb3180868d.
+-# Restore: git apply experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch
+-comptime TSA2_STL = _TSA2_FAST_APPLE
++comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+ # TOMBSTONE: MOJOLEARN_SEQ_FAST_VAR_SPEC (DROPPED-noise) deleted 2026-10-03 by dfbdc7943; code recoverable at dfbdc7943^.
+ # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch; record in docs/TOMBSTONES.md.
+ #: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the

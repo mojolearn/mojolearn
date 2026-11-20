@@ -99,7 +99,11 @@ def test_board_keeps_a_recompiled_cell_in_its_ratios_and_names_it():
 
 def test_algos_and_neural_drivers_carry_the_counts_into_their_arms():
     src = open(os.path.join(HERE, "bench_board_algos.py")).read()
-    assert "COMPILE.settle(lambda: (runner.fit(), runner.infer()))" in src
+    # the settle repeats the timed call's own sequence: the untimed Runner.prepare() (lane fx-harness-honest), then
+    # fit and infer, so no first-call compilation or first touch of the timed path is left for the clock
+    assert "settle_call = lambda: (runner.prepare(), runner.fit(), runner.infer())" in src
+    assert "COMPILE.settle(settle_call)" in src
+    assert "runner.prepare()                    # untimed harness setup" in src
     assert '"compile": compile_rec' in src and 'a["recompiles_in_timed_run"] = COMPILE.summarize(' in src
     nsrc = open(os.path.join(HERE, "bench_board_neural.py")).read()
     assert '"compiles": compiles_now' in nsrc and '["recompiles_in_timed_run"] = _load("bench_board_compile_guard")' in nsrc

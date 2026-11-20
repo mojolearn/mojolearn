@@ -90,13 +90,21 @@ public door. They are not restated; `_kalman` raises by name if a caller
 ever hands it `n_diff != 0`.
 
 WHAT IS REFUSED BY NAME (`arima_host_refuse_unrestated`, the binding calls it
-after the GPU binding's own validation): `p`, `q` or `P` above 1 (the Jones
-recursion and `test_invparams` past one coefficient), any `Q` (the seasonal
-MA arms of the matrices kernel and the seasonal least squares with an AR
-pre-fit), `d + D == 2` (the second difference and `_undiff_kernel[True]`),
+after the GPU binding's own validation): `p`, `q`, `P` or `Q` above 1 (the
+Jones recursion and `test_invparams` past one coefficient), `d + D == 2` (the second difference and `_undiff_kernel[True]`),
 `p + q + k == 0` (the seasonal-only arm of `start_params`). Every refused
 arm is spelled on the device and none is reached by the three lanes, so the
 CPU identity gate could not hold a restatement of it to anything.
+
+`Q == 1` IS SERVED (lane cpu-surface-defects, 2026-11-16). Its arms were
+already restated here: the seasonal MA column of the matrices kernel
+(`_kalman`, `sma` through `_param_to_poly` at `idx // s`, mirroring
+`batched_kalman.mojo:337`), the one-coefficient MA Jones transform
+(`_batched_jones`, the same routine as `q == 1`), and the seasonal least
+squares with its AR(max(P s, 2 Q s)) pre-fit (`_arma_least_squares` at
+`s = order.s`, mirroring `estimate_x0.mojo:357-374`). The refusal had held a
+GPU-supported order off the host column, so verify's `ARIMA.sma_` read failed
+there; the GPU and host columns now both answer it.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` doubles the
 finite-difference step (2^-9 in place of DEVIATION 687's 2^-10), so every
@@ -114,10 +122,6 @@ from std.math import inf, isfinite, isinf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from arima.impl.idn_ls_math import (
-    ILS_MAX_COLS, ILS_R2, ILS_RSZ, ILS_TPB, X0_IDN_PAR_LS, X0_IDN_PAR_LS_MIN_OBS,
-    ils_div, ils_fma, ils_givens_row, ils_solve,
-)
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_list_ptr, host_predict_chunk, host_predict_task_count
 from checks.numerics import (
@@ -262,7 +266,7 @@ def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
     `validate_order`, so every value that reaches here is one the GPU accepts."""
     var tail = String(
         "; the host restatement (arima/host/arima_oracle.mojo) covers p, q and"
-        " P of at most 1, Q = 0, d + D of at most 1 and p + q + k of at least"
+        " P and Q of at most 1, d + D of at most 1 and p + q + k of at least"
         " 1, the arms the arima, arima-011 and arima-seasonal-c lanes reach"
         " and the CPU identity gate holds to the GPU columns"
     )
@@ -283,11 +287,10 @@ def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
             who + ": no CPU implementation of ARIMA with P=" + String(order.P)
             + " (the Jones recursion past one seasonal AR coefficient)" + tail
         )
-    if order.Q != 0:
+    if order.Q > 1:
         raise Error(
             who + ": no CPU implementation of ARIMA with Q=" + String(order.Q)
-            + " (the seasonal MA arms of the state space matrices and the"
-            " seasonal least squares with an AR pre-fit)" + tail
+            + " (the Jones recursion past one seasonal MA coefficient)" + tail
         )
     if order.d + order.D > 1:
         raise Error(
@@ -582,8 +585,8 @@ def _jones_transform(
     roundings, the 2026-08-23 correction)."""
     var out = _zeros(max(1, parameter * batch_size))
     for model in range(batch_size):
-        var tmp = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
-        var mine = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
+        var tmp = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
+        var mine = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
         for i in range(parameter):
             var v = ftz(params[model * parameter + i])
             tmp[i] = v
@@ -672,8 +675,8 @@ def _reduced_polynomial(is_ar: Bool, coef0: Float32, coef1: Float32) -> Float32:
 
 
 def _lu_inverse(
-    mut a: InlineArray[Float32, AH_KRON_MAX],
-    mut inv: InlineArray[Float32, AH_KRON_MAX],
+    mut a: Array[Float32, AH_KRON_MAX],
+    mut inv: Array[Float32, AH_KRON_MAX],
     n: Int,
 ) -> Int32:
     """`lu_inverse` (`linalg/batched/matrix.mojo:79-148`): getrf with the
@@ -681,7 +684,7 @@ def _lu_inverse(
     ftz(ftz(a) / pivot)`, the fused trailing update; then getri column by
     column through the swaps, unit-L forward and U backward substitution,
     ascending folds. 0, or `j + 1` at the first zero pivot."""
-    var piv = InlineArray[Int, 25](fill=0)
+    var piv = Array[Int, 25](fill=0)
     for j in range(n):
         var best = j
         var best_mag = abs(ftz(a[j + j * n]))
@@ -737,8 +740,8 @@ def _lu_inverse(
 
 @always_inline
 def _mv(
-    n: Int, alpha: Float32, a: InlineArray[Float32, AH_RD2_MAX],
-    v: InlineArray[Float32, AH_RD_MAX], mut out_v: InlineArray[Float32, AH_RD_MAX],
+    n: Int, alpha: Float32, a: Array[Float32, AH_RD2_MAX],
+    v: Array[Float32, AH_RD_MAX], mut out_v: Array[Float32, AH_RD_MAX],
 ):
     """`_mv` (`batched_kalman.mojo:382-394`)."""
     for i in range(n):
@@ -750,8 +753,8 @@ def _mv(
 
 @always_inline
 def _mm(
-    n: Int, a: InlineArray[Float32, AH_RD2_MAX], b: InlineArray[Float32, AH_RD2_MAX],
-    bT: Bool, mut out_v: InlineArray[Float32, AH_RD2_MAX],
+    n: Int, a: Array[Float32, AH_RD2_MAX], b: Array[Float32, AH_RD2_MAX],
+    bT: Bool, mut out_v: Array[Float32, AH_RD2_MAX],
 ):
     """`_mm` (`batched_kalman.mojo:398-409`)."""
     for i in range(n):
@@ -764,7 +767,7 @@ def _mm(
 
 
 @always_inline
-def _numerical_stability(n: Int, mut a: InlineArray[Float32, AH_RD2_MAX]):
+def _numerical_stability(n: Int, mut a: Array[Float32, AH_RD2_MAX]):
     """`_numerical_stability` (`batched_kalman.mojo:413-422`)."""
     for i in range(n - 1):
         for j in range(i + 1, n):
@@ -864,8 +867,8 @@ def _kalman(
     def _init_series(c: Int) {imm}:
         for bid in range(c * chunk, min((c + 1) * chunk, batch_size)):
             # -- init_batched_kalman_matrices_kernel (:149-235), n_diff = 0
-            var R = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-            var T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var R = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var T = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
             R[n_diff] = Float32(1.0)
             for i in range(n_theta):
                 var idx = i + 1
@@ -890,10 +893,10 @@ def _kalman(
 
             # -- kalman_init_state_kernel (:243-373)
             var info = Int32(0)
-            var RQ = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-            var RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var Pm = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var RQ = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var RQR = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var Pm = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var alpha = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
             var sigma2 = ftz(sigma2_p[bid])
             for i in range(rd):
                 RQ[i] = ftz(ftz(R[i]) * sigma2)
@@ -903,8 +906,8 @@ def _kalman(
                     RQR[i + j * rd] = ftz(ftz(RQ[i]) * rj)
             # `kron_minus_identity` (matrix.mojo:152-180): I - A (x) A, two
             # roundings per cell with the exact -1.
-            var imaa = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-            var imaa_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            var imaa = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            var imaa_inv = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
             for ia in range(r):
                 for ja in range(r):
                     var a_ia_ja = -ftz(T[(ia + n_diff) + (ja + n_diff) * rd])
@@ -921,11 +924,11 @@ def _kalman(
             if inf1 != Int32(0):
                 info = inf1
             else:
-                var vecq = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+                var vecq = Array[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
                 for j in range(r):
                     for i in range(r):
                         vecq[i + j * r] = ftz(RQR[(i + n_diff) + (j + n_diff) * rd])
-                var xloc = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+                var xloc = Array[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
                 for i in range(r2):
                     var acc = Float32(0.0)
                     for k in range(r2):
@@ -937,8 +940,8 @@ def _kalman(
                     for i in range(r):
                         Pm[(i + n_diff) + (j + n_diff) * rd] = xloc[i + j * r]
             if k_trend != 0:
-                var imt = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-                var imt_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+                var imt = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
+                var imt_inv = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
                 for j in range(r):
                     for i in range(r):
                         var delta = Float32(1.0) if i == j else Float32(0.0)
@@ -989,14 +992,14 @@ def _kalman(
     def _loop_series(c: Int) {imm}:
         for bid in range(c * chunk, min((c + 1) * chunk, batch_size)):
             # -- batched_kalman_loop_kernel (:425-604), n_diff = 0
-            var l_RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var l_T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var l_P = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var l_alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-            var l_K = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-            var l_tmp = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var l_TP = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-            var l_v = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var l_RQR = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_T = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_P = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_alpha = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var l_K = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var l_tmp = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_TP = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_v = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
             var b_rd = bid * rd
             var b_rd2 = bid * rd2
             for i in range(rd2):
@@ -1523,7 +1526,7 @@ def _qr_solve(mut a: List[Float32], m: Int, n: Int, mut b: List[Float32]) -> Int
     """`householder_qr_solve` (`least_squares.mojo:111-210`) over one system
     at offset 0, `a` destroyed, the solution in `b[0..n)`. The two in-place
     subtractions read the raw cell, as the device's do (`:169`, `:184`)."""
-    var rdiag = InlineArray[Float32, AH_LS_MAX_COLS](fill=Float32(0.0))
+    var rdiag = Array[Float32, AH_LS_MAX_COLS](fill=Float32(0.0))
     for j in range(n):
         var sigma = Float32(0.0)
         for i in range(j, m):
@@ -1591,8 +1594,8 @@ def _test_invparams(params: List[Float32], base: Int, pq: Int, is_ar: Bool) -> B
     """`test_invparams` (`estimate_x0.mojo:171-206`): the inverse recursion
     stopped before atanh, with `coef * a * x` as `(coef*a) * x`, ONE
     rounding, then strictly inside (-1, 1)."""
-    var new_params = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
-    var tmp = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
+    var new_params = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
+    var tmp = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
     for i in range(pq):
         var v = ftz(params[base + i])
         tmp[i] = v
@@ -1634,169 +1637,6 @@ def _ls_refusal_fill(
         sigma2[bid] = Float32(1.0)
 
 
-def _ils_tree_solve(
-    mut sh: List[Float32], n: Int, mut x: InlineArray[Float32, ILS_MAX_COLS]
-) -> Int32:
-    """`idn_arma_ls._ils_merge_solve` replayed: `sh` holds the ILS_TPB
-    published triangles (ILS_RSZ floats each: R row major, then Q'b); round
-    by round, thread t with t % (2 stride) == 0 folds the n rows of thread
-    t + stride (ascending) into its own; thread 0's triangle is solved."""
-    var r = InlineArray[Float32, ILS_R2](fill=Float32(0.0))
-    var qb = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-    var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-    var stride = 1
-    while stride < ILS_TPB:
-        var tid = 0
-        while tid < ILS_TPB:
-            var o = tid + stride
-            for t in range(ILS_R2):
-                r[t] = sh[tid * ILS_RSZ + t]
-            for t in range(ILS_MAX_COLS):
-                qb[t] = sh[tid * ILS_RSZ + ILS_R2 + t]
-            for row in range(n):
-                for c in range(ILS_MAX_COLS):
-                    a[c] = sh[o * ILS_RSZ + row * ILS_MAX_COLS + c]
-                ils_givens_row(r, qb, a, sh[o * ILS_RSZ + ILS_R2 + row], n)
-            for t in range(ILS_R2):
-                sh[tid * ILS_RSZ + t] = r[t]
-            for t in range(ILS_MAX_COLS):
-                sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
-            tid += 2 * stride
-        stride *= 2
-    for t in range(ILS_R2):
-        r[t] = sh[t]
-    for t in range(ILS_MAX_COLS):
-        qb[t] = sh[ILS_R2 + t]
-    return ils_solve(r, qb, n, x)
-
-
-def _ils_resid(yd: List[Float32], yb: Int, p_ar: Int, j: Int,
-               arfit: InlineArray[Float32, ILS_MAX_COLS]) -> Float32:
-    """The AR pre-fit residual at row j, recomputed from y as the kernel
-    does: y[p_ar + j] - sum_c y[p_ar - c - 1 + j] arfit[c], ascending c."""
-    var acc = ftz(yd[yb + p_ar + j])
-    for c in range(p_ar):
-        acc = ils_fma(-ftz(yd[yb + p_ar - c - 1 + j]), arfit[c], acc)
-    return acc
-
-
-def _arma_least_squares_par(
-    mut ar: List[Float32], mut ma: List[Float32],
-    mut sigma2: List[Float32], mut mu: List[Float32],
-    yd: List[Float32], batch_size: Int, n_obs_d: Int,
-    p: Int, q: Int, s: Int, est_sigma2: Bool, k: Int, p_ar: Int, r_ls: Int,
-):
-    """The host column of `idn_arma_ls_kernel` + `fast_ls_finish_kernel`
-    (lane/fam2-timeseries, X0_IDN_PAR_LS): the block's ILS_TPB threads one
-    after another, each folding its strided rows from zero, then the
-    pairwise tree, the solve, the strided sigma2 partials and their halving
-    tree, in the kernel's order with the kernel's arithmetic
-    (`arima/impl/idn_ls_math.mojo`)."""
-    var m1 = n_obs_d - r_ls
-    var ncols = p + q + k
-    var ar_offset = r_ls - p * s
-    var res_offset = r_ls - p_ar - q * s
-    for bid in range(batch_size):
-        var yb = bid * n_obs_d
-        var sh = _zeros(ILS_TPB * ILS_RSZ)
-        var r = InlineArray[Float32, ILS_R2](fill=Float32(0.0))
-        var qb = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-        var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-        var arfit = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-        var afit = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
-
-        # -- 1. the AR(p_ar) pre-fit
-        if q != 0:
-            var m2 = n_obs_d - p_ar
-            for tid in range(ILS_TPB):
-                for t in range(ILS_R2):
-                    r[t] = Float32(0.0)
-                for t in range(ILS_MAX_COLS):
-                    qb[t] = Float32(0.0)
-                var i = tid
-                while i < m2:
-                    for c in range(ILS_MAX_COLS):
-                        a[c] = ftz(yd[yb + p_ar - c - 1 + i]) if c < p_ar else Float32(0.0)
-                    ils_givens_row(r, qb, a, ftz(yd[yb + p_ar + i]), p_ar)
-                    i += ILS_TPB
-                for t in range(ILS_R2):
-                    sh[tid * ILS_RSZ + t] = r[t]
-                for t in range(ILS_MAX_COLS):
-                    sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
-            if _ils_tree_solve(sh, p_ar, arfit) != Int32(0):
-                _ls_refusal_fill(bid, p, q, k, est_sigma2, ar, ma, sigma2, mu)
-                continue
-
-        # -- 2 to 5. the ARMA design, row by row, and its fit
-        for tid in range(ILS_TPB):
-            for t in range(ILS_R2):
-                r[t] = Float32(0.0)
-            for t in range(ILS_MAX_COLS):
-                qb[t] = Float32(0.0)
-            var i = tid
-            while i < m1:
-                for c in range(ILS_MAX_COLS):
-                    a[c] = Float32(0.0)
-                if k != 0:
-                    a[0] = Float32(1.0)
-                for lag in range(p):
-                    a[k + lag] = ftz(yd[yb + ar_offset + s * (p - lag - 1) + i])
-                for lag in range(q):
-                    a[k + p + lag] = _ils_resid(yd, yb, p_ar, res_offset + s * (q - lag - 1) + i, arfit)
-                ils_givens_row(r, qb, a, ftz(yd[yb + r_ls + i]), ncols)
-                i += ILS_TPB
-            for t in range(ILS_R2):
-                sh[tid * ILS_RSZ + t] = r[t]
-            for t in range(ILS_MAX_COLS):
-                sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
-        if _ils_tree_solve(sh, ncols, afit) != Int32(0):
-            _ls_refusal_fill(bid, p, q, k, est_sigma2, ar, ma, sigma2, mu)
-            continue
-
-        # -- 7. sigma2: each thread's strided partial, then the halving tree
-        if est_sigma2:
-            var parts = _zeros(ILS_TPB)
-            for tid in range(ILS_TPB):
-                var part = Float32(0.0)
-                var i = q + tid
-                while i < m1:
-                    var res = ftz(yd[yb + r_ls + i])
-                    if k != 0:
-                        res = ftz(res - afit[0])
-                    for lag in range(p):
-                        res = ils_fma(-ftz(yd[yb + ar_offset + s * (p - lag - 1) + i]), afit[k + lag], res)
-                    for lag in range(q):
-                        var acc = _ils_resid(yd, yb, p_ar, res_offset + s * (q - lag - 1) + i, arfit)
-                        res = ils_fma(-acc, afit[k + p + lag], res)
-                    part = ils_fma(res, res, part)
-                    i += ILS_TPB
-                parts[tid] = part
-            var w = ILS_TPB // 2
-            while w > 0:
-                for tid in range(w):
-                    parts[tid] = ftz(parts[tid] + parts[tid + w])
-                w //= 2
-            sigma2[bid] = ils_div(parts[0], Float32(m1 - q))
-
-        # -- 6. the solution into the parameter vectors
-        if k != 0:
-            mu[bid] = afit[0]
-        for c in range(p):
-            ar[p * bid + c] = afit[k + c]
-        for c in range(q):
-            ma[q * bid + c] = afit[k + p + c]
-
-        # -- 8. zero what the inverse transform would reject
-        if p != 0:
-            if not _test_invparams(ar, p * bid, p, True):
-                for ip in range(p):
-                    ar[p * bid + ip] = Float32(0.0)
-        if q != 0:
-            if not _test_invparams(ma, q * bid, q, False):
-                for iq in range(q):
-                    ma[q * bid + iq] = Float32(0.0)
-
-
 def _arma_least_squares(
     mut ar: List[Float32], mut ma: List[Float32],
     mut sigma2: List[Float32], mut mu: List[Float32],
@@ -1818,18 +1658,9 @@ def _arma_least_squares(
             + " columns, above LS_MAX_COLS = " + String(AH_LS_MAX_COLS)
             + "; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
-    comptime if X0_IDN_PAR_LS:
-        # lane/fam2-timeseries, candidate arm: the device's condition
-        # (`estimate_x0.mojo::arma_least_squares`) and its block's fold order
-        if (
-            n_obs_d >= X0_IDN_PAR_LS_MIN_OBS
-            and p + q + k <= ILS_MAX_COLS
-            and (q == 0 or p_ar <= ILS_MAX_COLS)
-        ):
-            _arma_least_squares_par(
-                ar, ma, sigma2, mu, yd, batch_size, n_obs_d, p, q, s, est_sigma2, k, p_ar, r_ls
-            )
-            return
+    # TOMBSTONE: MOJOLEARN_IDN_X0_PAR_LS and MOJOLEARN_IDN_X0_PAR_LS_MIN256 (opt-in arms, no A/B recorded) and the MOJOLEARN_IDN_ALL_OFF term deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 713890f21c.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_X0_PAR_LS.patch and experiments/removed/MOJOLEARN_IDN_X0_PAR_LS_MIN256.patch; record in docs/TOMBSTONES.md.
+    # (Sweep 2026-11-15: the always-False X0_IDN_PAR_LS branch, _arma_least_squares_par, _ils_tree_solve, _ils_resid, arima/impl/idn_arma_ls.mojo (idn_arma_ls_kernel, never launched) and arima/impl/idn_ls_math.mojo removed.)
     var ps = p * s
     var qs = q * s
     var m1 = n_obs_d - r_ls

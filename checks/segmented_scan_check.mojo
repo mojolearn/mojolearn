@@ -200,9 +200,9 @@ def check_segmented_scan_vector(inclusive: Bool) raises:
     var n_blocks = (n + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
     var d_bsum = ctx.enqueue_create_buffer[DType.float32](n_blocks)
     var d_bflag = ctx.enqueue_create_buffer[DType.uint8](n_blocks)
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_flags, src_ptr=h_flags.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_vals, h_vals)
+    upload_host_into[DType.uint32](ctx, d_flags, h_flags)
+    upload_host_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
 
     launch_segmented_scan_vector(
@@ -212,7 +212,7 @@ def check_segmented_scan_vector(inclusive: Bool) raises:
     ctx.synchronize()
 
     var got = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, got)
     ctx.synchronize()
 
     var incl = host_segmented_inclusive(values, flags)
@@ -293,9 +293,9 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
     var n_blocks = (n + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
     var d_bsum = ctx.enqueue_create_buffer[DType.float32](n_blocks)
     var d_bflag = ctx.enqueue_create_buffer[DType.uint8](n_blocks)
-    ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=h_idx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_out, src_ptr=h_out.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, d_vals, h_vals)
+    upload_host_into[DType.uint32](ctx, d_idx, h_idx)
+    upload_host_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
 
     launch_segmented_scan_and_scatter_non_negative(
@@ -305,7 +305,7 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
     ctx.synchronize()
 
     var got = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=d_out)
+    download_host_into[DType.float32](ctx, d_out, got)
     ctx.synchronize()
 
     var incl = host_segmented_inclusive(values, flags)
@@ -353,7 +353,7 @@ def check_segmented_scan_scatter(inclusive: Bool) raises:
         )
 
 
-def main() raises:
+def run_checks() raises:
     print("segmented scan, scan block", SEG_SCAN_BLOCK,
           "emit block", SEG_EMIT_BLOCK)
     check_segmented_scan_vector(False)
@@ -361,3 +361,22 @@ def main() raises:
     check_segmented_scan_scatter(False)
     check_segmented_scan_scatter(True)
     print("  segmented scan matches the host tally in every cell, 4 arms")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("segmented_scan_check", cpu=False, gpu=True, serial="", run=run_cases)

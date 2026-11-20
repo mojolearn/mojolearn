@@ -7,10 +7,9 @@
 # the host.
 from autograd.tape import Tape, Tensor
 from autograd.fold import blocked_fold, fold_partials_bound, loss_fold
-from autograd.ops import AXIS_ALL, AUTOGRAD_LOSS_REDUCED
+from autograd.ops import AXIS_ALL
 from autograd.loss_ops import (
-    OP_LS_ELEM_FWD, OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB,
-    LS_BINARY_LOG_PROB, LS_CROSS_ENTROPY,
+    OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_CROSS_ENTROPY,
 )
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
@@ -44,13 +43,13 @@ def _elem_loss[E: Exec](
     # Lane ag-pass6-fold (AUTOGRAD_LOSS_REDUCED, default on): the terms and
     # their mean / sum as one node (Tape.loss_reduced), the terms folded in
     # the leaf chain; the same value and gradients as loss_terms + mean /
-    # sum. -D MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF records the two nodes.
-    comptime if AUTOGRAD_LOSS_REDUCED:
-        if reduction != REDUCTION_MEAN and reduction != REDUCTION_SUM:
-            raise Error("reduction must be REDUCTION_MEAN or REDUCTION_SUM")
-        return tape.loss_reduced(ex, prediction, target, kind, delta, reduction == REDUCTION_MEAN)
-    else:
-        return _reduce(tape, ex, tape.loss_terms(ex, prediction, target, kind, delta), reduction)
+    # sum.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF (loss_terms + mean / sum, old path, no A/B recorded) deleted
+    # 2026-11-15 by lane/expdel2-24-neural; code recoverable at 56d165c105.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.patch
+    if reduction != REDUCTION_MEAN and reduction != REDUCTION_SUM:
+        raise Error("reduction must be REDUCTION_MEAN or REDUCTION_SUM")
+    return tape.loss_reduced(ex, prediction, target, kind, delta, reduction == REDUCTION_MEAN)
 
 
 def mse[E: Exec](
@@ -131,8 +130,8 @@ def loss_value_into[E: Exec](
 ) raises:
     """dst[0] = the loss of `kind` over executor buffers, with no tape.
 
-    kind is LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB or
-    LS_BINARY_LOG_PROB (rows x cols prediction and target), or
+    kind is LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS (rows x cols
+    prediction and target), or
     LS_CROSS_ENTROPY (rows x cols logits, `target` the rows class codes,
     reduced over rows). The value equals the tape loss of the same kind and
     reduction bit for bit: the same term body and the same fold.
@@ -153,15 +152,9 @@ def loss_value_into[E: Exec](
         ex.launch[OP_LS_CE_FWD](a, rows)
         blocked_fold(ex, dst, scratch.terms, rows, 1, AXIS_ALL, reduction_factor(count, reduction), scratch.partials)
         return
-    if kind < LS_MSE or kind > LS_BINARY_LOG_PROB:
+    if kind < LS_MSE or kind > LS_BCE_LOGITS:
         raise Error("unknown loss kind")
-    comptime if AUTOGRAD_LOSS_REDUCED:
-        # the terms folded in the leaf chain (lane ag-pass6-fold): the same
-        # word as the stored terms then the fold, no terms pass
-        loss_fold(ex, dst, prediction, target, rows, cols, kind, delta, reduction_factor(count, reduction),
-                  scratch.partials)
-        return
-    a.i0 = kind
-    a.f0 = delta
-    ex.launch[OP_LS_ELEM_FWD](a, count)
-    blocked_fold(ex, dst, scratch.terms, rows, cols, AXIS_ALL, reduction_factor(count, reduction), scratch.partials)
+    # the terms folded in the leaf chain (lane ag-pass6-fold): the same
+    # word as the stored terms then the fold, no terms pass
+    loss_fold(ex, dst, prediction, target, rows, cols, kind, delta, reduction_factor(count, reduction),
+              scratch.partials)

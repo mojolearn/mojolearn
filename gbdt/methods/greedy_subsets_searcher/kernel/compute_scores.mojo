@@ -2,8 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Score every candidate split of a level and pick the best. A kernel that re-derives the running prefix per candidate must walk bins in order, which forces the bin loop innermost, which pushes the leaf loop outward."""
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+# Mojo 1.2.0 removed max.gpu.intrinsics.ldg. Every former ldg(ptr) is now
+# ptr.unsafe_load[..., invariant=True](), the same invariant (non-coherent) load ldg emitted.
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -142,16 +143,16 @@ def compute_optimal_splits_kernel[
 
 
         for i in range(p_count):
-            var leaf_id = Int(ldg(part_ids + i))
+            var leaf_id = Int((part_ids + i).unsafe_load[invariant=True]())
             var leaf_base = leaf_id * stat_count * bin_feature_count
 
             var weight_left = max(
-                ldg(histograms + (leaf_base + bin_feature_id)),
+                (histograms + (leaf_base + bin_feature_id)).unsafe_load[invariant=True](),
                 Float32(0.0),
             )
             var weight_right = ftz(
                 max(
-                    ldg(part_stats + leaf_id * stat_count) - weight_left,
+                    (part_stats + leaf_id * stat_count).unsafe_load[invariant=True]() - weight_left,
                     Float32(0.0),
                 )
             )
@@ -165,10 +166,10 @@ def compute_optimal_splits_kernel[
                     + stat_id * bin_feature_count
                     + bin_feature_id
                 )
-                var sum_left = ldg(histograms + stat_slot)
-                var part_stat = ldg(
+                var sum_left = (histograms + stat_slot).unsafe_load[invariant=True]()
+                var part_stat = (
                     part_stats + (leaf_id * stat_count + stat_id)
-                )
+                ).unsafe_load[invariant=True]()
                 var sum_right = ftz(part_stat - sum_left)
 
                 _add_leaf[score_function, normalize](
@@ -220,7 +221,7 @@ def compute_optimal_splits_kernel[
 
         var gain = ftz(
             ftz(final_score - score_before)
-            * ldg(feature_weights + feature_id)
+            * (feature_weights + feature_id).unsafe_load[invariant=True]()
         )
 
         if gain > best_gain:
@@ -393,9 +394,9 @@ def _leafwise_scan_part[
         var score_b = Float32(0.0)
         var denum_sqr_b = Float32(1e-10)
 
-        var part_weight = ldg(part_stats + this_part_id * stat_count)
+        var part_weight = (part_stats + this_part_id * stat_count).unsafe_load[invariant=True]()
         var weight_left = max(
-            ldg(histograms + (leaf_base + bin_feature_id)), Float32(0.0)
+            (histograms + (leaf_base + bin_feature_id)).unsafe_load[invariant=True](), Float32(0.0)
         )
         var weight_right = ftz(max(part_weight - weight_left, Float32(0.0)))
 
@@ -422,10 +423,10 @@ def _leafwise_scan_part[
             var stat_slot = (
                 leaf_base + stat_id * bin_feature_count + bin_feature_id
             )
-            var sum_left = ldg(histograms + stat_slot)
-            var part_stat = ldg(
+            var sum_left = (histograms + stat_slot).unsafe_load[invariant=True]()
+            var part_stat = (
                 part_stats + (this_part_id * stat_count + stat_id)
-            )
+            ).unsafe_load[invariant=True]()
             total_sum_part = ftz(total_sum_part + part_stat)
             var sum_right = ftz(part_stat - sum_left)
 
@@ -491,7 +492,7 @@ def _leafwise_scan_part[
         var gain = Float32(0.0)
         if not to_zero_part_split:
             gain = ftz(final_score - score_before)
-        gain = ftz(gain * ldg(feature_weights + feature_id))
+        gain = ftz(gain * (feature_weights + feature_id).unsafe_load[invariant=True]())
 
         if gain > best_gain:
             best_gain = gain
@@ -550,58 +551,7 @@ def _leafwise_argmax_write[
             out_bin.unsafe_store(out_slot, UInt32(0xFFFFFFFF))
 
 
-def fused_root_scan_score_kernel[
-    score_function: Int = SCORE_FUNCTION_COSINE,
-    normalize: Bool = False,
-](
-    bf_skip: MutPointer[UInt8, MutAnyOrigin],
-    bin_feature_count_in: Int32,
-    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
-    feature_weights: MutPointer[Float32, MutAnyOrigin],
-    histograms: MutPointer[Float32, MutAnyOrigin],
-    part_stats: MutPointer[Float32, MutAnyOrigin],
-    stat_count_in: Int32,
-    part_id_in: Int32,
-    maybe_second_part_id_in: Int32,
-    multiclass_optimization: Int32,
-    lambda_l2: Float32,
-    score_std_dev: Float32,
-    global_seed: UInt64,
-    out_score: MutPointer[Float32, MutAnyOrigin],
-    out_bin: MutPointer[UInt32, MutAnyOrigin],
-    min_child_hessian: Float32,
-    feature_first: MutPointer[UInt32, MutAnyOrigin],
-    feature_folds: MutPointer[UInt32, MutAnyOrigin],
-    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
-    feature_count: Int32,
-):
-    """C45: root prefix and canonical split scoring share one block.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    Capacity is one score block's histogram. Root prefixes remain stored for
-    sibling-cache lifetime, but no separate scan launch/score array exists.
-    The original score statements, comparator and per-feature prefix order
-    are reused; no changed split candidates or floating atomics.
-    """
-    var feature = Int(thread_idx.x)
-    while feature < Int(feature_count):
-        var folds = Int(feature_folds.unsafe_load(feature))
-        if feature_one_hot.unsafe_load(feature) == UInt8(0) and folds > 1:
-            for stat in range(Int(stat_count_in)):
-                var base = (Int(part_id_in) * Int(stat_count_in) + stat) * Int(bin_feature_count_in)
-                base += Int(feature_first.unsafe_load(feature))
-                var running = Float32(0.0)
-                for bin in range(folds):
-                    running = ftz(running + histograms.unsafe_load(base + bin))
-                    histograms.unsafe_store(base + bin, running)
-        feature += Int(block_dim.x)
-    barrier()
-    compute_optimal_split_kernel[score_function, normalize](
-        bf_skip, bin_feature_count_in, bf_feature_id, feature_weights,
-        histograms, part_stats, stat_count_in, part_id_in,
-        maybe_second_part_id_in, multiclass_optimization, lambda_l2,
-        score_std_dev, global_seed, out_score, out_bin, min_child_hessian,
-    )
+# (Sweep 2026-11-15: fused_root_scan_score_kernel, never launched (its C45 caller was deleted), removed.)
 
 
 def compute_optimal_split_kernel[

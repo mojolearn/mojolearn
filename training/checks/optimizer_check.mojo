@@ -219,7 +219,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace, read_trace_lines
 from mamba.checks.mamba_fixture import corpus_splitmix64
 from checks.numerics import ftz, identical_mul, identical_sqrt
-from gemm.neural_dispatch import gemm_sabotage_name
+from gemm.checks.gemm_identical import gemm_sabotage_name
 from gemm.neural_backward import gemm_backward_sabotage_name
 from gemm.contract import OP_NT, contract_leaf_size
 from gemm.host.neural_gemm import gemm_oracle
@@ -282,6 +282,7 @@ from training.checks.optimizer_oracle import (
     optimizer_step_oracle,
     sched_field_name,
 )
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 # Card output follows the caller-selected runtime path; standalone runs use
@@ -502,9 +503,8 @@ def _upload_f32(
         host.unsafe_ptr().unsafe_store(i, values[i])
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -520,15 +520,14 @@ def _download_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        download_host_into[DType.float32](ctx, buf, host)
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        download_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
     return out^
 
 
@@ -548,9 +547,8 @@ def _overwrite_f32(
     for i in range(n):
         host.unsafe_ptr().unsafe_store(i, values[i])
     var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, view, host)
     ctx.synchronize()
-    _ = host^
     _ = view
 
 

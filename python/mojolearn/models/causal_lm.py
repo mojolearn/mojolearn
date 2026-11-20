@@ -10,19 +10,11 @@ and output.
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
-import array as _pyarray
-import inspect
-import os
-
 from .. import _backend
 from .. import _numeric_profile
 from .. import lowbit as _lowbit
-from .._array import Array
-from .._buffer import _native, addr, addr_ro, all_finite, as_i32_c, empty
-from .._bufcheck import is_integer, memcopy, probe
-from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
-                     UnsupportedModel, plan_for)
-from .safetensors import Checkpoint
+from .._array import Array as _Array
+from .._buffer import addr as _addr, addr_ro as _addr_ro, empty as _empty
 
 __all__ = ["CausalLM", "CausalLMState", "GenerationStream"]
 
@@ -35,71 +27,13 @@ _PROJECTIONS = {
     "mamba2": ("in_proj.weight", "out_proj.weight"),
 }
 
-#: Interface option -> the config field it came from, for the refusals.
-_OPTION_FIELD = {
-    "n_kv_heads": "num_key_value_heads", "head_dim": "head_dim", "window": "sliding_window",
-    "rope_theta": "rope_theta", "rope_scaling": "rope_scaling", "rope_dim": "partial_rotary_factor",
-    "max_positions": "max_position_embeddings", "qkv_bias": "attention_bias", "o_bias": "attention_bias",
-    "norm": "(the family's norm)", "norm_eps": "rms_norm_eps", "norm_bias": "(the family's norm)",
-    "mlp": "hidden_act", "mlp_bias": "mlp_bias", "qk_norm": "(qwen3 q_norm/k_norm)",
-    "attn_softcap": "attn_logit_softcapping",
-}
-
-
-def _accepted_options(cls):
-    """The keyword names the live block constructor accepts, read off its
-    signature (`NumericModeMixin` wraps `__init__` with `functools.wraps`,
-    and `inspect.signature` follows `__wrapped__`). `None` means the
-    constructor takes `**kwargs` and every option must be tried."""
-    sig = inspect.signature(cls.__init__)
-    names = set()
-    for p in sig.parameters.values():  # glue: walks the block constructor signature parameters
-        if p.kind is inspect.Parameter.VAR_KEYWORD:
-            return None
-        names.add(p.name)
-    return names - {"self", "weights"}
-
-
-def _block_kwargs(plan, cls):
-    """The keywords to pass to `cls` for `plan`, or `UnsupportedModel` by
-    name for an option the live block cannot honor at the plan's value."""
-    accepted = _accepted_options(cls)
-    kwargs = {}
-    for opt, value in plan.block_options.items():  # glue: copies block keyword options
-        default = INTERFACE_DEFAULTS[opt]
-        if accepted is None or opt in accepted:
-            if value != default:
-                kwargs[opt] = value
-            continue
-        fixed = FIXED_TODAY.get(opt, default)
-        if value != fixed:
-            raise UnsupportedModel(
-                f"mojolearn.models: model_type {plan.model_type!r}: option {opt}={value!r} "
-                f"(config field {_OPTION_FIELD.get(opt, opt)}) is not accepted by {cls.__name__} on this "
-                f"build, which fixes {opt}={fixed!r}; the accepted options are {sorted(accepted)}")
-    return kwargs
-
-
-def _route(device):
-    if device == "auto":
-        try:
-            vendor = _backend.vendor()
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"mojolearn.models.CausalLM: cannot read the selected backend's vendor: {exc}") from exc
-        return "cpu" if vendor in (None, "cpu") else "gpu"
-    if device in ("cpu", "gpu"):
-        return device
-    raise ValueError(f"mojolearn.models.CausalLM: device must be 'auto', 'cpu' or 'gpu', got {device!r}")
-
-
-def _block_classes(route):
-    if route == "gpu":
-        from .._mamba_impl import Mamba1Block, Mamba2Block
-        from .._transformer_impl import TransformerBlock
-        return {"transformer": TransformerBlock, "mamba1": Mamba1Block, "mamba2": Mamba2Block}
-    from ..neural_inference import Mamba1BlockInference, Mamba2BlockInference, TransformerBlockInference
-    return {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,
-            "mamba2": Mamba2BlockInference}
+# The device route ("auto" -> cpu/gpu by vendor), the per-route block classes,
+# the integer-weight refusal and the last-position argmax run in Mojo
+# (`_model_route`, `context["block_classes"]`, the checkpoint reader and the
+# generation entries in bindings/causal_lm_construct_door.mojo and
+# bindings/causal_lm_public_door.mojo); their dead Python twins `_route`,
+# `_block_classes`, `_float_weight` and `_argmax_last` are gone (lane
+# py-lm-neural, 2026-11-14).
 
 
 class _GpuPrimitives:
@@ -142,24 +76,24 @@ class _CpuPrimitives:
     def embedding(self, table, ids_flat):
         n = int(ids_flat.size)
         v, d = int(table.shape[0]), int(table.shape[1])
-        y = empty((n, d), "<f4")
+        y = _empty((n, d), "<f4")
         self._ext.embedding_forward(
-            [addr(y, name="x"), addr_ro(table, name="embed"), addr_ro(ids_flat, name="ids")], [n, v, d])
+            [_addr(y, name="x"), _addr_ro(table, name="embed"), _addr_ro(ids_flat, name="ids")], [n, v, d])
         return y
 
     def rms_norm(self, x2d, weight, eps):
         n, d = int(x2d.shape[0]), int(x2d.shape[1])
-        y = empty((n, d), "<f4")
+        y = _empty((n, d), "<f4")
         self._ext.rms_norm_forward(
-            [addr(y, name="hn"), addr_ro(x2d, name="x"), addr_ro(weight, name="norm")], [n, d, float(eps)])
+            [_addr(y, name="hn"), _addr_ro(x2d, name="x"), _addr_ro(weight, name="norm")], [n, d, float(eps)])
         return y
 
     def linear(self, x2d, weight):
         n, d = int(x2d.shape[0]), int(x2d.shape[1])
         v = int(weight.shape[0])
-        y = empty((n, v), "<f4")
+        y = _empty((n, v), "<f4")
         self._ext.linear_forward(
-            [addr(y, name="logits"), addr_ro(x2d, name="hn"), addr_ro(weight, name="head")], [n, v, d])
+            [_addr(y, name="logits"), _addr_ro(x2d, name="hn"), _addr_ro(weight, name="head")], [n, v, d])
         return y
 
     def linear_int15(self, x2d, planes):
@@ -184,49 +118,6 @@ class CausalLMState:
         return _NATIVE.causal_state_repr(self)
 
 
-def _float_weight(a, name):
-    pb = probe(a)
-    if is_integer(pb.format):
-        raise TypeError(f"mojolearn.models.CausalLM: tensor {name!r} is an integer tensor ({pb.format}); a weight must be F32, F16 or BF16")
-    return a
-
-
-def _argmax_last(logits, b, l, v):
-    """The argmax of row `b`'s LAST position, ties to the lowest index, as an
-    int32 `(b,)` Array: a sequential scan with a strict `>`
-    (`_greedy_next_bytes`'s rule). The base binding's `argmax_last_rows_f32`
-    reads position `l - 1` of each row on the device (the `argmax_rows_f32`
-    rule, DEVIATION 2500: strict `>` from index 0, so a NaN never replaces
-    and a NaN at index 0 stays); lane cpu4-python: the host row gather
-    `gather_rows_bytes` is gone."""
-    out = empty((b,), "<i8")
-    if b:
-        _native("argmax_last_rows_f32")(addr_ro(logits, name="logits"), [b, l, v], addr(out, name="next ids"))
-    return out.astype("<i4")
-
-
-def _prompt_then_new(prompt, b, l, n_new, new_addr, new_step_major):
-    """`(b, l + n_new)` int32: each prompt row followed by its new ids, with
-    no Python loop over rows or tokens. The ids are assembled step-major
-    (`[l + n_new, b]`) by the base binding's `transpose_f32` (a pure 4-byte
-    move, every bit pattern unchanged, so int32 ids pass through it) and
-    transposed back to C order. `new_addr` holds the new ids as int32,
-    step-major `[n_new, b]` when `new_step_major`, else C-order
-    `[b, n_new]`."""
-    total = l + n_new
-    move = _native("transpose_f32")
-    steps = empty((total, b), "<i4")
-    at = addr(steps, name="ids")
-    move(addr_ro(prompt, name="ids"), at, b, l)
-    if new_step_major:
-        memcopy(at + l * b * 4, new_addr, n_new * b * 4)
-    else:
-        move(new_addr, at + l * b * 4, b, n_new)
-    out = empty((b, total), "<i4")
-    move(at, addr(out, name="ids_out"), total, b)
-    return out
-
-
 class CausalLM:
     """See the module header. Build with `load` (a checkpoint directory) or
     directly from a `ModelPlan` and a weight dict shaped like
@@ -238,11 +129,10 @@ class CausalLM:
                                         (weight_format, max_positions, device, numeric_profile),
                                         _NATIVE_CONTEXT)
 
-    # The old owner is retained only for ParallelCausalLM's existing RPC path.
-    # It remains explicit runtime debt until that transport has native ownership.
-
-    def _make_blocks(self, cls, layers, kwargs):
-        return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
+    # TOMBSTONE: CausalLM._make_blocks, _ids, _check_positions (dead code: no caller; the native
+    # owner builds blocks and admits ids and positions) deleted 2026-11-09 by 57b86ba5ac; code
+    # recoverable at 57b86ba5ac^.
+    # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
     # ------------------------------------------------------------ loading
     @classmethod
@@ -265,36 +155,6 @@ class CausalLM:
     def parameters(self):
         """Return tensors by checkpoint name."""
         return _NATIVE.causal_lm_parameters(self)
-
-    def _ids(self, x, what, step=False):
-        pb = probe(x)
-        if not is_integer(pb.format):
-            raise TypeError(f"mojolearn {what}: ids must be integer, got buffer format {pb.format!r}")
-        if step:
-            if len(pb.shape) not in (1, 2) or (len(pb.shape) == 2 and pb.shape[1] != 1):
-                raise ValueError(f"mojolearn {what}: ids must be (B,) or (B, 1) for a step, got shape {pb.shape}")
-            ids = as_i32_c(x, ndim=None, name="ids")[0].reshape((int(pb.shape[0]), 1))
-        else:
-            if len(pb.shape) != 2:
-                raise ValueError(f"mojolearn {what}: ids must be (B, L), got shape {pb.shape}")
-            ids = as_i32_c(x, ndim=2, name="ids")[0]
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        if b < 1 or l < 1:
-            raise ValueError(f"mojolearn {what}: B and L must be positive, got ({b}, {l})")
-        if ids.min() < 0 or ids.max() >= self.vocab_size:
-            raise ValueError(f"mojolearn {what}: ids must be in [0, {self.vocab_size})")
-        return ids
-
-    def _check_positions(self, what, state, l):
-        have = state.positions if state is not None else 0
-        if self.max_positions is not None and have + l > self.max_positions:
-            raise ValueError(
-                f"mojolearn {what}: {have} + {l} positions exceed max_positions={self.max_positions} "
-                "(the transformer block's absolute-position ceiling is 8192, DEVIATION 812)")
-        if state is not None and state.positions + l > state.max_tokens:
-            raise ValueError(
-                f"mojolearn {what}: the state was allocated for {state.max_tokens} tokens and holds "
-                f"{state.positions}; {l} more do not fit")
 
     def _run(self, ids, state, step, what):
         return _NATIVE.causal_lm_forward(self, ids, state, step)
@@ -324,7 +184,7 @@ class CausalLM:
 
     def generate(self, ids, max_new_tokens, *, greedy=True, seed=None,
                  temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
-                 pad_token_id=None):
+                 pad_token_id=None, resident=False):
         """Return the prompt and up to `max_new_tokens` continuation ids.
 
         Greedy ties choose the lowest id. Sampling (`greedy=False`) requires
@@ -333,10 +193,20 @@ class CausalLM:
         batch rows are padded; decoding ends when every row finishes or reaches
         the token limit. With no EOS, the output has exactly `(B, L + max_new_tokens)`
         ids. A missing pad id uses the first EOS id, or zero.
+
+        `resident=True` keeps every layer's weights and decode session on the
+        GPU between calls and decodes the whole continuation in one device
+        pass. It returns the same ids as the default. It supports greedy
+        decoding without `eos_token_id` on a GPU model and raises `ValueError`
+        otherwise.
+
+        Example::
+
+            ids = model.generate(prompt, 32, resident=True)
         """
         return _NATIVE.causal_lm_generate(
             self, ids, max_new_tokens,
-            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id), resident)
 
     def stream(self, ids, max_new_tokens, *, greedy=True, seed=None,
                temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
@@ -378,10 +248,6 @@ class CausalLM:
         """Resume a generation checkpoint on the same model weights and settings."""
         return _NATIVE.causal_lm_resume(self, checkpoint, tokenizer)
 
-    def _generate_resident(self, ids, n_new, total, last_logits=None):
-        # Retained diagnostic door; arithmetic and lifecycle are native.
-        return _NATIVE.causal_lm_resident(self, ids, n_new, last_logits, None)
-
     def __repr__(self):
         return _NATIVE.causal_lm_repr(self)
 
@@ -411,7 +277,7 @@ def _connect_causal_native():
     from .. import _training_impl as training
     from .._transformer_impl import TransformerBlock, TransformerState, TransformerDecodeSession, _OPT_NAMES
     from .._mamba_impl import (Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State, Mamba3State,
-                               Mamba1DecodeSession, _Mamba2DecodeSession, _Mamba3DecodeSession)
+                               Mamba1DecodeSession, Mamba2DecodeSession, Mamba3DecodeSession)
     from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
                                     Mamba2BlockInference, Mamba3BlockInference, _causal_native_connections)
     from .config import _NATIVE_CONTEXT as config_context
@@ -424,7 +290,7 @@ def _connect_causal_native():
     runtime = runtime_binding()._module
     from .._native_operation_lock import connect as connect_operation_lock
     connect_operation_lock(runtime)
-    runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
+    runtime.native_codec_call("initialize", (_Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     selected_mode = _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}
     vendor = _backend.vendor()
@@ -457,7 +323,7 @@ def _connect_causal_native():
         "profile_defaults": _numeric_profile._defaults,
         "rejected_profiles": _numeric_profile.REJECTED,
         "config_context": config_context, "checkpoint_context": checkpoint_context,
-        "array_class": Array, "bf16_class": _lowbit.BF16Weight,
+        "array_class": _Array, "bf16_class": _lowbit.BF16Weight,
         "int8_class": _lowbit.Int8Weight, "projections": _PROJECTIONS,
         "optional_names": _OPT_NAMES, "rlock": _thread.RLock,
         "training_module": training,
@@ -470,9 +336,9 @@ def _connect_causal_native():
                     "mamba2": Mamba2Block, "mamba3": Mamba3Block}},
         "mamba3_state_class": Mamba3State,
         "transformer_session_class": TransformerDecodeSession,
-        "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": _Mamba2DecodeSession,
-                                  "mamba3": _Mamba3DecodeSession},
-        "generation_classes": (Array, CausalLMState,
+        "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": Mamba2DecodeSession,
+                                  "mamba3": Mamba3DecodeSession},
+        "generation_classes": (_Array, CausalLMState,
                                {"transformer": TransformerState, "mamba1": Mamba1State,
                                 "mamba2": Mamba2State}, GenerationStream),
     }

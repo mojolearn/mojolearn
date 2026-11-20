@@ -1,0 +1,35 @@
+Mojolearn native byte-LM config checks, 2026-11-10
+
+Changes
+  training/checks/byte_lm_config_check.mojo preserves all previous registry,
+  profile, GQA, copy, bounds, refusal-name and parameter-index assertions.
+  It now runs 25 independent native fixtures through host_parallelize.
+  Sequential loops within a fixture compare dependent prefix offsets.
+  Added full offset checks for the 162,147,840-parameter shape and native
+  checks for the generalized (layers,vocab) cases (1,257), (3,513), (12,50257).
+  The expectations use literal counts/totals; no product math is the oracle.
+  Only metadata is allocated, including for the large shape. No weights,
+  GPU context, Python objects, bindings, callbacks, or new runner.
+
+Removal
+  Deleted test_large_configuration_is_host_only from the Python runtime
+  shape tests. Its n_tensors/n_total/offset assertions now live directly
+  in the existing Mojo config check. Public checkpoint, dict schema,
+  exact integer admission, named buffers, snapshot ownership and trainer
+  gradient/evaluate API checks remain. This file is only partially migrated:
+  internal trainer state assertions still need a separate native migration.
+
+Orchestrator queue
+  bash tools/compile_slot.sh pixi run check-byte-lm-config
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/byte_lm_config_check.mojo -o "$HOME/mojolearn-evidence/native-byte-config"
+  Existing Python boundary bindings: _mojolearn_byte_lm / _mojolearn_byte_lm_host.
+  Retained installed-wheel selection:
+  python3 -m pytest mojolearn/tests/test_byte_lm_runtime_shape.py
+  Save logs; report compile and runtime statuses separately.
+
+Status
+  Source-reviewed only; compilation/run are RUN OWED to root orchestrator.
+  No box job, identity run or timing queued. Product code/bits unchanged.
+  A/B define: none. Existing fixture expectations and refusal text retained.
+  Frozen ops-session files are untouched by this batch.

@@ -10,15 +10,15 @@
         --out python/dist
 
 FOUR WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py): core, NVIDIA
-native sm_89, AMD gfx942 and NVIDIA PTX sm_80. The core requires both
-vendors, and NVIDIA requires PTX, all pinned to the same version.
+(native sm_89 AND PTX sm_80 in one wheel, Andrew 2026-11-05), AMD gfx942 and
+the file-free meta `mojolearn`, all pinned to the same version.
 Default pip installation includes every released target.
 
-`--wheels nvidia,nvidia-ptx` emits the native NVIDIA wheel and its exactly
-pinned PTX dependency. The PTX slot (`cuda/sm_80`, installed at
-`cuda_ptx/sm_80`) has its own build proof. Both package markers bind the
-same PTX manifest SHA256; native and PTX files have disjoint owners.
-Every wheel is checked against PyPI's 100 MiB file limit here, at pack time;
+`--wheels nvidia` emits the one NVIDIA wheel: `cuda_native/sm_89` and the PTX
+slot (`cuda/sm_80`, installed at `cuda_ptx/sm_80`, its own build proof). Its
+marker binds the PTX manifest SHA256. There is no separate PTX wheel any more
+(mojolearn-nvidia-ptx shipped 0.8.39 to 0.8.65).
+Every wheel is checked against its project's PyPI file limit (packaging/pypi_limits.json) here, at pack time;
 an oversize wheel fails the pack with its per-set compressed sizes.
 Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
 at the same directory depth, preserving RUNPATH while avoiding ownership overlap
@@ -289,7 +289,6 @@ def tier_names(tier, include_byte_lm=False, *, vendor=None):
         names = names + ("_mojolearn_byte_lm",)
     return names
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
-PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
 REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 #: One loaded sets/<vendor>/<arch> directory. `reuse` is None for a set a leg
@@ -316,8 +315,16 @@ from verify_linux_surface_qualification import (  # noqa: E402
 # THE SPLIT (2026-09-25): which plugin ships which vendor directory, read from
 # python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
 gpu_plugins = load_gpu_plugins()
+# PER-PROJECT PyPI LIMITS (2026-11-05): packaging/pypi_limits.json holds what PyPI
+# granted (mojolearn-nvidia and mojolearn-amd 250 MiB per file since 2026-11-04;
+# mojolearn and mojolearn-core the 100 MiB default). The NVIDIA wheel carries
+# native sm_89 and PTX sm_80 together and is checked against its 250 MiB.
+sys.path.insert(0, str(REPO / "packaging"))
+import pypi_limits  # noqa: E402
+#: The combined (unsplit) wheel publishes as `mojolearn`.
+PYPI_LIMIT = pypi_limits.file_limit("mojolearn")
 #: The profiles that emit the split wheels from the same inputs:
-#: `mojolearn-core` (core-linux), `mojolearn-nvidia`, `mojolearn-nvidia-ptx`,
+#: `mojolearn-core` (core-linux), `mojolearn-nvidia` (native + PTX),
 #: `mojolearn-amd` and the file-free `mojolearn` (meta-linux, requiring the
 #: core and both vendors; 2026-10-20). `split` is the
 #: default and checks sets the way `generic` does; `release-split` checks
@@ -350,10 +357,16 @@ SPLIT_PLAT = "manylinux_2_35_x86_64"
 # submodule runs the package's __init__, which selects a backend and refuses
 # on a box with no built binary (the release inventory test, Wheel CI).
 # host_surface.py itself imports nothing from the package.
+# NOT registered in sys.modules: a source-tree module under a mojolearn* name
+# left there by this import (tools/release.py -> release_reuse -> pack_wheel)
+# is seen by every later reader of sys.modules in the same process; the
+# installed-runtime qualifier's inventory (tools/qualify_native_runtime_installed.py
+# installed_module_inventory) correctly refuses it as product imported outside
+# the installed environment. Nothing looks the alias up; the module object is
+# held here as `host_surface`.
 import importlib.util  # noqa: E402
 _hs_spec = importlib.util.spec_from_file_location("mojolearn_host_surface", PY_DIR / "mojolearn" / "host_surface.py")
 host_surface = importlib.util.module_from_spec(_hs_spec)
-sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
 # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
 # per-lane fragments the manifest merges; empty until a lane declares one.
@@ -384,7 +397,7 @@ RELEASE_REGISTERED_SETS = {tuple(k.split("/")) for k in REGISTERED_ARCHES}  # gl
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO, required=None,
-                      profile=None, host_composition=None):
+                      profile=None, host_composition=None, local_version=False):
     """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
     File inspection only. Build provenance is not installed/runtime admission.
@@ -411,7 +424,9 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     optional = {tuple(k.split("/")) for v in full_vendors for k in OPTIONAL_ARCHES[v]}  # glue: registry key spelling
     fills = (required <= keyset and extra <= optional
              and len({normalise_arch("/".join(k)) for k in keyset}) == len(keyset))  # glue: one set per hardware slot
-    if version != read_version(source_root) or len(keys) != len(keyset) or not fills:
+    # a candidate's local version (--local-version) is checked by its own pattern, never against _version.py
+    declared = version if local_version and LOCAL_VERSION_RE.fullmatch(version) else read_version(source_root)
+    if version != declared or len(keys) != len(keyset) or not fills:
         raise SystemExit(profile + ' requires the sets '
                          + (release_contract(sorted({v for v, _ in required})) if required == RELEASE_061_SETS
                             else ', '.join('/'.join(k) for k in sorted(required)))
@@ -766,6 +781,20 @@ def check_proof_indexes(proof, s, reused):
 
 def urlsafe_b64(digest):
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+#: A CANDIDATE BUILD's version (tools/release.py candidate): the next release's .devN with a PEP 440 local
+#: segment naming the source commit's 12 hex and an optional label. PyPI refuses local versions, so a wheel
+#: carrying one can never be uploaded by mistake, and pip never takes it for the release.
+LOCAL_VERSION_RE = re.compile(r"\d+\.\d+\.\d+\.dev\d+\+[0-9a-f]{12}(\.[a-z0-9]+)*")
+
+
+def candidate_version_py(text, committed, local):
+    """_version.py's text with its one `__version__ = "<committed>"` line set to LOCAL (bytes)."""
+    line = re.compile(r'^__version__ = "' + re.escape(committed) + r'"$', re.M)
+    if len(line.findall(text)) != 1:
+        raise SystemExit("pack_wheel: _version.py must hold one __version__ line of " + committed)
+    return line.sub('__version__ = "' + local + '"', text).encode()
 
 
 def read_version(root=REPO):
@@ -1417,8 +1446,8 @@ def main(argv=None, _gates=True):
                     help="platform tag; default " + SPLIT_PLAT + " for the split profiles, "
                          "linux_x86_64 (for audit.sh to retag) for the combined ones")
     # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
-    # THE DEFAULT IS THE SPLIT: the core, the PTX payload and one
-    # plugin per GPU vendor. `generic` and `release-linux3` still pack the one
+    # THE DEFAULT IS THE SPLIT: the core and one plugin per GPU vendor
+    # (the NVIDIA plugin carries the PTX set). `generic` and `release-linux3` still pack the one
     # combined wheel and are what tools/release.py asks for by name.
     ap.add_argument('--profile', choices=SPLIT_PROFILES + ('generic', RELEASE_PROFILE, 'release-0.6.1'),
                     default=SPLIT_PROFILE)
@@ -1438,7 +1467,20 @@ def main(argv=None, _gates=True):
                     help='explicit retained common-host assembly receipt; original build proofs remain required')
     ap.add_argument('--source-root', type=pathlib.Path, default=REPO,
                     help='frozen package source checkout; packing tools may be newer than that source')
+    ap.add_argument('--local-version', default='',
+                    help='a CANDIDATE build (tools/release.py candidate): pack as this PEP 440 local version '
+                         '(X.Y.Z.devN+<sha12>[.<label>]) instead of _version.py\'s; the wheel\'s _version.py is '
+                         'generated with it and LINUX_PAYLOAD.json records the committed one. PyPI refuses a '
+                         'local version, so such a wheel can never be published')
+    ap.add_argument('--candidate-defines', default='',
+                    help='with --local-version: the build defines of the sets (MOJOLEARN_BUILD_DEFINES spelling), '
+                         'recorded in LINUX_PAYLOAD.json')
     a = ap.parse_args(argv)
+    if a.candidate_defines and not a.local_version:
+        raise SystemExit('pack_wheel: --candidate-defines needs --local-version (a candidate build)')
+    if a.local_version and not LOCAL_VERSION_RE.fullmatch(a.local_version):
+        raise SystemExit('pack_wheel: --local-version must look like 0.8.67.dev0+0123456789ab[.label] '
+                         '(a PEP 440 local version), not ' + repr(a.local_version))
     source_root = a.source_root.resolve()
     python_root = source_root / 'python'
     package_root = python_root / 'mojolearn'
@@ -1455,6 +1497,12 @@ def main(argv=None, _gates=True):
     if proj["version"] != version:
         raise SystemExit(f"pack_wheel: pyproject says {proj['version']}, "
                          f"_version.py says {version}")
+    committed_version = version
+    if a.local_version:
+        # A CANDIDATE: every name, pin and marker below takes the local version; the committed pair (checked
+        # equal above) stays the source's, and only the shipped _version.py is regenerated (candidate_version_py).
+        version = a.local_version
+        proj = dict(proj, version=version)
     readme = (source_root / "README.md").read_text()
 
     if a.host_composition and not strict:
@@ -1531,7 +1579,8 @@ def main(argv=None, _gates=True):
         except ValueError as exc:
             raise SystemExit(f"pack_wheel: invalid PTX set: {exc}") from exc
     if a.profile == RELEASE_PROFILE:
-        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, host_composition=a.host_composition)
+        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, host_composition=a.host_composition,
+                                      local_version=bool(a.local_version))
     elif a.profile == RELEASE_SPLIT_PROFILE:
         plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k not in NON_VENDOR_KINDS}
         # A plugin is packed from its own vendor's sets and nothing else; the
@@ -1551,7 +1600,7 @@ def main(argv=None, _gates=True):
                     else set(keys) & RELEASE_REGISTERED_SETS)
         inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, required=required,
                                       host_composition=a.host_composition,
-                                      profile=RELEASE_SPLIT_PROFILE)
+                                      profile=RELEASE_SPLIT_PROFILE, local_version=bool(a.local_version))
     else:
         inventory = None
     if inventory is not None:
@@ -1706,6 +1755,14 @@ def main(argv=None, _gates=True):
     if inventory is not None:
         witness = inventory["source_commit"]
         require_shipped_python_at_commit(entries, witness, repo=source_root)
+        if a.local_version:
+            # the committed _version.py was just proved to be the build commit's; the wheel ships the candidate's
+            version_py = entries.pop("mojolearn/_version.py")
+            candidate_py = candidate_version_py(version_py.read_text(), committed_version, version)
+            inventory["candidate"] = dict(
+                local_version=version, committed_version=committed_version, defines=a.candidate_defines or "",
+                committed_version_py_sha256=sha(version_py).hex(),
+                version_py_sha256=hashlib.sha256(candidate_py).hexdigest())
     else:
         import subprocess
         witness = subprocess.run(["git", "-C", str(source_root), "rev-parse", "HEAD"],
@@ -1758,6 +1815,10 @@ def main(argv=None, _gates=True):
     # METADATA is generated from `proj` a few lines above.
     generated["mojolearn/CITATION.cff"] = (source_root / "CITATION.cff").read_bytes()
     generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
+    if a.local_version:
+        if inventory is None:
+            raise SystemExit("pack_wheel: --local-version needs a release profile (a proven candidate build)")
+        generated["mojolearn/_version.py"] = candidate_py
 
     # The split core's METADATA is the combined wheel's plus exactly the two
     # exact plugin requirements (core_project, written by write_split).
@@ -1792,13 +1853,13 @@ def main(argv=None, _gates=True):
         wheels = {}
         for whl, vendor in built:
             distribution = kind_distribution(vendor)
-            limit = gpu_plugins.wheel_size_limit(distribution)
+            limit = pypi_limits.file_limit(distribution)
             wheels[whl.name] = dict(distribution=distribution, compressed_bytes=whl.stat().st_size,
                                     pypi_limit_bytes=limit, over_limit=whl.stat().st_size > limit,
                                     payloads=wheel_payload_sizes(whl))
         (out / f"SIZES-{version}-linux.json").write_text(json.dumps(
             dict(wheels=wheels, pypi_limit_bytes=PYPI_LIMIT, over_limit=True, profile=a.profile), indent=2))
-        print("\n".join(["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish."]
+        print("\n".join(["", "pack_wheel: WHEEL OVER ITS PyPI FILE LIMIT (packaging/pypi_limits.json). STOP: this release cannot publish."]
                         + oversize), file=sys.stderr)
         return 1
 
@@ -1824,7 +1885,18 @@ def main(argv=None, _gates=True):
             if core_wheels:
                 surface = audit(core_wheels, source_root=source_root)
                 (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
-                if not surface['wheels'][0]['source_payload_complete']:
+                entry = surface['wheels'][0]
+                complete = entry['source_payload_complete']
+                if a.local_version and not complete:
+                    # A measurement build ships a regenerated mojolearn/_version.py (the local
+                    # version). That one file is the only difference from the source it allows.
+                    complete = (entry.get('changed_python_payload') == ['mojolearn/_version.py']
+                                and not entry.get('missing_python_payload')
+                                and not entry.get('missing_reference_payload')
+                                and not entry.get('changed_reference_payload')
+                                and not entry.get('source_names_absent_from_wheel')
+                                and not entry.get('wheel_names_absent_from_source'))
+                if not complete:
                     raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
         if split:
             # EACH PLUGIN HOLDS EXACTLY ITS SETS AND THE CORE HOLDS NONE, the pins
@@ -1865,12 +1937,16 @@ def main(argv=None, _gates=True):
         for whl, vendor in built:
             size = whl.stat().st_size
             distribution = kind_distribution(vendor)
-            limit = gpu_plugins.wheel_size_limit(distribution)
+            limit = pypi_limits.file_limit(distribution)
             wheels[whl.name] = {
                 "distribution": distribution,
                 "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
                 "pypi_limit_bytes": limit, "over_limit": size > limit,
                 "payloads": wheel_payload_sizes(whl)}
+            # One line per wheel with its per-set compressed sizes: the NVIDIA wheel
+            # carries cuda_native/sm_89 and cuda_ptx/sm_80 together (2026-11-05).
+            print(f"pack_wheel: size {whl.name}: {size / 2**20:.1f} MiB of {limit / 2**20:.0f} MiB; "
+                  + ", ".join(f"{k} {n / 2**20:.1f} MiB" for k, n in sorted(wheels[whl.name]["payloads"].items())))
         sizes = {
             "wheels": wheels, "pypi_limit_bytes": PYPI_LIMIT,
             "over_limit": any(w["over_limit"] for w in wheels.values()),
@@ -1881,12 +1957,12 @@ def main(argv=None, _gates=True):
     print(json.dumps(sizes, indent=2))
     if sizes["over_limit"]:
         # THE WHEEL SIZE CHECK RUNS HERE, AT PACK TIME (Andrew 2026-10-10), and
-        # fails loudly: PyPI refuses any file over 100 MiB, so an oversize wheel
+        # fails loudly: PyPI refuses a file over its project's limit, so an oversize wheel
         # must stop the release before any column or publish step runs.
         rows = sizes["wheels"].items() if split else [(pathlib.Path(sizes["wheel"]).name, dict(
             compressed_bytes=sizes["compressed_bytes"], pypi_limit_bytes=PYPI_LIMIT, over_limit=True,
             payloads=wheel_payload_sizes(pathlib.Path(sizes["wheel"]))))]
-        lines = ["", "pack_wheel: WHEEL OVER PyPI's 100 MiB FILE LIMIT. STOP: this release cannot publish.",
+        lines = ["", "pack_wheel: WHEEL OVER ITS PyPI FILE LIMIT (packaging/pypi_limits.json). STOP: this release cannot publish.",
                  f"  report: {out / f'SIZES-{version}-linux.json'}"]
         for name, w in rows:
             lines.append(f"  {'OVER' if w['over_limit'] else 'ok  '} {name}: {w['compressed_bytes'] / 2**20:.1f} MiB "
@@ -1903,7 +1979,7 @@ def oversize_report(built):
     rows = []
     for whl, vendor in built:
         distribution = kind_distribution(vendor)
-        rows.append((whl, whl.stat().st_size, gpu_plugins.wheel_size_limit(distribution)))
+        rows.append((whl, whl.stat().st_size, pypi_limits.file_limit(distribution)))
     if not any(size > limit for _, size, limit in rows):
         return []
     lines = []

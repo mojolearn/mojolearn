@@ -37,7 +37,7 @@ because the reader is where the two kernels differ and the accumulator is not.
       other symptom. Recorded here so the reason is findable from the check.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -117,7 +117,7 @@ def hb_kernel[variant: Int, binary: Bool](
             )
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -154,10 +154,10 @@ def main() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight_h.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex_h.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices_h)
+    upload_whole_into[DType.float32](ctx, d_tgt, target_h)
+    upload_whole_into[DType.float32](ctx, d_wt, weight_h)
+    upload_whole_into[DType.uint32](ctx, d_ci, cindex_h)
 
     var d_out = ctx.enqueue_create_buffer[DType.float32](PW_HB_OUT_FLOATS)
     var h_out = ctx.enqueue_create_host_buffer[DType.float32](
@@ -219,7 +219,7 @@ def main() raises:
                 d_out.unsafe_ptr(),
                 grid_dim=(1, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
             )
-        ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+        download_buffer_into[DType.float32](ctx, d_out, h_out)
         ctx.synchronize()
 
         var bad = 0
@@ -297,7 +297,7 @@ def main() raises:
         d_out.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
-    ctx.enqueue_copy(dst_buf=h_out, src_buf=d_out)
+    download_buffer_into[DType.float32](ctx, d_out, h_out)
     ctx.synchronize()
 
     var bad_b = 0
@@ -349,3 +349,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("pointwise half-byte accumulator + both readers: C1-C4 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_buffer_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_hist2_half_byte_check", cpu=False, gpu=True, serial="", run=run_cases)

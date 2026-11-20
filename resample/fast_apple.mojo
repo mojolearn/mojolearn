@@ -13,7 +13,7 @@ Three kernels, all one launch, all parallel, no host step:
     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
   * (`bootstrap_mean_fast_kernel`, -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD, was
     deleted 2026-10-09: DROPPED-slower; docs/TOMBSTONES.md.)
-  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, default; _OFF): the
+  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, the FAST + Apple default): the
     permutation null by a 4-bit radix select (16 counters per thread in a
     SIMD register, block totals through threadgroup memory, no atomics, keys
     recomputed from Philox) instead of main's `perm_select_stat_kernel` (8
@@ -25,10 +25,10 @@ The device row gather of `sklearn.utils.resample` is NOT here: main carries
 it as `resample/gather_fast.mojo` (-D MOJOLEARN_RESAMPLE_FAST_GATHER).
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast, stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
@@ -52,7 +52,7 @@ from resample.checks.statistics import STAT_DIFF_MEANS, STAT_MEAN, _mean_of_sum
 #: Each switch is a build-time define on top of this (estimator.mojo,
 #: `RESAMPLE_FAST_*`).
 comptime RESAMPLE_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 
 #: Threads per block of every kernel here.

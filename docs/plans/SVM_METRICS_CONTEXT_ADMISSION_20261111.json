@@ -1,0 +1,21 @@
+{
+  "status": "source authored; no compilation or execution",
+  "base": "f93166d21e",
+  "defect": "Rebound live metrics context mappings, colliding keys and diagnostic values reached generic lookup/string conversion before native admission.",
+  "repair": [
+    "arena_prog_native._family_entries admits each exact mapping and string key set before first lookup",
+    "native str identity and diagnostic/family string checks precede conversion",
+    "classical_labels._accuracy_context admits rebound outer dictionary before former arena preparation",
+    "unchanged key sets reuse existing dictionary-epoch cache criterion7; layout/slot unchanged"
+  ],
+  "additive_dependency": "_native_classification_input returns admitted view/type metadata once; old _native_classification retains its original allocations and prepare route",
+  "tests": {
+    "file": "python/mojolearn/tests/test_svm_metrics_context_native_boundary.py",
+    "definitions": 3,
+    "expanded_cases": 12,
+    "runtime": "unrun"
+  },
+  "routes": "No algorithm, numerical kernel, provider selection or native transfer changed",
+  "compile_roots": "Shared arena/classical admission closure; root development group discovery required",
+  "removed": "Unadmitted generic metadata lookups/string conversion on unsupported objects; no source guard"
+}

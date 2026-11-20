@@ -13,8 +13,7 @@ what a slot holds is exactly the bytes the host gave it).
 EACH BINDING OWNS ITS OWN STORE, next to its own DeviceContext, because a
 device buffer belongs to the context that made it:
 
-    comptime MY_STORE = _Global[StorageType=DeviceStore, name="MojoMyStore<Tier>",
-                                init_fn=DeviceStore.__init__]
+    comptime MY_STORE = SharedSlot[DeviceStore, "MojolearnMyStore<Tier>V1"]
     var s = MY_STORE.get_or_create_ptr()
     var id = s[].put(my_ctx(), host_addr, n_words)
 
@@ -29,14 +28,12 @@ FREED DETERMINISTICALLY: `free` waits for the context (so no queued launch
 still reads the slot), then drops the buffer at once (the slot keeps a
 shared one-word placeholder), and the id is reused. Outside FAST a large
 freed buffer is kept as a spare for the next put of its length (G2,
-STORE_SLOT_POOL, capped at STORE_POOL_KEEP_BYTES); `-D
-MOJOLEARN_XPREP_ARENA_POOL_OFF=1` makes live device memory exactly the live
-slots again. Where bytes live moves no bit.
+STORE_SLOT_POOL, capped at STORE_POOL_KEEP_BYTES). Where bytes live moves
+no bit.
 """
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 # TOMBSTONE: MOJOLEARN_XPREP_PINNED_UPLOAD_OFF (slower) deleted 2026-10-09 by fd7e86b46; code recoverable at fd7e86b46^.
 # Restore: git apply experiments/removed/MOJOLEARN_XPREP_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -65,12 +62,10 @@ from core.device_zero import enqueue_fill
 #: policy cap of core/device_pool.mojo), oldest dropped first. A spare's
 #: words are whatever the last slot held; `put` overwrites all of them before
 #: any read. Not in FAST (untouched by this lane). DEFAULT ON (storage only,
-#: no bit moves); `-D MOJOLEARN_XPREP_ARENA_POOL_OFF=1` restores the
-#: free-at-once store (and the fresh device arena, x_prep/device.mojo).
-comptime STORE_SLOT_POOL = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-    and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]()
-)
+#: no bit moves).
+# TOMBSTONE: MOJOLEARN_XPREP_ARENA_POOL_OFF (old path: the free-at-once store; EXP:1787 CONFIRMED the pool default) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 9907fddc3f.
+# Restore: git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime STORE_SLOT_POOL = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 comptime STORE_POOL_MIN_WORDS = 1 << 20
 comptime STORE_POOL_KEEP_BYTES = 2 * 1024 * 1024 * 1024
 

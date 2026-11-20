@@ -42,7 +42,18 @@ name: Release Linux build
 # no artifact carries; host_donor_url likewise. Empty map_url: no R2; each
 # shard restores and saves its hot directory through actions/cache instead
 # (archives named by their content key, placed only after they verify).
-run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+#
+# CANDIDATE DEFINES (`defines`, default empty; tools/release.py candidate). A
+# define A/B's B wheel set is an ordinary candidate build of the same commit
+# with MOJOLEARN_BUILD_DEFINES set in every shard, assemble and host job
+# (tools/gha_release_box.sh, which records it in GHA/defines.txt). The binding
+# cache scopes it per build (tools/bincache.py scope_build_defines): a build
+# whose closure names no define is keyed and built without it, so it is a
+# cache hit on the A set's bytes. Empty: the variable is never set, and every
+# key is a normal release build's. `skip_units` (a B arm's only, tools/release_reuse.py
+# unit_plan): the shard entries whose closure names no define get no shard job;
+# the assemble job takes their A-set archives from the cache (a miss compiles there).
+run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]${{ inputs.defines != '' && format(' defines {0}', inputs.defines) || '' }}"
 
 on:
   workflow_dispatch:
@@ -95,6 +106,14 @@ on:
         type: boolean
         required: false
         default: false
+      defines:
+        description: "candidate build defines, MOJOLEARN_BUILD_DEFINES spelling NAME=V,NAME2 (empty: none; tools/release.py candidate)"
+        required: false
+        default: ""
+      skip_units:
+        description: "B arm only: merged shard entries with no shard job (its base build's bytes; assemble takes them from the binding cache)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -112,6 +131,7 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       sets: ${{ steps.plan.outputs.sets }}
       has_devices: ${{ steps.plan.outputs.has_devices }}
+      has_shards: ${{ steps.plan.outputs.has_shards }}
       host: ${{ steps.plan.outputs.host }}
       host_donor: ${{ steps.plan.outputs.host_donor }}
       jobs_per_set: ${{ steps.plan.outputs.jobs_per_set }}
@@ -126,8 +146,12 @@ jobs:
           IN_MODES: ${{ inputs.modes }}
           IN_REUSE_RUN: ${{ inputs.reuse_shards_run }}
           IN_COMPILE_GROUPS: ${{ inputs.compile_groups }}
+          IN_DEFINES: ${{ inputs.defines }}
+          IN_SKIP_UNITS: ${{ inputs.skip_units }}
         run: |
           set -eu
+          [ -z "$IN_SKIP_UNITS" ] || { [ -n "$IN_DEFINES" ] && printf '%s' "$IN_SKIP_UNITS" | grep -Eq '^[A-Za-z0-9_.:-]+( [A-Za-z0-9_.:-]+)*$'; } || { echo "skip_units is a B arm's (defines set): space-separated shard entries"; exit 2; }
+          [ -z "$IN_DEFINES" ] || printf '%s' "$IN_DEFINES" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?(,[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?)*$' || { echo "defines must be NAME[=VALUE],... (MOJOLEARN_BUILD_DEFINES)"; exit 2; }
           printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
           printf '%s' "$IN_SHARDS" | grep -Eq '^([1-9]|1[0-6])$' || { echo "shards must be 1..16"; exit 2; }
           printf '%s' "$IN_JOBS" | grep -Eq '^[1-4]$' || { echo "jobs must be 1..4"; exit 2; }
@@ -150,13 +174,14 @@ jobs:
           IN_SHARDS: ${{ inputs.shards }}
           IN_MODES: ${{ inputs.modes }}
           IN_COMPILE_GROUPS: ${{ inputs.compile_groups }}
+          IN_SKIP_UNITS: ${{ inputs.skip_units }}
         run: |
           # pipefail: without it tee hides the planner's refusal, the plan job
           # passes with no matrix and the run fails with no job named (run 39840375353)
           set -euo pipefail
           donor=$(python3 -c 'import json, os; e = json.load(open(os.environ["GITHUB_EVENT_PATH"])); print("1" if (e.get("inputs") or {}).get("host_donor_url") else "")')
           python3 tooling/tools/release_github_build.py plan --src src --sets "$IN_SETS" --shards "$IN_SHARDS" \
-            --modes "$IN_MODES" --compile-groups "$IN_COMPILE_GROUPS" ${donor:+--host-donor} --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+            --modes "$IN_MODES" --compile-groups "$IN_COMPILE_GROUPS" --skip-units "$IN_SKIP_UNITS" ${donor:+--host-donor} --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: plan
@@ -165,13 +190,17 @@ jobs:
 
   shard:
     needs: plan
-    if: needs.plan.outputs.has_devices == 'true' && inputs.reuse_shards_run == ''
+    if: needs.plan.outputs.has_devices == 'true' && needs.plan.outputs.has_shards == 'true' && inputs.reuse_shards_run == ''
     runs-on: ubuntu-24.04
     # Compile-only migration jobs use the bounded one-hour lease. The full
     # release route retains its existing six-hour limit for merged compiles.
     timeout-minutes: ${{ inputs.compile_groups != '' && 60 || 360 }}
     strategy:
-      fail-fast: false
+      # RED BUILDS REPORT EARLY (lane fx-build-tools, 2026-11-18): the first failed compile cancels the run's
+      # other shards; before, they ran on and the assemble job compiled the missing unit again (858-1102 s),
+      # so a red build took 40-122 min to report (5 of 13 base builds on Nov 17-18). Archives of shards that
+      # finished are still promoted by the Mac, so the rerun after the fix takes them from the cache.
+      fail-fast: true
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     name: "shard ${{ matrix.vendor }}-${{ matrix.arch }} ${{ matrix.shard }} ${{ matrix.unit }}"
     steps:
@@ -230,10 +259,11 @@ jobs:
           JOBS: ${{ inputs.jobs }}
           MODES: ${{ inputs.modes }}
           PRUNE: ${{ steps.map.outputs.r2 == 'false' && '1' || '0' }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_SHARD_ONLY="$ONLY" \
-            -e GHA_RELEASE_MODES="$MODES" -e GHA_PRUNE_HOT="$PRUNE" \
+            -e GHA_RELEASE_MODES="$MODES" -e GHA_PRUNE_HOT="$PRUNE" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
@@ -264,6 +294,11 @@ jobs:
           B="$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH/release-build/build"
           cp -r "$B/bincache" "$D/report/bincache" 2>/dev/null || true
           cp -r "$B/build_logs" "$D/report/build_logs" 2>/dev/null || true
+          # LOGS ONLY (Andrew, 2026-11-09). packaging/adapters/build.sh extracts the pinned PyTorch wheel under
+          # build_logs/adapters/torch-build (libtorch_cpu.so 422 MB and 85,000 headers). It is a build input, not
+          # evidence: every shard uploaded it, about 490 MB x shards x sets, 22 GB per release on the Mac. Keep
+          # torch-build.json (version, ABI, sha256) and drop the tree.
+          find "$D/report/build_logs/adapters/torch-build" -mindepth 1 -maxdepth 1 ! -name '*.json' -exec rm -rf {} + 2>/dev/null || true
           cp "$B/compile-inputs.json" "$D/report/compile-inputs.json" 2>/dev/null || true
           { echo "### shard $VENDOR-$ARCH $SHARD"; echo '```'; cat "$D/report/shard.tsv" "$D/report/memory.txt" "$D/report/swap.txt" "$D/report/guard.jsonl" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -278,7 +313,12 @@ jobs:
 
   assemble:
     needs: [plan, shard]
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true' && inputs.compile_groups == ''
+    # No assemble after a failed or cancelled shard (lane fx-build-tools, 2026-11-18): it would compile the failed
+    # unit again for 15-20 min and fail the same way. A shard job that never ran (every unit skipped, or the
+    # retained assembly of reuse_shards_run) is `skipped` and assembles from the cache as before.
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.has_devices == 'true'
+      && inputs.compile_groups == '' && (needs.shard.result == 'success' || needs.shard.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -342,10 +382,11 @@ jobs:
           JOBS: ${{ inputs.jobs }}
           MODES: ${{ inputs.modes }}
           REUSE_RUN: ${{ inputs.reuse_shards_run }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_RELEASE_MODES="$MODES" \
-            -e GHA_REUSE_SHARDS_RUN="$REUSE_RUN" \
+            -e GHA_REUSE_SHARDS_RUN="$REUSE_RUN" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
@@ -386,6 +427,16 @@ jobs:
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: error
+      # THE SET'S RECORDS ALONE (lane fx-pack-offload, 2026-11-19): a measurement build packs on GitHub
+      # (candidate-pack.yml takes the tree above), so its Mac collector (release_github_build.py run
+      # --records-only) downloads only these: timings, cache outcomes and the binding-cache uploads it promotes.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: release-${{ matrix.arch == 'gfx942' && 'hip' || 'cuda' }}-${{ matrix.arch }}-gha
+          path: ${{ runner.temp }}/w/art/leg/GHA
+          retention-days: 14
+          if-no-files-found: warn
 
   host:
     needs: [plan, assemble]
@@ -451,11 +502,12 @@ jobs:
         env:
           COMMIT: ${{ inputs.commit }}
           REUSE_HOST_GROUPS: ${{ inputs.reuse_host_groups }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           mkdir -p "$RUNNER_TEMP/w/out"
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" \
-            -e GHA_REUSE_HOST_GROUPS="$REUSE_HOST_GROUPS" \
+            -e GHA_REUSE_HOST_GROUPS="$REUSE_HOST_GROUPS" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$GITHUB_WORKSPACE/src:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/donor:/root/donor:ro" -v "$RUNNER_TEMP/w/out:/root/leg_out" \

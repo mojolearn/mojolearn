@@ -49,7 +49,7 @@ forest is reproducible from its seed ON ONE GPU MODEL; cuML itself does not
 reproduce across GPU models below `n_sampled_rows > 4 * SM * 256`.
 
 X IS COPIED TWICE PER FIT (the host to column-major float32 through
-`_buffer.as_f32_colmajor`, zero-copy for a float32 F-order input, then
+the native input admission, zero-copy for a float32 F-order input, then
 across the boundary); on large matrices that is the dominant cost of the
 CALL.
 
@@ -66,27 +66,21 @@ numeric labels and a Python list for str labels. Nothing in this module
 imports NumPy.
 """
 
-from . import _portable_math as math
-import numbers
-
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
-from ._labels import argmax_rows, decode_labels, is_bool
-from ._mode import NumericModeMixin
-from ._forest_protocol import ForestProtocol, forest_estimator
+from ._mode import NumericModeMixin as _NumericModeMixin
+from ._forest_protocol import ForestArchive as _ForestArchive, ForestClassifierPredict as _ForestClassifierPredict, ForestProtocol as _ForestProtocol, forest_estimator as _forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
 
-# The compiled saved-model owner, connected once at import: `save` and
-# `load` are one native call each (bindings/archive_schema_native.mojo
-# writes the schema registered after `_RandomForestBase`;
-# bindings/host_archive_native.mojo `host_archive_public_forest` builds the
-# loaded model).
-_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# `save` and `load` are _forest_protocol.ForestArchive's, one native call each
+# (bindings/archive_schema_native_door.mojo writes the schema registered after
+# `_RandomForestBase`; bindings/host_archive_native_door.mojo `host_archive_public_forest`
+# builds the loaded model).
 
 # The compiled tree-ensemble owner, connected once at import: `fit`,
 # `predict` and `predict_proba` are one native call each
-# (bindings/trees_public_forest.mojo validates the parameters, encodes the
+# (bindings/trees_public_forest_door.mojo validates the parameters, encodes the
 # labels, checks the weights, picks the fit entry and inference engine,
 # launches the kernels and assigns the fitted state).
 _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
@@ -151,7 +145,7 @@ _TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 # The other three constants below WERE re-read against the pin in the
 # same pass and are correct: `randomforest_common.pyx:319` is
 # `n_bins=128`, `:324` is `max_batch_size=4096`, `:326` is `n_streams=4`.
-_PORT_DEFAULT_MAX_DEPTH = 2147483647
+# `max_depth=None` -> 2147483647 is `_INT32_MAX` in bindings/trees_public_forest_door.mojo `_rf_base`.
 _CUML_DEFAULT_N_BINS = 128
 _CUML_DEFAULT_N_STREAMS = 4
 _CUML_DEFAULT_MAX_BATCH = 4096
@@ -229,219 +223,31 @@ _MAX_LEAF_NODES_WHY = (
 )
 
 
-_NONFINITE_REFUSAL = "X contains NaN or infinity; the forest has no missing-value arm"
+# The constructor checks and the native configuration they derive are the
+# forests' native owner's (bindings/trees_public_forest_door.mojo: `_refuse`
+# via xtrees/trees_forest_run.mojo, `_criterion_code`, `_min_weight_fraction`,
+# `_max_leaves_slot`, `_rf_base`, `_rf_derive`; `_max_features_fraction` at
+# fit). They run at fit on the stored parameters, which the native
+# constructor (bindings/trees_constructor_native_pack.mojo) stores as given.
+# Lane py-trees (2026-11-14) deleted the Python copies of those checks here.
 
 
-def _refuse(name, why):
-    raise NotImplementedError(
-        f"{name} is not implemented: {why} Refused by name rather than accepted"
-        " and ignored."
-    )
-
-
-def _min_weight_fraction(value, who):
-    """scikit-learn's `min_weight_fraction_leaf` check, its wording
-    (`Interval(Real, 0.0, 0.5, closed="both")`). The bound itself is
-    applied by the fit binding (slot 16 of `_fit_params`)."""
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        f = None
-    if isinstance(value, bool) or f is None or not 0.0 <= f <= 0.5:
-        raise ValueError(
-            f"The 'min_weight_fraction_leaf' parameter of {who} must be a float"
-            f" in the range [0.0, 0.5]. Got {value!r} instead.")
-    return f
-
-
-def _criterion_code(criterion, table, who):
-    """A criterion NAME into the engine's `CRITERION` enumerator, or a
-    refusal by name (DEVIATION 407)."""
-    if criterion in table:
-        return table[criterion]
-    if criterion in _UNSUPPORTED_CRITERIA:
-        _refuse(f"criterion={criterion!r}", _UNSUPPORTED_CRITERIA[criterion])
-    raise ValueError(
-        f"criterion={criterion!r} is not a {who} criterion here; accepted"
-        f" are {sorted(table)}"
-    )
-
-
-def _max_features_fraction(max_features, n_features):
-    """sklearn's max_features forms into the fraction the binding takes,
-    resolved the way cuML's python layer resolves them."""
-    if max_features is None:
-        return 1.0
-    if isinstance(max_features, str):
-        if max_features == "sqrt":
-            # The owned host helper uses the correctly rounded CPU sqrt instruction.
-            return math.sqrt(n_features) / n_features
-        if max_features == "log2":
-            # Use the same pinned portable_log2_64 arithmetic as the Mojo
-            # builder. Keep the fraction: the kernel truncates after FP32
-            # conversion. Powers of two are exact; max(2, n) retains the
-            # existing nonzero fraction for a one-feature input.
-            return math.log2(max(2, n_features)) / n_features
-        raise ValueError(
-            f"max_features={max_features!r} is not a recognised form;"
-            " accepted are 'sqrt', 'log2', None, a float fraction or an"
-            " int count"
-        )
-    if isinstance(max_features, numbers.Integral) and not is_bool(
-        max_features
-    ):
-        if not 1 <= int(max_features) <= n_features:
-            raise ValueError(
-                f"max_features={max_features} is outside [1, {n_features}]"
-            )
-        return int(max_features) / n_features
-    f = float(max_features)
-    if not 0.0 < f <= 1.0:
-        raise ValueError(f"max_features={f} is outside (0, 1]")
-    return f
-
-
-def _max_leaves_slot(max_leaves):
-    """cuML's `max_leaves` into slot 5 of the params list.
-
-    -1 is THEIR sentinel for unlimited, not ours (`decisiontree.hpp:83`,
-    `randomforest_common.pyx:318`, and the default table in
-    `ensemble/randomforest.mojo`); a positive int is a cap. `None` is
-    accepted as a spelling of -1 because a Python caller reaches for it.
-    Everything else is refused HERE rather than by
-    `DecisionTreeParams.check()` (`ensemble/decisiontree/decisiontree.mojo`
-    :257-258, which raises "Invalid max leaves"), so the message can name
-    the sentinel the caller was supposed to pass.
-    """
-    if max_leaves is None:
-        return -1
-    if is_bool(max_leaves) or not isinstance(
-        max_leaves, numbers.Integral
-    ):
-        raise ValueError(
-            f"max_leaves={max_leaves!r} must be None, -1 (cuML's sentinel"
-            " for unlimited) or a positive int count"
-        )
-    v = int(max_leaves)
-    if v == -1 or v > 0:
-        return v
-    raise ValueError(
-        f"max_leaves={v} is not a leaf cap: cuML accepts -1 (unlimited) or"
-        " a positive count, and ensemble/decisiontree/decisiontree.mojo"
-        ":257-258 raises on anything else"
-    )
-
-
-class _RandomForestBase(ForestProtocol, NumericModeMixin):
+class _RandomForestBase(_ForestProtocol, _NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_rf"
+    save = _ForestArchive.save
+    load = vars(_ForestArchive)["load"]
 
-    def __init__(
-        self,
-        n_estimators,
-        max_depth,
-        max_leaf_nodes,
-        max_leaves,
-        max_features,
-        n_bins,
-        min_samples_leaf,
-        min_samples_split,
-        min_impurity_decrease,
-        bootstrap,
-        max_samples,
-        random_state,
-        n_streams,
-        max_batch_size,
-        oob_score,
-        warm_start,
-        ccp_alpha,
-        class_weight,
-        monotonic_cst,
-        n_jobs,
-        verbose,
-        device,
-        criterion_code,
-    ):
-        if device != "gpu":
-            raise ValueError(
-                f"device must be 'gpu', got {device!r}: the fit runs on the"
-                " GPU binding, or, on a CPU-only install with the rf host"
-                " binding built, on its host restatement"
-                " (ensemble/host/rf_oracle.mojo) under the same device='gpu'"
-            )
-        if max_leaf_nodes is not None:
-            _refuse("max_leaf_nodes", _MAX_LEAF_NODES_WHY)
-        if not is_bool(oob_score):
-            raise ValueError("oob_score must be a boolean; callable scoring is not supported")
-        if oob_score and not bootstrap:
-            raise ValueError("oob_score=True requires bootstrap=True")
-        if warm_start:
-            _refuse("warm_start=True", "there is no incremental fit here,"
-                    " and accepting it would silently refit from scratch.")
-        if ccp_alpha:
-            _refuse("ccp_alpha", "cost-complexity pruning is a"
-                    " post-processing pass neither cuML nor this implementation"
-                    " implements. Only 0.0 is accepted.")
-        if class_weight is not None and not isinstance(class_weight, dict):
-            if not isinstance(class_weight, str) or class_weight != "balanced":
-                raise ValueError("class_weight must be None, a dict, or 'balanced'; balanced_subsample is unsupported")
-        if monotonic_cst is not None:
-            _refuse("monotonic_cst", "no cuML counterpart.")
-        if n_jobs is not None:
-            _refuse("n_jobs", "there is no CPU thread pool here -- the fit"
-                    " is one host thread driving the GPU.")
-        if verbose:
-            _refuse("verbose", "nothing in the Mojo layer logs per-tree"
-                    " progress.")
-        if max_samples is not None and not 0.0 < float(max_samples) <= 1.0:
-            raise ValueError(
-                f"max_samples={max_samples} is outside (0, 1]"
-            )
-        self.device = device
-        self._cfg = dict(
-            criterion=int(criterion_code),
-            n_estimators=int(n_estimators),
-            max_depth=(
-                _PORT_DEFAULT_MAX_DEPTH if max_depth is None
-                else int(max_depth)
-            ),
-            max_leaves=_max_leaves_slot(max_leaves),
-            max_features=max_features,
-            n_bins=int(n_bins),
-            min_samples_leaf=int(min_samples_leaf),
-            min_samples_split=int(min_samples_split),
-            min_impurity_decrease=float(min_impurity_decrease),
-            bootstrap=bool(bootstrap),
-            max_samples=(1.0 if max_samples is None else float(max_samples)),
-            random_state=(0 if random_state is None else int(random_state)),
-            n_streams=int(n_streams),
-            max_batch_size=int(max_batch_size),
-            oob_score=bool(oob_score),
-        )
-
-    def save(self, path):
-        """Write the fitted forest to `path` as an npz file.
-
-        The file holds the prediction arrays exactly as fitted, with exact
-        dtypes; floats never pass through decimal text. A model saved with the
-        'parallel_groves' inference engine also records its engine and
-        numeric mode. The file bytes depend only on the model, so equal models
-        give equal file hashes on any machine.
-        """
-        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
-
-    @classmethod
-    def load(cls, path):
-        """Load a forest saved by `save`.
-
-        The loaded model predicts; it does not refit. Loading a file saved by
-        a different estimator class raises `ValueError`.
-        """
-        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
+                             sample_weight=None):
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+                      _TREES_CONTEXT)
 
 
 #: The saved formats `load` reads, and the save schema of every forest
-#: class saved in this format (bindings/archive_schema_native.mojo): the
+#: class saved in this format (bindings/archive_schema_native_door.mojo): the
 #: members, dtypes and refusals the 0.8.55 Python `save` wrote.
 _MODEL_FORMATS = (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1")
 _SAVE_SCHEMA = (
@@ -468,7 +274,7 @@ _native_archive_bridge.register(_RandomForestBase, _MODEL_FORMATS, _SAVE_SCHEMA)
 # cuML's in neither. `max_depth=None` matches cuML >= v26.08.00; this surface
 # substituted 16 until 2026-09-01 (DEVIATION 409, closed by aligning).
 # `max_leaf_nodes` is refused by name (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
-@forest_estimator("classifier")
+@_forest_estimator("classifier")
 class RandomForestClassifier(_RandomForestBase):
     """Random forest classifier with cuML's defaults.
 
@@ -579,6 +385,7 @@ class RandomForestClassifier(_RandomForestBase):
     >>> model = mojolearn.RandomForestClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    predict = _ForestClassifierPredict.predict
 
     def __init__(
         self,
@@ -609,18 +416,9 @@ class RandomForestClassifier(_RandomForestBase):
         device="gpu",
         inference_engine="auto",
     ):
-        code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
-        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
-        super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_leaves,
-            max_features, n_bins,
-            min_samples_leaf, min_samples_split, min_impurity_decrease,
-            bootstrap, max_samples, random_state, n_streams, max_batch_size,
-            oob_score, warm_start, ccp_alpha, class_weight, monotonic_cst,
-            n_jobs, verbose, device, code,
-        )
-        self.criterion = criterion
-        self._cfg["min_weight_fraction_leaf"] = mwf
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
@@ -643,13 +441,6 @@ class RandomForestClassifier(_RandomForestBase):
         """
         return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
-                             sample_weight=None):
-        """`fit` of the trees from global tree ID `tree_start` on (a shard of
-        a multi-device forest)."""
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
-                      _TREES_CONTEXT)
-
     def predict_proba(self, X):
         """Class probabilities: the per-class vote fractions over the trees.
 
@@ -660,30 +451,6 @@ class RandomForestClassifier(_RandomForestBase):
         """
         return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
-    def _predict_with_proba(self, X):
-        """Return both classifier views after one forest traversal.
-
-        This is an internal verification fast path.  ``predict`` is defined
-        as the first-max decode of ``predict_proba`` below, so retaining the
-        exact probability buffer and deriving the labels from it is byte for
-        byte the same work as the two public calls without traversing every
-        tree twice.
-        """
-        proba = self.predict_proba(X)
-        return decode_labels(self.classes_, argmax_rows(proba)), proba
-
-    def predict(self, X):
-        """Predicted class labels: the argmax of `predict_proba`, first
-        maximum winning, mapped through `classes_`.
-
-        Returns
-        -------
-        Array or list of shape (n_samples,)
-            An int64 or float64 `Array` for numeric labels, a Python list for
-            string labels.
-        """
-        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
-
 
 # Maintainer notes (moved from the docstring): the regression criteria are
 # the four arms of cuML's `GainPerSplit` (`objectives.cuh:331-338`);
@@ -693,7 +460,7 @@ class RandomForestClassifier(_RandomForestBase):
 # stumps; `fit` refuses instead. `max_features=1.0` is cuML's regressor
 # default (`randomforestregressor.py:162`). `max_depth=None` since
 # 2026-09-01 (DEVIATION 409); `max_leaf_nodes` refused (DEVIATION 408).
-@forest_estimator("regressor")
+@_forest_estimator("regressor")
 class RandomForestRegressor(_RandomForestBase):
     """Random forest regressor with cuML's defaults.
 
@@ -826,18 +593,9 @@ class RandomForestRegressor(_RandomForestBase):
         device="gpu",
         inference_engine="auto",
     ):
-        code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
-        mwf = _min_weight_fraction(min_weight_fraction_leaf, type(self).__name__)
-        super().__init__(
-            n_estimators, max_depth, max_leaf_nodes, max_leaves,
-            max_features, n_bins,
-            min_samples_leaf, min_samples_split, min_impurity_decrease,
-            bootstrap, max_samples, random_state, n_streams, max_batch_size,
-            oob_score, warm_start, ccp_alpha, None, monotonic_cst,
-            n_jobs, verbose, device, code,
-        )
-        self.criterion = criterion
-        self._cfg["min_weight_fraction_leaf"] = mwf
+        # Signature only: `forest_estimator` installs the native constructor
+        # (parameters stored as given), and the checks run at fit.
+        pass
 
     def fit(self, X, y, sample_weight=None, *, feature_importances=False):
         """Fit the forest.
@@ -859,13 +617,6 @@ class RandomForestRegressor(_RandomForestBase):
         """
         return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
-    def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
-                             sample_weight=None):
-        """`fit` of the trees from global tree ID `tree_start` on (a shard of
-        a multi-device forest)."""
-        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
-                      _TREES_CONTEXT)
-
     def predict(self, X):
         """Predicted values: the mean of the trees' predictions.
 
@@ -876,7 +627,7 @@ class RandomForestRegressor(_RandomForestBase):
         return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
-# The forests' native owner (bindings/trees_public_forest.mojo) reads these
+# The forests' native owner (bindings/trees_public_forest_door.mojo) reads these
 # fixed tables: the criterion names, the refusal texts and the deviance
 # criterion codes whose targets it checks.
 _RF_TABLES = dict(

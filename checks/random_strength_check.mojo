@@ -176,7 +176,7 @@ def build_fixture(
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(N_ROWS), cindex.unsafe_ptr(),
@@ -184,7 +184,6 @@ def build_fixture(
             block_dim=WRITE_BLOCK_SIZE,
         )
         ctx.synchronize()
-    _ = hb^
 
     var targets = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var weights = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
@@ -211,11 +210,9 @@ def build_fixture(
                 y += 5.0
         ht.unsafe_ptr().unsafe_store(r, y)
         hw.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
-    _ = ht^
-    _ = hw^
     return Fixture(cindex^, targets^, weights^, folds.copy())
 
 
@@ -293,7 +290,7 @@ def count_loss_diffs(a: List[Float64], b: List[Float64]) -> Int:
     return moved
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -552,3 +549,22 @@ def main() raises:
         "random_strength: R1 R2 R2G R3 R4 R5 pass -- honored on both arms,"
         " visible on the doc-parallel one, cancelling on the greedy one"
     )
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("random_strength_check", cpu=False, gpu=True, serial="", run=run_cases)

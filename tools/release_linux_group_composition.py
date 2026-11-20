@@ -123,8 +123,24 @@ def rows_at(evidence, path):
     return [r.split('\t') for r in evidence.text(path).splitlines() if r.strip()]
 
 
-def device_recipe(fields, recipe, stem):
+def device_recipe(fields, recipe, stem, root=None, revision=None):
     rel = 'python/mojolearn/identical/' + stem + '.so'
+    if fields.get('key_rule') == bincache.KEY_RULE:
+        # closure-v2 (tools/bincache.py): the group's own closure, inputs,
+        # membership and read variables at the original revision.
+        require(fields['script'] == 'bindings/merged_build.sh' and fields['args'][:3] == ['gpu', '--group', stem]
+                and fields['numeric_mode'] == 'identical' and fields['gpu_archs'] == 'gfx942'
+                and fields['target_column'] == 'amd' and 'variant' not in fields
+                and fields['repo_path'] == '/root/mojolearn' and fields['os']['machine'] == 'x86_64',
+                'original device recipe differs')
+        environ = dict(MODULAR_HOME='/root/mojolearn/.pixi/envs/default/share/max',
+            MOJOLEARN_BUILD_PIXI_ENV='default', MOJOLEARN_BUILD_TIERS='identical',
+            MOJOLEARN_COMPILE_JOBS='8', MOJOLEARN_CUDA_CODE_FORMAT='native',
+            MOJOLEARN_GPU_ARCHS='gfx942', MOJOLEARN_LINUX_CPU='x86-64-v3',
+            MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_PACKAGE_BYTE_LM='1', MOJOLEARN_TARGET_COLUMN='amd')
+        require(root is not None and bincache.merged_fields_reproduce(fields, root, revision, environ, [rel]),
+                'device closure-v2 source, inputs or environment differ')
+        return
     require(fields['source'] == recipe['source']
             and fields['declared'] == dict(inputs=recipe['declared'], outputs=[rel], shell='bash')
             and fields['script'] == 'bindings/merged_build.sh'
@@ -172,8 +188,8 @@ def device_groups(rows, root, site, compiler, patchelf, evidence, overrides=()):
                 and manifest['source_commit'] == revision
                 and fields == evidence.json(report / 'bincache/keys' / (key + '.json')),
                 'original device key/source differs')
-        recipe = source_recipe(str(root), revision)
-        device_recipe(fields, recipe, stem)
+        recipe = None if fields.get('key_rule') == bincache.KEY_RULE else source_recipe(str(root), revision)
+        device_recipe(fields, recipe, stem, root, revision)
         require(manifest['installed_toolchain'] == fields['toolchain']['packages'],
                 'original installed toolchain differs')
         rawsha = hashlib.sha256(data).hexdigest()
@@ -276,6 +292,13 @@ def adapter_group(directory, root, site, compiler, patchelf, evidence):
     return {PREFIX + '_adapters': dict(files=files, manifest_sha256=files['adapters.json'])}
 
 
+#: The --target-features packaging/adapters/build.sh pins with --target-cpu x86-64-v3 (the
+#: x86-64-v3 level; `mojo build` otherwise takes the BUILD MACHINE's features, which made host
+#: bytes follow the runner CPU: bindings/merged_build.sh, 2026-11-13).
+LINUX_CPU_FEATURES = ('+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,'
+                      '+sse4.1,+sse4.2,+ssse3,+xsave')
+
+
 def adapter_commands(capture, build, vendor='hip', arch='gfx942'):
     require((vendor, arch) in (('hip', 'gfx942'), ('cuda', 'sm_89')), 'unsupported adapter target')
     command = capture['command']
@@ -284,7 +307,7 @@ def adapter_commands(capture, build, vendor='hip', arch='gfx942'):
     out, logs = command[2:4]
     expected_native = ['pixi', 'run', 'mojo', 'build', '--emit', 'shared-lib', '-j',
         str(capture['compiler_workers']), '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1',
-        '--target-cpu', 'x86-64-v3', '--target-accelerator', arch, '-D',
+        '--target-cpu', 'x86-64-v3', '--target-features', LINUX_CPU_FEATURES, '--target-accelerator', arch, '-D',
         'MOJOLEARN_COLUMN_AMD' if vendor == 'hip' else 'MOJOLEARN_COLUMN_NVIDIA',
         '-I', '.', '-I', 'bindings', 'adapters/native/c_api.mojo', '-o', out + '/libmojolearn_adapter.so']
     require(build['commands']['native'] == expected_native, 'native adapter flags differ')

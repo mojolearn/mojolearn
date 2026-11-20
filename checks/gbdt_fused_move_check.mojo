@@ -29,8 +29,8 @@ def same(ctx: DeviceContext, a: DeviceBuffer[DType.float32],
          b: DeviceBuffer[DType.float32], n: Int, label: String) raises:
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n)
     var hb = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=ha.unsafe_ptr(), src_buf=a)
-    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=b)
+    download_host_into[DType.float32](ctx, a, ha)
+    download_host_into[DType.float32](ctx, b, hb)
     ctx.synchronize()
     for i in range(n):
         if bitcast[DType.uint32](ha.unsafe_ptr().unsafe_load(i)) != bitcast[DType.uint32](hb.unsafe_ptr().unsafe_load(i)):
@@ -76,6 +76,11 @@ def check[estimation: Bool](objective: Int, weighted: Bool,
     ctx.enqueue_copy(dst_buf=cursor_a, src_ptr=hc.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=cursor_b, src_ptr=hc.unsafe_ptr())
     ctx.synchronize()
+    _ = hb^  # past the drain: a queued copy reads it after its last named use
+    _ = hc^  # past the drain: a queued copy reads it after its last named use
+    _ = hs^  # past the drain: a queued copy reads it after its last named use
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
     var timings = List[Float64]()
     # Warm each kernel before timing; both arms see exactly repeats+1 moves.
     for fused in range(2):
@@ -112,7 +117,7 @@ def check[estimation: Bool](objective: Int, weighted: Bool,
           "rows", n, "split_ms", timings[0], "fused_ms", timings[1])
 
 
-def main() raises:
+def run_checks() raises:
     print("numeric_mode", numeric_mode_name())
     var objectives: List[Int] = [OBJECTIVE_LOGLOSS, OBJECTIVE_CROSSENTROPY,
         OBJECTIVE_RMSE, OBJECTIVE_POISSON, OBJECTIVE_TWEEDIE, OBJECTIVE_LQ,
@@ -125,3 +130,22 @@ def main() raises:
     for _ in range(5):
         check[True](OBJECTIVE_LOGLOSS, True, n=1000003, repeats=30)
     print("ALL FUSED MOVE ARMS GREEN")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("gbdt_fused_move_check", cpu=False, gpu=True, serial="", run=run_cases)

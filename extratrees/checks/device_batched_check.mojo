@@ -232,7 +232,7 @@ def merged_regression(
     )
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     print("[device] the batched forest on", ctx.name())
     var cells = 0

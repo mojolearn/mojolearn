@@ -86,13 +86,12 @@ beside the call it replaces.
 from core.launch_log import log_launch
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 #: Threads per block for every kernel here. See PORTABILITY above.
 comptime SORT_BLOCK = 512
@@ -101,18 +100,15 @@ comptime SORT_BLOCK = 512
 #: segment's block totals runs as one 256-thread block per segment
 #: (`seg_scan_block_sums_block_kernel`) instead of one thread per segment.
 #: Int32 sums of the same values in a different association: the same
-#: offsets bit for bit. `-D MOJOLEARN_SEG_SUMS_SERIAL` keeps the one-thread
-#: scan (the A/B arm); IDENTICAL compiles the old path.
+#: offsets bit for bit. IDENTICAL compiles the one-thread scan.
 #: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
 #: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
 #: (gbdt/gpu_util/kernel/segmented_sort.mojo) keeps the one-thread scan: its
 #: opt-in block arm MOJOLEARN_GBDT_SEG_SUMS_BLOCK was DROPPED-noise
 #: (lane/apple-fast-rfet-scan @ 500168cfe).
-comptime SEG_SUMS_BLOCK_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEG_SUMS_SERIAL"]()
-)
+# TOMBSTONE: MOJOLEARN_SEG_SUMS_SERIAL (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 28ac8cfd29.
+# Restore: git apply experiments/removed/MOJOLEARN_SEG_SUMS_SERIAL.patch; record in docs/TOMBSTONES.md.
+comptime SEG_SUMS_BLOCK_SCAN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 comptime SEG_SUMS_TPB = 256
 
 #: `8 * sizeof(T)` for `T = float`, i.e. their `end_bit`
@@ -130,11 +126,12 @@ comptime FLOAT32_KEY_BITS = 32
 #: `offsets` buffer, so the form runs only when R8_BINS * blocks_wide <=
 #: seg_size (seg_size >= R8_BINS); smaller segments keep the one-bit passes.
 #: Shared pages: SORT_BLOCK Int32 = 2 KB (under every column's 16 KB floor).
-#: `-D MOJOLEARN_IDN_SEG_RADIX8_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
-#: one-bit passes. The one-bit kernels stay for ensemble/randomforest.mojo.
-comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_SEG_RADIX8_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: The one-bit kernels stay for ensemble/randomforest.mojo.
+# TOMBSTONE: MOJOLEARN_IDN_SEG_RADIX8_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at af0618e292.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_SEG_RADIX8_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7d3bf6d8e8.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
+comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime R8_BITS = 8
 comptime R8_BINS = 256
 comptime R8_PASSES = FLOAT32_KEY_BITS // R8_BITS

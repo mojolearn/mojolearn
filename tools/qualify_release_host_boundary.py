@@ -8,16 +8,34 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 from candidate_wheel_install import wheel_record
+import merged_bindings
 
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def host_file(site):
+    """The installed merged host file holding the tokenizer host binding (the forest input-admission path), read
+    from the installed host index; the stem is never hard-coded (bindings/merged_groups.json may regroup)."""
+    index = json.loads((site / 'mojolearn/host/_mojolearn_merged.json').read_text())
+    return merged_bindings.member_file('host', '_mojolearn_tokenizer_host', index=index)
+
+
 def main():
+    # the throwaway venv lives under a temp dir removed on exit; OUT keeps logs and the record only (2026-11-09)
+    scratch = Path(tempfile.mkdtemp(prefix='host-boundary-venv-'))
+    try:
+        return _main(scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _main(scratch):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--bundle', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -48,8 +66,8 @@ def main():
         (out / (name + '.exit')).write_text(str(result.returncode) + '\n')
         assert result.returncode == 0, name
 
-    run('venv', [sys.executable, '-m', 'venv', out / 'venv'])
-    python = out / 'venv/bin/python'
+    run('venv', [sys.executable, '-m', 'venv', scratch / 'venv'])
+    python = scratch / 'venv/bin/python'
     run('install', [python, '-m', 'pip', 'install', *wheels, 'numpy', 'pytest'])
     run('dependencies', [python, '-m', 'pip', 'check'])
     run('self-test', [python, '-m', 'mojolearn', 'verify', '--self-test'])
@@ -67,7 +85,7 @@ def main():
                   wheels=manifest['wheels'], checks=checks, cases=len(cases),
                   junit=dict(path='tests.xml', sha256=sha(out / 'tests.xml')),
                   test_sha256=sha(test),
-                  host_native_sha256=sha(site / 'mojolearn/host/_mojolearn_native_tokenizer_host.so'),
+                  host_native_sha256=sha(site / 'mojolearn/host' / host_file(site)),
                   verifier_sha256=sha(site / 'mojolearn/_verify_distributed.py'),
                   scope='Final installed wheel, dependencies, comparator self-test and four public CPU forest cases. GPU arithmetic and adapter checks are reused separately.')
     (out / 'result.json').write_text(json.dumps(report, indent=2) + '\n')

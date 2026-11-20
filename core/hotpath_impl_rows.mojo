@@ -4,7 +4,7 @@
 `bindings/hotpath_helpers.mojo` (fold_pair_f32 onward).
 
 The Python door stays in `bindings/hotpath_helpers.mojo`: it unpacks the
-PythonObject arguments, calls one function here (with the GIL released
+Python object arguments, calls one function here (with the GIL released
 where it was released before) and returns the result as a Python int.
 Every statement here is the binding's, word for word, in the same order
 (lane thin-core, 2026-10-21: a pure move, no bit change). Each function

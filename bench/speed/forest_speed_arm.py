@@ -923,9 +923,12 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
         specs[arm.name] = (call, post)
         emit_infer("FSPEED-INFER-PATH", lane, [("arm", arm.name), ("call", _one_line(text, 400))])
     spent = {name: 0.0 for name in specs}
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our arm's warm-up call on a batch
+    # decides how many consecutive calls its one scored run makes (20 under 10 ms, else 1); opponents make one
+    small = spec._small_rows()
     for batch, x_ours, x_them in batches:
         rows = int(x_ours.shape[0])
-        live, last = [], {}
+        live, last, warm_ms = [], {}, {}
         for name, (call, post) in specs.items():
             x = x_ours if name.startswith("ours") else x_them
             x = own_inputs.get(name, {}).get(batch, x)
@@ -942,6 +945,7 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                            ("reason", "%s during warm-up: %s" % (exc.__class__.__name__, _one_line(exc)))])
                 continue
             spent[name] += ms / 1000.0
+            warm_ms[name] = ms
             emit_infer("FSPEED-INFER-WARMUP", lane, [("arm", name), ("batch", batch),
                                                      ("rows", rows), ("ms", "%.3f" % ms)])
             live.append(name)
@@ -961,17 +965,33 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     raw = call(x)
                     ms = (time.perf_counter() - t0) * 1000.0
                     vec = post(raw)
+                    # SMALL ROWS: the rest of the scored run's calls; the hash, the accuracy and the receipt
+                    # are the first call's output (same bits every call)
+                    calls = [ms]
+                    n_calls = small.calls_for(warm_ms.get(name), name.startswith("ours"), "infer/" + batch)
+                    small.range_open(n_calls, "infer/" + batch)   # attribution profile runs only (no-op otherwise)
+                    try:
+                        for _ in range(1, n_calls):
+                            t0 = time.perf_counter()
+                            call(x)
+                            calls.append((time.perf_counter() - t0) * 1000.0)
+                    finally:
+                        small.range_close()
+                    calls_rec = small.spread(calls)
+                    ms = calls_rec["ms"]
                 except Exception as exc:           # noqa: BLE001
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "%s at round %d: %s" % (exc.__class__.__name__, r,
                                                                   _one_line(exc)))])
                     live.remove(name)
                     continue
-                spent[name] += ms / 1000.0
+                spent[name] += sum(calls) / 1000.0
                 last[name] = vec
                 emit_infer("FSPEED-INFER", lane, [("arm", name), ("batch", batch), ("rows", rows),
                                                   ("round", r), ("ms", "%.3f" % ms),
-                                                  ("hash", spec.hash_predictions(vec))])
+                                                  ("hash", spec.hash_predictions(vec))]
+                           + ([("calls", calls_rec["calls"]), ("min_ms", "%.6f" % calls_rec["min_ms"]),
+                               ("max_ms", "%.6f" % calls_rec["max_ms"])] if calls_rec["calls"] > 1 else []))
                 # FAIRNESS FIX (2026-10-13 audit): inference retained only
                 # a short digest. Save the exact already-consumed output
                 # after its clock, separately for each batch and scored round.
@@ -1048,6 +1068,11 @@ def build_parser():
                         "a name asked for and not built is REFUSED by name. "
                         "`ours` always runs; the filter reads opponents only. "
                         "Naming opponents here races them (default: ours only).")
+    p.add_argument("--own-arms", default=None,
+                   help="comma-separated own arm names to construct and time (`ours` and the lane's "
+                        "paired own arms, tools/board_pairing.py); default: every one. The board passes "
+                        "the own arms it planned, so an own arm whose opponent is not on this board is "
+                        "neither built nor timed; a name the lane does not have is REFUSED by name")
     p.add_argument("--opponents-only", action="store_true", help="run only explicitly selected opponents; never construct or run ours")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
@@ -1310,9 +1335,21 @@ def main(argv=None):
     # back; `ours` takes its own pairing's settings, and `ours-ab` is `ours` with one key changed.
     pairing = board_pairing.OUR_PAIRINGS.get(lane) or {}
     own_settings = dict((pairing.get("ours") or {}).get("settings") or {})
-    arms = [] if args.opponents_only else build_ours(lane, cfg, data, extra=own_settings or None)
+    # board-smoke-3 (2026-11-16; L40S smoke of d95f805cce, trees/gbdt-categorical/taxi): the board plans
+    # only ours-catboost-gpu there (`ours` pairs with catboost-cpu, not on a GPU board), yet this driver
+    # built and timed `ours` too; its unplanned cells carried no preflight worker receipt and refused the
+    # race. --own-arms (tools/bench_board.py tree_cmd) builds only the planned own arms.
+    own_wanted = {n.strip() for n in (args.own_arms or "").split(",") if n.strip()} or None
+    if own_wanted is not None and not args.opponents_only:
+        for name in sorted(own_wanted - {"ours"} - set(board_pairing.extra_own_arms(lane))):
+            spec.emit_refused(lane, name, "asked for by --own-arms and not an own arm of this lane; "
+                                          "own arms: %s" % ",".join(["ours"] + board_pairing.extra_own_arms(lane)))
+    arms = [] if args.opponents_only or (own_wanted is not None and "ours" not in own_wanted) \
+        else build_ours(lane, cfg, data, extra=own_settings or None)
     if not args.opponents_only:
         for own in board_pairing.extra_own_arms(lane):
+            if own_wanted is not None and own not in own_wanted:
+                continue
             if pairing[own].get("prebinned"):
                 built = build_prebinned_ours(lane, cfg, data, own, dict(pairing[own]["settings"]))
             else:
@@ -1321,6 +1358,8 @@ def main(argv=None):
                 arm.agreement_group = "mojolearn:" + own   # another configuration on purpose
             arms.extend(built)
         for own, p in pairing.items():
+            if own_wanted is not None and own not in own_wanted:
+                continue
             spec.emit_note(lane, [own], "pairing", float(len(p["opponents"])),
                            "own arm %s races against %s only: %s"
                            % (own, ",".join(p["opponents"]), p["why"]))

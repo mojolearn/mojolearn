@@ -20,7 +20,7 @@ date +%s > lease.last_busy
 export BOX_PERSIST_ROOT=$T/bp; mkdir -p $BOX_PERSIST_ROOT/bin $BOX_PERSIST_ROOT/active $T/bpres
 cp "$(dirname "$SRC")/box_persist_run.sh" $BOX_PERSIST_ROOT/bin/
 for t in podq jobx; do
-    printf '{\n  "tag": "%s",\n  "slots": "1",\n  "every_sec": "3600",\n  "expires_epoch": "%s",\n  "final.put": "http://127.0.0.1:9/%s"\n}\n' $t $(( $(date +%s) + 3600 )) $t > $T/$t.json
+    printf '{\n  "tag": "%s",\n  "slots": "1",\n  "every_sec": "3600",\n  "expires_epoch": "%s",\n  "final.p00.put": "http://127.0.0.1:9/%s"\n}\n' $t $(( $(date +%s) + 3600 )) $t > $T/$t.json
 done
 echo $T/podq.json > $T/q/pod_persist
 printf 'PID=999999\nJSON=%s\nRES=%s\n' $T/jobx.json $T/bpres > $BOX_PERSIST_ROOT/active/jobx.env
@@ -137,7 +137,7 @@ exec 5>&-
 check "not closing while recently busy" "[ ! -e $T/q/closing ]"
 i=0; while [ $i -lt 30 ] && [ ! -e $T/q/lease.deleted_ok ]; do sleep 1; i=$((i + 1)); done
 check "idle past the deadline: closing and the pod DELETE issued by the dispatcher" "[ -e $T/q/closing ] && grep -q 'FAKE DELETE fakepod by dispatcher' $T/q/lease.deleted"
-check "before the delete: every active job flushed, then the queue dir archived" "grep -q 'box_persist: flush jobx' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/bpres/persist.log && grep -q 'archiving $T/q to R2' $T/q/lease.log && grep -qE 'FAILED name=final.tgz|PERSIST-DISABLED' $T/q/persist.log"
+check "before the delete: every active job flushed, then the queue dir archived" "grep -q 'box_persist: flush jobx' $T/q/lease.log && grep -qE 'FAILED name=final.00.tgz|PERSIST-DISABLED' $T/bpres/persist.log && grep -q 'archiving $T/q to R2' $T/q/lease.log && grep -qE 'FAILED name=final.00.tgz|PERSIST-DISABLED' $T/q/persist.log"
 check "submit refuses once closing" "! $Q submit lane-a 1 20 $EV/j3.sh 2>/dev/null"
 check "ensure refuses once closing" "! $Q ensure 2>/dev/null"
 

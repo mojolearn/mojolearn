@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext,DeviceBuffer
 from metrics.checks.device_io import upload_f32,download_f32
 from x_decomp.tsqr_device import ts_pack_device,ts_factor_device,ts_apply_device,ts_free_device
@@ -18,17 +17,14 @@ def check_factor_reuse(ctx: DeviceContext,m: Int,d: Int) raises:
     var held = List[DeviceBuffer[DType.float32]]()
     var factors = 0
     for rhs in range(3):
-        var reuse = False
-        # NEVER RUN — PENDING MEASUREMENT
-        comptime if is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
-            reuse=True
-        if not reuse or rhs==0:
-            var dx = upload_f32(ctx,x)
-            var db = upload_f32(ctx,b)
-            held.append(ts_pack_device(ctx,dx,db,m,d,1))
-            ts_factor_device(ctx,held[len(held)-1],m,n,actual_r.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),True)
-            factors+=1
-            _ = dx^; _ = db^
+        # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c336036020.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch
+        var dx = upload_f32(ctx,x)
+        var db = upload_f32(ctx,b)
+        held.append(ts_pack_device(ctx,dx,db,m,d,1))
+        ts_factor_device(ctx,held[len(held)-1],m,n,actual_r.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),True)
+        factors+=1
+        _ = dx^; _ = db^
         var expected_r = List[Float32](length=n*n,fill=Float32(0))
         ts_factor_host(x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),expected_r.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,d,1,True)
         for i in range(n*n):
@@ -40,18 +36,16 @@ def check_factor_reuse(ctx: DeviceContext,m: Int,d: Int) raises:
             c.append(Float32((i*7+rhs)%23-11)/Float32(32))
         var expected = List[Float32](length=m*k,fill=Float32(0))
         ts_apply_host(c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),expected.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,k)
-        var q = ts_apply_device(ctx,c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,k,reuse and rhs<2)
+        var q = ts_apply_device(ctx,c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),m,n,k,False)
         var actual = download_f32(ctx,q,m*k)
         for i in range(m*k):
             if bitcast[DType.uint32](actual[i])!=bitcast[DType.uint32](expected[i]):
                 raise Error("I22 repeated RHS reuse differs from fresh host factor")
         _ = q^
         ts_free_host()
-    var expected_factors = 3
-    # NEVER RUN — PENDING MEASUREMENT
-    comptime if is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
-        expected_factors=1
-    if factors!=expected_factors:
+    # TOMBSTONE: MOJOLEARN_IDN_TSQR_REUSE (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-07-base; code recoverable at c336036020.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch
+    if factors!=3:
         raise Error("I22 factor reuse did not reach requested lifetime")
     ts_free_device()
     _ = held^

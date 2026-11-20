@@ -175,6 +175,27 @@ def test_native_lda_public_target_checks_and_dataframe_names():
     assert not hasattr(model, 'feature_names_in_')
 
 
+
+@pytest.mark.parametrize('storage', ['string[pyarrow]', 'arrow-string', 'arrow-large-string'])
+def test_native_lda_dataframe_names_from_arrow_string_columns(storage):
+    # pandas 3 with pyarrow stores string column names as Arrow strings; the
+    # names must match the ndarray/StringArray result exactly.
+    x, y = data()
+    pd = pytest.importorskip('pandas')
+    pa = pytest.importorskip('pyarrow')
+    dtype = {'string[pyarrow]': 'string[pyarrow]', 'arrow-string': pd.ArrowDtype(pa.string()),
+             'arrow-large-string': pd.ArrowDtype(pa.large_string())}[storage]
+    names = ['a', 'b', 'c', 'dé', 'e']
+    frame = pd.DataFrame(x, columns=pd.Index(pd.array(names, dtype=dtype)))
+    assert 'Arrow' in type(frame.columns.array).__name__
+    model = clean(LinearDiscriminantAnalysis)
+    clean(model.fit, frame, y)
+    assert model.feature_names_in_.dtype == object
+    assert [type(name) for name in model.feature_names_in_] == [str] * 5
+    np.testing.assert_array_equal(model.feature_names_in_, np.array(names, dtype=object))
+    clean(model.fit, x, y)
+    assert not hasattr(model, 'feature_names_in_')
+
 def test_native_label_output_refuses_changed_ancestry_before_copy_or_allocation():
     from mojolearn._labels import ClassLabels
     x, y = data()

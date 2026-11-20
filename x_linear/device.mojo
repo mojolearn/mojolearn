@@ -16,15 +16,17 @@ exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
 on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
-from std.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
-from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
-from std.ffi import _Global
+from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.math import isfinite
+from core.hostptr import copy_f32
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
+from core.py2mojo_rows import ROWS_HUBER_OUT, ROWS_LRCV_PROBA, ROWS_MAX_BLOCKS, ROWS_SGD_PROBA, ROWS_TPB, rows_kernel
 from x_linear.dispatch import decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
@@ -40,32 +42,35 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_SGD_CHUNK, C16_GLM_FUSED, RIDGECV_FF_BLOCKED
-from x_linear.ridge_ff_blocks import (
-    RFF_TPB, rff_blocks, rff_stats, rff_mcols, rff_part_words, rff_mean_part_kernel, rff_mean_fold_kernel, rff_untrusted_kernel,
-    rff_cell_part_kernel, rff_cell_fold_kernel, rff_kf_solve_kernel, rff_solve_kernel,
-)
-from x_linear.team import TEAM_SLOTS
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
+from core.admitted_finite_status import enqueue_finite_word
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
+from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
+# lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
+from std.sys.compile import get_defined_int
+from autograd.program_loop import LoopTimers, fit_epochs_per_read
+from autograd.program_loop_device import LoopOutcome, LoopRegisters, LoopStep, bounded_device_loop, loop_lap
 from x_linear.vfold import vscratch
 from x_linear.sgd import LR_INVSCALING
 from x_linear.sgd import (
     sgd_batch, mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_count_tie, oc_hinge_at, mb_oc_bias_step,
 )
-from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
-from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
+# TOMBSTONE: MOJOLEARN_SGD_PERC_AVG (loser) deleted 2026-11-15 by lane/expdel-03-linear (sgd_perc_avg_on, sgd_perc_avg_from, x_linear/sgd_avg.mojo); code recoverable at 8b2e35c54e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_PERC_AVG.patch; record in docs/TOMBSTONES.md.
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
-from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST, BAYES_EIGH_REFUSAL
+from x_decomp.eigh_ops import eigh_op_dense
+from core.step_gate import step_gate_open_word
 from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.glm import (
-    _unit, _unit_all, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
     glm_g_item, glm_h_item, glm_fwd_col, glm_back_col, glm_slope_part, glm_slope_blocks,
     _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
@@ -84,7 +89,6 @@ from x_linear.cls1_fast import (
     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
 )
 from x_linear.dispatch import ALGO_LOGCV
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
 from x_linear.quantile_grid import quantile_fit_grid
@@ -97,6 +101,8 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from core.shared_slot import SharedSlot
+from core.resident_upload_count import RUC_ISOTONIC, RUC_X_LINEAR, resident_upload_note
 
 
 struct _LinearContext(Defaultable, Movable):
@@ -108,8 +114,8 @@ struct _LinearContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXLinearContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXLinearContextFast"
-comptime X_LINEAR_CONTEXT = _Global[StorageType=_LinearContext, name=_CTX_NAME, init_fn=_LinearContext.__init__]
+comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV3"
+comptime X_LINEAR_CONTEXT = SharedSlot[_LinearContext, _CTX_NAME]
 
 
 def linear_ctx() raises -> DeviceContext:
@@ -124,13 +130,13 @@ def linear_ctx() raises -> DeviceContext:
 #: sse on the grid driver guarded by a reference row pass with an error
 #: bound (`bayes_step_guard_kernel`), the guard x_linear/bayes.mojo
 #: `bayes_ridge_fit` carries on the one-block fit. The FAST default since the
-#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm);
-#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` is main's unguarded Gram sse, the A/B
-#: arm. IDENTICAL and the other vendors never compile the branch.
+#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm).
+#: IDENTICAL and the other vendors never compile the branch.
+# TOMBSTONE: MOJOLEARN_BAYES_GRID_GUARD_OFF (old path of the FAST Apple default, EXP:249 KEPT 269ffa57a) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f7077f3ddc.
+# Restore: git apply experiments/removed/MOJOLEARN_BAYES_GRID_GUARD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime BAYES_GRID_GUARD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 
@@ -152,13 +158,28 @@ def _ridge_device(
     """Ridge on the grid (x_linear/ridge_grid.mojo), then the float-float
     refit when the float32 factor was not trusted (status 1)."""
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ridge_resident(ctx^, dx, n_x, y, n_y, n, d, ip, fp, n_out, res)
+    _ = dx^
+
+
+def ridge_resident(
+    var ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n_x_test: Int, y: FP, n_y: Int, n: Int, d: Int,
+    ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
+) raises:
+    """`_ridge_device` over an X already on `ctx` (`dx`, n x d C order): the
+    host upload's entry above, and the cross-validation fold entry
+    (bindings/_mojolearn_x_linear.mojo `x_linear_fit_fold`, lane
+    a8c-device-x-linear-prep-rfe), which gathers the fold into `dx` on the
+    device out of model selection's store. `n_x_test` words of `dx` are
+    tested finite here (0: the gather already tested them). One
+    synchronize at the end; the caller keeps `dx` until it returns."""
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
-        xlin_finite_device(ctx, dx, n_x, y, n_y)
+        xlin_finite_device(ctx, dx, n_x_test, y, n_y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
     # ip[4] == 1 means y holds the n int32 class codes (RidgeClassifier),
@@ -187,7 +208,6 @@ def _ridge_device(
         _ridge_ff_grid(ctx, dxp, dyp, n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
                        res.unsafe_load(t_n * d + t_n), res, sidx)
     ctx.synchronize()
-    _ = dx^
     _ = dy^
     _ = dyt^
 
@@ -391,6 +411,11 @@ def bayes_wgram_fin_kernel(n: Int32, d: Int32, gparts: FP, fw: FP, wf: IP, woff:
             st(fw, dd + dd * dd + (c - cells), v)
     witness_end(wf, woff, nonce)
 
+#: BayesianRidge iterations between host reads of the stop word off Apple
+#: (lane n2-cd-qn-glm-loops; the FAST Apple batch is C1_BATCH = 8 too)
+comptime BAYES_IDN_READ = 8
+
+
 def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32, nonce: Int32):
     """Thread j: the next iteration's coefficient j (`bayes_coef_one`, lambda
     and alpha from state) unless the step stopped (its final update wrote them)."""
@@ -399,15 +424,32 @@ def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32,
         st(res, j, bayes_coef_one(fw, Int(d), j, fd(ld(state, 1), ld(state, 0))))
     witness_end(wf, woff, nonce)
 
+def _bayes_eig_refused(ctx: DeviceContext, deig: DeviceBuffer[DType.int32]) raises -> Bool:
+    """BayesianRidge's eigh status word (`eigh_op_dense`'s, nonzero when the
+    Jacobi did not converge or met a NaN), read home: one word, one wait."""
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h, src_buf=deig)
+    ctx.synchronize()
+    var bad = Int(h.unsafe_ptr().unsafe_load(0)) != 0
+    _ = h^
+    return bad
+
+
 def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
-                     state: FP, wf: IP, woff: Int32, nonce: Int32):
-    """One block team: the d x d half of the prep (`bayes_eig_prep`: the
-    Jacobi eigendecomposition of G, V'X'y, the starting alpha and lambda)
-    and the first coefficients. Every row pass ran on the grid kernels
-    above; this block folds only the nb row-block partials."""
+                     state: FP, ew: FP, ev: FP, est: IP, wf: IP, woff: Int32, nonce: Int32):
+    """One block team: the d x d half of the prep after the executor eigh op
+    (`eigh_op_dense` on a copy of G, enqueued just before: w ascending in
+    ew, V in ev, its status word est; lane n9b-device-svd-qr, was the
+    team's cyclic Jacobi): the answer placed (`bayes_eig_place`), V'X'y, the
+    starting alpha and lambda (`bayes_eig_prep`) and the first
+    coefficients. Every row pass ran on the grid kernels above; this block
+    folds only the nb row-block partials. An unconverged eigh (or a cut
+    Jacobi launch: its block's mark stays -1) withholds the Metal witness,
+    so the unit reruns and then raises on Apple."""
     var a = ALGO_BAYES
     var dd = Int(d)
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
+    bayes_eig_place(t, fw, ew, ev, dd)
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
     var al = bayes_eig_prep(t, fw, fp, dd, yvar)
@@ -420,11 +462,14 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
         st(state, 1, al[1])
         st(state, 2, ym)
         st(state, 5, Float32(0))
-    witness_end(wf, woff, nonce)
+    if ldi(est, 0) == 0:
+        witness_end(wf, woff, nonce)
 
 def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row i's residual; a stopped fit (state[5] != 0) writes nothing, so
+    iterations queue past the stop (lane n2-cd-qn-glm-loops)."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    if i < Int(n):
+    if i < Int(n) and ld(state, 5) == Float32(0):
         var dd = Int(d)
         var p = Float32(0)
         for j in range(dd):
@@ -432,10 +477,11 @@ def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state:
         st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
     witness_end(wf, woff, nonce)
 
-def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row block bk's sse partial; gated on state[5] like `bayes_resid_kernel`."""
     var bk = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
-    if bk < fold_blocks(nn):
+    if bk < fold_blocks(nn) and ld(state, 5) == Float32(0):
         var lo = bk * FOLD_BLOCK
         st(parts, bk, _sse_part(rows, y, nn, sw != 0, lo, min(FOLD_BLOCK, nn - lo)))
     witness_end(wf, woff, nonce)
@@ -443,13 +489,17 @@ def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, w
 def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32, wf: IP, woff: Int32, nonce: Int32):
     """One thread: the nb row-block sse partials folded blocks ascending,
     then the scalar update (`bayes_step`, O(d) folds); `bayes_coef_kernel`
-    then writes the next coefficients a thread each."""
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+    then writes the next coefficients a thread each. A stopped fit (state[5]
+    != 0) does nothing; a live step stores the iterations run, it + 1, into
+    state[8], so the host reads the count with the stop word once per
+    BAYES_IDN_READ iterations (lane n2-cd-qn-glm-loops)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0 and ld(state, 5) == Float32(0):
         var sse = fold_parts(parts, 0, Int(nb))
         var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
         st(state, 0, r[1])
         st(state, 1, r[0])
         st(state, 5, Float32(r[2]))
+        st(state, 8, i2f(Int(it) + 1))
     witness_end(wf, woff, nonce)
 
 #: FAST on Apple (lane/apple-fast-classical, re-expressed on the grid
@@ -502,8 +552,7 @@ def bayes_step_gram_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, yyparts
             bayes_coef(fw, res, dd, r[0], r[1])
     witness_end(wf, woff, nonce)
 
-#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes;
-#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` turns it off):
+#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes):
 #: `bayes_step_gram_kernel`'s sse relative to a REFERENCE row pass, as
 #: x_linear/bayes.mojo `bayes_ridge_fit` guards the one-block fit. The plain yy - sum_k (2 z_k vty_k - ev_k z_k^2) cancelled
 #: to below zero on istella (220 features, near-null Gram directions with
@@ -640,8 +689,8 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: no env read on the fit path). Both are the FAST + Apple default since the M3
 #: A/B (lane/apple-fast-gram 47ab9b791) and the re-A/B on lane head c338b88dd
 #: (n=1, taxi, quality the same: lars 59.1 -> 15.1 ms, lasso-lars 59.1 ->
-#: 14.2 ms, ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms); `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` /
-#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restore main's path, and the old
+#: 14.2 ms, ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms); the `_OFF`
+#: rollbacks were deleted 2026-11-15 (docs/TOMBSTONES.md), and the old
 #: on-defines stay harmless:
 #: LARS_FAST_GRAM builds Lars / LassoLars' means, centered Gram, X'y and y mean
 #: with x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
@@ -650,8 +699,9 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: RIDGE_FAST_GRAM does the same for RidgeClassifier / RidgeCV's means, centered
 #: Gram and X'Y, and for k-fold RidgeCV's fold Grams instead of `kf_cells_kernel`
 #: (one thread per cell walking the fold's rows). Unweighted fits only.
-comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                              and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
+# TOMBSTONE: MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 8d8b814530.
+# Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime XL_LARS_FAST_GRAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 
 
 #: lane/lars-grid-gram (2026-10-11), PROMOTED to the default 2026-10-11
@@ -689,12 +739,15 @@ def _ridge_fast_gram() -> Bool:
 # The epoch order (`sgd_perm_kernel`), the targets and the epoch end
 # (x_linear/sgd_end.mojo) are the device's; the host enqueues an epoch's
 # batches without a sync and reads two stop words.
+# TOMBSTONE: MOJOLEARN_AFCL_L14 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 190fb2a092.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_L14.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # AFCL-L14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
 # Four SIMD groups per independent row-prediction block expose twice as
 # many schedulable blocks as the 256-thread baseline. Training examples,
 # minibatches, seeded order, gradient folds and update/stopping policy do
 # not change. Witness capacities/offsets use the same row-grid helper.
-comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
                     and is_defined["MOJOLEARN_AFCL_L14"]())
 comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
 
@@ -726,8 +779,11 @@ def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d:
 
 def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32, wf: IP, woff: Int32,
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32, gate: IP, wf: IP, woff: Int32,
                        nonce: Int32):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0,
                              dblk, ocm)
     witness_end(wf, woff, nonce)
@@ -789,12 +845,15 @@ def sgd_mb_oc_team(dlv: FP, lv: FP, bs: Int, eta: Float32, alpha: Float32, bsum:
 
 
 def sgd_mb_oc_kernel(dlv: FP, lv: FP, bs: Int32, eta: Float32, alpha: Float32, bsum: Int32, cnt: IP, dlt: FP,
-                     etp: FP, dev_eta: Int32, wf: IP, woff: Int32, nonce: Int32):
+                     etp: FP, dev_eta: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32):
     """The one-class implicit intercept step of a batch (`sgd_mb_oc_team`,
     one block between the rows and the partials launches; the counts are
     bisection probes over bs rows): the step to dlt[0] for the step
     kernel. dev_eta: the rate is the device's epoch-end word etp[0], as in
     `sgd_mb_step_kernel`."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var tid = Int(thread_idx.x)
     var e = ld(etp, 0) if dev_eta != 0 else eta
     var d0 = sgd_mb_oc_team(dlv, lv, Int(bs), e, alpha, bsum != 0, cnt, tid, Int(block_dim.x))
@@ -815,7 +874,10 @@ def _sgd_mb_parts_kernel_body(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, l
 
 
 def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP,
-                        sub: Int32, wf: IP, woff: Int32, nonce: Int32):
+                        sub: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_parts_kernel_body(x, d, idx, start, dlv, lv, bs, nsub, parts, sub)
     witness_end(wf, woff, nonce)
 
@@ -848,12 +910,15 @@ def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP,
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32, sub: Int32, etp: FP, dev_eta: Int32, ocm: Int32, dlt: FP, wf: IP, woff: Int32,
+                       bsum: Int32, sub: Int32, etp: FP, dev_eta: Int32, ocm: Int32, dlt: FP, gate: IP, wf: IP, woff: Int32,
                        nonce: Int32):
     """dev_eta: the constant / adaptive rate is the device's epoch-end state
     (etp[0], x_linear/sgd_end.mojo); the others are the schedule's `eta`.
     ocm / dlt: the one-class intercept (SGD_OC_MB_IMPLICIT; dlt[0] the
     implicit step of `sgd_mb_oc_kernel` when ocm == 2)."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var e = ld(etp, 0) if dev_eta != 0 else eta
     _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, e, alpha, l1r, penalty, fi, need_obj, one_class, bsum, sub,
                              ocm, dlt)
@@ -876,10 +941,12 @@ comptime SGD_CHUNK_DEFAULT = 64
 # weight) writes its own slot and the kernel strides them over block_dim, so
 # the words do not depend on the width: at batch 256 and istella's 220
 # columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
-# `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 2c034b8d40.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_CHUNK_WIDE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
-    and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
 )
 comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 
@@ -891,73 +958,31 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 # w1; block 0 alone folds the objective. The weights alternate between two
 # buffers so no block reads a word another block is replacing. The same
 # helpers on the same operands in the same order: no bit moves.
-# `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_MB_FUSE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f3550a03d5.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_MB_FUSE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_MB_FUSE = (
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 
-# lane/classical-structural (2026-10-07), IDENTICAL only, default off:
-# `-D MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS`. The minibatch kernels read
-# their rows through the epoch's permutation (`x[idx[p] * d + j]`,
-# `ys[idx[p]]`, `sw[idx[p]]`): a 4096-row batch touches 4096 rows scattered
-# over the whole of X, so every row load is its own cache line fetch and the
-# (d + 2) x nsub partial chains wait on scattered 44-byte rows. Here, once per
-# epoch and per problem right after `sgd_perm_kernel`, one wide gather writes
-# the permuted copies xp[p] = x[idx[p]], ysp[p] = ys[idx[p]], swp[p] =
-# sw[idx[p]], and the batch kernels run on those copies with the identity
-# order, so a batch reads `batch * d` contiguous words (L2-resident for the
-# chains). Cost reasoning: the gather is two streaming passes over X per
-# epoch (read + write), against batches-per-epoch x scattered-row latency; it
-# pays whenever n * d is above a few hundred rows a batch. No bits move: for
-# the row at batch position p every kernel sees the SAME operands
-# (x row idx[p], ys[idx[p]], sw[idx[p]]) in the SAME batch at the SAME
-# position, and the folds in `mb_dot` / `mb_part` are indexed by the batch
-# position r, not by the row id, so the operand order of every fmad is
-# unchanged. The host twin (`sgd_mb_one`) keeps its idx form and needs no
-# change. FAST (`SGD_FAST_EPOCH_RESIDENT`) is untouched: this flag is
-# IDENTICAL only. A memory gate (free device memory must cover the copies
-# twice over) falls back to the gathered-load route.
-comptime SGD_IDN_EPOCH_CONTIGUOUS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"]()
-)
-
-
-def sgd_gather_x_kernel(dst: FP, src: FP, idx: IP, n: Int32, d: Int32, wf: IP, woff: Int32, nonce: Int32):
-    """SGD_IDN_EPOCH_CONTIGUOUS: dst[p * d + j] = src[idx[p] * d + j], one
-    thread per word (coalesced stores; a row's d words are contiguous in the
-    source too)."""
-    var dd = Int(d)
-    var o = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    if o < Int(n) * dd:
-        var p = o // dd
-        var j = o - p * dd
-        st(dst, o, ld(src, Int(ldi(idx, p)) * dd + j))
-    witness_end(wf, woff, nonce)
-
-
-def sgd_gather_vec_kernel(dst_ys: FP, src_ys: FP, dst_sw: FP, src_sw: FP, idn: IP, idx: IP, n: Int32,
-                          wf: IP, woff: Int32, nonce: Int32):
-    """SGD_IDN_EPOCH_CONTIGUOUS: the targets and sample weights in the
-    epoch's order, plus the identity order the batch kernels then read."""
-    var p = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    if p < Int(n):
-        var i = Int(ldi(idx, p))
-        st(dst_ys, p, ld(src_ys, i))
-        st(dst_sw, p, ld(src_sw, i))
-        sti(idn, p, p)
-    witness_end(wf, woff, nonce)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed: never measured, default off; a per-epoch
+# n x d device-to-device re-gather of X, y and the sample weights) deleted 2026-11-09 by lane
+# n3-sgd-minibatch-loops; code recoverable at integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
 
 
 def sgd_mb_steprows_kernel(
     parts: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP, dlv: FP, lv: FP,
     ci: IP, cf: FP, etp: FP, dlt: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32, dev_eta: Int32,
-    wf: IP, woff: Int32, nonce: Int32,
+    gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
     """ci / cf: `_sgd_mb_chunk_kernel_body`'s. The step of the batch of
     bs_prev rows (`sgd_mb_step_kernel`'s statements, w0 -> w1), then the rows
     [start, start + bs) of the next batch (`sgd_mb_rows_kernel`'s) on w1;
     bs == 0 is the step alone."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var dd = ldi(ci, 2)
     var loss = ldi(ci, 3)
     var has_sw = ldi(ci, 4) != 0
@@ -1042,7 +1067,7 @@ def sgd_mb_steprows_kernel(
 # Update order: the same batches in the same order, the same helpers, the
 # same sub-block fold (sub = XG_TPB); FAST carries no bits requirement.
 comptime SGD_FAST_EPOCH_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_SGD_FAST_EPOCH_RESIDENT"]()
 )
 
@@ -1050,7 +1075,7 @@ comptime SGD_FAST_EPOCH_RESIDENT = (
 def sgd_mb_fast_batch_kernel(
     parts_prev: FP, parts_cur: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP,
     dlv: FP, lv: FP, ci: IP, cf: FP, etp: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32,
-    dev_eta: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dev_eta: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
     """SGD_FAST_EPOCH_RESIDENT, one launch per minibatch (ocm == 0 only; the
     host gates it). ci / cf: `_sgd_mb_chunk_kernel_body`'s. bs_prev > 0: the
@@ -1058,6 +1083,9 @@ def sgd_mb_fast_batch_kernel(
     [start, start + bs) on the stepped weights (w1, or w0 when bs_prev == 0)
     and this block's sub-block partials into parts_cur. bs == 0 is the step
     alone (one block; w1 may equal w0, each thread owning its words)."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var dd = ldi(ci, 2)
     var loss = ldi(ci, 3)
     var has_sw = ldi(ci, 4) != 0
@@ -1113,6 +1141,9 @@ def sgd_mb_fast_batch_kernel(
         for j in range(tid, dd + 2, nt):
             st(parts_cur, j * nsub + sb, mb_part(x, dd, idx, Int(start), dlv, lv, j, sb, Int(bs), sub))
     witness_end(wf, woff, nonce)
+# TOMBSTONE: MOJOLEARN_SGD_FAST_EPOCH_RESIDENT (unmeasured Apple FAST opt-in arm, EXP:1596 OPEN) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 639da56218.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_FAST_EPOCH_RESIDENT.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 
 # lane/idn-sgd-multiblock: the fit's finiteness check on the device
@@ -1120,17 +1151,18 @@ def sgd_mb_fast_batch_kernel(
 # every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one thread
 # tests SGD_FIN_RUN words of the uploaded X (and of y) and a bad word raises
 # the flag: the same verdict (exponent all ones = NaN or infinity), the same
-# error. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_OFF` restores the walk.
+# error.
 # Lane idn-all (2026-10-04): Apple runs the device check too. No Metal limit
 # prevents it; the one hazard (macOS cutting a command buffer would leave the
 # flag clear) is closed by the completion witness (x_linear/witness.mojo):
 # every block reports, the check is idempotent, a cut launch reruns and after
-# WITNESS_TRIES the fit raises. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF`
-# restores the host walk on Apple only.
+# WITNESS_TRIES the fit raises.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_DEV_FINITE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 2040a5c03e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 1d51928517.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-    and not (has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
 )
 comptime SGD_FIN_RUN = 64
 
@@ -1325,8 +1357,11 @@ def _sgd_mb_chunk_kernel_body(
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(SGD_CHUNK_TPB)))
 def sgd_mb_chunk_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
-    dotp: FP, sqp: FP, cnt: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dotp: FP, sqp: FP, cnt: IP, start0: Int32, nbat: Int32, t0: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, dotp, sqp, cnt, ldi(ci, 16), start0,
                               nbat, t0)
     witness_end(wf, woff, nonce)
@@ -1344,12 +1379,11 @@ def sgd_mb_chunk_kernel(
 # launch a live problem, and ONE read brings every problem's stop words
 # home. Each problem's statements are the sequential driver's on its own
 # words: NO BIT MOVES, the host column is untouched.
-# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
-# the sequential problems.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_OVR_PAR_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 255a84c8ff.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_OVR_PAR_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_OVR_PAR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     # I12 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
-    and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
 comptime SGD_OVR_CF = 9
@@ -1392,282 +1426,354 @@ def _sgd_mb_ovr_applies(problems: Int, n: Int, d: Int, batch: Int, chunk: Int) -
     return False
 
 
-def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
-                     n_out: Int, res: FP) raises:
-    """`_sgd_mb_grid`'s chunk arm with the one-vs-rest problems side by side
-    (SGD_IDN_OVR_PAR): the same statements per problem, the same words."""
-    var ctx = linear_ctx()
-    var k = Int(ip[0])
-    var loss = Int(ip[1])
-    var penalty = Int(ip[2])
-    var lr = Int(ip[3])
-    var fi = Int(ip[4]) != 0
-    var max_iter = Int(ip[5])
-    var nic = Int(ip[6])
-    var do_shuffle = Int(ip[7]) != 0
-    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
-    var has_sw = Int(ip[10]) != 0
-    var has_cw = Int(ip[11]) != 0
-    var batch = sgd_batch(Int(ip[12]), k, n)
-    var bsum = len(ip) > 13 and Int(ip[13]) != 0
-    var alpha = fp[0]
-    var l1r = fp[1]
-    var eta0 = fp[2]
-    var power_t = fp[3]
-    var eps = fp[4]
-    var tol = fp[5]
-    if penalty == P_L2:
-        l1r = Float32(0)
-    elif penalty == P_L1:
-        l1r = Float32(1)
-    var problems = k
-    var sub = mb_sub_size(batch)
-    var dblk = mb_dblk(batch)
-    var nsub = mb_subs(batch, sub)
-    var nbk = (d + MB_DBLK - 1) // MB_DBLK
-    var chunk = _sgd_chunk()
-    var pa_rate = lr == LR_PA1 or lr == LR_PA2
-    var need_obj = tol > Float32(-3.0e38)
-    var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
-    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dy = ctx.enqueue_create_buffer[DType.float32](n)
-    var dys = ctx.enqueue_create_buffer[DType.float32](problems * n)
-    var dsw = ctx.enqueue_create_buffer[DType.float32](n)
-    var didx = ctx.enqueue_create_buffer[DType.int32](problems * n)
-    var ddl = ctx.enqueue_create_buffer[DType.float32](problems * batch)
-    var dlv = ctx.enqueue_create_buffer[DType.float32](problems * batch)
-    var dparts = ctx.enqueue_create_buffer[DType.float32](problems * (d + 2) * nsub)
-    var dw = ctx.enqueue_create_buffer[DType.float32](problems * d)
-    var dbias = ctx.enqueue_create_buffer[DType.float32](problems)
-    var dobj = ctx.enqueue_create_buffer[DType.float32](problems)
-    var dws = ctx.enqueue_create_buffer[DType.float32](problems * d)
-    var dbs = ctx.enqueue_create_buffer[DType.float32](problems)
-    var ddotp = ctx.enqueue_create_buffer[DType.float32](max(problems * batch * nbk, 1))
-    var dsq = ctx.enqueue_create_buffer[DType.float32](n if pa_rate else 1)
-    var dci = ctx.enqueue_create_buffer[DType.int32](16)
-    var dcf = ctx.enqueue_create_buffer[DType.float32](problems * SGD_OVR_CF)
-    var dstt = ctx.enqueue_create_buffer[DType.float32](problems * SGD_MB_WORDS)
-    var dvp = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
-    var dact = ctx.enqueue_create_buffer[DType.int32](problems)
-    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
-    dres.enqueue_fill(Float32(0))
-    # chunk launches an epoch (each reports one word a problem), the PA
-    # row norms, the epoch end's one word a problem
-    var n_batches = (n + batch - 1) // batch
-    var launches = (n_batches + chunk - 1) // chunk
-    var wit = Witness(ctx, max(launches * problems + _xg_blocks(n) + problems, 1))
-    var hci = List[Int32](length=16, fill=Int32(0))
-    hci[0] = Int32(n)
-    hci[1] = Int32(batch)
-    hci[2] = Int32(d)
-    hci[3] = Int32(loss)
-    hci[4] = Int32(1 if has_sw else 0)
-    hci[5] = Int32(1 if has_cw else 0)
-    hci[6] = Int32(lr)
-    hci[7] = Int32(nsub)
-    hci[8] = Int32(penalty)
-    hci[9] = Int32(1 if fi else 0)
-    hci[10] = Int32(1 if need_obj else 0)
-    hci[11] = Int32(0)
-    hci[12] = Int32(1 if bsum else 0)
-    hci[13] = Int32(sub)
-    hci[14] = Int32(dblk)
-    hci[15] = Int32(1 if pa_rate else 0)
-    var hcf = List[Float32](length=problems * SGD_OVR_CF, fill=Float32(0))
-    var hstt = List[Float32](length=problems * SGD_MB_WORDS, fill=Float32(0))
-    var hact = List[Int32](length=problems, fill=Int32(1))
-    var active = List[Bool](length=problems, fill=True)
-    var failed = List[Bool](length=problems, fill=False)
-    var epochs = List[Int](length=problems, fill=0)
-    for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants, one row of parameters a class
-        var o = c * SGD_OVR_CF
-        hcf[o] = eps
-        hcf[o + 1] = fp[6 + c] if has_cw else Float32(1)
-        hcf[o + 2] = fp[6 + problems + c] if has_cw else Float32(1)
-        hcf[o + 3] = eta0
-        hcf[o + 4] = eta0
-        hcf[o + 5] = alpha
-        hcf[o + 6] = l1r
-        hcf[o + 7] = power_t
-        hcf[o + 8] = opt_init
-        hstt[c * SGD_MB_WORDS] = Float32(3.0e38)
-        hstt[c * SGD_MB_WORDS + 1] = Float32(0)
-        hstt[c * SGD_MB_WORDS + 2] = eta0
-    if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    if has_sw:
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
-    comptime if SGD_IDN_DEV_FINITE:
-        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
-    ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dstt, src_ptr=hstt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
-    dw.enqueue_fill(Float32(0))
-    dbias.enqueue_fill(Float32(0))
-    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
-    var seed_hi = Int32(Int(UInt32(seed >> 32)))
-    # host-side base addresses of the per-problem buffers
-    var a_ys = Int(dys.unsafe_ptr())
-    var a_idx = Int(didx.unsafe_ptr())
-    var a_w = Int(dw.unsafe_ptr())
-    var a_bias = Int(dbias.unsafe_ptr())
-    var a_obj = Int(dobj.unsafe_ptr())
-    var a_stt = Int(dstt.unsafe_ptr())
-    var a_cf = Int(dcf.unsafe_ptr())
-    for c in range(problems):
-        # problem c's targets and identity order (sgd_fit's statements)
-        ctx.enqueue_function[sgd_ys_kernel](
-            dy.unsafe_ptr(), FP(unsafe_from_address=a_ys) + c * n, IP(unsafe_from_address=a_idx) + c * n,
-            Int32(n), Int32(k), Int32(c), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-        )
-    var t = 1
-    var live = problems
-    for epoch in range(max_iter):
-        if live == 0:
-            break
-        for c in range(problems):  # small-loop(problems: OvR problems): per-problem epoch counters, bookkeeping only
-            if active[c]:
-                epochs[c] = epoch + 1
+struct _SgdOvrEpochs(LoopStep, Movable):
+    """`_sgd_mb_ovr_grid`'s fit and one epoch of every live one-vs-rest
+    problem as a step of the bounded device loop. Which problems still run
+    is the device's (`dact`, written by `sgd_mb_ovr_act_kernel`); the loop is
+    done when none is live."""
+    var ctx: DeviceContext
+    var wit: Witness
+    var dx: DeviceBuffer[DType.float32]
+    var dy: DeviceBuffer[DType.float32]
+    var dys: DeviceBuffer[DType.float32]
+    var dsw: DeviceBuffer[DType.float32]
+    var didx: DeviceBuffer[DType.int32]
+    var ddl: DeviceBuffer[DType.float32]
+    var dlv: DeviceBuffer[DType.float32]
+    var dparts: DeviceBuffer[DType.float32]
+    var dw: DeviceBuffer[DType.float32]
+    var dbias: DeviceBuffer[DType.float32]
+    var dobj: DeviceBuffer[DType.float32]
+    var dws: DeviceBuffer[DType.float32]
+    var dbs: DeviceBuffer[DType.float32]
+    var ddotp: DeviceBuffer[DType.float32]
+    var dsq: DeviceBuffer[DType.float32]
+    var dci: DeviceBuffer[DType.int32]
+    var dcf: DeviceBuffer[DType.float32]
+    var dstt: DeviceBuffer[DType.float32]
+    var dvp: DeviceBuffer[DType.float32]
+    var dact: DeviceBuffer[DType.int32]
+    var dep: DeviceBuffer[DType.int32]
+    var dlive: DeviceBuffer[DType.int32]
+    var dres: DeviceBuffer[DType.float32]
+    var hci: List[Int32]
+    var hcf: List[Float32]
+    var hstt: List[Float32]
+    var hact: List[Int32]
+    var k: Int
+    var penalty: Int
+    var lr: Int
+    var max_iter: Int
+    var nic: Int
+    var do_shuffle: Bool
+    var seed_lo: Int32
+    var seed_hi: Int32
+    var bsum: Bool
+    var n: Int
+    var d: Int
+    var batch: Int
+    var problems: Int
+    var alpha: Float32
+    var l1r: Float32
+    var tol: Float32
+    var chunk: Int
+    var need_obj: Bool
+    var t: Int
+
+    def __init__(out self, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int) raises:
+        var ctx = linear_ctx()
+        var k = Int(ip[0])
+        var loss = Int(ip[1])
+        var penalty = Int(ip[2])
+        var lr = Int(ip[3])
+        var fi = Int(ip[4]) != 0
+        var has_sw = Int(ip[10]) != 0
+        var has_cw = Int(ip[11]) != 0
+        var batch = sgd_batch(Int(ip[12]), k, n)
+        var bsum = len(ip) > 13 and Int(ip[13]) != 0
+        var alpha = fp[0]
+        var l1r = fp[1]
+        var eta0 = fp[2]
+        var power_t = fp[3]
+        var eps = fp[4]
+        var tol = fp[5]
+        if penalty == P_L2:
+            l1r = Float32(0)
+        elif penalty == P_L1:
+            l1r = Float32(1)
+        var problems = k
+        var sub = mb_sub_size(batch)
+        var dblk = mb_dblk(batch)
+        var nsub = mb_subs(batch, sub)
+        var nbk = (d + MB_DBLK - 1) // MB_DBLK
+        var chunk = _sgd_chunk()
+        var pa_rate = lr == LR_PA1 or lr == LR_PA2
+        var need_obj = tol > Float32(-3.0e38)
+        var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
+        self.dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+        self.dy = ctx.enqueue_create_buffer[DType.float32](n)
+        self.dys = ctx.enqueue_create_buffer[DType.float32](problems * n)
+        self.dsw = ctx.enqueue_create_buffer[DType.float32](n)
+        self.didx = ctx.enqueue_create_buffer[DType.int32](problems * n)
+        self.ddl = ctx.enqueue_create_buffer[DType.float32](problems * batch)
+        self.dlv = ctx.enqueue_create_buffer[DType.float32](problems * batch)
+        self.dparts = ctx.enqueue_create_buffer[DType.float32](problems * (d + 2) * nsub)
+        self.dw = ctx.enqueue_create_buffer[DType.float32](problems * d)
+        self.dbias = ctx.enqueue_create_buffer[DType.float32](problems)
+        self.dobj = ctx.enqueue_create_buffer[DType.float32](problems)
+        self.dws = ctx.enqueue_create_buffer[DType.float32](problems * d)
+        self.dbs = ctx.enqueue_create_buffer[DType.float32](problems)
+        self.ddotp = ctx.enqueue_create_buffer[DType.float32](max(problems * batch * nbk, 1))
+        self.dsq = ctx.enqueue_create_buffer[DType.float32](n if pa_rate else 1)
+        self.dci = ctx.enqueue_create_buffer[DType.int32](16)
+        self.dcf = ctx.enqueue_create_buffer[DType.float32](problems * SGD_OVR_CF)
+        self.dstt = ctx.enqueue_create_buffer[DType.float32](problems * SGD_MB_WORDS)
+        self.dvp = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
+        self.dact = ctx.enqueue_create_buffer[DType.int32](problems)
+        # every problem's epoch count (sgd_mb_ovr_act_kernel) and the live count
+        self.dep = ctx.enqueue_create_buffer[DType.int32](problems)
+        self.dep.enqueue_fill(Int32(0))
+        self.dlive = ctx.enqueue_create_buffer[DType.int32](1)
+        self.dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+        self.dres.enqueue_fill(Float32(0))
+        # chunk launches an epoch (each reports one word a problem), the PA
+        # row norms, the epoch end's one word a problem and the activity
+        # kernel's blocks
+        var n_batches = (n + batch - 1) // batch
+        var launches = (n_batches + chunk - 1) // chunk
+        var wit = Witness(ctx, max(launches * problems + _xg_blocks(n) + problems + (problems + SGD_END_TPB - 1) // SGD_END_TPB, 1))
+        var hci = List[Int32](length=16, fill=Int32(0))
+        hci[0] = Int32(n)
+        hci[1] = Int32(batch)
+        hci[2] = Int32(d)
+        hci[3] = Int32(loss)
+        hci[4] = Int32(1 if has_sw else 0)
+        hci[5] = Int32(1 if has_cw else 0)
+        hci[6] = Int32(lr)
+        hci[7] = Int32(nsub)
+        hci[8] = Int32(penalty)
+        hci[9] = Int32(1 if fi else 0)
+        hci[10] = Int32(1 if need_obj else 0)
+        hci[11] = Int32(0)
+        hci[12] = Int32(1 if bsum else 0)
+        hci[13] = Int32(sub)
+        hci[14] = Int32(dblk)
+        hci[15] = Int32(1 if pa_rate else 0)
+        var hcf = List[Float32](length=problems * SGD_OVR_CF, fill=Float32(0))
+        var hstt = List[Float32](length=problems * SGD_MB_WORDS, fill=Float32(0))
+        var hact = List[Int32](length=problems, fill=Int32(1))
+        for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants, one row of parameters a class
+            var o = c * SGD_OVR_CF
+            hcf[o] = eps
+            hcf[o + 1] = fp[6 + c] if has_cw else Float32(1)
+            hcf[o + 2] = fp[6 + problems + c] if has_cw else Float32(1)
+            hcf[o + 3] = eta0
+            hcf[o + 4] = eta0
+            hcf[o + 5] = alpha
+            hcf[o + 6] = l1r
+            hcf[o + 7] = power_t
+            hcf[o + 8] = opt_init
+            hstt[c * SGD_MB_WORDS] = Float32(3.0e38)
+            hstt[c * SGD_MB_WORDS + 1] = Float32(0)
+            hstt[c * SGD_MB_WORDS + 2] = eta0
+        if n_x > 0:
+            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+        if has_sw:
+            ctx.enqueue_copy(dst_buf=self.dsw, src_ptr=y + n)
+        ctx.enqueue_copy(dst_buf=self.dy, src_ptr=y)
+        comptime if SGD_IDN_DEV_FINITE:
+            _sgd_finite_device(ctx, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n_x, y, n_y)
+        ctx.enqueue_copy(dst_buf=self.dci, src_ptr=hci.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dcf, src_ptr=hcf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dstt, src_ptr=hstt.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dact, src_ptr=hact.unsafe_ptr())
+        self.dw.enqueue_fill(Float32(0))
+        self.dbias.enqueue_fill(Float32(0))
+        var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+        self.seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+        self.seed_hi = Int32(Int(UInt32(seed >> 32)))
+        var a_ys = Int(self.dys.unsafe_ptr())
+        var a_idx = Int(self.didx.unsafe_ptr())
+        for c in range(problems):  # driver-loop: over the one-vs-rest problems, one targets launch each
+            # problem c's targets and identity order (sgd_fit's statements)
+            ctx.enqueue_function[sgd_ys_kernel](
+                self.dy.unsafe_ptr(), FP(unsafe_from_address=a_ys) + c * n, IP(unsafe_from_address=a_idx) + c * n,
+                Int32(n), Int32(k), Int32(c), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+            )
+        if pa_rate:
+            # the PA rows' norms, once a fit (X does not change between epochs)
+            _sgd_rowsq_once(ctx, wit, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n, d,
+                            FP(unsafe_from_address=Int(self.dsq.unsafe_ptr())))
+        self.wit = wit^
+        self.hci = hci^
+        self.hcf = hcf^
+        self.hstt = hstt^
+        self.hact = hact^
+        self.k = k
+        self.penalty = penalty
+        self.lr = lr
+        self.max_iter = Int(ip[5])
+        self.nic = Int(ip[6])
+        self.do_shuffle = Int(ip[7]) != 0
+        self.bsum = bsum
+        self.n = n
+        self.d = d
+        self.batch = batch
+        self.problems = problems
+        self.alpha = alpha
+        self.l1r = l1r
+        self.tol = tol
+        self.chunk = chunk
+        self.need_obj = need_obj
+        self.t = 1
+        self.ctx = ctx^
+
+    def epoch_launches(self) -> Int:
+        """The launches of one epoch (chunk launches per class wave, the
+        epoch ends, the activity kernel, the criterion, the order)."""
+        var nb = (self.n + self.batch - 1) // max(self.batch, 1)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C17_OVR (unmeasured opt-in arm; non-owner site) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e6671383da.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C17_OVR.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        var wave = self.problems
+        var waves = (self.problems + wave - 1) // wave
+        return ((nb + self.chunk - 1) // max(self.chunk, 1)) * waves + self.problems + 3
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        """Epoch `it - 1` of every live problem: the chunk launches, each
+        problem's epoch end, the activity words, the criterion."""
+        var cx = self.ctx.copy()
+        var epoch = it - 1
+        var gate = _sgd_gate(registers)
+        var n = self.n
+        var d = self.d
+        var problems = self.problems
         var par = epoch % 2
         # the epoch as ONE guarded unit: a cut epoch restores every problem's
         # weights and replays the same batches
-        ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
-        ctx.enqueue_copy(dst_buf=dbs, src_buf=dbias)
-        var t_start = t
+        cx.enqueue_copy(dst_buf=self.dws, src_buf=self.dw)
+        cx.enqueue_copy(dst_buf=self.dbs, src_buf=self.dbias)
+        var t_start = self.t
         var tries = 0
-        while True:
-            var nonce = wit.begin()
+        while True:  # driver-loop: over Metal witness reruns of one epoch (x_linear/witness.mojo), at most WITNESS_TRIES
+            var nonce = self.wit.begin()
             var wo = 0
-            t = t_start
-            if do_shuffle:
-                ctx.enqueue_function[sgd_perm_kernel](
-                    didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(0), Int32(problems),
-                    grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
+            var t = t_start
+            if self.do_shuffle:
+                cx.enqueue_function[sgd_perm_kernel](
+                    self.didx.unsafe_ptr(), Int32(n), self.seed_lo, self.seed_hi, Int32(epoch), Int32(0), Int32(problems),
+                    gate, grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
                 )
-            dobj.enqueue_fill(Float32(0))
-            if pa_rate:
-                ctx.enqueue_function[sgd_rowsq_kernel](
-                    dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                    grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-                )
-                wo += _xg_blocks(n)
+            self.dobj.enqueue_fill(Float32(0))
             var start = 0
-            while start < n:
+            while start < n:  # driver-loop: over the epoch's chunks of `chunk` minibatches
                 var nbt = 0
                 var tt = t
                 var s1 = start
-                while nbt < chunk and s1 < n:
-                    var bs1 = min(batch, n - s1)
-                    tt += bs1 if bsum else 1
+                while nbt < self.chunk and s1 < n:  # driver-loop: over a chunk's minibatches, counting t on the host
+                    var bs1 = min(self.batch, n - s1)
+                    tt += bs1 if self.bsum else 1
                     s1 += bs1
                     nbt += 1
-                # C17: bounded class waves reduce simultaneously live model
-                # state. Four is a scheduling budget, never a dataset route.
-                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-                var wave = 4 if C17_OVR else problems
-                for first_problem in range(0, problems, wave):
+                var wave = problems
+                for first_problem in range(0, problems, wave):  # driver-loop: over class waves of the chunk launch
                     var active_problems = min(wave, problems - first_problem)
-                    ctx.enqueue_function[sgd_mb_chunk_ovr_kernel](
-                        dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                        dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
-                        dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dact.unsafe_ptr(),
+                    # a stopped problem's block returns at once (`act`), so the
+                    # epochs past the loop's stop change nothing
+                    cx.enqueue_function[sgd_mb_chunk_ovr_kernel](
+                        self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(), self.dw.unsafe_ptr(),
+                        self.dbias.unsafe_ptr(), self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(),
+                        self.dparts.unsafe_ptr(), self.dobj.unsafe_ptr(), self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(),
+                        self.ddotp.unsafe_ptr(), self.dsq.unsafe_ptr(), self.dact.unsafe_ptr(),
                         Int32(start), Int32(nbt), Int32(t),
-                        wit.p(), Int32(wo), nonce, Int32(first_problem), grid_dim=active_problems, block_dim=SGD_CHUNK_TPB,
+                        self.wit.p(), Int32(wo), nonce, Int32(first_problem), grid_dim=active_problems,
+                        block_dim=SGD_CHUNK_TPB,
                     )
                     wo += active_problems
                 t = tt
                 start = s1
-            if wit.ok(ctx, wo, "SGD one-vs-rest epoch"):
+            if self.wit.ok(cx, wo, "SGD one-vs-rest epoch"):
+                self.t = t
                 break
             tries += 1
             if tries >= WITNESS_TRIES:
-                wit.fail()
-            ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
-            ctx.enqueue_copy(dst_buf=dbias, src_buf=dbs)
-        # the epoch end: `sgd_mb_end_kernel` on each live problem's words (one
-        # block each, reads parity par, writes 1 - par), every problem's stop
-        # words home behind one synchronize
+                self.wit.fail()
+            cx.enqueue_copy(dst_buf=self.dw, src_buf=self.dws)
+            cx.enqueue_copy(dst_buf=self.dbias, src_buf=self.dbs)
+        # the epoch end: `sgd_mb_end_kernel` on each problem's words (one
+        # block each, reads parity par, writes 1 - par; a stopped problem's
+        # returns at once), then the activity words and the live count
+        var a_w = Int(self.dw.unsafe_ptr())
+        var a_bias = Int(self.dbias.unsafe_ptr())
+        var a_obj = Int(self.dobj.unsafe_ptr())
+        var a_stt = Int(self.dstt.unsafe_ptr())
+        var a_cf = Int(self.dcf.unsafe_ptr())
+        var a_act = Int(self.dact.unsafe_ptr())
         tries = 0
-        while True:
-            var nonce = wit.begin()
+        while True:  # driver-loop: over Metal witness reruns of the epoch end, at most WITNESS_TRIES
+            var nonce = self.wit.begin()
             var we = 0
-            for c in range(problems):
-                if active[c]:
-                    ctx.enqueue_function[sgd_mb_end_kernel](  # small-launch(d: weights): one block strides the d weights and two vfold sums; n only divides the objective
-                        FP(unsafe_from_address=a_w) + c * d, FP(unsafe_from_address=a_bias) + c,
-                        FP(unsafe_from_address=a_obj) + c, FP(unsafe_from_address=a_stt) + c * SGD_MB_WORDS,
-                        FP(unsafe_from_address=a_cf) + c * SGD_OVR_CF,
-                        dvp.unsafe_ptr(), Int32(d), Int32(n), alpha, l1r, Int32(penalty), tol, Int32(nic), Int32(lr),
-                        Int32(1 if need_obj else 0), Int32(0), Int32(par), wit.p(), Int32(we), nonce,
-                        grid_dim=1, block_dim=SGD_END_TPB,
-                    )
-                    we += 1
-            ctx.enqueue_copy(dst_ptr=hstt.unsafe_ptr(), src_buf=dstt)
-            if wit.ok(ctx, we, "SGD one-vs-rest epoch end"):
+            for c in range(problems):  # driver-loop: over the one-vs-rest problems, one epoch-end block each
+                cx.enqueue_function[sgd_mb_end_kernel](  # small-launch(d: weights): one block strides the d weights and two vfold sums; n only divides the objective
+                    FP(unsafe_from_address=a_w) + c * d, FP(unsafe_from_address=a_bias) + c,
+                    FP(unsafe_from_address=a_obj) + c, FP(unsafe_from_address=a_stt) + c * SGD_MB_WORDS,
+                    FP(unsafe_from_address=a_cf) + c * SGD_OVR_CF,
+                    self.dvp.unsafe_ptr(), Int32(d), Int32(n), self.alpha, self.l1r, Int32(self.penalty), self.tol,
+                    Int32(self.nic), Int32(self.lr), Int32(1 if self.need_obj else 0), Int32(0), Int32(par),
+                    gate, IP(unsafe_from_address=a_act) + c, self.wit.p(), Int32(we), nonce,
+                    grid_dim=1, block_dim=SGD_END_TPB,
+                )
+                we += 1
+            self.dlive.enqueue_fill(Int32(0))
+            cx.enqueue_function[sgd_mb_ovr_act_kernel](
+                self.dstt.unsafe_ptr(), self.dact.unsafe_ptr(), self.dep.unsafe_ptr(), self.dlive.unsafe_ptr(),
+                Int32(problems), Int32(epoch), gate, self.wit.p(), Int32(we), nonce,
+                grid_dim=(problems + SGD_END_TPB - 1) // SGD_END_TPB, block_dim=SGD_END_TPB,
+            )
+            we += (problems + SGD_END_TPB - 1) // SGD_END_TPB
+            if self.wit.ok(cx, we, "SGD one-vs-rest epoch end"):
                 break
             tries += 1
             if tries >= WITNESS_TRIES:
-                wit.fail()
-        ctx.synchronize()
-        var changed = False
-        for c in range(problems):  # small-loop(problems: OvR problems): reads each problem's two stop words, the epoch's scalar decision
-            if active[c]:
-                if hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS + 1] != Float32(0):
-                    failed[c] = True
-                    active[c] = False
-                elif hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS] != Float32(0):
-                    active[c] = False
-                if not active[c]:
-                    hact[c] = Int32(0)
-                    live -= 1
-                    changed = True
-        if changed:
-            ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
-            ctx.synchronize()
-    var max_epochs = 0
-    var status = 0
-    for c in range(problems):
-        ctx.enqueue_function[sgd_mb_res_kernel](
-            FP(unsafe_from_address=a_w) + c * d, FP(unsafe_from_address=a_bias) + c, dres.unsafe_ptr(),
-            Int32(c), Int32(d), Int32(problems), Int32(0), Int32(1 if failed[c] else 0),
-            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+                self.wit.fail()
+        cx.enqueue_function[sgd_live_crit_kernel](  # small-launch(one word): the epoch loop's stop criterion
+            gate, self.dlive.unsafe_ptr(), Int32(it), grid_dim=1, block_dim=1,
         )
-        if failed[c]:
-            status = -1
-        elif epochs[c] > max_epochs:
-            max_epochs = epochs[c]
-    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
-    ctx.synchronize()
-    res.unsafe_store(problems * d + problems, i2f(max_epochs))
-    res.unsafe_store(problems * d + problems + 1, i2f(status))
-    _ = hci^
-    _ = hcf^
-    _ = hstt^
-    _ = hact^
-    _ = dx^
-    _ = dy^
-    _ = dys^
-    _ = dsw^
-    _ = didx^
-    _ = ddl^
-    _ = dlv^
-    _ = dparts^
-    _ = dw^
-    _ = dbias^
-    _ = dobj^
-    _ = dws^
-    _ = dbs^
-    _ = ddotp^
-    _ = dsq^
-    _ = dci^
-    _ = dcf^
-    _ = dstt^
-    _ = dvp^
-    _ = dact^
-    _ = dres^
-    _ = wit^
+        loop_lap(ctx, timers, "sgd_ovr_epoch")
+
+    def finish(mut self, res: FP) raises:
+        """The result words, every problem's epoch count and the status
+        (`sgd_mb_ovr_res_kernel`, on the device), home in one copy."""
+        var cx = self.ctx.copy()
+        var words = self.problems * self.d + self.problems + 2
+        cx.enqueue_function[sgd_mb_ovr_res_kernel](
+            self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dstt.unsafe_ptr(), self.dep.unsafe_ptr(),
+            self.dres.unsafe_ptr(), Int32(self.d), Int32(self.problems),
+            grid_dim=(words + SGD_END_TPB - 1) // SGD_END_TPB, block_dim=SGD_END_TPB,
+        )
+        cx.enqueue_copy(dst_ptr=res, src_buf=self.dres)
+        cx.synchronize()
+
+
+def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                     n_out: Int, res: FP) raises:
+    """`_sgd_mb_grid`'s chunk arm with the one-vs-rest problems side by side
+    (SGD_IDN_OVR_PAR): the same statements per problem, the same words; the
+    epochs as the bounded device loop over `_SgdOvrEpochs`."""
+    var ctx = linear_ctx()
+    var step = _SgdOvrEpochs(x, n_x, y, n_y, n, d, ip, fp, n_out)
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers("sgd.ovr")
+    _ = bounded_device_loop(
+        ctx, step, registers, 1, step.max_iter,
+        sgd_loop_check_every(step.epoch_launches(), step.max_iter, step.need_obj), timers,
+    )
+    timers.report()
+    step.finish(res)
+    _ = registers^
+    _ = step^
 
 
 def _sgd_chunk() -> Int:
@@ -1679,498 +1785,690 @@ def _sgd_chunk() -> Int:
     except:
         return SGD_CHUNK_DEFAULT
 
+# ------------------------------------------------ the SGD epochs on the executor's device loop
+# Lane n3b-sgd-on-program-fit (2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row
+# "SGD / Perceptron / PA", docs/plans/EXECUTOR_X1_API.md section 5). The three SGD drivers (minibatch,
+# one-vs-rest minibatch, per-sample) ran their epochs as host loops that drained the stream and read the
+# stop words home after EVERY epoch. Each epoch is now one step of the executor's bounded device loop
+# (autograd/program_loop_device.mojo `bounded_device_loop`, the loop Program.fit's epochs run on since
+# lane x1b): the same permutation, the same per-minibatch gathers and kernels in the same order, every
+# epoch kernel gated on the loop's done word (it does nothing once set), the epoch end and the stopping
+# rule (tol / n_iter_no_change, the adaptive rate, the overflow check) on the device as before, and a
+# criterion kernel that sets the done word (x_linear/sgd_end.mojo). The host reads the loop's register
+# block once per `sgd_loop_check_every` epochs. No bit moves: the epochs that run are the host loop's,
+# the epochs enqueued past the stop change nothing.
+# On Apple the completion witness (x_linear/witness.mojo) still checks every epoch with a wait: it is
+# the Metal command-buffer guard, not a stop read, and it reruns a cut epoch from its start copies.
+# TOMBSTONE: sgd-host-epoch-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch; record in docs/TOMBSTONES.md.
+
+#: `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=<k>` (k >= 1) pins the epochs enqueued
+#: between two reads of the loop's register block (the A/B that prices the
+#: rule below; 1 is the old read after every epoch).
+comptime SGD_LOOP_CHECK_EVERY_PIN = get_defined_int["MOJOLEARN_SGD_LOOP_CHECK_EVERY", 0]()
+
+#: The minibatch epoch's arms (`_SgdMbEpochs.arm`).
+comptime SGD_ARM_FAST_RESIDENT = 0
+comptime SGD_ARM_CHUNK = 1
+comptime SGD_ARM_FUSE = 2
+comptime SGD_ARM_THREE = 3
+
+
+def sgd_loop_check_every(epoch_launches: Int, max_iter: Int, has_criterion: Bool) -> Int:
+    """Epochs between two reads of an SGD epoch loop. Without a tolerance the
+    only stop is a non-finite fit (the gate keeps the rest of the bound a
+    no-op), so the loop reads once, at the bound. With one it is Program.fit's
+    rule (autograd/program_loop.mojo `fit_epochs_per_read`) over the launches
+    of an epoch (what an epoch enqueued past the stop still costs: gated
+    launches that return at once): about FIT_STEPS_PER_READ launches between
+    two reads, never less than one epoch. A cost rule over the epoch's launch
+    count, the same on every vendor; it keys on no dimension and moves no bit."""
+    comptime if SGD_LOOP_CHECK_EVERY_PIN > 0:
+        return SGD_LOOP_CHECK_EVERY_PIN
+    if not has_criterion:
+        return max(max_iter, 1)
+    return fit_epochs_per_read(epoch_launches, max_iter, 0)
+
+
+@always_inline
+def _sgd_gate(mut registers: LoopRegisters) -> IP:
+    """The loop's register block as the epoch kernels' gate (word 0: done)."""
+    return IP(unsafe_from_address=Int(registers.words.unsafe_ptr()))
+
+
+def _sgd_rowsq_once(mut ctx: DeviceContext, mut wit: Witness, x: FP, n: Int, d: Int, sqp: FP) raises:
+    """The PA rates' |x_i|^2 (`sgd_rowsq_kernel`) once a fit, its own witness
+    unit: X does not change between epochs, so the per-epoch recompute (n d
+    multiply-adds an epoch) is gone; the same words."""
+    var tries = 0
+    while True:  # driver-loop: over Metal witness reruns of one launch (x_linear/witness.mojo), at most WITNESS_TRIES
+        var nonce = wit.begin()
+        ctx.enqueue_function[sgd_rowsq_kernel](
+            x, Int32(n), Int32(d), sqp, wit.p(), Int32(0), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+        )
+        if wit.ok(ctx, _xg_blocks(n), "SGD row norms"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
+
+
+struct _SgdMbEpochs(LoopStep, Movable):
+    """`_sgd_mb_grid`'s fit: its buffers and constants, and one epoch of
+    problem `c` as a step of the bounded device loop (`enqueue_step`)."""
+    var ctx: DeviceContext
+    var wit: Witness
+    var dx: DeviceBuffer[DType.float32]
+    var dy: DeviceBuffer[DType.float32]
+    var dys: DeviceBuffer[DType.float32]
+    var dsw: DeviceBuffer[DType.float32]
+    var didx: DeviceBuffer[DType.int32]
+    var ddl: DeviceBuffer[DType.float32]
+    var dlv: DeviceBuffer[DType.float32]
+    var dparts: DeviceBuffer[DType.float32]
+    # SGD_FAST_EPOCH_RESIDENT only: the second partials buffer; None on every other path (no allocation)
+    var dparts2: Optional[DeviceBuffer[DType.float32]]
+    var dw: DeviceBuffer[DType.float32]
+    var dbias: DeviceBuffer[DType.float32]
+    var dobj: DeviceBuffer[DType.float32]
+    var dws: DeviceBuffer[DType.float32]
+    var dbs: DeviceBuffer[DType.float32]
+    var dw2: DeviceBuffer[DType.float32]
+    var dbias2: DeviceBuffer[DType.float32]
+    var dcnt: DeviceBuffer[DType.int32]
+    var ddlt: DeviceBuffer[DType.float32]
+    var dci: DeviceBuffer[DType.int32]
+    var dcf: DeviceBuffer[DType.float32]
+    var ddotp: DeviceBuffer[DType.float32]
+    var dsq: DeviceBuffer[DType.float32]
+    var dstt: DeviceBuffer[DType.float32]
+    var dvp: DeviceBuffer[DType.float32]
+    var dact: DeviceBuffer[DType.int32]
+    var dres: DeviceBuffer[DType.float32]
+    var hci: List[Int32]
+    var hcf: List[Float32]
+    var hst: List[Float32]
+    var hb0: List[Float32]
+    var fp: List[Float32]
+    var k: Int
+    var loss: Int
+    var penalty: Int
+    var lr: Int
+    var fi: Bool
+    var max_iter: Int
+    var nic: Int
+    var do_shuffle: Bool
+    var seed_lo: Int32
+    var seed_hi: Int32
+    var has_sw: Bool
+    var has_cw: Bool
+    var bsum: Bool
+    var n: Int
+    var d: Int
+    var batch: Int
+    var problems: Int
+    var one_class: Bool
+    var alpha: Float32
+    var l1r: Float32
+    var eta0: Float32
+    var power_t: Float32
+    var eps: Float32
+    var tol: Float32
+    var sub: Int
+    var dblk: Int
+    var nsub: Int
+    var ocm: Int
+    var chunk: Int
+    var arm: Int
+    var pa_rate: Bool
+    var dev_eta: Int
+    var need_obj: Bool
+    var c: Int
+    var wpos: Float32
+    var wneg: Float32
+    var opt_init: Float32
+    var t: Int
+
+    def __init__(out self, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int) raises:
+        var ctx = linear_ctx()
+        var k = Int(ip[0])
+        var loss = Int(ip[1])
+        var penalty = Int(ip[2])
+        var lr = Int(ip[3])
+        var fi = Int(ip[4]) != 0
+        var has_sw = Int(ip[10]) != 0
+        var has_cw = Int(ip[11]) != 0
+        var batch = sgd_batch(Int(ip[12]), Int(ip[0]), n)
+        var bsum = len(ip) > 13 and Int(ip[13]) != 0
+        var alpha = fp[0]
+        var l1r = fp[1]
+        var eta0 = fp[2]
+        var power_t = fp[3]
+        var eps = fp[4]
+        var tol = fp[5]
+        if penalty == P_L2:
+            l1r = Float32(0)
+        elif penalty == P_L1:
+            l1r = Float32(1)
+        var problems = k if k > 2 else 1
+        var one_class = k == 1
+        var sub = mb_sub_size(batch)
+        var dblk = mb_dblk(batch)
+        var nsub = mb_subs(batch, sub)
+        var ocm = mb_oc_mode(one_class, fi, has_sw)
+        var chunk = _sgd_chunk()
+        var pa_rate = lr == LR_PA1 or lr == LR_PA2
+        var max_iter = Int(ip[5])
+        self.dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+        self.dys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        self.dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        self.didx = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+        self.ddl = ctx.enqueue_create_buffer[DType.float32](batch)
+        self.dlv = ctx.enqueue_create_buffer[DType.float32](batch)
+        self.dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
+        # SGD_FAST_EPOCH_RESIDENT: the second partials buffer, created only for that arm (the default path
+        # allocates nothing for it; it used to create a one-word buffer per fit here)
+        self.dparts2 = None
+        comptime if SGD_FAST_EPOCH_RESIDENT:
+            if ocm == 0 and sub == XG_TPB:
+                self.dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
+        self.dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+        # the intercept as (hi, lo): the one-class float-float (SGD_OC_MB_IMPLICIT;
+        # the low word stays 0 and unread with ocm 0)
+        self.dbias = ctx.enqueue_create_buffer[DType.float32](2)
+        self.dobj = ctx.enqueue_create_buffer[DType.float32](1)
+        self.dws = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+        self.dbs = ctx.enqueue_create_buffer[DType.float32](2)
+        # the implicit step's per-thread counts (the chunk kernel's width or a
+        # XG_TPB block) and the step word
+        self.dcnt = ctx.enqueue_create_buffer[DType.int32](max(SGD_CHUNK_TPB, XG_TPB))
+        self.ddlt = ctx.enqueue_create_buffer[DType.float32](1)
+        self.ddlt.enqueue_fill(Float32(0))
+        var hb0 = List[Float32](length=2, fill=Float32(0))
+        hb0[0] = Float32(1) if one_class else Float32(0)
+        # SGD_IDN_MB_FUSE: the pair the fused step writes while it reads dw / dbias
+        self.dw2 = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+        self.dbias2 = ctx.enqueue_create_buffer[DType.float32](2)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed) deleted 2026-11-09 by lane
+        # n3-sgd-minibatch-loops; code recoverable at integ/pre-0867-w2 f59d913b0b.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
+        var wcap = 0
+        var ws0 = 0
+        while ws0 < n:  # driver-loop: over the epoch's batches, sizing the witness words once a fit
+            var wbs = min(batch, n - ws0)
+            wcap += _sgd_row_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
+            ws0 += wbs
+        wcap += _xg_blocks(n)
+        var wit = Witness(ctx, max(wcap, 1))
+        self.dci = ctx.enqueue_create_buffer[DType.int32](17)
+        self.ddotp = ctx.enqueue_create_buffer[DType.float32](max(batch * ((d + MB_DBLK - 1) // MB_DBLK), 1))
+        self.dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
+        self.dcf = ctx.enqueue_create_buffer[DType.float32](9)
+        var hci = List[Int32](length=17, fill=Int32(0))
+        var hcf = List[Float32](length=9, fill=Float32(0))
+        hci[0] = Int32(n)
+        hci[1] = Int32(batch)
+        hci[2] = Int32(d)
+        hci[3] = Int32(loss)
+        hci[4] = Int32(1 if has_sw else 0)
+        hci[5] = Int32(1 if has_cw else 0)
+        hci[6] = Int32(lr)
+        hci[7] = Int32(nsub)
+        hci[8] = Int32(penalty)
+        hci[9] = Int32(1 if fi else 0)
+        hci[12] = Int32(1 if bsum else 0)
+        hci[13] = Int32(sub)
+        hci[14] = Int32(dblk)
+        hci[15] = Int32(1 if pa_rate else 0)
+        hci[16] = Int32(ocm)
+        hcf[0] = eps
+        hcf[3] = eta0
+        hcf[5] = alpha
+        hcf[6] = l1r
+        hcf[7] = power_t
+        if n_x > 0:
+            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+        if has_sw:
+            ctx.enqueue_copy(dst_buf=self.dsw, src_ptr=y + n)
+        self.dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        if not one_class and n > 0:
+            ctx.enqueue_copy(dst_buf=self.dy, src_ptr=y)
+        comptime if SGD_IDN_DEV_FINITE:
+            _sgd_finite_device(ctx, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n_x, y, n_y)
+        var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+        self.seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+        self.seed_hi = Int32(Int(UInt32(seed >> 32)))
+        # the epoch end on the device (x_linear/sgd_end.mojo): its state, the
+        # penalty fold's scratch, the result words
+        self.dstt = ctx.enqueue_create_buffer[DType.float32](SGD_MB_WORDS)
+        self.dvp = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
+        self.dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+        self.dres.enqueue_fill(Float32(0))
+        # the epoch end's activity word: always 1 here (the loop's gate stops
+        # the problem), the one-vs-rest driver's per-problem word otherwise
+        self.dact = ctx.enqueue_create_buffer[DType.int32](1)
+        self.dact.enqueue_fill(Int32(1))
+        self.dev_eta = 0 if (lr == LR_PA1 or lr == LR_PA2 or lr == LR_OPTIMAL or lr == LR_INVSCALING) else 1
+        self.need_obj = tol > Float32(-3.0e38)
+        var arm = SGD_ARM_THREE
+        if SGD_FAST_EPOCH_RESIDENT and ocm == 0 and sub == XG_TPB:
+            arm = SGD_ARM_FAST_RESIDENT
+        elif chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
+            # TOMBSTONE: lane fg-linear S1 (MOJOLEARN_IDN_SGD_EPOCH_KERNEL, large batches through this chunk kernel)
+            # deleted 2026-10-09 (lane postmerge-act-2): noise, sgd-clf istella NV 0.99x / AMD 1.00x, taxi 1.00x / 1.00x
+            # (nv n0606->n0615, amd a1065->a1074), accuracy SAME, same digests; code recoverable at main 5c137b55e.
+            arm = SGD_ARM_CHUNK
+        elif SGD_IDN_MB_FUSE:
+            arm = SGD_ARM_FUSE
+        if pa_rate and arm == SGD_ARM_CHUNK:
+            # the chunk kernel reads the PA rows' norms (ci[15]); once a fit
+            _sgd_rowsq_once(ctx, wit, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n, d,
+                            FP(unsafe_from_address=Int(self.dsq.unsafe_ptr())))
+        self.wit = wit^
+        self.hci = hci^
+        self.hcf = hcf^
+        self.hst = List[Float32](length=SGD_MB_WORDS, fill=Float32(0))
+        self.hb0 = hb0^
+        self.fp = fp.copy()
+        self.k = k
+        self.loss = loss
+        self.penalty = penalty
+        self.lr = lr
+        self.fi = fi
+        self.max_iter = max_iter
+        self.nic = Int(ip[6])
+        self.do_shuffle = Int(ip[7]) != 0
+        self.has_sw = has_sw
+        self.has_cw = has_cw
+        self.bsum = bsum
+        self.n = n
+        self.d = d
+        self.batch = batch
+        self.problems = problems
+        self.one_class = one_class
+        self.alpha = alpha
+        self.l1r = l1r
+        self.eta0 = eta0
+        self.power_t = power_t
+        self.eps = eps
+        self.tol = tol
+        self.sub = sub
+        self.dblk = dblk
+        self.nsub = nsub
+        self.ocm = ocm
+        self.chunk = chunk
+        self.arm = arm
+        self.pa_rate = pa_rate
+        self.c = 0
+        self.wpos = Float32(1)
+        self.wneg = Float32(1)
+        self.opt_init = Float32(0)
+        self.t = 1
+        self.ctx = ctx^
+
+    def epoch_launches(self) -> Int:
+        """The launches of one epoch on this fit's arm (the cost of an epoch
+        enqueued past the stop: each returns at once)."""
+        var nb = (self.n + self.batch - 1) // max(self.batch, 1)
+        var tail = 3 + (1 if self.do_shuffle else 0)
+        if self.arm == SGD_ARM_FAST_RESIDENT:
+            return nb + 1 + tail
+        if self.arm == SGD_ARM_CHUNK:
+            return (nb + self.chunk - 1) // max(self.chunk, 1) + tail
+        var per = 2 + (1 if self.ocm == 2 else 0)
+        if self.arm == SGD_ARM_THREE:
+            per += 1
+        return nb * per + 1 + tail
+
+    def begin_problem(mut self, c: Int) raises:
+        """Problem c's targets, identity order, zero weights, start state and
+        launch constants (sgd_fit's statements), enqueued; the previous
+        problem's loop ended on a read, so the host words are free."""
+        var cx = self.ctx.copy()
+        self.c = c
+        # the targets and the identity order on the device (sgd_fit's statements)
+        cx.enqueue_function[sgd_ys_kernel](
+            self.dy.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(), Int32(self.n), Int32(self.k), Int32(c),
+            Int32(1 if self.one_class else 0), grid_dim=_xg_blocks(self.n), block_dim=XG_TPB,
+        )
+        self.dw.enqueue_fill(Float32(0))
+        cx.enqueue_copy(dst_buf=self.dbias, src_ptr=self.hb0.unsafe_ptr())
+        self.wpos = self.fp[6 + c] if self.has_cw else Float32(1)
+        self.wneg = self.fp[6 + self.problems + c] if self.has_cw else Float32(1)
+        self.opt_init = mb_optimal_init(self.loss, self.alpha, self.eps) if self.lr == LR_OPTIMAL else Float32(0)
+        self.t = 1
+        self.hst[0] = Float32(3.0e38)
+        self.hst[1] = Float32(0)
+        self.hst[2] = self.eta0
+        cx.enqueue_copy(dst_buf=self.dstt, src_ptr=self.hst.unsafe_ptr())
+        self.hcf[4] = self.eta0
+        self.hcf[1] = self.wpos
+        self.hcf[2] = self.wneg
+        self.hcf[8] = self.opt_init
+        self.hci[10] = Int32(1 if self.need_obj else 0)
+        self.hci[11] = Int32(1 if self.one_class else 0)
+        cx.enqueue_copy(dst_buf=self.dci, src_ptr=self.hci.unsafe_ptr())
+        cx.enqueue_copy(dst_buf=self.dcf, src_ptr=self.hcf.unsafe_ptr())
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        """Epoch `it - 1` of problem `c`: its batches (the arm's kernels), the
+        epoch end, the averaging sum, the criterion; every kernel gated."""
+        var cx = self.ctx.copy()
+        var epoch = it - 1
+        var gate = _sgd_gate(registers)
+        var par = epoch % 2
+        var n = self.n
+        var d = self.d
+        var batch = self.batch
+        var lr = self.lr
+        var eta0 = self.eta0
+        var alpha = self.alpha
+        var power_t = self.power_t
+        var bsum = self.bsum
+        # the epoch as ONE guarded unit (x_linear/witness.mojo): its steps
+        # update the weights in place, so a cut epoch restores the weights
+        # it started from and replays the same batches
+        cx.enqueue_copy(dst_buf=self.dws, src_buf=self.dw)
+        cx.enqueue_copy(dst_buf=self.dbs, src_buf=self.dbias)
+        var t_start = self.t
+        var tries = 0
+        while True:  # driver-loop: over Metal witness reruns of one epoch (x_linear/witness.mojo), at most WITNESS_TRIES
+            var nonce = self.wit.begin()
+            var wo = 0
+            var t = t_start
+            if self.do_shuffle:
+                # the epoch's order on the device (a thread a row; idempotent)
+                cx.enqueue_function[sgd_perm_kernel](
+                    self.didx.unsafe_ptr(), Int32(n), self.seed_lo, self.seed_hi, Int32(epoch), Int32(self.c), Int32(1),
+                    gate, grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                )
+            # TOMBSTONE: MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS (removed: the per-epoch re-gather of
+            # X, y and sw) deleted 2026-11-09 by lane n3-sgd-minibatch-loops; code recoverable at
+            # integ/pre-0867-w2 f59d913b0b.
+            # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
+            # The batch kernels read the rows through the epoch's order.
+            var xk = FP(unsafe_from_address=Int(self.dx.unsafe_ptr()))
+            var ysk = FP(unsafe_from_address=Int(self.dys.unsafe_ptr()))
+            var swk = FP(unsafe_from_address=Int(self.dsw.unsafe_ptr()))
+            var idxk = IP(unsafe_from_address=Int(self.didx.unsafe_ptr()))
+            var etp = FP(unsafe_from_address=Int(self.dstt.unsafe_ptr())) + 4 * par + 2
+            self.dobj.enqueue_fill(Float32(0))
+            var start = 0
+            if self.arm == SGD_ARM_FAST_RESIDENT:
+                # one launch per minibatch (sgd_mb_fast_batch_kernel's
+                # comment); weights ping-pong dw/dbias <-> dw2/dbias2,
+                # partials dparts <-> dparts2. cur 0: weights in dw.
+                var cur = 0
+                var bs_prev = 0
+                var et_prev = eta0
+                var pp = 0
+                var wa = Int(self.dw.unsafe_ptr())
+                var wb = Int(self.dw2.unsafe_ptr())
+                var ba = Int(self.dbias.unsafe_ptr())
+                var bb = Int(self.dbias2.unsafe_ptr())
+                var pa = Int(self.dparts.unsafe_ptr())
+                var pb = Int(self.dparts2.value().unsafe_ptr())
+                while start < n:  # driver-loop: over the epoch's minibatches, one launch each
+                    var bs = min(batch, n - start)
+                    var et = mb_eta(lr, eta0, eta0, alpha, power_t, self.opt_init, t)
+                    var stepped = bs_prev > 0
+                    cx.enqueue_function[sgd_mb_fast_batch_kernel](
+                        FP(unsafe_from_address=pb if pp == 0 else pa),
+                        FP(unsafe_from_address=pa if pp == 0 else pb),
+                        FP(unsafe_from_address=wa if cur == 0 else wb),
+                        FP(unsafe_from_address=ba if cur == 0 else bb),
+                        FP(unsafe_from_address=wb if cur == 0 else wa),
+                        FP(unsafe_from_address=bb if cur == 0 else ba),
+                        self.dobj.unsafe_ptr(), self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(),
+                        self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(),
+                        self.dcf.unsafe_ptr(), etp,
+                        Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(self.dev_eta),
+                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(bs)
+                    if stepped:
+                        cur = 1 - cur
+                    # this batch's partials went to the buffer pp names
+                    pp = 1 - pp
+                    bs_prev = bs
+                    et_prev = et
+                    t += bs if bsum else 1
+                    start += bs
+                if bs_prev > 0:
+                    # the last batch's step into dw / dbias (in place
+                    # when cur == 0: one block, a thread per word)
+                    cx.enqueue_function[sgd_mb_fast_batch_kernel](
+                        FP(unsafe_from_address=pb if pp == 0 else pa),
+                        FP(unsafe_from_address=pa if pp == 0 else pb),
+                        FP(unsafe_from_address=wa if cur == 0 else wb),
+                        FP(unsafe_from_address=ba if cur == 0 else bb),
+                        FP(unsafe_from_address=wa), FP(unsafe_from_address=ba),
+                        self.dobj.unsafe_ptr(), self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(),
+                        self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(),
+                        self.dcf.unsafe_ptr(), etp,
+                        Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(self.dev_eta),
+                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                    )
+                    wo += 1
+            elif self.arm == SGD_ARM_CHUNK:
+                # the PA rows' norms are the fit's (`_sgd_rowsq_once`), not
+                # recomputed an epoch
+                while start < n:  # driver-loop: over the epoch's chunks of `chunk` minibatches, one launch each
+                    var nbt = 0
+                    var tt = t
+                    var s1 = start
+                    while nbt < self.chunk and s1 < n:  # driver-loop: over a chunk's minibatches, counting t on the host
+                        var bs1 = min(batch, n - s1)
+                        tt += bs1 if bsum else 1
+                        s1 += bs1
+                        nbt += 1
+                    cx.enqueue_function[sgd_mb_chunk_kernel](
+                        self.dx.unsafe_ptr(), self.dys.unsafe_ptr(), self.didx.unsafe_ptr(), self.dw.unsafe_ptr(),
+                        self.dbias.unsafe_ptr(), self.dsw.unsafe_ptr(), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(),
+                        self.dparts.unsafe_ptr(), self.dobj.unsafe_ptr(), self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(),
+                        self.ddotp.unsafe_ptr(), self.dsq.unsafe_ptr(), self.dcnt.unsafe_ptr(),
+                        Int32(start), Int32(nbt), Int32(t),
+                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=SGD_CHUNK_TPB,
+                    )
+                    wo += 1
+                    t = tt
+                    start = s1
+            elif self.arm == SGD_ARM_FUSE:
+                # the weights are in dw / dbias at the epoch's start (and
+                # after a restore); cur names the pair the last step wrote
+                var cur = 0
+                var bs_prev = 0
+                var et_prev = eta0
+                # host-side addresses (the two pairs swap roles a batch)
+                var wa = Int(self.dw.unsafe_ptr())
+                var wb = Int(self.dw2.unsafe_ptr())
+                var ba = Int(self.dbias.unsafe_ptr())
+                var bb = Int(self.dbias2.unsafe_ptr())
+                while start < n:  # driver-loop: over the epoch's minibatches, two or three launches each
+                    var bs = min(batch, n - start)
+                    var et = mb_eta(lr, eta0, eta0, alpha, power_t, self.opt_init, t)
+                    if bs_prev == 0:
+                        cx.enqueue_function[sgd_mb_rows_kernel](
+                            xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
+                            self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), Int32(self.loss), self.eps, swk,
+                            Int32(1 if self.has_sw else 0), self.wpos, self.wneg, Int32(1 if self.has_cw else 0),
+                            self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), Int32(lr), eta0, Int32(self.dblk),
+                            Int32(self.ocm), gate, self.wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs),
+                            block_dim=SGD_ROW_TPB,
+                        )
+                    else:
+                        var w_src = FP(unsafe_from_address=wa if cur == 0 else wb)
+                        var b_src = FP(unsafe_from_address=ba if cur == 0 else bb)
+                        var w_dst = FP(unsafe_from_address=wb if cur == 0 else wa)
+                        var b_dst = FP(unsafe_from_address=bb if cur == 0 else ba)
+                        cx.enqueue_function[sgd_mb_steprows_kernel](
+                            self.dparts.unsafe_ptr(), w_src, b_src, w_dst, b_dst,
+                            self.dobj.unsafe_ptr(), xk, ysk, idxk, swk,
+                            self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(),
+                            etp, self.ddlt.unsafe_ptr(),
+                            Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(self.dev_eta),
+                            gate, self.wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
+                        )
+                        cur = 1 - cur
+                    wo += _sgd_row_blocks(bs)
+                    if self.ocm == 2:
+                        # the implicit step of this batch (its rows' margins
+                        # above), dlt[0] for the step the next launch takes
+                        cx.enqueue_function[sgd_mb_oc_kernel](
+                            self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
+                            self.dcnt.unsafe_ptr(), self.ddlt.unsafe_ptr(), etp, Int32(self.dev_eta), gate, self.wit.p(),
+                            Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                        )
+                        wo += 1
+                    cx.enqueue_function[sgd_mb_parts_kernel](
+                        xk, Int32(d), idxk, Int32(start), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(),
+                        Int32(bs), Int32(self.nsub), self.dparts.unsafe_ptr(), Int32(self.sub), gate, self.wit.p(),
+                        Int32(wo), nonce, grid_dim=_xg_blocks((d + 2) * mb_subs(bs, self.sub)), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks((d + 2) * mb_subs(bs, self.sub))
+                    bs_prev = bs
+                    et_prev = et
+                    t += bs if bsum else 1
+                    start += bs
+                # the last batch's step, landing in dw / dbias: in place
+                # when the weights are there, else the step-only launch
+                if bs_prev > 0 and cur == 0:
+                    cx.enqueue_function[sgd_mb_step_kernel](
+                        self.dparts.unsafe_ptr(), Int32(self.nsub), Int32(bs_prev), Int32(d), self.dw.unsafe_ptr(),
+                        self.dbias.unsafe_ptr(), self.dobj.unsafe_ptr(), et_prev, alpha, self.l1r, Int32(self.penalty),
+                        Int32(1 if self.fi else 0), Int32(1 if self.need_obj else 0),
+                        Int32(1 if self.one_class else 0), Int32(1 if bsum else 0), Int32(self.sub),
+                        etp, Int32(self.dev_eta), Int32(self.ocm), self.ddlt.unsafe_ptr(), gate, self.wit.p(),
+                        Int32(wo), nonce, grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(d + 2)
+                elif bs_prev > 0:
+                    cx.enqueue_function[sgd_mb_steprows_kernel](
+                        self.dparts.unsafe_ptr(), self.dw2.unsafe_ptr(), self.dbias2.unsafe_ptr(), self.dw.unsafe_ptr(),
+                        self.dbias.unsafe_ptr(), self.dobj.unsafe_ptr(), xk, ysk, idxk, swk,
+                        self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(),
+                        etp, self.ddlt.unsafe_ptr(),
+                        Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(self.dev_eta),
+                        gate, self.wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                    )
+                    wo += 1
+            else:
+                while start < n:  # driver-loop: over the epoch's minibatches, three or four launches each
+                    var bs = min(batch, n - start)
+                    var et = mb_eta(lr, eta0, eta0, alpha, power_t, self.opt_init, t)
+                    cx.enqueue_function[sgd_mb_rows_kernel](
+                        xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
+                        self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), Int32(self.loss), self.eps, swk,
+                        Int32(1 if self.has_sw else 0), self.wpos, self.wneg, Int32(1 if self.has_cw else 0),
+                        self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), Int32(lr), eta0, Int32(self.dblk),
+                        Int32(self.ocm), gate, self.wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs),
+                        block_dim=SGD_ROW_TPB,
+                    )
+                    wo += _sgd_row_blocks(bs)
+                    if self.ocm == 2:
+                        cx.enqueue_function[sgd_mb_oc_kernel](
+                            self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
+                            self.dcnt.unsafe_ptr(), self.ddlt.unsafe_ptr(), etp,
+                            Int32(self.dev_eta), gate, self.wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                        )
+                        wo += 1
+                    cx.enqueue_function[sgd_mb_parts_kernel](
+                        xk, Int32(d), idxk, Int32(start), self.ddl.unsafe_ptr(), self.dlv.unsafe_ptr(),
+                        Int32(bs), Int32(self.nsub), self.dparts.unsafe_ptr(), Int32(self.sub), gate, self.wit.p(),
+                        Int32(wo), nonce, grid_dim=_xg_blocks((d + 2) * mb_subs(bs, self.sub)), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks((d + 2) * mb_subs(bs, self.sub))
+                    cx.enqueue_function[sgd_mb_step_kernel](
+                        self.dparts.unsafe_ptr(), Int32(self.nsub), Int32(bs), Int32(d), self.dw.unsafe_ptr(),
+                        self.dbias.unsafe_ptr(), self.dobj.unsafe_ptr(), et, alpha, self.l1r, Int32(self.penalty),
+                        Int32(1 if self.fi else 0), Int32(1 if self.need_obj else 0),
+                        Int32(1 if self.one_class else 0), Int32(1 if bsum else 0), Int32(self.sub),
+                        etp, Int32(self.dev_eta), Int32(self.ocm),
+                        self.ddlt.unsafe_ptr(), gate, self.wit.p(), Int32(wo), nonce,
+                        grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(d + 2)
+                    t += bs if bsum else 1
+                    start += bs
+            if self.wit.ok(cx, wo, "SGD epoch"):
+                self.t = t
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                self.wit.fail()
+            cx.enqueue_copy(dst_buf=self.dw, src_buf=self.dws)
+            cx.enqueue_copy(dst_buf=self.dbias, src_buf=self.dbs)
+        # the epoch end (one block, its own guarded unit; reads parity par,
+        # writes 1 - par); its stop and failed words stay on the device
+        tries = 0
+        while True:  # driver-loop: over Metal witness reruns of the epoch end, at most WITNESS_TRIES
+            var nonce = self.wit.begin()
+            cx.enqueue_function[sgd_mb_end_kernel](  # small-launch(d: weights): one block strides the d weights and two vfold sums; n only divides the objective
+                self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dobj.unsafe_ptr(), self.dstt.unsafe_ptr(),
+                self.dcf.unsafe_ptr(), self.dvp.unsafe_ptr(), Int32(d), Int32(n), alpha, self.l1r, Int32(self.penalty),
+                self.tol, Int32(self.nic), Int32(lr), Int32(1 if self.need_obj else 0),
+                Int32(1 if self.one_class else 0), Int32(par), gate, self.dact.unsafe_ptr(), self.wit.p(), Int32(0),
+                nonce, grid_dim=1, block_dim=SGD_END_TPB,
+            )
+            if self.wit.ok(cx, 1, "SGD epoch end"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                self.wit.fail()
+        var flags = FP(unsafe_from_address=Int(self.dstt.unsafe_ptr())) + SGD_MB_FLAGS
+        cx.enqueue_function[sgd_flags_crit_kernel](  # small-launch(one word): the epoch loop's stop criterion
+            gate, flags, Int32(it), grid_dim=1, block_dim=1,
+        )
+        loop_lap(ctx, timers, "sgd_epoch")
+
+    def end_problem(mut self, outcome: LoopOutcome, failed: Bool) raises -> Int:
+        """Problem c's result words; the epochs it ran."""
+        var cx = self.ctx.copy()
+        var epochs = outcome.stop_iteration if outcome.converged else max(self.max_iter, 0)
+        cx.enqueue_function[sgd_mb_res_kernel](
+            self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dres.unsafe_ptr(), Int32(self.c), Int32(self.d),
+            Int32(self.problems), Int32((2 if self.ocm != 0 else 1) if self.one_class else 0),
+            Int32(1 if failed else 0), grid_dim=_xg_blocks(self.d + 1), block_dim=XG_TPB,
+        )
+        return epochs
+
+
 def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
                  n_out: Int, res: FP) raises:
-    var ctx = linear_ctx()
+    """The minibatch fit (`sgd_mb_one` per problem): each problem's epochs as
+    the bounded device loop over `_SgdMbEpochs`."""
     var k = Int(ip[0])
-    var loss = Int(ip[1])
-    var penalty = Int(ip[2])
-    var lr = Int(ip[3])
-    var fi = Int(ip[4]) != 0
-    var max_iter = Int(ip[5])
-    var nic = Int(ip[6])
-    var do_shuffle = Int(ip[7]) != 0
-    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
-    var has_sw = Int(ip[10]) != 0
-    var has_cw = Int(ip[11]) != 0
-    var batch = sgd_batch(Int(ip[12]), Int(ip[0]), n)
-    var bsum = len(ip) > 13 and Int(ip[13]) != 0
-    var alpha = fp[0]
-    var l1r = fp[1]
-    var eta0 = fp[2]
-    var power_t = fp[3]
-    var eps = fp[4]
-    var tol = fp[5]
-    if penalty == P_L2:
-        l1r = Float32(0)
-    elif penalty == P_L1:
-        l1r = Float32(1)
     var problems = k if k > 2 else 1
-    var one_class = k == 1
     # lane fam2-linear: the one-vs-rest problems side by side (SGD_IDN_OVR_PAR)
-    if _sgd_mb_ovr_applies(problems, n, d, batch, _sgd_chunk()):
+    if _sgd_mb_ovr_applies(problems, n, d, sgd_batch(Int(ip[12]), k, n), _sgd_chunk()):
         _sgd_mb_ovr_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
-    var sub = mb_sub_size(batch)
-    var dblk = mb_dblk(batch)
-    var nsub = mb_subs(batch, sub)
-    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var didx = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
-    var ddl = ctx.enqueue_create_buffer[DType.float32](batch)
-    var dlv = ctx.enqueue_create_buffer[DType.float32](batch)
-    var dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
-    # SGD_FAST_EPOCH_RESIDENT: the second partials buffer (one word otherwise)
-    var dparts2 = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub if SGD_FAST_EPOCH_RESIDENT else 1)
-    var dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    # the intercept as (hi, lo): the one-class float-float (SGD_OC_MB_IMPLICIT;
-    # the low word stays 0 and unread with ocm 0)
-    var dbias = ctx.enqueue_create_buffer[DType.float32](2)
-    var dobj = ctx.enqueue_create_buffer[DType.float32](1)
-    var dws = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbs = ctx.enqueue_create_buffer[DType.float32](2)
-    var ocm = mb_oc_mode(one_class, fi, has_sw)
-    # the implicit step's per-thread counts (the chunk kernel's width or a
-    # XG_TPB block) and the step word
-    var dcnt = ctx.enqueue_create_buffer[DType.int32](max(SGD_CHUNK_TPB, XG_TPB))
-    var ddlt = ctx.enqueue_create_buffer[DType.float32](1)
-    ddlt.enqueue_fill(Float32(0))
-    var hb0 = List[Float32](length=2, fill=Float32(0))
-    hb0[0] = Float32(1) if one_class else Float32(0)
-    # SGD_IDN_MB_FUSE: the pair the fused step writes while it reads dw / dbias
-    var dw2 = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbias2 = ctx.enqueue_create_buffer[DType.float32](2)
-    # SGD_IDN_EPOCH_CONTIGUOUS: the permuted copies (one word each otherwise).
-    # Gate: free device memory covers the copies twice over (the batch
-    # kernels' own buffers are small; the margin is for the allocator).
-    var contiguous = False
-    comptime if SGD_IDN_EPOCH_CONTIGUOUS:
-        if do_shuffle:
-            var mem = ctx.get_memory_info()
-            contiguous = Int(mem[0]) >= 2 * 4 * (n_x + 2 * n)
-    var dxp = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1) if contiguous else 1)
-    var dysp = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if contiguous else 1)
-    var dswp = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if contiguous else 1)
-    var didn = ctx.enqueue_create_buffer[DType.int32](max(n, 1) if contiguous else 1)
-    var wcap = 0
-    var ws0 = 0
-    while ws0 < n:
-        var wbs = min(batch, n - ws0)
-        wcap += _sgd_row_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
-        ws0 += wbs
-    wcap += _xg_blocks(n)
-    if contiguous:
-        wcap += _xg_blocks(n_x) + _xg_blocks(n)
-    var wit = Witness(ctx, max(wcap, 1))
-    var chunk = _sgd_chunk()
-    var dci = ctx.enqueue_create_buffer[DType.int32](17)
-    var ddotp = ctx.enqueue_create_buffer[DType.float32](max(batch * ((d + MB_DBLK - 1) // MB_DBLK), 1))
-    var pa_rate = lr == LR_PA1 or lr == LR_PA2
-    var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
-    var dcf = ctx.enqueue_create_buffer[DType.float32](9)
-    var hci = List[Int32](length=17, fill=Int32(0))
-    var hcf = List[Float32](length=9, fill=Float32(0))
-    hci[0] = Int32(n)
-    hci[1] = Int32(batch)
-    hci[2] = Int32(d)
-    hci[3] = Int32(loss)
-    hci[4] = Int32(1 if has_sw else 0)
-    hci[5] = Int32(1 if has_cw else 0)
-    hci[6] = Int32(lr)
-    hci[7] = Int32(nsub)
-    hci[8] = Int32(penalty)
-    hci[9] = Int32(1 if fi else 0)
-    hci[12] = Int32(1 if bsum else 0)
-    hci[13] = Int32(sub)
-    hci[14] = Int32(dblk)
-    hci[15] = Int32(1 if pa_rate else 0)
-    hci[16] = Int32(ocm)
-    hcf[0] = eps
-    hcf[3] = eta0
-    hcf[5] = alpha
-    hcf[6] = l1r
-    hcf[7] = power_t
-    if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    if has_sw:
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
-    var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    if not one_class and n > 0:
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
-    comptime if SGD_IDN_DEV_FINITE:
-        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
-    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
-    var seed_hi = Int32(Int(UInt32(seed >> 32)))
-    # the epoch end on the device (x_linear/sgd_end.mojo): its state, the
-    # penalty fold's scratch, the result words
-    var dstt = ctx.enqueue_create_buffer[DType.float32](SGD_MB_WORDS)
-    var dvp = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
-    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
-    dres.enqueue_fill(Float32(0))
-    var hst = List[Float32](length=SGD_MB_WORDS, fill=Float32(0))
-    var hfl = List[Float32](length=2, fill=Float32(0))
-    var dev_eta = 0 if (lr == LR_PA1 or lr == LR_PA2 or lr == LR_OPTIMAL or lr == LR_INVSCALING) else 1
-    var need_obj = tol > Float32(-3.0e38)
+    var ctx = linear_ctx()
+    var step = _SgdMbEpochs(x, n_x, y, n_y, n, d, ip, fp, n_out)
+    var check = sgd_loop_check_every(step.epoch_launches(), step.max_iter, step.need_obj)
+    var registers = LoopRegisters(ctx)
     var max_epochs = 0
     var status = 0
-    # SGD_PERC_AVG (x_linear/sgd_avg.mojo): the epoch-end iterate sums
-    var avg = sgd_perc_avg_on(loss, lr, k, max_iter)
-    var avg_from = sgd_perc_avg_from(max_iter)
-    var dacc = ctx.enqueue_create_buffer[DType.float32](d + 1)
-    for c in range(problems):
-        var navg = 0
-        if avg:
-            dacc.enqueue_fill(Float32(0))
-        # the targets and the identity order on the device (sgd_fit's statements)
-        ctx.enqueue_function[sgd_ys_kernel](
-            dy.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(k), Int32(c),
-            Int32(1 if one_class else 0), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-        )
-        dw.enqueue_fill(Float32(0))
-        ctx.enqueue_copy(dst_buf=dbias, src_ptr=hb0.unsafe_ptr())
-        var wpos = fp[6 + c] if has_cw else Float32(1)
-        var wneg = fp[6 + problems + c] if has_cw else Float32(1)
-        var eta = eta0
-        var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
-        var t = 1
-        var epochs = 0
-        var failed = False
-        hst[0] = Float32(3.0e38)
-        hst[1] = Float32(0)
-        hst[2] = eta0
-        ctx.enqueue_copy(dst_buf=dstt, src_ptr=hst.unsafe_ptr())
-        hcf[4] = eta0
-        hcf[1] = wpos
-        hcf[2] = wneg
-        hcf[8] = opt_init
-        hci[10] = Int32(1 if need_obj else 0)
-        hci[11] = Int32(1 if one_class else 0)
-        ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
-        for epoch in range(max_iter):
-            epochs = epoch + 1
-            var par = epoch % 2
-            # the epoch as ONE guarded unit (x_linear/witness.mojo): its steps
-            # update the weights in place, so a cut epoch restores the weights
-            # it started from and replays the same batches
-            ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
-            ctx.enqueue_copy(dst_buf=dbs, src_buf=dbias)
-            var t_start = t
-            var tries = 0
-            while True:
-                var nonce = wit.begin()
-                var wo = 0
-                t = t_start
-                if do_shuffle:
-                    # the epoch's order on the device (a thread a row; idempotent)
-                    ctx.enqueue_function[sgd_perm_kernel](
-                        didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(c), Int32(1),
-                        grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-                    )
-                # SGD_IDN_EPOCH_CONTIGUOUS: the epoch's rows, targets and
-                # weights gathered once into contiguous copies (inside the
-                # guarded unit, so a replay regathers); the batch kernels
-                # below read the copies through the identity order
-                var xk = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
-                var ysk = FP(unsafe_from_address=Int(dys.unsafe_ptr()))
-                var swk = FP(unsafe_from_address=Int(dsw.unsafe_ptr()))
-                var idxk = IP(unsafe_from_address=Int(didx.unsafe_ptr()))
-                if contiguous:
-                    ctx.enqueue_function[sgd_gather_x_kernel](
-                        dxp.unsafe_ptr(), dx.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(d),
-                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n_x), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(n_x)
-                    ctx.enqueue_function[sgd_gather_vec_kernel](
-                        dysp.unsafe_ptr(), dys.unsafe_ptr(), dswp.unsafe_ptr(), dsw.unsafe_ptr(), didn.unsafe_ptr(),
-                        didx.unsafe_ptr(), Int32(n), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(n)
-                    xk = FP(unsafe_from_address=Int(dxp.unsafe_ptr()))
-                    ysk = FP(unsafe_from_address=Int(dysp.unsafe_ptr()))
-                    swk = FP(unsafe_from_address=Int(dswp.unsafe_ptr()))
-                    idxk = IP(unsafe_from_address=Int(didn.unsafe_ptr()))
-                dobj.enqueue_fill(Float32(0))
-                var start = 0
-                var fast_fused = False
-                comptime if SGD_FAST_EPOCH_RESIDENT:
-                    # one launch per minibatch (sgd_mb_fast_batch_kernel's
-                    # comment); weights ping-pong dw/dbias <-> dw2/dbias2,
-                    # partials dparts <-> dparts2. cur 0: weights in dw.
-                    if ocm == 0 and sub == XG_TPB:
-                        fast_fused = True
-                        var cur = 0
-                        var bs_prev = 0
-                        var et_prev = eta0
-                        var pp = 0
-                        var etp = FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2
-                        var wa = Int(dw.unsafe_ptr())
-                        var wb = Int(dw2.unsafe_ptr())
-                        var ba = Int(dbias.unsafe_ptr())
-                        var bb = Int(dbias2.unsafe_ptr())
-                        var pa = Int(dparts.unsafe_ptr())
-                        var pb = Int(dparts2.unsafe_ptr())
-                        while start < n:
-                            var bs = min(batch, n - start)
-                            var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
-                            var stepped = bs_prev > 0
-                            ctx.enqueue_function[sgd_mb_fast_batch_kernel](
-                                FP(unsafe_from_address=pb if pp == 0 else pa),
-                                FP(unsafe_from_address=pa if pp == 0 else pb),
-                                FP(unsafe_from_address=wa if cur == 0 else wb),
-                                FP(unsafe_from_address=ba if cur == 0 else bb),
-                                FP(unsafe_from_address=wb if cur == 0 else wa),
-                                FP(unsafe_from_address=bb if cur == 0 else ba),
-                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
-                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
-                                Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
-                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
-                            )
-                            wo += _xg_blocks(bs)
-                            if stepped:
-                                cur = 1 - cur
-                            # this batch's partials went to the buffer pp names
-                            pp = 1 - pp
-                            bs_prev = bs
-                            et_prev = et
-                            t += bs if bsum else 1
-                            start += bs
-                        if bs_prev > 0:
-                            # the last batch's step into dw / dbias (in place
-                            # when cur == 0: one block, a thread per word)
-                            ctx.enqueue_function[sgd_mb_fast_batch_kernel](
-                                FP(unsafe_from_address=pb if pp == 0 else pa),
-                                FP(unsafe_from_address=pa if pp == 0 else pb),
-                                FP(unsafe_from_address=wa if cur == 0 else wb),
-                                FP(unsafe_from_address=ba if cur == 0 else bb),
-                                FP(unsafe_from_address=wa), FP(unsafe_from_address=ba),
-                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
-                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
-                                Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(dev_eta),
-                                wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
-                            )
-                            wo += 1
-                if fast_fused:
-                    pass
-                elif chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
-                    # TOMBSTONE: lane fg-linear S1 (MOJOLEARN_IDN_SGD_EPOCH_KERNEL, large batches through this chunk kernel)
-                    # deleted 2026-10-09 (lane postmerge-act-2): noise, sgd-clf istella NV 0.99x / AMD 1.00x, taxi 1.00x / 1.00x
-                    # (nv n0606->n0615, amd a1065->a1074), accuracy SAME, same digests; code recoverable at main 5c137b55e.
-                    if pa_rate:
-                        ctx.enqueue_function[sgd_rowsq_kernel](
-                            dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-                        )
-                        wo += _xg_blocks(n)
-                    while start < n:
-                        var nbt = 0
-                        var tt = t
-                        var s1 = start
-                        while nbt < chunk and s1 < n:
-                            var bs1 = min(batch, n - s1)
-                            tt += bs1 if bsum else 1
-                            s1 += bs1
-                            nbt += 1
-                        ctx.enqueue_function[sgd_mb_chunk_kernel](
-                            dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                            dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
-                            dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dcnt.unsafe_ptr(),
-                            Int32(start), Int32(nbt), Int32(t),
-                            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=SGD_CHUNK_TPB,
-                        )
-                        wo += 1
-                        t = tt
-                        start = s1
-                elif SGD_IDN_MB_FUSE:
-                    # the weights are in dw / dbias at the epoch's start (and
-                    # after a restore); cur names the pair the last step wrote
-                    var cur = 0
-                    var bs_prev = 0
-                    var et_prev = eta0
-                    var etp = FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2
-                    # host-side addresses (the two pairs swap roles a batch)
-                    var wa = Int(dw.unsafe_ptr())
-                    var wb = Int(dw2.unsafe_ptr())
-                    var ba = Int(dbias.unsafe_ptr())
-                    var bb = Int(dbias2.unsafe_ptr())
-                    while start < n:
-                        var bs = min(batch, n - start)
-                        var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
-                        if bs_prev == 0:
-                            ctx.enqueue_function[sgd_mb_rows_kernel](
-                                xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
-                                dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, swk, Int32(1 if has_sw else 0),
-                                wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                                Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
-                            )
-                        else:
-                            var w_src = FP(unsafe_from_address=wa if cur == 0 else wb)
-                            var b_src = FP(unsafe_from_address=ba if cur == 0 else bb)
-                            var w_dst = FP(unsafe_from_address=wb if cur == 0 else wa)
-                            var b_dst = FP(unsafe_from_address=bb if cur == 0 else ba)
-                            ctx.enqueue_function[sgd_mb_steprows_kernel](
-                                dparts.unsafe_ptr(), w_src, b_src, w_dst, b_dst,
-                                dobj.unsafe_ptr(), xk, ysk, idxk, swk,
-                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
-                                Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
-                                wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
-                            )
-                            cur = 1 - cur
-                        wo += _sgd_row_blocks(bs)
-                        if ocm == 2:
-                            # the implicit step of this batch (its rows' margins
-                            # above), dlt[0] for the step the next launch takes
-                            ctx.enqueue_function[sgd_mb_oc_kernel](
-                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
-                                dcnt.unsafe_ptr(), ddlt.unsafe_ptr(), etp, Int32(dev_eta), wit.p(), Int32(wo), nonce,
-                                grid_dim=1, block_dim=XG_TPB,
-                            )
-                            wo += 1
-                        ctx.enqueue_function[sgd_mb_parts_kernel](
-                            xk, Int32(d), idxk, Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
-                            Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
-                        )
-                        wo += _xg_blocks((d + 2) * mb_subs(bs, sub))
-                        bs_prev = bs
-                        et_prev = et
-                        t += bs if bsum else 1
-                        start += bs
-                    # the last batch's step, landing in dw / dbias: in place
-                    # when the weights are there, else the step-only launch
-                    if bs_prev > 0 and cur == 0:
-                        ctx.enqueue_function[sgd_mb_step_kernel](
-                            dparts.unsafe_ptr(), Int32(nsub), Int32(bs_prev), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                            dobj.unsafe_ptr(), et_prev, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub),
-                            etp, Int32(dev_eta), Int32(ocm), ddlt.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
-                        )
-                        wo += _xg_blocks(d + 2)
-                    elif bs_prev > 0:
-                        ctx.enqueue_function[sgd_mb_steprows_kernel](
-                            dparts.unsafe_ptr(), dw2.unsafe_ptr(), dbias2.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                            dobj.unsafe_ptr(), xk, ysk, idxk, swk,
-                            ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
-                            Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(dev_eta),
-                            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
-                        )
-                        wo += 1
-                else:
-                    while start < n:
-                        var bs = min(batch, n - start)
-                        var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
-                        ctx.enqueue_function[sgd_mb_rows_kernel](
-                            xk, ysk, idxk, Int32(start), Int32(bs), Int32(d),
-                            dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, swk, Int32(1 if has_sw else 0),
-                            wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
-                        )
-                        wo += _sgd_row_blocks(bs)
-                        if ocm == 2:
-                            ctx.enqueue_function[sgd_mb_oc_kernel](
-                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
-                                dcnt.unsafe_ptr(), ddlt.unsafe_ptr(), FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2,
-                                Int32(dev_eta), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
-                            )
-                            wo += 1
-                        ctx.enqueue_function[sgd_mb_parts_kernel](
-                            xk, Int32(d), idxk, Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
-                            Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
-                        )
-                        wo += _xg_blocks((d + 2) * mb_subs(bs, sub))
-                        ctx.enqueue_function[sgd_mb_step_kernel](
-                            dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                            dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub),
-                            FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2, Int32(dev_eta), Int32(ocm),
-                            ddlt.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
-                        )
-                        wo += _xg_blocks(d + 2)
-                        t += bs if bsum else 1
-                        start += bs
-                if wit.ok(ctx, wo, "SGD epoch"):
-                    break
-                tries += 1
-                if tries >= WITNESS_TRIES:
-                    wit.fail()
-                ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
-                ctx.enqueue_copy(dst_buf=dbias, src_buf=dbs)
-            # the epoch end (one block, its own guarded unit; reads parity
-            # par, writes 1 - par): two words home
-            tries = 0
-            while True:
-                var nonce = wit.begin()
-                ctx.enqueue_function[sgd_mb_end_kernel](  # small-launch(d: weights): one block strides the d weights and two vfold sums; n only divides the objective
-                    dw.unsafe_ptr(), dbias.unsafe_ptr(), dobj.unsafe_ptr(), dstt.unsafe_ptr(), dcf.unsafe_ptr(),
-                    dvp.unsafe_ptr(), Int32(d), Int32(n), alpha, l1r, Int32(penalty), tol, Int32(nic), Int32(lr),
-                    Int32(1 if need_obj else 0), Int32(1 if one_class else 0), Int32(par), wit.p(), Int32(0), nonce,
-                    grid_dim=1, block_dim=SGD_END_TPB,
-                )
-                ctx.enqueue_copy(dst_ptr=hfl.unsafe_ptr(), src_buf=dstt.create_sub_buffer[DType.float32](SGD_MB_FLAGS, 2))
-                if wit.ok(ctx, 1, "SGD epoch end"):
-                    break
-                tries += 1
-                if tries >= WITNESS_TRIES:
-                    wit.fail()
-            ctx.synchronize()
-            if hfl[1] != Float32(0):
-                failed = True
-                break
-            if avg and epoch >= avg_from:
-                ctx.enqueue_function[sgd_avg_acc_kernel](
-                    dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d),
-                    grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
-                )
-                navg += 1
-            if hfl[0] != Float32(0):
-                break
-        if navg > 0 and not failed:
-            ctx.enqueue_function[sgd_avg_fin_kernel](
-                dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d), Float32(1) / Float32(navg),
-                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
-            )
-        ctx.enqueue_function[sgd_mb_res_kernel](
-            dw.unsafe_ptr(), dbias.unsafe_ptr(), dres.unsafe_ptr(), Int32(c), Int32(d), Int32(problems),
-            Int32((2 if ocm != 0 else 1) if one_class else 0), Int32(1 if failed else 0), grid_dim=_xg_blocks(d + 1),
-            block_dim=XG_TPB,
-        )
+    for c in range(problems):  # driver-loop: over the one-vs-rest problems, one device loop each
+        step.begin_problem(c)
+        var timers = LoopTimers("sgd.mb")
+        var outcome = bounded_device_loop(ctx, step, registers, 1, step.max_iter, check, timers)
+        timers.report()
+        var failed = outcome.converged and registers.failure() != 0
+        var epochs = step.end_problem(outcome, failed)
         if failed:
             status = -1
         elif epochs > max_epochs:
             max_epochs = epochs
-    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
+    ctx.enqueue_copy(dst_ptr=res, src_buf=step.dres)
     ctx.synchronize()
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
     res.unsafe_store(problems * d + problems + 1, i2f(status))
-    _ = dy^
-    _ = hst^
-    _ = hfl^
-    _ = dstt^
-    _ = dvp^
-    _ = dres^
-    _ = dx^
-    _ = dys^
-    _ = dsw^
-    _ = didx^
-    _ = ddl^
-    _ = dlv^
-    _ = dparts^
-    _ = dw^
-    _ = dbias^
-    _ = dobj^
-    _ = dws^
-    _ = dacc^
-    _ = dbs^
-    _ = dw2^
-    _ = dbias2^
-    _ = dcnt^
-    _ = ddlt^
-    _ = hb0^
-    _ = wit^
+    _ = registers^
+    _ = step^
 
 
 
@@ -2204,10 +2502,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # The epoch order (`sgd_perm_kernel`), the finite check, the stopping and
 # the adaptive rate are the device's (x_linear/sgd_end.mojo, sgd_one's
 # statements); the host reads the live problem count once an epoch.
-# C19: scheduling only; preserve sample order/time index and per-sample updates.
-# Fixed bounded launch budgets, independent of dataset dimensions.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime SGD_PS_CHUNK = C19_SGD_CHUNK
+# The per-sample launch budget: 2048 samples per ordered launch.
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C19_SGD_CHUNK (unmeasured opt-in arms 32/128; non-owner site) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 96b9d412f1.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C19_SGD_CHUNK.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+comptime SGD_PS_CHUNK = 2048
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
 comptime SGD_PS_ST = 6
@@ -2389,8 +2687,7 @@ def _sgd_ps_kernel_body(
 
 # lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
 # for d <= SPS_MAX_D = SPS_W * SPS_MAXC, the register bound (off:
-# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF; old d <= 32 gate behind
-# MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD). M3 A/Bs (n=1):
+# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
 # sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
 # identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
 # 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the old small-d gate. Cause: the per-sample fit above runs a
@@ -2405,8 +2702,8 @@ def _sgd_ps_kernel_body(
 # scalars in every lane, no barrier: a lane only touches its own columns),
 # and the weights go back to device memory once a launch. d <= SPS_W *
 # SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
-# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (rollback -D MOJOLEARN_SGDOC_FAST_TAIL_OFF;
-# -D MOJOLEARN_SGDOC_FAST_TAIL_LONG for the 4x tail). SGDOneClassSVM at
+# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (the `_OFF` rollback was deleted 2026-11-15).
+# SGDOneClassSVM at
 # learning_rate='optimal', tol=None on centered data: main's per-sample
 # kernels over the LAST SGDOC_TAIL_K steps of the real schedule from w = 0,
 # intercept = 1 (the 1/t schedule makes the final state a stationary chain's
@@ -2416,11 +2713,12 @@ def _sgd_ps_kernel_body(
 # w2-sgdoc-q PASS (flag fraction, objective, |w|, score spread, Jaccard vs
 # main's own seed spread). Still main's serial per-sample chain, 300x
 # shorter: a parallel SGD one-class algorithm remains owed.
-comptime SGDOC_FAST_TAIL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
-)
-comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
+# TOMBSTONE: MOJOLEARN_SGDOC_FAST_TAIL_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 43214c2e1e.
+# Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SGDOC_FAST_TAIL = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+# TOMBSTONE: MOJOLEARN_SGDOC_FAST_TAIL_LONG (unmeasured Apple FAST opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ea2d15591a.
+# Restore: git apply experiments/removed/MOJOLEARN_SGDOC_FAST_TAIL_LONG.patch; record in docs/TOMBSTONES.md.
+comptime SGDOC_TAIL_K = 65536
 # The tail must exceed the (S, R) chain's mixing time, which grows with d
 # (x_linear/sgdoc_tail.mojo: tens of steps at d ~ 10, up to thousands at
 # d ~ 200, i.e. at most ~20 steps per feature). A fixed K was only checked at
@@ -2436,7 +2734,7 @@ def sgdoc_tail_k(d: Int) -> Int:
 
 
 comptime SGD_FAST_PS_SIMD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
     and not is_defined["MOJOLEARN_SGD_FAST_PS_SIMD_OFF"]()
 )
 comptime SPS_W = 32
@@ -2444,11 +2742,8 @@ comptime SPS_MAXC = 8
 #: Kernel limit (register footprint): each of the SPS_W lanes holds SPS_MAXC
 #: weights and their q in registers, so d <= SPS_W * SPS_MAXC.
 comptime SPS_MAX_D = SPS_W * SPS_MAXC
-#: LEGACY, default OFF: the old gate admitted only d <= 32, chosen between
-#: taxi (d 11, -27.6%) and istella (d 220, +41%). Removed as benchmark-tuned
-#: on 2026-10-04; the register-bound replacement is UNMEASURED.
-comptime SPS_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"]()
-comptime SPS_LEGACY_MAX_D = 32
+# TOMBSTONE: MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD (unmeasured old benchmark-tuned d <= 32 gate, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 51a85b3df6.
+# Restore: git apply experiments/removed/MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -2647,7 +2942,7 @@ def _sgd_ps_simd_body(
 
 
 # lane/idn-sgd-multiblock (2026-10-04): SGD_IDN_PS_WARP, IDENTICAL on NVIDIA
-# and AMD for d <= SPS_W * MB_DBLK (off: -D MOJOLEARN_SGD_IDN_PS_WARP_OFF).
+# and AMD for d <= SPS_W * MB_DBLK.
 # The block form above pays, per SAMPLE, the partials' stores, two device-
 # ordering barriers and a device load and store of every weight. Here a
 # problem is ONE warp of SPS_W lanes: lane l keeps the weights (and q) of
@@ -2657,9 +2952,10 @@ def _sgd_ps_simd_body(
 # lane (`shuffle_idx`), so the scalars are uniform without a barrier, and
 # updates its own block's weights. The same chains folded in the same order
 # as the block form and the host's `sgd_one`: no bit moves.
+# TOMBSTONE: MOJOLEARN_SGD_IDN_PS_WARP_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 29555cd114.
+# Restore: git apply experiments/removed/MOJOLEARN_SGD_IDN_PS_WARP_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SGD_IDN_PS_WARP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
-    and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not TARGET_HAS_APPLE_GPU
 )
 
 
@@ -2887,264 +3183,347 @@ def sgd_ps_kernel(
     witness_end(wf, woff, nonce)
 
 
-def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
-                 n_out: Int, res: FP) raises:
-    """The per-sample fit (batch_size 0) on the device: `sgd_fit` with every
-    problem's `sgd_one` as `sgd_ps_kernel` launches; the same words."""
-    var ctx = linear_ctx()
-    var k = Int(ip[0])
-    var loss = Int(ip[1])
-    var penalty = Int(ip[2])
-    var lr = Int(ip[3])
-    var fi = Int(ip[4]) != 0
-    var max_iter = Int(ip[5])
-    var nic = Int(ip[6])
-    var do_shuffle = Int(ip[7]) != 0
-    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
-    var has_sw = Int(ip[10]) != 0
-    var has_cw = Int(ip[11]) != 0
-    var alpha = fp[0]
-    var l1_ratio = fp[1]
-    var eta0 = fp[2]
-    var power_t = fp[3]
-    var eps = fp[4]
-    var tol = fp[5]
-    if penalty == P_L2:
-        l1_ratio = Float32(0)
-    elif penalty == P_L1:
-        l1_ratio = Float32(1)
-    var problems = k if k > 2 else 1
-    var one_class = k == 1
-    var pa_rate = lr == LR_PA1 or lr == LR_PA2
-    var need_obj = tol > Float32(-3.0e38)
-    var nb = (d + MB_DBLK - 1) // MB_DBLK
-    var optimal_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
-    var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
-    var chunk = SGD_PS_CHUNK
-    var sps = False
-    comptime if SGD_FAST_PS_SIMD:
-        sps = d >= 1 and d <= SPS_MAX_D
-        comptime if SPS_LEGACY_NARROW:
-            sps = sps and d <= SPS_LEGACY_MAX_D
-    var spw = False
-    comptime if SGD_IDN_PS_WARP:
-        spw = d >= 1 and nb <= SPS_W
-    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
-    var didx = ctx.enqueue_create_buffer[DType.int32](max(problems * n, 1))
-    var dw = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
-    var dq = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
-    var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
-    var dpart = ctx.enqueue_create_buffer[DType.float32](max(problems * 3 * nb, 1))
-    var dps = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
-    var dpt = ctx.enqueue_create_buffer[DType.int32](problems)
-    var dact = ctx.enqueue_create_buffer[DType.int32](problems)
-    var dpf = ctx.enqueue_create_buffer[DType.float32](3 * problems)
-    var dci = ctx.enqueue_create_buffer[DType.int32](12)
-    var dcf = ctx.enqueue_create_buffer[DType.float32](7)
-    var dws = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
-    var dqs = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
-    var dpss = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
-    var dpts = ctx.enqueue_create_buffer[DType.int32](problems)
-    var launches = (n + chunk - 1) // chunk
-    var wit = Witness(ctx, max(launches * problems + (_xg_blocks(n) if pa_rate else 0), 1))
-    var hci = List[Int32](length=12, fill=Int32(0))
-    hci[0] = Int32(n)
-    hci[1] = Int32(d)
-    hci[2] = Int32(loss)
-    hci[3] = Int32(penalty)
-    hci[4] = Int32(lr)
-    hci[5] = Int32(1 if fi else 0)
-    hci[6] = Int32(1 if need_obj else 0)
-    hci[7] = Int32(1 if one_class else 0)
-    hci[8] = Int32(1 if has_sw else 0)
-    hci[9] = Int32(1 if has_cw else 0)
-    hci[10] = Int32(k)
-    hci[11] = Int32(1 if pa_rate else 0)
-    var hcf = List[Float32](length=7, fill=Float32(0))
-    hcf[0] = alpha
-    hcf[1] = l1_ratio
-    hcf[2] = eta0
-    hcf[3] = power_t
-    hcf[4] = eps
-    hcf[5] = optimal_init
-    hcf[6] = decay_factor
-    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
-    var seed_hi = Int32(Int(UInt32(seed >> 32)))
-    var hps = List[Float32](length=SGD_PS_ST * problems, fill=Float32(0))
-    var hpt = List[Int32](length=problems, fill=Int32(1))
-    var hact = List[Int32](length=problems, fill=Int32(1))
-    var hpf = List[Float32](length=3 * problems, fill=Float32(0))
-    # the epoch end's state on the device (x_linear/sgd_end.mojo), parity 0
-    # at the start: best, no-improve, eta, active, epochs, failed
-    var hst = List[Float32](length=2 * problems * SGD_END_ST, fill=Float32(0))
-    var dstt = ctx.enqueue_create_buffer[DType.float32](2 * problems * SGD_END_ST)
-    var dlive = ctx.enqueue_create_buffer[DType.int32](1)
-    var hlive = List[Int32](length=1, fill=Int32(0))
-    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
-    dres.enqueue_fill(Float32(0))
-    for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants and start state, a few words a class
-        hps[SGD_PS_ST * c] = Float32(1) if one_class else Float32(0)
-        hps[SGD_PS_ST * c + 4] = Float32(1)
-        hpf[3 * c] = eta0
-        hpf[3 * c + 1] = fp[6 + c] if has_cw else Float32(1)
-        hpf[3 * c + 2] = fp[6 + problems + c] if has_cw else Float32(1)
-        hst[c * SGD_END_ST] = Float32(3.0e38)
-        hst[c * SGD_END_ST + 2] = eta0
-        hst[c * SGD_END_ST + 3] = bitcast[DType.float32](Int32(1))
-    if n_x > 0:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    # SGDOC_FAST_TAIL: the first epoch e0 and its first position r0 of the
-    # last SGDOC_TAIL_K steps, t of that step (0, 0 and t = 1: the full run)
-    var e0 = 0
-    var r0 = 0
-    comptime if SGDOC_FAST_TAIL:
-        if (one_class and lr == LR_OPTIMAL and penalty == P_L2 and fi and do_shuffle and not need_obj
-                and not has_sw and max_iter * n > sgdoc_tail_k(d)):
-            if sgdoc_centered(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n, d):
-                var s0 = max_iter * n - sgdoc_tail_k(d)
-                e0 = s0 // n
-                r0 = s0 - e0 * n
-                hpt[0] = Int32(s0 + 1)
-    ctx.enqueue_copy(dst_buf=dlab, src_ptr=y)
-    if has_sw:
-        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
-    comptime if SGD_IDN_DEV_FINITE:
-        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
-    ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dps, src_ptr=hps.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dpt, src_ptr=hpt.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dpf, src_ptr=hpf.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dstt, src_ptr=hst.unsafe_ptr())
-    dw.enqueue_fill(Float32(0))
-    dq.enqueue_fill(Float32(0))
-    ctx.enqueue_function[sgd_iota_kernel](didx.unsafe_ptr(), Int32(n), Int32(problems),
-                                          grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB)
-    var fin_par = 0
-    for epoch in range(e0, max_iter):
-        # which problems still run is the device's (dact); every problem's
-        # order is written (a stopped one's is never read). The stop state's
-        # parity counts from e0 (parity 0 holds the initial words).
-        var par = (epoch - e0) % 2
+struct _SgdPsEpochs(LoopStep, Movable):
+    """`_sgd_ps_grid`'s fit and one epoch of every live problem as a step of
+    the bounded device loop. The per-sample kernels skip a stopped problem
+    (`act`, the epoch end's); the loop is done when none is live."""
+    var ctx: DeviceContext
+    var wit: Witness
+    var dx: DeviceBuffer[DType.float32]
+    var dlab: DeviceBuffer[DType.float32]
+    var dsw: DeviceBuffer[DType.float32]
+    var didx: DeviceBuffer[DType.int32]
+    var dw: DeviceBuffer[DType.float32]
+    var dq: DeviceBuffer[DType.float32]
+    var dsq: DeviceBuffer[DType.float32]
+    var dpart: DeviceBuffer[DType.float32]
+    var dps: DeviceBuffer[DType.float32]
+    var dpt: DeviceBuffer[DType.int32]
+    var dact: DeviceBuffer[DType.int32]
+    var dpf: DeviceBuffer[DType.float32]
+    var dci: DeviceBuffer[DType.int32]
+    var dcf: DeviceBuffer[DType.float32]
+    var dws: DeviceBuffer[DType.float32]
+    var dqs: DeviceBuffer[DType.float32]
+    var dpss: DeviceBuffer[DType.float32]
+    var dpts: DeviceBuffer[DType.int32]
+    var dstt: DeviceBuffer[DType.float32]
+    var dlive: DeviceBuffer[DType.int32]
+    var dres: DeviceBuffer[DType.float32]
+    var hci: List[Int32]
+    var hcf: List[Float32]
+    var hps: List[Float32]
+    var hpt: List[Int32]
+    var hact: List[Int32]
+    var hpf: List[Float32]
+    var hst: List[Float32]
+    var lr: Int
+    var max_iter: Int
+    var nic: Int
+    var do_shuffle: Bool
+    var seed_lo: Int32
+    var seed_hi: Int32
+    var n: Int
+    var d: Int
+    var problems: Int
+    var one_class: Bool
+    var tol: Float32
+    var need_obj: Bool
+    var chunk: Int
+    var sps: Bool
+    var spw: Bool
+    var e0: Int
+    var r0: Int
+
+    def __init__(out self, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int) raises:
+        var ctx = linear_ctx()
+        var k = Int(ip[0])
+        var loss = Int(ip[1])
+        var penalty = Int(ip[2])
+        var lr = Int(ip[3])
+        var fi = Int(ip[4]) != 0
+        var max_iter = Int(ip[5])
+        var do_shuffle = Int(ip[7]) != 0
+        var has_sw = Int(ip[10]) != 0
+        var has_cw = Int(ip[11]) != 0
+        var alpha = fp[0]
+        var l1_ratio = fp[1]
+        var eta0 = fp[2]
+        var power_t = fp[3]
+        var eps = fp[4]
+        var tol = fp[5]
+        if penalty == P_L2:
+            l1_ratio = Float32(0)
+        elif penalty == P_L1:
+            l1_ratio = Float32(1)
+        var problems = k if k > 2 else 1
+        var one_class = k == 1
+        var pa_rate = lr == LR_PA1 or lr == LR_PA2
+        var need_obj = tol > Float32(-3.0e38)
+        var nb = (d + MB_DBLK - 1) // MB_DBLK
+        var optimal_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
+        var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
+        var chunk = SGD_PS_CHUNK
+        var sps = False
+        comptime if SGD_FAST_PS_SIMD:
+            sps = d >= 1 and d <= SPS_MAX_D
+        var spw = False
+        comptime if SGD_IDN_PS_WARP:
+            spw = d >= 1 and nb <= SPS_W
+        self.dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+        self.dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        self.dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        self.didx = ctx.enqueue_create_buffer[DType.int32](max(problems * n, 1))
+        self.dw = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+        self.dq = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+        self.dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
+        self.dpart = ctx.enqueue_create_buffer[DType.float32](max(problems * 3 * nb, 1))
+        self.dps = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
+        self.dpt = ctx.enqueue_create_buffer[DType.int32](problems)
+        self.dact = ctx.enqueue_create_buffer[DType.int32](problems)
+        self.dpf = ctx.enqueue_create_buffer[DType.float32](3 * problems)
+        self.dci = ctx.enqueue_create_buffer[DType.int32](12)
+        self.dcf = ctx.enqueue_create_buffer[DType.float32](7)
+        self.dws = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+        self.dqs = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+        self.dpss = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
+        self.dpts = ctx.enqueue_create_buffer[DType.int32](problems)
+        var launches = (n + chunk - 1) // chunk
+        var wit = Witness(ctx, max(launches * problems + (_xg_blocks(n) if pa_rate else 0), 1))
+        var hci = List[Int32](length=12, fill=Int32(0))
+        hci[0] = Int32(n)
+        hci[1] = Int32(d)
+        hci[2] = Int32(loss)
+        hci[3] = Int32(penalty)
+        hci[4] = Int32(lr)
+        hci[5] = Int32(1 if fi else 0)
+        hci[6] = Int32(1 if need_obj else 0)
+        hci[7] = Int32(1 if one_class else 0)
+        hci[8] = Int32(1 if has_sw else 0)
+        hci[9] = Int32(1 if has_cw else 0)
+        hci[10] = Int32(k)
+        hci[11] = Int32(1 if pa_rate else 0)
+        var hcf = List[Float32](length=7, fill=Float32(0))
+        hcf[0] = alpha
+        hcf[1] = l1_ratio
+        hcf[2] = eta0
+        hcf[3] = power_t
+        hcf[4] = eps
+        hcf[5] = optimal_init
+        hcf[6] = decay_factor
+        var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+        self.seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+        self.seed_hi = Int32(Int(UInt32(seed >> 32)))
+        var hps = List[Float32](length=SGD_PS_ST * problems, fill=Float32(0))
+        var hpt = List[Int32](length=problems, fill=Int32(1))
+        var hact = List[Int32](length=problems, fill=Int32(1))
+        var hpf = List[Float32](length=3 * problems, fill=Float32(0))
+        # the epoch end's state on the device (x_linear/sgd_end.mojo), parity 0
+        # at the start: best, no-improve, eta, active, epochs, failed
+        var hst = List[Float32](length=2 * problems * SGD_END_ST, fill=Float32(0))
+        self.dstt = ctx.enqueue_create_buffer[DType.float32](2 * problems * SGD_END_ST)
+        self.dlive = ctx.enqueue_create_buffer[DType.int32](1)
+        self.dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+        self.dres.enqueue_fill(Float32(0))
+        for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants and start state, a few words a class
+            hps[SGD_PS_ST * c] = Float32(1) if one_class else Float32(0)
+            hps[SGD_PS_ST * c + 4] = Float32(1)
+            hpf[3 * c] = eta0
+            hpf[3 * c + 1] = fp[6 + c] if has_cw else Float32(1)
+            hpf[3 * c + 2] = fp[6 + problems + c] if has_cw else Float32(1)
+            hst[c * SGD_END_ST] = Float32(3.0e38)
+            hst[c * SGD_END_ST + 2] = eta0
+            hst[c * SGD_END_ST + 3] = bitcast[DType.float32](Int32(1))
+        if n_x > 0:
+            ctx.enqueue_copy(dst_buf=self.dx, src_ptr=x)
+        # SGDOC_FAST_TAIL: the first epoch e0 and its first position r0 of the
+        # last SGDOC_TAIL_K steps, t of that step (0, 0 and t = 1: the full run)
+        var e0 = 0
+        var r0 = 0
+        comptime if SGDOC_FAST_TAIL:
+            if (one_class and lr == LR_OPTIMAL and penalty == P_L2 and fi and do_shuffle and not need_obj
+                    and not has_sw and max_iter * n > sgdoc_tail_k(d)):
+                if sgdoc_centered(ctx, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n, d):
+                    var s0 = max_iter * n - sgdoc_tail_k(d)
+                    e0 = s0 // n
+                    r0 = s0 - e0 * n
+                    hpt[0] = Int32(s0 + 1)
+        ctx.enqueue_copy(dst_buf=self.dlab, src_ptr=y)
+        if has_sw:
+            ctx.enqueue_copy(dst_buf=self.dsw, src_ptr=y + n)
+        comptime if SGD_IDN_DEV_FINITE:
+            _sgd_finite_device(ctx, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n_x, y, n_y)
+        ctx.enqueue_copy(dst_buf=self.dci, src_ptr=hci.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dcf, src_ptr=hcf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dps, src_ptr=hps.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dpt, src_ptr=hpt.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dact, src_ptr=hact.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dpf, src_ptr=hpf.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dstt, src_ptr=hst.unsafe_ptr())
+        self.dw.enqueue_fill(Float32(0))
+        self.dq.enqueue_fill(Float32(0))
+        ctx.enqueue_function[sgd_iota_kernel](self.didx.unsafe_ptr(), Int32(n), Int32(problems),
+                                              grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB)
+        if pa_rate:
+            # the PA rows' norms, once a fit (X does not change between epochs)
+            _sgd_rowsq_once(ctx, wit, FP(unsafe_from_address=Int(self.dx.unsafe_ptr())), n, d,
+                            FP(unsafe_from_address=Int(self.dsq.unsafe_ptr())))
+        self.wit = wit^
+        self.hci = hci^
+        self.hcf = hcf^
+        self.hps = hps^
+        self.hpt = hpt^
+        self.hact = hact^
+        self.hpf = hpf^
+        self.hst = hst^
+        self.lr = lr
+        self.max_iter = max_iter
+        self.nic = Int(ip[6])
+        self.do_shuffle = do_shuffle
+        self.n = n
+        self.d = d
+        self.problems = problems
+        self.one_class = one_class
+        self.tol = tol
+        self.need_obj = need_obj
+        self.chunk = chunk
+        self.sps = sps
+        self.spw = spw
+        self.e0 = e0
+        self.r0 = r0
+        self.ctx = ctx^
+
+    def epoch_launches(self) -> Int:
+        """The launches of one epoch (the sample chunks, the order, the epoch
+        end, the criterion)."""
+        return (self.n + self.chunk - 1) // max(self.chunk, 1) + 4
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        """Epoch `e0 + it - 1`: every live problem's samples in order, the
+        epoch end, the criterion. The stop state's parity counts from e0
+        (parity 0 holds the initial words)."""
+        var cx = self.ctx.copy()
+        var epoch = self.e0 + it - 1
+        var gate = _sgd_gate(registers)
+        var n = self.n
+        var d = self.d
+        var problems = self.problems
+        var par = (it - 1) % 2
         # the epoch as ONE guarded unit: it updates w, q, the scalar state
         # and t in place, so a cut epoch restores them and replays
-        ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
-        ctx.enqueue_copy(dst_buf=dqs, src_buf=dq)
-        ctx.enqueue_copy(dst_buf=dpss, src_buf=dps)
-        ctx.enqueue_copy(dst_buf=dpts, src_buf=dpt)
+        cx.enqueue_copy(dst_buf=self.dws, src_buf=self.dw)
+        cx.enqueue_copy(dst_buf=self.dqs, src_buf=self.dq)
+        cx.enqueue_copy(dst_buf=self.dpss, src_buf=self.dps)
+        cx.enqueue_copy(dst_buf=self.dpts, src_buf=self.dpt)
         var tries = 0
-        while True:
-            var nonce = wit.begin()
+        while True:  # driver-loop: over Metal witness reruns of one epoch (x_linear/witness.mojo), at most WITNESS_TRIES
+            var nonce = self.wit.begin()
             var wo = 0
-            if do_shuffle:
-                ctx.enqueue_function[sgd_perm_kernel](
-                    didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(0), Int32(problems),
-                    grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
+            if self.do_shuffle:
+                # which problems still run is the device's (dact); every
+                # problem's order is written (a stopped one's is never read)
+                cx.enqueue_function[sgd_perm_kernel](
+                    self.didx.unsafe_ptr(), Int32(n), self.seed_lo, self.seed_hi, Int32(epoch), Int32(0), Int32(problems),
+                    gate, grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
                 )
-            if pa_rate:
-                ctx.enqueue_function[sgd_rowsq_kernel](
-                    dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                    grid_dim=_xg_blocks(n), block_dim=XG_TPB,
-                )
-                wo += _xg_blocks(n)
-            var start = r0 if epoch == e0 else 0
-            while start < n:
-                var cnt = min(chunk, n - start)
-                if spw:
-                    ctx.enqueue_function[sgd_ps_warp_kernel](
-                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
-                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
-                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
-                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
+            var start = self.r0 if epoch == self.e0 else 0
+            while start < n:  # driver-loop: over the epoch's sample chunks, one launch each (the samples' order is the algorithm)
+                var cnt = min(self.chunk, n - start)
+                if self.spw:
+                    cx.enqueue_function[sgd_ps_warp_kernel](
+                        self.dx.unsafe_ptr(), self.dlab.unsafe_ptr(), self.dsw.unsafe_ptr(), self.didx.unsafe_ptr(),
+                        self.dw.unsafe_ptr(), self.dq.unsafe_ptr(), self.dsq.unsafe_ptr(), self.dpart.unsafe_ptr(),
+                        self.dps.unsafe_ptr(), self.dpt.unsafe_ptr(), self.dact.unsafe_ptr(), self.dpf.unsafe_ptr(),
+                        self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        self.wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
                     )
-                elif sps:
-                    ctx.enqueue_function[sgd_ps_simd_kernel](
-                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
-                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
-                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
-                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
+                elif self.sps:
+                    cx.enqueue_function[sgd_ps_simd_kernel](
+                        self.dx.unsafe_ptr(), self.dlab.unsafe_ptr(), self.dsw.unsafe_ptr(), self.didx.unsafe_ptr(),
+                        self.dw.unsafe_ptr(), self.dq.unsafe_ptr(), self.dsq.unsafe_ptr(), self.dpart.unsafe_ptr(),
+                        self.dps.unsafe_ptr(), self.dpt.unsafe_ptr(), self.dact.unsafe_ptr(), self.dpf.unsafe_ptr(),
+                        self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        self.wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
                     )
                 else:
-                    ctx.enqueue_function[sgd_ps_kernel](
-                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
-                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
-                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
-                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=XG_TPB,
+                    cx.enqueue_function[sgd_ps_kernel](
+                        self.dx.unsafe_ptr(), self.dlab.unsafe_ptr(), self.dsw.unsafe_ptr(), self.didx.unsafe_ptr(),
+                        self.dw.unsafe_ptr(), self.dq.unsafe_ptr(), self.dsq.unsafe_ptr(), self.dpart.unsafe_ptr(),
+                        self.dps.unsafe_ptr(), self.dpt.unsafe_ptr(), self.dact.unsafe_ptr(), self.dpf.unsafe_ptr(),
+                        self.dci.unsafe_ptr(), self.dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        self.wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=XG_TPB,
                     )
                 wo += problems
                 start += cnt
-            if wit.ok(ctx, wo, "SGD per-sample epoch"):
+            if self.wit.ok(cx, wo, "SGD per-sample epoch"):
                 break
             tries += 1
             if tries >= WITNESS_TRIES:
-                wit.fail()
-            ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
-            ctx.enqueue_copy(dst_buf=dq, src_buf=dqs)
-            ctx.enqueue_copy(dst_buf=dps, src_buf=dpss)
-            ctx.enqueue_copy(dst_buf=dpt, src_buf=dpts)
+                self.wit.fail()
+            cx.enqueue_copy(dst_buf=self.dw, src_buf=self.dws)
+            cx.enqueue_copy(dst_buf=self.dq, src_buf=self.dqs)
+            cx.enqueue_copy(dst_buf=self.dps, src_buf=self.dpss)
+            cx.enqueue_copy(dst_buf=self.dpt, src_buf=self.dpts)
         # the epoch end (a block a problem, its own guarded unit; reads
-        # parity par, writes 1 - par): the live count home
+        # parity par, writes 1 - par), then the criterion over the live count
         tries = 0
-        while True:
-            var nonce = wit.begin()
-            dlive.enqueue_fill(Int32(0))
-            ctx.enqueue_function[sgd_ps_end_kernel](
-                dw.unsafe_ptr(), dps.unsafe_ptr(), dact.unsafe_ptr(), dpf.unsafe_ptr(), dstt.unsafe_ptr(),
-                dlive.unsafe_ptr(), Int32(d), Int32(n), Int32(problems), tol, Int32(nic), Int32(lr),
-                Int32(1 if need_obj else 0), Int32(par), Int32(epoch), Int32(SGD_PS_ST), wit.p(), Int32(0), nonce,
+        while True:  # driver-loop: over Metal witness reruns of the epoch end, at most WITNESS_TRIES
+            var nonce = self.wit.begin()
+            self.dlive.enqueue_fill(Int32(0))
+            cx.enqueue_function[sgd_ps_end_kernel](
+                self.dw.unsafe_ptr(), self.dps.unsafe_ptr(), self.dact.unsafe_ptr(), self.dpf.unsafe_ptr(),
+                self.dstt.unsafe_ptr(), self.dlive.unsafe_ptr(), Int32(d), Int32(n), Int32(problems), self.tol,
+                Int32(self.nic), Int32(self.lr), Int32(1 if self.need_obj else 0), Int32(par), Int32(epoch),
+                Int32(SGD_PS_ST), gate, self.wit.p(), Int32(0), nonce,
                 grid_dim=problems, block_dim=SGD_END_TPB,
             )
-            ctx.enqueue_copy(dst_ptr=hlive.unsafe_ptr(), src_buf=dlive)
-            if wit.ok(ctx, problems, "SGD per-sample epoch end"):
+            if self.wit.ok(cx, problems, "SGD per-sample epoch end"):
                 break
             tries += 1
             if tries >= WITNESS_TRIES:
-                wit.fail()
-        ctx.synchronize()
-        fin_par = 1 - par
-        if hlive[0] == 0:
-            break
-    ctx.enqueue_function[sgd_ps_res_kernel](
-        dw.unsafe_ptr(), dps.unsafe_ptr(), dstt.unsafe_ptr(), dres.unsafe_ptr(), Int32(d), Int32(problems),
-        Int32(1 if one_class else 0), Int32(fin_par), Int32(SGD_PS_ST),
-        grid_dim=_xg_blocks(problems * d + problems + 1), block_dim=XG_TPB,
-    )
-    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
-    ctx.synchronize()
+                self.wit.fail()
+        cx.enqueue_function[sgd_live_crit_kernel](  # small-launch(one word): the epoch loop's stop criterion
+            gate, self.dlive.unsafe_ptr(), Int32(it), grid_dim=1, block_dim=1,
+        )
+        loop_lap(ctx, timers, "sgd_ps_epoch")
 
-    _ = hci^
-    _ = hcf^
-    _ = hst^
-    _ = hlive^
-    _ = dstt^
-    _ = dlive^
-    _ = dres^
-    _ = hps^
-    _ = hpt^
-    _ = hact^
-    _ = hpf^
-    _ = dx^
-    _ = dlab^
-    _ = dsw^
-    _ = didx^
-    _ = dw^
-    _ = dq^
-    _ = dsq^
-    _ = dpart^
-    _ = dps^
-    _ = dpt^
-    _ = dact^
-    _ = dpf^
-    _ = dci^
-    _ = dcf^
-    _ = dws^
-    _ = dqs^
-    _ = dpss^
-    _ = dpts^
-    _ = wit^
+    def finish(mut self, outcome: LoopOutcome, res: FP) raises:
+        """The result words from the stopping epoch's state: its end wrote
+        parity 1 - par; no epoch past it wrote any."""
+        var cx = self.ctx.copy()
+        var ran = outcome.stop_iteration if outcome.converged else max(self.max_iter - self.e0, 0)
+        var fin_par = 0
+        if ran > 0:
+            fin_par = 1 - ((ran - 1) % 2)
+        cx.enqueue_function[sgd_ps_res_kernel](
+            self.dw.unsafe_ptr(), self.dps.unsafe_ptr(), self.dstt.unsafe_ptr(), self.dres.unsafe_ptr(), Int32(self.d),
+            Int32(self.problems), Int32(1 if self.one_class else 0), Int32(fin_par), Int32(SGD_PS_ST),
+            grid_dim=_xg_blocks(self.problems * self.d + self.problems + 1), block_dim=XG_TPB,
+        )
+        cx.enqueue_copy(dst_ptr=res, src_buf=self.dres)
+        cx.synchronize()
+
+
+def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int, res: FP) raises:
+    """The per-sample fit (batch_size 0) on the device: `sgd_fit` with every
+    problem's `sgd_one` as `sgd_ps_kernel` launches; the same words. The
+    epochs are the bounded device loop over `_SgdPsEpochs`."""
+    var ctx = linear_ctx()
+    var step = _SgdPsEpochs(x, n_x, y, n_y, n, d, ip, fp, n_out)
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers("sgd.ps")
+    var outcome = bounded_device_loop(
+        ctx, step, registers, 1, step.max_iter - step.e0,
+        sgd_loop_check_every(step.epoch_launches(), step.max_iter - step.e0, step.need_obj), timers,
+    )
+    timers.report()
+    step.finish(outcome, res)
+    _ = registers^
+    _ = step^
 
 
 # ------------------------------------------------ GLM on the grid (lane/neural-pass89)
@@ -3209,7 +3588,7 @@ def glm_init_finish_kernel(parts: FP, nf: Float32, nb: Int32, d: Int32, fi: Int3
     witness_end(wf, woff, nonce)
 
 def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
-                       theta: FP, eta: FP, lt: FP, gr: FP, hr: FP, wf: IP, woff: Int32, nonce: Int32):
+                       theta: FP, eta: FP, lt: FP, wf: IP, woff: Int32, nonce: Int32):
     """`_objective_team`'s row statements, one thread a row."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
@@ -3219,18 +3598,9 @@ def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float
         var e = fa(row_dot(x, i, dd, theta, 0), b)
         st(eta, i, e)
         var l = Float32(0)
-        comptime if C16_GLM_FUSED:
-            var values = _unit_all(power, Int(link), ld(y, i), e)
-            l = values[0]
-            var gi = values[1]
-            var hi = fmax(Float32(0), values[2])
-            if sw != 0:
-                gi = fm(ld(y, nn + i), gi)
-                hi = fm(ld(y, nn + i), hi)
-            st(gr, i, gi)
-            st(hr, i, hi)
-        else:
-            l = _unit(power, Int(link), ld(y, i), e, 0)
+        # TOMBSTONE: MOJOLEARN_CLASSICAL_C16_GLM_FUSED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at ff5b5b6e52.
+        # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C16_GLM_FUSED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+        l = _unit(power, Int(link), ld(y, i), e, 0)
         if sw != 0:
             l = fm(ld(y, nn + i), l)
         st(lt, i, l)
@@ -3272,14 +3642,14 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
 comptime GLM_APPLE_SLICE_MACS = 1 << 29
 
 def _glm_rows_slice(n: Int, slots: Int) -> Int:
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
     return n
 
 
 def _glm_blocks_slice(nb: Int, slots: Int) -> Int:
     """The row blocks a parts launch takes: all of them off Apple."""
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         return max(1, min(nb, GLM_APPLE_SLICE_MACS // (max(slots, 1) * FOLD_BLOCK)))
     return nb
 
@@ -3333,7 +3703,7 @@ def glm_sg_kernel(g: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, 
     var j = _gt()
     if j < Int(m):
         var term = glm_g_item(j, g, step, res, Int(d), alpha, fd(Float32(1), ld(sc, 0)))
-        _ = Atomic[DType.int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
+        _ = Atomic[Int32].max(gm, Int32(Int(bitcast[DType.uint32](term))))
 
 
 def glm_flag_kernel(gm: IP, sc: FP, tol: Float32):
@@ -3443,19 +3813,19 @@ def glm_accept_kernel(res: FP, trial: FP, m: Int32):
         st(res, j, ld(trial, j))
 
 
-def _glm_grid_objective(
-    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
-    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+def _glm_grid_objective_enqueue(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, fparts: FP, sc: FP,
     n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
     mut wit: Witness, gr: FP, hr: FP,
-) raises -> Float32:
-    """`_objective_team` at theta on the grid (map) and one block (fold); eta
-    holds its linear predictor afterwards."""
+) raises:
+    """`_objective_team` at theta into sc[1], enqueued (the map on the grid,
+    the fold); eta holds its linear predictor afterwards. Off Apple nothing
+    waits; on Apple the witness checks each try."""
     var tries = 0
     while True:
         var nonce = wit.begin()
         ctx.enqueue_function[glm_obj_map_kernel](x, y, Int32(n), Int32(d), Int32(fi), power, Int32(link), Int32(sw),
-                                                 theta, eta, lt, gr, hr, wit.p(), Int32(0), nonce,
+                                                 theta, eta, lt, wit.p(), Int32(0), nonce,
                                                  grid_dim=rows_grid, block_dim=XG_TPB)
         var nb = fold_blocks(n)
         ctx.enqueue_function[glm_obj_parts_kernel](lt, Int32(n), Int32(nb), fparts, wit.p(), Int32(rows_grid), nonce,
@@ -3469,12 +3839,41 @@ def _glm_grid_objective(
         tries += 1
         if tries >= WITNESS_TRIES:
             wit.fail()
-    ctx.synchronize()
-    var v = Float32(0)
+
+
+def _glm_grid_objective(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
+    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+    n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
+    mut wit: Witness, gr: FP, hr: FP,
+) raises -> Float32:
+    """`_glm_grid_objective_enqueue`, then the value home behind one wait
+    (lane n2-cd-qn-glm-loops: a bare `synchronize` before the ordered copy
+    read nothing and is gone)."""
+    _glm_grid_objective_enqueue(ctx, theta, x, y, eta, lt, fparts, sc, n, d, fi, power, link, sw, alpha,
+                                rows_grid, wit, gr, hr)
     ctx.enqueue_copy(dst_ptr=hsc, src_buf=sc_buf)
     ctx.synchronize()
-    v = hsc.unsafe_load(1)
-    return v
+    return hsc.unsafe_load(1)
+
+
+def glm_ls_first_kernel(sc: FP, res: FP, trial: FP, m: Int32, f: Float32, tt: Float32):
+    """The line search's first trial decided on the device (lane
+    n2-cd-qn-glm-loops): when the step flag sc[2] is 0, the host's Armijo
+    test (`ft == ft and ft <= f + 1e-4 * tt * slope`, the same fa / fm
+    roundings) on the trial objective sc[1] and the slope sc[3]; accepted,
+    the trial goes into res (one thread a coefficient). sc[5] = 1 accepted,
+    else 0. Every thread reads the same three words, written by earlier
+    launches."""
+    var ok = False
+    if ld(sc, 2) == Float32(0):
+        var ft = ld(sc, 1)
+        ok = ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), ld(sc, 3)))
+    var j = _gt()
+    if ok and j < Int(m):
+        st(res, j, ld(trial, j))
+    if j == 0:
+        st(sc, 5, Float32(1) if ok else Float32(0))
 
 
 def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
@@ -3565,18 +3964,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
     var stall = 0
     for it in range(max_iter):
-        comptime if not C16_GLM_FUSED:
-            var tries1 = 0
-            while True:
-                var nonce = wit.begin()
-                ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
-                                                       dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                       grid_dim=rows_grid, block_dim=XG_TPB)
-                if wit.ok(ctx, rows_grid, "GLM derivatives"):
-                    break
-                tries1 += 1
-                if tries1 >= WITNESS_TRIES:
-                    wit.fail()
+        var tries1 = 0
+        while True:
+            var nonce = wit.begin()
+            ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
+                                                   dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=rows_grid, block_dim=XG_TPB)
+            if wit.ok(ctx, rows_grid, "GLM derivatives"):
+                break
+            tries1 += 1
+            if tries1 >= WITNESS_TRIES:
+                wit.fail()
         var b0 = 0
         while b0 < nb:
             var bc = min(blocks_slice, nb - b0)
@@ -3613,6 +4011,21 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                          FP(unsafe_from_address=Int(dl_.unsafe_ptr())), FP(unsafe_from_address=Int(dyv.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dslp.unsafe_ptr())), IP(unsafe_from_address=Int(dgm.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dsc.unsafe_ptr())), m, d, alpha, tol)
+        # lane n2-cd-qn-glm-loops: the first trial (tt = 1) is enqueued behind
+        # the step and decided on the device (`glm_ls_first_kernel`), so the
+        # step's flag and slope, the trial objective and the verdict come home
+        # behind ONE wait; a Newton step that is accepted at once (the common
+        # case) costs one wait an iteration where it cost two (three with the
+        # objective's bare sync). A rejected first trial halves on the host as
+        # before. Same launches, same words: no bit moves. At a converged or
+        # failed step the trial objective is computed and never read.
+        ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
+                                               Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
+        _glm_grid_objective_enqueue(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
+        ctx.enqueue_function[glm_ls_first_kernel](FP(unsafe_from_address=Int(dsc.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dres.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), Int32(m), f,
+                                                  Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)
         ctx.synchronize()
         var flag = Int(hscp.unsafe_load(2))
@@ -3625,7 +4038,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
             break
         var tt = Float32(1)
         var accepted = False
-        for _ in range(40):
+        if hscp.unsafe_load(5) != Float32(0):
+            var ft1 = hscp.unsafe_load(1)
+            if ft1 == f:
+                stall += 1
+            else:
+                stall = 0
+            f = ft1
+            accepted = True
+        else:
+            tt = fm(tt, Float32(0.5))
+        for _ in range(39 if not accepted else 0):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=_xg_blocks(m), block_dim=XG_TPB)
             var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
@@ -3868,20 +4291,14 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var ff_units = ridge_ff_units(n, d, 1)
     var dsh = ctx.enqueue_create_buffer[DType.float32](ffw)
     var dsl = ctx.enqueue_create_buffer[DType.float32](ffw)
-    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): the float-float
-    # solve scratch per alpha (one block team per alpha in one launch) and
-    # the block partial table; one alpha's words otherwise
-    var ffa = na if RIDGECV_FF_BLOCKED else 1
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d, 1))
-    var dfh = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
-    var dfl = ctx.enqueue_create_buffer[DType.float32](max(ffa * d * d, 1))
-    var dtmp = ctx.enqueue_create_buffer[DType.float32](ffa * (d + 1))
-    var rff_pw = rff_part_words(n, d, 1) if RIDGECV_FF_BLOCKED else 1
-    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dtw = ctx.enqueue_create_buffer[DType.float32](max(ffa * TEAM_SLOTS, 1))
-    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 5ff76a71a1.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RIDGECV_FF_BLOCKED.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    # the float-float solve scratch: one alpha's words
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -3902,13 +4319,6 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     comptime if C13_FOLD_STATS:
         wcap = max(wcap, _xg_blocks(d + 1 + d * d + d) + _xg_blocks(na))
-    comptime if RIDGECV_FF_BLOCKED:
-        # unit B with the blocked float-float statistics: two partial passes,
-        # two folds, one solve block per alpha, then the predictions and scores
-        var nbw = fold_blocks(n)
-        wcap = max(wcap, rff_blocks(na) + rff_blocks(rff_mcols(d, 1) * nbw) + rff_blocks(d + 1)
-                   + rff_blocks(rff_stats(d, 1) * nbw) + rff_blocks(rff_stats(d, 1)) + na + _xg_blocks(nt_max * na)
-                   + _xg_blocks(kbm) + _xg_blocks(na * kbm) + _xg_blocks(na))
     # C13 fold cache fill. This block MUST sit under C13_FOLD_STATS: eeda2f55b
     # (RIDGECV_FF_BLOCKED, 2026-10-07) inserted its wcap lines above it and
     # captured it under the default-off FF_BLOCKED branch, so the default
@@ -3938,14 +4348,14 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
-    # `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores `kf_cells_kernel`)
+    # every other build takes `kf_cells_kernel`)
     # builds each fold's means, centered Gram and X'y with the shared grid
     # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
     # of `kf_cells_kernel`, one thread per cell walking the fold's rows
     # (136 threads at taxi's 16 features). Its launches are not witnessed
     # (it waits for them itself); the unit's solve that follows is.
     var fold_fast_gram = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         fold_fast_gram = _ridge_fast_gram() and d > 0
     for f in range(k):
         var s = Int32(kf_start(n, k, f))
@@ -3991,70 +4401,27 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         while True:
             var nonce = wit.begin()
             var wo = 0
-            comptime if RIDGECV_FF_BLOCKED:
-                # lane/classical-cv-folds: the fold's float-float statistics as
-                # FOLD_BLOCK-row block partials folded blocks ascending, then one
-                # solve block team per alpha. Whether the fold needs them is
-                # decided on the device: the trust flags set a gate word the
-                # statistics kernels read (idle when every alpha is trusted),
-                # and a trusted alpha's solve block does nothing.
-                var nbf = fold_blocks(n)
-                var mc = rff_mcols(d, 1)
-                var stats = rff_stats(d, 1)
-                ctx.enqueue_memset(dgate, Int32(0))
-                ctx.enqueue_function[rff_untrusted_kernel](dtr.unsafe_ptr(), Int32(na), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(na), block_dim=RFF_TPB)
-                wo += rff_blocks(na)
-                ctx.enqueue_function[rff_mean_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                           Int32(0), Int32(n), s, e, dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
-                wo += rff_blocks(mc * nbf)
-                ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(1), Int32(fi), dph.unsafe_ptr(),
-                                                           dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                           dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(d + 1), block_dim=RFF_TPB)
-                wo += rff_blocks(d + 1)
-                ctx.enqueue_function[rff_cell_part_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1),
-                                                           Int32(0), Int32(n), s, e, dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                           dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
-                wo += rff_blocks(stats * nbf)
-                ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(1), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                           dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                           wit.p(), Int32(wo), nonce,
-                                                           grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
-                wo += rff_blocks(stats)
-                ctx.enqueue_function[rff_kf_solve_kernel](Int32(d), Int32(fi), dal.unsafe_ptr(), Int32(na), dtr.unsafe_ptr(),
-                                                          dsh.unsafe_ptr(), dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(),
-                                                          dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtmp.unsafe_ptr(), dtw.unsafe_ptr(),
-                                                          dw.unsafe_ptr(), db.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                          grid_dim=na, block_dim=RFF_TPB)
-                wo += na
-            else:
-                var have_ff = False
-                for a in range(na):
-                    if htr[a] == Float32(1):
-                        continue
-                    if not have_ff:
-                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                                Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                                wit.p(), Int32(wo), nonce,
-                                                                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-                        wo += _xg_blocks(d + 1)
-                        ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
-                                                                Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                                wit.p(), Int32(wo), nonce,
-                                                                grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
-                        wo += _xg_blocks(ff_units - (d + 1))
-                        have_ff = True
-                    ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                             dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
-                                                             dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
-                                                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
-                    wo += 1
+            var have_ff = False
+            for a in range(na):
+                if htr[a] == Float32(1):
+                    continue
+                if not have_ff:
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                    wo += _xg_blocks(d + 1)
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
+                    wo += _xg_blocks(ff_units - (d + 1))
+                    have_ff = True
+                ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                         dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
+                                                         dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
+                                                         wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                wo += 1
             var nt = Int(e) - Int(s)
             ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
                                                  dp.unsafe_ptr(), Int32(stride), wit.p(), Int32(wo), nonce,
@@ -4109,10 +4476,6 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dfh^
     _ = dfl^
     _ = dtmp^
-    _ = dph^
-    _ = dpl^
-    _ = dtw^
-    _ = dgate^
 
 
 
@@ -4140,17 +4503,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var words = d + t_n + d * d + d * t_n
     var dsh = ctx.enqueue_create_buffer[DType.float32](words)
     var dsl = ctx.enqueue_create_buffer[DType.float32](words)
-    # RIDGECV_FF_BLOCKED (x_linear/ridge_ff_blocks.mojo): one target a thread
-    # in the solve team needs T*d words of b; the block partial table and the
-    # team's slots beside them (one word each otherwise)
-    var dbh = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
-    var dbl = ctx.enqueue_create_buffer[DType.float32](max(t_n * d if RIDGECV_FF_BLOCKED else d, 1))
-    var rff_pw = rff_part_words(n, d, t_n) if RIDGECV_FF_BLOCKED else 1
-    var dph = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dpl = ctx.enqueue_create_buffer[DType.float32](max(rff_pw, 1))
-    var dtw = ctx.enqueue_create_buffer[DType.float32](TEAM_SLOTS if RIDGECV_FF_BLOCKED else 1)
-    var dgate = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_memset(dgate, Int32(1))
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
     var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
@@ -4160,59 +4514,24 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var b1 = _xg_blocks(nm)
     var b2 = _xg_blocks(units - nm)
     var cap = b1 + b2 + 1
-    var nbf = fold_blocks(n)
-    var mc = rff_mcols(d, t_n)
-    var stats = rff_stats(d, t_n)
-    comptime if RIDGECV_FF_BLOCKED:
-        cap = rff_blocks(mc * nbf) + rff_blocks(nm) + rff_blocks(stats * nbf) + rff_blocks(stats) + 1
     var wit = Witness(ctx, cap)
     var tries = 0
     while True:
         var nonce = wit.begin()
         dsh.enqueue_fill(Float32(0))
         dsl.enqueue_fill(Float32(0))
-        comptime if RIDGECV_FF_BLOCKED:
-            # lane/classical-cv-folds: the statistics as block partials folded
-            # blocks ascending; the solve on one block team
-            var wo = 0
-            ctx.enqueue_function[rff_mean_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
-                                                       Int32(n * t_n), Int32(0), Int32(0), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(mc * nbf), block_dim=RFF_TPB)
-            wo += rff_blocks(mc * nbf)
-            ctx.enqueue_function[rff_mean_fold_kernel](Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), dph.unsafe_ptr(),
-                                                       dpl.unsafe_ptr(), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       dgate.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(nm), block_dim=RFF_TPB)
-            wo += rff_blocks(nm)
-            ctx.enqueue_function[rff_cell_part_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if sw else 0),
-                                                       Int32(n * t_n), Int32(0), Int32(0), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                                       dph.unsafe_ptr(), dpl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(stats * nbf), block_dim=RFF_TPB)
-            wo += rff_blocks(stats * nbf)
-            ctx.enqueue_function[rff_cell_fold_kernel](Int32(n), Int32(d), Int32(t_n), dph.unsafe_ptr(), dpl.unsafe_ptr(),
-                                                       dsh.unsafe_ptr(), dsl.unsafe_ptr(), dgate.unsafe_ptr(),
-                                                       wit.p(), Int32(wo), nonce,
-                                                       grid_dim=rff_blocks(stats), block_dim=RFF_TPB)
-            wo += rff_blocks(stats)
-            ctx.enqueue_function[rff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                   dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                   dfh.unsafe_ptr(), dfl.unsafe_ptr(), dtw.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                   grid_dim=1, block_dim=RFF_TPB)
-        else:
-            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                       Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
-                                                       dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                       grid_dim=b1, block_dim=XG_TPB)
-            ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
-                                                       Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
-                                                       dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
-                                                       grid_dim=b2, block_dim=XG_TPB)
-            ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                        dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                        dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
-                                                        grid_dim=1, block_dim=1)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=b1, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
+                                                   grid_dim=b2, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                    dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                    dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
+                                                    grid_dim=1, block_dim=1)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
         if wit.ok(ctx, cap, "Ridge float-float refit"):
             break
@@ -4231,10 +4550,6 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     _ = dsl^
     _ = dbh^
     _ = dbl^
-    _ = dph^
-    _ = dpl^
-    _ = dtw^
-    _ = dgate^
     _ = dout^
     _ = dfh^
     _ = dfl^
@@ -4841,15 +5156,25 @@ def iso_keep_write_kernel(n: Int32, fw: FP, mslot: IP, bcnt: IP, nbk: Int32, res
     witness_end(wf, woff, nonce)
 
 @always_inline
-def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP):
+def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, status: FP):
+    """One thread a query: res[q], then the two status words (lane
+    fb15-sync-counts, 2026-11-18): status[0] the out_of_bounds='raise' word
+    (iso_oob_flag's test, written at index 0 of `status`), status[1] a
+    non-finite query (IDENTICAL; the verdict `xlin_finite_kernel` gave in a
+    launch, a wait and a download of its own before). Every writer stores
+    the same word, so the order of the writes does not matter."""
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if q < Int(n):
         iso_predict_one(q, x, thr, Int(m), Int(oob), fp, res)
-        iso_oob_flag(q, Int(n), x, Int(oob), fp, res)
+        iso_oob_flag(q, 0, x, Int(oob), fp, status)
+        comptime if XLIN_IDN_DEV_FINITE:
+            if not isfinite(ld(x, q)):
+                st(status, 1, Float32(1))
 
 
-def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, wf: IP, woff: Int32, nonce: Int32):
-    _iso_predict_kernel_body(x, thr, n, m, oob, fp, res)
+def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, status: FP,
+                       wf: IP, woff: Int32, nonce: Int32):
+    _iso_predict_kernel_body(x, thr, n, m, oob, fp, res, status)
     witness_end(wf, woff, nonce)
 
 def ISO_WIT_CAP(n: Int) -> Int:
@@ -5089,42 +5414,84 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
 
 
 def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int32], fp: List[Float32], res: FP) raises:
+    """IsotonicRegression.predict on the grid: ONE upload of the queries, ONE
+    upload of [knots | X_min, X_max | two zero status words], ONE launch, the
+    predictions and the two status words downloaded, ONE wait (lane
+    fb15-sync-counts, 2026-11-18). Before: four uploads (the queries, the
+    knots, the knots AGAIN for their own finite test, the bounds), two
+    memsets, three launches (the queries' and the knots' finite tests and
+    the predict), two waits. The knots are the fitted thresholds, finite by
+    construction, so their per-predict finite test is gone; the queries'
+    test is the predict kernel's status[1] word, raised after the one wait
+    with the binding's text. Off Apple the witness (whose words are never
+    written there) allocates nothing. No predicted word moves."""
     var ctx = linear_ctx()
-    var hfp = fp.copy()
+    # [knots n_thr | X_min, X_max | status 2]: the status words go up as zeros
+    var bounds_at = n_thr
+    var status_at = n_thr + 2
+    var hk = List[Float32](length=n_thr + 4, fill=Float32(0))
+    copy_f32(thr, hk.unsafe_ptr(), n_thr)
+    if len(fp) > 0:
+        hk[bounds_at] = fp[0]
+    if len(fp) > 1:
+        hk[bounds_at + 1] = fp[1]
+    var hs = List[Float32](length=2, fill=Float32(0))
+    # OOB_RAISE: the binding reads the out-of-bounds word at res[n]
+    var raise_oob = len(ip) > 1 and Int(ip[1]) == OOB_RAISE
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dt = ctx.enqueue_create_buffer[DType.float32](max(n_thr, 1))
-    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
-    # OOB_RAISE: one more word, res[n], the out-of-bounds flag (zeroed here)
-    var n_res = n + 1 if (len(ip) > 1 and Int(ip[1]) == OOB_RAISE) else n
-    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
-    dout.enqueue_fill(Float32(0))
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_thr + 4)
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
-    comptime if XLIN_IDN_DEV_FINITE:
-        xlin_finite_device(ctx, dx, n_x, thr, n_thr)
-    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
-    # the whole isotonic predict as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
-    var wit = Witness(ctx, _xg_blocks(n))
-    var tries = 0
-    while True:
-        var nonce = wit.begin()
-        var wo = 0
-        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), dt.unsafe_ptr(), Int32(n), ip[0], ip[1], dfp.unsafe_ptr(),
-                                                 dout.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
-        wo += _xg_blocks(n)
+    ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
+    # check-only count (compiles to nothing by default): the knots ride the one upload that carries the
+    # zero status words of this call, so there is no separate fitted copy to keep resident
+    resident_upload_note(RUC_ISOTONIC, n_thr)
+    # thresholds, bounds and status ride ONE upload; the kernel takes them as three views of it
+    # (three pointers computed from one are refused as mutable aliases of each other)
+    var dstat = dk.create_sub_buffer[DType.float32](status_at, 2)
+    var dbnd = dk.create_sub_buffer[DType.float32](bounds_at, 2)
+    var kp = dk.unsafe_ptr()
+    comptime if TARGET_HAS_APPLE_GPU:
+        # the whole isotonic predict as ONE guarded unit (x_linear/witness.mojo):
+        # the launch rebuilds every word it writes from inputs it does not write
+        var wit = Witness(ctx, _xg_blocks(n))
+        var tries = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], dbnd.unsafe_ptr(),
+                                                     dout.unsafe_ptr(), dstat.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                     grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+            wo += _xg_blocks(n)
+            ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dstat)
+            if wit.ok(ctx, wo, "isotonic predict"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+        _ = wit^
+    else:
+        # witness_end compiles to nothing off Apple: the word pointer is never read
+        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), kp, Int32(n), ip[0], ip[1], dbnd.unsafe_ptr(),
+                                                 dout.unsafe_ptr(), dstat.unsafe_ptr(), IP(unsafe_from_address=Int(kp)),
+                                                 Int32(0), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
-        if wit.ok(ctx, wo, "isotonic predict"):
-            break
-        tries += 1
-        if tries >= WITNESS_TRIES:
-            wit.fail()
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dstat)
     ctx.synchronize()
-    _ = hfp^
+    var bad = hs[1] != Float32(0)
+    var oob_word = hs[0]
+    _ = hs^
+    _ = hk^
+    _ = dstat^
+    _ = dbnd^
     _ = dx^
-    _ = dt^
-    _ = dfp^
+    _ = dk^
     _ = dout^
-    _ = wit^
+    if bad:
+        raise Error("mojolearn: X contains NaN or infinity")
+    if raise_oob:
+        st(res, n, oob_word)
 
 
 def fit_device(
@@ -5158,7 +5525,7 @@ def fit_device(
         _sgd_ps_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     var ctx = linear_ctx()
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         # LassoCV / ElasticNetCV with every row pass on the grid
         # (x_linear/enetcv_fast.mojo, lane/apple-fast-classical); `=0` is the A/B arm
         # (the weighted fit, ip[7] = 1, takes the grid's weighted arm)
@@ -5171,7 +5538,7 @@ def fit_device(
         return
     # HuberRegressor with the line search batched on the device
     # (x_linear/huber_fast.mojo, lane/apple-fast-robust recovered):
-    # -D MOJOLEARN_HUBER_DEVICE_LBFGS (or HUBER_FAST_BLOCK512), FAST + Apple only
+    # FAST + Apple only
     comptime if HUBER_DEVICE_LBFGS:
         if algo == ALGO_HUBER and n > 0:
             huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
@@ -5222,7 +5589,7 @@ def fit_device(
             hip.append(Int32(0))
         hip[6] = Int32(n)
     var fast_gram = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
         # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
         if bayes_like:
@@ -5252,7 +5619,7 @@ def fit_device(
     # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI were dropped (lane/apple-fast-kernel
     # @ 9e851777c).
     var kstats = False
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
         if bayes_like:
             # STATS: BayesianRidge (unweighted) on main's grid driver only;
             # ARD keeps main's moments grid (its X'y pass is the team's)
@@ -5270,11 +5637,8 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
         xlin_finite_device(ctx, dx, n_x, y, n_y)
-    comptime if C13_LOGCV_WEIGHTS:
-        # the opt-in C13 weight sums assume disjoint folds; a non-partition cv
-        # marks every fold word -(n + 1) (x_linear/cv_roles.mojo)
-        if algo == ALGO_LOGCV and n > 0 and n_y > n and y[n] < Float32(0):
-            raise Error("x_linear: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS sums disjoint folds; a cv that is not a partition (ShuffleSplit, overlapping or partial splits) is refused under it")
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
     if algo == ALGO_LOGCV and n > 0:
         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo),
         # unless an explicit cv's fold ids came in y (ip[6] = 1)
@@ -5290,7 +5654,7 @@ def fit_device(
     # prep work in place, so a cut launch reruns the unit from its zeros.
     var cells = d * (d + 1) // 2
     var rows_slice = n
-    comptime if has_apple_gpu_accelerator():
+    comptime if TARGET_HAS_APPLE_GPU:
         rows_slice = max(64, min(n, (XL_APPLE_SLICE_MACS // max(cells, 1)) // 64 * 64))
     var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
     var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
@@ -5318,14 +5682,18 @@ def fit_device(
     var dstate = ctx.enqueue_create_buffer[DType.float32](C1_BAYES_STATE)
     var dyparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
     var dvparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
+    # the eigh op's status word (BayesianRidge on the grid): read once after
+    # the setup, so an unconverged solve is refused on every vendor
+    var deig = ctx.enqueue_create_buffer[DType.int32](1)
     var setup_tries = 0
     while True:
         dout.enqueue_fill(Float32(0))
         dfw.enqueue_fill(Float32(0))
         diw.enqueue_fill(Int32(0))
         dtw.enqueue_fill(Float32(0))
+        deig.enqueue_fill(Int32(0))
         var good = True
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
             if fast_gram:
                 # lane/apple-fast-gram: the shared grid Gram (row chunks x 32 x
                 # 32 tiles, x_linear/fast_gram.mojo) fills the words the moments
@@ -5500,11 +5868,26 @@ def fit_device(
                             dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(d)
+                # lane n9b-device-svd-qr: G's eigendecomposition is the
+                # executor op (`eigh_op_dense`, the round-robin Jacobi on a
+                # copy of G; host column `eigh_op_dense_host`), then the
+                # team's d x d half
+                var dg = ctx.enqueue_create_buffer[DType.float32](d * d)
+                ctx.enqueue_copy(dst_buf=dg, src_buf=dfw.create_sub_buffer[DType.float32](d, d * d))
+                var dew = ctx.enqueue_create_buffer[DType.float32](d)
+                var dev_v = ctx.enqueue_create_buffer[DType.float32](d * d)
+                var egate = step_gate_open_word(ctx)
+                eigh_op_dense(ctx, egate, dg, dew, dev_v, deig, 1, d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
+                    dew.unsafe_ptr(), dev_v.unsafe_ptr(), deig.unsafe_ptr(),
                     wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
                 )
+                _ = dg^
+                _ = dew^
+                _ = dev_v^
+                _ = egate^
                 units = wo + 1
             else:
                 ctx.enqueue_function[lars_path_kernel](
@@ -5517,7 +5900,16 @@ def fit_device(
             break
         setup_tries += 1
         if setup_tries >= WITNESS_TRIES:
+            # Apple: an unconverged eigh withholds the witness on every try;
+            # refuse it with the text every column raises, not the abort
+            if bayes_grid and _bayes_eig_refused(ctx, deig):
+                raise Error(BAYES_EIGH_REFUSAL)
             wit.fail()
+    # lane m3-linalg-and-housekeeping (2026-11-09): NVIDIA and AMD (no
+    # witness) went on with an unconverged eigendecomposition; one word read
+    if bayes_grid and _bayes_eig_refused(ctx, deig):
+        raise Error(BAYES_EIGH_REFUSAL)
+    _ = deig^
     if bayes_grid:
         var drows = ctx.enqueue_create_buffer[DType.float32](n)
         var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))
@@ -5532,7 +5924,7 @@ def fit_device(
         var max_iter = Int(hip[0])
         var sw = Int(hip[2]) if len(hip) > 2 else 0
         var gram_sse = False
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU:
             gram_sse = sw == 0 and len(hip) > 5 and Int(hip[5]) != 0
         # FAST on Apple, the default (lane/apple-fast-bayes; `_GUARD_OFF` turns it off):
         # the Gram sse guarded by a reference row pass (`bayes_step_guard_kernel`)
@@ -5628,7 +6020,8 @@ def fit_device(
                             else:
                                 ctx.enqueue_function[bayes_part_kernel](
                                     drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                                    dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                                    grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                                 )
                             if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                                 break
@@ -5649,6 +6042,9 @@ def fit_device(
                         break
                     fresh = hst[6] == Float32(0)
                 max_iter = 0  # the loop below ran here
+        var bayes_read = BAYES_IDN_READ
+        comptime if TARGET_HAS_APPLE_GPU:
+            bayes_read = 1
         for it in range(max_iter):
             iters = it + 1
             if gram_sse:
@@ -5683,7 +6079,8 @@ def fit_device(
                 else:
                     ctx.enqueue_function[bayes_part_kernel](
                         drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                        wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                        dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                        grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                     )
                 if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                     break
@@ -5701,10 +6098,17 @@ def fit_device(
             )
             if not wit2.ok(ctx, 1 + _xg_blocks(d), "Bayes step"):
                 wit2.fail()
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
-            ctx.synchronize()
-            if hst[5] != Float32(0):
-                break
+            # lane n2-cd-qn-glm-loops: the stop word and the count come home
+            # once per `bayes_read` iterations; the kernels of an iteration
+            # queued after the stop write nothing (state[5] gates them), so
+            # the fit ends at the same step with the same words. Apple reads
+            # every iteration (its witness reruns a cut iteration).
+            if (it + 1) % bayes_read == 0 or it + 1 == max_iter:
+                ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+                ctx.synchronize()
+                if hst[5] != Float32(0):
+                    iters = Int(hst[8])
+                    break
         var nf = wit2.begin()
         if dev_iters:
             ctx.enqueue_function[c1_bayes_finish_kernel](
@@ -5753,19 +6157,68 @@ def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32
         codes.unsafe_store(i, decision_code_row(s, i, Int(k), Int(strict), Int(below), Int(above)))
 
 
+# TOMBSTONE: MOJOLEARN_XLINEAR_FAST_WB_RESIDENT (its constant, the resident slot and struct, and the resident branch of
+# _decision_wb: the fitted weight block of the last decision call kept on the device with a host copy of its words, a
+# call with the same bits taking it after one compare; NOISE, A/B round 2 NVIDIA L40S, wheel 0c68d6cd27, job
+# nvc-ab-20261119T154232Z-0642a5, digests and quality equal on 28 cells: of the 18 pairs whose two cells ran on one
+# NUMA node, fits 0.98-1.01 and predicts 0.94-1.20 with three slower, huber istella 5.68 -> 6.79 ms, sgd-clf taxi
+# 1.09 -> 1.24, bayesian-ridge taxi 0.755 -> 0.788, medians of 20) deleted 2026-11-19 by lane/fx-verdicts4; code
+# recoverable at 8f3f639b13.
+# Restore: git apply experiments/removed/MOJOLEARN_XLINEAR_FAST_WB_RESIDENT.patch; record in docs/TOMBSTONES.md.
+def _decision_wb(ctx: DeviceContext, wb: FP, count: Int) raises -> DeviceBuffer[DType.float32]:
+    """The weight block `wb[0:count]` on the device for one decision entry:
+    a new buffer and one queued copy that reads `wb` until the entry's wait.
+    Call site: once per decision entry, no loop reaches it."""
+    var dwb = ctx.enqueue_create_buffer[DType.float32](count)
+    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    resident_upload_note(RUC_X_LINEAR, count)  # check-only count (compiles to nothing by default)
+    return dwb^
+
+
+def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count: Int, status: Int) raises -> DeviceBuffer[DType.int32]:
+    """The deferred finite test of a decision entry's X (lane
+    a1b-doors-opt-in-trees-linear; core/admitted_finite_status.mojo): over
+    the words the entry just uploaded, one grid-stride kernel into the
+    device word returned here. `status` is the host address of one int32
+    word, 0 when the door tested X itself; `_decision_status_home` copies
+    the word there, AFTER the entry's result copy (the status rides home
+    with the result, one drain per predict)."""
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    if status != 0:
+        enqueue_finite_word(ctx, dx.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat, 0)
+    return dstat^
+
+
+def _decision_status_home(ctx: DeviceContext, mut dstat: DeviceBuffer[DType.int32], status: Int) raises:
+    """Copy the finite status word to the door's host word, enqueued last.
+    Lane fable-perf-classical-0855 (2026-11-13): this copy was enqueued
+    BEFORE the decision kernel. `status` is a pageable host word (the
+    door's int32 array), and a device-to-host copy into pageable memory
+    returns only once it has completed (CUDA's cuMemcpyDtoHAsync rule), so
+    every predict drained the stream twice: once here, once for the
+    result. The owed measurement of candidate 4c2340386abc on an L40S
+    (~/mojolearn-evidence/measure-candidate/nv-results-4c2340386abc,
+    OWED-SUMMARY-nvidia.txt) had algos/ard/taxi infer Xq 1.20 -> 1.43 ms
+    against 0.8.66, which tested nothing; 0.8.66 is the only prior for the
+    row. Same words: the word is read after the entry's synchronisation."""
+    if status != 0:
+        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=status), src_buf=dstat)
+
+
 def decision_codes_device(
-    x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, strict: Int, below: Int, above: Int, codes: IP
+    x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, strict: Int, below: Int, above: Int, codes: IP,
+    status: Int = 0,
 ) raises:
     """`decision_device`'s block, then each row's class code on the device
     (`decision_code_row`); only the n int32 codes come down."""
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     var dc = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
+    var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
         ctx.enqueue_function[decision_kernel](
             dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
@@ -5776,7 +6229,9 @@ def decision_codes_device(
             grid_dim=(n + 127) // 128, block_dim=128,
         )
         ctx.enqueue_copy(dst_ptr=codes, src_buf=dc.create_sub_buffer[DType.int32](0, n))
+    _decision_status_home(ctx, dstat, status)
     ctx.synchronize()
+    _ = dstat^
     _ = dx^
     _ = dwb^
     _ = dout^
@@ -5784,14 +6239,109 @@ def decision_codes_device(
     _ = ctx^
 
 
-def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) raises:
+def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, res: FP,
+                         status: Int = 0) raises:
+    """`decision_device`'s block, then `py2mojo_rows` mode `rows_mode`
+    (ROWS_SGD_PROBA or ROWS_LRCV_PROBA, float32 in and out) on the scores
+    while they are on the device; only the n x max(k, 2) float32
+    probabilities come down. The same two kernels on the same words as
+    `x_linear_decision` followed by `py2mojo_rows`."""
+    # ne2-g-linear (N362): SGDClassifier / LogisticRegressionCV predict_proba
+    # was two crossings with the (n, k) scores downloaded and uploaded again.
+    if rows_mode != ROWS_SGD_PROBA and rows_mode != ROWS_LRCV_PROBA:
+        raise Error("x_linear_decision_rows: rows mode must be SGD_PROBA or LRCV_PROBA")
+    var ctx = linear_ctx()
+    var n_res = n * (2 if k == 1 else k)
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
+    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_s2 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d8 = ctx.enqueue_create_buffer[DType.uint8](1)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
+    var dstat = _decision_status(ctx, dx, n * d, status)
+    if n > 0:
+        ctx.enqueue_function[decision_kernel](
+            dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
+            grid_dim=(n * k + 127) // 128, block_dim=128,
+        )
+        var blocks = max(1, min(ROWS_MAX_BLOCKS, (n + ROWS_TPB - 1) // ROWS_TPB))
+        ctx.enqueue_function[rows_kernel](
+            Int32(rows_mode), dout.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(k), Int64(n),
+            dres.unsafe_ptr(), d_d64.unsafe_ptr(), d_s2.unsafe_ptr(), UInt64(0), d_d8.unsafe_ptr(),
+            grid_dim=blocks, block_dim=ROWS_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=res, src_buf=dres.create_sub_buffer[DType.float32](0, n_res))
+    _decision_status_home(ctx, dstat, status)
+    ctx.synchronize()
+    _ = dstat^
+    _ = dx^
+    _ = dwb^
+    _ = dout^
+    _ = dres^
+    _ = d_s64^
+    _ = d_d64^
+    _ = d_s2^
+    _ = d_d8^
+    _ = ctx^
+
+
+def decision_huber_out_device(
+    x: FP, wb: FP, n: Int, d: Int, link: Int, y: FP, thr: Float64, flags: MutPointer[UInt8, MutAnyOrigin],
+) raises:
+    """HuberRegressor.outliers_ in one device session: `decision_device`'s
+    one-target block on the training rows, then `py2mojo_rows`
+    ROWS_HUBER_OUT (|y - pred| > thr in binary64) on the prediction while it
+    is on the device; only the n uint8 flags come down."""
+    # ne2-g-linear (N302): was x_linear_decision (pred downloaded) then
+    # py2mojo_rows (y and pred uploaded again); the same two kernels' words.
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
-    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
+    var dpred = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dflags = ctx.enqueue_create_buffer[DType.uint8](max(n, 1))
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_d32 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_d64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    var dwb = _decision_wb(ctx, wb, d + 1)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+        ctx.enqueue_function[decision_kernel](
+            dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(link), dpred.unsafe_ptr(),
+            grid_dim=(n + 127) // 128, block_dim=128,
+        )
+        var blocks = max(1, min(ROWS_MAX_BLOCKS, (n + ROWS_TPB - 1) // ROWS_TPB))
+        ctx.enqueue_function[rows_kernel](
+            Int32(ROWS_HUBER_OUT), dy.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(1), Int64(n),
+            d_d32.unsafe_ptr(), d_d64.unsafe_ptr(), dpred.unsafe_ptr(), bitcast[DType.uint64](thr), dflags.unsafe_ptr(),
+            grid_dim=blocks, block_dim=ROWS_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=flags, src_buf=dflags.create_sub_buffer[DType.uint8](0, n))
+    ctx.synchronize()
+    _ = dx^
+    _ = dwb^
+    _ = dpred^
+    _ = dy^
+    _ = dflags^
+    _ = d_s64^
+    _ = d_d32^
+    _ = d_d64^
+    _ = ctx^
+
+
+def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP, status: Int = 0) raises:
+    var ctx = linear_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dwb = _decision_wb(ctx, wb, k * (d + 1))
+    var dstat = _decision_status(ctx, dx, n * d, status)
     var total = n * k
     if total > 0:
         ctx.enqueue_function[decision_kernel](
@@ -5799,7 +6349,9 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) r
             grid_dim=(total + 127) // 128, block_dim=128,
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    _decision_status_home(ctx, dstat, status)
     ctx.synchronize()
+    _ = dstat^
     _ = dx^
     _ = dwb^
     _ = dout^

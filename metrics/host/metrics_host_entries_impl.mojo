@@ -8,6 +8,7 @@ result back; every scan over rows lives here). Same checks, same order,
 same error sentences.
 """
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_list
 
 from metrics.host.classification_oracle import (
     MAX_CONFUSION_CLASSES,
@@ -29,10 +30,10 @@ def metrics_check_pair(y_true: List[Int32], y_pred: List[Int32], n: Int) raises:
 
 
 def require_finite_f32(values: List[Float32], message: String) raises:
-    """Refuse with `message` at the first non-finite value."""
-    for value in values:
-        if not isfinite(value):
-            raise Error(message)
+    """Refuse with `message` when any value is non-finite."""
+    # parallel: the one host finite scan (was a serial isfinite loop)
+    if not host_all_finite_list(values):
+        raise Error(message)
 
 
 def regression_inputs_finite(
@@ -40,9 +41,9 @@ def regression_inputs_finite(
     prediction: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
 ) raises:
-    for i in range(n):
-        if not isfinite(y.unsafe_load(i)) or not isfinite(prediction.unsafe_load(i)):
-            raise Error("regression_error: inputs must be finite Float32")
+    # parallel: the one host finite scan over each input (was a serial isfinite loop over both)
+    if not host_all_finite_f32(y, n) or not host_all_finite_f32(prediction, n):
+        raise Error("regression_error: inputs must be finite Float32")
 
 
 def binary_ranking_checked(

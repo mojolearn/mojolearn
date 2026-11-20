@@ -1,0 +1,208 @@
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index af26480182..9ff9797e68 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -1248,10 +1248,73 @@ def lanczos_restart_fast(
+ # TOMBSTONE: MOJOLEARN_LANCZOS_ID_DEV_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 3f2857a7e3.
+ # Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_ID_DEV_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime LANCZOS_ID_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and has_accelerator()
+-#: LANCZOS_ID_DEV runs the per-element launches of a step fused (the same
++#: LANCZOS_ID_DEV with the per-element launches of a step fused (the same
+ #: words, element by element, in the same order).
+-# TOMBSTONE: MOJOLEARN_LANCZOS_ID_DEV_FUSE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at b768ccf192.
+-# Restore: git apply experiments/removed/MOJOLEARN_LANCZOS_ID_DEV_FUSE_OFF.patch; record in docs/TOMBSTONES.md.
++#: `-D MOJOLEARN_LANCZOS_ID_DEV_FUSE_OFF` keeps one launch per host kernel.
++comptime LANCZOS_ID_DEV_FUSE = (
++    LANCZOS_ID_DEV and not is_defined["MOJOLEARN_LANCZOS_ID_DEV_FUSE_OFF"]()
++)
++
++
++def id_axpy_dev_kernel(
++    y: MutPointer[Float32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin],
++    a_ptr: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """`axpy_kernel` with `a` read from a device scalar."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= Int(n_in):
++        return
++    var a = a_ptr.unsafe_load(0)
++    y.unsafe_store(i, ftz(identical_mul_add(a, x.unsafe_load(i), y.unsafe_load(i))))
++
++
++def id_alpha_finish_kernel(
++    dot: MutPointer[Float32, MutAnyOrigin],
++    uu: MutPointer[Float32, MutAnyOrigin],
++    d_alpha: MutPointer[Float32, MutAnyOrigin],
++    i_in: Int32,
++):
++    """The host's `alpha_i = clamp_down(ftz(alpha_i + uu_i), 1e-9)`."""
++    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
++        return
++    var i = Int(i_in)
++    var a = ftz(dot.unsafe_load(0) + uu.unsafe_load(i))
++    d_alpha.unsafe_store(i, clamp_down(a, LANCZOS_ALPHA_CLAMP))
++
++
++def id_beta_finish_kernel(
++    sq: MutPointer[Float32, MutAnyOrigin],
++    d_beta: MutPointer[Float32, MutAnyOrigin],
++    i_in: Int32,
++):
++    """The host's `beta_i = clamp_down(ftz(sqrt(||u||^2)), 1e-6)`."""
++    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
++        return
++    var b = ftz(_host_sqrt(sq.unsafe_load(0)))
++    d_beta.unsafe_store(Int(i_in), clamp_down(b, LANCZOS_BETA_CLAMP))
++
++
++def id_normalize_dev_kernel(
++    u: MutPointer[Float32, MutAnyOrigin],
++    beta_ptr: MutPointer[Float32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin],
++    v_next: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """`kernel_normalize` with `beta[j]` read from a device scalar."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= Int(n_in):
++        return
++    var beta_j = beta_ptr.unsafe_load(0)
++    var val: Float32
++    if beta_j == Float32(0.0):
++        val = ftz(u.unsafe_load(i) / Float32(1.0))
++    else:
++        val = ftz(u.unsafe_load(i) / beta_j)
++    v.unsafe_store(i, val)
++    v_next.unsafe_store(i, val)
+ 
+ 
+ def id_three_term_kernel(
+@@ -1284,8 +1347,7 @@ def id_sub_alpha_kernel(
+     i_in: Int32,
+     n_in: Int32,
+ ):
+-    """`sub_kernel`, with thread 0 also doing the host's
+-    `alpha_i = clamp_down(ftz(alpha_i + uu_i), 1e-9)`."""
++    """`sub_kernel`, with thread 0 also doing `id_alpha_finish_kernel`."""
+     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if t == 0:
+         var i = Int(i_in)
+@@ -1306,9 +1368,9 @@ def id_clamp_beta_normalize_kernel(
+     do_norm: Int32,
+     n_in: Int32,
+ ):
+-    """`clamp_down_vector(u)`, the host's `beta_i = clamp_down(ftz(sqrt(
+-    ||u||^2)), 1e-6)` and (unless this is the last step) `kernel_normalize`
+-    in one launch. Every thread derives the same beta word from the same squared norm; thread 0 stores it. The
++    """`clamp_down_vector(u)`, `id_beta_finish_kernel` and (unless this is
++    the last step) `kernel_normalize` in one launch. Every thread derives
++    the same beta word from the same squared norm; thread 0 stores it. The
+     clamp and the division touch each element in the same thread, in the
+     host path's order."""
+     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+@@ -1368,32 +1430,83 @@ def _id_dev_enqueue_steps(
+         spmv_enqueue(ctx, A, u, v, 0, n, tpb)
+         identical_gemm_into(ctx, dot_c, v, u, ws, 1, 1, n, OP_NT)
+         var prev = (i - 1 + ncv) % ncv
+-        ctx.enqueue_function[id_three_term_kernel](
+-            u.unsafe_ptr(), vv.unsafe_ptr(), v.unsafe_ptr(),
+-            V.unsafe_ptr().unsafe_offset(prev * n), scal.unsafe_ptr(),
+-            d_beta.unsafe_ptr().unsafe_offset(prev), Int32(n),
+-            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+-        )
++        comptime if LANCZOS_ID_DEV_FUSE:
++            ctx.enqueue_function[id_three_term_kernel](
++                u.unsafe_ptr(), vv.unsafe_ptr(), v.unsafe_ptr(),
++                V.unsafe_ptr().unsafe_offset(prev * n), scal.unsafe_ptr(),
++                d_beta.unsafe_ptr().unsafe_offset(prev), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++        else:
++            ctx.enqueue_function[fill_zero_kernel](
++                vv.unsafe_ptr(), Int32(n), grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1)
++            )
++            ctx.enqueue_function[id_axpy_dev_kernel](
++                vv.unsafe_ptr(), v.unsafe_ptr(), scal.unsafe_ptr(), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++            ctx.enqueue_function[id_axpy_dev_kernel](
++                vv.unsafe_ptr(),
++                V.unsafe_ptr().unsafe_offset(prev * n),
++                d_beta.unsafe_ptr().unsafe_offset(prev),
++                Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++            ctx.enqueue_function[axpy_kernel](
++                u.unsafe_ptr(), vv.unsafe_ptr(), Float32(-1.0), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
+         identical_gemm_into(ctx, uu, V, u, ws, i + 1, 1, n, OP_NT)
+         identical_gemm_into(ctx, tmp, V, uu, ws, n, 1, i + 1, OP_TN)
+-        ctx.enqueue_function[id_sub_alpha_kernel](
+-            u.unsafe_ptr(), tmp.unsafe_ptr(), scal.unsafe_ptr(),
+-            uu.unsafe_ptr(), d_alpha.unsafe_ptr(), Int32(i), Int32(n),
+-            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+-        )
++        comptime if LANCZOS_ID_DEV_FUSE:
++            ctx.enqueue_function[id_sub_alpha_kernel](
++                u.unsafe_ptr(), tmp.unsafe_ptr(), scal.unsafe_ptr(),
++                uu.unsafe_ptr(), d_alpha.unsafe_ptr(), Int32(i), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++        else:
++            ctx.enqueue_function[sub_kernel](
++                u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++            ctx.enqueue_function[id_alpha_finish_kernel](
++                scal.unsafe_ptr(), uu.unsafe_ptr(), d_alpha.unsafe_ptr(), Int32(i),
++                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
++            )
+         # beta_i = ||u|| BEFORE the clamp of u.
+         identical_gemm_into(ctx, sq_c, u, uv, ws, 1, 1, n, OP_NT)
+         step += 1
+         var last = i >= end_idx - 1
+-        var nx = i if last else i + 1
+-        ctx.enqueue_function[id_clamp_beta_normalize_kernel](
+-            u.unsafe_ptr(), sq_c.unsafe_ptr(), d_beta.unsafe_ptr(),
+-            v.unsafe_ptr(), V.unsafe_ptr().unsafe_offset(nx * n), Int32(i),
+-            Int32(0) if last else Int32(1), Int32(n),
+-            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+-        )
+-        if last:
+-            break
++        comptime if LANCZOS_ID_DEV_FUSE:
++            var nx = i if last else i + 1
++            ctx.enqueue_function[id_clamp_beta_normalize_kernel](
++                u.unsafe_ptr(), sq_c.unsafe_ptr(), d_beta.unsafe_ptr(),
++                v.unsafe_ptr(), V.unsafe_ptr().unsafe_offset(nx * n), Int32(i),
++                Int32(0) if last else Int32(1), Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++            if last:
++                break
++        else:
++            ctx.enqueue_function[clamp_down_vector_kernel](
++                u.unsafe_ptr(), LANCZOS_U_CLAMP, Int32(n),
++                grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
++            )
++            ctx.enqueue_function[id_beta_finish_kernel](
++                scal.unsafe_ptr().unsafe_offset(1), d_beta.unsafe_ptr(), Int32(i),
++                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
++            )
++            if last:
++                break
++            ctx.enqueue_function[id_normalize_dev_kernel](
++                u.unsafe_ptr(),
++                d_beta.unsafe_ptr().unsafe_offset(i),
++                v.unsafe_ptr(),
++                V.unsafe_ptr().unsafe_offset((i + 1) * n),
++                Int32(n),
++                grid_dim=(g, 1, 1),
++                block_dim=(tpb, 1, 1),
++            )
+ 
+ def lanczos_aux_identical_dev(
+     ctx: DeviceContext,

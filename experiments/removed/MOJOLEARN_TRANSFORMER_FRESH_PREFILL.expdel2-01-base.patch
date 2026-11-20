@@ -1,0 +1,29 @@
+diff --git b/bindings/_mojolearn_transformer.mojo a/bindings/_mojolearn_transformer.mojo
+index 8d139348f3..a2f5657c1d 100644
+--- b/bindings/_mojolearn_transformer.mojo
++++ a/bindings/_mojolearn_transformer.mojo
+@@ -538,8 +538,8 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
+ # TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+ # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
+ # restored 2026-11-09 by lane r1-restore-measured-winners: the per-call entry and its two defines are live again
+-# with their pre-x4 export rule (NVIDIA IDENTICAL by default, -D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL opts out;
+-# the opt-in elsewhere, -D MOJOLEARN_TRANSFORMER_FRESH_PREFILL, was deleted 2026-11-15); the block session prefill stays the default route.
++# with their pre-x4 export rule (NVIDIA IDENTICAL by default, -D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL opts out,
++# -D MOJOLEARN_TRANSFORMER_FRESH_PREFILL opts in elsewhere); the block session prefill stays the default route.
+ def transformer_forward_fresh_binding(
+     addrs: PythonObject, params: PythonObject,
+ ) raises -> PythonObject:
+@@ -1225,10 +1225,9 @@ def build__mojolearn_transformer() -> PythonObject:
+         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
+         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
+         # NVIDIA's full public A/B gate admits discarded-cache prefill.
+-        # Apple retains its prior default until separately priced.
+-        # TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL (unmeasured opt-in arm: the per-call fresh prefill off NVIDIA) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 191ceb5942.
+-        # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.expdel2-01-base.patch
+-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()):
++        # Apple retains its prior default until separately priced; the explicit
++        # force flag remains available for its completed arithmetic gate.
++        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
+             m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
+         m.def_function[transformer_decode_step_binding](
+             "transformer_decode_step"

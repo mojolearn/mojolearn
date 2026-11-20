@@ -1408,6 +1408,25 @@ def stack_w64(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrackedOrigi
             dst[unsafe_offset=r * m + j] = src[unsafe_offset=r]
 
 
+def rows_any_unset(
+    eq: MutPointer[UInt8, MutUntrackedOrigin], n: Int, m: Int, col_major: Bool,
+    miss_out: MutPointer[Int32, MutUntrackedOrigin],
+):
+    """miss_out[r] = 1 when any of row r's m equality flags is 0, else 0; the flags
+    row-major (n x m) or, `col_major`, the m columns of n flags one after
+    another (lane ne2-b-members, N081: MultiOutputClassifier.score's per-row
+    all-outputs-match flag in one pass; the host column of
+    `glue_device.rows_any_unset_device`). Compares only."""
+    for r in range(n):
+        var miss = Int32(0)
+        for j in range(m):
+            var at = j * n + r if col_major else r * m + j
+            if eq[unsafe_offset=at] == UInt8(0):
+                miss = Int32(1)
+                break
+        miss_out[unsafe_offset=r] = miss
+
+
 def binary_proba(p: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin]):
     """res (n x 2) rows (1 - p, p), p widened exactly: the Python
     `[[1.0 - v, v] for v in p.tolist()]` (lane apple-fast-py2mojo-trees; the

@@ -325,8 +325,12 @@ def incremental_host(fixture, tmp_path):
 
 def test_incremental_host_rebuilds_changed_group_preserving_compilation_origins(fixture, tmp_path):
     directory, plan = incremental_host(fixture, tmp_path)
+    # one group (the tokenizer's, whose closure the fixture changed) compiles; every other merged host group of
+    # the real plan is retained (the count follows tools/merged_bindings.py, it grew from 5 groups to 7)
+    groups = hc.host_files()
+    assert sorted(plan) == groups
     assert [r['action'] for r in plan.values()].count('compile') == 1
-    assert [r['action'] for r in plan.values()].count('retain') == 4
+    assert [r['action'] for r in plan.values()].count('retain') == len(groups) - 1
     source, staged = hb.inspect(directory)
     contract, _, proof, capture = hb.record(source, COMPILER)
     assert hb.validate_bytes(source, staged, COMPILER)
@@ -335,7 +339,7 @@ def test_incremental_host_rebuilds_changed_group_preserving_compilation_origins(
     original_source, builds, *_ = fixture
     composition = rc.prepare(builds[0], directory, original_source, COMPILER, tmp_path/'composed-incremental')
     origins = [r for path,r in composition['artifact_origins'].items() if '/host/' in path]
-    assert sum(r['source_commit'] == OLD for r in origins) == 4
+    assert sum(r['source_commit'] == OLD for r in origins) == len(groups) - 1
     assert all('staging_proof_sha256' in r for r in origins)
 
 

@@ -46,7 +46,7 @@ from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 
 
 def _shape4(a: Int, b: Int, c: Int, d: Int) -> ShapeN:
-    var dims = InlineArray[Int, RN_MAX_RANK](fill=1)
+    var dims = Array[Int, RN_MAX_RANK](fill=1)
     dims[0] = a
     dims[1] = b
     dims[2] = c

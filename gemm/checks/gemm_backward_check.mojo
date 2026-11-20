@@ -224,8 +224,9 @@ from gemm.contract import (
 )
 from gemm.checks.gemm_oracle import fold_balanced_tree, gemm_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
+from checks.native_tests.kit import download_host_into, upload_host_into
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 #: Written into every output buffer before every launch. A cell still holding
 #: it afterwards was NEVER WRITTEN. Contract section 8 makes this load
@@ -1560,10 +1561,10 @@ def _run_bwd(
     # would hide that behind a plausible `+0.0`.
     for i in range(nws):
         hWS.unsafe_ptr().unsafe_store(i, POISON)
-    ctx.enqueue_copy(dst_buf=ddc, src_ptr=hDC.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dw, src_ptr=hW.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dout, src_ptr=hO.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dws, src_ptr=hWS.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, ddc, hDC)
+    upload_host_into[DType.float32](ctx, dw, hW)
+    upload_host_into[DType.float32](ctx, dout, hO)
+    upload_host_into[DType.float32](ctx, dws, hWS)
     ctx.synchronize()
 
     if which == BWD_A:
@@ -1573,7 +1574,7 @@ def _run_bwd(
     else:
         identical_gemm_backward_bias_into(ctx, dout, ddc, dw, dws, m, n)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hO.unsafe_ptr(), src_buf=dout)
+    download_host_into[DType.float32](ctx, dout, hO)
     ctx.synchronize()
 
     var out = List[Float32]()
@@ -1586,10 +1587,6 @@ def _run_bwd(
     _ = dw
     _ = dout
     _ = dws
-    _ = hDC
-    _ = hW
-    _ = hO
-    _ = hWS
     return out^
 
 
@@ -2049,15 +2046,15 @@ def _run_plan(
         hR.unsafe_ptr().unsafe_store(i, right[i])
     for i in range(out_alloc):
         hO.unsafe_ptr().unsafe_store(i, POISON)
-    ctx.enqueue_copy(dst_buf=dl, src_ptr=hL.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dr, src_ptr=hR.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dout, src_ptr=hO.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dl, hL)
+    upload_host_into[DType.float32](ctx, dr, hR)
+    upload_host_into[DType.float32](ctx, dout, hO)
     ctx.synchronize()
     identical_gemm_with_plan(
         ctx, dout, dl, dr, dws, call[1], call[2], call[3], call[0], plan
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hO.unsafe_ptr(), src_buf=dout)
+    download_host_into[DType.float32](ctx, dout, hO)
     ctx.synchronize()
     var out = List[Float32]()
     for i in range(need[2]):
@@ -2069,9 +2066,6 @@ def _run_plan(
     _ = dr
     _ = dout
     _ = dws
-    _ = hL
-    _ = hR
-    _ = hO
     return out^
 
 
@@ -3118,23 +3112,23 @@ def _shared_workspace_arm() raises:
             hoB.unsafe_ptr().unsafe_store(i, POISON)
         for i in range(nc):
             hoC.unsafe_ptr().unsafe_store(i, POISON)
-        ctx.enqueue_copy(dst_buf=ddc, src_ptr=hdc.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dB_, src_ptr=hb.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dA_, src_ptr=ha.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dOnes, src_ptr=hones.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dws, src_ptr=hws.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=oA, src_ptr=hoA.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=oB, src_ptr=hoB.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=oC, src_ptr=hoC.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, ddc, hdc)
+        upload_host_into[DType.float32](ctx, dB_, hb)
+        upload_host_into[DType.float32](ctx, dA_, ha)
+        upload_host_into[DType.float32](ctx, dOnes, hones)
+        upload_host_into[DType.float32](ctx, dws, hws)
+        upload_host_into[DType.float32](ctx, oA, hoA)
+        upload_host_into[DType.float32](ctx, oB, hoB)
+        upload_host_into[DType.float32](ctx, oC, hoC)
         ctx.synchronize()
         # THE COMPOSITION: three enqueues, one workspace, no wait between.
         identical_gemm_backward_a_into(ctx, oA, ddc, dB_, dws, m, n, k, op)
         identical_gemm_backward_b_into(ctx, oB, ddc, dA_, dws, m, n, k, op)
         identical_gemm_backward_bias_into(ctx, oC, ddc, dOnes, dws, m, n)
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hoA.unsafe_ptr(), src_buf=oA)
-        ctx.enqueue_copy(dst_ptr=hoB.unsafe_ptr(), src_buf=oB)
-        ctx.enqueue_copy(dst_ptr=hoC.unsafe_ptr(), src_buf=oC)
+        download_host_into[DType.float32](ctx, oA, hoA)
+        download_host_into[DType.float32](ctx, oB, hoB)
+        download_host_into[DType.float32](ctx, oC, hoC)
         ctx.synchronize()
         fails += _cmp_host_buf(hoA, solo_a, na, String("dA in the shared loop"))
         fails += _cmp_host_buf(hoB, solo_b, nb, String("dB in the shared loop"))
@@ -3147,11 +3141,6 @@ def _shared_workspace_arm() raises:
         _ = oA
         _ = oB
         _ = oC
-        _ = hdc
-        _ = hb
-        _ = ha
-        _ = hones
-        _ = hws
         _ = hoA
         _ = hoB
         _ = hoC

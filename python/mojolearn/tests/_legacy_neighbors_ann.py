@@ -1,28 +1,146 @@
 # SPDX-License-Identifier: Apache-2.0
 """Frozen pre-migration Python paths of the approximate indexes' `fit` and `refine`
 (lane native-neighbors-20261024, base b32103c00), used only as an independent test
-oracle for the one-call native doors (bindings/neighbors_ann_native.mojo)."""
-from mojolearn._buffer import addr, addr_ro, as_f32_c, empty
-from mojolearn._ivf_impl import _int_param
-from mojolearn._expansion_ann import _ann_int
+oracle for the one-call native doors (bindings/neighbors_ann_native_door.mojo)."""
+import mojolearn
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, require_numpy
+from mojolearn.tests._typed_input import as_f32_c
+
+# Local copies of the product's IVF constants (python/mojolearn/_ivf_impl.py).
+_MODE_CODE = {"fast": 0, "identical": 1}
+METRIC_L2_EXPANDED = 0
+METRIC_L2_SQRT_EXPANDED = 1
+_METRICS = {
+    "sqeuclidean": METRIC_L2_EXPANDED,
+    "l2_expanded": METRIC_L2_EXPANDED,
+    "euclidean": METRIC_L2_SQRT_EXPANDED,
+    "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
+    "l2": METRIC_L2_SQRT_EXPANDED,
+}
+
+
+def _ann_int(owner, name, v):
+    """Local copy of the product's `_expansion_ann._ann_int`."""
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(f"mojolearn {owner}: {name} must be an int, got {type(v).__name__}")
+    return int(v)
+
+
+# The removed IVFIndex helpers (lane py-tail, 2026-11-15; native twins in
+# bindings/neighbors_ann_native_door.mojo), frozen here for `ivf_fit`.
+_IVF_METRIC_CODES = (METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED)
+_IVF_INDEX_ARRAYS = (("centers_", "<f4"), ("center_norms_", "<f4"), ("list_offsets_", "<i4"),
+                     ("list_indices_", "<i4"), ("list_data_", "<f4"))
+
+
+def _int_param(name, v):
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise TypeError(f"mojolearn IVFIndex: {name} must be an int, got {type(v).__name__}")
+    return int(v)
+
+
+def _ivf_extension(self):
+    mod = self._bind()
+    want = getattr(self, "numeric_mode", None) or mojolearn.numeric_mode()
+    fn = getattr(mod, "ivf_numeric_mode", None)
+    if fn is not None and int(fn()) != _MODE_CODE.get(want):
+        raise RuntimeError(
+            f"mojolearn IVFIndex: numeric_mode={want!r} was requested but {mod.__name__} "
+            "reports another compile-time mode; rebuild it with bash bindings/build_ivf.sh"
+        )
+    return mod
+
+
+def _ivf_metric_code(self):
+    if isinstance(self.metric, str):
+        if self.metric not in _METRICS:
+            raise ValueError(f"mojolearn IVFIndex: metric must be one of {sorted(_METRICS)}, got {self.metric!r}")
+        return _METRICS[self.metric]
+    if isinstance(self.metric, bool) or self.metric not in _IVF_METRIC_CODES:
+        raise ValueError(f"mojolearn IVFIndex: the metric codes are {METRIC_L2_EXPANDED} (L2Expanded) and {METRIC_L2_SQRT_EXPANDED} (L2SqrtExpanded), got {self.metric!r}")
+    return int(self.metric)
+
+
+def _ivf_entry(mod, name):
+    fn = getattr(mod, name, None)
+    if fn is None:
+        raise ImportError(
+            f"mojolearn IVFIndex: {getattr(mod, '__name__', mod)} exports no {name}; "
+            "this binary predates the build and search split, rebuild it with bash bindings/build_ivf.sh"
+        )
+    return fn
+
+
+def _ivf_resident_key(self, partial):
+    arrays = tuple(self.__dict__.get(name) for name, _dtype in _IVF_INDEX_ARRAYS)
+    return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
+                  for a, (name, _dtype) in zip(arrays, _IVF_INDEX_ARRAYS)),
+            self.n_rows_, self.n_features_in_, self.n_lists_, self.metric_code_, bool(partial))
+
+
+def _ivf_materialize_list_data(self):
+    d = self.__dict__
+    if "_device_list_data" not in d:
+        return
+    cached = d.get("_resident")
+    if cached is None:
+        raise RuntimeError("mojolearn IVFIndex: the resident index was released before its list data was read")
+    n, dim = self.n_rows_, self.n_features_in_
+    data = empty((n * dim,), "<f4")
+    cached[2].ivf_flat_index_export(cached[1], addr(data, name="list_data_"), n * dim)
+    d["list_data_"] = data.reshape((n, dim))
+    del d["_device_list_data"]
+    d["_resident"] = (_ivf_resident_key(self, False) + (id(cached[2]),), cached[1], cached[2])
+
+
+def _ivf_release_resident(self):
+    _ivf_materialize_list_data(self)
+    cached = self.__dict__.pop("_resident", None)
+    if cached is None:
+        return
+    try:
+        cached[2].ivf_flat_index_release(cached[1])
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _release_resident(self):
+    """The removed `_AnnResident._release_resident` (native twin:
+    bindings/neighbors_ann_native_door.mojo): drop the held handle, if any."""
+    cached = self.__dict__.pop("_resident", None)
+    if cached is None:
+        return
+    try:
+        cached[2].x_ann_index_release(cached[1])
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _resident_key(self, native):
+    """The removed `_AnnResident._resident_key` (native twin:
+    bindings/neighbors_ann_native_door.mojo `_ann_key_entry`)."""
+    d = self.__dict__
+    arrays = tuple(d.get(a) for a, _dtype in self._SAVE_ARRAYS)
+    return (tuple(("device",) if a is None else (id(a), addr_ro(a, name=name), tuple(a.shape))
+                  for a, (name, _dtype) in zip(arrays, self._SAVE_ARRAYS)), id(native))
 
 
 def ivf_fit(self, X, y=None):
     self.__dict__.pop("_device_list_data", None)
-    self._release_resident()
+    _ivf_release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: the two shape dims
     n_lists = _int_param("n_lists", self.n_lists)
     iters = _int_param("kmeans_n_iters", self.kmeans_n_iters)
     seed = _int_param("random_state", self.random_state)
-    metric = self._metric_code()
+    metric = _ivf_metric_code(self)
     if n_lists < 1:
         raise ValueError(f"mojolearn IVFIndex: n_lists must be at least 1, got {n_lists}")
     centers = empty((n_lists * dim,), "<f4")
     norms = empty((n_lists,), "<f4")
     offsets = empty((n_lists + 1,), "<i4")
     indices = empty((n,), "<i4")
-    native = self._extension()
+    native = _ivf_extension(self)
     resident_build = getattr(native, "ivf_flat_build_resident", None)
     if resident_build is not None:
         handle = int(resident_build(
@@ -43,11 +161,11 @@ def ivf_fit(self, X, y=None):
         self.n_lists_ = n_lists
         self.metric_code_ = metric
         self._device_list_data = True
-        self._resident = (self._resident_key(False) + (id(native),), handle, native)
+        self._resident = (_ivf_resident_key(self, False) + (id(native),), handle, native)
         return self
     data = empty((n * dim,), "<f4")
-    self._entry(native, "ivf_flat_build")(
-        # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build).
+    _ivf_entry(native, "ivf_flat_build")(
+        # ORDER MATCHES bindings/ivf_index_arrays_unpack.mojo (ivf_flat_build).
         # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out
         [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(norms, name="center_norms_"),
          addr(offsets, name="list_offsets_"), addr(indices, name="list_indices_"),
@@ -69,7 +187,7 @@ def ivf_fit(self, X, y=None):
 
 def pq_fit(self, X, y=None):
     self.__dict__.pop("_device_codes", None)
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists, pq_dim, pq_bits = self._p("n_lists"), self._p("pq_dim"), self._p("pq_bits")
@@ -106,7 +224,7 @@ def pq_fit(self, X, y=None):
         self.n_features_in_, self.n_rows_, self.n_lists_ = dim, n, n_lists
         self.pq_dim_, self.pq_bits_, self.pq_len_ = pq_dim, pq_bits, pq_len
         self._device_codes = True
-        self._resident = (self._resident_key(native), handle, native)
+        self._resident = (_resident_key(self, native), handle, native)
         return self
     codes = empty((n * pq_dim,), "<i4")
     native.x_ann_ivf_pq_build(
@@ -128,7 +246,7 @@ def pq_fit(self, X, y=None):
 
 
 def sq_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists = self._p("n_lists")
@@ -163,7 +281,7 @@ def sq_fit(self, X, y=None):
 
 
 def rabitq_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
     n_lists = self._p("n_lists")
@@ -196,7 +314,7 @@ def rabitq_fit(self, X, y=None):
 
 
 def cagra_fit(self, X, y=None):
-    self._release_resident()
+    _release_resident(self)
     x, _ = as_f32_c(X, ndim=2, name="X")
     n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
     kdeg = min(self._p("intermediate_graph_degree"), n - 1)
@@ -215,12 +333,11 @@ def cagra_fit(self, X, y=None):
 
 
 def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean"):
-    from mojolearn._optional_numpy import require_numpy
     np = require_numpy('_expansion_ann')
     if metric not in ("sqeuclidean", "euclidean"):
         raise ValueError(f"mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
                          f"(inner product is not implemented), got {metric!r}")
-    from mojolearn import _backend
+    from mojolearn import _backend  # oracle subject: _backend.binding resolves the native x_ann binding refine drives; module-level refine has no estimator to reach it through
     x, _ = as_f32_c(dataset, ndim=2, name="dataset")
     q, _ = as_f32_c(queries, ndim=2, name="queries")
     n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input

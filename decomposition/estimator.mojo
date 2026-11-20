@@ -33,7 +33,7 @@ decomposition lane's file; left for that lane.
 
 from max.gpu.host import DeviceContext
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import ftz, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -52,7 +52,9 @@ from core.column_stats import (
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_negative, device_first_nonfinite
 from core.xtdz_coalesced import column_mean_launch
+from core.admitted_finite_status import enqueue_finite_word
 from core.gemm import gemm_nt
+from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
     PCA_LEAN_SCRATCH,
@@ -75,7 +77,6 @@ from std.sys.compile import is_defined
 
 #: FAST Apple default proposal, measured source 34b4f6c72 (2026-10-04).
 #: M3 w2-w4d-pca-istella-r1: 471.2 -> 217.8 ms; quality PASS (16 checks).
-#: `-D MOJOLEARN_PCA_FAST_POOL_OFF` restores fresh allocations.
 #: (FAST + Apple, on top of PCA_FAST_GRAM_MMA): when the fit takes the MMA
 #: Gram arm (d past the split-K Gram, Istella's 220), the fit's n x d device
 #: copy of X comes from core/device_pool (kept between calls, up to
@@ -83,22 +84,25 @@ from std.sys.compile import is_defined
 #: fresh allocation each call (fresh-page cost; x_prep's POOL_ARENA measured
 #: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
 #: 1 float. Copies and allocations only: no bit moves.
-comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
-comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+# TOMBSTONE: MOJOLEARN_PCA_FAST_POOL_OFF (old path of the FAST+Apple default, no A/B row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at b261ccae4f.
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA
+comptime _PCA_POOL = "MojolearnEstimatorsPcaFastXV2"
 #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only; both the
 #: default since verdicts batch 6 (2026-10-05). TruncatedSVD.fit's `tsvd_explained_host` (every fit, both component
 #: routes) reads the whole X again. Board: tsvd istella 864 ms (TSVD_QFIX),
 #: 363 ms on the old Gram route, of which this step is a fixed share.
-#: TSVD_FAST_POOL (rollback `-D MOJOLEARN_TSVD_FAST_POOL_OFF`): its n x d device copy of X
+#: TSVD_FAST_POOL (its `_OFF` rollback deleted 2026-11-15): its n x d device copy of X
 #: (880 MB at istella 1M x 220) comes from PCA's pool (`_PCA_POOL`) instead
 #: of a fresh allocation every fit, the fresh-page cost PCA_FAST_POOL removed
 #: from PCA (471.2 -> 217.8 ms); `tsvd_transform_host` too. Copies and
 #: allocations only: no bit moves.
 #: TSVD_FAST_POOL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab15-tsvdpool): tsvd istella 995.9 -> 921.0 ms, taxi
-#: 40.4 -> 32.3 ms, quality equal. KEEP: the FAST + Apple default; rollback
-#: -D MOJOLEARN_TSVD_FAST_POOL_OFF.
-comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"]()
+#: 40.4 -> 32.3 ms, quality equal. KEEP: the FAST + Apple default.
+# TOMBSTONE: MOJOLEARN_TSVD_FAST_POOL_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 8d1352d8a6.
+# Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_COLVAR_OFF (rollback of a FAST + Apple
 # winner, rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms) retired 2026-10-21 by
 # lane debt-block-per-n: the switch chose the row-coalesced STATS_TPB-chain
@@ -107,6 +111,27 @@ comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_F
 # mode, so FAST + Apple takes the fused variance below like every other
 # column. Code recoverable at 28b8ed11b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+
+
+def _pca_finite_flagged(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n_words: Int, finite_word: Int,
+) raises -> Bool:
+    """The fit's synchronisation after its upload of X, with X's deferred
+    finite test enqueued before it when `finite_word` is a host address
+    (lane a7d): the status word is stored there; True when X is flagged."""
+    if finite_word == 0:
+        ctx.synchronize()
+        return False
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_finite_word(ctx, x.unsafe_ptr(), n_words, status, 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var flagged = word.unsafe_ptr()[0]
+    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+    _ = word^
+    _ = status^
+    return flagged != 0
 
 
 def pca_fit_host(
@@ -120,13 +145,61 @@ def pca_fit_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises -> Float64:
+    """`finite_word` (lane a7d-device-x-decomp-cluster): when nonzero, the
+    host address of one Int32 that receives X's finite status word
+    (core/admitted_finite_status.mojo: 0 = every word finite), tested on the
+    device after the upload and read at the upload's own synchronisation. A
+    flagged X stops the fit there (no output is written; the door refuses).
+    The door then admits a borrowed X with `defer_finite=True`."""
     var big = n_rows * n_features
     var pooled = False
     comptime if PCA_FAST_POOL:
         # the MMA arm of compute_covariance reads neither alias buffer
         pooled = not gram_splitk_applies(n_features, n_features, n_rows)
     var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if _pca_finite_flagged(ctx, x, big, finite_word):
+        if pooled:
+            pool_give[_PCA_POOL](x^)
+        else:
+            _ = x^
+        return 0.0
+    var noise = pca_fit_cov_device_x(
+        ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+        n_rows, n_features, n_components, pooled,
+    )
+    if pooled:
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
+    return noise
+
+
+def pca_fit_cov_device_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    pooled: Bool,
+) raises -> Float64:
+    """The covariance arm of `pca_fit_host` over X already on the device in
+    `x` (n_rows x n_features, C order; the fit's own copy, overwritten).
+    Lane a8d-device-x-decomp-manifold: split out of `pca_fit_host` so a
+    model-selection fold gathered on the device (decomposition/pca_fold.mojo
+    `pca_fit_fold`) runs the same body; the host-address entry uploads and
+    calls it. `pooled`: `x` came from the PCA pool, so the MMA arm reads no
+    alias buffer (the sizes `pca_fit_host` always chose). The same kernels
+    on the same words in the same order: no bit change. The caller keeps
+    `x` (and returns a pooled one to the pool)."""
+    var big = n_rows * n_features
     var alias_n = 1 if pooled else big
     var alias2_n = alias_n
     comptime if PCA_LEAN_SCRATCH:
@@ -139,8 +212,6 @@ def pca_fit_host(
     var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -191,10 +262,6 @@ def pca_fit_host(
     ctx.synchronize()
     for i in range(n_features):
         mean_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
-    if pooled:
-        pool_give[_PCA_POOL](x^)
-    else:
-        _ = x^
     return result.noise_var
 
 
@@ -209,8 +276,10 @@ def pca_fit_full_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises -> Float64:
     """`PCA(svd_solver='full')`: the R-SVD arm, same five outputs.
+    `finite_word`: as `pca_fit_host`'s.
 
     The twin of `pca_fit_host` and deliberately the same shape, so a caller
     switching solvers changes ONE name. What differs is inside: no
@@ -227,6 +296,32 @@ def pca_fit_full_host(
     therefore diverge there too.
     """
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        return 0.0
+    var noise = pca_fit_full_device_x(
+        ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+        n_rows, n_features, n_components,
+    )
+    _ = x^
+    return noise
+
+
+def pca_fit_full_device_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises -> Float64:
+    """The R-SVD arm of `pca_fit_full_host` over X already on the device in
+    `x` (lane a8d: split out so a fold gathered on the device runs the same
+    body; no bit change)."""
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         pca_full_scratch_cells(n_rows, n_features)
     )
@@ -234,8 +329,6 @@ def pca_fit_full_host(
     var v = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -283,18 +376,37 @@ def pca_transform_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
-) raises:
+) raises -> Int32:
+    """Returns the finite status word of X (core/admitted_finite_status.mojo:
+    0 when every word is finite), tested on the device after the upload this
+    entry makes anyway and read back with the projection (lane a6: the door
+    admits a borrowed X with `defer_finite=True`, no host scan). A non-zero
+    word means the door refuses and discards `out_ptr`."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-    ctx.synchronize()
+    # The host words stay valid until the one synchronisation below; the
+    # stream orders the copies before the kernels (no sync in between).
+    enqueue_finite_word(ctx, x.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n_rows * n_features, status, 0)
     pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
+    # fix-classical-infer-xq: the status word lands in plain host memory, as
+    # the projection does just below (no pinned host buffer allocated and
+    # freed per call; 0.8.66 had none). Both copies sit right before the one
+    # synchronisation, so the pageable copy waits for nothing extra.
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(word.unsafe_ptr()))
+    ctx.enqueue_copy(dst_ptr=word_ptr, src_buf=status)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
+    var result = word[0]
+    _ = word^  # alive past the synchronisation the copy above writes it by
+    _ = status^
+    return result
 
 
 def tsvd_fit_host(
@@ -305,10 +417,12 @@ def tsvd_fit_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
+    """`finite_word` (lane a7d): as `pca_fit_host`'s."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    tsvd_fit_device(
-        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+    _ = tsvd_fit_device(
+        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word
     )
     _ = x^
 
@@ -322,16 +436,24 @@ def tsvd_fit_device(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
-) raises:
+    finite_word: Int = 0,
+    resident: Bool = False,
+) raises -> Bool:
     """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
     n_rows * n_features floats: uploads X into it, and leaves it holding X
     unchanged (the Gram only reads it), so T1 can run the explained tail on
-    the same buffer."""
+    the same buffer. `finite_word` (lane a7d): as `pca_fit_host`'s; returns
+    True when X was flagged (nothing fit, nothing written). `resident`
+    (lane a8d): `x` already holds X (a model-selection fold gathered and
+    tested on the device, decomposition/pca_fold.mojo `tsvd_fit_fold`):
+    no upload, no test, `x_ptr` unread; the same body after it."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
+    if not resident:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+            return True
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -341,7 +463,10 @@ def tsvd_fit_device(
     # The two halves of `tsvd_fit` by name, the Gram recorded between them
     # (row 38; see the PCA surface above for why).
     pca_validate(n_rows, n_features, n_components)
-    gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_gram_units_into(ctx, gram, x, n_features, n_rows):
+        gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
     ctx.synchronize()
     if trace.enabled:
         trace.record_device(ctx, "tsvd.gram", gram, n_features * n_features)
@@ -361,18 +486,7 @@ def tsvd_fit_device(
     if trace.enabled:
         trace.record_list_f32("tsvd.components", comp32)
         trace.record_list_f32("tsvd.singular_vals", sing32)
-
-
-def square_in_place_kernel(
-    a: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`a[i] = ftz(a[i] * a[i])`, the multiply pinned (lane/algos-decomp,
-    2026-09-27; `tsvd_explained_host`)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var v = a.unsafe_load(i)
-        a.unsafe_store(i, ftz(identical_mul(v, v)))
+    return False
 
 
 # lane fam2-decomp (2026-10-04), IDENTICAL: the column mean is launched
@@ -383,20 +497,19 @@ def square_in_place_kernel(
 # Since lane debt-block-per-n (2026-10-21) it is the only arm in every mode;
 # -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (the direct one-block-per-column
 # launch) is retired and refused.
-from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
 
 
-from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+from core.host_tile_fold import XTY_TILE_ROWS, xty_tiles
 from core.xtdz_coalesced import XTY_TILE_TPB, xty_tile_fold_kernel
-from experiments.classical_identical_ideas.shared_controls import C01_MEAN
 from checks.numerics import identical_mul_add
 
 #: T2, lane fg-pca (2026-10-09), MOJOLEARN_IDN_COLVAR_FUSED: the IDENTICAL
-#: DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
-#: MOJOLEARN_IDN_COLVAR_FUSED_OFF` restores the shift + square passes; the old
-#: on-define is refused in core/six_lane_experiment_guards.mojo). fg2 A/B on
+#: DEFAULT since 2026-10-10 (lane/postmerge-act-6), now the only form in every
+#: mode (the shift + square passes and their `-D MOJOLEARN_IDN_COLVAR_FUSED_OFF`
+#: rollback are deleted; the old on-define is refused in
+#: core/six_lane_experiment_guards.mojo). fg2 A/B on
 #: main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, MI325X a1161-a1190;
 #: ratio = arm / fg2 default): tsvd taxi NV 0.76x / AMD 0.97x, tsvd istella NV
 #: 0.97x / AMD 0.97x, pca istella 1.00x / 1.00x, pca taxi NV 1.03x / AMD 1.00x;
@@ -413,13 +526,11 @@ from checks.numerics import identical_mul_add
 #: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
 #: none (the same words into the same fold); the host column is unchanged.
 #: Taken only where the mean pass is `xty_tiled` (every mode since lane
-#: debt-block-per-n, 2026-10-21; not under the C01_MEAN arm).
-comptime IDN_COLVAR_FUSED = (
-    IDN_XTY_TILED
-    and IDN_DECOMP_MEAN_LAUNCH
-    and not C01_MEAN
-    and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
-)
+#: debt-block-per-n, 2026-10-21).
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C01_MEAN (DROPPED-slower, EXP C01_MEAN row) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at eeba85eb55.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C01_MEAN.expdel2-05-base.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_COLVAR_FUSED_OFF (old path of the PROMOTED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 7fdb249ce5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_COLVAR_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def colvar_tile_partial_kernel(
@@ -461,48 +572,33 @@ def _column_variance(
     n_rows: Int,
     n_cols: Int,
 ) raises:
-    """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
-    mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
-    the pinned square, then the column mean of the squares."""
+    """numpy's `var(axis=0)` (ddof 0) of `m`, `m` read-only: the column mean
+    (`column_mean_launch`), then the column mean of the pinned centered
+    squares formed in registers in the same tile order (T2)."""
     comptime assert not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()), "removed (lane debt-block-per-n, 2026-10-21): IDN_DECOMP_MEAN_LAUNCH_OFF / TSVD_FAST_COLVAR_OFF chose a column mean with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
-    var cells = n_rows * n_cols
-    comptime if IDN_COLVAR_FUSED:
-        # T2: the mean (xty_tiled), then the centered squares' mean in the
-        # same tile order, `m` read-only
-        column_mean_launch(ctx, mu, m, n_rows, n_cols)
-        var tiles = xty_tiles(n_rows)
-        var tcells = tiles * n_cols
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
-        ctx.enqueue_function[colvar_tile_partial_kernel](
-            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(n_rows), Int32(n_cols), Int32(tiles),
-            grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
-            block_dim=(XTY_TILE_TPB, 1, 1),
-        )
-        ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
-            var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(tiles), Int32(n_rows), Int32(1),
-            grid_dim=(n_cols, 1, 1),
-            block_dim=(STATS_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        _ = ws^
-        return
-    # lane debt-block-per-n (2026-10-21): the tile order only; the direct
-    # one-block-per-column `column_mean_kernel` arm is retired
+    # T2: the mean (xty_tiled), then the centered squares' mean in the
+    # same tile order, `m` read-only
     column_mean_launch(ctx, mu, m, n_rows, n_cols)
-    ctx.enqueue_function[shift_columns_kernel](
-        m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
-        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    var tiles = xty_tiles(n_rows)
+    var tcells = tiles * n_cols
+    var ws = ctx.enqueue_create_buffer[DType.float32](max(tcells, 1))
+    ctx.enqueue_function[colvar_tile_partial_kernel](
+        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_rows), Int32(n_cols), Int32(tiles),
+        grid_dim=((tcells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+        block_dim=(XTY_TILE_TPB, 1, 1),
     )
-    ctx.enqueue_function[square_in_place_kernel](
-        m.unsafe_ptr(), Int32(cells),
-        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+        var_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(tiles), Int32(n_rows), Int32(1),
+        grid_dim=(n_cols, 1, 1),
+        block_dim=(STATS_TPB, 1, 1),
     )
-    column_mean_launch(ctx, var_out, m, n_rows, n_cols)
+    ctx.synchronize()
+    _ = ws^
 
 
 @always_inline
@@ -598,7 +694,10 @@ def _tsvd_explained_tail(
     var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.synchronize()
-    gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_project_units_into(ctx, xt, x, components, n_rows, n_components, n_features):
+        gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
     _column_variance(ctx, xt, mu_t, var_t, n_rows, n_components)
     _column_variance(ctx, x, mu_x, var_x, n_rows, n_features)
     # the tail on the device (decomposition/tsvd_finish.mojo, the host
@@ -619,8 +718,8 @@ def _tsvd_explained_tail(
     _ = xt^
 
 
-#: T1, lane fg-pca (2026-10-09), IDENTICAL default; rollback
-#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF`. `TruncatedSVD.fit` called
+#: T1, lane fg-pca (2026-10-09), IDENTICAL default (the
+#: `-D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF` rollback is deleted). `TruncatedSVD.fit` called
 #: `tsvd_fit` and then `tsvd_explained`, and each copied X host -> device
 #: (n*d*4 bytes each: 880 MB at 1M x 220, about 46 ms per copy at a
 #: pageable ~19 GB/s) and allocated its own n*d buffer. `tsvd_fit_explained`
@@ -629,12 +728,10 @@ def _tsvd_explained_tail(
 #: SAME device buffer. Cost: -1 H2D copy of X and -1 n*d allocation per fit at
 #: any shape. Bits: none (the same kernels on the same words in the same
 #: order; the components reach the tail through the same Float32 output
-#: array). The OFF arm (and FAST, which keeps its pooled pair) runs the two
-#: calls in order.
-comptime TSVD_ONE_UPLOAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF"]()
-)
+#: array). FAST, which keeps its pooled pair, runs the two calls in order.
+# TOMBSTONE: MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF (old path of the CONFIRMED default) deleted 2026-11-15 by lane/expdel2-05-base; code recoverable at 34a0226192.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+comptime TSVD_ONE_UPLOAD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def tsvd_fit_explained_host(
@@ -647,20 +744,26 @@ def tsvd_fit_explained_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
     """`tsvd_fit_host` then `tsvd_explained_host`, with one upload of X
-    under TSVD_ONE_UPLOAD (T1)."""
+    under TSVD_ONE_UPLOAD (T1). `finite_word` (lane a7d): as
+    `pca_fit_host`'s; a flagged X skips the explained tail too."""
     comptime if not TSVD_ONE_UPLOAD:
-        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components)
+        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word)
+        if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+            return
         tsvd_explained_host(
             ctx, x_ptr, components_ptr, explained_ptr, ratio_ptr,
             n_rows, n_features, n_components,
         )
     else:
         var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-        tsvd_fit_device(
-            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
-        )
+        if tsvd_fit_device(
+            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word
+        ):
+            _ = x^
+            return
         pca_validate(n_rows, n_features, n_components)
         _tsvd_explained_tail(
             ctx, x, components_ptr, explained_ptr, ratio_ptr,
@@ -677,20 +780,47 @@ def tsvd_transform_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
+    """`finite_word` (lane a7d): as `tsvd_transform_dev`'s."""
+    var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components, finite_word)
+    _ = components^
+
+
+def tsvd_transform_dev(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut components: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    finite_word: Int = 0,
+) raises:
+    """`tsvd_transform_host` on components already on the device (the
+    per-call upload above, or a resident copy of the same words:
+    decomposition/tsvd_resident_state.mojo, lane ne1-a-decomp-resident):
+    X goes up, `out = X . components^T` by the same gemm_nt, out comes down.
+    `finite_word` (lane a7d): when nonzero, the host address of one Int32
+    that receives X's finite status word, tested on the device at the
+    upload's own synchronisation; a flagged X is not projected (the door
+    refuses)."""
     var x: DeviceBuffer[DType.float32]
     comptime if TSVD_FAST_POOL:
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
     else:
         x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-    ctx.synchronize()
-    gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
-    ctx.synchronize()
+    if not _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+        if not decomp_project_units_into(ctx, out, x, components, n_rows, n_components, n_features):
+            gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
+        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+        ctx.synchronize()
     comptime if TSVD_FAST_POOL:
         pool_give[_PCA_POOL](x^)
     else:
@@ -708,13 +838,31 @@ def inverse_transform_host(
     n_components: Int,
     add_mean: Bool,
 ) raises:
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    inverse_transform_dev(ctx, scores_ptr, components, mean_ptr, out_ptr, n_rows, n_features, n_components, add_mean)
+    _ = components^
+
+
+def inverse_transform_dev(
+    ctx: DeviceContext,
+    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut components: DeviceBuffer[DType.float32],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    add_mean: Bool,
+) raises:
+    """`inverse_transform_host` on components already on the device (the
+    per-call upload above, or a resident copy of the same words; lane
+    ne1-a-decomp-resident): the same transpose, gemm_nt and mean shift."""
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var components_t = ctx.enqueue_create_buffer[DType.float32](n_features * n_components)
     var mean = ctx.enqueue_create_buffer[DType.float32](n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=scores, src_ptr=scores_ptr)
-    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     if add_mean:
         ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
     ctx.enqueue_function[transpose_kernel](
@@ -725,7 +873,10 @@ def inverse_transform_host(
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
     ctx.synchronize()
-    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
+        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
     if add_mean:
         ctx.enqueue_function[shift_columns_kernel](
             out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
@@ -911,7 +1062,10 @@ def pca_whiten_inverse_transform_host(
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
     ctx.synchronize()
-    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
+    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
+    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
+        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
     ctx.enqueue_function[shift_columns_kernel](
         out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
         Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),

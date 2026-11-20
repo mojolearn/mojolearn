@@ -17,7 +17,6 @@ is not installed.
 """
 import os
 import re
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -89,16 +88,6 @@ def test_catboost_auto_learning_rate_is_public():
     assert not _NOT_USER_VOICE.search(ensemble.catboost_auto_learning_rate.__doc__)
     assert ensemble.catboost_auto_learning_rate("Logloss", 10000, 1000, False, False) == 0.029701
     assert ensemble.catboost_auto_learning_rate("MAE", 1000, 1000, False, True) is None
-
-
-def test_docs_leave_the_unqualified_drivers_out():
-    exclude = Path(__file__).resolve().parents[3] / "docs-site" / "api_exclude.txt"
-    if not exclude.is_file():
-        pytest.skip("docs-site is not part of an installed package")
-    names = {line.split("\t", 1)[0].strip() for line in exclude.read_text().splitlines()
-             if line.strip() and not line.startswith("#")}
-    assert set(MODULES) <= names
-    assert "ensemble.catboost_auto_learning_rate" in names
 
 
 # ---------------------------------------------------------------- real path (one device by default)

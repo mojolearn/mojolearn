@@ -80,7 +80,7 @@ the second. It is a reach test that fails loudly on the old code.
 """
 
 from max.gpu.host import DeviceContext, HostBuffer
-from max.gpu.host.device_attribute import DeviceAttribute
+from core.device_units import device_multiprocessor_count
 
 from gbdt.gpu_util.partitions_reduce import (
     STATS_BLOCK,
@@ -204,7 +204,7 @@ def _arm(
     if grid_rows > 0:
         grid_hint = grid_rows
     var max_chunks = partition_stats_chunks(
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT), N_STATS
+        device_multiprocessor_count(ctx), N_STATS
     )
 
     # ---- the planted stats, hashed, with the gap poisoned ---------------
@@ -225,7 +225,7 @@ def _arm(
     for i in range(N_STATS * n_rows):
         h_stats.unsafe_ptr().unsafe_store(i, Float32(host_stat[i]))
     var stats = ctx.enqueue_create_buffer[DType.float32](N_STATS * n_rows)
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, h_stats)
 
     # ---- the partition table, indexed BY LEAF ID ------------------------
     # One host staging buffer per `enqueue_copy`: they are asynchronous, and
@@ -244,8 +244,8 @@ def _arm(
         h_sz.unsafe_ptr().unsafe_store(lid, UInt32(sizes[k]))
     var p_off = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var p_sz = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, h_off)
+    upload_host_into[DType.uint32](ctx, p_sz, h_sz)
 
     # The slot-to-leaf map, deliberately NOT the identity. Their writeback is
     # `statSums[leafId * statCount + statId]` (`update_part_props.cu`,
@@ -257,7 +257,7 @@ def _arm(
     for k in range(n_slots):
         h_ids.unsafe_ptr().unsafe_store(k, UInt32(leaf_ids[k]))
     var leaves = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    ctx.enqueue_copy(dst_buf=leaves, src_ptr=h_ids.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, leaves, h_ids)
 
     # ---- the two output planes, poisoned first --------------------------
     # `partials` is given TWO slots more than the launch will touch, so a
@@ -270,14 +270,14 @@ def _arm(
     for i in range(partial_cells):
         h_partial_poison.unsafe_ptr().unsafe_store(i, POISON)
     var partials = ctx.enqueue_create_buffer[DType.float32](partial_cells)
-    ctx.enqueue_copy(dst_buf=partials, src_ptr=h_partial_poison.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, partials, h_partial_poison)
 
     var out_cells = max_leaves * N_STATS
     var h_out_poison = ctx.enqueue_create_host_buffer[DType.float32](out_cells)
     for i in range(out_cells):
         h_out_poison.unsafe_ptr().unsafe_store(i, POISON)
     var out_stats = ctx.enqueue_create_buffer[DType.float32](out_cells)
-    ctx.enqueue_copy(dst_buf=out_stats, src_ptr=h_out_poison.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, out_stats, h_out_poison)
     ctx.synchronize()
 
     compute_partition_stats(
@@ -298,9 +298,9 @@ def _arm(
     var got_partial = ctx.enqueue_create_host_buffer[DType.float32](
         partial_cells
     )
-    ctx.enqueue_copy(dst_ptr=got_partial.unsafe_ptr(), src_buf=partials)
+    download_host_into[DType.float32](ctx, partials, got_partial)
     var got_out = ctx.enqueue_create_host_buffer[DType.float32](out_cells)
-    ctx.enqueue_copy(dst_ptr=got_out.unsafe_ptr(), src_buf=out_stats)
+    download_host_into[DType.float32](ctx, out_stats, got_out)
     ctx.synchronize()
 
     # ---- PHASE 1, per (slot, stat, block) -------------------------------
@@ -748,7 +748,7 @@ def check_partitions_reduce_sabotage() raises:
     )
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. All three arms `checks/probe_main.mojo` runs under
     # "ComputePartitionStats vs an exact host tally (GPU)", in its order:
     # the size sweep, then the two reach arms.
@@ -756,3 +756,22 @@ def main() raises:
     check_partitions_reduce()
     check_partitions_reduce_sabotage()
     check_partitions_reduce_narrow_grid()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("partitions_reduce_check", cpu=False, gpu=True, serial="", run=run_cases)

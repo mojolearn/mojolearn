@@ -1,5 +1,5 @@
-from bindings.causal_lm_public import causal_lm_forward_binding, causal_lm_generate_binding
-from bindings.native_loaded_module import NativeModules
+from bindings.causal_lm_public_door import causal_lm_forward_binding, causal_lm_generate_binding
+from bindings.native_loaded_module_door import NativeModules
 from std.python import PythonObject
 
 def main() raises:

@@ -116,17 +116,17 @@ on the host for the CPU column.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.os import getenv
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
-from std.memory import bitcast, memcpy, stack_allocation
+from std.memory import bitcast, unsafe_memcpy, stack_allocation
 from gbdt.methods.leaves_estimation.device_walker import enqueue_scale_in_place
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from core.device_zero import enqueue_fill
+from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from core.pinned_reduce import halving_block_sum
 from checks.fixed_point import choose_scale
@@ -200,11 +200,8 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
 )
-from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
 from gbdt.trees_identical_switches import (
-    T24,
-    T25,
     ORD_STD_GRIDFOLD,
     ORD_SKIP_UNSEARCHED_PERM,
     IDN_ORD_CAT_PLANES,
@@ -272,8 +269,8 @@ comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
 #: before the next tree's writes (each tree ends on the learn-loss drain).
 #: No bit moves. On Metal each allocation is a fixed host cost per tree and
 #: a live buffer bound to the launches while it lives.
-#: `-D MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF` restores the allocations per tree.
-comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]()
+# TOMBSTONE: MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF (DELETE-OLD-PATH, EXP:2148 the default is the recorded bit-neutral kept path, rule e) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 47147e100f.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF.patch; record in docs/TOMBSTONES.md.
 
 #: Lane ml-gbdt T4 (roadmap T4; IDENTICAL, every vendor; default ON): the
 #: batched Ordered estimation tasks (`_ordered_estimate_prepare`) take
@@ -287,14 +284,12 @@ comptime GBDT_ORD_TREE_BUFS = not is_defined["MOJOLEARN_GBDT_ORD_TREE_BUFS_OFF"]
 #: task's leaf upload (the apply reads the device leaves), and the fold
 #: tasks' leaf readbacks; the estimation task's leaves come home on the
 #: learn-loss drain. Bits: none move. The partition settle drain stays (the
-#: oracle factory reads the host leaf sizes). `-D
-#: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
-comptime IDN_ORD_ONE_STEP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: oracle factory reads the host leaf sizes).
+# TOMBSTONE: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 632cd99677.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (DELETE-OLD-PATH, EXP:2438 master old-path switch already deleted, rule e; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 931e7ca76a.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ORD_ONE_STEP_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 #: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
 #: tree's score-noise std dev and fixed-point scale are formed ON THE DEVICE
@@ -311,13 +306,9 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
 #: in `d_ss` and the snap (`enqueue_snap_plane_dev`), the histogram kernels
 #: (`compute_hist2_dev`) and the score kernels (`find_optimal_split_dev`)
 #: read them as device words; only a traced run reads them back.
-#: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
-#: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
-comptime IDN_ORD_STD_SCALE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at fce840609d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_ORD_STD_SCALE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _ord_std_scale_kernel(
@@ -832,25 +823,7 @@ def _ord_std_combine_body(
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
 
-def _ord_std_combine_scale_kernel(
-    part: MutPointer[Float32, MutAnyOrigin],
-    sums: MutPointer[Float32, MutAnyOrigin],
-    count: Int32, tiny_bits: UInt64, mult_bits: UInt64,
-    random_strength: Float32, row_count: Int32,
-    dst: MutPointer[Float32, MutAnyOrigin],
-):
-    """T24: retain the exact lane combine and portable scalar statements.
-
-    COMPILED (2026-10-07, sm_89 and gfx942) — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    Both stages publish/read the sums on thread zero. No host round trip,
-    changed reduction graph, vendor libm or additional pointer alias.
-    """
-    _ord_std_combine_body(part, sums)
-    barrier()
-    _ord_std_scale_body(
-        sums, Int32(0), Int32(1), sums, Int32(1), count, tiny_bits,
-        mult_bits, random_strength, row_count, dst,
-    )
+# (Sweep 2026-11-15: _ord_std_combine_scale_kernel, launched only under the folded T24, removed.)
 
 
 def _ord_std_wide_kernel(
@@ -1486,12 +1459,12 @@ struct _PermPartition(Movable):
         if m > 0:
             self.snap.resize(unsafe_uninit_length=m)
             self.snap_off.resize(unsafe_uninit_length=m)
-            memcpy(
+            unsafe_memcpy(
                 dest=self.snap.unsafe_ptr().bitcast[Int64](),
                 src=self.h_snap64.unsafe_ptr(),
                 count=m,
             )
-            memcpy(
+            unsafe_memcpy(
                 dest=self.snap_off.unsafe_ptr().bitcast[Int64](),
                 src=self.h_snap_off64.unsafe_ptr(),
                 count=m,
@@ -1526,12 +1499,12 @@ struct _PermPartition(Movable):
         if n_leaves > 0:
             sizes.resize(unsafe_uninit_length=n_leaves)
             offsets.resize(unsafe_uninit_length=n_leaves)
-            memcpy(
+            unsafe_memcpy(
                 dest=sizes.unsafe_ptr(),
                 src=self.snap.unsafe_ptr() + k * n_leaves,
                 count=n_leaves,
             )
-            memcpy(
+            unsafe_memcpy(
                 dest=offsets.unsafe_ptr(),
                 src=self.snap_off.unsafe_ptr() + k * n_leaves,
                 count=n_leaves,
@@ -1820,7 +1793,7 @@ def _ordered_estimate_complete(
         ref d_est = est_ws[0].d_est
         trace.record_device(ctx, tag, d_est, n_leaves)
         est_times.begin(ctx)
-        ctx.enqueue_function[_ordered_apply_kernel[T25]](
+        ctx.enqueue_function[_ordered_apply_kernel[False]](
             permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
             cursor.unsafe_ptr(), Int32(pending.apply_size),
             opts.learning_rate,
@@ -1850,7 +1823,7 @@ def _ordered_estimate_complete(
     for leaf in range(n_leaves):
         hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_function[_ordered_apply_kernel[T25]](
+    ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
         cursor.unsafe_ptr(), Int32(pending.apply_size), opts.learning_rate,
         grid_dim=(_grid(pending.apply_size), 1, 1),
@@ -1867,8 +1840,8 @@ def _ordered_device_leaves(
     formed on the device), from the `h_est` copy `_ordered_estimate_complete`
     enqueued. The caller has drained since. One memcpy: the host model's
     download."""
-    var leaves = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(
+    var leaves = List[Float32](unsafe_uninit_length=n_leaves)
+    unsafe_memcpy(
         dest=leaves.unsafe_ptr(),
         src=est_ws[0].h_est.unsafe_ptr(),
         count=n_leaves,
@@ -1908,14 +1881,10 @@ def _ordered_device_leaves(
 
 #: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
 #: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
-#: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
-#: `-D MOJOLEARN_ORDERED_BATCH_EST` is still accepted and changes nothing.
 #: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
-comptime ORDERED_BATCH_EST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_ORDERED_BATCH_EST_OFF (DELETE-OLD-PATH, EXP:117 KEPT cf45a2732 on the M3 only; FAST is Apple only, so no other vendor is owed; rule d) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at accebf0183.
+# Restore: git apply experiments/removed/MOJOLEARN_ORDERED_BATCH_EST_OFF.patch; record in docs/TOMBSTONES.md.
+comptime ORDERED_BATCH_EST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: BATCH_EST keeps a learn permutation's fold cursors in one buffer
 comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
 #: chunks per (task, leaf) run in the batched reduce
@@ -1923,10 +1892,16 @@ comptime ORDERED_BAT_CHUNKS = 8
 
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G11, AFT_G12
 
+# TOMBSTONE: MOJOLEARN_AFT_G11 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 03c050a585.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G11.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # G11: four SIMD groups per prefix-task chunk reduce shared/register demand.
 # Keep every prefix, eight chunks, every weight and RNG mapping unchanged.
 # Uncompiled/unverified/unmeasured; only the FAST sum association changes.
 comptime AFT_ORDERED_REDUCE_BLOCK = 128 if AFT_G11 else ORDERED_BLOCK
+# TOMBSTONE: MOJOLEARN_AFT_G12 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at bc9ffa877f.
+# Restore: git apply experiments/removed/MOJOLEARN_AFT_G12.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # G12: independent four-row tiles amortize task-bound lookup, retaining the
 # per-row leaf and task. Four bounds-checked coalesced stores need little
 # register state; no dataset/dimension rule. No performance/quality evidence.
@@ -2156,7 +2131,7 @@ def _launch_ord_bat_reduce(
     """The objective switch for `_ord_bat_reduce_kernel`: `n_tasks` tasks
     on one cursor buffer, grid `(chunks, n_tasks * n_leaves)`."""
 
-    @parameter
+    @__parameter
     def _go[obj: Int]() raises:
         ctx.enqueue_function[_ord_bat_reduce_kernel[obj]](
             y_p.unsafe_ptr(), w_p.unsafe_ptr(), cursor.unsafe_ptr(),
@@ -2397,8 +2372,8 @@ def _ord_fast_take_leaves(
 ) -> List[Float32]:
     """The estimation task's RESCALED leaves (`leaf * learning_rate`, formed
     on the device), after the drain that ran the copy; one memcpy."""
-    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
+    var out = List[Float32](unsafe_uninit_length=n_leaves)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
     return out^
 
 
@@ -2425,6 +2400,9 @@ def fit_ordered(
     od_type: Int,
     od_pvalue: Float64,
     od_wait: Int,
+    # The fit's device plan, read once at the binding entry and handed to
+    # the structure searcher.
+    device_plan: DevicePlan = plan_for_single(),
 ) raises -> OrderedFitOutput:
     """Train `n_estimators` oblivious trees by their GPU Ordered boosting
     (see the module docstring) into `model`. The learn loss after each tree
@@ -2582,22 +2560,21 @@ def fit_ordered(
             ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
         )
         fast_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
-    # GBDT_ORD_TREE_BUFS: [sw, sg, noise partials, noise terms, draws,
+    # the per-fit buffers: [sw, sg, noise partials, noise terms, draws,
     # |planes|, magnitudes] and the bins, once per fit (off the wide path)
     var keep_f32 = List[DeviceBuffer[DType.float32]]()
     var keep_bins = List[DeviceBuffer[DType.uint32]]()
-    comptime if GBDT_ORD_TREE_BUFS:
-        if not ord_wide:
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(
-                ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
-            )
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
-            keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2))
-            keep_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
+    if not ord_wide:
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(
+            ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+        )
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2 * total))
+        keep_f32.append(ctx.enqueue_create_buffer[DType.float32](2))
+        keep_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
     var keep_on = len(keep_bins) > 0
     comptime if ORDERED_CAT_CURSORS:
         _ord_fast_init_cursors(
@@ -2821,10 +2798,6 @@ def fit_ordered(
                     comptime if ORDERED_SABOTAGE:
                         est = folds[f].quality_evaluate_samples.right
                     bounds.append(est)
-                    comptime if T25:
-                        # Cache also the apply suffix. Prefix statistics still
-                        # exclude these rows from this task's estimation.
-                        bounds.append(folds[f].quality_evaluate_samples.right)
             if p == est_p:
                 bounds.append(n_rows)
             parts.append(
@@ -2982,9 +2955,10 @@ def fit_ordered(
         # unbootstrapped planes and the magnitudes from the bootstrapped
         # ones; both readbacks ride the magnitudes' drain, the host
         # arithmetic on them is the same statements run after it, and every
-        # temporary is held past it. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF`
-        # restores the three drains.
-        var defer_drain = PW_FUSED_LEVEL and not fused_sums
+        # temporary is held past it.
+        # TOMBSTONE: MOJOLEARN_GBDT_FUSED_LEVEL_OFF (DELETE-OLD-PATH, no A/B recorded for the old path, rule b; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 037ec94044.
+        # Restore: git apply experiments/removed/MOJOLEARN_GBDT_FUSED_LEVEL_OFF.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+        var defer_drain = not fused_sums
         var held = List[DeviceBuffer[DType.float32]]()
         var held_h = List[HostBuffer[DType.float32]]()
         if fused_sums:
@@ -3011,13 +2985,16 @@ def fit_ordered(
                         grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
                     )
                     std_done = True
-            var combined_scale = False
             if not std_done:
                 # Lane S3 ORD_STD_GRIDFOLD: the grid fold always (no env
                 # read, so the host column knows the order from the define)
                 var std_split = True
-                comptime if not ORD_STD_GRIDFOLD:
-                    std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+                # lane fx-env-dead (2026-11-18): was the run-time env read
+                # MOJOLEARN_ORD_STD_SPLIT=0; now the build define (default
+                # unchanged: split on). Read only where ORD_STD_GRIDFOLD is off
+                # (fast builds), as before.
+                comptime if not ORD_STD_GRIDFOLD and is_defined["MOJOLEARN_GBDT_FAST_ORD_STD_SPLIT_OFF"]():
+                    std_split = False
                 if std_split:
                     comptime if ORD_STD_GRIDFOLD:
                         ctx.enqueue_function[_ord_std_gridfold_kernel](
@@ -3031,20 +3008,10 @@ def fit_ordered(
                             Int32(total), part.unsafe_ptr(),
                             grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
                         )
-                    comptime if T24:
-                        ctx.enqueue_function[_ord_std_combine_scale_kernel](
-                            part.unsafe_ptr(), d_sums.unsafe_ptr(), Int32(ord_count),
-                            bitcast[DType.uint64](Float64(1e-100)),
-                            bitcast[DType.uint64](ord_mult), opts.random_strength,
-                            Int32(total), d_ss.unsafe_ptr(),
-                            grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-                        )
-                        combined_scale = True
-                    else:
-                        ctx.enqueue_function[_ord_std_combine_kernel](
-                            part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                            grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-                        )
+                    ctx.enqueue_function[_ord_std_combine_kernel](
+                        part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                        grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                    )
                 else:
                     ctx.enqueue_function[_ord_std_and_mags_kernel](
                         sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
@@ -3057,14 +3024,13 @@ def fit_ordered(
                 # design; two untracked views pass the aliasing check (box-run-2).
                 var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-                if not combined_scale:
-                    ctx.enqueue_function[_ord_std_scale_kernel](
-                        sums_p, Int32(0), Int32(1), sums_w, Int32(1),
-                        Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
-                        bitcast[DType.uint64](ord_mult), opts.random_strength,
-                        Int32(total), d_ss.unsafe_ptr(),
-                        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-                    )
+                ctx.enqueue_function[_ord_std_scale_kernel](
+                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
+                    Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
+                    bitcast[DType.uint64](ord_mult), opts.random_strength,
+                    Int32(total), d_ss.unsafe_ptr(),
+                    grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+                )
                 # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss` for
                 # the snap and the searcher; no readback, no drain here.
                 # `part` is held past the learn-loss drain.
@@ -3278,6 +3244,7 @@ def fit_ordered(
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
             ord_wide=ord_wide, std_scale_word=ss_words^,
+            device_plan=device_plan,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)
@@ -3419,8 +3386,6 @@ def fit_ordered(
                     if pend_of[slot] < 0:
                         continue
                     var apply_bins = bins.copy()
-                    comptime if T25:
-                        apply_bins = parts[lp].d_leaf.copy()
                     _ = _ordered_estimate_complete(
                         ctx, pend[pend_of[slot]], slots[slot], n_leaves, dperms[lp],
                         apply_bins,
@@ -3431,19 +3396,13 @@ def fit_ordered(
             ord_dev_leaves = pend[est_pend].est.device_done
             ord_dev_slot = est_slot
             var estimation_bins = bins.copy()
-            comptime if T25:
-                estimation_bins = parts[est_p].d_leaf.copy()
             leaves = _ordered_estimate_complete(
                 ctx, pend[est_pend], slots[est_slot], n_leaves,
                 dperms[est_p], estimation_bins,
                 est_cursor, opts, est_pools[est_slot], trace,
                 tag + ".estimation", est_times, walker_times,
             )
-            comptime if PW_FUSED_LEVEL:
-                pend_held = pend^
-            else:
-                ctx.synchronize()
-                _ = pend^
+            pend_held = pend^
         for lp in range(0 if batch else learn_count):
             if lp == skip_p:
                 # F: no reader of this permutation's cursors

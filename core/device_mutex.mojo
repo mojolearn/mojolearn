@@ -71,10 +71,8 @@ from std.atomic import Atomic, Ordering, fence
 from std.sys.compile import is_defined
 
 
-#: A/B CONTROL, NEVER A DEFAULT. `-D MOJOLEARN_RF_MUTEX_CLAIM_STOCK=1` compiles the
-#: PRE-REPAIR claim, with no fence, for every caller. It exists so a leg has an arm that
-#: has to be SEEN to move. It is not a matrix row.
-comptime CLAIM_STOCK = is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]()
+# TOMBSTONE: MOJOLEARN_RF_MUTEX_CLAIM_STOCK (A/B control: the pre-repair claim with no acquire after the claim; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at 34c27fda1e.
+# Restore: git apply experiments/removed/MOJOLEARN_RF_MUTEX_CLAIM_STOCK.patch; record in docs/TOMBSTONES.md.
 
 #: BUILD-ONLY POSITIVE CONTROL FOR THE SECTION COMPARATOR, NEVER RUN AND NEVER A DEFAULT.
 #: `-D MOJOLEARN_MUTEX_SECTION_SABOTAGE=1` writes a different held value, which must move
@@ -84,14 +82,8 @@ comptime CLAIM_STOCK = is_defined["MOJOLEARN_RF_MUTEX_CLAIM_STOCK"]()
 #: The protocol still works under it, since only the holder writes the held value.
 comptime SECTION_SABOTAGE = is_defined["MOJOLEARN_MUTEX_SECTION_SABOTAGE"]()
 
-#: MEASUREMENT INSTRUMENT, NEVER A DEFAULT. `-D MOJOLEARN_MUTEX_SPIN_RELAXED=1` makes the
-#: SPIN TEST a relaxed load instead of an acquire load. It exists to answer, on a column
-#: with no AMDGPU disassembler to hand, whether the spin's ACQUIRE ORDERING survives into
-#: the instruction stream at all. If this arm is byte-identical to the default, the
-#: acquire on the spin emits nothing on that column and the shipped spin-wait has been
-#: resting on an ordering it never had. If it differs, the acquire is real. This is a
-#: differential build, and it answers the question without disassembling anything.
-comptime SPIN_RELAXED = is_defined["MOJOLEARN_MUTEX_SPIN_RELAXED"]()
+# TOMBSTONE: MOJOLEARN_MUTEX_SPIN_RELAXED (differential-build instrument: relaxed spin load instead of acquire; no A/B recorded) deleted 2026-11-15 by lane/expdel2-03-base; code recoverable at b616f3bc41.
+# Restore: git apply experiments/removed/MOJOLEARN_MUTEX_SPIN_RELAXED.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -101,12 +93,8 @@ def claim_device_mutex[origin: MutOrigin, //](
     """Take a cross-block device lock. Supports both the `0 -> 1` and `-2 -> -1` claims."""
     var claim_value = held + Int32(1) if SECTION_SABOTAGE else held
     while True:
-        comptime if SPIN_RELAXED:
-            if Atomic.load[ordering = Ordering.RELAXED](mutex) != available:
-                continue
-        else:
-            if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
-                continue
+        if Atomic.load[ordering = Ordering.ACQUIRE](mutex) != available:
+            continue
         var expected = available
         if Atomic.compare_exchange[
             success_ordering = Ordering.RELAXED,
@@ -116,27 +104,26 @@ def claim_device_mutex[origin: MutOrigin, //](
             # The edge is made HERE, with the release this thread actually claimed
             # against, not with whichever one its spin load happened to observe. Do not
             # replace this with a discarded acquire load; that spelling emits nothing.
-            comptime if not CLAIM_STOCK:
-                # MEASURED 2026-09-16: `fence[ordering = Ordering.ACQUIRE]()`
-                # generates valid AIR and then FAILS AT PIPELINE CREATION on
-                # Apple, "GPU machine code generation ...
-                # XPC_ERROR_CONNECTION_INTERRUPTED", 6 of 6 with arm order
-                # rotated, against stock 6 of 6 OK. It broke random forests,
-                # extratrees and the fused kNN on this vendor. Every
-                # cross-compile check passed, because AIR generation is not the
-                # stage that fails.
-                #
-                # This is an acquire LOAD whose value is CONSUMED, which is the
-                # distinction that makes it emit: a discarded one compiles to
-                # nothing on AIR, PTX and GCN alike. It reaches the SAME edge as
-                # the fence. The claim above is a read-modify-write, so its write
-                # sits in the release sequence headed by the release it consumed,
-                # and an acquire that reads a value in that sequence synchronizes
-                # with the release heading it.
-                #
-                # `claim_value`, NEVER a literal 1: the kNN consumer claims
-                # `-2 -> -1`, and a loop waiting on the wrong value does not fail,
-                # it HANGS.
-                while Atomic.load[ordering = Ordering.ACQUIRE](mutex) != claim_value:
-                    pass
+            # MEASURED 2026-09-16: `fence[ordering = Ordering.ACQUIRE]()`
+            # generates valid AIR and then FAILS AT PIPELINE CREATION on
+            # Apple, "GPU machine code generation ...
+            # XPC_ERROR_CONNECTION_INTERRUPTED", 6 of 6 with arm order
+            # rotated, against stock 6 of 6 OK. It broke random forests,
+            # extratrees and the fused kNN on this vendor. Every
+            # cross-compile check passed, because AIR generation is not the
+            # stage that fails.
+            #
+            # This is an acquire LOAD whose value is CONSUMED, which is the
+            # distinction that makes it emit: a discarded one compiles to
+            # nothing on AIR, PTX and GCN alike. It reaches the SAME edge as
+            # the fence. The claim above is a read-modify-write, so its write
+            # sits in the release sequence headed by the release it consumed,
+            # and an acquire that reads a value in that sequence synchronizes
+            # with the release heading it.
+            #
+            # `claim_value`, NEVER a literal 1: the kNN consumer claims
+            # `-2 -> -1`, and a loop waiting on the wrong value does not fail,
+            # it HANGS.
+            while Atomic.load[ordering = Ordering.ACQUIRE](mutex) != claim_value:
+                pass
             return

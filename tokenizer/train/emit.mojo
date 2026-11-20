@@ -11,7 +11,7 @@
                             mojolearn.
 
 WHY THE JSON IS HAND-ROLLED AND THE LAYOUT IS FIXED. This file and
-`python/mojolearn/_bpe_trainer.py` must produce the SAME BYTES -- that
+`python/mojolearn/tests/_bpe_trainer.py` must produce the SAME BYTES -- that
 equality is what `tokenizer/checks/trainer_check.mojo` asserts and the whole
 reason there are two implementations. Two JSON libraries agreeing on
 formatting is not something to rely on, and Mojo has no JSON writer anyway,

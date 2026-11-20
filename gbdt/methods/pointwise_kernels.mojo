@@ -184,8 +184,9 @@ from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G01, AFT_G02
 
 from gbdt.gpu_data.grid_policy import (
@@ -209,14 +210,6 @@ from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK, 
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
     PW_WRITE_EPS,
-    ORD_SMALL_FOLD_BLOCK,
-    ORD_SMALL_FOLD_PART_GROUPS,
-    ord_small_fold_convert_kernel,
-    ord_small_fold_hist8_kernel,
-)
-from gbdt.trees_identical_switches import (
-    ORD_HIST_FOLD_SKIP,
-    ORD_HIST_FOLD_SKIP_DOCS,
 )
 from gbdt.methods.kernel.pointwise_hist2_binary import (
     compute_split_properties_b_kernel,
@@ -336,6 +329,9 @@ def pw_block_multiplier(
         if pinned > PW_MAX_MULTIPLIER:
             pinned = PW_MAX_MULTIPLIER
         return pinned
+    # TOMBSTONE: MOJOLEARN_AFT_G02 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 27d9c12e7b.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G02.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     comptime if AFT_G02:
         # G02: an occupancy/row-budget alternative, not the rejected fixed
         # SYM_HIST_MULT retry. Aim for three blocks per compute unit but
@@ -397,14 +393,14 @@ struct FoldsHistogram(Copyable, Movable):
     Read `4, 5` as `6, 6`'s sibling and the estimate under-counts.
     """
 
-    var counts: InlineArray[UInt32, 9]
+    var counts: Array[UInt32, 9]
     """`std::array<ui32, 9> Counts`, the same fixed nine slots. An
     `InlineArray` rather than a `List` because theirs is a value type with a
     compile-time size and a `List` would make the struct non-copyable."""
 
     def __init__(out self):
         """`Counts.fill(0)`."""
-        self.counts = InlineArray[UInt32, 9](fill=UInt32(0))
+        self.counts = Array[UInt32, 9](fill=UInt32(0))
 
     def __init__(out self, counts: List[UInt32]) raises:
         """Fieldwise. `counts` must have nine entries, bits 0 through 8."""
@@ -414,7 +410,7 @@ struct FoldsHistogram(Copyable, Movable):
                 + String(len(counts))
                 + " entries"
             )
-        self.counts = InlineArray[UInt32, 9](fill=UInt32(0))
+        self.counts = Array[UInt32, 9](fill=UInt32(0))
         for b in range(9):
             self.counts[b] = counts[b]
 
@@ -644,8 +640,8 @@ def update_pointwise_histograms_kernel[
         # the reference reads BOTH planes before writing EITHER (`:60-64` then
         # `:67-71`), which matters because `left` and `right` alias when a
         # caller mis-sizes the grid; kept in the same two passes.
-        var calc_val = InlineArray[Float32, hist_count](fill=Float32(0.0))
-        var complement_val = InlineArray[Float32, hist_count](
+        var calc_val = Array[Float32, hist_count](fill=Float32(0.0))
+        var complement_val = Array[Float32, hist_count](
             fill=Float32(0.0)
         )
         comptime for hist_id in range(hist_count):
@@ -801,6 +797,9 @@ def scan_pointwise_histograms[
             (part_count // 2) * hist_line_size * hist_count
         ) * fold_count
 
+    # TOMBSTONE: MOJOLEARN_AFT_G01 (DELETE-EXPERIMENT, never-run Apple FAST programme card, rule g; non-owner fold) deleted 2026-11-15 by lane/expdel2-44-trees; code recoverable at 491a18b9bb.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFT_G01.expdel2-44-trees.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
     comptime if AFT_G01:
         ctx.enqueue_function[aft_cooperative_scan_kernel](
             feature_first_fold_index, feature_folds, feature_one_hot,
@@ -1041,57 +1040,7 @@ def compute_hist2_non_binary_dev[
     # (geometric folds, learn then quality per fold), so they are a prefix.
     # Same cells (Int32 sums are order-free); fixed 8-bit route only.
     var z_skip = 0
-    comptime if (
-        ORD_HIST_FOLD_SKIP
-        and bits == 8
-        and pointwise_one_byte_fixed_for[
-            TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
-        ]()
-    ):
-        if fold_count > 1 and len(fold_part_sizes) == fold_count:
-            var budget = part_count * ORD_HIST_FOLD_SKIP_DOCS
-            while z_skip < fold_count and fold_part_sizes[z_skip] < budget:  # small-loop(fold_count: fold partitions, 2F): the small-fold prefix
-                z_skip += 1
-        if z_skip > 0:
-            var fb = (
-                nb_count + PW_NB_FEATURES_PER_BLOCK - 1
-            ) // PW_NB_FEATURES_PER_BLOCK
-            var groups = ny if ny < ORD_SMALL_FOLD_PART_GROUPS else ORD_SMALL_FOLD_PART_GROUPS
-            var line_blocks = (2 * hist_line_size + 255) // 256
-            if full_pass:
-                ctx.enqueue_function[ord_small_fold_hist8_kernel[True]](
-                    feature_offset, feature_first_fold_index, feature_folds,
-                    Int32(nb_count), cindex, target, weight, indices,
-                    partition, bin_sums, Int32(hist_line_size),
-                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
-                    grid_dim=(fb, z_skip, groups),
-                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
-                )
-                ctx.enqueue_function[ord_small_fold_convert_kernel[True]](
-                    bin_sums, Int32(hist_line_size), Int32(fold_count),
-                    Int32(ny), fixed_scale,
-                    grid_dim=(line_blocks, z_skip, ny),
-                    block_dim=(256, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[ord_small_fold_hist8_kernel[False]](
-                    feature_offset, feature_first_fold_index, feature_folds,
-                    Int32(nb_count), cindex, target, weight, indices,
-                    partition, bin_sums, Int32(hist_line_size),
-                    Int32(fold_count), Int32(ny), fixed_scale, dither_ids,
-                    grid_dim=(fb, z_skip, groups),
-                    block_dim=(ORD_SMALL_FOLD_BLOCK, 1, 1),
-                )
-                ctx.enqueue_function[ord_small_fold_convert_kernel[False]](
-                    bin_sums, Int32(hist_line_size), Int32(fold_count),
-                    Int32(ny), fixed_scale,
-                    grid_dim=(line_blocks, z_skip, ny),
-                    block_dim=(256, 1, 1),
-                )
-            if z_skip >= nz:
-                # every fold partition was small: the regular grid has
-                # nothing left to file
-                return
+    # (Sweep 2026-11-15: the folded ORD_HIST_FOLD_SKIP small-fold prefix launch was removed; z_skip stays 0.)
 
     if int_slots:
         var stride_i = ny * nz * 2 * hist_line_size
@@ -1258,9 +1207,11 @@ def launch_pw_fold_doc_slots[
 # one-block writeback. The cell is the multiplier-1 cell at every
 # multiplier, so the split follows the device's SM count. The ordered
 # levels launched 32-64 blocks on a 142-SM L40S at 4.1M rows.
-# `MOJOLEARN_PW_INT_SLOTS=0` restores the one-block launch.
+# `-D MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF` restores the one-block launch
+# (lane fx-env-dead, 2026-11-18: was the run-time env read
+# MOJOLEARN_PW_INT_SLOTS=0 per hist launch; default unchanged, A/B owed).
 def pw_int_slots_on() -> Bool:
-    return String(getenv("MOJOLEARN_PW_INT_SLOTS")) != "0"
+    return not is_defined["MOJOLEARN_GBDT_FAST_PW_INT_SLOTS_OFF"]()
 
 
 def pw_fold_int_slots_kernel(
@@ -1453,7 +1404,6 @@ def run_compute_hist2_binary_kernel[
             bin_sums,
             Int32(total_feature_count),
             fixed_scale,
-            Int32(0),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
@@ -1473,7 +1423,6 @@ def run_compute_hist2_binary_kernel[
             bin_sums,
             Int32(total_feature_count),
             fixed_scale,
-            Int32(0),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
@@ -1748,7 +1697,6 @@ def run_compute_hist2_half_byte_kernel[
             bin_sums,
             Int32(bin_feature_count),
             fixed_scale,
-            Int32(0),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
@@ -1771,7 +1719,6 @@ def run_compute_hist2_half_byte_kernel[
             bin_sums,
             Int32(bin_feature_count),
             fixed_scale,
-            Int32(0),
             dither_ids,
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),

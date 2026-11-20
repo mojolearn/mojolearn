@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the Python-sharded multi-GPU drivers' native
-owner (bindings/parallel_shard_native.mojo, on the native local process
+owner (bindings/parallel_shard_native_door.mojo, on the native local process
 pool). Each driver module registers its fixed classes, entries and contexts
 here at its import; each public driver is then one call into it."""
 from . import _native_process  # noqa: F401  (connects the native process pool)
@@ -21,8 +21,7 @@ def _connect_binding(name, required, optional=()):
     from types import BuiltinFunctionType, ModuleType
     try:
         module = _backend.binding(name, "identical")
-        if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time resolution of the existing CPU-only proxy
+        module = _backend.exact_host_module(module)  # import-time: the CPU-only facade resolved to its compiled host module once
         if type(module) is not ModuleType:
             raise ImportError(f"parallel native binding requires the compiled {name} module")
         fields = vars(module)
@@ -43,9 +42,9 @@ _WORKER_BINDINGS = {
     "_mojolearn_kernel_methods": _connect_binding(
         "_mojolearn_kernel_methods", ("rbf_sampler_transform",), ("kernel_methods_numeric_mode",)),
     "_mojolearn_gp": _connect_binding(
-        "_mojolearn_gp", ("gpc_fit", "gpc_predict", "gpc_ovr_combine"), ("gp_numeric_mode",)),
+        "_mojolearn_gp", ("gp_native_api_v1",), ("gp_numeric_mode",)),
     "_mojolearn": _connect_binding(
-        "_mojolearn", ("prepare_targets", "gather_i64", "gather_f64", "msel_rebase_offsets_i32")),
+        "_mojolearn", ("prepare_targets", "gather_i64", "gather_f64")),
     "neighbors_base": _connect_binding(
         "_mojolearn", ("knn_search", "knn_classify", "knn_regress", "rbc_knn_search",
                        "knn_classify_neighbors", "knn_regress_neighbors", "radius_neighbors_count", "radius_neighbors_fill"),
@@ -54,29 +53,34 @@ _WORKER_BINDINGS = {
     "neighbor_density": _connect_binding("_mojolearn_estimators", ("kde_score_samples",),
         ("kde_fit_prepare", "kde_fit_release", "kde_score_samples_resident")),
     "_mojolearn_ivf": _connect_binding("_mojolearn_ivf",
-        ("ivf_flat_partial_search", "ivf_shard_plan", "ivf_merge_shards", "ivf_finalize_distances"),
+        ("ivf_flat_partial_search",),
         ("ivf_numeric_mode", "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export")),
 }
 
 
-def _connect_merge():
-    # glue: retain the same native host-helper route the old query selected
-    from types import BuiltinFunctionType
-    from ._buffer import _native
-    try:
-        entry = _native("shard_topk_merge_f32")
-        if type(entry) is not BuiltinFunctionType:
-            raise TypeError("parallel neighbor merge requires a compiled entry")
-        return entry
-    except (ImportError, AttributeError) as error:
-        return str(error)
+def _table_keys():
+    # glue: once at import, the (tier, vendor) keys of the images whose native
+    # tables the owner calls (core/parallel_entry_table.mojo): the base image
+    # (forest offset merge, reference top-k merge) and the IVF image (shard
+    # plan, shard merge, distance finalize). An absent key makes the native
+    # caller refuse when that family is actually requested.
+    from ._native_table_key import connected_key
+    keys = {"base": connected_key("_mojolearn"), "ivf": connected_key("_mojolearn_ivf")}
+    if keys["ivf"] is not None and keys["ivf"][1] == 0:
+        # A CPU install's IVF table is published by `_mojolearn_ivf_host`
+        # alone (the search-only host binding publishes none): load it.
+        try:
+            _backend.load_host_module("_mojolearn_ivf_host")  # import-time: its init publishes the table
+        except ImportError:
+            pass
+    return keys
 
 
-_REFERENCE_MERGE = _connect_merge()
+_TABLE_KEYS = _table_keys()
 
 #: Every GPU binding whose owner loops read a device plan and which registers
 #: `device_plan_enter` / `device_plan_exit` / `device_plan_log`
-#: (bindings/device_plan_binding.mojo).
+#: (bindings/device_plan_binding_pack.mojo).
 PLAN_BINDINGS = ('_mojolearn', '_mojolearn_estimators', '_mojolearn_gbdt', '_mojolearn_hdbscan', '_mojolearn_ivf',
                  '_mojolearn_linalg', '_mojolearn_metrics', '_mojolearn_mixture', '_mojolearn_resample',
                  '_mojolearn_rf', '_mojolearn_solver', '_mojolearn_trees', '_mojolearn_x_ann', '_mojolearn_x_cluster',
@@ -86,6 +90,11 @@ PLAN_BINDINGS = ('_mojolearn', '_mojolearn_estimators', '_mojolearn_gbdt', '_moj
 
 def register(**fixed):
     """Add one driver module's fixed tables to the owner, once, at import."""
-    # glue: import-time connection of compiled entries, classes and contexts
+    # glue: import-time connection of compiled entries, classes and contexts.
+    # Every driver's owner reads the family owners' shared `context` (array
+    # types, codes, classes); it was registered only by the neighbors drivers,
+    # so fit_scaler, the IVF shards and the GP classifier refused ("has no
+    # context") in a process that had not imported those (fb6-smoke census).
+    from ._native_family_bridge import shared_context
     _native_parallel_shard('register', dict(fixed, worker_bindings=_WORKER_BINDINGS,
-                                          reference_merge=_REFERENCE_MERGE))
+                                          table_keys=_TABLE_KEYS, context=shared_context()))

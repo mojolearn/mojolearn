@@ -12,7 +12,6 @@ Other numeric modes keep the original host refusal and transfer helpers.
 from std.os import abort
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import bitcast, stack_allocation
-from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from mamba.host.gen.mamba3_transfer import m3_download
 from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named_host
@@ -20,6 +19,9 @@ from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named_host
 comptime M3_REFUSAL_THREADS = 256
 comptime M3_REFUSAL_BLOCKS = 128
 comptime M3_REFUSAL_NONE: Int64 = 9223372036854775807
+# TOMBSTONE: MOJOLEARN_MAMBA3_LEGACY_REFUSAL (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at e81ebf2572.
+# Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_REFUSAL.patch; record in docs/TOMBSTONES.md.
+# The host refusal arm stays: the generated host column sets this False.
 comptime M3_DEVICE_REFUSAL = False
 
 
@@ -49,7 +51,7 @@ def m3_first_nonfinite_code(
     var _l1_a2 = Int64(n)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2}:
         m3_nonfinite_partial_kernel(gid_, _l1_a0, _l1_a1, _l1_a2)
-    host_launch(_launch_1, launch_count((blocks, 1, 1), (M3_REFUSAL_THREADS, 1, 1)))
+    host_launch(_launch_1, launch_count((blocks, 1, 1), (M3_REFUSAL_THREADS, 1, 1)), 0)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     ctx.synchronize()
     var best = M3_REFUSAL_NONE
@@ -111,3 +113,18 @@ def mamba_refuse_grad_output(
             raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
     else:
         _refuse_grad_output_host(tag, values)
+
+
+def mamba_refuse_grad_output_on_device(
+    ctx: DeviceContext, tag: String, mut grad: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    """`mamba_refuse_grad_output` for a gradient that is already on the
+    device and has no host copy (lane x56d: the block step op's rule, whose
+    upstream gradient is tape storage). The same message and first flat
+    index; the legacy-refusal build reads the n words back once."""
+    comptime if M3_DEVICE_REFUSAL:
+        var code = m3_first_nonfinite_code(ctx, grad, n)
+        if code != M3_REFUSAL_NONE:
+            raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
+    else:
+        _refuse_grad_output_host(tag, m3_download(ctx, grad, n))

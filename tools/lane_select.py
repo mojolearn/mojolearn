@@ -69,8 +69,8 @@ its own docstring and its own test that it still refuses where it must:
 `build_script_roots`, `pixi_tasks_only`, `NATIVE_INPUTS`,
 `_outside_python_unreachable`, `_unimported_mojo_unreachable`,
 `_imported_only_by_unreachable`, `_package_file_unreachable`,
-`_lane_keyed_prose`, `harness_closure_lanes` and the corpus-only reading of
-`test_module_inert`.
+`_lane_keyed_prose`, `harness_closure_lanes`, `pandas_gated_units` and the
+corpus-only reading of `test_module_inert`.
 
 WHAT IT REFUSES TO DO. It never returns an empty selection quietly for a path
 it could not place, and it never widens instead of saying so.
@@ -96,6 +96,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
+from boundary_keys_plain import plain as _keys_plain  # noqa: E402  held-key doors read in their by-name form
 from mojo_registrations import registered_functions as _registered_functions_uncached, sole_registration
 from import_metadata_effects import metadata_only_call
 PKG = os.path.join("python", "mojolearn")
@@ -440,52 +441,62 @@ def _by_path(fn):
     return wrapped
 
 
+#: Every module-level memo `reset_caches` sets back to None (the dict and set memos are in `_CACHES`).
+_RESET_TO_NONE = ("_TRACKED", "_PYTHON_FILES", "_ENUMERATORS", "_LANE_SOURCES", "_LANE_SEED_CALLS", "_LANE_PRECISION_PATHS", "_LANE_CPU_ROUTE_ONLY", "_LANE_DEVICE_CALLS", "_DISPATCH_VOCAB", "_MOJO_CALLERS", "_BINDING_HELD", "_SOURCE_HASHED", "_CONSTANTS", "_EXTENDERS", "_MOJO_CONFORMANCE", "_MOJO_IMPORTERS", "_PKG_IMPORT_CLOSURE", "_IMPORT_TIME_CLOSURE", "_CORPUS", "_CORPUS_TEXT", "_REVERSE", "_REGISTRIES", "_INCLUDE_ROOTS", "_GRAPH_REVERSE", "_HOST_CLASS_ROUTES", "_CONTEXT_DOORS", "_HOOK_CLASSES")
+#: Module-level containers `reset_caches` empties in place.
+_RESET_CLEARED = ("_GIT_SHOW", "_HOST_ROUTE_CLASSES", "_DISPATCHER_NAMES", "LANE_OPERATIONS")
+_RESET_COUNT = 0
+
+
 def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
-    global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES, _CONTEXT_DOORS
-    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
+    global _RESET_COUNT
+    _RESET_COUNT += 1
     for cache in _CACHES:
         cache.clear()
     bincache.cache_directory_listings(False)    # a test may have added or removed files
-    _GIT_SHOW.clear()
-    _TRACKED = None
-    _PYTHON_FILES = None
-    _ENUMERATORS = None
-    _LANE_SOURCES = None
-    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS, _LANE_CPU_ROUTE_ONLY, _LANE_DEVICE_CALLS
-    _LANE_SEED_CALLS = None
-    _LANE_PRECISION_PATHS = None
-    _LANE_CPU_ROUTE_ONLY = None
-    _LANE_DEVICE_CALLS = None
-    global _DISPATCH_VOCAB, _MOJO_CALLERS
-    _DISPATCH_VOCAB = None
-    _MOJO_CALLERS = None
-    global _BINDING_HELD
-    _BINDING_HELD = None
-    _HOST_ROUTE_CLASSES.clear()
-    _DISPATCHER_NAMES.clear()
-    LANE_OPERATIONS.clear()
-    _SOURCE_HASHED = None
-    _CONSTANTS = None
-    _EXTENDERS = None
-    _MOJO_CONFORMANCE = None
-    _MOJO_IMPORTERS = None
-    _PKG_IMPORT_CLOSURE = None
-    _CORPUS = None
-    _CORPUS_TEXT = None
-    _REVERSE = None
-    _REGISTRIES = None
-    _INCLUDE_ROOTS = None
-    _GRAPH_REVERSE = None
-    _HOST_CLASS_ROUTES = None
-    _CONTEXT_DOORS = None
-    global _HOOK_CLASSES
-    _HOOK_CLASSES = None
+    g = globals()
+    for name in _RESET_CLEARED:
+        g[name].clear()
+    for name in _RESET_TO_NONE:
+        g[name] = None
     if "lane_map_import_graph" in sys.modules:
         sys.modules["lane_map_import_graph"]._DERIVED = None
         sys.modules["lane_map_import_graph"]._CLOSURES.clear()
+
+
+def snapshot_caches():
+    """Every memo `reset_caches` drops, as it stands (shallow copies). A test that perturbs one edge,
+    resets and re-derives restores this afterwards instead of resetting again, so the next test reads
+    the real map without deriving it a second time (2026-11-18: each derivation is minutes; resetting
+    in a `finally` doubled the cost of every perturbation test). Valid only while the tree and the
+    module's functions are what they were when it was taken."""
+    g = globals()
+    graph = sys.modules.get("lane_map_import_graph")
+    return dict(caches=[c.copy() for c in _CACHES], none={n: g[n] for n in _RESET_TO_NONE},
+                cleared={n: g[n].copy() for n in _RESET_CLEARED}, dirs=bincache._DIR_NAMES,
+                graph=(graph, graph._DERIVED, dict(graph._CLOSURES)) if graph is not None else None,
+                count=_RESET_COUNT)
+
+
+def restore_caches(snap):
+    """Put back what `snapshot_caches` took (the containers in place, so references stay valid)."""
+    for cache, saved in zip(_CACHES, snap["caches"]):
+        cache.clear()
+        cache.update(saved)
+    g = globals()
+    for name, value in snap["none"].items():
+        g[name] = value
+    for name, saved in snap["cleared"].items():
+        g[name].clear()
+        g[name].update(saved)
+    bincache._DIR_NAMES = snap["dirs"]
+    if snap["graph"] is not None:
+        graph, derived, closures = snap["graph"]
+        graph._DERIVED = derived
+        graph._CLOSURES.clear()
+        graph._CLOSURES.update(closures)
 
 
 @_by_path
@@ -499,7 +510,11 @@ def _read(path):
         if text is not None:
             return text
     with open(full, encoding="utf-8", errors="replace") as fh:
-        return fh.read()
+        # A door that reads through held name keys and integer operation
+        # codes (bindings/py_keys.mojo) is read in its by-name form, so the
+        # dispatcher branches and the entry names below see the same text
+        # as before the door was converted (tools/boundary_keys_plain.py).
+        return _keys_plain(path, fh.read())
 
 
 @_by_path
@@ -1129,7 +1144,62 @@ def _region_import_edges(rel, wanted, narrow_unused=True):
                 merge(mod_files, {alias.name})
                 if registry in _reexport_registries() and registry != rel:
                     merge(_rebindings(registry).get(alias.name, set()), {alias.name})
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)
+            if dotted:
+                merge(_module_paths(dotted, listing), None)
     return out
+
+
+def _package_expr(node):
+    """True for an expression that is this module's package name: `__package__`, or
+    `__name__.rpartition(".")[0]` (a module's package; an `__init__.py` is handled by the caller)."""
+    if isinstance(node, ast.Name) and node.id == "__package__":
+        return "package"
+    if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and node.slice.value == 0
+            and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "rpartition" and isinstance(node.value.func.value, ast.Name)
+            and node.value.func.value.id == "__name__"
+            and [getattr(a, "value", None) for a in node.value.args] == ["."]):
+        return "name-parent"
+    return None
+
+
+def _dynamic_import_dotted(rel, call):
+    """The package-relative dotted module an `importlib.import_module(...)` call of `rel` loads, when
+    its argument names it without a runtime value: `"mojolearn.x"`, or the package plus a literal
+    suffix (`__package__ + ".x"`, `__name__.rpartition(".")[0] + ".models.causal_lm"`). None
+    otherwise (a name built from a variable is not resolved here).
+
+    A MODULE `__getattr__` THAT IMPORTS (lane lazy-import-fix, 76de1ab11d, 2026-11-12):
+    `_native_neural_bridge.__getattr__` runs `importlib.import_module(<package> + ".models.causal_lm")`
+    at the first read of RUNTIME/CONTEXT, which every Mamba and Transformer block call makes; that
+    module imports `neural_inference`. Without this edge the mamba lanes left the map of
+    neural_inference.py."""
+    func = call.func
+    if not ((isinstance(func, ast.Attribute) and func.attr == "import_module")
+            or (isinstance(func, ast.Name) and func.id == "import_module")) or not call.args:
+        return None
+    arg = call.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        if arg.value == "mojolearn" or arg.value.startswith("mojolearn."):
+            return arg.value[len("mojolearn"):].lstrip(".") or None
+        return None
+    if not (isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add)
+            and isinstance(arg.right, ast.Constant) and isinstance(arg.right.value, str)
+            and arg.right.value.startswith(".") and len(arg.right.value) > 1):
+        return None
+    kind = _package_expr(arg.left)
+    if kind is None:
+        return None
+    base = os.path.dirname(rel)
+    if kind == "name-parent" and os.path.basename(rel) == "__init__.py":
+        base = os.path.dirname(base)
+    if not (base == PKG or base.startswith(PKG + os.sep)):
+        return None
+    prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
+    prefix = "" if prefix == "." else prefix
+    return ".".join(p for p in (prefix, arg.right.value[1:]) if p)
 
 
 _REGIONS = {}
@@ -1776,6 +1846,28 @@ def _public_rebindings(files):
             one = ast.ImportFrom(module=node.module, names=[alias], level=node.level)
             for rel in _resolve_python_import(init, one, listing) - {init}:
                 out.setdefault(alias.name, set()).add(rel)
+    # THE LAZY TABLE IS A BINDING TOO (b6aa87e41d, 2026-11-12). Since every family is imported on first touch,
+    # `__init__.py` binds most public names through `_LAZY_NAMES = {"UMAP": ".umap", "umap": None, ...}` and
+    # its `__getattr__`, not through `from .umap import UMAP`. A name mapped to ".X" is `from .X import name`;
+    # a name mapped to None is the submodule itself, `from . import name`. Without this, umap.py,
+    # neural_inference.py and every other lazy door were in no lane's map.
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and any(isinstance(t, ast.Name) and t.id == "_LAZY_NAMES" for t in node.targets)):
+            continue
+        for key, value in zip(node.value.keys, node.value.values):
+            if not (isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    and isinstance(value, ast.Constant) and (value.value is None or isinstance(value.value, str))):
+                continue
+            where = value.value
+            if where is None:
+                one = ast.ImportFrom(module=None, names=[ast.alias(name=key.value)], level=1)
+            else:
+                level = len(where) - len(where.lstrip("."))
+                one = ast.ImportFrom(module=where.lstrip(".") or None, names=[ast.alias(name=key.value)],
+                                     level=level or 1)
+            for rel in _resolve_python_import(init, one, listing) - {init}:
+                out.setdefault(key.value, set()).add(rel)
     return out
 
 
@@ -1840,7 +1932,7 @@ def _python_imports(rel):
     #
     # SUBPACKAGES RESOLVE (2026-09-23). `from .safetensors import Checkpoint`
     # inside models/causal_lm.py means models/safetensors.py, and `from
-    # .models.safetensors import write_safetensors` at the top level means the
+    # .models.safetensors import INDEX_NAME, SINGLE_NAME` at the top level means the
     # models package and that module. Resolving every import name to
     # python/mojolearn/<name>.py alone made both edges vanish, and with them
     # every file of models/ (see `_python_files`). Function-local imports
@@ -1849,6 +1941,10 @@ def _python_imports(rel):
     for node in ast.walk(tree):
         if isinstance(node, (ast.ImportFrom, ast.Import)):
             out |= _resolve_python_import(rel, node, listing)
+        elif isinstance(node, ast.Call):
+            dotted = _dynamic_import_dotted(rel, node)     # the same edge `_region_import_edges` reads
+            if dotted:
+                out |= _module_paths(dotted, listing)
     out.discard(rel)
     return out
 
@@ -1984,7 +2080,7 @@ def _extending_files(closure):
     return out
 
 
-def _python_closure(seeds, sinks=(), regions=False):
+def _python_closure(seeds, sinks=(), regions=False, entered=None, follow=frozenset()):
     """The package's own import closure of `seeds`. A sink is included but not
     followed: the walk stops at a registry rather than stepping through it into
     every other family.
@@ -1994,7 +2090,7 @@ def _python_closure(seeds, sinks=(), regions=False):
     imports nothing for it. False is the whole-file walk (what `import
     mojolearn` can load at all, `_package_import_closure`)."""
     if regions:
-        return _region_closure(seeds, sinks)
+        return _region_closure(seeds, sinks, entered=entered, follow=follow)
     out, stack = set(), list(seeds)
     while True:
         while stack:
@@ -2022,7 +2118,7 @@ def _python_closure(seeds, sinks=(), regions=False):
         stack.extend(fresh)
 
 
-def _region_closure(seeds, sinks=()):
+def _region_closure(seeds, sinks=(), entered=None, follow=frozenset()):
     """`_python_closure` symbol by symbol: each file is followed only through
     the imports of the REGION its importers ask for (`_region_import_edges`),
     so a function-local import counts when its function can run for the lane,
@@ -2041,7 +2137,11 @@ def _region_closure(seeds, sinks=()):
     locally. Read whole, those local imports put `neural_inference.py` in 542
     of 571 lanes and connected the rf, gbdt and trees bindings to every
     lane, whose native owners then made `core/forest_inference.mojo` select
-    487 lanes (54 reviewed). `connect` imports none of them."""
+    487 lanes (54 reviewed). `connect` imports none of them.
+
+    `entered`, a dict, receives each sink the walk entered with the names its
+    importers asked of it (None: whole), for `sink_region_loads`. A sink in
+    `follow` (a lane's own seed: `_followed_seeds`) is followed like a door."""
     wanted, walked, stack = {}, {}, [(s, None) for s in seeds]
     while True:
         while stack:
@@ -2051,7 +2151,7 @@ def _region_closure(seeds, sinks=()):
                 wanted[rel] = None if names is None else set(names)
             elif wanted[rel] is not None:
                 wanted[rel] = None if names is None else wanted[rel] | names
-            if rel in sinks:
+            if rel in sinks and rel not in follow:
                 continue
             region = None if wanted[rel] is None else frozenset(wanted[rel])
             if not first and walked.get(rel, ()) == region:
@@ -2062,6 +2162,8 @@ def _region_closure(seeds, sinks=()):
         # THE BACKWARD EDGE, as in `_python_closure`: an extender runs whole.
         fresh = _extending_files(set(wanted)) - set(wanted)
         if not fresh:
+            if entered is not None:
+                entered.update({rel: names for rel, names in wanted.items() if rel in sinks})
             return set(wanted)
         stack.extend((f, None) for f in fresh)
 
@@ -2109,10 +2211,10 @@ def _mojo_module_files(dotted, rel, names=()):
     with `-I . -I bindings` (bindings/build_rf.sh:123, build_trees.sh:134,
     build_gbdt.sh:268), so `bindings/_mojolearn_rf.mojo` writing
     `from forest_inference_binding import forest_prepare_gpu_binding` means
-    `bindings/forest_inference_binding.mojo`, which is compiled into the
+    `bindings/forest_inference_binding_door.mojo`, which is compiled into the
     shipped `.so`. Resolving against the root alone found no such file and
     dropped the import as one of the toolchain's own, so the whole resident
-    forest inference tree (`bindings/forest_inference_binding.mojo` ->
+    forest inference tree (`bindings/forest_inference_binding_door.mojo` ->
     `core/forest_inference_model.mojo` -> `core/forest_inference.mojo`) was in
     no lane's map while being a shipped surface.
 
@@ -2425,11 +2527,11 @@ _CACHES.append(_SYMBOL_KEY)
 # --------------------------------------------- operation-string dispatchers
 # THE DISPATCHER'S OPERATIONS PER LANE (lane identity-attribution, 2026-10-31,
 # docs/plans/POST_0863_RELEASE_TOOLING.md item 3). The classical owner's one
-# compiled entry, `classical_native_call` (bindings/classical_native.mojo,
+# compiled entry, `classical_native_call` (bindings/classical_native_pack.mojo,
 # served by `_mojolearn_runtime_classical_host` through HOST_IMPORT_ALIASES on
 # every install), selects what it runs from a runtime string:
 # `if operation == "ridge_fit"`, `elif operation.startswith("family_")`, then
-# `family_operation` (bindings/family_native.mojo) again by prefix, and so on
+# `family_operation` (bindings/family_native_door.mojo) again by prefix, and so on
 # down to each family's owner. Read as plain text, the entry's body names every
 # family's kernels, so every lane that calls it at all (nearly all of them, for
 # `vendor_used`, `archive_save` and the like) took every export name those
@@ -3131,7 +3233,7 @@ def _binding_exports(rel):
 def _delegated_exports(rel):
     """export name -> (file, impl) for the exports a binding registers through
     a function it IMPORTS: `bindings/_mojolearn_x_trees.mojo` calls
-    `providers.python.xtrees_api_pyapi.register(module)`, which holds 87
+    `providers.python.xtrees_api_pyapi_door.register(module)`, which holds 87
     `m.def_function[impl]("name")` lines. `_binding_exports` reads the
     binding's own file only, so those exports were invisible to the per-export
     scan and reached a lane only through the whole closure of whatever else
@@ -3965,6 +4067,331 @@ def _mojo_node_label(node):
     return f"{node[1]}:{node[2]}" if node[0] == "t" else f"{node[1]}:{node[2]}.{node[3]}"
 
 
+# ------------------------------------------------- pandas-gated Mojo edits
+# A GLUE EDIT BEHIND A PANDAS TYPE GATE (lane-select-glue-attribution,
+# 2026-11-05). `bindings/classifier_public_lifecycle_door.mojo:_feature_names` runs
+# after EVERY estimator fit (the shared public lifecycle providers call it), so
+# the definition graph rightly reaches it from all 513 lanes. Its body opens
+# with `if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
+# return PythonObject(None)`, and everything after that line runs only for a
+# pandas DataFrame. The 0.8.66 Arrow feature-name fix changed only code after
+# that line, and still owed a re-record of every lane on every column.
+#
+# THE PROOF HAS TWO HALVES, both read from the tree, never from a diff:
+#   1. the edit (`pandas_gated_units`): every changed unit counted out is
+#      either a top-level def whose text up to and including such a gate is
+#      code-identical before and after, or a top-level def that only those
+#      units' gated bodies, or each other, name anywhere in the tree;
+#   2. the process (`pandas_free_identity_process`): no identity lane can hold
+#      a pandas object. The harness, its fragments, its runtime imports and
+#      the package's Python code name no pandas-family module or API in code,
+#      and no Mojo source imports one. `_pd_class` reads `sys.modules` and
+#      never imports, so without a pandas object the gate's class is either
+#      absent (None: `py_type(x) is not None` always holds) or has no instance.
+# The one assumption not read from this tree: the third-party modules the
+# package imports (numpy, scipy, the sklearn tag classes, torch) never hand
+# back a pandas object for the numpy inputs the harness builds unless asked by
+# a pandas option, and asking needs a name half 2 refuses.
+# Anything else (a gate in a method, a changed gate line, an `else` branch, a
+# helper named outside a gated body) stays with the definition graph.
+
+#: The pandas-family names whose appearance in harness or package CODE means a
+#: lane might build a pandas object. Docstrings and comments do not count.
+_PANDAS_TOKENS_RE = re.compile(r"\b(pandas|pyarrow|polars|DataFrame|as_frame|transform_output|set_output)\b")
+#: A Mojo import of a module by a name in the text (`import_module`,
+#: `__import__`, the C API).
+_MOJO_DYNAMIC_IMPORT_RE = re.compile(r"\b(import_module|__import__|PyImport_Import\w*)\b")
+_MOJO_STRING_RE = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')
+#: The gate: the first statement of a def body, a type test of a plain name
+#: against a pandas class looked up through `_pd_class`, whose block is one
+#: `return` of a constant.
+_PANDAS_GATE_RE = re.compile(r'^if\s+py_type\(\s*[A-Za-z_]\w*\s*\)\s+is\s+not\s+'
+                             r'_pd_class\(\s*"pandas(?:\.[A-Za-z_]\w*)+"\s*,\s*"[A-Za-z_]\w*"\s*\)\s*:$')
+_PANDAS_GATE_EXIT_RE = re.compile(r"^return(?:\s+(?:None|True|False|PythonObject\(None\)))?$")
+#: Where the gate's two names must come from (`_pd_class` reads sys.modules and
+#: never imports; `py_type` is the exact type).
+_PANDAS_GATE_IMPORTS = {"_pd_class": ("bindings.classical_pandas_door", "_pd_class"),
+                        "py_type": ("bindings.py_balanced", "py_type")}
+_PANDAS_FREE = {}
+_CACHES.append(_PANDAS_FREE)
+MOJO_GATED_WHY = {}
+
+
+def _pandas_free_python(rel):
+    """None for token-free code with locally known import module names,
+    else the reason. Unparsed code or computed imports cannot prove absence."""
+    try:
+        tree = ast.parse(_read(rel))
+    except (OSError, SyntaxError, ValueError):
+        return f"{rel} cannot be read as Python"
+    tree = _strip_docstrings(tree)
+    m = _PANDAS_TOKENS_RE.search(ast.unparse(tree))
+    if m:
+        return f"{rel} names `{m.group(1)}` in code"
+    # A missing token is not proof about a computed import name. Include
+    # imported aliases, and refuse an importer passed around as a value:
+    # the eventual module argument is then outside this local proof.
+    loaders = {"__import__", "import_module"}
+    loader_modules = {"importlib", "builtins", "__builtins__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            loaders.update(alias.asname or alias.name for alias in node.names
+                           if alias.name in {"__import__", "import_module"})
+        elif isinstance(node, ast.Import):
+            loader_modules.update(alias.asname or alias.name for alias in node.names
+                                  if alias.name in {"importlib", "builtins"})
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "getattr" \
+                and len(node.args) >= 2:
+            name = node.args[1]
+            reflected_loader = isinstance(name, ast.Constant) and name.value in {"__import__", "import_module"}
+            unknown_loader_member = isinstance(node.args[0], ast.Name) and node.args[0].id in loader_modules \
+                and not (isinstance(name, ast.Constant) and isinstance(name.value, str))
+            if reflected_loader or unknown_loader_member:
+                return f"{rel} reflects an importer with an unknown module name at line {node.lineno}"
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+                and node.value.attr == "__dict__" and isinstance(node.value.value, ast.Name) \
+                and node.value.value.id in loader_modules:
+            return f"{rel} indexes an importer module dictionary at line {node.lineno}"
+        importer = (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in loaders) or (
+            isinstance(node, ast.Attribute) and node.attr in {"__import__", "import_module"})
+        if not importer:
+            continue
+        call = parents.get(node)
+        if not isinstance(call, ast.Call) or call.func is not node or not call.args or not (
+                isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str)):
+            return f"{rel} has an importer with an unknown module name at line {node.lineno}"
+        if call.args[0].value.startswith("."):
+            return f"{rel} imports a relative module with an unproved package at line {node.lineno}"
+    return None
+
+
+def _pandas_free_mojo(rel):
+    """None when each Mojo importer has a literal non-pandas module argument.
+    An unrelated literal on an import line does not establish that argument."""
+    try:
+        code = _mojo_code_text(_read(rel))
+    except OSError:
+        return None                          # listed but absent: nothing compiles it
+    for literal in _MOJO_STRING_RE.finditer(code):
+        try:
+            value = ast.literal_eval(literal.group(0))
+        except (SyntaxError, ValueError):
+            continue
+        if _MOJO_DYNAMIC_IMPORT_RE.fullmatch(value):
+            return f"{rel} names an indirect importer `{value}` with no proved module argument"
+    # Locate importer identifiers outside strings, then inspect their actual
+    # first argument. Another literal on the same line proves nothing about
+    # a subscript, concatenation, alias or indirect importer call.
+    names = _MOJO_STRING_RE.sub(lambda match: " " * len(match.group(0)), code)
+    for match in _MOJO_DYNAMIC_IMPORT_RE.finditer(names):
+        tail = code[match.end():].lstrip()
+        argument = tail[1:].lstrip() if tail.startswith("(") else ""
+        literal = _MOJO_STRING_RE.match(argument)
+        if literal is None or not argument[literal.end():].lstrip().startswith((",", ")")):
+            return f"{rel} imports a module by an unknown or computed name near `{match.group(0)}`"
+        try:
+            module = ast.literal_eval(literal.group(0))
+        except (SyntaxError, ValueError):
+            return f"{rel} has an unproved module string near `{match.group(0)}`"
+        if module.startswith("."):
+            return f"{rel} imports a relative module with an unproved package"
+        if _PANDAS_TOKENS_RE.search(module):
+            return f"{rel} imports `{module}`"
+    return None
+
+
+def pandas_free_identity_process():
+    """(True, why) when no identity lane's process can hold a pandas object
+    (half 2 of the gate proof above), else (False, the first file that breaks
+    it). Read once per tree."""
+    if "answer" in _PANDAS_FREE:
+        return _PANDAS_FREE["answer"]
+    python = [HARNESS] + list(HARNESS_RUNTIME_IMPORTS)
+    try:
+        python += sorted(os.path.join(IDENTITY_FRAGMENTS, n) for n in os.listdir(os.path.join(ROOT, IDENTITY_FRAGMENTS))
+                         if n.endswith(".py"))
+    except OSError:
+        pass
+    python += sorted(_python_files())
+    answer = None
+    for rel in python:
+        why = _pandas_free_python(rel)
+        if why:
+            answer = (False, why)
+            break
+    if answer is None:
+        mojo = sorted({p for p in tracked_files() if p.endswith(".mojo")}
+                      | {p for p in _read.cache if p.endswith(".mojo")})
+        for rel in mojo:
+            why = _pandas_free_mojo(rel)
+            if why:
+                answer = (False, why)
+                break
+    if answer is None:
+        answer = (True, f"no pandas object can exist in an identity lane: {len(python)} harness and package "
+                        "Python files name no pandas-family module or API in code, and no Mojo source "
+                        "imports one")
+    _PANDAS_FREE["answer"] = answer
+    return answer
+
+
+def _pandas_gate(text):
+    """(gate prefix, its identifiers) for one top-level def's text whose body
+    opens with a pandas type gate (`_PANDAS_GATE_RE` with a constant `return`
+    as its whole block and no `elif`/`else`), else None. The prefix is the
+    signature and the gate, comments and docstrings blanked, whitespace
+    collapsed: what must be unchanged for the gate to hold before and after."""
+    code = _mojo_code_text(text)
+    scanned = _mojo_scan(code)
+    if scanned is None:
+        return None
+    stmts = _mojo_statements(scanned, 0)
+    if not stmts or len(stmts) != 1:
+        return None                          # a decorator or a second statement
+    first, pairs = stmts[0]
+    if not _MOJO_DEF_RE.match(first):
+        return None
+    k = 1
+    while k < len(pairs) and pairs[k][1]:
+        k += 1
+    header = [ln for ln, _ in pairs[:k]]
+    if not header[-1].rstrip().endswith(":"):
+        return None
+    rest = pairs[k:]
+    # Module imports do not establish the binding of a formal/comptime
+    # parameter or a local name. Refuse all such shadowing conservatively;
+    # there is no need to guess Mojo's scope/lifetime for a later assignment.
+    trusted = set(_PANDAS_GATE_IMPORTS)
+    if trusted & set(_MOJO_IDENT_RE.findall("\n".join(header))):
+        return None
+    for line, _ in rest:
+        declaration = re.search(r"\b(?:var|ref|alias|comptime|param|for|with|def|fn|except)\s+([^:=\n]+)", line)
+        if declaration and trusted & set(_MOJO_IDENT_RE.findall(declaration.group(1))):
+            return None
+        if re.match(r"\s*(?:from\b.*\bimport\b|import\b)", line) and (
+                trusted & set(_MOJO_IDENT_RE.findall(line))):
+            return None
+        assignment = re.match(r"\s*([^=\n]+?)(?<![!<>=:])=(?!=)", line)
+        if assignment and trusted & set(_MOJO_IDENT_RE.findall(assignment.group(1))):
+            return None
+    starts = [ln for ln, cont in rest if not cont and ln.strip()]
+    if not starts:
+        return None
+    indent = len(starts[0]) - len(starts[0].lstrip(" \t"))
+    if indent == 0:
+        return None
+    body = _mojo_statements(rest, indent)
+    if not body:
+        return None
+    gate_first, gate_pairs = body[0]
+    if not _PANDAS_GATE_RE.match(gate_first.strip()):
+        return None
+    block = [ln.strip() for ln, _ in gate_pairs[1:] if ln.strip()]
+    if len(block) != 1 or not _PANDAS_GATE_EXIT_RE.match(block[0]):
+        return None
+    if len(body) > 1 and re.match(r"^(?:elif|else)\b", body[1][0]):
+        return None
+    prefix = "\n".join(" ".join(ln.split()) for ln in header + [ln for ln, _ in gate_pairs] if ln.strip())
+    return prefix, frozenset(_MOJO_IDENT_RE.findall(prefix))
+
+
+def _mojo_files_naming(name, skip):
+    """The Mojo files other than `skip` whose code names `name`."""
+    out = set()
+    for rel in {p for p in tracked_files() if p.endswith(".mojo")} | {p for p in _read.cache if p.endswith(".mojo")}:
+        if rel == skip:
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if name in text and name in _MOJO_IDENT_RE.findall(_mojo_code_text(text)):
+            out.add(rel)
+    return out
+
+
+def pandas_gated_units(path, old_text, new_text, changed):
+    """(units, why): the changed units of one Mojo file (`changed`, from
+    `mojo_changed_definitions`) that no identity lane can execute, by the
+    pandas-gate proof above, and what it rested on (or why nothing was
+    counted out). Empty unless both halves hold."""
+    if old_text is None:
+        return set(), "a new file"
+    old_u, new_u = _mojo_units(old_text), _mojo_units(new_text)
+    if old_u is None or new_u is None:
+        return set(), "the file cannot be read by definition"
+    for units in (old_u, new_u):
+        for local, binding in _PANDAS_GATE_IMPORTS.items():
+            if local in units["top"] or units["imports"].get(local) != {binding}:
+                return set(), f"`{local}` is not imported from {binding[0]} alone"
+    # A name the gate prefix spells that now means something else (a changed
+    # import, a changed or new top-level name of this file) changes the prefix
+    # even when its text is the same.
+    moved = {n for n in set(old_u["imports"]) | set(new_u["imports"])
+             if old_u["imports"].get(n) != new_u["imports"].get(n)}
+    moved |= {u[1] for u in changed if u[0] == "t"}
+    gates = {}
+    for unit in changed:
+        if unit[0] != "t":
+            continue
+        o, n = old_u["top"].get(unit[1]), new_u["top"].get(unit[1])
+        if not o or not n or o[0] != "def" or n[0] != "def" or len(o[1]) != 1 or len(n[1]) != 1:
+            continue
+        before, after = _pandas_gate(o[1][0]), _pandas_gate(n[1][0])
+        if before is not None and after is not None and before[0] == after[0] \
+                and not (after[1] & (moved - {unit[1]})):
+            gates[unit[1]] = after[1]
+    if not gates:
+        return set(), "no changed definition opens with an unchanged pandas type gate"
+    # Helpers: top-level defs of the new text named only by gated bodies (not
+    # their gate prefix) or by each other, here and in no other Mojo file.
+    helpers = {u[1] for u in changed if u[0] == "t" and u[1] not in gates
+               and new_u["top"].get(u[1], (None,))[0] == "def"}
+    texts = _mojo_unit_texts(new_u)
+    idents = {unit: frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text(text))) for unit, text in texts.items()}
+    # Only helpers reachable from a gated body inherit its exclusion. An
+    # independent changed export with no local callers is not a helper merely
+    # because the set of other definitions naming it happens to be empty.
+    reachable = {h for h in helpers if any(
+        h in idents.get(("t", gate), ()) and h not in prefix
+        for gate, prefix in gates.items())}
+    pending = list(reachable)
+    while pending:
+        caller = pending.pop()
+        discovered = (set(idents.get(("t", caller), ())) & helpers) - reachable
+        reachable.update(discovered)
+        pending.extend(discovered)
+    helpers &= reachable
+    residue = frozenset(_MOJO_IDENT_RE.findall(_mojo_code_text("\n".join(new_u["residue"]))))
+    elsewhere = {h: _mojo_files_naming(h, path) for h in helpers}
+    shrinking = True
+    while shrinking:
+        shrinking = False
+        for h in sorted(helpers):
+            ok = not elsewhere[h] and h not in residue
+            for unit, words in idents.items():
+                if not ok:
+                    break
+                if h not in words or unit == ("t", h):
+                    continue
+                if unit[0] == "t" and unit[1] in gates and h not in gates[unit[1]]:
+                    continue
+                if unit[0] == "t" and unit[1] in helpers:
+                    continue
+                ok = False
+            if not ok:
+                helpers.discard(h)
+                shrinking = True
+    free, why_free = pandas_free_identity_process()
+    if not free:
+        return set(), why_free
+    out = {("t", g) for g in gates} | {("t", h) for h in helpers}
+    return out, (f"{', '.join(sorted(gates))} run(s) past a pandas type gate only for a pandas object"
+                 + (f" ({', '.join(sorted(helpers))} named only there)" if helpers else "") + "; " + why_free)
+
+
 def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     """(changed definition labels, selected lanes, lane -> chain, kept lanes)
     for one Mojo source's diff against `ref`, or None (whole file, with the
@@ -4002,8 +4429,19 @@ def mojo_edit_lanes(ref, path, hit, graph, backend=None):
     if changed is None:
         MOJO_EDIT_WHY[key] = why
         return None
-    nodes = {(u[0], path) + u[1:] for u in changed}
-    labels = sorted(_mojo_node_label(n) for n in nodes)
+    # UNITS NO IDENTITY LANE CAN EXECUTE (`pandas_gated_units`) are labelled
+    # but reach no lane, by the graph or by the whole-file rule: the proof is
+    # about every caller, so a lane kept for an unexplained route is not kept
+    # for them. Any other changed unit keeps the ordinary rules below.
+    MOJO_GATED_WHY.pop(key, None)
+    gated, why_gated = pandas_gated_units(path, old_text, new_text, changed) if changed else (set(), "")
+    if gated:
+        MOJO_GATED_WHY[key] = why_gated
+    nodes = {(u[0], path) + u[1:] for u in changed - gated}
+    labels = sorted([_mojo_node_label(n) for n in nodes]
+                    + [_mojo_node_label((u[0], path) + u[1:]) + " (pandas-gated)" for u in gated])
+    if gated and not nodes:
+        return labels, set(), {}, set()
     lanes, chains, kept = set(), {}, set()
     device = backend in DEVICE_BACKENDS and _LANE_DEVICE_CALLS is not None
     for lane in sorted(hit):
@@ -4163,6 +4601,116 @@ def _binding_names_in_uncached(rel, nodes):
     return out
 
 
+def _followed_seeds(seeds):
+    """The seeds a lane's walk FOLLOWS. Every seed, sinks included, except the
+    package `__init__.py` and the subpackage re-export registries
+    (`_reexport_registries`), which are entered only.
+
+    A SINK CAN BE A LANE'S OWN DOOR (2026-11-05). `neighbors.py` defines
+    KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors and
+    RadiusNeighbors and names four bindings (one in a comment), and
+    `_hierarchy_impl.py` defines AgglomerativeClustering and hands four to
+    `connect_bindings`, so the enumerator cap made both sinks and the k-NN and
+    agglomerative lanes walked none of what their own door imports (the same
+    break as fe5587bb0, 2026-10-04). A file defining the name a lane calls runs
+    for that lane with everything it imports, registry or not; what keeps a
+    registry from handing every lane every binding is that its binding NAMES
+    are not read as a door's (`sink_region_loads` reads its loads only), not
+    that its imports are hidden. Widening only."""
+    unfollowed = _reexport_registries() | {os.path.join(PKG, "__init__.py")}
+    return frozenset(seeds) - unfollowed
+
+
+_SINK_LOADS = {}
+_CACHES.append(_SINK_LOADS)
+#: What loads a binding by name inside a registry's region. `connect_bindings`
+#: (`_native_family_bridge.py`: "Connect estimator bindings during module
+#: import") loads each name it is handed for the native family owners. It is
+#: read here and NOT added to `_BINDING_CALLS` for every door: a door's binding
+#: may be taken WHOLE when no export of it is named, and that fallback pours
+#: the binding's whole closure into the lane's names; a sink's loads are always
+#: narrow (no export named: the binding source alone), so here it only widens.
+_SINK_LOAD_CALLS = _BINDING_CALLS | frozenset({"connect_bindings"})
+
+
+def sink_region_loads(rel, wanted):
+    """(bindings, names) a REGISTRY (an enumerator sink) LOADS in the region a
+    lane runs: every binding a binding call there (`_SINK_LOAD_CALLS`) names by
+    a LITERAL argument, and the attribute names that region reads which are
+    exports of those bindings. `wanted` is what the lane's importers ask of
+    the file (`_region_nodes`; None is the whole file).
+
+    WHY A SINK STILL LOADS (2026-11-05). A registry's binding NAMES are not
+    evidence for one lane (`ENUMERATOR_MAX_BINDINGS`), so the map took none of
+    them. The native-owner bridges then named a fourth binding:
+    `_native_runtime_manifold_bridge.py` hands three numerical bindings to
+    `_native_family_bridge.connect_bindings` and loads
+    `_mojolearn_runtime_manifold_host` in `connect`, so it became a sink, and
+    the umap lane, whose `_umap_impl.py` calls that `connect` at import and
+    whose every fit is `manifold_native_call`, lost the manifold owner and with
+    it the whole umap/ tree: `umap/*.mojo` mapped to no lane at all. A literal
+    load in code the lane runs is not a name in a list, it is a load the lane
+    performs, so it counts. So does a `_BINDING`-style constant in a def or
+    class of the region (what its `_bind` loads) and `from . import _mojolearn`
+    (the binding module itself). The same 4-name cap made
+    `_hierarchy_impl.py` (`connect_bindings` of four bindings) and
+    `neighbors.py` (three in code, a fourth in a comment) sinks: the
+    agglomerative and k-NN lanes' own doors. A table subscript or a variable
+    argument (the registry part: `_HOST_BASENAMES[name]`, `binding(name,
+    mode)`) still does not count, and the walk still stops at the sink.
+    Widening only: this adds bindings and names, never removes one.
+
+    A sink that is a lane's own seed is also followed (`_followed_seeds`), and
+    what it loads stays wide for that lane, as any seed's binding does."""
+    key = (rel, None if wanted is None else frozenset(wanted))
+    if key in _SINK_LOADS:
+        return _SINK_LOADS[key]
+    if _parse(rel) is None:
+        # Unreadable: every binding its text names, the wide answer.
+        loads = {b for b in set(_BINDING_RE.findall(_read(rel)))
+                 if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+        hit = _SINK_LOADS[key] = (frozenset(loads), frozenset())
+        return hit
+    nodes = _region_nodes(rel, None if wanted is None else frozenset(wanted))
+    loads = set()
+
+    def literal(value):
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) \
+                and value.value.startswith("_mojolearn"):
+            loads.add(value.value)
+    for top in nodes:
+        for node in ast.walk(top):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if name in _SINK_LOAD_CALLS:
+                    for arg in node.args:
+                        literal(arg)
+            elif isinstance(node, ast.Assign) and top is not node:
+                # `_BINDING = "_mojolearn_x"` inside a def or class of the
+                # region: the binding its `_bind` loads (`_BINDING_TARGETS`).
+                for target in node.targets:
+                    label = getattr(target, "id", None) or getattr(target, "attr", None)
+                    if label and label.upper().endswith(_BINDING_TARGETS):
+                        literal(node.value)
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:     # `from . import _mojolearn`: the module itself
+                    if alias.name.startswith("_mojolearn"):
+                        loads.add(alias.name)
+    loads = {b for b in loads if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+    names = set()
+    if loads:
+        exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
+                                | set(_delegated_exports(os.path.join("bindings", b + ".mojo")))
+                                for b in loads])
+        # ATTRIBUTE READS ONLY (`module.manifold_native_call`). A registry's
+        # string tables (`_classical_host.py` captures `cd_predict`,
+        # `kde_score_samples`, ... by `getattr` at import, for every lane that
+        # enters it) are the registry part, not a call this lane makes.
+        names = {sub.attr for top in nodes for sub in ast.walk(top) if isinstance(sub, ast.Attribute)} & exports
+    hit = _SINK_LOADS[key] = (frozenset(loads), frozenset(names))
+    return hit
+
+
 def _import_time_names(rel, operations=False):
     """The attribute names and identifier-shaped string constants of the code
     one Python file runs WHEN IMPORTED: its module-level statements, class
@@ -4248,7 +4796,7 @@ def context_doors():
     A native owner reaches another compiled entry through its context:
     `_native_runtime_manifold_bridge.connect` stores the manifold owner's
     `manifold_native_call` as `context["family_mani_door"]`, and
-    bindings/family_native.mojo calls `py_get(context, "family_mani_door")`
+    bindings/family_native_door.mojo calls `py_get(context, "family_mani_door")`
     for every `family_mani_*` operation. The key is all the native text
     names, so the UMAP lane reached no file of the manifold owner and no
     umap/ kernel (tools/test_lane_select.py::test_an_aliased_mojo_import_is_
@@ -4761,7 +5309,7 @@ def lane_sources():
                     # miss, and both are the ordinary spelling here:
                     #  * the impl is IMPORTED, not defined in the binding file.
                     #    `def_function[forest_prepare_gpu_binding[True]]` names
-                    #    a function in bindings/forest_inference_binding.mojo,
+                    #    a function in bindings/forest_inference_binding_door.mojo,
                     #    so `blocks.get` returned "" and the export
                     #    contributed nothing at all.
                     #  * the impl calls a helper DEFINED IN THE SAME FILE which
@@ -4841,15 +5389,21 @@ def lane_sources():
                     members[rel] = None  # the lane reaches the module object
                 elif rel not in members or members[rel] is not None:
                     members.setdefault(rel, set()).add(name)
-        files = _python_closure(seeds, sinks, regions=True)
+        entered = {}
+        files = _python_closure(seeds, sinks, regions=True, entered=entered,
+                                follow=_followed_seeds(seeds))
         doors = files - set(sinks)
-        bindings = door_bindings(doors)
+        # A SINK'S LITERAL LOADS in the region the lane runs (`sink_region_loads`):
+        # loads, not names, so they are this lane's bindings by syntax.
+        sink_loads = set().union(*[sink_region_loads(rel, names)[0] for rel, names in entered.items()]) \
+            if entered else set()
+        bindings = door_bindings(doors) | sink_loads
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
         seed_members[lane] = members
         # The bindings a door names BY SYNTAX, without the `host_model` class
         # routes `resolved_bindings` adds (`route_only` below).
-        syntax_of[lane] = {b for rel in doors for b in _binding_names(rel)} & bindings
+        syntax_of[lane] = ({b for rel in doors for b in _binding_names(rel)} | sink_loads) & bindings
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
@@ -4861,6 +5415,26 @@ def lane_sources():
     # and a lane that calls it names it in its own walk.
     ubiquitous_ops = set().union(*[_import_time_names(rel, operations=True)
                                    for rel in ubiquitous_py if rel.endswith(".py")])
+
+    def door_sinks_of(lane):
+        """The sinks that are this lane's OWN door: a followed seed
+        (`_followed_seeds`) that not every lane reaches. Read as a door (its
+        syntax bindings, its names, "no export named" wide for a seed), the
+        treatment `neighbors.py` and `_hierarchy_impl.py` had before the
+        four-binding cap made them sinks. Their literal loads beyond that
+        syntax (`connect_bindings`) stay narrow. 2026-11-05: taking those
+        loads WIDE instead handed the k-NN and agglomerative lanes the whole
+        core and x_cluster host closures, and with them
+        cluster/host/kmeans_oracle.mojo (102 of 513 lanes on the CPU leg)."""
+        return (_followed_seeds(seeds_of[lane]) & sinks) - ubiquitous_py
+
+    for lane in reach:
+        own_doors = door_sinks_of(lane)
+        if own_doors:
+            matched, files, doors, bindings = reach[lane]
+            extra = door_bindings(own_doors)
+            reach[lane] = (matched, files, doors, bindings | extra)
+            syntax_of[lane] |= {b for rel in own_doors for b in _binding_names(rel)} & extra
 
     connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
     for binding in tuple(connected_names):
@@ -4900,9 +5474,13 @@ def lane_sources():
             # its source file. Module-object roots remain whole. Import-time
             # initializers and opaque module consumers retain their edges.
             walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py,
-                             follow=seeds_of[lane] - sinks, seed_names=seed_members[lane])
+                             follow=_followed_seeds(seeds_of[lane]), seed_names=seed_members[lane])
             declared, whole, used = set(), set(), set()
-            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items() if rel not in sinks}
+            # A SINK THAT IS THIS LANE'S OWN DOOR is read as the door it is
+            # (`_door_sinks`), never through its loads alone.
+            own_doors = door_sinks_of(lane)
+            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items()
+                       if rel not in sinks or rel in own_doors}
             deferred, live = set(), set()
             for rel, nodes in regions.items():
                 candidates, consumed = _deferred_factory_calls(rel, nodes, walk[rel])
@@ -4911,7 +5489,22 @@ def lane_sources():
             deferred -= live
             limitations = {}
             for rel, wanted in walk.items():
-                if rel in sinks:
+                if rel in own_doors:
+                    # its literal loads (`connect_bindings` included) join as
+                    # narrow bindings; the door rule below decides the rest
+                    declared |= sink_region_loads(rel, wanted)[0]
+                if rel in sinks and rel not in own_doors:
+                    # A sink is entered, not read as a door; what its region
+                    # LOADS by a literal, and the exports of exactly those
+                    # loads that region reads, are the lane's own
+                    # (`sink_region_loads`). Never whole through a sink.
+                    loads, names = sink_region_loads(rel, wanted)
+                    declared |= loads
+                    if rel not in ubiquitous_py:
+                        # a file every lane enters says nothing about this one
+                        # (the rule `binding_seeds` keeps for a binding every
+                        # lane reaches): its loads stay the source alone
+                        used |= names
                     continue
                 nodes = regions[rel]
                 found = _binding_names_in(rel, nodes)
@@ -5424,8 +6017,9 @@ def _git_show(ref, path):
             # errors="replace": a binary path in the diff (a .so, a wheel, a lease file) raised
             # UnicodeDecodeError here, and identity_columns.py changed-lanes turned that into "cannot diff:
             # every lane re-recorded" (the 0.8.44 floor diff, 2026-10-13). Binary text never parses as code.
-            _GIT_SHOW[key] = subprocess.run(["git", "-C", ROOT, "show", key], capture_output=True, text=True,
-                                            encoding="utf-8", errors="replace", check=True).stdout
+            _GIT_SHOW[key] = _keys_plain(path, subprocess.run(
+                ["git", "-C", ROOT, "show", key], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", check=True).stdout)
         except subprocess.CalledProcessError:
             _GIT_SHOW[key] = None
     return _GIT_SHOW[key]
@@ -5471,7 +6065,7 @@ def git_show_prefetch(ref, paths):
         body, pos = data[pos:pos + size], pos + size + 1
         if header[1] == "blob":
             text = body.decode("utf-8", errors="replace")
-            _GIT_SHOW[key] = text.replace("\r\n", "\n").replace("\r", "\n")
+            _GIT_SHOW[key] = _keys_plain(key.split(":", 1)[1], text.replace("\r\n", "\n").replace("\r", "\n"))
             filled += 1
     return filled
 
@@ -5502,6 +6096,47 @@ def _hashes_a_file(rel):
 
 
 _SOURCE_HASHED = None
+_HASH_CONTEXT_KEY_RE = re.compile(r'context\["(\w+)"\]')
+
+
+def _native_hashed_context_keys():
+    """The operation-context keys a Mojo function that calls `sha256_file` reads: the byte LM's
+    `source_sha256` inventory moved from Python into bindings/byte_lm_trainer_native_door.mojo
+    (c3cd787c6d), which hashes the paths `_byte_lm_impl.py` hands it as `byte_lm_source_names`,
+    `byte_lm_source_root` and `byte_lm_wrapper_file`. Derived per function, so a key the same file reads
+    for anything else is not swept in."""
+    keys = set()
+    for rel in tracked_files():
+        if not rel.endswith(".mojo"):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if "sha256_file(" not in text:
+            continue
+        for body in re.split(r"\n(?=def |fn )", text):
+            if "sha256_file(" in body and not body.lstrip().startswith(("def sha256_file", "fn sha256_file")):
+                keys.update(_HASH_CONTEXT_KEY_RE.findall(body))
+    return keys
+
+
+def _hands_paths_to_a_native_hash(rel, keys):
+    """True when this Python module sets one of the context keys a native file hash reads
+    (`context.update(byte_lm_source_names=...)` or `context["byte_lm_source_names"] = ...`)."""
+    if not keys:
+        return False
+    text = _read(rel)
+    if not any(k in text for k in keys):
+        return False
+    tree = _parse(rel)
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if isinstance(node, ast.keyword) and node.arg in keys:
+            return True
+        if (isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store)
+                and isinstance(node.slice, ast.Constant) and node.slice.value in keys):
+            return True
+    return False
 
 
 def source_hashed_files():
@@ -5517,8 +6152,9 @@ def source_hashed_files():
     global _SOURCE_HASHED
     if _SOURCE_HASHED is None:
         out = set()
+        keys = _native_hashed_context_keys()
         for rel in _python_files():
-            if not _hashes_a_file(rel):
+            if not (_hashes_a_file(rel) or _hands_paths_to_a_native_hash(rel, keys)):
                 continue
             out.add(rel)
             tree = _parse(rel)
@@ -5582,7 +6218,7 @@ def docstring_only(ref, path):
         return False
     a, b = code_dump(old), code_dump(new)
     # A DOCSTRING'S PRESENCE IS READ (lane identity-attribution, 2026-10-31):
-    # bindings/classical_exceptions.mojo admits the NotFittedError bridge's
+    # bindings/classical_exceptions_door.mojo admits the NotFittedError bridge's
     # doc (`not_fitted_doc`) only as a str, so deleting or adding a docstring
     # can raise where editing one cannot. Only edits that keep every
     # docstring where it was are docstring-only.
@@ -5925,7 +6561,7 @@ def unreachable(path):
         # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
         # corpus is what a lane reaches, and a chain of files the map is
         # missing votes nowhere: `core/forest_inference_model.mojo` is
-        # imported by `bindings/forest_inference_binding.mojo`, which is
+        # imported by `bindings/forest_inference_binding_door.mojo`, which is
         # itself outside the map, so nothing in the corpus named either and
         # the model file read "nothing reaches it". A Mojo import is a
         # compile-time fact and does not need the corpus to be believed.
@@ -6049,7 +6685,7 @@ def _module_patterns(stem, dotted=()):
                         r"""args=\[Constant\(value=['"]%s['"]""" % (loaders, loaders, word))
     run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
     # THE SAME RULE IN MOJO (2026-10-24): a bare quoted word there is as often an
-    # operation name (`operation == "release"` in bindings/parallel_causal_native.mojo
+    # operation name (`operation == "release"` in bindings/parallel_causal_native_door.mojo
     # kept tools/release.py NOT ATTRIBUTABLE). A dotted `"x.stem"` is a module address
     # wherever it sits; the bare word counts only as the first argument of a loader
     # (`Python.import_module`, `native_loaded_module`, `__import__`).
@@ -6311,6 +6947,92 @@ def _package_import_closure():
         seeds.append(os.path.join(PKG, "__init__.py"))
         _PKG_IMPORT_CLOSURE = _python_closure(seeds, sinks=())
     return _PKG_IMPORT_CLOSURE
+
+
+_IMPORT_TIME_CLOSURE = None
+
+
+def package_import_time_closure():
+    """The package files whose IMPORT-TIME code `import mojolearn` runs, so
+    every lane runs it: `__init__.py`'s module-level statements, then each
+    imported file read in the region its importers ask for
+    (`_region_import_edges`: module-level statements, the defs they call, a
+    function-local import only when its def runs), to a fixed point, walking
+    straight through the registries the lane map stops at. `__init__.py`'s
+    own defs (`__getattr__`, the lazy doors) run on first touch, not at
+    import, so its walk starts from its module-level statements alone.
+    Derived from the import graph, never a list (2026-11-05: 160 files by
+    module-level imports alone, of 309 package files outside tests).
+
+    WHY. The lane map is door reach: what a lane's own calls run. Import-time
+    code runs in every lane's process whatever the lane calls:
+    `__init__.py:357` imports `_samba_impl.py`, whose module level calls
+    `_native_samba_bridge.connect`, which imports `neural_inference.py`; that
+    file's map said 427 of 513."""
+    global _IMPORT_TIME_CLOSURE
+    if _IMPORT_TIME_CLOSURE is None:
+        init = os.path.join(PKG, "__init__.py")
+        wanted, walked, stack = {}, {}, [(init, set())]
+        while stack:
+            rel, names = stack.pop()
+            first = rel not in wanted
+            if first:
+                wanted[rel] = None if names is None else set(names)
+            elif wanted[rel] is not None:
+                wanted[rel] = None if names is None else wanted[rel] | names
+            region = None if wanted[rel] is None else frozenset(wanted[rel])
+            if not first and walked.get(rel, ()) == region:
+                continue
+            walked[rel] = region
+            for f, n in _region_import_edges(rel, region, narrow_unused=False).items():
+                stack.append((f, n))
+        _IMPORT_TIME_CLOSURE = frozenset(wanted)
+    return _IMPORT_TIME_CLOSURE
+
+
+def _import_time_shape(tree):
+    """What of a module runs at import: every module-level statement, the
+    header of every def (decorators, defaults, annotations), and of every
+    class its header and its class-body statements (they run when the class
+    statement does), method headers included; never a def's or method's
+    body. Compared as dumps of a docstring-stripped tree."""
+    import copy
+
+    def header(node):
+        bare = copy.copy(node)
+        bare.body = [ast.Pass()]
+        return ast.dump(bare)
+
+    def shape(body):
+        out = []
+        for node in body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.append(("def", header(node)))
+            elif isinstance(node, ast.ClassDef):
+                out.append(("class", header(node), tuple(shape(node.body))))
+            else:
+                out.append(("stmt", ast.dump(node)))
+        return out
+    return tuple(shape(tree.body))
+
+
+def import_time_code_changed(ref, path):
+    """True when `path`'s diff against `ref` can change what runs at import
+    (`_import_time_shape`), or cannot be read: no old revision (a new file's
+    top level is all new), a file gone, a text that does not parse."""
+    old_text = _git_show(ref, path)
+    if old_text is None:
+        return True
+    try:
+        new_text = _read(path)
+    except OSError:
+        return True
+    try:
+        old = _import_time_shape(_strip_docstrings(ast.parse(old_text)))
+        new = _import_time_shape(_strip_docstrings(ast.parse(new_text)))
+    except SyntaxError:
+        return True
+    return old != new
 
 
 def _package_file_unreachable(path):
@@ -7770,7 +8492,7 @@ def _native_metadata_factory(rel, call, function):
     # loader. The name must resolve to that reviewed helper, not a local rebinding.
     owner = next(iter(roots))[1]
     return graph.resolve(owner, 'native_loaded_module') == {
-        ('t', 'bindings/native_loaded_module.mojo', 'native_loaded_module')}
+        ('t', 'bindings/native_loaded_module_door.mojo', 'native_loaded_module')}
 
 
 def _import_time_hits(node, affected, runs, run_methods, rel=None):
@@ -9636,10 +10358,16 @@ def _merged_root_is_location_free():
     tree = _parse(os.path.join("tools", "merged_bindings.py"))
     funcs = {n.name: n for n in (tree.body if tree else ()) if isinstance(n, ast.FunctionDef)}
     rt, cr = funcs.get("root_text"), funcs.get("cmd_root")
-    if rt is None or cr is None or [a.arg for a in rt.args.args] != ["stem", "names"]:
+    # root_text may take a trailing defaulted `repo` (bincache closure-v2, f573b8d285): it only picks
+    # the tree whose binding names validate the members, never the text. cmd_root must then call it
+    # with the stem and members alone (two positional arguments, no keywords), so the default holds.
+    params = [a.arg for a in rt.args.args] if rt is not None else None
+    if cr is None or params not in (["stem", "names"], ["stem", "names", "repo"]) or (
+            len(params) == 3 and len(rt.args.defaults) != 1):
         return "tools/merged_bindings.py has no root_text(stem, names) or cmd_root"
     calls = [n for n in ast.walk(cr) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "root_text"]
-    if len(calls) != 1 or any("out" in ast.dump(a) for a in calls[0].args):
+    if (len(calls) != 1 or len(calls[0].args) != 2 or calls[0].keywords
+            or any("out" in ast.dump(a) for a in calls[0].args)):
         return "cmd_root does not write root_text of the stem and members alone"
     return None
 
@@ -10575,6 +11303,18 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                              "on a rented box to build and time a binding and replay recorded steps; no "
                              "lane computes through it (MEASUREMENT_TOOLING_PREFIXES)")
             continue
+        if ref and path.endswith(".py") and path in package_import_time_closure() \
+                and import_time_code_changed(ref, path):
+            # IMPORT-TIME CODE OF A MODULE EVERY LANE IMPORTS (2026-11-05,
+            # `package_import_time_closure`): `import mojolearn` runs it in
+            # every lane's process, so the edit selects every lane, never
+            # fewer, whatever the door map says. A diff confined to def and
+            # method bodies falls through to the per-definition rules below.
+            lanes.update(every)
+            by_path[path] = set(every)
+            reasons[path] = (f"{len(every)} lane(s): import-time code changed in a module `import mojolearn` "
+                             f"runs in every lane (package_import_time_closure)")
+            continue
         why_only = _imported_only_by_unreachable_modules(path) if path not in rev else None
         if why_only:
             inert.append(path)
@@ -10680,6 +11420,9 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                                  f"reach one through the definition graph, plus {len(kept)} kept by the "
                                  f"whole-file rule (reached outside any export they call), of the {len(hit)} "
                                  f"that compile it")
+                if f"{ref}:{path}" in MOJO_GATED_WHY:
+                    reasons[path] += ("; the pandas-gated definitions select no lane: "
+                                      + MOJO_GATED_WHY[f"{ref}:{path}"])
                 continue
         if hit and ref and path.endswith(".py") and path.startswith(PKG + os.sep):
             edited = python_edit_lanes(ref, path, sources, rev)
@@ -10718,6 +11461,251 @@ def select(paths, ref=None, sources=None, backend=None, stop_when=None):
                 every_rules=every_rules, chains=chains, stopped_early=stopped_early,
                 precision_limitations=selection_precision_limitations(lanes, by_path, sources, generated_outputs),
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
+
+
+# ------------------------------------------------- the on-disk selection cache
+# ONE SELECTION PER (COMMIT, COLUMN), ON DISK (2026-11-05, finding 2 of
+# docs/release/0.8.66-release-state.md). `tools/release.py <v> --plan`,
+# `tools/reference_refresh.py --plan` and the refresh run each ran
+# `tools/identity_columns.py changed-lanes` per column, and each spent ~20 min
+# per column in `lane_sources()` + `select()` for the same commit: three times
+# ~1.5 h on the Mac. All three (and record_identity_column.sh) reach the
+# closure through `select_cached` below, so the second and third callers read
+# the first one's answer.
+#
+# THE KEY is everything the answer depends on: HEAD and its tree id, the
+# resolved ref, the changed-path list, backend, stop_when, the content of every
+# tools/*.py beside this file (the tool's own hash), the environment this
+# module reads (RELEASE_BUILD_ONLY_ENV), Python major.minor (the AST), the
+# platform and machine, and the path + content digest of every git-IGNORED
+# file the checkout holds outside .git/.pixi/__pycache__ (a generated Mojo
+# file or a staged harness copy is read by the walk without being in the tree;
+# `_ls_tree_state` prunes the same three names).
+#
+# NEVER STALE. Bypassed (computed, not stored, not served) when: the checkout
+# has a tracked edit, a staged change or an untracked file (`git status`), the
+# ref does not resolve to a commit, the checkout changed while the selection
+# ran, any function of this module or its helper modules is not the one it
+# was imported as (a test's monkeypatch), or the process runs under pytest
+# without MOJOLEARN_LANE_SELECT_CACHE set. Only the fields the callers read are
+# stored (SELECT_CACHE_FIELDS); a hit returns those and `cache="hit"`.
+# Atomic write (mkstemp in the cache dir + os.replace), so two pipelines
+# (macOS and Linux) racing on one key both leave a complete file and a reader
+# never sees a partial one; an unreadable or mismatching file is a miss.
+SELECT_CACHE_ENV = "MOJOLEARN_LANE_SELECT_CACHE"      # a directory, or off/0/no to disable
+SELECT_CACHE_SCHEMA = 1
+SELECT_CACHE_FIELDS = ("lanes", "unattributed", "stopped_early", "total")
+_SELECT_CACHE_ENV_INPUTS = (RELEASE_BUILD_ONLY_ENV,)
+_SELECT_CACHE_PRUNE = (".git", ".pixi", "__pycache__")
+_SELECT_TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+_SELECT_TOOL_DIGEST = {}            # tool dir -> digest, once per process
+_SELECT_FILE_DIGESTS = {}           # (path, size, mtime_ns, ino) -> sha256, once per process
+_SELECT_CACHE_GENUINE = None        # name -> object at import end (set at the bottom of this module)
+_SELECT_CACHE_HELPERS = ("bincache", "import_metadata_effects", "mojo_registrations", "lane_map_import_graph")
+
+
+def select_cache_dir():
+    """The cache directory, or None when the cache is off."""
+    raw = os.environ.get(SELECT_CACHE_ENV, "").strip()
+    if raw.lower() in ("0", "off", "no", "none", "false"):
+        return None
+    if not raw and os.environ.get("PYTEST_CURRENT_TEST"):
+        return None     # a test's mocked selection never reaches the real cache
+    return raw or os.path.join(os.path.expanduser("~"), "mojolearn-evidence", "lane-select-cache")
+
+
+def _select_cache_callables():
+    out = {name: value for name, value in globals().items()
+           if callable(value) and not name.startswith("__")}
+    for module_name in _SELECT_CACHE_HELPERS:
+        module = sys.modules.get(module_name)
+        if module is not None:
+            out.update({f"{module_name}.{name}": value for name, value in vars(module).items()
+                        if callable(value) and not name.startswith("__")})
+    return out
+
+
+def _select_cache_genuine():
+    """Every function this selection can call is the one imported (no monkeypatch)."""
+    if _SELECT_CACHE_GENUINE is None:
+        return False
+    now = _select_cache_callables()
+    return all(now.get(name) is value for name, value in _SELECT_CACHE_GENUINE.items())
+
+
+def _sha256_file(full):
+    st = os.lstat(full)
+    memo = (full, st.st_size, st.st_mtime_ns, st.st_ino)
+    if memo not in _SELECT_FILE_DIGESTS:
+        import hashlib
+        h = hashlib.sha256()
+        if os.path.islink(full):
+            h.update(b"link:" + os.readlink(full).encode("utf-8", "surrogateescape"))
+        else:
+            with open(full, "rb") as fh:
+                for block in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(block)
+        _SELECT_FILE_DIGESTS[memo] = h.hexdigest()
+    return _SELECT_FILE_DIGESTS[memo]
+
+
+def _select_tool_digest():
+    """sha256 over every tools/*.py beside this module (name + bytes)."""
+    tool_dir = _SELECT_TOOL_DIR
+    if tool_dir not in _SELECT_TOOL_DIGEST:
+        import hashlib
+        h = hashlib.sha256()
+        for name in sorted(os.listdir(tool_dir)):
+            full = os.path.join(tool_dir, name)
+            if name.endswith(".py") and os.path.isfile(full):
+                h.update(name.encode() + b"\0" + _sha256_file(full).encode() + b"\n")
+        _SELECT_TOOL_DIGEST[tool_dir] = h.hexdigest()
+    return _SELECT_TOOL_DIGEST[tool_dir]
+
+
+def _select_git(*args):
+    res = subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True, text=True)
+    return res.stdout if res.returncode == 0 else None
+
+
+def _select_tree_state():
+    """(state dict, None) for a clean checkout, or (None, why) to bypass the cache."""
+    status = _select_git("status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none")
+    if status is None:
+        return None, "git status failed"
+    if status.strip("\0").strip():
+        return None, "the checkout has tracked edits, staged changes or untracked files"
+    head = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{commit}") or "").strip()
+    tree = (_select_git("rev-parse", "--verify", "--quiet", "HEAD^{tree}") or "").strip()
+    if not head or not tree:
+        return None, "HEAD does not resolve"
+    listing = _select_git("ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+    if listing is None:
+        return None, "listing the ignored files failed"
+    import hashlib
+    ignored = hashlib.sha256()
+    count = 0
+    for entry in sorted(e for e in listing.split("\0") if e):
+        rel = entry.rstrip("/")
+        if any(part in _SELECT_CACHE_PRUNE for part in rel.split("/")):
+            continue
+        full = os.path.join(ROOT, rel)
+        files = []
+        if os.path.isdir(full) and not os.path.islink(full):
+            for dirpath, dirnames, filenames in os.walk(full):
+                dirnames[:] = sorted(d for d in dirnames if d not in _SELECT_CACHE_PRUNE)
+                files += [os.path.join(dirpath, f) for f in filenames]
+                # os.walk does not descend into a linked directory: key the link itself
+                files += [os.path.join(dirpath, d) for d in dirnames if os.path.islink(os.path.join(dirpath, d))]
+        elif os.path.lexists(full):
+            files.append(full)
+        for f in sorted(files):
+            try:
+                digest = _sha256_file(f)
+            except OSError:
+                return None, "an ignored file could not be read: " + os.path.relpath(f, ROOT)
+            ignored.update(os.path.relpath(f, ROOT).encode("utf-8", "surrogateescape") + b"\0"
+                           + digest.encode() + b"\n")
+            count += 1
+    return dict(head=head, tree=tree, ignored=ignored.hexdigest(), ignored_files=count), None
+
+
+def _select_cache_write(path, body):
+    """Atomic: a reader or a racing writer never sees a partial file. Best effort."""
+    import tempfile
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=os.path.dirname(path))
+    except OSError:
+        return False
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(json.dumps(body, sort_keys=True) + "\n")
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        return False
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def select_cache_key(paths, ref, backend=None, stop_when=None):
+    """(key, None), or (None, why the cache is bypassed)."""
+    if select_cache_dir() is None:
+        return None, "cache off"
+    if not ref:
+        return None, "no ref"
+    if not _select_cache_genuine():
+        return None, "a selection function is not the imported one"
+    commit = (_select_git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") or "").strip()
+    if not commit:
+        return None, f"ref {ref} does not resolve to a commit"
+    state, why = _select_tree_state()
+    if state is None:
+        return None, why
+    import hashlib
+    import platform
+    listed = "\n".join(sorted({p.strip() for p in paths if p.strip()}))
+    key = dict(schema=SELECT_CACHE_SCHEMA, ref=commit, backend=backend or None,
+               stop_when=sorted(stop_when) if stop_when is not None else None,
+               paths=hashlib.sha256(listed.encode("utf-8", "surrogateescape")).hexdigest(),
+               tool=_select_tool_digest(),
+               env={k: os.environ.get(k) for k in _SELECT_CACHE_ENV_INPUTS},
+               python="%s-%d.%d" % (sys.implementation.name, sys.version_info[0], sys.version_info[1]),
+               platform=sys.platform, machine=platform.machine(), **state)
+    return key, None
+
+
+class LaneMapFailed(RuntimeError):
+    """Deriving the lane map failed. Not a diff that could not be taken: a
+    caller that treats a failed diff as "re-record every lane" re-raises this
+    (before select_cached the map was derived outside that handler)."""
+
+
+def _derive_lane_map():
+    try:
+        lane_sources()
+    except BaseException as exc:  # noqa: BLE001 - re-raised, named
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        raise LaneMapFailed(f"deriving the lane map failed: {type(exc).__name__}: {exc}") from exc
+
+
+def select_cached(paths, ref=None, backend=None, stop_when=None):
+    """`select(paths, ref=ref, backend=backend, stop_when=stop_when)` with the
+    default lane map, through the on-disk cache above. Returns at least
+    SELECT_CACHE_FIELDS plus `cache` ("hit", "miss" or "bypass: <why>"). The
+    lane map is derived only on a miss."""
+    key, why = select_cache_key(paths, ref, backend, stop_when)
+    if key is None:
+        _derive_lane_map()
+        out = select(paths, ref=ref, backend=backend, stop_when=stop_when)
+        return dict(out, cache="bypass: " + why)
+    import hashlib
+    token = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:32]
+    path = os.path.join(select_cache_dir(), token + ".json")
+    try:
+        with open(path) as fh:
+            body = json.load(fh)
+        if body.get("key") == key and all(f in body.get("result", {}) for f in SELECT_CACHE_FIELDS):
+            return dict({f: body["result"][f] for f in SELECT_CACHE_FIELDS}, cache="hit")
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass            # absent, partial or foreign: a miss
+    _derive_lane_map()
+    out = select(paths, ref=ref, backend=backend, stop_when=stop_when)
+    # Store only an answer the key still describes: the checkout must not have
+    # moved while the selection read it.
+    after, _ = select_cache_key(paths, ref, backend, stop_when)
+    if after == key:
+        import datetime
+        _select_cache_write(path, dict(key=key, result={f: out.get(f) for f in SELECT_CACHE_FIELDS},
+                                       written=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                       pid=os.getpid()))
+        return dict(out, cache="miss")
+    return dict(out, cache="bypass: the checkout changed during the selection")
 
 
 # --------------------------------------------------------------- sharding
@@ -10879,6 +11867,11 @@ def main(argv=None):
             print(f"# shard {k} weight {load[k]} s: {','.join(group)}")
     print(",".join(sel["lanes"]))
     return 0
+
+
+# What `select_cached` compares against: every function as imported (see the
+# on-disk selection cache above). Keep this the last definition of the module.
+_SELECT_CACHE_GENUINE = _select_cache_callables()
 
 
 if __name__ == "__main__":

@@ -50,9 +50,8 @@ from core.classical_distance import direct_squared_distance
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, knn_distance_zero_fma_repair_for, knn_distance_preflight_for, knn_distance_hardware_flush_for, knn_distance_rows_for
 from neighbors.checks.zero_fma_boundary import repair_zero_fma
@@ -63,7 +62,9 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
     identical_sqrt,
+    nv_flush_by_one_kernel,
 )
+from checks.nv_fma_rn import nv_fma_rn_kernel
 
 
 comptime PINNED_TILE_TPB = 256
@@ -178,6 +179,9 @@ def _rt_load(x: Float32) -> Float32:
     return ftz(x)
 
 
+# The NVIDIA rounded FMA below is checks/nv_fma_rn.mojo's switched
+# `nv_fma_rn_kernel` (lane fix-hdbscan-nv; the asm helper is its default since
+# 2026-11-18, MOJOLEARN_IDN_NV_FMA_ASM_OFF the intrinsic).
 @always_inline
 def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Round the FMA before flushing its output; operands are already flushed.
@@ -191,8 +195,10 @@ def _rt_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         # Match the corrected GEMM seam: rounding occurs BEFORE the hardware
         # input/output FTZ on multiplication by exactly one. Bare fma.ftz is
         # deliberately excluded because it fails at the minnormal boundary.
-        var rounded = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
-        return llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](rounded, Float32(1.0))
+        var rounded = nv_fma_rn_kernel(a, b, acc)
+        # lane fix-nv-mul-rn-via-fma: the flush as fma.rn.ftz(x, 1.0, -0.0), same word
+        # for every x, schedulable (B: MOJOLEARN_IDN_NV_MUL_RN_ASM_OLD; checks/numerics.mojo).
+        return nv_flush_by_one_kernel(rounded)
     var result = ftz(identical_mul_add(a, b, acc))
     comptime if knn_distance_zero_fma_repair_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
         if (bitcast[DType.uint32](result) & 0x7fffffff) == 0:
@@ -220,7 +226,7 @@ def _rt_step_exact(a: Float32, b: Float32, acc: Float32) -> Float32:
     bits."""
     var r: Float32
     comptime if knn_distance_hardware_flush_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        r = llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+        r = nv_fma_rn_kernel(a, b, acc)
     else:
         r = identical_mul_add(a, b, acc)
     comptime if is_defined["MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE"]():

@@ -3,6 +3,6 @@ from sequence.exec_device import DeviceExec
 from autograd.checks.order_cases import run_order_checks
 
 
-def main() raises:
+def run_checks() raises:
     var ex = DeviceExec()
     run_order_checks(ex)

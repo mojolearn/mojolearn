@@ -69,7 +69,8 @@ def test_pls_native_target_keeps_finite_length_and_fitted_checks():
         model.fit(x, np.ones(7, dtype=np.float32))
     y = np.ones(8, dtype=np.float32)
     y[-1] = np.nan
-    with pytest.raises(ValueError, match="finite"):
+    # the shared lifecycle's scikit-learn wording
+    with pytest.raises(ValueError, match=r"Input y contains NaN or infinity \(PLSRegression\)"):
         model.fit(x, y)
 
 

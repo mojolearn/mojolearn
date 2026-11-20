@@ -13,28 +13,25 @@ MINMAX-3: Float32 arithmetic uses IDENTICAL operand/seam FTZ and portable
  division. Multiplication rounds before offset addition. Host validation
 rejects nonfinite statistics/results and nonpositive scale; no CPU reduction.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: lane/apple-fast-prep (2026-10-02): the row-tiled extrema kernel below is
 #: the fit's extrema pass (and `minmax_transform_direct` the transform entry)
 #: on the FAST tier on Apple. DEFAULT since the M3 A/B (lane/apple-fast-prep
 #: 387211293, n=1, output digests identical: minmax-scaler istella 152 ->
-#: 106 ms). `-D MOJOLEARN_PREP_FAST_MINMAX_OFF` restores main's path; the old
+#: 106 ms). The `_OFF` rollback was deleted 2026-11-15 (docs/TOMBSTONES.md); the old
 #: `-D MOJOLEARN_PREP_FAST_MINMAX` stays harmless. Every other build takes
 #: `extrema_chunks_kernel`, so IDENTICAL compiles main's code unchanged.
-comptime PREP_FAST_MINMAX = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_PREP_FAST_MINMAX_OFF (old path, superseded by the measured FAST+Apple default) deleted 2026-11-15 by lane/expdel-03-linear; code recoverable at 6c544e9855.
+# Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_MINMAX_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PREP_FAST_MINMAX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 from checks.numerics import ftz, identical_div, identical_mul
-from experiments.classical_identical_ideas.shared_controls import C03_FINITE_EXTREMA
 
 #: lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default ON (below):
 #: `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED` folds the fit's nonfinite scan
@@ -47,13 +44,15 @@ from experiments.classical_identical_ideas.shared_controls import C03_FINITE_EXT
 #: shape. Both need PREP_FAST_MINMAX. Same keys, same partials, same finalize:
 #: the same words. Both are the FAST + Apple default since the M3 A/B (n=1,
 #: quality identical): minmax-scaler istella 104.7 -> 19.1 ms (FUSED+POOL;
-#: POOL alone 106 -> 21.9). `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF` /
-#: `_POOL_OFF` turn them off; the old -D names stay harmless.
-# C03 extends the exact fused status/extrema walk to IDENTICAL, opt-in.
-# Public input refusal is boolean; no output is published before status.
-# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-comptime PREP_CLS2_MINMAX_FUSED = C03_FINITE_EXTREMA or (PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"]())
-comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF"]()
+#: POOL alone 106 -> 21.9).
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 8431777acf.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF (old path; EXP:405 record read, the FAST+Apple default is kept) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at af2a7c589f.
+# Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX
+# TOMBSTONE: MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF (old path; EXP:404 record read, the FAST+Apple default is kept) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at 008e8e1375.
+# Restore: git apply experiments/removed/MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX
 from metrics.checks.device_io import download_f32
 
 
@@ -133,7 +132,7 @@ def extrema_rows_fast_kernel(
     lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
 ):
     """lane/apple-fast-prep (2026-10-02), `PREP_FAST_MINMAX` (FAST on Apple,
-    default; -D MOJOLEARN_PREP_FAST_MINMAX_OFF turns it off) only, from `minmax_fit_fast`. Block
+    default) only, from `minmax_fit_fast`. Block
     (chunk, column group): thread t owns column group*tpb + t over the
     chunk's FAST_ROWS rows, so a simdgroup reads consecutive words of one
     row. `extrema_chunks_kernel` (above) gives

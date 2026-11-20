@@ -42,7 +42,7 @@ its planted membership through that permutation.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -109,6 +109,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import bitcast
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
 comptime CHECK_ROWS = 512
@@ -163,8 +164,8 @@ def _fill_fixture(
     for i in range(CHECK_ROWS):
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0))
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
     return worst
 
@@ -235,7 +236,7 @@ def check_kmeans_fit() raises:
                 c * CHECK_FEATURES + f,
                 _planted_center(c, f) + Float32(30.0),
             )
-    ctx.enqueue_copy(dst_buf=centroids, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, centroids, hc)
     ctx.synchronize()
 
     var params = KMeansParams.default()
@@ -260,8 +261,8 @@ def check_kmeans_fit() raises:
 
     var out_c = ctx.enqueue_create_host_buffer[DType.float32](cd)
     var out_l = ctx.enqueue_create_host_buffer[DType.uint32](CHECK_ROWS)
-    ctx.enqueue_copy(dst_ptr=out_c.unsafe_ptr(), src_buf=centroids)
-    ctx.enqueue_copy(dst_ptr=out_l.unsafe_ptr(), src_buf=labels)
+    download_host_into[DType.float32](ctx, centroids, out_c)
+    download_host_into[DType.uint32](ctx, labels, out_l)
     ctx.synchronize()
 
     # --- the recovered centroids must be a PERMUTATION of the planted ones.
@@ -409,7 +410,7 @@ def check_reach_by_sabotage() raises:
             hc.unsafe_ptr().unsafe_store(
                 c * CHECK_FEATURES + f, _planted_center(c, f)
             )
-    ctx.enqueue_copy(dst_buf=centroids, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, centroids, hc)
     ctx.synchronize()
 
     ctx.enqueue_function[row_norm_kernel](
@@ -441,8 +442,8 @@ def check_reach_by_sabotage() raises:
         ctx, x, x_norm, centroids, centroid_norm, dist_buf, labels, min_dist,
         params,
     )
-    ctx.enqueue_copy(dst_ptr=base_l.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=base_d.unsafe_ptr(), src_buf=min_dist)
+    download_host_into[DType.uint32](ctx, labels, base_l)
+    download_host_into[DType.float32](ctx, min_dist, base_d)
     ctx.synchronize()
 
     # --- SABOTAGE 1: centroid norms. Labels MUST move. -------------------
@@ -452,14 +453,14 @@ def check_reach_by_sabotage() raises:
         hn.unsafe_ptr().unsafe_store(
             c, Float32(1.0e6) * Float32(CHECK_CLUSTERS - c)
         )
-    ctx.enqueue_copy(dst_buf=centroid_norm, src_ptr=hn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, centroid_norm, hn)
     ctx.synchronize()
 
     _assign(
         ctx, x, x_norm, centroids, centroid_norm, dist_buf, labels, min_dist,
         params,
     )
-    ctx.enqueue_copy(dst_ptr=sab_l.unsafe_ptr(), src_buf=labels)
+    download_host_into[DType.uint32](ctx, labels, sab_l)
     ctx.synchronize()
 
     var moved = 0
@@ -497,22 +498,22 @@ def check_reach_by_sabotage() raises:
     # order-preserving once anything drives them below zero, so it is safe
     # for the round-off it exists for and is NOT safe as a general guard.
     var hxn = ctx.enqueue_create_host_buffer[DType.float32](CHECK_ROWS)
-    ctx.enqueue_copy(dst_ptr=hxn.unsafe_ptr(), src_buf=x_norm)
+    download_host_into[DType.float32](ctx, x_norm, hxn)
     ctx.synchronize()
     for i in range(CHECK_ROWS):
         hxn.unsafe_ptr().unsafe_store(
             i,
             hxn.unsafe_ptr().unsafe_load(i) + Float32(1000.0) * Float32(i + 1),
         )
-    ctx.enqueue_copy(dst_buf=x_norm, src_ptr=hxn.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x_norm, hxn)
     ctx.synchronize()
 
     _assign(
         ctx, x, x_norm, centroids, centroid_norm, dist_buf, labels, min_dist,
         params,
     )
-    ctx.enqueue_copy(dst_ptr=sab_l.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=sab_d.unsafe_ptr(), src_buf=min_dist)
+    download_host_into[DType.uint32](ctx, labels, sab_l)
+    download_host_into[DType.float32](ctx, min_dist, sab_d)
     ctx.synchronize()
 
     var label_moved = 0
@@ -579,7 +580,7 @@ def check_device_inclusive_scan() raises:
     var ha = ctx.enqueue_create_host_buffer[DType.float32](n)
     for i in range(n):
         ha.unsafe_ptr().unsafe_store(i, Float32((i % 17) + 1))
-    ctx.enqueue_copy(dst_buf=a, src_ptr=ha.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, a, ha)
     ctx.synchronize()
 
     ctx.enqueue_function[chunk_sums_kernel](
@@ -598,7 +599,7 @@ def check_device_inclusive_scan() raises:
     ctx.synchronize()
 
     var hc = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=csum)
+    download_host_into[DType.float32](ctx, csum, hc)
     ctx.synchronize()
 
     var running = Float64(0.0)
@@ -664,7 +665,7 @@ def check_kmeans_plus_plus_init() raises:
     )
 
     var out_c = ctx.enqueue_create_host_buffer[DType.float32](cd)
-    ctx.enqueue_copy(dst_ptr=out_c.unsafe_ptr(), src_buf=centroids)
+    download_host_into[DType.float32](ctx, centroids, out_c)
     ctx.synchronize()
 
     var used = List[Int]()
@@ -757,8 +758,8 @@ def check_fused_reduction_across_lanes() raises:
             hc.unsafe_ptr().unsafe_store(
                 j * d + f, Float32(_jitter(j + 9001, f) * 10.0)
             )
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
 
     ctx.enqueue_function[row_norm_kernel](
@@ -785,7 +786,7 @@ def check_fused_reduction_across_lanes() raises:
     ctx.synchronize()
 
     var hk = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=hk.unsafe_ptr(), src_buf=okey)
+    download_host_into[DType.uint32](ctx, okey, hk)
     ctx.synchronize()
 
     var wrong = 0
@@ -868,8 +869,8 @@ def _poison_outputs(
     for i in range(n):
         hk.unsafe_ptr().unsafe_store(i, ARM_POISON_KEY)
         hv.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](nan_bits))
-    ctx.enqueue_copy(dst_buf=keys, src_ptr=hk.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=values, src_ptr=hv.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, keys, hk)
+    upload_host_into[DType.float32](ctx, values, hv)
     ctx.synchronize()
 
 
@@ -991,8 +992,8 @@ def check_assignment_arm_dispatch() raises:
     for j in range(k):
         for f in range(d):
             hc.unsafe_ptr().unsafe_store(j * d + f, Float32(100 * (j + 1) + f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
 
     ctx.enqueue_function[row_norm_kernel](
@@ -1006,7 +1007,7 @@ def check_assignment_arm_dispatch() raises:
     var hpoison = ctx.enqueue_create_host_buffer[DType.float32](n * k)
     for i in range(n * k):
         hpoison.unsafe_ptr().unsafe_store(i, ARM_SENTINEL)
-    ctx.enqueue_copy(dst_buf=dist_buf, src_ptr=hpoison.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dist_buf, hpoison)
     ctx.synchronize()
 
     # --- poison both arms' OUTPUTS too (DEVIATION 529): a row the kernel
@@ -1024,9 +1025,9 @@ def check_assignment_arm_dispatch() raises:
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n * k)
     var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=dist_buf)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=min_dist)
+    download_host_into[DType.float32](ctx, dist_buf, hd)
+    download_host_into[DType.uint32](ctx, labels, hl)
+    download_host_into[DType.float32](ctx, min_dist, hm)
     ctx.synchronize()
 
     var overwritten = 0
@@ -1071,9 +1072,9 @@ def check_assignment_arm_dispatch() raises:
     var hdu = ctx.enqueue_create_host_buffer[DType.float32](n * k)
     var hlu = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var hmu = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hdu.unsafe_ptr(), src_buf=dist_buf)
-    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
-    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=min_dist_u)
+    download_host_into[DType.float32](ctx, dist_buf, hdu)
+    download_host_into[DType.uint32](ctx, labels_u, hlu)
+    download_host_into[DType.float32](ctx, min_dist_u, hmu)
     ctx.synchronize()
 
     var destroyed = 0
@@ -1359,10 +1360,10 @@ def _run_both_arms_on(
         n, d, k, METRIC_L2_EXPANDED, 0, 0,
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=hm.unsafe_ptr(), src_buf=min_dist)
-    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
-    ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=min_dist_u)
+    download_host_into[DType.uint32](ctx, labels, hl)
+    download_host_into[DType.float32](ctx, min_dist, hm)
+    download_host_into[DType.uint32](ctx, labels_u, hlu)
+    download_host_into[DType.float32](ctx, min_dist_u, hmu)
     ctx.synchronize()
 
 
@@ -1666,9 +1667,9 @@ def check_privatized_accumulate() raises:
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.uint32](ctx, labels, hl)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
@@ -1693,8 +1694,8 @@ def check_privatized_accumulate() raises:
         grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_direct_s)
+    download_host_into[DType.int32](ctx, wsum, h_direct_w)
     ctx.synchronize()
 
     # --- run B: the shipped dispatch, which must take the privatized arm --
@@ -1706,8 +1707,8 @@ def check_privatized_accumulate() raises:
     launch_accumulate_weight_per_cluster(
         ctx, wsum, labels, weights, n, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_priv_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_priv_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_priv_s)
+    download_host_into[DType.int32](ctx, wsum, h_priv_w)
     ctx.synchronize()
 
     var s_diff = 0
@@ -1732,7 +1733,7 @@ def check_privatized_accumulate() raises:
     launch_accumulate_centroid_sums(
         ctx, sums, x, labels, weights, n, d, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_again_s.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.int32](ctx, sums, h_again_s)
     ctx.synchronize()
     for i in range(cd):
         if h_again_s.unsafe_ptr().unsafe_load(i) != h_priv_s.unsafe_ptr().unsafe_load(i):
@@ -1752,7 +1753,7 @@ def check_privatized_accumulate() raises:
         ),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_sab_s.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.int32](ctx, sums, h_sab_s)
     ctx.synchronize()
     var moved = 0
     for i in range(cd):
@@ -1826,9 +1827,9 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.uint32](ctx, labels, hl)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
@@ -1850,8 +1851,8 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
         grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_direct_s)
+    download_host_into[DType.int32](ctx, wsum, h_direct_w)
     ctx.synchronize()
 
     var nonzero = 0
@@ -1872,8 +1873,8 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
     launch_accumulate_weight_per_cluster(
         ctx, wsum, labels, weights, n, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_arm_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_arm_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_arm_s)
+    download_host_into[DType.int32](ctx, wsum, h_arm_w)
     ctx.synchronize()
 
     var s_diff = 0
@@ -1939,9 +1940,9 @@ def check_blocked_accumulate() raises:
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
         for f in range(d):
             hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.uint32](ctx, labels, hl)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     # --- run A: the DIRECT atomic kernels, as the oracle ------------------
@@ -1959,8 +1960,8 @@ def check_blocked_accumulate() raises:
         grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
         block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_direct_s)
+    download_host_into[DType.int32](ctx, wsum, h_direct_w)
     ctx.synchronize()
 
     # --- run B: the row-block arm ------------------------------------------
@@ -1972,8 +1973,8 @@ def check_blocked_accumulate() raises:
     launch_accumulate_weight_per_cluster_blocked(
         ctx, wsum, table_w, labels, weights, n, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_blk_s.unsafe_ptr(), src_buf=sums)
-    ctx.enqueue_copy(dst_ptr=h_blk_w.unsafe_ptr(), src_buf=wsum)
+    download_host_into[DType.int32](ctx, sums, h_blk_s)
+    download_host_into[DType.int32](ctx, wsum, h_blk_w)
     ctx.synchronize()
     var s_diff = 0
     var nonzero = 0
@@ -2003,7 +2004,7 @@ def check_blocked_accumulate() raises:
     launch_accumulate_centroid_sums_blocked(
         ctx, sums, table, x, labels, weights, n, d, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_again_s.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.int32](ctx, sums, h_again_s)
     ctx.synchronize()
     for i in range(cd):
         if h_again_s.unsafe_ptr().unsafe_load(i) != h_blk_s.unsafe_ptr().unsafe_load(i):
@@ -2016,7 +2017,7 @@ def check_blocked_accumulate() raises:
     launch_accumulate_centroid_sums_blocked[True](
         ctx, sums, table, x, labels, weights, n, d, k, ACC_SCALE
     )
-    ctx.enqueue_copy(dst_ptr=h_sab_s.unsafe_ptr(), src_buf=sums)
+    download_host_into[DType.int32](ctx, sums, h_sab_s)
     ctx.synchronize()
     var moved = 0
     for i in range(cd):
@@ -2204,8 +2205,8 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
     for j in range(k):
         for f in range(d):
             hc.unsafe_ptr().unsafe_store(j * d + f, Float32(100 * (j + 1) + f))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=c, src_ptr=hc.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
 
     ctx.enqueue_function[row_norm_kernel](
@@ -2227,8 +2228,8 @@ def _policy_arm_correct(d: Int, expect_veclen: Int) raises:
 
     var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
     var hlu = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.enqueue_copy(dst_ptr=hlu.unsafe_ptr(), src_buf=labels_u)
+    download_host_into[DType.uint32](ctx, labels, hl)
+    download_host_into[DType.uint32](ctx, labels_u, hlu)
     ctx.synchronize()
 
     # The unfused arm's product is the vendor matmul: on a lossy column
@@ -2418,7 +2419,7 @@ def _run_scalable_selection(
     )
     var tail = csum.create_sub_buffer[DType.float32](n - 1, 1)
     var h_count = ctx.enqueue_create_host_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_ptr=h_count.unsafe_ptr(), src_buf=tail)
+    download_host_into[DType.float32](ctx, tail, h_count)
     ctx.synchronize()
     return Int(h_count.unsafe_ptr().unsafe_load(0))
 
@@ -2466,8 +2467,8 @@ def check_scalable_sampling_selection() raises:
             i, Int32(1) if _scal_preflagged(i) else Int32(0)
         )
         psi64 += Float64(_scal_cost(i))
-    ctx.enqueue_copy(dst_buf=min_dist, src_ptr=hd.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=is_centroid, src_ptr=hp.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, min_dist, hd)
+    upload_host_into[DType.int32](ctx, is_centroid, hp)
     ctx.synchronize()
 
     var psi = Float32(psi64)
@@ -2514,8 +2515,8 @@ def check_scalable_sampling_selection() raises:
     )
     var h_sel = ctx.enqueue_create_host_buffer[DType.uint32](n_sel)
     var h_flag = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h_sel.unsafe_ptr(), src_buf=sel_index)
-    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=is_centroid)
+    download_host_into[DType.uint32](ctx, sel_index, h_sel)
+    download_host_into[DType.int32](ctx, is_centroid, h_flag)
     ctx.synchronize()
 
     for e in range(len(expected)):
@@ -2546,8 +2547,8 @@ def check_scalable_sampling_selection() raises:
     for i in range(n):
         if i % 3 == 0:
             hd.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=min_dist, src_ptr=hd.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=is_centroid, src_ptr=hp.unsafe_ptr())  # reset
+    upload_host_into[DType.float32](ctx, min_dist, hd)
+    upload_host_into[DType.int32](ctx, is_centroid, hp)  # reset
     ctx.synchronize()
 
     var sab_expected = List[Int]()
@@ -2579,7 +2580,7 @@ def check_scalable_sampling_selection() raises:
         grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
     var h_sab = ctx.enqueue_create_host_buffer[DType.uint32](sab_sel)
-    ctx.enqueue_copy(dst_ptr=h_sab.unsafe_ptr(), src_buf=sab_index)
+    download_host_into[DType.uint32](ctx, sab_index, h_sab)
     ctx.synchronize()
     for e in range(sab_sel):
         var got = Int(h_sab.unsafe_ptr().unsafe_load(e))
@@ -2664,8 +2665,8 @@ def check_scalable_kmeans_plus_plus_init() raises:
 
     var out_c = ctx.enqueue_create_host_buffer[DType.float32](cd)
     var out_l = ctx.enqueue_create_host_buffer[DType.uint32](CHECK_ROWS)
-    ctx.enqueue_copy(dst_ptr=out_c.unsafe_ptr(), src_buf=centroids)
-    ctx.enqueue_copy(dst_ptr=out_l.unsafe_ptr(), src_buf=labels)
+    download_host_into[DType.float32](ctx, centroids, out_c)
+    download_host_into[DType.uint32](ctx, labels, out_l)
     ctx.synchronize()
 
     # --- permutation recovery, matched exactly once each ------------------
@@ -2815,8 +2816,8 @@ def check_scalable_supplement_branch() raises:
             magnitude = column
     for i in range(CHECK_ROWS):
         hw.unsafe_ptr().unsafe_store(i, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
     var sum_scale = Float32(choose_scale(magnitude))
     var weight_scale = Float32(choose_scale(Float64(CHECK_ROWS)))
@@ -2842,7 +2843,7 @@ def check_scalable_supplement_branch() raises:
         CHECK_ROWS, d, sum_scale, weight_scale,
     )
     var out_l = ctx.enqueue_create_host_buffer[DType.uint32](CHECK_ROWS)
-    ctx.enqueue_copy(dst_ptr=out_l.unsafe_ptr(), src_buf=labels)
+    download_host_into[DType.uint32](ctx, labels, out_l)
     ctx.synchronize()
     for i in range(CHECK_ROWS):
         if Int(out_l.unsafe_ptr().unsafe_load(i)) >= k:

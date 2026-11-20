@@ -40,6 +40,25 @@ def test_capture_default_refit_reset_pickle(cls):
     assert restored._fit_numeric_mode == default
     np.testing.assert_array_equal(np.asarray(restored.predict(X)), first)
     model.numeric_mode = _other(default)
+    answered = False
+    if _backend._FAST_ANSWER == default and _other(default) == 'fast':
+        # Off Apple with no fast set, the identical set answers the word
+        # `fast` for the door families named in core/mode_answer.mojo
+        # (MODE_FAMILIES_ANSWERED); every other family refuses it in all its
+        # operations. Whichever holds for the forests must hold for predict
+        # AND refit: the first call decides, the rest must follow it.
+        try:
+            np.testing.assert_array_equal(np.asarray(model.predict(X)), first)
+            answered = True
+        except ValueError as error:
+            assert 'was fitted' in str(error)
+    if answered:
+        model.fit(X, y)
+        assert model._fit_numeric_mode == default
+        assert model.get_params()['numeric_mode'] == 'fast'
+        np.testing.assert_array_equal(np.asarray(model.predict(X)), first)
+        model.set_params(numeric_mode='identical')
+        return
     with pytest.raises(ValueError, match='was fitted'):
         model.predict(X)
     if _backend._CPU_ONLY is not None and _other(default) != 'identical':

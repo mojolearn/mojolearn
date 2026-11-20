@@ -3,8 +3,9 @@
 (python/mojolearn/density.py before its methods became one native call each),
 used only as an independent test oracle: `fit(model, X, y, sample_weight)`,
 `scores(model, X, want_total)` (score_samples: False; score: True)."""
-from mojolearn._sample_weight import check_sample_weight
-from mojolearn._buffer import addr, addr_ro, all_finite, as_f32_dense_c, empty
+from mojolearn.tests._legacy_sample_weight import check_sample_weight
+from mojolearn.tests._oracle_support import addr, addr_ro, all_finite, empty
+from mojolearn.tests._typed_input import as_f32_dense_c
 
 
 def validate_params(self):
@@ -115,7 +116,7 @@ def release_resident_fit(self):
 
 # No Python `__del__`: dropping an instance releases its device fit
 # through the native finalizer connected below the class
-# (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
+# (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime_door.mojo).
 
 def fit(self, X, y=None, sample_weight=None):
     """Store the training data.
@@ -146,10 +147,9 @@ def fit(self, X, y=None, sample_weight=None):
         # DEVIATION 604 refuses a non-finite fit set at the first
         # score_samples; refusing it here as well names the input at the
         # call that supplied it, as scikit-learn's fit does.
-        raise ValueError(
-            "mojolearn KernelDensity: X contains a NaN or an infinity; "
-            "refused by name at fit (DEVIATION 604)"
-        )
+        # The one non-finite wording (bindings/admitted_input_unpack.mojo
+        # admitted_finite_wording; lane a7b-device-x-neighbors).
+        raise ValueError("Input X contains NaN or infinity (KernelDensity).")
     # Opt-in immutable snapshot: transport-only copy of caller bytes.
     # Residency never relies on external mutable pointer identity.
     binding = self._bind("_mojolearn_estimators")

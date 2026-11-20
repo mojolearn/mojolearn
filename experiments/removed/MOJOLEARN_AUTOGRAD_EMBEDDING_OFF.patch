@@ -1,0 +1,50 @@
+diff --git a/embedding/embedding_words_run.mojo b/embedding/embedding_words_run.mojo
+index a3b36f324f..badf98771b 100644
+--- a/embedding/embedding_words_run.mojo
++++ b/embedding/embedding_words_run.mojo
+@@ -547,9 +547,9 @@ def _forward_run(
+ # equal to the hand kernels'. The ids are the host list the binding already
+ # refused. Launches (scan): runs 2 + fold 1, the hand scan's counts, prefix
+ # and perm 3 + seed 1 + fold 1 (+ padding row 1). FAST on Apple (the atomic
+-# backward) is unchanged. With no position the hand kernels run.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_EMBEDDING_OFF (old path: the hand backward kernels for every call, no A/B recorded) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 5ee3d0ca88.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_EMBEDDING_OFF.patch; record in docs/TOMBSTONES.md.
++# backward) is unchanged. -D MOJOLEARN_AUTOGRAD_EMBEDDING_OFF keeps the
++# hand kernels (arm A).
++comptime AUTOGRAD_EMBEDDING = not is_defined["MOJOLEARN_AUTOGRAD_EMBEDDING_OFF"]()
+ 
+ 
+ def _tape_backward(
+@@ -704,7 +704,9 @@ def _backward_run(
+         var r_ids = _pool_i32(ctx, n_positions)
+         if n_positions > 0:
+             ctx.enqueue_copy(dst_buf=r_ids, src_ptr=idsp)
+-        var tape_route = n_positions > 0
++        var tape_route = False
++        comptime if AUTOGRAD_EMBEDDING:
++            tape_route = n_positions > 0
+         if tape_route:
+             # Row N161: the tape route runs on pooled begin / perm / keys and
+             # takes no counts buffer.
+@@ -742,7 +744,9 @@ def _backward_run(
+     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
+     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
+     var perm = _upload_i32(ctx, _zeros_i32(n_positions))
+-    var tape_route = n_positions > 0
++    var tape_route = False
++    comptime if AUTOGRAD_EMBEDDING:
++        tape_route = n_positions > 0
+     if tape_route:
+         _tape_backward(ctx, d_dw, d_dy, d_ids, n_positions, cfg, plan)
+     else:
+@@ -1047,7 +1051,9 @@ def _backward_dev_run(
+         fast_embedding_backward_into(ctx, r_dw, r_dy, r_ids, n_positions, cfg)
+         ctx.synchronize()
+     else:
+-        var tape_route = n_positions > 0
++        var tape_route = False
++        comptime if AUTOGRAD_EMBEDDING:
++            tape_route = n_positions > 0
+         if tape_route:
+             # Row N161: pooled begin / perm / keys, no counts buffer.
+             _tape_backward_pooled(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)

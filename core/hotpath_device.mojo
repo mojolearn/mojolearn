@@ -22,7 +22,7 @@ The bindings that choose between these and the host helpers are
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -407,7 +407,7 @@ def _bincount_i32_kernel(src: _I32, n_: Int32, k: Int32, cnt: _I32, status: _I32
     if v < 0 or v >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
 
 
 def _bincount_i64_kernel(src: _I64, n_: Int32, k: Int32, cnt: _I32, status: _I32):
@@ -418,7 +418,7 @@ def _bincount_i64_kernel(src: _I64, n_: Int32, k: Int32, cnt: _I32, status: _I32
     if v < 0 or v >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + v, Int32(1))
 
 
 def _widen_counts_kernel(cnt: _I32, k: Int32, base: _I64, accumulate: Int32):
@@ -490,7 +490,7 @@ def _bincount2_i32_kernel(a: _I32, b: _I32, n_: Int32, ka: Int32, kb: Int32, cnt
     if u < 0 or u >= Int(ka) or v < 0 or v >= Int(kb):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + (v * Int(ka) + u), Int32(1))
+    _ = Atomic[Int32].fetch_add(cnt + (v * Int(ka) + u), Int32(1))
 
 
 def device_bincount2_i32(
@@ -543,7 +543,7 @@ def _count_u8_kernel(mask: _U8, n_: Int32, total: _I32):
             c += 1
         i += stride
     if c != Int32(0):
-        _ = Atomic[DType.int32].fetch_add(total, c)
+        _ = Atomic[Int32].fetch_add(total, c)
 
 
 def _count_grid(n: Int) -> Int:
@@ -814,6 +814,120 @@ def device_select_fold_i64(
     return n_test
 
 
+def _scan_total_at_kernel(flag: _I32, scan: _I32, n_: Int32, counts: _I32, slot: Int32):
+    """counts[slot] = the number of flagged rows (the exclusive scan's last
+    slot plus the last flag). One thread."""
+    var last = Int(n_) - 1
+    counts.unsafe_store(Int(slot), scan.unsafe_load(last) + flag.unsafe_load(last))
+
+
+def _partition_emit_split_kernel(flag: _I32, scan: _I32, n_: Int32, size: Int32, dest: _I64):
+    """`_partition_emit_kernel` into one n-word buffer: the flagged rows to
+    dest[0, size), the others to dest[size, n), both ascending (the host loop's
+    order). A row past its side's expected length is not written, so a count
+    that disagrees with `size` never writes out of bounds (the caller sees the
+    disagreement in the fold's count and reruns the host helper)."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var s = Int(scan.unsafe_load(i))
+    if flag.unsafe_load(i) != Int32(0):
+        if s < Int(size):
+            dest.unsafe_store(s, Int64(i))
+    else:
+        var t = i - s
+        if t < Int(n_) - Int(size):
+            dest.unsafe_store(Int(size) + t, Int64(i))
+
+
+def _fold_counts_check_kernel(counts: _I32, sizes: _I64, k_: Int32, status: _I32):
+    """status[0] = 1 when any fold's flagged count differs from its size
+    (every writer stores the same word)."""
+    var f = _tid()
+    if f < Int(k_) and Int64(counts.unsafe_load(f)) != sizes.unsafe_load(f):
+        status.unsafe_store(0, Int32(1))
+
+
+def device_select_folds_i64(
+    ctx: DeviceContext, fold_addr: Int, n: Int, k: Int, sizes_addr: Int,
+    test_addrs_addr: Int, train_addrs_addr: Int,
+) raises -> Bool:
+    """`select_fold_i64` of every fold 0..k-1 as one split plan (lane
+    ne1-b-door, N051): the n fold ids go up ONCE, each fold's flags, scan and
+    partition run on the device, each fold's test and train rows are copied
+    straight into the caller's host arrays (`test_addrs[f]`, `train_addrs[f]`:
+    int64 words holding host addresses; an empty side's address may be 0),
+    and every fold's count is checked on the device behind ONE synchronize.
+    The per-fold form uploaded the same n ids and synchronized twice per
+    fold. Same integers, same order as k `select_fold_i64` calls.
+
+    `sizes[f]` (k int64 words, from `fold_ids`) sizes fold f's outputs.
+    Returns True when every fold's flagged count equals `sizes[f]`; False
+    (a size out of range, or a count that differs) has the binding rerun the
+    host helper, which reports the fold. `1 <= n <= HPD_MAX_N`, `k >= 1`."""
+    var sizes = _I64(unsafe_from_address=sizes_addr)
+    var tests = _I64(unsafe_from_address=test_addrs_addr)
+    var trains = _I64(unsafe_from_address=train_addrs_addr)
+    var d_fold = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_scan = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
+    var d_counts = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_sizes = ctx.enqueue_create_buffer[DType.int64](k)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    var d_out = ctx.enqueue_create_buffer[DType.int64](n)
+    ctx.enqueue_copy(dst_buf=d_fold, src_ptr=_I32(unsafe_from_address=fold_addr))
+    ctx.enqueue_copy(dst_buf=d_sizes, src_ptr=sizes)
+    enqueue_fill(ctx, d_status, Int32(0))
+    var sized = True
+    for f in range(k):  # driver-loop: over folds of one split plan (stream-ordered; d_out is reused after its copies)
+        var size = Int(sizes.unsafe_load(f))
+        if size < 0 or size > n:
+            sized = False
+            break
+        ctx.enqueue_function[_fold_flag_kernel](
+            d_fold.unsafe_ptr(), Int32(n), Int32(f), d_flag.unsafe_ptr(), d_scan.unsafe_ptr(),
+            grid_dim=_blocks(n), block_dim=HPD_TPB,
+        )
+        frs_exclusive_scan(ctx, d_scan, n, d_bsum)
+        ctx.enqueue_function[_scan_total_at_kernel](  # small-launch(n: the index of the last slot): one thread reads two words, no walk
+            d_flag.unsafe_ptr(), d_scan.unsafe_ptr(), Int32(n), d_counts.unsafe_ptr(), Int32(f),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        ctx.enqueue_function[_partition_emit_split_kernel](
+            d_flag.unsafe_ptr(), d_scan.unsafe_ptr(), Int32(n), Int32(size), d_out.unsafe_ptr(),
+            grid_dim=_blocks(n), block_dim=HPD_TPB,
+        )
+        var test_addr = Int(tests.unsafe_load(f))
+        var train_addr = Int(trains.unsafe_load(f))
+        if size > 0 and test_addr != 0:
+            var head = d_out.create_sub_buffer[DType.int64](0, size)
+            ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=test_addr), src_buf=head)
+            _ = head^
+        if n - size > 0 and train_addr != 0:
+            var tail = d_out.create_sub_buffer[DType.int64](size, n - size)
+            ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=train_addr), src_buf=tail)
+            _ = tail^
+    var ok = False
+    if sized:
+        ctx.enqueue_function[_fold_counts_check_kernel](
+            d_counts.unsafe_ptr(), d_sizes.unsafe_ptr(), Int32(k), d_status.unsafe_ptr(),
+            grid_dim=_blocks(k), block_dim=HPD_TPB,
+        )
+        ok = _read_status(ctx, d_status, 0) == 0
+    else:
+        ctx.synchronize()
+    _ = d_fold^
+    _ = d_flag^
+    _ = d_scan^
+    _ = d_bsum^
+    _ = d_counts^
+    _ = d_sizes^
+    _ = d_status^
+    _ = d_out^
+    return ok
+
+
 def device_select_mask_u8_i64(
     ctx: DeviceContext, mask_addr: Int, n: Int, test_addr: Int, train_addr: Int,
 ) raises -> Int:
@@ -916,7 +1030,7 @@ def _check_indices_kernel(idx: _I64, n_: Int32, bound: Int32, seen: _I32, status
     if v < 0 or v >= Int(bound):
         status.unsafe_store(0, Int32(1))
         return
-    var prev = Atomic[DType.int32].fetch_add(seen + v, Int32(1))
+    var prev = Atomic[Int32].fetch_add(seen + v, Int32(1))
     if prev != Int32(0):
         status.unsafe_store(1, Int32(1))
 
@@ -1046,8 +1160,8 @@ def _class_first_kernel(codes: _I32, n_: Int32, k: Int32, cnt: _I32, first: _I32
     if c < 0 or c >= Int(k):
         status.unsafe_store(0, Int32(1))
         return
-    _ = Atomic[DType.int32].fetch_add(cnt + c, Int32(1))
-    _ = Atomic[DType.int32].min(first + c, Int32(i))
+    _ = Atomic[Int32].fetch_add(cnt + c, Int32(1))
+    _ = Atomic[Int32].min(first + c, Int32(i))
 
 
 def _pair_iota_kernel(src: _I32, n_: Int32, keys: _U32, vals: _U32):
@@ -1081,7 +1195,7 @@ def _rank_fold_kernel(
     while f < K - 1 and Int(cum.unsafe_load(c * K + f)) <= rank:
         f += 1
     fold.unsafe_store(r, Int32(f))
-    _ = Atomic[DType.int32].fetch_add(per_fold + f, Int32(1))
+    _ = Atomic[Int32].fetch_add(per_fold + f, Int32(1))
 
 
 def device_class_counts(
@@ -1258,7 +1372,7 @@ def _first_rank_kernel(order: _U32, k: Int32, cnt: _I32, rank_of: _I32, counts: 
     rank_of.unsafe_store(c, Int32(q))
     counts.unsafe_store(q, Int64(m))
     if m != Int32(0):
-        _ = Atomic[DType.int32].fetch_add(status + 1, Int32(1))
+        _ = Atomic[Int32].fetch_add(status + 1, Int32(1))
 
 
 def device_first_seen_i32(

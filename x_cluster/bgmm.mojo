@@ -51,6 +51,8 @@ from x_cluster.bgmm_device import (
     ST_PRIOR,
     ST_UUT,
     ST_W,
+    ST_COMMIT,
+    ST_FREEZE,
     BgL,
 )
 from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64
@@ -297,6 +299,10 @@ def bgmm_fit[O: ClusterOps](
     var ps = ops.zeros(kc * d * d)
     var cs = ops.zeros(kc)
     var es = ops.zeros(2)
+    # the EM loop's committed workspace and its freeze pair (stop, iteration)
+    var wsnap = ops.zeros(2 * L.total)
+    var frz = ops.zeros(2)
+    var check_every = ops.loop_check_every(n, kc, d)
     if not (has_m and has_c):
         # the default priors: X's mean and np.cov(X.T), the moments of one
         # all-ones component, on the device
@@ -354,42 +360,60 @@ def bgmm_fit[O: ClusterOps](
                 ops.bgmm_step(ST_UUT, kc, d, cfg, 0, ws, -1, -1, -1)
                 ops.bgmm_step(ST_CHOL, kc, d, cfg, 0, ws, -1, -1, -1)
         _derive(ops, kc, d, cfg, ws, ms, ps, cs)
-        var converged = False
-        var n_iter = 0
-        for it in range(1, max_iter + 1):
-            n_iter = it
-            # E-step
-            ops.gauss_q(xs, n, d, ms, ps, kc, qs)
-            ops.resp(qs, cs, n, kc, lpn)
-            ops.exp(qs, rs, n * kc)
-            # M-step
-            ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
-            _m_step(ops, kc, d, cfg, ws, nks, xks, sks)
-            _derive(ops, kc, d, cfg, ws, ms, ps, cs)
-            if pr.variational:
-                # the entropy sum(resp * log_resp): the float-float fold
-                ops.fold_into(rs, qs, -1, n * kc, FM_PROD, es)
-            else:
-                # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
-                ops.fold_into(lpn, -1, -1, n, FM_VAL, es)
-            ops.bgmm_step(ST_D, kc, d, cfg, 0, ws, es, -1, -1)
-            # the one wait per iteration: the scalar block
-            var sc = ops.get(ws, 2 * SC_SIZE)
-            if sc[2 * SC_ERR] != Float32(0):
-                raise Error(BGMM_CHOL_ERROR)
-            if sc[2 * SC_CONV] != Float32(0):
-                converged = True
-                break
-        var sc = ops.get(ws, 2 * SC_SIZE)
+        # Lane n1-gmm-bgmm-loops (2026-11-09): the EM iterations are a
+        # bounded device loop. Each iteration ends with the gated commit of
+        # the workspace into `wsnap` (ST_COMMIT) and the stop word from its
+        # converged / error flags (ST_FREEZE, the change test ST_D already
+        # made on the device); the host reads the two-word freeze pair once
+        # per `check_every` iterations instead of the scalar block every
+        # iteration. Iterations enqueued past the stop run and are never
+        # committed, so `wsnap` is the stopping iteration's workspace.
+        # TOMBSTONE: bgmm-em-host-driver-loop (REFACTORED onto a gated device loop) deleted 2026-11-09 by lane/n1-gmm-bgmm-loops; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+        ops.bgmm_step(ST_KEEP, kc, d, cfg, 0, ws, wsnap, -1, -1)
+        ops.set(frz, List[Float32](length=2, fill=Float32(0)))
+        var it = 1
+        var stopped = False
+        while it <= max_iter and not stopped:  # driver-loop: over flag-read chunks of the EM loop, bounded by max_iter
+            var last = it + check_every - 1
+            if last > max_iter:
+                last = max_iter
+            while it <= last:  # driver-loop: over the EM iterations enqueued between two reads
+                # E-step
+                ops.gauss_q(xs, n, d, ms, ps, kc, qs)
+                ops.resp(qs, cs, n, kc, lpn)
+                ops.exp(qs, rs, n * kc)
+                # M-step
+                ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
+                _m_step(ops, kc, d, cfg, ws, nks, xks, sks)
+                _derive(ops, kc, d, cfg, ws, ms, ps, cs)
+                if pr.variational:
+                    # the entropy sum(resp * log_resp): the float-float fold
+                    ops.fold_into(rs, qs, -1, n * kc, FM_PROD, es)
+                else:
+                    # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
+                    ops.fold_into(lpn, -1, -1, n, FM_VAL, es)
+                ops.bgmm_step(ST_D, kc, d, cfg, 0, ws, es, -1, -1)
+                ops.bgmm_step(ST_COMMIT, kc, d, cfg, 0, ws, wsnap, frz, -1)
+                ops.bgmm_step(ST_FREEZE, kc, d, cfg, it, ws, frz, -1, -1)
+                it += 1
+            # the one wait per chunk: the freeze pair
+            var fz_chunk = ops.get(frz, 2)
+            if fz_chunk[0] != Float32(0):
+                stopped = True
+        var fz = ops.get(frz, 2)
+        var n_iter = Int(fz[1])
+        var sc = ops.get(wsnap, 2 * SC_SIZE)
         if sc[2 * SC_ERR] != Float32(0):
             raise Error(BGMM_CHOL_ERROR)
+        var converged = sc[2 * SC_CONV] != Float32(0)
         var lb = _ff64(sc, SC_LB)
         if not have_best or lb > max_lb:
             max_lb = lb
             have_best = True
             best_iter = n_iter
             converged_best = converged
-            ops.bgmm_step(ST_KEEP, kc, d, cfg, 0, ws, wb, -1, -1)
+            ops.bgmm_step(ST_KEEP, kc, d, cfg, 0, wsnap, wb, -1, -1)
     # the best init: its weights, then the final E-step on its parameters
     ops.bgmm_step(ST_W, kc, d, cfg, 0, wb, -1, -1, -1)
     ops.bgmm_step(ST_F, kc, d, cfg, 0, wb, ms, ps, cs)

@@ -219,7 +219,7 @@ def _gpr_fit_run(
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises -> Int:
     """The GIL-free half of `gpr_fit_binding`: everything after the
-    `PythonObject`s have been read and before one is built. A separate
+    Python objects have been read and before one is built. A separate
     function because `GPRegressor` has no default constructor to
     pre-declare across a `with` block, and an `Int` does."""
     var model = gpr_fit_host(x, n_train, n_features, y, spec, alpha)

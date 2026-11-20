@@ -38,24 +38,24 @@ upstream changes in later steps.
 Generator-friendly: plain cell kernels, no shared memory, no atomics, no float
 crossing a thread except through the global partials a later launch reads.
 """
-from mamba.host.device_shim import host_launch, launch_count
-from std.sys.compile import is_defined
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term deleted 2026-11-15 by lane/expdel2-23-neural (non-owner, owner expdel2-37-series); code recoverable at 62f98b1ca0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-23-neural.patch; record in docs/TOMBSTONES.md.
 
+from mamba.host.device_shim import host_launch, launch_count
 from checks.numerics import (
     ftz,
     identical_mul,
     identical_mul_add,
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
 )
 from mamba.checks.mamba_rms_fold import MAMBA_RMS_LANES, mamba_rms_tree
 
 
-comptime IDN_MAMBA_BWD_FOLDS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_MAMBA_BWD_FOLDS"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (unmeasured opt-in arm, EXP:2271 PENDING) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 52ec70d943.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch; record in docs/TOMBSTONES.md.
+# IDN_MAMBA_BWD_FOLDS stays False and the kernels below stay for
+# autograd/kernels/mamba2.mojo (another lane's file); they go with its branch
+# after the wave.
+comptime IDN_MAMBA_BWD_FOLDS = False
 
 #: Threads per block. Execution plan only (no float crosses a thread inside a
 #: launch), so it moves no bit.
@@ -72,11 +72,6 @@ def mamba_bwd_fold_grid(n: Int) -> Int:
 def mamba_bwd_fold_floats(m: Int) -> Int:
     """Scratch for one row-dot fold over `m` rows: `[m, LANES]` lane partials
     then `[m]` dots, at offset `mamba_bwd_fold_dot_offset(m)`. 1 when off."""
-    comptime if IDN_MAMBA_BWD_FOLDS:
-        var n = m * (MAMBA_RMS_LANES + 1)
-        if n < 1:
-            return 1
-        return n
     return 1
 
 

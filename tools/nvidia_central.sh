@@ -3,8 +3,8 @@
 # shared RunPod pods, never one per lane.
 #
 # THE ONLY WAY A LANE USES NVIDIA. At most NVC_MAX_PODS (3, the account cap in
-# tools/dev_pod.sh) shared RunPod pods, each with several cheap GPUs (4x or 2x
-# RTX 4090 where RunPod has them; a 1-GPU pod is the fallback), keyed nvc1,
+# tools/dev_pod.sh) shared RunPod pods, by default one L40S each (the paper's
+# NVIDIA device; NVIDIA_MEASURE_GPUS in tools/runpod_nvidia_sm89.env), keyed nvc1,
 # nvc2, nvc3 in the dev_pod state. Every lane's GPU work goes through the
 # pod's FIFO queue (tools/gpu_queue_box.sh, the same queue as the central AMD
 # box), one job per GPU slot, in the lane's own tree /root/mojolearn-<lane>.
@@ -13,12 +13,17 @@
 # `install` and `down` refuse without MOJOLEARN_ORCHESTRATOR=1; a lane that
 # finds no pod up says so to the orchestrator and waits.
 #
-#   tools/nvidia_central.sh up [N]                     ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1). RENTS.
-#                                                      Brings the shared set to N pods (default NVC_PODS=2, at
-#                                                      most 3). Idempotent: never more than N.
+#   tools/nvidia_central.sh up [--pods N | N]          ORCHESTRATOR ONLY (MOJOLEARN_ORCHESTRATOR=1). RENTS.
+#                                                      Brings the shared set to N pods (default NVC_PODS=1, at
+#                                                      most 3). Idempotent: never more than N. A measurement
+#                                                      needs one pod (2026-11-12: the old default 2 rented an
+#                                                      unused second L40S for the measurement).
 #   tools/nvidia_central.sh sync   <lane> <worktree>   patch-sync to /root/mojolearn-<lane> on the lane's pod
 #                                                      (a lane is assigned to one pod at its first sync)
-#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box>
+#   tools/nvidia_central.sh submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box>
+#                                                      First a PREFLIGHT on the pod (tools/ops/job_preflight.sh: the
+#                                                      script parses, --env paths exist, the script's own --preflight
+#                                                      when it declares one); a FAIL queues nothing.
 #                                                      THE WAY TO RUN A GATE: enqueue; prints the job id
 #                                                      (<pod>-<n>, e.g. nvc1-0003). Default and max cap 240 min.
 #                                                      The job runs under tools/box_persist_run.sh: DIR (relative to
@@ -27,6 +32,9 @@
 #                                                      from the pod every NVC_PERSIST_EVERY_MIN and on any exit
 #                                                      (tools/box_persist.py fetch --tag <tag>, printed on stderr).
 #                                                      --no-persist refuses unless MOJOLEARN_ALLOW_UNPERSISTED=1.
+#                                                      --env K=V (repeatable; K upper case, V plain characters) sets
+#                                                      an environment variable for the persisted job, e.g. the
+#                                                      lane scope tools/reference_refresh.sh passes (SCOPE=all).
 #   tools/nvidia_central.sh queue                      every pod's queued/running jobs, last finished, slots, lease
 #   tools/nvidia_central.sh status [<id>]              no id: pods, lanes, queues; id: that job
 #   tools/nvidia_central.sh log    <id> [N]            last N (default 40) lines of the job's log
@@ -34,6 +42,8 @@
 #   tools/nvidia_central.sh run    <lane> [--gpus N] [--wait MIN] <command>
 #                                                      SHORT interactive GPU command on N free slots
 #                                                      (yields to queued jobs; exit 75 if no slot came)
+#   tools/nvidia_central.sh ssh-target <lane>          prints "<ssh flags> <target>" of the lane's pod (for
+#                                                      tools/dataset_store.sh stage)
 #   tools/nvidia_central.sh sh     <lane> <command>    NO GPU (CUDA_VISIBLE_DEVICES=-1): builds, pixi, tail, git
 #   tools/nvidia_central.sh fetch  <lane> <path> <local dir>   tar a box path back to the Mac
 #   tools/nvidia_central.sh install <pod>              ORCHESTRATOR ONLY (up does this) install/upgrade queue + lease
@@ -63,6 +73,11 @@
 # there. ~/mojolearn-evidence/nvidia_central/lanes/<lane>/pod names it. When a
 # pod goes down idle, the lane's next sync picks a live pod (and its first
 # `pixi install` there links from that pod's package cache).
+#
+# LIBRARY MODE (lane fx-cpu-box-checks, 2026-11-19): sourced (`. tools/nvidia_central.sh`), this file defines its
+# functions (the lease install, the Mac watcher, reconcile, submit, ...) and returns before the command dispatch.
+# tools/cpu_central.sh, the CPU check box, sources it so the lease, dead-man and persistence code has one copy; it
+# sets MOJOLEARN_NVC_HOME / MOJOLEARN_NVC_CONF first and overrides pod_keys, queue_slots, QUEUE_VENDOR, say and die.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
@@ -71,12 +86,29 @@ CONF="${MOJOLEARN_NVC_CONF:-$HOME/mojolearn-evidence/nvidia_central.env}"
 # shellcheck disable=SC1090
 [ ! -f "$CONF" ] || . "$CONF"
 NVC_MAX_PODS=3                                        # the account cap (tools/dev_pod.sh MAX_RUNPOD_PODS)
-NVC_PODS=${NVC_PODS:-2}                               # `up` with no N brings the set to this many
-NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-"4 2 1"}             # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
-# Only sm_89 / sm_90 GPUs: every mojolearn release carries cuda sm_89 and sm_90a
-# only, so an sm_86 pod (RTX A6000, A40) runs our arm on NOTHING (2026-09-29: an
-# A40 pod refused our arm in every board race, "compiled=identical/cpu").
-NVC_GPUS=${NVC_GPUS:-"NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA L4"}
+NVC_PODS=${NVC_PODS:-1}                               # `up` with no N brings the set to this many
+# The GPU types and counts live in tools/runpod_nvidia_sm89.env (one constant file, shared with
+# tools/prebuild_changed.py --rent).
+# shellcheck disable=SC1091
+. "$ROOT/tools/runpod_nvidia_sm89.env"
+NVC_GPU_COUNTS=${NVC_GPU_COUNTS:-$NVIDIA_MEASURE_GPU_COUNTS}  # GPUs per pod, tried in order (1 = the plain dev_pod fallback)
+# L40S ONLY BY DEFAULT (2026-11-13): this `up` brings up the measurement box, and the paper's NVIDIA device is the
+# L40S ("compare on the same device"; AMD: MI300X). The old default, the sm_89 walk (4090, L40S, RTX 6000 Ada, L4),
+# rented a 2x RTX 6000 Ada when the L40S was out of stock. Another list only explicitly: MOJOLEARN_NVC_GPUS, else
+# MOJOLEARN_DEVPOD_GPUS (ignored here before; the orchestrator's L40S-only rent loop set it in vain). Only sm_89 /
+# sm_90 types belong in either: an sm_86 pod (RTX A6000, A40) runs our arm on nothing (2026-09-29).
+NVC_GPUS=${MOJOLEARN_NVC_GPUS:-${MOJOLEARN_DEVPOD_GPUS:-$NVIDIA_MEASURE_GPUS}}
+# ONE GPU PER POD (2026-11-13): at 17:35 ET an inherited multi-GPU count list rented a 4x L40S at $4.36/h for a
+# one-GPU timed board. `up` rents one GPU per pod; another count only with MOJOLEARN_NVC_ALLOW_MULTI_GPU=1.
+# Another GPU type than the paper's L40S only with PC_ALLOW_HW_DIFF=1 (the rows are then flagged HW-DIFF).
+nvc_check_request() {
+    if [ "${MOJOLEARN_NVC_ALLOW_MULTI_GPU:-0}" != 1 ] && [ "$NVC_GPU_COUNTS" != 1 ]; then
+        echo "NVC_GPU_COUNTS='$NVC_GPU_COUNTS' refused: one GPU per pod (MOJOLEARN_NVC_ALLOW_MULTI_GPU=1 to override)"; return 3
+    fi
+    if [ "${PC_ALLOW_HW_DIFF:-0}" != 1 ] && [ "$NVC_GPUS" != "$NVIDIA_MEASURE_GPUS" ]; then
+        echo "GPU list '$NVC_GPUS' refused: the measurement pod is '$NVIDIA_MEASURE_GPUS' only (PC_ALLOW_HW_DIFF=1 to override)"; return 3
+    fi
+}
 NVC_STOCK_WAIT=${NVC_STOCK_WAIT:-5}                   # minutes of out-of-stock retry per multi-GPU count
 NVC_STOCK_WAIT_1=${NVC_STOCK_WAIT_1:-30}              # ... and for the 1-GPU fallback
 NVC_MIN_BALANCE=${NVC_MIN_BALANCE:-10}                # `up` refuses below this RunPod balance (USD)
@@ -84,8 +116,8 @@ NVC_IDLE_MIN=${NVC_IDLE_MIN:-60}
 NVC_GRACE_MIN=${NVC_GRACE_MIN:-15}
 NVC_CAP_MIN=${NVC_CAP_MIN:-240}                       # a job's default AND maximum wall-clock cap
 NVC_WATCH_SECONDS=${NVC_WATCH_SECONDS:-300}
-NVC_PERSIST_SLOTS=${NVC_PERSIST_SLOTS:-4}             # submit: R2 ring slots per job (tools/box_persist.py)
-NVC_PERSIST_EVERY_MIN=${NVC_PERSIST_EVERY_MIN:-10}    # ... a results upload every this many minutes
+NVC_PERSIST_SLOTS=${NVC_PERSIST_SLOTS:-2}             # submit: R2 ring slots per job (tools/box_persist.py)
+NVC_PERSIST_EVERY_MIN=${NVC_PERSIST_EVERY_MIN:-30}    # ... a results upload every this many minutes
 NVC_PERSIST_DAYS=${NVC_PERSIST_DAYS:-2}               # ... the upload URLs' lifetime (queue wait + cap)
 DEVPOD="${MOJOLEARN_NVC_DEVPOD:-$ROOT/tools/dev_pod.sh}"
 NO_API="${MOJOLEARN_NVC_NO_API:-0}"                   # tests only: no RunPod API calls (reconcile, balance)
@@ -105,6 +137,10 @@ CURLRC="$TMPD/curlrc"
 mkdir -p "$NVC_HOME/lanes"
 
 pod_keys() { local i; for i in $(seq 1 $NVC_MAX_PODS); do echo nvc$i; done; }
+QUEUE_VENDOR=nvidia                                   # the queue's vendor file (tools/gpu_queue_box.sh)
+queue_slots() {  # <key>: the queue's slots on that pod (here: its GPUs)
+    BOX_TIMEOUT=120 box "nvidia-smi -L 2>/dev/null | grep -c '^GPU '" < /dev/null | tr -dc 0-9
+}
 live_pods() { local k; for k in $(pod_keys); do [ ! -f "$STATE_ROOT/$k/state.env" ] || echo $k; done; }
 pod_env() {  # <key>: SSH_TARGET POD_ID GPU GPU_COUNT COST_HR
     [ -f "$STATE_ROOT/$1/state.env" ] || die "shared pod $1 is not up"
@@ -128,7 +164,7 @@ need_lane_pod() {
 }
 split_id() {  # <pod>-<n> | <n> -> JOB_POD JOB_N
     case "$1" in
-        nvc[0-9]-[0-9]*) JOB_POD=${1%%-*}; JOB_N=${1#*-} ;;
+        [a-z][a-z][a-z][0-9]-[0-9]*) JOB_POD=${1%%-*}; JOB_N=${1#*-} ;;
         [0-9]*) JOB_N=$1; JOB_POD=$(live_pods)
                 [ "$(echo "$JOB_POD" | grep -c .)" = 1 ] || die "several pods are up: name the job as <pod>-$1 (e.g. nvc1-$1)" ;;
         *) die "a job id is <pod>-<n>, e.g. nvc1-0003" ;;
@@ -242,13 +278,17 @@ WATCH
 install_pod() {  # <key>
     local k=$1 n out
     pod_env $k
-    n=$(BOX_TIMEOUT=120 box "nvidia-smi -L 2>/dev/null | grep -c '^GPU '" < /dev/null | tr -dc 0-9)
-    [ -n "$n" ] && [ "$n" -ge 1 ] || die "$k: nvidia-smi shows no GPU"
-    [ "$n" = "$GPU_COUNT" ] || say "$k: nvidia-smi shows $n GPUs (state says $GPU_COUNT); the queue uses $n"
+    n=$(queue_slots "$k")
+    [ -n "$n" ] && [ "$n" -ge 1 ] || die "$k: no queue slots (nvidia-smi shows no GPU)"
+    [ "$QUEUE_VENDOR" != nvidia ] || [ "$n" = "$GPU_COUNT" ] || say "$k: nvidia-smi shows $n GPUs (state says $GPU_COUNT); the queue uses $n"
+    # torch and its CUDA wheels from the PyTorch CDN (runpod_pod_lib.sh pod_pip_conf_script: the extra index only
+    # adds a source; PyPI stays the index and every pin is unchanged)
+    out=$(BOX_TIMEOUT=60 box "$(pod_pip_conf_script)" < /dev/null 2>&1 | tail -1) || true
+    say "$k: ${out:-POD_PIP_CONF not written (no answer)}"
     BOX_TIMEOUT=120 box "set -e; command -v flock setsid > /dev/null
 [ -s /tmp/mojolearn-lease.curlrc ] || { echo 'no RunPod key on the pod (/tmp/mojolearn-lease.curlrc); the queue lease could not delete it' >&2; exit 3; }
 mkdir -p $QD/bin $LOCKD && cat > $NVQ.new && chmod 755 $NVQ.new && mv -f $NVQ.new $NVQ
-cd $QD && echo $n > slots && echo nvidia > vendor && echo plain > mode && echo - > service && echo $NVC_CAP_MIN > default_cap && echo $NVC_CAP_MIN > max_cap
+cd $QD && echo $n > slots && echo $QUEUE_VENDOR > vendor && echo plain > mode && echo - > service && echo $NVC_CAP_MIN > default_cap && echo $NVC_CAP_MIN > max_cap
 printf 'POD_ID=%s\nIDLE_MIN=%s\nGRACE_MIN=%s\nCURLRC=/tmp/mojolearn-lease.curlrc\n' $(sq "$POD_ID") $NVC_IDLE_MIN $NVC_GRACE_MIN > lease.conf
 [ -s lease.last_busy ] || date +%s > lease.last_busy
 export GQ_DIR=$QD GQ_LOCKD=$LOCKD GQ_UNIT=nvq; $NVQ ensure; sleep 7; $NVQ lease-check" < "$ROOT/tools/gpu_queue_box.sh" > "$TMPD/install.out" 2>&1 \
@@ -283,15 +323,98 @@ pick_pod() {  # the live pod with the fewest assigned lanes per GPU
     echo "$best"
 }
 
+central_submit() {  # the `submit` command (a function so tools/cpu_central.sh check runs the same code)
+    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1; jobenv=''; preflight=1
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --gpus) n="${2:?--gpus N}"; shift 2 ;;
+            --cap) cap="${2:?--cap MIN}"; shift 2 ;;
+            --note) note="${2:?--note TEXT}"; shift 2 ;;
+            --results) results="${2:?--results DIR}"; shift 2 ;;
+            --no-persist) persist=0; shift ;;
+            --no-preflight) preflight=0; shift ;;
+            --env)
+                kv="${2:?--env K=V}"
+                [[ "$kv" =~ ^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_.,:/@+=-]*$ ]] \
+                    || die "--env $kv: K must be upper case and V plain characters (no spaces or quotes)"
+                jobenv="$jobenv $kv"; shift 2 ;;
+            *) break ;;
+        esac
+    done
+    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--env K=V]... [--no-persist] [--no-preflight] <script-on-box> (one script path; put arguments inside the script)"
+    [ -z "$jobenv" ] || [ "$persist" = 1 ] || die "--env applies to a persisted job only (drop --no-persist)"
+    need_lane_pod "$lane"
+    script=$1
+    # SUBMIT-TIME PREFLIGHT (lane fx-pod-job, 2026-11-18: a call-profile job failed three times in 90 s on inputs that
+    # were wrong when it was submitted, after 2 h 37 min in the queue): tools/ops/job_preflight.sh, streamed from this
+    # checkout, runs on the lane's pod before anything is queued: the script parses, every --env path exists there,
+    # and a script that declares `# job-preflight:` checks its own inputs (`<script> --preflight`, read only). Any
+    # FAIL refuses the submit. --no-preflight skips it.
+    if [ "$preflight" = 1 ]; then
+        ptree=/root/mojolearn-$lane
+        case "$script" in /*) pabs=$script ;; *) pabs=$ptree/$script ;; esac
+        pres=''
+        if [ -n "$results" ]; then case "$results" in /*) pres=$results ;; *) pres=$ptree/$results ;; esac; fi
+        # --env values are checked plain above, so they need no quoting here
+        prc=0
+        pf=$(BOX_TIMEOUT=300 box "bash -s -- $(sq "$ptree") $(sq "$pabs") $(sq "$pres")$jobenv" < "$ROOT/tools/ops/job_preflight.sh") || prc=$?
+        printf '%s\n' "$pf" | grep '^PREFLIGHT' | head -n 60 >&2 || true
+        [ "$prc" -eq 0 ] || die "the preflight refused $script (rc $prc); nothing was queued (fix the inputs above, or --no-preflight)"
+    fi
+    if [ "$persist" = 1 ]; then
+        # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
+        bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
+            --every-min "$NVC_PERSIST_EVERY_MIN" --days "$NVC_PERSIST_DAYS" || die "$BP_MINT_FAILED"
+        tree=/root/mojolearn-$lane
+        case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
+        res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
+        jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
+        {
+            printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
+            cat "$TMPD/persist.sh"
+            printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
+            printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
+            # --env values are checked plain above, so they need no quoting here
+            printf 'exec env%s bash %s %s %s -- bash %s\n' "$jobenv" "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
+            printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
+        } > "$TMPD/stage.sh"
+        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
+        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
+        note="${note:+$note }[persist $BP_TAG: $script -> $res]"
+        script=$jobsh
+    else
+        bp_opt_out nvidia_central "submit $lane $script" || exit 1
+    fi
+    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$script") $(sq "$note")" < /dev/null) || exit 1
+    if [ "$persist" = 1 ]; then
+        bp_note_job "$(printf '%s\t%s\t%s\t%s' "$LANE_POD-$id" "$lane" "$1" "$res")"
+    fi
+    echo "$LANE_POD-$id"
+}
+
+# sourced: the functions above only (tools/cpu_central.sh)
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 cmd="${1:-}"; shift || true
 case "$cmd" in up|install|down)
     [ "${MOJOLEARN_ORCHESTRATOR:-0}" = 1 ] || die "only the orchestrator provisions machines: '$cmd' needs MOJOLEARN_ORCHESTRATOR=1. A lane reports that it needs NVIDIA and waits." ;;
 esac
 case "$cmd" in
 up)
-    want=${1:-$NVC_PODS}
-    [[ "$want" =~ ^[1-9]$ ]] && [ "$want" -le $NVC_MAX_PODS ] || die "up [N]: N is 1..$NVC_MAX_PODS"
+    want=$NVC_PODS
+    case "${1:-}" in
+        --pods) want=${2:-}; shift 2 || true ;;
+        --pods=*) want=${1#--pods=}; shift ;;
+        '') ;;
+        *) want=$1; shift ;;
+    esac
+    [ $# -eq 0 ] || die "up [--pods N | N]: unexpected '$*'"
+    [[ "$want" =~ ^[1-9]$ ]] && [ "$want" -le $NVC_MAX_PODS ] || die "up [--pods N | N]: N is 1..$NVC_MAX_PODS"
+    _req=$(nvc_check_request) || die "$_req; nothing rented"
+    if [ "${MOJOLEARN_NVC_PRINT_REQUEST:-0}" = 1 ]; then echo "request: counts=$NVC_GPU_COUNTS gpus=$NVC_GPUS"; exit 0; fi
     [ "$NO_API" = 1 ] || load_key || die "no RunPod key (~/.mojolearn_runpod_key, mode 600)"
+    # the account cap before any provider call (tools/rent_guard.sh counts every pod on the shared account, the
+    # Mambik pods included); tools/dev_pod.sh checks it again before each create attempt
+    [ "$NO_API" = 1 ] || bash "$ROOT/tools/rent_guard.sh" --own-cap="$NVC_MAX_PODS" || die "tools/rent_guard.sh refused (above); nothing rented"
     up_lock
     reconcile
     have=$(live_pods | grep -c . || true)
@@ -300,6 +423,11 @@ up)
     awk -v b="$bal" -v m="$NVC_MIN_BALANCE" 'BEGIN{exit !(b >= m)}' \
         || die "RunPod balance is \$$bal, under \$$NVC_MIN_BALANCE (NVC_MIN_BALANCE); nothing rented. Fund the account first."
     say "RunPod balance \$$bal; bringing the shared set from $have to $want pod(s)"
+    # the container disk is sized from the release gate's disk plan (dev_pod.sh DISK_GB, tools/ops/gate_disk_plan.py:
+    # the gate job's measured footprint + 20 GB headroom; 0.8.66 run t filled an 80 GB pod); the release gate job
+    # itself refuses a pod with less free than its GATE_DISK_NEED_GB
+    export MOJOLEARN_DEVPOD_DISK_GB="${MOJOLEARN_DEVPOD_DISK_GB:-$(python3 "$ROOT/tools/ops/gate_disk_plan.py" pod-gb 2>/dev/null || echo 80)}"
+    say "container disk ${MOJOLEARN_DEVPOD_DISK_GB} GB per pod (tools/ops/gate_disk_plan.py pod-gb)"
     for k in $(pod_keys); do
         [ "$(live_pods | grep -c . || true)" -lt "$want" ] || break
         [ ! -f "$STATE_ROOT/$k/state.env" ] || continue
@@ -307,6 +435,10 @@ up)
         for c in $NVC_GPU_COUNTS; do
             w=$NVC_STOCK_WAIT; [ "$c" != 1 ] || w=$NVC_STOCK_WAIT_1
             say "$k: asking RunPod for ${c}x of: $NVC_GPUS (out-of-stock retry $w min)"
+            # the exact create line, printed before it runs (2026-11-13: an `up` rented twice past the account cap
+            # with nothing in its output naming the create); dev_pod.sh runs tools/rent_guard.sh before the create
+            say "$k: CREATE: MOJOLEARN_DEVPOD_VIA_CENTRAL=1 MOJOLEARN_DEVPOD_GPU_COUNT=$c MOJOLEARN_DEVPOD_GPUS=$(sq "$NVC_GPUS")" \
+                "MOJOLEARN_DEVPOD_RETRY_MINUTES=$w MOJOLEARN_DEVPOD_DISK_GB=$MOJOLEARN_DEVPOD_DISK_GB $DEVPOD up $k 60"
             if MOJOLEARN_DEVPOD_VIA_CENTRAL=1 MOJOLEARN_DEVPOD_GPU_COUNT=$c MOJOLEARN_DEVPOD_GPUS="$NVC_GPUS" \
                     MOJOLEARN_DEVPOD_RETRY_MINUTES=$w "$DEVPOD" up $k 60 2>&1 | tee "$TMPD/up-$k-$c.log"; then
                 made=1; break
@@ -337,50 +469,7 @@ sync)
     BOX_TIMEOUT=60 box "$NVQ hold true" < /dev/null || true
     say "lane $lane is on $k ($GPU_COUNT GPU slots, $GPU); submit with: tools/nvidia_central.sh submit $lane <script>"
     ;;
-submit)
-    lane="${1:-}"; lane_ok "$lane"; shift; n=1; cap=$NVC_CAP_MIN; note=''; results=''; persist=1
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            --gpus) n="${2:?--gpus N}"; shift 2 ;;
-            --cap) cap="${2:?--cap MIN}"; shift 2 ;;
-            --note) note="${2:?--note TEXT}"; shift 2 ;;
-            --results) results="${2:?--results DIR}"; shift 2 ;;
-            --no-persist) persist=0; shift ;;
-            *) break ;;
-        esac
-    done
-    [ $# -eq 1 ] || die "submit <lane> [--gpus N] [--cap MIN] [--note TEXT] [--results DIR] [--no-persist] <script-on-box> (one script path; put arguments inside the script)"
-    need_lane_pod "$lane"
-    script=$1
-    if [ "$persist" = 1 ]; then
-        # the queued script is a job.sh that runs <script> under tools/box_persist_run.sh (results to R2 from the pod)
-        bp_prepare "nvc-$lane" nvidia_central "$TMPD/persist.sh" --slots "$NVC_PERSIST_SLOTS" \
-            --every-min "$NVC_PERSIST_EVERY_MIN" --days "$NVC_PERSIST_DAYS" || die "$BP_MINT_FAILED"
-        tree=/root/mojolearn-$lane
-        case "$script" in /*) abs=$script ;; *) abs=$tree/$script ;; esac
-        res=${results:-box-out/$BP_TAG}; case "$res" in /*) ;; *) res=$tree/$res ;; esac
-        jobsh=$BP_BOX_ROOT/jobs/$BP_TAG/job.sh
-        {
-            printf '[ -f %s ] || { echo "nvidia_central: no script %s on the box" >&2; exit 4; }\n' "$(sq "$abs")" "$abs"
-            cat "$TMPD/persist.sh"
-            printf "cat > %s <<'BOX_PERSIST_JOB_EOF'\n" "$(sq "$jobsh")"
-            printf '#!/bin/bash\n# tools/nvidia_central.sh submit: %s under tools/box_persist_run.sh (results persist to R2 from the box)\n' "$abs"
-            printf 'exec bash %s %s %s -- bash %s\n' "$(sq "$BP_BOX_ROOT/bin/box_persist_run.sh")" "$(sq "$BP_JSON")" "$(sq "$res")" "$(sq "$abs")"
-            printf 'BOX_PERSIST_JOB_EOF\nchmod 700 %s\n' "$(sq "$jobsh")"
-        } > "$TMPD/stage.sh"
-        staged=$(BOX_TIMEOUT=120 box "bash -s" < "$TMPD/stage.sh") || true
-        printf '%s\n' "$staged" | grep -q '^BOX_PERSIST_STAGED ' || die "could not stage the job's persistence on $LANE_POD; nothing was queued"
-        note="${note:+$note }[persist $BP_TAG: $script -> $res]"
-        script=$jobsh
-    else
-        bp_opt_out nvidia_central "submit $lane $script" || exit 1
-    fi
-    id=$(box "$NVQ ensure > /dev/null && $NVQ submit $(sq "$lane") $(sq "$n") $(sq "$cap") $(sq "$script") $(sq "$note")" < /dev/null) || exit 1
-    if [ "$persist" = 1 ]; then
-        bp_note_job "$(printf '%s\t%s\t%s\t%s' "$LANE_POD-$id" "$lane" "$1" "$res")"
-    fi
-    echo "$LANE_POD-$id"
-    ;;
+submit) central_submit "$@" ;;
 queue)
     for k in $(live_pods); do
         pod_env $k; echo "== $k: pod $POD_ID, $GPU_COUNT GPU ($GPU), \$$COST_HR/hr"
@@ -449,6 +538,11 @@ sh)
     # every GPU hidden (an invalid index shows no device); `hold` keeps the pod's lease busy while it runs
     inner="mkdir -p /root/mojolearn-$lane; export CUDA_VISIBLE_DEVICES=-1; $BOX_PATH; cd /root/mojolearn-$lane && bash -c $(sq "$*")"
     BOX_TIMEOUT=14400 box "$NVQ hold $(sq "$inner")"
+    ;;
+ssh-target)
+    # the "<ssh flags+target>" of the lane's pod, for tools/dataset_store.sh stage (tools/ops/measure_candidate.py)
+    lane="${1:-}"; lane_ok "$lane"; need_lane_pod "$lane"
+    echo "$SSH_OPTS $SSH_TARGET"
     ;;
 fetch)
     lane="${1:-}"; lane_ok "$lane"; p="${2:?fetch <lane> <path> <local dir>}"; out="${3:?local dir}"

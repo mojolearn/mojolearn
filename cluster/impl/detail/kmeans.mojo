@@ -76,11 +76,10 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,
@@ -92,7 +91,6 @@ from cluster.checks.reduce_by_key import (
     SUM_MODE_SQDIFF,
     copy_f32_gated_kernel,
     copy_f32_kernel,
-    kmeans_conv_step_kernel,
     launch_accumulate_centroid_sums_blocked_gated,
     launch_accumulate_weight_per_cluster_blocked_gated,
     finish_sum_kernel,
@@ -123,7 +121,12 @@ from cluster.impl.detail.min_cluster_distance_compute import (
     min_cluster_and_distance_compute,
     min_cluster_and_distance_compute_gated,
 )
-from cluster.multi_gpu import assignment_device_count
+from core.device_plan import DevicePlan
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import (
+    LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap,
+)
+from cluster.multi_gpu import assignment_device_count, kmeans_device_plan
 from std.memory import bitcast
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
@@ -144,47 +147,39 @@ from cluster.impl.kmeans_params import (
 #: bench/results/kmeans_linear_2026-09-18/: kmeans taxi 4M x 11 1216 to 100
 #: ms, Istella-S 2M x 220 14167 to 460 ms with 3081, digests equal to main's
 #: and to the H100 record's on every cell, the sabotage arm divergent on 75
-#: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
-#: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
-#: it off. Apple and AMD are untimed and keep the atomic reductions.
+#: of 90 fitting cells). Apple and AMD are untimed and keep the atomic reductions.
 #: fam-cluster (2026-10-04), IDENTICAL: the row-block accumulator on the AMD
 #: column too. The kernels are vendor neutral (plain Int32 loads and stores,
 #: no shared memory, no atomics) and the Int32 totals are the atomic arms'
 #: totals by the associativity argument in `reduce_by_key.mojo`, so no bit
-#: moves. `-D MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF=1` restores the atomic
-#: reductions on AMD.
+#: moves.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at cf541811a6.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_BLOCK_ACC_AMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_AMD
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
-comptime KMEANS_BLOCK_ACC = (
-    not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
-    and (
-        is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]()
-        or TARGET_COLUMN == COLUMN_NVIDIA
-        or IDN_KMEANS_BLOCK_ACC_AMD
-    )
-)
+# TOMBSTONE: MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC (unmeasured opt-in force-on arm) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at d018a447ba.
+# Restore: git apply experiments/removed/MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_KMEANS_BLOCK_ACC_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 5f12862454.
+# Restore: git apply experiments/removed/MOJOLEARN_KMEANS_BLOCK_ACC_OFF.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_BLOCK_ACC = TARGET_COLUMN == COLUMN_NVIDIA or IDN_KMEANS_BLOCK_ACC_AMD
 #: fam-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: the
 #: fold of the block tables STORES each output cell instead of adding into a
 #: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
-#: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
-#: restores the two zero launches and the adding fold.
-comptime IDN_KMEANS_FOLD_STORE = (
-    KMEANS_BLOCK_ACC
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: `total` in Int32, so no bit moves.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at dc02ea5629.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_FOLD_STORE = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
 #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
-#: iteration to read the shift scalar. `kmeans_conv_step_kernel` compares the
+#: iteration to read the shift scalar. The executor loop's criterion op
+#: (`loop_below_kernel`, autograd/program_loop_device.mojo; formerly
+#: `kmeans_conv_step_kernel`) compares the
 #: device shift with the tolerance and sets a device flag; the two heavy
 #: kernels of an iteration (the fused assignment, `n x k x d`, and the
 #: row-block accumulate, `n x d`) and the centroid copy-back return at once
@@ -195,21 +190,14 @@ comptime IDN_KMEANS_FOLD_STORE = (
 #: `n_iter` are the per-iteration loop's, bit for bit. The loop keeps the
 #: per-iteration form when `inertia_check` is on, when the identity trace is
 #: recording, and when the assignment is split across devices.
-#: `-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF=1` restores the per-iteration
-#: drain everywhere.
-comptime IDN_KMEANS_DEVICE_CONV = (
-    KMEANS_BLOCK_ACC
-    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-#: Iterations enqueued per flag read: ONE int sweep define (lane
-#: classical-fixes, 2026-10-07), `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK=1|2|4|16|32`,
-#: default 8 when absent. It replaces the five mutually overriding defines
-#: `MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1|_2|_4|_16|_32` (refused in
-#: core/six_lane_experiment_guards.mojo); each value keeps that arm's loop.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF (old path, EXP:2274 REFACTORED default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at ea62796835.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_DEVICE_CONV = KMEANS_BLOCK_ACC and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: Iterations enqueued per flag read: 8. The int sweep define of lane
+#: classical-fixes (2026-10-07; it replaced five mutually overriding chunk
+#: defines) is gone: see the tombstone below.
 #: Cost reasoning: a chunk trades one host flag read (a sync) per chunk
 #: against up to chunk-1 near-empty launches enqueued past convergence; it
 #: does not depend on the data shape. No bit depends on the chunk (labels,
@@ -224,7 +212,9 @@ comptime IDN_KMEANS_DEVICE_CONV = (
 # candidate0.887/1.077/1.517 ms vs1.086/1.272/1.503 ms on
 # 100000x32,100001x33,65537x17,k32. One warmup/score; default8 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime KMEANS_CONV_CHUNK = get_defined_int["MOJOLEARN_IDN_KMEANS_CONV_CHUNK", 8]()
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_CONV_CHUNK (int sweep arm, EXP:1571 RETIRED; A08 mixed on NVIDIA, default 8 kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 9fb488c850.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_CONV_CHUNK.patch; record in docs/TOMBSTONES.md.
+comptime KMEANS_CONV_CHUNK = 8
 
 
 def kmeans_shift_threshold(tol: Float64) -> Float32:
@@ -244,6 +234,12 @@ def kmeans_shift_threshold(tol: Float64) -> Float32:
         t = bitcast[DType.float32](bitcast[DType.uint32](t) + UInt32(1))
     return t
 
+
+#: k-means stage timer: `-D MOJOLEARN_KMEANS_STAGES` builds synchronize and
+#: print each stage; default builds compile it out. Before (lane
+#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: getenv per fit and per scalable k-means++ init.
+comptime KMEANS_STAGES_ON = is_defined["MOJOLEARN_KMEANS_STAGES"]()
 
 #: The reach control for 3080: the row-block arm with the first row of every
 #: block dropped. NEVER a shipping define.
@@ -295,7 +291,7 @@ struct FitResult(Copyable, ImplicitlyCopyable, Movable):
 
 
 def _km_stage(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
-    """MOJOLEARN_KMEANS_STAGES=1 (a diagnostic, lane cluster-apple2): drain
+    """`-D MOJOLEARN_KMEANS_STAGES` (a diagnostic, lane cluster-apple2): drain
     and print the wall time since the last stage. Off, it does nothing, so
     the default program is unchanged."""
     if not on:
@@ -402,17 +398,16 @@ def init_random(
 #: k - 1 picks each synchronized and read the costs back (ivf's 1024-list
 #: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
 #: draws and the same first-strict-minimum pick on the device.
-#: -D MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY=1 restores the Apple-only gate.
 comptime KMEANS_FAST_PP_NOSYNC = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and (
-        has_apple_gpu_accelerator()
-        or (
-            (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-            and not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"]()
-        )
+    # TOMBSTONE: MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY (unmeasured opt-in Apple-only gate) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 879a63ceab.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY.patch; record in docs/TOMBSTONES.md.
+    (
+        TARGET_HAS_APPLE_GPU
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or TARGET_COLUMN == COLUMN_AMD
     )
-    and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at af1f49acbe.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF.patch; record in docs/TOMBSTONES.md.
 )
 """FAST on Apple: the greedy k-means++ loop draws every pick's uniforms up
 front and chooses the best candidate on the device, so the `k - 1` picks
@@ -487,6 +482,7 @@ def pp_copy_best_kernel(
 
 
 def kmeans_plus_plus(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -542,7 +538,7 @@ def kmeans_plus_plus(
         ctx, centroids, centroid_norm, 1, n_features, params.metric
     )
     min_cluster_and_distance_compute(
-        ctx,
+        dplan, ctx,
         x,
         x_norm,
         centroids,
@@ -799,6 +795,37 @@ def _assign_to_candidates(
     n_features: Int,
     cand_count: Int,
 ) raises:
+    """Reads the device plan once and runs the planned overload below."""
+    _assign_to_candidates(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        x_norm,
+        cand,
+        dist_buf,
+        labels,
+        min_dist,
+        params,
+        n_samples,
+        n_features,
+        cand_count,
+    )
+
+
+def _assign_to_candidates(
+    dplan: DevicePlan,
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut cand: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    cand_count: Int,
+) raises:
     """One `minClusterDistanceCompute` round against the candidate set.
 
     Theirs (`detail/kmeans.cuh:629-640`, `:664-676`) computes distances only;
@@ -815,7 +842,7 @@ def _assign_to_candidates(
         ctx, cand, cand_norm, cand_count, n_features, params.metric
     )
     min_cluster_and_distance_compute(
-        ctx,
+        dplan, ctx,
         x,
         x_norm,
         cand,
@@ -836,41 +863,32 @@ def _assign_to_candidates(
 #: the running (min_dist, label) instead of reassigning every sample against
 #: every candidate so far (`fold_new_candidates_kernel`; a strict `<` keeps
 #: the earlier candidate on a tie, as the full argmin does).
-#: `-D MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF` reassigns in full.
 #: IDENTICAL on Apple takes it too (lane/apple-identical-neural,
 #: 2026-09-27): each (point, candidate) distance comes from the same
 #: `_assign_to_candidates` (its bits do not depend on which candidates share
 #: the launch), and the fold's strict `<` returns the full argmin's
-#: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
-#: full there.
+#: (value, lowest index).
 #: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
 #: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
 #: not depend on the launch's candidate set; strict `<` keeps the lowest
 #: index), so no bit moves; the eight rounds plus step 7 stop paying
-#: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
-#: reassigns in full there.
+#: `n * |C so far| * d` each.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 38518c77d5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
 comptime IDN_KMEANS_INCR_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
 comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
-    has_apple_gpu_accelerator() and (
-        (
-            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-            and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
-        )
-        or (
-            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and not (
-                is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
-                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-            )
-        )
-    )
+    # TOMBSTONE: MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF (old path beside the Apple FAST default, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3f8a07d350.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+    # TOMBSTONE: MOJOLEARN_KMEANS_ID_INCR_INIT_OFF (old path, no A/B row) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at c954d92f8b.
+    # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_ID_INCR_INIT_OFF.patch; record in docs/TOMBSTONES.md.
+    TARGET_HAS_APPLE_GPU
 )
 
 
@@ -879,14 +897,11 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
 #: scalar the reduction wrote, so the round drops its drain-and-read of psi
 #: (one of the round's drains; the selected COUNT still comes back, because
 #: it sizes the next allocation). Same Float32 psi, so the same flags.
-#: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
-comptime IDN_KMEANS_INIT_PSI_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 75ea427c34.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-10-cluster.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF (old path, EXP:1517 default kept) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at 3ee80555d0.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_KMEANS_INIT_PSI_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def fold_new_candidates_kernel(
@@ -907,6 +922,7 @@ def fold_new_candidates_kernel(
 
 
 def _assign_to_candidates_fast(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -927,7 +943,7 @@ def _assign_to_candidates_fast(
     assigned yet. Returns the new assigned count."""
     if assigned == 0:
         _assign_to_candidates(
-            ctx, x, x_norm, cand, dist_buf, labels, min_dist,
+            dplan, ctx, x, x_norm, cand, dist_buf, labels, min_dist,
             params, n_samples, n_features, cand_count,
         )
         return cand_count
@@ -938,7 +954,7 @@ def _assign_to_candidates_fast(
         assigned * n_features, n_new * n_features
     )
     _assign_to_candidates(
-        ctx, x, x_norm, sub, dist_buf, new_labels, new_dist,
+        dplan, ctx, x, x_norm, sub, dist_buf, new_labels, new_dist,
         params, n_samples, n_features, n_new,
     )
     ctx.enqueue_function[fold_new_candidates_kernel](
@@ -952,6 +968,7 @@ def _assign_to_candidates_fast(
 
 
 def init_scalable_kmeans_plus_plus(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut x_norm: DeviceBuffer[DType.float32],
@@ -1033,7 +1050,7 @@ def init_scalable_kmeans_plus_plus(
 
     var k = params.n_clusters
     var d = n_features
-    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1"
+    var km_on = KMEANS_STAGES_ON
     var km_t = Int(perf_counter_ns())
 
     # <<< Step-1 >>> (`:585-609`): one uniform point, flagged so no round
@@ -1083,7 +1100,7 @@ def init_scalable_kmeans_plus_plus(
     # scalar comes to the host exactly as their `clusterCost.value(stream)`
     # does.
     _assign_to_candidates(
-        ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+        dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
         params, n_samples, d, cand_count,
     )
     _sum_device(
@@ -1119,13 +1136,13 @@ def init_scalable_kmeans_plus_plus(
     for _iter in range(niter):
         comptime if KMEANS_FAST_INCR_INIT:
             incr_assigned = _assign_to_candidates_fast(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 incr_labels, incr_dist, params, n_samples, d,
                 incr_assigned, cand_count,
             )
         else:
             _assign_to_candidates(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 params, n_samples, d, cand_count,
             )
         _sum_device(
@@ -1265,13 +1282,13 @@ def init_scalable_kmeans_plus_plus(
         )
         comptime if KMEANS_FAST_INCR_INIT:
             incr_assigned = _assign_to_candidates_fast(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 incr_labels, incr_dist, params, n_samples, d,
                 incr_assigned, cand_count,
             )
         else:
             _assign_to_candidates(
-                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                dplan, ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
                 params, n_samples, d, cand_count,
             )
         ctx.enqueue_function[count_labels_kernel](
@@ -1310,7 +1327,7 @@ def init_scalable_kmeans_plus_plus(
         enqueue_row_norms(ctx, cand_norm_rows, cand_buf, cand_count, d)
         ctx.synchronize()
         kmeans_plus_plus(
-            ctx,
+            dplan, ctx,
             cand_buf,
             cand_norm_rows,
             centroids,
@@ -1358,7 +1375,7 @@ def init_scalable_kmeans_plus_plus(
         if params.recluster_max_iter > 0:
             inner.max_iter = params.recluster_max_iter
         var inner_res = kmeans_fit_main_traced(
-            ctx,
+            dplan, ctx,
             cand_buf,
             weight,
             centroids,
@@ -1454,7 +1471,7 @@ def kmeans_fit_main(
 
 comptime KMEANS_LAZY_SHIFT = (
     (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
         # lane gap-ivf (2026-10-08): FAST on NVIDIA and AMD too (FAST is judged on
         # speed and quality only; a fit to max_iter is unchanged), and IDENTICAL
         # on every column with the host restatement following
@@ -1468,19 +1485,19 @@ comptime KMEANS_LAZY_SHIFT = (
         )
         or KMEANS_LAZY_SHIFT_IDN
     )
-    and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF (old path, EXP:352 KEPT FAST+Apple default) deleted 2026-11-15 by lane/expdel2-10-cluster; code recoverable at f1d1f0f0b6.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF.patch; record in docs/TOMBSTONES.md.
 )
 #: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
 #: IVF-family rows faster, recall_at_10 identical. ACCEPT;
-#: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
 #: SCOPE (2026-10-04): a fit takes the lazy read only when its caller sets
 #: `KMeansParams.lazy_shift` (IVF's coarse quantizer in ivf_flat_build.mojo,
 #: its k-means|| recluster through the propagated params, and IVF-PQ's
 #: subspace codebooks in x_ann/ivf_pq_device.mojo); every other caller keeps
 #: the per-iteration read.
 """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
-rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
+rollback switch deleted 2026-11-15): the Lloyd loop reads the centroid shift
 back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
 max_iter, instead of every iteration (one synchronize and one host round
 trip per iteration: 20 waits per IVF coarse fit, per k-means|| recluster and
@@ -1496,7 +1513,199 @@ fits without the inertia check, with `params.lazy_shift` set, only."""
 comptime KMEANS_LAZY_SHIFT_EVERY = KMEANS_LAZY_EVERY  # shared with the host restatement
 
 
+struct LloydStep(LoopStep, Movable):
+    """One Lloyd iteration as a step op of the executor's bounded loop
+    (`autograd/program_loop_device.mojo`), `IDN_KMEANS_DEVICE_CONV` form:
+    centroid norms, the gated fused assignment, the gated row-block
+    accumulations of the sums and the weights, the centroid finalize, the
+    shift reduction, the gated copy back, and the "shift below tol" criterion.
+    Every gated kernel returns at once when the loop's done word is set, so
+    iterations enqueued past convergence leave labels, centroids, inertia and
+    `n_iter` as the converging iteration left them. The fields are handle
+    copies (`DeviceBuffer.copy()` shares the memory the fit owns)."""
+    var x: DeviceBuffer[DType.float32]
+    var x_norm: DeviceBuffer[DType.float32]
+    var cur_centroids: DeviceBuffer[DType.float32]
+    var centroid_norm: DeviceBuffer[DType.float32]
+    var labels: DeviceBuffer[DType.uint32]
+    var min_dist: DeviceBuffer[DType.float32]
+    var sums_i32: DeviceBuffer[DType.int32]
+    var acc_table: DeviceBuffer[DType.int32]
+    var weights: DeviceBuffer[DType.float32]
+    var weight_i32: DeviceBuffer[DType.int32]
+    var acc_table_w: DeviceBuffer[DType.int32]
+    var new_centroids: DeviceBuffer[DType.float32]
+    var partials: DeviceBuffer[DType.float32]
+    var d_shift: DeviceBuffer[DType.float32]
+    var n_samples: Int
+    var n_features: Int
+    var n_clusters: Int
+    var metric: Int
+    var sum_scale: Float32
+    var weight_scale: Float32
+    var conv_thresh: Float32
+
+    def __init__(
+        out self,
+        x: DeviceBuffer[DType.float32],
+        x_norm: DeviceBuffer[DType.float32],
+        cur_centroids: DeviceBuffer[DType.float32],
+        centroid_norm: DeviceBuffer[DType.float32],
+        labels: DeviceBuffer[DType.uint32],
+        min_dist: DeviceBuffer[DType.float32],
+        sums_i32: DeviceBuffer[DType.int32],
+        acc_table: DeviceBuffer[DType.int32],
+        weights: DeviceBuffer[DType.float32],
+        weight_i32: DeviceBuffer[DType.int32],
+        acc_table_w: DeviceBuffer[DType.int32],
+        new_centroids: DeviceBuffer[DType.float32],
+        partials: DeviceBuffer[DType.float32],
+        d_shift: DeviceBuffer[DType.float32],
+        n_samples: Int,
+        n_features: Int,
+        n_clusters: Int,
+        metric: Int,
+        sum_scale: Float32,
+        weight_scale: Float32,
+        conv_thresh: Float32,
+    ):
+        self.x = x.copy()
+        self.x_norm = x_norm.copy()
+        self.cur_centroids = cur_centroids.copy()
+        self.centroid_norm = centroid_norm.copy()
+        self.labels = labels.copy()
+        self.min_dist = min_dist.copy()
+        self.sums_i32 = sums_i32.copy()
+        self.acc_table = acc_table.copy()
+        self.weights = weights.copy()
+        self.weight_i32 = weight_i32.copy()
+        self.acc_table_w = acc_table_w.copy()
+        self.new_centroids = new_centroids.copy()
+        self.partials = partials.copy()
+        self.d_shift = d_shift.copy()
+        self.n_samples = n_samples
+        self.n_features = n_features
+        self.n_clusters = n_clusters
+        self.metric = metric
+        self.sum_scale = sum_scale
+        self.weight_scale = weight_scale
+        self.conv_thresh = conv_thresh
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var cd = self.n_clusters * self.n_features
+        comptime if not IDN_KMEANS_FOLD_STORE:
+            ctx.enqueue_function[zero_i32_kernel](
+                self.sums_i32.unsafe_ptr(),
+                Int32(cd),
+                grid_dim=((cd + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_function[zero_i32_kernel](
+                self.weight_i32.unsafe_ptr(),
+                Int32(self.n_clusters),
+                grid_dim=((self.n_clusters + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            loop_lap(ctx, timers, "zero_accumulators")
+        compute_centroid_norms(
+            ctx, self.cur_centroids, self.centroid_norm, self.n_clusters,
+            self.n_features, self.metric,
+        )
+        loop_lap(ctx, timers, "centroid_norms")
+        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+        # row in docs/apple-fast/EXPERIMENTS.md.
+        min_cluster_and_distance_compute_gated(
+            ctx, registers.words, self.x, self.x_norm, self.cur_centroids,
+            self.centroid_norm, self.labels, self.min_dist, self.n_samples,
+            self.n_features, self.n_clusters, self.metric,
+        )
+        loop_lap(ctx, timers, "assign")
+        launch_accumulate_centroid_sums_blocked_gated[
+            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+        ](
+            ctx, registers.words, self.sums_i32, self.acc_table, self.x, self.labels,
+            self.weights, self.n_samples, self.n_features, self.n_clusters,
+            self.sum_scale,
+        )
+        loop_lap(ctx, timers, "accumulate_sums")
+        launch_accumulate_weight_per_cluster_blocked_gated[
+            IDN_KMEANS_FOLD_STORE
+        ](
+            ctx, registers.words, self.weight_i32, self.acc_table_w, self.labels,
+            self.weights, self.n_samples, self.n_clusters, self.weight_scale,
+        )
+        loop_lap(ctx, timers, "accumulate_weights")
+        ctx.enqueue_function[finalize_centroids_kernel](
+            self.new_centroids.unsafe_ptr(),
+            self.cur_centroids.unsafe_ptr(),
+            self.sums_i32.unsafe_ptr(),
+            self.weight_i32.unsafe_ptr(),
+            Int32(self.n_clusters),
+            Int32(self.n_features),
+            self.sum_scale,
+            self.weight_scale,
+            grid_dim=((cd + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        loop_lap(ctx, timers, "finalize")
+        _sum_device(
+            ctx, self.cur_centroids, self.new_centroids, self.partials,
+            self.d_shift, cd, SUM_MODE_SQDIFF,
+        )
+        loop_lap(ctx, timers, "shift")
+        # The copy back reads the flag BEFORE this iteration's test sets it,
+        # so the converging iteration still copies, as the host loop does.
+        ctx.enqueue_function[copy_f32_gated_kernel](
+            registers.words.unsafe_ptr(),
+            self.cur_centroids.unsafe_ptr(),
+            self.new_centroids.unsafe_ptr(),
+            Int32(cd),
+            grid_dim=((cd + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        loop_lap(ctx, timers, "copy_back")
+        loop_criterion_below(ctx, registers, self.d_shift, self.conv_thresh, it)
+        loop_lap(ctx, timers, "criterion")
+
+
 def kmeans_fit_main_traced(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    sum_scale: Float32,
+    weight_scale: Float32,
+    mut trace: IdentityTrace,
+    tag_prefix: String,
+) raises -> FitResult:
+    """Reads the device plan once and runs the planned overload below."""
+    return kmeans_fit_main_traced(
+        kmeans_device_plan(),
+        ctx,
+        x,
+        weights,
+        centroids,
+        labels,
+        params,
+        n_samples,
+        n_features,
+        sum_scale,
+        weight_scale,
+        trace,
+        tag_prefix,
+    )
+
+
+def kmeans_fit_main_traced(
+    dplan: DevicePlan,
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
@@ -1574,16 +1783,17 @@ def kmeans_fit_main_traced(
     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
-    # `IDN_KMEANS_DEVICE_CONV`: [0] the done flag, [1] the iteration that
-    # converged. Zeroed at the start of every restart.
-    var d_conv = ctx.enqueue_create_buffer[DType.int32](2)
-    var h_conv = ctx.enqueue_create_host_buffer[DType.int32](2)
+    # `IDN_KMEANS_DEVICE_CONV`: the executor loop's register block
+    # (autograd/program_loop.mojo): [LOOP_DONE] the done flag the gated step
+    # kernels read, [LOOP_STOP_ITER] the iteration that converged. Zeroed by
+    # `bounded_device_loop` at the start of every restart.
+    var registers = LoopRegisters(ctx)
     var dev_conv = False
     comptime if IDN_KMEANS_DEVICE_CONV:
         dev_conv = (
             (not params.inertia_check)
             and (not trace.enabled)
-            and assignment_device_count() == 1
+            and assignment_device_count(dplan) == 1
         )
     var conv_thresh = kmeans_shift_threshold(params.tol)
     ctx.synchronize()
@@ -1618,7 +1828,7 @@ def kmeans_fit_main_traced(
     if params.init == INIT_ARRAY:
         n_init = 1
 
-    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1" and not tag_prefix.endswith("init.par.")
+    var km_on = KMEANS_STAGES_ON and not tag_prefix.endswith("init.par.")
     var km_t = Int(perf_counter_ns())
     _km_stage(ctx, km_on, km_t, "fit.setup")
     for _seed_iter in range(n_init):
@@ -1641,7 +1851,7 @@ def kmeans_fit_main_traced(
             # the classic sequential variant, anything else -- including the
             # DEFAULT 2.0 -- picks scalable k-means||.
             init_scalable_kmeans_plus_plus(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -1658,7 +1868,7 @@ def kmeans_fit_main_traced(
             )
         else:
             kmeans_plus_plus(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -1689,104 +1899,29 @@ def kmeans_fit_main_traced(
         var it = 1
         comptime if IDN_KMEANS_DEVICE_CONV:
             if dev_conv:
-                ctx.enqueue_function[zero_i32_kernel](
-                    d_conv.unsafe_ptr(),
-                    Int32(2),
-                    grid_dim=(1, 1, 1),
-                    block_dim=(256, 1, 1),
+                # Lane fix-d3-executor-loops (2026-11-08): the Lloyd iterations
+                # run as the executor's bounded loop over one step op
+                # (`LloydStep`: the same kernels, arguments and order as the
+                # hand-written chunk loop it replaces, so no bit moves), with
+                # one register-block read per KMEANS_CONV_CHUNK iterations.
+                # TOMBSTONE: kmeans-lloyd-chunk-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+                # Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+                var step = LloydStep(
+                    x, x_norm, cur_centroids, centroid_norm, labels, min_dist,
+                    sums_i32, acc_table, weights, weight_i32, acc_table_w,
+                    new_centroids, partials, d_shift, n_samples, n_features,
+                    n_clusters, params.metric, sum_scale, weight_scale,
+                    conv_thresh,
                 )
-                var conv_seen = False
-                while it <= params.max_iter and not conv_seen:
-                    var chunk_end = it + KMEANS_CONV_CHUNK - 1
-                    if chunk_end > params.max_iter:
-                        chunk_end = params.max_iter
-                    while it <= chunk_end:
-                        comptime if not IDN_KMEANS_FOLD_STORE:
-                            ctx.enqueue_function[zero_i32_kernel](
-                                sums_i32.unsafe_ptr(),
-                                Int32(cd),
-                                grid_dim=((cd + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
-                            ctx.enqueue_function[zero_i32_kernel](
-                                weight_i32.unsafe_ptr(),
-                                Int32(n_clusters),
-                                grid_dim=((n_clusters + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
-                        compute_centroid_norms(
-                            ctx, cur_centroids, centroid_norm, n_clusters,
-                            n_features, params.metric,
-                        )
-                        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
-                        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
-                        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
-                        # row in docs/apple-fast/EXPERIMENTS.md.
-                        min_cluster_and_distance_compute_gated(
-                            ctx, d_conv, x, x_norm, cur_centroids,
-                            centroid_norm, labels, min_dist, n_samples,
-                            n_features, n_clusters, params.metric,
-                        )
-                        launch_accumulate_centroid_sums_blocked_gated[
-                            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
-                        ](
-                            ctx, d_conv, sums_i32, acc_table, x, labels,
-                            weights, n_samples, n_features, n_clusters,
-                            sum_scale,
-                        )
-                        launch_accumulate_weight_per_cluster_blocked_gated[
-                            IDN_KMEANS_FOLD_STORE
-                        ](
-                            ctx, d_conv, weight_i32, acc_table_w, labels,
-                            weights, n_samples, n_clusters, weight_scale,
-                        )
-                        ctx.enqueue_function[finalize_centroids_kernel](
-                            new_centroids.unsafe_ptr(),
-                            cur_centroids.unsafe_ptr(),
-                            sums_i32.unsafe_ptr(),
-                            weight_i32.unsafe_ptr(),
-                            Int32(n_clusters),
-                            Int32(n_features),
-                            sum_scale,
-                            weight_scale,
-                            grid_dim=((cd + 255) // 256, 1, 1),
-                            block_dim=(256, 1, 1),
-                        )
-                        _sum_device(
-                            ctx, cur_centroids, new_centroids, partials,
-                            d_shift, cd, SUM_MODE_SQDIFF,
-                        )
-                        # The copy back reads the flag BEFORE this
-                        # iteration's test sets it, so the converging
-                        # iteration still copies, as the host loop does.
-                        ctx.enqueue_function[copy_f32_gated_kernel](
-                            d_conv.unsafe_ptr(),
-                            cur_centroids.unsafe_ptr(),
-                            new_centroids.unsafe_ptr(),
-                            Int32(cd),
-                            grid_dim=((cd + 255) // 256, 1, 1),
-                            block_dim=(256, 1, 1),
-                        )
-                        ctx.enqueue_function[kmeans_conv_step_kernel](
-                            d_conv.unsafe_ptr(),
-                            d_shift.unsafe_ptr(),
-                            conv_thresh,
-                            Int32(it),
-                            grid_dim=(1, 1, 1),
-                            block_dim=(1, 1, 1),
-                        )
-                        it += 1
-                    # ONE read per chunk.
-                    ctx.enqueue_copy(
-                        dst_ptr=h_conv.unsafe_ptr(), src_buf=d_conv
-                    )
-                    ctx.synchronize()
-                    if Int(h_conv.unsafe_ptr().unsafe_load(0)) != 0:
-                        conv_seen = True
-                        n_current_iter = Int(
-                            h_conv.unsafe_ptr().unsafe_load(1)
-                        )
-                        it = n_current_iter
+                var timers = LoopTimers(restart_tag + "kmeans.lloyd")
+                var outcome = bounded_device_loop(
+                    ctx, step, registers, it, params.max_iter,
+                    KMEANS_CONV_CHUNK, timers,
+                )
+                timers.report()
+                it = outcome.next_iteration
+                if outcome.converged:
+                    n_current_iter = outcome.stop_iteration
         while (not dev_conv) and it <= params.max_iter:
             comptime if not IDN_KMEANS_FOLD_STORE:
                 ctx.enqueue_function[zero_i32_kernel](
@@ -1815,7 +1950,7 @@ def kmeans_fit_main_traced(
             # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
             # row in docs/apple-fast/EXPERIMENTS.md.
             min_cluster_and_distance_compute(
-                ctx,
+                dplan, ctx,
                 x,
                 x_norm,
                 cur_centroids,
@@ -2058,7 +2193,7 @@ def kmeans_fit_main_traced(
             params.metric,
         )
         min_cluster_and_distance_compute(
-            ctx,
+            dplan, ctx,
             x,
             x_norm,
             cur_centroids,
@@ -2105,7 +2240,7 @@ def kmeans_fit_main_traced(
     # Launches hold raw pointers: keep the tables alive past the last sync.
     _ = acc_table^
     _ = acc_table_w^
-    _ = d_conv^
+    _ = registers^
     if trace.enabled:
         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)

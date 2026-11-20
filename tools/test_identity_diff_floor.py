@@ -161,22 +161,39 @@ def _comparable_train_cells(base, columns):
     return len(keys)
 
 
-@pytest.mark.parametrize("record,columns,require,want_rc,divergent", [
-    # the one recorded DIVERGENT cell: kmeans-sqrt/wide, where the H100 inertia stands alone
+def _live_divergent(base, columns, cells):
+    """The recorded DIVERGENT cells the harness still compares: a cell of a lane whose LANE_REVISIONS entry the
+    record predates is dropped from the diff (stale_revision_lanes), so it no longer counts."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("identity_break_floor_test2", IB)
+    ib = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ib)
+    stale = set()
+    for c in columns:
+        with open(os.path.join(base, c)) as fh:
+            stale |= set(ib.stale_revision_lanes(json.load(fh)))
+    return [k for k in cells if k.split("/")[0] not in stale]
+
+
+@pytest.mark.parametrize("record,columns,require,divergent_cells", [
+    # the one recorded DIVERGENT cell: kmeans-sqrt/wide, where the H100 inertia stands alone; it counts while the
+    # record's kmeans-sqrt revision is the harness's (a revision bump drops the lane from the diff by design)
     ("2026-09-14_166-lanes",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 1, 1),
+     "3", ("kmeans-sqrt/wide",)),
     ("2026-09-14_kmeans-sqrt-fix",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 0, 0),
+     "3", ()),
 ])
-def test_no_committed_record_moved(record, columns, require, want_rc, divergent):
+def test_no_committed_record_moved(record, columns, require, divergent_cells):
     """NO COMMITTED CELL MOVED. The two comparisons the CPU identity gate
     makes over committed columns: every comparable train cell IDENTICAL but
-    the recorded DIVERGENT ones."""
+    the recorded DIVERGENT ones (test_a_real_divergence_still_exits_one keeps the DIVERGENT exit)."""
     base = os.path.join(ROOT, "bench", "results", "identity_break", record)
     if not os.path.isdir(base):
         pytest.skip(f"{base} is not in this checkout")
+    divergent = len(_live_divergent(base, columns, divergent_cells))
+    want_rc = 1 if divergent else 0
     identical = _comparable_train_cells(base, columns) - divergent
     token = ("summary: DIVERGENT=%d, IDENTICAL=%d" % (divergent, identical) if divergent
              else "summary: IDENTICAL=%d" % identical)

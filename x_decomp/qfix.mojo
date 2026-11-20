@@ -22,7 +22,7 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          max_rel_singular_value_error and reconstruction unchanged), taxi
          48.54 -> 54.96 ms (+13.2%), istella +0.3%. REVERT: the old route is
          the default again.
-  bit 2  TSVD_QFIX  (`-D MOJOLEARN_TSVD_QOLD`)
+  bit 2  TSVD_QFIX
          TruncatedSVD 'covariance_eigh' / 'jacobi' on a tall matrix (n <= 512
          columns): the components are the top right singular vectors of the
          TSQR R (the one-sided Jacobi of R), not the eigenvectors of the
@@ -35,7 +35,7 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          reconstruction unchanged 3.257e-3, 34.5 -> 42.2 ms. KEEP as the FAST
          default for quality (the old route was worse than the opponent);
          speed follow-up owed in lane apple-fast-s-linalg.
-  bit 4  LU_QFIX    (`-D MOJOLEARN_LU_QOLD`)
+  bit 4  LU_QFIX
          `solve` and `lu_solve(lu_factor(A), B)`: one step of iterative
          refinement, x += LU^-1 (B - A x), the residual folded in float-float
          (`lu_resid_ff_kernel`, below) so it is accurate past float32.
@@ -49,10 +49,9 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          and 788.6 -> 896.3 ms (+13.7%). KEEP as the FAST default for
          quality.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import stack_allocation
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -63,8 +62,12 @@ from x_decomp.device import _down, _p, _up, xd_ctx
 # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: svd's TSQR route keeping every direction above 2^-40 s_0 (was 2^-20) with a Householder QR of U_R; svd taxi 48.54 -> 54.96 ms (+13.2%), istella +0.3%, no quality gain (rab5-svd).
 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
-comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSVD_QOLD"]()
-comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_LU_QOLD"]()
+# TOMBSTONE: MOJOLEARN_TSVD_QOLD (old path: the float32 Gram eigenvectors; EXP:1287 QUALITY-FIX KEPT as the FAST default) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 9914fb0c3e.
+# Restore: git apply experiments/removed/MOJOLEARN_TSVD_QOLD.patch; record in docs/TOMBSTONES.md.
+comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+# TOMBSTONE: MOJOLEARN_LU_QOLD (old path: no refinement step; EXP:1283 QUALITY-FIX KEPT as the FAST default) deleted 2026-11-15 by lane/expdel2-17-decomposition; code recoverable at 5a5cbac00a.
+# Restore: git apply experiments/removed/MOJOLEARN_LU_QOLD.patch; record in docs/TOMBSTONES.md.
+comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 #: threads per residual block (one block per row and QF_RT right-hand sides)
 comptime QF_TPB = 128

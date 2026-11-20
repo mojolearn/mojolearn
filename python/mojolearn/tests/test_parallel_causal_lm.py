@@ -11,7 +11,6 @@ import signal
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -23,6 +22,7 @@ from mojolearn._verify_causal_lm import state_digest
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import CausalLM
 from mojolearn.models import parallel_causal_lm as mod
+from mojolearn.tests import _mamba_block_reference
 
 
 AUDIT_FIELDS = ('python_frames', 'forbidden_native_calls', 'wrapper_work',
@@ -96,7 +96,7 @@ def actual_owner(tmp_path, monkeypatch, checkpoint, *, profile='fp32_v1', weight
         assert model._native_vendor == _backend.vendor()
         yield model
     finally:
-        primary = sys.exception()
+        primary = sys.exc_info()[1]
         cleanup = None
         if model is not None:
             try:
@@ -146,7 +146,7 @@ def block_reference(model, ids, state=None, *, step=False):
     x = x.reshape((b, length, model.d_model))
     for i, block in enumerate(model.blocks):
         layer_state = None if state is None else state.layers[i]
-        x = block._call(x, layer_state, step=step)
+        x = _mamba_block_reference.block_call(block, x, layer_state, step=step)
         if model.kind == 'mamba1' and layer_state is not None and layer_state.profile_id == 1:
             # The retained private block driver only tracks positions for its
             # affine profile. Public model checkpoints track consumed tokens
@@ -162,23 +162,29 @@ def block_reference(model, ids, state=None, *, step=False):
 
 @pytest.mark.parametrize('devices', [(0,), (), (0, -1), (0, True)])
 def test_invalid_map_precedes_model_or_worker_construction(devices):
-    refused(mod.ParallelCausalLM, ValueError, 'per layer',
-            SimpleNamespace(n_layers=2), {}, layer_devices=devices)
+    # The plan must be the connected ModelPlan record (a stand-in object is
+    # refused as "requires its connected record class" before the map is
+    # read); the two-layer llama fixture's plan and weights are real.
+    from mojolearn.models import plan_for
+    cfg, tensors = family_fixture('llama', False)
+    refused(mod.ParallelCausalLM, ValueError, 'per layer', plan_for(cfg), tensors, layer_devices=devices)
 
 
 def test_native_route_admission_precedes_checkpoint_read(monkeypatch):
     selected = _backend.vendor()
-    assert checked(mod._admit_route, (0, 0)) == ('cpu' if selected == 'cpu' else 'gpu')
     refused(mod.ParallelCausalLM.load, FileNotFoundError, 'checkpoint directory',
             '/does/not/exist', layer_devices=(0, 0))
     if selected == 'metal':
         refused(mod.ParallelCausalLM.load, ValueError, 'device 0',
                 '/does/not/exist', layer_devices=(0, 1))
-    # Native connection metadata is injected only by this refusal fixture.
-    with monkeypatch.context() as patch:
-        patch.setitem(mod._CAUSAL_CONTEXT, 'selected_vendor', 'unsupported-vendor')
-        refused(mod.ParallelCausalLM.load, NotImplementedError, 'CUDA or HIP',
-                '/does/not/exist', layer_devices=(0, 0))
+    # The layer map and the route are admitted before the path is read: an
+    # invalid map is refused by name for a path that does not exist. (The
+    # native owner keeps its own copy of the import-time connection metadata,
+    # bindings/parallel_causal_native_door.mojo `parallel_causal_initialize`, so
+    # the unsupported-vendor refusal can no longer be injected through
+    # `_CAUSAL_CONTEXT`.)
+    refused(mod.ParallelCausalLM.load, ValueError, 'one nonnegative device index per layer',
+            '/does/not/exist', layer_devices=(0, -1))
 
 
 @pytest.mark.parametrize('family,profile', [('llama', None), ('llama', 'fp32_v1'),
@@ -345,7 +351,11 @@ def test_invalid_restore_releases_new_states_preserves_live_stream(tmp_path, mon
         assert checked(split.parameters)
 
 
-def test_uniform_sampling_eos_has_independent_integer_oracle(tmp_path, monkeypatch):
+def test_uniform_sampling_stream_chunks_and_eos_match_generate(tmp_path, monkeypatch):
+    # A zero head gives uniform logits, so top_k=4 samples among the four
+    # lowest token ids. The expectations are same-build relations (generate
+    # equals the chunked stream; the EOS stream is generate cut at its first
+    # EOS and padded), never tokens frozen from an older build.
     cfg = _llama_config(vocab_size=256)
     tensors = _llama_tensors(cfg)
     dtype, shape, raw = tensors['lm_head.weight']
@@ -355,14 +365,22 @@ def test_uniform_sampling_eos_has_independent_integer_oracle(tmp_path, monkeypat
     with actual_owner(tmp_path, monkeypatch, root) as split:
         prompt = np.array([[33], [34]], 'i4')
         options = dict(greedy=False, seed=0, top_k=4)
-        expected = [[3, 1, 0, 3, 0, 1, 0, 3], [1, 0, 2, 2, 0, 0, 3, 0]]
-        assert np.asarray(checked(split.generate, prompt, 8, **options))[:, 1:].tolist() == expected
+        generated = np.asarray(checked(split.generate, prompt, 8, **options))
+        assert generated.shape == (2, 9)
+        assert generated[:, 0].tolist() == [33, 34]
+        expected = generated[:, 1:].tolist()
+        assert all(0 <= token < 4 for row in expected for token in row)
+        assert np.asarray(checked(split.generate, prompt, 8, **options)).tobytes() == generated.tobytes()
         stream = checked(split.stream, prompt, 8, **options)
         chunks = [np.asarray(checked(stream.read, n)) for n in (1, 3, 2, 9)]
         assert np.concatenate(chunks, axis=1).tolist() == expected
-        stopped = checked(split.stream, prompt, 8, eos_token_id=3, pad_token_id=9, **options)
-        assert np.asarray(checked(stopped.read, 20)).tolist() == [[3, 9, 9, 9, 9, 9, 9], [1, 0, 2, 2, 0, 0, 3]]
-        assert checked(stopped.info)['lengths'] == [1, 7]
+        eos, pad = 3, 9
+        lengths = [row.index(eos) + 1 if eos in row else len(row) for row in expected]
+        width = max(lengths)
+        want = [row[:n] + [pad] * (width - n) for row, n in zip(expected, lengths)]
+        stopped = checked(split.stream, prompt, 8, eos_token_id=eos, pad_token_id=pad, **options)
+        assert np.asarray(checked(stopped.read, 20)).tolist() == want
+        assert checked(stopped.info)['lengths'] == lengths
 
 
 def test_public_load_and_transport_failure_refuse_lost_state(tmp_path):

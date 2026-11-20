@@ -47,22 +47,21 @@
 #   REPEATS=1               fits per cell (default 1). Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun.
 #                           NVIDIA == AMD is the identity rule; a second fit on
 #                           one box adds nothing the other vendor's column does not
-#   (default)               REUSE GOOD OLD RUNS (Andrew 2026-10-31): with no
-#                           LANES, SHARD, ONLY_CHANGED or FULL, only the lanes whose
-#                           source closure (tools/lane_select.py, this column's
-#                           backend) changed since the newest good evidence of THIS
-#                           device class are recorded: the admitted table's rows and
-#                           every admissible record under bench/results/identity_break
-#                           (retained/ included), <outdir> and
-#                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints
-#                           REUSED n / RECORD m, and NOTHING-CHANGED (exit 0) when no
-#                           lane is owed; decisions in <outdir>/<label>.reuse.json.
-#                           A depth-1 box tree is enough: the reuse step fetches
-#                           HEAD's history back to the oldest reuse commit from the
-#                           tree's own remote (MOJOLEARN_IDENTITY_REUSE_REMOTE,
-#                           default origin) and names the release tags it holds
-#   FULL=1                  record every lane of the scope; the ONLY way to
-#                           re-record lanes whose closure did not change
+#   (default)               EVERY LANE (Andrew 2026-11-05, decided 2026-11-09: reuse of old
+#                           runs is opt-in): with no LANES, SHARD, ONLY_CHANGED or REUSE, every
+#                           lane of the scope is recorded; nothing is reused
+#   REUSE=1                 opt into reuse: with no LANES, SHARD or ONLY_CHANGED, only the lanes
+#                           whose source closure (tools/lane_select.py, this column's backend)
+#                           changed since the newest good evidence of THIS device class are
+#                           recorded: the admitted table's rows and every admissible record under
+#                           bench/results/identity_break (retained/ included), <outdir> and
+#                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints REUSED n / RECORD m,
+#                           and NOTHING-CHANGED (exit 0) when no lane is owed; decisions in
+#                           <outdir>/<label>.reuse.json. A depth-1 box tree is enough: the reuse
+#                           step fetches HEAD's history back to the oldest reuse commit from the
+#                           tree's own remote (MOJOLEARN_IDENTITY_REUSE_REMOTE, default origin)
+#                           and names the release tags it holds. (FULL=1, the old way to record
+#                           every lane, is retired with the reuse default and refused.)
 #   ONLY_CHANGED=table|<sha> INCREMENTAL RE-RECORD: only the lanes whose source
 #                           closure (tools/lane_select.py) changed between the
 #                           commit each lane's admitted rows rest on (`table`)
@@ -78,6 +77,28 @@
 #                           guarded release launches refuse this override
 #   MOJOLEARN_IDENTITY_LAUNCH  optional guarded release launch from
 #                           release_identity_run.py; validated when supplied
+#   RECORD_FROM_INSTALLED=1 THE RECORD IS THE GATE (Andrew 2026-11-05: one execution of the identity
+#                           lanes per device class, on the built release wheels). Default off. The lanes
+#                           run against the mojolearn INSTALLED in PYTHON's environment (the exact release
+#                           wheel bytes), never against $ROOT/python: PYTHONPATH is not extended, the
+#                           preflight refuses a package under $ROOT or outside site-packages, and the
+#                           installed identity_columns/COMMIT must equal HEAD (the harness in tools/ is the
+#                           same source). Needs PYTHON (the venv interpreter) and INSTALLED_WHEELS (a file of
+#                           "<wheel file name> <sha256>" lines the installer verified); the digests land in the
+#                           provenance as installed_wheels=. The lane selection (every lane, or REUSE=1) is unchanged.
+#   IDENTITY_RECORD_BOX     <provider>:<id> of this machine (runpod:<pod id>, digitalocean:<droplet id>,
+#                           github:<run id>/<job>, mac:<host>), written to the record's run.box and the
+#                           provenance's run_box= line. Unset: the harness derives it (GITHUB_RUN_ID/GITHUB_JOB,
+#                           RUNPOD_POD_ID, the Mac's hostname hash) or writes null with the reason
+#   IDENTITY_RECORD_WHEELS  set here from INSTALLED_WHEELS under RECORD_FROM_INSTALLED=1 (never by hand): the
+#                           record's run.wheels [{name, sha256, version}]. Neither variable starts with MOJO, so
+#                           the resume signature never sees them; the run block is provenance, never hashed
+#   SELECT_ONLY=1           with REUSE=1, the reuse selection only: prints LANES-SELECTED <csv> (or
+#                           NOTHING-CHANGED) and records nothing
+#   LANE_SELECTION=auto-reuse-chunk  with LANES: this record is one chunk of a SELECT_ONLY selection
+#   LANE_SELECTION=full-chunk  with LANES: one chunk of a full column (every lane; release.py --identity-on-wheels
+#                           default, Andrew 2026-11-05: run everything once per release, no selector)
+#                           (tools/identity_wheel_record.py runs the chunks in parallel)
 #
 # Start ledger-managed release columns through release_identity_run.py after
 # reconciling retained evidence. Legacy per-run controllers remain supported.
@@ -140,7 +161,22 @@ for v in $(env | sed -n 's/^\(MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*\)=.*/\1/p')
     [ -z "${!v:-}" ] || [ "${!v}" = 0 ] || die "$v is set; a sabotage run is never a record"
 done
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONUNBUFFERED=1
-export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+INSTALLED=${RECORD_FROM_INSTALLED:-0}
+case $INSTALLED in 0|1) ;; *) die "RECORD_FROM_INSTALLED is 0 or 1, not $INSTALLED";; esac
+INSTALLED_LINE=
+if [ "$INSTALLED" = 1 ]; then
+    [ -n "${PYTHON:-}" ] || die "RECORD_FROM_INSTALLED=1 needs PYTHON=<the venv interpreter the wheels are installed in>"
+    [ -n "${INSTALLED_WHEELS:-}" ] && [ -f "$INSTALLED_WHEELS" ] \
+        || die "RECORD_FROM_INSTALLED=1 needs INSTALLED_WHEELS=<file of '<wheel> <sha256>' lines>"
+    # no regex interval ({64}): mawk (Debian/Ubuntu's default awk) does not support it
+    INSTALLED_LINE=$(awk 'NF == 2 && length($2) == 64 && $2 ~ /^[0-9a-f]+$/ {printf "%s%s:%s", (n++ ? "," : ""), $1, $2} END {if (!n) exit 1}' \
+        "$INSTALLED_WHEELS") || die "INSTALLED_WHEELS $INSTALLED_WHEELS holds no '<wheel> <sha256>' line"
+    unset PYTHONPATH   # the installed package, never the source tree's python/
+    # the record's run.wheels (tools/identity_break.py recorded_wheels): the exact files installed
+    export IDENTITY_RECORD_WHEELS="$INSTALLED_WHEELS"
+else
+    export PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+fi
 T=${CPU_THREADS:-3}
 for v in MOJOLEARN_CPU_THREADS OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THREADS MKL_NUM_THREADS \
          VECLIB_MAXIMUM_THREADS NUMEXPR_NUM_THREADS NUMEXPR_MAX_THREADS BLIS_NUM_THREADS; do
@@ -166,6 +202,22 @@ if [ -n "${SRC_DIRTY// /}" ] && [ "${ALLOW_DIRTY:-0}" != 1 ]; then
 fi
 
 # --- preflight: the loaded backend and tier, before any fit ----------------
+if [ "$INSTALLED" = 1 ]; then
+    where=$("${PY[@]}" - "$ROOT" "$COMMIT" <<'PYEOF' 2>&1 | tail -1
+import pathlib, sys
+import mojolearn
+root, commit = pathlib.Path(sys.argv[1]).resolve(), sys.argv[2]
+pkg = pathlib.Path(mojolearn.__file__).resolve().parent
+assert not pkg.is_relative_to(root), "imported %s from the source tree" % pkg
+assert "site-packages" in pkg.parts, "%s is not an installed package" % pkg
+got = (pkg / "identity_columns" / "COMMIT").read_text().strip()
+assert got == commit, "installed wheel source %s, harness tree %s" % (got[:12], commit[:12])
+print("INSTALLED", pkg)
+PYEOF
+)
+    case $where in "INSTALLED "*) echo "record_identity_column: lanes run against the $where" ;;
+        *) die "preflight (RECORD_FROM_INSTALLED=1): $where" ;; esac
+fi
 got=$("${PY[@]}" -c 'import mojolearn as m, mojolearn._backend as b; print(m.vendor(), b.numeric_mode())' 2>&1 | tail -1)
 [ "$got" = "$BACKEND identical" ] || die "preflight: expected '$BACKEND identical', loaded '$got' (are the bindings built in $ROOT?)"
 if [ "$BACKEND" = cuda ]; then
@@ -194,18 +246,22 @@ fi
 # --- which lanes -----------------------------------------------------------
 NAME=$LABEL
 SELECTION=explicit
-# REUSE GOOD OLD RUNS, AUTOMATICALLY (Andrew 2026-10-31: "The CODE should be
-# structured so good old runs are not rerun; it should be AUTO in the code, NOT
-# MANUAL"). With no LANES, SHARD, ONLY_CHANGED or FULL, the column records only
-# the lanes whose source closure changed since the newest good evidence THIS
-# device class already holds; every other lane is reused, never re-run.
-# FULL=1 is the only way to re-record unchanged lanes.
-case "${FULL:-0}" in 0|1) ;; *) die "FULL=$FULL: 1 records every lane, 0 (default) reuses unchanged ones" ;; esac
-if [ "${FULL:-0}" = 1 ]; then
-    [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] || die "FULL=1 excludes ONLY_CHANGED and LANES"
-    SELECTION=full
-    echo "FULL $LABEL: FULL=1 records every ${SCOPE:-routine} lane; no lane is reused"
-elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; then
+# EVERY LANE BY DEFAULT; REUSE IS OPT-IN (Andrew 2026-11-05, decided 2026-11-09,
+# AGENTS.md "Reuse of old runs is opt-in"). With no LANES, SHARD or ONLY_CHANGED
+# the column records every lane of the scope. REUSE=1 records only the lanes
+# whose source closure changed since the newest good evidence THIS device class
+# already holds and reuses the rest. FULL=1 (the old opt-out of the reuse
+# default) is retired with it.
+[ -z "${FULL:-}" ] || die "FULL=$FULL is retired: every lane is recorded by default; REUSE=1 opts into reuse"
+case "${REUSE:-0}" in 0|1) ;; *) die "REUSE=$REUSE: 1 reuses unchanged lanes, 0 (default) records every lane" ;; esac
+if [ "${REUSE:-0}" = 0 ]; then
+    if [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; then
+        SELECTION=full
+        echo "FULL $LABEL: every ${SCOPE:-routine} lane is recorded; no lane is reused (REUSE=1 opts into reuse)"
+    fi
+else
+    [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ] \
+        || die "REUSE=1 excludes LANES, SHARD and ONLY_CHANGED"
     SELECTION=auto-reuse
     CLASS=$("${PY[@]}" -c 'import sys; sys.path.insert(0, "tools"); import identity_columns as c; print(c.label_class(sys.argv[1]))' "$LABEL") \
         || die "no device class for label $LABEL"
@@ -237,7 +293,13 @@ elif [ -z "${ONLY_CHANGED:-}" ] && [ -z "${LANES:-}" ] && [ -z "${SHARD:-}" ]; t
     reused=$(sed -n 's/.* REUSED \([0-9]*\) .*/\1/p' <<< "$summary")
     record=$(sed -n 's/.* RECORD \([0-9]*\) .*/\1/p' <<< "$summary")
     bad=$(sed -n 's/.* KNOWN-BAD \([0-9]*\) .*/\1/p' <<< "$summary")
-    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad; decisions $OUT/$LABEL.reuse.json; FULL=1 records every lane)"
+    # n/a: lanes the harness declares have no route on this class (GPU_ONLY_LANES on cpu), not known-bad.
+    na=$(sed -n 's|.* N/A \([0-9]*\).*|\1|p' <<< "$summary")
+    echo "REUSED $reused / RECORD $record $LABEL (class $CLASS, known-bad $bad, n/a ${na:-0}; decisions $OUT/$LABEL.reuse.json; without REUSE=1 every lane is recorded)"
+    # RELEASE FLOOR = THE LEDGER'S RULE (lane ledger-floor-receipts): changed-lanes measures a row
+    # from the release floor only with an admitted receipt at the floor (identity_columns.py
+    # floor_receipts_for -> release_identity_reference.floor_receipts); a tag alone is no floor.
+    grep -m 1 '^# release floor' "$OUT/$LABEL.changed-lanes.txt" | cut -c1-240 || true
     # Reused rows from records that are not committed yet must reach admission.
     "${PY[@]}" -c '
 import json, sys
@@ -255,6 +317,16 @@ if src:
         || die "could not list the ${SCOPE:-routine} lanes"
     # Nothing to reuse: an ordinary full column under its own label.
     [ "$AUTO_LANES" = "$ALL_LANES" ] || LANES=$AUTO_LANES
+    # SELECT_ONLY=1 (tools/identity_wheel_record.py): print the owed lanes and stop, so one selection by THIS
+    # rule feeds every parallel worker (each then records its chunk with LANES=... LANE_SELECTION=auto-reuse-chunk)
+    if [ "${SELECT_ONLY:-0}" = 1 ]; then echo "LANES-SELECTED $AUTO_LANES"; exit 0; fi
+fi
+[ "${SELECT_ONLY:-0}" = 0 ] || [ "$SELECTION" = auto-reuse ] || die "SELECT_ONLY=1 needs REUSE=1 (the reuse selection)"
+if [ -n "${LANE_SELECTION:-}" ]; then
+    case "$LANE_SELECTION" in auto-reuse-chunk|full-chunk) ;; *) die "LANE_SELECTION is auto-reuse-chunk or full-chunk";; esac
+    [ "$SELECTION" = explicit ] && [ -n "${LANES:-}" ] \
+        || die "LANE_SELECTION=$LANE_SELECTION names a chunk given as LANES"
+    SELECTION=$LANE_SELECTION
 fi
 if [ -n "${ONLY_CHANGED:-}" ]; then
     SELECTION=only-changed-$ONLY_CHANGED
@@ -276,6 +348,7 @@ if [ -n "${ONLY_CHANGED:-}" ]; then
     LANES=$("${PY[@]}" tools/identity_columns.py changed-lanes --scope "${SCOPE:-routine}" ${since_arg[@]+"${since_arg[@]}"} \
             2> "$OUT/$LABEL.changed-lanes.txt" | tail -n 1) || die "could not list the changed lanes (see $OUT/$LABEL.changed-lanes.txt)"
     grep -m 1 'CHANGED-LANES' "$OUT/$LABEL.changed-lanes.txt"
+    grep -m 1 '^# release floor' "$OUT/$LABEL.changed-lanes.txt" | cut -c1-240 || true
     if [ -z "$LANES" ]; then
         echo "NOTHING-CHANGED $LABEL: no lane's closure moved since the admitted table; every row is kept"
         exit 0
@@ -343,6 +416,13 @@ rc=${rc:-0}
     echo "host=$(uname -srm) $(hostname 2>/dev/null)"
     echo "date=$(date -u +%FT%TZ)"
     echo "dirty_tracked=${DIRTY:-none}"
+    [ "$INSTALLED" = 1 ] && echo "installed_wheels=$INSTALLED_LINE"
+    # THE RUN LINES (lane post-record-device-time): device, driver, Mojo, Python, start/end, seconds total and
+    # per lane, wheels, box and host, from the record's own run block (identity_break.py run_provenance_lines)
+    if [ -f "$JSON" ]; then
+        "${PY[@]}" "$ROOT/tools/identity_break.py" --provenance-lines "$JSON" 2>/dev/null \
+            || echo "run_facts=unreadable (identity_break.py --provenance-lines failed)"
+    fi
     [ -f "$JSON" ] && echo "record_sha256=$(shasum -a 256 "$JSON" | cut -d' ' -f1)"
 } > "$OUT/$NAME.provenance.txt"
 

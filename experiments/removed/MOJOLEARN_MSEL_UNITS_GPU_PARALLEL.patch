@@ -1,0 +1,36 @@
+diff --git a/bindings/native_unit_threads_unpack.mojo b/bindings/native_unit_threads_unpack.mojo
+index 0f13ebe947..fd710f4280 100644
+--- a/bindings/native_unit_threads_unpack.mojo
++++ b/bindings/native_unit_threads_unpack.mojo
+@@ -23,6 +23,7 @@
+ from std.ffi import c_int
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
++from std.sys.compile import is_defined
+ 
+ from bindings.py_cpython_table import cpython_table
+ from bindings.native_loaded_module_door import native_loaded_module
+@@ -44,16 +45,19 @@ from bindings.native_unit_os_threads_run import (
+ #: caches are not thread-safe. The device kernels are themselves parallel, so
+ #: one unit at a time still fills the GPU. Host-only units (a CPU-only install,
+ #: the host column: context vendor "cpu") keep the parallel units.
+-#: Parallel GPU units await a thread-safety lane (per-thread contexts, cache
+-#: audit) and then an NVIDIA + AMD A/B.
+-# TOMBSTONE: MOJOLEARN_MSEL_UNITS_GPU_PARALLEL (opt-in arm, crashes on Metal, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 853bb6d0ee.
+-# Restore: git apply experiments/removed/MOJOLEARN_MSEL_UNITS_GPU_PARALLEL.patch; record in docs/TOMBSTONES.md.
++#: -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL keeps the parallel-GPU arm compiled,
++#: default off: it awaits a thread-safety lane (per-thread contexts, cache
++#: audit) and then an NVIDIA + AMD A/B (RUN OWED: GridSearchCV /
++#: cross_validate / CalibratedClassifierCV rows of paper_compare, arm on vs off).
++comptime NATIVE_UNITS_GPU_PARALLEL = is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"]()
+ 
+ 
+ def native_unit_device_workers(workers: Int, context: PythonObject) -> Int:
+     """`workers`, or 1 when the units' member fits run on a GPU: the vendor the
+     process resolved (context "vendor": "metal", "cuda", "hip"; "cpu" on a
+     CPU-only install or the host column). An unknown vendor counts as a GPU."""
++    comptime if NATIVE_UNITS_GPU_PARALLEL:
++        return workers
+     try:
+         var vendor = py_get(context, PythonObject("vendor"), PythonObject(None))
+         if vendor is not None and String(py=vendor) == "cpu":

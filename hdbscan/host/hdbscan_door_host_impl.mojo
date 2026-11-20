@@ -5,9 +5,11 @@
 the fit, prediction-data and prediction runs with their result copies, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change)."""
+from core.host_predict_threads import HostF32Ptr
 from hdbscan.host.hdbscan_host_oracle import (
+    HdbhI32Ptr,
     hdbh_all_points_membership_vectors,
-    hdbh_approximate_predict,
+    hdbh_approximate_predict_ptr,
     hdbh_fit,
     hdbh_membership_vector,
 )
@@ -76,9 +78,11 @@ def prediction_data_host_run(parents: List[Int32], children: List[Int32], lambda
     return n_ex
 
 
-def approximate_predict_host_run(x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32], lambdas: List[Float32], deaths: List[Float32], selected: List[Int32], iic: List[Int32], q: List[Float32], nq: Int, min_samples: Int, lo: MutPointer[Int32, MutUntrackedOrigin], po: MutPointer[Float32, MutUntrackedOrigin]) raises:
-    """The GIL-free body of `hdbscan_approximate_predict_binding` (moved word for word)."""
-    var out = hdbh_approximate_predict(
+def approximate_predict_host_run(x: List[Float32], m: Int, d: Int, core: HostF32Ptr, labels: HdbhI32Ptr, lambdas: HostF32Ptr, deaths: HostF32Ptr, selected: HdbhI32Ptr, iic: HdbhI32Ptr, q: List[Float32], nq: Int, min_samples: Int, lo: MutPointer[Int32, MutUntrackedOrigin], po: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """The GIL-free body of `hdbscan_approximate_predict_binding`. The
+    fitted arrays are read in place through the caller's buffers (lane
+    perf-small-fixes); `x` and `q` are owned copies for the k-NN search."""
+    var out = hdbh_approximate_predict_ptr(
         x, m, d, core, labels, lambdas, m, deaths, selected, iic, q, nq,
         min_samples,
     )
@@ -88,22 +92,25 @@ def approximate_predict_host_run(x: List[Float32], m: Int, d: Int, core: List[Fl
     _ = out^
 
 
-def membership_vector_host_run(x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32], parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], q: List[Float32], nq: Int, min_samples: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
-    """The GIL-free body of `hdbscan_membership_vector_binding` (moved word for word)."""
+def membership_vector_host_run(x: List[Float32], m: Int, d: Int, core: HostF32Ptr, labels: HdbhI32Ptr, parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, var deaths: List[Float32], var selected: List[Int32], var iic: List[Int32], var ex_idx: List[Int32], var offsets: List[Int32], q: List[Float32], nq: Int, min_samples: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """The GIL-free body of `hdbscan_membership_vector_binding`. `core` and
+    `labels` are read in place; the prediction-data Lists are moved in."""
     var mv = hdbh_membership_vector(
         x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
-        deaths, selected, iic, ex_idx, offsets, q, nq, min_samples,
+        deaths^, selected^, iic^, ex_idx^, offsets^, q, nq, min_samples,
     )
     for i in range(nq * n_selected):
         dst.unsafe_store(i, mv[i])
     _ = mv^
 
 
-def all_points_membership_host_run(x: List[Float32], m: Int, d: Int, parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
-    """The GIL-free body of `hdbscan_all_points_membership_vectors_binding` (moved word for word)."""
+def all_points_membership_host_run(x: HostF32Ptr, m: Int, d: Int, parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, var deaths: List[Float32], var selected: List[Int32], var iic: List[Int32], var ex_idx: List[Int32], var offsets: List[Int32], row0: Int, count: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """The GIL-free body of `hdbscan_all_points_membership_vectors_binding`.
+    `x` is read in place through the caller's buffer; the prediction-data
+    Lists are moved in."""
     var mv = hdbh_all_points_membership_vectors(
-        x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
-        iic, ex_idx, offsets, row0, count,
+        x, m, d, parents, lambdas, n_edges, n_clusters, deaths^, selected^,
+        iic^, ex_idx^, offsets^, row0, count,
     )
     for i in range(count * n_selected):
         dst.unsafe_store(i, mv[i])

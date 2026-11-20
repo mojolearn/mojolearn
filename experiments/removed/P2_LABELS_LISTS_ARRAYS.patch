@@ -1,0 +1,1484 @@
+diff --git a/bindings/array_native.mojo b/bindings/array_native.mojo
+index f6ef12990c..c5be938f53 100644
+--- a/bindings/array_native.mojo
++++ b/bindings/array_native.mojo
+@@ -1,7 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # The public operations of `mojolearn.Array` (python/mojolearn/_array.py) as
+-# ONE native entry, `array_native_call(op, array, context, *args)` (or
+-# `(op, context, array, *args)` from the property-bound methods).
++# ONE native entry, `array_native_call(op, array, context, *args)`.
+ #
+ # Each operation is the former Python method, statement for statement, with
+ # the same CPython C calls it made (memoryview casts and tolist, array.array
+@@ -235,22 +234,16 @@ def _owned_as(cls: PythonObject, store: PythonObject, shape: PythonObject, dtype
+     return _init_owned(native_storage_allocate(cls), store, shape, dtype, order, context)
+ 
+ 
+-def _view_into(view: PythonObject, other: PythonObject, shape: PythonObject, dtype: String, order: String,
+-               context: PythonObject) raises:
+-    """Fill the slots of `view` as another shape over `other`'s memory, `other` kept alive."""
++def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
++    """`Array._view_of`: another shape over the same memory, `other` kept alive."""
++    var view = native_storage_allocate(context["array_class"])
+     py_setattr(view, "_store", other._store)
+     py_setattr(view, "_base", other)
+     py_setattr(view, "_pin", other._pin)
+     py_setattr(view, "_mv", other._mv)
+     py_setattr(view, "_addr", other._addr)
+     py_setattr(view, "_readonly", other._readonly)
+-    _set_meta(view, shape, dtype, order, other._mv, context)
+-
+-
+-def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
+-    """`Array._view_of`: another shape over the same memory, `other` kept alive."""
+-    var view = native_storage_allocate(context["array_class"])
+-    _view_into(view, other, shape, String(other.dtype), order, context)
++    _set_meta(view, shape, String(other.dtype), order, other._mv, context)
+     return view
+ 
+ 
+@@ -1112,39 +1105,11 @@ def _buffer_view(a: PythonObject, context: PythonObject) raises -> PythonObject:
+ 
+ 
+ def _reduce_protocol(a: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`__reduce__`: values and layout, never a borrowed pointer.
+-
+-    `(copyreg.__newobj__, (cls,), state)`: pickle (protocol 2 and later) and
+-    `copy` rebuild the instance with `cls.__new__` (C) and hand `state` to
+-    `__setstate__`, which is this entry again (`_set_state`). No Python
+-    reconstructor runs on load (the former `_array._restore_array` did, once
+-    per Array field of every pickled estimator)."""
+-    return Python.tuple(context["newobj"], Python.tuple(py_type(a)),
++    """`__reduce__`: values and layout, never a borrowed pointer."""
++    return Python.tuple(context["restore"],
+                         Python.tuple(_call(a._mv.tobytes), a.shape, a.dtype, a.order, a._readonly))
+ 
+ 
+-def _set_state(a: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`__setstate__` of a pickled Array: `state` is `(bytes, shape, dtype,
+-    order, readonly)` from `_reduce_protocol`. A writable Array gets its own
+-    `array.array` store; a read-only one stays a read-only view of the bytes."""
+-    var b = native_loaded_module("builtins")
+-    if py_type(state) is not b.tuple or len(state) != 5:
+-        raise Error("TypeError: mojolearn: an Array pickle state is (bytes, shape, dtype, order, readonly)")
+-    if py_type(state[1]) is not b.tuple:
+-        raise Error("TypeError: mojolearn: an Array pickle state carries its shape as a tuple")
+-    var dtype = String(state[2])
+-    var order = String(state[3])
+-    var code = _code(dtype, context)
+-    if _truth(state[4]):
+-        var flat = array_from_buffer(context["array_class"], _call(_call(b.memoryview, state[0]).cast, code), context)
+-        _view_into(a, flat, state[1], dtype, order, context)
+-        return PythonObject(None)
+-    var store = _call(context["array_type"], code)
+-    _ = _call(store.frombytes, state[0])
+-    _ = _init_owned(a, store, state[1], dtype, order, context)
+-    return PythonObject(None)
+-
+-
+ def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
+     """`Array(shape, dtype)`: a zero-filled C-order block."""
+     var b = native_loaded_module("builtins")
+@@ -1226,8 +1191,6 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
+         return _buffer(a, context)
+     if op == "reduce":
+         return _reduce_protocol(a, context)
+-    if op == "setstate":
+-        return _set_state(a, args[3], context)
+     raise Error("TypeError: unknown native Array operation " + op)
+ 
+ 
+@@ -1239,18 +1202,7 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
+         var op = args[0]
+         if py_type(op) is not py_type(PythonObject("")):
+             raise Error("TypeError: native Array operation names are exact strings")
+-        # Two layouts reach this entry. The methods and properties of
+-        # `Array` in _array.py are `functools.partial(entry, op, context)`
+-        # bound by a C `property` (no Python frame), so they arrive as
+-        # (op, context, array, *args); the classmethods and the reference
+-        # tests call (op, array, context, *args). The context is a dict and
+-        # an Array (or the Array class) never is; the operation arguments
+-        # sit at 3.. in both.
+-        var first = args[1]
+-        if py_type(first) is native_loaded_module("builtins").dict:
+-            var bound = _dispatch(String(op), args[2], first, args)
+-            return bound.steal_data()
+-        var result = _dispatch(String(op), first, args[2], args)
++        var result = _dispatch(String(op), args[1], args[2], args)
+         return result.steal_data()
+     except error:
+         return _raise_error(error)
+diff --git a/bindings/classical_labels.mojo b/bindings/classical_labels.mojo
+index 3f79f8635a..83e07c4022 100644
+--- a/bindings/classical_labels.mojo
++++ b/bindings/classical_labels.mojo
+@@ -1039,19 +1039,19 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
+             _ = out  # keep the Python object alive through the native call above
+             _ = wide_codes  # keep the Python object alive through the native call above
+             return out
+-    # Classes the gathers cannot carry (str / bool / object, or ints outside
+-    # int64): ONE presized list filled in C from the int64 code words
+-    # (p3_decode_list). Lane p2-labels-lists-arrays: the per-row Python
+-    # append loop (cpu-route) is gone. Python's list index rule holds
+-    # (negative codes index from the end); an out-of-range code raises
+-    # Python's IndexError, as the subscript did.
+-    if code_dtype != "<i4" and code_dtype != "<i8":
+-        raise Error("TypeError: mojolearn: label codes must be int32 or int64, not " + code_dtype)
+-    var listed = p3_decode_list(classes, labels_address(wide_codes), 8, n)
+-    _ = wide_codes  # keep the Python object alive through the native reads above
+-    if listed is None:
+-        raise Error("IndexError: list index out of range")
+-    return listed
++    var values = Python.list()
++    var p = _I64P(unsafe_from_address=labels_address(wide_codes))
++    _ = wide_codes  # keep the Python object alive through the native call above
++    for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
++        var c = Int(p[i])
++        if c >= k or c < -k:
++            # Python's list index rule (negative codes index from the end) and
++            # its exception class: a CPython IndexError raised inside the
++            # subscript below would cross the boundary as a ValueError.
++            raise Error("IndexError: list index out of range")
++        _ = py_call(values.append, classes[c])
++        _ = wide_codes  # keep the Python object alive through the native call above
++    return values
+ 
+ 
+ def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, context: PythonObject) raises -> PythonObject:
+diff --git a/bindings/classical_pandas.mojo b/bindings/classical_pandas.mojo
+index 93a791126a..a4894ec503 100644
+--- a/bindings/classical_pandas.mojo
++++ b/bindings/classical_pandas.mojo
+@@ -11,12 +11,12 @@ from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
+ from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
+ from bindings.sequential_inputs import _promote
+ from bindings.sequential_arrays import sequential_array, sequential_address
+-from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types, _native_one_of
++from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types
+ from bindings.native_loaded_module import NativeModules
+ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
+ from std.python._cpython import PyObjectPtr
+ from bindings.cpython_table import cpython_table
+-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
++from bindings.p3_labels_metrics_native import p3_type_word
+ 
+ 
+ def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
+@@ -137,40 +137,14 @@ struct _ClassicalAdmitTypes(Movable):
+         return cls is self.frame or cls is self.series
+ 
+ 
+-def _admitted_word(cls: PythonObject, seq: _SequentialValueTypes) -> Int:
+-    """The class word of `cls` when the sequential admission accepts it as a
+-    leaf (`_sequential_admit_value` returns at once for it), else 0."""
+-    if _native_one_of(cls, seq.native_types) or _native_one_of(cls, seq.scalar_types):
+-        return Int(cls._obj_ptr)
+-    return 0
+-
+-
+ def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut kinds: _ClassicalAdmitTypes,
+                      value: PythonObject, context: PythonObject, depth: Int) raises:
+     if depth > 64:
+         raise Error("TypeError: classical input nesting exceeds the supported depth")
+     var cls = py_type(value)
+     if cls is kinds.tuple_type or cls is kinds.list_type:
+-        # Lane p2-labels-lists-arrays: this walk visits every element of a
+-        # list input (it was tagged as a loop over argument containers). Each
+-        # element is read borrowed from the exact container's C storage and an
+-        # exact builtin scalar leaf (the common X / y list) stops at one class
+-        # pointer compare: no boxed index, no subscript, no recursion per leaf.
+-        var is_tuple = cls is kinds.tuple_type
+-        # A leaf skips only when the admission would accept its class as is
+-        # (a connected native or scalar type); 0 never matches a class word.
+-        var int_word = _admitted_word(kinds.int_type, seq)
+-        var float_word = _admitted_word(kinds.float_type, seq)
+-        var bool_word = _admitted_word(kinds.bool_type, seq)
+-        var str_word = _admitted_word(kinds.str_type, seq)
+-        var none_word = _admitted_word(kinds.none_type, seq)
+-        for k in range(len(value)):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed class-pointer read each from the C storage
+-            var raw = p3_item(value, k, is_tuple)
+-            var word = p3_type_word(raw)
+-            if word == int_word or word == float_word or word == bool_word or word == str_word or word == none_word:
+-                continue
+-            _classical_admit(mods, seq, kinds, PythonObject(from_borrowed=raw), context, depth + 1)
+-        _ = value  # keep the container alive through the borrowed reads above
++        for k in range(len(value)):  # driver-loop: over native operation argument containers
++            _classical_admit(mods, seq, kinds, value[k], context, depth + 1)
+     elif kinds.builtin_scalar(cls):
+         # An exact builtin scalar is never pandas storage: skip the pandas
+         # class test.
+diff --git a/bindings/mani_umap_native.mojo b/bindings/mani_umap_native.mojo
+index 2d64b65ade..fa5bda9921 100644
+--- a/bindings/mani_umap_native.mojo
++++ b/bindings/mani_umap_native.mojo
+@@ -30,9 +30,6 @@ from core.host_finite_scan import host_all_finite_f32
+ from core.mani_impl import mani_same_words
+ from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
+ from std.builtin.sort import sort
+-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+-from bindings.p3_labels_metrics_native import p3_item, p3_text_codes, P3_TEXT_OK
+-from bindings.cpython_table import cpython_table
+ from bindings.mani_kit import (
+     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
+     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
+@@ -236,133 +233,69 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
+         return PythonObject(None)
+     if not is_float and kind != CAST_KIND_SIGNED and kind != CAST_KIND_BOOL and not (kind == CAST_KIND_UNSIGNED and item < 8):
+         return PythonObject(None)
++    var t = family_array(Python.tuple(n), "<f4", context)
++    var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
+     if is_float:
+         var words = List[Float64](capacity=n)
+-        for i in range(n):  # driver-loop: native label words of the categorical target (no Python object)
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
+             var v = _umap_label_f64(base + i * stride, item)
+             if v != v:
+                 _ = meta.keep
+                 return PythonObject(None)
+             words.append(v)
+-        _ = meta.keep  # keep the source alive through the reads above
+-        return _umap_codes_f64(words, context)
+-    var ints = List[Int64](capacity=n)
+-    for i in range(n):  # driver-loop: native label words of the categorical target (no Python object)
+-        ints.append(_umap_label_i64(base + i * stride, kind, item))
++        var order = List[Float64](capacity=n)
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
++            if words[i] != -1.0:
++                order.append(words[i])
++        sort(order)
++        var classes = List[Float64](capacity=len(order))
++        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
++            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
++                classes.append(order[i])
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
++            if words[i] == -1.0:
++                tp[i] = Float32(-1.0)
++                continue
++            var lo = 0
++            var hi = len(classes) - 1
++            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
++                var mid = (lo + hi) // 2
++                if classes[mid] < words[i]:
++                    lo = mid + 1
++                else:
++                    hi = mid
++            tp[i] = Float32(Float64(lo))
++    else:
++        var words = List[Int64](capacity=n)
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
++            words.append(_umap_label_i64(base + i * stride, kind, item))
++        var order = List[Int64](capacity=n)
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
++            if words[i] != -1:
++                order.append(words[i])
++        sort(order)
++        var classes = List[Int64](capacity=len(order))
++        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
++            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
++                classes.append(order[i])
++        for i in range(n):  # cpu-route: categorical y codes from the native label words
++            if words[i] == -1:
++                tp[i] = Float32(-1.0)
++                continue
++            var lo = 0
++            var hi = len(classes) - 1
++            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
++                var mid = (lo + hi) // 2
++                if classes[mid] < words[i]:
++                    lo = mid + 1
++                else:
++                    hi = mid
++            tp[i] = Float32(Float64(lo))
+     _ = meta.keep  # keep the source alive through the reads above
+-    return _umap_codes_i64(ints, context)
+-
+-
+-def _umap_codes_f64(words: List[Float64], context: PythonObject) raises -> PythonObject:
+-    """(codes Array, codes address): labels other than -1 numbered 0.. in
+-    ascending value order, -1 kept as -1. Serial: one sort and one binary
+-    search per label over the n target words (host label preparation)."""
+-    var n = len(words)
+-    var t = family_array(Python.tuple(n), "<f4", context)
+-    var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
+-    var order = List[Float64](capacity=n)
+-    for i in range(n):  # driver-loop: native label words (no Python object)
+-        if words[i] != -1.0:
+-            order.append(words[i])
+-    sort(order)
+-    var classes = List[Float64](capacity=len(order))
+-    for i in range(len(order)):  # driver-loop: native sorted label words (no Python object)
+-        if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
+-            classes.append(order[i])
+-    for i in range(n):  # driver-loop: native label words (no Python object)
+-        if words[i] == -1.0:
+-            tp[i] = Float32(-1.0)
+-            continue
+-        var lo = 0
+-        var hi = len(classes) - 1
+-        while lo < hi:  # driver-loop: binary search of one label among the sorted classes
+-            var mid = (lo + hi) // 2
+-            if classes[mid] < words[i]:
+-                lo = mid + 1
+-            else:
+-                hi = mid
+-        tp[i] = Float32(Float64(lo))
+-    _ = t  # keep the Python object alive through the native writes above
+-    return Python.tuple(t, PythonObject(Int(tp)))
+-
+-
+-def _umap_codes_i64(words: List[Int64], context: PythonObject) raises -> PythonObject:
+-    """`_umap_codes_f64` for integer label words."""
+-    var n = len(words)
+-    var t = family_array(Python.tuple(n), "<f4", context)
+-    var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
+-    var order = List[Int64](capacity=n)
+-    for i in range(n):  # driver-loop: native label words (no Python object)
+-        if words[i] != -1:
+-            order.append(words[i])
+-    sort(order)
+-    var classes = List[Int64](capacity=len(order))
+-    for i in range(len(order)):  # driver-loop: native sorted label words (no Python object)
+-        if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
+-            classes.append(order[i])
+-    for i in range(n):  # driver-loop: native label words (no Python object)
+-        if words[i] == -1:
+-            tp[i] = Float32(-1.0)
+-            continue
+-        var lo = 0
+-        var hi = len(classes) - 1
+-        while lo < hi:  # driver-loop: binary search of one label among the sorted classes
+-            var mid = (lo + hi) // 2
+-            if classes[mid] < words[i]:
+-                lo = mid + 1
+-            else:
+-                hi = mid
+-        tp[i] = Float32(Float64(lo))
+     _ = t  # keep the Python object alive through the native writes above
+     return Python.tuple(t, PythonObject(Int(tp)))
+ 
+ 
+-def _umap_list_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+-    """(codes Array, codes address) of an exact list or tuple of n labels
+-    that are all exact ints, all exact bools, all exact floats (no NaN) or
+-    all exact strs, read borrowed from the container's C storage: the codes
+-    the (type, value) object order gives one-type labels (one type, so the
+-    value order; -1 is unknown for numbers and never equals a str). None for
+-    anything else (the object path then decides, with its refusals)."""
+-    var b = native_loaded_module("builtins")
+-    if (py_type(y) is not b.list and py_type(y) is not b.tuple) or len(y) != n or n == 0:
+-        return PythonObject(None)
+-    var kind = labels_list_scalar_kind(y)
+-    var is_tuple = py_type(y) is b.tuple
+-    var t = cpython_table()
+-    if kind == LABELS_LIST_FLOAT:
+-        var words = List[Float64](capacity=n)
+-        for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
+-            var v = t[].PyFloat_AsDouble(p3_item(y, i, is_tuple))
+-            if v != v:
+-                return PythonObject(None)
+-            words.append(v)
+-        _ = y  # keep the container alive through the borrowed reads above
+-        return _umap_codes_f64(words, context)
+-    if kind == LABELS_LIST_INT or kind == LABELS_LIST_BOOL:
+-        var ints = List[Int64](capacity=n)
+-        for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
+-            var v = t[].PyLong_AsLongLong(p3_item(y, i, is_tuple))
+-            if v == -1:
+-                if t[].PyErr_Occurred():
+-                    t[].PyErr_Clear()
+-                    return PythonObject(None)  # an int outside int64: the object path keeps it
+-            ints.append(v)
+-        _ = y  # keep the container alive through the borrowed reads above
+-        return _umap_codes_i64(ints, context)
+-    var listed = y if not is_tuple else py_call(b.list, y)
+-    var text = p3_text_codes(listed, False)
+-    if text.status != P3_TEXT_OK:
+-        return PythonObject(None)
+-    var out = family_array(Python.tuple(n), "<f4", context)
+-    var op = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out)))
+-    for i in range(n):  # driver-loop: native code write per label
+-        op[i] = Float32(Float64(Int(text.codes[i])))
+-    _ = out  # keep the Python object alive through the native writes above
+-    _ = listed
+-    return Python.tuple(out, PythonObject(Int(op)))
+-
+-
+ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+     """`_target(y, n)`: (kind, dims, codes, target_n_neighbors, weight)."""
+     var b = native_loaded_module("builtins")
+@@ -387,12 +320,6 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
+             var fast = _umap_native_codes(y, n, context)
+             if fast is not None:
+                 return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
+-        # Lane p2-labels-lists-arrays: an exact list / tuple of one exact
+-        # scalar type or of exact strs is coded from its C storage
+-        # (_umap_list_codes); the object path below runs only for anything else.
+-        var listed = _umap_list_codes(y, n, context)
+-        if listed is not None:
+-            return Python.tuple(PythonObject(1), PythonObject(1), listed[0], tk_kept, PythonObject(w), listed[0], listed[1])
+         var vals: PythonObject
+         if Bool(py=py_call(b.hasattr, y, PythonObject("tolist"))):
+             vals = family_call(py_call(b.getattr, y, PythonObject("tolist")))
+diff --git a/bindings/prep_classify_native.mojo b/bindings/prep_classify_native.mojo
+index 7ac96a4327..7b750f2c61 100644
+--- a/bindings/prep_classify_native.mojo
++++ b/bindings/prep_classify_native.mojo
+@@ -37,7 +37,7 @@ from bindings.classical_metadata import classical_is_fitted
+ from bindings.classical_pandas import classical_admit_value
+ from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
+ from bindings.scaler_lifecycle_native import _public_result
+-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_score_from_codes
++from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+ from bindings.admitted_input import admit_weight_words
+ from bindings.x_prep_native_inputs import _values, _rows_fields
+ from bindings.arena_cache_release import arena_cache_release_operation
+@@ -397,17 +397,9 @@ def _joint_log_proba(model: PythonObject, fields: PythonObject, kind: String, X:
+ 
+ 
+ def _score(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`_Classifier.score`: accuracy of the predicted codes, scored in the same
+-    call. y is encoded once against `classes_` and compared with the codes
+-    (classical_score_from_codes); the predicted labels are never built.
+-    Lane p2-labels-lists-arrays: the decode of every row to a Python label
+-    and its re-encode in `classical_accuracy` (str / bool classes: one
+-    Python object per row each way) are gone."""
+-    var pr = ClsProg()
+-    var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
+-    var codes = pr.get_i32(o.am, o.n, context)
+-    return PythonObject(classical_score_from_codes(y, fields["classes_"], codes, PythonObject(None),
+-                                                   PythonObject(None), context))
++    """`_Classifier.score`: accuracy of the prediction, scored in the same call."""
++    var prediction = _predict(model, fields, kind, X, context)
++    return PythonObject(classical_accuracy(y, prediction, PythonObject(None), PythonObject(None), context))
+ 
+ 
+ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+diff --git a/bindings/prep_labels_native.mojo b/bindings/prep_labels_native.mojo
+index dcc9316acc..29cc225c7e 100644
+--- a/bindings/prep_labels_native.mojo
++++ b/bindings/prep_labels_native.mojo
+@@ -32,7 +32,6 @@ from bindings.prep_encode_native import (
+ from bindings.str_labels_native import str_lookup
+ from bindings.user_objects_native import _Env, _f32_exact, _indicator
+ from bindings.cpython_table import cpython_table
+-from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes
+ 
+ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
+ comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
+@@ -381,34 +380,11 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
+     all_ints = count_ints
+     var n = len(values)
+     words.reserve(n)
+-    # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
+-    # from its C storage and an exact int / float converted by
+-    # PyFloat_AsDouble (no subscript, no PythonObject per label).
+-    var exact = py_type(values) is env.b.list or py_type(values) is env.b.tuple
+-    var is_tuple = py_type(values) is env.b.tuple
+-    var int_word = Int(int_type._obj_ptr)
+-    var float_word = Int(float_type._obj_ptr)
+-    ref cpy = Python().cpython()
+-    var t = cpython_table()
+-    for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
+-        var x: Float64
+-        var is_int: Bool
+-        if exact:
+-            var raw = p3_item(values, i, is_tuple)
+-            var word = p3_type_word(raw)
+-            if word == int_word or word == float_word:
+-                x = t[].PyFloat_AsDouble(raw)
+-                if x == -1.0:
+-                    if t[].PyErr_Occurred():
+-                        raise cpy.unsafe_get_error()
+-                if x != x or Float64(Float32(x)) != x:
+-                    return False
+-                words.append(x)
+-                if all_ints and word != int_word:
+-                    all_ints = False
+-                continue
++    for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
+         var v = values[i]
+         var cls = py_type(v)
++        var x: Float64
++        var is_int: Bool
+         if cls is int_type:
+             x = Float64(py=v)
+             is_int = True
+@@ -472,20 +448,11 @@ def _object_index(classes: PythonObject) raises -> PythonObject:
+ 
+ 
+ def _object_codes(mut p: EncProg, classes: PythonObject, values: PythonObject, context: PythonObject) raises -> Int:
+-    # pr.put_list([index.get(v, -1) for v in values]). Lane
+-    # p2-labels-lists-arrays: one borrowed read and one C dict probe per
+-    # label (p3_dict_codes) into int32 words, widened natively; the Python
+-    # `index.get` call per label is gone.
++    # pr.put_list([index.get(v, -1) for v in values]).
+     var index = _object_index(classes)
+-    var listed = values
+-    if py_type(listed) is not _builtins().list and py_type(listed) is not _builtins().tuple:
+-        listed = py_call(_builtins().list, values)
+-    var n = len(listed)
+-    var words = List[Int32](unsafe_uninit_length=n)
+-    p3_dict_codes(index, listed, Int(words.unsafe_ptr()), -1)
+-    var codes = List[Float64](unsafe_uninit_length=n)
+-    for i in range(n):  # driver-loop: native widening of the n code words
+-        codes[i] = Float64(words[i])
++    var codes = List[Float64]()
++    for i in range(len(values)):  # cpu-route: non-str object labels, the explicit label input step
++        codes.append(Float64(Int(py=py_call(index.get, values[i], PythonObject(-1)))))
+     return p.put_floats(codes, context)
+ 
+ 
+diff --git a/bindings/sequential_inputs.mojo b/bindings/sequential_inputs.mojo
+index 5d411768fb..a47e035425 100644
+--- a/bindings/sequential_inputs.mojo
++++ b/bindings/sequential_inputs.mojo
+@@ -10,8 +10,6 @@ from bindings.native_buffer_owner import native_buffer_view
+ from bindings.arena_buffer_copy import buffer_copy_to_array
+ from bindings.native_array_view import native_array_ndarray_view
+ from bindings.py_balanced import py_call, py_type, py_get
+-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+-from bindings.cpython_table import cpython_table
+ from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
+ from gemm.f16_widen import f16_bits_to_f32
+ 
+@@ -191,44 +189,9 @@ def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
+         dims.append(n)
+     elif dims[depth] != n:
+         raise Error("input sequences must be rectangular")
+-    var b = mods.module("builtins")
+-    var cls = py_type(value)
+-    if cls is not b.list and cls is not b.tuple:
+-        # A range or a list / tuple subclass: the element protocol as before.
+-        for k in range(n):  # driver-loop: per ELEMENT of a range or sequence subclass input (data-sized)
+-            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+-        return
+-    # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
+-    # from its C storage. An exact float or bool leaf (and an exact int when
+-    # the target is float) is admitted by one class-pointer compare and
+-    # appended by PyList_Append: no boxed index, subscript, recursion or
+-    # Python append call per element. Every other element takes the general
+-    # admission below, unchanged.
+-    var is_tuple = cls is b.tuple
+-    var float_word = Int(b.float._obj_ptr)
+-    var bool_word = Int(b.bool._obj_ptr)
+-    var int_word = Int(b.int._obj_ptr) if float_target else 0
+-    ref cpy = Python().cpython()
+-    var t = cpython_table()
+-    for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read each from the C storage
+-        var raw = p3_item(value, k, is_tuple)
+-        var word = p3_type_word(raw)
+-        if word == float_word or word == bool_word or word == int_word:
+-            if depth + 1 > 8:
+-                raise Error("input sequences must have rank at most eight")
+-            if leaf_depth >= 0 and leaf_depth != depth + 1:
+-                raise Error("input sequences must be rectangular")
+-            leaf_depth = depth + 1
+-            if word == bool_word:
+-                _promote(kind, size, "b", 1)
+-            else:
+-                _promote(kind, size, "f", 8)
+-            if Int(t[].PyList_Append(values._obj_ptr, raw)) != 0:
+-                raise cpy.unsafe_get_error()
+-        else:
+-            _sequence_values(mods, PythonObject(from_borrowed=raw), depth + 1, dims, values, kind, size, leaf_depth,
+-                             context, float_target)
+-    _ = value  # keep the container alive through the borrowed reads above
++    # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
++    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
++        _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+ 
+ 
+ def _fits_int64(value: PythonObject) -> Bool:
+diff --git a/bindings/trees_public_gbdt_fit.mojo b/bindings/trees_public_gbdt_fit.mojo
+index ce6944c23d..7c935c066f 100644
+--- a/bindings/trees_public_gbdt_fit.mojo
++++ b/bindings/trees_public_gbdt_fit.mojo
+@@ -40,9 +40,6 @@ from bindings.classical_arrays import classical_address, classical_c_order
+ from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+ from bindings.trees_boost_constructor_native import tree_constructor_storage
+ from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
+-from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
+-from bindings.p3_labels_metrics_native import p3_item, p3_text_codes, P3_TEXT_OK
+-from bindings.cpython_table import cpython_table
+ 
+ comptime _UNSET = -1.0
+ comptime _F32_MAX = 3.4028234663852886e+38
+@@ -484,74 +481,31 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
+                     + "data=" + String(n_rows) + " are different.")
+     if n_rows > 0xFFFFFFFF:
+         raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
+-    var code = _id_code(t)
+-    var words = List[Int](capacity=n)
+-    for i in range(n):  # driver-loop: group_id words read natively from the id buffer (no Python object)
+-        words.append(_id_word_coded(view_address, code, i))
+-    _ = view  # keep the id buffer alive through the reads above
+-    return _group_runs(words, PythonObject(None), context)
+-
+-
+-def _group_runs(words: List[Int], labels: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """The uint32 run lengths of consecutive equal group words, a repeated
+-    word (a split group) refused. `labels` is the exact list the words were
+-    coded from (its item names a refused group), or None for numeric ids.
+-    Serial by nature: each run continues the previous one."""
+     var sizes = List[Int]()
+     var seen = Dict[Int, Int]()
+     var last = 0
+-    for i in range(len(words)):  # driver-loop: over the n group words (native, no Python object)
+-        var value = words[i]
++    var code = _id_code(t)
++    for i in range(n):  # cpu-route: group_id run lengths read natively from the id buffer (fit input step)
++        var value = _id_word_coded(view_address, code, i)
+         if i > 0 and value == last:
+             sizes[len(sizes) - 1] += 1
+             continue
+         if value in seen:
+-            var name = String(value) if labels is None else _repr(labels[i])
+             raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+-                        + name + " are split into more than one run (row " + String(i) + "); "
++                        + String(value) + " are split into more than one run (row " + String(i) + "); "
+                         + "CatBoost requires every group's rows to be contiguous")
+         seen[value] = i
+         sizes.append(1)
+         last = value
++    _ = view  # keep the id buffer alive through the reads above
+     var out = admitted_vector(len(sizes), "<u4", context)
+     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+-    for i in range(len(sizes)):  # driver-loop: over the run lengths (native)
++    for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
+         p[i] = UInt32(sizes[i])
+     _ = out  # keep the Python object alive through the writes above
+     return out
+ 
+ 
+-def _group_sizes_list(ids: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+-    """`_group_sizes` of an exact list or tuple of n_rows group ids that are
+-    all exact ints (within int64) or all exact strs, read borrowed from the
+-    container's C storage (strs coded by their UTF-8 bytes, p3_text_codes):
+-    equal ids have equal words, so the runs and refusals are those of the
+-    keyed object path. None for anything else (that path then decides)."""
+-    var b = _b()
+-    if (py_type(ids) is not b.list and py_type(ids) is not b.tuple) or len(ids) != n_rows or n_rows == 0:
+-        return PythonObject(None)
+-    var listed = ids if py_type(ids) is b.list else py_call(b.list, ids)
+-    var kind = labels_list_scalar_kind(listed)
+-    if kind == LABELS_LIST_INT:
+-        var t = cpython_table()
+-        var words = List[Int](capacity=n_rows)
+-        for i in range(n_rows):  # driver-loop: per ROW (data-sized), one borrowed read and one C conversion each
+-            var v = t[].PyLong_AsLongLong(p3_item(listed, i, False))
+-            if v == -1:
+-                if t[].PyErr_Occurred():
+-                    t[].PyErr_Clear()
+-                    return PythonObject(None)  # an int outside int64: the keyed path keeps it
+-            words.append(Int(v))
+-        return _group_runs(words, listed, context)
+-    var text = p3_text_codes(listed, False)
+-    if text.status != P3_TEXT_OK:
+-        return PythonObject(None)
+-    var codes = List[Int](capacity=n_rows)
+-    for i in range(n_rows):  # driver-loop: native copy of the n_rows codes
+-        codes.append(Int(text.codes[i]))
+-    return _group_runs(codes, listed, context)
+-
+-
+ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
+     """`ensemble._group_sizes`: the run lengths of consecutive equal ids, a
+     repeated id refused (their `adjacent_find`)."""
+@@ -572,10 +526,6 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
+                     + "data=" + String(n_rows) + " are different.")
+     if n_rows > 0xFFFFFFFF:
+         raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
+-    # Lane p2-labels-lists-arrays: exact int or str ids from C storage.
+-    var coded = _group_sizes_list(ids, n_rows, context)
+-    if coded is not None:
+-        return coded
+     var sizes = List[Int]()
+     var seen = py_call(b.set)
+     var last = PythonObject(None)
+@@ -590,7 +540,7 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
+     var int_t = b.int
+     var str_t = b.str
+     var bytes_t = b.bytes
+-    for i in range(n_rows):  # cpu-route: group_id label objects other than exact int / str lists (bytes, mixed, subclasses) checked for contiguous runs [py-data-loop]
++    for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
+         var value = ids[i]
+         if i > 0:
+             var same = value is last_value
+diff --git a/bindings/trees_public_meta.mojo b/bindings/trees_public_meta.mojo
+index 6049f809d4..eff3fb9442 100644
+--- a/bindings/trees_public_meta.mojo
++++ b/bindings/trees_public_meta.mojo
+@@ -55,7 +55,6 @@ from bindings.prep_native_estimator import (
+     prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
+ )
+ from bindings.classical_labels import _label_list, classical_score_from_codes
+-from bindings.p3_labels_metrics_native import p3_interleave_columns, p3_rows_of
+ from bindings.classifier_public_lifecycle import classifier_label_list
+ from bindings.classical_pandas import native_pandas_exact
+ from bindings.native_buffer_owner import native_buffer_view
+@@ -1378,21 +1377,22 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
+     for j in range(len(lists)):  # driver-loop: over members (each column's first label)
+         if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
+             ints = False
++    var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
+     # Pack exact int/float/bool label objects (bool classes) into one numeric
+     # store as before. Any other label object (str, mixed) cannot live in a
+-    # numeric Array: native_array_from_values refuses it. Those outputs are
+-    # returned as the per-row label lists (one list of m labels per row), the
+-    # same label objects the single-output classifiers return for str classes.
+-    # Lane p2-labels-lists-arrays: the row-major labels and the row lists are
+-    # filled in C (p3_interleave_columns / p3_rows_of); the Python
+-    # zip/map/list per row and the extend per row are gone.
+-    var flat = p3_interleave_columns(lists, n)
++    # numeric Array: native_array_from_values refuses it, which made every
++    # string-label multi-output predict raise. Those outputs are returned as
++    # the per-row label lists (one list of m labels per row), the same label
++    # objects the single-output classifiers return for str classes.
++    var flat = Python.list()
++    for i in range(len(zipped)):  # driver-loop: completed output labels
++        _ = py_call(flat.extend, zipped[i])
+     var store = PythonObject(None)
+     try:
+         store = native_array_from_values("q" if ints else "d", flat)
+     except:
+-        return p3_rows_of(flat, n, len(lists))
+-    return classical_wrap_array(store, Python.tuple(n, len(cols)), "<i8" if ints else "<f8", "C", context)
++        return zipped
++    return classical_wrap_array(store, Python.tuple(len(zipped), len(cols)), "<i8" if ints else "<f8", "C", context)
+ 
+ 
+ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+diff --git a/providers/python/autograd_program_pyapi.mojo b/providers/python/autograd_program_pyapi.mojo
+index 9ba5144efa..166580edd0 100644
+--- a/providers/python/autograd_program_pyapi.mojo
++++ b/providers/python/autograd_program_pyapi.mojo
+@@ -5,9 +5,6 @@
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
+-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+-from bindings.cpython_table import cpython_table
+-from std.python._cpython import PyObjectPtr
+ from std.memory import memcpy
+ from std.time import perf_counter_ns
+ from sequence.exec_trait import Exec
+@@ -167,128 +164,43 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
+     return (src, sh)
+ 
+ 
+-@fieldwise_init
+-struct _SequenceWords(ImplicitlyCopyable, Movable):
+-    """The exact builtin class words a list input is read against."""
+-    var list_word: Int
+-    var tuple_word: Int
+-    var int_word: Int
+-    var float_word: Int
+-    var bool_word: Int
+-
+-
+-def _sequence_words() raises -> _SequenceWords:
++def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
++                     mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
+     var b = native_loaded_module("builtins")
+-    return _SequenceWords(Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), Int(b.int._obj_ptr),
+-                          Int(b.float._obj_ptr), Int(b.bool._obj_ptr))
+-
+-
+-def _leaf_f64(raw: PyObjectPtr, words: _SequenceWords) raises -> Float64:
+-    """One leaf as float64: an exact int, float or bool by its C slot
+-    (PyFloat_AsDouble), any other admitted scalar as before."""
+-    var word = p3_type_word(raw)
+-    if word == words.float_word or word == words.int_word or word == words.bool_word:
+-        var v = cpython_table()[].PyFloat_AsDouble(raw)
+-        if v == -1.0:
+-            if cpython_table()[].PyErr_Occurred():
+-                ref cpy = Python().cpython()
+-                raise cpy.unsafe_get_error()
+-        return v
+-    if word == words.list_word or word == words.tuple_word:
+-        raise Error("ValueError: program input sequences must be rectangular")
+-    var a = PythonObject(from_borrowed=raw)
+-    if not program_numeric_scalar(a):
+-        raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
+-    return Float64(py=a)
+-
+-
+-def _leaf_i64(raw: PyObjectPtr, words: _SequenceWords) raises -> Int64:
+-    """One leaf as an int64 id: an exact int by its C slot
+-    (PyLong_AsLongLong), any other admitted integer scalar as before."""
+-    var word = p3_type_word(raw)
+-    if word == words.int_word:
+-        var v = cpython_table()[].PyLong_AsLongLong(raw)
+-        if v == -1:
+-            if cpython_table()[].PyErr_Occurred():
+-                ref cpy = Python().cpython()
+-                raise cpy.unsafe_get_error()
+-        return v
+-    if word == words.list_word or word == words.tuple_word:
+-        raise Error("ValueError: program input sequences must be rectangular")
+-    var a = PythonObject(from_borrowed=raw)
+-    if not program_numeric_scalar(a):
+-        raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
+-    if not is_integer_input(a):
+-        raise Error("TypeError: program ids must be integers")
+-    return Int64(py=a)
+-
+-
+-def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, mut pos: Int,
+-                   mut values: List[Float64], mut ids: List[Int64], words: _SequenceWords) raises:
+-    """Fill the leaves under the container `c` at `level`, in C order, into
+-    their slots from `pos`."""
+-    var word = p3_type_word(c._obj_ptr)
+-    if word != words.list_word and word != words.tuple_word:
+-        raise Error("ValueError: program input sequences must be rectangular")
+-    var is_tuple = word == words.tuple_word
+-    var n = len(c)
+-    if n != dims[level]:
+-        raise Error("ValueError: program input sequences must be rectangular")
+-    if level + 1 < len(dims):
+-        for k in range(n):  # driver-loop: over the containers of one level (at most eight levels)
+-            _sequence_fill(PythonObject(from_borrowed=p3_item(c, k, is_tuple)), level + 1, dims, integer, pos,
+-                           values, ids, words)
+-        _ = c  # keep the container alive through the borrowed reads above
+-        return
+-    if integer:
+-        for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read and one C conversion each
+-            ids[pos + k] = _leaf_i64(p3_item(c, k, is_tuple), words)
+-    else:
+-        for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read and one C conversion each
+-            values[pos + k] = _leaf_f64(p3_item(c, k, is_tuple), words)
+-    pos += n
+-    _ = c  # keep the container alive through the borrowed reads above
++    _sequence_values(a, depth, dims, values, ids, integer, leaf_depth, b.list, b.tuple)
+ 
+ 
+ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
+-                     mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
+-    """A nested list / tuple of Python scalars (or one scalar) as ONE typed
+-    flat buffer: the shape is read down the first element of each level, the
+-    float64 or int64 output is sized once (uninitialised), and every leaf is
+-    read borrowed from the exact containers' C storage and converted by its C
+-    slot straight into its slot (lane p2-labels-lists-arrays; the former walk
+-    recursed once per element through a boxed subscript and grew its list by
+-    append). Serial by nature: each read is a CPython C call made under the
+-    GIL; the data then moves as one buffer."""
+-    if depth != 0 or len(dims) != 0:
+-        raise Error("ValueError: program input sequences are read from the top level")
+-    var words = _sequence_words()
+-    var probe = a
+-    while True:  # driver-loop: down the first element of each level (the input's rank, at most eight)
+-        var word = p3_type_word(probe._obj_ptr)
+-        if word != words.list_word and word != words.tuple_word:
+-            break
+-        var n = len(probe)
+-        if len(dims) >= 8 or n == 0:
++                     mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int,
++                     list_type: PythonObject, tuple_type: PythonObject) raises:
++    # The value already passed the exact-type admission walk
++    # (program_admit_value: lists and tuples are admitted only as their exact
++    # builtin types), so a type identity compare decides the container case
++    # without two isinstance calls and two module reads per element.
++    var cls = py_type(a)
++    if cls is list_type or cls is tuple_type:
++        var n = len(a)
++        if depth >= 8 or n == 0:
+             raise Error("ValueError: program input sequences must be nonempty and have rank at most eight")
+-        dims.append(n)
+-        probe = PythonObject(from_borrowed=p3_item(probe, 0, word == words.tuple_word))
+-    leaf_depth = len(dims)
+-    var total = 1
+-    for k in range(len(dims)):  # small-loop(rank: at most eight dimensions)
+-        total *= dims[k]
+-    if integer:
+-        ids = List[Int64](unsafe_uninit_length=total)
++        if depth == len(dims):
++            dims.append(n)
++        elif dims[depth] != n:
++            raise Error("ValueError: program input sequences must be rectangular")
++        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
++            _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth, list_type, tuple_type)
+     else:
+-        values = List[Float64](unsafe_uninit_length=total)
+-    if len(dims) == 0:
++        if not program_numeric_scalar(a):
++            raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
++        if leaf_depth < 0:
++            leaf_depth = depth
++        if depth != len(dims) or depth != leaf_depth:
++            raise Error("ValueError: program input sequences must be rectangular")
+         if integer:
+-            ids[0] = _leaf_i64(a._obj_ptr, words)
++            if not is_integer_input(a):
++                raise Error("TypeError: program ids must be integers")
++            ids.append(Int64(py=a))
+         else:
+-            values[0] = _leaf_f64(a._obj_ptr, words)
+-        return
+-    var pos = 0
+-    _sequence_fill(a, 0, dims, integer, pos, values, ids, words)
++            values.append(Float64(py=a))
+ 
+ 
+ def program_input(value: PythonObject, integer: Bool) raises -> ProgramInput:
+diff --git a/python/mojolearn/_array.py b/python/mojolearn/_array.py
+index b79efbbcfd..1b920c50bd 100644
+--- a/python/mojolearn/_array.py
++++ b/python/mojolearn/_array.py
+@@ -32,7 +32,6 @@ arithmetic in half precision.
+ from __future__ import annotations
+ 
+ import array
+-import copyreg
+ import mmap as _array_mmap
+ import functools
+ import operator
+@@ -276,6 +275,16 @@ def _reorder(a, src_order, out):
+     _strided_copy(a._addr, out.buffer_info()[0], a.itemsize, shape, src, dst)
+ 
+ 
++def _restore_array(raw, shape, dtype, order, readonly):
++    """Pickle restores values and layout, never a borrowed pointer or GPU handle."""
++    if readonly:
++        flat = Array.from_buffer(memoryview(raw).cast(_CODE[dtype]))
++        return Array._view_of(flat, shape, order)
++    store = array.array(_CODE[dtype])
++    store.frombytes(raw)
++    return Array._owned(store, shape, dtype, order)
++
++
+ class _ArrayInterface:
+     """Carries only an Array's `__array_interface__`, so `Array.__array__`
+     can hand NumPy a zero-copy view without recursing into itself. NumPy
+@@ -472,6 +481,15 @@ class Array:
+     def _has_order(self, order):
+         return self.order == order or self._both_orders()
+ 
++    @property
++    def flags(self):
++        """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
++        return _ARRAY_NATIVE("flags", self, _ARRAY_CONTEXT)
++
++    @property
++    def __array_interface__(self):
++        return _ARRAY_NATIVE("interface", self, _ARRAY_CONTEXT)
++
+     def __array__(self, dtype=None, copy=None):
+         """`numpy.asarray(a)` through the `__array__` protocol.
+ 
+@@ -486,6 +504,22 @@ class Array:
+         """
+         return _ARRAY_NATIVE("array", self, _ARRAY_CONTEXT, dtype, copy)
+ 
++    def __buffer__(self, flags):
++        """Python 3.12+ buffer protocol: a memoryview of the backing store
++        with this Array's shape.
++
++        An F-order block of rank 2+ and a `'<f2'` block RAISE BufferError:
++        a memoryview built from Python cannot carry column-major strides or
++        the `'e'` format, and handing out the flat store instead would be
++        wrong in a way that matters. NumPy consults the buffer protocol
++        BEFORE `__array_interface__` (measured on numpy 2.4 / CPython
++        3.14), so a flat view here would make `numpy.asarray` return a 1-D
++        array for a matrix; on the BufferError it falls through to
++        `__array_interface__`, which describes both cases exactly and is
++        still zero-copy. `tobytes()` and `_flat()` reach the raw store.
++        """
++        return _ARRAY_NATIVE("buffer", self, _ARRAY_CONTEXT)
++
+     def _flat(self):
+         """A 1-D Array over the storage IN STORAGE ORDER, no copy. For an
+         F-order matrix that is the column-major flat, `flat[f * rows + r]
+@@ -493,13 +527,8 @@ class Array:
+         return Array._view_of(self, (self.size,), "C")
+ 
+     # ------------------------------------------------------------- basic ops
+-    # The protocol methods (`__len__`, `__getitem__`, `__eq__`, `__ne__`,
+-    # `__repr__`, `__bool__`, `__iter__`, `__reduce__`, `__setstate__`,
+-    # `__buffer__`) and the `flags` / `__array_interface__` properties are
+-    # set below the class: each is a C `property` over
+-    # `functools.partial(array_native_call, op, context)`, so `len(a)`,
+-    # `a[i]`, `a == b`, `repr(a)`, pickling and NumPy's interface read reach
+-    # the native entry without entering a Python frame.
++    def __reduce__(self):
++        return _ARRAY_NATIVE("reduce", self, _ARRAY_CONTEXT)
+ 
+     def tobytes(self):
+         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
+@@ -628,6 +657,17 @@ class Array:
+         """A 1-D view, same as ``reshape(-1)``."""
+         return _ARRAY_NATIVE("ravel", self, _ARRAY_CONTEXT)
+ 
++    def __len__(self):
++        # The first-axis length is read natively (bindings/array_native.mojo).
++        # PYTHON COMPATIBILITY EXCEPTION (Andrew, 2026-10-25), narrowed: the
++        # native Voting/Stacking/MultiOutput/Calibrated meta-estimator paths
++        # still reach this one-line wrapper through len(Array); it does no
++        # Python work besides the native call. See _runtime_fallbacks.py.
++        return _ARRAY_NATIVE("len", self, _ARRAY_CONTEXT)
++
++    def __iter__(self):
++        return _ARRAY_NATIVE("iter", self, _ARRAY_CONTEXT)
++
+     def _row_view(self, i, shape, step):
+         """Row `i` of a C-order Array as a zero-copy view (`shape` = the
+         trailing dimensions, `step` = their element count): the same
+@@ -643,6 +683,23 @@ class Array:
+         v._set_meta(shape, self.dtype, "C")
+         return v
+ 
++    def __repr__(self):
++        return _ARRAY_NATIVE("repr", self, _ARRAY_CONTEXT)
++
++    def __bool__(self):
++        return _ARRAY_NATIVE("bool", self, _ARRAY_CONTEXT)
++
++    # ------------------------------------------------------------- indexing
++    def __getitem__(self, key):
++        """Int / slice / tuple of them. Full integer indexing returns a
++        Python scalar; anything else a COPY as a C-order Array."""
++        return _ARRAY_NATIVE("getitem", self, _ARRAY_CONTEXT, key)
++
++    def __eq__(self, other):
++        """Elementwise equality against an Array of the same shape or a
++        scalar, as a `'<u1'` Array of 0/1."""
++        return _ARRAY_NATIVE("eq", self, _ARRAY_CONTEXT, other)
++
+     def _native_eq(self, other):
+         """DEVIATION 3102: elementwise equality of two same-shape Arrays of
+         ONE dtype through the core helper `equal_elements`, or None. IEEE
+@@ -682,6 +739,9 @@ class Array:
+             fn(a._addr, fill.buffer_info()[0], code, self.size, store.buffer_info()[0])
+         return Array._owned(store, self.shape, "<u1", "C")
+ 
++    def __ne__(self, other):
++        return _ARRAY_NATIVE("ne", self, _ARRAY_CONTEXT, other)
++
+     __hash__ = None
+ 
+     # ------------------------------------------------------------ reductions
+@@ -830,8 +890,8 @@ class _ArrayReference:
+         return self._mv.cast("B").cast(_CODE[self.dtype], self.shape)
+ 
+     def __reduce__(self):
+-        return (copyreg.__newobj__, (type(self),),
+-                (self.tobytes(), self.shape, self.dtype, self.order, self._readonly))
++        return (_restore_array, (self.tobytes(), self.shape, self.dtype,
++                                 self.order, self._readonly))
+ 
+     def tobytes(self):
+         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
+@@ -1308,7 +1368,7 @@ _ARRAY_CONTEXT = dict(
+     aliases=dict(_ALIAS), supported=SUPPORTED_DTYPES, native_min=_NATIVE_MIN,
+     empty_address=_EMPTY_ARRAY_STORAGE.buffer_info()[0], empty_storage=_EMPTY_ARRAY_STORAGE,
+     struct_pack=struct.pack, struct_unpack=struct.unpack, operator=operator,
+-    partial=functools.partial, sys_modules=sys.modules, modules=sys.modules, newobj=copyreg.__newobj__,
++    partial=functools.partial, sys_modules=sys.modules, modules=sys.modules, restore=_restore_array,
+     entry=_ARRAY_NATIVE, helpers={}, int_bounds=dict(_INT_BOUNDS), infinity=float("inf"),
+     minus_infinity=float("-inf"), scalar_types=(int, float, bool), eq_i64_f64=_EQ_I64_F64,
+     not_implemented=NotImplemented, not_table=_NOT, scalar_type_set=_SCALAR_TYPES,
+@@ -1319,28 +1379,6 @@ _ARRAY_CONTEXT = dict(
+     from_buffer_slots={name: Array.__dict__[name] for name in Array.__slots__})  # glue: retain fixed native Array member descriptor identities
+ 
+ 
+-def _bound(op):
+-    """`a.<op>(*args)` as `array_native_call(op, _ARRAY_CONTEXT, a, *args)`:
+-    a C `property` whose getter is a C `functools.partial` building another
+-    one, so the protocol slots and attribute reads enter no Python frame."""
+-    return property(functools.partial(functools.partial, _ARRAY_NATIVE, op, _ARRAY_CONTEXT))
+-
+-
+-Array.__len__ = _bound("len")
+-Array.__iter__ = _bound("iter")
+-Array.__repr__ = _bound("repr")
+-Array.__bool__ = _bound("bool")
+-Array.__getitem__ = _bound("getitem")
+-Array.__eq__ = _bound("eq")
+-Array.__ne__ = _bound("ne")
+-Array.__reduce__ = _bound("reduce")
+-Array.__setstate__ = _bound("setstate")
+-Array.__buffer__ = _bound("buffer")
+-Array.flags = property(functools.partial(_ARRAY_NATIVE, "flags", _ARRAY_CONTEXT),
+-                       doc='``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans.')
+-Array.__array_interface__ = property(functools.partial(_ARRAY_NATIVE, "interface", _ARRAY_CONTEXT))
+-
+-
+ def connect_helpers(resolve):
+     """Capture the shared core helpers once (`_buffer._native_optional`);
+     an absent helper (None) is refused by name by the operation that needs it.
+diff --git a/python/mojolearn/_labels.py b/python/mojolearn/_labels.py
+index b62fd91550..69c65c9a1e 100644
+--- a/python/mojolearn/_labels.py
++++ b/python/mojolearn/_labels.py
+@@ -46,6 +46,7 @@ module, and because it depends only on the contract's `addr_ro`.
+ """
+ 
+ import ctypes
++from itertools import chain
+ from . import _portable_math as math
+ import numbers
+ import operator
+@@ -89,24 +90,120 @@ def is_bool(value):
+     return isinstance(value, bool) or type(value).__name__ == "bool_"
+ 
+ 
++def _is_nested(item):
++    return isinstance(item, (list, tuple))
++
++
++def _level(item):
++    """One nesting level of a label list: a list or tuple as is, a label
++    as a one-element tuple."""
++    return item if isinstance(item, (list, tuple)) else (item,)
++
++
+ def flatten_labels(y):
+     """`y` as a flat Python list of label objects. Anything with
+     `tolist()` (an `Array`, an ndarray, an `array.array`) is unpacked
+     through it; nested lists and tuples are flattened, which is what
+     `np.asarray(y).ravel()` did for a column vector.
+ 
+-    One native call (bindings/classical_labels.mojo `_flatten_labels`):
+-    exact containers are read by pointer from their C storage, depth first."""
+-    from ._native_labels_bridge import labels_entry, LABELS_OP_FLATTEN
+-    entry, context = labels_entry()
+-    return entry(LABELS_OP_FLATTEN, (y,), context)
++    The explicit label input step for Python objects (str labels have no
++    Mojo type): one C-level `chain` pass per nesting LEVEL, so the work is
++    the builtins', and depth-first order is kept (a level at a time
++    expands every list in place)."""
++    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
++        y = y.tolist()
++    if isinstance(y, (str, bytes)):
++        raise ValueError("mojolearn: y must be a sequence of labels")
++    if type(y) in (list, tuple) and _plain_labels(y) is not None:
++        # DEVIATION 3103: nothing to flatten (the type set, read in C)
++        return list(y)
++    items = [y]
++    while any(map(_is_nested, items)):  # glue: one pass per nesting level (depth-sized)
++        items = list(chain.from_iterable(map(_level, items)))  # cpu-route: Python label objects, the explicit label input step
++    return items
++
++
++_PLAIN_NUMBERS = frozenset((int, float, bool))
++_PLAIN_STR = frozenset((str,))
++
++
++def _plain_labels(labels):
++    """'number' or 'str' when EVERY label is exactly a Python int, float or
++    bool, or exactly a str (the type set, read in C); None for anything
++    else, an empty sequence included."""
++    if not labels:
++        return None
++    kinds = set(map(type, labels))
++    if kinds <= _PLAIN_NUMBERS:
++        return "number"
++    if kinds == _PLAIN_STR:
++        return "str"
++    return None
++
++
++def _classes_and_codes(labels):
++    """The ORDER RULE over labels already checked: the FIRST of equal keys
++    is the one `dict.fromkeys` keeps, the classes sort by Python's own
++    comparison, and each label's code is one dict lookup, driven by `map`."""
++    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
++    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
++    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
++
++
++def _sorted_plain_classes(labels, kind):
++    """DEVIATION 3103: `sorted_classes` for labels `_plain_labels` vouched
++    for: one kind (no mixing) of exact Python types, so only a float can be
++    a NaN."""
++    if kind == "number":
++        # `v != v` in C: True only for a NaN float (an int or bool never,
++        # at any size)
++        if any(map(operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
++            raise ValueError(
++                "mojolearn: y contains a NaN label; NaN is not a class"
++            )
++    return _classes_and_codes(labels)
++
++
++def _kind_of_type(t):
++    """'str', 'number' or None (refused) for one label TYPE: the per-label
++    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
++    if issubclass(t, str):
++        return "str"
++    if issubclass(t, numbers.Real) or t.__name__ == "bool_":
++        return "number"
++    return None
++
++
++def _first_true(flags):
++    """Index of the first true flag, or None."""
++    try:
++        return operator.indexOf(flags, True)
++    except ValueError:
++        return None
+ 
+ 
+-# TOMBSTONE: _labels._plain_labels / _classes_and_codes / _sorted_plain_classes /
+-# _kind_of_type / _first_true / _check_label_kinds (the Python ORDER RULE walk)
+-# deleted 2026-11-09 by lane p2-labels-lists-arrays: `sorted_classes` is one
+-# native call (bindings/classical_labels.mojo `_sorted_classes`); the oracle
+-# copies live in tests/test_hotpath_native.py.
++def _check_label_kinds(labels):
++    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
++    the refusals in walk order: the first label that is neither a number
++    nor a str, or a NaN before it, then a mix of the two kinds."""
++    kinds = {t: _kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
++    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
++    stop = _first_true(map(refused.__contains__, map(type, labels))) if refused else None
++    head = labels if stop is None else labels[:stop]
++    if _first_true(map(operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
++        raise ValueError(
++            "mojolearn: y contains a NaN label; NaN is not a class"
++        )
++    if stop is not None:
++        raise ValueError(
++            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
++        )
++    found = set(kinds.values())
++    if "str" in found and "number" in found:
++        raise ValueError(
++            "mojolearn: y mixes numeric and str labels; encode one kind "
++            "before fitting"
++        )
+ 
+ 
+ _STR_LABELS = []
+@@ -136,18 +233,15 @@ def sorted_classes(labels):
+     """`(classes, codes)`: the class list under the ORDER RULE above, and
+     one dense code per label, `classes[codes[i]] == labels[i]` under
+     Python equality."""
+-    classes, codes = _sorted_native(labels)
+-    return classes, codes.tolist()
+-
+-
+-def _sorted_native(labels):
+-    """`sorted_classes` with the codes as the int32 `Array` the native ORDER
+-    RULE writes (one native call; exact label types only, by pointer)."""
+-    from ._native_labels_bridge import labels_entry, LABELS_OP_SORTED
+-    if type(labels) not in (list, tuple):
++    if not labels:
++        raise ValueError("mojolearn: y is empty")
++    if type(labels) is not list:
+         labels = list(labels)
+-    entry, context = labels_entry()
+-    return entry(LABELS_OP_SORTED, (labels,), context)
++    kind = _plain_labels(labels)
++    if kind is not None:
++        return _sorted_plain_classes(labels, kind)
++    _check_label_kinds(labels)
++    return _classes_and_codes(labels)
+ 
+ 
+ # DEVIATION 2500 (2026-09-10): the ORDER RULE for ONE numeric buffer, in
+@@ -323,27 +417,83 @@ def decode_labels(classes, codes):
+     `Array`, real classes a float64 `Array`; str or bool classes give a
+     Python list of the label objects, since no `Array` dtype holds them
+     (DEVIATION 2340: an ndarray of labels used to come back)."""
+-    # ONE native call (bindings/classical_labels.mojo `labels_decode_labels`):
+-    # the class kind, the gathers and, for str / bool / object classes, one
+-    # list filled in C. Codes that are not a 1-D int32 / int64 Array are
+-    # first made one by the native Array operations (lane
+-    # p2-labels-lists-arrays; the Python map / from_list fallbacks are gone).
+-    if not isinstance(codes, Array):
+-        codes = (Array.from_list(codes, "<i8") if type(codes) in (list, tuple)
+-                 else Array.from_buffer(codes))
+-    if codes.ndim != 1:
+-        codes = codes.reshape(-1)
+-    if codes.dtype not in ("<i4", "<i8"):
+-        codes = codes.astype("<i8")
+-    from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
+-    entry, context = labels_entry()
+-    return entry(LABELS_OP_DECODE, (classes, codes), context)
++    if isinstance(codes, Array) and codes.ndim == 1 and codes.dtype in ("<i4", "<i8"):
++        # Lane ne1-h-labels (N437): the class kind, the packed class table,
++        # the int32 widening and the gather in ONE native call
++        # (bindings/classical_labels.mojo `labels_decode_labels`); the shell
++        # no longer re-derives the kind or packs the table per call.
++        from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
++        entry, context = labels_entry()
++        return entry(LABELS_OP_DECODE, (classes, codes), context)
++    kind = label_kind(classes)
++    fast = _decode_labels_native(classes, codes, kind)
++    if fast is not None:
++        return fast
++    values = _decode_list_native(classes, codes)
++    if values is None:
++        values = list(map(classes.__getitem__, map(int, codes)))  # cpu-route: codes the native decode does not take (not an int32/int64 Array, or out of range: Python's IndexError), the explicit label output step
++    try:
++        if kind == "int":
++            return Array.from_list(list(map(int, values)), "<i8")  # cpu-route: int classes past the native decode range, the explicit label output step
++        if kind == "float":
++            return Array.from_list(list(map(float, values)), "<f8")  # cpu-route: float classes past the native decode range, the explicit label output step
++    except (OverflowError, TypeError):
++        # `Array.from_list` reports an int outside int64 as a TypeError
++        # (pre-existing: only OverflowError was caught, so a 2**70 class
++        # raised instead of returning the label objects; fixed 2026-09-10)
++        pass
++    return values
++
++
++def _decode_list_native(classes, codes):
++    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native.mojo
++    "decode"): a presized list filled in C from an int32 or int64 vector code
++    `Array`. None for any other codes, or a code out of range."""
++    if type(classes) not in (list, tuple) or not isinstance(codes, Array):
++        return None
++    if codes.ndim != 1 or codes.dtype not in ("<i4", "<i8"):
++        return None
++    if not _STR_LABELS:
++        from .tokenizer import _binding
++        _STR_LABELS.append(_binding()._module.str_labels_native_call)
++    return _STR_LABELS[0]("decode", classes, codes._addr, int(codes.size),
++                          4 if codes.dtype == "<i4" else 8)
+ 
+ 
+-# TOMBSTONE: _labels._decode_list_native / _decode_labels_native (the Python
+-# decode seams; every decode is one native call now) deleted 2026-11-09 by lane
+-# p2-labels-lists-arrays; the frozen copies the legacy test oracle reads live in
+-# tests/_legacy_host_inference.py.
++def _decode_labels_native(classes, codes, kind):
++    """DEVIATION 2500: `classes[code]` per row through the base binding's
++    `gather_i64` / `gather_f64` when `codes` is an int64 `Array` (what
++    `argmax_rows` returns) and the classes are all int or all float. The
++    dtype of the answer is the one `decode_labels` documents; a class that
++    does not fit int64 leaves the Python arm to raise and fall back."""
++    from ._buffer import _native, _output_store
++
++    if kind not in ("int", "float") or not isinstance(codes, Array):
++        return None
++    if codes.dtype == "<i4" and codes.ndim == 1 and classes:
++        # DEVIATION 3103: int32 codes (`GradientBoostingClassifier.predict`
++        # hands these over) used to take the Python arm, four passes over
++        # the rows. Widened by `Array.astype` they take the gather. A code
++        # the gather refuses (negative: Python indexes from the END, so the
++        # Python arm ANSWERS it) sends the call back to the Python arm.
++        try:
++            return _decode_labels_native(classes, codes.astype("<i8"), kind)
++        except (ImportError, AttributeError):
++            raise
++        except Exception:
++            return None
++    if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
++        return None
++    try:
++        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"  # glue: packs the class table for the native decode (classes-sized: distinct classes)
++                 else Array.from_list([float(c) for c in classes], "<f8"))  # glue: packs the class table for the native decode (classes-sized: distinct classes)
++    except (OverflowError, TypeError):
++        return None  # a class outside int64: the Python arm returns the objects
++    n = int(codes.size)
++    store = _output_store("q" if kind == "int" else "d", n)
++    fn = _native("gather_i64" if kind == "int" else "gather_f64")
++    fn(table._addr, len(classes), codes._addr, n, store.buffer_info()[0])
++    return Array._owned(store, (n,), "<i8" if kind == "int" else "<f8", "C")
+ 
+ 
+ _INDEX_DTYPES = ("<i8", "<i4", "<u4", "<u2", "<u1", "<i1")
+@@ -378,11 +528,8 @@ class ClassLabels(list):
+             codes = codes.astype("<i8")
+         return decode_labels(list(self), codes)
+ 
+-    # Pickle and copy take object.__reduce_ex__'s C path: NEWOBJ with no
+-    # arguments, then the list items appended. `__slotnames__` is filled
+-    # here so CPython never calls copyreg._slotnames (Python) for the class.
+-    # The former Python `__reduce__` ran once per pickled classes_ list.
+-    __slotnames__ = []
++    def __reduce__(self):
++        return (ClassLabels, (list(self),))
+ 
+ 
+ def as_class_labels(classes):
+@@ -535,7 +682,8 @@ def unique_inverse(y):
+         native = str_labels("encode", flat) if type(flat) is list else None
+         if native is not None:
+             return native
+-        return _sorted_native(flat)
++        classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
++        return classes, Array.from_list(codes, "<i4")
+     if arr.size == 0:
+         raise ValueError("mojolearn: y is empty")
+     if arr.size != max(arr.shape):  # glue: largest axis of the shape
+diff --git a/python/mojolearn/_runtime_fallbacks.py b/python/mojolearn/_runtime_fallbacks.py
+index b2d00f5ce8..e12a4716c5 100644
+--- a/python/mojolearn/_runtime_fallbacks.py
++++ b/python/mojolearn/_runtime_fallbacks.py
+@@ -3,19 +3,63 @@
+ 
+ This module does not implement or select a product fallback. The verifier uses
+ it to report an existing callback without calling that operation Python-free.
+-
+-The list is frozen (AGENTS.md "No Python in the runtime"): nothing is added
+-without Andrew's explicit word. It is empty. Its one entry,
+-`array-length-metadata` (the Python `Array.__len__` frame that native
+-Voting/Stacking/MultiOutput/OneVsRest/Calibrated paths reached through
+-len(Array)), was removed on lane/p2-labels-lists-arrays: `Array.__len__` and
+-the other Array protocol methods are now C properties over the native entry
+-(`_array._bound`), so len(Array) from any caller enters no Python frame.
+ """
++import sys
++from types import MethodType, ModuleType
++
++from ._array import Array
++
++ARRAY_LENGTH_METADATA = {
++    'id': 'array-length-metadata',
++    'authorization': 'Andrew, 2026-10-25: documented Python fallbacks authorized',
++    'reason': ('len(Array) from these native owners enters Array.__len__, a one-call wrapper into the native '
++               'array_native_call; the owners do not yet read the first-axis length natively, so the '
++               'wrapper frame remains an incomplete native migration.'),
++    'callee': 'mojolearn._array.Array.__len__',
++    'upstream_context': 'https://github.com/modular/modular/issues/7399',
++}
++_LENGTH_CODE = Array.__len__.__code__
++_OWNERS = ('VotingRegressor', 'VotingClassifier', 'StackingRegressor',
++           'StackingClassifier', 'MultiOutputRegressor', 'MultiOutputClassifier',
++           'OneVsRestClassifier', 'CalibratedClassifierCV')
++_METHODS = frozenset(('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'))
++
++
++def _connected_methods():
++    module = sys.modules.get('mojolearn._expansion_trees')
++    if type(module) is not ModuleType:
++        return {}
++    methods = {}
++    for name in _OWNERS:
++        cls = vars(module).get(name)
++        if type(cls) is not type:
++            continue
++        for method in _METHODS:
++            for base in cls.__mro__:
++                if method in vars(base):
++                    methods[cls, method] = vars(base)[method]
++                    break
++    return methods
++
+ 
+-FALLBACKS = {}
++_CONNECTED_METHODS = _connected_methods()
+ 
+ 
+ def approved_metadata_callbacks(operation):
+-    """Return exact callback code identities approved for `operation`: none."""
+-    return {}
++    """Return exact callback code identities for the declared public owners."""
++    if type(operation) is not MethodType or operation.__func__.__name__ not in _METHODS:
++        return {}
++    module = sys.modules.get('mojolearn._expansion_trees')
++    if type(module) is not ModuleType:
++        return {}
++    owner = type(operation.__self__)
++    if not any(owner is vars(module).get(name) for name in _OWNERS):
++        return {}
++    if _CONNECTED_METHODS.get((owner, operation.__func__.__name__)) is not operation.__func__:
++        return {}
++    # A subclass or monkeypatched length implementation is not authorized by
++    # this exception. The callback must be the originally connected body.
++    length = vars(Array).get('__len__')
++    if getattr(length, '__code__', None) is not _LENGTH_CODE:
++        return {}
++    return {_LENGTH_CODE: ARRAY_LENGTH_METADATA}

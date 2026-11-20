@@ -1,0 +1,24 @@
+diff --git a/arima/impl/fast_order_search.mojo b/arima/impl/fast_order_search.mojo
+index 6215b5bcef..84ce54830c 100644
+--- a/arima/impl/fast_order_search.mojo
++++ b/arima/impl/fast_order_search.mojo
+@@ -20,7 +20,7 @@ returns 0 before any device work, and the caller takes the per-order fits
+ (whose evaluation has its own bound). Chunking moves no bit: every order
+ keeps its own parameters and every member is its own filter thread.
+ 
+-ARIMA_ORDER_DEVICE (its `_OFF` deleted 2026-11-15). The search
++ARIMA_ORDER_DEVICE (`-D MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF=1`). The search
+ stays on the device between the upload and one final download: each order's
+ starting point goes from `pack` straight into its optimizer (was a download,
+ a host finite walk and a re-upload per order; the finite test is a device
+@@ -76,9 +76,7 @@ comptime _ORDER_IDN = ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_IDENT
+ # TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 7cbcdf1758.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime ARIMA_ORDER_CAP = _ORDER_IDN
+-# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-47-promote; code recoverable at 1b2ff989e2.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime ARIMA_ORDER_DEVICE = _ORDER_IDN
++comptime ARIMA_ORDER_DEVICE = _ORDER_IDN and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
+ comptime ARIMA_ORDER_SEASONAL = (
+     ARIMA_ORDER_DEVICE and not is_defined["MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF"]()
+ )

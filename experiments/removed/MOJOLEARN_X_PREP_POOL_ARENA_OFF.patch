@@ -1,0 +1,16 @@
+diff --git a/x_prep/device.mojo b/x_prep/device.mojo
+index d69e640080..274fb16601 100644
+--- a/x_prep/device.mojo
++++ b/x_prep/device.mojo
+@@ -102,9 +102,8 @@ comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
+ # TOMBSTONE: MOJOLEARN_XPREP_ARENA_POOL_OFF (old path: the fresh allocation; EXP:1787 CONFIRMED the pool default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5867d7c11d.
+ # Restore: git apply experiments/removed/MOJOLEARN_XPREP_ARENA_POOL_OFF.expdel2-22-linear.patch
+ comptime X_PREP_POOL_ARENA_IDN = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_accelerator()
+-# TOMBSTONE: MOJOLEARN_X_PREP_POOL_ARENA_OFF (old path; promoted on FAST+Apple only (EXP:409, M3); the NVIDIA/AMD FAST A/B is owed and moot (FAST is Apple only)) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at cc8e7c0dfd.
+-# Restore: git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch
+-comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or X_PREP_POOL_ARENA_IDN
++comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++                             and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
+ comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV2" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV2"
+ #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
+ comptime _XP_POOL_MIN_WORDS = 1 << 24

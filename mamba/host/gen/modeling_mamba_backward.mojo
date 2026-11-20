@@ -511,7 +511,7 @@ def mamba_bwd_gate_into(
     var _l1_a10 = Int32(d_inner)
     def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10}:
         mamba_bwd_gate_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10)
-    host_launch(_launch_1, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_1, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 205)
 
 
 # ===========================================================================
@@ -616,7 +616,7 @@ def mamba_bwd_ddtp_into(
     var _l2_a5 = Int32(d_inner)
     def _launch_2(gid_: Int) {imm _l2_a0, imm _l2_a1, imm _l2_a2, imm _l2_a3, imm _l2_a4, imm _l2_a5}:
         mamba_bwd_ddtp_kernel(gid_, _l2_a0, _l2_a1, _l2_a2, _l2_a3, _l2_a4, _l2_a5)
-    host_launch(_launch_2, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_2, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 102)
 
 
 # ===========================================================================
@@ -717,7 +717,7 @@ def mamba_bwd_du_join_into(
     var _l3_a6 = Int32(n)
     def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6}:
         mamba_bwd_du_join_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6)
-    host_launch(_launch_3, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_3, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 122)
 
 
 # ===========================================================================
@@ -834,7 +834,7 @@ def mamba_bwd_dhin_into(
     var _l4_a5 = Int32(d_inner)
     def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5}:
         mamba_bwd_dhin_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5)
-    host_launch(_launch_4, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_4, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 0)
 
 
 def mamba_bwd_conv_tap_product_kernel(gid_: Int,
@@ -946,7 +946,7 @@ def mamba_bwd_conv_tap_product_into(
     var _l5_a7 = Int32(k)
     def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
         mamba_bwd_conv_tap_product_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
-    host_launch(_launch_5, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_5, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)), 33)
 
 
 # ===========================================================================
@@ -1045,7 +1045,7 @@ def mamba_bwd_concat_xp_into(
     var _l6_a6 = Int32(xr)
     def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3, imm _l6_a4, imm _l6_a5, imm _l6_a6}:
         mamba_bwd_concat_xp_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3, _l6_a4, _l6_a5, _l6_a6)
-    host_launch(_launch_6, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_6, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)), 0)
 
 
 def mamba_bwd_concat_p_into(
@@ -1069,7 +1069,7 @@ def mamba_bwd_concat_p_into(
     var _l7_a4 = Int32(d_inner)
     def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4}:
         mamba_bwd_concat_p_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4)
-    host_launch(_launch_7, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_7, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)), 0)
 
 
 # ===========================================================================
@@ -1292,7 +1292,7 @@ def mamba_bwd_norm_into(
     var _l8_a10 = Int32(d_model)
     def _launch_8(gid_: Int) {imm _l8_a0, imm _l8_a1, imm _l8_a2, imm _l8_a3, imm _l8_a4, imm _l8_a5, imm _l8_a6, imm _l8_a7, imm _l8_a8, imm _l8_a9, imm _l8_a10}:
         mamba_bwd_norm_kernel(gid_, _l8_a0, _l8_a1, _l8_a2, _l8_a3, _l8_a4, _l8_a5, _l8_a6, _l8_a7, _l8_a8, _l8_a9, _l8_a10)
-    host_launch(_launch_8, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)))
+    host_launch(_launch_8, launch_count((_grid(m), 1, 1), (BWD_TPB, 1, 1)), 0)
 
 
 def _require(got: Int, want: Int, name: String, shape: String) raises:

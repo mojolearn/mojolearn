@@ -1,6 +1,7 @@
 """Source/connection checks only; actual setters require the integrated binary."""
 import ast
 import builtins
+import copy
 import hashlib
 import inspect
 import json
@@ -73,7 +74,7 @@ def fixture():
     for name in ('_NATIVE_PUBLIC_CLASSES', '_NATIVE_PUBLIC_LOADERS'):
         declared = next(n.value for n in source.body
                         if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == name)
-        names = {node.attr for node in declared.elts}
+        names = set(ast.literal_eval(declared))
         inventories[name] = tuple(cls for cls in classes if cls.__name__ in names)
     ns.update({'__package__': package.__name__, '_CLASSES': tuple(classes), '_EVENTS': events,
           '_DEFERRED_MODULES': deferred,
@@ -235,15 +236,25 @@ def test_nested_native_entry_requires_exact_supported_dictionary_abi(recipe, acc
     assert not calls
 
 
+def _ast_sha(node):
+    """The function's AST digest without positions or its docstring: what the audited events depend on."""
+    body = node.body
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        node = copy.copy(node)
+        node.body = body[1:] or [ast.Pass()]
+    return hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+
+
 @pytest.mark.parametrize('row', ROWS, ids=lambda row: row['declared_class'])
 def test_every_schema_is_bound_to_unchanged_constructor_and_helper_source(row):
+    # Bound by the function's AST (positions excluded), not its line: an edit elsewhere in the file moves the
+    # line and changes nothing the schema depends on. `line` in the proof is where the audit found it.
     for function in row['source_functions']:
         source = ast.parse((ROOT / function['path']).read_text())
-        matches = [node for node in ast.walk(source) if isinstance(node, ast.FunctionDef)
-                   and node.name == function['name'] and node.lineno == function['line']]
-        assert len(matches) == 1
-        digest = hashlib.sha256(ast.dump(matches[0], include_attributes=False).encode()).hexdigest()
-        assert digest == function['ast_sha256'], function
+        digests = {_ast_sha(node) for node in ast.walk(source)
+                   if isinstance(node, ast.FunctionDef) and node.name == function['name']}
+        assert function['ast_sha256'] in digests, function
 
 
 def test_schema_events_preserve_repeated_writes_constants_and_mode_wrapper_order():
@@ -266,30 +277,40 @@ def test_constructor_resolution_and_mode_wrapper_still_match_the_audited_source(
     for row in ROWS:
         kind, cls = index.resolve_name(row['module'], row['declared_class'])
         assert kind == 'class'
-        ancestry = []
+        # What the audited events depend on, read from the class's current MRO (a mixin added or deleted that
+        # defines none of these changes nothing; 9d9846104e deleted ClassifierScoreMixin from these bases):
+        # (1) the __init__ chain is exactly the audited constructor functions (by AST), (2) the
+        # `_mojolearn_native_public` declarations and the classes that make them are the audited ones, and
+        # (3) no class requests `_native_constructor` (the audited NumericModeMixin events assume none does).
+        inits, declared = [], []
         for base in index.mro(cls):
+            assert not any(k.arg == '_native_constructor' for k in base.node.keywords), (row['declared_class'], base.name)
+            inits += [_ast_sha(node) for node in base.node.body
+                      if isinstance(node, ast.FunctionDef) and node.name == '__init__']
             declarations = []
             for node in base.node.body:
                 if isinstance(node, (ast.Assign, ast.AnnAssign)):
                     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                     if any(isinstance(target, ast.Name) and target.id == '_mojolearn_native_public' for target in targets):
                         declarations.append(ast.unparse(node))
-            ancestry.append(dict(module=base.mod.name, name=base.name,
-                bases=[ast.unparse(node) for node in base.node.bases],
-                decorators=[ast.unparse(node) for node in base.node.decorator_list],
-                native_public_declarations=declarations))
-        assert ancestry == row['constructor_ancestry'], row['declared_class']
+            if declarations:
+                declared.append((base.mod.name, base.name, declarations))
+        audited_inits = {f['ast_sha256'] for f in row['source_functions'] if f['name'] == '__init__'}
+        assert set(inits) == audited_inits, row['declared_class']
+        audited = [(a['module'], a['name'], a['native_public_declarations'])
+                   for a in row['constructor_ancestry'] if a['native_public_declarations']]
+        assert declared == audited, row['declared_class']
     wrapper = PROOF['mode_wrapper_source']
     source = ast.parse((ROOT / wrapper['path']).read_text())
     cls = next(node for node in source.body if isinstance(node, ast.ClassDef) and node.name == wrapper['class'])
     method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == wrapper['method'])
-    assert hashlib.sha256(ast.dump(method, include_attributes=False).encode()).hexdigest() == wrapper['ast_sha256']
+    assert _ast_sha(method) == wrapper['ast_sha256']
     # The class hook now delegates the wrapper and application-subclass schema
     # connection. Bind those audited helpers too, rather than pinning only the
     # three-line hook (b2133a474; public subclass tests passed in tests-r4).
     for name, digest in wrapper['helpers'].items():
         helper = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == name)
-        assert hashlib.sha256(ast.dump(helper, include_attributes=False).encode()).hexdigest() == digest, name
+        assert _ast_sha(helper) == digest, name
 
 
 def deferred_fixture():
@@ -326,8 +347,8 @@ def test_deferred_modules_are_exactly_the_numpy_backed_rows():
         for name in names:
             assert rows[name] == 'mojolearn.' + module, (name, rows[name])
     source = ast.parse(CONNECTOR.read_text())
-    eager = next(n.value for n in source.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CLASSES')
-    eager_names = [element.attr for element in eager.elts]
+    eager = next(n.value for n in source.body if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == '_CLASS_SOURCES')
+    eager_names = list(ast.literal_eval(eager))
     assert not set(eager_names) & set(lazy)
     assert sorted(eager_names + lazy) == sorted(rows)
 
@@ -446,7 +467,7 @@ def test_deferred_module_schema_mismatch_refuses_before_any_setter():
 
 
 def test_full_reset_is_separate_from_existing19_and_all_layout_snapshots_follow_install():
-    source = (ROOT / 'python/mojolearn/__init__.py').read_text()
+    source = (ROOT / 'python/mojolearn/_families.py').read_text()  # the package's class connections
     ordered = ['_install_full_reset_params()', '_connect_mode_metadata_classes(', '_connect_public_attributes(',
                '_connect_native_cv(', '_connect_params_setter(', '_connect_params_metadata_classes(', '_connect_full_reset_params(']
     positions = [source.index(name) for name in ordered]
@@ -458,7 +479,7 @@ def test_full_reset_is_separate_from_existing19_and_all_layout_snapshots_follow_
 
 
 def test_native_reset_never_invokes_python_constructor_or_clones_parameters():
-    source = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    source = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
     for forbidden in ('Python.import_module', '.__init__(', 'clone_parameter', 'msel_native_set_params', 'fields['):
         assert forbidden not in source
     assert source.index('_release_owned(previous, retained, context)') < source.index('py_call(fields.clear)')
@@ -467,7 +488,7 @@ def test_native_reset_never_invokes_python_constructor_or_clones_parameters():
     method = cls.body[0]
     assert len(method.body) == 2 and ast.unparse(method.body[1]) == 'return _ENTRY(self, params, _CONTEXT)'
     registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert 'from bindings.full_reset_params_native import full_reset_params_c\n' in registration
+    assert 'from bindings.full_reset_params_native_door import full_reset_params_c\n' in registration
     assert 'module.def_py_c_function(full_reset_params_c, "full_reset_params_native_call")' in registration
 
 
@@ -480,7 +501,7 @@ def test_compile_invalidation_is_only_host_tokenizer():
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/full_reset_params_native.mojo' in closure['files']:
+            if 'bindings/full_reset_params_native_door.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}
 
@@ -491,7 +512,7 @@ def test_native_constructor_is_one_call_and_never_runs_python_initializers():
     wrapper = factory.body[0]
     assert isinstance(wrapper, ast.FunctionDef) and len(wrapper.body) == 1
     assert ast.unparse(wrapper.body[0]) == 'return _INIT_ENTRY(self, args, kwargs, _CONTEXT, owner)'
-    source = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    source = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     for forbidden in ('Python.import_module', '.__init__(', '.__setattr__(', 'fields[', 'fields.clear',
                       'native_storage_allocate', 'py_setattr(', 'b.hasattr', 'Python.evaluate'):
         assert forbidden not in source, forbidden
@@ -502,7 +523,7 @@ def test_native_constructor_is_one_call_and_never_runs_python_initializers():
     body = source[source.index('def _construct('):]
     assert body.index('_bind(positional, keywords, plan)') < body.index('_admit(model, owner, plan, context)') < body.index('_fields(model)')
     registration = (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert 'from bindings.full_reset_constructor_native import full_reset_constructor_c\n' in registration
+    assert 'from bindings.full_reset_constructor_native_door import full_reset_constructor_c\n' in registration
     assert '\n        module.def_py_c_function(full_reset_constructor_c, "full_reset_constructor_native_call")\n' in registration
 
 
@@ -515,7 +536,7 @@ def test_constructor_compile_invalidation_is_only_host_tokenizer():
         for name, members in partitions.items():
             closure = graph.closure(members)
             assert closure['scope'] == 'closure', closure['unresolved']
-            if 'bindings/full_reset_constructor_native.mojo' in closure['files']:
+            if 'bindings/full_reset_constructor_native_door.mojo' in closure['files']:
                 owners.add((mode, name))
     assert owners == {('host', 'tokenizer')}
 
@@ -525,23 +546,31 @@ def test_umap_validation_is_connected_without_a_python_callback():
     cls = next(cls for cls in ns['_CLASSES'] if cls.__name__ == 'UMAP')
     plan = ns['_CONTEXT']['plans'][cls]
     assert plan['validation_kind'] == 'umap'
-    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', True)
+    # UMAP's own constructor writes numeric_mode (native-public, no
+    # NumericModeMixin wrapper); validation still precedes that write.
+    assert plan['events'][-1] == ('numeric_mode', 'parameter', 'numeric_mode', False)
     assert all('validation_kind' in p for p in ns['_CONTEXT']['plans'].values())
-    constructor = (ROOT / 'bindings/full_reset_constructor_native.mojo').read_text()
+    constructor = (ROOT / 'bindings/full_reset_constructor_native_door.mojo').read_text()
     body = constructor.split('var validated = False', 1)[1]
     assert body.index('umap_parameters_fields(fields,') < body.index('py_setitem(fields, targets[i], sources[i])')
-    reset = (ROOT / 'bindings/full_reset_params_native.mojo').read_text()
+    reset = (ROOT / 'bindings/full_reset_params_native_door.mojo').read_text()
     assert reset.index('umap_parameters_fields(fresh,') < reset.index('_release_owned(previous, retained, context)')
-    validation = (ROOT / 'bindings/umap_parameters_native.mojo').read_text()
+    validation = (ROOT / 'bindings/umap_parameters_native_door.mojo').read_text()
     for forbidden in ('._parameters(', '._extras(', 'operator.index', 'operator.le', 'operator.eq'):
         assert forbidden not in validation
     assert '_one_of(cls, context["integer_types"])' in validation
 
 
 def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
-    source = (ROOT / 'bindings/umap_parameters_native.mojo').read_text()
+    source = (ROOT / 'bindings/umap_parameters_native_door.mojo').read_text()
     assert 'var shape = array_shape_once(value, context)' in source
-    assert 'array_metadata_once(value, shape^, name, context, True)' in source
+    # The scalar is read under the door's ArrayPin, held until after the word is read (Mojo frees a local at its
+    # last named use, so the pin is named again after the read).
+    assert 'array_metadata_once(value, shape^, name, context, pin, True)' in source
+    for kind in ('umap_integer', 'umap_scalar'):
+        body = source.split(f'def {kind}(', 1)[1].split('\ndef ', 1)[0]
+        read = body.index('_scalar_word(scalar)')
+        assert body.index('var pin = ArrayPin()') < read < body.index('_ = pin^'), kind
     assert 'word > UInt64(UMAP_I64_MAX)' in source
     assert 'var at = i if value.native_byte_order else width - i - 1' in source
     assert 'result = bitcast[DType.float64](word)' in source
@@ -550,5 +579,5 @@ def test_umap_parameter_source_keeps_scalar_arrays_and_native_bounds():
     array_refusal = source.split('def _parameter_array(', 1)[1].split('def umap_integer(', 1)[0]
     assert 'except:' in array_refusal
     assert 'raise Error("ValueError: UMAP " + name + detail)' in array_refusal
-    assert '_parameter_array(value, name, True, context)' in source
-    assert '_parameter_array(value, name, False, context)' in source
+    assert '_parameter_array(value, name, True, context, pin)' in source
+    assert '_parameter_array(value, name, False, context, pin)' in source

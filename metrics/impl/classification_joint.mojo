@@ -5,7 +5,7 @@ admission; this operator refuses mismatched buffer shapes before indexing.
 Counts are exact Int32 for n<=Int32.max, matching classification.mojo.
 Outputs remain on device for existing finish kernels; no array readback."""
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from metrics.impl.classification import count_labels_kernel, MAX_CONFUSION_CLASSES, confusion_finish_kernel, prf_finish_kernel

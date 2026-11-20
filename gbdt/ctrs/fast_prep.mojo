@@ -6,11 +6,11 @@ Every entry point here is reached from `gbdt/train.mojo` only under a
 `comptime if` on one of the four flags below, each of which is
 `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` and its
 own `-D MOJOLEARN_...` define (or SYM_CTR_ALL, the FAST + Apple default since
-2026-10-04; rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`). IDENTICAL and
+2026-10-04; its rollback define was deleted 2026-11-15). IDENTICAL and
 every non-Apple build compile main's CTR prep unchanged by those historical
-FAST switches. NEW T28/T28_SORT/T28_PREFIX independently opt IDENTICAL into the
-shared preparation, stable-segment frequency and exclusive-prefix reuse paths below. They do
-not enable the other Apple FAST switches and remain default OFF.
+FAST switches. T28 opts IDENTICAL into the shared preparation below; it
+does not enable the other Apple FAST switches and remains default OFF
+(T28_SORT and T28_PREFIX were deleted 2026-11-15).
 NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 
 What each flag changes, against the read-profile in
@@ -49,20 +49,20 @@ What each flag changes, against the read-profile in
 Bits: FeatureFreq counts and table counts are integers; Borders values are
 the same kernels over the same sorted order; borders are the same host
 arithmetic over the same min/max. The historical FAST outcomes below are
-not evidence for the new IDENTICAL T28/T28_SORT arms; all-column identity and
+not evidence for the IDENTICAL T28 arm; all-column identity and
 quality remain unverified.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import memcpy
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
-from gbdt.trees_identical_switches import T28, T28_SORT, T28_PREFIX
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
+from core.transfer import transfer_download_list, transfer_upload_list
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
     CTR_BUCKETS,
@@ -101,7 +101,7 @@ from gbdt.gpu_util.kernel.transform import (
 
 
 comptime _SYM_CTR_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
@@ -114,8 +114,8 @@ comptime _SYM_CTR_FAST_APPLE = (
 #: 0.631129 -> 0.630830 (noise), logloss 0.528503 -> 0.528440 (better). KEEP:
 #: the umbrella is the FAST + Apple default since then (each flag below
 #: still ANDs _SYM_CTR_FAST_APPLE, so IDENTICAL and non-Apple are
-#: unchanged); rollback -D MOJOLEARN_SYM_CTR_ALL_OFF, after which the single
-#: defines select flags one by one again. Per-flag rab7 rows:
+#: unchanged); the rollback define and the single-flag defines were deleted
+#: 2026-11-15 (lane/expdel2-41-trees). Per-flag rab7 rows:
 #: CTR_INDEX_FUSED -6.4%, CTR_SORT_ONCE -4.7% (covered by this umbrella).
 #: SUPERSEDED PART (merge 2026-10-05): CTR_INDEX_FUSED's train arm (the
 #: `_build_cindex_fused` walk) was replaced by main's device CTR column build
@@ -123,7 +123,9 @@ comptime _SYM_CTR_FAST_APPLE = (
 #: the flag now only selects the device CTR output (`device_out`). The
 #: -8.0% above was measured with the old arm: gbdt-categorical taxi needs a
 #: re-measure of SYM_CTR_ALL on current main.
-comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
+# TOMBSTONE: MOJOLEARN_SYM_CTR_ALL_OFF (DELETE-OLD-PATH, rule d: EXP:1274 FAST+Apple default; FAST is Apple only, so no other vendor is owed) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 2497c8a9cf.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_CTR_ALL_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SYM_CTR_ALL = True
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
@@ -132,16 +134,26 @@ comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
 #: EXPERIMENTS.md (Oct 4): sym-ctr-prep-shared-taxicat-x on the old batch
 #: base 3150d75c1, 27,548 -> 26,357 ms (-4.3%), AUC .631249 -> .630964,
 #: HOLD (old base; quality noise not established). Owed: current-main A/B.
-comptime CTR_PREP_SHARED = T28 or T28_PREFIX or (_SYM_CTR_FAST_APPLE and (
+# TOMBSTONE: MOJOLEARN_CTR_PREP_SHARED (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 0a23440f37.
+# Restore: git apply experiments/removed/MOJOLEARN_CTR_PREP_SHARED.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T28_PREFIX (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 865bea9957.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_PREFIX.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_PREP_SHARED"]() or SYM_CTR_ALL
-))
+)
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
-comptime CTR_SORT_ONCE = T28_SORT or (_SYM_CTR_FAST_APPLE and (
+# TOMBSTONE: MOJOLEARN_CTR_SORT_ONCE (DELETE-ARM, EXP:1274 force knob under the SYM_CTR_ALL default, rule e) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at ea9a6fecad.
+# Restore: git apply experiments/removed/MOJOLEARN_CTR_SORT_ONCE.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREES_T28_SORT (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 6293628f02.
+# Restore: git apply experiments/removed/MOJOLEARN_TREES_T28_SORT.expdel2-41-trees.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_SORT_ONCE"]() or SYM_CTR_ALL
-))
+)
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
@@ -150,6 +162,9 @@ comptime CTR_SORT_ONCE = T28_SORT or (_SYM_CTR_FAST_APPLE and (
 #: EXPERIMENTS.md (Oct 4): sym-ctr-index-fused-taxicat-x on the old batch
 #: base 3150d75c1, 27,240 -> 25,566 ms (-6.1%), AUC .630808 -> .630766,
 #: HOLD (old base). Owed: current-main A/B.
+# TOMBSTONE: MOJOLEARN_CTR_INDEX_FUSED (DELETE-ARM, EXP:1274 force knob under the SYM_CTR_ALL default, rule e) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at f2886a9013.
+# Restore: git apply experiments/removed/MOJOLEARN_CTR_INDEX_FUSED.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_INDEX_FUSED"]() or SYM_CTR_ALL
 )
@@ -157,6 +172,9 @@ comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
+# TOMBSTONE: MOJOLEARN_CTR_ONEHOT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL force knob, rule g) deleted 2026-11-15 by lane/expdel2-41-trees; code recoverable at 3fb3500522.
+# Restore: git apply experiments/removed/MOJOLEARN_CTR_ONEHOT_DEVICE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_ONEHOT_DEVICE"]() or SYM_CTR_ALL
 )
@@ -306,7 +324,7 @@ def _read_counts_wide(
     ctx.enqueue_copy(dst_ptr=h_absent.unsafe_ptr(), src_buf=d_absent)
     ctx.synchronize()
     dst.resize(unsafe_uninit_length=n)
-    memcpy(
+    unsafe_memcpy(
         dest=dst.unsafe_ptr().bitcast[Int64](),
         src=h_wide.unsafe_ptr(),
         count=n,
@@ -381,7 +399,7 @@ def device_dense_codes(
     if n <= 0:
         raise Error("device_dense_codes: empty column")
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    memcpy(dest=h.unsafe_ptr(), src=src, count=n)
+    unsafe_memcpy(dest=h.unsafe_ptr(), src=src, count=n)
     var x = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=x, src_ptr=h.unsafe_ptr())
     var codes = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -520,13 +538,14 @@ def read_codes(
 ) raises -> List[UInt32]:
     """The host copy of a device code column, for a caller that still runs
     main's host drivers over it."""
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=codes)
-    ctx.synchronize()
-    var out = List[UInt32]()
-    out.resize(n, UInt32(0))
-    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
-    return out^
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): one copy into the
+    # list's own words. Gone: a pinned host buffer of the column per call, a
+    # zero fill of the list and a memcpy over it. The wait for an empty
+    # column is kept.
+    if n <= 0:
+        ctx.synchronize()
+        return List[UInt32]()
+    return transfer_download_list[DType.uint32](ctx, codes, n)
 
 
 def upload_codes(
@@ -534,14 +553,11 @@ def upload_codes(
 ) raises -> DeviceBuffer[DType.uint32]:
     """Host codes (main's `dense_category_code` loop) onto the device once
     per feature, for the fast drivers when `CTR_ONEHOT_DEVICE` is off."""
+    # core/transfer.mojo (lane fx-dup-next, 2026-11-19): copied in place from
+    # the caller's list, one wait. Gone: a pinned host buffer of the column
+    # per feature and a memcpy into it.
     var n = len(codes)
-    var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    memcpy(dest=h.unsafe_ptr(), src=codes.unsafe_ptr(), count=n)
-    var d = ctx.enqueue_create_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
-    return d^
+    return transfer_upload_list[DType.uint32](ctx, codes, n, n)
 
 
 # --- the device min/max and the Uniform grid (CTR_INDEX_FUSED) ----------------
@@ -638,7 +654,7 @@ def ctr_borders_from_device(
     ctx.synchronize()
     var values = List[Float32]()
     values.resize(n, Float32(0.0))
-    memcpy(dest=values.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=values.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     return compute_ctr_borders(values, description)
 
 
@@ -657,7 +673,7 @@ def _read_column(
     ctx.synchronize()
     var col = List[Float32]()
     col.resize(n, Float32(0.0))
-    memcpy(dest=col.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=col.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     return col^
 
 
@@ -685,11 +701,6 @@ struct CtrPrepFast(Movable):
     var orders: List[DeviceBuffer[DType.uint32]]
     var order_ready: List[Bool]
     var scratch_ready: Bool
-    # T28_PREFIX retains the exact exclusive prefix denominator and gathered
-    # target in existing scratch, only while bins/target are unchanged. No
-    # persistent row-sized cache allocation or hash-only identity is involved.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var prefix_ready: Bool
     # the bin builder's buffers (`ctr_bins_builder.h:253-259`)
     var indices: DeviceBuffer[DType.uint32]
     var bins: DeviceBuffer[DType.uint32]
@@ -725,7 +736,6 @@ struct CtrPrepFast(Movable):
         self.perm_count = perm_count
         self.has_target = False
         self.scratch_ready = False
-        self.prefix_ready = False
         self.target = ctx.enqueue_create_buffer[DType.uint8](1)
         self.orders = List[DeviceBuffer[DType.uint32]]()
         self.order_ready = List[Bool]()
@@ -800,11 +810,10 @@ struct CtrPrepFast(Movable):
                 + " entries for " + String(self.n) + " rows"
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint8](self.n)
-        memcpy(
+        unsafe_memcpy(
             dest=h.unsafe_ptr(), src=binarized_target.unsafe_ptr(),
             count=self.n,
         )
-        self.prefix_ready = False
         self.target = ctx.enqueue_create_buffer[DType.uint8](self.n)
         ctx.enqueue_copy(dst_buf=self.target, src_ptr=h.unsafe_ptr())
         ctx.synchronize()
@@ -829,8 +838,7 @@ struct CtrPrepFast(Movable):
                 + " entries for " + String(self.n) + " rows"
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.n)
-        memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=self.n)
-        self.prefix_ready = False
+        unsafe_memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=self.n)
         self.orders[p] = ctx.enqueue_create_buffer[DType.uint32](self.n)
         ctx.enqueue_copy(dst_buf=self.orders[p], src_ptr=h.unsafe_ptr())
         ctx.synchronize()
@@ -859,9 +867,6 @@ struct CtrPrepFast(Movable):
         if unique_values <= 1:
             raise Error("Error: useless catFeature found")
         self.ensure_scratch(ctx)
-        # New feature/permutation invalidates the previous stable-segment
-        # generation even if pointer allocation happens to be reused.
-        self.prefix_ready = False
         var n = self.n
         ctx.enqueue_copy(dst_buf=self.indices, src_buf=self.orders[p])
         enqueue_fill(ctx, self.current_bins, UInt32(0))
@@ -906,34 +911,20 @@ struct CtrPrepFast(Movable):
         ):
             raise Error("borders_ctrs takes Borders or Buckets configs only")
         var n = self.n
-        # T28_PREFIX: compatible CTR configs share category segments, target
-        # and permutation, so their exclusive denominator and gathered target
-        # are unchanged. Reuse only this builder generation; every build_bins,
-        # target/order replacement or frequency pass invalidates it. Each
-        # numerator still uses its requested target border/bucket and priors.
-        # Final columns are owned by this fit's permutation data and remain
-        # resident across trees; no target from a later row enters a prefix.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var reuse_prefix = False
-        comptime if T28_PREFIX:
-            reuse_prefix = self.prefix_ready
-        if not reuse_prefix:
-            # `Reset`: trivial weights, negated at a segment start, then the
-            # exclusive segmented scan -> denominator per ORIGINAL row.
-            launch_gather_trivial_weights(
-                ctx, self.indices, n, UInt32(n), True, self.gathered_weights
-            )
-            launch_segmented_scan_and_scatter_non_negative(
-                ctx, n, False, self.gathered_weights, self.indices,
-                self.scanned_weights, self.seg_scanned, self.seg_has_flag,
-                self.seg_block_sums, self.seg_block_flags,
-            )
-            launch_gather_with_mask_u8(
-                ctx, self.gathered_sample, self.target, self.indices, n,
-                CTR_INDEX_MASK,
-            )
-            comptime if T28_PREFIX:
-                self.prefix_ready = True
+        # `Reset`: trivial weights, negated at a segment start, then the
+        # exclusive segmented scan -> denominator per ORIGINAL row.
+        launch_gather_trivial_weights(
+            ctx, self.indices, n, UInt32(n), True, self.gathered_weights
+        )
+        launch_segmented_scan_and_scatter_non_negative(
+            ctx, n, False, self.gathered_weights, self.indices,
+            self.scanned_weights, self.seg_scanned, self.seg_has_flag,
+            self.seg_block_sums, self.seg_block_flags,
+        )
+        launch_gather_with_mask_u8(
+            ctx, self.gathered_sample, self.target, self.indices, n,
+            CTR_INDEX_MASK,
+        )
         launch_fill_binarized_targets_stats(
             ctx, self.gathered_sample, self.gathered_weights, n, self.stats,
             UInt32(reference.param_id), reference.ctr_type == CTR_BORDERS,
@@ -983,8 +974,6 @@ struct CtrPrepFast(Movable):
         adds the device copy for the fused compressed index."""
         if len(group) == 0:
             raise Error("freq_ctrs called with no configs")
-        # This path replaces gathered_weights with unflagged frequency ones.
-        self.prefix_ready = False
         var n = self.n
         launch_extract_border_masks(ctx, self.indices, self.tmp_u32, n, False)
         launch_scan_vector_u32(

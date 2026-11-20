@@ -1,0 +1,81 @@
+diff --git a/autograd/rules_mamba.mojo b/autograd/rules_mamba.mojo
+index 0bc89f8ab8..ccc2af773b 100644
+--- a/autograd/rules_mamba.mojo
++++ b/autograd/rules_mamba.mojo
+@@ -4,7 +4,7 @@
+ # these rules reproduce, launch for launch; the device copy of that walk was
+ # deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and is back as the
+ # step op's default VJP (`mamba{1,2}_step_backward_hand`, lane
+-# restore-mamba-backward-glue, 2026-11-13; see the TOMBSTONE of MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC). The
++# restore-mamba-backward-glue, 2026-11-13; see IDN_MAMBA_BACKWARD_GENERIC). The
+ # CPU column keeps it as generator input (mamba/host/mamba{1,2}_prefill_chain.mojo).
+ #
+ # ============================================================ LAUNCH INVENTORY
+@@ -222,12 +222,11 @@ from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
+ # chain won it (tape / hand: NV L40S m1 1.05, m2 1.01; AMD MI325X m1 1.03, m2 1.05; deleted by 47582a7fb on reasoning,
+ # "one backward path", without a measurement of its replacement). Bits: unchanged (the tape and the hand chain agreed
+ # word for word on Apple, NVIDIA and AMD; mamba/checks/mamba_step_backward_glue_check_suite.mojo compares the two arms
+-# word for word in one binary). The tape graph (`mamba{1,2}_step_backward_tape`, `_m{1,2}_record_backward`) stays
+-# for that check only. The stack VJPs (`mamba{1,2}_tape_backward_stack`), which only the digest checks call, stay on
+-# the tape.
+-# TOMBSTONE: MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC (the tape graph as the product backward, opt-in B arm, A/B owed and
+-# never run) deleted 2026-11-15 by lane/expdel2-24-neural; code recoverable at f97dc11e84.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC.patch
++# word for word in one binary). -D MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC (default off) runs the tape graph
++# (`mamba{1,2}_step_backward_tape`, `_m{1,2}_record_backward`) as the B arm of the owed A/B (owed row
++# restore-mamba-backward-glue, b arm mamba-backward-generic). The stack VJPs (`mamba{1,2}_tape_backward_stack`), which
++# only the digest checks call, stay on the tape.
++comptime IDN_MAMBA_BACKWARD_GENERIC = is_defined["MOJOLEARN_IDN_MAMBA_BACKWARD_GENERIC"]()
+ 
+ # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).
+ comptime M1_NORM = 48
+@@ -978,9 +977,13 @@ def mamba1_step_backward(
+ ) raises:
+     """The VJP of the recorded run kept in `S`: d(block output) `d_out`; d_x
+     (B * L * d_model) and the ten weight gradients at `at` (the packed
+-    layout's offsets, `_m1_weight_sizes` order) of `d_w`: the hand chain
+-    (its six intermediates in `hand`, the caller's held set)."""
+-    mamba1_step_backward_hand(S, hand, d_out, d_x, d_w, at)
++    layout's offsets, `_m1_weight_sizes` order) of `d_w`. The hand chain
++    by default (its six intermediates in `hand`, the caller's held set);
++    the tape graph under IDN_MAMBA_BACKWARD_GENERIC (header)."""
++    comptime if IDN_MAMBA_BACKWARD_GENERIC:
++        mamba1_step_backward_tape(S, d_out, d_x, d_w, at)
++    else:
++        mamba1_step_backward_hand(S, hand, d_out, d_x, d_w, at)
+ 
+ 
+ def mamba1_step_backward_hand(
+@@ -1120,7 +1123,7 @@ def mamba1_step_backward_hand(
+ 
+ 
+ def mamba1_step_backward_tape(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+-    """The tape graph's VJP (the glue check's second arm): the VJP of the recorded run kept
++    """IDN_MAMBA_BACKWARD_GENERIC's B arm: the VJP of the recorded run kept
+     in `S` through the tape graph (`_m1_record_backward`), the gradients
+     copied out of the tape's storage. One wait (the tape's storage is
+     released after the copies land)."""
+@@ -1643,8 +1646,12 @@ def mamba2_step_backward(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at
+     """The VJP of the recorded run kept in `S` (lane x56d): d(block output)
+     `d_out`; d_x and the nine weight gradients at `at` (`_m2_weight_sizes`
+     order: norm_w, w_in, conv_w, conv_b, dt_bias, a_log, d_skip, gnorm_w,
+-    w_out) of `d_w`: the hand chain."""
+-    mamba2_step_backward_hand(S, d_out, d_x, d_w, at)
++    w_out) of `d_w`. The hand chain by default; the tape graph under
++    IDN_MAMBA_BACKWARD_GENERIC (header)."""
++    comptime if IDN_MAMBA_BACKWARD_GENERIC:
++        mamba2_step_backward_tape(S, d_out, d_x, d_w, at)
++    else:
++        mamba2_step_backward_hand(S, d_out, d_x, d_w, at)
+ 
+ 
+ def mamba2_step_backward_hand(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+@@ -1727,7 +1734,7 @@ def mamba2_step_backward_hand(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: F
+ 
+ 
+ def mamba2_step_backward_tape(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+-    """The tape graph's VJP (the glue check's second arm): the VJP of the recorded run kept
++    """IDN_MAMBA_BACKWARD_GENERIC's B arm: the VJP of the recorded run kept
+     in `S` through the tape graph (`_m2_record_backward`). One wait."""
+     var ctx = S.ctx.copy()
+     var dims = S.dims.copy()

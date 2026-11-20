@@ -13,10 +13,9 @@ A row chunk holds as many rows as fit BUF_BYTES of (row, tree, slot, output)
 cells and at most UNITS_MAX (row, tree) units, so no single launch walks an
 unbounded grid (Apple aborts long command buffers). The chunking moves no
 bit: every unit's chain is independent of it (xtrees/shap.mojo)."""
-from std.ffi import _Global
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_idx, block_dim, thread_idx
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -27,18 +26,22 @@ from xtrees.shap import (
     shap_parent_unit, shap_depth_unit, shap_cover_unit, shap_slot_unit, shap_ev_part_unit, shap_ev_fold_unit,
     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
 )
-from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit, shap_tab_row_unit_sh
+from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
 from core.apple_fast_tree_experiments import (
     AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
 )
+from core.shared_slot import SharedSlot
 
 comptime TPB = 64 if AFT_P08 else 128
+# TOMBSTONE: MOJOLEARN_AFCL_T11 (never-run Apple FAST programme card) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 40d673a2f6.
+# Restore: git apply experiments/removed/MOJOLEARN_AFCL_T11.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 # AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
 # state per workgroup. This does not enable the rejected row-pair candidate.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
 comptime AFCL_T11 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU
     and is_defined["MOJOLEARN_AFCL_T11"]()
 )
 comptime QUERY_TPB = 64 if AFCL_T11 else TPB
@@ -47,19 +50,20 @@ comptime UNITS_MAX = 1 << 20
 
 # lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
 # (the table's terms are `shap_tree_unit`'s statements on the same operands,
-# added in the same order); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF below)
-# restores the per-row units in IDENTICAL.
+# added in the same order).
+# TOMBSTONE: MOJOLEARN_IDN_GATES_OFF (old-path switch, EXP:2479 DELETED (old path)) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ec2c023e02.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_GATES_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path master switch; owner lane expdel2-37-series, EXP:2438 DELETED) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at ef6b727b53.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-46-trees.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_TREESHAP_FAST_TABLE_OFF (old path; SHAP_TABLE default kept, EXP:186 KEPT/DEFAULT) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 7d6b2a07e7.
+# Restore: git apply experiments/removed/MOJOLEARN_TREESHAP_FAST_TABLE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime SHAP_TABLE = (
-    (
-        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
-    )
-    and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU)
+    or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 )
 """FAST + Apple and IDENTICAL (every vendor) DEFAULT (lane fix-treeshap; M3 A/B ab-tshap-table-taxi
 21.4 -> 11.8 ms, ab-tshap-table-istella 71.6 -> 25.1 ms, additivity error
-identical; `-D MOJOLEARN_TREESHAP_FAST_TABLE_OFF` restores the per-row
-units): the leaf table of
+identical): the leaf table of
 xtrees/shap.mojo (`shap_table_unit`, `shap_table_row_unit`). The per-row
 work drops from a path rebuild plus `extend_path` and every unwound sum per
 leaf (cubic in the path length) to one path walk and n table reads per
@@ -69,7 +73,7 @@ per-row units run. Same terms, same cells, same order: the same bits."""
 comptime TABLE_BYTES = 256 * 1024 * 1024
 #: SHAP_TREE_TAB (wherever SHAP_TABLE is on: FAST + Apple and IDENTICAL on
 #: every vendor; the default since
-#: 2026-10-04, rollback `-D MOJOLEARN_SHAP_TREE_TAB_OFF`): the leaf table's row unit finds
+#: 2026-10-04): the leaf table's row unit finds
 #: each leaf's pattern from ONE decision word per (row, tree) (one x read
 #: and compare per internal node) instead of walking every leaf's root path
 #: (xtrees/shap_tab.mojo). Source lane/apple-fast-shap@13343dd51 (commit
@@ -87,7 +91,9 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 #: rab1d-shaptab): tree-shap istella 24.75 -> 19.57 ms (-21.0%), taxi 11.81 ->
 #: 9.69 ms (-17.9%); max_additivity_error and output digest identical. KEEP:
 #: the FAST + Apple default; the old -D name is harmless.
-comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"]()
+# TOMBSTONE: MOJOLEARN_SHAP_TREE_TAB_OFF (old path; SHAP_TREE_TAB default kept, EXP:1271 ACCEPT/DEFAULT on M3 (FAST+Apple); NVIDIA/AMD IDENTICAL measurement owed) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 24292c45c2.
+# Restore: git apply experiments/removed/MOJOLEARN_SHAP_TREE_TAB_OFF.patch; record in docs/TOMBSTONES.md.
+comptime SHAP_TREE_TAB = SHAP_TABLE
 # Bounded adjacent rows in one thread reuse the same tree metadata; no new
 # pipeline/state overlap or attribution fold. Full SHAP caller decides speed.
 # F13 SHAP M3 2026-10-06 MEASURED; keep OFF. Actual x_trees public binding,
@@ -95,29 +101,22 @@ comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_
 # repeat1.0757/1.4591/1.6713. All quality equal, paired reach2 each; one warmup
 # plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
 # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
-comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+# TOMBSTONE: MOJOLEARN_SHAP_FAST_ROW_PAIR (measured loser: F13 SHAP M3 2026-10-06 B/A 1.07-1.74, kept OFF) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at a57eda3a34.
+# Restore: git apply experiments/removed/MOJOLEARN_SHAP_FAST_ROW_PAIR.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
+comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
 # P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
 comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
         self.calls = 0
-comptime SHAP_PAIR_STATE = _Global[StorageType=ShapPairAudit, name="ShapPairAudit", init_fn=ShapPairAudit.__init__]
+comptime SHAP_PAIR_STATE = SharedSlot[ShapPairAudit, "MojolearnShapPairAuditV1"]
 
-def shap_pair_count() raises -> Int:
-    return SHAP_PAIR_STATE.get_or_create_ptr()[].calls
 
 comptime TABLE_ACC = 64
-#: lane gap-shap-nb (2026-10-08), EXPERIMENT, default OFF: -D
-#: MOJOLEARN_TREESHAP_ACC_SHARED puts `tab_row_kernel[TABLE_ACC]`'s
-#: accumulator in a TABLE_ACC x QUERY_TPB threadgroup tile (32 KiB at 128
-#: lanes, one column per thread) instead of the dynamically indexed
-#: per-thread InlineArray (`shap_tab_row_unit_sh`). Same adds, same order,
-#: same bits on every vendor. Trades local-memory traffic for occupancy (32
-#: KiB per block); A/B it on NVIDIA and AMD (tree-shap taxi and istella plus
-#: a non-board forest) before it becomes a default. Off on Apple: Metal's
-#: threadgroup limit is 32 KiB, the whole tile.
-comptime SHAP_ACC_SHARED = is_defined["MOJOLEARN_TREESHAP_ACC_SHARED"]() and not has_apple_gpu_accelerator()
+# TOMBSTONE: MOJOLEARN_TREESHAP_ACC_SHARED (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at 70f8ff00b2.
+# Restore: git apply experiments/removed/MOJOLEARN_TREESHAP_ACC_SHARED.patch; record in docs/TOMBSTONES.md.
 
 
 struct _ShapContext(Defaultable, Movable):
@@ -129,8 +128,8 @@ struct _ShapContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXTreesShapContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesShapContextFast"
-comptime X_TREES_SHAP_CONTEXT = _Global[StorageType=_ShapContext, name=_CTX_NAME, init_fn=_ShapContext.__init__]
+comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV3"
+comptime X_TREES_SHAP_CONTEXT = SharedSlot[_ShapContext, _CTX_NAME]
 
 
 def _ctx() raises -> DeviceContext:
@@ -267,54 +266,30 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
                              slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
                              needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
     var group = _uid()
-    comptime if SHAP_ACC_SHARED and ACC > 0:
-        # one tile column per thread; the block's QUERY_TPB lanes
-        var sh = stack_allocation[ACC * QUERY_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-        var lane = Int(thread_idx.x)
-        comptime if SHAP_ROW_TILE > 1:
-            var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
-            var tree = group // pairs
-            var row = (group % pairs) * SHAP_ROW_TILE
-            if tree < Int(units) // Int(rows):
-                for offset in range(SHAP_ROW_TILE):
-                    if row + offset < Int(rows):
-                        var u = tree * Int(rows) + row + offset
-                        shap_tab_row_unit_sh[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets,
-                                                  colid, quesval, left, leaves, parent, slot, leaf_mf, leaf_n, table,
-                                                  dead, nint, needl, needr, x.unsafe_offset(Int(r0) * Int(d)), buf,
-                                                  meta, sh, lane, QUERY_TPB)
-        else:
-            if group < Int(units):
-                shap_tab_row_unit_sh[ACC](group, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets,
-                                          colid, quesval, left, leaves, parent, slot, leaf_mf, leaf_n, table, dead,
-                                          nint, needl, needr, x.unsafe_offset(Int(r0) * Int(d)), buf, meta, sh, lane,
-                                          QUERY_TPB)
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
+        var tree = group // pairs
+        var row = (group % pairs) * SHAP_ROW_TILE
+        if tree < Int(units) // Int(rows):
+            for offset in range(SHAP_ROW_TILE):
+                if row + offset < Int(rows):
+                    var u = tree * Int(rows) + row + offset
+                    shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                           left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+                                           x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
     else:
-        comptime if SHAP_ROW_TILE > 1:
-            var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
-            var tree = group // pairs
-            var row = (group % pairs) * SHAP_ROW_TILE
-            if tree < Int(units) // Int(rows):
-                for offset in range(SHAP_ROW_TILE):
-                    if row + offset < Int(rows):
-                        var u = tree * Int(rows) + row + offset
-                        shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
-                                               left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
-                                               x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
-        else:
-            var u = _uid()
-            if u < Int(units):
-                shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
-                                       left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
-                                       x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
+        var u = _uid()
+        if u < Int(units):
+            shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                                   left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+                                   x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
 
 
 def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
                 buf: F32P, phi: F32P):
     # P10: independent output planes, no skipped contributions or changed fold.
     var first = Int(block_idx.x) * TPB * AFT_SHAP_FOLD_ITEMS + Int(thread_idx.x)
-    @parameter
-    for tile in range(AFT_SHAP_FOLD_ITEMS):
+    comptime for tile in range(AFT_SHAP_FOLD_ITEMS):
         var u = first + tile * TPB
         if u < Int(units):
             shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)
@@ -611,7 +586,6 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
     _ = dx^
 
 
-
 # The retained explainer (lane gap-shap-nb, 2026-10-08; it finishes and
 # replaces the T44/C51 snapshot stub on the device binding): `TreeExplainer`'s
 # prepare uploads the forest ONCE, runs the cover / expected-value kernels on
@@ -661,7 +635,7 @@ struct _ShapCache(Defaultable, Movable):
         raise Error("unknown or released TreeSHAP cache handle")
 
 
-comptime _SHAP_CACHE = _Global[StorageType=_ShapCache, name="MojoTreesShapRetained", init_fn=_ShapCache.__init__]
+comptime _SHAP_CACHE = SharedSlot[_ShapCache, "MojolearnTreesShapRetainedV1"]
 
 
 def shap_prepare_retain(forest: List[Int], tscale: Int, bg: Int, cover_out: Int, ev: Int, meta_out: Int, nb: Int,

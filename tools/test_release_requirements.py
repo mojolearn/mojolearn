@@ -2,6 +2,7 @@
 import copy
 import json
 import subprocess
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -18,6 +19,15 @@ def synthetic_producer_only(monkeypatch):
     import release_requirement_receipts as P
     monkeypatch.setattr(P, "validate_producer_receipt", lambda *args, **kwargs: [], raising=False)
     monkeypatch.setattr(R, "producer_admission_available", lambda wanted: True)
+
+
+@contextmanager
+def tampered(ledger):
+    """Rewrite a historical record on disk, as an outside edit would: RequirementsLedger.edit refuses it."""
+    import release_requirements_storage as S
+    doc = copy.deepcopy(ledger.read())
+    yield doc
+    S.save(ledger.path, doc)
 
 
 def manifest(revision="a", arithmetic="one", compiler="1", flags="identical"):
@@ -181,6 +191,50 @@ def test_git_snapshot_ignores_docs_and_tracks_additions_deletions(tmp_path):
     assert R.changes(b["requirements"]["id"]["inputs"], c["requirements"]["id"]["inputs"]) == ["added input: arithmetic/b.mojo"]
 
 
+def test_frozen_revision_without_a_declared_checker_keeps_the_requirement_blocked(tmp_path):
+    # A maintenance release of a source cut before its checker existed: the
+    # category is kept, the gap is a named missing input, and the ledger
+    # blocks the requirement instead of aborting or shrinking its inputs.
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(tmp_path), *args], text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "Test")
+    git("config", "user.email", "test@example.invalid")
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "a.mojo").write_text("a")
+    (tmp_path / "tools" / "lanes_a.py").write_text("lanes")
+    git("add", ".")
+    git("commit", "-qm", "historical")
+    old = git("rev-parse", "HEAD")
+    catalog = {"requirements": [
+        dict(id="runtime", scope="s", coverage=["c"], source_inputs={"checker": ["tools/inventory.py"]}),
+        dict(id="coverage", scope="s", coverage=["c"], source_inputs={"checker": ["tools/audit.py", "tools/lanes_*"]}),
+        dict(id="arith", scope="s", coverage=["c"], source_inputs={"arithmetic": ["*.mojo"]})]}
+    a = R.requirements(tmp_path, old, "v", catalog)["requirements"]
+    assert a["runtime"]["inputs"]["checker"] == {}
+    assert a["runtime"]["missing_inputs"] == [
+        "input category checker matches no tracked files at " + old,
+        "input checker: tools/inventory.py is not tracked at " + old]
+    assert list(a["coverage"]["inputs"]["checker"]) == ["tools/lanes_a.py"]
+    assert a["coverage"]["missing_inputs"] == ["input checker: tools/audit.py is not tracked at " + old]
+    assert a["arith"]["missing_inputs"] == []
+    led = R.RequirementsLedger(tmp_path / "ledger.json")
+    led.sync(dict(schema=R.SCHEMA, version="v", source_revision=old, requirements=a))
+    rows = led.plan()
+    assert rows["runtime"]["action"] == rows["coverage"]["action"] == "complete-provenance"
+    assert rows["runtime"]["required"] and rows["runtime"]["status"] != "passed"
+    with pytest.raises(ValueError, match="missing input"):
+        led.begin("runtime")
+    # The same catalog at a revision that has the checkers is unaffected.
+    (tmp_path / "tools" / "inventory.py").write_text("inventory")
+    (tmp_path / "tools" / "audit.py").write_text("audit")
+    git("add", ".")
+    git("commit", "-qm", "checkers")
+    b = R.requirements(tmp_path, "HEAD", "v", catalog)["requirements"]
+    assert all(row["missing_inputs"] == [] for row in b.values())
+    assert b["arith"]["fingerprint"] == a["arith"]["fingerprint"]
+
+
 def test_record_is_immutable(ledger, tmp_path):
     path = record(ledger, tmp_path)
     run = ledger.read()["runs"][0]["id"]
@@ -192,6 +246,12 @@ def test_flags_use_existing_cache_policy_and_include_linker_options():
     flags = R.build_flags({"MOJOLEARN_COMMIT": "new", "MOJOLEARN_COMPILE_JOBS": "2",
                            "MOJOLEARN_BUILD_JOBS": "16", "CXXFLAGS": "-DNEW=1"})
     assert flags == {"MOJOLEARN_COMPILE_JOBS": "2", "CXXFLAGS": "-DNEW=1"}
+
+
+def test_orchestrator_switch_never_enters_build_flags():
+    flags = R.build_flags({"MOJOLEARN_ORCHESTRATOR": "1", "MOJOLEARN_GPU_ARCHS": "sm_89",
+                           "MOJOLEARN_RELEASE_AMD_BOX": "amd"})
+    assert flags == {"MOJOLEARN_GPU_ARCHS": "sm_89"}
 
 
 def test_provisioning_credentials_never_enter_build_fingerprints():
@@ -238,7 +298,7 @@ def test_prepublication_does_not_require_future_postpublication_checks(ledger, t
 
 def test_producer_evidence_is_revalidated_when_reusing_a_pass(ledger, tmp_path):
     path = record(ledger, tmp_path)
-    doc = ledger.read()
+    doc = copy.deepcopy(ledger.read())
     doc["attempts"][0]["receipt"]["producer"]["report_type"] = "execution"
     ledger.path.write_text(json.dumps(doc))
     assert ledger.plan()["identity"]["status"] == "untested"
@@ -369,7 +429,7 @@ def test_equivalence_reuses_actual_pass_without_fabricating_new_execution(native
 def test_legacy_run_manifest_reconstructs_inputs_for_proof(native_ledger, tmp_path):
     led, _, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         for entry in (doc['runs'][0], doc['attempts'][0]):
             entry['manifest'] = {k: entry['manifest'][k] for k in
                                  ('source_revision', 'fingerprint', 'coverage', 'kind', 'stage')}
@@ -546,7 +606,7 @@ def test_later_failure_with_unresolved_equivalence_blocks_reuse(native_ledger, t
 def test_invalid_original_receipt_cannot_acquire_an_equivalence_pass(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['receipt']['source_revision'] = 'b' * 40
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     row = led.plan()['identity']
@@ -618,7 +678,7 @@ def test_old_late_finish_cannot_replace_newer_run_result(ledger, tmp_path):
 def test_original_attempt_outcome_tampering_cannot_reuse(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['coverage']['skipped'] = 1
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     assert led.plan()['identity']['action'] == 'complete-provenance'
@@ -628,7 +688,7 @@ def test_original_attempt_outcome_tampering_cannot_reuse(native_ledger, tmp_path
 def test_original_contract_metadata_tampering_cannot_reuse(native_ledger, tmp_path):
     led, calls, _ = native_ledger
     record(led, tmp_path)
-    with led.edit() as doc:
+    with tampered(led) as doc:
         doc['attempts'][0]['manifest']['coverage'] = ['invented easier coverage']
     led.sync(native_manifest(tmp_path, 'b' * 40, 'edited'))
     assert led.plan()['identity']['action'] == 'complete-provenance'

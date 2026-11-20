@@ -102,6 +102,7 @@ from checks.numerics import (
     identical_exp,
     identical_mul64,
     identical_log,
+    identical_log64,
     portable_expf,
     portable_log64,
     portable_logf,
@@ -574,10 +575,10 @@ def sample_features_pertree_host(
 
 
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.math import ceildiv, exp, log
+from max.gpu import block_dim, block_idx, thread_idx
+from std.math import ceildiv, exp
 from std.memory import stack_allocation
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceContext
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.primitives.block import sum as block_sum
@@ -664,7 +665,7 @@ def sampler_report_len(work_items_size: Int) -> Int:
 
 def device_has_float64() -> Bool:
     """Can a kernel on this box hold a `double`? Mojo 1.0 exposes no fp64 capability query, so this is written as the one fact that is true today: of the three GPU targets Mojo supports, Apple is the one whose backend refuses the TYPE."""
-    return not has_apple_gpu_accelerator()
+    return not TARGET_HAS_APPLE_GPU
 
 
 
@@ -913,7 +914,11 @@ def _dev_expf32(x: Float32) -> Float32:
 
 def _dev_log64(x: Float64) -> Float64:
     """`raft::log(double)`. `_log64`'s device twin, and the one the Metal backend refuses."""
-    return log(x)
+    # IDENTITY (lane fb13-identity-audit, 2026-11-17): was the raw stdlib `log`, a different float64 log on
+    # NVIDIA, AMD and the host, reached in IDENTICAL by algo_l_sample_kernel (n_parallel_samples > 9216), whose
+    # column count it sets. `identical_log64` = `portable_log64` under IDENTICAL (as the host twin `_log64`),
+    # the stdlib under FAST. Bits change (IDENTICAL device column only, now equal to the host's).
+    return identical_log64(x)
 
 
 

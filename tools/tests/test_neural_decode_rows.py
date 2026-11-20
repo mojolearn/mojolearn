@@ -34,7 +34,10 @@ class Tables(unittest.TestCase):
 
     def test_opponents(self):
         for v in n.VENDORS:
-            for lane in ('mamba1-decode', 'mamba2-decode', 'mamba3-decode', 'samba-decode'):
+            # mamba1/2-decode race mamba_ssm's own carried-state step (FAIRNESS FIX 2026-10-30, MambaSsmArm)
+            for lane in ('mamba1-decode', 'mamba2-decode'):
+                self.assertEqual(n.opponents(v, lane), tuple(n.MAMBA_SSM_VENDOR_ARMS.get(v, ())))
+            for lane in ('mamba3-decode', 'samba-decode'):
                 self.assertEqual(n.opponents(v, lane), ())
             td = n.opponents(v, 'transformer-decode')
             self.assertTrue(td and all('-compile-' not in a and '-cpu-' not in a for a in td))
@@ -73,7 +76,8 @@ class _Session:
         return np.asarray(x) * 2
 
 
-class _Block:
+class _StepBlock:
+    """A prior wheel's Mamba-2/3 block: public per-call step, no decode_session."""
     log = None
 
     def __init__(self, w, **kw):
@@ -86,10 +90,6 @@ class _Block:
         self.log.append(('allocate', b) + rest)
         return types.SimpleNamespace(cached_tokens=0)
 
-    def decode_session(self, state):
-        self.log.append(('open',))
-        return _Session(self.log, state)
-
     def step(self, x, state):
         return np.asarray(x) * 3
 
@@ -97,9 +97,26 @@ class _Block:
         raise AssertionError('a decode lane must not call forward')
 
 
+class _Block(_StepBlock):
+    def decode_session(self, state):
+        self.log.append(('open',))
+        return _Session(self.log, state)
+
+
+#: the installed block module's structural constants (bench_board_neural.ours_ssm_record reads them from the block
+#: class's module since the 2026-10-13 fairness fix)
+_SSM_CONSTANTS = dict(_M1_D_STATE=16, _M1_D_CONV=4, _M1_EXPAND=2, _M2_D_STATE=64, _M2_D_CONV=4, _M2_EXPAND=2,
+                      _M2_HEADDIM=64, _M2_NGROUPS=1, _M2_CHUNK_SIZE=256, _M3_D_STATE=64, _M3_EXPAND=2,
+                      _M3_HEADDIM=64, _M3_NGROUPS=1, _M3_CHUNK_SIZE=64, _M3_NUM_ROPE_ANGLES=16)
+
+
 def fake_module(log):
-    blk = type('Blk', (_Block,), {'log': log})
-    m2 = type('Mamba2Block', (blk,), {'decode_session': None})
+    impl = types.ModuleType('fake_mamba_impl')
+    impl.__dict__.update(_SSM_CONSTANTS)
+    sys.modules['fake_mamba_impl'] = impl
+    blk = type('Blk', (_Block,), {'log': log, '__module__': 'fake_mamba_impl'})
+    # Mamba-2/3 of a prior wheel (no public decode_session): the board runs their per-call step
+    m2 = type('Mamba2Block', (_StepBlock,), {'log': log, '__module__': 'fake_mamba_impl'})
     mod = types.SimpleNamespace(TransformerBlock=blk, Mamba1Block=blk, Mamba2Block=m2,
                                 Mamba3Block=m2, numeric_mode=lambda: 'identical',
                                 vendor=lambda: 'cuda', __version__='test')

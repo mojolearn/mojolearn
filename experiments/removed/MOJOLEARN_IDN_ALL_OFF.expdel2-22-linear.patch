@@ -1,0 +1,102 @@
+diff --git a/x_prep/dradix.mojo b/x_prep/dradix.mojo
+index 14da4d73bd..b91a17c025 100644
+--- a/x_prep/dradix.mojo
++++ b/x_prep/dradix.mojo
+@@ -4,7 +4,7 @@
+ FAST on the Apple GPU, and (K1, lane ml-cluster-nbrs 2026-10-04) IDENTICAL on
+ every vendor: x_prep/device.mojo gates every call on RADIX_SORT. The sort has
+ one answer, so IDENTICAL keeps its bits (the host heapsort is unchanged).
+-the deleted `MOJOLEARN_IDN_XPREP_RADIX_OFF` (2026-11-15) restored the
++`-D MOJOLEARN_IDN_XPREP_RADIX_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+ bitonic sort under IDENTICAL. RBS = 64 assumes no wave width.
+ 
+ A sort has ONE answer under a total order on the words (x_prep/dsort.mojo),
+@@ -40,9 +40,7 @@ comptime RUP = MutPointer[UInt32, MutAnyOrigin]
+ #: K1 (IDENTICAL, every vendor): the radix sort of sort_cols, same words as the bitonic sort
+ # TOMBSTONE: MOJOLEARN_IDN_XPREP_RADIX_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 60adf729d6.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_XPREP_RADIX_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+-comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
+ comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_APPLE_GPU) or IDN_XPREP_RADIX
+ # C07 (IDENTICAL int sweep MOJOLEARN_CLASSICAL_C07_RADIX_BITS = 4|6|8, default 8):
+diff --git a/x_prep/fastnb.mojo b/x_prep/fastnb.mojo
+index 7fbfdbb6d3..640f443706 100644
+--- a/x_prep/fastnb.mojo
++++ b/x_prep/fastnb.mojo
+@@ -36,11 +36,11 @@ comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+ #: row count (`cat_hfold_unit` also sums integers and converts once), and the
+ #: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
+ #: the unit path on the device.
++comptime IDN_NB_CAT_ATOMIC = (
+ # TOMBSTONE: MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 7cf272e256.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+-comptime IDN_NB_CAT_ATOMIC = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
+ comptime NB_CAT_ATOMIC = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()
+diff --git a/x_prep/host/rr_eigh_host.mojo b/x_prep/host/rr_eigh_host.mojo
+index e7d0651e6d..da668d6a50 100644
+--- a/x_prep/host/rr_eigh_host.mojo
++++ b/x_prep/host/rr_eigh_host.mojo
+@@ -45,11 +45,12 @@ from x_decomp.rr import rr_cs, rr_block, rr_vrow, rr_off_fold, rr_converged
+ from x_prep.common import FP, IP, p
+ from x_prep.eigh import eigh_unit
+ 
++comptime IDN_RR_EIGH = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+ # TOMBSTONE: MOJOLEARN_IDN_RR_EIGH_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 43f37f93b7.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_RR_EIGH_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+-comptime IDN_RR_EIGH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ #: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
+ #: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
+ #: (the default stays 24): -D MOJOLEARN_IDN_RR_MIN_8, _16, _48 or _96 builds
+diff --git a/x_prep/idn_fold.mojo b/x_prep/idn_fold.mojo
+index 64653e9600..163226873e 100644
+--- a/x_prep/idn_fold.mojo
++++ b/x_prep/idn_fold.mojo
+@@ -31,7 +31,7 @@ BITS: a new order for every fold longer than one position (te_global /
+ te_enc at more than 1 row of a category or fold; ii_gram at n > IIG_ROWS).
+ All four columns run it together.
+ 
+-SWITCHES (IDENTICAL only, ON by default; the rollbacks below were deleted 2026-11-15):
++SWITCHES (IDENTICAL only, ON by default; MOJOLEARN_IDN_ALL_OFF turns all off):
+   -D MOJOLEARN_IDN_TE_GLOBAL_TREE_OFF  te_global's old serial unit
+   -D MOJOLEARN_IDN_TE_ENC_TREE_OFF     te_enc's old serial unit / host pass
+   -D MOJOLEARN_IDN_II_GRAM_TILE_OFF    ii_gram's old serial unit
+@@ -77,9 +77,7 @@ from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from x_prep.prims import add
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+-comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime _IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ #: lane classical-te-gmm: te_global / te_enc in the blocked order `BLT` (docstring); the arm is deleted,
+ #: the alias stays False for x_prep/target.mojo
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_TE_BLOCKED_FOLD (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 74754fe939.
+diff --git a/x_prep/label_fast.mojo b/x_prep/label_fast.mojo
+index 0c1335f468..44e3984514 100644
+--- a/x_prep/label_fast.mojo
++++ b/x_prep/label_fast.mojo
+@@ -32,9 +32,7 @@ comptime LABEL_DIRECT = _FAST_APPLE
+ #: words. -D MOJOLEARN_IDN_LABEL_OFF restores the device sort + per-cell lookup.
+ # TOMBSTONE: MOJOLEARN_IDN_LABEL_OFF (old path, no A/B recorded beside the IDENTICAL default) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 886a739db7.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LABEL_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path umbrella; EXP:2438 deleted, the resident defaults kept) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 51e7b6d7ec.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-22-linear.patch
+-comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ comptime LABEL_PRESENT = LABEL_DIRECT or IDN_LABEL
+ comptime LABEL_SCATTER = LABEL_DIRECT or IDN_LABEL
+ 

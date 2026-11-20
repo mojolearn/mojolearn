@@ -1,0 +1,39 @@
+diff --git b/x_decomp/lasso_grp.mojo a/x_decomp/lasso_grp.mojo
+index af28511ec3..dabd6273c8 100644
+--- b/x_decomp/lasso_grp.mojo
++++ a/x_decomp/lasso_grp.mojo
+@@ -2,7 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """Row-parallel Lasso CD with a 32-thread group per row, FAST on Apple
+ (lane/apple-fast-gap-clus3, 2026-10-03). Switch: `DECOMP_FAST_LASSO_GRP`,
+-on in FAST on Apple (its `_OFF` rollback was deleted 2026-11-15, docs/TOMBSTONES.md); taken by
++default on in FAST on Apple (`-D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` turns it off); taken by
+ x_decomp/device.mojo `DevExec.lasso_rows`. IDENTICAL compiles none of this.
+ 
+ Cause: `lasso_rows_kernel` is a thread per row (`cells.lasso_row`): at
+@@ -22,6 +22,7 @@ kernel.
+ """
+ from max.gpu import block_idx, thread_idx
+ from std.memory import stack_allocation
++from std.sys.compile import is_defined
+ from core.accelerator_target import TARGET_HAS_APPLE_GPU
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -29,12 +30,12 @@ from max.gpu.sync import barrier
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+ from x_decomp.cells import F32Ptr, div0, mul, sub
+ 
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 08bb175b23.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime DECOMP_FAST_LASSO_GRP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
+-# FAST + Apple default since the M3 A/B clus3-mbdl-lassogrp-istella (n=1):
++comptime DECOMP_FAST_LASSO_GRP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
++    and not is_defined["MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF"]()
++)  # FAST + Apple default since the M3 A/B clus3-mbdl-lassogrp-istella (n=1):
+ # mb-dict-learning istella 6827 -> 3185 ms (-53%), sparsity .08636 and
+-# reconstruction error .6483 identical
++# reconstruction error .6483 identical; -D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF turns it off
+ comptime LG_TPB = 32
+ comptime LG_MAXK = 64
+ 

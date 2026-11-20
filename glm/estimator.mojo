@@ -31,23 +31,23 @@ those shapes raise; it is that the host surface takes the same DISPATCH --
 that a wide fit through this door lands on the min-norm route and leaves the
 min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
-from experiments.classical_identical_ideas.shared_controls import C05_OLS_PHASE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.sys.compile import is_defined
 
-from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
 from glm.impl.ols import (
     OLS_ALGO_EIG,
     ols_fit_traced,
     ols_fit_weighted_traced,
 )
-from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.impl.qn.qn import qn_fit_x
+from glm.qn_resident import qn_loss_name, qn_check_loss_args, qn_fit_resident
+from core.admitted_finite_status import enqueue_finite_word
+from glm.qn_infer import qn_x_status, qn_scores_resident, qn_codes_resident
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
@@ -61,7 +61,7 @@ from glm.impl.linear_model.qn import (
     QNParams,
 )
 from checks.numerics import ftz
-from std.memory import bitcast
+from std.memory import bitcast, unsafe_memcpy
 from core.gram_splitk import (
     gram_splitk_applies,
     gram_splitk_chunk_count,
@@ -70,28 +70,9 @@ from core.gram_splitk import (
 from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf, col_sums_pair_buf
 
 
-def _add_scalar_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin], n_in: Int32, value: Float32
-):
-    """`dst += value`, one thread per element. The intercept epilogue.
-
-    IDENTITY_PATHS row 10, DEVIATION 527. `dst` is the prediction vector a
-    caller reads and this add is the last operation performed on it, so it
-    is a float SEAM in row 10's sense: the operand comes from `gemv_n` and
-    the result leaves the device. A prediction near zero -- an ordinary
-    thing for a centered regression -- plus a small intercept is exactly
-    where the cancellation lands in the denormal range, and there CUDA
-    keeps a number Metal has already flushed. Bitwise inert on an FTZ
-    backend, which is why it costs nothing to have.
-
-    Row 9 is NOT reachable here: there is no multiply, so there is no
-    contraction to pin, and `identical_mul_add` is deliberately not called
-    rather than called-and-inert.
-    """
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var v = ftz(dst.unsafe_load(i))
-        dst.unsafe_store(i, ftz(v + ftz(value)))
+# _add_scalar_kernel (the intercept epilogue, DEVIATION 527) and ols_predict_host
+# moved into core/p3_linear_impl.mojo ols_predict_device's one epilogue launch
+# (lane ols-regression, 2026-11-14); no other caller.
 
 
 def ols_fit_host(
@@ -110,16 +91,9 @@ def ols_fit_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -199,16 +173,9 @@ def ols_fit_resident_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var splitk = gram_splitk_applies(n_features, n_features, n_rows)
     var alias2_n = 1 if splitk else cells
     var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
@@ -225,35 +192,21 @@ def ols_fit_resident_host(
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-            ctx.synchronize()
-            var rows_f = Float64(n_rows)
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
-        else:
-            # lane apple-fast-purity: the means on the device (soft binary64,
-            # center_device.col_means_buf), downloaded once as the fit's outputs.
-            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
-            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
-            ctx.synchronize()
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            _ = d_m64^
+        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+        # lane apple-fast-purity: the means on the device (soft binary64,
+        # center_device.col_means_buf), downloaded once as the fit's outputs.
+        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+        ctx.synchronize()
+        for j in range(n_features + 1):
+            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+            if j < n_features:
+                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+            else:
+                ymean_ptr.unsafe_store(0, mean)
+        _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -265,7 +218,6 @@ def ols_fit_resident_host(
             n_rows, n_features, trace, OLS_ALGO_EIG,
         )
         _ = h_s^
-        _ = h_m^
         _ = d_sx^
         _ = d_sy^
         _ = d_mx^
@@ -331,16 +283,9 @@ def ols_fit_weighted_host(
     var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
-    # C05: Jacobi and diagonal extraction finish before inv is first written;
-    # cov has no later consumer. The inverse GEMM overwrites every cell.
-    # Two DeviceBuffer handles own one per-invocation allocation, as in
-    # ridge_eig_scratch_traced's u/u_scratch handles. No global retention.
-    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    var inv: DeviceBuffer[DType.float32]
-    comptime if C05_OLS_PHASE:
-        inv = cov
-    else:
-        inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C05_OLS_PHASE (unmeasured opt-in arm; owner lane/expdel2-07-base) folded here 2026-11-15 by lane/expdel2-20-linear; code recoverable at 3c2a7a6d60.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.expdel2-20-linear.patch; record in docs/TOMBSTONES.md.
+    var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -364,51 +309,6 @@ def ols_fit_weighted_host(
         coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
     _ = hw^
     _ = sw^
-
-
-def ols_predict_host(
-    ctx: DeviceContext,
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_rows: Int,
-    n_features: Int,
-    intercept: Float32,
-) raises:
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var coef = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var out = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
-    ctx.synchronize()
-    gemv_n(ctx, out, x, coef, n_rows, n_features)
-    # A HOST FLOAT COMPARISON DECIDING A LAUNCH, audited for DEVIATION 527
-    # and left as it is. `intercept` is a value the caller hands in, not one
-    # this repository computed on the device, so the compare is against a
-    # host constant and is the same answer on every host. THE SENTENCE THAT
-    # STOOD HERE -- "`ols_fit_host` refuses `fit_intercept`, so on the
-    # fitted path it is always exactly 0.0" -- WAS FALSE at the surface
-    # (corrected 2026-08-23, DEVIATION 517): the implemented `ols_fit` refuses
-    # `fit_intercept`, but `python/mojolearn/linear_model.py` centers X and
-    # y ON THE HOST before calling this file and hands a NON-ZERO intercept
-    # back in, so `mojolearn.LinearRegression()`'s default takes this
-    # branch on every fit. The intercept is a host float64 quantity
-    # (exactly-rounded sums, no BLAS; see that file), so the compare is
-    # still a function of the inputs alone. What the branch DOES change,
-    # and it is the honest residue: `x + 0.0` is `x` for every `x` except
-    # `-0.0`, which becomes `+0.0`. That is one sign bit on one value,
-    # identical on every vendor, and taking the branch out would launch a
-    # kernel over every prediction to achieve it.
-    if intercept != Float32(0.0):
-        ctx.enqueue_function[_add_scalar_kernel](
-            out.unsafe_ptr(), Int32(n_rows), intercept,
-            grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-        )
-    var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
-    ctx.synchronize()
-    for i in range(n_rows):
-        out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
 
 
 # ===========================================================================
@@ -511,35 +411,21 @@ def ridge_fit_resident_host(
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
         var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-            ctx.synchronize()
-            var rows_f = Float64(n_rows)
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
-        else:
-            # lane apple-fast-purity: the means on the device (soft binary64,
-            # center_device.col_means_buf), downloaded once as the fit's outputs.
-            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
-            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
-            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
-            ctx.synchronize()
-            for j in range(n_features + 1):
-                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
-                if j < n_features:
-                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-                else:
-                    ymean_ptr.unsafe_store(0, mean)
-            _ = d_m64^
+        # TOMBSTONE: MOJOLEARN_PURITY_1_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; code recoverable at a3181ec16f.
+        # Restore: git apply experiments/removed/MOJOLEARN_PURITY_1_OFF.patch; record in docs/TOMBSTONES.md.
+        # lane apple-fast-purity: the means on the device (soft binary64,
+        # center_device.col_means_buf), downloaded once as the fit's outputs.
+        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+        ctx.synchronize()
+        for j in range(n_features + 1):
+            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+            if j < n_features:
+                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+            else:
+                ymean_ptr.unsafe_store(0, mean)
+        _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -551,7 +437,6 @@ def ridge_fit_resident_host(
         # d_x is dead from here: the Gram's gemm_tn scratch.
         ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
         _ = h_s^
-        _ = h_m^
         _ = d_sx^
         _ = d_sy^
         _ = d_mx^
@@ -584,60 +469,6 @@ def ridge_fit_resident_host(
 # ===========================================================================
 
 
-def qn_loss_name(loss: Int) -> String:
-    """The identity card's header word for a loss id."""
-    if loss == QN_LOSS_LOGISTIC:
-        return "logistic"
-    if loss == QN_LOSS_SOFTMAX:
-        return "softmax"
-    if loss == QN_LOSS_SQUARED:
-        return "qn-squared"
-    if loss == QN_LOSS_ABS:
-        return "qn-absolute"
-    if loss == QN_LOSS_SVC_L1:
-        return "svc-l1"
-    if loss == QN_LOSS_SVC_L2:
-        return "svc-l2"
-    if loss == QN_LOSS_SVR_L1:
-        return "svr-l1"
-    return "svr-l2"
-
-
-def qn_check_loss_args(loss: Int, n_classes: Int, svr_eps: Float64) raises:
-    """The entry's refusals: the eight routed ids, the `C` each one's
-    `ASSERT` in `qn_fit_x` demands (`qn.cuh:121-173`), and `svr_eps` finite,
-    non-negative and nonzero only where the loss reads it."""
-    var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
-    var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
-    var is_binary = (
-        loss == QN_LOSS_LOGISTIC or loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2
-    )
-    if not (is_regression or is_binary or loss == QN_LOSS_SOFTMAX):
-        raise Error(
-            "qn_fit: loss " + String(loss) + " is not a qn_loss_type id;"
-            " 0 to 7 are (glm/impl/linear_model/qn.mojo)"
-        )
-    if is_regression and n_classes != 1:
-        raise Error(
-            "qn_fit: loss " + String(loss) + " is a regression loss and needs"
-            " n_classes == 1, got " + String(n_classes)
-        )
-    if is_binary and n_classes != 2:
-        raise Error(
-            "qn_fit: loss " + String(loss) + " needs n_classes == 2, got "
-            + String(n_classes)
-        )
-    if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
-        raise Error("qn_fit: the softmax loss needs n_classes > 2, got " + String(n_classes))
-    if not (svr_eps >= 0.0) or svr_eps > 3.0e38:
-        raise Error("qn_fit: svr_eps must be finite and non-negative, got " + String(svr_eps))
-    if svr_eps != 0.0 and not is_svr:
-        raise Error(
-            "qn_fit: svr_eps is read by the two SVR losses only; loss "
-            + String(loss) + " must be given 0"
-        )
-
-
 def qn_fit_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -660,6 +491,7 @@ def qn_fit_host(
     sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
     loss: Int = QN_LOSS_LOGISTIC,
     svr_eps: Float64 = 0.0,
+    status: Int = 0,
 ) raises -> Int:
     """`qnFit` (`qn.cuh:176-193`) for a dense row-major `X`, through
     `qn_fit_x`'s loss switch. `loss` is QN_LOSS_LOGISTIC (the default) with
@@ -681,53 +513,26 @@ def qn_fit_host(
     weights, uploaded here and installed into the objective; unset, `sw_ptr`
     is never read (any valid pointer will do)."""
     qn_check_loss_args(loss, n_classes, svr_eps)
-    var n_targets = 1 if n_classes == 2 else n_classes
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
-    ctx.enqueue_memset(w, Float32(0.0))
-    var sw = Optional[DeviceBuffer[DType.float32]]()
-    if has_sample_weight:
-        var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        ctx.enqueue_copy(dst_buf=swb, src_ptr=sw_ptr)
-        sw = Optional[DeviceBuffer[DType.float32]](swb^)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = loss
-    pams.penalty_l1 = penalty_l1
-    pams.penalty_l2 = penalty_l2
-    pams.grad_tol = grad_tol
-    pams.change_tol = change_tol
-    pams.max_iter = max_iter
-    pams.linesearch_max_iter = linesearch_max_iter
-    pams.lbfgs_memory = lbfgs_memory
-    pams.fit_intercept = fit_intercept
-    pams.penalty_normalized = penalty_normalized
-    var trace = IdentityTrace()
-    if trace.enabled:
-        trace.header(
-            qn_loss_name(loss) + " n=" + String(n_rows) + " d=" + String(n_features)
-            + " loss=" + String(loss)
-        )
-    var fx = Float32(0.0)
-    var iters = 0
-    var ret = qn_fit_x(
-        ctx, pams, x^, y^, n_rows, n_features, n_classes, w, fx, iters,
-        has_sample_weight, trace, Float32(svr_eps), sw^,
+    # `status` (lane a7c): the host address of the deferred finite status
+    # word of X (core/admitted_finite_status.mojo; 0 when the door tested X
+    # itself): the words just uploaded are tested on the device and the
+    # word comes back under qn_fit_resident's first synchronize. A
+    # non-finite X fits nothing (0 iterations, coef_ptr untouched); the
+    # door refuses.
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    if status != 0:
+        enqueue_finite_word(ctx, x.unsafe_ptr(), n_rows * n_features, dstat, 0)
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
+    var iters = qn_fit_resident(
+        ctx, x^, y_ptr, coef_ptr, info_ptr, n_rows, n_features, n_classes, penalty_l1, penalty_l2,
+        grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory, fit_intercept,
+        penalty_normalized, has_sample_weight, sw_ptr, loss, svr_eps, status, 1,
     )
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
-    ctx.synchronize()
-    for i in range(n_param):
-        coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
-    info_ptr.unsafe_store(0, fx)
-    info_ptr.unsafe_store(1, Float32(ret))
-    _ = hw^
+    _ = dstat^
     return iters
 
 
@@ -736,12 +541,9 @@ def qn_fit_host(
 #: whole design and a host-built 0/1 target). `qn_fit_ovr_host` uploads X and
 #: the int32 class codes once, builds every 0/1 target on the device and
 #: hands each class's solver a device copy of X. Same fits, same bits.
-#: `-D MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF` (or the master
-#: `MOJOLEARN_IDN_ALL_OFF`) leaves the entry unregistered and the Python
-#: layer keeps one `qn_fit` call per class.
-comptime QN_OVR_ONE_UPLOAD = not (
-    is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 021105e119.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime QN_OVR_ONE_UPLOAD removed with its readers in bindings/_mojolearn_estimators.mojo and glm/logistic_native_device.mojo.)
 
 
 def _ovr_target_kernel(
@@ -788,8 +590,8 @@ def qn_fit_ovr_host(
     `n_features + fit_intercept` floats (row k = fit k); `info_ptr` receives
     three floats per fit: objective, OPT_RETCODE, num_iters.
     `has_sample_weight` (lane sk-kernels): `sw_ptr` holds `n_rows` per-row
-    weights, uploaded once; every fit gets a device copy. Unset, `sw_ptr`
-    is never read."""
+    weights, uploaded once and shared by every fit. Unset, `sw_ptr` is
+    never read."""
     qn_check_loss_args(loss, 2, 0.0)
     if n_fits <= 0 or n_rows <= 0:
         raise Error("qn_fit_ovr: n_rows and n_fits must be positive")
@@ -813,14 +615,25 @@ def qn_fit_ovr_host(
     pams.lbfgs_memory = lbfgs_memory
     pams.fit_intercept = fit_intercept
     pams.penalty_normalized = penalty_normalized
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    for k in range(n_fits):
-        # the solver takes X and y by transfer: a device-to-device copy of X
-        # and a device-built target per class, nothing over the bus
-        var xk = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    # lane n2-cd-qn-glm-loops: every fit's weights land in one device block
+    # (row k = fit k) and come home once after the last fit, where each fit
+    # used to download its row behind its own wait
+    var w_all = ctx.enqueue_create_buffer[DType.float32](n_fits * n_param)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_fits * n_param)
+    # one weight buffer for every fit: fit k's row is copied out (stream
+    # order) before fit k + 1's memset clears it
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
+    for k in range(n_fits):  # driver-loop: over the one-vs-rest fits, X shared
+        # the solver takes X and y by transfer. X is the one resident upload
+        # shared by every class: the handle is copied (a reference count), not
+        # the n_rows x n_features words. The QN objective only reads X
+        # (`GLMWithData`: gemv / gemm / the fused gradient kernels take it as
+        # an input; nothing stores into it), so fit k sees the same bytes the
+        # per-class device-to-device copy gave it (lane consol-n0-readmission:
+        # that copy was n_rows x n_features words per class). The target is
+        # built on the device per class, nothing over the bus.
+        var xk = x
         var yk = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-        ctx.enqueue_copy(dst_buf=xk, src_buf=x)
         ctx.enqueue_function[_ovr_target_kernel](
             codes.unsafe_ptr(), yk.unsafe_ptr(), Int32(n_rows), Int32(first_class + k),
             grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -828,10 +641,12 @@ def qn_fit_ovr_host(
         ctx.enqueue_memset(w, Float32(0.0))
         var swk = Optional[DeviceBuffer[DType.float32]]()
         if has_sample_weight:
-            var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
-            ctx.enqueue_copy(dst_buf=swb, src_buf=sw_all)
+            # shared like X: the weighted arm only reads the weights
+            # (`qn_row_weight_kernel`)
+            var swb = sw_all
             swk = Optional[DeviceBuffer[DType.float32]](swb^)
-        ctx.synchronize()
+        # no wait here: the target kernel and the memset are ordered before
+        # the solver's launches on the same context (lane n2-cd-qn-glm-loops)
         var trace = IdentityTrace()
         if trace.enabled:
             trace.header(
@@ -844,14 +659,17 @@ def qn_fit_ovr_host(
             ctx, pams, xk^, yk^, n_rows, n_features, 2, w, fx, iters,
             has_sample_weight, trace, Float32(0.0), swk^,
         )
-        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
-        ctx.synchronize()
-        for i in range(n_param):
-            coef_ptr.unsafe_store(k * n_param + i, hw.unsafe_ptr().unsafe_load(i))
+        ctx.enqueue_copy(
+            dst_buf=w_all.create_sub_buffer[DType.float32](k * n_param, n_param), src_buf=w
+        )
         info_ptr.unsafe_store(3 * k, fx)
         info_ptr.unsafe_store(3 * k + 1, Float32(ret))
         info_ptr.unsafe_store(3 * k + 2, Float32(iters))
-        _ = w^
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w_all)
+    ctx.synchronize()
+    unsafe_memcpy(dest=coef_ptr, src=hw.unsafe_ptr(), count=n_fits * n_param)
+    _ = w^
+    _ = w_all^
     _ = hw^
     _ = sw_all^
     _ = codes^
@@ -867,6 +685,7 @@ def qn_decision_function_host(
     n_features: Int,
     fit_intercept: Bool,
     n_classes: Int = 1,
+    status: Int = 0,
 ) raises:
     """`qnDecisionFunction` (`qn.cuh:231-243`): `scores = X w + b` on the
     device, the fitted `W` layout in. `n_classes` (lane/logistic-multiclass,
@@ -877,41 +696,52 @@ def qn_decision_function_host(
     column-major `C x dims` block, `n_targets = C`, and `scores` is
     `n_rows * C` floats, `scores[i*C + c]` (row-major, which IS cuML's
     column-major `z[c + C*i]`, `glm_base.mojo::linear_fwd`); `predict` is
-    the row argmax and `predict_proba` the softmax (`qn_softmax_host`)."""
+    the row argmax and `predict_proba` the softmax (`qn_softmax_host`).
+    `status` (lane a8c): the host address of the deferred finite status
+    word of X (glm/qn_infer.mojo `qn_x_status`), 0 when the door tested X."""
     var n_targets = n_classes if n_classes > 2 else 1
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_SOFTMAX if n_targets > 1 else QN_LOSS_LOGISTIC
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_targets)
+    qn_decision_function_device(ctx, x_ptr, coef_ptr, scores, n_rows, n_features, fit_intercept, n_classes, status)
     var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
     ctx.synchronize()
-    for i in range(n_rows * n_targets):
-        out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
+    # lane a8c: one copy of the downloaded scores (was a per-word host loop)
+    unsafe_memcpy(dest=out_ptr, src=hs.unsafe_ptr(), count=n_rows * n_targets)
     _ = hs^
+    _ = scores^
 
 
-def _positive_code_kernel(
-    scores: MutPointer[Float32, MutAnyOrigin],
-    codes: MutPointer[Int64, MutAnyOrigin],
-    n_in: Int32,
-):
-    """codes[i] = 1 if scores[i] > 0 else 0, decided BY BITS (Metal flushes
-    compare operands): sign clear, magnitude nonzero and not a NaN. That is
-    the host's `score > 0.0` for every float, subnormals included."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var b = bitcast[DType.uint32](scores.unsafe_load(i))
-        var mag = b & UInt32(0x7FFFFFFF)
-        var pos = (b >> 31) == UInt32(0) and mag != UInt32(0) and mag <= UInt32(0x7F800000)
-        codes.unsafe_store(i, Int64(1) if pos else Int64(0))
+def qn_decision_function_device(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut scores: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+    n_classes: Int,
+    status: Int = 0,
+) raises:
+    """`qn_decision_function_host` with the scores left in the caller's
+    device buffer (`n_rows * n_targets` floats, the same layout): the same
+    uploads, the same `qn_decision_function` launch, no download. The fused
+    `qn_proba` entry applies the link to this buffer on the device.
+    `status`: as `qn_decision_function_host`'s, delivered by this call's
+    synchronize."""
+    # ne2-g-linear (N357): split out of qn_decision_function_host so the
+    # scores of predict_proba stay on the device; the host entry above is
+    # this call plus its download, statement for statement as before.
+    # Lane a8c: the decision over the resident X is glm/qn_infer.mojo's
+    # (the cross-validation fold entry glm/qn_fold.mojo calls it too).
+    var n_targets = n_classes if n_classes > 2 else 1
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    var w = qn_scores_resident(ctx, x, coef_ptr, scores, n_rows, n_features, fit_intercept, n_targets)
+    ctx.synchronize()
+    _ = x^
+    _ = w^
+    _ = dstat^
 
 
 def qn_predict_binary_host(
@@ -922,33 +752,22 @@ def qn_predict_binary_host(
     n_rows: Int,
     n_features: Int,
     fit_intercept: Bool,
+    status: Int = 0,
 ) raises:
     """Binary `qn_predict`, retaining the score and threshold boundary in
-    native code so Python never materializes scalar score/code objects."""
-    var n_param = n_features + (1 if fit_intercept else 0)
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_LOGISTIC
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
+    native code so Python never materializes scalar score/code objects.
+    `status`: as `qn_decision_function_host`'s."""
     # lane cgr4-download-loop: the threshold runs on the device and the codes
-    # download straight into the caller's buffer (was a host loop over rows)
+    # download straight into the caller's buffer (was a host loop over rows);
+    # lane a8c: over the resident X (glm/qn_infer.mojo qn_codes_resident).
     if n_rows <= 0:
         return
-    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
-    ctx.enqueue_function[_positive_code_kernel](
-        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows),
-        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
-    ctx.synchronize()
-    _ = codes^
-    _ = scores^
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, 1)
+    _ = x^
+    _ = dstat^
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
@@ -957,53 +776,16 @@ def qn_predict_binary_host(
 #: took the row argmax on the host (`_labels.argmax_rows`) after the device
 #: scored. The argmax now runs on the device (one thread per row) and the
 #: int64 codes download straight into the caller's buffer.
-#: `-D MOJOLEARN_QN_DEV_ARGMAX_OFF` (or the master `MOJOLEARN_IDN_ALL_OFF`)
-#: leaves the entry unregistered, and the Python layer falls back to the host
-#: scan. No bit moves: the same strict `>` from column 0.
-comptime QN_DEV_ARGMAX = not (
-    is_defined["MOJOLEARN_QN_DEV_ARGMAX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: No bit moves: the same strict `>` from column 0.
+# TOMBSTONE: MOJOLEARN_QN_DEV_ARGMAX_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-20-linear; the MOJOLEARN_IDN_ALL_OFF term goes with it here; code recoverable at 4218560b53.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_DEV_ARGMAX_OFF.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime QN_DEV_ARGMAX removed with its readers in bindings/_mojolearn_estimators.mojo and glm/logistic_native_device.mojo.)
 
 
-@always_inline
-def _argmax_key(b: UInt32) -> UInt32:
-    """A float's bits as an unsigned key whose integer order is the float
-    order of the non-NaN values, `-0.0` and `+0.0` sharing one key (so
-    neither is greater than the other, as IEEE `>` says)."""
-    var mag = b & UInt32(0x7FFFFFFF)
-    if mag == UInt32(0):
-        return UInt32(0x80000000)
-    if (b >> 31) == UInt32(0):
-        return b | UInt32(0x80000000)
-    return ~b
-
-
-def _row_argmax_code_kernel(
-    scores: MutPointer[Float32, MutAnyOrigin],
-    codes: MutPointer[Int64, MutAnyOrigin],
-    n_in: Int32,
-    n_cls: Int32,
-):
-    """codes[i] = the first maximum of scores[i*C .. i*C + C), decided BY
-    BITS (Metal flushes compare operands): a later column replaces only
-    when strictly greater, and a NaN on either side never replaces. That is
-    `_labels.argmax_rows` (`argmax_rows_f32_binding`) for every float."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var c_n = Int(n_cls)
-        var base = i * c_n
-        var best = 0
-        var bb = bitcast[DType.uint32](scores.unsafe_load(base))
-        var best_nan = (bb & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
-        var best_key = _argmax_key(bb)
-        for c in range(1, c_n):
-            var b = bitcast[DType.uint32](scores.unsafe_load(base + c))
-            var is_nan = (b & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
-            var key = _argmax_key(b)
-            if (not is_nan) and (not best_nan) and key > best_key:
-                best = c
-                best_key = key
-        codes.unsafe_store(i, Int64(best))
+# Lane a8c: the code kernels (`_positive_code_kernel`, `_argmax_key`,
+# `_row_argmax_code_kernel`) moved, unchanged, to glm/qn_infer.mojo
+# (`qn_positive_code_kernel`, `qn_row_argmax_code_kernel`), which the fold
+# entry glm/qn_fold.mojo shares.
 
 
 def qn_predict_multiclass_host(
@@ -1015,31 +797,18 @@ def qn_predict_multiclass_host(
     n_features: Int,
     fit_intercept: Bool,
     n_classes: Int,
+    status: Int = 0,
 ) raises:
     """Multiclass `qn_predict` (`n_classes > 2`): the softmax decision
     function and the row argmax both on the device; the int64 class codes
-    are the only download."""
+    are the only download. `status`: as `qn_decision_function_host`'s."""
     if n_classes <= 2:
         raise Error("qn_predict_multiclass: n_classes must exceed 2, got " + String(n_classes))
     if n_rows <= 0:
         return
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_classes
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_classes)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_SOFTMAX
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_classes)
-    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
-    ctx.enqueue_function[_row_argmax_code_kernel](
-        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows), Int32(n_classes),
-        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
-    ctx.synchronize()
-    _ = codes^
-    _ = scores^
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, n_classes)
+    _ = x^
+    _ = dstat^

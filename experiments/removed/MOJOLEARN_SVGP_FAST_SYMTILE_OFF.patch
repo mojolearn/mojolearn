@@ -1,0 +1,26 @@
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 16e1fc9d60..ddd317a946 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -2163,17 +2163,16 @@ def svgp_b32_select_kernel(flag: FP, b32: FP, bh: FP, bl: FP, mm_: Int64):
+ 
+ 
+ #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
+-#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical).
++#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
++#: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
+ #: lane/idn-gates (2026-10-04): SYMTILE and COLSPLIT are also the IDENTICAL
+ #: default on every vendor (two_prod commutes bit for bit and every entry
+ #: keeps its p-ascending fold; the four solves are the column item's own);
+-#: -D MOJOLEARN_IDN_GATES_OFF restores the old IDENTICAL form.
++#: -D MOJOLEARN_IDN_GATES_OFF (or either _OFF) restores the old IDENTICAL form.
+ comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU) or (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+-# TOMBSTONE: MOJOLEARN_SVGP_FAST_SYMTILE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-01-cluster; code recoverable at 614ccc0790.
+-# Restore: git apply experiments/removed/MOJOLEARN_SVGP_FAST_SYMTILE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON
++comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
+ 
+ 
+ #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B

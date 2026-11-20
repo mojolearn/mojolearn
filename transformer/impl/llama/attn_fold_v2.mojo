@@ -50,7 +50,7 @@ leaves is node(d, q), and the right-to-left finish is exactly the carry
 chain of the last, partial nodes (P = 13: B8 + (B4 + L12) = node(4, 0)).
 """
 
-from std.collections import InlineArray
+from std.collections import Array
 from std.math import max, min
 from std.sys.compile import is_defined
 
@@ -62,10 +62,16 @@ from checks.numerics import (
 )
 
 
+# TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (DELETE-ARM: no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-33-neural; code recoverable at c3d1c7865f.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed). Restored from the reverse of the deletion
+# commits b76ae8bbc3, a5a10b1930 and the sweep a803ea45ba, not from the patch (the patch also carries the Apple FAST
+# forward arms deleted between c3d1c7865f and a5a10b1930, which stay deleted).
+# The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
 comptime ATTN_FOLD_V2 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_ATTN_FOLD_V2"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 """The v2 key-axis fold on every column (device eager, fused, host oracle,
 byte-LM host kernels). OFF: v1's serial chains, byte for byte."""
@@ -101,13 +107,13 @@ struct AttnFoldV2Tree(Copyable, Movable):
     """The balanced carry tree over leaf partials pushed in ascending leaf
     order. Host and device use this one spelling."""
 
-    var stk: InlineArray[Float32, ATTN_V2_STACK]
+    var stk: Array[Float32, ATTN_V2_STACK]
     var sp: Int
     var n: Int
 
     @always_inline
     def __init__(out self):
-        self.stk = InlineArray[Float32, ATTN_V2_STACK](fill=Float32(0.0))
+        self.stk = Array[Float32, ATTN_V2_STACK](fill=Float32(0.0))
         self.sp = 0
         self.n = 0
 

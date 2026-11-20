@@ -121,7 +121,7 @@ standard semantics will get the last bin wrong.
 # imposing a ceremony their code does not have, on types where a copy is a
 # register move.
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree_node,

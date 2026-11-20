@@ -3,12 +3,15 @@ import hashlib
 import json
 from pathlib import Path
 
+import mojolearn
 
-ROOT = Path(__file__).resolve().parents[3]
+# The IMPORTED package's shipped verify fixtures (they are in the wheel), not
+# the repo root above this file, which an installed wheel does not have.
+PKG = Path(mojolearn.__file__).resolve().parent
 
 
 def test_all_six_kernel_variants_ship_all_recorded_fixtures():
-    base = ROOT / 'python/mojolearn/verify_reference'
+    base = PKG / 'verify_reference'
     table = json.loads((base / 'table.json').read_text())
     models = json.loads((base / 'models/models.json').read_text())['models']
     kernels = {f'{family}-{kernel}' for family in ('kernel-ridge', 'nystroem')

@@ -2,7 +2,7 @@
 """Import-time connection of the native owner of the prep lane's classifiers
 (GaussianNB, MultinomialNB, BernoulliNB, ComplementNB, CategoricalNB,
 LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis;
-bindings/prep_classify_native.mojo) and its fixed ABI."""
+bindings/prep_classify_native_door.mojo) and its fixed ABI."""
 
 #: The x_prep exports the owner probes (`_optional_prep_entry`).
 _OPTIONAL = ("x_prep_idn_int", "x_prep_idn_fam", "x_prep_idn_fam2", "x_prep_proba64",
@@ -15,7 +15,7 @@ def connect(kinds, prog_context):
     # `prog_context` is the shared arena runner's (`_PROG_CONTEXT`).
     import sys
     import mmap
-    import numbers
+    from ._native_loaded_modules import REAL_TYPES, INTEGRAL_TYPES
     from types import BuiltinFunctionType
     from . import _backend
     from . import _arena_io
@@ -55,7 +55,7 @@ def connect(kinds, prog_context):
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, cls_kinds=dict(kinds), cls_bindings=connected,
-                   prog_context=prog_context, real_type=numbers.Real, integral_type=numbers.Integral,
+                   prog_context=prog_context, real_type=REAL_TYPES, integral_type=INTEGRAL_TYPES,
                    resident_class=_arena_io.resident, resident_min_words=_arena_io.RESIDENT_MIN_WORDS,
                    arena_io_fields=vars(_arena_io))
     return call, context

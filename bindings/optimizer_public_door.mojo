@@ -10,10 +10,9 @@ typed kernel entry and writes the results back onto the optimizer.
 What the door does is argument conversion only:
 
   * the caller's parameter and gradient tensors are read through the
-    buffer protocol (`PyObject_GetBuffer`, released before the kernel
-    runs, exactly as `_bufcheck.probe` did) or, for a `mojolearn.Array`,
+    buffer protocol (`PyObject_GetBuffer`, retained through native execution) or, for a `mojolearn.Array`,
     off its own storage fields; a strided read-only input is made
-    C-contiguous by `PyBuffer_ToContiguous` into memory this door owns;
+    C-contiguous by the parallel native optimizer input plan;
   * dtype, emptiness, layout, count and shape are refused with the
     messages the Python glue raised;
   * built-in schedules supply admitted native configuration words; Python
@@ -23,25 +22,48 @@ What the door does is argument conversion only:
 
 The kernels are training/optimizer_public.mojo (the GPU binding),
 training/host/optimizer_public_host.mojo (a CPU-only install) and
-training/optimizer_public_common.mojo (shared, no device code); `OptKernels`
+training/optimizer_public_common.mojo (shared, no device code); `OptimizerNativeDriver`
 names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
-from std.ffi import _Global
-from std.memory import memcpy
-from std.math import isfinite
+from std.memory import unsafe_memcpy
+from std.ffi import c_int
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
-from bindings.native_buffer_owner import native_storage_allocate
-
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
-from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_get, py_fields
-from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
-from sequence.lr_table import LrSpec
-from training.optimizer_public_common import (
-    GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, I32P, OptHyper, PublicStep, PublicStepOut, eager_moments,
-    registry_offsets, zero_tensors,
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_cpython_table import cpython_table
+from std.python._cpython import ExternalFunction, GILReleased, PyObjectPtr
+from bindings.admitted_input_unpack import admitted_storage_native, admitted_zeros
+from training.optimizer_config import optimizer_keyword_refusal
+from training.optimizer_owner_control import OptimizerOwnerControl
+from training.optimizer_native_api import OptimizerNativeDriver
+from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_idle
+from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
+from training.optimizer_state_plan import (
+    OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
+    optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,
 )
+
+from bindings.optimizer_public_words_unpack import optimizer_python_error, stash_python_error
+from bindings.py_balanced import py_call, py_setitem, py_type, py_get, py_fields
+from bindings.tensor_view import (
+    TensorView, shape_text, _contiguous, base_format, _format_name, _typestr_name, _array_code,
+)
+from bindings.optimizer_admission_door import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
+from sequence.lr_table import LrSpec
+from training.optimizer_schedule_plan import optimizer_decay_readback
+from training.optimizer_public_common import (
+    GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut, zero_tensors,
+)
+from core.shared_slot import SharedSlot
+from bindings.optimizer_descriptor_boundary_door import optimizer_provider, optimizer_driver
+from bindings.optimizer_scalar_boundary_unpack import optimizer_float, optimizer_truth, optimizer_integer
+from bindings.optimizer_container_boundary_unpack import OptimizerInputOwners, OptimizerBufferLease
+from bindings.optimizer_container_boundary_pack import optimizer_sequence_items, optimizer_pack_list
+from training.optimizer_input_plan import (
+    check_views, _check_view, _addrs_of, optimizer_gradient_count, optimizer_gradient_shape, optimizer_accumulation_shapes, optimizer_contiguous_address,
+)
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_balanced import py_item
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
 comptime BP = MutPointer[UInt8, MutUntrackedOrigin]
@@ -64,87 +86,68 @@ comptime _SRC = " (python/mojolearn/_training_impl.py)"
 # the kernels a binding provides
 
 
-trait OptKernels:
-    """The typed kernel entries behind the door, one binding's set."""
-
-    @staticmethod
-    def step(req: PublicStep) raises -> PublicStepOut:
-        ...
-
-    @staticmethod
-    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
-        ...
-
-    @staticmethod
-    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
-        ...
-
-    @staticmethod
-    def accumulate(
-        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
-    ) raises -> Int:
-        ...
-
-    @staticmethod
-    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        ...
-
-    @staticmethod
-    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        ...
-
-
 # ---------------------------------------------------------------------------
 # the classes and tables the door reads, resolved once
+
+
+comptime _OptimizerRepr = ExternalFunction[
+    "PyObject_Repr", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+comptime _OptimizerDictClear = ExternalFunction[
+    "PyDict_Clear", def(PyObjectPtr) thin abi("C") -> NoneType]
+comptime _OptimizerDictUpdate = ExternalFunction[
+    "PyDict_Update", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
 
 
 struct OptDoor(Defaultable, Movable):
     var context: PythonObject
     var ready: Bool
-    var bi: PythonObject
+    var scalar_repr: _OptimizerRepr.type
+    var dict_clear: _OptimizerDictClear.type
+    var dict_update: _OptimizerDictUpdate.type
     var array_cls: PythonObject
     var dev_cls: PythonObject
-    var arrays: PythonObject
-    var not_covered: PythonObject
-    var refused: PythonObject
 
     def __init__(out self):
         self.context = PythonObject(None)
         self.ready = False
-        self.bi = PythonObject(None)
+        # This owner's error formatter is resolved once with its existing
+        # connection; it never consults the mutable builtins.repr binding.
+        ref cpy = Python().cpython()
+        self.scalar_repr = _OptimizerRepr.load(cpy.lib.borrow())
+        # Publication and rollback operate only on admitted exact dictionaries.
+        # Their pointers belong to this owner, not the process-wide API table.
+        self.dict_clear = _OptimizerDictClear.load(cpy.lib.borrow())
+        self.dict_update = _OptimizerDictUpdate.load(cpy.lib.borrow())
         self.array_cls = PythonObject(None)
         self.dev_cls = PythonObject(None)
-        self.arrays = PythonObject(None)
-        self.not_covered = PythonObject(None)
-        self.refused = PythonObject(None)
 
 
-comptime OPT_DOOR = _Global[StorageType=OptDoor, name="MojoOptimizerPublicDoor", init_fn=OptDoor.__init__]
+comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV3"]
 
 
 def door_ready() raises:
-    """Resolve the builtins, `mojolearn.Array`, `TrainDeviceArray`, the
-    `array` type and the refusal tables once per process."""
+    door_ready(PythonObject(None))
+
+
+def door_ready(guarded: PythonObject) raises:
+    """Connect loaded native type/owner identities once per process. `guarded` is a
+    context its caller has just run `opt_guards` on (the router): when it
+    is the door's own context the guards are not walked a second time."""
     var d = OPT_DOOR.get_or_create_ptr()
     if d[].ready:
-        opt_guards(d[].context)
+        if d[].context is not guarded:
+            opt_guards(d[].context)
         return
-    d[].bi = Python.import_module("builtins")
-    var training = Python.import_module("mojolearn._training_impl")
-    d[].context = py_fields(training)["_OPT_CONTEXT"]
-    opt_guards(d[].context)
+    var training = native_loaded_module("mojolearn._training_impl")
+    var nk = optimizer_keys()
+    d[].context = py_item(py_fields(training), nk[].k__OPT_CONTEXT)
+    if d[].context is not guarded:
+        opt_guards(d[].context)
     # Keep the import connection's guarded Array layout and native storage
     # type even when a module field is replaced before the first operation.
-    d[].array_cls = d[].context["array_class"]
-    d[].dev_cls = training.TrainDeviceArray
-    d[].not_covered = training._NOT_COVERED
-    d[].refused = training._REFUSED_KWARGS
-    d[].arrays = d[].context["buffer_types"][2]
+    d[].array_cls = py_item(d[].context, nk[].k_array_class)
+    d[].dev_cls = py_item(d[].context, nk[].k_device_class)
     d[].ready = True
-
-
-def _bi() raises -> PythonObject:
-    return OPT_DOOR.get_or_create_ptr()[].bi
 
 
 def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
@@ -152,98 +155,48 @@ def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises ->
 
 
 def as_float(value: PythonObject) raises -> Float64:
-    """`float(value)`."""
-    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Float64(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][3], value))
+    return optimizer_float(value, OPT_DOOR.get_or_create_ptr()[].context)
 
 
 def truth(value: PythonObject) raises -> Bool:
-    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Bool(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1], value))
+    return optimizer_truth(value, OPT_DOOR.get_or_create_ptr()[].context)
 
 
 def py_repr(value: PythonObject) raises -> String:
-    return String(py=py_call(_bi().repr, value))
+    var door = OPT_DOOR.get_or_create_ptr()
+    # Repr can invoke a type slot: admit exact native scalars (and their
+    # recursively admitted containers) before entering it under the GIL.
+    opt_scalar(value, door[].context)
+    var pointer = door[].scalar_repr(value._obj_ptr)
+    if not pointer:
+        var failure = stash_python_error()
+        raise failure^
+    return String(py=PythonObject(from_owned=pointer))
 
 
 def type_name(value: PythonObject) raises -> String:
-    return String(py=py_type(value).__name__)
+    var nk = optimizer_keys()
+    return String(py=py_call(py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_type_name), py_type(value)))
 
 
-def is_instance(value: PythonObject, cls: PythonObject) raises -> Bool:
-    return Bool(py=py_call(_bi().isinstance, value, cls))
-
-
-def shape_text(dims: List[Int]) -> String:
-    """A shape as Python prints a tuple: `(3, 4)`, `(5,)`, `()`."""
-    var text = String("(")
-    for i in range(len(dims)):  # driver-loop: over shape words of a refusal message
-        if i > 0:
-            text += ", "
-        text += String(dims[i])
-    if len(dims) == 1:
-        text += ","
-    return text + ")"
-
-
-def same_shape(a: List[Int], b: List[Int]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):  # driver-loop: over shape words
-        if a[i] != b[i]:
-            return False
-    return True
-
-
-def py_ints(values: List[Int]) raises -> PythonObject:
-    """A Python tuple of ints (a shape argument)."""
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over shape words
-        _ = py_call(out.append, PythonObject(values[i]))
-    return py_call(_bi().tuple, out)
+# shape_text, TensorView, _contiguous, base_format, _format_name, _typestr_name and _array_code moved to bindings/tensor_view.mojo (lane a6-device-x-family-classical).
 
 
 def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
-    """Assemble an Array from native storage and slots; never call its Python constructor."""
-    var d = OPT_DOOR.get_or_create_ptr()
-    var b = d[].bi
-    var size = 1
-    var strides = List[Int](length=len(dims), fill=0)
-    var step = 4
-    for i in range(len(dims) - 1, -1, -1):  # driver-loop: over one native shape/stride word per dimension
-        strides[i] = step
-        step *= dims[i]
-        size *= dims[i]
-    # The import connection retains exact native scalar types. A live
-    # builtins.bytes replacement must not become a zero-storage callback.
-    var bytes_type = d[].context["scalar_types"][6]
-    var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(bytes_type, size * 4))
-    # The connected, guarded Array has ordinary heap storage. Use the public
-    # allocator directly; a replaced builtins.object must never run a hook.
-    var result = native_storage_allocate(d[].array_cls)
-    py_setattr(result, "_store", store)
-    py_setattr(result, "_base", PythonObject(None))
-    py_setattr(result, "_pin", PythonObject(None))
-    # Acquire the native store's buffer through CPython's public API. The
-    # mutable builtins.memoryview module field is not a runtime constructor.
-    ref cpy = Python().cpython()
-    var view_ptr = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromObject")(store._obj_ptr)
-    if not view_ptr:
-        var failure = stash_python_error()
-        raise failure^
-    var view = PythonObject(from_owned=view_ptr)
-    py_setattr(result, "_mv", view)
-    py_setattr(result, "_addr", py_call(store.buffer_info)[0])
-    py_setattr(result, "_readonly", PythonObject(False))
-    py_setattr(result, "shape", py_ints(dims))
-    py_setattr(result, "dtype", PythonObject(dtype))
-    py_setattr(result, "ndim", PythonObject(len(dims)))
-    py_setattr(result, "size", PythonObject(size))
-    py_setattr(result, "nbytes", PythonObject(size * 4))
-    py_setattr(result, "itemsize", PythonObject(4))
-    py_setattr(result, "strides", py_ints(strides))
-    py_setattr(result, "order", PythonObject("C"))
-    return result
+    """PACK an owned Array through the shared native layout/storage boundary."""
+    var nk = optimizer_keys()
+    return admitted_storage_native(dims, dtype, py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_input_context), as_array=True)
+
+
+def new_zeros(dims: List[Int], dtype: String) raises -> PythonObject:
+    """`new_array` whose words are zero: the moments and `buf_initialized`
+    are read before any step writes them (a fresh optimizer's state is its
+    zeros). `new_array` is unfilled since 1bcfa0d69b (the Array branch of
+    admitted_storage_native lost its fill pass), so these owners ask for the
+    fill explicitly; a destination one writer fills in full keeps new_array."""
+    var nk = optimizer_keys()
+    var buf = admitted_zeros(dims, dtype, py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_input_context))
+    return buf.keep
 
 
 def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
@@ -251,7 +204,8 @@ def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
 
 
 def owner_kind(opt: PythonObject) raises -> Int:
-    var classes = OPT_DOOR.get_or_create_ptr()[].context["owners"]
+    var nk = optimizer_keys()
+    var classes = py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_owners)
     for i in range(len(classes)):  # driver-loop: over three native optimizer kinds
         if py_type(opt) is classes[i]:
             return i
@@ -260,151 +214,6 @@ def owner_kind(opt: PythonObject) raises -> Int:
 
 # ---------------------------------------------------------------------------
 # one tensor, read through the buffer protocol
-
-
-struct TensorView(Copyable, Movable):
-    """The facts `_bufcheck.probe` read, the address `_buffer.addr` read, and
-    the dtype name a refusal prints."""
-    var addr: Int
-    var nbytes: Int
-    var itemsize: Int
-    var readonly: Bool
-    var c_contig: Bool
-    var fmt: String
-    var dtype: String
-    var shape: List[Int]
-    var strides: List[Int]
-    var has_strides: Bool
-    var is_array: Bool
-
-    def __init__(out self):
-        self.addr = 0
-        self.nbytes = 0
-        self.itemsize = 0
-        self.readonly = False
-        self.c_contig = True
-        self.fmt = String("B")
-        self.dtype = String("")
-        self.shape = List[Int]()
-        self.strides = List[Int]()
-        self.has_strides = False
-        self.is_array = False
-
-    def count(self) -> Int:
-        var n = 1
-        for i in range(len(self.shape)):  # driver-loop: over shape words
-            n *= self.shape[i]
-        return n
-
-
-def _contiguous(shape: List[Int], strides: List[Int], has_strides: Bool, itemsize: Int) -> Bool:
-    """`_buffer._contiguity`'s C half (NumPy's rule)."""
-    if len(shape) == 0:
-        return True
-    var n = 1
-    for i in range(len(shape)):  # driver-loop: over shape words
-        n *= shape[i]
-    if n <= 1 or not has_strides:
-        return True
-    var expect = itemsize
-    for k in range(len(shape) - 1, -1, -1):  # driver-loop: over one stride word per axis
-        if shape[k] != 1 and strides[k] != expect:
-            return False
-        expect *= shape[k]
-    return True
-
-
-def base_format(fmt: String) -> String:
-    """`_bufcheck.base_format`: a byte-order mark naming the host's order
-    removed (this library's hosts are little-endian)."""
-    if fmt.byte_length() > 1 and (fmt.startswith("@") or fmt.startswith("=") or fmt.startswith("<")):
-        return String(fmt[byte=1:])
-    return fmt
-
-
-def _format_name(code: String, itemsize: Int, fmt: String) -> String:
-    if code == "f":
-        return "float32"
-    if code == "d":
-        return "float64"
-    if code == "e":
-        return "float16"
-    if code == "g":
-        return "longdouble"
-    if code == "?":
-        return "bool"
-    if code == "b":
-        return "int8"
-    if code == "B":
-        return "uint8"
-    if code == "h":
-        return "int16"
-    if code == "H":
-        return "uint16"
-    if code == "i":
-        return "int32"
-    if code == "I":
-        return "uint32"
-    if code == "q":
-        return "int64"
-    if code == "Q":
-        return "uint64"
-    if code == "n":
-        return "intp"
-    if code == "N":
-        return "uintp"
-    if code == "c":
-        return "bytes"
-    if code == "l":
-        return "int" + String(8 * itemsize)
-    if code == "L":
-        return "uint" + String(8 * itemsize)
-    return "'" + fmt + "'"
-
-
-def _typestr_name(t: String) -> String:
-    if t == "<f4" or t == ">f4":
-        return "float32"
-    if t == "<f8" or t == ">f8":
-        return "float64"
-    if t == "<f2":
-        return "float16"
-    if t == "<i4" or t == ">i4":
-        return "int32"
-    if t == "<i8" or t == ">i8":
-        return "int64"
-    if t == "<u4" or t == ">u4":
-        return "uint32"
-    if t == "<u1" or t == "|u1":
-        return "uint8"
-    if t == "<i2":
-        return "int16"
-    if t == "<u2":
-        return "uint16"
-    if t == "|i1":
-        return "int8"
-    return ""
-
-
-def _array_code(t: String) -> String:
-    """`_array._CODE`: an Array dtype's struct code."""
-    if t == "<f4":
-        return "f"
-    if t == "<f8":
-        return "d"
-    if t == "<i4":
-        return "i"
-    if t == "<i8":
-        return "q"
-    if t == "<u4":
-        return "I"
-    if t == "<u1":
-        return "B"
-    if t == "<f2" or t == "<u2":
-        return "H"
-    if t == "<i1":
-        return "b"
-    return "B"
 
 
 def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
@@ -416,54 +225,88 @@ def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
 def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
     """`PyObject_GetBuffer(obj, view, PyBUF_FULL_RO)`; False (indicator
     cleared) when `obj` does not export a buffer."""
-    ref cpy = Python().cpython()
+    # Symbols from the process-wide table (bindings/py_cpython_table.mojo),
+    # resolved once, not a dlsym per tensor; the clear runs only on refusal.
     var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var rc = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
+    var rc = cpython_table()[].PyObject_GetBuffer(obj._obj_ptr, p, Int32(PYBUF_FULL_RO))
     if rc != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        ref cpy = Python().cpython()
+        cpython_table()[].PyErr_Clear()
         return False
     return True
 
 
-def _release_buffer(mut view: List[Int]) raises:
-    ref cpy = Python().cpython()
-    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(p)
+def _array_view(obj: PythonObject, context: PythonObject, mut v: TensorView, mut pins: OptimizerInputOwners) raises:
+    """`opt_value`'s Array admission and `tensor_view`'s Array facts from one
+    read of each retained native slot descriptor (same errors, same values)."""
+    var nk = optimizer_keys()
+    var getters = py_item(context, nk[].k_array_getters)
+    var shape = py_call(py_item(getters, nk[].k_shape), obj)
+    var dtype = py_call(py_item(getters, nk[].k_dtype), obj)
+    var addr = py_call(py_item(getters, nk[].k__addr), obj)
+    var readonly = py_call(py_item(getters, nk[].k__readonly), obj)
+    var nbytes = py_call(py_item(getters, nk[].k_nbytes), obj)
+    var itemsize = py_call(py_item(getters, nk[].k_itemsize), obj)
+    var strides = py_call(py_item(getters, nk[].k_strides), obj)
+    opt_scalar(shape, context, 1)
+    opt_scalar(dtype, context, 1)
+    opt_scalar(py_call(py_item(getters, nk[].k_order), obj), context, 1)
+    opt_scalar(addr, context, 1)
+    opt_scalar(readonly, context, 1)
+    opt_scalar(py_call(py_item(getters, nk[].k_ndim), obj), context, 1)
+    opt_scalar(py_call(py_item(getters, nk[].k_size), obj), context, 1)
+    opt_scalar(nbytes, context, 1)
+    opt_scalar(itemsize, context, 1)
+    opt_scalar(strides, context, 1)
+    var mv = py_call(py_item(getters, nk[].k__mv), obj)
+    if py_type(mv) is not py_item(context, nk[].k_container_types)[5]:
+        raise Error("TypeError: optimizer Array requires native memoryview storage")
+    opt_value(mv, context, 1)
+    pins.append(mv)
+    v.is_array = True
+    v.addr = Int(py=addr)
+    v.nbytes = Int(py=nbytes)
+    v.itemsize = Int(py=itemsize)
+    v.readonly = optimizer_truth(readonly, context)
+    var t = String(py=dtype)
+    v.fmt = _array_code(t)
+    for i in range(len(shape)):  # driver-loop: over shape words
+        v.shape.append(Int(py=shape[i]))
+    for i in range(len(strides)):  # driver-loop: over stride words
+        v.strides.append(Int(py=strides[i]))
+    v.has_strides = True
+    v.c_contig = _contiguous(v.shape, v.strides, True, v.itemsize)
+    v.dtype = dtype_name(obj, v.fmt, v.itemsize)
 
 
 def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
+    var pins = OptimizerInputOwners()
+    return tensor_view(obj, v, pins)
+
+
+def tensor_view(obj: PythonObject, mut v: TensorView, mut pins: OptimizerInputOwners) raises -> Bool:
     """Fill `v` with `obj`'s buffer facts; False when `obj` is not a buffer
-    (`_training_impl._is_buffer`). The export is released before this
-    returns, as `probe` released it."""
+    (`_training_impl._is_buffer`). The admitted export stays in `pins`
+    until the boundary has completed native execution."""
     var d = OPT_DOOR.get_or_create_ptr()
     v = TensorView()
-    opt_value(obj, d[].context)
-    if is_instance(obj, d[].array_cls):
-        # an Array is read off its own storage fields (`_buffer.Buf._from_array`)
-        v.is_array = True
-        v.addr = Int(py=obj._addr)
-        v.nbytes = Int(py=obj.nbytes)
-        v.itemsize = Int(py=obj.itemsize)
-        v.readonly = truth(obj._readonly)
-        var t = String(py=obj.dtype)
-        v.fmt = _array_code(t)
-        var shape = obj.shape
-        for i in range(len(shape)):  # driver-loop: over shape words
-            v.shape.append(Int(py=shape[i]))
-        var strides = obj.strides
-        for i in range(len(strides)):  # driver-loop: over stride words
-            v.strides.append(Int(py=strides[i]))
-        v.has_strides = True
-        v.c_contig = _contiguous(v.shape, v.strides, True, v.itemsize)
-        v.dtype = dtype_name(obj, v.fmt, v.itemsize)
+    pins.append(obj)
+    if py_type(obj) is d[].array_cls:
+        # An exact Array: admit its native slots (what opt_value's Array arm
+        # does) and read the facts off the same slot values, in one pass.
+        # Before, opt_value read all ten slots and this function then read
+        # seven of them again by attribute, plus a builtins.isinstance call.
+        _array_view(obj, d[].context, v, pins)
         return True
+    opt_value(obj, d[].context)
     if py_type(obj) is d[].dev_cls:
         return False
     var view = List[Int](length=10, fill=0)
     if not _get_buffer(obj, view):
         _ = view^
         return False
-    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var lease = OptimizerBufferLease(view^, cpython_table()[].PyBuffer_Release)
+    var p = lease.words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var words32 = p.bitcast[Int32]()
     var indirect = False
     v.addr = p[0]
@@ -496,138 +339,78 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
             for k in range(ndim):  # driver-loop: over suboffset words of one buffer
                 if op[k] >= 0:
                     indirect = True
-    _release_buffer(view)
-    _ = view^
     if indirect:
         # `Buf._fill` refuses an indirect buffer with a TypeError, which
         # `_is_buffer` reads as "not a buffer"
         return False
     v.c_contig = _contiguous(v.shape, v.strides, v.has_strides, v.itemsize)
     v.dtype = dtype_name(obj, v.fmt, v.itemsize)
+    pins.buffers.append(lease^)
     return True
-
-
-def contiguous_addr(obj: PythonObject, v: TensorView, mut keep: List[List[Float32]]) raises -> Int:
-    """The address of `obj`'s values in C order (`_buffer.as_f32_c` of a
-    float32 tensor): its own memory when it is C-contiguous, else a copy
-    `PyBuffer_ToContiguous` makes into `keep`."""
-    if v.c_contig:
-        return v.addr
-    ref cpy = Python().cpython()
-    var n = v.count()
-    var store = List[Float32](length=max(n, 1), fill=Float32(0.0))
-    var dst = store.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var view = List[Int](length=10, fill=0)
-    var p = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var shape = v.shape.copy()
-    var strides = v.strides.copy()
-    var held = False
-    if v.is_array:
-        # an F-order Array: its storage described with its own strides
-        p[0] = v.addr
-        p[2] = v.nbytes
-        p[3] = v.itemsize
-        p.bitcast[Int32]()[8] = Int32(1)
-        p.bitcast[Int32]()[9] = Int32(len(shape))
-        p[6] = Int(shape.unsafe_ptr())
-        p[7] = Int(strides.unsafe_ptr())
-    else:
-        if not _get_buffer(obj, view):
-            raise Error("TypeError: mojolearn: tensor does not support the buffer protocol")
-        held = True
-    var rc = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(dst, p, n * 4, Int8(67))
-    if held:
-        _release_buffer(view)
-    _ = view^
-    _ = shape^
-    _ = strides^
-    if rc != 0:
-        raise cpy.unsafe_get_error()
-    keep.append(store^)
-    var last = len(keep) - 1
-    return Int(keep[last].unsafe_ptr())
 
 
 # ---------------------------------------------------------------------------
 # the argument checks of the Python glue, message for message
 
 
-def _not_covered(topic: String, where: String) raises -> Error:
-    var d = OPT_DOOR.get_or_create_ptr()
-    return Error("NotImplementedError: mojolearn." + where + ": " + String(py=d[].not_covered[topic]))
-
-
-def as_seq(x: PythonObject, name: String, where: String) raises -> PythonObject:
-    """`_as_seq`: one buffer, or an iterable of them, as a Python list."""
+def as_seq_views(x: PythonObject, name: String, where: String, mut views: List[TensorView], mut pins: OptimizerInputOwners) raises -> List[PythonObject]:
+    """`as_seq`, keeping each element's view in `views` so `check_views`
+    checks the same facts without reading every buffer a second time. Native
+    owner vectors and export leases remain in UNPACK until RUN completes."""
+    views = List[TensorView]()
     var v = TensorView()
-    if tensor_view(x, v):
-        var one = Python.list()
-        _ = py_call(one.append, x)
-        return one
-    var out: PythonObject
+    if tensor_view(x, v, pins):
+        var one = List[PythonObject]()
+        one.append(x)
+        views.append(v^)
+        return one^
+    var items = List[PythonObject]()
     try:
-        out = py_call(OPT_DOOR.get_or_create_ptr()[].context["container_types"][0], x)
+        items = optimizer_sequence_items(x, OPT_DOOR.get_or_create_ptr()[].context)
     except:
         raise Error(
             "TypeError: mojolearn." + where + ": " + name + " must be a float32 array (a numpy array, an "
             + "array.array or a mojolearn.Array -- anything supporting the buffer protocol) or an iterable "
             + "of them, got " + type_name(x)
         )
-    if len(out) == 0:
+    if len(items) == 0:
         raise Error(
             "ValueError: mojolearn." + where + ": " + name + " is empty; there is nothing to do and an "
             + "empty parameter registry is refused rather than answered (training/estimator.mojo)"
         )
-    for i in range(len(out)):  # driver-loop: over parameter buffers
-        if not tensor_view(out[i], v):
+    for i in range(len(items)):  # driver-loop: over parameter buffers
+        var item = TensorView()
+        if not tensor_view(items[i], item, pins):
             raise Error(
                 "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] is "
-                + type_name(out[i]) + ", not an array (it does not support the buffer protocol)"
+                + type_name(items[i]) + ", not an array (it does not support the buffer protocol)"
             )
-    return out
+        views.append(item^)
+    return items^
 
 
-def check_tensors(seq: PythonObject, name: String, where: String, inplace: Bool) raises -> List[TensorView]:
+def check_tensors(seq: PythonObject, name: String, where: String, inplace: Bool, mut pins: OptimizerInputOwners) raises -> List[TensorView]:
     """`_check_dtype`: float32 or refused by name, never cast; non-empty;
     with `inplace`, C-contiguous and writable. Returns every tensor's view."""
     var views = List[TensorView]()
     for i in range(len(seq)):  # driver-loop: over parameter buffers
         var v = TensorView()
-        if not tensor_view(seq[i], v):
+        if not tensor_view(seq[i], v, pins):
             raise Error("TypeError: mojolearn: object does not support the buffer protocol")
-        var code = base_format(v.fmt)
-        if code == "e" or v.dtype == "float16" or v.dtype == "bfloat16":
-            var refusal = _not_covered("mixed precision", where)
-            raise refusal^
-        if code != "f":
-            raise Error(
-                "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] has dtype " + v.dtype
-                + "; this surface is float32 only (loss contract section 1, optimizer contract section "
-                + "1) and refuses rather than casts, because a cast changes which arithmetic answered "
-                + "and leaves the label unchanged" + _SRC
-            )
-        if v.count() < 1:
-            raise Error(
-                "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] is empty, shape "
-                + shape_text(v.shape) + "; an empty tensor is REFUSED and not skipped -- the clip would "
-                + "fold a zero-length GEMM, which no gate in this tree has run (training/estimator.mojo)"
-            )
-        if inplace and (not v.c_contig or v.readonly):
-            raise Error(
-                "ValueError: mojolearn." + where + ": " + name + "[" + String(i) + "] must be "
-                + "C-contiguous and writable; it is written back IN PLACE (the torch.optim contract, the "
-                + "trailing underscore on clip_grad_norm_) and a strided or read-only buffer cannot be. "
-                + "Pass np.ascontiguousarray(...) of it, or a writable mojolearn.Array "
-                + "(python/mojolearn/_training_impl.py, DEVIATION 2403)"
-            )
+        _check_view(v, i, name, where, inplace)
         views.append(v^)
     return views^
 
 
 def write_addr(obj: PythonObject, name: String) raises -> Int:
+    var pins = OptimizerInputOwners()
+    return write_addr(obj, name, pins)
+
+
+def write_addr(obj: PythonObject, name: String, mut pins: OptimizerInputOwners) raises -> Int:
     """`_buffer.addr`: the address of a buffer the kernel writes."""
     var v = TensorView()
-    if not tensor_view(obj, v):
+    if not tensor_view(obj, v, pins):
         raise Error("TypeError: mojolearn: " + name + " does not support the buffer protocol")
     if v.readonly:
         raise Error("ValueError: mojolearn: " + name + " is read-only, refusing to write to it")
@@ -635,62 +418,42 @@ def write_addr(obj: PythonObject, name: String) raises -> Int:
 
 
 def read_addr(obj: PythonObject, name: String) raises -> Int:
+    var pins = OptimizerInputOwners()
+    return read_addr(obj, name, pins)
+
+
+def read_addr(obj: PythonObject, name: String, mut pins: OptimizerInputOwners) raises -> Int:
     """`_buffer.addr_ro`."""
     var v = TensorView()
-    if not tensor_view(obj, v):
+    if not tensor_view(obj, v, pins):
         raise Error("TypeError: mojolearn: " + name + " does not support the buffer protocol")
     return v.addr
 
 
-def _addrs_of(views: List[TensorView], mut addrs: List[Int], mut nbytes: List[Int]):
-    for j in range(len(views)):  # driver-loop: over parameter buffers
-        addrs.append(views[j].addr)
-        nbytes.append(views[j].nbytes)
-
-
-def _check_grads(params: PythonObject, gs: PythonObject, views: List[TensorView], owhere: String, where: String) raises:
-    """`_Optimizer._check_grads`: grads match params in count and shape."""
-    if len(gs) != len(params):
-        raise Error(
-            "ValueError: mojolearn." + owhere + "." + where + ": " + String(len(gs)) + " gradients for "
-            + String(len(params)) + " parameter tensors"
-        )
-    for j in range(len(params)):  # driver-loop: over parameter buffers
-        var pv = TensorView()
-        if not tensor_view(params[j], pv):
-            raise Error("TypeError: mojolearn: object does not support the buffer protocol")
-        if not same_shape(pv.shape, views[j].shape):
-            raise Error(
-                "ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(j) + "] has shape "
-                + shape_text(views[j].shape) + ", params[" + String(j) + "] has " + shape_text(pv.shape)
-            )
+def _check_grads(params: PythonObject, gs: List[PythonObject], views: List[TensorView], owhere: String, where: String,
+                 mut pviews: List[TensorView], mut have_pviews: Bool, mut pins: OptimizerInputOwners) raises:
+    """Unpack each parameter view once; native plans decide count and shape."""
+    optimizer_gradient_count(len(params), len(gs), owhere, where)
+    if not have_pviews:
+        pviews = List[TensorView]()
+        for j in range(len(params)):  # driver-loop: admit parameter buffer owners
+            var pv = TensorView()
+            if not tensor_view(params[j], pv, pins):
+                raise Error("TypeError: mojolearn: object does not support the buffer protocol")
+            optimizer_gradient_shape(pv, views[j], j, owhere, where)
+            pviews.append(pv^)
+        have_pviews = True
+        return
+    for j in range(len(pviews)):  # driver-loop: native shapes of parameter buffers
+        optimizer_gradient_shape(pviews[j], views[j], j, owhere, where)
 
 
 def refuse_kwargs(kwargs: PythonObject, where: String) raises:
-    """`_refuse_unknown`: every keyword this surface does not have, refused
-    by name."""
-    var d = OPT_DOOR.get_or_create_ptr()
-    opt_value(kwargs, d[].context)
-    var keys = py_call(d[].context["container_types"][0], kwargs)
-    for i in range(len(keys)):  # driver-loop: over keyword argument names
-        var k = String(py=keys[i])
-        if k == "dropout":
-            var refusal = _not_covered("dropout", where)
-            raise refusal^
-        if k == "distributed" or k == "world_size" or k == "rank":
-            var refusal = _not_covered("distributed", where)
-            raise refusal^
-        var why = py_call(d[].refused.get, keys[i])
-        if truth(why):
-            raise Error(
-                "TypeError: mojolearn." + where + ": " + k + "= is REFUSED BY NAME -- " + String(py=why) + _SRC
-            )
-        raise Error(
-            "TypeError: mojolearn." + where + ": unexpected keyword " + k + "=. This surface takes only "
-            + "the parameters in its WHAT IS HONORED table; an unknown keyword is refused rather than "
-            + "ignored, because a keyword that is accepted and does nothing is a caller who believes "
-            + "something about their run that is not true" + _SRC
-        )
+    var context = OPT_DOOR.get_or_create_ptr()[].context
+    opt_value(kwargs, context)
+    var keys = optimizer_sequence_items(kwargs, context)
+    if len(keys) != 0:
+        optimizer_keyword_refusal(String(keys[0]), where)
 
 
 # ---------------------------------------------------------------------------
@@ -701,117 +464,159 @@ def _resident_word(value: PythonObject) raises -> Int:
     """`_RESIDENT_WORD.get(resident, 1)`: None -1, False 0, True 1."""
     if value is None:
         return -1
-    if py_type(value) is OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1] or py_type(value) is OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2]:
+    var nk = optimizer_keys()
+    if py_type(value) is py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_scalar_types)[1] or py_type(value) is py_item(OPT_DOOR.get_or_create_ptr()[].context, nk[].k_scalar_types)[2]:
         return 0 if Int(py=value) == 0 else 1
     return 1
 
 
-def _state_into(opt: PythonObject, mut req: PublicStep) raises:
-    """`_state_words`: handle, resident, pristine and the mirrors' addresses."""
-    var res = py_fields(opt)["_res"]
-    req.handle = -1 if res is None else Int(py=res)
-    req.resident_wanted = _resident_word(py_fields(opt)["_resident_wanted"])
-    req.pristine = truth(py_fields(opt)["_pristine"])
-    var m = py_fields(opt)["_m"]
-    var v = py_fields(opt)["_v"]
-    req.m_addr = 0 if m is None else write_addr(m, "exp_avg")
-    req.v_addr = 0 if v is None else write_addr(v, "exp_avg_sq")
+def state_address(value: PythonObject, count: Int, name: String, mut pins: OptimizerInputOwners) raises -> Int:
+    var view = TensorView()
+    if not tensor_view(value, view, pins):
+        raise Error("TypeError: optimizer " + name + " requires a native state buffer")
+    return optimizer_state_span(view, count, name)
+
+
+def _state_into(opt: PythonObject, control: OptimizerOwnerControl, mut req: PublicStep, mut pins: OptimizerInputOwners) raises:
+    var fields = py_fields(opt)
+    var nk = optimizer_keys()
+    var first = py_item(fields, nk[].k__m)
+    var second = py_item(fields, nk[].k__v)
+    var state = OptimizerStateSnapshot(control.handle,
+        _resident_word(py_item(fields, nk[].k__resident_wanted)), control.pristine,
+        0 if first is None else state_address(first, req.n_total, "exp_avg", pins),
+        0 if second is None else state_address(second, req.n_total, "exp_avg_sq", pins))
+    state.apply(req)
 
 
 def host_moments(opt: PythonObject) raises:
     """`_host_moments`: the host mirrors, allocated (zero filled) on first need."""
-    var n = Int(py=py_fields(opt)["n_total"])
-    if py_fields(opt)["_m"] is None:
-        set_field(opt, "_m", new_array([n], "<f4"))
-    if py_fields(opt)["_v"] is None:
-        set_field(opt, "_v", new_array([n], "<f4"))
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var nk = optimizer_keys()
+    var n = Int(py=py_item(fields, nk[].k_n_total))
+    var plan = optimizer_host_moment_plan(n, py_item(fields, nk[].k__m) is not None, py_item(fields, nk[].k__v) is not None)
+    if plan[0]:
+        set_field(opt, "_m", new_zeros([n], "<f4"))
+    if plan[1]:
+        set_field(opt, "_v", new_zeros([n], "<f4"))
 
 
-def keep_slot(opt: PythonObject, handle: Int, module: PythonObject, on_host: Bool) raises:
-    """`_keep_slot`: record a slot the native call opened, with the extension
-    module that owns it (its finalizer closes the slot through it)."""
-    if py_fields(opt)["_res"] is None and handle >= 0:
-        set_field(opt, "_res", PythonObject(handle))
-        set_field(opt, "_res_binding", module)
-        set_field(opt, "_res_host", PythonObject(on_host))
+def keep_slot(mut record: OptimizerOwner, handle: Int, provider: PythonObject,
+    driver: OptimizerNativeDriver):
+    record.attach(handle, driver, provider)
 
 
-def _hyper(opt: PythonObject, maximize: Bool, max_norm: Float64) raises -> OptHyper:
+def _hyper(opt: PythonObject, kind: Int, maximize: Bool, max_norm: Float64) raises -> OptHyper:
     """`_config()` of SGD (kind 0) and Adam / AdamW, as the step's floats."""
-    var kind = owner_kind(opt)
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var nk = optimizer_keys()
     if kind == 0:
         return OptHyper(
-            kind, 1 if truth(py_fields(opt)["nesterov"]) else 0, maximize, as_float(py_fields(opt)["lr"]), 0.9, 0.999, 1e-8,
-            as_float(py_fields(opt)["weight_decay"]), as_float(py_fields(opt)["momentum"]), as_float(py_fields(opt)["dampening"]), max_norm,
+            kind, 1 if truth(py_item(fields, nk[].k_nesterov)) else 0, maximize, as_float(py_item(fields, nk[].k_lr)), 0.9, 0.999, 1e-8,
+            as_float(py_item(fields, nk[].k_weight_decay)), as_float(py_item(fields, nk[].k_momentum)), as_float(py_item(fields, nk[].k_dampening)), max_norm,
         )
-    var betas = py_fields(opt)["betas"]
+    var betas = py_item(fields, nk[].k_betas)
     return OptHyper(
-        kind, 0, maximize, as_float(py_fields(opt)["lr"]), as_float(betas[0]), as_float(betas[1]), as_float(py_fields(opt)["eps"]),
-        as_float(py_fields(opt)["weight_decay"]), 0.0, 0.0, max_norm,
+        kind, 0, maximize, as_float(py_item(fields, nk[].k_lr)), as_float(betas[0]), as_float(betas[1]), as_float(py_item(fields, nk[].k_eps)),
+        as_float(py_item(fields, nk[].k_weight_decay)), 0.0, 0.0, max_norm,
     )
 
 
 def schedule_spec(schedule: PythonObject) raises -> LrSpec:
+    opt_schedule(schedule, OPT_DOOR.get_or_create_ptr()[].context)
+    return schedule_spec_admitted(schedule)
+
+
+def schedule_spec_admitted(schedule: PythonObject) raises -> LrSpec:
+    """`schedule_spec` for a schedule its caller has just admitted with
+    `opt_schedule` (`opt_owner` admits the optimizer's `lr_schedule`). A
+    stored setting that is no number (an edit such as `peak_lr = "x"`, which
+    the attribute hook stores as object.__setattr__ would) raises TypeError,
+    not the bare conversion error (fb6-smoke, 2026-11-17)."""
+    try:
+        return _schedule_spec_read(schedule)
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError: ") or message.startswith("ValueError: "):
+            raise error^
+        raise Error("TypeError: schedule setting: " + message)
+
+
+def _schedule_spec_read(schedule: PythonObject) raises -> LrSpec:
     var context = OPT_DOOR.get_or_create_ptr()[].context
-    opt_schedule(schedule, context)
     var fields = py_fields(schedule)
     var kind = 0
-    var classes = context["schedules"]
+    var nk = optimizer_keys()
+    var classes = py_item(context, nk[].k_schedules)
     for i in range(len(classes)):  # driver-loop: over three built-in schedule configurations
         if py_type(schedule) is classes[i]:
             kind = i
     if kind < 3:
-        var total = fields["total_steps"]
-        return LrSpec(kind, Int(py=fields["warmup_steps"]), -1 if total is None else Int(py=total), 0,
-                      Float64(py=fields["peak_lr"]), Float64(py=fields["min_lr"]), 0.0, 0.0)
+        var total = py_item(fields, nk[].k_total_steps)
+        return LrSpec(kind, Int(py=py_item(fields, nk[].k_warmup_steps)), -1 if total is None else Int(py=total), 0,
+                      Float64(py=py_item(fields, nk[].k_peak_lr)), Float64(py=py_item(fields, nk[].k_min_lr)), 0.0, 0.0)
     if kind < 5:
-        var base = Float64(py=fields["base_lr"])
-        var gamma = Float64(py=fields["gamma"])
-        if not isfinite(base) or not isfinite(gamma):
-            raise Error("ValueError: base_lr and gamma must be finite")
-        return LrSpec(20, Int(py=fields["_step"]) if kind == 3 else 1, 0, 0, base, gamma, 0.0, 0.0)
-    return LrSpec(10, 1 if String(py=fields["anneal_strategy"]) == "linear" else 0,
-                  1 if Bool(py=fields["three_phase"]) else 0, Int(py=fields["total_steps"]),
-                  Float64(py=fields["max_lr"]), Float64(py=fields["div_factor"]),
-                  Float64(py=fields["final_div_factor"]), Float64(py=fields["pct_start"]))
+        var base = Float64(py=py_item(fields, nk[].k_base_lr))
+        var gamma = Float64(py=py_item(fields, nk[].k_gamma))
+        var readback = optimizer_decay_readback(base, gamma)
+        return readback.spec(Int(py=py_item(fields, nk[].k__step)) if kind == 3 else 1)
+    return LrSpec(10, 1 if String(py=py_item(fields, nk[].k_anneal_strategy)) == "linear" else 0,
+                  1 if Bool(py=py_item(fields, nk[].k_three_phase)) else 0, Int(py=py_item(fields, nk[].k_total_steps)),
+                  Float64(py=py_item(fields, nk[].k_max_lr)), Float64(py=py_item(fields, nk[].k_div_factor)),
+                  Float64(py=py_item(fields, nk[].k_final_div_factor)), Float64(py=py_item(fields, nk[].k_pct_start)))
 
 
 # ---------------------------------------------------------------------------
 # the public methods
 
 
-def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The registry half of `_Optimizer.__init__`: `params` as the tensor
-    list, its offsets (filled natively), `n_total`, the eager mirrors under
-    MOJOLEARN_OPT_LAZY_MOMENTS=0 and SGD's `buf_initialized`. Returns
-    n_total."""
-    door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var where = String(py=py_fields(opt)["_where"])
-    var seq = as_seq(params, "params", where)
-    set_field(opt, "params", seq)
-    var views = check_tensors(seq, "params", where, True)
-    var j = len(seq)
+@fieldwise_init
+struct OptimizerRegistryPrepared(Movable):
+    # PACK owners for the one prepared registry; algorithm metadata is native.
+    var params: PythonObject
+    var offsets: PythonObject
+    var initialized: PythonObject
+    var first: PythonObject
+    var second: PythonObject
+    var plan: OptimizerRegistryPlan
+
+
+def optimizer_prepare_registry(params: PythonObject, where: String) raises -> OptimizerRegistryPrepared:
+    var pins = OptimizerInputOwners()
+    var views = List[TensorView]()
+    var owners = as_seq_views(params, "params", where, views, pins)
+    var published = optimizer_pack_list(owners)
+    check_views(views, "params", where, True)
     var nbytes = List[Int]()
-    for k in range(j):  # driver-loop: over parameter buffers
+    for k in range(len(views)):  # driver-loop: native parameter registry descriptors
         nbytes.append(views[k].nbytes)
-    var offsets = new_array([j + 1], "<i4")
-    var n_total = registry_offsets(nbytes, I32P(unsafe_from_address=Int(py=offsets._addr)))
-    set_field(opt, "offsets", offsets)
-    set_field(opt, "n_total", PythonObject(n_total))
-    set_field(opt, "_m", PythonObject(None))
-    set_field(opt, "_v", PythonObject(None))
-    set_field(opt, "_pristine", PythonObject(True))
-    if eager_moments():
-        # MOJOLEARN_OPT_LAZY_MOMENTS=0: the eager pair (the A/B)
-        host_moments(opt)
-        set_field(opt, "_pristine", PythonObject(False))
-    set_field(opt, "buf_initialized", new_array([j], "<i4"))
-    return PythonObject(n_total)
+    var offsets = new_array([len(views) + 1], "<i4")
+    var plan = optimizer_registry_plan(nbytes, Int(py=offsets._addr))
+    var first = PythonObject(None)
+    var second = PythonObject(None)
+    if plan.eager:
+        first = new_zeros([plan.count], "<f4")
+        second = new_zeros([plan.count], "<f4")
+    var initialized = new_zeros([plan.parameters], "<i4")
+    _ = pins
+    return OptimizerRegistryPrepared(published, offsets, initialized, first, second, plan)
 
 
-def door_step[K: OptKernels](
-    module: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
+def optimizer_publish_registry(owner: PythonObject, registry: OptimizerRegistryPrepared) raises:
+    var fields = py_fields(owner)
+    var nk = optimizer_keys()
+    py_setitem(fields, nk[].k_params, registry.params)
+    py_setitem(fields, nk[].k_offsets, registry.offsets)
+    py_setitem(fields, nk[].k_n_total, PythonObject(registry.plan.count))
+    py_setitem(fields, nk[].k__m, registry.first)
+    py_setitem(fields, nk[].k__v, registry.second)
+    py_setitem(fields, nk[].k_buf_initialized, registry.initialized)
+
+
+def door_step(
+    module: PythonObject, provider: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
     tokens: PythonObject,
 ) raises -> PythonObject:
     """`step` (op 0), `step_device` (op 1) and `step_accumulated` (op 2;
@@ -819,22 +624,31 @@ def door_step[K: OptKernels](
     Python glue, the ONE kernel call, the assignments of its result.
     Returns the pre-clip total norm, or None."""
     door_ready()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var buffer_pins = OptimizerInputOwners()
+    # Host parameters are admitted one by one by tensor_view below, before
+    # any read; only device-resident parameters need the list walk here.
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context, True)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
-    var bi = d[].bi
-    var owhere = String(py=py_fields(opt)["_where"])
+    var owhere = record[].control.name()
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
-    var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
-    var parts = PythonObject(None)
+    var p_dev = record[].control.parameters_device
+    var nk = optimizer_keys()
+    if p_dev:
+        opt_value(py_item(fields, nk[].k_params), d[].context)
+    var parts = List[PythonObject]()
     var t_tokens = -1
     if op == OP_STEP_DEVICE and not p_dev:
         raise Error("RuntimeError: mojolearn." + owhere + ".step_device: call params_to_device() first")
     opt_value(grads, d[].context)
     opt_scalar(tokens, d[].context)
     if op == OP_STEP_ACCUMULATED:
-        parts = py_call(d[].context["container_types"][0], grads)
-        var want = Int(py=py_fields(opt)["accumulation_steps"])
+        parts = optimizer_sequence_items(grads, d[].context)
+        var want = Int(py=py_item(fields, nk[].k_accumulation_steps))
         if len(parts) != want:
             raise Error(
                 "ValueError: mojolearn." + owhere + ".step_accumulated: " + String(len(parts))
@@ -842,7 +656,7 @@ def door_step[K: OptKernels](
                 + "part of the run's numerical specification (optimizer contract clause 9.2)" + _SRC
             )
         if not (tokens is None):
-            t_tokens = Int(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2], tokens))
+            t_tokens = optimizer_integer(tokens, OPT_DOOR.get_or_create_ptr()[].context)
         if len(parts) > 1 and not (tokens is None) and t_tokens < 1:
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var mn = 0.0
@@ -853,95 +667,114 @@ def door_step[K: OptKernels](
                 "ValueError: mojolearn." + owhere + "." + where + ": max_norm must be > 0 or None, got "
                 + py_repr(max_norm) + "; None is how 'no clipping' is spelled" + _SRC
             )
-    var params = py_fields(opt)["params"]
+    var params = py_item(fields, nk[].k_params)
     var j = len(params)
-    var n_total = Int(py=py_fields(opt)["n_total"])
+    var n_total = Int(py=py_item(fields, nk[].k_n_total))
     var req = PublicStep()
     var keep = List[List[Float32]]()
     req.g_mode = GRADS_HOST
     req.a_count = 1
+    var pviews = List[TensorView]()
+    var have_pviews = False
     if op == OP_STEP_ACCUMULATED:
         req.a_count = len(parts)
         for i in range(len(parts)):  # driver-loop: over microbatch arguments
             var label = "microbatch_grads[" + String(i) + "]"
-            var gs = as_seq(parts[i], label, owhere)
-            var views = check_tensors(gs, label, owhere, req.a_count == 1)
-            _check_grads(params, gs, views, owhere, where)
-            for k in range(len(views)):  # driver-loop: over parameter buffers
-                if req.a_count > 1:
-                    # read-only inputs: strided buffers are made contiguous
-                    req.g_addr.append(contiguous_addr(gs[k], views[k], keep))
-                else:
-                    if views[k].readonly:
-                        raise Error("ValueError: mojolearn: tensor is read-only, refusing to write to it")
-                    req.g_addr.append(views[k].addr)
-                req.g_bytes.append(views[k].nbytes)
+            var views = List[TensorView]()
+            var gs = as_seq_views(parts[i], label, owhere, views, buffer_pins)
+            check_views(views, label, owhere, req.a_count == 1)
+            _check_grads(params, gs, views, owhere, where, pviews, have_pviews, buffer_pins)
+            with GILReleased(Python()):
+                for k in range(len(views)):  # driver-loop: over parameter buffers
+                    if req.a_count > 1:
+                        # read-only inputs: strided buffers are made contiguous
+                        req.g_addr.append(optimizer_contiguous_address(views[k], keep))
+                    else:
+                        if views[k].readonly:
+                            raise Error("ValueError: mojolearn: tensor is read-only, refusing to write to it")
+                        req.g_addr.append(views[k].addr)
+                    req.g_bytes.append(views[k].nbytes)
     elif p_dev and not (grads is None) and (
-        is_instance(grads, d[].dev_cls) or (
-            (py_type(grads) is d[].context["container_types"][0] or py_type(grads) is d[].context["container_types"][1]) and len(grads) > 0
-            and is_instance(grads[0], d[].dev_cls))):
-        var gs = grads
-        if is_instance(grads, d[].dev_cls):
-            gs = Python.list()
-            _ = py_call(gs.append, grads)
+        (py_type(grads) is d[].dev_cls) or (
+            (py_type(grads) is py_item(d[].context, nk[].k_container_types)[0] or py_type(grads) is py_item(d[].context, nk[].k_container_types)[1]) and len(grads) > 0
+            and (py_type(grads[0]) is d[].dev_cls))):
+        var gs = List[PythonObject]()
+        if (py_type(grads) is d[].dev_cls):
+            gs.append(grads)
+        else:
+            gs = optimizer_sequence_items(grads, d[].context)
         if len(gs) != j:
             raise Error(
                 "ValueError: mojolearn." + owhere + "." + where + ": " + String(len(gs)) + " gradients for "
                 + String(j) + " parameter tensors"
             )
         for k in range(len(gs)):  # driver-loop: over parameter buffers
-            if not is_instance(gs[k], d[].dev_cls):
+            if not (py_type(gs[k]) is d[].dev_cls):
                 raise Error("ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(k)
                             + "] must be a device array")
         req.g_mode = GRADS_DEVICE
         for k in range(len(gs)):  # driver-loop: over parameter buffers: one device handle each
-            req.g_addr.append(Int(py=py_fields(gs[k])["h"]))
-            req.g_bytes.append(Int(py=py_fields(gs[k])["size"]))
+            buffer_pins.append(gs[k])
+            req.g_addr.append(Int(py=py_item(py_fields(gs[k]), nk[].k_h)))
+            req.g_bytes.append(Int(py=py_item(py_fields(gs[k]), nk[].k_size)))
     elif p_dev and grads is None:
         req.g_mode = GRADS_RESIDENT
     else:
-        var gs = as_seq(grads, "grads", owhere)
-        var views = check_tensors(gs, "grads", owhere, True)
+        var views = List[TensorView]()
+        var gs = as_seq_views(grads, "grads", owhere, views, buffer_pins)
+        check_views(views, "grads", owhere, True)
         if p_dev and len(gs) != j:
             raise Error(
                 "ValueError: mojolearn." + owhere + ": grads does not match the optimizer's registry ("
                 + String(j) + " tensors, " + String(n_total) + " floats)"
             )
         if not p_dev:
-            _check_grads(params, gs, views, owhere, where)
+            _check_grads(params, gs, views, owhere, where, pviews, have_pviews, buffer_pins)
         _addrs_of(views, req.g_addr, req.g_bytes)
     if not p_dev:
         # Re-read every parameter buffer's layout on EVERY step: a caller
         # can reshape or resize their own array between steps.
-        var pviews = check_tensors(params, "params", owhere, True)
+        if have_pviews:
+            # Read this step by _check_grads; the dtype/layout refusals run
+            # here in the same order without exporting each buffer again.
+            check_views(pviews, "params", owhere, True)
+        else:
+            pviews = check_tensors(params, "params", owhere, True, buffer_pins)
         _addrs_of(pviews, req.p_addr, req.p_bytes)
-    var schedule = py_fields(opt)["lr_schedule"]
+    var schedule = py_item(fields, nk[].k_lr_schedule)
     req.has_sched = False
     if not (schedule is None):
         req.has_sched = True
-        req.sched = schedule_spec(schedule)
-    var resident = py_fields(opt)["_resident_wanted"]
-    if py_type(resident) is d[].context["scalar_types"][1] and not truth(resident):
+        # opt_owner above admitted this lr_schedule field with opt_schedule.
+        req.sched = schedule_spec_admitted(schedule)
+    var resident = py_item(fields, nk[].k__resident_wanted)
+    if py_type(resident) is py_item(d[].context, nk[].k_scalar_types)[1] and not truth(resident):
         # `resident=False`: the state lives in these host arrays (no slot)
         host_moments(opt)
     var maximize = truth(getattr_or(opt, "maximize", PythonObject(False)))
     req.j = j
-    req.t = Int(py=py_fields(opt)["t"])
-    req.hyper = _hyper(opt, maximize, mn)
+    req.t = Int(py=py_item(fields, nk[].k_t))
+    req.hyper = _hyper(opt, record[].control.kind, maximize, mn)
     req.n_total = n_total
-    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
-    req.init = write_addr(py_fields(opt)["buf_initialized"], "buf_initialized")
+    req.offsets = read_addr(py_item(fields, nk[].k_offsets), "offsets", buffer_pins)
+    req.init = write_addr(py_item(fields, nk[].k_buf_initialized), "buf_initialized", buffer_pins)
     req.tokens = t_tokens
-    _state_into(opt, req)
+    _state_into(opt, record[].control, req, buffer_pins)
     req.p_dev = p_dev
-    req.g_dev = truth(getattr_or(opt, "_g_dev", PythonObject(False)))
+    req.g_dev = record[].control.gradients_device
     req.device_op = op == OP_STEP_DEVICE
-    var out = K.step(req)
+    var out = PublicStepOut(0, -1, False, False, Float32(0), Float32(0), Float32(0), -1, False)
+    var driver = optimizer_driver(provider)
+    var has_sched = req.has_sched
+    with GILReleased(Python()):
+        out = driver.step(req^)
+    _ = provider
+    _ = buffer_pins
     _ = keep^
     # the assignments of the native result
     set_field(opt, "t", PythonObject(out.t))
-    keep_slot(opt, out.handle, module, not out.on_device)
-    set_field(opt, "_host_fresh", PythonObject(py_fields(opt)["_res"] is None))
+    keep_slot(record[], out.handle, provider, driver)
+    record[].control.host_fresh = record[].control.handle < 0
     var total = PythonObject(None)
     if out.clip_ran:
         total = PythonObject(Float64(out.total_norm))
@@ -952,29 +785,40 @@ def door_step[K: OptKernels](
         set_field(opt, "clip_coef_", PythonObject(None))
     var lr = PythonObject(Float64(out.lr))
     set_field(opt, "lr_", lr)
-    if req.has_sched:
+    if has_sched:
         set_field(opt, "lr", lr)
     if out.packed >= 0:
         set_field(opt, "packed_", PythonObject(out.packed != 0))
-    set_field(opt, "_g_dev", PythonObject(out.g_dev))
+    record[].control.gradients_device = out.g_dev
+    _ = lease
     return total
 
 
-def door_io[K: OptKernels](
-    module: PythonObject, opt: PythonObject, op_code: Int, tensors: PythonObject, name: String, tensor: Int
-) raises -> PythonObject:
-    """`_io`: the device transfers of `params_to_device`, `params_to_host`,
-    `grads_to_device`, `grads_to_host`, `param_device` and the query.
-    Returns the result word."""
+def optimizer_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    op_code: Int, tensors: PythonObject, name: String, tensor: Int) raises -> Int:
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var owhere = String(py=py_fields(opt)["_where"])
-    var j = len(py_fields(opt)["params"])
-    var n_total = Int(py=py_fields(opt)["n_total"])
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    var value = _optimizer_io_admitted(module, provider, opt, op_code, tensors, name, tensor, record[])
+    _ = lease
+    return value
+
+
+def _optimizer_io_admitted(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    op_code: Int, tensors: PythonObject, name: String, tensor: Int, mut record: OptimizerOwner) raises -> Int:
+    var buffer_pins = OptimizerInputOwners()
+    # The instance dictionary is fetched once; set_field writes the same dict.
+    var fields = py_fields(opt)
+    var owhere = record.control.name()
+    var nk = optimizer_keys()
+    var j = len(py_item(fields, nk[].k_params))
+    var n_total = Int(py=py_item(fields, nk[].k_n_total))
     var req = PublicStep()
     if not (tensors is None):
-        var seq = as_seq(tensors, name, owhere)
-        var views = check_tensors(seq, name, owhere, True)
+        var views = List[TensorView]()
+        var seq = as_seq_views(tensors, name, owhere, views, buffer_pins)
+        check_views(views, name, owhere, True)
         if len(seq) != j:
             raise Error(
                 "ValueError: mojolearn." + owhere + ": " + name + " does not match the optimizer's registry ("
@@ -983,76 +827,104 @@ def door_io[K: OptKernels](
         _addrs_of(views, req.g_addr, req.g_bytes)
     req.j = j
     req.n_total = n_total
-    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
-    _state_into(opt, req)
-    var r = K.io(req, op_code, tensor)
+    req.offsets = read_addr(py_item(fields, nk[].k_offsets), "offsets", buffer_pins)
+    _state_into(opt, record.control, req, buffer_pins)
+    var r = (-1, 0)
+    var driver = optimizer_driver(provider)
+    if driver.host:
+        r = driver.io(req^, op_code, tensor)
+    else:
+        with GILReleased(Python()):
+            r = driver.io(req^, op_code, tensor)
+    _ = provider
+    _ = buffer_pins
     try:
-        keep_slot(opt, r[0], module, False)
+        keep_slot(record, r[0], provider, driver)
         # A device allocation's handle stays an integer through publication.
         # The caller has prepared its owner before asking for this allocation.
-        return PythonObject(r[1]) if op_code == 5 else PythonObject(Float64(r[1]))
+        return r[1]
     except error:
         if op_code == 5:
             try:
-                _ = py_call(resident_entry(module, "train_dev_free"), r[1])
+                with GILReleased(Python()):
+                    _ = driver.free_device(r[1])
+            except:
+                pass
+        raise error^
+
+def optimizer_pack_io(provider: PythonObject, operation: Int, value: Int) raises -> PythonObject:
+    """PACK a public legacy IO result; release an unpublished device handle."""
+    try:
+        return PythonObject(value) if operation == 5 else PythonObject(Float64(value))
+    except error:
+        if operation == 5:
+            var driver = optimizer_driver(provider)
+            try:
+                with GILReleased(Python()):
+                    _ = driver.free_device(value)
             except:
                 pass
         raise error^
 
 
+def door_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    operation: Int, tensors: PythonObject, name: String, tensor: Int) raises -> PythonObject:
+    var value = optimizer_io(module, provider, opt, operation, tensors, name, tensor)
+    return optimizer_pack_io(provider, operation, value)
+
+
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     """`zero_grad`: +0.0 into every gradient buffer."""
     door_ready()
+    var buffer_pins = OptimizerInputOwners()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var owhere = String(py=py_fields(opt)["_where"])
-    var gs = as_seq(grads, "grads", owhere)
-    var views = check_tensors(gs, "grads", owhere, True)
+    var lease = OptimizerOwnerLease(opt)
+    var owhere = lease.value.downcast_value_ptr[OptimizerOwner]()[].control.name()
+    var views = List[TensorView]()
+    _ = as_seq_views(grads, "grads", owhere, views, buffer_pins)
+    check_views(views, "grads", owhere, True)
     var addrs = List[Int]()
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
     zero_tensors(addrs, nbytes)
+    _ = buffer_pins
+    _ = lease
     return PythonObject(None)
 
 
-def resident_entry(owner: PythonObject, name: String) raises -> PythonObject:
-    var context = OPT_DOOR.get_or_create_ptr()[].context
-    if py_type(owner) is not context["module_type"]:
-        raise Error("TypeError: optimizer resident state must retain its owning native extension")
-    var entry = py_get(py_fields(owner), PythonObject(name))
-    if py_type(entry) is not py_type(_bi().len):
-        raise Error("TypeError: optimizer resident state requires a compiled native entry")
-    return entry
-
-
-def _sync_host[K: OptKernels](module: PythonObject, opt: PythonObject) raises:
+def _sync_host(opt: PythonObject, mut record: OptimizerOwner) raises:
     """`_download`: the slot's state into the mirrors, when they are stale,
     through the module that owns the slot."""
-    if py_fields(opt)["_res"] is None or truth(py_fields(opt)["_host_fresh"]):
+    var fields = py_fields(opt)
+    var handle = record.control.handle
+    if not optimizer_state_download_needed(handle, record.control.host_fresh):
         return
     host_moments(opt)
-    var h = Int(py=py_fields(opt)["_res"])
-    var m = write_addr(py_fields(opt)["_m"], "exp_avg")
-    var v = write_addr(py_fields(opt)["_v"], "exp_avg_sq")
-    var n = Int(py=py_fields(opt)["n_total"])
-    var owner = py_fields(opt)["_res_binding"]
-    if owner is module:
-        _ = K.download(h, m, v, n)
+    var buffer_pins = OptimizerInputOwners()
+    var h = handle
+    var nk = optimizer_keys()
+    var n = Int(py=py_item(fields, nk[].k_n_total))
+    var m = state_address(py_item(fields, nk[].k__m), n, "exp_avg", buffer_pins)
+    var v = state_address(py_item(fields, nk[].k__v), n, "exp_avg_sq", buffer_pins)
+    var driver = record.control.driver.value().copy()
+    if driver.host:
+        _ = driver.download(h, m, v, n)
     else:
-        _ = py_call(resident_entry(owner, "optimizer_resident_download"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
-    set_field(opt, "_host_fresh", PythonObject(True))
+        with GILReleased(Python()):
+            _ = driver.download(h, m, v, n)
+    _ = buffer_pins
+    record.control.host_fresh = True
 
 
-def _upload[K: OptKernels](module: PythonObject, opt: PythonObject, m: Int, v: Int) raises:
-    """`_upload_one`: assigned moments into the slot (0 leaves that moment)."""
-    if py_fields(opt)["_res"] is None:
+def _upload(record: OptimizerOwner, m: Int, v: Int, n: Int) raises:
+    if record.control.handle < 0:
         return
-    var h = Int(py=py_fields(opt)["_res"])
-    var n = Int(py=py_fields(opt)["n_total"])
-    var owner = py_fields(opt)["_res_binding"]
-    if owner is module:
-        _ = K.upload(h, m, v, n)
+    var driver = record.control.driver.value().copy()
+    if driver.host:
+        _ = driver.upload(record.control.handle, m, v, n)
     else:
-        _ = py_call(resident_entry(owner, "optimizer_resident_upload"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+        with GILReleased(Python()):
+            _ = driver.upload(record.control.handle, m, v, n)
 
 
 def copy_array(source: PythonObject) raises -> PythonObject:
@@ -1060,48 +932,91 @@ def copy_array(source: PythonObject) raises -> PythonObject:
     if not tensor_view(source, v) or not v.c_contig or v.itemsize != 4:
         raise Error("TypeError: optimizer state copy requires a contiguous float32/int32 buffer")
     var result = new_array(v.shape, "<f4" if base_format(v.fmt) == "f" else "<i4")
-    memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
+    unsafe_memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
     return result
 
 
-def door_state[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int) raises -> PythonObject:
+def door_state(module: PythonObject, provider: PythonObject, opt: PythonObject, which: Int) raises -> PythonObject:
     """`state_dict()` (which 0) and the `exp_avg` / `exp_avg_sq` readings
     (1 / 2): the slot's state downloaded once per stale read."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    _sync_host[K](module, opt)
-    set_field(opt, "_pristine", PythonObject(False))
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    _sync_host(opt, record[])
+    record[].control.pristine = False
     host_moments(opt)
+    var nk = optimizer_keys()
     if which == STATE_EXP_AVG:
-        return py_fields(opt)["_m"]
+        _ = lease
+        return py_item(py_fields(opt), nk[].k__m)
     if which == STATE_EXP_AVG_SQ:
-        return py_fields(opt)["_v"]
+        _ = lease
+        return py_item(py_fields(opt), nk[].k__v)
     var out = Python.dict()
-    py_setitem(out, PythonObject("t"), PythonObject(Int(py=py_fields(opt)["t"])))
-    py_setitem(out, PythonObject("exp_avg"), copy_array(py_fields(opt)["_m"]))
-    py_setitem(out, PythonObject("exp_avg_sq"), copy_array(py_fields(opt)["_v"]))
-    py_setitem(out, PythonObject("buf_initialized"), copy_array(py_fields(opt)["buf_initialized"]))
+    py_setitem(out, nk[].k_t, PythonObject(Int(py=py_item(py_fields(opt), nk[].k_t))))
+    py_setitem(out, nk[].k_exp_avg, copy_array(py_item(py_fields(opt), nk[].k__m)))
+    py_setitem(out, nk[].k_exp_avg_sq, copy_array(py_item(py_fields(opt), nk[].k__v)))
+    py_setitem(out, nk[].k_buf_initialized, copy_array(py_item(py_fields(opt), nk[].k_buf_initialized)))
+    _ = lease
     return out
 
 
-def door_state_set[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
+def optimizer_export_state(opt: PythonObject) raises -> PythonObject:
+    """PACK copy/pickle state with host buffers and no process-local handle.
+
+    The owner lease spans synchronization and field capture. A restored copy
+    opens its own native slot lazily; public buffers keep ordinary Python
+    shallow/deep-copy behavior outside this operation.
+    """
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    _sync_host(opt, record[])
+    var fields = py_fields(opt)
+    var nk = optimizer_keys()
+    if record[].control.parameters_device:
+        _ = _optimizer_io_admitted(PythonObject(None), record[].provider, opt, 2, py_item(fields, nk[].k_params), "params", 0, record[])
+    var result = Python.dict()
+    var table = cpython_table()
+    var position = List[Int](length=1, fill=0)
+    var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+    while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
+            Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: PACK public serialized fields
+        var key = PythonObject(from_borrowed=pair[0])
+        if String(key) != "_native_optimizer_owner":
+            py_setitem(result, key, PythonObject(from_borrowed=pair[1]))
+    py_setitem(result, nk[].k__native_optimizer_pristine, PythonObject(record[].control.serialized_pristine(
+        py_item(fields, nk[].k__m) is not None, py_item(fields, nk[].k__v) is not None)))
+    _ = lease
+    return result
+
+
+def door_state_set(module: PythonObject, provider: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
     """`exp_avg = value` (which 1) and `exp_avg_sq = value` (2)."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
     opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
-    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
-    set_field(opt, "_pristine", PythonObject(False))
-    var a = 0 if value is None else write_addr(value, name)
+    var buffer_pins = OptimizerInputOwners()
+    var nk = optimizer_keys()
+    var count = Int(py=py_item(py_fields(opt), nk[].k_n_total))
+    var a = 0 if value is None else state_address(value, count, name, buffer_pins)
     if which == STATE_EXP_AVG:
-        _upload[K](module, opt, a, 0)
+        _upload(record[], a, 0, count)
     else:
-        _upload[K](module, opt, 0, a)
+        _upload(record[], 0, a, count)
+    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
+    record[].control.pristine = False
+    _ = buffer_pins
+    _ = lease
     return PythonObject(None)
 
 
-def door_load_state[K: OptKernels](
-    module: PythonObject, opt: PythonObject, t: PythonObject, ea: PythonObject, c1: PythonObject,
+def door_load_state(
+    module: PythonObject, provider: PythonObject, opt: PythonObject, t: PythonObject, ea: PythonObject, c1: PythonObject,
     es: PythonObject, c2: PythonObject, bi: PythonObject, c3: PythonObject,
 ) raises -> PythonObject:
     """`load_state_dict` after the conversion of the state's arrays
@@ -1115,25 +1030,41 @@ def door_load_state[K: OptKernels](
     opt_value(bi, OPT_DOOR.get_or_create_ptr()[].context)
     var m = ea if truth(c1) else copy_array(ea)
     var v = es if truth(c2) else copy_array(es)
-    var n_total = Int(py=py_fields(opt)["n_total"])
-    var owhere = String(py=py_fields(opt)["_where"])
-    if Int(py=m.size) != n_total:
-        raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg holds " + String(Int(py=m.size))
-                    + " floats, this optimizer's registry is " + String(n_total))
-    if Int(py=v.size) != n_total:
-        raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg_sq holds " + String(Int(py=v.size))
-                    + " floats, this optimizer's registry is " + String(n_total))
-    var init_view = TensorView()
-    if not tensor_view(bi, init_view) or init_view.count() != len(py_fields(opt)["params"]):
-        raise Error("ValueError: buf_initialized does not match the optimizer parameter registry")
-    set_field(opt, "_m", m)
-    set_field(opt, "_v", v)
-    set_field(opt, "_pristine", PythonObject(False))
-    _upload[K](module, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
-    set_field(opt, "_host_fresh", PythonObject(True))
+    optimizer_load_buffers(module, provider, opt, m, v, bi)
     set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
     set_field(opt, "t", t)
     return PythonObject(None)
+
+
+def optimizer_load_buffers(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    m: PythonObject, v: PythonObject, bi: PythonObject) raises:
+    """UNPACK owned checkpoint outputs, run the native span/upload plan, PACK mirrors.
+
+    Only API buffer owners cross this helper. Converted step/count/copy-policy
+    words stay native in the public router; legacy entry flags are decoded by
+    their own external UNPACK wrapper above.
+    """
+    # Both callers admit the current owner immediately before this boundary.
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    var nk = optimizer_keys()
+    var n_total = Int(py=py_item(py_fields(opt), nk[].k_n_total))
+    var owhere = record[].control.name()
+    var buffer_pins = OptimizerInputOwners()
+    var first_view = TensorView()
+    var second_view = TensorView()
+    var init_view = TensorView()
+    if not tensor_view(m, first_view, buffer_pins) or not tensor_view(v, second_view, buffer_pins) or not tensor_view(bi, init_view, buffer_pins):
+        raise Error("TypeError: optimizer checkpoint requires native state buffers")
+    optimizer_checkpoint_spans(first_view, second_view, init_view, n_total, len(py_item(py_fields(opt), nk[].k_params)), owhere)
+    # A refused native upload must retain the previous public state owners.
+    _upload(record[], first_view.addr, second_view.addr, n_total)
+    set_field(opt, "_m", m)
+    set_field(opt, "_v", v)
+    record[].control.pristine = False
+    _ = buffer_pins
+    record[].control.host_fresh = True
+    _ = lease
 
 
 comptime _NORM_TYPE_REFUSAL = (
@@ -1151,22 +1082,23 @@ comptime _NONFINITE_REFUSAL = (
 )
 
 
-def door_clip[K: OptKernels](
-    grads: PythonObject, max_norm: PythonObject, norm_type: PythonObject, error_if_nonfinite: PythonObject,
+def door_clip(
+    provider: PythonObject, grads: PythonObject, max_norm: PythonObject, norm_type: PythonObject, error_if_nonfinite: PythonObject,
     kwargs: PythonObject,
 ) raises -> PythonObject:
     """`clip_grad_norm_`: the refusals, the tensors, the in-place scale.
     Returns the pre-clip total norm."""
     door_ready()
-    var bi = _bi()
+    var buffer_pins = OptimizerInputOwners()
     refuse_kwargs(kwargs, "clip_grad_norm_")
     if as_float(norm_type) != 2.0:
         raise Error("NotImplementedError: mojolearn.clip_grad_norm_: norm_type=" + py_repr(norm_type)
                     + _NORM_TYPE_REFUSAL)
     if not truth(error_if_nonfinite):
         raise Error("NotImplementedError: " + _NONFINITE_REFUSAL)
-    var gs = as_seq(grads, "grads", "clip_grad_norm_")
-    var views = check_tensors(gs, "grads", "clip_grad_norm_", True)
+    var views = List[TensorView]()
+    _ = as_seq_views(grads, "grads", "clip_grad_norm_", views, buffer_pins)
+    check_views(views, "grads", "clip_grad_norm_", True)
     var mn = as_float(max_norm)
     if not (mn > 0.0):
         raise Error(
@@ -1177,63 +1109,65 @@ def door_clip[K: OptKernels](
     var addrs = List[Int]()
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
-    var r = K.clip(addrs, nbytes, Float32(mn))
+    var r = (Float32(0), Float32(0))
+    var driver = optimizer_driver(provider)
+    var maximum = Float32(mn)
+    with GILReleased(Python()):
+        r = driver.clip(addrs^, nbytes^, maximum)
+    _ = provider
+    _ = buffer_pins
     return PythonObject(Float64(r[0]))
 
 
-def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
+def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
     """`accumulate_grads`: the microbatches checked, made contiguous where
     strided, combined by the clause 9.2 tree into new arrays."""
     door_ready()
-    var bi = _bi()
+    var buffer_pins = OptimizerInputOwners()
     opt_value(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     opt_scalar(tokens, OPT_DOOR.get_or_create_ptr()[].context)
-    var parts = py_call(OPT_DOOR.get_or_create_ptr()[].context["container_types"][0], microbatch_grads)
+    var parts = optimizer_sequence_items(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     if len(parts) == 0:
         raise Error("ValueError: mojolearn.accumulate_grads: no microbatches")
     var first = TensorView()
-    var single = tensor_view(parts[0], first)
-    var seqs = Python.list()
-    for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        _ = py_call(seqs.append, as_seq(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads"))
+    var single = tensor_view(parts[0], first, buffer_pins)
     var probes = List[List[TensorView]]()
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        probes.append(check_tensors(seqs[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False))
-    var j0 = len(seqs[0])
+        var views = List[TensorView]()
+        _ = as_seq_views(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", views, buffer_pins)
+        probes.append(views^)
     for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        var ji = len(seqs[i])
-        if ji != j0:
-            raise Error("ValueError: mojolearn.accumulate_grads: microbatch " + String(i) + " has " + String(ji)
-                        + " tensors, microbatch 0 has " + String(j0))
-        for k in range(ji):  # driver-loop: over parameter buffers
-            if not same_shape(probes[i][k].shape, probes[0][k].shape):
-                raise Error("ValueError: mojolearn.accumulate_grads: microbatch " + String(i) + " tensor "
-                            + String(k) + " has shape " + shape_text(probes[i][k].shape)
-                            + ", microbatch 0 has " + shape_text(probes[0][k].shape))
+        check_views(probes[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False)
+    var j0 = optimizer_accumulation_shapes(probes)
     var t_tokens = -1
     if not (tokens is None):
-        t_tokens = Int(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2], tokens))
+        t_tokens = optimizer_integer(tokens, OPT_DOOR.get_or_create_ptr()[].context)
         if t_tokens < 1:
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var keep = List[List[Float32]]()
     var in_addrs = List[Int]()
-    for i in range(len(parts)):  # driver-loop: over microbatch arguments
-        var sq = seqs[i]
-        for k in range(j0):  # driver-loop: over parameter buffers
-            in_addrs.append(contiguous_addr(sq[k], probes[i][k], keep))
+    with GILReleased(Python()):
+        for i in range(len(probes)):  # driver-loop: admitted native microbatch plans
+            for k in range(j0):  # driver-loop: parameter buffers
+                in_addrs.append(optimizer_contiguous_address(probes[i][k], keep))
     var nbytes = List[Int]()
     var out_addrs = List[Int]()
-    var result = Python.list()
+    var result = List[PythonObject]()
     for k in range(j0):  # driver-loop: over parameter buffers: one result array each
         var a = new_array(probes[0][k].shape, "<f4")
-        _ = py_call(result.append, a)
+        result.append(a)
         out_addrs.append(Int(py=a._addr))
         nbytes.append(probes[0][k].nbytes)
-    _ = K.accumulate(in_addrs, nbytes, out_addrs, len(parts), t_tokens)
+    var a_count = len(parts)
+    var driver = optimizer_driver(provider)
+    with GILReleased(Python()):
+        _ = driver.accumulate(in_addrs^, nbytes^, out_addrs^, a_count, t_tokens)
+    _ = provider
+    _ = buffer_pins
     _ = keep^
     if single:
         return result[0]
-    return result
+    return optimizer_pack_list(result)
 
 
 # ---------------------------------------------------------------------------
@@ -1247,84 +1181,82 @@ def entry_args(packed: PyObjectPtr, count: Int, name: String) raises -> PythonOb
     return args
 
 
-def entry_step[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_step(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_step(opt, grads, max_norm, op, tokens)."""
     try:
         var a = entry_args(packed, 5, "optimizer_step_public")
-        return door_step[K](PythonObject(from_borrowed=py_self), a[0], a[1], a[2], Int(py=a[3]), a[4]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_step(module, provider, a[0], a[1], a[2], Int(py=a[3]), a[4]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_io[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_io(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_io(opt, op, tensors, name, tensor)."""
     try:
         var a = entry_args(packed, 5, "optimizer_io")
-        return door_io[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1]), a[2], String(py=a[3]),
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_io(module, provider, a[0], Int(py=a[1]), a[2], String(py=a[3]),
                           Int(py=a[4])).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_zero(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_zero(opt, grads)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_zero")
-        return door_zero(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)
-
-
-def entry_state[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state(opt, which)."""
     try:
         var a = entry_args(packed, 2, "optimizer_state")
-        return door_state[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1])).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_state(module, provider, a[0], Int(py=a[1])).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_state_set[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_state_set(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state_set(opt, which, value)."""
     try:
         var a = entry_args(packed, 3, "optimizer_state_set")
-        return door_state_set[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1]), a[2]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_state_set(module, provider, a[0], Int(py=a[1]), a[2]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_load_state[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_load_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_load_state(opt, t, exp_avg, copied, exp_avg_sq, copied, buf_initialized, copied)."""
     try:
         var a = entry_args(packed, 8, "optimizer_load_state")
-        return door_load_state[K](PythonObject(from_borrowed=py_self), a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_load_state(module, provider, a[0], a[1], a[2], a[3], a[4], a[5], a[6],
                                   a[7]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_clip[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_clip(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)."""
     try:
         var a = entry_args(packed, 5, "optimizer_clip")
-        return door_clip[K](a[0], a[1], a[2], a[3], a[4]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_clip(provider, a[0], a[1], a[2], a[3], a[4]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_accumulate[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_accumulate(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_accumulate(microbatch_grads, tokens)."""
     try:
         var a = entry_args(packed, 2, "optimizer_accumulate")
-        return door_accumulate[K](a[0], a[1]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_accumulate(provider, a[0], a[1]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_init(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_init(opt, params)."""
-    try:
-        var a = entry_args(packed, 2, "optimizer_init")
-        return door_init(a[0], a[1]).steal_data()
-    except error:
-        return optimizer_python_error(error)

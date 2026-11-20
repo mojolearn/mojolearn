@@ -51,6 +51,7 @@ SUBMODULES = ("metrics", "linalg", "manifold", "resample", "hdbscan", "model_sel
 #: result records): listed in the table as NOT AN ALGORITHM, never probed.
 NOT_ALGORITHMS = {
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch", "gpu_arch_how",
+    "runtime_report", "check",
     "Array", "ByteLanguageModelConfig", "LanguageModelConfig", "SambaConfig",
     "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState",
     "ConstantKernel", "Matern", "RBF", "WhiteKernel",
@@ -59,7 +60,7 @@ NOT_ALGORITHMS = {
     "resample.BootstrapResult", "resample.PermutationTestResult", "resample.MonteCarloResult",
     "resample.STATISTICS", "resample.METHODS", "resample.ALTERNATIVES", "resample.INTEGRANDS",
     "training.numeric_mode_used", "training.vendor_used", "training.accumulation_is_aligned",
-    "model_selection.split_descriptor",
+    "model_selection.split_descriptor", "model_selection.default_folds",
 }
 
 CLASSIFIER_HINTS = ("Classifier", "SVC", "Logistic", "NB", "Discriminant", "Perceptron",

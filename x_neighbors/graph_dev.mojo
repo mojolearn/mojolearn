@@ -89,7 +89,7 @@ struct GraphDev(GExec):
                 )
 
     def get_i(mut self, slot: Int, idx: Int) raises -> Int:
-        var h = List[Int32](length=1, fill=Int32(0))
+        var h = List[Int32](unsafe_uninit_length=1)
         var sub = self.bi.create_sub_buffer[DType.int32](Int(self.off[slot]) + idx, 1)
         self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
         self.ctx.synchronize()
@@ -97,7 +97,7 @@ struct GraphDev(GExec):
         return Int(h[0])
 
     def get_f(mut self, slot: Int, idx: Int) raises -> Float32:
-        var h = List[Float32](length=1, fill=Float32(0))
+        var h = List[Float32](unsafe_uninit_length=1)
         var sub = self.bf.create_sub_buffer[DType.float32](Int(self.off[slot]) + idx, 1)
         self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
         self.ctx.synchronize()

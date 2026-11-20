@@ -127,6 +127,7 @@ def probe() raises:
     # still in flight when the second one is enqueued, so an earlier hold
     # would free the scale under a launch that has not run yet.
     var scale_keep = upload_scale(ctx, Float32(1.0))
+    _ = scan_ids_h^  # past the drain: a queued copy reads it after its last named use
     var scale_ptr = rebind[MutPointer[Float32, MutAnyOrigin]](
         scale_keep.unsafe_ptr()
     )

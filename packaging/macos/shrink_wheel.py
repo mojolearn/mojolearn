@@ -1,6 +1,7 @@
 """Shrink the built macOS wheel under PyPI's per-file limit, in place.
 
-PyPI refuses any file over 100 MiB (python/mojolearn/gpu_plugins.py wheel_size_limit; no larger allowance exists).
+PyPI refuses a file over the project's limit: packaging/pypi_limits.json (the macOS wheel publishes as `mojolearn`,
+100 MiB until pypi/support#12773 is granted).
 0.8.55's macOS wheel was 100.6 MiB and the upload got HTTP 400. Two changes that leave the code untouched:
 
 - `strip -x` drops each binding's local symbols (names no loader can look up); exported symbols, the module init and
@@ -27,7 +28,11 @@ import sys
 import tempfile
 import zipfile
 
-LIMIT = 100 * 1024**2
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import pypi_limits  # noqa: E402
+
+#: The macOS wheel publishes as `mojolearn` (packaging/pypi_limits.json).
+LIMIT = pypi_limits.file_limit("mojolearn")
 ADAPTER_MANIFEST = "mojolearn/_adapters/adapters.json"
 
 

@@ -63,7 +63,7 @@ error rather than a comment.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import sum as block_sum
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 

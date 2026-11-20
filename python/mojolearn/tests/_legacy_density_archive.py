@@ -2,8 +2,9 @@
 """Frozen 30841c221 deterministic NPZ writer, used only as an independent test oracle."""
 import struct
 import zipfile
-from mojolearn._array import Array
-from mojolearn import _buffer
+import mojolearn
+from mojolearn import Array
+from mojolearn.tests import _oracle_support as _buffer
 
 MAGIC = b"\x93NUMPY"
 _ARRAY_ALIGN = 64
@@ -39,11 +40,18 @@ def _describe(value, *, c_order):
     (nested) list of them. With `c_order` the bytes are linearized to C
     order and a 0-d value becomes shape `(1,)`."""
     if isinstance(value, Array):
-        a = value._as_c() if c_order else value
+        # The product's `a._as_c()` / `a._mv` through the public `order` and `tobytes`: the storage-order bytes,
+        # or (c_order of an F-order block) the C-order bytes NumPy linearizes from the Array's interface.
+        a = value
         shape = a.shape if (a.ndim or not c_order) else (1,)
         descr = _DESCR_OF.get(a.dtype, a.dtype)
-        raw = a._mv.cast("B") if a.nbytes else b""
-        return descr, a.order == "F" and a.ndim > 1, shape, raw
+        if not a.nbytes:
+            raw = b""
+        elif c_order and a.order == "F" and a.ndim > 1:
+            raw = _buffer.require_numpy("the oracle npz writer").asarray(a).tobytes(order="C")
+        else:
+            raw = a.tobytes()
+        return descr, (not c_order) and a.order == "F" and a.ndim > 1, shape, raw
     if isinstance(value, bool):
         return "|b1", False, (1,) if c_order else (), bytes([1 if value else 0])
     if isinstance(value, int):
@@ -83,8 +91,53 @@ def _describe(value, *, c_order):
                 raw = memoryview(value).tobytes()
         return descr, fortran, shape, raw
 
+_SCALAR_TYPES = frozenset((float, int, bool))
+_ROW_TYPES = frozenset((list, tuple))
+
+
+def _leaves(nested, out):
+    """Copy of the product's general `_array._flatten` walk (bindings/user_objects_native_door.mojo
+    `_nested_into`): an Array contributes its shape and C-order values; a str, bytes or object without
+    `__len__` is a leaf; a list must be rectangular."""
+    if isinstance(nested, Array):
+        values = nested.tolist()
+        for _ in range(nested.ndim):
+            values = [v for row in values for v in row] if values and isinstance(values[0], list) else values
+        out.extend(values if isinstance(values, list) else [values])
+        return tuple(nested.shape)
+    if isinstance(nested, (str, bytes)) or not hasattr(nested, "__len__"):
+        out.append(nested)
+        return ()
+    seq = list(nested)
+    if not seq:
+        return (0,)
+    first = _leaves(seq[0], out)
+    for item in seq[1:]:
+        shape = _leaves(item, out)
+        if shape != first:
+            raise ValueError(f"mojolearn: nested sequence is not rectangular ({shape} vs {first})")
+    return (len(seq),) + first
+
+
+def _flatten(nested):
+    """Copy of the product's `_array._flatten`: `(shape, flat_list)` for a rectangular nested sequence; a scalar
+    gives shape ()."""
+    if type(nested) in _ROW_TYPES and nested:
+        kinds = set(map(type, nested))
+        if kinds <= _SCALAR_TYPES:
+            return (len(nested),), list(nested)
+        if kinds <= _ROW_TYPES:
+            widths = set(map(len, nested))
+            if len(widths) == 1:
+                flat = [v for row in nested for v in row]
+                if set(map(type, flat)) <= _SCALAR_TYPES:
+                    return (len(nested), widths.pop()), flat
+    flat = []
+    shape = _leaves(nested, flat)
+    return tuple(shape), flat
+
+
 def _describe_list(value):
-    from ._array import _flatten
     shape, flat = _flatten(value)
     if not flat:
         return "<f8", False, shape, b""
@@ -129,13 +182,12 @@ def write_npz(path, arrays):
 
 # Frozen 30841c221 public density save schemas. Canonical names are the
 # intentional roundtrip repair; canonical=False preserves the original bytes.
-from mojolearn import _backend
 from mojolearn.tests._legacy_host_iforest_fit import parameters as _iforest_parameters
 
 def _saved_mode(est):
     """The tier `predict` would run on now, persisted as GradientBoosting
     persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
+    mode = getattr(est, "numeric_mode", None) or mojolearn.numeric_mode()
     if not isinstance(mode, str) or mode.strip().lower() not in (
         "fast", "identical"
     ):

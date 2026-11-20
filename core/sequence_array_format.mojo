@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Float32 output formatting for the sequence tensor's native array protocol.
 # This is output preparation, not an optimizer/training kernel.
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.ffi import c_char, c_int, c_size_t, external_call
 from std.memory import bitcast
 from std.sys.info import CompilationTarget
@@ -69,7 +70,7 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
             c_int(6), value)
         if used < 0 or used >= 64:
             raise Error("RuntimeError: native legacy float formatting failed")
-        var result = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var result = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
         if result.find(".") < 0 and result.find("e") < 0:
             result += ".0"
         _ = numeric_locale^
@@ -81,7 +82,7 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
             c_int(precision), value)
         if used < 0 or used >= 64:
             raise Error("RuntimeError: native float formatting failed")
-        var candidate = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var candidate = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
         if bitcast[DType.uint32](Float32(Float64(candidate))) == bits:
             significant = precision
             break
@@ -100,7 +101,7 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
             c_int(significant - 1), value)
         if used < 0 or used >= 64:
             raise Error("RuntimeError: native positional float formatting failed")
-        var text = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var text = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
         var e = text.find("e")
         var exponent = Int(String(text[byte=e + 1:]))
         var negative = text.startswith("-")
@@ -130,7 +131,7 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
             buffer.unsafe_ptr(), c_size_t(64), exponent_format.as_c_string_slice().unsafe_ptr(), value)
         if exponent_used < 0 or exponent_used >= 64:
             raise Error("RuntimeError: native decimal exponent formatting failed")
-        var exponent_text = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var exponent_text = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
         var marker = exponent_text.find("e")
         var exponent = Int(String(exponent_text[byte=marker + 1:]))
         precision = max(0, significant - 1 - exponent)
@@ -140,7 +141,7 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
         c_int(precision), value)
     if used < 0 or used >= 64:
         raise Error("RuntimeError: native float formatting failed")
-    var result = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+    var result = unsafe_string_from_utf8_cstr(buffer.unsafe_ptr())
     if not scientific:
         if result.find(".") >= 0:
             while result.endswith("0"):

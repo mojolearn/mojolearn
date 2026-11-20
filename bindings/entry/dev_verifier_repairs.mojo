@@ -7,11 +7,13 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type
-from bindings.neural_block_public import neural_block_c
-from bindings.trees_constructor_native import forest_construct
-from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
-from bindings.optimizer_admission import opt_guards
+from bindings.neural_block_public_door import neural_block_c
+from bindings.trees_constructor_native_pack import forest_construct
+from bindings.sequence_device_native_pack import sequence_device_operation, sequence_device_finalize
+from bindings.optimizer_admission_door import opt_guards
 from bindings.optimizer_public_door import door_ready
+from bindings.optimizer_keys_unpack import optimizer_keys
+from bindings.py_keys import py_op_code
 
 
 def trees_dispatch(model: PythonObject, operation: PythonObject, args: PythonObject,
@@ -32,7 +34,9 @@ def device_dispatch(operation: PythonObject, owner: PythonObject, values: Python
     door_ready()
     if py_type(values) is not Python.import_module("builtins").tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
-    return sequence_device_operation(String(operation), owner, values, mode, context)
+    # The router's code for the name (bindings/optimizer_keys_unpack.mojo).
+    var nk = optimizer_keys()
+    return sequence_device_operation(py_op_code(nk[].ops, operation), owner, values, mode, context)
 
 
 def dispatch_c[device: Bool](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

@@ -5,11 +5,11 @@ Only integer minimum may change its tree here. Floating-point sums must retain
 an independently specified arithmetic order. All block threads must call this
 primitive convergently, and WIDTH must divide the block size.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 
 
 @always_inline

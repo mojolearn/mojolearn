@@ -10,6 +10,7 @@ except ImportError:
     pass
 from sklearn.preprocessing import KBinsDiscretizer as SkKB
 import mojolearn as ml
+from mojolearn.tests._sklearn_oracle import older_reference
 
 
 def _data(seed=0, n=500, d=4):
@@ -24,6 +25,8 @@ def test_strategies():
     X = _data()
     for kw in (dict(strategy="uniform"), dict(strategy="quantile"),
                dict(strategy="quantile", quantile_method="linear"), dict(strategy="kmeans")):
+        if older_reference() and kw == dict(strategy="quantile"):
+            continue  # the reference's default quantile_method is 'linear' before 1.9 (ours: 1.9's default)
         m = ml.KBinsDiscretizer(n_bins=5, encode="ordinal", **kw).fit(X)
         r = SkKB(n_bins=5, encode="ordinal", **kw).fit(X.astype(np.float64))
         # k-means on the tie column (integers equidistant from two centres)

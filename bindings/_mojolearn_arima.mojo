@@ -77,13 +77,16 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from core.experiment_guards_series import SERIES_GUARDS_OK
 from core.hostptr import f32_ptr, i32_ptr
+from arima.mojolearn_arima_run import _f32_ptr, _i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from arima.impl.fast_scalar_df import ARIMA_K3_DF_ON
-from arima.impl.fast_eval_df import product_df_count
-from bindings.arima_k3_df_probe import arima_k3_df_probe_binding
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (never measured, deleted) deleted 2026-11-09 by eff59d1b88; code
+# recoverable at f59d913b0b (the `_arima_k3_df_probe` export). Same commit: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL and its
+# `arima_product_df_count` reach counter.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -94,6 +97,14 @@ from arima.estimator import (
     arima_ic_from_loglike_ptr_host,
     arima_forecast_ptr_host,
     arima_predict_ptr_host,
+)
+
+
+from arima.resident_state import (
+    arima_resident_prepare,
+    arima_resident_release,
+    arima_resident_count,
+    arima_predict_resident,
 )
 
 
@@ -225,9 +236,10 @@ def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
 def arima_fast_search_mode_binding() raises -> PythonObject:
     """lane/apple-fast-arima-sf: `fast_search_mode` (bits 0..2, the
     deleted MOJOLEARN_ARIMA_FAST_CSS_SEARCH / _STEPWISE and their grouped
-    final fit, are always 0; bit 3
-    MOJOLEARN_ARIMA_FAST_CONST_BOTH, bit 4 MOJOLEARN_ARIMA_FAST_ROOT_CHECK,
-    bit 5 MOJOLEARN_ARIMA_FAST_KPSS_D); 0 with an identity trace on."""
+    final fit, are always 0; bit 3 (the removed
+    MOJOLEARN_ARIMA_FAST_CONST_BOTH) is always 0, bit 4
+    MOJOLEARN_ARIMA_FAST_ROOT_CHECK, bit 5 (the removed
+    MOJOLEARN_ARIMA_FAST_KPSS_D) is always 0); 0 with an identity trace on."""
     var trace = IdentityTrace()
     if trace.enabled:
         return PythonObject(0)
@@ -236,10 +248,10 @@ def arima_fast_search_mode_binding() raises -> PythonObject:
 
 def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
                                config: PythonObject) raises -> PythonObject:
-    """lane/apple-fast-arima-quality, MOJOLEARN_ARIMA_FAST_KPSS_D:
-    `ndiffs_kpss`, statsforecast's `ndiffs` d per series (int32 into
-    `out_addr`); `y_addr` (batch, nobs) float32 rows, `config` [batch, nobs,
-    d_max]. Returns `batch`."""
+    """lane/apple-fast-arima-quality: `ndiffs_kpss`, which refuses in every
+    build since MOJOLEARN_ARIMA_FAST_KPSS_D was removed (2026-11-15,
+    lane/expdel2-37-series); `fast_search_mode` bit 5 is always 0, so the
+    glue never calls it."""
     if len(config) != 3:
         raise Error("arima_ndiffs_kpss: expected [batch,nobs,d_max]")
     var bs = Int(py=config[0])
@@ -257,14 +269,6 @@ def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
 # 2026-10-09 on lane/owed-deletions-D1 (arima_order_search_css / arima_order_search_stepwise); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_CSS_SEARCH.patch; record in docs/TOMBSTONES.md.
 
-
-
-def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    return f32_ptr(addr)
-
-
-def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    return i32_ptr(addr)
 
 
 def arima_numeric_mode_binding() raises -> PythonObject:
@@ -595,21 +599,125 @@ def arima_forecast_binding(
     return PythonObject(written)
 
 
-def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
-    return PythonObject(product_df_count(Int(py=stage)))
+def arima_resident_prepare_binding(
+    y_addr: PythonObject,
+    exog_addr: PythonObject,
+    params_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Upload a fitted model's state once (lane ne1-a-decomp-tsa, N028/N029,
+    arima/resident_state.mojo); returns the handle `arima_predict_resident`
+    and `arima_forecast_resident` name. The addresses are `arima_predict`'s
+    `y_addr`, `exog_addr` and `params_addr`.
+
+    `params` is, in this exact order:
+
+         0  batch_size
+         1  n_obs
+         2  p
+         3  d
+         4  q
+         5  P
+         6  D
+         7  Q
+         8  s
+         9  k                fit_intercept, 0 or 1
+        10  n_exog           the exogenous regressor count
+    """
+    if len(params) != 11:
+        raise Error(
+            "arima_resident_prepare: params must contain 11 values (batch_size,"
+            " n_obs, p, d, q, P, D, Q, s, k, n_exog), got " + String(len(params))
+        )
+    var yp = _f32_ptr(Int(py=y_addr))
+    var exog_address = Int(py=exog_addr)
+    _ = _f32_ptr(exog_address)
+    var pp = _f32_ptr(Int(py=params_addr))
+    var w = List[Int]()
+    for i in range(11):  # driver-loop: over the eleven fixed plan words
+        w.append(Int(py=params[i]))
+    var handle = 0
+    with GILReleased(Python()):
+        handle = arima_resident_prepare(
+            yp, exog_address, pp, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7], w[8], w[9], w[10],
+        )
+    return PythonObject(handle)
+
+
+def arima_resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident fitted state; quiet for a handle already released."""
+    arima_resident_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def arima_resident_count_binding() raises -> PythonObject:
+    """Live resident fitted states (the tools/ lifetime check reads it)."""
+    return PythonObject(arima_resident_count())
+
+
+def arima_predict_resident_binding(
+    handle: PythonObject,
+    exog_fut_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`arima_predict` over a resident fitted state: `params` is `[start,
+    end]` (end EXCLUDED, as `arima_predict`); `exog_fut_addr` and `out_addr`
+    are `arima_predict`'s. Returns `(end - start) * batch_size`."""
+    if len(params) != 2:
+        raise Error("arima_predict_resident: params must contain 2 values (start, end), got "
+                    + String(len(params)))
+    var h = Int(py=handle)
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
+    var op = _f32_ptr(Int(py=out_addr))
+    var start = Int(py=params[0])
+    var end = Int(py=params[1])
+    var written = 0
+    with GILReleased(Python()):
+        written = arima_predict_resident(h, exog_fut_address, op, start, end, False, "arima_predict")
+    return PythonObject(written)
+
+
+def arima_forecast_resident_binding(
+    handle: PythonObject,
+    exog_fut_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`arima_forecast` over a resident fitted state: `params` is `[n_steps,
+    reserved]` (reserved MUST BE 0, as `arima_forecast`'s word 12). Returns
+    `n_steps * batch_size`."""
+    if len(params) != 2:
+        raise Error("arima_forecast_resident: params must contain 2 values (n_steps, reserved), got "
+                    + String(len(params)))
+    if Int(py=params[1]) != 0:
+        raise Error("arima_forecast_resident: params[1] is reserved and must be 0, got "
+                    + String(Int(py=params[1])))
+    var h = Int(py=handle)
+    var n_steps = Int(py=params[0])
+    if n_steps < 1:
+        raise Error("arima_forecast: n_steps must be >= 1 (n_steps=" + String(n_steps) + ")")
+    var exog_fut_address = Int(py=exog_fut_addr)
+    _ = _f32_ptr(exog_fut_address)
+    var op = _f32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        # forecast is predict(n_obs, n_obs + n_steps): the resident words
+        # hold n_obs, so the bounds are resolved inside.
+        written = arima_predict_resident(h, exog_fut_address, op, 0, n_steps, True, "arima_forecast")
+    return PythonObject(written)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_arima.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_arima() -> PythonObject:
+    comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_arima")
-        comptime if ARIMA_K3_DF_ON:
-            m.def_function[arima_k3_df_probe_binding]("_arima_k3_df_probe")
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        m.def_function[arima_product_df_count_binding]("arima_product_df_count")
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_ic_from_loglike_binding]("arima_ic_from_loglike")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
@@ -622,6 +730,11 @@ def build__mojolearn_arima() -> PythonObject:
         m.def_function[arima_ndiffs_kpss_binding]("arima_ndiffs_kpss")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
+        m.def_function[arima_resident_prepare_binding]("arima_resident_prepare")
+        m.def_function[arima_resident_release_binding]("arima_resident_release")
+        m.def_function[arima_resident_count_binding]("arima_resident_count")
+        m.def_function[arima_predict_resident_binding]("arima_predict_resident")
+        m.def_function[arima_forecast_resident_binding]("arima_forecast_resident")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_arima: ", e))

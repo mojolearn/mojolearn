@@ -1,5 +1,6 @@
 #!/bin/sh
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/build_defines.sh"  # MOJOLEARN_BUILD_DEFINES -> $MOJOLEARN_BUILD_DEFINE_FLAGS (compile line)
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/compile_jobs.sh"  # MOJOLEARN_COMPILE_JOBS or the host's cores -> $MOJOLEARN_COMPILE_JOBS_RESOLVED (compile line -j)
 # The neighbors expansion lane's GPU binding.
 set -eu
 MACOS_FLOOR="11.0"
@@ -28,7 +29,7 @@ if [ "$(uname)" = Darwin ]; then
     target_flags="--target-cpu apple-m1 --target-accelerator metal:1"
 else
     case "$(uname -m)" in
-        x86_64) target_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
+        x86_64) target_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3} --target-features ${MOJOLEARN_LINUX_CPU_FEATURES:-+avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave}" ;;
     esac
     if [ -n "${MOJOLEARN_GPU_ARCHS:-}" ]; then
         case "$MOJOLEARN_GPU_ARCHS" in *,*) echo "one GPU architecture required" >&2; exit 2 ;; esac
@@ -44,7 +45,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_x_neighbors.so
 # Intentionally split compiler option lists, consistent with existing builders.
 # compiles the entry bindings/entry/entry__mojolearn_x_neighbors.mojo, which imports the module body bindings/_mojolearn_x_neighbors.mojo
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "$MOJOLEARN_COMPILE_JOBS_RESOLVED" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/entry/entry__mojolearn_x_neighbors.mojo -o "$out"
 # The gate below needs NumPy in the gating interpreter, which a fresh Linux

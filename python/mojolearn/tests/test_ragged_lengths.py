@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """`lengths=`, the ragged right-padded batch (python/mojolearn/_ragged.py, 2026-09-15).
 
-Two groups. The helper tests need nothing compiled: they hold the byte
-copies, the refusals and the last-real-position gather to their contract
-with a stand-in call. The surface tests run each model that takes
+Two groups. The helper tests need nothing compiled: they hold the
+refusals and the ragged_forward composition to their contract with a
+stand-in call. The byte passes themselves (padded copy, in-place zero
+padding, int32 ids, the last-real-position gather) run natively in
+checks/native_tests/core_ragged_lengths_*.mojo. The surface tests run each model that takes
 `lengths` against the same rows run alone, on whatever bindings this
 install has, and skip BY NAME when the binding is absent (the CPU-only
 install has the host byte LM and nothing on a GPU): every real position must
@@ -21,55 +23,6 @@ LENS = (16, 1, 7, 9, 16, 3, 12, 15)
 
 
 # ---------------------------------------------------------------- helpers, nothing compiled
-
-def test_padded_copy_keeps_real_positions_and_zeros_padding():
-    x = np.arange(2 * 4 * 3, dtype=np.float32).reshape(2, 4, 3) + 1
-    out = np.asarray(_ragged.padded_copy(x, (4, 2), "<f4", "t"))
-    assert out[0].tobytes() == x[0].tobytes()
-    assert out[1, :2].tobytes() == x[1, :2].tobytes()
-    assert out[1, 2:].tobytes() == bytes(out[1, 2:].nbytes)
-    assert x[1, 2:].min() > 0                       # the source is untouched
-
-
-def test_zero_padding_writes_positive_zero_in_place():
-    y = np.full((3, 5, 2), -1.0, dtype=np.float32)
-    back = _ragged.zero_padding(y, (5, 1, 3), "t")
-    assert back is y
-    for i, n in enumerate((5, 1, 3)):
-        assert (y[i, :n] == -1.0).all()
-        assert y[i, n:].tobytes() == bytes(y[i, n:].nbytes)   # +0.0, never -0.0
-
-
-def test_int32_ids_are_copied_by_position():
-    ids = np.array([[5, 6, 7], [8, 9, 10]], dtype=np.int32)
-    out = np.asarray(_ragged.padded_copy(ids, (1, 3), "<i4", "t"))
-    assert out.tolist() == [[5, 0, 0], [8, 9, 10]]
-
-
-def test_last_real_rows_reads_each_rows_last_real_position():
-    logits = np.arange(2 * 3 * 4, dtype=np.float32).reshape(2, 3, 4)
-    out = np.asarray(_ragged.last_real_rows(logits, (2, 3), "t"))
-    assert out.shape == (2, 1, 4)
-    assert out[0, 0].tolist() == logits[0, 1].tolist()
-    assert out[1, 0].tolist() == logits[1, 2].tolist()
-
-
-@pytest.mark.parametrize("bad, kind, text", [
-    ((0, 3), ValueError, "outside [1, L = 3]"),
-    ((4, 3), ValueError, "outside [1, L = 3]"),
-    ((3,), ValueError, "lengths has 1 entries but the batch has B = 2"),
-    ((3.0, 3), TypeError, "is not an integer"),
-    ((True, 3), TypeError, "is a bool"),
-    (7, TypeError, "must be a sequence"),
-])
-def test_lengths_refused_by_name(bad, kind, text):
-    with pytest.raises(kind) as exc:
-        _ragged.lengths_for(bad, 2, 3, "Thing.forward")
-    assert text in str(exc.value) and "Thing.forward" in str(exc.value)
-
-
-def test_numpy_integers_are_admitted():
-    assert _ragged.lengths_for(np.array([3, 1], dtype=np.int64), 2, 3, "t") == (3, 1)
 
 
 def test_ragged_forward_refuses_a_state_before_calling():
@@ -187,7 +140,8 @@ def test_host_language_model_logits_and_next_bytes_lengths():
     _assert_ragged(padded, lambda i, n: m.logits(np.ascontiguousarray(ids[i:i + 1, :n])), lens)
     assert m.next_bytes(ids, lengths=lens) == [m.next_bytes(np.ascontiguousarray(ids[i:i + 1, :n]))[0]
                                                 for i, n in enumerate(lens)]
-    with pytest.raises(ValueError, match="outside"):
+    # the shared ByteLM lengths admission (providers/python/byte_lm_metadata_pyapi_door.mojo)
+    with pytest.raises(ValueError, match=r"lengths must be in \[1, L\]"):
         m.logits(ids, lengths=(33,) * len(lens))
 
 

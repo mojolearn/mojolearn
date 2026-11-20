@@ -76,8 +76,7 @@ from checks.numerics import (
     identical_mul_add_simd,
     identical_sqrt,
 )
-from std.sys.compile import is_defined
-from gemm.host.identical_gemm import OP_NT, contract_leaf_size, gemm_oracle_cell
+from gemm.host.identical_gemm import contract_leaf_size
 from gemm.host.gemm_oracle import (
     GEMM_ORACLE_SABOTAGE_ORDER_ARM,
     GEMM_ORACLE_SABOTAGE_VALUE_ARM,
@@ -266,9 +265,8 @@ def chol_host_potrf(a_in: List[Float32], n: Int, jitter: Float32) raises -> Chol
 #: sabotage arms, the balanced fold), then `ftz(ftz(cur) - ftz(upd))`. The
 #: j operands come from a flushed feature-major copy of the panel. Cells
 #: above the diagonal of a straddling block are computed and discarded.
-#: `-D MOJOLEARN_CHOL_HOST_SCALAR` builds the per-cell loops instead (here
-#: and in the two triangular solves; the before arm of the speed record).
-comptime CHOL_HOST_SCALAR = is_defined["MOJOLEARN_CHOL_HOST_SCALAR"]()
+# TOMBSTONE: MOJOLEARN_CHOL_HOST_SCALAR (opt-in before arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 61bd06b986.
+# Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch; record in docs/TOMBSTONES.md.
 comptime CHOL_W = 8
 comptime CholV = SIMD[DType.float32, CHOL_W]
 comptime CholU = SIMD[DType.uint32, CHOL_W]
@@ -419,19 +417,9 @@ def chol_host_factor_lower(
                 for c in range(w):
                     packed.append(a[(j0 + w + i) * n + j0 + c])
             var leaf = contract_leaf_size(w)
-            comptime if CHOL_HOST_SCALAR:
-                for i in range(n_trail):
-                    for j in range(i + 1):
-                        var upd = ftz(
-                            gemm_oracle_cell(
-                                packed, packed, OP_NT, i, j, n_trail, n_trail, w, leaf
-                            )
-                        )
-                        var at = (j0 + w + i) * n + j0 + w + j
-                        var cur = ftz(a[at])
-                        a[at] = ftz(cur - upd)
-            else:
-                _chol_trailing_lower_v(a, n, j0 + w, packed, n_trail, w, leaf)
+            # TOMBSTONE: MOJOLEARN_CHOL_HOST_SCALAR (opt-in before arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 61bd06b986.
+            # Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch; record in docs/TOMBSTONES.md.
+            _chol_trailing_lower_v(a, n, j0 + w, packed, n_trail, w, leaf)
             _ = packed^
 
         j0 += nb
@@ -502,9 +490,7 @@ def chol_host_trsm_lower(
 ):
     """`trsm_lower_kernel` at `ld == n`, in place over `b` (`n x nrhs`
     row-major). One right-hand side at a time; `k` ascending."""
-    var j0 = 0
-    comptime if not CHOL_HOST_SCALAR:
-        j0 = _chol_trsm_cols_v(l, b, n, nrhs, False)
+    var j0 = _chol_trsm_cols_v(l, b, n, nrhs, False)
     for j in range(j0, nrhs):
         for i in range(n):
             var t = ftz(b[i * nrhs + j])
@@ -521,9 +507,7 @@ def chol_host_trsm_upper(
 ):
     """`trsm_upper_kernel` at `ld == n`: rows descending, the inner sum
     ascending over the rows below."""
-    var j0 = 0
-    comptime if not CHOL_HOST_SCALAR:
-        j0 = _chol_trsm_cols_v(l, b, n, nrhs, True)
+    var j0 = _chol_trsm_cols_v(l, b, n, nrhs, True)
     for j in range(j0, nrhs):
         for ii in range(n):
             var i = n - 1 - ii

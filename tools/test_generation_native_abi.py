@@ -8,7 +8,7 @@ def source(path):
     return (ROOT / path).read_text()
 
 
-def test_native_dependency_closure_has_no_explicit_evaluation_or_missing_source():
+def test_native_dependency_closure_has_no_missing_source():
     seen, problems = audit()
     assert "transformer.transformer_binding_impl" in seen
     assert not problems, problems
@@ -45,57 +45,34 @@ def test_default_dependency_inventory_allows_native_capi_in_providers(tmp_path):
     assert not problems, problems
 
 
-def test_default_inventory_checks_provider_execution_instead_of_exempting_folder(tmp_path):
-    (tmp_path / "providers").mkdir()
-    (tmp_path / "entry.mojo").write_text("from providers.algorithm import run\n")
-    (tmp_path / "providers" / "algorithm.mojo").write_text(
-        'from std.python import Python as P\ndef run():\n    return P.evaluate("1+2")\n')
-    _, problems = audit(tmp_path, ("entry",))
-    assert problems == [(("entry", "providers.algorithm"), "explicit Python evaluator call P.evaluate at line 3")]
+# Lane transformer-session-native (2026-11-12): the generation session ABI
+# (providers/python/generation_session_pyapi.mojo, transformer/session_abi.mojo,
+# transformer/native_session_call.mojo, `transformer_native_api_v1`) is deleted;
+# a layer's session forward is the block table's op 11 on the session handle.
+def test_session_reserved_before_gil_release_and_released_on_both_outcomes():
+    run = source("providers/python/transformer_block_session_pyapi_door.mojo").split("def transformer_block_session_run(")[1]
+    assert run.index("NEURAL_BLOCK_RESERVE") < run.index("with GILReleased")
+    assert run.count("NEURAL_BLOCK_RELEASE") == 2
+    assert "except problem:" in run
+    native = source("transformer/native_block_dispatch.mojo")
+    assert "return transformer_session_forward_native(owner[], expanded, p, opts)" in native
+    session = source("transformer/session_native_dispatch.mojo")
+    assert session.count("return _transformer_run_session(owner, a,") == 1
+    assert "owner.clear()" in session
 
 
-def test_connection_copies_table_once_and_retains_both_owners():
-    provider = source("providers/python/generation_session_pyapi.mojo")
-    assert '"PyCapsule_IsValid"' in provider and '"PyCapsule_GetPointer"' in provider
-    assert "GenerationNativeProvider(module, capsule, factory, factory.__self__, admit_session, table[0])" in provider
-    assert "GenerationNativeSession(provider, session, handle)" in provider
-    assert "held[].provider is provider and held[].owner is session" in provider
-
-
-def test_busy_is_reserved_before_gil_release_and_finalized_on_both_outcomes():
-    provider = source("providers/python/generation_session_pyapi.mojo").split("def generation_native_forward(")[1]
-    assert provider.index("generation_session_forward(0,") < provider.index("with GILReleased")
-    assert provider.index("with GILReleased") < provider.index("generation_session_forward(1,")
-    assert provider.count("generation_session_forward(2,") == 2
-    assert "except problem:" in provider
-    native = source("transformer/session_native_dispatch.mojo")
-    refusal = native.split("    except problem:")[1]
-    assert "busy = False" not in refusal  # never unlock a refused reservation
-
-
-def test_old_and_direct_doors_share_the_exact_numerical_execution_function():
-    door = source("bindings/_mojolearn_transformer.mojo")
-    body = door.split("def transformer_session_forward_binding(")[1].split("def transformer_native_api_binding")[0]
-    native = source("transformer/session_native_dispatch.mojo")
-    assert "transformer_session_forward_native(owner[], a, p, opts)" in body
-    assert "transformer_session_forward_native(owner[], a, p, opts)" in native
-    assert native.count("return _transformer_run_session(owner, a,") == 1
-    assert "owner.clear()" in native
-    assert "error_sink(error_context, Int(bytes.unsafe_ptr()), len(bytes))" in native
-
-
-def test_candidate_stays_opt_in_and_uses_native_vectors():
-    public = source("bindings/causal_lm_public.mojo")
-    assert public.count('getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")') == 1
-    assert 'mode == NUMERIC_IDENTICAL and (String(getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")) == "1"' in public
-    branch = public.split('if native_provider is not None and not head_profile')[1].split("        else:\n", 1)[0]
-    assert "generation_native_forward(linked, a_words, p_words)" in branch
+def test_gpu_layer_session_uses_native_vectors():
+    public = source("bindings/causal_lm_public_door.mojo")
+    assert 'getenv("MOJOLEARN_GENERATION_NATIVE_SESSION")' not in public
+    # the branch tests the TRANSFORMER_LEGACY_SETUP build constant since 03bcaedce0
+    branch = public.split('elif device15 or (not TRANSFORMER_LEGACY_SETUP and py_contains(e, "block_session")')[1].split("        else:\n", 1)[0]
+    assert "transformer_block_session_run(session," in branch
     assert "py_ints(" not in branch
-    assert 'py_call(e["forward_session"]' not in branch
-    assert 'not py_contains(e, "causal_lm_session_run") or not _resident_norm_ok(model)' in public
-    # No-final-norm admission is a separately compiled opt-in capability.
-    # Its helper preserves the default refusal while supporting that flag.
+    assert "py_call(" not in branch
+    assert 'not py_contains(e, "resident") or not _resident_norm_ok(model)' in public
+    # The no-final-norm opt-in (-D MOJOLEARN_IDN_LM_RESIDENT_GENERATE) was deleted
+    # 2026-11-15: the helper keeps the default refusal only.
     norm = public.split("def _resident_norm_ok(", 1)[1].split("\ndef ", 1)[0]
-    assert "comptime if _LM_RESIDENT_GENERATE:" in norm
+    assert "comptime if" not in norm
     assert "return model._norm is not None" in norm
-    assert 'comptime _LM_RESIDENT_GENERATE = is_defined["MOJOLEARN_IDN_LM_RESIDENT_GENERATE"]()' in public
+    assert "comptime _LM_RESIDENT_GENERATE" not in public

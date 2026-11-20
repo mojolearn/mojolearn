@@ -104,59 +104,41 @@ tests. That main snapshot contains 37 fixtures and 602 exports; the additional
 integration fixtures and public export remain separately scoped. Its reuse
 receipt is [`native_only_svm_20261020.json`](native_only_svm_20261020.json).
 
-## The no-Python-in-kernels check
+## The retired Python source guard
 
-A kernel `.mojo` file must not import or call Python: no `from std.python ...`,
-`from python ...` or `import python` line and no `external_call["Py...`.
-Shell files are the Python door and may: everything under `bindings/`, any
-`*pyapi*.mojo` or `*_py.mojo` file (a kernel's sibling shell, such as
-`pca_pyapi.mojo` next to `pca.mojo`), and the tooling under `bench/`,
-`experiments/` and any `checks/` directory. Every other `.mojo` file is kernel
-code. `tools/hooks/no_python_in_kernels.py --tree` applies the test; the
-pre-push hook runs it (main on the whole tree, other branches on what they
-change over their merge-base with main), and so does the GitHub check
-`.github/workflows/no-python-in-kernels.yml`.
+Andrew removed the kernel-path/token source guard on 2026-11-10. Its zero count
+excluded the binding/provider layers where Python objects and calls remained;
+it did not establish Python-free product execution. The checker, push/CI
+invocations and checker-only tests are removed, with no replacement source-count gate.
 
-The files that failed on main `9f9bdb4a8` (90, in 14 directories) are listed in
-`tools/hooks/python_in_kernels_baseline.txt` and may stay until purged. The list
-only shrinks: when a file's Python door moves to a shell, delete its row
-(`no_python_in_kernels.py --prune-baseline` removes every row whose file no
-longer matches). A row that main's baseline lacks is not honored, so a new
-kernel file that imports Python is always refused.
+The former baseline files are retained unchanged under
+`experiments/retired_python_source_guard_20261110/` as historical evidence, not
+as active exceptions. Earlier source-audit reports remain historical records.
+The current work is the typed boundary migration in
+[`PYTHON_AT_THE_BOUNDARY.md`](PYTHON_AT_THE_BOUNDARY.md), with correctness and
+performance established on actual compiled operations.
 
-## The no-compute-in-shells check
+## The retired shell-loop counter
 
-A shell file (`bindings/**`, `*pyapi*.mojo`, `*_py.mojo`) is a passthrough: it
-unpacks PythonObject arguments into typed values, calls one typed kernel entry
-and converts the typed result back. `tools/hooks/no_compute_in_shells.py --tree`
-reports, in every shell file, each `for`/`while` line that carries no tag and
-each kernel launch (`enqueue_function`, `DeviceContext(`, `parallelize`,
-`vectorize`). A loop over argument words of bounded, data-independent length is
-tagged `# small-loop(<what>)`, and a driver loop over model structure
-`# driver-loop: over <what>`, on the loop line or the line above; launches are
-never taggable. The pre-push hook and the second job of
-`.github/workflows/no-python-in-kernels.yml` run it with the same main/branch
-rule as the other fences.
+The shell-loop source counter was removed on 2026-11-10 under the same owner
+instruction as the kernel-path guard. It rejected the archive migration's
+necessary input admission and output packing loops, even after formatting,
+CRC, storage and offset decisions moved to typed Mojo. Changing tags or
+expanding a baseline would not establish the runtime boundary.
 
-The hits on main `28b8ed11b` (1,206 in 116 files: 1,185 untagged loops and 21
-launches) are listed in `tools/hooks/compute_in_shells_baseline.txt` as
-`path:line: code`. A hit is matched by path and code text, so edits above a row
-do not break it. The list only shrinks: when the work moves into the kernel
-file, `no_compute_in_shells.py --prune-baseline` drops the stale rows.
+Its baseline is retained in
+`experiments/retired_python_source_guard_20261110/compute_in_shells_baseline.txt`.
+Native execution accepts typed values; the explicit boundary owns Python
+admission, output wrapping and lifetime pins. Use native correctness tests and
+real API admission/ownership checks to validate that split.
 
-## The kernel closure compile check
+## The kernel closure compile check (retired 2026-11-15)
 
-`tools/kernel_closure_check.py` is the compile proof that kernel code needs no
-Python. It writes `checks/kernel_closure_main.mojo` (git-ignored), a program
-that imports every kernel module, and builds it for the CPU target in a copy of
-the tree where every shell that imports or reaches Python is deleted and every
-Python import line is removed. A kernel module that uses a Python name, or
-imports a Python shell directly or through other modules, fails to compile.
-The binary must have no undefined CPython symbol and no libpython dependency,
-and it runs once. A static pass first lists kernel imports of Python shells
-(failures) and of Python-free helpers that still live under `bindings/`
-(to move out). `--emit-only` writes the program and the stripped tree and
-prints the program path and the build command. The GitHub workflow
-`.github/workflows/kernel-closure.yml` runs it on every push to main and on
-dispatch, with a 45-minute compile budget, and keeps the generated program, the
-build log and `summary.json`.
+Andrew, 2026-11-15: no redundant enforcement. A Mojo file that imports no
+Python cannot use Python; the compiler guarantees it. `tools/python_free_dirs.sh`
+(the import grep before every build and push) is the one guard. The kernel
+closure compile proof (`tools/kernel_closure_check.py`, its test and
+`.github/workflows/kernel-closure.yml`) checked the same property a second,
+expensive way and was removed; it is recoverable at the parent of its deletion
+commit. The size of the boundary is reported, never gated, by
+`tools/python_boundary_report.py`.

@@ -6,7 +6,7 @@ The release columns install LOCAL wheel files. A user runs
 `pip install mojolearn==V` against an index, and that is where the split
 Linux release can break: the Linux `mojolearn` requires mojolearn-core==V,
 mojolearn-nvidia==V and mojolearn-amd==V; each vendor requires
-mojolearn-core==V (NVIDIA also mojolearn-nvidia-ptx==V); mojolearn-core
+mojolearn-core==V (the NVIDIA wheel carries its PTX set since 2026-11-05); mojolearn-core
 requires no vendor (2026-10-20). Every project uploads in dependency order
 by separate jobs. Two subcommands:
 
@@ -41,10 +41,10 @@ CORE = "mojolearn-core"
 META = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
 PAYLOADS = {vendor: (project,) for vendor, project in PLUGINS.items()}
-PTX_PROJECT = "mojolearn-nvidia-ptx"
-PROJECTS = (META, CORE, *PLUGINS.values(), PTX_PROJECT)
-REQUIRES = {META: (CORE, *PLUGINS.values()), CORE: (), "mojolearn-nvidia": (CORE, PTX_PROJECT),
-            "mojolearn-amd": (CORE,), PTX_PROJECT: (CORE,)}
+# mojolearn-nvidia-ptx (0.8.39 to 0.8.65) is no longer a release project (2026-11-05).
+PROJECTS = (META, CORE, *PLUGINS.values())
+REQUIRES = {META: (CORE, *PLUGINS.values()), CORE: (), "mojolearn-nvidia": (CORE,),
+            "mojolearn-amd": (CORE,)}
 
 
 #: index -> (simple index, JSON API root, file host of OUR three projects)

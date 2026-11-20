@@ -1,28 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The CPU surface manifest (`mojolearn/host_surface.py`) against the tree.
+"""The CPU surface manifest (`mojolearn/host_surface.py`) against the tools,
+records and built bindings that read it.
 
-One file declares the CPU surface; these tests are what keeps the tree from
-drifting away from it (the host surface manifest lane, 2026-09-14). Each one
-reads SOURCE, never a built binary, so it runs on a box with nothing built:
-
-  * every family the manifest lists has a binding source under bindings/,
-    and every `bindings/_mojolearn_*_host.mojo` is a family the manifest
-    lists (a ninth binding with no manifest entry fails here);
-  * the names a binding registers in PyInit (`def_function[...]("name")`)
-    are exactly the names the manifest lists for it, so a function exported
-    but undeclared, or declared but unexported, fails;
-  * every `bindings/build_<family>_host.sh` is the two-line shim over
-    `bindings/build_host_family.sh` and names its own family;
-  * no host binding reads DETECTED_COLUMN, and every one carries the
-    build-time assert that it compiled as the kernel matrix's CPU column;
+  * every built host binding loads through the read-back and exports what
+    the manifest lists for it;
   * every covered training lane is a lane tools/identity_break.py defines,
     every inference lane is one tools/classical_host_gate.py knows, and the
     forest kinds are tools/forest_host_gate.py's KINDS;
-  * every recording directory and GPU column the manifest names exists;
-  * `_backend._HOST_MODULES` is the manifest's routing table, and the CPU
-    identity gate workflow reads its lists from the manifest rather than
-    carrying literals.
+  * every recording directory and GPU column the manifest names exists, and
+    the public reference lanes, fixture floors and lane accounting hold.
+
+The source-text checks of the binding files, build shims, workflow and
+packaging scripts were deleted on 2026-11-15 (lane tests-delete-source-text).
 """
 import json
 import os
@@ -34,7 +24,6 @@ import pytest
 from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
-BINDINGS = ROOT / "bindings"
 # Source archives omit local historical evidence; its original immutable root
 # can be supplied explicitly without replacing source or runtime imports.
 EVIDENCE_ROOT = Path(os.environ.get("MOJOLEARN_TEST_EVIDENCE_ROOT", ROOT))
@@ -71,7 +60,7 @@ def _harness_text():
 
 #: A binding may take its export list from a shared `register(m)` that the
 #: GPU binding calls too (bindings/_mojolearn_x_trees_host.mojo calls
-#: providers/python/xtrees_api_pyapi.mojo::register, so the two lists cannot drift). The
+#: providers/python/xtrees_api_pyapi_door.mojo::register, so the two lists cannot drift). The
 #: registrations it exports are that module's.
 REGISTER_IMPORT = re.compile(r"^from\s+([A-Za-z0-9_.]+)\s+import\s+(?:[A-Za-z0-9_]+\s*,\s*)*register\s*(?:,[^\n]*)?$", re.M)
 REGISTER_CALL = re.compile(r"^\s+register\(\s*(?:module|m)\s*\)", re.M)
@@ -87,119 +76,30 @@ def _exports_in_source(name):
     return names
 
 
-@pytest.mark.parametrize("name", host_surface.families())
-def test_family_has_a_binding_source(name):
-    assert (ROOT / host_surface.binding_source(name)).is_file(), (
-        f"the manifest lists family {name!r} but {host_surface.binding_source(name)} does not exist"
-    )
-
-
-def test_every_host_binding_source_is_a_family():
-    on_disk = sorted(
-        p.name[len("_mojolearn_"):-len("_host.mojo")]
-        for p in BINDINGS.glob("_mojolearn_*_host.mojo")
-    )
-    assert on_disk == sorted(host_surface.families()), (
-        "a host binding source exists that the manifest does not list, or the reverse"
-    )
-
-
-@pytest.mark.parametrize("name", host_surface.families())
-def test_binding_exports_exactly_the_manifest(name):
-    exported = _exports_in_source(name)
-    assert exported, f"no def_function registrations found in {host_surface.binding_source(name)}"
-    listed = list(host_surface.family(name)["exports"])
-    assert sorted(exported) == sorted(listed), (
-        f"{name}: binding exports {sorted(set(exported) - set(listed))} the manifest does not list; "
-        f"manifest lists {sorted(set(listed) - set(exported))} the binding does not export"
-    )
-    assert len(exported) == len(set(exported)), f"{name}: a name is registered twice"
-
-
-@pytest.mark.parametrize("name", host_surface.families())
-def test_binding_reads_back_the_cpu_column(name):
-    prefix = f"{name}_host"
-    exports = set(host_surface.family(name)["exports"])
-    for suffix in host_surface.READBACK:
-        assert f"{prefix}_{suffix}" in exports, f"{name}: no {prefix}_{suffix} read-back export"
-    source = _read(host_surface.binding_source(name))
-    assert "DETECTED_COLUMN" not in source, f"{name}: a host binding must not read DETECTED_COLUMN"
-    assert "comptime assert TARGET_COLUMN == COLUMN_CPU" in source, (
-        f"{name}: the build-time assert that the binding compiled as COLUMN_CPU is missing"
-    )
-
-
-@pytest.mark.parametrize("name", host_surface.families())
-def test_build_shim_execs_the_one_builder(name):
-    shim = ROOT / host_surface.build_shim(name)
-    assert shim.is_file(), f"{shim} is missing"
-    lines = [line for line in shim.read_text().splitlines() if line.strip() and not line.startswith("#")]
-    assert len(lines) == 1, f"{shim.name} is not a one-command shim: {lines}"
-    assert re.fullmatch(
-        r'exec sh "\$\(dirname -- "\$0"\)/build_host_family\.sh" ' + re.escape(name) + r'( "\$@")?',
-        lines[0],
-    ), f"{shim.name} does not exec {host_surface.BUILDER} with its own family: {lines[0]!r}"
-    assert host_surface.BUILDER == "bindings/build_host_family.sh"
-    assert (ROOT / host_surface.BUILDER).is_file()
-
-
-def test_no_second_builder():
-    builders = sorted(p.name for p in BINDINGS.glob("build_*host*.sh") if p.name != "build_host_family.sh"
-                      and not re.fullmatch(r"build_[a-z_]+_host\.sh", p.name))
-    assert builders == [], f"a builder beside build_host_family.sh: {builders}"
-
-
-def test_sabotage_define_reaches_each_binding():
-    """The define the gate passes for a family's negative control must be
-    read somewhere the binding compiles: its own source or a host module it
-    names."""
-    for f in host_surface.FAMILIES:
-        define = f["sabotage_define"]
-        texts = [_read(host_surface.binding_source(f["family"]))]
-        texts += [_read(m) for m in f["host_modules"] if (ROOT / m).is_file()]
-        assert any(define in t for t in texts), (
-            f"{f['family']}: {define} is read by neither the binding nor its host modules"
-        )
-
-
-#: The fit entry points an inference-only binding must never name, by family
-#: (the neighbors and density inference lane, 2026-09-15).
-#: Mojo compiles only what a binding reaches, so a source that names none of
-#: these ships none of them; bench/results/identity_break/
-#: 2026-09-15_inference-iforest-gmm-hdbscan/fit_symbols.txt shows the built
-#: files agree.
-_FIT_NAMES = {
-    "mixture_infer": ("gmmh_fit", "gmm_fit", "gmmh_m_step", "gmmh_initial_resp"),
-    "hdbscan_infer": ("hdbh_fit", "hdbscan_fit", "generate_prediction_data"),
-    "gp_infer": ("gpr_host_fit", "gpr_fit", "gpc_host_fit", "gpc_fit", "chol_host_potrf", "cholesky_factor"),
-    # lane/inference-holtwinters (2026-09-15): the Holt-Winters fit, its
-    # decomposition and BFGS, and the ARIMA fit.
-    "forecast": ("holtwinters_fit", "oracle_fit", "holtwinters_validate_params", "host_r1qt",
-                 "arima_fit", "oracle_eval"),
-}
-
-
-def _mojo_code(text):
-    """Mojo source with its triple-quoted strings and `#` comments removed,
-    so a docstring saying what a binding leaves out is not read as code."""
-    text = re.sub(r'"""[\s\S]*?"""', "", text)
-    return re.sub(r"#[^\n]*", "", text)
-
-
-def test_inference_only_bindings_name_no_fit():
-    for name, fits in _FIT_NAMES.items():
-        f = host_surface.family(name)
-        texts = [_mojo_code(_read(host_surface.binding_source(name)))]
-        texts += [_mojo_code(_read(m)) for m in f["host_modules"] if m.startswith("bindings/")]
-        for fit in fits:
-            hits = [t for t in texts if re.search(rf"\b{fit}\b", t)]
-            assert not hits, f"{name}: {fit} is named in its binding sources"
-
-
-def test_host_modules_exist():
-    for f in host_surface.FAMILIES:
-        for m in f["host_modules"]:
-            assert (ROOT / m).is_file(), f"{f['family']}: host module {m} does not exist"
+def test_built_host_bindings_load_and_export_the_manifest():
+    """Every host binding built here loads through `_backend.load_host_module`,
+    which reads back the CPU vendor, identical mode, the CPU column and a
+    non-sabotage build, and carries every entry the manifest lists for it; an
+    inference-only binding carries no `*_fit` entry. Replaces the source-text
+    checks of the binding files (deleted 2026-11-15, lane
+    tests-delete-source-text): this one reads the built modules."""
+    from mojolearn import _backend
+    built = set(_backend.host_families_built())
+    inference_only = set(host_surface.inference_routes().values())
+    checked = []
+    for name in host_surface.families():
+        basename = host_surface.family(name)["binding"]
+        if basename not in built:
+            continue
+        module = _backend.load_host_module(basename)
+        missing = [e for e in host_surface.family(name)["exports"] if not hasattr(module, e)]
+        assert not missing, f"{basename} does not export {missing}"
+        if basename in inference_only:
+            fits = [e for e in dir(module) if e.endswith("_fit")]
+            assert not fits, f"inference-only {basename} exports {fits}"
+        checked.append(basename)
+    if not checked:
+        pytest.skip("no host binding is built in this install")
 
 
 def _loop_registered_lanes(text):
@@ -339,123 +239,6 @@ def test_training_gpu_columns_exist():
     assert missing == [], f"the manifest names training GPU columns not in the tree: {missing}"
 
 
-def test_backend_routes_the_manifest():
-    from mojolearn import _backend
-    assert _backend._HOST_MODULES == host_surface.routed_modules()
-    for gpu_family in host_surface.routed_modules():
-        assert gpu_family in _backend._MODULES, f"{gpu_family} is routed but is not a _MODULES family"
-
-
-def test_inference_routes_ship_and_carry_no_fit():
-    """lane/inference-forecast-umap-pca (2026-09-15): an inference-only
-    binding that serves a route on a CPU-only install ships, serves a real
-    `_MODULES` family whose reference binding does not ship, registers the
-    reference binding's prediction names and no `*_fit` name, and
-    `_backend` reads the table from the manifest."""
-    from mojolearn import _backend
-    routes = host_surface.inference_routes()
-    assert routes == {
-        "_mojolearn_arima": "_mojolearn_forecast_host",
-        # lane/inference-holtwinters (2026-09-15)
-        "_mojolearn_tsa": "_mojolearn_forecast_host",
-        # lane/inference-embedding-ivf-cholesky (2026-09-15)
-        "_mojolearn_ivf": "_mojolearn_ivf_search_host",
-        "_mojolearn_embedding": "_mojolearn_embedding_infer_host",
-    }
-    assert _backend._HOST_INFERENCE_MODULES == routes
-    shipped = set(host_surface.wheel_bindings())
-    for route, binding in routes.items():
-        assert route in _backend._MODULES
-        assert binding in shipped
-        reference = host_surface.routed_modules().get(route)
-        assert reference, f"{route} is served by {binding} but is not a routed family"
-        name = binding[len("_mojolearn_"):-len("_host")]
-        exported = _exports_in_source(name)
-        assert not [e for e in exported if e.endswith("_fit")], f"{binding} registers a fit: {exported}"
-        # One inference binding may serve several routes (forecast serves
-        # ARIMA and Holt-Winters): every name it registers is a name of one
-        # of the reference bindings of the routes it serves.
-        ref_exports = set()
-        for other, b in routes.items():
-            if b == binding:
-                ref = host_surface.routed_modules()[other]
-                ref_exports |= set(host_surface.family(ref[len("_mojolearn_"):-len("_host")])["exports"])
-        served = [e for e in exported if not e.startswith(name + "_host_")]
-        assert set(served) <= ref_exports, f"{binding} registers names its reference bindings do not"
-
-
-def test_workflow_reads_the_manifest_not_literals():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    for var in ("COVERED_LANES", "BUILD_FAMILIES", "SABOTAGE_FAMILIES", "ALL_HOST_BINDINGS",
-                "CLASSICAL_RECORDED", "SAVED_MODEL_RECORDED"):
-        assert not re.search(rf'^\s+{var}: "', text, re.M), (
-            f"the workflow carries a literal {var}; it must read the manifest"
-        )
-    assert not re.search(r"^\s+GPU_COLUMNS: >-", text, re.M), (
-        "the workflow carries a literal GPU_COLUMNS block; it must read the manifest"
-    )
-    assert "python/mojolearn/host_surface.py" in text
-    for flag in ("--covered-lanes", "--families", "--wheel-families", "--bindings", "--wheel-bindings",
-                 "--classical-recorded", "--saved-model-recorded", "--classical-gpu-columns",
-                 "--training-gpu-columns", "cpu_identity_gate_check.py build-list"):
-        assert flag in text, f"the workflow does not read {flag} from the manifest"
-    for rel in host_surface.TRAINING_GPU_COLUMNS + host_surface.CLASSICAL_GPU_COLUMNS:
-        directory = "/" + rel.rsplit("/", 1)[0] + "/"
-        assert directory in text, f"the sparse checkout does not bring down {directory}"
-    # Every build loop reads the manifest's list; no binding is built by hand
-    # (until 2026-09-15 byte_lm, forest and tokenizer were, and seven shipped
-    # bindings were never built).
-    # The one hand build left is the forest sabotage binding, which reads its
-    # own define (MOJOLEARN_FOREST_HOST_SABOTAGE) into its own directory.
-    assert re.findall(r"sh bindings/build_([a-z_]+)_host\.sh", text) == ["forest"], "the workflow builds a family by hand"
-    assert text.count('for family in $BUILD_FAMILIES; do') == 1
-    assert text.count('for family in $SABOTAGE_FAMILIES; do') == 1
-    for rel in host_surface.saved_model_recorded():
-        assert rel.startswith("bench/results/classical_host/"), rel
-    assert "/bench/results/classical_host/" in text
-
-
-def test_public_inference_bindings_ship_and_packaging_reads_the_manifest():
-    """Inference dependencies ship; reference-only routes remain source-built.
-    Builders, packers and installed-wheel checks share the manifest.
-    """
-    from mojolearn import _backend
-    shipped = set(host_surface.wheel_bindings())
-    assert set(_backend._HOST_MODULES.values()) <= set(host_surface.bindings())
-    assert {"_mojolearn_byte_lm_host", "_mojolearn_forest_host", "_mojolearn_tokenizer_host",
-            "_mojolearn_neural_host"} <= shipped
-    held_back = [f["family"] for f in host_surface.FAMILIES if not f["ships_in_wheel"]]
-    assert held_back == [], (
-        f"these families do not ship: {held_back}. Every host family ships since 2026-09-16 "
-        "(lane/ship-cpu-host-families), so a wheel can check every lane whose reference is "
-        "current; holding one back makes its lanes unverifiable on an installed CPU and needs a "
-        "reason written into its wheel_note"
-    )
-    assert host_surface.wheel_families() == host_surface.families()
-    # The inference-only families ship; the reference families whose
-    # scoring and prediction entries they carry do not.
-    for inference, reference in (("mixture_infer", "mixture"), ("hdbscan_infer", "hdbscan"), ("gp_infer", "gp")):
-        assert host_surface.family(inference)["ships_in_wheel"] and host_surface.family(inference)["routes"] is None
-        assert host_surface.family(reference)["ships_in_wheel"], "every family ships since 2026-09-16"
-        assert host_surface.family(inference)["training_lanes"] == ()
-    assert set(host_surface.wheel_bindings()) == set(host_surface.bindings())
-    assert host_surface.training_gpu_column_record() == host_surface.TRAINING_GPU_COLUMNS[0].rsplit("/", 2)[1]
-    for rel, token in (
-        ("packaging/linux/pack_wheel.py", "wheel_host_bindings()"),
-        ("packaging/linux/build_sets.sh", "host_surface.py --wheel-families"),
-        ("packaging/macos/build_release_wheel.sh", "host_surface.py --wheel-families"),
-        ("packaging/linux/smoke.py", "host_surface.wheel_bindings()"),
-        ("packaging/macos/verify_wheel.sh", "host_surface.wheel_bindings()"),
-        ("tools/linux_surface_qualification.sh", "wheel_host_bindings()"),
-        ("tools/check_linux_release_qualification.py", "wheel_host_bindings()"),
-    ):
-        text = _read(rel)
-        assert token in text, f"{rel} does not read the host list from the manifest by {token!r}"
-        assert not re.search(r"^\s*HOST_NAMES?\s*=\s*[\"'(]\s*\"?_mojolearn_[a-z_]+_host", text, re.M), (
-            f"{rel} carries a host name list of its own"
-        )
-
-
 def test_command_line_agrees_with_the_api(capsys):
     assert host_surface.main(["--covered-lanes"]) == 0
     assert capsys.readouterr().out.strip() == ",".join(host_surface.covered_lanes())
@@ -524,7 +307,7 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     # under the family define alone.
     assert host_surface.sabotage_build_defines("linalg").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1"]
-    sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry.mojo"],
+    sources = {"runtime_model_selection": ["bindings/runtime_model_selection_entry_pack.mojo"],
                "tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
                              "tokenizer/impl/tokenizer_host_shell_impl.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
@@ -581,18 +364,6 @@ def test_gbdt_ctr_models_cover_every_fixture():
     assert set(host_surface.GBDT_CTR_MODEL_LANES) <= set(host_surface.family("forest")["training_lanes"])
     assert set(host_surface.family("forest")["training_lanes"]) - set(host_surface.GBDT_CTR_MODEL_LANES) \
         == {"saved-model-host-infer", "saved-model-host-infer-trees"}
-
-
-def test_workflow_wires_the_gaps_7_lanes():
-    text = _read(".github/workflows/cpu-identity-gate.yml")
-    assert "/" + host_surface.GBDT_CTR_MODELS_DIR.rsplit("/", 1)[0] + "/" in text, "the models are not checked out"
-    assert "MOJOLEARN_IDENTITY_GBDT_CTR_MODELS=$GITHUB_WORKSPACE/$(python3 $manifest --gbdt-ctr-models)" in text
-    assert '--sabotage-build-defines "$family"' in text
-    assert 'MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_HOST_SABOTAGE=1"' not in text, (
-        "a step-level sabotage define list would override the manifest's per-family defines")
-    sab_run = text.split("covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE", 1)[1].split("- name:", 1)[0]
-    assert 'MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so"' in sab_run
-    assert "MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1" in sab_run
 
 
 def test_command_line_prints_the_gaps_7_wiring(capsys):
@@ -658,11 +429,11 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
 
     # ONE SOURCE: both bindings register kpss_test from the shared module, so
     # the reference binary and the shipped binary cannot drift apart.
-    shared = "bindings/kpss_host_test.mojo"
+    shared = "bindings/kpss_host_test_unpack.mojo"
     assert (ROOT / shared).is_file(), f"{shared} is missing"
     for binding in ("_mojolearn_tsa_host", "_mojolearn_forecast_host"):
         src = _read(f"bindings/{binding}.mojo")
-        assert "from bindings.kpss_host_test import" in src, (
+        assert "from bindings.kpss_host_test_unpack import" in src, (
             f"{binding} does not register kpss_test from the shared module")
     assert "def kpss_test_binding(" not in _read("bindings/_mojolearn_tsa_host.mojo"), (
         "the tsa binding still defines its own kpss_test_binding; the two binaries would drift")
@@ -1259,7 +1030,7 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
     assert bad == [], "lanes that no mechanism accounts for:\n  " + "\n  ".join(bad)
 
 
-def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
+def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys, monkeypatch):
     """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the counting
     nobody did. `--self-test` builds eight worlds from the real tree -- a
     lane whose table cells vanish, a deleted pending declaration, a new lane
@@ -1281,19 +1052,28 @@ def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
     algorithm, and an excuse for one that has since gained a lane. Fifteen in
     all, each refused by the message that names it."""
     mod = _lane_accounting()
+    # Every world is built from the same unchanged tree, and each `check`
+    # call re-reads it: host_surface loaded by path again, and the harness and
+    # verification_matrix imported again for the laneless half. Read each
+    # once for this test; the worlds still differ only in the input that
+    # `self_test` perturbs, so every refusal is still seen by name.
+    surface, laneless = mod.surface, mod.laneless_algorithms
+    surfaces, found = {}, {}
+
+    def surface_once(path=mod.SURFACE):
+        if path not in surfaces:
+            surfaces[path] = surface(path)
+        return surfaces[path]
+
+    def laneless_once(declared=None):
+        if declared is not None:
+            return laneless(declared)
+        if "tree" not in found:
+            found["tree"] = laneless()
+        return found["tree"]
+
+    monkeypatch.setattr(mod, "surface", surface_once)
+    monkeypatch.setattr(mod, "laneless_algorithms", laneless_once)
     assert mod.self_test(verbose=True) is True, capsys.readouterr().out
 
 
-def test_every_binding_exports_its_pyinit():
-    """A function inserted between `@export` and `def PyInit_...` takes the
-    decorator: the build succeeds and the import fails with "dynamic module
-    does not define module export function" (_mojolearn_mamba_host,
-    bd4c36dbe). Every binding's PyInit must carry `@export` itself."""
-    bad = []
-    for path in sorted(BINDINGS.glob("_mojolearn*.mojo")):
-        text = path.read_text(encoding="utf-8")
-        for m in re.finditer(r"^def (PyInit_\w+)\(", text, re.M):
-            before = text[:m.start()].rstrip().split("\n")[-1].strip()
-            if before != "@export":
-                bad.append(f"{path.name}: {m.group(1)}")
-    assert not bad, bad

@@ -58,7 +58,7 @@ verified against leaves nothing to verify against tomorrow.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.primitives.block import prefix_sum
 from max.gpu.primitives.block import sum as block_sum
 
@@ -305,7 +305,7 @@ def partition_scan_kernel[
 
 
 def partition_scatter_kernel[
-    TPB: Int, ROWS: Int = 1, FLAGS: Bool = False, FUSED_OFFSETS: Bool = False
+    TPB: Int, ROWS: Int = 1, FLAGS: Bool = False
 ](
     row_ids_out: MutPointer[Int32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
@@ -357,20 +357,8 @@ def partition_scatter_kernel[
     var quesval = splits[unsafe_offset=nid].quesval
     var n_left = Int(splits[unsafe_offset=nid].n_left)
 
-    var block_left_before = Int32(0)
-    comptime if FUSED_OFFSETS:
-        # C48: exact prefix of prior block counts inside the scatter launch.
-        # Stable side offsets and split.n_left are unchanged; no arrival-order
-        # atomics, separate metadata transfer, or row reordering is introduced.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        var prior = tid
-        var subtotal = Int32(0)
-        while prior < ob:
-            subtotal += blk_off[unsafe_offset=b-ob+prior]
-            prior += TPB
-        block_left_before = _block_scan[TPB](subtotal)[1]
-    else:
-        block_left_before = blk_off[unsafe_offset=b]
+    # (Sweep 2026-11-15: the folded C48 FUSED_OFFSETS prefix branch was removed here.)
+    var block_left_before = blk_off[unsafe_offset=b]
 
     comptime if ROWS > 1:
         # Stable within the block: thread t's ROWS rows follow thread t-1's.

@@ -13,20 +13,23 @@ IVF_FAST_DEVICE_VALIDATE in ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
 and KMEANS_LAZY_SHIFT in cluster/impl/detail/kmeans.mojo (scoped to the IVF
 fits that set `KMeansParams.lazy_shift`) are FAST + Apple
 DEFAULTS since 2026-10-04 (M3 A/B, the `-D MOJOLEARN_VSEARCH_ALL` bundle at
-ad265a028: 9/9 rows faster, recall_at_10 identical); each has a rollback
-define `-D MOJOLEARN_<FLAG>_OFF`. `-D MOJOLEARN_VSEARCH_ALL` is kept as a
-no-op alias (every switch it bundled is a default now; IVF_REFINE_TEAM
-measured neutral and was deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
+ad265a028: 9/9 rows faster, recall_at_10 identical); the rollback defines
+of the two here and the `-D MOJOLEARN_VSEARCH_ALL` bundle were deleted
+2026-11-15 (docs/TOMBSTONES.md; IVF_REFINE_TEAM measured neutral and was
+deleted 2026-10-09). The mechanism of each is docs/apple-fast/ab/vsearch.md; the profile
 they answer is docs/apple-fast/notes/vsearch.md; the record is
 docs/apple-fast/EXPERIMENTS.md."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime VSEARCH_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: no-op alias since 2026-10-04 (the switches it bundled are defaults); kept so
 #: `-D MOJOLEARN_VSEARCH_ALL` build lines still parse to the default build
 comptime VSEARCH_ALL = is_defined["MOJOLEARN_VSEARCH_ALL"]()
+# TOMBSTONE: MOJOLEARN_VSEARCH_ALL (force-on bundle, a no-op since 2026-10-04: every switch it bundled is the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 72e3226c20.
+# Restore: git apply experiments/removed/MOJOLEARN_VSEARCH_ALL.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
 
 #: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, source ad265a028), A = default, B = -D MOJOLEARN_VSEARCH_ALL,
@@ -43,27 +46,30 @@ comptime VSEARCH_ALL = is_defined["MOJOLEARN_VSEARCH_ALL"]()
 #: table does not fit whole, so main evaluates every entry per candidate from
 #: device memory. The same fold on the same words: no bit moves.
 #: DEFAULT (FAST + Apple) since 2026-10-04, VSEARCH_ALL A/B above (ad265a028,
-#: 9/9 faster, recall identical); rollback `-D MOJOLEARN_PQ_LUT_TILED_OFF`.
+#: 9/9 faster, recall identical).
 #: Limits are the kernel's: pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <=
 #: LUT_MAX (threadgroup memory), checked at the launch; no dimension window.
-comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_LUT_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_PQ_LUT_TILED_OFF (old path; EXP:352 KEPT the tiled table as the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 0912c8dee2.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_LUT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_LUT_TILED = VSEARCH_FAST_APPLE
 
 #: the IVF-PQ score and top-k in ONE launch per chunk of queries: one
 #: threadgroup per query walks its probed lists with the tiled table, keeps
 #: a register top-k per thread and joins the lists in threadgroup memory; no
 #: candidate-distance buffer, no select launches. k <= SEL_KM. Same words.
 #: DEFAULT (FAST + Apple) since 2026-10-04, VSEARCH_ALL A/B above (ad265a028,
-#: 9/9 faster, recall identical); rollback `-D MOJOLEARN_PQ_SCAN_FUSED_OFF`.
+#: 9/9 faster, recall identical).
 #: Limits are the kernel's: k <= SEL_KM (register top-k), the table tile and
 #: the residual in threadgroup memory; no dimension window.
-comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCAN_FUSED_OFF"]()
+# TOMBSTONE: MOJOLEARN_PQ_SCAN_FUSED_OFF (old path; EXP:352 KEPT the fused scan as the FAST + Apple default) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at 5ed565aaf7.
+# Restore: git apply experiments/removed/MOJOLEARN_PQ_SCAN_FUSED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE
 
 # TOMBSTONE: MOJOLEARN_IVF_REFINE_TEAM (DROPPED-noise) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: ivf refine with one threadgroup per query and the dataset uploaded from the caller's array (refine_team_kernel, refine_device_team); ivf-refine taxi 1,208.3 -> 1,201.8 ms (-0.5%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch; record in docs/TOMBSTONES.md.
 
-#: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST
-#: (`-D MOJOLEARN_IDN_PQ_LUT_TILED_OFF` restores `pq_score_kernel`):
+#: lane fg-ivf (read_ivf.md idea A4), DEFAULT ON outside FAST:
 #: `pq_score_tiled_kernel` (`PQ_LUT_TILED` above) is the IDENTICAL IVF-PQ
 #: score on every vendor. Cost: when pq_dim x n_codes exceeds LUT_MAX the
 #: untiled kernel evaluates every (candidate, subspace) entry from device
@@ -76,7 +82,9 @@ comptime PQ_SCAN_FUSED = VSEARCH_FAST_APPLE and not is_defined["MOJOLEARN_PQ_SCA
 #: `ts_ftz_nonneg(total + v)` over j ascending carried between tiles in the
 #: candidate buffer (an exact store). Check: ID line, NV digest == AMD
 #: digest == the _OFF arm's.
-comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST and not is_defined["MOJOLEARN_IDN_PQ_LUT_TILED_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_PQ_LUT_TILED_OFF (old path, no A/B recorded beside the default; the grid's post-merge check found the _OFF arm neutral) deleted 2026-11-15 by lane/expdel2-14-cluster; code recoverable at aa63f5d1c7.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_PQ_LUT_TILED_OFF.patch; record in docs/TOMBSTONES.md.
+comptime IDN_PQ_LUT_TILED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 
 #: TOMBSTONE (lane postmerge-act-3, 2026-10-09): `IDN_PQ_SCAN_FUSED` (fg-ivf A5, -D MOJOLEARN_IDN_PQ_SCAN_FUSED,
 #: pq_scan_fused_kernel in IDENTICAL) removed: slower, ivf-pq istella NV 1.80x / AMD 1.00x, taxi NV 1.77x / AMD 1.00x,

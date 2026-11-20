@@ -66,6 +66,9 @@ from gemm.host_transport import (
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+# lane fx-fast-bf16 (2026-11-20): the two matrix-unit arms of a `fast` build; both False in every other build.
+from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_gemm_into, matrix_units_workspace_floats
+from gemm.fast_bf16_units import GEMM_FAST_BF16_UNITS, bf16_units_gemm_into, bf16_units_workspace_floats
 from gemm.int_slices import IDN_GEMM_INT_SLICES, identical_gemm_int_slices_into, int_slices_admits
 
 # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
@@ -124,8 +127,8 @@ def identical_gemm_host(
 
     # lane/gap-neural-models (2026-10-02): pooled device buffers, the
     # dispatcher's workspace pooled with them, and staged transfers
-    # (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0 and
-    # MOJOLEARN_GEMM_STAGE_DOWN/UP=0 restore the old transport). The kernels
+    # (gemm/host_transport.mojo; -D MOJOLEARN_GEMM_STAGE_UP_OFF restores
+    # the raw upload). The kernels
     # and their plan are the same; copies only, no bit moves.
     var lease = GemmHostLease()
     var a = lease.f32(ctx, ROLE_A, m * k)
@@ -139,6 +142,9 @@ def identical_gemm_host(
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
+        # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
         # lane/gemm-int-slices (2026-10-28): THE DISPATCH HOOK of the research
         # profile fp32.v2-int (gemm/int_slices.mojo, docs/plans/GEMM_INT_SLICES.md)
         # behind -D MOJOLEARN_IDN_GEMM_INT_SLICES, default OFF; off, this block
@@ -157,10 +163,37 @@ def identical_gemm_host(
         # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
         # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
         # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-        var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
-        identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
-        gemm_down_f32(ctx, lease, c, c_ptr, m * n)
-        _ = ws
+        # lane fx-fast-bf16 (2026-11-20): THE PUBLIC PRODUCT IN A `fast` SET WITH A MATRIX-UNIT ROW ON. This entry
+        # imports the exact kernel directly, so the first fast timing (build aa82adadef, arm
+        # fast-matrix-units-tf32) ran the gemm row on the FP32 chain in both arms: equal output hash, ratio 1.04.
+        # A set built with -D MOJOLEARN_GEMM_FAST_BF16_UNITS or -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS (fast-rows
+        # builds only; a compile error under the contract) now sends a product its size rule takes to that
+        # unit, bf16 asked first; the lease's workspace holds the bf16 images or the OP_TN transpose. The
+        # operands and the output are disjoint pooled buffers of exactly the sizes the routes need. Per call
+        # under an arm: the integer rule; the same uploads, one download and one wait as below. In every other
+        # build this block is not compiled and the two lines of the else branch are the code.
+        comptime if GEMM_FAST_BF16_UNITS or GEMM_FAST_MATRIX_UNITS:
+            var ws_floats = identical_gemm_workspace_max_floats(m, n, k)
+            comptime if GEMM_FAST_BF16_UNITS:
+                ws_floats = max(ws_floats, bf16_units_workspace_floats(m, n, k))
+            comptime if GEMM_FAST_MATRIX_UNITS:
+                ws_floats = max(ws_floats, matrix_units_workspace_floats(m, n, k, op))
+            var units_ws = lease.f32(ctx, ROLE_WS, ws_floats)
+            var units_took = False
+            comptime if GEMM_FAST_BF16_UNITS:
+                units_took = bf16_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
+            comptime if GEMM_FAST_MATRIX_UNITS:
+                if not units_took:
+                    units_took = matrix_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
+            if not units_took:
+                identical_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
+            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+            _ = units_ws
+        else:
+            var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+            gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+            _ = ws
     else:
         identical_gemm(ctx, c, a, b, m, n, k, op)
         gemm_down_f32(ctx, lease, c, c_ptr, m * n)

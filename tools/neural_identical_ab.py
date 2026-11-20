@@ -84,7 +84,7 @@ def configuration(idea, vendor, arm, parameters=None, variant=None):
     if any(not re.fullmatch(r"MOJOLEARN_[A-Z0-9_]+", key) or not isinstance(value, str)
            for key, value in environment.items()):
         raise ValueError("experiment environment must contain string MOJOLEARN settings")
-    managed = {"MOJOLEARN_IDN_ALL_OFF", "MOJOLEARN_BUILD_EXTRA_DEFINES"}
+    managed = {"MOJOLEARN_BUILD_EXTRA_DEFINES"}
     for row in arm_records().values():
         for choice in ("baseline", "candidate"):
             managed.update(row[choice].get("environment", {}))

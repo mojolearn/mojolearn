@@ -116,6 +116,10 @@ def _split(
         Float32(0.5),
         Int64(n_left),
         Int64(n_left),
+        # `terminal` (DEVIATION 2502, a pure node): never set here. The queue
+        # reads `is_valid` only; `_read_splits_host` is what folds purity
+        # into `is_valid`/`colid`, and it is not in this file's scope.
+        False,
     )
 
 
@@ -607,12 +611,12 @@ def arm_f_sabotage() raises -> Int:
     var b1 = qc.pop()
     var s1 = List[SplitSummary[DT]]()
     s1.append(_split(True, 0, 1.0, 40))
-    qc.push(b1, s1)
+    qc.push_replay(b1, s1)
     var b2 = qc.pop()
     var s2 = List[SplitSummary[DT]]()
     s2.append(_split(True, 1, 2.0, 10))
     s2.append(_split(True, 2, 3.0, 20))
-    qc.push(b2, s2)
+    qc.push_replay(b2, s2)
     if len(qc.tree.sparsetree) == 5:
         fails += 1
         print(
@@ -706,7 +710,7 @@ def arm_f_sabotage() raises -> Int:
     return fails
 
 
-def main() raises:
+def run_checks() raises:
     print("builder_check: ensemble/decisiontree/batched_levelalgo/builder.mojo")
     print("  mirroring builder.cuh @ cuml v26.08.00 265b9da6")
     var fails = 0

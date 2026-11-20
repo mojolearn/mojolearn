@@ -51,6 +51,7 @@ happens to it:
 """
 
 from std.math import isfinite
+from core.host_finite_scan import host_all_finite_f32, host_first_nonfinite_f32
 
 
 comptime C_SVC = 0
@@ -245,13 +246,16 @@ def check_rung1_scope(
 def check_finite_list(values: List[Float32], what: String) raises:
     """DEVIATION 636: every cell of `what` (`X`, `labels`, the predict `X`)
     must be finite; raises naming the first offending index."""
-    for i in range(len(values)):
-        if not isfinite(values[i]):
-            raise Error(
-                "svm: " + what + " contains a non-finite value at flat index "
-                + String(i) + " (DEVIATION 636: a NaN or inf input cannot be"
-                " fitted; a computed NaN has a vendor-specific payload)"
-            )
+    # parallel: the one host finite scan; the index walk runs only on a refusal
+    var cells = rebind[MutPointer[Float32, MutUntrackedOrigin]](values.unsafe_ptr())
+    var n = len(values)
+    if host_all_finite_f32(cells, n):
+        return
+    raise Error(
+        "svm: " + what + " contains a non-finite value at flat index "
+        + String(host_first_nonfinite_f32(cells, n)) + " (DEVIATION 636: a NaN or inf input cannot be"
+        " fitted; a computed NaN has a vendor-specific payload)"
+    )
 
 
 # DEVIATION 2665: the borrowed-buffer spelling of this check lives in

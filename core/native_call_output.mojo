@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-# Caller-owned native ABI output. Place this value in a one-element List before
-# exposing its field addresses: the foreign call needs stable writable storage,
-# not an inline value whose address crosses the ABI as an integer.
+# Caller-owned native ABI output. Expose its field addresses only through a
+# `mut` reference held by an out-of-line call (core/native_descriptor_call.mojo
+# `native_descriptor_call_spans`), so the storage is real memory for the whole
+# foreign call; an empty error List owns no heap storage.
 from std.atomic import Atomic, Ordering
 
 

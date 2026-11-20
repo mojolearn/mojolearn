@@ -63,22 +63,21 @@ def test_transform_fitted_guard_precedes_input_protocols(cls):
     assert calls == []
 
 
-def test_native_matrix_owner_avoids_legacy_matrix_hooks(monkeypatch):
+def test_native_matrix_owner_avoids_legacy_matrix_hooks():
     from mojolearn import _expansion_decomp
-    calls = []
-    original = _expansion_decomp._M.__getattribute__
-    def observed(self, name):
-        calls.append(name)
-        return original(self, name)
-    monkeypatch.setattr(_expansion_decomp._M, '__getattribute__', observed)
+    # The legacy Python matrix (`_expansion_decomp._M`) is deleted (lane pyout-decomp-linalg).
+    assert not hasattr(_expansion_decomp, "_M")
     x = np.random.default_rng(17).normal(size=(8, 4)).astype(np.float32)
     model = ClassicalMDS(n_components=2)
     result = model.fit_transform(x)
-    assert type(result) is np.ndarray and result.shape == (8, 2)
-    assert result.dtype == np.float32
+    # This module is not a user boundary (no `__mojolearn_user_boundary__`),
+    # so the native owner hands back its own Array; the user-boundary NumPy
+    # return is test_manifold_installed_contract's.
+    from mojolearn._array import Array
+    assert type(result) is Array and result.shape == (8, 2)
+    assert np.asarray(result).dtype == np.float32
     assert vars(model)['_mojolearn_fitted'] is True
     assert type(vars(model)['embedding_m_']).__name__ == '_ManifoldMatrix'
-    assert calls == []
 
 
 def test_after_fit_callback_is_refused_without_running_it():

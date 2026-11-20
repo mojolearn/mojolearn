@@ -91,8 +91,13 @@ DEVIATIONS RECORDED BY THIS FILE
 portable conformance bundle; docs/CONFORMANCE.md is its document.
 """
 
-from . import _buffer as _buffers, _bufcheck as _checks
-from ._array import Array as _Array
+# Verify runs on the loaded set the package had before lazy family import:
+# every family and every unit (lane lazy-family-import), however it is
+# entered (`python -m mojolearn verify`, or a tool importing this module).
+from . import _families as _verify_families
+_verify_families.load_all()
+from . import Array as _Array, runtime_report as _runtime_report
+import array as _stdarray
 import hashlib
 import importlib
 import importlib.util
@@ -228,23 +233,32 @@ def build_fixture():
     DEVIATION 2433: fixture values are written directly to Float32 buffers;
     the published byte-hash gate is unchanged and NumPy is not required.
     """
-    x = _buffers.empty((KM_N, KM_D), '<f4')
-    xv = _checks.flat_view(x, 'f')
+    # Public construction only (lane verify-runtime-report): a float32
+    # `array.array` filled in index order, handed to `mojolearn.Array`
+    # through `Array.from_buffer`; the values and bytes are unchanged.
+    xv = _stdarray.array('f', bytes(4 * KM_N * KM_D))
     for i in range(KM_N):
         for f in range(KM_D):
             xv[i*KM_D+f] = _coord(i, f, KM_SALT)
-    c = _buffers.empty((KM_K, KM_D), '<f4')
-    cv = _checks.flat_view(c, 'f')
+    cv = _stdarray.array('f', bytes(4 * KM_K * KM_D))
     for k in range(KM_K):
         for f in range(KM_D):
             cv[k*KM_D+f] = _coord(k * KM_CENTROID_STRIDE, f, KM_SALT)
+    x = _Array.from_buffer(memoryview(xv).cast('B').cast('f', (KM_N, KM_D)))
+    c = _Array.from_buffer(memoryview(cv).cast('B').cast('f', (KM_K, KM_D)))
     return x, c
 
 
 def _le_bytes(arr):
     """Raw little-endian bytes, in index order. The card's hash is over
     exactly these, so the comparison must be over exactly these."""
-    return _checks.le_bytes(arr, 'f')
+    raw = arr.tobytes()
+    if sys.byteorder == "big":
+        swapped = _stdarray.array('f')
+        swapped.frombytes(raw)
+        swapped.byteswap()
+        raw = swapped.tobytes()
+    return raw
 
 
 # --------------------------------------------------------------------------
@@ -353,7 +367,7 @@ def _differ_is_whole(mod):
 
 class ModeReport(object):
     __slots__ = ("requested", "loaded", "compiled", "binary", "ident_dir",
-                 "under_identical", "problem")
+                 "under_identical", "policy_masks", "problem")
 
     def __init__(self):
         self.requested = None
@@ -362,10 +376,56 @@ class ModeReport(object):
         self.binary = None        # the .so that runs THIS fixture
         self.ident_dir = None
         self.under_identical = None
+        # binding name -> its compiled mode policy mask (bit i = row i of
+        # checks/mode_policy.mojo relaxed), None where it could not be read
+        self.policy_masks = None
         self.problem = None
 
     def as_dict(self):
         return {k: getattr(self, k) for k in self.__slots__}
+
+
+#: The bindings whose compiled mode policy mask is read, with the entry that
+#: answers it: the binary that runs the fixture and the gbdt binary the
+#: selector cross-checks (the same two the mode gate already reads).
+_POLICY_MASK_ENTRIES = (
+    ("_mojolearn", "mojolearn_mode_policy_mask"),
+    ("_mojolearn_gbdt", "gbdt_mode_policy_mask"),
+)
+
+#: Row names by bit of the mask, as in checks/mode_policy.mojo.
+_POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math",
+                "matrix_units", "waits_elided", "tile_free", "bf16_units")
+
+
+def _read_policy_mask(module, entry):
+    """The mask a loaded binding reports, or None when it has no such entry
+    (a binary built before the table existed, or a missing-binary stub)."""
+    if module is None:
+        return None
+    try:
+        return int(getattr(module, entry)())
+    except Exception:
+        return None
+
+
+def _mode_policy_problem(loaded, masks):
+    """An identical set promises the same bits on every vendor, so no row of
+    the mode policy table may be relaxed in it. Returns the refusal text when
+    a binding of an identical set reports a non-zero mask, else None."""
+    if loaded != "identical" or not masks:
+        return None
+    for name in sorted(masks):
+        mask = masks[name]
+        if mask:
+            rows = [row for bit, row in enumerate(_POLICY_ROWS) if mask >> bit & 1]
+            return (
+                "the loaded numeric mode is identical but %s was compiled with "
+                "mode policy mask %d (relaxed rows: %s). An identical binary "
+                "relaxes no row; this set cannot be labelled identical."
+                % (name, mask, ", ".join(rows) or "unknown bits")
+            )
+    return None
 
 
 def _mode_report():
@@ -398,37 +458,20 @@ def _mode_report():
         rep.requested = "identical"
 
     try:
-        from . import _backend
-    except Exception as exc:            # pragma: no cover - import-time only
-        rep.problem = "cannot import mojolearn._backend (%s)" % exc
-        return rep
-
-    try:
-        rep.loaded = _backend.numeric_mode()
+        report = _runtime_report()
     except Exception as exc:
-        # _backend raises when the loaded gbdt binary was compiled for the
-        # other arm. That is exactly the mislabelled-measurement failure it
-        # exists to prevent, and it must not be swallowed.
+        # The report raises when the loaded gbdt binary was compiled for the
+        # other arm (the same check as `mojolearn.numeric_mode()`). That is
+        # exactly the mislabelled-measurement failure it exists to prevent,
+        # and it must not be swallowed.
         rep.problem = str(exc)
         return rep
+    rep.loaded = report["numeric_mode"]
+    # The loaded gbdt binary's own compile-time answer, by name ('identical',
+    # 'fast' or 'unknown'), or None when no gbdt binary is loaded.
+    rep.compiled = report["code_mode"]
 
     pkg_name = __name__.rsplit(".", 1)[0]
-    gb = sys.modules.get(pkg_name + "._mojolearn_gbdt")
-    try:
-        _readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
-    except (ImportError, AttributeError):
-        # A stub raises ImportError from __getattr__, and `hasattr` only
-        # swallows AttributeError. See `_backend.numeric_mode`.
-        _readable = False
-    if _readable:
-        try:
-            # A NAME lookup rather than a boolean.
-            rep.compiled = _backend._CODE_MODE.get(
-                gb.gbdt_numeric_mode(), "unknown"
-            )
-        except Exception:
-            rep.compiled = None
-
     pkg_dir = os.path.dirname(os.path.abspath(__file__))
     rep.ident_dir = os.path.realpath(os.path.join(pkg_dir, "identical"))
     fixture_mod = sys.modules.get(pkg_name + "._mojolearn")
@@ -441,8 +484,10 @@ def _mode_report():
         )
 
     if rep.loaded == "identical":
+        # `_backend._MissingUpperTier` is the missing-binary stub (the old
+        # name `_MissingIdentical` no longer exists, so this never matched).
         if fixture_mod is not None and type(fixture_mod).__name__ == \
-                "_MissingIdentical":
+                "_MissingUpperTier":
             # `_backend.select()` installs this stub when an identical binary
             # was not built, so the package still imports and every OTHER
             # family keeps working. It raises by name on first use. Reaching
@@ -468,6 +513,19 @@ def _mode_report():
                 "the wrong directory; nothing here can be labelled."
                 % (rep.binary, rep.ident_dir)
             )
+
+    # THE MODE POLICY ROWS, read from the binaries themselves. The gbdt
+    # binary is read only when the runtime report found it loaded
+    # (`rep.compiled`), so this never loads a binding.
+    masks = {}
+    for name, entry in _POLICY_MASK_ENTRIES:
+        module = sys.modules.get(pkg_name + "." + name)
+        if name == "_mojolearn_gbdt" and rep.compiled is None:
+            module = None
+        masks[name] = _read_policy_mask(module, entry)
+    rep.policy_masks = masks
+    if rep.problem is None:
+        rep.problem = _mode_policy_problem(rep.loaded, masks)
     return rep
 
 
@@ -592,6 +650,34 @@ def environment_json(mode=None):
     return result
 
 
+def harness_path():
+    """(path, how) of the identity harness, as
+    `mojolearn.runtime_report()["harness_source"]` names it:
+    MOJOLEARN_IDENTITY_BREAK, the wheel copy or the checkout. Raises
+    FileNotFoundError naming what was tried when this install carries none.
+    The one reader for `verify` (`_verify_all`) and `identity` (`_identity`)."""
+    report = _runtime_report()
+    source = report["harness_source"]
+    if source["path"] is None:
+        tried = [p for p in (os.environ.get("MOJOLEARN_IDENTITY_BREAK", "").strip(),) if p]
+        tried += [os.path.join(report["package_dir"], "_identity_break.py"), "<checkout>/tools/identity_break.py"]
+        raise FileNotFoundError(
+            "tools/identity_break.py is not in this install, so there is no harness to run. "
+            "Looked at:\n  " + "\n  ".join(tried)
+            + "\nInstall a wheel built with the packaging step that copies it in, "
+            "run from a checkout, or point MOJOLEARN_IDENTITY_BREAK at the file.")
+    return source["path"], source["how"]
+
+
+def commit_witness():
+    """(commit, source) for the local column, as
+    `mojolearn.runtime_report()["source_commit"]` names it: MOJOLEARN_COMMIT,
+    the wheel's COMMIT witness, or None (the harness then reads `git
+    rev-parse HEAD` of the checkout it lives in)."""
+    source = _runtime_report()["source_commit"]
+    return source["commit"], source["how"]
+
+
 def _vendor_text():
     """'cuda (the box probe ...)' and so on: what `_backend.vendor()` read
     back from the loaded binaries, and how the directory was chosen. Printed
@@ -599,9 +685,8 @@ def _vendor_text():
     Linux the wheel carries two vendors' sets and a card must say which one
     produced it. A failure to establish it is reported, never hidden."""
     try:
-        from . import _backend
-        v = _backend.vendor()
-        how = _backend.vendor_how()
+        report = _runtime_report()
+        v, how = report["vendor"], report["vendor_how"]
     except Exception as exc:
         return "unknown (%s: %s)" % (type(exc).__name__, exc)
     if v is None:

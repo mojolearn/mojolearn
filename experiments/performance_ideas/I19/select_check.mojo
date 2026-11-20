@@ -65,6 +65,7 @@ def check_select(ctx: DeviceContext,categories: Bool,bootstrap: Bool) raises:
             for j in range(total):
                 if hi[j]!=0:
                     raise Error("I19 valid bootstrap index refused")
+    _ = input^  # past the drain: a queued copy reads it after its last named use
     var refused=False
     try:
         var bad_ranks=ranks.copy()
@@ -83,6 +84,7 @@ def check_select(ctx: DeviceContext,categories: Bool,bootstrap: Bool) raises:
         for j in range(total):
             if hi[j]!=Int32(1 if j==0 or j==total-1 else 0):
                 raise Error("I19 bootstrap safe-gather refusal differs")
+    _ = indices^  # past the drain: a queued copy reads it after its last named use
     _ = src^; _ = samples^; _ = di^; _ = invalid^; _ = values^; _ = positions^; _ = descriptors^
     print("I19 SELECT_PASS categories",categories,"bootstrap",bootstrap,"tasks",tasks,"no_sorted_output_or_permutation stable_positions refusal")
 

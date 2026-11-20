@@ -9,7 +9,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     # `kinds` maps each public class to the kind the owner dispatches on,
     # `qselect` is MOJOLEARN_X_PREP_FAST_QSELECT as read at import, `scores`
     # maps the built-in score functions SelectKBest runs natively to their names.
-    # `owner_kinds` maps the classes the family door (bindings/prep_owner_native.mojo)
+    # `owner_kinds` maps the classes the family door (bindings/prep_owner_native_door.mojo)
     # serves outside the encode owner to their kinds; `owner_classes` names the
     # public classes those owners construct (IterativeImputer's SimpleImputer).
     import sys
@@ -22,6 +22,10 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     from .tokenizer import _binding
 
     context = _state_context()
+    # Native warning delivery (bindings/classical_warnings_unpack.mojo): filters read
+    # natively, standard display hooks only, no warnings.warn call.
+    from ._native_classical_warnings import connect_warnings
+    context.update(connect_warnings())
     context["output_context"] = _numpy_free_context()
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
@@ -65,6 +69,12 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                    prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores),
                    prep_owner_kinds=dict(owner_kinds or {}), prep_owner_classes=dict(owner_classes or {}))
     context.update(label_context())
+    # mutual_info's discrete_features indices (bindings/prep_select_native_door.mojo
+    # `_discrete_mask`): an exact int matches `int` by CPython's type test and
+    # never enters numbers.Integral's Python ABCMeta.__instancecheck__ (census
+    # d95f805cce: 2 frames per index).
+    from ._native_loaded_modules import INTEGRAL_TYPES
+    context["integral_type"] = INTEGRAL_TYPES
     # Only these exact composition classes use the native public lifecycle.
     # Keep the native instance-dictionary descriptor, not a Python getter.
     context['prep_composition_plans'] = {

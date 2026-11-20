@@ -87,6 +87,9 @@ def xmad(a: Float32, b: Float32, c: Float32) -> Float32:
         from std.math import fma
 
         return fma(a, b, c)
+    # TOMBSTONE: MOJOLEARN_X_LINEAR_FAST_FMA (unmeasured Apple FAST opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at f19d6bd79f.
+    # Restore: git apply experiments/removed/MOJOLEARN_X_LINEAR_FAST_FMA.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 by lane/restore-apple-fast-classical: Apple fast is paused, not abandoned (Andrew); opt-in, default off, Apple fast only.
     return identical_mul_add(a, b, c)
 
 
@@ -478,7 +481,7 @@ def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
     """C14: up to four column-major RHS share factor loads, same scalar chains.
     NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     """
-    var values = InlineArray[Float32, 4](fill=Float32(0))
+    var values = Array[Float32, 4](fill=Float32(0))
     for i in range(m):
         for t in range(count):
             values[t] = ld(b, (first + t) * m + i)
@@ -503,49 +506,8 @@ def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
         i -= 1
 
 
-def jacobi_eig(a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
-    """Cyclic Jacobi (Golub & Van Loan, Algorithm 8.5.3, the classical
-    rotation of Rutishauser's form) on the symmetric m x m block at `aoff`:
-    eigenvalues land on its diagonal, eigenvectors in the COLUMNS of `v`.
-    Sweep order p ascending, q ascending; stops when a whole sweep rotates
-    nothing (every |a_pq| below 1e-9 * sqrt(a_pp a_qq)) or at `max_sweeps`.
-    DEVIATION 5003 (IDENTITY_PATHS row 103): this sweep order and rotation."""
-    for i in range(m):
-        for j in range(m):
-            st(v, voff + i * m + j, Float32(1) if i == j else Float32(0))
-    for _ in range(max_sweeps):
-        var rotated = False
-        for p in range(m):
-            for q in range(p + 1, m):
-                var apq = ld(a, aoff + p * m + q)
-                var app = ld(a, aoff + p * m + p)
-                var aqq = ld(a, aoff + q * m + q)
-                var scale = fsqrt(fabs(fm(app, aqq)))
-                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
-                    continue
-                rotated = True
-                var theta = fd(fs(aqq, app), fm(Float32(2), apq))
-                var tt = fd(fsign(theta) if theta != 0 else Float32(1),
-                            fa(fabs(theta), fsqrt(fa(fm(theta, theta), Float32(1)))))
-                var c = fd(Float32(1), fsqrt(fa(fm(tt, tt), Float32(1))))
-                var s = fm(tt, c)
-                for k in range(m):
-                    var akp = ld(a, aoff + k * m + p)
-                    var akq = ld(a, aoff + k * m + q)
-                    st(a, aoff + k * m + p, fs(fm(c, akp), fm(s, akq)))
-                    st(a, aoff + k * m + q, fa(fm(s, akp), fm(c, akq)))
-                for k in range(m):
-                    var apk = ld(a, aoff + p * m + k)
-                    var aqk = ld(a, aoff + q * m + k)
-                    st(a, aoff + p * m + k, fs(fm(c, apk), fm(s, aqk)))
-                    st(a, aoff + q * m + k, fa(fm(s, apk), fm(c, aqk)))
-                for k in range(m):
-                    var vkp = ld(v, voff + k * m + p)
-                    var vkq = ld(v, voff + k * m + q)
-                    st(v, voff + k * m + p, fs(fm(c, vkp), fm(s, vkq)))
-                    st(v, voff + k * m + q, fa(fm(s, vkp), fm(c, vkq)))
-        if not rotated:
-            return
+# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
 
 
 def col_means(x: FP, n: Int, d: Int, rows: IP, n_rows: Int, use_rows: Bool, res: FP, ooff: Int):

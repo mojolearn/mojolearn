@@ -31,9 +31,7 @@ DEVICE I/O (lane neural-io-2, 2026-10-09): an x made by
 returns y as a `SequenceDeviceTensor` and keeps the routing outputs there
 too (`router_logits_`, `selected_experts_`, `routing_weights_` are read
 back when first accessed), so nothing crosses the bus inside the call
-(`sequence/moe_dev.mojo`, the same launches on the same values). A binding
-built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev`; a
-resident x is then read back once and the host-array entry runs. The
+(`sequence/moe_dev.mojo`, the same launches on the same values). The
 host-array entry's outputs are `np.empty` (the binding stores every cell)."""
 import os as _os
 from ._optional_numpy import require_numpy
@@ -42,15 +40,11 @@ from . import _x_sequence_device as _sequence_device  # glue: connect native dev
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 
-_WEIGHTS = ("router", "gate_up_proj", "down_proj")
-
-
 # Weights stay on the device (lane gap-neural-overhead2): the forward reads device copies made
 # once by `moe_weights_put` instead of uploading the three arrays every call; any assignment of
 # router / gate_up_proj / down_proj (or load_state_dict) re-copies on the next forward, and the
 # read-only host copies make a stale device copy impossible. Device I/O (lane neural-io-2): a
-# resident x keeps y and the routing outputs on the device (`sequence/moe_dev.mojo`); a binding
-# built with -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF has no `moe_forward_dev` and the host entry runs.
+# resident x keeps y and the routing outputs on the device (`sequence/moe_dev.mojo`).
 class MoEBlock:
     """Sparse mixture-of-experts feed-forward block, as Mixtral's `MixtralSparseMoeBlock`.
 
@@ -128,9 +122,6 @@ class MoEBlock:
         """
         return _SEQ_NATIVE("seqmoe_to_device", self, (a,), None, _SEQ_CONTEXT)
 
-    def _routing_out(self, i):
-        return _SEQ_NATIVE("seqmoe_routing", self, (i,), None, _SEQ_CONTEXT)
-
     @property
     def router_logits_(self):
         """Router logits of the last forward, (n_tokens, num_experts)."""
@@ -149,14 +140,6 @@ class MoEBlock:
     def __setattr__(self, name, value):
         return _SEQ_NATIVE("seqmoe_setattr", self, (name, value), None, _SEQ_CONTEXT)
 
-    def _weights_handle(self, b):
-        """The device copies' handle on binding `b`, put again after any
-        weight assignment (the old copies freed)."""
-        return _SEQ_NATIVE("seqmoe_weights", self, (b,), None, _SEQ_CONTEXT)
-
-    def _free_weights(self):
-        return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
-
     def __del__(self):
         return _SEQ_NATIVE("seqmoe_release", self, (), None, _SEQ_CONTEXT)
 
@@ -172,10 +155,6 @@ class MoEBlock:
         Shapes must match the block's, otherwise `ValueError`.
         """
         return _SEQ_NATIVE("seqmoe_load", self, (sd,), None, _SEQ_CONTEXT)
-
-    def _check_weights(self):
-        # `want`, not `shape`: the caller's `shape` holds x's shape for the final reshape
-        return _SEQ_NATIVE("seqmoe_check_weights", self, (), None, _SEQ_CONTEXT)
 
     def forward(self, x):
         """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.

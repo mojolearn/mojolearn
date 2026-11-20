@@ -3,7 +3,7 @@
 """Typed host-side helpers of the trees entry points (`providers/python/xtrees_api_pyapi.mojo`):
 the host column's cv folds, the scatter refusal, KernelExplainer's coalition
 schedule, the class priors and DART's per-tree bookkeeping. Every argument is
-a typed pointer or scalar; the PythonObject unpacking stays in the shell."""
+a typed pointer or scalar; the Python object unpacking stays in the shell."""
 
 from std.math import ceil
 from std.memory import bitcast

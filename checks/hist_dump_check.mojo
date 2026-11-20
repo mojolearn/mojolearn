@@ -58,7 +58,7 @@ def check_hist_depends_on_partition() raises:
     var z = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for i in range(n_rows):
         z.unsafe_ptr().unsafe_store(i, UInt32(0))
-    ctx.enqueue_copy(dst_buf=cindex, src_ptr=z.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, cindex, z)
     ctx.synchronize()
 
     var hb = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
@@ -66,7 +66,7 @@ def check_hist_depends_on_partition() raises:
     for f in range(n_features):
         for r in range(n_rows):
             hb.unsafe_ptr().unsafe_store(r, UInt8(((r // (f + 1)) + f) % 2))
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(0),
             policy_mask(POLICY_BINARY),
@@ -83,13 +83,13 @@ def check_hist_depends_on_partition() raises:
     var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
     for r in range(n_rows):
         hs.unsafe_ptr().unsafe_store(r, Float32(1.0))
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=hs.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, stats, hs)
 
     var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     for r in range(n_rows):
         hi.unsafe_ptr().unsafe_store(r, UInt32(r))
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=hi.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, row_index, hi)
 
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
     var fold_off = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -104,10 +104,10 @@ def check_hist_depends_on_partition() raises:
         qb.unsafe_ptr().unsafe_store(f, UInt32(f))
         qc.unsafe_ptr().unsafe_store(f, UInt32(0))
         qd.unsafe_ptr().unsafe_store(f, UInt32(n_features))
-    ctx.enqueue_copy(dst_buf=folds, src_ptr=qa.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=fold_off, src_ptr=qb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_off, src_ptr=qc.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=grp_sz, src_ptr=qd.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, folds, qa)
+    upload_host_into[DType.uint32](ctx, fold_off, qb)
+    upload_host_into[DType.uint32](ctx, grp_off, qc)
+    upload_host_into[DType.uint32](ctx, grp_sz, qd)
 
     var max_leaves = 4
     var hist = ctx.enqueue_create_buffer[DType.float32](
@@ -125,21 +125,21 @@ def check_hist_depends_on_partition() raises:
     var hid = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     for i in range(max_leaves):
         hid.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids, src_ptr=hid.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, ids, hid)
 
     # --- case A: ONE leaf, all 1024 rows ---------------------------------
     for i in range(max_leaves):
         ho.unsafe_ptr().unsafe_store(i, UInt32(0))
         hz.unsafe_ptr().unsafe_store(i, UInt32(0))
     hz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hz)
     var zf = ctx.enqueue_create_host_buffer[DType.float32](
         max_leaves * stat_count * n_features
     )
     for i in range(max_leaves * stat_count * n_features):
         zf.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, hist, zf)
     ctx.synchronize()
     # DEVIATION 95: `fixed_scale` is read from DEVICE memory now. ONE
     # buffer serves BOTH cases below, and the hold is placed after CASE B
@@ -161,7 +161,7 @@ def check_hist_depends_on_partition() raises:
         grid_dim=(1, 1, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     var whole = out.unsafe_ptr().unsafe_load(0)
 
@@ -169,9 +169,9 @@ def check_hist_depends_on_partition() raises:
     hz.unsafe_ptr().unsafe_store(0, UInt32(512))
     ho.unsafe_ptr().unsafe_store(1, UInt32(512))
     hz.unsafe_ptr().unsafe_store(1, UInt32(512))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=ho.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=hz.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=hist, src_ptr=zf.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p_off, ho)
+    upload_host_into[DType.uint32](ctx, p_sz, hz)
+    upload_host_into[DType.float32](ctx, hist, zf)
     ctx.synchronize()
 
     ctx.enqueue_function[binary_hist_gather_kernel[False]](
@@ -184,7 +184,7 @@ def check_hist_depends_on_partition() raises:
         grid_dim=(1, 2, 1), block_dim=(BLOCK_SIZE, 1, 1),
     )
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=hist)
+    download_host_into[DType.float32](ctx, hist, out)
     ctx.synchronize()
     _ = scale_keep^
 
@@ -211,8 +211,27 @@ def check_hist_depends_on_partition() raises:
     print("  the histogram tracks the partition")
 
 
-def main() raises:
+def run_checks() raises:
     # STANDALONE DRIVER. `checks/probe_main.mojo` calls this first inside
     # "ONE FULL LEVEL (GPU, end to end)"; it owns its own `DeviceContext`.
     print("histogram vs partition (GPU):")
     check_hist_depends_on_partition()
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("hist_dump_check", cpu=False, gpu=True, serial="", run=run_cases)

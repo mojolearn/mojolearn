@@ -17,12 +17,13 @@ index range into contiguous tasks (`cluster/host/host_cells.mojo`: the
 caller's floating-point environment, DEVIATION 5900). An index's arithmetic is the serial walk's, in
 the same order, so the bits are the same at every thread count; it is not a
 numeric row."""
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
-from x_cluster.minibatch_cells import mb_center_update
+from x_cluster.minibatch_cells import mb_center_update, mb_wdraw_cell
 from x_cluster.optics_xi_cells import optics_xi_host
+from x_cluster.host.spectral_df64_host import cluster_qr_df64_host, discretize_df64_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -62,6 +63,7 @@ from x_cluster.bgmm_device import bgmm_host_step
 from x_cluster.post_bodies import (
     FM_MIN,
     FM_PROD,
+    FM_SQDIFF,
     FM_VAL,
     FM_WMIN,
     FOLD_CHUNK,
@@ -191,14 +193,14 @@ struct HostOps(ClusterOps):
         if n > len(self.f[slot]):
             raise Error("x_cluster host: get of " + String(n) + " values from a slot of " + String(len(self.f[slot])))
         var out = List[Float32](length=n, fill=Float32(0))
-        memcpy(dest=out.unsafe_ptr(), src=self.f[slot].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=self.f[slot].unsafe_ptr(), count=n)
         return out^
 
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
         if n > len(self.i[slot]):
             raise Error("x_cluster host: get_i of " + String(n) + " values from a slot of " + String(len(self.i[slot])))
         var out = List[Int32](length=n, fill=Int32(0))
-        memcpy(dest=out.unsafe_ptr(), src=self.i[slot].unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=self.i[slot].unsafe_ptr(), count=n)
         return out^
 
     def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
@@ -216,7 +218,7 @@ struct HostOps(ClusterOps):
     def set(mut self, slot: Int, v: List[Float32]) raises:
         if len(v) > len(self.f[slot]):
             raise Error("x_cluster host: set of " + String(len(v)) + " values into a slot of " + String(len(self.f[slot])))
-        memcpy(dest=self._fp(slot), src=v.unsafe_ptr(), count=len(v))
+        unsafe_memcpy(dest=self._fp(slot), src=v.unsafe_ptr(), count=len(v))
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         var pa = self._fp(a)
@@ -459,7 +461,7 @@ struct HostOps(ClusterOps):
         # centered matrix lives in a slot under IDN_BISECT_DEVICE_CENTER)
         var g = List[Float32](length=len(rows) * d, fill=Float32(0))
         if len(rows) * d > 0:
-            memcpy(dest=g.unsafe_ptr(), src=self.f[sub].unsafe_ptr(), count=len(rows) * d)
+            unsafe_memcpy(dest=g.unsafe_ptr(), src=self.f[sub].unsafe_ptr(), count=len(rows) * d)
         return self.kmeans(g, len(rows), d, k, max_iter, tol, seed, n_init, init, centers, labels)
 
     def shrink(mut self, slot: Int) raises:
@@ -584,6 +586,15 @@ struct HostOps(ClusterOps):
 
         host_cells(body, na * nb, 4 * d)
 
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        return discretize_df64_host(x, n, k, seed, max_svd_restarts, n_iter_max, n_iter)
+
+    def spectral_cluster_qr(mut self, x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
+        return cluster_qr_df64_host(x, n, k)
+
     def fast_device(self) -> Bool:
         return False
 
@@ -631,6 +642,9 @@ struct HostOps(ClusterOps):
 
     def alloc(mut self, n: Int) raises -> Int:
         return self.zeros(n)
+
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        return 1
 
     def agglo_on_device(self) -> Bool:
         return False
@@ -752,7 +766,7 @@ struct HostOps(ClusterOps):
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
         if len(v) > len(self.i[slot]):
             raise Error("x_cluster host: set_i of " + String(len(v)) + " values into a slot of " + String(len(self.i[slot])))
-        memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
+        unsafe_memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
 
     def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
         var pb = self._fp(b)
@@ -782,6 +796,26 @@ struct HostOps(ClusterOps):
         var pi = self._ip(idx)
         for t in range(m):
             pi[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(n)))
+
+    def mb_wdraw(mut self, idx: Int, m: Int, cum: Int, n: Int, state: UInt64) raises:
+        var pi = self._ip(idx)
+        var pc = self._ip(cum)
+
+        def body(t: Int) {imm pi, imm pc, imm n, imm state}:
+            mb_wdraw_cell(pi, pc, n, state, t)
+
+        # a draw is a binary search over n words in soft binary64
+        host_cells(body, m, 64)
+
+    def fold_sqdiff_at(
+        mut self, a: Int, a_off: Int, b: Int, b_off: Int, n: Int, dst: Int, off: Int, th: Int, tl: Int
+    ) raises:
+        var pa = self._fp(a) + a_off
+        var pb = self._fp(b) + b_off
+        var v = ff_fold_host(FM_SQDIFF, pa, pb, pa, n)
+        var po = self._fp(dst)
+        po[off] = v.hi
+        po[off + 1] = v.lo
 
     def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
         var pa = self._fp(a)
@@ -1130,20 +1164,6 @@ struct HostOps(ClusterOps):
             pi[t] = Int32(kpp_search_cell(mode, pc, pw, pth, ptl, m, v.hi, v.lo))
         _ = th^
         _ = tl^
-
-    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
-        var pc=self._fp(centers)
-        var pi=self._ip(ids)
-        var px=self._fp(x)
-        var po=self._fp(output)
-        for trial in range(nt):
-            var first=trial
-            for t in range(trial):
-                if pi[t]==pi[trial]:
-                    first=t
-                    break
-            for row in range(n):
-                po[trial*n+row]=po[first*n+row] if first!=trial else sq_dist_rows(pc,trial,px,row,d)
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
         var pc = self._fp(closest)

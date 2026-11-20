@@ -5,13 +5,15 @@
 from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: MOJOLEARN_IDN_NORM_FIXED_LANES arms and helpers (RUN #6 of
+# docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), reverse of the sweep 5d0bda260a.
 from transformer.experiments.norm_fixed_lanes import (
     IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total,
     norm_row_threads,
 )
 from std.time import perf_counter_ns
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -19,7 +21,19 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_arena import arena_active, arena_take
 # lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
 # build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
+# TOMBSTONE: MOJOLEARN_AFN_LM_BWD_FUSE / MOJOLEARN_AFN26_LM_BWD_FUSE (Apple FAST opt-in, never promoted) folded to False
+# here 2026-11-15 by lane/expdel2-24-neural; code recoverable at c15b52cbb4.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_BWD_FUSE.expdel2-24-neural.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
+# TOMBSTONE: MOJOLEARN_AFN_LMGRAD_ALL, MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_EPILOGUE and
+# MOJOLEARN_AFN_LM_BWD_NORM1_RESID (Apple FAST block-backward arms, never measured) deleted 2026-11-15 by
+# lane/expdel2-24-neural with autograd/kernels/transformer_afn.mojo; code recoverable at d2c4643c6b.
+# TOMBSTONE: MOJOLEARN_AFN26_LM_WGRAD_SPLIT, MOJOLEARN_AFN26_LM_BWD_EPILOGUE, MOJOLEARN_AFN26_LM_BWD_NORM1_RESID,
+# MOJOLEARN_AFN26_LM_WGRAD_CAP8 and MOJOLEARN_AFN26_LM_WGRAD_MIN128 (their AFN26 aliases and split-K knobs) deleted
+# with them; code recoverable at d2c4643c6b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 # lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
 # GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
 # (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
@@ -44,7 +58,6 @@ from autograd.kernels.checks.readback import _download
 # token (`STEP_GLUE_SHIPPED_ROWS`, NVIDIA only).
 from core.step_glue import (
     STEP_GLUE_SHIPPED_ROWS,
-    STEP_GLUE_TRIAL,
     step_glue_arm_from_env,
     step_glue_blocks,
     step_glue_rows_of,
@@ -57,7 +70,6 @@ from gemm.neural_backward import (
     gemm_backward_b_call,
 )
 from gemm.neural_dispatch import GemmWorkspace, identical_gemm
-from std.os import getenv
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
@@ -77,10 +89,8 @@ from checks.kernel_matrix import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
-    FUSED_SKIPPED_STICKY,
     device_first_nonfinite,
     attn_device_units,
     fused_attention_arm_estash_runs,
@@ -88,6 +98,7 @@ from transformer.impl.llama.fused_attention import (
     fused_backward_launch,
     fused_backward_launch_estash_ran,
     fused_backward_launch_estash_report,
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm
     ATTN_APPLE_ESTASH_RECOMPUTE,
     attention_estash_recompute_granted,
     fused_backward_launch_erecomp_report,
@@ -169,7 +180,7 @@ def _upload(
     step_count_sync()
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     step_count_h2d()
@@ -248,15 +259,17 @@ def _fill_ones[wait: Bool = True](
 
 #: The RMSNorm backward's `c` fold spelled product-then-add instead of one
 #: `fma` per term. INERT at `d_model == 1` and on exactly-representable rows.
-comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+# lane/expdel2-24-neural; code recoverable at 3d189418c5.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 """lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
 layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
 identity) runs only on a traced or materialized call; the production path
 hands `d_out` to the copy's readers instead (one `[M, d_model]` read and
-write fewer per layer). Same bytes read: no bit moves on any column.
-`-D MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF` restores the copy."""
+write fewer per layer). Same bytes read: no bit moves on any column."""
 
 
 comptime SAB_B01_DOT_UNFUSED = is_defined[
@@ -416,6 +429,10 @@ comptime BWD_ANY_SABOTAGE = (
 comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
+# TOMBSTONE: _AFN_WGRAD / _AFN_NORM1_RESID (MOJOLEARN_AFN_LM_WGRAD_SPLIT, MOJOLEARN_AFN_LM_BWD_NORM1_RESID) deleted
+# 2026-11-15 by lane/expdel2-24-neural; code recoverable at d2c4643c6b.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LMGRAD_ALL.patch
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
 
 #: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
@@ -427,12 +444,9 @@ comptime BWD_NORM_SPLIT_TRIAL = is_defined[
 comptime BWD_NORM_FUSED_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM_FUSED_TRIAL"
 ]()
-# Historical exact-size dispatch is an explicit B arm only. Its old board
-# thresholds are preserved to attribute the removal, never a default route.
-comptime BWD_NORM_LEGACY_SHAPE_RULE = (
-    is_defined["MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE (old exact-size dispatch B arm, no A/B recorded) deleted 2026-11-15
+# by lane/expdel2-24-neural; code recoverable at e7e660e1bc.
+# Restore: git apply experiments/removed/MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE.patch
 
 comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
@@ -2084,6 +2098,14 @@ def _afn_wgrad(
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 
 
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) BWD_GEMM_EPI, _route_a_epi_takes, _route_a_epi and LlamaBackwardStages.fanin_joined (the S9 and S32 dX fan-ins joined in the GEMM store) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
+
+
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_DX_CONCAT (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, samba-train-step 0.99) pack kernel, one-product launcher and switch deleted 2026-11-19 by lane/fx-verdicts3; code recoverable at 913fc44cfa.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_DX_CONCAT.patch
+
+
 # ===========================================================================
 # THE STAGES AND THE SCRATCH
 # ===========================================================================
@@ -2970,15 +2992,8 @@ def bwd_attention_dispatch(
     # `not need_eager` confines the latch to the trace-off trainer path; see
     # `eager_attention_forward`. Under `need_eager` this branch reduces to the
     # code that was here before, so the identity card is untouched.
-    if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
-            and ATTN_STICKY and not need_eager):
-        bst.attn_backward_status = FUSED_SKIPPED_STICKY
-        if not need_eager:
-            bwd_attention_eager_stages(
-                ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
-                trace, prefix,
-            )
-    elif choice != ATTN_PATH_EAGER:
+    # (Sweep 2026-11-15: the ATTN_STICKY latch arm (False on every build) removed.)
+    if choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
         # IDN_ATTN_BWD_SCAN_REUSE: the forward's q/k/v regime maxima when
@@ -3015,6 +3030,8 @@ def bwd_attention_dispatch(
                     fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
                 )
                 estash_done = True
+        # (Sweep 2026-11-15: the ATTN_APPLE_ESTASH_RECOMPUTE arm (False on every build) removed.)
+        # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): MOJOLEARN_ATTN_APPLE_ERECOMP opt-in arm back, default off.
         comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
             # lane/neural-apple2: a process denied the kept stashes
             # recomputes this layer's (fused_attention.mojo,
@@ -3114,7 +3131,7 @@ def _bwd_rms_norm_kernels[which: Int](
     # offered under the define.
     var dot_blocks = _grid(norm_row_threads(m))
     var dot_threads = BWD_TPB
-    comptime if (STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_ROWS) and not IDN_NORM_FIXED_LANES:
+    comptime if STEP_GLUE_SHIPPED_ROWS and not IDN_NORM_FIXED_LANES:
         var glue_rows = step_glue_rows_of(step_glue_arm_from_env())
         if glue_rows > 0:
             dot_blocks = step_glue_blocks(m, glue_rows)
@@ -3151,13 +3168,8 @@ def _bwd_rms_norm_kernels[which: Int](
         var use_fused = False
         comptime if BWD_NORM_FUSED_TRIAL:
             use_fused = True  # explicit experiment really forces the row owner
-        elif BWD_NORM_LEGACY_SHAPE_RULE:
-            # Historical B only: retained verbatim for neighbor/full-workload A/B.
-            comptime if TARGET_COLUMN == COLUMN_APPLE:
-                use_fused = m >= 8192 and dm >= 768
-            elif TARGET_COLUMN == COLUMN_NVIDIA:
-                use_fused = m >= 32768 and dm >= 768
-        elif not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        else:
+            # MOJOLEARN_IDN_ALL_OFF's term removed 2026-11-15 (lane/expdel2-24-neural, see the TOMBSTONE above).
             var units = attn_device_units(ctx)
             use_fused = units > 0 and dot_blocks >= 2 * units
         if use_fused:
@@ -3254,11 +3266,8 @@ def bwd_rms_norm[which: Int](
     _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 
-def _norm_dw_own_workspace() -> Bool:
-    """MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1 restores `identical_gemm`
-    (its own workspace, two waits) for the norm weight gradients: the A/B
-    against the routed form below."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS")) == "1"
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS (old path beside the default, no A/B recorded in four weeks: the run-time switch since 2026-10-20, a build define since 2026-11-15) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
+# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS.patch; record in docs/TOMBSTONES.md.
 
 
 def bwd_rms_norm_routed[which: Int](
@@ -3306,10 +3315,7 @@ def bwd_rms_norm_routed[which: Int](
         ):
             _bwd_rms_norm_dw_tick[which](ctx, pc)
             return
-    if _norm_dw_own_workspace():
-        identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
-    else:
-        workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
     _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 
@@ -3324,7 +3330,7 @@ def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType
     the one offending word read back to name NaN or infinity). Raises
     before any launch of the backward; returns when `d_out` is finite.
     The autograd decoder-layer entry calls it on traced and materialized
-    calls (and under -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF)."""
+    calls."""
     var bad = device_first_nonfinite(ctx, d_out, len(d_out))
     if bad >= 0:
         var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)

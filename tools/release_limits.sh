@@ -38,12 +38,6 @@ DO_RELEASE_DEADMAN_SECONDS=7200
 # 2400 for 0.8.19.
 RUNPOD_RELEASE_BUILD_CAP=6000
 
-# The build bound of the Hot Aisle AMD leg (tools/hotaisle_release_leg.sh).
-# Its default lease is 60 minutes, so the lease, not this cap, is what binds
-# it today. Raised from 2400 to RELEASE_BUILD_SECONDS_MAX with the leg's
-# bound following the lease (lane/build-parallelism, 2026-09-25).
-HOTAISLE_RELEASE_BUILD_CAP=6000
-
 # The CPU build route (tools/release_linux_cpu_box.sh, on the rented CPU box):
 # the MOJOLEARN_RELEASE_BUILD_SECONDS it hands each of the three sets. Raised
 # from 2400 (the bound the GPU legs ran past on a cold 0.8.19 rebuild) to the

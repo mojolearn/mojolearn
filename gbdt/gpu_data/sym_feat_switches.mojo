@@ -1,25 +1,21 @@
 """lane/apple-fast-sym-feat (2026-10-03): the A/B switches of the symmetric
 feature set outside histograms and leaf estimation (quantization, index
-build, held-out arm, predict, bootstrap seeds). Every switch is compiled
+build, predict). Every switch is compiled
 ONLY under `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`
 and is OFF by default, so IDENTICAL (and FAST on any other vendor) compiles
-main's code unchanged. `-D MOJOLEARN_SYM_FEAT_ALL` turns on every switch
-that composes. One module so `train.mojo`, `gls_borders_device.mojo`,
-`doc_parallel_boosting.mojo`, `resident_model.mojo` and `bootstrap.mojo`
+main's code unchanged. One module so `train.mojo`, `gls_borders_device.mojo`,
+`doc_parallel_boosting.mojo` and `resident_model.mojo`
 read the same flags without importing each other."""
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime SYM_FEAT_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 )
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed. Umbrella: all six.
-comptime SYM_FEAT_ALL = (
-    SYM_FEAT_FAST_APPLE and is_defined["MOJOLEARN_SYM_FEAT_ALL"]()
-)
+# TOMBSTONE: MOJOLEARN_SYM_FEAT_ALL (NEUTRAL: rab4-symfeat istella -1.3%, taxi -0.1%) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 54b6a264fc.
+# Restore: git apply experiments/removed/MOJOLEARN_SYM_FEAT_ALL.patch
 
 #: `-D MOJOLEARN_GBDT_INDEX_PACK_DEVICE`: the compressed index is written by
 #: ONE `pack_cindex_words_kernel` launch over every float feature (grid: row
@@ -31,8 +27,11 @@ comptime SYM_FEAT_ALL = (
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`,
 #: as main's binarize kernel (subnormal borders on Metal).
+# TOMBSTONE: MOJOLEARN_GBDT_INDEX_PACK_DEVICE (DELETE-EXPERIMENT, EXP:170 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at b763f5cf63.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_INDEX_PACK_DEVICE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]() or SYM_FEAT_ALL
+    is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]()
 )
 #: `-D MOJOLEARN_GBDT_QUANT_DEVICE`: the float columns go host to device
 #: ONCE, into one resident column-major matrix, before the border build;
@@ -48,30 +47,18 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`
 #: (as INDEX_PACK_DEVICE).
+# TOMBSTONE: MOJOLEARN_GBDT_QUANT_DEVICE (DELETE-EXPERIMENT, EXP:1303 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at 408e1ba726.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_QUANT_DEVICE.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]() or GBDT_INDEX_PACK_DEVICE
 )
-#: `-D MOJOLEARN_GBDT_EVAL_SKIP_EMPTY`: with NO eval set `train` still ran
-#: `_build_cindex_from_floats` over a one-row dummy (two uploads and a
-#: launch per bordered feature, a drain per eight) for a test arm nothing
-#: reads; the switch allocates the one-word index and skips the launches.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"]() or SYM_FEAT_ALL
-)
-#: `-D MOJOLEARN_GBDT_EVAL_FUSED`: the held-out arm's per-tree apply takes
-#: ONE packed upload (split records and leaf values in one pinned buffer)
-#: instead of six, and when no overfitting detector can stop the fit the
-#: per-tree loss is left on the device (`fv_all[iteration]`) and read back
-#: once after the last tree instead of a readback and a drain per tree.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_EVAL_FUSED"]() or SYM_FEAT_ALL
-)
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_SKIP_EMPTY (NEUTRAL) deleted 2026-11-15 by lane/expdel-05-trees; code recoverable at
+# 8815b00d75.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_SKIP_EMPTY.patch
+# TOMBSTONE: MOJOLEARN_GBDT_EVAL_FUSED (NEUTRAL: rab7-gbdtevalfused istella -0.3%) deleted 2026-11-15 by
+# lane/expdel-05-trees; code recoverable at 70801eb24c.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_EVAL_FUSED.patch
 #: `-D MOJOLEARN_GBDT_PREDICT_PACKED`: the resident predict quantizes with
 #: ONE `pack_cindex_words_kernel` launch (not one per feature) and applies
 #: the whole ensemble with ONE `compute_bins_and_add_all_kernel` launch (not
@@ -79,16 +66,13 @@ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
 #: source), never timed.
+# TOMBSTONE: MOJOLEARN_GBDT_PREDICT_PACKED (DELETE-EXPERIMENT, EXP:171 NEUTRAL; prerequisite of a never-run Apple FAST card, rule g) deleted 2026-11-15 by lane/expdel2-42-trees; code recoverable at da9c45fa84.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_PREDICT_PACKED.patch; record in docs/TOMBSTONES.md.
+# RESTORED 2026-11-15 by lane/restore-apple-fast-trees: opt-in arm back as it was, default off, Apple fast only; default path unchanged.
 comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]() or SYM_FEAT_ALL
+    is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]()
 )
-#: `-D MOJOLEARN_GBDT_BOOT_DEVICE`: the 65,536 bootstrap seeds are filled
-#: by one launch (`bootstrap_seed_fill_kernel`, splitmix64 of
-#: `base + (i + 1) * golden`, the host loop's exact values) instead of a
-#: host loop, a pinned upload and a drain.
-#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
-#: source), never timed.
-comptime GBDT_BOOT_DEVICE = SYM_FEAT_FAST_APPLE and (
-    is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]() or SYM_FEAT_ALL
-)
+# TOMBSTONE: MOJOLEARN_GBDT_BOOT_DEVICE (NEUTRAL: rab7-gbdtbootdevice istella -0.2%; its device seed fill is every
+# tier's default since cpu2-l6-bindings, so the switch read nothing) deleted 2026-11-15 by lane/expdel-05-trees; code
+# recoverable at 2f51f8b97d.
+# Restore: git apply experiments/removed/MOJOLEARN_GBDT_BOOT_DEVICE.patch

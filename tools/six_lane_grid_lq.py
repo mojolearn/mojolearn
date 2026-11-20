@@ -45,7 +45,10 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 import six_lane_timing as T  # noqa: E402  (reuse: PHASES, judge, _spread, VOTERS)
 import six_lane_grid_bb as BBW  # noqa: E402  (pip_arg: what the box runner installs for a line's races)
+from removed_defines import removed_defines, removed_in  # noqa: E402  (the guard modules' refused defines)
 
+#: the defines the build refuses (removed or promoted); an old plan's pack naming one is refused, never queued
+REFUSED_DEFINES = removed_defines(ROOT)
 BOX = {'nvidia': 'nv', 'amd': 'amd'}
 VENDOR_OF_BOX = {v: k for k, v in BOX.items()}
 PAIR_SECONDS = {'nvidia': 38.0, 'amd': 24.0}  # median scored-pair seconds (tools/six_lane_grid.py PAIR_SECONDS)
@@ -55,7 +58,7 @@ DEFINES_ENV = 'MOJOLEARN_BUILD_DEFINES'
 PREBUILT_TOKEN = 'PREBUILT='  # + store path on the box (tools/six_lane_grid_prebuild.py); render --prebuilt
 IDENTITY_COLUMN = {'nvidia': 'nvidia-native', 'amd': 'amd'}  # six_lane_compare_results REQUIRED_IDENTICAL
 DIGEST_CHARS = 16  # box_job.sh keeps the first 16 hex characters of the race digest
-QUALITY_REL = 1e-3  # relative: a bits-changing IDENTICAL arm legitimately moves a metric in the 6th digit; 0.1% is the material gate (CLAUDE.md "no material drop")
+QUALITY_REL = 1e-3  # relative: a bits-changing IDENTICAL arm legitimately moves a metric in the 6th digit; 0.1% is the material gate (AGENTS.md "no material drop")
 TIMING_SOURCE = ('median_ms of our arm: lq RACE ALGOS lines (tools/bench_board_algos.py) or lq CMD GRIDBB lines '
                  '(tools/bench_board.py cells); one run per arm')
 
@@ -132,23 +135,8 @@ def binding_builds(bindings):
 # mlp-train-step race with "numeric_mode='identical' needs .../_mojolearn_linalg.so, which is not built".
 NEURAL_RUNTIME_BINDINGS = {'mlp-train-step': ('_mojolearn_training', '_mojolearn_linalg')}
 
-# Runtime environment a define set needs: a binary built with an experimental numerical profile refuses to load
-# unless the process names that exact profile (python/mojolearn/_linalg_impl.py _EXPECTED_PROFILE_ENV; the profile
-# name is gemm/contract.mojo GEMM_NUMERICAL_PROFILE). Grid ge123e6f9 refused the MOJOLEARN_IDN_GEMM_LEAF=3 (all256)
-# gemm cells by that check. B lines (no defines) never get these.
-DEFINE_ENVS = {'MOJOLEARN_IDN_GEMM_LEAF=3': ('MOJOLEARN_EXPERIMENT_GEMM_PROFILE', 'mojolearn.identical.gemm.fp32.ni08-leaf256')}
-
-
-def define_envs(defines):
-    """[(name, value)] runtime environment the define list needs (DEFINE_ENVS), in define order."""
-    if 'MOJOLEARN_IDN_ALL_OFF' in {d.split('=', 1)[0] for d in defines or []}:
-        return []  # gemm/contract.mojo: _NEURAL_GEMM_PROFILE_ARM is off under IDN_ALL_OFF, the binary stays v1
-    out = []
-    for d in defines or []:
-        kv = DEFINE_ENVS.get(d)
-        if kv and kv not in out:
-            out.append(kv)
-    return out
+# (DEFINE_ENVS / define_envs, the runtime profile the all256 GEMM leaf binary needed, are gone: its define
+# MOJOLEARN_IDN_GEMM_LEAF was deleted 2026-11-15, docs/TOMBSTONES.md.)
 
 
 def workload_selected(wid, only_workloads):
@@ -312,6 +300,13 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=No
             lane, ds, note = r['lane'], r['dataset'], r['note']
             if only_lanes and lane not in only_lanes:
                 continue
+            # an old plan's pack may name a define the build now refuses (tools/removed_defines.py): refused here,
+            # never queued into the guard's refusal (lane m1-followups-misc)
+            gone = removed_in(packs[g['pack']]['defines'], REFUSED_DEFINES)
+            if gone:
+                refused.append(dict(configuration=cid, workload_id=wid, algorithm=algo,
+                                    reason='the pack names removed defines: ' + ', '.join(gone)))
+                continue
             job = jobs.setdefault(g['pack'], dict(pack=g['pack'], regime_rank=REGIME_RANK.get(regime, 9),
                                                   priority=c.get('priority') or 9, configs=set(), cells=[],
                                                   defines=list(packs[g['pack']]['defines']),
@@ -406,7 +401,7 @@ def render(plan_dir, vendor, branch='main', b_repeats=1, only_lanes=None, phase=
             if not cells:
                 continue
             tag = '%s.%s%s' % (run_id, job['pack'], '' if kind == 'race' else '.bb')
-            envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))] + define_envs(job['defines'])
+            envs = [(TAG_ENV, tag), (DEFINES_ENV, ','.join(job['defines']))]
             emit('A', tag, kind, cells, envs, sorted(job['bindings']),
                  pack=job['pack'], defines=job['defines'], regime=regime,
                  configurations=sorted({c['configuration'] for c in cells}))

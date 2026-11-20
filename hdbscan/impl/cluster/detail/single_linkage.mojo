@@ -47,7 +47,7 @@ condense sabotage, which is the kind of defect a green suite does not
 show.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -70,7 +70,6 @@ from hierarchy.impl.cluster.detail.dendrogram_device import (
 )
 from hdbscan.impl.detail.idn_switches import (
     IDN_HDB_MR_FUSED_GUARD,
-    IDN_HDB_SPARSE_MIN_ROWS,
 )
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
@@ -92,8 +91,13 @@ from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
 # Tried: the d <= 64 arm's Boruvka rounds driven on the device (fast_mr_mst_device.mojo); hdbscan taxi 434 -> 432.6 ms (-0.3%, noise).
 # Restore: git apply experiments/removed/MOJOLEARN_HDB_DEV_BORUVKA.patch; record in docs/TOMBSTONES.md.
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 comptime MR_GRAPH_AUTO = 0
@@ -191,17 +195,14 @@ def build_mr_linkage(
         )
     # DEVIATION 1620: past the dense bound (or when asked) the mutual
     # reachability MST is built without the m * m graph.
-    # fam2-cluster: the auto switch point is IDN_HDB_SPARSE_MIN_ROWS (a
-    # candidate arm; its default is PAIRWISE_MAX_ROWS, the old test).
-    comptime assert (
-        IDN_HDB_SPARSE_MIN_ROWS <= PAIRWISE_MAX_ROWS
-        and IDN_HDB_SPARSE_MIN_ROWS >= 2
-    ), "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS must be in 2..46340"
+    # TOMBSTONE: MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS (unmeasured threshold arm) deleted 2026-11-18 by lane/fx-env-dead;
+    # code recoverable at 0c65d61fed. The auto switch point is PAIRWISE_MAX_ROWS (its default), so the old
+    # `m > PAIRWISE_MAX_ROWS or not trace.enabled` term is always true here and went with it.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS.patch
     var use_sparse = graph == MR_GRAPH_SPARSE or (
         graph == MR_GRAPH_AUTO
-        and m > IDN_HDB_SPARSE_MIN_ROWS
+        and m > PAIRWISE_MAX_ROWS
         and not use_fast
-        and (m > PAIRWISE_MAX_ROWS or not trace.enabled)
     )
     if graph != MR_GRAPH_AUTO and graph != MR_GRAPH_DENSE and graph != MR_GRAPH_SPARSE:
         raise Error(
@@ -244,7 +245,7 @@ def build_mr_linkage(
     # Half one: the k-NN and the core distances, which ARE theirs.
     # MOJOLEARN_STAGE_TIMES=1 (a diagnostic, lane cluster-apple3): drain and
     # print the wall time of each part. Off, nothing changes.
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var st_t = Int(perf_counter_ns())
     # fg-tsne-dbscan H2 (IDN_HDB_MST_SEED_KNN): the k-NN one neighbour wider
     # on the sparse arm, so round 1 can resolve points from their lists
@@ -449,7 +450,7 @@ def build_mr_linkage(
         print("HDB_STAGE edges_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
     # `:107-117` Perform hierarchical labeling, on the device.
-    # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same three
+    # lane af-hdbscan2 (HDB_LINKAGE_DEVICE, the FAST Apple default): the same three
     # outputs with one lock-free union launch per level and no flag
     # readback (dendrogram_union.mojo).
     comptime if HDB_LINKAGE_DEVICE:

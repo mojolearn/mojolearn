@@ -92,6 +92,7 @@ import shlex
 import statistics
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -470,7 +471,10 @@ _add("meanshift", xlane="cluster", ours="MeanShift", task="cluster", block="cls"
 # scikit-learn's 'auto' builds a KD/ball tree: different neighbour searches. Both now run
 # algorithm='brute' (ours' own method; scikit-learn's brute NearestNeighbors). Results raced
 # before this change were wrong for this lane; apply extra scrutiny.
-_add("optics", xlane="cluster", ours="OPTICS", task="cluster", block="cls", sub={"X": SUB["quad"]},
+# NO INFER CELL (fb-harness, 2026-11-17): OPTICS has no predict (ours and scikit-learn: the labels come from the fit),
+# and the infer cell timed `predict(Xq) if hasattr(est, "predict") else None`, an empty call (0.012 ms on the
+# d95f805cce full board, flagged REGRESSION against 0.8.55's empty call). no_predict drops the cell from the plan.
+_add("optics", xlane="cluster", ours="OPTICS", task="cluster", block="cls", sub={"X": SUB["quad"]}, no_predict=True,
      sk="sklearn.cluster:OPTICS", params=dict(min_samples=10, xi=0.05, algorithm="brute"),
      sk_params=dict(min_samples=10, xi=0.05, algorithm="brute", n_jobs=-1),
      mism=["algorithm='brute' on both: ours always computes the full n x n distance matrix "
@@ -1011,7 +1015,11 @@ for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
     _add(_slug, xlane="prep", ours="SelectKBest", task="select", block=_blk, score_func=_fn,
          sub=({"X": SUB["mid"]} if _fn.startswith("mutual") else {}),
          sk="sklearn.feature_selection:SelectKBest", params=dict(k="half"),
-         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)])
+         notes=["k = d // 2; score_func = %s (ours: mojolearn.%s)" % (_fn, _fn)],
+         mism=(["mutual information noise seed: ours runs mojolearn.%s at its defaults inside SelectKBest.fit "
+                "(random_state=None, a fixed native seed; a wrapped callable is refused), scikit-learn "
+                "random_state=%d; both add the same 1e-10-scale jitter to continuous features" % (_fn, SEED)]
+               if _fn.startswith("mutual") else []))
 _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]}, quality="select-exact",
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
@@ -1693,6 +1701,12 @@ _add("resnet-block", xlane="cnn", ours=("BasicBlock", "ResNetBasicBlock"), kind=
 # say so, which also changes the store's settings key. Results raced before this change were
 # wrong for this lane; apply extra scrutiny.
 GCN_TORCH_KW = {"cached": True}
+#: lane fx-harness-honest (2026-11-18 audit, H1): the harness-clock stamp of the gcn and graphsage cells once both
+#: arms run cached=True (ours from 2026-11-18; torch always did). The lane notes, and so the store's settings key,
+#: changed with it: a stored torch cell is under the old key and waits for the opponent job ("(all arms)":
+#: tools/race_fairness.py calls such a pair BROKEN; tools/paper_compare.py lists the row as waiting for a re-score),
+#: and an own cell timed before (no stamp, the content compare per forward) is HARNESS-CLOCK, never FASTER.
+GRAPH_CACHED_CLOCK = "2026-11-18 graph layers cached=True, settings key changed (all arms)"
 _GRAPH_FAIR = ("both arms compute the full backward of forward + backward(dy): the weight and "
                "bias gradients and grad_x (torch: x.requires_grad); ours loads torch's seeded "
                "initial weights from the neural fixture, so its y is compared with torch's "
@@ -1701,16 +1715,47 @@ _add("gcn", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn", bloc
      torch=True, params=dict(out_channels=128, improved=False, add_self_loops=True, normalize=True,
                              bias=True),
      notes=["the kNN graph and its node features; PyG GCNConv (normalize=True, self loops)",
-            "the normalized graph is cached on both arms after the first (warm-up) call: ours' "
-            "GCNConv caches it per edge_index, torch's is PyG GCNConv(cached=True) (a torch-only "
-            "argument; ours has no `cached`)", _GRAPH_FAIR])
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): this note said "ours has no
+            # `cached`" after ours started passing cached=True (GRAPH_CACHED_CLOCK), so the store's
+            # settings key did not record a setting that changes ours' work. The note now states the
+            # setting both arms run with; the settings key changes with it (the work changed), so the
+            # stored torch cells wait for the opponent job's re-score (tools/paper_compare.py prints
+            # the list). The user default, cached=False, is timed on gcn-default-call.
+            "cached=True on both arms: the normalized graph is built in the first (warm-up) call "
+            "and reused with no check of edge_index: ours GCNConv(cached=True) (read back from the "
+            "layer), torch's PyG GCNConv(cached=True); a wheel whose GCNConv has no `cached` runs "
+            "its default (a content compare of edge_index per forward) and its record says so",
+            _GRAPH_FAIR])
 _add("graphsage", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer", task="sage",
      block="graph", torch=True,
      params=dict(out_channels=128, aggr="mean", normalize=False, root_weight=True, project=False,
                  bias=True),
      notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)",
-            "ours keeps its CSR view of edge_index between calls; PyG aggregates from edge_index "
-            "by scatter and needs no such view", _GRAPH_FAIR])
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): see gcn's note
+            "ours SAGEConv(cached=True) (read back from the layer): its CSR view of edge_index is "
+            "built in the first (warm-up) call and reused with no check of edge_index; PyG "
+            "SAGEConv aggregates from edge_index by scatter on every call and has no cache or "
+            "check; a wheel whose SAGEConv has no `cached` runs its default (a content compare of "
+            "edge_index per forward) and its record says so; the user default, cached=False, is "
+            "timed on graphsage-default-call", _GRAPH_FAIR])
+# lane fx-harness-honest (2026-11-18 audit, H1): the user's default call, GCNConv / SAGEConv with
+# cached=False (the default: the whole edge_index is compared with the cached graph's snapshot on every
+# forward, and the graph is rebuilt when it differs), is no longer timed by gcn / graphsage, which pass
+# cached=True to match PyG's cached GCNConv. These two rows keep it on the board: our arm only (no
+# opponent, never an opponent ratio: PyG GCNConv(cached=False) renormalizes the graph on every call,
+# which is different work again), the same graph, weights and dy as gcn / graphsage.
+_GRAPH_DEFAULT = ("the user's default call: cached=False, passed explicitly (read back from the "
+                  "layer); every forward compares the whole edge_index with the cached graph's "
+                  "snapshot; our arm only, never raced or used for an opponent ratio")
+_add("gcn-default-call", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn",
+     block="graph", own_only=True, graph_cached=False, params=dict(LANES["gcn"]["params"]),
+     notes=["the kNN graph and its node features of gcn; mojolearn GCNConv (normalize=True, "
+            "self loops)", _GRAPH_DEFAULT, _GRAPH_FAIR])
+_add("graphsage-default-call", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer",
+     task="sage", block="graph", own_only=True, graph_cached=False,
+     params=dict(LANES["graphsage"]["params"]),
+     notes=["the kNN graph and its node features of graphsage; mojolearn SAGEConv (mean "
+            "aggregation)", _GRAPH_DEFAULT, _GRAPH_FAIR])
 
 _add("embedding", xlane="embedding", ours=("Embedding",), kind="layer", task="embedding",
      block="tensor", datasets=("synthetic",), torch=True,
@@ -2003,6 +2048,10 @@ NOT_RACED = {
     "monte_carlo_integrate": "no pinned library has a plain seeded Monte Carlo integrator "
                              "(numpy and torch have none; scipy.integrate.qmc_quad is "
                              "quasi-Monte Carlo over a QMCEngine); no opponent",
+    "StepLR / ExponentialLR / OneCycleLR / ConstantLR / WarmupLinearLR / WarmupCosineLR":
+        "call overhead, internal check, not a race (Andrew, 2026-11-17): lr_at is one host call per "
+        "step with no GPU work; algos/internal-call-overhead-lr-at times ConstantLR.lr_at, our arm "
+        "only, against our own prior version on the same box",
 }
 
 
@@ -2032,6 +2081,8 @@ def opponents(vendor, lane):
     arms = []
     if s["kind"] == "extra":
         return _EXTRA.opponents(vendor, lane, s, TORCH_GPU[vendor])
+    if s.get("own_only"):                 # our arm only (gcn/graphsage-default-call): no opponent
+        return ()
     if s["kind"] in ("layer", "seqmodel", "cnnclf"):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
@@ -2080,7 +2131,7 @@ def has_infer(lane):
     if s["kind"] in ("layer", "ann", "svgp", "seqmodel", "cnnclf"):
         return True
     if s["kind"] in ("est", "dart"):
-        if s.get("fit_predict") or s["task"] in ("embed", "covariance", "select"):
+        if s.get("fit_predict") or s.get("no_predict") or s["task"] in ("embed", "covariance", "select"):
             return False
         return True
     # time series: the libraries fit and forecast in one call (statsforecast's
@@ -2107,7 +2158,7 @@ def infer_call(lane):
     if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg", "gmm"):
         return "predict(Xq)"
     if t == "cluster":
-        return "predict(Xq) or fit labels"
+        return "predict(Xq)"
     return "transform(Xq)"
 
 
@@ -2383,7 +2434,11 @@ def r2_keys(lane, dataset):
 
 def corpus_path(key):
     """Where a staged corpus key lives on this box (tools/dataset_store.sh puts
-    keys outside $HOME under ~/r2-stage/<key>)."""
+    keys outside $HOME under ~/r2-stage/<key>). In the release measurement
+    smoke's synthetic mode, generated text of the corpus's kind written on
+    the box (tools/smoke_inputs.py synthetic_path); nothing is staged."""
+    if os.environ.get("MOJOLEARN_BOARD_INPUTS", "datasets") == "synthetic":
+        return _tool("smoke_inputs").synthetic_path(key)
     home = os.path.expanduser("~")
     cands = []
     if os.environ.get("MOJOLEARN_CORPUS_ROOT"):
@@ -2712,14 +2767,22 @@ def prep(args):
     datasets = [d for d in args.datasets.split(",") if d]
     cap = int(args.max_rows) if args.max_rows else None
     os.makedirs(args.data, exist_ok=True)
+    # --inputs verify-fixtures (the release measurement smoke only): the tabular, series and zone blocks come from
+    # the identity verification's fixture `base` (tools/smoke_inputs.py prep_sources), never from the dataset files
+    inputs = getattr(args, "inputs", None) or "datasets"
+    SI = _tool("smoke_inputs")
+    fixtures = inputs == SI.FIXTURES_MODE
     if getattr(args, "full_tree_workload", False):
         raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
         return _aft_prepare_full_tree_blocks(args, lanes, datasets)
     base = {"rule": "tools/bench_board_algos.py prep", "smoke_max_rows": cap, "seed": SEED}
     need = set()
+    # --race-datasets (the release measurement smoke): exactly the datasets its races read, so a prep never builds
+    # a block from data its staging group did not stage (a taxi group's prep never reads the text corpora)
+    only = set(d for d in (getattr(args, "race_datasets", None) or "").split(",") if d) or None
     for l in lanes:
         for ds in datasets_of(l):
-            if ds in datasets or ds not in TAB:
+            if (ds in only) if only is not None else (ds in datasets or ds not in TAB):
                 need.add(("ts" if block_of(l) == "seqwin" else block_of(l), ds))
 
     def have(name):
@@ -2731,8 +2794,11 @@ def prep(args):
     mds = sorted({ds for b, ds in need if b in MORE_BLOCK and ds in TAB})
     if mlanes:
         more.prep(argparse.Namespace(data=args.data, lanes=",".join(mlanes), datasets=",".join(mds),
-                                     max_rows=args.max_rows))
+                                     max_rows=args.max_rows, inputs=inputs))
     harness = None
+
+    def tab_harness():
+        return SI.prep_sources(inputs, ctd._module("speed_gbdt_arm"), None)[0]
     for b, ds in sorted(need):
         t0 = time.perf_counter()
         name = None
@@ -2740,7 +2806,7 @@ def prep(args):
             name = "%s-%s" % ("raw" if b.startswith("raw") else b, ds)
             if have(name):
                 continue
-            harness = harness or ctd._module("speed_gbdt_arm")
+            harness = harness or tab_harness()
             xtr, xte, ytr, yte = _tab_loader(ctd, harness, ds, "cls" if b != "mc" else "mc")
             fi = ctd.stride_rows(xtr.shape[0], _cap(FIT_ROWS, cap, 256))
             ei = ctd.stride_rows(xte.shape[0], _cap(EVAL_ROWS, cap, 256))
@@ -2784,9 +2850,13 @@ def prep(args):
             name = "%s-%s" % (b, ds)
             if have(name):
                 continue
-            if ds == "taxi-hourly":
+            if ds == "taxi-hourly" and fixtures:
+                kind = {"tsi": "intermittent", "tsr": "garch"}.get(b, "seasonal")
+                Y = SI.series(kind, TS_SERIES, 60 * 24)
+                how = "verify fixture %s as %s series (tools/smoke_inputs.py series)" % (SI.FIXTURE, kind)
+            elif ds == "taxi-hourly":
                 harness = harness or ctd._module("speed_gbdt_arm")
-                raw = np.load(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz"))["x"]
+                raw = np.load(SI.loader_path(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz")))["x"]
                 C = taxi_hourly(raw)
                 vol = C.sum(axis=1)
                 if b == "tsi":
@@ -2828,9 +2898,14 @@ def prep(args):
                 arrays = {"X": X[~held], "y": y[~held], "Xq": X[held], "yq": y[held]}
                 how = "byte-bigram counts (mod %d) of %d-byte documents of enwik8 (0) and pile_github (1)" % (
                     TEXT_BINS, TEXT_DOC_BYTES)
+            elif fixtures:
+                M = SI.zone_matrix(max(cap * 20, 20000) if cap else 20000)
+                held = (np.arange(M.shape[0]) % 10) == 0
+                arrays = {"X": M[~held], "Xq": M[held]}
+                how = "verify fixture %s, positive part (tools/smoke_inputs.py zone_matrix)" % SI.FIXTURE
             else:
                 harness = harness or ctd._module("speed_gbdt_arm")
-                raw = np.load(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz"))["x"]
+                raw = np.load(SI.loader_path(os.path.join(harness.data_root(), "taxi", "taxi_speed.npz")))["x"]
                 if cap:
                     raw = raw[:max(cap * 20, 20000)]
                 M = taxi_zone_matrix(raw)
@@ -3035,8 +3110,12 @@ class Skipped(Exception):
 
 class Runner:
     def __init__(self, info, fit, outputs, infer=None, sync=None, record=None, model_for_hash=None,
-                 upload_inputs=None):
+                 upload_inputs=None, prepare=None):
         self.model_for_hash = model_for_hash
+        #: untimed, before every timed fit (lane fx-harness-honest, 2026-11-18): the harness's own per-call setup
+        #: that is not the product's work (a fresh copy of the caller's input the call then mutates); None = none.
+        #: A fit() called without it (reference runs) still works: the builder falls back to doing it itself.
+        self._prepare = prepare
         #: OUR arm only: the host arrays the timed call is handed, [(name, array)], for the
         #: separate upload probe (`_ours_upload_probe`). None = the builder declared none.
         self.upload_inputs = upload_inputs
@@ -3054,6 +3133,10 @@ class Runner:
     def sync_for_receipt(self):
         if self._sync:
             self._sync()
+
+    def prepare(self):
+        if self._prepare:
+            self._prepare()
 
     def fit(self):
         self._fit()
@@ -3505,12 +3588,14 @@ def _est_factory(lane, arm, D):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
                 raise Skipped("SKIPPED: not built yet (mojolearn has no %s)" % s["score_func"])
-            f = getattr(ml, s["score_func"])
-            if s["score_func"].startswith("mutual"):
-                import functools            # the same noise seed as scikit-learn's arm below
-                f = functools.partial(f, random_state=SEED)
-                f.__name__ = s["score_func"]
-            params["score_func"] = f
+            # 0.8.66 AMD measurement smoke (select-mutual-info, select-mutual-info-reg on istella and taxi:
+            # "SelectKBest score_func must be f_classif, ...; a user callable is not supported"): ours' fit runs
+            # its score functions natively and refuses any other callable, a functools.partial of its own
+            # mutual_info_* included (bindings/prep_encode_native_door.mojo _select_fit; no Python runs in fit).
+            # Ours gets the function itself and runs it at its defaults (random_state=None, the native fixed
+            # seed); scikit-learn's arm keeps random_state=SEED. The two noise draws differ (a 1e-10-scale
+            # jitter on continuous features), named in the lane's mism.
+            params["score_func"] = getattr(ml, s["score_func"])
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
         try:
@@ -3715,11 +3800,14 @@ def _build_est(lane, arm, D):
                     S["proba"] = None
         elif t == "gmm":
             S["pred"] = est.predict(Xq)
-        elif t == "cluster":
-            S["pred"] = est.predict(Xq) if hasattr(est, "predict") else None
+        elif t == "cluster":            # a lane without predict has no infer cell (no_predict: optics)
+            S["pred"] = est.predict(Xq)
         elif t == "radius":                 # neighbour count per query (ragged rows)
-            _dist, ind = est.radius_neighbors(Xq)
-            S["pred"] = [int(np.shape(r)[0]) for r in ind]
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): the per-query count (a Python loop over every query
+            # row) ran inside the clock on every arm; the clock now holds the returned neighbour lists and
+            # outputs() counts them after it
+            _dist, S["radius_ind"] = est.radius_neighbors(Xq)
+            S.pop("pred", None)
         elif t in ("labels",):
             S["pred"] = est.transform(labq)
         elif t == "multilabel":
@@ -3733,6 +3821,8 @@ def _build_est(lane, arm, D):
         est = S["est"]
         o = {}
         qk = quality_kind(lane)
+        if "radius_ind" in S:               # the radius lane's counts, after the clock (FAIRNESS FIX 2026-11-18)
+            S["pred"] = [int(np.shape(r)[0]) for r in S.pop("radius_ind")]
         if "pred" in S and S["pred"] is not None and qk not in ("cca",):
             o["pred"] = _arr(S["pred"], np.float64)
         if S.get("proba") is not None:
@@ -3809,6 +3899,8 @@ def _build_est(lane, arm, D):
         if arm in OURS_ARMS:
             info["input_copy"] = ("inside the timed call: ours takes host arrays and copies X to the "
                                   "device inside %s" % timed_op)
+    if t == "radius":
+        info["harness_clock"] = HARNESS_CLOCK
     runner = Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
                     record=_BP().arm_record(make()), model_for_hash=lambda: S.get("est"))
     if arm in OURS_ARMS:
@@ -3855,8 +3947,7 @@ def synthetic_images(n, n_classes=10, shape=(1, 28, 28), seed=SEED):
 # same order. The conductor now runs `ours-init` under OUR interpreter before the race: it builds
 # ours' estimator with the lane's parameters and runs the same steps its fit runs first (the
 # InitStream draws, then the schedule seed), writes those weights and every epoch's row order
-# (the Feistel permutation below, checked against ours' own `x_cnn_epoch_rows` entry when the
-# binding has it) to one npz, and every torch arm loads it. No export, no torch arm: the arm is
+# (the Feistel permutation below, sequence/mlp.mojo op_mlp_perm) to one npz, and every torch arm loads it. No export, no torch arm: the arm is
 # refused by name. Results raced before this change were wrong for this lane; apply extra
 # scrutiny.
 
@@ -4003,21 +4094,40 @@ def feistel_order(n, seed, epoch, shuffle=True):
     return x.astype(np.int64)
 
 
-def _ours_epoch_rows(n, seed, epoch):
-    """Ours' own epoch order (the x_cnn binding's host entry `x_cnn_epoch_rows`), or None
-    when this build has no such entry. Used only to check feistel_order."""
-    np = _np()
-    try:
-        from mojolearn import _expansion_cnn as xc
-        b = xc._Layer()._binding()
-        if not hasattr(b, "x_cnn_epoch_rows"):
-            return None
-        out = np.empty(int(n), dtype=np.int32)
-        b.x_cnn_epoch_rows(out.ctypes.data, [int(n), int(epoch), 1, int(seed) & 0xFFFFFFFF,
-                                             (int(seed) >> 32) & 0xFFFFFFFF])
-        return out.astype(np.int64)
-    except Exception:  # noqa: BLE001  (no binding on this interpreter: unchecked, said so)
-        return None
+# TOMBSTONE: _ours_epoch_rows (the check against the x_cnn_epoch_rows entry) deleted 2026-11-09 by lane/x8-cnn-on-executor
+# with that entry: CNNClassifier trains through Program.fit, whose order is OP_MLP_PERM, the same Feistel order
+# (sequence/mlp.mojo op_mlp_perm) feistel_order restates.
+
+
+class InitStream:
+    """The restatement of ours' seeded init stream (the native `XseqStream`,
+    bindings/xseq_native_common_door.mojo: the base binding's counter-based
+    `uniform_init_f32` draws plus a splitmix64 child seed), so an opponent
+    starts from the SAME initial weights. Moved here from the product's
+    `_buffer.InitStream` (lane pyout-runtime-boundary, 2026-11-11), which no
+    product path called once the fits drew natively."""
+
+    def __init__(self, seed=None):
+        if seed is None:
+            import secrets
+            seed = secrets.randbits(64)
+        self.seed = int(seed) & 0xFFFFFFFFFFFFFFFF
+        self.offset = 0
+
+    def fill_uniform(self, address, n, low, high):
+        from mojolearn._buffer import _native
+        n = int(n)
+        if n:
+            _native("uniform_init_f32")(int(address), n, float(low), float(high),
+                                        self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
+    def child_seed(self):
+        z = (self.seed + (self.offset + 1) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        self.offset += 1
+        return (z ^ (z >> 31)) >> 1
 
 
 def ours_initial_state(lane, D):
@@ -4027,14 +4137,13 @@ def ours_initial_state(lane, D):
     conv<i>.bias per conv block and head.weight / head.bias."""
     np = _np()
     import mojolearn as ml
-    from mojolearn._buffer import InitStream
     s = LANES[lane]
     make, what, params = _est_factory(lane, "ours", D)
     est = make()
     X, y = D["X"], np.asarray(D["y"])
     n = int(X.shape[0])
     if s["kind"] == "seqmodel":
-        # the recurrent fit's first steps (bindings/xseq_neural_native.mojo `_rnn_fit`), restated
+        # the recurrent fit's first steps (bindings/xseq_neural_native_door.mojo `_rnn_fit`), restated
         # in its order: every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order from the seeded
         # stream, then the schedule seed
         est.n_features_in_ = int(np.asarray(X).shape[2])
@@ -4064,14 +4173,7 @@ def ours_initial_state(lane, D):
         raise ValueError("ours-init: lane %s (kind %s) has no exported init" % (lane, s["kind"]))
     orders = np.stack([feistel_order(n, seed, e, shuffle) for e in range(epochs)]) if epochs else \
         np.zeros((0, n), np.int64)
-    check = "not shuffled" if not shuffle else "unchecked (no x_cnn_epoch_rows entry)"
-    if shuffle and epochs:
-        got = _ours_epoch_rows(n, seed, 0)
-        if got is not None:
-            if not np.array_equal(got, orders[0]):
-                raise RuntimeError("ours-init: feistel_order differs from ours' x_cnn_epoch_rows "
-                                   "(epoch 0); the torch twin cannot follow ours' batches")
-            check = "epoch 0 equal to ours' x_cnn_epoch_rows"
+    check = "not shuffled" if not shuffle else "unchecked (op_mlp_perm restated by feistel_order)"
     meta = {"lane": lane, "kind": s["kind"], "n_rows": n, "epochs": int(epochs),
             "shuffle": bool(shuffle), "order_seed": str(seed), "order_check": check,
             "estimator": what, "mojolearn": getattr(ml, "__version__", "?"),
@@ -4554,6 +4656,11 @@ def _build_ts(lane, arm, D):
         # autoarima: the search's maxiter, the lane's pinned maxiter; the env switch of the
         # 2026-10-04 quality A/B (below) restores 20 and the params record says so
         _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else int(p.get("maxiter", 1000))
+        # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): var's (n_obs, K) block was made contiguous INSIDE
+        # our clock on every call (a harness transpose copy; statsmodels' arm takes the view), and every forecast was
+        # cast to float64 inside it. The block is made once here, before the clock (a user holds data in the shape
+        # the call takes), and the forecast is held as returned and cast in outputs(). Cell: HARNESS_CLOCK_OURS.
+        Yvar = np.ascontiguousarray(Y32[:16].T) if lane == "var" else None
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -4581,7 +4688,7 @@ def _build_ts(lane, arm, D):
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result
                 S["est"] = cls(Y32, **_STL_KW(p)).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
-                S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(
+                S["est"] = cls(Yvar).fit(
                     maxlags=p["maxlags"], method=p["method"], ic=p["ic"], trend=p["trend"])
             elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
                 S["est"] = cls(**p).fit(Y32, horizon=h)
@@ -4598,9 +4705,14 @@ def _build_ts(lane, arm, D):
                     tr, se = e.trend_, e.seasonal_
                 else:
                     se = e.seasonal
-                S["fc"] = _arr(tr, np.float64) + _arr(se, np.float64)
+                # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): the float64 copies and the sum of trend and
+                # seasonal ran inside the clock; the clock now holds the returned components (`_held`, no copy)
+                # and outputs() sums them after it
+                S["fc_parts"] = (_held(tr), _held(se))
+                S.pop("fc", None)
             elif lane == "var":
-                S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
+                S["fc_raw"] = _held(e.forecast(Yvar[-e.k_ar:], h))     # rows of a C block: no copy
+                S.pop("fc", None)
             else:
                 if lane == "autoarima" or t == "garch":
                     fc = e.forecast(h)
@@ -4610,12 +4722,20 @@ def _build_ts(lane, arm, D):
                     fc = e.predict(h)
                     if isinstance(fc, dict):
                         fc = fc["mean"]
-                fc = _arr(fc, np.float64)
-                if fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
-                    fc = fc.T                  # (h, batch), cuML's layout
-                S["fc"] = fc
+                S["fc_raw"] = _held(fc)        # cast after the clock (outputs)
+                S.pop("fc", None)
 
         def outputs():
+            if "fc_raw" in S:               # the forecast's float64 cast and layout, after the clock (2026-11-18)
+                fc = _arr(S.pop("fc_raw"), np.float64)
+                if lane == "var":
+                    fc = fc.T
+                elif fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
+                    fc = fc.T                  # (h, batch), cuML's layout
+                S["fc"] = fc
+            if "fc_parts" in S:             # decompose: trend + seasonal, after the clock (FAIRNESS FIX 2026-11-18)
+                tr, se = S.pop("fc_parts")
+                S["fc"] = _arr(tr, np.float64) + _arr(se, np.float64)
             o = {"forecast": _arr(S["fc"], np.float64)} if t != "decompose" else {
                 "components": _arr(S["fc"], np.float64)}
             if t == "garch":
@@ -4642,6 +4762,7 @@ def _build_ts(lane, arm, D):
         def fit():                        # the forecast is inside the clock, as for every arm
             fit0()
             infer()
+        info["harness_clock"] = HARNESS_CLOCK_OURS     # decompose and the forecasts (lane fx-harness-honest)
         return Runner(info, fit, outputs, None, record=rec)
     lib = s["other"][arm]
     if lib == "statsforecast":
@@ -5706,11 +5827,15 @@ def _build_layer(lane, arm, D):
             # MOJOLEARN_SEQ_DEVICE_IO_OFF=1 (the before arm), keeps host arrays.
             import os as _os
             dev_io = (getattr(layer, "_device_io", False)
-                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1"
-                      and _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") != "1")
+                      and _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") != "1")
             if dev_io:
+                # board-smoke-3 (2026-11-16): the probe is the public `to_device` on one float,
+                # outside the clock; it refuses (RuntimeError) on a binding without the device
+                # entries, as the private `_dev_module` did before lane py-lm-neural deleted it
+                # (the harness read a product internal; a board probe uses the public surface).
                 try:
-                    layer._dev_module()
+                    _probe = layer.to_device(np.zeros(1, np.float32))
+                    del _probe
                 except RuntimeError:
                     dev_io = False
 
@@ -5734,8 +5859,24 @@ def _build_layer(lane, arm, D):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
         try:
-            if "random_state" in inspect.signature(cls).parameters:
+            _sig = inspect.signature(cls).parameters
+            if "random_state" in _sig:
                 kw["random_state"] = SEED
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-rows): the torch GCN arm is PyG
+            # GCNConv(cached=True) (reuses its graph with no check of edge_index) and PyG
+            # SAGEConv reads edge_index by scatter with no cache check at all, while ours
+            # compared the whole live edge_index (16 E bytes) against a snapshot on every
+            # forward: ours did more work per call. Ours now takes the same setting,
+            # cached=True (identity key, no compare), when its constructor has it; an older
+            # wheel without `cached` runs as before (its record states its kw).
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest): the lane notes said "ours
+            # has no `cached`", so the store's settings key missed a setting that changes ours'
+            # work, and no row timed the user default. The notes now state cached=True (the key
+            # changes), the cell carries GRAPH_CACHED_CLOCK (tools/paper_compare.py HARNESS-CLOCK
+            # against a cell timed before), the layer's effective `cached` is read back below,
+            # and gcn/graphsage-default-call pass the default, cached=False, explicitly.
+            if s["task"] in ("gcn", "sage") and "cached" in _sig:
+                kw["cached"] = bool(s.get("graph_cached", True))
         except (TypeError, ValueError):
             pass
         probe_light = s["task"] == "moe" and _params_probe_only()
@@ -5751,6 +5892,14 @@ def _build_layer(lane, arm, D):
             info["constructed"] = "parameter probe: the lane's arguments at D=F=8; the record holds the real ones"
         else:
             layer = cls(**kw)
+        if "cached" in kw:
+            # the effective setting, read back from the layer (lane fx-harness-honest): the record carries it
+            got = getattr(layer, "cached", None)
+            if got is not None and bool(got) != kw["cached"]:
+                raise RuntimeError("mojolearn.%s(cached=%r) reads back cached=%r" % (name, kw["cached"], got))
+            info["graph_cached"] = {"asked": kw["cached"], "read_back": None if got is None else bool(got)}
+            if kw["cached"] and not s.get("own_only"):
+                info["harness_clock"] = GRAPH_CACHED_CLOCK
         _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
@@ -5811,8 +5960,7 @@ def _build_layer(lane, arm, D):
         elif getattr(layer, "_seq_device_io", False):
             # lane neural-io-2: a sequence-binding layer (MoEBlock) takes x as a resident
             # SequenceDeviceTensor and returns y as one (read back in outputs(), outside the
-            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1, or a binding built with
-            # -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF, keeps the host-array entry (the before arm).
+            # clock). MOJOLEARN_SEQ_DEVICE_IO_OFF=1 keeps the host-array entry (the before arm).
             to_dev = layer.to_device
             x = to_dev(x)
             if getattr(x, "_device_tensor", False):
@@ -5935,6 +6083,8 @@ def _build_layer(lane, arm, D):
             mod(x, *extra)
         _torch_sync(torch, dev)
         info["gcn_cache"] = "PyG GCNConv(cached=True), filled by one untimed forward before the clock"
+    if s["task"] in ("gcn", "sage"):
+        info["harness_clock"] = GRAPH_CACHED_CLOCK     # the settings key changed with the lane notes (2026-11-18)
     run = torch.compile(mod) if mode == "compile" else mod
     dt = torch.bfloat16 if prec == "bf16" else None
     info["config"] = "%s on %s, %s, %s%s" % (type(mod).__name__, dev, mode, prec,
@@ -5983,6 +6133,11 @@ def _build_layer(lane, arm, D):
                    [("extra%d" % i, a.numpy()) for i, a in enumerate(extra_cpu)] + sorted(state.items())))
     if s["task"] in ("gcn", "sage"):
         rec["in_channels"] = x_cpu.shape[1]
+    if s["task"] == "gcn":
+        # the effective PyG setting, read back from the module (lane fx-harness-honest, 2026-11-18): compared
+        # with ours' cached (tools/bench_board_params.py); PyG SAGEConv has none (a reviewed absent field there)
+        conv = getattr(mod, "conv", mod)
+        rec["cached"] = bool(getattr(conv, "cached", GCN_TORCH_KW.get("cached")))
     return Runner(info, fit, outputs, infer, record=rec)
 
 
@@ -6114,8 +6269,18 @@ def _build_optim(lane, arm, D):
             else:
                 info["resident_path"] = "unavailable on this build: host arrays every step"
 
+        # FAIRNESS FIX (2026-11-18 audit, lane fx-harness-honest; found by lane fx-rnn-cnn-fit): the fresh host copy
+        # of p0 (64 MB, the harness's, so that every call starts from the same parameter; the step mutates it in
+        # place) was made INSIDE our clock; torch's arm has no host copy (p0.to(dev) is its take of the caller's
+        # parameter, as ours' params_to_device / the host step is). The copy is now made before the clock
+        # (Runner.prepare); what the product does with the caller's array stays inside. The device-I/O optimizers
+        # (to_dev: the upload is the product's take) are unchanged. The cell carries HARNESS_CLOCK_INPUTS_OURS.
+        def prepare():
+            if not to_dev:
+                S["p_next"] = p0.copy()
+
         def fit():
-            p = to_dev(p0) if to_dev else p0.copy()
+            p = to_dev(p0) if to_dev else (S.pop("p_next", None) if S.get("p_next") is not None else p0.copy())
             opt = cls([p], **hyper)
             if resident:
                 opt.params_to_device()
@@ -6145,7 +6310,9 @@ def _build_optim(lane, arm, D):
         rec = dict(hyper, __library__="mojolearn", __implementation__=cls, input_arrays=input_arrays)
         for flag, value in semantics.items():
             rec.setdefault(flag, value)
-        return _with_upload(Runner(info, fit, outputs, record=rec),
+        if not to_dev:
+            info["harness_clock"] = HARNESS_CLOCK_INPUTS_OURS
+        return _with_upload(Runner(info, fit, outputs, record=rec, prepare=prepare),
                             [("p0", p0)] + [("grad%d" % i, gr) for i, gr in enumerate(grads)])
     import torch
     dev = _torch_device(torch)
@@ -6214,7 +6381,12 @@ def _build_optim(lane, arm, D):
     # the host (the same upload as before) and the optimizer back to its constructed state in
     # place (_opt_state_reset), then runs the 10 steps. The eager arm does the same per-round
     # work. Results raced before this change were wrong for this lane; apply extra scrutiny.
-    p = torch.nn.Parameter(p0_host.to(dev))
+    # FAIRNESS FIX (2026-10-13 audit), repaired 2026-10-29: the untimed CPU
+    # quality reference also uses this runner. A no-op .to("cpu") aliases
+    # p0_host and its NumPy reset baseline, so warm-up used to mutate the
+    # initial parameter and the next reference fit accumulated another update.
+    # Own the parameter storage on every device; keep the reset bytes intact.
+    p = torch.nn.Parameter(p0_host.to(dev, copy=True))
     # preflight-smoke (2026-10-14): ours' fixed math flags pinned explicitly where this torch class takes them
     # (compared through the read-back), and torch's capturable/differentiable modes explicitly off (no captured
     # graph, no autograd through the step; recorded as implementation-only exceptions).
@@ -6546,17 +6718,19 @@ _MS_TASKS = {"grid-search": "GridSearchCV", "random-search": "RandomizedSearchCV
 
 
 def _ms_run(t, call, X, y, p, lib):
-    """One model_selection call with the lane's explicit parameters -> its outputs (numpy, float64).
-    `lib` 'ours' or 'sklearn' resolves the estimator; scikit-learn adds n_jobs=-1 where the call takes it."""
-    np = _np()
+    """One model_selection call with the lane's explicit parameters -> what it returned, held as it is (the TIMED
+    part; `_ms_outputs` reduces it after the clock). `lib` 'ours' or 'sklearn' resolves the estimator;
+    scikit-learn adds n_jobs=-1 where the call takes it.
+    FAIRNESS FIX (2026-11-18 audit, lane fx-harness): this function used to reduce inside the clock: train-test-split
+    copied every output with np.array(copy=True) and cast it to float64 (`_arr`) and took the column means there,
+    2.6 GB of harness first-touch memory per istella call against 880 MB of product output, on both arms; cv-predict
+    cast its predictions. The clock now holds the call and its returned arrays only (`_held`: no copy); the copies,
+    casts and means run in `_ms_outputs`, outside every clock. Cells timed before carry no harness_clock and
+    tools/paper_compare.py shows such a row as HARNESS-CLOCK, never as FASTER."""
     jobs = {"n_jobs": -1} if lib == "sklearn" else {}
     if t == "split":
-        Xa, Xb, ya, yb = call(X, y, test_size=p["test_size"], random_state=p["random_state"],
-                              shuffle=p["shuffle"])
-        Xa, Xb = _arr(Xa, np.float64), _arr(Xb, np.float64)
-        return {"sizes": np.array([Xa.shape[0], Xb.shape[0]], dtype=np.float64),
-                "train_mean": Xa.mean(0), "test_mean": Xb.mean(0),
-                "ymeans": np.array([_arr(ya, np.float64).mean(), _arr(yb, np.float64).mean()])}
+        return tuple(_held(a) for a in call(X, y, test_size=p["test_size"], random_state=p["random_state"],
+                                            shuffle=p["shuffle"]))
     est = _resolve(p["estimator"], lib)
     if t in ("grid-search", "random-search"):
         kw = dict(cv=p["cv"], scoring=p["scoring"], refit=p["refit"], **jobs)
@@ -6566,31 +6740,104 @@ def _ms_run(t, call, X, y, p, lib):
             search = call(est, param_distributions=p["param_distributions"], n_iter=p["n_iter"],
                           random_state=p["random_state"], **kw)
         search.fit(X, y)
+        return search
+    if t == "cv-validate":
+        return call(est, X, y, cv=p["cv"], scoring=p["scoring"], return_train_score=p["return_train_score"], **jobs)
+    if t == "cv-predict":
+        return _held(call(est, X, y, cv=p["cv"], method=p["method"], **jobs))
+    if t == "learning-curve":
+        return tuple(_held(a) for a in call(est, X, y, train_sizes=p["train_sizes"], cv=p["cv"],
+                                            scoring=p["scoring"], shuffle=p["shuffle"], **jobs)[:3])
+    if t == "validation-curve":
+        return tuple(_held(a) for a in call(est, X, y, param_name=p["param_name"], param_range=p["param_range"],
+                                            cv=p["cv"], scoring=p["scoring"], **jobs))
+    if t == "perm-test-score":
+        return call(est, X, y, cv=p["cv"], n_permutations=p["n_permutations"], scoring=p["scoring"],
+                    random_state=p["random_state"], **jobs)
+    raise ValueError("unknown model_selection task %r" % (t,))
+
+
+def _ms_outputs(t, r):
+    """`_ms_run`'s held result -> the lane's outputs (numpy, float64), after the clock (the reductions that ran inside
+    it before the 2026-11-18 fairness fix, unchanged)."""
+    np = _np()
+    if t == "split":
+        Xa, Xb, ya, yb = r
+        Xa, Xb = _arr(Xa, np.float64), _arr(Xb, np.float64)
+        return {"sizes": np.array([Xa.shape[0], Xb.shape[0]], dtype=np.float64),
+                "train_mean": Xa.mean(0), "test_mean": Xb.mean(0),
+                "ymeans": np.array([_arr(ya, np.float64).mean(), _arr(yb, np.float64).mean()])}
+    if t in ("grid-search", "random-search"):
+        search = r
         cvr = search.cv_results_
         alphas = [float(a["alpha"]) for a in cvr["params"]]
         return {"best_score": np.array([float(search.best_score_)]),
                 "best_alpha": np.array([float(search.best_params_["alpha"])]),
                 "alphas": np.array(alphas), "mean_test": _arr(cvr["mean_test_score"], np.float64)}
     if t == "cv-validate":
-        r = call(est, X, y, cv=p["cv"], scoring=p["scoring"], return_train_score=p["return_train_score"], **jobs)
         return {"test": _arr(r["test_score"], np.float64), "train": _arr(r["train_score"], np.float64)}
     if t == "cv-predict":
-        return {"pred": _arr(call(est, X, y, cv=p["cv"], method=p["method"], **jobs), np.float64)}
+        return {"pred": _arr(r, np.float64)}
     if t == "learning-curve":
-        sizes, train, test = call(est, X, y, train_sizes=p["train_sizes"], cv=p["cv"], scoring=p["scoring"],
-                                  shuffle=p["shuffle"], **jobs)[:3]
+        sizes, train, test = r
         return {"sizes": _arr(sizes, np.float64), "mean_test": _arr(test, np.float64).mean(1),
                 "mean_train": _arr(train, np.float64).mean(1)}
     if t == "validation-curve":
-        train, test = call(est, X, y, param_name=p["param_name"], param_range=p["param_range"], cv=p["cv"],
-                           scoring=p["scoring"], **jobs)
+        train, test = r
         return {"mean_test": _arr(test, np.float64).mean(1), "mean_train": _arr(train, np.float64).mean(1)}
     if t == "perm-test-score":
-        score, perm, pv = call(est, X, y, cv=p["cv"], n_permutations=p["n_permutations"], scoring=p["scoring"],
-                               random_state=p["random_state"], **jobs)
+        score, perm, pv = r
         return {"score": np.array([float(score)]), "p": np.array([float(pv)]),
                 "perm_mean": np.array([float(_arr(perm, np.float64).mean())])}
     raise ValueError("unknown model_selection task %r" % (t,))
+
+
+#: lane fx-harness (2026-11-18): the harness-clock revision a lane's cells carry when its timed call no longer holds
+#: harness copies, casts or quality reductions (cell field harness_clock; tools/paper_compare.py HARNESS-CLOCK)
+HARNESS_CLOCK = "2026-11-18 outputs reduced after the clock (all arms)"
+#: the same for a lane where only OUR arm's clock held the harness work (the opponents' clocks are unchanged), so
+#: tools/race_fairness.py does not call a stored opponent cell of that lane unfair
+HARNESS_CLOCK_OURS = "2026-11-18 outputs reduced after the clock (our arm)"
+#: lane fx-harness-honest (2026-11-18): our arm's harness copies of its INPUTS (a fresh parameter copy, a transposed
+#: block) moved before the clock; the opponents' clocks never held them
+HARNESS_CLOCK_INPUTS_OURS = "2026-11-18 harness input copies made before the clock (our arm)"
+
+
+def _held(a):
+    """A returned array as the product handed it, consumed inside the clock without a harness copy: a NumPy array as
+    it is; an object exposing __array_interface__ (a host array of another library) viewed by np.asarray, which
+    copies nothing; anything else (device arrays, tuples, scalars) as it is. The copies, casts and reductions the
+    quality needs run after the clock (FAIRNESS FIX 2026-11-18 audit)."""
+    np = _np()
+    if isinstance(a, np.ndarray):
+        return a
+    if hasattr(a, "__array_interface__"):
+        return np.asarray(a)
+    # lane fx-harness-honest (2026-11-18 audit H3): every lane that holds results here hands our arm host arrays,
+    # and each such call returns host memory its native call has already waited for (mojolearn.Array / NumPy; the
+    # lane-by-lane table is in ~/mojolearn-evidence/briefs-20261118/fx-harness-honest-RESULT.md). The only lazy
+    # objects mojolearn returns are its device tensors (`_device_tensor`: x_cnn DeviceTensor, sequence
+    # SequenceDeviceTensor) and none of these lanes is given one; a generator would run its work on iteration.
+    # Either would finish after the clock, so it refuses by name here rather than time a part of the work.
+    if getattr(a, "_device_tensor", False) or isinstance(a, _GENERATOR_TYPES):
+        raise RuntimeError("HARNESS: a held result is lazy (%s): its work would finish after the clock; the lane "
+                           "must time the call that makes it real" % type(a).__name__)
+    return a
+
+
+#: the lazy result kinds `_held` refuses (lane fx-harness-honest, H3)
+_GENERATOR_TYPES = (types.GeneratorType, types.AsyncGeneratorType)
+
+
+def _reduced_after(S, reduce):
+    """An outputs() for a runner whose fit() holds the product's raw results in S["raw"]: reduces them once,
+    outside every clock, keeps the outputs in S["o"] and drops the raw arrays (so the next call's clock does not
+    free them)."""
+    def outputs():
+        if "raw" in S:
+            S["o"] = reduce(S.pop("raw"))
+        return S["o"]
+    return outputs
 
 
 def _ms_record(p):
@@ -6632,13 +6879,16 @@ def _build_fn(lane, arm, D):
             elif t == "permutation":
                 r = fn(y, yq, **kw)
                 S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            # FAIRNESS FIX (2026-11-18 audit, lane fx-harness): resample, resample-indices and the model_selection
+            # tasks copied (np.array copy=True), cast and averaged their outputs INSIDE the clock (resample/istella:
+            # 2.6 GB of harness first-touch memory per call). The clock now holds the call and its returned arrays
+            # (`_held`, no copy); `_fn_outputs` reduces them after the clock.
             elif t == "resample-indices":
-                S["o"] = {"idx": _arr(fn(X.shape[0], n_samples=X.shape[0], **kw), np.int64)}
+                S["raw"] = _held(fn(X.shape[0], n_samples=X.shape[0], **kw))
             elif t == "resample":
-                Xr, yr = fn(X, y, **kw)
-                S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+                S["raw"] = tuple(_held(a) for a in fn(X, y, **kw))
             elif t in _MS_TASKS:
-                S["o"] = _ms_run(t, fn, X, y, p, "ours")
+                S["raw"] = _ms_run(t, fn, X, y, p, "ours")
             else:                           # cross_val_score clones the estimator per fold
                 est = _resolve(p["estimator"], "ours")
                 S["o"] = {"scores": _arr(fn(est, X, y, cv=p["cv"], scoring=p["scoring"]),
@@ -6648,7 +6898,9 @@ def _build_fn(lane, arm, D):
         if t == "resample-indices":
             rec.update(n=int(X.shape[0]), n_samples=int(X.shape[0]))
         rec["__library__"] = "mojolearn"
-        return Runner(info, fit, lambda: S["o"], record=rec)
+        if t in _FN_HELD:
+            info["harness_clock"] = HARNESS_CLOCK
+        return Runner(info, fit, _reduced_after(S, lambda r: _fn_outputs(t, r)), record=rec)
     lib = s["other"][arm]
     info = _tool("bench_board_more")._sk_info()
     info.update(library=lib, device="cpu", pre_clock_fit=False, input_home="host")
@@ -6699,7 +6951,7 @@ def _build_fn(lane, arm, D):
             _MS_TASKS[t], ", ".join("%s=%r" % kv for kv in sorted(rec.items())))
 
         def fit():
-            S["o"] = _ms_run(t, call, X, y, p, "sklearn")
+            S["raw"] = _ms_run(t, call, X, y, p, "sklearn")    # reduced after the clock (FAIRNESS FIX 2026-11-18)
     else:
         if t == "resample-indices":
             from sklearn.utils import resample as skresample
@@ -6709,17 +6961,18 @@ def _build_fn(lane, arm, D):
             rows = np.arange(n_rows)
 
             def fit():
-                S["o"] = {"idx": np.asarray(skresample(rows, replace=p["replace"], n_samples=n_rows,
-                                                       random_state=p["random_state"]), dtype=np.int64)}
+                # FAIRNESS FIX (2026-11-18 audit): the int64 cast ran inside the clock; now after it (_fn_outputs)
+                S["raw"] = _held(skresample(rows, replace=p["replace"], n_samples=n_rows,
+                                            random_state=p["random_state"]))
             rec = dict(p, n=n_rows, n_samples=n_rows, __implementation__=skresample)
         elif t == "resample":
             from sklearn.utils import resample as skresample
             info["config"] = "sklearn.utils.resample(X, y, %s)" % p
 
             def fit():
-                Xr, yr = skresample(X, y, **p)
-                S["o"] = {"xmean": np.asarray(Xr, dtype=np.float64).mean(0),
-                          "ymean": np.array([np.asarray(yr, dtype=np.float64).mean()])}
+                # FAIRNESS FIX (2026-11-18 audit): the float64 cast and the means ran inside the clock (1.76 GB of
+                # harness memory per istella call); now after it (_fn_outputs), as on our arm
+                S["raw"] = tuple(_held(a) for a in skresample(X, y, **p))
             rec = dict(p, __implementation__=skresample)
         else:
             from sklearn.model_selection import cross_val_score as skcv
@@ -6734,7 +6987,25 @@ def _build_fn(lane, arm, D):
     # measure-coverage (2026-10-24): every opponent record above names the library function its fit()
     # calls (__implementation__); without it the preflight's real-implementation check refused each pair
     rec["__library__"] = lib
-    return Runner(info, fit, lambda: S["o"], record=rec)
+    if t in _FN_HELD:
+        info["harness_clock"] = HARNESS_CLOCK
+    return Runner(info, fit, _reduced_after(S, lambda r: _fn_outputs(t, r)), record=rec)
+
+
+#: the function-call tasks whose fit() holds raw results (S["raw"]) reduced by _fn_outputs after the clock
+_FN_HELD = frozenset(("resample", "resample-indices")) | frozenset(_MS_TASKS)
+
+
+def _fn_outputs(t, r):
+    """The function-call lanes' outputs from the results their fit() held (FAIRNESS FIX 2026-11-18 audit): the same
+    reductions that ran inside the clock before, now after it."""
+    np = _np()
+    if t == "resample":
+        Xr, yr = r
+        return {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+    if t == "resample-indices":
+        return {"idx": _arr(r, np.int64)}
+    return _ms_outputs(t, r)
 
 
 # ---- ALS ------------------------------------------------------------------
@@ -7490,6 +7761,12 @@ def worker_ready(args):
         return None, None, None, None, None, {"event": "error", "stage": "ready", "error": repr(exc)}
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
+        # lane fx-harness (2026-11-18): the NUMA node(s) this worker runs and allocates on, and what the conductor
+        # asked (tools/numa_place.py); the cell carries it as worker_numa
+        try:
+            runner.info["worker_numa"] = _tool("numa_place").worker_node()
+        except Exception as exc:  # noqa: BLE001 -- a record, never a reason to fail the race
+            runner.info["worker_numa"] = {"error": str(exc)[:200]}
         if ab_config is not None:
             runner.info["neural_ab_config"] = ab_config
             runner.info["neural_ab_lane_config"] = lane_config(args.lane)
@@ -7520,6 +7797,11 @@ def worker(args):
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?", arm=args.arm)
     last = None
+    # SMALL ROWS (Andrew, 2026-11-15; tools/bench_board_small_rows.py): our FIRST SCORED fit and infer calls'
+    # times decide how many consecutive calls the one scored run makes (20 under 10 ms, else 1); the warmup
+    # does not decide (it carries start-up and kernel compilation)
+    small = _tool("bench_board_small_rows")
+    numa = _tool("numa_place")
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -7542,14 +7824,22 @@ def worker(args):
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): torch.compile counters read around each
                 # scored call, outside its clock (tools/bench_board_compile_guard.py)
                 c0 = COMPILE.read()
+                # HOST USAGE (lane fx-harness, 2026-11-18): getrusage just outside each scored call's clock (system
+                # time, user time, minor and major faults); a call whose system time is above half its wall is a
+                # host stall (tools/numa_place.py summarize; tools/paper_compare.py HOST-STALL)
+                runner.prepare()                    # untimed harness setup (Runner.prepare)
+                u0 = numa.usage()
                 t0 = time.perf_counter()
                 runner.fit()
                 ms = (time.perf_counter() - t0) * 1000.0
+                u1 = numa.usage()
                 c1 = COMPILE.read()
                 t1 = time.perf_counter()
                 did = runner.infer()
                 ims = (time.perf_counter() - t1) * 1000.0 if did else None
+                u2 = numa.usage()
                 c2 = COMPILE.read()
+                fit_use, inf_use = [numa.delta(u0, u1, ms)], [numa.delta(u1, u2, ims) if did else None]
                 compile_rec = {"recompiles_in_timed_run": COMPILE.compiles(c0, c1),
                                "recompiles_in_timed_infer": COMPILE.compiles(c1, c2) if did else None,
                                "warmup_compiles": None, "warmup_settle": None}
@@ -7559,10 +7849,54 @@ def worker(args):
                         # the warm-up repeats the exact timed call (every algos call resets its
                         # optimizer, reloads its weights or reruns a stateless layer, so a repeat
                         # is the same work from the same state) until one call compiles nothing
-                        compile_rec["warmup_settle"] = COMPILE.settle(lambda: (runner.fit(), runner.infer()))
+                        # each settle call is prepare() then fit() then infer(), the timed call's own sequence
+                        settle_call = lambda: (runner.prepare(), runner.fit(), runner.infer())  # noqa: E731
+                        compile_rec["warmup_settle"] = COMPILE.settle(settle_call)
                 last = runner.outputs()
                 runner.sync_for_receipt()
                 operation_ms = (time.perf_counter() - whole_start) * 1000.0
+                # SMALL ROWS: the rest of the scored run's calls, after the first call's outputs were taken
+                # (the hash, the saved outputs and the receipt are the first call's; same bits every call).
+                # Opponents and rows at or above 10 ms make one call; nothing below runs for them.
+                ours_arm = args.arm in OURS_ARMS
+                n_fit = small.calls_for(ms, ours_arm, "fit") if r > 0 else 1
+                n_inf = small.calls_for(ims, ours_arm, "infer") if r > 0 and did else 1
+                # BOARD ORDER (call profile phase fit+infer, lane fx-harness 2026-11-18): both phases the same count,
+                # interleaved below as on the board: each fit, then the first predict right after it
+                pair = small.paired_calls(ms, ims, ours_arm) if r > 0 and did else None
+                if pair is not None:
+                    n_fit = n_inf = pair
+                fit_calls, inf_calls = [ms], [ims]
+                # attribution and call profile runs only (no-op otherwise): the window around the forced phase's
+                # extra calls; a call profile run makes one call of the other phase, so the window holds one phase
+                # (board order: the window holds the fit and inference pairs)
+                if pair is not None:
+                    small.range_open(pair, small.BOARD_ORDER)
+                else:
+                    small.range_open(n_fit, "fit") or small.range_open(n_inf, "infer")
+                try:
+                    for i in range(1, max(n_fit, n_inf)):
+                        if i < n_fit:
+                            runner.prepare()
+                            u0 = numa.usage()
+                            t0 = time.perf_counter()
+                            runner.fit()
+                            fit_calls.append((time.perf_counter() - t0) * 1000.0)
+                            fit_use.append(numa.delta(u0, numa.usage(), fit_calls[-1]))
+                        if i < n_inf:
+                            u1 = numa.usage()
+                            t1 = time.perf_counter()
+                            runner.infer()
+                            inf_calls.append((time.perf_counter() - t1) * 1000.0)
+                            inf_use.append(numa.delta(u1, numa.usage(), inf_calls[-1]))
+                finally:
+                    small.range_close()
+                fit_rec = small.spread(fit_calls) if r > 0 else None
+                inf_rec = small.spread(inf_calls) if r > 0 and did else None
+                if fit_rec is not None:
+                    ms = fit_rec["ms"]
+                if inf_rec is not None:
+                    ims = inf_rec["ms"]
                 m = mem.stop()
                 h = hashlib.sha256()
                 for k in sorted(last):
@@ -7588,6 +7922,8 @@ def worker(args):
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "scored_calls": fit_rec, "infer_scored_calls": inf_rec,
+                 "host_usage": {"fit": fit_use, "infer": inf_use if did else None},
                  "aft_capture": aft_capture, "upload_separate": upload_sep,
                  "upload_separate_infer": upload_sep_infer, "compile": compile_rec,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
@@ -7815,7 +8151,12 @@ def partition_disagreement(reference, labels, ari=None):
 INDEPENDENT_REFERENCE = {"layer": "torch-eager-fp32", "optim": "torch-eager-fp32",
                          "outlier": "sklearn-cpu", "pagerank": "networkx-cpu",
                          "components": "networkx-cpu", "x-kpss": "statsmodels-cpu",
-                         "x-selectd": "statsmodels-cpu"}
+                         "x-selectd": "statsmodels-cpu",
+                         # SCORER GAP (lane release-measurement-smoke, 2026-11-06): jl-min-dim's only metric,
+                         # equal_fraction_vs_sklearn (bench_board_extra quality "jl"), reads the sklearn-cpu arm's
+                         # integers, so ours raced alone had none. Its untimed reference is that same arm (the
+                         # lane's "other" opponent), run after the timed workers like every entry above.
+                         "x-jl": "sklearn-cpu"}
 
 
 def independent_reference_arm(lane):
@@ -7826,7 +8167,7 @@ def independent_reference_arm(lane):
         return None
     if s["kind"] == "optim" and not s.get("torch_opt"):
         return None                   # an optimizer lane without a peer class (no opponent at all)
-    if arm == "sklearn-cpu" and not s.get("sk"):
+    if arm == "sklearn-cpu" and not s.get("sk") and arm not in s.get("other", {}):
         return None
     if arm in ("networkx-cpu", "statsmodels-cpu") and arm not in s.get("other", {}):
         return None
@@ -8656,6 +8997,14 @@ def race(args):
                 a["ms"].append(msg["ms"])
                 if msg.get("infer_ms") is not None:
                     a["infer_ms"].append(msg["infer_ms"])
+                # SMALL ROWS (2026-11-15): the calls of the scored run and their spread (ms is their median)
+                if msg.get("scored_calls") is not None:
+                    a.setdefault("scored_calls", []).append(dict(msg["scored_calls"], round=r))
+                if msg.get("infer_scored_calls") is not None:
+                    a.setdefault("infer_scored_calls", []).append(dict(msg["infer_scored_calls"], round=r))
+                # HOST USAGE (lane fx-harness, 2026-11-18): each scored call's system time and faults
+                if msg.get("host_usage") is not None:
+                    a.setdefault("host_usage", []).append(dict(msg["host_usage"], round=r))
                 # COMPILE-IN-CLOCK (Andrew 2026-10-14): compiles inside the scored calls, summed over the
                 # scored rounds (None when torch is not loaded in this arm's worker)
                 a.setdefault("compile_rounds", []).append(comp)
@@ -8677,8 +9026,9 @@ def race(args):
                 a.setdefault("upload_separate_infer", []).append(dict(msg["upload_separate_infer"], round=r,
                                                                        warmup=r == 0))
             a["mem"].append(msg.get("mem"))
-            print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
-                  % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)
+            print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s%s"
+                  % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"],
+                     _tool("bench_board_small_rows").line_suffix(msg.get("scored_calls"))), flush=True)
     outs = {}
     for arm in arms:
         w = workers[arm]
@@ -8748,6 +9098,8 @@ def race(args):
         if has_infer(lane):
             ist = a["status"] if a["status"] != "ok" or a["infer_ms"] else "error"
             infer["arms"][arm] = {"ms": list(a["infer_ms"]), "warmup_ms": a["infer_warmup_ms"],
+                                  "scored_calls": a.get("infer_scored_calls"),
+                                  "host_usage": a.get("host_usage"),
                                   "status": ist, "error": a.get("error") if ist != "ok" else None,
                                   "digests": a["digests"], "digest_stable": a["digest_stable"],
                                   "info": info, "span": predict_upload_span(arm, a)}
@@ -8850,6 +9202,11 @@ def build_parser():
     pr.add_argument("--lanes", default=",".join(LANE_ORDER))
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0)
+    pr.add_argument("--race-datasets", default=None,
+                    help="build only the blocks of these datasets (the races' own; the release measurement smoke)")
+    pr.add_argument("--inputs", default="datasets", choices=("datasets", "verify-fixtures"),
+                    help="verify-fixtures: the release measurement smoke's blocks from the identity fixture "
+                         "(tools/smoke_inputs.py); never a timed run")
     pr.add_argument("--full-tree-workload", action="store_true",
                     help="tree-only: save all existing taxi/istella split rows in separate aft-full cls/reg blocks")
     r = sub.add_parser("race")

@@ -136,3 +136,86 @@ checkpoints carry native `training_experiment_profile` metadata (chunked head,
 CE token-total tree, GEMM leaf), and mismatches are refused. Missing older
 metadata means baseline. Source only: no compilation, execution, verification,
 quality assessment or timing has been performed for these edits.
+
+## GEMM-panel arm (the default profile since 2026-11-19; the only profile since 2026-11-20, when the scalar serial profile was deleted)
+
+Promoted on the A/B of 2026-11-19 (NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc, base and arm in one job):
+train-chunked-lm-head-loss 33,016.9 -> 284.5 ms, the three FP64 differences smaller under the panels; numbers beside
+`LMHEAD_FAST_GEMM_PANEL` in `training/chunked_lm_head_panel_math.mojo`. "The arm" below is this profile; "the default
+profile" in the text below names the scalar serial profile it replaced.
+
+An experiment arm of the public door (`chunked_lm_head_v2_loss`,
+`chunked_lm_head_v2_train`) and of the executor op `lm_head_v2`
+(`OPS_LM_HEAD_V2`, device and host arm: `autograd/lm_head_v2_op.mojo`,
+`autograd/lm_head_v2_host.mojo`), which calls the door's forward and backward
+over the executor's storage. One define switches the device door
+(`training/chunked_lm_head_v2.mojo::_gp_door`), the host column
+(`training/chunked_lm_head_gemm_panel_host.mojo`) and the oracle
+(`chunked_lm_head_v2_oracle_forward`, `chunked_lm_head_v2_oracle`) together:
+one build, one set of words on every vendor and on the CPU. The words differ
+from the default profile's (logit contraction and every fold below), so the
+arm's hashes are compared across columns of the same build, never with a
+default build. The device kernels and the host loops call the same per-unit
+bodies (`training/chunked_lm_head_panel_math.mojo`). The ByteLM head keeps its
+own folds. The op adds only what is its own: float class codes, a code that
+names no vocabulary entry (shifted logit +0.0, so the row loss is
+`log(denominator)`, and no one-hot in its dlogit) and the upstream factor
+`ftz(g * upstream)` per gradient cell.
+
+Fold contract under the arm, with `P = LM_HEAD_V2_CHUNK = 1024` vocabulary
+entries per panel and `LMHEAD_GP_LEAF = 64` per denominator leaf. Under the
+arm both constants are arithmetic, not storage: changing either is a
+different profile.
+
+1. Operands: hidden and weight are read only through the GEMM, whose leaf
+   flushes both operands (`ftz`); no separate flush pass exists.
+2. Logits: panel `p` holds `H . W[pP : pP+n]^T` by the identical FP32 GEMM
+   contract (`OP_NT`, `m = rows`, `n = n_p`, `k = width`), the contraction the
+   ByteLM head uses. It is recomputed in each of the three passes (maximum,
+   denominator, gradients); no `[rows, vocab]` owner exists.
+3. Row maximum: `identical_fmax` over the row's logits. A total-order
+   selection, so the visiting order does not reach the result.
+4. Denominator: with `shifted = ftz(ftz(logit) - ftz(max))`, leaf `j` folds
+   `ftz(exp(shifted))` over vocabulary ids `64j .. 64j+63` ascending from
+   `+0.0`, every add flushed. The row's leaves, in ascending order, reduce
+   level by level: node `q` of a level is `ftz(ftz(a) + ftz(b))` of nodes
+   `2q` and `2q+1` of the level below, an odd tail carried bit for bit. The
+   root is the denominator. A panel holds whole leaves, so panel boundaries
+   do not reach this fold.
+5. Row loss and the mean: unchanged (`-(shifted_target - log(denominator))`,
+   then the 256-row leaves and balanced tree of the default profile).
+6. dlogit: `ftz((ftz(ftz(exp(shifted)) / ftz(denominator)) - onehot) / rows)`
+   per cell, as in the default profile.
+7. dWeight: rows `pP .. pP+n-1` are `dlogit_p^T . H` by the GEMM contract
+   (`OP_TN`, `m = n_p`, `n = width`, `k = rows`). Final: nothing folds across
+   panels.
+8. dHidden: panel partial `D_p = dlogit_p . W[pP : pP+n]` by the GEMM
+   contract (`OP_NN`, `m = rows`, `n = width`, `k = n_p`); the partials, in
+   ascending panel order, reduce by the same level-by-level pair rule as the
+   denominator leaves. The implementation is a binary counter holding
+   `floor(log2(panels)) + 1` partials.
+
+Execution: every device kernel runs one thread per output unit (operand
+element, (row, panel) for the maximum, (row, leaf), (row, tree node), panel
+cell, dHidden cell); none walks the vocabulary or the rows. On the host every pass splits its units across
+all cores and the GEMM splits inside; the loop over panels is the only serial
+driver. Under the arm the door's input validation is one parallel scan per
+operand with the default's refusals, order and words, and spans beyond signed
+32-bit kernel indexing are refused by name.
+
+Scratch beyond the operands and returned gradients, in floats:
+`rows * P` (panel) `+ 1.5 * rows * ceil(vocab / 64)` (leaves and their tree)
+`+ (floor(log2(panels)) + 1) * rows * width` (dHidden partials) plus the GEMM
+workspace. At 8,192 x 32,768 x 1,024: 8.4M + 6.3M + 6 x 8.4M = 65M floats
+(260 MB) against 268M for one full logits tensor.
+
+Quality: the same mathematics in a different summation order (pairwise in
+place of serial chains). The checks that judge this function by tolerance are
+unchanged and apply to the arm as written: loss within rtol 2e-5 of the
+Float64 reference and gradients within rtol 1e-4, atol 1e-6
+(`checks/native_tests/training_chunked_lm_head_door.mojo`), and 2e-5 absolute
+against the v1 composition (`training/checks/chunked_lm_head_check.mojo`).
+The device check compares the arm's door with the arm's oracle word for word
+at three panels plus a one-token tail. The host negative control under the
+arm (`-D MOJOLEARN_HOST_SABOTAGE=1`) folds every denominator leaf descending.
+Source only: nothing here has been compiled, run or timed.

@@ -73,9 +73,10 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from gemm.checks.gemm_oracle import OP_TN, gemm_oracle
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 
 
 def _mode_name() -> String:
@@ -342,15 +343,15 @@ def _gemm_tn_over_capacity(
         hx.unsafe_ptr().unsafe_store(i, _val_f32(i, 77))
     for i in range(m * m):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
     try:
         gemm_tn(ctx, z, x, xt, xt2, m, m, k)
         ctx.synchronize()
     except e:
         return String(e)
-    ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+    download_host_into[DType.float32](ctx, z, hz)
     ctx.synchronize()
     for i in range(m * m):
         out.append(hz.unsafe_ptr().unsafe_load(i))
@@ -361,8 +362,6 @@ def _gemm_tn_over_capacity(
     _ = z
     _ = xt
     _ = xt2
-    _ = hx
-    _ = hz
     return String("")
 
 
@@ -478,9 +477,9 @@ def _nt_rows(
             )
     for i in range(m * n):
         hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out, src_ptr=hz.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, x, hx)
+    upload_host_into[DType.float32](ctx, y, hy)
+    upload_host_into[DType.float32](ctx, out, hz)
     ctx.synchronize()
     gemm_nt(ctx, out, x, y, m, n, k)
     ctx.synchronize()
@@ -559,7 +558,7 @@ def check_pinned_gemm_is_batch_invariant() raises:
             _nt_rows(ctx, z, M, n, K, salt)
             var hz = ctx.enqueue_create_host_buffer[DType.float32](M * n)
             ctx.synchronize()
-            ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+            download_host_into[DType.float32](ctx, z, hz)
             ctx.synchronize()
             for i in range(M):
                 for j in range(N_NARROW):
@@ -676,14 +675,14 @@ def check_pinned_gemv_matches_oracle() raises:
             hy.unsafe_ptr().unsafe_store(i, _val_f32(i, salt + 3))
         for i in range(M):
             hz.unsafe_ptr().unsafe_store(i, Float32(-987654.0))
-        ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=z, src_ptr=hz.unsafe_ptr())
+        upload_host_into[DType.float32](ctx, x, hx)
+        upload_host_into[DType.float32](ctx, y, hy)
+        upload_host_into[DType.float32](ctx, z, hz)
         ctx.synchronize()
 
         gemv_n(ctx, z, x, y, M, K)
         ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hz.unsafe_ptr(), src_buf=z)
+        download_host_into[DType.float32](ctx, z, hz)
         ctx.synchronize()
 
         for i in range(M):

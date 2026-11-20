@@ -35,8 +35,7 @@ FAST on Apple by default, and the IDENTICAL default (`IDN_ETS_TEAM`)
 host column by `ets_team_replay`).
 
 The multiplicative-error and the seasonal models keep `op_ets`."""
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.ets import SEAS_N, _log, ets_init_state
@@ -47,12 +46,13 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 #: the switch: FAST on Apple, default ON since the M3 A/B (damped-ets
 #: taxi-hourly, lane/apple-fast-ets e3369d119, n=1: 611.9 -> 48.0 ms,
 #: forecast_rmse 96.69 -> 96.68; docs/apple-fast/ab/ets.md).
-#: -D MOJOLEARN_ETS_TEAM_OFF turns it off; the old -D MOJOLEARN_ETS_TEAM is
-#: harmless. IDENTICAL and every other vendor compile op_ets unchanged.
+#: The old -D MOJOLEARN_ETS_TEAM is harmless. IDENTICAL and every other
+#: vendor compile op_ets unchanged.
+# TOMBSTONE: MOJOLEARN_ETS_TEAM_OFF (old path of the FAST Apple default, EXP:535 KEPT aec9f8c33; promoted on Apple (M3) only, FAST is Apple only so no other-vendor A/B is owed) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 8d47995bad.
+# Restore: git apply experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch; record in docs/TOMBSTONES.md.
 comptime ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
+    and TARGET_HAS_APPLE_GPU
 )
 
 #: lane ets-team-idn (2026-10-11, idea E2). PROMOTED to the IDENTICAL default
@@ -60,7 +60,7 @@ comptime ETS_TEAM = (
 #: damped-ets synthetic 0.017, taxi-hourly 0.014 (NV 0.017/0.014, AMD
 #: 0.017/0.014); BITS CHANGE, NV == AMD; forecast_rmse 13.93 -> 13.94
 #: synthetic, 96.69 -> 96.69 taxi-hourly: equal; nv2 v0099, amd a1681).
-#: `-D MOJOLEARN_IDN_ETS_TEAM_OFF` restores op_ets. It runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
+#: It runs ETS(A, A|Ad, N) on NVIDIA and AMD (and
 #: Apple) with the team above, one block of SEQ_TEAM_TPB threads per series,
 #: in place of op_ets's one thread per series. Structural reason: op_ets
 #: walks the whole series serially in one thread per Nelder-Mead evaluation
@@ -77,11 +77,13 @@ comptime ETS_TEAM = (
 #: trend form, chunked SSE fold, the forecast's running phi power) on NVIDIA,
 #: AMD and the host column together: the host binding replays the same chunk
 #: maps, tree and fold in `ets_team_replay` (sequence/exec.mojo). Every other
-#: ETS model keeps op_ets. MOJOLEARN_IDN_ALL_OFF turns it off.
+#: ETS model keeps op_ets.
+# TOMBSTONE: MOJOLEARN_IDN_ETS_TEAM_OFF (old path beside the IDENTICAL ETS team default, EXP:2087 KEEP) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 0fe5074767.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at 9cf14671a2.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 comptime IDN_ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_ETS_TEAM_OFF"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 #: IDN_ETS_TEAM's chunk count: the team's threads (the host replay runs
 #: them one after another)
@@ -563,7 +565,7 @@ def ets_team_replay(t: Int, a: Args):
     var lo = x + 8
     var hi = lo + 8
     var nm_scr = hi + 8
-    var buf = InlineArray[Float32, ETS_REPLAY_W](fill=Float32(0.0))
+    var buf = Array[Float32, ETS_REPLAY_W](fill=Float32(0.0))
     var maps = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
     var L = (n + ETS_TEAM_CHUNKS - 1) // ETS_TEAM_CHUNKS
     var fa = (a.i5 & 1) != 0

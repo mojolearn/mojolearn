@@ -61,7 +61,7 @@ kernel.
 from std.math import abs, sqrt
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -128,7 +128,7 @@ from tsa.checks.fixtures import ar1_series, random_walk, to_f32, u01
 from tsa.impl.timeSeries.arima_helpers import prepare_data_host
 
 
-comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL
 comptime SALT = 7
 
 
@@ -1314,7 +1314,7 @@ def check_fit_refuses_by_name(ctx: DeviceContext) raises:
     _assert(refusals == 4, "fewer than four doors refused")
 
 
-def main() raises:
+def run_checks() raises:
     print("== arima/checks/fit_check.mojo [" + _mode_name() + "] FIT_N_OBS="
           + String(FIT_N_OBS) + " SALT=" + String(SALT) + " ==")
     var ctx = DeviceContext()

@@ -90,10 +90,37 @@ def test_clip_grad_norm_every_arm_records_its_input_arrays(monkeypatch):
 def test_tensor_lanes_without_staged_arrays_record_inputs_on_every_arm():
     G = dict(vars(A))
     G["_staging"] = lambda: None
-    for lane in ("lr-step", "jl-min-dim"):
+    for lane in (X.INTERNAL_LR_LANE, "jl-min-dim"):
         recs = X.input_arrays(lane, {}, G)
         cell = dict(params={"raw_params": {"input_arrays": recs}})
         assert E.measured_shape(cell, {}) == {"input_arrays": recs}, lane
     docs = X._text_arrays(np, ["ab", "cé"])
     assert [n for n, _ in docs] == ["docs_utf8", "doc_bytes"]
     assert docs[1][1].tolist() == [2, 3]
+
+
+def test_refine_quality_returns_the_per_arm_dict():
+    """0.8.66 AMD smoke: the refine scorer's query block shadowed the result dict, so quality() returned an
+    ndarray and the race recorded "'numpy.ndarray' object has no attribute 'get'" for ours."""
+    rng = np.random.default_rng(3)
+    D = {"X": rng.random((300, 6), dtype=np.float32), "Xq": rng.random((25, 6), dtype=np.float32)}
+    _, Q, C = (a for _, a in X.refine_inputs(np, D, A.SEED))
+    X64 = np.asarray(D["X"], dtype=np.float64)
+    d = ((X64[C] - Q.astype(np.float64)[:, None, :]) ** 2).sum(-1)
+    k = A.LANES["ann-refine"]["params"]["k"]
+    exact = np.take_along_axis(C, np.argsort(d, axis=1, kind="stable")[:, :k], 1)
+    q = X.quality("ann-refine", D, {"ours": {"distances": np.zeros(exact.shape), "indices": exact}}, vars(A))
+    assert isinstance(q, dict) and set(q) == {"ours"}
+    assert "quality_error" not in q["ours"]
+    assert q["ours"]["recall_vs_exact_refine"] == 1.0
+
+
+def test_the_lr_at_row_is_one_internal_lane_named_as_race_fairness_names_it():
+    """Andrew 2026-11-17: the lr-* schedule races are gone; one internal row (ConstantLR, warmup 0), our arm only."""
+    RF = _load("race_fairness")
+    assert X.INTERNAL_LR_LANE == RF.INTERNAL_CALL_OVERHEAD_LANE
+    assert not [l for l in A.LANES if l.startswith("lr-")]
+    s = A.LANES[X.INTERNAL_LR_LANE]
+    assert s["params"] == {"peak_lr": 1e-3, "warmup_steps": 0}
+    assert all(A.opponents(v, X.INTERNAL_LR_LANE) == () for v in ("apple", "nvidia", "amd"))
+    assert [l for l in A.LANES if RF.lane_class(l)] == [X.INTERNAL_LR_LANE]

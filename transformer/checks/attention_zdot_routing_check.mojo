@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Compile/run gate for the measured exact estash-zdot tile routing."""
 
-from std.sys.compile import is_defined
-
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from transformer.impl.llama.fused_attention import attention_estash_zdot_tq
 
@@ -12,14 +10,10 @@ def require(got: Int, want: Int, label: String) raises:
         raise Error(label + ": got " + String(got) + ", want " + String(want))
 
 
-def main() raises:
-    comptime if is_defined["MOJOLEARN_ATTN_ES_TQ16"]():
-        require(attention_estash_zdot_tq(1, 0), 16, "forced tq16 small")
-        require(attention_estash_zdot_tq(4096, 512), 16, "forced tq16 large")
-    elif is_defined["MOJOLEARN_ATTN_ES_TQ8"]():
-        require(attention_estash_zdot_tq(1, 0), 8, "forced tq8 small")
-        require(attention_estash_zdot_tq(4096, 512), 8, "forced tq8 large")
-    elif TARGET_COLUMN == COLUMN_NVIDIA:
+def run_checks() raises:
+    # TOMBSTONE: MOJOLEARN_ATTN_ES_TQ16, MOJOLEARN_ATTN_ES_TQ8 (opt-in forced tile arms, no A/B recorded; the measured routing stays) deleted 2026-11-15 by lane/expdel2-32-neural; code recoverable at 284d3f2314.
+    # Restore: git apply experiments/removed/MOJOLEARN_ATTN_ES_TQ16.patch
+    comptime if TARGET_COLUMN == COLUMN_NVIDIA:
         require(attention_estash_zdot_tq(1, 0), 16, "NVIDIA small")
         require(attention_estash_zdot_tq(4096, 512), 16, "NVIDIA large")
     elif TARGET_COLUMN == COLUMN_AMD:

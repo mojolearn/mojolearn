@@ -1,0 +1,23 @@
+diff --git a/training/byte_lm_host_kernels.mojo b/training/byte_lm_host_kernels.mojo
+index 29a7fbb401..e77a0aaac0 100644
+--- a/training/byte_lm_host_kernels.mojo
++++ b/training/byte_lm_host_kernels.mojo
+@@ -141,15 +141,13 @@ comptime GEMM_CHAINS = 8
+ #: of that kernel. Same bits as `gemm_nt_rows`, which rebuilt the leaf
+ #: partials through a scratch round trip at every step for k above the
+ #: leaf. The sabotage builds keep the legacy kernel (its reversed fold is
+-#: DEVIATION 2612's control) and so do changed neural profiles.
+-# TOMBSTONE: MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM (old path: the legacy host GEMM in any build, no A/B recorded)
+-# deleted 2026-11-15 by lane/expdel2-31-neural; the legacy kernel stays for the sabotage controls; code recoverable
+-# at fb518878c4.
+-# Restore: git apply experiments/removed/MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM.patch
++#: DEVIATION 2612's control); `-D MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM=1`
++#: restores it in any build.
+ comptime BYTE_HOST_GHR = (
+     not NEURAL_PROFILE_CHANGED
+     and not is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
+     and not GEMM_ORACLE_HOST_SABOTAGE
++    and not is_defined["MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM"]()
+ )
+ 
+ 

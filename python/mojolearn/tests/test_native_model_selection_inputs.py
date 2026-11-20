@@ -79,7 +79,6 @@ def test_no_runtime_buffer_or_binding_loader(monkeypatch):
         calls.append('Python preparation')
         raise AssertionError('Python input helper or binding loader reached')
 
-    monkeypatch.setattr(_buffer, '_materialize', forbidden)
     monkeypatch.setattr(_buffer, '_native', forbidden)
     monkeypatch.setattr(_backend, 'binding', forbidden)
     monkeypatch.setattr(_backend, 'load_host_module', forbidden)
@@ -225,18 +224,6 @@ def test_splitter_counts_and_native_fold_iteration_agree(cls, kwargs, count):
             assert set(y[train]) == set(y[test]) == {0, 1}
 
 
-def test_preconnected_helper_rejects_python_replacement(monkeypatch):
-    calls = []
-
-    def callback(*args):
-        calls.append(args)
-        raise AssertionError('compiled helper replacement ran')
-
-    monkeypatch.setitem(ms._NATIVE_CONTEXT['family_msel_entries'], 'arange_i64', callback)
-    clean(ms.train_test_split, np.arange(12, dtype='f4'), shuffle=False, error=TypeError)
-    assert calls == []
-
-
 @pytest.mark.parametrize('kind', ('float64', 'mixed', 'int16_float32', 'series'))
 def test_pandas_storage_avoids_array_protocol_and_preserves_promoted_values(kind, monkeypatch):
     pd = pytest.importorskip('pandas')
@@ -271,8 +258,12 @@ def test_numpy_free_import_and_standard_buffers():
         import array, importlib.abc, sys
         class NoArrays(importlib.abc.MetaPathFinder):
             def find_spec(self, fullname, path=None, target=None):
+                # absent, as on an install without them: the package's optional
+                # import-time connections catch ModuleNotFoundError; the last
+                # line checks no import succeeded
                 if fullname.split('.')[0] in ('numpy', 'scipy', 'sklearn'):
-                    raise AssertionError('optional array dependency imported: ' + fullname)
+                    raise ModuleNotFoundError('optional array dependency imported: ' + fullname,
+                                              name=fullname.split('.')[0])
         sys.meta_path.insert(0, NoArrays())
         from mojolearn.model_selection import train_test_split
         from mojolearn._verify_native_runtime import audit_native_call

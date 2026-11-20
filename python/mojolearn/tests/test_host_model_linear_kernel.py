@@ -3,8 +3,8 @@
 kernel methods (lane/inference-linear-svm, 2026-09-15).
 
 The refusal tests need no binding. The round-trip tests fit through the
-bindings this process routes (a GPU set, or the reference host set under
-`reference_training()` on a CPU-only install), save, load through
+bindings this process routes (a GPU set, or the host set on a CPU-only
+install), save, load through
 `mojolearn.host_model` and require the host answer to be the same bytes as
 the fitted model's; they skip when the estimators host binding is not built.
 Cross-vendor identity is tools/classical_host_gate.py's and
@@ -18,7 +18,6 @@ import pytest
 
 import mojolearn
 from mojolearn import _backend, _classical_host, _serialize
-from mojolearn._cpu_reference import reference_training
 
 
 def _rows(n=300, d=6, seed=3):
@@ -39,8 +38,7 @@ def _host_built():
 
 
 def _fit(make, X, y):
-    with reference_training():
-        return make().fit(X, y)
+    return make().fit(X, y)
 
 
 CASES = [

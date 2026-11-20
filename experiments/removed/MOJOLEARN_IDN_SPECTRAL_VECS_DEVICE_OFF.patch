@@ -1,0 +1,24 @@
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index 736528fd0d..b0077bea6c 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -2013,11 +2013,16 @@ def lanczos_restart_pooled(
+ #: upload, then a k x n download into a `List` and an upload of the same
+ #: floats. Copies and the same hash: no bit moves, the host column is
+ #: unchanged. A traced run keeps the host lists (the card records them).
++#: `-D MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF=1` restores the round trips.
+ # TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster (non-owner; owner expdel2-37-series); code recoverable at c089be9c4a.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-13-cluster.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at f32202b277.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_SPECTRAL_VECS_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and has_accelerator()
++comptime IDN_SPECTRAL_VECS_DEVICE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and has_accelerator()
++    and not (
++        is_defined["MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF"]()
++    )
++)
+ 
+ 
+ def lanczos_v0_kernel(

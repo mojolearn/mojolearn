@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit CPU isolation-forest scoring preserves state and native boundaries."""
-import ast
 import gc
 import json
 import os
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -255,9 +253,9 @@ def test_iforest_subclass_native_attributes_finalizer_and_outputs(tmp_path):
     for method in METHODS:
         audit_native_call(getattr, model, method).assert_native()
         _check(model, _input(2, "float32"), method)
-    # the resident forest's release is a native lifetime object since lane
-    # migrate-trees-2 (bindings/trees_public_iforest.mojo `_if_lifetime`):
-    # no Python finalizer is defined anywhere in the class's MRO
+    # the resident forest's release is a native lifetime object held in the
+    # estimator's native side record (bindings/trees_side_records_unpack.mojo, lane
+    # perf-trees-owed): no Python finalizer is defined anywhere in the MRO
     assert not any("__del__" in vars(base) for base in cls.__mro__)
 
 
@@ -303,16 +301,6 @@ def test_iforest_unfitted_mode_shape_and_complex_refusals_stay_native(tmp_path, 
         _refused(audit_native_call(getattr(model, method), x))
     model.numeric_mode = "fast"
     _refused(audit_native_call(getattr(model, method), [[1., 2.]]))
-
-
-def test_iforest_public_methods_are_single_native_calls():
-    tree = ast.parse(Path(host.__file__).read_text())
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "HostIsolationForest")
-    for name in METHODS:
-        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
-        body = method.body[1:]
-        assert len(body) == 1 and isinstance(body[0], ast.Return)
-        assert isinstance(body[0].value, ast.Call) and body[0].value.func.id == "_native_classical"
 
 
 _NUMPY_IMPORT_CHILD = r'''

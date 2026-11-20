@@ -1,0 +1,2892 @@
+{
+  "bindings": {
+    "_mojolearn_arima": {
+      "path": "/root/mojolearn-two-device/python/mojolearn/identical/_mojolearn_arima.so",
+      "sha256": "31f7ac1b5d2aeb5188a473a112b7621ff8e72c757f4010d884af926dbddcd7b9",
+      "vendor": "cuda"
+    },
+    "_mojolearn_gp": {
+      "path": "/root/mojolearn-two-device/python/mojolearn/identical/_mojolearn_gp.so",
+      "sha256": "28ac3330a88a1d2b3c313637be581397d8f9385dd5f7858b08266627a0b11d86",
+      "vendor": "cuda"
+    },
+    "_mojolearn_ivf": {
+      "path": "/root/mojolearn-two-device/python/mojolearn/identical/_mojolearn_ivf.so",
+      "sha256": "60aee7d6204b654984fea33f5c025119e3e1edba67f0610bf3fe837f8209a3d0",
+      "vendor": "cuda"
+    },
+    "_mojolearn_tsa": {
+      "path": "/root/mojolearn-two-device/python/mojolearn/identical/_mojolearn_tsa.so",
+      "sha256": "074323428a2ccefc86b38b6fddf422ea97398fbab4ff530eb577cb1bb05adc19",
+      "vendor": "cuda"
+    }
+  },
+  "cells": [
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        0
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        1
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        2,
+        3
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        4
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        5
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        6
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        7
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        8,
+        9
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        10
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        11
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        12
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "34aa2f82114d7fad4aed8ecdb5b783fff4edc6844c91c2d22dd7eea6a1907bb0",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        13
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "dcac5b1b398de3b3a76062d254d112622b6725f78674cbca5ecffa05b135a38d",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        14,
+        15
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "b231f1be3cf6ba36a6d7e1d5230b429dc6bffce10548a77963591b30fb49c793",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        16
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        17
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "case": "arima",
+      "detected": true,
+      "error": "ValueError('shard workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "arima",
+      "detected": true,
+      "error": "ValueError('ARIMA worker returned an invalid prediction shape or dtype')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "holtwinters",
+      "detected": true,
+      "error": "ValueError('shard workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "holtwinters",
+      "detected": true,
+      "error": "ValueError('Holt-Winters worker returned an invalid prediction shape or dtype')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc",
+      "detected": true,
+      "error": "ValueError('shard workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc",
+      "detected": true,
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "ivf",
+      "detected": true,
+      "error": "ValueError('shard workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "ivf",
+      "detected": true,
+      "error": "ValueError('invalid IVF candidate count')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc_fit",
+      "detected": true,
+      "error": "ValueError('shard workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc_fit",
+      "detected": true,
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    }
+  ],
+  "devices": [
+    0,
+    1
+  ],
+  "distribution": null,
+  "elapsed_seconds": 72.85067481407896,
+  "environment": {
+    "commit": "f8d100c34d4a03d865cd9ca5b43d075c77576527 (WORKING TREE DIRTY)",
+    "device": "NVIDIA NVIDIA L40S, 595.91.07",
+    "mode": {
+      "binary": "/root/mojolearn-two-device/python/mojolearn/identical/_mojolearn.so",
+      "compiled": null,
+      "ident_dir": "/root/mojolearn-two-device/python/mojolearn/identical",
+      "loaded": "identical",
+      "problem": null,
+      "requested": "identical",
+      "under_identical": true
+    },
+    "mojolearn_version": "0.8.64",
+    "numpy_version": "2.5.2",
+    "platform": "Linux 6.8.0-138-generic x86_64",
+    "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+    "python": "3.14.7 CPython",
+    "vendor": "cuda (flat layout; read from the loaded binaries)"
+  },
+  "guarded_source_commit": null,
+  "inputs": {
+    "arima": {
+      "dtype": "<f4",
+      "sha256": "f8fef8e983e5c8301ce5e191581cb42b21694f5e9dafeaf17ed6c92b920a2ece",
+      "shape": [
+        5,
+        32
+      ]
+    },
+    "gpc_x": {
+      "dtype": "<f4",
+      "sha256": "1f97be7841818e405ed316fe96b8657dd13791651d70a3692c3dc2a21b9373e2",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    "gpc_y": {
+      "dtype": "<i4",
+      "sha256": "f0f05679062d8d21b52c291de821383c6faaf59c2f7c71b89ea2026f69128725",
+      "shape": [
+        9
+      ]
+    },
+    "holtwinters": {
+      "dtype": "<f4",
+      "sha256": "830f5fd74f2ab05fc60bc9c3d698c15c51fd03f4f99ada52b0e8ea5b2171421b",
+      "shape": [
+        5,
+        24
+      ]
+    },
+    "ivf": {
+      "dtype": "<f4",
+      "sha256": "933142afeeee49f03fabfd2f11f20777c2420814eda1fe9bc0f19fc3c1c0dd9f",
+      "shape": [
+        65,
+        17
+      ]
+    }
+  },
+  "native_fault_controls": "OWED",
+  "package": "/root/mojolearn-two-device/python/mojolearn",
+  "physical_execution_trace": "OWED",
+  "protocol": "distributed-classical-v2",
+  "repeats": 1,
+  "source_commit": "f8d100c34d4a03d865cd9ca5b43d075c77576527 (WORKING TREE DIRTY)",
+  "source_files": {
+    "__init__.py": "7decbb1a167f431b17335333130266d645d3a1e112fc52b6fd38ef4980a833b2",
+    "_gpu_witness.py": "a38323dda2a9ff4ba169a0da51f824307a312ade846e96b5521c0214b47dac39",
+    "_native_parallel_shard.py": "c5925f69e7929cc56b588df5ba80390b911476ebea61060990a11c385630ed4f",
+    "_verify_distributed.py": "66fff379a5ac0cbe1cb819e391e80259d0f80c720a110743c3b55050558c6a5c",
+    "parallel_forecasting.py": "2721078df5227169ef3ec96a871dfc618662e2d4feeb6dec2a66db7fc6af0350",
+    "parallel_gaussian_process.py": "84285528e4f96eb792126f54cd52ad73ceeac00c2209867efe093e70c1d471fd",
+    "parallel_ivf.py": "e78efafce184266461b1fbf224ae2ff67f721b28dffd351bdcb0019efcd515a8"
+  },
+  "status": "NUMERICAL_MATCH_EXECUTION_TRACE_OWED",
+  "vendor": "cuda",
+  "worker_calls": [
+    {
+      "group": 0,
+      "operation": "arima_predict_shard",
+      "pid": 63884
+    },
+    {
+      "group": 0,
+      "operation": "arima_predict_shard",
+      "pid": 63884
+    },
+    {
+      "group": 0,
+      "operation": "arima_predict_shard",
+      "pid": 63884
+    },
+    {
+      "group": 1,
+      "operation": "hw_predict_shard",
+      "pid": 64055
+    },
+    {
+      "group": 1,
+      "operation": "hw_predict_shard",
+      "pid": 64055
+    },
+    {
+      "group": 1,
+      "operation": "hw_predict_shard",
+      "pid": 64055
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 64192
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 64192
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 64192
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 64331
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 64331
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 64331
+    },
+    {
+      "group": 4,
+      "operation": "ivf_store",
+      "pid": 64502
+    },
+    {
+      "group": 4,
+      "operation": "ivf_search",
+      "pid": 64502
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 64639
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 64639
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 64639
+    },
+    {
+      "group": 6,
+      "operation": "arima_predict_shard",
+      "pid": 64812
+    },
+    {
+      "group": 6,
+      "operation": "arima_predict_shard",
+      "pid": 64943
+    },
+    {
+      "group": 6,
+      "operation": "arima_predict_shard",
+      "pid": 64812
+    },
+    {
+      "group": 7,
+      "operation": "hw_predict_shard",
+      "pid": 65083
+    },
+    {
+      "group": 7,
+      "operation": "hw_predict_shard",
+      "pid": 65216
+    },
+    {
+      "group": 7,
+      "operation": "hw_predict_shard",
+      "pid": 65083
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 65360
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 65491
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 65360
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 65665
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 65796
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 65665
+    },
+    {
+      "group": 10,
+      "operation": "ivf_store",
+      "pid": 65941
+    },
+    {
+      "group": 10,
+      "operation": "ivf_store",
+      "pid": 66106
+    },
+    {
+      "group": 10,
+      "operation": "ivf_search",
+      "pid": 65941
+    },
+    {
+      "group": 10,
+      "operation": "ivf_search",
+      "pid": 66106
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 66246
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 66377
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 66246
+    },
+    {
+      "group": 12,
+      "operation": "arima_predict_shard",
+      "pid": 66553
+    },
+    {
+      "group": 12,
+      "operation": "arima_predict_shard",
+      "pid": 66687
+    },
+    {
+      "group": 12,
+      "operation": "arima_predict_shard",
+      "pid": 66553
+    },
+    {
+      "group": 13,
+      "operation": "hw_predict_shard",
+      "pid": 66827
+    },
+    {
+      "group": 13,
+      "operation": "hw_predict_shard",
+      "pid": 66960
+    },
+    {
+      "group": 13,
+      "operation": "hw_predict_shard",
+      "pid": 66827
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 67097
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 67233
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 67097
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 67433
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 67577
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 67433
+    },
+    {
+      "group": 16,
+      "operation": "ivf_store",
+      "pid": 67753
+    },
+    {
+      "group": 16,
+      "operation": "ivf_store",
+      "pid": 67884
+    },
+    {
+      "group": 16,
+      "operation": "ivf_search",
+      "pid": 67753
+    },
+    {
+      "group": 16,
+      "operation": "ivf_search",
+      "pid": 67884
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 68027
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 68158
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 68027
+    },
+    {
+      "group": 18,
+      "operation": "arima_predict_shard",
+      "pid": 68336
+    },
+    {
+      "group": 18,
+      "operation": "arima_predict_shard",
+      "pid": 68467
+    },
+    {
+      "group": 18,
+      "operation": "arima_predict_shard",
+      "pid": 68336
+    },
+    {
+      "group": 19,
+      "operation": "arima_predict_shard",
+      "pid": 68619
+    },
+    {
+      "group": 19,
+      "operation": "arima_predict_shard",
+      "pid": 68753
+    },
+    {
+      "group": 19,
+      "operation": "arima_predict_shard",
+      "pid": 68619
+    },
+    {
+      "group": 20,
+      "operation": "hw_predict_shard",
+      "pid": 68927
+    },
+    {
+      "group": 20,
+      "operation": "hw_predict_shard",
+      "pid": 69058
+    },
+    {
+      "group": 20,
+      "operation": "hw_predict_shard",
+      "pid": 68927
+    },
+    {
+      "group": 21,
+      "operation": "hw_predict_shard",
+      "pid": 69195
+    },
+    {
+      "group": 21,
+      "operation": "hw_predict_shard",
+      "pid": 69329
+    },
+    {
+      "group": 21,
+      "operation": "hw_predict_shard",
+      "pid": 69195
+    },
+    {
+      "group": 22,
+      "operation": "gpc_class_predict",
+      "pid": 69468
+    },
+    {
+      "group": 22,
+      "operation": "gpc_class_predict",
+      "pid": 69599
+    },
+    {
+      "group": 22,
+      "operation": "gpc_class_predict",
+      "pid": 69468
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_predict",
+      "pid": 69773
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_predict",
+      "pid": 69907
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_predict",
+      "pid": 69773
+    },
+    {
+      "group": 24,
+      "operation": "gpc_class_predict",
+      "pid": 70049
+    },
+    {
+      "group": 24,
+      "operation": "gpc_class_predict",
+      "pid": 70180
+    },
+    {
+      "group": 24,
+      "operation": "gpc_class_predict",
+      "pid": 70049
+    },
+    {
+      "group": 25,
+      "operation": "ivf_store",
+      "pid": 70354
+    },
+    {
+      "group": 25,
+      "operation": "ivf_store",
+      "pid": 70485
+    },
+    {
+      "group": 25,
+      "operation": "ivf_search",
+      "pid": 70354
+    },
+    {
+      "group": 25,
+      "operation": "ivf_search",
+      "pid": 70485
+    },
+    {
+      "group": 26,
+      "operation": "ivf_store",
+      "pid": 70630
+    },
+    {
+      "group": 26,
+      "operation": "ivf_store",
+      "pid": 70795
+    },
+    {
+      "group": 26,
+      "operation": "ivf_search",
+      "pid": 70630
+    },
+    {
+      "group": 26,
+      "operation": "ivf_search",
+      "pid": 70795
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_fit",
+      "pid": 70935
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_fit",
+      "pid": 71066
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_fit",
+      "pid": 70935
+    },
+    {
+      "group": 28,
+      "operation": "gpc_class_fit",
+      "pid": 71245
+    },
+    {
+      "group": 28,
+      "operation": "gpc_class_fit",
+      "pid": 71376
+    },
+    {
+      "group": 28,
+      "operation": "gpc_class_fit",
+      "pid": 71245
+    }
+  ],
+  "worker_groups": [
+    {
+      "devices": [
+        0
+      ],
+      "group": 0,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 63884,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 1,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64055,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 2,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64192,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 3,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64331,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 4,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64502,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 5,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64639,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 6,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64812,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 64943,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 7,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65083,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65216,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 8,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65360,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65491,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 9,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65665,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65796,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 10,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 65941,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66106,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 11,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66246,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66377,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 12,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66553,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66687,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 13,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66827,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 66960,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 14,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67097,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67233,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 15,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67433,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67577,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 16,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67753,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 67884,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 17,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68027,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68158,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 18,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68336,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68467,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 19,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68619,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68753,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 20,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 68927,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69058,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 21,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69195,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69329,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 22,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69468,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69599,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 23,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69773,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 69907,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 24,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70049,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70180,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 25,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70354,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70485,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 26,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70630,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70795,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 27,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 70935,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 71066,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 28,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:64:00.0",
+              "uuid": "e3395c8913ef334d4640a08250cff1f8"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 71245,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "NVIDIA L40S",
+              "ordinal": 0,
+              "pci_bus_id": "0000:e3:00.0",
+              "uuid": "b2657dcb5399c3e5046f6d04f2005586"
+            }
+          ],
+          "driver_library": "libcuda.so.1",
+          "kind": "visible-device-inventory",
+          "pid": 71376,
+          "ppid": 63696,
+          "vendor": "cuda",
+          "visibility": {
+            "CUDA_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -2,19 +2,25 @@
 """Import-time schemas for the field-only native linear constructors."""
 from types import BuiltinFunctionType
 from .tokenizer import _binding
-from . import _expansion_linear as linear
 
 _ENTRY = _binding()._module.linear_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('linear constructors require a compiled native entry')
 _CONTEXT = dict(plans={}, missing=object(), ready=False)
-_CLASSES = (
-    linear.SGDClassifier, linear.SGDRegressor, linear.PoissonRegressor, linear.GammaRegressor,
-    linear.TweedieRegressor, linear.HuberRegressor, linear.BayesianRidge, linear.ARDRegression,
-    linear.Lars, linear.LassoLars, linear.QuantileRegressor, linear.Perceptron,
-    linear.PassiveAggressiveClassifier, linear.PassiveAggressiveRegressor, linear.RidgeClassifier,
-    linear.RidgeCV, linear.LassoCV, linear.ElasticNetCV, linear.LogisticRegressionCV,
-)
+# The vetted classes of _expansion_linear, connected when that family loads
+# (lane lazy-family-import, 2026-11-12): `collect()` fills `_CLASSES`.
+_CLASSES = ()
+
+
+def collect():
+    """Fill `_CLASSES` once the linear expansion is loaded (never imports it)."""
+    # glue: fixed class inventory of a loaded family
+    global _CLASSES
+    import sys
+    from ._native_params_setter import _CLASSES as names
+    linear = sys.modules.get(__package__ + '._expansion_linear')
+    if linear is not None and not _CLASSES:
+        _CLASSES = tuple(getattr(linear, name) for name in names)
 
 
 def _initializer():
@@ -28,6 +34,8 @@ def install():
     # metadata is copied at import; no original constructor is retained/called.
     import inspect
     for cls in _CLASSES:  # glue: exact vetted field-only constructor declarations
+        if cls in _CONTEXT['plans']:
+            continue  # installed when its family first loaded
         original = vars(cls)['__init__']
         signature = inspect.signature(original)
         parameters = tuple(signature.parameters.values())[1:]
@@ -43,9 +51,9 @@ def install():
         names = tuple(p.name for p in parameters)  # glue: ordered public constructor schema
         # These original bodies write a field before the other signature
         # parameters. Preserve observable instance-dictionary insertion order.
-        first = ('power', 'link') if cls is linear.TweedieRegressor else (
-            ('batch_size',) if cls in (linear.Perceptron, linear.PassiveAggressiveClassifier,
-                                      linear.PassiveAggressiveRegressor) else ())
+        first = ('power', 'link') if cls.__name__ == 'TweedieRegressor' else (
+            ('batch_size',) if cls.__name__ in ('Perceptron', 'PassiveAggressiveClassifier',
+                                               'PassiveAggressiveRegressor') else ())
         order = first + tuple(name for name in names if name not in first)  # glue: fixed field assignment order
         _CONTEXT['plans'][cls] = dict(
             names=names, order=order,
@@ -59,9 +67,13 @@ def connect(setter_context):
     # after CV and setters have captured their final native method identities.
     from ._native_params_setter import _CLASSES as names
     from ._native_public_attributes import _resolved
+    if not _CLASSES:
+        return  # the linear family is not loaded
     if tuple(cls.__name__ for cls in _CLASSES) != names:  # glue: exact supported subset
         raise TypeError('linear constructor and setter schemas differ')
     for cls in _CLASSES:  # glue: fixed post-install layout snapshots
+        if 'field_hooks' in _CONTEXT['plans'][cls]:
+            continue  # snapshotted when its family first connected
         owner = setter_context['plans'][cls]
         constructor = owner['constructor']
         plan = _CONTEXT['plans'][cls]

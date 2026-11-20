@@ -33,31 +33,41 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from core.device_plan import device_plan_device, device_plan_setting
+from core.device_plan import DevicePlan, plan_for_single
 from core.hostptr import copy_f32, f32_ptr, i32_ptr
-from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
-from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
+from core.transfer import (
+    TRANSFER_TIER_IDENTICAL,
+    transfer_download_f32_list,
+    transfer_download_i32_list,
+    transfer_download_list,
+    transfer_upload_list,
+)
+from resample.gather_fast import GATHER_COLS, GATHER_ROWS, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     perm_select_fast,
 )
 from std.math import ceildiv
 from std.os import getenv
-from std.sys.compile import is_defined
-from std.sys.defines import get_defined_int
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoResampleContextFast"
+comptime _DEVCTX_SLOT = "MojolearnResampleContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnResampleContextFastV3"
 
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from resample.order_select import IDN_BOOT_SELECT, boot_quantile_select_kernel
+from resample.multi_gpu import (
+    bootstrap_theta_dispatch,
+    mc_partials_dispatch,
+    perm_null_dispatch,
+    resample_device_count,
+)
 from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -83,6 +93,7 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_UTILS_PERMUTE,
     RESAMPLE_KIND_UTILS_REPLACE,
     utils_first_by_key,
+    utils_first_by_key_into,
     utils_validate,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
@@ -204,14 +215,13 @@ comptime RESAMPLE_MAP_TPB = 256
 #: Known: never compiled, never measured; main's select already runs the
 #: board's 20,000 + 20,000 (no refusal to lift), so this is an A/B of two
 #: selects. 16 KB + 64 B threadgroup memory per block (Apple: 32 KB).
-#: FAST + Apple DEFAULT (rollback -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF).
+#: FAST + Apple DEFAULT.
 #: M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04 (ab1 d51f4b4bf):
 #: permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms;
 #: pvalue identical.
-comptime RESAMPLE_FAST_PERM_SELECT = (
-    RESAMPLE_FAST_APPLE
-    and not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 1b6a31e9a1.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RESAMPLE_FAST_PERM_SELECT = RESAMPLE_FAST_APPLE
 
 #: `-D MOJOLEARN_CV_FAST_SLICE` (python/mojolearn/model_selection.py
 #: cross_val_score): when every fold is KFold(shuffle=False)-shaped, each
@@ -229,11 +239,10 @@ comptime RESAMPLE_FAST_PERM_SELECT = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
 #: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
-#: the FAST + Apple default since then; rollback -D MOJOLEARN_CV_FAST_SLICE_OFF
-#: (the old -D name is harmless).
-comptime CV_FAST_SLICE = (
-    RESAMPLE_FAST_APPLE and not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"]()
-)
+#: the FAST + Apple default since then (the old -D name is harmless).
+# TOMBSTONE: MOJOLEARN_CV_FAST_SLICE_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 289e8ff918.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_SLICE_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CV_FAST_SLICE = RESAMPLE_FAST_APPLE
 
 #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
 #: the native default folds (`fold_ids` + `select_fold_i64`, a partition by
@@ -244,12 +253,10 @@ comptime CV_FAST_SLICE = (
 #: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
 #: rab1d-cvtrust): cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella
 #: 3099.08 -> 3089.22 ms (-0.3%); mean_r2 and output digest identical. KEEP:
-#: the FAST + Apple default since then; rollback
-#: -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (the old -D name is harmless).
-comptime CV_FAST_TRUST_FOLDS = (
-    RESAMPLE_FAST_APPLE
-    and not is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF"]()
-)
+#: the FAST + Apple default since then (the old -D name is harmless).
+# TOMBSTONE: MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 8258512ade.
+# Restore: git apply experiments/removed/MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF.patch; record in docs/TOMBSTONES.md.
+comptime CV_FAST_TRUST_FOLDS = RESAMPLE_FAST_APPLE
 
 
 def resample_fast_defines() -> Int:
@@ -269,8 +276,6 @@ def resample_fast_defines() -> Int:
         m |= 32
     comptime if CV_FAST_TRUST_FOLDS:
         m |= 64
-    comptime if RESAMPLE_FAST_GATHER_NARROW:
-        m |= 128
     return m
 
 
@@ -313,35 +318,95 @@ struct MonteCarloResult(Movable):
 
 
 # ===========================================================================
-# Upload / download, the same shape `kde/estimator.mojo` uses
+# Upload / download: core/transfer.mojo's forms
 # ===========================================================================
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnResampleTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnResampleTransferStagesFastV1"
+#: The pinned int32 stages (a slot holds stages of one element type).
+comptime _XFER_I32_POOL = "MojolearnResampleTransferI32StagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnResampleTransferI32StagesFastV1"
 
 
 def _upload(
     ctx: DeviceContext, values: List[Float32]
 ) raises -> DeviceBuffer[DType.float32]:
-    var n = len(values)
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): read in place
+    # from the caller's list. Gone: the pinned staging buffer per call, the
+    # wait before it was touched and the host copy into it. One wait.
+    return transfer_upload_list[DType.float32](ctx, values, len(values), len(values))
+
+
+#: The caller-pointer type of the `*_into` entries: the binding's own
+#: (`core/hostptr.mojo::f32_ptr`), so an address goes straight through.
+comptime ResampleF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _list_f32_ptr(values: List[Float32]) -> ResampleF32Ptr:
+    """A List's storage as the `*_into` pointer (the List outlives the call)."""
+    return ResampleF32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+def _upload_from(
+    ctx: DeviceContext, src: ResampleF32Ptr, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """`_upload` of `n` words read in place at `src` (lane ne2-b-rounds,
+    N078): one host-to-device copy from the caller's buffer, no List and no
+    staging copy. The same words."""
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
     ctx.synchronize()
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
     return buf^
+
+
+def _upload_pooled(
+    ctx: DeviceContext, xp: ResampleF32Ptr, n_x: Int, yp: ResampleF32Ptr, n_y: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The pooled sample `x ++ y` on the device, each half copied from its
+    caller buffer into its place (the permutation test's `_upload(pooled)`
+    without the host concatenation)."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](n_x + n_y)
+    if n_x > 0:
+        var head = buf.create_sub_buffer[DType.float32](0, n_x)
+        ctx.enqueue_copy(dst_buf=head, src_ptr=xp)
+        ctx.synchronize()
+        _ = head^
+    if n_y > 0:
+        var tail = buf.create_sub_buffer[DType.float32](n_x, n_y)
+        ctx.enqueue_copy(dst_buf=tail, src_ptr=yp)
+        ctx.synchronize()
+        _ = tail^
+    ctx.synchronize()
+    return buf^
+
+
+def _download_f32_into(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], dst: ResampleF32Ptr, n: Int
+) raises:
+    """The `n` words of `buf` (its whole length) straight into the caller's
+    buffer `dst`: one device-to-host copy, no List."""
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
+    ctx.synchronize()
+
+
+def _download_f32_list(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
+) raises -> List[Float32]:
+    """`_download_f32` copied straight into the List's storage (no staging
+    buffer, no per-word append)."""
+    var out = List[Float32](unsafe_uninit_length=n)
+    _download_f32_into(ctx, buf, _list_f32_ptr(out), n)
+    return out^
 
 
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words. Gone: a pinned buffer per call and
+    # one append per word into a growing list.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)
 
 
 def _perm_observed(
@@ -395,14 +460,11 @@ def _perm_observed(
 def _download_i32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
 ) raises -> List[Int32]:
-    var host = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
+    # core/transfer.mojo: the drawn row indices (`count` of them) straight
+    # into the list's own words; from DOWNLOAD_STAGE_MIN words through the
+    # pooled pinned int32 stages (lane fx-dup-next, 2026-11-19: millions of
+    # indices went down in one copy into fresh pageable pages).
+    return transfer_download_i32_list[_XFER_I32_POOL](ctx, buf, n)
 
 
 # ===========================================================================
@@ -546,15 +608,12 @@ def _launch_bootstrap_stat(
         )
 
 
-#: A/B (gap-fails2, 2026-10-02): `-D MOJOLEARN_PERM_COUNT_RANK` keeps main's
-#: counting-rank kernel up to `PERM_MAX_POOLED`; the default selects the
-#: first group's threshold by radix select at every pooled length. Same
-#: membership mask, same folds, so the same bits.
-comptime PERM_COUNT_RANK_AB = is_defined["MOJOLEARN_PERM_COUNT_RANK"]()
-
-
+#: The default selects the first group's threshold by radix select at every
+#: pooled length.
+# TOMBSTONE: MOJOLEARN_PERM_COUNT_RANK (opt-in B arm keeping the counting-rank kernel, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_PERM_COUNT_RANK.patch; record in docs/TOMBSTONES.md.
 def perm_uses_select(n_pooled: Int) -> Bool:
-    return not PERM_COUNT_RANK_AB or n_pooled > PERM_MAX_POOLED
+    return True
 
 
 def _launch_perm_stat_at[
@@ -1026,25 +1085,15 @@ def _sort_segments(
 # ===========================================================================
 
 
-def resample_device_count() raises -> Int:
-    """MOJOLEARN_RESAMPLE_DEVICE_COUNT: replicate or sample ranges on owners."""
-    var value = device_plan_setting("MOJOLEARN_RESAMPLE_DEVICE_COUNT")
-    if value == "":
-        return 1
-    var count = Int(value)
-    if count < 1 or count > 64:
-        raise Error("resample device count must be in [1, 64]")
-    if count > 1 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("multi-GPU resampling requires IDENTICAL numeric mode")
-    return count
-
-
-def _owner_offset(rank: Int) -> Int:
-    """Check-only arm: later owners compute their range one position late."""
-    comptime if is_defined["MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE"]():
-        if rank > 0:
-            return 1
-    return 0
+def _resample_plan(plan: Optional[DevicePlan]) raises -> DevicePlan:
+    """The device plan an entry runs under: the value its binding entry read
+    once (`device_plan_current()`), or one device for a direct caller that
+    passes none (checks, the speed bench, `resample_main`). The owner loops
+    and their dispatchers live in `resample/multi_gpu.mojo`; nothing in this
+    file reads the thread-scoped plan."""
+    if plan:
+        return plan.value().copy()
+    return plan_for_single()
 
 
 def _launch_boot_select_at[
@@ -1178,86 +1227,6 @@ def _bootstrap_theta(
         ctx.synchronize()
 
 
-def _bootstrap_theta_owners(
-    ctx: DeviceContext,
-    mut theta: DeviceBuffer[DType.float32],
-    x: List[Float32],
-    key: UInt64,
-    r_first: Int,
-    n_resamples: Int,
-    n: Int,
-    n_features: Int,
-    statistic: Int,
-    q_or_prop: Float32,
-    tpb: Int,
-    map_tpb: Int,
-    count: Int,
-) raises:
-    """Contiguous global replicate ranges on owners, bytes copied into place."""
-    var active = min(count, n_resamples)
-    ctx.synchronize()
-    for rank in range(active):
-        var begin = n_resamples * rank // active
-        var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var ox = _upload(owner, x)
-        var ot = owner.enqueue_create_buffer[DType.float32](rows)
-        owner.synchronize()
-        _bootstrap_theta(
-            owner, ot, ox, key, r_first + begin + _owner_offset(rank), rows,
-            n, n_features, statistic, q_or_prop, tpb, map_tpb,
-        )
-        owner.synchronize()
-        var view = theta.create_sub_buffer[DType.float32](begin, rows)
-        ot.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = ox^
-        _ = ot^
-        _ = owner^
-    ctx.synchronize()
-
-
-def _perm_null_owners(
-    ctx: DeviceContext,
-    mut null_buf: DeviceBuffer[DType.float32],
-    pooled: List[Float32],
-    key: UInt64,
-    r_first: Int,
-    n_resamples: Int,
-    n_pooled: Int,
-    n_x: Int,
-    statistic: Int,
-    tpb: Int,
-    count: Int,
-) raises:
-    """Contiguous global permutation ranges on owners, bytes copied into place."""
-    var active = min(count, n_resamples)
-    ctx.synchronize()
-    for rank in range(active):
-        var begin = n_resamples * rank // active
-        var rows = n_resamples * (rank + 1) // active - begin
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var op = _upload(owner, pooled)
-        var on = owner.enqueue_create_buffer[DType.float32](rows)
-        owner.synchronize()
-        _launch_perm_stat(
-            owner, on, op, key, r_first + begin + _owner_offset(rank), rows,
-            n_pooled, n_x, statistic, tpb,
-        )
-        owner.synchronize()
-        var view = null_buf.create_sub_buffer[DType.float32](begin, rows)
-        on.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = op^
-        _ = on^
-        _ = owner^
-    ctx.synchronize()
-
-
 def _mc_partials[
     f_id: Int
 ](
@@ -1290,57 +1259,6 @@ def _mc_partials[
             " got " + String(tpb)
         )
 
-def _mc_partials_owners[
-    f_id: Int
-](
-    ctx: DeviceContext,
-    mut partials: DeviceBuffer[DType.float32],
-    lower: List[Float32],
-    span: List[Float32],
-    key: UInt64,
-    i_first: Int,
-    n_samples: Int,
-    n_chunks: Int,
-    tpb: Int,
-    count: Int,
-) raises:
-    """Whole PINNED_SUM_W chunks on owners. An owner starting at global chunk
-    c0 draws from `i_first + c0 * PINNED_SUM_W`, so its chunk j is global
-    chunk c0 + j with the same values and the same pinned fold; the root folds
-    all partials in chunk order."""
-    var active = min(count, n_chunks)
-    ctx.synchronize()
-    for rank in range(active):
-        var c0 = n_chunks * rank // active
-        var c1 = n_chunks * (rank + 1) // active
-        var first_sample = c0 * PINNED_SUM_W
-        var last_sample = c1 * PINNED_SUM_W
-        if last_sample > n_samples:
-            last_sample = n_samples
-        var chunks = c1 - c0
-        var owner = DeviceContext(device_id=device_plan_device(rank))
-        var ol = _upload(owner, lower)
-        var ospan = _upload(owner, span)
-        var opart = owner.enqueue_create_buffer[DType.float32](chunks)
-        owner.synchronize()
-        _mc_partials[f_id](
-            owner, opart, ol, ospan, key,
-            i_first + first_sample + _owner_offset(rank),
-            last_sample - first_sample, chunks, chunks, tpb,
-        )
-        owner.synchronize()
-        var view = partials.create_sub_buffer[DType.float32](c0, chunks)
-        opart.enqueue_copy_to(view)
-        owner.synchronize()
-        ctx.synchronize()
-        _ = view^
-        _ = ol^
-        _ = ospan^
-        _ = opart^
-        _ = owner^
-    ctx.synchronize()
-
-
 def bootstrap_host(
     x: List[Float32],
     n: Int,
@@ -1356,6 +1274,39 @@ def bootstrap_host(
     tpb: Int = RESAMPLE_TPB,
     with_bca_diagnostics: Bool = False,
     map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
+) raises -> BootstrapResult:
+    """`bootstrap_host_into` over a List sample, the distribution returned as a
+    List (the checks, the speed driver and `resample_main` read it). The
+    refusals and the bits are `bootstrap_host_into`'s."""
+    var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = bootstrap_host_into(
+        _list_f32_ptr(x), len(x), n, n_features, statistic, n_resamples, seed, method,
+        _list_f32_ptr(dist), confidence_level, alternative, q_or_prop, r_first,
+        tpb, with_bca_diagnostics, map_tpb, plan,
+    )
+    r.distribution = dist^
+    return r^
+
+
+def bootstrap_host_into(
+    xp: ResampleF32Ptr,
+    x_words: Int,
+    n: Int,
+    n_features: Int,
+    statistic: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    dist_out: ResampleF32Ptr,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    q_or_prop: Float32 = Float32(0.5),
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+    with_bca_diagnostics: Bool = False,
+    map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> BootstrapResult:
     """`scipy.stats.bootstrap((x,), statistic, n_resamples=..., rng=seed,
     method=..., confidence_level=..., alternative=...)`, one shot.
@@ -1371,6 +1322,14 @@ def bootstrap_host(
     answers are bit-identical to the corresponding slice of the whole run.
     SciPy's equivalent -- passing `bootstrap_result` back in -- CONTINUES a
     stream and therefore cannot make that promise.
+
+    POINTER FORM (lane ne2-b-rounds, N078): the sample is read in place at
+    `xp` (`x_words` float32 words, at least n * n_features) and its n *
+    n_features words are uploaded straight from it; the replicate
+    distribution is downloaded straight into `dist_out` (n_resamples
+    float32 slots), so the returned `distribution` is EMPTY.
+    The sorted distribution comes back once into the returned List the
+    interval reads. The same words reach the same kernels as before.
     """
     validate_positions(n_resamples, n)
     if r_first < 0:
@@ -1392,15 +1351,15 @@ def bootstrap_host(
             "bootstrap: statistic 'std' is ddof=1 (DEVIATION 1697) and needs"
             " at least 2 observations; got n=" + String(n)
         )
-    if len(x) < n * n_features:
+    if x_words < n * n_features:
         raise Error(
             "bootstrap: the sample holds "
-            + String(len(x))
+            + String(x_words)
             + " values but n * n_features is "
             + String(n * n_features)
         )
     for i in range(n * n_features):
-        var v = x[i]
+        var v = xp[i]
         if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
             raise Error(
                 "bootstrap: the sample contains NaN or infinity at position "
@@ -1469,7 +1428,7 @@ def bootstrap_host(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dx = _upload(ctx, x)
+    var dx = _upload_from(ctx, xp, n * n_features)
     var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
 
@@ -1496,19 +1455,14 @@ def bootstrap_host(
     ctx.synchronize()
     trace.record_device(ctx, "resample.index_map", idx_buf, win_r * win_i)
 
-    var owners = resample_device_count()
-    if owners > 1 and n_resamples > 1:
-        _bootstrap_theta_owners(
-            ctx, theta, x, key, r_first, n_resamples, n, n_features,
-            statistic, q_or_prop, tpb, map_tpb, owners,
-        )
-    else:
-        _bootstrap_theta(
-            ctx, theta, dx, key, r_first, n_resamples, n, n_features,
-            statistic, q_or_prop, tpb, map_tpb,
-        )
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
+    bootstrap_theta_dispatch(
+        dplan, owners, ctx, theta, dx, xp, n * n_features, key, r_first,
+        n_resamples, n, n_features, statistic, q_or_prop, tpb, map_tpb,
+    )
     trace.record_device(ctx, "resample.theta", theta, n_resamples)
-    var dist = _download_f32(ctx, theta, n_resamples)
+    _download_f32_into(ctx, theta, dist_out, n_resamples)
 
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
@@ -1516,7 +1470,7 @@ def bootstrap_host(
     # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch.
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
-    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+    var sorted_dist = _download_f32_list(ctx, sorted_buf, n_resamples)
 
     var theta_hat = point_estimate_device(ctx, dx, n, n_features, statistic, q_or_prop)
     trace.record_scalar_f32("resample.point", theta_hat)
@@ -1592,16 +1546,66 @@ def bootstrap_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return BootstrapResult(
-        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+        theta_hat, List[Float32](), sorted_dist^, se, interval, pos_lo, pos_hi
     )
 
 
-def _unpaired_validate(
-    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
-    method: Int, confidence_level: Float32, r_first: Int,
-) raises:
-    """`bootstrap_unpaired_host`'s refusals, shared word for word with the
-    host twin (`resample/host/resample_host.mojo`)."""
+def bootstrap_unpaired_host(
+    x: List[Float32],
+    n_x: Int,
+    y: List[Float32],
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> BootstrapResult:
+    """`bootstrap_unpaired_host_into` over List samples, the distribution
+    returned as a List. The refusals and the bits are the pointer form's."""
+    var dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = bootstrap_unpaired_host_into(
+        _list_f32_ptr(x), len(x), n_x, _list_f32_ptr(y), len(y), n_y,
+        n_resamples, seed, method, _list_f32_ptr(dist), confidence_level,
+        alternative, r_first, tpb,
+    )
+    r.distribution = dist^
+    return r^
+
+
+def bootstrap_unpaired_host_into(
+    xp: ResampleF32Ptr,
+    x_words: Int,
+    n_x: Int,
+    yp: ResampleF32Ptr,
+    y_words: Int,
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    dist_out: ResampleF32Ptr,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> BootstrapResult:
+    """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
+    two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
+    sample 0 under kind 1 (so its replicate is exactly the one-sample
+    bootstrap's), sample 1 under kind 4 -- and `theta[r] = mean(x*_r) -
+    mean(y*_r)`, each mean the pinned tree of the one-sample `mean` arm, the
+    difference one flushed subtraction (the paired `diff_means` spelling).
+    BCa uses SciPy's multi-sample acceleration (`bca_acceleration_two`)
+    over each sample's leave-one-out means with the other sample whole.
+
+    POINTER FORM (lane ne2-b-rounds, N078): both samples are read in place
+    and uploaded straight from `xp` / `yp`; the distribution is downloaded
+    into `dist_out` (n_resamples slots), so the returned `distribution` is
+    EMPTY. The same words reach the same kernels."""
+    # the refusals (the host twin keeps the same words,
+    # resample/host/resample_host.mojo `_host_unpaired_validate`)
     validate_positions(n_resamples, n_x)
     validate_positions(n_resamples, n_y)
     if r_first < 0:
@@ -1610,12 +1614,12 @@ def _unpaired_validate(
         )
     validate_positions(r_first + n_resamples, n_x)
     validate_positions(r_first + n_resamples, n_y)
-    if len(x) < n_x or len(y) < n_y:
+    if x_words < n_x or y_words < n_y:
         raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
     for k in range(2):
         var m = n_x if k == 0 else n_y
         for i in range(m):
-            var v = x[i] if k == 0 else y[i]
+            var v = xp[i] if k == 0 else yp[i]
             if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
                 raise Error(
                     "bootstrap: sample " + String(k) + " contains NaN or"
@@ -1633,35 +1637,11 @@ def _unpaired_validate(
             " sample (each leave-one-out sample must itself have a mean); got"
             " n_x=" + String(n_x) + ", n_y=" + String(n_y)
         )
-
-
-def bootstrap_unpaired_host(
-    x: List[Float32],
-    n_x: Int,
-    y: List[Float32],
-    n_y: Int,
-    n_resamples: Int,
-    seed: UInt64,
-    method: Int,
-    confidence_level: Float32 = Float32(0.95),
-    alternative: Int = ALT_TWO_SIDED,
-    r_first: Int = 0,
-    tpb: Int = RESAMPLE_TPB,
-) raises -> BootstrapResult:
-    """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
-    two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
-    sample 0 under kind 1 (so its replicate is exactly the one-sample
-    bootstrap's), sample 1 under kind 4 -- and `theta[r] = mean(x*_r) -
-    mean(y*_r)`, each mean the pinned tree of the one-sample `mean` arm, the
-    difference one flushed subtraction (the paired `diff_means` spelling).
-    BCa uses SciPy's multi-sample acceleration (`bca_acceleration_two`)
-    over each sample's leave-one-out means with the other sample whole."""
-    _unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
     var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
     var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dxb = _upload(ctx, x)
-    var dyb = _upload(ctx, y)
+    var dxb = _upload_from(ctx, xp, x_words)
+    var dyb = _upload_from(ctx, yp, y_words)
     var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     var ty = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
@@ -1672,12 +1652,12 @@ def bootstrap_unpaired_host(
     # once (it is returned)
     var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     enqueue_diff_map(ctx, theta, tx, ty.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_resamples, Float32(0.0), 0)
-    var dist = _download_f32(ctx, theta, n_resamples)
+    _download_f32_into(ctx, theta, dist_out, n_resamples)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     # TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_RANK_SORT (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1: see bootstrap_host.
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
-    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+    var sorted_dist = _download_f32_list(ctx, sorted_buf, n_resamples)
 
     var mx = point_estimate_device(ctx, dxb, n_x, 1, STAT_MEAN, Float32(0.5))
     var my = point_estimate_device(ctx, dyb, n_y, 1, STAT_MEAN, Float32(0.5))
@@ -1738,7 +1718,7 @@ def bootstrap_unpaired_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return BootstrapResult(
-        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+        theta_hat, List[Float32](), sorted_dist^, se, interval, pos_lo, pos_hi
     )
 
 
@@ -1756,6 +1736,33 @@ def permutation_test_host(
     alternative: Int,
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
+    plan: Optional[DevicePlan] = None,
+) raises -> PermutationResult:
+    """`permutation_test_host_into` over List samples, the null returned as a
+    List. The refusals and the bits are the pointer form's."""
+    var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = permutation_test_host_into(
+        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), statistic,
+        n_resamples, seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
+        plan,
+    )
+    r.null_distribution = null_dist^
+    return r^
+
+
+def permutation_test_host_into(
+    xp: ResampleF32Ptr,
+    n_x: Int,
+    yp: ResampleF32Ptr,
+    n_y: Int,
+    statistic: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    null_out: ResampleF32Ptr,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> PermutationResult:
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=seed,
@@ -1772,9 +1779,14 @@ def permutation_test_host(
     (DEVIATION 1702), which is CONSERVATIVE -- it can only make a p-value
     larger -- and is stated so nobody reads a floor of `1/(R+1)` as a claim
     of exactness.
+
+    POINTER FORM (lane ne2-b-rounds, N078): `x` (n_x words at `xp`) and `y`
+    (n_y words at `yp`) are read in place and each is copied into its half
+    of the pooled device buffer (no host concatenation); the null comes back
+    straight into `null_out` (n_resamples slots), so the returned
+    `null_distribution` is EMPTY. The pooled words are the ones the host
+    concatenation built, in the same order.
     """
-    var n_x = len(x)
-    var n_y = len(y)
     var n_pooled = n_x + n_y
     if n_x <= 0 or n_y <= 0:
         raise Error(
@@ -1790,13 +1802,8 @@ def permutation_test_host(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"
             " 2 observations in the first sample; got n_x=" + String(n_x)
         )
-    var pooled = List[Float32]()
-    for i in range(n_x):
-        pooled.append(x[i])
-    for i in range(n_y):
-        pooled.append(y[i])
     for i in range(n_pooled):
-        var v = pooled[i]
+        var v = xp[i] if i < n_x else yp[i - n_x]
         if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
             raise Error(
                 "permutation_test: the pooled sample contains NaN or infinity"
@@ -1824,43 +1831,29 @@ def permutation_test_host(
     var key_words: List[Int32] = [key_lo(key), key_hi(key)]
     trace.record_list_i32("resample.key", key_words)
 
-    var dpool = _upload(ctx, pooled)
+    var dpool = _upload_pooled(ctx, xp, n_x, yp, n_y)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    var owners = resample_device_count()
-    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default; _OFF rolls back): the
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
+    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default): the
     # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
     # the same permutation. Mean and diff_means; anything else: main's launch.
-    # (Owners > 1 is IDENTICAL only, resample_device_count.)
+    # (Owners > 1 is IDENTICAL only, resample/multi_gpu.mojo::resample_device_count.)
     var selected = False
     comptime if RESAMPLE_FAST_PERM_SELECT:
         selected = perm_select_fast(
             ctx, null_buf, dpool, key, r_first, n_resamples, n_pooled, n_x,
             statistic,
         )
-    if selected:
-        pass
-    elif owners > 1 and n_resamples > 1:
-        _perm_null_owners(
-            ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
-            statistic, tpb, owners,
-        )
-    else:
-        _launch_perm_stat(
-            ctx,
-            null_buf,
-            dpool,
-            key,
-            r_first,
-            n_resamples,
-            n_pooled,
-            n_x,
-            statistic,
-            tpb,
+    if not selected:
+        perm_null_dispatch(
+            dplan, owners, ctx, null_buf, dpool, xp, yp, key, r_first,
+            n_resamples, n_pooled, n_x, statistic, tpb,
         )
     ctx.synchronize()
     trace.record_device(ctx, "resample.null", null_buf, n_resamples)
-    var null_dist = _download_f32(ctx, null_buf, n_resamples)
+    _download_f32_into(ctx, null_buf, null_out, n_resamples)
 
     # The OBSERVED statistic is the pooled sample split where it already is,
     # i.e. the identity permutation, over `host_tree_sum`'s pinned tree (the
@@ -1880,36 +1873,7 @@ def permutation_test_host(
     _ = null_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return PermutationResult(observed, null_dist^, pv)
-
-
-def perm_samples_validate(
-    x: List[Float32], y: List[Float32], two: Bool, n_resamples: Int, r_first: Int
-) raises:
-    """`permutation_samples_host`'s refusals (shared word for word by the
-    host twin)."""
-    var n = len(x)
-    if n <= 0:
-        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
-    if two and len(y) != n:
-        raise Error(
-            "permutation_test(permutation_type='samples'): the two samples"
-            " must be PAIRED, the same length; got n_x=" + String(n)
-            + ", n_y=" + String(len(y))
-        )
-    validate_positions(n_resamples, n)
-    if r_first < 0:
-        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
-    validate_positions(r_first + n_resamples, n)
-    for k in range(2 if two else 1):
-        for i in range(n):
-            var v = x[i] if k == 0 else y[i]
-            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
-                raise Error(
-                    "permutation_test: sample " + String(k) + " contains NaN"
-                    " or infinity at position " + String(i) + " (refused"
-                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
-                )
+    return PermutationResult(observed, List[Float32](), pv)
 
 
 def permutation_samples_host(
@@ -1922,21 +1886,71 @@ def permutation_samples_host(
     r_first: Int = 0,
     tpb: Int = RESAMPLE_TPB,
 ) raises -> PermutationResult:
+    """`permutation_samples_host_into` over List samples, the null returned as a
+    List. The refusals and the bits are the pointer form's."""
+    var null_dist = List[Float32](length=max(n_resamples, 0), fill=Float32(0.0))
+    var r = permutation_samples_host_into(
+        _list_f32_ptr(x), len(x), _list_f32_ptr(y), len(y), two, n_resamples,
+        seed, alternative, _list_f32_ptr(null_dist), r_first, tpb,
+    )
+    r.null_distribution = null_dist^
+    return r^
+
+
+def permutation_samples_host_into(
+    xp: ResampleF32Ptr,
+    n: Int,
+    yp: ResampleF32Ptr,
+    n_y: Int,
+    two: Bool,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    null_out: ResampleF32Ptr,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> PermutationResult:
     """`scipy.stats.permutation_test(data, statistic,
     permutation_type='samples', ...)` (2026-09-28): `two` is `(x, y)` with
     `diff_means`, else `(x,)` with `mean` (SciPy's sign-flip convention).
     `perm_samples_kernel` draws each pair's coin at its own Philox position
     (kind 5); the observed statistic is the identity arrangement, the pinned
     tree on the device; the p-value is `permutation_pvalue`'s (DEVIATION 1702)
-    from device counts."""
-    perm_samples_validate(x, y, two, n_resamples, r_first)
-    var n = len(x)
+    from device counts.
+
+    POINTER FORM (lane ne2-b-rounds, N078): `x` (n words at `xp`) and, when
+    `two`, `y` (n_y words at `yp`) are read in place and uploaded straight
+    from the caller's buffers; the null comes back into `null_out`
+    (n_resamples slots), so the returned `null_distribution` is EMPTY."""
+    # the refusals (the host twin keeps the same words,
+    # resample/host/resample_host.mojo `_host_perm_samples_validate`)
+    if n <= 0:
+        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
+    if two and n_y != n:
+        raise Error(
+            "permutation_test(permutation_type='samples'): the two samples"
+            " must be PAIRED, the same length; got n_x=" + String(n)
+            + ", n_y=" + String(n_y)
+        )
+    validate_positions(n_resamples, n)
+    if r_first < 0:
+        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
+    validate_positions(r_first + n_resamples, n)
+    for k in range(2 if two else 1):
+        for i in range(n):
+            var v = xp[i] if k == 0 else yp[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "permutation_test: sample " + String(k) + " contains NaN"
+                    " or infinity at position " + String(i) + " (refused"
+                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = _upload(ctx, x)
-    var dy = _upload(ctx, x)
-    if two:
-        dy = _upload(ctx, y)
+    var dx = _upload_from(ctx, xp, n)
+    # one sample: the kernel's second operand is unread; the old route
+    # uploaded x a second time for it
+    var dy = _upload_from(ctx, yp if two else xp, n_y if two else n)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     if tpb != 256 and tpb != 128 and tpb != 64:
@@ -1959,7 +1973,7 @@ def permutation_samples_host(
                     grid_dim=(n_resamples, 1, 1), block_dim=(width, 1, 1),
                 )
     ctx.synchronize()
-    var null_dist = _download_f32(ctx, null_buf, n_resamples)
+    _download_f32_into(ctx, null_buf, null_out, n_resamples)
     # the identity arrangement's statistic and the p-value's counts on the
     # device (resample/device_post.mojo), the replicate kernels' tree
     var observed = _perm_observed(ctx, dx, n, n, 0, STAT_MEAN)
@@ -1973,7 +1987,7 @@ def permutation_samples_host(
     _ = null_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return PermutationResult(observed, null_dist^, pv)
+    return PermutationResult(observed, List[Float32](), pv)
 
 
 # ===========================================================================
@@ -2023,6 +2037,7 @@ def monte_carlo_integrate_host[
     tpb: Int = RESAMPLE_TPB,
     grid_blocks: Int = 0,
     map_tpb: Int = RESAMPLE_MAP_TPB,
+    plan: Optional[DevicePlan] = None,
 ) raises -> MonteCarloResult:
     """`volume * mean(f(x_i))` over `n_samples` points drawn uniformly from
     the rectangle `[lower, upper)`.
@@ -2099,17 +2114,12 @@ def monte_carlo_integrate_host[
     ctx.synchronize()
 
     var blocks = grid_blocks if grid_blocks > 0 else n_chunks
-    var owners = resample_device_count()
-    if owners > 1 and n_chunks > 1:
-        _mc_partials_owners[f_id](
-            ctx, partials, lower, span, key, i_first, n_samples, n_chunks, tpb,
-            owners,
-        )
-    else:
-        _mc_partials[f_id](
-            ctx, partials, dlower, dspan, key, i_first, n_samples, n_chunks,
-            blocks, tpb,
-        )
+    var dplan = _resample_plan(plan)
+    var owners = resample_device_count(dplan)
+    mc_partials_dispatch[f_id](
+        dplan, owners, ctx, partials, dlower, dspan, lower, span, key,
+        i_first, n_samples, n_chunks, blocks, tpb,
+    )
     ctx.synchronize()
 
     # A bounded window of coordinates, for the card and for the map gate.
@@ -2174,10 +2184,11 @@ def mc_closed_form_for[
 # Array (1,000,000 rows at the board). On FAST + Apple the device rows go
 # straight into the caller's int32 buffer in one copy. The same integers.
 # Default since the M3 A/B gmp-rs-idx-* (resample taxi 71.7 -> 62.8 ms,
-# istella -1.8%, max_mean_shift the same); -D
-# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF restores the List route.
-comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                                and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
+# istella -1.8%, max_mean_shift the same). Every tier now takes the direct
+# copy (bindings/_mojolearn_resample.mojo); the switch and its List-route
+# B arm are gone.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF (old path, superseded by the FAST+Apple default) deleted 2026-11-15 by lane/expdel-02-decomposition-series; code recoverable at 080e0e6f72.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def resample_indices_replace_into(
@@ -2198,6 +2209,42 @@ def resample_indices_replace_into(
         )
         ctx.enqueue_copy(dst_ptr=dst, src_buf=rows.create_sub_buffer[DType.int32](0, count))
     ctx.synchronize()
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+
+
+def resample_indices_permute_into(
+    n: Int, count: Int, seed: UInt64, dst: MutPointer[Int32, MutUntrackedOrigin], tpb: Int = 256
+) raises:
+    """`resample_indices_host(n, count, False, seed)` written into `dst`
+    (count int32 slots): the device draws every position's 64-bit key
+    (kind 7), the keys come home once into a host buffer and
+    `utils_first_by_key_into` writes the first `count` positions of the
+    total order straight into the caller's buffer (lane ne2-b-rounds, N053:
+    no List of keys, no List of indices, no copy after). The same integers
+    as `resample_indices_host`."""
+    utils_validate(n, count, False)
+    var key = resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var rows = ctx.enqueue_create_buffer[DType.int32](1)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(n), Int32(0),
+        grid_dim=(ceildiv(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.uint64](n)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
+    ctx.synchronize()
+    utils_first_by_key_into(
+        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(host.unsafe_ptr())),
+        n,
+        count,
+        dst,
+    )
+    _ = host^
     _ = rows^
     _ = keys^
     # DEVIATION 1946: the context dies LAST.
@@ -2270,13 +2317,15 @@ def resample_indices_host(
 # Historical wide-row regression retained; no dataset-specific switch.
 # Initial metadata failures produced NO scores. Full receipt hashes are in
 # docs/apple-fast/ab/resample-gpu-recovery.md.
-# C11 is an independent default-off IDENTICAL arm; Apple FAST retains main's default.
-comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C11_DRAW_GATHER (opt-in IDENTICAL arm, no A/B recorded; non-owner site, owner expdel2-07-base) folded to False 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C11_DRAW_GATHER.expdel2-37-series.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_OFF (old path, EXP:1131 reconciled; the FAST + Apple gather default kept) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and TARGET_HAS_APPLE_GPU)
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
-    and not is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_OFF"]())
 
 
 # Pair independent array transfers on one stream. Source/output DeviceBuffers
@@ -2292,12 +2341,13 @@ comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERI
 # remain limitations. Explicit *_OFF flags take precedence over old opt-ins.
 # Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
 # resample-full-summary.json; model is stateless, output/index hashes saved.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF (old path beside the Apple FAST default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and TARGET_HAS_APPLE_GPU)
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
     # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
-    and not is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF"]())
 
 # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):
 # B/A1.0402/0.9868/1.7701, quality equal, one warmup+score. Historical losses.
@@ -2311,9 +2361,10 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # control. Earlier small-workload losses remain. F19 permutation stays OFF.
 # Evidence beside the F04 summary: resample-combined-summary.json and boards.
 # Decision: resample-promotion.json in the same evidence directory.
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF (old path beside the Apple FAST default, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
 comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"]())
+    and TARGET_HAS_APPLE_GPU)
 
 
 def resample_gather_grouped(
@@ -2346,7 +2397,9 @@ def resample_gather_grouped(
 # F19 M3 permutation complete calls B/A2.0031/2.1569/1.0847 at509x3/521x129/997x67;
 # resample control1.6429/0.6770/0.4746. Quality equal, one warmup+score; keep OFF.
 # Evidence ab-20261006/repairs-54c1f35a5/F19; no unmeasured combination promotion.
-comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"]()
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE (opt-in FAST arm, F19 slower, no promotion) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime RESAMPLE_FAST_DEVICE_PERMUTE removed; always False, nothing read it.)
 
 def resample_permutation_gather_gpu(
     n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
@@ -2362,7 +2415,7 @@ def resample_gather_gpu[REPLACE: Bool = True](
     Input/output copies are transport, not host row indexing. No retained pointers.
     """
     comptime if RESAMPLE_GPU_GATHER:
-        comptime if not REPLACE and not RESAMPLE_FAST_DEVICE_PERMUTE:
+        comptime if not REPLACE:
             return False
         utils_validate(n, count, REPLACE)
         if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
@@ -2375,27 +2428,6 @@ def resample_gather_gpu[REPLACE: Bool = True](
                 return False
         var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if REPLACE else RESAMPLE_KIND_UTILS_PERMUTE)
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        # C11 A regenerates draws at each consumed output. B retains the
-        # materialized index array. Each input owns independent buffers and
-        # every queued copy completes before its buffers leave scope.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        comptime if C11_DRAW_GATHER and REPLACE:
-            for a in range(len(srcs)):
-                var d = widths[a]
-                var source = ctx.enqueue_create_buffer[DType.float32](n*d)
-                var output = ctx.enqueue_create_buffer[DType.float32](count*d)
-                ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
-                ctx.enqueue_function[classical_draw_gather_kernel](
-                    output.unsafe_ptr(), source.unsafe_ptr(), key_lo(key), key_hi(key),
-                    Int32(n), Int32(count), Int32(d),
-                    grid_dim=ceildiv(count*d, 256), block_dim=256,
-                )
-                ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=output)
-                ctx.synchronize()
-                _ = output^
-                _ = source^
-            _ = ctx^
-            return True
         var draw_count = count if REPLACE else n
         var rows = ctx.enqueue_create_buffer[DType.int32](draw_count)
         var keys = ctx.enqueue_create_buffer[DType.uint64](1 if REPLACE else n)
@@ -2464,8 +2496,8 @@ def resample_gather_gpu[REPLACE: Bool = True](
         return False
 
 
-#: `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
-#: 2026-10-04; READY-AB, opt-in, FAST + Apple): resample(replace=True)'s
+#: Formerly `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
+#: 2026-10-04; READY-AB, opt-in, FAST + Apple, removed unmeasured): resample(replace=True)'s
 #: gather on the device for NARROW rows only. RESAMPLE_GPU_GATHER (above)
 #: was mixed: taxi (11 floats = 44 B a row) 68.5 -> 58.8 ms, istella (220
 #: floats = 880 B) 390.8 -> 805.4 ms. Why, from the Apple transfer costs
@@ -2482,10 +2514,10 @@ def resample_gather_gpu[REPLACE: Bool = True](
 #: caller's output), and the indices come back in the same launch. The draw
 #: is `resample_indices_replace_into`'s launch: the same integers, the same
 #: rows, bit-identical outputs.
-comptime RESAMPLE_FAST_GATHER_NARROW = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW"]())
-comptime GATHER_NARROW_MAX_BYTES = get_defined_int["MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES", 128]()
+# TOMBSTONE: MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW, MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES (opt-in FAST arm and its width knob, EXP:1404 READY-AB, no A/B recorded) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at 6b87cc7de9.
+# Restore: git apply experiments/removed/MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW.patch and experiments/removed/MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES.patch; record in docs/TOMBSTONES.md.
+# (Sweep 2026-11-15: comptime RESAMPLE_FAST_GATHER_NARROW removed; always False, nothing read it.)
+comptime GATHER_NARROW_MAX_BYTES = 128
 
 
 def resample_gather_narrow(
@@ -2497,43 +2529,4 @@ def resample_gather_narrow(
     dsts[a] (count x widths[a] float32). Returns the bit mask of the arrays
     gathered (the caller gathers the rest with the indices), -1 in a build
     without the define. Synchronized; nothing retained."""
-    comptime if RESAMPLE_FAST_GATHER_NARROW:
-        utils_validate(n, count, True)
-        if count <= 0:
-            return 0
-        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var rows = ctx.enqueue_create_buffer[DType.int32](count)
-        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
-        ctx.enqueue_function[utils_draw_kernel](
-            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
-            Int32(n), Int32(count), Int32(1),
-            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
-        )
-        ctx.enqueue_copy(dst_ptr=i32_ptr(idx_dst), src_buf=rows.create_sub_buffer[DType.int32](0, count))
-        var keep = List[DeviceBuffer[DType.float32]]()
-        var done = 0
-        for a in range(len(srcs)):
-            var d = widths[a]
-            if d <= 0 or d * 4 > GATHER_NARROW_MAX_BYTES or count * d > 2147483647 or n * d > 2147483647:
-                continue
-            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
-            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=f32_ptr(srcs[a]))
-            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
-            ctx.enqueue_function[gather_rows_f32_kernel](
-                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=dout)
-            keep.append(dsrc^)
-            keep.append(dout^)
-            done |= 1 << a
-        ctx.synchronize()
-        _ = keep^
-        _ = rows^
-        _ = keys^
-        # DEVIATION 1946: the context dies LAST.
-        _ = ctx^
-        return done
-    else:
-        return -1
+    return -1

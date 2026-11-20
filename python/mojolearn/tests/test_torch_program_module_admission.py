@@ -4,9 +4,15 @@ import subprocess
 import sys
 
 import numpy as np
-import onnx
 import pytest
+
+onnx = pytest.importorskip("onnx")
+# every case runs a child that imports torch
+pytest.importorskip("torch")
 from onnx import TensorProto, helper, numpy_helper
+
+# Every test runs its child without PYTHONPATH, so it imports the installed package.
+pytestmark = pytest.mark.needs_installed_package
 
 
 @pytest.fixture(scope="module")

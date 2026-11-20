@@ -81,15 +81,7 @@ caller of this function:
   cannot stop you from creating an order dependence afterwards.
 """
 
-import array
-import importlib.machinery
-import importlib.util
-import os
-import sys
-
 from . import _backend
-from ._buffer import addr, addr_ro, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty
-from ._bufcheck import dtype_name, is_native_f32, nelems, probe
 
 #: The profile family and the version, kept apart because the VERSION is the
 #: part the contract makes load-bearing: "a bit-identity claim with no version
@@ -105,6 +97,7 @@ PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
 _EXPERIMENT_PROFILES = {
     2: "mojolearn.identical.gemm.fp32.i04-leaf64",
     3: "mojolearn.identical.gemm.fp32.ni08-leaf256",
+    4: "mojolearn.identical.gemm.fp32.v2-leaf512",
 }
 _EXPECTED_PROFILE_ENV = "MOJOLEARN_EXPERIMENT_GEMM_PROFILE"
 
@@ -215,76 +208,13 @@ def require_identical():
 #   False        True          OP_NT    a @ b.T      (m, k)    (n, k)
 #   True         False         OP_TN    a.T @ b      (k, m)    (k, n)
 #   True         True          REFUSED  -- see below
-_OPS = {
-    (False, False): OP_NN,
-    (False, True): OP_NT,
-    (True, False): OP_TN,
-}
-
-
-def _operand(x, name):
-    """A float32, C-contiguous, 2-D `Array` over `x`, to keep alive across
-    the call. DEVIATION 2400: the operand is read through the BUFFER
-    PROTOCOL (`_buffer.view`), so a NumPy array, an `array.array('f')`, a
-    `mojolearn.Array` or anything else exporting a float32 buffer is an
-    operand; there is no NumPy on this path.
-
-    **A non-float32 buffer is REFUSED BY NAME, never cast.** `_buffer.as_f32_c`
-    converts float64 silently-but-reported, which is the right trade for an
-    estimator whose answer is approximate anyway. It is the wrong trade here:
-    this module's entire product is the caller's control over which bits go
-    in, and a float64 input downcast on the way through has already lost 29
-    mantissa bits before the profile sees it. The caller does the cast, and
-    then it is in their source where they can see it. So the FORMAT is
-    checked here first and `as_f32_c` is reached only by a float32 buffer,
-    where its one remaining job is the layout.
-
-    Non-contiguous IS accepted with a copy, because reordering float32 values
-    changes no bit. The contract requires contiguity (section 2) and a
-    layout copy supplies it without touching a value; a float32 buffer
-    already in C order is borrowed with no copy at all.
-    """
-    try:
-        pb = probe(x)
-    except TypeError:
-        raise TypeError(
-            f"mojolearn.linalg: {name} is a {type(x).__name__}, which does "
-            "not support the buffer protocol, and only a float32 buffer is "
-            f"in this profile ({PROFILE}; contract section 1 makes FP32 a "
-            "hard requirement). Pass a float32 array -- a NumPy array, an "
-            "array.array('f') or a mojolearn.Array; convert with "
-            f"np.asarray({name}, dtype=np.float32) if that is what you want."
-        ) from None
-    if not is_native_f32(pb.format):
-        raise TypeError(
-            f"mojolearn.linalg: {name} has dtype {dtype_name(x, pb)}, and "
-            f"only float32 is in this profile ({PROFILE}; contract section 1 "
-            "makes FP32 a hard requirement, and section 0.5 excludes FP16, "
-            "BF16, TF32 and float64). Refused rather than cast, because a "
-            "cast from float64 drops mantissa bits you may care about. "
-            f"Convert it yourself with np.asarray({name}, dtype=np.float32) "
-            "if that is what you want."
-        )
-    if pb.ndim != 2:
-        raise ValueError(
-            f"mojolearn.linalg: {name} must be 2-D, got {pb.ndim}-D shape "
-            f"{pb.shape}. A vector product is OP_NT at n == 1 (contract 0.1); "
-            f"pass it as a 2-D array of shape (n, k) or (k, 1)."
-        )
-    if nelems(pb.shape) == 0:
-        raise ValueError(
-            f"mojolearn.linalg: {name} has shape {pb.shape} and no elements. "
-            "Contract section 8 does specify the degenerate shapes (k == 0 "
-            "writes +0.0 into every cell; m == 0 or n == 0 writes nothing), "
-            "but no gate in this tree has run them through the Python "
-            "surface, so they are refused here rather than answered "
-            "unchecked."
-        )
-    # A layout copy at most, never a cast (the format was checked above):
-    # contiguity is a layout and reordering float32 values moves no bit.
-    # Contract section 2 requires it.
-    a, _copied = as_f32_c(x, ndim=2, name=name)
-    return a
+#
+# The operand refusals (float32 only, refused by name and never cast; 2-D;
+# no empty operand; a layout copy at most) are
+# bindings/linalg_ops_lowbit_door.mojo `lin_operand`; the Python `_operand`,
+# `_lowbit_binding`, `_int8_operand` and `_out_or_new` that duplicated
+# `lin_operand`, `lin_lowbit`, `_lin_int8_operand` and `lin_out` are deleted
+# (lane py-classical-linalg, 2026-11-14).
 
 
 # Arithmetic (contract gemm/IDENTICAL_FP32_CONTRACT.md; oracle gemm/host/gemm_oracle.mojo::gemm_oracle):
@@ -372,24 +302,6 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
 # ===========================================================================
 
 
-def _lowbit_binding():
-    b = _load()
-    require_identical()
-    got = getattr(b, "lowbit_profile_version", None)
-    if got is None:
-        raise RuntimeError(
-            "mojolearn.linalg: the loaded linalg extension predates the "
-            "low-bit profiles; rebuild it with bindings/build_linalg.sh"
-        )
-    v = int(got())
-    if v != LOWBIT_PROFILE_VERSION:
-        raise RuntimeError(
-            f"mojolearn.linalg: the loaded extension implements low-bit "
-            f"profile version {v}, this wrapper expects {LOWBIT_PROFILE_VERSION}"
-        )
-    return b
-
-
 # Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md L-2 (from_bf16: L-1; int8: L-3, L-4, L-6; int15: W-1..W-4).
 def to_bf16(x):
     """Convert float32 to bfloat16 bits.
@@ -458,19 +370,6 @@ def matmul_int8(a, b, *, out=None):
     return _NATIVE(None, "family_lin_matmul_int8", (None, a, b, out), _NATIVE_CONTEXT)
 
 
-def _int8_operand(x, name):
-    if isinstance(x, tuple) and len(x) == 2:
-        q, _ = as_i8_c(x[0], ndim=2, name=name + " codes")
-        e, _ = as_i32_c(x[1], ndim=1, name=name + " exponents")
-        if probe(e).shape != (probe(q).shape[0],):
-            raise ValueError(
-                f"mojolearn.linalg.matmul_int8: {name} exponents has shape "
-                f"{probe(e).shape}, want ({probe(q).shape[0]},)"
-            )
-        return q, e
-    return quantize_int8(_operand(x, name))
-
-
 # ===========================================================================
 # THE FIFTEEN-BIT PROFILE (lane/lowbit-int15, 2026-09-29)
 # gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6. An operand is THREE arrays:
@@ -515,19 +414,6 @@ def matmul_int15(a, b, *, out=None):
     identical build.
     """
     return _NATIVE(None, "family_lin_matmul_int15", (None, a, b, out), _NATIVE_CONTEXT)
-
-
-def _out_or_new(out, m, n, who):
-    if out is None:
-        return empty((m, n), "<f4")
-    pb = probe(out)
-    if not is_native_f32(pb.format):
-        raise TypeError(f"mojolearn.linalg.{who}: out must be float32")
-    if pb.shape != (m, n):
-        raise ValueError(f"mojolearn.linalg.{who}: out has shape {pb.shape}, want ({m}, {n})")
-    if not pb.c_contiguous or pb.readonly:
-        raise ValueError(f"mojolearn.linalg.{who}: out must be C-contiguous and writable")
-    return out
 
 
 # ===========================================================================
@@ -594,28 +480,8 @@ def _door():
     return _load()
 
 
-def _refuse_wide(rows, cols, who):
-    if rows < cols:
-        raise ValueError(
-            f"mojolearn.linalg.{who}: needs at least as many rows as columns, "
-            f"got {rows} x {cols}. The route for a wide matrix is an LQ "
-            "factorization of the transpose, which this tree does not carry "
-            "(DEVIATION 593). It is REFUSED BY NAME rather than transposed "
-            "for you, because the singular values of the transpose are the "
-            "same and the VECTORS are not."
-        )
-
-
 # TOMBSTONE: MOJOLEARN_QR_FAST_DEV / MOJOLEARN_SVD_FAST_CHOLQR deleted 2026-10-09 on lane/owed-deletions-D1 took their
 # only caller-facing helper, `_fast_apple_kit`; code recoverable at b639a2bd2.
-
-
-def _xd_matrix(a_arr, rows, cols):
-    import array as _array
-    from ._expansion_decomp import _M
-    st = _array.array("f")
-    st.frombytes(a_arr.tobytes())
-    return _M(st, rows, cols)
 
 
 class QRResult(tuple):
@@ -687,31 +553,13 @@ class SVDResult(tuple):
 _TS_MAX_N = 512
 
 
-def _tsqr_on(rows, cols, extra=0):
-    """Whether the blocked TSQR serves a rows x (cols + extra) factorization:
-    tall and at most _TS_MAX_N wide."""
-    n = cols + extra
-    return cols >= 1 and n <= _TS_MAX_N and rows >= n
-
-
-def _tsqr_r(b, a_arr, rows, cols, keep):
-    """R (cols x cols, an Array) of the TSQR of a_arr; `keep` holds the
-    factorization in the binding for one `_tsqr_q`."""
-    R = empty((cols, cols), "<f4")
-    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
-    # (m, d, nrhs, keep); b is not read when nrhs is 0
-    b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(a_arr, name="a"), addr(R, name="r_out"),
-                      [int(rows), int(cols), 0, 1 if keep else 0])
-    return R
-
-
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: _tsvd_cholqr_r (the binding's x_decomp_tsvd_cholqr_r, None when absent).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 
 
 # TruncatedSVD's TSVD_QFIX route (`_tsvd_tsqr_components`) runs in x_decomp/tsvd_owner.mojo
-# (`x_decomp_tsvd_tsqr`, called by bindings/tsvd_native.mojo), lane mca2-decomp-a 2026-10-22.
+# (`x_decomp_tsvd_tsqr`, called by bindings/tsvd_native_door.mojo), lane mca2-decomp-a 2026-10-22.
 
 
 # mode 'reduced'/'complete'/'raw': LAPACK geqrf with reflectors kept, dlarfg's sign convention,
@@ -812,96 +660,16 @@ _SVD_NULL_RTOL = 2.0 ** -20
 _SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 
 
-def _svd_stage_timer():
-    """MOJOLEARN_LINALG_TIMING=1: each stage of `_svd_tall` and its wall on
-    stderr (the device waited for, since every stage's result is read)."""
-    if os.environ.get("MOJOLEARN_LINALG_TIMING") != "1":
-        return lambda name: None
-    import sys
-    import time
-    last = [time.perf_counter()]
-
-    def tick(name):
-        now = time.perf_counter()
-        print("svd stage %-28s %9.1f ms" % (name, (now - last[0]) * 1e3), file=sys.stderr)
-        last[0] = now
-    return tick
-
-
 # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: _SVD_QFIX_NULL_RTOL = 2^-40, the TSQR route's U_R null cut.
 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
 
 
-def _svd_tall(k, A, full):
-    """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
-    QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
-    U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
-    (the cells' gemm and division), each Q column signed by its R[j, j],
-    the null directions and the m - n more of full_matrices its trailing
-    columns."""
-    from ._expansion_decomp import _M
-    m, n = A.r, A.c
-    tick = _svd_stage_timer()
-    S, Vt = k.svd(A)
-    tick("svd (sliced QR + Jacobi of R)")
-    s0 = S.s[0] if n else 0.0
-    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE
-    # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
-    r = int(k.b.x_decomp_rank_above(S.s.buffer_info()[0], [n], float(_SVD_NULL_RTOL))) if n else 0
-    AV = k.mm(A, Vt, tb=True)                                   # m x n
-    tick("A V (gemm)")
-    Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
-    tick("A V / s")
-    width = m if full else n
-    if r == n and width == n:
-        # lane neural-pass17: with every direction kept and no trailing
-        # columns wanted, U is the orthonormalized A V / s: the kit's orth
-        # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
-        # whose folds run over the row slices in parallel, where geqrf +
-        # orgqr ran 4 n serial one-thread chains over the m rows (at
-        # 1,000,000 x 220, 880 chains of a million dependent steps: most
-        # of the bench board's svd race on every GPU). Column j is signed
-        # by the product of the passes' R diagonals, which is Q_j . Ug_j:
-        # the same orientation geqrf's R[j, j] gave (Ug_j's). A guarded
-        # (zero) product means a dependent column the orth cannot build;
-        # the Householder route then stands.
-        Qo, d = k.orth_diag(Ug)
-        tick("U = orth(A V / s)")
-        # every product nonzero (a NaN counts as nonzero, as `!=` did), then
-        # each column signed by its product's sign, on the kit
-        if not k.total(k.ew("le", k.ew("abs", d), _M.zeros(1, 1))).s[0]:   # one count word down
-            out = k.ew("mul", Qo, k.neg_signs(d))
-            tick("U column signs")
-            return out, S, Vt
-    import array as _array
-    if not r:
-        # the m x width identity: a zero store and one strided C-level fill of its diagonal
-        eye = _array.array("f", bytes(4 * m * width))
-        nd = min(m, width)
-        eye[0:nd * (width + 1):width + 1] = _array.array("f", [1.0]) * nd
-        return _M(eye, m, width), S, Vt
-    # A v / s loses orthogonality as s_0 / s_j grows (its error is V's
-    # rounding times that ratio); the Householder QR of those columns
-    # restores it: Q's column j signed by R[j, j] (an exact negation) is
-    # A v_j / s_j to that same error, orthonormal to float32, and Q's
-    # trailing columns are the complement's basis.
-    h, tau = k.geqrf(Ug)
-    tick("geqrf(A V / s)")
-    Qc = k.orgqr(h, tau, width)
-    tick("orgqr")
-    # R[j, j]'s sign per kept column (+1 for the trailing complement), on the kit
-    sg = k.neg_signs(k.strided(h, r, r + 1, 0))
-    if width > r:
-        sg = k.hstack([sg, k.const(1.0, 1, width - r)])
-    # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
-    # was a Python loop over every value of each flipped column (m Python
-    # negations per column: at 1,000,000 rows and 220 columns, most of the
-    # bench board's 95.8 s svd on an MI325X). The flip is the kit's
-    # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
-    # values a device kernel already stored (so already flushed), the same
-    # bits the loop produced (the loop and its env switch are gone).
-    return k.ew("mul", Qc, sg), S, Vt
+# TOMBSTONE: `_svd_tall` (the Python tall SVD on the decomp kit, lstsq's and
+# LinearRegression's TSQR solve) and its `_svd_stage_timer` deleted 2026-11-11 by
+# lane pyout-decomp-linalg: no caller remained; the native twin is
+# bindings/decomp_kit_native_door.mojo `svd_tall` (lstsq) and bindings/linalg_ops_decomp_door.mojo.
+# Code recoverable at 6f82d0255d.
 
 
 # Householder QR + one-sided Jacobi SVD of R give S and V; U[:, j] = A v_j / s_j; null directions
@@ -937,7 +705,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
 
 
 # The compiled owner of this module's public functions
-# (bindings/linalg_ops_native.mojo), connected once at import: each public
+# (bindings/linalg_ops_native_unpack.mojo), connected once at import: each public
 # function is one native call; that boundary admits the connected binding.
 from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()

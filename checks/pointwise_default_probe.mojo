@@ -6,7 +6,7 @@
 the flip was left as a measurement's job. This is that measurement.
 
 The two arms are BIT-IDENTICAL over twenty iterations
-(`pixi run check-fit-pointwise`), so this is purely a performance question
+(`pixi run check-native-gpu fit_pointwise_check`), so this is purely a performance question
 and nothing about the answer can change a user's numbers -- which is what
 makes flipping the default a free action if the measurement says to
 ([[mojotrees-switches-must-flip]]).
@@ -91,6 +91,8 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
+    _ = ht^  # past the drain: a queued copy reads it after its last named use
+    _ = hw^  # past the drain: a queued copy reads it after its last named use
 
     print(
         "fixture:", N_ROWS, "rows x", n_features, "features,",

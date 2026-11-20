@@ -2,9 +2,8 @@
 """_Resident.take and DeviceRows.materialize on foreign fold containers.
 
 Lists, tuples, ranges, memoryview/array.array, pandas and Arrow-backed
-pandas values are materialized by the native model-selection input owner,
-not by the Python `_buffer._materialize` step: the whole take is one native
-call, the original dtype is kept (float64 that float32 would round, int64
+pandas values are materialized by the native model-selection input owner:
+the whole take is one native call, the original dtype is kept (float64 that float32 would round, int64
 beyond 2**24), and caller hooks (__array__, __iter__, __float__, DLPack)
 are refused before they can run.
 """
@@ -14,7 +13,6 @@ import gc
 import numpy as np
 import pytest
 
-from mojolearn import _buffer
 from mojolearn._arena_io import DeviceRows
 from mojolearn._buffer import _native
 from mojolearn.model_selection import _Resident
@@ -40,18 +38,8 @@ def owner():
         assert _live() == before
 
 
-@pytest.fixture(autouse=True)
-def no_python_materializer(monkeypatch):
-    calls = []
-    original = _buffer._materialize
-
-    def spy(*args, **kwargs):
-        calls.append(args)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(_buffer, "_materialize", spy)
-    yield
-    assert not calls
+# The autouse spy on the Python `_buffer._materialize` went with that helper (deleted 2026-11-15 by lane
+# py-tail-2); `audit_native_call(...).assert_native()` below still proves each take is one native call.
 
 
 def _rows(value):
@@ -138,7 +126,7 @@ def test_foreign_hooks_are_refused_before_they_run(owner, hook):
 
 def test_device_rows_materialize_on_a_float64_base_is_native(owner):
     # DeviceRows reads its shape and dtype from exact Array/ndarray metadata
-    # (54cd01bff, bindings/arena_array_metadata.mojo); a list base has none
+    # (54cd01bff, bindings/arena_array_metadata_pack.mojo); a list base has none
     # and is refused at construction. model_selection only builds DeviceRows
     # over admitted arrays. The materialize step keeps the float64 dtype.
     listed = [[0.1, 1.0], [2.0, 3.0], [4.0, 5.5]]

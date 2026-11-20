@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-arima (2026-10-03): a FAST-on-Apple switch for
-`batched_fit.mojo::batched_min_lbfgs`. ARIMA_FAST_ASYNC is the FAST+Apple
-default (`_OFF` turns it off). ARIMA_FAST_LS_NOREAD was DROPPED-noise; its
-code is on lane/apple-fast-gap-arima @ d967c0121.
+"""The per-series batched ARIMA L-BFGS (`batched_fit.mojo::batched_min_lbfgs`
+takes it whenever the fit holds the stacked evaluation workspace: FAST on
+Apple, IDENTICAL on every vendor within `IDN_EVAL_WS_MAX_CELLS`). lane/apple-fast-gap-arima
+2026-10-03 wrote it as the FAST-on-Apple ARIMA_FAST_ASYNC; lane
+n10-dictl-arima-loops 2026-11-09 let it take the sequential evaluation too and
+deleted the lock-step loop; lane r2-restore-unmeasured-defaults 2026-11-09
+restored the lock-step loop as the default on the routes that had it.
+ARIMA_FAST_LS_NOREAD was DROPPED-noise; its code is on
+lane/apple-fast-gap-arima @ d967c0121.
 
-`-D MOJOLEARN_ARIMA_FAST_ASYNC=1` (ARIMA_FAST_ASYNC). The lock-step solver
+The lock-step solver (`batched_fit.mojo::_lockstep_min_lbfgs`)
 moves every series through the same phase together: prelude, a shared line
 search that runs until the LAST series accepts, verdict, with three host
 waits per iteration. Here every series runs its own state machine in one
@@ -13,8 +18,9 @@ kernel (`async_step_kernel`): after each shared evaluation a series takes
 its Armijo test and, when its line search is over, runs its verdict, its
 history update, the next prelude and its next candidate in the same thread,
 so the next evaluation already carries its next point. The per-series
-statements are `lbfgs_device.mojo`'s kernels' in the same order on the same
-operands (a series' evaluation reads only its own candidate: every Kalman
+statements are the lock-step kernels' (`lbfgs_device.mojo`; the host column
+`arima/host/arima_oracle.mojo::_batched_min_lbfgs` keeps that shape too) in the
+same order on the same operands (a series' evaluation reads only its own candidate: every Kalman
 member, the infeasible mark and the gradient are per series), so each
 series' iterates, `n_iter` and `retcode` are the lock-step solver's bit for
 bit; what changes is that a series no longer waits for the slowest line
@@ -26,14 +32,12 @@ in `ist` (field-major, `ist[f * bs + b]`), the per-series floats in `fst`.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isinf, isnan
-from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
-from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.lbfgs_device import (
     LBFGS_TPB,
@@ -44,10 +48,9 @@ from arima.impl.lbfgs_device import (
     d_nrm_max,
     lbfgs_init_kernel,
 )
-from arima.impl.tsa.arima_common import ARIMAOrder
+from arima.impl.eval_batch import arima_eval
+from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_mul_add,
@@ -65,28 +68,23 @@ from glm.impl.qn.qn_util import (
     LBFGSParam,
 )
 
-#: DEFAULT ON (FAST + Apple, via KALMAN_FAST_EVAL_WS) since the M3 A/B:
-#: autoarima taxi-hourly 39,639 -> 24,563 ms (-38%), synthetic 28,511 ->
-#: 14,918 ms (-48%), forecast_rmse identical. The old
-#: `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` stays harmless;
-#: `-D MOJOLEARN_ARIMA_FAST_ASYNC_OFF=1` turns it off.
-#: IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
-#: the held evaluation workspace (IDN_ARIMA_EVAL_WS, `batched_kalman.mojo`):
-#: each series' iterates, `n_iter` and `retcode` are the lock-step solver's
-#: bit for bit (module banner), and the host reads one word every
-#: ASYNC_READ_EVERY evaluations instead of one per line-search step and one
-#: per iteration. `-D MOJOLEARN_IDN_ARIMA_ASYNC_OFF=1` keeps the lock-step
-#: solver under IDENTICAL; `MOJOLEARN_IDN_ALL_OFF` turns the workspace, and
-#: so this, off.
-comptime ARIMA_FAST_ASYNC = (
-    KALMAN_FAST_EVAL_WS
-    and not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"]()
-    and not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_IDN_ARIMA_ASYNC_OFF"]()
-    )
-)
-
+#: The per-series solver, measured: FAST + Apple M3 A/B autoarima
+#: taxi-hourly 39,639 -> 24,563 ms (-38%), synthetic 28,511 -> 14,918 ms
+#: (-48%), forecast_rmse identical; IDENTICAL on every vendor since
+#: lane/fam-timeseries (2026-10-04), each series' iterates, `n_iter` and
+#: `retcode` the lock-step solver's bit for bit (module banner).
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ASYNC_OFF, MOJOLEARN_ARIMA_FAST_ASYNC_OFF (superseded: the lock-step device solver they kept) deleted 2026-11-09 by lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
+# Restore: git apply experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch
+# Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the lock-step
+# solver is back as the default on the routes that took it before the deletion
+# (no held evaluation workspace: FAST on NVIDIA / AMD, FAST on Apple with exog,
+# IDENTICAL above IDN_EVAL_WS_MAX_CELLS); the per-series solver there was never
+# measured. The `_OFF` defines stay removed (the per-series default where it
+# was measured is unchanged).
+# TOMBSTONE: MOJOLEARN_ARIMA_ASYNC_ALL (opt-in A/B arm, RUN OWED and never run) deleted 2026-11-15 by lane/expdel2-37-series; code recoverable at b3b95c7aa8.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_ARIMA_ASYNC_ALL (decided B arm, L40S ba08dac006 arima synthetic fit 52.54 -> 54.52 ms, B 1.04x, no gain) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_ASYNC_ALL.fb12-loser-arms.patch; record in docs/TOMBSTONES.md.
 #: evaluations between two reads of the "any series still running" word;
 #: the rounds after the last series stops propose current points and change
 #: nothing.
@@ -248,7 +246,7 @@ def _drive(
             ist[I_KCUR * bs + b] = Int32(k + 1)
         if _prelude(ist, fst, x, xp, grad, gradp, drt, b, bs, n, ftol):
             _candidate(cand, xp, drt, fst[F_STEP * bs + b], b, n)
-            _ = Atomic[DType.int32].max(any_active, Int32(1))
+            _ = Atomic[Int32].max(any_active, Int32(1))
             return
         need_verdict = True
 
@@ -314,7 +312,7 @@ def async_step_kernel(
         still = True
     if still and Int(lsi) < Int(max_ls_in):
         _candidate(cand, xp, drt, fst[F_STEP * bs + b], b, n)
-        _ = Atomic[DType.int32].max(any_active, Int32(1))
+        _ = Atomic[Int32].max(any_active, Int32(1))
         return
     _drive(
         ist, fst, x, xp, grad, gradp, drt, cand, S, Y, yhist, alpha, fx_hist, any_active,
@@ -336,9 +334,9 @@ def _down_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], off: Int, n:
     if n > 0:
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.float32](off, n))
     ctx.synchronize()
-    var out = List[Float32](length=n, fill=Float32(0.0))
+    var out = List[Float32](unsafe_uninit_length=max(n, 0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -348,16 +346,19 @@ def _down_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], off: Int, n: I
     if n > 0:
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.int32](off, n))
     ctx.synchronize()
-    var out = List[Int32](length=n, fill=Int32(0))
+    var out = List[Int32](unsafe_uninit_length=max(n, 0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
 
 def async_min_lbfgs(
     ctx: DeviceContext,
-    mut ews: FastEvalWS,
+    mut ews: Optional[FastEvalWS],
+    mut d_y_kf: DeviceBuffer[DType.float32],
+    mut d_exog_kf: DeviceBuffer[DType.float32],
+    n_obs_kf: Int,
     batch_size: Int,
     scale: Float32,
     order_kf: ARIMAOrder,
@@ -366,8 +367,13 @@ def async_min_lbfgs(
     h: Float32,
 ) raises -> AsyncLBFGSOut:
     """`batched_min_lbfgs` with every series on its own schedule (module
-    banner). The caller takes this arm only under ARIMA_FAST_ASYNC, with the
-    held evaluation workspace and the identity trace off."""
+    banner). `batched_min_lbfgs` takes it when the fit holds the stacked
+    evaluation workspace. The body
+    per round is one batched evaluation (`eval_batch.mojo::arima_eval`: the
+    held stacked workspace `ews` when the fit has one, else the sequential
+    evaluation over `d_y_kf` / `d_exog_kf`; same bits) and
+    `async_step_kernel`; the host reads one word every ASYNC_READ_EVERY
+    rounds."""
     var n = order_kf.complexity()
     var bs = batch_size
     var b_n = bs * n
@@ -412,8 +418,14 @@ def async_min_lbfgs(
         ctx.synchronize()
         _ = hx^
     ctx.enqueue_copy(dst_buf=cand, src_buf=x)
+    # the sequential evaluation's unpack target, held for the solve (unused
+    # with the held workspace)
+    var scratch = ARIMAParams(ctx, order_kf, bs)
     # the evaluation at x0, then `lbfgs_init_kernel` on the packed fields
-    ews.eval(ctx, order_kf, h, scale, cand, d_grad, d_x_pert, f_fx, grad, bad)
+    arima_eval(
+        ctx, ews, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, cand, d_grad, d_x_pert, scratch,
+        h, scale, f_fx, grad, bad,
+    )
     var n_eval = 1
     var ip = ist.unsafe_ptr()
     var fp = fst.unsafe_ptr()
@@ -459,7 +471,10 @@ def async_min_lbfgs(
             if flag_host.unsafe_ptr()[0] == 0:
                 running = False
                 break
-        ews.eval(ctx, order_kf, h, scale, cand, d_grad, d_x_pert, f_fxc, gradc, bad)
+        arima_eval(
+            ctx, ews, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, cand, d_grad, d_x_pert, scratch,
+            h, scale, f_fxc, gradc, bad,
+        )
         n_eval += 1
         ctx.enqueue_memset(any_active, Int32(0))
         ctx.enqueue_function[async_step_kernel](
@@ -507,6 +522,7 @@ def async_min_lbfgs(
     _ = alpha^
     _ = fx_hist^
     _ = bad^
+    _ = scratch^
     _ = any_active^
     _ = flag_host^
     return AsyncLBFGSOut(

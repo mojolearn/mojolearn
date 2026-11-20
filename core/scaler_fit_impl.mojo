@@ -6,8 +6,9 @@ These routines preserve the former buffer casts and public validation semantics.
 """
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
+from core.host_finite_scan import host_all_finite_f32, host_any_inf_f32
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
 def scaler_finite(value: Float32) -> Bool:
@@ -29,10 +30,8 @@ def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, ki
 
 
 def scaler_all_finite(x: F32P, size: Int) -> Bool:
-    for i in range(size):
-        if not scaler_finite(x[i]):
-            return False
-    return True
+    # parallel: the one host finite scan (was a serial bits loop over the n*d input)
+    return host_all_finite_f32(x, size)
 
 
 def scaler_check_stats(mean: F32P, variance: F32P, scale: F32P, d: Int) raises:
@@ -63,18 +62,18 @@ def scaler_counts(source: F32P, dest: MutPointer[Int64, MutUntrackedOrigin], d: 
 
 
 def scaler_refuse_infinite_columns(arena: F32P, stats_base: Int, d: Int) raises:
-    for j in range(d):
-        if scaler_inf(arena[stats_base + 3*d+j]) or scaler_inf(arena[stats_base + 4*d+j]):
-            raise Error("Scaler input contains infinity; only NaN may be missing")
+    # The two statistic rows [3d, 4d) and [4d, 5d) are adjacent: one
+    # any-infinity pass over 2d words (NaN passes), no private loop.
+    if host_any_inf_f32(arena + (stats_base + 3 * d), 2 * d):
+        raise Error("Scaler input contains infinity; only NaN may be missing")
 
 
 def scaler_refuse_infinite(x: F32P, size: Int, message: String) raises:
     # Refuses an infinite entry of a fitted statistic (NaN is a missing
     # value and passes): a column maximum |x| is infinite exactly when the
     # column holds an infinity, so the d statistics decide for the n*d input.
-    for j in range(size):
-        if scaler_inf(x[j]):
-            raise Error(message)
+    if host_any_inf_f32(x, size):
+        raise Error(message)
 
 
 def scaler_feature_indices(dest: F32P, d: Int):

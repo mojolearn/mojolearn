@@ -32,6 +32,26 @@ def board(**races):
 
 
 class RaceFairness(unittest.TestCase):
+    def test_call_overhead_lanes_are_not_a_race(self):
+        """Andrew 2026-11-17: the lr-* schedule lanes and the internal lr_at row are NOT-A-RACE (rerace x, never shown
+        or raced); a prior audit moves to audit_history; other lanes are judged as before."""
+        b = board(**{"algos/lr-step/synthetic/rows=full": race("lr-step", [("torch-cpu", 10, {"device": "cpu"})]),
+                     "algos/internal-call-overhead-lr-at/synthetic/rows=full": race(RF.INTERNAL_CALL_OVERHEAD_LANE, []),
+                     "classical/ridge/taxi/rows=full": race("ridge", [("cuml-gpu", 10, {})])})
+        old = {"verdict": "MATCHED", "rerace": "", "rule": "older"}
+        b["races"]["algos/lr-step/synthetic/rows=full"]["audit"] = {"identical/fit": old}
+        RF.apply(b, None, "2026-11-17")
+        for rid in ("algos/lr-step/synthetic/rows=full", "algos/internal-call-overhead-lr-at/synthetic/rows=full"):
+            rr = b["races"][rid]
+            self.assertEqual(rr["rerace"], "x")
+            self.assertEqual(rr["lane_class"], RF.CALL_OVERHEAD)
+            self.assertEqual(rr["audit"]["identical/fit"]["verdict"], "NOT-A-RACE")
+        self.assertEqual(b["races"]["algos/lr-step/synthetic/rows=full"]["audit_history"],
+                         [dict(old, row="identical/fit")])
+        self.assertNotIn("lane_class", b["races"]["classical/ridge/taxi/rows=full"])
+        self.assertIsNone(RF.lane_class("ridge"))
+        self.assertIsNone(RF.lane_class(None))
+
     def test_neural_wheel_change_reuses_only_exact_typed_input_evidence(self):
         rr = race("gemm", [("torch-gpu", 10, {"family": "neural"})])
         rr["family"] = "neural"
@@ -424,3 +444,34 @@ def test_enumerated_setting_spelling_is_not_a_difference():
     assert RF._same_spelling("Lossguide", "lossguide")
     assert not RF._same_spelling("Depthwise", "Lossguide")
     assert not RF._same_spelling(1, 1.0)
+
+
+def test_harness_clock_all_arms_breaks_a_stored_opponent_pair():
+    # lane fx-harness (2026-11-18): the function lanes' outputs are reduced after every arm's clock now; a stored
+    # opponent cell timed with the old harness held that work in its clock
+    rr = race("train-test-split", [("sklearn-cpu", 10, {})])
+    ours, opp = rr["cells"]
+    ours["harness_clock"] = "2026-11-18 outputs reduced after the clock (all arms)"
+    bad, _missing, _ = RF._pair_problems(rr, ours, opp)
+    assert any(b.startswith("harness clock differs") for b in bad)
+    opp["harness_clock"] = ours["harness_clock"]                  # re-scored by the opponent job: fair again
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+    del opp["harness_clock"]
+    ours["harness_clock"] = "2026-11-18 outputs reduced after the clock (our arm)"   # only our clock changed
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+
+
+def test_graph_cached_settings_change_breaks_a_stored_torch_pair():
+    # lane fx-harness-honest (2026-11-18): gcn/graphsage now record cached=True for both arms (the settings key
+    # changed); a stored torch cell from before is BROKEN until the opponent job re-scores it, then fair again
+    stamp = "2026-11-18 graph layers cached=True, settings key changed (all arms)"
+    rr = race("gcn", [("torch-eager-fp32", 10, {})])
+    ours, opp = rr["cells"]
+    ours["harness_clock"] = stamp
+    assert RF.opponent_rescore_owed(ours) == stamp
+    assert RF.opponent_rescore_owed(opp) is None
+    assert any(b.startswith("harness clock differs") for b in RF._pair_problems(rr, ours, opp)[0])
+    opp["harness_clock"] = stamp
+    assert not any(b.startswith("harness clock") for b in RF._pair_problems(rr, ours, opp)[0])
+    assert RF.opponent_rescore_owed({"harness_clock": "x (our arm)"}) is None
+    assert RF.opponent_rescore_owed(None) is None

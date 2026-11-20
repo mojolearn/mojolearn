@@ -7,6 +7,7 @@ launch_gemm) and the same scalar steps (x_decomp/lanczos_step.mojo), in the
 same order. Registered as `x_decomp_lanczos` by the host binding."""
 from x_decomp.cells import F32Ptr
 from x_decomp.host import HostExec
+from x_decomp.eigh_ops_host import eigh_op_tridiag_host
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
 
 
@@ -42,3 +43,20 @@ def lanczos_run(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, c
         raise Error("x_decomp: lanczos steps out of range")
     lanczos_host(pa, pq, pab, n, j0, j1, cap)
     return j1 - j0
+
+
+def eigh_tridiag_host_run(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises -> Int:
+    """`x_decomp/lanczos_dev.mojo` `dev_eigh_tridiag_run` on host memory: T
+    of alphas pab[0, j) and betas pab[cap, cap + j - 1) through
+    `eigh_op_tridiag_host` (the device op's algorithm and words) into w (j,
+    ascending) and z (j x j, eigenvector c in column c). Raises when
+    neither the tridiagonal solve nor its Jacobi fallback holds."""
+    if j < 1 or j > cap:
+        raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
+    if eigh_op_tridiag_host(pab, pab + cap, pw, pz, j) != 0:
+        raise Error(
+            "x_decomp: the Lanczos projected tridiagonal solve (j = " + String(j) + ") did not hold on the"
+            " bisection route nor on its Jacobi fallback. An unconverged decomposition is not returned as if"
+            " it were one (DEVIATION 590)."
+        )
+    return j

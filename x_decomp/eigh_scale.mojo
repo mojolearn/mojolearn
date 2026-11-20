@@ -37,7 +37,7 @@ at the same point.
 Each scale is two multiplications (2^-e1, then 2^-e2, e1 = e // 2): every
 factor is a normal power of two for e in [-125, 128], and each product is
 flushed (`ftz`), the host's and every device's denormal policy."""
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceBuffer, DeviceContext

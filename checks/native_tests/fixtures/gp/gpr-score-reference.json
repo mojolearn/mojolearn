@@ -1,0 +1,35 @@
+{
+  "status": "independent fixture preparation only; no product execution",
+  "source": "python/mojolearn/tests/test_estimator_score_p2.py",
+  "function": "_reg_data",
+  "source_sha256": "c012c7106c7cc7e74c2e5c0fec36cfdbb60c9029928d683ed8c3d08217e15b18",
+  "function_ast_sha256": "3945583dd117f7d22a6e84ecc4d19b90c757e7579bd79cea796062993348f3dd",
+  "rows": 60,
+  "features": 4,
+  "data_seed": 1,
+  "kernel": "ConstantKernel(1.0, fixed) * RBF(1.0, fixed)",
+  "alpha": 9.5367431640625e-07,
+  "optimizer": null,
+  "normalize_y": false,
+  "original_score_abs_tolerance": 0.001,
+  "oracle": "NumPy float64 Gaussian covariance and dense linear solve, then the original float64 R2 formula",
+  "numpy": "2.5.2",
+  "artifact_workers": 10,
+  "files": [
+    {
+      "name": "gpr-score60-source.f32",
+      "bytes": 960,
+      "sha256": "e1b11e10bf294128ec6cc4cd0a2aa68297127b7be1b460da3c40a975fe80770d"
+    },
+    {
+      "name": "gpr-score60-target.f32",
+      "bytes": 240,
+      "sha256": "807660f254a27b221178d40d14a1c4801fc2cfc81a712abe1821b91bf3e2b48c"
+    },
+    {
+      "name": "gpr-score60-reference.f64",
+      "bytes": 24,
+      "sha256": "647fe75a77e8c833984e02477c41b1a8614c1edce7fa9a8c580449384d6d5e19"
+    }
+  ]
+}

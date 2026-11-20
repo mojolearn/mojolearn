@@ -23,7 +23,7 @@ def report():
 def test_every_original_gap_has_an_executable_fixture_route():
     routes=api.registry()
     expected={r['endpoint'] for r in api.TARGETS}
-    assert len(expected)==1275
+    assert len(expected)==1273   # 1275 less the deleted TransformerBlockInference tape pair (TOMBSTONE TRANSFORMER_FORWARD_TAPE_API)
     assert routes.keys()==expected
     from mojolearn._verify_api_faults import FAULTS
     assert set(FAULTS.values())<=expected
@@ -191,7 +191,11 @@ def test_encoding_preserves_scalar_rank_layout_and_signed_zero():
     assert encode(x)==encode(x.copy())
 
 
-def test_inventory_regeneration_cannot_hide_a_new_unmapped_api():
+def test_inventory_regeneration_cannot_hide_a_new_unmapped_api(monkeypatch):
+    # tools/verification_endpoints.py is imported by name: put tools/ on sys.path here
+    # rather than rely on another test file having done it in the same process.
+    import pathlib
+    monkeypatch.syspath_prepend(str(pathlib.Path(__file__).resolve().parents[3] / 'tools'))
     from verification_endpoints import require_complete_mapping
     old=[{'endpoint':'existing.call'}]
     routes={'existing.call':object()}

@@ -36,7 +36,7 @@ def run[O: ClusterOps](mut ops: O, x: List[Float32], n: Int, d: Int, bw: Float32
     return ops.get(sc, n * d)
 
 
-def main() raises:
+def run_checks() raises:
     var n = 96
     var d = 3
     var x = seam_fixture(n, d, 7)

@@ -39,9 +39,7 @@ def environment(vendor, arch, source, arm):
     # Frozen tools/ second: a repaired harness gate script still imports its unchanged
     # frozen helper modules (e.g. bench_board_probe) from the frozen tree.
     env['PYTHONPATH'] = str(source / 'python') + os.pathsep + str(source / 'tools')
-    env['MOJOLEARN_MOJO_BUILD_FLAGS'] = '-D MOJOLEARN_IDN_ALL_OFF=1' if arm == 'off' else ''
-    if arm == 'off':
-        env['MOJOLEARN_IDN_ALL_OFF'] = '1'
+    env['MOJOLEARN_MOJO_BUILD_FLAGS'] = ''  # the only arm is on (IDN_ALL_OFF deleted 2026-11-15)
     return env
 
 
@@ -69,10 +67,10 @@ def main():
     cells = []
     for cell in a.cell:
         gate_id, _, arm = cell.partition(':')
-        if gate_id not in gates or arm not in ('on', 'off'):
+        if gate_id not in gates or arm != 'on':
             p.error('unknown cell ' + cell)
         gate = gates[gate_id]
-        if arm not in gate.get('arms', ['on', 'off']):
+        if arm not in gate.get('arms', ['on']):
             p.error('gate excludes arm: ' + cell)
         if gate.get('kind') not in SUPPORTED_KINDS or not gate.get('path'):
             p.error('only python gates with a path are supported: ' + cell)

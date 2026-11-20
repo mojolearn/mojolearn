@@ -24,10 +24,11 @@ worth more than one that pretends to build a GPU wheel and never can.
         downstream could have noticed. This walks the import graph instead.
 
     versions <repo-root>
-        python/pyproject.toml, python/mojolearn/_version.py and CITATION.cff
-        must agree. The release workflow's "Version agreement" step reads the
-        first two only, and a wrong CITATION.cff `version` is minted
-        permanently into a DOI.
+        python/pyproject.toml and python/mojolearn/_version.py must agree.
+        CITATION.cff names what to cite (the paper, `preferred-citation`) and
+        carries no release `version` or `date-released` (Andrew, 2026-11-17):
+        this fails if either top-level field comes back, since a version
+        there goes stale and is minted permanently into a DOI.
 
     pins <repo-root>
         Every bindings/build_*.sh must pin BOTH cpu baselines, and MACOS_FLOOR
@@ -46,7 +47,6 @@ import ast
 import pathlib
 import re
 import sys
-import subprocess
 
 
 # --------------------------------------------------------------------------
@@ -113,6 +113,23 @@ def inventory(argv):
     # above: they count only when that importer is reached.
     dynamic["host_surface"] = [s for s in present if s.startswith("_surface_")]
     dynamic["_identity_break"] = [s for s in present if s.startswith("_identity_lane_")]
+    # A CPU family served by a Python adapter (host_surface.ADAPTED_MODULES,
+    # `{"_mojolearn_byte_lm": dict(family="byte_lm", module="_byte_lm_trainer_host")}`)
+    # is loaded by `_backend` with `import_module(f"{pkg}.{adapted['module']}")`.
+    # The `module=` value names the adapter, so host_surface reaches it.
+    if "host_surface" in present:
+        for node in ast.parse(present["host_surface"].read_text(encoding="utf-8")).body:
+            if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                    and any(isinstance(t, ast.Name) and t.id == "ADAPTED_MODULES" for t in node.targets)):
+                for v in node.value.values:
+                    if isinstance(v, ast.Call):
+                        dynamic["host_surface"] += [k.value.value for k in v.keywords
+                                                    if k.arg == "module" and isinstance(k.value, ast.Constant)
+                                                    and isinstance(k.value.value, str)]
+                    elif isinstance(v, ast.Dict):
+                        dynamic["host_surface"] += [b.value for a, b in zip(v.keys, v.values)
+                                                    if isinstance(a, ast.Constant) and a.value == "module"
+                                                    and isinstance(b, ast.Constant) and isinstance(b.value, str)]
     # A submodule the user documentation tells people to import by its own
     # path is public, not abandoned: the multi-GPU drivers are reached as
     # `from mojolearn.parallel_ensemble import fit_forest`
@@ -141,7 +158,7 @@ def inventory(argv):
         if "PREPARED AND NOT EXPOSED" in doc.split("\n", 1)[0] and f"`{stem}.py`" in init_text:
             queue.append(stem)
     # A module the native local process pool launches as `python -m
-    # <pkg>.<module>` (bindings/native_process_pool.mojo; the child module
+    # <pkg>.<module>` (bindings/native_process_pool_door.mojo; the child module
     # names are string literals in the binding sources, e.g.
     # "mojolearn._native_parallel_shard_worker") is reached by the binding,
     # though no Python import statement names it.
@@ -169,6 +186,32 @@ def inventory(argv):
                     if (isinstance(v, ast.Tuple) and v.elts and isinstance(v.elts[0], ast.Constant)
                             and isinstance(v.elts[0].value, str)):
                         out.append(v.elts[0].value.lstrip("."))
+        out.extend(first_touch_targets(path))
+        return out
+    # THE PACKAGE ROOT'S FIRST-TOUCH TABLE is the same import in another spelling:
+    # `_CPU_INFERENCE = {"HostForest": "._forest_host", "language_model": None, ...}` in __init__.py,
+    # read by a module `__getattr__` that runs `import_module(where, __name__)` for a "."-relative string
+    # value and `import_module("." + name, __name__)` for a None value (the key is then the submodule).
+    # Counted only in a module whose own `__getattr__` calls `import_module`, so a dict of strings that
+    # nothing imports from stays inert.
+    def first_touch_targets(path):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        loads = any(isinstance(f, ast.FunctionDef) and f.name == "__getattr__"
+                    and any(isinstance(c, ast.Call) and (getattr(c.func, "attr", None) == "import_module"
+                                                         or getattr(c.func, "id", None) == "import_module")
+                            for c in ast.walk(f))
+                    for f in tree.body)
+        out = []
+        if not loads:
+            return out
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict):
+                for k, v in zip(node.value.keys, node.value.values):
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str) and v.value.startswith("."):
+                        out.append(v.value[1:].split(".")[0])
+                    elif (isinstance(v, ast.Constant) and v.value is None
+                          and isinstance(k, ast.Constant) and isinstance(k.value, str)):
+                        out.append(k.value)
         return out
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
@@ -220,21 +263,21 @@ def versions(argv):
             r'^version = "([^"]+)"', root / "python/pyproject.toml"),
         "python/mojolearn/_version.py": _one(
             r'^__version__ = "([^"]+)"', root / "python/mojolearn/_version.py"),
-        "CITATION.cff": _one(
-            r'^version: *"?([^"\s]+)"?', root / "CITATION.cff"),
     }
     if len(set(found.values())) != 1:
-        print("FAIL the version is written in three places and they disagree:",
+        print("FAIL the version is written in two places and they disagree:",
               file=sys.stderr)
         for k, v in found.items():
             print(f"    {v:<12} {k}", file=sys.stderr)
-        print("  A wrong CITATION.cff version is minted permanently into a DOI.",
+        return 1
+    cff = (root / "CITATION.cff").read_text(encoding="utf-8")
+    stale = re.findall(r"^(version|date-released):", cff, re.M)
+    if stale or not re.search(r"^preferred-citation:", cff, re.M):
+        print("FAIL CITATION.cff must carry preferred-citation and no top-level "
+              f"version or date-released (found: {', '.join(stale) or 'no preferred-citation'})",
               file=sys.stderr)
         return 1
-    if subprocess.call([sys.executable, str(root / "tools/citation_metadata.py"),
-                        "--root", str(root)]):
-        return 1
-    print(f"  versions: {next(iter(found.values()))} in all three places")
+    print(f"  versions: {next(iter(found.values()))} in both places; CITATION.cff cites the paper")
     return 0
 
 

@@ -34,7 +34,7 @@ comptime SG_SLOTS = SG_LIMBS + 1
 comptime SG_BAD = SG_LIMBS
 #: cells a thread adds between two carries
 comptime SG_CHUNK = 1 << 20
-comptime SG_ACC = InlineArray[Int64, SG_SLOTS]
+comptime SG_ACC = Array[Int64, SG_SLOTS]
 
 comptime _M32 = UInt64(0xFFFFFFFF)
 

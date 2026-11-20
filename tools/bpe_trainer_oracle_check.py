@@ -15,7 +15,7 @@ CONSTRUCTION and a cross-column diff adds no information at all. A defect
 present when the reference hash was recorded is invisible forever.
 
 WHAT THIS IS NOT. `pixi run check-bpe-trainer` already holds the Mojo trainer
-(`tokenizer/train/bpe_train.mojo`) against `python/mojolearn/_bpe_trainer.py`
+(`tokenizer/train/bpe_train.mojo`) against `python/mojolearn/tests/_bpe_trainer.py`
 file byte for file byte, and that IS a second implementation. It is not this
 one, for two reasons worth writing down rather than assuming:
 
@@ -34,7 +34,7 @@ algorithm the lane's corpus may not.
 
 THE FOUR PLACES THE REFERENCE TAKES A DIFFERENT ROUTE
 
-  ours (`python/mojolearn/_bpe_trainer.py`)   this reference
+  ours (`python/mojolearn/tests/_bpe_trainer.py`)   this reference
   ----------------------------------------   -----------------------------
   pre-tokens grouped into `(piece, count)`    one entry per pre-token
   pairs, sorted by bytes                      OCCURRENCE, ungrouped and
@@ -486,7 +486,7 @@ def main(argv=None, out=sys.stdout):
     args = parser.parse_args(argv)
 
     import mojolearn as ml
-    from mojolearn import _bpe_trainer as bpe
+    from mojolearn.tests import _bpe_trainer as bpe
 
     identity_break = _load_identity_break()
     cases = corpora(identity_break, bpe)

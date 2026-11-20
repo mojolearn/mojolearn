@@ -2,7 +2,7 @@
 # Compile-only root for bindings/public_lifecycle_owner.mojo (shared lifecycle helper).
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 
 @export
 def lifecycle_owner_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

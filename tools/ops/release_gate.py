@@ -20,7 +20,7 @@ Nothing here rents, releases or extends a box: the orchestrator brings the box u
    sha256 checked there: the candidate wheels, the committed job script tools/ops/release_gate_job.sh
    (verbatim; refused when it is not committed and clean), gate.env (the exact build and gate argv
    below) and, when given, a retained autograd artifact set to reuse (--autograd-prior).
-3. The job runs persisted to R2 from the box: `nvidia_central.sh submit release-gate --cap 180
+3. The job runs persisted to R2 from the box: `nvidia_central.sh submit release-gate --cap 240
    --results <res> <in>/release_gate_job.sh` (queued; this tool polls the R2 manifest) or
    `do_amd_steward.sh run <tag> <res> bash <in>/release_gate_job.sh` (in the foreground).
    On the box the job checks the GPU target, makes the source tree's locked pixi env, BUILDS the
@@ -28,24 +28,34 @@ Nothing here rents, releases or extends a box: the orchestrator brings the box u
    prior binaries), then runs tools/gate_smoke_box.py ... all (release-light-v1: eleven installed
    correctness records, 24 autograd entries, three adapter phases, 30-minute ceiling), all from the
    candidate commit's tree. Reports and the built autograd set land in <res>.
-4. `tools/box_persist.py fetch --tag <tag> --extract` brings the final results home; <res>/out is
-   copied into --out (gate-smoke.json and the reports the old lq transport brought home).
+4. `tools/box_persist.py fetch --tag <tag> --extract` brings the results home; <res>/out is copied into
+   --out (gate-smoke.json and the reports the old lq transport brought home). The job runs the measurement
+   smoke LAST, after its verdict is settled, and uploads its reports at once before it (phase hard-done, a
+   `hard` snapshot holding out/gate-hard.json): with --until hard (the default) this tool brings that
+   snapshot home and returns while the box runs the smoke, keeping --state; `release_gate.py await-final
+   --state FILE --out DIR` (tools/release.py starts it in the background) then waits for the final upload
+   and brings it home, out/measuresmoke/ included. --until final waits for the final upload (--strict).
 
 Exit: 0 when the gate-smoke.json that came home says PASS for this vendor and version, the job's rc
-(or 1) otherwise, 3 when no final result landed within --max-wait-hours (a rerun with the same
---state resumes the same job instead of submitting another).
+(or 1) otherwise, 3 when no result landed within --max-wait-hours (a rerun with the same --state resumes
+the same job instead of submitting another).
 """
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
+import io
 import json
+import math
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -56,6 +66,27 @@ if str(TOOLS) not in sys.path:
 JOB_SCRIPT = "tools/ops/release_gate_job.sh"
 #: the one nvidia_central lane the gate's jobs run in (its tree: /root/mojolearn-release-gate)
 LANE = "release-gate"
+#: what the laptop-to-pod link carries in all, MB/s, and what one `ssh cat >` stream carries alone (2026-11-18, lane
+#: fx-pod-job2: one stream 1.3 MB/s; 10 streams moved 26 wheels of 54-64 MB in about 570 s = 2.6 MB/s in all, so each
+#: stream got 0.26 MB/s and the 27th file hit its 569 s timeout, stage-ab4-try1.log). More streams than the link
+#: carries only share it; MOJOLEARN_STAGE_LINK_MBPS / MOJOLEARN_STAGE_STREAM_MBPS override the measured figures.
+STAGE_LINK_MBPS = float(os.environ.get("MOJOLEARN_STAGE_LINK_MBPS") or 2.6)
+STAGE_STREAM_MBPS = float(os.environ.get("MOJOLEARN_STAGE_STREAM_MBPS") or 1.3)
+#: parallel copy streams of Runner.stage: as many as the link carries (link / one stream, rounded up), never more
+#: than the laptop's cores, at most one per file (MOJOLEARN_STAGE_STREAMS overrides)
+STAGE_STREAMS = int(os.environ.get("MOJOLEARN_STAGE_STREAMS")
+                    or min(os.cpu_count() or 4, max(1, math.ceil(STAGE_LINK_MBPS / STAGE_STREAM_MBPS))))
+#: a copy's timeout: a fixed start-up allowance plus SLACK times its size over its share of the link
+STAGE_COPY_BASE_S = 300
+STAGE_COPY_SLACK = 3.0
+
+
+def stage_copy_timeout(size, streams, link_mbps=None):
+    """Seconds one file of SIZE bytes may take while STREAMS copies share the link: 300 s plus 3x its size over its
+    share (link / streams, never above one stream's rate)."""
+    link = link_mbps or STAGE_LINK_MBPS
+    share = min(STAGE_STREAM_MBPS, link / max(1, streams)) * 1e6
+    return int(STAGE_COPY_BASE_S + STAGE_COPY_SLACK * size / share)
 IN_BASE = "/root/release-gate"
 #: gate_autograd_artifacts.py: outputs, logs and receipts live under a retained /root/results* directory
 RESULTS_BASE = "/root/results-release-gate"
@@ -68,19 +99,76 @@ VENDORS = {
     "amd": dict(wrapper="tools/do_amd_steward.sh", target="gfx942", compile_jobs=8),
 }
 #: nvidia_central.sh submit --cap (minutes; the wrapper's maximum is 240): pixi env + eight compiles
-#: (bounded by BUILD_MINUTES) + the gate's own 30-minute ceiling
-NV_CAP_MIN = 180
+#: (bounded by BUILD_MINUTES) + the gate + the installed-runtime qualifier. At 0.8.65 build and gate took
+#: ~20 minutes and the full qualifier needs ~125 more on the L40S, so the wrapper's maximum is used; the job
+#: script clips the qualifier to the minutes this cap leaves (GATE_JOB_CAP_MINUTES).
+NV_CAP_MIN = 240
 BUILD_MINUTES = 120
+#: phase hard-done's marker under out/: the job's HARD verdict is settled and its reports are uploaded
+HARD_MARKER = "gate-hard.json"
 #: what the job copies from the gate's out root into <res>/out (reports only; the venv and caches stay
 #: on the box). The same list the lq transport fetched, plus the whole built autograd set.
-GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke",
+GATE_FETCH = ("gate-smoke.json", "correctness.log", "correctness-*", "autograd-smoke.json", "autograd-smoke", "runtime-*",
               "smoke.log", "measure-*.log", "measure-manifest-*.json",
               "setup/wheel-manifest.json", "setup/logs", "autograd-bin",
               "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
               "measure-*/campaign-retention.json", "measure-*/board",
               # the installed-wheel adapter smoke (tools/adapter_gate.py): receipt, logs, per-phase results
               "adapter-smoke/adapter-smoke.json", "adapter-smoke/*.log", "adapter-smoke/*.exit",
-              "adapter-smoke/*/*.json")
+              "adapter-smoke/*/*.json",
+              # the gate runner overlay the job applied (GATE_OVERLAY): its box-side record and its manifest
+              "route-overlay.txt", "route-overlay.json",
+              # --identity-columns (release.py --identity-on-wheels): the one identity column record of these wheels
+              "identity",
+              # --units-plan: the device-check unit records and their summary (tools/release_check_units.py)
+              "units",
+              # the one-GPU multi-device gate (tools/logical_shard_identity.py), run unconditionally by every job
+              "shardcheck",
+              # the measurement smoke (tools/release_measurement_smoke.py), run unconditionally by every job: the
+              # summary, the failure list and the batch logs (the batch smoke boards and caches stay on the box)
+              "measuresmoke/measuresmoke.json", "measuresmoke/measuresmoke.txt", "measuresmoke/logs",
+              # phase hard-done: the job's verdict is settled and its reports were uploaded ahead of the smoke
+              HARD_MARKER)
+#: THE GATE RUNNER OVERLAY: the tooling checkout's copy of each of these files whose bytes differ from the
+#: source commit's ships with the job (route-overlay.tgz, tools/release_tooling.py write_overlay) and is
+#: applied over the source tree AFTER the autograd build (the build and its reuse proof read the clean tree)
+#: and BEFORE the gate runs, so a runner fix never needs a refreeze. tools/release.py gate_ok accepts the
+#: report only when the box's route-overlay.txt shows the overlaid bytes (release.overlay_verified).
+#: tools/logical_shard_identity.py (the one-GPU multi-device gate) is one of them: the Mac judges its record with
+#: its own LANES / COUNTS / SCHEMA (tools/release_identity_wheels.py `single_gate_ok`), so the box must run the same
+#: copy; release_gate_job.sh runs its phase right after the overlay.
+#: tools/release_measurement_smoke.py (the measurement smoke) likewise: the Mac judges its summary with its own
+#: SCHEMA / summary_errors; release_gate_job.sh stages its data after the overlay and runs it last.
+GATE_OVERLAY = ("tools/gate_smoke_box.py", "tools/autograd_smoke.py", "tools/release_gate_profiles.py",
+                "tools/logical_shard_identity.py", "tools/release_measurement_smoke.py")
+#: the measurement smoke's venv (release_gate_job.sh phase measuresmoke): the exact wheels plus these harness packages
+#: (the board harness and its data prep read NumPy; the two causal-LM recipes fetch their public checkpoints with
+#: huggingface_hub). Harness only: nothing here is an opponent library and nothing reaches the runtime.
+#: The untimed quality references some of our cells are scored against are part of that harness (pinned as the board
+#: pins them, tools/opponent_wheels.sh and bench_board_algos.PINS_COMMON): scikit-learn (the algos preprocessing
+#: oracle, rfe, the hdbscan scorer), scipy (the als input split, the NB count matrix), statsmodels (select-d). They
+#: are never raced: the smoke runs no opponent arm.
+#: CatBoost (pinned as the trees board pins it, tools/opponent_wheels.sh) is the untimed border oracle of our own
+#: pre-binned arms, never an arm: trees/gbdt-depthwise `ours-prebinned` and trees/gbdt-lossguide `ours-gain0` fit on
+#: the GreedyLogSum bin ids that tools/speed_gbdt_arm.py prebinned_data builds with CatBoost's Pool.quantize. Without
+#: it both arms were refused at construction and the 0.8.66 AMD smoke failed those four recipes on "missing
+#: parameter/version probe: ours-prebinned / ours-gain0".
+MEASURE_SMOKE_PIP = ("numpy>=1.26.4", "huggingface_hub", "scikit-learn==1.7.2", "scipy==1.17.1", "statsmodels==0.15.0",
+                     "catboost==1.2.10")
+#: the fixture generator's own venv (tools/neural_fixtures_box.sh NF_TORCH / NF_PYG, CPU index): it writes the layer
+#: lanes' inputs once before the batches; never the measured venv, never raced
+MEASURE_SMOKE_FIXTURE_PIP = ("numpy", "torch==2.13.0", "torch-geometric==2.8.0.post1")
+#: the measurement smoke's ceiling (minutes); see tools/release_measurement_smoke.py for the expected duration.
+#: THE SMOKE IS THE LAST PHASE OF THE ONE GATE JOB (Andrew 2026-11-08: "run immediately after the verification and
+#: not be something separate"; the second box job, --job measuresmoke, is gone). Its setup (two venvs, 4.8 GB of data
+#: from R2; 20-45 min at 0.8.66) runs in the background during the earlier phases. On the capped NVIDIA job the
+#: qualifier's bound leaves this ceiling to the smoke, which is clipped to what the cap leaves.
+MEASURE_SMOKE_MINUTES = 90
+#: --until: when this tool returns. hard: once the job's HARD parts are home (phase hard-done's upload), the job
+#: still running its smoke; final: once the final upload is home (the smoke included; tools/release.py --strict)
+UNTIL = ("hard", "final")
+#: the presigned-GET data plan the measurement smoke stages from R2 (tools/release_measurement_smoke.py data-plan)
+MEASURE_SMOKE_DATA = "measuresmoke-data.json"
 TERMINAL_NV = ("done", "failed", "cancelled", "timeout", "interrupted")
 
 
@@ -97,7 +185,7 @@ def sha256(path):
 
 
 def gate_argv(vendor, version, out_root, candidate_wheels=(), source_commit=None, autograd_manifest=None,
-              adapters=True, profile="release-light-v1"):
+              adapters=True, profile="release-light-v1", identity_once=False):
     """The box argv (run from the source tree) of tools/gate_smoke_box.py VENDOR VERSION <out_root> all.
     ADAPTERS False (MOJOLEARN_RELEASE_ADAPTERS=0: no adapters ship) passes --no-adapters."""
     if vendor not in VENDORS or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
@@ -108,6 +196,8 @@ def gate_argv(vendor, version, out_root, candidate_wheels=(), source_commit=None
     argv = ["tools/gate_smoke_box.py", vendor, version, out_root, "all", "--profile", profile]
     if not adapters:
         argv.append("--no-adapters")
+    if identity_once:
+        argv.append("--no-identity-lanes")   # the one column record of the same wheels ran those lanes
     if candidate_wheels:
         if not source_commit or not autograd_manifest:
             raise SystemExit("release-gate: candidate wheels need the source commit and the autograd manifest")
@@ -130,6 +220,51 @@ def build_argv(vendor, source_commit, tree, out, reuse_from=None):
     return argv
 
 
+#: The installed-runtime qualifier (tools/release_runtime_installed.py run: the public runtime registry against
+#: the installed candidate wheels, runtime-<vendor> in the ledger) runs on the box after the smoke, bounded by
+#: this many minutes. Its outcome is recorded under out/runtime-<vendor>/ and fetched; the job's verdict stays
+#: the smoke's, tools/release.py gate_ok fails the gate unless that report passed, and the ledger admits
+#: runtime-<vendor> only from a passed run. 0 skips it.
+#: The job script passes the qualifier a run budget 10 minutes under this bound (venv, install, report), so
+#: the qualifier stops itself and writes its report and partial junit. At 0.8.65 a 15-minute budget
+#: stopped it at 12% (NVIDIA) and 23% (AMD): about 7,500 s and 3,900 s for the full run.
+RUNTIME_MINUTES = int(os.environ.get("MOJOLEARN_GATE_RUNTIME_MINUTES", "200"))
+
+
+#: the earlier unit receipts the job's qualifier may reuse, one tarball (one upload, not one per receipt)
+RUNTIME_PRIOR_TGZ = "runtime-units-prior.tgz"
+
+
+def write_runtime_prior(source, staged):
+    """(path, sha256): SOURCE's regular files as a deterministic gzip tarball in STAGED (sorted members,
+    zero mtimes and owners), so the same receipts give the same bytes and gate.env can name them."""
+    import gzip
+    import io
+    import tarfile
+    source, staged = Path(source), Path(staged)
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        for path in sorted(p for p in source.rglob("*") if p.is_file() and not p.is_symlink()):
+            info = tarfile.TarInfo(path.relative_to(source).as_posix())
+            data = path.read_bytes()
+            info.size, info.mtime, info.mode = len(data), 0, 0o644
+            archive.addfile(info, io.BytesIO(data))
+    target = staged / RUNTIME_PRIOR_TGZ
+    staged.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as stream:
+        stream.write(buffer.getvalue())
+    return target, sha256(target)
+
+
+def gate_disk_plan():
+    """tools/ops/gate_disk_plan.py (beside this file)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gate_disk_plan", Path(__file__).resolve().parent / "gate_disk_plan.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def bash_array(name, items):
     return f"{name}=(" + " ".join(shlex.quote(str(i)) for i in items) + ")"
 
@@ -138,7 +273,8 @@ class Plan:
     """Every path, file and wrapper command of one gate job; pure (reads no file, runs nothing)."""
 
     def __init__(self, vendor, version, source_commit, source_tree, out, wheels, tag, adapters=True,
-                 profile="release-light-v1", prior=None, prior_files=(), staged=None):
+                 profile="release-light-v1", prior=None, prior_files=(), staged=None, overlay=None,
+                 runtime_prior=None, identity_columns=(), label_device="", units_plan=None, reuse_unchanged=False):
         if vendor not in VENDORS:
             raise SystemExit(f"release-gate: vendor must be nvidia or amd, not {vendor!r}")
         if not re.fullmatch(r"[0-9a-f]{40}", source_commit or ""):
@@ -164,10 +300,43 @@ class Plan:
         self.prior_files = list(prior_files)
         #: the local directory that holds the generated gate.env
         self.staged = Path(staged) if staged else self.out.parent / f"inputs-{tag}"
+        #: the gate runner overlay manifest (release_tooling.overlay_manifest); an input only when bytes differ
+        self.overlay = overlay if overlay and overlay.get("files") else None
+        #: the overlay tarball's sha256, set once Runner writes it (gate.env carries it)
+        self.overlay_sha256 = None
+        #: earlier gates' unit receipts the installed-runtime qualifier may reuse (tools/release.py
+        #: gate_runtime_prior: <class>/<unit>/<receipt>.json + junit); shipped as runtime-units-prior.tgz
+        self.runtime_prior = Path(runtime_prior) if runtime_prior and any(Path(runtime_prior).rglob("*.json")) else None
+        #: that tarball's sha256, set once Runner writes it (gate.env carries it)
+        self.runtime_prior_sha256 = None
+        #: THE ONE BOX JOB (release.py --identity-on-wheels, Andrew 2026-11-05): the identity columns this job
+        #: records from the installed wheels (tools/identity_wheel_record.py), before the device checks. Empty:
+        #: the job records nothing (the default path, unchanged).
+        self.identity_columns = [c for c in identity_columns if c]
+        allowed = {"nvidia": ("nvidia", "ptx"), "amd": ("amd",)}[vendor]
+        if any(c not in allowed for c in self.identity_columns):
+            raise SystemExit(f"release-gate: {vendor} records only {', '.join(allowed)}, not {self.identity_columns}")
+        if self.identity_columns and not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", label_device or ""):
+            raise SystemExit("release-gate: --identity-columns needs --label-device (a lowercase slug, e.g. l40s)")
+        self.label_device = label_device
+        #: --reuse-unchanged (release.py): the one run reuses unchanged lanes and runtime units; default: everything runs
+        self.reuse_unchanged = bool(reuse_unchanged)
+        #: THE DEVICE CHECKS AS UNITS (tools/release_check_units.py): the plan the Mac made before the rental; with
+        #: it the job runs exactly its owed units (install/load, autograd entries, adapters) instead of the gate's
+        #: stage list, and builds the autograd executables only when a compiled check is owed
+        self.units_plan = Path(units_plan) if units_plan else None
+        plan_doc = json.loads(self.units_plan.read_text()) if self.units_plan and self.units_plan.is_file() else {}
+        self.build_autograd = not self.units_plan or any(
+            r["decision"] == "run" and r["unit"].startswith("autograd/") and r["key"]["files"]
+            and any(f.endswith(".mojo") for f in r["key"]["files"]) for r in plan_doc.get("units", []))
+        #: runtime-cpu (the same producer, --vendor cpu) runs on the NVIDIA job after runtime-nvidia; with
+        #: --identity-columns every CPU check runs on GitHub's free runners instead (cpu-identity-gate.yml)
+        self.runtime_cpu = vendor == "nvidia" and not self.identity_columns
         gate_out = f"{self.work}/out"
         manifest = f"{gate_out}/autograd-bin/build-manifest.json"
         box_wheels = [f"{self.indir}/{w.name}" for w in self.wheels]
-        self.gate = gate_argv(vendor, version, gate_out, box_wheels, source_commit, manifest, adapters, profile)
+        self.gate = gate_argv(vendor, version, gate_out, box_wheels, source_commit, manifest, adapters, profile,
+                              identity_once=bool(self.identity_columns))
         reuse = f"{self.indir}/autograd-prior" if self.prior else None
         self.build = build_argv(vendor, source_commit, self.tree, f"{gate_out}/autograd-bin", reuse)
         self.build_fresh = build_argv(vendor, source_commit, self.tree, f"{gate_out}/autograd-bin")
@@ -181,17 +350,44 @@ class Plan:
                  f"GATE_TAG={self.tag}", f"GATE_TREE={self.tree}", f"GATE_FETCH_URL={self.fetch_url}",
                  f"GATE_WORK={self.work}", f"GATE_BUILD_MINUTES={BUILD_MINUTES}",
                  f"GATE_ADAPTERS={1 if self.adapters else 0}", f"GATE_PROFILE={self.profile}",
-                 f"GATE_REUSE={1 if self.prior else 0}",
+                 f"GATE_REUSE={1 if self.prior else 0}", f"GATE_RUNTIME_MINUTES={RUNTIME_MINUTES}",
+                 f"GATE_JOB_CAP_MINUTES={self.cap_minutes() if self.vendor == 'nvidia' else 0}",
+                 f"GATE_RUNTIME_CPU={1 if self.runtime_cpu else 0}",
+                 f"GATE_RUNTIME_PRIOR_SHA256={self.runtime_prior_sha256 or ''}",
+                 bash_array("GATE_WHEELS", [f"{self.indir}/{w.name}" for w in self.wheels]),
+                 f"GATE_OVERLAY_SHA256={self.overlay_sha256 or ''}", bash_array("GATE_OVERLAY", GATE_OVERLAY),
                  bash_array("BUILD_ARGV", self.build), bash_array("BUILD_FRESH_ARGV", self.build_fresh),
-                 bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH)]
+                 bash_array("GATE_ARGV", self.gate), bash_array("GATE_FETCH", GATE_FETCH),
+                 f"GATE_IDENTITY_COLUMNS={','.join(self.identity_columns)}",
+                 f"GATE_IDENTITY_LABEL_DEVICE={self.label_device}",
+                 bash_array("GATE_IDENTITY_SHA256", [f"{w.name}={sha256(w) if w.is_file() else 'DRY-RUN'}"
+                                                     for w in self.wheels] if self.identity_columns else []),
+                 f"GATE_UNITS={1 if self.units_plan else 0}", f"GATE_BUILD_AUTOGRAD={1 if self.build_autograd else 0}",
+                 f"GATE_REUSE_UNCHANGED={1 if self.reuse_unchanged else 0}",
+                 bash_array("MEASURE_SMOKE_PIP", MEASURE_SMOKE_PIP),
+                 bash_array("MEASURE_SMOKE_FIXTURE_PIP", MEASURE_SMOKE_FIXTURE_PIP),
+                 f"GATE_MEASURE_SMOKE_MINUTES={MEASURE_SMOKE_MINUTES}",
+                 # the free disk the job refuses to start without (tools/ops/gate_disk_plan.py; 0.8.66 run t filled
+                 # the 80 GB pod) and the measurement smoke's footprint cap inside it
+                 f"GATE_DISK_NEED_GB={gate_disk_plan().job_need_gb()}",
+                 f"GATE_MEASURE_SMOKE_MAX_GB={gate_disk_plan().SMOKE_CAP_GB:g}"]
         return "\n".join(lines) + "\n"
 
     def uploads(self):
         """[(local, remote, executable)]: the wheels, the job script, the reused autograd set, gate.env."""
         out = [(w, f"{self.indir}/{w.name}", False) for w in self.wheels]
         out.append((ROOT / JOB_SCRIPT, f"{self.indir}/release_gate_job.sh", True))
+        if self.overlay:
+            for name in ("route-overlay.tgz", "route-overlay.json"):
+                out.append((self.staged / name, f"{self.indir}/{name}", False))
         for name in self.prior_files:
             out.append((self.prior / name, f"{self.indir}/autograd-prior/{name}", name != "build-manifest.json"))
+        if self.runtime_prior:
+            out.append((self.staged / RUNTIME_PRIOR_TGZ, f"{self.indir}/{RUNTIME_PRIOR_TGZ}", False))
+        if self.units_plan:
+            out.append((self.units_plan, f"{self.indir}/units-plan.json", False))
+        # the measurement smoke's data: presigned GETs minted on the Mac (Runner.main writes it before gate.env)
+        out.append((self.staged / MEASURE_SMOKE_DATA, f"{self.indir}/{MEASURE_SMOKE_DATA}", False))
         out.append((self.staged / "gate.env", f"{self.indir}/gate.env", False))
         names = [r for _, r, _ in out]
         if len(set(names)) != len(names):
@@ -226,9 +422,13 @@ class Plan:
         """argv: the persisted job (NVIDIA: queued, prints the job id; AMD: runs in the foreground)."""
         script = f"{self.indir}/release_gate_job.sh"
         if self.vendor == "nvidia":
-            return ["bash", self.wrapper, "submit", LANE, "--cap", str(NV_CAP_MIN), "--note", self.tag,
+            return ["bash", self.wrapper, "submit", LANE, "--cap", str(self.cap_minutes()), "--note", self.tag,
                     "--results", self.res, script]
         return ["bash", self.wrapper, "run", self.tag, self.res, "bash", script]
+
+    def cap_minutes(self):
+        """nvidia_central.sh submit --cap: the wrapper's maximum (the job script clips the qualifier and the smoke)."""
+        return NV_CAP_MIN
 
     def fetch(self, tag, dest, listing=False):
         return [sys.executable, "tools/box_persist.py", "fetch", "--tag", tag, "--dest", str(dest)] + (
@@ -252,9 +452,11 @@ class Plan:
         lines.append("  on the box, in " + self.tree + " at " + self.commit[:12] + ": pixi run -e default python3 "
                      + q(self.build))
         lines.append("  on the box, then: python3 " + q(self.gate))
+        lines.append("  on the box, then: phase hard-done uploads the reports (a `hard` snapshot), then LAST: "
+                     "python3 tools/release_measurement_smoke.py run (out/measuresmoke/)")
         tag = "<the R2 tag the wrapper prints>"
         lines.append(q(self.fetch(tag, self.staged.parent / "fetch-<tag>"))
-                     + f"  # then <fetch>/final/out -> {self.out}")
+                     + f"  # the `hard` slot (--until hard) or the final -> {self.out}")
         return lines
 
 
@@ -265,6 +467,18 @@ def job_script_committed():
     dirty = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--", rel], capture_output=True)
     if tracked.returncode or dirty.returncode:
         raise SystemExit(f"release-gate: {rel} is not committed and clean in {ROOT}; commit it first")
+
+
+def gate_overlay(source_commit):
+    """The gate runner overlay manifest: each GATE_OVERLAY file whose bytes at the tooling commit (this
+    checkout's HEAD) differ from the source commit's (an empty `files` when none differ)."""
+    import release_tooling
+    tooling = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+    try:
+        return release_tooling.overlay_manifest(ROOT, tooling, source_commit, GATE_OVERLAY)
+    except release_tooling.OverlayRefused as exc:
+        raise SystemExit(f"release-gate: {exc}")
 
 
 def on_origin_main(commit):
@@ -301,6 +515,13 @@ def gate_verdict_home(out, vendor, version):
     if doc.get("verdict") != "PASS":
         return False, f"verdict {doc.get('verdict')}: " + "; ".join(doc.get("verdict_reasons") or [])
     return True, "PASS"
+
+
+def read_summary(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
 
 
 def persist_tag(text):
@@ -365,17 +586,40 @@ class Runner:
         got = self.must(plan.prepare(), f"preparing {plan.indir}")
         if "READY" not in (got.stdout or ""):
             raise SystemExit(f"release-gate: could not prepare {plan.indir}")
-        want, executables = {}, []
-        for local, remote, executable in plan.uploads():
+        # PARALLEL STAGING (lane fx-pod-job, 2026-11-18): a 53-64 MB wheel took 33-56 s through one `ssh cat >`
+        # (about 1.3 MB/s, one stream), and the files went one after the other: 6.3 min for three arms, about 57 min
+        # for 42. Now (1) a file already on the box at its sha256 is not sent again (the base wheels per candidate
+        # dir, the 44 MB stored board on every stage), and (2) the rest go in STAGE_STREAMS parallel streams. The
+        # sha256 check of every file on the box after the copies is unchanged. The candidate wheels are not kept in
+        # R2 (the build collector drops them), so the pod cannot pull them from there.
+        items = list(plan.uploads())
+        for local, _, _ in items:
             if not Path(local).is_file():
                 raise SystemExit(f"release-gate: no file {local}")
+        workers = max(1, min(len(items), STAGE_STREAMS))
+        with ThreadPoolExecutor(workers) as ex:
+            sums = list(ex.map(lambda it: sha256(it[0]), items))
+        want = {remote: s for (_, remote, _), s in zip(items, sums)}
+        executables = [remote for _, remote, executable in items if executable]
+        have = self.box_sums(plan, list(want)) if want else {}
+        todo = [(local, remote) for local, remote, _ in items if have.get(remote) != want[remote]]
+        for local, remote, _ in items:
+            if have.get(remote) == want[remote]:
+                say(f"on the box already at its sha256: {remote}")
+
+        streams = max(1, min(len(todo), STAGE_STREAMS))
+
+        def copy(job):
+            local, remote = job
             size = Path(local).stat().st_size
-            say(f"copying {Path(local).name} ({size} bytes) to {remote}")
+            limit = stage_copy_timeout(size, streams)
+            say(f"copying {Path(local).name} ({size} bytes, timeout {limit} s, {streams} stream(s)) to {remote}")
             with open(local, "rb") as fh:
-                self.must(plan.upload(remote), f"the copy of {local}", stdin=fh, timeout=300 + size // 200000)
-            want[remote] = sha256(local)
-            if executable:
-                executables.append(remote)
+                self.must(plan.upload(remote), f"the copy of {local}", stdin=fh, timeout=limit)
+
+        if todo:
+            with ThreadPoolExecutor(streams) as ex:
+                list(ex.map(copy, todo))      # list(): a failed copy's SystemExit is raised here
         got = self.must(plan.verify(list(want), executables), "the sha256 check on the box")
         have = {}
         for line in (got.stdout or "").splitlines():
@@ -387,16 +631,34 @@ class Runner:
             raise SystemExit(f"release-gate: sha256 differs on the box for {bad}")
         say(f"{len(want)} input(s) on the box, sha256 verified")
 
-    def wait_final(self, plan, tag, job=None):
-        """(state, exit) of the job's R2 manifest once final, or None at the deadline."""
+    def box_sums(self, plan, remotes):
+        """{remote: sha256} of the REMOTES already on the box (a missing file is left out; never fails the stage)."""
+        cmd = "sha256sum " + " ".join(shlex.quote(r) for r in remotes) + " 2> /dev/null; true"
+        got = self.call(plan.box_sh(cmd), timeout=900)
+        have = {}
+        for line in (got.stdout or "").splitlines() if got.returncode == 0 else []:
+            parts = line.split()
+            if len(parts) == 2:
+                have[parts[1]] = parts[0]
+        return have
+
+    def fetch_dir(self, tag):
+        return (Path(self.a.state).parent if self.a.state else self.a.out.parent) / f"fetch-{tag}"
+
+    def wait_final(self, plan, tag, job=None, until="final"):
+        """(state, exit) of the job's R2 manifest once final, ("hard", None) once (UNTIL hard) the job's phase
+        hard-done upload landed while it runs on, ("lost", None) for a job that ended without a final upload,
+        or None at the deadline."""
         deadline = self.clock() + self.a.max_wait_hours * 3600
-        dest = Path(self.a.state).parent / f"fetch-{tag}" if self.a.state else self.a.out.parent / f"fetch-{tag}"
+        dest = self.fetch_dir(tag)
         polls, ended = 0, 0
         while self.clock() < deadline:
             got = self.call(plan.fetch(tag, dest, listing=True), timeout=600)
             state, rc = manifest_state(got.stdout)
             if state == "final":
                 return state, rc
+            if until == "hard" and hard_landed(dest / "manifest.json"):
+                return "hard", None
             if job:
                 st = self.call(plan.status(job), timeout=300)
                 m = re.search(r"^job \S+: (\S+)", st.stdout or "", re.M)
@@ -413,12 +675,35 @@ class Runner:
         return None
 
     def bring_home(self, plan, tag):
-        dest = (Path(self.a.state).parent if self.a.state else self.a.out.parent) / f"fetch-{tag}"
+        dest = self.fetch_dir(tag)
         got = self.call(plan.fetch(tag, dest), timeout=3600)
         if got.returncode != 0:
             say(f"fetch of {tag} exited {got.returncode}: {(got.stdout or '')[-300:]}")
             return False
-        final = dest / "final"
+        return self.copy_home(dest / "final", tag)
+
+    def bring_home_hard(self, plan, tag):
+        """The newest ring slot of a running job (box_persist fetch without a final takes it) into --out, when
+        it holds the job's phase hard-done marker for TAG: the HARD exit it records, else None."""
+        dest = self.fetch_dir(tag)
+        got = self.call(plan.fetch(tag, dest), timeout=3600)
+        m = re.findall(r"^EXTRACTED (\S+) -> (\S+)", got.stdout or "", re.M)
+        if got.returncode != 0 or not m:
+            say(f"fetch of {tag}'s hard-done snapshot exited {got.returncode}: {(got.stdout or '')[-300:]}")
+            return None
+        slot = Path(m[-1][1])
+        marker = read_summary(slot / "out" / HARD_MARKER) or {}
+        a = self.a
+        if (marker.get("vendor"), marker.get("version"), marker.get("source_commit")) != (
+                a.vendor, a.version, a.source_commit) or not isinstance(marker.get("exit"), int):
+            say(f"{tag}: the snapshot {slot.name} holds no {HARD_MARKER}; waiting for the final upload")
+            return None
+        if not self.copy_home(slot, tag):
+            return None
+        return marker["exit"]
+
+    def copy_home(self, final, tag):
+        """FINAL/out (and FINAL/job) of one fetched job into --out."""
         if not (final / "out").is_dir():
             say(f"no out/ in the final results of {tag}")
             return False
@@ -428,6 +713,59 @@ class Runner:
             shutil.copytree(final / "job", self.a.out / "job", dirs_exist_ok=True)
         say(f"{tag}: results home in {self.a.out}")
         return True
+
+    def adopt_landed(self):
+        """Reuse a landed result instead of relaunching (Andrew, 2026-10-31: reuse good old runs, automatically).
+        Under the state dir (the --state parent, else --out's parent), every fetch-*/final.tgz whose
+        manifest.json is final and whose bytes are the manifest's final upload is extracted tolerantly; a
+        gate-smoke.json for THIS candidate (vendor, version, source commit, profile and the sha256 of every
+        --candidate-wheel) with verdict PASS is brought home exactly as bring_home does. A landed FAIL for this
+        candidate is reported, never adopted (the gate relaunches). The adopted tag, or None."""
+        a = self.a
+        base = Path(a.state).parent if a.state else a.out.parent
+        want = sorted(sha256(w) for w in a.candidate_wheel if Path(w).is_file())
+        if len(want) != len(a.candidate_wheel):
+            return None
+        import box_persist
+        fetched = sorted(base.glob("fetch-*/final.tgz"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for tgz in fetched:
+            d = tgz.parent
+            try:
+                m = json.loads((d / "manifest.json").read_text())
+            except (OSError, ValueError):
+                continue
+            ups = [u for u in m.get("uploads", []) if u.get("name") == "final.tgz"]
+            if m.get("state") != "final" or not ups or ups[-1].get("sha256") != sha256(tgz):
+                continue
+            tag = m.get("tag") or d.name[len("fetch-"):]
+            try:
+                with contextlib.redirect_stdout(io.StringIO()) as skipped:
+                    box_persist.extract_tolerant(str(tgz), str(d / "final"))
+            except (OSError, tarfile.TarError) as e:
+                say(f"landed {tag}: cannot extract ({e}); not adopted")
+                continue
+            try:
+                doc = json.loads((d / "final" / "out" / "gate-smoke.json").read_text())
+            except (OSError, ValueError):
+                continue
+            cand = doc.get("candidate") or {}
+            wheels = cand.get("wheels")
+            if (doc.get("vendor") != a.vendor or doc.get("version") != a.version
+                    or doc.get("source_commit") != a.source_commit or cand.get("source_commit") != a.source_commit
+                    or doc.get("profile", a.profile) != a.profile
+                    or not isinstance(wheels, dict) or sorted(wheels.values()) != want):
+                continue
+            ok, why = gate_verdict_home(d / "final" / "out", a.vendor, a.version)
+            if not ok:
+                say(f"landed {tag} is this candidate's gate but {why}; not adopted, the gate runs again")
+                continue
+            n = skipped.getvalue().count("SKIPPED ")
+            if not self.copy_home(d / "final", tag):
+                continue
+            say(f"adopted {tag}: {why} for {a.vendor} {a.version} at {a.source_commit[:12]} "
+                f"({len(want)} wheel sha256 equal; {n} link member(s) skipped); no job launched")
+            return tag
+        return None
 
     def make_plan(self):
         """(plan, key, state path, state): the launch's plan, its input key and a resumable earlier launch."""
@@ -441,9 +779,18 @@ class Runner:
                 st = json.loads(state_path.read_text())
             except ValueError:
                 st = {}
+        overlay = gate_overlay(a.source_commit)
         key_inputs = [a.vendor, a.version, a.source_commit, a.profile, not a.no_adapters,
                       [sha256(w) if Path(w).is_file() else str(w) for w in a.candidate_wheel],
                       sha256(ROOT / JOB_SCRIPT) if (ROOT / JOB_SCRIPT).is_file() else None]
+        if overlay["files"]:
+            key_inputs.append(overlay["digest"])   # a runner fix is a new job, never a resumed old one
+        if getattr(a, "identity_columns", ""):
+            key_inputs.append(["identity", a.identity_columns, getattr(a, "label_device", "")])
+        if getattr(a, "reuse_unchanged", False):
+            key_inputs.append("reuse-unchanged")
+        if getattr(a, "units_plan", None) and Path(a.units_plan).is_file():
+            key_inputs.append(["units", sha256(a.units_plan)])
         key = hashlib.sha256(json.dumps(key_inputs).encode()).hexdigest()
         if st.get("key") == key and st.get("tag"):
             tag = st["plan_tag"]
@@ -452,7 +799,12 @@ class Runner:
         plan = Plan(a.vendor, a.version, a.source_commit, a.source_tree, a.out, a.candidate_wheel, tag,
                     adapters=not a.no_adapters, profile=a.profile,
                     prior=a.autograd_prior if prior else None, prior_files=prior,
-                    staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}")
+                    staged=(state_path.parent if state_path else a.out.parent) / f"inputs-{tag}",
+                    overlay=overlay, runtime_prior=getattr(a, "runtime_prior", None),
+                    identity_columns=[c for c in (getattr(a, "identity_columns", "") or "").split(",") if c],
+                    label_device=getattr(a, "label_device", "") or "",
+                    units_plan=getattr(a, "units_plan", None),
+                    reuse_unchanged=getattr(a, "reuse_unchanged", False))
         return plan, key, state_path, st
 
     def dry_lines(self):
@@ -466,6 +818,11 @@ class Runner:
             for line in plan.describe():
                 print("  would: " + line)
             return 0
+        if self.adopt_landed():
+            if state_path and state_path.is_file():
+                state_path.unlink()   # a landed PASS for this candidate settles any earlier launch
+            ok, why = gate_verdict_home(a.out, a.vendor, a.version)
+            return 0 if ok else 1
         job_script_committed()
         if a.vendor == "nvidia" and not on_origin_main(a.source_commit):
             raise SystemExit("release-gate: the candidate commit is not on origin/main; the NVIDIA lane sync "
@@ -479,6 +836,23 @@ class Runner:
             say(f"resuming {st['tag']} (launched {st.get('launched_at')}); not launched again")
         else:
             plan.staged.mkdir(parents=True, exist_ok=True)
+            if plan.overlay:
+                import release_tooling
+                try:
+                    _, plan.overlay_sha256 = release_tooling.write_overlay(ROOT, plan.overlay, plan.staged)
+                except release_tooling.OverlayRefused as exc:
+                    raise SystemExit(f"release-gate: {exc}")
+                say("gate runner overlay: " + ", ".join(sorted(plan.overlay["files"])))
+            if plan.runtime_prior:
+                _, plan.runtime_prior_sha256 = write_runtime_prior(plan.runtime_prior, plan.staged)
+                say(f"runtime unit receipts to reuse: {sum(1 for _ in plan.runtime_prior.rglob('*.json'))} "
+                    f"from {plan.runtime_prior}")
+            # the measurement smoke's data plan: one presigned GET per file the plan reads (the R2 secret stays)
+            import release_measurement_smoke as MS
+            files = MS.write_data_plan(a.vendor, plan.staged / MEASURE_SMOKE_DATA, presign=lambda key, secs: (
+                self.call(["sh", ROOT / "tools/dataset_store.sh", "presign", key, secs]).stdout or "").strip())
+            say(f"measurement smoke data plan: {len(files)} files, {sum(f['bytes'] for f in files) / 1e9:.2f} GB "
+                f"(presigned GETs; files already at their pins on the box are kept)")
             (plan.staged / "gate.env").write_text(plan.env_text())
             self.stage(plan)
             record = dict(key=key, plan_tag=tag, vendor=a.vendor, launched_at=dt.datetime.now(
@@ -513,7 +887,22 @@ class Runner:
                 if not record.get("tag"):
                     raise SystemExit(f"release-gate: the AMD run (rc {rc}) named no R2 tag; nothing to fetch")
             st = record
-        final = self.wait_final(plan, st["tag"], st.get("job"))
+        until = getattr(a, "until", "final")
+        final = self.wait_final(plan, st["tag"], st.get("job"), until=until)
+        if final is not None and final[0] == "hard":
+            # THE HARD PARTS ARE HOME, THE BOX RUNS THE SMOKE ON: return now and keep --state, so
+            # `release_gate.py await-final --state` brings the final (the smoke's summary) home later
+            hard_rc = self.bring_home_hard(plan, st["tag"])
+            if hard_rc is not None:
+                if state_path:
+                    st["hard_home_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+                    state_path.parent.mkdir(parents=True, exist_ok=True)
+                    state_path.write_text(json.dumps(st, indent=2) + "\n")
+                ok, why = gate_verdict_home(a.out, a.vendor, a.version)
+                say(f"gate {a.vendor} {a.version}: HARD parts home (job exit {hard_rc} so far), {why}; the box runs "
+                    f"the measurement smoke, `release_gate.py await-final --state {state_path}` brings it home")
+                return 0 if ok else (hard_rc or 1)
+            final = self.wait_final(plan, st["tag"], st.get("job"))
         if final is None:
             say(f"no final result for {st['tag']} within {a.max_wait_hours} h; a rerun with this --state resumes it")
             return 3
@@ -548,11 +937,79 @@ def parse(argv):
                     help="a complete retained autograd set (build-manifest.json + binaries) the build may reuse")
     ap.add_argument("--profile", choices=("release-light-v1", "performance-campaign-v1"), default="release-light-v1")
     ap.add_argument("--no-adapters", action="store_true")
+    ap.add_argument("--identity-columns", default="",
+                    help="release.py --identity-on-wheels: the identity columns this ONE job records from the installed "
+                         "wheels before its device checks (nvidia: nvidia,ptx; amd: amd); the gate then drops its "
+                         "identity-lane jobs")
+    ap.add_argument("--label-device", default="", help="the device slug of the column labels (l40s, mi325x)")
+    ap.add_argument("--reuse-unchanged", action="store_true",
+                    help="with --identity-columns: reuse unchanged lanes and runtime units (default: everything runs)")
+    ap.add_argument("--units-plan", default=None,
+                    help="tools/release_check_units.py plan: the job runs exactly its owed device-check units")
+    ap.add_argument("--runtime-prior", default=None,
+                    help="earlier gates' runtime unit receipts (<class>/<unit>/...) the job's qualifier may reuse")
+    ap.add_argument("--until", choices=UNTIL, default="hard",
+                    help="hard (default): return once the job's HARD parts are home, the box still running the "
+                         "measurement smoke (await-final brings it home); final: wait for the final upload")
     ap.add_argument("--poll-seconds", type=int, default=60)
     ap.add_argument("--max-wait-hours", type=float, default=72.0)
     ap.add_argument("--dry-run", action="store_true", help="print the wrapper commands; run nothing")
     return ap.parse_args(argv)
 
 
+class JobRef:
+    """The wrapper commands await-final needs of a launched job (Plan.fetch / Plan.status), from its vendor."""
+
+    def __init__(self, vendor):
+        if vendor not in VENDORS:
+            raise SystemExit(f"release-gate: the state names vendor {vendor!r}")
+        self.wrapper = VENDORS[vendor]["wrapper"]
+
+    fetch = Plan.fetch
+    status = Plan.status
+
+
+def await_final(argv, runner=None):
+    """`release_gate.py await-final --state FILE --out DIR`: the final upload of the job --state names (a gate
+    whose HARD parts came home with --until hard) brought home into --out, the measurement smoke's summary
+    (out/measuresmoke/) with it; then --state is removed. 0 home, 1 lost or not home, 3 none within the wait."""
+    ap = argparse.ArgumentParser(prog="release_gate.py await-final")
+    ap.add_argument("--state", required=True)
+    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--poll-seconds", type=int, default=60)
+    ap.add_argument("--max-wait-hours", type=float, default=12.0)
+    a = ap.parse_args(argv)
+    state_path = Path(a.state)
+    st = read_summary(state_path) or {}
+    if not st.get("tag"):
+        say(f"await-final: {state_path} names no launched job; nothing to bring home")
+        return 1
+    r = runner(a) if runner else Runner(a)
+    plan = JobRef(st.get("vendor") or "")
+    final = r.wait_final(plan, st["tag"], st.get("job"))
+    if final is None:
+        say(f"await-final: no final result for {st['tag']} within {a.max_wait_hours} h; rerun to resume")
+        return 3
+    if final[0] == "lost":
+        say(f"await-final: {st['tag']} ended without a final upload")
+        return 1
+    home = r.bring_home(plan, st["tag"])
+    if home and state_path.is_file():
+        state_path.unlink()
+    import release_measurement_smoke as MS
+    errors = MS.summary_errors(read_summary(a.out / "measuresmoke" / MS.SUMMARY))
+    say(f"await-final {st['tag']}: final home={bool(home)}, measurement smoke "
+        + ("; ".join(errors) if errors else "PASS"))
+    return 0 if home else 1
+
+
+def hard_landed(manifest):
+    """True when the job's R2 manifest (a fetch --list wrote it) records its phase hard-done upload."""
+    doc = read_summary(manifest) or {}
+    return any((u or {}).get("label") == "hard" for u in doc.get("uploads") or [])
+
+
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["await-final"]:
+        sys.exit(await_final(sys.argv[2:]))
     sys.exit(Runner(parse(sys.argv[1:])).main())

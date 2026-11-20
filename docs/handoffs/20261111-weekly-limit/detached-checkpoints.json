@@ -1,0 +1,57 @@
+[
+  {
+    "worktree": "/Users/andrewhendel/.cache/mojolearn-sites/mojolearn",
+    "head": "bb9077c09fa6d2f0395bb9b869cb78d005422dd9",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/mojolearn-bb9077c09fa6"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+0ce88411d382/source/0ce88411d382",
+    "head": "0ce88411d382095258b0356164f84969fa8f9214",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/0ce88411d382-0ce88411d382"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.em1/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.em8/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.greedyoff/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.sgd1/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96.svd1/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release-candidates/0.8.67.dev0+cd02a3f6fe96/source/cd02a3f6fe96",
+    "head": "cd02a3f6fe960f140f83e929bbfb2024f1e56aca",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/cd02a3f6fe96-cd02a3f6fe96"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/43b5f7c320e0",
+    "head": "43b5f7c320e0942bdef8c212917b440d1ab1d513",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/43b5f7c320e0-43b5f7c320e0"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/abcd7a637456",
+    "head": "abcd7a6374565a9ce79447abee1296993a6e09a1",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/abcd7a637456-abcd7a637456"
+  },
+  {
+    "worktree": "/Users/andrewhendel/mojolearn-evidence/release/0.8.66/source/bc4ecd4518a9",
+    "head": "bc4ecd4518a90965f8646de0f7b61819d58b79f0",
+    "checkpoint_branch": "checkpoint/weekly-limit-20261111/bc4ecd4518a9-bc4ecd4518a9"
+  }
+]

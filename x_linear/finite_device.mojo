@@ -13,22 +13,23 @@ walk's (exponent all ones = NaN or infinity), the error text is the
 binding's, X is named before y. One witness-guarded unit: the flags are
 rebuilt from inputs the launches do not write, so a cut Apple launch reruns.
 
-`-D MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF` (or the master
-`MOJOLEARN_IDN_ALL_OFF`) restores the binding's host walk on every vendor.
 No bit moves: the check reads, it does not compute a fitted word.
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
+from core.host_finite_scan import host_all_finite_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP, ld, sti
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 
+# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (old-path umbrella, EXP:2438 DELETED; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 9ff89ae635.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF (unmeasured old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at 784535aaec.
+# Restore: git apply experiments/removed/MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF.patch; record in docs/TOMBSTONES.md.
 comptime XLIN_IDN_DEV_FINITE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime XF_TPB = 256
 #: words one thread tests
@@ -57,10 +58,10 @@ def _xf_blocks(count: Int) -> Int:
 def xlin_finite_host(p: FP, count: Int, name: String) raises:
     """The binding's scalar walk, for the routes that upload nothing a
     device check could read (and for the shapes no route serves)."""
-    for i in range(count):
-        var v = p.unsafe_load(i)
-        if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+    # parallel: the one host finite scan (was a serial `v == v and |v| <= FLT_MAX`
+    # walk: the same verdict as the exponent-bits test, NaN and both infinities)
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(p)), count):
+        raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
 
 
 def xlin_finite_device(

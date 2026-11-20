@@ -159,9 +159,10 @@ from hierarchy.impl.cluster.detail.connectivities import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 
-comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 
 
 def _mode_name() -> String:
@@ -208,9 +209,8 @@ def _upload(
     for i in range(pad):
         host.unsafe_ptr().unsafe_store(n + i, poison)
     var dev = ctx.enqueue_create_buffer[DType.float32](n + pad)
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, dev, host)
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -220,12 +220,11 @@ def _copy_f32(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
     var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
+    download_host_into[DType.float32](ctx, v, h)
     ctx.synchronize()
     var out = List[Float32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = v^
     return out^
 

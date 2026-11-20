@@ -45,6 +45,10 @@ runs the same stages as host loops in the same orders.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.transfer import TRANSFER_TIER_IDENTICAL, transfer_download_f32_list
+
+#: The pinned download stages of this module and tier (core/transfer.mojo).
+comptime _XFER_POOL = "MojolearnHdbscanRunnerTransferStagesIdenticalV1" if TRANSFER_TIER_IDENTICAL else "MojolearnHdbscanRunnerTransferStagesFastV1"
 
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
@@ -59,7 +63,6 @@ from hdbscan.impl.detail.condense import (
     download_condensed,
 )
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
-from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
 from hdbscan.impl.detail.idn_switches import IDN_HDB_ONE_SYNC
 from hdbscan.impl.detail.tree_device import (
     td_stage_f32,
@@ -78,8 +81,13 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
-from std.os import getenv
+from std.sys import is_defined
 from std.time import perf_counter_ns
+
+#: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
+#: builds compile them out. Before (lane envgate-classical-deviceplan,
+#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 
 comptime GRAPH_BUILD_BRUTE_FORCE_KNN = 0
@@ -310,7 +318,7 @@ def fit_hdbscan(
     var sizes = ctx.enqueue_create_buffer[DType.int32](n_edges)
     ctx.synchronize()
 
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_on = STAGE_TIMES_ON
     var st_t = Int(perf_counter_ns())
     # `:120-133` helpers::build_linkage(..., mutual_reachability_params)
     var rounds = build_mr_linkage(
@@ -352,12 +360,12 @@ def fit_hdbscan(
     # The outputs, downloaded once.
     var tree: CondensedHierarchy
     var h_core: List[Float32]
-    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the tree's
-    # four arrays and the core distances staged, ONE wait; main's route
+    # IDENTICAL on every vendor (IDN_HDB_ONE_SYNC): the tree's four arrays
+    # and the core distances staged, ONE wait; the other route
     # (`download_condensed` + `_download_f32`) waits six times.
-    # fam2-cluster: the same route under IDENTICAL on every vendor
-    # (IDN_HDB_ONE_SYNC).
-    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
+    # TOMBSTONE: MOJOLEARN_HDB_ONE_SYNC (its FAST Apple term here) deleted 2026-11-15 by lane/expdel2-11-cluster; code recoverable at 0aed7700fc.
+    # Restore: git apply experiments/removed/MOJOLEARN_HDB_ONE_SYNC.patch; record in docs/TOMBSTONES.md.
+    comptime if IDN_HDB_ONE_SYNC:
         var s_par = td_stage_i32(ctx, dtree.parents)
         var s_chi = td_stage_i32(ctx, dtree.children)
         var s_lam = td_stage_f32(ctx, dtree.lambdas)
@@ -417,14 +425,7 @@ def fit_hdbscan(
 def _download_f32(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    # core/transfer.mojo (lane fx-transfer-helpers, 2026-11-18): the copy
+    # engine writes the list's own words, one wait. Gone: two waits, a pinned
+    # buffer per call and one append per word.
+    return transfer_download_f32_list[_XFER_POOL](ctx, buf, n)

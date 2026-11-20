@@ -90,7 +90,9 @@
 set -u
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-MANIFEST="$ROOT/bench/results/dataset_store/manifest.tsv"
+# MOJOLEARN_DATASET_MANIFEST: the pins of another checkout (a lean worktree has no bench/results/; the measurement
+# stage step passes the candidate's full source tree's manifest, tools/ops/measure_candidate.py)
+MANIFEST="${MOJOLEARN_DATASET_MANIFEST:-$ROOT/bench/results/dataset_store/manifest.tsv}"
 CREDS="${MOJOLEARN_R2_CREDS:-$HOME/.mojolearn_r2}"
 
 # key <TAB> local path, relative to $HOME for data, $ROOT for corpora.
@@ -461,6 +463,12 @@ cmd_box_cmd() {
     cat <<EOF
 # run ON THE BOX; \$URL is a presigned URL minted on the Mac (no credentials here)
 mkdir -p "\$(dirname $_rp)"
+# already there at the pinned size: hash it and stop (a restaged measurement box keeps its datasets)
+if [ -f "$_rp" ] && [ "\$(wc -c < "$_rp" | tr -d ' ')" = "$_wsz" ]; then
+    if command -v sha256sum > /dev/null 2>&1; then sh=\$(sha256sum "$_rp" | cut -d' ' -f1); else sh=\$(shasum -a 256 "$_rp" | cut -d' ' -f1); fi
+    [ "\$sh" = "$_wsh" ] && { echo "ok $_rp $_wsz \$sh (already staged)"; exit 0; }
+    rm -f "$_rp"
+fi
 curl -sS -C - --retry 8 --retry-delay 5 --retry-all-errors -o "$_rp" "\$URL"
 sz=\$(wc -c < "$_rp" | tr -d ' ')
 [ "\$sz" = "$_wsz" ] || { echo "size \$sz, pinned $_wsz" >&2; exit 1; }

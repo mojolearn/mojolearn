@@ -1,0 +1,49 @@
+{
+  "family": "Spectral RBF native plan supplementary coverage",
+  "status": "CPU6/GPU4 authored, uncompiled and unrun",
+  "dependencies": ["eb7b5a81e2", "71cd5c0138", "07dd5500e4", "bcc32168f4"],
+  "local_adoption_not_producer": "05bb879abe copies only the exact frozen core/spectral_affinity_plan.mojo blob",
+  "entries": {
+    "cpu": "checks/native_tests/spectral_rbf_cpu.mojo",
+    "gpu": "checks/native_tests/spectral_rbf_gpu.mojo"
+  },
+  "suites": {
+    "cpu": "checks.native_tests.spectral_rbf_cpu_suite.run_checks",
+    "gpu": "checks.native_tests.spectral_rbf_gpu_suite.run_checks"
+  },
+  "coverage": {
+    "cpu": 6,
+    "gpu": 4,
+    "pure_resource_cases": 4,
+    "actual_host_graphs": 2,
+    "actual_device_graphs": 4,
+    "resource_contracts": [
+      "Five resources release exactly once in allocation order; tags intentionally do not sort in that order.",
+      "Failure on first and third free remains quiet and does not stop later frees.",
+      "Third allocation failure releases only its two predecessors and retains the original failure.",
+      "Operation unwinding releases all five resources and preserves the original error despite a cleanup failure."
+    ],
+    "numerical": "Original150x2 embedding input with gamma0.5 (Embedding default) and1.0 (Clustering default). Actual host cell sequence and both existing immediate/resident device sequences execute squared-distance, scale and exp through their original descriptors.",
+    "storage": "Output NaN initialization and guards, unchanged borrowed X, callback records and statistics pinned through all cleanup/error paths."
+  },
+  "oracle": {
+    "kind": "Supplementary independent NumPy Float64 Gaussian formula, rounded once to Float32",
+    "reference_manifest": "checks/native_tests/fixtures/spectral/rbf-reference.json",
+    "formula": "exp(-gamma * sum((Float64(X_i)-Float64(X_j))**2))",
+    "atol": 0.000002,
+    "rtol": 0.00002,
+    "limits": "New Float32 rounding bound for supplementary coverage; no prior Python assertion or tolerance is changed. No fitted outputs or native results generated the reference.",
+    "reference_preparation": {"independent_jobs": 20, "workers": 10, "artifacts": 2, "bytes": 180000}
+  },
+  "parallel_plan": "CPU4 resource cases and2 numerical graphs use host_parallelize; matrix assertions also run across rows/cells. GPU4 complete graphs run in order on one physical GPU. Resource allocation/free order is inherently sequential lifecycle work within each independent case. Tuned kernels remain parallel; shared-context concurrency failure remains separate.",
+  "compile_flags": {
+    "all": ["-D MOJOLEARN_NUMERIC_IDENTICAL=1", "-I ."],
+    "cpu": ["-D MOJOLEARN_COLUMN_CPU=1"]
+  },
+  "python_retained": "Audited Spectral files contain RBF public affinity acceptance/refusal seams, not a numerical formula oracle. These are new supplementary native checks; no Python deletion is claimed or applied.",
+  "source_evidence": "E/pca-native-tests/spectral-final-static.json",
+  "reference_preparation_log": "E/pca-native-tests/spectral-rbf-reference-preparation.log",
+  "product_or_kernel_changes": 0,
+  "python_deletions": 0,
+  "runtime_identity_performance_claim": false
+}

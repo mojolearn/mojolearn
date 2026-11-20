@@ -61,7 +61,7 @@ carrying it must fail every gate in `gemm_lowbit_check.mojo`. A value arm,
 not an order arm: the int8 sum is exact and would fold an order arm away.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -570,6 +570,9 @@ def identical_gemm_int8_into(
     DEVIATION 2910: the MMA plan when the column's row says True, the shape
     is admitted and the build does not force the flat plan; the flat plan
     otherwise. Both are the profile (contract L-9)."""
+    # TOMBSTONE: MOJOLEARN_AFN_GEMM_INT8_MMA (never measured, FAST Apple chunked int8 matrix-unit route) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 02da0a0217.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_GEMM_ALL.patch; record in docs/TOMBSTONES.md.
+    # RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
     # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple with
     # MOJOLEARN_AFN_GEMM_INT8_MMA the exact chunked matrix-unit kernel (one
     # launch, no slice waits; the same Int32 per cell, contract L-9's

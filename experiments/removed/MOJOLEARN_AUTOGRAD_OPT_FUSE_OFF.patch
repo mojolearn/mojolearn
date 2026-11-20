@@ -1,0 +1,28 @@
+diff --git a/autograd/optim.mojo b/autograd/optim.mojo
+index 5266fcffb8..1c6ec722e5 100644
+--- a/autograd/optim.mojo
++++ b/autograd/optim.mojo
+@@ -56,6 +56,7 @@ from std.memory import bitcast
+ from autograd.ops import ag_fold_block
+ from autograd.composed_ops import OP_AGC_OPT_FINISH, AGC_FINISH_TENSORS, agc_set_bound
+ from checks.numerics import ftz, identical_cos, identical_div, identical_mul, identical_pow64, identical_sqrt
++from std.sys.compile import is_defined
+ 
+ # Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 5), default on: a
+ # trainer that finishes its raw gradients with OP_L2GRAD (weights: (g +
+@@ -66,12 +67,9 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_mul, id
+ # on the same words, stored, then op_opt on the stored word; the gradient
+ # vector ends holding the finished words, as before). Launches: 2 a
+ # parameter tensor pair fewer each step (the composed tape MLP: 4 a batch
+-# for one hidden layer).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF (separate finish launches, arm A; old path, no A/B recorded) deleted
+-# 2026-11-15 by lane/expdel2-24-neural; code recoverable at 8535432c53. AUTOGRAD_OPT_FUSE stays as the constant
+-# sequence/mlp_fit.mojo imports.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF.patch
+-comptime AUTOGRAD_OPT_FUSE = True
++# for one hidden layer). -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF keeps the
++# separate finish launches (arm A).
++comptime AUTOGRAD_OPT_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF"]()
+ 
+ # Operation codes of this family, a range of their own clear of the tape's
+ # 1000..1010 (autograd/ops.mojo); sequence/dispatch.mojo routes the range

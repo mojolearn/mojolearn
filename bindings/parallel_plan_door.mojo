@@ -14,9 +14,11 @@ door's `finally`). No Python frame runs: every call below is a compiled
 entry or a builtin.
 """
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
-from bindings.family_common import family_call
-from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY
+from bindings.family_common_pack import family_call
+from core.device_plan import DEVICE_PLAN_WORKER, DEVICE_PLAN_CHOLESKY, device_plan_logical
+from core.mode_answer import fast_is_answered_by_identical
 
 
 def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
@@ -26,15 +28,20 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     `cooperative`: the binding shards inside one call (refused on a CPU-only
     install); otherwise the door shards and a CPU-only install runs the
     host binding per shard."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.tuple and py_type(value) is not b.list and py_type(value) is not b.range:
         raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var devices = py_call(b.tuple, value)
     if len(devices) == 0:
         raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    # The logical-device test option (core/device_plan.mojo) admits a
+    # repeated index; nothing else about the route changes.
+    var logical = device_plan_logical()
     for i in range(len(devices)):  # driver-loop: over the selected device indices
         if py_type(devices[i]) is not b.int or Int(py=devices[i]) < 0:
             raise Error("ValueError: devices must be distinct nonnegative integer indices")
+        if logical:
+            continue
         for j in range(i):  # driver-loop: over the earlier selected device indices
             if Int(py=devices[j]) == Int(py=devices[i]):
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")
@@ -66,7 +73,7 @@ def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
     environment, every family but Cholesky). A binding built before the plan
     entries is refused by name (`rebuild`, the old worker's capability
     refusal)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var enter = py_call(b.getattr, binding, PythonObject("device_plan_enter"), PythonObject(None))
     var leave = py_call(b.getattr, binding, PythonObject("device_plan_exit"), PythonObject(None))
     if enter is None or leave is None:
@@ -76,7 +83,7 @@ def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
 
 def plan_exit(binding: PythonObject) raises:
     """Release the calling thread's plan in `binding`'s DSO."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _ = family_call(py_call(b.getattr, binding, PythonObject("device_plan_exit")))
 
 
@@ -86,14 +93,24 @@ def plan_field(model: PythonObject, name: String) raises -> PythonObject:
     return py_get(py_fields(model), PythonObject(name), PythonObject(None))
 
 
-def plan_require_identical(model: PythonObject, message: String) raises:
-    """The drivers' `numeric_mode not in (None, 'identical')` refusal."""
+def plan_require_identical(model: PythonObject, message: String, family: Int) raises:
+    """The drivers' `numeric_mode not in (None, 'identical')` refusal. The
+    word `fast` passes where the identical set answers it for the driver's
+    door `family` (core/mode_answer.mojo; lane fx-fast-mask): the driver then
+    runs the identical kernels, as the estimator's own fit does. Once per
+    driver call, no loop; an `identical` word pays nothing more."""
     var mode = plan_field(model, "numeric_mode")
     if mode is None:
         return
-    var b = Python.import_module("builtins")
-    if py_type(mode) is not b.str or String(mode) != "identical":
+    var b = native_loaded_module("builtins")
+    if py_type(mode) is not b.str:
         raise Error("ValueError: " + message)
+    var word = String(mode)
+    if word == "identical":
+        return
+    if word == "fast" and fast_is_answered_by_identical(family):
+        return
+    raise Error("ValueError: " + message)
 
 
 def plan_enter_all(bindings: PythonObject, devices: PythonObject, rebuild: String,

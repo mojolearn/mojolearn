@@ -4,7 +4,7 @@
 `Ridge(solver='eig')` and `LogisticRegression(solver='qn')`.
 
 NUMPY-FREE SINCE DEVIATION 2360 (branch numpy-free-0.7). Inputs cross the
-boundary through `_buffer.as_f32_c` and friends, outputs are `_array.Array`,
+boundary through the native input admission, outputs are `_array.Array`,
 and the centering of an intercept fit -- the column sums, the subtraction
 and the sqrt-weight rescale -- runs in the estimators binding
 (`lm_col_sums`, `lm_center`, `lm_scale_rows`; on the device on a GPU
@@ -14,22 +14,11 @@ What is still Python here is named at each site: label encoding
 (permitted, O(rows)).
 """
 
-import array
-import numbers
-from . import _portable_math as math
+import numbers as _numbers
 
-from . import _backend, _mojolearn_estimators, _serialize
-from ._array import Array
-from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
-)
-from ._labels import (
-    argmax_rows, decode_labels,
-    encode_labels, flatten_labels, sorted_classes, threshold_codes,
-)
+from . import _backend, _mojolearn_estimators
 from . import _native_archive_bridge, _native_classical_bridge
-from ._mode import NumericModeMixin
-from ._sample_weight import check_sample_weight
+from ._mode import NumericModeMixin as _NumericModeMixin, sklearn_tags as _sklearn_tags
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
 #: `save` writes exactly what `predict` reads, raw bytes and exact dtypes,
@@ -42,38 +31,10 @@ _LINEAR_FORMAT = "mojolearn-linear-1"
 _LOGISTIC_FORMAT = "mojolearn-logistic-1"
 
 # The compiled saved-model owner, connected once at import: LogisticRegression's
-# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# `save` and `load` are one native call each (bindings/archive_schema_native_door.mojo
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-
-def _saved_mode(est):
-    """The tier `predict` would run on now, persisted as GradientBoosting
-    persists it, so a loaded model never silently changes tier."""
-    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
-    if not isinstance(mode, str) or mode.strip().lower() not in (
-        "fast", "identical"
-    ):
-        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-    return mode.strip().lower()
-
-
-def _restore_mode(obj, arrays):
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    obj.numeric_mode = mode
-
-
-def _check_saved_by(arrays, path, cls):
-    """The file's `estimator` must be `cls` or a base of it, so the host
-    subclasses of `_classical_host.py` load the plain class's file."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -82,307 +43,151 @@ def _check_saved_by(arrays, path, cls):
 # ---------------------------------------------------------------------------
 
 
-def _round_f32(v):
-    """`float(np.float32(v))`: ONE round-to-nearest-even of a Python float
-    (binary64) to binary32 and back. `array.array('f')` stores through the C
-    `(float)` cast, which is that rounding; an out-of-range value becomes
-    +-inf exactly as NumPy's `astype(float32)` makes it."""
-    return array.array("f", (float(v),))[0]
+# TOMBSTONE: linear_model `_shape_of` re-export, `_flatten`, `_INT_FORMATS`, `_buffer_format`, `_is_integer_labels`
+# and `_dtype_name` (no product caller: neighbors.py imported them unused since lane py-neighbors; their last caller,
+# the frozen oracle tests/_legacy_neighbors_knn.py, carries its own copies) deleted 2026-11-15 by lane py-dedupe;
+# code recoverable at 6906a59111.
 
 
-# `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
-# reading an argument's shape is argument checking, the shell's job.
-from ._buffer import shape_of as _shape_of  # noqa: E402
+# TOMBSTONE: `_r2_sums` (the Python `_Reg` / `_r2_sums_of` R^2 program; no product caller, its native owners
+# are core/linear_score_program.mojo and bindings/svc_common_door.mojo `svc_r2_sums`) deleted 2026-11-11 by lane
+# pyout-metrics-cnn; code recoverable at 6f82d0255d.
 
 
-def _labels_1d(y):
-    """`y` as a Python list of scalars, plus its shape. Labels may be ints,
-    floats or strings, so this never goes through a float buffer; `tolist()`
-    (ndarray, Array, array.array) or plain iteration. O(rows), which is the
-    one Python loop the contract permits on labels."""
-    shape = _shape_of(y)
-    if len(shape) != 1:
-        return None, shape
-    return flatten_labels(y), shape
+# TOMBSTONE: linear_model `_round_f32`, `_labels_1d`, `_accuracy_host`, `_col_sums`, `_means`,
+# `_weight_total`, `_column_means`, `_vector_mean`, `_dims`, `_helper_output` and `_center` (no product
+# caller: the OLS/Ridge fit, its centering and sample-weight total are core/p3_linear_impl.mojo and
+# bindings/x_linear_native_door.mojo; the score's shape refusal and match count are
+# bindings/svc_common_door.mojo and bindings/logistic_native_door.mojo) deleted 2026-11-14 by lane
+# py-classical-linalg; code recoverable at 9140ed9c6c.
 
 
-# The `classes_` ORDER RULE and the label <-> code maps live in
-# `_labels.py` (DEVIATION 2340): `sorted_classes`, `decode_labels`. Every
-# classifier in the package orders `classes_` through that one spelling;
-# DEVIATION 2364 is this file's adoption of it (a Python list, int64 /
-# float64 Arrays out of `predict` for int / float labels, a list otherwise).
-
-
-def _flatten(obj):
-    """Every leaf of a nested list/tuple (or anything with `tolist()`) as
-    one flat Python list; a scalar is a one-element list."""
-    # read once natively (bindings/user_objects_native.mojo flatten)
-    from . import _user_objects
-    return _user_objects.call("flatten", obj)
-
-
-#: struct-format codes of the integer buffer types.
-_INT_FORMATS = frozenset("bBhHiIlLqQnN")
-
-
-def _buffer_format(obj):
-    """The struct format code of a buffer-protocol object, byte-order prefix
-    stripped; None when `obj` exports no buffer (a list, a scalar)."""
-    if isinstance(obj, Array):
-        return {"<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q", "<u4": "I",
-                "<u1": "B", "<f2": "e"}.get(obj.dtype)
-    try:
-        with view(obj) as buf:
-            return buf.format.lstrip("<>=@!|")
-    except TypeError:
-        return None
-
-
-def _is_integer_labels(y):
-    """`np.issubdtype(y.dtype, np.integer)`: True for a buffer whose format
-    is an integer code (bools are NOT integers here, as in NumPy), or a
-    list/tuple whose every leaf is a Python int (bools excluded)."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return fmt in _INT_FORMATS
-    from . import _user_objects
-    leaves = _flatten(y)
-    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
-
-
-def _dtype_name(y):
-    """What to print for `y`'s dtype in a refusal: the buffer format code
-    when it has one, the Python type name otherwise."""
-    fmt = _buffer_format(y)
-    if fmt is not None:
-        return f"buffer format {fmt!r}"
-    return f"type {type(y).__name__}"
-
-
-def _accuracy_host(pred, y):
-    """The fraction of rows where `pred == y`: the exact match count of the
-    x_metrics binding's grouped sums (`_expansion_metrics.accuracy_fraction`,
-    on the device on a GPU install) over the row count. Lane pyglue-sweep
-    (Oct 3): this was a Python count over O(rows) labels."""
-    from ._expansion_metrics import accuracy_fraction
-    if len(_shape_of(y)) != 1 or _shape_of(y)[0] != len(pred):
-        raise ValueError(
-            "mojolearn: y must be 1-D with one entry per row of X"
-        )
-    return accuracy_fraction(y, pred)
-
-
-def _target_1d(y, n_rows, ndim_msg, length_msg):
-    """A 1-D C-contiguous float32 target of length `n_rows`, with the
-    estimator's own two messages raised before `_buffer`'s generic ones."""
-    if len(_shape_of(y)) != 1:
-        raise ValueError(ndim_msg)
-    t, _ = as_f32_c(y, ndim=1, name="y")
-    if t.shape[0] != n_rows:
-        raise ValueError(length_msg)
-    return t
-
-
-def _r2_sums(pred, y):
-    """`(SS_res, SS_tot)` for scikit-learn's R^2 from float32 predictions
-    and the target cast once to float32: the x_metrics binding's grouped
-    sums (`_expansion_metrics`'s `reg_term` and pinned-sum stages, on the
-    device on a GPU install, the same words on the host column), the
-    target mean first, then both sums of squares, binary64 out. Lane
-    pyglue-sweep (Oct 3): these were sequential Python float64 loops over
-    the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
-    their own convention for `SS_tot == 0`."""
-    from ._expansion_metrics import _Reg, _r2_sums_of
-    t, _ = as_f32_c(y, ndim=1, name="y")
-    p, _ = as_f32_c(pred, ndim=1, name="predictions")
-    r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
-    # lane cpu2-l7-metrics: one program, the y mean rounded on the device
-    return _r2_sums_of(r, None)
-
-
-def _r2_host(pred, y):
-    """`1 - SS_res / SS_tot`, and 0.0 for a constant target -- the linear
-    models' NumPy-era convention (`if denom else 0.0`). See `_r2_sums`."""
-    ss_res, ss_tot = _r2_sums(pred, y)
-    return 1.0 - ss_res / ss_tot if ss_tot else 0.0
-
-
-# The centering of LinearRegression and Ridge (lane hr-small-passes,
-# 2026-10-02) runs in the estimators binding: `lm_col_sums`, `lm_center`
-# and `lm_scale_rows`, on the device on a GPU install
-# (glm/impl/center_device.mojo) and over the same items on the CPU column
-# (glm/host/center_host.mojo), so every tier writes the same words. `b` is
-# the estimator's `_bind("_mojolearn_estimators")`.
-
-
-def _col_sums(b, x, rows, cols):
-    """The column sums of a C-contiguous float32 `[rows, cols]` buffer: each
-    the EXACT sum rounded once to float64 (round to nearest even), so the
-    blocked device fold and the host pass agree on every vendor
-    (glm/impl/center_items.mojo). Returns a float64 `Array` of `cols`."""
-    out = empty((cols,), "<f8")
-    b.lm_col_sums(addr_ro(x, name="X"), addr(out, name="column sums"),
-                  [int(rows), int(cols)])
-    return out
-
-
-def _means(b, x, rows, cols, total=None):
-    """(float64 means, float32 means) of the columns of a `[rows, cols]`
-    buffer, as two `Array`s: `_col_sums` finished in Mojo
-    (`lm_means_finish`, glm/impl/lm_finish.mojo): sum / rows (one binary64
-    division), and with a `total` then `* rows / total`; the float32 means
-    are one round-to-nearest-even of the float64 ones. A 1-D vector is a
-    `[rows, 1]` matrix here."""
-    sums = _col_sums(b, x, rows, cols)
-    m64, m32 = empty((cols,), "<f8"), empty((cols,), "<f4")
-    b.lm_means_finish(addr(sums, name="column sums"), addr(m64, name="means"),
-                      addr(m32, name="float32 means"),
-                      [int(cols), int(rows), 0 if total is None else 1],
-                      0.0 if total is None else float(total))
-    return m64, m32
-
-
-def _weight_total(b, weights):
-    """`sum(w)`: the exact sum rounded once to float64 (`_col_sums` over a
-    `[rows, 1]` view)."""
-    total = float(_col_sums(b, weights, weights.shape[0], 1)[0])
-    if total <= 0.0:
-        raise ValueError(
-            "mojolearn: sample_weight sums to zero, so the weighted mean "
-            "cuML's preProcessData forms is a division by zero"
-        )
-    return total
-
-
-def _column_means(b, x, weights):
-    """Column means in float64, narrowed to float32 -- weighted when
-    `weights` is not None. Returns a float32 `Array`.
-
-    Unweighted: `_means`. Weighted it is cuML's
-    `raft::stats::weightedMean`, `sum_i w_i x_ij / sum_i w_i`, in THIS
-    ORDER: (1) `wx_ij = fl32(x_ij * w_i)` (`lm_scale_rows`); (2) the
-    column means of `wx`; (3) `mean_j * rows / total` in float64, `total`
-    the weights' `_weight_total`; (4) one narrowing to float32 (steps 2-4
-    are `lm_means_finish`). Theirs divides by the SUM OF THE WEIGHTS and
-    not by the row count, so a uniform weight of 2 leaves the mean
-    unchanged.
-    """
-    rows, cols = x.shape
-    if weights is None:
-        return _means(b, x, rows, cols)[1]
-    total = _weight_total(b, weights)
-    wx = _helper_output(x.shape, rows * cols)
-    b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(weights, name="sample_weight"),
-                    addr(wx, name="weighted X"), [int(rows), int(cols)])
-    return _means(b, wx, rows, cols, total)[1]
-
-
-def _vector_mean(b, v, weights):
-    """(float64 mean, float32 mean `Array` of one) of the target, weighted
-    when `weights` is not None: the 1-D half of `_column_means`."""
-    n = v.shape[0]
-    if weights is None:
-        m64, m32 = _means(b, v, n, 1)
-    else:
-        total = _weight_total(b, weights)
-        wy = _helper_output(v.shape, n)
-        b.lm_scale_rows(addr_ro(v, name="y"), addr_ro(weights, name="sample_weight"),
-                        addr(wy, name="weighted y"), [int(n), 1])
-        m64, m32 = _means(b, wy, n, 1, total)
-    return float(m64[0]), m32
-
-
-def _dims(x):
-    """`(rows, cols)` of a 2-D Array, or `(rows, 1)` of a 1-D one: a vector
-    is a `[rows, 1]` matrix to every helper in this file."""
-    return (x.shape[0], x.shape[1]) if x.ndim == 2 else (x.shape[0], 1)
-
-
-def _helper_output(shape, size):
-    """DEVIATION 2632: the float32 destination of an op that writes EVERY
-    element (`lm_center`, `lm_scale_rows`), taken from
-    `_buffer._output_store`'s uninitialized raw allocation instead of
-    `empty`, whose zero fill cost 105 to 121 ms of a 4,000,000 x 11
-    LinearRegression fit on the H100 pod. No byte of the result comes from
-    the allocation, so no bit moves."""
-    from ._buffer import _output_store
-    return Array._owned(_output_store("f", size), tuple(shape), "<f4", "C")
-
-
-def _center(b, x, mu32):
-    """`x - mu` in float32 per column (`lm_center`): one binary32
-    subtraction per cell, operands and result flushed to signed zero when
-    subnormal; `x` is `[rows, cols]` or a vector with `cols == 1`, `mu32` a
-    float32 `Array` of `cols` means."""
-    rows, cols = _dims(x)
-    mean = mu32
-    out = _helper_output(x.shape, rows * cols)
-    b.lm_center(addr_ro(x, name="X"), addr_ro(mean, name="column means"),
-                addr(out, name="centered X"), [int(rows), int(cols)])
-    return out
-
-
-def _check_sample_weight(sample_weight, n_rows, estimator):
-    """Validate `sample_weight` and return it as a C-order float32 Array,
-    or None when there are no weights.
-
-    cuML validates nothing here: `olsFit` takes a raw pointer and trusts it.
-    These checks are input validation (scikit-learn's `_check_sample_weight`
-    and its wording, `_sample_weight.check_sample_weight`): a length mismatch
-    would read past the end of the array on the device, a negative weight
-    makes `sqrt(w)` a NaN that silently poisons the whole fit, non-finite
-    weights likewise, and an all-zero vector leaves nothing to fit.
-    `estimator` is kept for the callers' signature.
-    """
-    if sample_weight is None:
-        return None
-    return check_sample_weight(sample_weight, n_rows)
-
-
-def _optional_export(b, name):
-    """`name` from binding `b`, or None when it does not export it. A host
-    binding's stand-in raises ImportError (by name) for a missing export
-    rather than AttributeError, so a plain getattr default never applies on a
-    CPU-only install, and LinearRegression.fit raised there."""
-    try:
-        return getattr(b, name, None)
-    except (ImportError, AttributeError):
-        return None
+# TOMBSTONE: linear_model._check_sample_weight and the module _sample_weight (no product caller:
+# every door admits sample_weight natively, bindings/admitted_input_unpack.mojo admit_weights)
+# deleted 2026-11-14 by lane py-admission; the frozen oracle is tests/_legacy_sample_weight.py.
 
 
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
 
-def _ols_tsqr_centered(x, y, rows, cols, mode):
-    """`(coef_, column means, y mean)` of the unweighted fit with an
-    intercept in ONE binding entry (lane idn-dense-linalg,
-    `x_decomp_ols_tsqr_r`): X and y cross to the device once; the exact
-    column sums, the means, the centering and the blocked TSQR of
-    [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
-    on the small R. The same words as `_column_means` + `_center` +
-    `_ols_tsqr`, which crossed X four times. None when the binding does not
-    route here (an older binding or a FAST build): the caller keeps that
-    sequence. The IDENTICAL off arm (MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF) was
-    deleted 2026-10-08 (grid ge123e6f9: 2.97x/1.74x istella, 6.17x/3.83x
-    taxi slower on NV/AMD); recoverable at main 42d1e42c6."""
-    from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
-    k = _Kit(_mode(mode))
-    flags = _optional_export(k._raw(), "x_decomp_idn_flags")
-    if flags is None or not int(flags()) & 1:
-        return None
-    n = cols + 1
-    Ra = _M.zeros(n, n)
-    mu = empty((cols,), "<f4")
-    ymean = empty((1,), "<f8")
-    # ORDER MATCHES x_decomp/api.mojo ols_tsqr_r_py: (a, b, r_out, mu, ymean), (m, d)
-    k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
-                            addr(mu, name="column means"), addr(ymean, name="y mean"),
-                            [int(rows), int(cols)])
-    # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
-    return X.out((cols,)), mu, float(ymean.tolist()[0])
+# TOMBSTONE: `_ols_tsqr_centered` (the Python OLS one-entry TSQR solve on the decomp
+# kit) deleted 2026-11-11 by lane pyout-decomp-linalg: it had no caller (the native
+# linear owner, bindings/x_linear_native_door.mojo, runs the fit). Code recoverable at 6f82d0255d.
+
+
+class _ClassicalLinear:
+    """The public methods LinearRegression and Ridge share: each is one call
+    into the classical native owner (bindings/classical_native_pack.mojo).
+    Each owner binds these functions into its own namespace (`name = Holder.name`)
+    instead of inheriting them: the native integrity checks walk every class's
+    ancestry on each call, so an extra base would add work to every call."""
+
+    def predict(self, X):
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples, read as float32.
+
+        Returns
+        -------
+        y_pred : ndarray or Array of shape (n_samples,), float64
+            ``X @ coef_ + intercept_``.
+
+        Raises
+        ------
+        ValueError
+            If the model is not fitted, or ``X`` has a different number of
+            features than the training data.
+        """
+        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
+
+    def score(self, X, y):
+        """Return the coefficient of determination R^2 of the prediction.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True target values.
+
+        Returns
+        -------
+        score : float
+            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
+            (``SS_tot == 0``) scores 0.0.
+        """
+        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
+
+    def get_params(self, deep=True):
+        """Get this estimator's constructor parameters.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility; these parameters are
+            plain values with no nested estimators.
+
+        Returns
+        -------
+        params : dict
+            Each constructor parameter name mapped to its value.
+        """
+        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
+
+    def set_params(self, **params):
+        """Set constructor parameters.
+
+        Any fitted state is dropped, as a new setting invalidates it.
+
+        Parameters
+        ----------
+        **params
+            Constructor parameters by name.
+
+        Returns
+        -------
+        self
+            This estimator.
+        """
+        return _native_classical(self, "set_params", (params,), _CLASSICAL)
+
+    @classmethod
+    def _get_param_names(cls):
+        return _native_classical(cls, "param_names", (), _CLASSICAL)
+
+    def __sklearn_is_fitted__(self):
+        return _native_classical(self, "is_fitted", (), _CLASSICAL)
+
+    def __sklearn_tags__(self):
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _native_classical(self, "vendor_used", (), _CLASSICAL)
+
+    def numeric_mode_used(self):
+        """The numeric mode this estimator runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'``, read from the compiled binary
+            the estimator uses, not from the argument it was given.
+        """
+        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -432,7 +237,7 @@ def _ols_tsqr_centered(x, y, rows, cols, mode):
 #   finding). cuML's sums accumulate in float32, so coef_ can differ from cuML's
 #   in the last bits on ill-conditioned data.
 # - Honored/refused rows were measured by tools/e2u_matrix_fit.py.
-class LinearRegression(NumericModeMixin):
+class LinearRegression(_NumericModeMixin):
     """Ordinary least squares linear regression.
 
     Fits ``y ~ X @ coef_ + intercept_`` by minimizing the sum of squared
@@ -487,6 +292,15 @@ class LinearRegression(NumericModeMixin):
     >>> model = mojolearn.LinearRegression().fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -496,7 +310,7 @@ class LinearRegression(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The methods below are one call each into the compiled classical owner
-    #: (bindings/classical_native.mojo), connected once at import. It
+    #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
     #: the fitted attributes; NumericModeMixin leaves these methods unwrapped.
     _mojolearn_native_public = True
@@ -531,45 +345,6 @@ class LinearRegression(NumericModeMixin):
             The fitted estimator.
         """
         return _native_classical(self, "ols_fit", (X, y, sample_weight), _CLASSICAL)
-
-    def predict(self, X):
-        """Predict with the fitted linear model.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, read as float32.
-
-        Returns
-        -------
-        y_pred : ndarray or Array of shape (n_samples,), float64
-            ``X @ coef_ + intercept_``.
-
-        Raises
-        ------
-        ValueError
-            If the model is not fitted, or ``X`` has a different number of
-            features than the training data.
-        """
-        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
-
-    def score(self, X, y):
-        """Return the coefficient of determination R^2 of the prediction.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True target values.
-
-        Returns
-        -------
-        score : float
-            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
-            (``SS_tot == 0``) scores 0.0.
-        """
-        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
 
     def save(self, path):
         """Save the fitted model to ``path`` as an ``.npz`` file.
@@ -616,71 +391,6 @@ class LinearRegression(NumericModeMixin):
         """
         return _native_classical(cls, "load", (path,), _CLASSICAL)
 
-    def get_params(self, deep=True):
-        """Get this estimator's constructor parameters.
-
-        Parameters
-        ----------
-        deep : bool, default True
-            Accepted for scikit-learn compatibility; these parameters are
-            plain values with no nested estimators.
-
-        Returns
-        -------
-        params : dict
-            Each constructor parameter name mapped to its value.
-        """
-        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
-
-    def set_params(self, **params):
-        """Set constructor parameters.
-
-        Any fitted state is dropped, as a new setting invalidates it.
-
-        Parameters
-        ----------
-        **params
-            Constructor parameters by name.
-
-        Returns
-        -------
-        self
-            This estimator.
-        """
-        return _native_classical(self, "set_params", (params,), _CLASSICAL)
-
-    @classmethod
-    def _get_param_names(cls):
-        return _native_classical(cls, "param_names", (), _CLASSICAL)
-
-    def __sklearn_is_fitted__(self):
-        return _native_classical(self, "is_fitted", (), _CLASSICAL)
-
-    def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _native_classical(self, "vendor_used", (), _CLASSICAL)
-
-    def numeric_mode_used(self):
-        """The numeric mode this estimator runs in.
-
-        Returns
-        -------
-        str
-            ``'identical'`` or ``'fast'``, read from the compiled binary
-            the estimator uses, not from the argument it was given.
-        """
-        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
-
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
 # Reference: cuml/python/cuml/linear_model/ridge.pyx and
@@ -703,7 +413,7 @@ class LinearRegression(NumericModeMixin):
 #                  column): `fit` sends both to the x_linear ridge kernel
 #                  (x_linear/ridge.mojo, weighted means + Cholesky; lane sk-edges)
 #   y 2-D          refused, one target only
-class Ridge(NumericModeMixin):
+class Ridge(_NumericModeMixin):
     """Linear least squares with l2 regularization.
 
     Minimizes ``||y - X w||^2 + alpha * ||w||^2``, the same objective and
@@ -761,6 +471,15 @@ class Ridge(NumericModeMixin):
     >>> model = mojolearn.Ridge(alpha=0.5).fit(X, y)
     >>> pred = model.predict(X)
     """
+    predict = _ClassicalLinear.predict
+    score = _ClassicalLinear.score
+    get_params = _ClassicalLinear.get_params
+    set_params = _ClassicalLinear.set_params
+    _get_param_names = vars(_ClassicalLinear)["_get_param_names"]
+    __sklearn_is_fitted__ = _ClassicalLinear.__sklearn_is_fitted__
+    __sklearn_tags__ = _ClassicalLinear.__sklearn_tags__
+    vendor_used = _ClassicalLinear.vendor_used
+    numeric_mode_used = _ClassicalLinear.numeric_mode_used
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -770,7 +489,7 @@ class Ridge(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The methods below are one call each into the compiled classical owner
-    #: (bindings/classical_native.mojo), connected once at import. It
+    #: (bindings/classical_native_pack.mojo), connected once at import. It
     #: validates the inputs, chooses the route, runs the kernels and stores
     #: the fitted attributes; NumericModeMixin leaves these methods unwrapped.
     _mojolearn_native_public = True
@@ -812,45 +531,6 @@ class Ridge(NumericModeMixin):
             The fitted estimator.
         """
         return _native_classical(self, "ridge_fit", (X, y, sample_weight), _CLASSICAL)
-
-    def predict(self, X):
-        """Predict with the fitted ridge model.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Samples, read as float32.
-
-        Returns
-        -------
-        y_pred : ndarray or Array of shape (n_samples,), float64
-            ``X @ coef_ + intercept_``.
-
-        Raises
-        ------
-        ValueError
-            If the model is not fitted, or ``X`` has a different number of
-            features than the training data.
-        """
-        return _native_classical(self, "predict_public", (X,), _CLASSICAL)
-
-    def score(self, X, y):
-        """Return the coefficient of determination R^2 of the prediction.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Test samples.
-        y : array-like of shape (n_samples,)
-            True target values.
-
-        Returns
-        -------
-        score : float
-            ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
-            (``SS_tot == 0``) scores 0.0.
-        """
-        return _native_classical(self, "score_public", (X, y), _CLASSICAL)
 
     def save(self, path):
         """Save the fitted model to ``path`` as an ``.npz`` file.
@@ -895,78 +575,6 @@ class Ridge(NumericModeMixin):
         """
         return _native_classical(cls, "load", (path,), _CLASSICAL)
 
-    def get_params(self, deep=True):
-        """Get this estimator's constructor parameters.
-
-        Parameters
-        ----------
-        deep : bool, default True
-            Accepted for scikit-learn compatibility; these parameters are
-            plain values with no nested estimators.
-
-        Returns
-        -------
-        params : dict
-            Each constructor parameter name mapped to its value.
-        """
-        return _native_classical(self, "get_params", (deep,), _CLASSICAL)
-
-    def set_params(self, **params):
-        """Set constructor parameters.
-
-        Any fitted state is dropped, as a new setting invalidates it.
-
-        Parameters
-        ----------
-        **params
-            Constructor parameters by name.
-
-        Returns
-        -------
-        self
-            This estimator.
-        """
-        return _native_classical(self, "set_params", (params,), _CLASSICAL)
-
-    @classmethod
-    def _get_param_names(cls):
-        return _native_classical(cls, "param_names", (), _CLASSICAL)
-
-    def __sklearn_is_fitted__(self):
-        return _native_classical(self, "is_fitted", (), _CLASSICAL)
-
-    def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
-
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
-            compiled binary the estimator uses.
-        """
-        return _native_classical(self, "vendor_used", (), _CLASSICAL)
-
-    def numeric_mode_used(self):
-        """The numeric mode this estimator runs in.
-
-        Returns
-        -------
-        str
-            ``'identical'`` or ``'fast'``, read from the compiled binary
-            the estimator uses, not from the argument it was given.
-        """
-        return _native_classical(self, "numeric_mode_used", (), _CLASSICAL)
-
-
-# cuML's `qn_params.loss` ids (cuml/linear_model/qn.h); the Python door maps
-# 'sigmoid' to QN_LOSS_LOGISTIC and 'softmax' to QN_LOSS_SOFTMAX.
-_QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
-                   2: "OPT_LS_FAILED", 3: "OPT_MAX_ITERS_REACHED",
-                   4: "OPT_INVALID_ARGS"}
-
 
 #: `glm/impl/linear_model/qn.mojo`'s ids, the 14th `qn_fit` field.
 _QN_LOSS_LOGISTIC = 0
@@ -979,35 +587,10 @@ _QN_LOSS_SVR_L2 = 6
 _QN_LOSS_ABS = 7
 
 
-def _coef_from_w(w, cols, n_targets, fit_intercept):
-    """`coef_` and `intercept_` from the fitted `W` block. One target: the
-    first `cols` entries and the last (a slice of an Array COPIES, the
-    _array contract, so both are detached from `_w`). C targets: cuML's
-    column-major `w[c + C*j]`, the bias column at `j == cols`."""
-    if n_targets == 1:
-        coef = w[:cols].reshape((1, cols))
-        intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
-        return coef, intercept
-    # `w[c + C*j]` is the (c, j) entry of a column-major [C, n_param] block:
-    # one relabeled view and one C-order copy (`Array._as_c`), then two
-    # slices, instead of a Python loop over the parameters (lane
-    # pyglue-sweep, Oct 3).
-    n_param = cols + (1 if fit_intercept else 0)
-    full = Array._view_of(w, (n_targets, n_param), "F")._as_c()
-    coef = full[:, :cols]
-    intercept = full[:, cols] if fit_intercept else zeros((n_targets,), "<f4")
-    return coef, intercept
-
-
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
 #: and the `py2mojo_linear_flags` bit that routes them
 _ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_SQRT_F32 = 1, 2, 3, 5
 _PY2MOJO_ROWS = 2
-
-
-def _py2mojo_flags(binding):
-    fn = getattr(binding, "py2mojo_linear_flags", None)
-    return int(fn()) if fn is not None else 0
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -1055,7 +638,7 @@ def _py2mojo_flags(binding):
 # line search's one host multiply-add is an fma, so the accepted steps, the
 # L-BFGS history, the iteration count and the coefficients are a function of the
 # inputs alone; the card (`qn.iterNNNN.*`, `qn.n_iter`, `qn.coef`) records them.
-class LogisticRegression(NumericModeMixin):
+class LogisticRegression(_NumericModeMixin):
     """Logistic regression classifier, solved by a quasi-Newton method.
 
     Minimizes ``mean_i logloss_i + penalty(w) / (C * n_samples)``, which
@@ -1354,105 +937,9 @@ _native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
     _native_archive_bridge.fitted("_w"),
     *_native_archive_bridge.head(_LOGISTIC_FORMAT),
     ("array", "w", "_w"),
-    ("class_table", "classes", "classes_", numbers.Integral, numbers.Real),
+    ("class_table", "classes", "classes_", _numbers.Integral, _numbers.Real),
     ("i8", "meta", (("int", "n_features_in_"), ("bool", "fit_intercept"))),
 ))
-
-
-def _qn_row_weights(est, sample_weight, class_weight, classes, codes, n):
-    """The quasi-Newton solver's per-row float32 weights, or None for an
-    unweighted fit: `sample_weight` checked with scikit-learn's rules and
-    wording (`check_sample_weight`), times each row's class weight when
-    `class_weight` is a dict or 'balanced' (scikit-learn multiplies the two
-    the same way). The class weights per row and the product are the trees
-    binding's native helpers (`_class_weight_rows`, `x_trees_mul_f32`)."""
-    if sample_weight is None and class_weight is None:
-        return None
-    sw = check_sample_weight(sample_weight, n)
-    if class_weight is None:
-        return sw
-    if isinstance(class_weight, str):
-        if class_weight != "balanced":
-            raise ValueError(
-                f"The 'class_weight' parameter of {type(est).__name__} must be an "
-                "instance of 'dict', a str among {'balanced'} or None. "
-                f"Got {class_weight!r} instead.")
-    elif not isinstance(class_weight, dict):
-        raise ValueError(
-            f"The 'class_weight' parameter of {type(est).__name__} must be an "
-            "instance of 'dict', a str among {'balanced'} or None. "
-            f"Got {class_weight!r} instead.")
-    # the shared class-weight module, not the tree doors: importing those
-    # would put every forest and their bindings behind each linear lane
-    from ._class_weights import _class_weight_rows, _trees_x_bind
-    xb = _trees_x_bind(est)
-    codes32 = codes if codes.dtype == "<i4" else codes.astype("<i4")
-    cw = _class_weight_rows(class_weight, list(classes), codes32, xb)
-    if cw is None:  # every class weight is 1
-        return sw
-    out = empty((n,), "<f4")
-    xb.x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
-                       addr(out, name="weights"), [n])
-    return out
-
-
-def _qn_weight_fields(sw):
-    """The `qn_fit` params from field 13 on that carry the row weights:
-    has_sample_weight, and with weights the address (field 16)."""
-    return (0, None) if sw is None else (1, addr_ro(sw, name="sample_weight"))
-
-
-def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
-                       change_tol, svr_eps=0.0, sw=None):
-    """One `qn_fit` call on a one-target loss (the 15-field form, 16 with
-    row weights `sw`): the fitted `(n_features + fit_intercept,)` float32
-    block, `num_iters`, the objective and the OPT_RETCODE. `est` supplies
-    the solver fields."""
-    rows, cols = x.shape
-    w = zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
-    info = zeros((2,), "<f4")
-    has_sw, sw_addr = _qn_weight_fields(sw)
-    params = [rows, cols, n_classes,
-              float(l1), float(l2), float(grad_tol), float(change_tol),
-              int(est.max_iter), int(est.linesearch_max_iter),
-              int(est.lbfgs_memory), 1 if est.fit_intercept else 0,
-              1 if est.penalty_normalized else 0, has_sw, int(loss), float(svr_eps)]
-    if has_sw:
-        params.append(sw_addr)
-    n_iter = est._bind("_mojolearn_estimators").qn_fit(
-        addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
-        addr(w, name="coef_"), addr(info, name="info"), params,
-    )
-    return w, int(n_iter), float(info[0]), int(info[1])
-
-
-def _qn_scores(est, X, w, n_targets=1):
-    """`qn_decision_function` on a fitted block: `(n,)` float32 for one
-    target, `(n, n_targets)` for the column-major one-vs-rest block."""
-    x, _ = as_f32_c(X, ndim=2, name="X")
-    if x.shape[1] != est.n_features_in_:
-        raise ValueError(f"mojolearn {type(est).__name__} feature count differs from fit")
-    params = [x.shape[0], x.shape[1], 1 if est.fit_intercept else 0]
-    shape = (x.shape[0],)
-    if n_targets > 1:
-        params.append(n_targets)
-        shape = (x.shape[0], n_targets)
-    out = empty(shape, "<f4")
-    est._bind("_mojolearn_estimators").qn_decision_function(
-        addr_ro(x, name="X"), addr_ro(w, name="coef_"),
-        addr(out, name="scores"), params,
-    )
-    return out
-
-
-def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memory):
-    if not tol > 0:
-        raise ValueError(f"mojolearn {name}: tol must be positive, got {tol}")
-    for field, value in (("max_iter", max_iter),  # glue: three solver argument checks
-                         ("linesearch_max_iter", linesearch_max_iter),
-                         ("lbfgs_memory", lbfgs_memory)):
-        if int(value) != value or value < 1:
-            raise ValueError(f"mojolearn {name}: {field} must be a positive integer, got {value}")
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -1460,7 +947,7 @@ def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memo
 # cuml/cpp/src/glm/qn/glm_linear.cuh; the Mojo implementation is
 # glm/impl/qn/glm_linear.mojo (DEVIATION 707). change_tol = delta if given else
 # tol * 0.01 (qn.pyx:504-506). sample_weight: glm/NOT_IMPLEMENTED.tsv.
-class QNRegressor(NumericModeMixin):
+class QNRegressor(_NumericModeMixin):
     """Linear regression on the squared or absolute loss, solved by a
     quasi-Newton method.
 
@@ -1624,7 +1111,7 @@ _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, L
 
 
 # The compiled QNRegressor owner, connected once at import: fit, predict and
-# score are one call each into it (bindings/qn_native.mojo).
+# score are one call each into it (bindings/qn_native_door.mojo).
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
 _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode'))
@@ -1632,6 +1119,6 @@ _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_inte
 
 # The compiled LogisticRegression owner, connected once at import: fit,
 # decision_function, predict, predict_proba, predict_log_proba and score are
-# one call each into it (bindings/logistic_native.mojo).
+# one call each into it (bindings/logistic_native_door.mojo).
 from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
 _LR_CALL, _LR_CONTEXT = _connect_logistic()

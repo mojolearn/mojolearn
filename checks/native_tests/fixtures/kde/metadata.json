@@ -1,0 +1,531 @@
+{
+  "origin": "test_neighbors_kde_native.py::test_scores_equal_former_path",
+  "train_shape": [
+    37,
+    5
+  ],
+  "query_shape": [
+    11,
+    5
+  ],
+  "seeds": [
+    3,
+    9
+  ],
+  "bandwidth": 0.75,
+  "weight_admission": "Float64 linspace(.25,3,37) converted to Float32, matching public RUN storage",
+  "profiles": [
+    {
+      "name": "gaussian-euclidean-uniform",
+      "kernel": "gaussian",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "gaussian-euclidean-uniform.f64",
+      "sha256": "e4ccc9a6161ed0e569cfe53594321aeb626b564e4639235899df8ca6cc9b286d",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-euclidean-weighted",
+      "kernel": "gaussian",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "gaussian-euclidean-weighted.f64",
+      "sha256": "6acc9ed28cc351142c22fae3374be2ba4a9d65c9be130bee4f2f9e75bc7af86f",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-manhattan-uniform",
+      "kernel": "gaussian",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "gaussian-manhattan-uniform.f64",
+      "sha256": "5fea84b138e79f7cbbc3b31a15c1b9ae1646d4966e08c3354c12d74da2e3a5c0",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-manhattan-weighted",
+      "kernel": "gaussian",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "gaussian-manhattan-weighted.f64",
+      "sha256": "a68de0bfd599cde65e5678c8980fd03e9370111d42c341c69eb61afd47d8e391",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-chebyshev-uniform",
+      "kernel": "gaussian",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "gaussian-chebyshev-uniform.f64",
+      "sha256": "0701c91c40403b0e5301861dd50fbcec4982d7a8bc2e720e3911dfcf6935a907",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-chebyshev-weighted",
+      "kernel": "gaussian",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "gaussian-chebyshev-weighted.f64",
+      "sha256": "27084f9c467b99121608b92f9c3fd7fdddfed07fac9102f1760438c1e2f6a548",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-sqeuclidean-uniform",
+      "kernel": "gaussian",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "gaussian-sqeuclidean-uniform.f64",
+      "sha256": "d77258b80346450804d524b5d8a4839b07a8bb2381b2a94ceda0f3d9c07bf52f",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "gaussian-sqeuclidean-weighted",
+      "kernel": "gaussian",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "gaussian-sqeuclidean-weighted.f64",
+      "sha256": "bf741db2c09d11b66e7ac63fd4866a53465399d6672c53d35a8726e523deb5b3",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "tophat-euclidean-uniform",
+      "kernel": "tophat",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "tophat-euclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "tophat-euclidean-weighted",
+      "kernel": "tophat",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "tophat-euclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "tophat-manhattan-uniform",
+      "kernel": "tophat",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "tophat-manhattan-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "tophat-manhattan-weighted",
+      "kernel": "tophat",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "tophat-manhattan-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "tophat-chebyshev-uniform",
+      "kernel": "tophat",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "tophat-chebyshev-uniform.f64",
+      "sha256": "5903bee7b4c9f37ef3da95f69124dde3cfc22be9fb09ae35f03106f146c5a279",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "tophat-chebyshev-weighted",
+      "kernel": "tophat",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "tophat-chebyshev-weighted.f64",
+      "sha256": "5d36608fd9077955664e07ff09c0af46590245ed111a3a6ad3272d018b3916e2",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "tophat-sqeuclidean-uniform",
+      "kernel": "tophat",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "tophat-sqeuclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "tophat-sqeuclidean-weighted",
+      "kernel": "tophat",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "tophat-sqeuclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-euclidean-uniform",
+      "kernel": "epanechnikov",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "epanechnikov-euclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-euclidean-weighted",
+      "kernel": "epanechnikov",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "epanechnikov-euclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-manhattan-uniform",
+      "kernel": "epanechnikov",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "epanechnikov-manhattan-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-manhattan-weighted",
+      "kernel": "epanechnikov",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "epanechnikov-manhattan-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-chebyshev-uniform",
+      "kernel": "epanechnikov",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "epanechnikov-chebyshev-uniform.f64",
+      "sha256": "00775a9228c690d563708435597e73552140229d1e218a948354939a6daa0920",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "epanechnikov-chebyshev-weighted",
+      "kernel": "epanechnikov",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "epanechnikov-chebyshev-weighted.f64",
+      "sha256": "1c331284087afb46ac7cca7a96740f5d059ce060f10e1373f001c3da60ce7728",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "epanechnikov-sqeuclidean-uniform",
+      "kernel": "epanechnikov",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "epanechnikov-sqeuclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "epanechnikov-sqeuclidean-weighted",
+      "kernel": "epanechnikov",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "epanechnikov-sqeuclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "exponential-euclidean-uniform",
+      "kernel": "exponential",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "exponential-euclidean-uniform.f64",
+      "sha256": "e2a0ec51859b8bb44e96a06cbf78be92f33f47c8ff45c904e79fc8d1628c2096",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-euclidean-weighted",
+      "kernel": "exponential",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "exponential-euclidean-weighted.f64",
+      "sha256": "1622183b0e256a0738cee0c9e6b5d47e85511e339e3f6843570a05b889fbb51f",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-manhattan-uniform",
+      "kernel": "exponential",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "exponential-manhattan-uniform.f64",
+      "sha256": "72cf3c330c97c83c03a2bb9bc3d6b400bab396d31a075e739ac98e543b97cb88",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-manhattan-weighted",
+      "kernel": "exponential",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "exponential-manhattan-weighted.f64",
+      "sha256": "110957fcc45baae18208e0d7d75288ac043f85494e6dd11b15e1622f760c097d",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-chebyshev-uniform",
+      "kernel": "exponential",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "exponential-chebyshev-uniform.f64",
+      "sha256": "5dd54be00f04bcb91c88486ec617578cb1bf65120695a9e8a70482d1d3dea886",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-chebyshev-weighted",
+      "kernel": "exponential",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "exponential-chebyshev-weighted.f64",
+      "sha256": "737c7f14f633cd146653bdf5a4cdbd6ca27d6ca1630323bf95f3c74fa9d08b64",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-sqeuclidean-uniform",
+      "kernel": "exponential",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "exponential-sqeuclidean-uniform.f64",
+      "sha256": "11c036d5af2d2cde5e91339b672db8a497e4ff9bcec38a73ca9f0f3fb4ce8359",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "exponential-sqeuclidean-weighted",
+      "kernel": "exponential",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "exponential-sqeuclidean-weighted.f64",
+      "sha256": "c19964ef14c9e1733c55906117e6489b5aee79845c30607be64c220722a81a22",
+      "finite_scores": 11,
+      "negative_infinity_scores": 0
+    },
+    {
+      "name": "linear-euclidean-uniform",
+      "kernel": "linear",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "linear-euclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "linear-euclidean-weighted",
+      "kernel": "linear",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "linear-euclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "linear-manhattan-uniform",
+      "kernel": "linear",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "linear-manhattan-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "linear-manhattan-weighted",
+      "kernel": "linear",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "linear-manhattan-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "linear-chebyshev-uniform",
+      "kernel": "linear",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "linear-chebyshev-uniform.f64",
+      "sha256": "1190e5d3cc78451beeda6e34516b84674c39611ae684c6f56b3f926c10c8d6ff",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "linear-chebyshev-weighted",
+      "kernel": "linear",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "linear-chebyshev-weighted.f64",
+      "sha256": "fc8ba84bbbadf3d4e0ca4e86f43325a8539c541689f188093502f481c2866094",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "linear-sqeuclidean-uniform",
+      "kernel": "linear",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "linear-sqeuclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "linear-sqeuclidean-weighted",
+      "kernel": "linear",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "linear-sqeuclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-euclidean-uniform",
+      "kernel": "cosine",
+      "metric": "euclidean",
+      "weighted": false,
+      "file": "cosine-euclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-euclidean-weighted",
+      "kernel": "cosine",
+      "metric": "euclidean",
+      "weighted": true,
+      "file": "cosine-euclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-manhattan-uniform",
+      "kernel": "cosine",
+      "metric": "manhattan",
+      "weighted": false,
+      "file": "cosine-manhattan-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-manhattan-weighted",
+      "kernel": "cosine",
+      "metric": "manhattan",
+      "weighted": true,
+      "file": "cosine-manhattan-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-chebyshev-uniform",
+      "kernel": "cosine",
+      "metric": "chebyshev",
+      "weighted": false,
+      "file": "cosine-chebyshev-uniform.f64",
+      "sha256": "9954ddab2f026342b59b019ecb3e3de2d9da21b7e13c25cac9e849f2497195ac",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "cosine-chebyshev-weighted",
+      "kernel": "cosine",
+      "metric": "chebyshev",
+      "weighted": true,
+      "file": "cosine-chebyshev-weighted.f64",
+      "sha256": "7f8d5d6d56183384e3eab40a7b282be8510293f83b20faf1f5443788e9931eee",
+      "finite_scores": 3,
+      "negative_infinity_scores": 8
+    },
+    {
+      "name": "cosine-sqeuclidean-uniform",
+      "kernel": "cosine",
+      "metric": "sqeuclidean",
+      "weighted": false,
+      "file": "cosine-sqeuclidean-uniform.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    },
+    {
+      "name": "cosine-sqeuclidean-weighted",
+      "kernel": "cosine",
+      "metric": "sqeuclidean",
+      "weighted": true,
+      "file": "cosine-sqeuclidean-weighted.f64",
+      "sha256": "a193f995a98761c039c5769a5619925969b85e8cb18dc437a878f6bf8ab5544f",
+      "finite_scores": 0,
+      "negative_infinity_scores": 11
+    }
+  ],
+  "inputs": [
+    {
+      "file": "train.f32",
+      "shape": [
+        37,
+        5
+      ],
+      "sha256": "761caeee5614287a074ddc7d4631a50d2e1ff10631fc175de00cef6d147a534b"
+    },
+    {
+      "file": "query.f32",
+      "shape": [
+        11,
+        5
+      ],
+      "sha256": "fc635beeaae3539d45ebed8e1826d73519d655949b7e7eefd49f97b00d146979"
+    },
+    {
+      "file": "weights.f32",
+      "shape": [
+        37
+      ],
+      "sha256": "e15a6dcb408077dab54dc652d5af24ead472f281a27c5308bfa3996e221507c1"
+    }
+  ],
+  "workers": 10,
+  "numpy": "2.5.2",
+  "bound": "Existing kde_check: abs(actual-reference) <= 2e-4 * max(1,abs(reference)); mathematical -inf requires actual <= -1e38.",
+  "bound_origin": "kde/checks/kde_check.mojo::_close/check_kde_oracle_vs_float64; not chosen from native test results",
+  "oracle": "Independent Float64 mathematical distances/radial kernels/stable log sums; cosine normalization by128-point quadrature, not product recurrence.",
+  "generator_sha256": "bc297fd910f5218d6d4c1261fa7fb722f1806a29bb86efcf4ab389da4e897d1e",
+  "execution": "Input/reference preparation only; no product compile/test/timing/identity run."
+}

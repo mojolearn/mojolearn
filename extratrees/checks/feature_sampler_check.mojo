@@ -32,6 +32,7 @@ The uniformity section is a smoke test and says so where it runs. It is not a
 statistical test of anything.
 """
 
+from std.builtin.sort import sort
 from std.testing import assert_equal, assert_true
 
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -213,7 +214,7 @@ def run_case(
     return cells
 
 
-def main() raises:
+def run_checks() raises:
     var cells = 0
 
     # =====================================================================

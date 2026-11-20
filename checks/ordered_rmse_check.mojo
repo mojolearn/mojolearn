@@ -42,10 +42,10 @@ def prefix_case(ctx: DeviceContext, poison_tail: Bool, full_estimate: Bool, zero
     var y = ctx.enqueue_create_buffer[DType.float32](8)
     var w = ctx.enqueue_create_buffer[DType.float32](8)
     var c = ctx.enqueue_create_buffer[DType.float32](8)
-    ctx.enqueue_copy(dst_buf=p, src_ptr=hp.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=b, src_ptr=hb.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=y, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=w, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, p, hp)
+    upload_host_into[DType.uint32](ctx, b, hb)
+    upload_host_into[DType.float32](ctx, y, hy)
+    upload_host_into[DType.float32](ctx, w, hw)
     ctx.enqueue_memset(c, Float32(0.5))
     var trace = IdentityTrace.disabled()
     var result = List[Float32]()
@@ -65,7 +65,7 @@ def prefix_case(ctx: DeviceContext, poison_tail: Bool, full_estimate: Bool, zero
         for i in range(len(leaves)):
             result.append(leaves[i])
     var hc = ctx.enqueue_create_host_buffer[DType.float32](8)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=c)
+    download_host_into[DType.float32](ctx, c, hc)
     ctx.synchronize()
     for i in range(8):
         var value = hc.unsafe_ptr().unsafe_load(i)
@@ -74,10 +74,6 @@ def prefix_case(ctx: DeviceContext, poison_tail: Bool, full_estimate: Bool, zero
         if zero_prefix and not full_estimate and value != Float32(0.5):
             raise Error("ordered zero-mass prefix changed its persistent cursor")
         result.append(value)
-    _ = hp^
-    _ = hb^
-    _ = hy^
-    _ = hw^
     return result^
 
 
@@ -89,7 +85,7 @@ def constant_model_check(ctx: DeviceContext) raises:
     var x = ctx.enqueue_create_buffer[DType.uint32](4)
     for i in range(4):
         hx.unsafe_ptr().unsafe_store(i, UInt32(i % 2) << layout.features[0].shift)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, x, hx)
     for mixed in range(2):
         var model = TAdditiveModel()
         model.bias = Float64(0.5)
@@ -109,7 +105,7 @@ def constant_model_check(ctx: DeviceContext) raises:
         var cursor = ctx.enqueue_create_buffer[DType.float32](4)
         predict(model, ctx, 4, counts, x, cursor)
         var hc = ctx.enqueue_create_host_buffer[DType.float32](4)
-        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+        download_host_into[DType.float32](ctx, cursor, hc)
         ctx.synchronize()
         for i in range(4):
             var expected = Float32(2.5)
@@ -119,7 +115,6 @@ def constant_model_check(ctx: DeviceContext) raises:
             if bitcast[DType.uint32](actual) != bitcast[DType.uint32](expected):
                 raise Error("constant/mixed tree apply lost leaf values or bias")
             print("ORDERED_BITS constant_model", mixed, i, bitcast[DType.uint32](actual))
-    _ = hx^
 
 
 def whole_loop_cursor_check(ctx: DeviceContext) raises:
@@ -141,7 +136,7 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
         y.append(Float32(i - 4))
         w.append(Float32(1 + i % 3))
         p.append(UInt32((i * 5 + 3) % N))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.uint32](ctx, x, hx)
     var fit = fit_ordered_rmse(ctx, layout, x, y, w, p, 2, 1, 1, Float32(0.25), Float32(1))
     if len(fit.folds) != 3:
         raise Error("ordered small-fixture prefix fold inventory changed")
@@ -183,19 +178,18 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
                 expected[pos] += values[leaf_ids[pos]]
         var hc = ctx.enqueue_create_host_buffer[DType.float32](size)
         if f < len(fit.folds):
-            ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=fit.fold_cursors[f])
+            download_host_into[DType.float32](ctx, fit.fold_cursors[f], hc)
         else:
-            ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=fit.estimation_cursor)
+            download_host_into[DType.float32](ctx, fit.estimation_cursor, hc)
         ctx.synchronize()
         for pos in range(size):
             var actual = hc.unsafe_ptr().unsafe_load(pos)
             if not isfinite(actual) or abs(Float64(actual) - expected[pos]) > Float64(0.00001):
                 raise Error("ordered whole-loop cursor differs from prefix-only Float64 replay")
             print("ORDERED_BITS fold_cursor", f, pos, bitcast[DType.uint32](actual))
-    _ = hx^
 
 
-def main() raises:
+def run_checks() raises:
     print("ORDERED NUMERIC MODE", numeric_mode_name())
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("ordered RMSE certification requires MOJOLEARN_NUMERIC_IDENTICAL")
@@ -269,3 +263,22 @@ def main() raises:
     if not refused:
         raise Error("ordered fit accepted duplicate permutation ids")
     print("ORDERED RMSE PASS: prefix isolation, leakage control, zero-mass prefix L2=0, constant/mixed model apply, two cursor updates, weighted three-tree fit/apply, invalid permutation refusal")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ordered_rmse_check", cpu=False, gpu=True, serial="", run=run_cases)

@@ -75,8 +75,14 @@ def test_host_archive_prediction_is_one_native_call_with_old_outcome(tmp_path, n
     _assert_same(audit.assert_native(), reference[1])
 
 
-@pytest.mark.parametrize("name", ["GaussianMixture", "DBSCAN", "AgglomerativeClustering",
-                                  "KNeighborsClassifier", "KNeighborsRegressor"])
+# GaussianMixture and the two KNeighbors fits build their fast archive with the fast tier; DBSCAN and
+# AgglomerativeClustering archive without it.
+_NEEDS_FAST = pytest.mark.needs_fast_tier
+
+
+@pytest.mark.parametrize("name", [pytest.param("GaussianMixture", marks=_NEEDS_FAST), "DBSCAN", "AgglomerativeClustering",
+                                  pytest.param("KNeighborsClassifier", marks=_NEEDS_FAST),
+                                  pytest.param("KNeighborsRegressor", marks=_NEEDS_FAST)])
 def test_saved_fast_mode_is_refused_as_the_host_bind_refused_it(tmp_path, name):
     path = _archive(tmp_path, name, mode="fast")
     try:

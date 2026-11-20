@@ -46,7 +46,7 @@ def install(fake, *, fail=False, extra=0.0):
     def train_step(addresses, native, scalars, completed):
         assert len(addresses) == 8
         assert all(type(a) is int for a in addresses)
-        assert list(native) == host_mod._native_shape(SHAPE)
+        assert list(native) == list(SHAPE.native_shape)
         assert len(scalars) == 5 and all(type(s) is float for s in scalars)
         assert type(completed) is int
         calls.append(dict(scalars=list(scalars), completed=completed,
@@ -68,70 +68,56 @@ def trainer(**kwargs):
     return host_mod.LanguageModelHostTrainer(np.ones(N, np.float32), **kwargs)
 
 
-def test_a_binding_without_the_training_entry_is_refused_by_name(fake_host):
+# The trainer's native owner (bindings/byte_lm_host_trainer_native_door.mojo) reads
+# the host binding connected at import into `_HOST_TRAIN_CONTEXT` and admits
+# only compiled entries owned by that module
+# (providers/python/neural_descriptor_pyapi_door.mojo, `neural_descriptor_entry`).
+# A Python stand-in planted in `sys.modules` is therefore never called, so the
+# wiring tests below run one real step of the shipped host binding and read
+# its public state; the arithmetic itself is still the gate's business.
+def test_a_binding_without_the_training_entry_is_refused_by_name(monkeypatch):
     """An older host binding runs inference fine and has no training entry.
-    The refusal names the entry and the build script, at construction, rather
-    than failing somewhere inside the first step."""
-    assert not hasattr(fake_host, 'byte_lm_host_train_step')
+    The refusal names the entry, at construction, rather than failing
+    somewhere inside the first step; a binding that failed to import is
+    refused with its import error."""
+    import types
+    older = types.ModuleType(host_mod._MODULE_NAME)
+    monkeypatch.setitem(host_mod._HOST_TRAIN_CONTEXT, 'byte_lm_host_binding', older)
+    with pytest.raises(TypeError, match='compiled entry byte_lm_host_train_step'):
+        trainer()
+    reason = ('ImportError: mojolearn: no host binding with byte_lm_host_train_step; '
+              'build it with bindings/build_byte_lm_host.sh')
+    monkeypatch.setitem(host_mod._HOST_TRAIN_CONTEXT, 'byte_lm_host_binding', reason)
     with pytest.raises(ImportError, match='byte_lm_host_train_step') as info:
         trainer()
     assert 'bindings/build_byte_lm_host.sh' in str(info.value)
 
 
-def test_a_step_reaches_the_binding_and_advances_the_state(fake_host):
-    calls = install(fake_host)
+def test_a_step_reaches_the_binding_and_advances_the_state():
     model = trainer()
     assert model.completed_steps == 0 and model.gradient_ is None
+    np.testing.assert_array_equal(np.asarray(model.m_), np.zeros(N, np.float32))
+    np.testing.assert_array_equal(np.asarray(model.v_), np.zeros(N, np.float32))
     x = ids()
     bits = model.train_step(x)
-    assert bits == 0x3F800000
-    assert len(calls) == 1 and calls[0]['completed'] == 0
-    np.testing.assert_array_equal(calls[0]['ids'], x.ravel())
-    np.testing.assert_array_equal(calls[0]['params'], np.ones(N, np.float32))
-    # The moments default to zero and are handed to the binding as read-only.
-    np.testing.assert_array_equal(calls[0]['m'], np.zeros(N, np.float32))
-    # Each output buffer lands on its own attribute.
-    np.testing.assert_array_equal(np.asarray(model.gradient_), np.full(N, 1.0, np.float32))
-    np.testing.assert_array_equal(np.asarray(model.parameters_), np.full(N, 2.0, np.float32))
-    np.testing.assert_array_equal(np.asarray(model.m_), np.full(N, 3.0, np.float32))
-    np.testing.assert_array_equal(np.asarray(model.v_), np.full(N, 4.0, np.float32))
+    assert type(bits) is int and 0 <= bits < 1 << 32
+    assert np.isfinite(struct.unpack('<f', struct.pack('<I', bits))[0])
     assert model.completed_steps == 1
-    # The next step carries the advanced count, which is what the optimizer's
-    # bias correction reads, and the previous step's outputs as its inputs.
+    gradient = np.asarray(model.gradient_)
+    assert gradient.shape == (N,) and gradient.dtype == np.float32
+    # That the step moves the parameters and both moments, and the next step
+    # (from its outputs at completed 1) moves them again, is
+    # checks/native_tests/byte_lm_host_column.mojo unit 5 (lane tmig-lm-1).
     model.train_step(x)
-    assert calls[1]['completed'] == 1
-    np.testing.assert_array_equal(calls[1]['params'], np.full(N, 2.0, np.float32))
-    np.testing.assert_array_equal(calls[1]['m'], np.full(N, 3.0, np.float32))
-    np.testing.assert_array_equal(calls[1]['v'], np.full(N, 4.0, np.float32))
+    assert model.completed_steps == 2
 
 
-def test_a_failed_step_leaves_nothing_half_applied(fake_host):
-    install(fake_host, fail=True)
-    model = trainer()
-    before = (np.asarray(model.parameters_).copy(), np.asarray(model.m_).copy(),
-              np.asarray(model.v_).copy())
-    with pytest.raises(RuntimeError, match='injected'):
-        model.train_step(ids())
-    assert model.completed_steps == 0
-    assert model.gradient_ is None
-    for got, want in zip((model.parameters_, model.m_, model.v_), before):
-        np.testing.assert_array_equal(np.asarray(got), want)
-
-
-def test_the_gradient_is_cleared_before_the_call_not_left_stale(fake_host):
-    # the native step resolves the host entry once per trainer, so the
-    # failure is switched on inside the installed entry, not by a re-install
-    failing = {"on": False}
-    calls = install(fake_host, fail=lambda: failing["on"])
-    model = trainer()
-    model.train_step(ids())
-    assert model.gradient_ is not None
-    failing["on"] = True
-    with pytest.raises(RuntimeError):
-        model.train_step(ids())
-    # A stale gradient from the previous step would read as this step's.
-    assert model.gradient_ is None
-    assert len(calls) == 2  # the first step and the failing one, one log
+# DELETED 2026-11-07 (lane ne1-k-fail-a): test_a_failed_step_leaves_nothing_half_applied
+# and test_the_gradient_is_cleared_before_the_call_not_left_stale injected the
+# failure through a Python stand-in entry, which the native owner no longer
+# admits. The current contract (a refused step leaves parameters, moments and
+# the step count unchanged and the gradient None) is tested by
+# test_byte_lm_host_native_provider.py::test_host_native_provider_reuse_and_transactional_outputs.
 
 
 def test_ids_must_be_the_training_batch_layout(fake_host):
@@ -144,24 +130,24 @@ def test_ids_must_be_the_training_batch_layout(fake_host):
     assert calls == [] and model.completed_steps == 0
 
 
-def test_byte_range_is_refused_and_the_ignore_index_only_in_the_last_column(fake_host):
-    calls = install(fake_host)
+def test_byte_range_is_refused_and_the_ignore_index_only_in_the_last_column():
     model = trainer()
     for bad in (-1, 256, 2 ** 20):
         x = ids()
         x[0, 3] = bad
         with pytest.raises(ValueError, match='byte values'):
             model.train_step(x)
+    assert model.completed_steps == 0
     # -100 is a target-only sentinel: legal in the last column, refused before.
     x = ids()
     x[0, SHAPE.length] = host_mod._IGNORE_INDEX
     model.train_step(x)
-    assert len(calls) == 1
+    assert model.completed_steps == 1
     x = ids()
     x[0, SHAPE.length - 1] = host_mod._IGNORE_INDEX
     with pytest.raises(ValueError, match='byte values'):
         model.train_step(x)
-    assert len(calls) == 1
+    assert model.completed_steps == 1
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -175,11 +161,14 @@ def test_illegal_optimizer_configurations_are_refused_at_construction(fake_host,
         trainer(**kwargs)
 
 
-def test_the_admitted_optimizer_reaches_the_binding_as_five_floats(fake_host):
-    calls = install(fake_host)
+def test_the_admitted_optimizer_reaches_the_binding_as_five_floats():
+    # The owner keeps the five admitted floats it hands every step.
     model = trainer(lr=3e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2)
+    scalars = vars(model)['_scalars']
+    assert all(type(v) is float for v in scalars)
+    assert scalars == pytest.approx([3e-3, 0.9, 0.999, 1e-8, 1e-2])
     model.train_step(ids())
-    assert calls[0]['scalars'] == pytest.approx([3e-3, 0.9, 0.999, 1e-8, 1e-2])
+    assert model.completed_steps == 1
 
 
 @pytest.mark.parametrize('bad', [np.ones(N - 1, np.float32), np.ones(N + 1, np.float32)])
@@ -211,24 +200,30 @@ def test_completed_steps_must_be_a_nonnegative_int(fake_host, bad):
         trainer(completed_steps=bad)
 
 
-def test_from_state_carries_the_moments_and_the_step_count(fake_host):
-    calls = install(fake_host)
+def test_from_state_carries_the_moments_and_the_step_count():
     m = np.full(N, 0.25, np.float32)
     v = np.full(N, 0.75, np.float32)
     model = host_mod.LanguageModelHostTrainer.from_state(
         np.ones(N, np.float32), m, v, completed_steps=63, lr=3e-3)
     assert model.completed_steps == 63
+    np.testing.assert_array_equal(np.asarray(model.m_), m)
+    np.testing.assert_array_equal(np.asarray(model.v_), v)
     model.train_step(ids())
-    assert calls[0]['completed'] == 63
-    np.testing.assert_array_equal(calls[0]['m'], m)
-    np.testing.assert_array_equal(calls[0]['v'], v)
     assert model.completed_steps == 64
+    # A resumed step ending elsewhere than a fresh one is
+    # byte_lm_host_column_cases.mojo unit 6.
 
 
-def test_loss_returns_the_float_of_the_bits(fake_host):
-    install(fake_host)
+def test_loss_returns_the_float_of_the_bits():
+    """`loss` is the step's loss at the current parameters and moves nothing
+    (lane byte-lm-host-step-words, 2026-11-13: it used to be a step)."""
+    bits = trainer().train_step(ids())
     model = trainer()
-    assert model.loss(ids()) == struct.unpack('<f', struct.pack('<I', 0x3F800000))[0]
+    before = np.asarray(model.parameters_).tobytes()
+    assert model.loss(ids()) == struct.unpack('<f', struct.pack('<I', bits))[0]
+    assert model.completed_steps == 0
+    assert np.asarray(model.parameters_).tobytes() == before
+    assert model.train_step(ids()) == bits
     assert model.completed_steps == 1
 
 
@@ -254,37 +249,22 @@ def test_profile_and_sha256_are_readable_without_a_step(fake_host):
 FOUR = Shape(batch=4)
 
 
-def test_a_second_shape_reaches_the_binding_as_that_shape(fake_host):
+def test_a_second_shape_reaches_the_binding_as_that_shape():
     """The surface has only ever been exercised at the certified shape. A
     capture at another shape is worth nothing if the replay silently runs the
-    default, so this checks what actually crosses the boundary."""
-    calls = []
-
-    def train_step(addresses, native, scalars, completed):
-        assert list(native) == host_mod._native_shape(FOUR)
-        calls.append(dict(
-            native=list(native),
-            ids=buffer(addresses[3], FOUR.batch * (FOUR.length + 1), True).copy(),
-            params=buffer(addresses[0], FOUR.n_total).copy()))
-        for slot, value in ((4, 1.0), (5, 2.0), (6, 3.0), (7, 4.0)):
-            buffer(addresses[slot], FOUR.n_total)[:] = value
-        return 0x3F800000
-
-    fake_host.byte_lm_host_train_step = train_step
+    default, so this checks the four-row batch is the one the step takes."""
     model = host_mod.LanguageModelHostTrainer(np.ones(FOUR.n_total, np.float32), shape=FOUR)
     x = (np.arange(FOUR.batch * (FOUR.length + 1), dtype=np.int32) % 256
          ).reshape(FOUR.batch, FOUR.length + 1)
+    assert x.size == FOUR.batch * (FOUR.length + 1) == 132
     model.train_step(x)
-    assert len(calls) == 1
-    # Four rows, and the batch dimension is what the native side is told.
-    assert calls[0]['native'][0] == 4
-    assert len(calls[0]['ids']) == FOUR.batch * (FOUR.length + 1) == 132
-    np.testing.assert_array_equal(calls[0]['ids'], x.ravel())
     # Same parameter count at both shapes, which is the point: the arrays are
     # the same size and the sums behind them are not.
     assert FOUR.n_total == SHAPE.n_total
     assert model.profile == FOUR.profile != SHAPE.profile
     assert model.completed_steps == 1
+    # Four rows and two rows giving different gradients over the same
+    # parameters is byte_lm_host_column_cases.mojo unit 8.
 
 
 def test_the_certified_batch_layout_is_refused_at_the_second_shape(fake_host):

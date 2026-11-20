@@ -9,9 +9,12 @@ inputs into owned Lists, computes, and only then writes the caller's output.
 The loss comes back as its IEEE-754 bit pattern, an int, so the gate compares
 bytes and nothing on the Python side rounds it.
 """
-from std.memory import bitcast, memcpy
+from core.experiment_guards_neural import NEURAL_GUARDS_OK
+from std.memory import bitcast, unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.p3_lm_tokenizer_cpython_unpack import lm_try_index
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -37,10 +40,13 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+# RUN (lane rs-embedding-bytelm): typed shape completion, no Python import.
+from training.byte_lm_config_run import byte_config_words
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
 from training.byte_lm_host_dispatch import BYTE_HOST_NATIVE_TABLE
-from providers.python.byte_lm_host_compat_pyapi import register
-from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from providers.python.byte_lm_host_compat_pyapi_door import register
+from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from training.byte_lm_host_io import (
     all_finite_f32_scan,
     all_finite_f64_scan,
@@ -52,27 +58,28 @@ from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
     byte_host_next_threaded,
-    byte_host_loss,
     byte_host_sabotage_compiled,
 )
-# DEVIATION 2680. The CPU training step. This import is what puts the host
-# backward pass inside the certified CPU inference artifact, so the loss gate's
-# 33 of 33 and the DEVIATION 2612 sabotage catch must both be unmoved
-# afterwards; either one shifting is a stop, not something to reconcile.
-from training.byte_lm_host_backward import (
-    byte_host_adamw,
-    byte_host_train_step,
-)
+# DEVIATION 2680. The CPU training step and loss (training/byte_lm_host_execution.mojo):
+# the composed host step and loss by default (restored 2026-11-13, lane
+# restore-byte-lm-host-step; the GPU columns' hand step's words). The program
+# arm (-D MOJOLEARN_BYTE_LM_PROGRAM_STEP) was deleted 2026-11-17 (lane fb12-loser-arms).
 
 
 comptime BYTE_HOST_MAX_LOGITS = 268435456
 
 
 def _index(value: PythonObject) raises -> Int:
+    # Fast path: PyNumber_Index through entries resolved once (no class-name
+    # String, no operator module stamp, no Python call per word); any refusal
+    # keeps the original path and wording below.
+    var word = 0
+    if lm_try_index(value, word):
+        return word
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("byte LM host: integers expected, not booleans")
-    var operator_module = Python.import_module("operator")
+    var operator_module = native_loaded_module("operator")
     # operator.index through the balanced call: PythonObject.__call__ keeps one
     # reference on each argument (bindings/py_balanced.mojo), which leaked every
     # buffer address passed to a host entry.
@@ -85,18 +92,7 @@ def _host_config(shape: PythonObject) raises -> ByteConfig:
     var values = List[Int]()
     for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
         values.append(_index(shape[i]))
-    if len(values) == 7:
-        values.append(2)
-        values.append(256)
-    var chunked = False
-    if len(values) == 10:
-        if values[9] != 0 and values[9] != 1:
-            raise Error("byte LM host: chunked head selector must be 0 or 1")
-        chunked = values[9] == 1
-    var cfg = ByteConfig(values[0], values[1], values[2], values[3],
-                         values[4], values[5], values[6], values[7], values[8], chunked)
-    cfg.validate()
-    return cfg^
+    return byte_config_words(values^, "byte LM host")
 
 
 def byte_lm_host_native_api_binding() raises -> PythonObject:
@@ -220,11 +216,8 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
     Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
     loss compared as a float is a loss compared with a tolerance.
 
-    NO THREADED PATH. The threaded forward (DEVIATION 2640) has no backward
-    twin and must not grow one by accident: a weight gradient sums over every
-    row of the batch, so unlike the forward it crosses every thread boundary
-    and needs a fixed cross-thread fold rather than threads accumulating as
-    they finish.
+    The step is the composed host step (the GPU columns' hand step's words).
+    Its folds are fixed on every core.
     """
     var cfg = _host_config(shape)
     if len(addresses) != 8:
@@ -245,8 +238,12 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
 
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
                               threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
-    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))].
-    `threaded` and `threads` as for logits. Returns the mean loss's IEEE-754 bits."""
+    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))]:
+    the trainer's training forward on the host, on one thread (`threaded`
+    0) or at most `threads` threads (0: one per physical core). Returns the
+    mean loss's IEEE-754 bits."""
+    # The composed host loss (`threaded` / `threads` choose the oracle or the
+    # threaded forward, same bits).
     var cfg = _host_config(shape)
     if len(addresses) != 2:
         raise Error("byte LM host: expected 2 addresses")
@@ -320,6 +317,7 @@ def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_byte_lm_host() -> PythonObject:
+    comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
         register(module)
@@ -337,6 +335,8 @@ def build__mojolearn_byte_lm_host() -> PythonObject:
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
+        # The native trainer door's table (core/byte_lm_entry_table.mojo).
+        publish_byte_lm_host_entries()
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_byte_lm_host: ", error))

@@ -134,12 +134,12 @@ comptime UMAP_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: `UMAP_GRAD_CLIP`, `umap/optimizer.mojo:16` (both 4).
 comptime UMAP_HOST_GRAD_CLIP = Float32(4.0)
 
-#: `UMAP_LIVE_ROW` and `UMAP_LIVE_BOTH_ARM`,
-#: `optimizer_identical_device.mojo:96-99`, the same row and define.
+#: `UMAP_LIVE_ROW`, `optimizer_identical_device.mojo:96-99`, the same row.
 comptime UMAP_HOST_LIVE_ROW = umap_device_optimizer_live_row_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
-comptime UMAP_HOST_LIVE_BOTH_ARM = is_defined["MOJOLEARN_UMAP_LIVE_BOTH_ARM"]()
+# TOMBSTONE: MOJOLEARN_UMAP_LIVE_BOTH_ARM (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-13-cluster; code recoverable at 6eba6fdae9.
+# Restore: git apply experiments/removed/MOJOLEARN_UMAP_LIVE_BOTH_ARM.patch; record in docs/TOMBSTONES.md.
 
 #: `PHILOX_W32_*`, `PHILOX_M4X32_*`, `core/philox.mojo:12-15`.
 comptime UMAP_PHILOX_W32_0: UInt32 = 0x9E3779B9
@@ -388,10 +388,7 @@ def host_umap_vertex[C: Int](
             )
             comptime for c in range(C):
                 var g = ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c])))))
-                comptime if UMAP_HOST_LIVE_BOTH_ARM:
-                    x[c] = ftz(x[c] + g)
-                    x[c] = ftz(x[c] + g)
-                elif UMAP_HOST_LIVE_ROW:
+                comptime if UMAP_HOST_LIVE_ROW:
                     x[c] = ftz(x[c] + g)
                     acc[c] = ftz(acc[c] + g)
                 else:
@@ -428,7 +425,7 @@ def host_umap_vertex[C: Int](
                     ),
                 )
                 comptime for c in range(C):
-                    comptime if UMAP_HOST_LIVE_ROW or UMAP_HOST_LIVE_BOTH_ARM:
+                    comptime if UMAP_HOST_LIVE_ROW:
                         x[c] = ftz(x[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
                     else:
                         acc[c] = ftz(acc[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
@@ -467,8 +464,8 @@ def host_umap_vertex_rt(
     var epoch_u = UInt32(draw_epoch)
     var n_u = UInt32(n)
     var key = SIMD[DType.uint32, 2](UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF))
-    var x = InlineArray[Float32, 32](fill=Float32(0.0))
-    var acc = InlineArray[Float32, 32](fill=Float32(0.0))
+    var x = Array[Float32, 32](fill=Float32(0.0))
+    var acc = Array[Float32, 32](fill=Float32(0.0))
     for c in range(C):
         x[c] = source[v * C + c]
     var begin = Int(row_offsets[v])
@@ -478,7 +475,7 @@ def host_umap_vertex_rt(
         if Int(next_f * s) <= Int(epoch_f * s):
             continue
         var u = Int(tails[e])
-        var delta = InlineArray[Float32, 32](fill=Float32(0.0))
+        var delta = Array[Float32, 32](fill=Float32(0.0))
         var d2 = Float32(0.0)
         for c in range(C):
             delta[c] = ftz(x[c] - source[u * C + c])
@@ -491,10 +488,7 @@ def host_umap_vertex_rt(
             )
             for c in range(C):
                 var g = ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c])))))
-                comptime if UMAP_HOST_LIVE_BOTH_ARM:
-                    x[c] = ftz(x[c] + g)
-                    x[c] = ftz(x[c] + g)
-                elif UMAP_HOST_LIVE_ROW:
+                comptime if UMAP_HOST_LIVE_ROW:
                     x[c] = ftz(x[c] + g)
                     acc[c] = ftz(acc[c] + g)
                 else:
@@ -516,7 +510,7 @@ def host_umap_vertex_rt(
             var other = Int(draw[lane] % n_u)
             if other == v:
                 continue
-            var nd = InlineArray[Float32, 32](fill=Float32(0.0))
+            var nd = Array[Float32, 32](fill=Float32(0.0))
             var n2 = Float32(0.0)
             for c in range(C):
                 nd[c] = ftz(x[c] - source[other * C + c])
@@ -531,7 +525,7 @@ def host_umap_vertex_rt(
                     ),
                 )
                 for c in range(C):
-                    comptime if UMAP_HOST_LIVE_ROW or UMAP_HOST_LIVE_BOTH_ARM:
+                    comptime if UMAP_HOST_LIVE_ROW:
                         x[c] = ftz(x[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
                     else:
                         acc[c] = ftz(acc[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))

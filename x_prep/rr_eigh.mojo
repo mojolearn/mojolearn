@@ -34,7 +34,7 @@ a tie, `spectrum_rank_desc`), each vector's largest-magnitude component
 the round-robin order is not the cyclic order, so the words differ from
 `eigh_unit`'s within float32 round-off; IDENTICAL never compiles a call.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace

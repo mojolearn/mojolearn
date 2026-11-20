@@ -1,0 +1,67 @@
+diff --git a/bindings/cfb_dbscan.mojo b/bindings/cfb_dbscan.mojo
+index 0ab54919da..4da7c83386 100644
+--- a/bindings/cfb_dbscan.mojo
++++ b/bindings/cfb_dbscan.mojo
+@@ -13,7 +13,7 @@ from std.memory import memcpy
+ from std.python import Python, PythonObject
+ from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
+ from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
+-from core.admitted_weights import admitted_fill
++from core.family_cast_impl import family_fill_i32
+ from core.host_finite_scan import host_all_finite_f32
+ from bindings.family_common import (
+     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min, family_field,
+@@ -234,7 +234,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
+     var n_core = Int(py=components.shape[0])
+     if n_core == 0:
+         var labels = family_array(Python.tuple(nq), "<i4", context)
+-        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
++        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+         _ = labels  # keep the Python object alive through the native call above
+         return labels
+     var metric_name = py_call(py_call(b.str, family_raw_get(model, "metric")).lower)
+diff --git a/bindings/cluster_native.mojo b/bindings/cluster_native.mojo
+index a3e0239c8c..b236903c8d 100644
+--- a/bindings/cluster_native.mojo
++++ b/bindings/cluster_native.mojo
+@@ -15,7 +15,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
+ from bindings.classical_arrays import (
+     classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
+ )
+-from core.admitted_weights import admitted_fill
++from core.family_cast_impl import family_fill_i32
+ from core.host_finite_scan import host_all_finite_f32
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.native_loaded_module import native_loaded_module, NativeModules
+@@ -259,7 +259,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
+     var n_core = Int(py=components.shape[0])
+     if n_core == 0:
+         var labels = family_array(Python.tuple(nq), "<i4", context)
+-        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
++        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+         _ = labels  # keep the Python object alive through the native call above
+         return labels
+     var metric_name = py_call(py_call(b.str, native_fitted_get(mods, model, "metric")).lower)
+@@ -391,7 +391,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
+             var labels = family_array(Python.tuple(Int(py=x.shape[0])), "<i4", context)
+             var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels)))
+             _ = labels  # keep the Python object alive through the native call above
+-            admitted_fill[DType.int32](words, Int(py=x.shape[0]), Int32(-1))
++            family_fill_i32(words, Int(py=x.shape[0]), -1)
+             _ = labels  # keep the Python object alive through the native call above
+             return labels
+         return _xc_nearest(model, binding, x, centers, context)
+diff --git a/core/family_cast_impl.mojo b/core/family_cast_impl.mojo
+index 35699455dc..4da67a9097 100644
+--- a/core/family_cast_impl.mojo
++++ b/core/family_cast_impl.mojo
+@@ -104,6 +104,6 @@ def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) ->
+     return _family_extreme[False](src, count)
+ 
+ 
+-# TOMBSTONE: family_fill_i32 (a serial constant-label fill) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+-# Restore: experiments/removed/A6_FAMILY_FILL_I32.patch. core/admitted_weights.mojo
+-# admitted_fill[DType.int32] fills in row tasks across the host's cores.
++def family_fill_i32(out_buf: MutPointer[Int32, MutUntrackedOrigin], n: Int, value: Int32):
++    for i in range(n):  # native output marshaling: one constant label per row
++        out_buf[i] = value

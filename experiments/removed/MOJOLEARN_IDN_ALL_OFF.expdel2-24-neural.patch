@@ -1,0 +1,53 @@
+diff --git a/autograd/kernels/transformer.mojo b/autograd/kernels/transformer.mojo
+index faaebb2b97..24bb8dc480 100644
+--- a/autograd/kernels/transformer.mojo
++++ b/autograd/kernels/transformer.mojo
+@@ -250,9 +250,9 @@ def _fill_ones[wait: Bool = True](
+ # TOMBSTONE: MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+ # lane/expdel2-24-neural; code recoverable at 3d189418c5.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+-# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+-comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ """lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
+ layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
+ identity) runs only on a traced or materialized call; the production path
+@@ -3115,8 +3115,7 @@ def _bwd_rms_norm_kernels[which: Int](
+         var use_fused = False
+         comptime if BWD_NORM_FUSED_TRIAL:
+             use_fused = True  # explicit experiment really forces the row owner
+-        else:
+-            # MOJOLEARN_IDN_ALL_OFF's term removed 2026-11-15 (lane/expdel2-24-neural, see the TOMBSTONE above).
++        elif not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+             var units = attn_device_units(ctx)
+             use_fused = units > 0 and dot_blocks >= 2 * units
+         if use_fused:
+diff --git a/autograd/row_ops.mojo b/autograd/row_ops.mojo
+index a09e10d858..c6927b21c3 100644
+--- a/autograd/row_ops.mojo
++++ b/autograd/row_ops.mojo
+@@ -41,6 +41,7 @@
+ # autograd/ops.mojo _ld_right). Every function a kernel reaches is
+ # @always_inline.
+ from std.math import nan
++from std.sys.compile import is_defined
+ from sequence.ops import Args, FP, ld, st, add, sub, mul
+ from sequence.fold32 import FOLD_L, tree32
+ from checks.numerics import (
+@@ -50,9 +51,10 @@ from checks.numerics import (
+ # TOMBSTONE: MOJOLEARN_IDN_ROW_COOP_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+ # lane/expdel2-24-neural; code recoverable at 5d81d356e0. ROW_COOP stays the IDENTICAL-mode alias.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
+-# TOMBSTONE: MOJOLEARN_IDN_ALL_OFF (umbrella old-path switch) term removed here 2026-11-15 by lane/expdel2-24-neural;
+-# code recoverable at 0bbf0a6c7e. Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-24-neural.patch
+-comptime ROW_COOP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime ROW_COOP = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ # TOMBSTONE: MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF (old path, no A/B recorded) deleted 2026-11-15 by
+ # lane/expdel2-24-neural; code recoverable at fe0b691d9b. The block sort is the only route (autograd/metrics.mojo).
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_AUC_BLOCK_SORT_OFF.patch

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Compile-only whole public model constructor/load/execution/state boundary.
 from std.python._cpython import PyObjectPtr
-from bindings.causal_lm_construct import causal_model_c
-from bindings.causal_lm_public import causal_public_c
+from bindings.causal_lm_construct_door import causal_model_c
+from bindings.causal_lm_public_door import causal_public_c
 
 
 @export

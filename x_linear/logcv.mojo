@@ -22,7 +22,6 @@ The caller passes zeros for the fold ids; the host binding fills them
 (`logcv_fold_ids`) and the device binding builds them on the grid
 (x_linear/logcv_grid.mojo) from the same table.
 """
-from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
     axpy_acc, row_dots,
@@ -39,10 +38,9 @@ weights and the raw weights (y: labels n | fold words n | fit weights n |
 raw weights n | roles F*n; Python sends unit weights when there are none,
 so such a fit always has sample_weight set). A held-out row is a split's
 test row; a training row its training row; any other row is skipped by
-both. C13_LOGCV_WEIGHTS (an opt-in define) sums the other folds' weights,
-which holds for a partition only."""
+both."""
 from x_linear.vfold import vwsq
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix, fold_parts, fold_blocks, FOLD_BLOCK
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 
@@ -182,27 +180,6 @@ def logcv_rows(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
     return t.bcast_int(cnt, 5)
 
 
-@always_inline
-
-def lcv_disjoint_weight(y: FP, n: Int, fold: Int, weighted: Bool) -> Float32:
-    """C13 weighted LogCV preparation: immutable fold sum, rows ascending.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    var total = Float32(0)
-    for i in range(n):
-        if Int(ld(y, n + i)) == fold:
-            total = fa(total, ld(y, 2 * n + i) if weighted else Float32(1))
-    return total
-
-
-def lcv_retained_weight(cache: FP, folds: Int, held: Int) -> Float32:
-    var total = Float32(0)
-    for f in range(folds):
-        if f != held:
-            total = fa(total, ld(cache, f))
-    return total
-
-
 def _logcv_part(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: Bool, fold: Int, ix: IP, cnt: Int,
                 bk: Int, t: Team) -> Float32:
     return logcv_part_rows(o, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t.row(0))
@@ -236,7 +213,9 @@ def logcv_part_rows(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw:
         if fold >= 0:
             return fold_fa_ix(lt, ix + lo, cb)
         return fold_fa(lt, lo, 1, cb)
-    if not sw or C13_LOGCV_WEIGHTS:
+    # TOMBSTONE: MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS (unmeasured opt-in arm; non-owner sites) deleted 2026-11-15 by lane/expdel2-21-linear; code recoverable at e7b27dab14.
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.expdel2-21-linear.patch; record in docs/TOMBSTONES.md.
+    if not sw:
         return Float32(0)
     if fold >= 0:
         return fold_fa_ix(y, ix + lo, cb, 2 * n)
@@ -377,8 +356,6 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
                 acc = fa(acc, _logcv_part(p, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
                 if sw:
                     wrows = fa(wrows, _logcv_part(p + 1, x, y, n, d, kp, fi, sw, fold, ix, cnt, bk, t))
-        comptime if C13_LOGCV_WEIGHTS:
-            wrows = ld(fp, 1) if sw else Float32(0)
         out = logcv_finish(g, goff, th, toff, kp, d, sw, c, cnt, acc, wrows)
     return t.bcast(out)
 

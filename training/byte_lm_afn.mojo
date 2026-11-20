@@ -9,10 +9,10 @@ FAST build on NVIDIA or AMD, compiles main's code unchanged.
 docs/apple-fast/notes/neural-lm.md lists what each one changes.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -23,10 +23,18 @@ from core.step_phase import step_count_d2h, step_count_h2d, step_count_launch, s
 from training.checks.loss_contract import CE_NEG_INF_BITS
 
 comptime BYTE_LM_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 
 
+# TOMBSTONE: MOJOLEARN_AFN_LM_ALL, MOJOLEARN_AFN_LM_NOSYNC, MOJOLEARN_AFN26_LM_NOSYNC, MOJOLEARN_AFN_LM_BWD_FUSE,
+# MOJOLEARN_AFN26_LM_BWD_FUSE, MOJOLEARN_AFN_LM_PARAM_VIEWS, MOJOLEARN_AFN26_LM_PARAM_VIEWS, MOJOLEARN_AFN_LM_HEAD_FUSE,
+# MOJOLEARN_AFN26_LM_HEAD_FUSE, MOJOLEARN_AFN26_LM_CE_BLOCK128, MOJOLEARN_AFN26_LM_CE_BLOCK512 (Apple FAST opt-in arms,
+# no A/B recorded or never promoted) and MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF (old path beside the promoted F08 default)
+# deleted 2026-11-15 by lane/expdel2-31-neural; with them the NOSYNC status kernel, afn_step_finish, afn_reset and the
+# HEAD_FUSE row kernel afn_ce_fused (nothing launched them any more); code recoverable at f6652fc1ac.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_LM_ALL.patch (one patch per define, same diff)
+# RESTORED 2026-11-15 (lane/restore-apple-fast-neural): opt-in arm back, default off, Apple fast only (Andrew: a paused programme's arms are kept).
 comptime _AFN_LM_ALL = is_defined["MOJOLEARN_AFN_LM_ALL"]()
 
 #: -D MOJOLEARN_AFN_LM_NOSYNC: ONE host wait per train step. The ids go up
@@ -155,7 +163,7 @@ def afn_step_status_kernel(
     var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     if gid == 0 and _afn_nonfinite(loss.unsafe_load(0)):
-        _ = Atomic[DType.int32].min(status + AFN_ST_LOSS, Int32(0))
+        _ = Atomic[Int32].min(status + AFN_ST_LOSS, Int32(0))
     var bg = NONFINITE_NONE
     var bp = NONFINITE_NONE
     var bm = NONFINITE_NONE
@@ -176,15 +184,15 @@ def afn_step_status_kernel(
             bn = Int32(i)
         i += stride
     if bg != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_GRAD, bg)
+        _ = Atomic[Int32].min(status + AFN_ST_GRAD, bg)
     if bp != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_PARAM, bp)
+        _ = Atomic[Int32].min(status + AFN_ST_PARAM, bp)
     if bm != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_M, bm)
+        _ = Atomic[Int32].min(status + AFN_ST_M, bm)
     if bv != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_V, bv)
+        _ = Atomic[Int32].min(status + AFN_ST_V, bv)
     if bn != NONFINITE_NONE:
-        _ = Atomic[DType.int32].min(status + AFN_ST_VNEG, bn)
+        _ = Atomic[Int32].min(status + AFN_ST_VNEG, bn)
 
 
 def afn_ce_fused_kernel(

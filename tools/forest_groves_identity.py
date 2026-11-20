@@ -119,8 +119,9 @@ def _cell(est, Xh, tmp, name):
         est.save(path)
         with open(path, "rb") as fh:
             record["model_sha256"] = hashlib.sha256(fh.read()).hexdigest()[:16]
-        record["archive_format"] = str(mojolearn._serialize.scalar_str(
-            mojolearn._serialize.read_npz(path, (
+        from mojolearn import _serialize as _npz  # the npz reader (a tool codec, not on a product path)
+        record["archive_format"] = str(_npz.scalar_str(
+            _npz.read_npz(path, (
                 "mojolearn-randomforest-1-parallel-groves-1", "mojolearn-extratrees-1-parallel-groves-1",
                 "mojolearn-randomforest-1", "mojolearn-extratrees-1")), "format"))
     except Exception as exc:
@@ -189,10 +190,11 @@ def run_lanes(args):
 
 def _class_of(path):
     import mojolearn as ml
-    arrays = ml._serialize.read_npz(path, (
+    from mojolearn import _serialize as _npz  # the npz reader (a tool codec, not on a product path)
+    arrays = _npz.read_npz(path, (
         "mojolearn-randomforest-1-parallel-groves-1", "mojolearn-extratrees-1-parallel-groves-1",
         "mojolearn-randomforest-1", "mojolearn-extratrees-1"))
-    return getattr(ml, ml._serialize.scalar_str(arrays, "estimator"))
+    return getattr(ml, _npz.scalar_str(arrays, "estimator"))
 
 
 def run_large(args):

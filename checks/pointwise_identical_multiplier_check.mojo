@@ -3,7 +3,7 @@
 """Gate for DEVIATION 2624: an ordered-tier POINTWISE histogram depends on
 neither `sm_count` nor the order in which the device finishes its blocks.
 
-    pixi run check-pointwise-identical-multiplier
+    pixi run check-native-gpu pointwise_identical_multiplier_check
 
 WHAT BROKE. `EstimateBlockPerFeatureMultiplier` splits the document axis of
 every pointwise histogram launch `M` ways, and at `M > 1` each document
@@ -194,10 +194,10 @@ def run_policy(
     var d_first = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_folds = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_oh = ctx.enqueue_create_buffer[DType.uint8](n)
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=p.offset.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_first, src_ptr=p.first.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_folds, src_ptr=p.folds.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_oh, src_ptr=p.one_hot.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_off, p.offset)
+    upload_whole_into[DType.uint32](ctx, d_first, p.first)
+    upload_whole_into[DType.uint32](ctx, d_folds, p.folds)
+    upload_whole_into[DType.uint8](ctx, d_oh, p.one_hot)
 
     var line2 = p.line * 2
     var fh = FoldsHistogram()
@@ -216,7 +216,7 @@ def run_policy(
         d_idx.unsafe_ptr(), N_ROWS, d_parts1.unsafe_ptr(), 1, 1,
         d_hist.unsafe_ptr(), p.line, True, fh.copy(), sm_count, FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     var bits = List[UInt32]()
     var hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
@@ -231,7 +231,7 @@ def run_policy(
         d_idx.unsafe_ptr(), N_ROWS, d_parts2.unsafe_ptr(), 2, 1,
         d_hist.unsafe_ptr(), p.line, False, fh.copy(), sm_count, FIXED_SCALE,
     )
-    ctx.enqueue_copy(dst_buf=h_hist, src_buf=d_hist)
+    download_host_into[DType.float32](ctx, d_hist, h_hist)
     ctx.synchronize()
     hp = h_hist.unsafe_ptr().unsafe_bitcast[UInt32]()
     for k in range(2 * line2):
@@ -243,7 +243,7 @@ def run_policy(
     return bits^
 
 
-def main() raises:
+def run_checks() raises:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         print(
             "REFUSED: DEVIATION 2624 gates the ordered tiers; this build is",
@@ -323,9 +323,9 @@ def main() raises:
     var d_tgt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_wt = ctx.enqueue_create_buffer[DType.float32](N_ROWS)
     var d_ci = ctx.enqueue_create_buffer[DType.uint32](N_COLUMNS * N_ROWS)
-    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=indices.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tgt, src_ptr=target.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_wt, src_ptr=weight.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_idx, indices)
+    upload_whole_into[DType.float32](ctx, d_tgt, target)
+    upload_whole_into[DType.float32](ctx, d_wt, weight)
     ctx.enqueue_copy(dst_buf=d_ci, src_ptr=cindex.unsafe_ptr())
 
     var parts1: List[UInt32] = [UInt32(0), UInt32(N_ROWS)]
@@ -334,8 +334,8 @@ def main() raises:
     ]
     var d_parts1 = ctx.enqueue_create_buffer[DType.uint32](2)
     var d_parts2 = ctx.enqueue_create_buffer[DType.uint32](4)
-    ctx.enqueue_copy(dst_buf=d_parts1, src_ptr=parts1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_parts2, src_ptr=parts2.unsafe_ptr())
+    upload_whole_into[DType.uint32](ctx, d_parts1, parts1)
+    upload_whole_into[DType.uint32](ctx, d_parts2, parts2)
     ctx.synchronize()
     _ = indices[0]
     _ = target[0]
@@ -385,3 +385,22 @@ def main() raises:
             + " gate(s) failed"
         )
     print("check-pointwise-identical-multiplier PASS")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_whole_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("pointwise_identical_multiplier_check", cpu=False, gpu=True, serial="", run=run_cases)

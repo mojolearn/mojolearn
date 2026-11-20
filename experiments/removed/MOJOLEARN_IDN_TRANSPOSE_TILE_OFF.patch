@@ -1,0 +1,31 @@
+diff --git a/autograd/fold_kernels.mojo b/autograd/fold_kernels.mojo
+index c6d83fbfd5..b5af6810dd 100644
+--- a/autograd/fold_kernels.mojo
++++ b/autograd/fold_kernels.mojo
+@@ -38,10 +38,12 @@
+ #   tile: coalesced loads into threadgroup memory (33-float rows), barrier,
+ #   coalesced stores of the transposed tile. Each destination word is
+ #   the scalar body's: raw forward movement, st(ld(word)) for VJP.
++#   -D MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.
+ # None of the three keys on a shape beyond the stated cost and alignment
+ # rules; every rule covers neighbouring shapes alike.
+ from max.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast, stack_allocation
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -67,9 +69,10 @@ comptime AG_FOLD_STAGED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and AUTOGRAD_
+ # TOMBSTONE: MOJOLEARN_IDN_ELEM_VEC4_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at b57fa1c4dd.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ELEM_VEC4_OFF.patch; record in docs/TOMBSTONES.md.
+ comptime AG_ELEM_VEC4 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+-# TOMBSTONE: MOJOLEARN_IDN_TRANSPOSE_TILE_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 34a89b9e44.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime AG_TRANSPOSE_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++comptime AG_TRANSPOSE_TILE = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (is_defined["MOJOLEARN_IDN_TRANSPOSE_TILE_OFF"]())
++)
+ 
+ # the staged leaves: one leaf a thread, a block of AG_FOLD_LEAF threads
+ comptime AGS_TPB = AG_FOLD_LEAF

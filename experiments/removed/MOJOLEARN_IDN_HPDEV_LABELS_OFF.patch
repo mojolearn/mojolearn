@@ -1,0 +1,23 @@
+diff --git a/core/hotpath_device_run.mojo b/core/hotpath_device_run.mojo
+index c63a7391c4..cf992bf7c2 100644
+--- a/core/hotpath_device_run.mojo
++++ b/core/hotpath_device_run.mojo
+@@ -6,6 +6,7 @@ fixes (float64 narrowing, transpose, strided copy) the base binding's doors
+ call with the GIL released. Each returns "not done" when the caller must run
+ its host loop. Typed Mojo only: no Python import."""
+ from core.hotpath_impl_rows import fold_pair_f32
++from std.sys.compile import is_defined
+ from core.hotpath_device import (
+     HPD_F32, HPD_F64, HPD_I32, HPD_I64, HPD_MAX_N, HPD_U32, HPD_U8, device_cast_f64_to_f32,
+     device_encode_labels, device_fold_pair_f32, device_gather_u64,
+@@ -17,9 +18,7 @@ from core.label_device_steps import (
+     LABELS_DEVICE_CONTEXT as _HPDEV_SLOT, LABELS_DEVICE_BASE as _HPDEV_BASE, labels_device_try_finite,
+ )
+ 
+-# TOMBSTONE: MOJOLEARN_IDN_HPDEV_LABELS_OFF (old path, no A/B recorded beside the default) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 7fe1ce981e.
+-# Restore: git apply experiments/removed/MOJOLEARN_IDN_HPDEV_LABELS_OFF.patch; record in docs/TOMBSTONES.md.
+-comptime IDN_HPDEV_LABELS = _HPDEV_BASE
++comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
+ 
+ 
+ def fold_pair_f32_device_run(d: Int, s: Int, count: Int) raises -> Int:

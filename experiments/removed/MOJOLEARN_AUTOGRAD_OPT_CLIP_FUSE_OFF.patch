@@ -1,0 +1,79 @@
+diff --git a/autograd/optim.mojo b/autograd/optim.mojo
+index 1c6ec722e5..23da741769 100644
+--- a/autograd/optim.mojo
++++ b/autograd/optim.mojo
+@@ -89,11 +89,9 @@ comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
+ # cell, as CLIP_COEF did. Bits: identical by construction (the same
+ # operations on the same words in the same order; each thread redoes the
+ # nparts ~ sqrt(n) adds). Launches: 2 fewer a step with a clip (CLIP_COEF
+-# and CLIP_SCALE).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF (the three clip launches before OP_OPT, arm A; old path, no A/B
+-# recorded) deleted 2026-11-15 by lane/expdel2-24-neural with clip_grad_norm and the AUTOGRAD_OPT_CLIP_FUSE alias;
+-# code recoverable at e770fd25b9. OP_AGO_CLIP_COEF / OP_AGO_CLIP_SCALE stay registered in the dispatch range.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF.patch
++# and CLIP_SCALE). -D MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF keeps the three
++# clip launches before OP_OPT (arm A).
++comptime AUTOGRAD_OPT_CLIP_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF"]()
+ 
+ # The pass-6 host lane's family (2400..; sequence/dispatch.mojo routes the
+ # range and asserts it overlaps no other family).
+@@ -498,6 +496,31 @@ def optimizer_scalars(
+ 
+ 
+ # ------------------------------------------------------------------ the step
++def clip_grad_norm[E: Exec](mut ex: E, max_norm: Float32, mut state: OptimizerState, grads: FP, n: Int) raises:
++    """grads *= min(1, max_norm / (||grads|| + 1e-6)) over the flat vector:
++    a two-launch blocked fold for the norm (state.cell[0]) and the
++    coefficient (state.cell[1]), then one elementwise scale. Nothing is
++    read back to the host."""
++    if n != state.n:
++        raise Error("autograd optim: the clip's vector length differs from the state's")
++    var p = Args()
++    p.p0 = grads
++    p.p1 = state.parts
++    p.i0 = n
++    p.i1 = state.block
++    ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
++    var c = Args()
++    c.p0 = state.parts
++    c.p1 = state.cell
++    c.i0 = state.nparts
++    c.f0 = max_norm
++    ex.launch[OP_AGO_CLIP_COEF](c, 1)
++    var s = Args()
++    s.p0 = grads
++    s.p1 = state.cell
++    ex.launch[OP_AGO_CLIP_SCALE](s, n)
++
++
+ def step_lr[E: Exec](
+     mut ex: E, cfg: OptimizerConfig, mut state: OptimizerState, params: FP, grads: FP, n: Int, t: Int, lr: Float32,
+ ) raises:
+@@ -506,15 +529,18 @@ def step_lr[E: Exec](
+     calls it every step in order (the running bias-correction products)."""
+     if n != state.n:
+         raise Error("autograd optim: the parameter count differs from the state's")
+-    var fuse_clip = cfg.clip > Float32(0.0)
+-    if fuse_clip:
+-        # the partials only; the coefficient and scale run in the update
+-        var p = Args()
+-        p.p0 = grads
+-        p.p1 = state.parts
+-        p.i0 = n
+-        p.i1 = state.block
+-        ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
++    var fuse_clip = AUTOGRAD_OPT_CLIP_FUSE and cfg.clip > Float32(0.0)
++    if cfg.clip > Float32(0.0):
++        if fuse_clip:
++            # the partials only; the coefficient and scale run in the update
++            var p = Args()
++            p.p0 = grads
++            p.p1 = state.parts
++            p.i0 = n
++            p.i1 = state.block
++            ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
++        else:
++            clip_grad_norm(ex, cfg.clip, state, grads, n)
+     var a = Args()
+     a.p0 = params
+     a.p1 = grads

@@ -76,7 +76,7 @@ comptime N_ITERS = 20
 comptime MAX_DEPTH = 4
 
 
-def main() raises:
+def run_checks() raises:
     var ctx = DeviceContext()
     # SIX one-byte features: 4 fit in one cindex word, so features 8 and 9
     # live in the SECOND column of their policy. The signal is put there on
@@ -104,7 +104,7 @@ def main() raises:
             col.append(v)
             hb.unsafe_ptr().unsafe_store(r, UInt8(v))
         host_bin.append(col^)
-        ctx.enqueue_copy(dst_buf=bins, src_ptr=hb.unsafe_ptr())
+        upload_host_into[DType.uint8](ctx, bins, hb)
         ctx.enqueue_function[write_compressed_index_kernel](
             Int32(Int(cf.offset) * N_ROWS), cf.mask, cf.shift,
             bins.unsafe_ptr(), Int32(N_ROWS), cindex.unsafe_ptr(),
@@ -135,8 +135,8 @@ def main() raises:
         var d = Float64(ht.unsafe_ptr().unsafe_load(r)) - mean
         variance += d * d
     variance /= Float64(N_ROWS)
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, targets, ht)
+    upload_host_into[DType.float32](ctx, weights, hw)
     ctx.synchronize()
 
     var failures = 0
@@ -221,6 +221,41 @@ def main() raises:
                 )
             differ += 1
     if differ != 0:
+        # LOCALIZE (fb11, 2026-11-17: the first L40S run had tree 0 identical
+        # and 13 of 20 losses off in the 7th digit, re-agreeing at 4-6 and
+        # 8-9, which is leaf values a last bit apart rather than a split).
+        # Name the first tree whose SPLITS differ and the first whose LEAF
+        # VALUES differ, so the next run says which stage diverged.
+        var first_split = -1
+        var first_leaf = -1
+        var n_trees = min(len(m_greedy.weak_models), len(m_pw.weak_models))
+        for t in range(n_trees):
+            ref gs = m_greedy.weak_models[t].structure.splits
+            ref ps = m_pw.weak_models[t].structure.splits
+            ref gl = m_greedy.weak_models[t].leaf_values
+            ref pl = m_pw.weak_models[t].leaf_values
+            var same_s = len(gs) == len(ps)
+            if same_s:
+                for i in range(len(gs)):
+                    if (gs[i].feature_id != ps[i].feature_id
+                        or gs[i].bin_idx != ps[i].bin_idx
+                        or gs[i].split_type != ps[i].split_type):
+                        same_s = False
+            if not same_s and first_split < 0:
+                first_split = t
+            if same_s and first_leaf < 0 and len(gl) == len(pl):
+                for i in range(len(gl)):
+                    if gl[i] != pl[i] and first_leaf < 0:
+                        first_leaf = t
+                        print(
+                            "   W2 first leaf difference: tree", t, "leaf", i,
+                            ":", gl[i], "vs", pl[i], "(splits equal)",
+                        )
+        print(
+            "   W2 first tree with different SPLITS:", first_split,
+            " first with equal splits and different LEAVES:", first_leaf,
+            " (-1 = none, of", n_trees, "trees)",
+        )
         print(
             "FAIL W2:", differ, "of", len(l_pw),
             "iterations differ. The two arms share every stage but the"
@@ -267,3 +302,22 @@ def main() raises:
     if failures != 0:
         raise Error(String(failures) + " gate(s) failed")
     print("fit runs CatBoost's single-target symmetric learner: W1-W3 pass")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("fit_pointwise_check", cpu=False, gpu=True, serial="", run=run_cases)

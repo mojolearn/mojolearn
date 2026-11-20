@@ -38,7 +38,7 @@ the case where the substitution costs most in absolute terms and least in
 meaning: it widens a warp sync to a block sync 32 times per point.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 

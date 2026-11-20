@@ -11,7 +11,6 @@ SEPARATE each seam. Under IDENTICAL:
 Card stages: quant.sq.*, quant.rq.*, quant.refine.*, quant.filter.*."""
 
 from std.memory import bitcast
-from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
 from x_ann.ivf_pq_device import (
@@ -25,7 +24,7 @@ from x_ann.checks.ivf_quant_oracle import (
 )
 
 
-def main() raises:
+def run_checks() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var failed = 0
     var trace = IdentityTrace()
@@ -224,8 +223,8 @@ def main() raises:
           "refine", sep_refine, "filter", sep_filter)
     if sep_range == 0 or sep_round == 0 or sep_decode == 0 or sep_zero == 0 or sep_refine == 0 or sep_filter == 0:
         print("VACUOUS: a fixture does not separate its seam")
-        exit(2)
+        raise Error("VACUOUS: a fixture does not separate its seam")
     if failed > 0:
         print("ivf_quant_check: FAILED", failed)
-        exit(1)
+        raise Error("ivf_quant_check: FAILED")
     print("ivf_quant_check: ALL OK")

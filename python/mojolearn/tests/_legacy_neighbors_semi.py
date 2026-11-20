@@ -1,18 +1,67 @@
 # SPDX-License-Identifier: Apache-2.0
 """Frozen b32103c00 Python paths of LabelPropagation / LabelSpreading and the
 chi2 samplers' public methods, used only as an independent test oracle for
-their one-call native doors (bindings/neighbors_semi_native.mojo). Each
+their one-call native doors (bindings/neighbors_semi_native_door.mojo). Each
 function takes the estimator in place of `self`; the primitives
 (`_op`, `_knn_sq`, `_kernel`, `_matmul`, `_unary`) are the package's own."""
 import struct
 
-from mojolearn._buffer import addr, addr_ro, empty
-from mojolearn._lazy_out import _empty_out
-from mojolearn import _expansion_neighbors as xn
-from mojolearn._expansion_neighbors import (
-    _f32, _kfeat_flags, _seed_word, _f32_scalar, _lp_fast_resident,
-    _classical_graph_normalization, _argmax_labels, _accuracy, _U_LOG,
-)
+from mojolearn.tests._oracle_support import addr, addr_ro, empty, empty_out as _empty_out, require_numpy
+from mojolearn.tests._typed_input import f32_dense as _f32, f32_1d as _f32_1d, i32_1d as _i32
+from mojolearn.tests._legacy_neighbors_loc import _argmax_labels, _accuracy, _f32_scalar, _OLD_ITEMS
+
+# Local copies of the product's python/mojolearn/_expansion_neighbors.py helpers.
+_U_LOG = 1  # position 1 of `_U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)`
+
+
+def _kfeat_flags(est):
+    """lane apple-fast-w2-kfeat: the chi2 samplers' FAST + Apple fit entries
+    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default:
+    bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW);
+    0 on the FAST tier without them, on IDENTICAL and on the host column."""
+    if not est._fast_tier():
+        return 0
+    fn = getattr(est._bind(), "x_neighbors_kfeat_flags", None)
+    return int(fn()) if fn is not None else 0
+
+
+def _classical_graph_normalization(est):
+    """C43 binary capability, IDENTICAL only and default OFF."""
+    flag = getattr(est._bind(), "x_neighbors_classical_graph_normalization", None)
+    return flag is not None and bool(flag())
+
+
+# Frozen copy of the former `_expansion_neighbors._seed_word` (deleted by lane
+# py-neighbors, 2026-11-14: the samplers' seed is read natively,
+# bindings/neighbors_semi_native_door.mojo).
+def _seed_word(seed):
+    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
+    None (numpy's global RandomState) or a caller's numpy RandomState gives
+    ONE draw, a word in [0, 2^31), and that word seeds the device
+    counter-based generator exactly as an int random_state would. The
+    O(d * n_components) table is then drawn on the device. Not
+    scikit-learn's numbers for those two inputs (theirs are not reproducible
+    for None either); the distribution is the same. Anything else is
+    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
+    _OFF arms drew from.)"""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    if seed is None:
+        np = require_numpy('_expansion_neighbors')
+        seed = np.random.mtrand._rand
+    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
+        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
+    return int(seed.randint(0, 1 << 31, size=1)[0])
+
+
+# ====================================================================== PolynomialCountSketch
+# Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
+# 1.9.0): `indexHash_` (`randint(0, n_components, (degree, n_features))`)
+# and `bitHash_` (`choice([-1, 1], (degree, n_features))`); here drawn by the
+# device counter-based generator (x_neighbors/kfeat_rng.mojo, see
+# `_seed_word`), the same distribution, not their legacy RandomState words.
+# The transform is the count sketches' circular convolution, computed
+# directly instead of through an FFT (DEVIATION 5203).
 
 
 # ------------------------------------------------------------ AdditiveChi2Sampler
@@ -168,7 +217,7 @@ def _build_graph(est, X):
         return G
     n = A.shape[0]
     G = _empty_out((n, n), "<f4")
-    if xn._OLD_ITEMS:
+    if _OLD_ITEMS:
         est._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
     else:
         deg = _empty_out((n,), "<f4")
@@ -194,7 +243,7 @@ def lp_fit(est, X, y):
         raise ValueError("alpha must be in (0, 1)")
     X = _f32(X)
     n = X.shape[0]
-    from mojolearn._labels import encode_labels
+    from mojolearn._labels import encode_labels  # oracle subject: the native ORDER RULE encoder (classical_encode_labels: buffers, Series, lists, '<U' and object labels, its refusals); no exact copy, no public route
     allc, codes = encode_labels(y)
     if codes.size != n:
         raise ValueError("X and y have different numbers of rows")
@@ -221,7 +270,7 @@ def lp_fit(est, X, y):
         est._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
     else:
         ystatic = ys
-    if isinstance(G, tuple) and _lp_fast_resident(est):
+    if isinstance(G, tuple):
         cols, vals, _ = G
         info = empty((2,), "<i4")
         tol_bits = struct.unpack("<Q", struct.pack("<d", float(est.tol)))[0]

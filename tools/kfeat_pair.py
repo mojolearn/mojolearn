@@ -32,23 +32,22 @@ FIXTURE = "kfeat-v2"  # lane apple-fast-w3-kfeat: gate, lazy-weights and staged 
 REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
     # RBF_RESIDENT, SRP_STRAT, SCHI2_MOJO_MT, ACHI2_DEVSCAN, SCHI2_LAZYW and RBF_STAGED are
     # default since their promotion; their _OFF forms build the old arm.
-    "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds),
-    "x_neighbors": ("kfeat_flags", lambda ds: (1 if "MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF" not in ds else 0)
-                    | (2 if "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)
-                    | (4 if "MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF" not in ds
-                       and "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)),
+    # kernel_methods: RBF_RESIDENT_OFF and RBF_STAGED_OFF are deleted (lane expdel-06-base-cluster-kernel,
+    # docs/TOMBSTONES.md); every FAST + Apple kernel_methods arm has both compiled in.
+    "kernel_methods": ("rbf_resident", lambda ds: True),
+    # x_neighbors: the three _OFF rollbacks are deleted (lane expdel-01-cluster, docs/TOMBSTONES.md);
+    # every FAST + Apple x_neighbors arm carries bits 1, 2 and 4.
+    "x_neighbors": ("kfeat_flags", lambda ds: 7),
     "x_decomp": ("grp_cls2", None),
 }
 # extra reach keys checked as well (lane apple-fast-w3-kfeat)
 REACH_EXTRA = {
-    "kernel_methods": ("rbf_staged", lambda ds: 1 if ("MOJOLEARN_KM_FAST_RBF_STAGED_OFF" not in ds
-                                                      and "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds) else 0),
+    "kernel_methods": ("rbf_staged", lambda ds: 1),
 }
 ALLOWED = {
-    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF", "MOJOLEARN_KM_FAST_RBF_STAGED_OFF"},
-    "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF",
-                    "MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"},
-    "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
+    "kernel_methods": set(),
+    "x_neighbors": set(),
+    "x_decomp": set(),  # MOJOLEARN_XD_FAST_SRP_STRAT_OFF deleted 2026-11-15
 }
 
 

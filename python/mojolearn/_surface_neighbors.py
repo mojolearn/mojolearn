@@ -29,6 +29,8 @@ FAMILIES = (
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo",
                       "x_neighbors/proba64_nc.mojo", "checks/f64_words.mojo"),
         exports=(
+            # manifest sync (lane import-fix-entry-probes, 2026-11-12): registered in the binding source
+            "ocsvm_resident_native_api_v1",
             # BEGIN GENERATED EXPORTS
             "x_neighbors_host_numeric_mode",
             "x_neighbors_host_vendor",
@@ -116,10 +118,13 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             # xn_softmax64 is not listed: bindings/_mojolearn_x_neighbors_host.mojo:1238 registers it only under
             # NC_PROBA64, which is FAST-only, and a host binding is IDENTICAL (0.8.37 macOS wheel qualification).
-            "x_neighbors_classical_graph_normalization", "x_neighbors_lp_fast_resident",
+            "x_neighbors_classical_graph_normalization",
             "x_neighbors_ocsvm_alpha_init", "x_neighbors_unit_ff", "x_neighbors_kfeat_schi2_fit_idn",
-            "x_neighbors_kfeat_pcs_draw_idn",
+            "x_neighbors_kfeat_pcs_draw_idn", "x_neighbors_ocsvm_labels",
+            "x_neighbors_nc_labels", "x_neighbors_nc_proba", "x_neighbors_lp_dense_proba",
             # END GENERATED EXPORTS
+            # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
+            "x_neighbors_native_api_v1", "kpca_neighbors_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the neighbors + kernel expansion lane's CPU route (x_neighbors/).",

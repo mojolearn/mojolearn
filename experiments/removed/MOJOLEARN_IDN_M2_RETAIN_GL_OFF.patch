@@ -1,0 +1,15 @@
+diff --git a/mamba/impl/modules/ssd_minimal.mojo b/mamba/impl/modules/ssd_minimal.mojo
+index 186d8aed27..18aa66376a 100644
+--- a/mamba/impl/modules/ssd_minimal.mojo
++++ b/mamba/impl/modules/ssd_minimal.mojo
+@@ -720,8 +720,8 @@ comptime M2_RETAIN_GL = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     # PROMOTED 2026-10-11 (grid g50ebe26a5, arm m2_retain_gl=on vs today's defaults, one run per arm): mamba2-forward gaussian
+     # NV L40S 13.079 -> 5.690 ms (v1242), AMD MI325X 4.551 -> 4.554 ms (a1350); avg ratio 0.660; hash 0350b90b on both vendors.
+-    # TOMBSTONE: MOJOLEARN_IDN_M2_RETAIN_GL_OFF (old recompute path beside the promoted default, EXP:2013) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at a93584a744.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_RETAIN_GL_OFF.patch
++    # Default ON; -D MOJOLEARN_IDN_M2_RETAIN_GL_OFF restores the recompute path.
++    and not is_defined["MOJOLEARN_IDN_M2_RETAIN_GL_OFF"]()
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+     and not SSD_ANY_SABOTAGE
+ )

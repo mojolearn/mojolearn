@@ -94,7 +94,12 @@ def _same(x: List[Float32], y: List[Float32]) -> Int:
 def main() raises:
     var ms: List[Int] = [1, 3, 6]
     var ns: List[Int] = [1, 7, 8, 31, 32, 33, 40, 100]
-    var ks: List[Int] = [0, 1, 5, 128, 129, 256, 300, 384, 1000]
+    # 511..2049 (lane fx-gemm-leaf512, 2026-11-19): below, at and above 512,
+    # a non-multiple of it (1500 = 512 + 512 + 476) and a one-element tail
+    # (2049), so the host column is held to the oracle on both sides of the
+    # leaf under -D MOJOLEARN_GEMM_FAST_LEAF512 (L = 512) as it is under v1
+    # (L = 128: 128, 129, 300). Both profiles run every k.
+    var ks: List[Int] = [0, 1, 5, 128, 129, 256, 300, 384, 511, 512, 513, 1000, 1500, 2049]
     var ops: List[Int] = [OP_NN, OP_NT, OP_TN]
     var cases = 0
     var failed = 0
@@ -140,8 +145,9 @@ def main() raises:
         for bi in range(len(big)):
             var m = big[bi]
             var n = 333 if m > 2 else 2100
-            for kk in range(2):
-                var k = 97 if kk == 0 else 300
+            for kk in range(3):
+                # 1500: many leaves under either profile (300 is one leaf at L = 512)
+                var k = 97 if kk == 0 else (300 if kk == 1 else 1500)
                 var kind = KIND_SUBNORMAL if (oi + kk) % 2 == 0 else KIND_RELU
                 var a = _fill(m * k, kind, 700 + op * 10 + kk, True)
                 var b = _fill(n * k, kind, 800 + op * 10 + kk, False)
@@ -159,7 +165,7 @@ def main() raises:
     # middle, k - 1 and k; the operands beyond real_k are left as filled
     # (garbage the compression must never read) or zeroed (the caller's
     # contract), and the ZEROS kind ends real prefixes at -0.0.
-    var pk: List[Int] = [1, 7, 128, 129, 300, 384]
+    var pk: List[Int] = [1, 7, 128, 129, 300, 384, 512, 513, 1100]
     var pn: List[Int] = [1, 9, 33, 64]
     for kind in range(3):
         for oi in range(len(ops)):

@@ -330,7 +330,7 @@ def evaluator_predict(
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_feats)
     for i in range(n_rows * n_feats):
         hx.unsafe_ptr().unsafe_store(i, x[i])
-    ctx.enqueue_copy(dst_buf=xdev, src_ptr=hx.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, xdev, hx)
 
     var ev_borders = ctx.enqueue_create_buffer[DType.float32](total)
     var ev_off = ctx.enqueue_create_buffer[DType.uint32](n_feats)
@@ -348,10 +348,10 @@ def evaluator_predict(
         for i in range(len(tm.borders[f])):
             h1.unsafe_ptr().unsafe_store(pos, tm.borders[f][i])
             pos += 1
-    ctx.enqueue_copy(dst_buf=ev_borders, src_ptr=h1.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ev_off, src_ptr=h2.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ev_cnt, src_ptr=h3.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=ev_bucket, src_ptr=h4.unsafe_ptr())
+    upload_host_into[DType.float32](ctx, ev_borders, h1)
+    upload_host_into[DType.uint32](ctx, ev_off, h2)
+    upload_host_into[DType.uint32](ctx, ev_cnt, h3)
+    upload_host_into[DType.uint32](ctx, ev_bucket, h4)
 
     var quantized = ctx.enqueue_create_buffer[DType.uint32](
         quantized_buffer_u32s(n_feats, n_rows)
@@ -367,7 +367,7 @@ def evaluator_predict(
         quantized,
     )
     launch_eval(ctx, gpu_model, quantized, n_feats, n_rows, results)
-    ctx.enqueue_copy(dst_ptr=h_res.unsafe_ptr(), src_buf=results)
+    download_host_into[DType.float32](ctx, results, h_res)
     ctx.synchronize()
     # Past the drain, every buffer an enqueued copy or kernel touched (the
     # step-33 race class). Mojo frees a local at its LAST NAMED USE: `hx`
@@ -377,11 +377,6 @@ def evaluator_predict(
     # MI325X that moved rows between two runs of the SAME model and put
     # whole rows on wrong leaves (k = 3: 1822 of 3000 rows, |diff| 1.68);
     # the evaluator kernels themselves are deterministic.
-    _ = hx^
-    _ = h1^
-    _ = h2^
-    _ = h3^
-    _ = h4^
     _ = xdev^
     _ = ev_borders^
     _ = ev_off^
@@ -1401,7 +1396,7 @@ def borders_plan_for(
 
     The category counts and the per-target-class histogram are computed in
     this function from the raw codes; the target GRID comes from the
-    library's `build_target_borders`, which `pixi run check-minentropy`
+    library's `build_target_borders`, which `pixi run check-native-cpu min_entropy_check`
     gates bit-exactly against CatBoost's own borders and which is not what
     this file is testing.
 
@@ -2535,7 +2530,7 @@ def check_borders_sabotages(ctx: DeviceContext) raises:
           " predictions", _spread(held_out))
 
 
-def main() raises:
+def run_checks() raises:
     print("CTR apply: a categorical model scores raw rows:")
     check_table_arithmetic()
     check_borders_table_arithmetic()
@@ -2549,3 +2544,22 @@ def main() raises:
     check_sabotages(ctx)
     check_borders_sabotages(ctx)
     print("CTR apply: all parts green, every sabotage red")
+
+
+# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
+# checks/ that no CI job ran. One process per check name in CI keeps any
+# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
+from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
+from checks.native_tests.kit import download_host_into, upload_host_into
+
+
+def run_cases(column: Column, mut report: Report):
+    try:
+        comptime if not CPU_COLUMN_BUILD:
+            run_checks()
+    except error:
+        report.abort(error)
+
+
+def register() -> Check:
+    return Check("ctr_apply_check", cpu=False, gpu=True, serial="", run=run_cases)
